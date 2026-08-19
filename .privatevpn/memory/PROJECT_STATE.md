@@ -42,8 +42,9 @@ GATE 2 — WireGuard integration (code done, device build verified; real connect
 - GATE 1 skeleton code (state model, UI, extension) — buildable + unit-tested is
   evidence of buildability, not real-device VPN runtime verification (GATE 2+).
 - WireGuard integration (KeychainStore keypair, WireGuardConfig parser,
-  PacketTunnelProvider using WireGuardAdapter, VPNManager config) — compiles + device
-  build links, but **no real tunnel connect verified** (needs server + device).
+  PacketTunnelProvider using WireGuardAdapter, VPNManager config, VPNConfigStore +
+  SettingsView) — compiles + device build links, but **no real tunnel connect
+  verified** (needs server + device).
 
 ## What is running?
 Culi orchestration session (this one).
@@ -52,9 +53,14 @@ Culi orchestration session (this one).
 - Real VPN runtime (GATE 2+): simulator cannot run Packet Tunnel; requires physical
   iPhone + Apple team with Network Extension entitlement (identity exists).
 - Server/control-plane: no Vietnam node credentials, endpoint, or peer public key
-  provided. WireGuard config currently uses placeholders in `VPNManager.makeConfig()`.
+  provided. The user now enters endpoint + peer key via the in-app Configuration
+  screen (`SettingsView`/`VPNConfigStore`), replacing the previous hardcoded
+  placeholders in `VPNManager.makeConfig()`.
 - Simulator link of `libwg-go.a` fails (Go iOS-simulator runtime lacks a darwin symbol);
   WireGuard is device-only (documented, acceptable — simulator can't run a tunnel).
+- Unit tests cannot run on the iOS Simulator because the test host builds the whole
+  app, which links `libwg-go.a` (simulator-incompatible). Tests require a device or
+  a way to exclude WireGuard from the test host.
 
 ## What is stale?
 Nothing yet (fresh repo).
@@ -65,8 +71,9 @@ Nothing yet (fresh repo).
 3. ✅ Implement state model, VPNManager, minimal SwiftUI UI.
 4. ✅ Build with xcodebuild → capture BUILD SUCCEEDED log in evidence/.
 5. ✅ Commit GATE 1; report.
-6. 🚧 WireGuard integration: vendored kit, keypair store, config parser, real
-   `startTunnel` via WireGuardAdapter — code done, device build OK (uncommitted).
-7. Commit WireGuard integration + capture evidence.
+6. ✅ WireGuard integration: vendored kit, keypair store, config parser, real
+   `startTunnel` via WireGuardAdapter — code done, device build OK (committed 9033251).
+7. ✅ Add in-app Configuration screen (VPNConfigStore + SettingsView) for endpoint /
+   peer key; user-configurable instead of placeholders.
 8. GATE 2: real-device E2E — needs physical iPhone + Vietnam node endpoint/peer
-   public key (blocked).
+   public key entered in the app (blocked).

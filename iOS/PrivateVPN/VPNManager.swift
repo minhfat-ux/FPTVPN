@@ -37,9 +37,9 @@ final class VPNManager: ObservableObject {
         state = VPNState(networkStatus: manager.connection.status)
     }
 
-    func connect() async {
+    func connect(store: VPNConfigStore) async {
         do {
-            let config = try await makeConfig()
+            let config = try makeConfig(store: store)
             try await prepareConfiguration(config)
             try manager.connection.startVPNTunnel()
             lastError = nil
@@ -58,7 +58,7 @@ final class VPNManager: ObservableObject {
     // MARK: - Device / keypair
 
     /// Loads (or creates) the device WireGuard keypair and exposes the public key.
-    private func refreshDevicePublicKey() {
+    func refreshDevicePublicKey() {
         do {
             if let publicKey = try KeychainStore.loadPublicKey() {
                 devicePublicKey = publicKey.base64Key
@@ -73,30 +73,51 @@ final class VPNManager: ObservableObject {
 
     // MARK: - Configuration
 
-    private func makeConfig() async throws -> WireGuardConfig {
-        let privateKey = try KeychainStore.obtainOrCreatePrivateKey()
-        let publicKey = privateKey.publicKey.base64Key
-        devicePublicKey = publicKey
+    func makeConfig(store: VPNConfigStore) throws -> WireGuardConfig {
+        guard store.isConfigured else {
+            throw ConfigError.notConfigured
+        }
 
-        // TODO(GATE 2+): replace with server-provisioned values from the control
-        // plane (Tailscale-style device registration). Placeholders below stand
-        // in until a real Vietnam node endpoint + peer public key is provided.
+        let privateKey = try KeychainStore.obtainOrCreatePrivateKey()
+        devicePublicKey = privateKey.publicKey.base64Key
+
+        let addresses = store.tunnelAddress
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let dns = store.dnsServers
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let allowedIPs = store.allowedIPs
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+
         let config = WireGuardConfig(
             name: "privatevpn",
             privateKeyBase64: privateKey.base64Key,
-            addresses: ["10.80.0.2/32"],
-            dnsServers: ["1.1.1.1"],
+            addresses: addresses,
+            dnsServers: dns,
             peers: [
                 WireGuardConfig.WireGuardPeer(
-                    publicKeyBase64: "",
-                    endpoint: "",
-                    allowedIPs: ["0.0.0.0/0", "::/0"],
+                    publicKeyBase64: store.serverPublicKey.trimmingCharacters(in: .whitespaces),
+                    endpoint: store.serverEndpoint.trimmingCharacters(in: .whitespaces),
+                    allowedIPs: allowedIPs,
                     preSharedKeyBase64: nil,
                     persistentKeepAlive: 25
                 )
             ]
         )
         return config
+    }
+
+    enum ConfigError: LocalizedError {
+        case notConfigured
+
+        var errorDescription: String? {
+            switch self {
+            case .notConfigured:
+                return "Enter the server endpoint and peer public key in Configuration first."
+            }
+        }
     }
 
     private func prepareConfiguration(_ config: WireGuardConfig) async throws {

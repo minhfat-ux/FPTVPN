@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var vpnManager: VPNManager
+    @EnvironmentObject private var configStore: VPNConfigStore
+    @State private var showingSettings = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -21,7 +23,7 @@ struct ContentView: View {
 
             Button {
                 Task {
-                    await vpnManager.connect()
+                    await vpnManager.connect(store: configStore)
                 }
             } label: {
                 Label("Connect", systemImage: "network")
@@ -39,11 +41,28 @@ struct ContentView: View {
             .buttonStyle(.bordered)
             .disabled(!vpnManager.state.canDisconnect)
 
-            Text("Vietnam (VN) — Hanoi")
+            Button {
+                showingSettings = true
+            } label: {
+                Label("Configuration", systemImage: "gearshape")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+
+            Text(configStore.isConfigured
+                 ? "Server: \(configStore.serverEndpoint)"
+                 : "Not configured — set endpoint & peer key")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(32)
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+                    .environmentObject(configStore)
+                    .environmentObject(vpnManager)
+            }
+        }
         .task {
             vpnManager.refreshStatus()
         }
@@ -62,4 +81,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(VPNManager())
+        .environmentObject(VPNConfigStore())
 }
