@@ -27,8 +27,10 @@ app.use(cors());
 app.use(express.json());
 
 // Simple bearer-token auth (optional). Enable by setting AUTH_TOKEN.
+// /health is always public so it can be used as a liveness probe.
 app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
+  if (req.path === "/health") return next();
   const header = req.headers.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (token !== AUTH_TOKEN) {

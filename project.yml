@@ -30,6 +30,8 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: iOS/PrivateVPN/PrivateVPN.entitlements
       properties:
