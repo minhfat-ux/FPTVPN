@@ -19,6 +19,7 @@ struct SettingsView: View {
                     if let loc = VPNLocation.presets.first(where: { $0.id == newValue }) {
                         configStore.serverEndpoint = "\(loc.host):\(loc.port)"
                         configStore.serverPublicKey = loc.publicKey
+                        configStore.tunnelAddress = loc.clientAddress
                     }
                 }
 

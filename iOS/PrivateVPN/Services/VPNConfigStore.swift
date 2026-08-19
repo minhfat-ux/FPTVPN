@@ -61,6 +61,7 @@ final class VPNConfigStore: ObservableObject {
             selectedLocationID = first.id
             serverEndpoint = "\(first.host):\(first.port)"
             serverPublicKey = first.publicKey
+            tunnelAddress = first.clientAddress
         }
     }
 }
