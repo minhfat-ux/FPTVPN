@@ -1,0 +1,32 @@
+# Xcode
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+
+# Secrets / credentials — never commit
+*.pem
+*.p12
+*.key
+*.mobileprovision
+*.provisionprofile
+.env
+.env.*
+*.xcconfig
+secrets/
+*.secret
+
+# Apple / Xcode user state
+*.orig
+
+# macOS
+.DS_Store
+
+# SwiftPM
+.build/
+.swiftpm/
+
+# PrivateVPN runtime artifacts
+.privatevpn/tmp/
+*.log.local
