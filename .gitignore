@@ -22,6 +22,8 @@ secrets/
 
 # macOS
 .DS_Store
+._*
+.AppleDouble
 
 # SwiftPM
 .build/
