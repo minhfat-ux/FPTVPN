@@ -50,7 +50,7 @@ struct ContentView: View {
             .buttonStyle(.bordered)
 
             Text(configStore.isConfigured
-                 ? "Server: \(configStore.serverEndpoint)"
+                 ? (configStore.selectedLocation.map { "Server: \($0.name)" } ?? "Server: \(configStore.serverEndpoint)")
                  : "Not configured — set endpoint & peer key")
                 .font(.caption)
                 .foregroundStyle(.secondary)

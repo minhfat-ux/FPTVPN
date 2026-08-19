@@ -7,6 +7,29 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Server location") {
+                Picker("Location", selection: $configStore.selectedLocationID) {
+                    ForEach(VPNLocation.presets) { location in
+                        Text("\(location.name) — \(location.city), \(location.country)")
+                            .tag(location.id as UUID?)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: configStore.selectedLocationID) { _, newValue in
+                    if let loc = VPNLocation.presets.first(where: { $0.id == newValue }) {
+                        configStore.serverEndpoint = "\(loc.host):\(loc.port)"
+                    }
+                }
+
+                if let loc = configStore.selectedLocation {
+                    LabeledContent("Endpoint") {
+                        Text("\(loc.host):\(loc.port)")
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Section("Server") {
                 LabeledContent("Device public key", value: vpnManager.devicePublicKey ?? "…")
                     .font(.footnote)

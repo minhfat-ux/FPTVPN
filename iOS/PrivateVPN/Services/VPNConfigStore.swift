@@ -11,6 +11,7 @@ final class VPNConfigStore: ObservableObject {
         static let tunnelAddress = "config.server.address"
         static let dnsServers = "config.server.dns"
         static let allowedIPs = "config.server.allowedIPs"
+        static let selectedLocationID = "config.server.locationID"
     }
 
     private let defaults: UserDefaults
@@ -30,6 +31,14 @@ final class VPNConfigStore: ObservableObject {
     @Published var allowedIPs: String {
         didSet { defaults.set(allowedIPs, forKey: Key.allowedIPs) }
     }
+    @Published var selectedLocationID: UUID? {
+        didSet { defaults.set(selectedLocationID?.uuidString, forKey: Key.selectedLocationID) }
+    }
+
+    /// The currently selected preset location, if any.
+    var selectedLocation: VPNLocation? {
+        VPNLocation.presets.first { $0.id == selectedLocationID }
+    }
 
     /// True when an endpoint and a peer public key have both been entered.
     var isConfigured: Bool {
@@ -44,5 +53,13 @@ final class VPNConfigStore: ObservableObject {
         tunnelAddress = defaults.string(forKey: Key.tunnelAddress) ?? "10.80.0.2/32"
         dnsServers = defaults.string(forKey: Key.dnsServers) ?? "1.1.1.1"
         allowedIPs = defaults.string(forKey: Key.allowedIPs) ?? "0.0.0.0/0, ::/0"
+        selectedLocationID = defaults.string(forKey: Key.selectedLocationID).flatMap(UUID.init)
+
+        // Seed a default server selection on first launch so the app is usable
+        // without manual endpoint entry.
+        if selectedLocationID == nil, let first = VPNLocation.presets.first {
+            selectedLocationID = first.id
+            serverEndpoint = "\(first.host):\(first.port)"
+        }
     }
 }
