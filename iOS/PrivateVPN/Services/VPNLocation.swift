@@ -27,7 +27,7 @@ struct VPNLocation: Identifiable, Hashable, Codable {
             endpoint: "63.140.14.154",
             port: 64044,
             publicKey: "hPuZYfu/lvnaSkGcO61Ks99rqVIdrL/ilOjw3+ip5BQ=",
-            clientAddress: "0.77.0.2/32"
+            clientAddress: "10.77.0.2/32"
         ),
     ]
 }
