@@ -18,7 +18,7 @@ Current task tracked here (schema per spec §31). Structured state also in
 | Acceptance criteria | GATE 1 builds (BUILD SUCCEEDED) + unit tests pass (9/9) |
 | Expected evidence | `evidence/builds/gate1-simulator-build.log`, `evidence/builds/gate1-simulator-tests.log`, `evidence/gate1-verification.md` |
 | Start commit | fafbf5b (GATE 0) |
-| End commit | (set after GATE 1 commit) |
+| End commit | e23eae9 (GATE 1 skeleton — build ✓, tests ✓) |
 
 ## Next task (continuation rule §103)
 
