@@ -1,29 +1,167 @@
 {
-  "baseline": "RS-20260819-01",
-  "requirements": [
-    {"id":"FR-AUTH-001","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_4"},
-    {"id":"FR-DEVICE-001","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_3"},
-    {"id":"FR-DEVICE-002","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_3"},
-    {"id":"FR-PROVISION-001","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_3"},
-    {"id":"FR-PROVISION-002","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_3"},
-    {"id":"FR-VPN-001","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_2"},
-    {"id":"FR-VPN-002","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_2"},
-    {"id":"FR-VPN-003","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_2"},
-    {"id":"FR-VPN-004","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_2"},
-    {"id":"FR-VPN-005","version":"v1","state":"APPROVED","impl":"IMPLEMENTED","gate":"GATE_1"},
-    {"id":"FR-REVOKE-001","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_4"},
-    {"id":"FR-REVOKE-002","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_4"},
-    {"id":"FR-ADMIN-001","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_5"},
-    {"id":"FR-DIAG-001","version":"v1","state":"APPROVED","impl":"PARTIAL","gate":"GATE_5"},
-    {"id":"NFR-SEC-001","version":"v1","state":"APPROVED","impl":"PARTIAL","gate":"GATE_3"},
-    {"id":"NFR-SEC-002","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_3"},
-    {"id":"NFR-SEC-003","version":"v1","state":"APPROVED","impl":"IMPLEMENTED","gate":"GATE_0"},
-    {"id":"NFR-SEC-004","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_4"},
-    {"id":"NFR-PRIV-001","version":"v1","state":"APPROVED","impl":"NOT_STARTED","gate":"GATE_6"},
-    {"id":"NFR-PERF-001","version":"v1","state":"APPROVED","impl":"PARTIAL","gate":"GATE_1"},
-    {"id":"NFR-REL-001","version":"v1","state":"APPROVED","impl":"PARTIAL","gate":"GATE_1"},
-    {"id":"NFR-UX-001","version":"v1","state":"APPROVED","impl":"IMPLEMENTED","gate":"GATE_1"},
-    {"id":"NFR-OBS-001","version":"v1","state":"APPROVED","impl":"PARTIAL","gate":"GATE_0"}
-  ],
-  "updated": "2026-08-19"
+ "baseline": "RS-20260819-01",
+ "requirements": [
+  {
+   "id": "FR-AUTH-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_4"
+  },
+  {
+   "id": "FR-DEVICE-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_3"
+  },
+  {
+   "id": "FR-DEVICE-002",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_3"
+  },
+  {
+   "id": "FR-PROVISION-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_3"
+  },
+  {
+   "id": "FR-PROVISION-002",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_3"
+  },
+  {
+   "id": "FR-VPN-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_2"
+  },
+  {
+   "id": "FR-VPN-002",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_2"
+  },
+  {
+   "id": "FR-VPN-003",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_2"
+  },
+  {
+   "id": "FR-VPN-004",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_2"
+  },
+  {
+   "id": "FR-VPN-005",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_1"
+  },
+  {
+   "id": "FR-REVOKE-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_4"
+  },
+  {
+   "id": "FR-REVOKE-002",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_4"
+  },
+  {
+   "id": "FR-ADMIN-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_5"
+  },
+  {
+   "id": "FR-DIAG-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "PARTIAL",
+   "gate": "GATE_5"
+  },
+  {
+   "id": "NFR-SEC-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "PARTIAL",
+   "gate": "GATE_3"
+  },
+  {
+   "id": "NFR-SEC-002",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_3"
+  },
+  {
+   "id": "NFR-SEC-003",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_0"
+  },
+  {
+   "id": "NFR-SEC-004",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_4"
+  },
+  {
+   "id": "NFR-PRIV-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "NOT_STARTED",
+   "gate": "GATE_6"
+  },
+  {
+   "id": "NFR-PERF-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "PARTIAL",
+   "gate": "GATE_1"
+  },
+  {
+   "id": "NFR-REL-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "PARTIAL",
+   "gate": "GATE_1"
+  },
+  {
+   "id": "NFR-UX-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_1"
+  },
+  {
+   "id": "NFR-OBS-001",
+   "version": "v1",
+   "state": "APPROVED",
+   "impl": "PARTIAL",
+   "gate": "GATE_0"
+  }
+ ],
+ "updated": "2026-08-19"
 }

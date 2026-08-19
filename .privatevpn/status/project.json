@@ -5,8 +5,8 @@
   "rule_baseline": "RULESET-0001",
   "current_gate": "GATE_1",
   "gate_states": {
-    "GATE_0": "IN_PROGRESS",
-    "GATE_1": "IN_PROGRESS",
+    "GATE_0": "PARTIAL",
+    "GATE_1": "PARTIAL",
     "GATE_2": "NOT_STARTED",
     "GATE_3": "NOT_STARTED",
     "GATE_4": "NOT_STARTED",
@@ -16,12 +16,17 @@
   },
   "requirements_verified": 0,
   "gates_verified": 0,
-  "open_bugs": { "critical": 0, "high": 0, "medium": 0, "low": 0 },
+  "open_bugs": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
   "blockers": [
     "Simulator cannot run a real Packet Tunnel; real-device VPN E2E needs physical iPhone (GATE 2+).",
     "No Vietnam node / control-plane credentials provided (GATE 2+)."
   ],
-  "last_verified": null,
-  "next_verification": "simulator build via xcodebuild",
+  "last_verified": "2026-08-19",
+  "next_verification": "GATE 1 formal gate review (evidence: builds/gate1-simulator-build.log, gate1-simulator-tests.log)",
   "updated": "2026-08-19"
 }
