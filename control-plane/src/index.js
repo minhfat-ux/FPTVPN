@@ -1,5 +1,9 @@
 import express from "express";
 import cors from "cors";
+import fs from "node:fs";
+import http from "node:http";
+import https from "node:https";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPPool } from "./ip-pool.js";
@@ -17,6 +21,25 @@ const WG_BIN = process.env.WG_BIN ?? "wg";
 const DRY_RUN = process.env.DRY_RUN === "1";
 const AUTH_TOKEN = process.env.AUTH_TOKEN ?? "";
 const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "devices.json");
+const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
+const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
+const NODE_NAME = process.env.NODE_NAME ?? "";
+const STARTED_AT = new Date().toISOString();
+
+// TLS (NFR-SEC-002 / AC-016): HTTPS when both cert + key are provided.
+// Plain HTTP is a LOCAL-DEV-ONLY fallback and logs a prominent warning.
+let tlsReady = false;
+if (TLS_CERT_FILE && TLS_KEY_FILE) {
+  try {
+    const tlsCert = fs.readFileSync(TLS_CERT_FILE, "utf8");
+    const tlsKey = fs.readFileSync(TLS_KEY_FILE, "utf8");
+    if (tlsCert && tlsKey) tlsReady = { cert: tlsCert, key: tlsKey };
+  } catch (err) {
+    console.error(`ERROR: could not read TLS files (TLS_CERT_FILE=${TLS_CERT_FILE}, TLS_KEY_FILE=${TLS_KEY_FILE}):`, err.message);
+  }
+} else if (TLS_CERT_FILE || TLS_KEY_FILE) {
+  console.error("ERROR: TLS_CERT_FILE and TLS_KEY_FILE must BOTH be set to enable TLS — falling back to plain HTTP.");
+}
 
 const pool = new IPPool(IP_POOL_CIDR);
 const wg = new WireGuardManager({ interfaceName: WG_INTERFACE, wgBin: WG_BIN, dryRun: DRY_RUN });
@@ -47,7 +70,7 @@ app.get("/health", (_req, res) => {
 // Register a device: assign IP, provision peer, return client config.
 app.post("/device", async (req, res) => {
   try {
-    const { publicKey, deviceName } = req.body ?? {};
+    const { publicKey, deviceName, platform } = req.body ?? {};
     if (!publicKey || typeof publicKey !== "string") {
       return res.status(400).json({ error: "publicKey is required" });
     }
@@ -63,7 +86,7 @@ app.post("/device", async (req, res) => {
       }
     }
 
-    const result = await store.upsertByPublicKey({ publicKey, deviceName, assignedIP });
+    const result = await store.upsertByPublicKey({ publicKey, deviceName, assignedIP, platform });
     device = result.device;
 
     // Provision the peer on the WireGuard node (idempotent).
@@ -94,6 +117,53 @@ app.delete("/device/:id", async (req, res) => {
   res.json({ device });
 });
 
+// Owner visibility (FR-ADMIN-001 / AC-013): list all registered devices.
+app.get("/devices", async (_req, res) => {
+  try {
+    const devices = await store.all();
+    res.json({
+      count: devices.length,
+      devices: devices.map((d) => ({
+        device_id: d.id,
+        name: d.deviceName,
+        platform: d.platform ?? null,
+        status: d.active ? "active" : "revoked",
+        created_at: d.createdAt,
+        assigned_ip: d.assignedIP,
+        public_key: d.publicKey,
+      })),
+    });
+  } catch (err) {
+    console.error("GET /devices failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Owner visibility (FR-ADMIN-001 / AC-013): node status.
+app.get("/status", async (_req, res) => {
+  try {
+    const devices = await store.all();
+    const activeCount = devices.filter((d) => d.active).length;
+    const wgPeers = await wg.listPeers();
+    res.json({
+      node: {
+        name: NODE_NAME || os.hostname(),
+        endpoint: WG_PUBLIC_ENDPOINT || null,
+        interface: WG_INTERFACE,
+      },
+      peers: wgPeers ? wgPeers.length : activeCount,
+      peer_source: wgPeers ? "wg" : "registry",
+      dryRun: DRY_RUN,
+      tls: tlsReady ? true : false,
+      uptime_seconds: Math.floor(process.uptime()),
+      started_at: STARTED_AT,
+    });
+  } catch (err) {
+    console.error("GET /status failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 function buildClientConfig(device) {
   return {
     serverPublicKey: WG_SERVER_PUBKEY,
@@ -105,9 +175,22 @@ function buildClientConfig(device) {
   };
 }
 
-app.listen(PORT, () => {
-  console.log(`PrivateVPN control plane listening on :${PORT}`);
+function onListen() {
+  console.log(`PrivateVPN control plane listening on :${PORT} (${tlsReady ? "HTTPS" : "HTTP"})`);
   console.log(`  interface=${WG_INTERFACE} dryRun=${DRY_RUN} pool=${IP_POOL_CIDR}`);
   if (!WG_SERVER_PUBKEY) console.warn("  WARNING: WG_SERVER_PUBKEY not set");
   if (!WG_PUBLIC_ENDPOINT) console.warn("  WARNING: WG_PUBLIC_ENDPOINT not set");
-});
+}
+
+if (tlsReady) {
+  // NFR-SEC-002 / AC-016: TLS enforced when TLS_CERT_FILE + TLS_KEY_FILE are provided.
+  https.createServer({ cert: tlsReady.cert, key: tlsReady.key }, app).listen(PORT, onListen);
+} else {
+  // LOCAL-DEV-ONLY fallback: plain HTTP. Never expose this to the public Internet.
+  console.warn("============================================================");
+  console.warn("  WARNING: Control API running WITHOUT TLS (plain HTTP).");
+  console.warn("  This is for LOCAL DEVELOPMENT ONLY (NFR-SEC-002 / AC-016).");
+  console.warn("  Set TLS_CERT_FILE and TLS_KEY_FILE to enable HTTPS.");
+  console.warn("============================================================");
+  http.createServer(app).listen(PORT, onListen);
+}

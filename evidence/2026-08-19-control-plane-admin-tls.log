@@ -1,0 +1,86 @@
+===================================================================
+ PrivateVPN control-plane — GATE 3/5 admin + TLS smoke test
+ FR-ADMIN-001 (AC-013) + NFR-SEC-002 (AC-016)
+===================================================================
+started_at=2026-08-19T13:35:23Z
+node: v26.6.0
+
+########## PART 1 — plain HTTP fallback (local dev) ##########
+--- server startup log ---
+============================================================
+  WARNING: Control API running WITHOUT TLS (plain HTTP).
+  This is for LOCAL DEVELOPMENT ONLY (NFR-SEC-002 / AC-016).
+  Set TLS_CERT_FILE and TLS_KEY_FILE to enable HTTPS.
+============================================================
+PrivateVPN control plane listening on :18080 (HTTP)
+  interface=wg0 dryRun=true pool=10.77.0.0/24
+  WARNING: WG_SERVER_PUBKEY not set
+  PASS: prominent no-TLS warning logged
+
+--- auth enforcement (owner endpoints) ---
+  PASS: GET /health without auth -> 200 (public liveness) (got 200)
+  PASS: GET /devices without auth -> 401 (got 401)
+  PASS: GET /status without auth -> 401 (got 401)
+  PASS: POST /device without auth -> 401 (got 401)
+
+--- register devices (existing POST /device behavior must be unchanged) ---
+  PASS: POST /device pubkey1 'iPhone 15' platform=ios -> 201 (got 201)
+  PASS: POST /device pubkey2 'iPhone 16' -> 201 (got 201)
+  PASS: POST /device pubkey1 again -> 200 (idempotent) (got 200)
+
+########## FR-ADMIN-001 / AC-013: GET /devices ##########
+  PASS: GET /devices -> 200 (got 200)
+  PASS: devices array has count==2 (got 2)
+  PASS: device fields present (device_id,name,platform,status,created_at,assigned_ip) (got ok)
+  PASS: device1 platform=ios, status=active, ip=10.77.0.2 (got ios active 10.77.0.2)
+  PASS: device2 ip=10.77.0.3 (pool increments) (got 10.77.0.3)
+
+########## FR-ADMIN-001 / AC-013: GET /status ##########
+  PASS: GET /status -> 200 (got 200)
+  PASS: node name/endpoint/interface present (got vietnam-1 63.140.14.154:64044 wg0)
+  PASS: peers==2, dryRun==true, tls==false, uptime>=0 (got 2 true false yes)
+  --- GET /status response body ---
+{"node":{"name":"vietnam-1","endpoint":"63.140.14.154:64044","interface":"wg0"},"peers":2,"peer_source":"registry","dryRun":true,"tls":false,"uptime_seconds":1,"started_at":"2026-08-19T13:35:23.557Z"}
+
+--- revocation still works (existing DELETE behavior unchanged) ---
+  PASS: DELETE /device/:id -> 200 (got 200)
+  PASS: GET /devices after revoke -> 200 (got 200)
+  PASS: revoked device shows status=revoked (got revoked)
+  PASS: GET /status after revoke -> 200 (got 200)
+  PASS: peers==1 after revoke (got 1)
+  PASS: other device still active (got active)
+
+--- wg dry-run provisioning lines (server log) ---
+[dry-run] wg set wg0 peer pubkey1-test allowed-ips 10.77.0.2/32
+[dry-run] wg set wg0 peer pubkey2-test allowed-ips 10.77.0.3/32
+[dry-run] wg set wg0 peer pubkey1-test allowed-ips 10.77.0.2/32
+[dry-run] wg set wg0 peer pubkey1-test remove
+  PASS: peer1 upsert logged
+  PASS: peer1 remove logged
+
+########## PART 2 — NFR-SEC-002 / AC-016: TLS via https.createServer ##########
+self-signed cert generated: /tmp/pvpn-cp-admin-test/cert.pem + key.pem
+--- TLS server startup log ---
+PrivateVPN control plane listening on :18081 (HTTPS)
+  interface=wg0 dryRun=true pool=10.77.0.0/24
+  WARNING: WG_SERVER_PUBKEY not set
+  PASS: server reports HTTPS
+
+--- HTTPS endpoints (curl -k, self-signed) ---
+  PASS: GET https /health -> 200 (got 200)
+  PASS: GET https /status -> 200 (got 200)
+  PASS: tls==true under HTTPS (got true)
+  PASS: GET https /devices -> 200 (got 200)
+  PASS: devices list still intact over TLS (got 2)
+  --- GET https /status response body ---
+{"node":{"name":"vietnam-1","endpoint":"63.140.14.154:64044","interface":"wg0"},"peers":1,"peer_source":"registry","dryRun":true,"tls":true,"uptime_seconds":0,"started_at":"2026-08-19T13:35:25.396Z"}
+  --- GET https /devices response body ---
+{"count":2,"devices":[{"device_id":"67f080f3-cae9-44c3-820e-46a19905aede","name":"iPhone 15","platform":"ios","status":"revoked","created_at":"2026-08-19T13:35:23.937Z","assigned_ip":"10.77.0.2","public_key":"pubkey1-test"},{"device_id":"7361a47d-024b-4b6d-b13e-343396e519e0","name":"iPhone 16","platform":null,"status":"active","created_at":"2026-08-19T13:35:23.972Z","assigned_ip":"10.77.0.3","public_key":"pubkey2-test"}]}
+
+--- no plain-HTTP listener when TLS is on (production: TLS-only) ---
+  PASS: plain HTTP refused on TLS port (TLS-only in prod) (got 000)
+
+===================================================================
+ RESULT: ALL CHECKS PASSED
+ Evidence: ../evidence/2026-08-19-control-plane-admin-tls.log
+===================================================================

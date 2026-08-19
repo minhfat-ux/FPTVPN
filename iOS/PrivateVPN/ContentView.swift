@@ -1,79 +1,345 @@
 import SwiftUI
 
+/// Main screen: one-tap Connect/Disconnect, live status card, location and
+/// on-device diagnostics. Target flow: Open app → Choose Vietnam → Connect →
+/// Connected → internet exits through Vietnam.
 struct ContentView: View {
     @EnvironmentObject private var vpnManager: VPNManager
     @EnvironmentObject private var configStore: VPNConfigStore
     @State private var showingSettings = false
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text("FPT PrivateVPN")
-                .font(.largeTitle.bold())
+        NavigationStack {
+            ZStack {
+                VPNTheme.backgroundGradient
+                    .ignoresSafeArea()
 
-            Text(vpnManager.state.label)
-                .font(.title2)
-                .foregroundStyle(stateColor)
+                ScrollView {
+                    VStack(spacing: 20) {
+                        header
+                        statusCard
+                        locationCard
+                        primaryButton
 
-            if let error = vpnManager.lastError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-            }
+                        if vpnManager.state == .failed, let error = vpnManager.lastError {
+                            errorBanner(error)
+                        }
 
-            Button {
-                Task {
-                    await vpnManager.connect(store: configStore)
+                        diagnosticsCard
+                        notConfiguredHint
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
+                    .frame(maxWidth: .infinity)
                 }
-            } label: {
-                Label("Connect", systemImage: "network")
-                    .frame(maxWidth: .infinity)
+                .scrollIndicators(.hidden)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(!vpnManager.state.canConnect)
-
-            Button {
-                vpnManager.disconnect()
-            } label: {
-                Label("Disconnect", systemImage: "network.slash")
-                    .frame(maxWidth: .infinity)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                    .accessibilityLabel("Configuration")
+                }
             }
-            .buttonStyle(.bordered)
-            .disabled(!vpnManager.state.canDisconnect)
-
-            Button {
-                showingSettings = true
-            } label: {
-                Label("Configuration", systemImage: "gearshape")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
-            Text(configStore.isConfigured
-                 ? (configStore.selectedLocation.map { "Server: \($0.name)" } ?? "Server: \(configStore.serverEndpoint)")
-                 : "Not configured — set endpoint & peer key")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(32)
-        .sheet(isPresented: $showingSettings) {
-            NavigationStack {
-                SettingsView()
-                    .environmentObject(configStore)
-                    .environmentObject(vpnManager)
+            .sheet(isPresented: $showingSettings) {
+                NavigationStack {
+                    SettingsView()
+                        .environmentObject(configStore)
+                        .environmentObject(vpnManager)
+                }
             }
         }
+        .preferredColorScheme(.dark)
         .task {
             vpnManager.refreshStatus()
         }
     }
 
-    private var stateColor: Color {
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 34))
+                .foregroundStyle(VPNTheme.accent)
+            Text("FPT PrivateVPN")
+                .font(.title.bold())
+                .foregroundStyle(.white)
+            Text("Private, encrypted internet from Vietnam")
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.6))
+        }
+        .padding(.top, 14)
+    }
+
+    // MARK: - Status card (real state from VPNState, color + SF Symbol)
+
+    private var statusCard: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(vpnManager.state.tint.opacity(0.12))
+                    .frame(width: 172, height: 172)
+                Circle()
+                    .stroke(vpnManager.state.tint.opacity(0.30), lineWidth: 2)
+                    .frame(width: 172, height: 172)
+                Image(systemName: vpnManager.state.symbol)
+                    .font(.system(size: 58, weight: .medium))
+                    .foregroundStyle(vpnManager.state.tint)
+            }
+            .overlay(alignment: .bottom) {
+                if vpnManager.state.isTransitioning {
+                    ProgressView()
+                        .tint(vpnManager.state.tint)
+                        .offset(y: -30)
+                }
+            }
+
+            Text(vpnManager.state.label)
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+
+            Text(vpnManager.state.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.65))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 26)
+        .padding(.horizontal, 20)
+        .background(VPNTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
+        )
+        .animation(.easeInOut(duration: 0.25), value: vpnManager.state)
+    }
+
+    // MARK: - Location (from VPNConfigStore.selectedLocation / serverEndpoint)
+
+    private var locationCard: some View {
+        HStack(spacing: 14) {
+            Text(flagEmoji(for: locationCountry))
+                .font(.system(size: 34))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(locationName)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(locationDetail)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+
+            Spacer()
+
+            Image(systemName: "mappin.and.ellipse")
+                .font(.title3)
+                .foregroundStyle(VPNTheme.accent.opacity(0.8))
+        }
+        .padding(16)
+        .background(VPNTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
+        )
+    }
+
+    private var locationName: String {
+        if let loc = configStore.selectedLocation {
+            return "\(loc.name) · \(loc.city)"
+        }
+        return configStore.serverEndpoint.isEmpty ? "No server selected" : configStore.serverEndpoint
+    }
+
+    private var locationDetail: String {
+        if let loc = configStore.selectedLocation {
+            return "\(loc.host):\(loc.port) · \(countryName(loc.country))"
+        }
+        return "Open Configuration to set a server"
+    }
+
+    private var locationCountry: String {
+        configStore.selectedLocation?.country ?? "VN"
+    }
+
+    // MARK: - Single one-tap primary button (NFR-UX-001 / AC-022)
+
+    private var primaryButton: some View {
+        Button(action: handlePrimaryTap) {
+            HStack(spacing: 10) {
+                if vpnManager.state.isTransitioning {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: primaryButtonSymbol)
+                        .font(.headline)
+                }
+                Text(primaryButtonTitle)
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .background(Capsule().fill(primaryButtonColor))
+        .opacity(primaryButtonDisabled ? 0.45 : 1)
+        .disabled(primaryButtonDisabled)
+        .animation(.easeInOut(duration: 0.25), value: vpnManager.state)
+        .accessibilityHint(vpnManager.state.canConnect
+                           ? "Starts the VPN tunnel to the selected location"
+                           : "Stops the VPN tunnel")
+    }
+
+    private var primaryButtonTitle: String {
         switch vpnManager.state {
-        case .connected: return .green
-        case .connecting, .disconnecting: return .orange
-        case .failed: return .red
-        case .disconnected: return .secondary
+        case .disconnected, .failed: return "Connect"
+        case .connecting, .connected: return "Disconnect"
+        case .disconnecting: return "Disconnecting…"
+        }
+    }
+
+    private var primaryButtonSymbol: String {
+        switch vpnManager.state {
+        case .disconnected, .failed: return "power"
+        case .connecting, .connected, .disconnecting: return "stop.fill"
+        }
+    }
+
+    private var primaryButtonColor: Color {
+        switch vpnManager.state {
+        case .disconnected, .failed: return VPNTheme.accent
+        case .connecting, .connected, .disconnecting: return .red
+        }
+    }
+
+    private var primaryButtonDisabled: Bool {
+        switch vpnManager.state {
+        case .disconnecting:
+            return true
+        case .connecting, .connected:
+            return false
+        case .disconnected, .failed:
+            // Nothing to dial yet — unless the control plane can provision.
+            return !configStore.isConfigured && !configStore.hasControlPlane
+        }
+    }
+
+    private func handlePrimaryTap() {
+        if vpnManager.state.canDisconnect {
+            vpnManager.disconnect()
+        } else {
+            Task {
+                await vpnManager.connect(store: configStore)
+            }
+        }
+    }
+
+    // MARK: - Diagnostics (FR-DIAG-001 / AC-014: on-device, no secrets)
+
+    private var diagnosticsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Diagnostics", systemImage: "waveform.path.ecg")
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            Divider().overlay(Color.white.opacity(0.15))
+
+            diagRow(title: "State", value: vpnManager.state.label, valueColor: vpnManager.state.tint)
+            diagRow(title: "Node", value: nodeDisplay, valueColor: .white.opacity(0.85))
+            diagRow(title: "VPN IP", value: vpnIPDisplay, valueColor: .white.opacity(0.85))
+            diagRow(
+                title: "Last error",
+                value: vpnManager.lastError ?? "None",
+                valueColor: vpnManager.lastError == nil ? .white.opacity(0.85) : .red.opacity(0.9)
+            )
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VPNTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
+        )
+    }
+
+    private func diagRow(title: String, value: String, valueColor: Color) -> some View {
+        HStack(alignment: .top) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.55))
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.subheadline.monospaced())
+                .foregroundStyle(valueColor)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private var nodeDisplay: String {
+        if let loc = configStore.selectedLocation {
+            return "\(loc.name) · \(loc.host):\(loc.port)"
+        }
+        return configStore.serverEndpoint.isEmpty ? "Not configured" : configStore.serverEndpoint
+    }
+
+    private var vpnIPDisplay: String {
+        let trimmed = configStore.tunnelAddress.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? "—" : trimmed
+    }
+
+    // MARK: - Helpers
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(Color.red.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.red.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var notConfiguredHint: some View {
+        if !configStore.isConfigured && !configStore.hasControlPlane && vpnManager.state != .connected {
+            Button {
+                showingSettings = true
+            } label: {
+                Label("Not configured — tap to open Configuration", systemImage: "gearshape")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+    }
+
+    private func countryName(_ code: String) -> String {
+        code == "VN" ? "Vietnam" : code
+    }
+
+    /// ISO 3166-1 alpha-2 country code → regional indicator flag emoji.
+    private func flagEmoji(for countryCode: String) -> String {
+        let base: UInt32 = 127397
+        return countryCode.uppercased().unicodeScalars.reduce(into: "") { result, scalar in
+            if let flag = UnicodeScalar(base + scalar.value) {
+                result.unicodeScalars.append(flag)
+            }
         }
     }
 }

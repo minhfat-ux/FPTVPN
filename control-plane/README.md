@@ -19,8 +19,11 @@ and provisions the peer on the WireGuard node (Tailscale-style).
 | `IP_POOL_CIDR` | `10.77.0.0/24` | Pool subnet; server uses .1, clients get .2–.254 |
 | `WG_BIN` | `wg` | path to `wg` binary |
 | `WG_CMD` | `` | if set, all wg calls go through `wg set` via this wrapper command |
-| `AUTH_TOKEN` | (empty) | if set, `Authorization: Bearer <token>` required |
+| `AUTH_TOKEN` | (empty) | if set, `Authorization: Bearer *** required |
 | `DATA_FILE` | `./data/devices.json` | persistence for device registry |
+| `TLS_CERT_FILE` | (empty) | path to TLS certificate (PEM); together with `TLS_KEY_FILE` enables HTTPS (NFR-SEC-002) |
+| `TLS_KEY_FILE` | (empty) | path to TLS private key (PEM); enables HTTPS when both files are set |
+| `NODE_NAME` | (hostname) | node name reported by `GET /status` |
 
 ## Endpoints
 
@@ -64,6 +67,54 @@ Returns the device record.
 ### `DELETE /device/:id`
 
 Deactivate a device and remove the peer from the node.
+
+### `GET /devices` (owner visibility — FR-ADMIN-001)
+
+Lists all registered devices:
+
+```json
+{
+  "count": 1,
+  "devices": [
+    {
+      "device_id": "uuid",
+      "name": "iPhone 15",
+      "platform": "ios",
+      "status": "active",
+      "created_at": "2026-08-19T...",
+      "assigned_ip": "10.77.0.2",
+      "public_key": "..."
+    }
+  ]
+}
+```
+
+### `GET /status` (owner visibility — FR-ADMIN-001)
+
+Node status: node name/endpoint, peer count, dry-run flag, uptime:
+
+```json
+{
+  "node": { "name": "vietnam-1", "endpoint": "63.140.14.154:64044", "interface": "wg0" },
+  "peers": 1,
+  "peer_source": "registry",
+  "dryRun": true,
+  "tls": false,
+  "uptime_seconds": 42,
+  "started_at": "2026-08-19T..."
+}
+```
+
+`peer_source` is `"wg"` when the count comes from `wg show <iface> peers`
+(production), otherwise `"registry"` (active registered devices — used in
+DRY_RUN / when `wg` is unavailable).
+
+### TLS (NFR-SEC-002)
+
+Set `TLS_CERT_FILE` and `TLS_KEY_FILE` to serve HTTPS (uses
+`https.createServer`). Without them the API falls back to plain HTTP for
+local development and logs a prominent warning — never run production
+without TLS.
 
 ## Local run (dev)
 

@@ -43,11 +43,12 @@ export class DeviceStore {
   }
 
   /** Creates or returns the existing device for a public key. */
-  async upsertByPublicKey({ publicKey, deviceName, assignedIP }) {
+  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform }) {
     const devices = await this._load();
     const existing = devices.find((d) => d.publicKey === publicKey);
     if (existing) {
       existing.deviceName = deviceName ?? existing.deviceName;
+      existing.platform = platform ?? existing.platform;
       existing.active = true;
       await this._save(devices);
       return { device: existing, isNew: false };
@@ -56,6 +57,7 @@ export class DeviceStore {
       id: crypto.randomUUID(),
       publicKey,
       deviceName: deviceName ?? "device",
+      platform: platform ?? null,
       assignedIP,
       createdAt: new Date().toISOString(),
       active: true,

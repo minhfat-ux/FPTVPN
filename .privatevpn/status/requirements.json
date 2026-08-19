@@ -111,15 +111,17 @@
    "id": "FR-ADMIN-001",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_5"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_5",
+   "evidence": "control-plane/src/index.js (GET /devices, GET /status, TLS via TLS_CERT_FILE/TLS_KEY_FILE); evidence/2026-08-19-control-plane-admin-tls.log (31/31 PASS)"
   },
   {
    "id": "FR-DIAG-001",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "PARTIAL",
-   "gate": "GATE_5"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_5",
+   "evidence": "iOS/PrivateVPN/ContentView.swift (status card, one-tap toggle, diagnostics card); evidence/2026-08-19-ui-ux-task.md; evidence/builds/2026-08-19-uiux-build.log (BUILD SUCCEEDED)"
   },
   {
    "id": "NFR-SEC-001",
@@ -132,8 +134,9 @@
    "id": "NFR-SEC-002",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_3"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_3",
+   "evidence": "control-plane/src/index.js (GET /devices, GET /status, TLS via TLS_CERT_FILE/TLS_KEY_FILE); evidence/2026-08-19-control-plane-admin-tls.log (31/31 PASS)"
   },
   {
    "id": "NFR-SEC-003",

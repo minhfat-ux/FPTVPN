@@ -36,6 +36,21 @@ export class WireGuardManager {
     return this._run(args);
   }
 
+  /**
+   * Returns the peer public keys currently configured on the interface,
+   * or null when unavailable (dry-run mode or `wg` not present/failing).
+   * Additive: used by GET /status for the real peer count.
+   */
+  async listPeers() {
+    if (this.dryRun) return null;
+    try {
+      const { stdout } = await execFileAsync(this.wgBin, ["show", this.interfaceName, "peers"]);
+      return stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+    } catch {
+      return null;
+    }
+  }
+
   /** Returns the server's public key, or null on failure. */
   async serverPublicKey() {
     try {
