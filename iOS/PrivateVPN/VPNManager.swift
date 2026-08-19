@@ -1,5 +1,6 @@
 import Foundation
 import NetworkExtension
+import UIKit
 import WireGuardKit
 
 @MainActor
@@ -39,7 +40,12 @@ final class VPNManager: ObservableObject {
 
     func connect(store: VPNConfigStore) async {
         do {
-            let config = try makeConfig(store: store)
+            let config: WireGuardConfig
+            if let baseURL = store.controlPlaneBaseURL {
+                config = try await provisionViaControlPlane(store: store, baseURL: baseURL)
+            } else {
+                config = try makeConfig(store: store)
+            }
             try await prepareConfiguration(config)
             try manager.connection.startVPNTunnel()
             lastError = nil
@@ -69,6 +75,31 @@ final class VPNManager: ObservableObject {
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    // MARK: - Control plane provisioning
+
+    /// Registers the device with the control plane and builds a config from the
+    /// provisioned response (server assigns IP + endpoint automatically).
+    private func provisionViaControlPlane(store: VPNConfigStore, baseURL: URL) async throws -> WireGuardConfig {
+        let privateKey = try KeychainStore.obtainOrCreatePrivateKey()
+        devicePublicKey = privateKey.publicKey.base64Key
+
+        let client = ControlAPIClient(baseURL: baseURL, authToken: store.controlPlaneToken.isEmpty ? nil : store.controlPlaneToken)
+        let response = try await client.register(
+            publicKey: privateKey.publicKey.base64Key,
+            deviceName: UIDevice.current.name
+        )
+
+        let config = ProvisionedConfig(
+            serverPublicKey: response.config.serverPublicKey,
+            endpoint: response.config.endpoint,
+            address: response.config.address,
+            dns: response.config.dns,
+            allowedIPs: response.config.allowedIPs,
+            persistentKeepalive: response.config.persistentKeepalive
+        )
+        return try config.makeWireGuardConfig(privateKey: privateKey)
     }
 
     // MARK: - Configuration

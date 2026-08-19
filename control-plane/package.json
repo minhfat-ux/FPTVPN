@@ -1,0 +1,18 @@
+{
+  "name": "privatevpn-control-plane",
+  "version": "0.1.0",
+  "description": "PrivateVPN control plane — device registration, IP allocation, WireGuard peer provisioning",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

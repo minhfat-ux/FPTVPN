@@ -115,3 +115,25 @@ private extension IPAddress {
         return nil
     }
 }
+
+extension ProvisionedConfig {
+    /// Builds a `WireGuardConfig` from a control-plane-provisioned response,
+    /// using the on-device private key.
+    func makeWireGuardConfig(privateKey: PrivateKey) -> WireGuardConfig {
+        WireGuardConfig(
+            name: "privatevpn",
+            privateKeyBase64: privateKey.base64Key,
+            addresses: [address],
+            dnsServers: dns,
+            peers: [
+                WireGuardConfig.WireGuardPeer(
+                    publicKeyBase64: serverPublicKey,
+                    endpoint: endpoint,
+                    allowedIPs: allowedIPs,
+                    preSharedKeyBase64: nil,
+                    persistentKeepAlive: persistentKeepalive.map(UInt16.init) ?? 25
+                )
+            ]
+        )
+    }
+}

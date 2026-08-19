@@ -37,3 +37,6 @@ Vendor/WireGuardKit/Sources/WireGuardKitGo/goroot/
 # PrivateVPN runtime artifacts
 .privatevpn/tmp/
 *.log.local
+
+# Scratch task notes (not part of the project)
+tasks/

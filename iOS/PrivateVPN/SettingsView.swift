@@ -7,6 +7,31 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                LabeledContent("Control plane URL") {
+                    TextField("https://host:8080", text: $configStore.controlPlaneURL)
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                }
+
+                LabeledContent("Auth token") {
+                    TextField("(optional)", text: $configStore.controlPlaneToken)
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+
+                Text(configStore.hasControlPlane
+                     ? "Devices are registered automatically; endpoint & peer key are filled in."
+                     : "Leave blank to configure the server manually below.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Control plane (auto-provision)")
+            }
+
             Section("Server location") {
                 Picker("Location", selection: $configStore.selectedLocationID) {
                     ForEach(VPNLocation.presets) { location in

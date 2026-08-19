@@ -12,6 +12,8 @@ final class VPNConfigStore: ObservableObject {
         static let dnsServers = "config.server.dns"
         static let allowedIPs = "config.server.allowedIPs"
         static let selectedLocationID = "config.server.locationID"
+        static let controlPlaneURL = "config.controlPlane.url"
+        static let controlPlaneToken = "config.controlPlane.token"
     }
 
     private let defaults: UserDefaults
@@ -34,6 +36,12 @@ final class VPNConfigStore: ObservableObject {
     @Published var selectedLocationID: UUID? {
         didSet { defaults.set(selectedLocationID?.uuidString, forKey: Key.selectedLocationID) }
     }
+    @Published var controlPlaneURL: String {
+        didSet { defaults.set(controlPlaneURL, forKey: Key.controlPlaneURL) }
+    }
+    @Published var controlPlaneToken: String {
+        didSet { defaults.set(controlPlaneToken, forKey: Key.controlPlaneToken) }
+    }
 
     /// The currently selected preset location, if any.
     var selectedLocation: VPNLocation? {
@@ -46,6 +54,18 @@ final class VPNConfigStore: ObservableObject {
             && !serverPublicKey.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// True when a control plane URL has been provided for auto-provisioning.
+    var hasControlPlane: Bool {
+        !controlPlaneURL.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// The control plane URL as a `URL`, if configured.
+    var controlPlaneBaseURL: URL? {
+        let trimmed = controlPlaneURL.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return nil }
+        return url
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         serverEndpoint = defaults.string(forKey: Key.serverEndpoint) ?? ""
@@ -54,6 +74,8 @@ final class VPNConfigStore: ObservableObject {
         dnsServers = defaults.string(forKey: Key.dnsServers) ?? "1.1.1.1"
         allowedIPs = defaults.string(forKey: Key.allowedIPs) ?? "0.0.0.0/0, ::/0"
         selectedLocationID = defaults.string(forKey: Key.selectedLocationID).flatMap(UUID.init)
+        controlPlaneURL = defaults.string(forKey: Key.controlPlaneURL) ?? ""
+        controlPlaneToken = defaults.string(forKey: Key.controlPlaneToken) ?? ""
 
         // Seed a default server selection on first launch so the app is usable
         // without manual endpoint entry.

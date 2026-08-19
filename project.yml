@@ -70,6 +70,7 @@ targets:
     sources:
       - iOS/PrivateVPNPacketTunnel
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
+      - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
     info:
       path: iOS/PrivateVPNPacketTunnel/Info.plist
       properties:
