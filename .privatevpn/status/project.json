@@ -5,8 +5,8 @@
   "rule_baseline": "RULESET-0001",
   "current_gate": "GATE_1",
   "gate_states": {
-    "GATE_0": "PARTIAL",
-    "GATE_1": "PARTIAL",
+    "GATE_0": "DONE",
+    "GATE_1": "COMPLETE",
     "GATE_2": "NOT_STARTED",
     "GATE_3": "NOT_STARTED",
     "GATE_4": "NOT_STARTED",
@@ -14,8 +14,8 @@
     "GATE_6": "NOT_STARTED",
     "GATE_7": "NOT_STARTED"
   },
-  "requirements_verified": 0,
-  "gates_verified": 0,
+  "requirements_verified": 1,
+  "gates_verified": 1,
   "open_bugs": {
     "critical": 0,
     "high": 0,
@@ -27,6 +27,6 @@
     "No Vietnam node / control-plane credentials provided (GATE 2+)."
   ],
   "last_verified": "2026-08-19",
-  "next_verification": "GATE 1 formal gate review (evidence: builds/gate1-simulator-build.log, gate1-simulator-tests.log)",
+  "next_verification": "GATE 2 real-device VPN E2E",
   "updated": "2026-08-19"
 }

@@ -16,7 +16,7 @@ Current task tracked here (schema per spec §31). Structured state also in
 | Files in scope | docs/, .privatevpn/, evidence/, project.yml, iOS/, README.md, .gitignore |
 | Dependencies | xcodegen 2.46.0 (installed) |
 | Acceptance criteria | GATE 1 builds (BUILD SUCCEEDED) + unit tests pass (9/9) |
-| Expected evidence | `evidence/builds/gate1-simulator-build.log`, `evidence/builds/gate1-simulator-tests.log`, `evidence/gate1-verification.md` |
+| Expected evidence | `evidence/builds/2026-08-19-gate1-simulator-build.log`, `evidence/builds/2026-08-19-gate1-tests.log` |
 | Start commit | fafbf5b (GATE 0) |
 | End commit | e23eae9 (GATE 1 skeleton — build ✓, tests ✓) |
 

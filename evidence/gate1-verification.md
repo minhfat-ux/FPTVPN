@@ -7,7 +7,7 @@
 
 ## 1. Simulator build (BUILD SUCCEEDED)
 
-- Log: `evidence/builds/gate1-simulator-build.log`
+- Log: `evidence/builds/2026-08-19-gate1-simulator-build.log`
 - Command:
   ```
   xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN \
@@ -18,7 +18,7 @@
 
 ## 2. Unit tests (TEST SUCCEEDED — 9/9 passed)
 
-- Log: `evidence/builds/gate1-simulator-tests.log`
+- Log: `evidence/builds/2026-08-19-gate1-tests.log`
 - Command:
   ```
   xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN \
