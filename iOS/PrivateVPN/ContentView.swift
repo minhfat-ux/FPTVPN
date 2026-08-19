@@ -5,7 +5,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Text("PrivateVPN")
+            Text("FPT PrivateVPN")
                 .font(.largeTitle.bold())
 
             Text(vpnManager.state.label)

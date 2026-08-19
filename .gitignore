@@ -29,6 +29,11 @@ secrets/
 .build/
 .swiftpm/
 
+# WireGuardKit vendored build artifacts (libwg-go.a built at link time)
+Vendor/WireGuardKit/Sources/WireGuardKitGo/out/
+Vendor/WireGuardKit/Sources/WireGuardKitGo/.tmp/
+Vendor/WireGuardKit/Sources/WireGuardKitGo/goroot/
+
 # PrivateVPN runtime artifacts
 .privatevpn/tmp/
 *.log.local

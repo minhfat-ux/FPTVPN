@@ -7,7 +7,7 @@
   "gate_states": {
     "GATE_0": "DONE",
     "GATE_1": "COMPLETE",
-    "GATE_2": "NOT_STARTED",
+    "GATE_2": "IN_PROGRESS",
     "GATE_3": "NOT_STARTED",
     "GATE_4": "NOT_STARTED",
     "GATE_5": "NOT_STARTED",
@@ -23,8 +23,8 @@
     "low": 0
   },
   "blockers": [
-    "Simulator cannot run a real Packet Tunnel; real-device VPN E2E needs physical iPhone (GATE 2+).",
-    "No Vietnam node / control-plane credentials provided (GATE 2+)."
+    "WireGuard integration code done + device build OK; real connect needs physical iPhone + Network Extensions provisioning profile (paid team).",
+    "No Vietnam node endpoint / peer public key provided (config placeholders in VPNManager.makeConfig())."
   ],
   "last_verified": "2026-08-19",
   "next_verification": "GATE 2 real-device VPN E2E",

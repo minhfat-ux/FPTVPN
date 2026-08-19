@@ -20,6 +20,7 @@ RULESET-0001.
 
 ## Current gate?
 GATE 1 — iOS VPN Skeleton (COMPLETE, simulator-verified). GATE 0 bootstrap deliverables committed.
+GATE 2 — WireGuard integration (code done, device build verified; real connect blocked).
 
 ## What is VERIFIED?
 - Environment audit captured (`evidence/environment_audit.md`): Xcode 26.6,
@@ -31,12 +32,18 @@ GATE 1 — iOS VPN Skeleton (COMPLETE, simulator-verified). GATE 0 bootstrap del
 - App + Packet Tunnel extension sign ad-hoc and build from Xcode on the simulator
   → resolves "executable is not codesigned" run error (`CODE_SIGNING_ALLOWED=NO`
   removed from project-level settings).
+- WireGuardKit vendored (`Vendor/WireGuardKit`), libwg-go.a built via Go 1.26.6,
+  and the **device** build links it → `** BUILD SUCCEEDED **` (extension embedded
+  + signed team G6XW3RN6LJ). See `VERIFIED_FACTS.md` VF-007/008.
 
 ## What is implemented but unverified?
 - Docs/bootstrap artifacts (SRS, architecture, ADRs, rules, KB, memory, bug registry,
   status, dashboard) — created, not externally verified.
 - GATE 1 skeleton code (state model, UI, extension) — buildable + unit-tested is
   evidence of buildability, not real-device VPN runtime verification (GATE 2+).
+- WireGuard integration (KeychainStore keypair, WireGuardConfig parser,
+  PacketTunnelProvider using WireGuardAdapter, VPNManager config) — compiles + device
+  build links, but **no real tunnel connect verified** (needs server + device).
 
 ## What is running?
 Culi orchestration session (this one).
@@ -44,7 +51,10 @@ Culi orchestration session (this one).
 ## What is blocked?
 - Real VPN runtime (GATE 2+): simulator cannot run Packet Tunnel; requires physical
   iPhone + Apple team with Network Extension entitlement (identity exists).
-- Server/control-plane: no Vietnam node credentials or API details provided.
+- Server/control-plane: no Vietnam node credentials, endpoint, or peer public key
+  provided. WireGuard config currently uses placeholders in `VPNManager.makeConfig()`.
+- Simulator link of `libwg-go.a` fails (Go iOS-simulator runtime lacks a darwin symbol);
+  WireGuard is device-only (documented, acceptable — simulator can't run a tunnel).
 
 ## What is stale?
 Nothing yet (fresh repo).
@@ -55,5 +65,8 @@ Nothing yet (fresh repo).
 3. ✅ Implement state model, VPNManager, minimal SwiftUI UI.
 4. ✅ Build with xcodebuild → capture BUILD SUCCEEDED log in evidence/.
 5. ✅ Commit GATE 1; report.
-6. GATE 2: real-device build/signing, WireGuard provisioning vs Vietnam node,
-   tunnel runtime E2E (blocked: needs physical iPhone + Node/control-plane creds).
+6. 🚧 WireGuard integration: vendored kit, keypair store, config parser, real
+   `startTunnel` via WireGuardAdapter — code done, device build OK (uncommitted).
+7. Commit WireGuard integration + capture evidence.
+8. GATE 2: real-device E2E — needs physical iPhone + Vietnam node endpoint/peer
+   public key (blocked).
