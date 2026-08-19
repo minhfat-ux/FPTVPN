@@ -60,6 +60,7 @@ final class VPNConfigStore: ObservableObject {
         if selectedLocationID == nil, let first = VPNLocation.presets.first {
             selectedLocationID = first.id
             serverEndpoint = "\(first.host):\(first.port)"
+            serverPublicKey = first.publicKey
         }
     }
 }

@@ -10,6 +10,7 @@ struct VPNLocation: Identifiable, Hashable, Codable {
     var city: String
     var endpoint: String   // host:port
     var port: UInt16
+    var publicKey: String   // WireGuard peer public key
 
     var host: String {
         endpoint.split(separator: ":").first.map(String.init) ?? endpoint
@@ -23,7 +24,8 @@ struct VPNLocation: Identifiable, Hashable, Codable {
             country: "VN",
             city: "Hanoi",
             endpoint: "103.173.155.50",
-            port: 22
+            port: 22,
+            publicKey: "hPuZYfu/lvnaSkGcO61Ks99rqVIdrL/ilOjw3+ip5BQ="
         ),
     ]
 }

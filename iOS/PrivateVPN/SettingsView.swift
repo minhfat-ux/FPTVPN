@@ -18,6 +18,7 @@ struct SettingsView: View {
                 .onChange(of: configStore.selectedLocationID) { _, newValue in
                     if let loc = VPNLocation.presets.first(where: { $0.id == newValue }) {
                         configStore.serverEndpoint = "\(loc.host):\(loc.port)"
+                        configStore.serverPublicKey = loc.publicKey
                     }
                 }
 
