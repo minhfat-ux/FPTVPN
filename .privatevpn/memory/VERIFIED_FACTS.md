@@ -10,6 +10,7 @@ Only evidence-backed statements. Agent/Expert claims are never promoted directly
 | VF-003 | Repo was empty at start (no commits); git status verified | `evidence/environment_audit.md` | 2026-08-19 |
 | VF-004 | App + Packet Tunnel extension + tests build for iOS Simulator via xcodebuild → BUILD SUCCEEDED | `evidence/builds/2026-08-19-gate1-simulator-build.log` | 2026-08-19 |
 | VF-005 | VPNState unit tests: 9/9 pass, 0 failures (TEST SUCCEEDED) | `evidence/builds/2026-08-19-gate1-tests.log` | 2026-08-19 |
+| VF-006 | App + Packet Tunnel extension sign ad-hoc (`Signature=adhoc`) and build from Xcode for the iOS Simulator after removing project-level `CODE_SIGNING_ALLOWED=NO` | `codesign -dv` on built `PrivateVPN.app` + `PlugIns/PrivateVPNPacketTunnel.appex`; `xcodebuild ... -destination 'iOS Simulator' build` → BUILD SUCCEEDED | 2026-08-19 |
 
 NOT verified: any VPN connectivity, public-IP change, DNS/HTTPS through tunnel,
 revocation. These require GATE 2+/real device.

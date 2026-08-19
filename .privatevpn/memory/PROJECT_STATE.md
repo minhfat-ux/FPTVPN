@@ -28,6 +28,9 @@ GATE 1 — iOS VPN Skeleton (COMPLETE, simulator-verified). GATE 0 bootstrap del
   → `** BUILD SUCCEEDED **` (`evidence/builds/2026-08-19-gate1-simulator-build.log`).
 - VPNState unit tests → `** TEST SUCCEEDED **`, 9/9 passed, 0 failures
   (`evidence/builds/2026-08-19-gate1-tests.log`). See `VERIFIED_FACTS.md` VF-004/005.
+- App + Packet Tunnel extension sign ad-hoc and build from Xcode on the simulator
+  → resolves "executable is not codesigned" run error (`CODE_SIGNING_ALLOWED=NO`
+  removed from project-level settings).
 
 ## What is implemented but unverified?
 - Docs/bootstrap artifacts (SRS, architecture, ADRs, rules, KB, memory, bug registry,

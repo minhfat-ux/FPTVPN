@@ -26,10 +26,23 @@ docs/                 SRS, architecture, ADRs, registry, changelog
 evidence/             real build / test / network evidence
 ```
 
-## Build (simulator)
+## Build & run (simulator)
+
+The project is signed automatically (ad-hoc) so it can be built and run directly
+from Xcode on the iOS Simulator. Regenerate the project after editing `project.yml`:
 
 ```bash
 /opt/homebrew/bin/xcodegen generate
-xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN \
-  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
+
+Build + run from Xcode, or via CLI:
+
+```bash
+xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN \
+  -destination 'generic/platform=iOS Simulator' build
+```
+
+> Note: `CODE_SIGNING_ALLOWED=NO` is NOT set in the project anymore — it was removed
+> so the app can be signed and installed on the simulator from Xcode. If you only
+> want an unsigned compile check from the CLI, pass `CODE_SIGNING_ALLOWED=NO` on the
+> command line.

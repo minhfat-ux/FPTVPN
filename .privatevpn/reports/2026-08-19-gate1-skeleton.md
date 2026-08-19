@@ -18,8 +18,9 @@ GATE 1 = iOS app + Packet Tunnel provider skeleton with a real state model, buil
 
 ## Deliverables
 - `project.yml` — XcodeGen manifest: app, packet-tunnel extension, unit-test targets,
-  Network Extension `packet-tunnel-provider` entitlement, `CODE_SIGNING_ALLOWED=NO`
-  (simulator-only build, documented decision).
+  Network Extension `packet-tunnel-provider` entitlement. `CODE_SIGNING_ALLOWED=NO`
+  removed from project-level settings so the app signs ad-hoc and runs from Xcode
+  on the simulator (fixes "executable is not codesigned").
 - `iOS/PrivateVPN/` — app sources:
   - `VPNState.swift` — state machine (`disconnected/connecting/connected/disconnecting/failed`),
     `NEVPNStatus` mapping, `canConnect`/`canDisconnect`.

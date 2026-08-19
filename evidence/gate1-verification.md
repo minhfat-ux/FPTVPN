@@ -16,6 +16,17 @@
 - Result: exit 0 — `** BUILD SUCCEEDED **`
 - Targets built: PrivateVPN (app), PrivateVPNPacketTunnel (appex, embedded)
 
+## 1b. Xcode signing fix (adhoc sign, runnable from Xcode)
+
+- Root cause of "The executable is not codesigned" run error: project-level
+  `CODE_SIGNING_ALLOWED: NO` in `project.yml` disabled all signing, so Xcode
+  could not install the app on the simulator.
+- Fix: removed `CODE_SIGNING_ALLOWED: NO` from project-level settings; regenerated
+  the project with xcodegen.
+- Result: app + extension now sign ad-hoc (`codesign -dv` → `Signature=adhoc`,
+  `Identifier=com.privatevpn.app`, `com.privatevpn.app.packet-tunnel`) and build
+  from Xcode for the simulator → BUILD SUCCEEDED.
+
 ## 2. Unit tests (TEST SUCCEEDED — 9/9 passed)
 
 - Log: `evidence/builds/2026-08-19-gate1-tests.log`
