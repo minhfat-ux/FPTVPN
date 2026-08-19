@@ -11,23 +11,23 @@
 ```
 PRIVATEVPN iOS MVP
 
-Project health: ACTIVE (GATE 1 verified — pending formal gate review)
-Current Gate: GATE 1 — iOS VPN Skeleton
+Project health: ACTIVE (GATE 1 verified — GATE 2/3 code complete, runtime E2E blocked)
+Current Gate: GATE 3 — Dynamic Device Provisioning (control plane implemented)
 Current SRS: v0.1
 Requirement baseline: RS-20260819-01
 Rule baseline: RULESET-0001
 
-Requirements VERIFIED: 0 (by evidence; formal gate review pending)
-Gates VERIFIED: 0 / 8
-Verification checks: BUILD PASS ✓ (GATE 1, 2026-08-19) · TESTS PASS ✓ (9/9)
+Requirements VERIFIED: 1 (FR-VPN-005; GATE 2/3 code verified by build + smoke)
+Gates VERIFIED: 1 / 8 (GATE 1)
+Verification checks: BUILD PASS ✓ (GATE 1 + GATE 2 device re-verify, 2026-08-19) · TESTS PASS ✓ (9/9) · CONTROL-PLANE SMOKE ✓ (auth/IP-pool/idempotency/delete)
 
 Active agents: 1 (Culi/orchestrator — this session)
 Active experts: 0 consulted (bootstrap; planned for GATE 2 WireGuard wiring)
 Open bugs: Critical 0 / High 0 / Medium 0 / Low 0
 Blockers:
-  - Simulator cannot run a real Packet Tunnel (needs physical iPhone) — affects GATE 2+, NOT GATE 1.
-  - No server/control-plane credentials provided yet — affects GATE 2+.
-  - Internal system disk was 100% full during session (300 MB free) — freed ~2 GB (DerivedData/module caches); ~2.3 GB free now. Watch disk pressure before next build.
+  - Real VPN connect needs physical iPhone + Network Extensions provisioning profile (paid team) — GATE 2/7.
+  - No production Vietnam node credentials: control plane runs DRY_RUN; real wg provisioning needs node access + WG_SERVER_PUBKEY/WG_PUBLIC_ENDPOINT.
+  - Internal system disk pressure (8.6 Gi free at last check). Watch before next build.
 Last verified result: GATE 1 simulator build + 9/9 unit tests (evidence/builds/*.log, evidence/gate1-verification.md)
 Next verification: GATE 1 formal gate review (verifier authority, spec §33)
 Owner action required: none for GATE 1 (simulator scope)
@@ -36,10 +36,10 @@ Owner action required: none for GATE 1 (simulator scope)
 ## Gate flow
 
 ```text
-◐ GATE 0  Reality Audit & Engineering Bootstrap  (PARTIAL — artifacts done)
-◐ GATE 1  iOS VPN Skeleton  (build ✓ + tests ✓ 9/9; formal review pending)
-○ GATE 2  Static Real Tunnel
-○ GATE 3  Dynamic Device Provisioning
+✓ GATE 0  Reality Audit & Engineering Bootstrap  (DONE)
+✓ GATE 1  iOS VPN Skeleton  (build ✓ + tests ✓ 9/9; formal review pending)
+▶ GATE 2  Static Real Tunnel  (code complete + device build ✓; runtime E2E BLOCKED)
+▶ GATE 3  Dynamic Device Provisioning  (control plane code + smoke ✓; real node pending)
 ○ GATE 4  Authentication & Revocation
 ○ GATE 5  MVP UX & Diagnostics
 ○ GATE 6  Security Review

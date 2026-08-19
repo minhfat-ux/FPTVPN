@@ -13,3 +13,5 @@ Durable engineering decisions (see also `docs/adr/`).
 | 2026-08-19 | WireGuard framework = WireGuardKit (wireguard-apple), vendored into `Vendor/WireGuardKit` (patched sys/types.h for Xcode 26; wireguard-go pinned 2023 for Go 1.26 compat) | PROJECT_STATE.md, VERIFIED_FACTS.md VF-007 |
 | 2026-08-19 | Device keypair kept per-device (Tailscale-style: user owns many devices); private key only in Keychain, never on server | ARCHITECTURE.md §2, VERIFIED_FACTS.md |
 | 2026-08-19 | `libwg-go.a` built by a pre-build script (Go) at link time; simulator link unsupported (Go iOS-simulator runtime) → WireGuard is device-only | PROJECT_STATE.md |
+| 2026-08-19 | Control plane = small Node.js/Express service (control-plane/): POST /device registers, IP pool 10.77.0.0/24 (server-assigned, Tailscale-style), wg set provisioning, optional bearer auth, DRY_RUN mode for dev | commit 464d793, control-plane/README.md |
+| 2026-08-19 | Device registers with control plane on Connect when control-plane URL configured in Settings (ControlAPIClient); manual endpoint/peer entry remains as fallback | VPNManager.swift, SettingsView.swift |

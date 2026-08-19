@@ -12,57 +12,73 @@
    "id": "FR-DEVICE-001",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_3"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_3",
+   "verified": null,
+   "evidence": "control-plane/src/index.js (POST /device); iOS/PrivateVPN/Services/ControlAPIClient.swift; evidence/2026-08-19-control-plane-smoke.log"
   },
   {
    "id": "FR-DEVICE-002",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_3"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_3",
+   "verified": null,
+   "evidence": "iOS/PrivateVPN/Services/KeychainStore.swift"
   },
   {
    "id": "FR-PROVISION-001",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_3"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_3",
+   "verified": null,
+   "evidence": "control-plane/src/ip-pool.js; control-plane/src/index.js buildClientConfig; evidence/2026-08-19-control-plane-smoke.log"
   },
   {
    "id": "FR-PROVISION-002",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_3"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_3",
+   "verified": null,
+   "evidence": "control-plane/src/wireguard.js; control-plane/src/index.js (wg upsertPeer); evidence/2026-08-19-control-plane-smoke.log"
   },
   {
    "id": "FR-VPN-001",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_2"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_2",
+   "verified": null,
+   "evidence": "iOS/PrivateVPN/VPNManager.swift; iOS/PrivateVPN/Services/WireGuardConfig.swift; evidence/builds/2026-08-19-gate2-device-build-verify.log"
   },
   {
    "id": "FR-VPN-002",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_2"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_2",
+   "verified": null,
+   "evidence": "iOS/PrivateVPN/Services/WireGuardConfig.swift (allowedIPs 0.0.0.0/0, ::/0)"
   },
   {
    "id": "FR-VPN-003",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_2"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_2",
+   "verified": null,
+   "evidence": "iOS/PrivateVPN/VPNManager.swift disconnect() -> stopVPNTunnel()"
   },
   {
    "id": "FR-VPN-004",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_2"
+   "impl": "IMPLEMENTED",
+   "gate": "GATE_2",
+   "verified": null,
+   "evidence": "iOS/PrivateVPN/VPNManager.swift connect() -> startVPNTunnel() (re-entrant)"
   },
   {
    "id": "FR-VPN-005",
@@ -77,15 +93,19 @@
    "id": "FR-REVOKE-001",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_4"
+   "impl": "PARTIAL",
+   "gate": "GATE_4",
+   "verified": null,
+   "evidence": "control-plane/src/index.js (DELETE /device -> wg removePeer); iOS revoke UI chưa có"
   },
   {
    "id": "FR-REVOKE-002",
    "version": "v1",
    "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_4"
+   "impl": "PARTIAL",
+   "gate": "GATE_4",
+   "verified": null,
+   "evidence": "control-plane/src/index.js DELETE /device (server-side peer removal); device-side verify pending"
   },
   {
    "id": "FR-ADMIN-001",

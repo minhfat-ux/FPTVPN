@@ -20,7 +20,8 @@ RULESET-0001.
 
 ## Current gate?
 GATE 1 — iOS VPN Skeleton (COMPLETE, simulator-verified). GATE 0 bootstrap deliverables committed.
-GATE 2 — WireGuard integration (code done, device build verified; real connect blocked).
+GATE 2 — WireGuard integration (code complete + device build verified; real connect blocked).
+GATE 3 — Dynamic device provisioning (control-plane implemented + smoke-tested; integration with real node pending).
 
 ## What is VERIFIED?
 - Environment audit captured (`evidence/environment_audit.md`): Xcode 26.6,
@@ -35,6 +36,11 @@ GATE 2 — WireGuard integration (code done, device build verified; real connect
 - WireGuardKit vendored (`Vendor/WireGuardKit`), libwg-go.a built via Go 1.26.6,
   and the **device** build links it → `** BUILD SUCCEEDED **` (extension embedded
   + signed team G6XW3RN6LJ). See `VERIFIED_FACTS.md` VF-007/008.
+- **Device build re-verified independently** after control-plane integration
+  (`evidence/builds/2026-08-19-gate2-device-build-verify.log`) → BUILD SUCCEEDED.
+- **Control-plane smoke test** (DRY_RUN, Node v26.6.0): 401 auth, 201 register +
+  IP pool 10.77.0.2/.3, 200 idempotent re-register, 400 validation, DELETE →
+  active=false + `wg` dry-run peer remove (`evidence/2026-08-19-control-plane-smoke.md`).
 
 ## What is implemented but unverified?
 - Docs/bootstrap artifacts (SRS, architecture, ADRs, rules, KB, memory, bug registry,
@@ -45,17 +51,21 @@ GATE 2 — WireGuard integration (code done, device build verified; real connect
   PacketTunnelProvider using WireGuardAdapter, VPNManager config, VPNConfigStore +
   SettingsView) — compiles + device build links, but **no real tunnel connect
   verified** (needs server + device).
+- Control plane (Express: POST/GET/DELETE /device, IP pool 10.77.0.0/24, wg peer
+  provisioning, bearer auth, DRY_RUN) — code complete + smoke-verified; **not yet
+  run against a real WireGuard node** (no node credentials).
+- ControlAPIClient (iOS side registers device on Connect when control-plane URL set)
+  — compiled into device build; runtime path needs a reachable control plane.
 
 ## What is running?
-Culi orchestration session (this one).
+Culi orchestration session (this one) + control-plane smoke test (finished).
 
 ## What is blocked?
 - Real VPN runtime (GATE 2+): simulator cannot run Packet Tunnel; requires physical
   iPhone + Apple team with Network Extension entitlement (identity exists).
-- Server/control-plane: no Vietnam node credentials, endpoint, or peer public key
-  provided. The user now enters endpoint + peer key via the in-app Configuration
-  screen (`SettingsView`/`VPNConfigStore`), replacing the previous hardcoded
-  placeholders in `VPNManager.makeConfig()`.
+- Server/control-plane: no production Vietnam node credentials, endpoint, or peer
+  public key provided. Dev preset (Hanoi test node) exists in-app; control plane
+  needs WG_SERVER_PUBKEY/WG_PUBLIC_ENDPOINT of a live node to provision real peers.
 - Simulator link of `libwg-go.a` fails (Go iOS-simulator runtime lacks a darwin symbol);
   WireGuard is device-only (documented, acceptable — simulator can't run a tunnel).
 - Unit tests cannot run on the iOS Simulator because the test host builds the whole
@@ -75,5 +85,9 @@ Nothing yet (fresh repo).
    `startTunnel` via WireGuardAdapter — code done, device build OK (committed 9033251).
 7. ✅ Add in-app Configuration screen (VPNConfigStore + SettingsView) for endpoint /
    peer key; user-configurable instead of placeholders.
-8. GATE 2: real-device E2E — needs physical iPhone + Vietnam node endpoint/peer
-   public key entered in the app (blocked).
+8. ✅ Control plane (Node.js): device registration + auto-provisioning + IP pool
+   + bearer auth + DRY_RUN (commit 464d793, smoke-tested).
+9. GATE 3/4: wire revoke UI (FR-REVOKE-001/002), auth (FR-AUTH-001), admin
+   visibility (FR-ADMIN-001) — pending control-plane deployment decisions.
+10. GATE 2: real-device E2E — needs physical iPhone + Vietnam node endpoint/peer
+    public key entered in the app (blocked).

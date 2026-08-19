@@ -3,12 +3,12 @@
   "srs_version": "v0.1",
   "requirement_baseline": "RS-20260819-01",
   "rule_baseline": "RULESET-0001",
-  "current_gate": "GATE_1",
+  "current_gate": "GATE_3",
   "gate_states": {
     "GATE_0": "DONE",
     "GATE_1": "COMPLETE",
-    "GATE_2": "IN_PROGRESS",
-    "GATE_3": "NOT_STARTED",
+    "GATE_2": "CODE_COMPLETE",
+    "GATE_3": "IN_PROGRESS",
     "GATE_4": "NOT_STARTED",
     "GATE_5": "NOT_STARTED",
     "GATE_6": "NOT_STARTED",
@@ -23,8 +23,8 @@
     "low": 0
   },
   "blockers": [
-    "WireGuard integration code done + device build OK; real connect needs physical iPhone + Network Extensions provisioning profile (paid team).",
-    "No Vietnam node endpoint / peer public key provided (config placeholders in VPNManager.makeConfig())."
+    "Real VPN connect (GATE 2/7) needs physical iPhone + Network Extensions provisioning profile (paid team) — code + device build verified, runtime E2E blocked.",
+    "No production Vietnam node credentials: control-plane runs in DRY_RUN; real wg provisioning needs node access + WG_SERVER_PUBKEY/WG_PUBLIC_ENDPOINT of a live node."
   ],
   "last_verified": "2026-08-19",
   "next_verification": "GATE 2 real-device VPN E2E",
