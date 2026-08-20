@@ -151,16 +151,17 @@
       "id": "NFR-SEC-004",
       "version": "v1",
       "state": "APPROVED",
-      "impl": "NOT_STARTED",
-      "gate": "GATE_4"
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_4",
+      "evidence": "evidence/2026-08-20-privacy-fixes.md (AC-018: admin endpoints fail closed — 503 when AUTH_TOKEN unset, 401 on bad/missing token)"
     },
     {
       "id": "NFR-PRIV-001",
       "version": "v1",
       "state": "APPROVED",
-      "impl": "PARTIAL",
+      "impl": "IMPLEMENTED",
       "gate": "GATE_6",
-      "evidence": "evidence/2026-08-20-privacy-review.md (19 points, 16 PASS / 3 low ISSUE: deviceName in POST /device, auth token UserDefaults plaintext, admin unauth when AUTH_TOKEN unset)"
+      "evidence": "evidence/2026-08-20-privacy-fixes.md (3 low issues fixed: deviceName removed from POST /device, token moved to Keychain, admin endpoints fail-closed)"
     },
     {
       "id": "NFR-PERF-001",

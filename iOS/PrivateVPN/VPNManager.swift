@@ -88,7 +88,6 @@ final class VPNManager: ObservableObject {
         let client = ControlAPIClient(baseURL: baseURL, authToken: store.controlPlaneToken.isEmpty ? nil : store.controlPlaneToken)
         let response = try await client.register(
             publicKey: privateKey.publicKey.base64Key,
-            deviceName: UIDevice.current.name,
             deviceId: try DeviceIdentity.deviceID().uuidString,
             platform: "ios"
         )

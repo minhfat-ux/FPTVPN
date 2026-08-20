@@ -13,12 +13,16 @@ final class VPNConfigStoreTests: XCTestCase {
         suiteName = "VPNConfigStoreTests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         defaults.removePersistentDomain(forName: suiteName)
+        // The control-plane token now lives in the Keychain (NFR-PRIV-001);
+        // tests swap in an in-memory backend so nothing touches real secrets.
+        KeychainStore.backend = InMemoryKeychainBackend()
     }
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         suiteName = nil
+        KeychainStore.backend = SecurityKeychainBackend()
         super.tearDown()
     }
 
@@ -92,5 +96,39 @@ final class VPNConfigStoreTests: XCTestCase {
         XCTAssertEqual(store.allowedIPs, "0.0.0.0/0, ::/0")
         XCTAssertEqual(store.controlPlaneURL, "")
         XCTAssertEqual(store.controlPlaneToken, "")
+    }
+
+    func testTokenPersistsInKeychainNotUserDefaults() throws {
+        let store = makeStore()
+        store.controlPlaneToken = "tok-keychain"
+
+        // The token must live in the Keychain, never in UserDefaults
+        // (NFR-PRIV-001 — privacy review 2026-08-20 ISSUE #3).
+        XCTAssertNil(defaults.object(forKey: "config.controlPlane.token"))
+        let stored = try XCTUnwrap(
+            try KeychainStore.loadData(for: "control-plane.token")
+                .flatMap { String(data: $0, encoding: .utf8) }
+        )
+        XCTAssertEqual(stored, "tok-keychain")
+
+        // A fresh store instance (same device) must reload it from the Keychain.
+        let reloaded = makeStore()
+        XCTAssertEqual(reloaded.controlPlaneToken, "tok-keychain")
+    }
+
+    func testTokenMigratesFromLegacyUserDefaults() throws {
+        // Simulate a pre-Keychain install: token sitting in UserDefaults.
+        defaults.set("legacy-tok", forKey: "config.controlPlane.token")
+
+        let store = makeStore()
+        XCTAssertEqual(store.controlPlaneToken, "legacy-tok")
+
+        // Migration is one-shot: legacy value removed, Keychain now holds it.
+        XCTAssertNil(defaults.object(forKey: "config.controlPlane.token"))
+        let stored = try XCTUnwrap(
+            try KeychainStore.loadData(for: "control-plane.token")
+                .flatMap { String(data: $0, encoding: .utf8) }
+        )
+        XCTAssertEqual(stored, "legacy-tok")
     }
 }

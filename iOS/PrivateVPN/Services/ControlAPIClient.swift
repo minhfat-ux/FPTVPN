@@ -60,9 +60,13 @@ struct ControlAPIClient {
     /// `deviceId` is the stable on-device UUID from `DeviceIdentity`; `platform`
     /// is the client OS. Both are forward-compatible extras — the control plane
     /// currently keys registration on the public key and ignores unknown fields.
+    ///
+    /// Deliberately does NOT send a device name: `UIDevice.current.name`
+    /// frequently contains the owner's real name (e.g. "Minh's iPhone") and is
+    /// not required by the VPN service (NFR-PRIV-001 — privacy review
+    /// 2026-08-20 ISSUE #1). The control plane defaults the display name.
     func register(
         publicKey: String,
-        deviceName: String,
         deviceId: String? = nil,
         platform: String? = nil
     ) async throws -> RegisterDeviceResponse {
@@ -75,7 +79,6 @@ struct ControlAPIClient {
         }
         var body: [String: String] = [
             "publicKey": publicKey,
-            "deviceName": deviceName,
         ]
         if let deviceId {
             body["deviceId"] = deviceId

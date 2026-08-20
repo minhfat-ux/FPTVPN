@@ -63,8 +63,7 @@ final class ControlAPIClientTests: XCTestCase {
         }
 
         let result = try await client.register(
-            publicKey: "server-seen-public-key",
-            deviceName: "iPhone 15"
+            publicKey: "server-seen-public-key"
         )
 
         XCTAssertEqual(result, expected)
@@ -88,7 +87,6 @@ final class ControlAPIClientTests: XCTestCase {
 
         _ = try await client.register(
             publicKey: "device-public-key",
-            deviceName: "iPhone 15",
             deviceId: "00000000-0000-0000-0000-0000000000ab",
             platform: "ios"
         )
@@ -102,7 +100,7 @@ final class ControlAPIClientTests: XCTestCase {
         let body = try XCTUnwrap(bodyData(from: request))
         let payload = try XCTUnwrap(try JSONDecoder().decode([String: String].self, from: body))
         XCTAssertEqual(payload["publicKey"], "device-public-key")
-        XCTAssertEqual(payload["deviceName"], "iPhone 15")
+        XCTAssertNil(payload["deviceName"], "device name must not be transmitted (NFR-PRIV-001)")
         XCTAssertEqual(payload["deviceId"], "00000000-0000-0000-0000-0000000000ab")
         XCTAssertEqual(payload["platform"], "ios")
     }
@@ -118,7 +116,7 @@ final class ControlAPIClientTests: XCTestCase {
             return (response, try JSONEncoder().encode(self.makeResponse()))
         }
 
-        _ = try await client.register(publicKey: "device-public-key", deviceName: "iPhone 15")
+        _ = try await client.register(publicKey: "device-public-key")
 
         XCTAssertNil(capturedRequest?.value(forHTTPHeaderField: "Authorization"))
     }
@@ -133,7 +131,7 @@ final class ControlAPIClientTests: XCTestCase {
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key", deviceName: "iPhone 15")
+            _ = try await client.register(publicKey: "device-public-key")
             XCTFail("Expected a ClientError for HTTP 401")
         } catch let error as ControlAPIClient.ClientError {
             guard case .server(let message) = error else {
@@ -153,7 +151,7 @@ final class ControlAPIClientTests: XCTestCase {
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key", deviceName: "iPhone 15")
+            _ = try await client.register(publicKey: "device-public-key")
             XCTFail("Expected a ClientError for HTTP 503")
         } catch let error as ControlAPIClient.ClientError {
             guard case .server(let message) = error else {
@@ -170,7 +168,7 @@ final class ControlAPIClientTests: XCTestCase {
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key", deviceName: "iPhone 15")
+            _ = try await client.register(publicKey: "device-public-key")
             XCTFail("Expected a ClientError for a transport failure")
         } catch let error as ControlAPIClient.ClientError {
             guard case .transport = error else {
@@ -189,7 +187,7 @@ final class ControlAPIClientTests: XCTestCase {
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key", deviceName: "iPhone 15")
+            _ = try await client.register(publicKey: "device-public-key")
             XCTFail("Expected a decoding error for a malformed 200 payload")
         } catch is DecodingError {
             // Expected: JSON decode failure surfaces as-is.

@@ -13,7 +13,12 @@ final class VPNConfigStore: ObservableObject {
         static let allowedIPs = "config.server.allowedIPs"
         static let selectedLocationID = "config.server.locationID"
         static let controlPlaneURL = "config.controlPlane.url"
-        static let controlPlaneToken = "config.controlPlane.token"
+        /// Keychain account for the control-plane auth token. The token is a
+        /// credential and must not live in UserDefaults (NFR-PRIV-001 — privacy
+        /// review 2026-08-20 ISSUE #3).
+        static let controlPlaneTokenAccount = "control-plane.token"
+        /// Legacy UserDefaults key for the token; read once for migration, then removed.
+        static let controlPlaneTokenLegacy = "config.controlPlane.token"
     }
 
     private let defaults: UserDefaults
@@ -40,7 +45,7 @@ final class VPNConfigStore: ObservableObject {
         didSet { defaults.set(controlPlaneURL, forKey: Key.controlPlaneURL) }
     }
     @Published var controlPlaneToken: String {
-        didSet { defaults.set(controlPlaneToken, forKey: Key.controlPlaneToken) }
+        didSet { persistControlPlaneToken() }
     }
 
     /// The currently selected preset location, if any.
@@ -83,7 +88,7 @@ final class VPNConfigStore: ObservableObject {
         allowedIPs = defaults.string(forKey: Key.allowedIPs) ?? "0.0.0.0/0, ::/0"
         selectedLocationID = defaults.string(forKey: Key.selectedLocationID).flatMap(UUID.init)
         controlPlaneURL = defaults.string(forKey: Key.controlPlaneURL) ?? ""
-        controlPlaneToken = defaults.string(forKey: Key.controlPlaneToken) ?? ""
+        controlPlaneToken = Self.loadControlPlaneToken(defaults: defaults)
 
         // Seed a default server selection on first launch so the app is usable
         // without manual endpoint entry.
@@ -92,6 +97,33 @@ final class VPNConfigStore: ObservableObject {
             serverEndpoint = "\(first.host):\(first.port)"
             serverPublicKey = first.publicKey
             tunnelAddress = first.clientAddress
+        }
+    }
+
+    // MARK: - Control-plane token persistence (Keychain)
+
+    /// Reads the token from the Keychain, migrating any legacy UserDefaults
+    /// value on first run (NFR-PRIV-001 — privacy review 2026-08-20 ISSUE #3).
+    private static func loadControlPlaneToken(defaults: UserDefaults) -> String {
+        if let data = try? KeychainStore.loadData(for: Key.controlPlaneTokenAccount),
+           let token = String(data: data, encoding: .utf8),
+           !token.isEmpty {
+            return token
+        }
+        if let legacy = defaults.string(forKey: Key.controlPlaneTokenLegacy), !legacy.isEmpty {
+            try? KeychainStore.save(Data(legacy.utf8), for: Key.controlPlaneTokenAccount)
+            defaults.removeObject(forKey: Key.controlPlaneTokenLegacy)
+            return legacy
+        }
+        return ""
+    }
+
+    private func persistControlPlaneToken() {
+        do {
+            try KeychainStore.save(Data(controlPlaneToken.utf8), for: Key.controlPlaneTokenAccount)
+        } catch {
+            // Surface programming errors in debug; never crash on a storage hiccup.
+            assertionFailure("Failed to persist control-plane token to Keychain: \(error)")
         }
     }
 }

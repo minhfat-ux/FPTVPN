@@ -62,6 +62,25 @@ app.use((req, res, next) => {
   next();
 });
 
+// Admin/owner surface (NFR-SEC-004 / AC-018): device listing, status and
+// revocation FAIL CLOSED. When AUTH_TOKEN is not configured these endpoints
+// are disabled (503) instead of being left public — the device registry
+// (public keys, assigned IPs) must never be exposed without authorization.
+// POST /device (registration) stays reachable in dev so the app can
+// provision; when AUTH_TOKEN IS set, the global middleware above already
+// guards it too.
+const requireAdminAuth = (req, res, next) => {
+  if (!AUTH_TOKEN) {
+    return res.status(503).json({ error: "AUTH_TOKEN not configured — admin endpoints disabled" });
+  }
+  const header = req.headers.authorization ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+  if (token !== AUTH_TOKEN) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+};
+
 // Health check.
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -103,14 +122,14 @@ app.post("/device", async (req, res) => {
 });
 
 // Fetch a device by id.
-app.get("/device/:id", async (req, res) => {
+app.get("/device/:id", requireAdminAuth, async (req, res) => {
   const device = await store.findById(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
   res.json({ device });
 });
 
 // Deactivate a device and remove its peer.
-app.delete("/device/:id", async (req, res) => {
+app.delete("/device/:id", requireAdminAuth, async (req, res) => {
   const device = await store.deactivate(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
   await wg.removePeer(device.publicKey);
@@ -118,7 +137,7 @@ app.delete("/device/:id", async (req, res) => {
 });
 
 // Owner visibility (FR-ADMIN-001 / AC-013): list all registered devices.
-app.get("/devices", async (_req, res) => {
+app.get("/devices", requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
     res.json({
@@ -140,7 +159,7 @@ app.get("/devices", async (_req, res) => {
 });
 
 // Owner visibility (FR-ADMIN-001 / AC-013): node status.
-app.get("/status", async (_req, res) => {
+app.get("/status", requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
     const activeCount = devices.filter((d) => d.active).length;

@@ -27,8 +27,8 @@
 | NFR-SEC-001 | Private key on-device only | v1 | APPROVED | IMPLEMENTED (Keychain + tests 37/37 PASS 2026-08-20) | 3 |
 | NFR-SEC-002 | Control API TLS | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
 | NFR-SEC-003 | No secrets committed | v1 | APPROVED | IMPLEMENTED (baseline hygiene) | 0 |
-| NFR-SEC-004 | Server-side authorization | v1 | APPROVED | NOT_STARTED | 4 |
-| NFR-PRIV-001 | Minimal data collection/logging | v1 | APPROVED | PARTIAL (AC-019 evidence 2026-08-20; 3 low issues recorded) | 6 |
+| NFR-SEC-004 | Server-side authorization | v1 | APPROVED | IMPLEMENTED (AC-018 — admin endpoints fail closed 2026-08-20) | 4 |
+| NFR-PRIV-001 | Minimal data collection/logging | v1 | APPROVED | IMPLEMENTED (3 low issues fixed 2026-08-20) | 6 |
 | NFR-PERF-001 | Responsive connect feedback | v1 | APPROVED | PARTIAL (GATE 1) | 1 |
 | NFR-REL-001 | Restore sane state after restart/network change | v1 | APPROVED | PARTIAL (GATE 1) | 1 |
 | NFR-UX-001 | One-tap connect/disconnect | v1 | APPROVED | IMPLEMENTED (GATE 1) | 1 |
@@ -38,9 +38,9 @@
 
 | Impl. state | Count | Requirements |
 |-------------|-------|--------------|
-| IMPLEMENTED | 15 | FR-DEVICE-001/002, FR-PROVISION-001/002, FR-VPN-001..005, FR-ADMIN-001, FR-DIAG-001, NFR-SEC-001/002/003, NFR-UX-001 |
-| PARTIAL | 6 | FR-REVOKE-001/002, NFR-PERF-001, NFR-REL-001, NFR-OBS-001, NFR-PRIV-001 |
-| NOT_STARTED | 2 | FR-AUTH-001, NFR-SEC-004 |
+| IMPLEMENTED | 17 | FR-DEVICE-001/002, FR-PROVISION-001/002, FR-VPN-001..005, FR-ADMIN-001, FR-DIAG-001, NFR-SEC-001/002/003/004, NFR-UX-001, NFR-PRIV-001 |
+| PARTIAL | 4 | FR-REVOKE-001/002, NFR-PERF-001, NFR-REL-001, NFR-OBS-001 |
+| NOT_STARTED | 1 | FR-AUTH-001 |
 | **Total** | **23** | |
 
 ## Acceptance criteria

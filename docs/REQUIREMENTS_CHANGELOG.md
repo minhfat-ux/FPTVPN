@@ -61,12 +61,49 @@ initialization is CR-0001.
 - **Decision owner:** MinhNb2 (owner) / Culi.
 - **Effective requirement version:** SRS v0.1 / RS-20260819-01 (unchanged).
 
+## CR-0003 — Privacy low-issue fixes (owner-approved, GATE 6)
+
+- **ID:** CR-0003
+- **Title:** Fix 3 low-severity privacy review issues (deviceName transmission, token in UserDefaults, unauthenticated admin endpoints)
+- **Requested by:** Owner (approval 2026-08-20, follow-up to CR-0002 findings)
+- **Date:** 2026-08-20
+- **Affected requirements:** NFR-PRIV-001 (PARTIAL → IMPLEMENTED), NFR-SEC-004 (NOT_STARTED → IMPLEMENTED)
+- **Current requirement:** NFR-PRIV-001 partial (AC-019 evidence, 3 low issues); NFR-SEC-004 not started.
+- **Proposed requirement:** both IMPLEMENTED.
+- **Reason:** close GATE 6 privacy findings — (1) stop transmitting `UIDevice.current.name`
+  in POST /device; (2) store control-plane auth token in Keychain instead of UserDefaults
+  (one-shot migration); (3) admin endpoints fail closed when `AUTH_TOKEN` unset (AC-018).
+- **Trigger/evidence:** `evidence/2026-08-20-privacy-review.md` (CR-0002), `evidence/2026-08-20-privacy-fixes.md`.
+- **Business impact:** none (no UX change; token UX unchanged; device display name falls back to server default `"device"` until a user-chosen name is added).
+- **Technical impact:** iOS — `ControlAPIClient.register` signature change (dropped
+  `deviceName`), `VPNConfigStore.controlPlaneToken` backed by Keychain + migration;
+  control-plane — `requireAdminAuth` middleware on admin routes (503 when unconfigured).
+- **Security impact:** positive — device registry no longer publicly readable without
+  authorization; credential no longer persisted plaintext; personal device name no longer
+  transmitted.
+- **UX impact:** none (fields/behavior unchanged from user perspective).
+- **Architecture impact:** none.
+- **Affected tasks:** none (executed as owner-approved GATE 6 follow-up run).
+- **Affected tests:** `ControlAPIClientTests` (deviceName regression assertion),
+  `VPNConfigStoreTests` (+2: Keychain persistence, UserDefaults migration).
+- **Affected evidence:** `evidence/2026-08-20-privacy-fixes.md` (new), `evidence/builds/2026-08-20-privacy-fixes-tests.log` (new).
+- **Affected gates:** GATE 4 (NFR-SEC-004), GATE 6 (NFR-PRIV-001).
+- **Backward compatibility:** iOS client drops one optional request field (server ignores
+  unknown fields and defaults the name); control-plane admin routes now require auth —
+  intentional, per NFR-SEC-004.
+- **Migration need:** token auto-migrates UserDefaults → Keychain on first app launch (one-shot).
+- **Recommendation:** accept.
+- **Decision:** ACCEPTED.
+- **Decision owner:** MinhNb2 (owner) / Culi.
+- **Effective requirement version:** SRS v0.1 / RS-20260819-01 (unchanged; impl-state only).
+
 ## Change history
 
 | CR | Date | Type | Result | Effective baseline |
 |----|------|------|--------|--------------------|
 | CR-0001 | 2026-08-19 | Initial baseline | ACCEPTED | RS-20260819-01 |
 | CR-0002 | 2026-08-20 | Docs sync + privacy review (AC-019 evidence) | ACCEPTED | RS-20260819-01 |
+| CR-0003 | 2026-08-20 | Privacy fixes (NFR-PRIV-001 + NFR-SEC-004 → IMPLEMENTED) | ACCEPTED | RS-20260819-01 |
 
 ## Rules for changes
 
