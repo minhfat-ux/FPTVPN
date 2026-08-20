@@ -57,7 +57,15 @@ struct ControlAPIClient {
     }
 
     /// Registers (or re-registers) a device by its WireGuard public key.
-    func register(publicKey: String, deviceName: String) async throws -> RegisterDeviceResponse {
+    /// `deviceId` is the stable on-device UUID from `DeviceIdentity`; `platform`
+    /// is the client OS. Both are forward-compatible extras — the control plane
+    /// currently keys registration on the public key and ignores unknown fields.
+    func register(
+        publicKey: String,
+        deviceName: String,
+        deviceId: String? = nil,
+        platform: String? = nil
+    ) async throws -> RegisterDeviceResponse {
         let url = baseURL.appendingPathComponent("device")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -65,10 +73,17 @@ struct ControlAPIClient {
         if let authToken {
             request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try JSONEncoder().encode([
+        var body: [String: String] = [
             "publicKey": publicKey,
             "deviceName": deviceName,
-        ])
+        ]
+        if let deviceId {
+            body["deviceId"] = deviceId
+        }
+        if let platform {
+            body["platform"] = platform
+        }
+        request.httpBody = try JSONEncoder().encode(body)
 
         let data: Data
         let response: URLResponse

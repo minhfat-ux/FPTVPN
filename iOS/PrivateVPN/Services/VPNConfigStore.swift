@@ -59,10 +59,18 @@ final class VPNConfigStore: ObservableObject {
         !controlPlaneURL.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// The control plane URL as a `URL`, if configured.
+    /// The control plane URL as an http(s) `URL`, if configured.
+    /// The scheme check is deliberate: modern Foundation's URL parser accepts
+    /// strings like "not a url" (scheme "not"), which must not count as a
+    /// usable control plane address.
     var controlPlaneBaseURL: URL? {
         let trimmed = controlPlaneURL.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return nil }
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme,
+              ["http", "https"].contains(scheme.lowercased()),
+              let host = url.host,
+              !host.isEmpty else { return nil }
         return url
     }
 

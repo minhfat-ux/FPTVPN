@@ -123,3 +123,18 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/PrivateVPN.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PrivateVPN
         BUNDLE_LOADER: $(TEST_HOST)
+        LIBRARY_SEARCH_PATHS:
+          - "$(DERIVED_FILE_DIR)/wg"
+    preBuildScripts:
+      - name: Build wireguard-go
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          WGK="${SRCROOT}/Vendor/WireGuardKit/Sources/WireGuardKitGo"
+          mkdir -p "${DERIVED_FILE_DIR}/wg" "${DERIVED_FILE_DIR}/wg-tmp"
+          make -C "$WGK" \
+            PLATFORM_NAME="$PLATFORM_NAME" \
+            ARCHS="$ARCHS" \
+            DESTDIR="${DERIVED_FILE_DIR}/wg" \
+            CONFIGURATION_TEMP_DIR="${DERIVED_FILE_DIR}/wg-tmp"

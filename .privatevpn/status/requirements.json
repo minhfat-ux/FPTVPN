@@ -1,198 +1,201 @@
 {
- "baseline": "RS-20260819-01",
- "requirements": [
-  {
-   "id": "FR-AUTH-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_4"
-  },
-  {
-   "id": "FR-DEVICE-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_3",
-   "verified": null,
-   "evidence": "control-plane/src/index.js (POST /device); iOS/PrivateVPN/Services/ControlAPIClient.swift; evidence/2026-08-19-control-plane-smoke.log"
-  },
-  {
-   "id": "FR-DEVICE-002",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_3",
-   "verified": null,
-   "evidence": "iOS/PrivateVPN/Services/KeychainStore.swift"
-  },
-  {
-   "id": "FR-PROVISION-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_3",
-   "verified": null,
-   "evidence": "control-plane/src/ip-pool.js; control-plane/src/index.js buildClientConfig; evidence/2026-08-19-control-plane-smoke.log"
-  },
-  {
-   "id": "FR-PROVISION-002",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_3",
-   "verified": null,
-   "evidence": "control-plane/src/wireguard.js; control-plane/src/index.js (wg upsertPeer); evidence/2026-08-19-control-plane-smoke.log"
-  },
-  {
-   "id": "FR-VPN-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_2",
-   "verified": null,
-   "evidence": "iOS/PrivateVPN/VPNManager.swift; iOS/PrivateVPN/Services/WireGuardConfig.swift; evidence/builds/2026-08-19-gate2-device-build-verify.log"
-  },
-  {
-   "id": "FR-VPN-002",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_2",
-   "verified": null,
-   "evidence": "iOS/PrivateVPN/Services/WireGuardConfig.swift (allowedIPs 0.0.0.0/0, ::/0)"
-  },
-  {
-   "id": "FR-VPN-003",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_2",
-   "verified": null,
-   "evidence": "iOS/PrivateVPN/VPNManager.swift disconnect() -> stopVPNTunnel()"
-  },
-  {
-   "id": "FR-VPN-004",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_2",
-   "verified": null,
-   "evidence": "iOS/PrivateVPN/VPNManager.swift connect() -> startVPNTunnel() (re-entrant)"
-  },
-  {
-   "id": "FR-VPN-005",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_1",
-   "verified": "2026-08-19",
-   "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
-  },
-  {
-   "id": "FR-REVOKE-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "PARTIAL",
-   "gate": "GATE_4",
-   "verified": null,
-   "evidence": "control-plane/src/index.js (DELETE /device -> wg removePeer); iOS revoke UI chưa có"
-  },
-  {
-   "id": "FR-REVOKE-002",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "PARTIAL",
-   "gate": "GATE_4",
-   "verified": null,
-   "evidence": "control-plane/src/index.js DELETE /device (server-side peer removal); device-side verify pending"
-  },
-  {
-   "id": "FR-ADMIN-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_5",
-   "evidence": "control-plane/src/index.js (GET /devices, GET /status, TLS via TLS_CERT_FILE/TLS_KEY_FILE); evidence/2026-08-19-control-plane-admin-tls.log (31/31 PASS)"
-  },
-  {
-   "id": "FR-DIAG-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_5",
-   "evidence": "iOS/PrivateVPN/ContentView.swift (status card, one-tap toggle, diagnostics card); evidence/2026-08-19-ui-ux-task.md; evidence/builds/2026-08-19-uiux-build.log (BUILD SUCCEEDED)"
-  },
-  {
-   "id": "NFR-SEC-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "PARTIAL",
-   "gate": "GATE_3"
-  },
-  {
-   "id": "NFR-SEC-002",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_3",
-   "evidence": "control-plane/src/index.js (GET /devices, GET /status, TLS via TLS_CERT_FILE/TLS_KEY_FILE); evidence/2026-08-19-control-plane-admin-tls.log (31/31 PASS)"
-  },
-  {
-   "id": "NFR-SEC-003",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_0"
-  },
-  {
-   "id": "NFR-SEC-004",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_4"
-  },
-  {
-   "id": "NFR-PRIV-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "NOT_STARTED",
-   "gate": "GATE_6"
-  },
-  {
-   "id": "NFR-PERF-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "PARTIAL",
-   "gate": "GATE_1",
-   "verified": null,
-   "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
-  },
-  {
-   "id": "NFR-REL-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "PARTIAL",
-   "gate": "GATE_1",
-   "verified": null,
-   "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
-  },
-  {
-   "id": "NFR-UX-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "IMPLEMENTED",
-   "gate": "GATE_1",
-   "verified": "2026-08-19",
-   "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
-  },
-  {
-   "id": "NFR-OBS-001",
-   "version": "v1",
-   "state": "APPROVED",
-   "impl": "PARTIAL",
-   "gate": "GATE_0"
-  }
- ],
- "updated": "2026-08-19"
+  "baseline": "RS-20260819-01",
+  "requirements": [
+    {
+      "id": "FR-AUTH-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "NOT_STARTED",
+      "gate": "GATE_4"
+    },
+    {
+      "id": "FR-DEVICE-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_3",
+      "verified": null,
+      "evidence": "control-plane/src/index.js (POST /device); iOS/PrivateVPN/Services/ControlAPIClient.swift; evidence/2026-08-19-control-plane-smoke.log"
+    },
+    {
+      "id": "FR-DEVICE-002",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_3",
+      "verified": null,
+      "evidence": "iOS/PrivateVPN/Services/KeychainStore.swift"
+    },
+    {
+      "id": "FR-PROVISION-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_3",
+      "verified": null,
+      "evidence": "control-plane/src/ip-pool.js; control-plane/src/index.js buildClientConfig; evidence/2026-08-19-control-plane-smoke.log"
+    },
+    {
+      "id": "FR-PROVISION-002",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_3",
+      "verified": null,
+      "evidence": "control-plane/src/wireguard.js; control-plane/src/index.js (wg upsertPeer); evidence/2026-08-19-control-plane-smoke.log"
+    },
+    {
+      "id": "FR-VPN-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_2",
+      "verified": null,
+      "evidence": "iOS/PrivateVPN/VPNManager.swift; iOS/PrivateVPN/Services/WireGuardConfig.swift; evidence/builds/2026-08-19-gate2-device-build-verify.log"
+    },
+    {
+      "id": "FR-VPN-002",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_2",
+      "verified": null,
+      "evidence": "iOS/PrivateVPN/Services/WireGuardConfig.swift (allowedIPs 0.0.0.0/0, ::/0)"
+    },
+    {
+      "id": "FR-VPN-003",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_2",
+      "verified": null,
+      "evidence": "iOS/PrivateVPN/VPNManager.swift disconnect() -> stopVPNTunnel()"
+    },
+    {
+      "id": "FR-VPN-004",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_2",
+      "verified": null,
+      "evidence": "iOS/PrivateVPN/VPNManager.swift connect() -> startVPNTunnel() (re-entrant)"
+    },
+    {
+      "id": "FR-VPN-005",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_1",
+      "verified": "2026-08-19",
+      "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
+    },
+    {
+      "id": "FR-REVOKE-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "PARTIAL",
+      "gate": "GATE_4",
+      "verified": null,
+      "evidence": "control-plane/src/index.js (DELETE /device -> wg removePeer); iOS revoke UI chưa có"
+    },
+    {
+      "id": "FR-REVOKE-002",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "PARTIAL",
+      "gate": "GATE_4",
+      "verified": null,
+      "evidence": "control-plane/src/index.js DELETE /device (server-side peer removal); device-side verify pending"
+    },
+    {
+      "id": "FR-ADMIN-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_5",
+      "evidence": "control-plane/src/index.js (GET /devices, GET /status, TLS via TLS_CERT_FILE/TLS_KEY_FILE); evidence/2026-08-19-control-plane-admin-tls.log (31/31 PASS)"
+    },
+    {
+      "id": "FR-DIAG-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_5",
+      "evidence": "iOS/PrivateVPN/ContentView.swift (status card, one-tap toggle, diagnostics card); evidence/2026-08-19-ui-ux-task.md; evidence/builds/2026-08-19-uiux-build.log (BUILD SUCCEEDED)"
+    },
+    {
+      "id": "NFR-SEC-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_3",
+      "verified": "2026-08-20",
+      "evidence": "iOS/PrivateVPN/Services/KeychainStore.swift; iOS/PrivateVPN/Services/DeviceIdentity.swift; evidence/builds/2026-08-20-gate3-tests.log (37/37 PASS, TEST SUCCEEDED)"
+    },
+    {
+      "id": "NFR-SEC-002",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_3",
+      "evidence": "control-plane/src/index.js (GET /devices, GET /status, TLS via TLS_CERT_FILE/TLS_KEY_FILE); evidence/2026-08-19-control-plane-admin-tls.log (31/31 PASS)"
+    },
+    {
+      "id": "NFR-SEC-003",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_0"
+    },
+    {
+      "id": "NFR-SEC-004",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "NOT_STARTED",
+      "gate": "GATE_4"
+    },
+    {
+      "id": "NFR-PRIV-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "PARTIAL",
+      "gate": "GATE_6",
+      "evidence": "evidence/2026-08-20-privacy-review.md (19 points, 16 PASS / 3 low ISSUE: deviceName in POST /device, auth token UserDefaults plaintext, admin unauth when AUTH_TOKEN unset)"
+    },
+    {
+      "id": "NFR-PERF-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "PARTIAL",
+      "gate": "GATE_1",
+      "verified": null,
+      "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
+    },
+    {
+      "id": "NFR-REL-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "PARTIAL",
+      "gate": "GATE_1",
+      "verified": null,
+      "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
+    },
+    {
+      "id": "NFR-UX-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "IMPLEMENTED",
+      "gate": "GATE_1",
+      "verified": "2026-08-19",
+      "evidence": "evidence/builds/2026-08-19-gate1-simulator-build.log; evidence/builds/2026-08-19-gate1-tests.log"
+    },
+    {
+      "id": "NFR-OBS-001",
+      "version": "v1",
+      "state": "APPROVED",
+      "impl": "PARTIAL",
+      "gate": "GATE_0"
+    }
+  ],
+  "updated": "2026-08-19"
 }

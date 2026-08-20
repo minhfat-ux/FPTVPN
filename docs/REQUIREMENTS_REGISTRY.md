@@ -1,7 +1,7 @@
 # PRIVATEVPN — REQUIREMENTS REGISTRY
 
 - **Baseline:** RS-20260819-01 (SRS v0.1)
-- **Date:** 2026-08-19
+- **Date:** 2026-08-20 (impl states synced with `.privatevpn/status/requirements.json`)
 - **Authoritative source:** `docs/SRS.md`
 - **State model:** DRAFT → PROPOSED → APPROVED → ACTIVE → SUPERSEDED → DEPRECATED → REJECTED (spec §9)
 - **Implementation state:** NOT_STARTED / PARTIAL / IMPLEMENTED / VERIFYING / VERIFIED / FAILED / BLOCKED / NEEDS_REVERIFY
@@ -11,28 +11,37 @@
 | ID | Title | Version | Approval | Impl. state | Gate |
 |----|-------|---------|----------|-------------|------|
 | FR-AUTH-001 | Sign-in flow for authorized user | v1 | APPROVED | NOT_STARTED | 4 |
-| FR-DEVICE-001 | Device registration | v1 | APPROVED | NOT_STARTED | 3 |
-| FR-DEVICE-002 | On-device WireGuard keygen, private key local | v1 | APPROVED | NOT_STARTED | 3 |
-| FR-PROVISION-001 | Tunnel IP allocation + client config | v1 | APPROVED | NOT_STARTED | 3 |
-| FR-PROVISION-002 | Vietnam node assignment + server peer | v1 | APPROVED | NOT_STARTED | 3 |
-| FR-VPN-001 | Establish WireGuard tunnel to VN node | v1 | APPROVED | NOT_STARTED | 2 |
-| FR-VPN-002 | Route Internet via tunnel (0.0.0.0/0) | v1 | APPROVED | NOT_STARTED | 2 |
-| FR-VPN-003 | Disconnect restores normal routing | v1 | APPROVED | NOT_STARTED | 2 |
-| FR-VPN-004 | Reconnect after disconnect | v1 | APPROVED | NOT_STARTED | 2 |
+| FR-DEVICE-001 | Device registration | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
+| FR-DEVICE-002 | On-device WireGuard keygen, private key local | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
+| FR-PROVISION-001 | Tunnel IP allocation + client config | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
+| FR-PROVISION-002 | Vietnam node assignment + server peer | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
+| FR-VPN-001 | Establish WireGuard tunnel to VN node | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
+| FR-VPN-002 | Route Internet via tunnel (0.0.0.0/0) | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
+| FR-VPN-003 | Disconnect restores normal routing | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
+| FR-VPN-004 | Reconnect after disconnect | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
 | FR-VPN-005 | Real VPN state model, no fake connected | v1 | APPROVED | IMPLEMENTED (GATE 1) | 1 |
-| FR-REVOKE-001 | Owner can revoke device | v1 | APPROVED | NOT_STARTED | 4 |
-| FR-REVOKE-002 | Revoked device cannot connect | v1 | APPROVED | NOT_STARTED | 4 |
-| FR-ADMIN-001 | Device/node status visibility for owner | v1 | APPROVED | NOT_STARTED | 5 |
-| FR-DIAG-001 | Basic on-device diagnostics | v1 | APPROVED | PARTIAL (GATE 1) | 5 |
-| NFR-SEC-001 | Private key on-device only | v1 | APPROVED | PARTIAL (Keychain plan) | 3 |
-| NFR-SEC-002 | Control API TLS | v1 | APPROVED | NOT_STARTED | 3 |
+| FR-REVOKE-001 | Owner can revoke device | v1 | APPROVED | PARTIAL (GATE 4) | 4 |
+| FR-REVOKE-002 | Revoked device cannot connect | v1 | APPROVED | PARTIAL (GATE 4) | 4 |
+| FR-ADMIN-001 | Device/node status visibility for owner | v1 | APPROVED | IMPLEMENTED (GATE 5) | 5 |
+| FR-DIAG-001 | Basic on-device diagnostics | v1 | APPROVED | IMPLEMENTED (GATE 5) | 5 |
+| NFR-SEC-001 | Private key on-device only | v1 | APPROVED | IMPLEMENTED (Keychain + tests 37/37 PASS 2026-08-20) | 3 |
+| NFR-SEC-002 | Control API TLS | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
 | NFR-SEC-003 | No secrets committed | v1 | APPROVED | IMPLEMENTED (baseline hygiene) | 0 |
 | NFR-SEC-004 | Server-side authorization | v1 | APPROVED | NOT_STARTED | 4 |
-| NFR-PRIV-001 | Minimal data collection/logging | v1 | APPROVED | NOT_STARTED | 6 |
+| NFR-PRIV-001 | Minimal data collection/logging | v1 | APPROVED | PARTIAL (AC-019 evidence 2026-08-20; 3 low issues recorded) | 6 |
 | NFR-PERF-001 | Responsive connect feedback | v1 | APPROVED | PARTIAL (GATE 1) | 1 |
 | NFR-REL-001 | Restore sane state after restart/network change | v1 | APPROVED | PARTIAL (GATE 1) | 1 |
 | NFR-UX-001 | One-tap connect/disconnect | v1 | APPROVED | IMPLEMENTED (GATE 1) | 1 |
 | NFR-OBS-001 | Owner dashboard reflects authoritative state | v1 | APPROVED | PARTIAL (GATE 0 bootstrap) | 0 |
+
+## Implementation counts (synced 2026-08-20, from `.privatevpn/status/requirements.json`)
+
+| Impl. state | Count | Requirements |
+|-------------|-------|--------------|
+| IMPLEMENTED | 15 | FR-DEVICE-001/002, FR-PROVISION-001/002, FR-VPN-001..005, FR-ADMIN-001, FR-DIAG-001, NFR-SEC-001/002/003, NFR-UX-001 |
+| PARTIAL | 6 | FR-REVOKE-001/002, NFR-PERF-001, NFR-REL-001, NFR-OBS-001, NFR-PRIV-001 |
+| NOT_STARTED | 2 | FR-AUTH-001, NFR-SEC-004 |
+| **Total** | **23** | |
 
 ## Acceptance criteria
 

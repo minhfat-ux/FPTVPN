@@ -1,7 +1,7 @@
 # PRIVATEVPN — REQUIREMENTS CHANGELOG
 
 - **Latest baseline:** RS-20260819-01
-- **Date:** 2026-08-19
+- **Date:** 2026-08-20
 
 Change requests are captured with stable IDs (CR-xxxx, spec §10-§12). Baseline
 initialization is CR-0001.
@@ -33,11 +33,40 @@ initialization is CR-0001.
 - **Decision owner:** MinhNb2 (owner) / Culi.
 - **Effective requirement version:** SRS v0.1 / RS-20260819-01.
 
+## CR-0002 — Docs sync with authoritative status + privacy review (AC-019)
+
+- **ID:** CR-0002
+- **Title:** Docs status sync + privacy review (NFR-PRIV-001 / AC-019 evidence)
+- **Requested by:** Owner (verification workflow / master spec directive)
+- **Date:** 2026-08-20
+- **Affected requirements:** none changed — impl states of all 23 requirements synced to `.privatevpn/status/requirements.json`
+- **Current requirement:** unchanged
+- **Proposed requirement:** unchanged (docs-only; no SRS text change)
+- **Reason:** RULE-DASH-001 — registry/dashboard are projections of authoritative state; sync after commit `6d1a1f7` (FR-ADMIN-001 / NFR-SEC-002 / FR-DIAG-001 → IMPLEMENTED). Privacy review produces AC-019 evidence for NFR-PRIV-001.
+- **Trigger/evidence:** `.privatevpn/status/requirements.json`; `evidence/2026-08-20-privacy-review.md`.
+- **Business impact:** none.
+- **Technical impact:** none (docs + evidence only).
+- **Security impact:** privacy review records 3 low-severity findings (no code fix in this CR): (1) `UIDevice.current.name` transmitted in POST /device; (2) control-plane auth token stored in UserDefaults plaintext; (3) admin endpoints unauthenticated when `AUTH_TOKEN` unset (depends on NFR-SEC-004).
+- **UX impact:** none.
+- **Architecture impact:** none.
+- **Affected tasks:** none.
+- **Affected tests:** none.
+- **Affected evidence:** `evidence/2026-08-20-privacy-review.md` (new).
+- **Affected gates:** GATE 6 (NFR-PRIV-001 evidence), GATE 5 (status sync).
+- **Backward compatibility:** full.
+- **Migration need:** none.
+- **Recommendation:** accept.
+- **Post-verify update (2026-08-20 11:30):** GATE 3 iOS unit tests re-verified — **37/37 PASS, TEST SUCCEEDED** (iPhone 16 Pro simulator, `evidence/builds/2026-08-20-gate3-tests.log`); `NFR-SEC-001` → IMPLEMENTED (Keychain backend + `DeviceIdentity`), `NFR-PRIV-001` → PARTIAL (AC-019 evidence exists; 3 low issues pending GATE 6). Registry/dashboard synced per RULE-DASH-001.
+- **Decision:** ACCEPTED.
+- **Decision owner:** MinhNb2 (owner) / Culi.
+- **Effective requirement version:** SRS v0.1 / RS-20260819-01 (unchanged).
+
 ## Change history
 
 | CR | Date | Type | Result | Effective baseline |
 |----|------|------|--------|--------------------|
 | CR-0001 | 2026-08-19 | Initial baseline | ACCEPTED | RS-20260819-01 |
+| CR-0002 | 2026-08-20 | Docs sync + privacy review (AC-019 evidence) | ACCEPTED | RS-20260819-01 |
 
 ## Rules for changes
 
