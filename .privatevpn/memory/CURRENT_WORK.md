@@ -5,8 +5,8 @@ Current task tracked here (schema per spec §31). Structured state also in
 
 | Field | Value |
 |-------|-------|
-| Task ID | TASK-G2-MESH-EXITNODE / TASK-G3-ACCOUNT-MULTIDEVICE (next) |
-| Objective | GATE 2/3: Tailscale-style WireGuard mesh with VPS coordinator + exit node. macOS app registers + connects via wg-quick; iOS app same client, device blocked. NEXT: account login + add device (user owns many devices). |
+| Task ID | TASK-G2-MESH-EXITNODE / TASK-G3-ACCOUNT-MULTIDEVICE (next) / TASK-PROD-MAC-NE (refactor) |
+| Objective | GATE 2/3: Tailscale-style WireGuard mesh with VPS coordinator + exit node. macOS app registers + connects via wg-quick (dev). NEXT: production refactor to NetworkExtension+WireGuardKit (no wg-quick/sudo), then account login + add device. |
 | Requirement IDs | FR-VPN-001..005, FR-DEVICE-001/002, FR-PROVISION-001/002, FR-AUTH-001, NFR-SEC-001, NFR-UX-001, NFR-PERF-001, NFR-REL-001 |
 | Requirement baseline | RS-20260819-01 |
 | Rule baseline | RULESET-0001 |

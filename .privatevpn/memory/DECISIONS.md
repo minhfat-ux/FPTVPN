@@ -23,3 +23,4 @@ Durable engineering decisions (see also `docs/adr/`).
 | 2026-08-21 | **Exit-node registry on the coordinator** (`exit_nodes` table): `GET /v1/nodes` public, `POST`/`DELETE /v1/nodes` admin; VPS node seeded on first run | coordinator.ts, server.ts |
 | 2026-08-21 | **Server list configured from backend**: apps fetch `/v1/nodes` and let the user pick an exit node (macOS Settings picker, iOS location picker) instead of hardcoded presets | VPNManagerMac, SettingsView, SettingsViewMac |
 | 2026-08-21 | **macOS Connect/Disconnect = single toggle button** matching iOS one-tap UX (state-driven title/symbol/color) | ContentViewMac |
+| 2026-08-21 | **Dev macOS app shells to `wg-quick` (needs Homebrew + passwordless sudo)** — acceptable for local dev only. **Production must use NetworkExtension + WireGuardKit** (NEPacketTunnelProvider + WireGuardAdapter) to remove the wg-quick/sudo dependency; noted as next refactor. | PROJECT_STATE.md "What is next", CURRENT_WORK.md |

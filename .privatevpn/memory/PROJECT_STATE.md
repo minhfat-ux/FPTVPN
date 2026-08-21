@@ -89,8 +89,14 @@ macOS FPTPrivateVPN app (test) + coordinator on VPS 103.173.155.50.
 4. ✅ Exit-node registry + server list from backend; macOS toggle button.
 5. 🔲 Confirm end-to-end tunnel on macOS (user runs `sudo wg-quick up`, verify
    exit IP).
-6. 🔲 Design + build **account login + add device** (Tailscale-style): users
+6. 🔲 **Production refactor (macOS)**: switch from shelling out to `wg-quick`
+   (needs Homebrew wireguard-tools + passwordless sudo) to **NetworkExtension +
+   WireGuardKit** (NEPacketTunnelProvider + WireGuardAdapter), reusing the iOS
+   tunnel code. Removes the `wg-quick`/sudo dependency so the app can ship to
+   end users without extra installs. Requires a NetworkExtension entitlement +
+   signed/notarized app.
+7. 🔲 Design + build **account login + add device** (Tailscale-style): users
    table, auth, user→devices ownership.
-7. 🔲 Update SRS/ARCHITECTURE for Tailscale model + macOS target.
-8. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).
-9. 🔲 iOS real-device E2E (needs Xcode reinstall).
+8. 🔲 Update SRS/ARCHITECTURE for Tailscale model + macOS target.
+9. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).
+10. 🔲 iOS real-device E2E (needs Xcode reinstall).
