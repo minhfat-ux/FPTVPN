@@ -1,16 +1,21 @@
 # PROJECT_STATE.md
 
-- **Updated:** 2026-08-19
+- **Updated:** 2026-08-21
 - **Authoritative answer to "what is the state?"** — see also `.privatevpn/status/project.json`.
 
 ## What are we building?
-PrivateVPN iOS MVP: authorized user installs app, authenticates, registers device,
-gets WireGuard credentials provisioned against our own Vietnam VPN node, connects,
-routes Internet through Vietnam, verifies exit IP, disconnects, reconnects, and can
-be revoked.
+PrivateVPN: a Tailscale-style WireGuard mesh. A coordinator on a VPS allocates
+overlay IPs and provisions peers; devices (iOS app, macOS app, other nodes)
+register with the coordinator and connect through an **exit node** on the same
+VPS to route Internet through Vietnam.
+
+Current working app that RUNS: **macOS app (FPTPrivateVPN)** connecting to the
+VPS exit node via wg-quick. iOS app is coded and builds/tests but real-device
+tunnel is blocked (Xcode DeviceSupport).
 
 ## Current SRS?
-v0.1 (baseline RS-20260819-01).
+v0.1 (baseline RS-20260819-01). **To be updated** for the Tailscale-style
+account/device model + macOS target (see docs/SRS.md, pending edit).
 
 ## Current requirement baseline?
 RS-20260819-01 (CR-0001 accepted).
@@ -19,81 +24,69 @@ RS-20260819-01 (CR-0001 accepted).
 RULESET-0001.
 
 ## Current gate?
-GATE 1 — iOS VPN Skeleton (COMPLETE, simulator-verified). GATE 0 bootstrap deliverables committed.
-GATE 2 — WireGuard integration (code complete + device build verified; real connect blocked).
-GATE 3 — Dynamic device provisioning (control-plane implemented + smoke-tested; integration with real node pending).
+GATE 2 — Real WireGuard integration (macOS app connects to VPS exit node;
+iOS code complete, device blocked). GATE 3 — Dynamic device provisioning
+(coordinator mesh working end-to-end on VPS).
+
+## Architecture (as-built, 2026-08-21)
+```
+Coordinator + exit node = same VPS 103.173.155.50
+  - coordinator: /root/privatevpn (Node, port 7777, Express + node:sqlite)
+      endpoints: /v1/health, /v1/peers/register, /v1/peers/heartbeat,
+                 /v1/peers, /v1/peers/me, /v1/peers/revoke, /v1/tokens
+      WireGuard wg0 (10.77.0.1/24, UDP 443), public key N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=
+      on register -> wg set wg0 peer <key> allowed-ips <ip>/32
+      on revoke  -> wg set wg0 peer <key> remove
+  - join token: single-use, 30-min expiry (PVPN-JOIN-...)
+  - /v1/tokens (POST) issues a fresh join token (open in dev)
+
+App (macOS + iOS) uses ControlAPIClient -> /v1/peers/register, then connects
+to exit node 103.173.155.50:443 with full-tunnel allowedIPs 0.0.0.0/0.
+```
 
 ## What is VERIFIED?
-- Environment audit captured (`evidence/environment_audit.md`): Xcode 26.6,
-  Swift 6.3.3, xcodegen 2.46.0, iOS 26.5 sims, signing identity present.
-- App + Packet Tunnel extension + tests build for iOS Simulator via xcodebuild
-  → `** BUILD SUCCEEDED **` (`evidence/builds/2026-08-19-gate1-simulator-build.log`).
-- VPNState unit tests → `** TEST SUCCEEDED **`, 9/9 passed, 0 failures
-  (`evidence/builds/2026-08-19-gate1-tests.log`). See `VERIFIED_FACTS.md` VF-004/005.
-- App + Packet Tunnel extension sign ad-hoc and build from Xcode on the simulator
-  → resolves "executable is not codesigned" run error (`CODE_SIGNING_ALLOWED=NO`
-  removed from project-level settings).
-- WireGuardKit vendored (`Vendor/WireGuardKit`), libwg-go.a built via Go 1.26.6,
-  and the **device** build links it → `** BUILD SUCCEEDED **` (extension embedded
-  + signed team G6XW3RN6LJ). See `VERIFIED_FACTS.md` VF-007/008.
-- **Device build re-verified independently** after control-plane integration
-  (`evidence/builds/2026-08-19-gate2-device-build-verify.log`) → BUILD SUCCEEDED.
-- **Control-plane smoke test** (DRY_RUN, Node v26.6.0): 401 auth, 201 register +
-  IP pool 10.77.0.2/.3, 200 idempotent re-register, 400 validation, DELETE →
-  active=false + `wg` dry-run peer remove (`evidence/2026-08-19-control-plane-smoke.md`).
-- **iOS unit test suite runs on iOS Simulator → TEST SUCCEEDED, 39/39 pass, 0
-  failures** (ControlAPIClient, DeviceIdentity, KeychainStore, VPNConfigStore,
-  VPNState, WireGuardConfig). Simulator build fixed via `GOOS_iphonesimulator := ios`
-  in the WireGuardKitGo Makefile (`evidence/builds/2026-08-19-gate4-tests.log`,
-  VF-011).
+- macOS app **FPTPrivateVPN** builds and launches; registers with coordinator
+  and brings up wg-quick to the VPS exit node (manual sudo step). Evidence:
+  `mac/PrivateVPNMac/`, build log in DerivedData.
+- Coordinator auto-provisions peers into wg0 on register (verified: a test peer
+  public key appeared in `wg show wg0 peers` after register).
+- `POST /v1/peers/register` returns `{peer_id, overlay_ip, network,
+  peer_credential, peers[]}`; IP pool 10.77.0.2–254.
+- iOS unit tests → **36/36 PASS** on simulator (`evidence/builds/...`); iOS and
+  macOS builds SUCCEEDED.
+- WireGuardKit vendored; libwg-go.a built for device + simulator (simulator fixed
+  via `GOOS_iphonesimulator := ios`).
 
 ## What is implemented but unverified?
-- Docs/bootstrap artifacts (SRS, architecture, ADRs, rules, KB, memory, bug registry,
-  status, dashboard) — created, not externally verified.
-- GATE 1 skeleton code (state model, UI, extension) — buildable + unit-tested is
-  evidence of buildability, not real-device VPN runtime verification (GATE 2+).
-- WireGuard integration (KeychainStore keypair, WireGuardConfig parser,
-  PacketTunnelProvider using WireGuardAdapter, VPNManager config, VPNConfigStore +
-  SettingsView) — compiles + device build links + unit-tested; **no real tunnel
-  connect verified** (needs server + device).
-- Control plane (Express: POST/GET/DELETE /device, IP pool 10.77.0.0/24, wg peer
-  provisioning, bearer auth, DRY_RUN, TLS, /devices /status admin) — code complete +
-  smoke-verified; **not yet run against a real WireGuard node** (no node credentials).
-- ControlAPIClient (iOS side registers device on Connect when control-plane URL set)
-  — unit-tested; runtime end-to-end path needs a reachable control plane + device.
+- iOS app real-device tunnel (blocked: Xcode DeviceSupport missing for iOS 26.6,
+  DDI cannot mount → cannot install/run on physical iPhone).
+- Account login / multi-device ownership (Tailscale-style) — **NOT yet built**;
+  current model uses one-time join tokens. This is the next design task.
+- Revoke-from-app UI (peer revoke exists server-side via /v1/peers/revoke).
 
 ## What is running?
-Culi orchestration session (this one) + control-plane smoke test (finished).
+macOS FPTPrivateVPN app (test) + coordinator on VPS 103.173.155.50.
 
 ## What is blocked?
-- Real VPN runtime (GATE 2+): simulator cannot run Packet Tunnel; requires physical
-  iPhone + Apple team with Network Extension entitlement (identity exists).
-- **Xcode DeviceSupport missing for iOS 26.6** (only up to 16.4 present; Xcode.app
-  is only ~4GB, incomplete install) → Developer Disk Image cannot mount → cannot
-  install/run the app on a physical iPhone yet. Fix: reinstall/complete Xcode 26.6.
-- Server/control-plane: no production Vietnam node credentials, endpoint, or peer
-  public key provided. Dev preset (Hanoi test node) exists in-app; control plane
-  needs WG_SERVER_PUBKEY/WG_PUBLIC_ENDPOINT of a live node to provision real peers.
+- **iOS real-device**: Xcode DeviceSupport only to 16.4 (Xcode.app ~4GB,
+  incomplete) → Developer Disk Image cannot mount → cannot install on iPhone.
+  Fix: reinstall/complete Xcode 26.6.
+- Real tunnel egress unverified end-to-end (needs `sudo wg-quick up` on the Mac;
+  user runs that step manually).
+- Account/multi-device model (FR-AUTH-001) not implemented.
 
 ## What is stale?
-Nothing yet (fresh repo).
+- Previous "control-plane Express" (`control-plane/`) is superseded by the VPS
+  coordinator mesh; kept in repo but not used by the app anymore.
 
 ## What is next?
-1. ✅ Commit GATE 0 artifacts.
-2. ✅ Generate Xcode project with xcodegen (app + Packet Tunnel extension).
-3. ✅ Implement state model, VPNManager, minimal SwiftUI UI.
-4. ✅ Build with xcodebuild → capture BUILD SUCCEEDED log in evidence/.
-5. ✅ Commit GATE 1; report.
-6. ✅ WireGuard integration: vendored kit, keypair store, config parser, real
-   `startTunnel` via WireGuardAdapter — code done, device build OK (committed 9033251).
-7. ✅ Add in-app Configuration screen (VPNConfigStore + SettingsView) for endpoint /
-   peer key; user-configurable instead of placeholders.
-8. ✅ Control plane (Node.js): device registration + auto-provisioning + IP pool
-   + bearer auth + DRY_RUN (commit 464d793, smoke-tested).
-9. ✅ UI/UX redesign + admin endpoints (/devices, /status) + TLS + privacy fixes
-   (commits 6d1a1f7, 1426c25); iOS unit tests 39/39 PASS on simulator (VF-011).
-10. GATE 3/4: wire revoke UI (FR-REVOKE-001/002), auth (FR-AUTH-001), admin
-    visibility (FR-ADMIN-001) — pending control-plane deployment decisions.
-11. GATE 2: real-device E2E — needs physical iPhone + Vietnam node endpoint/peer
-    public key entered in the app (blocked by missing Xcode DeviceSupport for iOS
-    26.6 → reinstall/complete Xcode, plus live node provisioning).
+1. ✅ WireGuardKit vendored + keypair store + config screen.
+2. ✅ Coordinator mesh integration (register + auto wg provisioning).
+3. ✅ macOS app FPTPrivateVPN builds + launches + registers.
+4. 🔲 Confirm end-to-end tunnel on macOS (user runs `sudo wg-quick up`, verify
+   exit IP).
+5. 🔲 Design + build **account login + add device** (Tailscale-style): users
+   table, auth, user→devices ownership.
+6. 🔲 Update SRS/ARCHITECTURE for Tailscale model + macOS target.
+7. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).
+8. 🔲 iOS real-device E2E (needs Xcode reinstall).

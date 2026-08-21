@@ -179,3 +179,50 @@ SRS: v0.1
 Requirement baseline: RS-20260819-01
 Gate: GATE 1 (iOS VPN Skeleton) — in progress
 ```
+
+---
+
+## Appendix A — Architecture drift & pending baseline update (2026-08-21)
+
+This SRS (v0.1, RS-20260819-01) was written for the original **iOS-only,
+Express control-plane** design. During GATE 2/3 execution the architecture
+moved to a **Tailscale-style WireGuard mesh** with a **VPS coordinator + exit
+node**, and a **macOS target** was added. This appendix records that drift so
+the SRS can be updated in the next baseline revision. **No requirement IDs were
+deleted or re-scoped here; this is a documented delta pending owner approval.**
+
+### A1. What changed in the implementation
+
+1. **Coordinator (VPS `103.173.155.50:7777`)** replaces the in-repo Express
+   `control-plane/`. It is Node 24 + `node:sqlite`, endpoints under `/v1/...`
+   (`/v1/peers/register`, `/v1/peers/heartbeat`, `/v1/peers/revoke`,
+   `/v1/tokens`, `/v1/health`, ...). It auto-provisions peers into the exit
+   node's `wg0` (`wg set`) on register/revoke.
+2. **Exit-node model**: the app connects to the VPS exit node
+   (`103.173.155.50:443`) with full-tunnel `AllowedIPs = 0.0.0.0/0` for Internet
+   egress through Vietnam. This supersedes the earlier "one central VPN server
+   provisions a server-side peer" framing while keeping the same user outcome.
+3. **macOS target** `PrivateVPNMac` added (SwiftUI app that registers and runs
+   `wg-quick`), reusing `ControlAPIClient`. iOS remains the primary client.
+4. **Join token** is single-use with 30-minute expiry; the app auto-fetches a
+   fresh token via `POST /v1/tokens` when the field is empty.
+
+### A2. Pending requirements for next baseline (Tailscale account model)
+
+- **FR-AUTH-001 (account login)**: user signs in (email+password / magic link /
+  token). Currently only one-time join tokens exist; account ownership is not
+  yet implemented.
+- **FR-DEVICE multi-device ownership**: one user owns many devices (Tailscale
+  model); device registration tied to the signed-in user rather than a join token.
+- **Device list + revoke UI** in the app (server-side `/v1/peers/revoke` exists).
+
+### A3. Not changed
+
+- On-device WireGuard keygen; private key never leaves the device.
+- Real state model; evidence-gated verification; no fake "connected".
+- iOS Packet Tunnel Provider as the data plane (when running on device).
+
+> **Action (owner/next session):** update §1–§8, §14 and the requirements registry
+> to reflect the mesh + coordinator + account model, and open a CR against
+> RS-20260819-01 before promoting the next baseline.
+

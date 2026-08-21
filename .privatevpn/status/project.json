@@ -8,7 +8,7 @@
     "GATE_0": "DONE",
     "GATE_1": "COMPLETE",
     "GATE_2": "VERIFIED",
-    "GATE_3": "CODE_COMPLETE",
+    "GATE_3": "IN_PROGRESS",
     "GATE_4": "NOT_STARTED",
     "GATE_5": "NOT_STARTED",
     "GATE_6": "NOT_STARTED",
@@ -23,11 +23,11 @@
     "low": 0
   },
   "blockers": [
-    "Real VPN connect (GATE 2/7) needs physical iPhone + Network Extensions provisioning profile (paid team) — code + device build verified, runtime E2E blocked.",
-    "No production Vietnam node credentials: control-plane runs in DRY_RUN; real wg provisioning needs node access + WG_SERVER_PUBKEY/WG_PUBLIC_ENDPOINT of a live node.",
-    "Xcode DeviceSupport missing for iOS 26.6 (incomplete Xcode.app ~4GB) — Developer Disk Image cannot mount, cannot install/run on physical iPhone. Fix: reinstall/complete Xcode 26.6."
+    "iOS real-device blocked: Xcode DeviceSupport missing for iOS 26.6 (incomplete Xcode.app ~4GB) -> DDI cannot mount -> cannot install on iPhone. Reinstall Xcode.",
+    "macOS end-to-end tunnel needs manual sudo wg-quick (unverified exit IP yet).",
+    "Account login / multi-device model (FR-AUTH-001) not implemented; current model uses one-time join tokens."
   ],
-  "last_verified": "2026-08-19",
-  "next_verification": "GATE 2 real-device VPN E2E (after Xcode DDI fix)",
+  "last_verified": "2026-08-21",
+  "next_verification": "macOS end-to-end tunnel egress (verify exit IP = 103.173.155.50)",
   "updated": "2026-08-19"
 }

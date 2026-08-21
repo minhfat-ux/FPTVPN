@@ -5,24 +5,26 @@ Current task tracked here (schema per spec §31). Structured state also in
 
 | Field | Value |
 |-------|-------|
-| Task ID | TASK-G2-WIREGUARD-INTEGRATION / TASK-G3-CONTROL-PLANE |
-| Objective | GATE 2: WireGuard framework integrated, keypair + real tunnel path implemented. GATE 3: control plane (device registration, IP allocation, peer provisioning) implemented. |
-| Requirement IDs | FR-VPN-001..005, FR-DEVICE-001/002, FR-PROVISION-001/002, NFR-SEC-001, NFR-UX-001, NFR-PERF-001, NFR-REL-001 |
+| Task ID | TASK-G2-MESH-EXITNODE / TASK-G3-ACCOUNT-MULTIDEVICE (next) |
+| Objective | GATE 2/3: Tailscale-style WireGuard mesh with VPS coordinator + exit node. macOS app registers + connects via wg-quick; iOS app same client, device blocked. NEXT: account login + add device (user owns many devices). |
+| Requirement IDs | FR-VPN-001..005, FR-DEVICE-001/002, FR-PROVISION-001/002, FR-AUTH-001, NFR-SEC-001, NFR-UX-001, NFR-PERF-001, NFR-REL-001 |
 | Requirement baseline | RS-20260819-01 |
 | Rule baseline | RULESET-0001 |
-| Expert consultations | none yet; GATE 2 WireGuard wiring done |
+| Expert consultations | none yet; mesh/coordinator integration done (2026-08-21) |
 | Assigned agent/runtime | Culi (orchestrator) |
-| Status | GATE 1 COMPLETED; GATE 2 code complete + device build verified; GATE 3 control plane implemented + smoke-tested |
-| Files in scope | docs/, .privatevpn/, evidence/, project.yml, iOS/, control-plane/, README.md, .gitignore, Vendor/WireGuardKit/ |
-| Dependencies | xcodegen 2.46.0, Go 1.26.6 (homebrew, for libwg-go.a), Node.js >= 18 (control plane) |
-| Acceptance criteria | GATE 1 builds + tests pass (done); GATE 2: WireGuardKit vendored + device build links libwg-go.a (done); GATE 3: control plane registers device, allocates IP, provisions peer (smoke-verified, real node pending) |
-| Expected evidence | `evidence/builds/2026-08-19-gate1-*.log`, `evidence/builds/2026-08-19-gate2-wireguard-device-build.log`, `evidence/builds/2026-08-19-gate2-device-build-verify.log`, `evidence/2026-08-19-control-plane-smoke.md` |
+| Status | macOS app RUNS (registers + wg-quick). Coordinator mesh verified end-to-end on VPS. iOS real-device blocked. |
+| Files in scope | iOS/, mac/PrivateVPNMac/, project.yml, Vendor/WireGuardKit/, control-plane/ (superseded), scripts/mac-test.sh, docs/, .privatevpn/, evidence/ |
+| Dependencies | xcodegen 2.46.0, Go 1.26.6, Node 24 (VPS coordinator), wg/wg-quick (macOS), sshpass (ops) |
+| Acceptance criteria | macOS connect end-to-end (needs manual sudo wg-quick). iOS device E2E blocked by Xcode DDI. |
+| Expected evidence | coordinator /v1/peers/register returns overlay IP; wg0 auto-provisions peer; macOS app build/launch |
 | Start commit | fafbf5b (GATE 0) |
-| End commit | 464d793 (control-plane) — GATE 2/3 code |
+| End commit | a35b154 (macOS app + token endpoint) |
 
 ## Next task (continuation rule §103)
 
-- GATE 3/4: revoke UI (FR-REVOKE-001/002), auth flow (FR-AUTH-001), admin visibility
-  (FR-ADMIN-001) — deploy control plane + decide auth approach first.
-- GATE 2 formal gate review (verifier authority) + real-device E2E (blocked: needs
-  physical iPhone + Vietnam node credentials).
+- **Design + build account login & add-device (Tailscale-style)**: users table,
+  auth (email+password or token), user→devices ownership, device list UI, revoke.
+- Confirm macOS end-to-end tunnel (user runs `sudo wg-quick up`, verify exit IP).
+- Update SRS/ARCHITECTURE for Tailscale model + macOS target.
+- Push iOS app to FPTVPN repo.
+- iOS real-device E2E (blocked: reinstall Xcode for iOS 26.6 DeviceSupport).
