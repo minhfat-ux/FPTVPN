@@ -25,8 +25,8 @@ final class VPNConfigStore: ObservableObject {
 
     private let defaults: UserDefaults
 
-    /// Default control plane URL (dev node). Replaced by user input once set.
-    private static let defaultControlPlaneURL = "http://63.140.14.154:8080"
+    /// Default control plane URL (dev, via ngrok). Replaced by user input once set.
+    private static let defaultControlPlaneURL = "https://rename-carless-vastly.ngrok-free.dev"
 
     @Published var serverEndpoint: String {
         didSet { defaults.set(serverEndpoint, forKey: Key.serverEndpoint) }
