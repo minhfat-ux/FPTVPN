@@ -77,12 +77,12 @@ final class VPNManager: ObservableObject {
         }
     }
 
-    // MARK: - Control plane provisioning
+    // MARK: - Coordinator provisioning
 
-    /// Fetches the available exit nodes from the control plane.
+    /// Fetches the available exit nodes from the coordinator (for the picker).
     func fetchNodes(store: VPNConfigStore) async {
         guard let baseURL = store.controlPlaneBaseURL else { return }
-        let client = ControlAPIClient(baseURL: baseURL, authToken: store.controlPlaneToken.isEmpty ? nil : store.controlPlaneToken)
+        let client = ControlAPIClient(baseURL: baseURL, joinToken: store.controlPlaneToken)
         do {
             let nodes = try await client.fetchNodes()
             store.remoteNodes = nodes
@@ -96,28 +96,44 @@ final class VPNManager: ObservableObject {
         }
     }
 
-    /// Registers the device with the control plane and builds a config from the
-    /// provisioned response (server assigns IP + endpoint automatically).
+    /// Registers this device with the PrivateVPN coordinator to obtain its
+    /// overlay IP, then builds a WireGuard config that connects to the VPS
+    /// exit node (103.173.155.50) for Internet egress.
     private func provisionViaControlPlane(store: VPNConfigStore, baseURL: URL) async throws -> WireGuardConfig {
         let privateKey = try KeychainStore.obtainOrCreatePrivateKey()
         devicePublicKey = privateKey.publicKey.base64Key
 
-        let client = ControlAPIClient(baseURL: baseURL, authToken: store.controlPlaneToken.isEmpty ? nil : store.controlPlaneToken)
+        let client = ControlAPIClient(
+            baseURL: baseURL,
+            joinToken: store.controlPlaneToken
+        )
         let response = try await client.register(
-            publicKey: privateKey.publicKey.base64Key,
-            deviceId: try DeviceIdentity.deviceID().uuidString,
-            platform: "ios"
+            name: "ios-device",
+            platform: "ios",
+            wireguardPublicKey: privateKey.publicKey.base64Key,
+            endpoint: "0.0.0.0:51820"  // outbound-only client; placeholder
         )
 
-        let config = ProvisionedConfig(
-            serverPublicKey: response.config.serverPublicKey,
-            endpoint: response.config.endpoint,
-            address: response.config.address,
-            dns: response.config.dns,
-            allowedIPs: response.config.allowedIPs,
-            persistentKeepalive: response.config.persistentKeepalive
+        // Connect to the VPS exit node. Static config — the exit node is the
+        // same VPS that runs the coordinator (103.173.155.50, WireGuard :443).
+        let exitEndpoint = store.serverEndpoint.isEmpty ? "103.173.155.50:443" : store.serverEndpoint
+        let exitPublicKey = store.serverPublicKey.isEmpty ? "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=" : store.serverPublicKey
+
+        return WireGuardConfig(
+            name: "privatevpn",
+            privateKeyBase64: privateKey.base64Key,
+            addresses: ["\(response.overlay_ip)/24"],
+            dnsServers: ["1.1.1.1"],
+            peers: [
+                WireGuardConfig.WireGuardPeer(
+                    publicKeyBase64: exitPublicKey,
+                    endpoint: exitEndpoint,
+                    allowedIPs: ["0.0.0.0/0", "::/0"],
+                    preSharedKeyBase64: nil,
+                    persistentKeepAlive: 25
+                )
+            ]
         )
-        return try config.makeWireGuardConfig(privateKey: privateKey)
     }
 
     // MARK: - Configuration

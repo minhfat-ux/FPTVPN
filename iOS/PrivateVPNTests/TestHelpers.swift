@@ -55,11 +55,11 @@ final class MockURLProtocol: URLProtocol {
 /// Builds a `ControlAPIClient` whose `URLSession` is routed through
 /// `MockURLProtocol`, so tests can stub responses per request.
 func makeMockedClient(
-    baseURL: URL = URL(string: "https://control.example.com")!,
-    authToken: String? = "test-token"
+    baseURL: URL = URL(string: "http://103.173.155.50:7777")!,
+    joinToken: String = "PVPN-JOIN-test"
 ) -> ControlAPIClient {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [MockURLProtocol.self]
     let session = URLSession(configuration: configuration)
-    return ControlAPIClient(baseURL: baseURL, authToken: authToken, session: session)
+    return ControlAPIClient(baseURL: baseURL, joinToken: joinToken, session: session)
 }

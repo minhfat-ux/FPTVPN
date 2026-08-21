@@ -25,8 +25,8 @@ final class VPNConfigStore: ObservableObject {
 
     private let defaults: UserDefaults
 
-    /// Default control plane URL (dev, via loca.lt). Replaced by user input once set.
-    private static let defaultControlPlaneURL = "https://slimy.badgers-lie.loca.lt"
+    /// Default coordinator URL (VPS). Replaced by user input once set.
+    private static let defaultControlPlaneURL = "http://103.173.155.50:7777"
 
     @Published var serverEndpoint: String {
         didSet { defaults.set(serverEndpoint, forKey: Key.serverEndpoint) }
@@ -149,7 +149,7 @@ final class VPNConfigStore: ObservableObject {
 
     /// Default join token for the dev control plane. Replaced once the user
     /// enters their own token.
-    private static let defaultControlPlaneToken = "PVPN-JOIN-vnZXvt8sNKWW7EMQoTJi6vbQKgaQfRRh"
+    private static let defaultControlPlaneToken = "PVPN-JOIN-iPk1BTysgTktb62gswqgXj1oGaSYgHzY"
 
     private func persistControlPlaneToken() {
         do {

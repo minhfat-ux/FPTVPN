@@ -1,26 +1,25 @@
 import XCTest
 @testable import PrivateVPN
 
-/// Tests `ControlAPIClient` request/response handling using a mocked
-/// `URLProtocol` — no network involved.
+/// Tests `ControlAPIClient` (coordinator API) request/response handling using a
+/// mocked `URLProtocol` — no network involved.
 final class ControlAPIClientTests: XCTestCase {
-    private func makeResponse() -> RegisterDeviceResponse {
-        RegisterDeviceResponse(
-            device: ProvisionedDevice(
-                id: "uuid-device-1",
-                publicKey: "server-seen-public-key",
-                deviceName: "iPhone 15",
-                assignedIP: "10.77.0.2/32",
-                active: true
-            ),
-            config: ProvisionedConfig(
-                serverPublicKey: "server-peer-public-key",
-                endpoint: "103.173.155.50:22",
-                address: "10.77.0.2/32",
-                dns: ["1.1.1.1"],
-                allowedIPs: ["0.0.0.0/0", "::/0"],
-                persistentKeepalive: 25
-            )
+    private func makeRegisterResponse() -> CoordinatorRegisterResponse {
+        CoordinatorRegisterResponse(
+            peer_id: "uuid-peer-1",
+            overlay_ip: "10.77.0.5",
+            network: "10.77.0.0/24",
+            peer_credential: "PVPN-PEER-test-cred",
+            peers: [
+                CoordinatorPeer(
+                    peer_id: "uuid-peer-2",
+                    name: "exitnode",
+                    overlay_ip: "10.77.0.1",
+                    wireguard_public_key: "exit-node-pubkey",
+                    endpoint: "103.173.155.50:443",
+                    allowed_ips: ["10.77.0.1/32"]
+                )
+            ]
         )
     }
 
@@ -29,8 +28,6 @@ final class ControlAPIClientTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Extracts the request body. URLSession hands URLProtocols a request whose
-    /// `httpBody` has been moved to `httpBodyStream`, so both must be handled.
     private func bodyData(from request: URLRequest) -> Data? {
         if let body = request.httpBody {
             return body
@@ -52,73 +49,61 @@ final class ControlAPIClientTests: XCTestCase {
 
     func testRegisterSuccessDecodesResponse() async throws {
         let client = makeMockedClient()
-        let expected = makeResponse()
+        let expected = makeRegisterResponse()
         let body = try JSONEncoder().encode(expected)
 
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
-                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
             )!
             return (response, body)
         }
 
         let result = try await client.register(
-            publicKey: "server-seen-public-key"
+            name: "ios-device",
+            platform: "ios",
+            wireguardPublicKey: "device-pubkey",
+            endpoint: "0.0.0.0:51820"
         )
 
         XCTAssertEqual(result, expected)
-        XCTAssertEqual(result.device.id, "uuid-device-1")
-        XCTAssertEqual(result.device.assignedIP, "10.77.0.2/32")
-        XCTAssertEqual(result.config.endpoint, "103.173.155.50:22")
-        XCTAssertEqual(result.config.allowedIPs, ["0.0.0.0/0", "::/0"])
-        XCTAssertEqual(result.config.persistentKeepalive, 25)
+        XCTAssertEqual(result.peer_id, "uuid-peer-1")
+        XCTAssertEqual(result.overlay_ip, "10.77.0.5")
+        XCTAssertEqual(result.peers.count, 1)
+        XCTAssertEqual(result.peers.first?.endpoint, "103.173.155.50:443")
     }
 
-    func testRegisterSendsPublicKeyAndStableDeviceIdentity() async throws {
+    func testRegisterSendsCoordinatorPayload() async throws {
         let client = makeMockedClient()
         var capturedRequest: URLRequest?
         MockURLProtocol.requestHandler = { request in
             capturedRequest = request
             let response = HTTPURLResponse(
-                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
             )!
-            return (response, try JSONEncoder().encode(self.makeResponse()))
+            return (response, try JSONEncoder().encode(self.makeRegisterResponse()))
         }
 
         _ = try await client.register(
-            publicKey: "device-public-key",
-            deviceId: "00000000-0000-0000-0000-0000000000ab",
-            platform: "ios"
+            name: "ios-device",
+            platform: "ios",
+            wireguardPublicKey: "device-pubkey",
+            endpoint: "0.0.0.0:51820"
         )
 
         let request = try XCTUnwrap(capturedRequest)
         XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(request.url?.path, "/device")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
-        XCTAssertTrue(request.value(forHTTPHeaderField: "Content-Type")?.contains("application/json") == true)
+        XCTAssertEqual(request.url?.path, "/v1/peers/register")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"),
+                     "coordinator auth is via join_token in body, not a header")
 
         let body = try XCTUnwrap(bodyData(from: request))
         let payload = try XCTUnwrap(try JSONDecoder().decode([String: String].self, from: body))
-        XCTAssertEqual(payload["publicKey"], "device-public-key")
-        XCTAssertNil(payload["deviceName"], "device name must not be transmitted (NFR-PRIV-001)")
-        XCTAssertEqual(payload["deviceId"], "00000000-0000-0000-0000-0000000000ab")
+        XCTAssertEqual(payload["name"], "ios-device")
         XCTAssertEqual(payload["platform"], "ios")
-    }
-
-    func testRegisterOmitsAuthHeaderWhenNoToken() async throws {
-        let client = makeMockedClient(authToken: nil)
-        var capturedRequest: URLRequest?
-        MockURLProtocol.requestHandler = { request in
-            capturedRequest = request
-            let response = HTTPURLResponse(
-                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
-            )!
-            return (response, try JSONEncoder().encode(self.makeResponse()))
-        }
-
-        _ = try await client.register(publicKey: "device-public-key")
-
-        XCTAssertNil(capturedRequest?.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertEqual(payload["wireguard_public_key"], "device-pubkey")
+        XCTAssertEqual(payload["endpoint"], "0.0.0.0:51820")
+        XCTAssertEqual(payload["join_token"], "PVPN-JOIN-test")
     }
 
     func testRegisterUnauthorizedMapsToServerError() async throws {
@@ -127,17 +112,18 @@ final class ControlAPIClientTests: XCTestCase {
             let response = HTTPURLResponse(
                 url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil
             )!
-            return (response, Data(#"{"error":"unauthorized"}"#.utf8))
+            return (response, Data(#"{"error":"TOKEN_FAILURE","message":"Join token has expired"}"#.utf8))
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key")
+            _ = try await client.register(name: "ios", platform: "ios",
+                                          wireguardPublicKey: "k", endpoint: "0.0.0.0:51820")
             XCTFail("Expected a ClientError for HTTP 401")
         } catch let error as ControlAPIClient.ClientError {
             guard case .server(let message) = error else {
                 return XCTFail("Expected .server error, got \(error)")
             }
-            XCTAssertEqual(message, "unauthorized")
+            XCTAssertEqual(message, "Join token has expired")
         }
     }
 
@@ -151,7 +137,8 @@ final class ControlAPIClientTests: XCTestCase {
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key")
+            _ = try await client.register(name: "ios", platform: "ios",
+                                          wireguardPublicKey: "k", endpoint: "0.0.0.0:51820")
             XCTFail("Expected a ClientError for HTTP 503")
         } catch let error as ControlAPIClient.ClientError {
             guard case .server(let message) = error else {
@@ -168,7 +155,8 @@ final class ControlAPIClientTests: XCTestCase {
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key")
+            _ = try await client.register(name: "ios", platform: "ios",
+                                          wireguardPublicKey: "k", endpoint: "0.0.0.0:51820")
             XCTFail("Expected a ClientError for a transport failure")
         } catch let error as ControlAPIClient.ClientError {
             guard case .transport = error else {
@@ -181,16 +169,17 @@ final class ControlAPIClientTests: XCTestCase {
         let client = makeMockedClient()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
-                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
             )!
             return (response, Data("{\"not\": \"the expected shape\"}".utf8))
         }
 
         do {
-            _ = try await client.register(publicKey: "device-public-key")
-            XCTFail("Expected a decoding error for a malformed 200 payload")
+            _ = try await client.register(name: "ios", platform: "ios",
+                                          wireguardPublicKey: "k", endpoint: "0.0.0.0:51820")
+            XCTFail("Expected a decoding error for a malformed 201 payload")
         } catch is DecodingError {
-            // Expected: JSON decode failure surfaces as-is.
+            // Expected.
         } catch {
             XCTFail("Expected DecodingError, got \(error)")
         }

@@ -59,7 +59,7 @@ final class VPNConfigStoreTests: XCTestCase {
         // The app ships a dev control-plane URL default, so a fresh store is
         // already "configured" and yields a usable base URL.
         XCTAssertTrue(store.hasControlPlane)
-        XCTAssertEqual(store.controlPlaneBaseURL, URL(string: "https://rename-carless-vastly.ngrok-free.dev"))
+        XCTAssertEqual(store.controlPlaneBaseURL, URL(string: "http://103.173.155.50:7777"))
 
         store.controlPlaneURL = "https://control.example.com"
         XCTAssertTrue(store.hasControlPlane)
@@ -96,8 +96,8 @@ final class VPNConfigStoreTests: XCTestCase {
         XCTAssertEqual(store.tunnelAddress, "10.80.0.2/32")
         XCTAssertEqual(store.dnsServers, "1.1.1.1")
         XCTAssertEqual(store.allowedIPs, "0.0.0.0/0, ::/0")
-        XCTAssertEqual(store.controlPlaneURL, "https://rename-carless-vastly.ngrok-free.dev")
-        XCTAssertEqual(store.controlPlaneToken, "")
+        XCTAssertEqual(store.controlPlaneURL, "http://103.173.155.50:7777")
+        XCTAssertEqual(store.controlPlaneToken, "PVPN-JOIN-iPk1BTysgTktb62gswqgXj1oGaSYgHzY")
     }
 
     func testTokenPersistsInKeychainNotUserDefaults() throws {

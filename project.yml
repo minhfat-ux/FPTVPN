@@ -32,10 +32,8 @@ targets:
           - UIInterfaceOrientationPortrait
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-          NSExceptionDomains:
-            ngrok-free.dev:
-              NSIncludesSubdomains: true
-              NSExceptionAllowsInsecureHTTPLoads: true
+          # Dev: allow HTTP to the VPS coordinator (public IP). Replace with HTTPS before release.
+          NSAllowsArbitraryLoads: true
     entitlements:
       path: iOS/PrivateVPN/PrivateVPN.entitlements
       properties:
