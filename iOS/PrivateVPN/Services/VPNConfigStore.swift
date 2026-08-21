@@ -149,7 +149,7 @@ final class VPNConfigStore: ObservableObject {
 
     /// Default join token for the dev control plane. Replaced once the user
     /// enters their own token.
-    private static let defaultControlPlaneToken = "PVPN-JOIN-iPk1BTysgTktb62gswqgXj1oGaSYgHzY"
+    private static let defaultControlPlaneToken = "PVPN-JOIN-1dWnX9t-XRVhSwIDwBhvfftj_ELmq6vE"
 
     private func persistControlPlaneToken() {
         do {
