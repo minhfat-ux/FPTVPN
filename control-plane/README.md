@@ -121,7 +121,7 @@ without TLS.
 ```bash
 cd control-plane
 npm install
-WG_SERVER_PUBKEY=hPuZYfu/lvnaSkGcO61Ks99rqVIdrL/ilOjw3+ip5BQ= \
+WG_SERVER_PUBKEY=d1DhSaDqyrWW+eGuQq/qVjEj5KseklNRvscoREq2qyo= \
 WG_PUBLIC_ENDPOINT=103.173.155.50:22 \
 AUTH_TOKEN=devtoken \
 npm start

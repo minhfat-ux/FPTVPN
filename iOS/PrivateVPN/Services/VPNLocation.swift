@@ -26,7 +26,7 @@ struct VPNLocation: Identifiable, Hashable, Codable {
             city: "Hanoi",
             endpoint: "103.173.155.50",
             port: 22,
-            publicKey: "hPuZYfu/lvnaSkGcO61Ks99rqVIdrL/ilOjw3+ip5BQ=",
+            publicKey: "d1DhSaDqyrWW+eGuQq/qVjEj5KseklNRvscoREq2qyo=",
             clientAddress: "10.77.0.2/32"
         ),
     ]
