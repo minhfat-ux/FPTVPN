@@ -144,6 +144,36 @@ struct ControlAPIClient {
         }
     }
 
+    /// Requests a fresh one-time join token from the coordinator. The server may
+    /// require an admin token (Bearer header); pass it if configured.
+    func fetchJoinToken(adminToken: String? = nil) async throws -> String {
+        let url = baseURL.appendingPathComponent("v1/tokens")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        if let adminToken {
+            request.setValue("Bearer \(adminToken)", forHTTPHeaderField: "Authorization")
+        }
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ClientError.transport(error)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw ClientError.badResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ClientError.server("HTTP \(http.statusCode)")
+        }
+        let body = try JSONDecoder().decode(TokenResponse.self, from: data)
+        return body.token
+    }
+
+    private struct TokenResponse: Decodable {
+        let token: String
+    }
+
     private struct ErrorBody: Decodable {
         let error: String?
         let message: String?

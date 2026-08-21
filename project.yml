@@ -140,3 +140,28 @@ targets:
             ARCHS="$ARCHS" \
             DESTDIR="${DERIVED_FILE_DIR}/wg" \
             CONFIGURATION_TEMP_DIR="${DERIVED_FILE_DIR}/wg-tmp"
+
+  PrivateVPNMac:
+    type: application
+    platform: macOS
+    sources:
+      - mac/PrivateVPNMac
+      - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
+    info:
+      path: mac/PrivateVPNMac/Info.plist
+      properties:
+        CFBundleDisplayName: FPT PrivateVPN
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "13.0"
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac
+        PRODUCT_NAME: FPTPrivateVPN
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        CODE_SIGN_STYLE: Automatic
+    scheme:
+      testTargets: []

@@ -97,7 +97,7 @@ final class VPNConfigStoreTests: XCTestCase {
         XCTAssertEqual(store.dnsServers, "1.1.1.1")
         XCTAssertEqual(store.allowedIPs, "0.0.0.0/0, ::/0")
         XCTAssertEqual(store.controlPlaneURL, "http://103.173.155.50:7777")
-        XCTAssertEqual(store.controlPlaneToken, "PVPN-JOIN-iPk1BTysgTktb62gswqgXj1oGaSYgHzY")
+        XCTAssertEqual(store.controlPlaneToken, "PVPN-JOIN-1dWnX9t-XRVhSwIDwBhvfftj_ELmq6vE")
     }
 
     func testTokenPersistsInKeychainNotUserDefaults() throws {
