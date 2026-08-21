@@ -25,6 +25,21 @@ struct RegisterDeviceResponse: Equatable, Codable {
     var config: ProvisionedConfig
 }
 
+/// An exit node advertised by the control plane (Tailscale-style). The app
+/// fetches these instead of hardcoding a server list.
+struct RemoteNode: Equatable, Codable, Identifiable {
+    var id: String
+    var name: String
+    var country: String
+    var city: String
+    var endpoint: String?
+    var serverPublicKey: String?
+}
+
+struct NodesResponse: Equatable, Codable {
+    var nodes: [RemoteNode]
+}
+
 /// Talks to the PrivateVPN control plane to register a device and obtain its
 /// WireGuard configuration (Tailscale-style).
 struct ControlAPIClient {
@@ -104,6 +119,30 @@ struct ControlAPIClient {
             throw ClientError.server(message)
         }
         return try JSONDecoder().decode(RegisterDeviceResponse.self, from: data)
+    }
+
+    /// Fetches the list of available exit nodes from the control plane.
+    func fetchNodes() async throws -> [RemoteNode] {
+        let url = baseURL.appendingPathComponent("nodes")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if let authToken {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ClientError.transport(error)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw ClientError.badResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ClientError.server("HTTP \(http.statusCode)")
+        }
+        return try JSONDecoder().decode(NodesResponse.self, from: data).nodes
     }
 
     private struct ErrorBody: Decodable {

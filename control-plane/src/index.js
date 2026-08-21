@@ -24,6 +24,9 @@ const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "d
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
+const NODE_ID = process.env.NODE_ID ?? "";
+const NODE_COUNTRY = process.env.NODE_COUNTRY ?? "VN";
+const NODE_CITY = process.env.NODE_CITY ?? "Hanoi";
 const STARTED_AT = new Date().toISOString();
 
 // TLS (NFR-SEC-002 / AC-016): HTTPS when both cert + key are provided.
@@ -84,6 +87,23 @@ const requireAdminAuth = (req, res, next) => {
 // Health check.
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// Public list of exit nodes (Tailscale-style). The app fetches this to present
+// selectable locations instead of hardcoding them.
+app.get("/nodes", (_req, res) => {
+  res.json({
+    nodes: [
+      {
+        id: NODE_ID || "node-1",
+        name: NODE_NAME || os.hostname(),
+        country: NODE_COUNTRY || "VN",
+        city: NODE_CITY || "Hanoi",
+        endpoint: WG_PUBLIC_ENDPOINT || null,
+        serverPublicKey: WG_SERVER_PUBKEY || null,
+      },
+    ],
+  });
 });
 
 // Register a device: assign IP, provision peer, return client config.

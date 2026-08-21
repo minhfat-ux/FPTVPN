@@ -79,6 +79,23 @@ final class VPNManager: ObservableObject {
 
     // MARK: - Control plane provisioning
 
+    /// Fetches the available exit nodes from the control plane.
+    func fetchNodes(store: VPNConfigStore) async {
+        guard let baseURL = store.controlPlaneBaseURL else { return }
+        let client = ControlAPIClient(baseURL: baseURL, authToken: store.controlPlaneToken.isEmpty ? nil : store.controlPlaneToken)
+        do {
+            let nodes = try await client.fetchNodes()
+            store.remoteNodes = nodes
+            if store.selectedNodeID == nil, let first = nodes.first {
+                store.selectedNodeID = first.id
+                store.serverEndpoint = first.endpoint ?? ""
+                store.serverPublicKey = first.serverPublicKey ?? ""
+            }
+        } catch {
+            // Non-fatal: fall back to local presets / manual config.
+        }
+    }
+
     /// Registers the device with the control plane and builds a config from the
     /// provisioned response (server assigns IP + endpoint automatically).
     private func provisionViaControlPlane(store: VPNConfigStore, baseURL: URL) async throws -> WireGuardConfig {
@@ -154,7 +171,6 @@ final class VPNManager: ObservableObject {
 
     private func prepareConfiguration(_ config: WireGuardConfig) async throws {
         try await manager.loadFromPreferences()
-        guard manager.protocolConfiguration == nil else { return }
 
         let protocolConfig = NETunnelProviderProtocol()
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier

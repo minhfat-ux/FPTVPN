@@ -34,8 +34,8 @@ final class VPNConfigStoreTests: XCTestCase {
         let store = makeStore()
         let preset = try XCTUnwrap(VPNLocation.presets.first)
 
-        XCTAssertEqual(store.selectedLocationID, preset.id)
-        XCTAssertEqual(store.selectedLocation, preset)
+        XCTAssertEqual(store.selectedNodeID, preset.id.uuidString)
+        XCTAssertEqual(store.selectedRemoteNode?.endpoint, "\(preset.host):\(preset.port)")
         XCTAssertEqual(store.serverEndpoint, "\(preset.host):\(preset.port)")
         XCTAssertEqual(store.serverPublicKey, preset.publicKey)
         XCTAssertEqual(store.tunnelAddress, preset.clientAddress)
@@ -75,20 +75,20 @@ final class VPNConfigStoreTests: XCTestCase {
         first.allowedIPs = "10.0.0.0/8"
         // A non-nil selection (even unknown to presets) must persist as-is,
         // and must prevent the first-launch preset seeding from re-running.
-        let customID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
-        first.selectedLocationID = customID
+        let customID = UUID().uuidString
+        first.selectedNodeID = customID
 
         let second = makeStore()
         XCTAssertEqual(second.controlPlaneURL, "https://control.example.com")
         XCTAssertEqual(second.controlPlaneToken, "tok-123")
         XCTAssertEqual(second.allowedIPs, "10.0.0.0/8")
-        XCTAssertEqual(second.selectedLocationID, customID)
+        XCTAssertEqual(second.selectedNodeID, customID)
     }
 
     func testDefaultsForUnsetOptionalFields() {
         // Pre-seed a selection so first-launch preset seeding is skipped and
         // the raw defaults for every field are observable.
-        defaults.set(UUID().uuidString, forKey: "config.server.locationID")
+        defaults.set(UUID().uuidString, forKey: "config.node.id")
 
         let store = makeStore()
         XCTAssertEqual(store.tunnelAddress, "10.80.0.2/32")

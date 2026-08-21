@@ -13,6 +13,8 @@ final class VPNConfigStore: ObservableObject {
         static let allowedIPs = "config.server.allowedIPs"
         static let selectedLocationID = "config.server.locationID"
         static let controlPlaneURL = "config.controlPlane.url"
+        /// ID of the exit node chosen from the control plane's node list.
+        static let selectedNodeID = "config.node.id"
         /// Keychain account for the control-plane auth token. The token is a
         /// credential and must not live in UserDefaults (NFR-PRIV-001 — privacy
         /// review 2026-08-20 ISSUE #3).
@@ -47,10 +49,33 @@ final class VPNConfigStore: ObservableObject {
     @Published var controlPlaneToken: String {
         didSet { persistControlPlaneToken() }
     }
+    /// Exit nodes fetched from the control plane (Tailscale-style), plus any
+    /// legacy local presets. Controls the location picker.
+    @Published var remoteNodes: [RemoteNode] = []
+    /// The exit node id currently selected.
+    @Published var selectedNodeID: String? {
+        didSet { defaults.set(selectedNodeID, forKey: Key.selectedNodeID) }
+    }
 
     /// The currently selected preset location, if any.
     var selectedLocation: VPNLocation? {
         VPNLocation.presets.first { $0.id == selectedLocationID }
+    }
+
+    /// All selectable exit nodes: control-plane nodes first, then legacy presets.
+    var availableNodes: [RemoteNode] {
+        if !remoteNodes.isEmpty {
+            return remoteNodes
+        }
+        return VPNLocation.presets.map {
+            RemoteNode(id: $0.id.uuidString, name: $0.name, country: $0.country,
+                       city: $0.city, endpoint: "\($0.host):\($0.port)", serverPublicKey: $0.publicKey)
+        }
+    }
+
+    /// The currently selected exit node (remote or preset).
+    var selectedRemoteNode: RemoteNode? {
+        availableNodes.first { $0.id == selectedNodeID }
     }
 
     /// True when an endpoint and a peer public key have both been entered.
@@ -89,11 +114,12 @@ final class VPNConfigStore: ObservableObject {
         selectedLocationID = defaults.string(forKey: Key.selectedLocationID).flatMap(UUID.init)
         controlPlaneURL = defaults.string(forKey: Key.controlPlaneURL) ?? ""
         controlPlaneToken = Self.loadControlPlaneToken(defaults: defaults)
+        selectedNodeID = defaults.string(forKey: Key.selectedNodeID)
 
         // Seed a default server selection on first launch so the app is usable
         // without manual endpoint entry.
-        if selectedLocationID == nil, let first = VPNLocation.presets.first {
-            selectedLocationID = first.id
+        if selectedNodeID == nil, let first = VPNLocation.presets.first {
+            selectedNodeID = first.id.uuidString
             serverEndpoint = "\(first.host):\(first.port)"
             serverPublicKey = first.publicKey
             tunnelAddress = first.clientAddress

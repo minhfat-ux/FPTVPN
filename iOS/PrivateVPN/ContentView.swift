@@ -153,15 +153,15 @@ struct ContentView: View {
     }
 
     private var locationName: String {
-        if let loc = configStore.selectedLocation {
-            return "\(loc.name) · \(loc.city)"
+        if let node = configStore.selectedRemoteNode {
+            return "\(node.name) · \(node.city)"
         }
         return configStore.serverEndpoint.isEmpty ? "No server selected" : configStore.serverEndpoint
     }
 
     private var locationDetail: String {
-        if let loc = configStore.selectedLocation {
-            return "\(loc.host):\(loc.port) · \(countryName(loc.country))"
+        if let node = configStore.selectedRemoteNode {
+            return "\(node.endpoint ?? "") · \(countryName(node.country))"
         }
         return "Open Configuration to set a server"
     }

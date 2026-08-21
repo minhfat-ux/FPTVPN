@@ -78,21 +78,40 @@ struct SettingsView: View {
 
     private var locationSection: some View {
         Section("Server location") {
-            Picker("Location", selection: $configStore.selectedLocationID) {
-                ForEach(VPNLocation.presets) { location in
-                    Text("\(location.name) — \(location.city), \(location.country)")
-                        .tag(location.id as UUID?)
+            if configStore.remoteNodes.isEmpty {
+                Button {
+                    Task { await vpnManager.fetchNodes(store: configStore) }
+                } label: {
+                    Label("Refresh locations from control plane", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(!configStore.hasControlPlane)
+            }
+
+            Picker("Location", selection: $configStore.selectedNodeID) {
+                ForEach(configStore.availableNodes) { node in
+                    Text("\(node.name) — \(node.city), \(node.country)")
+                        .tag(node.id as String?)
                 }
             }
             .pickerStyle(.menu)
-            .onChange(of: configStore.selectedLocationID) { _, newValue in
-                applyLocation(newValue)
+            .onChange(of: configStore.selectedNodeID) { _, newValue in
+                applyNode(newValue)
             }
 
-            if let loc = configStore.selectedLocation {
-                LabeledContent("Endpoint", value: "\(loc.host):\(loc.port)")
+            if let node = configStore.selectedRemoteNode, let endpoint = node.endpoint {
+                LabeledContent("Endpoint", value: endpoint)
                     .multilineTextAlignment(.trailing)
             }
+        }
+    }
+
+    private func applyNode(_ id: String?) {
+        guard let node = configStore.availableNodes.first(where: { $0.id == id }) else { return }
+        if let endpoint = node.endpoint {
+            configStore.serverEndpoint = endpoint
+        }
+        if let key = node.serverPublicKey {
+            configStore.serverPublicKey = key
         }
     }
 
