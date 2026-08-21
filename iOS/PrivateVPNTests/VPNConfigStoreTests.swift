@@ -56,8 +56,10 @@ final class VPNConfigStoreTests: XCTestCase {
 
     func testHasControlPlaneAndBaseURL() {
         let store = makeStore()
-        XCTAssertFalse(store.hasControlPlane)
-        XCTAssertNil(store.controlPlaneBaseURL)
+        // The app ships a dev control-plane URL default, so a fresh store is
+        // already "configured" and yields a usable base URL.
+        XCTAssertTrue(store.hasControlPlane)
+        XCTAssertEqual(store.controlPlaneBaseURL, URL(string: "http://63.140.14.154:8080"))
 
         store.controlPlaneURL = "https://control.example.com"
         XCTAssertTrue(store.hasControlPlane)
@@ -94,7 +96,7 @@ final class VPNConfigStoreTests: XCTestCase {
         XCTAssertEqual(store.tunnelAddress, "10.80.0.2/32")
         XCTAssertEqual(store.dnsServers, "1.1.1.1")
         XCTAssertEqual(store.allowedIPs, "0.0.0.0/0, ::/0")
-        XCTAssertEqual(store.controlPlaneURL, "")
+        XCTAssertEqual(store.controlPlaneURL, "http://63.140.14.154:8080")
         XCTAssertEqual(store.controlPlaneToken, "")
     }
 

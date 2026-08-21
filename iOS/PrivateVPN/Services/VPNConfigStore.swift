@@ -25,6 +25,9 @@ final class VPNConfigStore: ObservableObject {
 
     private let defaults: UserDefaults
 
+    /// Default control plane URL (dev node). Replaced by user input once set.
+    private static let defaultControlPlaneURL = "http://63.140.14.154:8080"
+
     @Published var serverEndpoint: String {
         didSet { defaults.set(serverEndpoint, forKey: Key.serverEndpoint) }
     }
@@ -112,7 +115,7 @@ final class VPNConfigStore: ObservableObject {
         dnsServers = defaults.string(forKey: Key.dnsServers) ?? "1.1.1.1"
         allowedIPs = defaults.string(forKey: Key.allowedIPs) ?? "0.0.0.0/0, ::/0"
         selectedLocationID = defaults.string(forKey: Key.selectedLocationID).flatMap(UUID.init)
-        controlPlaneURL = defaults.string(forKey: Key.controlPlaneURL) ?? ""
+        controlPlaneURL = defaults.string(forKey: Key.controlPlaneURL) ?? Self.defaultControlPlaneURL
         controlPlaneToken = Self.loadControlPlaneToken(defaults: defaults)
         selectedNodeID = defaults.string(forKey: Key.selectedNodeID)
 
