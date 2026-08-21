@@ -15,6 +15,7 @@ Only evidence-backed statements. Agent/Expert claims are never promoted directly
 | VF-008 | Device (`generic/platform=iOS`) build links WireGuardKit + libwg-go.a → BUILD SUCCEEDED; extension embedded + signed team G6XW3RN6LJ | `xcodebuild ... -destination 'generic/platform=iOS' build`; `codesign -dv` on `.appex` | 2026-08-19 |
 | VF-009 | **Device build re-verified independently AFTER control-plane integration (ControlAPIClient etc.) → BUILD SUCCEEDED** | `evidence/builds/2026-08-19-gate2-device-build-verify.log` (xcodebuild, generic/platform=iOS, CODE_SIGNING_ALLOWED=NO) | 2026-08-19 |
 | VF-010 | **Control-plane smoke test (DRY_RUN, Node v26.6.0): auth 401 → register 201 (IP 10.77.0.2, then .3) → idempotent re-register 200 (same IP) → validation 400 → DELETE deactivates (active=false) + wg dry-run peer remove** | `evidence/2026-08-19-control-plane-smoke.md` (raw curl transcript, server log) | 2026-08-19 |
+| VF-011 | **iOS unit test suite (ControlAPIClient, DeviceIdentity, KeychainStore, VPNConfigStore, VPNState, WireGuardConfig) runs on iOS Simulator → TEST SUCCEEDED, 39/39 pass, 0 failures** (simulator build fixed via `GOOS_iphonesimulator := ios` in WireGuardKitGo Makefile) | `evidence/builds/2026-08-19-gate4-tests.log` | 2026-08-19 |
 
 NOT verified: any VPN connectivity, public-IP change, DNS/HTTPS through tunnel,
 revocation against a live node, real control-plane provisioning against a WireGuard

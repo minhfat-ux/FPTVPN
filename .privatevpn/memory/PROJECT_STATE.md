@@ -41,6 +41,11 @@ GATE 3 — Dynamic device provisioning (control-plane implemented + smoke-tested
 - **Control-plane smoke test** (DRY_RUN, Node v26.6.0): 401 auth, 201 register +
   IP pool 10.77.0.2/.3, 200 idempotent re-register, 400 validation, DELETE →
   active=false + `wg` dry-run peer remove (`evidence/2026-08-19-control-plane-smoke.md`).
+- **iOS unit test suite runs on iOS Simulator → TEST SUCCEEDED, 39/39 pass, 0
+  failures** (ControlAPIClient, DeviceIdentity, KeychainStore, VPNConfigStore,
+  VPNState, WireGuardConfig). Simulator build fixed via `GOOS_iphonesimulator := ios`
+  in the WireGuardKitGo Makefile (`evidence/builds/2026-08-19-gate4-tests.log`,
+  VF-011).
 
 ## What is implemented but unverified?
 - Docs/bootstrap artifacts (SRS, architecture, ADRs, rules, KB, memory, bug registry,
@@ -49,13 +54,13 @@ GATE 3 — Dynamic device provisioning (control-plane implemented + smoke-tested
   evidence of buildability, not real-device VPN runtime verification (GATE 2+).
 - WireGuard integration (KeychainStore keypair, WireGuardConfig parser,
   PacketTunnelProvider using WireGuardAdapter, VPNManager config, VPNConfigStore +
-  SettingsView) — compiles + device build links, but **no real tunnel connect
-  verified** (needs server + device).
+  SettingsView) — compiles + device build links + unit-tested; **no real tunnel
+  connect verified** (needs server + device).
 - Control plane (Express: POST/GET/DELETE /device, IP pool 10.77.0.0/24, wg peer
-  provisioning, bearer auth, DRY_RUN) — code complete + smoke-verified; **not yet
-  run against a real WireGuard node** (no node credentials).
+  provisioning, bearer auth, DRY_RUN, TLS, /devices /status admin) — code complete +
+  smoke-verified; **not yet run against a real WireGuard node** (no node credentials).
 - ControlAPIClient (iOS side registers device on Connect when control-plane URL set)
-  — compiled into device build; runtime path needs a reachable control plane.
+  — unit-tested; runtime end-to-end path needs a reachable control plane + device.
 
 ## What is running?
 Culi orchestration session (this one) + control-plane smoke test (finished).
@@ -63,14 +68,12 @@ Culi orchestration session (this one) + control-plane smoke test (finished).
 ## What is blocked?
 - Real VPN runtime (GATE 2+): simulator cannot run Packet Tunnel; requires physical
   iPhone + Apple team with Network Extension entitlement (identity exists).
+- **Xcode DeviceSupport missing for iOS 26.6** (only up to 16.4 present; Xcode.app
+  is only ~4GB, incomplete install) → Developer Disk Image cannot mount → cannot
+  install/run the app on a physical iPhone yet. Fix: reinstall/complete Xcode 26.6.
 - Server/control-plane: no production Vietnam node credentials, endpoint, or peer
   public key provided. Dev preset (Hanoi test node) exists in-app; control plane
   needs WG_SERVER_PUBKEY/WG_PUBLIC_ENDPOINT of a live node to provision real peers.
-- Simulator link of `libwg-go.a` fails (Go iOS-simulator runtime lacks a darwin symbol);
-  WireGuard is device-only (documented, acceptable — simulator can't run a tunnel).
-- Unit tests cannot run on the iOS Simulator because the test host builds the whole
-  app, which links `libwg-go.a` (simulator-incompatible). Tests require a device or
-  a way to exclude WireGuard from the test host.
 
 ## What is stale?
 Nothing yet (fresh repo).
@@ -87,7 +90,10 @@ Nothing yet (fresh repo).
    peer key; user-configurable instead of placeholders.
 8. ✅ Control plane (Node.js): device registration + auto-provisioning + IP pool
    + bearer auth + DRY_RUN (commit 464d793, smoke-tested).
-9. GATE 3/4: wire revoke UI (FR-REVOKE-001/002), auth (FR-AUTH-001), admin
-   visibility (FR-ADMIN-001) — pending control-plane deployment decisions.
-10. GATE 2: real-device E2E — needs physical iPhone + Vietnam node endpoint/peer
-    public key entered in the app (blocked).
+9. ✅ UI/UX redesign + admin endpoints (/devices, /status) + TLS + privacy fixes
+   (commits 6d1a1f7, 1426c25); iOS unit tests 39/39 PASS on simulator (VF-011).
+10. GATE 3/4: wire revoke UI (FR-REVOKE-001/002), auth (FR-AUTH-001), admin
+    visibility (FR-ADMIN-001) — pending control-plane deployment decisions.
+11. GATE 2: real-device E2E — needs physical iPhone + Vietnam node endpoint/peer
+    public key entered in the app (blocked by missing Xcode DeviceSupport for iOS
+    26.6 → reinstall/complete Xcode, plus live node provisioning).
