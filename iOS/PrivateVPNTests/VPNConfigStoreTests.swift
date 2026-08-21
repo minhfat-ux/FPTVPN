@@ -49,7 +49,7 @@ final class VPNConfigStoreTests: XCTestCase {
         store.serverEndpoint = ""
         XCTAssertFalse(store.isConfigured, "missing endpoint must mean not configured")
 
-        store.serverEndpoint = "63.140.14.154:64044"
+        store.serverEndpoint = "103.173.155.50:22"
         store.serverPublicKey = ""
         XCTAssertFalse(store.isConfigured, "missing peer public key must mean not configured")
     }

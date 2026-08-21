@@ -51,7 +51,7 @@ Response:
   },
   "config": {
     "serverPublicKey": "...",
-    "endpoint": "63.140.14.154:64044",
+    "endpoint": "103.173.155.50:22",
     "address": "10.77.0.2/32",
     "dns": ["1.1.1.1"],
     "allowedIPs": ["0.0.0.0/0", "::/0"],
@@ -95,7 +95,7 @@ Node status: node name/endpoint, peer count, dry-run flag, uptime:
 
 ```json
 {
-  "node": { "name": "vietnam-1", "endpoint": "63.140.14.154:64044", "interface": "wg0" },
+  "node": { "name": "vietnam-1", "endpoint": "103.173.155.50:22", "interface": "wg0" },
   "peers": 1,
   "peer_source": "registry",
   "dryRun": true,
@@ -122,7 +122,7 @@ without TLS.
 cd control-plane
 npm install
 WG_SERVER_PUBKEY=hPuZYfu/lvnaSkGcO61Ks99rqVIdrL/ilOjw3+ip5BQ= \
-WG_PUBLIC_ENDPOINT=63.140.14.154:64044 \
+WG_PUBLIC_ENDPOINT=103.173.155.50:22 \
 AUTH_TOKEN=devtoken \
 npm start
 ```

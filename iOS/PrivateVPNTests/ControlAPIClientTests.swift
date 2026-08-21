@@ -15,7 +15,7 @@ final class ControlAPIClientTests: XCTestCase {
             ),
             config: ProvisionedConfig(
                 serverPublicKey: "server-peer-public-key",
-                endpoint: "63.140.14.154:64044",
+                endpoint: "103.173.155.50:22",
                 address: "10.77.0.2/32",
                 dns: ["1.1.1.1"],
                 allowedIPs: ["0.0.0.0/0", "::/0"],
@@ -69,7 +69,7 @@ final class ControlAPIClientTests: XCTestCase {
         XCTAssertEqual(result, expected)
         XCTAssertEqual(result.device.id, "uuid-device-1")
         XCTAssertEqual(result.device.assignedIP, "10.77.0.2/32")
-        XCTAssertEqual(result.config.endpoint, "63.140.14.154:64044")
+        XCTAssertEqual(result.config.endpoint, "103.173.155.50:22")
         XCTAssertEqual(result.config.allowedIPs, ["0.0.0.0/0", "::/0"])
         XCTAssertEqual(result.config.persistentKeepalive, 25)
     }

@@ -22,7 +22,7 @@ final class WireGuardConfigTests: XCTestCase {
         let serverKey = try serverPublicKey ?? KeychainStore.obtainOrCreatePrivateKey().publicKey.base64Key
         return ProvisionedConfig(
             serverPublicKey: serverKey,
-            endpoint: "63.140.14.154:64044",
+            endpoint: "103.173.155.50:22",
             address: "10.77.0.2/32",
             dns: ["1.1.1.1", "8.8.8.8"],
             allowedIPs: ["0.0.0.0/0", "::/0"],
@@ -47,7 +47,7 @@ final class WireGuardConfigTests: XCTestCase {
         let peer = config.peers[0]
         XCTAssertEqual(peer.publicKeyBase64, key.publicKey.base64Key,
                        "server public key must map to the peer public key")
-        XCTAssertEqual(peer.endpoint, "63.140.14.154:64044")
+        XCTAssertEqual(peer.endpoint, "103.173.155.50:22")
         XCTAssertEqual(peer.allowedIPs, ["0.0.0.0/0", "::/0"])
         XCTAssertNil(peer.preSharedKeyBase64)
         XCTAssertEqual(peer.persistentKeepAlive, 25)
@@ -71,7 +71,7 @@ final class WireGuardConfigTests: XCTestCase {
             peers: [
                 WireGuardConfig.WireGuardPeer(
                     publicKeyBase64: key.publicKey.base64Key,
-                    endpoint: "63.140.14.154:64044",
+                    endpoint: "103.173.155.50:22",
                     allowedIPs: ["0.0.0.0/0", "::/0"],
                     preSharedKeyBase64: nil,
                     persistentKeepAlive: 25
