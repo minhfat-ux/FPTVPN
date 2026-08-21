@@ -222,7 +222,18 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
 - Real state model; evidence-gated verification; no fake "connected".
 - iOS Packet Tunnel Provider as the data plane (when running on device).
 
-> **Action (owner/next session):** update §1–§8, §14 and the requirements registry
-> to reflect the mesh + coordinator + account model, and open a CR against
-> RS-20260819-01 before promoting the next baseline.
+### A4. Exit-node registry + UI toggle (2026-08-21)
+
+- Coordinator now manages a registry of **exit nodes** (`exit_nodes` table).
+  Endpoints: `GET /v1/nodes` (public), `POST /v1/nodes` and
+  `DELETE /v1/nodes/:name` (admin). The VPS exit node is seeded on first run.
+- Apps fetch the server list from the backend and let the user **choose an
+  exit node** (macOS Settings picker; iOS location picker) instead of a
+  hardcoded preset.
+- macOS main screen uses a **single toggle Connect/Disconnect** button that
+  changes with state, matching the iOS one-tap UX.
+
+> **Action (owner/next session):** fold A2/A4 into §1–§8 and the requirements
+> registry (FR-AUTH-001, FR-DEVICE multi-device, exit-node selection), and open
+> a CR against RS-20260819-01 before promoting the next baseline.
 

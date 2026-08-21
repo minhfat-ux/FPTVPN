@@ -52,6 +52,9 @@ to exit node 103.173.155.50:443 with full-tunnel allowedIPs 0.0.0.0/0.
   public key appeared in `wg show wg0 peers` after register).
 - `POST /v1/peers/register` returns `{peer_id, overlay_ip, network,
   peer_credential, peers[]}`; IP pool 10.77.0.2–254.
+- **Exit-node registry**: `GET /v1/nodes` (public) + `POST`/`DELETE /v1/nodes`
+  (admin); `vietnam-1` seeded. Apps list + pick the exit node from the backend.
+- macOS main screen = single Connect/Disconnect toggle (matches iOS).
 - iOS unit tests → **36/36 PASS** on simulator (`evidence/builds/...`); iOS and
   macOS builds SUCCEEDED.
 - WireGuardKit vendored; libwg-go.a built for device + simulator (simulator fixed
@@ -83,10 +86,11 @@ macOS FPTPrivateVPN app (test) + coordinator on VPS 103.173.155.50.
 1. ✅ WireGuardKit vendored + keypair store + config screen.
 2. ✅ Coordinator mesh integration (register + auto wg provisioning).
 3. ✅ macOS app FPTPrivateVPN builds + launches + registers.
-4. 🔲 Confirm end-to-end tunnel on macOS (user runs `sudo wg-quick up`, verify
+4. ✅ Exit-node registry + server list from backend; macOS toggle button.
+5. 🔲 Confirm end-to-end tunnel on macOS (user runs `sudo wg-quick up`, verify
    exit IP).
-5. 🔲 Design + build **account login + add device** (Tailscale-style): users
+6. 🔲 Design + build **account login + add device** (Tailscale-style): users
    table, auth, user→devices ownership.
-6. 🔲 Update SRS/ARCHITECTURE for Tailscale model + macOS target.
-7. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).
-8. 🔲 iOS real-device E2E (needs Xcode reinstall).
+7. 🔲 Update SRS/ARCHITECTURE for Tailscale model + macOS target.
+8. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).
+9. 🔲 iOS real-device E2E (needs Xcode reinstall).

@@ -54,34 +54,54 @@ struct ContentViewMac: View {
 
                 Spacer()
 
-                // Buttons
-                HStack(spacing: 16) {
-                    Button {
-                        Task { await vpnManager.connect() }
-                    } label: {
-                        Label("Connect", systemImage: "network")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(VPNThemeMac.accent)
-                    .disabled(vpnManager.state == "Connected")
-
-                    Button {
+                // Primary toggle button: Connect when disconnected, Disconnect when connected.
+                Button {
+                    if vpnManager.state == "Connected" || vpnManager.state == "Connecting…" {
                         vpnManager.disconnect()
-                    } label: {
-                        Label("Disconnect", systemImage: "network.slash")
-                            .frame(maxWidth: .infinity)
+                    } else {
+                        Task { await vpnManager.connect() }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-                    .disabled(vpnManager.state != "Connected" && vpnManager.state != "Connecting…")
+                } label: {
+                    Label(primaryButtonTitle, systemImage: primaryButtonSymbol)
+                        .font(.title3.weight(.semibold))
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(primaryButtonColor)
+                .disabled(primaryButtonDisabled)
+                .padding(.horizontal, 24)
                 .padding(.bottom, 16)
             }
             .padding(24)
-            .frame(minWidth: 420, minHeight: 380)
+            .frame(minWidth: 380, minHeight: 360)
         }
         .preferredColorScheme(.dark)
+    }
+
+    private var primaryButtonTitle: String {
+        switch vpnManager.state {
+        case "Disconnected", "Failed": return "Connect"
+        case "Connecting…": return "Disconnecting…"
+        default: return "Disconnect"
+        }
+    }
+
+    private var primaryButtonSymbol: String {
+        switch vpnManager.state {
+        case "Disconnected", "Failed": return "network"
+        default: return "network.slash"
+        }
+    }
+
+    private var primaryButtonColor: Color {
+        switch vpnManager.state {
+        case "Disconnected", "Failed": return VPNThemeMac.accent
+        default: return .red
+        }
+    }
+
+    private var primaryButtonDisabled: Bool {
+        vpnManager.state == "Connecting…"
     }
 
     private var statusSymbol: String {

@@ -12,13 +12,13 @@ Current task tracked here (schema per spec §31). Structured state also in
 | Rule baseline | RULESET-0001 |
 | Expert consultations | none yet; mesh/coordinator integration done (2026-08-21) |
 | Assigned agent/runtime | Culi (orchestrator) |
-| Status | macOS app RUNS (registers + wg-quick). Coordinator mesh verified end-to-end on VPS. iOS real-device blocked. |
+| Status | macOS app RUNS (registers + wg-quick). Coordinator mesh + exit-node registry verified. iOS real-device blocked. |
 | Files in scope | iOS/, mac/PrivateVPNMac/, project.yml, Vendor/WireGuardKit/, control-plane/ (superseded), scripts/mac-test.sh, docs/, .privatevpn/, evidence/ |
 | Dependencies | xcodegen 2.46.0, Go 1.26.6, Node 24 (VPS coordinator), wg/wg-quick (macOS), sshpass (ops) |
-| Acceptance criteria | macOS connect end-to-end (needs manual sudo wg-quick). iOS device E2E blocked by Xcode DDI. |
-| Expected evidence | coordinator /v1/peers/register returns overlay IP; wg0 auto-provisions peer; macOS app build/launch |
+| Acceptance criteria | macOS connect end-to-end (needs manual sudo wg-quick). iOS device E2E blocked by Xcode DDI. Exit-node list from backend works. |
+| Expected evidence | coordinator /v1/peers/register returns overlay IP; wg0 auto-provisions peer; /v1/nodes lists exit nodes; macOS app build/launch |
 | Start commit | fafbf5b (GATE 0) |
-| End commit | a35b154 (macOS app + token endpoint) |
+| End commit | af972a9 (exit-node registry + server list + macOS toggle) |
 
 ## Next task (continuation rule §103)
 

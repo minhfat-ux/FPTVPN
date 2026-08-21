@@ -20,3 +20,6 @@ Durable engineering decisions (see also `docs/adr/`).
 | 2026-08-21 | **macOS target `PrivateVPNMac`** added (SwiftUI app that registers + runs wg-quick); reuses ControlAPIClient; join token auto-fetched from `POST /v1/tokens` when empty | project.yml, mac/PrivateVPNMac/ |
 | 2026-08-21 | **Join token = single-use, 30-min expiry**; app auto-fetches a fresh token each connect (no manual paste) | coordinator createJoinToken, VPNManagerMac |
 | 2026-08-21 | Peer name made unique per register (`mac-<suffix>`) because coordinator enforces unique peer names | VPNManagerMac |
+| 2026-08-21 | **Exit-node registry on the coordinator** (`exit_nodes` table): `GET /v1/nodes` public, `POST`/`DELETE /v1/nodes` admin; VPS node seeded on first run | coordinator.ts, server.ts |
+| 2026-08-21 | **Server list configured from backend**: apps fetch `/v1/nodes` and let the user pick an exit node (macOS Settings picker, iOS location picker) instead of hardcoded presets | VPNManagerMac, SettingsView, SettingsViewMac |
+| 2026-08-21 | **macOS Connect/Disconnect = single toggle button** matching iOS one-tap UX (state-driven title/symbol/color) | ContentViewMac |
