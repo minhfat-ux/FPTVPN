@@ -21,13 +21,39 @@ struct SettingsViewMac: View {
                         .font(.footnote)
                 }
             }
+
+            Section("Exit node") {
+                Picker("Server", selection: $vpnManager.selectedNodeID) {
+                    ForEach(vpnManager.exitNodes) { node in
+                        Text("\(node.name) — \(node.city), \(node.country)")
+                            .tag(node.id as String?)
+                    }
+                }
+                .disabled(vpnManager.exitNodes.isEmpty)
+
+                if vpnManager.exitNodes.isEmpty {
+                    Label("No servers from coordinator yet.", systemImage: "network.slash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button("Refresh servers") {
+                    Task { await vpnManager.refreshNodes() }
+                }
+            }
+
             Text("The WireGuard private key is generated on-device and never leaves this device.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
-        .frame(width: 440)
+        .frame(width: 460)
         .padding()
+        .task {
+            if vpnManager.exitNodes.isEmpty {
+                await vpnManager.refreshNodes()
+            }
+        }
     }
 }
 

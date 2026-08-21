@@ -161,7 +161,7 @@ struct ContentView: View {
 
     private var locationDetail: String {
         if let node = configStore.selectedRemoteNode {
-            return "\(node.endpoint ?? "") · \(countryName(node.country))"
+            return "\(node.endpoint) · \(countryName(node.country))"
         }
         return "Open Configuration to set a server"
     }

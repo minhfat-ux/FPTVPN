@@ -31,6 +31,11 @@ struct ContentViewMac: View {
                     Text(vpnManager.state)
                         .font(.title2.bold())
                         .foregroundStyle(statusColor)
+                    if let ip = vpnManager.overlayIP {
+                        Text("Tunnel IP: \(ip)")
+                            .font(.footnote)
+                            .foregroundStyle(VPNThemeMac.textSecondary)
+                    }
                     if let error = vpnManager.lastError {
                         Text(error)
                             .font(.footnote)
@@ -40,31 +45,6 @@ struct ContentViewMac: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(20)
-                .background(VPNThemeMac.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
-                )
-
-                // Config fields
-                VStack(spacing: 12) {
-                    labeledField("Coordinator URL") {
-                        TextField("http://coordinator:port", text: $vpnManager.coordinatorURL)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    labeledField("Join token") {
-                        SecureField("(auto-fetch if empty)", text: $vpnManager.joinToken)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    LabeledContent("Device public key") {
-                        Text(vpnManager.devicePublicKey ?? "…")
-                            .textSelection(.enabled)
-                            .foregroundStyle(VPNThemeMac.textSecondary)
-                            .font(.footnote)
-                    }
-                }
-                .padding(16)
                 .background(VPNThemeMac.cardBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
@@ -99,18 +79,9 @@ struct ContentViewMac: View {
                 .padding(.bottom, 16)
             }
             .padding(24)
-            .frame(minWidth: 460, minHeight: 520)
+            .frame(minWidth: 420, minHeight: 380)
         }
         .preferredColorScheme(.dark)
-    }
-
-    private func labeledField<V: View>(_ title: String, @ViewBuilder content: () -> V) -> some View {
-        HStack {
-            Text(title)
-                .foregroundStyle(VPNThemeMac.textSecondary)
-                .frame(width: 120, alignment: .leading)
-            content()
-        }
     }
 
     private var statusSymbol: String {

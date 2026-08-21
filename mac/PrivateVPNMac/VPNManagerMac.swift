@@ -5,19 +5,27 @@ import Foundation
 @MainActor
 final class VPNManagerMac: ObservableObject {
     @Published private(set) var state: String = "Disconnected"
+    @Published private(set) var overlayIP: String?
     @Published var lastError: String?
     @Published var joinToken: String = ""
     @Published var coordinatorURL: String = "http://103.173.155.50:7777"
     @Published var devicePublicKey: String?
+    /// Exit nodes advertised by the coordinator (list of selectable servers).
+    @Published var exitNodes: [ExitNode] = []
+    /// Currently selected exit node id.
+    @Published var selectedNodeID: String? {
+        didSet { UserDefaults.standard.set(selectedNodeID, forKey: "selectedNodeID") }
+    }
 
-    static let exitEndpoint = "103.173.155.50:443"
-    static let exitPublicKey = "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8="
+    static let fallbackExitEndpoint = "103.173.155.50:443"
+    static let fallbackExitPublicKey = "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8="
 
     private let stateDir = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".privatevpn")
 
     init() {
         refreshPublicKey()
+        selectedNodeID = UserDefaults.standard.string(forKey: "selectedNodeID")
     }
 
     func refreshPublicKey() {
@@ -58,6 +66,15 @@ final class VPNManagerMac: ObservableObject {
             }
 
             let client = ControlAPIClient(baseURL: baseURL, joinToken: joinToken)
+
+            // Fetch the list of exit nodes and pick the selected one.
+            if exitNodes.isEmpty {
+                exitNodes = try await client.fetchNodes()
+            }
+            guard let node = selectedExitNode else {
+                throw MacError.noExitNode
+            }
+
             let response = try await client.register(
                 name: "mac-\(Self.randomSuffix())",
                 platform: "macos",
@@ -65,13 +82,16 @@ final class VPNManagerMac: ObservableObject {
                 endpoint: "0.0.0.0:51820"
             )
             let overlayIP = response.overlay_ip
-            NSLog("MacVPN: registered, overlay=\(overlayIP)")
+            NSLog("MacVPN: registered, overlay=\(overlayIP), node=\(node.name)")
             let config = Self.buildConfig(privateKey: privateKey.privateKey,
-                                          overlayIP: overlayIP)
+                                          overlayIP: overlayIP,
+                                          exitEndpoint: node.endpoint,
+                                          exitPublicKey: node.public_key)
             try writeConfig(config)
             state = "Connecting…"
             try Self.runWireGuardUp(configPath: stateDir.appendingPathComponent("privatevpn0.conf").path)
-            state = "Connected (\(overlayIP))"
+            self.overlayIP = overlayIP
+            state = "Connected"
             lastError = nil
         } catch {
             state = "Failed"
@@ -80,15 +100,34 @@ final class VPNManagerMac: ObservableObject {
         }
     }
 
+    /// Loads the list of exit nodes from the coordinator (for the picker).
+    func refreshNodes() async {
+        guard let baseURL = normalizedURL(coordinatorURL) else { return }
+        let client = ControlAPIClient(baseURL: baseURL, joinToken: "")
+        do {
+            exitNodes = try await client.fetchNodes()
+            if selectedNodeID == nil, let first = exitNodes.first {
+                selectedNodeID = first.id
+            }
+        } catch {
+            NSLog("MacVPN: refreshNodes failed: \(error.localizedDescription)")
+        }
+    }
+
+    private var selectedExitNode: ExitNode? {
+        exitNodes.first { $0.id == selectedNodeID } ?? exitNodes.first
+    }
+
     func disconnect() {
         let path = stateDir.appendingPathComponent("privatevpn0.conf").path
         Self.runWireGuardDown(configPath: path)
+        overlayIP = nil
         state = "Disconnected"
     }
 
     // MARK: - Config
 
-    private static func buildConfig(privateKey: String, overlayIP: String) -> String {
+    private static func buildConfig(privateKey: String, overlayIP: String, exitEndpoint: String, exitPublicKey: String) -> String {
         """
         [Interface]
         PrivateKey = \(privateKey)
@@ -108,23 +147,20 @@ final class VPNManagerMac: ObservableObject {
         try content.write(to: stateDir.appendingPathComponent("privatevpn0.conf"), atomically: true, encoding: .utf8)
     }
 
-    // MARK: - wg-quick via admin
+    // MARK: - wg-quick via sudo (passwordless, configured once in /etc/sudoers.d)
 
     private static func runWireGuardUp(configPath: String) throws {
-        // Run wg-quick with admin privileges. `wg-quick up <conf>`.
-        let script = "osascript -e 'do shell script \"wg-quick up \(configPath)\" with administrator privileges'"
-        try run(script)
+        try run(["sudo", "-n", "/opt/homebrew/bin/wg-quick", "up", configPath])
     }
 
     private static func runWireGuardDown(configPath: String) {
-        let script = "osascript -e 'do shell script \"wg-quick down \(configPath)\" with administrator privileges'"
-        _ = try? run(script)
+        _ = try? run(["sudo", "-n", "/opt/homebrew/bin/wg-quick", "down", configPath])
     }
 
-    private static func run(_ command: String) throws {
+    private static func run(_ args: [String]) throws {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = args
         try process.run()
         process.waitUntilExit()
         if process.terminationStatus != 0 {
@@ -136,6 +172,7 @@ final class VPNManagerMac: ObservableObject {
         case missingConfig
         case missingToken
         case invalidURL(String)
+        case noExitNode
         case commandFailed(Int32)
 
         var errorDescription: String? {
@@ -146,6 +183,8 @@ final class VPNManagerMac: ObservableObject {
                 return "Enter a join token."
             case .invalidURL(let url):
                 return "Invalid coordinator URL: \(url)"
+            case .noExitNode:
+                return "No exit node available from the coordinator."
             case .commandFailed(let code):
                 return "wg-quick failed with exit code \(code)."
             }

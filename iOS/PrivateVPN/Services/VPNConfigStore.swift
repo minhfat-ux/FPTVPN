@@ -54,7 +54,7 @@ final class VPNConfigStore: ObservableObject {
     }
     /// Exit nodes fetched from the control plane (Tailscale-style), plus any
     /// legacy local presets. Controls the location picker.
-    @Published var remoteNodes: [RemoteNode] = []
+    @Published var remoteNodes: [ExitNode] = []
     /// The exit node id currently selected.
     @Published var selectedNodeID: String? {
         didSet { defaults.set(selectedNodeID, forKey: Key.selectedNodeID) }
@@ -66,18 +66,18 @@ final class VPNConfigStore: ObservableObject {
     }
 
     /// All selectable exit nodes: control-plane nodes first, then legacy presets.
-    var availableNodes: [RemoteNode] {
+    var availableNodes: [ExitNode] {
         if !remoteNodes.isEmpty {
             return remoteNodes
         }
         return VPNLocation.presets.map {
-            RemoteNode(id: $0.id.uuidString, name: $0.name, country: $0.country,
-                       city: $0.city, endpoint: "\($0.host):\($0.port)", serverPublicKey: $0.publicKey)
+            ExitNode(id: $0.id.uuidString, name: $0.name, country: $0.country,
+                     city: $0.city, endpoint: "\($0.host):\($0.port)", public_key: $0.publicKey)
         }
     }
 
     /// The currently selected exit node (remote or preset).
-    var selectedRemoteNode: RemoteNode? {
+    var selectedRemoteNode: ExitNode? {
         availableNodes.first { $0.id == selectedNodeID }
     }
 

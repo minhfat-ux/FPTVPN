@@ -22,19 +22,19 @@ struct CoordinatorRegisterResponse: Equatable, Codable {
     var peers: [CoordinatorPeer]
 }
 
-/// An exit node advertised for selection (Tailscale-style). The app may present
-/// these in the location picker; the VPS exit node is the primary one.
-struct RemoteNode: Equatable, Codable, Identifiable {
+/// An exit node advertised by the coordinator (Tailscale-style). The app
+/// presents these in the location picker and connects to the selected one.
+struct ExitNode: Equatable, Codable, Identifiable {
     var id: String
     var name: String
     var country: String
     var city: String
-    var endpoint: String?
-    var serverPublicKey: String?
+    var endpoint: String
+    var public_key: String
 }
 
 struct NodesResponse: Equatable, Codable {
-    var nodes: [RemoteNode]
+    var nodes: [ExitNode]
 }
 
 /// Talks to the PrivateVPN coordinator (mesh control plane) to register this
@@ -123,8 +123,8 @@ struct ControlAPIClient {
     }
 
     /// Fetches the list of available exit nodes from the coordinator.
-    func fetchNodes() async throws -> [RemoteNode] {
-        let url = baseURL.appendingPathComponent("v1/peers")
+    func fetchNodes() async throws -> [ExitNode] {
+        let url = baseURL.appendingPathComponent("v1/nodes")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         let data: Data
@@ -137,11 +137,7 @@ struct ControlAPIClient {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             return []
         }
-        let peers = try JSONDecoder().decode([CoordinatorPeer].self, from: data)
-        return peers.map { peer in
-            RemoteNode(id: peer.peer_id, name: peer.name, country: "VN", city: "Hanoi",
-                       endpoint: peer.endpoint, serverPublicKey: peer.wireguard_public_key)
-        }
+        return try JSONDecoder().decode(NodesResponse.self, from: data).nodes
     }
 
     /// Requests a fresh one-time join token from the coordinator. The server may

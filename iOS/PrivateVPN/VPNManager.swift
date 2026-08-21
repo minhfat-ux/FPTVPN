@@ -88,8 +88,8 @@ final class VPNManager: ObservableObject {
             store.remoteNodes = nodes
             if store.selectedNodeID == nil, let first = nodes.first {
                 store.selectedNodeID = first.id
-                store.serverEndpoint = first.endpoint ?? ""
-                store.serverPublicKey = first.serverPublicKey ?? ""
+                store.serverEndpoint = first.endpoint
+                store.serverPublicKey = first.public_key
             }
         } catch {
             // Non-fatal: fall back to local presets / manual config.

@@ -98,8 +98,8 @@ struct SettingsView: View {
                 applyNode(newValue)
             }
 
-            if let node = configStore.selectedRemoteNode, let endpoint = node.endpoint {
-                LabeledContent("Endpoint", value: endpoint)
+            if let node = configStore.selectedRemoteNode {
+                LabeledContent("Endpoint", value: node.endpoint)
                     .multilineTextAlignment(.trailing)
             }
         }
@@ -107,12 +107,8 @@ struct SettingsView: View {
 
     private func applyNode(_ id: String?) {
         guard let node = configStore.availableNodes.first(where: { $0.id == id }) else { return }
-        if let endpoint = node.endpoint {
-            configStore.serverEndpoint = endpoint
-        }
-        if let key = node.serverPublicKey {
-            configStore.serverPublicKey = key
-        }
+        configStore.serverEndpoint = node.endpoint
+        configStore.serverPublicKey = node.public_key
     }
 
     private var serverSection: some View {
