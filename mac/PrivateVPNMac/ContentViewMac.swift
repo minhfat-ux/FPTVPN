@@ -31,6 +31,7 @@ struct ContentViewMac: View {
                 .padding(.top, 16)
 
                 subscriptionStatusCard
+                serverSelectionCard
 
                 // Status card
                 VStack(spacing: 10) {
@@ -111,6 +112,7 @@ struct ContentViewMac: View {
         }
         .task {
             await subscriptionStore.start()
+            await vpnManager.refreshNodes()
         }
     }
 
@@ -155,6 +157,59 @@ struct ContentViewMac: View {
         )
     }
 
+    private var serverSelectionCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.title3)
+                    .foregroundStyle(VPNThemeMac.accent)
+
+                Text(languageStore.t(.serverLocation))
+                    .font(.headline)
+                    .foregroundStyle(VPNThemeMac.textPrimary)
+
+                Spacer()
+
+                Button {
+                    Task { await vpnManager.refreshNodes() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(VPNThemeMac.textSecondary)
+                .disabled(vpnManager.isRefreshingNodes || isConnectionTransitioning)
+                .help(languageStore.t(.refreshLocations))
+            }
+
+            if vpnManager.exitNodes.isEmpty {
+                Text(vpnManager.isRefreshingNodes ? languageStore.t(.loadingLocations) : languageStore.t(.noServerAvailable))
+                    .font(.subheadline)
+                    .foregroundStyle(VPNThemeMac.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Picker(languageStore.t(.serverLocation), selection: Binding(
+                    get: { vpnManager.selectedNodeID ?? vpnManager.exitNodes.first?.id ?? "" },
+                    set: { vpnManager.selectedNodeID = $0 }
+                )) {
+                    ForEach(vpnManager.exitNodes) { node in
+                        Text(serverTitle(for: node)).tag(node.id)
+                    }
+                }
+                .labelsHidden()
+                .disabled(isConnectionTransitioning)
+            }
+        }
+        .padding(16)
+        .background(VPNThemeMac.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
+        )
+    }
+
     private var primaryButtonColor: Color {
         switch vpnManager.state {
         case "Connected":
@@ -167,7 +222,15 @@ struct ContentViewMac: View {
     }
 
     private var primaryButtonDisabled: Bool {
+        isConnectionTransitioning || (vpnManager.state != "Connected" && vpnManager.exitNodes.isEmpty)
+    }
+
+    private var isConnectionTransitioning: Bool {
         vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…"
+    }
+
+    private func serverTitle(for node: ExitNode) -> String {
+        "\(node.city), \(node.country) · \(node.name)"
     }
 
     private var statusSymbol: String {

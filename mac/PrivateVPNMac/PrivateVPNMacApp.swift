@@ -66,6 +66,28 @@ private struct MenuBarContent: View {
 
         Divider()
 
+        if vpnManager.exitNodes.isEmpty {
+            Text(vpnManager.isRefreshingNodes ? languageStore.t(.loadingLocations) : languageStore.t(.noServerAvailable))
+                .foregroundStyle(.secondary)
+        } else {
+            Picker(languageStore.t(.serverLocation), selection: Binding(
+                get: { vpnManager.selectedNodeID ?? vpnManager.exitNodes.first?.id ?? "" },
+                set: { vpnManager.selectedNodeID = $0 }
+            )) {
+                ForEach(vpnManager.exitNodes) { node in
+                    Text(serverTitle(for: node)).tag(node.id)
+                }
+            }
+            .disabled(vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…")
+        }
+
+        Button(languageStore.t(.refreshLocations)) {
+            Task { await vpnManager.refreshNodes() }
+        }
+        .disabled(vpnManager.isRefreshingNodes || vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…")
+
+        Divider()
+
         Button(languageStore.t(.connect)) {
             if subscriptionStore.isSubscribed {
                 Task { await vpnManager.connect() }
@@ -73,7 +95,7 @@ private struct MenuBarContent: View {
                 openSettings()
             }
         }
-        .disabled(vpnManager.state == "Connected" || vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…" )
+        .disabled(vpnManager.state == "Connected" || vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…" || vpnManager.exitNodes.isEmpty)
 
         if !subscriptionStore.isSubscribed {
             Button(languageStore.t(.upgradeToPremium)) {
@@ -114,5 +136,9 @@ private struct MenuBarContent: View {
         case "Failed": return .red
         default: return .secondary
         }
+    }
+
+    private func serverTitle(for node: ExitNode) -> String {
+        "\(node.city), \(node.country) · \(node.name)"
     }
 }

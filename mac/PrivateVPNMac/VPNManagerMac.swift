@@ -19,6 +19,7 @@ final class VPNManagerMac: ObservableObject {
     @Published var devicePublicKey: String?
     /// Exit nodes advertised by the coordinator (list of selectable servers).
     @Published var exitNodes: [ExitNode] = []
+    @Published private(set) var isRefreshingNodes = false
     /// Currently selected exit node id.
     @Published var selectedNodeID: String? {
         didSet { UserDefaults.standard.set(selectedNodeID, forKey: "selectedNodeID") }
@@ -43,6 +44,7 @@ final class VPNManagerMac: ObservableObject {
         refreshStatus()
         Task {
             await loadManagerFromPreferences()
+            await refreshNodes()
             startStatusPolling()
         }
     }
@@ -110,6 +112,7 @@ final class VPNManagerMac: ObservableObject {
     }
 
     func connect() async {
+        guard state != "Connecting…", state != "Disconnecting…" else { return }
         state = "Connecting…"
         lastError = nil
 
@@ -162,8 +165,12 @@ final class VPNManagerMac: ObservableObject {
                                           exitEndpoint: node.endpoint,
                                           exitPublicKey: node.public_key)
             try await prepareConfiguration(config)
+            guard let manager else {
+                throw MacError.savedConfigurationMissing
+            }
+
             do {
-                try manager?.connection.startVPNTunnel()
+                try manager.connection.startVPNTunnel()
             } catch {
                 let ns = error as NSError
                 log.error("connect: startVPNTunnel failed: \(error.localizedDescription, privacy: .public) [domain=\(ns.domain, privacy: .public) code=\(ns.code)]")
@@ -195,18 +202,30 @@ final class VPNManagerMac: ObservableObject {
     /// Loads the list of exit nodes from the coordinator (for the picker).
     func refreshNodes() async {
         guard let baseURL = normalizedURL(coordinatorURL) else { return }
+        isRefreshingNodes = true
+        defer { isRefreshingNodes = false }
+
         let client = ControlAPIClient(baseURL: baseURL, joinToken: "")
         do {
-            exitNodes = try await client.fetchNodes()
-            if selectedNodeID == nil, let first = exitNodes.first {
+            let nodes = try await client.fetchNodes()
+            exitNodes = nodes
+            if let selectedNodeID, !nodes.contains(where: { $0.id == selectedNodeID }) {
+                self.selectedNodeID = nodes.first?.id
+            } else if selectedNodeID == nil, let first = nodes.first {
                 selectedNodeID = first.id
             }
+            if nodes.isEmpty {
+                lastError = MacError.noExitNode.localizedDescription
+            } else if lastError == MacError.noExitNode.localizedDescription {
+                lastError = nil
+            }
         } catch {
+            lastError = error.localizedDescription
             NSLog("MacVPN: refreshNodes failed: \(error.localizedDescription)")
         }
     }
 
-    private var selectedExitNode: ExitNode? {
+    var selectedNode: ExitNode? {
         exitNodes.first { $0.id == selectedNodeID } ?? exitNodes.first
     }
 
@@ -218,10 +237,7 @@ final class VPNManagerMac: ObservableObject {
             selectedNodeID = selected.id
             return selected
         }
-        guard let selectedExitNode else {
-            throw MacError.noExitNode
-        }
-        return selectedExitNode
+        throw MacError.noExitNode
     }
 
     func disconnect() {

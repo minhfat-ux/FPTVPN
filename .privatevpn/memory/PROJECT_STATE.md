@@ -69,6 +69,10 @@ to exit node 103.173.155.50:443 with full-tunnel allowedIPs 0.0.0.0/0.
 - macOS main screen = single Connect/Disconnect toggle (matches iOS); permission
   prompt can be delayed while the app fetches nodes/token, registers the peer,
   saves the VPN profile, and reloads it from preferences.
+- macOS app loads exit nodes from `GET /v1/nodes`, exposes a server/location
+  selector in the main window and menu bar, disables Connect until at least one
+  backend node is available, and no longer falls back to stale locally cached
+  nodes when the coordinator returns an empty node list during Connect.
 - iOS unit tests → **36/36 PASS** on simulator (`evidence/builds/...`); iOS and
   macOS builds SUCCEEDED.
 - WireGuardKit vendored; libwg-go.a built for device + simulator (simulator fixed

@@ -73,6 +73,7 @@ enum AppTextKey: String {
     case noPlans, noPlansDetail, privacy, eula, notNow
     case plan, connect, disconnect, openSettings, upgradeToPremium, quit
     case disconnected, connecting, connected, disconnecting, failed
+    case serverLocation, loadingLocations, noServerAvailable, refreshLocations
 }
 
 @MainActor
@@ -135,7 +136,9 @@ final class AppLanguageStore: ObservableObject {
             .connect: "Connect", .disconnect: "Disconnect", .openSettings: "Open Settings",
             .upgradeToPremium: "Upgrade to Premium", .quit: "Quit FlowVPN",
             .disconnected: "Disconnected", .connecting: "Connecting", .connected: "Connected",
-            .disconnecting: "Disconnecting", .failed: "Failed",
+            .disconnecting: "Disconnecting", .failed: "Failed", .serverLocation: "Server",
+            .loadingLocations: "Loading servers…", .noServerAvailable: "No server available",
+            .refreshLocations: "Refresh servers",
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam",
@@ -152,7 +155,9 @@ final class AppLanguageStore: ObservableObject {
             .connect: "Kết nối", .disconnect: "Ngắt kết nối", .openSettings: "Mở Cài đặt",
             .upgradeToPremium: "Nâng cấp Premium", .quit: "Thoát FlowVPN",
             .disconnected: "Đã ngắt kết nối", .connecting: "Đang kết nối", .connected: "Đã kết nối",
-            .disconnecting: "Đang ngắt kết nối", .failed: "Lỗi",
+            .disconnecting: "Đang ngắt kết nối", .failed: "Lỗi", .serverLocation: "Máy chủ",
+            .loadingLocations: "Đang tải máy chủ…", .noServerAvailable: "Chưa có máy chủ khả dụng",
+            .refreshLocations: "Tải lại máy chủ",
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络",
@@ -169,7 +174,9 @@ final class AppLanguageStore: ObservableObject {
             .connect: "连接", .disconnect: "断开", .openSettings: "打开设置",
             .upgradeToPremium: "升级到 Premium", .quit: "退出 FlowVPN",
             .disconnected: "未连接", .connecting: "正在连接", .connected: "已连接",
-            .disconnecting: "正在断开", .failed: "失败",
+            .disconnecting: "正在断开", .failed: "失败", .serverLocation: "服务器",
+            .loadingLocations: "正在加载服务器…", .noServerAvailable: "暂无可用服务器",
+            .refreshLocations: "刷新服务器",
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信",
@@ -186,7 +193,9 @@ final class AppLanguageStore: ObservableObject {
             .connect: "接続", .disconnect: "切断", .openSettings: "設定を開く",
             .upgradeToPremium: "Premium にアップグレード", .quit: "FlowVPN を終了",
             .disconnected: "未接続", .connecting: "接続中", .connected: "接続済み",
-            .disconnecting: "切断中", .failed: "失敗",
+            .disconnecting: "切断中", .failed: "失敗", .serverLocation: "サーバー",
+            .loadingLocations: "サーバーを読み込み中…", .noServerAvailable: "利用可能なサーバーがありません",
+            .refreshLocations: "サーバーを更新",
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷",
@@ -203,7 +212,9 @@ final class AppLanguageStore: ObservableObject {
             .connect: "연결", .disconnect: "연결 해제", .openSettings: "설정 열기",
             .upgradeToPremium: "Premium으로 업그레이드", .quit: "FlowVPN 종료",
             .disconnected: "연결 끊김", .connecting: "연결 중", .connected: "연결됨",
-            .disconnecting: "연결 해제 중", .failed: "실패",
+            .disconnecting: "연결 해제 중", .failed: "실패", .serverLocation: "서버",
+            .loadingLocations: "서버를 불러오는 중…", .noServerAvailable: "사용 가능한 서버 없음",
+            .refreshLocations: "서버 새로고침",
         ],
     ]
 }

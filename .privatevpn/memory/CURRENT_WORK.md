@@ -60,6 +60,11 @@ Current task tracked here (schema per spec §31). Structured state also in
   `Preparing VPN permission...` while connecting, disables duplicate Connect
   taps during connecting/disconnecting, surfaces safe errors, and the paywall
   includes a close (`X`) button.
+- macOS now loads exit nodes from `GET /v1/nodes` on launch/main-screen task,
+  shows a server selector in the main window and menu bar, disables Connect
+  until a backend node is available, and `connect()` fails with
+  `No exit node available from the coordinator.` when the coordinator returns
+  no nodes.
 - macOS Premium is temporarily unlocked for normal use while Mac App Store
   product IDs are deferred. This is implemented only in `MacSubscriptionStore`;
   iOS StoreKit gating remains unchanged for App Store publish.
@@ -69,6 +74,8 @@ Current task tracked here (schema per spec §31). Structured state also in
   fills secrets locally.
 - Build verification passed after these changes. macOS end-to-end public exit IP
   remains to be verified with the correct Network Extension signing profile.
+- macOS server-selection upgrade verification:
+  `.privatevpn/reports/2026-08-23-macos-server-selection.md`.
 
 ## Clone prompt state (2026-08-23)
 
@@ -83,13 +90,15 @@ Current task tracked here (schema per spec §31). Structured state also in
 
 ## Next task (continuation rule §103)
 
-- **Next-version server selection upgrade (iOS + macOS)**: remove the production
-  dependency on hardcoded `VPNLocation.presets` / local fallback nodes. On app
-  launch, both clients must load exit nodes from `GET /v1/nodes`, show the user
-  a server/location selector, require a selected active backend node before
-  Connect, then build the WireGuard config from that selected node. Keep any
-  static node seed only as a DEBUG/internal fallback, not as the normal
-  production UI path.
+- **Next-version server selection upgrade (iOS remaining; macOS code/build verified)**:
+  remove the production dependency on hardcoded `VPNLocation.presets` / local
+  fallback nodes. On app launch, clients must load exit nodes from
+  `GET /v1/nodes`, show the user a server/location selector, require a selected
+  active backend node before Connect, then build the WireGuard config from that
+  selected node. Keep any static node seed only as a DEBUG/internal fallback,
+  not as the normal production UI path. macOS code/build verification is
+  recorded in `.privatevpn/reports/2026-08-23-macos-server-selection.md`;
+  real macOS egress remains pending signed NE profile.
 - **Design + build account login & add-device (Tailscale-style)**: users table,
   auth (email+password or token), user→devices ownership, device list UI, revoke.
 - Production device onboarding: keep registration idempotent by stable device
