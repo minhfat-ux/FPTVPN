@@ -37,6 +37,7 @@ docs/
 | `EVIDENCE_LOG.md` | Evidence registry template |
 | `VERIFICATION_REPORT.md` | Build/test/manual verification report template |
 | `REVIEWER_PROMPT.md` | Prompt template for DSH, opencode, Hermes, Cline, or another reviewer |
+| `PROJECT_BOOTSTRAP_PROMPT.md` | Prompt for initializing a new project with this workflow |
 
 ## Minimum setup checklist
 

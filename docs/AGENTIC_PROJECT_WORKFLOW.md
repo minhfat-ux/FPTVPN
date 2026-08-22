@@ -53,6 +53,7 @@ docs/
       EVIDENCE_LOG.md
       VERIFICATION_REPORT.md
       REVIEWER_PROMPT.md
+      PROJECT_BOOTSTRAP_PROMPT.md
 ```
 
 Use a project-specific directory name such as `.privatevpn/`, `.privatecrm/`, or
@@ -60,6 +61,8 @@ Use a project-specific directory name such as `.privatevpn/`, `.privatecrm/`, or
 
 For new projects, copy `docs/templates/agentic-project/` first, then rename
 `.privateproject/` references to the local project memory directory.
+Use `docs/templates/agentic-project/PROJECT_BOOTSTRAP_PROMPT.md` as the first
+prompt for the main agent.
 
 ## 3. Git policy
 
