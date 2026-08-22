@@ -322,3 +322,9 @@ The macOS app's data plane was refactored from shelling out to `wg-quick`
 > **Action (owner/next session):** fold A2/A4 into §1–§8 and the requirements
 > registry (FR-AUTH-001, FR-DEVICE multi-device, exit-node selection), and open
 > a CR against RS-20260819-01 before promoting the next baseline.
+>
+> **Security note (2026-08-23):** production `POST /v1/tokens` is open without auth
+> (BUG-20260823-001, evidence `evidence/2026-08-23-tokens-open-production.md`). A2's
+> "production enrollment token model" is now a release blocker; fix direction = Option F
+> (bind tokens to registered user + active subscription), tracked in
+> `.privatevpn/memory/CURRENT_WORK.md` next-task list.
