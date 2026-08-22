@@ -99,7 +99,7 @@ final class MacSubscriptionStore: ObservableObject {
         #if DEBUG
         return true
         #else
-        !purchasedProductIDs.isDisjoint(with: Self.productIDs)
+        return !purchasedProductIDs.isDisjoint(with: Self.productIDs)
         #endif
     }
 
