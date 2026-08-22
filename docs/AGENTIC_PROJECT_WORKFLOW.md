@@ -44,10 +44,22 @@ docs/
   DEVELOPMENT.md
   RELEASE_CHECKLIST.md
   AGENTIC_PROJECT_WORKFLOW.md
+  templates/
+    agentic-project/
+      README.md
+      RULES.md
+      CURRENT_TASK.md
+      AGENT_HANDOFF.md
+      EVIDENCE_LOG.md
+      VERIFICATION_REPORT.md
+      REVIEWER_PROMPT.md
 ```
 
 Use a project-specific directory name such as `.privatevpn/`, `.privatecrm/`, or
 `.privateadmin/` when useful. Keep the internal structure consistent.
+
+For new projects, copy `docs/templates/agentic-project/` first, then rename
+`.privateproject/` references to the local project memory directory.
 
 ## 3. Git policy
 
@@ -87,24 +99,54 @@ secrets/
 | Reviewer | DSH, opencode, Hermes | Provide second opinion, checklist review, architecture risks, test gaps |
 | Planner | Cline plan mode, DSH headless | Produce implementation plan without editing files |
 
-## 5. Default workflow
+## 5. Shared Rules for Agents
+
+Every agent should refer to `docs/templates/agentic-project/RULES.md` before
+taking work. Project-specific rule files may add detail, but the reusable rule
+set defines the default bar for:
+
+- authority and source of truth,
+- agent ownership,
+- evidence,
+- verification,
+- memory updates,
+- task tracking,
+- git safety,
+- reviewer behavior,
+- worker behavior.
+
+Minimum rules:
+
+- The main agent owns final repo state.
+- Reviewer agents do not edit, commit, or push.
+- Worker agents only edit assigned file/module scopes.
+- No evidence means not verified.
+- Verification must be mapped to a task, requirement, bug, or release item.
+- Important decisions and incomplete work must be written to memory.
+
+## 6. Default workflow
 
 1. Capture the user request in `memory/CURRENT_WORK.md` if it changes product
    direction or affects later releases.
-2. Query local RAG for relevant code, docs, decisions, and known issues.
-3. Let the main agent inspect the authoritative files.
-4. For large tasks, split work by ownership:
+2. Create or update a task record using
+   `docs/templates/agentic-project/CURRENT_TASK.md`.
+3. Query local RAG for relevant code, docs, decisions, and known issues.
+4. Let the main agent inspect the authoritative files.
+5. For large tasks, split work by ownership:
    - iOS app files
    - macOS app files
    - backend/coordinator files
    - docs and release checklist
-5. Use secondary agents only for scoped tasks or review.
-6. Main agent reviews every diff before accepting it.
-7. Run the smallest useful validation first, then broader build/test checks.
-8. Commit only intentional changes.
-9. Push only after validating that secrets and generated caches are excluded.
+6. Use secondary agents only for scoped tasks or review.
+7. Main agent reviews every diff before accepting it.
+8. Run the smallest useful validation first, then broader build/test checks.
+9. Record evidence using `docs/templates/agentic-project/EVIDENCE_LOG.md`.
+10. Write a handoff using `docs/templates/agentic-project/AGENT_HANDOFF.md` when
+    work is incomplete, delegated, blocked, or materially changes the project.
+11. Commit only intentional changes.
+12. Push only after validating that secrets and generated caches are excluded.
 
-## 6. Local RAG usage
+## 7. Local RAG usage
 
 Use RAG before asking broad questions or handing context to another agent:
 
@@ -117,7 +159,64 @@ python3 .privateproject/tools/rag_search.py "release checklist storekit payment"
 Feed the retrieved snippets into the reviewer prompt. Do not ask external agents
 to infer repo state without context.
 
-## 7. Secondary agent usage
+## 8. Task and Memory Updates
+
+Use `docs/templates/agentic-project/CURRENT_TASK.md` for active task state.
+
+Update task status this way:
+
+| Event | Status |
+|---|---|
+| Task captured but not started | `proposed` |
+| Agent is actively working | `in_progress` |
+| External input or access is required | `blocked` |
+| Patch/docs are ready for review | `needs_review` |
+| Validation has evidence | `verified` |
+| Work is committed/pushed or otherwise closed | `done` |
+| Work is intentionally moved to a later version | `deferred` |
+
+Update memory when:
+
+- product direction changes,
+- a technical decision affects future work,
+- a release blocker appears or is resolved,
+- a workaround or temporary unlock is introduced,
+- a task is not finished in the current session,
+- a platform clone prompt must inherit a behavior.
+
+Never put unverified claims in `VERIFIED_FACTS.md`. Put assumptions or pending
+questions in `OPEN_QUESTIONS.md` or the current task record.
+
+## 9. Evidence and Verification
+
+Use `docs/templates/agentic-project/EVIDENCE_LOG.md` for evidence records and
+`docs/templates/agentic-project/VERIFICATION_REPORT.md` for larger validation
+runs.
+
+Evidence must include:
+
+- task, requirement, bug, or release checklist mapping,
+- verification level,
+- command or manual steps,
+- sanitized result,
+- what was not verified.
+
+Verification levels:
+
+| Level | Meaning |
+|---|---|
+| `not_checked` | No verification run |
+| `static_checked` | Code/config/docs reviewed |
+| `build_checked` | Build or compile command completed |
+| `unit_checked` | Unit test suite completed |
+| `integration_checked` | Local integration flow completed |
+| `manual_checked` | Human/device workflow completed |
+| `production_checked` | Live production behavior completed |
+
+Release-sensitive work should have at least one reviewer-agent pass and one
+main-agent validation report before commit or publish.
+
+## 10. Secondary agent usage
 
 Use secondary agents for independent work, not for uncontrolled repo mutation.
 
@@ -135,7 +234,10 @@ Avoid:
 - Letting a secondary agent commit or push.
 - Sending secrets, private keys, or live credentials in prompts.
 
-## 8. Suggested commands
+Every secondary agent should return a handoff compatible with
+`docs/templates/agentic-project/AGENT_HANDOFF.md`.
+
+## 11. Suggested commands
 
 ### Codex sub-agent
 
@@ -192,7 +294,7 @@ Single review query:
 hermes-agent -q "Review the backend coordinator risk list for production launch."
 ```
 
-## 9. Release safety checklist
+## 12. Release safety checklist
 
 Before release or publish:
 
@@ -205,8 +307,13 @@ Before release or publish:
 - App payment/free-trial behavior is checked against store configuration.
 - Backend endpoints used by the app are documented and reachable.
 - A reviewer agent has checked for missing release blockers.
+- Evidence and verification reports are updated.
+- Agent handoffs are complete for unfinished or delegated work.
 
-## 10. Prompt template for reviewer agents
+## 13. Prompt template for reviewer agents
+
+Prefer `docs/templates/agentic-project/REVIEWER_PROMPT.md` for reusable review
+work. The inline version below is a compact fallback.
 
 ```text
 You are reviewing this project as a secondary agent.
@@ -229,7 +336,7 @@ Review the requested area and return:
 4. Questions that block implementation.
 ```
 
-## 11. Prompt template for platform cloning
+## 14. Prompt template for platform cloning
 
 ```text
 You are cloning an existing product to a new platform.
@@ -260,7 +367,7 @@ Output:
 8. Open questions.
 ```
 
-## 12. Operating rule
+## 15. Operating rule
 
 When in doubt, keep the main repo conservative:
 
