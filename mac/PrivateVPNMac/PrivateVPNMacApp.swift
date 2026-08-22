@@ -3,6 +3,8 @@ import SwiftUI
 @main
 struct PrivateVPNMacApp: App {
     @StateObject private var vpnManager = VPNManagerMac()
+    @StateObject private var subscriptionStore = MacSubscriptionStore()
+    @StateObject private var languageStore = AppLanguageStore()
     @State private var showSettings = false
 
     var body: some Scene {
@@ -10,13 +12,18 @@ struct PrivateVPNMacApp: App {
         WindowGroup {
             ContentViewMac()
                 .environmentObject(vpnManager)
+                .environmentObject(subscriptionStore)
+                .environmentObject(languageStore)
                 .preferredColorScheme(.dark)
         }
+        .windowResizability(.contentSize)
 
         // Menu bar (status bar) extra: status + Connect/Disconnect/Settings/Quit.
-        MenuBarExtra("FPT PrivateVPN", systemImage: menubarIcon) {
+        MenuBarExtra("FlowVPN", systemImage: menubarIcon) {
             MenuBarContent()
                 .environmentObject(vpnManager)
+                .environmentObject(subscriptionStore)
+                .environmentObject(languageStore)
         }
         .menuBarExtraStyle(.menu)
 
@@ -24,6 +31,8 @@ struct PrivateVPNMacApp: App {
         Settings {
             SettingsViewMac()
                 .environmentObject(vpnManager)
+                .environmentObject(subscriptionStore)
+                .environmentObject(languageStore)
                 .preferredColorScheme(.dark)
         }
     }
@@ -40,38 +49,59 @@ struct PrivateVPNMacApp: App {
 
 private struct MenuBarContent: View {
     @EnvironmentObject private var vpnManager: VPNManagerMac
+    @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Text("FPT PrivateVPN")
+        Text("FlowVPN")
             .font(.headline)
 
         Divider()
 
-        Text("Status: \(vpnManager.state)")
+        Text("\(languageStore.t(.status)): \(vpnManager.state.localizedVPNState(languageStore.language))")
             .foregroundStyle(statusColor)
+
+        Text("\(languageStore.t(.plan)): \(subscriptionStore.isSubscribed ? subscriptionStore.activePlanName : languageStore.t(.free))")
 
         Divider()
 
-        Button("Connect") {
-            Task { await vpnManager.connect() }
+        Button(languageStore.t(.connect)) {
+            if subscriptionStore.isSubscribed {
+                Task { await vpnManager.connect() }
+            } else {
+                openSettings()
+            }
         }
-        .disabled(vpnManager.state == "Connected")
+        .disabled(vpnManager.state == "Connected" || vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…" )
 
-        Button("Disconnect") {
+        if !subscriptionStore.isSubscribed {
+            Button(languageStore.t(.upgradeToPremium)) {
+                openSettings()
+            }
+        }
+
+        Button(languageStore.t(.disconnect)) {
             vpnManager.disconnect()
         }
         .disabled(vpnManager.state != "Connected" && vpnManager.state != "Connecting…")
 
         Divider()
 
-        Button("Open Settings") {
+        Button(languageStore.t(.openSettings)) {
             openSettings()
         }
 
+        Button(languageStore.t(.restorePurchases)) {
+            Task {
+                await subscriptionStore.restorePurchases()
+            }
+        }
+        .disabled(subscriptionStore.isLoading)
+
         Divider()
 
-        Button("Quit FPT PrivateVPN") {
+        Button(languageStore.t(.quit)) {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")

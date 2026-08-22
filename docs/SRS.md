@@ -193,8 +193,9 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
 
 ### A1. What changed in the implementation
 
-1. **Coordinator (VPS `103.173.155.50:7777`)** replaces the in-repo Express
-   `control-plane/`. It is Node 24 + `node:sqlite`, endpoints under `/v1/...`
+1. **Coordinator (`https://api.meetflowai.site`, VPS `103.173.155.50`)**
+   replaces the in-repo Express `control-plane/`. It is Node 24 + `node:sqlite`,
+   endpoints under `/v1/...`
    (`/v1/peers/register`, `/v1/peers/heartbeat`, `/v1/peers/revoke`,
    `/v1/tokens`, `/v1/health`, ...). It auto-provisions peers into the exit
    node's `wg0` (`wg set`) on register/revoke.
@@ -202,8 +203,9 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
    (`103.173.155.50:443`) with full-tunnel `AllowedIPs = 0.0.0.0/0` for Internet
    egress through Vietnam. This supersedes the earlier "one central VPN server
    provisions a server-side peer" framing while keeping the same user outcome.
-3. **macOS target** `PrivateVPNMac` added (SwiftUI app that registers and runs
-   `wg-quick`), reusing `ControlAPIClient`. iOS remains the primary client.
+3. **macOS target** `PrivateVPNMac` added, reusing `ControlAPIClient`.
+   The initial local `wg-quick` experiment is superseded; current production
+   macOS data plane is NetworkExtension + WireGuardKit.
 4. **Join token** is single-use with 30-minute expiry; the app auto-fetches a
    fresh token via `POST /v1/tokens` when the field is empty.
 
@@ -214,6 +216,10 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
   yet implemented.
 - **FR-DEVICE multi-device ownership**: one user owns many devices (Tailscale
   model); device registration tied to the signed-in user rather than a join token.
+- **Production enrollment token model**: tokens are issued for a registered user
+  ID with an active subscription, then consumed by device registration to create
+  or update that user's device record. Public/dev `/v1/tokens` bootstrap must be
+  disabled outside local/internal builds.
 - **Device list + revoke UI** in the app (server-side `/v1/peers/revoke` exists).
 
 ### A3. Not changed
@@ -222,18 +228,84 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
 - Real state model; evidence-gated verification; no fake "connected".
 - iOS Packet Tunnel Provider as the data plane (when running on device).
 
-### A4. Exit-node registry + UI toggle (2026-08-21)
+### A4. Exit-node registry + UI toggle (updated 2026-08-22)
 
-- Coordinator now manages a registry of **exit nodes** (`exit_nodes` table).
-  Endpoints: `GET /v1/nodes` (public), `POST /v1/nodes` and
-  `DELETE /v1/nodes/:name` (admin). The VPS exit node is seeded on first run.
+- Coordinator/control-plane now manages a registry of **exit nodes**.
+  Public app endpoint: `GET /v1/nodes`.
+  Admin endpoints: `GET/POST/PATCH/DELETE /v1/admin/nodes`.
+- Admin page: `GET /admin`, used to add/update/disable exit node
+  configuration in a browser.
+- Admin access MUST NOT rely on a dynamic home IP. Production admin access is
+  through an SSH tunnel only:
+  `ssh -i .tmp/flowvpn_support_page_ed25519 -L 9000:127.0.0.1:7777 root@103.173.155.50`,
+  then open `http://127.0.0.1:9000/admin`.
+- Public access to `/admin` and `/v1/admin/nodes` from non-localhost client IPs
+  MUST return `403`; admin APIs also require `Authorization: Bearer <AUTH_TOKEN>`.
 - Apps fetch the server list from the backend and let the user **choose an
   exit node** (macOS Settings picker; iOS location picker) instead of a
   hardcoded preset.
 - macOS main screen uses a **single toggle Connect/Disconnect** button that
   changes with state, matching the iOS one-tap UX.
 
+### A5. macOS production tunnel → NetworkExtension + WireGuardKit (2026-08-21)
+
+The macOS app's data plane was refactored from shelling out to `wg-quick`
+(Homebrew + passwordless sudo) to **NetworkExtension + WireGuardKit**
+(`NEPacketTunnelProvider` + `WireGuardAdapter`), reusing the iOS tunnel code:
+
+- New extension target `PrivateVPNMacPacketTunnel` embeds `PacketTunnelProvider`
+  + `WireGuardConfig` (shared from iOS).
+- `VPNManagerMac` now drives `NETunnelProviderManager` + `NEVPNStatusDidChange`
+  (no `wg-quick`, no `sudo`, no config file on disk).
+- `WireGuardKeychain` generates keys with WireGuardKit `PrivateKey()` (no shell
+  to the `wg` binary).
+- Build-verified (`CODE_SIGNING_ALLOWED=NO`). Runtime requires a Mac App
+  Development profile that includes the `packet-tunnel-provider` entitlement.
+- Packaging fix (2026-08-23): the macOS app must embed
+  `PrivateVPNMacPacketTunnel.appex`; the app icon copy script must not delete
+  `Contents/PlugIns/PrivateVPNMacPacketTunnel.appex`.
+- Runtime setup fix (2026-08-23): `VPNManagerMac` removes stale `FlowVPN` /
+  `FPT PrivateVPN` VPN profiles, saves a fresh `NETunnelProviderManager`, reloads
+  it from preferences before starting, and uses IPv4-only full-tunnel routing
+  (`0.0.0.0/0`) until IPv6 overlay support exists.
+- UX fix (2026-08-23): macOS shows connecting feedback while provisioning and
+  requesting VPN permission, disables duplicate Connect taps, constrains the
+  main window to an iPhone-sized layout, and includes a close button on the
+  paywall.
+
+### A6. Commercial flow + app localization (2026-08-22)
+
+- iOS and macOS include a Premium paywall using StoreKit 2 product IDs:
+  `Monthly_Premium` and `Yearly_Premium`.
+- VPN connect is gated by active Premium entitlement; disconnect remains allowed.
+- Settings no longer includes an account sign-in section.
+- Settings includes legal/support links:
+  `https://meetflowai.site/SupportPrivateVPN.html`,
+  `https://meetflowai.site/FlowVPNPrivacy.html`, and Apple Standard EULA.
+- iOS and macOS include an in-app language picker in Settings.
+- Language defaults to the user's system/regional language when supported.
+- The user can override language in Settings with:
+  `🌐 System Setting`, `🇺🇸 English`, `🇻🇳 Vietnamese`, `🇨🇳 Chinese`,
+  `🇯🇵 Japanese`, `🇰🇷 Korean`.
+- Language names in the dropdown MUST be full display names with flag emoji;
+  do not show abbreviated labels such as `en`, `vi`, `zh`, `ja`, or `ko`.
+- Localized UI coverage includes main screen, settings, paywall, support/legal
+  labels, subscription state, VPN state labels, and safe error messages.
+
+### A7. Android / Windows clone scope (2026-08-23)
+
+- Android and Windows are client clone targets only. They MUST reuse the
+  existing backend/coordinator at `https://api.meetflowai.site`; do not fork or
+  rebuild backend functionality for those clients.
+- Client apps fetch exit nodes dynamically from `GET /v1/nodes` and preserve
+  the current iOS/macOS UI language, branding, paywall, legal links, one-tap
+  VPN flow, and safe diagnostics model.
+- Android should use Kotlin + Jetpack Compose + Android `VpnService`; Windows
+  should use a native Windows stack such as WinUI 3 with WireGuardNT/official
+  WireGuard tunnel integration.
+- Android/Windows must support English, Vietnamese, Chinese, Japanese, and
+  Korean with full language names and flag emoji in the in-app picker.
+
 > **Action (owner/next session):** fold A2/A4 into §1–§8 and the requirements
 > registry (FR-AUTH-001, FR-DEVICE multi-device, exit-node selection), and open
 > a CR against RS-20260819-01 before promoting the next baseline.
-

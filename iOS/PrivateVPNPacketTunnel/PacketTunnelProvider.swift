@@ -1,5 +1,6 @@
 import NetworkExtension
 import os
+import Security
 import WireGuardKit
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
@@ -69,7 +70,49 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
               let config = try? JSONDecoder().decode(WireGuardConfig.self, from: data) else {
             return nil
         }
-        return config
+        guard config.privateKeyBase64.isEmpty else {
+            return config
+        }
+        guard let privateKey = try? WireGuardPrivateKeyStore.loadPrivateKey() else {
+            log.error("Missing WireGuard private key in shared Keychain")
+            return nil
+        }
+        return config.withPrivateKey(privateKey)
+    }
+}
+
+private enum WireGuardPrivateKeyStore {
+    static let service = "com.privatevpn.app.keys"
+    static let accessGroup = "G6XW3RN6LJ.com.privatevpn.shared"
+    static let privateKeyAccount = "wireguard.private-key"
+
+    static func loadPrivateKey() throws -> PrivateKey? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: privateKeyAccount,
+            kSecAttrAccessGroup as String: accessGroup,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        switch status {
+        case errSecSuccess:
+            guard let data = result as? Data else {
+                return nil
+            }
+            return PrivateKey(rawValue: data)
+        case errSecItemNotFound:
+            return nil
+        default:
+            throw NSError(
+                domain: "com.privatevpn.tunnel.keychain",
+                code: Int(status),
+                userInfo: [NSLocalizedDescriptionKey: "Shared Keychain read failed"]
+            )
+        }
     }
 }
 

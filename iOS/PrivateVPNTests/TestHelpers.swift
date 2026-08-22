@@ -55,7 +55,7 @@ final class MockURLProtocol: URLProtocol {
 /// Builds a `ControlAPIClient` whose `URLSession` is routed through
 /// `MockURLProtocol`, so tests can stub responses per request.
 func makeMockedClient(
-    baseURL: URL = URL(string: "http://103.173.155.50:7777")!,
+    baseURL: URL = URL(string: "https://api.meetflowai.site")!,
     joinToken: String = "PVPN-JOIN-test"
 ) -> ControlAPIClient {
     let configuration = URLSessionConfiguration.ephemeral

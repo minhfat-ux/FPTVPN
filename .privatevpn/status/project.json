@@ -3,13 +3,13 @@
   "srs_version": "v0.1",
   "requirement_baseline": "RS-20260819-01",
   "rule_baseline": "RULESET-0001",
-  "current_gate": "GATE_3",
+  "current_gate": "GATE_4",
   "gate_states": {
     "GATE_0": "DONE",
     "GATE_1": "COMPLETE",
     "GATE_2": "VERIFIED",
     "GATE_3": "IN_PROGRESS",
-    "GATE_4": "NOT_STARTED",
+    "GATE_4": "IN_PROGRESS",
     "GATE_5": "NOT_STARTED",
     "GATE_6": "NOT_STARTED",
     "GATE_7": "NOT_STARTED"
@@ -23,11 +23,11 @@
     "low": 0
   },
   "blockers": [
-    "iOS real-device blocked: Xcode DeviceSupport missing for iOS 26.6 (incomplete Xcode.app ~4GB) -> DDI cannot mount -> cannot install on iPhone. Reinstall Xcode.",
-    "macOS end-to-end tunnel needs manual sudo wg-quick (unverified exit IP yet).",
+    "iOS App Store Archive, Validate, Upload, build processing, and review are not yet verified.",
+    "macOS end-to-end tunnel still needs a signed NetworkExtension run and public exit-IP verification after latest runtime fixes.",
     "Account login / multi-device model (FR-AUTH-001) not implemented; current model uses one-time join tokens."
   ],
-  "last_verified": "2026-08-21",
-  "next_verification": "macOS end-to-end tunnel egress (verify exit IP = 103.173.155.50)",
-  "updated": "2026-08-19"
+  "last_verified": "2026-08-23",
+  "next_verification": "iOS publish archive/validate/upload and macOS NetworkExtension E2E exit-IP check",
+  "updated": "2026-08-23"
 }

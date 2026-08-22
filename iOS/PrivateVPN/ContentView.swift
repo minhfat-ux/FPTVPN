@@ -6,7 +6,10 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var vpnManager: VPNManager
     @EnvironmentObject private var configStore: VPNConfigStore
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingSettings = false
+    @State private var showingPaywall = false
 
     var body: some View {
         NavigationStack {
@@ -17,12 +20,13 @@ struct ContentView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         header
+                        subscriptionStatusCard
                         statusCard
                         locationCard
                         primaryButton
 
-                        if vpnManager.state == .failed, let error = vpnManager.lastError {
-                            errorBanner(error)
+                        if vpnManager.state == .failed {
+                            errorBanner(vpnManager.statusMessage ?? languageStore.t(.vpnStartFailure))
                         }
 
                         diagnosticsCard
@@ -43,7 +47,7 @@ struct ContentView: View {
                         Image(systemName: "gearshape.fill")
                             .foregroundStyle(.white.opacity(0.8))
                     }
-                    .accessibilityLabel("Configuration")
+                    .accessibilityLabel(languageStore.t(.configuration))
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -51,12 +55,20 @@ struct ContentView: View {
                     SettingsView()
                         .environmentObject(configStore)
                         .environmentObject(vpnManager)
+                        .environmentObject(subscriptionStore)
+                        .environmentObject(languageStore)
                 }
+            }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView()
+                    .environmentObject(subscriptionStore)
+                    .environmentObject(languageStore)
             }
         }
         .preferredColorScheme(.dark)
         .task {
             vpnManager.refreshStatus()
+            await subscriptionStore.start()
         }
     }
 
@@ -64,13 +76,16 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(spacing: 6) {
-            Image(systemName: "lock.shield.fill")
-                .font(.system(size: 34))
-                .foregroundStyle(VPNTheme.accent)
-            Text("FPT PrivateVPN")
+            Image("AppLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 76, height: 76)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+            Text("FlowVPN")
                 .font(.title.bold())
                 .foregroundStyle(.white)
-            Text("Private, encrypted internet from Vietnam")
+            Text(languageStore.t(.appSubtitle))
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.6))
         }
@@ -100,11 +115,11 @@ struct ContentView: View {
                 }
             }
 
-            Text(vpnManager.state.label)
+            Text(vpnManager.state.localizedLabel(languageStore.language))
                 .font(.title2.bold())
                 .foregroundStyle(.white)
 
-            Text(vpnManager.state.subtitle)
+            Text(vpnManager.state.localizedSubtitle(languageStore.language))
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.65))
                 .multilineTextAlignment(.center)
@@ -121,7 +136,7 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.25), value: vpnManager.state)
     }
 
-    // MARK: - Location (from VPNConfigStore.selectedLocation / serverEndpoint)
+    // MARK: - Location
 
     private var locationCard: some View {
         HStack(spacing: 14) {
@@ -152,18 +167,59 @@ struct ContentView: View {
         )
     }
 
+    private var subscriptionStatusCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: subscriptionStore.isSubscribed ? "checkmark.seal.fill" : "lock.shield.fill")
+                .font(.title3)
+                .foregroundStyle(subscriptionStore.isSubscribed ? VPNTheme.accent : .orange)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.premiumRequired))
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(subscriptionStore.isSubscribed ? languageStore.t(.protectionUnlocked) : languageStore.t(.choosePlanToStart))
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+
+            Spacer()
+
+            if !subscriptionStore.isSubscribed {
+                Button {
+                    showingPaywall = true
+                } label: {
+                    Text(languageStore.t(.upgrade))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(VPNTheme.accent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(16)
+        .background(VPNTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
+        )
+    }
+
     private var locationName: String {
         if let node = configStore.selectedRemoteNode {
             return "\(node.name) · \(node.city)"
         }
-        return configStore.serverEndpoint.isEmpty ? "No server selected" : configStore.serverEndpoint
+        return "Vietnam"
     }
 
     private var locationDetail: String {
         if let node = configStore.selectedRemoteNode {
-            return "\(node.endpoint) · \(countryName(node.country))"
+            return countryName(node.country)
         }
-        return "Open Configuration to set a server"
+        return languageStore.t(.secureExitNode)
     }
 
     private var locationCountry: String {
@@ -174,49 +230,43 @@ struct ContentView: View {
 
     private var primaryButton: some View {
         Button(action: handlePrimaryTap) {
-            HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(primaryButtonColor)
+                    .frame(width: 132, height: 132)
+                    .shadow(color: primaryButtonColor.opacity(0.45), radius: 22, y: 10)
+                Circle()
+                    .stroke(.white.opacity(0.22), lineWidth: 1)
+                    .frame(width: 132, height: 132)
                 if vpnManager.state.isTransitioning {
-                    ProgressView().tint(.white)
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.white)
                 } else {
-                    Image(systemName: primaryButtonSymbol)
-                        .font(.headline)
+                    Image(systemName: "power")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
-                Text(primaryButtonTitle)
-                    .font(.headline)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.white)
-        .background(Capsule().fill(primaryButtonColor))
         .opacity(primaryButtonDisabled ? 0.45 : 1)
         .disabled(primaryButtonDisabled)
         .animation(.easeInOut(duration: 0.25), value: vpnManager.state)
         .accessibilityHint(vpnManager.state.canConnect
-                           ? "Starts the VPN tunnel to the selected location"
-                           : "Stops the VPN tunnel")
-    }
-
-    private var primaryButtonTitle: String {
-        switch vpnManager.state {
-        case .disconnected, .failed: return "Connect"
-        case .connecting, .connected: return "Disconnect"
-        case .disconnecting: return "Disconnecting…"
-        }
-    }
-
-    private var primaryButtonSymbol: String {
-        switch vpnManager.state {
-        case .disconnected, .failed: return "power"
-        case .connecting, .connected, .disconnecting: return "stop.fill"
-        }
+                           ? languageStore.t(.startVPNHint)
+                           : languageStore.t(.stopVPNHint))
     }
 
     private var primaryButtonColor: Color {
         switch vpnManager.state {
-        case .disconnected, .failed: return VPNTheme.accent
-        case .connecting, .connected, .disconnecting: return .red
+        case .connected:
+            return VPNTheme.accent
+        case .connecting, .disconnecting:
+            return .orange
+        case .disconnected, .failed:
+            return .red
         }
     }
 
@@ -235,6 +285,8 @@ struct ContentView: View {
     private func handlePrimaryTap() {
         if vpnManager.state.canDisconnect {
             vpnManager.disconnect()
+        } else if !subscriptionStore.isSubscribed {
+            showingPaywall = true
         } else {
             Task {
                 await vpnManager.connect(store: configStore)
@@ -246,20 +298,17 @@ struct ContentView: View {
 
     private var diagnosticsCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Diagnostics", systemImage: "waveform.path.ecg")
+            Label(languageStore.t(.diagnostics), systemImage: "waveform.path.ecg")
                 .font(.headline)
                 .foregroundStyle(.white)
 
             Divider().overlay(Color.white.opacity(0.15))
 
-            diagRow(title: "State", value: vpnManager.state.label, valueColor: vpnManager.state.tint)
-            diagRow(title: "Node", value: nodeDisplay, valueColor: .white.opacity(0.85))
-            diagRow(title: "VPN IP", value: vpnIPDisplay, valueColor: .white.opacity(0.85))
-            diagRow(
-                title: "Last error",
-                value: vpnManager.lastError ?? "None",
-                valueColor: vpnManager.lastError == nil ? .white.opacity(0.85) : .red.opacity(0.9)
-            )
+            diagRow(title: languageStore.t(.state), value: vpnManager.state.localizedLabel(languageStore.language), valueColor: vpnManager.state.tint)
+            diagRow(title: languageStore.t(.location), value: nodeDisplay, valueColor: .white.opacity(0.85))
+            if let statusMessage = vpnManager.statusMessage {
+                diagRow(title: languageStore.t(.message), value: statusMessage, valueColor: .white.opacity(0.85))
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -286,14 +335,12 @@ struct ContentView: View {
 
     private var nodeDisplay: String {
         if let loc = configStore.selectedLocation {
-            return "\(loc.name) · \(loc.host):\(loc.port)"
+            return loc.name
         }
-        return configStore.serverEndpoint.isEmpty ? "Not configured" : configStore.serverEndpoint
-    }
-
-    private var vpnIPDisplay: String {
-        let trimmed = configStore.tunnelAddress.trimmingCharacters(in: .whitespaces)
-        return trimmed.isEmpty ? "—" : trimmed
+        if let node = configStore.selectedRemoteNode {
+            return "\(node.city), \(countryName(node.country))"
+        }
+        return languageStore.t(.vietnam)
     }
 
     // MARK: - Helpers
@@ -322,7 +369,7 @@ struct ContentView: View {
             Button {
                 showingSettings = true
             } label: {
-                Label("Not configured — tap to open Configuration", systemImage: "gearshape")
+                Label(languageStore.t(.notConfigured), systemImage: "gearshape")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.6))
             }
@@ -330,7 +377,7 @@ struct ContentView: View {
     }
 
     private func countryName(_ code: String) -> String {
-        code == "VN" ? "Vietnam" : code
+        code == "VN" ? languageStore.t(.vietnam) : code
     }
 
     /// ISO 3166-1 alpha-2 country code → regional indicator flag emoji.
@@ -348,4 +395,6 @@ struct ContentView: View {
     ContentView()
         .environmentObject(VPNManager())
         .environmentObject(VPNConfigStore())
+        .environmentObject(SubscriptionStore())
+        .environmentObject(AppLanguageStore())
 }

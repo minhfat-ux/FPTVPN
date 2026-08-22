@@ -5,29 +5,31 @@
 - **Date:** 2026-08-19
 - **Status:** APPROVED (GATE 0)
 - **Source:** `docs/spec/...MASTER_SPEC.md` §16, §19, §20, §21, §22, §26, §27, §117
+- **As-built delta (2026-08-23):** see Appendix B — Tailscale-style mesh,
+  VPS coordinator + exit node, macOS target, NetworkExtension data plane.
 
 ## 1. Goals
 
 - Minimum viable VPN client that is buildable and honest about state.
-- Separation of app, VPN extension, and (future) control plane.
+- Separation of app, VPN extension, and control plane.
 - Real VPN state model; no fake "connected".
 - On-device key generation and secure storage.
 
 ## 2. System context
 
 ```text
- iPhone
+ iPhone / Mac
    │
-   ├── PrivateVPN iOS App (SwiftUI)
+   ├── PrivateVPN App (SwiftUI: iOS + macOS)
    │        │
-   │        ├── VPNManager (NEVPNManager + PacketTunnelProvider)
-   │        ├── KeychainStore (private key, credentials)
-   │        └── ControlAPIClient (TLS; future)
+   │        ├── VPNManager / VPNManagerMac (NEVPNManager / NETunnelProviderManager)
+   │        ├── KeychainStore / WireGuardKeychain (private key)
+   │        └── ControlAPIClient (register + fetch nodes)
    │
-   └── Packet Tunnel Provider (NEPacketTunnelProvider, WireGuard)
+   └── Packet Tunnel Provider (NEPacketTunnelProvider, WireGuardKit)
          │
          ▼
-  WireGuard tunnel → Vietnam VPN node → Internet
+  Coordinator + exit node (VPS) → Internet (Vietnam)
 ```
 
 ## 3. Module / target layout (GATE 1)
@@ -105,3 +107,82 @@ TLS everywhere, secrets never in repo, authorization server-side.
 ## 11. Verified facts (architecture-relevant)
 
 See `.privatevpn/memory/VERIFIED_FACTS.md`. Only evidence-backed entries.
+
+## Appendix B — As-built delta (2026-08-21)
+
+The GATE 0 baseline above described an iOS-only app with an Express control
+plane. During GATE 2/3 the as-built architecture moved to a **Tailscale-style
+WireGuard mesh**; this appendix records the current reality.
+
+### B1. Targets
+
+- `PrivateVPN` — iOS app (SwiftUI), `PrivateVPNPacketTunnel` extension.
+- `PrivateVPNMac` — macOS app (SwiftUI, branded as FlowVPN),
+  `PrivateVPNMacPacketTunnel`
+  extension. macOS data plane uses **NetworkExtension + WireGuardKit**
+  (NEPacketTunnelProvider + WireGuardAdapter), reusing iOS tunnel code; no
+  `wg-quick`/sudo.
+- `PrivateVPNTests` — iOS unit tests (36/36 pass).
+
+### B2. Coordinator + exit node
+
+- Production coordinator URL: `https://api.meetflowai.site`.
+- VPS exit node: `103.173.155.50` with WireGuard UDP `443`.
+
+- Node 24 + `node:sqlite`; endpoints under `/v1/...`
+  (`/v1/peers/register`, `/v1/peers/heartbeat`, `/v1/peers/me`,
+  `/v1/peers/revoke`, `/v1/tokens`, `/v1/nodes`, `/v1/health`).
+- Auto-provisions peers into the exit node's `wg0` (`wg set`) on register/revoke;
+  IP pool 10.77.0.2–254, WireGuard UDP 443.
+- **Exit-node registry** (`exit_nodes`): `GET /v1/nodes` public, admin
+  POST/DELETE. The VPS exit node is seeded; apps pick a node from the backend.
+
+### B3. Provisioning flow
+
+```
+Device generates keypair (Keychain)
+  → POST /v1/peers/register (join token) → {overlay_ip, peer_credential, peers[]}
+  → coordinator adds peer to wg0
+  → app builds WireGuardConfig with IPv4 full-tunnel AllowedIPs 0.0.0.0/0
+  → NEVPNManager / NETunnelProviderManager
+  → startVPNTunnel → packet-tunnel provider → WireGuardAdapter
+```
+
+### B4. Key differences from GATE 0 baseline
+
+- Full-tunnel `AllowedIPs = 0.0.0.0/0` to the exit node for Vietnam egress.
+- Dev join token is single-use, 30-minute expiry; app auto-fetches from
+  `/v1/tokens` only for local/internal builds.
+- Production enrollment tokens must be issued for a signed-in user ID and active
+  subscription, then consumed by `/v1/peers/register` to attach the device
+  identity/public key to that user.
+- `ControlAPIClient` is shared verbatim across iOS and macOS targets.
+- Account login / multi-device ownership (Tailscale model) is designed but not
+  yet built (see `docs/SRS.md` Appendix A2).
+
+### B5. macOS runtime packaging notes
+
+- The macOS app must embed `PrivateVPNMacPacketTunnel.appex` under
+  `FlowVPN.app/Contents/PlugIns/`; build scripts must not delete the embedded
+  extension after Xcode copies it.
+- `VPNManagerMac` should remove stale profiles for old app names, save a fresh
+  `NETunnelProviderManager`, reload it from preferences, then start the tunnel.
+  Starting an unsaved/stale manager can produce `NEVPNErrorDomain Code=4`.
+- macOS connect UX should set `Connecting` immediately, show a short
+  provisioning/permission message, and ignore duplicate Connect taps while the
+  VPN profile is being saved or system permission is pending.
+- macOS end-to-end exit-IP verification remains separate from build success and
+  requires a Network Extension-capable signing profile on a real Mac.
+
+### B6. Android / Windows client clone target
+
+- Android and Windows clients reuse the production coordinator and exit-node
+  registry. They should not duplicate backend functionality.
+- Android UI should be Kotlin + Jetpack Compose and match the current iOS/macOS
+  app style: narrow mobile-first dark layout, premium card, status card,
+  dynamic location selector, and one large circular power button.
+- Android VPN should use `VpnService.prepare()` for user consent, secure local
+  key storage, WireGuard tunnel integration, and IPv4-only full-tunnel routing
+  unless IPv6 overlay support is added later.
+- Windows UI should match the same product style using WinUI 3 or an equivalent
+  native stack, with WireGuardNT/official WireGuard tunnel service integration.

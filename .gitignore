@@ -6,6 +6,7 @@ build/
 *.xcuserstate
 
 # Secrets / credentials — never commit
+.tmp/
 *.pem
 *.p12
 *.key

@@ -77,6 +77,18 @@ struct WireGuardConfig: Equatable, Codable {
         return TunnelConfiguration(name: name, interface: interface, peers: peers)
     }
 
+    func withoutPrivateKey() -> WireGuardConfig {
+        var copy = self
+        copy.privateKeyBase64 = ""
+        return copy
+    }
+
+    func withPrivateKey(_ privateKey: PrivateKey) -> WireGuardConfig {
+        var copy = self
+        copy.privateKeyBase64 = privateKey.base64Key
+        return copy
+    }
+
     enum ConfigError: Error, LocalizedError {
         case invalidPrivateKey
         case invalidPeerPublicKey
@@ -115,4 +127,3 @@ private extension IPAddress {
         return nil
     }
 }
-

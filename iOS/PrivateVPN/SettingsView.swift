@@ -1,162 +1,431 @@
 import SwiftUI
+import StoreKit
 
-/// Configuration screen: control plane (URL/token), location picker and
-/// manual server/peer fields. Functionality unchanged — visual style now
-/// matches the main screen theme.
+/// Settings screen for account and subscription actions.
 struct SettingsView: View {
-    @EnvironmentObject private var configStore: VPNConfigStore
-    @EnvironmentObject private var vpnManager: VPNManager
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
+    @State private var showingPaywall = false
 
     var body: some View {
         Form {
-            controlPlaneSection
-            locationSection
-            serverSection
-            peerSection
-
-            if !configStore.isConfigured {
-                Section {
-                    Label("Enter the server endpoint and peer public key to enable Connect.",
-                          systemImage: "info.circle")
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-            }
+            languageSection
+            subscriptionSection
+            supportSection
         }
         .scrollContentBackground(.hidden)
         .background(VPNTheme.backgroundGradient.ignoresSafeArea())
         .tint(VPNTheme.accent)
-        .navigationTitle("Configuration")
+        .navigationTitle(languageStore.t(.configuration))
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+                .environmentObject(subscriptionStore)
+                .environmentObject(languageStore)
+        }
+        .task {
+            await subscriptionStore.start()
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
+                Button(languageStore.t(.done)) { dismiss() }
             }
-        }
-        .onAppear {
-            vpnManager.refreshDevicePublicKey()
         }
     }
 
-    private func applyLocation(_ id: UUID?) {
-        guard let loc = VPNLocation.presets.first(where: { $0.id == id }) else { return }
-        configStore.serverEndpoint = "\(loc.host):\(loc.port)"
-        configStore.serverPublicKey = loc.publicKey
-        configStore.tunnelAddress = loc.clientAddress
-    }
-
-    private var controlPlaneSection: some View {
-        Section {
-            LabeledContent("Control plane URL") {
-                TextField("https://host:8080", text: $configStore.controlPlaneURL)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
+    private var languageSection: some View {
+        Section(languageStore.t(.language)) {
+            Picker(languageStore.t(.language), selection: Binding(
+                get: { languageStore.choice },
+                set: { languageStore.setChoice($0) }
+            )) {
+                ForEach(AppLanguageChoice.allCases) { choice in
+                    Text(choice.title(in: languageStore.language)).tag(choice)
+                }
             }
-
-            LabeledContent("Auth token") {
-                TextField("(optional)", text: $configStore.controlPlaneToken)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-
-            Text(configStore.hasControlPlane
-                 ? "Devices are registered automatically; endpoint & peer key are filled in."
-                 : "Leave blank to configure the server manually below.")
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.55))
-        } header: {
-            Text("Control plane (auto-provision)")
-        } footer: {
-            Text("Sign-in / device authorization is a future release — entering a URL enables automatic provisioning.")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.4))
         }
     }
 
-    private var locationSection: some View {
-        Section("Server location") {
-            if configStore.remoteNodes.isEmpty {
+    private var subscriptionSection: some View {
+        Section(languageStore.t(.subscription)) {
+            LabeledContent(languageStore.t(.status)) {
+                Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.free))
+                    .foregroundStyle(subscriptionStore.isSubscribed ? VPNTheme.accent : .secondary)
+            }
+
+            Button {
+                showingPaywall = true
+            } label: {
+                Label(languageStore.t(.choosePlan), systemImage: "creditcard")
+            }
+
+            Button {
+                Task {
+                    await subscriptionStore.restorePurchases()
+                }
+            } label: {
+                Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
+            }
+            .disabled(subscriptionStore.isLoading)
+
+            Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
+                Label(languageStore.t(.manageSubscription), systemImage: "slider.horizontal.3")
+            }
+        }
+    }
+
+    private var supportSection: some View {
+        Section(languageStore.t(.support)) {
+            Link(destination: URL(string: "https://meetflowai.site/SupportPrivateVPN.html")!) {
+                Label(languageStore.t(.contactSupport), systemImage: "questionmark.circle")
+            }
+
+            Link(destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!) {
+                Label(languageStore.t(.privacyPolicy), systemImage: "hand.raised")
+            }
+
+            Link(destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!) {
+                Label(languageStore.t(.appleStandardEULA), systemImage: "doc.text")
+            }
+        }
+    }
+
+}
+
+@MainActor
+final class SubscriptionStore: ObservableObject {
+    static let productIDs = [
+        "Monthly_Premium",
+        "Yearly_Premium"
+    ]
+
+    @Published private(set) var products: [Product] = []
+    @Published private(set) var purchasedProductIDs: Set<String> = []
+    @Published private(set) var isLoading = false
+    @Published var errorMessage: String?
+
+    private var hasStarted = false
+    private var transactionUpdatesTask: Task<Void, Never>?
+
+    var isSubscribed: Bool {
+        #if DEBUG
+        return true
+        #else
+        !purchasedProductIDs.isDisjoint(with: Self.productIDs)
+        #endif
+    }
+
+    var activePlanName: String {
+        #if DEBUG
+        return "Premium"
+        #else
+        if let activeProduct = products.first(where: { purchasedProductIDs.contains($0.id) }) {
+            return activeProduct.displayName
+        }
+        return isSubscribed ? "Premium" : "Free"
+        #endif
+    }
+
+    func start() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+        observeTransactionUpdates()
+        await loadProducts()
+        await refreshEntitlements()
+    }
+
+    func loadProducts() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let loadedProducts = try await Product.products(for: Self.productIDs)
+            products = loadedProducts.sorted { left, right in
+                if left.type == right.type {
+                    return left.price < right.price
+                }
+                return left.id < right.id
+            }
+            errorMessage = loadedProducts.isEmpty ? "No StoreKit products found. Check product IDs in App Store Connect." : nil
+        } catch {
+            errorMessage = "Cannot load plans. Please try again."
+        }
+    }
+
+    func purchase(_ product: Product) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let result = try await product.purchase()
+            switch result {
+            case .success(let verification):
+                guard case .verified(let transaction) = verification else {
+                    errorMessage = "Purchase could not be verified."
+                    return
+                }
+                await transaction.finish()
+                await refreshEntitlements()
+                errorMessage = nil
+            case .pending:
+                errorMessage = "Purchase is pending approval."
+            case .userCancelled:
+                break
+            @unknown default:
+                break
+            }
+        } catch {
+            errorMessage = "Purchase failed. Please try again."
+        }
+    }
+
+    func restorePurchases() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            try await AppStore.sync()
+            await refreshEntitlements()
+            errorMessage = isSubscribed ? nil : "No active Premium purchase was found."
+        } catch {
+            errorMessage = "Restore failed. Please try again."
+        }
+    }
+
+    func refreshEntitlements() async {
+        var activeProductIDs = Set<String>()
+
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result else { continue }
+            guard Self.productIDs.contains(transaction.productID) else { continue }
+            if transaction.revocationDate == nil,
+               transaction.expirationDate.map({ $0 > Date() }) ?? true {
+                activeProductIDs.insert(transaction.productID)
+            }
+        }
+
+        purchasedProductIDs = activeProductIDs
+    }
+
+    private func observeTransactionUpdates() {
+        transactionUpdatesTask?.cancel()
+        transactionUpdatesTask = Task(priority: .background) { [weak self] in
+            for await result in Transaction.updates {
+                guard let self else { return }
+                guard case .verified(let transaction) = result else { continue }
+                await transaction.finish()
+                await self.refreshEntitlements()
+            }
+        }
+    }
+
+    deinit {
+        transactionUpdatesTask?.cancel()
+    }
+}
+
+struct PaywallView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
+
+    var body: some View {
+        ZStack {
+            VPNTheme.backgroundGradient
+                .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 22) {
+                    header
+                    benefits
+                    plans
+                    footer
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 28)
+                .padding(.bottom, 34)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            await subscriptionStore.start()
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            Image("AppLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 76, height: 76)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+
+            Text(languageStore.t(.paywallTitle))
+                .font(.largeTitle.bold())
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text(languageStore.t(.paywallSubtitle))
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.65))
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private var benefits: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            benefitRow("checkmark.shield.fill", languageStore.t(.benefitTunnel))
+            benefitRow("wifi.exclamationmark", languageStore.t(.benefitWifi))
+            benefitRow("bolt.fill", languageStore.t(.benefitFast))
+        }
+        .paywallCard()
+    }
+
+    private func benefitRow(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(VPNTheme.accent)
+                .frame(width: 26)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.white)
+            Spacer()
+        }
+    }
+
+    private var plans: some View {
+        VStack(spacing: 12) {
+            if subscriptionStore.isLoading && subscriptionStore.products.isEmpty {
+                ProgressView()
+                    .tint(VPNTheme.accent)
+                    .padding(.vertical, 24)
+            }
+
+            ForEach(subscriptionStore.products, id: \.id) { product in
                 Button {
-                    Task { await vpnManager.fetchNodes(store: configStore) }
+                    Task {
+                        await subscriptionStore.purchase(product)
+                        if subscriptionStore.isSubscribed {
+                            dismiss()
+                        }
+                    }
                 } label: {
-                    Label("Refresh locations from control plane", systemImage: "arrow.triangle.2.circlepath")
+                    planRow(product)
                 }
-                .disabled(!configStore.hasControlPlane)
+                .buttonStyle(.plain)
+                .disabled(subscriptionStore.isLoading)
             }
 
-            Picker("Location", selection: $configStore.selectedNodeID) {
-                ForEach(configStore.availableNodes) { node in
-                    Text("\(node.name) — \(node.city), \(node.country)")
-                        .tag(node.id as String?)
+            if subscriptionStore.products.isEmpty && !subscriptionStore.isLoading {
+                VStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(languageStore.t(.noPlans))
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text(languageStore.t(.noPlansDetail))
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
                 }
-            }
-            .pickerStyle(.menu)
-            .onChange(of: configStore.selectedNodeID) { _, newValue in
-                applyNode(newValue)
+                .padding(.vertical, 16)
             }
 
-            if let node = configStore.selectedRemoteNode {
-                LabeledContent("Endpoint", value: node.endpoint)
-                    .multilineTextAlignment(.trailing)
+            if let message = subscriptionStore.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
             }
         }
+        .paywallCard()
     }
 
-    private func applyNode(_ id: String?) {
-        guard let node = configStore.availableNodes.first(where: { $0.id == id }) else { return }
-        configStore.serverEndpoint = node.endpoint
-        configStore.serverPublicKey = node.public_key
+    private func planRow(_ product: Product) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(product.displayName)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(product.description)
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.58))
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(product.displayPrice)
+                .font(.headline.bold())
+                .foregroundStyle(.black)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(VPNTheme.accent)
+                .clipShape(Capsule())
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
     }
 
-    private var serverSection: some View {
-        Section {
-            LabeledContent("Device public key", value: vpnManager.devicePublicKey ?? "…")
+    private var footer: some View {
+        VStack(spacing: 12) {
+            Button {
+                Task {
+                    await subscriptionStore.restorePurchases()
+                }
+            } label: {
+                Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
+                    .font(.subheadline.bold())
+            }
+            .tint(VPNTheme.accent)
+            .disabled(subscriptionStore.isLoading)
+
+            legalLinks
                 .font(.footnote)
-                .textSelection(.enabled)
+                .foregroundStyle(.white.opacity(0.65))
 
-            LabeledContent("WireGuard address") {
-                TextField("10.80.0.2/32", text: $configStore.tunnelAddress)
-                    .multilineTextAlignment(.trailing)
-                    .keyboardType(.numbersAndPunctuation)
-            }
+            Text(languageStore.t(.subscriptionDisclosure))
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.55))
+                .multilineTextAlignment(.center)
 
-            LabeledContent("DNS") {
-                TextField("1.1.1.1", text: $configStore.dnsServers)
-                    .multilineTextAlignment(.trailing)
-                    .keyboardType(.numbersAndPunctuation)
+            Button(languageStore.t(.notNow)) {
+                dismiss()
             }
-        } footer: {
-            Text("The WireGuard private key is generated on-device and never leaves this device.")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.4))
+            .font(.footnote)
+            .foregroundStyle(.white.opacity(0.55))
+            .padding(.top, 4)
         }
     }
 
-    private var peerSection: some View {
-        Section("Peer (Vietnam node)") {
-            LabeledContent("Endpoint") {
-                TextField("host:port", text: $configStore.serverEndpoint)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-            }
-
-            LabeledContent("Public key") {
-                TextField("base64 peer key", text: $configStore.serverPublicKey)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-
-            LabeledContent("Allowed IPs") {
-                TextField("0.0.0.0/0, ::/0", text: $configStore.allowedIPs)
-                    .multilineTextAlignment(.trailing)
-                    .autocorrectionDisabled()
-            }
+    private var legalLinks: some View {
+        HStack(spacing: 14) {
+            Link(languageStore.t(.privacy), destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!)
+            Link(languageStore.t(.support), destination: URL(string: "https://meetflowai.site/SupportPrivateVPN.html")!)
+            Link(languageStore.t(.eula), destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
         }
+    }
+}
+
+private extension View {
+    func paywallCard() -> some View {
+        self
+            .padding(18)
+            .frame(maxWidth: .infinity)
+            .background(VPNTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VPNTheme.cardStroke, lineWidth: 1)
+            )
     }
 }

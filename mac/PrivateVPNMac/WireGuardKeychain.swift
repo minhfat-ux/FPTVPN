@@ -1,8 +1,9 @@
 import Foundation
 import Security
+import WireGuardKit
 
-/// Minimal WireGuard keypair store for macOS, persisted in the Keychain.
-/// Returns plain text keys (macOS wg-quick uses text config files).
+/// WireGuard keypair store for macOS, persisted in the Keychain.
+/// Keys are generated on-device with WireGuardKit (no external `wg` binary).
 enum WireGuardKeychain {
     private static let service = "com.privatevpn.mac.keys"
     private static let privateAccount = "wireguard.private"
@@ -16,9 +17,8 @@ enum WireGuardKeychain {
         if let existing = load() {
             return existing
         }
-        let priv = genKey()
-        let pub = derivePublic(priv)
-        let pair = KeyPair(privateKey: priv, publicKey: pub)
+        let key = PrivateKey()
+        let pair = KeyPair(privateKey: key.base64Key, publicKey: key.publicKey.base64Key)
         save(pair)
         return pair
     }
@@ -52,31 +52,7 @@ enum WireGuardKeychain {
         SecItemAdd(attributes as CFDictionary, nil)
     }
 
-    private static func genKey() -> String {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/wg")
-        process.arguments = ["genkey"]
-        process.standardOutput = pipe
-        try? process.run()
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
-
     private static func derivePublic(_ priv: String) -> String {
-        let process = Process()
-        let inPipe = Pipe()
-        let outPipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", "echo \(priv) | /opt/homebrew/bin/wg pubkey"]
-        process.standardInput = inPipe
-        process.standardOutput = outPipe
-        try? process.run()
-        inPipe.fileHandleForWriting.write(Data(priv.utf8))
-        inPipe.fileHandleForWriting.closeFile()
-        process.waitUntilExit()
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        PrivateKey(base64Key: priv)?.publicKey.base64Key ?? ""
     }
 }

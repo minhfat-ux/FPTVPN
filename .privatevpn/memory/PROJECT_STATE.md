@@ -1,6 +1,6 @@
 # PROJECT_STATE.md
 
-- **Updated:** 2026-08-21
+- **Updated:** 2026-08-23
 - **Authoritative answer to "what is the state?"** — see also `.privatevpn/status/project.json`.
 
 ## What are we building?
@@ -9,13 +9,14 @@ overlay IPs and provisions peers; devices (iOS app, macOS app, other nodes)
 register with the coordinator and connect through an **exit node** on the same
 VPS to route Internet through Vietnam.
 
-Current working app that RUNS: **macOS app (FPTPrivateVPN)** connecting to the
-VPS exit node via wg-quick. iOS app is coded and builds/tests but real-device
-tunnel is blocked (Xcode DeviceSupport).
+Current publish focus: **iOS FlowVPN**. The app installs on device after fixing
+the packet tunnel extension bundle version; StoreKit paywall, legal/support
+links, localization, and App Store review checklist items are in place. Archive,
+Validate, Upload, and App Store processing are not yet verified.
 
 ## Current SRS?
-v0.1 (baseline RS-20260819-01). **To be updated** for the Tailscale-style
-account/device model + macOS target (see docs/SRS.md, pending edit).
+v0.1 (baseline RS-20260819-01), updated with exit-node registry/admin and
+cross-platform clone prompt requirements.
 
 ## Current requirement baseline?
 RS-20260819-01 (CR-0001 accepted).
@@ -24,11 +25,10 @@ RS-20260819-01 (CR-0001 accepted).
 RULESET-0001.
 
 ## Current gate?
-GATE 2 — Real WireGuard integration (macOS app connects to VPS exit node;
-iOS code complete, device blocked). GATE 3 — Dynamic device provisioning
-(coordinator mesh working end-to-end on VPS).
+GATE 4/Publish Prep — iOS App Store submission preparation. Coordinator mesh and
+exit-node registry are implemented; account/multi-device ownership remains next.
 
-## Architecture (as-built, 2026-08-21)
+## Architecture (as-built, 2026-08-23)
 ```
 Coordinator + exit node = same VPS 103.173.155.50
   - coordinator: /root/privatevpn (Node, port 7777, Express + node:sqlite)
@@ -45,37 +45,54 @@ to exit node 103.173.155.50:443 with full-tunnel allowedIPs 0.0.0.0/0.
 ```
 
 ## What is VERIFIED?
-- macOS app **FPTPrivateVPN** builds and launches; registers with coordinator
-  and brings up wg-quick to the VPS exit node (manual sudo step). Evidence:
-  `mac/PrivateVPNMac/`, build log in DerivedData.
+- macOS app **FlowVPN** builds with the embedded
+  `PrivateVPNMacPacketTunnel.appex`; the production macOS tunnel path is
+  NetworkExtension + WireGuardKit, not `wg-quick`/sudo/Homebrew.
 - Coordinator auto-provisions peers into wg0 on register (verified: a test peer
   public key appeared in `wg show wg0 peers` after register).
 - `POST /v1/peers/register` returns `{peer_id, overlay_ip, network,
   peer_credential, peers[]}`; IP pool 10.77.0.2–254.
 - **Exit-node registry**: `GET /v1/nodes` (public) + `POST`/`DELETE /v1/nodes`
   (admin); `vietnam-1` seeded. Apps list + pick the exit node from the backend.
-- macOS main screen = single Connect/Disconnect toggle (matches iOS).
+- Public legal/support pages are live and return HTTP 200:
+  `https://meetflowai.site/FlowVPNPrivacy.html` and
+  `https://meetflowai.site/SupportPrivateVPN.html`.
+- iOS app and packet tunnel plist/entitlements lint OK after App Store prep.
+- iOS Swift parse passes after StoreKit paywall, debug premium bypass, language
+  pack, and Apple subscription disclosure changes.
+- macOS UI now uses a fixed iPhone-sized content window, shows connecting
+  feedback while provisioning/requesting VPN permission, disables duplicate
+  Connect taps, surfaces safe errors, and has a close button on the paywall.
+- Device install popup `MissingBundleVersion` for `PrivateVPNPacketTunnel.appex`
+  was diagnosed from Xcode run `.xcresult` and fixed by giving the extension
+  `CFBundleShortVersionString = 1.0` and `CFBundleVersion = 1`.
+- macOS main screen = single Connect/Disconnect toggle (matches iOS); permission
+  prompt can be delayed while the app fetches nodes/token, registers the peer,
+  saves the VPN profile, and reloads it from preferences.
 - iOS unit tests → **36/36 PASS** on simulator (`evidence/builds/...`); iOS and
   macOS builds SUCCEEDED.
 - WireGuardKit vendored; libwg-go.a built for device + simulator (simulator fixed
   via `GOOS_iphonesimulator := ios`).
 
 ## What is implemented but unverified?
-- iOS app real-device tunnel (blocked: Xcode DeviceSupport missing for iOS 26.6,
-  DDI cannot mount → cannot install/run on physical iPhone).
+- iOS App Store Archive, Validate, Upload, App Store Connect processing, and
+  Review submission.
+- macOS end-to-end tunnel connection/exit IP after latest NetworkExtension
+  runtime fixes. Build/package are verified; live VPN egress still needs a
+  signed run and public-IP check.
+- Production StoreKit subscription/free-trial behavior from App Store Connect.
 - Account login / multi-device ownership (Tailscale-style) — **NOT yet built**;
   current model uses one-time join tokens. This is the next design task.
 - Revoke-from-app UI (peer revoke exists server-side via /v1/peers/revoke).
 
 ## What is running?
-macOS FPTPrivateVPN app (test) + coordinator on VPS 103.173.155.50.
+macOS FlowVPN app (test) + coordinator on VPS 103.173.155.50.
 
-## What is blocked?
-- **iOS real-device**: Xcode DeviceSupport only to 16.4 (Xcode.app ~4GB,
-  incomplete) → Developer Disk Image cannot mount → cannot install on iPhone.
-  Fix: reinstall/complete Xcode 26.6.
-- Real tunnel egress unverified end-to-end (needs `sudo wg-quick up` on the Mac;
-  user runs that step manually).
+- iOS Archive may still be blocked by local Go toolchain if the WireGuard build
+  script hits `package fmt is not in std`; `go list fmt` failed in this session
+  with Go 1.26.6, but the user later reported regular device build was working.
+- Release/App Store signing depends on valid Network Extension provisioning for
+  both `com.privatevpn.app` and `com.privatevpn.app.packet-tunnel`.
 - Account/multi-device model (FR-AUTH-001) not implemented.
 
 ## What is stale?
@@ -85,18 +102,19 @@ macOS FPTPrivateVPN app (test) + coordinator on VPS 103.173.155.50.
 ## What is next?
 1. ✅ WireGuardKit vendored + keypair store + config screen.
 2. ✅ Coordinator mesh integration (register + auto wg provisioning).
-3. ✅ macOS app FPTPrivateVPN builds + launches + registers.
+3. ✅ macOS app FlowVPN builds with embedded NetworkExtension.
 4. ✅ Exit-node registry + server list from backend; macOS toggle button.
-5. 🔲 Confirm end-to-end tunnel on macOS (user runs `sudo wg-quick up`, verify
-   exit IP).
-6. 🔲 **Production refactor (macOS)**: switch from shelling out to `wg-quick`
-   (needs Homebrew wireguard-tools + passwordless sudo) to **NetworkExtension +
-   WireGuardKit** (NEPacketTunnelProvider + WireGuardAdapter), reusing the iOS
-   tunnel code. Removes the `wg-quick`/sudo dependency so the app can ship to
-   end users without extra installs. Requires a NetworkExtension entitlement +
-   signed/notarized app.
-7. 🔲 Design + build **account login + add device** (Tailscale-style): users
+5. ✅ **Production refactor (macOS)**: NetworkExtension + WireGuardKit
+   (NEPacketTunnelProvider + WireGuardAdapter); no wg-quick/sudo/Homebrew.
+   Build-verified; runtime pending NE-capable signing profile.
+6. ✅ iOS App Store prep: StoreKit paywall, product IDs, privacy/support/EULA
+   links, manage subscription link, 5-language language pack, packet tunnel
+   bundle version fix, debug-only premium bypass for device testing.
+7. 🔲 iOS publish: Clean Build Folder → Archive → Validate → Upload → App Store
+   Connect processing → submit review.
+8. 🔲 Sign macOS app with NE-capable Mac App Development profile; verify
+   Connect permission prompt, tunnel start, and end-to-end exit IP =
+   103.173.155.50.
+9. 🔲 Design + build **account login + add device** (Tailscale-style): users
    table, auth, user→devices ownership.
-8. 🔲 Update SRS/ARCHITECTURE for Tailscale model + macOS target.
-9. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).
-10. 🔲 iOS real-device E2E (needs Xcode reinstall).
+10. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).

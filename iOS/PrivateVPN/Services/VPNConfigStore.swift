@@ -1,8 +1,6 @@
 import Foundation
 
-/// User-editable server configuration for the WireGuard tunnel.
-/// The server endpoint and peer public key are not secrets (private key stays
-/// in the Keychain), so they are persisted in UserDefaults.
+/// Internal server configuration for the WireGuard tunnel.
 @MainActor
 final class VPNConfigStore: ObservableObject {
     private enum Key {
@@ -25,8 +23,8 @@ final class VPNConfigStore: ObservableObject {
 
     private let defaults: UserDefaults
 
-    /// Default coordinator URL (VPS). Replaced by user input once set.
-    private static let defaultControlPlaneURL = "http://103.173.155.50:7777"
+    /// Default coordinator URL (VPS). This is app-owned config, not user UI.
+    private static let defaultControlPlaneURL = "https://api.meetflowai.site"
 
     @Published var serverEndpoint: String {
         didSet { defaults.set(serverEndpoint, forKey: Key.serverEndpoint) }
@@ -93,13 +91,15 @@ final class VPNConfigStore: ObservableObject {
     }
 
     /// The control plane URL as an http(s) `URL`, if configured.
-    /// The scheme check is deliberate: modern Foundation's URL parser accepts
-    /// strings like "not a url" (scheme "not"), which must not count as a
-    /// usable control plane address.
+    /// A missing scheme is treated as `https://` to match production defaults and make
+    /// pasting `host:port` work on device.
     var controlPlaneBaseURL: URL? {
         let trimmed = controlPlaneURL.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty,
-              let url = URL(string: trimmed),
+        guard !trimmed.isEmpty else { return nil }
+        let urlString = trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")
+            ? trimmed
+            : "https://\(trimmed)"
+        guard let url = URL(string: urlString),
               let scheme = url.scheme,
               ["http", "https"].contains(scheme.lowercased()),
               let host = url.host,
@@ -113,9 +113,10 @@ final class VPNConfigStore: ObservableObject {
         serverPublicKey = defaults.string(forKey: Key.serverPublicKey) ?? ""
         tunnelAddress = defaults.string(forKey: Key.tunnelAddress) ?? "10.80.0.2/32"
         dnsServers = defaults.string(forKey: Key.dnsServers) ?? "1.1.1.1"
-        allowedIPs = defaults.string(forKey: Key.allowedIPs) ?? "0.0.0.0/0, ::/0"
+        allowedIPs = defaults.string(forKey: Key.allowedIPs) ?? "0.0.0.0/0"
         selectedLocationID = defaults.string(forKey: Key.selectedLocationID).flatMap(UUID.init)
-        controlPlaneURL = defaults.string(forKey: Key.controlPlaneURL) ?? Self.defaultControlPlaneURL
+        defaults.removeObject(forKey: Key.controlPlaneURL)
+        controlPlaneURL = Self.defaultControlPlaneURL
         controlPlaneToken = Self.loadControlPlaneToken(defaults: defaults)
         selectedNodeID = defaults.string(forKey: Key.selectedNodeID)
 
@@ -144,12 +145,8 @@ final class VPNConfigStore: ObservableObject {
             defaults.removeObject(forKey: Key.controlPlaneTokenLegacy)
             return legacy
         }
-        return defaultControlPlaneToken
+        return ""
     }
-
-    /// Default join token for the dev control plane. Replaced once the user
-    /// enters their own token.
-    private static let defaultControlPlaneToken = "PVPN-JOIN-1dWnX9t-XRVhSwIDwBhvfftj_ELmq6vE"
 
     private func persistControlPlaneToken() {
         do {

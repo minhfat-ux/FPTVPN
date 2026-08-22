@@ -9,7 +9,7 @@
 #   bash scripts/mac-test.sh status    # show tunnel + peers
 #
 # Env overrides:
-#   COORDINATOR   (default http://103.173.155.50:7777)
+#   COORDINATOR   (default https://api.meetflowai.site)
 #   JOIN_TOKEN    (required for "up"; one-time use)
 #   EXIT_ENDPOINT (default 103.173.155.50:443)
 #   EXIT_PUBKEY   (default VPS exit node public key)
@@ -18,7 +18,7 @@ set -euo pipefail
 
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 
-COORDINATOR="${COORDINATOR:-http://103.173.155.50:7777}"
+COORDINATOR="${COORDINATOR:-https://api.meetflowai.site}"
 EXIT_ENDPOINT="${EXIT_ENDPOINT:-103.173.155.50:443}"
 EXIT_PUBKEY="${EXIT_PUBKEY:-N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=}"
 NAME="${NAME:-macbook}"

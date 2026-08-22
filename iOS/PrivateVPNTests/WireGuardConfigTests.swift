@@ -57,6 +57,33 @@ final class WireGuardConfigTests: XCTestCase {
         }
     }
 
+    func testPrivateKeyCanBeStrippedAndRestored() throws {
+        let key = try KeychainStore.obtainOrCreatePrivateKey()
+        let config = WireGuardConfig(
+            name: "privatevpn",
+            privateKeyBase64: key.base64Key,
+            addresses: ["10.77.0.2/32"],
+            dnsServers: ["1.1.1.1"],
+            peers: [
+                WireGuardConfig.WireGuardPeer(
+                    publicKeyBase64: key.publicKey.base64Key,
+                    endpoint: "103.173.155.50:443",
+                    allowedIPs: ["0.0.0.0/0"],
+                    preSharedKeyBase64: nil,
+                    persistentKeepAlive: 25
+                )
+            ]
+        )
+
+        let publicConfig = config.withoutPrivateKey()
+        XCTAssertTrue(publicConfig.privateKeyBase64.isEmpty)
+        XCTAssertThrowsError(try publicConfig.makeTunnelConfiguration())
+
+        let restoredConfig = publicConfig.withPrivateKey(key)
+        XCTAssertEqual(restoredConfig.privateKeyBase64, key.base64Key)
+        XCTAssertNoThrow(try restoredConfig.makeTunnelConfiguration())
+    }
+
     func testMakeTunnelConfigurationRejectsInvalidAddress() throws {
         let key = try KeychainStore.obtainOrCreatePrivateKey()
         let config = WireGuardConfig(

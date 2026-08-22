@@ -159,9 +159,10 @@ final class ControlAPIClientTests: XCTestCase {
                                           wireguardPublicKey: "k", endpoint: "0.0.0.0:51820")
             XCTFail("Expected a ClientError for a transport failure")
         } catch let error as ControlAPIClient.ClientError {
-            guard case .transport = error else {
+            guard case .transport(let endpoint, _) = error else {
                 return XCTFail("Expected .transport error, got \(error)")
             }
+            XCTAssertEqual(endpoint, "registration")
         }
     }
 

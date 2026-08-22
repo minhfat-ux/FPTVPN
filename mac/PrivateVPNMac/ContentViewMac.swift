@@ -1,7 +1,11 @@
+import AppKit
 import SwiftUI
 
 struct ContentViewMac: View {
     @EnvironmentObject private var vpnManager: VPNManagerMac
+    @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
+    @State private var showingPaywall = false
 
     var body: some View {
         ZStack {
@@ -11,36 +15,48 @@ struct ContentViewMac: View {
             VStack(spacing: 20) {
                 // Header
                 VStack(spacing: 6) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(VPNThemeMac.accent)
-                    Text("FPT PrivateVPN")
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 76, height: 76)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+                    Text("FlowVPN")
                         .font(.largeTitle.bold())
                         .foregroundStyle(VPNThemeMac.textPrimary)
-                    Text("Private, encrypted internet from Vietnam")
+                    Text(languageStore.t(.appSubtitle))
                         .font(.subheadline)
                         .foregroundStyle(VPNThemeMac.textSecondary)
                 }
                 .padding(.top, 16)
+
+                subscriptionStatusCard
 
                 // Status card
                 VStack(spacing: 10) {
                     Image(systemName: statusSymbol)
                         .font(.system(size: 44))
                         .foregroundStyle(statusColor)
-                    Text(vpnManager.state)
+                    Text(vpnManager.state.localizedVPNState(languageStore.language))
                         .font(.title2.bold())
                         .foregroundStyle(statusColor)
-                    if let ip = vpnManager.overlayIP {
-                        Text("Tunnel IP: \(ip)")
+                    if vpnManager.state == "Connecting…" {
+                        Text("Preparing VPN permission…")
                             .font(.footnote)
                             .foregroundStyle(VPNThemeMac.textSecondary)
-                    }
-                    if let error = vpnManager.lastError {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
+                    }
+                    if vpnManager.state == "Failed" {
+                        VStack(spacing: 4) {
+                            Text(languageStore.t(.vpnStartFailure))
+                            if let lastError = vpnManager.lastError, !lastError.isEmpty {
+                                Text(lastError)
+                                    .lineLimit(3)
+                            }
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -58,50 +74,100 @@ struct ContentViewMac: View {
                 Button {
                     if vpnManager.state == "Connected" || vpnManager.state == "Connecting…" {
                         vpnManager.disconnect()
+                    } else if !subscriptionStore.isSubscribed {
+                        showingPaywall = true
                     } else {
                         Task { await vpnManager.connect() }
                     }
                 } label: {
-                    Label(primaryButtonTitle, systemImage: primaryButtonSymbol)
-                        .font(.title3.weight(.semibold))
-                        .frame(maxWidth: .infinity)
+                    Image(systemName: "power")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 132, height: 132)
+                        .background(
+                            Circle()
+                                .fill(primaryButtonColor)
+                                .shadow(color: primaryButtonColor.opacity(0.45), radius: 22, y: 10)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(.white.opacity(0.22), lineWidth: 1)
+                        )
+                        .contentShape(Circle())
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(primaryButtonColor)
+                .buttonStyle(.plain)
                 .disabled(primaryButtonDisabled)
-                .padding(.horizontal, 24)
+                .opacity(primaryButtonDisabled ? 0.72 : 1)
                 .padding(.bottom, 16)
             }
             .padding(24)
-            .frame(minWidth: 380, minHeight: 360)
+            .frame(width: 390, height: 760)
         }
         .preferredColorScheme(.dark)
-    }
-
-    private var primaryButtonTitle: String {
-        switch vpnManager.state {
-        case "Disconnected", "Failed": return "Connect"
-        case "Connecting…": return "Disconnecting…"
-        default: return "Disconnect"
+        .sheet(isPresented: $showingPaywall) {
+            MacPaywallView()
+                .environmentObject(subscriptionStore)
+                .environmentObject(languageStore)
+        }
+        .task {
+            await subscriptionStore.start()
         }
     }
 
-    private var primaryButtonSymbol: String {
-        switch vpnManager.state {
-        case "Disconnected", "Failed": return "network"
-        default: return "network.slash"
+    private var subscriptionStatusCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: subscriptionStore.isSubscribed ? "checkmark.seal.fill" : "lock.shield.fill")
+                .font(.title3)
+                .foregroundStyle(subscriptionStore.isSubscribed ? VPNThemeMac.accent : .orange)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.premiumRequired))
+                    .font(.headline)
+                    .foregroundStyle(VPNThemeMac.textPrimary)
+                Text(subscriptionStore.isSubscribed ? languageStore.t(.protectionUnlocked) : languageStore.t(.choosePlanToStart))
+                    .font(.subheadline)
+                    .foregroundStyle(VPNThemeMac.textSecondary)
+            }
+
+            Spacer()
+
+            if !subscriptionStore.isSubscribed {
+                Button {
+                    showingPaywall = true
+                } label: {
+                    Text(languageStore.t(.upgrade))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(VPNThemeMac.accent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .padding(16)
+        .background(VPNThemeMac.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
+        )
     }
 
     private var primaryButtonColor: Color {
         switch vpnManager.state {
-        case "Disconnected", "Failed": return VPNThemeMac.accent
-        default: return .red
+        case "Connected":
+            return VPNThemeMac.accent
+        case "Connecting…", "Disconnecting…":
+            return .orange
+        default:
+            return .red
         }
     }
 
     private var primaryButtonDisabled: Bool {
-        vpnManager.state == "Connecting…"
+        vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…"
     }
 
     private var statusSymbol: String {
@@ -118,7 +184,7 @@ struct ContentViewMac: View {
         case "Connected": return VPNThemeMac.accent
         case "Connecting…": return .orange
         case "Failed": return .red
-        default: return VPNThemeMac.textSecondary
+        default: return .red
         }
     }
 }
@@ -126,4 +192,6 @@ struct ContentViewMac: View {
 #Preview {
     ContentViewMac()
         .environmentObject(VPNManagerMac())
+        .environmentObject(MacSubscriptionStore())
+        .environmentObject(AppLanguageStore())
 }

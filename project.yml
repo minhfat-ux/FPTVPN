@@ -24,26 +24,36 @@ targets:
     info:
       path: iOS/PrivateVPN/Info.plist
       properties:
-        CFBundleDisplayName: PrivateVPN
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
+        CFBundleDisplayName: FlowVPN
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-          # Dev: allow HTTP to the VPS coordinator (public IP). Replace with HTTPS before release.
-          NSAllowsArbitraryLoads: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     entitlements:
       path: iOS/PrivateVPN/PrivateVPN.entitlements
       properties:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.privatevpn.shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app
-        PRODUCT_NAME: PrivateVPN
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        PRODUCT_NAME: FlowVPN
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -75,11 +85,12 @@ targets:
       - iOS/PrivateVPNPacketTunnel
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
       - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
+      - path: iOS/PrivateVPN/Services/KeychainStore.swift
     info:
       path: iOS/PrivateVPNPacketTunnel/Info.plist
       properties:
-        CFBundleDisplayName: PrivateVPN Tunnel
-        CFBundleShortVersionString: "0.1.0"
+        CFBundleDisplayName: FlowVPN Tunnel
+        CFBundleShortVersionString: "1.0"
         CFBundleVersion: "1"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
@@ -89,6 +100,8 @@ targets:
       properties:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.privatevpn.shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
@@ -123,7 +136,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.tests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/PrivateVPN.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PrivateVPN
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/FlowVPN.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FlowVPN
         BUNDLE_LOADER: $(TEST_HOST)
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -144,30 +157,52 @@ targets:
   PrivateVPNMac:
     type: application
     platform: macOS
+    productName: FlowVPN
     sources:
       - path: mac/PrivateVPNMac
         excludes:
           - "Resources/ChatGPT*.png"
       - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
+      - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac
-        PRODUCT_NAME: FPTPrivateVPN
+        PRODUCT_NAME: FlowVPN
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        LIBRARY_SEARCH_PATHS:
+          - "$(DERIVED_FILE_DIR)/wg"
+    preBuildScripts:
+      - name: Build wireguard-go
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          WGK="${SRCROOT}/Vendor/WireGuardKit/Sources/WireGuardKitGo"
+          mkdir -p "${DERIVED_FILE_DIR}/wg" "${DERIVED_FILE_DIR}/wg-tmp"
+          make -C "$WGK" \
+            PLATFORM_NAME="$PLATFORM_NAME" \
+            ARCHS="$ARCHS" \
+            DESTDIR="${DERIVED_FILE_DIR}/wg" \
+            CONFIGURATION_TEMP_DIR="${DERIVED_FILE_DIR}/wg-tmp"
     info:
       path: mac/PrivateVPNMac/Info.plist
       properties:
-        CFBundleDisplayName: FPT PrivateVPN
+        CFBundleDisplayName: FlowVPN
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         CFBundleIconFile: AppIcon
         LSMinimumSystemVersion: "14.0"
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
+    entitlements:
+      path: mac/PrivateVPNMac/PrivateVPNMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
     postCompileScripts:
       - name: Copy AppIcon
         basedOnDependencyAnalysis: false
@@ -176,12 +211,58 @@ targets:
           mkdir -p "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
           cp "${SRCROOT}/mac/PrivateVPNMac/Resources/AppIcon.icns" \
              "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppIcon.icns"
+    dependencies:
+      - target: PrivateVPNMacPacketTunnel
+        embed: true
+      - package: WireGuardKit
+    scheme:
+      testTargets: []
+
+  PrivateVPNMacPacketTunnel:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift
+      - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
+    info:
+      path: mac/PrivateVPNMacPacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: FlowVPN Tunnel
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: mac/PrivateVPNMacPacketTunnel/PrivateVPNMacPacketTunnel.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac
-        PRODUCT_NAME: FPTPrivateVPN
+        PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac.packet-tunnel
+        PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         CODE_SIGN_STYLE: Automatic
-    scheme:
-      testTargets: []
+        SKIP_INSTALL: YES
+        LIBRARY_SEARCH_PATHS:
+          - "$(DERIVED_FILE_DIR)/wg"
+    preBuildScripts:
+      - name: Build wireguard-go
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          WGK="${SRCROOT}/Vendor/WireGuardKit/Sources/WireGuardKitGo"
+          mkdir -p "${DERIVED_FILE_DIR}/wg" "${DERIVED_FILE_DIR}/wg-tmp"
+          make -C "$WGK" \
+            PLATFORM_NAME="$PLATFORM_NAME" \
+            ARCHS="$ARCHS" \
+            DESTDIR="${DERIVED_FILE_DIR}/wg" \
+            CONFIGURATION_TEMP_DIR="${DERIVED_FILE_DIR}/wg-tmp"
+    dependencies:
+      - package: WireGuardKit

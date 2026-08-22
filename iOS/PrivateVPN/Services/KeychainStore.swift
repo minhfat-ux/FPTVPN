@@ -19,11 +19,7 @@ protocol KeychainBackend {
 /// devices and not included in iCloud Keychain sync.
 struct SecurityKeychainBackend: KeychainBackend {
     func save(_ data: Data, for account: String) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: KeychainStore.service,
-            kSecAttrAccount as String: account,
-        ]
+        let query = baseQuery(for: account)
         SecItemDelete(query as CFDictionary)
 
         var attributes = query
@@ -37,13 +33,10 @@ struct SecurityKeychainBackend: KeychainBackend {
     }
 
     func loadData(for account: String) throws -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: KeychainStore.service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
+        var query = baseQuery(for: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         switch status {
@@ -54,6 +47,16 @@ struct SecurityKeychainBackend: KeychainBackend {
         default:
             throw KeychainStore.KeychainError.unexpectedStatus(status)
         }
+    }
+
+    private func baseQuery(for account: String) -> [String: Any] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: KeychainStore.service,
+            kSecAttrAccount as String: account,
+        ]
+        query[kSecAttrAccessGroup as String] = KeychainStore.accessGroup
+        return query
     }
 }
 
@@ -84,6 +87,7 @@ final class KeychainStore {
 
     /// Keychain service shared by the WireGuard keypair and the device identity.
     static let service = "com.privatevpn.app.keys"
+    static let accessGroup = "G6XW3RN6LJ.com.privatevpn.shared"
     private static let privateKeyAccount = "wireguard.private-key"
     private static let publicKeyAccount = "wireguard.public-key"
 

@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
+import { NodeStore, adminNode, publicNode } from "./node-store.js";
+import { adminPageHTML } from "./admin-page.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,7 +22,9 @@ const IP_POOL_CIDR = process.env.IP_POOL_CIDR ?? "10.77.0.0/24";
 const WG_BIN = process.env.WG_BIN ?? "wg";
 const DRY_RUN = process.env.DRY_RUN === "1";
 const AUTH_TOKEN = process.env.AUTH_TOKEN ?? "";
+const ADMIN_ALLOWED_IPS = parseAllowedIPs(process.env.ADMIN_ALLOWED_IPS ?? "");
 const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "devices.json");
+const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", "nodes.json");
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
@@ -47,8 +51,10 @@ if (TLS_CERT_FILE && TLS_KEY_FILE) {
 const pool = new IPPool(IP_POOL_CIDR);
 const wg = new WireGuardManager({ interfaceName: WG_INTERFACE, wgBin: WG_BIN, dryRun: DRY_RUN });
 const store = new DeviceStore(DATA_FILE);
+const nodeStore = new NodeStore(NODES_FILE, buildFallbackExitNode());
 
 const app = express();
+app.set("trust proxy", true);
 app.use(cors());
 app.use(express.json());
 
@@ -56,7 +62,8 @@ app.use(express.json());
 // /health is always public so it can be used as a liveness probe.
 app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
-  if (req.path === "/health") return next();
+  if (req.path === "/health" || req.path === "/nodes" || req.path === "/v1/nodes") return next();
+  if (req.method === "GET" && (req.path === "/admin" || req.path === "/admin/")) return next();
   const header = req.headers.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (token !== AUTH_TOKEN) {
@@ -84,32 +91,92 @@ const requireAdminAuth = (req, res, next) => {
   next();
 };
 
+const requireAdminIP = (req, res, next) => {
+  const clientIP = clientIPAddress(req);
+  if (!ADMIN_ALLOWED_IPS.has(clientIP)) {
+    return res.status(403).json({
+      error: "Admin access denied from this IP",
+      client_ip: clientIP,
+    });
+  }
+  next();
+};
+
 // Health check.
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-// Public list of exit nodes (Tailscale-style). The app fetches this to present
-// selectable locations instead of hardcoding them.
-app.get("/nodes", (_req, res) => {
-  res.json({
-    nodes: [
-      {
-        id: NODE_ID || "node-1",
-        name: NODE_NAME || os.hostname(),
-        country: NODE_COUNTRY || "VN",
-        city: NODE_CITY || "Hanoi",
-        endpoint: WG_PUBLIC_ENDPOINT || null,
-        serverPublicKey: WG_SERVER_PUBKEY || null,
-      },
-    ],
-  });
+app.get(["/admin", "/admin/"], requireAdminIP, (_req, res) => {
+  res.type("html").send(adminPageHTML());
+});
+
+// Public list of active exit nodes (Tailscale-style). The app fetches this to
+// present selectable locations instead of hardcoding them.
+const listPublicNodes = async (_req, res) => {
+  try {
+    const nodes = await nodeStore.active();
+    res.json({ nodes: nodes.map(publicNode) });
+  } catch (err) {
+    console.error("GET /nodes failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+};
+
+app.get("/nodes", listPublicNodes);
+app.get("/v1/nodes", listPublicNodes);
+
+// Admin exit-node management. DELETE disables a node instead of physically
+// removing it, so existing device records and audit history remain meaningful.
+app.get(["/admin/nodes", "/v1/admin/nodes"], requireAdminIP, requireAdminAuth, async (_req, res) => {
+  try {
+    const nodes = await nodeStore.all();
+    res.json({ count: nodes.length, nodes: nodes.map(adminNode) });
+  } catch (err) {
+    console.error("GET /admin/nodes failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+app.post(["/admin/nodes", "/v1/admin/nodes"], requireAdminIP, requireAdminAuth, async (req, res) => {
+  try {
+    const node = await nodeStore.create(req.body ?? {});
+    res.status(201).json({ node: adminNode(node) });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+app.get(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireAdminAuth, async (req, res) => {
+  const node = await nodeStore.findById(req.params.id);
+  if (!node) return res.status(404).json({ error: "Not found" });
+  res.json({ node: adminNode(node) });
+});
+
+app.patch(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireAdminAuth, async (req, res) => {
+  try {
+    const node = await nodeStore.update(req.params.id, req.body ?? {});
+    if (!node) return res.status(404).json({ error: "Not found" });
+    res.json({ node: adminNode(node) });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+app.delete(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireAdminAuth, async (req, res) => {
+  try {
+    const node = await nodeStore.disable(req.params.id);
+    if (!node) return res.status(404).json({ error: "Not found" });
+    res.json({ node: adminNode(node) });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
 });
 
 // Register a device: assign IP, provision peer, return client config.
 app.post("/device", async (req, res) => {
   try {
-    const { publicKey, deviceName, platform } = req.body ?? {};
+    const { publicKey, deviceName, platform, exitNodeId, node_id } = req.body ?? {};
     if (!publicKey || typeof publicKey !== "string") {
       return res.status(400).json({ error: "publicKey is required" });
     }
@@ -131,9 +198,14 @@ app.post("/device", async (req, res) => {
     // Provision the peer on the WireGuard node (idempotent).
     await wg.upsertPeer(publicKey, `${assignedIP}/32`);
 
+    const selectedNode = await selectExitNode(exitNodeId ?? node_id);
+    if (!selectedNode) {
+      return res.status(503).json({ error: "No active exit node available" });
+    }
+
     res.status(result.isNew ? 201 : 200).json({
       device,
-      config: buildClientConfig(device),
+      config: buildClientConfig(device, selectedNode),
     });
   } catch (err) {
     console.error("POST /device failed:", err);
@@ -142,14 +214,14 @@ app.post("/device", async (req, res) => {
 });
 
 // Fetch a device by id.
-app.get("/device/:id", requireAdminAuth, async (req, res) => {
+app.get("/device/:id", requireAdminIP, requireAdminAuth, async (req, res) => {
   const device = await store.findById(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
   res.json({ device });
 });
 
 // Deactivate a device and remove its peer.
-app.delete("/device/:id", requireAdminAuth, async (req, res) => {
+app.delete("/device/:id", requireAdminIP, requireAdminAuth, async (req, res) => {
   const device = await store.deactivate(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
   await wg.removePeer(device.publicKey);
@@ -157,7 +229,7 @@ app.delete("/device/:id", requireAdminAuth, async (req, res) => {
 });
 
 // Owner visibility (FR-ADMIN-001 / AC-013): list all registered devices.
-app.get("/devices", requireAdminAuth, async (_req, res) => {
+app.get("/devices", requireAdminIP, requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
     res.json({
@@ -179,7 +251,7 @@ app.get("/devices", requireAdminAuth, async (_req, res) => {
 });
 
 // Owner visibility (FR-ADMIN-001 / AC-013): node status.
-app.get("/status", requireAdminAuth, async (_req, res) => {
+app.get("/status", requireAdminIP, requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
     const activeCount = devices.filter((d) => d.active).length;
@@ -190,6 +262,7 @@ app.get("/status", requireAdminAuth, async (_req, res) => {
         endpoint: WG_PUBLIC_ENDPOINT || null,
         interface: WG_INTERFACE,
       },
+      exit_nodes: (await nodeStore.active()).map(publicNode),
       peers: wgPeers ? wgPeers.length : activeCount,
       peer_source: wgPeers ? "wg" : "registry",
       dryRun: DRY_RUN,
@@ -203,10 +276,16 @@ app.get("/status", requireAdminAuth, async (_req, res) => {
   }
 });
 
-function buildClientConfig(device) {
+async function selectExitNode(id) {
+  if (id) return nodeStore.findActiveById(id);
+  return nodeStore.firstActive();
+}
+
+function buildClientConfig(device, node) {
   return {
-    serverPublicKey: WG_SERVER_PUBKEY,
-    endpoint: WG_PUBLIC_ENDPOINT,
+    exitNodeId: node.id,
+    serverPublicKey: node.public_key,
+    endpoint: node.endpoint,
     address: `${device.assignedIP}/32`,
     dns: ["1.1.1.1"],
     allowedIPs: ["0.0.0.0/0", "::/0"],
@@ -214,9 +293,47 @@ function buildClientConfig(device) {
   };
 }
 
+function buildFallbackExitNode() {
+  if (!WG_PUBLIC_ENDPOINT && !WG_SERVER_PUBKEY) return null;
+  return {
+    id: NODE_ID || "node-1",
+    name: NODE_NAME || os.hostname(),
+    country: NODE_COUNTRY || "VN",
+    city: NODE_CITY || "Hanoi",
+    endpoint: WG_PUBLIC_ENDPOINT,
+    public_key: WG_SERVER_PUBKEY,
+    active: true,
+    priority: 100,
+  };
+}
+
+function parseAllowedIPs(value) {
+  const configured = value
+    .split(",")
+    .map((ip) => normalizeIP(ip))
+    .filter(Boolean);
+  return new Set(configured.length > 0 ? configured : ["127.0.0.1", "::1"]);
+}
+
+function clientIPAddress(req) {
+  const forwardedFor = String(req.headers["x-forwarded-for"] ?? "")
+    .split(",")
+    .map((part) => normalizeIP(part))
+    .find(Boolean);
+  return forwardedFor || normalizeIP(req.ip || req.socket.remoteAddress || "");
+}
+
+function normalizeIP(value) {
+  return String(value)
+    .trim()
+    .replace(/^::ffff:/, "");
+}
+
 function onListen() {
   console.log(`PrivateVPN control plane listening on :${PORT} (${tlsReady ? "HTTPS" : "HTTP"})`);
   console.log(`  interface=${WG_INTERFACE} dryRun=${DRY_RUN} pool=${IP_POOL_CIDR}`);
+  console.log(`  nodesFile=${NODES_FILE}`);
+  console.log(`  adminAllowedIPs=${Array.from(ADMIN_ALLOWED_IPS).join(",")}`);
   if (!WG_SERVER_PUBKEY) console.warn("  WARNING: WG_SERVER_PUBKEY not set");
   if (!WG_PUBLIC_ENDPOINT) console.warn("  WARNING: WG_PUBLIC_ENDPOINT not set");
 }

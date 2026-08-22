@@ -59,7 +59,11 @@ final class VPNConfigStoreTests: XCTestCase {
         // The app ships a dev control-plane URL default, so a fresh store is
         // already "configured" and yields a usable base URL.
         XCTAssertTrue(store.hasControlPlane)
-        XCTAssertEqual(store.controlPlaneBaseURL, URL(string: "http://103.173.155.50:7777"))
+        XCTAssertEqual(store.controlPlaneBaseURL, URL(string: "https://api.meetflowai.site"))
+
+        store.controlPlaneURL = "api.meetflowai.site"
+        XCTAssertTrue(store.hasControlPlane)
+        XCTAssertEqual(store.controlPlaneBaseURL, URL(string: "https://api.meetflowai.site"))
 
         store.controlPlaneURL = "https://control.example.com"
         XCTAssertTrue(store.hasControlPlane)
@@ -81,7 +85,7 @@ final class VPNConfigStoreTests: XCTestCase {
         first.selectedNodeID = customID
 
         let second = makeStore()
-        XCTAssertEqual(second.controlPlaneURL, "https://control.example.com")
+        XCTAssertEqual(second.controlPlaneURL, "https://api.meetflowai.site")
         XCTAssertEqual(second.controlPlaneToken, "tok-123")
         XCTAssertEqual(second.allowedIPs, "10.0.0.0/8")
         XCTAssertEqual(second.selectedNodeID, customID)
@@ -95,9 +99,9 @@ final class VPNConfigStoreTests: XCTestCase {
         let store = makeStore()
         XCTAssertEqual(store.tunnelAddress, "10.80.0.2/32")
         XCTAssertEqual(store.dnsServers, "1.1.1.1")
-        XCTAssertEqual(store.allowedIPs, "0.0.0.0/0, ::/0")
-        XCTAssertEqual(store.controlPlaneURL, "http://103.173.155.50:7777")
-        XCTAssertEqual(store.controlPlaneToken, "PVPN-JOIN-1dWnX9t-XRVhSwIDwBhvfftj_ELmq6vE")
+        XCTAssertEqual(store.allowedIPs, "0.0.0.0/0")
+        XCTAssertEqual(store.controlPlaneURL, "https://api.meetflowai.site")
+        XCTAssertEqual(store.controlPlaneToken, "")
     }
 
     func testTokenPersistsInKeychainNotUserDefaults() throws {

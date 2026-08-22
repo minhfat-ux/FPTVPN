@@ -11,8 +11,11 @@
 #   WG_SUBNET         (default 10.77.0.0/24) client pool
 #   CONTROL_PORT      (default 8080) control plane HTTP/HTTPS port
 #   AUTH_TOKEN        (required) control plane bearer token
+#   ADMIN_ALLOWED_IPS (optional) comma-separated public IPs allowed to open /admin
 #   PUBLIC_IP         (required) node public IP (default auto-detect)
 #   WG_PRIVATE_KEY    (optional) server private key; generated if unset
+#   TLS_CERT_FILE     (optional) HTTPS certificate path for direct Node TLS
+#   TLS_KEY_FILE      (optional) HTTPS private key path for direct Node TLS
 set -euo pipefail
 
 WG_INTERFACE="${WG_INTERFACE:-wg0}"
@@ -118,8 +121,12 @@ Environment=WG_BIN=/usr/bin/wg
 Environment=WG_PUBLIC_ENDPOINT=${PUBLIC_IP}:${WG_LISTEN_PORT}
 Environment=WG_SERVER_PUBKEY=${SERVER_PUBKEY}
 Environment=AUTH_TOKEN=${AUTH_TOKEN}
+Environment=ADMIN_ALLOWED_IPS=${ADMIN_ALLOWED_IPS:-}
 Environment=IP_POOL_CIDR=${WG_SUBNET}
 Environment=DATA_FILE=/opt/privatevpn/devices.json
+Environment=NODES_FILE=/opt/privatevpn/nodes.json
+Environment=TLS_CERT_FILE=${TLS_CERT_FILE:-}
+Environment=TLS_KEY_FILE=${TLS_KEY_FILE:-}
 
 [Install]
 WantedBy=multi-user.target
@@ -133,6 +140,11 @@ echo "==> DONE =="
 echo "WireGuard interface : $WG_INTERFACE  (UDP ${WG_LISTEN_PORT})"
 echo "Server tunnel IP    : ${SERVER_IP}"
 echo "Server public key   : ${SERVER_PUBKEY}"
-echo "Control plane       : http://${PUBLIC_IP}:${CONTROL_PORT}"
+if [[ -n "${TLS_CERT_FILE:-}" && -n "${TLS_KEY_FILE:-}" ]]; then
+  echo "Control plane       : https://${PUBLIC_IP}:${CONTROL_PORT}"
+else
+  echo "Control plane       : http://${PUBLIC_IP}:${CONTROL_PORT} (local/internal only; set TLS_CERT_FILE + TLS_KEY_FILE for HTTPS)"
+fi
 echo "AUTH_TOKEN          : (set)"
-echo "In the iOS app set: endpoint=${PUBLIC_IP}:${WG_LISTEN_PORT}, peer public key=<server pubkey above>, control plane URL=http://${PUBLIC_IP}:${CONTROL_PORT}"
+echo "Admin allowed IPs   : ${ADMIN_ALLOWED_IPS:-127.0.0.1,::1 only}"
+echo "In the iOS app set: endpoint=${PUBLIC_IP}:${WG_LISTEN_PORT}, peer public key=<server pubkey above>, control plane URL=<https coordinator URL>"

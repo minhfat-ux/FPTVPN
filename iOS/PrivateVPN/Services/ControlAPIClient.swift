@@ -55,7 +55,7 @@ struct ControlAPIClient {
     enum ClientError: LocalizedError {
         case badResponse
         case server(String)
-        case transport(Error)
+        case transport(endpoint: String, Error)
 
         var errorDescription: String? {
             switch self {
@@ -63,8 +63,8 @@ struct ControlAPIClient {
                 return "The coordinator returned an invalid response."
             case .server(let message):
                 return message
-            case .transport(let error):
-                return "Could not reach the coordinator: \(error.localizedDescription)"
+            case .transport(let endpoint, let error):
+                return "Could not reach the coordinator while requesting \(endpoint): \(error.localizedDescription)"
             }
         }
     }
@@ -96,7 +96,7 @@ struct ControlAPIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw ClientError.transport(error)
+            throw ClientError.transport(endpoint: "registration", error)
         }
         guard let http = response as? HTTPURLResponse else {
             throw ClientError.badResponse
@@ -132,7 +132,7 @@ struct ControlAPIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw ClientError.transport(error)
+            throw ClientError.transport(endpoint: "locations", error)
         }
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             return []
@@ -154,7 +154,7 @@ struct ControlAPIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw ClientError.transport(error)
+            throw ClientError.transport(endpoint: "token", error)
         }
         guard let http = response as? HTTPURLResponse else {
             throw ClientError.badResponse
