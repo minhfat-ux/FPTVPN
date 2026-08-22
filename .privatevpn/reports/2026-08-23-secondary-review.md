@@ -59,20 +59,25 @@ not reachable from this repo and is flagged as missing evidence where relevant.
 
 ### HIGH — release blockers
 
-**H1. Public `/v1/tokens` bootstrap + no subscription-backed enrollment = paywall/revocation bypass (MUST verify production)**
+**H1. Public `/v1/tokens` bootstrap + no subscription-backed enrollment = paywall/revocation bypass — [CONFIRMED 2026-08-23]**
 - Path: `iOS/PrivateVPN/VPNManager.swift:132-133` (`bootstrap.fetchJoinToken()` — no auth),
-  `iOS/PrivateVPN/Services/ControlAPIClient.swift:145-167` (`POST /v1/tokens`).
+  `iOS/PrivateVPN/Services/ControlAPIClient.swift:145-167` (`POST /v1/tokens`);
+  server-side: VPS `/root/privatevpn/dist/server.js` (`app.post('/v1/tokens')`).
 - Facts: app mints a fresh join token on every Connect; token is single-use, 30-min
   expiry. SRS Appendix A2 + `DECISIONS.md` require production tokens to be issued for a
   registered user with an active subscription, and the public bootstrap endpoint must be
   disabled outside local/internal builds. FR-AUTH-001 is still NOT_STARTED.
-- Impact: if production still serves unauthenticated `POST /v1/tokens`, anyone with the
-  app can mint a token, register a peer, and use the exit node for free (paywall bypass),
-  and revocation is trivially bypassed (revoked device mints a new token + new name).
-  Coordinator code lives on the VPS, not in this repo → **no evidence available here**.
-- Missing evidence: `curl -X POST https://api.meetflowai.site/v1/tokens` (no auth) status.
-- Fix: close public bootstrap or bind tokens to user+subscription before App Store
-  submission; otherwise document explicitly in Review Notes with a follow-up plan.
+- **CONFIRMED via evidence `evidence/2026-08-23-tokens-open-production.md` (2026-08-23):**
+  - Static: `/v1/tokens` protected by `ADMIN_TOKEN` **only when set**, open otherwise.
+  - Runtime: `privatevpn.service` running process has NO `ADMIN_TOKEN` (env = NODE_ENV=production only).
+  - External: `curl -X POST https://api.meetflowai.site/v1/tokens` (no auth) → **HTTP 201 + valid token** (masked in evidence).
+  - `wg show wg0 peers` → 13 peers.
+- Impact: anyone with the app can mint tokens → free VPN (paywall bypass); revoked devices
+  can re-register with a new token + name (FR-REVOKE-002 at risk; HIGH per SECURITY.md §6).
+  NFR-SEC-004/AC-018 evidence covers only the superseded `control-plane/`, not this coordinator.
+- Logged as **BUG-20260823-001** (HIGH, NEW). Fix options: set `ADMIN_TOKEN` + Bearer,
+  or bind tokens to user+subscription (SRS A2), or restrict to localhost via Caddy ACL.
+- **Release-blocking:** must be closed before App Store submission.
 
 **H2. Real-device E2E (exit IP / DNS / HTTPS / reconnect / revoke) not verified after latest changes**
 - Facts: `VERIFIED_FACTS.md` tail: "NOT verified: latest iOS/macOS production end-to-end
@@ -147,7 +152,7 @@ not reachable from this repo and is flagged as missing evidence where relevant.
 | RAG retrieval | 5 searches (server selection, exit node, iOS publish, storekit, macOS unlock) | pass | VERIFY-20260823-001 |
 | Static review of iOS sources | read-only inspection (files in section 4) | pass (findings above) | VERIFY-20260823-001 |
 | Real-device VPN E2E | not run (no device/production evidence in repo) | **not_run** | H2 |
-| Production `/v1/tokens` auth check | not run (backend not reachable from this review) | **not_run** | H1 |
+| Production `/v1/tokens` auth check | static (server.js) + runtime env + external curl → **201 no auth** | **FAIL (open)** | H1 / evidence/2026-08-23-tokens-open-production.md |
 | StoreKit sandbox purchase/restore | not run | **not_run** | M4 |
 
 ---
@@ -156,7 +161,7 @@ not reachable from this repo and is flagged as missing evidence where relevant.
 
 | Area | Reason | Required before release |
 |---|---:|
-| `POST /v1/tokens` without auth still open in production? | H1 — paywall/revocation bypass | **yes** |
+| `POST /v1/tokens` without auth still open in production? | H1 — **CONFIRMED OPEN** (evidence 2026-08-23) | **yes** |
 | Real-device tunnel + exit IP = 103.173.155.50 | H2 — Apple review will test | **yes** |
 | StoreKit sandbox purchase/restore/free-trial flow | M4 — no real evidence yet | **yes** |
 | Release archive signing team (must match Keychain access group) | M1 | **yes** |
@@ -170,12 +175,13 @@ not reachable from this repo and is flagged as missing evidence where relevant.
 
 ## 9. Conclusion
 
-**PARTIAL — proceed with caveats.** No code-level blocker in the reviewed sources, but
-App Store submission should be gated on closing the four "yes" items in section 7, in priority
-order: (1) verify/close public `/v1/tokens`, (2) pin release signing team + verify shared
-Keychain, (3) real-device egress verification, (4) StoreKit sandbox test. M2-M5 and L1-L4
-should be tracked for the next tasks (A8 server selection, account model) and do not block
-the current publish.
+**PARTIAL — proceed with caveats.** **H1 is now CONFIRMED OPEN** (evidence
+`evidence/2026-08-23-tokens-open-production.md`, BUG-20260823-001) and is the top
+release blocker: close it (set `ADMIN_TOKEN` + Bearer, or bind to user+subscription, or
+restrict to localhost) before App Store submission, then re-verify with an external
+unauthenticated curl (must return 401/403). Remaining gates: (2) pin release signing team
++ verify shared Keychain, (3) real-device egress verification, (4) StoreKit sandbox test.
+M2-M5 and L1-L4 tracked for the next tasks (A8 server selection, account model).
 
 ---
 

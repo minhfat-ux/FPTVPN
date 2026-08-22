@@ -1,7 +1,7 @@
 # BUG INDEX
 
-- **Status:** empty at bootstrap
-- **Date:** 2026-08-19
+- **Status:** 1 open (BUG-20260823-001)
+- **Date:** 2026-08-19 (updated 2026-08-23)
 - **Severity model:** CRITICAL / HIGH / MEDIUM / LOW (spec §77)
 - **Bug statuses:** NEW / TRIAGED / READY / ASSIGNED / FIXING / FIXED_UNVERIFIED / VERIFYING / RESOLVED / REOPENED / BLOCKED / WONT_FIX / DUPLICATE (spec §76)
 
@@ -9,7 +9,7 @@
 
 | ID | Title | Sev | Status | Gate | Found by |
 |----|-------|-----|--------|------|----------|
-| (none) | | | | | |
+| BUG-20260823-001 | Production `POST /v1/tokens` open without auth (paywall/revocation bypass) | HIGH | NEW | 4 / publish-prep | DSH secondary reviewer |
 
 ## Regressions
 
