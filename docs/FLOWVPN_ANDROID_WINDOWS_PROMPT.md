@@ -114,19 +114,28 @@ http://127.0.0.1:9000/admin
 
 ## Main App Flow
 
+This flow should match the planned iOS and macOS upgrade: backend-first server
+selection, no production dependency on local hardcoded server presets.
+
 1. App launches.
 2. Load stored device identity and WireGuard keypair, or create them.
-3. Fetch node list from `https://api.meetflowai.site/v1/nodes`.
-4. Select default node from the backend list: prefer Vietnam / Hanoi / `vietnam-1`; otherwise use the first active node.
-5. Show main screen:
+3. Fetch node list from `https://api.meetflowai.site/v1/nodes` before allowing
+   VPN connection.
+4. Show a server/location selector populated from the backend node list.
+5. Select default node from the backend list: prefer Vietnam / Hanoi /
+   `vietnam-1`; otherwise use the first active node.
+6. Require one active backend node to be selected before Connect is enabled.
+7. Static/hardcoded server definitions are allowed only as DEBUG/internal
+   fallback data, not as the normal production UI path.
+8. Show main screen:
    - Logo
    - App title: FlowVPN
    - Subtitle: Private, encrypted internet from Vietnam
    - Premium status card
    - VPN state card
-   - Location card
+   - Location/server selector card
    - Large circular power button
-6. If user taps Connect:
+9. If user taps Connect:
    - If user is not Premium, show paywall.
    - If user is Premium:
      - Immediately show `Connecting` state and disable duplicate Connect taps.
@@ -138,8 +147,8 @@ http://127.0.0.1:9000/admin
      - Start VPN tunnel.
      - While provisioning or waiting for VPN permission, show a short status such
        as `Preparing VPN permission...` so the app does not feel frozen.
-7. If connected, power button disconnects VPN.
-8. If failed, show safe error message only.
+10. If connected, power button disconnects VPN.
+11. If failed, show safe error message only.
 
 ## Localization And Language Settings
 

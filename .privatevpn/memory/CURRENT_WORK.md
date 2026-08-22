@@ -83,6 +83,13 @@ Current task tracked here (schema per spec §31). Structured state also in
 
 ## Next task (continuation rule §103)
 
+- **Next-version server selection upgrade (iOS + macOS)**: remove the production
+  dependency on hardcoded `VPNLocation.presets` / local fallback nodes. On app
+  launch, both clients must load exit nodes from `GET /v1/nodes`, show the user
+  a server/location selector, require a selected active backend node before
+  Connect, then build the WireGuard config from that selected node. Keep any
+  static node seed only as a DEBUG/internal fallback, not as the normal
+  production UI path.
 - **Design + build account login & add-device (Tailscale-style)**: users table,
   auth (email+password or token), user→devices ownership, device list UI, revoke.
 - Production device onboarding: keep registration idempotent by stable device

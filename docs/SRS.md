@@ -306,6 +306,19 @@ The macOS app's data plane was refactored from shelling out to `wg-quick`
 - Android/Windows must support English, Vietnamese, Chinese, Japanese, and
   Korean with full language names and flag emoji in the in-app picker.
 
+### A8. Next client upgrade: backend-first server selection (2026-08-23)
+
+- iOS and macOS must move fully to backend-first exit-node selection in the
+  next version.
+- On launch, each app should load active exit nodes from `GET /v1/nodes` before
+  enabling Connect.
+- The user should choose a server/location from the backend node list, and the
+  selected active node should be persisted locally.
+- Connect should build WireGuard config from the selected backend node only.
+- Hardcoded `VPNLocation.presets` or local fallback nodes should be limited to
+  DEBUG/internal fallback behavior and must not be the normal production UI
+  path.
+
 > **Action (owner/next session):** fold A2/A4 into §1–§8 and the requirements
 > registry (FR-AUTH-001, FR-DEVICE multi-device, exit-node selection), and open
 > a CR against RS-20260819-01 before promoting the next baseline.
