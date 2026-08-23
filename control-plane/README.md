@@ -32,7 +32,7 @@ and provisions the peer on the WireGuard node (Tailscale-style).
 | `SMTP_USER` | (empty) | SMTP username (mailbox, e.g. `no-reply@meetflowai.site`) |
 | `SMTP_PASS` | (empty) | SMTP password (set on the VPS env only; never commit) |
 | `FROM_EMAIL` | `FlowVPN <no-reply@meetflowai.site>` | sender address used for OTP emails |
-| `NODE_ENV` | `development` | `production` gates real Resend sends and removes `debug_code` from `/v1/auth/email/start` responses; in dev the OTP code is returned as `debug_code` and no email is sent |
+| `NODE_ENV` | `development` | `production` gates real SMTP sends and removes `debug_code` from `/v1/auth/email/start` responses; in dev the OTP code is returned as `debug_code` and no email is sent |
 | `LEGACY_MODE` | `1` | **Temporary App Store review compat.** `1` keeps the pre-auth flow working: `POST /v1/tokens` issues one-time join tokens (30-min, single-use) and `/v1/peers/register` accepts unauthenticated register with a join token. Set `0` after the authenticated app build (email login + enrollment tokens) is released to fail closed (410/401). Server logs a warning while `1`. |
 
 ## Endpoints
@@ -139,6 +139,22 @@ Per-node health probe (used by the admin page Health column):
   node only; `null` for nodes on other hosts until a remote agent exists).
 - `capability`: wg interface up/down, peer count, host uptime, load average.
 - Unreachable -> `reachable: false`, `latency_ms: null`.
+
+### Email-code authentication (account model, FR-AUTH-001)
+
+- `POST /v1/auth/email/start` `{email}` -> 202; sends a 6-digit OTP by SMTP
+  (production) or returns `debug_code` (dev / allowlisted emails). Rate-limited
+  to 3 sends / 15 min / email (429).
+- `POST /v1/auth/email/verify` `{email, code}` -> 201 `{access_token, user}`;
+  session TTL 30 days; 5 failed attempts invalidate the code. Creates the user
+  account on first verify (email-only login; no Apple/Firebase).
+- `POST /v1/enrollment-tokens` (Bearer) -> 201 one-time enrollment token
+  (10 min) — requires an active subscription (403 otherwise).
+- `POST /v1/peers/register` (Bearer + enrollment token) — new authenticated flow
+  (also accepts legacy join-token when LEGACY_MODE=1).
+- Admin user management: `GET /v1/admin/users`,
+  `POST /v1/admin/users/:id/subscription` (grant days),
+  `POST /v1/admin/users/:id/revoke` (kills sessions).
 
 ### `POST /device`
 

@@ -5,9 +5,9 @@
       "id": "FR-AUTH-001",
       "version": "v1",
       "state": "APPROVED",
-      "impl": "PARTIAL",
+      "impl": "IMPLEMENTED",
       "gate": "GATE_4",
-      "evidence": "control-plane/src/auth-store.js + /v1/auth/email/*; iOS/PrivateVPN/Services/AuthSessionStore.swift; mac/PrivateVPNMac/AuthSessionStoreMac.swift; repo-side implemented 2026-08-23 (email-only login, enrollment tokens); production deployed (LEGACY_MODE=1); RESEND_API_KEY + subscription source pending"
+      "evidence": "control-plane/src/auth-store.js + /v1/auth/email/start|verify + /v1/enrollment-tokens + admin users; SMTP mailer (docs/MAILER_RESEND.md, SPF+DMARC verified); iOS/PrivateVPN/LoginView.swift + AuthSessionStore.swift; mac equivalent; production full flow verified 2026-08-23 (OTP email real -> session 30d -> enrollment -> register 201); subscription source still pending App Store product review"
     },
     {
       "id": "FR-DEVICE-001",

@@ -67,6 +67,12 @@ allowedIPs 0.0.0.0/0.
 - iOS app and packet tunnel plist/entitlements lint OK after App Store prep.
 - iOS Swift parse passes after StoreKit paywall, debug premium bypass, language
   pack, and Apple subscription disclosure changes.
+- **Email-OTP login production verified (2026-08-23)**: `POST /v1/auth/email/start`
+  sends real OTP via the owner SMTP server (`no-reply@meetflowai.site`, Postfix 465);
+  SPF PASS + DMARC `p=none` added -> **iCloud (me.com) and Gmail receive OTP**.
+  Full auth flow verified: start -> verify (session 30d) -> enrollment-token 201 ->
+  Bearer register 201 -> peer in wg0. Login screen is a dedicated full-screen view
+  (iOS `LoginView.swift`, macOS `LoginViewMac.swift`).
 - macOS UI now uses a fixed iPhone-sized content window, shows connecting
   feedback while provisioning/requesting VPN permission, disables duplicate
   Connect taps, surfaces safe errors, and has a close button on the paywall.

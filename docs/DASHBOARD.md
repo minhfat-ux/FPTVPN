@@ -17,7 +17,7 @@ Current SRS: v0.1
 Requirement baseline: RS-20260819-01
 Rule baseline: RULESET-0001
 
-Requirements VERIFIED: 2 (FR-VPN-005, NFR-UX-001)
+Requirements VERIFIED: 2 (FR-VPN-005, NFR-UX-001) · IMPLEMENTED: 18/23 (incl. FR-AUTH-001 email-OTP)
 Gates VERIFIED: 1 / 8 (GATE 1)
 Verification checks: BUILD PASS ✓ · TESTS PASS ✓ (14/14 control-plane incl. mailer + legacy + rate limits; iOS 39/39 historical) · PRODUCTION DEPLOY ✓ 2026-08-23 (dual-mode, devices migrated 15/15, legacy register 200/201, real wg provisioning)
 

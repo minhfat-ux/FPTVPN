@@ -162,7 +162,10 @@ LEGACY (App-Store-review build, LEGACY_MODE=1 only):
 ```
 
 Note: Sign in with Apple and Firebase Auth are explicitly NOT used (owner decision
-2026-08-23); production login is email-OTP only (see `docs/MAILER_RESEND.md`).
+2026-08-23); production login is email-OTP only, delivered by the owner SMTP mail server
+(Postfix 465; SPF pass + DMARC p=none verified 2026-08-23 — iCloud/Gmail receive OTP).
+Session TTL 30 days, persisted in Keychain. Admin user management: `GET /v1/admin/users`,
+grant/revoke subscription, revoke user (see `control-plane/README.md`).
 
 ### B4. Key differences from GATE 0 baseline
 

@@ -213,11 +213,14 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
 
 ### A2. Pending requirements for next baseline (Tailscale account model)
 
-- **FR-AUTH-001 (account login)**: user signs in (email-code fallback, Sign in
-  with Apple once server-side Apple JWT verification is deployed). iOS/macOS
-  now persist coordinator sessions in Keychain for enrollment.
+- **FR-AUTH-001 (account login)**: user signs in with **email OTP** (SMTP mailer,
+  `docs/MAILER_RESEND.md`); session TTL 30 days persisted in Keychain (no re-login).
+  Implemented repo-side + production (2026-08-23): `/v1/auth/email/start|verify`,
+  `/v1/enrollment-tokens`, Bearer-bound register, admin user management.
+  Sign in with Apple / Firebase explicitly NOT used (owner decision).
 - **FR-DEVICE multi-device ownership**: one user owns many devices (Tailscale
   model); device registration tied to the signed-in user rather than a join token.
+  (Devices already carry `userId` in the registry; user-facing device list UI pending.)
 - **Production enrollment token model**: tokens are issued for a registered user
   ID with an active subscription, then consumed by device registration to create
   or update that user's device record. Public/dev `/v1/tokens` bootstrap must be
