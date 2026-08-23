@@ -18,7 +18,11 @@ final class VPNManager: ObservableObject {
     private var manager: NETunnelProviderManager?
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
 
+    /// Static ref cho AppDelegate (applicationWillTerminate -> disconnect).
+    nonisolated(unsafe) static weak var sharedForTerminate: VPNManager?
+
     init() {
+        VPNManager.sharedForTerminate = self
         statusObserver = NotificationCenter.default.addObserver(
             forName: .NEVPNStatusDidChange,
             object: nil,

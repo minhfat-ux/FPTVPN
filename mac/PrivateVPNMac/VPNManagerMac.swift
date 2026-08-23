@@ -29,7 +29,11 @@ final class VPNManagerMac: ObservableObject {
     private var statusPollTask: Task<Void, Never>?
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
 
+    /// Static ref cho AppDelegate (applicationWillTerminate -> disconnect).
+    nonisolated(unsafe) static weak var sharedForTerminate: VPNManagerMac?
+
     init() {
+        VPNManagerMac.sharedForTerminate = self
         refreshPublicKey()
         selectedNodeID = UserDefaults.standard.string(forKey: "selectedNodeID")
         statusObserver = NotificationCenter.default.addObserver(

@@ -1,7 +1,16 @@
 import SwiftUI
+import AppKit
+
+/// App delegate: tắt VPN tunnel khi quit app (Cmd+Q).
+final class PrivateVPNMacAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        VPNManagerMac.sharedForTerminate?.disconnect()
+    }
+}
 
 @main
 struct PrivateVPNMacApp: App {
+    @NSApplicationDelegateAdaptor(PrivateVPNMacAppDelegate.self) private var appDelegate
     @StateObject private var vpnManager = VPNManagerMac()
     @StateObject private var subscriptionStore = MacSubscriptionStore()
     @StateObject private var authStore = AuthSessionStore()
