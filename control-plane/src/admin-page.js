@@ -334,7 +334,12 @@ export function adminPageHTML() {
       nodesBody: document.getElementById("nodesBody"),
     };
 
-    fields.baseUrl.value = window.location.origin;
+    // Auto-detect the API base: when this page is served under
+    // /PrivateVPN/Admin (Caddy strips the prefix), keep the prefix so API
+    // calls hit the proxy too; when served at /admin (SSH tunnel) use origin.
+    fields.baseUrl.value =
+      window.location.origin +
+      window.location.pathname.replace(/\/admin\/?$/i, "");
 
     function setStatus(message, isError = false) {
       fields.status.textContent = message;
