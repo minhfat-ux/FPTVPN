@@ -105,7 +105,11 @@ Current task tracked here (schema per spec §31). Structured state also in
   the App-Store-review build while the new authenticated flow (email login, enrollment
   tokens) is also live. So a node deploy during the review window is safe — do NOT set
   `LEGACY_MODE=0` until the authenticated app is released.
-  **Deploy timing (owner, 2026-08-23): DO NOT deploy to production yet** — the current
+  **DEPLOYED 2026-08-23 (see DECISIONS.md):** VPS production now runs this dual-mode
+  server (`flowvpn-cp.service`, port 7778; Caddy switched; devices migrated 15/15;
+  legacy flow verified for the review build; rollback script ready). LEGACY_MODE stays 1
+  until the authenticated app is released.
+  **Deploy timing (owner, 2026-08-23): initial guidance was DO NOT deploy to production yet** — the current
   app build (depends on open `/v1/tokens`) is submitted for App Store review; deploying the
   fail-closed fix now would break the reviewer's connect test. Deploy the coordinator fix +
   the authenticated app build **together AFTER App Store approval**, then:

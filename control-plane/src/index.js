@@ -140,6 +140,11 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// Alias kept for compatibility with the previous production coordinator.
+app.get("/v1/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.get(["/admin", "/admin/"], requireAdminIP, (_req, res) => {
   res.type("html").send(adminPageHTML());
 });
