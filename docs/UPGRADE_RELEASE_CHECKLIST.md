@@ -28,7 +28,7 @@
 - [x] StoreKit paywall (Monthly_Premium / Yearly_Premium) — chờ products approve
 - [x] **Force update gate** (`/v1/app-version` + AppVersionService + ForceUpdateView iOS/macOS) — user dưới minimum_version bị chặn dùng + nút Update mở App Store. Quản lý qua admin `PATCH /v1/admin/app-version`.
   - **Trạng thái hiện tại: DISABLED** (`minimum_version = 0.0.0`) — **chưa có version nào trên App Store nên chưa bật** (owner: bật khi có bản đầu trên store rồi release bản sau, set minimum_version = bản trước).
-- [ ] Real-device E2E (xem `docs/E2E_DEVICE_TEST.md`)
+- [x] **Real-device E2E (iPhone 14 Pro Max) PASS 2026-08-23** — evidence `evidence/e2e/2026-08-23-iphone-e2e.md`; macOS connect pending NE profile (owner tạo trên portal)
 - [ ] (Pending) Device list + Revoke UI trong app (FR-REVOKE-001/002 UI)
 - [ ] (Pending) Multi-device ownership UI (FR-DEVICE)
 

@@ -93,7 +93,9 @@ allowedIPs 0.0.0.0/0.
 
 ## What is implemented but unverified?
 - iOS App Store Archive, Validate, Upload, App Store Connect processing, and
-  Review submission.
+  Review submission (iPhone E2E đã PASS — evidence `evidence/e2e/2026-08-23-iphone-e2e.md`).
+- macOS end-to-end connect: cần NE provisioning profile (0 profiles hiện tại;
+  owner tạo trên Apple Developer Portal cho com.privatevpn.mac + .mac.packet-tunnel).
 - macOS end-to-end tunnel connection/exit IP after latest NetworkExtension
   runtime fixes. Build/package are verified; live VPN egress still needs a
   signed run and public-IP check.

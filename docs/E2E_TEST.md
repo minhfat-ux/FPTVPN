@@ -42,6 +42,12 @@ ISP path. Also verify DNS, HTTPS, reconnect, IPv6 behavior/leakage.
 Per step, capture: timestamp, commit, screenshot or log, pass/fail, verifier.
 Store in `evidence/e2e/`. Sanitize secrets (RULE-EVID-005).
 
+## 6b. Kết quả chạy thật (2026-08-23) — PASS
+
+- iPhone 14 Pro Max E2E PASS đầy đủ (login OTP thật, IP=103.173.155.50, DNS/HTTPS,
+  disconnect/reconnect, session persist) — evidence `evidence/e2e/2026-08-23-iphone-e2e.md`.
+- macOS: chờ NE provisioning profile (0 profiles hiện tại).
+
 ## 7. Known GATE-1 boundary
 
 GATE 1 does not execute this plan. It proves: targets build, capability wiring

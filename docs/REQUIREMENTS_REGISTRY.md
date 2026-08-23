@@ -15,10 +15,10 @@
 | FR-DEVICE-002 | On-device WireGuard keygen, private key local | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
 | FR-PROVISION-001 | Tunnel IP allocation + client config | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
 | FR-PROVISION-002 | Vietnam node assignment + server peer | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
-| FR-VPN-001 | Establish WireGuard tunnel to VN node | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
-| FR-VPN-002 | Route Internet via tunnel (0.0.0.0/0) | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
-| FR-VPN-003 | Disconnect restores normal routing | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
-| FR-VPN-004 | Reconnect after disconnect | v1 | APPROVED | IMPLEMENTED (GATE 2) | 2 |
+| FR-VPN-001 | Establish WireGuard tunnel to VN node | v1 | APPROVED | VERIFIED (iPhone E2E 2026-08-23) | 2 |
+| FR-VPN-002 | Route Internet via tunnel (0.0.0.0/0) | v1 | APPROVED | VERIFIED (iPhone E2E 2026-08-23) | 2 |
+| FR-VPN-003 | Disconnect restores normal routing | v1 | APPROVED | VERIFIED (iPhone E2E 2026-08-23) | 2 |
+| FR-VPN-004 | Reconnect after disconnect | v1 | APPROVED | VERIFIED (iPhone E2E 2026-08-23) | 2 |
 | FR-VPN-005 | Real VPN state model, no fake connected | v1 | APPROVED | IMPLEMENTED (GATE 1) | 1 |
 | FR-REVOKE-001 | Owner can revoke device | v1 | APPROVED | PARTIAL (GATE 4) | 4 |
 | FR-REVOKE-002 | Revoked device cannot connect | v1 | APPROVED | PARTIAL (GATE 4) | 4 |

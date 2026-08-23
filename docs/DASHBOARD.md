@@ -17,9 +17,9 @@ Current SRS: v0.1
 Requirement baseline: RS-20260819-01
 Rule baseline: RULESET-0001
 
-Requirements VERIFIED: 2 (FR-VPN-005, NFR-UX-001) · IMPLEMENTED: 18/23 (incl. FR-AUTH-001 email-OTP)
+Requirements VERIFIED: 6 (FR-VPN-001..005, NFR-UX-001 — FR-VPN-001..004 verified by real-device E2E 2026-08-23) · IMPLEMENTED: 18/23
 Gates VERIFIED: 1 / 8 (GATE 1)
-Verification checks: BUILD PASS ✓ · TESTS PASS ✓ (14/14 control-plane incl. mailer + legacy + rate limits; iOS 39/39 historical) · PRODUCTION DEPLOY ✓ 2026-08-23 (dual-mode, devices migrated 15/15, legacy register 200/201, real wg provisioning)
+Verification checks: BUILD PASS ✓ · TESTS PASS ✓ (17/17 control-plane) · PRODUCTION DEPLOY ✓ · **IPHONE E2E ✓ 2026-08-23** (login OTP thật, IP=103.173.155.50, DNS/HTTPS, disconnect/reconnect, session persist — evidence/e2e/)
 
 Active agents: DSH orchestrator + opencode worker (UI sign-in task)
 Active experts: 0

@@ -14,7 +14,7 @@
     "GATE_6": "NOT_STARTED",
     "GATE_7": "NOT_STARTED"
   },
-  "requirements_verified": 1,
+  "requirements_verified": 6,
   "gates_verified": 2,
   "open_bugs": {
     "critical": 0,
@@ -23,8 +23,8 @@
     "low": 0
   },
   "blockers": [
-    "iOS App Store Archive, Validate, Upload, build processing, and review are not yet verified.",
-    "macOS end-to-end tunnel still needs a signed NetworkExtension run and public exit-IP verification after latest runtime fixes.",
+    "iOS App Store Archive, Validate, Upload, build processing, and review are not yet verified (iPhone E2E đã PASS).",
+    "macOS connect cần NE provisioning profile (0 profiles; owner tạo trên Apple Developer Portal).",
     "Production login email needs RESEND_API_KEY (email-OTP OTP not delivered yet); admin endpoints fail-closed until AUTH_TOKEN set.",
     "LEGACY_MODE=1 must stay until the authenticated app is released (then set 0).",
     "Subscription source pending App Store product review (test grant only)."
