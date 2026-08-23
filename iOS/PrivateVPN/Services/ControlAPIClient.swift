@@ -113,7 +113,8 @@ struct ControlAPIClient {
         platform: String,
         wireguardPublicKey: String,
         endpoint: String,
-        accessToken: String? = nil
+        accessToken: String? = nil,
+        exitNodeId: String? = nil
     ) async throws -> CoordinatorRegisterResponse {
         let url = baseURL.appendingPathComponent("v1/peers/register")
         var request = URLRequest(url: url)
@@ -122,13 +123,15 @@ struct ControlAPIClient {
         if let accessToken, !accessToken.isEmpty {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try JSONEncoder().encode([
+        var body: [String: String?] = [
             "name": name,
             "platform": platform,
             "wireguard_public_key": wireguardPublicKey,
             "endpoint": endpoint,
             "join_token": joinToken,
-        ])
+            "exit_node_id": exitNodeId,
+        ]
+        request.httpBody = try JSONEncoder().encode(body.compactMapValues { $0 })
 
         let data: Data
         let response: URLResponse

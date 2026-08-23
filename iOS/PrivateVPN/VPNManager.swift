@@ -143,7 +143,8 @@ final class VPNManager: ObservableObject {
                 joinToken: joinToken,
                 name: deviceName,
                 publicKey: privateKey.publicKey.base64Key,
-                accessToken: accessToken
+                accessToken: accessToken,
+                exitNodeId: store.selectedNodeID
             )
         } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
             let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
@@ -152,7 +153,8 @@ final class VPNManager: ObservableObject {
                 joinToken: retryToken,
                 name: Self.randomRegistrationName(),
                 publicKey: privateKey.publicKey.base64Key,
-                accessToken: accessToken
+                accessToken: accessToken,
+                exitNodeId: store.selectedNodeID
             )
         } catch ControlAPIClient.ClientError.server {
             let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
@@ -161,7 +163,8 @@ final class VPNManager: ObservableObject {
                 joinToken: retryToken,
                 name: deviceName,
                 publicKey: privateKey.publicKey.base64Key,
-                accessToken: accessToken
+                accessToken: accessToken,
+                exitNodeId: store.selectedNodeID
             )
         }
 
@@ -218,14 +221,15 @@ final class VPNManager: ObservableObject {
         "ios-\(UUID().uuidString.prefix(8).lowercased())"
     }
 
-    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String) async throws -> CoordinatorRegisterResponse {
+    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String, exitNodeId: String?) async throws -> CoordinatorRegisterResponse {
         let client = ControlAPIClient(baseURL: baseURL, joinToken: joinToken)
         return try await client.register(
             name: name,
             platform: "ios",
             wireguardPublicKey: publicKey,
             endpoint: "0.0.0.0:51820",  // outbound-only client; placeholder
-            accessToken: accessToken
+            accessToken: accessToken,
+            exitNodeId: exitNodeId
         )
     }
 

@@ -142,7 +142,8 @@ final class VPNManagerMac: ObservableObject {
                     joinToken: token,
                     name: deviceName,
                     publicKey: privateKey.publicKey,
-                    accessToken: accessToken
+                    accessToken: accessToken,
+                    exitNodeId: selectedNodeID
                 )
             } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
                 let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
@@ -151,7 +152,8 @@ final class VPNManagerMac: ObservableObject {
                     joinToken: retryToken,
                     name: Self.randomRegistrationName(),
                     publicKey: privateKey.publicKey,
-                    accessToken: accessToken
+                    accessToken: accessToken,
+                    exitNodeId: selectedNodeID
                 )
             } catch ControlAPIClient.ClientError.server {
                 let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
@@ -160,7 +162,8 @@ final class VPNManagerMac: ObservableObject {
                     joinToken: retryToken,
                     name: deviceName,
                     publicKey: privateKey.publicKey,
-                    accessToken: accessToken
+                    accessToken: accessToken,
+                    exitNodeId: selectedNodeID
                 )
             }
             let overlayIP = response.overlay_ip
@@ -195,14 +198,15 @@ final class VPNManagerMac: ObservableObject {
         }
     }
 
-    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String) async throws -> CoordinatorRegisterResponse {
+    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String, exitNodeId: String?) async throws -> CoordinatorRegisterResponse {
         let client = ControlAPIClient(baseURL: baseURL, joinToken: joinToken)
         return try await client.register(
             name: name,
             platform: "macos",
             wireguardPublicKey: publicKey,
             endpoint: "0.0.0.0:51820",
-            accessToken: accessToken
+            accessToken: accessToken,
+            exitNodeId: exitNodeId
         )
     }
 
