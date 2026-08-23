@@ -90,7 +90,7 @@ Current task tracked here (schema per spec §31). Structured state also in
 
 ## Next task (continuation rule §103)
 
-- **🟡 FIX BUG-20260823-001 in progress (release blocker, decision = Option F / SRS A2):** production
+- **🟡 BUG-20260823-001 (release blocker; repo fix DONE `afa7c7c` — deploy WAIT App Store approval):** production
   `POST /v1/tokens` is open without auth (confirmed 2026-08-23 — evidence
   `evidence/2026-08-23-tokens-open-production.md`). Anyone can mint join tokens -> free VPN
   (paywall bypass) and revoked devices can re-register (FR-REVOKE-002 at risk). Fix direction
@@ -100,7 +100,18 @@ Current task tracked here (schema per spec §31). Structured state also in
   unauthenticated POST -> 401/403. Current repo work adds Keychain auth sessions,
   email-code login UI, `/v1/enrollment-tokens`, Bearer-bound `/v1/peers/register`,
   and fail-closed legacy `/v1/tokens` / `/device` behavior in `control-plane/`.
-  Production VPS coordinator still must be updated/deployed and black-box verified.
+  **Deploy timing (owner, 2026-08-23): DO NOT deploy to production yet** — the current
+  app build (depends on open `/v1/tokens`) is submitted for App Store review; deploying the
+  fail-closed fix now would break the reviewer's connect test. Deploy the coordinator fix +
+  the authenticated app build **together AFTER App Store approval**, then:
+  1. Deploy coordinator fix to VPS; verify unauthenticated `/v1/tokens` -> 401/403/410.
+  2. Close remaining production gaps first (fix is NOT usable in production without these):
+     (a) subscription source: only `AUTH_DEV_GRANT_SUBSCRIPTION` test grant exists — need
+         StoreKit receipt verification server-side (or owner-defined manual grant policy),
+     (b) login: email-OTP has no mailer in production; `/v1/auth/apple` returns 501 (no
+         JWT verification) — pick email delivery or Sign in with Apple JWT verify,
+     (c) re-verify: signed-in subscribed user can mint enrollment token; unsubscribed /
+         revoked cannot; revoked device cannot re-register (FR-REVOKE-002).
 - **Next-version server selection upgrade (iOS remaining; macOS code/build verified)**:
   remove the production dependency on hardcoded `VPNLocation.presets` / local
   fallback nodes. On app launch, clients must load exit nodes from
