@@ -1,56 +1,86 @@
-import { promises as fs } from "node:fs";
-import { existsSync } from "node:fs";
-import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { existsSync, readFileSync } from "node:fs";
 
 /**
- * JSON-file backed exit-node registry.
+ * SQLite-backed exit-node registry (node:sqlite).
  *
- * The public app only sees active nodes; admin endpoints can manage active and
- * disabled records. Existing env-based single-node deployments are used as a
- * fallback until the first node is saved.
+ * The public app only sees active nodes; admin endpoints manage active and
+ * disabled records. On first run the store seeds itself from an optional
+ * legacy JSON file (nodes.json) or from the env-based fallback node.
+ *
+ * DB file is configured via NODES_DB_FILE (default ./data/nodes.db).
  */
 export class NodeStore {
-  constructor(filePath, fallbackNode) {
-    this.filePath = filePath;
+  constructor(dbPath, fallbackNode, { legacyJsonPath } = {}) {
+    this.dbPath = dbPath;
     this.fallbackNode = fallbackNode;
+    this.legacyJsonPath = legacyJsonPath;
+    this.db = new DatabaseSync(dbPath);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS exit_nodes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        country TEXT NOT NULL,
+        city TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        public_key TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 100,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    this._seedIfEmpty();
   }
 
-  async _loadRaw() {
-    if (!existsSync(this.filePath)) return [];
-    try {
-      const raw = await fs.readFile(this.filePath, "utf8");
-      const data = JSON.parse(raw);
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
+  _seedIfEmpty() {
+    const count = this.db.prepare("SELECT COUNT(*) AS c FROM exit_nodes").get().c;
+    if (count > 0) return;
+
+    // 1) Migrate from a legacy JSON file (nodes.json) if present.
+    if (this.legacyJsonPath && existsSync(this.legacyJsonPath)) {
+      try {
+        const raw = JSON.parse(readFileSync(this.legacyJsonPath, "utf8"));
+        const nodes = Array.isArray(raw) ? raw : raw.nodes ?? [];
+        for (const node of nodes.map(normalizeNode)) {
+          this._insert(node);
+        }
+        if (nodes.length > 0) return;
+      } catch {
+        // fall through to env fallback
+      }
+    }
+
+    // 2) Seed from the env-based fallback node (WG_SERVER_PUBKEY / WG_PUBLIC_ENDPOINT).
+    if (this.fallbackNode) {
+      this._insert(normalizeNode(this.fallbackNode));
     }
   }
 
-  async _load() {
-    const nodes = await this._loadRaw();
-    if (nodes.length > 0) return nodes.map(normalizeNode);
-    return this.fallbackNode ? [normalizeNode(this.fallbackNode)] : [];
+  _insert(node) {
+    this.db.prepare(`
+      INSERT INTO exit_nodes (id, name, country, city, endpoint, public_key, priority, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(node.id, node.name, node.country, node.city, node.endpoint, node.public_key, node.priority, node.active ? 1 : 0, node.created_at, node.updated_at);
   }
 
-  async _save(nodes) {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(nodes.map(normalizeNode), null, 2), "utf8");
+  _rows() {
+    return this.db.prepare("SELECT * FROM exit_nodes").all().map(rowToNode);
   }
 
   async all() {
-    return this._load();
+    return this._rows();
   }
 
   async active() {
-    const nodes = await this._load();
-    return nodes
+    return this._rows()
       .filter((node) => node.active)
       .sort((left, right) => left.priority - right.priority || left.name.localeCompare(right.name));
   }
 
   async findById(id) {
-    const nodes = await this._load();
-    return nodes.find((node) => node.id === id) ?? null;
+    const row = this.db.prepare("SELECT * FROM exit_nodes WHERE id = ?").get(id);
+    return row ? rowToNode(row) : null;
   }
 
   async findActiveById(id) {
@@ -64,7 +94,6 @@ export class NodeStore {
   }
 
   async create(input) {
-    const nodes = await this._load();
     const now = new Date().toISOString();
     const node = normalizeNode({
       ...input,
@@ -76,32 +105,36 @@ export class NodeStore {
     });
 
     validateNode(node);
-    if (nodes.some((existing) => existing.id === node.id)) {
+    const existing = this.db.prepare("SELECT id FROM exit_nodes WHERE id = ?").get(node.id);
+    if (existing) {
       const error = new Error(`Exit node '${node.id}' already exists`);
       error.statusCode = 409;
       throw error;
     }
 
-    nodes.push(node);
-    await this._save(nodes);
+    this._insert(node);
     return node;
   }
 
   async update(id, input) {
-    const nodes = await this._load();
-    const index = nodes.findIndex((node) => node.id === id);
-    if (index < 0) return null;
+    const existing = this.db.prepare("SELECT * FROM exit_nodes WHERE id = ?").get(id);
+    if (!existing) return null;
 
     const updated = normalizeNode({
-      ...nodes[index],
+      ...rowToNode(existing),
       ...input,
       id,
       updated_at: new Date().toISOString(),
     });
 
     validateNode(updated);
-    nodes[index] = updated;
-    await this._save(nodes);
+    this.db.prepare(`
+      UPDATE exit_nodes
+      SET name = ?, country = ?, city = ?, endpoint = ?, public_key = ?,
+          priority = ?, active = ?, updated_at = ?
+      WHERE id = ?
+    `).run(updated.name, updated.country, updated.city, updated.endpoint, updated.public_key,
+           updated.priority, updated.active ? 1 : 0, updated.updated_at, id);
     return updated;
   }
 
@@ -129,6 +162,21 @@ export function adminNode(node) {
     priority: node.priority,
     created_at: node.created_at,
     updated_at: node.updated_at,
+  };
+}
+
+function rowToNode(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    country: row.country,
+    city: row.city,
+    endpoint: row.endpoint,
+    public_key: row.public_key,
+    priority: row.priority,
+    active: row.active === 1,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 

@@ -22,7 +22,8 @@ and provisions the peer on the WireGuard node (Tailscale-style).
 | `AUTH_TOKEN` | (empty) | if set, `Authorization: Bearer *** required |
 | `ADMIN_ALLOWED_IPS` | `127.0.0.1,::1` | comma-separated client IPs allowed to access `/admin` and admin node APIs |
 | `DATA_FILE` | `./data/devices.json` | persistence for device registry |
-| `NODES_FILE` | `./data/nodes.json` | persistence for exit-node registry |
+| `NODES_DB_FILE` | `./data/nodes.db` | **SQLite** persistence for exit-node registry (`node:sqlite`; legacy `nodes.json` imported once on first run) |
+| `NODES_FILE` | `./data/nodes.json` | legacy JSON path, imported into SQLite on first run (kept for migration) |
 | `TLS_CERT_FILE` | (empty) | path to TLS certificate (PEM); together with `TLS_KEY_FILE` enables HTTPS (NFR-SEC-002) |
 | `TLS_KEY_FILE` | (empty) | path to TLS private key (PEM); enables HTTPS when both files are set |
 | `NODE_NAME` | (hostname) | node name reported by `GET /status` |

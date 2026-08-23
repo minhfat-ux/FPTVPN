@@ -30,7 +30,8 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN ?? "";
 const ADMIN_ALLOWED_IPS = parseAllowedIPs(process.env.ADMIN_ALLOWED_IPS ?? "");
 const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "devices.json");
 const AUTH_FILE = process.env.AUTH_FILE ?? path.join(__dirname, "..", "data", "auth.json");
-const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", "nodes.json");
+const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", "nodes.json"); // legacy JSON (imported once into SQLite)
+const NODES_DB_FILE = process.env.NODES_DB_FILE ?? path.join(__dirname, "..", "data", "nodes.db");
 const ALLOW_DEV_TOKEN_BOOTSTRAP = process.env.ALLOW_DEV_TOKEN_BOOTSTRAP === "1" && !IS_PRODUCTION;
 // LEGACY_MODE=1 keeps the pre-auth join-token + unauthenticated /v1/peers/register
 // flow working so a build that is already submitted to App Store review can still
@@ -76,7 +77,7 @@ const pool = new IPPool(IP_POOL_CIDR);
 const wg = new WireGuardManager({ interfaceName: WG_INTERFACE, wgBin: WG_BIN, dryRun: DRY_RUN });
 const store = new DeviceStore(DATA_FILE);
 const authStore = new AuthStore(AUTH_FILE);
-const nodeStore = new NodeStore(NODES_FILE, buildFallbackExitNode());
+const nodeStore = new NodeStore(NODES_DB_FILE, buildFallbackExitNode(), { legacyJsonPath: NODES_FILE });
 
 const app = express();
 app.set("trust proxy", true);

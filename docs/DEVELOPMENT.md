@@ -57,9 +57,11 @@ Targets:
   `flowvpn-cp.service` on the VPS (103.173.155.50): port 7778,
   `NODE_ENV=production`, `LEGACY_MODE=1`, dryRun=false; Caddy reverse-proxies
   `api.meetflowai.site` -> 127.0.0.1:7778.
-- Data: JSON files under `/root/flowvpn-cp/data/` (`devices.json`, `auth.json`,
-  `nodes.json`); migrated from the old sqlite coordinator
-  (`/root/.privatevpn/coordinator.db`, read with `sqlite3` CLI, now installed).
+- Data: `devices.json` + `auth.json` (JSON) and **`nodes.db` (SQLite, `node:sqlite`)**
+  under `/root/flowvpn-cp/data/`; exit nodes are stored in SQLite and served by
+  `GET /v1/nodes`; legacy `nodes.json` is imported into SQLite on first run.
+  Old sqlite coordinator DB (`/root/.privatevpn/coordinator.db`, read with
+  `sqlite3` CLI, now installed) is kept for audit.
 - Redeploy after changing `control-plane/`:
   ```bash
   rsync -az --exclude node_modules --exclude data control-plane/ root@103.173.155.50:/root/flowvpn-cp/
