@@ -62,9 +62,12 @@ Public list of active exit nodes for the app location picker:
 
 Browser admin page for managing exit nodes. It is reachable from the internet at
 `https://meetflowai.site/PrivateVPN/Admin` (owner decision 2026-08-23). The page
-only serves the form HTML (no data); it asks for `AUTH_TOKEN` and calls the
-admin APIs below, which require `Authorization: Bearer <AUTH_TOKEN>` (401
-without; 503 fail-closed when AUTH_TOKEN is unset).
+has two views: a **node list** (auto-loads when a saved token exists; token and
+API base persist in localStorage) and a **separate edit page** (opens on Edit,
+with the WireGuard Server Public Key preloaded from the node record). It asks
+for `AUTH_TOKEN` and calls the admin APIs below, which require
+`Authorization: Bearer <AUTH_TOKEN>` (401 without; 503 fail-closed when
+AUTH_TOKEN is unset).
 
 An SSH tunnel still works as an alternative:
 `ssh -L 9000:127.0.0.1:7778 root@103.173.155.50` then open
@@ -106,6 +109,33 @@ Updates node fields such as `name`, `endpoint`, `public_key`, `priority`, or
 
 Disables the exit node. Records are not physically removed so existing device
 history remains meaningful.
+
+### `GET /v1/admin/nodes/:id/health` (admin)
+
+Per-node health probe (used by the admin page Health column):
+
+```json
+{
+  "node_id": "node-1",
+  "endpoint": "103.173.155.50:443",
+  "reachable": true,
+  "latency_ms": 0.1,
+  "bandwidth": { "rx_bytes": 3130068712, "tx_bytes": 10137932948 },
+  "capability": {
+    "wg_interface": "wg0",
+    "wg_interface_up": true,
+    "peers": 13,
+    "uptime_s": 480098,
+    "load_avg": [0, 0.03, 0]
+  }
+}
+```
+
+- `latency_ms`: `ping -c 1 -W 2 <host>` from the coordinator.
+- `bandwidth`: `wg show <iface> transfer` summed over peers (coordinator-local
+  node only; `null` for nodes on other hosts until a remote agent exists).
+- `capability`: wg interface up/down, peer count, host uptime, load average.
+- Unreachable -> `reachable: false`, `latency_ms: null`.
 
 ### `POST /device`
 
