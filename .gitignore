@@ -41,3 +41,4 @@ Vendor/WireGuardKit/Sources/WireGuardKitGo/goroot/
 
 # Scratch task notes (not part of the project)
 tasks/
+.dhs-setup/
