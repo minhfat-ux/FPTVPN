@@ -33,6 +33,69 @@ struct ExitNode: Equatable, Codable, Identifiable {
     var public_key: String
 }
 
+extension ExitNode {
+    /// Fallback exit nodes used when the coordinator is unreachable (e.g. on
+    /// censored networks where the control plane domain/IP is blocked). Mirrors
+    /// the live production `exit_nodes` table — keep in sync with node-store.
+    static let builtInFallback: [ExitNode] = [
+        ExitNode(id: "node-1", name: "vietnam-1", country: "VN", city: "Hanoi",
+                 endpoint: "103.173.155.50:443",
+                 public_key: "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8="),
+        ExitNode(id: "vietnam-2", name: "Vietnam 2", country: "VN", city: "Hanoi",
+                 endpoint: "103.6.234.233:443",
+                 public_key: "OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=")
+    ]
+}
+
+/// Persists the last successfully fetched node list so the picker still shows
+/// servers when the coordinator is temporarily unreachable.
+enum ExitNodeCache {
+    private static let key = "cached.exitNodes.v1"
+
+    static func load() -> [ExitNode]? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(NodesResponse.self, from: data).nodes
+    }
+
+    static func save(_ nodes: [ExitNode]) {
+        guard let data = try? JSONEncoder().encode(NodesResponse(nodes: nodes)) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
+/// Last successful tunnel provisioning (overlay IP + exit node). Lets the app
+/// reconnect without the coordinator when it is temporarily unreachable (e.g.
+/// hotel captive portal or censored network) — the WireGuard peer still exists
+/// on the node's wg0, so the cached config remains valid.
+struct CachedTunnelConfig: Equatable, Codable {
+    var overlayIP: String
+    var node: ExitNode
+    var savedAt: Date
+}
+
+enum TunnelConfigCache {
+    private static let key = "cached.tunnelConfig.v1"
+
+    static func load() -> CachedTunnelConfig? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(CachedTunnelConfig.self, from: data)
+    }
+
+    static func save(overlayIP: String, node: ExitNode) {
+        let config = CachedTunnelConfig(overlayIP: overlayIP, node: node, savedAt: Date())
+        guard let data = try? JSONEncoder().encode(config) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
 struct NodesResponse: Equatable, Codable {
     var nodes: [ExitNode]
 }
@@ -119,6 +182,7 @@ struct ControlAPIClient {
         let url = baseURL.appendingPathComponent("v1/peers/register")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let accessToken, !accessToken.isEmpty {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -169,6 +233,10 @@ struct ControlAPIClient {
         let url = baseURL.appendingPathComponent("v1/nodes")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        // Short timeout so a blocked/slow control plane (e.g. censored
+        // networks) fails fast and the app can fall back to cached nodes
+        // instead of hanging on "Loading servers…" forever.
+        request.timeoutInterval = 10
         let data: Data
         let response: URLResponse
         do {
@@ -253,6 +321,7 @@ struct ControlAPIClient {
         let url = baseURL.appendingPathComponent("v1/enrollment-tokens")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 10
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         let data: Data
         let response: URLResponse

@@ -20,6 +20,9 @@ final class VPNManagerMac: ObservableObject {
     /// Exit nodes advertised by the coordinator (list of selectable servers).
     @Published var exitNodes: [ExitNode] = []
     @Published private(set) var isRefreshingNodes = false
+    /// True when the node list comes from cache/built-in fallback because the
+    /// coordinator was unreachable (e.g. censored network). UI shows a hint.
+    @Published private(set) var usingFallbackNodes = false
     /// Currently selected exit node id.
     @Published var selectedNodeID: String? {
         didSet { UserDefaults.standard.set(selectedNodeID, forKey: "selectedNodeID") }
@@ -132,51 +135,71 @@ final class VPNManagerMac: ObservableObject {
             let node = try await selectedExitNode(client: bootstrap)
             log.info("connect: selected node \(node.name, privacy: .public) @ \(node.endpoint, privacy: .public)")
 
-            log.info("connect: fetching enrollment token")
-            guard let accessToken = authStore.accessToken else {
-                throw ControlAPIClient.ClientError.missingSession
-            }
-            let token = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-
-            let deviceName = "mac-\(Self.stableSuffix(from: privateKey.publicKey))"
-            let response: CoordinatorRegisterResponse
+            var overlayIP: String
+            var exitNode = node
             do {
-                response = try await registerDevice(
-                    baseURL: baseURL,
-                    joinToken: token,
-                    name: deviceName,
-                    publicKey: privateKey.publicKey,
-                    accessToken: accessToken,
-                    exitNodeId: selectedNodeID
-                )
-            } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
-                let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-                response = try await registerDevice(
-                    baseURL: baseURL,
-                    joinToken: retryToken,
-                    name: Self.randomRegistrationName(),
-                    publicKey: privateKey.publicKey,
-                    accessToken: accessToken,
-                    exitNodeId: selectedNodeID
-                )
-            } catch ControlAPIClient.ClientError.server {
-                let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-                response = try await registerDevice(
-                    baseURL: baseURL,
-                    joinToken: retryToken,
-                    name: deviceName,
-                    publicKey: privateKey.publicKey,
-                    accessToken: accessToken,
-                    exitNodeId: selectedNodeID
-                )
+                log.info("connect: fetching enrollment token")
+                guard let accessToken = authStore.accessToken else {
+                    throw ControlAPIClient.ClientError.missingSession
+                }
+                let token = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+
+                let deviceName = "mac-\(Self.stableSuffix(from: privateKey.publicKey))"
+                let response: CoordinatorRegisterResponse
+                do {
+                    response = try await registerDevice(
+                        baseURL: baseURL,
+                        joinToken: token,
+                        name: deviceName,
+                        publicKey: privateKey.publicKey,
+                        accessToken: accessToken,
+                        exitNodeId: selectedNodeID
+                    )
+                } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
+                    let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                    response = try await registerDevice(
+                        baseURL: baseURL,
+                        joinToken: retryToken,
+                        name: Self.randomRegistrationName(),
+                        publicKey: privateKey.publicKey,
+                        accessToken: accessToken,
+                        exitNodeId: selectedNodeID
+                    )
+                } catch ControlAPIClient.ClientError.server {
+                    let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                    response = try await registerDevice(
+                        baseURL: baseURL,
+                        joinToken: retryToken,
+                        name: deviceName,
+                        publicKey: privateKey.publicKey,
+                        accessToken: accessToken,
+                        exitNodeId: selectedNodeID
+                    )
+                }
+                overlayIP = response.overlay_ip
+                log.info("connect: registered, overlay=\(overlayIP, privacy: .public)")
+                TunnelConfigCache.save(overlayIP: overlayIP, node: exitNode)
+                usingFallbackNodes = false
+            } catch ControlAPIClient.ClientError.transport {
+                // Coordinator unreachable (hotel captive portal / censored
+                // network): reconnect with the last successful tunnel config.
+                // The WireGuard peer still exists on the node's wg0.
+                guard let cached = TunnelConfigCache.load() else {
+                    throw ControlAPIClient.ClientError.transport(
+                        endpoint: "coordinator",
+                        MacError.cachedTunnelUnavailable
+                    )
+                }
+                overlayIP = cached.overlayIP
+                exitNode = cached.node
+                usingFallbackNodes = true
+                log.info("connect: coordinator unreachable — using cached tunnel config (overlay=\(overlayIP, privacy: .public))")
             }
-            let overlayIP = response.overlay_ip
-            log.info("connect: registered, overlay=\(overlayIP, privacy: .public)")
 
             let config = Self.buildConfig(privateKeyBase64: privateKey.privateKey,
                                           overlayIP: overlayIP,
-                                          exitEndpoint: node.endpoint,
-                                          exitPublicKey: node.public_key)
+                                          exitEndpoint: exitNode.endpoint,
+                                          exitPublicKey: exitNode.public_key)
             try await prepareConfiguration(config)
             guard let manager else {
                 throw MacError.savedConfigurationMissing
@@ -215,28 +238,41 @@ final class VPNManagerMac: ObservableObject {
     }
 
     /// Loads the list of exit nodes from the coordinator (for the picker).
+    /// On failure (e.g. control plane unreachable on a censored network) falls
+    /// back to the last cached list, then to built-in fallback nodes so the
+    /// picker is never empty.
     func refreshNodes() async {
         guard let baseURL = normalizedURL(coordinatorURL) else { return }
         isRefreshingNodes = true
         defer { isRefreshingNodes = false }
 
         let client = ControlAPIClient(baseURL: baseURL, joinToken: "")
+        var nodes: [ExitNode] = []
+        var fromFallback = false
         do {
-            let nodes = try await client.fetchNodes()
-            exitNodes = nodes
-            if let selectedNodeID, !nodes.contains(where: { $0.id == selectedNodeID }) {
-                self.selectedNodeID = nodes.first?.id
-            } else if selectedNodeID == nil, let first = nodes.first {
-                selectedNodeID = first.id
-            }
-            if nodes.isEmpty {
-                lastError = MacError.noExitNode.localizedDescription
-            } else if lastError == MacError.noExitNode.localizedDescription {
-                lastError = nil
+            nodes = try await client.fetchNodes()
+            if !nodes.isEmpty {
+                ExitNodeCache.save(nodes)
             }
         } catch {
-            lastError = error.localizedDescription
             NSLog("MacVPN: refreshNodes failed: \(error.localizedDescription)")
+        }
+        if nodes.isEmpty {
+            nodes = ExitNodeCache.load() ?? ExitNode.builtInFallback
+            fromFallback = true
+            NSLog("MacVPN: using fallback nodes (\(nodes.count))")
+        }
+        usingFallbackNodes = fromFallback
+        exitNodes = nodes
+        if let selectedNodeID, !nodes.contains(where: { $0.id == selectedNodeID }) {
+            self.selectedNodeID = nodes.first?.id
+        } else if selectedNodeID == nil, let first = nodes.first {
+            selectedNodeID = first.id
+        }
+        if nodes.isEmpty {
+            lastError = MacError.noExitNode.localizedDescription
+        } else if lastError == MacError.noExitNode.localizedDescription {
+            lastError = nil
         }
     }
 
@@ -245,12 +281,20 @@ final class VPNManagerMac: ObservableObject {
     }
 
     private func selectedExitNode(client: ControlAPIClient) async throws -> ExitNode {
-        let nodes = try await client.fetchNodes()
-        if !nodes.isEmpty {
+        // Prefer a fresh fetch, but fall back to whatever is already loaded
+        // (cached/built-in) so connect still works when the coordinator is
+        // temporarily unreachable on the current network.
+        if let nodes = try? await client.fetchNodes(), !nodes.isEmpty {
             exitNodes = nodes
+            ExitNodeCache.save(nodes)
+            usingFallbackNodes = false
             let selected = nodes.first { $0.id == selectedNodeID } ?? nodes.first!
             selectedNodeID = selected.id
             return selected
+        }
+        if let node = selectedNode ?? exitNodes.first {
+            usingFallbackNodes = true
+            return node
         }
         throw MacError.noExitNode
     }
@@ -339,6 +383,7 @@ final class VPNManagerMac: ObservableObject {
         case invalidURL(String)
         case noExitNode
         case savedConfigurationMissing
+        case cachedTunnelUnavailable
 
         var errorDescription: String? {
             switch self {
@@ -348,6 +393,8 @@ final class VPNManagerMac: ObservableObject {
                 return "No exit node available from the coordinator."
             case .savedConfigurationMissing:
                 return "The VPN configuration was saved but could not be reloaded."
+            case .cachedTunnelUnavailable:
+                return "Could not reach the coordinator and no saved tunnel is available yet. Connect once on a working network, then this network will work offline."
             }
         }
     }

@@ -109,29 +109,70 @@ final class VPNManager: ObservableObject {
     // MARK: - Coordinator provisioning
 
     /// Fetches the available exit nodes from the coordinator (for the picker).
+    /// On failure (e.g. control plane unreachable on a censored network) falls
+    /// back to the last cached list, then to built-in fallback nodes.
     func fetchNodes(store: VPNConfigStore) async {
         guard let baseURL = store.controlPlaneBaseURL else { return }
         let client = ControlAPIClient(baseURL: baseURL, joinToken: store.controlPlaneToken)
+        var nodes: [ExitNode] = []
+        var usedFallback = false
         do {
-            let nodes = try await client.fetchNodes()
-            store.remoteNodes = nodes
-            if store.selectedNodeID == nil, let first = nodes.first {
-                store.selectedNodeID = first.id
-                store.serverEndpoint = first.endpoint
-                store.serverPublicKey = first.public_key
+            nodes = try await client.fetchNodes()
+            if !nodes.isEmpty {
+                ExitNodeCache.save(nodes)
             }
         } catch {
-            // Non-fatal: fall back to local presets / manual config.
+            // Non-fatal: fall back to cache / local presets / manual config.
+        }
+        if nodes.isEmpty {
+            nodes = ExitNodeCache.load() ?? ExitNode.builtInFallback
+            usedFallback = true
+        }
+        store.usingFallbackNodes = usedFallback
+        store.remoteNodes = nodes
+        if store.selectedNodeID == nil, let first = nodes.first {
+            store.selectedNodeID = first.id
+            store.serverEndpoint = first.endpoint
+            store.serverPublicKey = first.public_key
         }
     }
 
     /// Registers this device with the PrivateVPN coordinator to obtain its
     /// overlay IP, then builds a WireGuard config that connects to the VPS
-    /// exit node (103.173.155.50) for Internet egress.
+    /// exit node (103.173.155.50) for Internet egress. On coordinator failure
+    /// (e.g. hotel captive portal / censored network) falls back to the last
+    /// successful tunnel config — the WireGuard peer still exists on wg0.
     private func provisionViaControlPlane(store: VPNConfigStore, authStore: AuthSessionStore, baseURL: URL) async throws -> WireGuardConfig {
         let privateKey = try KeychainStore.obtainOrCreatePrivateKey()
         devicePublicKey = privateKey.publicKey.base64Key
 
+        do {
+            return try await provisionFresh(store: store, authStore: authStore, baseURL: baseURL, privateKey: privateKey)
+        } catch ControlAPIClient.ClientError.transport {
+            guard let cached = TunnelConfigCache.load() else {
+                throw ConfigError.cachedTunnelUnavailable
+            }
+            store.usingFallbackNodes = true
+            NSLog("iOSVPN: coordinator unreachable — using cached tunnel config (overlay=\(cached.overlayIP))")
+            return WireGuardConfig(
+                name: "privatevpn",
+                privateKeyBase64: privateKey.base64Key,
+                addresses: ["\(cached.overlayIP)/24"],
+                dnsServers: ["1.1.1.1"],
+                peers: [
+                    WireGuardConfig.WireGuardPeer(
+                        publicKeyBase64: cached.node.public_key,
+                        endpoint: cached.node.endpoint,
+                        allowedIPs: ["0.0.0.0/0"],
+                        preSharedKeyBase64: nil,
+                        persistentKeepAlive: 25
+                    )
+                ]
+            )
+        }
+    }
+
+    private func provisionFresh(store: VPNConfigStore, authStore: AuthSessionStore, baseURL: URL, privateKey: PrivateKey) async throws -> WireGuardConfig {
         let deviceName = try registrationName()
         let bootstrap = ControlAPIClient(baseURL: baseURL, joinToken: "")
         guard let accessToken = authStore.accessToken else {
@@ -173,6 +214,8 @@ final class VPNManager: ObservableObject {
         }
 
         let exitNode = try await selectedExitNode(store: store, client: bootstrap)
+        store.usingFallbackNodes = false
+        TunnelConfigCache.save(overlayIP: response.overlay_ip, node: exitNode)
 
         return WireGuardConfig(
             name: "privatevpn",
@@ -192,29 +235,24 @@ final class VPNManager: ObservableObject {
     }
 
     private func selectedExitNode(store: VPNConfigStore, client: ControlAPIClient) async throws -> ExitNode {
-        let nodes = try await client.fetchNodes()
-        if !nodes.isEmpty {
+        // Prefer a fresh fetch, but fall back to whatever is already loaded
+        // (cached/built-in) so connect still works when the coordinator is
+        // temporarily unreachable on the current network.
+        if let nodes = try? await client.fetchNodes(), !nodes.isEmpty {
             store.remoteNodes = nodes
+            ExitNodeCache.save(nodes)
             let selected = nodes.first { $0.id == store.selectedNodeID } ?? nodes.first!
             store.selectedNodeID = selected.id
             store.serverEndpoint = selected.endpoint
             store.serverPublicKey = selected.public_key
             return selected
         }
-
-        // Backend-first (SRS A8): no hardcoded fallback in production.
-        #if DEBUG
-        return ExitNode(
-            id: "vietnam-1",
-            name: "Vietnam",
-            country: "VN",
-            city: "Hanoi",
-            endpoint: "103.173.155.50:443",
-            public_key: "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8="
-        )
-        #else
+        if let node = store.remoteNodes.first(where: { $0.id == store.selectedNodeID }) ?? store.remoteNodes.first {
+            store.serverEndpoint = node.endpoint
+            store.serverPublicKey = node.public_key
+            return node
+        }
         throw ConfigError.noBackendNode
-        #endif
     }
 
     private func registrationName() throws -> String {
@@ -278,6 +316,7 @@ final class VPNManager: ObservableObject {
     enum ConfigError: LocalizedError {
         case notConfigured
         case noBackendNode
+        case cachedTunnelUnavailable
 
         var errorDescription: String? {
             switch self {
@@ -285,6 +324,8 @@ final class VPNManager: ObservableObject {
                 return "Enter the server endpoint and peer public key in Configuration first."
             case .noBackendNode:
                 return "No exit node available from the server. Please try again."
+            case .cachedTunnelUnavailable:
+                return "Could not reach the server and no saved tunnel is available yet. Connect once on a working network, then this network will work offline."
             }
         }
     }

@@ -177,24 +177,57 @@ struct ContentView: View {
     // MARK: - Location
 
     private var locationCard: some View {
-        HStack(spacing: 14) {
-            Text(flagEmoji(for: locationCountry))
-                .font(.system(size: 34))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.title3)
+                    .foregroundStyle(VPNTheme.accent)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(locationName)
+                Text(languageStore.t(.serverLocation))
                     .font(.headline)
                     .foregroundStyle(.white)
-                Text(locationDetail)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+
+                Spacer()
+
+                Button {
+                    Task { await vpnManager.fetchNodes(store: configStore) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.7))
+                .disabled(vpnManager.state.isTransitioning)
+                .accessibilityLabel(languageStore.t(.refreshLocations))
             }
 
-            Spacer()
+            let nodes = configStore.availableNodes
+            if nodes.isEmpty {
+                Text(languageStore.t(.noServerAvailable))
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Picker(languageStore.t(.serverLocation), selection: Binding(
+                    get: { configStore.selectedNodeID ?? nodes.first?.id ?? "" },
+                    set: { selectNode(id: $0) }
+                )) {
+                    ForEach(nodes) { node in
+                        Text(serverTitle(for: node)).tag(node.id)
+                    }
+                }
+                .labelsHidden()
+                .disabled(vpnManager.state.isTransitioning)
+                .tint(.white)
 
-            Image(systemName: "mappin.and.ellipse")
-                .font(.title3)
-                .foregroundStyle(VPNTheme.accent.opacity(0.8))
+                if configStore.usingFallbackNodes {
+                    Text(languageStore.t(.usingSavedServers))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
         .padding(16)
         .background(VPNTheme.cardBackground)
@@ -203,6 +236,18 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(VPNTheme.cardStroke, lineWidth: 1)
         )
+    }
+
+    private func selectNode(id: String) {
+        configStore.selectedNodeID = id
+        if let node = configStore.availableNodes.first(where: { $0.id == id }) {
+            configStore.serverEndpoint = node.endpoint
+            configStore.serverPublicKey = node.public_key
+        }
+    }
+
+    private func serverTitle(for node: ExitNode) -> String {
+        "\(flagEmoji(for: node.country)) \(node.city), \(countryName(node.country)) · \(node.name)"
     }
 
     private var subscriptionStatusCard: some View {
@@ -244,24 +289,6 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(VPNTheme.cardStroke, lineWidth: 1)
         )
-    }
-
-    private var locationName: String {
-        if let node = configStore.selectedRemoteNode {
-            return "\(node.name) · \(node.city)"
-        }
-        return "Vietnam"
-    }
-
-    private var locationDetail: String {
-        if let node = configStore.selectedRemoteNode {
-            return countryName(node.country)
-        }
-        return languageStore.t(.secureExitNode)
-    }
-
-    private var locationCountry: String {
-        configStore.selectedLocation?.country ?? "VN"
     }
 
     // MARK: - Single one-tap primary button (NFR-UX-001 / AC-022)

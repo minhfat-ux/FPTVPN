@@ -34,6 +34,10 @@ Only evidence-backed statements. Agent/Expert claims are never promoted directly
 
 | VF-025 | **Node 2 (103.6.234.233) egress verified (2026-08-23):** device connect qua node 2, mạng thông (transfer 65 MiB/1.2 GiB, handshake 34s). Fix routing: thêm 10.77.0.1/24 vào wg0 + rp_filter=0 + NAT 10.77 (persist wg0.conf). Multi-node provisioning qua SSH hoạt động. | `docs/EXIT_NODE_RUNBOOK.md`, DECISIONS 2026-08-23 | 2026-08-23 |
 
+| VF-026 | **Censored-network resilience (2026-08-23):** khi coordinator unreachable (vd. network Trung Quốc chặn api.meetflowai.site), app không còn treo "Loading servers…" — `fetchNodes` có timeout 10s, sau đó fallback về cache (lần tải thành công gần nhất) rồi tới danh sách built-in (node-1 + vietnam-2, sync với production exit_nodes). macOS hiển thị hint "using saved servers"; iOS fallback âm thầm qua `availableNodes`. | source inspection: `ControlAPIClient.fetchNodes` (timeoutInterval=10), `ExitNodeCache`, `ExitNode.builtInFallback`, `VPNManagerMac.refreshNodes`, `VPNConfigStore.availableNodes`; parse OK iOS + macOS | 2026-08-23 |
+
+| VF-027 | **Cached reconnect (2026-08-23):** khi coordinator unreachable (hotel captive portal / mạng bị chặn), bấm Connect không còn báo "Could not reach the coordinator" nếu máy từng connect thành công — app lưu overlay IP + node vào `TunnelConfigCache` sau mỗi lần register OK, và fallback build config từ cache (peer vẫn còn trên wg0). Timeout 10s cho fetchNodes/register/enrollment-token để fail nhanh. | source inspection: `TunnelConfigCache` (ControlAPIClient.swift), `VPNManagerMac.connect` catch transport → cached, `VPNManager.provisionViaControlPlane` fallback cached; parse OK iOS + macOS | 2026-08-23 |
+
 NOT verified: latest iOS/macOS production end-to-end VPN connectivity,
 public-IP change, DNS/HTTPS through tunnel, reconnect/disconnect, and App Store
 review flow after the most recent paywall/localization/macOS NetworkExtension

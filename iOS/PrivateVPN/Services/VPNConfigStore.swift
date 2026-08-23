@@ -53,6 +53,9 @@ final class VPNConfigStore: ObservableObject {
     /// Exit nodes fetched from the control plane (Tailscale-style), plus any
     /// legacy local presets. Controls the location picker.
     @Published var remoteNodes: [ExitNode] = []
+    /// True when remoteNodes came from cache/built-in fallback because the
+    /// coordinator was unreachable (e.g. censored network). UI shows a hint.
+    @Published var usingFallbackNodes = false
     /// The exit node id currently selected.
     @Published var selectedNodeID: String? {
         didSet { defaults.set(selectedNodeID, forKey: Key.selectedNodeID) }
@@ -64,7 +67,9 @@ final class VPNConfigStore: ObservableObject {
     }
 
     /// All selectable exit nodes: control-plane nodes first, then legacy presets
-    /// (DEBUG builds only — production must come from the backend, SRS A8).
+    /// (DEBUG builds only — production must come from the backend, SRS A8), and
+    /// finally built-in fallback so the picker is never empty on a censored
+    /// network where the coordinator is unreachable.
     var availableNodes: [ExitNode] {
         if !remoteNodes.isEmpty {
             return remoteNodes
@@ -75,7 +80,7 @@ final class VPNConfigStore: ObservableObject {
                      city: $0.city, endpoint: "\($0.host):\($0.port)", public_key: $0.publicKey)
         }
         #else
-        return []
+        return ExitNode.builtInFallback
         #endif
     }
 

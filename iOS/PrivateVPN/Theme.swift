@@ -113,6 +113,7 @@ enum AppTextKey: String {
     case support, contactSupport, privacyPolicy, appleStandardEULA, upgrade
     case vpnStartFailure, diagnostics, state, location, message, notConfigured
     case secureExitNode, vietnam, startVPNHint, stopVPNHint
+    case serverLocation, loadingLocations, noServerAvailable, refreshLocations, usingSavedServers
     case paywallTitle, paywallSubtitle, benefitTunnel, benefitWifi, benefitFast
     case noPlans, noPlansDetail, subscriptionDisclosure, manageSubscription, privacy, eula, notNow
     case disconnected, connecting, connected, disconnecting, failed
@@ -190,6 +191,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "Your VPN tunnel is off", .connectingSubtitle: "Starting secure VPN tunnel",
             .connectedSubtitle: "Your traffic is protected", .disconnectingSubtitle: "Stopping VPN tunnel",
             .failedSubtitle: "VPN needs attention",
+            .serverLocation: "Server", .loadingLocations: "Loading servers…", .noServerAvailable: "No server available", .refreshLocations: "Refresh servers", .usingSavedServers: "Showing saved servers — coordinator unreachable. Tap to refresh."
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam",
@@ -218,6 +220,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN tunnel đang tắt", .connectingSubtitle: "Đang khởi động VPN tunnel bảo mật",
             .connectedSubtitle: "Lưu lượng của bạn đang được bảo vệ", .disconnectingSubtitle: "Đang dừng VPN tunnel",
             .failedSubtitle: "VPN cần được kiểm tra",
+            .serverLocation: "Máy chủ", .loadingLocations: "Đang tải máy chủ…", .noServerAvailable: "Chưa có máy chủ khả dụng", .refreshLocations: "Tải lại máy chủ", .usingSavedServers: "Đang hiển thị máy chủ đã lưu — không kết nối được máy chủ điều phối. Chạm để tải lại."
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络",
@@ -245,6 +248,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN 隧道已关闭", .connectingSubtitle: "正在启动安全 VPN 隧道",
             .connectedSubtitle: "你的流量正在受到保护", .disconnectingSubtitle: "正在停止 VPN 隧道",
             .failedSubtitle: "VPN 需要检查",
+            .serverLocation: "服务器", .loadingLocations: "正在加载服务器…", .noServerAvailable: "暂无可用服务器", .refreshLocations: "刷新服务器", .usingSavedServers: "正在显示已保存的服务器 — 无法连接协调服务器。点击重试。"
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信",
@@ -272,6 +276,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN トンネルはオフです", .connectingSubtitle: "安全な VPN トンネルを開始中",
             .connectedSubtitle: "通信は保護されています", .disconnectingSubtitle: "VPN トンネルを停止中",
             .failedSubtitle: "VPN の確認が必要です",
+            .serverLocation: "サーバー", .loadingLocations: "サーバーを読み込み中…", .noServerAvailable: "利用可能なサーバーがありません", .refreshLocations: "サーバーを更新", .usingSavedServers: "保存済みサーバーを表示中 — コーディネーターに接続できません。再試行するにはタップ。"
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷",
@@ -299,6 +304,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN 터널이 꺼져 있습니다", .connectingSubtitle: "보안 VPN 터널을 시작하는 중",
             .connectedSubtitle: "트래픽이 보호되고 있습니다", .disconnectingSubtitle: "VPN 터널을 중지하는 중",
             .failedSubtitle: "VPN 확인이 필요합니다",
+            .serverLocation: "서버", .loadingLocations: "서버를 불러오는 중…", .noServerAvailable: "사용 가능한 서버 없음", .refreshLocations: "서버 새로고침", .usingSavedServers: "저장된 서버 표시 중 — 코디네이터에 연결할 수 없습니다. 다시 시도하려면 탭하세요."
         ],
     ]
 }

@@ -219,6 +219,12 @@ struct ContentViewMac: View {
                 }
                 .labelsHidden()
                 .disabled(isConnectionTransitioning)
+                if vpnManager.usingFallbackNodes {
+                    Text(languageStore.t(.usingSavedServers))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
         .padding(16)
