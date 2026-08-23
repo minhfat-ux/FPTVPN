@@ -4,6 +4,9 @@
 - **Purpose:** deliver the 6-digit OTP code from `/v1/auth/email/start` (email-code login,
   part of BUG-20260823-001 Option F account model)
 - **Related:** `.privatevpn/memory/DECISIONS.md`, `CURRENT_WORK.md` (BUG-20260823-001 gap b),
+- **Login model (owner, 2026-08-23):** **email-only** — email-OTP is the ONLY production
+  login method. Do NOT add Sign in with Apple JWT verification or Firebase Auth.
+  `/v1/auth/apple` stays dev-only (501 in production) or is removed.
   `control-plane/src/auth-store.js`, `control-plane/src/index.js`
 - **Owner decision:** Resend free tier (3,000 emails/month, 100 emails/day, never expires).
   Backup if more volume later: Brevo (300/day) or Resend Pro ($20/mo, 50k/mo).
