@@ -101,7 +101,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.path === "/health" || req.path === "/v1/health" || req.path === "/nodes" || req.path === "/v1/nodes" || req.path === "/v1/app-version") return next();
-  if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register") return next();
+  if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
   if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
@@ -394,6 +394,24 @@ app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// User-initiated account deletion (Apple 5.1.1(v)): deletes the user, their
+// subscriptions/sessions, and their devices (including wg peer removal).
+app.delete("/v1/account", requireUserAuth, async (req, res) => {
+  try {
+    const userId = req.userAuth.user.id;
+    const devices = await store.devicesByUserId(userId);
+    for (const device of devices) {
+      try { await wg.removePeer(device.publicKey); } catch { /* best effort */ }
+      await store.deleteByPublicKey(device.publicKey);
+    }
+    await authStore.deleteUser(userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /v1/account failed:", err);
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
   }
 });
 

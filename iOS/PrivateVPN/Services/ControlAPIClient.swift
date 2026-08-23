@@ -197,6 +197,24 @@ struct ControlAPIClient {
         return try JSONDecoder().decode(AppVersionInfo.self, from: data)
     }
 
+    /// Deletes the signed-in user's account (Apple 5.1.1(v)): user, devices, sessions.
+    func deleteAccount(accessToken: String) async throws {
+        let url = baseURL.appendingPathComponent("v1/account")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ClientError.transport(endpoint: "account deletion", error)
+        }
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ClientError.badResponse
+        }
+    }
+
     /// Requests a fresh one-time join token from the coordinator. The server may
     /// require an admin token (Bearer header); pass it if configured.
     /// App runtime code must not use this public/dev bootstrap in production;

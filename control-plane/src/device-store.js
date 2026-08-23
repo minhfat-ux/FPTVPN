@@ -79,6 +79,19 @@ export class DeviceStore {
     return { device, isNew: true };
   }
 
+  async devicesByUserId(userId) {
+    const devices = await this._load();
+    return devices.filter((d) => d.userId === userId);
+  }
+
+  async deleteByPublicKey(publicKey) {
+    const devices = await this._load();
+    const next = devices.filter((d) => d.publicKey !== publicKey);
+    if (next.length === devices.length) return false;
+    await this._save(next);
+    return true;
+  }
+
   async deactivate(id) {
     const devices = await this._load();
     const device = devices.find((d) => d.id === id);

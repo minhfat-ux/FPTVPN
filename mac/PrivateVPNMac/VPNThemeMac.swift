@@ -67,6 +67,8 @@ enum AppLanguageChoice: String, CaseIterable, Identifiable {
 enum AppTextKey: String {
     case account, signedIn, signedOut, signInRequired, signInTitle, email, loginCode, sendCode, verifyCode, signOut
     case updateRequired, updateRequiredDetail, update
+    case deleteAccount, deleteAccountConfirm, deleteAccountDone
+    case cancel
     case emailPlaceholder, codePlaceholder, invalidEmail, devCode, loginCodeSent
     case systemLanguage, language, appSubtitle, subscription, status
     case premiumActive, premiumRequired, free, protectionUnlocked, choosePlanToStart
@@ -129,7 +131,7 @@ final class AppLanguageStore: ObservableObject {
             .signInTitle: "Sign In", .loginCode: "Login code", .sendCode: "Send Code", .verifyCode: "Verify Code", .signOut: "Sign Out",
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456", .invalidEmail: "Please enter a valid email address.",
             .devCode: "Dev code: %@", .loginCodeSent: "Login code sent",
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam", .updateRequired: "Update Required", .updateRequiredDetail: "A new version of FlowVPN is required to continue. Please update from the App Store.", .update: "Update",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam", .updateRequired: "Update Required", .updateRequiredDetail: "A new version of FlowVPN is required to continue. Please update from the App Store.", .update: "Update", .deleteAccount: "Delete Account", .deleteAccountConfirm: "This permanently deletes your account and all data. This cannot be undone.", .deleteAccountDone: "Account deleted.", .cancel: "Cancel",
             .subscription: "Subscription", .status: "Status", .premiumActive: "Premium Active",
             .premiumRequired: "Premium Required", .free: "Free", .protectionUnlocked: "VPN protection is unlocked",
             .choosePlanToStart: "Choose a plan to start protection", .choosePlan: "Choose Plan",
@@ -148,7 +150,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "Refresh servers",
         ],
         .vietnamese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của FlowVPN để tiếp tục. Vui lòng cập nhật từ App Store.", .update: "Cập nhật",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của FlowVPN để tiếp tục. Vui lòng cập nhật từ App Store.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
             .signInRequired: "Cần đăng nhập",
             .signInTitle: "Đăng nhập", .invalidEmail: "Vui lòng nhập địa chỉ email hợp lệ.",
             .devCode: "Mã dev: %@", .loginCodeSent: "Mã đăng nhập đã được gửi",
@@ -171,7 +173,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "Tải lại máy chủ",
         ],
         .chinese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 FlowVPN 才能继续。请从 App Store 更新。", .update: "更新",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 FlowVPN 才能继续。请从 App Store 更新。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
             .signInRequired: "需要登录",
             .signInTitle: "登录", .invalidEmail: "请输入有效的邮箱地址。",
             .devCode: "开发者验证码：%@", .loginCodeSent: "登录验证码已发送",
@@ -194,7 +196,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "刷新服务器",
         ],
         .japanese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "FlowVPN の新しいバージョンが必要です。App Store から更新してください。", .update: "アップデート",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "FlowVPN の新しいバージョンが必要です。App Store から更新してください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
             .signInRequired: "サインインが必要です",
             .signInTitle: "サインイン", .invalidEmail: "有効なメールアドレスを入力してください。",
             .devCode: "開発用コード: %@", .loginCodeSent: "ログインコードを送信しました",
@@ -217,7 +219,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "サーバーを更新",
         ],
         .korean: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 FlowVPN 버전이 필요합니다. App Store에서 업데이트하세요.", .update: "업데이트",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 FlowVPN 버전이 필요합니다. App Store에서 업데이트하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
             .signInRequired: "로그인이 필요합니다",
             .signInTitle: "로그인", .invalidEmail: "유효한 이메일 주소를 입력하세요.",
             .devCode: "개발자 코드: %@", .loginCodeSent: "로그인 코드가 전송되었습니다",

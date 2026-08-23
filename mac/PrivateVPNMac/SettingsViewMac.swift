@@ -9,6 +9,8 @@ struct SettingsViewMac: View {
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingPaywall = false
     @State private var showingLogin = false
+    @State private var showDeleteAccountConfirm = false
+    @State private var accountMessage: String?
 
     var body: some View {
         Form {
@@ -100,6 +102,24 @@ struct SettingsViewMac: View {
                 } label: {
                     Label(languageStore.t(.signOut), systemImage: "rectangle.portrait.and.arrow.right")
                 }
+
+                Button(role: .destructive) {
+                    showDeleteAccountConfirm = true
+                } label: {
+                    Label(languageStore.t(.deleteAccount), systemImage: "trash")
+                }
+                .confirmationDialog(
+                    languageStore.t(.deleteAccount),
+                    isPresented: $showDeleteAccountConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button(languageStore.t(.deleteAccount), role: .destructive) {
+                        Task { await deleteAccount() }
+                    }
+                    Button(languageStore.t(.cancel), role: .cancel) {}
+                } message: {
+                    Text(languageStore.t(.deleteAccountConfirm))
+                }
             } else {
                 Button {
                     showingLogin = true
@@ -107,6 +127,29 @@ struct SettingsViewMac: View {
                     Label(languageStore.t(.signInTitle), systemImage: "person.crop.circle.badge.plus")
                 }
             }
+
+            if let message = accountMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @MainActor
+    private func deleteAccount() async {
+        do {
+            guard let url = URL(string: vpnManager.coordinatorURL) else {
+                throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
+            }
+            guard let token = authStore.accessToken else {
+                throw ControlAPIClient.ClientError.missingSession
+            }
+            try await ControlAPIClient(baseURL: url, joinToken: "").deleteAccount(accessToken: token)
+            authStore.signOut()
+            accountMessage = languageStore.t(.deleteAccountDone)
+        } catch {
+            accountMessage = error.localizedDescription
         }
     }
 }

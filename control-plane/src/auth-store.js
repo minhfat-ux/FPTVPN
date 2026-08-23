@@ -178,6 +178,16 @@ export class AuthStore {
     return publicUser(user, activeSubscriptionFor(data, userId));
   }
 
+  async deleteUser(userId) {
+    const data = await this._load();
+    data.users = data.users.filter((entry) => entry.id !== userId);
+    data.sessions = data.sessions.filter((entry) => entry.userId !== userId);
+    data.subscriptions = data.subscriptions.filter((entry) => entry.userId !== userId);
+    data.enrollmentTokens = data.enrollmentTokens.filter((entry) => entry.userId !== userId);
+    await this._save(data);
+    return { ok: true };
+  }
+
   async revokeUser(userId) {
     const data = await this._load();
     const user = data.users.find((entry) => entry.id === userId);
