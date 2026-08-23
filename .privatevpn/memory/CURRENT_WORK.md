@@ -106,8 +106,9 @@ Current task tracked here (schema per spec §31). Structured state also in
   the authenticated app build **together AFTER App Store approval**, then:
   1. Deploy coordinator fix to VPS; verify unauthenticated `/v1/tokens` -> 401/403/410.
   2. Close remaining production gaps first (fix is NOT usable in production without these):
-     (a) subscription source: only `AUTH_DEV_GRANT_SUBSCRIPTION` test grant exists — need
-         StoreKit receipt verification server-side (or owner-defined manual grant policy),
+     (a) subscription source: **PENDING (owner)** — StoreKit products are under App Store
+         Connect review; keep `AUTH_DEV_GRANT_SUBSCRIPTION` test grant for now; re-check
+         after product review, then decide StoreKit receipt verification vs manual grant,
      (b) login: email-OTP needs a mailer — **SOLUTION DECIDED: Resend**
          (see `docs/MAILER_RESEND.md`; free 3k/mo + 100/day; implement `sendOtpEmail`
          in `control-plane/src/mailer.js`, wire into `/v1/auth/email/start`, add
