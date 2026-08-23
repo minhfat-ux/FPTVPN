@@ -30,6 +30,8 @@ Only evidence-backed statements. Agent/Expert claims are never promoted directly
 
 | VF-023 | **iPhone 14 Pro Max E2E PASS (2026-08-23):** login email-OTP thật (iCloud nhận OTP), Connect thành công, public IP = 103.173.155.50, DNS + HTTPS hoạt động, Disconnect về nhà mạng, Reconnect lại VN node, kill app → vẫn signed in. Server-side: peer iPhone active (10.77.0.14, handshake 29s), health latency 0.1ms, bandwidth tăng. | `evidence/e2e/2026-08-23-iphone-e2e.md` | 2026-08-23 |
 
+| VF-024 | **macOS FlowVPN E2E PASS (2026-08-23):** Mac app (Xcode signed, NE) connect thành công — session persist, IP = 103.173.155.50, DNS/HTTPS, disconnect/reconnect OK (owner xác nhận). Server-side: peer Mac active (10.77.0.9, handshake 22s), health latency 0.1ms. | `evidence/e2e/2026-08-23-mac-e2e.md` | 2026-08-23 |
+
 NOT verified: latest iOS/macOS production end-to-end VPN connectivity,
 public-IP change, DNS/HTTPS through tunnel, reconnect/disconnect, and App Store
 review flow after the most recent paywall/localization/macOS NetworkExtension
