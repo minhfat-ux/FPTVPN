@@ -76,6 +76,16 @@
 - Never log the OTP code or the email body containing it (RULE-SEC-002 style).
 - Production must NOT return `debug_code` in the response (already gated by `IS_PRODUCTION`).
 
+## 3b. Deliverability status (verified 2026-08-23)
+
+- **SPF**: PASS (IP 112.213.92.231 in `spf.maychuemail.com`).
+- **DMARC**: added `_dmarc.meetflowai.site` = `v=DMARC1; p=none` (owner added via
+  hosting DNS) -> DMARC PASS via SPF-aligned, so **iCloud/me.com now receives OTP
+  email** (verified: minhnb2@me.com received).
+- **DKIM**: mail server signs with `maychuemail.com` (hosting-level), so DKIM shows
+  FAIL for `meetflowai.site`. Not blocking (DMARC pass is sufficient for iCloud/Gmail),
+  but enabling domain DKIM via the hosting provider would improve deliverability.
+
 ## 4. Verification checklist (after implementation)
 
 1. Dev: `POST /v1/auth/email/start` returns `debug_code` (no real email needed).
