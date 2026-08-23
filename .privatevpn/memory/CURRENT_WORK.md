@@ -169,3 +169,11 @@ Current task tracked here (schema per spec §31). Structured state also in
   for both `com.privatevpn.app` and `com.privatevpn.app.packet-tunnel`.
 - iOS real-device E2E: verify public IP, DNS, HTTPS, reconnect, and disconnect
   with production coordinator URL after publish build is stable.
+
+## E2E device test (2026-08-23, đang chờ owner test trên iPhone)
+
+- App iOS signed đã cài trên iPhone 14 Pro Max (bản login + backend-first + force update DISABLED).
+- macOS unsigned không gọi được network (lsof: no socket) → cần Xcode Run signed để test Mac.
+- Force update: **DISABLED** (minimum_version=0.0.0) — chưa có version trên App Store (owner note).
+- Allowlist: minhnb2@me.com + support@meetflowai.site (debug_code + grant sub).
+- Khi owner test: điền `evidence/e2e/README.md`, chạy server-verify (wg peer/handshake + health + users).
