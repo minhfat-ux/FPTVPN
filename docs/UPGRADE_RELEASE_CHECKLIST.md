@@ -40,6 +40,8 @@
 - [ ] **App Store Connect — Privacy Nutrition Labels**: khai báo data types (Email, Device ID, Purchases/Subscription).
 - [ ] **App Store Connect — account deletion question**: "Can users delete their account?" → **Yes** (kèm hướng dẫn: Settings → Delete Account).
 - [ ] **Sign in with Apple**: KHÔNG bắt buộc (app dùng email-OTP tự build, không third-party login — guideline 4.8 chỉ áp dụng third-party). Nếu review hỏi → giải thích.
+- [ ] **VPN app disclosure**: Privacy labels KHÔNG có mục "WireGuard/VPN" riêng — khai báo data types (Email, Device ID, Purchases). Nhưng trong **App Review Notes** nêu rõ: app là VPN client dùng NetworkExtension (NEPacketTunnelProvider) + WireGuard; account email + delete account in-app.
+- [ ] **Region VPN license**: Trung Quốc/Ấn Độ/Nga yêu cầu giấy phép VPN — đánh giá phạm vi phân phối (MVP: US/EU/VN).
 
 ## 3. Build & submit
 
