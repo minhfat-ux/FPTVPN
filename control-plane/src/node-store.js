@@ -147,6 +147,14 @@ export class NodeStore {
   async disable(id) {
     return this.update(id, { active: false });
   }
+
+  /** Xóa hẳn record khỏi registry (hard delete — admin). */
+  async delete(id) {
+    const existing = this.db.prepare("SELECT * FROM exit_nodes WHERE id = ?").get(id);
+    if (!existing) return null;
+    this.db.prepare("DELETE FROM exit_nodes WHERE id = ?").run(id);
+    return rowToNode(existing);
+  }
 }
 
 export function publicNode(node) {

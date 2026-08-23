@@ -319,9 +319,12 @@ app.patch(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminAuth, async (
 
 app.delete(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminAuth, async (req, res) => {
   try {
-    const node = await nodeStore.disable(req.params.id);
+    // ?hard=1 xóa hẳn record (dọn node test); mặc định disable (giữ lịch sử)
+    const node = req.query.hard === "1"
+      ? await nodeStore.delete(req.params.id)
+      : await nodeStore.disable(req.params.id);
     if (!node) return res.status(404).json({ error: "Not found" });
-    res.json({ node: adminNode(node) });
+    res.json({ node: adminNode(node), hard: req.query.hard === "1" });
   } catch (err) {
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
   }
