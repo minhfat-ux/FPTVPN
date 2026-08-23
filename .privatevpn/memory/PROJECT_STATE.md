@@ -133,8 +133,10 @@ allowedIPs 0.0.0.0/0.
 6. ✅ iOS App Store prep: StoreKit paywall, product IDs, privacy/support/EULA
    links, manage subscription link, 5-language language pack, packet tunnel
    bundle version fix, debug-only premium bypass for device testing.
-7. 🔲 iOS publish: Clean Build Folder → Archive → Validate → Upload → App Store
-   Connect processing → submit review.
+7. 🔲 iOS publish (owner, sau khi reject bản review cũ): Clean Build Folder → Archive →
+   Validate → Upload → App Store Connect → **submit bản latest** (login email-OTP,
+   backend-first, Delete Account, Mac 1.0). Nhớ: Privacy labels (Email/DeviceID/Purchases),
+   "Can users delete account?" → Yes, App Review Notes (VPN/NE/WireGuard).
 8. 🔲 Sign macOS app with NE-capable Mac App Development profile; verify
    Connect permission prompt, tunnel start, and end-to-end exit IP =
    103.173.155.50.
