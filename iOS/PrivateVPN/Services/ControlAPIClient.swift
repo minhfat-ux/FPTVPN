@@ -121,6 +121,27 @@ struct CoordinatorSubscriptionStatus: Equatable, Codable {
     var expires_at: String?
 }
 
+/// A device owned by the signed-in user (user-scoped device management,
+/// FR-REVOKE-001/002). `public_key` lets the app mark the current device.
+struct CoordinatorDevice: Equatable, Codable, Identifiable {
+    var device_id: String
+    var name: String?
+    var platform: String?
+    var status: String?
+    var created_at: String?
+    var assigned_ip: String?
+    var public_key: String?
+
+    var id: String { device_id }
+
+    var isActive: Bool { status == "active" }
+}
+
+struct DevicesResponse: Equatable, Codable {
+    var count: Int
+    var devices: [CoordinatorDevice]
+}
+
 /// App version info from the coordinator (force-update gate). Defined here so the
 /// Packet Tunnel extension target (which compiles ControlAPIClient but not the
 /// app-only AppVersionService) also has the type.
@@ -284,6 +305,31 @@ struct ControlAPIClient {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw ClientError.badResponse
         }
+    }
+
+    /// Lists the signed-in user's devices (active first), each with status,
+    /// assigned overlay IP and public key (FR-REVOKE-001).
+    func fetchMyDevices(accessToken: String) async throws -> [CoordinatorDevice] {
+        guard !accessToken.isEmpty else { throw ClientError.missingSession }
+        let url = baseURL.appendingPathComponent("v1/devices")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let data = try await sendEmpty(request, endpoint: "devices")
+        return try JSONDecoder().decode(DevicesResponse.self, from: data).devices
+    }
+
+    /// Revokes one of the signed-in user's devices (removes its wg peer, so it
+    /// can no longer connect — AC-011/AC-012).
+    func revokeDevice(id: String, accessToken: String) async throws {
+        guard !accessToken.isEmpty else { throw ClientError.missingSession }
+        let url = baseURL.appendingPathComponent("v1/devices/\(id)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 10
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        _ = try await sendEmpty(request, endpoint: "device revocation")
     }
 
     /// Requests a fresh one-time join token from the coordinator. The server may

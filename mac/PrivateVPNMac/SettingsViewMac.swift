@@ -11,11 +11,18 @@ struct SettingsViewMac: View {
     @State private var showingLogin = false
     @State private var showDeleteAccountConfirm = false
     @State private var accountMessage: String?
+    // User-scoped device management (FR-REVOKE-001/002).
+    @State private var devices: [CoordinatorDevice] = []
+    @State private var isLoadingDevices = false
+    @State private var devicesMessage: String?
+    @State private var deviceToRevoke: CoordinatorDevice?
+    @State private var revokingDeviceID: String?
 
     var body: some View {
         Form {
             languageSection
             accountSection
+            devicesSection
 
             Section(languageStore.t(.subscription)) {
                 LabeledContent(languageStore.t(.status)) {
@@ -69,6 +76,7 @@ struct SettingsViewMac: View {
         }
         .task {
             await subscriptionStore.start()
+            await loadDevices()
         }
     }
 
@@ -152,12 +160,162 @@ struct SettingsViewMac: View {
             accountMessage = error.localizedDescription
         }
     }
+
+    // MARK: - Devices (FR-REVOKE-001/002)
+
+    private var devicesSection: some View {
+        Section {
+            if authStore.isSignedIn {
+                if isLoadingDevices && devices.isEmpty {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(languageStore.t(.loadingDevices))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if devices.isEmpty {
+                    Text(languageStore.t(.noDevices))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(devices) { device in
+                        deviceRow(device)
+                    }
+                }
+
+                if let message = devicesMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Button {
+                    showingLogin = true
+                } label: {
+                    Label(languageStore.t(.signInTitle), systemImage: "person.crop.circle.badge.plus")
+                }
+            }
+        } header: {
+            HStack {
+                Text(languageStore.t(.devices))
+                Spacer()
+                if authStore.isSignedIn {
+                    Button {
+                        Task { await loadDevices() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isLoadingDevices)
+                    .help(languageStore.t(.refreshLocations))
+                }
+            }
+        }
+    }
+
+    private func deviceRow(_ device: CoordinatorDevice) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(device.name ?? device.device_id)
+                        .font(.subheadline.weight(.medium))
+                    if isCurrentDevice(device) {
+                        Text(languageStore.t(.thisDevice))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(deviceDetail(device))
+                    .font(.caption)
+                    .foregroundStyle(device.isActive ? VPNThemeMac.accent : .secondary)
+            }
+            Spacer()
+            if device.isActive && !isCurrentDevice(device) {
+                Button(languageStore.t(.revoke), role: .destructive) {
+                    deviceToRevoke = device
+                }
+                .font(.caption)
+                .disabled(revokingDeviceID != nil)
+            }
+        }
+        .confirmationDialog(
+            languageStore.t(.revoke),
+            isPresented: Binding(
+                get: { deviceToRevoke?.device_id == device.device_id },
+                set: { if !$0 { deviceToRevoke = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(languageStore.t(.revoke), role: .destructive) {
+                Task { await revokeDevice(device) }
+            }
+            Button(languageStore.t(.cancel), role: .cancel) { deviceToRevoke = nil }
+        } message: {
+            Text(languageStore.t(.revokeDeviceConfirm))
+        }
+    }
+
+    private func isCurrentDevice(_ device: CoordinatorDevice) -> Bool {
+        guard let current = vpnManager.devicePublicKey, !current.isEmpty else { return false }
+        return device.public_key == current
+    }
+
+    private func deviceDetail(_ device: CoordinatorDevice) -> String {
+        var parts: [String] = [device.isActive ? languageStore.t(.active) : languageStore.t(.revoked)]
+        if let ip = device.assigned_ip, !ip.isEmpty { parts.append(ip) }
+        if let platform = device.platform, !platform.isEmpty { parts.append(platform) }
+        if let created = device.created_at,
+           let date = Self.parseISODate(created) {
+            parts.append(date.formatted(date: .abbreviated, time: .shortened))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func parseISODate(_ raw: String) -> Date? {
+        ISO8601DateFormatter().date(from: raw)
+    }
+
+    @MainActor
+    private func loadDevices() async {
+        guard authStore.isSignedIn else { return }
+        isLoadingDevices = true
+        defer { isLoadingDevices = false }
+        do {
+            guard let url = URL(string: vpnManager.coordinatorURL) else {
+                throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
+            }
+            guard let token = authStore.accessToken else {
+                throw ControlAPIClient.ClientError.missingSession
+            }
+            devices = try await ControlAPIClient(baseURL: url, joinToken: "").fetchMyDevices(accessToken: token)
+            devicesMessage = nil
+        } catch {
+            devicesMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func revokeDevice(_ device: CoordinatorDevice) async {
+        revokingDeviceID = device.device_id
+        defer { revokingDeviceID = nil }
+        do {
+            guard let url = URL(string: vpnManager.coordinatorURL) else {
+                throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
+            }
+            guard let token = authStore.accessToken else {
+                throw ControlAPIClient.ClientError.missingSession
+            }
+            try await ControlAPIClient(baseURL: url, joinToken: "").revokeDevice(id: device.device_id, accessToken: token)
+            devicesMessage = languageStore.t(.deviceRevoked)
+            await loadDevices()
+        } catch {
+            devicesMessage = error.localizedDescription
+        }
+    }
 }
 
 @MainActor
 final class MacSubscriptionStore: ObservableObject {
-    private static let temporaryPremiumUnlock = true
-
     static let productIDs = [
         "Monthly_Premium",
         "Yearly_Premium"
@@ -172,10 +330,6 @@ final class MacSubscriptionStore: ObservableObject {
     private var transactionUpdatesTask: Task<Void, Never>?
 
     var isSubscribed: Bool {
-        if Self.temporaryPremiumUnlock {
-            return true
-        }
-
         #if DEBUG
         return true
         #else
@@ -184,10 +338,6 @@ final class MacSubscriptionStore: ObservableObject {
     }
 
     var activePlanName: String {
-        if Self.temporaryPremiumUnlock {
-            return "Premium"
-        }
-
         #if DEBUG
         return "Premium"
         #else
@@ -201,7 +351,6 @@ final class MacSubscriptionStore: ObservableObject {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
-        guard !Self.temporaryPremiumUnlock else { return }
         observeTransactionUpdates()
         await loadProducts()
         await refreshEntitlements()

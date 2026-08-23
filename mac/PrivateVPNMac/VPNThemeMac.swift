@@ -80,6 +80,7 @@ enum AppTextKey: String {
     case disconnected, connecting, connected, disconnecting, failed
     case serverLocation, loadingLocations, noServerAvailable, refreshLocations
     case usingSavedServers
+    case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
 }
 
 @MainActor
@@ -150,6 +151,7 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "Loading servers…", .noServerAvailable: "No server available",
             .refreshLocations: "Refresh servers",
             .usingSavedServers: "Offline mode — using saved servers",
+            .devices: "Devices", .revoke: "Revoke", .revokeDeviceConfirm: "Revoke this device? It will no longer be able to connect.", .thisDevice: "This device", .deviceRevoked: "Device revoked.", .noDevices: "No devices registered.", .active: "Active", .revoked: "Revoked", .loadingDevices: "Loading devices…"
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của FlowVPN để tiếp tục. Vui lòng cập nhật từ App Store.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
@@ -174,6 +176,7 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "Đang tải máy chủ…", .noServerAvailable: "Chưa có máy chủ khả dụng",
             .refreshLocations: "Tải lại máy chủ",
             .usingSavedServers: "Chế độ offline — đang dùng máy chủ đã lưu",
+            .devices: "Thiết bị", .revoke: "Thu hồi", .revokeDeviceConfirm: "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", .thisDevice: "Thiết bị này", .deviceRevoked: "Đã thu hồi thiết bị.", .noDevices: "Chưa có thiết bị nào được đăng ký.", .active: "Hoạt động", .revoked: "Đã thu hồi", .loadingDevices: "Đang tải thiết bị…"
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 FlowVPN 才能继续。请从 App Store 更新。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
@@ -198,6 +201,7 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "正在加载服务器…", .noServerAvailable: "暂无可用服务器",
             .refreshLocations: "刷新服务器",
             .usingSavedServers: "离线模式 — 正在使用已保存的服务器",
+            .devices: "设备", .revoke: "撤销", .revokeDeviceConfirm: "撤销此设备？该设备将无法再连接。", .thisDevice: "当前设备", .deviceRevoked: "设备已撤销。", .noDevices: "尚未注册任何设备。", .active: "活跃", .revoked: "已撤销", .loadingDevices: "正在加载设备…"
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "FlowVPN の新しいバージョンが必要です。App Store から更新してください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
@@ -222,6 +226,7 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "サーバーを読み込み中…", .noServerAvailable: "利用可能なサーバーがありません",
             .refreshLocations: "サーバーを更新",
             .usingSavedServers: "オフラインモード — 保存済みサーバーを使用中",
+            .devices: "デバイス", .revoke: "取り消す", .revokeDeviceConfirm: "このデバイスを取り消しますか？このデバイスは接続できなくなります。", .thisDevice: "このデバイス", .deviceRevoked: "デバイスを取り消しました。", .noDevices: "登録されたデバイスがありません。", .active: "アクティブ", .revoked: "取り消し済み", .loadingDevices: "デバイスを読み込み中…"
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 FlowVPN 버전이 필요합니다. App Store에서 업데이트하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
@@ -246,6 +251,7 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "서버를 불러오는 중…", .noServerAvailable: "사용 가능한 서버 없음",
             .refreshLocations: "서버 새로고침",
             .usingSavedServers: "오프라인 모드 — 저장된 서버 사용 중",
+            .devices: "기기", .revoke: "해지", .revokeDeviceConfirm: "이 기기를 해지하시겠습니까? 이 기기는 더 이상 연결할 수 없습니다.", .thisDevice: "현재 기기", .deviceRevoked: "기기가 해지되었습니다.", .noDevices: "등록된 기기가 없습니다.", .active: "활성", .revoked: "해지됨", .loadingDevices: "기기를 불러오는 중…"
         ],
     ]
 }

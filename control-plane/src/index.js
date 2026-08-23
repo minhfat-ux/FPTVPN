@@ -101,7 +101,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.path === "/health" || req.path === "/v1/health" || req.path === "/nodes" || req.path === "/v1/nodes" || req.path === "/v1/app-version") return next();
-  if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account") return next();
+  if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
   if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
@@ -484,6 +484,42 @@ app.post("/v1/peers/register", async (req, res) => {
   }
 });
 
+// User-scoped device management (FR-REVOKE-001/002): the signed-in user lists
+// and revokes their own devices. A revoked device keeps its record (status
+// "revoked") but loses its wg peer, so it cannot connect anymore (AC-011/AC-012).
+app.get("/v1/devices", requireUserAuth, async (req, res) => {
+  try {
+    const userId = req.userAuth.user.id;
+    const devices = (await store.all())
+      .filter((d) => d.userId === userId)
+      .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1));
+    res.json({
+      count: devices.length,
+      devices: devices.map(userDevice),
+    });
+  } catch (err) {
+    console.error("GET /v1/devices failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+app.delete("/v1/devices/:id", requireUserAuth, async (req, res) => {
+  try {
+    const userId = req.userAuth.user.id;
+    const device = await store.findById(req.params.id);
+    // 404 (not 403) so device existence is not leaked to other users.
+    if (!device || device.userId !== userId) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    await removePeerForDevice(device);
+    const updated = await store.deactivate(device.id);
+    res.json({ ok: true, device: userDevice(updated) });
+  } catch (err) {
+    console.error("DELETE /v1/devices/:id failed:", err);
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
 // Register a device: assign IP, provision peer, return client config.
 app.post("/device", async (req, res) => {
   try {
@@ -512,14 +548,7 @@ app.get("/device/:id", requireAdminAuth, async (req, res) => {
 app.delete("/device/:id", requireAdminAuth, async (req, res) => {
   const device = await store.deactivate(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
-  // Revoke đúng node của device (kể cả khi node đã bị disable) — không fallback
-  // sang node khác để tránh xóa nhầm peer trên node active.
-  const node = device.exitNodeId
-    ? await nodeStore.findById(device.exitNodeId)
-    : await nodeStore.firstActive();
-  if (node) {
-    await wgForNode(node).removePeer(device.publicKey);
-  }
+  await removePeerForDevice(device);
   res.json({ device });
 });
 
@@ -582,6 +611,31 @@ function wgForNode(node) {
     });
   }
   return wg;
+}
+
+/// Removes the wg peer of a device from the exact node it was provisioned on
+/// (kể cả khi node đã bị disable) — không fallback sang node khác để tránh
+/// xóa nhầm peer trên node active. Best-effort: a missing node is ignored.
+async function removePeerForDevice(device) {
+  const node = device.exitNodeId
+    ? await nodeStore.findById(device.exitNodeId)
+    : await nodeStore.firstActive();
+  if (node) {
+    await wgForNode(node).removePeer(device.publicKey);
+  }
+}
+
+/// Public shape of a device as seen by its owner (user-scoped endpoints).
+function userDevice(device) {
+  return {
+    device_id: device.id,
+    name: device.deviceName,
+    platform: device.platform ?? null,
+    status: device.active ? "active" : "revoked",
+    created_at: device.createdAt,
+    assigned_ip: device.assignedIP,
+    public_key: device.publicKey,
+  };
 }
 
 async function provisionPeer(node, publicKey, allowedIPs) {
