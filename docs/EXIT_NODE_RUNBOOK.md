@@ -9,7 +9,10 @@
    Đừng dùng key của node khác. (Node 2 từng bị lệch key do config bị ghi đè → connect fail.)
 2. **NAT phải cover subnet client `10.77.0.0/24`** (không chỉ subnet local của node).
    Lỗi "connected nhưng mạng không thông" = thiếu rule này. (Node 2 chỉ NAT 10.78.0.0/24 → client 10.77.0.x không ra được internet.)
-3. **App phải gửi `exit_node_id` khi register** — nếu không, coordinator provision peer lên node đầu
+3. **wg0 phải có ADDRESS của subnet client** (VD `10.77.0.1/24` trên wg0) + `rp_filter=0` cho wg0.
+   Nếu wg0 chỉ có subnet khác (VD 10.78.0.1/24) → **reverse-path filter drop** → handshake OK nhưng egress fail
+   (transfer ~13 KiB kẹt). Fix thực tế node 2: `ip addr add 10.77.0.1/24 dev wg0` + Address trong wg0.conf + `sysctl -w net.ipv4.conf.wg0.rp_filter=0`.
+4. **App phải gửi `exit_node_id` khi register** — nếu không, coordinator provision peer lên node đầu
    (firstActive) → node Anh chọn không có peer. (Đã fix trong app — giữ nguyên.)
 
 ---
@@ -31,6 +34,8 @@ cat > /etc/wireguard/wg0.conf << CONF
 [Interface]
 Address = 10.77.0.1/24
 ListenPort = 443
+# LƯU Ý: nếu node có sẵn subnet khác (VD 10.78.0.1/24), thêm CẢ client subnet:
+# Address = 10.78.0.1/24, 10.77.0.1/24  + sysctl -w net.ipv4.conf.wg0.rp_filter=0
 PrivateKey = $(cat /etc/wireguard/server.key)
 PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -m state --state RELATED,ESTABLISHED -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.78.0.0/24 -o eth0 -j MASQUERADE; iptables -t nat -A POSTROUTING -s 10.77.0.0/24 -o eth0 -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -m state --state RELATED,ESTABLISHED -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.78.0.0/24 -o eth0 -j MASQUERADE; iptables -t nat -D POSTROUTING -s 10.77.0.0/24 -o eth0 -j MASQUERADE

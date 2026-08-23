@@ -32,6 +32,8 @@ Only evidence-backed statements. Agent/Expert claims are never promoted directly
 
 | VF-024 | **macOS FlowVPN E2E PASS (2026-08-23):** Mac app (Xcode signed, NE) connect thành công — session persist, IP = 103.173.155.50, DNS/HTTPS, disconnect/reconnect OK (owner xác nhận). Server-side: peer Mac active (10.77.0.9, handshake 22s), health latency 0.1ms. | `evidence/e2e/2026-08-23-mac-e2e.md` | 2026-08-23 |
 
+| VF-025 | **Node 2 (103.6.234.233) egress verified (2026-08-23):** device connect qua node 2, mạng thông (transfer 65 MiB/1.2 GiB, handshake 34s). Fix routing: thêm 10.77.0.1/24 vào wg0 + rp_filter=0 + NAT 10.77 (persist wg0.conf). Multi-node provisioning qua SSH hoạt động. | `docs/EXIT_NODE_RUNBOOK.md`, DECISIONS 2026-08-23 | 2026-08-23 |
+
 NOT verified: latest iOS/macOS production end-to-end VPN connectivity,
 public-IP change, DNS/HTTPS through tunnel, reconnect/disconnect, and App Store
 review flow after the most recent paywall/localization/macOS NetworkExtension
