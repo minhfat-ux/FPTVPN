@@ -289,7 +289,13 @@ export function adminPageHTML() {
     // calls hit the proxy too; when served at /admin (SSH tunnel) use origin.
     fields.baseUrl.value =
       window.location.origin +
-      window.location.pathname.replace(/\\/admin\\/?$/i, "");
+      window.location.pathname.replace(/\/admin\/?$/i, "");
+
+    // Persist token + base across visits so the page can auto-load nodes.
+    fields.token.value = localStorage.getItem("fvpn_admin_token") || "";
+    fields.baseUrl.value = localStorage.getItem("fvpn_admin_base") || fields.baseUrl.value;
+    fields.token.addEventListener("input", () => localStorage.setItem("fvpn_admin_token", fields.token.value.trim()));
+    fields.baseUrl.addEventListener("input", () => localStorage.setItem("fvpn_admin_base", fields.baseUrl.value));
 
     function setStatus(message, isError = false) {
       fields.status.textContent = message;
@@ -467,6 +473,13 @@ export function adminPageHTML() {
       event.preventDefault();
       showView("list");
     };
+
+    // Auto-load the existing node(s) on open when a token is already saved.
+    if (fields.token.value) {
+      loadNodes();
+    } else {
+      setStatus("Enter the admin token, then click Load Nodes.");
+    }
   </script>
 </body>
 </html>`;
