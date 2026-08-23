@@ -24,12 +24,18 @@ export class NodeStore {
         city TEXT NOT NULL,
         endpoint TEXT NOT NULL,
         public_key TEXT NOT NULL,
+        ssh_target TEXT,
         priority INTEGER NOT NULL DEFAULT 100,
         active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
     `);
+    // Migrate: thêm cột ssh_target nếu bảng exit_nodes có từ phiên bản cũ.
+    const cols = this.db.prepare("PRAGMA table_info(exit_nodes)").all().map((c) => c.name);
+    if (!cols.includes("ssh_target")) {
+      this.db.exec("ALTER TABLE exit_nodes ADD COLUMN ssh_target TEXT");
+    }
     this._seedIfEmpty();
   }
 
@@ -59,9 +65,9 @@ export class NodeStore {
 
   _insert(node) {
     this.db.prepare(`
-      INSERT INTO exit_nodes (id, name, country, city, endpoint, public_key, priority, active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(node.id, node.name, node.country, node.city, node.endpoint, node.public_key, node.priority, node.active ? 1 : 0, node.created_at, node.updated_at);
+      INSERT INTO exit_nodes (id, name, country, city, endpoint, public_key, ssh_target, priority, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(node.id, node.name, node.country, node.city, node.endpoint, node.public_key, node.ssh_target ?? null, node.priority, node.active ? 1 : 0, node.created_at, node.updated_at);
   }
 
   _rows() {
@@ -130,11 +136,11 @@ export class NodeStore {
     validateNode(updated);
     this.db.prepare(`
       UPDATE exit_nodes
-      SET name = ?, country = ?, city = ?, endpoint = ?, public_key = ?,
+      SET name = ?, country = ?, city = ?, endpoint = ?, public_key = ?, ssh_target = ?,
           priority = ?, active = ?, updated_at = ?
       WHERE id = ?
     `).run(updated.name, updated.country, updated.city, updated.endpoint, updated.public_key,
-           updated.priority, updated.active ? 1 : 0, updated.updated_at, id);
+           updated.ssh_target ?? null, updated.priority, updated.active ? 1 : 0, updated.updated_at, id);
     return updated;
   }
 
@@ -173,6 +179,7 @@ function rowToNode(row) {
     city: row.city,
     endpoint: row.endpoint,
     public_key: row.public_key,
+    ssh_target: row.ssh_target ?? null,
     priority: row.priority,
     active: row.active === 1,
     created_at: row.created_at,
@@ -189,6 +196,7 @@ function normalizeNode(node) {
     city: String(node.city ?? "").trim(),
     endpoint: String(node.endpoint ?? "").trim(),
     public_key: String(publicKey).trim(),
+    ssh_target: node.ssh_target ?? node.sshTarget ?? null,
     active: node.active !== false,
     priority: Number.isFinite(Number(node.priority)) ? Number(node.priority) : 100,
     created_at: node.created_at ?? node.createdAt ?? new Date().toISOString(),

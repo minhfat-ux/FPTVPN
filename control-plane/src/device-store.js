@@ -43,7 +43,7 @@ export class DeviceStore {
   }
 
   /** Creates or returns the existing device for a public key. */
-  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId }) {
+  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId }) {
     const devices = await this._load();
     const existing = devices.find((d) => d.publicKey === publicKey);
     if (existing) {
@@ -59,6 +59,7 @@ export class DeviceStore {
       }
       existing.deviceName = deviceName ?? existing.deviceName;
       existing.platform = platform ?? existing.platform;
+      if (exitNodeId) existing.exitNodeId = exitNodeId;
       existing.userId = userId ?? existing.userId ?? null;
       existing.active = true;
       await this._save(devices);
@@ -70,6 +71,7 @@ export class DeviceStore {
       deviceName: deviceName ?? "device",
       platform: platform ?? null,
       userId: userId ?? null,
+      exitNodeId: exitNodeId ?? null,
       assignedIP,
       createdAt: new Date().toISOString(),
       active: true,

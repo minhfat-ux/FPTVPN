@@ -509,7 +509,8 @@ app.get("/device/:id", requireAdminAuth, async (req, res) => {
 app.delete("/device/:id", requireAdminAuth, async (req, res) => {
   const device = await store.deactivate(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
-  await wg.removePeer(device.publicKey);
+  const node = await nodeStore.findActiveById(device.exitNodeId) ?? await nodeStore.firstActive();
+  await wgForNode(node).removePeer(device.publicKey);
   res.json({ device });
 });
 
@@ -561,6 +562,23 @@ app.get("/status", requireAdminAuth, async (_req, res) => {
   }
 });
 
+function wgForNode(node) {
+  if (node?.ssh_target) {
+    return new WireGuardManager({
+      interfaceName: node.wg_interface ?? "wg0",
+      wgBin: "wg",
+      dryRun: DRY_RUN,
+      sshTarget: node.ssh_target,
+      sshKey: process.env.SSH_KEY ?? "/root/.ssh/id_ed25519",
+    });
+  }
+  return wg;
+}
+
+async function provisionPeer(node, publicKey, allowedIPs) {
+  return wgForNode(node).upsertPeer(publicKey, allowedIPs);
+}
+
 async function selectExitNode(id) {
   if (id) return nodeStore.findActiveById(id);
   return nodeStore.firstActive();
@@ -591,17 +609,17 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
     }
   }
 
-  const result = await store.upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId });
-  device = result.device;
-
-  await wg.upsertPeer(publicKey, `${assignedIP}/32`);
-
   const selectedNode = await selectExitNode(exitNodeId);
   if (!selectedNode) {
     const error = new Error("No active exit node available");
     error.statusCode = 503;
     throw error;
   }
+
+  const result = await store.upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId: selectedNode.id });
+  device = result.device;
+
+  await provisionPeer(selectedNode, publicKey, `${assignedIP}/32`);
 
   if (apiShape === "v1") {
     return {

@@ -14,10 +14,13 @@ export class WireGuardManager {
    * @param {string} opts.wgBin
    * @param {boolean} opts.dryRun
    */
-  constructor({ interfaceName = "wg0", wgBin = "wg", dryRun = false } = {}) {
+  constructor({ interfaceName = "wg0", wgBin = "wg", dryRun = false, sshTarget = null, sshKey = null } = {}) {
     this.interfaceName = interfaceName;
     this.wgBin = wgBin;
     this.dryRun = dryRun;
+    // Optional remote provisioning: e.g. sshTarget = "root@10.0.0.5", sshKey = "/root/.ssh/id_ed25519"
+    this.sshTarget = sshTarget;
+    this.sshKey = sshKey;
   }
 
   /**
@@ -63,7 +66,14 @@ export class WireGuardManager {
 
   async _run(args) {
     if (this.dryRun) {
-      console.log(`[dry-run] ${this.wgBin} ${args.join(" ")}`);
+      console.log(`[dry-run] ${this.wgBin} ${args.join(" ")}` + (this.sshTarget ? ` (ssh ${this.sshTarget})` : ""));
+      return;
+    }
+    if (this.sshTarget) {
+      const sshArgs = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8"];
+      if (this.sshKey) sshArgs.push("-i", this.sshKey);
+      sshArgs.push(this.sshTarget, `${this.wgBin} ${args.join(" ")}`);
+      await execFileAsync("ssh", sshArgs);
       return;
     }
     await execFileAsync(this.wgBin, args);
