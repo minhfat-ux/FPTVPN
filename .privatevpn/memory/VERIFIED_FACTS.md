@@ -28,6 +28,8 @@ Only evidence-backed statements. Agent/Expert claims are never promoted directly
 | VF-021 | iOS App Store checklist local validation passed after subscription disclosure changes: app/extension plist and entitlements lint OK; iOS Swift files parse OK. | `plutil -lint iOS/PrivateVPN/Info.plist iOS/PrivateVPNPacketTunnel/Info.plist iOS/PrivateVPN/PrivateVPN.entitlements iOS/PrivateVPNPacketTunnel/PacketTunnel.entitlements`; `xcrun --sdk iphoneos swiftc -parse ...` | 2026-08-22 |
 | VF-022 | macOS FlowVPN build/package check passed after runtime fixes: `FlowVPN.app` embeds `Contents/PlugIns/PrivateVPNMacPacketTunnel.appex`; app and extension are signed with Network Extension entitlement; build succeeded after removing the script line that deleted the embedded extension. | `xcodegen generate`; Xcode build log `BuildProject-Log-20260823-000709.txt`; `codesign -d --entitlements` on app + appex; bundle inspection | 2026-08-23 |
 
+| VF-023 | **iPhone 14 Pro Max E2E PASS (2026-08-23):** login email-OTP thật (iCloud nhận OTP), Connect thành công, public IP = 103.173.155.50, DNS + HTTPS hoạt động, Disconnect về nhà mạng, Reconnect lại VN node, kill app → vẫn signed in. Server-side: peer iPhone active (10.77.0.14, handshake 29s), health latency 0.1ms, bandwidth tăng. | `evidence/e2e/2026-08-23-iphone-e2e.md` | 2026-08-23 |
+
 NOT verified: latest iOS/macOS production end-to-end VPN connectivity,
 public-IP change, DNS/HTTPS through tunnel, reconnect/disconnect, and App Store
 review flow after the most recent paywall/localization/macOS NetworkExtension

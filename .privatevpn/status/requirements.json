@@ -49,36 +49,36 @@
       "id": "FR-VPN-001",
       "version": "v1",
       "state": "APPROVED",
-      "impl": "IMPLEMENTED",
+      "impl": "VERIFIED",
       "gate": "GATE_2",
-      "verified": null,
+      "verified": "2026-08-23",
       "evidence": "iOS/PrivateVPN/VPNManager.swift; iOS/PrivateVPN/Services/WireGuardConfig.swift; evidence/builds/2026-08-19-gate2-device-build-verify.log"
     },
     {
       "id": "FR-VPN-002",
       "version": "v1",
       "state": "APPROVED",
-      "impl": "IMPLEMENTED",
+      "impl": "VERIFIED",
       "gate": "GATE_2",
-      "verified": null,
+      "verified": "2026-08-23",
       "evidence": "iOS/PrivateVPN/Services/WireGuardConfig.swift (allowedIPs 0.0.0.0/0, ::/0)"
     },
     {
       "id": "FR-VPN-003",
       "version": "v1",
       "state": "APPROVED",
-      "impl": "IMPLEMENTED",
+      "impl": "VERIFIED",
       "gate": "GATE_2",
-      "verified": null,
+      "verified": "2026-08-23",
       "evidence": "iOS/PrivateVPN/VPNManager.swift disconnect() -> stopVPNTunnel()"
     },
     {
       "id": "FR-VPN-004",
       "version": "v1",
       "state": "APPROVED",
-      "impl": "IMPLEMENTED",
+      "impl": "VERIFIED",
       "gate": "GATE_2",
-      "verified": null,
+      "verified": "2026-08-23",
       "evidence": "iOS/PrivateVPN/VPNManager.swift connect() -> startVPNTunnel() (re-entrant)"
     },
     {
