@@ -73,9 +73,12 @@ export class WireGuardManager {
       const sshArgs = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8"];
       if (this.sshKey) sshArgs.push("-i", this.sshKey);
       sshArgs.push(this.sshTarget, `${this.wgBin} ${args.join(" ")}`);
-      await execFileAsync("ssh", sshArgs);
+      // Hard total timeout so a hung remote node (unresponsive sshd / stalled
+      // network after TCP connect) cannot hang the register request forever,
+      // which would surface to clients as "Could not reach the coordinator".
+      await execFileAsync("ssh", sshArgs, { timeout: 12_000, killSignal: "SIGKILL" });
       return;
     }
-    await execFileAsync(this.wgBin, args);
+    await execFileAsync(this.wgBin, args, { timeout: 10_000, killSignal: "SIGKILL" });
   }
 }
