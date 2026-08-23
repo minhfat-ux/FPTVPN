@@ -193,7 +193,7 @@ final class VPNManagerMac: ObservableObject {
                     // No TunnelConfigCache yet (e.g. first run of this build),
                     // but the VPN profile from a previous session is still on
                     // disk — replay it directly.
-                    overlayIP = saved.addresses.first ?? ""
+                    overlayIP = Self.overlayIP(fromSaved: saved)
                     exitNode = ExitNode(
                         id: "saved",
                         name: "Saved",
@@ -208,7 +208,7 @@ final class VPNManagerMac: ObservableObject {
                     // Profile may not be loaded yet (init loads it async).
                     await loadManagerFromPreferences()
                     if let saved = savedTunnelConfig() {
-                        overlayIP = saved.addresses.first ?? ""
+                        overlayIP = Self.overlayIP(fromSaved: saved)
                         exitNode = ExitNode(
                             id: "saved",
                             name: "Saved",
@@ -414,6 +414,14 @@ final class VPNManagerMac: ObservableObject {
             return nil
         }
         return config
+    }
+
+    /// Extracts the bare overlay IP from a saved config's address string
+    /// ("10.77.0.9/24" → "10.77.0.9"). buildConfig appends "/24" itself, so a
+    /// CIDR-suffixed address would produce an invalid "…/24/24".
+    private static func overlayIP(fromSaved config: WireGuardConfig) -> String {
+        guard let address = config.addresses.first else { return "" }
+        return address.split(separator: "/").first.map(String.init) ?? ""
     }
 
     private func startStatusPolling() {

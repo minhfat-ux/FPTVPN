@@ -158,7 +158,9 @@ final class VPNManager: ObservableObject {
             if manager == nil { await loadManagerFromPreferences() }
             if let saved = savedTunnelConfig(), let peer = saved.peers.first {
                 store.usingFallbackNodes = true
-                let overlayIP = saved.addresses.first ?? ""
+                // Saved address is "10.77.0.9/24" — cachedTunnelConfig appends
+                // "/24" itself, so strip the CIDR suffix first.
+                let overlayIP = (saved.addresses.first ?? "").split(separator: "/").first.map(String.init) ?? ""
                 let node = ExitNode(
                     id: "saved",
                     name: "Saved",
