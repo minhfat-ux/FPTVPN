@@ -8,6 +8,7 @@ struct ContentViewMac: View {
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingPaywall = false
     @State private var showingLogin = false
+    @State private var forcedUpdateInfo: AppVersionInfo?
 
     var body: some View {
         ZStack {
@@ -99,6 +100,10 @@ struct ContentViewMac: View {
             .padding(24)
             .frame(width: 390, height: 760)
         }
+            .sheet(item: $forcedUpdateInfo) { info in
+                ForceUpdateViewMac(info: info)
+                    .environmentObject(languageStore)
+            }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showingPaywall) {
             MacPaywallView()
@@ -122,6 +127,12 @@ struct ContentViewMac: View {
         .task {
             await subscriptionStore.start()
             await vpnManager.refreshNodes()
+            // Force-update gate (owner requirement): block usage below minimum_version.
+            if let url = URL(string: vpnManager.coordinatorURL),
+               let info = try? await AppVersionService.fetch(from: url),
+               AppVersionService.isForcedUpdate(info) {
+                forcedUpdateInfo = info
+            }
         }
     }
 

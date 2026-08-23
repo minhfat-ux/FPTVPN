@@ -66,6 +66,7 @@ enum AppLanguageChoice: String, CaseIterable, Identifiable {
 
 enum AppTextKey: String {
     case account, signedIn, signedOut, signInRequired, signInTitle, email, loginCode, sendCode, verifyCode, signOut
+    case updateRequired, updateRequiredDetail, update
     case emailPlaceholder, codePlaceholder, invalidEmail, devCode, loginCodeSent
     case systemLanguage, language, appSubtitle, subscription, status
     case premiumActive, premiumRequired, free, protectionUnlocked, choosePlanToStart
@@ -128,7 +129,7 @@ final class AppLanguageStore: ObservableObject {
             .signInTitle: "Sign In", .loginCode: "Login code", .sendCode: "Send Code", .verifyCode: "Verify Code", .signOut: "Sign Out",
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456", .invalidEmail: "Please enter a valid email address.",
             .devCode: "Dev code: %@", .loginCodeSent: "Login code sent",
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam", .updateRequired: "Update Required", .updateRequiredDetail: "A new version of FlowVPN is required to continue. Please update from the App Store.", .update: "Update",
             .subscription: "Subscription", .status: "Status", .premiumActive: "Premium Active",
             .premiumRequired: "Premium Required", .free: "Free", .protectionUnlocked: "VPN protection is unlocked",
             .choosePlanToStart: "Choose a plan to start protection", .choosePlan: "Choose Plan",
@@ -147,7 +148,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "Refresh servers",
         ],
         .vietnamese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của FlowVPN để tiếp tục. Vui lòng cập nhật từ App Store.", .update: "Cập nhật",
             .signInRequired: "Cần đăng nhập",
             .signInTitle: "Đăng nhập", .invalidEmail: "Vui lòng nhập địa chỉ email hợp lệ.",
             .devCode: "Mã dev: %@", .loginCodeSent: "Mã đăng nhập đã được gửi",
@@ -170,7 +171,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "Tải lại máy chủ",
         ],
         .chinese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 FlowVPN 才能继续。请从 App Store 更新。", .update: "更新",
             .signInRequired: "需要登录",
             .signInTitle: "登录", .invalidEmail: "请输入有效的邮箱地址。",
             .devCode: "开发者验证码：%@", .loginCodeSent: "登录验证码已发送",
@@ -193,7 +194,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "刷新服务器",
         ],
         .japanese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "FlowVPN の新しいバージョンが必要です。App Store から更新してください。", .update: "アップデート",
             .signInRequired: "サインインが必要です",
             .signInTitle: "サインイン", .invalidEmail: "有効なメールアドレスを入力してください。",
             .devCode: "開発用コード: %@", .loginCodeSent: "ログインコードを送信しました",
@@ -216,7 +217,7 @@ final class AppLanguageStore: ObservableObject {
             .refreshLocations: "サーバーを更新",
         ],
         .korean: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 FlowVPN 버전이 필요합니다. App Store에서 업데이트하세요.", .update: "업데이트",
             .signInRequired: "로그인이 필요합니다",
             .signInTitle: "로그인", .invalidEmail: "유효한 이메일 주소를 입력하세요.",
             .devCode: "개발자 코드: %@", .loginCodeSent: "로그인 코드가 전송되었습니다",

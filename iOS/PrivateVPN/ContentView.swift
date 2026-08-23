@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var showingSettings = false
     @State private var showingPaywall = false
     @State private var showingLogin = false
+    @State private var forcedUpdateInfo: AppVersionInfo?
 
     var body: some View {
         NavigationStack {
@@ -74,6 +75,10 @@ struct ContentView: View {
                     .environmentObject(authStore)
                     .environmentObject(languageStore)
             }
+            .fullScreenCover(item: $forcedUpdateInfo) { info in
+                ForceUpdateView(info: info)
+                    .environmentObject(languageStore)
+            }
         }
         .preferredColorScheme(.dark)
         .onAppear {
@@ -96,6 +101,12 @@ struct ContentView: View {
             // in production.
             await vpnManager.fetchNodes(store: configStore)
             await subscriptionStore.start()
+            // Force-update gate: if the backend requires a newer build, block usage.
+            if let baseURL = configStore.controlPlaneBaseURL,
+               let info = try? await AppVersionService.fetch(from: baseURL),
+               AppVersionService.isForcedUpdate(info) {
+                forcedUpdateInfo = info
+            }
         }
     }
 

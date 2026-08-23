@@ -58,6 +58,17 @@ struct CoordinatorSubscriptionStatus: Equatable, Codable {
     var expires_at: String?
 }
 
+/// App version info from the coordinator (force-update gate). Defined here so the
+/// Packet Tunnel extension target (which compiles ControlAPIClient but not the
+/// app-only AppVersionService) also has the type.
+struct AppVersionInfo: Equatable, Codable, Identifiable {
+    var platform: String?
+    var minimum_version: String
+    var latest_version: String
+    var store_url: String
+    var id: String { "\(minimum_version)-\(latest_version)" }
+}
+
 /// Talks to the PrivateVPN coordinator (mesh control plane) to register this
 /// device and learn the exit node it should connect to.
 struct ControlAPIClient {
@@ -166,6 +177,24 @@ struct ControlAPIClient {
             return []
         }
         return try JSONDecoder().decode(NodesResponse.self, from: data).nodes
+    }
+
+    /// Fetches the required/latest app version (force-update gate).
+    func fetchAppVersion() async throws -> AppVersionInfo {
+        let url = baseURL.appendingPathComponent("v1/app-version")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ClientError.transport(endpoint: "app version", error)
+        }
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ClientError.badResponse
+        }
+        return try JSONDecoder().decode(AppVersionInfo.self, from: data)
     }
 
     /// Requests a fresh one-time join token from the coordinator. The server may

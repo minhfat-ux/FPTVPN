@@ -164,6 +164,7 @@ targets:
           - "Resources/ChatGPT*.png"
       - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
+      - path: iOS/PrivateVPN/Services/AppVersionService.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac
