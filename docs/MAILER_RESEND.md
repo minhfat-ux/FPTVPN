@@ -1,6 +1,8 @@
-# Mailer Solution — Resend (OTP email for email login)
+# Mailer Solution — SMTP (owner mail server, OTP email for email login)
 
-- **Status:** DECIDED (owner, 2026-08-23) — use **Resend** for transactional OTP emails
+- **Status:** DECIDED (owner, 2026-08-23, updated) — use the **owner SMTP mail server**
+  (`mail92231.maychuemail.com:465`, Postfix) via nodemailer. Resend was the initial pick
+  and is now superseded/removed (SMTP is primary).
 - **Purpose:** deliver the 6-digit OTP code from `/v1/auth/email/start` (email-code login,
   part of BUG-20260823-001 Option F account model)
 - **Related:** `.privatevpn/memory/DECISIONS.md`, `CURRENT_WORK.md` (BUG-20260823-001 gap b),
@@ -8,9 +10,9 @@
   login method. Do NOT add Sign in with Apple JWT verification or Firebase Auth.
   `/v1/auth/apple` stays dev-only (501 in production) or is removed.
   `control-plane/src/auth-store.js`, `control-plane/src/index.js`
-- **Owner decision:** Resend free tier (3,000 emails/month, 100 emails/day, never expires).
-  Backup if more volume later: Brevo (300/day) or Resend Pro ($20/mo, 50k/mo).
-  Do NOT use Gmail SMTP for production.
+- **Owner decision:** SMTP via owner mail server (Postfix, port 465 SSL / 587 STARTTLS).
+  Credentials live in the `flowvpn-cp.service` env on the VPS (`SMTP_USER`/`SMTP_PASS`),
+  never in git. Do NOT use Gmail SMTP for production.
 
 ## 1. Why Resend
 
