@@ -131,7 +131,7 @@ WireGuard mesh**; this appendix records the current reality.
 
 - Node 24 + `node:sqlite`; endpoints under `/v1/...`
   (`/v1/peers/register`, `/v1/peers/heartbeat`, `/v1/peers/me`,
-  `/v1/peers/revoke`, `/v1/tokens`, `/v1/nodes`, `/v1/health`).
+  `/v1/peers/revoke`, `/v1/enrollment-tokens`, `/v1/nodes`, `/v1/health`).
 - Auto-provisions peers into the exit node's `wg0` (`wg set`) on register/revoke;
   IP pool 10.77.0.2–254, WireGuard UDP 443.
 - **Exit-node registry** (`exit_nodes`): `GET /v1/nodes` public, admin
@@ -140,8 +140,12 @@ WireGuard mesh**; this appendix records the current reality.
 ### B3. Provisioning flow
 
 ```
-Device generates keypair (Keychain)
-  → POST /v1/peers/register (join token) → {overlay_ip, peer_credential, peers[]}
+User signs in (Sign in with Apple or email code)
+  → app stores coordinator access token in Keychain
+  → Device generates keypair (Keychain)
+  → POST /v1/enrollment-tokens (Bearer session, active entitlement required)
+  → POST /v1/peers/register (one-time enrollment token + Bearer session)
+      → {overlay_ip, peer_credential, peers[]}
   → coordinator adds peer to wg0
   → app builds WireGuardConfig with IPv4 full-tunnel AllowedIPs 0.0.0.0/0
   → NEVPNManager / NETunnelProviderManager
@@ -152,13 +156,15 @@ Device generates keypair (Keychain)
 
 - Full-tunnel `AllowedIPs = 0.0.0.0/0` to the exit node for Vietnam egress.
 - Dev join token is single-use, 30-minute expiry; app auto-fetches from
-  `/v1/tokens` only for local/internal builds.
+  `/v1/tokens` only for local/internal builds. Production app clients must not
+  call this endpoint.
 - Production enrollment tokens must be issued for a signed-in user ID and active
   subscription, then consumed by `/v1/peers/register` to attach the device
   identity/public key to that user.
 - `ControlAPIClient` is shared verbatim across iOS and macOS targets.
-- Account login / multi-device ownership (Tailscale model) is designed but not
-  yet built (see `docs/SRS.md` Appendix A2).
+- Account login / multi-device ownership (Tailscale model) now has the first
+  client contract and control-plane reference implementation; production VPS
+  coordinator must deploy the same fail-closed policy before release.
 
 ### B5. macOS runtime packaging notes
 

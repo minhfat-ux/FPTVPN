@@ -95,7 +95,7 @@ final class ControlAPIClientTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.url?.path, "/v1/peers/register")
         XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"),
-                     "coordinator auth is via join_token in body, not a header")
+                     "registration keeps legacy no-header behavior unless an access token is supplied")
 
         let body = try XCTUnwrap(bodyData(from: request))
         let payload = try XCTUnwrap(try JSONDecoder().decode([String: String].self, from: body))
@@ -104,6 +104,69 @@ final class ControlAPIClientTests: XCTestCase {
         XCTAssertEqual(payload["wireguard_public_key"], "device-pubkey")
         XCTAssertEqual(payload["endpoint"], "0.0.0.0:51820")
         XCTAssertEqual(payload["join_token"], "PVPN-JOIN-test")
+    }
+
+    func testRegisterCanAttachBearerSession() async throws {
+        let client = makeMockedClient()
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            return (response, try JSONEncoder().encode(self.makeRegisterResponse()))
+        }
+
+        _ = try await client.register(
+            name: "ios-device",
+            platform: "ios",
+            wireguardPublicKey: "device-pubkey",
+            endpoint: "0.0.0.0:51820",
+            accessToken: "PVPN-AUTH-test"
+        )
+
+        let request = try XCTUnwrap(capturedRequest)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer PVPN-AUTH-test")
+    }
+
+    func testFetchEnrollmentTokenUsesAuthenticatedEndpoint() async throws {
+        let client = makeMockedClient()
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"token":"PVPN-ENROLL-test"}"#.utf8))
+        }
+
+        let token = try await client.fetchEnrollmentToken(accessToken: "PVPN-AUTH-test")
+
+        let request = try XCTUnwrap(capturedRequest)
+        XCTAssertEqual(token, "PVPN-ENROLL-test")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.path, "/v1/enrollment-tokens")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer PVPN-AUTH-test")
+    }
+
+    func testFetchEnrollmentTokenRejectsMissingSessionBeforeNetwork() async throws {
+        let client = makeMockedClient()
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("Missing session should fail before making a request")
+            let response = HTTPURLResponse(
+                url: URL(string: "https://api.meetflowai.site")!, statusCode: 500, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await client.fetchEnrollmentToken(accessToken: "")
+            XCTFail("Expected missingSession")
+        } catch let error as ControlAPIClient.ClientError {
+            guard case .missingSession = error else {
+                return XCTFail("Expected missingSession, got \(error)")
+            }
+        }
     }
 
     func testRegisterUnauthorizedMapsToServerError() async throws {

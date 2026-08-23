@@ -58,11 +58,11 @@ final class VPNManager: ObservableObject {
         }
     }
 
-    func connect(store: VPNConfigStore) async {
+    func connect(store: VPNConfigStore, authStore: AuthSessionStore) async {
         do {
             let config: WireGuardConfig
             if let baseURL = store.controlPlaneBaseURL {
-                config = try await provisionViaControlPlane(store: store, baseURL: baseURL)
+                config = try await provisionViaControlPlane(store: store, authStore: authStore, baseURL: baseURL)
             } else {
                 config = try makeConfig(store: store)
             }
@@ -124,13 +124,16 @@ final class VPNManager: ObservableObject {
     /// Registers this device with the PrivateVPN coordinator to obtain its
     /// overlay IP, then builds a WireGuard config that connects to the VPS
     /// exit node (103.173.155.50) for Internet egress.
-    private func provisionViaControlPlane(store: VPNConfigStore, baseURL: URL) async throws -> WireGuardConfig {
+    private func provisionViaControlPlane(store: VPNConfigStore, authStore: AuthSessionStore, baseURL: URL) async throws -> WireGuardConfig {
         let privateKey = try KeychainStore.obtainOrCreatePrivateKey()
         devicePublicKey = privateKey.publicKey.base64Key
 
         let deviceName = try registrationName()
         let bootstrap = ControlAPIClient(baseURL: baseURL, joinToken: "")
-        let joinToken = try await bootstrap.fetchJoinToken()
+        guard let accessToken = authStore.accessToken else {
+            throw ControlAPIClient.ClientError.missingSession
+        }
+        let joinToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
         store.controlPlaneToken = ""
 
         let response: CoordinatorRegisterResponse
@@ -139,23 +142,26 @@ final class VPNManager: ObservableObject {
                 baseURL: baseURL,
                 joinToken: joinToken,
                 name: deviceName,
-                publicKey: privateKey.publicKey.base64Key
+                publicKey: privateKey.publicKey.base64Key,
+                accessToken: accessToken
             )
         } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
-            let retryToken = try await bootstrap.fetchJoinToken()
+            let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
             response = try await registerDevice(
                 baseURL: baseURL,
                 joinToken: retryToken,
                 name: Self.randomRegistrationName(),
-                publicKey: privateKey.publicKey.base64Key
+                publicKey: privateKey.publicKey.base64Key,
+                accessToken: accessToken
             )
         } catch ControlAPIClient.ClientError.server {
-            let retryToken = try await bootstrap.fetchJoinToken()
+            let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
             response = try await registerDevice(
                 baseURL: baseURL,
                 joinToken: retryToken,
                 name: deviceName,
-                publicKey: privateKey.publicKey.base64Key
+                publicKey: privateKey.publicKey.base64Key,
+                accessToken: accessToken
             )
         }
 
@@ -207,13 +213,14 @@ final class VPNManager: ObservableObject {
         "ios-\(UUID().uuidString.prefix(8).lowercased())"
     }
 
-    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String) async throws -> CoordinatorRegisterResponse {
+    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String) async throws -> CoordinatorRegisterResponse {
         let client = ControlAPIClient(baseURL: baseURL, joinToken: joinToken)
         return try await client.register(
             name: name,
             platform: "ios",
             wireguardPublicKey: publicKey,
-            endpoint: "0.0.0.0:51820"  // outbound-only client; placeholder
+            endpoint: "0.0.0.0:51820",  // outbound-only client; placeholder
+            accessToken: accessToken
         )
     }
 
@@ -310,6 +317,8 @@ final class VPNManager: ObservableObject {
                 return "Coordinator rejected this device. Please try again."
             case .badResponse:
                 return "Coordinator returned an invalid response. Please try again."
+            case .missingSession:
+                return "Please sign in before connecting."
             }
         }
         if error is ConfigError {

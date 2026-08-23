@@ -7,6 +7,7 @@ struct ContentView: View {
     @EnvironmentObject private var vpnManager: VPNManager
     @EnvironmentObject private var configStore: VPNConfigStore
     @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingSettings = false
     @State private var showingPaywall = false
@@ -56,6 +57,7 @@ struct ContentView: View {
                         .environmentObject(configStore)
                         .environmentObject(vpnManager)
                         .environmentObject(subscriptionStore)
+                        .environmentObject(authStore)
                         .environmentObject(languageStore)
                 }
             }
@@ -289,7 +291,7 @@ struct ContentView: View {
             showingPaywall = true
         } else {
             Task {
-                await vpnManager.connect(store: configStore)
+                await vpnManager.connect(store: configStore, authStore: authStore)
             }
         }
     }
@@ -396,5 +398,6 @@ struct ContentView: View {
         .environmentObject(VPNManager())
         .environmentObject(VPNConfigStore())
         .environmentObject(SubscriptionStore())
+        .environmentObject(AuthSessionStore())
         .environmentObject(AppLanguageStore())
 }

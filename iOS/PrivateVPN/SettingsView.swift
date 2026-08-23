@@ -4,13 +4,19 @@ import StoreKit
 /// Settings screen for account and subscription actions.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var configStore: VPNConfigStore
     @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingPaywall = false
+    @State private var email = ""
+    @State private var loginCode = ""
+    @State private var accountMessage: String?
 
     var body: some View {
         Form {
             languageSection
+            accountSection
             subscriptionSection
             supportSection
         }
@@ -29,6 +35,52 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(languageStore.t(.done)) { dismiss() }
+            }
+        }
+    }
+
+    private var accountSection: some View {
+        Section(languageStore.t(.account)) {
+            LabeledContent(languageStore.t(.status)) {
+                Text(authStore.isSignedIn ? languageStore.t(.signedIn) : languageStore.t(.signedOut))
+                    .foregroundStyle(authStore.isSignedIn ? VPNTheme.accent : .secondary)
+            }
+
+            if let email = authStore.session?.user.email, !email.isEmpty {
+                LabeledContent(languageStore.t(.email), value: email)
+            } else {
+                TextField(languageStore.t(.email), text: $email)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+                SecureField(languageStore.t(.loginCode), text: $loginCode)
+                    .keyboardType(.numberPad)
+
+                Button {
+                    Task { await sendLoginCode() }
+                } label: {
+                    Label(languageStore.t(.sendCode), systemImage: "envelope")
+                }
+
+                Button {
+                    Task { await verifyLoginCode() }
+                } label: {
+                    Label(languageStore.t(.verifyCode), systemImage: "checkmark.seal")
+                }
+                .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || loginCode.isEmpty)
+            }
+
+            if authStore.isSignedIn {
+                Button(role: .destructive) {
+                    authStore.signOut()
+                } label: {
+                    Label(languageStore.t(.signOut), systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }
+
+            if let message = accountMessage ?? authStore.lastError {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -90,6 +142,35 @@ struct SettingsView: View {
         }
     }
 
+}
+
+private extension SettingsView {
+    func controlAPIClient() throws -> ControlAPIClient {
+        guard let baseURL = configStore.controlPlaneBaseURL else {
+            throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
+        }
+        return ControlAPIClient(baseURL: baseURL, joinToken: "")
+    }
+
+    func sendLoginCode() async {
+        do {
+            let debugCode = try await controlAPIClient().startEmailLogin(email: email)
+            accountMessage = debugCode.map { "Login code sent. Dev code: \($0)" } ?? "Login code sent."
+        } catch {
+            accountMessage = error.localizedDescription
+        }
+    }
+
+    func verifyLoginCode() async {
+        do {
+            let session = try await controlAPIClient().verifyEmailLogin(email: email, code: loginCode)
+            authStore.save(session)
+            loginCode = ""
+            accountMessage = nil
+        } catch {
+            accountMessage = error.localizedDescription
+        }
+    }
 }
 
 @MainActor

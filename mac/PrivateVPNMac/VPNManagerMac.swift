@@ -111,7 +111,7 @@ final class VPNManagerMac: ObservableObject {
         return URL(string: withScheme)
     }
 
-    func connect() async {
+    func connect(authStore: AuthSessionStore) async {
         guard state != "Connecting…", state != "Disconnecting…" else { return }
         state = "Connecting…"
         lastError = nil
@@ -129,7 +129,10 @@ final class VPNManagerMac: ObservableObject {
             log.info("connect: selected node \(node.name, privacy: .public) @ \(node.endpoint, privacy: .public)")
 
             log.info("connect: fetching enrollment token")
-            let token = try await bootstrap.fetchJoinToken()
+            guard let accessToken = authStore.accessToken else {
+                throw ControlAPIClient.ClientError.missingSession
+            }
+            let token = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
 
             let deviceName = "mac-\(Self.stableSuffix(from: privateKey.publicKey))"
             let response: CoordinatorRegisterResponse
@@ -138,23 +141,26 @@ final class VPNManagerMac: ObservableObject {
                     baseURL: baseURL,
                     joinToken: token,
                     name: deviceName,
-                    publicKey: privateKey.publicKey
+                    publicKey: privateKey.publicKey,
+                    accessToken: accessToken
                 )
             } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
-                let retryToken = try await bootstrap.fetchJoinToken()
+                let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
                 response = try await registerDevice(
                     baseURL: baseURL,
                     joinToken: retryToken,
                     name: Self.randomRegistrationName(),
-                    publicKey: privateKey.publicKey
+                    publicKey: privateKey.publicKey,
+                    accessToken: accessToken
                 )
             } catch ControlAPIClient.ClientError.server {
-                let retryToken = try await bootstrap.fetchJoinToken()
+                let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
                 response = try await registerDevice(
                     baseURL: baseURL,
                     joinToken: retryToken,
                     name: deviceName,
-                    publicKey: privateKey.publicKey
+                    publicKey: privateKey.publicKey,
+                    accessToken: accessToken
                 )
             }
             let overlayIP = response.overlay_ip
@@ -189,13 +195,14 @@ final class VPNManagerMac: ObservableObject {
         }
     }
 
-    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String) async throws -> CoordinatorRegisterResponse {
+    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String) async throws -> CoordinatorRegisterResponse {
         let client = ControlAPIClient(baseURL: baseURL, joinToken: joinToken)
         return try await client.register(
             name: name,
             platform: "macos",
             wireguardPublicKey: publicKey,
-            endpoint: "0.0.0.0:51820"
+            endpoint: "0.0.0.0:51820",
+            accessToken: accessToken
         )
     }
 

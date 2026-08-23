@@ -197,7 +197,7 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
    replaces the in-repo Express `control-plane/`. It is Node 24 + `node:sqlite`,
    endpoints under `/v1/...`
    (`/v1/peers/register`, `/v1/peers/heartbeat`, `/v1/peers/revoke`,
-   `/v1/tokens`, `/v1/health`, ...). It auto-provisions peers into the exit
+   `/v1/enrollment-tokens`, `/v1/tokens` dev-only, `/v1/health`, ...). It auto-provisions peers into the exit
    node's `wg0` (`wg set`) on register/revoke.
 2. **Exit-node model**: the app connects to the VPS exit node
    (`103.173.155.50:443`) with full-tunnel `AllowedIPs = 0.0.0.0/0` for Internet
@@ -206,20 +206,22 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
 3. **macOS target** `PrivateVPNMac` added, reusing `ControlAPIClient`.
    The initial local `wg-quick` experiment is superseded; current production
    macOS data plane is NetworkExtension + WireGuardKit.
-4. **Join token** is single-use with 30-minute expiry; the app auto-fetches a
-   fresh token via `POST /v1/tokens` when the field is empty.
+4. **Enrollment token** is single-use and short-lived; production app clients
+   request it via `POST /v1/enrollment-tokens` with a Bearer user session and
+   active entitlement before calling `POST /v1/peers/register`. Legacy
+   `POST /v1/tokens` is local/internal-dev only.
 
 ### A2. Pending requirements for next baseline (Tailscale account model)
 
-- **FR-AUTH-001 (account login)**: user signs in (email+password / magic link /
-  token). Currently only one-time join tokens exist; account ownership is not
-  yet implemented.
+- **FR-AUTH-001 (account login)**: user signs in (email-code fallback, Sign in
+  with Apple once server-side Apple JWT verification is deployed). iOS/macOS
+  now persist coordinator sessions in Keychain for enrollment.
 - **FR-DEVICE multi-device ownership**: one user owns many devices (Tailscale
   model); device registration tied to the signed-in user rather than a join token.
 - **Production enrollment token model**: tokens are issued for a registered user
   ID with an active subscription, then consumed by device registration to create
   or update that user's device record. Public/dev `/v1/tokens` bootstrap must be
-  disabled outside local/internal builds.
+  disabled outside local/internal builds and verified on the production VPS.
 - **Device list + revoke UI** in the app (server-side `/v1/peers/revoke` exists).
 
 ### A3. Not changed

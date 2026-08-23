@@ -90,15 +90,17 @@ Current task tracked here (schema per spec §31). Structured state also in
 
 ## Next task (continuation rule §103)
 
-- **🔴 FIX BUG-20260823-001 (release blocker, decision = Option F / SRS A2):** production
+- **🟡 FIX BUG-20260823-001 in progress (release blocker, decision = Option F / SRS A2):** production
   `POST /v1/tokens` is open without auth (confirmed 2026-08-23 — evidence
   `evidence/2026-08-23-tokens-open-production.md`). Anyone can mint join tokens -> free VPN
   (paywall bypass) and revoked devices can re-register (FR-REVOKE-002 at risk). Fix direction
   (owner): build the **account model** — users table, auth, user->devices ownership
   (FR-AUTH-001); issue tokens only for a registered user with active subscription; disable
   public dev bootstrap `/v1/tokens` outside local/internal builds; re-verify external
-  unauthenticated POST -> 401/403. Do NOT close `/v1/tokens` before the app can authenticate
-  (breaks connect + Apple review).
+  unauthenticated POST -> 401/403. Current repo work adds Keychain auth sessions,
+  email-code login UI, `/v1/enrollment-tokens`, Bearer-bound `/v1/peers/register`,
+  and fail-closed legacy `/v1/tokens` / `/device` behavior in `control-plane/`.
+  Production VPS coordinator still must be updated/deployed and black-box verified.
 - **Next-version server selection upgrade (iOS remaining; macOS code/build verified)**:
   remove the production dependency on hardcoded `VPNLocation.presets` / local
   fallback nodes. On app launch, clients must load exit nodes from

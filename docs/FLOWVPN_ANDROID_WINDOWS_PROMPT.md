@@ -39,10 +39,10 @@ secure local storage, localization, and UI.
 - Base URL: `https://api.meetflowai.site`
 - Fetch nodes:
   - `GET /v1/nodes`
-- Fetch join token:
-  - `POST /v1/tokens`
+- Fetch one-time enrollment token:
+  - `POST /v1/enrollment-tokens` with `Authorization: Bearer <session>`
 - Register device:
-  - `POST /v1/peers/register`
+  - `POST /v1/peers/register` with Bearer session + enrollment token
 - The app must never show coordinator URL, auth token, endpoint IP, WireGuard public key, or private key on the public UI.
 - Diagnostics UI may show only safe state information: Connected, Disconnected, Connecting, Failed, Location, and user-friendly errors.
 - There is no account sign-in in the current product. Do not add login screens
@@ -139,8 +139,9 @@ selection, no production dependency on local hardcoded server presets.
    - If user is not Premium, show paywall.
    - If user is Premium:
      - Immediately show `Connecting` state and disable duplicate Connect taps.
-     - Fetch join token from `POST /v1/tokens`.
-     - Register device using public key.
+     - Require a signed-in user session.
+     - Fetch one-time enrollment token from `POST /v1/enrollment-tokens` with `Authorization: Bearer <session>`.
+     - Register device using public key via `POST /v1/peers/register` with the enrollment token and Bearer session.
      - Receive overlay IP.
      - Build WireGuard config.
      - Request platform VPN permission/consent if not already granted.

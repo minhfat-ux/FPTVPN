@@ -37,6 +37,27 @@ struct NodesResponse: Equatable, Codable {
     var nodes: [ExitNode]
 }
 
+/// Authenticated app session issued by the coordinator after user login.
+struct CoordinatorAuthSession: Equatable, Codable {
+    var access_token: String
+    var token_type: String?
+    var expires_at: String?
+    var user: CoordinatorUser
+}
+
+struct CoordinatorUser: Equatable, Codable {
+    var id: String
+    var email: String?
+    var apple_user_id: String?
+    var subscription_status: CoordinatorSubscriptionStatus?
+}
+
+struct CoordinatorSubscriptionStatus: Equatable, Codable {
+    var is_active: Bool
+    var product_id: String?
+    var expires_at: String?
+}
+
 /// Talks to the PrivateVPN coordinator (mesh control plane) to register this
 /// device and learn the exit node it should connect to.
 struct ControlAPIClient {
@@ -56,6 +77,7 @@ struct ControlAPIClient {
         case badResponse
         case server(String)
         case transport(endpoint: String, Error)
+        case missingSession
 
         var errorDescription: String? {
             switch self {
@@ -65,6 +87,8 @@ struct ControlAPIClient {
                 return message
             case .transport(let endpoint, let error):
                 return "Could not reach the coordinator while requesting \(endpoint): \(error.localizedDescription)"
+            case .missingSession:
+                return "Please sign in before connecting."
             }
         }
     }
@@ -77,12 +101,16 @@ struct ControlAPIClient {
         name: String,
         platform: String,
         wireguardPublicKey: String,
-        endpoint: String
+        endpoint: String,
+        accessToken: String? = nil
     ) async throws -> CoordinatorRegisterResponse {
         let url = baseURL.appendingPathComponent("v1/peers/register")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let accessToken, !accessToken.isEmpty {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
         request.httpBody = try JSONEncoder().encode([
             "name": name,
             "platform": platform,
@@ -142,6 +170,8 @@ struct ControlAPIClient {
 
     /// Requests a fresh one-time join token from the coordinator. The server may
     /// require an admin token (Bearer header); pass it if configured.
+    /// App runtime code must not use this public/dev bootstrap in production;
+    /// use `fetchEnrollmentToken(accessToken:)` instead.
     func fetchJoinToken(adminToken: String? = nil) async throws -> String {
         let url = baseURL.appendingPathComponent("v1/tokens")
         var request = URLRequest(url: url)
@@ -166,8 +196,98 @@ struct ControlAPIClient {
         return body.token
     }
 
+    /// Requests a one-time enrollment token bound to the signed-in user and
+    /// active subscription/entitlement.
+    func fetchEnrollmentToken(accessToken: String) async throws -> String {
+        guard !accessToken.isEmpty else { throw ClientError.missingSession }
+        let url = baseURL.appendingPathComponent("v1/enrollment-tokens")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ClientError.transport(endpoint: "enrollment token", error)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw ClientError.badResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.message
+                ?? (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
+                ?? "HTTP \(http.statusCode)"
+            throw ClientError.server(message)
+        }
+        let body = try JSONDecoder().decode(TokenResponse.self, from: data)
+        return body.token
+    }
+
+    /// Email-code login fallback for regions where third-party SSO is blocked.
+    func startEmailLogin(email: String) async throws -> String? {
+        let url = baseURL.appendingPathComponent("v1/auth/email/start")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["email": email])
+        let data = try await sendEmpty(request, endpoint: "email login")
+        return (try? JSONDecoder().decode(EmailLoginStartResponse.self, from: data))?.debug_code
+    }
+
+    func verifyEmailLogin(email: String, code: String) async throws -> CoordinatorAuthSession {
+        let url = baseURL.appendingPathComponent("v1/auth/email/verify")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["email": email, "code": code])
+        return try await send(request, endpoint: "email verification")
+    }
+
+    func signInWithApple(identityToken: String, authorizationCode: String?) async throws -> CoordinatorAuthSession {
+        let url = baseURL.appendingPathComponent("v1/auth/apple")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode([
+            "identity_token": identityToken,
+            "authorization_code": authorizationCode,
+        ])
+        return try await send(request, endpoint: "apple login")
+    }
+
+    @discardableResult
+    private func sendEmpty(_ request: URLRequest, endpoint: String) async throws -> Data {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ClientError.transport(endpoint: endpoint, error)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw ClientError.badResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.message
+                ?? (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
+                ?? "HTTP \(http.statusCode)"
+            throw ClientError.server(message)
+        }
+        return data
+    }
+
+    private func send<T: Decodable>(_ request: URLRequest, endpoint: String) async throws -> T {
+        let data = try await sendEmpty(request, endpoint: endpoint)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
     private struct TokenResponse: Decodable {
         let token: String
+    }
+
+    private struct EmailLoginStartResponse: Decodable {
+        let debug_code: String?
     }
 
     private struct ErrorBody: Decodable {

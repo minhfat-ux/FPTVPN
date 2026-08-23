@@ -43,12 +43,23 @@ export class DeviceStore {
   }
 
   /** Creates or returns the existing device for a public key. */
-  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform }) {
+  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId }) {
     const devices = await this._load();
     const existing = devices.find((d) => d.publicKey === publicKey);
     if (existing) {
+      if (existing.active === false) {
+        const error = new Error("Device has been revoked");
+        error.statusCode = 403;
+        throw error;
+      }
+      if (existing.userId && userId && existing.userId !== userId) {
+        const error = new Error("Device belongs to another user");
+        error.statusCode = 403;
+        throw error;
+      }
       existing.deviceName = deviceName ?? existing.deviceName;
       existing.platform = platform ?? existing.platform;
+      existing.userId = userId ?? existing.userId ?? null;
       existing.active = true;
       await this._save(devices);
       return { device: existing, isNew: false };
@@ -58,6 +69,7 @@ export class DeviceStore {
       publicKey,
       deviceName: deviceName ?? "device",
       platform: platform ?? null,
+      userId: userId ?? null,
       assignedIP,
       createdAt: new Date().toISOString(),
       active: true,

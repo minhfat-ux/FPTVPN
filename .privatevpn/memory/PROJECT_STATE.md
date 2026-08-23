@@ -33,15 +33,17 @@ exit-node registry are implemented; account/multi-device ownership remains next.
 Coordinator + exit node = same VPS 103.173.155.50
   - coordinator: /root/privatevpn (Node, port 7777, Express + node:sqlite)
       endpoints: /v1/health, /v1/peers/register, /v1/peers/heartbeat,
-                 /v1/peers, /v1/peers/me, /v1/peers/revoke, /v1/tokens
+                 /v1/peers, /v1/peers/me, /v1/peers/revoke,
+                 /v1/enrollment-tokens, /v1/tokens (dev-only)
       WireGuard wg0 (10.77.0.1/24, UDP 443), public key N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=
       on register -> wg set wg0 peer <key> allowed-ips <ip>/32
       on revoke  -> wg set wg0 peer <key> remove
-  - join token: single-use, 30-min expiry (PVPN-JOIN-...)
-  - /v1/tokens (POST) issues a fresh join token (open in dev)
+  - enrollment token: single-use, short-lived, user/subscription-bound
+  - /v1/tokens (POST) is legacy/dev-only and must fail closed in production
 
-App (macOS + iOS) uses ControlAPIClient -> /v1/peers/register, then connects
-to exit node 103.173.155.50:443 with full-tunnel allowedIPs 0.0.0.0/0.
+App (macOS + iOS) uses ControlAPIClient -> /v1/enrollment-tokens ->
+/v1/peers/register, then connects to the selected exit node with full-tunnel
+allowedIPs 0.0.0.0/0.
 ```
 
 ## What is VERIFIED?

@@ -9,7 +9,7 @@
 
 | ID | Title | Sev | Status | Gate | Found by |
 |----|-------|-----|--------|------|----------|
-| BUG-20260823-001 | Production `POST /v1/tokens` open without auth (paywall/revocation bypass) | HIGH | NEW | 4 / publish-prep | DSH secondary reviewer |
+| BUG-20260823-001 | Production `POST /v1/tokens` open without auth (paywall/revocation bypass) | HIGH | IN_PROGRESS | 4 / publish-prep | DSH secondary reviewer |
 
 ## Regressions
 

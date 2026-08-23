@@ -4,6 +4,7 @@ import SwiftUI
 struct PrivateVPNMacApp: App {
     @StateObject private var vpnManager = VPNManagerMac()
     @StateObject private var subscriptionStore = MacSubscriptionStore()
+    @StateObject private var authStore = AuthSessionStore()
     @StateObject private var languageStore = AppLanguageStore()
     @State private var showSettings = false
 
@@ -13,6 +14,7 @@ struct PrivateVPNMacApp: App {
             ContentViewMac()
                 .environmentObject(vpnManager)
                 .environmentObject(subscriptionStore)
+                .environmentObject(authStore)
                 .environmentObject(languageStore)
                 .preferredColorScheme(.dark)
         }
@@ -23,6 +25,7 @@ struct PrivateVPNMacApp: App {
             MenuBarContent()
                 .environmentObject(vpnManager)
                 .environmentObject(subscriptionStore)
+                .environmentObject(authStore)
                 .environmentObject(languageStore)
         }
         .menuBarExtraStyle(.menu)
@@ -32,6 +35,7 @@ struct PrivateVPNMacApp: App {
             SettingsViewMac()
                 .environmentObject(vpnManager)
                 .environmentObject(subscriptionStore)
+                .environmentObject(authStore)
                 .environmentObject(languageStore)
                 .preferredColorScheme(.dark)
         }
@@ -50,6 +54,7 @@ struct PrivateVPNMacApp: App {
 private struct MenuBarContent: View {
     @EnvironmentObject private var vpnManager: VPNManagerMac
     @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
+    @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
     @Environment(\.openSettings) private var openSettings
 
@@ -90,7 +95,7 @@ private struct MenuBarContent: View {
 
         Button(languageStore.t(.connect)) {
             if subscriptionStore.isSubscribed {
-                Task { await vpnManager.connect() }
+                Task { await vpnManager.connect(authStore: authStore) }
             } else {
                 openSettings()
             }

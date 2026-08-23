@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
@@ -9,12 +10,15 @@ import { fileURLToPath } from "node:url";
 import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
+import { AuthStore } from "./auth-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = parseInt(process.env.PORT ?? "8080", 10);
+const NODE_ENV = process.env.NODE_ENV ?? "development";
+const IS_PRODUCTION = NODE_ENV === "production";
 const WG_INTERFACE = process.env.WG_INTERFACE ?? "wg0";
 const WG_SERVER_PUBKEY = process.env.WG_SERVER_PUBKEY ?? "";
 const WG_PUBLIC_ENDPOINT = process.env.WG_PUBLIC_ENDPOINT ?? "";
@@ -24,7 +28,11 @@ const DRY_RUN = process.env.DRY_RUN === "1";
 const AUTH_TOKEN = process.env.AUTH_TOKEN ?? "";
 const ADMIN_ALLOWED_IPS = parseAllowedIPs(process.env.ADMIN_ALLOWED_IPS ?? "");
 const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "devices.json");
+const AUTH_FILE = process.env.AUTH_FILE ?? path.join(__dirname, "..", "data", "auth.json");
 const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", "nodes.json");
+const ALLOW_DEV_TOKEN_BOOTSTRAP = process.env.ALLOW_DEV_TOKEN_BOOTSTRAP === "1" && !IS_PRODUCTION;
+const ALLOW_LEGACY_DEVICE_REGISTRATION = process.env.ALLOW_LEGACY_DEVICE_REGISTRATION === "1" && !IS_PRODUCTION;
+const AUTH_DEV_GRANT_SUBSCRIPTION = process.env.AUTH_DEV_GRANT_SUBSCRIPTION === "1" && !IS_PRODUCTION;
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
@@ -51,6 +59,7 @@ if (TLS_CERT_FILE && TLS_KEY_FILE) {
 const pool = new IPPool(IP_POOL_CIDR);
 const wg = new WireGuardManager({ interfaceName: WG_INTERFACE, wgBin: WG_BIN, dryRun: DRY_RUN });
 const store = new DeviceStore(DATA_FILE);
+const authStore = new AuthStore(AUTH_FILE);
 const nodeStore = new NodeStore(NODES_FILE, buildFallbackExitNode());
 
 const app = express();
@@ -63,6 +72,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.path === "/health" || req.path === "/nodes" || req.path === "/v1/nodes") return next();
+  if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register") return next();
   if (req.method === "GET" && (req.path === "/admin" || req.path === "/admin/")) return next();
   const header = req.headers.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
@@ -102,6 +112,21 @@ const requireAdminIP = (req, res, next) => {
   next();
 };
 
+const requireUserAuth = async (req, res, next) => {
+  try {
+    const header = req.headers.authorization ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+    const auth = await authStore.findSession(token);
+    if (!auth) {
+      return res.status(401).json({ error: "Unauthorized", message: "Valid user session required" });
+    }
+    req.userAuth = auth;
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Health check.
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -125,6 +150,82 @@ const listPublicNodes = async (_req, res) => {
 
 app.get("/nodes", listPublicNodes);
 app.get("/v1/nodes", listPublicNodes);
+
+app.post("/v1/auth/email/start", async (req, res) => {
+  try {
+    const login = await authStore.startEmailLogin(req.body?.email);
+    const body = { ok: true };
+    if (!IS_PRODUCTION) body.debug_code = login.code;
+    res.status(202).json(body);
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+app.post("/v1/auth/email/verify", async (req, res) => {
+  try {
+    const session = await authStore.verifyEmailLogin(req.body?.email, req.body?.code);
+    if (AUTH_DEV_GRANT_SUBSCRIPTION) {
+      await authStore.grantSubscriptionForTest(session.user.id);
+    }
+    res.status(201).json(session);
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+app.post("/v1/auth/apple", async (req, res) => {
+  try {
+    if (IS_PRODUCTION) {
+      return res.status(501).json({
+        error: "Apple identity verification not configured",
+        message: "Production must verify Sign in with Apple JWTs before issuing sessions",
+      });
+    }
+    const payload = parseUnsignedJWT(req.body?.identity_token);
+    const appleUserId = payload?.sub;
+    if (!appleUserId) {
+      return res.status(401).json({ error: "Unauthorized", message: "Valid Apple identity token required" });
+    }
+    const session = await authStore.createAppleSession({
+      appleUserId,
+      email: typeof payload.email === "string" ? payload.email : null,
+    });
+    if (AUTH_DEV_GRANT_SUBSCRIPTION) {
+      await authStore.grantSubscriptionForTest(session.user.id);
+    }
+    res.status(201).json(session);
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+// New app runtime enrollment path. This is deliberately user-authenticated and
+// subscription-bound; the token is one-time and consumed by /v1/peers/register.
+app.post("/v1/enrollment-tokens", requireUserAuth, async (req, res) => {
+  try {
+    const subscription = req.userAuth.subscription;
+    if (!subscription) {
+      return res.status(403).json({ error: "Forbidden", message: "Active subscription required" });
+    }
+    const token = await authStore.createEnrollmentToken(req.userAuth.user.id);
+    res.status(201).json({ token, expires_in: 600 });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+// Legacy bootstrap token issuance must fail closed in production. It may be
+// enabled only for local/internal development by setting ALLOW_DEV_TOKEN_BOOTSTRAP=1.
+app.post("/v1/tokens", async (_req, res) => {
+  if (!ALLOW_DEV_TOKEN_BOOTSTRAP) {
+    return res.status(IS_PRODUCTION ? 410 : 403).json({
+      error: "Legacy token bootstrap disabled",
+      message: "Use authenticated /v1/enrollment-tokens",
+    });
+  }
+  res.status(201).json({ token: `PVPN-DEV-${crypto.randomUUID()}` });
+});
 
 // Admin exit-node management. DELETE disables a node instead of physically
 // removing it, so existing device records and audit history remain meaningful.
@@ -173,43 +274,36 @@ app.delete(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireA
   }
 });
 
+app.post("/v1/peers/register", requireUserAuth, async (req, res) => {
+  try {
+    const { join_token } = req.body ?? {};
+    const enrollment = await authStore.consumeEnrollmentToken(join_token, req.userAuth.user.id);
+    const result = await registerDeviceWithPayload({
+      body: req.body,
+      userId: enrollment.userId,
+      apiShape: "v1",
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    console.error("POST /v1/peers/register failed:", err);
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
 // Register a device: assign IP, provision peer, return client config.
 app.post("/device", async (req, res) => {
   try {
-    const { publicKey, deviceName, platform, exitNodeId, node_id } = req.body ?? {};
-    if (!publicKey || typeof publicKey !== "string") {
-      return res.status(400).json({ error: "publicKey is required" });
+    if (!ALLOW_LEGACY_DEVICE_REGISTRATION) {
+      return res.status(IS_PRODUCTION ? 410 : 403).json({
+        error: "Legacy device registration disabled",
+        message: "Use authenticated /v1/peers/register",
+      });
     }
-
-    let device = await store.findByPublicKey(publicKey);
-    let assignedIP = device?.assignedIP;
-
-    if (!device) {
-      const devices = await store.all();
-      assignedIP = pool.nextFreeIP(devices);
-      if (!assignedIP) {
-        return res.status(503).json({ error: "No free IP available in the pool" });
-      }
-    }
-
-    const result = await store.upsertByPublicKey({ publicKey, deviceName, assignedIP, platform });
-    device = result.device;
-
-    // Provision the peer on the WireGuard node (idempotent).
-    await wg.upsertPeer(publicKey, `${assignedIP}/32`);
-
-    const selectedNode = await selectExitNode(exitNodeId ?? node_id);
-    if (!selectedNode) {
-      return res.status(503).json({ error: "No active exit node available" });
-    }
-
-    res.status(result.isNew ? 201 : 200).json({
-      device,
-      config: buildClientConfig(device, selectedNode),
-    });
+    const result = await registerDeviceWithPayload({ body: req.body, userId: null, apiShape: "legacy" });
+    res.status(result.status).json(result.body);
   } catch (err) {
     console.error("POST /device failed:", err);
-    res.status(500).json({ error: "Internal error" });
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
   }
 });
 
@@ -281,6 +375,65 @@ async function selectExitNode(id) {
   return nodeStore.firstActive();
 }
 
+async function registerDeviceWithPayload({ body, userId, apiShape }) {
+  const publicKey = body?.wireguard_public_key ?? body?.publicKey;
+  const deviceName = body?.name ?? body?.deviceName;
+  const platform = body?.platform;
+  const exitNodeId = body?.exit_node_id ?? body?.exitNodeId ?? body?.node_id;
+
+  if (!publicKey || typeof publicKey !== "string") {
+    const error = new Error("publicKey is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let device = await store.findByPublicKey(publicKey);
+  let assignedIP = device?.assignedIP;
+
+  if (!device) {
+    const devices = await store.all();
+    assignedIP = pool.nextFreeIP(devices);
+    if (!assignedIP) {
+      const error = new Error("No free IP available in the pool");
+      error.statusCode = 503;
+      throw error;
+    }
+  }
+
+  const result = await store.upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId });
+  device = result.device;
+
+  await wg.upsertPeer(publicKey, `${assignedIP}/32`);
+
+  const selectedNode = await selectExitNode(exitNodeId);
+  if (!selectedNode) {
+    const error = new Error("No active exit node available");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  if (apiShape === "v1") {
+    return {
+      status: result.isNew ? 201 : 200,
+      body: {
+        peer_id: device.id,
+        overlay_ip: device.assignedIP,
+        network: IP_POOL_CIDR,
+        peer_credential: `PVPN-PEER-${crypto.randomUUID()}`,
+        peers: [],
+      },
+    };
+  }
+
+  return {
+    status: result.isNew ? 201 : 200,
+    body: {
+      device,
+      config: buildClientConfig(device, selectedNode),
+    },
+  };
+}
+
 function buildClientConfig(device, node) {
   return {
     exitNodeId: node.id,
@@ -327,6 +480,17 @@ function normalizeIP(value) {
   return String(value)
     .trim()
     .replace(/^::ffff:/, "");
+}
+
+function parseUnsignedJWT(jwt) {
+  const parts = String(jwt ?? "").split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function onListen() {

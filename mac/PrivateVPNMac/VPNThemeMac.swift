@@ -65,6 +65,7 @@ enum AppLanguageChoice: String, CaseIterable, Identifiable {
 }
 
 enum AppTextKey: String {
+    case account, signedIn, signedOut, email, loginCode, sendCode, verifyCode, signOut
     case systemLanguage, language, appSubtitle, subscription, status
     case premiumActive, premiumRequired, free, protectionUnlocked, choosePlanToStart
     case choosePlan, restorePurchases, support, contactSupport, privacyPolicy
@@ -122,6 +123,8 @@ final class AppLanguageStore: ObservableObject {
 
     nonisolated private static let textTable: [AppLanguage: [AppTextKey: String]] = [
         .english: [
+            .account: "Account", .signedIn: "Signed in", .signedOut: "Signed out", .email: "Email",
+            .loginCode: "Login code", .sendCode: "Send Code", .verifyCode: "Verify Code", .signOut: "Sign Out",
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam",
             .subscription: "Subscription", .status: "Status", .premiumActive: "Premium Active",
             .premiumRequired: "Premium Required", .free: "Free", .protectionUnlocked: "VPN protection is unlocked",

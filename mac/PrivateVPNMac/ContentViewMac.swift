@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentViewMac: View {
     @EnvironmentObject private var vpnManager: VPNManagerMac
     @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
+    @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingPaywall = false
 
@@ -78,7 +79,7 @@ struct ContentViewMac: View {
                     } else if !subscriptionStore.isSubscribed {
                         showingPaywall = true
                     } else {
-                        Task { await vpnManager.connect() }
+                        Task { await vpnManager.connect(authStore: authStore) }
                     }
                 } label: {
                     Image(systemName: "power")
@@ -256,5 +257,6 @@ struct ContentViewMac: View {
     ContentViewMac()
         .environmentObject(VPNManagerMac())
         .environmentObject(MacSubscriptionStore())
+        .environmentObject(AuthSessionStore())
         .environmentObject(AppLanguageStore())
 }
