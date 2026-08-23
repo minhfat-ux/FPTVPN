@@ -100,6 +100,11 @@ Current task tracked here (schema per spec §31). Structured state also in
   unauthenticated POST -> 401/403. Current repo work adds Keychain auth sessions,
   email-code login UI, `/v1/enrollment-tokens`, Bearer-bound `/v1/peers/register`,
   and fail-closed legacy `/v1/tokens` / `/device` behavior in `control-plane/`.
+  **Deploy safety (2026-08-23):** `control-plane` now supports dual-mode via `LEGACY_MODE`
+  (default `1`): legacy `/v1/tokens` + unauthenticated `/v1/peers/register` keep working for
+  the App-Store-review build while the new authenticated flow (email login, enrollment
+  tokens) is also live. So a node deploy during the review window is safe — do NOT set
+  `LEGACY_MODE=0` until the authenticated app is released.
   **Deploy timing (owner, 2026-08-23): DO NOT deploy to production yet** — the current
   app build (depends on open `/v1/tokens`) is submitted for App Store review; deploying the
   fail-closed fix now would break the reviewer's connect test. Deploy the coordinator fix +

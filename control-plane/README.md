@@ -29,6 +29,7 @@ and provisions the peer on the WireGuard node (Tailscale-style).
 | `RESEND_API_KEY` | (empty) | Resend API key for OTP email delivery. Required for production sends; never commit. When set together with `NODE_ENV=production`, `/v1/auth/email/start` sends real email |
 | `FROM_EMAIL` | `FlowVPN <no-reply@meetflowai.site>` | sender address used for OTP emails (Resend) |
 | `NODE_ENV` | `development` | `production` gates real Resend sends and removes `debug_code` from `/v1/auth/email/start` responses; in dev the OTP code is returned as `debug_code` and no email is sent |
+| `LEGACY_MODE` | `1` | **Temporary App Store review compat.** `1` keeps the pre-auth flow working: `POST /v1/tokens` issues one-time join tokens (30-min, single-use) and `/v1/peers/register` accepts unauthenticated register with a join token. Set `0` after the authenticated app build (email login + enrollment tokens) is released to fail closed (410/401). Server logs a warning while `1`. |
 
 ## Endpoints
 

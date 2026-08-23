@@ -9,6 +9,7 @@ const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
 const RESEND_RATE_MAX = 3;
 const RESEND_RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
+const LEGACY_JOIN_TTL_MS = 30 * 60 * 1000;
 
 export class AuthStore {
   constructor(filePath) {
@@ -124,6 +125,33 @@ export class AuthStore {
     enrollment.consumedAt = new Date().toISOString();
     await this._save(data);
     return { userId };
+  }
+
+  /// Legacy one-time join token (App Store review compat window, LEGACY_MODE=1).
+  /// Mirrors the pre-auth coordinator: PVPN-JOIN-* token, 30-min expiry, single-use.
+  async createJoinToken() {
+    const data = await this._load();
+    const token = `PVPN-JOIN-${crypto.randomBytes(24).toString("base64url")}`;
+    const now = new Date();
+    data.joinTokens.push({
+      tokenHash: hashToken(token),
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + LEGACY_JOIN_TTL_MS).toISOString(),
+      consumed: false,
+    });
+    await this._save(data);
+    return { token, expiresAt: new Date(now.getTime() + LEGACY_JOIN_TTL_MS).toISOString() };
+  }
+
+  async consumeJoinToken(token) {
+    const data = await this._load();
+    const row = data.joinTokens.find((entry) => entry.tokenHash === hashToken(token));
+    if (!row) throw unauthorized("Invalid or expired join token");
+    if (row.consumed) throw unauthorized("Join token has already been consumed");
+    if (isExpired(row.expiresAt)) throw unauthorized("Join token has expired");
+    row.consumed = true;
+    await this._save(data);
+    return { ok: true };
   }
 
   async grantSubscriptionForTest(userId, productId = "test.premium") {
@@ -243,6 +271,7 @@ function emptyData() {
     sessions: [],
     emailOtps: [],
     emailLoginRequests: [],
+    joinTokens: [],
     subscriptions: [],
     enrollmentTokens: [],
   };
@@ -254,6 +283,7 @@ function normalizeData(data) {
     sessions: Array.isArray(data.sessions) ? data.sessions : [],
     emailOtps: Array.isArray(data.emailOtps) ? data.emailOtps : [],
     emailLoginRequests: Array.isArray(data.emailLoginRequests) ? data.emailLoginRequests : [],
+    joinTokens: Array.isArray(data.joinTokens) ? data.joinTokens : [],
     subscriptions: Array.isArray(data.subscriptions) ? data.subscriptions : [],
     enrollmentTokens: Array.isArray(data.enrollmentTokens) ? data.enrollmentTokens : [],
   };

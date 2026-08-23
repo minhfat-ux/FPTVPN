@@ -32,6 +32,13 @@ const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "d
 const AUTH_FILE = process.env.AUTH_FILE ?? path.join(__dirname, "..", "data", "auth.json");
 const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", "nodes.json");
 const ALLOW_DEV_TOKEN_BOOTSTRAP = process.env.ALLOW_DEV_TOKEN_BOOTSTRAP === "1" && !IS_PRODUCTION;
+// LEGACY_MODE=1 keeps the pre-auth join-token + unauthenticated /v1/peers/register
+// flow working so a build that is already submitted to App Store review can still
+// connect after this server is deployed. Set LEGACY_MODE=0 (or unset -> default "1"
+// until the new authenticated app is released) to fail closed.
+// TODO(owner): set LEGACY_MODE=0 in production once the authenticated app build
+// (email login + enrollment tokens) is released and App Store approved.
+const LEGACY_MODE = process.env.LEGACY_MODE ?? "1";
 const ALLOW_LEGACY_DEVICE_REGISTRATION = process.env.ALLOW_LEGACY_DEVICE_REGISTRATION === "1" && !IS_PRODUCTION;
 const AUTH_DEV_GRANT_SUBSCRIPTION = process.env.AUTH_DEV_GRANT_SUBSCRIPTION === "1" && !IS_PRODUCTION;
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
@@ -220,6 +227,17 @@ app.post("/v1/enrollment-tokens", requireUserAuth, async (req, res) => {
 // Legacy bootstrap token issuance must fail closed in production. It may be
 // enabled only for local/internal development by setting ALLOW_DEV_TOKEN_BOOTSTRAP=1.
 app.post("/v1/tokens", async (_req, res) => {
+  // LEGACY_MODE=1: keep issuing one-time join tokens so the App-Store-review build
+  // (which calls this endpoint unauthenticated) keeps working after deploy.
+  if (LEGACY_MODE === "1") {
+    try {
+      const created = await authStore.createJoinToken();
+      return res.status(201).json({ token: created.token, expires_at: created.expiresAt });
+    } catch (err) {
+      return res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+    }
+  }
+  // Fail closed otherwise.
   if (!ALLOW_DEV_TOKEN_BOOTSTRAP) {
     return res.status(IS_PRODUCTION ? 410 : 403).json({
       error: "Legacy token bootstrap disabled",
@@ -276,16 +294,39 @@ app.delete(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireA
   }
 });
 
-app.post("/v1/peers/register", requireUserAuth, async (req, res) => {
+app.post("/v1/peers/register", async (req, res) => {
   try {
     const { join_token } = req.body ?? {};
-    const enrollment = await authStore.consumeEnrollmentToken(join_token, req.userAuth.user.id);
+    const header = req.headers.authorization ?? "";
+    const bearer = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+
+    // New flow: authenticated user session + one-time enrollment token.
+    if (bearer) {
+      const auth = await authStore.findSession(bearer);
+      if (!auth) {
+        return res.status(401).json({ error: "Unauthorized", message: "Valid user session required" });
+      }
+      const enrollment = await authStore.consumeEnrollmentToken(join_token, auth.user.id);
+      const result = await registerDeviceWithPayload({
+        body: req.body,
+        userId: enrollment.userId,
+        apiShape: "v1",
+      });
+      return res.status(result.status).json(result.body);
+    }
+
+    // Legacy flow (App Store review compat, LEGACY_MODE=1 only): unauthenticated
+    // register with a one-time join token from POST /v1/tokens.
+    if (LEGACY_MODE !== "1") {
+      return res.status(401).json({ error: "Unauthorized", message: "Valid user session required" });
+    }
+    await authStore.consumeJoinToken(join_token);
     const result = await registerDeviceWithPayload({
       body: req.body,
-      userId: enrollment.userId,
+      userId: null,
       apiShape: "v1",
     });
-    res.status(result.status).json(result.body);
+    return res.status(result.status).json(result.body);
   } catch (err) {
     console.error("POST /v1/peers/register failed:", err);
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
@@ -502,6 +543,7 @@ function onListen() {
   console.log(`  adminAllowedIPs=${Array.from(ADMIN_ALLOWED_IPS).join(",")}`);
   if (!WG_SERVER_PUBKEY) console.warn("  WARNING: WG_SERVER_PUBKEY not set");
   if (!WG_PUBLIC_ENDPOINT) console.warn("  WARNING: WG_PUBLIC_ENDPOINT not set");
+  if (LEGACY_MODE === "1") console.warn("  WARNING: LEGACY_MODE=1 — unauthenticated join tokens + register enabled (App Store review window). Set LEGACY_MODE=0 after the authenticated app is released.");
 }
 
 if (tlsReady) {
