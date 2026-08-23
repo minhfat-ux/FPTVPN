@@ -351,6 +351,35 @@ app.get("/v1/admin/nodes/:id/health", requireAdminAuth, async (req, res) => {
   }
 });
 
+// User administration (admin, Bearer AUTH_TOKEN): list users + subscription
+// status, grant a test subscription, revoke a user (kills their sessions).
+app.get("/v1/admin/users", requireAdminAuth, async (_req, res) => {
+  try {
+    const users = await authStore.listUsers();
+    res.json({ count: users.length, users });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+app.post("/v1/admin/users/:id/subscription", requireAdminAuth, async (req, res) => {
+  try {
+    const user = await authStore.grantSubscription(req.params.id, req.body ?? {});
+    res.json({ user });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+app.post("/v1/admin/users/:id/revoke", requireAdminAuth, async (req, res) => {
+  try {
+    const user = await authStore.revokeUser(req.params.id);
+    res.json({ user });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
 app.post("/v1/peers/register", async (req, res) => {
   try {
     const { join_token } = req.body ?? {};

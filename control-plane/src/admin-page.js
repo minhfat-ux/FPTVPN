@@ -144,6 +144,15 @@ export function adminPageHTML() {
 
     .hidden { display: none !important; }
 
+    .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+    .tab {
+      border: 1px solid var(--stroke);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .tab.active { background: var(--accent); color: #06160d; border-color: var(--accent); }
+
     .backlink {
       display: inline-flex;
       align-items: center;
@@ -177,6 +186,11 @@ export function adminPageHTML() {
   </header>
 
   <main>
+    <div class="tabs">
+      <button class="tab active" id="tabNodes">Nodes</button>
+      <button class="tab" id="tabUsers">Users</button>
+    </div>
+
     <!-- ===================== LIST VIEW ===================== -->
     <section class="card" id="view-list">
       <div class="grid">
@@ -213,6 +227,31 @@ export function adminPageHTML() {
           </thead>
           <tbody id="nodesBody">
             <tr><td colspan="7">No data loaded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== USERS VIEW ===================== -->
+    <section class="card hidden" id="view-users">
+      <h2>Users</h2>
+      <div class="actions">
+        <button class="secondary" id="loadUsers">Load Users</button>
+      </div>
+      <div style="overflow-x:auto; margin-top: 12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>User ID</th>
+              <th>Created</th>
+              <th>Subscription</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody">
+            <tr><td colspan="6">No data loaded.</td></tr>
           </tbody>
         </table>
       </div>
@@ -282,7 +321,11 @@ export function adminPageHTML() {
       nodesBody: document.getElementById("nodesBody"),
       viewList: document.getElementById("view-list"),
       viewEdit: document.getElementById("view-edit"),
+      viewUsers: document.getElementById("view-users"),
+      usersBody: document.getElementById("usersBody"),
       editTitle: document.getElementById("editTitle"),
+      tabNodes: document.getElementById("tabNodes"),
+      tabUsers: document.getElementById("tabUsers"),
     };
 
     let editingId = null; // null = create mode
@@ -314,6 +357,94 @@ export function adminPageHTML() {
         "Authorization": "Bearer " + fields.token.value.trim(),
         "Content-Type": "application/json",
       };
+    }
+
+    function showTab(tab) {
+      const nodes = tab === "nodes";
+      fields.tabNodes.classList.toggle("active", nodes);
+      fields.tabUsers.classList.toggle("active", !nodes);
+      fields.viewList.classList.toggle("hidden", !nodes);
+      fields.viewUsers.classList.toggle("hidden", nodes);
+      fields.viewEdit.classList.add("hidden");
+      if (!nodes && !fields.usersLoaded) {
+        fields.usersLoaded = true;
+        loadUsers();
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        setStatus("Loading users...");
+        const data = await request("/v1/admin/users");
+        renderUsers(data.users || []);
+        setStatus("Loaded " + (data.users || []).length + " user(s).");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    function renderUsers(users) {
+      if (!users.length) {
+        fields.usersBody.innerHTML = '<tr><td colspan="6">No users found.</td></tr>';
+        return;
+      }
+      fields.usersBody.innerHTML = "";
+      for (const user of users) {
+        const row = document.createElement("tr");
+        row.innerHTML = [
+          '<td data-label="Email"></td>',
+          '<td data-label="User ID"><code></code></td>',
+          '<td data-label="Created"></td>',
+          '<td data-label="Subscription"></td>',
+          '<td data-label="Status"></td>',
+          '<td data-label="Actions"></td>',
+        ].join("");
+        row.children[0].textContent = user.email || (user.apple_user_id ? "apple:" + user.apple_user_id.slice(0, 8) : "—");
+        row.children[1].querySelector("code").textContent = user.id;
+        row.children[2].textContent = user.created_at ? user.created_at.slice(0, 10) : "";
+        const sub = user.subscription_status || {};
+        row.children[3].innerHTML = sub.is_active
+          ? "active (" + (sub.product_id || "?") + ") until " + (sub.expires_at || "").slice(0, 10)
+          : '<span class="pill off">no subscription</span>';
+        row.children[4].innerHTML = user.revoked_at
+          ? '<span class="pill off">revoked</span>'
+          : '<span class="pill">active</span>';
+
+        const grant = document.createElement("button");
+        grant.className = "secondary";
+        grant.textContent = "Grant 30d";
+        grant.disabled = !!user.revoked_at;
+        grant.onclick = async () => {
+          try {
+            await request("/v1/admin/users/" + encodeURIComponent(user.id) + "/subscription", {
+              method: "POST",
+              body: JSON.stringify({ days: 30 }),
+            });
+            setStatus("Granted 30-day subscription to " + (user.email || user.id) + ".");
+            await loadUsers();
+          } catch (error) {
+            setStatus(error.message, true);
+          }
+        };
+
+        const revoke = document.createElement("button");
+        revoke.className = "danger";
+        revoke.textContent = user.revoked_at ? "Revoked" : "Revoke";
+        revoke.disabled = !!user.revoked_at;
+        revoke.onclick = async () => {
+          if (!confirm("Revoke user " + (user.email || user.id) + "? Their sessions will stop working.")) return;
+          try {
+            await request("/v1/admin/users/" + encodeURIComponent(user.id) + "/revoke", { method: "POST" });
+            setStatus("Revoked " + (user.email || user.id) + ".");
+            await loadUsers();
+          } catch (error) {
+            setStatus(error.message, true);
+          }
+        };
+
+        row.children[5].append(grant, " ", revoke);
+        fields.usersBody.appendChild(row);
+      }
     }
 
     function showView(view) {
@@ -516,6 +647,9 @@ export function adminPageHTML() {
       }
     }
 
+    document.getElementById("tabNodes").onclick = () => showTab("nodes");
+    document.getElementById("tabUsers").onclick = () => showTab("users");
+    document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;
     document.getElementById("saveNode").onclick = saveNode;

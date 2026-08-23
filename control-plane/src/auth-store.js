@@ -154,6 +154,39 @@ export class AuthStore {
     return { ok: true };
   }
 
+  async listUsers() {
+    const data = await this._load();
+    return data.users.map((user) => publicUser(user, activeSubscriptionFor(data, user.id)));
+  }
+
+  async grantSubscription(userId, { productId = "test.premium", days = 30 } = {}) {
+    const data = await this._load();
+    const user = data.users.find((entry) => entry.id === userId);
+    if (!user) throw badRequest("User not found");
+    const daysNum = Number(days);
+    const expiresAt = new Date(Date.now() + (Number.isFinite(daysNum) && daysNum > 0 ? daysNum : 30) * 24 * 60 * 60 * 1000).toISOString();
+    data.subscriptions = data.subscriptions.filter((entry) => entry.userId !== userId);
+    data.subscriptions.push({
+      id: crypto.randomUUID(),
+      userId,
+      productId,
+      expiresAt,
+      revokedAt: null,
+      createdAt: new Date().toISOString(),
+    });
+    await this._save(data);
+    return publicUser(user, activeSubscriptionFor(data, userId));
+  }
+
+  async revokeUser(userId) {
+    const data = await this._load();
+    const user = data.users.find((entry) => entry.id === userId);
+    if (!user) throw badRequest("User not found");
+    user.revokedAt = new Date().toISOString();
+    await this._save(data);
+    return publicUser(user, activeSubscriptionFor(data, userId));
+  }
+
   async grantSubscriptionForTest(userId, productId = "test.premium") {
     const data = await this._load();
     data.subscriptions = data.subscriptions.filter((entry) => entry.userId !== userId);
@@ -235,6 +268,7 @@ function publicUser(user, subscription = null) {
     id: user.id,
     email: user.email ?? null,
     apple_user_id: user.appleUserId ?? null,
+    revoked_at: user.revokedAt ?? null,
     subscription_status: {
       is_active: Boolean(subscription),
       product_id: subscription?.productId ?? null,
