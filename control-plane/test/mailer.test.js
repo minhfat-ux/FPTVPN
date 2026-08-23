@@ -68,9 +68,11 @@ test("production: sends via SMTP and returns sent: true", async () => {
       const message = sent[0];
       assert.equal(message.from, "FlowVPN <no-reply@meetflowai.site>");
       assert.equal(message.to, "user@example.com");
-      assert.equal(message.subject, "Your FlowVPN login code");
+      assert.equal(message.subject, "Your FlowVPN Login Code");
+      assert.match(message.html, /Dear valued customer/);
       assert.match(message.html, /483920/);
       assert.match(message.html, /expires in 10 minutes/);
+      assert.match(message.html, /support@meetflowai.site/);
     }
   );
 });

@@ -1,8 +1,11 @@
 import nodemailer from "nodemailer";
 
 const DEFAULT_FROM_EMAIL = "FlowVPN <no-reply@meetflowai.site>";
-const SUBJECT = "Your FlowVPN login code";
-const EXPIRES_NOTE = "It expires in 10 minutes. If you did not request this, ignore this email.";
+const SUBJECT = "Your FlowVPN Login Code";
+const SUPPORT_EMAIL = "support@meetflowai.site";
+const GREETING = "Dear valued customer,";
+const EXPIRES_NOTE = "This code expires in 10 minutes. If you did not request this, please ignore this email.";
+const SIGNATURE = `Best regards,<br/>FlowVPN Team<br/><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>`;
 
 // Sends the OTP login code via the owner's SMTP mail server
 // (mail92231.maychuemail.com:465 SSL / 587 STARTTLS). createSendOtpEmail lets
@@ -27,7 +30,11 @@ export function createSendOtpEmail({ transporter } = {}) {
           from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
           to: email,
           subject: SUBJECT,
-          html: `<p>Your FlowVPN login code is <strong>${code}</strong>.</p>\n<p>${EXPIRES_NOTE}</p>`,
+          html: `<p>${GREETING}</p>
+<p>Your FlowVPN login code is:</p>
+<p style="font-size:24px;font-weight:bold;letter-spacing:4px">${code}</p>
+<p>${EXPIRES_NOTE}</p>
+<p>${SIGNATURE}</p>`,
         });
         return { sent: true };
       } catch (err) {
