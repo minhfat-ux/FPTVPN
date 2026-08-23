@@ -21,6 +21,11 @@ struct ContentView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         header
+
+                        if !authStore.isSignedIn {
+                            signInRequiredBanner
+                        }
+
                         subscriptionStatusCard
                         statusCard
                         locationCard
@@ -289,6 +294,8 @@ struct ContentView: View {
             vpnManager.disconnect()
         } else if !subscriptionStore.isSubscribed {
             showingPaywall = true
+        } else if !authStore.isSignedIn {
+            showingSettings = true
         } else {
             Task {
                 await vpnManager.connect(store: configStore, authStore: authStore)
@@ -346,6 +353,30 @@ struct ContentView: View {
     }
 
     // MARK: - Helpers
+
+    private var signInRequiredBanner: some View {
+        Button {
+            showingSettings = true
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.exclamationmark.fill")
+                    .foregroundStyle(.orange)
+                Text(languageStore.t(.signInRequired))
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(14)
+            .background(Color.orange.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageStore.t(.signInRequired))
+    }
 
     private func errorBanner(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 10) {

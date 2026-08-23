@@ -41,6 +41,14 @@ const ALLOW_DEV_TOKEN_BOOTSTRAP = process.env.ALLOW_DEV_TOKEN_BOOTSTRAP === "1" 
 const LEGACY_MODE = process.env.LEGACY_MODE ?? "1";
 const ALLOW_LEGACY_DEVICE_REGISTRATION = process.env.ALLOW_LEGACY_DEVICE_REGISTRATION === "1" && !IS_PRODUCTION;
 const AUTH_DEV_GRANT_SUBSCRIPTION = process.env.AUTH_DEV_GRANT_SUBSCRIPTION === "1" && !IS_PRODUCTION;
+// Test-only allowlists that DO apply in production (owner/dev testing without
+// waiting for Resend + App Store product review). Comma-separated emails.
+// DEBUG_CODE_EMAILS: return debug_code in /v1/auth/email/start for these emails
+//   even in production (so the dev can see the OTP in the app without a mailer).
+// GRANT_SUB_EMAILS: grant a test subscription on email verify for these emails
+//   (so /v1/enrollment-tokens stops returning 403 for the test account).
+const DEBUG_CODE_EMAILS = parseEmailList(process.env.DEBUG_CODE_EMAILS);
+const GRANT_SUB_EMAILS = parseEmailList(process.env.GRANT_SUB_EMAILS);
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
@@ -169,7 +177,9 @@ app.post("/v1/auth/email/start", async (req, res) => {
     const login = await authStore.startEmailLogin(req.body?.email);
     const mail = await sendOtpEmail({ email: login.email, code: login.code });
     const body = { ok: true };
-    if (!IS_PRODUCTION) body.debug_code = mail.devCode ?? login.code;
+    if (!IS_PRODUCTION || DEBUG_CODE_EMAILS.has(login.email)) {
+      body.debug_code = mail.devCode ?? login.code;
+    }
     res.status(202).json(body);
   } catch (err) {
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
@@ -179,7 +189,7 @@ app.post("/v1/auth/email/start", async (req, res) => {
 app.post("/v1/auth/email/verify", async (req, res) => {
   try {
     const session = await authStore.verifyEmailLogin(req.body?.email, req.body?.code);
-    if (AUTH_DEV_GRANT_SUBSCRIPTION) {
+    if (AUTH_DEV_GRANT_SUBSCRIPTION || GRANT_SUB_EMAILS.has(session.user.email ?? "")) {
       await authStore.grantSubscriptionForTest(session.user.id);
     }
     res.status(201).json(session);
@@ -506,6 +516,13 @@ function buildFallbackExitNode() {
     active: true,
     priority: 100,
   };
+}
+
+function parseEmailList(value) {
+  return new Set(String(value ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean));
 }
 
 function parseAllowedIPs(value) {

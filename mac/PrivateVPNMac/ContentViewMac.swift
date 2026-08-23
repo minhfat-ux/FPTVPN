@@ -6,6 +6,7 @@ struct ContentViewMac: View {
     @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
     @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
+    @Environment(\.openSettings) private var openSettings
     @State private var showingPaywall = false
 
     var body: some View {
@@ -32,6 +33,11 @@ struct ContentViewMac: View {
                 .padding(.top, 16)
 
                 subscriptionStatusCard
+
+                if !authStore.isSignedIn {
+                    signInRequiredBanner
+                }
+
                 serverSelectionCard
 
                 // Status card
@@ -73,15 +79,7 @@ struct ContentViewMac: View {
                 Spacer()
 
                 // Primary toggle button: Connect when disconnected, Disconnect when connected.
-                Button {
-                    if vpnManager.state == "Connected" || vpnManager.state == "Connecting…" {
-                        vpnManager.disconnect()
-                    } else if !subscriptionStore.isSubscribed {
-                        showingPaywall = true
-                    } else {
-                        Task { await vpnManager.connect(authStore: authStore) }
-                    }
-                } label: {
+                Button(action: handlePrimaryTap) {
                     Image(systemName: "power")
                         .font(.system(size: 44, weight: .semibold))
                         .foregroundStyle(.white)
@@ -220,6 +218,41 @@ struct ContentViewMac: View {
         default:
             return .red
         }
+    }
+
+    private func handlePrimaryTap() {
+        if vpnManager.state == "Connected" || vpnManager.state == "Connecting…" {
+            vpnManager.disconnect()
+        } else if !subscriptionStore.isSubscribed {
+            showingPaywall = true
+        } else if !authStore.isSignedIn {
+            openSettings()
+        } else {
+            Task { await vpnManager.connect(authStore: authStore) }
+        }
+    }
+
+    private var signInRequiredBanner: some View {
+        Button(action: { openSettings() }) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.exclamationmark.fill")
+                    .foregroundStyle(.orange)
+                Text(languageStore.t(.signInRequired))
+                    .font(.footnote)
+                    .foregroundStyle(VPNThemeMac.textPrimary.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity)
+            .background(Color.orange.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(languageStore.t(.signInRequired))
     }
 
     private var primaryButtonDisabled: Bool {
