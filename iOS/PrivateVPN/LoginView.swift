@@ -9,9 +9,11 @@ struct LoginView: View {
     @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
 
-    @State private var email = ""
+    // Persisted so the login progress survives app transitions (e.g. switching to
+    // the mail app to read the OTP, which can evict the view and reset @State).
+    @AppStorage("login.pendingEmail") private var email = ""
+    @AppStorage("login.codeRequested") private var codeRequested = false
     @State private var loginCode = ""
-    @State private var codeRequested = false
     @State private var isSendingCode = false
     @State private var isVerifying = false
     @State private var message: LoginMessage?
@@ -220,6 +222,9 @@ struct LoginView: View {
             do {
                 let session = try await controlAPIClient().verifyEmailLogin(email: trimmedEmail, code: loginCode)
                 authStore.save(session)
+                email = ""
+                codeRequested = false
+                loginCode = ""
                 if authStore.isSignedIn {
                     dismiss()
                 }
