@@ -9,9 +9,7 @@ struct SettingsView: View {
     @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingPaywall = false
-    @State private var email = ""
-    @State private var loginCode = ""
-    @State private var accountMessage: String?
+    @State private var showingLogin = false
 
     var body: some View {
         Form {
@@ -27,6 +25,12 @@ struct SettingsView: View {
         .sheet(isPresented: $showingPaywall) {
             PaywallView()
                 .environmentObject(subscriptionStore)
+                .environmentObject(languageStore)
+        }
+        .fullScreenCover(isPresented: $showingLogin) {
+            LoginView()
+                .environmentObject(configStore)
+                .environmentObject(authStore)
                 .environmentObject(languageStore)
         }
         .task {
@@ -48,25 +52,6 @@ struct SettingsView: View {
 
             if let email = authStore.session?.user.email, !email.isEmpty {
                 LabeledContent(languageStore.t(.email), value: email)
-            } else {
-                TextField(languageStore.t(.email), text: $email)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.emailAddress)
-                SecureField(languageStore.t(.loginCode), text: $loginCode)
-                    .keyboardType(.numberPad)
-
-                Button {
-                    Task { await sendLoginCode() }
-                } label: {
-                    Label(languageStore.t(.sendCode), systemImage: "envelope")
-                }
-
-                Button {
-                    Task { await verifyLoginCode() }
-                } label: {
-                    Label(languageStore.t(.verifyCode), systemImage: "checkmark.seal")
-                }
-                .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || loginCode.isEmpty)
             }
 
             if authStore.isSignedIn {
@@ -75,12 +60,12 @@ struct SettingsView: View {
                 } label: {
                     Label(languageStore.t(.signOut), systemImage: "rectangle.portrait.and.arrow.right")
                 }
-            }
-
-            if let message = accountMessage ?? authStore.lastError {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            } else {
+                Button {
+                    showingLogin = true
+                } label: {
+                    Label(languageStore.t(.signInTitle), systemImage: "person.crop.circle.badge.plus")
+                }
             }
         }
     }
@@ -142,35 +127,6 @@ struct SettingsView: View {
         }
     }
 
-}
-
-private extension SettingsView {
-    func controlAPIClient() throws -> ControlAPIClient {
-        guard let baseURL = configStore.controlPlaneBaseURL else {
-            throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
-        }
-        return ControlAPIClient(baseURL: baseURL, joinToken: "")
-    }
-
-    func sendLoginCode() async {
-        do {
-            let debugCode = try await controlAPIClient().startEmailLogin(email: email)
-            accountMessage = debugCode.map { "Login code sent. Dev code: \($0)" } ?? "Login code sent."
-        } catch {
-            accountMessage = error.localizedDescription
-        }
-    }
-
-    func verifyLoginCode() async {
-        do {
-            let session = try await controlAPIClient().verifyEmailLogin(email: email, code: loginCode)
-            authStore.save(session)
-            loginCode = ""
-            accountMessage = nil
-        } catch {
-            accountMessage = error.localizedDescription
-        }
-    }
 }
 
 @MainActor

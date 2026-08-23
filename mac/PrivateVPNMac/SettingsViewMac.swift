@@ -8,9 +8,7 @@ struct SettingsViewMac: View {
     @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingPaywall = false
-    @State private var email = ""
-    @State private var loginCode = ""
-    @State private var accountMessage: String?
+    @State private var showingLogin = false
 
     var body: some View {
         Form {
@@ -61,6 +59,12 @@ struct SettingsViewMac: View {
                 .environmentObject(subscriptionStore)
                 .environmentObject(languageStore)
         }
+        .sheet(isPresented: $showingLogin) {
+            LoginViewMac()
+                .environmentObject(vpnManager)
+                .environmentObject(authStore)
+                .environmentObject(languageStore)
+        }
         .task {
             await subscriptionStore.start()
         }
@@ -88,23 +92,6 @@ struct SettingsViewMac: View {
 
             if let email = authStore.session?.user.email, !email.isEmpty {
                 LabeledContent(languageStore.t(.email), value: email)
-            } else {
-                TextField(languageStore.t(.email), text: $email)
-                    .textContentType(.emailAddress)
-                SecureField(languageStore.t(.loginCode), text: $loginCode)
-
-                Button {
-                    Task { await sendLoginCode() }
-                } label: {
-                    Label(languageStore.t(.sendCode), systemImage: "envelope")
-                }
-
-                Button {
-                    Task { await verifyLoginCode() }
-                } label: {
-                    Label(languageStore.t(.verifyCode), systemImage: "checkmark.seal")
-                }
-                .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || loginCode.isEmpty)
             }
 
             if authStore.isSignedIn {
@@ -113,50 +100,14 @@ struct SettingsViewMac: View {
                 } label: {
                     Label(languageStore.t(.signOut), systemImage: "rectangle.portrait.and.arrow.right")
                 }
+            } else {
+                Button {
+                    showingLogin = true
+                } label: {
+                    Label(languageStore.t(.signInTitle), systemImage: "person.crop.circle.badge.plus")
+                }
             }
-
-            if let message = accountMessage ?? authStore.lastError {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
-    }
-
-    private func sendLoginCode() async {
-        do {
-            let debugCode = try await controlAPIClient().startEmailLogin(email: email)
-            accountMessage = debugCode.map { "Login code sent. Dev code: \($0)" } ?? "Login code sent."
-        } catch {
-            accountMessage = error.localizedDescription
-        }
-    }
-
-    private func verifyLoginCode() async {
-        do {
-            let session = try await controlAPIClient().verifyEmailLogin(email: email, code: loginCode)
-            authStore.save(session)
-            loginCode = ""
-            accountMessage = nil
-        } catch {
-            accountMessage = error.localizedDescription
-        }
-    }
-
-    private func controlAPIClient() throws -> ControlAPIClient {
-        guard let url = normalizedURL(vpnManager.coordinatorURL) else {
-            throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
-        }
-        return ControlAPIClient(baseURL: url, joinToken: "")
-    }
-
-    private func normalizedURL(_ raw: String) -> URL? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
-            return URL(string: trimmed)
-        }
-        return URL(string: "https://\(trimmed)")
     }
 }
 

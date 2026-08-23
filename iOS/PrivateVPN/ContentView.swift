@@ -11,6 +11,7 @@ struct ContentView: View {
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingSettings = false
     @State private var showingPaywall = false
+    @State private var showingLogin = false
 
     var body: some View {
         NavigationStack {
@@ -21,10 +22,6 @@ struct ContentView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         header
-
-                        if !authStore.isSignedIn {
-                            signInRequiredBanner
-                        }
 
                         subscriptionStatusCard
                         statusCard
@@ -71,8 +68,27 @@ struct ContentView: View {
                     .environmentObject(subscriptionStore)
                     .environmentObject(languageStore)
             }
+            .fullScreenCover(isPresented: $showingLogin) {
+                LoginView()
+                    .environmentObject(configStore)
+                    .environmentObject(authStore)
+                    .environmentObject(languageStore)
+            }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            if !authStore.isSignedIn {
+                showingLogin = true
+            }
+        }
+        .onChange(of: authStore.isSignedIn) { _, isSignedIn in
+            if isSignedIn {
+                showingLogin = false
+            } else {
+                showingSettings = false
+                showingLogin = true
+            }
+        }
         .task {
             vpnManager.refreshStatus()
             // Backend-first server selection (SRS A8): load exit nodes from the
@@ -299,7 +315,7 @@ struct ContentView: View {
         } else if !subscriptionStore.isSubscribed {
             showingPaywall = true
         } else if !authStore.isSignedIn {
-            showingSettings = true
+            showingLogin = true
         } else {
             Task {
                 await vpnManager.connect(store: configStore, authStore: authStore)
@@ -357,30 +373,6 @@ struct ContentView: View {
     }
 
     // MARK: - Helpers
-
-    private var signInRequiredBanner: some View {
-        Button {
-            showingSettings = true
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "person.crop.circle.badge.exclamationmark.fill")
-                    .foregroundStyle(.orange)
-                Text(languageStore.t(.signInRequired))
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(14)
-            .background(Color.orange.opacity(0.15))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.orange.opacity(0.35), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(languageStore.t(.signInRequired))
-    }
 
     private func errorBanner(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 10) {

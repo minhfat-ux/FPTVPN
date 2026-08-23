@@ -103,7 +103,8 @@ enum AppLanguageChoice: String, CaseIterable, Identifiable {
 
 enum AppTextKey: String {
     case systemLanguage, language, appSubtitle, configuration, done
-    case account, signedIn, signedOut, signInRequired, email, loginCode, sendCode, verifyCode, signOut
+    case account, signedIn, signedOut, signInRequired, signInTitle, email, loginCode, sendCode, verifyCode, signOut
+    case emailPlaceholder, codePlaceholder, invalidEmail, devCode, loginCodeSent
     case subscription, status, premiumActive, premiumRequired, free
     case protectionUnlocked, choosePlanToStart, choosePlan, restorePurchases
     case support, contactSupport, privacyPolicy, appleStandardEULA, upgrade
@@ -163,7 +164,9 @@ final class AppLanguageStore: ObservableObject {
         .english: [
             .systemLanguage: "System", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam",
             .account: "Account", .signedIn: "Signed in", .signedOut: "Signed out", .signInRequired: "Sign in required", .email: "Email",
-            .loginCode: "Login code", .sendCode: "Send Code", .verifyCode: "Verify Code", .signOut: "Sign Out",
+            .signInTitle: "Sign In", .loginCode: "Login code", .sendCode: "Send Code", .verifyCode: "Verify Code", .signOut: "Sign Out",
+            .emailPlaceholder: "you@example.com", .codePlaceholder: "123456", .invalidEmail: "Please enter a valid email address.",
+            .devCode: "Dev code: %@", .loginCodeSent: "Login code sent",
             .configuration: "Configuration", .done: "Done", .subscription: "Subscription", .status: "Status",
             .premiumActive: "Premium Active", .premiumRequired: "Premium Required", .free: "Free",
             .protectionUnlocked: "VPN protection is unlocked", .choosePlanToStart: "Choose a plan to start protection",
@@ -188,6 +191,9 @@ final class AppLanguageStore: ObservableObject {
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam",
             .signInRequired: "Cần đăng nhập",
+            .signInTitle: "Đăng nhập", .invalidEmail: "Vui lòng nhập địa chỉ email hợp lệ.",
+            .devCode: "Mã dev: %@", .loginCodeSent: "Mã đăng nhập đã được gửi",
+            .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .configuration: "Cấu hình", .done: "Xong", .subscription: "Gói đăng ký", .status: "Trạng thái",
             .premiumActive: "Premium đang hoạt động", .premiumRequired: "Cần Premium", .free: "Miễn phí",
             .protectionUnlocked: "Bảo vệ VPN đã được mở khóa", .choosePlanToStart: "Chọn gói để bắt đầu bảo vệ",
@@ -212,6 +218,9 @@ final class AppLanguageStore: ObservableObject {
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络",
             .signInRequired: "需要登录",
+            .signInTitle: "登录", .invalidEmail: "请输入有效的邮箱地址。",
+            .devCode: "开发者验证码：%@", .loginCodeSent: "登录验证码已发送",
+            .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .configuration: "设置", .done: "完成", .subscription: "订阅", .status: "状态",
             .premiumActive: "Premium 已激活", .premiumRequired: "需要 Premium", .free: "免费",
             .protectionUnlocked: "VPN 保护已解锁", .choosePlanToStart: "选择套餐以开始保护",
@@ -235,6 +244,9 @@ final class AppLanguageStore: ObservableObject {
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信",
             .signInRequired: "サインインが必要です",
+            .signInTitle: "サインイン", .invalidEmail: "有効なメールアドレスを入力してください。",
+            .devCode: "開発用コード: %@", .loginCodeSent: "ログインコードを送信しました",
+            .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .configuration: "設定", .done: "完了", .subscription: "サブスクリプション", .status: "ステータス",
             .premiumActive: "Premium 有効", .premiumRequired: "Premium が必要", .free: "無料",
             .protectionUnlocked: "VPN 保護が有効です", .choosePlanToStart: "保護を開始するにはプランを選択",
@@ -258,6 +270,9 @@ final class AppLanguageStore: ObservableObject {
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷",
             .signInRequired: "로그인이 필요합니다",
+            .signInTitle: "로그인", .invalidEmail: "유효한 이메일 주소를 입력하세요.",
+            .devCode: "개발자 코드: %@", .loginCodeSent: "로그인 코드가 전송되었습니다",
+            .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .configuration: "설정", .done: "완료", .subscription: "구독", .status: "상태",
             .premiumActive: "Premium 활성화됨", .premiumRequired: "Premium 필요", .free: "무료",
             .protectionUnlocked: "VPN 보호가 활성화되었습니다", .choosePlanToStart: "보호를 시작하려면 플랜을 선택하세요",
