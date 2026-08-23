@@ -13,6 +13,7 @@ import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { AuthStore } from "./auth-store.js";
+import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
 import { sendOtpEmail } from "./mailer.js";
@@ -32,6 +33,10 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN ?? "";
 const ADMIN_ALLOWED_IPS = parseAllowedIPs(process.env.ADMIN_ALLOWED_IPS ?? "");
 const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "devices.json");
 const AUTH_FILE = process.env.AUTH_FILE ?? path.join(__dirname, "..", "data", "auth.json");
+const APP_CONFIG_DB = process.env.APP_CONFIG_DB ?? path.join(__dirname, "..", "data", "app-config.db");
+const DEFAULT_MIN_VERSION = process.env.MIN_IOS_VERSION ?? "1.0";
+const DEFAULT_LATEST_VERSION = process.env.LATEST_IOS_VERSION ?? "1.0";
+const DEFAULT_STORE_URL = process.env.APP_STORE_URL ?? "https://apps.apple.com/app/flowvpn";
 const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", "nodes.json"); // legacy JSON (imported once into SQLite)
 const NODES_DB_FILE = process.env.NODES_DB_FILE ?? path.join(__dirname, "..", "data", "nodes.db");
 const ALLOW_DEV_TOKEN_BOOTSTRAP = process.env.ALLOW_DEV_TOKEN_BOOTSTRAP === "1" && !IS_PRODUCTION;
@@ -80,6 +85,11 @@ const wg = new WireGuardManager({ interfaceName: WG_INTERFACE, wgBin: WG_BIN, dr
 const store = new DeviceStore(DATA_FILE);
 const authStore = new AuthStore(AUTH_FILE);
 const nodeStore = new NodeStore(NODES_DB_FILE, buildFallbackExitNode(), { legacyJsonPath: NODES_FILE });
+const appConfig = new AppConfigStore(APP_CONFIG_DB, {
+  minimum_ios_version: DEFAULT_MIN_VERSION,
+  latest_ios_version: DEFAULT_LATEST_VERSION,
+  app_store_url: DEFAULT_STORE_URL,
+});
 
 const app = express();
 app.set("trust proxy", true);
@@ -90,7 +100,7 @@ app.use(express.json());
 // /health is always public so it can be used as a liveness probe.
 app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
-  if (req.path === "/health" || req.path === "/v1/health" || req.path === "/nodes" || req.path === "/v1/nodes") return next();
+  if (req.path === "/health" || req.path === "/v1/health" || req.path === "/nodes" || req.path === "/v1/nodes" || req.path === "/v1/app-version") return next();
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
@@ -353,6 +363,40 @@ app.get("/v1/admin/nodes/:id/health", requireAdminAuth, async (req, res) => {
 
 // User administration (admin, Bearer AUTH_TOKEN): list users + subscription
 // status, grant a test subscription, revoke a user (kills their sessions).
+// App version (force-update): public for the apps, admin GET/PATCH to manage.
+app.get("/v1/app-version", (_req, res) => {
+  res.json({
+    platform: "ios",
+    minimum_version: appConfig.get("minimum_ios_version"),
+    latest_version: appConfig.get("latest_ios_version"),
+    store_url: appConfig.get("app_store_url"),
+  });
+});
+
+app.get("/v1/admin/app-version", requireAdminAuth, (_req, res) => {
+  res.json({
+    minimum_version: appConfig.get("minimum_ios_version"),
+    latest_version: appConfig.get("latest_ios_version"),
+    store_url: appConfig.get("app_store_url"),
+  });
+});
+
+app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
+  try {
+    const { minimum_version, latest_version, store_url } = req.body ?? {};
+    if (minimum_version !== undefined) appConfig.set("minimum_ios_version", minimum_version);
+    if (latest_version !== undefined) appConfig.set("latest_ios_version", latest_version);
+    if (store_url !== undefined) appConfig.set("app_store_url", store_url);
+    res.json({
+      minimum_version: appConfig.get("minimum_ios_version"),
+      latest_version: appConfig.get("latest_ios_version"),
+      store_url: appConfig.get("app_store_url"),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 app.get("/v1/admin/users", requireAdminAuth, async (_req, res) => {
   try {
     const users = await authStore.listUsers();
