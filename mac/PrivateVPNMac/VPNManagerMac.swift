@@ -200,40 +200,28 @@ final class VPNManagerMac: ObservableObject {
             } catch ControlAPIClient.ClientError.transport {
                 // Coordinator unreachable (hotel captive portal / censored
                 // network): reconnect with the last successful tunnel config.
-                // The WireGuard peer still exists on the node's wg0.
+                // The WireGuard peer still exists on the node's wg0. The exit
+                // node always follows the user's picker selection (falling
+                // back to the cached node only when the picker has no list).
                 if let cached = TunnelConfigCache.load() {
                     overlayIP = cached.overlayIP
-                    exitNode = cached.node
+                    exitNode = preferredExitNode(fallback: cached.node)
                     usingFallbackNodes = true
-                    log.info("connect: coordinator unreachable — using cached tunnel config (overlay=\(overlayIP, privacy: .public))")
+                    log.info("connect: coordinator unreachable — using cached tunnel config (overlay=\(overlayIP, privacy: .public), node=\(exitNode.id, privacy: .public))")
                 } else if let saved = savedTunnelConfig() {
                     // No TunnelConfigCache yet (e.g. first run of this build),
                     // but the VPN profile from a previous session is still on
                     // disk — replay it directly.
                     overlayIP = Self.overlayIP(fromSaved: saved)
-                    exitNode = ExitNode(
-                        id: "saved",
-                        name: "Saved",
-                        country: "VN",
-                        city: "Hanoi",
-                        endpoint: saved.peers.first?.endpoint ?? "",
-                        public_key: saved.peers.first?.publicKeyBase64 ?? ""
-                    )
+                    exitNode = preferredExitNode(fallback: savedExitNode(from: saved))
                     usingFallbackNodes = true
-                    log.info("connect: coordinator unreachable — replaying saved VPN profile (overlay=\(overlayIP, privacy: .public))")
+                    log.info("connect: coordinator unreachable — replaying saved VPN profile (overlay=\(overlayIP, privacy: .public), node=\(exitNode.id, privacy: .public))")
                 } else {
                     // Profile may not be loaded yet (init loads it async).
                     await loadManagerFromPreferences()
                     if let saved = savedTunnelConfig() {
                         overlayIP = Self.overlayIP(fromSaved: saved)
-                        exitNode = ExitNode(
-                            id: "saved",
-                            name: "Saved",
-                            country: "VN",
-                            city: "Hanoi",
-                            endpoint: saved.peers.first?.endpoint ?? "",
-                            public_key: saved.peers.first?.publicKeyBase64 ?? ""
-                        )
+                        exitNode = preferredExitNode(fallback: savedExitNode(from: saved))
                         usingFallbackNodes = true
                         log.info("connect: coordinator unreachable — replayed saved VPN profile after reload (overlay=\(overlayIP, privacy: .public))")
                     } else {
@@ -520,6 +508,31 @@ final class VPNManagerMac: ObservableObject {
             )
         }
         return nil
+    }
+
+    /// The exit node to dial, always honoring the user's picker selection:
+    /// selected node from the (cached/built-in) list wins; `fallback` is used
+    /// only when the picker has no list (e.g. first launch on a blocked net).
+    private func preferredExitNode(fallback: ExitNode) -> ExitNode {
+        if let selected = selectedNodeID,
+           let node = exitNodes.first(where: { $0.id == selected }) {
+            return node
+        }
+        if let node = exitNodes.first {
+            return node
+        }
+        return fallback
+    }
+
+    private func savedExitNode(from config: WireGuardConfig) -> ExitNode {
+        ExitNode(
+            id: "saved",
+            name: "Saved",
+            country: "VN",
+            city: "Hanoi",
+            endpoint: config.peers.first?.endpoint ?? "",
+            public_key: config.peers.first?.publicKeyBase64 ?? ""
+        )
     }
 
     private func startStatusPolling() {
