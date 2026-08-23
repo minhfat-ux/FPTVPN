@@ -108,8 +108,12 @@ Current task tracked here (schema per spec §31). Structured state also in
   2. Close remaining production gaps first (fix is NOT usable in production without these):
      (a) subscription source: only `AUTH_DEV_GRANT_SUBSCRIPTION` test grant exists — need
          StoreKit receipt verification server-side (or owner-defined manual grant policy),
-     (b) login: email-OTP has no mailer in production; `/v1/auth/apple` returns 501 (no
-         JWT verification) — pick email delivery or Sign in with Apple JWT verify,
+     (b) login: email-OTP needs a mailer — **SOLUTION DECIDED: Resend**
+         (see `docs/MAILER_RESEND.md`; free 3k/mo + 100/day; implement `sendOtpEmail`
+         in `control-plane/src/mailer.js`, wire into `/v1/auth/email/start`, add
+         `RESEND_API_KEY`/`FROM_EMAIL` env, verify domain SPF/DKIM, add resend+verify
+         rate limits); `/v1/auth/apple` returns 501 (no JWT verification) — decide
+         Sign in with Apple JWT verify or keep email-only,
      (c) re-verify: signed-in subscribed user can mint enrollment token; unsubscribed /
          revoked cannot; revoked device cannot re-register (FR-REVOKE-002).
 - **Next-version server selection upgrade (iOS remaining; macOS code/build verified)**:
