@@ -6,6 +6,9 @@ import crypto from "node:crypto";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
+const RESEND_RATE_MAX = 3;
+const RESEND_RATE_WINDOW_MS = 15 * 60 * 1000;
+const MAX_VERIFY_ATTEMPTS = 5;
 
 export class AuthStore {
   constructor(filePath) {
@@ -17,13 +20,25 @@ export class AuthStore {
     if (!normalized) throw badRequest("email is required");
 
     const data = await this._load();
+    const now = Date.now();
+    const windowStart = now - RESEND_RATE_WINDOW_MS;
+    data.emailLoginRequests = data.emailLoginRequests.filter(
+      (entry) => Date.parse(entry.createdAt) > windowStart
+    );
+    const recentCount = data.emailLoginRequests.filter((entry) => entry.email === normalized).length;
+    if (recentCount >= RESEND_RATE_MAX) {
+      throw tooManyRequests("Too many login code requests; try again later");
+    }
+    data.emailLoginRequests.push({ email: normalized, createdAt: new Date(now).toISOString() });
+
     const code = `${crypto.randomInt(0, 1000000)}`.padStart(6, "0");
     data.emailOtps = data.emailOtps.filter((otp) => otp.email !== normalized);
     data.emailOtps.push({
       email: normalized,
       codeHash: hashToken(code),
-      expiresAt: new Date(Date.now() + OTP_TTL_MS).toISOString(),
-      createdAt: new Date().toISOString(),
+      expiresAt: new Date(now + OTP_TTL_MS).toISOString(),
+      createdAt: new Date(now).toISOString(),
+      failedAttempts: 0,
     });
     await this._save(data);
     return { email: normalized, code };
@@ -35,7 +50,13 @@ export class AuthStore {
 
     const data = await this._load();
     const otp = data.emailOtps.find((entry) => entry.email === normalized);
-    if (!otp || isExpired(otp.expiresAt) || otp.codeHash !== hashToken(String(code))) {
+    if (!otp) throw unauthorized("Invalid or expired login code");
+    if (isExpired(otp.expiresAt) || otp.codeHash !== hashToken(String(code))) {
+      otp.failedAttempts = (otp.failedAttempts ?? 0) + 1;
+      if (otp.failedAttempts >= MAX_VERIFY_ATTEMPTS) {
+        data.emailOtps = data.emailOtps.filter((entry) => entry !== otp);
+      }
+      await this._save(data);
       throw unauthorized("Invalid or expired login code");
     }
 
@@ -217,7 +238,14 @@ function isExpired(value) {
 }
 
 function emptyData() {
-  return { users: [], sessions: [], emailOtps: [], subscriptions: [], enrollmentTokens: [] };
+  return {
+    users: [],
+    sessions: [],
+    emailOtps: [],
+    emailLoginRequests: [],
+    subscriptions: [],
+    enrollmentTokens: [],
+  };
 }
 
 function normalizeData(data) {
@@ -225,6 +253,7 @@ function normalizeData(data) {
     users: Array.isArray(data.users) ? data.users : [],
     sessions: Array.isArray(data.sessions) ? data.sessions : [],
     emailOtps: Array.isArray(data.emailOtps) ? data.emailOtps : [],
+    emailLoginRequests: Array.isArray(data.emailLoginRequests) ? data.emailLoginRequests : [],
     subscriptions: Array.isArray(data.subscriptions) ? data.subscriptions : [],
     enrollmentTokens: Array.isArray(data.enrollmentTokens) ? data.enrollmentTokens : [],
   };
@@ -240,6 +269,10 @@ function unauthorized(message) {
 
 function forbidden(message) {
   return httpError(403, message);
+}
+
+function tooManyRequests(message) {
+  return httpError(429, message);
 }
 
 function httpError(statusCode, message) {

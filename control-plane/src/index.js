@@ -13,6 +13,7 @@ import { DeviceStore } from "./device-store.js";
 import { AuthStore } from "./auth-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
+import { sendOtpEmail } from "./mailer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -154,8 +155,9 @@ app.get("/v1/nodes", listPublicNodes);
 app.post("/v1/auth/email/start", async (req, res) => {
   try {
     const login = await authStore.startEmailLogin(req.body?.email);
+    const mail = await sendOtpEmail({ email: login.email, code: login.code });
     const body = { ok: true };
-    if (!IS_PRODUCTION) body.debug_code = login.code;
+    if (!IS_PRODUCTION) body.debug_code = mail.devCode ?? login.code;
     res.status(202).json(body);
   } catch (err) {
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });

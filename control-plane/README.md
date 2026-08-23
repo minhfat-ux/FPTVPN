@@ -26,6 +26,9 @@ and provisions the peer on the WireGuard node (Tailscale-style).
 | `TLS_CERT_FILE` | (empty) | path to TLS certificate (PEM); together with `TLS_KEY_FILE` enables HTTPS (NFR-SEC-002) |
 | `TLS_KEY_FILE` | (empty) | path to TLS private key (PEM); enables HTTPS when both files are set |
 | `NODE_NAME` | (hostname) | node name reported by `GET /status` |
+| `RESEND_API_KEY` | (empty) | Resend API key for OTP email delivery. Required for production sends; never commit. When set together with `NODE_ENV=production`, `/v1/auth/email/start` sends real email |
+| `FROM_EMAIL` | `FlowVPN <no-reply@meetflowai.site>` | sender address used for OTP emails (Resend) |
+| `NODE_ENV` | `development` | `production` gates real Resend sends and removes `debug_code` from `/v1/auth/email/start` responses; in dev the OTP code is returned as `debug_code` and no email is sent |
 
 ## Endpoints
 
