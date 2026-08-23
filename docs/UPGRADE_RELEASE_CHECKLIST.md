@@ -32,6 +32,15 @@
 - [ ] (Pending) Device list + Revoke UI trong app (FR-REVOKE-001/002 UI)
 - [ ] (Pending) Multi-device ownership UI (FR-DEVICE)
 
+## 2b. App Store review — account/registration (owner action trên App Store Connect)
+
+- [x] **Delete Account** (Apple 5.1.1(v)): backend `DELETE /v1/account` + iOS/macOS Settings → Delete Account (confirm + xóa user/devices/session/subscription); deployed.
+- [x] **Privacy policy** đầy đủ: data collected (email, device, subscription), **Delete Account instructions**, contact `support@meetflowai.site` (EN + VI) — `https://meetflowai.site/FlowVPNPrivacy.html` live.
+- [x] Support email `support@meetflowai.site` (đã có mailbox? — nếu chưa, tạo trên mail server).
+- [ ] **App Store Connect — Privacy Nutrition Labels**: khai báo data types (Email, Device ID, Purchases/Subscription).
+- [ ] **App Store Connect — account deletion question**: "Can users delete their account?" → **Yes** (kèm hướng dẫn: Settings → Delete Account).
+- [ ] **Sign in with Apple**: KHÔNG bắt buộc (app dùng email-OTP tự build, không third-party login — guideline 4.8 chỉ áp dụng third-party). Nếu review hỏi → giải thích.
+
 ## 3. Build & submit
 
 - [ ] Build Release trên máy có signing NE-capable (bundle `com.privatevpn.app` + `com.privatevpn.app.packet-tunnel`)
