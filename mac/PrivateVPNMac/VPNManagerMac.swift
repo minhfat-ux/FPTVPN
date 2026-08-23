@@ -478,24 +478,48 @@ final class VPNManagerMac: ObservableObject {
         return address.split(separator: "/").first.map(String.init) ?? ""
     }
 
-    /// Returns (overlay IP, node) from the tunnel cache or the saved VPN
-    /// profile — whichever is available — for fast-path reconnect.
+    /// Returns (overlay IP, node) for fast-path reconnect.
+    /// Overlay IP comes from the tunnel cache or the saved VPN profile; the
+    /// node comes from the *currently selected* exit node when known (its
+    /// endpoint comes from the cached/built-in node list) — a stale profile
+    /// pointing at a blocked node (e.g. node-1 unreachable from a censored
+    /// network while node-2 works) must not pin the replay to the dead node.
     private func savedTunnelSnapshot() -> (overlayIP: String, node: ExitNode)? {
+        let overlayIP: String
         if let cached = TunnelConfigCache.load() {
-            return (cached.overlayIP, cached.node)
+            overlayIP = cached.overlayIP
+        } else if let saved = savedTunnelConfig() {
+            overlayIP = Self.overlayIP(fromSaved: saved)
+        } else {
+            return nil
         }
-        guard let saved = savedTunnelConfig(), let peer = saved.peers.first else { return nil }
-        return (
-            Self.overlayIP(fromSaved: saved),
-            ExitNode(
-                id: "saved",
-                name: "Saved",
-                country: "VN",
-                city: "Hanoi",
-                endpoint: peer.endpoint ?? "",
-                public_key: peer.publicKeyBase64
+        // Prefer the currently selected node from the (cached/built-in) node
+        // list — it has the freshest endpoint + public key.
+        if let selected = selectedNodeID,
+           let node = exitNodes.first(where: { $0.id == selected }) {
+            return (overlayIP, node)
+        }
+        if let node = exitNodes.first {
+            return (overlayIP, node)
+        }
+        // Fall back to whatever the profile/cache remembers.
+        if let cached = TunnelConfigCache.load() {
+            return (overlayIP, cached.node)
+        }
+        if let saved = savedTunnelConfig(), let peer = saved.peers.first {
+            return (
+                overlayIP,
+                ExitNode(
+                    id: "saved",
+                    name: "Saved",
+                    country: "VN",
+                    city: "Hanoi",
+                    endpoint: peer.endpoint ?? "",
+                    public_key: peer.publicKeyBase64
+                )
             )
-        )
+        }
+        return nil
     }
 
     private func startStatusPolling() {

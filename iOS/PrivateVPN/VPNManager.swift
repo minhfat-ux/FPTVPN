@@ -151,8 +151,14 @@ final class VPNManager: ObservableObject {
         } catch ControlAPIClient.ClientError.transport {
             if let cached = TunnelConfigCache.load() {
                 store.usingFallbackNodes = true
-                NSLog("iOSVPN: coordinator unreachable — using cached tunnel config (overlay=\(cached.overlayIP))")
-                return cachedTunnelConfig(privateKey: privateKey, overlayIP: cached.overlayIP, node: cached.node)
+                // Prefer the currently selected node (freshest endpoint from
+                // cached/built-in list) — a stale cached node could point at a
+                // blocked endpoint (e.g. node-1 unreachable while node-2 works).
+                let node = store.availableNodes.first { $0.id == store.selectedNodeID }
+                    ?? store.availableNodes.first
+                    ?? cached.node
+                NSLog("iOSVPN: coordinator unreachable — using cached tunnel config (overlay=\(cached.overlayIP), node=\(node.id))")
+                return cachedTunnelConfig(privateKey: privateKey, overlayIP: cached.overlayIP, node: node)
             }
             // Profile may not be loaded yet (init loads it async).
             if manager == nil { await loadManagerFromPreferences() }
