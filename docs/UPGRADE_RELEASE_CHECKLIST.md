@@ -26,6 +26,7 @@
 - [x] Session 30 ngày Keychain (login 1 lần)
 - [x] Localization 5 ngôn ngữ
 - [x] StoreKit paywall (Monthly_Premium / Yearly_Premium) — chờ products approve
+- [x] **Force update gate** (`/v1/app-version` + AppVersionService + ForceUpdateView iOS/macOS) — user dưới minimum_version bị chặn dùng + nút Update mở App Store. Quản lý qua admin `PATCH /v1/admin/app-version`. Khi release bản mới: set minimum_version = bản mới.
 - [ ] Real-device E2E (xem `docs/E2E_DEVICE_TEST.md`)
 - [ ] (Pending) Device list + Revoke UI trong app (FR-REVOKE-001/002 UI)
 - [ ] (Pending) Multi-device ownership UI (FR-DEVICE)
