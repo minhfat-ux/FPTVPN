@@ -92,6 +92,9 @@ app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.path === "/health" || req.path === "/nodes" || req.path === "/v1/nodes") return next();
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register") return next();
+  // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
+  // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
+  if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
   if (req.method === "GET" && /^\/admin\/?$/i.test(req.path)) return next();
   const header = req.headers.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
