@@ -235,14 +235,15 @@ deleted or re-scoped here; this is a documented delta pending owner approval.**
 - Coordinator/control-plane now manages a registry of **exit nodes**.
   Public app endpoint: `GET /v1/nodes`.
   Admin endpoints: `GET/POST/PATCH/DELETE /v1/admin/nodes`.
-- Admin page: `GET /admin`, used to add/update/disable exit node
-  configuration in a browser.
-- Admin access MUST NOT rely on a dynamic home IP. Production admin access is
-  through an SSH tunnel only:
-  `ssh -i .tmp/flowvpn_support_page_ed25519 -L 9000:127.0.0.1:7777 root@103.173.155.50`,
-  then open `http://127.0.0.1:9000/admin`.
-- Public access to `/admin` and `/v1/admin/nodes` from non-localhost client IPs
-  MUST return `403`; admin APIs also require `Authorization: Bearer <AUTH_TOKEN>`.
+- Admin page: `GET /admin` (reachable from the internet at
+  `https://meetflowai.site/PrivateVPN/Admin` — owner decision 2026-08-23).
+- Admin API (`/v1/admin/nodes` GET/POST/PATCH/DELETE) requires
+  `Authorization: Bearer <AUTH_TOKEN>`; without a valid token -> 401, and when
+  AUTH_TOKEN is unset -> 503 fail-closed. The admin page itself only serves the
+  form HTML (no data) and is therefore public; all data access goes through the
+  token-protected API.
+- (Superseded 2026-08-23) previous SSH-tunnel-only access
+  `ssh -L 9000:127.0.0.1:7778 ...` still works but is no longer required.
 - Apps fetch the server list from the backend and let the user **choose an
   exit node** (macOS Settings picker; iOS location picker) instead of a
   hardcoded preset.

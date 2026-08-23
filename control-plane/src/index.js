@@ -90,7 +90,7 @@ app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.path === "/health" || req.path === "/nodes" || req.path === "/v1/nodes") return next();
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register") return next();
-  if (req.method === "GET" && (req.path === "/admin" || req.path === "/admin/")) return next();
+  if (req.method === "GET" && /^\/admin\/?$/i.test(req.path)) return next();
   const header = req.headers.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (token !== AUTH_TOKEN) {
@@ -154,7 +154,9 @@ app.get("/v1/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get(["/admin", "/admin/"], requireAdminIP, (_req, res) => {
+// Admin page is reachable from the internet at /PrivateVPN/Admin (owner decision
+// 2026-08-23); it only serves the form HTML. Data access requires AUTH_TOKEN (below).
+app.get(["/admin", "/admin/"], (_req, res) => {
   res.type("html").send(adminPageHTML());
 });
 
@@ -265,7 +267,7 @@ app.post("/v1/tokens", async (_req, res) => {
 
 // Admin exit-node management. DELETE disables a node instead of physically
 // removing it, so existing device records and audit history remain meaningful.
-app.get(["/admin/nodes", "/v1/admin/nodes"], requireAdminIP, requireAdminAuth, async (_req, res) => {
+app.get(["/admin/nodes", "/v1/admin/nodes"], requireAdminAuth, async (_req, res) => {
   try {
     const nodes = await nodeStore.all();
     res.json({ count: nodes.length, nodes: nodes.map(adminNode) });
@@ -275,7 +277,7 @@ app.get(["/admin/nodes", "/v1/admin/nodes"], requireAdminIP, requireAdminAuth, a
   }
 });
 
-app.post(["/admin/nodes", "/v1/admin/nodes"], requireAdminIP, requireAdminAuth, async (req, res) => {
+app.post(["/admin/nodes", "/v1/admin/nodes"], requireAdminAuth, async (req, res) => {
   try {
     const node = await nodeStore.create(req.body ?? {});
     res.status(201).json({ node: adminNode(node) });
@@ -284,13 +286,13 @@ app.post(["/admin/nodes", "/v1/admin/nodes"], requireAdminIP, requireAdminAuth, 
   }
 });
 
-app.get(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireAdminAuth, async (req, res) => {
+app.get(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminAuth, async (req, res) => {
   const node = await nodeStore.findById(req.params.id);
   if (!node) return res.status(404).json({ error: "Not found" });
   res.json({ node: adminNode(node) });
 });
 
-app.patch(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireAdminAuth, async (req, res) => {
+app.patch(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminAuth, async (req, res) => {
   try {
     const node = await nodeStore.update(req.params.id, req.body ?? {});
     if (!node) return res.status(404).json({ error: "Not found" });
@@ -300,7 +302,7 @@ app.patch(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireAd
   }
 });
 
-app.delete(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminIP, requireAdminAuth, async (req, res) => {
+app.delete(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminAuth, async (req, res) => {
   try {
     const node = await nodeStore.disable(req.params.id);
     if (!node) return res.status(404).json({ error: "Not found" });
@@ -367,14 +369,14 @@ app.post("/device", async (req, res) => {
 });
 
 // Fetch a device by id.
-app.get("/device/:id", requireAdminIP, requireAdminAuth, async (req, res) => {
+app.get("/device/:id", requireAdminAuth, async (req, res) => {
   const device = await store.findById(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
   res.json({ device });
 });
 
 // Deactivate a device and remove its peer.
-app.delete("/device/:id", requireAdminIP, requireAdminAuth, async (req, res) => {
+app.delete("/device/:id", requireAdminAuth, async (req, res) => {
   const device = await store.deactivate(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
   await wg.removePeer(device.publicKey);
@@ -382,7 +384,7 @@ app.delete("/device/:id", requireAdminIP, requireAdminAuth, async (req, res) => 
 });
 
 // Owner visibility (FR-ADMIN-001 / AC-013): list all registered devices.
-app.get("/devices", requireAdminIP, requireAdminAuth, async (_req, res) => {
+app.get("/devices", requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
     res.json({
@@ -404,7 +406,7 @@ app.get("/devices", requireAdminIP, requireAdminAuth, async (_req, res) => {
 });
 
 // Owner visibility (FR-ADMIN-001 / AC-013): node status.
-app.get("/status", requireAdminIP, requireAdminAuth, async (_req, res) => {
+app.get("/status", requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
     const activeCount = devices.filter((d) => d.active).length;

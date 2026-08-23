@@ -60,32 +60,15 @@ Public list of active exit nodes for the app location picker:
 
 ### `GET /admin`
 
-Browser admin page for managing exit nodes. Access is allowed only when the
-client IP is present in `ADMIN_ALLOWED_IPS`; otherwise the backend returns
-`403`. The page asks for `AUTH_TOKEN` and calls the admin APIs below.
+Browser admin page for managing exit nodes. It is reachable from the internet at
+`https://meetflowai.site/PrivateVPN/Admin` (owner decision 2026-08-23). The page
+only serves the form HTML (no data); it asks for `AUTH_TOKEN` and calls the
+admin APIs below, which require `Authorization: Bearer <AUTH_TOKEN>` (401
+without; 503 fail-closed when AUTH_TOKEN is unset).
 
-When running behind Caddy/Nginx, keep Node bound to localhost and let the proxy
-send `X-Forwarded-For`; the app trusts the proxy to identify the original
-client IP.
-
-For a dynamic home IP, do not expose admin by IP. Leave `ADMIN_ALLOWED_IPS`
-unset so only localhost is allowed, then open it through an SSH tunnel:
-
-```bash
-ssh -i .tmp/flowvpn_support_page_ed25519 \
-  -L 9000:127.0.0.1:7777 \
-  root@103.173.155.50
-```
-
-Then open this in the browser:
-
-```text
-http://127.0.0.1:9000/admin
-```
-
-The browser traffic reaches the backend as `127.0.0.1`, so the admin page works
-through the SSH key while public requests to `https://api.meetflowai.site/admin`
-remain blocked.
+An SSH tunnel still works as an alternative:
+`ssh -L 9000:127.0.0.1:7778 root@103.173.155.50` then open
+`http://127.0.0.1:9000/admin`.
 
 ### `GET /v1/admin/nodes` (admin)
 
