@@ -195,6 +195,8 @@ final class VPNManager: ObservableObject {
             return selected
         }
 
+        // Backend-first (SRS A8): no hardcoded fallback in production.
+        #if DEBUG
         return ExitNode(
             id: "vietnam-1",
             name: "Vietnam",
@@ -203,6 +205,9 @@ final class VPNManager: ObservableObject {
             endpoint: "103.173.155.50:443",
             public_key: "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8="
         )
+        #else
+        throw ConfigError.noBackendNode
+        #endif
     }
 
     private func registrationName() throws -> String {
@@ -264,11 +269,14 @@ final class VPNManager: ObservableObject {
 
     enum ConfigError: LocalizedError {
         case notConfigured
+        case noBackendNode
 
         var errorDescription: String? {
             switch self {
             case .notConfigured:
                 return "Enter the server endpoint and peer public key in Configuration first."
+            case .noBackendNode:
+                return "No exit node available from the server. Please try again."
             }
         }
     }

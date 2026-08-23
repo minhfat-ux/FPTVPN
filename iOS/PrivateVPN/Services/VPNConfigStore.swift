@@ -63,15 +63,20 @@ final class VPNConfigStore: ObservableObject {
         VPNLocation.presets.first { $0.id == selectedLocationID }
     }
 
-    /// All selectable exit nodes: control-plane nodes first, then legacy presets.
+    /// All selectable exit nodes: control-plane nodes first, then legacy presets
+    /// (DEBUG builds only — production must come from the backend, SRS A8).
     var availableNodes: [ExitNode] {
         if !remoteNodes.isEmpty {
             return remoteNodes
         }
+        #if DEBUG
         return VPNLocation.presets.map {
             ExitNode(id: $0.id.uuidString, name: $0.name, country: $0.country,
                      city: $0.city, endpoint: "\($0.host):\($0.port)", public_key: $0.publicKey)
         }
+        #else
+        return []
+        #endif
     }
 
     /// The currently selected exit node (remote or preset).

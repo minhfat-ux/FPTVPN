@@ -75,6 +75,10 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .task {
             vpnManager.refreshStatus()
+            // Backend-first server selection (SRS A8): load exit nodes from the
+            // coordinator before enabling Connect; never rely on hardcoded presets
+            // in production.
+            await vpnManager.fetchNodes(store: configStore)
             await subscriptionStore.start()
         }
     }
