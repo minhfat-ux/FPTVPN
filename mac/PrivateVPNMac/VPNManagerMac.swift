@@ -184,16 +184,48 @@ final class VPNManagerMac: ObservableObject {
                 // Coordinator unreachable (hotel captive portal / censored
                 // network): reconnect with the last successful tunnel config.
                 // The WireGuard peer still exists on the node's wg0.
-                guard let cached = TunnelConfigCache.load() else {
-                    throw ControlAPIClient.ClientError.transport(
-                        endpoint: "coordinator",
-                        MacError.cachedTunnelUnavailable
+                if let cached = TunnelConfigCache.load() {
+                    overlayIP = cached.overlayIP
+                    exitNode = cached.node
+                    usingFallbackNodes = true
+                    log.info("connect: coordinator unreachable — using cached tunnel config (overlay=\(overlayIP, privacy: .public))")
+                } else if let saved = savedTunnelConfig() {
+                    // No TunnelConfigCache yet (e.g. first run of this build),
+                    // but the VPN profile from a previous session is still on
+                    // disk — replay it directly.
+                    overlayIP = saved.addresses.first ?? ""
+                    exitNode = ExitNode(
+                        id: "saved",
+                        name: "Saved",
+                        country: "VN",
+                        city: "Hanoi",
+                        endpoint: saved.peers.first?.endpoint ?? "",
+                        public_key: saved.peers.first?.publicKeyBase64 ?? ""
                     )
+                    usingFallbackNodes = true
+                    log.info("connect: coordinator unreachable — replaying saved VPN profile (overlay=\(overlayIP, privacy: .public))")
+                } else {
+                    // Profile may not be loaded yet (init loads it async).
+                    await loadManagerFromPreferences()
+                    if let saved = savedTunnelConfig() {
+                        overlayIP = saved.addresses.first ?? ""
+                        exitNode = ExitNode(
+                            id: "saved",
+                            name: "Saved",
+                            country: "VN",
+                            city: "Hanoi",
+                            endpoint: saved.peers.first?.endpoint ?? "",
+                            public_key: saved.peers.first?.publicKeyBase64 ?? ""
+                        )
+                        usingFallbackNodes = true
+                        log.info("connect: coordinator unreachable — replayed saved VPN profile after reload (overlay=\(overlayIP, privacy: .public))")
+                    } else {
+                        throw ControlAPIClient.ClientError.transport(
+                            endpoint: "coordinator",
+                            MacError.cachedTunnelUnavailable
+                        )
+                    }
                 }
-                overlayIP = cached.overlayIP
-                exitNode = cached.node
-                usingFallbackNodes = true
-                log.info("connect: coordinator unreachable — using cached tunnel config (overlay=\(overlayIP, privacy: .public))")
             }
 
             let config = Self.buildConfig(privateKeyBase64: privateKey.privateKey,
@@ -365,6 +397,23 @@ final class VPNManagerMac: ObservableObject {
             lastError = error.localizedDescription
             log.error("configuration: failed to load VPN profile: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Decodes the WireGuard config stored in the currently saved "FlowVPN"
+    /// NEVPN profile. Used as a fallback when the coordinator is unreachable —
+    /// the profile persists across sessions even before TunnelConfigCache
+    /// existed, so this works on the very first offline reconnect.
+    private func savedTunnelConfig() -> WireGuardConfig? {
+        guard let protocolConfig = manager?.protocolConfiguration as? NETunnelProviderProtocol,
+              let data = protocolConfig.providerConfiguration?["wireguard"] as? Data,
+              let config = try? JSONDecoder().decode(WireGuardConfig.self, from: data),
+              !config.addresses.isEmpty,
+              let peer = config.peers.first,
+              !(peer.endpoint ?? "").isEmpty,
+              !peer.publicKeyBase64.isEmpty else {
+            return nil
+        }
+        return config
     }
 
     private func startStatusPolling() {

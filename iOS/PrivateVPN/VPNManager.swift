@@ -149,27 +149,47 @@ final class VPNManager: ObservableObject {
         do {
             return try await provisionFresh(store: store, authStore: authStore, baseURL: baseURL, privateKey: privateKey)
         } catch ControlAPIClient.ClientError.transport {
-            guard let cached = TunnelConfigCache.load() else {
-                throw ConfigError.cachedTunnelUnavailable
+            if let cached = TunnelConfigCache.load() {
+                store.usingFallbackNodes = true
+                NSLog("iOSVPN: coordinator unreachable — using cached tunnel config (overlay=\(cached.overlayIP))")
+                return cachedTunnelConfig(privateKey: privateKey, overlayIP: cached.overlayIP, node: cached.node)
             }
-            store.usingFallbackNodes = true
-            NSLog("iOSVPN: coordinator unreachable — using cached tunnel config (overlay=\(cached.overlayIP))")
-            return WireGuardConfig(
-                name: "privatevpn",
-                privateKeyBase64: privateKey.base64Key,
-                addresses: ["\(cached.overlayIP)/24"],
-                dnsServers: ["1.1.1.1"],
-                peers: [
-                    WireGuardConfig.WireGuardPeer(
-                        publicKeyBase64: cached.node.public_key,
-                        endpoint: cached.node.endpoint,
-                        allowedIPs: ["0.0.0.0/0"],
-                        preSharedKeyBase64: nil,
-                        persistentKeepAlive: 25
-                    )
-                ]
-            )
+            // Profile may not be loaded yet (init loads it async).
+            if manager == nil { await loadManagerFromPreferences() }
+            if let saved = savedTunnelConfig(), let peer = saved.peers.first {
+                store.usingFallbackNodes = true
+                let overlayIP = saved.addresses.first ?? ""
+                let node = ExitNode(
+                    id: "saved",
+                    name: "Saved",
+                    country: "VN",
+                    city: "Hanoi",
+                    endpoint: peer.endpoint ?? "",
+                    public_key: peer.publicKeyBase64
+                )
+                NSLog("iOSVPN: coordinator unreachable — replaying saved VPN profile (overlay=\(overlayIP))")
+                return cachedTunnelConfig(privateKey: privateKey, overlayIP: overlayIP, node: node)
+            }
+            throw ConfigError.cachedTunnelUnavailable
         }
+    }
+
+    private func cachedTunnelConfig(privateKey: PrivateKey, overlayIP: String, node: ExitNode) -> WireGuardConfig {
+        WireGuardConfig(
+            name: "privatevpn",
+            privateKeyBase64: privateKey.base64Key,
+            addresses: ["\(overlayIP)/24"],
+            dnsServers: ["1.1.1.1"],
+            peers: [
+                WireGuardConfig.WireGuardPeer(
+                    publicKeyBase64: node.public_key,
+                    endpoint: node.endpoint,
+                    allowedIPs: ["0.0.0.0/0"],
+                    preSharedKeyBase64: nil,
+                    persistentKeepAlive: 25
+                )
+            ]
+        )
     }
 
     private func provisionFresh(store: VPNConfigStore, authStore: AuthSessionStore, baseURL: URL, privateKey: PrivateKey) async throws -> WireGuardConfig {
@@ -363,6 +383,23 @@ final class VPNManager: ObservableObject {
             lastError = error.localizedDescription
             statusMessage = Self.userMessage(for: error)
         }
+    }
+
+    /// Decodes the WireGuard config stored in the saved "FlowVPN" NEVPN
+    /// profile. Used as a fallback when the coordinator is unreachable — the
+    /// profile persists across sessions, so this works even before
+    /// TunnelConfigCache was ever written.
+    private func savedTunnelConfig() -> WireGuardConfig? {
+        guard let protocolConfig = manager?.protocolConfiguration as? NETunnelProviderProtocol,
+              let data = protocolConfig.providerConfiguration?["wireguard"] as? Data,
+              let config = try? JSONDecoder().decode(WireGuardConfig.self, from: data),
+              !config.addresses.isEmpty,
+              let peer = config.peers.first,
+              !(peer.endpoint ?? "").isEmpty,
+              !peer.publicKeyBase64.isEmpty else {
+            return nil
+        }
+        return config
     }
 
     private static func userMessage(for error: Error) -> String {
