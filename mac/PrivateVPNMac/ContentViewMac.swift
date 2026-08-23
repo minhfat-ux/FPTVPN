@@ -39,9 +39,19 @@ struct ContentViewMac: View {
 
                 // Status card
                 VStack(spacing: 10) {
-                    Image(systemName: statusSymbol)
-                        .font(.system(size: 44))
-                        .foregroundStyle(statusColor)
+                    ZStack {
+                        if vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…" {
+                            ProgressView()
+                                .controlSize(.large)
+                                .tint(statusColor)
+                                .scaleEffect(1.6)
+                        } else {
+                            Image(systemName: statusSymbol)
+                                .font(.system(size: 44))
+                                .foregroundStyle(statusColor)
+                        }
+                    }
+                    .frame(height: 52)
                     Text(vpnManager.state.localizedVPNState(languageStore.language))
                         .font(.title2.bold())
                         .foregroundStyle(statusColor)
@@ -219,7 +229,7 @@ struct ContentViewMac: View {
                 }
                 .labelsHidden()
                 .disabled(isConnectionTransitioning)
-                if vpnManager.usingFallbackNodes {
+                if vpnManager.usingFallbackNodes && vpnManager.state == "Disconnected" {
                     Text(languageStore.t(.usingSavedServers))
                         .font(.caption)
                         .foregroundStyle(.orange)

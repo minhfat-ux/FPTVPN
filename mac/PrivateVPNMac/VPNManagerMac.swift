@@ -123,12 +123,29 @@ final class VPNManagerMac: ObservableObject {
         state = "Connecting…"
         lastError = nil
 
+        let privateKey = WireGuardKeychain.loadOrCreatePrivateKey()
+
+        // Fast path: if a saved tunnel config exists for the selected node,
+        // replay it immediately — the VPN permission prompt appears at once
+        // instead of after coordinator timeouts (~20s) on censored networks.
+        // The coordinator is then refreshed in the background when reachable.
+        if let saved = savedTunnelSnapshot(), saved.node.id == (selectedNodeID ?? saved.node.id) {
+            do {
+                try await startTunnel(privateKey: privateKey, overlayIP: saved.overlayIP, node: saved.node)
+                usingFallbackNodes = true
+                log.info("connect: fast-path replay of saved config (overlay=\(saved.overlayIP, privacy: .public))")
+                Task { await refreshCoordinatorIfReachable(authStore: authStore, privateKey: privateKey) }
+                return
+            } catch {
+                log.warning("connect: fast-path replay failed (\(error.localizedDescription, privacy: .public)) — falling back to coordinator")
+            }
+        }
+
         do {
             guard let baseURL = normalizedURL(coordinatorURL) else {
                 throw MacError.invalidURL(coordinatorURL)
             }
             log.info("connect: coordinator=\(baseURL.absoluteString, privacy: .public)")
-            let privateKey = WireGuardKeychain.loadOrCreatePrivateKey()
 
             let bootstrap = ControlAPIClient(baseURL: baseURL, joinToken: "")
 
@@ -228,32 +245,69 @@ final class VPNManagerMac: ObservableObject {
                 }
             }
 
-            let config = Self.buildConfig(privateKeyBase64: privateKey.privateKey,
-                                          overlayIP: overlayIP,
-                                          exitEndpoint: exitNode.endpoint,
-                                          exitPublicKey: exitNode.public_key)
-            try await prepareConfiguration(config)
-            guard let manager else {
-                throw MacError.savedConfigurationMissing
-            }
-
-            do {
-                try manager.connection.startVPNTunnel()
-            } catch {
-                let ns = error as NSError
-                log.error("connect: startVPNTunnel failed: \(error.localizedDescription, privacy: .public) [domain=\(ns.domain, privacy: .public) code=\(ns.code)]")
-                throw error
-            }
-            self.overlayIP = overlayIP
-            lastError = nil
-            log.info("connect: startVPNTunnel initiated, overlay=\(overlayIP, privacy: .public)")
-            startStatusPolling()
+            try await startTunnel(privateKey: privateKey, overlayIP: overlayIP, node: exitNode)
         } catch {
             state = "Failed"
             lastError = error.localizedDescription
             let ns = error as NSError
             log.error("connect failed: \(error.localizedDescription, privacy: .public) [domain=\(ns.domain, privacy: .public) code=\(ns.code)]")
             NSLog("MacVPN: connect failed: \(error.localizedDescription) [\(ns.domain) \(ns.code)]")
+        }
+    }
+
+    /// Shared tunnel start: builds the WireGuard config and starts the tunnel.
+    private func startTunnel(privateKey: WireGuardKeychain.KeyPair, overlayIP: String, node: ExitNode) async throws {
+        let config = Self.buildConfig(privateKeyBase64: privateKey.privateKey,
+                                      overlayIP: overlayIP,
+                                      exitEndpoint: node.endpoint,
+                                      exitPublicKey: node.public_key)
+        try await prepareConfiguration(config)
+        guard let manager else {
+            throw MacError.savedConfigurationMissing
+        }
+
+        do {
+            try manager.connection.startVPNTunnel()
+        } catch {
+            let ns = error as NSError
+            log.error("connect: startVPNTunnel failed: \(error.localizedDescription, privacy: .public) [domain=\(ns.domain, privacy: .public) code=\(ns.code)]")
+            throw error
+        }
+        self.overlayIP = overlayIP
+        lastError = nil
+        log.info("connect: startVPNTunnel initiated, overlay=\(overlayIP, privacy: .public)")
+        startStatusPolling()
+    }
+
+    /// After a fast-path replay, try to refresh the coordinator (register +
+    /// fresh node list) in the background so the next connect has up-to-date
+    /// config. Best effort — silently ignored when the coordinator is blocked.
+    private func refreshCoordinatorIfReachable(authStore: AuthSessionStore, privateKey: WireGuardKeychain.KeyPair) async {
+        guard let baseURL = normalizedURL(coordinatorURL) else { return }
+        let bootstrap = ControlAPIClient(baseURL: baseURL, joinToken: "")
+        do {
+            if let nodes = try? await bootstrap.fetchNodes(), !nodes.isEmpty {
+                exitNodes = nodes
+                ExitNodeCache.save(nodes)
+            }
+            guard let accessToken = authStore.accessToken else { return }
+            let token = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+            let deviceName = "mac-\(Self.stableSuffix(from: privateKey.publicKey))"
+            let response = try await registerDevice(
+                baseURL: baseURL,
+                joinToken: token,
+                name: deviceName,
+                publicKey: privateKey.publicKey,
+                accessToken: accessToken,
+                exitNodeId: selectedNodeID
+            )
+            let node = exitNodes.first { $0.id == selectedNodeID } ?? exitNodes.first
+            if let node {
+                TunnelConfigCache.save(overlayIP: response.overlay_ip, node: node)
+            }
+            log.info("connect: background coordinator refresh ok (overlay=\(response.overlay_ip, privacy: .public))")
+        } catch {
+            log.info("connect: background coordinator refresh skipped (\(error.localizedDescription, privacy: .public))")
         }
     }
 
@@ -422,6 +476,26 @@ final class VPNManagerMac: ObservableObject {
     private static func overlayIP(fromSaved config: WireGuardConfig) -> String {
         guard let address = config.addresses.first else { return "" }
         return address.split(separator: "/").first.map(String.init) ?? ""
+    }
+
+    /// Returns (overlay IP, node) from the tunnel cache or the saved VPN
+    /// profile — whichever is available — for fast-path reconnect.
+    private func savedTunnelSnapshot() -> (overlayIP: String, node: ExitNode)? {
+        if let cached = TunnelConfigCache.load() {
+            return (cached.overlayIP, cached.node)
+        }
+        guard let saved = savedTunnelConfig(), let peer = saved.peers.first else { return nil }
+        return (
+            Self.overlayIP(fromSaved: saved),
+            ExitNode(
+                id: "saved",
+                name: "Saved",
+                country: "VN",
+                city: "Hanoi",
+                endpoint: peer.endpoint ?? "",
+                public_key: peer.publicKeyBase64
+            )
+        )
     }
 
     private func startStatusPolling() {

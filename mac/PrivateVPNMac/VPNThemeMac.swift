@@ -149,7 +149,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnecting: "Disconnecting", .failed: "Failed", .serverLocation: "Server",
             .loadingLocations: "Loading servers…", .noServerAvailable: "No server available",
             .refreshLocations: "Refresh servers",
-            .usingSavedServers: "Showing saved servers — coordinator unreachable. Tap refresh to retry.",
+            .usingSavedServers: "Offline mode — using saved servers",
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của FlowVPN để tiếp tục. Vui lòng cập nhật từ App Store.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
@@ -173,7 +173,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnecting: "Đang ngắt kết nối", .failed: "Lỗi", .serverLocation: "Máy chủ",
             .loadingLocations: "Đang tải máy chủ…", .noServerAvailable: "Chưa có máy chủ khả dụng",
             .refreshLocations: "Tải lại máy chủ",
-            .usingSavedServers: "Đang hiển thị máy chủ đã lưu — không kết nối được máy chủ điều phối. Bấm để tải lại.",
+            .usingSavedServers: "Chế độ offline — đang dùng máy chủ đã lưu",
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 FlowVPN 才能继续。请从 App Store 更新。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
@@ -197,7 +197,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnecting: "正在断开", .failed: "失败", .serverLocation: "服务器",
             .loadingLocations: "正在加载服务器…", .noServerAvailable: "暂无可用服务器",
             .refreshLocations: "刷新服务器",
-            .usingSavedServers: "正在显示已保存的服务器 — 无法连接协调服务器。点击重试。",
+            .usingSavedServers: "离线模式 — 正在使用已保存的服务器",
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "FlowVPN の新しいバージョンが必要です。App Store から更新してください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
@@ -221,7 +221,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnecting: "切断中", .failed: "失敗", .serverLocation: "サーバー",
             .loadingLocations: "サーバーを読み込み中…", .noServerAvailable: "利用可能なサーバーがありません",
             .refreshLocations: "サーバーを更新",
-            .usingSavedServers: "保存済みサーバーを表示中 — コーディネーターに接続できません。再試行するにはタップ。",
+            .usingSavedServers: "オフラインモード — 保存済みサーバーを使用中",
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 FlowVPN 버전이 필요합니다. App Store에서 업데이트하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
@@ -245,7 +245,7 @@ final class AppLanguageStore: ObservableObject {
             .disconnecting: "연결 해제 중", .failed: "실패", .serverLocation: "서버",
             .loadingLocations: "서버를 불러오는 중…", .noServerAvailable: "사용 가능한 서버 없음",
             .refreshLocations: "서버 새로고침",
-            .usingSavedServers: "저장된 서버 표시 중 — 코디네이터에 연결할 수 없습니다. 다시 시도하려면 탭하세요.",
+            .usingSavedServers: "오프라인 모드 — 저장된 서버 사용 중",
         ],
     ]
 }
