@@ -35,6 +35,7 @@
 | KBP-001 | Evidence-based verification | AGENT_ENGINEERING | HIGH | RULE-EVID-* |
 | KDP-001 | DNS-fail playbook placeholder | DEBUG_PLAYBOOKS | MED | spec §42 |
 | KPL-001 | Simulator limits for Network Extension | PLATFORM | HIGH | RULE-IOS-007 |
+| KDP-002 | Exit node runbook (docs/EXIT_NODE_RUNBOOK.md) | VPN | HIGH | verified node 2 2026-08-23 |
 
 Full item files live in the domain folders. Do not dump this KB into agent context;
 route relevant items only (RULE-KB-002).
