@@ -92,14 +92,18 @@ allowedIPs 0.0.0.0/0.
 - Revoke-from-app UI (peer revoke exists server-side via /v1/peers/revoke).
 
 ## What is running?
-macOS FlowVPN app (test) + coordinator on VPS 103.173.155.50.
-
-- iOS Archive may still be blocked by local Go toolchain if the WireGuard build
-  script hits `package fmt is not in std`; `go list fmt` failed in this session
-  with Go 1.26.6, but the user later reported regular device build was working.
-- Release/App Store signing depends on valid Network Extension provisioning for
-  both `com.privatevpn.app` and `com.privatevpn.app.packet-tunnel`.
-- Account/multi-device model (FR-AUTH-001) not implemented.
+- **Production coordinator = `control-plane/` dual-mode server** (systemd
+  `flowvpn-cp.service`, port 7778, NODE_ENV=production, LEGACY_MODE=1, dryRun=false).
+  Caddy `api.meetflowai.site` -> 127.0.0.1:7778. Devices migrated from old sqlite
+  (15 peers, IPs 10.77.0.2–.16 preserved). Old `privatevpn.service` (7777) kept for
+  rollback (`/root/flowvpn-cp/rollback.sh`). sqlite3 CLI installed on VPS.
+- macOS FlowVPN app (test) + iOS build.
+- **Deploy pending items:** RESEND_API_KEY (email OTP sends real mail), AUTH_TOKEN
+  (admin endpoints fail-closed 503 until set), LEGACY_MODE=0 (only after the
+  authenticated app is released).
+- Account/multi-device model (FR-AUTH-001): **repo-side implemented** (email-OTP login,
+  enrollment tokens, Bearer register); production subscription source still pending
+  App Store product review.
 
 ## What is stale?
 - Previous "control-plane Express" (`control-plane/`) is superseded by the VPS

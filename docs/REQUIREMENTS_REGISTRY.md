@@ -10,7 +10,7 @@
 
 | ID | Title | Version | Approval | Impl. state | Gate |
 |----|-------|---------|----------|-------------|------|
-| FR-AUTH-001 | Sign-in flow for authorized user | v1 | APPROVED | NOT_STARTED | 4 |
+| FR-AUTH-001 | Sign-in flow for authorized user | v1 | APPROVED | PARTIAL (repo-side impl 2026-08-23 — email-OTP login, enrollment tokens; RESEND key + subscription pending) | 4 |
 | FR-DEVICE-001 | Device registration | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
 | FR-DEVICE-002 | On-device WireGuard keygen, private key local | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
 | FR-PROVISION-001 | Tunnel IP allocation + client config | v1 | APPROVED | IMPLEMENTED (GATE 3) | 3 |
@@ -39,8 +39,8 @@
 | Impl. state | Count | Requirements |
 |-------------|-------|--------------|
 | IMPLEMENTED | 17 | FR-DEVICE-001/002, FR-PROVISION-001/002, FR-VPN-001..005, FR-ADMIN-001, FR-DIAG-001, NFR-SEC-001/002/003/004, NFR-UX-001, NFR-PRIV-001 |
-| PARTIAL | 4 | FR-REVOKE-001/002, NFR-PERF-001, NFR-REL-001, NFR-OBS-001 |
-| NOT_STARTED | 1 | FR-AUTH-001 |
+| PARTIAL | 5 | FR-AUTH-001, FR-REVOKE-001/002, NFR-PERF-001, NFR-REL-001, NFR-OBS-001 |
+| NOT_STARTED | 0 | — |
 | **Total** | **23** | |
 
 ## Acceptance criteria

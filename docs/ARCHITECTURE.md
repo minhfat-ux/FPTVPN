@@ -137,20 +137,28 @@ WireGuard mesh**; this appendix records the current reality.
 - **Exit-node registry** (`exit_nodes`): `GET /v1/nodes` public, admin
   POST/DELETE. The VPS exit node is seeded; apps pick a node from the backend.
 
-### B3. Provisioning flow
+### B3. Provisioning flow (two modes; login = email-only, owner decision)
 
 ```
-User signs in (Sign in with Apple or email code)
-  → app stores coordinator access token in Keychain
+NEW (authenticated, post-release):
+  User signs in (email OTP via Resend) → session (Keychain, 30d)
   → Device generates keypair (Keychain)
-  → POST /v1/enrollment-tokens (Bearer session, active entitlement required)
+  → POST /v1/enrollment-tokens (Bearer session, active subscription required)
   → POST /v1/peers/register (one-time enrollment token + Bearer session)
       → {overlay_ip, peer_credential, peers[]}
   → coordinator adds peer to wg0
   → app builds WireGuardConfig with IPv4 full-tunnel AllowedIPs 0.0.0.0/0
   → NEVPNManager / NETunnelProviderManager
   → startVPNTunnel → packet-tunnel provider → WireGuardAdapter
+
+LEGACY (App-Store-review build, LEGACY_MODE=1 only):
+  POST /v1/tokens (no auth) → one-time join token (30 min)
+  → POST /v1/peers/register (join token, no auth) → {overlay_ip, peers[]}
+  → same provisioning as above
 ```
+
+Note: Sign in with Apple and Firebase Auth are explicitly NOT used (owner decision
+2026-08-23); production login is email-OTP only (see `docs/MAILER_RESEND.md`).
 
 ### B4. Key differences from GATE 0 baseline
 

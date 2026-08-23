@@ -11,26 +11,27 @@
 ```
 PRIVATEVPN iOS MVP
 
-Project health: ACTIVE (GATE 1 verified — GATE 2/3 code complete + smoke pass; GATE 4/5 partial)
-Current Gate: GATE 5 — MVP UX & Diagnostics (GATE 6 security review started)
+Project health: ACTIVE (GATE 1 verified; GATE 2/3/4 partial; production coordinator deployed 2026-08-23)
+Current Gate: GATE 4 / Publish Prep — iOS App Store submission (auth repo-side done; deploy done)
 Current SRS: v0.1
 Requirement baseline: RS-20260819-01
 Rule baseline: RULESET-0001
 
-Requirements VERIFIED: 2 (FR-VPN-005, NFR-UX-001 — per requirements.json verified=2026-08-19)
+Requirements VERIFIED: 2 (FR-VPN-005, NFR-UX-001)
 Gates VERIFIED: 1 / 8 (GATE 1)
-Verification checks: BUILD PASS ✓ (GATE 1 + GATE 2 device re-verify, 2026-08-19) · TESTS PASS ✓ (9/9) · CONTROL-PLANE SMOKE ✓ (auth/IP-pool/idempotency/delete) · ADMIN+TLS SMOKE ✓ 31/31 (evidence/2026-08-19-control-plane-admin-tls.log)
+Verification checks: BUILD PASS ✓ · TESTS PASS ✓ (14/14 control-plane incl. mailer + legacy + rate limits; iOS 39/39 historical) · PRODUCTION DEPLOY ✓ 2026-08-23 (dual-mode, devices migrated 15/15, legacy register 200/201, real wg provisioning)
 
-Active agents: 1 (Culi/orchestrator — this session)
-Active experts: 0 consulted (bootstrap; planned for GATE 2 WireGuard wiring)
-Open bugs: Critical 0 / High 0 / Medium 0 / Low 0
+Active agents: DSH orchestrator + opencode worker (UI sign-in task)
+Active experts: 0
+Open bugs: Critical 0 / High 0 / Medium 0 / Low 0 (BUG-20260823-001 = TRIAGED, repo+deploy resolved; verification of prod closed endpoint pending LEGACY_MODE=0)
 Blockers:
-  - Real VPN connect needs physical iPhone + Network Extensions provisioning profile (paid team) — GATE 2/7.
-  - No production Vietnam node credentials: control plane runs DRY_RUN; real wg provisioning needs node access + WG_SERVER_PUBKEY/WG_PUBLIC_ENDPOINT.
-  - Internal system disk pressure (8.6 Gi free at last check). Watch before next build.
-Last verified result: GATE 1 simulator build + 9/9 unit tests (evidence/builds/*.log, evidence/gate1-verification.md)
-Next verification: GATE 1 formal gate review (verifier authority, spec §33)
-Owner action required: none for GATE 1 (simulator scope)
+  - Real-device VPN E2E (public IP = 103.173.155.50) not yet verified after latest changes.
+  - Production email OTP needs RESEND_API_KEY; admin endpoints fail-closed until AUTH_TOKEN set.
+  - LEGACY_MODE=1 must stay until authenticated app is released.
+  - Subscription source pending App Store product review.
+Last verified result: production coordinator deployed + verified (2026-08-23, evidence in memory DECISIONS.md)
+Next verification: iOS publish archive/validate/upload; macOS NE E2E; email OTP after RESEND_API_KEY
+Owner action required: RESEND_API_KEY (Resend signup + domain SPF/DKIM); App Store results
 ```
 
 ## Gate flow

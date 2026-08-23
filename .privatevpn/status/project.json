@@ -25,9 +25,11 @@
   "blockers": [
     "iOS App Store Archive, Validate, Upload, build processing, and review are not yet verified.",
     "macOS end-to-end tunnel still needs a signed NetworkExtension run and public exit-IP verification after latest runtime fixes.",
-    "Account login / multi-device model (FR-AUTH-001) not implemented; current model uses one-time join tokens."
+    "Production login email needs RESEND_API_KEY (email-OTP OTP not delivered yet); admin endpoints fail-closed until AUTH_TOKEN set.",
+    "LEGACY_MODE=1 must stay until the authenticated app is released (then set 0).",
+    "Subscription source pending App Store product review (test grant only)."
   ],
   "last_verified": "2026-08-23",
-  "next_verification": "iOS publish archive/validate/upload and macOS NetworkExtension E2E exit-IP check",
+  "next_verification": "iOS publish archive/validate/upload, macOS NetworkExtension E2E exit-IP, production email OTP after RESEND_API_KEY",
   "updated": "2026-08-23"
 }

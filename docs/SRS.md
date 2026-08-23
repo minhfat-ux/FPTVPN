@@ -325,8 +325,12 @@ The macOS app's data plane was refactored from shelling out to `wg-quick`
 > registry (FR-AUTH-001, FR-DEVICE multi-device, exit-node selection), and open
 > a CR against RS-20260819-01 before promoting the next baseline.
 >
-> **Security note (2026-08-23):** production `POST /v1/tokens` is open without auth
-> (BUG-20260823-001, evidence `evidence/2026-08-23-tokens-open-production.md`). A2's
-> "production enrollment token model" is now a release blocker; fix direction = Option F
-> (bind tokens to registered user + active subscription), tracked in
-> `.privatevpn/memory/CURRENT_WORK.md` next-task list.
+> **Security note (2026-08-23, updated after deploy):** BUG-20260823-001 (open
+> `POST /v1/tokens`) is **resolved repo-side and deployed**. Production now runs the
+> `control-plane/` dual-mode server (`flowvpn-cp.service`, port 7778) with **LEGACY_MODE=1**:
+> the App-Store-review build keeps working (legacy join token + unauth register) while the
+> new authenticated flow (email login + `/v1/enrollment-tokens` + Bearer register) is live.
+> **LEGACY_MODE must stay 1 until the authenticated app is released**, then set 0.
+> Login = **email-only** (Resend OTP; `docs/MAILER_RESEND.md`); Sign in with Apple / Firebase
+> explicitly NOT used (owner decision). **Pending:** RESEND_API_KEY (real OTP email),
+> AUTH_TOKEN (admin fail-closed), subscription source after App Store product review.

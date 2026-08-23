@@ -51,6 +51,26 @@ Targets:
 - Future: provisioning flow, config persistence, error states (§82).
 - Real E2E mandatory for final acceptance; mocks do not count (RULE-TEST-002).
 
+## 5b. Production deployment (VPS, as-built 2026-08-23)
+
+- Production coordinator = `control-plane/` (this repo) deployed via systemd
+  `flowvpn-cp.service` on the VPS (103.173.155.50): port 7778,
+  `NODE_ENV=production`, `LEGACY_MODE=1`, dryRun=false; Caddy reverse-proxies
+  `api.meetflowai.site` -> 127.0.0.1:7778.
+- Data: JSON files under `/root/flowvpn-cp/data/` (`devices.json`, `auth.json`,
+  `nodes.json`); migrated from the old sqlite coordinator
+  (`/root/.privatevpn/coordinator.db`, read with `sqlite3` CLI, now installed).
+- Redeploy after changing `control-plane/`:
+  ```bash
+  rsync -az --exclude node_modules --exclude data control-plane/ root@103.173.155.50:/root/flowvpn-cp/
+  ssh root@103.173.155.50 'cd /root/flowvpn-cp && npm install --omit=dev && systemctl restart flowvpn-cp'
+  ```
+- Legacy review window: keep `LEGACY_MODE=1` until the authenticated app is released;
+  then set `LEGACY_MODE=0` in the unit + restart.
+- Rollback: `/root/flowvpn-cp/rollback.sh` (Caddy back to 7777); old
+  `privatevpn.service` still exists for fallback.
+- Set `RESEND_API_KEY` (OTP email) and `AUTH_TOKEN` (admin) once available.
+
 ## 6. Commit conventions
 
 Commit message format (RULE-GIT-005, owner directive):
