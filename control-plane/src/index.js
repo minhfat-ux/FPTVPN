@@ -5,6 +5,8 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import os from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPPool } from "./ip-pool.js";
@@ -312,6 +314,40 @@ app.delete(["/admin/nodes/:id", "/v1/admin/nodes/:id"], requireAdminAuth, async 
   }
 });
 
+// Health of a single exit node (admin): latency (ping), bandwidth (wg transfer,
+// coordinator-local node only), capability (wg interface up, peer count, uptime, load).
+app.get("/v1/admin/nodes/:id/health", requireAdminAuth, async (req, res) => {
+  try {
+    const node = await nodeStore.findById(req.params.id);
+    if (!node) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    const host = String(node.endpoint).split(":").shift() || "";
+    const [ping, wgTransfer, wgPeers] = await Promise.all([
+      measureLatency(host),
+      wgTransferBytes(),
+      wgPeerCount(),
+    ]);
+    res.json({
+      node_id: node.id,
+      endpoint: node.endpoint,
+      reachable: ping.ok,
+      latency_ms: ping.ok ? ping.ms : null,
+      bandwidth: wgTransfer, // { rx_bytes, tx_bytes } or null (coordinator-local wg0 only)
+      capability: {
+        wg_interface: WG_INTERFACE,
+        wg_interface_up: wgTransfer !== null,
+        peers: wgPeers,
+        uptime_s: Math.floor(os.uptime()),
+        load_avg: os.loadavg().map((v) => Number(v.toFixed(2))),
+      },
+    });
+  } catch (err) {
+    console.error("GET /v1/admin/nodes/:id/health failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 app.post("/v1/peers/register", async (req, res) => {
   try {
     const { join_token } = req.body ?? {};
@@ -558,6 +594,58 @@ function parseUnsignedJWT(jwt) {
     return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
   } catch {
     return null;
+  }
+}
+
+function measureLatency(host) {
+  return new Promise((resolve) => {
+    if (!host) return resolve({ ok: false });
+    execFile("ping", ["-c", "1", "-W", "2", host], { timeout: 4000 }, (err, stdout) => {
+      if (err) return resolve({ ok: false });
+      const m = String(stdout).match(/time=([\d.]+)\s*ms/);
+      resolve({ ok: true, ms: m ? Number(Number(m[1]).toFixed(1)) : null });
+    });
+  });
+}
+
+function wgTransferBytes() {
+  return new Promise((resolve) => {
+    execFile("wg", ["show", WG_INTERFACE, "transfer"], { timeout: 3000 }, (err, stdout) => {
+      if (err) return resolve(null);
+      // `wg show <iface> transfer` prints per-peer lines: <pubkey> <rx_bytes> <tx_bytes>
+      const lines = String(stdout).trim().split("\n").filter(Boolean);
+      if (!lines.length) return resolve({ rx_bytes: 0, tx_bytes: 0 });
+      let rx = 0;
+      let tx = 0;
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          rx += Number(parts[1]) || 0;
+          tx += Number(parts[2]) || 0;
+        }
+      }
+      resolve({ rx_bytes: rx, tx_bytes: tx });
+    });
+  });
+}
+
+function wgPeerCount() {
+  return new Promise((resolve) => {
+    execFile("wg", ["show", WG_INTERFACE, "peers"], { timeout: 3000 }, (err, stdout) => {
+      if (err) return resolve(null);
+      resolve(String(stdout).trim() ? String(stdout).trim().split("\n").length : 0);
+    });
+  });
+}
+
+function parseSize(value, unit) {
+  const n = Number(value);
+  switch (unit) {
+    case "KiB": return Math.round(n * 1024);
+    case "MiB": return Math.round(n * 1024 * 1024);
+    case "GiB": return Math.round(n * 1024 * 1024 * 1024);
+    case "TiB": return Math.round(n * 1024 * 1024 * 1024 * 1024);
+    default: return Math.round(n);
   }
 }
 

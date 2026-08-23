@@ -137,6 +137,8 @@ export function adminPageHTML() {
 
     td code { word-break: break-all; color: rgba(255, 255, 255, 0.82); }
 
+    td code.health { white-space: pre-line; color: rgba(255, 255, 255, 0.82); }
+
     .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; color: #06160d; background: var(--accent); font-size: 12px; font-weight: 700; }
     .pill.off { color: #fff; background: rgba(255, 255, 255, 0.2); }
 
@@ -205,11 +207,12 @@ export function adminPageHTML() {
               <th>Endpoint</th>
               <th>Public Key</th>
               <th>Status</th>
+              <th>Health</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="nodesBody">
-            <tr><td colspan="6">No data loaded.</td></tr>
+            <tr><td colspan="7">No data loaded.</td></tr>
           </tbody>
         </table>
       </div>
@@ -394,7 +397,7 @@ export function adminPageHTML() {
 
     function renderNodes(nodes) {
       if (!nodes.length) {
-        fields.nodesBody.innerHTML = '<tr><td colspan="6">No exit nodes found.</td></tr>';
+        fields.nodesBody.innerHTML = '<tr><td colspan="7">No exit nodes found.</td></tr>';
         return;
       }
 
@@ -407,6 +410,7 @@ export function adminPageHTML() {
           '<td data-label="Endpoint"><code></code></td>',
           '<td data-label="Public Key"><code></code></td>',
           '<td data-label="Status"></td>',
+          '<td data-label="Health"><code class="health"></code></td>',
           '<td data-label="Actions"></td>',
         ].join("");
         row.children[0].querySelector("code").textContent = node.id;
@@ -414,6 +418,10 @@ export function adminPageHTML() {
         row.children[2].querySelector("code").textContent = node.endpoint;
         row.children[3].querySelector("code").textContent = node.public_key;
         row.children[4].innerHTML = node.active ? '<span class="pill">Active</span>' : '<span class="pill off">Disabled</span>';
+
+        const healthCell = row.children[5].querySelector("code");
+        healthCell.textContent = "loading...";
+        fetchNodeHealth(node.id, healthCell);
 
         const edit = document.createElement("button");
         edit.className = "secondary";
@@ -435,9 +443,52 @@ export function adminPageHTML() {
           }
         };
 
-        row.children[5].append(edit, " ", disable);
+        row.children[6].append(edit, " ", disable);
         fields.nodesBody.appendChild(row);
       }
+    }
+
+    async function fetchNodeHealth(id, cell) {
+      try {
+        const h = await request("/v1/admin/nodes/" + encodeURIComponent(id) + "/health");
+        const lines = [];
+        if (h.latency_ms != null) {
+          lines.push(h.latency_ms + " ms" + (h.reachable === false ? " (no reply)" : ""));
+        } else {
+          lines.push(h.reachable === false ? "unreachable" : "n/a");
+        }
+        if (h.bandwidth) {
+          lines.push("up " + formatBytes(h.bandwidth.tx_bytes) + " / down " + formatBytes(h.bandwidth.rx_bytes));
+        } else {
+          lines.push("wg n/a");
+        }
+        const cap = h.capability || {};
+        const up = cap.wg_interface_up === false ? "wg down" : "up";
+        const peers = cap.peers != null ? cap.peers + " peers" : "";
+        const uptime = cap.uptime_s != null ? formatUptime(cap.uptime_s) : "";
+        lines.push([up, peers, uptime].filter(Boolean).join(" \u00b7 "));
+        cell.textContent = lines.join("\n");
+        cell.title = JSON.stringify(h, null, 2);
+      } catch (error) {
+        cell.textContent = "n/a";
+        cell.title = error.message;
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (bytes == null) return "n/a";
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let i = 0;
+      let v = bytes;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return v.toFixed(v >= 100 ? 0 : 1) + units[i];
+    }
+
+    function formatUptime(seconds) {
+      if (seconds < 60) return seconds + "s";
+      if (seconds < 3600) return (seconds / 60).toFixed(0) + "m";
+      if (seconds < 86400) return (seconds / 3600).toFixed(1) + "h";
+      return (seconds / 86400).toFixed(1) + "d";
     }
 
     async function saveNode() {
