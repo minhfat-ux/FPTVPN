@@ -574,7 +574,24 @@ export function adminPageHTML() {
           }
         };
 
-        row.children[6].append(edit, " ", disable);
+        const enable = document.createElement("button");
+        enable.className = "secondary";
+        enable.textContent = "Enable";
+        enable.disabled = node.active === true;
+        enable.onclick = async () => {
+          try {
+            await request("/v1/admin/nodes/" + encodeURIComponent(node.id), {
+              method: "PATCH",
+              body: JSON.stringify({ active: true }),
+            });
+            setStatus("Enabled " + node.id + ".");
+            await loadNodes();
+          } catch (error) {
+            setStatus(error.message, true);
+          }
+        };
+
+        row.children[6].append(edit, " ", disable, " ", enable);
         fields.nodesBody.appendChild(row);
       }
     }
