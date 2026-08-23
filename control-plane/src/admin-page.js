@@ -292,7 +292,7 @@ export function adminPageHTML() {
     // calls hit the proxy too; when served at /admin (SSH tunnel) use origin.
     fields.baseUrl.value =
       window.location.origin +
-      window.location.pathname.replace(/\/admin\/?$/i, "");
+      window.location.pathname.replace(/\\/admin\\/?$/i, "");
 
     // Persist token + base across visits so the page can auto-load nodes.
     fields.token.value = localStorage.getItem("fvpn_admin_token") || "";
@@ -467,7 +467,7 @@ export function adminPageHTML() {
         const peers = cap.peers != null ? cap.peers + " peers" : "";
         const uptime = cap.uptime_s != null ? formatUptime(cap.uptime_s) : "";
         lines.push([up, peers, uptime].filter(Boolean).join(" \u00b7 "));
-        cell.textContent = lines.join("\n");
+        cell.textContent = lines.join("\\n");
         cell.title = JSON.stringify(h, null, 2);
       } catch (error) {
         cell.textContent = "n/a";
