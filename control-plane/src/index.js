@@ -509,8 +509,14 @@ app.get("/device/:id", requireAdminAuth, async (req, res) => {
 app.delete("/device/:id", requireAdminAuth, async (req, res) => {
   const device = await store.deactivate(req.params.id);
   if (!device) return res.status(404).json({ error: "Not found" });
-  const node = await nodeStore.findActiveById(device.exitNodeId) ?? await nodeStore.firstActive();
-  await wgForNode(node).removePeer(device.publicKey);
+  // Revoke đúng node của device (kể cả khi node đã bị disable) — không fallback
+  // sang node khác để tránh xóa nhầm peer trên node active.
+  const node = device.exitNodeId
+    ? await nodeStore.findById(device.exitNodeId)
+    : await nodeStore.firstActive();
+  if (node) {
+    await wgForNode(node).removePeer(device.publicKey);
+  }
   res.json({ device });
 });
 
