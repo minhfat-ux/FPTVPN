@@ -5,6 +5,7 @@ Durable engineering decisions (see also `docs/adr/`).
 | Date | Decision | Reference |
 |------|----------|-----------|
 | 2026-08-23 | **Owner reference:** the owner is **Minh (MinhNb2)**. Address the owner as **"Anh"** (Vietnamese honorific) in all communication. | this session (owner request) |
+| 2026-08-23 | **BUG-20260823-001 deploy timing (owner):** DO NOT deploy the authenticated-enrollment fix to production yet. The current app build (which depends on open `POST /v1/tokens`) is already submitted for **App Store review**; deploying the fail-closed fix now would break the reviewer's connect test and cause rejection. Deploy the fix + the new authenticated app build **after App Store approval**. Until then production `/v1/tokens` stays open (known risk: paywall/revocation bypass; interim mitigations A rate-limit / B peer-cleanup declined for now by owner). | this session (owner decision) |
 | 2026-08-19 | Xcode project generated via xcodegen (project.yml authoritative) | ADR-0001 |
 | 2026-08-19 | VPN mechanism = Packet Tunnel Provider (NEPacketTunnelProvider) | ADR-0002 |
 | 2026-08-19 | Separate app target + extension target | ADR-0003 |
