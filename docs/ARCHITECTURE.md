@@ -134,8 +134,12 @@ WireGuard mesh**; this appendix records the current reality.
   `/v1/peers/revoke`, `/v1/enrollment-tokens`, `/v1/nodes`, `/v1/health`).
 - Auto-provisions peers into the exit node's `wg0` (`wg set`) on register/revoke;
   IP pool 10.77.0.2–254, WireGuard UDP 443.
-- **Exit-node registry** (`exit_nodes`): `GET /v1/nodes` public, admin
-  POST/DELETE. The VPS exit node is seeded; apps pick a node from the backend.
+- **Exit-node registry**: stored in **SQLite** (`nodes.db`, `node:sqlite`); `GET /v1/nodes`
+  public, admin `GET/POST/PATCH/DELETE /v1/admin/nodes` (Bearer AUTH_TOKEN, fail-closed 503).
+  Seed: `vietnam-1` (103.173.155.50:443).
+- **Admin page**: `https://meetflowai.site/PrivateVPN/Admin` (public page, token-protected
+  API; list + separate edit views). **Per-node health**: `GET /v1/admin/nodes/:id/health`
+  (ping latency, `wg show transfer` bandwidth, capability peers/uptime/load).
 
 ### B3. Provisioning flow (two modes; login = email-only, owner decision)
 

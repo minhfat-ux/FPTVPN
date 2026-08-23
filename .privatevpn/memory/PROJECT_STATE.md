@@ -54,8 +54,13 @@ allowedIPs 0.0.0.0/0.
   public key appeared in `wg show wg0 peers` after register).
 - `POST /v1/peers/register` returns `{peer_id, overlay_ip, network,
   peer_credential, peers[]}`; IP pool 10.77.0.2–254.
-- **Exit-node registry**: `GET /v1/nodes` (public) + `POST`/`DELETE /v1/nodes`
-  (admin); `vietnam-1` seeded. Apps list + pick the exit node from the backend.
+- **Exit-node registry in SQLite** (`/root/flowvpn-cp/data/nodes.db`, `node:sqlite`):
+  `GET /v1/nodes` (public) + `GET/POST/PATCH/DELETE /v1/admin/nodes` (admin, Bearer
+  AUTH_TOKEN; 503 fail-closed if unset). `vietnam-1` seeded. Apps list + pick the
+  exit node from the backend (backend-first, no production hardcode).
+- **Admin page public**: `https://meetflowai.site/PrivateVPN/Admin` (list + edit views,
+  token persisted, auto-load). **Per-node health**: `GET /v1/admin/nodes/:id/health`
+  (latency, bandwidth, capability) — verified live (0.1ms, rx 3.1GB/tx 10.1GB, 13 peers).
 - Public legal/support pages are live and return HTTP 200:
   `https://meetflowai.site/FlowVPNPrivacy.html` and
   `https://meetflowai.site/SupportPrivateVPN.html`.
