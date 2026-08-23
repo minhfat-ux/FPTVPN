@@ -59,23 +59,12 @@ export function adminPageHTML() {
       color: #06160d;
     }
 
-    h1 {
-      margin: 0;
-      font-size: clamp(25px, 4vw, 38px);
-      letter-spacing: 0;
-    }
+    h1 { margin: 0; font-size: clamp(25px, 4vw, 38px); letter-spacing: 0; }
+    h2 { margin: 0 0 14px; font-size: 17px; }
 
-    .subtitle {
-      margin-top: 4px;
-      color: var(--muted);
-      font-size: 15px;
-    }
+    .subtitle { margin-top: 4px; color: var(--muted); font-size: 15px; }
 
-    main {
-      padding: 26px 0 42px;
-      display: grid;
-      gap: 18px;
-    }
+    main { padding: 26px 0 42px; display: grid; gap: 18px; }
 
     .card {
       padding: 18px;
@@ -85,18 +74,9 @@ export function adminPageHTML() {
       backdrop-filter: blur(18px);
     }
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 
-    label {
-      display: grid;
-      gap: 7px;
-      color: var(--muted);
-      font-size: 13px;
-    }
+    label { display: grid; gap: 7px; color: var(--muted); font-size: 13px; }
 
     input, textarea, select {
       width: 100%;
@@ -109,23 +89,16 @@ export function adminPageHTML() {
       outline: none;
     }
 
-    textarea {
-      min-height: 76px;
-      resize: vertical;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    }
+    textarea { min-height: 76px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
     input:focus, textarea:focus, select:focus {
       border-color: rgba(51, 199, 115, 0.8);
       box-shadow: 0 0 0 3px rgba(51, 199, 115, 0.16);
     }
 
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 14px;
-    }
+    input[readonly] { opacity: 0.6; cursor: not-allowed; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 
     button {
       border: 0;
@@ -138,21 +111,9 @@ export function adminPageHTML() {
       cursor: pointer;
     }
 
-    button.secondary {
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid var(--stroke);
-    }
-
-    button.danger {
-      color: #fff;
-      background: var(--danger);
-    }
-
-    button:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
+    button.secondary { color: var(--text); background: rgba(255, 255, 255, 0.12); border: 1px solid var(--stroke); }
+    button.danger { color: #fff; background: var(--danger); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
 
     .status {
       min-height: 22px;
@@ -162,20 +123,9 @@ export function adminPageHTML() {
       white-space: pre-wrap;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      overflow: hidden;
-      border-radius: 8px;
-    }
+    table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 8px; }
 
-    th, td {
-      padding: 12px;
-      border-bottom: 1px solid var(--stroke);
-      text-align: left;
-      vertical-align: top;
-      font-size: 14px;
-    }
+    th, td { padding: 12px; border-bottom: 1px solid var(--stroke); text-align: left; vertical-align: top; font-size: 14px; }
 
     th {
       color: var(--muted);
@@ -185,25 +135,23 @@ export function adminPageHTML() {
       background: rgba(255, 255, 255, 0.06);
     }
 
-    td code {
-      word-break: break-all;
-      color: rgba(255, 255, 255, 0.82);
-    }
+    td code { word-break: break-all; color: rgba(255, 255, 255, 0.82); }
 
-    .pill {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 999px;
-      color: #06160d;
-      background: var(--accent);
-      font-size: 12px;
-      font-weight: 700;
-    }
+    .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; color: #06160d; background: var(--accent); font-size: 12px; font-weight: 700; }
+    .pill.off { color: #fff; background: rgba(255, 255, 255, 0.2); }
 
-    .pill.off {
-      color: #fff;
-      background: rgba(255, 255, 255, 0.2);
+    .hidden { display: none !important; }
+
+    .backlink {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      text-decoration: none;
+      margin-bottom: 14px;
     }
+    .backlink:hover { color: var(--text); }
 
     @media (max-width: 760px) {
       .grid { grid-template-columns: 1fr; }
@@ -211,13 +159,7 @@ export function adminPageHTML() {
       thead { display: none; }
       tr { border-bottom: 1px solid var(--stroke); padding: 10px 0; }
       td { border: 0; padding: 7px 0; }
-      td::before {
-        content: attr(data-label);
-        display: block;
-        color: var(--muted);
-        font-size: 12px;
-        margin-bottom: 3px;
-      }
+      td::before { content: attr(data-label); display: block; color: var(--muted); font-size: 12px; margin-bottom: 3px; }
     }
   </style>
 </head>
@@ -233,7 +175,8 @@ export function adminPageHTML() {
   </header>
 
   <main>
-    <section class="card">
+    <!-- ===================== LIST VIEW ===================== -->
+    <section class="card" id="view-list">
       <div class="grid">
         <label>
           Admin Bearer Token
@@ -246,13 +189,36 @@ export function adminPageHTML() {
       </div>
       <div class="actions">
         <button id="loadNodes">Load Nodes</button>
-        <button class="secondary" id="clearForm">Clear Form</button>
+        <button id="addNode">+ Add Node</button>
       </div>
       <div class="status" id="status"></div>
     </section>
 
     <section class="card">
-      <h2>Node Configuration</h2>
+      <h2>Exit Nodes</h2>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Location</th>
+              <th>Endpoint</th>
+              <th>Public Key</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="nodesBody">
+            <tr><td colspan="6">No data loaded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== EDIT VIEW ===================== -->
+    <section class="card hidden" id="view-edit">
+      <a class="backlink" href="#" id="backToList">&larr; Back to list</a>
+      <h2 id="editTitle">Edit Node</h2>
       <div class="grid">
         <label>
           Node ID
@@ -291,29 +257,8 @@ export function adminPageHTML() {
         <textarea id="publicKey" placeholder="base64 public key"></textarea>
       </label>
       <div class="actions">
-        <button id="createNode">Add Node</button>
-        <button class="secondary" id="updateNode">Update Node</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Exit Nodes</h2>
-      <div style="overflow-x:auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Location</th>
-              <th>Endpoint</th>
-              <th>Public Key</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="nodesBody">
-            <tr><td colspan="6">No data loaded.</td></tr>
-          </tbody>
-        </table>
+        <button id="saveNode">Save Node</button>
+        <button class="secondary" id="cancelEdit">Cancel</button>
       </div>
     </section>
   </main>
@@ -332,14 +277,19 @@ export function adminPageHTML() {
       publicKey: document.getElementById("publicKey"),
       status: document.getElementById("status"),
       nodesBody: document.getElementById("nodesBody"),
+      viewList: document.getElementById("view-list"),
+      viewEdit: document.getElementById("view-edit"),
+      editTitle: document.getElementById("editTitle"),
     };
+
+    let editingId = null; // null = create mode
 
     // Auto-detect the API base: when this page is served under
     // /PrivateVPN/Admin (Caddy strips the prefix), keep the prefix so API
     // calls hit the proxy too; when served at /admin (SSH tunnel) use origin.
     fields.baseUrl.value =
       window.location.origin +
-      window.location.pathname.replace(/\/admin\/?$/i, "");
+      window.location.pathname.replace(/\\/admin\\/?$/i, "");
 
     function setStatus(message, isError = false) {
       fields.status.textContent = message;
@@ -357,9 +307,19 @@ export function adminPageHTML() {
       };
     }
 
+    function showView(view) {
+      const list = view === "list";
+      fields.viewList.classList.toggle("hidden", !list);
+      fields.viewEdit.classList.toggle("hidden", list);
+      if (list) {
+        editingId = null;
+        fields.editTitle.textContent = "Edit Node";
+        fields.nodeId.readOnly = false;
+      }
+    }
+
     function formPayload() {
       return {
-        id: fields.nodeId.value.trim(),
         name: fields.name.value.trim(),
         country: fields.country.value.trim().toUpperCase(),
         city: fields.city.value.trim(),
@@ -370,8 +330,12 @@ export function adminPageHTML() {
       };
     }
 
-    function fillForm(node) {
-      fields.nodeId.value = node.id || "";
+    // Load the node's WireGuard public key into the edit form.
+    function openEdit(node) {
+      editingId = node.id;
+      fields.editTitle.textContent = "Edit Node: " + node.id;
+      fields.nodeId.value = node.id;
+      fields.nodeId.readOnly = true;
       fields.name.value = node.name || "";
       fields.country.value = node.country || "";
       fields.city.value = node.city || "";
@@ -379,11 +343,24 @@ export function adminPageHTML() {
       fields.publicKey.value = node.public_key || node.serverPublicKey || "";
       fields.priority.value = node.priority ?? 100;
       fields.active.value = node.active === false ? "false" : "true";
-      fields.nodeId.focus();
+      showView("edit");
+      fields.name.focus();
     }
 
-    function clearForm() {
-      fillForm({ priority: 100, active: true });
+    function openCreate() {
+      editingId = null;
+      fields.editTitle.textContent = "Add Node";
+      fields.nodeId.value = "";
+      fields.nodeId.readOnly = false;
+      fields.name.value = "";
+      fields.country.value = "VN";
+      fields.city.value = "";
+      fields.endpoint.value = "";
+      fields.publicKey.value = "";
+      fields.priority.value = "100";
+      fields.active.value = "true";
+      showView("edit");
+      fields.nodeId.focus();
     }
 
     async function request(path, options = {}) {
@@ -418,14 +395,14 @@ export function adminPageHTML() {
       fields.nodesBody.innerHTML = "";
       for (const node of nodes) {
         const row = document.createElement("tr");
-        row.innerHTML = \`
-          <td data-label="ID"><code></code></td>
-          <td data-label="Location"></td>
-          <td data-label="Endpoint"><code></code></td>
-          <td data-label="Public Key"><code></code></td>
-          <td data-label="Status"></td>
-          <td data-label="Actions"></td>
-        \`;
+        row.innerHTML = [
+          '<td data-label="ID"><code></code></td>',
+          '<td data-label="Location"></td>',
+          '<td data-label="Endpoint"><code></code></td>',
+          '<td data-label="Public Key"><code></code></td>',
+          '<td data-label="Status"></td>',
+          '<td data-label="Actions"></td>',
+        ].join("");
         row.children[0].querySelector("code").textContent = node.id;
         row.children[1].textContent = node.name + " - " + node.city + ", " + node.country;
         row.children[2].querySelector("code").textContent = node.endpoint;
@@ -435,7 +412,7 @@ export function adminPageHTML() {
         const edit = document.createElement("button");
         edit.className = "secondary";
         edit.textContent = "Edit";
-        edit.onclick = () => fillForm(node);
+        edit.onclick = () => openEdit(node);
 
         const disable = document.createElement("button");
         disable.className = "danger";
@@ -443,8 +420,13 @@ export function adminPageHTML() {
         disable.disabled = node.active === false;
         disable.onclick = async () => {
           if (!confirm("Disable exit node " + node.id + "?")) return;
-          await request("/v1/admin/nodes/" + encodeURIComponent(node.id), { method: "DELETE" });
-          await loadNodes();
+          try {
+            await request("/v1/admin/nodes/" + encodeURIComponent(node.id), { method: "DELETE" });
+            setStatus("Disabled " + node.id + ".");
+            await loadNodes();
+          } catch (error) {
+            setStatus(error.message, true);
+          }
         };
 
         row.children[5].append(edit, " ", disable);
@@ -452,36 +434,38 @@ export function adminPageHTML() {
       }
     }
 
-    document.getElementById("loadNodes").onclick = loadNodes;
-    document.getElementById("clearForm").onclick = clearForm;
-    document.getElementById("createNode").onclick = async () => {
+    async function saveNode() {
       try {
-        const data = await request("/v1/admin/nodes", {
-          method: "POST",
-          body: JSON.stringify(formPayload()),
-        });
-        setStatus("Added " + data.node.id + ".");
-        await loadNodes();
-      } catch (error) {
-        setStatus(error.message, true);
-      }
-    };
-
-    document.getElementById("updateNode").onclick = async () => {
-      try {
-        const id = fields.nodeId.value.trim();
-        if (!id) throw new Error("Node ID is required.");
         const payload = formPayload();
-        delete payload.id;
-        const data = await request("/v1/admin/nodes/" + encodeURIComponent(id), {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-        setStatus("Updated " + data.node.id + ".");
+        let result;
+        if (editingId) {
+          result = await request("/v1/admin/nodes/" + encodeURIComponent(editingId), {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          setStatus("Updated " + result.node.id + ".");
+        } else {
+          const body = { id: fields.nodeId.value.trim(), ...payload };
+          result = await request("/v1/admin/nodes", {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          setStatus("Added " + result.node.id + ".");
+        }
+        showView("list");
         await loadNodes();
       } catch (error) {
         setStatus(error.message, true);
       }
+    }
+
+    document.getElementById("loadNodes").onclick = loadNodes;
+    document.getElementById("addNode").onclick = openCreate;
+    document.getElementById("saveNode").onclick = saveNode;
+    document.getElementById("cancelEdit").onclick = () => showView("list");
+    document.getElementById("backToList").onclick = (event) => {
+      event.preventDefault();
+      showView("list");
     };
   </script>
 </body>
