@@ -76,3 +76,24 @@ Durable engineering decisions (see also `docs/adr/`).
 | 2026-08-24 | **iOS main screen simplified**: server dropdown → scrollable list view (max 5 rows, Select button per row; select first, then Connect via big button); removed "Connected to" status card and subscription upgrade card from main screen (status stays as small dot under logo; upgrade via Settings/paywall flow); added `.select` key in 5 languages. Build verified. | ios/PrivateVPN/ContentView.swift, ios/PrivateVPN/Theme.swift |
 | 2026-08-24 | **Mac main window server list + permission-wait UX (Mac + iOS)**: (1) Mac main-window server dropdown → scrollable list view (max 5 rows, Select button selects + connects; mirror of menu bar/iOS); (2) while waiting for VPN permission/connecting: visible spinner + "Preparing VPN permission…" (new `.preparingPermission` key, 5 languages) and ALL buttons disabled — Mac: select rows/refresh/connect/upgrade; iOS: select rows/refresh/connect (now disabled while .connecting)/settings gear. Both builds verified. | mac/PrivateVPNMac/ContentViewMac.swift, mac/PrivateVPNMac/VPNThemeMac.swift, ios/PrivateVPN/ContentView.swift, ios/PrivateVPN/Theme.swift |
 | 2026-08-24 | **Mac menu bar → native macOS style**: reverted custom `.menuBarExtraStyle(.window)` list popover to `.menuBarExtraStyle(.menu)`; server selection now a native submenu (checkmark on selected node), status/plan text rows, standard Buttons + Dividers, Quit ⌘Q; app title "VPNFlow". Select-server then Connect (native interaction). Build verified. | mac/PrivateVPNMac/PrivateVPNMacApp.swift |
+
+## 2026-08-25 — Android clone (VPNFlow Android)
+
+- **Quyết định**: Build bản Android native (Kotlin + Jetpack Compose), clone
+  đúng hành vi iOS/macOS hiện tại (backend-first, login OTP, paywall Play Billing,
+  5 ngôn ngữ, theme dark).
+- **WireGuard Android**: dùng `com.wireguard.android:tunnel` (AAR chính thức,
+  Apache-2.0, chứa wireguard-go + GoBackend$VpnService tự khai báo trong manifest
+  khi merge). Không tự viết VpnService từ đầu.
+- **Google Play Billing 7.x**: đã bỏ suspend ktx extensions — dùng callback API
+  (queryProductDetailsAsync / queryPurchasesAsync + listener).
+- **Product IDs Android**: `Monthly_Premium` / `Yearly_Premium` (giống iOS).
+- **Debug unlock**: `BuildConfig.DEBUG → isSubscribed = true` (giống iOS #if DEBUG).
+- **ExFAT workaround (BIWIN)**: macOS ghi xattr `com.apple.provenance` → ExFAT
+  lưu thành file `._*` (AppleDouble) cạnh mỗi file build output → aapt/d8 chết.
+  Giải pháp: chuyển build dir sang APFS (`~/.vpnflow-build`) qua
+  `layout.buildDirectory` trong root build.gradle.kts. Không dùng fileTree
+  `**/._*` (Gradle default-excludes `._*`).
+- **Sign-in Android**: không có Sign in with Apple → dùng email OTP (backend đã hỗ trợ).
+- **Build verified**: assembleDebug + assembleRelease (R8 + proguard) đều PASS.
+  APK debug 33.8MB / release-unsigned 16.1MB.

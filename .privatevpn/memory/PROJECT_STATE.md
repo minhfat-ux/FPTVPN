@@ -145,3 +145,11 @@ allowedIPs 0.0.0.0/0.
 9. 🔲 Design + build **account login + add device** (Tailscale-style): users
    table, auth, user→devices ownership.
 10. 🔲 Push iOS app to FPTVPN repo (scope: iOS/ + project.yml + Vendor).
+
+## Android (bản clone, commit 3e7ea17 — CHƯA PUSH, chờ user push từ terminal)
+
+- `android/` — Kotlin + Jetpack Compose + WireGuard tunnel AAR.
+- Build: `cd android && ./gradlew :app:assembleDebug` (JDK 17, SDK platform 35).
+- Build outputs: `~/.vpnflow-build/app/outputs/apk/{debug,release}/`.
+- Trạng thái: compile + R8 PASS. Chưa chạy trên thiết bị thật (chưa có emulator/phone test).
+- TODO: tạo Play Console project, product IDs, upload test; test thật VPN trên máy Android.
