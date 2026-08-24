@@ -18,12 +18,36 @@ struct ContentViewMac: View {
             VStack(spacing: 20) {
                 // Header
                 VStack(spacing: 6) {
-                    Image(nsImage: NSApplication.shared.applicationIconImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 76, height: 76)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+                    ZStack(alignment: .topLeading) {
+                        Image(nsImage: NSApplication.shared.applicationIconImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 76, height: 76)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+
+                        // Crown badge: active Premium → góc trái trên của app logo.
+                        if subscriptionStore.isSubscribed {
+                            Image(systemName: "crown.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(.yellow)
+                                .padding(3)
+                                .background(Circle().fill(Color.black.opacity(0.6)))
+                                .offset(x: -5, y: -5)
+                        }
+                    }
+                    .frame(width: 76, height: 76)
+
+                    // Connection status: chấm nhỏ + trạng thái, nằm ngay dưới logo.
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+                        Text(vpnManager.state.localizedVPNState(languageStore.language))
+                            .font(.caption)
+                            .foregroundStyle(statusColor)
+                    }
+
                     Text("FlowVPN")
                         .font(.largeTitle.bold())
                         .foregroundStyle(VPNThemeMac.textPrimary)
@@ -33,30 +57,26 @@ struct ContentViewMac: View {
                 }
                 .padding(.top, 16)
 
-                subscriptionStatusCard
+                if !subscriptionStore.isSubscribed {
+                    subscriptionStatusCard
+                }
 
                 serverSelectionCard
 
-                // Status card
+                // Status card: chỉ text + chi tiết (icon nhỏ đã nằm dưới logo).
                 VStack(spacing: 10) {
-                    ZStack {
+                    HStack(spacing: 8) {
                         if vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…" {
                             ProgressView()
-                                .controlSize(.large)
+                                .controlSize(.small)
                                 .tint(statusColor)
-                                .scaleEffect(1.6)
-                        } else {
-                            Image(systemName: statusSymbol)
-                                .font(.system(size: 44))
-                                .foregroundStyle(statusColor)
                         }
+                        Text(vpnManager.state.localizedVPNState(languageStore.language))
+                            .font(.title2.bold())
+                            .foregroundStyle(statusColor)
                     }
-                    .frame(height: 52)
-                    Text(vpnManager.state.localizedVPNState(languageStore.language))
-                        .font(.title2.bold())
-                        .foregroundStyle(statusColor)
                     if vpnManager.state == "Connecting…" {
-                        Text("Preparing VPN permission…")
+                        Text(languageStore.t(.preparingPermission))
                             .font(.footnote)
                             .foregroundStyle(VPNThemeMac.textSecondary)
                             .multilineTextAlignment(.center)
@@ -129,10 +149,26 @@ struct ContentViewMac: View {
         .onAppear {
             if !authStore.isSignedIn {
                 showingLogin = true
+            } else {
+                // Đã có token (khôi phục từ keychain): check subscription ngay.
+                syncBackendPremium()
+                if !subscriptionStore.isSubscribed {
+                    showingPaywall = true
+                }
+            }
+        }
+        .onChange(of: authStore.session) { _, _ in
+            // Vừa đăng nhập / session đổi: lấy token trước, rồi mới quyết định paywall.
+            syncBackendPremium()
+            if authStore.isSignedIn && !subscriptionStore.isSubscribed {
+                showingPaywall = true
             }
         }
         .onChange(of: authStore.isSignedIn) { _, isSignedIn in
             showingLogin = !isSignedIn
+            if !isSignedIn {
+                showingPaywall = false
+            }
         }
         .task {
             await subscriptionStore.start()
@@ -144,6 +180,10 @@ struct ContentViewMac: View {
                 forcedUpdateInfo = info
             }
         }
+    }
+
+    private func syncBackendPremium() {
+        subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
     }
 
     private var subscriptionStatusCard: some View {
@@ -176,6 +216,7 @@ struct ContentViewMac: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .disabled(isConnectionTransitioning)
             }
         }
         .padding(16)
@@ -219,16 +260,18 @@ struct ContentViewMac: View {
                     .foregroundStyle(VPNThemeMac.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Picker(languageStore.t(.serverLocation), selection: Binding(
-                    get: { vpnManager.selectedNodeID ?? vpnManager.exitNodes.first?.id ?? "" },
-                    set: { vpnManager.selectedNodeID = $0 }
-                )) {
-                    ForEach(vpnManager.exitNodes) { node in
-                        Text(serverTitle(for: node)).tag(node.id)
+                // List view: tối đa 5 server hiển thị, cuộn được; nút Select
+                // chọn server đó và connect luôn (giống menu bar).
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(vpnManager.exitNodes) { node in
+                            serverRow(node)
+                        }
                     }
+                    .padding(2)
                 }
-                .labelsHidden()
-                .disabled(isConnectionTransitioning)
+                .frame(height: min(CGFloat(vpnManager.exitNodes.count), 5) * 30)
+                .scrollIndicators(.visible)
                 if vpnManager.usingFallbackNodes && vpnManager.state == "Disconnected" {
                     Text(languageStore.t(.usingSavedServers))
                         .font(.caption)
@@ -275,6 +318,41 @@ struct ContentViewMac: View {
 
     private var isConnectionTransitioning: Bool {
         vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…"
+    }
+
+    private func serverRow(_ node: ExitNode) -> some View {
+        let isSelected = vpnManager.selectedNodeID == node.id
+        let isCurrent = isSelected && vpnManager.state == "Connected"
+        let busy = isConnectionTransitioning
+
+        return HStack(spacing: 8) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isSelected ? VPNThemeMac.accent : VPNThemeMac.textSecondary)
+
+            Text(serverTitle(for: node))
+                .font(.body)
+                .lineLimit(1)
+                .foregroundStyle(VPNThemeMac.textPrimary)
+
+            Spacer(minLength: 8)
+
+            Button(isCurrent ? languageStore.t(.connected) : languageStore.t(.select)) {
+                vpnManager.selectedNodeID = node.id
+                if subscriptionStore.isSubscribed {
+                    Task { await vpnManager.connect(authStore: authStore) }
+                } else {
+                    showingPaywall = true
+                }
+            }
+            .font(.footnote.bold())
+            .foregroundStyle(isCurrent ? Color.secondary : VPNThemeMac.accent)
+            .buttonStyle(.plain)
+            .disabled(busy || isCurrent)
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 6)
+        .background(isSelected ? VPNThemeMac.accent.opacity(0.12) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private func serverTitle(for node: ExitNode) -> String {

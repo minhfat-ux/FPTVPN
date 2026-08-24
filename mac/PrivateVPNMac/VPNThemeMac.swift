@@ -73,10 +73,10 @@ enum AppTextKey: String {
     case systemLanguage, language, appSubtitle, subscription, status
     case premiumActive, premiumRequired, free, protectionUnlocked, choosePlanToStart
     case choosePlan, restorePurchases, support, contactSupport, privacyPolicy
-    case appleStandardEULA, upgrade, vpnStartFailure
+    case appleStandardEULA, upgrade, preparingPermission, vpnStartFailure
     case paywallTitle, paywallSubtitle, benefitTunnel, benefitWifi, benefitFast
-    case noPlans, noPlansDetail, privacy, eula, notNow
-    case plan, connect, disconnect, openSettings, upgradeToPremium, quit
+    case noPlans, noPlansDetail, subscriptionDisclosure, privacy, eula, notNow
+    case plan, select, connect, disconnect, openSettings, upgradeToPremium, quit
     case disconnected, connecting, connected, disconnecting, failed
     case serverLocation, loadingLocations, noServerAvailable, refreshLocations
     case usingSavedServers
@@ -139,12 +139,12 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "Choose a plan to start protection", .choosePlan: "Choose Plan",
             .restorePurchases: "Restore Purchases", .support: "Support", .contactSupport: "Contact Support",
             .privacyPolicy: "Privacy Policy", .appleStandardEULA: "Apple Standard EULA", .upgrade: "Upgrade",
-            .vpnStartFailure: "VPN could not start. Please try again.", .paywallTitle: "FlowVPN Premium",
+            .preparingPermission: "Preparing VPN permission…", .vpnStartFailure: "VPN could not start. Please try again.", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "Unlock private, encrypted internet protection.", .benefitTunnel: "Secure VPN tunnel",
             .benefitWifi: "Protection on public Wi-Fi", .benefitFast: "Fast one-click connection",
-            .noPlans: "No plans available", .noPlansDetail: "StoreKit did not return Monthly_Premium or Yearly_Premium.",
+            .noPlans: "No plans available", .noPlansDetail: "StoreKit did not return Mac_monthly or Mac_yearly.", .subscriptionDisclosure: "Payment is charged to your Apple ID at confirmation of purchase. Subscriptions auto-renew unless canceled at least 24 hours before the end of the current period; your account is charged for renewal within 24 hours prior to the period end. Manage or cancel anytime in your Apple ID Account Settings. Any unused portion of a free trial, if offered, is forfeited upon purchasing a subscription.",
             .privacy: "Privacy", .eula: "EULA", .notNow: "Not Now", .plan: "Plan",
-            .connect: "Connect", .disconnect: "Disconnect", .openSettings: "Open Settings",
+            .select: "Select", .connect: "Connect", .disconnect: "Disconnect", .openSettings: "Open Settings",
             .upgradeToPremium: "Upgrade to Premium", .quit: "Quit FlowVPN",
             .disconnected: "Disconnected", .connecting: "Connecting", .connected: "Connected",
             .disconnecting: "Disconnecting", .failed: "Failed", .serverLocation: "Server",
@@ -164,12 +164,12 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "Chọn gói để bắt đầu bảo vệ", .choosePlan: "Chọn gói",
             .restorePurchases: "Khôi phục giao dịch", .support: "Hỗ trợ", .contactSupport: "Liên hệ hỗ trợ",
             .privacyPolicy: "Chính sách quyền riêng tư", .appleStandardEULA: "EULA tiêu chuẩn của Apple", .upgrade: "Nâng cấp",
-            .vpnStartFailure: "Không thể khởi động VPN. Vui lòng thử lại.", .paywallTitle: "FlowVPN Premium",
+            .preparingPermission: "Đang chờ cấp quyền VPN…", .vpnStartFailure: "Không thể khởi động VPN. Vui lòng thử lại.", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "Mở khóa bảo vệ internet riêng tư và mã hóa.", .benefitTunnel: "VPN tunnel bảo mật",
             .benefitWifi: "Bảo vệ khi dùng Wi-Fi công cộng", .benefitFast: "Kết nối nhanh một click",
-            .noPlans: "Chưa có gói khả dụng", .noPlansDetail: "StoreKit không trả về Monthly_Premium hoặc Yearly_Premium.",
+            .noPlans: "Chưa có gói khả dụng", .noPlansDetail: "StoreKit không trả về Mac_monthly hoặc Mac_yearly.", .subscriptionDisclosure: "Thanh toán sẽ được trừ vào tài khoản Apple ID khi bạn xác nhận mua. Gói đăng ký tự động gia hạn trừ khi bạn hủy ít nhất 24 giờ trước khi kết thúc kỳ hiện tại; tài khoản sẽ bị trừ phí gia hạn trong vòng 24 giờ trước khi kết thúc kỳ. Bạn có thể quản lý hoặc hủy gói đăng ký bất cứ lúc nào trong cài đặt tài khoản Apple ID. Mọi phần chưa dùng của thời gian dùng thử miễn phí (nếu có) sẽ bị mất khi bạn mua gói đăng ký.",
             .privacy: "Quyền riêng tư", .eula: "EULA", .notNow: "Để sau", .plan: "Gói",
-            .connect: "Kết nối", .disconnect: "Ngắt kết nối", .openSettings: "Mở Cài đặt",
+            .select: "Chọn", .connect: "Kết nối", .disconnect: "Ngắt kết nối", .openSettings: "Mở Cài đặt",
             .upgradeToPremium: "Nâng cấp Premium", .quit: "Thoát FlowVPN",
             .disconnected: "Đã ngắt kết nối", .connecting: "Đang kết nối", .connected: "Đã kết nối",
             .disconnecting: "Đang ngắt kết nối", .failed: "Lỗi", .serverLocation: "Máy chủ",
@@ -189,12 +189,12 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "选择套餐以开始保护", .choosePlan: "选择套餐",
             .restorePurchases: "恢复购买", .support: "支持", .contactSupport: "联系支持",
             .privacyPolicy: "隐私政策", .appleStandardEULA: "Apple 标准 EULA", .upgrade: "升级",
-            .vpnStartFailure: "VPN 无法启动。请重试。", .paywallTitle: "FlowVPN Premium",
+            .preparingPermission: "正在等待 VPN 权限…", .vpnStartFailure: "VPN 无法启动。请重试。", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "解锁私密、加密的互联网保护。", .benefitTunnel: "安全 VPN 隧道",
             .benefitWifi: "公共 Wi-Fi 保护", .benefitFast: "一键快速连接",
-            .noPlans: "暂无可用套餐", .noPlansDetail: "StoreKit 未返回 Monthly_Premium 或 Yearly_Premium。",
+            .noPlans: "暂无可用套餐", .noPlansDetail: "StoreKit 未返回 Mac_monthly 或 Mac_yearly。", .subscriptionDisclosure: "付款将在购买确认时从您的 Apple ID 账户扣除。订阅会自动续订，除非在当前订阅期结束前至少 24 小时取消；续订费用将在当前订阅期结束前 24 小时内从您的账户扣除。您可随时在 Apple ID 账户设置中管理或取消订阅。若提供免费试用，未使用的试用时长将在购买订阅时被收回。",
             .privacy: "隐私", .eula: "EULA", .notNow: "暂不", .plan: "套餐",
-            .connect: "连接", .disconnect: "断开", .openSettings: "打开设置",
+            .select: "选择", .connect: "连接", .disconnect: "断开", .openSettings: "打开设置",
             .upgradeToPremium: "升级到 Premium", .quit: "退出 FlowVPN",
             .disconnected: "未连接", .connecting: "正在连接", .connected: "已连接",
             .disconnecting: "正在断开", .failed: "失败", .serverLocation: "服务器",
@@ -214,12 +214,12 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "保護を開始するにはプランを選択", .choosePlan: "プランを選択",
             .restorePurchases: "購入を復元", .support: "サポート", .contactSupport: "サポートに連絡",
             .privacyPolicy: "プライバシーポリシー", .appleStandardEULA: "Apple 標準 EULA", .upgrade: "アップグレード",
-            .vpnStartFailure: "VPN を開始できませんでした。もう一度お試しください。", .paywallTitle: "FlowVPN Premium",
+            .preparingPermission: "VPN の許可を待機中…", .vpnStartFailure: "VPN を開始できませんでした。もう一度お試しください。", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "プライベートで暗号化されたインターネット保護を解除します。", .benefitTunnel: "安全な VPN トンネル",
             .benefitWifi: "公共 Wi-Fi での保護", .benefitFast: "ワンクリックで高速接続",
-            .noPlans: "利用可能なプランがありません", .noPlansDetail: "StoreKit が Monthly_Premium または Yearly_Premium を返しませんでした。",
+            .noPlans: "利用可能なプランがありません", .noPlansDetail: "StoreKit が Mac_monthly または Mac_yearly を返しませんでした。", .subscriptionDisclosure: "お支払いは購入確定時に Apple ID アカウントに請求されます。サブスクリプションは、現在の期間終了の24時間前までにキャンセルしない限り自動更新され、更新料金は期間終了前24時間以内に請求されます。サブスクリプションは Apple ID アカウント設定でいつでも管理・キャンセルできます。無料トライアルが提供される場合、未使用分はサブスクリプション購入時に失われます。",
             .privacy: "プライバシー", .eula: "EULA", .notNow: "後で", .plan: "プラン",
-            .connect: "接続", .disconnect: "切断", .openSettings: "設定を開く",
+            .select: "選択", .connect: "接続", .disconnect: "切断", .openSettings: "設定を開く",
             .upgradeToPremium: "Premium にアップグレード", .quit: "FlowVPN を終了",
             .disconnected: "未接続", .connecting: "接続中", .connected: "接続済み",
             .disconnecting: "切断中", .failed: "失敗", .serverLocation: "サーバー",
@@ -239,12 +239,12 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "보호를 시작하려면 플랜을 선택하세요", .choosePlan: "플랜 선택",
             .restorePurchases: "구매 복원", .support: "지원", .contactSupport: "지원 문의",
             .privacyPolicy: "개인정보 처리방침", .appleStandardEULA: "Apple 표준 EULA", .upgrade: "업그레이드",
-            .vpnStartFailure: "VPN을 시작할 수 없습니다. 다시 시도해 주세요.", .paywallTitle: "FlowVPN Premium",
+            .preparingPermission: "VPN 권한을 기다리는 중…", .vpnStartFailure: "VPN을 시작할 수 없습니다. 다시 시도해 주세요.", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "비공개 암호화 인터넷 보호를 잠금 해제하세요.", .benefitTunnel: "보안 VPN 터널",
             .benefitWifi: "공용 Wi-Fi 보호", .benefitFast: "빠른 원클릭 연결",
-            .noPlans: "사용 가능한 플랜 없음", .noPlansDetail: "StoreKit이 Monthly_Premium 또는 Yearly_Premium을 반환하지 않았습니다.",
+            .noPlans: "사용 가능한 플랜 없음", .noPlansDetail: "StoreKit이 Mac_monthly 또는 Mac_yearly을 반환하지 않았습니다.", .subscriptionDisclosure: "결제는 구매 확정 시 Apple ID 계정에 청구됩니다. 구독은 현재 기간 종료 최소 24시간 전에 취소하지 않으면 자동 갱신되며, 갱신 요금은 기간 종료 24시간 이내에 청구됩니다. 구독은 Apple ID 계정 설정에서 언제든지 관리하거나 취소할 수 있습니다. 무료 체험 기간이 제공되는 경우, 사용하지 않은 부분은 구독 구매 시 소멸됩니다.",
             .privacy: "개인정보", .eula: "EULA", .notNow: "나중에", .plan: "플랜",
-            .connect: "연결", .disconnect: "연결 해제", .openSettings: "설정 열기",
+            .select: "선택", .connect: "연결", .disconnect: "연결 해제", .openSettings: "설정 열기",
             .upgradeToPremium: "Premium으로 업그레이드", .quit: "FlowVPN 종료",
             .disconnected: "연결 끊김", .connecting: "연결 중", .connected: "연결됨",
             .disconnecting: "연결 해제 중", .failed: "실패", .serverLocation: "서버",

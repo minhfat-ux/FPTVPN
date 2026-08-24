@@ -1,96 +1,54 @@
 # Current Task
 
-- **Task ID:** TASK-20260823-MAC-SERVER-SELECTION
-- **Title:** Upgrade macOS FlowVPN server selection and connect readiness
+- **Task ID:** TASK-20260825-MEETFLOWAI-BACKEND
+- **Title:** Fix MeetFlowAI backend & make it stable (review + research)
 - **Owner:** main agent
-- **Status:** verified
-- **Created:** 2026-08-23
-- **Updated:** 2026-08-23
+- **Status:** todo (planned for 2026-08-25)
+- **Created:** 2026-08-24 (note từ cuối phiên 2026-08-24)
+- **Updated:** 2026-08-24
 
 ## Objective
 
-macOS FlowVPN should follow the next-version backend-first server selection
-flow: load exit nodes from the coordinator, show a selected server/location to
-the user, and only allow Connect after a backend node is available.
+"Fix con MeetFlowAI, review và research thêm phần backend cho nó ổn định"
+— kiểm tra, sửa lỗi và củng cố backend control plane FlowVPN (MeetFlowAI /
+meetflowai.site) để chạy ổn định lâu dài, không crash, không rủi ro mất cấu hình.
 
-## Scope
+## Context (đã biết từ các phiên trước)
 
-In scope:
+- Control plane: VPS 103.173.155.50, port 7778, `LEGACY_MODE=1`, code tại `/root/flowvpn-cp/`.
+- Từng crash `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` trên Node 18 → đã nâng lên Node 24.19.0 (cài tay, NodeSource repo).
+- Chạy CHUNG trên VPS 1 CPU / 1 GB RAM với: Caddy (443), nginx auth gate (3081), dhs-auth (9090), WireGuard wg0 (vietnam-1), cron `sync-peers.py` mỗi 5 phút.
+- 2 exit node: vietnam-1 (103.173.155.50:443, 10.77.0.0/24), vietnam-2 (103.6.234.233:443, 10.78.0.0/24) — vietnam-2 tự quản wg0, CP chính provision peer qua SSH (`/root/.ssh/id_ed25519`).
+- AUTH_TOKEN của CP lưu trong `/tmp/cp.env` + unit files (đã từng bị lộ trong chat).
+- Đồng bộ devices: `sync-peers.py` cron `*/5` → `wg set peer` trên mọi node.
 
-- macOS main window server/location selector.
-- macOS menu-bar server/location selector/status.
-- `VPNManagerMac` node loading and connect preconditions.
-- macOS build/diagnostic evidence.
+## Plan (draft — làm chi tiết vào sáng 2026-08-25)
 
-Out of scope:
+| Bước | Nội dung |
+|---|---|
+| 1. Audit | Log/uptime/crash history của CP; memory usage; trạng thái systemd; sync-peers có chạy ổn; devices.json còn khớp với các node |
+| 2. Review kiến trúc | Điểm yếu hiện tại: 1 VPS 1GB chạy quá nhiều service; research hướng ổn định: tách service / giới hạn RAM (systemd MemoryMax) / hardening / giám sát + alert / backup config CP + wg |
+| 3. Fix | Sửa các lỗi tìm được (crash, sync fail, memory leak nếu có) |
+| 4. Verify | End-to-end: đăng ký device mới → sync tới cả 2 node; reconnect client; uptime sau fix |
 
-- iOS server selection upgrade.
-- Account login / add-device model.
-- Mac App Store product ID replacement.
-- Real production VPN egress verification, which requires a signed run and
-  Network Extension-capable provisioning profile.
+## References
 
-## Context
+- Code CP: VPS `/root/flowvpn-cp/` (+ `sync-peers.py`), registry node trong CP.
+- Cấu hình: `/etc/caddy/Caddyfile`, `/etc/nginx/sites-available/dhs-gate`, `/etc/wireguard/wg0.conf` (2 node).
+- Docs: `docs/ARCHITECTURE.md`, `docs/SRS.md`, memory `.privatevpn/memory/DECISIONS.md`, `.dhs-setup/FPT-HARNESS-NOTES.md` (phần DSH backend).
 
-- Relevant docs:
-  - `docs/AGENTIC_PROJECT_WORKFLOW.md`
-  - `docs/SRS.md`
-  - `docs/ARCHITECTURE.md`
-- Relevant memory:
-  - `.privatevpn/memory/CURRENT_WORK.md`
-  - `.privatevpn/memory/PROJECT_STATE.md`
-  - `.privatevpn/reports/2026-08-23-secondary-review.md`
-- Relevant code:
-  - `mac/PrivateVPNMac/VPNManagerMac.swift`
-  - `mac/PrivateVPNMac/ContentViewMac.swift`
-  - `mac/PrivateVPNMac/PrivateVPNMacApp.swift`
-  - `mac/PrivateVPNMac/VPNThemeMac.swift`
+## Validation Plan (điền khi làm)
 
-## Plan
-
-| Step | Status | Owner | Notes |
-|---|---|---|---|
-| 1. Gather context | done | main | Read rules/memory and used local RAG |
-| 2. Implement macOS server selection | done | main | Changes scoped to macOS client |
-| 3. Validate diagnostics/build | done | main | Xcode diagnostics and BuildProject passed |
-| 4. Record evidence | done | main | Report added under `.privatevpn/reports/` |
-| 5. Commit | proposed | main | Commit only intentional changes |
-
-## Expected File Changes
-
-| Path | Owner | Reason |
-|---|---|---|
-| `mac/PrivateVPNMac/VPNManagerMac.swift` | main | Backend-first node loading and connect preconditions |
-| `mac/PrivateVPNMac/ContentViewMac.swift` | main | Main-window server selector |
-| `mac/PrivateVPNMac/PrivateVPNMacApp.swift` | main | Menu-bar selected server/status |
-| `mac/PrivateVPNMac/VPNThemeMac.swift` | main | Localized server selector strings |
-| `.privatevpn/memory/CURRENT_TASK.md` | main | Current task state |
-| `.privatevpn/reports/2026-08-23-macos-server-selection.md` | main | Verification report |
-
-## Validation Plan
-
-| Check | Required | Evidence target |
-|---|---:|---|
-| Static diff review | yes | `.privatevpn/reports/2026-08-23-macos-server-selection.md` |
-| Xcode diagnostics | yes | `.privatevpn/reports/2026-08-23-macos-server-selection.md` |
-| Mac build | yes | `.privatevpn/reports/2026-08-23-macos-server-selection.md` |
-| Real VPN egress | no | Deferred: needs signed NE-capable run |
-
-## Evidence
-
-| Evidence ID | Level | Summary |
-|---|---|---|
-| EVID-20260823-MAC-001 | static_checked | Xcode file diagnostics passed for changed macOS files |
-| EVID-20260823-MAC-002 | build_checked | Xcode BuildProject passed |
-| EVID-20260823-MAC-003 | not_checked | Real VPN egress not run; requires signed NE-capable profile |
-
-## Open Questions
-
-- Real macOS egress verification still depends on a signed Network
-  Extension-capable build/profile.
+| Check | Required | Evidence |
+|---|---|---:|---|
+| CP uptime sau fix (≥ 24h không crash) | yes | _ |
+| sync-peers chạy đúng cron, mọi node khớp | yes | _ |
+| Device mới sync được tới cả 2 node | yes | _ |
+| Memory VPS ổn định (không leak) | yes | _ |
+| Backup config CP + wg hoạt động | yes | _ |
 
 ## Handoff
 
-Mac server selection upgrade is code/build verified. iOS server selection
-remains a separate deferred task. Real macOS tunnel egress still requires a
-signed run with an NE-capable provisioning profile.
+(Điền cuối phiên ngày mai.) Hôm nay (2026-08-24) đã xong: hết bad gateway
+(root cause 2 launchd tunnel đánh nhau), cache browser phone, installer
+1-click FPT Harness, nginx/caddy verified sạch lỗi.

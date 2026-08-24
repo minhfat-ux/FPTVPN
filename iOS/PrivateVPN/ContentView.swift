@@ -24,9 +24,22 @@ struct ContentView: View {
                     VStack(spacing: 20) {
                         header
 
-                        subscriptionStatusCard
-                        statusCard
                         locationCard
+
+                        if vpnManager.state.isTransitioning {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                    .tint(VPNTheme.accent)
+                                Text(languageStore.t(.preparingPermission))
+                                    .font(.footnote)
+                                    .foregroundStyle(.white.opacity(0.75))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(VPNTheme.cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+
                         primaryButton
 
                         if vpnManager.state == .failed {
@@ -52,6 +65,7 @@ struct ContentView: View {
                             .foregroundStyle(.white.opacity(0.8))
                     }
                     .accessibilityLabel(languageStore.t(.configuration))
+                    .disabled(vpnManager.state.isTransitioning)
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -84,7 +98,12 @@ struct ContentView: View {
         .onAppear {
             if !authStore.isSignedIn {
                 showingLogin = true
+            } else {
+                syncBackendPremium()
             }
+        }
+        .onChange(of: authStore.session) { _, _ in
+            syncBackendPremium()
         }
         .onChange(of: authStore.isSignedIn) { _, isSignedIn in
             if isSignedIn {
@@ -110,16 +129,44 @@ struct ContentView: View {
         }
     }
 
+    private func syncBackendPremium() {
+        subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+    }
+
     // MARK: - Header
 
     private var header: some View {
         VStack(spacing: 6) {
-            Image("AppLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 76, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+            ZStack(alignment: .topLeading) {
+                Image("AppLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 76, height: 76)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+
+                // Crown badge: active Premium → góc trái trên của app logo.
+                if subscriptionStore.isSubscribed {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.yellow)
+                        .padding(3)
+                        .background(Circle().fill(Color.black.opacity(0.6)))
+                        .offset(x: -5, y: -5)
+                }
+            }
+            .frame(width: 76, height: 76)
+
+            // Connection status: chấm nhỏ + trạng thái, nằm ngay dưới logo.
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(vpnManager.state.tint)
+                    .frame(width: 8, height: 8)
+                Text(vpnManager.state.localizedLabel(languageStore.language))
+                    .font(.caption)
+                    .foregroundStyle(vpnManager.state.tint)
+            }
+
             Text("FlowVPN")
                 .font(.title.bold())
                 .foregroundStyle(.white)
@@ -134,28 +181,15 @@ struct ContentView: View {
 
     private var statusCard: some View {
         VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(vpnManager.state.tint.opacity(0.12))
-                    .frame(width: 172, height: 172)
-                Circle()
-                    .stroke(vpnManager.state.tint.opacity(0.30), lineWidth: 2)
-                    .frame(width: 172, height: 172)
-                Image(systemName: vpnManager.state.symbol)
-                    .font(.system(size: 58, weight: .medium))
-                    .foregroundStyle(vpnManager.state.tint)
-            }
-            .overlay(alignment: .bottom) {
+            HStack(spacing: 8) {
                 if vpnManager.state.isTransitioning {
                     ProgressView()
                         .tint(vpnManager.state.tint)
-                        .offset(y: -30)
                 }
+                Text(vpnManager.state.localizedLabel(languageStore.language))
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
             }
-
-            Text(vpnManager.state.localizedLabel(languageStore.language))
-                .font(.title2.bold())
-                .foregroundStyle(.white)
 
             Text(vpnManager.state.localizedSubtitle(languageStore.language))
                 .font(.subheadline)
@@ -209,17 +243,18 @@ struct ContentView: View {
                     .foregroundStyle(.white.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Picker(languageStore.t(.serverLocation), selection: Binding(
-                    get: { configStore.selectedNodeID ?? nodes.first?.id ?? "" },
-                    set: { selectNode(id: $0) }
-                )) {
-                    ForEach(nodes) { node in
-                        Text(serverTitle(for: node)).tag(node.id)
+                // List view: tối đa 5 server hiển thị, cuộn được. Mỗi dòng có
+                // nút Select để chọn server; bấm Connect (nút lớn) để kết nối.
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(nodes) { node in
+                            serverRow(node)
+                        }
                     }
+                    .padding(2)
                 }
-                .labelsHidden()
-                .disabled(vpnManager.state.isTransitioning)
-                .tint(.white)
+                .frame(height: min(CGFloat(nodes.count), 5) * 44)
+                .scrollIndicators(.visible)
 
                 if configStore.usingFallbackNodes {
                     Text(languageStore.t(.usingSavedServers))
@@ -236,6 +271,35 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(VPNTheme.cardStroke, lineWidth: 1)
         )
+    }
+
+    private func serverRow(_ node: ExitNode) -> some View {
+        let isSelected = configStore.selectedNodeID == node.id
+        let busy = vpnManager.state.isTransitioning
+
+        return HStack(spacing: 8) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isSelected ? VPNTheme.accent : .white.opacity(0.4))
+
+            Text(serverTitle(for: node))
+                .font(.subheadline)
+                .lineLimit(1)
+                .foregroundStyle(.white)
+
+            Spacer(minLength: 8)
+
+            Button(languageStore.t(.select)) {
+                selectNode(id: node.id)
+            }
+            .font(.footnote.bold())
+            .foregroundStyle(VPNTheme.accent)
+            .buttonStyle(.plain)
+            .disabled(busy)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 6)
+        .background(isSelected ? VPNTheme.accent.opacity(0.15) : Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func selectNode(id: String) {
@@ -337,9 +401,9 @@ struct ContentView: View {
 
     private var primaryButtonDisabled: Bool {
         switch vpnManager.state {
-        case .disconnecting:
+        case .disconnecting, .connecting:
             return true
-        case .connecting, .connected:
+        case .connected:
             return false
         case .disconnected, .failed:
             // Nothing to dial yet — unless the control plane can provision.

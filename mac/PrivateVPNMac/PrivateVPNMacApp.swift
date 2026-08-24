@@ -68,7 +68,7 @@ private struct MenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Text("FlowVPN")
+        Text("VPNFlow")
             .font(.headline)
 
         Divider()
@@ -80,25 +80,31 @@ private struct MenuBarContent: View {
 
         Divider()
 
+        // Server submenu — native macOS style: checkmark on the selected server.
         if vpnManager.exitNodes.isEmpty {
             Text(vpnManager.isRefreshingNodes ? languageStore.t(.loadingLocations) : languageStore.t(.noServerAvailable))
                 .foregroundStyle(.secondary)
         } else {
-            Picker(languageStore.t(.serverLocation), selection: Binding(
-                get: { vpnManager.selectedNodeID ?? vpnManager.exitNodes.first?.id ?? "" },
-                set: { vpnManager.selectedNodeID = $0 }
-            )) {
+            Menu(languageStore.t(.serverLocation)) {
                 ForEach(vpnManager.exitNodes) { node in
-                    Text(serverTitle(for: node)).tag(node.id)
+                    Button {
+                        vpnManager.selectedNodeID = node.id
+                    } label: {
+                        if vpnManager.selectedNodeID == node.id {
+                            Label(serverTitle(for: node), systemImage: "checkmark")
+                        } else {
+                            Text(serverTitle(for: node))
+                        }
+                    }
+                    .disabled(isBusy)
                 }
             }
-            .disabled(vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…")
-        }
 
-        Button(languageStore.t(.refreshLocations)) {
-            Task { await vpnManager.refreshNodes() }
+            Button(languageStore.t(.refreshLocations)) {
+                Task { await vpnManager.refreshNodes() }
+            }
+            .disabled(vpnManager.isRefreshingNodes || isBusy)
         }
-        .disabled(vpnManager.isRefreshingNodes || vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…")
 
         Divider()
 
@@ -109,7 +115,7 @@ private struct MenuBarContent: View {
                 openSettings()
             }
         }
-        .disabled(vpnManager.state == "Connected" || vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…" || vpnManager.exitNodes.isEmpty)
+        .disabled(vpnManager.state == "Connected" || isBusy || vpnManager.exitNodes.isEmpty)
 
         if !subscriptionStore.isSubscribed {
             Button(languageStore.t(.upgradeToPremium)) {
@@ -141,6 +147,10 @@ private struct MenuBarContent: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    private var isBusy: Bool {
+        vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…"
     }
 
     private var statusColor: Color {

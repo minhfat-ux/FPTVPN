@@ -25,11 +25,11 @@
   "blockers": [
     "iOS App Store Archive, Validate, Upload, build processing, and review are not yet verified (iPhone E2E đã PASS).",
     "macOS connect cần NE provisioning profile (0 profiles; owner tạo trên Apple Developer Portal).",
-    "Production login email needs RESEND_API_KEY (email-OTP OTP not delivered yet); admin endpoints fail-closed until AUTH_TOKEN set.",
+    "Admin endpoints fail-closed (503) until AUTH_TOKEN is set on the VPS.",
     "LEGACY_MODE=1 must stay until the authenticated app is released (then set 0).",
-    "Subscription source pending App Store product review (test grant only)."
+    "Subscription source production chưa có: server không verify StoreKit receipt; /v1/enrollment-tokens 403 cho user trả tiền thật (hiện chỉ test-grant)."
   ],
   "last_verified": "2026-08-23",
-  "next_verification": "iOS publish archive/validate/upload, macOS NetworkExtension E2E exit-IP, production email OTP after RESEND_API_KEY",
+  "next_verification": "iOS publish archive/validate/upload; macOS NetworkExtension E2E exit-IP; subscription production source (receipt verify) sau khi App Store duyệt products",
   "updated": "2026-08-23"
 }

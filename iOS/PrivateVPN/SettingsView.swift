@@ -330,6 +330,9 @@ final class SubscriptionStore: ObservableObject {
 
     @Published private(set) var products: [Product] = []
     @Published private(set) var purchasedProductIDs: Set<String> = []
+    /// Backend entitlement: true when the signed-in account has an active
+    /// subscription (subscription_status.is_active from the coordinator).
+    @Published var backendPremium = false
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
@@ -340,7 +343,7 @@ final class SubscriptionStore: ObservableObject {
         #if DEBUG
         return true
         #else
-        !purchasedProductIDs.isDisjoint(with: Self.productIDs)
+        return backendPremium || !purchasedProductIDs.isDisjoint(with: Self.productIDs)
         #endif
     }
 

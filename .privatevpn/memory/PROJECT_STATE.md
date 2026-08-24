@@ -110,6 +110,7 @@ allowedIPs 0.0.0.0/0.
   Caddy `api.meetflowai.site` -> 127.0.0.1:7778. Devices migrated from old sqlite
   (15 peers, IPs 10.77.0.2–.16 preserved). Old `privatevpn.service` (7777) kept for
   rollback (`/root/flowvpn-cp/rollback.sh`). sqlite3 CLI installed on VPS.
+- **FPT Harness (DSH) backend ổn định** (2026-08-24): hết bad gateway (root cause 2 launchd tunnel job đánh nhau — đã gỡ `com.fpt.tunnel` + khóa single-instance trong `dsh-tunnel.sh`); phone browser cache immutable cho assets/plugins; installer 1-click `install-fpt-harness.sh`; nginx+caddy verified 0 lỗi sau fix; GUI nhóm "Ungrouped" đổi tên "MeetFlowAI". Chi tiết: `.dhs-setup/FPT-HARNESS-NOTES.md` (mục 10–14).
 - macOS FlowVPN app (test) + iOS build.
 - **Deploy pending items:** RESEND_API_KEY (email OTP sends real mail), AUTH_TOKEN
   (admin endpoints fail-closed 503 until set), LEGACY_MODE=0 (only after the
@@ -123,6 +124,7 @@ allowedIPs 0.0.0.0/0.
   coordinator mesh; kept in repo but not used by the app anymore.
 
 ## What is next?
+0. 🔲 **Fix MeetFlowAI control-plane backend + research stability** (TODO 2026-08-25 — xem `CURRENT_TASK.md` TASK-20260825-MEETFLOWAI-BACKEND).
 1. ✅ WireGuardKit vendored + keypair store + config screen.
 2. ✅ Coordinator mesh integration (register + auto wg provisioning).
 3. ✅ macOS app FlowVPN builds with embedded NetworkExtension.

@@ -78,6 +78,12 @@ struct SettingsViewMac: View {
             await subscriptionStore.start()
             await loadDevices()
         }
+        .onAppear {
+            subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+        }
+        .onChange(of: authStore.session) { _, _ in
+            subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+        }
     }
 
     private var languageSection: some View {
@@ -317,14 +323,17 @@ struct SettingsViewMac: View {
 @MainActor
 final class MacSubscriptionStore: ObservableObject {
     static let productIDs = [
-        "Monthly_Premium",
-        "Yearly_Premium"
+        "Mac_monthly",
+        "Mac_yearly"
     ]
 
     @Published private(set) var products: [Product] = []
     @Published private(set) var purchasedProductIDs: Set<String> = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
+    /// Backend entitlement: true when the signed-in account has an active
+    /// subscription (subscription_status.is_active from the coordinator).
+    @Published var backendPremium = false
 
     private var hasStarted = false
     private var transactionUpdatesTask: Task<Void, Never>?
@@ -333,7 +342,7 @@ final class MacSubscriptionStore: ObservableObject {
         #if DEBUG
         return true
         #else
-        return !purchasedProductIDs.isDisjoint(with: Self.productIDs)
+        return backendPremium || !purchasedProductIDs.isDisjoint(with: Self.productIDs)
         #endif
     }
 
@@ -368,7 +377,7 @@ final class MacSubscriptionStore: ObservableObject {
                 }
                 return left.id < right.id
             }
-            errorMessage = loadedProducts.isEmpty ? "No StoreKit products found. Check Monthly_Premium and Yearly_Premium in App Store Connect." : nil
+            errorMessage = loadedProducts.isEmpty ? "No StoreKit products found. Check Mac_monthly and Mac_yearly in App Store Connect." : nil
         } catch {
             errorMessage = "Cannot load plans. Please try again."
         }
@@ -456,14 +465,20 @@ struct MacPaywallView: View {
             VPNThemeMac.backgroundGradient
                 .ignoresSafeArea()
 
-            VStack(spacing: 22) {
-                header
-                benefits
-                plans
-                footer
+            // ScrollView keeps the sheet usable on small screens: the
+            // content (header + benefits + plans + disclosure) can exceed
+            // the window height, so it scrolls instead of clipping/offsetting.
+            ScrollView {
+                VStack(spacing: 22) {
+                    header
+                    benefits
+                    plans
+                    footer
+                }
+                .padding(24)
+                .frame(width: 390)
             }
-            .padding(24)
-            .frame(width: 390)
+            .scrollIndicators(.hidden)
 
             Button {
                 dismiss()
@@ -478,6 +493,7 @@ struct MacPaywallView: View {
             .buttonStyle(.plain)
             .padding(16)
         }
+        .frame(width: 438, height: 720)   // fixed sheet size (390 + 2×24 padding)
         .preferredColorScheme(.dark)
         .task {
             await subscriptionStore.start()
@@ -623,6 +639,11 @@ struct MacPaywallView: View {
             legalLinks
             .font(.footnote)
             .foregroundStyle(VPNThemeMac.textSecondary)
+
+            Text(languageStore.t(.subscriptionDisclosure))
+                .font(.caption)
+                .foregroundStyle(VPNThemeMac.textSecondary.opacity(0.7))
+                .multilineTextAlignment(.center)
 
             Button(languageStore.t(.notNow)) {
                 dismiss()
