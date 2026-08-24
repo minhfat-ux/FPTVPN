@@ -340,22 +340,22 @@ final class SubscriptionStore: ObservableObject {
     private var transactionUpdatesTask: Task<Void, Never>?
 
     var isSubscribed: Bool {
-        #if DEBUG
-        return true
-        #else
+        // Dev bypass (owner machine): FORCE_PREMIUM=1 in the scheme environment,
+        // or `defaults write com.privatevpn.app flowvpn.forcePremium -bool YES`
+        // on this device/simulator. Debug and Release behave identically; end
+        // users never have this flag set, so StoreKit/backend checks apply.
+        if ProcessInfo.processInfo.environment["FORCE_PREMIUM"] == "1"
+            || UserDefaults.standard.bool(forKey: "flowvpn.forcePremium") {
+            return true
+        }
         return backendPremium || !purchasedProductIDs.isDisjoint(with: Self.productIDs)
-        #endif
     }
 
     var activePlanName: String {
-        #if DEBUG
-        return "Premium"
-        #else
         if let activeProduct = products.first(where: { purchasedProductIDs.contains($0.id) }) {
             return activeProduct.displayName
         }
         return isSubscribed ? "Premium" : "Free"
-        #endif
     }
 
     func start() async {
