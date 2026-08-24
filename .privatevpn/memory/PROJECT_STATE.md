@@ -153,3 +153,13 @@ allowedIPs 0.0.0.0/0.
 - Build outputs: `~/.vpnflow-build/app/outputs/apk/{debug,release}/`.
 - Trạng thái: compile + R8 PASS. Chưa chạy trên thiết bị thật (chưa có emulator/phone test).
 - TODO: tạo Play Console project, product IDs, upload test; test thật VPN trên máy Android.
+
+## DSH remote access (REBUILT 2026-08-24, spec 13080)
+
+- Kiến trúc: Mac DSH 127.0.0.1:3080 → SSH -R 127.0.0.1:13080 → VPS nginx 3081 → Caddy HTTPS.
+- LaunchAgent: com.dsh.tunnel (user), wrapper ~/dsh-tunnel.sh, key ~/.ssh/dsh_tunnel.
+- Log: /tmp/dsh-tunnel.{out,err}.log.
+- CÒN TREO: com.dsh.housekeeping (LaunchDaemon root, dọn disk, lành tính) — chưa xoá,
+  cần user chạy: sudo launchctl bootout system /Library/LaunchDaemons/com.dsh.housekeeping.plist
+  && sudo rm /Library/LaunchDaemons/com.dsh.housekeeping.plist.
+- setup-tunnel.sh trong repo đã cập nhật 13080.

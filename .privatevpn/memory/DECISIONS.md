@@ -97,3 +97,22 @@ Durable engineering decisions (see also `docs/adr/`).
 - **Sign-in Android**: không có Sign in with Apple → dùng email OTP (backend đã hỗ trợ).
 - **Build verified**: assembleDebug + assembleRelease (R8 + proguard) đều PASS.
   APK debug 33.8MB / release-unsigned 16.1MB.
+
+## 2026-08-24 — REBUILD remote access DSH (spec port 13080, sau incident proxy)
+
+- **Sự cố trước**: setup cũ tạo local proxy helpers + sửa macOS System HTTP/HTTPS Proxy
+  (com.vmware.storage.identitydaemonworker.eq03 giả mạo, NODE_OPTIONS=--require preload.js,
+  proxy dynamic port) → CẤM tuyệt đối tái tạo.
+- **Quyết định kiến trúc (spec mới)**: DSH → SSH reverse tunnel → VPS 127.0.0.1:**13080**
+  → nginx gate 3081 (auth cookie) → Caddy HTTPS dhs.meetflowai.site. Mac KHÔNG làm proxy,
+  KHÔNG root, KHÔNG LaunchDaemon.
+- **Port VPS tunnel = 13080** (KHÔNG phải 3080 như bản cũ) — nginx upstream đã đổi
+  7× proxy_pass 3080 → 13080 (backup: /etc/nginx/sites-available/dhs-gate.bak-13080).
+- **Persistence**: 1 LaunchAgent duy nhất `com.dsh.tunnel` (user minhnguyen, KeepAlive,
+  wrapper ~/dsh-tunnel.sh có lock chống trùng, fuser -k 13080 1 lần, retry 8 lần).
+- **SSH key**: ~/.ssh/dsh_tunnel (ed25519, riêng tunnel, pubkey đã cài trên VPS
+  authorized_keys — cài qua key fpt_tunnel có sẵn, KHÔNG cần password).
+- **Failure-isolation đã test**: stop tunnel → remote DSH unavailable, local DSH 200,
+  proxy macOS không đổi, browsing bình thường. /login vẫn 200 (auth 9090 độc lập).
+- **Phương pháp làm việc theo yêu cầu user**: audit trước → báo cáo → chờ duyệt từng
+  phase → test tay trước → mới tạo persistence. Đã chạy đủ 9 phase, user duyệt từng bước.
