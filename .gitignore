@@ -46,3 +46,6 @@ tasks/
 # Local build artifacts
 .derivedData-*/
 FPT-Harness/
+
+# Local toolchains (JDK on BIWIN — ExFAT, keep out of git)
+.tools/

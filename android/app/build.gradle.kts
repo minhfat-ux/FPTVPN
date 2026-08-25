@@ -81,6 +81,9 @@ dependencies {
     implementation(libs.security.crypto)
     implementation(libs.wireguard.tunnel)
     debugImplementation(libs.androidx.ui.tooling)
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
 
 // The ExFAT volume (BIWIN) stores macOS AppleDouble sidecars (._*) for files
