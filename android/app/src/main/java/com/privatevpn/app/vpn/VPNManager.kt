@@ -205,6 +205,7 @@ class VPNManager(
                 endpoint = Config.WG_CLIENT_ENDPOINT,
                 accessToken = accessToken,
                 exitNodeId = node.id,
+                enrollmentToken = joinToken,
             )
         } catch (e: ControlAPIClient.ClientError.Server) {
             // Retry once with a fresh token + random name (duplicate-name safety).
@@ -217,6 +218,7 @@ class VPNManager(
                 endpoint = Config.WG_CLIENT_ENDPOINT,
                 accessToken = accessToken,
                 exitNodeId = node.id,
+                enrollmentToken = retryToken,
             )
         }
 

@@ -59,13 +59,16 @@ class ControlAPIClient(
         endpoint: String,
         accessToken: String? = null,
         exitNodeId: String? = null,
+        enrollmentToken: String? = null,
     ): CoordinatorRegisterResponse {
         val body = buildMap {
             put("name", name)
             put("platform", platform)
             put("wireguard_public_key", wireguardPublicKey)
             put("endpoint", endpoint)
-            put("join_token", joinToken)
+            // Auth flow: the one-time enrollment token (fetched per attempt) is
+            // required — the constructor joinToken is only a legacy fallback.
+            put("join_token", enrollmentToken ?: joinToken)
             exitNodeId?.let { put("exit_node_id", it) }
         }
         val request = Request.Builder()
