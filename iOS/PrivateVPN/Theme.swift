@@ -1,17 +1,35 @@
 import SwiftUI
+import UIKit
 
 /// Shared visual theme for the PrivateVPN iOS UI.
-/// Follows the iOS system design: system blue accent (#007AFF), adaptive
-/// system backgrounds, and semantic label colors so light/dark both look right.
+/// Matches the FlowVPN brand used across FPT Harness: navy backgrounds
+/// (#0A1F3B base, #16385E bottom), system blue accent (#007AFF). Light mode
+/// follows iOS system backgrounds; dark mode uses the FlowVPN navy palette.
 enum VPNTheme {
     /// Accent — iOS system blue, used for the primary action and highlights.
     static let accent = Color(uiColor: .systemBlue)
 
-    static let backgroundTop = Color(uiColor: .systemBackground)
-    static let backgroundBottom = Color(uiColor: .secondarySystemBackground)
+    /// FlowVPN navy palette (FPT Harness style).
+    static let navyBase = UIColor(red: 10/255, green: 31/255, blue: 59/255, alpha: 1)      // #0A1F3B
+    static let navyLayer1 = UIColor(red: 14/255, green: 39/255, blue: 71/255, alpha: 1)    // #0E2747
+    static let navyLayer2 = UIColor(red: 18/255, green: 48/255, blue: 82/255, alpha: 1)    // #123052
+    static let navyLayer3 = UIColor(red: 22/255, green: 56/255, blue: 94/255, alpha: 1)    // #16385E
 
-    static let cardBackground = Color(uiColor: .secondarySystemBackground)
-    static let cardStroke = Color(uiColor: .separator)
+    static let backgroundTop = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark ? navyBase : .systemBackground
+    })
+    static let backgroundBottom = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark ? navyLayer3 : .secondarySystemBackground
+    })
+
+    static let cardBackground = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark ? navyLayer1 : .secondarySystemBackground
+    })
+    static let cardStroke = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.12)
+            : .separator
+    })
 
     static let backgroundGradient = LinearGradient(
         colors: [backgroundTop, backgroundBottom],
