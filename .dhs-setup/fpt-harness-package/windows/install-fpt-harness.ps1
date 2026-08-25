@@ -34,6 +34,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 $SRC = Split-Path -Parent $MyInvocation.MyCommand.Path   # thư mục windows/ của package
+# patches/profile có thể nằm cạnh windows/ (cấu trúc package đầy đủ) HOẶC bên trong windows/
+# (bundle tự chứa). Tìm cả 2, ưu tiên cấu trúc đầy đủ.
+$PKG = Split-Path $SRC -Parent
+$patchDir = @((Join-Path $PKG "patches"), (Join-Path $SRC "patches")) | Where-Object { Test-Path $_ } | Select-Object -First 1
+$profSrc = @((Join-Path $PKG "profile\cordis.patch.yml"), (Join-Path $SRC "profile\cordis.patch.yml")) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $patchDir) { throw "THIEU folder patches/ - copy ca package (xem README-WINDOWS.md) hoac dat apply-fpt-patches.py + favicon.png canh install-fpt-harness.ps1" }
+if (-not $profSrc) { throw "THIEU profile/cordis.patch.yml - copy ca package (xem README-WINDOWS.md)" }
 
 function Log  { Write-Host "==> $args" -ForegroundColor Green }
 function Info { Write-Host "--> $args" -ForegroundColor Cyan }
@@ -87,7 +94,7 @@ Ok "Python: $(python --version 2>&1)"
 
 # ---------- [2] patch branding/theme ----------
 if (-not $SkipPatch) {
-    $patchPy = Join-Path (Split-Path $SRC -Parent) "patches\apply-fpt-patches.py"
+    $patchPy = Join-Path $patchDir "apply-fpt-patches.py"
     if (Test-Path $patchPy) {
         Log "Ap ban va FPT (theme, logo, favicon, browse-picker) - co backup .fpt.bak"
         python $patchPy
@@ -100,8 +107,7 @@ if (-not $SkipPatch) {
     Log "Cai profile (pin browse directory picker cho truy cap tu xa)"
     $profDir = Join-Path $env:USERPROFILE ".dsh\profiles\web"
     New-Item -ItemType Directory -Force -Path $profDir | Out-Null
-    $profSrc = Join-Path (Split-Path $SRC -Parent) "profile\cordis.patch.yml"
-    if (Test-Path $profSrc) {
+    if ($profSrc) {
         $profDst = Join-Path $profDir "cordis.patch.yml"
         if ((Test-Path $profDst) -and -not (Test-Path "$profDst.bak")) {
             Copy-Item $profDst "$profDst.bak"

@@ -21,14 +21,22 @@ Caddy HTTPS dhs-win.meetflowai.site
 
 ## Cách cài
 
-### Bước 1 — Copy package lên máy Windows
+### Bước 1 — Copy lên máy Windows
 
-Copy thư mục `fpt-harness-package/` sang máy Windows (USB / Google Drive / scp). Hoặc chỉ cần copy riêng 2 thứ:
+**Cách nhanh nhất: dùng file `fpt-harness-windows-bundle.zip` (self-contained, đã đóng sẵn
+bên cạnh file này).** Giải nén ra, bên trong có sẵn `patches/`, `profile/`, `vps/` — copy
+nguyên folder `windows/` sang máy Windows là chạy được, không thiếu gì:
 
-- `windows/install-fpt-harness.ps1`
-- `patches/apply-fpt-patches.py` + `patches/favicon.png` + `patches/favicon.svg`
-- `profile/cordis.patch.yml`
-- `windows/vps/add-windows-site.sh` (để chạy trên VPS)
+```text
+windows/                      ← giải nén ra thư mục này
+├── install-fpt-harness.ps1   ← chạy cái này
+├── README-WINDOWS.md
+├── patches/                  ← ĐÃ CÓ (theme, logo, favicon)
+├── profile/                  ← ĐÃ CÓ (browse-picker)
+└── vps/                      ← ĐÃ CÓ (script chạy trên VPS)
+```
+
+Hoặc nếu dùng package đầy đủ `fpt-harness-package/`: copy cả thư mục (windows/ + patches/ + profile/ + vps/ cùng cấp — installer tự tìm patches ở cả 2 chỗ).
 
 ### Bước 2 — Chạy installer (PowerShell, user thường — KHÔNG cần admin)
 
