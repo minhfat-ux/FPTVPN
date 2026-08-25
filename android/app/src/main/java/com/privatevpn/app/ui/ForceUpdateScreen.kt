@@ -39,12 +39,12 @@ fun ForceUpdateScreen(info: AppVersionInfo, lang: LanguageStore) {
     ) {
         AppLogo(modifier = Modifier.size(76.dp))
         Spacer(Modifier.height(20.dp))
-        Text(lang.t(LKey.updateRequired), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(lang.t(LKey.updateRequired), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
         Spacer(Modifier.height(10.dp))
         Text(
             lang.t(LKey.updateRequiredDetail),
             fontSize = 15.sp,
-            color = Color.White.copy(alpha = 0.65f),
+            color = VPNTheme.SecondaryLabel,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
@@ -56,7 +56,7 @@ fun ForceUpdateScreen(info: AppVersionInfo, lang: LanguageStore) {
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = VPNTheme.Accent),
         ) {
-            Text(lang.t(LKey.update), color = Color.Black, fontWeight = FontWeight.Bold)
+            Text(lang.t(LKey.update), color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }

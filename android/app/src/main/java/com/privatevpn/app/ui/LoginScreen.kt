@@ -71,11 +71,11 @@ fun LoginScreen(
     ) {
         AppLogo(modifier = Modifier.size(76.dp))
         Spacer(Modifier.height(10.dp))
-        Text("VPNFlow", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("VPNFlow", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
         Text(
             lang.t(LKey.appSubtitle),
             fontSize = 15.sp,
-            color = Color.White.copy(alpha = 0.6f),
+            color = VPNTheme.SecondaryLabel,
             textAlign = TextAlign.Center,
         )
 
@@ -178,7 +178,7 @@ fun LoginScreen(
 @Composable
 private fun LabeledField(label: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, fontSize = 14.sp, color = Color.White.copy(alpha = 0.6f))
+        Text(label, fontSize = 14.sp, color = VPNTheme.SecondaryLabel)
         content()
     }
 }
@@ -186,12 +186,12 @@ private fun LabeledField(label: String, content: @Composable () -> Unit) {
 @Composable
 private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = VPNTheme.Accent.copy(alpha = 0.6f),
-    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
+    unfocusedBorderColor = VPNTheme.CardStroke,
+    focusedTextColor = VPNTheme.Label,
+    unfocusedTextColor = VPNTheme.Label,
     cursorColor = VPNTheme.Accent,
-    focusedPlaceholderColor = Color.White.copy(alpha = 0.4f),
-    unfocusedPlaceholderColor = Color.White.copy(alpha = 0.4f),
+    focusedPlaceholderColor = VPNTheme.TertiaryLabel,
+    unfocusedPlaceholderColor = VPNTheme.TertiaryLabel,
 )
 
 @Composable
@@ -208,11 +208,11 @@ private fun SendCodeButton(
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (loading) VPNTheme.Accent.copy(alpha = 0.6f) else VPNTheme.Accent,
-            contentColor = Color.Black,
+            contentColor = Color.White,
         ),
     ) {
         if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
         } else {
             Text(text, fontWeight = FontWeight.Bold)
         }
@@ -236,7 +236,7 @@ private fun MessageBanner(isError: Boolean, text: String) {
         Spacer(Modifier.height(0.dp))
         Text(
             text,
-            color = if (isError) VPNTheme.Red else Color.White.copy(alpha = 0.9f),
+            color = if (isError) VPNTheme.Red else VPNTheme.Label,
             fontSize = 13.sp,
             modifier = Modifier.padding(start = 10.dp),
         )

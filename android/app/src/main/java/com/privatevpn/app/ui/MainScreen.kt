@@ -1,5 +1,6 @@
 package com.privatevpn.app.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -95,7 +97,7 @@ fun MainScreen(
                 Icon(
                     Icons.Default.Settings,
                     contentDescription = lang.t(LKey.configuration),
-                    tint = Color.White.copy(alpha = 0.8f),
+                    tint = VPNTheme.SecondaryLabel,
                 )
             }
         }
@@ -209,18 +211,19 @@ private fun Header(
 
         Spacer(Modifier.height(4.dp))
 
-        Text("VPNFlow", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("VPNFlow", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
         Text(
             lang.t(LKey.appSubtitle),
             fontSize = 15.sp,
-            color = Color.White.copy(alpha = 0.6f),
+            color = VPNTheme.SecondaryLabel,
             textAlign = TextAlign.Center,
         )
     }
 }
 
+@Composable
 private fun stateColor(state: VPNState): Color = when (state) {
-    VPNState.DISCONNECTED -> Color.White.copy(alpha = 0.55f)
+    VPNState.DISCONNECTED -> VPNTheme.SecondaryLabel
     VPNState.CONNECTING, VPNState.DISCONNECTING -> VPNTheme.Orange
     VPNState.CONNECTED -> VPNTheme.Accent
     VPNState.FAILED -> VPNTheme.Red
@@ -242,14 +245,14 @@ private fun ServerCard(
             Text(
                 lang.t(LKey.serverLocation),
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
+                color = VPNTheme.Label,
             )
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onRefresh, enabled = !busy) {
                 Icon(
                     Icons.Default.Refresh,
                     contentDescription = lang.t(LKey.refreshLocations),
-                    tint = Color.White.copy(alpha = 0.7f),
+                    tint = VPNTheme.SecondaryLabel,
                 )
             }
         }
@@ -257,7 +260,7 @@ private fun ServerCard(
         if (nodes.isEmpty()) {
             Text(
                 lang.t(LKey.loadingLocations),
-                color = Color.White.copy(alpha = 0.6f),
+                color = VPNTheme.SecondaryLabel,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         } else {
@@ -297,14 +300,14 @@ private fun ServerRow(
             .fillMaxWidth()
             .padding(vertical = 8.dp, horizontal = 6.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) VPNTheme.Accent.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f))
+            .background(if (isSelected) VPNTheme.Accent.copy(alpha = 0.15f) else VPNTheme.CardStroke.copy(alpha = 0.35f))
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             if (isSelected) Icons.Default.CheckCircle else Icons.Default.Circle,
             contentDescription = null,
-            tint = if (isSelected) VPNTheme.Accent else Color.White.copy(alpha = 0.4f),
+            tint = if (isSelected) VPNTheme.Accent else VPNTheme.TertiaryLabel,
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(8.dp))
@@ -312,7 +315,7 @@ private fun ServerRow(
             serverTitle(node, lang),
             fontSize = 14.sp,
             maxLines = 1,
-            color = Color.White,
+            color = VPNTheme.Label,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(8.dp))
@@ -359,7 +362,7 @@ private fun PreparingBanner(text: String) {
             color = VPNTheme.Accent,
             strokeWidth = 2.dp,
         )
-        Text(text, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp)
+        Text(text, color = VPNTheme.SecondaryLabel, fontSize = 13.sp)
     }
 }
 
@@ -424,7 +427,7 @@ private fun ErrorBanner(message: String) {
         Spacer(Modifier.width(10.dp))
         Text(
             message,
-            color = Color.White.copy(alpha = 0.9f),
+            color = VPNTheme.Label,
             fontSize = 13.sp,
         )
     }
@@ -442,13 +445,13 @@ private fun DiagnosticsCard(
         Text(
             lang.t(LKey.diagnostics),
             style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
+            color = VPNTheme.Label,
         )
         Spacer(Modifier.height(10.dp))
         DiagRow(lang.t(LKey.state), lang.stateLabel(state), stateColor(state))
-        DiagRow(lang.t(LKey.location), nodeDisplay(vpn.selectedNode), Color.White.copy(alpha = 0.85f))
+        DiagRow(lang.t(LKey.location), nodeDisplay(vpn.selectedNode), VPNTheme.SecondaryLabel)
         statusMessage?.let {
-            DiagRow(lang.t(LKey.message), it, Color.White.copy(alpha = 0.85f))
+            DiagRow(lang.t(LKey.message), it, VPNTheme.SecondaryLabel)
         }
     }
 }
@@ -459,7 +462,7 @@ private fun nodeDisplay(node: com.privatevpn.app.api.ExitNode?): String =
 @Composable
 private fun DiagRow(title: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(title, color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
+        Text(title, color = VPNTheme.SecondaryLabel, fontSize = 14.sp)
         Spacer(Modifier.weight(1f))
         Text(value, color = valueColor, fontSize = 14.sp, textAlign = TextAlign.End)
     }
@@ -477,12 +480,12 @@ private fun SubscriptionStatusCard(
                 Text(
                     lang.t(LKey.premiumRequired),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = VPNTheme.Label,
                 )
                 Text(
                     lang.t(LKey.choosePlanToStart),
                     fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = VPNTheme.SecondaryLabel,
                 )
             }
             Button(
@@ -490,7 +493,7 @@ private fun SubscriptionStatusCard(
                 colors = ButtonDefaults.buttonColors(containerColor = VPNTheme.Accent),
                 shape = RoundedCornerShape(50),
             ) {
-                Text(lang.t(LKey.upgrade), color = Color.Black, fontWeight = FontWeight.Bold)
+                Text(lang.t(LKey.upgrade), color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -510,12 +513,9 @@ fun CardContainer(content: @Composable () -> Unit) {
 
 @Composable
 fun AppLogo(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF0E2A4A)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("VPN", color = VPNTheme.Accent, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-    }
+    Image(
+        painter = painterResource(id = com.privatevpn.app.R.drawable.ic_app_logo),
+        contentDescription = "FlowVPN",
+        modifier = modifier.clip(RoundedCornerShape(18.dp)),
+    )
 }

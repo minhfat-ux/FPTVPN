@@ -79,16 +79,16 @@ fun PaywallScreen(
             // Close (X)
             Row(modifier = Modifier.fillMaxWidth()) {
                 IconButton(onClick = onClose, modifier = Modifier.align(Alignment.Top)) {
-                    Icon(Icons.Default.Close, contentDescription = lang.t(LKey.notNow), tint = Color.White.copy(alpha = 0.7f))
+                    Icon(Icons.Default.Close, contentDescription = lang.t(LKey.notNow), tint = VPNTheme.SecondaryLabel)
                 }
             }
 
             AppLogo(modifier = Modifier.size(76.dp))
-            Text("VPNFlow Premium", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("VPNFlow Premium", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
             Text(
                 lang.t(LKey.paywallSubtitle),
                 fontSize = 15.sp,
-                color = Color.White.copy(alpha = 0.65f),
+                color = VPNTheme.SecondaryLabel,
                 textAlign = TextAlign.Center,
             )
 
@@ -116,11 +116,11 @@ fun PaywallScreen(
                 }
                 if (products.isEmpty() && !isLoading) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-                        Text(lang.t(LKey.noPlans), fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(lang.t(LKey.noPlans), fontWeight = FontWeight.Bold, color = VPNTheme.Label)
                         Text(
                             lang.t(LKey.noPlansDetail),
                             fontSize = 13.sp,
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = VPNTheme.SecondaryLabel,
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -154,13 +154,13 @@ fun PaywallScreen(
             Text(
                 lang.t(LKey.subscriptionDisclosure),
                 fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.55f),
+                color = VPNTheme.SecondaryLabel,
                 textAlign = TextAlign.Center,
             )
 
             Text(
                 lang.t(LKey.notNow),
-                color = Color.White.copy(alpha = 0.55f),
+                color = VPNTheme.SecondaryLabel,
                 fontSize = 14.sp,
                 modifier = Modifier
                     .padding(top = 4.dp)
@@ -178,7 +178,7 @@ private fun BenefitRow(icon: ImageVector, title: String) {
     ) {
         Icon(icon, contentDescription = null, tint = VPNTheme.Accent, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
-        Text(title, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(title, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
     }
 }
 
@@ -193,16 +193,16 @@ private fun PlanRow(product: ProductDetails, enabled: Boolean, onClick: () -> Un
         enabled = enabled,
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.08f)),
+        colors = ButtonDefaults.buttonColors(containerColor = VPNTheme.CardStroke.copy(alpha = 0.35f)),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(name, fontWeight = FontWeight.Bold, color = Color.White)
-                Text(product.title, fontSize = 12.sp, color = Color.White.copy(alpha = 0.58f), maxLines = 1)
+                Text(name, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
+                Text(product.title, fontSize = 12.sp, color = VPNTheme.SecondaryLabel, maxLines = 1)
             }
             Text(
                 price,
-                color = Color.Black,
+                color = Color.White,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .background(VPNTheme.Accent, CircleShape)
@@ -223,7 +223,7 @@ private fun LegalLink(text: String, url: String) {
     val context = LocalContext.current
     Text(
         text,
-        color = Color.White.copy(alpha = 0.65f),
+        color = VPNTheme.SecondaryLabel,
         fontSize = 13.sp,
         modifier = Modifier.clickableText {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))

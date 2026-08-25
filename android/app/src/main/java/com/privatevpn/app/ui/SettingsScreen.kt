@@ -98,9 +98,9 @@ fun SettingsScreen(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = lang.t(LKey.done), tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = lang.t(LKey.done), tint = VPNTheme.Label)
             }
-            Text(lang.t(LKey.configuration), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(lang.t(LKey.configuration), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
             Spacer(Modifier.weight(1f))
         }
 
@@ -117,7 +117,7 @@ fun SettingsScreen(
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(c.title(lang.language), color = Color.White, fontSize = 15.sp)
+                    Text(c.title(lang.language), color = VPNTheme.Label, fontSize = 15.sp)
                     Spacer(Modifier.weight(1f))
                     if (choice == c) {
                         Icon(Icons.Default.Check, contentDescription = null, tint = VPNTheme.Accent, modifier = Modifier.width(20.dp))
@@ -132,19 +132,19 @@ fun SettingsScreen(
         SectionTitle(lang.t(LKey.account))
         CardContainer {
             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                Text(lang.t(LKey.status), color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
+                Text(lang.t(LKey.status), color = VPNTheme.SecondaryLabel, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
                 Text(
                     if (isSignedIn) lang.t(LKey.signedIn) else lang.t(LKey.signedOut),
-                    color = if (isSignedIn) VPNTheme.Accent else Color.White.copy(alpha = 0.6f),
+                    color = if (isSignedIn) VPNTheme.Accent else VPNTheme.SecondaryLabel,
                     fontSize = 14.sp,
                 )
             }
             sessionEmail?.let { email ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Text(lang.t(LKey.email), color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
+                    Text(lang.t(LKey.email), color = VPNTheme.SecondaryLabel, fontSize = 14.sp)
                     Spacer(Modifier.weight(1f))
-                    Text(email, color = Color.White, fontSize = 14.sp)
+                    Text(email, color = VPNTheme.Label, fontSize = 14.sp)
                 }
             }
             if (isSignedIn) {
@@ -166,7 +166,7 @@ fun SettingsScreen(
                     }
                 }
                 accountMessage?.let {
-                    Text(it, fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 6.dp))
+                    Text(it, fontSize = 12.sp, color = VPNTheme.SecondaryLabel, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
@@ -180,10 +180,10 @@ fun SettingsScreen(
                 if (isLoadingDevices && devices.isEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), color = VPNTheme.Accent, strokeWidth = 2.dp)
-                        Text(lang.t(LKey.loadingDevices), fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
+                        Text(lang.t(LKey.loadingDevices), fontSize = 13.sp, color = VPNTheme.SecondaryLabel)
                     }
                 } else if (devices.isEmpty()) {
-                    Text(lang.t(LKey.noDevices), fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
+                    Text(lang.t(LKey.noDevices), fontSize = 13.sp, color = VPNTheme.SecondaryLabel)
                 } else {
                     devices.forEach { device ->
                         DeviceRow(
@@ -209,7 +209,7 @@ fun SettingsScreen(
                     }
                 }
                 devicesMessage?.let {
-                    Text(it, fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 6.dp))
+                    Text(it, fontSize = 12.sp, color = VPNTheme.SecondaryLabel, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
@@ -220,11 +220,11 @@ fun SettingsScreen(
         SectionTitle(lang.t(LKey.subscription))
         CardContainer {
             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                Text(lang.t(LKey.status), color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp)
+                Text(lang.t(LKey.status), color = VPNTheme.SecondaryLabel, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
                 Text(
                     if (isSubscribed) lang.t(LKey.premiumActive) else lang.t(LKey.free),
-                    color = if (isSubscribed) VPNTheme.Accent else Color.White.copy(alpha = 0.6f),
+                    color = if (isSubscribed) VPNTheme.Accent else VPNTheme.SecondaryLabel,
                     fontSize = 14.sp,
                 )
             }
@@ -263,7 +263,7 @@ private fun SectionTitle(text: String) {
         text,
         fontSize = 13.sp,
         fontWeight = FontWeight.SemiBold,
-        color = Color.White.copy(alpha = 0.5f),
+        color = VPNTheme.SecondaryLabel,
         modifier = Modifier.padding(bottom = 6.dp),
     )
 }
@@ -298,12 +298,12 @@ private fun DeviceRow(
             Text(
                 device.name ?: device.deviceId,
                 fontWeight = FontWeight.Medium,
-                color = Color.White,
+                color = VPNTheme.Label,
                 fontSize = 14.sp,
                 modifier = Modifier.weight(1f),
             )
             if (isCurrent) {
-                Text(lang.t(LKey.thisDevice), fontSize = 11.sp, color = Color.White.copy(alpha = 0.6f))
+                Text(lang.t(LKey.thisDevice), fontSize = 11.sp, color = VPNTheme.SecondaryLabel)
             }
             if (device.isActive && !isCurrent) {
                 Spacer(Modifier.width(8.dp))
@@ -325,7 +325,7 @@ private fun DeviceRow(
         Text(
             parts.joinToString(" · "),
             fontSize = 12.sp,
-            color = if (device.isActive) VPNTheme.Accent else Color.White.copy(alpha = 0.6f),
+            color = if (device.isActive) VPNTheme.Accent else VPNTheme.SecondaryLabel,
         )
     }
 }
