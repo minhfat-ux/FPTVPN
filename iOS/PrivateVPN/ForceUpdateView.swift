@@ -19,16 +19,16 @@ struct ForceUpdateView: View {
 
                 Text("FlowVPN")
                     .font(.largeTitle.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(VPNTheme.label)
 
                 Text(languageStore.t(.updateRequired))
                     .font(.title3.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(VPNTheme.label)
                     .multilineTextAlignment(.center)
 
                 Text(languageStore.t(.updateRequiredDetail))
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(VPNTheme.secondaryLabel)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
 
@@ -41,7 +41,7 @@ struct ForceUpdateView: View {
                         .font(.headline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .foregroundStyle(.black)
+                        .foregroundStyle(.white)
                         .background(VPNTheme.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
@@ -51,7 +51,6 @@ struct ForceUpdateView: View {
             }
             .padding(20)
         }
-        .preferredColorScheme(.dark)
         .interactiveDismissDisabled()
     }
 }

@@ -33,7 +33,7 @@ struct LoginView: View {
 
                         if codeRequested {
                             Divider()
-                                .overlay(Color.white.opacity(0.15))
+                                .overlay(VPNTheme.cardStroke)
 
                             codeField
                             verifyButton
@@ -59,7 +59,6 @@ struct LoginView: View {
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Header
@@ -75,11 +74,11 @@ struct LoginView: View {
 
             Text("FlowVPN")
                 .font(.largeTitle.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
 
             Text(languageStore.t(.appSubtitle))
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(VPNTheme.secondaryLabel)
                 .multilineTextAlignment(.center)
         }
     }
@@ -90,20 +89,20 @@ struct LoginView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(languageStore.t(.email))
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(VPNTheme.secondaryLabel)
 
             TextField(languageStore.t(.emailPlaceholder), text: $email)
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
                 .padding(14)
-                .background(Color.white.opacity(0.08))
+                .background(Color(uiColor: .tertiarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .stroke(VPNTheme.cardStroke, lineWidth: 1)
                 )
         }
     }
@@ -112,18 +111,18 @@ struct LoginView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(languageStore.t(.loginCode))
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(VPNTheme.secondaryLabel)
 
             TextField(languageStore.t(.codePlaceholder), text: $loginCode)
                 .textContentType(.oneTimeCode)
                 .keyboardType(.numberPad)
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
                 .padding(14)
-                .background(Color.white.opacity(0.08))
+                .background(Color(uiColor: .tertiarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .stroke(VPNTheme.cardStroke, lineWidth: 1)
                 )
         }
     }
@@ -133,14 +132,14 @@ struct LoginView: View {
             HStack(spacing: 8) {
                 if isSendingCode {
                     ProgressView()
-                        .tint(.black)
+                        .tint(.white)
                 }
                 Text(languageStore.t(.sendCode))
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .foregroundStyle(.black)
+            .foregroundStyle(.white)
             .background(isSendingCode ? VPNTheme.accent.opacity(0.6) : VPNTheme.accent)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
@@ -153,14 +152,14 @@ struct LoginView: View {
             HStack(spacing: 8) {
                 if isVerifying {
                     ProgressView()
-                        .tint(.black)
+                        .tint(.white)
                 }
                 Text(languageStore.t(.verifyCode))
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .foregroundStyle(.black)
+            .foregroundStyle(.white)
             .background(isVerifying ? VPNTheme.accent.opacity(0.6) : VPNTheme.accent)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
@@ -174,7 +173,7 @@ struct LoginView: View {
                 .foregroundStyle(message.isError ? .red : VPNTheme.accent)
             Text(message.text)
                 .font(.footnote)
-                .foregroundStyle(message.isError ? .red : .white.opacity(0.9))
+                .foregroundStyle(message.isError ? .red : VPNTheme.label)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)

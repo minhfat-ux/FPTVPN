@@ -1,21 +1,28 @@
 import SwiftUI
 
 /// Shared visual theme for the PrivateVPN iOS UI.
+/// Follows the iOS system design: system blue accent (#007AFF), adaptive
+/// system backgrounds, and semantic label colors so light/dark both look right.
 enum VPNTheme {
-    /// Accent — green used for the connected state and the primary action.
-    static let accent = Color(red: 0.20, green: 0.78, blue: 0.45)
+    /// Accent — iOS system blue, used for the primary action and highlights.
+    static let accent = Color(uiColor: .systemBlue)
 
-    static let backgroundTop = Color(red: 0.02, green: 0.08, blue: 0.15)
-    static let backgroundBottom = Color(red: 0.04, green: 0.12, blue: 0.23)
+    static let backgroundTop = Color(uiColor: .systemBackground)
+    static let backgroundBottom = Color(uiColor: .secondarySystemBackground)
 
-    static let cardBackground = Color.white.opacity(0.06)
-    static let cardStroke = Color.white.opacity(0.12)
+    static let cardBackground = Color(uiColor: .secondarySystemBackground)
+    static let cardStroke = Color(uiColor: .separator)
 
     static let backgroundGradient = LinearGradient(
         colors: [backgroundTop, backgroundBottom],
         startPoint: .top,
         endPoint: .bottom
     )
+
+    // Semantic label colors (adapt to light/dark automatically).
+    static let label = Color(uiColor: .label)
+    static let secondaryLabel = Color(uiColor: .secondaryLabel)
+    static let tertiaryLabel = Color(uiColor: .tertiaryLabel)
 }
 
 // MARK: - VPNState UI presentation (UI-only extension; VPNState.swift untouched)
@@ -35,7 +42,7 @@ extension VPNState {
     /// Accent color for the connection state.
     var tint: Color {
         switch self {
-        case .disconnected: return Color.white.opacity(0.55)
+        case .disconnected: return .secondary
         case .connecting, .disconnecting: return .orange
         case .connected: return VPNTheme.accent
         case .failed: return .red

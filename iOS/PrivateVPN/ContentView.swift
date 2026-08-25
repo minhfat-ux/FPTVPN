@@ -32,7 +32,7 @@ struct ContentView: View {
                                     .tint(VPNTheme.accent)
                                 Text(languageStore.t(.preparingPermission))
                                     .font(.footnote)
-                                    .foregroundStyle(.white.opacity(0.75))
+                                    .foregroundStyle(VPNTheme.secondaryLabel)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
@@ -62,7 +62,7 @@ struct ContentView: View {
                         showingSettings = true
                     } label: {
                         Image(systemName: "gearshape.fill")
-                            .foregroundStyle(.white.opacity(0.8))
+                            .foregroundStyle(VPNTheme.secondaryLabel)
                     }
                     .accessibilityLabel(languageStore.t(.configuration))
                     .disabled(vpnManager.state.isTransitioning)
@@ -94,7 +94,6 @@ struct ContentView: View {
                     .environmentObject(languageStore)
             }
         }
-        .preferredColorScheme(.dark)
         .onAppear {
             if !authStore.isSignedIn {
                 showingLogin = true
@@ -169,10 +168,10 @@ struct ContentView: View {
 
             Text("FlowVPN")
                 .font(.title.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
             Text(languageStore.t(.appSubtitle))
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(VPNTheme.secondaryLabel)
         }
         .padding(.top, 14)
     }
@@ -188,12 +187,12 @@ struct ContentView: View {
                 }
                 Text(vpnManager.state.localizedLabel(languageStore.language))
                     .font(.title2.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(VPNTheme.label)
             }
 
             Text(vpnManager.state.localizedSubtitle(languageStore.language))
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(VPNTheme.secondaryLabel)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -219,7 +218,7 @@ struct ContentView: View {
 
                 Text(languageStore.t(.serverLocation))
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(VPNTheme.label)
 
                 Spacer()
 
@@ -231,7 +230,7 @@ struct ContentView: View {
                         .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(VPNTheme.secondaryLabel)
                 .disabled(vpnManager.state.isTransitioning)
                 .accessibilityLabel(languageStore.t(.refreshLocations))
             }
@@ -240,7 +239,7 @@ struct ContentView: View {
             if nodes.isEmpty {
                 Text(languageStore.t(.noServerAvailable))
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(VPNTheme.secondaryLabel)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 // List view: tối đa 5 server hiển thị, cuộn được. Mỗi dòng có
@@ -279,12 +278,12 @@ struct ContentView: View {
 
         return HStack(spacing: 8) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? VPNTheme.accent : .white.opacity(0.4))
+                .foregroundStyle(isSelected ? VPNTheme.accent : VPNTheme.tertiaryLabel)
 
             Text(serverTitle(for: node))
                 .font(.subheadline)
                 .lineLimit(1)
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
 
             Spacer(minLength: 8)
 
@@ -298,7 +297,7 @@ struct ContentView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 6)
-        .background(isSelected ? VPNTheme.accent.opacity(0.15) : Color.white.opacity(0.04))
+        .background(isSelected ? VPNTheme.accent.opacity(0.15) : Color(uiColor: .tertiarySystemFill))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -323,10 +322,10 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.premiumRequired))
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(VPNTheme.label)
                 Text(subscriptionStore.isSubscribed ? languageStore.t(.protectionUnlocked) : languageStore.t(.choosePlanToStart))
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(VPNTheme.secondaryLabel)
             }
 
             Spacer()
@@ -337,7 +336,7 @@ struct ContentView: View {
                 } label: {
                     Text(languageStore.t(.upgrade))
                         .font(.subheadline.bold())
-                        .foregroundStyle(.black)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background(VPNTheme.accent)
@@ -431,14 +430,14 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             Label(languageStore.t(.diagnostics), systemImage: "waveform.path.ecg")
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
 
-            Divider().overlay(Color.white.opacity(0.15))
+            Divider().overlay(VPNTheme.cardStroke)
 
             diagRow(title: languageStore.t(.state), value: vpnManager.state.localizedLabel(languageStore.language), valueColor: vpnManager.state.tint)
-            diagRow(title: languageStore.t(.location), value: nodeDisplay, valueColor: .white.opacity(0.85))
+            diagRow(title: languageStore.t(.location), value: nodeDisplay, valueColor: VPNTheme.secondaryLabel)
             if let statusMessage = vpnManager.statusMessage {
-                diagRow(title: languageStore.t(.message), value: statusMessage, valueColor: .white.opacity(0.85))
+                diagRow(title: languageStore.t(.message), value: statusMessage, valueColor: VPNTheme.secondaryLabel)
             }
         }
         .padding(16)
@@ -455,7 +454,7 @@ struct ContentView: View {
         HStack(alignment: .top) {
             Text(title)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(VPNTheme.secondaryLabel)
             Spacer(minLength: 12)
             Text(value)
                 .font(.subheadline.monospaced())
@@ -482,7 +481,7 @@ struct ContentView: View {
                 .foregroundStyle(.red)
             Text(message)
                 .font(.footnote)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(VPNTheme.label)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
@@ -502,7 +501,7 @@ struct ContentView: View {
             } label: {
                 Label(languageStore.t(.notConfigured), systemImage: "gearshape")
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(VPNTheme.secondaryLabel)
             }
         }
     }

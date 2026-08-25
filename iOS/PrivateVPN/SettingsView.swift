@@ -28,8 +28,6 @@ struct SettingsView: View {
             subscriptionSection
             supportSection
         }
-        .scrollContentBackground(.hidden)
-        .background(VPNTheme.backgroundGradient.ignoresSafeArea())
         .tint(VPNTheme.accent)
         .navigationTitle(languageStore.t(.configuration))
         .refreshable {
@@ -479,7 +477,6 @@ struct PaywallView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .preferredColorScheme(.dark)
         .task {
             await subscriptionStore.start()
         }
@@ -496,12 +493,12 @@ struct PaywallView: View {
 
             Text(languageStore.t(.paywallTitle))
                 .font(.largeTitle.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
                 .multilineTextAlignment(.center)
 
             Text(languageStore.t(.paywallSubtitle))
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(VPNTheme.secondaryLabel)
                 .multilineTextAlignment(.center)
         }
     }
@@ -523,7 +520,7 @@ struct PaywallView: View {
                 .frame(width: 26)
             Text(title)
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(VPNTheme.label)
             Spacer()
         }
     }
@@ -557,10 +554,10 @@ struct PaywallView: View {
                         .foregroundStyle(.orange)
                     Text(languageStore.t(.noPlans))
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(VPNTheme.label)
                     Text(languageStore.t(.noPlansDetail))
                         .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(VPNTheme.secondaryLabel)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.vertical, 16)
@@ -582,10 +579,10 @@ struct PaywallView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(product.displayName)
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(VPNTheme.label)
                 Text(product.description)
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.58))
+                    .foregroundStyle(VPNTheme.secondaryLabel)
                     .lineLimit(2)
             }
 
@@ -593,18 +590,18 @@ struct PaywallView: View {
 
             Text(product.displayPrice)
                 .font(.headline.bold())
-                .foregroundStyle(.black)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(VPNTheme.accent)
                 .clipShape(Capsule())
         }
         .padding(16)
-        .background(Color.white.opacity(0.08))
+        .background(Color(uiColor: .tertiarySystemFill))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
         )
     }
 
@@ -623,18 +620,18 @@ struct PaywallView: View {
 
             legalLinks
                 .font(.footnote)
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(VPNTheme.secondaryLabel)
 
             Text(languageStore.t(.subscriptionDisclosure))
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(VPNTheme.secondaryLabel)
                 .multilineTextAlignment(.center)
 
             Button(languageStore.t(.notNow)) {
                 dismiss()
             }
             .font(.footnote)
-            .foregroundStyle(.white.opacity(0.55))
+            .foregroundStyle(VPNTheme.secondaryLabel)
             .padding(.top, 4)
         }
     }
