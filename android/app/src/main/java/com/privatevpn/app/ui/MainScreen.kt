@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -400,10 +401,11 @@ private fun PowerButton(
                 strokeWidth = 4.dp,
             )
         } else {
-            Text(
-                "⏻",
-                fontSize = 44.sp,
-                color = Color.White,
+            Icon(
+                Icons.Default.PowerSettingsNew,
+                contentDescription = null,
+                modifier = Modifier.size(44.dp),
+                tint = Color.White,
             )
         }
     }
