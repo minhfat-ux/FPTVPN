@@ -390,7 +390,7 @@ struct ContentView: View {
     private var primaryButtonColor: Color {
         switch vpnManager.state {
         case .connected:
-            return VPNTheme.accent
+            return VPNTheme.success
         case .connecting, .disconnecting:
             return .orange
         case .disconnected, .failed:

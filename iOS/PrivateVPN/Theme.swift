@@ -8,6 +8,9 @@ enum VPNTheme {
     /// Accent — iOS system blue, used for the primary action and highlights.
     static let accent = Color(uiColor: .systemBlue)
 
+    /// Success green — connected state (FlowVPN brand green #33C773).
+    static let success = Color(red: 51/255, green: 199/255, blue: 115/255)
+
     /// FlowVPN navy palette (FPT Harness style) — always dark.
     static let navyBase = Color(red: 10/255, green: 31/255, blue: 59/255)      // #0A1F3B
     static let navyLayer1 = Color(red: 14/255, green: 39/255, blue: 71/255)    // #0E2747
@@ -51,7 +54,7 @@ extension VPNState {
         switch self {
         case .disconnected: return .secondary
         case .connecting, .disconnecting: return .orange
-        case .connected: return VPNTheme.accent
+        case .connected: return VPNTheme.success
         case .failed: return .red
         }
     }

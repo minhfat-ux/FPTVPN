@@ -226,7 +226,7 @@ private fun Header(
 private fun stateColor(state: VPNState): Color = when (state) {
     VPNState.DISCONNECTED -> VPNTheme.SecondaryLabel
     VPNState.CONNECTING, VPNState.DISCONNECTING -> VPNTheme.Orange
-    VPNState.CONNECTED -> VPNTheme.Accent
+    VPNState.CONNECTED -> VPNTheme.Green
     VPNState.FAILED -> VPNTheme.Red
 }
 
@@ -381,7 +381,7 @@ private fun PowerButton(
         VPNState.DISCONNECTED, VPNState.FAILED -> false // always allow: control plane provisions
     }
     val color = when (state) {
-        VPNState.CONNECTED -> VPNTheme.Accent
+        VPNState.CONNECTED -> VPNTheme.Green
         VPNState.CONNECTING, VPNState.DISCONNECTING -> VPNTheme.Orange
         VPNState.DISCONNECTED, VPNState.FAILED -> VPNTheme.Red
     }

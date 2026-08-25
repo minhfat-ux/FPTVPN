@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.Color
 object VPNTheme {
     // iOS system blue (#007AFF) — matches the iOS/macOS app accent.
     val Accent = Color(0xFF007AFF)
+    // Success green — connected state (FlowVPN brand green #33C773).
+    val Green = Color(0xFF33C773)
     val Red = Color(0xFFFF3B30)
     val Orange = Color(0xFFFF9500)
     val Yellow = Color(0xFFFFD60A)
