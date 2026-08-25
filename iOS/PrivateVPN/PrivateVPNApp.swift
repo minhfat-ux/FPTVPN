@@ -27,6 +27,7 @@ struct PrivateVPNApp: App {
                 .environmentObject(subscriptionStore)
                 .environmentObject(authStore)
                 .environmentObject(languageStore)
+                .preferredColorScheme(.dark)   // app is always dark (FlowVPN navy)
         }
     }
 }

@@ -1,35 +1,24 @@
 import SwiftUI
 import UIKit
 
-/// Shared visual theme for the PrivateVPN iOS UI.
-/// Matches the FlowVPN brand used across FPT Harness: navy backgrounds
-/// (#0A1F3B base, #16385E bottom), system blue accent (#007AFF). Light mode
-/// follows iOS system backgrounds; dark mode uses the FlowVPN navy palette.
+/// Shared visual theme for the PrivateVPN iOS UI — always dark, FlowVPN navy
+/// palette (matches FPT Harness style): #0A1F3B base, #0E2747 cards,
+/// #16385E gradient bottom, system blue accent (#007AFF).
 enum VPNTheme {
     /// Accent — iOS system blue, used for the primary action and highlights.
     static let accent = Color(uiColor: .systemBlue)
 
-    /// FlowVPN navy palette (FPT Harness style).
-    static let navyBase = UIColor(red: 10/255, green: 31/255, blue: 59/255, alpha: 1)      // #0A1F3B
-    static let navyLayer1 = UIColor(red: 14/255, green: 39/255, blue: 71/255, alpha: 1)    // #0E2747
-    static let navyLayer2 = UIColor(red: 18/255, green: 48/255, blue: 82/255, alpha: 1)    // #123052
-    static let navyLayer3 = UIColor(red: 22/255, green: 56/255, blue: 94/255, alpha: 1)    // #16385E
+    /// FlowVPN navy palette (FPT Harness style) — always dark.
+    static let navyBase = Color(red: 10/255, green: 31/255, blue: 59/255)      // #0A1F3B
+    static let navyLayer1 = Color(red: 14/255, green: 39/255, blue: 71/255)    // #0E2747
+    static let navyLayer2 = Color(red: 18/255, green: 48/255, blue: 82/255)    // #123052
+    static let navyLayer3 = Color(red: 22/255, green: 56/255, blue: 94/255)    // #16385E
 
-    static let backgroundTop = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark ? navyBase : .systemBackground
-    })
-    static let backgroundBottom = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark ? navyLayer3 : .secondarySystemBackground
-    })
+    static let backgroundTop = navyBase
+    static let backgroundBottom = navyLayer3
 
-    static let cardBackground = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark ? navyLayer1 : .secondarySystemBackground
-    })
-    static let cardStroke = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.12)
-            : .separator
-    })
+    static let cardBackground = navyLayer1
+    static let cardStroke = Color.white.opacity(0.12)
 
     static let backgroundGradient = LinearGradient(
         colors: [backgroundTop, backgroundBottom],
@@ -37,10 +26,10 @@ enum VPNTheme {
         endPoint: .bottom
     )
 
-    // Semantic label colors (adapt to light/dark automatically).
-    static let label = Color(uiColor: .label)
-    static let secondaryLabel = Color(uiColor: .secondaryLabel)
-    static let tertiaryLabel = Color(uiColor: .tertiaryLabel)
+    // Dark-only semantic colors.
+    static let label = Color.white
+    static let secondaryLabel = Color.white.opacity(0.6)
+    static let tertiaryLabel = Color.white.opacity(0.4)
 }
 
 // MARK: - VPNState UI presentation (UI-only extension; VPNState.swift untouched)
