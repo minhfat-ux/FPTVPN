@@ -54,6 +54,36 @@ export class WireGuardManager {
     }
   }
 
+  /**
+   * Returns full peer dump (`wg show <iface> dump`): one line per peer with
+   * public_key, preshared_key, endpoint, allowed_ips, latest_handshake,
+   * transfer_rx, transfer_tx, persistent_keepalive. Parsed into objects.
+   * Returns [] when unavailable (dry-run / wg missing / remote hung).
+   */
+  async dump() {
+    if (this.dryRun) return [];
+    try {
+      const { stdout } = await execFileAsync(this.wgBin, ["show", this.interfaceName, "dump"]);
+      const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+      const rows = [];
+      for (const line of lines.slice(1)) { // first line = interface header
+        const [publicKey, , endpoint, allowedIps, latestHandshake, rx, tx] = line.split("\t");
+        if (!publicKey) continue;
+        rows.push({
+          publicKey,
+          endpoint: endpoint || null,
+          allowedIps: allowedIps || null,
+          latestHandshakeSec: latestHandshake === "0" ? 0 : Number(latestHandshake),
+          rxBytes: Number(rx || 0),
+          txBytes: Number(tx || 0),
+        });
+      }
+      return rows;
+    } catch {
+      return [];
+    }
+  }
+
   /** Returns the server's public key, or null on failure. */
   async serverPublicKey() {
     try {

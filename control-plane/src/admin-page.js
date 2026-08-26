@@ -166,6 +166,31 @@ export function adminPageHTML() {
     }
     .backlink:hover { color: var(--text); }
 
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 14px 0; }
+    .stat-card {
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      text-align: center;
+    }
+    .stat-card .num { font-size: 30px; font-weight: 800; color: var(--accent); line-height: 1.1; }
+    .stat-card .lbl { margin-top: 6px; color: var(--muted); font-size: 13px; }
+    .stat-card .sub { margin-top: 2px; color: rgba(255,255,255,.4); font-size: 12px; }
+
+    .stats-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 8px; }
+    .stats-bars { display: grid; gap: 8px; }
+    .bar-row { display: grid; grid-template-columns: 110px 1fr 46px; gap: 10px; align-items: center; font-size: 13px; }
+    .bar-row .name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-row .track { height: 14px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
+    .bar-row .fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s ease; }
+    .bar-row .val { text-align: right; color: var(--text); font-weight: 600; }
+    .bar-row.alt .fill { background: var(--warning); }
+
+    @media (max-width: 760px) {
+      .stats-cols { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 760px) {
       .grid { grid-template-columns: 1fr; }
       table, thead, tbody, th, td, tr { display: block; }
@@ -193,6 +218,7 @@ export function adminPageHTML() {
     <div class="tabs">
       <button class="tab active" id="tabNodes">Nodes</button>
       <button class="tab" id="tabUsers">Users</button>
+      <button class="tab" id="tabStats">Dashboard</button>
     </div>
 
     <!-- ===================== LIST VIEW ===================== -->
@@ -259,6 +285,28 @@ export function adminPageHTML() {
           </tbody>
         </table>
       </div>
+    </section>
+
+    <!-- ===================== DASHBOARD VIEW ===================== -->
+    <section class="card hidden" id="view-stats">
+      <h2>Dashboard</h2>
+      <div class="actions">
+        <button id="loadStats">Refresh</button>
+        <button class="secondary" id="autoStats" style="display:inline-flex;align-items:center;gap:6px;">Auto-refresh: OFF</button>
+      </div>
+
+      <div class="stats-grid" id="statsCards"></div>
+      <div class="stats-cols">
+        <div>
+          <h2>Devices by Platform</h2>
+          <div id="statsPlatform" class="stats-bars"></div>
+        </div>
+        <div>
+          <h2>Online Peer Regions</h2>
+          <div id="statsRegions" class="stats-bars"></div>
+        </div>
+      </div>
+      <div class="status" id="statsStatus"></div>
     </section>
 
     <!-- ===================== EDIT VIEW ===================== -->
@@ -330,6 +378,14 @@ export function adminPageHTML() {
       editTitle: document.getElementById("editTitle"),
       tabNodes: document.getElementById("tabNodes"),
       tabUsers: document.getElementById("tabUsers"),
+      tabStats: document.getElementById("tabStats"),
+      viewStats: document.getElementById("view-stats"),
+      statsCards: document.getElementById("statsCards"),
+      statsPlatform: document.getElementById("statsPlatform"),
+      statsRegions: document.getElementById("statsRegions"),
+      statsStatus: document.getElementById("statsStatus"),
+      loadStats: document.getElementById("loadStats"),
+      autoStats: document.getElementById("autoStats"),
     };
 
     let editingId = null; // null = create mode
@@ -366,14 +422,17 @@ export function adminPageHTML() {
     function showTab(tab) {
       const nodes = tab === "nodes";
       fields.tabNodes.classList.toggle("active", nodes);
-      fields.tabUsers.classList.toggle("active", !nodes);
+      fields.tabUsers.classList.toggle("active", tab === "users");
+      fields.tabStats.classList.toggle("active", tab === "stats");
       fields.viewList.classList.toggle("hidden", !nodes);
-      fields.viewUsers.classList.toggle("hidden", nodes);
+      fields.viewUsers.classList.toggle("hidden", tab !== "users");
+      fields.viewStats.classList.toggle("hidden", tab !== "stats");
       fields.viewEdit.classList.add("hidden");
-      if (!nodes && !fields.usersLoaded) {
+      if (tab === "users" && !fields.usersLoaded) {
         fields.usersLoaded = true;
         loadUsers();
       }
+      if (tab === "stats") loadStats();
     }
 
     async function loadUsers() {
@@ -685,8 +744,82 @@ export function adminPageHTML() {
       }
     }
 
+    // ---------------- Dashboard ----------------
+    let statsTimer = null;
+
+    function statCard(num, label, sub) {
+      const el = document.createElement("div");
+      el.className = "stat-card";
+      el.innerHTML = '<div class="num"></div><div class="lbl"></div><div class="sub"></div>';
+      el.querySelector(".num").textContent = num;
+      el.querySelector(".lbl").textContent = label;
+      el.querySelector(".sub").textContent = sub || "";
+      return el;
+    }
+
+    function renderBars(container, entries, max) {
+      container.innerHTML = "";
+      if (!entries || !Object.keys(entries).length) {
+        container.innerHTML = '<div class="bar-row"><span class="name">No data</span></div>';
+        return;
+      }
+      const total = max || Object.values(entries).reduce((a, b) => a + b, 0) || 1;
+      for (const [name, val] of Object.entries(entries).sort((a, b) => b[1] - a[1])) {
+        const row = document.createElement("div");
+        row.className = "bar-row" + (name === "revoked" ? " alt" : "");
+        row.innerHTML = '<span class="name"></span><div class="track"><div class="fill"></div></div><span class="val"></span>';
+        row.querySelector(".name").textContent = name;
+        row.querySelector(".val").textContent = val;
+        row.querySelector(".fill").style.width = Math.round((val / total) * 100) + "%";
+        container.appendChild(row);
+      }
+    }
+
+    async function loadStats() {
+      try {
+        fields.statsStatus.textContent = "Loading stats...";
+        const data = await request("/v1/admin/stats");
+        const t = data.totals || {};
+        fields.statsCards.innerHTML = "";
+        fields.statsCards.append(
+          statCard(t.devices ?? 0, "Devices", "total registered"),
+          statCard(t.active_devices ?? 0, "Active", "not revoked"),
+          statCard(t.revoked_devices ?? 0, "Revoked", "disabled"),
+          statCard(t.online_peers ?? 0, "Online", "wg handshake < 3min"),
+          statCard(t.total_peers ?? 0, "Peers", "wg configured"),
+          statCard(t.exit_nodes ?? 0, "Exit Nodes", "backends"),
+        );
+        renderBars(fields.statsPlatform, data.by_platform || {});
+        const regions = {};
+        for (const e of data.online_peer_endpoints || []) regions[e.ip] = e.count;
+        renderBars(fields.statsRegions, regions);
+        fields.statsStatus.textContent =
+          "Generated " + new Date(data.generated_at).toLocaleString() +
+          " · " + (data.online_peer_endpoints || []).length + " region(s)";
+      } catch (error) {
+        fields.statsStatus.textContent = error.message;
+        fields.statsStatus.style.color = "var(--danger)";
+      }
+    }
+
+    fields.loadStats.onclick = loadStats;
+    let autoStatsOn = false;
+    fields.autoStats.onclick = () => {
+      autoStatsOn = !autoStatsOn;
+      fields.autoStats.textContent = "Auto-refresh: " + (autoStatsOn ? "ON (30s)" : "OFF");
+      fields.autoStats.classList.toggle("active", autoStatsOn);
+      if (autoStatsOn) {
+        statsTimer = setInterval(loadStats, 30000);
+        loadStats();
+      } else if (statsTimer) {
+        clearInterval(statsTimer);
+        statsTimer = null;
+      }
+    };
+
     document.getElementById("tabNodes").onclick = () => showTab("nodes");
     document.getElementById("tabUsers").onclick = () => showTab("users");
+    document.getElementById("tabStats").onclick = () => showTab("stats");
     document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;

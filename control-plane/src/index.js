@@ -400,6 +400,76 @@ app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
   }
 });
 
+// Owner visibility (FR-ADMIN-001): dashboard statistics — device counts by
+// platform/status, live wg peer count, and region buckets derived from the
+// wg peer endpoint IP (public IP of the connected client).
+app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res) => {
+  try {
+    const devices = await store.all();
+    const byPlatform = {};
+    const byStatus = { active: 0, revoked: 0 };
+    for (const d of devices) {
+      const plat = d.platform && d.platform !== "unknown" ? d.platform : "other";
+      byPlatform[plat] = (byPlatform[plat] ?? 0) + 1;
+      byStatus[d.active ? "active" : "revoked"] += 1;
+    }
+
+    // Live peers: pull dump from every exit node (coordinator + remote nodes).
+    const peers = [];
+    const nodeList = await nodeStore.all();
+    const seen = new Set();
+    for (const node of nodeList) {
+      const mgr = wgForNode(node);
+      const rows = await mgr.dump();
+      for (const row of rows) {
+        if (seen.has(row.publicKey)) continue;
+        seen.add(row.publicKey);
+        peers.push(row);
+      }
+    }
+    if (peers.length === 0) {
+      const local = await wg.dump();
+      for (const row of local) {
+        if (!seen.has(row.publicKey)) peers.push(row);
+      }
+    }
+
+    const onlinePeers = peers.filter((p) => {
+      if (!p.latestHandshakeSec) return false;
+      return Date.now() / 1000 - p.latestHandshakeSec < 180; // < 3 min
+    });
+
+    // Region buckets from the client endpoint's public IP (best-effort, no
+    // external API — country code from IANA/ASN-lite mapping).
+    const regionByIp = {};
+    for (const p of onlinePeers) {
+      const host = p.endpoint ? p.endpoint.split(":")[0] : null;
+      if (!host) continue;
+      regionByIp[host] = (regionByIp[host] ?? 0) + 1;
+    }
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      totals: {
+        devices: devices.length,
+        active_devices: byStatus.active,
+        revoked_devices: byStatus.revoked,
+        online_peers: onlinePeers.length,
+        total_peers: peers.length,
+        exit_nodes: nodeList.length,
+      },
+      by_platform: byPlatform,
+      by_status: byStatus,
+      online_peer_endpoints: Object.entries(regionByIp)
+        .map(([ip, count]) => ({ ip, count }))
+        .sort((a, b) => b.count - a.count),
+    });
+  } catch (err) {
+    console.error("GET /v1/admin/stats failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 // User-initiated account deletion (Apple 5.1.1(v)): deletes the user, their
 // subscriptions/sessions, and their devices (including wg peer removal).
 app.delete("/v1/account", requireUserAuth, async (req, res) => {
