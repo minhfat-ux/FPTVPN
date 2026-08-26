@@ -148,8 +148,10 @@ if errorlevel 1 (
   exit /b 0
 )
 
-rem connect with retry (up to 8 times)
+rem connect with retry (up to 8 times). Moi lan retry deu don port cu tren VPS
+rem (sshd vua chet giu port -> "remote port forwarding failed").
 for /L %%i in (1,1,8) do (
+  ssh -i "%KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 $SshUser@$VpsIP "fuser -k $TunnelPort/tcp 2>/dev/null; sleep 1; true" 2>nul
   ssh -i "%KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=8 -C -N -R 127.0.0.1:$TunnelPort:127.0.0.1:3080 $SshUser@$VpsIP
   if errorlevel 1 timeout /t 2 /nobreak >nul
 )
