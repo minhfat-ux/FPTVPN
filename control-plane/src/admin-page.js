@@ -187,6 +187,28 @@ export function adminPageHTML() {
     .bar-row .val { text-align: right; color: var(--text); font-weight: 600; }
     .bar-row.alt .fill { background: var(--warning); }
 
+    .user-card {
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+    .user-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .user-card .email { font-weight: 700; color: var(--text); }
+    .user-card .meta { color: var(--muted); font-size: 13px; }
+    .user-card .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .chip {
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(51, 199, 115, 0.16);
+      color: var(--accent);
+      border: 1px solid rgba(51, 199, 115, 0.3);
+    }
+    .chip.off { background: rgba(255,255,255,0.08); color: var(--muted); border-color: var(--stroke); }
+
     @media (max-width: 760px) {
       .stats-cols { grid-template-columns: 1fr; }
     }
@@ -306,6 +328,9 @@ export function adminPageHTML() {
           <div id="statsRegions" class="stats-bars"></div>
         </div>
       </div>
+
+      <h2 style="margin-top:18px;">Devices by User</h2>
+      <div id="statsUsers"></div>
       <div class="status" id="statsStatus"></div>
     </section>
 
@@ -386,6 +411,7 @@ export function adminPageHTML() {
       statsStatus: document.getElementById("statsStatus"),
       loadStats: document.getElementById("loadStats"),
       autoStats: document.getElementById("autoStats"),
+      statsUsers: document.getElementById("statsUsers"),
     };
 
     let editingId = null; // null = create mode
@@ -775,6 +801,29 @@ export function adminPageHTML() {
       }
     }
 
+    function renderUsersByUser(byUser) {
+      fields.statsUsers.innerHTML = "";
+      if (!byUser.length) {
+        fields.statsUsers.innerHTML = '<div class="user-card"><span class="meta">No user-owned devices.</span></div>';
+        return;
+      }
+      for (const u of byUser) {
+        const card = document.createElement("div");
+        card.className = "user-card";
+        const chips = Object.entries(u.platforms || {})
+          .map(([p, n]) => '<span class="chip">' + p + ": " + n + "</span>")
+          .join("");
+        card.innerHTML =
+          '<div class="head"><span class="email"></span><span class="meta"></span></div>' +
+          '<div class="chips"></div>';
+        card.querySelector(".email").textContent = u.email;
+        card.querySelector(".meta").textContent =
+          u.total + " device(s), " + u.active + " active";
+        card.querySelector(".chips").innerHTML = chips;
+        fields.statsUsers.appendChild(card);
+      }
+    }
+
     async function loadStats() {
       try {
         fields.statsStatus.textContent = "Loading stats...";
@@ -782,14 +831,15 @@ export function adminPageHTML() {
         const t = data.totals || {};
         fields.statsCards.innerHTML = "";
         fields.statsCards.append(
-          statCard(t.devices ?? 0, "Devices", "total registered"),
+          statCard(t.devices ?? 0, "Devices", "real, owned by users"),
+          statCard(t.users ?? 0, "Users", "accounts"),
           statCard(t.active_devices ?? 0, "Active", "not revoked"),
-          statCard(t.revoked_devices ?? 0, "Revoked", "disabled"),
           statCard(t.online_peers ?? 0, "Online", "wg handshake < 3min"),
-          statCard(t.total_peers ?? 0, "Peers", "wg configured"),
+          statCard(t.test_devices ?? 0, "Test Devices", "no user (legacy)"),
           statCard(t.exit_nodes ?? 0, "Exit Nodes", "backends"),
         );
         renderBars(fields.statsPlatform, data.by_platform || {});
+        renderUsersByUser(data.by_user || []);
         const regions = {};
         for (const e of data.online_peer_endpoints || []) regions[e.ip] = e.count;
         renderBars(fields.statsRegions, regions);

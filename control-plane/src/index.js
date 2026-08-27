@@ -406,12 +406,27 @@ app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
 app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
+    // Real devices only: those claimed by a real user account (devices with no
+    // userId are probe/test/legacy registrations and are excluded from counts).
+    const users = await authStore.listUsers();
+    const emailById = new Map(users.map((u) => [u.id, u.email ?? u.id]));
+    const realDevices = devices.filter((d) => d.userId);
+    const testDevices = devices.filter((d) => !d.userId);
+
     const byPlatform = {};
     const byStatus = { active: 0, revoked: 0 };
-    for (const d of devices) {
+    const byUser = {};        // userId -> { email, total, active, platforms:{} }
+    for (const d of realDevices) {
       const plat = d.platform && d.platform !== "unknown" ? d.platform : "other";
       byPlatform[plat] = (byPlatform[plat] ?? 0) + 1;
       byStatus[d.active ? "active" : "revoked"] += 1;
+      const uid = d.userId;
+      if (!byUser[uid]) {
+        byUser[uid] = { email: emailById.get(uid) ?? uid, total: 0, active: 0, platforms: {} };
+      }
+      byUser[uid].total += 1;
+      if (d.active) byUser[uid].active += 1;
+      byUser[uid].platforms[plat] = (byUser[uid].platforms[plat] ?? 0) + 1;
     }
 
     // Live peers: pull dump from every exit node (coordinator + remote nodes).
@@ -451,7 +466,9 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
     res.json({
       generated_at: new Date().toISOString(),
       totals: {
-        devices: devices.length,
+        devices: realDevices.length,
+        test_devices: testDevices.length,
+        users: users.length,
         active_devices: byStatus.active,
         revoked_devices: byStatus.revoked,
         online_peers: onlinePeers.length,
@@ -460,6 +477,7 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
       },
       by_platform: byPlatform,
       by_status: byStatus,
+      by_user: Object.values(byUser).sort((a, b) => b.total - a.total),
       online_peer_endpoints: Object.entries(regionByIp)
         .map(([ip, count]) => ({ ip, count }))
         .sort((a, b) => b.count - a.count),
