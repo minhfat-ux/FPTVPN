@@ -320,17 +320,6 @@ private fun ServerRow(
             color = VPNTheme.Label,
             modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            lang.t(LKey.select),
-            color = VPNTheme.Accent,
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (isSelected) Color.Transparent else Color.Transparent)
-                .padding(6.dp),
-        )
     }
 }
 
