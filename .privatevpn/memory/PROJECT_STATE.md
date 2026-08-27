@@ -163,3 +163,10 @@ allowedIPs 0.0.0.0/0.
   cần user chạy: sudo launchctl bootout system /Library/LaunchDaemons/com.dsh.housekeeping.plist
   && sudo rm /Library/LaunchDaemons/com.dsh.housekeeping.plist.
 - setup-tunnel.sh trong repo đã cập nhật 13080.
+
+## Android (verified máy thật 2026-08-27)
+
+- App VPNFlow 1.0.0 debug đang chạy trên Samsung Z Fold 5 (giữ nguyên).
+- Release APK đã ký sẵn sàng upload Play.
+- Play Console account: CHỜ VERIFY.
+- Keystore backup: /Volumes/BIWIN/VPNFlow-Backup/release-signing/.

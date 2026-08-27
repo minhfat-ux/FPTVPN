@@ -116,3 +116,30 @@ Durable engineering decisions (see also `docs/adr/`).
   proxy macOS không đổi, browsing bình thường. /login vẫn 200 (auth 9090 độc lập).
 - **Phương pháp làm việc theo yêu cầu user**: audit trước → báo cáo → chờ duyệt từng
   phase → test tay trước → mới tạo persistence. Đã chạy đủ 9 phase, user duyệt từng bước.
+
+## 2026-08-27 — Android verified trên máy thật + Play Console setup
+
+- **Verified end-to-end trên Samsung Z Fold 5 (SM-F9460, RFCX110TCWA)**:
+  install, login OTP (minhnb2@me.com), premium crown, server list (2 node),
+  Connect→node-1 (IP 103.173.155.50), chọn dòng server→Connect→node-2
+  (IP 103.6.234.233), Disconnect (IP về thật). Backend stats: 6 devices
+  (2 mac, 2 ios, 2 android).
+- **Bug tìm thấy + fix trên máy thật**:
+  (1) Nút "Select" server không có click handler → bấm cả dòng = select
+  (commit 923c3a6, 3677697).
+- **Dashboard admin (control-plane)**: thêm tab Dashboard — /v1/admin/stats
+  đếm device THẬT (có userId, exclude probe/test), theo user + platform +
+  online peers (wg handshake <3min) + region IP. 42→5 device thật (37 test
+  tách riêng). Commit 14e87d4, 22a7913.
+- **Release signing**: keystore CN="Minh Nguyen Binh", O=VPNFlow.
+  Keystore: ~/keystores/vpnflow-release.jks + secrets/vpnflow-release.jks
+  (gitignored). Backup: /Volumes/BIWIN/VPNFlow-Backup/release-signing/
+  (jks + properties + pass + README). Properties:
+  ~/keystores/vpnflow-signing.properties (gradle load sẵn). Release APK
+  đã ký 15MB: ~/.vpnflow-build/app/outputs/apk/release/app-release.apk.
+  SHA-256: dc6e484b... (ghi trong README-BACKUP).
+- **Play Console**: account đang VERIFY (tạo với tư cách individual,
+  tránh DUNS). Chờ verify xong → create app (VPNFlow, com.privatevpn.app),
+  upload key, upload APK, tạo Monthly_Premium/Yearly_Premium + free trial.
+- **QUYẾT ĐỊNH**: BỎ Windows (không làm bản Windows FPT harness nữa —
+  user từ chối; để nguyên bundle đã tạo trong package nếu sau này cần).
