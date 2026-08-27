@@ -302,6 +302,7 @@ private fun ServerRow(
             .padding(vertical = 8.dp, horizontal = 6.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (isSelected) VPNTheme.Accent.copy(alpha = 0.15f) else VPNTheme.CardStroke.copy(alpha = 0.35f))
+            .clickable(enabled = !busy, onClick = onSelect)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
