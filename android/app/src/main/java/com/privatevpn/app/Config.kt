@@ -8,6 +8,9 @@ object Config {
     /** Production coordinator. */
     const val CONTROL_PLANE_URL = "https://api.meetflowai.site"
 
+    /** Web purchase page (plan picker + QR payment). Mirrors iOS/macOS. */
+    const val BUY_URL = "https://meetflowai.site/buy"
+
     /** Google Play Billing product IDs (must match Play Console + backend). */
     val PRODUCT_IDS = listOf("Monthly_Premium", "Yearly_Premium")
 
