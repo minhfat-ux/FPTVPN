@@ -64,6 +64,20 @@ export class AuthStore {
     data.emailOtps = data.emailOtps.filter((entry) => entry !== otp);
     const user = findOrCreateUser(data, { email: normalized });
     const session = createSession(data, user.id);
+    // Free trial for new accounts (no active subscription yet, not yet trialed).
+    const enabled = process.env.ENABLE_FREE_TRIAL !== "0";
+    const trialDays = Number(process.env.TRIAL_DAYS || 1);
+    if (enabled && !user.trialGrantedAt && !activeSubscriptionFor(data, user.id) && !user.revokedAt) {
+      data.subscriptions.push({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        productId: "trial.1day",
+        expiresAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString(),
+        revokedAt: null,
+        createdAt: new Date().toISOString(),
+      });
+      user.trialGrantedAt = new Date().toISOString();
+    }
     await this._save(data);
     return sessionPayload(session, user);
   }
