@@ -14,8 +14,8 @@ import crypto from "node:crypto";
  */
 
 const PLANS = {
-  monthly: { amount: 100000, days: 30, label: "Monthly (100,000 VND / 30 days)" },
-  yearly:  { amount: 900000, days: 365, label: "Yearly (900,000 VND / 365 days)" },
+  monthly: { amount: 50000, days: 30, label: "Monthly (50,000 VND / 30 days)" },
+  yearly:  { amount: 450000, days: 365, label: "Yearly (450,000 VND / 365 days)" },
 };
 
 function payosConfig() {
