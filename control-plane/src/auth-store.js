@@ -228,13 +228,15 @@ export class AuthStore {
    * Records a pending payment order (orderCode -> {email, plan}) so the
    * webhook can activate the right user/plan when the payment completes.
    */
-  async recordPendingPayment(orderCode, { email, plan }) {
+  async recordPendingPayment(orderCode, { email, plan, method }) {
     const data = await this._load();
     data.pendingPayments = data.pendingPayments.filter((entry) => entry.orderCode !== orderCode);
     data.pendingPayments.push({
       orderCode: Number(orderCode),
       email: normalizeEmail(email),
       plan,
+      method: method ?? "payos",
+      paidAt: null,
       createdAt: new Date().toISOString(),
     });
     await this._save(data);
@@ -248,6 +250,18 @@ export class AuthStore {
     data.pendingPayments = data.pendingPayments.filter((e) => e.orderCode !== Number(orderCode));
     await this._save(data);
     return entry;
+  }
+
+  /** Looks up a pending payment without consuming it (status polling). */
+  async pendingPaymentByCode(orderCode) {
+    const data = await this._load();
+    return data.pendingPayments.find((e) => e.orderCode === Number(orderCode)) ?? null;
+  }
+
+  /** Lists recent pending payments (admin manual-confirm queue). */
+  async listPendingPayments() {
+    const data = await this._load();
+    return data.pendingPayments.slice(-50).reverse();
   }
 
   async _load() {

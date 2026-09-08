@@ -22,6 +22,8 @@ import {
   paymentSuccessPageHTML,
   paymentCancelPageHTML,
   createPayosPaymentLink,
+  createBankQrDataUrl,
+  bankQrConfig,
   verifyPayosWebhook,
   PLANS_PUBLIC,
 } from "./payments.js";
@@ -226,6 +228,20 @@ app.post("/v1/payments/create", async (req, res) => {
     if (!planCfg) return res.status(400).json({ error: "Gói không hợp lệ." });
 
     const orderCode = Math.floor(Date.now() / 1000);
+    await authStore.recordPendingPayment(orderCode, { email, plan, method });
+
+    if (method === "bankqr") {
+      const bank = bankQrConfig();
+      if (!bank) return res.status(502).json({ error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
+      const qrDataUrl = await createBankQrDataUrl({
+        accountNumber: bank.accountNumber,
+        accountName: bank.accountName,
+        amount: planCfg.amount,
+        orderCode,
+      });
+      return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+    }
+
     const result = await createPayosPaymentLink({
       orderCode,
       amount: planCfg.amount,
@@ -235,8 +251,6 @@ app.post("/v1/payments/create", async (req, res) => {
       buyerEmail: email,
     });
     if (result.error) return res.status(502).json({ error: result.error });
-    // Lưu mapping order -> email/plan để webhook kích hoạt đúng user.
-    await authStore.recordPendingPayment(orderCode, { email, plan });
     res.json({ checkoutUrl: result.checkoutUrl, qrCode: result.qrCode });
   } catch (err) {
     console.error("POST /v1/payments/create failed:", err);
@@ -280,6 +294,45 @@ app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res
     res.json({ ok: true });
   } catch (err) {
     console.error("webhook failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Payment status (public poll) — tells the buy page whether the order was paid.
+app.get("/v1/payments/status/:orderCode", async (req, res) => {
+  try {
+    const order = await authStore.pendingPaymentByCode(req.params.orderCode);
+    if (!order) return res.json({ paid: false, elapsed_sec: 0 });
+    if (order.paidAt) return res.json({ paid: true, orderCode: order.orderCode });
+    const elapsed = Math.max(0, Math.floor((Date.now() - Date.parse(order.createdAt)) / 1000));
+    res.json({ paid: false, elapsed_sec: elapsed });
+  } catch {
+    res.json({ paid: false, elapsed_sec: 0 });
+  }
+});
+
+// Admin: list pending (unpaid) payment orders, for manual bank-QR confirmation.
+app.get("/v1/admin/payments/pending", requireAdminAuth, async (_req, res) => {
+  try {
+    const orders = await authStore.listPendingPayments();
+    res.json({ orders: orders.map((o) => ({ orderCode: o.orderCode, email: o.email, plan: o.plan, method: o.method ?? "payos", createdAt: o.createdAt, paid: Boolean(o.paidAt) })) });
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Admin: mark a bank-QR order as paid (manual confirmation after checking
+// the bank app for the matching transfer note). Grants premium immediately.
+app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, res) => {
+  try {
+    const order = await authStore.takePendingPayment(req.params.orderCode);
+    if (!order) return res.status(404).json({ error: "Order not found or already processed" });
+    const user = await authStore.ensureUserByEmail(order.email);
+    const planCfg = PLANS_PUBLIC[order.plan] ?? PLANS_PUBLIC.monthly;
+    await authStore.grantSubscription(user.id, { productId: `bankqr.${order.plan}`, days: planCfg.days });
+    console.log(`admin confirm: granted ${order.plan} (${planCfg.days}d) to ${order.email} (order ${order.orderCode})`);
+    res.json({ ok: true, email: order.email });
+  } catch (err) {
     res.status(500).json({ error: "Internal error" });
   }
 });

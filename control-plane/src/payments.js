@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import QRCode from "qrcode";
+import { buildVietQRPayload } from "./vietqr.js";
 
 /**
  * Web payment integration (PayOS) — Vietnamese payments: MoMo wallet +
@@ -31,6 +33,30 @@ function payosSignature({ checksumKey, orderCode, amount, description, cancelUrl
   // PayOS v2 signature: hmac sha256 of "amount=$amount&cancelUrl=$cancelUrl&description=$description&orderCode=$orderCode&returnUrl=$returnUrl"
   const payload = `amount=${amount}&cancelUrl=${cancelUrl}&description=${description}&orderCode=${orderCode}&returnUrl=${returnUrl}`;
   return crypto.createHmac("sha256", checksumKey).update(payload).digest("hex");
+}
+
+/**
+ * Builds a VietQR (direct bank transfer) as a QR data URL. No merchant
+ * registration needed — customer scans with any VN banking app, pays the
+ * exact amount, and the note carries the order code for manual/auto matching.
+ */
+export async function createBankQrDataUrl({ accountNumber, accountName, amount, orderCode }) {
+  const payload = buildVietQRPayload({
+    accountNumber,
+    accountName,
+    amount,
+    content: String(orderCode),
+  });
+  const dataUrl = await QRCode.toDataURL(payload, { width: 320, margin: 2, errorCorrectionLevel: "M" });
+  return dataUrl;
+}
+
+/** Returns bank config from env, or null when not configured. */
+export function bankQrConfig() {
+  const accountNumber = process.env.BANK_QR_ACCOUNT;
+  const accountName = process.env.BANK_QR_NAME || "VPNFlow";
+  if (!accountNumber) return null;
+  return { accountNumber, accountName };
 }
 
 /** Creates a PayOS payment link (checkout page) or null on failure. */
@@ -196,27 +222,30 @@ export function buyPageHTML({ baseUrl }) {
 
       <label>Phương thức thanh toán</label>
       <div class="methods">
-        <div class="method active" data-method="payos">
-          <div class="icon">🏦</div>Bank QR / MoMo<br><small>(PayOS)</small>
+        <div class="method active" data-method="bankqr">
+          <div class="icon">🏦</div>Chuyển khoản<br><small>Quét QR ngân hàng</small>
         </div>
-        <div class="method" data-method="momo" style="opacity:.5;cursor:not-allowed">
-          <div class="icon">📱</div>MoMo trực tiếp<br><small>(sắp có)</small>
-        </div>
-        <div class="method" data-method="vnpay" style="opacity:.5;cursor:not-allowed">
-          <div class="icon">💳</div>VNPay<br><small>(sắp có)</small>
+        <div class="method" data-method="payos">
+          <div class="icon">💳</div>Cổng PayOS<br><small>MoMo / QR / thẻ</small>
         </div>
       </div>
 
-      <button type="submit" id="payBtn">Thanh toán qua PayOS</button>
+      <button type="submit" id="payBtn">Tạo mã thanh toán</button>
       <div class="status" id="status"></div>
-      <div class="note">Sau khi thanh toán, premium sẽ tự kích hoạt cho email này (vài giây).</div>
+      <div class="note">Sau khi chuyển tiền, premium sẽ được kích hoạt cho email này.</div>
     </form>
+
+    <div id="qrPanel" style="display:none; text-align:center; margin-top:6px;">
+      <img id="qrImg" alt="QR thanh toán" style="width:250px;height:250px;border-radius:12px;background:#fff;padding:8px;">
+      <div id="qrInfo" style="margin-top:10px;color:rgba(255,255,255,.75);font-size:13px;line-height:1.5;"></div>
+      <div id="qrStatus" style="margin-top:10px;font-size:13px;min-height:18px;"></div>
+    </div>
   </div>
 
   <script>
     const base = ${JSON.stringify(baseUrl)};
     let plan = "monthly";
-    let method = "payos";
+    let method = "bankqr";
 
     document.querySelectorAll(".plan").forEach(el => {
       el.onclick = () => {
@@ -236,6 +265,10 @@ export function buyPageHTML({ baseUrl }) {
 
     const statusEl = document.getElementById("status");
     const btn = document.getElementById("payBtn");
+    const qrPanel = document.getElementById("qrPanel");
+    const qrImg = document.getElementById("qrImg");
+    const qrInfo = document.getElementById("qrInfo");
+    const qrStatus = document.getElementById("qrStatus");
 
     document.getElementById("buyForm").onsubmit = async (e) => {
       e.preventDefault();
@@ -243,7 +276,7 @@ export function buyPageHTML({ baseUrl }) {
       if (!email) { statusEl.className = "status err"; statusEl.textContent = "Nhập email tài khoản."; return; }
       btn.disabled = true;
       statusEl.className = "status";
-      statusEl.textContent = "Đang tạo yêu cầu thanh toán...";
+      statusEl.textContent = "Đang tạo mã thanh toán...";
       try {
         const res = await fetch(base + "/v1/payments/create", {
           method: "POST",
@@ -257,12 +290,23 @@ export function buyPageHTML({ baseUrl }) {
           btn.disabled = false;
           return;
         }
-        if (data.checkoutUrl) {
-          statusEl.textContent = "Đang chuyển tới trang thanh toán PayOS...";
+        if (data.qrDataUrl) {
+          statusEl.className = "status";
+          statusEl.textContent = "";
+          qrPanel.style.display = "block";
+          qrImg.src = data.qrDataUrl;
+          const amt = data.amount.toLocaleString("vi-VN");
+          qrInfo.innerHTML =
+            "Chuyển <b>" + amt + " đ</b> tới tài khoản VPNFlow bằng app ngân hàng.<br>" +
+            "Mã đơn: <b>" + data.orderCode + "</b> (nhập đúng nội dung chuyển tiền).<br>" +
+            "Sau khi chuyển, bấm nút dưới để báo đã thanh toán.";
+          qrStatus.textContent = "Đang chờ xác nhận... (thường dưới 2 phút)";
+          startPoll(data.orderCode);
+        } else if (data.checkoutUrl) {
           window.location.href = data.checkoutUrl;
         } else {
           statusEl.className = "status err";
-          statusEl.textContent = "Không tạo được link thanh toán.";
+          statusEl.textContent = "Không tạo được mã thanh toán.";
           btn.disabled = false;
         }
       } catch (err) {
@@ -271,6 +315,24 @@ export function buyPageHTML({ baseUrl }) {
         btn.disabled = false;
       }
     };
+
+    // Poll trạng thái đơn tới khi được xác nhận (chuyển khoản / PayOS webhook).
+    let pollTimer = null;
+    function startPoll(orderCode) {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch(base + "/v1/payments/status/" + orderCode);
+          const data = await res.json();
+          if (data.paid) {
+            clearInterval(pollTimer);
+            qrStatus.innerHTML = "<span style='color:#33c773'>✅ Đã nhận thanh toán! Premium đã kích hoạt. Mở app VPNFlow để dùng.</span>";
+          } else {
+            qrStatus.textContent = "Đang chờ xác nhận... (" + (data.elapsed_sec || "") + "s)";
+          }
+        } catch (e) { /* keep polling */ }
+      }, 5000);
+    }
   </script>
 </body>
 </html>`;
