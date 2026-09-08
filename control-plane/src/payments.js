@@ -142,7 +142,7 @@ export function buyPageHTML({ baseUrl }) {
     }
     .plan.active { border-color: #33c773; background: rgba(51,199,115,.12); }
     .plan .price { color: #33c773; font-weight: 800; }
-    .methods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 6px; }
+    .methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 6px; }
     .method {
       padding: 14px 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
       background: rgba(255,255,255,.05); cursor: pointer; text-align: center; font-size: 13px;
@@ -223,7 +223,13 @@ export function buyPageHTML({ baseUrl }) {
       <label>Phương thức thanh toán</label>
       <div class="methods">
         <div class="method active" data-method="bankqr">
-          <div class="icon">🏦</div>Chuyển khoản<br><small>Quét QR ngân hàng</small>
+          <div class="icon">🏦</div>Ngân hàng VN<br><small>Quét QR TPBank</small>
+        </div>
+        <div class="method" data-method="wechat">
+          <div class="icon">💚</div>WeChat Pay<br><small>Quét QR</small>
+        </div>
+        <div class="method" data-method="alipay">
+          <div class="icon">🔵</div>Alipay<br><small>Quét QR</small>
         </div>
         <div class="method" data-method="payos">
           <div class="icon">💳</div>Cổng PayOS<br><small>MoMo / QR / thẻ</small>
@@ -290,17 +296,22 @@ export function buyPageHTML({ baseUrl }) {
           btn.disabled = false;
           return;
         }
-        if (data.qrDataUrl) {
+        if (data.qrDataUrl || data.qrImageUrl) {
           statusEl.className = "status";
           statusEl.textContent = "";
           qrPanel.style.display = "block";
-          qrImg.src = data.qrDataUrl;
+          qrImg.src = data.qrDataUrl || (base + data.qrImageUrl);
           const amt = data.amount.toLocaleString("vi-VN");
+          const labels = {
+            bankqr: "chuyển khoản tới tài khoản VPNFlow",
+            wechat: "quét QR bằng WeChat và nhập đúng số tiền",
+            alipay: "quét QR bằng Alipay và nhập đúng số tiền"
+          };
           qrInfo.innerHTML =
-            "Chuyển <b>" + amt + " đ</b> tới tài khoản VPNFlow bằng app ngân hàng.<br>" +
-            "Mã đơn: <b>" + data.orderCode + "</b> (nhập đúng nội dung chuyển tiền).<br>" +
-            "Sau khi chuyển, bấm nút dưới để báo đã thanh toán.";
-          qrStatus.textContent = "Đang chờ xác nhận... (thường dưới 2 phút)";
+            "Thanh toán <b>" + amt + " đ</b> — " + (labels[data.method] || "quét QR để thanh toán") + ".<br>" +
+            "Mã đơn: <b>" + data.orderCode + "</b> (ghi chú nếu app cho phép).<br>" +
+            "Sau khi chuyển, chờ xác nhận (vài phút).";
+          qrStatus.textContent = "Đang chờ xác nhận thanh toán...";
           startPoll(data.orderCode);
         } else if (data.checkoutUrl) {
           window.location.href = data.checkoutUrl;

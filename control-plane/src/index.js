@@ -242,6 +242,12 @@ app.post("/v1/payments/create", async (req, res) => {
       return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
     }
 
+    if (method === "wechat" || method === "alipay") {
+      // Personal collection QR: static image, paid amount entered by the
+      // customer. Admin confirms manually via /v1/admin/payments/:code/confirm.
+      return res.json({ qrImageUrl: `/v1/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
+    }
+
     const result = await createPayosPaymentLink({
       orderCode,
       amount: planCfg.amount,
@@ -254,6 +260,19 @@ app.post("/v1/payments/create", async (req, res) => {
     res.json({ checkoutUrl: result.checkoutUrl, qrCode: result.qrCode });
   } catch (err) {
     console.error("POST /v1/payments/create failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Serve the static personal WeChat/Alipay collection QR images.
+app.get("/v1/payments/qr/:name", async (req, res) => {
+  try {
+    const name = ["wechat", "alipay"].includes(req.params.name) ? req.params.name : null;
+    if (!name) return res.status(404).send("Not found");
+    const file = path.join(process.env.PAY_QR_DIR || "/root/flowvpn-pay", `${name}.png`);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: "QR image not uploaded yet" });
+    res.sendFile(file);
+  } catch {
     res.status(500).json({ error: "Internal error" });
   }
 });
