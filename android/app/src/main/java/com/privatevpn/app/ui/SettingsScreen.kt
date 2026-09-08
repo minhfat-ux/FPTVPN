@@ -71,7 +71,6 @@ fun SettingsScreen(
     var devices by remember { mutableStateOf<List<CoordinatorDevice>>(emptyList()) }
     var isLoadingDevices by remember { mutableStateOf(false) }
     var devicesMessage by remember { mutableStateOf<String?>(null) }
-    var revokingId by remember { mutableStateOf<String?>(null) }
     var accountMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadDevices() {
@@ -189,21 +188,6 @@ fun SettingsScreen(
                         DeviceRow(
                             device = device,
                             isCurrent = device.publicKey == app.vpnManager.devicePublicKey.value,
-                            revoking = revokingId == device.deviceId,
-                            onRevoke = {
-                                val token = auth.accessToken ?: return@DeviceRow
-                                revokingId = device.deviceId
-                                scope.launch {
-                                    try {
-                                        ControlAPIClient().revokeDevice(device.deviceId, token)
-                                        devicesMessage = lang.t(LKey.deviceRevoked)
-                                        loadDevices()
-                                    } catch (e: Exception) {
-                                        devicesMessage = e.message
-                                    }
-                                    revokingId = null
-                                }
-                            },
                             lang = lang,
                         )
                     }
@@ -289,8 +273,6 @@ private fun ActionRow(text: String, destructive: Boolean = false, onClick: () ->
 private fun DeviceRow(
     device: CoordinatorDevice,
     isCurrent: Boolean,
-    revoking: Boolean,
-    onRevoke: () -> Unit,
     lang: com.privatevpn.app.l10n.LanguageStore,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
@@ -304,17 +286,6 @@ private fun DeviceRow(
             )
             if (isCurrent) {
                 Text(lang.t(LKey.thisDevice), fontSize = 11.sp, color = VPNTheme.SecondaryLabel)
-            }
-            if (device.isActive && !isCurrent) {
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = onRevoke,
-                    enabled = !revoking,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Text(lang.t(LKey.revoke), color = VPNTheme.Red, fontSize = 12.sp)
-                }
             }
         }
         val parts = buildList {

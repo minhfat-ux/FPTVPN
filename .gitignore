@@ -10,6 +10,8 @@ build/
 *.pem
 *.p12
 *.key
+*.jks
+*.keystore
 *.mobileprovision
 *.provisionprofile
 .env

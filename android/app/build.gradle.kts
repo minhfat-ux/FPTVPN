@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -6,6 +7,30 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
+
+// Release signing: keystore + password live OUTSIDE the repo.
+// Load from ~/keystores/vpnflow-signing.properties (created by scripts/setup-release-signing.sh)
+// or from environment variables (STORE_FILE, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD).
+fun loadSigningProps(): Properties? {
+    val props = Properties()
+    val fromEnv = System.getenv("STORE_FILE")
+    val home = System.getProperty("user.home")
+    val file = File(home, "keystores/vpnflow-signing.properties")
+    if (fromEnv != null) {
+        props["storeFile"] = fromEnv
+        props["storePassword"] = System.getenv("STORE_PASSWORD") ?: ""
+        props["keyAlias"] = System.getenv("KEY_ALIAS") ?: "vpnflow"
+        props["keyPassword"] = System.getenv("KEY_PASSWORD") ?: props["storePassword"]
+        return props
+    }
+    if (file.exists()) {
+        file.inputStream().use { props.load(it) }
+        return props
+    }
+    return null
+}
+
+val signingProps = loadSigningProps()
 
 android {
     namespace = "com.privatevpn.app"
@@ -20,6 +45,17 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        if (signingProps != null) {
+            create("release") {
+                storeFile = file(signingProps!!.getProperty("storeFile"))
+                storePassword = signingProps!!.getProperty("storePassword")
+                keyAlias = signingProps!!.getProperty("keyAlias")
+                keyPassword = signingProps!!.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -28,6 +64,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (signingProps != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
