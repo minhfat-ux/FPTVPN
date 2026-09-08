@@ -143,3 +143,20 @@ Durable engineering decisions (see also `docs/adr/`).
   upload key, upload APK, tạo Monthly_Premium/Yearly_Premium + free trial.
 - **QUYẾT ĐỊNH**: BỎ Windows (không làm bản Windows FPT harness nữa —
   user từ chối; để nguyên bundle đã tạo trong package nếu sau này cần).
+
+## 2026-09-08 — Chống tái diễn lỗi revoke/fake-connected (toàn nền tảng)
+
+- **Nguyên nhân lỗi "coordinator reject"**: device bị revoke (từ nút Revoke
+  trong app UI) → backend trả 403 "Device has been revoked" → app giữ key
+  cũ, bị chặn vĩnh viễn → fake connected (VpnService UP nhưng wg handshake=0).
+- **Giải pháp (đã build PASS cả 3 nền tảng)**:
+  (1) Bỏ Revoke khỏi app UI (iOS/Mac/Android) — devices read-only.
+  (2) Tự xoay WG keypair khi bị revoked: iOS KeychainStore.rotatePrivateKey(),
+  Mac WireGuardKeychain.rotate(), Android DeviceIdentity.rotateKeyPair()
+  (commit 81de5b9 trước đó).
+  (3) Wrapper tunnel dọn port mỗi retry (bad gateway).
+- **iOS+Mac build SUCCEEDED** (commit 96a61ae). Android đã cài lên Samsung
+  (bản mới có cả 3 fix).
+- Keystore backup: /Volumes/BIWIN/VPNFlow-Backup/release-signing/.
+  CN khớp: Minh Nguyen Binh / VPNFlow (script setup-release-signing.sh đã
+  align, f22f3d7).

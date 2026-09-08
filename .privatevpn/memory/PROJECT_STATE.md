@@ -170,3 +170,9 @@ allowedIPs 0.0.0.0/0.
 - Release APK đã ký sẵn sàng upload Play.
 - Play Console account: CHỜ VERIFY.
 - Keystore backup: /Volumes/BIWIN/VPNFlow-Backup/release-signing/.
+
+## Chống revoke/fake-connected (xong 2026-09-08)
+
+- iOS + Mac: build SUCCEEDED, chờ anh build từ Xcode cài lên device.
+- Android: đã cài bản mới lên Samsung (rotation + no-revoke + row-select).
+- 4 device revoked đã khôi phục (active=true + wg peers thêm lại).
