@@ -261,27 +261,27 @@ export function adminPageHTML() {
         <button id="addNode">+ Add Node</button>
       </div>
       <div class="status" id="status"></div>
-    </section>
 
-    <section class="card">
-      <h2>Exit Nodes</h2>
-      <div style="overflow-x:auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Location</th>
-              <th>Endpoint</th>
-              <th>Public Key</th>
-              <th>Status</th>
-              <th>Health</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="nodesBody">
-            <tr><td colspan="7">No data loaded.</td></tr>
-          </tbody>
-        </table>
+      <div style="margin-top:18px;">
+        <h2>Exit Nodes</h2>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Location</th>
+                <th>Endpoint</th>
+                <th>Public Key</th>
+                <th>Status</th>
+                <th>Health</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="nodesBody">
+              <tr><td colspan="7">No data loaded.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -898,7 +898,7 @@ export function adminPageHTML() {
           statCard(t.active_devices ?? 0, "Active", "not revoked"),
           statCard(t.online_peers ?? 0, "Online", "wg handshake < 3min"),
           statCard(t.test_devices ?? 0, "Test Devices", "no user (legacy)"),
-          statCard(t.exit_nodes ?? 0, "Exit Nodes", "backends"),
+          statCard(t.revoked_devices ?? 0, "Revoked", "disabled"),
         );
         renderBars(fields.statsPlatform, data.by_platform || {});
         renderUsersByUser(data.by_user || []);
