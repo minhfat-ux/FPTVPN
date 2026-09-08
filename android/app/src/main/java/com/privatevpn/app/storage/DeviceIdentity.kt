@@ -35,6 +35,18 @@ object DeviceIdentity {
         return pair
     }
 
+    /**
+     * Replaces the stored WireGuard keypair with a brand-new one. Used when the
+     * coordinator rejects this device as revoked (403 "Device has been
+     * revoked"): the old key can never register again, so come back as a NEW
+     * device with a NEW keypair.
+     */
+    fun rotateKeyPair(store: SecureStore): KeyPair {
+        store.remove(SecureStore.Keys.WG_PRIVATE_KEY)
+        store.remove(SecureStore.Keys.WG_PUBLIC_KEY)
+        return generateAndStore(store)
+    }
+
     fun registrationName(store: SecureStore): String {
         val id = deviceID(store)
         return "android-${id.replace("-", "").take(8)}"

@@ -197,29 +197,49 @@ class VPNManager(
             nodes.first()
         }
 
-        val response = try {
+        var activeKeyPair = keyPair
+        var response = try {
             client.register(
                 name = DeviceIdentity.registrationName(store),
                 platform = "android",
-                wireguardPublicKey = keyPair.publicKey.toBase64(),
+                wireguardPublicKey = activeKeyPair.publicKey.toBase64(),
                 endpoint = Config.WG_CLIENT_ENDPOINT,
                 accessToken = accessToken,
                 exitNodeId = node.id,
                 enrollmentToken = joinToken,
             )
         } catch (e: ControlAPIClient.ClientError.Server) {
-            // Retry once with a fresh token + random name (duplicate-name safety).
-            val retryToken = runCatching { client.fetchEnrollmentToken(accessToken) }
-                .getOrElse { throw ControlAPIClient.ClientError.Server("Cannot prepare secure access. Please try again.") }
-            client.register(
-                name = DeviceIdentity.randomRegistrationName(),
-                platform = "android",
-                wireguardPublicKey = keyPair.publicKey.toBase64(),
-                endpoint = Config.WG_CLIENT_ENDPOINT,
-                accessToken = accessToken,
-                exitNodeId = node.id,
-                enrollmentToken = retryToken,
-            )
+            val msg = e.serverMessage.lowercase()
+            if (msg.contains("revoked")) {
+                // This device was revoked server-side; the old key can never
+                // register again. Rotate to a fresh keypair -> NEW device.
+                activeKeyPair = DeviceIdentity.rotateKeyPair(store)
+                _devicePublicKey.value = activeKeyPair.publicKey.toBase64()
+                val freshToken = runCatching { client.fetchEnrollmentToken(accessToken) }
+                    .getOrElse { throw ControlAPIClient.ClientError.Server("Cannot prepare secure access. Please try again.") }
+                client.register(
+                    name = DeviceIdentity.randomRegistrationName(),
+                    platform = "android",
+                    wireguardPublicKey = activeKeyPair.publicKey.toBase64(),
+                    endpoint = Config.WG_CLIENT_ENDPOINT,
+                    accessToken = accessToken,
+                    exitNodeId = node.id,
+                    enrollmentToken = freshToken,
+                )
+            } else {
+                // Generic failure: retry once with a fresh token + random name.
+                val retryToken = runCatching { client.fetchEnrollmentToken(accessToken) }
+                    .getOrElse { throw ControlAPIClient.ClientError.Server("Cannot prepare secure access. Please try again.") }
+                client.register(
+                    name = DeviceIdentity.randomRegistrationName(),
+                    platform = "android",
+                    wireguardPublicKey = activeKeyPair.publicKey.toBase64(),
+                    endpoint = Config.WG_CLIENT_ENDPOINT,
+                    accessToken = accessToken,
+                    exitNodeId = node.id,
+                    enrollmentToken = retryToken,
+                )
+            }
         }
 
         peerId = response.peerId
@@ -228,7 +248,7 @@ class VPNManager(
         heartbeatLoop()
 
         return WireGuardTunnelConfig(
-            privateKeyBase64 = keyPair.privateKey.toBase64(),
+            privateKeyBase64 = activeKeyPair.privateKey.toBase64(),
             addresses = listOf("${response.overlayIp}/24"),
             dnsServers = listOf(Config.WG_DNS),
             peers = listOf(
