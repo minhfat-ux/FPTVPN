@@ -428,7 +428,9 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
   // Fresh subscription record for accurate expiry (grant returns publicUser but
   // we can re-read via subscriptionForUserEmail to include expiresAt).
   const sub = await authStore.subscriptionForUserEmail(email);
-  const appUrl = process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL}` : "https://meetflowai.site";
+  // Deep link: opens the installed VPNFlow app (universal/app link via
+  // meetflowai.site/open); falls back to the web page when not installed.
+  const appUrl = "https://meetflowai.site/open";
   await sendInvoiceEmail({
     to: email,
     orderCode,

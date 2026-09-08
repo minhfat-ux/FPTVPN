@@ -28,6 +28,11 @@ struct PrivateVPNApp: App {
                 .environmentObject(authStore)
                 .environmentObject(languageStore)
                 .preferredColorScheme(.dark)   // app is always dark (FlowVPN navy)
+                .onOpenURL { _ in
+                    // Deep link (vpnflow://open or universal link): the app is
+                    // already signed-in aware; bringing it to front is enough.
+                    // (Content shows login if needed.)
+                }
         }
     }
 }

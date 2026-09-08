@@ -34,6 +34,10 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.privatevpn.app
+            CFBundleURLSchemes:
+              - vpnflow
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UISupportedInterfaceOrientations~ipad:
@@ -48,6 +52,8 @@ targets:
           - packet-tunnel-provider
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.privatevpn.shared
+        com.apple.developer.associated-domains:
+          - applinks:meetflowai.site
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app
