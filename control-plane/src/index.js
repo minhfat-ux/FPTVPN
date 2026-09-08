@@ -746,8 +746,28 @@ app.delete("/v1/account", requireUserAuth, async (req, res) => {
 
 app.get("/v1/admin/users", requireAdminAuth, async (_req, res) => {
   try {
-    const users = await authStore.listUsers();
-    res.json({ count: users.length, users });
+    // Use expiry analytics so the admin dashboard can show days-left and
+    // highlight customers about to expire / already expired.
+    const users = await authStore.listUsersWithExpiry();
+    const now = Date.now();
+    const expiryBuckets = {
+      active: 0,
+      expiring_soon: 0,
+      expired: 0,
+      lifetime: 0,
+      none: 0,
+      revoked: 0,
+    };
+    for (const u of users) {
+      const st = u.expiry_status ?? "none";
+      expiryBuckets[st] = (expiryBuckets[st] ?? 0) + 1;
+      if (st === "active" || st === "lifetime") {
+        // nothing extra
+      } else if (st === "expiring_soon" && u.days_left != null) {
+        u.days_left = u.days_left; // keep raw for UI
+      }
+    }
+    res.json({ count: users.length, expiry: expiryBuckets, users });
   } catch (err) {
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
   }

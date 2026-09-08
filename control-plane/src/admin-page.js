@@ -291,6 +291,7 @@ export function adminPageHTML() {
       <div class="actions">
         <button class="secondary" id="loadUsers">Load Users</button>
       </div>
+      <div id="expirySummary" style="margin:10px 0;font-size:13px;line-height:2;"></div>
       <div style="overflow-x:auto; margin-top: 12px;">
         <table>
           <thead>
@@ -299,12 +300,13 @@ export function adminPageHTML() {
               <th>User ID</th>
               <th>Created</th>
               <th>Subscription</th>
+              <th>Han dung / Con lai</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="usersBody">
-            <tr><td colspan="6">No data loaded.</td></tr>
+            <tr><td colspan="7">No data loaded.</td></tr>
           </tbody>
         </table>
       </div>
@@ -489,16 +491,30 @@ export function adminPageHTML() {
       try {
         setStatus("Loading users...");
         const data = await request("/v1/admin/users");
-        renderUsers(data.users || []);
+        renderUsers(data.users || [], data.expiry || {});
         setStatus("Loaded " + (data.users || []).length + " user(s).");
       } catch (error) {
         setStatus(error.message, true);
       }
     }
 
-    function renderUsers(users) {
+    function renderUsers(users, expiry) {
+      const sumEl = document.getElementById("expirySummary");
+      if (sumEl) {
+        const e = expiry || {};
+        const chips = [
+          ["Lifetime", e.lifetime || 0, "#33c773"],
+          ["Active", e.active || 0, "var(--accent)"],
+          ["Sap het han (<=7d)", e.expiring_soon || 0, "#ffb84d"],
+          ["Het han", e.expired || 0, "#ff5a6a"],
+          ["Chua mua", e.none || 0, "rgba(255,255,255,.5)"],
+        ].filter((c) => c[1] > 0);
+        sumEl.innerHTML = chips.length
+          ? chips.map((c) => '<span class="pill" style="margin:2px 6px 2px 0;color:' + c[2] + ';border-color:' + c[2] + '">' + c[0] + ': <b>' + c[1] + '</b></span>').join("")
+          : '<span style="color:var(--muted)">Khong co user.</span>';
+      }
       if (!users.length) {
-        fields.usersBody.innerHTML = '<tr><td colspan="6">No users found.</td></tr>';
+        fields.usersBody.innerHTML = '<tr><td colspan="7">No users found.</td></tr>';
         return;
       }
       fields.usersBody.innerHTML = "";
@@ -509,17 +525,44 @@ export function adminPageHTML() {
           '<td data-label="User ID"><code></code></td>',
           '<td data-label="Created"></td>',
           '<td data-label="Subscription"></td>',
+          '<td data-label="Expiry"></td>',
           '<td data-label="Status"></td>',
           '<td data-label="Actions"></td>',
         ].join("");
         row.children[0].textContent = user.email || (user.apple_user_id ? "apple:" + user.apple_user_id.slice(0, 8) : "—");
         row.children[1].querySelector("code").textContent = user.id;
-        row.children[2].textContent = user.created_at ? user.created_at.slice(0, 10) : "";
+        row.children[2].textContent = (user.created_at || "").slice(0, 10);
         const sub = user.subscription_status || {};
-        row.children[3].innerHTML = sub.is_active
-          ? "active (" + (sub.product_id || "?") + ") until " + (sub.expires_at || "").slice(0, 10)
-          : '<span class="pill off">no subscription</span>';
-        row.children[4].innerHTML = user.revoked_at
+        const prod = (sub.product_id || "?").replace(/^(bankqr|payos|test)\./, "");
+        const st = user.expiry_status || (user.revoked_at ? "revoked" : sub.is_active ? "active" : "none");
+
+        // Subscription cell
+        if (user.revoked_at) {
+          row.children[3].innerHTML = '<span class="pill off">revoked</span>';
+        } else if (st === "none") {
+          row.children[3].innerHTML = '<span class="pill off">no subscription</span>';
+        } else if (st === "lifetime") {
+          row.children[3].innerHTML = "lifetime (<b>" + prod + "</b>)";
+        } else {
+          row.children[3].innerHTML = "<b>" + prod + "</b> · " + (user.expires_at || "").slice(0, 10);
+        }
+        // Expiry cell
+        if (user.revoked_at) {
+          row.children[4].innerHTML = "-";
+        } else if (st === "lifetime") {
+          row.children[4].innerHTML = '<span class="pill" style="color:#33c773;border-color:#33c773">vinh vien</span>';
+        } else if (st === "expired") {
+          row.children[4].innerHTML = '<span class="pill" style="color:#ff5a6a;border-color:#ff5a6a">DA HET HAN</span>';
+          row.style.opacity = "0.65";
+        } else if (st === "expiring_soon") {
+          row.children[4].innerHTML = '<span class="pill" style="color:#ffb84d;border-color:#ffb84d">con ' + (user.days_left != null ? user.days_left + " ngay" : "sap het") + '</span>';
+        } else if (st === "active") {
+          row.children[4].innerHTML = "con " + user.days_left + " ngay";
+        } else {
+          row.children[4].innerHTML = "-";
+        }
+        // Status cell
+        row.children[5].innerHTML = user.revoked_at
           ? '<span class="pill off">revoked</span>'
           : '<span class="pill">active</span>';
 
@@ -535,9 +578,7 @@ export function adminPageHTML() {
             });
             setStatus("Granted 30-day subscription to " + (user.email || user.id) + ".");
             await loadUsers();
-          } catch (error) {
-            setStatus(error.message, true);
-          }
+          } catch (error) { setStatus(error.message, true); }
         };
 
         const revoke = document.createElement("button");
@@ -550,16 +591,13 @@ export function adminPageHTML() {
             await request("/v1/admin/users/" + encodeURIComponent(user.id) + "/revoke", { method: "POST" });
             setStatus("Revoked " + (user.email || user.id) + ".");
             await loadUsers();
-          } catch (error) {
-            setStatus(error.message, true);
-          }
+          } catch (error) { setStatus(error.message, true); }
         };
 
-        row.children[5].append(grant, " ", revoke);
+        row.children[6].append(grant, " ", revoke);
         fields.usersBody.appendChild(row);
       }
     }
-
     function showView(view) {
       const list = view === "list";
       fields.viewList.classList.toggle("hidden", !list);

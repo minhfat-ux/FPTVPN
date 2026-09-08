@@ -159,6 +159,44 @@ export class AuthStore {
     return data.users.map((user) => publicUser(user, activeSubscriptionFor(data, user.id)));
   }
 
+  /**
+   * Users with per-user subscription expiry analytics: days left and an
+   * expiry status bucket for the admin dashboard.
+   *   status: none | active | expiring_soon (<=7d) | expired
+   */
+  async listUsersWithExpiry() {
+    const data = await this._load();
+    const now = Date.now();
+    return data.users.map((user) => {
+      const sub = activeSubscriptionFor(data, user.id);
+      const base = publicUser(user, sub);
+      let daysLeft = null;
+      let expiryStatus = "none";
+      if (user.revokedAt) {
+        expiryStatus = "revoked";
+      } else if (sub) {
+        if (!sub.expiresAt) {
+          expiryStatus = "lifetime";
+          daysLeft = null;
+        } else {
+          const ms = Date.parse(sub.expiresAt) - now;
+          daysLeft = Math.ceil(ms / (24 * 60 * 60 * 1000));
+          expiryStatus = ms <= 0 ? "expired" : ms <= 7 * 24 * 60 * 60 * 1000 ? "expiring_soon" : "active";
+        }
+      }
+      return {
+        ...base,
+        id: user.id,
+        email: user.email ?? null,
+        created_at: user.createdAt ?? null,
+        revoked_at: user.revokedAt ?? null,
+        days_left: daysLeft,
+        expiry_status: expiryStatus,
+        expires_at: sub?.expiresAt ?? null,
+      };
+    });
+  }
+
   async grantSubscription(userId, { productId = "test.premium", days = 30 } = {}) {
     const data = await this._load();
     const user = data.users.find((entry) => entry.id === userId);
