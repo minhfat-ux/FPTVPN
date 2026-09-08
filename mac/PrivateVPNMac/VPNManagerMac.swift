@@ -162,36 +162,52 @@ final class VPNManagerMac: ObservableObject {
                 let token = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
 
                 let deviceName = "mac-\(Self.stableSuffix(from: privateKey.publicKey))"
-                let response: CoordinatorRegisterResponse
+                var activeKeyPair = privateKey
+                var response: CoordinatorRegisterResponse
                 do {
                     response = try await registerDevice(
                         baseURL: baseURL,
                         joinToken: token,
                         name: deviceName,
-                        publicKey: privateKey.publicKey,
+                        publicKey: activeKeyPair.publicKey,
                         accessToken: accessToken,
                         exitNodeId: selectedNodeID
                     )
-                } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
-                    let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-                    response = try await registerDevice(
-                        baseURL: baseURL,
-                        joinToken: retryToken,
-                        name: Self.randomRegistrationName(),
-                        publicKey: privateKey.publicKey,
-                        accessToken: accessToken,
-                        exitNodeId: selectedNodeID
-                    )
-                } catch ControlAPIClient.ClientError.server {
-                    let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-                    response = try await registerDevice(
-                        baseURL: baseURL,
-                        joinToken: retryToken,
-                        name: deviceName,
-                        publicKey: privateKey.publicKey,
-                        accessToken: accessToken,
-                        exitNodeId: selectedNodeID
-                    )
+                } catch ControlAPIClient.ClientError.server(let message) {
+                    if message.localizedCaseInsensitiveContains("revoked") {
+                        // Device was revoked server-side; old key can never
+                        // register. Rotate to a fresh keypair -> NEW device.
+                        activeKeyPair = WireGuardKeychain.rotate()
+                        let freshToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                        response = try await registerDevice(
+                            baseURL: baseURL,
+                            joinToken: freshToken,
+                            name: Self.randomRegistrationName(),
+                            publicKey: activeKeyPair.publicKey,
+                            accessToken: accessToken,
+                            exitNodeId: selectedNodeID
+                        )
+                    } else if message.localizedCaseInsensitiveContains("name") {
+                        let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                        response = try await registerDevice(
+                            baseURL: baseURL,
+                            joinToken: retryToken,
+                            name: Self.randomRegistrationName(),
+                            publicKey: activeKeyPair.publicKey,
+                            accessToken: accessToken,
+                            exitNodeId: selectedNodeID
+                        )
+                    } else {
+                        let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                        response = try await registerDevice(
+                            baseURL: baseURL,
+                            joinToken: retryToken,
+                            name: deviceName,
+                            publicKey: activeKeyPair.publicKey,
+                            accessToken: accessToken,
+                            exitNodeId: selectedNodeID
+                        )
+                    }
                 }
                 overlayIP = response.overlay_ip
                 log.info("connect: registered, overlay=\(overlayIP, privacy: .public)")

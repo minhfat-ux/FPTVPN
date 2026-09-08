@@ -209,36 +209,53 @@ final class VPNManager: ObservableObject {
         let joinToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
         store.controlPlaneToken = ""
 
-        let response: CoordinatorRegisterResponse
+        var activeKey = privateKey
+        var response: CoordinatorRegisterResponse
         do {
             response = try await registerDevice(
                 baseURL: baseURL,
                 joinToken: joinToken,
                 name: deviceName,
-                publicKey: privateKey.publicKey.base64Key,
+                publicKey: activeKey.publicKey.base64Key,
                 accessToken: accessToken,
                 exitNodeId: store.selectedNodeID
             )
-        } catch ControlAPIClient.ClientError.server(let message) where message.localizedCaseInsensitiveContains("name") {
-            let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-            response = try await registerDevice(
-                baseURL: baseURL,
-                joinToken: retryToken,
-                name: Self.randomRegistrationName(),
-                publicKey: privateKey.publicKey.base64Key,
-                accessToken: accessToken,
-                exitNodeId: store.selectedNodeID
-            )
-        } catch ControlAPIClient.ClientError.server {
-            let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-            response = try await registerDevice(
-                baseURL: baseURL,
-                joinToken: retryToken,
-                name: deviceName,
-                publicKey: privateKey.publicKey.base64Key,
-                accessToken: accessToken,
-                exitNodeId: store.selectedNodeID
-            )
+        } catch ControlAPIClient.ClientError.server(let message) {
+            if message.localizedCaseInsensitiveContains("revoked") {
+                // Device was revoked server-side; old key can never register.
+                // Rotate to a fresh keypair -> register as a NEW device.
+                activeKey = try KeychainStore.rotatePrivateKey()
+                devicePublicKey = activeKey.publicKey.base64Key
+                let freshToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                response = try await registerDevice(
+                    baseURL: baseURL,
+                    joinToken: freshToken,
+                    name: Self.randomRegistrationName(),
+                    publicKey: activeKey.publicKey.base64Key,
+                    accessToken: accessToken,
+                    exitNodeId: store.selectedNodeID
+                )
+            } else if message.localizedCaseInsensitiveContains("name") {
+                let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                response = try await registerDevice(
+                    baseURL: baseURL,
+                    joinToken: retryToken,
+                    name: Self.randomRegistrationName(),
+                    publicKey: activeKey.publicKey.base64Key,
+                    accessToken: accessToken,
+                    exitNodeId: store.selectedNodeID
+                )
+            } else {
+                let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                response = try await registerDevice(
+                    baseURL: baseURL,
+                    joinToken: retryToken,
+                    name: deviceName,
+                    publicKey: activeKey.publicKey.base64Key,
+                    accessToken: accessToken,
+                    exitNodeId: store.selectedNodeID
+                )
+            }
         }
 
         let exitNode = try await selectedExitNode(store: store, client: bootstrap)
@@ -247,7 +264,7 @@ final class VPNManager: ObservableObject {
 
         return WireGuardConfig(
             name: "privatevpn",
-            privateKeyBase64: privateKey.base64Key,
+            privateKeyBase64: activeKey.base64Key,
             addresses: ["\(response.overlay_ip)/24"],
             dnsServers: ["1.1.1.1"],
             peers: [

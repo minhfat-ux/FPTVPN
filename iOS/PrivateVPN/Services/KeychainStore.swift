@@ -11,6 +11,9 @@ protocol KeychainBackend {
 
     /// Returns the persisted data for `account`, or nil when absent.
     func loadData(for account: String) throws -> Data?
+
+    /// Deletes the stored value for `account`, if present.
+    func delete(for account: String) throws
 }
 
 /// Production backend backed by the iOS Keychain (`SecItem` generic passwords).
@@ -47,6 +50,11 @@ struct SecurityKeychainBackend: KeychainBackend {
         default:
             throw KeychainStore.KeychainError.unexpectedStatus(status)
         }
+    }
+
+    func delete(for account: String) throws {
+        let query = baseQuery(for: account)
+        SecItemDelete(query as CFDictionary)
     }
 
     private func baseQuery(for account: String) -> [String: Any] {
@@ -117,6 +125,17 @@ final class KeychainStore {
             throw KeychainError.keyGenerationFailed
         }
         return key
+    }
+
+    /// Replaces the stored WireGuard keypair with a brand-new one. Used when
+    /// the coordinator rejects this device as revoked (403 "Device has been
+    /// revoked"): the old key can never register again, so come back as a NEW
+    /// device with a NEW keypair.
+    @discardableResult
+    static func rotatePrivateKey() throws -> PrivateKey {
+        try backend.delete(for: privateKeyAccount)
+        try backend.delete(for: publicKeyAccount)
+        return try obtainOrCreatePrivateKey()
     }
 
     /// Loads the stored public key, or nil if none is present.

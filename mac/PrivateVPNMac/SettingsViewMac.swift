@@ -15,8 +15,6 @@ struct SettingsViewMac: View {
     @State private var devices: [CoordinatorDevice] = []
     @State private var isLoadingDevices = false
     @State private var devicesMessage: String?
-    @State private var deviceToRevoke: CoordinatorDevice?
-    @State private var revokingDeviceID: String?
 
     var body: some View {
         Form {
@@ -236,28 +234,6 @@ struct SettingsViewMac: View {
                     .foregroundStyle(device.isActive ? VPNThemeMac.accent : .secondary)
             }
             Spacer()
-            if device.isActive && !isCurrentDevice(device) {
-                Button(languageStore.t(.revoke), role: .destructive) {
-                    deviceToRevoke = device
-                }
-                .font(.caption)
-                .disabled(revokingDeviceID != nil)
-            }
-        }
-        .confirmationDialog(
-            languageStore.t(.revoke),
-            isPresented: Binding(
-                get: { deviceToRevoke?.device_id == device.device_id },
-                set: { if !$0 { deviceToRevoke = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(languageStore.t(.revoke), role: .destructive) {
-                Task { await revokeDevice(device) }
-            }
-            Button(languageStore.t(.cancel), role: .cancel) { deviceToRevoke = nil }
-        } message: {
-            Text(languageStore.t(.revokeDeviceConfirm))
         }
     }
 
@@ -300,24 +276,6 @@ struct SettingsViewMac: View {
         }
     }
 
-    @MainActor
-    private func revokeDevice(_ device: CoordinatorDevice) async {
-        revokingDeviceID = device.device_id
-        defer { revokingDeviceID = nil }
-        do {
-            guard let url = URL(string: vpnManager.coordinatorURL) else {
-                throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
-            }
-            guard let token = authStore.accessToken else {
-                throw ControlAPIClient.ClientError.missingSession
-            }
-            try await ControlAPIClient(baseURL: url, joinToken: "").revokeDevice(id: device.device_id, accessToken: token)
-            devicesMessage = languageStore.t(.deviceRevoked)
-            await loadDevices()
-        } catch {
-            devicesMessage = error.localizedDescription
-        }
-    }
 }
 
 @MainActor

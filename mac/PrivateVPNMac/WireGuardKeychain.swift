@@ -23,6 +23,20 @@ enum WireGuardKeychain {
         return pair
     }
 
+    /// Replaces the stored WireGuard keypair with a brand-new one. Used when
+    /// the coordinator rejects this device as revoked (403 "Device has been
+    /// revoked"): the old key can never register again, so come back as a NEW
+    /// device with a NEW keypair.
+    static func rotate() -> KeyPair {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: privateAccount,
+        ]
+        SecItemDelete(query as CFDictionary)
+        return loadOrCreatePrivateKey()
+    }
+
     private static func load() -> KeyPair? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
