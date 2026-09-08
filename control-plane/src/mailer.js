@@ -50,6 +50,50 @@ export function createSendOtpEmail({ transporter } = {}) {
 
 export const sendOtpEmail = createSendOtpEmail();
 
+// ---------- Payment alert email (owner) ----------
+const PAYMENT_SUBJECT = "VPNFlow — Đơn thanh toán mới cần xác nhận";
+
+// Sends the owner an email when a new payment order arrives, with a signed
+// link to confirm (grant premium) after verifying the transfer in the bank app.
+export async function sendPaymentAlert({ to, orderCode, buyerEmail, plan, amount, confirmUrl }) {
+  const configured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+  if (!(process.env.NODE_ENV === "production" && configured)) {
+    console.log("[payment-alert] (dev, no SMTP) order", orderCode, "buyer", buyerEmail, "plan", plan);
+    return { sent: false };
+  }
+  try {
+    const port = Number(process.env.SMTP_PORT || 465);
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port,
+      secure: port === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+    const amt = Number(amount || 0).toLocaleString("vi-VN");
+    await transporter.sendMail({
+      from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+      to,
+      subject: `${PAYMENT_SUBJECT} — #${orderCode}`,
+      html: `<p>${GREETING}</p>
+<p>Có đơn thanh toán mới cần xác nhận:</p>
+<table style="border-collapse:collapse">
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Mã đơn</td><td style="font-weight:bold">#${orderCode}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Email khách</td><td style="font-weight:bold">${buyerEmail}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Gói</td><td style="font-weight:bold">${plan}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Số tiền</td><td style="font-weight:bold">${amt} đ</td></tr>
+</table>
+<p>Vui lòng kiểm tra app ngân hàng đã nhận tiền, rồi bấm nút bên dưới để kích hoạt Premium cho khách:</p>
+<p><a href="${confirmUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">✅ Xác nhận đã nhận tiền</a></p>
+<p style="color:#999;font-size:12px">Link chỉ có hiệu lực 1 lần. Nếu bạn không tạo đơn này, hãy bỏ qua email.</p>
+${SIGNATURE}`,
+    });
+    return { sent: true };
+  } catch (err) {
+    console.error("sendPaymentAlert failed:", redactError(err));
+    return { sent: false };
+  }
+}
+
 // Never log the code or the email body that contains it.
 function redactError(err) {
   return { name: err?.name ?? "Error", message: err?.message ?? "unknown error" };

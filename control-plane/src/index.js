@@ -16,7 +16,7 @@ import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
-import { sendOtpEmail } from "./mailer.js";
+import { sendOtpEmail, sendPaymentAlert } from "./mailer.js";
 import {
   buyPageHTML,
   paymentSuccessPageHTML,
@@ -230,6 +230,9 @@ app.post("/v1/payments/create", async (req, res) => {
     const orderCode = Math.floor(Date.now() / 1000);
     await authStore.recordPendingPayment(orderCode, { email, plan, method });
 
+    // Alert the owner (email) with a signed one-click confirm link.
+    firePaymentAlert(orderCode, email, plan, planCfg.amount);
+
     if (method === "bankqr") {
       const bank = bankQrConfig();
       if (!bank) return res.status(502).json({ error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
@@ -356,6 +359,45 @@ app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, 
     res.status(500).json({ error: "Internal error" });
   }
 });
+
+// Signed one-click confirm link for the owner's email alert. HMAC over the
+// order code using AUTH_TOKEN as the secret (fallback: a static env secret).
+app.get("/v1/payments/confirm/:orderCode", async (req, res) => {
+  try {
+    const orderCode = req.params.orderCode;
+    const sig = req.query.t || "";
+    const expected = paymentConfirmSignature(orderCode);
+    if (sig !== expected) return res.status(403).send("Link không hợp lệ hoặc đã hết hạn.");
+    const order = await authStore.markPendingPaymentPaid(orderCode);
+    if (!order) return res.status(404).send("Đơn không tồn tại hoặc đã xác nhận.");
+    const user = await authStore.ensureUserByEmail(order.email);
+    const planCfg = PLANS_PUBLIC[order.plan] ?? PLANS_PUBLIC.monthly;
+    await authStore.grantSubscription(user.id, { productId: `bankqr.${order.plan}`, days: planCfg.days });
+    console.log(`confirm-link: granted ${order.plan} (${planCfg.days}d) to ${order.email} (order ${orderCode})`);
+    res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>Premium ${planCfg.days} ngày đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
+  } catch (err) {
+    console.error("confirm-link failed:", err);
+    res.status(500).send("Lỗi xác nhận. Liên hệ support@meetflowai.site");
+  }
+});
+
+function paymentConfirmSignature(orderCode) {
+  const secret = process.env.CONFIRM_SECRET || AUTH_TOKEN || "vpnflow-confirm";
+  return crypto.createHmac("sha256", secret).update(String(orderCode)).digest("hex").slice(0, 32);
+}
+
+async function firePaymentAlert(orderCode, email, plan, amount) {
+  const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
+  const base = process.env.PUBLIC_BASE_URL || "https://api.meetflowai.site";
+  const sig = paymentConfirmSignature(orderCode);
+  const confirmUrl = `${base}/v1/payments/confirm/${orderCode}?t=${sig}`;
+  try {
+    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl });
+    console.log(`payment-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
+  } catch (err) {
+    console.error("firePaymentAlert failed:", err);
+  }
+}
 
 // Public base URL helper (for PayOS return/cancel URLs).
 function publicBaseUrl() {

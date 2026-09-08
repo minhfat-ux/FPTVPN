@@ -241,6 +241,7 @@ export function adminPageHTML() {
       <button class="tab active" id="tabNodes">Nodes</button>
       <button class="tab" id="tabUsers">Users</button>
       <button class="tab" id="tabStats">Dashboard</button>
+      <button class="tab" id="tabPayments">Payments</button>
     </div>
 
     <!-- ===================== LIST VIEW ===================== -->
@@ -305,6 +306,21 @@ export function adminPageHTML() {
           <tbody id="usersBody">
             <tr><td colspan="6">No data loaded.</td></tr>
           </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== PAYMENTS VIEW ===================== -->
+    <section class="card hidden" id="view-payments">
+      <h2>Payments - don cho xac nhan</h2>
+      <div class="actions">
+        <button id="loadPayments">Refresh</button>
+        <span class="status-inline" id="paymentsStatus"></span>
+      </div>
+      <div style="overflow-x:auto; margin-top:12px;">
+        <table>
+          <thead><tr><th>Ma don</th><th>Email khach</th><th>Goi</th><th>Method</th><th>Thoi gian</th><th>Trang thai</th><th>Action</th></tr></thead>
+          <tbody id="paymentsBody"><tr><td colspan="7">Bam Refresh.</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -412,6 +428,11 @@ export function adminPageHTML() {
       loadStats: document.getElementById("loadStats"),
       autoStats: document.getElementById("autoStats"),
       statsUsers: document.getElementById("statsUsers"),
+      tabPayments: document.getElementById("tabPayments"),
+      viewPayments: document.getElementById("view-payments"),
+      paymentsBody: document.getElementById("paymentsBody"),
+      paymentsStatus: document.getElementById("paymentsStatus"),
+      loadPayments: document.getElementById("loadPayments"),
     };
 
     let editingId = null; // null = create mode
@@ -450,15 +471,18 @@ export function adminPageHTML() {
       fields.tabNodes.classList.toggle("active", nodes);
       fields.tabUsers.classList.toggle("active", tab === "users");
       fields.tabStats.classList.toggle("active", tab === "stats");
+      fields.tabPayments.classList.toggle("active", tab === "payments");
       fields.viewList.classList.toggle("hidden", !nodes);
       fields.viewUsers.classList.toggle("hidden", tab !== "users");
       fields.viewStats.classList.toggle("hidden", tab !== "stats");
+      fields.viewPayments.classList.toggle("hidden", tab !== "payments");
       fields.viewEdit.classList.add("hidden");
       if (tab === "users" && !fields.usersLoaded) {
         fields.usersLoaded = true;
         loadUsers();
       }
       if (tab === "stats") loadStats();
+      if (tab === "payments") loadPayments();
     }
 
     async function loadUsers() {
@@ -867,9 +891,45 @@ export function adminPageHTML() {
       }
     };
 
+    // ---------------- Payments ----------------
+    async function loadPayments() {
+      try {
+        fields.paymentsStatus.textContent = "Loading...";
+        const data = await request("/v1/admin/payments/pending");
+        const orders = data.orders || [];
+        fields.paymentsBody.innerHTML = "";
+        if (!orders.length) fields.paymentsBody.innerHTML = '<tr><td colspan="7">Khong co don cho xac nhan.</td></tr>';
+        for (const o of orders) {
+          const tr = document.createElement("tr");
+          const isPaid = Boolean(o.paid);
+          tr.innerHTML = "<td>#" + o.orderCode + "</td><td></td><td>" + o.plan + "</td><td>" + (o.method || "-") + "</td><td></td><td></td><td></td>";
+          const tds = tr.querySelectorAll("td");
+          tds[1].textContent = o.email;
+          tds[4].textContent = new Date(o.createdAt).toLocaleString();
+          tds[5].textContent = isPaid ? "Da xac nhan" : "Cho";
+          tds[5].style.color = isPaid ? "var(--accent)" : "var(--warning)";
+          if (!isPaid) {
+            const btn = document.createElement("button");
+            btn.textContent = "Xac nhan da nhan tien";
+            btn.onclick = () => confirmOrder(o.orderCode);
+            tds[6].appendChild(btn);
+          } else tds[6].textContent = "-";
+          fields.paymentsBody.appendChild(tr);
+        }
+        fields.paymentsStatus.textContent = orders.length + " don.";
+      } catch (error) { fields.paymentsStatus.textContent = error.message; }
+    }
+    async function confirmOrder(orderCode) {
+      if (!confirm("Xac nhan da nhan tien don #" + orderCode + "? Premium se kich hoat ngay.")) return;
+      try { await request("/v1/admin/payments/" + orderCode + "/confirm", { method: "POST" }); loadPayments(); }
+      catch (error) { fields.paymentsStatus.textContent = error.message; }
+    }
+    fields.loadPayments.onclick = loadPayments;
+
     document.getElementById("tabNodes").onclick = () => showTab("nodes");
     document.getElementById("tabUsers").onclick = () => showTab("users");
     document.getElementById("tabStats").onclick = () => showTab("stats");
+    document.getElementById("tabPayments").onclick = () => showTab("payments");
     document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;
