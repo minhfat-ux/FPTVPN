@@ -51,7 +51,7 @@ else
     -alias "$ALIAS" \
     -keyalg RSA -keysize 2048 -validity 10000 \
     -storepass "$PASS" -keypass "$PASS" \
-    -dname "CN=FlowVPN, OU=Mobile, O=FlowVPN, L=Hanoi, ST=Hanoi, C=VN" >/dev/null
+    -dname "CN=Minh Nguyen Binh, OU=VPNFlow, O=VPNFlow, L=Hanoi, ST=Hanoi, C=VN" >/dev/null
   chmod 600 "$KEYSTORE"
   echo "Created $KEYSTORE"
 fi
