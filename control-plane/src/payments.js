@@ -150,6 +150,8 @@ const TEXTS = {
     modalTitle: "Scan the QR to pay",
     qrAlt: "Payment QR",
     close: "Close",
+    saveQr: "Save QR image",
+    saveQrHint: "Tap the QR to save it to your photos, then scan it from your bank app.",
     mini: "Keep the order code for reference. Premium activates automatically after confirmation.",
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
@@ -199,6 +201,8 @@ const TEXTS = {
     modalTitle: "Quét QR để thanh toán",
     qrAlt: "QR thanh toán",
     close: "Đóng",
+    saveQr: "Lưu ảnh QR",
+    saveQrHint: "Chạm vào QR để lưu về máy, rồi mở app ngân hàng quét từ ảnh đã lưu.",
     mini: "Giữ mã đơn để đối chiếu. Premium tự kích hoạt sau khi xác nhận.",
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
@@ -248,6 +252,8 @@ const TEXTS = {
     modalTitle: "扫描二维码支付",
     qrAlt: "支付二维码",
     close: "关闭",
+    saveQr: "保存二维码",
+    saveQrHint: "点击二维码保存到相册，再打开银行应用从相册扫描。",
     mini: "请保留订单号以备核对。确认后 Premium 将自动激活。",
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
@@ -297,6 +303,8 @@ const TEXTS = {
     modalTitle: "QRをスキャンして支払う",
     qrAlt: "支払いQR",
     close: "閉じる",
+    saveQr: "QR画像を保存",
+    saveQrHint: "QRをタップして写真に保存し、銀行アプリで保存した画像をスキャンしてください。",
     mini: "照合用に注文番号をお控えください。確認後、プレミアムは自動的に有効になります。",
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
@@ -346,6 +354,8 @@ const TEXTS = {
     modalTitle: "QR을 스캔하여 결제",
     qrAlt: "결제 QR",
     close: "닫기",
+    saveQr: "QR 이미지 저장",
+    saveQrHint: "QR을 눌러 사진에 저장한 뒤, 은행 앱에서 저장된 이미지를 스캔하세요.",
     mini: "대조용으로 주문번호를 보관하세요. 확인 후 프리미엄이 자동으로 활성화됩니다.",
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
@@ -482,6 +492,11 @@ export function buyPageHTML({ baseUrl, lang }) {
     .modal .qstatus { margin-top: 12px; font-size: 13px; min-height: 18px; color: #33c773; }
     .modal .qerr { color: #ff5a6a; }
     .modal button.done { margin-top: 6px; }
+    .modal button.save {
+      margin-top: 12px; background: rgba(255,255,255,.12); color: #fff;
+      border: 1px solid rgba(255,255,255,.2);
+    }
+    .modal .savehint { font-size: 11px; color: rgba(255,255,255,.5); margin-top: 8px; line-height: 1.4; }
     .modal .mini { font-size: 11px; color: rgba(255,255,255,.4); margin-top: 10px; }
   </style>
 </head>
@@ -567,6 +582,8 @@ export function buyPageHTML({ baseUrl, lang }) {
       <div class="oc" id="qrOrder"></div>
       <div class="hint" id="qrHint"></div>
       <div class="qstatus" id="qrStatus"></div>
+      <button type="button" class="save" id="qrSaveBtn">💾 ${t.saveQr}</button>
+      <div class="savehint" id="qrSaveHint"></div>
       <button type="button" class="done" id="qrCloseBtn">${t.close}</button>
       <div class="mini">${t.mini}</div>
     </div>
@@ -608,11 +625,48 @@ export function buyPageHTML({ baseUrl, lang }) {
     const qrOrder = document.getElementById("qrOrder");
     const qrHint = document.getElementById("qrHint");
     const qrStatus = document.getElementById("qrStatus");
+    const qrSaveBtn = document.getElementById("qrSaveBtn");
+    const qrSaveHint = document.getElementById("qrSaveHint");
     function showQr() { qrModal.classList.add("show"); }
-    function hideQr() { qrModal.classList.remove("show"); if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+    function hideQr() {
+      qrModal.classList.remove("show");
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      qrSaveHint.textContent = "";
+    }
     document.getElementById("qrClose").onclick = hideQr;
     document.getElementById("qrCloseBtn").onclick = hideQr;
     qrModal.onclick = (e) => { if (e.target === qrModal) hideQr(); };
+
+    // Save the shown QR as an image so the user can scan it from their bank
+    // app's photo library. Works for data: (bank QR) and https (WeChat/Alipay).
+    qrSaveBtn.onclick = async () => {
+      const src = qrImg.src;
+      if (!src) return;
+      qrSaveHint.textContent = "";
+      try {
+        let href = src;
+        if (!src.startsWith("data:")) {
+          const res = await fetch(src);
+          if (!res.ok) throw new Error("fetch failed");
+          href = URL.createObjectURL(await res.blob());
+        }
+        const a = document.createElement("a");
+        a.href = href;
+        a.download = "vpnflow-qr.png";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        if (href !== src) setTimeout(() => URL.revokeObjectURL(href), 5000);
+        qrSaveHint.textContent = T.saveQrHint;
+        qrSaveHint.className = "savehint";
+      } catch (e) {
+        // Cross-origin fetch blocked or download blocked (some in-app browsers):
+        // open the image so the user can long-press to save.
+        qrSaveHint.textContent = T.saveQrHint;
+        qrSaveHint.className = "savehint";
+        try { window.open(src, "_blank"); } catch (e2) {}
+      }
+    };
 
     document.getElementById("buyForm").onsubmit = async (e) => {
       e.preventDefault();
