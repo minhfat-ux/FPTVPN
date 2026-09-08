@@ -131,12 +131,50 @@ export function buyPageHTML({ baseUrl }) {
     .status { margin-top: 14px; text-align: center; font-size: 13px; min-height: 18px; }
     .status.err { color: #ff5a6a; }
     .note { margin-top: 16px; text-align: center; color: rgba(255,255,255,.4); font-size: 12px; }
+
+    .dl-section { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .dl-title { text-align: center; font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .dl-sub { text-align: center; color: rgba(255,255,255,.5); font-size: 12px; margin-bottom: 14px; }
+    .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .dl-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      padding: 12px 6px; border: 1px solid rgba(255,255,255,.14); border-radius: 12px;
+      background: #0b0b0d; text-decoration: none; color: #fff; transition: border-color .15s;
+    }
+    .dl-btn:hover { border-color: #33c773; }
+    .dl-btn .os { font-size: 13px; font-weight: 700; }
+    .dl-btn .store { font-size: 10px; color: rgba(255,255,255,.55); text-align: center; line-height: 1.3; }
+    @media (max-width: 380px) {
+      .dl-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="logo">VPN<span>Flow</span> Premium</div>
     <div class="sub">Mở khoá VPN an toàn cho tài khoản của bạn</div>
+
+    <div class="dl-section">
+      <div class="dl-title">Tải app VPNFlow</div>
+      <div class="dl-sub">Chưa có app? Chọn nền tảng của bạn:</div>
+      <div class="dl-grid">
+        <a class="dl-btn" href="https://apps.apple.com/PLACEHOLDER-IOS" target="_blank" rel="noopener">
+          <span style="font-size:24px">🍎</span>
+          <span class="os">iPhone / iOS</span>
+          <span class="store">App Store</span>
+        </a>
+        <a class="dl-btn" href="https://apps.apple.com/PLACEHOLDER-MAC" target="_blank" rel="noopener">
+          <span style="font-size:24px">🖥️</span>
+          <span class="os">macOS</span>
+          <span class="store">Mac App Store</span>
+        </a>
+        <a class="dl-btn" href="${'${base}'}/v1/downloads/android" target="_blank" rel="noopener">
+          <span style="font-size:24px">🤖</span>
+          <span class="os">Android</span>
+          <span class="store">Tải APK trực tiếp</span>
+        </a>
+      </div>
+    </div>
 
     <form id="buyForm">
       <label>Email tài khoản VPNFlow</label>

@@ -112,6 +112,8 @@ app.use((req, res, next) => {
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
   // Public payment flow: buy page + create order + PayOS webhook.
   if (req.path === "/buy" || req.path.startsWith("/buy/") || req.path.startsWith("/v1/payments/")) return next();
+  // Public app downloads (APK host).
+  if (req.path === "/v1/downloads/android") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
   if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
@@ -238,6 +240,20 @@ app.post("/v1/payments/create", async (req, res) => {
     res.json({ checkoutUrl: result.checkoutUrl, qrCode: result.qrCode });
   } catch (err) {
     console.error("POST /v1/payments/create failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Serve the Android APK for direct download (sideload distribution).
+app.get("/v1/downloads/android", async (_req, res) => {
+  try {
+    const apkDir = process.env.APK_DIR || "/root/flowvpn-apk";
+    const apkPath = path.join(apkDir, "VPNFlow-latest.apk");
+    if (!fs.existsSync(apkPath)) {
+      return res.status(404).send("APK not found. Contact support@meetflowai.site");
+    }
+    res.download(apkPath, "VPNFlow.apk");
+  } catch (err) {
     res.status(500).json({ error: "Internal error" });
   }
 });
