@@ -416,7 +416,10 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var languageStore: AppLanguageStore
 
-    private let buyURL = URL(string: "https://meetflowai.site/buy")!
+    /// Buy page localized to the in-app language (paywall maps to app UI).
+    private var buyURL: URL {
+        URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)")!
+    }
 
     var body: some View {
         NavigationStack {

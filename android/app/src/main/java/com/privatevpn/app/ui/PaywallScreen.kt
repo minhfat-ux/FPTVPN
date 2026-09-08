@@ -81,14 +81,18 @@ fun PaywallScreen(
             )
         }
 
-        // The buy page handles plans, payment and invoice delivery.
-        BuyWebView(modifier = Modifier.fillMaxSize())
+        // The buy page handles plans, payment and invoice delivery. Localize
+        // the paywall to the in-app language via ?lang= (mirrors iOS/macOS).
+        BuyWebView(
+            url = Config.BUY_URL + "?lang=" + lang.language.code,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
 /** Minimal Android WebView wrapper that loads the web buy page. */
 @Composable
-private fun BuyWebView(modifier: Modifier = Modifier) {
+private fun BuyWebView(url: String, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
@@ -97,7 +101,7 @@ private fun BuyWebView(modifier: Modifier = Modifier) {
                 settings.domStorageEnabled = true
                 setBackgroundColor(Color.Transparent.toArgb())
                 webViewClient = WebViewClient()
-                loadUrl(Config.BUY_URL)
+                loadUrl(url)
             }
         },
         modifier = modifier,

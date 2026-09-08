@@ -25,6 +25,7 @@ import {
   createBankQrDataUrl,
   bankQrConfig,
   verifyPayosWebhook,
+  pickBuyLang,
   PLANS_PUBLIC,
 } from "./payments.js";
 
@@ -206,31 +207,36 @@ app.get("/v1/nodes", listPublicNodes);
 
 // ---------------- Web payments (PayOS: MoMo wallet + Bank QR VietQR) ----------------
 // Trang mua hàng (Android sideload + iOS web-account flow). Ngưới dùng nhập
-// email tài khoản, chọn gói, thanh toán qua PayOS; webhook kích hoạt premium.
+// email tài khoản, chọn gói, thanh toán; webhook kích hoạt premium.
+// ?lang=en|vi|zh|ja|ko maps the paywall to the app language.
 
-app.get(["/buy", "/buy/"], (_req, res) => {
+function buyLang(req) {
+  return pickBuyLang(String(req.query?.lang ?? "").slice(0, 8));
+}
+
+app.get(["/buy", "/buy/"], (req, res) => {
   // baseUrl is absolute so the page works from any host/path that proxies to
   // this control plane (api.meetflowai.site/buy, meetflowai.site/buy, or any
   // prefixed route). Relative fetch to "" breaks under prefixed mounts
   // (e.g. /PrivateVPN/buy) because the browser would call /v1/... at the root
   // of the outer host, which is a 404 → "Không kết nối được máy chủ".
-  res.type("html").send(buyPageHTML({ baseUrl: publicBaseUrl() }));
+  res.type("html").send(buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req) }));
 });
 
-app.get(["/buy/success", "/buy/success/"], (_req, res) => {
-  res.type("html").send(paymentSuccessPageHTML());
+app.get(["/buy/success", "/buy/success/"], (req, res) => {
+  res.type("html").send(paymentSuccessPageHTML(buyLang(req)));
 });
 
-app.get(["/buy/cancel", "/buy/cancel/"], (_req, res) => {
-  res.type("html").send(paymentCancelPageHTML());
+app.get(["/buy/cancel", "/buy/cancel/"], (req, res) => {
+  res.type("html").send(paymentCancelPageHTML(buyLang(req)));
 });
 
 app.post("/v1/payments/create", async (req, res) => {
   try {
     const { email, plan, method } = req.body ?? {};
-    if (!email || !/\S+@\S+/.test(email)) return res.status(400).json({ error: "Email không hợp lệ." });
+    if (!email || !/\S+@\S+/.test(email)) return res.status(400).json({ code: "invalid_email", error: "Email không hợp lệ." });
     const planCfg = PLANS_PUBLIC[plan];
-    if (!planCfg) return res.status(400).json({ error: "Gói không hợp lệ." });
+    if (!planCfg) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
     const orderCode = Math.floor(Date.now() / 1000);
     await authStore.recordPendingPayment(orderCode, { email, plan, method });
@@ -240,7 +246,7 @@ app.post("/v1/payments/create", async (req, res) => {
 
     if (method === "bankqr") {
       const bank = bankQrConfig();
-      if (!bank) return res.status(502).json({ error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
+      if (!bank) return res.status(502).json({ code: "bank_not_configured", error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
       const qrDataUrl = await createBankQrDataUrl({
         accountNumber: bank.accountNumber,
         accountName: bank.accountName,
@@ -264,11 +270,11 @@ app.post("/v1/payments/create", async (req, res) => {
       returnUrl: `${publicBaseUrl()}/buy/success`,
       buyerEmail: email,
     });
-    if (result.error) return res.status(502).json({ error: result.error });
+    if (result.error) return res.status(502).json({ code: "payos_not_configured", error: result.error });
     res.json({ checkoutUrl: result.checkoutUrl, qrCode: result.qrCode });
   } catch (err) {
     console.error("POST /v1/payments/create failed:", err);
-    res.status(500).json({ error: "Internal error" });
+    res.status(500).json({ code: "internal", error: "Internal error" });
   }
 });
 
