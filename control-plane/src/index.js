@@ -209,7 +209,12 @@ app.get("/v1/nodes", listPublicNodes);
 // email tài khoản, chọn gói, thanh toán qua PayOS; webhook kích hoạt premium.
 
 app.get(["/buy", "/buy/"], (_req, res) => {
-  res.type("html").send(buyPageHTML({ baseUrl: "" }));
+  // baseUrl is absolute so the page works from any host/path that proxies to
+  // this control plane (api.meetflowai.site/buy, meetflowai.site/buy, or any
+  // prefixed route). Relative fetch to "" breaks under prefixed mounts
+  // (e.g. /PrivateVPN/buy) because the browser would call /v1/... at the root
+  // of the outer host, which is a 404 → "Không kết nối được máy chủ".
+  res.type("html").send(buyPageHTML({ baseUrl: publicBaseUrl() }));
 });
 
 app.get(["/buy/success", "/buy/success/"], (_req, res) => {
