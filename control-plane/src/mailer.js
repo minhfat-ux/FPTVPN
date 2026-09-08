@@ -50,6 +50,55 @@ export function createSendOtpEmail({ transporter } = {}) {
 
 export const sendOtpEmail = createSendOtpEmail();
 
+// ---------- Invoice email (customer, after successful payment) ----------
+const INVOICE_SUBJECT = "VPNFlow — Xác nhận thanh toán";
+
+// Sends a payment confirmation/invoice to the customer after their order is
+// confirmed/activated. Reuses the configured SMTP transporter.
+export async function sendInvoiceEmail({ to, orderCode, planLabel, amount, days, activatedAt, expiresAt, appUrl }) {
+  const configured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+  if (!(process.env.NODE_ENV === "production" && configured)) {
+    console.log("[invoice] (dev, no SMTP) to", to, "order", orderCode);
+    return { sent: false };
+  }
+  try {
+    const port = Number(process.env.SMTP_PORT || 465);
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port,
+      secure: port === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+    const amt = Number(amount || 0).toLocaleString("vi-VN");
+    const fmt = (iso) => (iso ? new Date(iso).toLocaleString("vi-VN") : "Vĩnh viễn");
+    const period = days == null ? "Vĩnh viễn (một lần)" : `${days} ngày`;
+    const expires = expiresAt ? fmt(expiresAt) : "Không giới hạn";
+    await transporter.sendMail({
+      from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+      to,
+      subject: `${INVOICE_SUBJECT} — #${orderCode}`,
+      html: `<p>Xin chào,</p>
+<p>Cảm ơn bạn đã mua <b>VPNFlow Premium</b>. Thanh toán của bạn đã được xác nhận thành công.</p>
+<table style="border-collapse:collapse;width:100%;max-width:460px">
+  <tr style="background:rgba(0,0,0,.05)"><th style="text-align:left;padding:8px">Mã đơn</th><td style="padding:8px">#${orderCode}</td></tr>
+  <tr><th style="text-align:left;padding:8px">Gói</th><td style="padding:8px">${planLabel}</td></tr>
+  <tr style="background:rgba(0,0,0,.05)"><th style="text-align:left;padding:8px">Thời hạn</th><td style="padding:8px">${period}</td></tr>
+  <tr><th style="text-align:left;padding:8px">Số tiền</th><td style="padding:8px"><b>${amt} đ</b></td></tr>
+  <tr style="background:rgba(0,0,0,.05)"><th style="text-align:left;padding:8px">Kích hoạt</th><td style="padding:8px">${fmt(activatedAt)}</td></tr>
+  <tr><th style="text-align:left;padding:8px">Hết hạn</th><td style="padding:8px">${expires}</td></tr>
+</table>
+<p>Premium đã được kích hoạt cho tài khoản <b>${to}</b> — bạn có thể dùng trên mọi thiết bị khi đăng nhập cùng email này.</p>
+<p><a href="${appUrl || "https://meetflowai.site"}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">🚀 Mở VPNFlow</a></p>
+<p style="color:#999;font-size:12px">Cần hỗ trợ? Liên hệ <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
+${SIGNATURE}`,
+    });
+    return { sent: true };
+  } catch (err) {
+    console.error("sendInvoiceEmail failed:", redactError(err));
+    return { sent: false };
+  }
+}
+
 // ---------- Renewal reminder email (customer) ----------
 const RENEW_SUBJECT = "VPNFlow — Gói của bạn sắp hết hạn";
 

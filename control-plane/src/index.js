@@ -16,7 +16,7 @@ import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
-import { sendOtpEmail, sendPaymentAlert, sendRenewalReminder } from "./mailer.js";
+import { sendOtpEmail, sendPaymentAlert, sendRenewalReminder, sendInvoiceEmail } from "./mailer.js";
 import {
   buyPageHTML,
   paymentSuccessPageHTML,
@@ -308,11 +308,13 @@ app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res
       console.warn("webhook: no pending payment for order", evt.orderCode);
       return res.json({ ok: true });
     }
-    // Find/create the user by email, then grant premium for the plan's days.
-    const user = await authStore.ensureUserByEmail(pending.email);
-    const planCfg = PLANS_PUBLIC[pending.plan] ?? PLANS_PUBLIC.monthly;
-    await authStore.grantSubscription(user.id, { productId: `payos.${pending.plan}`, days: planCfg.days });
-    console.log(`webhook: granted ${pending.plan} (${planCfg.days}d) to ${pending.email} (order ${evt.orderCode})`);
+    // Find/create the user by email, grant premium AND email an invoice.
+    await activatePaymentAndInvoice({
+      orderCode: evt.orderCode,
+      email: pending.email,
+      plan: pending.plan,
+      prefix: "payos",
+    });
     res.json({ ok: true });
   } catch (err) {
     console.error("webhook failed:", err);
@@ -374,10 +376,12 @@ app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, 
     // Mark paid (keeps the order so /status can report paid=true), then grant.
     const order = await authStore.markPendingPaymentPaid(req.params.orderCode);
     if (!order) return res.status(404).json({ error: "Order not found or already paid" });
-    const user = await authStore.ensureUserByEmail(order.email);
-    const planCfg = PLANS_PUBLIC[order.plan] ?? PLANS_PUBLIC.monthly;
-    await authStore.grantSubscription(user.id, { productId: `bankqr.${order.plan}`, days: planCfg.days });
-    console.log(`admin confirm: granted ${order.plan} (${planCfg.days}d) to ${order.email} (order ${order.orderCode})`);
+    await activatePaymentAndInvoice({
+      orderCode: order.orderCode,
+      email: order.email,
+      plan: order.plan,
+      prefix: "bankqr",
+    });
     res.json({ ok: true, email: order.email });
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
@@ -394,11 +398,13 @@ app.get("/v1/payments/confirm/:orderCode", async (req, res) => {
     if (sig !== expected) return res.status(403).send("Link không hợp lệ hoặc đã hết hạn.");
     const order = await authStore.markPendingPaymentPaid(orderCode);
     if (!order) return res.status(404).send("Đơn không tồn tại hoặc đã xác nhận.");
-    const user = await authStore.ensureUserByEmail(order.email);
-    const planCfg = PLANS_PUBLIC[order.plan] ?? PLANS_PUBLIC.monthly;
-    await authStore.grantSubscription(user.id, { productId: `bankqr.${order.plan}`, days: planCfg.days });
-    console.log(`confirm-link: granted ${order.plan} (${planCfg.days}d) to ${order.email} (order ${orderCode})`);
-    res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>Premium ${planCfg.days} ngày đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
+    await activatePaymentAndInvoice({
+      orderCode: order.orderCode,
+      email: order.email,
+      plan: order.plan,
+      prefix: "bankqr",
+    });
+    res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>Premium đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
   } catch (err) {
     console.error("confirm-link failed:", err);
     res.status(500).send("Lỗi xác nhận. Liên hệ support@meetflowai.site");
@@ -408,6 +414,33 @@ app.get("/v1/payments/confirm/:orderCode", async (req, res) => {
 function paymentConfirmSignature(orderCode) {
   const secret = process.env.CONFIRM_SECRET || AUTH_TOKEN || "vpnflow-confirm";
   return crypto.createHmac("sha256", secret).update(String(orderCode)).digest("hex").slice(0, 32);
+}
+
+/**
+ * Grants premium for a completed payment order and emails the customer an
+ * invoice. Shared by all confirm paths (admin button, email confirm link,
+ * PayOS webhook). `planCfg` = PLANS_PUBLIC entry (may be null -> monthly).
+ */
+async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "bankqr" }) {
+  const planCfg = PLANS_PUBLIC[plan] ?? PLANS_PUBLIC.monthly;
+  const user = await authStore.ensureUserByEmail(email);
+  await authStore.grantSubscription(user.id, { productId: `${prefix}.${plan}`, days: planCfg.days });
+  // Fresh subscription record for accurate expiry (grant returns publicUser but
+  // we can re-read via subscriptionForUserEmail to include expiresAt).
+  const sub = await authStore.subscriptionForUserEmail(email);
+  const appUrl = process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL}` : "https://meetflowai.site";
+  await sendInvoiceEmail({
+    to: email,
+    orderCode,
+    planLabel: planCfg.label,
+    amount: planCfg.amount,
+    days: planCfg.days,
+    activatedAt: new Date().toISOString(),
+    expiresAt: sub?.expiresAt ?? null,
+    appUrl,
+  });
+  console.log(`invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode})`);
+  return user;
 }
 
 async function firePaymentAlert(orderCode, email, plan, amount) {
