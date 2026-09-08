@@ -252,6 +252,16 @@ export class AuthStore {
     return entry;
   }
 
+  /** Marks a pending payment as paid (keeps it for status polling). */
+  async markPendingPaymentPaid(orderCode) {
+    const data = await this._load();
+    const entry = data.pendingPayments.find((e) => e.orderCode === Number(orderCode));
+    if (!entry || entry.paidAt) return null;
+    entry.paidAt = new Date().toISOString();
+    await this._save(data);
+    return entry;
+  }
+
   /** Looks up a pending payment without consuming it (status polling). */
   async pendingPaymentByCode(orderCode) {
     const data = await this._load();

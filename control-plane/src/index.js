@@ -325,8 +325,9 @@ app.get("/v1/admin/payments/pending", requireAdminAuth, async (_req, res) => {
 // the bank app for the matching transfer note). Grants premium immediately.
 app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, res) => {
   try {
-    const order = await authStore.takePendingPayment(req.params.orderCode);
-    if (!order) return res.status(404).json({ error: "Order not found or already processed" });
+    // Mark paid (keeps the order so /status can report paid=true), then grant.
+    const order = await authStore.markPendingPaymentPaid(req.params.orderCode);
+    if (!order) return res.status(404).json({ error: "Order not found or already paid" });
     const user = await authStore.ensureUserByEmail(order.email);
     const planCfg = PLANS_PUBLIC[order.plan] ?? PLANS_PUBLIC.monthly;
     await authStore.grantSubscription(user.id, { productId: `bankqr.${order.plan}`, days: planCfg.days });
