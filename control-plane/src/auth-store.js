@@ -211,6 +211,45 @@ export class AuthStore {
     await this._save(data);
   }
 
+  /**
+   * Ensures a user exists for the given email (creates if missing). Used by
+   * the payment webhook to grant premium to the buyer's account.
+   */
+  async ensureUserByEmail(email) {
+    const normalized = normalizeEmail(email);
+    if (!normalized) throw badRequest("email is required");
+    const data = await this._load();
+    const user = findOrCreateUser(data, { email: normalized });
+    await this._save(data);
+    return user;
+  }
+
+  /**
+   * Records a pending payment order (orderCode -> {email, plan}) so the
+   * webhook can activate the right user/plan when the payment completes.
+   */
+  async recordPendingPayment(orderCode, { email, plan }) {
+    const data = await this._load();
+    data.pendingPayments = data.pendingPayments.filter((entry) => entry.orderCode !== orderCode);
+    data.pendingPayments.push({
+      orderCode: Number(orderCode),
+      email: normalizeEmail(email),
+      plan,
+      createdAt: new Date().toISOString(),
+    });
+    await this._save(data);
+  }
+
+  /** Retrieves (and consumes) a pending payment for a given orderCode. */
+  async takePendingPayment(orderCode) {
+    const data = await this._load();
+    const entry = data.pendingPayments.find((e) => e.orderCode === Number(orderCode));
+    if (!entry) return null;
+    data.pendingPayments = data.pendingPayments.filter((e) => e.orderCode !== Number(orderCode));
+    await this._save(data);
+    return entry;
+  }
+
   async _load() {
     if (!existsSync(this.filePath)) return emptyData();
     try {
@@ -315,9 +354,10 @@ function emptyData() {
     sessions: [],
     emailOtps: [],
     emailLoginRequests: [],
+    enrollmentTokens: [],
     joinTokens: [],
     subscriptions: [],
-    enrollmentTokens: [],
+    pendingPayments: [],
   };
 }
 
@@ -330,6 +370,7 @@ function normalizeData(data) {
     joinTokens: Array.isArray(data.joinTokens) ? data.joinTokens : [],
     subscriptions: Array.isArray(data.subscriptions) ? data.subscriptions : [],
     enrollmentTokens: Array.isArray(data.enrollmentTokens) ? data.enrollmentTokens : [],
+    pendingPayments: Array.isArray(data.pendingPayments) ? data.pendingPayments : [],
   };
 }
 

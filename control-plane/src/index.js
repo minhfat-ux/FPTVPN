@@ -17,6 +17,14 @@ import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
 import { sendOtpEmail } from "./mailer.js";
+import {
+  buyPageHTML,
+  paymentSuccessPageHTML,
+  paymentCancelPageHTML,
+  createPayosPaymentLink,
+  verifyPayosWebhook,
+  PLANS_PUBLIC,
+} from "./payments.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,6 +110,8 @@ app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.path === "/health" || req.path === "/v1/health" || req.path === "/nodes" || req.path === "/v1/nodes" || req.path === "/v1/app-version") return next();
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
+  // Public payment flow: buy page + create order + PayOS webhook.
+  if (req.path === "/buy" || req.path.startsWith("/buy/") || req.path.startsWith("/v1/payments/")) return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
   if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
@@ -189,6 +199,79 @@ const listPublicNodes = async (_req, res) => {
 
 app.get("/nodes", listPublicNodes);
 app.get("/v1/nodes", listPublicNodes);
+
+// ---------------- Web payments (PayOS: MoMo wallet + Bank QR VietQR) ----------------
+// Trang mua hàng (Android sideload + iOS web-account flow). Ngưới dùng nhập
+// email tài khoản, chọn gói, thanh toán qua PayOS; webhook kích hoạt premium.
+
+app.get(["/buy", "/buy/"], (_req, res) => {
+  res.type("html").send(buyPageHTML({ baseUrl: "" }));
+});
+
+app.get(["/buy/success", "/buy/success/"], (_req, res) => {
+  res.type("html").send(paymentSuccessPageHTML());
+});
+
+app.get(["/buy/cancel", "/buy/cancel/"], (_req, res) => {
+  res.type("html").send(paymentCancelPageHTML());
+});
+
+app.post("/v1/payments/create", async (req, res) => {
+  try {
+    const { email, plan, method } = req.body ?? {};
+    if (!email || !/\S+@\S+/.test(email)) return res.status(400).json({ error: "Email không hợp lệ." });
+    const planCfg = PLANS_PUBLIC[plan];
+    if (!planCfg) return res.status(400).json({ error: "Gói không hợp lệ." });
+
+    const orderCode = Math.floor(Date.now() / 1000);
+    const result = await createPayosPaymentLink({
+      orderCode,
+      amount: planCfg.amount,
+      description: `VPNFlow ${plan} ${email}`.slice(0, 25),
+      cancelUrl: `${publicBaseUrl()}/buy/cancel`,
+      returnUrl: `${publicBaseUrl()}/buy/success`,
+      buyerEmail: email,
+    });
+    if (result.error) return res.status(502).json({ error: result.error });
+    // Lưu mapping order -> email/plan để webhook kích hoạt đúng user.
+    await authStore.recordPendingPayment(orderCode, { email, plan });
+    res.json({ checkoutUrl: result.checkoutUrl, qrCode: result.qrCode });
+  } catch (err) {
+    console.error("POST /v1/payments/create failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// PayOS IPN/webhook — auto-activate premium for the buyer's email.
+app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res) => {
+  try {
+    const sig = req.get("x-webhook-signature") || req.get("signature") || "";
+    const raw = JSON.stringify(req.body);
+    const evt = verifyPayosWebhook(raw, sig);
+    if (!evt) return res.status(400).json({ error: "Invalid webhook signature" });
+    if (!evt.success) return res.json({ ok: true });
+
+    const pending = await authStore.takePendingPayment(evt.orderCode);
+    if (!pending?.email) {
+      console.warn("webhook: no pending payment for order", evt.orderCode);
+      return res.json({ ok: true });
+    }
+    // Find/create the user by email, then grant premium for the plan's days.
+    const user = await authStore.ensureUserByEmail(pending.email);
+    const planCfg = PLANS_PUBLIC[pending.plan] ?? PLANS_PUBLIC.monthly;
+    await authStore.grantSubscription(user.id, { productId: `payos.${pending.plan}`, days: planCfg.days });
+    console.log(`webhook: granted ${pending.plan} (${planCfg.days}d) to ${pending.email} (order ${evt.orderCode})`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("webhook failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Public base URL helper (for PayOS return/cancel URLs).
+function publicBaseUrl() {
+  return process.env.PUBLIC_BASE_URL || "https://api.meetflowai.site";
+}
 
 app.post("/v1/auth/email/start", async (req, res) => {
   try {
