@@ -163,8 +163,11 @@ export class AuthStore {
     const data = await this._load();
     const user = data.users.find((entry) => entry.id === userId);
     if (!user) throw badRequest("User not found");
-    const daysNum = Number(days);
-    const expiresAt = new Date(Date.now() + (Number.isFinite(daysNum) && daysNum > 0 ? daysNum : 30) * 24 * 60 * 60 * 1000).toISOString();
+    // days == null (or 0) means LIFETIME: no expiry.
+    const lifetime = days == null || Number(days) <= 0;
+    const expiresAt = lifetime
+      ? null
+      : new Date(Date.now() + Number(days) * 24 * 60 * 60 * 1000).toISOString();
     data.subscriptions = data.subscriptions.filter((entry) => entry.userId !== userId);
     data.subscriptions.push({
       id: crypto.randomUUID(),

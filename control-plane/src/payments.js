@@ -16,8 +16,11 @@ import { buildVietQRPayload } from "./vietqr.js";
  */
 
 const PLANS = {
-  monthly: { amount: 70000, days: 30, label: "Monthly (70,000 VND / 30 days)" },
-  yearly:  { amount: 600000, days: 365, label: "Yearly (600,000 VND / 365 days)" },
+  monthly:   { amount: 70000,  days: 30,   label: "Monthly (70,000 VND / 30 days)", badge: "Monthly" },
+  quarterly: { amount: 190000, days: 90,   label: "3 Months (190,000 VND / 90 days)", badge: "3 Months" },
+  semiannual:{ amount: 350000, days: 180,  label: "6 Months (350,000 VND / 180 days)", badge: "6 Months" },
+  yearly:    { amount: 600000, days: 365,  label: "Yearly (600,000 VND / 365 days)", badge: "Yearly" },
+  lifetime:  { amount: 1500000, days: null, label: "Lifetime (1,500,000 VND one-time)", badge: "Lifetime" },
 };
 
 function payosConfig() {
@@ -105,6 +108,13 @@ export function verifyPayosWebhook(rawBody, signatureHeader) {
 }
 
 /** Buy page HTML (VPNFlow dark theme) — email + plan + method picker. */
+export function planDescription(plan) {
+  const p = PLANS[plan];
+  if (!p) return "";
+  if (p.days === null) return `${p.badge} — ${p.amount.toLocaleString("vi-VN")} đ một lần, dùng vĩnh viễn`;
+  return `${p.badge} — ${p.amount.toLocaleString("vi-VN")} đ / ${p.days} ngày`;
+}
+
 export function buyPageHTML({ baseUrl }) {
   const plans = PLANS;
   return `<!doctype html>
@@ -239,12 +249,12 @@ export function buyPageHTML({ baseUrl }) {
       <input type="email" id="email" placeholder="you@example.com" required>
 
       <label>Chọn gói</label>
-      <div class="plans">
+      <div class="plans" id="planList">
         <div class="plan active" data-plan="monthly">
-          <span>Monthly</span><span class="price">${plans.monthly.amount.toLocaleString("vi-VN")} đ / ${plans.monthly.days} ngày</span>
+          <span>Monthly</span><span class="price">70.000 đ / 30 ngày</span>
         </div>
         <div class="plan" data-plan="yearly">
-          <span>Yearly</span><span class="price">${plans.yearly.amount.toLocaleString("vi-VN")} đ / ${plans.yearly.days} ngày</span>
+          <span>Yearly</span><span class="price">600.000 đ / 365 ngày</span>
         </div>
       </div>
 
@@ -289,14 +299,31 @@ export function buyPageHTML({ baseUrl }) {
     const base = ${JSON.stringify(baseUrl)};
     let plan = "monthly";
     let method = "bankqr";
+    const PLANS_ALL = [
+      { id: "monthly", name: "Monthly", price: "70.000 đ / 30 ngày" },
+      { id: "quarterly", name: "3 Months", price: "190.000 đ / 90 ngày" },
+      { id: "semiannual", name: "6 Months", price: "350.000 đ / 180 ngày" },
+      { id: "yearly", name: "Yearly", price: "600.000 đ / 365 ngày" },
+      { id: "lifetime", name: "Lifetime", price: "1.500.000 đ / một lần · vĩnh viễn" },
+    ];
+    (function renderPlans() {
+      const list = document.getElementById("planList");
+      list.innerHTML = "";
+      PLANS_ALL.forEach((pl, i) => {
+        const el = document.createElement("div");
+        el.className = "plan" + (i === 0 ? " active" : "");
+        el.dataset.plan = pl.id;
+        el.innerHTML = "<span>" + pl.name + "</span><span class='price'>" + pl.price + "</span>";
+        el.onclick = () => {
+          document.querySelectorAll(".plan").forEach(x => x.classList.remove("active"));
+          el.classList.add("active");
+          plan = el.dataset.plan;
+        };
+        list.appendChild(el);
+      });
+    })();
 
-    document.querySelectorAll(".plan").forEach(el => {
-      el.onclick = () => {
-        document.querySelectorAll(".plan").forEach(x => x.classList.remove("active"));
-        el.classList.add("active");
-        plan = el.dataset.plan;
-      };
-    });
+
     document.querySelectorAll(".method").forEach(el => {
       if (el.style.cursor === "not-allowed") return;
       el.onclick = () => {
