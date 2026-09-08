@@ -163,6 +163,34 @@ export function buyPageHTML({ baseUrl }) {
     .dl-sub { text-align: center; color: rgba(255,255,255,.5); font-size: 12px; margin-bottom: 14px; }
     .dl-section a { text-decoration: none; display: inline-block; transition: transform .1s; }
     .dl-section a:hover { transform: scale(1.04); }
+
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.72); display: none;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      width: 100%; max-width: 380px; background: #0d1b30;
+      border: 1px solid rgba(255,255,255,.14); border-radius: 18px;
+      padding: 24px; text-align: center; position: relative;
+      box-shadow: 0 24px 60px rgba(0,0,0,.5);
+    }
+    .modal .close {
+      position: absolute; top: 10px; right: 14px; cursor: pointer;
+      color: rgba(255,255,255,.6); font-size: 22px; background: none; border: 0; width: 30px; height: 30px;
+    }
+    .modal .qr-wrap {
+      display: inline-block; background: #fff; border-radius: 12px; padding: 8px; margin: 12px 0;
+    }
+    .modal img { width: 230px; height: 230px; display: block; border-radius: 8px; }
+    .modal .amt { font-size: 18px; font-weight: 800; color: #33c773; }
+    .modal .oc { color: rgba(255,255,255,.7); font-size: 13px; margin: 8px 0; word-break: break-all; }
+    .modal .hint { color: rgba(255,255,255,.55); font-size: 13px; line-height: 1.5; }
+    .modal .qstatus { margin-top: 12px; font-size: 13px; min-height: 18px; color: #33c773; }
+    .modal .qerr { color: #ff5a6a; }
+    .modal button.done { margin-top: 6px; }
+    .modal .mini { font-size: 11px; color: rgba(255,255,255,.4); margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -241,10 +269,19 @@ export function buyPageHTML({ baseUrl }) {
       <div class="note">Sau khi chuyển tiền, premium sẽ được kích hoạt cho email này.</div>
     </form>
 
-    <div id="qrPanel" style="display:none; text-align:center; margin-top:6px;">
-      <img id="qrImg" alt="QR thanh toán" style="width:250px;height:250px;border-radius:12px;background:#fff;padding:8px;">
-      <div id="qrInfo" style="margin-top:10px;color:rgba(255,255,255,.75);font-size:13px;line-height:1.5;"></div>
-      <div id="qrStatus" style="margin-top:10px;font-size:13px;min-height:18px;"></div>
+  </div>
+
+  <div class="modal-overlay" id="qrModal">
+    <div class="modal">
+      <button class="close" id="qrClose">&times;</button>
+      <div style="font-size:15px;font-weight:700;">Quét QR để thanh toán</div>
+      <div class="qr-wrap"><img id="qrImg" alt="QR thanh toán"></div>
+      <div class="amt" id="qrAmt"></div>
+      <div class="oc" id="qrOrder"></div>
+      <div class="hint" id="qrHint"></div>
+      <div class="qstatus" id="qrStatus"></div>
+      <button type="button" class="done" id="qrCloseBtn">Đóng</button>
+      <div class="mini">Giữ mã đơn để đối chiếu. Premium tự kích hoạt sau khi xác nhận.</div>
     </div>
   </div>
 
@@ -271,10 +308,17 @@ export function buyPageHTML({ baseUrl }) {
 
     const statusEl = document.getElementById("status");
     const btn = document.getElementById("payBtn");
-    const qrPanel = document.getElementById("qrPanel");
+    const qrModal = document.getElementById("qrModal");
     const qrImg = document.getElementById("qrImg");
-    const qrInfo = document.getElementById("qrInfo");
+    const qrAmt = document.getElementById("qrAmt");
+    const qrOrder = document.getElementById("qrOrder");
+    const qrHint = document.getElementById("qrHint");
     const qrStatus = document.getElementById("qrStatus");
+    function showQr() { qrModal.classList.add("show"); }
+    function hideQr() { qrModal.classList.remove("show"); if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+    document.getElementById("qrClose").onclick = hideQr;
+    document.getElementById("qrCloseBtn").onclick = hideQr;
+    qrModal.onclick = (e) => { if (e.target === qrModal) hideQr(); };
 
     document.getElementById("buyForm").onsubmit = async (e) => {
       e.preventDefault();
@@ -299,19 +343,18 @@ export function buyPageHTML({ baseUrl }) {
         if (data.qrDataUrl || data.qrImageUrl) {
           statusEl.className = "status";
           statusEl.textContent = "";
-          qrPanel.style.display = "block";
           qrImg.src = data.qrDataUrl || (base + data.qrImageUrl);
-          const amt = data.amount.toLocaleString("vi-VN");
+          qrAmt.textContent = (data.amount.toLocaleString("vi-VN")) + " đ";
+          qrOrder.textContent = "Mã đơn: " + data.orderCode;
           const labels = {
-            bankqr: "chuyển khoản tới tài khoản VPNFlow",
-            wechat: "quét QR bằng WeChat và nhập đúng số tiền",
-            alipay: "quét QR bằng Alipay và nhập đúng số tiền"
+            bankqr: "Mở app ngân hàng quét QR và nhập đúng số tiền.",
+            wechat: "Mở WeChat quét QR, nhập đúng số tiền.",
+            alipay: "Mở Alipay quét QR, nhập đúng số tiền."
           };
-          qrInfo.innerHTML =
-            "Thanh toán <b>" + amt + " đ</b> — " + (labels[data.method] || "quét QR để thanh toán") + ".<br>" +
-            "Mã đơn: <b>" + data.orderCode + "</b> (ghi chú nếu app cho phép).<br>" +
-            "Sau khi chuyển, chờ xác nhận (vài phút).";
+          qrHint.textContent = labels[data.method] || "Quét QR bằng app thanh toán.";
           qrStatus.textContent = "Đang chờ xác nhận thanh toán...";
+          qrStatus.className = "qstatus";
+          showQr();
           startPoll(data.orderCode);
         } else if (data.checkoutUrl) {
           window.location.href = data.checkoutUrl;
@@ -337,9 +380,11 @@ export function buyPageHTML({ baseUrl }) {
           const data = await res.json();
           if (data.paid) {
             clearInterval(pollTimer);
-            qrStatus.innerHTML = "<span style='color:#33c773'>✅ Đã nhận thanh toán! Premium đã kích hoạt. Mở app VPNFlow để dùng.</span>";
+            qrStatus.textContent = "✅ Đã nhận thanh toán! Premium đã kích hoạt. Mở app VPNFlow để dùng.";
+            qrStatus.className = "qstatus";
           } else {
             qrStatus.textContent = "Đang chờ xác nhận... (" + (data.elapsed_sec || "") + "s)";
+            qrStatus.className = "qstatus";
           }
         } catch (e) { /* keep polling */ }
       }, 5000);
