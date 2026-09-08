@@ -16,7 +16,7 @@ import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
-import { sendOtpEmail, sendPaymentAlert } from "./mailer.js";
+import { sendOtpEmail, sendPaymentAlert, sendRenewalReminder } from "./mailer.js";
 import {
   buyPageHTML,
   paymentSuccessPageHTML,
@@ -1168,6 +1168,39 @@ function parseSize(value, unit) {
     case "TiB": return Math.round(n * 1024 * 1024 * 1024 * 1024);
     default: return Math.round(n);
   }
+}
+
+// ---------------- Renewal reminder job ----------------
+// Runs periodically: emails customers whose premium expires within 7/3/1 days,
+// once per window, with a link to the buy page. Thresholds are configurable.
+async function runRenewalReminders() {
+  try {
+    const due = await authStore.listUsersDueForRenewalReminder();
+    if (!due.length) return;
+    const buyUrl = `${publicBaseUrl()}/buy`;
+    for (const d of due) {
+      const email = d.user.email;
+      if (!email) continue;
+      const r = await sendRenewalReminder({
+        to: email,
+        daysLeft: d.daysLeft,
+        expiresAt: d.sub.expiresAt,
+        buyUrl,
+      });
+      await authStore.markRenewalReminded(d.user.id, d.windowDays);
+      console.log(`renewal-reminder: sent to ${email} (${d.daysLeft}d left, win ${d.windowDays}) sent=${r?.sent}`);
+    }
+  } catch (err) {
+    console.error("runRenewalReminders failed:", err);
+  }
+}
+
+const RENEWAL_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6h
+if (process.env.ENABLE_RENEWAL_REMINDERS !== "0") {
+  // Small initial delay so the server finishes booting before first run.
+  setTimeout(runRenewalReminders, 60_000);
+  setInterval(runRenewalReminders, RENEWAL_INTERVAL_MS);
+  console.log(`  renewal-reminders: every ${RENEWAL_INTERVAL_MS / 3_600_000}h (windows 7/3/1 days)`);
 }
 
 function onListen() {

@@ -330,6 +330,47 @@ export class AuthStore {
     return data.pendingPayments.slice(-50).reverse();
   }
 
+  /**
+   * Users with an active (non-lifetime) subscription expiring within `maxDays`
+   * that have NOT yet been reminded for the coarser reminder window they fall
+   * into. Reminder windows: [7, 3, 1]. A user due in 9 days => none yet
+   * (only reminded when <=7). Due in 5 days but already reminded at window 7
+   * => skipped. Returns records to email.
+   */
+  async listUsersDueForRenewalReminder() {
+    const data = await this._load();
+    const now = Date.now();
+    const windows = [7, 3, 1];
+    const out = [];
+    for (const user of data.users) {
+      if (user.revokedAt) continue;
+      const sub = activeSubscriptionFor(data, user.id);
+      if (!sub || !sub.expiresAt) continue; // none or lifetime
+      const msLeft = Date.parse(sub.expiresAt) - now;
+      if (msLeft <= 0) continue; // already expired -> handled elsewhere
+      const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+      // choose the coarsest window that still applies (7 > 3 > 1)
+      const win = windows.find((w) => daysLeft <= w);
+      if (win == null) continue; // >7 days, no reminder yet
+      const reminded = (data.renewalReminders ?? []).some(
+        (r) => r.userId === user.id && r.windowDays === win
+      );
+      if (reminded) continue;
+      out.push({ user, sub, daysLeft, windowDays: win });
+    }
+    return out;
+  }
+
+  /** Records that a renewal reminder was sent for a user at a given window. */
+  async markRenewalReminded(userId, windowDays) {
+    const data = await this._load();
+    data.renewalReminders = (data.renewalReminders ?? []).filter(
+      (r) => !(r.userId === userId && r.windowDays === windowDays)
+    );
+    data.renewalReminders.push({ userId, windowDays, sentAt: new Date().toISOString() });
+    await this._save(data);
+  }
+
   async _load() {
     if (!existsSync(this.filePath)) return emptyData();
     try {
@@ -438,6 +479,7 @@ function emptyData() {
     joinTokens: [],
     subscriptions: [],
     pendingPayments: [],
+    renewalReminders: [],
   };
 }
 
@@ -451,6 +493,7 @@ function normalizeData(data) {
     subscriptions: Array.isArray(data.subscriptions) ? data.subscriptions : [],
     enrollmentTokens: Array.isArray(data.enrollmentTokens) ? data.enrollmentTokens : [],
     pendingPayments: Array.isArray(data.pendingPayments) ? data.pendingPayments : [],
+    renewalReminders: Array.isArray(data.renewalReminders) ? data.renewalReminders : [],
   };
 }
 
