@@ -215,6 +215,21 @@ export class AuthStore {
    * Ensures a user exists for the given email (creates if missing). Used by
    * the payment webhook to grant premium to the buyer's account.
    */
+  /**
+   * Returns the active subscription (with expiresAt) for the user owning the
+   * given email, or null. Used by the admin payments view to show activation
+   * and expiry times after a payment was confirmed.
+   */
+  async subscriptionForUserEmail(email) {
+    const normalized = normalizeEmail(email);
+    if (!normalized) return null;
+    const data = await this._load();
+    const user = data.users.find((entry) => entry.email === normalized);
+    if (!user) return null;
+    const sub = activeSubscriptionFor(data, user.id);
+    return sub ? { productId: sub.productId, expiresAt: sub.expiresAt, createdAt: sub.createdAt } : null;
+  }
+
   async ensureUserByEmail(email) {
     const normalized = normalizeEmail(email);
     if (!normalized) throw badRequest("email is required");

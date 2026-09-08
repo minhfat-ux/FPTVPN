@@ -337,7 +337,31 @@ app.get("/v1/payments/status/:orderCode", async (req, res) => {
 app.get("/v1/admin/payments/pending", requireAdminAuth, async (_req, res) => {
   try {
     const orders = await authStore.listPendingPayments();
-    res.json({ orders: orders.map((o) => ({ orderCode: o.orderCode, email: o.email, plan: o.plan, method: o.method ?? "payos", createdAt: o.createdAt, paid: Boolean(o.paidAt) })) });
+    const enriched = [];
+    for (const o of orders) {
+      const planCfg = PLANS_PUBLIC[o.plan] ?? null;
+      let activatedAt = null;
+      let expiresAt = null;
+      if (o.paidAt) {
+        activatedAt = o.paidAt;
+        const sub = await authStore.subscriptionForUserEmail(o.email);
+        if (sub) expiresAt = sub.expiresAt;
+      }
+      enriched.push({
+        orderCode: o.orderCode,
+        email: o.email,
+        plan: o.plan,
+        plan_label: planCfg ? planCfg.label : o.plan,
+        amount: planCfg ? planCfg.amount : null,
+        days: planCfg ? planCfg.days : null,
+        method: o.method ?? "payos",
+        createdAt: o.createdAt,
+        paid: Boolean(o.paidAt),
+        activatedAt,
+        expiresAt,
+      });
+    }
+    res.json({ orders: enriched });
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
   }

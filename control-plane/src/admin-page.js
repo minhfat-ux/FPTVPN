@@ -319,8 +319,8 @@ export function adminPageHTML() {
       </div>
       <div style="overflow-x:auto; margin-top:12px;">
         <table>
-          <thead><tr><th>Ma don</th><th>Email khach</th><th>Goi</th><th>Method</th><th>Thoi gian</th><th>Trang thai</th><th>Action</th></tr></thead>
-          <tbody id="paymentsBody"><tr><td colspan="7">Bam Refresh.</td></tr></tbody>
+          <thead><tr><th>Ma don</th><th>Email khach</th><th>Goi</th><th>Method</th><th>So tien</th><th>Ngay tao</th><th>Kich hoat</th><th>Het han</th><th>Trang thai</th><th>Action</th></tr></thead>
+          <tbody id="paymentsBody"><tr><td colspan="10">Bam Refresh.</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -902,18 +902,24 @@ export function adminPageHTML() {
         for (const o of orders) {
           const tr = document.createElement("tr");
           const isPaid = Boolean(o.paid);
-          tr.innerHTML = "<td>#" + o.orderCode + "</td><td></td><td>" + o.plan + "</td><td>" + (o.method || "-") + "</td><td></td><td></td><td></td>";
+          tr.innerHTML = "<td>#" + o.orderCode + "</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
           const tds = tr.querySelectorAll("td");
+          const amt = o.amount != null ? o.amount.toLocaleString("vi-VN") + " d" : "-";
           tds[1].textContent = o.email;
-          tds[4].textContent = new Date(o.createdAt).toLocaleString();
-          tds[5].textContent = isPaid ? "Da xac nhan" : "Cho";
-          tds[5].style.color = isPaid ? "var(--accent)" : "var(--warning)";
+          tds[2].innerHTML = "<b>" + o.plan_label + "</b><br><small style='color:var(--muted)'>" + (o.days ? o.days + " ngay" : "") + "</small>";
+          tds[3].textContent = o.method || "-";
+          tds[4].textContent = amt;
+          tds[5].textContent = new Date(o.createdAt).toLocaleString();
+          tds[6].textContent = o.activatedAt ? new Date(o.activatedAt).toLocaleString() : "-";
+          tds[7].textContent = o.expiresAt ? new Date(o.expiresAt).toLocaleString() : "-";
+          tds[8].textContent = isPaid ? "Da kich hoat" : "Cho xac nhan";
+          tds[8].style.color = isPaid ? "var(--accent)" : "var(--warning)";
           if (!isPaid) {
             const btn = document.createElement("button");
             btn.textContent = "Xac nhan da nhan tien";
             btn.onclick = () => confirmOrder(o.orderCode);
-            tds[6].appendChild(btn);
-          } else tds[6].textContent = "-";
+            tds[9].appendChild(btn);
+          } else tds[9].textContent = "-";
           fields.paymentsBody.appendChild(tr);
         }
         fields.paymentsStatus.textContent = orders.length + " don.";
