@@ -143,7 +143,7 @@ const TEXTS = {
     planLabel: "Choose a plan",
     methodLabel: "Payment method",
     bankName: "VN Bank", bankScan: "Scan TPBank QR",
-    wechatScan: "Scan QR", alipayScan: "Scan QR",
+    wechatScan: "Scan QR", alipayScan: "Scan QR", momoScan: "Scan QR",
     payosName: "PayOS gateway", payosSub: "MoMo / QR / card",
     payBtn: "Create payment QR",
     note: "After you transfer, Premium will be activated for this email.",
@@ -176,6 +176,7 @@ const TEXTS = {
       bankqr: "Open your banking app, scan the QR and enter the exact amount.",
       wechat: "Open WeChat, scan the QR and enter the exact amount.",
       alipay: "Open Alipay, scan the QR and enter the exact amount.",
+      momo: "Open MoMo, scan the QR and enter the exact amount.",
       other: "Scan the QR with your payment app.",
     },
     errByCode: {
@@ -204,7 +205,7 @@ const TEXTS = {
     planLabel: "Chọn gói",
     methodLabel: "Phương thức thanh toán",
     bankName: "Ngân hàng VN", bankScan: "Quét QR TPBank",
-    wechatScan: "Quét QR", alipayScan: "Quét QR",
+    wechatScan: "Quét QR", alipayScan: "Quét QR", momoScan: "Quét QR MoMo",
     payosName: "Cổng PayOS", payosSub: "MoMo / QR / thẻ",
     payBtn: "Tạo mã thanh toán",
     note: "Sau khi chuyển tiền, premium sẽ được kích hoạt cho email này.",
@@ -237,6 +238,7 @@ const TEXTS = {
       bankqr: "Mở app ngân hàng quét QR và nhập đúng số tiền.",
       wechat: "Mở WeChat quét QR, nhập đúng số tiền.",
       alipay: "Mở Alipay quét QR, nhập đúng số tiền.",
+      momo: "Mở MoMo quét QR và nhập đúng số tiền.",
       other: "Quét QR bằng app thanh toán.",
     },
     errByCode: {
@@ -265,7 +267,7 @@ const TEXTS = {
     planLabel: "选择套餐",
     methodLabel: "支付方式",
     bankName: "越南银行", bankScan: "扫描 TPBank 二维码",
-    wechatScan: "扫描二维码", alipayScan: "扫描二维码",
+    wechatScan: "扫描二维码", alipayScan: "扫描二维码", momoScan: "扫描 MoMo 二维码",
     payosName: "PayOS 网关", payosSub: "MoMo / 二维码 / 银行卡",
     payBtn: "生成支付二维码",
     note: "转账后，Premium 将为此邮箱激活。",
@@ -298,6 +300,7 @@ const TEXTS = {
       bankqr: "打开银行应用扫描二维码并输入准确金额。",
       wechat: "打开微信扫描二维码并输入准确金额。",
       alipay: "打开支付宝扫描二维码并输入准确金额。",
+      momo: "打开 MoMo 扫描二维码并输入准确金额。",
       other: "使用支付应用扫描二维码。",
     },
     errByCode: {
@@ -326,7 +329,7 @@ const TEXTS = {
     planLabel: "プランを選択",
     methodLabel: "支払い方法",
     bankName: "ベトナムの銀行", bankScan: "TPBank QRをスキャン",
-    wechatScan: "QRをスキャン", alipayScan: "QRをスキャン",
+    wechatScan: "QRをスキャン", alipayScan: "QRをスキャン", momoScan: "MoMo QR をスキャン",
     payosName: "PayOS決済", payosSub: "MoMo / QR / カード",
     payBtn: "支払いQRを作成",
     note: "送金後、このメールでプレミアムが有効になります。",
@@ -359,6 +362,7 @@ const TEXTS = {
       bankqr: "銀行アプリを開き、QRをスキャンして正確な金額を入力してください。",
       wechat: "WeChatを開き、QRをスキャンして正確な金額を入力してください。",
       alipay: "Alipayを開き、QRをスキャンして正確な金額を入力してください。",
+      momo: "MoMo を開き、QR をスキャンして正確な金額を入力してください。",
       other: "支払いアプリでQRをスキャンしてください。",
     },
     errByCode: {
@@ -387,7 +391,7 @@ const TEXTS = {
     planLabel: "요금제 선택",
     methodLabel: "결제 수단",
     bankName: "베트남 은행", bankScan: "TPBank QR 스캔",
-    wechatScan: "QR 스캔", alipayScan: "QR 스캔",
+    wechatScan: "QR 스캔", alipayScan: "QR 스캔", momoScan: "MoMo QR 스캔",
     payosName: "PayOS 결제", payosSub: "MoMo / QR / 카드",
     payBtn: "결제 QR 만들기",
     note: "송금 후 이 이메일로 프리미엄이 활성화됩니다.",
@@ -420,6 +424,7 @@ const TEXTS = {
       bankqr: "은행 앱을 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
       wechat: "WeChat을 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
       alipay: "Alipay를 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
+      momo: "MoMo를 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
       other: "결제 앱으로 QR을 스캔하세요.",
     },
     errByCode: {
@@ -661,6 +666,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
     .method .brand svg { width: 17px; height: 17px; display: block; }
     .method.brand-wechat .brand { background: #07C160; }
     .method.brand-alipay .brand { background: #1677FF; }
+    .method.brand-momo .brand { background: #A50064; }
+    .momo-mark { color: #fff; font-weight: 800; font-size: 9.5px; letter-spacing: -.3px; }
     button {
       width: 100%; margin-top: 24px; border: 0; border-radius: 12px; padding: 14px;
       color: #06160d; background: #33c773; font: inherit; font-weight: 800; cursor: pointer; font-size: 16px;
@@ -812,6 +819,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
         </div>
         <div class="method brand-alipay" data-method="alipay">
           <div class="icon"><span class="brand"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M19.695 15.07c3.426 1.158 4.203 1.22 4.203 1.22V3.846c0-2.124-1.705-3.845-3.81-3.845H3.914C1.808.001.102 1.722.102 3.846v16.31c0 2.123 1.706 3.845 3.813 3.845h16.173c2.105 0 3.81-1.722 3.81-3.845v-.157s-6.19-2.602-9.315-4.119c-2.096 2.602-4.8 4.181-7.607 4.181-4.75 0-6.361-4.19-4.112-6.949.49-.602 1.324-1.175 2.617-1.497 2.025-.502 5.247.313 8.266 1.317a16.796 16.796 0 0 0 1.341-3.302H5.781v-.952h4.799V6.975H4.77v-.953h5.81V3.591s0-.409.411-.409h2.347v2.84h5.744v.951h-5.744v1.704h4.69a19.453 19.453 0 0 1-1.986 5.06c1.424.52 2.702 1.011 3.654 1.333m-13.81-2.032c-.596.06-1.71.325-2.321.869-1.83 1.608-.735 4.55 2.968 4.55 2.151 0 4.301-1.388 5.99-3.61-2.403-1.182-4.438-2.028-6.637-1.809"/></svg></span></div>Alipay<br><small>${t.alipayScan}</small>
+        </div>
+        <div class="method brand-momo" data-method="momo">
+          <div class="icon"><span class="brand"><span class="momo-mark">MoMo</span></span></div>MoMo<br><small>${t.momoScan}</small>
         </div>
         <div class="method" data-method="payos">
           <div class="icon"><span class="brand" style="background:rgba(255,255,255,.14)">💳</span></div>${t.payosName}<br><small>${t.payosSub}</small>
@@ -965,7 +975,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
           const labels = {
             bankqr: T.hints.bankqr,
             wechat: T.hints.wechat,
-            alipay: T.hints.alipay
+            alipay: T.hints.alipay,
+            momo: T.hints.momo
           };
           qrHint.textContent = labels[data.method] || T.hints.other;
           qrStatus.textContent = T.waiting;

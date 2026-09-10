@@ -320,7 +320,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     await aiStore.recordPendingPayment(orderCode, { email, plan, method });
     fireAiPaymentAlert(orderCode, email, plan, planCfg.amount);
 
-    if (method === "wechat" || method === "alipay") {
+    if (method === "wechat" || method === "alipay" || method === "momo") {
       return res.json({ qrImageUrl: `/v1/ai/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
     }
 
@@ -359,7 +359,7 @@ app.get("/v1/ai/downloads/android", async (_req, res) => {
 // Personal WeChat / Alipay collection QR images (shared with VPNFlow assets).
 app.get("/v1/ai/payments/qr/:name", async (req, res) => {
   try {
-    const name = ["wechat", "alipay"].includes(req.params.name) ? req.params.name : null;
+    const name = ["wechat", "alipay", "momo"].includes(req.params.name) ? req.params.name : null;
     if (!name) return res.status(404).send("Not found");
     const file = path.join(process.env.PAY_QR_DIR || "/root/flowvpn-pay", `${name}.png`);
     if (!fs.existsSync(file)) return res.status(404).json({ error: "QR image not uploaded yet" });
@@ -501,7 +501,7 @@ app.post("/v1/payments/create", async (req, res) => {
       return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
     }
 
-    if (method === "wechat" || method === "alipay") {
+    if (method === "wechat" || method === "alipay" || method === "momo") {
       // Personal collection QR: static image, paid amount entered by the
       // customer. Admin confirms manually via /v1/admin/payments/:code/confirm.
       return res.json({ qrImageUrl: `/v1/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
@@ -526,7 +526,7 @@ app.post("/v1/payments/create", async (req, res) => {
 // Serve the static personal WeChat/Alipay collection QR images.
 app.get("/v1/payments/qr/:name", async (req, res) => {
   try {
-    const name = ["wechat", "alipay"].includes(req.params.name) ? req.params.name : null;
+    const name = ["wechat", "alipay", "momo"].includes(req.params.name) ? req.params.name : null;
     if (!name) return res.status(404).send("Not found");
     const file = path.join(process.env.PAY_QR_DIR || "/root/flowvpn-pay", `${name}.png`);
     if (!fs.existsSync(file)) return res.status(404).json({ error: "QR image not uploaded yet" });
