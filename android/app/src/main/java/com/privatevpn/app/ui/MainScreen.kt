@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.privatevpn.app.Config
 import com.privatevpn.app.VPNFlowApp
 import com.privatevpn.app.api.ExitNode
 import com.privatevpn.app.l10n.LKey
@@ -150,7 +151,8 @@ fun MainScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        if (!isSubscribed) {
+        // Store build: no in-app purchase UI at all (Play Payments policy).
+        if (!isSubscribed && Config.SELL_ON_WEB) {
             SubscriptionStatusCard(
                 app = app,
                 onUpgrade = onShowPaywall,

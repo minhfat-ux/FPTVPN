@@ -11,16 +11,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +50,7 @@ fun PaywallScreen(
     onUpgraded: () -> Unit,
 ) {
     val lang = app.languageStore
+    val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize().background(VPNTheme.backgroundGradient)) {
         // Header bar: title + close
@@ -81,12 +86,64 @@ fun PaywallScreen(
             )
         }
 
-        // The buy page handles plans, payment and invoice delivery. Localize
-        // the paywall to the in-app language via ?lang= (mirrors iOS/macOS).
-        BuyWebView(
-            url = Config.BUY_URL + "?lang=" + lang.language.code,
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (Config.SELL_ON_WEB) {
+            // Web-selling build: the buy page handles plans, payment and invoice
+            // delivery. Localize via ?lang= (mirrors iOS/macOS).
+            BuyWebView(
+                url = Config.BUY_URL + "?lang=" + lang.language.code,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            // Store build (Google Play): purchases are NOT offered in-app.
+            // Explain how to activate an existing subscription and let the user
+            // re-sync it; there is deliberately no price and no external link.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    Icons.Default.WorkspacePremium,
+                    contentDescription = null,
+                    tint = VPNTheme.SecondaryLabel,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    lang.t(LKey.premiumRequired),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = VPNTheme.Label,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    lang.t(LKey.premiumRequired) + " — " + lang.t(LKey.choosePlanToStart),
+                    fontSize = 14.sp,
+                    color = VPNTheme.SecondaryLabel,
+                )
+                Spacer(Modifier.height(22.dp))
+                Button(onClick = {
+                    app.subscriptionStore.syncBackendPremium()
+                    onUpgraded()
+                }) {
+                    Text(lang.t(LKey.restorePurchases))
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    lang.t(LKey.contactSupport),
+                    fontSize = 14.sp,
+                    color = VPNTheme.SecondaryLabel,
+                    modifier = Modifier.androidClickable {
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_SENDTO,
+                            android.net.Uri.parse("mailto:support@meetflowai.site"),
+                        )
+                        runCatching { context.startActivity(intent) }
+                    },
+                )
+            }
+        }
     }
 }
 

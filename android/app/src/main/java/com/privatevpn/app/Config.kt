@@ -11,6 +11,12 @@ object Config {
     /** Web purchase page (plan picker + QR payment). Mirrors iOS/macOS. */
     const val BUY_URL = "https://meetflowai.site/buy"
 
+    /** Selling mode — WEB branch: true (in-app paywall opens the web buy page).
+     *  STORE branch (Google Play): false — no in-app purchase, no link out to a
+     *  purchase page (Play Payments policy). Users sign in with an account that
+     *  already has a subscription. */
+    const val SELL_ON_WEB = false
+
     /** Google Play Billing product IDs (must match Play Console + backend). */
     val PRODUCT_IDS = listOf("Monthly_Premium", "Yearly_Premium")
 
