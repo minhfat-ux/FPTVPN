@@ -7,6 +7,15 @@ struct ForceUpdateView: View {
     let info: AppVersionInfo
     @EnvironmentObject private var languageStore: AppLanguageStore
 
+    /// App Store link from the backend. Until the app has a public App Store
+    /// page the admin leaves `store_url` empty, so fall back to an App Store
+    /// search for the app name instead of a dead button.
+    private var updateURL: URL? {
+        let raw = info.store_url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !raw.isEmpty, let url = URL(string: raw) { return url }
+        return URL(string: "https://apps.apple.com/search?term=FlowVPN")
+    }
+
     var body: some View {
         ZStack {
             VPNTheme.backgroundGradient
@@ -33,7 +42,7 @@ struct ForceUpdateView: View {
                     .padding(.horizontal, 24)
 
                 Button {
-                    if let url = URL(string: info.store_url) {
+                    if let url = updateURL {
                         UIApplication.shared.open(url)
                     }
                 } label: {

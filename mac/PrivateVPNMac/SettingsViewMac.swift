@@ -414,11 +414,46 @@ final class MacSubscriptionStore: ObservableObject {
     }
 }
 
+/// How the paywall is delivered — mirrors the iOS `PaywallDistribution`.
+/// `appStore` (default) is the only mode that may be submitted to the Mac App
+/// Store: digital goods must use In-App Purchase and must not link out to an
+/// external payment page (Guidelines 3.1.1 / 3.1.3).
+enum MacPaywallDistribution {
+    case appStore
+    case direct
+
+    static var current: MacPaywallDistribution {
+        #if DEBUG
+        // Direct builds opt in explicitly, e.g.:
+        //   defaults write com.privatevpn.mac flowvpn.paywallMode direct
+        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "direct"
+            ? .direct
+            : .appStore
+        #else
+        // Release (App Store) builds always use In-App Purchase — see the iOS
+        // PaywallDistribution note (Guideline 3.1.1 / 3.1.3).
+        return .appStore
+        #endif
+    }
+}
+
 struct MacPaywallView: View {
+    var body: some View {
+        switch MacPaywallDistribution.current {
+        case .appStore:
+            MacStoreKitPaywallView()
+        case .direct:
+            MacWebBuyPaywallView()
+        }
+    }
+}
+
+/// Direct-distribution paywall: the web buy page (bank QR / WeChat / Alipay).
+/// Only shown when `flowvpn.paywallMode` is set to `direct`.
+struct MacWebBuyPaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var languageStore: AppLanguageStore
 
-    /// Buy page localized to the in-app language (paywall maps to app UI).
     private var buyURL: URL {
         URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)")!
     }
@@ -428,9 +463,6 @@ struct MacPaywallView: View {
             VPNThemeMac.backgroundGradient
                 .ignoresSafeArea()
 
-            // Buy page (meetflowai.site/buy) handles plans, payment
-            // (bank QR / WeChat / Alipay) and emails the invoice. Premium is
-            // activated server-side for the signed-in account.
             MacBuyWebView(url: buyURL)
 
             Button {
@@ -446,8 +478,231 @@ struct MacPaywallView: View {
             .buttonStyle(.plain)
             .padding(16)
         }
-        .frame(width: 460, height: 760)   // fixed sheet size
+        .frame(width: 460, height: 760)
         .preferredColorScheme(.dark)
+    }
+}
+
+struct MacStoreKitPaywallView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VPNThemeMac.backgroundGradient
+                .ignoresSafeArea()
+
+            // ScrollView keeps the sheet usable on small screens: the
+            // content (header + benefits + plans + disclosure) can exceed
+            // the window height, so it scrolls instead of clipping/offsetting.
+            ScrollView {
+                VStack(spacing: 22) {
+                    header
+                    benefits
+                    plans
+                    footer
+                }
+                .frame(width: 390)
+                .padding(24)
+            }
+            .scrollIndicators(.hidden)
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(VPNThemeMac.textPrimary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(16)
+        }
+        .frame(width: 438, height: 720)   // fixed sheet size (390 + 2×24 padding)
+        .preferredColorScheme(.dark)
+        .task {
+            await subscriptionStore.start()
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 76, height: 76)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+
+            Text(languageStore.t(.paywallTitle))
+                .font(.largeTitle.bold())
+                .foregroundStyle(VPNThemeMac.textPrimary)
+                .multilineTextAlignment(.center)
+
+            Text(languageStore.t(.paywallSubtitle))
+                .font(.subheadline)
+                .foregroundStyle(VPNThemeMac.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private var benefits: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            benefitRow("checkmark.shield.fill", languageStore.t(.benefitTunnel))
+            benefitRow("wifi.exclamationmark", languageStore.t(.benefitWifi))
+            benefitRow("bolt.fill", languageStore.t(.benefitFast))
+        }
+        .macPaywallCard()
+    }
+
+    private func benefitRow(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(VPNThemeMac.accent)
+                .frame(width: 26)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(VPNThemeMac.textPrimary)
+            Spacer()
+        }
+    }
+
+    private var plans: some View {
+        VStack(spacing: 12) {
+            if subscriptionStore.isLoading && subscriptionStore.products.isEmpty {
+                ProgressView()
+                    .tint(VPNThemeMac.accent)
+                    .padding(.vertical, 24)
+            }
+
+            ForEach(subscriptionStore.products, id: \.id) { product in
+                Button {
+                    Task {
+                        await subscriptionStore.purchase(product)
+                        if subscriptionStore.isSubscribed {
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    planRow(product)
+                }
+                .buttonStyle(.plain)
+                .disabled(subscriptionStore.isLoading)
+            }
+
+            if subscriptionStore.products.isEmpty && !subscriptionStore.isLoading {
+                VStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(languageStore.t(.noPlans))
+                        .font(.headline)
+                        .foregroundStyle(VPNThemeMac.textPrimary)
+                    Text(languageStore.t(.noPlansDetail))
+                        .font(.footnote)
+                        .foregroundStyle(VPNThemeMac.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 16)
+            }
+
+            if let message = subscriptionStore.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+            }
+        }
+        .macPaywallCard()
+    }
+
+    private func planRow(_ product: Product) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(product.displayName)
+                    .font(.headline)
+                    .foregroundStyle(VPNThemeMac.textPrimary)
+                Text(product.description)
+                    .font(.footnote)
+                    .foregroundStyle(VPNThemeMac.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(product.displayPrice)
+                .font(.headline.bold())
+                .foregroundStyle(.black)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(VPNThemeMac.accent)
+                .clipShape(Capsule())
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var footer: some View {
+        VStack(spacing: 12) {
+            Button {
+                Task {
+                    await subscriptionStore.restorePurchases()
+                }
+            } label: {
+                Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
+                    .font(.subheadline.bold())
+            }
+            .tint(VPNThemeMac.accent)
+            .disabled(subscriptionStore.isLoading)
+
+            legalLinks
+            .font(.footnote)
+            .foregroundStyle(VPNThemeMac.textSecondary)
+
+            Text(languageStore.t(.subscriptionDisclosure))
+                .font(.caption)
+                .foregroundStyle(VPNThemeMac.textSecondary.opacity(0.7))
+                .multilineTextAlignment(.center)
+
+            Button(languageStore.t(.notNow)) {
+                dismiss()
+            }
+            .font(.footnote)
+            .foregroundStyle(VPNThemeMac.textSecondary)
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+    }
+
+    private var legalLinks: some View {
+        HStack(spacing: 14) {
+            Link(languageStore.t(.privacy), destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!)
+            Link(languageStore.t(.support), destination: URL(string: "https://meetflowai.site/SupportPrivateVPN.html")!)
+            Link(languageStore.t(.eula), destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+        }
+    }
+}
+
+private extension View {
+    func macPaywallCard() -> some View {
+        self
+            .padding(18)
+            .frame(maxWidth: .infinity)
+            .background(VPNThemeMac.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
+            )
     }
 }
 

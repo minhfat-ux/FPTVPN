@@ -16,7 +16,18 @@ export class AuthStore {
     this.filePath = filePath;
   }
 
-  async startEmailLogin(email) {
+  /**
+   * Create (or replace) the one-time login code for an email address.
+   *
+   * `options.fixedCode` pins the code instead of generating a random one — used
+   * for the App Review demo account, where the reviewer cannot read the emailed
+   * code (see DEV_LOGIN_CODE). It must be 6 digits, and the code has to match
+   * what the app/server compares against, so it is stored hashed as usual.
+   *
+   * `options.skipRateLimit` exempts an account from the resend limit (dev/review
+   * allowlist only, where no new email is actually needed).
+   */
+  async startEmailLogin(email, options = {}) {
     const normalized = normalizeEmail(email);
     if (!normalized) throw badRequest("email is required");
 
@@ -27,12 +38,17 @@ export class AuthStore {
       (entry) => Date.parse(entry.createdAt) > windowStart
     );
     const recentCount = data.emailLoginRequests.filter((entry) => entry.email === normalized).length;
-    if (recentCount >= RESEND_RATE_MAX) {
+    // The resend limit protects real mailboxes from code spam. A dev/review
+    // account with a pinned code sends nothing new, so it is exempt — a
+    // reviewer tapping "resend" must never hit "too many requests".
+    if (options.skipRateLimit !== true && recentCount >= RESEND_RATE_MAX) {
       throw tooManyRequests("Too many login code requests; try again later");
     }
     data.emailLoginRequests.push({ email: normalized, createdAt: new Date(now).toISOString() });
 
-    const code = `${crypto.randomInt(0, 1000000)}`.padStart(6, "0");
+    const fixed = typeof options.fixedCode === "string" ? options.fixedCode.trim() : "";
+    if (fixed && !/^[0-9]{6}$/.test(fixed)) throw badRequest("fixedCode must be 6 digits");
+    const code = fixed || `${crypto.randomInt(0, 1000000)}`.padStart(6, "0");
     data.emailOtps = data.emailOtps.filter((otp) => otp.email !== normalized);
     data.emailOtps.push({
       email: normalized,
@@ -121,6 +137,23 @@ export class AuthStore {
     const user = data.users.find((entry) => entry.id === session.userId);
     if (!user || user.revokedAt) return null;
     return { session, user, subscription: activeSubscriptionFor(data, user.id) };
+  }
+
+  /**
+   * Re-reads a session payload so subscription changes are visible immediately
+   * (e.g. a test/review grant applied right after login).
+   */
+  async sessionPayloadForToken(token) {
+    const auth = await this.findSession(token);
+    if (!auth) return null;
+    // The stored session only keeps the token hash, so echo back the token the
+    // caller presented (previously yielded a payload without access_token).
+    return {
+      access_token: token,
+      token_type: "Bearer",
+      expires_at: auth.session.expiresAt,
+      user: publicUser(auth.user, auth.subscription),
+    };
   }
 
   async createEnrollmentToken(userId) {
@@ -271,14 +304,14 @@ export class AuthStore {
     return publicUser(user, activeSubscriptionFor(data, userId));
   }
 
-  async grantSubscriptionForTest(userId, productId = "test.premium") {
+  async grantSubscriptionForTest(userId, productId = "test.premium", days = 365) {
     const data = await this._load();
     data.subscriptions = data.subscriptions.filter((entry) => entry.userId !== userId);
     data.subscriptions.push({
       id: crypto.randomUUID(),
       userId,
       productId,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString(),
       revokedAt: null,
       createdAt: new Date().toISOString(),
     });
@@ -458,12 +491,12 @@ function createSession(data, userId) {
   return session;
 }
 
-function sessionPayload(session, user) {
+function sessionPayload(session, user, subscription = null) {
   return {
     access_token: session.token,
     token_type: "Bearer",
     expires_at: session.expiresAt,
-    user: publicUser(user),
+    user: publicUser(user, subscription),
   };
 }
 

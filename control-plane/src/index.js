@@ -79,6 +79,11 @@ const AUTH_DEV_GRANT_SUBSCRIPTION = process.env.AUTH_DEV_GRANT_SUBSCRIPTION === 
 //   (so /v1/enrollment-tokens stops returning 403 for the test account).
 const DEBUG_CODE_EMAILS = parseEmailList(process.env.DEBUG_CODE_EMAILS);
 const GRANT_SUB_EMAILS = parseEmailList(process.env.GRANT_SUB_EMAILS);
+// DEV_LOGIN_CODE: pin the email login code for the DEBUG_CODE_EMAILS accounts
+// (e.g. the App Review demo account `review@meetflowai.site`). App Review cannot
+// read email, so the reviewer needs a code that is always the same — it is
+// quoted in the App Store Connect review notes. Leave unset to disable.
+const DEV_LOGIN_CODE = (process.env.DEV_LOGIN_CODE ?? "").trim();
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
@@ -857,13 +862,30 @@ function publicBaseUrl() {
 
 app.post("/v1/auth/email/start", async (req, res) => {
   try {
-    const login = await authStore.startEmailLogin(req.body?.email);
+    // DEV_LOGIN_CODE pins the code for the dev/review allowlist so a reviewer
+    // who cannot read the mailbox can still sign in with the documented code.
+    const requestedEmail = String(req.body?.email ?? "").trim().toLowerCase();
+    const isAllowlisted = DEBUG_CODE_EMAILS.has(requestedEmail);
+    const login = await authStore.startEmailLogin(req.body?.email, {
+      fixedCode: isAllowlisted ? DEV_LOGIN_CODE || undefined : undefined,
+      skipRateLimit: isAllowlisted,
+    });
     // The apps send their UI language so the code arrives localized.
     const lang = pickMailLang(req.body?.lang);
     await authStore.rememberLangForEmail(login.email, lang);
-    const mail = await sendOtpEmail({ email: login.email, code: login.code, lang });
+    const isDevCodeAccount = !IS_PRODUCTION || DEBUG_CODE_EMAILS.has(login.email);
+    let mail = { sent: false };
+    try {
+      mail = await sendOtpEmail({ email: login.email, code: login.code, lang });
+    } catch (err) {
+      // A delivery failure must never lock out an account that gets the code
+      // in-app (App Review demo account / owner): still return the code.
+      // Real customers keep failing loudly so nobody is stuck without a code.
+      if (!isDevCodeAccount) throw err;
+      console.error(`OTP email delivery failed for dev-code account ${login.email}:`, err?.message ?? err);
+    }
     const body = { ok: true };
-    if (!IS_PRODUCTION || DEBUG_CODE_EMAILS.has(login.email)) {
+    if (isDevCodeAccount) {
       body.debug_code = mail.devCode ?? login.code;
     }
     res.status(202).json(body);
@@ -877,6 +899,10 @@ app.post("/v1/auth/email/verify", async (req, res) => {
     const session = await authStore.verifyEmailLogin(req.body?.email, req.body?.code);
     if (AUTH_DEV_GRANT_SUBSCRIPTION || GRANT_SUB_EMAILS.has(session.user.email ?? "")) {
       await authStore.grantSubscriptionForTest(session.user.id);
+      // Re-read so the session the app stores already shows Premium active
+      // (the payload above was built before the grant).
+      const fresh = await authStore.sessionPayloadForToken(session.access_token);
+      if (fresh) return res.status(201).json(fresh);
     }
     res.status(201).json(session);
   } catch (err) {

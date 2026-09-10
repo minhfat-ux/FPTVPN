@@ -412,11 +412,254 @@ final class SubscriptionStore: ObservableObject {
     }
 }
 
+/// How the paywall is delivered.
+///
+/// - `appStore`: **In-App Purchase only.** App Store Review Guideline 3.1.1
+///   requires digital goods to be sold with IAP, and 3.1.3 forbids linking out
+///   to an external payment page — so this is the default, and the only mode
+///   that may be submitted.
+/// - `direct`: the web buy page (bank QR / WeChat / Alipay) used by builds we
+///   hand out ourselves (sideload / enterprise). Never submit this mode.
+enum PaywallDistribution {
+    case appStore
+    case direct
+
+    static var current: PaywallDistribution {
+        #if DEBUG
+        // Direct builds opt in explicitly, e.g.:
+        //   defaults write com.privatevpn.app flowvpn.paywallMode direct
+        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "direct"
+            ? .direct
+            : .appStore
+        #else
+        // Release (App Store) builds always use In-App Purchase. The web buy page
+        // is compiled in but unreachable, so a submitted binary can never present
+        // an out-of-app payment path (Guideline 3.1.1 / 3.1.3).
+        return .appStore
+        #endif
+    }
+}
+
 struct PaywallView: View {
+    var body: some View {
+        switch PaywallDistribution.current {
+        case .appStore:
+            StoreKitPaywallView()
+        case .direct:
+            WebBuyPaywallView()
+        }
+    }
+}
+
+/// App Store paywall — StoreKit subscriptions, restore, legal links and the
+/// auto-renewal disclosure required by Guideline 3.1.2.
+struct StoreKitPaywallView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
+
+    var body: some View {
+        ZStack {
+            VPNTheme.backgroundGradient
+                .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 22) {
+                    header
+                    benefits
+                    plans
+                    footer
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 28)
+                .padding(.bottom, 34)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .task {
+            await subscriptionStore.start()
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            Image("AppLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 76, height: 76)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+
+            Text(languageStore.t(.paywallTitle))
+                .font(.largeTitle.bold())
+                .foregroundStyle(VPNTheme.label)
+                .multilineTextAlignment(.center)
+
+            Text(languageStore.t(.paywallSubtitle))
+                .font(.subheadline)
+                .foregroundStyle(VPNTheme.secondaryLabel)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private var benefits: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            benefitRow("checkmark.shield.fill", languageStore.t(.benefitTunnel))
+            benefitRow("wifi.exclamationmark", languageStore.t(.benefitWifi))
+            benefitRow("bolt.fill", languageStore.t(.benefitFast))
+        }
+        .paywallCard()
+    }
+
+    private func benefitRow(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(VPNTheme.accent)
+                .frame(width: 26)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(VPNTheme.label)
+            Spacer()
+        }
+    }
+
+    private var plans: some View {
+        VStack(spacing: 12) {
+            if subscriptionStore.isLoading && subscriptionStore.products.isEmpty {
+                ProgressView()
+                    .tint(VPNTheme.accent)
+                    .padding(.vertical, 24)
+            }
+
+            ForEach(subscriptionStore.products, id: \.id) { product in
+                Button {
+                    Task {
+                        await subscriptionStore.purchase(product)
+                        if subscriptionStore.isSubscribed {
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    planRow(product)
+                }
+                .buttonStyle(.plain)
+                .disabled(subscriptionStore.isLoading)
+            }
+
+            if subscriptionStore.products.isEmpty && !subscriptionStore.isLoading {
+                VStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(languageStore.t(.noPlans))
+                        .font(.headline)
+                        .foregroundStyle(VPNTheme.label)
+                    Text(languageStore.t(.noPlansDetail))
+                        .font(.footnote)
+                        .foregroundStyle(VPNTheme.secondaryLabel)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 16)
+            }
+
+            if let message = subscriptionStore.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+            }
+        }
+        .paywallCard()
+    }
+
+    private func planRow(_ product: Product) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(product.displayName)
+                    .font(.headline)
+                    .foregroundStyle(VPNTheme.label)
+                Text(product.description)
+                    .font(.footnote)
+                    .foregroundStyle(VPNTheme.secondaryLabel)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(product.displayPrice)
+                .font(.headline.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(VPNTheme.accent)
+                .clipShape(Capsule())
+        }
+        .padding(16)
+        .background(Color(uiColor: .tertiarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
+        )
+    }
+
+    private var footer: some View {
+        VStack(spacing: 12) {
+            Button {
+                Task {
+                    await subscriptionStore.restorePurchases()
+                }
+            } label: {
+                Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
+                    .font(.subheadline.bold())
+            }
+            .tint(VPNTheme.accent)
+            .disabled(subscriptionStore.isLoading)
+
+            HStack(spacing: 14) {
+                Link(languageStore.t(.privacy), destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!)
+                Link(languageStore.t(.support), destination: URL(string: "https://meetflowai.site/SupportPrivateVPN.html")!)
+                Link(languageStore.t(.eula), destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+            }
+            .font(.footnote)
+            .foregroundStyle(VPNTheme.secondaryLabel)
+
+            Text(languageStore.t(.subscriptionDisclosure))
+                .font(.caption)
+                .foregroundStyle(VPNTheme.secondaryLabel)
+                .multilineTextAlignment(.center)
+
+            Button(languageStore.t(.notNow)) {
+                dismiss()
+            }
+            .font(.footnote)
+            .foregroundStyle(VPNTheme.secondaryLabel)
+            .padding(.top, 4)
+        }
+    }
+}
+
+private extension View {
+    func paywallCard() -> some View {
+        self
+            .padding(18)
+            .frame(maxWidth: .infinity)
+            .background(VPNTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(VPNTheme.cardStroke, lineWidth: 1)
+            )
+    }
+}
+
+/// Direct-distribution paywall: the web buy page (bank QR / WeChat / Alipay).
+/// Only shown when `flowvpn.paywallMode` is set to `direct`.
+struct WebBuyPaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var languageStore: AppLanguageStore
 
-    /// Buy page localized to the in-app language (paywall maps to app UI).
     private var buyURL: URL {
         URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)")!
     }
@@ -424,7 +667,6 @@ struct PaywallView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Header bar: title + close
                 HStack {
                     Text(languageStore.t(.paywallTitle))
                         .font(.headline)
@@ -440,10 +682,6 @@ struct PaywallView: View {
                 .padding(.vertical, 10)
                 .background(VPNTheme.backgroundTop)
 
-                // The buy page (meetflowai.site/buy) handles plan selection,
-                // payment (bank QR / WeChat / Alipay) and email delivery of the
-                // invoice. Premium is activated server-side on the account the
-                // customer is signed in with.
                 BuyWebView(url: buyURL)
                     .ignoresSafeArea()
             }
