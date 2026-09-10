@@ -28,15 +28,34 @@ Vì vậy trang buy hiển thị thêm **giá quy đổi sang ¥** cho hai phư�
 - Email báo đơn cho chủ shop cũng ghi thêm dòng **Quy đổi CNY: ¥X** để biết cần đối chiếu bao nhiêu.
 
 **Làm tròn:** luôn làm tròn **lên** tới đồng ¥ nguyên (ceil) — khách nhập tay, không để thiếu tiền.
-Ví dụ: 70.000đ → ¥19 · 150.000đ → ¥39 · 600.000đ → ¥155 · 1.500.000đ → ¥387.
 
-**Tỷ giá:** lấy tự động từ `open.er-api.com` (miễn phí, cập nhật hằng ngày), cache **6 giờ**.
+**Tỷ giá hiện tại: GHIM CỐ ĐỊNH 1 CNY = 3.500 đ** (chủ shop ấn định, không dùng tỷ giá thị trường).
+Đặt bằng `Environment=VND_PER_CNY=3500` trong `/etc/systemd/system/flowvpn-cp.service.d/store-urls.conf`.
 
-- Ghim tỷ giá cố định: `Environment=VND_PER_CNY=3800` trong systemd drop-in
-  (đặt là dùng luôn, không gọi mạng nữa).
-- Nếu không gọi được API: dùng tỷ giá cache gần nhất, cuối cùng mới dùng mặc định `3880`.
-- Nếu tỷ giá lệch quá **30%** so với lần trước → coi là nguồn lỗi, không áp dụng (tránh giá vô lý).
-- Log kiểm tra: `journalctl -u flowvpn-cp | grep "CNY rate"` → `CNY rate: 1 CNY = 3876 VND (open.er-api.com, cached 6h)`.
+| Gói | Giá | Quy đổi |
+|---|---|---|
+| VPN tháng | 70.000đ | **¥20** |
+| VPN 3 tháng | 190.000đ | **¥55** |
+| VPN 6 tháng | 350.000đ | **¥100** |
+| VPN năm | 600.000đ | **¥172** |
+| VPN trọn đời | 1.500.000đ | **¥429** |
+| MeetFlow AI pass30 | 150.000đ | **¥43** |
+| MeetFlow AI tháng | 130.000đ | **¥38** |
+| MeetFlow AI năm | 1.050.000đ | **¥300** |
+
+Đổi tỷ giá: sửa số trong dòng `VND_PER_CNY` → `systemctl daemon-reload && systemctl restart flowvpn-cp`.
+**Xoá** dòng đó để quay lại tỷ giá thị trường tự động.
+
+Khi chạy tỷ giá thị trường (không ghim): lấy từ `open.er-api.com` (miễn phí, cập nhật hằng ngày),
+cache **6 giờ**; không gọi được thì dùng cache gần nhất rồi mới tới mặc định `3880`;
+lệch quá **30%** so với lần trước thì coi là nguồn lỗi và không áp dụng.
+
+Log kiểm tra: `journalctl -u flowvpn-cp | grep "CNY rate"`
+
+```
+CNY rate: pinned at 1 CNY = 3500 VND (env:VND_PER_CNY)          # đang ghim
+CNY rate: 1 CNY = 3876 VND (open.er-api.com, cached 6h)          # chạy theo thị trường
+```
 
 ## 2. Kích hoạt Pro cho khách
 

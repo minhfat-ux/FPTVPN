@@ -628,9 +628,16 @@ const PRODUCT_META = {
 const DEFAULT_VND_PER_CNY = Number(process.env.VND_PER_CNY ?? 3880);
 const CNY_CACHE_MS = 6 * 60 * 60 * 1000;
 let cnyCache = { rate: null, at: 0, source: null };
+let envRateLogged = false;
 
 export async function vndPerCny() {
   if (process.env.VND_PER_CNY) {
+    // Pinned by the shop: no rate feed, no drift. Logged once so ops can see
+    // which mode is active without spamming every page render.
+    if (!envRateLogged) {
+      envRateLogged = true;
+      console.log(`CNY rate: pinned at 1 CNY = ${Math.round(DEFAULT_VND_PER_CNY)} VND (env:VND_PER_CNY)`);
+    }
     return { rate: DEFAULT_VND_PER_CNY, at: null, source: "env:VND_PER_CNY" };
   }
   if (cnyCache.rate && Date.now() - cnyCache.at < CNY_CACHE_MS) return cnyCache;
