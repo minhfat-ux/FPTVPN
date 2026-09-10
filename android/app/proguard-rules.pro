@@ -21,3 +21,7 @@
 # OkHttp
 -dontwarn okhttp3.**
 -dontwarn okio.**
+
+# Tink (pulled in transitively) references errorprone annotations that are not
+# on the runtime classpath; R8 only needs to ignore them.
+-dontwarn com.google.errorprone.annotations.**

@@ -1,10 +1,7 @@
 package com.privatevpn.app
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -22,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import com.privatevpn.app.api.AppVersionInfo
 import com.privatevpn.app.api.AppVersionService
 import com.privatevpn.app.api.ControlAPIClient
@@ -60,19 +56,7 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
         app.vpnManager.resumeAfterConsent()
     }
 
-    // Notification permission (Android 13+), needed for the VPN foreground notification.
-    val notifPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
-
     val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED) {
-            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
 
     // Backend-first init: nodes, subscription, force-update gate.
     LaunchedEffect(Unit) {
