@@ -25,7 +25,7 @@ class VPNFlowApp : Application() {
         secureStore = SecureStore(this)
         authStore = AuthSessionStore(secureStore)
         vpnManager = VPNManager(this, secureStore, authStore)
-        subscriptionStore = SubscriptionStore(this, authStore)
+        subscriptionStore = SubscriptionStore(authStore)
         languageStore = LanguageStore(getSharedPreferences("vpnflow_prefs", MODE_PRIVATE))
         vpnManager.refreshDevicePublicKey()
     }
