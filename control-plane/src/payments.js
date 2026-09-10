@@ -153,6 +153,8 @@ const TEXTS = {
     saveQr: "Save QR image",
     saveQrHint: "Tap the QR to save it to your photos, then scan it from your bank app.",
     mini: "Keep the order code for reference. Premium activates automatically after confirmation.",
+        privacyLabel: "Privacy Policy",
+    supportLabel: "Support",
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
     errCreate: "Could not create payment.",
@@ -204,6 +206,8 @@ const TEXTS = {
     saveQr: "Lưu ảnh QR",
     saveQrHint: "Chạm vào QR để lưu về máy, rồi mở app ngân hàng quét từ ảnh đã lưu.",
     mini: "Giữ mã đơn để đối chiếu. Premium tự kích hoạt sau khi xác nhận.",
+        privacyLabel: "Chính sách bảo mật",
+    supportLabel: "Hỗ trợ",
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
     errCreate: "Lỗi tạo thanh toán.",
@@ -255,6 +259,8 @@ const TEXTS = {
     saveQr: "保存二维码",
     saveQrHint: "点击二维码保存到相册，再打开银行应用从相册扫描。",
     mini: "请保留订单号以备核对。确认后 Premium 将自动激活。",
+        privacyLabel: "隐私政策",
+    supportLabel: "支持",
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
     errCreate: "无法创建支付。",
@@ -306,6 +312,8 @@ const TEXTS = {
     saveQr: "QR画像を保存",
     saveQrHint: "QRをタップして写真に保存し、銀行アプリで保存した画像をスキャンしてください。",
     mini: "照合用に注文番号をお控えください。確認後、プレミアムは自動的に有効になります。",
+        privacyLabel: "プライバシーポリシー",
+    supportLabel: "サポート",
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
     errCreate: "支払いを作成できませんでした。",
@@ -357,6 +365,8 @@ const TEXTS = {
     saveQr: "QR 이미지 저장",
     saveQrHint: "QR을 눌러 사진에 저장한 뒤, 은행 앱에서 저장된 이미지를 스캔하세요.",
     mini: "대조용으로 주문번호를 보관하세요. 확인 후 프리미엄이 자동으로 활성화됩니다.",
+        privacyLabel: "개인정보 처리방침",
+    supportLabel: "지원",
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
     errCreate: "결제를 만들 수 없습니다.",
@@ -465,6 +475,22 @@ function productConfig(product) {
   return product === "ai" ? "ai" : "vpn";
 }
 
+/** Brand assets + legal/support links per product (shown on the buy page). */
+const PRODUCT_META = {
+  vpn: {
+    logoPath: "/assets/vpnflow-logo.png",
+    brandName: "VPNFlow",
+    privacyUrl: "https://meetflowai.site/FlowVPNPrivacy.html",
+    supportUrl: "https://meetflowai.site/SupportPrivateVPN.html",
+  },
+  ai: {
+    logoPath: "/assets/meetflow-logo.png",
+    brandName: "MeetFlow AI",
+    privacyUrl: "https://meetflowai.site/privacy",
+    supportUrl: "https://meetflowai.site/support.html",
+  },
+};
+
 /** Plan list in display order with localized names + price text. */
 export function localizedPlanRows(lang, product = "vpn") {
   const base = TEXTS[lang] || TEXTS.vi;
@@ -487,6 +513,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
   const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   const apiPrefix = product === "ai" ? "/v1/ai/payments" : "/v1/payments";
   const logoHtml = product === "ai" ? t.logoHtml : 'VPN<span>Flow</span> Premium';
+  const meta = PRODUCT_META[product];
+  const logoUrl = `${baseUrl}${meta.logoPath}`;
   const showDownloads = product !== "ai";
   const rows = localizedPlanRows(lang, product);
   const planHtml = rows.map((r, i) =>
@@ -511,7 +539,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
       background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
       border-radius: 18px; backdrop-filter: blur(16px);
     }
-    .logo { text-align: center; font-size: 28px; font-weight: 800; margin-bottom: 6px; }
+    .brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .brand-logo {
+      width: 76px; height: 76px; border-radius: 18px; display: block;
+      box-shadow: 0 10px 24px rgba(0,0,0,.38);
+    }
+    .logo { text-align: center; font-size: 26px; font-weight: 800; }
     .logo span { color: #33c773; }
     .sub { text-align: center; color: rgba(255,255,255,.6); font-size: 14px; margin-bottom: 24px; }
     label { display: block; color: rgba(255,255,255,.6); font-size: 13px; margin: 16px 0 7px; }
@@ -549,6 +582,13 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
     .status { margin-top: 14px; text-align: center; font-size: 13px; min-height: 18px; }
     .status.err { color: #ff5a6a; }
     .note { margin-top: 16px; text-align: center; color: rgba(255,255,255,.4); font-size: 12px; }
+    .footer {
+      margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.1);
+      text-align: center; font-size: 12px;
+    }
+    .footer a { color: rgba(255,255,255,.62); text-decoration: none; }
+    .footer a:hover { color: #33c773; text-decoration: underline; }
+    .footer .sep { color: rgba(255,255,255,.3); margin: 0 8px; }
 
     .dl-section { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,.1); }
     .dl-title { text-align: center; font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
@@ -592,7 +632,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
 </head>
 <body>
   <div class="card">
-    <div class="logo">${logoHtml}</div>
+    <div class="brand">
+      <img class="brand-logo" src="${logoUrl}" alt="${meta.brandName}">
+      <div class="logo">${logoHtml}</div>
+    </div>
     <div class="sub">${t.sub}</div>
 
     ${showDownloads ? `<div class="dl-section">
@@ -660,6 +703,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
       <div class="status" id="status"></div>
       <div class="note">${t.note}</div>
     </form>
+
+    <div class="footer">
+      <a href="${meta.privacyUrl}" target="_blank" rel="noopener">${t.privacyLabel}</a>
+      <span class="sep">·</span>
+      <a href="${meta.supportUrl}" target="_blank" rel="noopener">${t.supportLabel}</a>
+    </div>
 
   </div>
 

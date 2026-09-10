@@ -122,6 +122,8 @@ app.use((req, res, next) => {
   // Public MeetFlow AI purchase flow (buy page, create/status/qr/confirm,
   // entitlement lookup used by the apps).
   if (req.path === "/ai/buy" || req.path.startsWith("/ai/buy/") || req.path.startsWith("/v1/ai/")) return next();
+  // Brand logos referenced by the buy pages.
+  if (req.path.startsWith("/assets/")) return next();
   // Public app downloads (APK host).
   if (req.path === "/v1/downloads/android") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
@@ -245,6 +247,21 @@ app.get(["/buy/cancel", "/buy/cancel/"], (req, res) => {
  *         /v1/ai/payments/confirm/:orderCode  (signed link in owner alert)
  *         /v1/ai/entitlement?email=…          (read by the AI apps)
  * ================================================================== */
+
+// Brand logos used by the buy pages (served locally so the pages work on any
+// host that proxies to this control plane).
+app.get("/assets/:file", async (req, res) => {
+  try {
+    const allowed = { "vpnflow-logo.png": "image/png", "meetflow-logo.png": "image/png" };
+    const type = allowed[req.params.file];
+    if (!type) return res.status(404).send("Not found");
+    const file = path.join(process.env.ASSETS_DIR || path.join(__dirname, "..", "assets"), req.params.file);
+    if (!fs.existsSync(file)) return res.status(404).send("Not found");
+    res.type(type).sendFile(file);
+  } catch {
+    res.status(500).send("Internal error");
+  }
+});
 
 app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
   res.type("html").send(buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req), product: "ai" }));
