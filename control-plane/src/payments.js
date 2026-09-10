@@ -181,6 +181,7 @@ const TEXTS = {
     steps: ["Download and install the app (iOS: App Store · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
         copyAmount: "Copy amount",
     copied: "Copied",
+        guideLink: "📖 Step-by-step activation guide",
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
     errCreate: "Could not create payment.",
@@ -245,6 +246,7 @@ const TEXTS = {
     steps: ["Tải và cài app (iOS: App Store · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
         copyAmount: "Sao chép số tiền",
     copied: "Đã sao chép",
+        guideLink: "📖 Xem hướng dẫn kích hoạt từng bước",
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
     errCreate: "Lỗi tạo thanh toán.",
@@ -309,6 +311,7 @@ const TEXTS = {
     steps: ["下载并安装应用（iOS：App Store · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
         copyAmount: "复制金额",
     copied: "已复制",
+        guideLink: "📖 查看分步激活指南",
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
     errCreate: "无法创建支付。",
@@ -373,6 +376,7 @@ const TEXTS = {
     steps: ["アプリをダウンロードしてインストール（iOS：App Store · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
         copyAmount: "金額をコピー",
     copied: "コピーしました",
+        guideLink: "📖 順を追った有効化ガイドを見る",
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
     errCreate: "支払いを作成できませんでした。",
@@ -437,6 +441,7 @@ const TEXTS = {
     steps: ["앱을 내려받아 설치합니다 (iOS: App Store · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
         copyAmount: "금액 복사",
     copied: "복사됨",
+        guideLink: "📖 단계별 활성화 안내 보기",
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
     errCreate: "결제를 만들 수 없습니다.",
@@ -636,6 +641,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       ? t.iosLineTestflight
       : t.iosLineSoon;
   const howToSteps = Array.isArray(t.steps) ? t.steps : [];
+  const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
   const showDownloads = anyDownload;
   const rows = localizedPlanRows(lang, product);
   const planHtml = rows.map((r, i) =>
@@ -738,6 +744,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
     }
     .howto-steps { margin: 10px 0 0 0; padding-left: 18px; }
     .howto-steps li { font-size: 12px; line-height: 1.6; color: rgba(255,255,255,.82); margin-bottom: 4px; }
+    .guidelnk { display: inline-block; margin-top: 10px; color: #33c773; font-size: 12.5px; font-weight: 700;
+                text-decoration: none; }
+    .guidelnk:hover { text-decoration: underline; }
     .footer {
       margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.1);
       text-align: center; font-size: 12px;
@@ -892,6 +901,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       <ol class="howto-steps">
         ${howToSteps.map((step) => `<li>${step}</li>`).join("")}
       </ol>
+      <a class="guidelnk" href="${guideUrl}" target="_blank" rel="noopener">${t.guideLink}</a>
     </div>
 
     <div class="footer">

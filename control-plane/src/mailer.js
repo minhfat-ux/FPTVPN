@@ -55,7 +55,7 @@ const INVOICE_SUBJECT = "VPNFlow — Xác nhận thanh toán";
 
 // Sends a payment confirmation/invoice to the customer after their order is
 // confirmed/activated. Reuses the configured SMTP transporter.
-export async function sendInvoiceEmail({ to, orderCode, planLabel, amount, days, activatedAt, expiresAt, appUrl }) {
+export async function sendInvoiceEmail({ to, orderCode, planLabel, amount, days, activatedAt, expiresAt, appUrl, guideUrl }) {
   const configured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
   if (!(process.env.NODE_ENV === "production" && configured)) {
     console.log("[invoice] (dev, no SMTP) to", to, "order", orderCode);
@@ -88,6 +88,15 @@ export async function sendInvoiceEmail({ to, orderCode, planLabel, amount, days,
   <tr><th style="text-align:left;padding:8px">Hết hạn</th><td style="padding:8px">${expires}</td></tr>
 </table>
 <p>Premium đã được kích hoạt cho tài khoản <b>${to}</b> — bạn có thể dùng trên mọi thiết bị khi đăng nhập cùng email này.</p>
+<div style="background:#f4f8ff;border:1px solid #d8e4f5;border-radius:10px;padding:14px;margin:16px 0">
+  <p style="margin:0 0 8px"><b>Cách kích hoạt trong app:</b></p>
+  <ol style="margin:0;padding-left:20px;color:#333;font-size:14px;line-height:1.7">
+    <li>Tải app (iOS: App Store · Android: file APK trên trang mua).</li>
+    <li>Mở app và đăng nhập bằng đúng email <b>${to}</b> — mã OTP sẽ gửi vào email này.</li>
+    <li>Premium tự kích hoạt, không cần làm gì thêm.</li>
+  </ol>
+  ${guideUrl ? `<p style="margin:10px 0 0"><a href="${guideUrl}" style="color:#1c70f2">Xem hướng dẫn chi tiết có hình →</a></p>` : ""}
+</div>
 <p><a href="${appUrl || "https://meetflowai.site"}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">🚀 Mở VPNFlow</a></p>
 <p style="color:#999;font-size:12px">Cần hỗ trợ? Liên hệ <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
 ${SIGNATURE}`,
@@ -189,7 +198,7 @@ function redactError(err) {
 }
 
 /** Invoice for a MeetFlow AI Pro web purchase (separate branding). */
-export async function sendAiInvoiceEmail({ to, orderCode, planLabel, amount, days, activatedAt, expiresAt }) {
+export async function sendAiInvoiceEmail({ to, orderCode, planLabel, amount, days, activatedAt, expiresAt, guideUrl }) {
   const configured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
   if (!(process.env.NODE_ENV === "production" && configured)) {
     console.log("[ai-invoice] (dev, no SMTP) to", to, "order", orderCode);
@@ -220,7 +229,16 @@ export async function sendAiInvoiceEmail({ to, orderCode, planLabel, amount, day
   <tr style="background:rgba(0,0,0,.05)"><th style="text-align:left;padding:8px">Kích hoạt</th><td style="padding:8px">${fmt(activatedAt)}</td></tr>
   <tr><th style="text-align:left;padding:8px">Hết hạn</th><td style="padding:8px">${fmt(expiresAt)}</td></tr>
 </table>
-<p>Pro đã được kích hoạt cho tài khoản <b>${to}</b>. Mở app MeetFlow AI và đăng nhập bằng email này để dùng ngay.</p>
+<p>Pro đã được kích hoạt cho tài khoản <b>${to}</b>.</p>
+<div style="background:#f4f8ff;border:1px solid #d8e4f5;border-radius:10px;padding:14px;margin:16px 0">
+  <p style="margin:0 0 8px"><b>Cách kích hoạt trong app (Android):</b></p>
+  <ol style="margin:0;padding-left:20px;color:#333;font-size:14px;line-height:1.7">
+    <li>Tải app: iOS trên App Store · Android tải file APK trên trang mua.</li>
+    <li>Mở app → màn hình nâng cấp → mục <b>“Đã mua trên web?”</b>.</li>
+    <li>Nhập đúng email <b>${to}</b> → bấm <b>“Kích hoạt Pro”</b>.</li>
+  </ol>
+  ${guideUrl ? `<p style="margin:10px 0 0"><a href="${guideUrl}" style="color:#1c70f2">Xem hướng dẫn chi tiết →</a></p>` : ""}
+</div>
 <p style="color:#999;font-size:12px">Cần hỗ trợ? Liên hệ <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
 <p>Best regards,<br/>MeetFlow AI Team<br/><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>`,
     });

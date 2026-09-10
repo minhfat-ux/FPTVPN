@@ -18,6 +18,7 @@ import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
 import { sendOtpEmail, sendPaymentAlert, sendRenewalReminder, sendInvoiceEmail, sendAiInvoiceEmail } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
+import { guidePageHTML } from "./guide-page.js";
 import {
   buyPageHTML,
   AI_PLANS,
@@ -123,6 +124,8 @@ app.use((req, res, next) => {
   // Public MeetFlow AI purchase flow (buy page, create/status/qr/confirm,
   // entitlement lookup used by the apps).
   if (req.path === "/ai/buy" || req.path.startsWith("/ai/buy/") || req.path.startsWith("/v1/ai/")) return next();
+  // Activation guides.
+  if (req.path === "/guide" || req.path.startsWith("/guide/") || req.path.startsWith("/ai/guide")) return next();
   // Brand logos referenced by the buy pages.
   if (req.path.startsWith("/assets/")) return next();
   // Public app downloads (APK host).
@@ -291,6 +294,19 @@ app.get("/assets/:file", async (req, res) => {
   } catch {
     res.status(500).send("Internal error");
   }
+});
+
+// Activation guides — linked from the buy pages and the invoice emails.
+app.get(["/guide", "/guide/"], (req, res) => {
+  res.type("html").send(
+    guidePageHTML({ lang: buyLang(req), product: "vpn", buyUrl: `${publicBaseUrl()}/buy` }),
+  );
+});
+
+app.get(["/ai/guide", "/ai/guide/"], (req, res) => {
+  res.type("html").send(
+    guidePageHTML({ lang: buyLang(req), product: "ai", buyUrl: `${publicBaseUrl()}/ai/buy` }),
+  );
 });
 
 app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
@@ -473,6 +489,7 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
     days: planCfg.days,
     activatedAt: new Date().toISOString(),
     expiresAt: ent?.expires_at ?? null,
+    guideUrl: `${publicBaseUrl()}/ai/guide`,
   });
   console.log(`ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode})`);
   return ent;
@@ -729,6 +746,7 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
     activatedAt: new Date().toISOString(),
     expiresAt: sub?.expiresAt ?? null,
     appUrl,
+    guideUrl: `${publicBaseUrl()}/guide`,
   });
   console.log(`invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode})`);
   return user;
