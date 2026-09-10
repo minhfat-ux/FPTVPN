@@ -335,8 +335,13 @@ export function renderVerifyEmail({ lang = "en", to, link, reminders = 1 }) {
 }
 
 /** Builds the owner's "new order needs confirmation" alert (always Vietnamese). */
-export function renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confirmUrl, product = "VPNFlow Premium" }) {
+export function renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confirmUrl, product = "VPNFlow Premium", cny = null }) {
   const amt = Number(amount || 0).toLocaleString("vi-VN");
+  // WeChat/Alipay customers type the CNY amount by hand, so the owner must know
+  // which ¥ figure to look for in the payment app.
+  const cnyRow = cny?.amount
+    ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Quy đổi CNY</td><td style="font-weight:bold">¥${cny.amount} <span style="color:#666;font-weight:normal">(1 CNY ≈ ${Number(cny.rate || 0).toLocaleString("vi-VN")} đ)</span></td></tr>`
+    : "";
   return {
     subject: `Đơn thanh toán mới (${product}) — #${orderCode}`,
     html: shell(`<p>Xin chào,</p>
@@ -346,6 +351,7 @@ export function renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confir
   <tr><td style="padding:4px 12px 4px 0;color:#666">Email khách</td><td style="font-weight:bold">${buyerEmail}</td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666">Gói</td><td style="font-weight:bold">${plan}</td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666">Số tiền</td><td style="font-weight:bold">${amt} đ</td></tr>
+  ${cnyRow}
 </table>
 <p>Sản phẩm: <b>${product}</b></p>
 <p>Vui lòng kiểm tra app ngân hàng đã nhận tiền, rồi bấm nút bên dưới để kích hoạt cho khách:</p>

@@ -179,6 +179,8 @@ const TEXTS = {
     iosLineSoon: "iOS version is coming to the App Store.",
     androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.",
     steps: ["Download and install the app (iOS: App Store · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
+        cnyNote: "WeChat Pay / Alipay settle in CNY — the ¥ amount is converted at",
+        cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
         copyAmount: "Copy amount",
     copied: "Copied",
         guideLink: "📖 Step-by-step activation guide",
@@ -245,6 +247,8 @@ const TEXTS = {
     iosLineSoon: "Bản iOS đang chờ phát hành trên App Store.",
     androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.",
     steps: ["Tải và cài app (iOS: App Store · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
+        cnyNote: "WeChat Pay / Alipay thanh toán bằng CNY (Nhân dân tệ) — số ¥ quy đổi theo tỷ giá",
+        cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
         copyAmount: "Sao chép số tiền",
     copied: "Đã sao chép",
         guideLink: "📖 Xem hướng dẫn kích hoạt từng bước",
@@ -311,6 +315,8 @@ const TEXTS = {
     iosLineSoon: "iOS 版本即将在 App Store 上架。",
     androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。",
     steps: ["下载并安装应用（iOS：App Store · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
+        cnyNote: "微信支付 / 支付宝以人民币（CNY）结算 — 金额按以下汇率换算：",
+        cnyEnter: "支付时请输入二维码上显示的人民币金额。",
         copyAmount: "复制金额",
     copied: "已复制",
         guideLink: "📖 查看分步激活指南",
@@ -377,6 +383,8 @@ const TEXTS = {
     iosLineSoon: "iOS 版は App Store で近日公開予定です。",
     androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。",
     steps: ["アプリをダウンロードしてインストール（iOS：App Store · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
+        cnyNote: "WeChat Pay / Alipay は人民元（CNY）決済です — 金額は次のレートで換算：",
+        cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
         copyAmount: "金額をコピー",
     copied: "コピーしました",
         guideLink: "📖 順を追った有効化ガイドを見る",
@@ -443,6 +451,8 @@ const TEXTS = {
     iosLineSoon: "iOS 버전은 곧 App Store에 출시됩니다.",
     androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.",
     steps: ["앱을 내려받아 설치합니다 (iOS: App Store · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
+        cnyNote: "WeChat Pay / Alipay는 위안화(CNY) 결제입니다 — 금액은 다음 환율로 환산:",
+        cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
         copyAmount: "금액 복사",
     copied: "복사됨",
         guideLink: "📖 단계별 활성화 안내 보기",
@@ -605,7 +615,54 @@ const PRODUCT_META = {
 };
 
 /** Plan list in display order with localized names + price text. */
-export function localizedPlanRows(lang, product = "vpn") {
+/**
+ * VND → CNY for the Chinese payment methods.
+ *
+ * WeChat Pay and Alipay are settled by scanning a personal QR and typing the
+ * amount by hand, so the customer needs a CNY figure. The rate comes from a free
+ * daily feed, is cached for 6 hours, can be pinned with VND_PER_CNY, and falls
+ * back to the last known / default rate so the page never renders without a
+ * price. A swing of more than 30% is treated as a bad feed rather than passed
+ * on to customers.
+ */
+const DEFAULT_VND_PER_CNY = Number(process.env.VND_PER_CNY ?? 3880);
+const CNY_CACHE_MS = 6 * 60 * 60 * 1000;
+let cnyCache = { rate: null, at: 0, source: null };
+
+export async function vndPerCny() {
+  if (process.env.VND_PER_CNY) {
+    return { rate: DEFAULT_VND_PER_CNY, at: null, source: "env:VND_PER_CNY" };
+  }
+  if (cnyCache.rate && Date.now() - cnyCache.at < CNY_CACHE_MS) return cnyCache;
+  try {
+    const res = await fetch("https://open.er-api.com/v6/latest/VND", { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const rate = 1 / Number(data?.rates?.CNY);
+    if (!Number.isFinite(rate) || rate < 1000 || rate > 20000) throw new Error(`rate out of range: ${rate}`);
+    const reference = cnyCache.rate ?? DEFAULT_VND_PER_CNY;
+    if (Math.abs(rate - reference) / reference > 0.3) {
+      throw new Error(`rate moved >30% (${Math.round(rate)} vs ${Math.round(reference)})`);
+    }
+    cnyCache = { rate, at: Date.now(), source: "open.er-api.com" };
+    console.log(`CNY rate: 1 CNY = ${Math.round(rate)} VND (${cnyCache.source}, cached 6h)`);
+    return cnyCache;
+  } catch (err) {
+    console.error("CNY rate unavailable:", err?.message ?? err);
+    return {
+      rate: cnyCache.rate ?? DEFAULT_VND_PER_CNY,
+      at: cnyCache.at || null,
+      source: cnyCache.rate ? "cache" : "default",
+    };
+  }
+}
+
+/** CNY amount, rounded UP to a whole yuan — the customer types it by hand. */
+export function cnyFromVnd(amountVnd, rate) {
+  const r = Number(rate) > 0 ? Number(rate) : DEFAULT_VND_PER_CNY;
+  return Math.max(1, Math.ceil(Number(amountVnd) / r));
+}
+
+export function localizedPlanRows(lang, product = "vpn", cnyRate = null) {
   const base = TEXTS[lang] || TEXTS.vi;
   const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   const table = product === "ai" ? AI_PLANS : PLANS;
@@ -616,12 +673,19 @@ export function localizedPlanRows(lang, product = "vpn") {
       + (p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote);
     if (p.oneTime && t.pass30Note) price += " · " + t.pass30Note;
     const label = p.oneTime && t.pass30Note ? t.planNames[id] + " · " + t.pass30Note : t.planNames[id];
-    return { id, name: label, price };
+    return {
+      id,
+      name: label,
+      price,
+      amount: p.amount,
+      // Shown only while WeChat/Alipay is selected (see .cny in the page CSS).
+      cny: cnyRate ? cnyFromVnd(p.amount, cnyRate) : null,
+    };
   });
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null }) {
   lang = pickBuyLang(lang);
   product = productConfig(product);
   const base = TEXTS[lang];
@@ -648,10 +712,16 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   const howToSteps = Array.isArray(t.steps) ? t.steps : [];
   const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
   const showDownloads = anyDownload;
-  const rows = localizedPlanRows(lang, product);
+  // WeChat Pay / Alipay are priced in CNY: the customer types the amount by
+  // hand into the app, so the page must show a ¥ figure (and copy the ¥ one).
+  const cnyRate = Number(cny?.rate) > 0 ? Number(cny.rate) : DEFAULT_VND_PER_CNY;
+  const cnySource = cny?.source ?? "default";
+  // Server-side formatting (NUM_LOCALE only exists inside the page script).
+  const cnyRateLabel = Math.round(cnyRate).toLocaleString("vi-VN");
+  const rows = localizedPlanRows(lang, product, cnyRate);
   const wantedPlan = rows.some((r) => r.id === prefillPlan) ? prefillPlan : rows[0]?.id;
   const planHtml = rows.map((r) =>
-    `<div class="plan${r.id === wantedPlan ? " active" : ""}" data-plan="${r.id}"><span>${r.name}</span><span class="price">${r.price}</span></div>`
+    `<div class="plan${r.id === wantedPlan ? " active" : ""}" data-plan="${r.id}" data-amount="${r.amount}" data-cny="${r.cny ?? ""}"><span>${r.name}</span><span class="price">${r.price}<span class="cny">≈ ¥${r.cny}</span></span></div>`
   ).join("\n        ");
   const safeEmail = String(prefillEmail || "").replace(/[<>"']/g, "");
   // Only render payment methods that are actually configured (QR image
@@ -714,6 +784,17 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     .plan.active { border-color: #33c773; background: rgba(51,199,115,.12); }
     .plan .price { color: #33c773; font-weight: 800; text-align: right; }
     .plan .name { display: block; }
+    .cny { display: none; margin-left: 8px; color: #7ab8ff; font-weight: 800; white-space: nowrap; }
+    body.m-cny .cny { display: inline; }
+    .cnynote {
+      display: none; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
+      font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,.78);
+      background: rgba(122,184,255,.1); border: 1px solid rgba(122,184,255,.3);
+    }
+    body.m-cny .cnynote { display: block; }
+    .cnynote b { color: #7ab8ff; }
+    .qrsub { margin-top: 4px; font-size: 12.5px; color: rgba(255,255,255,.6); }
+
     .plannote {
       margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 11.5px;
       line-height: 1.5; color: rgba(255,255,255,.7);
@@ -890,6 +971,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       ${t.renewNote ? `<div class="plannote">${t.renewNote}</div>` : ""}
 
       <label>${t.methodLabel}</label>
+      <div class="cnynote" id="cnyNote">${t.cnyNote} <b>1 CNY ≈ ${cnyRateLabel} đ</b>. ${t.cnyEnter}</div>
       <div class="methods">
         ${has("bankqr") ? `        <div class="method active" data-method="bankqr">
           <div class="icon"><span class="brand" style="background:rgba(255,255,255,.14)">🏦</span></div>${t.bankName}<br><small>${t.bankScan}</small>
@@ -938,6 +1020,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <div style="font-size:15px;font-weight:700;">${t.modalTitle}</div>
       <div class="qr-wrap"><img id="qrImg" alt="${t.qrAlt}"></div>
       <div class="amt" id="qrAmt"></div>
+      <div class="qrsub" id="qrAmtSub"></div>
       <button type="button" class="copyamt" id="qrCopyBtn">📋 ${t.copyAmount}</button>
       <div class="oc" id="qrOrder"></div>
       <div class="hint" id="qrHint"></div>
@@ -975,8 +1058,22 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         document.querySelectorAll(".method").forEach((x) => x.classList.remove("active"));
         el.classList.add("active");
         method = el.dataset.method;
+        applyCnyMode();
       };
     });
+
+    // WeChat Pay / Alipay settle in CNY: show ¥ prices and copy the ¥ amount.
+    const CNY = { rate: ${JSON.stringify(cnyRate)}, source: ${JSON.stringify(cnySource)} };
+    const CNY_METHODS = ["wechat", "alipay"];
+    let isCny = CNY_METHODS.indexOf(method) !== -1;
+    function cnyOf(vnd) {
+      const r = CNY.rate > 0 ? CNY.rate : 1;
+      return Math.max(1, Math.ceil(Number(vnd || 0) / r));
+    }
+    function applyCnyMode() {
+      isCny = CNY_METHODS.indexOf(method) !== -1;
+      document.body.classList.toggle("m-cny", isCny);
+    }
 
     const statusEl = document.getElementById("status");
     const btn = document.getElementById("payBtn");
@@ -986,6 +1083,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     const qrOrder = document.getElementById("qrOrder");
     const qrHint = document.getElementById("qrHint");
     const qrStatus = document.getElementById("qrStatus");
+    const qrAmtSub = document.getElementById("qrAmtSub");
+    applyCnyMode();
     const qrSaveBtn = document.getElementById("qrSaveBtn");
     const qrSaveHint = document.getElementById("qrSaveHint");
     function showQr() { qrModal.classList.add("show"); }
@@ -1013,7 +1112,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         ta.remove();
       }
       const original = qrCopyBtn.textContent;
-      qrCopyBtn.textContent = "✅ " + T.copied;
+      qrCopyBtn.textContent = "✅ " + T.copied + " " + (isCny ? "¥" : "") + value;
       setTimeout(() => { qrCopyBtn.textContent = original; }, 1800);
     };
 
@@ -1078,8 +1177,20 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
           statusEl.className = "status";
           statusEl.textContent = "";
           qrImg.src = data.qrDataUrl || (base + data.qrImageUrl);
-          qrAmt.textContent = money(data.amount);
-          qrCopyBtn.dataset.amount = String(data.amount);
+          const methodIsCny = CNY_METHODS.indexOf(data.method) !== -1;
+          if (methodIsCny) {
+            // The customer types this into WeChat/Alipay, so lead with ¥ and let
+            // the copy button copy the yuan figure.
+            const cnyValue = cnyOf(data.amount);
+            qrAmt.textContent = "¥" + cnyValue;
+            qrAmtSub.textContent = "≈ " + money(data.amount) + " · 1 CNY ≈ " +
+              new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
+            qrCopyBtn.dataset.amount = String(cnyValue);
+          } else {
+            qrAmt.textContent = money(data.amount);
+            qrAmtSub.textContent = "";
+            qrCopyBtn.dataset.amount = String(data.amount);
+          }
           qrOrder.textContent = T.orderPrefix + data.orderCode;
           const labels = {
             bankqr: T.hints.bankqr,
@@ -1087,7 +1198,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             alipay: T.hints.alipay,
             momo: T.hints.momo
           };
-          qrHint.textContent = labels[data.method] || T.hints.other;
+          qrHint.textContent = (labels[data.method] || T.hints.other) +
+            (methodIsCny ? " " + T.cnyEnter : "");
           qrStatus.textContent = T.waiting;
           qrStatus.className = "qstatus";
           showQr();

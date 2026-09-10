@@ -16,6 +16,28 @@ Tài liệu này ghi lại toàn bộ phần đã triển khai cho **MeetFlow AI
 Phương thức nào **chưa cấu hình sẽ tự ẩn** (PayOS ẩn khi chưa có credentials; WeChat/Alipay/MoMo
 ẩn khi thiếu ảnh QR) — khách không bao giờ bấm vào nút chết.
 
+### Quy đổi CNY cho WeChat Pay / Alipay
+
+WeChat và Alipay dùng **QR cá nhân tĩnh** (không nhúng được số tiền), khách phải tự nhập số tiền.
+Vì vậy trang buy hiển thị thêm **giá quy đổi sang ¥** cho hai phương thức này:
+
+- Chọn WeChat/Alipay → mỗi gói hiện thêm `≈ ¥39`, kèm khung ghi chú tỷ giá.
+- Popup QR hiện số tiền **¥ to** (kèm dòng nhỏ "≈ 150.000 đ · 1 CNY ≈ 3.876 đ"), và nút
+  **Sao chép số tiền** copy **số ¥** (không phải VND) để khách dán vào WeChat/Alipay.
+- Đổi lại sang chuyển khoản ngân hàng / MoMo → trở về hiển thị VND như cũ.
+- Email báo đơn cho chủ shop cũng ghi thêm dòng **Quy đổi CNY: ¥X** để biết cần đối chiếu bao nhiêu.
+
+**Làm tròn:** luôn làm tròn **lên** tới đồng ¥ nguyên (ceil) — khách nhập tay, không để thiếu tiền.
+Ví dụ: 70.000đ → ¥19 · 150.000đ → ¥39 · 600.000đ → ¥155 · 1.500.000đ → ¥387.
+
+**Tỷ giá:** lấy tự động từ `open.er-api.com` (miễn phí, cập nhật hằng ngày), cache **6 giờ**.
+
+- Ghim tỷ giá cố định: `Environment=VND_PER_CNY=3800` trong systemd drop-in
+  (đặt là dùng luôn, không gọi mạng nữa).
+- Nếu không gọi được API: dùng tỷ giá cache gần nhất, cuối cùng mới dùng mặc định `3880`.
+- Nếu tỷ giá lệch quá **30%** so với lần trước → coi là nguồn lỗi, không áp dụng (tránh giá vô lý).
+- Log kiểm tra: `journalctl -u flowvpn-cp | grep "CNY rate"` → `CNY rate: 1 CNY = 3876 VND (open.er-api.com, cached 6h)`.
+
 ## 2. Kích hoạt Pro cho khách
 
 1. Khách mua trên web → hệ thống ghi đơn + gửi email báo cho chủ shop (có link xác nhận 1-click).

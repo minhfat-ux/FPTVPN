@@ -60,6 +60,8 @@ import {
   pickBuyLang,
   momoQrConfig,
   PLANS_PUBLIC,
+  vndPerCny,
+  cnyFromVnd,
 } from "./payments.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -329,7 +331,7 @@ function buyLang(req) {
   return pickBuyLang(String(req.query?.lang ?? "").slice(0, 8));
 }
 
-app.get(["/buy", "/buy/"], (req, res) => {
+app.get(["/buy", "/buy/"], async (req, res) => {
   // baseUrl is absolute so the page works from any host/path that proxies to
   // this control plane (api.meetflowai.site/buy, meetflowai.site/buy, or any
   // prefixed route). Relative fetch to "" breaks under prefixed mounts
@@ -344,6 +346,7 @@ app.get(["/buy", "/buy/"], (req, res) => {
       prefillEmail: String(req.query?.email ?? "").slice(0, 120),
       prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
       methods: availablePaymentMethods(),
+      cny: await vndPerCny(),
     }),
   );
 });
@@ -436,7 +439,7 @@ app.get(["/ai/support", "/ai/support/"], (req, res) => {
   );
 });
 
-app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
+app.get(["/ai/buy", "/ai/buy/"], async (req, res) => {
   res.type("html").send(
     buyPageHTML({
       baseUrl: publicBaseUrl(),
@@ -446,6 +449,7 @@ app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
       prefillEmail: String(req.query?.email ?? "").slice(0, 120),
       prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
       methods: availablePaymentMethods(),
+      cny: await vndPerCny(),
     }),
   );
 });
@@ -520,7 +524,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       await aiUsersStore
         .touch(email, { source: "purchase", note: `${plan} via ${method ?? "bankqr"}` })
         .catch((err) => console.error("ai user touch failed:", err?.message ?? err));
-      fireAiPaymentAlert(orderCode, email, plan, planCfg.amount);
+      fireAiPaymentAlert(orderCode, email, plan, planCfg.amount, method);
     }
 
     if (method === "momo") {
@@ -1421,13 +1425,14 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
 }
 
 /** Owner alert for a new MeetFlow Pro order (confirm link is product-scoped). */
-async function fireAiPaymentAlert(orderCode, email, plan, amount) {
+async function fireAiPaymentAlert(orderCode, email, plan, amount, method = null) {
   const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
   const base = process.env.PUBLIC_BASE_URL || "https://api.meetflowai.site";
   const sig = paymentConfirmSignature("ai:" + orderCode);
   const confirmUrl = `${base}/v1/ai/payments/confirm/${orderCode}?t=${sig}`;
+  const cny = await cnyAmountForMethod(amount, method).catch(() => null);
   try {
-    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, product: "MeetFlow AI Pro" });
+    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, product: "MeetFlow AI Pro", cny });
     console.log(`ai-payment-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
   } catch (err) {
     console.error("fireAiPaymentAlert failed:", err);
@@ -1445,7 +1450,7 @@ app.post("/v1/payments/create", async (req, res) => {
     await authStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
 
     // Alert the owner (email) with a signed one-click confirm link.
-    firePaymentAlert(orderCode, email, plan, planCfg.amount);
+    firePaymentAlert(orderCode, email, plan, planCfg.amount, method);
 
     if (method === "bankqr") {
       const bank = bankQrConfig();
@@ -1682,13 +1687,23 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
   return user;
 }
 
-async function firePaymentAlert(orderCode, email, plan, amount) {
+/** CNY figure for a WeChat/Alipay order (null for the other methods). */
+async function cnyAmountForMethod(amount, method) {
+  const m = String(method ?? "").toLowerCase();
+  if (m !== "wechat" && m !== "alipay") return null;
+  const { rate, source } = await vndPerCny();
+  return { amount: cnyFromVnd(amount, rate), rate: Math.round(rate), source };
+}
+
+async function firePaymentAlert(orderCode, email, plan, amount, method = null) {
   const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
   const base = process.env.PUBLIC_BASE_URL || "https://api.meetflowai.site";
   const sig = paymentConfirmSignature(orderCode);
   const confirmUrl = `${base}/v1/payments/confirm/${orderCode}?t=${sig}`;
+  // WeChat/Alipay are settled in CNY — tell the owner the figure to look for.
+  const cny = await cnyAmountForMethod(amount, method).catch(() => null);
   try {
-    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl });
+    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, cny });
     console.log(`payment-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
   } catch (err) {
     console.error("firePaymentAlert failed:", err);
