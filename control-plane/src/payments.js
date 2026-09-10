@@ -668,36 +668,124 @@ export async function vndPerCny() {
   }
 }
 
-/** CNY amount, rounded UP to a whole yuan — the customer types it by hand. */
+/**
+ * VND → USD for international visitors, same shape as the CNY helper: env
+ * override, 6h cache, sanity clamp, and a fallback so the page always renders.
+ */
+const DEFAULT_VND_PER_USD = Number(process.env.VND_PER_USD ?? 25600);
+let usdCache = { rate: null, at: 0, source: null };
+let usdRateLogged = false;
+
+export async function vndPerUsd() {
+  if (process.env.VND_PER_USD) {
+    if (!usdRateLogged) {
+      usdRateLogged = true;
+      console.log(`USD rate: pinned at 1 USD = ${Math.round(DEFAULT_VND_PER_USD)} VND (env:VND_PER_USD)`);
+    }
+    return { rate: DEFAULT_VND_PER_USD, at: null, source: "env:VND_PER_USD" };
+  }
+  if (usdCache.rate && Date.now() - usdCache.at < CNY_CACHE_MS) return usdCache;
+  try {
+    const res = await fetch("https://open.er-api.com/v6/latest/VND", { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const rate = 1 / Number(data?.rates?.USD);
+    if (!Number.isFinite(rate) || rate < 5000 || rate > 100000) throw new Error(`rate out of range: ${rate}`);
+    const reference = usdCache.rate ?? DEFAULT_VND_PER_USD;
+    if (Math.abs(rate - reference) / reference > 0.3) {
+      throw new Error(`rate moved >30% (${Math.round(rate)} vs ${Math.round(reference)})`);
+    }
+    usdCache = { rate, at: Date.now(), source: "open.er-api.com" };
+    console.log(`USD rate: 1 USD = ${Math.round(rate)} VND (${usdCache.source}, cached 6h)`);
+    return usdCache;
+  } catch (err) {
+    console.error("USD rate unavailable:", err?.message ?? err);
+    return {
+      rate: usdCache.rate ?? DEFAULT_VND_PER_USD,
+      at: usdCache.at || null,
+      source: usdCache.rate ? "cache" : "default",
+    };
+  }
+}
+
+/**
+ * Which currency to show as the headline price.
+ *
+ * The visitor's language is the signal we already have (the page is chosen by
+ * ?lang= or Accept-Language): Chinese pages price in CNY because that is what
+ * WeChat/Alipay customers actually hand over, Vietnamese in dong, everyone else
+ * in USD with the dong figure alongside. `?cur=` overrides it.
+ */
+export function displayCurrencyFor({ lang = "vi", cur = "" } = {}) {
+  const forced = String(cur ?? "").trim().toUpperCase();
+  if (["VND", "CNY", "USD"].includes(forced)) return forced;
+  const code = pickBuyLang(lang);
+  if (code === "vi") return "VND";
+  if (code === "zh") return "CNY";
+  return "USD";
+}
+
+/** ¥ amount, rounded up to a whole yuan (the customer types it by hand). */
 export function cnyFromVnd(amountVnd, rate) {
   const r = Number(rate) > 0 ? Number(rate) : DEFAULT_VND_PER_CNY;
   return Math.max(1, Math.ceil(Number(amountVnd) / r));
 }
 
-export function localizedPlanRows(lang, product = "vpn", cnyRate = null) {
+/** $ amount, rounded to the nearest cent — this figure is informational. */
+export function usdVndToUsd(amountVnd, rate) {
+  const r = Number(rate) > 0 ? Number(rate) : DEFAULT_VND_PER_USD;
+  return Math.max(0.01, Math.round((Number(amountVnd) / r) * 100) / 100);
+}
+
+export function fmtCny(amount) {
+  return "¥" + Number(amount).toLocaleString("en-US");
+}
+
+export function fmtUsd(amount) {
+  return "$" + Number(amount).toFixed(2);
+}
+
+/** Formats an amount in one of the three currencies. */
+export function fmtMoney(currency, amountVnd, { lang = "vi", cnyRate = null, usdRate = null } = {}) {
+  if (currency === "CNY") return fmtCny(cnyFromVnd(amountVnd, cnyRate ?? DEFAULT_VND_PER_CNY));
+  if (currency === "USD") return fmtUsd(usdVndToUsd(amountVnd, usdRate ?? DEFAULT_VND_PER_USD));
+  return fmtAmount(lang, amountVnd);
+}
+
+/**
+ * Plan rows for the page: localized name, the headline price in the visitor's
+ * currency, and the amounts they will actually hand over (dong for bank
+ * transfer/MoMo, yuan for WeChat/Alipay).
+ */
+export function localizedPlanRows(lang, product = "vpn", options = {}) {
+  const { cnyRate = null, usdRate = null, currency = "VND" } = options;
   const base = TEXTS[lang] || TEXTS.vi;
   const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   const table = product === "ai" ? AI_PLANS : PLANS;
   const order = product === "ai" ? AI_PLAN_ORDER : ["monthly", "quarterly", "semiannual", "yearly", "lifetime"];
   return order.map((id) => {
     const p = table[id];
-    let price = t.planNames[id] + " — " + fmtAmount(lang, p.amount)
-      + (p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote);
-    if (p.oneTime && t.pass30Note) price += " · " + t.pass30Note;
+    const period = p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote;
+    const oneTime = p.oneTime && t.pass30Note ? " · " + t.pass30Note : "";
     const label = p.oneTime && t.pass30Note ? t.planNames[id] + " · " + t.pass30Note : t.planNames[id];
+    const main = fmtMoney(currency, p.amount, { lang, cnyRate, usdRate }) + period + oneTime;
+    // The other two currencies, small, so nobody has to guess what they pay.
+    const others = ["VND", "CNY", "USD"]
+      .filter((c) => c !== currency)
+      .map((c) => fmtMoney(c, p.amount, { lang, cnyRate, usdRate }));
     return {
       id,
       name: label,
-      price,
+      price: main,
+      sub: "≈ " + others.join(" · "),
       amount: p.amount,
-      // Shown only while WeChat/Alipay is selected (see .cny in the page CSS).
       cny: cnyRate ? cnyFromVnd(p.amount, cnyRate) : null,
+      usd: usdRate ? usdVndToUsd(p.amount, usdRate) : null,
     };
   });
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "" }) {
   lang = pickBuyLang(lang);
   product = productConfig(product);
   const base = TEXTS[lang];
@@ -724,16 +812,21 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   const howToSteps = Array.isArray(t.steps) ? t.steps : [];
   const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
   const showDownloads = anyDownload;
-  // WeChat Pay / Alipay are priced in CNY: the customer types the amount by
-  // hand into the app, so the page must show a ¥ figure (and copy the ¥ one).
+  // WeChat Pay / Alipay are priced in CNY (the customer types the amount by
+  // hand), and the headline price follows the visitor: dong for Vietnamese,
+  // yuan for Chinese pages, dollars for everyone else. `?cur=` overrides.
   const cnyRate = Number(cny?.rate) > 0 ? Number(cny.rate) : DEFAULT_VND_PER_CNY;
   const cnySource = cny?.source ?? "default";
+  const usdRate = Number(usd?.rate) > 0 ? Number(usd.rate) : DEFAULT_VND_PER_USD;
+  const usdSource = usd?.source ?? "default";
+  const displayCurrency = displayCurrencyFor({ lang, cur });
   // Server-side formatting (NUM_LOCALE only exists inside the page script).
   const cnyRateLabel = Math.round(cnyRate).toLocaleString("vi-VN");
-  const rows = localizedPlanRows(lang, product, cnyRate);
+  const usdRateLabel = Math.round(usdRate).toLocaleString("vi-VN");
+  const rows = localizedPlanRows(lang, product, { cnyRate, usdRate, currency: displayCurrency });
   const wantedPlan = rows.some((r) => r.id === prefillPlan) ? prefillPlan : rows[0]?.id;
   const planHtml = rows.map((r) =>
-    `<div class="plan${r.id === wantedPlan ? " active" : ""}" data-plan="${r.id}" data-amount="${r.amount}" data-cny="${r.cny ?? ""}"><span>${r.name}</span><span class="price">${r.price}<span class="cny">≈ ¥${r.cny}</span></span></div>`
+    `<div class="plan${r.id === wantedPlan ? " active" : ""}" data-plan="${r.id}" data-amount="${r.amount}" data-cny="${r.cny ?? ""}" data-usd="${r.usd ?? ""}"><span>${r.name}</span><span class="price">${r.price}<span class="pricesub">${r.sub}</span></span></div>`
   ).join("\n        ");
   const safeEmail = String(prefillEmail || "").replace(/[<>"']/g, "");
   // Only render payment methods that are actually configured (QR image
@@ -796,8 +889,14 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     .plan.active { border-color: #33c773; background: rgba(51,199,115,.12); }
     .plan .price { color: #33c773; font-weight: 800; text-align: right; }
     .plan .name { display: block; }
-    .cny { display: none; margin-left: 8px; color: #7ab8ff; font-weight: 800; white-space: nowrap; }
-    body.m-cny .cny { display: inline; }
+    .price { text-align: right; white-space: nowrap; }
+    .pricesub { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,.5); }
+    .curbar { display: flex; gap: 6px; justify-content: center; margin: -6px 0 14px; }
+    .curbar a {
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-decoration: none;
+      color: rgba(255,255,255,.6); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+    }
+    .curbar a.on { color: #06160d; background: #33c773; border-color: #33c773; }
     .cnynote {
       display: none; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
       font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,.78);
@@ -916,7 +1015,14 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     <div class="langbar">
       ${["vi", "en", "zh", "ja", "ko"].map((code) => {
         const names = { vi: "Tiếng Việt", en: "English", zh: "中文", ja: "日本語", ko: "한국어" };
-        return `<a class="lang${code === lang ? " on" : ""}" href="?lang=${code}" hreflang="${code}">${names[code]}</a>`;
+        const keepCur = cur ? `&cur=${encodeURIComponent(cur)}` : "";
+        return `<a class="lang${code === lang ? " on" : ""}" href="?lang=${code}${keepCur}" hreflang="${code}">${names[code]}</a>`;
+      }).join("")}
+    </div>
+    <div class="curbar">
+      ${["VND", "CNY", "USD"].map((code) => {
+        const label = code === "VND" ? "VNĐ" : code === "CNY" ? "¥ CNY" : "$ USD";
+        return `<a class="${code === displayCurrency ? "on" : ""}" href="?lang=${lang}&cur=${code}">${label}</a>`;
       }).join("")}
     </div>
 
@@ -1076,6 +1182,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
 
     // WeChat Pay / Alipay settle in CNY: show ¥ prices and copy the ¥ amount.
     const CNY = { rate: ${JSON.stringify(cnyRate)}, source: ${JSON.stringify(cnySource)} };
+    const USD = { rate: ${JSON.stringify(usdRate)}, source: ${JSON.stringify(usdSource)} };
+    const DISPLAY_CUR = ${JSON.stringify(displayCurrency)};
+    function usdLabel(vnd) { return "$" + (Number(vnd || 0) / (USD.rate > 0 ? USD.rate : 1)).toFixed(2); }
+    function cnyLabel(vnd) { return "¥" + cnyOf(vnd); }
     const CNY_METHODS = ["wechat", "alipay"];
     let isCny = CNY_METHODS.indexOf(method) !== -1;
     function cnyOf(vnd) {
@@ -1197,12 +1307,16 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             // the copy button copy the yuan figure.
             const cnyValue = cnyOf(data.amount);
             qrAmt.textContent = "¥" + cnyValue;
-            qrAmtSub.textContent = "≈ " + money(data.amount) + " · 1 CNY ≈ " +
-              new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
+            qrAmtSub.textContent = "≈ " + money(data.amount) + " · " + usdLabel(data.amount) +
+              " · 1 CNY ≈ " + new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
             qrCopyBtn.dataset.amount = String(cnyValue);
           } else {
             qrAmt.textContent = money(data.amount);
-            qrAmtSub.textContent = "";
+            // International visitors still pay in dong here, so show what that is
+            // worth in their currency (and in yuan, the other rail).
+            qrAmtSub.textContent = DISPLAY_CUR === "VND"
+              ? ""
+              : "≈ " + usdLabel(data.amount) + " · " + cnyLabel(data.amount);
             qrCopyBtn.dataset.amount = String(data.amount);
           }
           qrOrder.textContent = T.orderPrefix + data.orderCode;

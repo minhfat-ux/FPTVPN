@@ -61,6 +61,7 @@ import {
   momoQrConfig,
   PLANS_PUBLIC,
   vndPerCny,
+  vndPerUsd,
   cnyFromVnd,
 } from "./payments.js";
 
@@ -347,6 +348,8 @@ app.get(["/buy", "/buy/"], async (req, res) => {
       prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
       methods: availablePaymentMethods(),
       cny: await vndPerCny(),
+      usd: await vndPerUsd(),
+      cur: String(req.query?.cur ?? "").slice(0, 8),
     }),
   );
 });
@@ -450,6 +453,8 @@ app.get(["/ai/buy", "/ai/buy/"], async (req, res) => {
       prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
       methods: availablePaymentMethods(),
       cny: await vndPerCny(),
+      usd: await vndPerUsd(),
+      cur: String(req.query?.cur ?? "").slice(0, 8),
     }),
   );
 });

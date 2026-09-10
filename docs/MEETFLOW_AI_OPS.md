@@ -27,6 +27,27 @@ Vì vậy trang buy hiển thị thêm **giá quy đổi sang ¥** cho hai phư�
 - Đổi lại sang chuyển khoản ngân hàng / MoMo → trở về hiển thị VND như cũ.
 - Email báo đơn cho chủ shop cũng ghi thêm dòng **Quy đổi CNY: ¥X** để biết cần đối chiếu bao nhiêu.
 
+### Hiển thị giá theo tiền tệ của người xem
+
+Trang mua tự chọn tiền tệ hiển thị (giá chính) theo ngôn ngữ khách đang xem:
+
+| Khách | Giá chính | Dòng phụ (≈) | Thanh toán thực tế |
+|---|---|---|---|
+| Việt Nam (`?lang=vi`) | **70.000 đ** / 30 ngày | ≈ ¥20 · $2.73 | chuyển khoản/MoMo: **VND** · WeChat/Alipay: **¥** |
+| Trung Quốc (`?lang=zh`) | **¥20** / 30 天 | ≈ 70,000 đ · $2.73 | WeChat/Alipay: **¥20** |
+| Quốc tế (`?lang=en/ja/ko`) | **$2.73** / 30 days | ≈ 70,000 đ · ¥20 | chuyển khoản/MoMo: **VND** (hiện kèm ≈ $) |
+
+- Có **thanh chọn tiền tệ** (VNĐ / ¥ CNY / $ USD) ngay dưới thanh ngôn ngữ; đổi ngôn ngữ thì
+  tiền tệ tự đổi theo. Ép bằng URL: `?cur=CNY`, `?cur=USD`, `?cur=VND` (giữ nguyên khi đổi ngôn ngữ).
+- **Popup QR luôn hiện đúng số tiền phải chuyển** (VND cho ngân hàng/MoMo, ¥ cho WeChat/Alipay),
+  kèm dòng ≈ quy đổi để khách quốc tế biết giá trị tương đương.
+- Làm tròn: **CNY làm tròn lên** (khách tự nhập tay, không để thiếu); **USD làm tròn tới cent**
+  (chỉ để tham khảo — không có cổng thu USD).
+
+**Tỷ giá USD:** giống CNY — tự động từ `open.er-api.com`, cache 6 giờ, hoặc ghim cố định bằng
+`Environment=VND_PER_USD=25600` trong systemd drop-in. Log: `journalctl -u flowvpn-cp | grep "USD rate"`.
+Nếu chưa ghim thì tỷ giá USD đổi theo ngày, còn CNY đang ghim 3.500.
+
 ### Nhập sẵn số tiền vào QR (WeChat / Alipay)
 
 - **Chuyển khoản ngân hàng (TPBank VietQR)** và **MoMo**: số tiền **đã được nhúng sẵn** trong QR động,
