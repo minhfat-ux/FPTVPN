@@ -6,7 +6,9 @@ import crypto from "node:crypto";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
-const RESEND_RATE_MAX = 3;
+// Resend cap per email. Raised from 3 to 5: delivery to Gmail lands in spam
+// until DKIM is configured, so real customers do tap "resend" a few times.
+const RESEND_RATE_MAX = 5;
 const RESEND_RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 const LEGACY_JOIN_TTL_MS = 30 * 60 * 1000;
@@ -95,7 +97,10 @@ export class AuthStore {
       user.trialGrantedAt = new Date().toISOString();
     }
     await this._save(data);
-    return sessionPayload(session, user);
+    // The subscription MUST be part of the payload: without it the app is told
+    // premium is off right after a paying customer logs in (the trial/free path
+    // below is what made this look fine for the debug-grant accounts).
+    return sessionPayload(session, user, activeSubscriptionFor(data, user.id));
   }
 
   async createAppleSession({ appleUserId, email }) {
@@ -107,7 +112,9 @@ export class AuthStore {
     });
     const session = createSession(data, user.id);
     await this._save(data);
-    return sessionPayload(session, user);
+    // Same as the email-code path: include the active subscription (Sign in with
+    // Apple users were also being told they had no plan).
+    return sessionPayload(session, user, activeSubscriptionFor(data, user.id));
   }
 
   /** Remembers the customer's preferred language, keyed by email address. */
