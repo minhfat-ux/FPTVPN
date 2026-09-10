@@ -2110,6 +2110,40 @@ app.get("/v1/admin/users", requireAdminAuth, async (_req, res) => {
   }
 });
 
+/**
+ * POST /v1/admin/users — add an account by email and optionally activate it.
+ * Body: { email, days?, productId?, grant? }
+ * days: null or <= 0 means lifetime (same convention as the grant route).
+ */
+app.post("/v1/admin/users", requireAdminAuth, async (req, res) => {
+  try {
+    const email = String(req.body?.email ?? "").trim();
+    if (!/\S+@\S+/.test(email)) return res.status(400).json({ error: "Email không hợp lệ" });
+    const { user, created, userId } = await authStore.findOrCreateUserByEmail(email);
+
+    let result = user;
+    const wantsGrant = req.body?.grant === true || req.body?.days !== undefined;
+    if (wantsGrant) {
+      const rawDays = req.body?.days;
+      const days = rawDays === null ? null : Number(rawDays ?? 365);
+      result = await authStore.grantSubscription(userId, {
+        productId: String(req.body?.productId ?? "admin.manual").slice(0, 60),
+        days,
+      });
+      console.log(
+        `admin users: ${created ? "created" : "found"} ${email} and granted ` +
+          `${days == null || days <= 0 ? "lifetime" : `${days}d`} premium`,
+      );
+    } else {
+      console.log(`admin users: ${created ? "created" : "found"} ${email} (no subscription change)`);
+    }
+    res.status(created ? 201 : 200).json({ ok: true, created, user: result });
+  } catch (err) {
+    console.error("admin create/find user failed:", err);
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
 app.post("/v1/admin/users/:id/subscription", requireAdminAuth, async (req, res) => {
   try {
     const user = await authStore.grantSubscription(req.params.id, req.body ?? {});

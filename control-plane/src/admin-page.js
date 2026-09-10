@@ -337,8 +337,27 @@ export function adminPageHTML() {
     <!-- ===================== USERS VIEW ===================== -->
     <section class="card hidden" id="view-users">
       <h2>Users</h2>
+      <div class="grid" style="margin-bottom:6px">
+        <label>
+          Thêm user VPNFlow (email)
+          <input id="newUserEmail" type="email" placeholder="khach@gmail.com" autocomplete="off">
+        </label>
+        <label>
+          Kích hoạt Premium
+          <select id="newUserDays">
+            <option value="30">30 ngày</option>
+            <option value="90">3 tháng (90 ngày)</option>
+            <option value="180">6 tháng (180 ngày)</option>
+            <option value="365" selected>1 năm (365 ngày)</option>
+            <option value="0">Trọn đời (không hết hạn)</option>
+            <option value="none">Không cấp gói (chỉ tạo tài khoản)</option>
+          </select>
+        </label>
+      </div>
       <div class="actions">
+        <button id="addUserBtn">➕ Thêm &amp; kích hoạt</button>
         <button class="secondary" id="loadUsers">Load Users</button>
+        <span class="status-inline" id="addUserStatus"></span>
       </div>
       <div id="expirySummary" style="margin:10px 0;font-size:13px;line-height:2;"></div>
       <div style="overflow-x:auto; margin-top: 12px;">
@@ -630,6 +649,9 @@ export function adminPageHTML() {
       viewEdit: document.getElementById("view-edit"),
       viewUsers: document.getElementById("view-users"),
       usersBody: document.getElementById("usersBody"),
+      newUserEmail: document.getElementById("newUserEmail"),
+      newUserDays: document.getElementById("newUserDays"),
+      addUserStatus: document.getElementById("addUserStatus"),
       editTitle: document.getElementById("editTitle"),
       tabNodes: document.getElementById("tabNodes"),
       tabUsers: document.getElementById("tabUsers"),
@@ -738,6 +760,37 @@ export function adminPageHTML() {
       if (tab === "aiu") loadAiUsers();
     }
 
+    /** Adds a VPNFlow account by email and (optionally) activates Premium. */
+    async function addUser() {
+      const email = (fields.newUserEmail.value || "").trim();
+      const choice = fields.newUserDays.value;
+      if (!email || email.indexOf("@") < 1) {
+        fields.addUserStatus.textContent = "Nhap email hop le.";
+        return;
+      }
+      const payload = { email: email };
+      if (choice !== "none") {
+        payload.grant = true;
+        payload.days = choice === "0" ? null : Number(choice);
+      }
+      const label = choice === "none" ? "chi tao tai khoan"
+        : choice === "0" ? "tron doi" : choice + " ngay";
+      if (!confirm("Them " + email + " va " + label + "?")) return;
+      try {
+        fields.addUserStatus.textContent = "Dang xu ly " + email + "...";
+        const data = await request("/v1/admin/users", { method: "POST", body: JSON.stringify(payload) });
+        const u = data.user || {};
+        const exp = u.expires_at ? new Date(u.expires_at).toLocaleDateString("vi-VN") : "khong het han";
+        fields.addUserStatus.textContent =
+          (data.created ? "✅ Da tao moi " : "ℹ️ Da co san ") + email +
+          (choice === "none" ? "" : " · Premium den " + exp);
+        fields.newUserEmail.value = "";
+        await loadUsers();
+      } catch (error) {
+        fields.addUserStatus.textContent = error.message;
+      }
+    }
+
     async function loadUsers() {
       try {
         setStatus("Loading users...");
@@ -816,6 +869,23 @@ export function adminPageHTML() {
         row.children[5].innerHTML = user.revoked_at
           ? '<span class="pill off">revoked</span>'
           : '<span class="pill">active</span>';
+
+        const grantYear = document.createElement("button");
+        grantYear.textContent = "Grant 1 nam";
+        grantYear.disabled = !!user.revoked_at;
+        grantYear.onclick = async () => {
+          try {
+            await request("/v1/admin/users/" + encodeURIComponent(user.id) + "/subscription", {
+              method: "POST",
+              body: JSON.stringify({ days: 365 }),
+            });
+            setStatus("Da cap Premium 1 nam cho " + (user.email || user.id) + ".");
+            await loadUsers();
+          } catch (error) {
+            setStatus(error.message, true);
+          }
+        };
+        row.children[6].appendChild(grantYear);
 
         const grant = document.createElement("button");
         grant.className = "secondary";
@@ -2113,6 +2183,7 @@ export function adminPageHTML() {
     document.getElementById("tabAi").onclick = () => showTab("ai");
     document.getElementById("tabAiUsers").onclick = () => showTab("aiu");
     document.getElementById("loadUsers").onclick = loadUsers;
+    document.getElementById("addUserBtn").onclick = addUser;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;
     document.getElementById("saveNode").onclick = saveNode;

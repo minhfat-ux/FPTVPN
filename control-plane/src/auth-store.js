@@ -263,6 +263,27 @@ export class AuthStore {
     });
   }
 
+  /**
+   * Finds the account for an email, creating it when it does not exist yet.
+   *
+   * Support flow: a customer who paid outside the app (transfer to a personal
+   * account, or a comped account) still needs a real account before Premium can
+   * be granted, and the app would otherwise only create it on first OTP login.
+   */
+  async findOrCreateUserByEmail(email) {
+    const normalized = normalizeEmail(email);
+    if (!normalized) throw badRequest("email is required");
+    const data = await this._load();
+    const existed = data.users.some((entry) => entry.email === normalized);
+    const user = findOrCreateUser(data, { email: normalized });
+    if (!existed) await this._save(data);
+    return {
+      user: publicUser(user, activeSubscriptionFor(data, user.id)),
+      created: !existed,
+      userId: user.id,
+    };
+  }
+
   async grantSubscription(userId, { productId = "test.premium", days = 30 } = {}) {
     const data = await this._load();
     const user = data.users.find((entry) => entry.id === userId);
