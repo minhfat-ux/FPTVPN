@@ -629,9 +629,6 @@ app.get("/v1/ai/payments/confirm/:orderCode", async (req, res) => {
 // shown to the admin so nothing is silently lost.
 // ---------------------------------------------------------------------------
 
-/** Milliseconds in a day (used to turn a Play expiry into entitlement days). */
-const STORE_DAY_MS = 24 * 60 * 60 * 1000;
-
 /** Play product id -> plan id used everywhere else in the dashboard. */
 function planFromProductId(productId) {
   const id = String(productId ?? "").toLowerCase();
@@ -685,13 +682,15 @@ async function verifyStorePurchaseRow(row) {
     // an email (anonymous Play buyers have no email to key an entitlement on).
     if (result.active && updated?.email) {
       const plan = updated.plan ?? planFromProductId(result.productId) ?? "monthly";
-      const msLeft = Date.parse(result.expiresAt ?? "") - Date.now();
-      const days = Number.isFinite(msLeft) && msLeft > 0 ? Math.min(400, Math.ceil(msLeft / STORE_DAY_MS)) : 1;
-      await aiStore.grantPro(updated.email, {
+      // Absolute expiry from Google, not "days from now": the app reports the
+      // same purchase on every launch, and adding days each time would extend
+      // the subscription indefinitely.
+      await aiStore.grantProUntil(updated.email, {
         plan,
-        days,
+        expiresAt: result.expiresAt,
         productId: `play.${result.productId}`,
-        lang: null,
+        orderCode: result.orderId ?? null,
+        note: `Google Play ${result.productId}`,
       });
       await aiUsersStore
         .touch(updated.email, { source: "store", note: `Google Play ${result.productId}` })

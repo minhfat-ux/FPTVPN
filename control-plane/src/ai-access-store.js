@@ -146,6 +146,66 @@ export class AiAccessStore {
     return this.entitlementForEmail(key);
   }
 
+  /**
+   * Grants Pro until an absolute instant — used by store purchases, where the
+   * expiry comes from Google/Apple rather than from a number of days we add.
+   *
+   * Idempotent on purpose: the app reports the same purchase on every launch,
+   * so adding days each time would inflate the subscription forever. The expiry
+   * only ever moves forward, and a lifetime entitlement is never shortened.
+   */
+  async grantProUntil(email, { plan, expiresAt, productId = null, lang = null, orderCode = null, note = null } = {}) {
+    const key = normalizeEmail(email);
+    if (!key) return null;
+    const target = expiresAt ? Date.parse(expiresAt) : NaN;
+    if (!Number.isFinite(target)) return this.entitlementForEmail(key);
+
+    const data = await this._load();
+    const now = Date.now();
+    const existing = data.entitlements.find((e) => e.email === key && e.product === "meetflow-pro");
+
+    if (existing && existing.expiresAt === null) {
+      return this.entitlementForEmail(key); // lifetime — leave it alone
+    }
+    const currentExpiry = existing?.expiresAt ? Date.parse(existing.expiresAt) : 0;
+    if (existing && currentExpiry >= target) {
+      // Already covered (same purchase reported again, or a longer plan exists).
+      if (plan && existing.plan !== plan) existing.plan = plan;
+      if (productId) existing.productId = productId;
+      await this._save(data);
+      return this.entitlementForEmail(key);
+    }
+
+    const isoExpiry = new Date(target).toISOString();
+    const isoNow = new Date(now).toISOString();
+    if (existing) {
+      existing.plan = plan ?? existing.plan;
+      existing.lang = lang ?? existing.lang ?? null;
+      existing.productId = productId ?? existing.productId ?? null;
+      existing.expiresAt = isoExpiry;
+      existing.grantedAt = isoNow;
+      existing.orderCode = orderCode ?? existing.orderCode ?? null;
+      existing.history = [
+        ...(Array.isArray(existing.history) ? existing.history : []),
+        { plan: plan ?? existing.plan, days: null, orderCode, at: isoNow, note: note ?? `store until ${isoExpiry}` },
+      ];
+    } else {
+      data.entitlements.push({
+        email: key,
+        product: "meetflow-pro",
+        plan: plan ?? "monthly",
+        lang: lang ?? null,
+        productId,
+        expiresAt: isoExpiry,
+        grantedAt: isoNow,
+        orderCode,
+        history: [{ plan: plan ?? "monthly", days: null, orderCode, at: isoNow, note: note ?? `store until ${isoExpiry}` }],
+      });
+    }
+    await this._save(data);
+    return this.entitlementForEmail(key);
+  }
+
   /** Public entitlement payload for the apps (never exposes other users). */
   async entitlementForEmail(email) {
     const data = await this._load();
