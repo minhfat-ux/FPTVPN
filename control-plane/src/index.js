@@ -543,7 +543,21 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     }
 
     if (method === "wechat" || method === "alipay") {
-      return res.json({ qrImageUrl: `/v1/ai/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
+      // Ask for the amount-specific QR when the owner uploaded one — then the
+      // amount is already filled in when the customer scans it.
+      const cnyInfo = await cnyAmountForMethod(planCfg.amount, method);
+      const qrQuery = `plan=${encodeURIComponent(plan)}${cnyInfo ? `&cny=${cnyInfo.amount}` : ""}`;
+      const prefilled = Boolean(
+        resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", method, { cny: cnyInfo?.amount, plan }).prefilled,
+      );
+      return res.json({
+        qrImageUrl: `/v1/ai/payments/qr/${method}?${qrQuery}`,
+        orderCode,
+        amount: planCfg.amount,
+        cny: cnyInfo?.amount ?? null,
+        amountPrefilled: prefilled,
+        method,
+      });
     }
 
     // Default: direct bank transfer via VietQR (same TPBank account).
@@ -583,9 +597,14 @@ app.get("/v1/ai/payments/qr/:name", async (req, res) => {
   try {
     const name = ["wechat", "alipay", "momo"].includes(req.params.name) ? req.params.name : null;
     if (!name) return res.status(404).send("Not found");
-    const file = path.join(process.env.PAY_QR_DIR || "/root/flowvpn-pay", `${name}.png`);
-    if (!fs.existsSync(file)) return res.status(404).json({ error: "QR image not uploaded yet" });
-    res.sendFile(file);
+    const resolved = resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", name, {
+      cny: req.query?.cny,
+      plan: req.query?.plan,
+    });
+    if (resolved.missing) return res.status(404).json({ error: "QR image not uploaded yet" });
+    res.set("X-QR-Variant", resolved.variant);
+    res.set("X-QR-Amount-Prefilled", resolved.prefilled ? "1" : "0");
+    res.sendFile(resolved.file);
   } catch {
     res.status(500).json({ error: "Internal error" });
   }
@@ -1482,9 +1501,23 @@ app.post("/v1/payments/create", async (req, res) => {
     }
 
     if (method === "wechat" || method === "alipay") {
-      // Personal collection QR: static image, paid amount entered by the
-      // customer. Admin confirms manually via /v1/admin/payments/:code/confirm.
-      return res.json({ qrImageUrl: `/v1/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
+      // Personal collection QR. When the owner generated it with "设置金额"
+      // (fixed amount) we serve that image, so the amount is pre-filled in
+      // WeChat/Alipay and the customer only confirms. Otherwise the customer
+      // types the amount shown on screen.
+      const cnyInfo = await cnyAmountForMethod(planCfg.amount, method);
+      const qrQuery = `plan=${encodeURIComponent(plan)}${cnyInfo ? `&cny=${cnyInfo.amount}` : ""}`;
+      const prefilled = Boolean(
+        resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", method, { cny: cnyInfo?.amount, plan }).prefilled,
+      );
+      return res.json({
+        qrImageUrl: `/v1/payments/qr/${method}?${qrQuery}`,
+        orderCode,
+        amount: planCfg.amount,
+        cny: cnyInfo?.amount ?? null,
+        amountPrefilled: prefilled,
+        method,
+      });
     }
 
     const result = await createPayosPaymentLink({
@@ -1504,13 +1537,41 @@ app.post("/v1/payments/create", async (req, res) => {
 });
 
 // Serve the static personal WeChat/Alipay collection QR images.
+/**
+ * Picks the QR image to serve for a method.
+ *
+ * WeChat Pay and Alipay personal receive codes cannot carry an amount unless the
+ * owner generated them with one, so an owner who uses "设置金额" produces one
+ * image per price. Preference order:
+ *   <method>-<cny>.png  →  <method>-<plan>.png  →  <method>.png
+ * The first hit means the amount is already inside the QR, which the buy page
+ * reports to the customer as "amount pre-filled".
+ */
+function resolveQrFile(dir, name, { cny = null, plan = null } = {}) {
+  const candidates = [];
+  const cnyValue = Number(cny);
+  if (Number.isFinite(cnyValue) && cnyValue > 0) candidates.push(`${name}-${Math.round(cnyValue)}.png`);
+  if (plan) candidates.push(`${name}-${String(plan).replace(/[^a-z0-9_-]/gi, "")}.png`);
+  candidates.push(`${name}.png`);
+  for (const candidate of candidates) {
+    const file = path.join(dir, candidate);
+    if (fs.existsSync(file)) return { file, variant: path.basename(candidate), prefilled: candidate !== `${name}.png` };
+  }
+  return { file: path.join(dir, `${name}.png`), variant: `${name}.png`, prefilled: false, missing: true };
+}
+
 app.get("/v1/payments/qr/:name", async (req, res) => {
   try {
     const name = ["wechat", "alipay", "momo"].includes(req.params.name) ? req.params.name : null;
     if (!name) return res.status(404).send("Not found");
-    const file = path.join(process.env.PAY_QR_DIR || "/root/flowvpn-pay", `${name}.png`);
-    if (!fs.existsSync(file)) return res.status(404).json({ error: "QR image not uploaded yet" });
-    res.sendFile(file);
+    const resolved = resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", name, {
+      cny: req.query?.cny,
+      plan: req.query?.plan,
+    });
+    if (resolved.missing) return res.status(404).json({ error: "QR image not uploaded yet" });
+    res.set("X-QR-Variant", resolved.variant);
+    res.set("X-QR-Amount-Prefilled", resolved.prefilled ? "1" : "0");
+    res.sendFile(resolved.file);
   } catch {
     res.status(500).json({ error: "Internal error" });
   }

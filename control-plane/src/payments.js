@@ -181,6 +181,7 @@ const TEXTS = {
     steps: ["Download and install the app (iOS: App Store · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
         cnyNote: "WeChat Pay / Alipay settle in CNY — the ¥ amount is converted at",
         cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
+        amountPrefilled: "The amount is already filled in — just confirm.",
         copyAmount: "Copy amount",
     copied: "Copied",
         guideLink: "📖 Step-by-step activation guide",
@@ -249,6 +250,7 @@ const TEXTS = {
     steps: ["Tải và cài app (iOS: App Store · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
         cnyNote: "WeChat Pay / Alipay thanh toán bằng CNY (Nhân dân tệ) — số ¥ quy đổi theo tỷ giá",
         cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
+        amountPrefilled: "Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận.",
         copyAmount: "Sao chép số tiền",
     copied: "Đã sao chép",
         guideLink: "📖 Xem hướng dẫn kích hoạt từng bước",
@@ -317,6 +319,7 @@ const TEXTS = {
     steps: ["下载并安装应用（iOS：App Store · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
         cnyNote: "微信支付 / 支付宝以人民币（CNY）结算 — 金额按以下汇率换算：",
         cnyEnter: "支付时请输入二维码上显示的人民币金额。",
+        amountPrefilled: "二维码中已填入金额 — 确认即可。",
         copyAmount: "复制金额",
     copied: "已复制",
         guideLink: "📖 查看分步激活指南",
@@ -385,6 +388,7 @@ const TEXTS = {
     steps: ["アプリをダウンロードしてインストール（iOS：App Store · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
         cnyNote: "WeChat Pay / Alipay は人民元（CNY）決済です — 金額は次のレートで換算：",
         cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
+        amountPrefilled: "金額は入力済みです — 確認するだけです。",
         copyAmount: "金額をコピー",
     copied: "コピーしました",
         guideLink: "📖 順を追った有効化ガイドを見る",
@@ -453,6 +457,7 @@ const TEXTS = {
     steps: ["앱을 내려받아 설치합니다 (iOS: App Store · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
         cnyNote: "WeChat Pay / Alipay는 위안화(CNY) 결제입니다 — 금액은 다음 환율로 환산:",
         cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
+        amountPrefilled: "금액이 미리 입력되어 있습니다 — 확인만 하면 됩니다.",
         copyAmount: "금액 복사",
     copied: "복사됨",
         guideLink: "📖 단계별 활성화 안내 보기",
@@ -1183,6 +1188,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         if (data.qrDataUrl || data.qrImageUrl) {
           statusEl.className = "status";
           statusEl.textContent = "";
+          // data.qrImageUrl already carries ?plan=…&cny=… so the server can
+          // serve the amount-specific QR image when one exists.
           qrImg.src = data.qrDataUrl || (base + data.qrImageUrl);
           const methodIsCny = CNY_METHODS.indexOf(data.method) !== -1;
           if (methodIsCny) {
@@ -1205,8 +1212,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             alipay: T.hints.alipay,
             momo: T.hints.momo
           };
+          // When the owner uploaded a QR that already carries the amount
+          // (WeChat/Alipay "设置金额"), the customer only confirms — say so.
           qrHint.textContent = (labels[data.method] || T.hints.other) +
-            (methodIsCny ? " " + T.cnyEnter : "");
+            (data.amountPrefilled
+              ? " " + T.amountPrefilled
+              : (methodIsCny ? " " + T.cnyEnter : ""));
           qrStatus.textContent = T.waiting;
           qrStatus.className = "qstatus";
           showQr();

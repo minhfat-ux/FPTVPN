@@ -27,6 +27,41 @@ Vì vậy trang buy hiển thị thêm **giá quy đổi sang ¥** cho hai phư�
 - Đổi lại sang chuyển khoản ngân hàng / MoMo → trở về hiển thị VND như cũ.
 - Email báo đơn cho chủ shop cũng ghi thêm dòng **Quy đổi CNY: ¥X** để biết cần đối chiếu bao nhiêu.
 
+### Nhập sẵn số tiền vào QR (WeChat / Alipay)
+
+- **Chuyển khoản ngân hàng (TPBank VietQR)** và **MoMo**: số tiền **đã được nhúng sẵn** trong QR động,
+  khách quét là app điền sẵn số tiền, chỉ cần xác nhận. Không phải làm gì thêm.
+- **WeChat Pay / Alipay (QR cá nhân)**: mã cá nhân không cho nhúng số tiền từ phía server.
+  Cách làm đúng: trong app WeChat/Alipay tạo **mã nhận tiền có đặt sẵn số tiền**
+  (微信: 收付款 → 二维码收款 → **设置金额**; Alipay: 收钱 → **设置金额**) rồi lưu ảnh QR cho **từng mức tiền**.
+
+Server tự chọn ảnh theo thứ tự ưu tiên (thư mục `/root/flowvpn-pay`):
+
+```
+<method>-<số ¥>.png      ví dụ wechat-20.png, alipay-43.png     ← có số tiền sẵn
+<method>-<tên gói>.png   ví dụ wechat-monthly.png               ← theo gói
+<method>.png             ảnh QR chung (khách tự nhập số tiền)    ← dự phòng
+```
+
+Có ảnh riêng thì trang mua tự báo khách *"Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận."*;
+chưa có thì vẫn hiện số ¥ to + nút sao chép như hiện nay (không bao giờ lỗi).
+Kiểm tra ảnh nào đang được dùng: response header `X-QR-Variant` và `X-QR-Amount-Prefilled`.
+
+**Danh sách ảnh cần tạo** (mỗi mức tiền 1 ảnh cho **cả WeChat và Alipay**):
+
+| Số tiền | Dùng cho | Tên file |
+|---|---|---|
+| ¥20 | VPN tháng 70.000đ | `wechat-20.png`, `alipay-20.png` |
+| ¥55 | VPN 3 tháng 190.000đ | `wechat-55.png`, `alipay-55.png` |
+| ¥100 | VPN 6 tháng 350.000đ | `wechat-100.png`, `alipay-100.png` |
+| ¥172 | VPN năm 600.000đ | `wechat-172.png`, `alipay-172.png` |
+| ¥429 | VPN trọn đời 1.500.000đ | `wechat-429.png`, `alipay-429.png` |
+| ¥43 | MeetFlow AI pass 30 ngày | `wechat-43.png`, `alipay-43.png` |
+| ¥38 | MeetFlow AI tháng | `wechat-38.png`, `alipay-38.png` |
+| ¥300 | MeetFlow AI năm | `wechat-300.png`, `alipay-300.png` |
+
+Làm dần cũng được: gói nào chưa có ảnh riêng thì dùng ảnh QR chung như hiện tại.
+
 **Làm tròn:** luôn làm tròn **lên** tới đồng ¥ nguyên (ceil) — khách nhập tay, không để thiếu tiền.
 
 **Tỷ giá hiện tại: GHIM CỐ ĐỊNH 1 CNY = 3.500 đ** (chủ shop ấn định, không dùng tỷ giá thị trường).
