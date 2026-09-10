@@ -74,3 +74,52 @@ Người dùng mới được miễn phí 1 tháng. Sau thời gian dùng thử,
 
 Quyền riêng tư của bạn là quan trọng. VPNFlow không ghi lại hoạt động duyệt web của bạn. Tải VPNFlow for Mac ngay hôm nay để tận hưởng internet an toàn và nhanh hơn — miễn phí tháng đầu tiên.
 
+---
+
+## App Review Information (demo account — bắt buộc cho resubmit)
+
+> Phản hồi cho rejection **Guideline 2.1(a) Information Needed** (2026-08-27).
+> App đăng nhập bằng email + mã OTP; reviewer không nhận được OTP nên server
+> production bật chế độ dev-code cho một email riêng.
+
+### Server setup (một lần trên node production)
+
+Email review dùng: `review@<domain-củabạn>` (điền domain thật rồi thống nhất dùng ở mọi nơi).
+
+Chạy lại deploy script với 2 biến môi trường (đã được script ghi vào systemd unit):
+
+```bash
+sudo DEBUG_CODE_EMAILS=review@<domain> GRANT_SUB_EMAILS=review@<domain> \
+     AUTH_TOKEN=<token> bash deploy-node.sh
+```
+
+- `DEBUG_CODE_EMAILS`: `/v1/auth/email/start` trả `debug_code` kể cả production → app tự hiển thị mã OTP ngay trong màn hình đăng nhập ("Dev code: XXXX").
+- `GRANT_SUB_EMAILS`: cấp subscription test khi verify → reviewer dùng full tính năng premium (enrollment token không bị 403).
+
+### Điền vào App Store Connect → App Review Information
+
+- **Sign-in required**: ✅ Yes
+- **User name**: `review@<domain>`
+- **Password**: `shown in app` (OTP được app tự hiển thị — xem Notes)
+- **Notes**:
+
+```
+To sign in: enter the provided demo email address and tap "Send Code".
+Dev-code mode is enabled on our server for this review account, so the
+6-digit login code is displayed directly in the app right after tapping
+"Send Code" — enter it and tap "Verify Code". No mailbox access is needed.
+
+This account has an active subscription, so all app features are available:
+server selection, one-tap VPN connection (WireGuard), and device management.
+
+The VPN connection requires the reviewer to allow the VPN configuration
+profile when iOS prompts for it.
+```
+
+### Checklist trước khi resubmit
+
+- [ ] Server production đã restart với `DEBUG_CODE_EMAILS` + `GRANT_SUB_EMAILS` chứa email review.
+- [ ] Test tay trên máy thật: gõ email review → Send Code → app hiện "Dev code" → Verify → connect VPN thành công.
+- [ ] Email review trong App Store Connect trùng khớp email trên server.
+- [ ] (Song song) Xử lý rejection **5.4 VPN Apps**: app phải submit từ tài khoản Apple Developer dạng **Organization** — convert account Individual → Organization (cần pháp nhân + D-U-N-S) hoặc transfer app sang account organization. Không sửa bằng code được.
+

@@ -16,6 +16,12 @@
 #   WG_PRIVATE_KEY    (optional) server private key; generated if unset
 #   TLS_CERT_FILE     (optional) HTTPS certificate path for direct Node TLS
 #   TLS_KEY_FILE      (optional) HTTPS private key path for direct Node TLS
+#   DEBUG_CODE_EMAILS (optional) comma-separated emails that get debug_code back
+#                     from /v1/auth/email/start even in production (App Review
+#                     demo account — the app shows the OTP right in the UI)
+#   GRANT_SUB_EMAILS  (optional) comma-separated emails that get a test
+#                     subscription on verify (so the App Review account has
+#                     full premium access)
 set -euo pipefail
 
 WG_INTERFACE="${WG_INTERFACE:-wg0}"
@@ -127,6 +133,8 @@ Environment=DATA_FILE=/opt/privatevpn/devices.json
 Environment=NODES_FILE=/opt/privatevpn/nodes.json
 Environment=TLS_CERT_FILE=${TLS_CERT_FILE:-}
 Environment=TLS_KEY_FILE=${TLS_KEY_FILE:-}
+Environment=DEBUG_CODE_EMAILS=${DEBUG_CODE_EMAILS:-}
+Environment=GRANT_SUB_EMAILS=${GRANT_SUB_EMAILS:-}
 
 [Install]
 WantedBy=multi-user.target
@@ -147,4 +155,6 @@ else
 fi
 echo "AUTH_TOKEN          : (set)"
 echo "Admin allowed IPs   : ${ADMIN_ALLOWED_IPS:-127.0.0.1,::1 only}"
+echo "Debug-code emails   : ${DEBUG_CODE_EMAILS:-(none)}"
+echo "Grant-sub emails    : ${GRANT_SUB_EMAILS:-(none)}"
 echo "In the iOS app set: endpoint=${PUBLIC_IP}:${WG_LISTEN_PORT}, peer public key=<server pubkey above>, control plane URL=<https coordinator URL>"

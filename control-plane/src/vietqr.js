@@ -32,41 +32,46 @@ function crc16(data) {
 }
 
 /**
- * Builds a full VietQR payload string.
- * @param {object} opts
- * @param {string} opts.accountNumber
- * @param {string} opts.accountName  (merchant name, ASCII-safe subset)
- * @param {string} [opts.bin]         default TPBank
- * @param {number} [opts.amount]      VND, optional for amount-less QR
- * @param {string} [opts.content]     transfer note (max ~25 chars)
+ * Builds a full VietQR payload string — VietQR (NAPAS) consumer-presented QR
+ * for a personal bank transfer ("transfer to account").
+ *
+ * Correct structure (per VietQR spec, see tranvu711/qrpayment + Napas):
+ *   field 38 = merchant account info (VietQR uses tag 38, NOT 26)
+ *     sub 00 = "A000000727"            (VietQR service GUID)
+ *     sub 01 = {                        (customer/account info)
+ *       00 = <bank BIN>                  e.g. TPBank 970423
+ *       01 = <account number>
+ *       02 = "QRIBFTTA"                  transfer to account
+ *     }
+ *   field 52 = "0000" (MCC), 53 = "704" (VND), 54 = amount
+ *   58 = "VN", 59 = name, 60 = city, 62 = content/bill, 63 = CRC16
  */
 export function buildVietQRPayload({ accountNumber, accountName, bin = BIN_TPBANK, amount, content = "" }) {
   const name = String(accountName || "VPNFlow").slice(0, 25);
   const note = String(content || "").slice(0, 25);
 
-  // Merchant Account Information (field 26)
-  const guid = tlv("00", "00000072701"); // VietQR global GUID
-  const vq = tlv("01", "11");            // VietQR version
-  const binTlv = tlv("02", bin);         // bank BIN
-  const acctTlv = tlv("03", accountNumber); // account number
-  const merchantInfo = tlv("26", guid + vq + binTlv + acctTlv);
+  // Service GUID subfield: 00 = "A000000727"
+  const service = tlv("00", "A000000727");
+  // Customer (account) subfield 01: 00 = BIN, 01 = account, 02 = QRIBFTTA
+  const customer = tlv("00", bin) + tlv("01", accountNumber) + tlv("02", "QRIBFTTA");
+  // Tag 38 merchant account info
+  const merchantInfo = tlv("38", service + tlv("01", customer));
 
-  // Build body (everything except CRC)
-  let body = "000201";                              // payload format indicator
-  body += "010212";                                 // point of init: dynamic (per-amount)
+  let body = "000201";                          // payload format
+  body += "010212";                             // dynamic (has amount)
   body += merchantInfo;
-  body += tlv("52", "0000");                        // merchant category code (uncategorised)
-  body += tlv("53", "704");                         // currency VND
-  if (amount) body += tlv("54", String(amount));    // transaction amount
-  body += tlv("58", "VN");                          // country
-  body += tlv("59", name);                          // merchant name
-  body += tlv("60", "Hanoi");                       // merchant city
-  // Additional data (field 62): bill number = the order reference
+  body += tlv("52", "0000");                    // MCC
+  body += tlv("53", "704");                     // VND
+  if (amount) body += tlv("54", String(amount));
+  body += tlv("58", "VN");
+  body += tlv("59", name);
+  body += tlv("60", "Hanoi");
+  // Additional data (62): bill number = order reference so it shows in the
+  // customer's transfer note field.
   body += tlv("62", tlv("01", note ? `VPNFLOW-${note}` : "VPNFLOW"));
-  body += "6304";                                   // CRC placeholder tag
+  body += "6304";
 
-  const crc = crc16(body);
-  return body + crc;
+  return body + crc16(body);
 }
 
 export const BANKS = { TPBANK: BIN_TPBANK };
