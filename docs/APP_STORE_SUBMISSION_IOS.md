@@ -132,19 +132,35 @@ Notes:
 
 ```bash
 cd /Volumes/BIWIN/SourcesCode/PrivateVPN
-./scripts/archive-appstore.sh ios     # macOS: ./scripts/archive-appstore.sh mac
-# -> build/ios-export/ipa/PrivateVPN.ipa   (upload lên App Store Connect)
+
+./scripts/archive-appstore.sh ios appstore   # -> build/ios-appstore-export/ipa/FlowVPN.ipa
+./scripts/archive-appstore.sh ios direct     # -> build/ios-direct-export/ipa/FlowVPN.ipa
+# macOS: thay ios bằng mac
 ```
 
-Script archive kèm cờ biên dịch **`PAYWALL_APPSTORE`** — đây là điều kiện để bản
-nộp chỉ có In-App Purchase. **Không** archive tay rồi nộp: bản Release archive
-kiểu thường vẫn giữ trang mua web (đúng cho TestFlight/kênh tự phát hành, nhưng
-nộp lên App Store sẽ bị từ chối theo 3.1.1/3.1.3).
+| Bản build | Lệnh | Paywall | Dùng để |
+|---|---|---|---|
+| **App Store** | `... ios appstore` | Chỉ StoreKit (cờ `PAYWALL_APPSTORE`), không có đường dẫn web | Nộp App Store Review |
+| **TestFlight/direct** | `... ios direct` | Mặc định mở trang web `/buy` của mình | TestFlight, sideload, kênh tự bán |
 
-| Bản build | Cờ | Paywall |
-|---|---|---|
-| **Nộp App Store** | `PAYWALL_APPSTORE` (script) | Chỉ StoreKit, không có đường dẫn web |
-| TestFlight / sideload (kênh tự bán) | không cờ | Mặc định mở trang web `/buy` của mình |
+**Đừng nộp bản `direct` lên App Store Review** — nó có đường dẫn thanh toán
+ngoài app (vi phạm 3.1.1/3.1.3). Và đừng đưa bản `appstore` cho khách TestFlight,
+vì bản đó không có IAP product nào để bán.
+
+Đổi qua lại để test trên máy:
+
+```bash
+# bản direct: bắt buộc dùng StoreKit để thử IAP
+defaults write com.privatevpn.app flowvpn.paywallMode appstore
+# quay lại web
+defaults delete com.privatevpn.app flowvpn.paywallMode
+```
+
+Thứ tự phát hành gợi ý (build number phải tăng dần mỗi lần upload):
+
+1. `... ios direct` → upload TestFlight cho khách hiện tại (bản web).
+2. Tăng `CURRENT_PROJECT_VERSION` trong `project.yml` (2 → 3), `xcodegen generate`.
+3. `... ios appstore` → upload → nộp App Store Review.
 
 Đổi qua lại để test trên máy:
 
@@ -183,7 +199,7 @@ xcodebuild -exportArchive \
 Upload: **Xcode → Window → Organizer → Distribute App**, hoặc
 
 ```bash
-xcrun altool --upload-app -f build/ios-export/ipa/PrivateVPN.ipa \
+xcrun altool --upload-app -f build/ios-appstore-export/ipa/FlowVPN.ipa \
   -t ios --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>   # cần API key App Store Connect
 ```
 
@@ -231,8 +247,9 @@ curl -s -X PATCH https://api.meetflowai.site/v1/admin/app-version \
 |---|---|
 | **5.4 VPN app cần Organization** | Nâng cấp/chuyển tài khoản sang Organization, hoặc phát qua TestFlight. |
 | 2.1 "Không đăng nhập được" | Review notes có sẵn email + mã cố định `246810`; mã luôn là 246810 kể cả khi bấm gửi lại. |
-| 3.1.1 "Có đường dẫn mua ngoài" | Bản Release chỉ còn StoreKit (xem mục 1). Trả lời kèm ảnh chụp màn hình paywall. |
+| 3.1.1 "Có đường dẫn mua ngoài" | Bản nộp (`ios appstore`) chỉ còn StoreKit: `strings` trên binary không còn `meetflowai.site/buy`. Trả lời kèm ảnh chụp màn hình paywall. |
 | 3.1.2 thiếu disclosure | Đã có: giá, chu kỳ, tự động gia hạn, link EULA + privacy, Restore. |
 | 4.2 "App quá đơn giản" | Nhấn: WireGuard tunnel, nhiều exit node, tự chọn node nhanh nhất, quản lý thiết bị, đăng nhập email OTP. |
-| 5.1.1 thiếu privacy policy | `https://meetflowai.site/privacy` (đã có, đặt trong App Store Connect + trong app). |
+| 5.1.1 thiếu privacy policy | `https://meetflowai.site/FlowVPNPrivacy.html` (VPNFlow) — đặt trong App Store Connect + trong app. |
+| 5.1.1(v) thiếu xoá tài khoản | Đã có: Settings → Delete Account (`DELETE /v1/account`), kèm mô tả trong FAQ trang support. |
 | IAP không hiện khi test | Sản phẩm chưa "Ready to Submit"/chưa có ảnh review, hoặc thiếu `Paid Applications Agreement` + thông tin thuế/ngân hàng. |

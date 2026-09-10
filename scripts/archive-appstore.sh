@@ -8,8 +8,10 @@
 # submitted to App Store Review — archive those without this flag.
 #
 # Usage:
-#   scripts/archive-appstore.sh                # iOS
-#   scripts/archive-appstore.sh mac            # macOS
+#   scripts/archive-appstore.sh                      # iOS, App Store build
+#   scripts/archive-appstore.sh mac                  # macOS, App Store build
+#   scripts/archive-appstore.sh ios direct           # iOS, TestFlight/sideload
+#                                                    #   build (web buy page ON)
 #
 set -euo pipefail
 
@@ -17,13 +19,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 TARGET="${1:-ios}"
+MODE="${2:-appstore}"
 case "$TARGET" in
   ios) SCHEME="PrivateVPN";    PLATFORM="iOS";   DEST="generic/platform=iOS" ;;
   mac) SCHEME="PrivateVPNMac"; PLATFORM="macOS"; DEST="generic/platform=macOS" ;;
-  *) echo "usage: $0 [ios|mac]" >&2; exit 2 ;;
+  *) echo "usage: $0 [ios|mac] [appstore|direct]" >&2; exit 2 ;;
+esac
+case "$MODE" in
+  appstore|direct) ;;
+  *) echo "usage: $0 [ios|mac] [appstore|direct]" >&2; exit 2 ;;
 esac
 
-OUT="build/${TARGET}-export"
+OUT="build/${TARGET}-${MODE}-export"
 ARCHIVE="$OUT/$SCHEME.xcarchive"
 IPA="$OUT/ipa"
 
@@ -42,12 +49,19 @@ cat > "$OUT/ExportOptions.plist" <<PLIST
 </dict></plist>
 PLIST
 
-echo "==> Archiving $SCHEME ($PLATFORM) for the App Store"
-# PAYWALL_APPSTORE: removes the web buy page from the paywall at compile time.
+if [ "$MODE" = "appstore" ]; then
+  # PAYWALL_APPSTORE removes the web buy page from the paywall at compile time.
+  echo "==> Archiving $SCHEME ($PLATFORM) for App Store review (IAP only)"
+  COND='$(inherited) PAYWALL_APPSTORE'
+else
+  echo "==> Archiving $SCHEME ($PLATFORM) for our own distribution (web buy page ON)"
+  COND='$(inherited)'
+fi
+
 xcodebuild -project PrivateVPN.xcodeproj -scheme "$SCHEME" \
   -configuration Release -destination "$DEST" \
   -archivePath "$ARCHIVE" \
-  SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PAYWALL_APPSTORE' \
+  SWIFT_ACTIVE_COMPILATION_CONDITIONS="$COND" \
   archive -allowProvisioningUpdates
 
 echo "==> Exporting IPA"
@@ -59,6 +73,12 @@ echo
 echo "==> Done. Upload this to App Store Connect / TestFlight:"
 ls -1 "$IPA"/*.ipa
 echo
-echo "Reminder: this IPA is the In-App-Purchase-only build."
-echo "TestFlight builds for our own web-payment channel are archived WITHOUT the flag"
-echo "and must never be submitted for App Store review."
+if [ "$MODE" = "appstore" ]; then
+  echo "This IPA is the In-App-Purchase-only build -> submit to App Store Review."
+  echo "For TestFlight with our web payment page, run instead:"
+  echo "  $0 $TARGET direct"
+else
+  echo "This IPA contains the web buy page -> TestFlight / sideload ONLY."
+  echo "NEVER submit it for App Store review (Guideline 3.1.1 / 3.1.3);"
+  echo "build the review binary with: $0 $TARGET appstore"
+fi
