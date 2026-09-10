@@ -134,6 +134,21 @@ _(Play 还支持 ja/ko locale — 需要 thì lấy từ `RELEASE_NOTES_1.2.2.md
 |---|---|---|
 | `main` / `web` | Bán gói qua **web** — APK sideload (`meetflowai.site/v1/downloads/android`) | `Config.SELL_ON_WEB = true`: paywall mở WebView trang buy (WeChat/Alipay/bank QR) |
 | `store` | **Google Play** — AAB upload lên Play Console | `Config.SELL_ON_WEB = false`: paywall chỉ hiện màn hình thông tin + nút "Restore purchases" + mailto support; **không giá, không link ra trang bán**; ẩn cả thẻ nâng cấp ở màn chính |
+| **`production`** | **Nộp store cho MỌI nền tảng** — AAB Google Play **+ IPA App Store (iOS/macOS)** | Lấy từ `store` (Android Play-safe) **và** thêm mặc định `PAYWALL_APPSTORE` trong `project.yml` cho target iOS + macOS → mọi bản archive từ branch này chỉ có In-App Purchase, không thể hiện link ra trang bán (Guideline 3.1.1 / 3.1.3) |
+
+`production` là branch "an toàn để nộp" — build artifact nộp store từ đây. Không cần nhớ thêm cờ
+`-DPAYWALL_APPSTORE` khi archive nữa: `project.yml` đã bật sẵn cho cả iOS và macOS.
+
+```bash
+# Android — AAB nộp Google Play
+git checkout production && ./gradlew :app:bundleRelease
+
+# iOS — IPA nộp App Store (script cũng tự thêm cờ, trùng lặp vô hại)
+git checkout production && ./scripts/archive-appstore.sh ios appstore
+
+# macOS — IPA nộp App Store
+./scripts/archive-appstore.sh mac appstore
+```
 
 Chỉ 2 điểm khác nhau (một cờ `SELL_ON_WEB` + nhánh điều kiện trong `PaywallScreen`/`MainScreen`) nên merge qua lại rất dễ. AAB nộp Play **phải** build từ branch `store`; APK bán web build từ `main`/`web`.
 
