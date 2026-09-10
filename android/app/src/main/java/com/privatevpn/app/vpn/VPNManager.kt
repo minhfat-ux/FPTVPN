@@ -114,6 +114,10 @@ class VPNManager(
     /** Main connect flow. Assumes premium + signed-in are already checked. */
     fun connect() {
         scope.launch {
+            if (Config.HYSTERIA_MODE) {
+                consentAndStartHysteria()
+                return@launch
+            }
             if (_state.value.isTransitioning) return@launch
             _state.value = VPNState.CONNECTING
             _lastError.value = null
@@ -134,13 +138,75 @@ class VPNManager(
             } catch (e: Exception) {
                 _state.value = VPNState.FAILED
                 _lastError.value = e.message
+                Log.e("VPNFLOW_DEBUG", "connect failed: ${e.message}", e)
                 _statusMessage.value = userMessage(e)
             }
         }
     }
 
+    /** Marks the relay's TCP socket to bypass the VPN tunnel (prevents a loop). */
+    private fun protectRelay() {
+        val sock = relay?.tcpSocketForProtect ?: return
+        // Reflect the GoBackend$VpnService instance (the ACTIVE VPN) and call
+        // protect() on it so the relay's TCP connection bypasses the tunnel.
+        try {
+            val gb = Class.forName("com.wireguard.android.backend.GoBackend")
+            val f = gb.getDeclaredField("vpnService")
+            f.isAccessible = true
+            val future = f.get(null) as? java.util.concurrent.CompletableFuture<*> ?: return
+            val vs = future.get(3, java.util.concurrent.TimeUnit.SECONDS)
+            if (vs is android.net.VpnService) {
+                vs.protect(sock)
+                Log.e("VPNFLOW_DEBUG", "relay: protect OK via active VpnService")
+            }
+        } catch (e: Exception) {
+            Log.e("VPNFLOW_DEBUG", "relay: reflect-protect failed: ${e.message}")
+        }
+    }
+
+    /** Hysteria2 China mode: obtain VPN consent then start the tunnel service. */
+    private fun consentAndStartHysteria() {
+        val intent = prepareVpnServiceIntent()
+        if (intent != null) {
+            _pendingConsent.value = intent
+        } else {
+            startHysteriaService()
+        }
+    }
+
+    private fun startHysteriaService() {
+        runCatching {
+            val node = selectedNode
+            val host = node?.endpoint?.substringBefore(':')?.takeIf { it.isNotBlank() }
+                ?: Config.HY_SERVER
+            val i = android.content.Intent(app, HysteriaVpnService::class.java)
+            i.putExtra(HysteriaVpnService.EXTRA_HOST, host)
+            Log.e("VPNFLOW_DEBUG", "hysteria: connect node=${node?.name ?: "default"} host=$host")
+            // Plain startService: an active VpnService tunnel keeps the process
+            // alive; Android 15+/16 dropped the "vpn" foregroundServiceType so
+            // startForegroundService()+startForeground() is not usable here.
+            app.startService(i)
+        }
+        // Not CONNECTED yet — the service reports onHysteriaUp() once the
+        // tunnel really serves traffic (avoids a fake "connected" state).
+        _state.value = VPNState.CONNECTING
+    }
+
+    /** Called by HysteriaVpnService when the tunnel is actually up. */
+    fun onHysteriaUp() {
+        if (_state.value != VPNState.DISCONNECTING) {
+            _state.value = VPNState.CONNECTED
+            _lastError.value = null
+        }
+    }
+
     /** Resumes connect() after consent was granted. */
     fun resumeAfterConsent() {
+        if (Config.HYSTERIA_MODE) {
+            _pendingConsent.value = null
+            startHysteriaService()
+            return
+        }
         scope.launch {
             val config = pendingConfig
             pendingConfig = null
@@ -158,9 +224,25 @@ class VPNManager(
     private val _pendingConsent = MutableStateFlow<android.content.Intent?>(null)
     val pendingConsent: StateFlow<android.content.Intent?> = _pendingConsent.asStateFlow()
 
+    /** TCP relay (China transport), when Config.USE_RELAY is on. */
+    private var relay: WGRelay? = null
+
     fun disconnect() {
         scope.launch {
             _state.value = VPNState.DISCONNECTING
+            if (Config.HYSTERIA_MODE) {
+                // Stops the Go client directly + stops the service. Do NOT rely
+                // on onDestroy(): Android may defer it while the VPN is active.
+                try {
+                    HysteriaVpnService.requestStop(app)
+                } catch (e: Exception) {
+                    Log.e("VPNFlow", "stop hysteria failed: $e")
+                }
+                activeTunnel = null
+                _state.value = VPNState.DISCONNECTED
+                _statusMessage.value = null
+                return@launch
+            }
             withContext(Dispatchers.IO) {
                 try {
                     backend?.setState(activeTunnel ?: SimpleTunnel(Config.WG_TUNNEL_NAME), Tunnel.State.DOWN, null)
@@ -168,10 +250,30 @@ class VPNManager(
                     Log.e("VPNFlow", "disconnect failed: $e")
                 }
             }
+            relay?.stop()
+            relay = null
             activeTunnel = null
             _state.value = VPNState.DISCONNECTED
             _statusMessage.value = null
         }
+    }
+
+    /**
+     * Called by HysteriaVpnService when the tunnel ends on its own (server
+     * unreachable, network drop, tunnel error) — not by a user disconnect.
+     */
+    fun onHysteriaExited(error: String?) {
+        _state.value = VPNState.DISCONNECTED
+        val err = error ?: "connection dropped"
+        // Distinguish "never could connect" (network unstable) from a drop of a
+        // working tunnel.
+        _statusMessage.value = if (err.contains("connect failed") || err.contains("all transports")) {
+            "Could not connect - network unstable. Tap to retry."
+        } else {
+            "Connection lost. Tap to reconnect."
+        }
+        _lastError.value = err
+        Log.e("VPNFLOW_DEBUG", "hysteria exited: $err")
     }
 
     // MARK: - Provisioning
@@ -196,6 +298,7 @@ class VPNManager(
             selectNode(nodes.first().id)
             nodes.first()
         }
+        Log.e("VPNFLOW_DEBUG", "provision: selectedID=${_selectedNodeID.value} node=${node.id} endpoint=${node.endpoint} pubkey=${node.publicKey}")
 
         var activeKeyPair = keyPair
         var response = try {
@@ -247,6 +350,27 @@ class VPNManager(
         cacheTunnel(overlayIp = response.overlayIp, node = node)
         heartbeatLoop()
 
+        // China transport: route WG through the TCP relay instead of raw UDP.
+        val peerEndpoint: String = if (Config.USE_RELAY) {
+            Log.e("VPNFLOW_DEBUG", "relay: connecting to ${Config.RELAY_HOST}:${Config.RELAY_PORT}")
+            val r = withContext(Dispatchers.IO) {
+                val net = runCatching {
+                    val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                    cm.activeNetwork
+                }.getOrNull()
+                Log.e("VPNFLOW_DEBUG", "relay: active network=$net")
+                val rr = WGRelay(Config.RELAY_HOST, Config.RELAY_PORT, net)
+                rr.start()
+                rr
+            }
+            relay = r
+            Log.e("VPNFLOW_DEBUG", "relay: started on 127.0.0.1:${r.localPort}")
+            "127.0.0.1:${r.localPort}"
+        } else {
+            node.endpoint
+        }
+        Log.e("VPNFLOW_DEBUG", "provision-relay: peerEndpoint=$peerEndpoint overlayIp=${response.overlayIp}")
+
         return WireGuardTunnelConfig(
             privateKeyBase64 = activeKeyPair.privateKey.toBase64(),
             addresses = listOf("${response.overlayIp}/24"),
@@ -254,7 +378,7 @@ class VPNManager(
             peers = listOf(
                 WireGuardPeer(
                     publicKeyBase64 = node.publicKey,
-                    endpoint = node.endpoint,
+                    endpoint = peerEndpoint,
                     allowedIPs = listOf(Config.WG_ALLOWED_IPS),
                     persistentKeepAlive = Config.WG_PERSISTENT_KEEPALIVE,
                 )
@@ -266,6 +390,7 @@ class VPNManager(
         scope.launch {
             withContext(Dispatchers.IO) {
                 try {
+                    Log.e("VPNFLOW_DEBUG", "startTunnel: endpoint=${config.peers.firstOrNull()?.endpoint} peerPubkey=${config.peers.firstOrNull()?.publicKeyBase64} addr=${config.addresses}")
                     val backendInstance = backend ?: GoBackend(app).also { backend = it }
                     val tunnel = SimpleTunnel(Config.WG_TUNNEL_NAME) { newState ->
                         if (newState == Tunnel.State.UP) {
@@ -277,6 +402,10 @@ class VPNManager(
                     }
                     activeTunnel = tunnel
                     backendInstance.setState(tunnel, Tunnel.State.UP, config.toWgQuickConfig())
+                    // Tunnel is up: now the GoBackend$VpnService instance exists,
+                    // so we can protect() the relay's TCP socket against the
+                    // tunnel's 0.0.0.0/0 routing.
+                    if (Config.USE_RELAY) protectRelay()
                 } catch (e: Exception) {
                     _state.value = VPNState.FAILED
                     _lastError.value = e.message

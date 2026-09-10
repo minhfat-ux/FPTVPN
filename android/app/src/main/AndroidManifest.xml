@@ -42,5 +42,14 @@
 
         <!-- WireGuard tunnel VpnService is provided by the com.wireguard.android:tunnel
              AAR (GoBackend$VpnService) and merges in automatically. -->
+        <service
+            android:name=".vpn.HysteriaVpnService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:permission="android.permission.BIND_VPN_SERVICE" />
+        <service
+            android:name=".vpn.RelayProtectService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE" />
     </application>
 </manifest>

@@ -26,4 +26,23 @@ object Config {
     const val WG_PERSISTENT_KEEPALIVE = 25
     const val WG_TUNNEL_NAME = "vpnflow"
     const val WG_CLIENT_ENDPOINT = "0.0.0.0:51820"
+
+    /** TCP relay (China transport): rides WG over TCP instead of raw UDP.
+     *  Relay daemon next to the exit node unwraps and forwards to its WG UDP 443. */
+    const val USE_RELAY = true
+    const val RELAY_HOST = "103.173.155.50"
+    const val RELAY_PORT = 9444
+
+    /** Hysteria2 China-mode transport (fast, QUIC+obfs). Ports are tried in
+     *  order — 8443 is the classic hysteria port (often UDP-blocked by ISPs),
+     *  the others are the fallback listeners running on the same servers. */
+    const val HYSTERIA_MODE = true
+    const val HY_SERVER = "103.173.155.50" // node1 (ok qua TQ); node2 = 103.6.234.233 (chờ đổi IP)
+    // TCP relay trước UDP: mạng nào block UDP (GFW, corporate NAT) vẫn qua TCP.
+    // Relay node1: TCP <-> UDP 127.0.0.1:8443 (wgrelay.js); app probe từng cổng.
+    const val HY_TCP_RELAY_HOST = "103.173.155.50"
+    val HY_TCP_RELAY_PORTS = intArrayOf(8443, 9445)
+    val HY_PORTS = intArrayOf(8443, 28443, 54443)
+    const val HY_PASSWORD = "flowvpn_hysteria_2026"
+    const val HY_OBFS = "FlowVPN-8f3k"
 }

@@ -41,8 +41,8 @@ android {
         applicationId = "com.privatevpn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.2.2"
     }
 
     signingConfigs {
@@ -102,6 +102,7 @@ android {
 }
 
 dependencies {
+    implementation(files("libs/hysteria.aar"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
