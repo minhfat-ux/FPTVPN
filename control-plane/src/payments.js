@@ -450,7 +450,9 @@ const TEXTS = {
  * ================================================================== */
 
 export const AI_PLANS = {
-  pass30:  { amount: 130000,  days: 30,  label: "MeetFlow Pro 30-Day Pass (130,000 VND / 30 days)", badge: "30-Day Pass" },
+  pass30:  { amount: 150000,  days: 30,  oneTime: true,
+             label: "MeetFlow Pro 30-Day Pass (150,000 VND / 30 days, one-time, NO auto-renewal)",
+             badge: "30-Day Pass" },
   monthly: { amount: 130000,  days: 30,  label: "MeetFlow Pro Monthly (130,000 VND / 30 days)",     badge: "Monthly" },
   yearly:  { amount: 1050000, days: 365, label: "MeetFlow Pro Yearly (1,050,000 VND / 365 days)",   badge: "Yearly" },
 };
@@ -469,6 +471,8 @@ const AI_TEXTS = {
     successBody: "Pro has been activated for your account. Reopen the MeetFlow AI app — your Pro features are ready.",
     cancelTitle: "Payment cancelled",
     cancelBody: "No charge was made. Go back to the buy page to try again.",
+    pass30Note: "one-time · no auto-renewal",
+    renewNote: "The 30-day plan is a one-time purchase — it does NOT renew automatically. Buy again whenever you want another 30 days.",
     planNames: { pass30: "30-Day Pass", monthly: "Monthly", yearly: "Yearly" },
   },
   vi: {
@@ -484,6 +488,8 @@ const AI_TEXTS = {
     successBody: "Pro đã được kích hoạt cho tài khoản của bạn. Mở lại app MeetFlow AI — tính năng Pro đã sẵn sàng.",
     cancelTitle: "Đã huỷ thanh toán",
     cancelBody: "Không có khoản phí nào bị trừ. Quay lại trang mua để thử lại.",
+    pass30Note: "mua một lần · không tự động gia hạn",
+    renewNote: "Gói 30 ngày là mua một lần — KHÔNG tự động gia hạn. Muốn dùng tiếp 30 ngày nữa thì mua lại.",
     planNames: { pass30: "Gói 30 ngày", monthly: "Hàng tháng", yearly: "Hàng năm" },
   },
   zh: {
@@ -499,6 +505,8 @@ const AI_TEXTS = {
     successBody: "Pro 已为您的账户激活。重新打开 MeetFlow AI 应用即可使用 Pro 功能。",
     cancelTitle: "支付已取消",
     cancelBody: "未产生任何扣费。返回购买页面重试。",
+    pass30Note: "一次性 · 不会自动续费",
+    renewNote: "30 天套餐为一次性购买 — 不会自动续费。需要再用 30 天时请重新购买。",
     planNames: { pass30: "30 天通行证", monthly: "月度", yearly: "年度" },
   },
   ja: {
@@ -514,6 +522,8 @@ const AI_TEXTS = {
     successBody: "Pro がアカウントに有効になりました。MeetFlow AI アプリを開き直してください。",
     cancelTitle: "支払いはキャンセルされました",
     cancelBody: "料金は請求されていません。購入ページに戻ってお試しください。",
+    pass30Note: "一回のみ · 自動更新なし",
+    renewNote: "30日パスは買い切りのプランです — 自動更新はありません。さらに30日ご利用になる場合は再度ご購入ください。",
     planNames: { pass30: "30日パス", monthly: "月額", yearly: "年額" },
   },
   ko: {
@@ -529,6 +539,8 @@ const AI_TEXTS = {
     successBody: "계정에 Pro가 활성화되었습니다. MeetFlow AI 앱을 다시 열어 주세요.",
     cancelTitle: "결제가 취소되었습니다",
     cancelBody: "요금이 청구되지 않았습니다. 구매 페이지로 돌아가 다시 시도하세요.",
+    pass30Note: "1회 구매 · 자동 갱신 없음",
+    renewNote: "30일 이용권은 1회 구매 상품이며 자동 갱신되지 않습니다. 30일을 더 이용하려면 다시 구매하세요.",
     planNames: { pass30: "30일 이용권", monthly: "월간", yearly: "연간" },
   },
 };
@@ -564,9 +576,11 @@ export function localizedPlanRows(lang, product = "vpn") {
   const order = product === "ai" ? AI_PLAN_ORDER : ["monthly", "quarterly", "semiannual", "yearly", "lifetime"];
   return order.map((id) => {
     const p = table[id];
-    const price = t.planNames[id] + " — " + fmtAmount(lang, p.amount)
+    let price = t.planNames[id] + " — " + fmtAmount(lang, p.amount)
       + (p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote);
-    return { id, name: t.planNames[id], price };
+    if (p.oneTime && t.pass30Note) price += " · " + t.pass30Note;
+    const label = p.oneTime && t.pass30Note ? t.planNames[id] + " · " + t.pass30Note : t.planNames[id];
+    return { id, name: label, price };
   });
 }
 
@@ -652,6 +666,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
     }
     .plan.active { border-color: #33c773; background: rgba(51,199,115,.12); }
     .plan .price { color: #33c773; font-weight: 800; text-align: right; }
+    .plan .name { display: block; }
+    .plannote {
+      margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 11.5px;
+      line-height: 1.5; color: rgba(255,255,255,.7);
+      background: rgba(255,180,0,.08); border: 1px solid rgba(255,180,0,.25);
+    }
     .methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 6px; }
     .method {
       padding: 14px 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
@@ -808,6 +828,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       <div class="plans" id="planList">
         ${planHtml}
       </div>
+      ${t.renewNote ? `<div class="plannote">${t.renewNote}</div>` : ""}
 
       <label>${t.methodLabel}</label>
       <div class="methods">
