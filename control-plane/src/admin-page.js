@@ -424,10 +424,10 @@ export function adminPageHTML() {
 
       <div class="stats-grid" id="aiuCards"></div>
       <div class="note-line">
-        <b>Nguồn gói:</b> cột Pro / gói / doanh thu chỉ tính gói mua <b>trên web</b>
-        (VietQR · MoMo · WeChat Pay · Alipay) và gói admin cấp tay.
-        Gói mua qua <b>Google Play</b> hoặc <b>App Store</b> nằm ở Google/Apple, app chưa báo về server
-        nên các tài khoản đó hiện là "chưa thấy gói" — không có nghĩa là họ chưa mua.
+        <b>Nguồn gói:</b> gói mua <b>trên web</b> (VietQR · MoMo · WeChat Pay · Alipay) và gói admin cấp tay
+        được ghi nhận đầy đủ. Gói mua qua <b>Google Play</b> do app báo về khi mua/khôi phục (bản app 1.0.3 trở lên)
+        và chỉ tính khi xác thực được với Google Play Developer API — xem mục "Gói mua qua Google Play" bên dưới.
+        Gói mua qua <b>App Store</b> (iOS) chưa được hỗ trợ nên vẫn hiện là "chưa thấy gói".
       </div>
       <div class="stats-cols">
         <div>
@@ -486,6 +486,41 @@ export function adminPageHTML() {
       </div>
 
       <div class="user-card hidden" id="aiuDetail"></div>
+
+      <h2 style="margin-top:26px">Gói mua qua Google Play / App Store</h2>
+      <div class="fb-panel" id="storePanel">
+        <div class="fb-title" id="storeTitle">Đang kiểm tra cấu hình Google Play...</div>
+        <div class="fb-body" id="storeBody">App báo từng giao dịch mua trong app về server; server xác thực bằng Google Play Developer API.</div>
+        <details id="storeCredDetails">
+          <summary>Kết nối Google Play (dán service account JSON)</summary>
+          <div style="margin-top:10px">
+            <div class="fb-body" style="margin-bottom:8px">
+              Google Cloud Console → tạo <b>service account</b> → tạo <b>key JSON</b> → bật
+              <b>Google Play Android Developer API</b> → vào Play Console → <b>Users and permissions</b>
+              → mời email service account với quyền <b>View financial data</b> (hoặc Manage orders).
+              Rồi dán nội dung file JSON vào đây → <b>Lưu</b>.
+            </div>
+            <textarea id="storeCredJson" placeholder='{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}' style="min-height:110px"></textarea>
+            <div class="actions">
+              <button id="storeSaveCred">Lưu key Play</button>
+              <button class="secondary" id="storeClearCred">Xoá key đã lưu</button>
+            </div>
+          </div>
+        </details>
+      </div>
+      <div class="actions">
+        <button class="secondary" id="loadStore">Tải giao dịch</button>
+        <span class="status-inline" id="storeStatus"></span>
+      </div>
+      <div style="overflow-x:auto; margin-top:10px;">
+        <table>
+          <thead><tr>
+            <th>Báo lúc</th><th>Nền tảng</th><th>Sản phẩm</th><th>Gói</th><th>Người mua</th>
+            <th>Hết hạn</th><th>Tự gia hạn</th><th>Xác thực</th><th>Action</th>
+          </tr></thead>
+          <tbody id="storeBody2"><tr><td colspan="9">Bấm "Tải giao dịch".</td></tr></tbody>
+        </table>
+      </div>
 
       <h2 style="margin-top:26px">Tài khoản Firebase Auth (đăng ký gốc)</h2>
       <div class="actions">
@@ -635,6 +670,13 @@ export function adminPageHTML() {
       aiuRevenueBars: document.getElementById("aiuRevenueBars"),
       aiuNewUserBars: document.getElementById("aiuNewUserBars"),
       loadAiUsers: document.getElementById("loadAiUsers"),
+      loadStore: document.getElementById("loadStore"),
+      storeStatus: document.getElementById("storeStatus"),
+      storeBody2: document.getElementById("storeBody2"),
+      storePanel: document.getElementById("storePanel"),
+      storeTitle: document.getElementById("storeTitle"),
+      storeBody: document.getElementById("storeBody"),
+      storeCredJson: document.getElementById("storeCredJson"),
       loadFirebaseUsers: document.getElementById("loadFirebaseUsers"),
       fbBody: document.getElementById("fbBody"),
       fbStatus: document.getElementById("fbStatus"),
@@ -1289,7 +1331,7 @@ export function adminPageHTML() {
 
     function aiuSourceChips(sources) {
       var wrap = document.createElement("div");
-      var labels = { firebase: "firebase", app: "app", purchase: "đơn hàng", pro: "pro", admin: "admin" };
+      var labels = { firebase: "firebase", app: "app", purchase: "đơn hàng", pro: "pro", admin: "admin", store: "google play" };
       for (var i = 0; i < (sources || []).length; i++) {
         var chip = document.createElement("span");
         chip.className = "src-chip";
@@ -1327,6 +1369,8 @@ export function adminPageHTML() {
         ["User mới 30 ngày", aiuNum(stats.newLast30), "", ""],
         ["Khách đã trả tiền", aiuNum(stats.paidUsers), aiuNum(stats.ordersPaid) + " đơn đã xác nhận", ""],
         ["Doanh thu Pro (web)", aiuMoney(stats.revenue), aiuNum(stats.ordersPending) + " đơn chờ xác nhận", "revenue"],
+        ["Gói mua qua store", aiuNum(stats.storePurchases || 0),
+          aiuNum(stats.storeVerified || 0) + " đã xác thực · " + aiuNum(stats.storeActive || 0) + " đang hiệu lực", ""],
         ["Tài khoản Firebase", stats.firebase && stats.firebase.configured ? aiuNum(stats.firebase.count) : "chưa kết nối",
           stats.firebase && stats.firebase.linked ? aiuNum(stats.firebase.linked) + " khớp với dữ liệu Pro" : "dán key ở khung phía trên", ""],
       ];
@@ -1414,6 +1458,7 @@ export function adminPageHTML() {
         aiuRenderBars(fields.aiuRevenueBars, series, function (s) { return s.revenue; }, true);
         aiuRenderBars(fields.aiuNewUserBars, series, function (s) { return s.newUsers; }, false);
         aiuRenderRows(aiuState.rows);
+        aiuRenderStorePanel(data.play, aiuState.stats);
         fields.aiuStatusLine.textContent =
           "Hiển thị " + aiuState.rows.length + "/" + aiuNum(data.total) + " user (tổng " + aiuNum(data.totalKnown) + ")" +
           " · cập nhật " + new Date(data.generatedAt).toLocaleTimeString("vi-VN");
@@ -1670,6 +1715,154 @@ export function adminPageHTML() {
       }
     }
 
+    // ---------------- Store purchases (Google Play / App Store) ----------------
+    function aiuRenderStorePanel(play, stats) {
+      if (!fields.storePanel) return;
+      var ok = play && play.configured;
+      fields.storePanel.className = "fb-panel" + (ok ? " ok" : "");
+      if (ok) {
+        fields.storeTitle.textContent = "Google Play đã kết nối" + (play.projectId ? " (" + play.projectId + ")" : "");
+        fields.storeBody.textContent =
+          "Package " + (play.packageName || "?") + " · " + aiuNum((stats && stats.storePurchases) || 0) + " giao dịch app báo về, " +
+          aiuNum((stats && stats.storeVerified) || 0) + " đã xác thực với Google, " +
+          aiuNum((stats && stats.storeActive) || 0) + " đang còn hiệu lực.";
+      } else {
+        fields.storeTitle.textContent = "Chưa kết nối Google Play Developer API";
+        fields.storeBody.textContent =
+          "Giao dịch app báo về vẫn được lưu (" + aiuNum((stats && stats.storePurchases) || 0) + " giao dịch) nhưng " +
+          "CHƯA xác thực được nên không tính là Pro. Dán service account JSON của Google Cloud ở khung bên dưới để bật xác thực.";
+      }
+    }
+
+    async function loadStorePurchases() {
+      if (!fields.storeBody2) return;
+      try {
+        fields.storeStatus.textContent = "Đang tải...";
+        var data = await request("/v1/admin/ai/store/purchases");
+        aiuRenderStorePanel(data.play, data.summary);
+        var rows = data.purchases || [];
+        fields.storeBody2.innerHTML = "";
+        if (!rows.length) {
+          fields.storeBody2.innerHTML = '<tr><td colspan="9">Chưa có giao dịch nào được app báo về.</td></tr>';
+        }
+        for (var i = 0; i < rows.length; i++) {
+          var p = rows[i];
+          var tr = document.createElement("tr");
+          tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+          var tds = tr.querySelectorAll("td");
+          tds[0].textContent = aiuFmtDate(p.lastReportedAt) + (p.reportCount > 1 ? " (" + p.reportCount + " lần)" : "");
+          tds[1].textContent = p.platform === "ios" ? "App Store" : "Google Play";
+          var prod = document.createElement("code");
+          prod.textContent = p.productId || "-";
+          tds[2].appendChild(prod);
+          tds[3].textContent = p.plan || "-";
+          var who = document.createElement("div");
+          who.textContent = p.email || "(chưa biết email)";
+          var sub = document.createElement("div");
+          sub.className = "meta";
+          sub.style.fontSize = "12px";
+          sub.textContent = "uid: " + (p.uid || p.obfuscatedAccountId || "-") + (p.orderId ? " · " + p.orderId : "");
+          tds[4].appendChild(who); tds[4].appendChild(sub);
+          tds[5].textContent = p.expiresAt ? aiuFmtDate(p.expiresAt) : "-";
+          tds[6].textContent = p.autoRenewing === true ? "có" : (p.autoRenewing === false ? "không" : "-");
+          var badge = document.createElement("span");
+          badge.className = "badge " + (p.verified ? (p.active ? "ok" : "warn") : "mute");
+          badge.textContent = p.verified ? (p.active ? "đã xác thực · hiệu lực" : "đã xác thực · hết hạn") : "chưa xác thực";
+          tds[7].appendChild(badge);
+          if (!p.verified && p.verifyError) {
+            var err = document.createElement("div");
+            err.className = "meta";
+            err.style.fontSize = "11.5px";
+            err.textContent = p.verifyError.slice(0, 120);
+            tds[7].appendChild(err);
+          }
+          var actions = document.createElement("div");
+          actions.className = "row-actions";
+          var verify = document.createElement("button");
+          verify.className = "secondary";
+          verify.textContent = "Xác thực lại";
+          verify.onclick = function (tokenId) { return function () { storeVerify(tokenId); }; }(p.tokenId);
+          actions.appendChild(verify);
+          if (p.email) {
+            var grant = document.createElement("button");
+            grant.textContent = "Cấp 30 ngày";
+            grant.onclick = function (email) { return function () { aiuGrant(email, 30); }; }(p.email);
+            actions.appendChild(grant);
+          }
+          var forget = document.createElement("button");
+          forget.className = "danger";
+          forget.textContent = "Xoá";
+          forget.onclick = function (tokenId) { return function () { storeForget(tokenId); }; }(p.tokenId);
+          actions.appendChild(forget);
+          tds[8].appendChild(actions);
+          fields.storeBody2.appendChild(tr);
+        }
+        fields.storeStatus.textContent = rows.length + " giao dịch · " + aiuNum(data.summary.verified) +
+          " đã xác thực · doanh thu ghi nhận: " + (Object.keys(data.summary.revenue || {}).length
+            ? Object.keys(data.summary.revenue).map(function (c) { return aiuNum(Math.round(data.summary.revenue[c])) + " " + c; }).join(", ")
+            : "chưa có");
+      } catch (error) {
+        fields.storeStatus.textContent = error.message;
+      }
+    }
+
+    async function storeVerify(tokenId) {
+      try {
+        fields.storeStatus.textContent = "Đang xác thực với Google...";
+        var data = await request("/v1/admin/ai/store/purchases/" + encodeURIComponent(tokenId) + "/verify", { method: "POST" });
+        fields.storeStatus.textContent = data.verified
+          ? "Đã xác thực giao dịch " + tokenId + (data.purchase && data.purchase.expiresAt ? " · hết hạn " + aiuFmtDate(data.purchase.expiresAt) : "")
+          : "Chưa xác thực được: " + (data.error || "không rõ lỗi");
+        await loadStorePurchases();
+        await loadAiUsers();
+      } catch (error) {
+        fields.storeStatus.textContent = error.message;
+      }
+    }
+
+    async function storeForget(tokenId) {
+      if (!confirm("Xoá giao dịch " + tokenId + " khỏi danh sách?")) return;
+      try {
+        await request("/v1/admin/ai/store/purchases/" + encodeURIComponent(tokenId) + "/forget", { method: "POST" });
+        await loadStorePurchases();
+        await loadAiUsers();
+      } catch (error) {
+        fields.storeStatus.textContent = error.message;
+      }
+    }
+
+    async function storeSaveCredential() {
+      if (!fields.storeCredJson || !fields.storeCredJson.value.trim()) {
+        fields.storeBody.textContent = "Dán nội dung file service account JSON của Google Cloud trước.";
+        return;
+      }
+      try {
+        fields.storeTitle.textContent = "Đang lưu key Play...";
+        var data = await request("/v1/admin/ai/store/credentials", {
+          method: "POST",
+          body: JSON.stringify({ json: fields.storeCredJson.value.trim() }),
+        });
+        fields.storeCredJson.value = "";
+        fields.storeStatus.textContent = "Đã lưu key Play cho service account " + data.client_email + " · package " + data.packageName;
+        await loadStorePurchases();
+        await loadAiUsers();
+      } catch (error) {
+        fields.storeTitle.textContent = "Không lưu được key Play";
+        fields.storeBody.textContent = error.message;
+      }
+    }
+
+    async function storeClearCredential() {
+      if (!confirm("Xoá service account key của Google Play đã lưu trên VPS?")) return;
+      try {
+        await request("/v1/admin/ai/store/credentials", { method: "DELETE" });
+        fields.storeStatus.textContent = "Đã xoá key Play.";
+        await loadStorePurchases();
+      } catch (error) {
+        fields.storeStatus.textContent = error.message;
+      }
+    }
+
     // ---------------- Firebase Auth accounts ----------------
     async function loadFirebaseUsers() {
       if (!fields.fbBody) return;
@@ -1811,6 +2004,11 @@ export function adminPageHTML() {
     }
 
     if (fields.loadAiUsers) fields.loadAiUsers.onclick = loadAiUsers;
+    if (fields.loadStore) fields.loadStore.onclick = loadStorePurchases;
+    var storeSaveBtn = document.getElementById("storeSaveCred");
+    if (storeSaveBtn) storeSaveBtn.onclick = storeSaveCredential;
+    var storeClearBtn = document.getElementById("storeClearCred");
+    if (storeClearBtn) storeClearBtn.onclick = storeClearCredential;
     if (fields.loadFirebaseUsers) fields.loadFirebaseUsers.onclick = loadFirebaseUsers;
     if (fields.aiuStatus) fields.aiuStatus.onchange = loadAiUsers;
     if (fields.aiuSource) fields.aiuSource.onchange = loadAiUsers;

@@ -127,6 +127,70 @@ DELETE /v1/admin/ai/firebase/users/:uid
 POST   /v1/admin/ai/firebase/users/:uid/password-reset   { email }
 ```
 
+## 3c. Gói mua qua Google Play / App Store
+
+### Vì sao cần phần này
+
+Giao dịch mua trong app **không đi qua server mình**: Play Billing và StoreKit trả quyền
+ngay trên máy. Nên trước đây khách trả tiền qua Google Play vẫn hiện là "chưa thấy gói"
+trong dashboard, và doanh thu Play không ai thấy. Firebase cũng chỉ có danh tính, không có
+thông tin mua hàng.
+
+### Luồng hoạt động (bản Android 1.0.3 trở lên)
+
+```
+App mua/khôi phục (Play Billing)
+   └─ POST /v1/ai/store/purchase  { productId, purchaseToken, uid, email?, orderId, appVersion }
+         └─ server xác thực bằng Google Play Developer API
+               ├─ hợp lệ + còn hiệu lực + có email  → cấp Pro (productId play.<productId>) + ghi vào dashboard
+               ├─ hợp lệ nhưng không có email        → lưu giao dịch (hiện ở bảng Play, chưa cấp Pro)
+               └─ chưa có key / lỗi                  → lưu ở trạng thái "chưa xác thực" (không tính là Pro)
+```
+
+- App **chỉ báo**, không tự quyết định: một giao dịch chỉ thành Pro khi Google xác nhận.
+  Nhờ vậy không ai giả mạo được token để lấy Pro.
+- Báo lại nhiều lần không sao: mỗi token là một dòng, báo lại chỉ cập nhật hạn/trạng thái.
+- App còn set `obfuscatedAccountId = Firebase uid` khi mở luồng mua, để Google trả về uid
+  trong kết quả xác thực — có thể ghép giao dịch với tài khoản kể cả khi app báo hụt.
+
+### Cấu hình Google Play (một lần)
+
+1. **Google Cloud Console** (project `meetflowai-82dee` hoặc project riêng):
+   - Bật **Google Play Android Developer API**.
+   - IAM → **Service accounts** → tạo service account → **Keys → Add key → JSON** → tải file.
+2. **Play Console** → **Users and permissions** → **Invite new users** → dán email service account
+   (`...@....iam.gserviceaccount.com`) → cấp quyền **View financial data** (hoặc *Manage orders*)
+   cho app MeetFlow AI → gửi lời mời.
+3. Dán nội dung file JSON vào khung **"Kết nối Google Play"** trong tab AI Users → **Lưu key Play**.
+   - File lưu ở `/root/flowvpn-cp/data/play-admin.json` (quyền `0600`), **không** gửi ngược lại trình duyệt.
+   - Hoặc dùng env `PLAY_SERVICE_ACCOUNT_JSON` / `PLAY_SERVICE_ACCOUNT_FILE`, và `PLAY_PACKAGE_NAME`
+     (mặc định `com.meetflow.translator`).
+4. Nếu chưa làm bước 2 (chưa invite), API trả `401/403` — khung Play sẽ hiện đúng thông báo lỗi đó.
+
+Sau khi có key, các giao dịch đã lưu ở trạng thái "chưa xác thực" có thể bấm **Xác thực lại**
+từng dòng, hoặc chỉ cần khách mở app (app báo lại) là tự xác thực.
+
+### API
+
+```
+POST   /v1/ai/store/purchase                      (public, app gọi; giới hạn 40 lần/giờ/IP)
+GET    /v1/admin/ai/store/purchases               (danh sách + tổng hợp + trạng thái key Play)
+POST   /v1/admin/ai/store/purchases/:tokenId/verify
+POST   /v1/admin/ai/store/purchases/:tokenId/forget
+POST   /v1/admin/ai/store/credentials             { json }   dán service account Play
+DELETE /v1/admin/ai/store/credentials             xoá key đã lưu
+```
+
+### Giới hạn cần biết
+
+- **App Store (iOS) chưa hỗ trợ**: bản iOS chưa báo giao dịch về server, nên khách mua qua
+  App Store vẫn hiện "chưa thấy gói". Muốn làm cần: app set `appAccountToken` + gửi
+  `transactionId` về server, và/hoặc bật App Store Server Notifications V2 (cần key In-App Purchase `.p8`).
+- Khách mua **ẩn danh** (không nhập email) chỉ hiện trong bảng Play với uid, không thành dòng
+  trong bảng user (bảng user khoá theo email). Khi đó dùng nút **Cấp 30 ngày** kèm email khách đọc cho support.
+- Doanh thu trong bảng Play chỉ là số ghi nhận từ giá Play trả về ở thời điểm mua; số liệu
+  đối soát chính thức vẫn lấy từ Play Console (**Financial reports**).
+
 ## 4. Phát hành bản Android mới (bắt buộc cập nhật)
 
 ```bash

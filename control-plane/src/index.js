@@ -26,6 +26,14 @@ import {
 } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
 import { AiUsersStore } from "./ai-users-store.js";
+import { AiStorePurchaseStore } from "./ai-store-purchases.js";
+import {
+  verifyPurchase as verifyPlayPurchase,
+  playCredentialStatus,
+  savePlayCredential,
+  clearPlayCredential,
+  playPackageName,
+} from "./play-store.js";
 import { buildUserRows, filterRows, computeStats, rowsToCsv, entitlementState } from "./ai-users.js";
 import {
   credentialStatus as firebaseCredentialStatus,
@@ -101,6 +109,7 @@ const DEV_LOGIN_CODE = (process.env.DEV_LOGIN_CODE ?? "").trim();
 const SUPPORT_EMAIL = (process.env.SUPPORT_EMAIL ?? "support@meetflowai.site").trim();
 // Registry of MeetFlow AI accounts seen by the control plane (admin dashboard).
 const AI_USERS_FILE = process.env.AI_USERS_FILE ?? path.join(__dirname, "..", "data", "ai-users.json");
+const AI_STORE_PURCHASES_FILE = process.env.AI_STORE_PURCHASES_FILE ?? path.join(__dirname, "..", "data", "ai-store-purchases.json");
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
@@ -133,6 +142,9 @@ const aiStore = new AiAccessStore(process.env.AI_ACCESS_FILE ?? path.join(__dirn
 // Our own record of MeetFlow AI accounts we have seen (Firebase is the real
 // account system, but it needs a service-account key — see firebase-users.js).
 const aiUsersStore = new AiUsersStore(AI_USERS_FILE);
+// Google Play / App Store purchases reported by the apps (see
+// ai-store-purchases.js) — the platform stores never tell us about these.
+const aiStorePurchaseStore = new AiStorePurchaseStore(AI_STORE_PURCHASES_FILE);
 const nodeStore = new NodeStore(NODES_DB_FILE, buildFallbackExitNode(), { legacyJsonPath: NODES_FILE });
 const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   minimum_ios_version: DEFAULT_MIN_VERSION,
@@ -607,6 +619,233 @@ app.get("/v1/ai/payments/confirm/:orderCode", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Store purchases (Google Play / App Store) reported by the apps
+//
+// In-app purchases never touch our server: Play Billing and StoreKit resolve
+// the entitlement on the device. The app therefore reports the purchase token
+// here, we verify it with Google (when the Play service account is configured)
+// and only a verified purchase may grant Pro. Unverified reports are still
+// shown to the admin so nothing is silently lost.
+// ---------------------------------------------------------------------------
+
+/** Milliseconds in a day (used to turn a Play expiry into entitlement days). */
+const STORE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Play product id -> plan id used everywhere else in the dashboard. */
+function planFromProductId(productId) {
+  const id = String(productId ?? "").toLowerCase();
+  if (id.includes("year") || id.includes("annual")) return "yearly";
+  if (id.includes("month")) return "monthly";
+  if (id.includes("pass") || id.includes("30")) return "pass30";
+  return null;
+}
+
+// Cheap per-IP cap: the endpoint is public (apps call it), but it can grant Pro
+// for a verified token, so it must not be a free-for-all.
+const STORE_REPORT_WINDOW_MS = 60 * 60 * 1000;
+const STORE_REPORT_MAX = 40;
+const storeReportHits = new Map();
+
+function storeReportAllowed(ip) {
+  const now = Date.now();
+  const hits = (storeReportHits.get(ip) ?? []).filter((t) => now - t < STORE_REPORT_WINDOW_MS);
+  if (hits.length >= STORE_REPORT_MAX) {
+    storeReportHits.set(ip, hits);
+    return false;
+  }
+  hits.push(now);
+  storeReportHits.set(ip, hits);
+  if (storeReportHits.size > 5000) storeReportHits.clear();
+  return true;
+}
+
+/** Verifies one stored row and, when it is real and active, grants Pro. */
+async function verifyStorePurchaseRow(row) {
+  const token = row?.purchaseToken;
+  if (!token) return { row, verified: false, error: "Không có purchase token" };
+  const status = await playCredentialStatus();
+  if (!status.configured) {
+    const message = "Chưa cấu hình Google Play service account — chưa xác thực được";
+    await aiStorePurchaseStore.markVerified(row.tokenId, null, message);
+    return { row: await aiStorePurchaseStore.get(row.tokenId), verified: false, error: message };
+  }
+  try {
+    const result = await verifyPlayPurchase({
+      purchaseToken: token,
+      productId: row.productId,
+      kind: row.kind ?? "subs",
+    });
+    const updated = await aiStorePurchaseStore.markVerified(row.tokenId, result);
+    console.log(
+      `play-verify tokenId=${row.tokenId} product=${result.productId} state=${result.state} ` +
+        `active=${result.active} expires=${result.expiresAt ?? "-"}`,
+    );
+    // Grant Pro only for a verified, still-valid purchase that we can attach to
+    // an email (anonymous Play buyers have no email to key an entitlement on).
+    if (result.active && updated?.email) {
+      const plan = updated.plan ?? planFromProductId(result.productId) ?? "monthly";
+      const msLeft = Date.parse(result.expiresAt ?? "") - Date.now();
+      const days = Number.isFinite(msLeft) && msLeft > 0 ? Math.min(400, Math.ceil(msLeft / STORE_DAY_MS)) : 1;
+      await aiStore.grantPro(updated.email, {
+        plan,
+        days,
+        productId: `play.${result.productId}`,
+        lang: null,
+      });
+      await aiUsersStore
+        .touch(updated.email, { source: "store", note: `Google Play ${result.productId}` })
+        .catch(() => {});
+    }
+    return { row: updated, verified: true, error: null };
+  } catch (err) {
+    const message = String(err?.message ?? err).slice(0, 300);
+    await aiStorePurchaseStore.markVerified(row.tokenId, null, message);
+    console.error(`play-verify failed tokenId=${row.tokenId}: ${message}`);
+    return { row: await aiStorePurchaseStore.get(row.tokenId), verified: false, error: message };
+  }
+}
+
+/** POST /v1/ai/store/purchase — the app reports a Play/App Store purchase. */
+app.post("/v1/ai/store/purchase", async (req, res) => {
+  try {
+    if (!storeReportAllowed(req.ip ?? "unknown")) {
+      return res.status(429).json({ error: "Quá nhiều yêu cầu, thử lại sau." });
+    }
+    const body = req.body ?? {};
+    const purchaseToken = String(body.purchaseToken ?? "").trim();
+    const productId = String(body.productId ?? "").trim();
+    if (!purchaseToken || purchaseToken.length < 10) {
+      return res.status(400).json({ error: "purchaseToken không hợp lệ" });
+    }
+    if (!productId) return res.status(400).json({ error: "Thiếu productId" });
+
+    const platformRaw = String(body.platform ?? "android").toLowerCase();
+    const platform = platformRaw.includes("ios") || platformRaw.includes("apple") ? "ios" : "android";
+    const email = String(body.email ?? "").trim();
+
+    let row = await aiStorePurchaseStore.record({
+      purchaseToken,
+      productId,
+      platform,
+      packageName: String(body.packageName ?? playPackageName()).slice(0, 80),
+      kind: platform === "android" ? "subs" : "subs",
+      uid: String(body.uid ?? "").slice(0, 128) || null,
+      email: email || null,
+      orderId: body.orderId ? String(body.orderId).slice(0, 80) : null,
+      plan: body.plan ? String(body.plan).slice(0, 20) : planFromProductId(productId),
+      expiresAt: body.expiresAt ? String(body.expiresAt).slice(0, 40) : null,
+      autoRenewing: typeof body.autoRenewing === "boolean" ? body.autoRenewing : null,
+      priceMicros: Number.isFinite(Number(body.priceMicros)) ? Number(body.priceMicros) : null,
+      currency: body.currency ? String(body.currency).slice(0, 8) : null,
+      appVersion: body.appVersion ? String(body.appVersion).slice(0, 24) : null,
+    });
+
+    if (email) {
+      await aiUsersStore
+        .touch(email, { source: "store", note: `Google Play ${productId}` })
+        .catch(() => {});
+    }
+    console.log(
+      `ai-store-report tokenId=${row.tokenId} platform=${platform} product=${productId} ` +
+        `uid=${row.uid ?? "-"} email=${email || "-"}`,
+    );
+
+    // Verify right away when we can; otherwise the admin can re-run it later.
+    let verified = false;
+    let error = null;
+    if (platform === "android") {
+      const outcome = await verifyStorePurchaseRow(row);
+      row = outcome.row ?? row;
+      verified = outcome.verified;
+      error = outcome.error;
+    }
+    res.json({
+      ok: true,
+      tokenId: row.tokenId,
+      verified: Boolean(row.verified),
+      active: Boolean(row.active),
+      plan: row.plan ?? null,
+      expiresAt: row.expiresAt ?? null,
+      checked: verified,
+      error,
+    });
+  } catch (err) {
+    console.error("ai store purchase report failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** GET /v1/admin/ai/store/purchases — Play/App Store purchases + Play status. */
+app.get("/v1/admin/ai/store/purchases", requireAdminAuth, async (_req, res) => {
+  try {
+    const purchases = await aiStorePurchaseStore.list();
+    const credentials = await playCredentialStatus();
+    res.json({
+      purchases,
+      summary: AiStorePurchaseStore.summarize(purchases),
+      play: {
+        configured: credentials.configured,
+        source: credentials.source,
+        projectId: credentials.projectId,
+        packageName: credentials.packageName,
+      },
+    });
+  } catch (err) {
+    console.error("admin store purchases failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** POST /v1/admin/ai/store/purchases/:tokenId/verify — re-check with Google. */
+app.post("/v1/admin/ai/store/purchases/:tokenId/verify", requireAdminAuth, async (req, res) => {
+  try {
+    const row = await aiStorePurchaseStore.get(req.params.tokenId);
+    if (!row) return res.status(404).json({ error: "Không tìm thấy giao dịch" });
+    const outcome = await verifyStorePurchaseRow(row);
+    res.json({ ok: true, verified: outcome.verified, error: outcome.error, purchase: outcome.row });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+/** POST /v1/admin/ai/store/purchases/:tokenId/forget — drop a bogus report. */
+app.post("/v1/admin/ai/store/purchases/:tokenId/forget", requireAdminAuth, async (req, res) => {
+  try {
+    res.json({ ok: true, removed: await aiStorePurchaseStore.forget(req.params.tokenId) });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** POST /v1/admin/ai/store/credentials — paste the Play service-account JSON. */
+app.post("/v1/admin/ai/store/credentials", requireAdminAuth, async (req, res) => {
+  try {
+    const raw = typeof req.body?.json === "string" ? req.body.json : JSON.stringify(req.body?.json ?? {});
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return res.status(400).json({ error: "JSON không hợp lệ — dán đúng nội dung file service account của Google Cloud" });
+    }
+    const saved = await savePlayCredential(parsed);
+    res.json({ ok: true, ...saved, packageName: playPackageName() });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+/** DELETE /v1/admin/ai/store/credentials — remove the stored Play key. */
+app.delete("/v1/admin/ai/store/credentials", requireAdminAuth, async (_req, res) => {
+  try {
+    await clearPlayCredential();
+    const status = await playCredentialStatus();
+    res.json({ ok: true, configured: status.configured, source: status.source });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 // Admin: list pending MeetFlow Pro orders / confirm one manually.
 app.get("/v1/admin/ai/payments/pending", requireAdminAuth, async (_req, res) => {
   try {
@@ -655,23 +894,26 @@ app.get("/v1/admin/ai/entitlements", requireAdminAuth, async (_req, res) => {
 
 /** Builds the merged dashboard payload (rows + stats) from all four sources. */
 async function aiUsersSnapshot({ withFirebase = true } = {}) {
-  const [registry, entitlements, orders, firebase] = await Promise.all([
+  const [registry, entitlements, orders, firebase, storePurchases] = await Promise.all([
     aiUsersStore.listUsers(),
     aiStore.listEntitlements(),
     aiStore.listAllPayments(),
     withFirebase
       ? listFirebaseUsers({ max: 2000 })
       : Promise.resolve({ configured: false, users: [], count: 0, error: null }),
+    aiStorePurchaseStore.list(),
   ]);
   const rows = buildUserRows({
     registry,
     entitlements,
     orders,
     firebaseUsers: firebase.users ?? [],
+    storePurchases,
     prices: AI_PLANS,
   });
-  const stats = computeStats({ rows, orders, prices: AI_PLANS, firebase });
-  return { rows, stats, registry, entitlements, orders, firebase };
+  const store = AiStorePurchaseStore.summarize(storePurchases);
+  const stats = computeStats({ rows, orders, prices: AI_PLANS, firebase, store });
+  return { rows, stats, registry, entitlements, orders, firebase, storePurchases, store };
 }
 
 function aiUserQuery(req) {
@@ -704,6 +946,7 @@ app.get("/v1/admin/ai/users", requireAdminAuth, async (req, res) => {
         count: firebase.count ?? 0,
         projectId: firebase.projectId ?? null,
       },
+      play: await playCredentialStatus(),
       generatedAt: new Date().toISOString(),
     });
   } catch (err) {

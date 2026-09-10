@@ -57,6 +57,15 @@ export function entitlementState(entitlement, now = Date.now()) {
   };
 }
 
+/** Play/App Store product id -> plan id (mirrors the server's mapping). */
+export function planFromProduct(productId) {
+  const id = String(productId ?? "").toLowerCase();
+  if (id.includes("year") || id.includes("annual")) return "yearly";
+  if (id.includes("month")) return "monthly";
+  if (id.includes("pass") || id.includes("30")) return "pass30";
+  return null;
+}
+
 /** Localized plan label lookup is the caller's job; this only needs amounts. */
 function planAmount(prices, plan) {
   const entry = prices?.[plan];
@@ -74,7 +83,15 @@ function planDays(prices, plan) {
  * `prices` maps plan id -> { amount, days } so revenue can be attributed to the
  * plan that was bought at the time of the order.
  */
-export function buildUserRows({ registry = [], entitlements = [], orders = [], firebaseUsers = [], prices = {}, now = Date.now() } = {}) {
+export function buildUserRows({
+  registry = [],
+  entitlements = [],
+  orders = [],
+  firebaseUsers = [],
+  storePurchases = [],
+  prices = {},
+  now = Date.now(),
+} = {}) {
   const rows = new Map();
   const touchRow = (email) => {
     const key = normalizeEmail(email);
@@ -92,6 +109,7 @@ export function buildUserRows({ registry = [], entitlements = [], orders = [], f
         note: null,
         inRegistry: false,
         inFirebase: false,
+        store: [],
         seenDates: [],
         firstSeenFallback: null,
         lastSeenFallback: null,
@@ -175,6 +193,43 @@ export function buildUserRows({ registry = [], entitlements = [], orders = [], f
     }
   }
 
+  // Store purchases carry the buyer's email when the app knew it, otherwise the
+  // Firebase uid (or the obfuscated account id Play stored for us) — try both.
+  const byUid = new Map();
+  for (const row of rows.values()) {
+    if (row.firebase?.uid) byUid.set(row.firebase.uid, row);
+  }
+  for (const purchase of storePurchases) {
+    const key = normalizeEmail(purchase.email);
+    let target = key ? rows.get(key) : null;
+    if (!target && purchase.uid && byUid.has(purchase.uid)) target = byUid.get(purchase.uid);
+    if (!target && purchase.obfuscatedAccountId && byUid.has(purchase.obfuscatedAccountId)) {
+      target = byUid.get(purchase.obfuscatedAccountId);
+    }
+    if (!target) continue;
+    target.store.push({
+      tokenId: purchase.tokenId,
+      platform: purchase.platform ?? "android",
+      productId: purchase.productId ?? null,
+      plan: purchase.plan ?? planFromProduct(purchase.productId),
+      expiresAt: purchase.expiresAt ?? null,
+      verified: Boolean(purchase.verified),
+      active: Boolean(purchase.active),
+      autoRenewing: purchase.autoRenewing ?? null,
+      orderId: purchase.orderId ?? null,
+      state: purchase.state ?? null,
+      reportedAt: purchase.lastReportedAt ?? null,
+      verifyError: purchase.verifyError ?? null,
+    });
+    if (!target.sources.includes("store")) target.sources.push("store");
+    if (purchase.lastReportedAt) {
+      if (!target.lastSeen || String(purchase.lastReportedAt) > String(target.lastSeen)) {
+        target.lastSeen = purchase.lastReportedAt;
+      }
+      if (!target.firstSeen) target.firstSeen = target.lastSeen;
+    }
+  }
+
   const list = [];
   for (const row of rows.values()) {
     // Only the registry and Firebase know real signup/activity times; when a
@@ -211,6 +266,7 @@ export function buildUserRows({ registry = [], entitlements = [], orders = [], f
         history: history.slice(-20).reverse(),
       },
       orders: row.orders,
+      store: row.store,
     });
   }
 
@@ -266,7 +322,7 @@ function lastMonths(count, now) {
 }
 
 /** Dashboard totals for the AI Users tab. */
-export function computeStats({ rows = [], orders = [], firebase = {}, now = Date.now(), prices = {} } = {}) {
+export function computeStats({ rows = [], orders = [], firebase = {}, store = null, now = Date.now(), prices = {} } = {}) {
   const stats = {
     total: rows.length,
     proActive: 0,
@@ -284,6 +340,11 @@ export function computeStats({ rows = [], orders = [], firebase = {}, now = Date
     byMethod: {},
     byStatus: {},
     series: [],
+    // Store purchases (Google Play / App Store) reported by the apps.
+    storePurchases: 0,
+    storeVerified: 0,
+    storeActive: 0,
+    storeLinkedUsers: 0,
     firebase: {
       configured: Boolean(firebase.configured),
       error: firebase.error ?? null,
@@ -310,6 +371,10 @@ export function computeStats({ rows = [], orders = [], firebase = {}, now = Date
     else stats.noPro += 1;
 
     stats.byStatus[row.pro.status] = (stats.byStatus[row.pro.status] ?? 0) + 1;
+    if (row.store.length) {
+      stats.storeLinkedUsers += 1;
+      if (row.store.some((p) => p.verified && p.active)) stats.storeActive += 1;
+    }
     if (row.orders.paid > 0) stats.paidUsers += 1;
     if (row.firstSeen && Date.parse(row.firstSeen) >= cutoff30) stats.newLast30 += 1;
     if (row.inFirebase) {
@@ -341,6 +406,11 @@ export function computeStats({ rows = [], orders = [], firebase = {}, now = Date
   }
 
   stats.firebase.anonymous = Math.max(0, stats.firebase.count - stats.firebase.linked);
+  if (store) {
+    stats.storePurchases = store.total ?? 0;
+    stats.storeVerified = store.verified ?? 0;
+    stats.storeActive = Math.max(stats.storeActive, store.active ?? 0);
+  }
 
   // Active subscriptions expiring inside the reminder window.
   stats.renewalsDue = rows.filter((row) => row.pro.status === "expiring").length;
