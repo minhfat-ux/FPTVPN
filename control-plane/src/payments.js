@@ -43,15 +43,31 @@ function payosSignature({ checksumKey, orderCode, amount, description, cancelUrl
  * registration needed — customer scans with any VN banking app, pays the
  * exact amount, and the note carries the order code for manual/auto matching.
  */
-export async function createBankQrDataUrl({ accountNumber, accountName, amount, orderCode }) {
+export async function createBankQrDataUrl({ accountNumber, accountName, amount, orderCode, bin }) {
   const payload = buildVietQRPayload({
     accountNumber,
     accountName,
     amount,
     content: String(orderCode),
+    ...(bin ? { bin } : {}),
   });
   const dataUrl = await QRCode.toDataURL(payload, { width: 320, margin: 2, errorCorrectionLevel: "M" });
   return dataUrl;
+}
+
+/**
+ * Wallet collections (MoMo) that speak VietQR: their printed QR is a
+ * consumer-presented VietQR payload (BIN + account), so we can mint a fresh
+ * QR per order **with the plan amount pre-filled** instead of showing a static
+ * image the customer has to type the amount into.
+ */
+export function momoQrConfig() {
+  // MOMO_QR_DYNAMIC=0 falls back to the static collection image.
+  if (process.env.MOMO_QR_DYNAMIC === "0") return null;
+  const bin = process.env.MOMO_QR_BIN;
+  const accountNumber = process.env.MOMO_QR_ACCOUNT;
+  if (!bin || !accountNumber) return null;
+  return { bin, accountNumber, accountName: process.env.MOMO_QR_NAME || "MOMO" };
 }
 
 /** Returns bank config from env, or null when not configured. */
@@ -163,6 +179,8 @@ const TEXTS = {
     iosLineSoon: "iOS version is coming to the App Store.",
     androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.",
     steps: ["Download and install the app (iOS: App Store · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
+        copyAmount: "Copy amount",
+    copied: "Copied",
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
     errCreate: "Could not create payment.",
@@ -173,10 +191,10 @@ const TEXTS = {
     waitingTick: "Waiting for confirmation…",
     paid: "✅ Payment received! Premium activated. Open the VPNFlow app to use it.",
     hints: {
-      bankqr: "Open your banking app, scan the QR and enter the exact amount.",
+      bankqr: "Open your banking app and scan the QR — the amount is filled in automatically, just confirm.",
       wechat: "Open WeChat, scan the QR and enter the exact amount.",
       alipay: "Open Alipay, scan the QR and enter the exact amount.",
-      momo: "Open MoMo, scan the QR and enter the exact amount.",
+      momo: "Open MoMo and scan the QR — the amount is filled in automatically, just confirm.",
       other: "Scan the QR with your payment app.",
     },
     errByCode: {
@@ -225,6 +243,8 @@ const TEXTS = {
     iosLineSoon: "Bản iOS đang chờ phát hành trên App Store.",
     androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.",
     steps: ["Tải và cài app (iOS: App Store · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
+        copyAmount: "Sao chép số tiền",
+    copied: "Đã sao chép",
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
     errCreate: "Lỗi tạo thanh toán.",
@@ -235,10 +255,10 @@ const TEXTS = {
     waitingTick: "Đang chờ xác nhận...",
     paid: "✅ Đã nhận thanh toán! Premium đã kích hoạt. Mở app VPNFlow để dùng.",
     hints: {
-      bankqr: "Mở app ngân hàng quét QR và nhập đúng số tiền.",
+      bankqr: "Mở app ngân hàng quét QR — số tiền đã được điền sẵn, chỉ cần xác nhận.",
       wechat: "Mở WeChat quét QR, nhập đúng số tiền.",
       alipay: "Mở Alipay quét QR, nhập đúng số tiền.",
-      momo: "Mở MoMo quét QR và nhập đúng số tiền.",
+      momo: "Mở MoMo quét QR — số tiền đã được điền sẵn, chỉ cần xác nhận.",
       other: "Quét QR bằng app thanh toán.",
     },
     errByCode: {
@@ -287,6 +307,8 @@ const TEXTS = {
     iosLineSoon: "iOS 版本即将在 App Store 上架。",
     androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。",
     steps: ["下载并安装应用（iOS：App Store · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
+        copyAmount: "复制金额",
+    copied: "已复制",
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
     errCreate: "无法创建支付。",
@@ -297,10 +319,10 @@ const TEXTS = {
     waitingTick: "等待确认中…",
     paid: "✅ 已收到付款！Premium 已激活。打开 VPNFlow 应用即可使用。",
     hints: {
-      bankqr: "打开银行应用扫描二维码并输入准确金额。",
+      bankqr: "打开银行应用扫描二维码 — 金额已自动填好，确认即可。",
       wechat: "打开微信扫描二维码并输入准确金额。",
       alipay: "打开支付宝扫描二维码并输入准确金额。",
-      momo: "打开 MoMo 扫描二维码并输入准确金额。",
+      momo: "打开 MoMo 扫描二维码 — 金额已自动填好，确认即可。",
       other: "使用支付应用扫描二维码。",
     },
     errByCode: {
@@ -349,6 +371,8 @@ const TEXTS = {
     iosLineSoon: "iOS 版は App Store で近日公開予定です。",
     androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。",
     steps: ["アプリをダウンロードしてインストール（iOS：App Store · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
+        copyAmount: "金額をコピー",
+    copied: "コピーしました",
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
     errCreate: "支払いを作成できませんでした。",
@@ -359,10 +383,10 @@ const TEXTS = {
     waitingTick: "確認待ち…",
     paid: "✅ 支払いを確認しました！プレミアムが有効になりました。VPNFlowアプリを開いてご利用ください。",
     hints: {
-      bankqr: "銀行アプリを開き、QRをスキャンして正確な金額を入力してください。",
+      bankqr: "銀行アプリを開いてQRをスキャンしてください — 金額は自動入力されます。",
       wechat: "WeChatを開き、QRをスキャンして正確な金額を入力してください。",
       alipay: "Alipayを開き、QRをスキャンして正確な金額を入力してください。",
-      momo: "MoMo を開き、QR をスキャンして正確な金額を入力してください。",
+      momo: "MoMo を開いて QR をスキャンしてください — 金額は自動入力されます。",
       other: "支払いアプリでQRをスキャンしてください。",
     },
     errByCode: {
@@ -411,6 +435,8 @@ const TEXTS = {
     iosLineSoon: "iOS 버전은 곧 App Store에 출시됩니다.",
     androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.",
     steps: ["앱을 내려받아 설치합니다 (iOS: App Store · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
+        copyAmount: "금액 복사",
+    copied: "복사됨",
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
     errCreate: "결제를 만들 수 없습니다.",
@@ -421,10 +447,10 @@ const TEXTS = {
     waitingTick: "확인 대기 중…",
     paid: "✅ 결제가 확인되었습니다! 프리미엄이 활성화되었습니다. VPNFlow 앱을 열어 사용하세요.",
     hints: {
-      bankqr: "은행 앱을 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
+      bankqr: "은행 앱을 열고 QR을 스캔하세요 — 금액이 자동으로 입력됩니다.",
       wechat: "WeChat을 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
       alipay: "Alipay를 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
-      momo: "MoMo를 열고 QR을 스캔한 뒤 정확한 금액을 입력하세요.",
+      momo: "MoMo를 열고 QR을 스캔하세요 — 금액이 자동으로 입력됩니다.",
       other: "결제 앱으로 QR을 스캔하세요.",
     },
     errByCode: {
@@ -752,6 +778,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
     .modal .qstatus { margin-top: 12px; font-size: 13px; min-height: 18px; color: #33c773; }
     .modal .qerr { color: #ff5a6a; }
     .modal button.done { margin-top: 6px; }
+    .modal button.copyamt {
+      margin-top: 8px; background: rgba(255,255,255,.08); color: #fff;
+      border: 1px solid rgba(255,255,255,.16); font-size: 13px; padding: 8px 12px;
+    }
     .modal button.save {
       margin-top: 12px; background: rgba(255,255,255,.12); color: #fff;
       border: 1px solid rgba(255,255,255,.2);
@@ -878,6 +908,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       <div style="font-size:15px;font-weight:700;">${t.modalTitle}</div>
       <div class="qr-wrap"><img id="qrImg" alt="${t.qrAlt}"></div>
       <div class="amt" id="qrAmt"></div>
+      <button type="button" class="copyamt" id="qrCopyBtn">📋 ${t.copyAmount}</button>
       <div class="oc" id="qrOrder"></div>
       <div class="hint" id="qrHint"></div>
       <div class="qstatus" id="qrStatus"></div>
@@ -938,6 +969,23 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
 
     // Save the shown QR as an image so the user can scan it from their bank
     // app's photo library. Works for data: (bank QR) and https (WeChat/Alipay).
+    const qrCopyBtn = document.getElementById("qrCopyBtn");
+    qrCopyBtn.onclick = async () => {
+      const value = qrCopyBtn.dataset.amount || "";
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch (e) {
+        const ta = document.createElement("textarea");
+        ta.value = value; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); } catch (e2) {}
+        ta.remove();
+      }
+      const original = qrCopyBtn.textContent;
+      qrCopyBtn.textContent = "✅ " + T.copied;
+      setTimeout(() => { qrCopyBtn.textContent = original; }, 1800);
+    };
+
     qrSaveBtn.onclick = async () => {
       const src = qrImg.src;
       if (!src) return;
@@ -992,6 +1040,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
           statusEl.textContent = "";
           qrImg.src = data.qrDataUrl || (base + data.qrImageUrl);
           qrAmt.textContent = money(data.amount);
+          qrCopyBtn.dataset.amount = String(data.amount);
           qrOrder.textContent = T.orderPrefix + data.orderCode;
           const labels = {
             bankqr: T.hints.bankqr,

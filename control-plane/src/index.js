@@ -28,6 +28,7 @@ import {
   bankQrConfig,
   verifyPayosWebhook,
   pickBuyLang,
+  momoQrConfig,
   PLANS_PUBLIC,
 } from "./payments.js";
 
@@ -320,7 +321,22 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     await aiStore.recordPendingPayment(orderCode, { email, plan, method });
     fireAiPaymentAlert(orderCode, email, plan, planCfg.amount);
 
-    if (method === "wechat" || method === "alipay" || method === "momo") {
+    if (method === "momo") {
+      const cfg = momoQrConfig();
+      if (cfg) {
+        const qrDataUrl = await createBankQrDataUrl({
+          accountNumber: cfg.accountNumber,
+          accountName: cfg.accountName,
+          bin: cfg.bin,
+          amount: planCfg.amount,
+          orderCode,
+        });
+        return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "momo" });
+      }
+      return res.json({ qrImageUrl: "/v1/ai/payments/qr/momo", orderCode, amount: planCfg.amount, method: "momo" });
+    }
+
+    if (method === "wechat" || method === "alipay") {
       return res.json({ qrImageUrl: `/v1/ai/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
     }
 
@@ -501,7 +517,24 @@ app.post("/v1/payments/create", async (req, res) => {
       return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
     }
 
-    if (method === "wechat" || method === "alipay" || method === "momo") {
+    if (method === "momo") {
+      // MoMo speaks VietQR, so mint a per-order QR with the amount pre-filled.
+      const cfg = momoQrConfig();
+      if (cfg) {
+        const qrDataUrl = await createBankQrDataUrl({
+          accountNumber: cfg.accountNumber,
+          accountName: cfg.accountName,
+          bin: cfg.bin,
+          amount: planCfg.amount,
+          orderCode,
+        });
+        return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "momo" });
+      }
+      // Fallback: static collection image (customer types the amount).
+      return res.json({ qrImageUrl: "/v1/payments/qr/momo", orderCode, amount: planCfg.amount, method: "momo" });
+    }
+
+    if (method === "wechat" || method === "alipay") {
       // Personal collection QR: static image, paid amount entered by the
       // customer. Admin confirms manually via /v1/admin/payments/:code/confirm.
       return res.json({ qrImageUrl: `/v1/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
