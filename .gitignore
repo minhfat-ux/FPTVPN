@@ -51,3 +51,6 @@ FPT-Harness/
 
 # Local toolchains (JDK on BIWIN — ExFAT, keep out of git)
 .tools/
+
+# Built release artifacts (APKs / archives) — regenerate with gradle/xcodebuild
+release/
