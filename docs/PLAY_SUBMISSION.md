@@ -6,8 +6,8 @@ _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung
 
 | File | Đường dẫn | Ghi chú |
 |---|---|---|
-| AAB (Play) | `release/android/VPNFlow-1.2.2-play.aab` | 39 MB, versionCode **2** / versionName **1.2.2**, ký release cert VPNFlow |
-| SHA256 AAB | `d540b7d3098699b5e13c03b6c5f05b88ac3a6dffd8a3fef63601bb2d0c0a2dad` | |
+| AAB (Play) | `release/android/VPNFlow-1.2.2-play-store.aab` | 39 MB, versionCode **2** / versionName **1.2.2**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
+| SHA256 AAB | `da7076057b94cb290b97894273fdc3e9a582361b4622937dc00218c801831120` | |
 | APK (sideload) | `release/android/VPNFlow-1.2.2-arm64-x86-universal.apk` | 96 MB universal, phát qua `meetflowai.site/v1/downloads/android` |
 | Icon 512×512 | `release/android/play-assets/icon-512.png` | từ icon app (1024 gốc) |
 | Feature graphic 1024×500 | `release/android/play-assets/feature-graphic-1024x500.png` | navy + logo + tagline |
@@ -128,21 +128,32 @@ _(Play 还支持 ja/ko locale — 需要 thì lấy từ `RELEASE_NOTES_1.2.2.md
 | Người dùng có thể yêu cầu xoá dữ liệu | Yes — qua support@meetflowai.site |
 | Bán dữ liệu cho bên thứ ba | **Không** |
 
-## 5. ⚠️ Rủi ro chính sách cần quyết trước khi submit: thanh toán
+## 4b. Branch strategy (đã tách)
+
+| Branch | Dùng cho | Khác biệt |
+|---|---|---|
+| `main` / `web` | Bán gói qua **web** — APK sideload (`meetflowai.site/v1/downloads/android`) | `Config.SELL_ON_WEB = true`: paywall mở WebView trang buy (WeChat/Alipay/bank QR) |
+| `store` | **Google Play** — AAB upload lên Play Console | `Config.SELL_ON_WEB = false`: paywall chỉ hiện màn hình thông tin + nút "Restore purchases" + mailto support; **không giá, không link ra trang bán**; ẩn cả thẻ nâng cấp ở màn chính |
+
+Chỉ 2 điểm khác nhau (một cờ `SELL_ON_WEB` + nhánh điều kiện trong `PaywallScreen`/`MainScreen`) nên merge qua lại rất dễ. AAB nộp Play **phải** build từ branch `store`; APK bán web build từ `main`/`web`.
+
+Cách build:
+```bash
+git checkout store && ./gradlew :app:bundleRelease     # AAB cho Play
+git checkout main  && ./gradlew :app:assembleRelease   # APK bán web
+```
+
+## 5. ⚠️ Chính sách thanh toán — đã xử bằng branch `store`
 
 App hiện bán gói **trong app bằng web** (mở trang buy với WeChat/Alipay/bank QR — `Config` trỏ tới `meetflowai.site/buy`). Google Play **Payments policy** yêu cầu mọi nội dung số bán trong app phải dùng **Play Billing**. Nộp nguyên trạng rất dễ bị reject.
 
-Hai phương án:
+**Đã chọn: tách branch (phương án A).** Branch `store` ẩn toàn bộ UI mua gói và **không có bất kỳ liên kết nào ra trang bán** → không vi phạm Payments policy:
 
-**A. Flavor tách biệt (khuyến nghị, nhanh)**
-- Tạo product flavor `play`: ẩn toàn bộ UI mua gói (paywall/buy), chỉ còn đăng nhập + kết nối. Người dùng đăng ký trên web ở ngoài app, mở app đăng nhập là dùng.
-- Flavor `direct` (APK sideload, phân phối qua web) giữ nguyên thanh toán web.
-- Cần: thêm `flavorDimensions` trong `android/app/build.gradle.kts`, cờ `Config.IS_PLAY_BUILD` để ẩn entry point mua gói, build `bundlePlayRelease`.
-- Rủi ro còn lại: nếu app có bất kỳ liên kết "mua/nâng cấp" nào dẫn ra web trong bản Play → vẫn bị coi là steering. Bản Play tuyệt đối không link tới trang bán.
+- Màn chính: thẻ "nâng cấp" bị ẩn khi chưa có gói (`SELL_ON_WEB = false`).
+- Paywall: hiện thông tin "Premium Required" + nút **Restore purchases** (đồng bộ lại quyền lợi từ backend) + liên hệ support qua **mailto**. Không hiển thị giá, không mở web.
+- Người dùng mua gói ở ngoài app (web) rồi đăng nhập trong bản Play là dùng được.
 
-**B. Tích hợp Play Billing cho bản Play**
-- Thêm Play Billing library, tạo sản phẩm subscription trong Play Console, xác thực purchase token với backend (`/v1/...</Verification`), cấp Pro theo token.
-- Đúng luật 100% nhưng cần thêm công việc ở backend + test purchase (license tester), và giá sẽ theo Play (không dùng giá VND/WeChat).
+Nếu sau này muốn bán trực tiếp trên Play thì mới cần **Play Billing** (library + xác thực purchase token với backend) — hiện chưa làm.
 
 ## 6. Trình tự submit
 
@@ -155,7 +166,7 @@ Hai phương án:
 
 ## 7. Việc cần làm tiếp (owner)
 
-- [ ] Chốt phương án thanh toán (A hay B) — quyết định trước khi build bản Play
+- [x] Chốt phương án thanh toán → tách branch `store` (không bán trong app)
 - [ ] Chụp screenshots từ máy thật (≥4 ảnh) và copy vào `release/android/play-assets/`
 - [ ] Tạo tài khoản Pro test để khai "App access"
 - [ ] Xác nhận loại tài khoản Play (cá nhân/tổ chức) → biết có phải chạy 12 tester × 14 ngày không
