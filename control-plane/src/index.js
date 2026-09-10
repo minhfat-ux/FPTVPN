@@ -26,6 +26,7 @@ import {
 } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
 import { guidePageHTML } from "./guide-page.js";
+import { supportPageHTML } from "./support-page.js";
 import {
   buyPageHTML,
   AI_PLANS,
@@ -84,6 +85,9 @@ const GRANT_SUB_EMAILS = parseEmailList(process.env.GRANT_SUB_EMAILS);
 // read email, so the reviewer needs a code that is always the same — it is
 // quoted in the App Store Connect review notes. Leave unset to disable.
 const DEV_LOGIN_CODE = (process.env.DEV_LOGIN_CODE ?? "").trim();
+// Public support address shown on the support page (App Store Support URL)
+// and in the mail footers.
+const SUPPORT_EMAIL = (process.env.SUPPORT_EMAIL ?? "support@meetflowai.site").trim();
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
@@ -145,6 +149,8 @@ app.use((req, res, next) => {
   if (req.path === "/ai/buy" || req.path.startsWith("/ai/buy/") || req.path.startsWith("/v1/ai/")) return next();
   // Activation guides.
   if (req.path === "/guide" || req.path.startsWith("/guide/") || req.path.startsWith("/ai/guide")) return next();
+  // Support pages — the App Store "Support URL" must load without a token.
+  if (req.path === "/support" || req.path.startsWith("/support/") || req.path.startsWith("/ai/support")) return next();
   // Brand logos referenced by the buy pages.
   if (req.path.startsWith("/assets/")) return next();
   // Public app downloads (APK host).
@@ -346,13 +352,57 @@ app.get("/assets/:file", async (req, res) => {
 // Activation guides — linked from the buy pages and the invoice emails.
 app.get(["/guide", "/guide/"], (req, res) => {
   res.type("html").send(
-    guidePageHTML({ lang: buyLang(req), product: "vpn", buyUrl: `${publicBaseUrl()}/buy` }),
+    guidePageHTML({
+      lang: buyLang(req),
+      product: "vpn",
+      buyUrl: `${publicBaseUrl()}/buy`,
+      supportEmail: SUPPORT_EMAIL,
+    }),
   );
 });
 
 app.get(["/ai/guide", "/ai/guide/"], (req, res) => {
   res.type("html").send(
-    guidePageHTML({ lang: buyLang(req), product: "ai", buyUrl: `${publicBaseUrl()}/ai/buy` }),
+    guidePageHTML({
+      lang: buyLang(req),
+      product: "ai",
+      buyUrl: `${publicBaseUrl()}/ai/buy`,
+      supportEmail: SUPPORT_EMAIL,
+    }),
+  );
+});
+
+// Support pages — the App Store "Support URL" for both apps (and a real help
+// page for web customers). Localized, with the contact address and FAQs.
+app.get(["/support", "/support/"], (req, res) => {
+  res.type("html").send(
+    supportPageHTML({
+      lang: buyLang(req),
+      product: "vpn",
+      supportEmail: SUPPORT_EMAIL,
+      links: {
+        guide: `${publicBaseUrl()}/guide`,
+        buy: `${publicBaseUrl()}/buy`,
+        privacy: `${siteBaseUrl()}/FlowVPNPrivacy.html`,
+        terms: `${siteBaseUrl()}/terms`,
+      },
+    }),
+  );
+});
+
+app.get(["/ai/support", "/ai/support/"], (req, res) => {
+  res.type("html").send(
+    supportPageHTML({
+      lang: buyLang(req),
+      product: "ai",
+      supportEmail: SUPPORT_EMAIL,
+      links: {
+        guide: `${publicBaseUrl()}/ai/guide`,
+        buy: `${publicBaseUrl()}/ai/buy`,
+        privacy: `${siteBaseUrl()}/privacy`,
+        terms: `${siteBaseUrl()}/terms`,
+      },
+    }),
   );
 });
 

@@ -17,6 +17,9 @@ Mục tiêu: bản nộp lên App Store **chỉ dùng In-App Purchase (StoreKit)
 | Mã hoá | `ITSAppUsesNonExemptEncryption = false` trong Info.plist (iOS + macOS) → không phải trả lời câu hỏi export compliance mỗi lần upload. |
 | Force update | `/v1/app-version` + `ForceUpdateView`. Nút Update nay fallback sang App Store search khi server chưa có `store_url`. |
 | Tài khoản review | `review@meetflowai.site` — mã OTP **cố định `246810`**, không giới hạn resend, tự động có Premium 1 năm. |
+| Support URL | `/support` (VPNFlow) và `/ai/support` (MeetFlow AI) — trang mới trong `control-plane/src/support-page.js`, 5 ngôn ngữ, đã mở public trong middleware token và Caddy. |
+| Xoá tài khoản | Đã có sẵn: app **Settings → Delete Account** → `DELETE /v1/account` (Apple 5.1.1(v)). |
+| Legal trong app | Paywall + Settings có Terms (EULA của Apple) và Privacy Policy. |
 
 Kiểm tra nhanh trên máy chủ (đã chạy, kết quả OK):
 
@@ -82,8 +85,11 @@ Trong App Store Connect → app VPNFlow → *Monetization → Subscriptions*:
 - [ ] Age rating: 4+ (VPN, không nội dung nhạy cảm).
 - [ ] Category: Utilities (chính) — Business (phụ).
 - [ ] Encryption: chọn **"No"** khi được hỏi (đã khai `ITSAppUsesNonExemptEncryption=false`).
-- [ ] Support URL + Marketing URL: `https://meetflowai.site/support` (đã có).
-- [ ] Privacy Policy URL: `https://meetflowai.site/privacy`.
+- [x] Support URL: `https://meetflowai.site/support` — trang hỗ trợ mới, 5 ngôn ngữ,
+      có email liên hệ, FAQ (hoàn tiền, huỷ gói App Store, xoá tài khoản) và link
+      privacy/terms. (MeetFlow AI dùng `https://meetflowai.site/ai/support`.)
+- [x] Privacy Policy URL: `https://meetflowai.site/FlowVPNPrivacy.html` (VPNFlow),
+      `https://meetflowai.site/privacy` (MeetFlow AI); Terms: `https://meetflowai.site/terms`.
 - [ ] TestFlight: nên upload lên TestFlight trước để tự kiểm tra bản Release thật.
 
 ### 2.4 Review notes (dán nguyên văn vào *App Review Information → Notes*)

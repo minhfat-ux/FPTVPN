@@ -46,7 +46,7 @@ struct SettingsViewMac: View {
             }
 
             Section(languageStore.t(.support)) {
-                Link(destination: URL(string: "https://meetflowai.site/SupportPrivateVPN.html")!) {
+                Link(destination: URL(string: "https://meetflowai.site/support")!) {
                     Label(languageStore.t(.contactSupport), systemImage: "questionmark.circle")
                 }
 
@@ -686,7 +686,7 @@ struct MacStoreKitPaywallView: View {
     private var legalLinks: some View {
         HStack(spacing: 14) {
             Link(languageStore.t(.privacy), destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!)
-            Link(languageStore.t(.support), destination: URL(string: "https://meetflowai.site/SupportPrivateVPN.html")!)
+            Link(languageStore.t(.support), destination: URL(string: "https://meetflowai.site/support")!)
             Link(languageStore.t(.eula), destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
         }
     }
