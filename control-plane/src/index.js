@@ -16,9 +16,11 @@ import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
-import { sendOtpEmail, sendPaymentAlert, sendRenewalReminder, sendInvoiceEmail } from "./mailer.js";
+import { sendOtpEmail, sendPaymentAlert, sendRenewalReminder, sendInvoiceEmail, sendAiInvoiceEmail } from "./mailer.js";
+import { AiAccessStore } from "./ai-access-store.js";
 import {
   buyPageHTML,
+  AI_PLANS,
   paymentSuccessPageHTML,
   paymentCancelPageHTML,
   createPayosPaymentLink,
@@ -95,6 +97,8 @@ const pool = new IPPool(IP_POOL_CIDR);
 const wg = new WireGuardManager({ interfaceName: WG_INTERFACE, wgBin: WG_BIN, dryRun: DRY_RUN });
 const store = new DeviceStore(DATA_FILE);
 const authStore = new AuthStore(AUTH_FILE);
+// MeetFlow AI web purchases (separate product + account system).
+const aiStore = new AiAccessStore(process.env.AI_ACCESS_FILE ?? path.join(__dirname, "..", "data", "ai-access.json"));
 const nodeStore = new NodeStore(NODES_DB_FILE, buildFallbackExitNode(), { legacyJsonPath: NODES_FILE });
 const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   minimum_ios_version: DEFAULT_MIN_VERSION,
@@ -115,6 +119,9 @@ app.use((req, res, next) => {
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
   // Public payment flow: buy page + create order + PayOS webhook.
   if (req.path === "/buy" || req.path.startsWith("/buy/") || req.path.startsWith("/v1/payments/")) return next();
+  // Public MeetFlow AI purchase flow (buy page, create/status/qr/confirm,
+  // entitlement lookup used by the apps).
+  if (req.path === "/ai/buy" || req.path.startsWith("/ai/buy/") || req.path.startsWith("/v1/ai/")) return next();
   // Public app downloads (APK host).
   if (req.path === "/v1/downloads/android") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
@@ -230,6 +237,182 @@ app.get(["/buy/success", "/buy/success/"], (req, res) => {
 app.get(["/buy/cancel", "/buy/cancel/"], (req, res) => {
   res.type("html").send(paymentCancelPageHTML(buyLang(req)));
 });
+
+/* =====================================================================
+ * MeetFlow AI — Pro web purchase (QR / WeChat / Alipay), same UX as VPNFlow.
+ * Pages:  /ai/buy  (+ /ai/buy/success, /ai/buy/cancel)
+ * API:    /v1/ai/payments/create | /status/:orderCode | /qr/:name
+ *         /v1/ai/payments/confirm/:orderCode  (signed link in owner alert)
+ *         /v1/ai/entitlement?email=…          (read by the AI apps)
+ * ================================================================== */
+
+app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
+  res.type("html").send(buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req), product: "ai" }));
+});
+
+app.get(["/ai/buy/success", "/ai/buy/success/"], (req, res) => {
+  res.type("html").send(paymentSuccessPageHTML(buyLang(req), "ai"));
+});
+
+app.get(["/ai/buy/cancel", "/ai/buy/cancel/"], (req, res) => {
+  res.type("html").send(paymentCancelPageHTML(buyLang(req), "ai"));
+});
+
+// Creates a MeetFlow Pro order and returns the payment QR (bank / WeChat / Alipay).
+app.post("/v1/ai/payments/create", async (req, res) => {
+  try {
+    const { email, plan, method } = req.body ?? {};
+    if (!email || !/\S+@\S+/.test(email)) {
+      return res.status(400).json({ code: "invalid_email", error: "Email không hợp lệ." });
+    }
+    const planCfg = AI_PLANS[plan];
+    if (!planCfg) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
+
+    const orderCode = Math.floor(Date.now() / 1000);
+    await aiStore.recordPendingPayment(orderCode, { email, plan, method });
+    fireAiPaymentAlert(orderCode, email, plan, planCfg.amount);
+
+    if (method === "wechat" || method === "alipay") {
+      return res.json({ qrImageUrl: `/v1/ai/payments/qr/${method}`, orderCode, amount: planCfg.amount, method });
+    }
+
+    // Default: direct bank transfer via VietQR (same TPBank account).
+    const bank = bankQrConfig();
+    if (!bank) {
+      return res.status(502).json({ code: "bank_not_configured", error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
+    }
+    const qrDataUrl = await createBankQrDataUrl({
+      accountNumber: bank.accountNumber,
+      accountName: bank.accountName,
+      amount: planCfg.amount,
+      orderCode,
+    });
+    return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+  } catch (err) {
+    console.error("POST /v1/ai/payments/create failed:", err);
+    res.status(500).json({ code: "internal", error: "Internal error" });
+  }
+});
+
+// Personal WeChat / Alipay collection QR images (shared with VPNFlow assets).
+app.get("/v1/ai/payments/qr/:name", async (req, res) => {
+  try {
+    const name = ["wechat", "alipay"].includes(req.params.name) ? req.params.name : null;
+    if (!name) return res.status(404).send("Not found");
+    const file = path.join(process.env.PAY_QR_DIR || "/root/flowvpn-pay", `${name}.png`);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: "QR image not uploaded yet" });
+    res.sendFile(file);
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+app.get("/v1/ai/payments/status/:orderCode", async (req, res) => {
+  try {
+    const order = await aiStore.pendingPayment(req.params.orderCode);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    const elapsedSec = Math.max(0, Math.round((Date.now() - Date.parse(order.createdAt)) / 1000));
+    res.json({ paid: Boolean(order.paidAt), orderCode: order.orderCode, elapsed_sec: elapsedSec });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Signed one-click confirm link (owner email alert) — grants Pro + invoice.
+app.get("/v1/ai/payments/confirm/:orderCode", async (req, res) => {
+  try {
+    const orderCode = req.params.orderCode;
+    if ((req.query.t || "") !== paymentConfirmSignature("ai:" + orderCode)) {
+      return res.status(403).send("Link không hợp lệ hoặc đã hết hạn.");
+    }
+    const order = await aiStore.markPendingPaymentPaid(orderCode);
+    if (!order) return res.status(404).send("Đơn không tồn tại hoặc đã xác nhận.");
+    await activateAiProAndInvoice({ orderCode: order.orderCode, email: order.email, plan: order.plan, method: order.method });
+    res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>MeetFlow Pro đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
+  } catch (err) {
+    console.error("ai confirm-link failed:", err);
+    res.status(500).send("Lỗi xác nhận. Liên hệ support@meetflowai.site");
+  }
+});
+
+// Admin: list pending MeetFlow Pro orders / confirm one manually.
+app.get("/v1/admin/ai/payments/pending", requireAdminAuth, async (_req, res) => {
+  try {
+    res.json({ orders: await aiStore.listPendingPayments() });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+app.post("/v1/admin/ai/payments/:orderCode/confirm", requireAdminAuth, async (req, res) => {
+  try {
+    const order = await aiStore.markPendingPaymentPaid(req.params.orderCode);
+    if (!order) return res.status(404).json({ error: "Order not found or already paid" });
+    await activateAiProAndInvoice({ orderCode: order.orderCode, email: order.email, plan: order.plan, method: order.method });
+    res.json({ ok: true, email: order.email });
+  } catch (err) {
+    console.error("ai admin confirm failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Admin: all MeetFlow Pro entitlements (support / expiry questions).
+app.get("/v1/admin/ai/entitlements", requireAdminAuth, async (_req, res) => {
+  try {
+    res.json({ entitlements: await aiStore.listEntitlements() });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Apps read Pro status here after sign-in (email = Firebase account email).
+app.get("/v1/ai/entitlement", async (req, res) => {
+  try {
+    const email = String(req.query?.email ?? "").trim();
+    if (!email || !/\S+@\S+/.test(email)) {
+      return res.status(400).json({ error: "Valid email required" });
+    }
+    res.json(await aiStore.entitlementForEmail(email));
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** Grants MeetFlow Pro for a paid order and emails the invoice. */
+async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankqr" }) {
+  const planCfg = AI_PLANS[plan] ?? AI_PLANS.monthly;
+  const ent = await aiStore.grantPro(email, {
+    plan,
+    days: planCfg.days,
+    orderCode,
+    productId: `meetflow.${method}.${plan}`,
+  });
+  await sendAiInvoiceEmail({
+    to: email,
+    orderCode,
+    planLabel: planCfg.label,
+    amount: planCfg.amount,
+    days: planCfg.days,
+    activatedAt: new Date().toISOString(),
+    expiresAt: ent?.expires_at ?? null,
+  });
+  console.log(`ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode})`);
+  return ent;
+}
+
+/** Owner alert for a new MeetFlow Pro order (confirm link is product-scoped). */
+async function fireAiPaymentAlert(orderCode, email, plan, amount) {
+  const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
+  const base = process.env.PUBLIC_BASE_URL || "https://api.meetflowai.site";
+  const sig = paymentConfirmSignature("ai:" + orderCode);
+  const confirmUrl = `${base}/v1/ai/payments/confirm/${orderCode}?t=${sig}`;
+  try {
+    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, product: "MeetFlow AI Pro" });
+    console.log(`ai-payment-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
+  } catch (err) {
+    console.error("fireAiPaymentAlert failed:", err);
+  }
+}
 
 app.post("/v1/payments/create", async (req, res) => {
   try {

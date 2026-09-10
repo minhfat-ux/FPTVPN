@@ -389,23 +389,106 @@ const TEXTS = {
   },
 };
 
+/* =====================================================================
+ * MeetFlow AI (second product) — same web-paywall flow, own plans/brand.
+ * 30-day pass / Monthly / Yearly, QR (VietQR) + WeChat + Alipay.
+ * ================================================================== */
+
+export const AI_PLANS = {
+  pass30:  { amount: 130000,  days: 30,  label: "MeetFlow Pro 30-Day Pass (130,000 VND / 30 days)", badge: "30-Day Pass" },
+  monthly: { amount: 130000,  days: 30,  label: "MeetFlow Pro Monthly (130,000 VND / 30 days)",     badge: "Monthly" },
+  yearly:  { amount: 1050000, days: 365, label: "MeetFlow Pro Yearly (1,050,000 VND / 365 days)",   badge: "Yearly" },
+};
+
+const AI_TEXTS = {
+  en: {
+    pageTitle: "MeetFlow AI — Buy Pro",
+    sub: "Unlock AI translation and meeting minutes",
+    logoHtml: "Meet<span>Flow</span> AI",
+    paid: "✅ Payment received! Pro is active. Open the MeetFlow AI app to use it.",
+    successTitle: "Payment successful!",
+    successBody: "Pro has been activated for your account. Reopen the MeetFlow AI app — your Pro features are ready.",
+    cancelTitle: "Payment cancelled",
+    cancelBody: "No charge was made. Go back to the buy page to try again.",
+    planNames: { pass30: "30-Day Pass", monthly: "Monthly", yearly: "Yearly" },
+  },
+  vi: {
+    pageTitle: "MeetFlow AI — Mua Pro",
+    sub: "Mở khoá dịch AI và biên bản cuộc họp",
+    logoHtml: "Meet<span>Flow</span> AI",
+    paid: "✅ Đã nhận thanh toán! Pro đã kích hoạt. Mở app MeetFlow AI để dùng.",
+    successTitle: "Thanh toán thành công!",
+    successBody: "Pro đã được kích hoạt cho tài khoản của bạn. Mở lại app MeetFlow AI — tính năng Pro đã sẵn sàng.",
+    cancelTitle: "Đã huỷ thanh toán",
+    cancelBody: "Không có khoản phí nào bị trừ. Quay lại trang mua để thử lại.",
+    planNames: { pass30: "Gói 30 ngày", monthly: "Hàng tháng", yearly: "Hàng năm" },
+  },
+  zh: {
+    pageTitle: "MeetFlow AI — 购买 Pro",
+    sub: "解锁 AI 翻译与会议纪要",
+    logoHtml: "Meet<span>Flow</span> AI",
+    paid: "✅ 已收到付款！Pro 已激活。打开 MeetFlow AI 应用即可使用。",
+    successTitle: "支付成功！",
+    successBody: "Pro 已为您的账户激活。重新打开 MeetFlow AI 应用即可使用 Pro 功能。",
+    cancelTitle: "支付已取消",
+    cancelBody: "未产生任何扣费。返回购买页面重试。",
+    planNames: { pass30: "30 天通行证", monthly: "月度", yearly: "年度" },
+  },
+  ja: {
+    pageTitle: "MeetFlow AI — Pro を購入",
+    sub: "AI翻訳と議事録を解放",
+    logoHtml: "Meet<span>Flow</span> AI",
+    paid: "✅ 支払いを確認しました！Pro が有効になりました。MeetFlow AI アプリを開いてご利用ください。",
+    successTitle: "支払いが完了しました！",
+    successBody: "Pro がアカウントに有効になりました。MeetFlow AI アプリを開き直してください。",
+    cancelTitle: "支払いはキャンセルされました",
+    cancelBody: "料金は請求されていません。購入ページに戻ってお試しください。",
+    planNames: { pass30: "30日パス", monthly: "月額", yearly: "年額" },
+  },
+  ko: {
+    pageTitle: "MeetFlow AI — Pro 구매",
+    sub: "AI 번역과 회의록 잠금 해제",
+    logoHtml: "Meet<span>Flow</span> AI",
+    paid: "✅ 결제가 확인되었습니다! Pro가 활성화되었습니다. MeetFlow AI 앱을 열어 사용하세요.",
+    successTitle: "결제가 완료되었습니다!",
+    successBody: "계정에 Pro가 활성화되었습니다. MeetFlow AI 앱을 다시 열어 주세요.",
+    cancelTitle: "결제가 취소되었습니다",
+    cancelBody: "요금이 청구되지 않았습니다. 구매 페이지로 돌아가 다시 시도하세요.",
+    planNames: { pass30: "30일 이용권", monthly: "월간", yearly: "연간" },
+  },
+};
+
+const AI_PLAN_ORDER = ["pass30", "monthly", "yearly"];
+
+/** Resolves product config (plans, texts, api paths, brand) for a page. */
+function productConfig(product) {
+  return product === "ai" ? "ai" : "vpn";
+}
+
 /** Plan list in display order with localized names + price text. */
-export function localizedPlanRows(lang) {
-  const t = TEXTS[lang] || TEXTS.vi;
-  const order = ["monthly", "quarterly", "semiannual", "yearly", "lifetime"];
+export function localizedPlanRows(lang, product = "vpn") {
+  const base = TEXTS[lang] || TEXTS.vi;
+  const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
+  const table = product === "ai" ? AI_PLANS : PLANS;
+  const order = product === "ai" ? AI_PLAN_ORDER : ["monthly", "quarterly", "semiannual", "yearly", "lifetime"];
   return order.map((id) => {
-    const p = PLANS[id];
+    const p = table[id];
     const price = t.planNames[id] + " — " + fmtAmount(lang, p.amount)
-      + (p.days ? " / " + p.days + " " + t.dayUnit : " · " + t.lifetimeNote);
+      + (p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote);
     return { id, name: t.planNames[id], price };
   });
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
   lang = pickBuyLang(lang);
-  const t = TEXTS[lang];
-  const rows = localizedPlanRows(lang);
+  product = productConfig(product);
+  const base = TEXTS[lang];
+  const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
+  const apiPrefix = product === "ai" ? "/v1/ai/payments" : "/v1/payments";
+  const logoHtml = product === "ai" ? t.logoHtml : 'VPN<span>Flow</span> Premium';
+  const showDownloads = product !== "ai";
+  const rows = localizedPlanRows(lang, product);
   const planHtml = rows.map((r, i) =>
     `<div class="plan${i === 0 ? " active" : ""}" data-plan="${r.id}"><span>${r.name}</span><span class="price">${r.price}</span></div>`
   ).join("\n        ");
@@ -509,10 +592,10 @@ export function buyPageHTML({ baseUrl, lang }) {
 </head>
 <body>
   <div class="card">
-    <div class="logo">VPN<span>Flow</span> Premium</div>
+    <div class="logo">${logoHtml}</div>
     <div class="sub">${t.sub}</div>
 
-    <div class="dl-section">
+    ${showDownloads ? `<div class="dl-section">
       <div class="dl-title">${t.dlTitle}</div>
       <div class="dl-sub">${t.dlSub}</div>
       <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
@@ -546,7 +629,7 @@ export function buyPageHTML({ baseUrl, lang }) {
           </svg>
         </a>
       </div>
-    </div>
+    </div>` : ""}
 
     <form id="buyForm">
       <label>${t.emailLabel}</label>
@@ -683,7 +766,7 @@ export function buyPageHTML({ baseUrl, lang }) {
       statusEl.className = "status";
       statusEl.textContent = T.creating;
       try {
-        const res = await fetch(base + "/v1/payments/create", {
+        const res = await fetch(base + "${apiPrefix}/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, plan, method }),
@@ -731,7 +814,7 @@ export function buyPageHTML({ baseUrl, lang }) {
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(async () => {
         try {
-          const res = await fetch(base + "/v1/payments/status/" + orderCode);
+          const res = await fetch(base + "${apiPrefix}/status/" + orderCode);
           const data = await res.json();
           if (data.paid) {
             clearInterval(pollTimer);
@@ -749,18 +832,20 @@ export function buyPageHTML({ baseUrl, lang }) {
 </html>`;
 }
 
-export function paymentSuccessPageHTML(lang) {
+export function paymentSuccessPageHTML(lang, product = "vpn") {
   lang = pickBuyLang(lang);
-  const t = TEXTS[lang];
+  const base = TEXTS[lang];
+  const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   return `<!doctype html>
 <html lang="${t.htmlLang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${t.pageTitle} — ✓</title>
 <style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Segoe UI",sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.card{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.check{font-size:52px;color:#33c773}h1{font-size:22px;margin:12px 0}p{color:rgba(255,255,255,.6);font-size:14px;line-height:1.5}</style></head>
 <body><div class="card"><div class="check">✓</div><h1>${t.successTitle}</h1><p>${t.successBody}</p></div></body></html>`;
 }
 
-export function paymentCancelPageHTML(lang) {
+export function paymentCancelPageHTML(lang, product = "vpn") {
   lang = pickBuyLang(lang);
-  const t = TEXTS[lang];
+  const base = TEXTS[lang];
+  const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   return `<!doctype html>
 <html lang="${t.htmlLang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${t.pageTitle} — ✕</title>
 <style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Segoe UI",sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.card{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}h1{font-size:22px;margin:12px 0}p{color:rgba(255,255,255,.6);font-size:14px;line-height:1.5}</style></head>

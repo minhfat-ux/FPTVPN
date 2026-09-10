@@ -143,7 +143,7 @@ const PAYMENT_SUBJECT = "VPNFlow — Đơn thanh toán mới cần xác nhận";
 
 // Sends the owner an email when a new payment order arrives, with a signed
 // link to confirm (grant premium) after verifying the transfer in the bank app.
-export async function sendPaymentAlert({ to, orderCode, buyerEmail, plan, amount, confirmUrl }) {
+export async function sendPaymentAlert({ to, orderCode, buyerEmail, plan, amount, confirmUrl, product = "VPNFlow Premium" }) {
   const configured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
   if (!(process.env.NODE_ENV === "production" && configured)) {
     console.log("[payment-alert] (dev, no SMTP) order", orderCode, "buyer", buyerEmail, "plan", plan);
@@ -161,7 +161,7 @@ export async function sendPaymentAlert({ to, orderCode, buyerEmail, plan, amount
     await transporter.sendMail({
       from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
       to,
-      subject: `${PAYMENT_SUBJECT} — #${orderCode}`,
+      subject: `${PAYMENT_SUBJECT} (${product}) — #${orderCode}`,
       html: `<p>${GREETING}</p>
 <p>Có đơn thanh toán mới cần xác nhận:</p>
 <table style="border-collapse:collapse">
@@ -170,7 +170,8 @@ export async function sendPaymentAlert({ to, orderCode, buyerEmail, plan, amount
   <tr><td style="padding:4px 12px 4px 0;color:#666">Gói</td><td style="font-weight:bold">${plan}</td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666">Số tiền</td><td style="font-weight:bold">${amt} đ</td></tr>
 </table>
-<p>Vui lòng kiểm tra app ngân hàng đã nhận tiền, rồi bấm nút bên dưới để kích hoạt Premium cho khách:</p>
+<p>Sản phẩm: <b>${product}</b></p>
+<p>Vui lòng kiểm tra app ngân hàng đã nhận tiền, rồi bấm nút bên dưới để kích hoạt cho khách:</p>
 <p><a href="${confirmUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">✅ Xác nhận đã nhận tiền</a></p>
 <p style="color:#999;font-size:12px">Link chỉ có hiệu lực 1 lần. Nếu bạn không tạo đơn này, hãy bỏ qua email.</p>
 ${SIGNATURE}`,
@@ -185,4 +186,47 @@ ${SIGNATURE}`,
 // Never log the code or the email body that contains it.
 function redactError(err) {
   return { name: err?.name ?? "Error", message: err?.message ?? "unknown error" };
+}
+
+/** Invoice for a MeetFlow AI Pro web purchase (separate branding). */
+export async function sendAiInvoiceEmail({ to, orderCode, planLabel, amount, days, activatedAt, expiresAt }) {
+  const configured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+  if (!(process.env.NODE_ENV === "production" && configured)) {
+    console.log("[ai-invoice] (dev, no SMTP) to", to, "order", orderCode);
+    return { sent: false };
+  }
+  try {
+    const port = Number(process.env.SMTP_PORT || 465);
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port,
+      secure: port === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+    const amt = Number(amount || 0).toLocaleString("vi-VN");
+    const fmt = (iso) => (iso ? new Date(iso).toLocaleString("vi-VN") : "Không giới hạn");
+    const period = days == null ? "Vĩnh viễn (một lần)" : `${days} ngày`;
+    await transporter.sendMail({
+      from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+      to,
+      subject: `MeetFlow AI — Xác nhận thanh toán gói Pro #${orderCode}`,
+      html: `<p>Xin chào,</p>
+<p>Cảm ơn bạn đã mua <b>MeetFlow AI Pro</b>. Thanh toán của bạn đã được xác nhận thành công.</p>
+<table style="border-collapse:collapse;width:100%;max-width:460px">
+  <tr style="background:rgba(0,0,0,.05)"><th style="text-align:left;padding:8px">Mã đơn</th><td style="padding:8px">#${orderCode}</td></tr>
+  <tr><th style="text-align:left;padding:8px">Gói</th><td style="padding:8px">${planLabel}</td></tr>
+  <tr style="background:rgba(0,0,0,.05)"><th style="text-align:left;padding:8px">Thời hạn</th><td style="padding:8px">${period}</td></tr>
+  <tr><th style="text-align:left;padding:8px">Số tiền</th><td style="padding:8px"><b>${amt} đ</b></td></tr>
+  <tr style="background:rgba(0,0,0,.05)"><th style="text-align:left;padding:8px">Kích hoạt</th><td style="padding:8px">${fmt(activatedAt)}</td></tr>
+  <tr><th style="text-align:left;padding:8px">Hết hạn</th><td style="padding:8px">${fmt(expiresAt)}</td></tr>
+</table>
+<p>Pro đã được kích hoạt cho tài khoản <b>${to}</b>. Mở app MeetFlow AI và đăng nhập bằng email này để dùng ngay.</p>
+<p style="color:#999;font-size:12px">Cần hỗ trợ? Liên hệ <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
+<p>Best regards,<br/>MeetFlow AI Team<br/><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>`,
+    });
+    return { sent: true };
+  } catch (err) {
+    console.error("sendAiInvoiceEmail failed:", redactError(err));
+    return { sent: false };
+  }
 }
