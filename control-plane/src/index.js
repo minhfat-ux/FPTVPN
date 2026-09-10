@@ -215,6 +215,30 @@ app.get("/nodes", listPublicNodes);
 app.get("/v1/nodes", listPublicNodes);
 
 // ---------------- Web payments (PayOS: MoMo wallet + Bank QR VietQR) ----------------
+/**
+ * Store / APK download links per product. App Store URLs come from env so they
+ * can be filled in the moment each app is published (no code change):
+ *   APP_STORE_URL_IOS            → VPNFlow iOS
+ *   APP_STORE_URL_MAC            → VPNFlow macOS
+ *   APP_STORE_URL_MEETFLOW_AI    → MeetFlow AI iOS
+ *   APP_STORE_URL_MEETFLOW_MAC   → MeetFlow AI macOS
+ * The Android link always works — the APK is served by this control plane.
+ */
+function storeLinks(product) {
+  const base = publicBaseUrl();
+  return product === "ai"
+    ? {
+        ios: process.env.APP_STORE_URL_MEETFLOW_AI || null,
+        mac: process.env.APP_STORE_URL_MEETFLOW_MAC || null,
+        android: `${base}/v1/ai/downloads/android`,
+      }
+    : {
+        ios: process.env.APP_STORE_URL_IOS || null,
+        mac: process.env.APP_STORE_URL_MAC || null,
+        android: `${base}/v1/downloads/android`,
+      };
+}
+
 // Trang mua hàng (Android sideload + iOS web-account flow). Ngưới dùng nhập
 // email tài khoản, chọn gói, thanh toán; webhook kích hoạt premium.
 // ?lang=en|vi|zh|ja|ko maps the paywall to the app language.
@@ -229,7 +253,9 @@ app.get(["/buy", "/buy/"], (req, res) => {
   // prefixed route). Relative fetch to "" breaks under prefixed mounts
   // (e.g. /PrivateVPN/buy) because the browser would call /v1/... at the root
   // of the outer host, which is a 404 → "Không kết nối được máy chủ".
-  res.type("html").send(buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req) }));
+  res.type("html").send(
+    buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req), product: "vpn", links: storeLinks("vpn") }),
+  );
 });
 
 app.get(["/buy/success", "/buy/success/"], (req, res) => {
@@ -264,7 +290,9 @@ app.get("/assets/:file", async (req, res) => {
 });
 
 app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
-  res.type("html").send(buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req), product: "ai" }));
+  res.type("html").send(
+    buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req), product: "ai", links: storeLinks("ai") }),
+  );
 });
 
 app.get(["/ai/buy/success", "/ai/buy/success/"], (req, res) => {
@@ -308,6 +336,20 @@ app.post("/v1/ai/payments/create", async (req, res) => {
   } catch (err) {
     console.error("POST /v1/ai/payments/create failed:", err);
     res.status(500).json({ code: "internal", error: "Internal error" });
+  }
+});
+
+// MeetFlow AI APK for direct download (sideload distribution).
+app.get("/v1/ai/downloads/android", async (_req, res) => {
+  try {
+    const apkDir = process.env.APK_DIR || "/root/flowvpn-apk";
+    const apkPath = path.join(apkDir, "MeetFlowAI-latest.apk");
+    if (!fs.existsSync(apkPath)) {
+      return res.status(404).send("APK not found. Contact support@meetflowai.site");
+    }
+    res.download(apkPath, "MeetFlowAI.apk");
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
   }
 });
 

@@ -412,6 +412,8 @@ export const AI_PLANS = {
 
 const AI_TEXTS = {
   en: {
+    dlTitle: "Get the MeetFlow AI app",
+    dlSub: "Don't have the app yet? Download it here:",
     pageTitle: "MeetFlow AI — Buy Pro",
     sub: "Unlock AI translation and meeting minutes",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -423,6 +425,8 @@ const AI_TEXTS = {
     planNames: { pass30: "30-Day Pass", monthly: "Monthly", yearly: "Yearly" },
   },
   vi: {
+    dlTitle: "Tải app MeetFlow AI",
+    dlSub: "Chưa có app? Tải về tại đây:",
     pageTitle: "MeetFlow AI — Mua Pro",
     sub: "Mở khoá dịch AI và biên bản cuộc họp",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -434,6 +438,8 @@ const AI_TEXTS = {
     planNames: { pass30: "Gói 30 ngày", monthly: "Hàng tháng", yearly: "Hàng năm" },
   },
   zh: {
+    dlTitle: "获取 MeetFlow AI 应用",
+    dlSub: "还没有应用？在此下载：",
     pageTitle: "MeetFlow AI — 购买 Pro",
     sub: "解锁 AI 翻译与会议纪要",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -445,6 +451,8 @@ const AI_TEXTS = {
     planNames: { pass30: "30 天通行证", monthly: "月度", yearly: "年度" },
   },
   ja: {
+    dlTitle: "MeetFlow AI アプリを入手",
+    dlSub: "アプリをお持ちでない場合はこちらから：",
     pageTitle: "MeetFlow AI — Pro を購入",
     sub: "AI翻訳と議事録を解放",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -456,6 +464,8 @@ const AI_TEXTS = {
     planNames: { pass30: "30日パス", monthly: "月額", yearly: "年額" },
   },
   ko: {
+    dlTitle: "MeetFlow AI 앱 받기",
+    dlSub: "아직 앱이 없으신가요? 여기에서 받으세요:",
     pageTitle: "MeetFlow AI — Pro 구매",
     sub: "AI 번역과 회의록 잠금 해제",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -506,7 +516,7 @@ export function localizedPlanRows(lang, product = "vpn") {
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
   lang = pickBuyLang(lang);
   product = productConfig(product);
   const base = TEXTS[lang];
@@ -515,7 +525,13 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
   const logoHtml = product === "ai" ? t.logoHtml : 'VPN<span>Flow</span> Premium';
   const meta = PRODUCT_META[product];
   const logoUrl = `${baseUrl}${meta.logoPath}`;
-  const showDownloads = product !== "ai";
+  // Store / download links: injected by the server (APP_STORE_URL_* env vars,
+  // APK endpoint). Badges render only for links that actually exist.
+  const androidUrl = links.android || `${baseUrl}${product === "ai" ? "/v1/ai/downloads/android" : "/v1/downloads/android"}`;
+  const iosUrl = links.ios || null;
+  const macUrl = links.mac || null;
+  const anyDownload = Boolean(androidUrl || iosUrl || macUrl);
+  const showDownloads = anyDownload;
   const rows = localizedPlanRows(lang, product);
   const planHtml = rows.map((r, i) =>
     `<div class="plan${i === 0 ? " active" : ""}" data-plan="${r.id}"><span>${r.name}</span><span class="price">${r.price}</span></div>`
@@ -642,23 +658,23 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
       <div class="dl-title">${t.dlTitle}</div>
       <div class="dl-sub">${t.dlSub}</div>
       <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-        <a href="https://apps.apple.com/PLACEHOLDER-IOS" target="_blank" rel="noopener" title="Download on the App Store (iOS)">
+        ${iosUrl ? `<a href="${iosUrl}" target="_blank" rel="noopener" title="Download on the App Store (iOS)">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
             <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
             <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
             <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">Download on the</text>
             <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">App Store</text>
           </svg>
-        </a>
-        <a href="https://apps.apple.com/PLACEHOLDER-MAC" target="_blank" rel="noopener" title="Download on the Mac App Store">
+        </a>` : ""}
+        ${macUrl ? `<a href="${macUrl}" target="_blank" rel="noopener" title="Download on the Mac App Store">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
             <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
             <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
             <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">Download on the</text>
             <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Mac App Store</text>
           </svg>
-        </a>
-        <a href="${baseUrl}/v1/downloads/android" target="_blank" rel="noopener" title="${t.androidTitle}">
+        </a>` : ""}
+        ${androidUrl ? `<a href="${androidUrl}" target="_blank" rel="noopener" title="${t.androidTitle}">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
             <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
             <g transform="translate(12 12) scale(0.058)">
@@ -670,7 +686,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn" }) {
             <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">GET IT ON</text>
             <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Google Play</text>
           </svg>
-        </a>
+        </a>` : ""}
       </div>
     </div>` : ""}
 
