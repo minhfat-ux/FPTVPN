@@ -18,7 +18,13 @@ Package name: **com.privatevpn.app** · minSdk 26 · targetSdk 36 (đạt yêu c
 
 ## 1. Tài khoản & bước bắt buộc
 
-1. **Loại tài khoản**: tài khoản **cá nhân** tạo sau 11/2023 phải chạy **closed testing với ≥12 tester trong 14 ngày liên tục** trước khi xin lên production. Tài khoản **tổ chức** (cần D-U-N-S) không bị yêu cầu này → nếu có pháp nhân, dùng org account sẽ nhanh hơn nhiều.
+1. **Loại tài khoản**: **ĐÃ XÁC NHẬN LÀ TÀI KHOẢN CÁ NHÂN** → bắt buộc:
+   - Tạo app → đẩy bản release lên **Closed testing** (dùng AAB `VPNFlow-1.2.2-play-store.aab`).
+   - Có **≥12 tester** tham gia (opt-in qua link/Google Group) và **giữ nguyên 14 ngày liên tục** (không rút, không để số lượng tụt dưới 12).
+   - Sau 14 ngày mới **xin quyền Production** (Google xét thủ công 1–7 ngày).
+   - ⚠️ Tester **phải có tài khoản Google** và cài app qua Play (không phải cài file APK). Với tệp khách Trung Quốc, nên huy động tester ở VN/nước ngoài hoặc ai có Google account; ghi lại email từng người để thêm vào danh sách.
+   - Mẹo: tạo **Google Group** riêng (vd `vpnflow-testers@googlegroups.com`) rồi add Group làm tester — sau này thêm/bớt người dễ, không phải sửa danh sách.
+   - Tài khoản **tổ chức** (cần D-U-N-S) không bị yêu cầu này → nếu sau này có pháp nhân, cân nhắc chuyển.
 2. Tạo app mới: tên **VPNFlow**, ngôn ngữ mặc định **English (US)**, app = **App**, **Free**.
 3. Bật **Play App Signing** (Google giữ signing key; ta upload bằng upload key = keystore `~/keystores/vpnflow-release.jks`). Lưu ý: nếu app đã từng có bản khác cùng package thì phải dùng đúng key cũ.
 
@@ -169,4 +175,6 @@ Nếu sau này muốn bán trực tiếp trên Play thì mới cần **Play Bill
 - [x] Chốt phương án thanh toán → tách branch `store` (không bán trong app)
 - [ ] Chụp screenshots từ máy thật (≥4 ảnh) và copy vào `release/android/play-assets/`
 - [ ] Tạo tài khoản Pro test để khai "App access"
-- [ ] Xác nhận loại tài khoản Play (cá nhân/tổ chức) → biết có phải chạy 12 tester × 14 ngày không
+- [x] Xác nhận loại tài khoản Play → **cá nhân** ⇒ phải chạy closed testing 12 tester × 14 ngày (xem mục 1)
+- [ ] Gom ≥12 email tester (có Google account) + gửi tin mời (xem `release/android/PLAY_TESTER_INVITE.md`)
+- [ ] Tạo Google Group cho tester và thêm Group vào Closed testing
