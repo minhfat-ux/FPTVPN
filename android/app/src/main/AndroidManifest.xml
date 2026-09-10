@@ -3,9 +3,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_VPN" />
 
     <application
         android:name=".VPNFlowApp"
@@ -46,10 +43,6 @@
             android:name=".vpn.HysteriaVpnService"
             android:exported="false"
             android:stopWithTask="false"
-            android:permission="android.permission.BIND_VPN_SERVICE" />
-        <service
-            android:name=".vpn.RelayProtectService"
-            android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE" />
     </application>
 </manifest>
