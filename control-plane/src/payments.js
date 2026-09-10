@@ -155,6 +155,7 @@ const TEXTS = {
     mini: "Keep the order code for reference. Premium activates automatically after confirmation.",
         privacyLabel: "Privacy Policy",
     supportLabel: "Support",
+        testflightSub: "Join the beta",
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
     errCreate: "Could not create payment.",
@@ -208,6 +209,7 @@ const TEXTS = {
     mini: "Giữ mã đơn để đối chiếu. Premium tự kích hoạt sau khi xác nhận.",
         privacyLabel: "Chính sách bảo mật",
     supportLabel: "Hỗ trợ",
+        testflightSub: "Tham gia bản thử",
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
     errCreate: "Lỗi tạo thanh toán.",
@@ -261,6 +263,7 @@ const TEXTS = {
     mini: "请保留订单号以备核对。确认后 Premium 将自动激活。",
         privacyLabel: "隐私政策",
     supportLabel: "支持",
+        testflightSub: "加入测试版",
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
     errCreate: "无法创建支付。",
@@ -314,6 +317,7 @@ const TEXTS = {
     mini: "照合用に注文番号をお控えください。確認後、プレミアムは自動的に有効になります。",
         privacyLabel: "プライバシーポリシー",
     supportLabel: "サポート",
+        testflightSub: "ベータに参加",
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
     errCreate: "支払いを作成できませんでした。",
@@ -367,6 +371,7 @@ const TEXTS = {
     mini: "대조용으로 주문번호를 보관하세요. 확인 후 프리미엄이 자동으로 활성화됩니다.",
         privacyLabel: "개인정보 처리방침",
     supportLabel: "지원",
+        testflightSub: "베타 참여",
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
     errCreate: "결제를 만들 수 없습니다.",
@@ -530,7 +535,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
   const androidUrl = links.android || `${baseUrl}${product === "ai" ? "/v1/ai/downloads/android" : "/v1/downloads/android"}`;
   const iosUrl = links.ios || null;
   const macUrl = links.mac || null;
-  const anyDownload = Boolean(androidUrl || iosUrl || macUrl);
+  // iOS can be distributed before App Store approval via a TestFlight public
+  // link; the App Store badge wins when both exist.
+  const testflightUrl = !iosUrl && links.testflight ? links.testflight : null;
+  const anyDownload = Boolean(androidUrl || iosUrl || macUrl || testflightUrl);
   const showDownloads = anyDownload;
   const rows = localizedPlanRows(lang, product);
   const planHtml = rows.map((r, i) =>
@@ -666,6 +674,15 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
             <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">App Store</text>
           </svg>
         </a>` : ""}
+        ${testflightUrl ? `<a href="${testflightUrl}" target="_blank" rel="noopener" title="TestFlight beta">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d" stroke="rgba(255,255,255,.18)"/>
+            <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.testflightSub}</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">TestFlight</text>
+          </svg>
+        </a>` : ""}
+
         ${macUrl ? `<a href="${macUrl}" target="_blank" rel="noopener" title="Download on the Mac App Store">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
             <rect width="170" height="54" rx="8" fill="#0b0b0d"/>

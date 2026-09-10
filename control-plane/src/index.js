@@ -220,6 +220,7 @@ app.get("/v1/nodes", listPublicNodes);
  * can be filled in the moment each app is published (no code change):
  *   APP_STORE_URL_IOS            → VPNFlow iOS
  *   APP_STORE_URL_MAC            → VPNFlow macOS
+ *   TESTFLIGHT_URL_IOS           → VPNFlow iOS TestFlight public link
  *   APP_STORE_URL_MEETFLOW_AI    → MeetFlow AI iOS
  *   APP_STORE_URL_MEETFLOW_MAC   → MeetFlow AI macOS
  * The Android link always works — the APK is served by this control plane.
@@ -235,6 +236,8 @@ function storeLinks(product) {
     : {
         ios: process.env.APP_STORE_URL_IOS || null,
         mac: process.env.APP_STORE_URL_MAC || null,
+        // Used while the app is only in beta (before App Store approval).
+        testflight: process.env.TESTFLIGHT_URL_IOS || null,
         android: `${base}/v1/downloads/android`,
       };
 }
