@@ -7,7 +7,7 @@ _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung
 | File | Đường dẫn | Ghi chú |
 |---|---|---|
 | AAB (Play) | `release/android/VPNFlow-1.2.2-play-store.aab` | 39 MB, versionCode **2** / versionName **1.2.2**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
-| SHA256 AAB | `da7076057b94cb290b97894273fdc3e9a582361b4622937dc00218c801831120` | |
+| SHA256 AAB | `c00e23adcd127d352a2a81255695672c67a8b137174defd652e3d02ebeab2218` | |
 | APK (sideload) | `release/android/VPNFlow-1.2.2-arm64-x86-universal.apk` | 96 MB universal, phát qua `meetflowai.site/v1/downloads/android` |
 | Icon 512×512 | `release/android/play-assets/icon-512.png` | từ icon app (1024 gốc) |
 | Feature graphic 1024×500 | `release/android/play-assets/feature-graphic-1024x500.png` | navy + logo + tagline |
@@ -135,7 +135,11 @@ _(Play 还支持 ja/ko locale — 需要 thì lấy từ `RELEASE_NOTES_1.2.2.md
 | `main` / `web` | Bán gói qua **web** — APK sideload (`meetflowai.site/v1/downloads/android`) | `Config.SELL_ON_WEB = true`: paywall mở WebView trang buy (WeChat/Alipay/bank QR) |
 | `store` | **Google Play** — AAB upload lên Play Console | `Config.SELL_ON_WEB = false`: paywall chỉ hiện màn hình thông tin + nút "Restore purchases" + mailto support; **không giá, không link ra trang bán**; ẩn cả thẻ nâng cấp ở màn chính |
 
-Chỉ 2 điểm khác nhau (một cờ `SELL_ON_WEB` + nhánh điều kiện trong `PaywallScreen`/`MainScreen`) nên merge qua lại rất dễ. AAB nộp Play **phải** build từ branch `store`; APK bán web build từ `main`/`web`.
+Ngoài cờ `SELL_ON_WEB`, branch `store` còn được dọn cho đúng chuẩn Play:
+- Bỏ **toàn bộ Play Billing** (`billing-ktx` dependency + `BillingClient`) → app không còn khai báo quyền `com.android.vending.BILLING`; quyền lợi chỉ đọc từ backend theo tài khoản đăng nhập.
+- Bỏ các permission thừa: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_VPN`, `POST_NOTIFICATIONS` (không nơi nào gọi `startForeground`) → bản Play chỉ còn `INTERNET` + `ACCESS_NETWORK_STATE`.
+- Xoá service chết `RelayProtectService`.
+- Thêm `-dontwarn com.google.errorprone.annotations.**` (R8, do Tink tham chiếu annotation không có trên runtime). AAB nộp Play **phải** build từ branch `store`; APK bán web build từ `main`/`web`.
 
 Cách build:
 ```bash
