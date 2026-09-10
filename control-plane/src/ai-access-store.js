@@ -75,6 +75,31 @@ export class AiAccessStore {
     return entry;
   }
 
+  /** Every order ever recorded (paid and unpaid) — admin user history. */
+  async listAllPayments() {
+    const data = await this._load();
+    return [...data.pendingPayments].sort((a, b) => Number(b.orderCode ?? 0) - Number(a.orderCode ?? 0));
+  }
+
+  /**
+   * Ends Pro immediately, keeping the record (and a history entry) so the
+   * dashboard can still explain what happened. Used by admin revoke.
+   */
+  async revokePro(email, { reason = "admin revoke" } = {}) {
+    const data = await this._load();
+    const key = normalizeEmail(email);
+    const entry = data.entitlements.find((e) => e.email === key && e.product === "meetflow-pro");
+    if (!entry) return null;
+    const now = new Date().toISOString();
+    entry.expiresAt = now;
+    entry.history = [
+      ...(Array.isArray(entry.history) ? entry.history : []),
+      { plan: entry.plan ?? null, days: 0, orderCode: null, at: now, note: reason },
+    ];
+    await this._save(data);
+    return this.entitlementForEmail(key);
+  }
+
   async listPendingPayments() {
     const data = await this._load();
     return data.pendingPayments.filter((e) => !e.paidAt).slice(-50).reverse();

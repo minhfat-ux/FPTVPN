@@ -41,6 +41,81 @@ QR/chuyển khoản **không thể tự trích tiền** (không có uỷ quyền
 - Muốn tự trích tiền thật → phải dùng gateway thu định kỳ (MoMo Business / VNPAY Token /
   2C2P / OnePay) hoặc uỷ nhiệm chi ngân hàng + webhook Casso/SePay.
 
+## 3b. Trang quản lý user (admin → tab "AI Users")
+
+Mở `https://api.meetflowai.site/admin` → dán **Admin Bearer Token** → tab **AI Users**.
+
+### Dashboard hiển thị gì
+
+| Thẻ | Ý nghĩa |
+|---|---|
+| Tổng user biết được | Số email hệ thống đã thấy (registry + Firebase + đơn hàng) |
+| Pro đang hoạt động | Gồm cả gói trọn đời |
+| Sắp hết hạn (<=7 ngày) | Đúng nhóm mà job nhắc gia hạn sẽ email tới |
+| Đã hết hạn / Chưa có Pro | Phân loại phần còn lại |
+| User mới 30 ngày | Theo ngày đăng ký (Firebase) hoặc ngày biết tới đầu tiên |
+| Khách đã trả tiền | Số user có ít nhất 1 đơn đã xác nhận + số đơn |
+| Doanh thu Pro (web) | Tổng tiền các đơn đã xác nhận, theo giá gói lúc mua |
+| Tài khoản Firebase | Số tài khoản đọc được từ Firebase Authentication |
+
+Kèm 2 biểu đồ: doanh thu 6 tháng và user mới theo tháng.
+
+### Ba nguồn dữ liệu được gộp lại (khoá là email)
+
+1. **Firebase Authentication** — tài khoản đăng ký thật của app MeetFlow AI
+   (ngày tạo, đăng nhập cuối, cách đăng nhập, đã xác thực email chưa, có bị khoá không).
+2. **Entitlement Pro** (`data/ai-access.json`) — ai đang có Pro, gói gì, hết hạn khi nào, lịch sử cấp.
+3. **Đơn hàng** (pending + paid) — đã trả bao nhiêu, phương thức nào, đơn nào còn chờ xác nhận.
+4. **Registry nội bộ** (`data/ai-users.json`) — email mà app/trang mua đã liên hệ, kể cả chưa trả tiền.
+   Được ghi tự động mỗi lần app gọi `/v1/ai/entitlement`, mỗi lần tạo đơn, mỗi lần admin cấp/thu hồi.
+
+### Kết nối Firebase (một lần)
+
+Firebase Console → ⚙️ **Project settings** → **Service accounts** → **Generate new private key**
+→ file JSON tải về → mở bằng TextEdit → copy toàn bộ → dán vào khung
+**"Kết nối Firebase (dán service account JSON)"** trong tab AI Users → **Lưu & kiểm tra**.
+
+- Key được lưu tại `/root/flowvpn-cp/data/firebase-admin.json`, quyền `0600`, chỉ server đọc.
+- Key **không bao giờ** được gửi ngược lại trình duyệt (endpoint chỉ trả về project id + trạng thái).
+- Có thể thay bằng biến môi trường `FIREBASE_SERVICE_ACCOUNT_JSON` (inline) hoặc
+  `FIREBASE_SERVICE_ACCOUNT_FILE` (đường dẫn) trong systemd drop-in nếu không muốn lưu file.
+- Bấm **Xoá key đã lưu** để thu hồi quyền truy cập của control plane.
+
+Chưa kết nối Firebase thì tab vẫn chạy với 3 nguồn còn lại (chỉ thiếu user chưa từng mua/liên hệ).
+
+### Hành động trên từng user
+
+| Nút | Việc xảy ra |
+|---|---|
+| Chi tiết | Xem gói, hạn, số lần cấp Pro, đơn hàng, lịch sử cấp/thu hồi, nguồn dữ liệu |
+| +30 ngày / +1 năm | Cấp thêm Pro (cộng dồn từ hạn hiện tại, không phải từ hôm nay) |
+| Cấp 30 ngày + gửi email | Như trên, kèm email hoá đơn (dùng khi khách trả tiền ngoài luồng QR) |
+| Thu hồi | Kết thúc Pro ngay, vẫn giữ lịch sử để đối chiếu |
+| Khoá / Mở khoá tài khoản | `disabled` bên Firebase (chặn đăng nhập) |
+| Reset mật khẩu | Trả về link đặt lại mật khẩu để gửi cho khách |
+| Xoá (bảng Firebase) | Xoá hẳn tài khoản Firebase |
+| Xoá khỏi danh sách theo dõi | Chỉ xoá registry nội bộ, không ảnh hưởng Firebase/đơn hàng |
+
+Lọc: tìm theo email (gõ là lọc ngay), theo trạng thái Pro, theo nguồn, sắp xếp, số dòng.
+**Export CSV** xuất đúng tập đang lọc (mở được bằng Excel/Google Sheets).
+
+### API tương ứng (đều cần Bearer token admin)
+
+```
+GET    /v1/admin/ai/users?q=&status=&source=&sort=&limit=&offset=
+GET    /v1/admin/ai/users.csv?<cùng tham số>
+GET    /v1/admin/ai/users/:email
+POST   /v1/admin/ai/users/:email/grant     { plan?, days?, notify?, note? }
+POST   /v1/admin/ai/users/:email/revoke    { reason? }
+POST   /v1/admin/ai/users/:email/forget
+GET    /v1/admin/ai/firebase
+POST   /v1/admin/ai/firebase/credentials   { json }
+DELETE /v1/admin/ai/firebase/credentials
+POST   /v1/admin/ai/firebase/users/:uid/disable          { disabled }
+DELETE /v1/admin/ai/firebase/users/:uid
+POST   /v1/admin/ai/firebase/users/:uid/password-reset   { email }
+```
+
 ## 4. Phát hành bản Android mới (bắt buộc cập nhật)
 
 ```bash

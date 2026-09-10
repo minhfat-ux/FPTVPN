@@ -209,6 +209,47 @@ export function adminPageHTML() {
     }
     .chip.off { background: rgba(255,255,255,0.08); color: var(--muted); border-color: var(--stroke); }
 
+    .badge {
+      display: inline-block; padding: 3px 9px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; white-space: nowrap;
+    }
+    .badge.ok { background: rgba(51,199,115,.18); color: #58e694; border: 1px solid rgba(51,199,115,.35); }
+    .badge.warn { background: rgba(255,184,77,.16); color: var(--warning); border: 1px solid rgba(255,184,77,.35); }
+    .badge.bad { background: rgba(255,90,106,.16); color: var(--danger); border: 1px solid rgba(255,90,106,.35); }
+    .badge.mute { background: rgba(255,255,255,.09); color: var(--muted); border: 1px solid var(--stroke); }
+    .badge.info { background: rgba(90,170,255,.16); color: #7ab8ff; border: 1px solid rgba(90,170,255,.35); }
+
+    .kpi-value.revenue { color: #58e694; }
+    .kpi-value.count { color: var(--text); }
+    .src-chip {
+      display: inline-block; padding: 2px 7px; margin: 1px 2px 1px 0; border-radius: 6px;
+      font-size: 11px; background: rgba(255,255,255,.08); color: var(--muted); border: 1px solid var(--stroke);
+    }
+
+    .fb-panel {
+      padding: 14px; border-radius: 10px; margin-bottom: 14px; font-size: 13.5px;
+      background: rgba(255,184,77,.07); border: 1px solid rgba(255,184,77,.28);
+    }
+    .fb-panel.ok { background: rgba(51,199,115,.07); border-color: rgba(51,199,115,.3); }
+    .fb-panel .fb-title { font-weight: 700; margin-bottom: 6px; }
+    .fb-panel .fb-body { color: rgba(255,255,255,.72); line-height: 1.6; }
+    .fb-panel details { margin-top: 10px; }
+    .fb-panel summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+    .fb-panel pre { margin: 0; padding: 10px; background: rgba(0,0,0,.25); border-radius: 8px;
+                    font-size: 12px; overflow-x: auto; color: rgba(255,255,255,.85); }
+
+    .mini-bars { display: grid; gap: 6px; margin-top: 6px; }
+    .mini-bars .mb-row { display: grid; grid-template-columns: 74px 1fr 60px; gap: 8px; align-items: center; font-size: 12px; }
+    .mini-bars .mb-track { height: 10px; background: rgba(255,255,255,.08); border-radius: 999px; overflow: hidden; }
+    .mini-bars .mb-fill { height: 100%; background: linear-gradient(90deg,#33c773,#58e694); border-radius: 999px; }
+    .mini-bars .mb-name { color: var(--muted); }
+    .mini-bars .mb-val { text-align: right; color: var(--text); font-weight: 600; }
+
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+    .detail-grid .d-item { padding: 10px; background: rgba(255,255,255,.05); border: 1px solid var(--stroke); border-radius: 8px; }
+    .detail-grid .d-lbl { color: var(--muted); font-size: 12px; }
+    .detail-grid .d-val { margin-top: 3px; font-weight: 600; word-break: break-all; }
+
     @media (max-width: 760px) {
       .stats-cols { grid-template-columns: 1fr; }
     }
@@ -243,6 +284,7 @@ export function adminPageHTML() {
       <button class="tab" id="tabStats">Dashboard</button>
       <button class="tab" id="tabPayments">Payments</button>
       <button class="tab" id="tabAi">MeetFlow AI</button>
+      <button class="tab" id="tabAiUsers">AI Users</button>
     </div>
 
     <!-- ===================== LIST VIEW ===================== -->
@@ -347,6 +389,104 @@ export function adminPageHTML() {
         <table>
           <thead><tr><th>Email</th><th>Goi</th><th>Kich hoat</th><th>Het han</th><th>Ma don</th><th>Trang thai</th></tr></thead>
           <tbody id="aiEntBody"><tr><td colspan="6">Bam Refresh.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= MEETFLOW AI USERS (dashboard) ================= -->
+    <section class="card hidden" id="view-ai-users">
+      <h2>MeetFlow AI — quản lý user</h2>
+      <div class="fb-panel" id="aiuSourcePanel">
+        <div class="fb-title" id="aiuSourceTitle">Đang kiểm tra nguồn dữ liệu...</div>
+        <div class="fb-body" id="aiuSourceBody">Firebase Authentication là nơi lưu tài khoản đăng ký của MeetFlow AI.</div>
+        <details id="aiuCredDetails">
+          <summary>Kết nối Firebase (dán service account JSON)</summary>
+          <div style="margin-top:10px">
+            <div class="fb-body" style="margin-bottom:8px">
+              Firebase Console → ⚙️ Project settings → <b>Service accounts</b> → <b>Generate new private key</b>
+              → mở file JSON vừa tải → dán toàn bộ nội dung vào ô dưới → bấm Lưu.
+              File được lưu trên VPS với quyền 0600 và không bao giờ gửi ngược lại trình duyệt.
+            </div>
+            <textarea id="aiuCredJson" placeholder='{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}' style="min-height:120px"></textarea>
+            <div class="actions">
+              <button id="aiuSaveCred">Lưu &amp; kiểm tra</button>
+              <button class="secondary" id="aiuClearCred">Xoá key đã lưu</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="stats-grid" id="aiuCards"></div>
+      <div class="stats-cols">
+        <div>
+          <h2>Doanh thu 6 tháng (Pro web)</h2>
+          <div class="mini-bars" id="aiuRevenueBars"></div>
+        </div>
+        <div>
+          <h2>User mới theo tháng</h2>
+          <div class="mini-bars" id="aiuNewUserBars"></div>
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top:18px">
+        <input id="aiuSearch" placeholder="Tìm theo email..." style="max-width:230px">
+        <select id="aiuStatus" style="max-width:190px">
+          <option value="all">Mọi trạng thái</option>
+          <option value="lifetime">Trọn đời</option>
+          <option value="active">Đang hoạt động</option>
+          <option value="expiring">Sắp hết hạn (&lt;=7 ngày)</option>
+          <option value="expired">Đã hết hạn</option>
+          <option value="none">Chưa có Pro</option>
+        </select>
+        <select id="aiuSource" style="max-width:200px">
+          <option value="all">Mọi nguồn</option>
+          <option value="firebase">Có tài khoản Firebase</option>
+          <option value="paid">Đã thanh toán</option>
+          <option value="app">App đã liên hệ</option>
+          <option value="noorders">Chưa có đơn hàng</option>
+        </select>
+        <select id="aiuSort" style="max-width:190px">
+          <option value="recent">Hoạt động gần nhất</option>
+          <option value="newest">Đăng ký mới nhất</option>
+          <option value="expiry">Sắp hết hạn trước</option>
+          <option value="revenue">Chi nhiều nhất</option>
+          <option value="email">Email A-Z</option>
+        </select>
+        <select id="aiuLimit" style="max-width:130px">
+          <option value="100">100 dòng</option>
+          <option value="200" selected>200 dòng</option>
+          <option value="500">500 dòng</option>
+          <option value="1000">1000 dòng</option>
+        </select>
+        <button id="loadAiUsers">Refresh</button>
+        <button class="secondary" id="aiuExport">Export CSV</button>
+      </div>
+      <div class="status" id="aiuStatusLine"></div>
+
+      <div style="overflow-x:auto; margin-top:8px;">
+        <table>
+          <thead><tr>
+            <th>Email</th><th>Nguồn</th><th>Pro</th><th>Gói</th><th>Hết hạn</th>
+            <th>Còn</th><th>Đơn</th><th>Đã trả</th><th>Hoạt động cuối</th><th>Action</th>
+          </tr></thead>
+          <tbody id="aiuBody"><tr><td colspan="10">Bấm Refresh.</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="user-card hidden" id="aiuDetail"></div>
+
+      <h2 style="margin-top:26px">Tài khoản Firebase Auth (đăng ký gốc)</h2>
+      <div class="actions">
+        <button class="secondary" id="loadFirebaseUsers">Tải danh sách Firebase</button>
+        <span class="status-inline" id="fbStatus"></span>
+      </div>
+      <div style="overflow-x:auto; margin-top:10px;">
+        <table>
+          <thead><tr>
+            <th>Email</th><th>UID</th><th>Cách đăng nhập</th><th>Ngày tạo</th>
+            <th>Đăng nhập cuối</th><th>Xác thực email</th><th>Trạng thái</th><th>Action</th>
+          </tr></thead>
+          <tbody id="fbBody"><tr><td colspan="8">Bấm "Tải danh sách Firebase".</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -464,6 +604,28 @@ export function adminPageHTML() {
       aiStatus: document.getElementById("aiStatus"),
       aiBody: document.getElementById("aiBody"),
       aiEntBody: document.getElementById("aiEntBody"),
+      tabAiUsers: document.getElementById("tabAiUsers"),
+      viewAiUsers: document.getElementById("view-ai-users"),
+      aiuCards: document.getElementById("aiuCards"),
+      aiuBody: document.getElementById("aiuBody"),
+      aiuStatusLine: document.getElementById("aiuStatusLine"),
+      aiuSearch: document.getElementById("aiuSearch"),
+      aiuStatus: document.getElementById("aiuStatus"),
+      aiuSource: document.getElementById("aiuSource"),
+      aiuSort: document.getElementById("aiuSort"),
+      aiuLimit: document.getElementById("aiuLimit"),
+      aiuExport: document.getElementById("aiuExport"),
+      aiuDetail: document.getElementById("aiuDetail"),
+      aiuSourcePanel: document.getElementById("aiuSourcePanel"),
+      aiuSourceTitle: document.getElementById("aiuSourceTitle"),
+      aiuSourceBody: document.getElementById("aiuSourceBody"),
+      aiuCredJson: document.getElementById("aiuCredJson"),
+      aiuRevenueBars: document.getElementById("aiuRevenueBars"),
+      aiuNewUserBars: document.getElementById("aiuNewUserBars"),
+      loadAiUsers: document.getElementById("loadAiUsers"),
+      loadFirebaseUsers: document.getElementById("loadFirebaseUsers"),
+      fbBody: document.getElementById("fbBody"),
+      fbStatus: document.getElementById("fbStatus"),
     };
 
     let editingId = null; // null = create mode
@@ -508,6 +670,8 @@ export function adminPageHTML() {
       fields.viewStats.classList.toggle("hidden", tab !== "stats");
       fields.viewPayments.classList.toggle("hidden", tab !== "payments");
       if (fields.viewAi) fields.viewAi.classList.toggle("hidden", tab !== "ai");
+      if (fields.tabAiUsers) fields.tabAiUsers.classList.toggle("active", tab === "aiu");
+      if (fields.viewAiUsers) fields.viewAiUsers.classList.toggle("hidden", tab !== "aiu");
       fields.viewEdit.classList.add("hidden");
       if (tab === "users" && !fields.usersLoaded) {
         fields.usersLoaded = true;
@@ -516,6 +680,7 @@ export function adminPageHTML() {
       if (tab === "stats") loadStats();
       if (tab === "payments") loadPayments();
       if (tab === "ai") loadAi();
+      if (tab === "aiu") loadAiUsers();
     }
 
     async function loadUsers() {
@@ -1058,6 +1223,608 @@ export function adminPageHTML() {
       } catch (error) { fields.aiStatus.textContent = error.message; }
     }
 
+    // ---------------- MeetFlow AI users (dashboard + support actions) ----------------
+    var aiuState = { rows: [], stats: null, firebase: null };
+    var aiuSearchTimer = null;
+
+    function aiuNum(value) {
+      return Number(value || 0).toLocaleString("vi-VN");
+    }
+
+    function aiuMoney(value) {
+      return aiuNum(value) + "d";
+    }
+
+    function aiuFmtDate(iso) {
+      if (!iso) return "-";
+      var d = new Date(iso);
+      return isNaN(d.getTime()) ? "-" : d.toLocaleString("vi-VN");
+    }
+
+    function aiuFmtDay(iso) {
+      if (!iso) return "-";
+      var d = new Date(iso);
+      return isNaN(d.getTime()) ? "-" : d.toLocaleDateString("vi-VN");
+    }
+
+    function aiuLeftText(pro) {
+      if (!pro) return "-";
+      if (pro.status === "lifetime") return "vĩnh viễn";
+      if (pro.daysLeft === null || pro.daysLeft === undefined) return "-";
+      if (pro.daysLeft <= 0) return "đã hết";
+      return pro.daysLeft + " ngày";
+    }
+
+    function aiuStatusBadge(pro) {
+      var map = {
+        lifetime: ["Trọn đời", "ok"],
+        active: ["Hoạt động", "ok"],
+        expiring: ["Sắp hết hạn", "warn"],
+        expired: ["Hết hạn", "bad"],
+        none: ["Chưa có Pro", "mute"],
+      };
+      var item = map[pro.status] || map.none;
+      var span = document.createElement("span");
+      span.className = "badge " + item[1];
+      span.textContent = item[0];
+      return span;
+    }
+
+    function aiuSourceChips(sources) {
+      var wrap = document.createElement("div");
+      var labels = { firebase: "firebase", app: "app", purchase: "đơn hàng", pro: "pro", admin: "admin" };
+      for (var i = 0; i < (sources || []).length; i++) {
+        var chip = document.createElement("span");
+        chip.className = "src-chip";
+        chip.textContent = labels[sources[i]] || sources[i];
+        wrap.appendChild(chip);
+      }
+      if (!wrap.childNodes.length) {
+        var none = document.createElement("span");
+        none.className = "src-chip";
+        none.textContent = "-";
+        wrap.appendChild(none);
+      }
+      return wrap;
+    }
+
+    function aiuQueryString() {
+      var params = [];
+      params.push("q=" + encodeURIComponent(fields.aiuSearch ? fields.aiuSearch.value.trim() : ""));
+      params.push("status=" + encodeURIComponent(fields.aiuStatus ? fields.aiuStatus.value : "all"));
+      params.push("source=" + encodeURIComponent(fields.aiuSource ? fields.aiuSource.value : "all"));
+      params.push("sort=" + encodeURIComponent(fields.aiuSort ? fields.aiuSort.value : "recent"));
+      params.push("limit=" + encodeURIComponent(fields.aiuLimit ? fields.aiuLimit.value : "200"));
+      return params.join("&");
+    }
+
+    function aiuRenderCards(stats) {
+      if (!fields.aiuCards) return;
+      fields.aiuCards.innerHTML = "";
+      var cards = [
+        ["Tổng user biết được", aiuNum(stats.total), "registry + Firebase", "count"],
+        ["Pro đang hoạt động", aiuNum(stats.proActive + stats.proLifetime), (stats.proLifetime || 0) + " trọn đời", ""],
+        ["Sắp hết hạn (<=7 ngày)", aiuNum(stats.proExpiring), "cần nhắc gia hạn", "warn"],
+        ["Đã hết hạn", aiuNum(stats.proExpired), "", ""],
+        ["Chưa có Pro", aiuNum(stats.noPro), "", ""],
+        ["User mới 30 ngày", aiuNum(stats.newLast30), "", ""],
+        ["Khách đã trả tiền", aiuNum(stats.paidUsers), aiuNum(stats.ordersPaid) + " đơn đã xác nhận", ""],
+        ["Doanh thu Pro (web)", aiuMoney(stats.revenue), aiuNum(stats.ordersPending) + " đơn chờ xác nhận", "revenue"],
+        ["Tài khoản Firebase", stats.firebase && stats.firebase.configured ? aiuNum(stats.firebase.count) : "chưa kết nối",
+          stats.firebase && stats.firebase.linked ? aiuNum(stats.firebase.linked) + " khớp với dữ liệu Pro" : "dán key ở khung phía trên", ""],
+      ];
+      for (var i = 0; i < cards.length; i++) {
+        var card = document.createElement("div");
+        card.className = "stat-card";
+        var num = document.createElement("div");
+        num.className = "num " + (cards[i][3] === "revenue" ? "kpi-value revenue" : "");
+        num.textContent = cards[i][1];
+        num.style.color = cards[i][3] === "revenue" ? "#58e694" : "";
+        if (cards[i][3] === "warn") num.style.color = "var(--warning)";
+        var lbl = document.createElement("div");
+        lbl.className = "lbl";
+        lbl.textContent = cards[i][0];
+        var sub = document.createElement("div");
+        sub.className = "sub";
+        sub.textContent = cards[i][2];
+        card.appendChild(num); card.appendChild(lbl); card.appendChild(sub);
+        fields.aiuCards.appendChild(card);
+      }
+    }
+
+    function aiuRenderBars(target, series, pick, money) {
+      if (!target) return;
+      target.innerHTML = "";
+      var max = 0;
+      for (var i = 0; i < series.length; i++) max = Math.max(max, pick(series[i]));
+      if (!max) max = 1;
+      for (var j = 0; j < series.length; j++) {
+        var value = pick(series[j]);
+        var row = document.createElement("div");
+        row.className = "mb-row";
+        var name = document.createElement("div");
+        name.className = "mb-name";
+        name.textContent = series[j].month;
+        var track = document.createElement("div");
+        track.className = "mb-track";
+        var fill = document.createElement("div");
+        fill.className = "mb-fill";
+        fill.style.width = Math.round((value / max) * 100) + "%";
+        track.appendChild(fill);
+        var val = document.createElement("div");
+        val.className = "mb-val";
+        val.textContent = money ? aiuMoney(value) : aiuNum(value);
+        row.appendChild(name); row.appendChild(track); row.appendChild(val);
+        target.appendChild(row);
+      }
+    }
+
+    function aiuRenderSourcePanel(firebase, stats) {
+      if (!fields.aiuSourcePanel) return;
+      var ok = firebase && firebase.configured && !firebase.error;
+      fields.aiuSourcePanel.className = "fb-panel" + (ok ? " ok" : "");
+      if (ok) {
+        fields.aiuSourceTitle.textContent = "Firebase đã kết nối" + (firebase.projectId ? " (" + firebase.projectId + ")" : "");
+        fields.aiuSourceBody.innerHTML = "";
+        fields.aiuSourceBody.textContent =
+          aiuNum(firebase.count) + " tài khoản Firebase Auth · " +
+          aiuNum((stats.firebase && stats.firebase.linked) || 0) + " tài khoản khớp dữ liệu Pro/đơn hàng · " +
+          aiuNum((stats.firebase && stats.firebase.unverified) || 0) + " chưa xác thực email · " +
+          aiuNum((stats.firebase && stats.firebase.disabled) || 0) + " đang bị khoá.";
+      } else if (firebase && firebase.error) {
+        fields.aiuSourceTitle.textContent = "Firebase đã cấu hình nhưng đọc lỗi";
+        fields.aiuSourceBody.textContent = firebase.error;
+      } else {
+        fields.aiuSourceTitle.textContent = "Chưa kết nối Firebase Authentication";
+        fields.aiuSourceBody.textContent =
+          "Đang hiển thị user mà hệ thống thanh toán tự biết: khách đã mua Pro, đơn hàng, và các email app đã liên hệ. " +
+          "Để thấy toàn bộ tài khoản đăng ký (kể cả chưa trả tiền), dán service account JSON ở khung bên dưới.";
+      }
+    }
+
+    async function loadAiUsers() {
+      if (!fields.aiuBody) return;
+      try {
+        fields.aiuStatusLine.textContent = "Đang tải...";
+        var data = await request("/v1/admin/ai/users?" + aiuQueryString());
+        aiuState.rows = data.users || [];
+        aiuState.stats = data.stats || {};
+        aiuState.firebase = data.firebase || {};
+        aiuRenderCards(aiuState.stats);
+        aiuRenderSourcePanel(data.firebase, aiuState.stats);
+        var series = (aiuState.stats && aiuState.stats.series) || [];
+        aiuRenderBars(fields.aiuRevenueBars, series, function (s) { return s.revenue; }, true);
+        aiuRenderBars(fields.aiuNewUserBars, series, function (s) { return s.newUsers; }, false);
+        aiuRenderRows(aiuState.rows);
+        fields.aiuStatusLine.textContent =
+          "Hiển thị " + aiuState.rows.length + "/" + aiuNum(data.total) + " user (tổng " + aiuNum(data.totalKnown) + ")" +
+          " · cập nhật " + new Date(data.generatedAt).toLocaleTimeString("vi-VN");
+      } catch (error) {
+        fields.aiuStatusLine.textContent = error.message;
+      }
+    }
+
+    function aiuRenderRows(rows) {
+      fields.aiuBody.innerHTML = "";
+      if (!rows.length) {
+        fields.aiuBody.innerHTML = '<tr><td colspan="10">Không có user nào khớp bộ lọc.</td></tr>';
+        return;
+      }
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+        var tds = tr.querySelectorAll("td");
+
+        var mail = document.createElement("div");
+        mail.textContent = r.email;
+        mail.style.fontWeight = "600";
+        if (r.firebase && r.firebase.disabled) {
+          var lock = document.createElement("span");
+          lock.className = "badge bad";
+          lock.textContent = "bị khoá";
+          lock.style.marginLeft = "6px";
+          mail.appendChild(lock);
+        }
+        tds[0].appendChild(mail);
+
+        tds[1].appendChild(aiuSourceChips(r.sources));
+        tds[2].appendChild(aiuStatusBadge(r.pro));
+        tds[3].textContent = r.pro.plan || "-";
+        tds[4].textContent = r.pro.lifetime ? "không giới hạn" : aiuFmtDay(r.pro.expiresAt);
+        tds[5].textContent = aiuLeftText(r.pro);
+        tds[6].textContent = r.orders.count ? aiuNum(r.orders.count) + (r.orders.pending ? " (" + r.orders.pending + " chờ)" : "") : "-";
+        tds[7].textContent = r.orders.amount ? aiuMoney(r.orders.amount) : "-";
+        tds[8].textContent = aiuFmtDay(r.lastSeen) + (r.inRegistry ? "" : " (Firebase)");
+
+        var actions = document.createElement("div");
+        actions.className = "row-actions";
+
+        var detail = document.createElement("button");
+        detail.className = "secondary";
+        detail.textContent = "Chi tiết";
+        detail.onclick = function (email) { return function () { aiuShowDetail(email); }; }(r.email);
+        actions.appendChild(detail);
+
+        var extend = document.createElement("button");
+        extend.textContent = "+30 ngày";
+        extend.onclick = function (email) { return function () { aiuGrant(email, 30); }; }(r.email);
+        actions.appendChild(extend);
+
+        var year = document.createElement("button");
+        year.className = "secondary";
+        year.textContent = "+1 năm";
+        year.onclick = function (email) { return function () { aiuGrant(email, 365); }; }(r.email);
+        actions.appendChild(year);
+
+        if (r.pro.active) {
+          var revoke = document.createElement("button");
+          revoke.className = "danger";
+          revoke.textContent = "Thu hồi";
+          revoke.onclick = function (email) { return function () { aiuRevoke(email); }; }(r.email);
+          actions.appendChild(revoke);
+        }
+        tds[9].appendChild(actions);
+        fields.aiuBody.appendChild(tr);
+      }
+    }
+
+    function aiuDetailItem(label, value) {
+      var wrap = document.createElement("div");
+      wrap.className = "d-item";
+      var l = document.createElement("div");
+      l.className = "d-lbl";
+      l.textContent = label;
+      var v = document.createElement("div");
+      v.className = "d-val";
+      v.textContent = value;
+      wrap.appendChild(l); wrap.appendChild(v);
+      return wrap;
+    }
+
+    async function aiuShowDetail(email) {
+      if (!fields.aiuDetail) return;
+      try {
+        fields.aiuDetail.classList.remove("hidden");
+        fields.aiuDetail.innerHTML = '<div class="meta">Đang tải chi tiết...</div>';
+        var data = await request("/v1/admin/ai/users/" + encodeURIComponent(email));
+        var u = data.user;
+        fields.aiuDetail.innerHTML = "";
+
+        var head = document.createElement("div");
+        head.className = "head";
+        var mailEl = document.createElement("span");
+        mailEl.className = "email";
+        mailEl.textContent = u.email;
+        head.appendChild(mailEl);
+        head.appendChild(aiuStatusBadge(u.pro));
+        var close = document.createElement("button");
+        close.className = "secondary";
+        close.textContent = "Đóng";
+        close.style.marginLeft = "auto";
+        close.onclick = function () { fields.aiuDetail.classList.add("hidden"); };
+        head.appendChild(close);
+        fields.aiuDetail.appendChild(head);
+
+        var grid = document.createElement("div");
+        grid.className = "detail-grid";
+        grid.appendChild(aiuDetailItem("Gói hiện tại", u.pro.plan || "-"));
+        grid.appendChild(aiuDetailItem("Hết hạn", u.pro.lifetime ? "không giới hạn" : aiuFmtDate(u.pro.expiresAt)));
+        grid.appendChild(aiuDetailItem("Còn lại", aiuLeftText(u.pro)));
+        grid.appendChild(aiuDetailItem("Kích hoạt lần cuối", aiuFmtDate(u.pro.grantedAt)));
+        grid.appendChild(aiuDetailItem("Số lần cấp Pro", aiuNum(u.pro.grantCount)));
+        grid.appendChild(aiuDetailItem("Tổng đã trả", aiuMoney(u.orders.amount)));
+        grid.appendChild(aiuDetailItem("Đơn hàng", aiuNum(u.orders.paid) + " đã trả / " + aiuNum(u.orders.pending) + " chờ"));
+        grid.appendChild(aiuDetailItem("Đăng ký (first seen)", aiuFmtDate(u.firstSeen)));
+        grid.appendChild(aiuDetailItem("Hoạt động cuối", aiuFmtDate(u.lastSeen)));
+        grid.appendChild(aiuDetailItem("Nền tảng", (u.platform || "-") + (u.appVersion ? " · " + u.appVersion : "")));
+        grid.appendChild(aiuDetailItem("Nguồn dữ liệu", (u.sources || []).join(", ") || "-"));
+        grid.appendChild(aiuDetailItem("Firebase", u.firebase ? (u.firebase.uid + (u.firebase.disabled ? " (đang khoá)" : "")) : "chưa có"));
+        fields.aiuDetail.appendChild(grid);
+
+        if (u.note) {
+          var note = document.createElement("div");
+          note.className = "meta";
+          note.style.marginTop = "8px";
+          note.textContent = "Ghi chú: " + u.note;
+          fields.aiuDetail.appendChild(note);
+        }
+
+        var actions = document.createElement("div");
+        actions.className = "actions";
+        var addMonth = document.createElement("button");
+        addMonth.textContent = "Cấp thêm 30 ngày";
+        addMonth.onclick = function () { aiuGrant(u.email, 30); };
+        var addYear = document.createElement("button");
+        addYear.className = "secondary";
+        addYear.textContent = "Cấp thêm 1 năm";
+        addYear.onclick = function () { aiuGrant(u.email, 365); };
+        var notify = document.createElement("button");
+        notify.className = "secondary";
+        notify.textContent = "Cấp 30 ngày + gửi email";
+        notify.onclick = function () { aiuGrant(u.email, 30, true); };
+        actions.appendChild(addMonth); actions.appendChild(addYear); actions.appendChild(notify);
+        if (u.pro.active) {
+          var revoke = document.createElement("button");
+          revoke.className = "danger";
+          revoke.textContent = "Thu hồi Pro";
+          revoke.onclick = function () { aiuRevoke(u.email); };
+          actions.appendChild(revoke);
+        }
+        if (u.firebase) {
+          var lock = document.createElement("button");
+          lock.className = "secondary";
+          lock.textContent = u.firebase.disabled ? "Mở khoá tài khoản" : "Khoá tài khoản";
+          lock.onclick = function () { fbAction(u.firebase.uid, u.firebase.disabled ? "enable" : "disable", u.email); };
+          actions.appendChild(lock);
+          var reset = document.createElement("button");
+          reset.className = "secondary";
+          reset.textContent = "Link đặt lại mật khẩu";
+          reset.onclick = function () { fbAction(u.firebase.uid, "reset", u.email); };
+          actions.appendChild(reset);
+        }
+        var forget = document.createElement("button");
+        forget.className = "secondary";
+        forget.textContent = "Xoá khỏi danh sách theo dõi";
+        forget.onclick = function () { aiuForget(u.email); };
+        actions.appendChild(forget);
+        fields.aiuDetail.appendChild(actions);
+
+        var orders = data.orders || [];
+        if (orders.length) {
+          var title = document.createElement("div");
+          title.style.marginTop = "14px";
+          title.style.fontWeight = "700";
+          title.textContent = "Lịch sử đơn hàng";
+          fields.aiuDetail.appendChild(title);
+          for (var i = 0; i < orders.length; i++) {
+            var o = orders[i];
+            var line = document.createElement("div");
+            line.className = "meta";
+            line.style.marginTop = "4px";
+            line.textContent =
+              "#" + o.orderCode + " · " + (o.plan || "-") + " · " + (o.method || "-") + " · " +
+              (o.paidAt ? "đã nhận tiền " + aiuFmtDate(o.paidAt) : "chờ xác nhận") + " · tạo " + aiuFmtDate(o.createdAt);
+            fields.aiuDetail.appendChild(line);
+          }
+        }
+        if (u.pro.history && u.pro.history.length) {
+          var hTitle = document.createElement("div");
+          hTitle.style.marginTop = "14px";
+          hTitle.style.fontWeight = "700";
+          hTitle.textContent = "Lịch sử cấp Pro";
+          fields.aiuDetail.appendChild(hTitle);
+          for (var j = 0; j < u.pro.history.length; j++) {
+            var h = u.pro.history[j];
+            var hLine = document.createElement("div");
+            hLine.className = "meta";
+            hLine.style.marginTop = "4px";
+            hLine.textContent = aiuFmtDate(h.at) + " · " + (h.plan || "-") + " · " + (h.days ? h.days + " ngày" : "thu hồi") +
+              (h.orderCode ? " · đơn #" + h.orderCode : "") + (h.note ? " · " + h.note : "");
+            fields.aiuDetail.appendChild(hLine);
+          }
+        }
+      } catch (error) {
+        fields.aiuDetail.innerHTML = "";
+        var err = document.createElement("div");
+        err.className = "meta";
+        err.textContent = error.message;
+        fields.aiuDetail.appendChild(err);
+      }
+    }
+
+    async function aiuGrant(email, days, notify) {
+      if (!confirm("Cấp/gia hạn " + days + " ngày Pro cho " + email + "?" + (notify ? "\\nEmail thông báo sẽ được gửi." : ""))) return;
+      try {
+        fields.aiuStatusLine.textContent = "Đang cấp Pro cho " + email + "...";
+        await request("/v1/admin/ai/users/" + encodeURIComponent(email) + "/grant", {
+          method: "POST",
+          body: JSON.stringify({ days: days, notify: notify === true }),
+        });
+        fields.aiuStatusLine.textContent = "Đã cấp " + days + " ngày cho " + email + ".";
+        await loadAiUsers();
+        if (fields.aiuDetail && !fields.aiuDetail.classList.contains("hidden")) aiuShowDetail(email);
+      } catch (error) {
+        fields.aiuStatusLine.textContent = error.message;
+      }
+    }
+
+    async function aiuRevoke(email) {
+      if (!confirm("Thu hồi Pro của " + email + "? Quyền Pro sẽ hết hiệu lực ngay.")) return;
+      try {
+        await request("/v1/admin/ai/users/" + encodeURIComponent(email) + "/revoke", { method: "POST" });
+        fields.aiuStatusLine.textContent = "Đã thu hồi Pro của " + email + ".";
+        await loadAiUsers();
+        if (fields.aiuDetail && !fields.aiuDetail.classList.contains("hidden")) aiuShowDetail(email);
+      } catch (error) {
+        fields.aiuStatusLine.textContent = error.message;
+      }
+    }
+
+    async function aiuForget(email) {
+      if (!confirm("Xoá " + email + " khỏi danh sách theo dõi của control plane?\\n(Không ảnh hưởng tài khoản Firebase và lịch sử đơn hàng.)")) return;
+      try {
+        await request("/v1/admin/ai/users/" + encodeURIComponent(email) + "/forget", { method: "POST" });
+        fields.aiuDetail.classList.add("hidden");
+        await loadAiUsers();
+      } catch (error) {
+        fields.aiuStatusLine.textContent = error.message;
+      }
+    }
+
+    // ---------------- Firebase Auth accounts ----------------
+    async function loadFirebaseUsers() {
+      if (!fields.fbBody) return;
+      try {
+        fields.fbStatus.textContent = "Đang tải từ Firebase...";
+        var data = await request("/v1/admin/ai/firebase");
+        fields.fbBody.innerHTML = "";
+        if (!data.configured) {
+          fields.fbBody.innerHTML = '<tr><td colspan="8">Chưa kết nối Firebase — dán service account JSON ở khung phía trên.</td></tr>';
+          fields.fbStatus.textContent = "Chưa cấu hình.";
+          return;
+        }
+        if (data.error) {
+          fields.fbBody.innerHTML = '<tr><td colspan="8">Lỗi đọc Firebase: xem thông báo bên dưới.</td></tr>';
+          fields.fbStatus.textContent = data.error;
+          return;
+        }
+        var users = data.users || [];
+        if (!users.length) fields.fbBody.innerHTML = '<tr><td colspan="8">Chưa có tài khoản nào.</td></tr>';
+        for (var i = 0; i < users.length; i++) {
+          var u = users[i];
+          var tr = document.createElement("tr");
+          tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+          var tds = tr.querySelectorAll("td");
+          tds[0].textContent = u.email || "(không có email)";
+          var uid = document.createElement("code");
+          uid.textContent = u.uid;
+          tds[1].appendChild(uid);
+          tds[2].textContent = u.provider || "-";
+          tds[3].textContent = aiuFmtDate(u.created);
+          tds[4].textContent = aiuFmtDate(u.lastSignIn);
+          tds[5].textContent = u.emailVerified ? "đã xác thực" : "chưa xác thực";
+          tds[5].style.color = u.emailVerified ? "var(--accent)" : "var(--warning)";
+          var state = document.createElement("span");
+          state.className = "badge " + (u.disabled ? "bad" : "ok");
+          state.textContent = u.disabled ? "đang khoá" : "hoạt động";
+          tds[6].appendChild(state);
+
+          var actions = document.createElement("div");
+          actions.className = "row-actions";
+          var lock = document.createElement("button");
+          lock.className = "secondary";
+          lock.textContent = u.disabled ? "Mở khoá" : "Khoá";
+          lock.onclick = function (uid2, disabled) { return function () { fbAction(uid2, disabled ? "enable" : "disable", null); }; }(u.uid, u.disabled);
+          actions.appendChild(lock);
+          var reset = document.createElement("button");
+          reset.className = "secondary";
+          reset.textContent = "Reset mật khẩu";
+          reset.onclick = function (uid2, email2) { return function () { fbAction(uid2, "reset", email2); }; }(u.uid, u.email);
+          actions.appendChild(reset);
+          var del = document.createElement("button");
+          del.className = "danger";
+          del.textContent = "Xoá";
+          del.onclick = function (uid2, email2) { return function () { fbAction(uid2, "delete", email2); }; }(u.uid, u.email);
+          actions.appendChild(del);
+          tds[7].appendChild(actions);
+          fields.fbBody.appendChild(tr);
+        }
+        fields.fbStatus.textContent = users.length + " tài khoản Firebase" + (data.truncated ? " (giới hạn 2000)" : "") +
+          (data.projectId ? " · project " + data.projectId : "");
+      } catch (error) {
+        fields.fbStatus.textContent = error.message;
+      }
+    }
+
+    async function fbAction(uid, action, email) {
+      var labels = { disable: "Khoá", enable: "Mở khoá", delete: "XOÁ VĨNH VIỄN", reset: "Tạo link đặt lại mật khẩu cho" };
+      if (action === "reset") {
+        if (!email) { alert("Tài khoản này không có email."); return; }
+      } else if (!confirm(labels[action] + " tài khoản " + (email || uid) + "?")) {
+        return;
+      }
+      try {
+        if (action === "disable" || action === "enable") {
+          await request("/v1/admin/ai/firebase/users/" + encodeURIComponent(uid) + "/disable", {
+            method: "POST",
+            body: JSON.stringify({ disabled: action === "disable" }),
+          });
+          fields.fbStatus.textContent = (action === "disable" ? "Đã khoá " : "Đã mở khoá ") + (email || uid);
+        } else if (action === "delete") {
+          await request("/v1/admin/ai/firebase/users/" + encodeURIComponent(uid), { method: "DELETE" });
+          fields.fbStatus.textContent = "Đã xoá tài khoản " + (email || uid) + " khỏi Firebase.";
+        } else if (action === "reset") {
+          var data = await request("/v1/admin/ai/firebase/users/" + encodeURIComponent(uid) + "/password-reset", {
+            method: "POST",
+            body: JSON.stringify({ email: email }),
+          });
+          fields.fbStatus.textContent = "Link đặt lại mật khẩu cho " + email + " (gửi cho khách):";
+          if (fields.fbBody) {
+            var pre = document.createElement("pre");
+            pre.textContent = data.link;
+            fields.fbBody.appendChild(pre);
+          }
+          return;
+        }
+        await loadFirebaseUsers();
+        await loadAiUsers();
+      } catch (error) {
+        fields.fbStatus.textContent = error.message;
+      }
+    }
+
+    async function aiuSaveCredential() {
+      if (!fields.aiuCredJson || !fields.aiuCredJson.value.trim()) {
+        fields.aiuSourceBody.textContent = "Dán nội dung file service account JSON trước.";
+        return;
+      }
+      try {
+        fields.aiuSourceTitle.textContent = "Đang lưu và kiểm tra key...";
+        var data = await request("/v1/admin/ai/firebase/credentials", {
+          method: "POST",
+          body: JSON.stringify({ json: fields.aiuCredJson.value.trim() }),
+        });
+        fields.aiuCredJson.value = "";
+        fields.aiuSourceTitle.textContent = data.reachable ? "Firebase đã kết nối" : "Đã lưu key nhưng đọc Firebase lỗi";
+        fields.aiuSourceBody.textContent = data.reachable
+          ? "Project " + (data.projectId || "?") + " · đọc được " + aiuNum(data.count) + " tài khoản."
+          : (data.error || "Không rõ lỗi");
+        await loadAiUsers();
+        await loadFirebaseUsers();
+      } catch (error) {
+        fields.aiuSourceTitle.textContent = "Không lưu được key";
+        fields.aiuSourceBody.textContent = error.message;
+      }
+    }
+
+    async function aiuClearCredential() {
+      if (!confirm("Xoá service account key đã lưu trên VPS?")) return;
+      try {
+        await request("/v1/admin/ai/firebase/credentials", { method: "DELETE" });
+        fields.aiuSourceTitle.textContent = "Đã xoá key Firebase";
+        fields.aiuSourceBody.textContent = "Danh sách giờ chỉ còn dữ liệu do hệ thống thanh toán tự biết.";
+        fields.fbBody.innerHTML = '<tr><td colspan="8">Chưa kết nối Firebase.</td></tr>';
+        fields.fbStatus.textContent = "";
+        await loadAiUsers();
+      } catch (error) {
+        fields.aiuSourceBody.textContent = error.message;
+      }
+    }
+
+    if (fields.loadAiUsers) fields.loadAiUsers.onclick = loadAiUsers;
+    if (fields.loadFirebaseUsers) fields.loadFirebaseUsers.onclick = loadFirebaseUsers;
+    if (fields.aiuStatus) fields.aiuStatus.onchange = loadAiUsers;
+    if (fields.aiuSource) fields.aiuSource.onchange = loadAiUsers;
+    if (fields.aiuSort) fields.aiuSort.onchange = loadAiUsers;
+    if (fields.aiuLimit) fields.aiuLimit.onchange = loadAiUsers;
+    if (fields.aiuSearch) {
+      fields.aiuSearch.oninput = function () {
+        clearTimeout(aiuSearchTimer);
+        aiuSearchTimer = setTimeout(loadAiUsers, 350);
+      };
+    }
+    if (fields.aiuExport) {
+      fields.aiuExport.onclick = function () {
+        var base = (fields.baseUrl.value || "").replace(/\\/$/, "");
+        var url = base + "/v1/admin/ai/users.csv?" + aiuQueryString();
+        fetch(url, { headers: { "Authorization": "Bearer " + fields.token.value.trim() } })
+          .then(function (res) { return res.blob(); })
+          .then(function (blob) {
+            var link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "meetflow-ai-users.csv";
+            link.click();
+            URL.revokeObjectURL(link.href);
+          })
+          .catch(function (error) { fields.aiuStatusLine.textContent = error.message; });
+      };
+    }
+    var aiuSaveBtn = document.getElementById("aiuSaveCred");
+    if (aiuSaveBtn) aiuSaveBtn.onclick = aiuSaveCredential;
+    var aiuClearBtn = document.getElementById("aiuClearCred");
+    if (aiuClearBtn) aiuClearBtn.onclick = aiuClearCredential;
+
     if (fields.loadAi) fields.loadAi.onclick = loadAi;
 
     document.getElementById("tabNodes").onclick = () => showTab("nodes");
@@ -1065,6 +1832,7 @@ export function adminPageHTML() {
     document.getElementById("tabStats").onclick = () => showTab("stats");
     document.getElementById("tabPayments").onclick = () => showTab("payments");
     document.getElementById("tabAi").onclick = () => showTab("ai");
+    document.getElementById("tabAiUsers").onclick = () => showTab("aiu");
     document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;

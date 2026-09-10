@@ -25,6 +25,17 @@ import {
   pickMailLang,
 } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
+import { AiUsersStore } from "./ai-users-store.js";
+import { buildUserRows, filterRows, computeStats, rowsToCsv, entitlementState } from "./ai-users.js";
+import {
+  credentialStatus as firebaseCredentialStatus,
+  listFirebaseUsers,
+  saveCredential as saveFirebaseCredential,
+  clearCredential as clearFirebaseCredential,
+  setUserDisabled as setFirebaseUserDisabled,
+  deleteFirebaseUser,
+  sendPasswordReset as sendFirebasePasswordReset,
+} from "./firebase-users.js";
 import { guidePageHTML } from "./guide-page.js";
 import { supportPageHTML } from "./support-page.js";
 import {
@@ -88,6 +99,8 @@ const DEV_LOGIN_CODE = (process.env.DEV_LOGIN_CODE ?? "").trim();
 // Public support address shown on the support page (App Store Support URL)
 // and in the mail footers.
 const SUPPORT_EMAIL = (process.env.SUPPORT_EMAIL ?? "support@meetflowai.site").trim();
+// Registry of MeetFlow AI accounts seen by the control plane (admin dashboard).
+const AI_USERS_FILE = process.env.AI_USERS_FILE ?? path.join(__dirname, "..", "data", "ai-users.json");
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE ?? "";
 const TLS_KEY_FILE = process.env.TLS_KEY_FILE ?? "";
 const NODE_NAME = process.env.NODE_NAME ?? "";
@@ -117,6 +130,9 @@ const store = new DeviceStore(DATA_FILE);
 const authStore = new AuthStore(AUTH_FILE);
 // MeetFlow AI web purchases (separate product + account system).
 const aiStore = new AiAccessStore(process.env.AI_ACCESS_FILE ?? path.join(__dirname, "..", "data", "ai-access.json"));
+// Our own record of MeetFlow AI accounts we have seen (Firebase is the real
+// account system, but it needs a service-account key — see firebase-users.js).
+const aiUsersStore = new AiUsersStore(AI_USERS_FILE);
 const nodeStore = new NodeStore(NODES_DB_FILE, buildFallbackExitNode(), { legacyJsonPath: NODES_FILE });
 const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   minimum_ios_version: DEFAULT_MIN_VERSION,
@@ -428,6 +444,18 @@ app.get(["/ai/buy/cancel", "/ai/buy/cancel/"], (req, res) => {
   res.type("html").send(paymentCancelPageHTML(buyLang(req), "ai"));
 });
 
+// Duplicate-order protection: a customer who double-taps (or reloads) must not
+// end up with two orders — and never with two activations. Admins confirm one
+// payment per order, so two orders = 2x the days for one payment.
+const AI_DUP_WINDOW_MS = Number(process.env.AI_DUP_WINDOW_MS || 30 * 60 * 1000);
+const AI_DUP_MESSAGES = {
+  en: "This email already has an activated pass. Check your inbox, or contact support if you need help.",
+  vi: "Email này đã được kích hoạt gói trước đó. Vui lòng kiểm tra hộp thư, hoặc liên hệ hỗ trợ nếu cần.",
+  zh: "该邮箱已激活通行证，请查看邮箱；如需帮助请联系客服。",
+  ja: "このメールアドレスはすでに有効化済みです。受信トレイをご確認ください。",
+  ko: "이 이메일은 이미 활성화되었습니다. 받은편지함을 확인해 주세요.",
+};
+
 // Creates a MeetFlow Pro order and returns the payment QR (bank / WeChat / Alipay).
 app.post("/v1/ai/payments/create", async (req, res) => {
   try {
@@ -438,9 +466,48 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     const planCfg = AI_PLANS[plan];
     if (!planCfg) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
-    const orderCode = Math.floor(Date.now() / 1000);
-    await aiStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
-    fireAiPaymentAlert(orderCode, email, plan, planCfg.amount);
+    const emailKey = String(email).trim().toLowerCase();
+    let orderCode = null;
+    // 1) Reuse a recent pending order for the same email+plan (reload / double-tap)
+    //    so the customer pays once for one orderCode.
+    // 2) Refuse to create a new order when that email+plan was already paid
+    //    recently — one payment must never stack twice.
+    try {
+      const recent = (await aiStore.listAllPayments()).filter((p) =>
+        String(p.email ?? "").trim().toLowerCase() === emailKey &&
+        p.plan === plan &&
+        Date.now() - Date.parse(p.createdAt ?? 0) < AI_DUP_WINDOW_MS
+      );
+      const pendingDup = recent
+        .filter((p) => !p.paidAt)
+        .sort((a, b) => b.orderCode - a.orderCode)[0];
+      const paidDup = recent
+        .filter((p) => p.paidAt)
+        .sort((a, b) => Date.parse(b.paidAt) - Date.parse(a.paidAt))[0];
+      if (pendingDup) {
+        orderCode = pendingDup.orderCode;
+        console.log(`ai-payments: reuse pending order ${orderCode} for ${emailKey} plan=${plan}`);
+      } else if (paidDup) {
+        console.log(`ai-payments: duplicate create blocked for ${emailKey} plan=${plan} (paid order ${paidDup.orderCode})`);
+        return res.status(200).json({
+          code: "already_paid",
+          error: AI_DUP_MESSAGES[pickMailLang(lang)] || AI_DUP_MESSAGES.en,
+          alreadyPaid: true,
+          orderCode: paidDup.orderCode,
+        });
+      }
+    } catch (err) {
+      console.error("ai-payments: duplicate check failed:", err?.message ?? err);
+    }
+
+    if (orderCode == null) {
+      orderCode = Math.floor(Date.now() / 1000);
+      await aiStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
+      await aiUsersStore
+        .touch(email, { source: "purchase", note: `${plan} via ${method ?? "bankqr"}` })
+        .catch((err) => console.error("ai user touch failed:", err?.message ?? err));
+      fireAiPaymentAlert(orderCode, email, plan, planCfg.amount);
+    }
 
     if (method === "momo") {
       const cfg = momoQrConfig();
@@ -576,6 +643,267 @@ app.get("/v1/admin/ai/entitlements", requireAdminAuth, async (_req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// MeetFlow AI user management (admin dashboard)
+//
+// MeetFlow AI accounts are Firebase accounts; the control plane additionally
+// keeps its own registry of every email it has seen. These endpoints merge the
+// two with the entitlement + order history into one user view, so support can
+// answer "who is this, is Pro active, when does it expire, what did they pay"
+// without touching Firebase or SSHing into the VPS.
+// ---------------------------------------------------------------------------
+
+/** Builds the merged dashboard payload (rows + stats) from all four sources. */
+async function aiUsersSnapshot({ withFirebase = true } = {}) {
+  const [registry, entitlements, orders, firebase] = await Promise.all([
+    aiUsersStore.listUsers(),
+    aiStore.listEntitlements(),
+    aiStore.listAllPayments(),
+    withFirebase
+      ? listFirebaseUsers({ max: 2000 })
+      : Promise.resolve({ configured: false, users: [], count: 0, error: null }),
+  ]);
+  const rows = buildUserRows({
+    registry,
+    entitlements,
+    orders,
+    firebaseUsers: firebase.users ?? [],
+    prices: AI_PLANS,
+  });
+  const stats = computeStats({ rows, orders, prices: AI_PLANS, firebase });
+  return { rows, stats, registry, entitlements, orders, firebase };
+}
+
+function aiUserQuery(req) {
+  return {
+    q: String(req.query?.q ?? "").slice(0, 120),
+    status: String(req.query?.status ?? "all").slice(0, 20),
+    source: String(req.query?.source ?? "all").slice(0, 20),
+    sort: String(req.query?.sort ?? "recent").slice(0, 20),
+    limit: Math.min(1000, Math.max(1, Number(req.query?.limit) || 200)),
+    offset: Math.max(0, Number(req.query?.offset) || 0),
+  };
+}
+
+/** GET /v1/admin/ai/users — the AI Users tab (rows + dashboard stats). */
+app.get("/v1/admin/ai/users", requireAdminAuth, async (req, res) => {
+  try {
+    const query = aiUserQuery(req);
+    const { rows, stats, firebase } = await aiUsersSnapshot();
+    const filtered = filterRows(rows, query);
+    res.json({
+      users: filtered.slice(query.offset, query.offset + query.limit),
+      total: filtered.length,
+      totalKnown: rows.length,
+      offset: query.offset,
+      limit: query.limit,
+      stats,
+      firebase: {
+        configured: Boolean(firebase.configured),
+        error: firebase.error ?? null,
+        count: firebase.count ?? 0,
+        projectId: firebase.projectId ?? null,
+      },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("admin ai users failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** GET /v1/admin/ai/users.csv — export of the filtered view. */
+app.get("/v1/admin/ai/users.csv", requireAdminAuth, async (req, res) => {
+  try {
+    const query = aiUserQuery(req);
+    const { rows } = await aiUsersSnapshot({ withFirebase: false });
+    const csv = rowsToCsv(filterRows(rows, query));
+    res.type("text/csv").set("Content-Disposition", 'attachment; filename="meetflow-ai-users.csv"').send(csv);
+  } catch (err) {
+    console.error("admin ai users csv failed:", err);
+    res.status(500).send("Internal error");
+  }
+});
+
+/** GET /v1/admin/ai/users/:email — one user in full (grants + orders). */
+app.get("/v1/admin/ai/users/:email", requireAdminAuth, async (req, res) => {
+  try {
+    const email = String(req.params.email ?? "").trim().toLowerCase();
+    if (!email.includes("@")) return res.status(400).json({ error: "Email không hợp lệ" });
+    const { rows, orders } = await aiUsersSnapshot();
+    const row = rows.find((r) => r.email === email);
+    if (!row) return res.status(404).json({ error: "Không tìm thấy user này trong dữ liệu" });
+    res.json({
+      user: row,
+      orders: orders.filter((o) => String(o.email ?? "").toLowerCase() === email),
+    });
+  } catch (err) {
+    console.error("admin ai user detail failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * POST /v1/admin/ai/users/:email/grant — grant or extend Pro by hand
+ * (support case: customer paid outside the QR flow, goodwill, testing).
+ * Body: { plan?, days?, note?, notify? }
+ */
+app.post("/v1/admin/ai/users/:email/grant", requireAdminAuth, async (req, res) => {
+  try {
+    const email = String(req.params.email ?? "").trim();
+    if (!email.includes("@")) return res.status(400).json({ error: "Email không hợp lệ" });
+    const plan = AI_PLANS[req.body?.plan] ? req.body.plan : "monthly";
+    const requestedDays = Number(req.body?.days);
+    const days = Number.isFinite(requestedDays) && requestedDays > 0 ? Math.min(3650, Math.floor(requestedDays)) : AI_PLANS[plan].days;
+    const note = String(req.body?.note ?? "").slice(0, 200) || null;
+    const lang = pickMailLang(req.body?.lang);
+
+    const entitlement = await aiStore.grantPro(email, {
+      plan,
+      days,
+      productId: `meetflow.admin.${plan}`,
+      lang,
+    });
+    await aiUsersStore.touch(email, { source: "admin", note: note ?? `admin grant ${days}d` });
+    console.log(`admin ai grant email=${email} plan=${plan} days=${days} by=admin`);
+
+    let notified = false;
+    if (req.body?.notify === true) {
+      try {
+        await sendAiInvoiceEmail({
+          to: email,
+          orderCode: `ADMIN-${Date.now().toString().slice(-6)}`,
+          planLabel: AI_PLANS[plan].label,
+          amount: 0,
+          days,
+          activatedAt: new Date().toISOString(),
+          expiresAt: entitlement?.expires_at ?? null,
+          guideUrl: `${siteBaseUrl()}/ai/guide`,
+          lang,
+          oneTime: AI_PLANS[plan]?.oneTime === true,
+        });
+        notified = true;
+      } catch (err) {
+        console.error("admin ai grant notify failed:", err?.message ?? err);
+      }
+    }
+    res.json({ ok: true, email: email.toLowerCase(), plan, days, entitlement, notified });
+  } catch (err) {
+    console.error("admin ai grant failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** POST /v1/admin/ai/users/:email/revoke — end Pro now (keeps history). */
+app.post("/v1/admin/ai/users/:email/revoke", requireAdminAuth, async (req, res) => {
+  try {
+    const email = String(req.params.email ?? "").trim();
+    if (!email.includes("@")) return res.status(400).json({ error: "Email không hợp lệ" });
+    const entitlement = await aiStore.revokePro(email, {
+      reason: String(req.body?.reason ?? "admin revoke").slice(0, 120),
+    });
+    if (!entitlement) return res.status(404).json({ error: "User này chưa có Pro" });
+    await aiUsersStore.touch(email, { source: "admin", note: "admin revoke" });
+    console.log(`admin ai revoke email=${email}`);
+    res.json({ ok: true, email: email.toLowerCase(), entitlement });
+  } catch (err) {
+    console.error("admin ai revoke failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** POST /v1/admin/ai/users/:email/forget — drop our registry row only. */
+app.post("/v1/admin/ai/users/:email/forget", requireAdminAuth, async (req, res) => {
+  try {
+    const removed = await aiUsersStore.forget(req.params.email);
+    res.json({ ok: true, removed });
+  } catch (err) {
+    console.error("admin ai forget failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** GET /v1/admin/ai/firebase — credential status + the Firebase user list. */
+app.get("/v1/admin/ai/firebase", requireAdminAuth, async (req, res) => {
+  try {
+    const status = await firebaseCredentialStatus();
+    const users = status.configured ? await listFirebaseUsers({ max: 2000 }) : { users: [], count: 0, error: null };
+    res.json({
+      configured: status.configured,
+      source: status.source,
+      projectId: status.projectId ?? users.projectId ?? null,
+      count: users.count ?? 0,
+      error: users.error ?? null,
+      truncated: Boolean(users.truncated),
+      users: users.users ?? [],
+    });
+  } catch (err) {
+    console.error("admin firebase list failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** POST /v1/admin/ai/firebase/credentials — paste a service-account JSON. */
+app.post("/v1/admin/ai/firebase/credentials", requireAdminAuth, async (req, res) => {
+  try {
+    const raw = typeof req.body?.json === "string" ? req.body.json : JSON.stringify(req.body?.json ?? {});
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return res.status(400).json({ error: "JSON không hợp lệ — dán đúng nội dung file service account" });
+    }
+    const saved = await saveFirebaseCredential(parsed);
+    const check = await listFirebaseUsers({ max: 5, force: true });
+    res.json({ ok: true, ...saved, reachable: !check.error, count: check.count ?? 0, error: check.error ?? null });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+/** DELETE /v1/admin/ai/firebase/credentials — remove the stored key. */
+app.delete("/v1/admin/ai/firebase/credentials", requireAdminAuth, async (_req, res) => {
+  try {
+    await clearFirebaseCredential();
+    const status = await firebaseCredentialStatus();
+    res.json({ ok: true, configured: status.configured, source: status.source });
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** POST /v1/admin/ai/firebase/users/:uid/disable — lock / unlock an account. */
+app.post("/v1/admin/ai/firebase/users/:uid/disable", requireAdminAuth, async (req, res) => {
+  try {
+    await setFirebaseUserDisabled(req.params.uid, req.body?.disabled !== false);
+    res.json({ ok: true, uid: req.params.uid, disabled: req.body?.disabled !== false });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+/** DELETE /v1/admin/ai/firebase/users/:uid — delete the Firebase account. */
+app.delete("/v1/admin/ai/firebase/users/:uid", requireAdminAuth, async (req, res) => {
+  try {
+    await deleteFirebaseUser(req.params.uid);
+    res.json({ ok: true, uid: req.params.uid });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+/** POST /v1/admin/ai/firebase/users/:uid/password-reset — return a reset link. */
+app.post("/v1/admin/ai/firebase/users/:uid/password-reset", requireAdminAuth, async (req, res) => {
+  try {
+    const email = String(req.body?.email ?? "").trim();
+    if (!email.includes("@")) return res.status(400).json({ error: "Thiếu email để tạo link" });
+    const result = await sendFirebasePasswordReset(email);
+    res.json({ ok: true, email, link: result.link });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
 // Apps read Pro status here after sign-in (email = Firebase account email).
 app.get("/v1/ai/entitlement", async (req, res) => {
   try {
@@ -587,6 +915,14 @@ app.get("/v1/ai/entitlement", async (req, res) => {
     if (!email || !/\S+@\S+/.test(email)) {
       return res.status(400).json({ error: "Valid email required" });
     }
+    // Registry touch: tells the dashboard this account exists (even without Pro).
+    aiUsersStore
+      .touch(email, {
+        source: "app",
+        platform: String(req.query?.platform ?? "").slice(0, 24) || null,
+        appVersion: String(req.query?.version ?? "").slice(0, 24) || null,
+      })
+      .catch((err) => console.error("ai user touch failed:", err?.message ?? err));
     res.json(await aiStore.entitlementForEmail(email));
   } catch {
     res.status(500).json({ error: "Internal error" });
