@@ -156,6 +156,7 @@ const TEXTS = {
         privacyLabel: "Privacy Policy",
     supportLabel: "Support",
         testflightSub: "Join the beta",
+        noteExtra: "Pro is activated for the email you enter above. If it is not active within 10 minutes after your transfer, contact support@meetflowai.site.",
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
     errCreate: "Could not create payment.",
@@ -210,6 +211,7 @@ const TEXTS = {
         privacyLabel: "Chính sách bảo mật",
     supportLabel: "Hỗ trợ",
         testflightSub: "Tham gia bản thử",
+        noteExtra: "Pro được kích hoạt theo email bạn nhập ở trên. Nếu sau 10 phút chuyển khoản vẫn chưa thấy kích hoạt, liên hệ support@meetflowai.site.",
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
     errCreate: "Lỗi tạo thanh toán.",
@@ -264,6 +266,7 @@ const TEXTS = {
         privacyLabel: "隐私政策",
     supportLabel: "支持",
         testflightSub: "加入测试版",
+        noteExtra: "Pro 将为您在上方填写的邮箱激活。若转账后 10 分钟内仍未激活，请联系 support@meetflowai.site。",
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
     errCreate: "无法创建支付。",
@@ -318,6 +321,7 @@ const TEXTS = {
         privacyLabel: "プライバシーポリシー",
     supportLabel: "サポート",
         testflightSub: "ベータに参加",
+        noteExtra: "Pro は上に入力したメールに有効化されます。送金後 10 分以上経っても有効にならない場合は support@meetflowai.site までご連絡ください。",
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
     errCreate: "支払いを作成できませんでした。",
@@ -372,6 +376,7 @@ const TEXTS = {
         privacyLabel: "개인정보 처리방침",
     supportLabel: "지원",
         testflightSub: "베타 참여",
+        noteExtra: "Pro는 위에 입력한 이메일로 활성화됩니다. 송금 후 10분이 지나도 활성화되지 않으면 support@meetflowai.site로 문의하세요.",
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
     errCreate: "결제를 만들 수 없습니다.",
@@ -563,6 +568,17 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
       border-radius: 18px; backdrop-filter: blur(16px);
     }
+    .langbar {
+      display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+      margin-bottom: 16px;
+    }
+    .lang {
+      font-size: 12px; padding: 4px 10px; border-radius: 50px; text-decoration: none;
+      color: rgba(255,255,255,.6); background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+    }
+    .lang:hover { color: #fff; border-color: rgba(255,255,255,.3); }
+    .lang.on { color: #06160d; background: #33c773; border-color: #33c773; font-weight: 700; }
     .brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 10px; }
     .brand-logo {
       width: 76px; height: 76px; border-radius: 18px; display: block;
@@ -606,6 +622,11 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
     .status { margin-top: 14px; text-align: center; font-size: 13px; min-height: 18px; }
     .status.err { color: #ff5a6a; }
     .note { margin-top: 16px; text-align: center; color: rgba(255,255,255,.4); font-size: 12px; }
+    .noteextra {
+      margin-top: 10px; padding: 10px 12px; border-radius: 10px; text-align: left;
+      color: rgba(255,255,255,.62); background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.08); font-size: 11.5px; line-height: 1.55;
+    }
     .footer {
       margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.1);
       text-align: center; font-size: 12px;
@@ -656,6 +677,13 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
 </head>
 <body>
   <div class="card">
+    <div class="langbar">
+      ${["vi", "en", "zh", "ja", "ko"].map((code) => {
+        const names = { vi: "Tiếng Việt", en: "English", zh: "中文", ja: "日本語", ko: "한국어" };
+        return `<a class="lang${code === lang ? " on" : ""}" href="?lang=${code}" hreflang="${code}">${names[code]}</a>`;
+      }).join("")}
+    </div>
+
     <div class="brand">
       <img class="brand-logo" src="${logoUrl}" alt="${meta.brandName}">
       <div class="logo">${logoHtml}</div>
@@ -735,6 +763,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       <button type="submit" id="payBtn">${t.payBtn}</button>
       <div class="status" id="status"></div>
       <div class="note">${t.note}</div>
+      <div class="noteextra">ℹ️ ${t.noteExtra}</div>
     </form>
 
     <div class="footer">
