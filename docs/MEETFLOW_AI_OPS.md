@@ -69,19 +69,30 @@ Kèm 2 biểu đồ: doanh thu 6 tháng và user mới theo tháng.
 4. **Registry nội bộ** (`data/ai-users.json`) — email mà app/trang mua đã liên hệ, kể cả chưa trả tiền.
    Được ghi tự động mỗi lần app gọi `/v1/ai/entitlement`, mỗi lần tạo đơn, mỗi lần admin cấp/thu hồi.
 
-### Kết nối Firebase (một lần)
+### Firebase — trạng thái & cách thay key
 
-Firebase Console → ⚙️ **Project settings** → **Service accounts** → **Generate new private key**
-→ file JSON tải về → mở bằng TextEdit → copy toàn bộ → dán vào khung
-**"Kết nối Firebase (dán service account JSON)"** trong tab AI Users → **Lưu & kiểm tra**.
+Đã kết nối project **meetflowai-82dee** (service account `firebase-adminsdk-fbsvc`).
+Key nằm ở `/root/flowvpn-cp/data/firebase-admin.json`, quyền `0600` root, và
+**không** được expose qua HTTP (đã kiểm tra: `/data/…`, `/assets/…` đều 401/404).
 
-- Key được lưu tại `/root/flowvpn-cp/data/firebase-admin.json`, quyền `0600`, chỉ server đọc.
-- Key **không bao giờ** được gửi ngược lại trình duyệt (endpoint chỉ trả về project id + trạng thái).
-- Có thể thay bằng biến môi trường `FIREBASE_SERVICE_ACCOUNT_JSON` (inline) hoặc
-  `FIREBASE_SERVICE_ACCOUNT_FILE` (đường dẫn) trong systemd drop-in nếu không muốn lưu file.
-- Bấm **Xoá key đã lưu** để thu hồi quyền truy cập của control plane.
+Cách thay key mới (khi key cũ hết hạn hoặc bị thu hồi):
 
-Chưa kết nối Firebase thì tab vẫn chạy với 3 nguồn còn lại (chỉ thiếu user chưa từng mua/liên hệ).
+1. Firebase Console → ⚙️ **Project settings** → **Service accounts** → **Generate new private key**.
+2. Dán toàn bộ nội dung file JSON vào khung **"Kết nối Firebase"** trong tab AI Users → **Lưu & kiểm tra**.
+   (Hoặc copy lên VPS: `scp <key>.json root@103.173.155.50:/root/flowvpn-cp/data/firebase-admin.json`
+   rồi `chmod 600`.)
+3. Nếu key sai/không hợp lệ, khung đó hiện **đúng thông báo lỗi của Google**
+   (ví dụ `invalid_grant: account not found` = service account đã bị xoá).
+
+- Hoặc dùng biến môi trường `FIREBASE_SERVICE_ACCOUNT_JSON` (inline) /
+  `FIREBASE_SERVICE_ACCOUNT_FILE` (đường dẫn) trong systemd drop-in, khi đó không cần file.
+- Bấm **Xoá key đã lưu** để thu hồi quyền truy cập của control plane bất cứ lúc nào.
+- Danh sách Firebase được cache 60 giây (lỗi chỉ cache 5 giây để sửa key là ăn ngay).
+
+Lưu ý về con số: **app Android/iOS đăng nhập Firebase ẩn danh** (anonymous) nên phần lớn
+tài khoản không có email. Những tài khoản đó vẫn nằm trong bảng Firebase (hiện `(không có email)`)
+nhưng không thành dòng trong bảng gộp, vì bảng gộp khoá theo email. Số ẩn danh được ghi rõ
+trong khung trạng thái ở đầu tab.
 
 ### Hành động trên từng user
 

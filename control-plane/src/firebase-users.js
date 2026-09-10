@@ -18,9 +18,14 @@ import path from "node:path";
  */
 
 const CACHE_TTL_MS = 60 * 1000;
+// A failed read must not be cached for a whole minute: the key may have just
+// been replaced (or the network just recovered) and the dashboard is expected
+// to recover as soon as the admin fixes it.
+const ERROR_CACHE_TTL_MS = 5 * 1000;
 const APP_NAME = "flowvpn-admin";
 
-let adminModule = null;
+let appModule = null;
+let authModule = null;
 let firebaseApp = null;
 let loadedFingerprint = null;
 let cache = { at: 0, users: [], error: null, configured: false };
@@ -99,23 +104,32 @@ function resetCache() {
   cache = { at: 0, users: [], error: null, configured: false };
 }
 
-async function getAdmin() {
-  if (!adminModule) adminModule = await import("firebase-admin");
-  const admin = adminModule.default ?? adminModule;
+/**
+ * Initializes (or re-initializes) the Admin SDK and returns its Auth interface.
+ *
+ * firebase-admin v10+ is modular: `cert()`/`initializeApp()` come from
+ * `firebase-admin/app` and Auth is reached with `getAuth(app)` — there is no
+ * `admin.credential` namespace any more.
+ */
+async function getAuth() {
+  if (!appModule) appModule = await import("firebase-admin/app");
+  if (!authModule) authModule = await import("firebase-admin/auth");
   const { parsed, fingerprint } = await readCredential();
   if (!firebaseApp || loadedFingerprint !== fingerprint) {
-    try {
-      await firebaseApp?.delete();
-    } catch {
-      /* the previous app may already be gone */
+    if (firebaseApp) {
+      try {
+        await appModule.deleteApp(firebaseApp);
+      } catch {
+        /* the previous app may already be gone */
+      }
     }
-    firebaseApp = admin.initializeApp(
-      { credential: admin.credential.cert(parsed) },
+    firebaseApp = appModule.initializeApp(
+      { credential: appModule.cert(parsed) },
       `${APP_NAME}-${Date.now()}`,
     );
     loadedFingerprint = fingerprint;
   }
-  return admin;
+  return authModule.getAuth(firebaseApp);
 }
 
 function mapUser(user) {
@@ -140,45 +154,51 @@ export async function listFirebaseUsers({ max = 1000, force = false } = {}) {
   if (!status.configured) {
     return { configured: false, error: null, users: [], count: 0, truncated: false };
   }
-  if (!force && cache.at && Date.now() - cache.at < CACHE_TTL_MS) {
-    return { ...cache, configured: true, projectId: status.projectId };
+  const ttl = cache.error ? ERROR_CACHE_TTL_MS : CACHE_TTL_MS;
+  if (!force && cache.at && Date.now() - cache.at < ttl) {
+    return {
+      ...cache,
+      configured: true,
+      projectId: status.projectId,
+      count: Array.isArray(cache.users) ? cache.users.length : 0,
+    };
   }
 
   try {
-    const admin = await getAdmin();
+    const auth = await getAuth();
     const users = [];
     let pageToken;
     do {
       const remaining = Math.max(1, Math.min(1000, max - users.length));
-      const page = await admin.auth().listUsers(remaining, pageToken);
+      const page = await auth.listUsers(remaining, pageToken);
       users.push(...page.users.map(mapUser));
       pageToken = page.pageToken;
     } while (pageToken && users.length < max);
 
-    cache = { at: Date.now(), users, error: null, truncated: users.length >= max };
+    cache = { at: Date.now(), users, count: users.length, error: null, truncated: users.length >= max };
     return { configured: true, projectId: status.projectId, users, count: users.length, truncated: users.length >= max, error: null };
   } catch (err) {
     const message = String(err?.message ?? err).slice(0, 300);
-    cache = { at: Date.now(), users: [], error: message, truncated: false };
+    cache = { at: Date.now(), users: [], count: 0, error: message, truncated: false };
     return { configured: true, projectId: status.projectId, users: [], count: 0, truncated: false, error: message };
   }
 }
 
 /** Firebase-side account actions (null result unit = success, throws on error). */
 export async function setUserDisabled(uid, disabled) {
-  const admin = await getAdmin();
-  await admin.auth().updateUser(uid, { disabled: Boolean(disabled) });
+  const auth = await getAuth();
+  await auth.updateUser(uid, { disabled: Boolean(disabled) });
   resetCache();
 }
 
 export async function deleteFirebaseUser(uid) {
-  const admin = await getAdmin();
-  await admin.auth().deleteUser(uid);
+  const auth = await getAuth();
+  await auth.deleteUser(uid);
   resetCache();
 }
 
 export async function sendPasswordReset(email) {
-  const admin = await getAdmin();
-  const link = await admin.auth().generatePasswordResetLink(email);
+  const auth = await getAuth();
+  const link = await auth.generatePasswordResetLink(email);
   return { link };
 }

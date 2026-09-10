@@ -291,6 +291,9 @@ export function computeStats({ rows = [], orders = [], firebase = {}, now = Date
       disabled: 0,
       unverified: 0,
       linked: 0,
+      // Firebase also holds anonymous accounts (the apps sign in anonymously),
+      // which have no email and therefore cannot be a row in this view.
+      anonymous: 0,
     },
   };
 
@@ -336,6 +339,8 @@ export function computeStats({ rows = [], orders = [], firebase = {}, now = Date
       series[monthIndex.get(key)].orders += 1;
     }
   }
+
+  stats.firebase.anonymous = Math.max(0, stats.firebase.count - stats.firebase.linked);
 
   // Active subscriptions expiring inside the reminder window.
   stats.renewalsDue = rows.filter((row) => row.pro.status === "expiring").length;

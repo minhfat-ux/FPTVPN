@@ -1218,7 +1218,12 @@ export function adminPageHTML() {
     async function confirmAiOrder(orderCode) {
       if (!confirm("Xac nhan da nhan tien don MeetFlow AI #" + orderCode + "? Pro se kich hoat ngay.")) return;
       try {
-        await request("/v1/admin/ai/payments/" + orderCode + "/confirm", { method: "POST" });
+        const data = await request("/v1/admin/ai/payments/" + orderCode + "/confirm", { method: "POST" });
+        if (fields.aiStatus) {
+          fields.aiStatus.textContent = data && data.mailSent
+            ? "✅ Đã kích hoạt #" + orderCode + " — hoá đơn/xác nhận đã gửi tới " + (data.email || "khách")
+            : "⚠️ Đã kích hoạt #" + orderCode + " nhưng CHƯA gửi được email hoá đơn — kiểm tra SMTP";
+        }
         loadAi();
       } catch (error) { fields.aiStatus.textContent = error.message; }
     }
@@ -1367,8 +1372,9 @@ export function adminPageHTML() {
         fields.aiuSourceTitle.textContent = "Firebase đã kết nối" + (firebase.projectId ? " (" + firebase.projectId + ")" : "");
         fields.aiuSourceBody.innerHTML = "";
         fields.aiuSourceBody.textContent =
-          aiuNum(firebase.count) + " tài khoản Firebase Auth · " +
-          aiuNum((stats.firebase && stats.firebase.linked) || 0) + " tài khoản khớp dữ liệu Pro/đơn hàng · " +
+          aiuNum(firebase.count) + " tài khoản Firebase Auth: " +
+          aiuNum((stats.firebase && stats.firebase.linked) || 0) + " có email (hiện trong bảng bên dưới), " +
+          aiuNum((stats.firebase && stats.firebase.anonymous) || 0) + " tài khoản ẩn danh không có email. " +
           aiuNum((stats.firebase && stats.firebase.unverified) || 0) + " chưa xác thực email · " +
           aiuNum((stats.firebase && stats.firebase.disabled) || 0) + " đang bị khoá.";
       } else if (firebase && firebase.error) {

@@ -593,14 +593,14 @@ app.get("/v1/ai/payments/confirm/:orderCode", async (req, res) => {
     }
     const order = await aiStore.markPendingPaymentPaid(orderCode);
     if (!order) return res.status(404).send("Đơn không tồn tại hoặc đã xác nhận.");
-    await activateAiProAndInvoice({
+    const activated = await activateAiProAndInvoice({
       orderCode: order.orderCode,
       email: order.email,
       plan: order.plan,
       method: order.method,
       lang: order.lang,
     });
-    res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>MeetFlow Pro đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
+    res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>MeetFlow Pro đã kích hoạt cho <b>${order.email}</b>.</p><p>${activated?.mailSent ? "📧 Hoá đơn / xác nhận đã gửi tới email khách." : "⚠️ Chưa gửi được email hoá đơn — kiểm tra SMTP."}</p></div></body></html>`);
   } catch (err) {
     console.error("ai confirm-link failed:", err);
     res.status(500).send("Lỗi xác nhận. Liên hệ support@meetflowai.site");
@@ -620,14 +620,14 @@ app.post("/v1/admin/ai/payments/:orderCode/confirm", requireAdminAuth, async (re
   try {
     const order = await aiStore.markPendingPaymentPaid(req.params.orderCode);
     if (!order) return res.status(404).json({ error: "Order not found or already paid" });
-    await activateAiProAndInvoice({
+    const activated = await activateAiProAndInvoice({
       orderCode: order.orderCode,
       email: order.email,
       plan: order.plan,
       method: order.method,
       lang: order.lang,
     });
-    res.json({ ok: true, email: order.email });
+    res.json({ ok: true, email: order.email, mailSent: activated?.mailSent === true, mailError: activated?.mailError ?? null });
   } catch (err) {
     console.error("ai admin confirm failed:", err);
     res.status(500).json({ error: "Internal error" });
@@ -939,22 +939,41 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
     productId: `meetflow.${method}.${plan}`,
     lang: pickMailLang(lang),
   });
-  const invoiceResult = await sendAiInvoiceEmail({
-    to: email,
-    orderCode,
-    planLabel: planCfg.label,
-    amount: planCfg.amount,
-    days: planCfg.days,
-    activatedAt: new Date().toISOString(),
-    expiresAt: ent?.expires_at ?? null,
-    guideUrl: `${siteBaseUrl()}/ai/guide`,
-    lang,
-    oneTime: AI_PLANS[plan]?.oneTime === true,
-  });
+
+  // Confirmation + invoice mail goes out automatically right after the payment
+  // is confirmed. Retry once so a transient SMTP hiccup does not silently leave
+  // the customer without a receipt; the outcome is returned to the admin.
+  let mailSent = false;
+  let mailError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const invoiceResult = await sendAiInvoiceEmail({
+        to: email,
+        orderCode,
+        planLabel: planCfg.label,
+        amount: planCfg.amount,
+        days: planCfg.days,
+        activatedAt: new Date().toISOString(),
+        expiresAt: ent?.expires_at ?? null,
+        guideUrl: `${siteBaseUrl()}/ai/guide`,
+        lang,
+        oneTime: AI_PLANS[plan]?.oneTime === true,
+      });
+      if (invoiceResult?.sent === true) {
+        mailSent = true;
+        break;
+      }
+      mailError = "mailer returned sent=false";
+    } catch (err) {
+      mailError = err?.message ?? String(err);
+      console.error(`ai-invoice: attempt ${attempt} failed for ${email} (order ${orderCode}):`, mailError);
+    }
+    if (attempt === 1) await new Promise((r) => setTimeout(r, 2000));
+  }
   console.log(
-    `ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode}) mailSent=${invoiceResult?.sent === true}`,
+    `ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode}) mailSent=${mailSent}${mailError ? ` err=${mailError}` : ""}`,
   );
-  return ent;
+  return { entitlement: ent, mailSent, mailError };
 }
 
 /** Owner alert for a new MeetFlow Pro order (confirm link is product-scoped). */
