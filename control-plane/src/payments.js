@@ -157,6 +157,12 @@ const TEXTS = {
     supportLabel: "Support",
         testflightSub: "Join the beta",
         noteExtra: "Pro is activated for the email you enter above. If it is not active within 10 minutes after your transfer, contact support@meetflowai.site.",
+        howToTitle: "How to activate after buying",
+    iosLineStore: "Available on the App Store — install it, then sign in with the same email you used here; Premium unlocks automatically.",
+    iosLineTestflight: "iOS beta via TestFlight — join, install, then sign in with this email.",
+    iosLineSoon: "iOS version is coming to the App Store.",
+    androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.",
+    steps: ["Download and install the app (iOS: App Store · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
     errCreate: "Could not create payment.",
@@ -212,6 +218,12 @@ const TEXTS = {
     supportLabel: "Hỗ trợ",
         testflightSub: "Tham gia bản thử",
         noteExtra: "Pro được kích hoạt theo email bạn nhập ở trên. Nếu sau 10 phút chuyển khoản vẫn chưa thấy kích hoạt, liên hệ support@meetflowai.site.",
+        howToTitle: "Cách kích hoạt sau khi mua",
+    iosLineStore: "Đã có trên App Store — tải về, rồi đăng nhập bằng đúng email bạn dùng ở trang này; Premium tự bật.",
+    iosLineTestflight: "Bản iOS thử nghiệm qua TestFlight — tham gia, cài đặt, rồi đăng nhập bằng email này.",
+    iosLineSoon: "Bản iOS đang chờ phát hành trên App Store.",
+    androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.",
+    steps: ["Tải và cài app (iOS: App Store · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
     errCreate: "Lỗi tạo thanh toán.",
@@ -267,6 +279,12 @@ const TEXTS = {
     supportLabel: "支持",
         testflightSub: "加入测试版",
         noteExtra: "Pro 将为您在上方填写的邮箱激活。若转账后 10 分钟内仍未激活，请联系 support@meetflowai.site。",
+        howToTitle: "购买后如何激活",
+    iosLineStore: "已在 App Store 上架 — 下载后使用本页填写的同一邮箱登录，Premium 自动开启。",
+    iosLineTestflight: "iOS 测试版通过 TestFlight — 加入并安装后，用此邮箱登录。",
+    iosLineSoon: "iOS 版本即将在 App Store 上架。",
+    androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。",
+    steps: ["下载并安装应用（iOS：App Store · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
     errCreate: "无法创建支付。",
@@ -322,6 +340,12 @@ const TEXTS = {
     supportLabel: "サポート",
         testflightSub: "ベータに参加",
         noteExtra: "Pro は上に入力したメールに有効化されます。送金後 10 分以上経っても有効にならない場合は support@meetflowai.site までご連絡ください。",
+        howToTitle: "購入後の有効化方法",
+    iosLineStore: "App Store で配信中 — インストール後、このページで使った同じメールでサインインすると Premium が有効になります。",
+    iosLineTestflight: "iOS ベータは TestFlight で配布中 — 参加・インストール後、このメールでサインインしてください。",
+    iosLineSoon: "iOS 版は App Store で近日公開予定です。",
+    androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。",
+    steps: ["アプリをダウンロードしてインストール（iOS：App Store · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
     errCreate: "支払いを作成できませんでした。",
@@ -377,6 +401,12 @@ const TEXTS = {
     supportLabel: "지원",
         testflightSub: "베타 참여",
         noteExtra: "Pro는 위에 입력한 이메일로 활성화됩니다. 송금 후 10분이 지나도 활성화되지 않으면 support@meetflowai.site로 문의하세요.",
+        howToTitle: "구매 후 활성화 방법",
+    iosLineStore: "App Store에서 제공 중 — 설치 후 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동으로 활성화됩니다.",
+    iosLineTestflight: "iOS 베타는 TestFlight로 제공 — 참여 후 설치하고 이 이메일로 로그인하세요.",
+    iosLineSoon: "iOS 버전은 곧 App Store에 출시됩니다.",
+    androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.",
+    steps: ["앱을 내려받아 설치합니다 (iOS: App Store · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
     errCreate: "결제를 만들 수 없습니다.",
@@ -424,6 +454,8 @@ const AI_TEXTS = {
   en: {
     dlTitle: "Get the MeetFlow AI app",
     dlSub: "Don't have the app yet? Download it here:",
+        iosLineStore: "Available on the App Store — subscribe inside the iOS app with Apple.",
+    steps: ["Buy on this page and keep the email you entered.", "Android: download the APK above and install it (allow installs from unknown sources).", "Open the app → upgrade screen → \"Bought on the web?\" → enter this email → tap Activate Pro."],
     pageTitle: "MeetFlow AI — Buy Pro",
     sub: "Unlock AI translation and meeting minutes",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -437,6 +469,8 @@ const AI_TEXTS = {
   vi: {
     dlTitle: "Tải app MeetFlow AI",
     dlSub: "Chưa có app? Tải về tại đây:",
+        iosLineStore: "Đã có trên App Store — gói được mua trực tiếp trong app iOS qua Apple.",
+    steps: ["Mua trên trang này và giữ lại email bạn đã nhập.", "Android: tải file APK ở trên và cài vào máy (bật \"Cài từ nguồn không xác định\").", "Mở app → màn hình nâng cấp → \"Đã mua trên web?\" → nhập email vừa mua → bấm Kích hoạt Pro."],
     pageTitle: "MeetFlow AI — Mua Pro",
     sub: "Mở khoá dịch AI và biên bản cuộc họp",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -450,6 +484,8 @@ const AI_TEXTS = {
   zh: {
     dlTitle: "获取 MeetFlow AI 应用",
     dlSub: "还没有应用？在此下载：",
+        iosLineStore: "已在 App Store 上架 — 请在 iOS 应用内通过 Apple 订阅。",
+    steps: ["在本页购买，并记住您填写的邮箱。", "Android：下载上方 APK 并安装（允许“未知来源”安装）。", "打开应用 → 升级页面 → “已在网页购买？” → 输入该邮箱 → 点击“激活 Pro”。"],
     pageTitle: "MeetFlow AI — 购买 Pro",
     sub: "解锁 AI 翻译与会议纪要",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -463,6 +499,8 @@ const AI_TEXTS = {
   ja: {
     dlTitle: "MeetFlow AI アプリを入手",
     dlSub: "アプリをお持ちでない場合はこちらから：",
+        iosLineStore: "App Store で配信中 — iOS アプリ内で Apple 経由でご購入ください。",
+    steps: ["このページで購入し、入力したメールを控えてください。", "Android：上の APK をダウンロードしてインストール（提供元不明を許可）。", "アプリを開く → アップグレード画面 → 「ウェブで購入済み？」 → このメールを入力 → 「Pro を有効化」をタップ。"],
     pageTitle: "MeetFlow AI — Pro を購入",
     sub: "AI翻訳と議事録を解放",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -476,6 +514,8 @@ const AI_TEXTS = {
   ko: {
     dlTitle: "MeetFlow AI 앱 받기",
     dlSub: "아직 앱이 없으신가요? 여기에서 받으세요:",
+        iosLineStore: "App Store에서 제공 중 — iOS 앱 안에서 Apple을 통해 구독하세요.",
+    steps: ["이 페이지에서 구매하고 입력한 이메일을 기억해 두세요.", "Android: 위의 APK를 내려받아 설치하세요(알 수 없는 출처 허용).", "앱 열기 → 업그레이드 화면 → \"웹에서 구매하셨나요?\" → 이 이메일 입력 → \"Pro 활성화\" 탭."],
     pageTitle: "MeetFlow AI — Pro 구매",
     sub: "AI 번역과 회의록 잠금 해제",
     logoHtml: "Meet<span>Flow</span> AI",
@@ -544,6 +584,13 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
   // link; the App Store badge wins when both exist.
   const testflightUrl = !iosUrl && links.testflight ? links.testflight : null;
   const anyDownload = Boolean(androidUrl || iosUrl || macUrl || testflightUrl);
+  // Activation instructions adapt to how iOS is distributed right now.
+  const iosLine = iosUrl
+    ? t.iosLineStore
+    : testflightUrl
+      ? t.iosLineTestflight
+      : t.iosLineSoon;
+  const howToSteps = Array.isArray(t.steps) ? t.steps : [];
   const showDownloads = anyDownload;
   const rows = localizedPlanRows(lang, product);
   const planHtml = rows.map((r, i) =>
@@ -627,6 +674,17 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       color: rgba(255,255,255,.62); background: rgba(255,255,255,.05);
       border: 1px solid rgba(255,255,255,.08); font-size: 11.5px; line-height: 1.55;
     }
+    .howto {
+      margin-top: 18px; padding: 14px; border-radius: 12px;
+      background: rgba(51,199,115,.07); border: 1px solid rgba(51,199,115,.22);
+    }
+    .howto-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+    .howto-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,.72); margin-bottom: 6px; }
+    .howto-row .plat {
+      flex: 0 0 auto; font-weight: 700; color: #33c773; min-width: 56px;
+    }
+    .howto-steps { margin: 10px 0 0 0; padding-left: 18px; }
+    .howto-steps li { font-size: 12px; line-height: 1.6; color: rgba(255,255,255,.82); margin-bottom: 4px; }
     .footer {
       margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.1);
       text-align: center; font-size: 12px;
@@ -765,6 +823,15 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       <div class="note">${t.note}</div>
       <div class="noteextra">ℹ️ ${t.noteExtra}</div>
     </form>
+
+    <div class="howto">
+      <div class="howto-title">📱 ${t.howToTitle}</div>
+      <div class="howto-row"><span class="plat">iOS</span><span>${iosLine}</span></div>
+      <div class="howto-row"><span class="plat">Android</span><span>${t.androidLine}</span></div>
+      <ol class="howto-steps">
+        ${howToSteps.map((step) => `<li>${step}</li>`).join("")}
+      </ol>
+    </div>
 
     <div class="footer">
       <a href="${meta.privacyUrl}" target="_blank" rel="noopener">${t.privacyLabel}</a>
