@@ -13,7 +13,9 @@ import nodemailer from "nodemailer";
  * owner, not the customer.
  */
 
-const DEFAULT_FROM_EMAIL = "FlowVPN <no-reply@meetflowai.site>";
+const DEFAULT_FROM_EMAIL = "VPNFlow <no-reply@meetflowai.site>";
+const AI_FROM_EMAIL = "MeetFlow AI <no-reply@meetflowai.site>";
+const REPLY_TO = "support@meetflowai.site";
 const SUPPORT_EMAIL = "support@meetflowai.site";
 
 export const MAIL_LANGS = ["vi", "en", "zh"];
@@ -56,11 +58,12 @@ const T = {
     openApp: "🚀 Mở ứng dụng",
     renewSubject: "Gói của bạn sắp hết hạn",
     renewIntro: (d) => `Gói <b>Premium</b> của bạn sẽ hết hạn sau <b>${d} ngày</b>.`,
-    renewBody: "Gia hạn ngay để không bị gián đoạn kết nối.",
+    renewBody: "Bấm nút bên dưới để gia hạn — email và gói của bạn đã được điền sẵn, chỉ cần chọn cách thanh toán rồi quét QR chuyển tiền là xong.",
     renewCta: "🔄 Gia hạn ngay",
     renewalFor: (to) => `Tài khoản: <b>${to}</b>`,
     expiresAt: (when) => `Hết hạn: ${when}`,
     support: "Cần hỗ trợ? Liên hệ",
+    renewHint: "Link mở sẵn trang thanh toán của bạn.",
   },
   en: {
     greeting: "Hello,",
@@ -92,11 +95,12 @@ const T = {
     openApp: "🚀 Open the app",
     renewSubject: "Your plan is about to expire",
     renewIntro: (d) => `Your <b>Premium</b> plan expires in <b>${d} days</b>.`,
-    renewBody: "Renew now so your connection is not interrupted.",
+    renewBody: "Tap the button below to renew — your email and plan are already filled in, so you only pick a payment method and scan the QR.",
     renewCta: "🔄 Renew now",
     renewalFor: (to) => `Account: <b>${to}</b>`,
     expiresAt: (when) => `Expires: ${when}`,
     support: "Need help? Contact",
+    renewHint: "The link opens your pre-filled checkout page.",
   },
   zh: {
     greeting: "您好，",
@@ -128,11 +132,12 @@ const T = {
     openApp: "🚀 打开应用",
     renewSubject: "您的套餐即将到期",
     renewIntro: (d) => `您的 <b>Premium</b> 套餐将在 <b>${d} 天</b>后到期。`,
-    renewBody: "立即续费，避免连接中断。",
+    renewBody: "点击下方按钮续费 — 您的邮箱和套餐已自动填好，只需选择支付方式并扫码付款即可。",
     renewCta: "🔄 立即续费",
     renewalFor: (to) => `账户：<b>${to}</b>`,
     expiresAt: (when) => `到期时间：${when}`,
     support: "需要帮助？请联系",
+    renewHint: "该链接会打开已填好信息的支付页面。",
   },
 };
 
@@ -159,6 +164,20 @@ function money(amount, lang) {
   } catch {
     return `${n} đ`;
   }
+}
+
+/** Crude HTML → text so every message ships a text/plain alternative. */
+function htmlToText(html) {
+  return String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
+    .replace(/<li>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function shell(body) {
@@ -243,7 +262,9 @@ export function renderRenewalEmail({ lang = "vi", to, daysLeft, expiresAt, buyUr
 <p>${t.renewIntro(daysLeft)}</p>
 <p>${t.renewalFor(to)}<br/>${t.expiresAt(fmtDate(expiresAt, lang))}</p>
 <p>${t.renewBody}</p>
-${buyUrl ? `<p><a href="${buyUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">${t.renewCta}</a></p>` : ""}
+<p style="color:#666;font-size:12px">${t.renewHint}</p>
+${buyUrl ? `<p><a href="${buyUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">${t.renewCta}</a></p>
+<p style="color:#666;font-size:12px;word-break:break-all">${buyUrl}</p>` : ""}
 <p style="color:#999;font-size:12px">${t.support} <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
 <p>${t.signature}</p>`),
   };
@@ -284,22 +305,25 @@ function smtpConfigured() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-async function deliver({ to, message, logTag, logContext }) {
+async function deliver({ to, message, logTag, logContext, from }) {
   if (!(process.env.NODE_ENV === "production" && smtpConfigured())) {
     console.log(`[${logTag}] (dev, no SMTP)`, logContext);
     return { sent: false };
   }
   try {
-    await transport().sendMail({
-      from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+    const info = await transport().sendMail({
+      from: from ?? process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
       subject: message.subject,
       html: message.html,
+      text: htmlToText(message.html),
     });
-    return { sent: true };
+    console.log(`[${logTag}] sent to ${to} accepted=${JSON.stringify(info.accepted)} id=${info.messageId}`);
+    return { sent: true, accepted: info.accepted, messageId: info.messageId };
   } catch (err) {
-    console.error(`${logTag} failed:`, redactError(err));
-    return { sent: false };
+    console.error(`${logTag} failed to ${to}:`, redactError(err), err?.response ?? "");
+    return { sent: false, error: err?.message ?? "send failed" };
   }
 }
 
@@ -309,12 +333,15 @@ export function createSendOtpEmail({ transporter } = {}) {
     const message = renderOtpEmail({ code, lang });
     if (process.env.NODE_ENV === "production" && smtpConfigured()) {
       try {
-        await (transporter ?? transport()).sendMail({
+        const info = await (transporter ?? transport()).sendMail({
           from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+          replyTo: REPLY_TO,
           to: email,
           subject: message.subject,
           html: message.html,
+          text: htmlToText(message.html),
         });
+        console.log(`[otp] sent to ${email} accepted=${JSON.stringify(info.accepted)} id=${info.messageId}`);
         return { sent: true };
       } catch (err) {
         console.error("sendOtpEmail failed:", redactError(err));
@@ -352,6 +379,7 @@ export async function sendAiInvoiceEmail({ to, lang, orderCode, planLabel, amoun
     }),
     logTag: "ai-invoice",
     logContext: { to, orderCode, lang: pickMailLang(lang) },
+    from: AI_FROM_EMAIL,
   });
 }
 

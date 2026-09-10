@@ -519,7 +519,7 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
     productId: `meetflow.${method}.${plan}`,
     lang: pickMailLang(lang),
   });
-  await sendAiInvoiceEmail({
+  const invoiceResult = await sendAiInvoiceEmail({
     to: email,
     orderCode,
     planLabel: planCfg.label,
@@ -527,11 +527,13 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
     days: planCfg.days,
     activatedAt: new Date().toISOString(),
     expiresAt: ent?.expires_at ?? null,
-    guideUrl: `${publicBaseUrl()}/ai/guide`,
+    guideUrl: `${siteBaseUrl()}/ai/guide`,
     lang,
     oneTime: AI_PLANS[plan]?.oneTime === true,
   });
-  console.log(`ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode})`);
+  console.log(
+    `ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode}) mailSent=${invoiceResult?.sent === true}`,
+  );
   return ent;
 }
 
@@ -779,7 +781,7 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
   // Deep link: opens the installed VPNFlow app (universal/app link via
   // meetflowai.site/open); falls back to the web page when not installed.
   const appUrl = "https://meetflowai.site/open";
-  await sendInvoiceEmail({
+  const invoiceResult = await sendInvoiceEmail({
     to: email,
     orderCode,
     planLabel: planCfg.label,
@@ -788,10 +790,12 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
     activatedAt: new Date().toISOString(),
     expiresAt: sub?.expiresAt ?? null,
     appUrl,
-    guideUrl: `${publicBaseUrl()}/guide`,
+    guideUrl: `${siteBaseUrl()}/guide`,
     lang,
   });
-  console.log(`invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode})`);
+  console.log(
+    `invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode}) mailSent=${invoiceResult?.sent === true}`,
+  );
   return user;
 }
 
@@ -806,6 +810,15 @@ async function firePaymentAlert(orderCode, email, plan, amount) {
   } catch (err) {
     console.error("firePaymentAlert failed:", err);
   }
+}
+
+/**
+ * Customer-facing site base (used for links inside emails: buy page, guides).
+ * Points at the pretty domain, not the api subdomain — better deliverability
+ * and more trustworthy for the customer.
+ */
+function siteBaseUrl() {
+  return (process.env.PUBLIC_SITE_URL || "https://meetflowai.site").replace(/\/$/, "");
 }
 
 // Public base URL helper (for PayOS return/cancel URLs).
@@ -1565,7 +1578,7 @@ async function runRenewalReminders() {
   try {
     const due = await authStore.listUsersDueForRenewalReminder();
     if (!due.length) return;
-    const buyUrl = `${publicBaseUrl()}/buy`; // per-customer link added below
+    const buyUrl = `${siteBaseUrl()}/buy`; // per-customer link added below
     for (const d of due) {
       const email = d.user.email;
       if (!email) continue;
@@ -1594,7 +1607,7 @@ async function runAiRenewalReminders() {
     if (!due.length) return;
     for (const d of due) {
       const lang = pickMailLang(d.lang);
-      const buyUrl = `${publicBaseUrl()}/ai/buy?lang=${lang}` +
+      const buyUrl = `${siteBaseUrl()}/ai/buy?lang=${lang}` +
         `&email=${encodeURIComponent(d.email)}` +
         `&plan=${encodeURIComponent(d.plan || "monthly")}`;
       const r = await sendRenewalReminder({
