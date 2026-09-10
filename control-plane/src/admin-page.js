@@ -242,6 +242,7 @@ export function adminPageHTML() {
       <button class="tab" id="tabUsers">Users</button>
       <button class="tab" id="tabStats">Dashboard</button>
       <button class="tab" id="tabPayments">Payments</button>
+      <button class="tab" id="tabAi">MeetFlow AI</button>
     </div>
 
     <!-- ===================== LIST VIEW ===================== -->
@@ -323,6 +324,29 @@ export function adminPageHTML() {
         <table>
           <thead><tr><th>Ma don</th><th>Email khach</th><th>Goi</th><th>Method</th><th>So tien</th><th>Ngay tao</th><th>Kich hoat</th><th>Het han</th><th>Trang thai</th><th>Action</th></tr></thead>
           <tbody id="paymentsBody"><tr><td colspan="10">Bam Refresh.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== MEETFLOW AI VIEW ===================== -->
+    <section class="card hidden" id="view-ai">
+      <h2>MeetFlow AI Pro — don cho xac nhan</h2>
+      <div class="actions">
+        <button id="loadAi">Refresh</button>
+        <span class="status-inline" id="aiStatus"></span>
+      </div>
+      <div style="overflow-x:auto; margin-top:12px;">
+        <table>
+          <thead><tr><th>Ma don</th><th>Email khach</th><th>Goi</th><th>Method</th><th>So tien</th><th>Ngay tao</th><th>Ngon ngu</th><th>Trang thai</th><th>Action</th></tr></thead>
+          <tbody id="aiBody"><tr><td colspan="9">Bam Refresh.</td></tr></tbody>
+        </table>
+      </div>
+
+      <h2 style="margin-top:26px">MeetFlow AI Pro — khach dang co Pro</h2>
+      <div style="overflow-x:auto; margin-top:12px;">
+        <table>
+          <thead><tr><th>Email</th><th>Goi</th><th>Kich hoat</th><th>Het han</th><th>Ma don</th><th>Trang thai</th></tr></thead>
+          <tbody id="aiEntBody"><tr><td colspan="6">Bam Refresh.</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -435,6 +459,11 @@ export function adminPageHTML() {
       paymentsBody: document.getElementById("paymentsBody"),
       paymentsStatus: document.getElementById("paymentsStatus"),
       loadPayments: document.getElementById("loadPayments"),
+      viewAi: document.getElementById("view-ai"),
+      loadAi: document.getElementById("loadAi"),
+      aiStatus: document.getElementById("aiStatus"),
+      aiBody: document.getElementById("aiBody"),
+      aiEntBody: document.getElementById("aiEntBody"),
     };
 
     let editingId = null; // null = create mode
@@ -478,6 +507,7 @@ export function adminPageHTML() {
       fields.viewUsers.classList.toggle("hidden", tab !== "users");
       fields.viewStats.classList.toggle("hidden", tab !== "stats");
       fields.viewPayments.classList.toggle("hidden", tab !== "payments");
+      if (fields.viewAi) fields.viewAi.classList.toggle("hidden", tab !== "ai");
       fields.viewEdit.classList.add("hidden");
       if (tab === "users" && !fields.usersLoaded) {
         fields.usersLoaded = true;
@@ -485,6 +515,7 @@ export function adminPageHTML() {
       }
       if (tab === "stats") loadStats();
       if (tab === "payments") loadPayments();
+      if (tab === "ai") loadAi();
     }
 
     async function loadUsers() {
@@ -970,10 +1001,70 @@ export function adminPageHTML() {
     }
     fields.loadPayments.onclick = loadPayments;
 
+    // ---------------- MeetFlow AI Pro (web purchases) ----------------
+    async function loadAi() {
+      try {
+        fields.aiStatus.textContent = "Loading...";
+        const data = await request("/v1/admin/ai/payments/pending");
+        const orders = data.orders || [];
+        fields.aiBody.innerHTML = "";
+        if (!orders.length) fields.aiBody.innerHTML = '<tr><td colspan="9">Khong co don cho xac nhan.</td></tr>';
+        for (const o of orders) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = "<td>#" + o.orderCode + "</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+          const tds = tr.querySelectorAll("td");
+          tds[1].textContent = o.email;
+          tds[2].textContent = o.plan;
+          tds[3].textContent = o.method || "-";
+          tds[4].textContent = "-";
+          tds[5].textContent = new Date(o.createdAt).toLocaleString();
+          tds[6].textContent = o.lang || "-";
+          tds[7].textContent = "Cho xac nhan";
+          tds[7].style.color = "var(--warning)";
+          const btn = document.createElement("button");
+          btn.textContent = "Xac nhan da nhan tien";
+          btn.onclick = () => confirmAiOrder(o.orderCode);
+          tds[8].appendChild(btn);
+          fields.aiBody.appendChild(tr);
+        }
+        fields.aiStatus.textContent = orders.length + " don cho xac nhan.";
+
+        const entData = await request("/v1/admin/ai/entitlements");
+        const ents = entData.entitlements || [];
+        fields.aiEntBody.innerHTML = "";
+        if (!ents.length) fields.aiEntBody.innerHTML = '<tr><td colspan="6">Chua co khach nao.</td></tr>';
+        for (const e of ents) {
+          const active = !e.expiresAt || Date.parse(e.expiresAt) > Date.now();
+          const tr = document.createElement("tr");
+          tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td>";
+          const tds = tr.querySelectorAll("td");
+          tds[0].textContent = e.email;
+          tds[1].textContent = e.plan || "-";
+          tds[2].textContent = e.grantedAt ? new Date(e.grantedAt).toLocaleString() : "-";
+          tds[3].textContent = e.expiresAt ? new Date(e.expiresAt).toLocaleString() : "Khong gioi han";
+          tds[4].textContent = e.orderCode ? "#" + e.orderCode : "-";
+          tds[5].textContent = active ? "Dang hoat dong" : "Het han";
+          tds[5].style.color = active ? "var(--accent)" : "var(--muted)";
+          fields.aiEntBody.appendChild(tr);
+        }
+      } catch (error) { fields.aiStatus.textContent = error.message; }
+    }
+
+    async function confirmAiOrder(orderCode) {
+      if (!confirm("Xac nhan da nhan tien don MeetFlow AI #" + orderCode + "? Pro se kich hoat ngay.")) return;
+      try {
+        await request("/v1/admin/ai/payments/" + orderCode + "/confirm", { method: "POST" });
+        loadAi();
+      } catch (error) { fields.aiStatus.textContent = error.message; }
+    }
+
+    if (fields.loadAi) fields.loadAi.onclick = loadAi;
+
     document.getElementById("tabNodes").onclick = () => showTab("nodes");
     document.getElementById("tabUsers").onclick = () => showTab("users");
     document.getElementById("tabStats").onclick = () => showTab("stats");
     document.getElementById("tabPayments").onclick = () => showTab("payments");
+    document.getElementById("tabAi").onclick = () => showTab("ai");
     document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;

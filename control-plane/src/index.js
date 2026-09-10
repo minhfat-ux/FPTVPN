@@ -113,6 +113,13 @@ const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   minimum_ios_version: DEFAULT_MIN_VERSION,
   latest_ios_version: DEFAULT_LATEST_VERSION,
   app_store_url: DEFAULT_STORE_URL,
+  // MeetFlow AI Android (APK sideload) release channel — drives the in-app
+  // required-update gate. 0 disables the gate.
+  ai_android_latest_version_code: Number(process.env.AI_ANDROID_LATEST_CODE ?? 0),
+  ai_android_minimum_version_code: Number(process.env.AI_ANDROID_MIN_CODE ?? 0),
+  ai_android_latest_version_name: process.env.AI_ANDROID_LATEST_NAME ?? "",
+  ai_android_apk_url: process.env.AI_ANDROID_APK_URL ?? "",
+  ai_android_notes: process.env.AI_ANDROID_NOTES ?? "",
 });
 
 const app = express();
@@ -236,6 +243,26 @@ app.get("/v1/nodes", listPublicNodes);
  *   APP_STORE_URL_MEETFLOW_MAC   → MeetFlow AI macOS
  * The Android link always works — the APK is served by this control plane.
  */
+/**
+ * Payment methods that can actually be used right now: bank QR needs the
+ * account, the wallet methods need their collection QR uploaded, PayOS needs
+ * gateway credentials. Keeps dead buttons off the buy page.
+ */
+function availablePaymentMethods() {
+  const methods = [];
+  if (bankQrConfig()) methods.push("bankqr");
+  const qrDir = process.env.PAY_QR_DIR || "/root/flowvpn-pay";
+  for (const name of ["wechat", "alipay"]) {
+    if (fs.existsSync(path.join(qrDir, `${name}.png`))) methods.push(name);
+  }
+  // MoMo: either the dynamic VietQR config or the static collection image.
+  if (momoQrConfig() || fs.existsSync(path.join(qrDir, "momo.png"))) methods.push("momo");
+  if (process.env.PAYOS_CLIENT_ID && process.env.PAYOS_API_KEY && process.env.PAYOS_CHECKSUM_KEY) {
+    methods.push("payos");
+  }
+  return methods;
+}
+
 function storeLinks(product) {
   const base = publicBaseUrl();
   return product === "ai"
@@ -275,6 +302,7 @@ app.get(["/buy", "/buy/"], (req, res) => {
       links: storeLinks("vpn"),
       prefillEmail: String(req.query?.email ?? "").slice(0, 120),
       prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
+      methods: availablePaymentMethods(),
     }),
   );
 });
@@ -332,6 +360,7 @@ app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
       links: storeLinks("ai"),
       prefillEmail: String(req.query?.email ?? "").slice(0, 120),
       prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
+      methods: availablePaymentMethods(),
     }),
   );
 });
@@ -1013,6 +1042,38 @@ app.get("/v1/app-version", (_req, res) => {
     latest_version: appConfig.get("latest_ios_version"),
     store_url: appConfig.get("app_store_url"),
   });
+});
+
+/** MeetFlow AI Android release channel (drives the in-app update gate). */
+function aiAndroidVersion() {
+  const base = siteBaseUrl();
+  const apkUrl = appConfig.get("ai_android_apk_url") || `${base}/v1/ai/downloads/android`;
+  return {
+    platform: "android",
+    latest_version_code: Number(appConfig.get("ai_android_latest_version_code") ?? 0),
+    minimum_version_code: Number(appConfig.get("ai_android_minimum_version_code") ?? 0),
+    latest_version_name: appConfig.get("ai_android_latest_version_name") || null,
+    apk_url: apkUrl,
+    notes: appConfig.get("ai_android_notes") || null,
+  };
+}
+
+app.get("/v1/ai/app-version", (_req, res) => {
+  res.json(aiAndroidVersion());
+});
+
+app.get("/v1/admin/ai/app-version", requireAdminAuth, (_req, res) => {
+  res.json(aiAndroidVersion());
+});
+
+app.patch("/v1/admin/ai/app-version", requireAdminAuth, (req, res) => {
+  const { latest_version_code, minimum_version_code, latest_version_name, apk_url, notes } = req.body ?? {};
+  if (latest_version_code !== undefined) appConfig.set("ai_android_latest_version_code", latest_version_code);
+  if (minimum_version_code !== undefined) appConfig.set("ai_android_minimum_version_code", minimum_version_code);
+  if (latest_version_name !== undefined) appConfig.set("ai_android_latest_version_name", latest_version_name);
+  if (apk_url !== undefined) appConfig.set("ai_android_apk_url", apk_url);
+  if (notes !== undefined) appConfig.set("ai_android_notes", notes);
+  res.json(aiAndroidVersion());
 });
 
 app.get("/v1/admin/app-version", requireAdminAuth, (_req, res) => {
