@@ -424,30 +424,39 @@ enum PaywallDistribution {
     case appStore
     case direct
 
+    /// The App Store archive is built with `-DPAYWALL_APPSTORE` (see
+    /// `scripts/archive-appstore.sh`): that binary sells with In-App Purchase
+    /// only, so it can never present an out-of-app payment path (Guideline 3.1.1
+    /// / 3.1.3).
+    ///
+    /// Every other build is one we distribute ourselves (TestFlight / sideload),
+    /// where the web buy page IS the payment channel — it is the default there,
+    /// and can be switched for testing with:
+    ///   defaults write com.privatevpn.app flowvpn.paywallMode appstore
     static var current: PaywallDistribution {
-        #if DEBUG
-        // Direct builds opt in explicitly, e.g.:
-        //   defaults write com.privatevpn.app flowvpn.paywallMode direct
-        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "direct"
-            ? .direct
-            : .appStore
-        #else
-        // Release (App Store) builds always use In-App Purchase. The web buy page
-        // is compiled in but unreachable, so a submitted binary can never present
-        // an out-of-app payment path (Guideline 3.1.1 / 3.1.3).
+        #if PAYWALL_APPSTORE
         return .appStore
+        #else
+        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "appstore"
+            ? .appStore
+            : .direct
         #endif
     }
 }
 
 struct PaywallView: View {
     var body: some View {
+        #if PAYWALL_APPSTORE
+        // App Store build: In-App Purchase is the only payment path that exists.
+        StoreKitPaywallView()
+        #else
         switch PaywallDistribution.current {
         case .appStore:
             StoreKitPaywallView()
         case .direct:
             WebBuyPaywallView()
         }
+        #endif
     }
 }
 

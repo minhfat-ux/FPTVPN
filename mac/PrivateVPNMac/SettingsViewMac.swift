@@ -422,17 +422,17 @@ enum MacPaywallDistribution {
     case appStore
     case direct
 
+    /// See the iOS `PaywallDistribution` note: the App Store archive is built
+    /// with `-DPAYWALL_APPSTORE` and sells with In-App Purchase only, while every
+    /// build we distribute ourselves defaults to the web buy page.
+    ///   defaults write com.privatevpn.mac flowvpn.paywallMode appstore
     static var current: MacPaywallDistribution {
-        #if DEBUG
-        // Direct builds opt in explicitly, e.g.:
-        //   defaults write com.privatevpn.mac flowvpn.paywallMode direct
-        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "direct"
-            ? .direct
-            : .appStore
-        #else
-        // Release (App Store) builds always use In-App Purchase — see the iOS
-        // PaywallDistribution note (Guideline 3.1.1 / 3.1.3).
+        #if PAYWALL_APPSTORE
         return .appStore
+        #else
+        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "appstore"
+            ? .appStore
+            : .direct
         #endif
     }
 }

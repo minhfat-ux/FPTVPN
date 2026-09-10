@@ -11,8 +11,8 @@ Mục tiêu: bản nộp lên App Store **chỉ dùng In-App Purchase (StoreKit)
 
 | Việc | Chi tiết |
 |---|---|
-| Paywall mặc định = StoreKit | `PaywallDistribution` (iOS) / `MacPaywallDistribution` (macOS). Release **luôn** trả `.appStore`; chế độ `direct` (mở trang web `/buy`) chỉ còn ở build `DEBUG`. |
-| Tuân thủ 3.1.1 / 3.1.3 | Không còn link/CTA ra ngoài để mua gói. Trang web buy vẫn có trong binary nhưng **không thể tới được** ở Release. |
+| Paywall theo kênh phát hành | Cờ biên dịch `PAYWALL_APPSTORE` (script `scripts/archive-appstore.sh`) → bản nộp **chỉ có StoreKit**. Bản không cờ (TestFlight/sideload) → mặc định mở trang web `/buy` của mình. |
+| Tuân thủ 3.1.1 / 3.1.3 | Ở bản có `PAYWALL_APPSTORE`, `PaywallView` chỉ dựng `StoreKitPaywallView` — không còn nhánh nào mở được trang web. |
 | Khai báo 3.1.2 | `StoreKitPaywallView` có giá, chu kỳ, "tự động gia hạn", link Điều khoản (EULA) + Chính sách riêng tư + nút **Restore Purchases**. |
 | Mã hoá | `ITSAppUsesNonExemptEncryption = false` trong Info.plist (iOS + macOS) → không phải trả lời câu hỏi export compliance mỗi lần upload. |
 | Force update | `/v1/app-version` + `ForceUpdateView`. Nút Update nay fallback sang App Store search khi server chưa có `store_url`. |
@@ -128,37 +128,56 @@ Notes:
 
 ## 3. Build & export IPA
 
+### Cách chuẩn: dùng script (khuyến nghị)
+
 ```bash
 cd /Volumes/BIWIN/SourcesCode/PrivateVPN
+./scripts/archive-appstore.sh ios     # macOS: ./scripts/archive-appstore.sh mac
+# -> build/ios-export/ipa/PrivateVPN.ipa   (upload lên App Store Connect)
+```
 
-# 1) Sinh lại project nếu có sửa project.yml
-xcodegen generate --spec project.yml --project .
+Script archive kèm cờ biên dịch **`PAYWALL_APPSTORE`** — đây là điều kiện để bản
+nộp chỉ có In-App Purchase. **Không** archive tay rồi nộp: bản Release archive
+kiểu thường vẫn giữ trang mua web (đúng cho TestFlight/kênh tự phát hành, nhưng
+nộp lên App Store sẽ bị từ chối theo 3.1.1/3.1.3).
 
-# 2) Archive (Release, thiết bị thật)
-rm -rf build/ios-export && mkdir -p build/ios-export
+| Bản build | Cờ | Paywall |
+|---|---|---|
+| **Nộp App Store** | `PAYWALL_APPSTORE` (script) | Chỉ StoreKit, không có đường dẫn web |
+| TestFlight / sideload (kênh tự bán) | không cờ | Mặc định mở trang web `/buy` của mình |
+
+Đổi qua lại để test trên máy:
+
+```bash
+# bản không cờ: bắt buộc dùng StoreKit để thử IAP
+defaults write com.privatevpn.app flowvpn.paywallMode appstore
+# quay lại web
+defaults delete com.privatevpn.app flowvpn.paywallMode
+```
+
+### Cách thủ công (nếu cần)
+
+```bash
+xcodegen generate --spec project.yml --project .   # nếu vừa sửa project.yml
+
 xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN \
   -configuration Release -destination 'generic/platform=iOS' \
-  -archivePath build/ios-export/PrivateVPN.xcarchive archive \
-  -allowProvisioningUpdates
-
-# 3) Export IPA để upload
-cat > build/ios-export/ExportOptions.plist <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>method</key><string>app-store</string>
-  <key>teamID</key><string>G6XW3RN6LJ</string>
-  <key>uploadSymbols</key><true/>
-  <key>compileBitcode</key><false/>
-  <key>destination</key><string>export</string>
-</dict></plist>
-PLIST
+  -archivePath build/ios-export/PrivateVPN.xcarchive \
+  SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PAYWALL_APPSTORE' \
+  archive -allowProvisioningUpdates
 
 xcodebuild -exportArchive \
   -archivePath build/ios-export/PrivateVPN.xcarchive \
   -exportOptionsPlist build/ios-export/ExportOptions.plist \
-  -exportPath build/ios-export/ipa \
-  -allowProvisioningUpdates
+  -exportPath build/ios-export/ipa -allowProvisioningUpdates
+```
+
+`ExportOptions.plist` (đã tạo sẵn bởi script):
+
+```xml
+<key>method</key><string>app-store-connect</string>   <!-- Xcode 26; "app-store" vẫn chạy nhưng deprecated -->
+<key>teamID</key><string>G6XW3RN6LJ</string>
+<key>uploadSymbols</key><true/>
 ```
 
 Upload: **Xcode → Window → Organizer → Distribute App**, hoặc
@@ -168,15 +187,13 @@ xcrun altool --upload-app -f build/ios-export/ipa/PrivateVPN.ipa \
   -t ios --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>   # cần API key App Store Connect
 ```
 
-macOS (nếu nộp luôn): đổi scheme `PrivateVPNMac`, `-destination 'generic/platform=macOS'`,
-`method` = `app-store`.
-
----
-
 ## 4. Kiểm tra trước khi bấm Submit
 
-- [ ] Build Release trên máy thật: mở màn Subscription → thấy **gói IAP + giá**, có
+- [ ] Cài bản IPA **do `scripts/archive-appstore.sh` tạo** lên máy thật (TestFlight
+      internal trước cũng được), mở màn Subscription → thấy **gói IAP + giá**, có
       Restore Purchases, có link EULA/Privacy. **Không** thấy trang web thanh toán.
+- [ ] Kiểm tra IPA có đúng bản App Store: `unzip -p <ipa> Payload/FlowVPN.app/FlowVPN | strings | grep -c "meetflowai.site/buy"`
+      → 0 là tốt (trang web đã bị loại khỏi bản nộp).
 - [ ] Đăng nhập bằng `review@meetflowai.site` + `246810` → Premium hiện đúng.
 - [ ] Kết nối VPN thành công trên thiết bị thật (không chỉ simulator).
 - [ ] Không có chữ nào nhắc "chuyển khoản", "VietQR", "MoMo", "WeChat Pay", "Alipay"
