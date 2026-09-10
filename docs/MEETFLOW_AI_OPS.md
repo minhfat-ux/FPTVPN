@@ -191,6 +191,65 @@ DELETE /v1/admin/ai/store/credentials             xoá key đã lưu
 - Doanh thu trong bảng Play chỉ là số ghi nhận từ giá Play trả về ở thời điểm mua; số liệu
   đối soát chính thức vẫn lấy từ Play Console (**Financial reports**).
 
+## 3d. Nhắc xác thực email
+
+Tài khoản đăng ký bằng email/mật khẩu trong Firebase bắt đầu ở trạng thái **chưa xác thực**.
+Những tài khoản này nếu quên mật khẩu thì không có đường vào lại, và cũng không nhận được
+email đặt lại mật khẩu. Vì app đăng nhập ẩn danh, chỉ control plane phát hiện và nhắc được.
+
+### Tự động
+
+Job chạy **mỗi 6 giờ** (lần đầu sau khi service khởi động 150 giây):
+
+- Chỉ gửi cho tài khoản **có email, chưa xác thực, không bị khoá**, và **tạo cách đây trên 24 giờ**.
+- **Cách nhau 7 ngày**, tối đa **3 lần** cho mỗi email (đếm trong `data/ai-users.json`).
+- Ngôn ngữ: theo ngôn ngữ đã lưu của email → theo domain (qq/163/126/sina/foxmail/aliyun/yeah → tiếng Trung) → còn lại tiếng Việt.
+- Tắt job: `Environment=VERIFY_REMINDERS=0` trong systemd drop-in.
+- Tinh chỉnh: `VERIFY_REMINDER_INTERVAL_MS`, `VERIFY_REMINDER_MIN_AGE_MS`,
+  `VERIFY_REMINDER_SPACING_MS`, `VERIFY_REMINDER_MAX`, `VERIFY_LINK_TTL_DAYS`.
+
+Log kiểm tra:
+
+```bash
+journalctl -u flowvpn-cp --no-pager | grep -E "verify-email|verify-reminder"
+# verify-email: to=a@b.com lang=vi reason=scheduled sent=true reminder#1
+# verify-reminder run: sent=1 skipped=2
+```
+
+### Gửi tay trên dashboard
+
+Tab **AI Users** → mục *Tài khoản Firebase Auth*:
+
+- Mỗi dòng chưa xác thực có nút **Gửi email xác thực**.
+- Nút **📧 Gửi email xác thực cho tất cả (chưa xác thực)** gửi một lượt cho mọi tài khoản
+  chưa xác thực (vẫn tôn trọng khoảng cách 7 ngày / tối đa 3 lần).
+- Trong panel chi tiết user cũng có nút gửi.
+- Thẻ KPI **"Chưa xác thực email"** cho biết còn bao nhiêu tài khoản.
+
+### Link xác thực hoạt động thế nào
+
+```
+Email của mình  →  https://api.meetflowai.site/v1/ai/verify-email/confirm?t=<token ký HMAC>
+                     └─ token hạn 30 ngày, ký bằng VERIFY_LINK_SECRET (mặc định AUTH_TOKEN)
+                     └─ server xin Firebase link xác thực MỚI rồi 302 sang đó
+                          └─ Firebase xác thực email → emailVerified = true (dashboard cập nhật sau ~60 giây)
+```
+
+Vì sao không gửi thẳng link Firebase: link Firebase **hết hạn rất nhanh** và Firebase chặn
+`continueUrl` nếu domain chưa được allowlist (`auth/unauthorized-continue-uri`). Link của mình
+sống 30 ngày và sinh link Firebase mới ngay lúc khách bấm.
+
+### API
+
+```
+GET  /v1/ai/verify-email/confirm?t=…                        (public, link trong email)
+POST /v1/admin/ai/firebase/users/:uid/verify-email          { email, force? }  gửi 1 tài khoản
+POST /v1/admin/ai/verify-email/remind                       { force? }         gửi tất cả chưa xác thực
+```
+
+Trả về `reason` khi không gửi: `too-soon` (vừa nhắc trong 7 ngày), `max-reminders` (đã 3 lần),
+`delivery-failed`, `error`. `force: true` bỏ qua khoảng cách và giới hạn (dùng khi khách xin lại).
+
 ## 4. Phát hành bản Android mới (bắt buộc cập nhật)
 
 ```bash

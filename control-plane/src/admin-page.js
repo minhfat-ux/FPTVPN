@@ -525,6 +525,7 @@ export function adminPageHTML() {
       <h2 style="margin-top:26px">Tài khoản Firebase Auth (đăng ký gốc)</h2>
       <div class="actions">
         <button class="secondary" id="loadFirebaseUsers">Tải danh sách Firebase</button>
+        <button id="remindVerify">📧 Gửi email xác thực cho tất cả (chưa xác thực)</button>
         <span class="status-inline" id="fbStatus"></span>
       </div>
       <div style="overflow-x:auto; margin-top:10px;">
@@ -1371,6 +1372,8 @@ export function adminPageHTML() {
         ["Doanh thu Pro (web)", aiuMoney(stats.revenue), aiuNum(stats.ordersPending) + " đơn chờ xác nhận", "revenue"],
         ["Gói mua qua store", aiuNum(stats.storePurchases || 0),
           aiuNum(stats.storeVerified || 0) + " đã xác thực · " + aiuNum(stats.storeActive || 0) + " đang hiệu lực", ""],
+        ["Chưa xác thực email", aiuNum((stats.firebase && stats.firebase.unverified) || 0),
+          "tự động nhắc tối đa " + "3 lần, cách nhau 7 ngày", stats.firebase && stats.firebase.unverified ? "warn" : ""],
         ["Tài khoản Firebase", stats.firebase && stats.firebase.configured ? aiuNum(stats.firebase.count) : "chưa kết nối",
           stats.firebase && stats.firebase.linked ? aiuNum(stats.firebase.linked) + " khớp với dữ liệu Pro" : "dán key ở khung phía trên", ""],
       ];
@@ -1614,6 +1617,12 @@ export function adminPageHTML() {
           revoke.onclick = function () { aiuRevoke(u.email); };
           actions.appendChild(revoke);
         }
+        if (u.firebase && !u.firebase.emailVerified) {
+          var remindBtn = document.createElement("button");
+          remindBtn.textContent = "📧 Gửi email xác thực";
+          remindBtn.onclick = function (uid2, email2) { return function () { remindVerify(uid2, email2); }; }(u.firebase.uid, u.email);
+          actions.appendChild(remindBtn);
+        }
         if (u.firebase) {
           var lock = document.createElement("button");
           lock.className = "secondary";
@@ -1712,6 +1721,38 @@ export function adminPageHTML() {
         await loadAiUsers();
       } catch (error) {
         fields.aiuStatusLine.textContent = error.message;
+      }
+    }
+
+    // ---------------- Email verification reminders ----------------
+    async function remindVerify(uid, email) {
+      if (!confirm("Gửi email nhắc xác thực tới " + email + "?")) return;
+      try {
+        fields.fbStatus.textContent = "Đang gửi tới " + email + "...";
+        var data = await request("/v1/admin/ai/firebase/users/" + encodeURIComponent(uid) + "/verify-email", {
+          method: "POST",
+          body: JSON.stringify({ email: email }),
+        });
+        fields.fbStatus.textContent = data.sent
+          ? "✅ Đã gửi email xác thực tới " + email + " (lần " + data.count + ")"
+          : "⚠️ Chưa gửi được: " + (data.reason || "không rõ") + (data.lastAt ? " · lần trước " + aiuFmtDate(data.lastAt) : "");
+        if (data.sent) await loadFirebaseUsers();
+      } catch (error) {
+        fields.fbStatus.textContent = error.message;
+      }
+    }
+
+    async function remindVerifyBulk() {
+      if (!confirm("Gửi email xác thực cho TẤT CẢ tài khoản chưa xác thực?\\n(Chỉ gửi cho ai chưa được nhắc trong 7 ngày qua, tối đa 3 lần.)")) return;
+      try {
+        fields.fbStatus.textContent = "Đang gửi hàng loạt...";
+        var data = await request("/v1/admin/ai/verify-email/remind", { method: "POST", body: JSON.stringify({}) });
+        fields.fbStatus.textContent = "Đã gửi " + data.sent + "/" + data.unverified + " tài khoản chưa xác thực" +
+          (data.skipped ? " · " + data.skipped + " bỏ qua (vừa nhắc gần đây hoặc quá số lần)" : "");
+        await loadFirebaseUsers();
+        await loadAiUsers();
+      } catch (error) {
+        fields.fbStatus.textContent = error.message;
       }
     }
 
@@ -1900,9 +1941,29 @@ export function adminPageHTML() {
           state.className = "badge " + (u.disabled ? "bad" : "ok");
           state.textContent = u.disabled ? "đang khoá" : "hoạt động";
           tds[6].appendChild(state);
+          if (!u.email) {
+            // Anonymous Firebase accounts have no address to verify.
+            var anonTag = document.createElement("div");
+            anonTag.className = "badge mute";
+            anonTag.style.marginTop = "4px";
+            anonTag.textContent = "ẩn danh (không có email)";
+            tds[6].appendChild(anonTag);
+          } else if (!u.emailVerified) {
+            var verifyTag = document.createElement("div");
+            verifyTag.className = "badge warn";
+            verifyTag.style.marginTop = "4px";
+            verifyTag.textContent = "chưa xác thực email";
+            tds[6].appendChild(verifyTag);
+          }
 
           var actions = document.createElement("div");
           actions.className = "row-actions";
+          if (!u.emailVerified && u.email) {
+            var remind = document.createElement("button");
+            remind.textContent = "Gửi email xác thực";
+            remind.onclick = function (uid2, email2) { return function () { remindVerify(uid2, email2); }; }(u.uid, u.email);
+            actions.appendChild(remind);
+          }
           var lock = document.createElement("button");
           lock.className = "secondary";
           lock.textContent = u.disabled ? "Mở khoá" : "Khoá";
@@ -2010,6 +2071,8 @@ export function adminPageHTML() {
     var storeClearBtn = document.getElementById("storeClearCred");
     if (storeClearBtn) storeClearBtn.onclick = storeClearCredential;
     if (fields.loadFirebaseUsers) fields.loadFirebaseUsers.onclick = loadFirebaseUsers;
+    var remindBulkBtn = document.getElementById("remindVerify");
+    if (remindBulkBtn) remindBulkBtn.onclick = remindVerifyBulk;
     if (fields.aiuStatus) fields.aiuStatus.onchange = loadAiUsers;
     if (fields.aiuSource) fields.aiuSource.onchange = loadAiUsers;
     if (fields.aiuSort) fields.aiuSort.onchange = loadAiUsers;

@@ -22,6 +22,7 @@ import {
   sendRenewalReminder,
   sendInvoiceEmail,
   sendAiInvoiceEmail,
+  sendVerifyEmail,
   pickMailLang,
 } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
@@ -43,6 +44,7 @@ import {
   setUserDisabled as setFirebaseUserDisabled,
   deleteFirebaseUser,
   sendPasswordReset as sendFirebasePasswordReset,
+  generateEmailVerificationLink,
 } from "./firebase-users.js";
 import { guidePageHTML } from "./guide-page.js";
 import { supportPageHTML } from "./support-page.js";
@@ -842,6 +844,206 @@ app.delete("/v1/admin/ai/store/credentials", requireAdminAuth, async (_req, res)
     res.json({ ok: true, configured: status.configured, source: status.source });
   } catch {
     res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Email verification reminders
+//
+// Firebase password sign-ups start unverified: those users have no way back
+// into their account if they forget the password, and they cannot be reached by
+// password reset. The apps sign in anonymously, so the control plane is the
+// only place that can notice and nudge them.
+//
+// The emailed link is OURS and valid for 30 days; clicking it asks Firebase for
+// a fresh verification link and redirects there, which sidesteps both the
+// authorized-domain allowlist and Firebase's short link lifetime.
+// ---------------------------------------------------------------------------
+
+const VERIFY_LINK_TTL_DAYS = Number(process.env.VERIFY_LINK_TTL_DAYS ?? 30);
+const VERIFY_REMINDERS_ENABLED = process.env.VERIFY_REMINDERS !== "0";
+const VERIFY_REMINDER_INTERVAL_MS = Number(process.env.VERIFY_REMINDER_INTERVAL_MS ?? 6 * 60 * 60 * 1000);
+const VERIFY_REMINDER_MIN_AGE_MS = Number(process.env.VERIFY_REMINDER_MIN_AGE_MS ?? 24 * 60 * 60 * 1000);
+const VERIFY_REMINDER_SPACING_MS = Number(process.env.VERIFY_REMINDER_SPACING_MS ?? 7 * 24 * 60 * 60 * 1000);
+const VERIFY_REMINDER_MAX = Number(process.env.VERIFY_REMINDER_MAX ?? 3);
+
+function verifyLinkSecret() {
+  return process.env.VERIFY_LINK_SECRET || AUTH_TOKEN || "flowvpn-verify-link";
+}
+
+/** Signed, long-lived token for our own verification link. */
+function signVerifyToken(email) {
+  const payload = `${String(email).trim().toLowerCase()}.${Date.now()}`;
+  const signature = crypto.createHmac("sha256", verifyLinkSecret()).update(payload).digest("base64url");
+  return `${Buffer.from(payload).toString("base64url")}.${signature}`;
+}
+
+function readVerifyToken(token) {
+  const raw = String(token ?? "").trim();
+  const [payloadPart, signature] = raw.split(".");
+  if (!payloadPart || !signature) return null;
+  let payload;
+  try {
+    payload = Buffer.from(payloadPart, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+  // Emails contain dots, so split on the LAST one: the payload is
+  // "<email>.<issuedAt>" and an email like a@b.com would otherwise be cut in half.
+  const separator = payload.lastIndexOf(".");
+  if (separator <= 0) return null;
+  const email = payload.slice(0, separator);
+  const issuedAt = payload.slice(separator + 1);
+  if (!email || !issuedAt) return null;
+  const expected = crypto.createHmac("sha256", verifyLinkSecret()).update(payload).digest("base64url");
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  const ageMs = Date.now() - Number(issuedAt);
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > VERIFY_LINK_TTL_DAYS * 24 * 60 * 60 * 1000) return null;
+  return { email, issuedAt: Number(issuedAt) };
+}
+
+function verifyLinkFor(email) {
+  const base = publicBaseUrl();
+  return `${base}/v1/ai/verify-email/confirm?t=${encodeURIComponent(signVerifyToken(email))}`;
+}
+
+/**
+ * Guesses the email language: what the customer used before, then the domain
+ * (Chinese providers are a real share of MeetFlow AI users), then Vietnamese,
+ * our primary market.
+ */
+async function verifyMailLang(email) {
+  const remembered = await authStore.langForEmail(email).catch(() => null);
+  if (remembered) return pickMailLang(remembered);
+  const domain = String(email).split("@")[1]?.toLowerCase() ?? "";
+  if (/(qq\.com|163\.com|126\.com|sina\.com|foxmail\.com|aliyun\.com|yeah\.net)$/.test(domain)) return "zh";
+  return "vi";
+}
+
+/** Sends one verification email. Never throws. */
+async function sendVerificationEmailTo(email, { force = false, reason = "manual" } = {}) {
+  const key = String(email ?? "").trim().toLowerCase();
+  if (!key.includes("@")) return { sent: false, reason: "invalid-email" };
+  const info = await aiUsersStore.verifyReminderInfo(key).catch(() => ({ count: 0, lastAt: null }));
+  if (!force) {
+    if (info.count >= VERIFY_REMINDER_MAX) return { sent: false, reason: "max-reminders", count: info.count };
+    if (info.lastAt && Date.now() - Date.parse(info.lastAt) < VERIFY_REMINDER_SPACING_MS) {
+      return { sent: false, reason: "too-soon", lastAt: info.lastAt, count: info.count };
+    }
+  }
+  const lang = await verifyMailLang(key);
+  try {
+    const result = await sendVerifyEmail({ to: key, lang, link: verifyLinkFor(key), reminders: info.count + 1 });
+    const sent = result?.sent === true;
+    await aiUsersStore.markVerifyReminded(key, { ok: sent });
+    console.log(`verify-email: to=${key} lang=${lang} reason=${reason} sent=${sent} reminder#${info.count + 1}`);
+    return { sent, lang, count: info.count + 1, reason: sent ? null : "delivery-failed" };
+  } catch (err) {
+    console.error(`verify-email failed for ${key}:`, err?.message ?? err);
+    await aiUsersStore.markVerifyReminded(key, { ok: false }).catch(() => {});
+    return { sent: false, reason: "error", error: String(err?.message ?? err).slice(0, 200) };
+  }
+}
+
+/**
+ * Scheduled job: nudge unverified accounts that are old enough, spacing the
+ * reminders out and stopping after VERIFY_REMINDER_MAX.
+ */
+async function runVerifyEmailReminders() {
+  if (!VERIFY_REMINDERS_ENABLED) return;
+  try {
+    const status = await firebaseCredentialStatus();
+    if (!status.configured) return;
+    const list = await listFirebaseUsers({ max: 3000 });
+    if (list.error) {
+      console.error("verify-reminder: cannot read Firebase:", list.error);
+      return;
+    }
+    const now = Date.now();
+    let sent = 0;
+    let skipped = 0;
+    for (const user of list.users ?? []) {
+      if (!user.email || user.emailVerified || user.disabled) continue;
+      const created = user.created ? Date.parse(user.created) : NaN;
+      if (Number.isFinite(created) && now - created < VERIFY_REMINDER_MIN_AGE_MS) continue;
+      const result = await sendVerificationEmailTo(user.email, { reason: "scheduled" });
+      if (result.sent) sent += 1;
+      else skipped += 1;
+    }
+    if (sent || skipped) console.log(`verify-reminder run: sent=${sent} skipped=${skipped}`);
+  } catch (err) {
+    console.error("runVerifyEmailReminders failed:", err?.message ?? err);
+  }
+}
+
+/** GET /v1/ai/verify-email/confirm?t=… — our link, forwarded to Firebase. */
+app.get(["/v1/ai/verify-email/confirm", "/v1/ai/verify-email/confirm/"], async (req, res) => {
+  const parsed = readVerifyToken(req.query?.t);
+  const page = (title, body) =>
+    `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>` +
+    `<style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}` +
+    `.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}` +
+    `h1{font-size:19px;margin:10px 0}p{color:rgba(255,255,255,.65);font-size:14px;line-height:1.6}</style></head>` +
+    `<body><div class="c">${body}</div></body></html>`;
+
+  if (!parsed) {
+    return res.status(400).type("html").send(
+      page("Link không hợp lệ", '<div style="font-size:44px">⚠️</div><h1>Link đã hết hạn hoặc không hợp lệ</h1><p>Vui lòng mở lại email xác thực mới nhất, hoặc liên hệ support@meetflowai.site.</p>'),
+    );
+  }
+  try {
+    const link = await generateEmailVerificationLink(parsed.email);
+    console.log(`verify-email clicked email=${parsed.email} -> redirect Firebase`);
+    res.redirect(302, link);
+  } catch (err) {
+    const message = String(err?.message ?? err);
+    console.error(`verify-email confirm failed for ${parsed.email}:`, message);
+    const already = /user-not-found/i.test(message);
+    res.status(already ? 404 : 500).type("html").send(
+      page("Không xác thực được", `<div style="font-size:44px">${already ? "🤔" : "⚠️"}</div><h1>${already ? "Không tìm thấy tài khoản" : "Chưa xác thực được"}</h1><p>${already ? "Tài khoản này không còn tồn tại trong hệ thống." : "Vui lòng thử lại sau, hoặc liên hệ support@meetflowai.site."}</p>`),
+    );
+  }
+});
+
+/** POST /v1/admin/ai/firebase/users/:uid/verify-email — send one reminder. */
+app.post("/v1/admin/ai/firebase/users/:uid/verify-email", requireAdminAuth, async (req, res) => {
+  try {
+    const email = String(req.body?.email ?? "").trim();
+    if (!email.includes("@")) return res.status(400).json({ error: "Thiếu email của tài khoản" });
+    const result = await sendVerificationEmailTo(email, { force: req.body?.force === true, reason: "admin" });
+    res.json({ ok: result.sent, ...result });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 200) });
+  }
+});
+
+/** POST /v1/admin/ai/verify-email/remind — all unverified accounts. */
+app.post("/v1/admin/ai/verify-email/remind", requireAdminAuth, async (req, res) => {
+  try {
+    const status = await firebaseCredentialStatus();
+    if (!status.configured) return res.status(400).json({ error: "Chưa cấu hình Firebase service account" });
+    const list = await listFirebaseUsers({ max: 3000, force: true });
+    if (list.error) return res.status(400).json({ error: list.error });
+    const force = req.body?.force === true;
+    const targets = [];
+    const results = [];
+    for (const user of list.users ?? []) {
+      if (!user.email || user.emailVerified || user.disabled) continue;
+      targets.push(user.email);
+      results.push({ email: user.email, ...(await sendVerificationEmailTo(user.email, { force, reason: "admin-bulk" })) });
+    }
+    res.json({
+      ok: true,
+      unverified: targets.length,
+      sent: results.filter((r) => r.sent).length,
+      skipped: results.filter((r) => !r.sent).length,
+      results,
+    });
+  } catch (err) {
+    console.error("bulk verify reminder failed:", err);
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 200) });
   }
 });
 
@@ -2369,6 +2571,9 @@ if (process.env.ENABLE_RENEWAL_REMINDERS !== "0") {
   setInterval(runRenewalReminders, RENEWAL_INTERVAL_MS);
   setTimeout(runAiRenewalReminders, 90_000);
   setInterval(runAiRenewalReminders, RENEWAL_INTERVAL_MS);
+  // Nudge unverified Firebase accounts (spaced out, capped — see above).
+  setTimeout(runVerifyEmailReminders, 150_000);
+  setInterval(runVerifyEmailReminders, VERIFY_REMINDER_INTERVAL_MS);
   console.log(`  renewal-reminders: every ${RENEWAL_INTERVAL_MS / 3_600_000}h (windows 7/3/1 days)`);
 }
 

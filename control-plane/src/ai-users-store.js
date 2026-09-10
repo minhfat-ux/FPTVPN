@@ -90,6 +90,41 @@ export class AiUsersStore {
     return user;
   }
 
+  /**
+   * Records that an email-verification reminder went out, so the scheduled job
+   * can space them out instead of mailing the same person every run.
+   */
+  async markVerifyReminded(email, { ok = true } = {}) {
+    const key = normalizeEmail(email);
+    if (!key) return null;
+    return this._serialize(async () => {
+      const data = await this._load();
+      let user = data.users.find((u) => u.email === key);
+      if (!user) {
+        const now = new Date().toISOString();
+        user = { email: key, firstSeen: now, lastSeen: now, seenCount: 0, sources: ["verify-reminder"] };
+        data.users.push(user);
+      }
+      user.verifyReminderCount = ok ? Number(user.verifyReminderCount ?? 0) + 1 : Number(user.verifyReminderCount ?? 0);
+      user.lastVerifyReminderAt = new Date().toISOString();
+      if (!ok) user.lastVerifyReminderError = true;
+      else delete user.lastVerifyReminderError;
+      await this._save(data);
+      return user;
+    });
+  }
+
+  /** { count, lastAt } for one email (0/null when never reminded). */
+  async verifyReminderInfo(email) {
+    const key = normalizeEmail(email);
+    const data = await this._load();
+    const user = data.users.find((u) => u.email === key);
+    return {
+      count: Number(user?.verifyReminderCount ?? 0),
+      lastAt: user?.lastVerifyReminderAt ?? null,
+    };
+  }
+
   /** Registry rows, newest activity first. */
   async listUsers() {
     const data = await this._load();

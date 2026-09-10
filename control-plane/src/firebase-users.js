@@ -197,6 +197,20 @@ export async function deleteFirebaseUser(uid) {
   resetCache();
 }
 
+/**
+ * Fresh Firebase email-verification link.
+ *
+ * Deliberately called WITHOUT a continue URL: Firebase rejects a continue
+ * domain that is not in the project's authorized-domains list
+ * ("auth/unauthorized-continue-uri") unless it has been allowlisted in the
+ * console. Our own link (see the /v1/ai/verify-email/confirm route) regenerates
+ * this at click time, which also gets around Firebase's short link lifetime.
+ */
+export async function generateEmailVerificationLink(email) {
+  const auth = await getAuth();
+  return auth.generateEmailVerificationLink(email);
+}
+
 export async function sendPasswordReset(email) {
   const auth = await getAuth();
   const link = await auth.generatePasswordResetLink(email);
