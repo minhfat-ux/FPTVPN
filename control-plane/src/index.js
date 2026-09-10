@@ -374,10 +374,23 @@ app.get(["/buy/cancel", "/buy/cancel/"], (req, res) => {
 // host that proxies to this control plane).
 app.get("/assets/:file", async (req, res) => {
   try {
-    const allowed = { "vpnflow-logo.png": "image/png", "meetflow-logo.png": "image/png" };
+    // Legacy/alternate file names used by the static pages (/privacy, /terms,
+    // support pages) must resolve to the files that actually exist here —
+    // otherwise those pages render without their logo.
+    const allowed = {
+      "vpnflow-logo.png": "image/png",
+      "flowvpn-logo.png": "image/png", // legacy name used by the static pages
+      "meetflow-logo.png": "image/png",
+      "meetflowai-icon.png": "image/png", // legacy name used by the static pages
+    };
     const type = allowed[req.params.file];
     if (!type) return res.status(404).send("Not found");
-    const file = path.join(process.env.ASSETS_DIR || path.join(__dirname, "..", "assets"), req.params.file);
+    const fileAlias = {
+      "flowvpn-logo.png": "vpnflow-logo.png",
+      "meetflowai-icon.png": "meetflow-logo.png",
+    };
+    const assetName = fileAlias[req.params.file] ?? req.params.file;
+    const file = path.join(process.env.ASSETS_DIR || path.join(__dirname, "..", "assets"), assetName);
     if (!fs.existsSync(file)) return res.status(404).send("Not found");
     res.type(type).sendFile(file);
   } catch {
