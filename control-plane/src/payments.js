@@ -1049,7 +1049,16 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     document.getElementById("buyForm").onsubmit = async (e) => {
       e.preventDefault();
       const email = document.getElementById("email").value.trim();
-      if (!email) { statusEl.className = "status err"; statusEl.textContent = T.errNoEmail; return; }
+      if (!email) {
+        statusEl.className = "status err";
+        statusEl.textContent = T.errNoEmail;
+        document.getElementById("email").focus();
+        return;
+      }
+      // Only one request at a time; the button is always re-enabled in the
+      // finally block below, so the customer can change the email/method and
+      // generate again without reloading the page.
+      if (btn.disabled) return;
       btn.disabled = true;
       statusEl.className = "status";
       statusEl.textContent = T.creating;
@@ -1063,7 +1072,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         if (!res.ok || data.error) {
           statusEl.className = "status err";
           statusEl.textContent = (data.code && T.errByCode[data.code]) || data.error || T.errCreate;
-          btn.disabled = false;
           return;
         }
         if (data.qrDataUrl || data.qrImageUrl) {
@@ -1089,14 +1097,30 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         } else {
           statusEl.className = "status err";
           statusEl.textContent = T.errNoCode;
-          btn.disabled = false;
         }
       } catch (err) {
         statusEl.className = "status err";
         statusEl.textContent = T.errNoConn;
+      } finally {
+        // Success included: a generated QR must not lock the button — the
+        // customer may have typed the wrong email or want another method.
         btn.disabled = false;
       }
     };
+
+    // Editing anything re-arms the form: clear a stale error and make sure the
+    // button is clickable even if a previous request died mid-flight.
+    const emailInput = document.getElementById("email");
+    emailInput.addEventListener("input", () => {
+      btn.disabled = false;
+      if (statusEl.classList.contains("err")) {
+        statusEl.className = "status";
+        statusEl.textContent = "";
+      }
+    });
+    document.querySelectorAll(".plan, .method").forEach((el) => {
+      el.addEventListener("click", () => { btn.disabled = false; });
+    });
 
     // Poll the order status until it is confirmed (bank transfer / PayOS webhook).
     let pollTimer = null;
