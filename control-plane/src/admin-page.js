@@ -245,6 +245,12 @@ export function adminPageHTML() {
     .mini-bars .mb-name { color: var(--muted); }
     .mini-bars .mb-val { text-align: right; color: var(--text); font-weight: 600; }
 
+    .note-line {
+      margin: 4px 0 14px; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.6;
+      color: rgba(255,255,255,.66); background: rgba(255,184,77,.07); border: 1px solid rgba(255,184,77,.22);
+    }
+    .note-line b { color: rgba(255,255,255,.86); }
+
     .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
     .detail-grid .d-item { padding: 10px; background: rgba(255,255,255,.05); border: 1px solid var(--stroke); border-radius: 8px; }
     .detail-grid .d-lbl { color: var(--muted); font-size: 12px; }
@@ -417,6 +423,12 @@ export function adminPageHTML() {
       </div>
 
       <div class="stats-grid" id="aiuCards"></div>
+      <div class="note-line">
+        <b>Nguồn gói:</b> cột Pro / gói / doanh thu chỉ tính gói mua <b>trên web</b>
+        (VietQR · MoMo · WeChat Pay · Alipay) và gói admin cấp tay.
+        Gói mua qua <b>Google Play</b> hoặc <b>App Store</b> nằm ở Google/Apple, app chưa báo về server
+        nên các tài khoản đó hiện là "chưa thấy gói" — không có nghĩa là họ chưa mua.
+      </div>
       <div class="stats-cols">
         <div>
           <h2>Doanh thu 6 tháng (Pro web)</h2>
@@ -1311,7 +1323,7 @@ export function adminPageHTML() {
         ["Pro đang hoạt động", aiuNum(stats.proActive + stats.proLifetime), (stats.proLifetime || 0) + " trọn đời", ""],
         ["Sắp hết hạn (<=7 ngày)", aiuNum(stats.proExpiring), "cần nhắc gia hạn", "warn"],
         ["Đã hết hạn", aiuNum(stats.proExpired), "", ""],
-        ["Chưa có Pro", aiuNum(stats.noPro), "", ""],
+        ["Chưa thấy gói (web)", aiuNum(stats.noPro), "chưa gồm Google Play / App Store", ""],
         ["User mới 30 ngày", aiuNum(stats.newLast30), "", ""],
         ["Khách đã trả tiền", aiuNum(stats.paidUsers), aiuNum(stats.ordersPaid) + " đơn đã xác nhận", ""],
         ["Doanh thu Pro (web)", aiuMoney(stats.revenue), aiuNum(stats.ordersPending) + " đơn chờ xác nhận", "revenue"],
