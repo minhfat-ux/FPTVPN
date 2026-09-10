@@ -182,6 +182,7 @@ const TEXTS = {
         copyAmount: "Copy amount",
     copied: "Copied",
         guideLink: "📖 Step-by-step activation guide",
+        renewPrefill: "Renewal link — your email and plan are already filled in. Just pick the payment method and scan the QR.",
     errNoEmail: "Enter your account email.",
     creating: "Creating payment code…",
     errCreate: "Could not create payment.",
@@ -247,6 +248,7 @@ const TEXTS = {
         copyAmount: "Sao chép số tiền",
     copied: "Đã sao chép",
         guideLink: "📖 Xem hướng dẫn kích hoạt từng bước",
+        renewPrefill: "Link gia hạn — email và gói của bạn đã được điền sẵn. Chỉ cần chọn cách thanh toán rồi quét QR.",
     errNoEmail: "Nhập email tài khoản.",
     creating: "Đang tạo mã thanh toán...",
     errCreate: "Lỗi tạo thanh toán.",
@@ -312,6 +314,7 @@ const TEXTS = {
         copyAmount: "复制金额",
     copied: "已复制",
         guideLink: "📖 查看分步激活指南",
+        renewPrefill: "续费链接 — 您的邮箱和套餐已自动填好，只需选择支付方式并扫码。",
     errNoEmail: "请输入账户邮箱。",
     creating: "正在生成支付码…",
     errCreate: "无法创建支付。",
@@ -377,6 +380,7 @@ const TEXTS = {
         copyAmount: "金額をコピー",
     copied: "コピーしました",
         guideLink: "📖 順を追った有効化ガイドを見る",
+        renewPrefill: "更新リンク — メールとプランは入力済みです。支払い方法を選んでQRをスキャンするだけです。",
     errNoEmail: "アカウントのメールを入力してください。",
     creating: "支払いコードを作成中…",
     errCreate: "支払いを作成できませんでした。",
@@ -442,6 +446,7 @@ const TEXTS = {
         copyAmount: "금액 복사",
     copied: "복사됨",
         guideLink: "📖 단계별 활성화 안내 보기",
+        renewPrefill: "갱신 링크 — 이메일과 요금제가 미리 입력되어 있습니다. 결제 수단을 고르고 QR만 스캔하세요.",
     errNoEmail: "계정 이메일을 입력하세요.",
     creating: "결제 코드 생성 중…",
     errCreate: "결제를 만들 수 없습니다.",
@@ -616,7 +621,7 @@ export function localizedPlanRows(lang, product = "vpn") {
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "" }) {
   lang = pickBuyLang(lang);
   product = productConfig(product);
   const base = TEXTS[lang];
@@ -644,9 +649,11 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
   const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
   const showDownloads = anyDownload;
   const rows = localizedPlanRows(lang, product);
-  const planHtml = rows.map((r, i) =>
-    `<div class="plan${i === 0 ? " active" : ""}" data-plan="${r.id}"><span>${r.name}</span><span class="price">${r.price}</span></div>`
+  const wantedPlan = rows.some((r) => r.id === prefillPlan) ? prefillPlan : rows[0]?.id;
+  const planHtml = rows.map((r) =>
+    `<div class="plan${r.id === wantedPlan ? " active" : ""}" data-plan="${r.id}"><span>${r.name}</span><span class="price">${r.price}</span></div>`
   ).join("\n        ");
+  const safeEmail = String(prefillEmail || "").replace(/[<>"']/g, "");
   return `<!doctype html>
 <html lang="${t.htmlLang}">
 <head>
@@ -728,6 +735,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
     .status { margin-top: 14px; text-align: center; font-size: 13px; min-height: 18px; }
     .status.err { color: #ff5a6a; }
     .note { margin-top: 16px; text-align: center; color: rgba(255,255,255,.4); font-size: 12px; }
+    .prefill {
+      margin: -14px 0 18px; padding: 9px 12px; border-radius: 10px; font-size: 12px; line-height: 1.5;
+      background: rgba(51,199,115,.1); border: 1px solid rgba(51,199,115,.3); color: rgba(255,255,255,.85);
+    }
     .noteextra {
       margin-top: 10px; padding: 10px 12px; border-radius: 10px; text-align: left;
       color: rgba(255,255,255,.62); background: rgba(255,255,255,.05);
@@ -813,6 +824,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
       <div class="logo">${logoHtml}</div>
     </div>
     <div class="sub">${t.sub}</div>
+    ${safeEmail && t.renewPrefill ? `<div class="prefill">🔁 ${t.renewPrefill}</div>` : ""}
 
     ${showDownloads ? `<div class="dl-section">
       <div class="dl-title">${t.dlTitle}</div>
@@ -861,7 +873,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
 
     <form id="buyForm">
       <label>${t.emailLabel}</label>
-      <input type="email" id="email" placeholder="you@example.com" required>
+      <input type="email" id="email" placeholder="you@example.com" required value="${safeEmail}">
 
       <label>${t.planLabel}</label>
       <div class="plans" id="planList">
@@ -932,8 +944,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
   <script>
     const base = ${JSON.stringify(baseUrl)};
     const T = ${JSON.stringify(t)};
+    const lang = ${JSON.stringify(lang)};
     const NUM_LOCALE = ${JSON.stringify(LOCALES[lang])};
-    let plan = "monthly";
+    let plan = ${JSON.stringify(wantedPlan || "monthly")};
     let method = "bankqr";
 
     function money(n) {
@@ -1036,7 +1049,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {} }) {
         const res = await fetch(base + "${apiPrefix}/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, plan, method }),
+          body: JSON.stringify({ email, plan, method, lang }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.error) {

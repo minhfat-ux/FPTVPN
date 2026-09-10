@@ -94,6 +94,25 @@ export class AuthStore {
     return sessionPayload(session, user);
   }
 
+  /** Remembers the customer's preferred language, keyed by email address. */
+  async rememberLangForEmail(email, lang) {
+    const key = normalizeEmail(email);
+    if (!key || !lang) return;
+    const data = await this._load();
+    data.emailLangs = { ...(data.emailLangs ?? {}), [key]: String(lang).slice(0, 5) };
+    const user = data.users.find((entry) => entry.email === key);
+    if (user) user.lang = String(lang).slice(0, 5);
+    await this._save(data);
+  }
+
+  /** Preferred language for an email address (user record first, then lookup). */
+  async langForEmail(email) {
+    const key = normalizeEmail(email);
+    const data = await this._load();
+    const user = data.users.find((entry) => entry.email === key);
+    return user?.lang ?? data.emailLangs?.[key] ?? null;
+  }
+
   async findSession(token) {
     if (!token) return null;
     const data = await this._load();
@@ -298,7 +317,7 @@ export class AuthStore {
    * Records a pending payment order (orderCode -> {email, plan}) so the
    * webhook can activate the right user/plan when the payment completes.
    */
-  async recordPendingPayment(orderCode, { email, plan, method }) {
+  async recordPendingPayment(orderCode, { email, plan, method, lang }) {
     const data = await this._load();
     data.pendingPayments = data.pendingPayments.filter((entry) => entry.orderCode !== orderCode);
     data.pendingPayments.push({
@@ -306,6 +325,7 @@ export class AuthStore {
       email: normalizeEmail(email),
       plan,
       method: method ?? "payos",
+      lang: lang ?? null,
       paidAt: null,
       createdAt: new Date().toISOString(),
     });

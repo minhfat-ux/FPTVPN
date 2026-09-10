@@ -45,7 +45,7 @@ export class AiAccessStore {
 
   // ---------------------------------------------------------------- orders
 
-  async recordPendingPayment(orderCode, { email, plan, method }) {
+  async recordPendingPayment(orderCode, { email, plan, method, lang }) {
     const data = await this._load();
     data.pendingPayments = data.pendingPayments.filter((e) => e.orderCode !== Number(orderCode));
     data.pendingPayments.push({
@@ -53,6 +53,7 @@ export class AiAccessStore {
       email: normalizeEmail(email),
       plan,
       method: method ?? "bankqr",
+      lang: lang ?? null,
       paidAt: null,
       createdAt: new Date().toISOString(),
     });
@@ -82,7 +83,7 @@ export class AiAccessStore {
   // ----------------------------------------------------------- entitlements
 
   /** Grants (or extends) Pro for an email. days === null -> lifetime. */
-  async grantPro(email, { plan, days, orderCode = null, productId = null } = {}) {
+  async grantPro(email, { plan, days, orderCode = null, productId = null, lang = null } = {}) {
     const data = await this._load();
     const key = normalizeEmail(email);
     const now = Date.now();
@@ -94,6 +95,7 @@ export class AiAccessStore {
 
     if (existing) {
       existing.plan = plan;
+      existing.lang = lang ?? existing.lang ?? null;
       existing.productId = productId ?? existing.productId ?? null;
       existing.expiresAt = expiresAt;
       existing.grantedAt = new Date(now).toISOString();
@@ -107,6 +109,7 @@ export class AiAccessStore {
         email: key,
         product: "meetflow-pro",
         plan,
+        lang: lang ?? null,
         productId: productId ?? null,
         expiresAt,
         grantedAt: new Date(now).toISOString(),
@@ -132,6 +135,53 @@ export class AiAccessStore {
       expires_at: active ? entry.expiresAt ?? null : null,
       lifetime: active && entry.expiresAt == null,
     };
+  }
+
+  /** Reminder window (7/3/1 days before expiry) for a given time left. */
+  static renewalWindow(daysLeft) {
+    if (daysLeft <= 1) return 1;
+    if (daysLeft <= 3) return 3;
+    if (daysLeft <= 7) return 7;
+    return null;
+  }
+
+  /** Active Pro subscriptions expiring soon that were not reminded yet. */
+  async listDueForRenewalReminder(now = Date.now()) {
+    const data = await this._load();
+    const due = [];
+    for (const entry of data.entitlements) {
+      if (!entry.expiresAt) continue; // lifetime — never expires
+      const msLeft = Date.parse(entry.expiresAt) - now;
+      if (!Number.isFinite(msLeft) || msLeft <= 0) continue;
+      const daysLeft = Math.ceil(msLeft / DAY_MS);
+      const windowDays = AiAccessStore.renewalWindow(daysLeft);
+      if (!windowDays) continue;
+      const reminded = Array.isArray(entry.renewalReminded) ? entry.renewalReminded : [];
+      if (reminded.includes(windowDays)) continue;
+      due.push({
+        email: entry.email,
+        plan: entry.plan ?? null,
+        expiresAt: entry.expiresAt,
+        daysLeft,
+        windowDays,
+        lang: entry.lang ?? null,
+        oneTime: true,
+      });
+    }
+    return due;
+  }
+
+  /** Marks a reminder window as sent so it is not repeated. */
+  async markRenewalReminded(email, windowDays) {
+    const data = await this._load();
+    const entry = data.entitlements.find(
+      (e) => e.email === normalizeEmail(email) && e.product === "meetflow-pro",
+    );
+    if (!entry) return;
+    entry.renewalReminded = Array.from(
+      new Set([...(Array.isArray(entry.renewalReminded) ? entry.renewalReminded : []), Number(windowDays)]),
+    );
+    await this._save(data);
   }
 
   async listEntitlements() {

@@ -16,7 +16,14 @@ import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { adminPageHTML } from "./admin-page.js";
-import { sendOtpEmail, sendPaymentAlert, sendRenewalReminder, sendInvoiceEmail, sendAiInvoiceEmail } from "./mailer.js";
+import {
+  sendOtpEmail,
+  sendPaymentAlert,
+  sendRenewalReminder,
+  sendInvoiceEmail,
+  sendAiInvoiceEmail,
+  pickMailLang,
+} from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
 import { guidePageHTML } from "./guide-page.js";
 import {
@@ -261,7 +268,14 @@ app.get(["/buy", "/buy/"], (req, res) => {
   // (e.g. /PrivateVPN/buy) because the browser would call /v1/... at the root
   // of the outer host, which is a 404 → "Không kết nối được máy chủ".
   res.type("html").send(
-    buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req), product: "vpn", links: storeLinks("vpn") }),
+    buyPageHTML({
+      baseUrl: publicBaseUrl(),
+      lang: buyLang(req),
+      product: "vpn",
+      links: storeLinks("vpn"),
+      prefillEmail: String(req.query?.email ?? "").slice(0, 120),
+      prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
+    }),
   );
 });
 
@@ -311,7 +325,14 @@ app.get(["/ai/guide", "/ai/guide/"], (req, res) => {
 
 app.get(["/ai/buy", "/ai/buy/"], (req, res) => {
   res.type("html").send(
-    buyPageHTML({ baseUrl: publicBaseUrl(), lang: buyLang(req), product: "ai", links: storeLinks("ai") }),
+    buyPageHTML({
+      baseUrl: publicBaseUrl(),
+      lang: buyLang(req),
+      product: "ai",
+      links: storeLinks("ai"),
+      prefillEmail: String(req.query?.email ?? "").slice(0, 120),
+      prefillPlan: String(req.query?.plan ?? "").slice(0, 20),
+    }),
   );
 });
 
@@ -326,7 +347,7 @@ app.get(["/ai/buy/cancel", "/ai/buy/cancel/"], (req, res) => {
 // Creates a MeetFlow Pro order and returns the payment QR (bank / WeChat / Alipay).
 app.post("/v1/ai/payments/create", async (req, res) => {
   try {
-    const { email, plan, method } = req.body ?? {};
+    const { email, plan, method, lang } = req.body ?? {};
     if (!email || !/\S+@\S+/.test(email)) {
       return res.status(400).json({ code: "invalid_email", error: "Email không hợp lệ." });
     }
@@ -334,7 +355,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     if (!planCfg) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
     const orderCode = Math.floor(Date.now() / 1000);
-    await aiStore.recordPendingPayment(orderCode, { email, plan, method });
+    await aiStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
     fireAiPaymentAlert(orderCode, email, plan, planCfg.amount);
 
     if (method === "momo") {
@@ -421,7 +442,13 @@ app.get("/v1/ai/payments/confirm/:orderCode", async (req, res) => {
     }
     const order = await aiStore.markPendingPaymentPaid(orderCode);
     if (!order) return res.status(404).send("Đơn không tồn tại hoặc đã xác nhận.");
-    await activateAiProAndInvoice({ orderCode: order.orderCode, email: order.email, plan: order.plan, method: order.method });
+    await activateAiProAndInvoice({
+      orderCode: order.orderCode,
+      email: order.email,
+      plan: order.plan,
+      method: order.method,
+      lang: order.lang,
+    });
     res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>MeetFlow Pro đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
   } catch (err) {
     console.error("ai confirm-link failed:", err);
@@ -442,7 +469,13 @@ app.post("/v1/admin/ai/payments/:orderCode/confirm", requireAdminAuth, async (re
   try {
     const order = await aiStore.markPendingPaymentPaid(req.params.orderCode);
     if (!order) return res.status(404).json({ error: "Order not found or already paid" });
-    await activateAiProAndInvoice({ orderCode: order.orderCode, email: order.email, plan: order.plan, method: order.method });
+    await activateAiProAndInvoice({
+      orderCode: order.orderCode,
+      email: order.email,
+      plan: order.plan,
+      method: order.method,
+      lang: order.lang,
+    });
     res.json({ ok: true, email: order.email });
   } catch (err) {
     console.error("ai admin confirm failed:", err);
@@ -463,6 +496,10 @@ app.get("/v1/admin/ai/entitlements", requireAdminAuth, async (_req, res) => {
 app.get("/v1/ai/entitlement", async (req, res) => {
   try {
     const email = String(req.query?.email ?? "").trim();
+    // Diagnostic: confirms whether the app actually reaches this endpoint.
+    console.log(
+      `ai-entitlement lookup email=${email || "(none)"} ip=${req.ip} ua=${String(req.get("user-agent") || "-").slice(0, 40)}`,
+    );
     if (!email || !/\S+@\S+/.test(email)) {
       return res.status(400).json({ error: "Valid email required" });
     }
@@ -473,13 +510,14 @@ app.get("/v1/ai/entitlement", async (req, res) => {
 });
 
 /** Grants MeetFlow Pro for a paid order and emails the invoice. */
-async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankqr" }) {
+async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankqr", lang }) {
   const planCfg = AI_PLANS[plan] ?? AI_PLANS.monthly;
   const ent = await aiStore.grantPro(email, {
     plan,
     days: planCfg.days,
     orderCode,
     productId: `meetflow.${method}.${plan}`,
+    lang: pickMailLang(lang),
   });
   await sendAiInvoiceEmail({
     to: email,
@@ -490,6 +528,8 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
     activatedAt: new Date().toISOString(),
     expiresAt: ent?.expires_at ?? null,
     guideUrl: `${publicBaseUrl()}/ai/guide`,
+    lang,
+    oneTime: AI_PLANS[plan]?.oneTime === true,
   });
   console.log(`ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode})`);
   return ent;
@@ -511,13 +551,13 @@ async function fireAiPaymentAlert(orderCode, email, plan, amount) {
 
 app.post("/v1/payments/create", async (req, res) => {
   try {
-    const { email, plan, method } = req.body ?? {};
+    const { email, plan, method, lang } = req.body ?? {};
     if (!email || !/\S+@\S+/.test(email)) return res.status(400).json({ code: "invalid_email", error: "Email không hợp lệ." });
     const planCfg = PLANS_PUBLIC[plan];
     if (!planCfg) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
     const orderCode = Math.floor(Date.now() / 1000);
-    await authStore.recordPendingPayment(orderCode, { email, plan, method });
+    await authStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
 
     // Alert the owner (email) with a signed one-click confirm link.
     firePaymentAlert(orderCode, email, plan, planCfg.amount);
@@ -687,6 +727,7 @@ app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, 
       email: order.email,
       plan: order.plan,
       prefix: "bankqr",
+      lang: order.lang ?? (await authStore.langForEmail(order.email)),
     });
     res.json({ ok: true, email: order.email });
   } catch (err) {
@@ -709,6 +750,7 @@ app.get("/v1/payments/confirm/:orderCode", async (req, res) => {
       email: order.email,
       plan: order.plan,
       prefix: "bankqr",
+      lang: order.lang ?? (await authStore.langForEmail(order.email)),
     });
     res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>Premium đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
   } catch (err) {
@@ -727,7 +769,7 @@ function paymentConfirmSignature(orderCode) {
  * invoice. Shared by all confirm paths (admin button, email confirm link,
  * PayOS webhook). `planCfg` = PLANS_PUBLIC entry (may be null -> monthly).
  */
-async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "bankqr" }) {
+async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "bankqr", lang }) {
   const planCfg = PLANS_PUBLIC[plan] ?? PLANS_PUBLIC.monthly;
   const user = await authStore.ensureUserByEmail(email);
   await authStore.grantSubscription(user.id, { productId: `${prefix}.${plan}`, days: planCfg.days });
@@ -747,6 +789,7 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
     expiresAt: sub?.expiresAt ?? null,
     appUrl,
     guideUrl: `${publicBaseUrl()}/guide`,
+    lang,
   });
   console.log(`invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode})`);
   return user;
@@ -773,7 +816,10 @@ function publicBaseUrl() {
 app.post("/v1/auth/email/start", async (req, res) => {
   try {
     const login = await authStore.startEmailLogin(req.body?.email);
-    const mail = await sendOtpEmail({ email: login.email, code: login.code });
+    // The apps send their UI language so the code arrives localized.
+    const lang = pickMailLang(req.body?.lang);
+    await authStore.rememberLangForEmail(login.email, lang);
+    const mail = await sendOtpEmail({ email: login.email, code: login.code, lang });
     const body = { ok: true };
     if (!IS_PRODUCTION || DEBUG_CODE_EMAILS.has(login.email)) {
       body.debug_code = mail.devCode ?? login.code;
@@ -1519,15 +1565,18 @@ async function runRenewalReminders() {
   try {
     const due = await authStore.listUsersDueForRenewalReminder();
     if (!due.length) return;
-    const buyUrl = `${publicBaseUrl()}/buy`;
+    const buyUrl = `${publicBaseUrl()}/buy`; // per-customer link added below
     for (const d of due) {
       const email = d.user.email;
       if (!email) continue;
+      const lang = pickMailLang(d.user.lang);
+      const link = `${buyUrl}?lang=${lang}&email=${encodeURIComponent(email)}`;
       const r = await sendRenewalReminder({
         to: email,
         daysLeft: d.daysLeft,
         expiresAt: d.sub.expiresAt,
-        buyUrl,
+        buyUrl: link,
+        lang,
       });
       await authStore.markRenewalReminded(d.user.id, d.windowDays);
       console.log(`renewal-reminder: sent to ${email} (${d.daysLeft}d left, win ${d.windowDays}) sent=${r?.sent}`);
@@ -1537,11 +1586,42 @@ async function runRenewalReminders() {
   }
 }
 
+// MeetFlow AI Pro reminders (web purchases never auto-renew — we email the
+// customer a pre-filled renewal link so paying again is one tap).
+async function runAiRenewalReminders() {
+  try {
+    const due = await aiStore.listDueForRenewalReminder();
+    if (!due.length) return;
+    for (const d of due) {
+      const lang = pickMailLang(d.lang);
+      const buyUrl = `${publicBaseUrl()}/ai/buy?lang=${lang}` +
+        `&email=${encodeURIComponent(d.email)}` +
+        `&plan=${encodeURIComponent(d.plan || "monthly")}`;
+      const r = await sendRenewalReminder({
+        to: d.email,
+        lang,
+        daysLeft: d.daysLeft,
+        expiresAt: d.expiresAt,
+        buyUrl,
+        brand: "MeetFlow AI Pro",
+      });
+      await aiStore.markRenewalReminded(d.email, d.windowDays);
+      console.log(
+        `ai-renewal-reminder: ${d.email} (${d.daysLeft}d left, win ${d.windowDays}, lang ${lang}) sent=${r?.sent}`,
+      );
+    }
+  } catch (err) {
+    console.error("runAiRenewalReminders failed:", err);
+  }
+}
+
 const RENEWAL_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6h
 if (process.env.ENABLE_RENEWAL_REMINDERS !== "0") {
   // Small initial delay so the server finishes booting before first run.
   setTimeout(runRenewalReminders, 60_000);
   setInterval(runRenewalReminders, RENEWAL_INTERVAL_MS);
+  setTimeout(runAiRenewalReminders, 90_000);
+  setInterval(runAiRenewalReminders, RENEWAL_INTERVAL_MS);
   console.log(`  renewal-reminders: every ${RENEWAL_INTERVAL_MS / 3_600_000}h (windows 7/3/1 days)`);
 }
 
