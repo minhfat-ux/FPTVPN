@@ -20,8 +20,18 @@ const PLANS = {
   quarterly: { amount: 190000, days: 90,   label: "3 Months (190,000 VND / 90 days)", badge: "3 Months" },
   semiannual:{ amount: 350000, days: 180,  label: "6 Months (350,000 VND / 180 days)", badge: "6 Months" },
   yearly:    { amount: 600000, days: 365,  label: "Yearly (600,000 VND / 365 days)", badge: "Yearly" },
-  lifetime:  { amount: 1500000, days: null, label: "Lifetime (1,500,000 VND one-time)", badge: "Lifetime" },
+  // Lifetime was withdrawn from sale (2026-09-11) — the shop no longer offers it.
+  // Kept here so historical orders, invoices and admin views can still resolve
+  // the plan name, and `retired` makes the API refuse new orders for it.
+  lifetime:  { amount: 1500000, days: null, retired: true, label: "Lifetime (1,500,000 VND one-time)", badge: "Lifetime" },
 };
+
+/** Plans that can still be bought (retired ones stay resolvable but are hidden). */
+export function isSellablePlan(product, planId) {
+  const table = product === "ai" ? AI_PLANS : PLANS;
+  const entry = table?.[planId];
+  return Boolean(entry) && entry.retired !== true;
+}
 
 function payosConfig() {
   const clientId = process.env.PAYOS_CLIENT_ID;
@@ -761,7 +771,9 @@ export function localizedPlanRows(lang, product = "vpn", options = {}) {
   const base = TEXTS[lang] || TEXTS.vi;
   const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   const table = product === "ai" ? AI_PLANS : PLANS;
-  const order = product === "ai" ? AI_PLAN_ORDER : ["monthly", "quarterly", "semiannual", "yearly", "lifetime"];
+  // Retired plans are filtered out, so the buy page never offers them.
+  const order = (product === "ai" ? AI_PLAN_ORDER : ["monthly", "quarterly", "semiannual", "yearly"])
+    .filter((id) => table[id] && table[id].retired !== true);
   return order.map((id) => {
     const p = table[id];
     const period = p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote;

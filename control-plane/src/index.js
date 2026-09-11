@@ -500,7 +500,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       return res.status(400).json({ code: "invalid_email", error: "Email không hợp lệ." });
     }
     const planCfg = AI_PLANS[plan];
-    if (!planCfg) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
+    if (!planCfg || planCfg.retired) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
     const emailKey = String(email).trim().toLowerCase();
     let orderCode = null;
@@ -1493,7 +1493,8 @@ app.post("/v1/payments/create", async (req, res) => {
     const { email, plan, method, lang } = req.body ?? {};
     if (!email || !/\S+@\S+/.test(email)) return res.status(400).json({ code: "invalid_email", error: "Email không hợp lệ." });
     const planCfg = PLANS_PUBLIC[plan];
-    if (!planCfg) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
+    // Retired plans (e.g. lifetime) must not be orderable any more.
+    if (!planCfg || planCfg.retired) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
     const orderCode = Math.floor(Date.now() / 1000);
     await authStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
