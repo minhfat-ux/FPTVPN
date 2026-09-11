@@ -1,6 +1,7 @@
 # Android: VPNFlow không thông mạng trên mobile data (metered) — điều tra & hướng fix
 
-_Trạng thái: **CHƯA FIX** — đã ghi nhận bằng chứng + giả thuyết + kế hoạch test. Làm sau._
+_Trạng thái: **CHƯA FIX — CHƯA CODE** (owner yêu cầu ghi nhớ trước, làm sau)._
+_**Quyết định của owner: đi hướng B (app tự giữ foreground service) — vì user không biết/không tự bật được cài đặt hệ thống.**_
 
 ## 1. Triệu chứng
 - Trên **wifi khách sạn (unmetered)**: app chạy tốt — node1/node2 đều UP qua TCP relay 8443, ổn định nhiều phút.
@@ -28,6 +29,32 @@ _Trạng thái: **CHƯA FIX** — đã ghi nhận bằng chứng + giả thuyế
 
 > Loại trừ: node1/node2 chết, transport hỏng, code connect sai — vì cùng lúc shell connect được và wifi chạy tốt.
 
+## 3b. Chi tiết triển khai hướng B (đã soạn sẵn, CHƯA áp dụng vào code)
+
+Đã kiểm chứng bằng SDK 36 (`javap -constants android.content.pm.ServiceInfo`):
+**Android 15/16 KHÔNG còn `FOREGROUND_SERVICE_TYPE_VPN`** — danh sách type chỉ có:
+camera, connectedDevice, dataSync, health, location, mediaPlayback, mediaProcessing,
+mediaProjection, microphone, phoneCall, remoteMessaging, shortService, **specialUse**, systemExempted.
+(`android:foregroundServiceType="vpn"` cũng bị aapt2 từ chối — đã thử và fail.)
+⇒ Dùng **`specialUse`** + property `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE`.
+
+Các thay đổi cần làm (khi bắt tay vào):
+1. `AndroidManifest.xml`
+   - đổi `FOREGROUND_SERVICE_VPN` → `FOREGROUND_SERVICE_SPECIAL_USE`
+   - service `HysteriaVpnService`: thêm `android:foregroundServiceType="specialUse"` và
+     `<property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="vpn_tunnel" />`
+2. `HysteriaVpnService.onStartCommand`: gọi `startForeground(...)` NGAY đầu hàm
+   (API 34+: `startForeground(id, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)`),
+   kèm notification channel IMPORTANCE_LOW + PendingIntent mở MainActivity.
+3. Teardown: `stopForeground(STOP_FOREGROUND_REMOVE)` ở cả nhánh thành công, nhánh lỗi và `onDestroy`.
+4. `MainActivity`: xin `POST_NOTIFICATIONS` (Android 13+) để notification hiện.
+5. Branch `store` (Play): sau khi thêm, phải khai **Foreground service type = specialUse** trong
+   Play Console (App content → Foreground service types) kèm mô tả "keeps the VPN tunnel alive while
+   the app is not in the foreground; Android 15+ has no vpn-specific FGS type".
+
+Rủi ro cần kiểm khi làm: `specialUse` bị Play review kỹ hơn (phải có mô tả hợp lý); nếu bị từ chối,
+phương án dự phòng là `dataSync` (nhưng bị giới hạn 6 giờ/ngày trên Android 15+).
+
 ## 4. Test có kiểm soát (chạy khi có USB)
 ```bash
 # 0. cắm cáp; chỉ dùng mobile data
@@ -49,7 +76,7 @@ Kết luận cần đạt: app-uid chỉ fail khi BACKGROUND + metered ⇒ xác 
 **A. Phía user (nhanh, không đủ cho mọi khách)**
 - Cài đặt → Ứng dụng → FlowVPN → Dữ liệu di động → bật **"Cho phép dữ liệu nền"**; tắt Data Saver; Pin → "Không hạn chế".
 
-**B. Phía app (giải pháp thật) — giữ process ở mức foreground khi connect**
+**B. Phía app (giải pháp thật) — ĐÃ CHỌN, giữ process ở mức foreground khi connect**
 - Đưa `HysteriaVpnService` lên **foreground service** khi đang kết nối/đã kết nối ⇒ không bị coi là background ⇒ không bị cắt data.
 - Ràng buộc cần xử lý: Android 15/16 **đã bỏ FGS type `vpn`** khỏi `android:foregroundServiceType` (đã kiểm bằng aapt2 dump android-36: attr chỉ có 14 flag, không có `vpn`) ⇒ phải dùng type khác (`specialUse` kèm mô tả, hoặc `dataSync`) — **lưu ý Play review** với `specialUse`/`dataSync` (cần khai lý do, và `dataSync` bị giới hạn 6h/ngày).
 - Đây là fix ưu tiên vì giải quyết luôn cả "đóng app là VPN mất" (hiện chỉ có `stopWithTask=false` + START_STICKY).
