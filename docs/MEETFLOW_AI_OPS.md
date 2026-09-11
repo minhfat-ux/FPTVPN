@@ -27,6 +27,16 @@ Vì vậy trang buy hiển thị thêm **giá quy đổi sang ¥** cho hai phư�
 - Đổi lại sang chuyển khoản ngân hàng / MoMo → trở về hiển thị VND như cũ.
 - Email báo đơn cho chủ shop cũng ghi thêm dòng **Quy đổi CNY: ¥X** để biết cần đối chiếu bao nhiêu.
 
+### Gói đã ngừng bán
+
+- **VPNFlow: gói "Trọn đời" (1.500.000đ) đã bỏ khỏi trang buy từ 2026-09-11** — chỉ còn 4 gói:
+  tháng · 3 tháng · 6 tháng · năm. API `/v1/payments/create` cũng từ chối `plan=lifetime`
+  (`invalid_plan`), nên link cũ đặt gói này không tạo được đơn.
+- Vẫn giữ định nghĩa gói trong code (`PLANS.lifetime` có `retired: true`) để hoá đơn/đơn hàng cũ
+  và màn admin hiển thị đúng tên gói; khách đã mua trọn đời trước đây **không bị ảnh hưởng**
+  (quyền lợi không có ngày hết hạn).
+- Muốn mở bán lại: xoá `retired: true` và thêm `"lifetime"` lại vào danh sách gói trong `payments.js`.
+
 ### Hiển thị giá theo tiền tệ của người xem
 
 Trang mua tự chọn tiền tệ hiển thị (giá chính) theo ngôn ngữ khách đang xem:
@@ -76,7 +86,6 @@ Kiểm tra ảnh nào đang được dùng: response header `X-QR-Variant` và `
 | ¥55 | VPN 3 tháng 190.000đ | `wechat-55.png`, `alipay-55.png` |
 | ¥100 | VPN 6 tháng 350.000đ | `wechat-100.png`, `alipay-100.png` |
 | ¥172 | VPN năm 600.000đ | `wechat-172.png`, `alipay-172.png` |
-| ¥429 | VPN trọn đời 1.500.000đ | `wechat-429.png`, `alipay-429.png` |
 | ¥43 | MeetFlow AI pass 30 ngày | `wechat-43.png`, `alipay-43.png` |
 | ¥38 | MeetFlow AI tháng | `wechat-38.png`, `alipay-38.png` |
 | ¥300 | MeetFlow AI năm | `wechat-300.png`, `alipay-300.png` |
@@ -94,7 +103,6 @@ Làm dần cũng được: gói nào chưa có ảnh riêng thì dùng ảnh QR 
 | VPN 3 tháng | 190.000đ | **¥55** |
 | VPN 6 tháng | 350.000đ | **¥100** |
 | VPN năm | 600.000đ | **¥172** |
-| VPN trọn đời | 1.500.000đ | **¥429** |
 | MeetFlow AI pass30 | 150.000đ | **¥43** |
 | MeetFlow AI tháng | 130.000đ | **¥38** |
 | MeetFlow AI năm | 1.050.000đ | **¥300** |
