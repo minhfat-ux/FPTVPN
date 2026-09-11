@@ -7,7 +7,7 @@ _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung
 | File | Đường dẫn | Ghi chú |
 |---|---|---|
 | AAB (Play) | `release/android/VPNFlow-1.2.2-play-store.aab` | 39 MB, versionCode **2** / versionName **1.2.2**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
-| SHA256 AAB | `c00e23adcd127d352a2a81255695672c67a8b137174defd652e3d02ebeab2218` | |
+| SHA256 AAB | `c00e23adcd127d352a2a81255695672c67a8b137174defd652e3d02ebeab2218` | (khớp file AAB trên đĩa, build sau khi bỏ Play Billing) |
 | APK (sideload) | `release/android/VPNFlow-1.2.2-arm64-x86-universal.apk` | 96 MB universal, phát qua `meetflowai.site/v1/downloads/android` |
 | Icon 512×512 | `release/android/play-assets/icon-512.png` | từ icon app (1024 gốc) |
 | Feature graphic 1024×500 | `release/android/play-assets/feature-graphic-1024x500.png` | navy + logo + tagline |
@@ -18,7 +18,13 @@ Package name: **com.privatevpn.app** · minSdk 26 · targetSdk 36 (đạt yêu c
 
 ## 1. Tài khoản & bước bắt buộc
 
-1. **Loại tài khoản**: tài khoản **cá nhân** tạo sau 11/2023 phải chạy **closed testing với ≥12 tester trong 14 ngày liên tục** trước khi xin lên production. Tài khoản **tổ chức** (cần D-U-N-S) không bị yêu cầu này → nếu có pháp nhân, dùng org account sẽ nhanh hơn nhiều.
+1. **Loại tài khoản**: **ĐÃ XÁC NHẬN LÀ TÀI KHOẢN CÁ NHÂN** → bắt buộc:
+   - Tạo app → đẩy bản release lên **Closed testing** (dùng AAB `VPNFlow-1.2.2-play-store.aab`).
+   - Có **≥12 tester** tham gia (opt-in qua link/Google Group) và **giữ nguyên 14 ngày liên tục** (không rút, không để số lượng tụt dưới 12).
+   - Sau 14 ngày mới **xin quyền Production** (Google xét thủ công 1–7 ngày).
+   - ⚠️ Tester **phải có tài khoản Google** và cài app qua Play (không phải cài file APK). Với tệp khách Trung Quốc, nên huy động tester ở VN/nước ngoài hoặc ai có Google account; ghi lại email từng người để thêm vào danh sách.
+   - Mẹo: tạo **Google Group** riêng (vd `vpnflow-testers@googlegroups.com`) rồi add Group làm tester — sau này thêm/bớt người dễ, không phải sửa danh sách.
+   - Tài khoản **tổ chức** (cần D-U-N-S) không bị yêu cầu này → nếu sau này có pháp nhân, cân nhắc chuyển.
 2. Tạo app mới: tên **VPNFlow**, ngôn ngữ mặc định **English (US)**, app = **App**, **Free**.
 3. Bật **Play App Signing** (Google giữ signing key; ta upload bằng upload key = keystore `~/keystores/vpnflow-release.jks`). Lưu ý: nếu app đã từng có bản khác cùng package thì phải dùng đúng key cũ.
 
@@ -139,27 +145,22 @@ _(Play 还支持 ja/ko locale — 需要 thì lấy từ `RELEASE_NOTES_1.2.2.md
 `production` là branch "an toàn để nộp" — build artifact nộp store từ đây. Không cần nhớ thêm cờ
 `-DPAYWALL_APPSTORE` khi archive nữa: `project.yml` đã bật sẵn cho cả iOS và macOS.
 
-```bash
-# Android — AAB nộp Google Play
-git checkout production && ./gradlew :app:bundleRelease
-
-# iOS — IPA nộp App Store (script cũng tự thêm cờ, trùng lặp vô hại)
-git checkout production && ./scripts/archive-appstore.sh ios appstore
-
-# macOS — IPA nộp App Store
-./scripts/archive-appstore.sh mac appstore
-```
-
 Ngoài cờ `SELL_ON_WEB`, branch `store` còn được dọn cho đúng chuẩn Play:
 - Bỏ **toàn bộ Play Billing** (`billing-ktx` dependency + `BillingClient`) → app không còn khai báo quyền `com.android.vending.BILLING`; quyền lợi chỉ đọc từ backend theo tài khoản đăng nhập.
 - Bỏ các permission thừa: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_VPN`, `POST_NOTIFICATIONS` (không nơi nào gọi `startForeground`) → bản Play chỉ còn `INTERNET` + `ACCESS_NETWORK_STATE`.
 - Xoá service chết `RelayProtectService`.
-- Thêm `-dontwarn com.google.errorprone.annotations.**` (R8, do Tink tham chiếu annotation không có trên runtime). AAB nộp Play **phải** build từ branch `store`; APK bán web build từ `main`/`web`.
+- Thêm `-dontwarn com.google.errorprone.annotations.**` (R8, do Tink tham chiếu annotation không có trên runtime).
+
+Về phần paywall, `store` và `main`/`web` chỉ khác nhau một cờ `SELL_ON_WEB` + nhánh điều kiện trong
+`PaywallScreen`/`MainScreen` nên merge qua lại rất dễ.
 
 Cách build:
 ```bash
-git checkout store && ./gradlew :app:bundleRelease     # AAB cho Play
-git checkout main  && ./gradlew :app:assembleRelease   # APK bán web
+git checkout main       && ./gradlew :app:assembleRelease   # APK bán web (sideload)
+git checkout store      && ./gradlew :app:bundleRelease     # AAB cho Google Play
+git checkout production && ./gradlew :app:bundleRelease     # AAB Play + IPA App Store
+./scripts/archive-appstore.sh ios appstore                  # IPA nộp App Store (iOS)
+./scripts/archive-appstore.sh mac appstore                  # IPA nộp App Store (macOS)
 ```
 
 ## 5. ⚠️ Chính sách thanh toán — đã xử bằng branch `store`
@@ -188,4 +189,6 @@ Nếu sau này muốn bán trực tiếp trên Play thì mới cần **Play Bill
 - [x] Chốt phương án thanh toán → tách branch `store` (không bán trong app)
 - [ ] Chụp screenshots từ máy thật (≥4 ảnh) và copy vào `release/android/play-assets/`
 - [ ] Tạo tài khoản Pro test để khai "App access"
-- [ ] Xác nhận loại tài khoản Play (cá nhân/tổ chức) → biết có phải chạy 12 tester × 14 ngày không
+- [x] Xác nhận loại tài khoản Play → **cá nhân** ⇒ phải chạy closed testing 12 tester × 14 ngày (xem mục 1)
+- [ ] Gom ≥12 email tester (có Google account) + gửi tin mời (xem `release/android/PLAY_TESTER_INVITE.md`)
+- [ ] Tạo Google Group cho tester và thêm Group vào Closed testing
