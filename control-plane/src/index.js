@@ -538,7 +538,13 @@ app.post("/v1/ai/payments/create", async (req, res) => {
 
     if (orderCode == null) {
       orderCode = Math.floor(Date.now() / 1000);
-      await aiStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
+      await aiStore.recordPendingPayment(orderCode, {
+        email,
+        plan,
+        method,
+        lang: pickMailLang(lang),
+        amount: planCfg.amount,
+      });
       await aiUsersStore
         .touch(email, { source: "purchase", note: `${plan} via ${method ?? "bankqr"}` })
         .catch((err) => console.error("ai user touch failed:", err?.message ?? err));
@@ -1497,7 +1503,15 @@ app.post("/v1/payments/create", async (req, res) => {
     if (!planCfg || planCfg.retired) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
     const orderCode = Math.floor(Date.now() / 1000);
-    await authStore.recordPendingPayment(orderCode, { email, plan, method, lang: pickMailLang(lang) });
+    // Freeze the price with the order: a later price change must not re-price an
+    // order the customer already saw (and may already have transferred).
+    await authStore.recordPendingPayment(orderCode, {
+      email,
+      plan,
+      method,
+      lang: pickMailLang(lang),
+      amount: planCfg.amount,
+    });
 
     // Alert the owner (email) with a signed one-click confirm link.
     firePaymentAlert(orderCode, email, plan, planCfg.amount, method);
@@ -1642,6 +1656,7 @@ app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res
       email: pending.email,
       plan: pending.plan,
       prefix: "payos",
+      amount: pending.amount ?? null,
     });
     res.json({ ok: true });
   } catch (err) {
@@ -1710,6 +1725,7 @@ app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, 
       plan: order.plan,
       prefix: "bankqr",
       lang: order.lang ?? (await authStore.langForEmail(order.email)),
+      amount: order.amount ?? null,
     });
     res.json({ ok: true, email: order.email });
   } catch (err) {
@@ -1733,6 +1749,7 @@ app.get("/v1/payments/confirm/:orderCode", async (req, res) => {
       plan: order.plan,
       prefix: "bankqr",
       lang: order.lang ?? (await authStore.langForEmail(order.email)),
+      amount: order.amount ?? null,
     });
     res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>Premium đã kích hoạt cho <b>${order.email}</b>.</p></div></body></html>`);
   } catch (err) {
@@ -1751,8 +1768,17 @@ function paymentConfirmSignature(orderCode) {
  * invoice. Shared by all confirm paths (admin button, email confirm link,
  * PayOS webhook). `planCfg` = PLANS_PUBLIC entry (may be null -> monthly).
  */
-async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "bankqr", lang }) {
+async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "bankqr", lang, amount = null }) {
   const planCfg = PLANS_PUBLIC[plan] ?? PLANS_PUBLIC.monthly;
+  // The price recorded with the order wins (price changes must not silently
+  // re-price an order the customer already paid against).
+  const billedAmount = Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : planCfg.amount;
+  if (Number(amount) > 0 && Number(amount) !== planCfg.amount) {
+    console.log(
+      `invoice: order ${orderCode} billed at the price frozen with the order ` +
+        `(${billedAmount}) instead of the current ${planCfg.amount}`,
+    );
+  }
   const user = await authStore.ensureUserByEmail(email);
   await authStore.grantSubscription(user.id, { productId: `${prefix}.${plan}`, days: planCfg.days });
   // Fresh subscription record for accurate expiry (grant returns publicUser but
@@ -1765,7 +1791,7 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
     to: email,
     orderCode,
     planLabel: planCfg.label,
-    amount: planCfg.amount,
+    amount: billedAmount,
     days: planCfg.days,
     activatedAt: new Date().toISOString(),
     expiresAt: sub?.expiresAt ?? null,

@@ -16,10 +16,11 @@ import { buildVietQRPayload } from "./vietqr.js";
  */
 
 const PLANS = {
-  monthly:   { amount: 70000,  days: 30,   label: "Monthly (70,000 VND / 30 days)", badge: "Monthly" },
-  quarterly: { amount: 190000, days: 90,   label: "3 Months (190,000 VND / 90 days)", badge: "3 Months" },
-  semiannual:{ amount: 350000, days: 180,  label: "6 Months (350,000 VND / 180 days)", badge: "6 Months" },
-  yearly:    { amount: 600000, days: 365,  label: "Yearly (600,000 VND / 365 days)", badge: "Yearly" },
+  // Prices raised 2026-09-11 (200k / 550k / 950k / 1.8M).
+  monthly:   { amount: 200000, days: 30,   label: "Monthly (200,000 VND / 30 days)", badge: "Monthly" },
+  quarterly: { amount: 550000, days: 90,   label: "3 Months (550,000 VND / 90 days)", badge: "3 Months" },
+  semiannual:{ amount: 950000, days: 180,  label: "6 Months (950,000 VND / 180 days)", badge: "6 Months" },
+  yearly:    { amount: 1800000, days: 365, label: "Yearly (1,800,000 VND / 365 days)", badge: "Yearly" },
   // Lifetime was withdrawn from sale (2026-09-11) — the shop no longer offers it.
   // Kept here so historical orders, invoices and admin views can still resolve
   // the plan name, and `retired` makes the API refuse new orders for it.
