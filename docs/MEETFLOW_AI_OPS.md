@@ -27,6 +27,17 @@ Vì vậy trang buy hiển thị thêm **giá quy đổi sang ¥** cho hai phư�
 - Đổi lại sang chuyển khoản ngân hàng / MoMo → trở về hiển thị VND như cũ.
 - Email báo đơn cho chủ shop cũng ghi thêm dòng **Quy đổi CNY: ¥X** để biết cần đối chiếu bao nhiêu.
 
+### Giá được chốt theo từng đơn
+
+Khi khách bấm tạo mã thanh toán, **giá của gói được ghi vào đơn** (`pendingPayments[].amount`).
+Lúc xác nhận (nút admin / link trong email / webhook PayOS), hoá đơn và quyền lợi dùng **đúng giá
+đã ghi trong đơn**, không dùng giá hiện tại — nên **đổi giá không làm sai hoá đơn của đơn cũ**.
+
+- Log khi hai giá khác nhau: `invoice: order <mã> billed at the price frozen with the order (600000) instead of the current 1800000`.
+- Đơn cũ tạo trước khi có cơ chế này (không có `amount`) sẽ dùng giá hiện tại — khi đổi giá, nhớ
+  chốt tay cho các đơn đang chờ (đã làm cho 9 đơn đang chờ ngày 11/09/2026: giá cũ 70k/190k/350k/600k).
+- Đổi giá gói: sửa `PLANS` trong `control-plane/src/payments.js` (4 gói VPN) hoặc `AI_PLANS` (MeetFlow AI).
+
 ### Gói đã ngừng bán
 
 - **VPNFlow: gói "Trọn đời" (1.500.000đ) đã bỏ khỏi trang buy từ 2026-09-11** — chỉ còn 4 gói:
@@ -43,9 +54,9 @@ Trang mua tự chọn tiền tệ hiển thị (giá chính) theo ngôn ngữ kh
 
 | Khách | Giá chính | Dòng phụ (≈) | Thanh toán thực tế |
 |---|---|---|---|
-| Việt Nam (`?lang=vi`) | **70.000 đ** / 30 ngày | ≈ ¥20 · $2.73 | chuyển khoản/MoMo: **VND** · WeChat/Alipay: **¥** |
-| Trung Quốc (`?lang=zh`) | **¥20** / 30 天 | ≈ 70,000 đ · $2.73 | WeChat/Alipay: **¥20** |
-| Quốc tế (`?lang=en/ja/ko`) | **$2.73** / 30 days | ≈ 70,000 đ · ¥20 | chuyển khoản/MoMo: **VND** (hiện kèm ≈ $) |
+| Việt Nam (`?lang=vi`) | **200.000 đ** / 30 ngày | ≈ ¥58 · $7.80 | chuyển khoản/MoMo: **VND** · WeChat/Alipay: **¥** |
+| Trung Quốc (`?lang=zh`) | **¥58** / 30 天 | ≈ 200,000 đ · $7.80 | WeChat/Alipay: **¥58** |
+| Quốc tế (`?lang=en/ja/ko`) | **$7.80** / 30 days | ≈ 200,000 đ · ¥58 | chuyển khoản/MoMo: **VND** (hiện kèm ≈ $) |
 
 - Có **thanh chọn tiền tệ** (VNĐ / ¥ CNY / $ USD) ngay dưới thanh ngôn ngữ; đổi ngôn ngữ thì
   tiền tệ tự đổi theo. Ép bằng URL: `?cur=CNY`, `?cur=USD`, `?cur=VND` (giữ nguyên khi đổi ngôn ngữ).
@@ -82,10 +93,10 @@ Kiểm tra ảnh nào đang được dùng: response header `X-QR-Variant` và `
 
 | Số tiền | Dùng cho | Tên file |
 |---|---|---|
-| ¥20 | VPN tháng 70.000đ | `wechat-20.png`, `alipay-20.png` |
-| ¥55 | VPN 3 tháng 190.000đ | `wechat-55.png`, `alipay-55.png` |
-| ¥100 | VPN 6 tháng 350.000đ | `wechat-100.png`, `alipay-100.png` |
-| ¥172 | VPN năm 600.000đ | `wechat-172.png`, `alipay-172.png` |
+| ¥58 | VPN tháng 200.000đ | `wechat-58.png`, `alipay-58.png` |
+| ¥158 | VPN 3 tháng 550.000đ | `wechat-158.png`, `alipay-158.png` |
+| ¥272 | VPN 6 tháng 950.000đ | `wechat-272.png`, `alipay-272.png` |
+| ¥515 | VPN năm 1.800.000đ | `wechat-515.png`, `alipay-515.png` |
 | ¥43 | MeetFlow AI pass 30 ngày | `wechat-43.png`, `alipay-43.png` |
 | ¥38 | MeetFlow AI tháng | `wechat-38.png`, `alipay-38.png` |
 | ¥300 | MeetFlow AI năm | `wechat-300.png`, `alipay-300.png` |
@@ -97,12 +108,12 @@ Làm dần cũng được: gói nào chưa có ảnh riêng thì dùng ảnh QR 
 **Tỷ giá hiện tại: GHIM CỐ ĐỊNH 1 CNY = 3.500 đ** (chủ shop ấn định, không dùng tỷ giá thị trường).
 Đặt bằng `Environment=VND_PER_CNY=3500` trong `/etc/systemd/system/flowvpn-cp.service.d/store-urls.conf`.
 
-| Gói | Giá | Quy đổi |
+| Gói | Giá (từ 11/09/2026) | Quy đổi ¥ |
 |---|---|---|
-| VPN tháng | 70.000đ | **¥20** |
-| VPN 3 tháng | 190.000đ | **¥55** |
-| VPN 6 tháng | 350.000đ | **¥100** |
-| VPN năm | 600.000đ | **¥172** |
+| VPN tháng | 200.000đ | **¥58** |
+| VPN 3 tháng | 550.000đ | **¥158** |
+| VPN 6 tháng | 950.000đ | **¥272** |
+| VPN năm | 1.800.000đ | **¥515** |
 | MeetFlow AI pass30 | 150.000đ | **¥43** |
 | MeetFlow AI tháng | 130.000đ | **¥38** |
 | MeetFlow AI năm | 1.050.000đ | **¥300** |

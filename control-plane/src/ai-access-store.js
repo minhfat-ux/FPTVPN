@@ -45,13 +45,14 @@ export class AiAccessStore {
 
   // ---------------------------------------------------------------- orders
 
-  async recordPendingPayment(orderCode, { email, plan, method, lang }) {
+  async recordPendingPayment(orderCode, { email, plan, method, lang, amount = null }) {
     const data = await this._load();
     data.pendingPayments = data.pendingPayments.filter((e) => e.orderCode !== Number(orderCode));
     data.pendingPayments.push({
       orderCode: Number(orderCode),
       email: normalizeEmail(email),
       plan,
+      amount: amount == null ? null : Number(amount),
       method: method ?? "bankqr",
       lang: lang ?? null,
       paidAt: null,

@@ -67,8 +67,12 @@ Trong App Store Connect → app VPNFlow → *Monetization → Subscriptions*:
 
 | Product ID | Loại | Giá gợi ý | Ghi chú |
 |---|---|---|---|
-| `Monthly_Premium` | Auto-renewable, 1 tháng | 70.000đ | Cùng **1 subscription group** |
-| `Yearly_Premium` | Auto-renewable, 1 năm | 600.000đ | Bậc cao hơn trong group |
+| `Monthly_Premium` | Auto-renewable, 1 tháng | 200.000đ | Cùng **1 subscription group** |
+| `Yearly_Premium` | Auto-renewable, 1 năm | 1.800.000đ | Bậc cao hơn trong group |
+
+> ⚠️ Giá IAP **phải khớp giá bán trên web** (200.000đ / 1.800.000đ từ 11/09/2026). Sau khi tăng giá,
+> vào App Store Connect sửa giá 2 gói này (và Play Console nếu bản Android bán qua Google Play);
+> app hiển thị giá do Apple/Google trả về nên không cần build lại.
 
 - App **không hard-code** product ID → không cần đổi code khi đặt ID khác, nhưng
   phải **đúng** ID đã đăng ký (kiểm tra ở `SubscriptionStore`).
