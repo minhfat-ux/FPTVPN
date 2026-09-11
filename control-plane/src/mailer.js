@@ -335,26 +335,49 @@ export function renderVerifyEmail({ lang = "en", to, link, reminders = 1 }) {
 }
 
 /** Builds the owner's "new order needs confirmation" alert (always Vietnamese). */
-export function renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confirmUrl, product = "VPNFlow Premium", cny = null }) {
+export function renderPaymentAlert({
+  orderCode,
+  buyerEmail,
+  plan,
+  amount,
+  confirmUrl,
+  product = "VPNFlow Premium",
+  cny = null,
+  method = null,
+  methodInfo = null,
+}) {
   const amt = Number(amount || 0).toLocaleString("vi-VN");
   // WeChat/Alipay customers type the CNY amount by hand, so the owner must know
   // which ¥ figure to look for in the payment app.
   const cnyRow = cny?.amount
     ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Quy đổi CNY</td><td style="font-weight:bold">¥${cny.amount} <span style="color:#666;font-weight:normal">(1 CNY ≈ ${Number(cny.rate || 0).toLocaleString("vi-VN")} đ)</span></td></tr>`
     : "";
+  // The owner opens this mail to check one thing: did the money arrive, and
+  // where? So the channel goes in a box at the top, with the exact app/account
+  // to open and the figure to match — before the confirm button.
+  const channelBox = methodInfo
+    ? `<div style="background:#fff8e1;border:1px solid #f0d48a;border-left:5px solid #f0a800;border-radius:8px;padding:14px;margin:16px 0">
+  <p style="margin:0 0 6px;font-size:15px"><b>Khách chọn thanh toán qua: ${methodInfo.label}</b></p>
+  <p style="margin:0 0 6px;color:#333">🔎 <b>Kiểm tra ở:</b> ${methodInfo.where}</p>
+  <p style="margin:0;color:#333">💵 <b>Số tiền cần khớp:</b> ${methodInfo.expected || `${amt} đ`}</p>
+  ${methodInfo.account ? `<p style="margin:6px 0 0;color:#666;font-size:12.5px">Tài khoản/Ví nhận: ${methodInfo.account}</p>` : ""}
+</div>`
+    : "";
   return {
-    subject: `Đơn thanh toán mới (${product}) — #${orderCode}`,
+    subject: `Đơn mới (${product}) #${orderCode} — khách trả qua ${methodInfo?.short ?? method ?? "?"}`,
     html: shell(`<p>Xin chào,</p>
 <p>Có đơn thanh toán mới cần xác nhận:</p>
+${channelBox}
 <table style="border-collapse:collapse">
   <tr><td style="padding:4px 12px 4px 0;color:#666">Mã đơn</td><td style="font-weight:bold">#${orderCode}</td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666">Email khách</td><td style="font-weight:bold">${buyerEmail}</td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666">Gói</td><td style="font-weight:bold">${plan}</td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666">Số tiền</td><td style="font-weight:bold">${amt} đ</td></tr>
+  ${methodInfo ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Phương thức</td><td style="font-weight:bold">${methodInfo.label}</td></tr>` : ""}
   ${cnyRow}
 </table>
 <p>Sản phẩm: <b>${product}</b></p>
-<p>Vui lòng kiểm tra app ngân hàng đã nhận tiền, rồi bấm nút bên dưới để kích hoạt cho khách:</p>
+<p>Sau khi kiểm tra đúng số tiền ở kênh trên, bấm nút dưới để kích hoạt cho khách:</p>
 <p><a href="${confirmUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">✅ Xác nhận đã nhận tiền</a></p>
 <p style="color:#999;font-size:12px">Link chỉ có hiệu lực 1 lần. Nếu bạn không tạo đơn này, hãy bỏ qua email.</p>`),
   };
@@ -464,12 +487,23 @@ export async function sendRenewalReminder({ to, lang, daysLeft, expiresAt, buyUr
 }
 
 /** Owner alert for a new order (Vietnamese, includes the confirm link). */
-export async function sendPaymentAlert({ to, orderCode, buyerEmail, plan, amount, confirmUrl, product = "VPNFlow Premium" }) {
+export async function sendPaymentAlert({
+  to,
+  orderCode,
+  buyerEmail,
+  plan,
+  amount,
+  confirmUrl,
+  product = "VPNFlow Premium",
+  cny = null,
+  method = null,
+  methodInfo = null,
+}) {
   return deliver({
     to,
-    message: renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confirmUrl, product }),
+    message: renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confirmUrl, product, cny, method, methodInfo }),
     logTag: "payment-alert",
-    logContext: { orderCode, buyerEmail },
+    logContext: { orderCode, buyerEmail, method: method ?? "?", channel: methodInfo?.short ?? null },
   });
 }
 

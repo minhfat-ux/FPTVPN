@@ -1468,8 +1468,20 @@ async function fireAiPaymentAlert(orderCode, email, plan, amount, method = null)
   const sig = paymentConfirmSignature("ai:" + orderCode);
   const confirmUrl = `${base}/v1/ai/payments/confirm/${orderCode}?t=${sig}`;
   const cny = await cnyAmountForMethod(amount, method).catch(() => null);
+  const methodInfo = paymentMethodInfo(method, { amountVnd: amount, cny });
   try {
-    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, product: "MeetFlow AI Pro", cny });
+    const r = await sendPaymentAlert({
+      to: owner,
+      orderCode,
+      buyerEmail: email,
+      plan,
+      amount,
+      confirmUrl,
+      product: "MeetFlow AI Pro",
+      cny,
+      method,
+      methodInfo,
+    });
     console.log(`ai-payment-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
   } catch (err) {
     console.error("fireAiPaymentAlert failed:", err);
@@ -1766,6 +1778,65 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
   return user;
 }
 
+/**
+ * "Where did this customer actually pay?" — the owner's alert has to answer that
+ * at a glance: opening the wrong app (or the wrong bank account) is how a real
+ * transfer gets missed. Labels are Vietnamese because the alert goes to the shop
+ * owner, with the Chinese app names kept for the two CN channels.
+ */
+function paymentMethodInfo(method, { amountVnd = 0, cny = null } = {}) {
+  const bankAccount = process.env.BANK_QR_ACCOUNT || "57222538888";
+  const bankName = process.env.BANK_QR_NAME || "TPBank";
+  const momoAccount = process.env.MOMO_QR_ACCOUNT || "ví MoMo";
+  const amountText = `${Number(amountVnd || 0).toLocaleString("vi-VN")} đ`;
+  const cnyText = cny?.amount ? `¥${cny.amount} (≈ ${amountText})` : amountText;
+  const map = {
+    bankqr: {
+      short: "Chuyển khoản ngân hàng",
+      label: `🏦 Chuyển khoản ngân hàng (VietQR · ${bankName})`,
+      where: `Mở app ngân hàng (${bankName}) → xem biến động số dư / lịch sử giao dịch của tài khoản nhận tiền`,
+      account: `${bankName} · ${bankAccount}`,
+      expected: amountText,
+    },
+    momo: {
+      short: "MoMo",
+      label: "📱 MoMo (QR động)",
+      where: "Mở app MoMo → Lịch sử giao dịch (hoặc thông báo nhận tiền) của ví nhận",
+      account: `MoMo · ${momoAccount}`,
+      expected: amountText,
+    },
+    wechat: {
+      short: "WeChat Pay",
+      label: "💬 WeChat Pay (微信支付)",
+      where: "Mở WeChat → 我 (Tôi) → 服务 → 钱包 → 账单 (Lịch sử giao dịch), lọc theo ngày hôm nay",
+      account: "Ví WeChat nhận tiền (mã QR cá nhân)",
+      expected: cnyText,
+    },
+    alipay: {
+      short: "Alipay",
+      label: "🅰️ Alipay (支付宝)",
+      where: "Mở Alipay → 我的 (Của tôi) → 账单 (Lịch sử giao dịch), lọc theo ngày hôm nay",
+      account: "Ví Alipay nhận tiền (mã QR cá nhân)",
+      expected: cnyText,
+    },
+    payos: {
+      short: "PayOS",
+      label: "💳 Cổng thanh toán PayOS (MoMo/QR/thẻ)",
+      where: "Mở dashboard PayOS → Giao dịch (đơn này thường tự xác nhận qua webhook)",
+      account: "PayOS",
+      expected: amountText,
+    },
+  };
+  const key = String(method ?? "").toLowerCase();
+  return map[key] ?? {
+    short: key || "không rõ",
+    label: `❔ Kênh thanh toán: ${key || "không rõ"}`,
+    where: "Kiểm tra tất cả kênh nhận tiền (ngân hàng, MoMo, WeChat, Alipay)",
+    account: null,
+    expected: amountText,
+  };
+}
+
 /** CNY figure for a WeChat/Alipay order (null for the other methods). */
 async function cnyAmountForMethod(amount, method) {
   const m = String(method ?? "").toLowerCase();
@@ -1781,8 +1852,9 @@ async function firePaymentAlert(orderCode, email, plan, amount, method = null) {
   const confirmUrl = `${base}/v1/payments/confirm/${orderCode}?t=${sig}`;
   // WeChat/Alipay are settled in CNY — tell the owner the figure to look for.
   const cny = await cnyAmountForMethod(amount, method).catch(() => null);
+  const methodInfo = paymentMethodInfo(method, { amountVnd: amount, cny });
   try {
-    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, cny });
+    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, cny, method, methodInfo });
     console.log(`payment-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
   } catch (err) {
     console.error("firePaymentAlert failed:", err);

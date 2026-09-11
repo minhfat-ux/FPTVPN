@@ -113,6 +113,24 @@ CNY rate: pinned at 1 CNY = 3500 VND (env:VND_PER_CNY)          # đang ghim
 CNY rate: 1 CNY = 3876 VND (open.er-api.com, cached 6h)          # chạy theo thị trường
 ```
 
+### Email báo đơn cho chủ shop — có ghi rõ kênh thanh toán
+
+Mỗi đơn mới gửi 1 email tới `OWNER_ALERT_EMAIL` (mặc định `minhnb2@me.com`). Đầu email có **khung
+vàng** trả lời ngay 3 câu: khách trả qua kênh nào, mở app nào để kiểm tra, và số tiền cần khớp.
+
+| Kênh khách chọn | Tiêu đề email | Hướng dẫn kiểm tra trong email |
+|---|---|---|
+| Chuyển khoản ngân hàng | `… — khách trả qua Chuyển khoản ngân hàng` | Mở app **TPBank** → biến động số dư tài khoản `57222538888` |
+| **WeChat Pay** | `… — khách trả qua WeChat Pay` | Mở **WeChat → 我 → 服务 → 钱包 → 账单** (lịch sử giao dịch), số tiền cần khớp ghi bằng **¥** |
+| **Alipay** | `… — khách trả qua Alipay` | Mở **Alipay → 我的 → 账单**, số tiền ghi bằng **¥** |
+| MoMo | `… — khách trả qua MoMo` | Mở app **MoMo → Lịch sử giao dịch** |
+| PayOS | `… — khách trả qua PayOS` | Dashboard **PayOS → Giao dịch** (thường tự xác nhận qua webhook) |
+
+- Với WeChat/Alipay, khung đó ghi **số ¥ cần tìm** kèm quy đổi VND (ví dụ `¥43 (≈ 150.000 đ)`),
+  vì khách tự nhập số tiền nên anh phải khớp đúng con số đó.
+- Tài khoản/ví nhận tiền được in ngay dưới khung để khỏi mở nhầm ví.
+- Nút **✅ Xác nhận đã nhận tiền** nằm cuối email, chỉ có hiệu lực 1 lần.
+
 ## 2. Kích hoạt Pro cho khách
 
 1. Khách mua trên web → hệ thống ghi đơn + gửi email báo cho chủ shop (có link xác nhận 1-click).
