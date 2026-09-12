@@ -1,5 +1,21 @@
 # EXIT NODE RUNBOOK — Thêm exit node mới (1 lần là xong)
 
+> ⚠️ **CẬP NHẬT 2026-09-12 — transport đã đổi.** Từ nay node mới phải chạy **hysteria2 + TCP relay**
+> (không phải WireGuard). Các bước WireGuard bên dưới **chỉ còn dùng cho node legacy / client cũ**.
+> Quy trình đúng cho node mới: **`docs/AGENT_NEW_NODE_GUIDE.md`** + `tools/node-setup/provision-node.sh`
+> (systemd: `hysteria@<port>`, `hyrelay@<port>`), chọn dải IP theo `docs/EXIT_NODE_IP_GUIDE.md`.
+
+## 0. Trạng thái node hiện tại (2026-09-12)
+
+| Node | IP | ASN | Cổng đang chạy | Ghi chú |
+|---|---|---|---|---|
+| node1 (coordinator) | `103.173.155.50` | AS135905 (VNPT) | hysteria UDP `8443/28443/54443`; relay TCP `8443→8443`, `9445→8443`; wgrelay TCP `9444→UDP 443` (legacy) | Chạy tốt từ TQ (cả UDP lẫn TCP relay) |
+| node2 | `103.6.234.233` | AS152992 (Online Data) | như trên | **UDP bị GFW chặn ở mức IP** → chỉ dùng được TCP relay |
+
+- Config hysteria: node1 `/etc/hysteria/server.yaml` (+`server-<port>.yaml`), node2 `/etc/hysteria-server-<port>.yaml`; cert self-signed `/etc/hysteria-cert.pem`.
+- Auth `flowvpn_hysteria_2026`, obfs salamander `FlowVPN-8f3k`. **Không** đặt `ignoreClientBandwidth: true` (sẽ mất Brutal CC của client).
+- Registry node là **SQLite** `/root/flowvpn-cp/data/nodes.db` (bảng `exit_nodes`) — `nodes.json` chỉ là đường import legacy.
+
 - **Verified:** 2026-08-23 (node 2: 103.6.234.233 — đã làm đủ, có cả bài học từ lỗi)
 - **Scope:** thêm exit node WireGuard mới vào hệ thống (coordinator + registry + app)
 
@@ -103,3 +119,14 @@ curl -s "https://meetflowai.site/PrivateVPN/v1/admin/nodes/<id>/health" -H "Auth
 - [ ] SSH coordinator → node (không password)
 - [ ] Registry: endpoint + public_key (THỰC TẾ) + ssh_target + priority + active
 - [ ] Verify: /v1/nodes + register → peer trên node + connect thật → IP đúng + mạng thông
+
+## Troubleshooting thật đã gặp (2026-09-09 → 09-12)
+
+| Triệu chứng | Nguyên nhân | Cách xử |
+|---|---|---|
+| App "Connected" nhưng không có mạng | socket transport **không được `protect()`** → packet của tunnel bị route vào tunnel chưa kết nối | Đã fix trong app (tạo socket ở Java → `protect()` → `fd` sang Go). Đừng sửa theo hướng cũ. |
+| Connect fail khi app ở background trên **mobile data**, WiFi thì OK | `netpolicy` chặn data app ở background trên mạng **metered** (`blocked=APP_BACKGROUND`) | Đã fix: foreground service `specialUse` + retry vô hạn + nhớ transport (`docs/ANDROID_METERED_BACKGROUND_DATA.md`) |
+| Node mới, UDP từ TQ timeout dù server vẫn sống | GFW chặn UDP theo **IP** (như node2) | Dùng TCP relay (8443/9445) hoặc xin IP ở dải tốt hơn (`docs/EXIT_NODE_IP_GUIDE.md`) |
+| `403` khi tải file trong `/var/www/flowvpn/**` | file thuộc root, mode 600 → caddy (user `caddy`) không đọc được | `chown caddy:caddy <file> && chmod 644 <file>` |
+| `caddy reload` làm chết web | cấu hình sai | Luôn `caddy validate --config /etc/caddy/Caddyfile` **trước** khi `systemctl reload caddy` |
+| Đổi cấu hình hysteria phải restart tay | chạy bằng `setsid nohup` (node1/node2 hiện tại) | Node mới dùng systemd: `systemctl restart hysteria@8443` |

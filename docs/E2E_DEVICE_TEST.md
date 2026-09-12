@@ -1,5 +1,7 @@
 # E2E Device Test — iPhone thật (bản upgrade)
 
+> Android: xem `docs/E2E_ANDROID_DEVICE_TEST.md` (TC mobile-data background, disconnect, 3 thiết bị, nhớ transport).
+
 - **Date:** 2026-08-23
 - **Gate:** GATE 2/7 (real E2E) — evidence bắt buộc trước khi submit upgrade
 - **Rule:** `VPN UI CONNECTED != WORKING VPN` — cần observation độc lập (RULE-VPN-001/002)

@@ -2,7 +2,7 @@
 
 - **Baseline:** RS-20260819-01
 - **Rule baseline:** RULESET-0001
-- **Updated:** 2026-08-20
+- **Updated:** 2026-09-12
 - **Note (RULE-DASH-001):** this is a projection of authoritative state in
   `.privatevpn/status/`; it is not the source of truth.
 
@@ -74,3 +74,8 @@ None yet. See `.privatevpn/bugs/`.
 - 2026-08-20: privacy review (NFR-PRIV-001 / AC-019) — evidence/2026-08-20-privacy-review.md: 19 points reviewed (12 iOS + 7 control-plane), 3 low-severity issues recorded (deviceName transmission, auth token in UserDefaults, unauthenticated admin endpoints when AUTH_TOKEN unset); no code changes; docs synced with .privatevpn/status/requirements.json (RULE-DASH-001).
 - 2026-08-20 (11:30): GATE 3 iOS unit tests verified — **37/37 PASS, TEST SUCCEEDED** (iPhone 16 Pro simulator, evidence/builds/2026-08-20-gate3-tests.log); NFR-SEC-001 → IMPLEMENTED (Keychain + DeviceIdentity), NFR-PRIV-001 → PARTIAL (evidence AC-019, 3 low issues pending GATE 6).
 - 2026-08-20 (12:14, owner-approved): **3 privacy low issues FIXED** (CR-0003) — (1) `UIDevice.current.name` removed from POST /device (+ regression test asserting no deviceName in payload); (2) control-plane auth token moved UserDefaults → Keychain with one-shot migration; (3) admin endpoints (GET /devices, GET /status, GET/DELETE /device/:id) fail closed — 503 when `AUTH_TOKEN` unset, 401 on missing/bad token (AC-018). Control-plane smoke PASS (both scenarios); iOS **39/39 PASS** (evidence/builds/2026-08-20-privacy-fixes-tests.log); NFR-PRIV-001 + NFR-SEC-004 → IMPLEMENTED. Evidence: evidence/2026-08-20-privacy-fixes.md.
+- 2026-09-12: **Android China transport shipped (1.2.4 / versionCode 4)** — hysteria2 (UDP 8443/28443/54443 + obfs salamander) làm transport chính, **TCP relay** (TCP 8443 & 9445 → UDP 8443) cho mạng chặn UDP; app tạo socket trong Java → `protect()` → `Connect()` trước khi `establish()` ⇒ hết bug "connected but no internet"; **foreground service `specialUse`** + **retry vô hạn backoff** + **nhớ transport** ⇒ hết "chập chờn trên mobile data"; **Brutal CC** (up 2 / down 20 Mbps).
+- 2026-09-12: **Giới hạn 3 thiết bị/tài khoản** — server `POST /v1/devices/claim` + env `MAX_DEVICES_PER_USER=3`; app hiện dialog chọn đăng xuất thiết bị cũ (5 ngôn ngữ) rồi tự connect lại. Evidence: `docs/DEVICE_LIMIT.md` (đã test: claim 1-3 tạo, claim 4 bị 403 kèm danh sách).
+- 2026-09-12: **Phát hành**: APK web `https://meetflowai.site/v1/downloads/android` (1.2.4) + AAB Play `https://meetflowai.site/dl/VPNFlow-1.2.4-play-store.aab` (branch `store`, không UI mua gói, không quyền BILLING, khai FGS type `specialUse`).
+- 2026-09-12: Hạ tầng node — bộ provision chuẩn hoá `tools/node-setup/` (hysteria + relay Go + **systemd**, thay cho `setsid nohup`); hướng dẫn chọn dải IP `docs/EXIT_NODE_IP_GUIDE.md` (ưu tiên AS135905/VNPT như node1, tránh AS152992); guideline dựng node cho agent: `docs/AGENT_NEW_NODE_GUIDE.md`.
+- 2026-09-12: Docs mới/đã cập nhật: `CHINA_TRANSPORT_ROADMAP.md` (kiến trúc cuối), `ANDROID_METERED_BACKGROUND_DATA.md` (đã fix), `E2E_ANDROID_DEVICE_TEST.md`, `DEVELOPMENT.md` §5c (build/release Android), `PLAY_SUBMISSION.md`, `RELEASE_NOTES_1.2.4.md`, `PLAY_LISTING_EN.md`.

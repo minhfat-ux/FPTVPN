@@ -38,7 +38,7 @@ _Lợi ích: tài khoản **Organization** KHÔNG bị yêu cầu closed testing
 - Nếu anh muốn dùng app `com.privatevpn.app` đã tạo ở account cá nhân: dùng tính năng **Transfer app** sang account mới (không mất versionCode/đánh giá).
 
 ## 3. Sau khi có org account
-- Upload AAB: `release/android/VPNFlow-1.2.2-play-store.aab` (branch `store`).
+- Upload AAB: `release/android/VPNFlow-1.2.4-play-store.aab` (link: https://meetflowai.site/dl/VPNFlow-1.2.4-play-store.aab) (branch `store`).
 - **Không cần** closed testing 12 tester → có thể đẩy thẳng Internal testing → Production.
 - Vẫn phải điền đủ: App content, Data safety, Content rating, Privacy policy (`https://meetflowai.site/FlowVPNPrivacy.html`), App access (account review: `review@meetflowai.site` / `246810`).
 - Vẫn nên chạy **Internal testing** vài ngày để có pre-launch report trước khi rollout 100%.

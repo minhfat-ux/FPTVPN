@@ -446,3 +446,33 @@ curl -s "https://api.meetflowai.site/v1/ai/entitlement?email=X"  # quyền Pro c
 curl -sI https://meetflowai.site/v1/ai/downloads/android         # APK
 curl -s "$TOKEN" https://api.meetflowai.site/v1/admin/ai/payments/pending
 ```
+
+## 8. Phát hành Android (play vs china) — cập nhật 2026-09-12
+
+**Package:** `com.meetflow.translator` · **phiên bản hiện tại: 1.0.4 (versionCode 5)**
+
+Hai flavour trong `FChinaTranslator/android/app/build.gradle.kts`:
+| Flavour | Ai dùng | Thanh toán | BuildConfig |
+|---|---|---|---|
+| `play` | Google Play | **Play Billing** (không có web checkout — yêu cầu chính sách Play, xem commit `ecc845d`) | `WEB_PRO_ONLY=false` |
+| `china` | Sideload (web bán QR) | **Web checkout** (bank/WeChat/Alipay qua control-plane) | `WEB_PRO_ONLY=true` |
+
+**Artifact đang phát:**
+| Kênh | File | Link |
+|---|---|---|
+| Google Play | AAB (flavour `play`) | https://meetflowai.site/dl/MeetFlowAI-1.0.4-play.aab |
+| Sideload | APK (flavour `china`) | https://meetflowai.site/dl/MeetFlowAI-1.0.4-china.apk |
+| Update gate + trang support | APK | `https://api.meetflowai.site/v1/ai/downloads/android` → file `/root/flowvpn-apk/MeetFlowAI-latest.apk` |
+
+**Build (project KHÔNG commit gradle wrapper — dùng gradle 8.11.1 có sẵn trên máy):**
+```bash
+cd /Volumes/BIWIN/SourcesCode/FChinaTranslator/android
+GRADLE=$HOME/.gradle/wrapper/dists/gradle-8.11.1-bin/*/gradle-8.11.1/bin/gradle
+JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=$HOME/Library/Android/sdk $GRADLE :app:bundlePlayRelease    # AAB cho Play
+JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=$HOME/Library/Android/sdk $GRADLE :app:assembleChinaRelease   # APK sideload
+```
+Ký bằng `android/keystore/upload-keystore.jks` (`CN=MeetFlow AI, OU=Mobile`) — **dùng đúng keystore này** cho mọi bản lên Play.
+
+**Release notes 5 ngôn ngữ:** `FChinaTranslator/play-assets/RELEASE_NOTES_1.0.4.md` (mỗi ngôn ngữ ≤500 ký tự theo giới hạn "What's new" của Play).
+
+**Sau khi phát hành bản mới:** cập nhật `MeetFlowAI-latest.apk` (endpoint update trong app) và link trên trang support (`/var/www/flowvpn/support.html`, nhớ `chown caddy` + `chmod 644`).

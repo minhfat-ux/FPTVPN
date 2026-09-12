@@ -97,6 +97,30 @@ initialization is CR-0001.
 - **Decision owner:** MinhNb2 (owner) / Culi.
 - **Effective requirement version:** SRS v0.1 / RS-20260819-01 (unchanged; impl-state only).
 
+## CR-0004 — China transport (hysteria2) + Android stability/device-limit release
+
+- **ID:** CR-0004
+- **Title:** Android China transport, background-connection stability và giới hạn 3 thiết bị
+- **Requested by:** Owner (chỉ đạo trực tiếp trong phiên làm việc 2026-09-12)
+- **Date:** 2026-09-12
+- **Affected requirements:** FR-VPN-* (transport/connectivity), FR-REVOKE-* (quản lý thiết bị), NFR-REL-* (độ ổn định), NFR-SEC-* (không đổi baseline bảo mật)
+- **Current requirement:** transport WireGuard UDP + relay TCP chỉ mang tính chứng minh; chưa có giới hạn số thiết bị
+- **Proposed requirement:**
+  1. Transport chính cho khách Trung Quốc là **hysteria2** (UDP + obfs salamander) với **TCP relay** dự phòng cho mạng chặn UDP; app tự chuyển transport và ghi nhớ transport đã thành công.
+  2. Tunnel phải **giữ được khi app ở background trên mạng metered** (dùng foreground service `specialUse`) và **tự kết nối lại vô hạn có backoff** thay vì bỏ cuộc.
+  3. Mỗi tài khoản tối đa **3 thiết bị đang hoạt động**; khi vượt, hệ thống chặn kết nối và app hiển thị danh sách để người dùng **đăng xuất thiết bị cũ**.
+- **Reason:** lỗi "Connected but no internet"/"chập chờn" trên mạng Trung Quốc; yêu cầu thương mại về số thiết bị; chuẩn bị phát hành Google Play.
+- **Implementation (đã giao):**
+  - Android **1.2.4 (versionCode 4)**: APK bán web (`/v1/downloads/android`) + AAB Play (`VPNFlow-1.2.4-play-store.aab`).
+  - Server: control-plane thêm `POST /v1/devices/claim` + env `MAX_DEVICES_PER_USER=3`.
+  - Node: hysteria2 3 cổng UDP + 2 TCP relay, chạy bằng systemd (`tools/node-setup/`).
+- **Evidence:** `docs/CHINA_TRANSPORT_ROADMAP.md`, `docs/ANDROID_METERED_BACKGROUND_DATA.md` (đã fix), `docs/DEVICE_LIMIT.md`, `docs/E2E_ANDROID_DEVICE_TEST.md`, `docs/PLAY_SUBMISSION.md`, log thật trên node1 (`journalctl -u flowvpn-cp`) và adb logcat của phiên test.
+- **Impact analysis:** không đổi baseline SRS; các requirement WireGuard cũ vẫn hợp lệ nhưng **không còn là transport chính** cho Android (đánh dấu PARTIAL/SUPERSEDED cần owner xác nhận khi sync `.privatevpn/status/requirements.json`).
+- **Recommendation:** accept (đã chạy production, đã kiểm thử thiết bị thật).
+- **Decision:** PROPOSED — chờ owner chấp thuận.
+- **Decision owner:** MinhNb2 (owner).
+- **Effective requirement version:** đề xuất nâng lên RS-20260912-01 sau khi ACCEPTED.
+
 ## Change history
 
 | CR | Date | Type | Result | Effective baseline |
@@ -104,6 +128,7 @@ initialization is CR-0001.
 | CR-0001 | 2026-08-19 | Initial baseline | ACCEPTED | RS-20260819-01 |
 | CR-0002 | 2026-08-20 | Docs sync + privacy review (AC-019 evidence) | ACCEPTED | RS-20260819-01 |
 | CR-0003 | 2026-08-20 | Privacy fixes (NFR-PRIV-001 + NFR-SEC-004 → IMPLEMENTED) | ACCEPTED | RS-20260819-01 |
+| CR-0004 | 2026-09-12 | Android China transport (hysteria2 + TCP relay) + background stability + giới hạn 3 thiết bị | PROPOSED | RS-20260819-01 (đề xuất RS-20260912-01) |
 
 ## Rules for changes
 

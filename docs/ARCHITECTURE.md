@@ -207,3 +207,21 @@ grant/revoke subscription, revoke user (see `control-plane/README.md`).
   unless IPv6 overlay support is added later.
 - Windows UI should match the same product style using WinUI 3 or an equivalent
   native stack, with WireGuardNT/official WireGuard tunnel service integration.
+
+## 12. Android data plane (as-built 2026-09-12)
+
+Android **không** dùng WireGuard làm transport chính cho khách Trung Quốc nữa (GFW chặn UDP tới node VN).
+Data plane hiện tại:
+
+- **hysteria2** (QUIC + obfs salamander) trên UDP `8443/28443/54443`, chạy như **foreground service**
+  (`HysteriaVpnService`, `foregroundServiceType="specialUse"`) — Android 15/16 đã bỏ type `vpn`.
+- **TCP relay** dự phòng (TCP `8443` và `9445` → UDP `8443`) cho mạng chặn UDP (GFW, corporate NAT).
+- Socket transport do **Java tạo** rồi `protect()` trước khi giao fd cho Go (`mobile.Mobile`) — nếu thiếu
+  bước này, packet của chính tunnel bị route vào tunnel chưa kết nối (bug "connected but no internet").
+- `Connect()` chạy **trước** `establish()` ⇒ mọi transport fail thì mạng của máy không bị mất.
+- Client khai báo băng thông cho **Brutal CC**; app **nhớ transport** đã thành công và **retry vô hạn** có backoff.
+- WireGuard (GoBackend AAR) vẫn còn trong app cho chế độ cũ/legacy; iOS/macOS hiện vẫn dùng WireGuard +
+  TCP relay như mô tả ở mục 6–9.
+
+Chi tiết & bằng chứng: `docs/CHINA_TRANSPORT_ROADMAP.md`, `docs/ANDROID_METERED_BACKGROUND_DATA.md`,
+`docs/E2E_ANDROID_DEVICE_TEST.md`, `tools/hysteria-android/README.md`.

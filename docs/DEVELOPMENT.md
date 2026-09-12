@@ -73,6 +73,55 @@ Targets:
   `privatevpn.service` still exists for fallback.
 - Set `RESEND_API_KEY` (OTP email) and `AUTH_TOKEN` (admin) once available.
 
+## 5c. Android build & release (as-built 2026-09-12)
+
+**Toolchain:** JDK 17 (`/opt/homebrew/opt/openjdk@17`), Android SDK (`~/Library/Android/sdk`),
+Gradle 8.11.1 (wrapper ở `android/gradlew`), buildDir ghi ra `$HOME/.vpnflow-build` để tránh volume exFAT.
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export GRADLE_USER_HOME=$HOME/.gradle
+cd android
+./gradlew -p . -Pandroid.buildDir=$HOME/.vpnflow-build :app:assembleDebug     # APK debug (cài test)
+./gradlew -p . -Pandroid.buildDir=$HOME/.vpnflow-build :app:assembleRelease   # APK bán web (ký release key)
+./gradlew -p . -Pandroid.buildDir=$HOME/.vpnflow-build :app:bundleRelease     # AAB cho Google Play
+```
+
+**Hai branch phát hành:**
+| Branch | Kênh | Khác biệt |
+|---|---|---|
+| `main` / `web` | APK sideload (bán qua web) | `Config.SELL_ON_WEB = true` — paywall mở WebView trang buy |
+| `store` | Google Play (AAB) | `SELL_ON_WEB = false` — không UI mua gói, không link ra web, bỏ Play Billing |
+
+Version nằm ở `android/app/build.gradle.kts` (`versionCode` / `versionName`) — **bump ở cả 2 branch** mỗi lần phát hành.
+
+**AAR hysteria (transport TQ):** `android/app/libs/hysteria.aar` (29 MB, có trong git).
+Build lại bằng `tools/hysteria-android/build.sh` (clone hysteria `app/v2.12.2` → patch TUN fd → wrapper
+`mobile.go` → `gomobile bind`). Cần Go ≥1.22, gomobile, **NDK r25**, JDK 17.
+
+**Phát hành:**
+```bash
+# 1) APK bán web -> endpoint mà nút trên trang buy trỏ tới
+scp -i .tmp/flowvpn_support_page_ed25519 <apk> root@103.173.155.50:/root/flowvpn-apk/VPNFlow-latest.apk
+#    (link public: https://meetflowai.site/v1/downloads/android)
+# 2) AAB cho Play -> thư mục tĩnh /dl
+scp -i .tmp/flowvpn_support_page_ed25519 <aab> root@103.173.155.50:/var/www/flowvpn/dl/VPNFlow-<ver>-play-store.aab
+ssh ... "chown caddy:caddy /var/www/flowvpn/dl/*; chmod 644 /var/www/flowvpn/dl/*"
+```
+File đặt trong `/var/www/flowvpn/**` **phải** `chown caddy:caddy` + `chmod 644`, nếu không caddy trả 403.
+
+**Deploy control-plane (coordinator):**
+```bash
+scp -i .tmp/flowvpn_support_page_ed25519 control-plane/src/<file>.js root@103.173.155.50:/root/flowvpn-cp/src/
+ssh ... "systemctl restart flowvpn-cp && systemctl is-active flowvpn-cp"
+```
+Env của control-plane nằm **inline trong unit** (`systemctl cat flowvpn-cp`) — ví dụ `MAX_DEVICES_PER_USER=3`,
+`DEBUG_CODE_EMAILS`, `DEV_LOGIN_CODE`, `SMTP_*`.
+
+**Gotchas vận hành:** cache `~/.gradle/caches/8.11.1/kotlin-dsl` hỏng định kỳ → `./gradlew --stop && rm -rf` rồi build lại;
+adb trên máy Samsung test hay rớt (USB debugging tự tắt) → phải bật lại; file trong `/var/www` phải đúng owner/permission.
+
 ## 6. Commit conventions
 
 Commit message format (RULE-GIT-005, owner directive):

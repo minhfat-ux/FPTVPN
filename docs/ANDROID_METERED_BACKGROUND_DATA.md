@@ -1,7 +1,22 @@
 # Android: VPNFlow không thông mạng trên mobile data (metered) — điều tra & hướng fix
 
-_Trạng thái: **CHƯA FIX — CHƯA CODE** (owner yêu cầu ghi nhớ trước, làm sau)._
-_**Quyết định của owner: đi hướng B (app tự giữ foreground service) — vì user không biết/không tự bật được cài đặt hệ thống.**_
+_Trạng thái: ✅ **ĐÃ FIX** trong bản Android **1.2.4 (versionCode 4)** — phát hành 2026-09-12._
+_Owner chọn hướng B (app tự giữ foreground service) vì user không biết/không tự bật được cài đặt hệ thống._
+
+## 0. Đã fix những gì (tóm tắt cho người đọc sau)
+1. **Foreground service** `HysteriaVpnService` với `android:foregroundServiceType="specialUse"` +
+   property `PROPERTY_SPECIAL_USE_FGS_SUBTYPE=vpn_tunnel`; gọi `startForeground()` ngay đầu
+   `onStartCommand`, hạ foreground khi dừng. (Android 15/16 đã bỏ type `vpn`.)
+2. **Retry vô hạn + backoff** (3s → 6s → 12s → 24s → 30s, cap): service không còn tự bỏ cuộc sau 6 lượt
+   ⇒ hết "tự disconnect"; UI hiện **"Reconnecting…"** và nút Disconnect vẫn dùng được (`canDisconnect`).
+3. **Nhớ transport đã chạy** (`last_good_transport` trong `SharedPreferences`): connect sau thử đúng
+   đường cũ trước (ví dụ `tcp:8443`) rồi mới quét các cổng khác.
+4. **Brutal congestion control** phía client (`HY_UP_KBPS=2000`, `HY_DOWN_KBPS=20000`) → tốc độ tốt hơn
+   trên mạng loss/high-RTT.
+Kết quả thực tế: trên WiFi khách sạn TQ, connect **UP qua TCP relay 8443 trong ~2.6 s**; trên mobile data
+TQ owner xác nhận "chạy ngon" sau khi cài 1.2.4.
+
+Kịch bản kiểm tra lại khi nghi ngờ hồi quy: xem mục 4 (test có kiểm soát) bên dưới.
 
 ## 1. Triệu chứng
 - Trên **wifi khách sạn (unmetered)**: app chạy tốt — node1/node2 đều UP qua TCP relay 8443, ổn định nhiều phút.

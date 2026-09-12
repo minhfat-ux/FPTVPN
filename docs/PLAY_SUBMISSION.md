@@ -1,4 +1,4 @@
-# VPNFlow — Google Play Submission Pack (v1.2.2)
+# VPNFlow — Google Play Submission Pack (v1.2.4)
 
 _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung để đưa app lên Play Console._
 
@@ -6,20 +6,20 @@ _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung
 
 | File | Đường dẫn | Ghi chú |
 |---|---|---|
-| AAB (Play) | `release/android/VPNFlow-1.2.2-play-store.aab` | 39 MB, versionCode **2** / versionName **1.2.2**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
+| AAB (Play) | `release/android/VPNFlow-1.2.4-play-store.aab` | ~37 MB, versionCode **4** / versionName **1.2.4**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
 | SHA256 AAB | `da7076057b94cb290b97894273fdc3e9a582361b4622937dc00218c801831120` | |
-| APK (sideload) | `release/android/VPNFlow-1.2.2-arm64-x86-universal.apk` | 96 MB universal, phát qua `meetflowai.site/v1/downloads/android` |
+| APK (sideload) | `release/android/VPNFlow-1.2.4-arm64-x86-universal.apk` | ~92 MB universal, endpoint phát hành: `https://meetflowai.site/v1/downloads/android` |
 | Icon 512×512 | `release/android/play-assets/icon-512.png` | từ icon app (1024 gốc) |
 | Feature graphic 1024×500 | `release/android/play-assets/feature-graphic-1024x500.png` | navy + logo + tagline |
 | Screenshots | _cần chụp_ | tối thiểu 2 ảnh phone (1080×1920+), nên 4–8 ảnh |
-| Release notes 5 ngôn ngữ | `release/android/RELEASE_NOTES_1.2.2.md` | dán vào Play "What's new" |
+| Release notes 5 ngôn ngữ | `release/android/RELEASE_NOTES_1.2.4.md` | dán vào Play "What's new" |
 
 Package name: **com.privatevpn.app** · minSdk 26 · targetSdk 36 (đạt yêu cầu Play 2026).
 
 ## 1. Tài khoản & bước bắt buộc
 
 1. **Loại tài khoản**: **ĐÃ XÁC NHẬN LÀ TÀI KHOẢN CÁ NHÂN** → bắt buộc:
-   - Tạo app → đẩy bản release lên **Closed testing** (dùng AAB `VPNFlow-1.2.2-play-store.aab`).
+   - Tạo app → đẩy bản release lên **Closed testing** (dùng AAB `VPNFlow-1.2.4-play-store.aab`).
    - Có **≥12 tester** tham gia (opt-in qua link/Google Group) và **giữ nguyên 14 ngày liên tục** (không rút, không để số lượng tụt dưới 12).
    - Sau 14 ngày mới **xin quyền Production** (Google xét thủ công 1–7 ngày).
    - ⚠️ Tester **phải có tài khoản Google** và cài app qua Play (không phải cài file APK). Với tệp khách Trung Quốc, nên huy động tester ở VN/nước ngoài hoặc ai có Google account; ghi lại email từng người để thêm vào danh sách.
@@ -99,7 +99,7 @@ VPNFlow 是一款高速、注重隐私的 VPN，专为普通 VPN 无法工作的
 客服：support@meetflowai.site
 ```
 
-_(Play 还支持 ja/ko locale — 需要 thì lấy từ `RELEASE_NOTES_1.2.2.md`.)_
+_(Play 还支持 ja/ko locale — 需要 thì lấy từ `RELEASE_NOTES_1.2.4.md`.)_
 
 ## 3. Đồ hoạ cần upload
 
@@ -164,7 +164,7 @@ Nếu sau này muốn bán trực tiếp trên Play thì mới cần **Play Bill
 ## 6. Trình tự submit
 
 1. Tạo app → điền App content (mục 4) + Data safety + Content rating + Target audience.
-2. Upload `VPNFlow-1.2.2-play.aab` vào **Closed testing** (internal testing trước để tự test).
+2. Upload `VPNFlow-1.2.4-play-store.aab` vào **Closed testing** (internal testing trước để tự test).
 3. Thêm ≥12 tester (nếu account cá nhân) → chạy 14 ngày liên tục.
 4. Kiểm tra pre-launch report (Play tự chạy trên máy thật) — xem crash/ANR.
 5. Xin **Production access** → rollout 20% → theo dõi → 100%.

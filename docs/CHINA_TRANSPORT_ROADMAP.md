@@ -1,7 +1,32 @@
 # China Transport Roadmap (Hysteria2 Integration)
 
-> Status: planning → toolchain setup in progress (gomobile + NDK)
-> Date: 2026-09-09
+> Status: ✅ **SHIPPED** — hysteria2 là transport chính cho mọi bản Android; Web APK & AAB 1.2.4 đã phát hành 2026-09-12
+> Date: 2026-09-09 (cập nhật 2026-09-12)
+
+## KIẾN TRÚC CUỐI CÙNG (2026-09-12)
+
+**Server (mỗi node):**
+- hysteria2 server: **UDP 8443, 28443, 54443** (`/etc/hysteria-server-<port>.yaml`), auth `flowvpn_hysteria_2026`,
+  obfs **salamander** `FlowVPN-8f3k`, cert self-signed CN=meetflowai.site
+- TCP relay (Go, `tools/node-setup/relay.go`): **TCP 8443 → UDP 8443** và **TCP 9445 → UDP 8443**
+  (framing 2-byte big-endian length; dùng cho mạng chặn UDP như GFW/corporate NAT)
+- WireGuard legacy vẫn còn: TCP 9444 → UDP 443 (wgrelay), chỉ giữ cho client cũ
+- Chạy bằng **systemd** (`hysteria@<port>`, `hyrelay@<port>`) — xem `tools/node-setup/provision-node.sh`
+
+**Client Android (`HysteriaVpnService` + `mobile.Mobile` từ AAR):**
+1. Tạo socket transport **trong Java** (TCP relay hoặc UDP) → `protect()` → chuyển fd sang Go
+   (thiếu bước protect là bug "connected but no internet": packet tự lọt vào tunnel chưa kết nối)
+2. `Mobile.connect(...)` **trước khi** `establish()` VpnService ⇒ mọi transport fail thì mạng máy **không bị mất**
+3. Chỉ sau khi connect thành công mới `establish()` + `Mobile.serve(fd, ...)` (TUN fd của VpnService)
+4. **Brutal CC**: client khai báo băng thông (`upKbps`/`downKbps`) → server pace theo, chịu loss tốt hơn
+5. **Foreground service** (`specialUse`) + **retry vô hạn backoff** + **nhớ transport đã chạy**
+6. Thứ tự thử: transport đã nhớ → TCP relay 8443/9445 → UDP 8443/28443/54443
+
+**AAR được build tái lập:** `tools/hysteria-android/build.sh` (clone hysteria `app/v2.12.2` → patch TUN fd →
+wrapper `mobile.go` → `gomobile bind` → `android/app/libs/hysteria.aar`).
+
+**Giới hạn đã biết:** node2 (103.6.234.233, AS152992) bị **GFW chặn UDP ở mức IP** ⇒ bắt buộc đi TCP relay;
+hướng dẫn chọn dải IP mới ở `docs/EXIT_NODE_IP_GUIDE.md` (ưu tiên AS135905/VNPT như node1).
 
 ## Problem (validated, 2026-09-08/09)
 
