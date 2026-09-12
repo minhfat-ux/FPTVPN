@@ -31,6 +31,10 @@ class ControlAPIClient(
         class Transport(val endpoint: String, cause: IOException) :
             ClientError("Could not reach the coordinator while requesting $endpoint: ${cause.message}")
         class MissingSession : ClientError("Please sign in before connecting.")
+
+        /** The account already has the maximum number of active devices. */
+        class DeviceLimit(val devices: List<CoordinatorDevice>) :
+            ClientError("Device limit reached")
     }
 
     private suspend fun execute(request: Request, endpoint: String): String = withContext(Dispatchers.IO) {
@@ -38,8 +42,15 @@ class ControlAPIClient(
             client.newCall(request).execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
+                    // Device limit: carry the existing devices so the UI can offer
+                    // "log out an old device" and then retry.
+                    if (body.contains("device_limit_reached")) {
+                        val limit = runCatching { json.decodeFromString<DeviceLimitBody>(body) }.getOrNull()
+                        throw ClientError.DeviceLimit(limit?.devices ?: emptyList())
+                    }
                     val err = runCatching { json.decodeFromString<ErrorBody>(body) }.getOrNull()
-                    throw ClientError.Server(err?.message ?: err?.error ?: "HTTP ${resp.code}")
+                    val message = err?.message ?: err?.error
+                    throw ClientError.Server(message ?: "HTTP ${resp.code}")
                 }
                 body
             }
@@ -128,6 +139,27 @@ class ControlAPIClient(
             .build()
         val raw = execute(request, "devices")
         return json.decodeFromString<DevicesResponse>(raw).devices
+    }
+
+    /**
+     * Claims this installation for the signed-in user. The server rejects with
+     * ClientError.DeviceLimit when the account already uses the maximum number
+     * of devices, returning the list so the UI can offer to log one out.
+     */
+    suspend fun claimDevice(
+        accessToken: String,
+        deviceKey: String,
+        name: String,
+        platform: String = "android",
+    ): Unit {
+        if (accessToken.isEmpty()) throw ClientError.MissingSession()
+        val body = mapOf("device_key" to deviceKey, "name" to name, "platform" to platform)
+        val request = Request.Builder()
+            .url("$baseUrl/v1/devices/claim")
+            .post(json.encodeToString(body).toRequestBody(JSON))
+            .header("Authorization", "Bearer $accessToken")
+            .build()
+        execute(request, "device claim")
     }
 
     /** Revokes one of the signed-in user's devices. */

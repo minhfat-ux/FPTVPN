@@ -14,6 +14,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,6 +70,18 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
         ActivityResultContracts.StartActivityForResult()
     ) {
         app.vpnManager.resumeAfterConsent()
+    }
+
+    // "Max 3 devices": the server returns the account's device list when the
+    // limit is hit, and the user picks one to log out before we retry.
+    val deviceLimit = app.vpnManager.deviceLimit.collectAsState().value
+    if (deviceLimit != null) {
+        DeviceLimitDialog(
+            app = app,
+            devices = deviceLimit,
+            onLogout = { app.vpnManager.logOutDeviceAndRetry(it) },
+            onDismiss = { app.vpnManager.dismissDeviceLimit() },
+        )
     }
 
     // Notification permission (Android 13+), needed for the VPN foreground notification.
@@ -127,4 +151,47 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
             )
         }
     }
+}
+
+@Composable
+private fun DeviceLimitDialog(
+    app: VPNFlowApp,
+    devices: List<com.privatevpn.app.api.CoordinatorDevice>,
+    onLogout: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val lang = app.languageStore
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(lang.t(com.privatevpn.app.l10n.LKey.deviceLimitTitle)) },
+        text = {
+            Column {
+                Text(lang.t(com.privatevpn.app.l10n.LKey.deviceLimitBody))
+                Spacer(Modifier.height(12.dp))
+                devices.forEach { device ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                    ) {
+                        Text(device.name ?: "\u2014")
+                        val subtitle = listOfNotNull(device.platform, device.createdAt?.take(10))
+                            .joinToString(" · ")
+                        if (subtitle.isNotEmpty()) {
+                            Text(subtitle, fontSize = 12.sp, color = VPNTheme.SecondaryLabel)
+                        }
+                        TextButton(onClick = { onLogout(device.deviceId) }) {
+                            Text(lang.t(com.privatevpn.app.l10n.LKey.deviceLimitLogout))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(lang.t(com.privatevpn.app.l10n.LKey.notNow))
+            }
+        },
+    )
 }

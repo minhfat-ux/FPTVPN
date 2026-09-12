@@ -2390,7 +2390,11 @@ app.post("/v1/peers/register", async (req, res) => {
     return res.status(result.status).json(result.body);
   } catch (err) {
     console.error("POST /v1/peers/register failed:", err);
-    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+    res.status(err.statusCode ?? 500).json({
+      error: err.statusCode ? (err.code ?? err.message) : "Internal error",
+      message: err.statusCode ? err.message : undefined,
+      devices: err.devices,
+    });
   }
 });
 
@@ -2410,6 +2414,72 @@ app.get("/v1/devices", requireUserAuth, async (req, res) => {
   } catch (err) {
     console.error("GET /v1/devices failed:", err);
     res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Claim this installation for the signed-in user (China/hysteria mode has no
+// WireGuard peer, but the device limit must still apply). Called on every
+// connect: creates the record once, then just refreshes last_seen_at.
+app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
+  try {
+    const userId = req.userAuth.user.id;
+    const deviceKey = String(req.body?.device_key ?? "").trim();
+    const name = String(req.body?.name ?? "device").slice(0, 60);
+    const platform = String(req.body?.platform ?? "android").slice(0, 24);
+    if (!deviceKey) return res.status(400).json({ error: "device_key is required" });
+
+    const all = await store.all();
+    const existing = all.find((d) => d.publicKey === deviceKey && d.userId === userId);
+    if (existing) {
+      if (existing.active === false) {
+        return res.status(403).json({ error: "device_revoked", message: "This device was logged out. Please sign in again." });
+      }
+      const refreshed = await store.all();
+      const rec = refreshed.find((d) => d.id === existing.id);
+      if (rec) {
+        rec.lastSeenAt = new Date().toISOString();
+        rec.deviceName = name || rec.deviceName;
+        rec.platform = platform || rec.platform;
+        await store._save(refreshed);
+      }
+      return res.json({ ok: true, device_id: existing.id, created: false });
+    }
+
+    const mine = all.filter((d) => d.userId === userId && d.active !== false);
+    if (mine.length >= MAX_DEVICES_PER_USER) {
+      console.log(`device limit: user=${userId} has ${mine.length} active devices, claim rejected`);
+      return res.status(403).json({
+        error: "device_limit_reached",
+        message: `You can use VPNFlow on up to ${MAX_DEVICES_PER_USER} devices. Log out one of the devices below to continue.`,
+        devices: mine
+          .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+          .map(userDevice),
+      });
+    }
+
+    const assignedIP = pool.nextFreeIP(all);
+    const result = await store.upsertByPublicKey({
+      publicKey: deviceKey,
+      deviceName: name,
+      platform,
+      assignedIP: assignedIP ?? "0.0.0.0",
+      userId,
+      exitNodeId: null,
+    });
+    const created = result.device;
+    // Re-load before writing: upsertByPublicKey already saved, so saving the
+    // snapshot loaded earlier in this handler would drop the new record.
+    const latest = await store.all();
+    const rec = latest.find((d) => d.id === created.id);
+    if (rec) {
+      rec.lastSeenAt = new Date().toISOString();
+      await store._save(latest);
+    }
+    console.log(`device claim: user=${userId} new device ${created.id} (${platform}) ip=${created.assignedIP}`);
+    res.status(201).json({ ok: true, device_id: created.id, created: true });
+  } catch (err) {
+    console.error("POST /v1/devices/claim failed:", err);
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
   }
 });
 
@@ -2557,6 +2627,10 @@ async function selectExitNode(id) {
   return nodeStore.firstActive();
 }
 
+// Every account may use at most this many ACTIVE devices. Revoked devices are
+// freed immediately, which is how a user "logs out" an old phone/tablet/PC.
+const MAX_DEVICES_PER_USER = Number(process.env.MAX_DEVICES_PER_USER || 3);
+
 async function registerDeviceWithPayload({ body, userId, apiShape }) {
   const publicKey = body?.wireguard_public_key ?? body?.publicKey;
   const deviceName = body?.name ?? body?.deviceName;
@@ -2579,6 +2653,25 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
       const error = new Error("No free IP available in the pool");
       error.statusCode = 503;
       throw error;
+    }
+  }
+
+  // Device limit (FR: max N active devices per account). A device that already
+  // belongs to this user (or is being re-registered after a revoke) is exempt —
+  // only a genuinely NEW device can push the account over the limit.
+  if (userId) {
+    const ownedActive = device && device.userId === userId && device.active !== false;
+    if (!ownedActive) {
+      const mine = (await store.devicesByUserId(userId)).filter((d) => d.active !== false);
+      if (mine.length >= MAX_DEVICES_PER_USER) {
+        const error = new Error("Device limit reached");
+        error.statusCode = 403;
+        error.code = "device_limit_reached";
+        error.devices = mine
+          .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+          .map(userDevice);
+        throw error;
+      }
     }
   }
 
