@@ -192,6 +192,14 @@ class VPNManager(
         _state.value = VPNState.CONNECTING
     }
 
+    /** Called while the service is (re)trying to bring the tunnel up. */
+    fun onHysteriaReconnecting() {
+        if (_state.value != VPNState.DISCONNECTING) {
+            _state.value = VPNState.CONNECTING
+            _statusMessage.value = "Reconnecting…"
+        }
+    }
+
     /** Called by HysteriaVpnService when the tunnel is actually up. */
     fun onHysteriaUp() {
         if (_state.value != VPNState.DISCONNECTING) {
