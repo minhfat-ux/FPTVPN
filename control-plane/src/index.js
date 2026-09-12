@@ -2430,6 +2430,22 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
 
     const all = await store.all();
     const existing = all.find((d) => d.publicKey === deviceKey && d.userId === userId);
+    const mine = all.filter((d) => d.userId === userId && d.active !== false);
+    // Enforce the cap for EVERYONE, not just new devices: an account that is
+    // already over the limit (e.g. devices added before this rule) must log out
+    // the old ones before it can connect again.
+    const isMine = Boolean(existing && existing.active !== false);
+    if (mine.length > MAX_DEVICES_PER_USER || (!isMine && mine.length >= MAX_DEVICES_PER_USER)) {
+      console.log(`device limit: user=${userId} has ${mine.length} active devices (this device known=${isMine}), claim rejected`);
+      return res.status(403).json({
+        error: "device_limit_reached",
+        message: `You can use VPNFlow on up to ${MAX_DEVICES_PER_USER} devices. Log out the devices below to continue.`,
+        devices: mine
+          .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+          .map(userDevice),
+        max_devices: MAX_DEVICES_PER_USER,
+      });
+    }
     if (existing) {
       if (existing.active === false) {
         return res.status(403).json({ error: "device_revoked", message: "This device was logged out. Please sign in again." });
@@ -2443,18 +2459,6 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
         await store._save(refreshed);
       }
       return res.json({ ok: true, device_id: existing.id, created: false });
-    }
-
-    const mine = all.filter((d) => d.userId === userId && d.active !== false);
-    if (mine.length >= MAX_DEVICES_PER_USER) {
-      console.log(`device limit: user=${userId} has ${mine.length} active devices, claim rejected`);
-      return res.status(403).json({
-        error: "device_limit_reached",
-        message: `You can use VPNFlow on up to ${MAX_DEVICES_PER_USER} devices. Log out one of the devices below to continue.`,
-        devices: mine
-          .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
-          .map(userDevice),
-      });
     }
 
     const assignedIP = pool.nextFreeIP(all);
@@ -2661,9 +2665,9 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
   // only a genuinely NEW device can push the account over the limit.
   if (userId) {
     const ownedActive = device && device.userId === userId && device.active !== false;
-    if (!ownedActive) {
-      const mine = (await store.devicesByUserId(userId)).filter((d) => d.active !== false);
-      if (mine.length >= MAX_DEVICES_PER_USER) {
+    const mine = (await store.devicesByUserId(userId)).filter((d) => d.active !== false);
+    if (mine.length > MAX_DEVICES_PER_USER || (!ownedActive && mine.length >= MAX_DEVICES_PER_USER)) {
+      {
         const error = new Error("Device limit reached");
         error.statusCode = 403;
         error.code = "device_limit_reached";

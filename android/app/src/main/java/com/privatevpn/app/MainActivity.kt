@@ -79,6 +79,8 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
         DeviceLimitDialog(
             app = app,
             devices = deviceLimit,
+            ownDeviceKey = com.privatevpn.app.storage.DeviceIdentity
+                .obtainOrCreateKeyPair(app.secureStore).publicKey.toBase64(),
             onLogout = { app.vpnManager.logOutDeviceAndRetry(it) },
             onDismiss = { app.vpnManager.dismissDeviceLimit() },
         )
@@ -157,6 +159,7 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
 private fun DeviceLimitDialog(
     app: VPNFlowApp,
     devices: List<com.privatevpn.app.api.CoordinatorDevice>,
+    ownDeviceKey: String,
     onLogout: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -180,8 +183,17 @@ private fun DeviceLimitDialog(
                         if (subtitle.isNotEmpty()) {
                             Text(subtitle, fontSize = 12.sp, color = VPNTheme.SecondaryLabel)
                         }
-                        TextButton(onClick = { onLogout(device.deviceId) }) {
-                            Text(lang.t(com.privatevpn.app.l10n.LKey.deviceLimitLogout))
+                        if (device.publicKey != null && device.publicKey == ownDeviceKey) {
+                            // Never offer to log out the phone in your hand.
+                            Text(
+                                lang.t(com.privatevpn.app.l10n.LKey.thisDevice),
+                                fontSize = 12.sp,
+                                color = VPNTheme.SecondaryLabel,
+                            )
+                        } else {
+                            TextButton(onClick = { onLogout(device.deviceId) }) {
+                                Text(lang.t(com.privatevpn.app.l10n.LKey.deviceLimitLogout))
+                            }
                         }
                     }
                 }
