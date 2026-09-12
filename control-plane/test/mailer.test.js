@@ -59,19 +59,19 @@ test("production: sends via SMTP and returns sent: true", async () => {
       SMTP_PORT: "465",
       SMTP_USER: "no-reply@meetflowai.site",
       SMTP_PASS: "smtp-secret",
-      FROM_EMAIL: "FlowVPN <no-reply@meetflowai.site>",
+      FROM_EMAIL: "VPNFlow <no-reply@meetflowai.site>",
     },
     async () => {
       const result = await sendOtpEmail({ email: "user@example.com", code: "483920" });
       assert.deepEqual(result, { sent: true });
       assert.equal(sent.length, 1);
       const message = sent[0];
-      assert.equal(message.from, "FlowVPN <no-reply@meetflowai.site>");
+      assert.equal(message.from, "VPNFlow <no-reply@meetflowai.site>");
       assert.equal(message.to, "user@example.com");
-      assert.equal(message.subject, "Your FlowVPN Login Code");
-      assert.match(message.html, /Dear valued customer/);
+      assert.equal(message.subject, "Mã đăng nhập VPNFlow");
+      assert.match(message.html, /Xin chào,/);
       assert.match(message.html, /483920/);
-      assert.match(message.html, /expires in 10 minutes/);
+      assert.match(message.html, /Mã có hiệu lực 10 phút/);
       assert.match(message.html, /support@meetflowai.site/);
     }
   );
@@ -82,7 +82,7 @@ test("production: FROM_EMAIL defaults when unset", async () => {
   const sendOtpEmail = createSendOtpEmail({ transporter });
   await withEnv({ NODE_ENV: "production", SMTP_HOST: "h", SMTP_USER: "u", SMTP_PASS: "p" }, async () => {
     await sendOtpEmail({ email: "user@example.com", code: "111111" });
-    assert.equal(sent[0].from, "FlowVPN <no-reply@meetflowai.site>");
+    assert.equal(sent[0].from, "VPNFlow <no-reply@meetflowai.site>");
   });
 });
 

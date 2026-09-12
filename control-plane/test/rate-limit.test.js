@@ -5,10 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { AuthStore } from "../src/auth-store.js";
 
-test("resend limit: max 3 startEmailLogin calls per 15 min per email -> 429 on the 4th", async () => {
+test("resend limit: max 5 startEmailLogin calls per 15 min per email -> 429 on the 6th", async () => {
   const { store, cleanup } = await makeStore();
   try {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const { email, code } = await store.startEmailLogin("limit@example.com");
       assert.equal(email, "limit@example.com");
       assert.match(code, /^\d{6}$/);
@@ -29,7 +29,7 @@ test("resend limit: max 3 startEmailLogin calls per 15 min per email -> 429 on t
 test("resend limit is tracked per email address", async () => {
   const { store, cleanup } = await makeStore();
   try {
-    for (let i = 0; i < 3; i++) await store.startEmailLogin("a@example.com");
+    for (let i = 0; i < 5; i++) await store.startEmailLogin("a@example.com");
     const other = await store.startEmailLogin("b@example.com");
     assert.match(other.code, /^\d{6}$/);
   } finally {

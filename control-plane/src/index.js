@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
+import { deviceLimitDecision } from "./device-limit.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
@@ -2435,7 +2436,8 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
     // already over the limit (e.g. devices added before this rule) must log out
     // the old ones before it can connect again.
     const isMine = Boolean(existing && existing.active !== false);
-    if (mine.length > MAX_DEVICES_PER_USER || (!isMine && mine.length >= MAX_DEVICES_PER_USER)) {
+    const { blocked } = deviceLimitDecision({ activeCount: mine.length, isOwnDevice: isMine, max: MAX_DEVICES_PER_USER });
+    if (blocked) {
       console.log(`device limit: user=${userId} has ${mine.length} active devices (this device known=${isMine}), claim rejected`);
       return res.status(403).json({
         error: "device_limit_reached",
@@ -2666,11 +2668,12 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
   if (userId) {
     const ownedActive = device && device.userId === userId && device.active !== false;
     const mine = (await store.devicesByUserId(userId)).filter((d) => d.active !== false);
-    if (mine.length > MAX_DEVICES_PER_USER || (!ownedActive && mine.length >= MAX_DEVICES_PER_USER)) {
+    const { blocked, code } = deviceLimitDecision({ activeCount: mine.length, isOwnDevice: ownedActive, max: MAX_DEVICES_PER_USER });
+    if (blocked) {
       {
         const error = new Error("Device limit reached");
         error.statusCode = 403;
-        error.code = "device_limit_reached";
+        error.code = code;
         error.devices = mine
           .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
           .map(userDevice);
