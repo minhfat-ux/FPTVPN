@@ -6,8 +6,8 @@ _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung
 
 | File | Đường dẫn | Ghi chú |
 |---|---|---|
-| AAB (Play) | `release/android/VPNFlow-1.2.3-play-store.aab` (link: https://meetflowai.site/dl/VPNFlow-1.2.3-play-store.aab) | ~37 MB, versionCode **3** / versionName **1.2.3**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
-| SHA256 AAB | `1753754ce38d1531bdca01efc35165c1ab41124b6b8fa0c009f5651bf45d14c1` | |
+| AAB (Play) | `release/android/VPNFlow-1.2.4-play-store.aab` (link: https://meetflowai.site/dl/VPNFlow-1.2.4-play-store.aab) | ~37 MB, versionCode **4** / versionName **1.2.4**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
+| SHA256 AAB | `596ce9564f6917614e91ec712793b42f2bb5008898f51e5cdc8cc966ef0129e8` | |
 | APK (sideload) | `release/android/VPNFlow-1.2.2-arm64-x86-universal.apk` | 96 MB universal, phát qua `meetflowai.site/v1/downloads/android` |
 | Icon 512×512 | `release/android/play-assets/icon-512.png` | từ icon app (1024 gốc) |
 | Feature graphic 1024×500 | `release/android/play-assets/feature-graphic-1024x500.png` | navy + logo + tagline |
@@ -19,7 +19,7 @@ Package name: **com.privatevpn.app** · minSdk 26 · targetSdk 36 (đạt yêu c
 ## 1. Tài khoản & bước bắt buộc
 
 1. **Loại tài khoản**: **ĐÃ XÁC NHẬN LÀ TÀI KHOẢN CÁ NHÂN** → bắt buộc:
-   - Tạo app → đẩy bản release lên **Closed testing** (dùng AAB `VPNFlow-1.2.3-play-store.aab`).
+   - Tạo app → đẩy bản release lên **Closed testing** (dùng AAB `VPNFlow-1.2.4-play-store.aab`).
    - Có **≥12 tester** tham gia (opt-in qua link/Google Group) và **giữ nguyên 14 ngày liên tục** (không rút, không để số lượng tụt dưới 12).
    - Sau 14 ngày mới **xin quyền Production** (Google xét thủ công 1–7 ngày).
    - ⚠️ Tester **phải có tài khoản Google** và cài app qua Play (không phải cài file APK). Với tệp khách Trung Quốc, nên huy động tester ở VN/nước ngoài hoặc ai có Google account; ghi lại email từng người để thêm vào danh sách.
@@ -170,7 +170,7 @@ Khi nộp Play, mục **App content → Foreground service types** phải chọn
 > background data restrictions. Android 15+ removed the VPN-specific foreground
 > service type, so specialUse is the only applicable type.
 
-## 4d. Quyền của bản Play 1.2.3 (đã kiểm tra)
+## 4d. Quyền của bản Play 1.2.4 (đã kiểm tra)
 
 ```
 INTERNET
