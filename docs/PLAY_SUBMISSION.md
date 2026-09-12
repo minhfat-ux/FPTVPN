@@ -178,3 +178,12 @@ Nếu sau này muốn bán trực tiếp trên Play thì mới cần **Play Bill
 - [x] Xác nhận loại tài khoản Play → **cá nhân** ⇒ phải chạy closed testing 12 tester × 14 ngày (xem mục 1)
 - [ ] Gom ≥12 email tester (có Google account) + gửi tin mời (xem `release/android/PLAY_TESTER_INVITE.md`)
 - [ ] Tạo Google Group cho tester và thêm Group vào Closed testing
+
+### Video demo cho khai báo foreground service (đã quay + host)
+
+Link public (stream được, có Accept-Ranges): **https://meetflowai.site/dl/VPNFlow-foreground-service-demo.mp4**
+- File: `VPNFlow-foreground-service-demo.mp4` (11.8 MB, MP4, 16/09/2026)
+- MD5: `1a1a2de23a464942cb8daaac3154a000`
+- Nội dung: mở app → Connect → notification "VPNFlow · VPN connection active" → Home → kiểm tra IP đã đổi → notification vẫn còn → Disconnect → notification mất
+
+⚠️ Nếu ô video trong Play Console **bắt buộc là link YouTube**, upload lại file này lên YouTube ở chế độ **Unlisted** rồi dán link YouTube thay cho link trên.
