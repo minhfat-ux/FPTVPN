@@ -6,8 +6,8 @@
 ## KIẾN TRÚC CUỐI CÙNG (2026-09-12)
 
 **Server (mỗi node):**
-- hysteria2 server: **UDP 8443, 28443, 54443** (`/etc/hysteria-server-<port>.yaml`), auth `flowvpn_hysteria_2026`,
-  obfs **salamander** `FlowVPN-8f3k`, cert self-signed CN=meetflowai.site
+- hysteria2 server: **UDP 8443, 28443, 54443** (`/etc/hysteria-server-<port>.yaml`), auth `<HY_AUTH_PASSWORD>`,
+  obfs **salamander** `<HY_OBFS_PASSWORD>`, cert self-signed CN=meetflowai.site
 - TCP relay (Go, `tools/node-setup/relay.go`): **TCP 8443 → UDP 8443** và **TCP 9445 → UDP 8443**
   (framing 2-byte big-endian length; dùng cho mạng chặn UDP như GFW/corporate NAT)
 - WireGuard legacy vẫn còn: TCP 9444 → UDP 443 (wgrelay), chỉ giữ cho client cũ
@@ -64,7 +64,7 @@ regions; Hysteria2 becomes the data plane when behind the GFW.
 | WireGuard wg0 | UDP :443 | Existing WG exit (non-China users) |
 
 Hysteria2 server config (/etc/hysteria/server.yaml): port 8443, self-signed
-cert /etc/hysteria/cert.pem, obfs salamander password FlowVPN-8f3k, auth
+cert /etc/hysteria/cert.pem, obfs salamander password <HY_OBFS_PASSWORD>, auth
 password in file. Start: /root/hysteria.bin server -c /etc/hysteria/server.yaml.
 TODO: convert to systemd service.
 

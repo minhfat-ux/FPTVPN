@@ -32,7 +32,7 @@
 | node2 | `103.6.234.233` | **AS152992 (Online Data)** | ⚠️ **UDP bị chặn ở mức IP** → chỉ dùng được TCP relay (chậm hơn) | Đang chờ provider đổi IP |
 
 ### Transport (áp dụng cho mọi node)
-- **hysteria2 (QUIC)** — server UDP ports: **8443, 28443, 54443**; obfs **salamander** password `FlowVPN-8f3k`; auth password `flowvpn_hysteria_2026`; TLS self-signed `CN=meetflowai.site` (client dùng `insecure`).
+- **hysteria2 (QUIC)** — server UDP ports: **8443, 28443, 54443**; obfs **salamander** password `<HY_OBFS_PASSWORD>`; auth password `<HY_AUTH_PASSWORD>`; TLS self-signed `CN=meetflowai.site` (client dùng `insecure`).
 - **TCP relay** — app dial TCP **8443** và **9445**, relay bọc/giải bọc framing **2 byte big-endian length prefix** rồi chuyển sang UDP `127.0.0.1:8443`. Relay viết bằng Go: `tools/node-setup/relay.go` (binary có sẵn: `tools/node-setup/bin/hyrelay-linux-amd64`). *(Node1/node2 cũ còn dùng `wgrelay.js` bản Node — node mới dùng binary Go, không cần Node.js.)*
 - Phía app Android (hysteria mode): `claim` thiết bị → thử lần lượt **[transport đã nhớ]** → **TCP relay** → **UDP**; bật **Brutal CC** (`HY_UP_KBPS=2000`, `HY_DOWN_KBPS=20000`); chạy dưới **foreground service** (`specialUse`).
 
@@ -104,8 +104,8 @@ ssh -i $NODE2_KEY root@$NEW_IP \
 | `--hyrelay-bin PATH` | — | copy binary vào `/usr/local/bin/hyrelay` |
 | `--udp-ports "p1 p2 …"` | `8443 28443 54443` | các cổng UDP hysteria (mỗi cổng 1 instance systemd `hysteria@<port>`) |
 | `--relays "tcp:udp …"` | `8443:8443 9445:8443` | cặp cổng TCP relay → UDP đích (`hyrelay@<tcp>`) |
-| `--auth PASS` | `flowvpn_hysteria_2026` | auth password hysteria |
-| `--obfs PASS` | `FlowVPN-8f3k` | salamander obfs password |
+| `--auth PASS` | `<HY_AUTH_PASSWORD>` | auth password hysteria |
+| `--obfs PASS` | `<HY_OBFS_PASSWORD>` | salamander obfs password |
 | env `HYSTERIA_URL` | — | nếu không truyền `--hysteria-bin` thì script tải từ URL này |
 | env `CERT_CN` | `meetflowai.site` | CN của cert self-signed |
 
@@ -129,14 +129,14 @@ Chạy trên **node1 hoặc node2** (đã có binary hysteria):
 ssh -i $NODE1_KEY root@103.173.155.50 'bash -s' <<EOS
 cat > /tmp/hy-client.yaml <<'YAML'
 server: $NEW_IP:8443
-auth: flowvpn_hysteria_2026
+auth: <HY_AUTH_PASSWORD>
 tls:
   sni: $NEW_IP
   insecure: true
 obfs:
   type: salamander
   salamander:
-    password: FlowVPN-8f3k
+    password: <HY_OBFS_PASSWORD>
 socks5:
   listen: 127.0.0.1:1080
 YAML
@@ -153,7 +153,7 @@ EOS
   ```bash
   # trong repo hysteria đã clone (xem tools/hysteria-android/build.sh để clone + patch)
   go build -o /tmp/hyconn ./app/tools/hyconnect    # nếu tồn tại
-  /tmp/hyconn $NEW_IP 8443 flowvpn_hysteria_2026 FlowVPN-8f3k tcp $NEW_IP:8443
+  /tmp/hyconn $NEW_IP 8443 <HY_AUTH_PASSWORD> <HY_OBFS_PASSWORD> tcp $NEW_IP:8443
   ```
 
 ### Bước 7 — Test từ TRUNG QUỐC (bài test quyết định)

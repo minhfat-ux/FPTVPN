@@ -17,8 +17,8 @@ RELAYS_DEFAULT="8443:8443 9445:8443"
 
 UDP_PORTS="${UDP_PORTS:-$UDP_PORTS_DEFAULT}"
 RELAYS="${RELAYS:-$RELAYS_DEFAULT}"
-AUTH_PASS="${AUTH_PASS:-flowvpn_hysteria_2026}"
-OBFS_PASS="${OBFS_PASS:-FlowVPN-8f3k}"
+AUTH_PASS="${AUTH_PASS:-}"
+OBFS_PASS="${OBFS_PASS:-}"
 CERT_CN="${CERT_CN:-meetflowai.site}"
 HYSTERIA_URL="${HYSTERIA_URL:-}"
 HYSTERIA_BIN_SRC=""
@@ -37,6 +37,16 @@ while [ $# -gt 0 ]; do
 done
 
 log() { echo "==> $*"; }
+
+# Credentials are NOT stored in this repo (public). Provide them explicitly:
+#   AUTH_PASS / OBFS_PASS env vars, or --auth / --obfs. For an existing fleet the
+#   real values live in the server configs (/etc/hysteria-server-*.yaml) and in
+#   the app's Config.kt — copy them from there, never from git.
+if [ -z "$AUTH_PASS" ] || [ -z "$OBFS_PASS" ]; then
+  echo "!! AUTH_PASS and OBFS_PASS must be provided (--auth/--obfs or env)." >&2
+  echo "   Values are kept out of this repo (public). See docs/AGENT_NEW_NODE_GUIDE.md." >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------- packages
 if ! command -v openssl >/dev/null 2>&1; then

@@ -48,6 +48,10 @@ object Config {
      *  this is what keeps speed usable on China mobile data. 0 = standard CC. */
     const val HY_UP_KBPS = 2000
     const val HY_DOWN_KBPS = 20000
+    // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
+    // they are effectively public. Treat them as non-secret identifiers; if real
+    // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)
+    // and rotate these values (see docs/EXIT_NODE_RUNBOOK.md).
     const val HY_PASSWORD = "flowvpn_hysteria_2026"
     const val HY_OBFS = "FlowVPN-8f3k"
 }
