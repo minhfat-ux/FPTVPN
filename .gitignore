@@ -54,3 +54,4 @@ FPT-Harness/
 
 # Built release artifacts (APKs / archives) — regenerate with gradle/xcodebuild
 release/
+android/app/libs/hysteria-sources.jar

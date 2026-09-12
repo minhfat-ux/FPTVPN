@@ -115,7 +115,10 @@ class HysteriaVpnService : VpnService() {
                 continue
             }
             try {
-                Mobile.connect(runHost, HY_PORTS[0].toLong(), HY_PASSWORD, HY_OBFS_PASSWORD, sockFd.toLong(), true)
+                Mobile.connect(
+                    runHost, HY_PORTS[0].toLong(), HY_PASSWORD, HY_OBFS_PASSWORD,
+                    sockFd.toLong(), true, HY_UP_KBPS.toLong(), HY_DOWN_KBPS.toLong(),
+                )
             } catch (e: Exception) {
                 if (e.message?.contains("already running") == true) throw e
                 android.util.Log.e("VPNFLOW_DEBUG", "hysteria: TCP relay $relayPort connect failed: ${e.message}")
@@ -151,7 +154,10 @@ class HysteriaVpnService : VpnService() {
                 continue
             }
             try {
-                Mobile.connect(runHost, port.toLong(), HY_PASSWORD, HY_OBFS_PASSWORD, sockFd.toLong(), false)
+                Mobile.connect(
+                    runHost, port.toLong(), HY_PASSWORD, HY_OBFS_PASSWORD,
+                    sockFd.toLong(), false, HY_UP_KBPS.toLong(), HY_DOWN_KBPS.toLong(),
+                )
             } catch (e: Exception) {
                 if (e.message?.contains("already running") == true) throw e
                 android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UDP $runHost:$port connect failed: ${e.message}")
@@ -242,6 +248,8 @@ class HysteriaVpnService : VpnService() {
         // legacy alias giữ nguyên cho các tham chiếu cũ (nếu có)
         const val HY_HOST = com.privatevpn.app.Config.HY_SERVER
         val HY_PORTS = com.privatevpn.app.Config.HY_PORTS
+        const val HY_UP_KBPS = com.privatevpn.app.Config.HY_UP_KBPS
+        const val HY_DOWN_KBPS = com.privatevpn.app.Config.HY_DOWN_KBPS
         const val HY_TCP_RELAY_HOST = com.privatevpn.app.Config.HY_TCP_RELAY_HOST
         val HY_TCP_RELAY_PORTS = com.privatevpn.app.Config.HY_TCP_RELAY_PORTS
         const val HY_PASSWORD = com.privatevpn.app.Config.HY_PASSWORD
