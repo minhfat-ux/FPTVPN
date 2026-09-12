@@ -39,7 +39,7 @@ regions; Hysteria2 becomes the data plane when behind the GFW.
 | WireGuard wg0 | UDP :443 | Existing WG exit (non-China users) |
 
 Hysteria2 server config (/etc/hysteria/server.yaml): port 8443, self-signed
-cert /etc/hysteria/cert.pem, obfs salamander password FlowVPN-8f3k, auth
+cert /etc/hysteria/cert.pem, obfs salamander password <HY_OBFS_PASSWORD>, auth
 password in file. Start: /root/hysteria.bin server -c /etc/hysteria/server.yaml.
 TODO: convert to systemd service.
 
