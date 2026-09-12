@@ -49,6 +49,10 @@ object Config {
     const val HY_TCP_RELAY_HOST = "103.173.155.50"
     val HY_TCP_RELAY_PORTS = intArrayOf(8443, 9445)
     val HY_PORTS = intArrayOf(8443, 28443, 54443)
+    /** Brutal congestion control: the client declares its real up/down bandwidth
+     *  and the server paces to it, ignoring loss — keeps mobile-data speeds usable. */
+    const val HY_UP_KBPS = 2000
+    const val HY_DOWN_KBPS = 20000
     const val HY_PASSWORD = "flowvpn_hysteria_2026"
     const val HY_OBFS = "FlowVPN-8f3k"
 }
