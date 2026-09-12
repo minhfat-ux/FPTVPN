@@ -7,7 +7,7 @@ _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung
 | File | Đường dẫn | Ghi chú |
 |---|---|---|
 | AAB (Play) | `release/android/VPNFlow-1.2.2-play-store.aab` | 39 MB, versionCode **2** / versionName **1.2.2**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
-| SHA256 AAB | `c00e23adcd127d352a2a81255695672c67a8b137174defd652e3d02ebeab2218` | |
+| SHA256 AAB | `d50f1f28cb4425662d34d976071447eb05a057467a17da574b229fc2e493573b` | |
 | APK (sideload) | `release/android/VPNFlow-1.2.2-arm64-x86-universal.apk` | 96 MB universal, phát qua `meetflowai.site/v1/downloads/android` |
 | Icon 512×512 | `release/android/play-assets/icon-512.png` | từ icon app (1024 gốc) |
 | Feature graphic 1024×500 | `release/android/play-assets/feature-graphic-1024x500.png` | navy + logo + tagline |
@@ -152,6 +152,23 @@ Cách build:
 git checkout store && ./gradlew :app:bundleRelease     # AAB cho Play
 git checkout main  && ./gradlew :app:assembleRelease   # APK bán web
 ```
+
+## 4c. Foreground service (mobile-data fix 2026-09-12)
+
+Bản Play giờ chạy `HysteriaVpnService` dưới dạng **foreground service** với
+`android:foregroundServiceType="specialUse"` (+ property
+`android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE=vpn_tunnel`). Lý do: trên mạng
+**metered (mobile data)** Android chặn data của app ở background
+(`netpolicy blocked=APP_BACKGROUND`) → connect lúc ẩn app bị fail, gây
+"chập chờn". Android 15/16 đã **bỏ FGS type `vpn`** nên phải dùng `specialUse`.
+
+Khi nộp Play, mục **App content → Foreground service types** phải chọn
+`specialUse` và mô tả, ví dụ:
+
+> VPNFlow is a VPN app. The foreground service keeps the VPN tunnel alive while
+> the app is not in the foreground, so the connection is not dropped by
+> background data restrictions. Android 15+ removed the VPN-specific foreground
+> service type, so specialUse is the only applicable type.
 
 ## 5. ⚠️ Chính sách thanh toán — đã xử bằng branch `store`
 
