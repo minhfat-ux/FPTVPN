@@ -54,12 +54,13 @@ function payosSignature({ checksumKey, orderCode, amount, description, cancelUrl
  * registration needed — customer scans with any VN banking app, pays the
  * exact amount, and the note carries the order code for manual/auto matching.
  */
-export async function createBankQrDataUrl({ accountNumber, accountName, amount, orderCode, bin }) {
+export async function createBankQrDataUrl({ accountNumber, accountName, amount, orderCode, bin, prefix = "VPNFLOW" }) {
   const payload = buildVietQRPayload({
     accountNumber,
     accountName,
     amount,
     content: String(orderCode),
+    prefix,
     ...(bin ? { bin } : {}),
   });
   const dataUrl = await QRCode.toDataURL(payload, { width: 320, margin: 2, errorCorrectionLevel: "M" });
@@ -1186,6 +1187,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     const T = ${JSON.stringify(t)};
     const lang = ${JSON.stringify(lang)};
     const NUM_LOCALE = ${JSON.stringify(LOCALES[lang])};
+    // Reference prefix shown/copied by the customer and embedded in the bank QR.
+    const REF_PREFIX = ${JSON.stringify(product === "ai" ? "MEETFLOW" : "VPNFLOW")};
     let plan = ${JSON.stringify(wantedPlan || "monthly")};
     let method = ${JSON.stringify(firstMethod)};
 
@@ -1374,7 +1377,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
           }
           qrOrder.textContent = T.orderPrefix + data.orderCode;
           // Same reference string the bank QR embeds, so the shop can match it.
-          const orderRef = "VPNFLOW-" + data.orderCode;
+          const orderRef = REF_PREFIX + "-" + data.orderCode;
           qrCopyOrderBtn.dataset.ref = orderRef;
           qrOrderHint.innerHTML = T.orderNoteHint + " <b>" + orderRef + "</b>";
           const labels = {

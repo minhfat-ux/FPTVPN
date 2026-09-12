@@ -240,6 +240,53 @@ Avoid:
 Every secondary agent should return a handoff compatible with
 `docs/templates/agentic-project/AGENT_HANDOFF.md`.
 
+### 10b. Delegation to local CLI worker agents (opencode / codebuddy) — RULE-DELEGATE-001
+
+**Vai trò (bắt buộc tuân thủ):**
+- **DSH agent (em) = người GIAO TASK + người VERIFY.** Chỉ DSH agent được commit, push, deploy server, và chịu trách nhiệm cuối về tính đúng đắn.
+- **opencode / codebuddy = worker.** Chúng chỉ được sửa file trong repo theo brief; **không** commit, **không** push, **không** ssh, **không** đụng server production.
+- Owner (người) là người quyết định cuối cùng (chấp nhận/không) và là người gia hạn subscription cho worker.
+
+**Trạng thái công cụ (kiểm tra 2026-09-13, máy này):**
+| Tool | Version | Gọi non-interactive | Trạng thái |
+|---|---|---|---|
+| `opencode` | 1.18.21 | `opencode run "<prompt>"` → log ra file | ✅ chạy được (model deepseek-v4-flash) |
+| `codebuddy` | 2.137.1 | `codebuddy -p "<prompt>" --permission-mode dontAsk` | ❌ `429 Enterprise subscription has expired` — cần owner gia hạn |
+
+Cách chạy chuẩn (không chặn phiên chính):
+```bash
+cat > /tmp/opencode-task-<name>.md <<'EOF'
+<brief đầy đủ>
+EOF
+(opencode run "$(cat /tmp/opencode-task-<name>.md)" > /tmp/oc-<name>.log 2>&1 &)
+# đợi 60–120s rồi đọc log; task lớn có thể 5–15 phút
+```
+
+**Brief bắt buộc có đủ 6 phần** (worker không thấy context phiên của DSH agent):
+1. Repo path + phạm vi (dòng "KHÔNG commit, KHÔNG push, KHÔNG ssh")
+2. File/đường dẫn cụ thể được phép sửa (và cấm sửa file khác)
+3. **Nguồn sự thật** (ví dụ: "code production là chuẩn, chỉ sửa test")
+4. Hành vi đúng hiện tại (copy điều kiện/logic liên quan vào brief)
+5. Tiêu chí nghiệm thu kiểm chứng được (test pass, số lượng, output cụ thể)
+6. Yêu cầu báo cáo: file đã đổi + output test tóm tắt
+
+**Checklist VERIFY của DSH agent (làm hết mới được commit):**
+- [ ] `git status --porcelain` — chỉ đúng những file trong brief bị đổi, không có file lạ
+- [ ] Đọc diff bằng mắt: hành vi cũ có bị đổi ngoài ý muốn không (đặc biệt với refactor)
+- [ ] Tự chạy lại test/lệnh kiểm chứng (không tin output worker dán vào)
+- [ ] Test/assertion **không bị nới lỏng** thành vô nghĩa
+- [ ] Nếu chạm server: deploy + kiểm tra hành vi thật (curl/claim/log), rồi dọn dữ liệu test
+- [ ] Quét lại xem worker có vô tình thêm secret/credential vào repo không
+- [ ] Chỉ sau đó mới commit + push (và ghi rõ trong commit message worker nào đã làm gì nếu cần)
+
+**Xử lý khi worker sai:** sửa brief và chạy lại **tối đa 2 lần**; nếu vẫn không đạt hoặc output không kiểm chứng được → DSH agent tự làm.
+
+**Ví dụ đã chạy thật (2026-09-13):**
+1. Task "tách `deviceLimitDecision` thành hàm thuần + viết test" → opencode tạo `src/device-limit.js` + `test/device-limit.test.js`,
+   DSH verify diff (hành vi giữ nguyên), chạy `npm test`, deploy node1, test live (claim #4 bị 403) → commit `06511e1`.
+2. Task "sửa 3 test cũ đang fail (mailer branding + rate-limit)" → opencode chỉ sửa test (không sửa `src/`), DSH
+   tự chạy lại: **28 pass / 0 fail** → cùng commit.
+
 ## 11. Suggested commands
 
 ### Codex sub-agent

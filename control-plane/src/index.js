@@ -556,6 +556,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       const cfg = momoQrConfig();
       if (cfg) {
         const qrDataUrl = await createBankQrDataUrl({
+          prefix: "MEETFLOW",
           accountNumber: cfg.accountNumber,
           accountName: cfg.accountName,
           bin: cfg.bin,
@@ -591,6 +592,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       return res.status(502).json({ code: "bank_not_configured", error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
     }
     const qrDataUrl = await createBankQrDataUrl({
+      prefix: "MEETFLOW",
       accountNumber: bank.accountNumber,
       accountName: bank.accountName,
       amount: planCfg.amount,
@@ -1521,6 +1523,7 @@ app.post("/v1/payments/create", async (req, res) => {
       const bank = bankQrConfig();
       if (!bank) return res.status(502).json({ code: "bank_not_configured", error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
       const qrDataUrl = await createBankQrDataUrl({
+        prefix: "VPNFLOW",
         accountNumber: bank.accountNumber,
         accountName: bank.accountName,
         amount: planCfg.amount,
@@ -1534,6 +1537,7 @@ app.post("/v1/payments/create", async (req, res) => {
       const cfg = momoQrConfig();
       if (cfg) {
         const qrDataUrl = await createBankQrDataUrl({
+          prefix: "VPNFLOW",
           accountNumber: cfg.accountNumber,
           accountName: cfg.accountName,
           bin: cfg.bin,

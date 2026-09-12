@@ -46,7 +46,7 @@ function crc16(data) {
  *   field 52 = "0000" (MCC), 53 = "704" (VND), 54 = amount
  *   58 = "VN", 59 = name, 60 = city, 62 = content/bill, 63 = CRC16
  */
-export function buildVietQRPayload({ accountNumber, accountName, bin = BIN_TPBANK, amount, content = "" }) {
+export function buildVietQRPayload({ accountNumber, accountName, bin = BIN_TPBANK, amount, content = "", prefix = "VPNFLOW" }) {
   const name = String(accountName || "VPNFlow").slice(0, 25);
   const note = String(content || "").slice(0, 25);
 
@@ -68,7 +68,11 @@ export function buildVietQRPayload({ accountNumber, accountName, bin = BIN_TPBAN
   body += tlv("60", "Hanoi");
   // Additional data (62): bill number = order reference so it shows in the
   // customer's transfer note field.
-  body += tlv("62", tlv("01", note ? `VPNFLOW-${note}` : "VPNFLOW"));
+  // Reference prefix identifies the PRODUCT: a MeetFlow AI order must not look
+  // like a VPNFlow one, and the two order-code spaces can collide (both are
+  // epoch seconds).
+  const ref = String(prefix || "VPNFLOW").slice(0, 12);
+  body += tlv("62", tlv("01", note ? `${ref}-${note}` : ref));
   body += "6304";
 
   return body + crc16(body);
