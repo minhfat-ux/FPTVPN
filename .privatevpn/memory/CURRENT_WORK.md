@@ -177,3 +177,30 @@ Current task tracked here (schema per spec §31). Structured state also in
 - Force update: **DISABLED** (minimum_version=0.0.0) — chưa có version trên App Store (owner note).
 - Allowlist: minhnb2@me.com + support@meetflowai.site (debug_code + grant sub).
 - Khi owner test: điền `evidence/e2e/README.md`, chạy server-verify (wg peer/handshake + health + users).
+
+## Trạng thái cuối ngày 2026-09-13 (bàn giao — mai tiếp)
+
+### Việc ĐANG CHỜ (owner quyết định mai làm)
+1. **iOS / Xcode Cloud** — *owner hoãn sang 2026-09-14*. Nguyên nhân fail đã tìm ra & đã fix (commit `f674e02`, `d7cd46d`):
+   - `.gitignore` có `*.xcodeproj/` ⇒ repo **không chứa** `PrivateVPN.xcodeproj`; nguồn sự thật là `project.yml` (xcodegen).
+   - Đã thêm **`ci_scripts/ci_post_clone.sh`** (mode 100755): cài Go + xcodegen → `xcodegen generate` → kiểm tra shared scheme.
+   - Đã kiểm chứng local: script sinh project + 2 shared scheme; `make -C Vendor/WireGuardKit/Sources/WireGuardKitGo PLATFORM_NAME=iphoneos ARCHS=arm64` PASS (Go 1.26.6).
+   - **Việc mai làm:** chạy lại workflow Xcode Cloud (chọn scheme `PrivateVPN`); nếu còn fail → dán tên bước + log cho agent.
+   - Chi tiết: `docs/XCODE_CLOUD.md`.
+2. **Google Play (VPNFlow)** — AAB sẵn sàng: `release/android/VPNFlow-1.2.4-play-store.aab` (link `https://meetflowai.site/dl/VPNFlow-1.2.4-play-store.aab`).
+   Cần: khai **Foreground service type = specialUse** (text ở `docs/PLAY_SUBMISSION.md` §4c) + video demo (`https://meetflowai.site/dl/VPNFlow-foreground-service-demo.mp4`),
+   App access `review@meetflowai.site` / code `246810` (account đã được dọn về 0 thiết bị), privacy `https://meetflowai.site/FlowVPNPrivacy.html`.
+   Tài khoản Play **cá nhân** ⇒ cần **closed testing 12 tester × 14 ngày** (hoặc đi Organization + D-U-N-S, xem `docs/PLAY_ORG_ACCOUNT_DUNS.md`).
+3. **Windows client** — requirement đã viết (CR-0005 PROPOSED, `docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md`).
+   **Chờ owner trả lời Q1–Q6** (TUN vs proxy, code-signing cert, Microsoft Store, WireGuard legacy, Windows Server/IPv6, per-user hysteria auth).
+4. **Bảo mật** — repo GitHub `minhfat-ux/FPTVPN` đang **PUBLIC**: đề xuất owner chuyển **Private**; credential hysteria đã redact khỏi docs/script (còn trong `Config.kt` vì app cần, coi như không bí mật).
+   Cân nhắc đổi auth+obfs mới (script hoá) — chờ owner quyết.
+5. **Branch `web`** đang bị worktree `/Volumes/BIWIN/SourcesCode/PrivateVPN-production` giữ và có thay đổi staged của agent khác ⇒ chưa sync với `main` (cần chạy `git merge --ff-only main` khi worktree rảnh).
+6. **codebuddy** hết hạn subscription (`429 Enterprise subscription has expired`) ⇒ chỉ dùng được `opencode` cho delegate (xem RULE-DELEGATE-001, `docs/AGENTIC_PROJECT_WORKFLOW.md` §10b).
+
+### Đã xong trong ngày (tóm tắt)
+- Android 1.2.4 phát hành (APK web + AAB Play): fix mobile-data (foreground service `specialUse` + retry vô hạn + nhớ transport + Brutal CC), giới hạn 3 thiết bị (server `POST /v1/devices/claim` + dialog logout 5 ngôn ngữ).
+- Control-plane: refactor `deviceLimitDecision` + test (28/28 pass), sửa 3 test cũ lỗi thời, deploy node1 + test live.
+- Node tooling: `tools/node-setup/` (hysteria + relay Go + systemd), `docs/AGENT_NEW_NODE_GUIDE.md`, `docs/EXIT_NODE_IP_GUIDE.md`.
+- MeetFlowAI: AAB 1.0.4 (play) + APK (china) + release notes 5 ngôn ngữ; trang support đổi sang bản release.
+- Workflow agent: `AGENTS.md` + `CLAUDE.md` + `RULE-DELEGATE-001` + template brief; đã kiểm chứng worker tự đọc luật.
