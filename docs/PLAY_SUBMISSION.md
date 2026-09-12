@@ -7,7 +7,7 @@ _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung
 | File | Đường dẫn | Ghi chú |
 |---|---|---|
 | AAB (Play) | `release/android/VPNFlow-1.2.2-play-store.aab` | 39 MB, versionCode **2** / versionName **1.2.2**, ký release cert VPNFlow, build từ branch **`store`** (không có UI mua gói) |
-| SHA256 AAB | `d50f1f28cb4425662d34d976071447eb05a057467a17da574b229fc2e493573b` | |
+| SHA256 AAB | `9ac15bb7cd72caa2aebeff9954aa521b17880c5e65dd29f37ccdaf1ff75865fb` | |
 | APK (sideload) | `release/android/VPNFlow-1.2.2-arm64-x86-universal.apk` | 96 MB universal, phát qua `meetflowai.site/v1/downloads/android` |
 | Icon 512×512 | `release/android/play-assets/icon-512.png` | từ icon app (1024 gốc) |
 | Feature graphic 1024×500 | `release/android/play-assets/feature-graphic-1024x500.png` | navy + logo + tagline |
