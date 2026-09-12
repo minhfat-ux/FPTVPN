@@ -67,12 +67,7 @@ struct SettingsView: View {
 
             if authStore.isSignedIn {
                 Button(role: .destructive) {
-                    Task {
-                        // Free this device first so another account can register
-                        // it right after signing in.
-                        await vpnManager.releaseThisDevice(authStore: authStore)
-                        authStore.signOut()
-                    }
+                    authStore.signOut()
                 } label: {
                     Label(languageStore.t(.signOut), systemImage: "rectangle.portrait.and.arrow.right")
                 }

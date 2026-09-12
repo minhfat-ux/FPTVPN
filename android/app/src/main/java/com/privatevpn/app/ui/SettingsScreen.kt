@@ -42,7 +42,6 @@ import androidx.core.content.ContextCompat
 import com.privatevpn.app.Config
 import com.privatevpn.app.VPNFlowApp
 import com.privatevpn.app.api.ControlAPIClient
-import com.privatevpn.app.storage.DeviceIdentity
 import com.privatevpn.app.api.CoordinatorDevice
 import com.privatevpn.app.l10n.LKey
 import com.privatevpn.app.l10n.LangChoice
@@ -149,25 +148,8 @@ fun SettingsScreen(
             }
             if (isSignedIn) {
                 ActionRow(text = lang.t(LKey.signOut), destructive = false) {
-                    val token = auth.accessToken
-                    scope.launch {
-                        // Release this device on the coordinator BEFORE dropping the
-                        // session. Otherwise the device record stays bound to this
-                        // account and the next account that signs in on this phone is
-                        // refused with "Device belongs to another user".
-                        if (!token.isNullOrEmpty()) {
-                            runCatching {
-                                val mine = ControlAPIClient().fetchMyDevices(token)
-                                val myKey = DeviceIdentity
-                                    .obtainOrCreateKeyPair(app.secureStore).publicKey.toBase64()
-                                mine.firstOrNull { it.publicKey == myKey }?.let { device ->
-                                    ControlAPIClient().revokeDevice(device.deviceId, token)
-                                }
-                            }
-                        }
-                        auth.signOut()
-                        devices = emptyList()
-                    }
+                    auth.signOut()
+                    devices = emptyList()
                 }
                 ActionRow(text = lang.t(LKey.deleteAccount), destructive = true) {
                     val token = auth.accessToken ?: return@ActionRow

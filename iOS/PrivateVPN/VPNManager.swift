@@ -454,25 +454,6 @@ final class VPNManager: ObservableObject {
         deviceLimitDevices = []
     }
 
-    /// Releases THIS device on the coordinator before signing out, so the next
-    /// account that signs in on this device registers cleanly instead of being
-    /// refused with "Device belongs to another user".
-    func releaseThisDevice(authStore: AuthSessionStore) async {
-        guard let token = authStore.accessToken, !token.isEmpty else { return }
-        guard let myKey = devicePublicKey, !myKey.isEmpty else { return }
-        do {
-            let client = ControlAPIClient()
-            let mine = try await client.fetchMyDevices(accessToken: token)
-            if let mineDevice = mine.first(where: { $0.public_key == myKey }) {
-                try await client.revokeDevice(id: mineDevice.id, accessToken: token)
-                log.info("released device on sign-out: \(mineDevice.device_id, privacy: .public)")
-            }
-        } catch {
-            // Best effort: signing out must never be blocked by the network.
-            log.error("release device failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
     /// Logs out one of the account's devices and retries the connection.
     func logOutDeviceAndRetry(deviceId: String, store: VPNConfigStore, authStore: AuthSessionStore) async {
         guard let token = authStore.accessToken, !token.isEmpty else { return }
