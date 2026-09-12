@@ -195,6 +195,8 @@ const TEXTS = {
         cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
         amountPrefilled: "The amount is already filled in — just confirm.",
         copyAmount: "Copy amount",
+        amountReminder: "Transfer EXACTLY this amount.",
+        planChosen: "Your plan:",
         copyOrder: "Copy reference",
         orderNoteHint: "Paste this into the transfer note:",
     copied: "Copied",
@@ -266,6 +268,8 @@ const TEXTS = {
         cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
         amountPrefilled: "Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận.",
         copyAmount: "Sao chép số tiền",
+        amountReminder: "Chuyển ĐÚNG số tiền này khi chuyển khoản.",
+        planChosen: "Gói bạn đã chọn:",
         copyOrder: "Sao chép nội dung CK",
         orderNoteHint: "Dán nội dung này vào ô ghi chú khi chuyển tiền:",
     copied: "Đã sao chép",
@@ -337,6 +341,8 @@ const TEXTS = {
         cnyEnter: "支付时请输入二维码上显示的人民币金额。",
         amountPrefilled: "二维码中已填入金额 — 确认即可。",
         copyAmount: "复制金额",
+        amountReminder: "请转账「此金额」，不要多也不要少。",
+        planChosen: "您选择的套餐：",
         copyOrder: "复制转账备注",
         orderNoteHint: "请在转账备注中粘贴：",
     copied: "已复制",
@@ -408,6 +414,8 @@ const TEXTS = {
         cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
         amountPrefilled: "金額は入力済みです — 確認するだけです。",
         copyAmount: "金額をコピー",
+        amountReminder: "この金額をそのまま送金してください。",
+        planChosen: "選択中のプラン：",
         copyOrder: "参照番号をコピー",
         orderNoteHint: "振込メモに貼り付けてください：",
     copied: "コピーしました",
@@ -479,6 +487,8 @@ const TEXTS = {
         cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
         amountPrefilled: "금액이 미리 입력되어 있습니다 — 확인만 하면 됩니다.",
         copyAmount: "금액 복사",
+        amountReminder: "이 금액을 정확히 이체하세요.",
+        planChosen: "선택한 요금제:",
         copyOrder: "입금 메모 복사",
         orderNoteHint: "이체 메모에 붙여넣으세요:",
     copied: "복사됨",
@@ -1022,7 +1032,14 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       display: inline-block; background: #fff; border-radius: 12px; padding: 8px; margin: 12px 0;
     }
     .modal img { width: 230px; height: 230px; display: block; border-radius: 8px; }
-    .modal .amt { font-size: 18px; font-weight: 800; color: #33c773; }
+    /* Amount block sits ABOVE the QR: the customer must read it before scanning. */
+    .modal .amtbox {
+      margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px;
+      background: rgba(51,199,115,.10); border: 1px solid rgba(51,199,115,.35);
+    }
+    .modal .amtplan { font-size: 12.5px; color: rgba(255,255,255,.7); }
+    .modal .amtremind { margin-top: 6px; font-size: 12.5px; font-weight: 700; color: #ffd166; line-height: 1.45; }
+    .modal .amt { font-size: 26px; font-weight: 800; color: #33c773; line-height: 1.2; margin-top: 2px; }
     .modal .oc { color: rgba(255,255,255,.7); font-size: 13px; margin: 8px 0; word-break: break-all; }
     .modal .hint { color: rgba(255,255,255,.55); font-size: 13px; line-height: 1.5; }
     .modal .qstatus { margin-top: 12px; font-size: 13px; min-height: 18px; color: #33c773; }
@@ -1166,10 +1183,14 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     <div class="modal">
       <button class="close" id="qrClose">&times;</button>
       <div style="font-size:15px;font-weight:700;">${t.modalTitle}</div>
-      <div class="qr-wrap"><img id="qrImg" alt="${t.qrAlt}"></div>
-      <div class="amt" id="qrAmt"></div>
-      <div class="qrsub" id="qrAmtSub"></div>
+      <div class="amtbox">
+        <div class="amtplan" id="qrPlan"></div>
+        <div class="amt" id="qrAmt"></div>
+        <div class="qrsub" id="qrAmtSub"></div>
+        <div class="amtremind" id="qrAmtRemind">${t.amountReminder}</div>
+      </div>
       <button type="button" class="copyamt" id="qrCopyBtn">📋 ${t.copyAmount}</button>
+      <div class="qr-wrap"><img id="qrImg" alt="${t.qrAlt}"></div>
       <button type="button" class="copyamt" id="qrCopyOrderBtn">📋 ${t.copyOrder}</button>
       <div class="oc" id="qrOrder"></div>
       <div class="qrsub" id="qrOrderHint"></div>
@@ -1240,6 +1261,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     const qrHint = document.getElementById("qrHint");
     const qrStatus = document.getElementById("qrStatus");
     const qrAmtSub = document.getElementById("qrAmtSub");
+    const qrPlan = document.getElementById("qrPlan");
     applyCnyMode();
     const qrSaveBtn = document.getElementById("qrSaveBtn");
     const qrSaveHint = document.getElementById("qrSaveHint");
@@ -1362,11 +1384,16 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             // The customer types this into WeChat/Alipay, so lead with ¥ and let
             // the copy button copy the yuan figure.
             const cnyValue = cnyOf(data.amount);
-            qrAmt.textContent = "¥" + cnyValue;
+            // Show which plan the amount belongs to, right above the figure.
+          const planEl = document.querySelector(".plan.active span");
+          qrPlan.textContent = T.planChosen + " " + (planEl ? planEl.textContent.trim() : plan);
+          qrAmt.textContent = "¥" + cnyValue;
             qrAmtSub.textContent = "≈ " + money(data.amount) + " · " + usdLabel(data.amount) +
               " · 1 CNY ≈ " + new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
             qrCopyBtn.dataset.amount = String(cnyValue);
           } else {
+            const planEl2 = document.querySelector(".plan.active span");
+            qrPlan.textContent = T.planChosen + " " + (planEl2 ? planEl2.textContent.trim() : plan);
             qrAmt.textContent = money(data.amount);
             // International visitors still pay in dong here, so show what that is
             // worth in their currency (and in yuan, the other rail).

@@ -262,6 +262,14 @@ EOF
 # đợi 60–120s rồi đọc log; task lớn có thể 5–15 phút
 ```
 
+**Enforcement (từ 2026-09-13):** repo có **`AGENTS.md`** ở gốc (và `CLAUDE.md` trỏ về nó) — worker
+nạp tự động khi mở repo. Mọi brief **phải** bắt đầu bằng 2 dòng:
+```
+Đọc và tuân thủ: AGENTS.md, docs/templates/agentic-project/RULES.md
+Ràng buộc cứng: KHÔNG git, KHÔNG ssh/deploy, KHÔNG thêm dependency, KHÔNG sửa file ngoài whitelist
+```
+Dùng mẫu brief: `docs/templates/agentic-project/WORKER_TASK_BRIEF.md`.
+
 **Brief bắt buộc có đủ 6 phần** (worker không thấy context phiên của DSH agent):
 1. Repo path + phạm vi (dòng "KHÔNG commit, KHÔNG push, KHÔNG ssh")
 2. File/đường dẫn cụ thể được phép sửa (và cấm sửa file khác)
@@ -277,6 +285,9 @@ EOF
 - [ ] Test/assertion **không bị nới lỏng** thành vô nghĩa
 - [ ] Nếu chạm server: deploy + kiểm tra hành vi thật (curl/claim/log), rồi dọn dữ liệu test
 - [ ] Quét lại xem worker có vô tình thêm secret/credential vào repo không
+- [ ] **Kiểm tra convention**: diff tối thiểu, không format lại file khác, comment đúng ngôn ngữ file,
+      test đúng runner (`node --test`), không thêm dependency, không tạo file thừa
+- [ ] **Kiểm tra worker có tự chạy git/ssh không** (`git reflog`, `git log`, file ngoài whitelist) — nếu có → revert và nhắc lại luật
 - [ ] Chỉ sau đó mới commit + push (và ghi rõ trong commit message worker nào đã làm gì nếu cần)
 
 **Xử lý khi worker sai:** sửa brief và chạy lại **tối đa 2 lần**; nếu vẫn không đạt hoặc output không kiểm chứng được → DSH agent tự làm.
