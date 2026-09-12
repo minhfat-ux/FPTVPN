@@ -69,7 +69,11 @@ Trang mua tự chọn tiền tệ hiển thị (giá chính) theo ngôn ngữ kh
 `Environment=VND_PER_USD=25600` trong systemd drop-in. Log: `journalctl -u flowvpn-cp | grep "USD rate"`.
 Nếu chưa ghim thì tỷ giá USD đổi theo ngày, còn CNY đang ghim 3.500.
 
-### Nhập sẵn số tiền vào QR (WeChat / Alipay)
+### Nhập sẵn số tiền vào QR (WeChat / Alipay) — cơ chế có sẵn, hiện KHÔNG dùng
+
+> **Trạng thái 11/09/2026:** chủ shop chọn **giữ ảnh QR chung** cho WeChat / Alipay / MoMo
+> (khách tự nhập số tiền). Phần dưới là cơ chế ảnh-theo-mức-tiền — vẫn có sẵn trong code, chỉ cần thả ảnh
+> vào `/root/flowvpn-pay/` là tự bật, **không cần làm bây giờ**.
 
 - **Chuyển khoản ngân hàng (TPBank VietQR)** và **MoMo**: số tiền **đã được nhúng sẵn** trong QR động,
   khách quét là app điền sẵn số tiền, chỉ cần xác nhận. Không phải làm gì thêm.
@@ -89,7 +93,7 @@ Có ảnh riêng thì trang mua tự báo khách *"Số tiền đã có sẵn tr
 chưa có thì vẫn hiện số ¥ to + nút sao chép như hiện nay (không bao giờ lỗi).
 Kiểm tra ảnh nào đang được dùng: response header `X-QR-Variant` và `X-QR-Amount-Prefilled`.
 
-**Danh sách ảnh cần tạo** (mỗi mức tiền 1 ảnh cho **cả WeChat và Alipay**):
+**Nếu sau này muốn bật** (mỗi mức tiền 1 ảnh cho **cả WeChat và Alipay**) — hiện **không cần**:
 
 | Số tiền | Dùng cho | Tên file |
 |---|---|---|
@@ -102,6 +106,17 @@ Kiểm tra ảnh nào đang được dùng: response header `X-QR-Variant` và `
 | ¥300 | MeetFlow AI năm | `wechat-300.png`, `alipay-300.png` |
 
 Làm dần cũng được: gói nào chưa có ảnh riêng thì dùng ảnh QR chung như hiện tại.
+
+Trạng thái từng kênh (11/09/2026):
+
+| Kênh | Đang dùng | Số tiền |
+|---|---|---|
+| Chuyển khoản ngân hàng (TPBank) | QR **động** do server tạo | ✅ nhúng sẵn + ghi mã đơn vào nội dung CK |
+| MoMo | QR **động** (VietQR BIN 971025) | ✅ nhúng sẵn + mã đơn |
+| WeChat Pay | ảnh tĩnh `wechat.png` (ảnh cũ) | ❌ khách tự nhập ¥ (số ¥ hiện to + nút sao chép) |
+| Alipay | ảnh tĩnh `alipay.png` (ảnh cũ) | ❌ khách tự nhập ¥ |
+
+Muốn MoMo quay lại dùng ảnh tĩnh `momo.png`: thêm `Environment=MOMO_QR_DYNAMIC=0` rồi restart service.
 
 **Làm tròn:** luôn làm tròn **lên** tới đồng ¥ nguyên (ceil) — khách nhập tay, không để thiếu tiền.
 
