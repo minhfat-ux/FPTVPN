@@ -8,6 +8,7 @@ import java.net.DatagramSocket
 import java.net.InetSocketAddress
 import java.net.Socket
 import android.net.Network
+import com.privatevpn.app.diag.DiagnosticsLog
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -47,16 +48,24 @@ class WGRelay(
             if (running.get()) return true
             val udp = DatagramSocket(0)
             val tcp = Socket()
+            DiagnosticsLog.log("relay: connecting $relayHost:$relayPort")
+            val connectStarted = System.currentTimeMillis()
             try {
                 tcp.connect(InetSocketAddress(relayHost, relayPort), 10_000)
                 tcp.tcpNoDelay = true
             } catch (e: IOException) {
+                DiagnosticsLog.warn("relay: connect FAILED after ${System.currentTimeMillis() - connectStarted}ms: ${e.message}")
                 udp.close()
                 throw e
             }
             localSocket = udp
             tcpSocket = tcp
             running.set(true)
+            DiagnosticsLog.log(
+                "relay: connected in ${System.currentTimeMillis() - connectStarted}ms, local udp port=${udp.localPort}",
+            )
+            DiagnosticsLog.transport = "wg-relay"
+            DiagnosticsLog.relayConnected = true
         }
         val udp = localSocket ?: return false
         val tcp = tcpSocket ?: return false
@@ -77,7 +86,10 @@ class WGRelay(
                         out.write(buf, 0, pkt.length)
                         out.flush()
                     }
+                    DiagnosticsLog.relayTxBytes += pkt.length
+                    DiagnosticsLog.relayLastTxAt = System.currentTimeMillis()
                 } catch (e: Exception) {
+                    DiagnosticsLog.warn("relay: udp->tcp loop died: ${e.javaClass.simpleName}: ${e.message}")
                     if (running.get()) stop()
                     break
                 }
@@ -94,7 +106,10 @@ class WGRelay(
                     input.readFully(payload)
                     val dst = peer.get() ?: InetSocketAddress("127.0.0.1", 51820)
                     udp.send(DatagramPacket(payload, len, dst))
+                    DiagnosticsLog.relayRxBytes += len
+                    DiagnosticsLog.relayLastRxAt = System.currentTimeMillis()
                 } catch (e: Exception) {
+                    DiagnosticsLog.warn("relay: tcp->udp loop died: ${e.javaClass.simpleName}: ${e.message}")
                     if (running.get()) stop()
                     break
                 }
@@ -103,9 +118,17 @@ class WGRelay(
         return true
     }
 
+    private fun ageSeconds(at: Long): String =
+        if (at <= 0) "never" else "${(System.currentTimeMillis() - at) / 1000}s ago"
+
     fun stop() {
         synchronized(lock) {
             if (!running.getAndSet(false)) return
+            DiagnosticsLog.warn(
+                "relay: stopping (rx=${DiagnosticsLog.relayRxBytes}B tx=${DiagnosticsLog.relayTxBytes}B; " +
+                    "last rx ${ageSeconds(DiagnosticsLog.relayLastRxAt)}, last tx ${ageSeconds(DiagnosticsLog.relayLastTxAt)})",
+            )
+            DiagnosticsLog.relayConnected = false
             try { tcpSocket?.close() } catch (_: IOException) {}
             try { localSocket?.close() } catch (_: IOException) {}
             tcpSocket = null

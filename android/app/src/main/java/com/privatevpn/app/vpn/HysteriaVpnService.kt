@@ -1,5 +1,8 @@
 package com.privatevpn.app.vpn
 
+import com.privatevpn.app.Config
+import com.privatevpn.app.diag.DiagnosticsLog
+import com.privatevpn.app.diag.NetworkMonitor
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -28,6 +31,10 @@ class HysteriaVpnService : VpnService() {
     /** Hysteria server host, from the selected exit node (Config fallback). */
     private var runHost: String = DEFAULT_HOST
 
+    /** Logs default-network changes while the tunnel runs (WiFi -> mobile data). */
+    private var networkMonitor: NetworkMonitor? = null
+    private var probeThread: Thread? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Foreground immediately: on metered networks (China mobile data) Android
         // blocks data for background apps (netpolicy blocked=APP_BACKGROUND), which
@@ -37,6 +44,15 @@ class HysteriaVpnService : VpnService() {
         // New session: clear any stop flag left by the previous disconnect,
         // otherwise the tunnel thread exits immediately and stops the service.
         stopping = false
+        // Diagnostics: default-network changes + periodic transport probe. This is
+        // the instrumentation for "connected on hotel WiFi, walked outside, no
+        // internet until reconnect".
+        DiagnosticsLog.init(this)
+        if (networkMonitor == null) {
+            networkMonitor = NetworkMonitor(this).also { it.start() }
+        }
+        startProbeLoop()
+        DiagnosticsLog.log("service: onStartCommand startId=$startId")
         // Hysteria server host comes from the selected exit node; Config is the fallback.
         runHost = intent?.getStringExtra(EXTRA_HOST)?.takeIf { it.isNotBlank() } ?: DEFAULT_HOST
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: onStartCommand startId=$startId host=$runHost")
@@ -266,6 +282,8 @@ class HysteriaVpnService : VpnService() {
 
     /** Notifies the UI layer that the tunnel is really up (clears fake state). */
     private fun reportUp() {
+        DiagnosticsLog.tunnelUp = true
+        DiagnosticsLog.log("tunnel: UP (${DiagnosticsLog.transport})")
         try {
             val app = application as VPNFlowApp
             app.vpnManager.onHysteriaUp()
@@ -275,6 +293,8 @@ class HysteriaVpnService : VpnService() {
 
     /** UI: we are (re)trying to bring the tunnel up. */
     private fun reportReconnecting() {
+        DiagnosticsLog.tunnelUp = false
+        DiagnosticsLog.warn("tunnel: reconnecting / not serving")
         if (stopping) return
         try {
             val app = application as VPNFlowApp
@@ -305,6 +325,11 @@ class HysteriaVpnService : VpnService() {
 
     override fun onDestroy() {
         stopping = true
+        DiagnosticsLog.tunnelUp = false
+        DiagnosticsLog.log("service: onDestroy")
+        networkMonitor?.stop()
+        networkMonitor = null
+        probeThread = null
         runCatching { stopForeground(Service.STOP_FOREGROUND_REMOVE) }
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: service onDestroy -> Mobile.stop()")
         // Ask the Go client to stop; Start() (blocked on another thread) returns.
@@ -312,7 +337,75 @@ class HysteriaVpnService : VpnService() {
         super.onDestroy()
     }
 
+    /**
+     * Every [PROBE_INTERVAL_MS] logs the network + transport state and checks that
+     * the relay is still reachable through the CURRENT underlying network. A
+     * tunnel that is up while the relay is silent/unreachable is exactly the
+     * "connected but no internet" signature.
+     */
+    private fun startProbeLoop() {
+        if (probeThread != null) return
+        probeThread = Thread {
+            var tick = 0
+            while (!stopping) {
+                try {
+                    Thread.sleep(PROBE_INTERVAL_MS)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                if (stopping) return@Thread
+                tick++
+                val rxSilenceSec = if (DiagnosticsLog.relayLastRxAt > 0) {
+                    (System.currentTimeMillis() - DiagnosticsLog.relayLastRxAt) / 1000
+                } else {
+                    -1L
+                }
+                DiagnosticsLog.log(
+                    "probe#$tick transport=${DiagnosticsLog.transport} tunnelUp=${DiagnosticsLog.tunnelUp} " +
+                        "relayConnected=${DiagnosticsLog.relayConnected} rx=${DiagnosticsLog.relayRxBytes}B " +
+                        "tx=${DiagnosticsLog.relayTxBytes}B lastRx=" +
+                        (if (rxSilenceSec >= 0) "${rxSilenceSec}s ago" else "never") +
+                        " | " + (networkMonitor?.snapshot() ?: "net=?"),
+                )
+                if (DiagnosticsLog.tunnelUp && rxSilenceSec > RELAY_SILENCE_WARN_SEC) {
+                    DiagnosticsLog.warn(
+                        "probe#$tick TUNNEL UP BUT NO TRAFFIC for ${rxSilenceSec}s " +
+                            "(stale transport after a network change?)",
+                    )
+                }
+                probeRelayReachable()
+            }
+        }.apply { isDaemon = true; name = "vpn-diagnostics-probe" }.also { it.start() }
+    }
+
+    /** Cheap TCP reachability check of the relay through the current network. */
+    private fun probeRelayReachable() {
+        val started = System.currentTimeMillis()
+        var ok = false
+        var detail = ""
+        try {
+            val socket = java.net.Socket()
+            try {
+                protect(socket)
+                socket.connect(java.net.InetSocketAddress(Config.RELAY_HOST, Config.RELAY_PORT), 2500)
+                ok = true
+            } finally {
+                runCatching { socket.close() }
+            }
+        } catch (e: Exception) {
+            detail = " (${e.javaClass.simpleName}: ${e.message})"
+        }
+        DiagnosticsLog.log(
+            "probe: relay ${Config.RELAY_HOST}:${Config.RELAY_PORT} reachable=$ok " +
+                "in ${System.currentTimeMillis() - started}ms$detail",
+        )
+    }
+
     companion object {
+        /** Probe cadence: frequent enough to catch a handover, cheap enough to keep. */
+        const val PROBE_INTERVAL_MS = 15_000L
+        /** Warn when the tunnel claims to be up but nothing came back for this long. */
+        const val RELAY_SILENCE_WARN_SEC = 45L
         const val TCP_CONNECT_TIMEOUT_MS = 2500
         const val RETRY_BACKOFF_START_MS = 3000L
         const val RETRY_BACKOFF_MAX_MS = 30000L

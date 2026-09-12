@@ -20,7 +20,9 @@ class VPNFlowApp : Application() {
     lateinit var languageStore: LanguageStore
         private set
 
-    override fun onCreate() {
+        override fun onCreate() {
+        super.onCreate()
+        com.privatevpn.app.diag.DiagnosticsLog.init(this)
         super.onCreate()
         secureStore = SecureStore(this)
         authStore = AuthSessionStore(secureStore)
