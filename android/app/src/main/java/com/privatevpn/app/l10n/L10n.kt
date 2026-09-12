@@ -64,6 +64,7 @@ enum class LKey {
     disconnected, connecting, connected, disconnecting, failed,
     disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle,
     devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices,
+    deviceLimitTitle, deviceLimitBody, deviceLimitLogout,
     signInRequiredShort, updateRequiredShort, deleteAccountDoneShort, invalidEmailShort,
     notNowShort
 }
@@ -113,6 +114,7 @@ object L10n {
             LKey.failedSubtitle to "VPN needs attention",
             LKey.select to "Select", LKey.serverLocation to "Server", LKey.loadingLocations to "Loading servers…", LKey.noServerAvailable to "No server available", LKey.refreshLocations to "Refresh servers", LKey.usingSavedServers to "Showing saved servers — coordinator unreachable. Tap to refresh.",
             LKey.devices to "Devices", LKey.revoke to "Revoke", LKey.revokeDeviceConfirm to "Revoke this device? It will no longer be able to connect.", LKey.thisDevice to "This device", LKey.deviceRevoked to "Device revoked.", LKey.noDevices to "No devices registered.", LKey.active to "Active", LKey.revoked to "Revoked", LKey.loadingDevices to "Loading devices…",
+            LKey.deviceLimitTitle to "Device limit reached", LKey.deviceLimitBody to "You can use VPNFlow on up to 3 devices. Log out one of the devices below to keep using this one.", LKey.deviceLimitLogout to "Log out",
             LKey.signInRequiredShort to "Sign in required", LKey.updateRequiredShort to "Update Required", LKey.deleteAccountDoneShort to "Account deleted.", LKey.invalidEmailShort to "Please enter a valid email address.", LKey.notNowShort to "Not Now"
         ),
         AppLanguage.VIETNAMESE to mapOf(
@@ -144,6 +146,7 @@ object L10n {
             LKey.failedSubtitle to "VPN cần được kiểm tra",
             LKey.select to "Chọn", LKey.serverLocation to "Máy chủ", LKey.loadingLocations to "Đang tải máy chủ…", LKey.noServerAvailable to "Chưa có máy chủ khả dụng", LKey.refreshLocations to "Tải lại máy chủ", LKey.usingSavedServers to "Đang hiển thị máy chủ đã lưu — không kết nối được máy chủ điều phối. Chạm để tải lại.",
             LKey.devices to "Thiết bị", LKey.revoke to "Thu hồi", LKey.revokeDeviceConfirm to "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", LKey.thisDevice to "Thiết bị này", LKey.deviceRevoked to "Đã thu hồi thiết bị.", LKey.noDevices to "Chưa có thiết bị nào được đăng ký.", LKey.active to "Hoạt động", LKey.revoked to "Đã thu hồi", LKey.loadingDevices to "Đang tải thiết bị…",
+            LKey.deviceLimitTitle to "Đã đạt giới hạn thiết bị", LKey.deviceLimitBody to "Bạn chỉ có thể dùng VPNFlow trên tối đa 3 thiết bị. Hãy đăng xuất một thiết bị dưới đây để tiếp tục dùng thiết bị này.", LKey.deviceLimitLogout to "Đăng xuất",
             LKey.signInRequiredShort to "Cần đăng nhập", LKey.updateRequiredShort to "Cần cập nhật", LKey.deleteAccountDoneShort to "Đã xóa tài khoản.", LKey.invalidEmailShort to "Vui lòng nhập địa chỉ email hợp lệ.", LKey.notNowShort to "Để sau"
         ),
         AppLanguage.CHINESE to mapOf(
@@ -174,6 +177,7 @@ object L10n {
             LKey.failedSubtitle to "VPN 需要检查",
             LKey.select to "选择", LKey.serverLocation to "服务器", LKey.loadingLocations to "正在加载服务器…", LKey.noServerAvailable to "暂无可用服务器", LKey.refreshLocations to "刷新服务器", LKey.usingSavedServers to "正在显示已保存的服务器 — 无法连接协调服务器。点击重试。",
             LKey.devices to "设备", LKey.revoke to "撤销", LKey.revokeDeviceConfirm to "撤销此设备？该设备将无法再连接。", LKey.thisDevice to "当前设备", LKey.deviceRevoked to "设备已撤销。", LKey.noDevices to "尚未注册任何设备。", LKey.active to "活跃", LKey.revoked to "已撤销", LKey.loadingDevices to "正在加载设备…",
+            LKey.deviceLimitTitle to "已达到设备上限", LKey.deviceLimitBody to "VPNFlow 最多可在 3 台设备上使用。请登出下方其中一台设备，以便继续使用本设备。", LKey.deviceLimitLogout to "登出",
             LKey.signInRequiredShort to "需要登录", LKey.updateRequiredShort to "需要更新", LKey.deleteAccountDoneShort to "账户已删除。", LKey.invalidEmailShort to "请输入有效的邮箱地址。", LKey.notNowShort to "暂不"
         ),
         AppLanguage.JAPANESE to mapOf(
@@ -204,6 +208,7 @@ object L10n {
             LKey.failedSubtitle to "VPN の確認が必要です",
             LKey.select to "選択", LKey.serverLocation to "サーバー", LKey.loadingLocations to "サーバーを読み込み中…", LKey.noServerAvailable to "利用可能なサーバーがありません", LKey.refreshLocations to "サーバーを更新", LKey.usingSavedServers to "保存済みサーバーを表示中 — コーディネーターに接続できません。再試行するにはタップ。",
             LKey.devices to "デバイス", LKey.revoke to "取り消す", LKey.revokeDeviceConfirm to "このデバイスを取り消しますか？このデバイスは接続できなくなります。", LKey.thisDevice to "このデバイス", LKey.deviceRevoked to "デバイスを取り消しました。", LKey.noDevices to "登録されたデバイスがありません。", LKey.active to "アクティブ", LKey.revoked to "取り消し済み", LKey.loadingDevices to "デバイスを読み込み中…",
+            LKey.deviceLimitTitle to "デバイス上限に達しました", LKey.deviceLimitBody to "VPNFlow は最大 3 台まで利用できます。このデバイスを使うには、下のいずれかをログアウトしてください。", LKey.deviceLimitLogout to "ログアウト",
             LKey.signInRequiredShort to "サインインが必要です", LKey.updateRequiredShort to "アップデートが必要です", LKey.deleteAccountDoneShort to "アカウントを削除しました。", LKey.invalidEmailShort to "有効なメールアドレスを入力してください。", LKey.notNowShort to "後で"
         ),
         AppLanguage.KOREAN to mapOf(
@@ -234,6 +239,7 @@ object L10n {
             LKey.failedSubtitle to "VPN 확인이 필요합니다",
             LKey.select to "선택", LKey.serverLocation to "서버", LKey.loadingLocations to "서버를 불러오는 중…", LKey.noServerAvailable to "사용 가능한 서버 없음", LKey.refreshLocations to "서버 새로고침", LKey.usingSavedServers to "저장된 서버 표시 중 — 코디네이터에 연결할 수 없습니다. 다시 시도하려면 탭하세요.",
             LKey.devices to "기기", LKey.revoke to "해지", LKey.revokeDeviceConfirm to "이 기기를 해지하시겠습니까? 이 기기는 더 이상 연결할 수 없습니다.", LKey.thisDevice to "현재 기기", LKey.deviceRevoked to "기기가 해지되었습니다.", LKey.noDevices to "등록된 기기가 없습니다.", LKey.active to "활성", LKey.revoked to "해지됨", LKey.loadingDevices to "기기를 불러오는 중…",
+            LKey.deviceLimitTitle to "기기 한도에 도달했습니다", LKey.deviceLimitBody to "VPNFlow는 최대 3대까지 사용할 수 있습니다. 이 기기를 계속 사용하려면 아래 기기 중 하나를 로그아웃하세요.", LKey.deviceLimitLogout to "로그아웃",
             LKey.signInRequiredShort to "로그인이 필요합니다", LKey.updateRequiredShort to "업데이트 필요", LKey.deleteAccountDoneShort to "계정이 삭제되었습니다.", LKey.invalidEmailShort to "유효한 이메일 주소를 입력하세요.", LKey.notNowShort to "나중에"
         )
     )

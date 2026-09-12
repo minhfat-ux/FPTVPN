@@ -5,6 +5,7 @@ import android.net.VpnService
 import android.util.Log
 import com.privatevpn.app.Config
 import com.privatevpn.app.api.ControlAPIClient
+import com.privatevpn.app.api.CoordinatorDevice
 import com.privatevpn.app.api.ExitNode
 import com.privatevpn.app.auth.AuthSessionStore
 import com.privatevpn.app.storage.DeviceIdentity
@@ -56,6 +57,10 @@ class VPNManager(
 
     private val _usingFallbackNodes = MutableStateFlow(false)
     val usingFallbackNodes: StateFlow<Boolean> = _usingFallbackNodes.asStateFlow()
+
+    /** Non-null while the account is at the device limit (UI asks which to log out). */
+    private val _deviceLimit = MutableStateFlow<List<CoordinatorDevice>?>(null)
+    val deviceLimit: StateFlow<List<CoordinatorDevice>?> = _deviceLimit.asStateFlow()
 
     private val _selectedNodeID = MutableStateFlow<String?>(store.getString(SecureStore.Keys.SELECTED_NODE_ID))
     val selectedNodeID: StateFlow<String?> = _selectedNodeID.asStateFlow()
@@ -170,7 +175,58 @@ class VPNManager(
         if (intent != null) {
             _pendingConsent.value = intent
         } else {
+            scope.launch { claimDeviceThenStart() }
+        }
+    }
+
+    /**
+     * Hysteria mode has no WireGuard peer, so the device is claimed explicitly:
+     * that is where the "max 3 devices per account" rule is enforced.
+     */
+    private suspend fun claimDeviceThenStart() {
+        val token = authStore.accessToken
+        if (token.isNullOrEmpty()) {
+            _state.value = VPNState.FAILED
+            _statusMessage.value = "Please sign in before connecting."
+            return
+        }
+        val pair = DeviceIdentity.obtainOrCreateKeyPair(store)
+        _state.value = VPNState.CONNECTING
+        try {
+            ControlAPIClient().claimDevice(
+                accessToken = token,
+                deviceKey = pair.publicKey.toBase64(),
+                name = DeviceIdentity.registrationName(store),
+            )
+            _deviceLimit.value = null
             startHysteriaService()
+        } catch (e: ControlAPIClient.ClientError.DeviceLimit) {
+            _deviceLimit.value = e.devices
+            _state.value = VPNState.DISCONNECTED
+            _statusMessage.value = "Device limit reached. Log out one of your other devices."
+            Log.e("VPNFLOW_DEBUG", "device limit reached: ${e.devices.size} devices")
+        } catch (e: Exception) {
+            _state.value = VPNState.FAILED
+            _lastError.value = e.message
+            _statusMessage.value = userMessage(e)
+            Log.e("VPNFLOW_DEBUG", "device claim failed: ${e.message}")
+        }
+    }
+
+    /** Closes the device-limit prompt without changing anything. */
+    fun dismissDeviceLimit() {
+        _deviceLimit.value = null
+    }
+
+    /** Logs out (revokes) one device, then retries the connection. */
+    fun logOutDeviceAndRetry(deviceId: String) {
+        scope.launch {
+            val token = authStore.accessToken
+            if (token.isNullOrEmpty()) return@launch
+            runCatching { ControlAPIClient().revokeDevice(deviceId, token) }
+                .onFailure { Log.e("VPNFLOW_DEBUG", "revoke device failed: ${it.message}") }
+            _deviceLimit.value = null
+            connect()
         }
     }
 
@@ -212,7 +268,7 @@ class VPNManager(
     fun resumeAfterConsent() {
         if (Config.HYSTERIA_MODE) {
             _pendingConsent.value = null
-            startHysteriaService()
+            scope.launch { claimDeviceThenStart() }
             return
         }
         scope.launch {

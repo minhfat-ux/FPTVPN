@@ -107,5 +107,13 @@ data class AppVersionInfo(
 @Serializable
 data class ErrorBody(val error: String? = null, val message: String? = null)
 
+/** 403 device_limit_reached: the account already uses the maximum devices. */
+@Serializable
+data class DeviceLimitBody(
+    val error: String? = null,
+    val message: String? = null,
+    val devices: List<CoordinatorDevice> = emptyList(),
+)
+
 @Serializable
 internal data class TokenResponse(val token: String)
