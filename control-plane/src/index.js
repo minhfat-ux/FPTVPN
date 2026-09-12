@@ -2476,6 +2476,9 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       assignedIP: assignedIP ?? "0.0.0.0",
       userId,
       exitNodeId: null,
+      // Authenticated claim (session + subscription): adopt a record left behind
+      // by a previous account on this same device.
+      allowTransfer: true,
     });
     const created = result.device;
     // Re-load before writing: upsertByPublicKey already saved, so saving the
@@ -2486,8 +2489,15 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       rec.lastSeenAt = new Date().toISOString();
       await store._save(latest);
     }
-    console.log(`device claim: user=${userId} new device ${created.id} (${platform}) ip=${created.assignedIP}`);
-    res.status(201).json({ ok: true, device_id: created.id, created: true });
+    console.log(
+      `device claim: user=${userId} ${result.transferred ? "adopted" : "new"} device ${created.id} (${platform}) ip=${created.assignedIP}`,
+    );
+    res.status(result.transferred ? 200 : 201).json({
+      ok: true,
+      device_id: created.id,
+      created: !result.transferred,
+      transferred: Boolean(result.transferred),
+    });
   } catch (err) {
     console.error("POST /v1/devices/claim failed:", err);
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
@@ -2695,7 +2705,16 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
     throw error;
   }
 
-  const result = await store.upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId: selectedNode.id });
+  const result = await store.upsertByPublicKey({
+    publicKey,
+    deviceName,
+    assignedIP,
+    platform,
+    userId,
+    exitNodeId: selectedNode.id,
+    // Authenticated register: adopt a record left behind by a previous account.
+    allowTransfer: Boolean(userId),
+  });
   device = result.device;
 
   await provisionPeer(selectedNode, publicKey, `${assignedIP}/32`);

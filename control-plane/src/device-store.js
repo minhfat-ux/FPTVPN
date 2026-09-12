@@ -42,10 +42,19 @@ export class DeviceStore {
     return devices.find((d) => d.id === id) ?? null;
   }
 
-  /** Creates or returns the existing device for a public key. */
-  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId }) {
+  /**
+   * Creates or returns the existing device for a public key.
+   *
+   * `allowTransfer` lets an authenticated (and subscribed) user adopt a device
+   * record that currently belongs to another account. The app keeps ONE
+   * WireGuard keypair per installation, so signing out and signing in with a
+   * different account on the same phone must move the record instead of failing
+   * with "Device belongs to another user".
+   */
+  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId, allowTransfer = false }) {
     const devices = await this._load();
     const existing = devices.find((d) => d.publicKey === publicKey);
+    let transferred = false;
     if (existing) {
       if (existing.active === false) {
         const error = new Error("Device has been revoked");
@@ -53,9 +62,14 @@ export class DeviceStore {
         throw error;
       }
       if (existing.userId && userId && existing.userId !== userId) {
-        const error = new Error("Device belongs to another user");
-        error.statusCode = 403;
-        throw error;
+        if (!allowTransfer) {
+          const error = new Error("Device belongs to another user");
+          error.statusCode = 403;
+          throw error;
+        }
+        // Same hardware, new account: hand the record (and its overlay IP) over.
+        console.log(`device transfer: ${existing.id} from ${existing.userId} to ${userId}`);
+        transferred = true;
       }
       existing.deviceName = deviceName ?? existing.deviceName;
       existing.platform = platform ?? existing.platform;
@@ -63,7 +77,7 @@ export class DeviceStore {
       existing.userId = userId ?? existing.userId ?? null;
       existing.active = true;
       await this._save(devices);
-      return { device: existing, isNew: false };
+      return { device: existing, isNew: false, transferred };
     }
     const device = {
       id: crypto.randomUUID(),
