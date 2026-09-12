@@ -778,9 +778,10 @@ export function localizedPlanRows(lang, product = "vpn", options = {}) {
   return order.map((id) => {
     const p = table[id];
     const period = p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote;
-    const oneTime = p.oneTime && t.pass30Note ? " · " + t.pass30Note : "";
+    // Ghi chú "mua một lần · không tự động gia hạn" chỉ để ở TÊN gói: lặp lại ở dòng giá
+    // làm hàng gói AI không vừa màn hình điện thoại.
     const label = p.oneTime && t.pass30Note ? t.planNames[id] + " · " + t.pass30Note : t.planNames[id];
-    const main = fmtMoney(currency, p.amount, { lang, cnyRate, usdRate }) + period + oneTime;
+    const main = fmtMoney(currency, p.amount, { lang, cnyRate, usdRate }) + period;
     // The other two currencies, small, so nobody has to guess what they pay.
     const others = ["VND", "CNY", "USD"]
       .filter((c) => c !== currency)
@@ -902,7 +903,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     .plan.active { border-color: #33c773; background: rgba(51,199,115,.12); }
     .plan .price { color: #33c773; font-weight: 800; text-align: right; }
     .plan .name { display: block; }
-    .price { text-align: right; white-space: nowrap; }
+    /* Khối giá phải được phép co và xuống dòng: gói AI pass30 có tên rất dài,
+       nowrap từng làm tên gói bị bóp còn vài ký tự và hàng gói cao gấp 3 lần. */
+    .price { text-align: right; min-width: 0; }
+    .plan { flex-wrap: wrap; }
+    .plan > span:first-child { flex: 1 1 auto; min-width: 0; }
+    .plan > .price { flex: 0 1 auto; margin-left: auto; }
     .pricesub { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,.5); }
     .curbar { display: flex; gap: 6px; justify-content: center; margin: -6px 0 14px; }
     .curbar a {
