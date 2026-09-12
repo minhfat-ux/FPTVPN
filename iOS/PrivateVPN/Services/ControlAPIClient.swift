@@ -173,6 +173,10 @@ struct ControlAPIClient {
         case server(String)
         case transport(endpoint: String, Error)
         case missingSession
+        /// The account already uses the maximum number of active devices. Carries
+        /// the coordinator's message and the device list so the UI can offer
+        /// "log out an old device" instead of a vague rejection.
+        case deviceLimit(message: String, devices: [CoordinatorDevice])
 
         var errorDescription: String? {
             switch self {
@@ -184,6 +188,8 @@ struct ControlAPIClient {
                 return "Could not reach the coordinator while requesting \(endpoint): \(error.localizedDescription)"
             case .missingSession:
                 return "Please sign in before connecting."
+            case .deviceLimit(let message, _):
+                return message
             }
         }
     }
@@ -229,6 +235,15 @@ struct ControlAPIClient {
             throw ClientError.badResponse
         }
         guard (200..<300).contains(http.statusCode) else {
+            // Device limit: keep the coordinator's message AND the device list so
+            // the app can show which devices to log out.
+            if let limit = try? JSONDecoder().decode(DeviceLimitBody.self, from: data),
+               limit.error == "device_limit_reached" {
+                throw ClientError.deviceLimit(
+                    message: limit.message ?? "Device limit reached. Log out an old device to continue.",
+                    devices: limit.devices ?? []
+                )
+            }
             let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.message
                 ?? "HTTP \(http.statusCode)"
             throw ClientError.server(message)
@@ -458,5 +473,13 @@ struct ControlAPIClient {
     private struct ErrorBody: Decodable {
         let error: String?
         let message: String?
+    }
+
+    /// 403 body from the coordinator when the account is at the device cap.
+    private struct DeviceLimitBody: Decodable {
+        let error: String?
+        let message: String?
+        let devices: [CoordinatorDevice]?
+        let max_devices: Int?
     }
 }

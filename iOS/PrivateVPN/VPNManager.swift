@@ -14,6 +14,10 @@ final class VPNManager: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var statusMessage: String?
     @Published private(set) var devicePublicKey: String?
+    /// Set when the coordinator rejects the connection because the account is at
+    /// its device cap — the UI lists these devices so the user can log one out.
+    @Published private(set) var deviceLimitMessage: String?
+    @Published private(set) var deviceLimitDevices: [CoordinatorDevice] = []
 
     private var manager: NETunnelProviderManager?
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
@@ -75,6 +79,23 @@ final class VPNManager: ObservableObject {
             try manager?.connection.startVPNTunnel()
             lastError = nil
             statusMessage = nil
+            deviceLimitMessage = nil
+            deviceLimitDevices = []
+        } catch let error as ControlAPIClient.ClientError {
+            if case .deviceLimit(let message, let devices) = error {
+                // Not a failure to hide behind "Coordinator rejected": show the
+                // real reason plus the devices that can be logged out.
+                deviceLimitMessage = message
+                deviceLimitDevices = devices
+                state = .disconnected
+                lastError = message
+                statusMessage = message
+                log.error("device limit reached: \(devices.count) active devices")
+                return
+            }
+            state = .failed
+            lastError = error.localizedDescription
+            statusMessage = Self.userMessage(for: error)
         } catch {
             state = .failed
             lastError = error.localizedDescription
@@ -427,17 +448,40 @@ final class VPNManager: ObservableObject {
         return config
     }
 
+    /// Closes the device-limit prompt without changing anything.
+    func dismissDeviceLimit() {
+        deviceLimitMessage = nil
+        deviceLimitDevices = []
+    }
+
+    /// Logs out one of the account's devices and retries the connection.
+    func logOutDeviceAndRetry(deviceId: String, store: VPNConfigStore, authStore: AuthSessionStore) async {
+        guard let token = authStore.accessToken, !token.isEmpty else { return }
+        do {
+            try await ControlAPIClient().revokeDevice(id: deviceId, accessToken: token)
+            log.info("logged out device \(deviceId, privacy: .public)")
+        } catch {
+            log.error("device logout failed: \(error.localizedDescription, privacy: .public)")
+        }
+        dismissDeviceLimit()
+        await connect(store: store, authStore: authStore)
+    }
+
     private static func userMessage(for error: Error) -> String {
         if let error = error as? ControlAPIClient.ClientError {
             switch error {
             case .transport(_, let underlying):
                 return transportMessage(underlying: underlying)
-            case .server:
-                return "Coordinator rejected this device. Please try again."
+            case .server(let message):
+                // The coordinator's messages are already user-facing (e.g. which
+                // limit was hit) — don't replace them with a vague rejection.
+                return message
             case .badResponse:
                 return "Coordinator returned an invalid response. Please try again."
             case .missingSession:
                 return "Please sign in before connecting."
+            case .deviceLimit(let message, _):
+                return message
             }
         }
         if error is ConfigError {

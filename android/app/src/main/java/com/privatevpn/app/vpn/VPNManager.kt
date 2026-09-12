@@ -522,7 +522,10 @@ class VPNManager(
 
     private fun userMessage(e: Exception): String = when (e) {
         is ControlAPIClient.ClientError.Transport -> "Cannot reach VPNFlow service. Please try again."
-        is ControlAPIClient.ClientError.Server -> "Coordinator rejected this device. Please try again."
+        is ControlAPIClient.ClientError.Server ->
+            // Surface the coordinator's own (already user-facing) reason, e.g.
+            // "You can use VPNFlow on up to 3 devices…" instead of a vague text.
+            e.serverMessage.ifBlank { "Coordinator rejected this device. Please try again." }
         is ControlAPIClient.ClientError.MissingSession -> "Please sign in before connecting."
         is com.wireguard.android.backend.BackendException ->
             if (e.reason == com.wireguard.android.backend.BackendException.Reason.VPN_NOT_AUTHORIZED)

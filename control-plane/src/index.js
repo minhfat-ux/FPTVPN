@@ -2399,6 +2399,7 @@ app.post("/v1/peers/register", async (req, res) => {
       error: err.statusCode ? (err.code ?? err.message) : "Internal error",
       message: err.statusCode ? err.message : undefined,
       devices: err.devices,
+      max_devices: err.maxDevices,
     });
   }
 });
@@ -2674,15 +2675,16 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
     const mine = (await store.devicesByUserId(userId)).filter((d) => d.active !== false);
     const { blocked, code } = deviceLimitDecision({ activeCount: mine.length, isOwnDevice: ownedActive, max: MAX_DEVICES_PER_USER });
     if (blocked) {
-      {
-        const error = new Error("Device limit reached");
-        error.statusCode = 403;
-        error.code = code;
-        error.devices = mine
-          .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
-          .map(userDevice);
-        throw error;
-      }
+      const error = new Error(
+        `You can use VPNFlow on up to ${MAX_DEVICES_PER_USER} devices. Log out the devices below to continue.`,
+      );
+      error.statusCode = 403;
+      error.code = "device_limit_reached";
+      error.devices = mine
+        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+        .map(userDevice);
+      error.maxDevices = MAX_DEVICES_PER_USER;
+      throw error;
     }
   }
 

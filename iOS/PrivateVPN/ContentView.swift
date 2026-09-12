@@ -94,6 +94,31 @@ struct ContentView: View {
                     .environmentObject(languageStore)
             }
         }
+        // Device cap hit: show the real reason + let the user log out an old
+        // device instead of a vague "Coordinator rejected this device".
+        .confirmationDialog(
+            vpnManager.deviceLimitMessage ?? "Device limit reached",
+            isPresented: Binding(
+                get: { vpnManager.deviceLimitMessage != nil },
+                set: { if !$0 { vpnManager.dismissDeviceLimit() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            ForEach(vpnManager.deviceLimitDevices) { device in
+                Button(deviceLimitLabel(device)) {
+                    Task {
+                        await vpnManager.logOutDeviceAndRetry(
+                            deviceId: device.id,
+                            store: configStore,
+                            authStore: authStore
+                        )
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { vpnManager.dismissDeviceLimit() }
+        } message: {
+            Text("Choose a device to log out, then VPNFlow will connect again.")
+        }
         .onAppear {
             if !authStore.isSignedIn {
                 showingLogin = true
@@ -126,6 +151,12 @@ struct ContentView: View {
                 forcedUpdateInfo = info
             }
         }
+    }
+
+    private func deviceLimitLabel(_ device: CoordinatorDevice) -> String {
+        let name = device.name?.isEmpty == false ? device.name! : device.device_id
+        let platform = device.platform?.isEmpty == false ? " · \(device.platform!)" : ""
+        return "\(name)\(platform)"
     }
 
     private func syncBackendPremium() {
