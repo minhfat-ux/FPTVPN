@@ -70,6 +70,13 @@
 | AC-021 | NFR-REL-001 | Critical transitions handled without false connected. |
 | AC-022 | NFR-UX-001 | Single action transitions state correctly. |
 | AC-023 | NFR-OBS-001 | Dashboard rebuilds from durable state after restart. |
+| AC-024 | FR-WIN-001/002/004 | Windows: sau Connect, 2 nguồn độc lập đều trả IP node (PowerShell Invoke-RestMethod). |
+| AC-025 | FR-WIN-003 | Windows: từ mạng TQ, HTTPS đầu tiên trong tunnel ≤15s; khi UDP bị chặn thì tự chuyển TCP relay. |
+| AC-026 | FR-WIN-005/012 | Windows: rút/bật lại mạng → reconnect ≤30s; UI không báo Connected khi adapter wintun không tồn tại. |
+| AC-027 | FR-WIN-005/013 | Windows: sau Disconnect, route/DNS/system proxy giống hệt trước connect (snapshot so sánh). |
+| AC-028 | FR-WIN-006 | Windows: tài khoản đã 3 thiết bị → dialog hiện đúng 3, logout 1 → connect OK. |
+| AC-029 | NFR-WIN-003 | Windows: kill tiến trình khi Connected → route khôi phục ≤10s, internet trở lại. |
+| AC-030 | FR-WIN-008 | Windows: SHA256 + Authenticode hợp lệ; sau update vẫn giữ đăng nhập. |
 
 ## Gate mapping
 
@@ -80,3 +87,31 @@
 - GATE 4 (auth & revocation): FR-AUTH-001, FR-REVOKE-001/002, NFR-SEC-004
 - GATE 5 (UX & diagnostics): FR-ADMIN-001, FR-DIAG-001 (full)
 - GATE 6 (security review): NFR-PRIV-001
+
+### Windows client (CR-0005 — PROPOSED, chưa duyệt)
+
+| ID | Title | Version | Approval | Impl. state | Gate |
+|----|-------|---------|----------|-------------|------|
+| FR-WIN-001 | Windows: đăng nhập email-OTP, token DPAPI per-user | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1 |
+| FR-WIN-002 | Windows: node list động từ /v1/nodes, chỉ hiện tên location | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1 |
+| FR-WIN-003 | Windows: hysteria2 + TCP relay dự phòng + Brutal CC + nhớ transport | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1/P2 |
+| FR-WIN-004 | Windows: TUN mode (wintun) + proxy mode (không admin) | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1/P2 |
+| FR-WIN-005 | Windows: disconnect/exit khôi phục route/DNS/proxy; auto-reconnect backoff; state thật | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| FR-WIN-006 | Windows: device claim + device_key ổn định + giới hạn 3 thiết bị (logout máy cũ trong app) | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| FR-WIN-007 | Windows: kiểm tra revocation khi connect + định kỳ | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| FR-WIN-008 | Windows: auto-update + xác minh SHA256/Authenticode + rollback | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P3 |
+| FR-WIN-009 | Windows: tray + khởi động cùng Windows + đóng cửa sổ không ngắt tunnel | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1 |
+| FR-WIN-010 | Windows: diagnostics an toàn (không hiện endpoint IP/key/token) | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| FR-WIN-011 | Windows: uninstaller gỡ sạch adapter/route/DNS/proxy/dữ liệu | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P3 |
+| FR-WIN-012 | Windows: xử lý đổi mạng + sleep/resume/Modern Standby | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| FR-WIN-013 | Windows: chống leak DNS/IPv6 | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| FR-WIN-014 | Windows: hành vi update khi đang Connected | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P3 |
+| FR-WIN-015 | Windows: parity paywall/legal/đăng xuất/xoá tài khoản | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| FR-WIN-016 | Windows: 5 ngôn ngữ EN/VI/ZH/JA/KO (SRS A7) | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1 |
+| NFR-WIN-001 | Windows: ≥80% throughput baseline, CPU <15% idle | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| NFR-WIN-002 | Windows: code-signing installer/EXE + không credential trong log | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P3 |
+| NFR-WIN-003 | Windows: kill tiến trình không để lại route/DNS/proxy hỏng | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P2 |
+| NFR-WIN-004 | Windows: branding/UX theo iOS-macOS, cửa sổ 390×760 DIP | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1 |
+| NFR-WIN-005 | Windows: proxy mode không admin; TUN elevate chỉ khi cài helper | v1 (draft) | PROPOSED | NOT_STARTED | WIN-P1/P2 |
+
+Chi tiết + acceptance criteria: `docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md`

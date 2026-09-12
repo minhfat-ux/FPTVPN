@@ -36,3 +36,29 @@ Task → Agent → Implementation → Test → Evidence → Verification.
 
 > Note (RULE-VERIFY-005, ADR-0004): BUILD PASS in GATE 1 proves buildability only.
 > `IMPLEMENTED` ≠ `VERIFIED`. GATE 1 items are marked IMPLEMENTED, not VERIFIED.
+
+## Windows client (CR-0005 — PROPOSED)
+
+| ID | Version | ADR | Rules | Task | Implementation | Test | Evidence | Verification |
+|----|---------|-----|-------|------|----------------|------|----------|--------------|
+| FR-WIN-001 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-002 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-003 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-004 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-005 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-006 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-007 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-008 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-009 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-010 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-011 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-012 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-013 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-014 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-015 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| FR-WIN-016 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| NFR-WIN-001 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| NFR-WIN-002 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| NFR-WIN-003 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| NFR-WIN-004 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |
+| NFR-WIN-005 | v1 (draft) | — | AGENTS.md / RULE-DELEGATE-001 | CR-0005 (PROPOSED) | — | — | — | — |

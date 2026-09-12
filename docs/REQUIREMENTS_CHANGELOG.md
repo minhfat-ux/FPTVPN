@@ -121,6 +121,31 @@ initialization is CR-0001.
 - **Decision owner:** MinhNb2 (owner).
 - **Effective requirement version:** đề xuất nâng lên RS-20260912-01 sau khi ACCEPTED.
 
+## CR-0005 — VPNFlow Windows client (đưa non-iOS client vào scope)
+
+- **ID:** CR-0005
+- **Title:** Yêu cầu cho client VPNFlow trên Windows (desktop app)
+- **Requested by:** Owner (chỉ đạo trực tiếp 2026-09-13)
+- **Date:** 2026-09-13
+- **Affected requirements:** SRS §2 Scope; SRS §3 Out of scope (bỏ "non-iOS clients" và "billing/subscriptions" khỏi ánh xạ cho Windows);
+  SRS **A7** (dòng 310: "Windows … WireGuardNT") — đề nghị **supersede**; `docs/ARCHITECTURE.md` dòng 209 cùng nội dung;
+  nhóm mới **FR-WIN-001…016**, **NFR-WIN-001…005**, **AC-024…AC-030**
+- **Current requirement:** SRS §3 xếp "non-iOS clients" là out of scope; chỉ có iOS/macOS/Android
+- **Proposed requirement:** thêm **Windows client** vào scope với 11 FR và 5 NFR, chi tiết ở
+  `docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md` (tái dùng coordinator + transport hysteria2/TCP relay + giới hạn 3 thiết bị)
+- **Reason:** khách hàng (đặc biệt tệp dùng Windows tại Trung Quốc) cần client desktop; backend đã sẵn sàng, không cần sửa server
+- **Implementation (chưa có):** đề xuất 4 phase (P1 proxy mode → P2 TUN/wintun → P3 auto-update + installer ký → P4 tuỳ chọn)
+- **Evidence:** chưa có (đây là requirement mới). Khi triển khai phải có: build trên Win11 x64/arm64, E2E từ mạng TQ, log SHA256 update, `route print` trước/sau disconnect
+- **Impact analysis:** không đổi requirement iOS/Android hiện có; SRS §3 cần bỏ "non-iOS clients" khỏi danh sách out-of-scope khi CR được ACCEPTED
+- **Backend cần bổ sung (không fork):** kênh version theo nền tảng cho Windows (`/v1/app-version` hiện chỉ trả cấu hình iOS);
+  và quyết định **per-user hysteria auth** (hiện dùng chung 1 mật khẩu nằm trong APK/EXE). `/v1/peers/heartbeat` **không tồn tại** → Windows không dùng.
+- **Open questions:** Q1–Q6 trong `docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md` §9 (TUN vs proxy, code-signing cert, Microsoft Store,
+  WireGuard legacy, Windows Server/IPv6, per-user hysteria auth)
+- **Review độc lập:** bản v1 của spec đã được một worker agent (opencode) review; 10 phát hiện đã được verify và xử lý trong bản v2 (§0 của spec)
+- **Recommendation:** accept phần scope + FR/NFR; chốt Q1–Q5 trước khi bắt đầu code
+- **Decision:** PROPOSED — chờ owner chấp thuận và trả lời Q1–Q5
+- **Decision owner:** MinhNb2 (owner)
+
 ## Change history
 
 | CR | Date | Type | Result | Effective baseline |
@@ -129,6 +154,7 @@ initialization is CR-0001.
 | CR-0002 | 2026-08-20 | Docs sync + privacy review (AC-019 evidence) | ACCEPTED | RS-20260819-01 |
 | CR-0003 | 2026-08-20 | Privacy fixes (NFR-PRIV-001 + NFR-SEC-004 → IMPLEMENTED) | ACCEPTED | RS-20260819-01 |
 | CR-0004 | 2026-09-12 | Android China transport (hysteria2 + TCP relay) + background stability + giới hạn 3 thiết bị | PROPOSED | RS-20260819-01 (đề xuất RS-20260912-01) |
+| CR-0005 | 2026-09-13 | Windows client (FR-WIN-*/NFR-WIN-*) — đưa non-iOS client vào scope | PROPOSED | RS-20260819-01 (đề xuất RS-20260913-01) |
 
 ## Rules for changes
 
