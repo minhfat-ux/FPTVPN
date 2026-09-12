@@ -194,6 +194,8 @@ const TEXTS = {
         cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
         amountPrefilled: "The amount is already filled in — just confirm.",
         copyAmount: "Copy amount",
+        copyOrder: "Copy reference",
+        orderNoteHint: "Paste this into the transfer note:",
     copied: "Copied",
         guideLink: "📖 Step-by-step activation guide",
         renewPrefill: "Renewal link — your email and plan are already filled in. Just pick the payment method and scan the QR.",
@@ -263,6 +265,8 @@ const TEXTS = {
         cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
         amountPrefilled: "Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận.",
         copyAmount: "Sao chép số tiền",
+        copyOrder: "Sao chép nội dung CK",
+        orderNoteHint: "Dán nội dung này vào ô ghi chú khi chuyển tiền:",
     copied: "Đã sao chép",
         guideLink: "📖 Xem hướng dẫn kích hoạt từng bước",
         renewPrefill: "Link gia hạn — email và gói của bạn đã được điền sẵn. Chỉ cần chọn cách thanh toán rồi quét QR.",
@@ -332,6 +336,8 @@ const TEXTS = {
         cnyEnter: "支付时请输入二维码上显示的人民币金额。",
         amountPrefilled: "二维码中已填入金额 — 确认即可。",
         copyAmount: "复制金额",
+        copyOrder: "复制转账备注",
+        orderNoteHint: "请在转账备注中粘贴：",
     copied: "已复制",
         guideLink: "📖 查看分步激活指南",
         renewPrefill: "续费链接 — 您的邮箱和套餐已自动填好，只需选择支付方式并扫码。",
@@ -401,6 +407,8 @@ const TEXTS = {
         cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
         amountPrefilled: "金額は入力済みです — 確認するだけです。",
         copyAmount: "金額をコピー",
+        copyOrder: "参照番号をコピー",
+        orderNoteHint: "振込メモに貼り付けてください：",
     copied: "コピーしました",
         guideLink: "📖 順を追った有効化ガイドを見る",
         renewPrefill: "更新リンク — メールとプランは入力済みです。支払い方法を選んでQRをスキャンするだけです。",
@@ -470,6 +478,8 @@ const TEXTS = {
         cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
         amountPrefilled: "금액이 미리 입력되어 있습니다 — 확인만 하면 됩니다.",
         copyAmount: "금액 복사",
+        copyOrder: "입금 메모 복사",
+        orderNoteHint: "이체 메모에 붙여넣으세요:",
     copied: "복사됨",
         guideLink: "📖 단계별 활성화 안내 보기",
         renewPrefill: "갱신 링크 — 이메일과 요금제가 미리 입력되어 있습니다. 결제 수단을 고르고 QR만 스캔하세요.",
@@ -1159,7 +1169,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <div class="amt" id="qrAmt"></div>
       <div class="qrsub" id="qrAmtSub"></div>
       <button type="button" class="copyamt" id="qrCopyBtn">📋 ${t.copyAmount}</button>
+      <button type="button" class="copyamt" id="qrCopyOrderBtn">📋 ${t.copyOrder}</button>
       <div class="oc" id="qrOrder"></div>
+      <div class="qrsub" id="qrOrderHint"></div>
       <div class="hint" id="qrHint"></div>
       <div class="qstatus" id="qrStatus"></div>
       <button type="button" class="save" id="qrSaveBtn">💾 ${t.saveQr}</button>
@@ -1241,6 +1253,28 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     // Save the shown QR as an image so the user can scan it from their bank
     // app's photo library. Works for data: (bank QR) and https (WeChat/Alipay).
     const qrCopyBtn = document.getElementById("qrCopyBtn");
+    const qrCopyOrderBtn = document.getElementById("qrCopyOrderBtn");
+    const qrOrderHint = document.getElementById("qrOrderHint");
+
+    // The bank/MoMo QR carries the reference inside it (tag 62), but WeChat and
+    // Alipay are personal codes that cannot: give the customer a one-tap copy of
+    // the reference so they can paste it into the transfer note.
+    function copyText(value) {
+      return navigator.clipboard.writeText(value).catch(() => {
+        const ta = document.createElement("textarea");
+        ta.value = value; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); } catch (e) {}
+        ta.remove();
+      });
+    }
+    qrCopyOrderBtn.onclick = async () => {
+      const value = qrCopyOrderBtn.dataset.ref || "";
+      if (!value) return;
+      await copyText(value);
+      const original = qrCopyOrderBtn.textContent;
+      qrCopyOrderBtn.textContent = "✅ " + T.copied + " " + value;
+      setTimeout(() => { qrCopyOrderBtn.textContent = original; }, 2000);
+    };
     qrCopyBtn.onclick = async () => {
       const value = qrCopyBtn.dataset.amount || "";
       if (!value) return;
@@ -1339,6 +1373,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             qrCopyBtn.dataset.amount = String(data.amount);
           }
           qrOrder.textContent = T.orderPrefix + data.orderCode;
+          // Same reference string the bank QR embeds, so the shop can match it.
+          const orderRef = "VPNFLOW-" + data.orderCode;
+          qrCopyOrderBtn.dataset.ref = orderRef;
+          qrOrderHint.innerHTML = T.orderNoteHint + " <b>" + orderRef + "</b>";
           const labels = {
             bankqr: T.hints.bankqr,
             wechat: T.hints.wechat,
