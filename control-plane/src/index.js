@@ -187,8 +187,9 @@ app.use((req, res, next) => {
   if (req.path === "/support" || req.path.startsWith("/support/") || req.path.startsWith("/ai/support")) return next();
   // Brand logos referenced by the buy pages.
   if (req.path.startsWith("/assets/")) return next();
-  // Public app downloads (APK host).
-  if (req.path === "/v1/downloads/android") return next();
+  // Public app downloads (APK host): the regular build and the Android 7+ build
+  // for Fire TV / older devices.
+  if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
   if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
@@ -322,6 +323,8 @@ function storeLinks(product) {
         // Used while the app is only in beta (before App Store approval).
         testflight: process.env.TESTFLIGHT_URL_IOS || null,
         android: `${base}/v1/downloads/android`,
+        // Android 7.0+ build for Fire TV / older devices (see the route below).
+        androidLegacy: process.env.ANDROID_LEGACY_APK_URL || `${base}/v1/downloads/android-legacy`,
       };
 }
 
@@ -1636,6 +1639,27 @@ app.get("/v1/downloads/android", async (_req, res) => {
       return res.status(404).send("APK not found. Contact support@meetflowai.site");
     }
     res.download(apkPath, "VPNFlow.apk");
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * Legacy Android build for devices the regular APK cannot serve: that APK declares
+ * minSdk 26 (Android 8), so Fire OS 5/6 (Fire TV Stick 4K, older Android 7 phones
+ * and TVs) fail with "There was a problem parsing the package". The legacy variant
+ * is built with minSdk 24 from the same source and the same signing key, so it
+ * installs over — and can be upgraded to — the regular one. It lives at its own URL
+ * on purpose: the working download path is never touched by compatibility work.
+ */
+app.get("/v1/downloads/android-legacy", async (_req, res) => {
+  try {
+    const apkDir = process.env.APK_DIR || "/root/flowvpn-apk";
+    const apkPath = process.env.LEGACY_APK_PATH || path.join(apkDir, "VPNFlow-android7.apk");
+    if (!fs.existsSync(apkPath)) {
+      return res.status(404).send("Legacy APK not found. Contact support@meetflowai.site");
+    }
+    res.download(apkPath, "VPNFlow-android7.apk");
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
   }

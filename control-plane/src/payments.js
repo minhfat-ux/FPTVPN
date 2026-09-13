@@ -167,6 +167,8 @@ const TEXTS = {
     dlTitle: "Get the VPNFlow app",
     dlSub: "Don't have the app yet? Choose your platform:",
     androidTitle: "Get it on Google Play — or download the APK directly here",
+    androidLegacyLabel: "Fire TV / older device",
+    androidLegacySub: "APK for Android 7.0 and 7.1 — Fire TV Stick 4K, older phones and TVs",
     emailLabel: "Your VPNFlow account email",
     planLabel: "Choose a plan",
     methodLabel: "Payment method",
@@ -240,6 +242,8 @@ const TEXTS = {
     dlTitle: "Tải app VPNFlow",
     dlSub: "Chưa có app? Chọn nền tảng của bạn:",
     androidTitle: "Get it on Google Play — hoặc tải APK trực tiếp tại đây",
+    androidLegacyLabel: "Fire TV / máy cũ",
+    androidLegacySub: "APK cho Android 7.0 và 7.1 — Fire TV Stick 4K, điện thoại và TV đời cũ",
     emailLabel: "Email tài khoản VPNFlow",
     planLabel: "Chọn gói",
     methodLabel: "Phương thức thanh toán",
@@ -313,6 +317,8 @@ const TEXTS = {
     dlTitle: "获取 VPNFlow 应用",
     dlSub: "还没有应用？选择您的平台：",
     androidTitle: "在 Google Play 获取 — 或在此直接下载 APK",
+    androidLegacyLabel: "Fire TV / 旧设备",
+    androidLegacySub: "适用于 Android 7.0 与 7.1 的 APK — Fire TV Stick 4K、旧款手机与电视",
     emailLabel: "您的 VPNFlow 账户邮箱",
     planLabel: "选择套餐",
     methodLabel: "支付方式",
@@ -386,6 +392,8 @@ const TEXTS = {
     dlTitle: "VPNFlowアプリを入手",
     dlSub: "アプリをお持ちでない場合：プラットフォームを選択",
     androidTitle: "Google Playで入手 — またはここでAPKを直接ダウンロード",
+    androidLegacyLabel: "Fire TV / 旧端末",
+    androidLegacySub: "Android 7.0 / 7.1 用 APK — Fire TV Stick 4K、旧型スマホ・テレビ",
     emailLabel: "VPNFlowアカウントのメール",
     planLabel: "プランを選択",
     methodLabel: "支払い方法",
@@ -459,6 +467,8 @@ const TEXTS = {
     dlTitle: "VPNFlow 앱 받기",
     dlSub: "아직 앱이 없으신가요? 플랫폼을 선택하세요:",
     androidTitle: "Google Play에서 받기 — 또는 여기서 APK 직접 다운로드",
+    androidLegacyLabel: "Fire TV / 구형 기기",
+    androidLegacySub: "Android 7.0 / 7.1용 APK — Fire TV Stick 4K, 구형 휴대폰·TV",
     emailLabel: "VPNFlow 계정 이메일",
     planLabel: "요금제 선택",
     methodLabel: "결제 수단",
@@ -832,12 +842,15 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   // Store / download links: injected by the server (APP_STORE_URL_* env vars,
   // APK endpoint). Badges render only for links that actually exist.
   const androidUrl = links.android || `${baseUrl}${product === "ai" ? "/v1/ai/downloads/android" : "/v1/downloads/android"}`;
+  // Separate build for Fire TV / older devices (minSdk 24 instead of 26). Rendered
+  // only when the server provides the link, so the page never shows a dead badge.
+  const androidLegacyUrl = links.androidLegacy || null;
   const iosUrl = links.ios || null;
   const macUrl = links.mac || null;
   // iOS can be distributed before App Store approval via a TestFlight public
   // link; the App Store badge wins when both exist.
   const testflightUrl = !iosUrl && links.testflight ? links.testflight : null;
-  const anyDownload = Boolean(androidUrl || iosUrl || macUrl || testflightUrl);
+  const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || macUrl || testflightUrl);
   // Activation instructions adapt to how iOS is distributed right now.
   const iosLine = iosUrl
     ? t.iosLineStore
@@ -1120,6 +1133,19 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             </g>
             <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">GET IT ON</text>
             <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Google Play</text>
+          </svg>
+        </a>` : ""}
+        ${androidLegacyUrl ? `<a href="${androidLegacyUrl}" target="_blank" rel="noopener" title="${t.androidLegacySub}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d" stroke="rgba(255,255,255,.18)"/>
+            <g transform="translate(12 12) scale(0.058)">
+              <path fill="#34A853" d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1z"/>
+              <path fill="#FBBC04" d="M47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l256.6-256L47 0z"/>
+              <path fill="#4285F4" d="M425.2 225.6l-58.9-34.1-65.7 64.5 65.7 64.5 60.1-34.1c18-14.3 18-46.5-1.2-60.8z"/>
+              <path fill="#EA4335" d="M104.6 499l280.8-161.2-60.1-60.1L104.6 499z"/>
+            </g>
+            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.androidLegacyLabel}</text>
+            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Android 7.0+</text>
           </svg>
         </a>` : ""}
       </div>
