@@ -586,13 +586,17 @@ không phải khách. Muốn đổi thì sửa `renderPaymentAlert`.
 
 ### Việc còn lại (không chặn gì)
 
-- Thêm `rua=` vào DMARC để nhận báo cáo tổng hợp:
+- Thêm `rua=` vào DMARC để nhận báo cáo tổng hợp (hiện `_dmarc` mới chỉ có `v=DMARC1; p=none`):
   ```
   TXT _dmarc.meetflowai.site
-  v=DMARC1; p=none; rua=mailto:dmarc@meetflowai.site; fo=1
+  v=DMARC1; p=none; rua=mailto:support@meetflowai.site; fo=1
   ```
-  Ổn định 1–2 tuần thì nâng `p=quarantine`. Lưu ý: mỗi tên miền **chỉ được có MỘT bản ghi TXT SPF** —
-  cần thêm include thì **gộp** vào bản ghi hiện có, đừng tạo bản ghi thứ hai.
+  Dùng **support@** vì đó là hộp thư có thật (đã kiểm: đăng nhập IMAP được). `dmarc@meetflowai.site`
+  **chưa tồn tại** — nếu muốn dùng địa chỉ riêng thì phải tạo hộp thư ở panel maychuemail TRƯỚC,
+  không thì báo cáo DMARC sẽ bị trả lại.
+  Ổn định 1–2 tuần thì nâng `p=quarantine`. Lưu ý: mỗi tên miền **chỉ được có MỘT bản ghi TXT** ở
+  `_dmarc` (và một bản ghi TXT SPF ở gốc) — cần thêm include thì **gộp** vào bản ghi hiện có.
+  Kiểm tra sau khi thêm: `dig +short TXT _dmarc.meetflowai.site`.
 - Khoá DKIM Resend đang là **1024-bit**; muốn 2048-bit thì xoay khoá trong Resend rồi cập nhật CNAME.
 - Có thể chạy lại `scripts/check-email-auth.sh` bất cứ lúc nào để xem báo cáo SPF/DKIM/DMARC của Port25.
 
