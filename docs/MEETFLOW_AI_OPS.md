@@ -149,6 +149,11 @@ CNY rate: 1 CNY = 3876 VND (open.er-api.com, cached 6h)          # chạy theo t
 
 ### Email báo đơn cho chủ shop — có ghi rõ kênh thanh toán
 
+> ⚠️ **Từ 14/09/2026 email này KHÔNG còn gửi mặc định.** Khi đã có webhook SePay tự xác nhận tiền,
+> chủ shop chỉ cần biết đơn **đã thanh toán** (xem §5b → *Email thông báo chủ shop*). Email mô tả
+> dưới đây chỉ còn gửi khi bật `OWNER_ALERT_ON_CREATE=1`, hoặc **luôn gửi cho WeChat/Alipay** vì hai
+> kênh đó không có webhook nào theo dõi.
+
 Mỗi đơn mới gửi 1 email tới `OWNER_ALERT_EMAIL` (mặc định `minhnb2@me.com`). Đầu email có **khung
 vàng** trả lời ngay 3 câu: khách trả qua kênh nào, mở app nào để kiểm tra, và số tiền cần khớp.
 
@@ -516,8 +521,10 @@ Sau khi sửa: `systemctl daemon-reload && systemctl restart flowvpn-cp`.
 ## 5b. SePay — tự xác nhận đơn chuyển khoản (IPN)
 
 SePay theo dõi biến động số dư tài khoản ngân hàng rồi POST về hệ thống mỗi khi có tiền vào ⇒ đơn
-VietQR/chuyển khoản được **kích hoạt tự động**, không phải chờ chủ shop bấm tay (luồng xác nhận tay
-+ email alert cho chủ shop **vẫn giữ nguyên** làm đường dự phòng).
+VietQR/chuyển khoản được **kích hoạt tự động**, không phải chờ chủ shop bấm tay. Vì đã có webhook
+xác nhận tiền, **email xác nhận tay lúc tạo đơn mặc định KHÔNG gửi nữa**: chủ shop chỉ nhận email
+khi đơn **đã thanh toán** (và email cảnh báo khi có tiền vào mà không khớp đơn) — xem
+[Email thông báo](#email-thông-báo-chủ-shop-chỉ-báo-khi-đã-thanh-toán).
 
 ### URL cắm vào SePay (mục Webhooks / IPN)
 
@@ -581,12 +588,59 @@ hạn `12/11` (cộng dồn 30 ngày) — nội dung CK trong test đúng dạng
 | Tình huống | Hành vi |
 |---|---|
 | Tiền vào (`transferType=in`) đúng mã đơn, đủ tiền | tự kích hoạt + gửi hoá đơn: `sepay: TỰ KÍCH HOẠT đơn 1789317437 (vpn, 200000đ, tx 9990123)` |
-| Chuyển **thiếu** tiền | **KHÔNG** kích hoạt, chỉ log để chủ shop xác nhận: `đơn … chuyển 199000đ < cần 200000đ` |
+| Chuyển **thiếu** tiền | **KHÔNG** kích hoạt, log `đơn … chuyển 199000đ < cần 200000đ` **và gửi email cảnh báo** cho chủ shop |
 | Webhook **lặp** (SePay gửi lại) | không cấp lần hai: `đơn … không còn chờ xác nhận (đã xử lý hoặc hết hạn)` |
-| Nội dung **không có mã đơn** | log để xác nhận tay (alert cũ vẫn gửi) |
+| Nội dung **không có mã đơn** | log + **email cảnh báo** kèm nội dung CK, mã giao dịch, số tiền và link bảng điều khiển |
 | Giao dịch tiền **ra** | bỏ qua |
 | Sai chữ ký / không xác thực | HTTP **401** |
 | Chưa cấu hình secret | HTTP **503** (không nhận webhook trần) |
+
+### Email thông báo chủ shop: chỉ báo khi ĐÃ thanh toán
+
+| Email | Khi nào | Nội dung |
+|---|---|---|
+| `✅ Đã thanh toán (<sản phẩm>) #<mã đơn> — <số tiền> · <email>` | ngay khi SePay/PayOS xác nhận tiền và hệ thống kích hoạt xong | mã đơn, email khách, gói, số tiền, thời điểm, link `/buy/status/<mã>` (AI: `/ai/buy/status/<mã>`) — **không có nút xác nhận** vì không cần xác nhận gì nữa |
+| `⚠️ Tiền vào <số tiền> nhưng chưa khớp đơn — cần xem lại` | có tiền vào mà nội dung **không có mã đơn**, hoặc **chuyển thiếu** | số tiền, nội dung CK, tài khoản nhận, mã giao dịch, lý do, link bảng điều khiển (`/admin`) — đây là email duy nhất cần người xử lý |
+| Email "có đơn mới" (nút xác nhận tay) | **mặc định tắt**; bật lại bằng `OWNER_ALERT_ON_CREATE=1` trong drop-in env | như cũ |
+
+- **Ngoại lệ bắt buộc**: WeChat/Alipay là QR cá nhân, **không có webhook nào theo dõi tiền về**, nên
+  hai kênh này **vẫn nhận email đơn mới** kể cả khi cờ trên tắt (`shouldAlertOnCreate()` trong
+  `index.js`) — nếu tắt hết thì đơn CNY trả tiền sẽ im lặng.
+- Khách vẫn nhận **hoá đơn/hướng dẫn kích hoạt** qua email của chính họ khi đơn được kích hoạt.
+
+Bằng chứng thật 14/09/2026 (đơn test `1789322708`, webhook SePay ký HMAC):
+
+```
+sepay: đơn 1789322708 khớp giao dịch 990101
+[invoice] sent to <email khách> via resend id=…
+[paid-alert] sent to minhnb2@me.com via resend id=7a41ec4b-…
+paid-alert order 1789322708 to minhnb2@me.com: sent=true       # KHÔNG có dòng payment-alert nào lúc tạo đơn
+sepay: TỰ KÍCH HOẠT đơn 1789322708 (vpn, 200000đ, tx 990101, email …)
+```
+
+Tiêu đề thư lấy lại từ Resend API (`GET /emails/<id>` → `last_event: delivered`):
+
+```
+✅ Đã thanh toán (VPNFlow Premium) #1789322708 — 200.000 đ · <email khách>
+⚠️ Tiền vào 50.000 đ nhưng chưa khớp đơn — cần xem lại
+```
+
+### Mã đơn là duy nhất (2 khách mua trong cùng một giây)
+
+Mã đơn = epoch giây, nên hai khách bấm "Thanh toán" trong cùng giây sẽ ra **cùng mã**. Trước đây
+`recordPendingPayment` xoá mã trùng ⇒ đơn sau ghi đè đơn trước, và vì webhook SePay có thể trả mã
+đơn ở trường `code` (không kèm tiền tố sản phẩm), tiền của khách A có thể kích hoạt gói cho khách B.
+Từ 14/09/2026 đơn mới chỉ được tạo qua `createPendingOrder()` trong `index.js`:
+
+- kiểm tra trùng trên **cả hai kho** (VPN `auth.json` + MeetFlow AI `ai-access.json`) rồi **nhích
+  mã** cho tới khi trống, giữ 10 chữ số để khớp `normalizeOrderCode` của webhook;
+- nằm trong hàng đợi chung `withOrderCodeLock()` vì file JSON là đọc-sửa-ghi, hai request chạy xen
+  kẽ có thể cùng đọc một trạng thái rồi ghi đè nhau (mất đơn).
+
+```
+# 3 đơn đồng thời (đã tái hiện lỗi trước khi sửa: cả 3 ra cùng mã 1789322616)
+1789322696 qa-u1@… bankqr   | 1789322697 qa-u3@… momo | 1789322698 qa-u2@… wechat
+```
 
 ### Cách tự test
 
@@ -601,7 +655,7 @@ curl -s -X POST -H 'content-type: application/json' \
 SEPAY_SECRET=spsk_… node scripts/sepay-selftest.mjs --code <orderCode> --amount 200000
 ```
 
-Test tự động cho phần xác thực/đọc mã đơn/số tiền: `control-plane/test/sepay.test.js` (7 test).
+Test tự động: `control-plane/test/sepay.test.js` (xác thực/đọc mã đơn/số tiền), `control-plane/test/paid-alert.test.js` (nội dung 2 email thông báo + guard luồng webhook, cổng `OWNER_ALERT_ON_CREATE`, mã đơn duy nhất), `control-plane/test/order-status.test.js` (trang tình trạng). Toàn bộ control-plane: `node --test` → 140 pass / 0 fail.
 
 ## 6. Email — chống vào Junk / Spam (ĐÃ XỬ LÝ 13/09/2026)
 
