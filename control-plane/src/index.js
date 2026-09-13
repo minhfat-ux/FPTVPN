@@ -18,6 +18,7 @@ import { versionPayloadFor, wantsLegacyApk } from "./app-version.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
+import { PlanStore } from "./plan-store.js";
 import {
   aggregateConnections,
   clientIPFromEndpoint,
@@ -60,6 +61,8 @@ import { supportPageHTML } from "./support-page.js";
 import {
   buyPageHTML,
   AI_PLANS,
+  DEFAULT_PLANS,
+  applyPlans,
   paymentSuccessPageHTML,
   paymentCancelPageHTML,
   createPayosPaymentLink,
@@ -96,6 +99,8 @@ const DEFAULT_LATEST_VERSION = process.env.LATEST_IOS_VERSION ?? "1.0";
 const DEFAULT_STORE_URL = process.env.APP_STORE_URL ?? "https://apps.apple.com/app/flowvpn";
 const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", "nodes.json"); // legacy JSON (imported once into SQLite)
 const NODES_DB_FILE = process.env.NODES_DB_FILE ?? path.join(__dirname, "..", "data", "nodes.db");
+// Bảng gói bán (giá/thời hạn) sửa được từ admin — xem plan-store.js.
+const PLANS_FILE = process.env.PLANS_FILE ?? path.join(__dirname, "..", "data", "plans.json");
 const ALLOW_DEV_TOKEN_BOOTSTRAP = process.env.ALLOW_DEV_TOKEN_BOOTSTRAP === "1" && !IS_PRODUCTION;
 // LEGACY_MODE=1 keeps the pre-auth join-token + unauthenticated /v1/peers/register
 // flow working so a build that is already submitted to App Store review can still
@@ -161,6 +166,10 @@ const aiUsersStore = new AiUsersStore(AI_USERS_FILE);
 // ai-store-purchases.js) — the platform stores never tell us about these.
 const aiStorePurchaseStore = new AiStorePurchaseStore(AI_STORE_PURCHASES_FILE);
 const nodeStore = new NodeStore(NODES_DB_FILE, buildFallbackExitNode(), { legacyJsonPath: NODES_FILE });
+// Bảng gói bán: seed từ DEFAULT_PLANS lần đầu (deployment cũ chạy y như trước),
+// và onChange nạp lại bảng đang chạy mỗi khi admin sửa -> trang /buy, tạo order
+// và hoá đơn dùng ngay giá mới, không cần deploy.
+const planStore = new PlanStore(PLANS_FILE, DEFAULT_PLANS, { onChange: applyPlans });
 const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   minimum_ios_version: DEFAULT_MIN_VERSION,
   latest_ios_version: DEFAULT_LATEST_VERSION,
@@ -1906,6 +1915,50 @@ app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, 
   }
 });
 
+/* =====================================================================
+ * Admin — bảng gói bán (giá / thời hạn / nhãn), sửa không cần deploy.
+ * Mọi thay đổi đi qua PlanStore (data/plans.json) và được nạp lại vào bảng
+ * đang chạy qua onChange -> trang /buy và tạo order dùng ngay giá mới.
+ *
+ * Retire chứ KHÔNG xoá: đơn cũ, hoá đơn và danh sách chờ xác nhận vẫn phải tra
+ * ra tên gói (xem comment của gói lifetime trong payments.js).
+ * ================================================================== */
+
+app.get("/v1/admin/plans", requireAdminAuth, (_req, res) => {
+  res.json({ plans: planStore.all() });
+});
+
+app.post("/v1/admin/plans", requireAdminAuth, (req, res) => {
+  try {
+    const plan = planStore.create(req.body ?? {});
+    console.log(`admin plans: created ${plan.id} (${plan.amount} VND / ${plan.days ?? "lifetime"})`);
+    res.status(201).json({ ok: true, plan });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+app.patch("/v1/admin/plans/:id", requireAdminAuth, (req, res) => {
+  try {
+    const plan = planStore.update(req.params.id, req.body ?? {});
+    console.log(`admin plans: updated ${plan.id} (${plan.amount} VND / ${plan.days ?? "lifetime"}, retired=${plan.retired === true})`);
+    res.json({ ok: true, plan });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+// Ngừng bán một gói (không xoá — xem khối comment phía trên).
+app.post("/v1/admin/plans/:id/retire", requireAdminAuth, (req, res) => {
+  try {
+    const plan = planStore.retire(req.params.id);
+    console.log(`admin plans: retired ${plan.id} (vẫn giữ tên gói cho đơn cũ)`);
+    res.json({ ok: true, plan });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
 // Signed one-click confirm link for the owner's email alert. HMAC over the
 // order code using AUTH_TOKEN as the secret (fallback: a static env secret).
 app.get("/v1/payments/confirm/:orderCode", async (req, res) => {
@@ -2120,6 +2173,35 @@ app.post("/v1/auth/email/verify", async (req, res) => {
       if (fresh) return res.status(201).json(fresh);
     }
     res.status(201).json(session);
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+/**
+ * GET /v1/auth/session — đọc lại session của chính caller, để app thấy thay đổi
+ * quyền Premium MÀ KHÔNG phải đăng xuất/đăng nhập lại.
+ *
+ * Vì sao cần route này: chỉ ba route đăng nhập (email/start, email/verify, apple)
+ * trả về session, nên `subscription_status` tới client ĐÚNG MỘT LẦN lúc đăng nhập
+ * và app buộc phải cache nó. Hệ quả thật: khách trả tiền trên web, admin xác nhận
+ * cấp gói, nhưng app vẫn báo "chưa mua" cho tới khi họ đăng xuất rồi đăng nhập lại.
+ * Với mô hình bán hoàn toàn qua backend thì đó là lỗ chặn bán hàng, không phải
+ * chuyện tiện nghi.
+ *
+ * Helper `authStore.sessionPayloadForToken()` đã có sẵn (trước đây chỉ được gọi
+ * trong /v1/auth/email/verify) và trả về ĐÚNG dạng payload như lúc đăng nhập, nên
+ * client decode bằng đúng kiểu dữ liệu sẵn có, không cần thêm định dạng mới.
+ */
+app.get("/v1/auth/session", requireUserAuth, async (req, res) => {
+  try {
+    const header = req.headers.authorization ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+    const payload = await authStore.sessionPayloadForToken(token);
+    if (!payload) {
+      return res.status(401).json({ error: "Unauthorized", message: "Valid user session required" });
+    }
+    res.json(payload);
   } catch (err) {
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
   }
@@ -3146,6 +3228,7 @@ function onListen() {
   console.log(`PrivateVPN control plane listening on :${PORT} (${tlsReady ? "HTTPS" : "HTTP"})`);
   console.log(`  interface=${WG_INTERFACE} dryRun=${DRY_RUN} pool=${IP_POOL_CIDR}`);
   console.log(`  nodesFile=${NODES_FILE}`);
+  console.log(`  plansFile=${PLANS_FILE} (${planStore.all().length} plan(s))`);
   console.log(`  mail transport=${mailTransportName()} (resend if RESEND_API_KEY is set)`);
   console.log(`  adminAllowedIPs=${Array.from(ADMIN_ALLOWED_IPS).join(",")}`);
   if (!WG_SERVER_PUBKEY) console.warn("  WARNING: WG_SERVER_PUBKEY not set");

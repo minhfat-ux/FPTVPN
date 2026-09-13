@@ -289,6 +289,7 @@ export function adminPageHTML() {
       <button class="tab" id="tabUsers">Users</button>
       <button class="tab" id="tabStats">Dashboard</button>
       <button class="tab" id="tabPayments">Payments</button>
+      <button class="tab" id="tabPlans">Plans</button>
       <button class="tab" id="tabAi">MeetFlow AI</button>
       <button class="tab" id="tabAiUsers">AI Users</button>
     </div>
@@ -392,6 +393,60 @@ export function adminPageHTML() {
           <thead><tr><th>Ma don</th><th>Email khach</th><th>Goi</th><th>Method</th><th>So tien</th><th>Ngay tao</th><th>Kich hoat</th><th>Het han</th><th>Trang thai</th><th>Action</th></tr></thead>
           <tbody id="paymentsBody"><tr><td colspan="10">Bam Refresh.</td></tr></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ===================== PLANS VIEW ===================== -->
+    <section class="card hidden" id="view-plans">
+      <h2>Gói bán — giá &amp; thời hạn</h2>
+      <div class="subtitle">Sửa ở đây là trang /buy đổi ngay, không cần deploy. Ngừng bán một gói thì Retire (không xoá) để hoá đơn và đơn cũ vẫn tra được tên gói.</div>
+      <div class="actions">
+        <button id="loadPlans">Refresh</button>
+        <span class="status-inline" id="plansStatus"></span>
+      </div>
+      <div style="overflow-x:auto; margin-top:12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Giá (VND)</th>
+              <th>Số ngày</th>
+              <th>Label (hoá đơn / admin)</th>
+              <th>Badge (tên ngắn trên /buy)</th>
+              <th>Trạng thái</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="plansBody"><tr><td colspan="7">Bấm Refresh.</td></tr></tbody>
+        </table>
+      </div>
+
+      <h2 style="margin-top:22px;">Thêm gói mới</h2>
+      <div class="grid">
+        <label>
+          ID (slug, không đổi được sau khi tạo)
+          <input id="newPlanId" type="text" placeholder="promo60" autocomplete="off">
+        </label>
+        <label>
+          Giá (VND)
+          <input id="newPlanAmount" type="number" min="1" step="1000" placeholder="300000">
+        </label>
+        <label>
+          Số ngày (để trống = vĩnh viễn)
+          <input id="newPlanDays" type="number" min="1" step="1" placeholder="60">
+        </label>
+        <label>
+          Label
+          <input id="newPlanLabel" type="text" maxlength="120" placeholder="Promo 2 months (300,000 VND / 60 days)">
+        </label>
+        <label>
+          Badge
+          <input id="newPlanBadge" type="text" maxlength="40" placeholder="2 Months">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="addPlanBtn">➕ Thêm gói</button>
+        <span class="status-inline" id="addPlanStatus"></span>
       </div>
     </section>
 
@@ -685,6 +740,18 @@ export function adminPageHTML() {
       paymentsBody: document.getElementById("paymentsBody"),
       paymentsStatus: document.getElementById("paymentsStatus"),
       loadPayments: document.getElementById("loadPayments"),
+      tabPlans: document.getElementById("tabPlans"),
+      viewPlans: document.getElementById("view-plans"),
+      plansBody: document.getElementById("plansBody"),
+      plansStatus: document.getElementById("plansStatus"),
+      loadPlans: document.getElementById("loadPlans"),
+      newPlanId: document.getElementById("newPlanId"),
+      newPlanAmount: document.getElementById("newPlanAmount"),
+      newPlanDays: document.getElementById("newPlanDays"),
+      newPlanLabel: document.getElementById("newPlanLabel"),
+      newPlanBadge: document.getElementById("newPlanBadge"),
+      addPlanBtn: document.getElementById("addPlanBtn"),
+      addPlanStatus: document.getElementById("addPlanStatus"),
       viewAi: document.getElementById("view-ai"),
       loadAi: document.getElementById("loadAi"),
       aiStatus: document.getElementById("aiStatus"),
@@ -766,6 +833,8 @@ export function adminPageHTML() {
       fields.viewUsers.classList.toggle("hidden", tab !== "users");
       fields.viewStats.classList.toggle("hidden", tab !== "stats");
       fields.viewPayments.classList.toggle("hidden", tab !== "payments");
+      if (fields.tabPlans) fields.tabPlans.classList.toggle("active", tab === "plans");
+      if (fields.viewPlans) fields.viewPlans.classList.toggle("hidden", tab !== "plans");
       if (fields.viewAi) fields.viewAi.classList.toggle("hidden", tab !== "ai");
       if (fields.tabAiUsers) fields.tabAiUsers.classList.toggle("active", tab === "aiu");
       if (fields.viewAiUsers) fields.viewAiUsers.classList.toggle("hidden", tab !== "aiu");
@@ -776,6 +845,7 @@ export function adminPageHTML() {
       }
       if (tab === "stats") loadStats();
       if (tab === "payments") loadPayments();
+      if (tab === "plans") loadPlans();
       if (tab === "ai") loadAi();
       if (tab === "aiu") loadAiUsers();
     }
@@ -1361,6 +1431,136 @@ export function adminPageHTML() {
       catch (error) { fields.paymentsStatus.textContent = error.message; }
     }
     fields.loadPayments.onclick = loadPayments;
+
+    // ---------------- Bảng gói bán (giá/thời hạn sửa được, không cần deploy) ----------------
+    // Sửa thẳng trong bảng rồi bấm Save: mỗi gói chỉ có 4 field ngắn nên không cần
+    // màn hình edit riêng như Nodes. Retire = ngừng bán, KHÔNG xoá gói.
+    async function loadPlans() {
+      try {
+        fields.plansStatus.textContent = "Loading...";
+        const data = await request("/v1/admin/plans");
+        const plans = data.plans || [];
+        renderPlans(plans);
+        const sellable = plans.filter((p) => p.retired !== true).length;
+        fields.plansStatus.textContent = plans.length + " gói · đang bán " + sellable + ".";
+      } catch (error) {
+        fields.plansStatus.textContent = error.message;
+      }
+    }
+
+    function renderPlans(plans) {
+      if (!plans.length) {
+        fields.plansBody.innerHTML = '<tr><td colspan="7">Chưa có gói nào.</td></tr>';
+        return;
+      }
+      fields.plansBody.innerHTML = "";
+      for (const plan of plans) {
+        const row = document.createElement("tr");
+        row.innerHTML = [
+          '<td data-label="ID"><code></code></td>',
+          '<td data-label="Giá (VND)"><input class="planAmount" type="number" min="1" step="1000"></td>',
+          '<td data-label="Số ngày"><input class="planDays" type="number" min="1" step="1" placeholder="vĩnh viễn"></td>',
+          '<td data-label="Label"><input class="planLabel" type="text" maxlength="120"></td>',
+          '<td data-label="Badge"><input class="planBadge" type="text" maxlength="40"></td>',
+          '<td data-label="Trạng thái"></td>',
+          '<td data-label="Actions"></td>',
+        ].join("");
+        row.children[0].querySelector("code").textContent = plan.id;
+        const amountIn = row.querySelector(".planAmount");
+        amountIn.value = plan.amount;
+        const daysIn = row.querySelector(".planDays");
+        daysIn.value = plan.days == null ? "" : plan.days;
+        const labelIn = row.querySelector(".planLabel");
+        labelIn.value = plan.label || "";
+        const badgeIn = row.querySelector(".planBadge");
+        badgeIn.value = plan.badge || "";
+        row.children[5].innerHTML = plan.retired === true
+          ? '<span class="badge mute">Ngừng bán</span>'
+          : '<span class="badge ok">Đang bán</span>';
+
+        const save = document.createElement("button");
+        save.className = "secondary";
+        save.textContent = "Save";
+        save.onclick = async () => {
+          const daysRaw = String(daysIn.value).trim();
+          await savePlan(plan.id, {
+            amount: Number(amountIn.value),
+            days: daysRaw === "" ? null : Number(daysRaw),
+            label: String(labelIn.value).trim(),
+            badge: String(badgeIn.value).trim(),
+          });
+        };
+
+        const toggle = document.createElement("button");
+        toggle.className = plan.retired === true ? "secondary" : "danger";
+        toggle.textContent = plan.retired === true ? "Activate" : "Retire";
+        toggle.onclick = async () => {
+          if (plan.retired !== true && !confirm("Ngừng bán gói " + plan.id + "? Đơn và hoá đơn cũ vẫn giữ nguyên tên gói.")) return;
+          try {
+            if (plan.retired === true) {
+              await request("/v1/admin/plans/" + encodeURIComponent(plan.id), {
+                method: "PATCH",
+                body: JSON.stringify({ retired: false }),
+              });
+              fields.plansStatus.textContent = "Đã mở bán lại " + plan.id + ".";
+            } else {
+              await request("/v1/admin/plans/" + encodeURIComponent(plan.id) + "/retire", { method: "POST" });
+              fields.plansStatus.textContent = "Đã ngừng bán " + plan.id + " — trang /buy không còn gói này.";
+            }
+            await loadPlans();
+          } catch (error) {
+            fields.plansStatus.textContent = error.message;
+          }
+        };
+
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+        actions.appendChild(save);
+        actions.appendChild(toggle);
+        row.children[6].appendChild(actions);
+        fields.plansBody.appendChild(row);
+      }
+    }
+
+    async function savePlan(id, patch) {
+      try {
+        await request("/v1/admin/plans/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(patch) });
+        fields.plansStatus.textContent = "Đã lưu " + id + " — trang /buy dùng giá mới ngay.";
+        await loadPlans();
+      } catch (error) {
+        fields.plansStatus.textContent = error.message;
+      }
+    }
+
+    async function addPlan() {
+      const daysRaw = String(fields.newPlanDays.value).trim();
+      const payload = {
+        id: String(fields.newPlanId.value).trim(),
+        amount: Number(fields.newPlanAmount.value),
+        days: daysRaw === "" ? null : Number(daysRaw),
+        label: String(fields.newPlanLabel.value).trim(),
+        badge: String(fields.newPlanBadge.value).trim(),
+      };
+      if (!payload.id || !payload.label) {
+        fields.addPlanStatus.textContent = "Cần nhập ID và Label.";
+        return;
+      }
+      try {
+        await request("/v1/admin/plans", { method: "POST", body: JSON.stringify(payload) });
+        fields.addPlanStatus.textContent = "✅ Đã thêm gói " + payload.id + ".";
+        fields.newPlanId.value = "";
+        fields.newPlanAmount.value = "";
+        fields.newPlanDays.value = "";
+        fields.newPlanLabel.value = "";
+        fields.newPlanBadge.value = "";
+        await loadPlans();
+      } catch (error) {
+        fields.addPlanStatus.textContent = error.message;
+      }
+    }
+
+    if (fields.loadPlans) fields.loadPlans.onclick = loadPlans;
+    if (fields.addPlanBtn) fields.addPlanBtn.onclick = addPlan;
 
     // ---------------- MeetFlow AI Pro (web purchases) ----------------
     async function loadAi() {
@@ -2251,6 +2451,7 @@ export function adminPageHTML() {
     document.getElementById("tabUsers").onclick = () => showTab("users");
     document.getElementById("tabStats").onclick = () => showTab("stats");
     document.getElementById("tabPayments").onclick = () => showTab("payments");
+    document.getElementById("tabPlans").onclick = () => showTab("plans");
     document.getElementById("tabAi").onclick = () => showTab("ai");
     document.getElementById("tabAiUsers").onclick = () => showTab("aiu");
     document.getElementById("loadUsers").onclick = loadUsers;

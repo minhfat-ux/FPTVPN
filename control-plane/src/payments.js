@@ -11,11 +11,22 @@ import { buildVietQRPayload } from "./vietqr.js";
  *   PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY, PAYOS_BASE_URL?
  *
  * Plans:
- *   monthly: 100,000 VND / 30 days
- *   yearly : 900,000 VND / 365 days
+ *   Giá đang bán nằm trong plan-store.js (data/plans.json) và sửa được từ admin
+ *   tab Plans; DEFAULT_PLANS bên dưới chỉ là bảng mặc định (seed + fallback).
  */
 
-const PLANS = {
+/**
+ * Bảng giá MẶC ĐỊNH trong code.
+ *
+ * Sản phẩm không còn phát hành trên App Store / Google Play nữa — giá đang bán
+ * nằm trong store sửa được từ admin (src/plan-store.js -> data/plans.json, tab
+ * Plans). Bảng này chỉ còn đúng hai việc:
+ *   1) seed lần đầu, để deployment cũ chạy y hệt sau khi nâng cấp;
+ *   2) FALLBACK khi store trống hoặc không đọc được — bảng giá trống làm trang
+ *      /buy không còn gói nào để mua (mất đơn mà không ai biết), nên thà chạy
+ *      bằng giá cứng trong code.
+ */
+export const DEFAULT_PLANS = {
   // Prices raised 2026-09-11 (200k / 550k / 950k / 1.8M).
   monthly:   { amount: 200000, days: 30,   label: "Monthly (200,000 VND / 30 days)", badge: "Monthly" },
   quarterly: { amount: 550000, days: 90,   label: "3 Months (550,000 VND / 90 days)", badge: "3 Months" },
@@ -24,8 +35,52 @@ const PLANS = {
   // Lifetime was withdrawn from sale (2026-09-11) — the shop no longer offers it.
   // Kept here so historical orders, invoices and admin views can still resolve
   // the plan name, and `retired` makes the API refuse new orders for it.
+  // Store cũng theo đúng luật đó: retire chứ KHÔNG xoá gói.
   lifetime:  { amount: 1500000, days: null, retired: true, label: "Lifetime (1,500,000 VND one-time)", badge: "Lifetime" },
 };
+
+/**
+ * Bảng gói ĐANG dùng: trang /buy, tạo order, chặn gói retired và hoá đơn đều đọc
+ * từ đây. index.js nạp nội dung từ PlanStore lúc boot rồi nạp lại sau mỗi lần
+ * admin sửa (xem applyPlans).
+ *
+ * Sửa TẠI CHỖ (không gán lại biến) là cố ý: PLANS_PUBLIC ở cuối file export đúng
+ * object này và index.js giữ tham chiếu đó, nên mọi consumer thấy bảng mới ngay
+ * mà không phải đổi call site nào.
+ */
+const PLANS = clonePlans(DEFAULT_PLANS);
+
+/** Copy bảng gói để bảng đang chạy không dính vào bảng mặc định. */
+function clonePlans(table) {
+  const out = {};
+  for (const [id, cfg] of Object.entries(table ?? {})) out[id] = { ...cfg };
+  return out;
+}
+
+/**
+ * Nạp bảng gói từ store vào bảng đang chạy (index.js gọi lúc boot và sau mỗi lần
+ * admin sửa giá). Danh sách rỗng/lỗi => quay về bảng mặc định trong code, không
+ * bao giờ để trang bán hàng trắng gói.
+ */
+export function applyPlans(plans) {
+  const list = Array.isArray(plans) ? plans.filter((p) => p && typeof p.id === "string" && p.id) : [];
+  if (list.length === 0) {
+    console.error("plans: danh sách gói rỗng — giữ bảng giá mặc định trong code");
+    for (const key of Object.keys(PLANS)) delete PLANS[key];
+    Object.assign(PLANS, clonePlans(DEFAULT_PLANS));
+    return;
+  }
+  for (const key of Object.keys(PLANS)) delete PLANS[key];
+  for (const p of list) {
+    PLANS[p.id] = {
+      amount: p.amount,
+      days: p.days ?? null,
+      label: p.label,
+      badge: p.badge ?? "",
+      ...(p.retired === true ? { retired: true } : {}),
+    };
+  }
+}
 
 /** Plans that can still be bought (retired ones stay resolvable but are hidden). */
 export function isSellablePlan(product, planId) {
@@ -804,14 +859,19 @@ export function localizedPlanRows(lang, product = "vpn", options = {}) {
   const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   const table = product === "ai" ? AI_PLANS : PLANS;
   // Retired plans are filtered out, so the buy page never offers them.
-  const order = (product === "ai" ? AI_PLAN_ORDER : ["monthly", "quarterly", "semiannual", "yearly"])
+  // Thứ tự hiển thị = thứ tự trong bảng gói (gói admin thêm mới nằm cuối).
+  const order = (product === "ai" ? AI_PLAN_ORDER : Object.keys(PLANS))
     .filter((id) => table[id] && table[id].retired !== true);
   return order.map((id) => {
     const p = table[id];
     const period = p.days ? " / " + p.days + " " + t.dayUnit : " · " + base.lifetimeNote;
+    // Tên gói: bản địa hoá theo id với các gói có sẵn; gói admin tự thêm chưa có
+    // tên trong bảng dịch thì dùng `badge` (ngắn) rồi mới tới `label`, để gói mới
+    // không hiện "undefined" trên trang bán hàng.
+    const planName = t.planNames?.[id] || p.badge || p.label || id;
     // Ghi chú "mua một lần · không tự động gia hạn" chỉ để ở TÊN gói: lặp lại ở dòng giá
     // làm hàng gói AI không vừa màn hình điện thoại.
-    const label = p.oneTime && t.pass30Note ? t.planNames[id] + " · " + t.pass30Note : t.planNames[id];
+    const label = p.oneTime && t.pass30Note ? planName + " · " + t.pass30Note : planName;
     const main = fmtMoney(currency, p.amount, { lang, cnyRate, usdRate }) + period;
     // The other two currencies, small, so nobody has to guess what they pay.
     const others = ["VND", "CNY", "USD"]
@@ -843,7 +903,8 @@ export function planNameFor(lang, product, planId) {
   const table = product === "ai" ? AI_PLANS : PLANS;
   const plan = table[planId];
   if (!plan) return "";
-  return t.planNames?.[planId] || plan.badge || planId;
+  // Gói admin thêm mới không có tên trong bảng dịch -> dùng badge/label của gói.
+  return t.planNames?.[planId] || plan.badge || plan.label || planId;
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
