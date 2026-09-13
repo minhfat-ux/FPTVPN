@@ -52,6 +52,29 @@ class HysteriaVpnService : VpnService() {
     /** Set when the underlying network changed and the outer socket must be rebuilt. */
     @Volatile private var rebuildRequested = false
 
+    /**
+     * Thông số brutal của lượt thử ĐANG chạy. Mặc định là đường trực tiếp; lượt thử
+     * qua WS relay hạ xuống (xem wsRelayAttempt) vì đường đó đi qua 2 chặng.
+     * Cùng kiểu với runHost: đổi quanh lời gọi rồi trả lại như cũ.
+     */
+    @Volatile private var attemptUpKbps = HY_UP_KBPS
+    @Volatile private var attemptDownKbps = HY_DOWN_KBPS
+
+    /**
+     * Token của lượt thử đang chạy. Timer trần thời gian của lượt cũ thấy token đổi
+     * thì tự thoát, nên không cần giữ tham chiếu Thread để huỷ.
+     */
+    @Volatile private var attemptToken = 0
+
+    /**
+     * Lượt thử hiện tại đã vượt trần thời gian bắt tay. Đọc trong serveOutcome() để
+     * phân biệt "chưa bao giờ lên" (đi tiếp đường khác) với "vừa chết" (dựng lại).
+     */
+    @Volatile private var attemptTimedOut = false
+
+    /** Số lần probe liên tiếp thấy tunnel UP mà không có gói nào qua được. */
+    @Volatile private var deadProbes = 0
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Foreground immediately: on metered networks (China mobile data) Android
         // blocks data for background apps (netpolicy blocked=APP_BACKGROUND), which
@@ -188,13 +211,21 @@ class HysteriaVpnService : VpnService() {
     /**
      * What a finished serve() means:
      *  1 = the user asked to stop,
-     *  2 = the transport ended (network change or peer loss) and must be rebuilt.
+     *  2 = the transport ended (network change or peer loss) and must be rebuilt,
+     *  0 = the attempt never came up within its own budget, so try the next path.
      *
      * Returning 1 for an unexpected end was a bug: the service reported "stopped
      * cleanly" and shut down while the UI still showed Connected.
      */
     private fun serveOutcome(how: String): Int {
         if (stopping) return 1
+        // Hết hạn bắt tay: client bị chính armAttemptBudget() dừng, nên đây KHÔNG phải
+        // "transport vừa chết" mà là "chưa bao giờ lên" — phải đi tiếp đường khác
+        // trong cùng lượt, không được dựng lại đúng đường vừa thất bại.
+        if (attemptTimedOut) {
+            DiagnosticsLog.warn("attempt: $how -> hết hạn bắt tay, thử đường khác")
+            return 0
+        }
         if (rebuildRequested) {
             rebuildRequested = false
             DiagnosticsLog.warn("rebuild: transport torn down ($how) -> reconnecting on the new network")
@@ -252,7 +283,15 @@ class HysteriaVpnService : VpnService() {
             .build()
     }
 
-    /** One pass: the transport that worked last time, then TCP relays, then UDP. */
+    /**
+     * One pass: the transport that worked last time, then the cheapest direct path,
+     * then the WS relay, and only then the remaining direct ports.
+     *
+     * Thứ tự này để người bị chặn IP không phải chờ vô ích: khi GFW chặn IP node thì
+     * MỌI cổng trực tiếp đều chết, nên thử hết 2 TCP relay + 3 UDP rồi mới tới WS chỉ
+     * làm mất ~20s mà không có cơ hội thành công nào. Người không bị chặn vẫn đi đường
+     * cũ trong <1s vì đường trực tiếp thử trước.
+     */
     private fun oneConnectPass(): Int {
         val preferred = lastGoodTransport()
         if (preferred != null) {
@@ -263,12 +302,19 @@ class HysteriaVpnService : VpnService() {
             val outcome = tcpRelayAttempt(relayPort)
             if (outcome != 0) return outcome
         }
-        for (port in HY_PORTS) {
+        // Một cổng UDP trực tiếp: đây là đường nhanh nhất khi không bị chặn.
+        val primaryUdp = udpAttempt(HY_PORTS[0])
+        if (primaryUdp != 0) return primaryUdp
+        // Đường duy nhất còn sống khi IP node bị chặn — đi qua hạ tầng dùng chung.
+        val ws = wsRelayAttempt()
+        if (ws != 0) return ws
+        // WS cũng không mở được: thử nốt các cổng UDP trực tiếp còn lại (mạng chặn UDP
+        // không đều, hoặc Funnel/Cloudflare tạm lỗi).
+        for (port in HY_PORTS.drop(1)) {
             val outcome = udpAttempt(port)
             if (outcome != 0) return outcome
         }
-        // Cuối cùng: đi qua relay WebSocket sau Cloudflare (khi IP node bị chặn hết).
-        return wsRelayAttempt()
+        return 0
     }
 
     /**
@@ -277,7 +323,19 @@ class HysteriaVpnService : VpnService() {
      */
     private fun wsRelayAttempt(): Int {
         if (stopping) return 1
-        val bridge = WSRelayBridge(protector = { sock -> protect(sock) })
+        val bridge = WSRelayBridge(
+            protector = { sock -> protect(sock) },
+            onDead = { reason ->
+                // Mất cầu WS giữa lúc tunnel đang chạy: Hysteria vẫn giữ socket UDP
+                // tới bridge nên serve() KHÔNG tự trả về. Phải dừng client Go để
+                // runTunnel() nhận outcome 2 và dựng lại transport (kèm WS mới).
+                // Không làm việc này thì tunnel nằm "UP" mà không gói nào đi đâu cả.
+                if (!stopping) {
+                    DiagnosticsLog.warn("ws-relay: $reason -> dừng client để dựng lại transport")
+                    runCatching { Mobile.stop() }
+                }
+            },
+        )
         if (!bridge.start()) return 0
         DiagnosticsLog.log("ws-relay: thử transport qua Cloudflare (local port ${bridge.localPort})")
         // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói.
@@ -291,18 +349,27 @@ class HysteriaVpnService : VpnService() {
             return 0
         }
         val previousHost = runHost
+        val previousUp = attemptUpKbps
+        val previousDown = attemptDownKbps
         runHost = "127.0.0.1"
+        // Đường này đi qua 2 chặng (hạ tầng dùng chung + node) nên brutal phải khai
+        // thấp hơn đường trực tiếp, nếu không server pace theo số khai và tự gây nghẽn.
+        attemptUpKbps = HY_RELAY_UP_KBPS
+        attemptDownKbps = HY_RELAY_DOWN_KBPS
         return try {
             // Cổng phải là cổng BRIDGE đang nghe (127.0.0.1:<localPort>), không phải
             // cổng Hysteria phía server — Hysteria dial vào bridge, bridge mới đẩy
             // datagram qua WSS.
-            val outcome = udpAttempt(bridge.localPort)
-            // Nhớ để lượt sau (và lần mở app sau) đi thẳng qua WS, không phí ~25s thử
-            // UDP/TCP trực tiếp vốn đã chết khi IP node bị chặn.
+            // Budget dài hơn đường trực tiếp: handshake qua relay chậm hơn thật.
+            val outcome = udpAttempt(bridge.localPort, WS_ATTEMPT_UP_BUDGET_MS)
+            // Nhớ để lượt sau (và lần mở app sau) đi thẳng qua WS, không phí thời gian
+            // thử UDP/TCP trực tiếp vốn đã chết khi IP node bị chặn.
             if (outcome != 0) rememberTransport("ws")
             outcome
         } finally {
             runHost = previousHost
+            attemptUpKbps = previousUp
+            attemptDownKbps = previousDown
             bridge.stop()
         }
     }
@@ -347,14 +414,17 @@ class HysteriaVpnService : VpnService() {
             runCatching { sock.close() }
             return 0
         }
+        // Trần thời gian cho giai đoạn bắt tay — xem armAttemptBudget().
+        armAttemptBudget(ATTEMPT_UP_BUDGET_MS)
         try {
             connectClient(relayPort, sockFd, tcp = true)
         } catch (e: Exception) {
+            disarmAttemptBudget()
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: TCP relay $relayPort connect failed: ${e.message}")
             runCatching { sock.close() }
             return 0
         }
-        if (stopping) { runCatching { Mobile.stop() }; runCatching { sock.close() }; return 1 }
+        if (stopping) { disarmAttemptBudget(); runCatching { Mobile.stop() }; runCatching { sock.close() }; return 1 }
         try {
             // The TUN comes up only once a transport is actually connected: a pass
             // that cannot reach the server must not black-hole the device (that was
@@ -373,6 +443,7 @@ class HysteriaVpnService : VpnService() {
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: TCP relay $relayPort serve failed: ${e.message}")
             return serveOutcome("hy-tcp:$relayPort serve() threw: ${e.message}")
         } finally {
+            disarmAttemptBudget()
             DiagnosticsLog.relayConnected = false
             DiagnosticsLog.transport = "none"
             runCatching { sock.close() }
@@ -380,7 +451,7 @@ class HysteriaVpnService : VpnService() {
     }
 
     /** Direct UDP attempt (native QUIC — fast path when UDP is not blocked). */
-    private fun udpAttempt(port: Int): Int {
+    private fun udpAttempt(port: Int, upBudgetMs: Long = ATTEMPT_UP_BUDGET_MS): Int {
         if (stopping) return 1
         val ds = java.net.DatagramSocket()
         // Same ordering rule as the TCP relay: bind to the current underlying
@@ -394,18 +465,22 @@ class HysteriaVpnService : VpnService() {
             return 0
         }
         DiagnosticsLog.outerDetail = "udp:$port"
+        // Trần thời gian cho giai đoạn bắt tay — xem armAttemptBudget().
+        armAttemptBudget(upBudgetMs)
         try {
             connectClient(port, sockFd, tcp = false)
         } catch (e: Exception) {
+            disarmAttemptBudget()
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UDP $runHost:$port connect failed: ${e.message}")
             runCatching { ds.close() }
             return 0
         }
-        if (stopping) { runCatching { Mobile.stop() }; runCatching { ds.close() }; return 1 }
+        if (stopping) { disarmAttemptBudget(); runCatching { Mobile.stop() }; runCatching { ds.close() }; return 1 }
         try {
             DiagnosticsLog.outerLocal = safeAddr(ds)
             DiagnosticsLog.log(
-                "hy-udp:$port protect=$protected local=${safeAddr(ds)} remote=$runHost:$port",
+                "hy-udp:$port protect=$protected local=${safeAddr(ds)} remote=$runHost:$port " +
+                    "budget=${upBudgetMs}ms up=${attemptUpKbps}kbps down=${attemptDownKbps}kbps",
             )
             val tunFd = ensureTun().fd.toLong()
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UP via UDP $runHost:$port tun=$tunFd")
@@ -420,6 +495,7 @@ class HysteriaVpnService : VpnService() {
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UDP $runHost:$port serve failed: ${e.message}")
             return serveOutcome("hy-udp:$port serve() threw: ${e.message}")
         } finally {
+            disarmAttemptBudget()
             DiagnosticsLog.transport = "none"
             runCatching { ds.close() }
         }
@@ -482,7 +558,7 @@ class HysteriaVpnService : VpnService() {
             try {
                 Mobile.connect(
                     runHost, port.toLong(), HY_PASSWORD, HY_OBFS_PASSWORD,
-                    sockFd.toLong(), tcp, HY_UP_KBPS.toLong(), HY_DOWN_KBPS.toLong(),
+                    sockFd.toLong(), tcp, attemptUpKbps.toLong(), attemptDownKbps.toLong(),
                 )
                 return
             } catch (e: Exception) {
@@ -497,8 +573,48 @@ class HysteriaVpnService : VpnService() {
         }
     }
 
+    /**
+     * Đặt trần thời gian cho giai đoạn bắt tay của lượt thử hiện tại.
+     *
+     * Vì sao cần: client Go nằm trong `hysteria.aar` đóng sẵn, không có tham số
+     * timeout handshake để truyền từ Kotlin. Khi IP node bị GFW chặn thì mọi cổng
+     * trực tiếp đều không trả lời, mỗi lần thử cứ treo tới hạn nội bộ của QUIC nên
+     * cả lượt đi mất hàng chục giây mới tới được WS relay — với người dùng là "quay
+     * tít". Hết trần thì tự dừng client Go: `serve()` trả về, lượt thử được tính là
+     * thất bại (serveOutcome đọc attemptTimedOut) và đi tiếp đường khác.
+     *
+     * Timer tự vô hiệu theo TOKEN chứ không đọc cờ toàn cục: token bị đổi khi
+     * `reportUp()` (tunnel đã lên, hết giai đoạn bắt tay) hoặc `disarmAttemptBudget()`
+     * (lượt thử kết thúc). Nhờ vậy nó không thể cắt một tunnel đang chạy thật, và
+     * cũng không phụ thuộc vào việc cờ tunnelUp có được dọn đúng lúc hay không.
+     */
+    private fun armAttemptBudget(budgetMs: Long) {
+        val token = ++attemptToken
+        attemptTimedOut = false
+        Thread {
+            try {
+                Thread.sleep(budgetMs)
+            } catch (_: InterruptedException) {
+                return@Thread
+            }
+            if (token != attemptToken) return@Thread // tunnel đã lên, hoặc lượt thử đã kết thúc
+            if (stopping) return@Thread
+            attemptTimedOut = true
+            DiagnosticsLog.warn("attempt: quá ${budgetMs}ms chưa lên -> dừng client để thử đường khác")
+            runCatching { Mobile.stop() }
+        }.apply { isDaemon = true; name = "hy-attempt-budget" }.start()
+    }
+
+    /** Lượt thử đã kết thúc: vô hiệu hoá timer của nó. */
+    private fun disarmAttemptBudget() {
+        attemptToken++
+    }
+
     /** Notifies the UI layer that the tunnel is really up (clears fake state). */
     private fun reportUp() {
+        // Bắt tay xong: hết giai đoạn bị tính trần thời gian, nếu không timer sẽ cắt
+        // đúng cái tunnel vừa dựng được.
+        disarmAttemptBudget()
         DiagnosticsLog.tunnelUp = true
         DiagnosticsLog.log("tunnel: UP (${DiagnosticsLog.transport})")
         reportNodeHealth(runHost, reachable = true)
@@ -611,7 +727,27 @@ class HysteriaVpnService : VpnService() {
                 }
                 DiagnosticsLog.log("probe#$tick vpn underlying=${underlyingSummary()}")
                 probeRelayReachable()
-                probeThroughTunnel()
+                // Watchdog: tunnel "UP" mà gói thật không đi được thì phải dựng lại
+                // transport, không chỉ ghi log. Trước đây chỗ này chỉ warn nên tunnel
+                // nằm chết ở trạng thái connected cho tới khi người dùng tự tắt/bật.
+                val tunnelOk = probeThroughTunnel()
+                if (!DiagnosticsLog.tunnelUp) {
+                    deadProbes = 0
+                } else if (tunnelOk) {
+                    deadProbes = 0
+                } else {
+                    deadProbes++
+                    if (deadProbes >= DEAD_PROBE_LIMIT) {
+                        DiagnosticsLog.warn(
+                            "probe#$tick tunnel UP nhưng $deadProbes lần liên tiếp không có gói nào qua " +
+                                "-> dừng client để dựng lại transport",
+                        )
+                        deadProbes = 0
+                        // serve() trả về -> runTunnel() nhận outcome 2 và dựng lại
+                        // (kèm transport/WS mới). TUN được giữ nên không rò rỉ gói.
+                        runCatching { Mobile.stop() }
+                    }
+                }
             }
         }.apply { isDaemon = true; name = "vpn-diagnostics-probe" }.also { it.start() }
     }
@@ -646,9 +782,14 @@ class HysteriaVpnService : VpnService() {
      * (observed on device, 1.2.5). So we write a real HTTP request and require
      * response bytes, and (separately) send a real DNS query — a dead transport
      * leaves the request unanswered until the read timeout expires.
+     *
+     * @return true nếu CÓ gói thật đi qua được (HTTP hoặc DNS). Chỉ tính là chết khi
+     *   cả hai đều không trả lời: một trong hai có thể bị chặn riêng và như vậy không
+     *   có nghĩa tunnel hỏng. Đây là tín hiệu cho watchdog ở startProbeLoop().
      */
-    private fun probeThroughTunnel() {
+    private fun probeThroughTunnel(): Boolean {
         val started = System.currentTimeMillis()
+        var httpOk = false
         val http = try {
             java.net.Socket().use { s ->
                 s.connect(java.net.InetSocketAddress("1.1.1.1", 80), 4000)
@@ -659,7 +800,12 @@ class HysteriaVpnService : VpnService() {
                 }
                 val buf = ByteArray(32)
                 val n = s.getInputStream().read(buf)
-                if (n > 0) "ok=${String(buf, 0, n).lineSequence().first().trim()}" else "eof"
+                if (n > 0) {
+                    httpOk = true
+                    "ok=${String(buf, 0, n).lineSequence().first().trim()}"
+                } else {
+                    "eof"
+                }
             }
         } catch (e: Exception) {
             "FAIL ${e.javaClass.simpleName}: ${e.message}"
@@ -669,9 +815,14 @@ class HysteriaVpnService : VpnService() {
         )
         val dnsStart = System.currentTimeMillis()
         val dns = dnsThroughTunnel("example.com")
+        // dnsThroughTunnel trả "answers=<n> <record>" hoặc "FAIL ...": chỉ tính là
+        // thông khi có bản ghi trả về thật.
+        val dnsAnswers = dns.substringAfter("answers=", "").substringBefore(' ').toIntOrNull() ?: 0
+        val dnsOk = dnsAnswers > 0
         DiagnosticsLog.log(
             "probe: THROUGH TUNNEL dns 1.1.1.1:53 $dns in ${System.currentTimeMillis() - dnsStart}ms",
         )
+        return httpOk || dnsOk
     }
 
     /** Sends a real A query through the tunnel and reports the answer. */
@@ -749,7 +900,30 @@ class HysteriaVpnService : VpnService() {
         const val PROBE_INTERVAL_MS = 15_000L
         /** Warn when the tunnel claims to be up but nothing came back for this long. */
         const val RELAY_SILENCE_WARN_SEC = 45L
-        const val TCP_CONNECT_TIMEOUT_MS = 2500
+        /**
+         * Số lần probe liên tiếp thấy tunnel UP mà không có gói thật nào qua được thì
+         * dựng lại transport. Để 2 lần (không phải 1) vì trên mạng di động TQ một cú
+         * mất gói đơn lẻ vẫn xảy ra bình thường — dựng lại vì nó chỉ làm mạng chậm thêm.
+         * Cần 2 lần nên phản ứng mất khoảng 30-45s, chậm hơn đường WS chết (bắt ngay
+         * qua onFailure ở WSRelayBridge) — watchdog này là lưới an toàn cho trường hợp
+         * WS vẫn "mở" nhưng relay âm thầm nuốt gói.
+         */
+        const val DEAD_PROBE_LIMIT = 2
+        /**
+         * Trần thời gian bắt tay của MỘT đường trực tiếp. Đường trực tiếp khi thông thì
+         * lên trong <1s; quá ngần này nghĩa là cổng/IP đó không tới được.
+         */
+        const val ATTEMPT_UP_BUDGET_MS = 4_000L
+        /**
+         * Trần cho đường WS relay: phải đi qua 2 chặng nên handshake chậm hơn thật, cắt
+         * sớm sẽ bỏ mất đúng đường duy nhất còn sống khi IP node bị chặn.
+         */
+        const val WS_ATTEMPT_UP_BUDGET_MS = 15_000L
+        /**
+         * TCP connect tới relay. 2500ms là lãng phí: khi IP node bị chặn thì connect
+         * không bao giờ xong, còn khi tới được thì RTT từ TQ chỉ vài chục ms.
+         */
+        const val TCP_CONNECT_TIMEOUT_MS = 1200
         const val RETRY_BACKOFF_START_MS = 3000L
         const val RETRY_BACKOFF_MAX_MS = 30000L
         /** Pause after a transport teardown so the Go client releases its socket. */
@@ -794,6 +968,9 @@ class HysteriaVpnService : VpnService() {
         val HY_PORTS = com.privatevpn.app.Config.HY_PORTS
         const val HY_UP_KBPS = com.privatevpn.app.Config.HY_UP_KBPS
         const val HY_DOWN_KBPS = com.privatevpn.app.Config.HY_DOWN_KBPS
+        /** Brutal CC hạ xuống cho đường WS relay (đi qua 2 chặng) — xem wsRelayAttempt. */
+        const val HY_RELAY_UP_KBPS = com.privatevpn.app.Config.HY_RELAY_UP_KBPS
+        const val HY_RELAY_DOWN_KBPS = com.privatevpn.app.Config.HY_RELAY_DOWN_KBPS
         const val HY_TCP_RELAY_HOST = com.privatevpn.app.Config.HY_TCP_RELAY_HOST
         val HY_TCP_RELAY_PORTS = com.privatevpn.app.Config.HY_TCP_RELAY_PORTS
         const val HY_PASSWORD = com.privatevpn.app.Config.HY_PASSWORD

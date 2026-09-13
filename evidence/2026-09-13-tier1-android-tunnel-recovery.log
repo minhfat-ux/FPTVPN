@@ -1,0 +1,87 @@
+=== BẰNG CHỨNG: Tầng 1 — sửa gốc lỗi "connected nhưng không có mạng" (Android) ===
+Thời điểm: 2026-09-13 21:54 CST
+Máy: macOS 26.5.2 / arm64
+Git HEAD lúc chạy: 834e584 (thay đổi Tầng 1 còn ở working tree)
+
+################ 1. BUILD (bằng chứng thật) ################
+--- $ ./gradlew :app:compileModernReleaseKotlin ---
+> Task :app:processModernReleaseManifestForPackage UP-TO-DATE
+> Task :app:processModernReleaseResources UP-TO-DATE
+> Task :app:compileModernReleaseKotlin UP-TO-DATE
+
+BUILD SUCCESSFUL in 959ms
+16 actionable tasks: 1 executed, 15 up-to-date
+
+--- $ ./gradlew :app:assembleModernRelease (gồm R8 minify + lintVital) ---
+> Task :app:writeModernReleaseAppMetadata UP-TO-DATE
+> Task :app:writeModernReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:packageModernRelease UP-TO-DATE
+> Task :app:createModernReleaseApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleModernRelease
+
+BUILD SUCCESSFUL in 788ms
+52 actionable tasks: 2 executed, 50 up-to-date
+EXIT_ASSEMBLE=0
+
+--- APK tạo ra (build dir nằm NGOÀI repo: ExFAT không dùng được với aapt/d8 —
+    xem gradle.properties android.buildDir + build.gradle.kts layout.buildDirectory) ---
+-rw-r--r--  1 minhnguyen  staff  96801567 Sep 13 21:54 ~/.vpnflow-build/app/outputs/apk/modern/release/app-modern-release.apk
+
+################ 2. TRACE CODE PATH (kiểm tra tĩnh, không phải runtime) ################
+Ba callback của WebSocket giờ đều báo chết (trước đây chỉ set connected=false):
+  WSRelayBridge.kt:110:                        notifyDead("closing: $code $reason")
+  WSRelayBridge.kt:117:                        notifyDead("failed: ${t.message}")
+  WSRelayBridge.kt:122:                        notifyDead("closed: $code $reason")
+  WSRelayBridge.kt:156:    private fun notifyDead(reason: String) {
+
+Hai điều kiện gác trong notifyDead (running / opened) + chỉ báo 1 lần:
+  WSRelayBridge.kt:157:        if (!running || !opened) return
+  WSRelayBridge.kt:158:        if (!deadReported.compareAndSet(false, true)) return
+
+Service nối callback đó vào Mobile.stop() (làm serve() trả về -> runTunnel dựng lại):
+  HysteriaVpnService.kt:328:            onDead = { reason ->
+  HysteriaVpnService.kt:329-                // Mất cầu WS giữa lúc tunnel đang chạy: Hysteria vẫn giữ socket UDP
+  HysteriaVpnService.kt:330-                // tới bridge nên serve() KHÔNG tự trả về. Phải dừng client Go để
+  HysteriaVpnService.kt:331-                // runTunnel() nhận outcome 2 và dựng lại transport (kèm WS mới).
+  HysteriaVpnService.kt:332-                // Không làm việc này thì tunnel nằm "UP" mà không gói nào đi đâu cả.
+  HysteriaVpnService.kt:333-                if (!stopping) {
+  HysteriaVpnService.kt:334-                    DiagnosticsLog.warn("ws-relay: $reason -> dừng client để dựng lại transport")
+  HysteriaVpnService.kt:335-                    runCatching { Mobile.stop() }
+  HysteriaVpnService.kt:336-                }
+
+Watchdog: probe qua tunnel nay tra ve Boolean va co hanh dong, khong chi warn:
+  HysteriaVpnService.kt:733:                val tunnelOk = probeThroughTunnel()
+  HysteriaVpnService.kt:740:                    if (deadProbes >= DEAD_PROBE_LIMIT) {
+  HysteriaVpnService.kt:911:        const val DEAD_PROBE_LIMIT = 2
+
+Thu tu thu transport moi trong oneConnectPass (WS len truoc cac cong UDP con lai):
+  8:            val outcome = tcpRelayAttempt(relayPort)
+  12:        val primaryUdp = udpAttempt(HY_PORTS[0])
+  15:        val ws = wsRelayAttempt()
+  20:            val outcome = udpAttempt(port)
+  23:        return 0
+
+Brutal CC cho duong relay (ha tu 20Mbps khai bao):
+  Config.kt:102:    const val HY_RELAY_UP_KBPS = 800
+  Config.kt:103:    const val HY_RELAY_DOWN_KBPS = 4000
+
+################ 3. CHƯA KIỂM CHỨNG — BẮT BUỘC LÀM TRƯỚC KHI PHÁT HÀNH ################
+Chưa test trên thiết bị thật: lúc chạy bằng chứng này KHÔNG có thiết bị Android nào
+kết nối adb (`adb devices` -> danh sách rỗng). Ba việc phải đo trên máy thật:
+
+  a) Cau WS chet -> tunnel tu dung lai:
+     - adb shell tail -f /sdcard/Android/data/com.privatevpn.app/files/diagnostics.log
+     - Mong doi: 'ws-relay: cau WS chet (...)' roi NGAY SAU la
+       'ws-relay: ... -> dung client de dung lai transport' va 'transport ended ... -> reconnecting'
+     - TRUOC khi sua: tunnel nam o tunnelUp=true va khong co dong nao o tren.
+  b) Watchdog tunnel UP nhung khong co mang:
+     - Mong doi sau ~2 lan probe: 'tunnel UP nhung N lan lien tiep khong co goi nao qua'
+  c) Thu tu thu transport + thoi gian toi WS:
+     - Do thoi gian tu luc bam Connect toi dong 'ws-relay: connected'.
+     - Truoc khi sua ~25s; mong doi sau khi sua ~7-11s (TCP relay 2x1.2s + 1 UDP toi da 4s + WS mo ~6s).
+
+Rui ro con lai: tran thoi gian bat tay (ATTEMPT_UP_BUDGET_MS=4s) la con so CHON THEO LY THUYET,
+chua do tren mang TQ that. Neu lan dau ket noi tren mang cham bi cat som, tang len 6-8s.
+
+Khong the kiem chung tu day: trang thai song cua server (Funnel/wsrelay/cloudflared/nodes.db) —
+AGENTS.md muc 1 cam ssh/sua production.

@@ -92,6 +92,15 @@ object Config {
      *  this is what keeps speed usable on China mobile data. 0 = standard CC. */
     const val HY_UP_KBPS = 2000
     const val HY_DOWN_KBPS = 20000
+    /**
+     * Brutal CC cho đường WS relay (khi IP node bị chặn). Đường này đi qua 2 chặng —
+     * hạ tầng dùng chung (Tailscale Funnel/Cloudflare) rồi mới tới node — nên khai
+     * bằng đường trực tiếp (20Mbps) là tự bóp nghẽn: server pace đúng theo số client
+     * khai, gói bị dồn ở chặng giữa và độ trễ tăng vọt. Số dưới đây là mức khởi điểm
+     * bảo thủ, chỉnh lại theo số đo thật trên thiết bị.
+     */
+    const val HY_RELAY_UP_KBPS = 800
+    const val HY_RELAY_DOWN_KBPS = 4000
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)

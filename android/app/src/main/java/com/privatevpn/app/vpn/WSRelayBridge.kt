@@ -31,6 +31,14 @@ class WSRelayBridge(
     /** VpnService.protect: bắt buộc — nếu không, khi tunnel vừa lên thì kết nối TCP
      *  tới relay bị hút vào chính tunnel (vòng lặp) và bị reset ngay lập tức. */
     private val protector: ((java.net.Socket) -> Boolean)? = null,
+    /**
+     * Cầu WS đã mở được rồi mới chết. Bắt buộc phải có: Hysteria vẫn giữ socket
+     * UDP tới 127.0.0.1 nên `serve()` không hề trả về, tunnel nằm ở trạng thái
+     * `tunnelUp=true` mà không có gói nào đi đâu cả — đúng triệu chứng "connected
+     * nhưng không có mạng". Service dùng callback này để dừng client Go, nhờ vậy
+     * `serve()` trả về và vòng runTunnel() dựng lại transport (kèm WS mới).
+     */
+    private val onDead: ((String) -> Unit)? = null,
 ) {
 
     private var udp: DatagramSocket? = null
@@ -40,6 +48,10 @@ class WSRelayBridge(
     @Volatile private var running = false
     @Volatile var connected = false
         private set
+
+    /** Đã từng mở được WS trong lần chạy này — trước đó thì không có gì để "chết". */
+    @Volatile private var opened = false
+    private val deadReported = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private val client = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -70,6 +82,8 @@ class WSRelayBridge(
         return try {
             val sock = DatagramSocket(0, InetAddress.getByName("127.0.0.1"))
             udp = sock
+            opened = false
+            deadReported.set(false)
             running = true
             DiagnosticsLog.log("ws-relay: local udp 127.0.0.1:${sock.localPort} -> $url")
 
@@ -77,6 +91,7 @@ class WSRelayBridge(
                 Request.Builder().url(url).build(),
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
+                        opened = true
                         connected = true
                         DiagnosticsLog.log("ws-relay: connected")
                     }
@@ -88,13 +103,23 @@ class WSRelayBridge(
                         }
                     }
 
+                    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                        connected = false
+                        // Đầu kia chủ động đóng (relay restart, hạ tầng cắt): phải
+                        // hoàn tất handshake đóng, và báo chết như mọi đường khác.
+                        notifyDead("closing: $code $reason")
+                        webSocket.close(1000, null)
+                    }
+
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         connected = false
                         DiagnosticsLog.warn("ws-relay: failed: ${t.message}")
+                        notifyDead("failed: ${t.message}")
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         connected = false
+                        notifyDead("closed: $code $reason")
                     }
                 },
             )
@@ -120,7 +145,23 @@ class WSRelayBridge(
         }
     }
 
+    /**
+     * Báo một lần duy nhất rằng cầu WS đã chết SAU KHI đã từng mở được.
+     *
+     * Hai điều kiện gác:
+     *  - `running`: `stop()` chủ động của service cũng làm WS đóng, đó không phải sự cố.
+     *  - `opened`: chưa từng mở được thì `wsRelayAttempt()` đã tự xử lý (nó đợi tối đa
+     *    6s rồi bỏ qua), không cần báo động — nếu báo, lúc đó chưa có tunnel nào để dựng lại.
+     */
+    private fun notifyDead(reason: String) {
+        if (!running || !opened) return
+        if (!deadReported.compareAndSet(false, true)) return
+        DiagnosticsLog.warn("ws-relay: cầu WS chết ($reason)")
+        onDead?.invoke(reason)
+    }
+
     fun stop() {
+        // Đặt running trước khi đóng: nếu không, chính lần đóng này lại bị coi là sự cố.
         running = false
         connected = false
         runCatching { ws?.close(1000, null) }
