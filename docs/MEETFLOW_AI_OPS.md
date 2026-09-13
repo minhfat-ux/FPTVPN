@@ -513,6 +513,57 @@ Environment=PUBLIC_SITE_URL=https://meetflowai.site   # domain hiển thị tron
 ```
 Sau khi sửa: `systemctl daemon-reload && systemctl restart flowvpn-cp`.
 
+## 5b. SePay — tự xác nhận đơn chuyển khoản (IPN)
+
+SePay theo dõi biến động số dư tài khoản ngân hàng rồi POST về hệ thống mỗi khi có tiền vào ⇒ đơn
+VietQR/chuyển khoản được **kích hoạt tự động**, không phải chờ chủ shop bấm tay (luồng xác nhận tay
++ email alert cho chủ shop **vẫn giữ nguyên** làm đường dự phòng).
+
+### URL cắm vào SePay (mục Webhooks / IPN)
+
+```
+https://api.meetflowai.site/v1/payments/sepay-webhook
+```
+(bản sao: `https://meetflowai.site/v1/payments/sepay-webhook` — cả hai đều đi qua Caddy tới control plane)
+
+- **Xác thực**: chọn *HMAC-SHA256* (SePay ký `{timestamp}.{raw_body}`, header `X-SePay-Signature`
+  dạng `sha256=<hex>` + `X-SePay-Timestamp`) — hoặc chọn *API Key* và dùng đúng secret đó
+  (`Authorization: Apikey <key>`). Code hỗ trợ **cả hai**.
+- Secret nằm trong drop-in trên **node-2** (máy chính): `/etc/systemd/system/flowvpn-cp.service.d/sepay.conf`
+  (`SEPAY_WEBHOOK_SECRET`, `SEPAY_API_KEY`, chmod 600). Đổi key (sang key live) thì sửa file đó rồi
+  `systemctl daemon-reload && systemctl restart flowvpn-cp`.
+- **Mã thanh toán**: nội dung chuyển khoản do VietQR sinh ra có dạng `VPNFLOW-<mã đơn>` (VPNFlow) và
+  `MEETFLOW-<mã đơn>` (MeetFlow AI) — xem `vietqr.js`. Cấu hình "mã thanh toán" trong SePay nên tách
+  phần số; nếu không cấu hình, code vẫn tự đọc tiền tố trong `content`.
+- Tài khoản ngân hàng phải là tài khoản đã nối với SePay (`BANK_QR_ACCOUNT`, hiện TPBank `57222538888`).
+
+### Quy tắc an toàn đã cài (test thật 14/09/2026)
+
+| Tình huống | Hành vi |
+|---|---|
+| Tiền vào (`transferType=in`) đúng mã đơn, đủ tiền | tự kích hoạt + gửi hoá đơn: `sepay: TỰ KÍCH HOẠT đơn 1789317437 (vpn, 200000đ, tx 9990123)` |
+| Chuyển **thiếu** tiền | **KHÔNG** kích hoạt, chỉ log để chủ shop xác nhận: `đơn … chuyển 199000đ < cần 200000đ` |
+| Webhook **lặp** (SePay gửi lại) | không cấp lần hai: `đơn … không còn chờ xác nhận (đã xử lý hoặc hết hạn)` |
+| Nội dung **không có mã đơn** | log để xác nhận tay (alert cũ vẫn gửi) |
+| Giao dịch tiền **ra** | bỏ qua |
+| Sai chữ ký / không xác thực | HTTP **401** |
+| Chưa cấu hình secret | HTTP **503** (không nhận webhook trần) |
+
+### Cách tự test
+
+```bash
+# 5 ca cơ bản (chữ ký đúng/sai, API key, không xác thực, tiền ra)
+SEPAY_SECRET=spsk_… node scripts/sepay-selftest.mjs --code 555000 --amount 200000
+
+# trọn luồng: tạo đơn thật rồi cho webhook báo có tiền
+curl -s -X POST -H 'content-type: application/json' \
+  -d '{"email":"<email test>","plan":"monthly","method":"bankqr","lang":"vi"}' \
+  https://api.meetflowai.site/v1/payments/create          # lấy orderCode
+SEPAY_SECRET=spsk_… node scripts/sepay-selftest.mjs --code <orderCode> --amount 200000
+```
+
+Test tự động cho phần xác thực/đọc mã đơn/số tiền: `control-plane/test/sepay.test.js` (7 test).
+
 ## 6. Email — chống vào Junk / Spam (ĐÃ XỬ LÝ 13/09/2026)
 
 ### Trạng thái hiện tại: gửi qua **Resend**, DKIM **pass** ✅
