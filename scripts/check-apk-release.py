@@ -29,6 +29,7 @@ import os
 import re
 import shutil
 import socketserver
+import ssl
 import subprocess
 import sys
 import threading
@@ -120,14 +121,35 @@ def apk_info(path: Path, override_version: str | None = None) -> dict:
     return info
 
 
+def _ssl_context() -> ssl.SSLContext:
+    """CA bundle chắc chắn có: python trên macOS (Homebrew/python.org) thường thiếu CA hệ thống,
+    khiến urllib báo CERTIFICATE_VERIFY_FAILED trong khi curl vẫn chạy bình thường."""
+    try:
+        import certifi  # có thì dùng ngay
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001
+        pass
+    for bundle in ("/etc/ssl/cert.pem", "/etc/pki/tls/certs/ca-bundle.crt",
+                   "/usr/local/etc/openssl@3/cert.pem"):
+        if Path(bundle).is_file():
+            try:
+                return ssl.create_default_context(cafile=bundle)
+            except Exception:  # noqa: BLE001
+                continue
+    return ssl.create_default_context()
+
+
+SSL_CONTEXT = _ssl_context()
+
+
 def fetch_json(url: str, timeout: int = 20) -> dict:
-    with urllib.request.urlopen(url, timeout=timeout) as res:
+    with urllib.request.urlopen(url, timeout=timeout, context=SSL_CONTEXT) as res:
         return json.loads(res.read().decode("utf-8"))
 
 
 def head(url: str, user_agent: str, timeout: int = 25) -> dict:
     req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": user_agent})
-    with urllib.request.urlopen(req, timeout=timeout) as res:
+    with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as res:
         return {
             "status": res.status,
             "length": int(res.headers.get("Content-Length") or 0),
@@ -137,7 +159,7 @@ def head(url: str, user_agent: str, timeout: int = 25) -> dict:
 
 def download(url: str, user_agent: str = MODERN_UA) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-    with urllib.request.urlopen(req, timeout=300) as res:
+    with urllib.request.urlopen(req, timeout=300, context=SSL_CONTEXT) as res:
         return res.read()
 
 
