@@ -35,6 +35,16 @@ class HysteriaVpnService : VpnService() {
     private var networkMonitor: NetworkMonitor? = null
     private var probeThread: Thread? = null
 
+    /**
+     * The TUN interface. Created once per session and deliberately KEPT across
+     * transport rebuilds: closing it would let the device's traffic leak out
+     * unprotected for the second or two a rebuild takes.
+     */
+    private var tun: ParcelFileDescriptor? = null
+
+    /** Set when the underlying network changed and the outer socket must be rebuilt. */
+    @Volatile private var rebuildRequested = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Foreground immediately: on metered networks (China mobile data) Android
         // blocks data for background apps (netpolicy blocked=APP_BACKGROUND), which
@@ -49,7 +59,11 @@ class HysteriaVpnService : VpnService() {
         // internet until reconnect".
         DiagnosticsLog.init(this)
         if (networkMonitor == null) {
-            networkMonitor = NetworkMonitor(this).also { it.start() }
+            // The listener is what fixes the "connected on WiFi, walked outside, no
+            // internet" bug: a transport rebuild is started the moment Android moves
+            // the tunnel onto another underlying network.
+            networkMonitor = NetworkMonitor(this) { onUnderlyingNetworkChanged() }
+                .also { it.start() }
         }
         startProbeLoop()
         DiagnosticsLog.log("service: onStartCommand startId=$startId")
@@ -90,29 +104,73 @@ class HysteriaVpnService : VpnService() {
         // keep retrying with capped exponential backoff until the user stops us.
         var backoffMs = RETRY_BACKOFF_START_MS
         var everUp = false
-        while (!stopping) {
-            val outcome = oneConnectPass()
-            when (outcome) {
-                1 -> return // tunnel ran and stopped cleanly (user stop)
-                2 -> { // tunnel was up and dropped — reconnect right away
-                    everUp = true
-                    backoffMs = RETRY_BACKOFF_START_MS
-                    reportReconnecting()
-                    android.util.Log.e("VPNFLOW_DEBUG", "hysteria: tunnel dropped -> reconnecting")
-                    continue
-                }
-                else -> { // no transport reachable in this pass
-                    reportReconnecting()
-                    if (stopping) return
-                    android.util.Log.e(
-                        "VPNFLOW_DEBUG",
-                        "hysteria: no transport reachable (pass failed" + (if (everUp) ", was up before" else "") + ") -> retry in ${backoffMs}ms",
-                    )
-                    Thread.sleep(backoffMs)
-                    backoffMs = (backoffMs * 2).coerceAtMost(RETRY_BACKOFF_MAX_MS)
+        try {
+            while (!stopping) {
+                val outcome = oneConnectPass()
+                when (outcome) {
+                    1 -> return // user stop
+                    2 -> { // transport dropped or was rebuilt for a network change
+                        everUp = true
+                        backoffMs = RETRY_BACKOFF_START_MS
+                        reportReconnecting()
+                        // Give the Go client a moment to release its socket/fd before
+                        // the next pass opens a fresh one on the new network.
+                        Thread.sleep(REBUILD_SETTLE_MS)
+                        continue
+                    }
+                    else -> { // no transport reachable in this pass
+                        reportReconnecting()
+                        if (stopping) return
+                        // Drop the TUN while we back off: with no working transport an
+                        // up interface would black-hole every packet on the device.
+                        closeTun()
+                        val wasUp = if (everUp) ", was up before" else ""
+                        android.util.Log.e(
+                            "VPNFLOW_DEBUG",
+                            "hysteria: no transport reachable (pass failed$wasUp) -> retry in ${backoffMs}ms",
+                        )
+                        Thread.sleep(backoffMs)
+                        backoffMs = (backoffMs * 2).coerceAtMost(RETRY_BACKOFF_MAX_MS)
+                    }
                 }
             }
+        } finally {
+            closeTun()
         }
+    }
+
+    /**
+     * Android moved the tunnel onto a different underlying network: hotel WiFi died,
+     * or WiFi came up over mobile data. The outer socket is bound to the network that
+     * was default when it was created (measured on device: it stays on the dead WiFi
+     * address `10.0.3.247` while the phone is on 4G, so the tunnel silently carries
+     * nothing). Stopping the Go client makes serve() return; the create/connect loop
+     * then opens a fresh socket, which protect() binds to the NEW network.
+     */
+    private fun onUnderlyingNetworkChanged() {
+        if (tun == null) return // nothing serving yet; the next pass uses the new network
+        rebuildRequested = true
+        DiagnosticsLog.warn("rebuild: underlying network changed -> restarting transport")
+        runCatching { Mobile.stop() }
+    }
+
+    /**
+     * What a finished serve() means:
+     *  1 = the user asked to stop,
+     *  2 = the transport ended (network change or peer loss) and must be rebuilt.
+     *
+     * Returning 1 for an unexpected end was a bug: the service reported "stopped
+     * cleanly" and shut down while the UI still showed Connected.
+     */
+    private fun serveOutcome(how: String): Int {
+        if (stopping) return 1
+        if (rebuildRequested) {
+            rebuildRequested = false
+            DiagnosticsLog.warn("rebuild: transport torn down ($how) -> reconnecting on the new network")
+            return 2
+        }
+        DiagnosticsLog.warn("transport ended on its own ($how) -> reconnecting")
+        return 2
     }
 
     /** Foreground notification so metered-background restrictions never apply. */
@@ -178,10 +236,15 @@ class HysteriaVpnService : VpnService() {
         return if (parts[0] == "tcp") tcpRelayAttempt(port) else udpAttempt(port)
     }
 
-    /** Returns 0 = could not connect, 1 = tunnel ran then user stopped, 2 = dropped. */
+    /** Returns 0 = could not connect, 1 = user stop, 2 = transport ended (rebuild). */
     private fun tcpRelayAttempt(relayPort: Int): Int {
         if (stopping) return 1
         val sock = java.net.Socket()
+        // protect() BEFORE connect(): Android binds the socket to the network that is
+        // default at protect() time. Protecting afterwards is a no-op for an already
+        // connected socket, which is what left the transport pinned to dead WiFi.
+        val protected = runCatching { protect(sock) }.getOrDefault(false)
+        DiagnosticsLog.outerProtected = if (protected) "protect=ok" else "protect=false"
         val ok = try {
             sock.connect(java.net.InetSocketAddress(runHost, relayPort), TCP_CONNECT_TIMEOUT_MS)
             true
@@ -191,6 +254,13 @@ class HysteriaVpnService : VpnService() {
             false
         }
         if (!ok) return 0
+        // The outer socket is the thing that gets stranded when the underlying
+        // network dies; its local address is the WiFi/cell address it is pinned to.
+        DiagnosticsLog.outerDetail = "tcp-relay:$relayPort"
+        DiagnosticsLog.outerLocal = safeAddr(sock)
+        DiagnosticsLog.log(
+            "hy-tcp:$relayPort socket protect=$protected local=${safeAddr(sock)} remote=${safeRemote(sock)}",
+        )
         val sockFd = try {
             android.os.ParcelFileDescriptor.fromSocket(sock).detachFd()
         } catch (e: Exception) {
@@ -198,31 +268,33 @@ class HysteriaVpnService : VpnService() {
             return 0
         }
         try {
-            Mobile.connect(
-                runHost, HY_PORTS[0].toLong(), HY_PASSWORD, HY_OBFS_PASSWORD,
-                sockFd.toLong(), true, HY_UP_KBPS.toLong(), HY_DOWN_KBPS.toLong(),
-            )
+            connectClient(relayPort, sockFd, tcp = true)
         } catch (e: Exception) {
-            if (e.message?.contains("already running") == true) throw e
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: TCP relay $relayPort connect failed: ${e.message}")
             runCatching { sock.close() }
             return 0
         }
         if (stopping) { runCatching { Mobile.stop() }; runCatching { sock.close() }; return 1 }
-        val tun = establish()
         try {
-            protect(sock)
-            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UP via TCP relay $relayPort tun=${tun.fd}")
+            // The TUN comes up only once a transport is actually connected: a pass
+            // that cannot reach the server must not black-hole the device (that was
+            // the old behaviour, and it kept the user offline during long backoffs).
+            val tunFd = ensureTun().fd.toLong()
+            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UP via TCP relay $relayPort tun=$tunFd")
             rememberTransport("tcp:$relayPort")
+            DiagnosticsLog.transport = "hy-tcp:$relayPort"
+            DiagnosticsLog.relayConnected = true
             if (!stopping) reportUp()
-            Mobile.serve(tun.fd.toLong(), HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
-            return 1 // tunnel ran, then stopped because the user asked to
+            DiagnosticsLog.log("hy-tcp:$relayPort serve() start")
+            Mobile.serve(tunFd, HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
+            return serveOutcome("hy-tcp:$relayPort serve() returned")
         } catch (e: Exception) {
             if (e.message?.contains("already running") == true) throw e
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: TCP relay $relayPort serve failed: ${e.message}")
-            return 2
+            return serveOutcome("hy-tcp:$relayPort serve() threw: ${e.message}")
         } finally {
-            tun.close()
+            DiagnosticsLog.relayConnected = false
+            DiagnosticsLog.transport = "none"
             runCatching { sock.close() }
         }
     }
@@ -231,38 +303,44 @@ class HysteriaVpnService : VpnService() {
     private fun udpAttempt(port: Int): Int {
         if (stopping) return 1
         val ds = java.net.DatagramSocket()
+        // Same ordering rule as the TCP relay: bind to the current underlying
+        // network before any packet leaves the socket.
+        val protected = runCatching { protect(ds) }.getOrDefault(false)
+        DiagnosticsLog.outerProtected = if (protected) "protect=ok" else "protect=false"
         val sockFd = try {
             android.os.ParcelFileDescriptor.fromDatagramSocket(ds).detachFd()
         } catch (e: Exception) {
             runCatching { ds.close() }
             return 0
         }
+        DiagnosticsLog.outerDetail = "udp:$port"
         try {
-            Mobile.connect(
-                runHost, port.toLong(), HY_PASSWORD, HY_OBFS_PASSWORD,
-                sockFd.toLong(), false, HY_UP_KBPS.toLong(), HY_DOWN_KBPS.toLong(),
-            )
+            connectClient(port, sockFd, tcp = false)
         } catch (e: Exception) {
-            if (e.message?.contains("already running") == true) throw e
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UDP $runHost:$port connect failed: ${e.message}")
             runCatching { ds.close() }
             return 0
         }
         if (stopping) { runCatching { Mobile.stop() }; runCatching { ds.close() }; return 1 }
-        val tun = establish()
         try {
-            protect(ds)
-            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UP via UDP $runHost:$port tun=${tun.fd}")
+            DiagnosticsLog.outerLocal = safeAddr(ds)
+            DiagnosticsLog.log(
+                "hy-udp:$port protect=$protected local=${safeAddr(ds)} remote=$runHost:$port",
+            )
+            val tunFd = ensureTun().fd.toLong()
+            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UP via UDP $runHost:$port tun=$tunFd")
             rememberTransport("udp:$port")
+            DiagnosticsLog.transport = "hy-udp:$port"
             if (!stopping) reportUp()
-            Mobile.serve(tun.fd.toLong(), HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
-            return 1
+            DiagnosticsLog.log("hy-udp:$port serve() start")
+            Mobile.serve(tunFd, HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
+            return serveOutcome("hy-udp:$port serve() returned")
         } catch (e: Exception) {
             if (e.message?.contains("already running") == true) throw e
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UDP $runHost:$port serve failed: ${e.message}")
-            return 2
+            return serveOutcome("hy-udp:$port serve() threw: ${e.message}")
         } finally {
-            tun.close()
+            DiagnosticsLog.transport = "none"
             runCatching { ds.close() }
         }
     }
@@ -277,7 +355,66 @@ class HysteriaVpnService : VpnService() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             builder.setMetered(false)
         }
-        return builder.establish() ?: throw IllegalStateException("establish failed")
+        val tun = builder.establish() ?: throw IllegalStateException("establish failed")
+        DiagnosticsLog.log(
+            "vpn: establish ok tun=${tun.fd} underlying=" + runCatching { underlyingSummary() }.getOrDefault("?"),
+        )
+        return tun
+    }
+
+    /**
+     * The TUN is created once and reused for the whole session, including across
+     * transport rebuilds (a rebuild then never lets traffic escape unprotected).
+     */
+    private fun ensureTun(): ParcelFileDescriptor {
+        tun?.let { return it }
+        val created = establish()
+        tun = created
+        applyUnderlyingNetwork()
+        return created
+    }
+
+    private fun closeTun() {
+        runCatching { tun?.close() }
+        tun = null
+    }
+
+    /**
+     * Tells Android which network the tunnel rides on — the same call the official
+     * WireGuard client makes. Without it the VPN keeps the underlying network it
+     * was established with, so a WiFi -> mobile-data handover is not applied.
+     */
+    private fun applyUnderlyingNetwork() {
+        val net = networkMonitor?.underlyingNetwork()
+        val label = net?.let { networkMonitor?.describe(it) } ?: "null"
+        val ok = runCatching {
+            setUnderlyingNetworks(if (net != null) arrayOf(net) else null)
+        }.getOrDefault(false)
+        DiagnosticsLog.log("vpn: setUnderlyingNetworks($label) -> $ok")
+    }
+
+    /**
+     * Opens the Go client on a fresh socket. A rebuild stops the client first, so
+     * the bind can still be settling: retry once instead of failing the pass.
+     */
+    private fun connectClient(port: Int, sockFd: Int, tcp: Boolean) {
+        repeat(2) { attempt ->
+            try {
+                Mobile.connect(
+                    runHost, port.toLong(), HY_PASSWORD, HY_OBFS_PASSWORD,
+                    sockFd.toLong(), tcp, HY_UP_KBPS.toLong(), HY_DOWN_KBPS.toLong(),
+                )
+                return
+            } catch (e: Exception) {
+                if (e.message?.contains("already running") == true && attempt == 0) {
+                    DiagnosticsLog.warn("client still stopping after transport teardown -> retry in ${CLIENT_RESTART_WAIT_MS}ms")
+                    runCatching { Mobile.stop() }
+                    Thread.sleep(CLIENT_RESTART_WAIT_MS)
+                } else {
+                    throw e
+                }
+            }
+        }
     }
 
     /** Notifies the UI layer that the tunnel is really up (clears fake state). */
@@ -330,6 +467,7 @@ class HysteriaVpnService : VpnService() {
         networkMonitor?.stop()
         networkMonitor = null
         probeThread = null
+        closeTun()
         runCatching { stopForeground(Service.STOP_FOREGROUND_REMOVE) }
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: service onDestroy -> Mobile.stop()")
         // Ask the Go client to stop; Start() (blocked on another thread) returns.
@@ -362,10 +500,11 @@ class HysteriaVpnService : VpnService() {
                 }
                 DiagnosticsLog.log(
                     "probe#$tick transport=${DiagnosticsLog.transport} tunnelUp=${DiagnosticsLog.tunnelUp} " +
-                        "relayConnected=${DiagnosticsLog.relayConnected} rx=${DiagnosticsLog.relayRxBytes}B " +
-                        "tx=${DiagnosticsLog.relayTxBytes}B lastRx=" +
+                        "wgRelayConnected=${DiagnosticsLog.relayConnected} wgRelayRx=${DiagnosticsLog.relayRxBytes}B " +
+                        "wgRelayTx=${DiagnosticsLog.relayTxBytes}B lastRx=" +
                         (if (rxSilenceSec >= 0) "${rxSilenceSec}s ago" else "never") +
-                        " | " + (networkMonitor?.snapshot() ?: "net=?"),
+                        " outer=${DiagnosticsLog.outerLocal}/${DiagnosticsLog.outerProtected} " +
+                        "| " + (networkMonitor?.snapshot() ?: "net=?"),
                 )
                 if (DiagnosticsLog.tunnelUp && rxSilenceSec > RELAY_SILENCE_WARN_SEC) {
                     DiagnosticsLog.warn(
@@ -373,7 +512,9 @@ class HysteriaVpnService : VpnService() {
                             "(stale transport after a network change?)",
                     )
                 }
+                DiagnosticsLog.log("probe#$tick vpn underlying=${underlyingSummary()}")
                 probeRelayReachable()
+                probeThroughTunnel()
             }
         }.apply { isDaemon = true; name = "vpn-diagnostics-probe" }.also { it.start() }
     }
@@ -401,6 +542,111 @@ class HysteriaVpnService : VpnService() {
         )
     }
 
+    /**
+     * Real end-to-end check through the tunnel. A bare TCP connect proves nothing
+     * here: the tunnel's userspace TCP stack answers the SYN locally, so a connect
+     * to a remote host returns ok=true in ~1ms even when the transport is dead
+     * (observed on device, 1.2.5). So we write a real HTTP request and require
+     * response bytes, and (separately) send a real DNS query — a dead transport
+     * leaves the request unanswered until the read timeout expires.
+     */
+    private fun probeThroughTunnel() {
+        val started = System.currentTimeMillis()
+        val http = try {
+            java.net.Socket().use { s ->
+                s.connect(java.net.InetSocketAddress("1.1.1.1", 80), 4000)
+                s.soTimeout = 6000
+                s.getOutputStream().apply {
+                    write("GET / HTTP/1.0\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n".toByteArray())
+                    flush()
+                }
+                val buf = ByteArray(32)
+                val n = s.getInputStream().read(buf)
+                if (n > 0) "ok=${String(buf, 0, n).lineSequence().first().trim()}" else "eof"
+            }
+        } catch (e: Exception) {
+            "FAIL ${e.javaClass.simpleName}: ${e.message}"
+        }
+        DiagnosticsLog.log(
+            "probe: THROUGH TUNNEL http 1.1.1.1:80 $http in ${System.currentTimeMillis() - started}ms",
+        )
+        val dnsStart = System.currentTimeMillis()
+        val dns = dnsThroughTunnel("example.com")
+        DiagnosticsLog.log(
+            "probe: THROUGH TUNNEL dns 1.1.1.1:53 $dns in ${System.currentTimeMillis() - dnsStart}ms",
+        )
+    }
+
+    /** Sends a real A query through the tunnel and reports the answer. */
+    private fun dnsThroughTunnel(host: String): String = try {
+        java.net.DatagramSocket().use { ds ->
+            ds.soTimeout = 4000
+            val query = buildDnsQuery(host)
+            ds.send(
+                java.net.DatagramPacket(
+                    query, query.size, java.net.InetAddress.getByName("1.1.1.1"), 53,
+                ),
+            )
+            val buf = ByteArray(512)
+            val resp = java.net.DatagramPacket(buf, buf.size)
+            ds.receive(resp)
+            val answers = ((buf[6].toInt() and 0xff) shl 8) or (buf[7].toInt() and 0xff)
+            "answers=$answers ${firstARecord(buf, resp.length)}"
+        }
+    } catch (e: Exception) {
+        "FAIL ${e.javaClass.simpleName}: ${e.message}"
+    }
+
+    private fun buildDnsQuery(host: String): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        out.write(byteArrayOf(0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0))
+        for (label in host.split('.')) {
+            out.write(label.length)
+            out.write(label.toByteArray())
+        }
+        out.write(0)
+        out.write(byteArrayOf(0x00, 0x01, 0x00, 0x01)) // A, IN
+        return out.toByteArray()
+    }
+
+    /** Walks the answer section of a single-question response and prints the A record. */
+    private fun firstARecord(buf: ByteArray, len: Int): String {
+        var i = 12
+        while (i < len && buf[i].toInt() != 0) { // skip QNAME labels
+            if (buf[i].toInt() and 0xc0 == 0xc0) { i += 2; break }
+            i += (buf[i].toInt() and 0xff) + 1
+        }
+        if (i < len && buf[i].toInt() == 0) i++
+        i += 4 // qtype + qclass
+        if (i + 12 > len) return "no-answer-record"
+        i += 2 // name pointer
+        val type = ((buf[i].toInt() and 0xff) shl 8) or (buf[i + 1].toInt() and 0xff)
+        i += 8 // type + class + ttl
+        val rdlen = ((buf[i].toInt() and 0xff) shl 8) or (buf[i + 1].toInt() and 0xff)
+        i += 2
+        if (type != 1 || rdlen != 4 || i + 4 > len) return "type=$type"
+        return "ip=${buf[i].toInt() and 0xff}.${buf[i + 1].toInt() and 0xff}." +
+            "${buf[i + 2].toInt() and 0xff}.${buf[i + 3].toInt() and 0xff}"
+    }
+
+    /** Which network Android currently treats as the tunnel's underlying transport. */
+    private fun underlyingSummary(): String {
+        val net = networkMonitor?.underlyingNetwork()
+        return "underlying=" + (net?.let { networkMonitor?.describe(it) } ?: "none")
+    }
+
+    private fun safeAddr(socket: java.net.Socket): String =
+        runCatching { socket.localSocketAddress?.toString() ?: "-" }.getOrDefault("-")
+
+    private fun safeRemote(socket: java.net.Socket): String =
+        runCatching { socket.remoteSocketAddress?.toString() ?: "-" }.getOrDefault("-")
+
+    private fun safeAddr(socket: java.net.DatagramSocket): String =
+        runCatching {
+            val a = socket.localSocketAddress as? java.net.InetSocketAddress
+            if (a == null || a.isUnresolved) "unbound" else "${a.address?.hostAddress}:${a.port}"
+        }.getOrDefault("-")
+
     companion object {
         /** Probe cadence: frequent enough to catch a handover, cheap enough to keep. */
         const val PROBE_INTERVAL_MS = 15_000L
@@ -409,6 +655,10 @@ class HysteriaVpnService : VpnService() {
         const val TCP_CONNECT_TIMEOUT_MS = 2500
         const val RETRY_BACKOFF_START_MS = 3000L
         const val RETRY_BACKOFF_MAX_MS = 30000L
+        /** Pause after a transport teardown so the Go client releases its socket. */
+        const val REBUILD_SETTLE_MS = 700L
+        /** Wait before retrying a connect that hit "already running". */
+        const val CLIENT_RESTART_WAIT_MS = 800L
         const val NOTIF_ID = 4242
         const val CHANNEL_ID = "vpn_foreground"
         const val PREFS = "vpnflow_hysteria"
