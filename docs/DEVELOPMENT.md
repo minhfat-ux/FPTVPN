@@ -35,6 +35,26 @@ Targets:
 
 - `PrivateVPN` — iOS app
 - `PrivateVPNPacketTunnel` — Packet Tunnel Provider extension (embedded)
+- `PrivateVPNMac` / `PrivateVPNMacPacketTunnel` — bản macOS
+
+⚠️ **Hai target tunnel dùng CHUNG `iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift`**
+(`project.yml` khai file này cho cả iOS và macOS), nhưng target iOS khai **cả thư mục**
+(`sources: - iOS/PrivateVPNPacketTunnel`) còn target macOS chỉ khai **đúng file provider**
+(`project.yml:248`). Vì vậy khi thêm file `.swift` mới vào thư mục tunnel mà quên khai cho
+macOS thì **iOS vẫn build được, macOS build đứt** — lỗi kiểu `cannot find type 'X' in scope`
+trong `PacketTunnelProvider.swift`. Đã gặp thật 13/09/2026 với `WGRelayClient.swift` +
+`RelayDiagnostics.swift`.
+
+Kiểm tra nhanh sau khi thêm file vào tunnel:
+
+```bash
+xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN    -configuration Release -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPNMac -configuration Release -destination 'generic/platform=macOS'         CODE_SIGNING_ALLOWED=NO build
+```
+
+Lưu ý khi kiểm tra: build trong worktree đang có WIP của agent khác có thể đứt vì lý do không
+phải của mình — muốn biết **bản đã commit** có build được không thì tạo worktree sạch
+(`git worktree add /tmp/clean <commit>` → `xcodegen generate` → build).
 
 ## 4. Code conventions
 
