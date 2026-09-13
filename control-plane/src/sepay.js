@@ -84,6 +84,21 @@ export function isIncomingTransfer(payload) {
   return type === "" || type === "in";
 }
 
+/** Mã đơn của mình sinh bằng `Math.floor(Date.now()/1000)` ⇒ luôn 10 chữ số. */
+const ORDER_CODE_DIGITS = 10;
+
+/**
+ * Chuẩn hoá nhóm số vừa tách được thành mã đơn.
+ *
+ * Khi nội dung **không có dấu phân cách** (vietqr.app bỏ gạch), token gói có thể dính ngay sau mã
+ * đơn và bắt đầu bằng số — ví dụ `MEETFLOW178931966430NG` (mã đơn 1789319664 + gói 30NG). Lấy cả
+ * nhóm sẽ ra 178931966430 ⇒ sai. Vì mã đơn luôn 10 chữ số nên cắt đúng 10 số đầu.
+ */
+export function normalizeOrderCode(digits) {
+  const raw = String(digits ?? "").replace(/\D/g, "");
+  return raw.length > ORDER_CODE_DIGITS ? Number(raw.slice(0, ORDER_CODE_DIGITS)) : Number(raw);
+}
+
 /** Tiền tố trong nội dung chuyển khoản (do VietQR tag 62 sinh ra) → sản phẩm. */
 export const ORDER_REF_PREFIXES = { VPNFLOW: "vpn", MEETFLOW: "ai", FLOWVPN: "vpn" };
 
@@ -99,10 +114,12 @@ export const ORDER_REF_PREFIXES = { VPNFLOW: "vpn", MEETFLOW: "ai", FLOWVPN: "vp
 export function extractOrderRef({ code, content } = {}) {
   const fields = [String(code ?? ""), String(content ?? "")];
   for (const field of fields) {
-    const matched = field.match(/\b(VPNFLOW|MEETFLOW|FLOWVPN)[\s\-_#]*(\d{3,12})\b/i);
+    // Không có `\b` ở cuối: vietqr.app bỏ dấu gạch nên nội dung có thể là
+    // "VPNFLOW1789319664NAM" — số dính liền chữ, `\b` sẽ không khớp.
+    const matched = field.match(/\b(VPNFLOW|MEETFLOW|FLOWVPN)[\s\-_#]*(\d{3,12})/i);
     if (matched) {
       return {
-        orderCode: Number(matched[2]),
+        orderCode: normalizeOrderCode(matched[2]),
         product: ORDER_REF_PREFIXES[matched[1].toUpperCase()] ?? null,
         via: matched[1].toUpperCase(),
       };
@@ -111,11 +128,11 @@ export function extractOrderRef({ code, content } = {}) {
 
   // SePay đã tách đúng mã đơn vào `code` (cấu hình "mã thanh toán" chỉ là số)
   const digitsInCode = String(code ?? "").trim().match(/^(\d{3,12})$/);
-  if (digitsInCode) return { orderCode: Number(digitsInCode[1]), product: null, via: "code" };
+  if (digitsInCode) return { orderCode: normalizeOrderCode(digitsInCode[1]), product: null, via: "code" };
 
-  // Khách gõ tay: lấy nhóm số dài nhất trong nội dung
-  const inContent = String(content ?? "").match(/\b(\d{5,12})\b/);
-  if (inContent) return { orderCode: Number(inContent[1]), product: null, via: "content" };
+  // Khách gõ tay: lấy nhóm số trong nội dung (số có thể dính liền chữ, ví dụ "…1789319664NAM")
+  const inContent = String(content ?? "").match(/(?<!\d)(\d{5,12})(?!\d)/);
+  if (inContent) return { orderCode: normalizeOrderCode(inContent[1]), product: null, via: "content" };
 
   return { orderCode: null, product: null, via: null };
 }

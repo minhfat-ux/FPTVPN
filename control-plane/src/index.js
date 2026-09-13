@@ -76,6 +76,7 @@ import {
   createPayosPaymentLink,
   createBankQrDataUrl,
   bankQrConfig,
+  bankQrImageUrl,
   verifyPayosWebhook,
   pickBuyLang,
   momoQrConfig,
@@ -84,6 +85,7 @@ import {
   vndPerUsd,
   cnyFromVnd,
   planNameFor,
+  transferNote,
 } from "./payments.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -764,7 +766,14 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       amount: planCfg.amount,
       orderCode,
     });
-    return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+    const qrImageUrl = bankQrImageUrl({
+      amount: planCfg.amount,
+      note: transferNote({ orderCode, plan, product: "ai" }),
+      account: bank.accountNumber,
+      holder: bank.accountName,
+      store: process.env.BANK_QR_STORE_AI || "MeetFlow AI",
+    });
+    return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
   } catch (err) {
     console.error("POST /v1/ai/payments/create failed:", err);
     res.status(500).json({ code: "internal", error: "Internal error" });
@@ -1697,7 +1706,15 @@ app.post("/v1/payments/create", async (req, res) => {
         amount: planCfg.amount,
         orderCode,
       });
-      return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+      // Ảnh QR của SePay/vietqr.app (số tiền + nội dung điền sẵn) — trang buy ưu tiên ảnh này,
+      // tự rơi về `qrDataUrl` sinh tại chỗ nếu ảnh không tải được (mạng TQ hay chặn dịch vụ ngoài).
+      const qrImageUrl = bankQrImageUrl({
+        amount: planCfg.amount,
+        note: transferNote({ orderCode, plan, product: "vpn" }),
+        account: bank.accountNumber,
+        holder: bank.accountName,
+      });
+      return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
     }
 
     if (method === "momo") {

@@ -122,3 +122,18 @@ test("token trong URL (dự phòng cho chế độ 'không xác thực' của Se
   assert.equal(verifySepayUrlToken({ token: "", urlToken: "tok_abc123" }), false);
   assert.equal(verifySepayUrlToken({ token: "tok_abc123", urlToken: "" }), false, "chưa cấu hình ⇒ không nhận");
 });
+
+test("nội dung KHÔNG có dấu gạch (vietqr.app bỏ gạch) vẫn đọc được mã đơn", () => {
+  // vietqr.app đặt nội dung vào tag 62/08 và bỏ dấu gạch: VPNFLOW-1789319664-NAM → VPNFLOW1789319664NAM
+  assert.deepEqual(extractOrderRef({ content: "VPNFLOW1789319664NAM" }), {
+    orderCode: 1789319664,
+    product: "vpn",
+    via: "VPNFLOW",
+  });
+  assert.equal(extractOrderRef({ content: "MEETFLOW178931966430NG" }).orderCode, 1789319664);
+  assert.equal(extractOrderRef({ content: "MEETFLOW178931966430NG" }).product, "ai");
+  // nội dung ngân hàng hay chèn số tài khoản vào trước — phải lấy mã đơn có tiền tố, không lấy số TK
+  assert.equal(extractOrderRef({ content: "CT DEN 57222538888 VPNFLOW1789319664NAM" }).orderCode, 1789319664);
+  // không có tiền tố: vẫn lấy được nhóm số dính chữ
+  assert.equal(extractOrderRef({ content: "chuyen tien 1789319664 nhe" }).orderCode, 1789319664);
+});

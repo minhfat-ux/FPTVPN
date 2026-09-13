@@ -29,6 +29,8 @@ const SECRET = process.env.SEPAY_SECRET || flag("secret");
 const CODE = flag("code", "999999");
 const AMOUNT = Number(flag("amount", "200000"));
 const PREFIX = flag("prefix", "VPNFLOW");
+// --plain: nội dung KHÔNG dấu gạch, đúng dạng vietqr.app sinh ra (VPNFLOW1789319664THANG)
+const PLAIN = args.includes("--plain");
 
 if (!SECRET) {
   console.error("Thiếu secret: đặt SEPAY_SECRET=… hoặc --secret …");
@@ -41,8 +43,8 @@ const payload = (transferType = "in", amount = AMOUNT) => JSON.stringify({
   transactionDate: new Date().toISOString().slice(0, 19).replace("T", " "),
   accountNumber: "57222538888",
   subAccount: null,
-  code: `${PREFIX}-${CODE}`,
-  content: `${PREFIX}-${CODE} thanh toan don hang`,
+  code: PLAIN ? `${PREFIX}${CODE}` : `${PREFIX}-${CODE}`,
+  content: PLAIN ? `${PREFIX}${CODE}THANG` : `${PREFIX}-${CODE} thanh toan don hang`,
   transferType,
   description: "SePay selftest",
   transferAmount: amount,

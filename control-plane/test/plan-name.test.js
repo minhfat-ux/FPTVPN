@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planNameFor, transferNote } from "../src/payments.js";
+import { bankQrImageUrl, planNameFor, transferNote } from "../src/payments.js";
 import { renderInvoiceEmail } from "../src/mailer.js";
 import { extractOrderRef } from "../src/sepay.js";
 
@@ -76,4 +76,25 @@ test("nội dung CK mới vẫn đọc được mã đơn bằng bộ tách củ
   assert.equal(extractOrderRef({ content: memo }).product, "vpn");
   // ngân hàng cắt mất phần tên gói ⇒ vẫn khớp đơn
   assert.equal(extractOrderRef({ content: "VPNFLOW-1789318130" }).orderCode, 1789318130);
+});
+
+test("URL ảnh QR SePay/vietqr.app có số tiền + nội dung CK, đúng tham số", () => {
+  const url = bankQrImageUrl({
+    amount: 200000,
+    note: transferNote({ orderCode: 1789319664, plan: "monthly", product: "vpn" }),
+    account: "57222538888",
+    holder: "NGUYEN BINH MINH",
+  });
+  const u = new URL(url);
+  assert.equal(u.origin + u.pathname, "https://vietqr.app/img");
+  assert.equal(u.searchParams.get("bank"), "TPBank");
+  assert.equal(u.searchParams.get("acc"), "57222538888");
+  assert.equal(u.searchParams.get("amount"), "200000");
+  assert.equal(u.searchParams.get("des"), "1789319664-THANG");
+  assert.equal(u.searchParams.get("holder"), "NGUYEN BINH MINH");
+  assert.equal(u.searchParams.get("store"), "VPNFlow Purchasing");
+  assert.equal(u.searchParams.get("showinfo"), "true");
+  assert.equal(u.searchParams.get("fullacc"), "true");
+  // khoảng trắng phải được encode để URL còn hợp lệ
+  assert.ok(!url.includes(" "), "URL còn khoảng trắng chưa encode");
 });

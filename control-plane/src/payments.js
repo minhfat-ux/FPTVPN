@@ -105,6 +105,39 @@ function payosSignature({ checksumKey, orderCode, amount, description, cancelUrl
 }
 
 /**
+ * Ảnh QR chuyển khoản lấy từ vietqr.app (SePay dùng chính dịch vụ này) — ảnh "standee" có sẵn
+ * branding ngân hàng, số tiền và nội dung CK điền sẵn.
+ *
+ * Lưu ý khi đối chiếu với QR tự sinh (`buildVietQRPayload`):
+ *  - vietqr.app đặt nội dung ở tag 62 **subfield 08** (purpose) và **bỏ dấu gạch**:
+ *    `VPNFLOW-1789319664-NAM` → `VPNFLOW1789319664NAM` (bộ tách mã đơn đã chấp nhận cả hai dạng).
+ *  - Không có tag 59 (tên người nhận) trong payload; app ngân hàng tự tra tên theo BIN + số tài khoản.
+ * Vì vậy trang buy hiển thị ảnh này và **tự rơi về QR sinh tại chỗ** nếu ảnh không tải được.
+ */
+export function bankQrImageUrl({
+  amount,
+  note = "",
+  account,
+  holder = "",
+  bank = process.env.BANK_QR_BANK_NAME || "TPBank",
+  store = process.env.BANK_QR_STORE || "VPNFlow Purchasing",
+  template = process.env.BANK_QR_TEMPLATE || "standee",
+} = {}) {
+  const base = (process.env.VIETQR_IMG_BASE || "https://vietqr.app/img").replace(/\/$/, "");
+  const params = new URLSearchParams();
+  params.set("bank", bank);
+  params.set("acc", String(account ?? ""));
+  params.set("template", template);
+  if (amount) params.set("amount", String(Math.round(Number(amount))));
+  if (note) params.set("des", String(note).slice(0, 25));
+  if (holder) params.set("holder", holder);
+  if (store) params.set("store", store);
+  params.set("showinfo", "true");
+  params.set("fullacc", "true");
+  return `${base}?${params.toString()}`;
+}
+
+/**
  * Token gói hàng ngắn để in vào NỘI DUNG CHUYỂN KHOẢN (không dấu, tối đa 5 ký tự).
  *
  * Ngân hàng cắt nội dung khá ngắn (EMVCo cho field 62/01 tối đa 25 ký tự) nên mã đơn phải đứng
@@ -1522,9 +1555,24 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         if (data.qrDataUrl || data.qrImageUrl) {
           statusEl.className = "status";
           statusEl.textContent = "";
-          // data.qrImageUrl already carries ?plan=…&cny=… so the server can
-          // serve the amount-specific QR image when one exists.
-          qrImg.src = data.qrDataUrl || (base + data.qrImageUrl);
+          // Ví QR ưu tiên ảnh của SePay/vietqr.app (bankqr: đã điền số tiền + nội dung CK,
+          // có branding ngân hàng). Nếu ảnh ngoài không tải được — mạng chặn dịch vụ ngoài,
+          // ví dụ từ Trung Quốc — thì tự rơi về QR sinh tại chỗ để khách vẫn trả được tiền.
+          const remoteQr = /^https?:/i.test(String(data.qrImageUrl || ""))
+            ? data.qrImageUrl
+            : (data.qrImageUrl ? base + data.qrImageUrl : "");
+          const localQr = data.qrDataUrl || "";
+          if (remoteQr && localQr) {
+            let swapped = false;
+            const useLocal = () => { if (!swapped) { swapped = true; qrImg.onerror = null; qrImg.onload = null; qrImg.src = localQr; } };
+            qrImg.onerror = useLocal;
+            qrImg.onload = () => clearTimeout(guardTimer);
+            const guardTimer = setTimeout(() => { if (!qrImg.complete || qrImg.naturalWidth === 0) useLocal(); }, 4000);
+            qrImg.src = remoteQr;
+          } else {
+            qrImg.onerror = null;
+            qrImg.src = remoteQr || localQr;
+          }
           const methodIsCny = CNY_METHODS.indexOf(data.method) !== -1;
           if (methodIsCny) {
             // The customer types this into WeChat/Alipay, so lead with ¥ and let
