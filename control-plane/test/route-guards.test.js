@@ -21,7 +21,21 @@ const REQUIRED_IN_INDEX = [
   ["route đổi ngưỡng kênh Android", "/v1/admin/android-version"],
   ["payload version theo kênh client", "versionPayloadFor(req"],
   ["nhãn gói bản địa hoá trong hoá đơn", "planNameFor(pickMailLang(lang)"],
+  ["cờ QR tự chứa số tiền + nội dung", "selfContained: true"],
 ];
+
+const paymentsSource = fs.readFileSync(path.join(here, "../src/payments.js"), "utf8");
+const REQUIRED_IN_PAYMENTS = [
+  ["ẩn phần copy khi QR đã có số tiền + nội dung", "const selfContained = data.selfContained === true"],
+  ["khai báo qrAmtRemind", 'const qrAmtRemind = document.getElementById("qrAmtRemind")'],
+  ["ảnh QR SePay/vietqr.app", "export function bankQrImageUrl"],
+];
+
+for (const [name, needle] of REQUIRED_IN_PAYMENTS) {
+  test(`payments.js còn giữ: ${name}`, () => {
+    assert.ok(paymentsSource.includes(needle), `MẤT "${needle}" trong control-plane/src/payments.js`);
+  });
+}
 
 for (const [name, needle] of REQUIRED_IN_INDEX) {
   test(`index.js còn giữ: ${name}`, () => {

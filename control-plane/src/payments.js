@@ -1440,6 +1440,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     const qrHint = document.getElementById("qrHint");
     const qrStatus = document.getElementById("qrStatus");
     const qrAmtSub = document.getElementById("qrAmtSub");
+    const qrAmtRemind = document.getElementById("qrAmtRemind");
     const qrPlan = document.getElementById("qrPlan");
     applyCnyMode();
     const qrSaveBtn = document.getElementById("qrSaveBtn");
@@ -1596,11 +1597,18 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
               : "≈ " + usdLabel(data.amount) + " · " + cnyLabel(data.amount);
             qrCopyBtn.dataset.amount = String(data.amount);
           }
+          // QR đã mang sẵn SỐ TIỀN và NỘI DUNG (bankqr qua VietQR/SePay, MoMo động) ⇒ khách
+          // không phải copy gì: chỉ để lại QR + tên gói + số tiền. Các kênh còn lại
+          // (WeChat/Alipay dùng ảnh tĩnh) vẫn hiện số tiền + mã đơn để khách nhập tay.
+          const selfContained = data.selfContained === true;
+          [qrCopyBtn, qrCopyOrderBtn, qrOrder, qrOrderHint, qrAmtRemind].forEach((el) => {
+            if (el) el.style.display = selfContained ? "none" : "";
+          });
           qrOrder.textContent = T.orderPrefix + data.orderCode;
           // Same reference string the bank QR embeds, so the shop can match it.
           const orderRef = REF_PREFIX + "-" + data.orderCode;
           qrCopyOrderBtn.dataset.ref = orderRef;
-          qrOrderHint.innerHTML = T.orderNoteHint + " <b>" + orderRef + "</b>";
+          qrOrderHint.innerHTML = selfContained ? "" : (T.orderNoteHint + " <b>" + orderRef + "</b>");
           const labels = {
             bankqr: T.hints.bankqr,
             wechat: T.hints.wechat,

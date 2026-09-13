@@ -729,7 +729,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
           amount: planCfg.amount,
           orderCode,
         });
-        return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "momo" });
+        return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "momo", selfContained: true });
       }
       return res.json({ qrImageUrl: "/v1/ai/payments/qr/momo", orderCode, amount: planCfg.amount, method: "momo" });
     }
@@ -773,7 +773,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       holder: bank.accountName,
       store: process.env.BANK_QR_STORE_AI || "MeetFlow AI",
     });
-    return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+    return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr", selfContained: true });
   } catch (err) {
     console.error("POST /v1/ai/payments/create failed:", err);
     res.status(500).json({ code: "internal", error: "Internal error" });
@@ -1716,7 +1716,7 @@ app.post("/v1/payments/create", async (req, res) => {
         account: bank.accountNumber,
         holder: bank.accountName,
       });
-      return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+      return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr", selfContained: true });
     }
 
     if (method === "momo") {
@@ -1733,7 +1733,7 @@ app.post("/v1/payments/create", async (req, res) => {
           amount: planCfg.amount,
           orderCode,
         });
-        return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "momo" });
+        return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "momo", selfContained: true });
       }
       // Fallback: static collection image (customer types the amount).
       return res.json({ qrImageUrl: "/v1/payments/qr/momo", orderCode, amount: planCfg.amount, method: "momo" });
