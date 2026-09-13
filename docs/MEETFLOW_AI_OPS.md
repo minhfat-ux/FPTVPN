@@ -545,6 +545,37 @@ https://api.meetflowai.site/v1/payments/sepay-webhook
   `content` (bộ tách `sepay.js` khớp cả khi có/không có token gói).
 - Tài khoản ngân hàng phải là tài khoản đã nối với SePay (`BANK_QR_ACCOUNT`, hiện TPBank `57222538888`).
 
+### Trang buy hiển thị QR của SePay (vietqr.app) + tự lùi về QR sinh tại chỗ
+
+`/v1/payments/create` (và `/v1/ai/payments/create`) trả thêm `qrImageUrl` cho phương thức `bankqr`:
+ảnh QR dựng bởi **vietqr.app** (dịch vụ SePay dùng) với số tiền + nội dung CK điền sẵn, có branding
+ngân hàng (`template=standee`). Trang buy **ưu tiên ảnh này**; nếu ảnh ngoài không tải được (mạng
+chặn dịch vụ ngoài, ví dụ từ Trung Quốc) thì tự rơi về `qrDataUrl` sinh tại chỗ nên khách vẫn trả được.
+
+```bash
+# xem URL ảnh + giải mã payload để chắc chắn có số tiền và nội dung
+curl -s -X POST -H 'content-type: application/json'   -d '{"email":"<email>","plan":"monthly","method":"bankqr","lang":"vi"}'   https://api.meetflowai.site/v1/payments/create | python3 -c 'import json,sys;print(json.load(sys.stdin)["qrImageUrl"])'
+```
+
+⚠️ Khác biệt của vietqr.app so với QR tự sinh (đã xử lý trong code):
+| | QR tự sinh (`vietqr.js`) | QR vietqr.app |
+|---|---|---|
+| Nội dung CK | tag 62 **subfield 01** | tag 62 **subfield 08**, và **bỏ dấu gạch**: `VPNFLOW-<mã đơn>-THANG` → `VPNFLOW< mã đơn>THANG` |
+| Tên người nhận | có (tag 59) | không có trong payload (app ngân hàng tự tra theo BIN + STK) |
+
+Bộ tách mã đơn (`sepay.js`) nhận **cả hai dạng** (có/không gạch) và cắt đúng 10 chữ số của mã đơn
+(mã đơn là epoch giây) để không lẫn token gói dính sau (`MEETFLOW178931966430NG`).
+
+### Xác nhận tiền về ⇒ tự kích hoạt, và **CỘNG DỒN** nếu gói cũ chưa hết hạn
+
+Khi webhook báo có tiền đúng mã đơn + đủ tiền, backend tự kích hoạt gói tương ứng. Nếu tài khoản
+**vẫn còn hạn**, thời gian mới được **cộng dồn** vào hạn cũ (không tính lại từ hôm nay); nếu đã hết
+hạn thì tính từ hôm nay. MeetFlow AI đã làm đúng như vậy từ trước, nay VPNFlow đồng nhất
+(`auth-store.grantSubscription`).
+
+Đã test thật 14/09/2026 qua chính webhook SePay: mua gói tháng lần 1 → hạn `13/10`, mua tiếp lần 2 →
+hạn `12/11` (cộng dồn 30 ngày) — nội dung CK trong test đúng dạng vietqr.app sinh ra (`VPNFLOW< mã đơn>THANG`).
+
 ### Quy tắc an toàn đã cài (test thật 14/09/2026)
 
 | Tình huống | Hành vi |
