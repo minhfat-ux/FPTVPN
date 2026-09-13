@@ -420,6 +420,48 @@ curl -X PATCH https://api.meetflowai.site/v1/admin/ai/app-version \
 - App tự kiểm tra lại khi quay về foreground nên màn hình chặn tự mất sau khi cài xong.
 - Xem giá trị đang phát: `GET /v1/ai/app-version` (công khai).
 
+### VPNFlow — kênh APK sideload (KHÁC kênh iOS, dùng chung `/v1/app-version`)
+
+VPNFlow có **hai kênh phát hành**: iOS/macOS qua App Store, Android qua APK sideload
+(`meetflowai.site/v1/downloads/android`). Trước đây cả hai dùng chung một câu trả lời nên
+kênh Android bị **rỗng `store_url` ⇒ nút "Cập nhật" bấm không mở gì**. Nay server trả lời
+theo **đúng kênh của client**:
+
+| Client | Nhận được |
+|---|---|
+| iPhone/macOS (`CFNetwork/Darwin`) | `{platform:"ios", minimum_version, latest_version, store_url}` — như cũ |
+| Android (`okhttp/*`, hoặc `?platform=android`) | `{platform:"android", minimum_version, latest_version, apk_url, store_url}` — `store_url` **bằng** `apk_url` |
+
+Cách nhận kênh: ưu tiên `?platform=android|ios` (bản ≥ 1.2.6 gửi kèm), nếu không có thì suy từ
+User-Agent — nhờ vậy **bản đã cài sẵn (≤ 1.2.4) cũng nhận đúng link APK**, không cần build lại.
+
+```bash
+# Xem ngưỡng ép cập nhật của kênh Android
+curl -s "https://api.meetflowai.site/v1/app-version?platform=android"
+curl -s -H "Authorization: Bearer $AUTH_TOKEN" https://api.meetflowai.site/v1/admin/android-version
+
+# Bắt buộc mọi bản cũ cài lại bản mới (minimum = latest)
+curl -X PATCH https://api.meetflowai.site/v1/admin/android-version \
+  -H "Authorization: Bearer $AUTH_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"latest_version":"1.2.6","minimum_version":"1.2.6"}'
+```
+
+Phát hành APK mới (kênh web/sideload, branch `main`):
+
+```bash
+cd android && ./gradlew -p . -Pandroid.buildDir=$HOME/.vpnflow-build \
+  :app:assembleModernRelease :app:assembleLegacyRelease     # ký bằng ~/keystores/vpnflow-signing.properties
+scp app/build/outputs/apk/modern/release/app-modern-release.apk root@VPS:/root/flowvpn-apk/VPNFlow-latest.apk
+scp app/build/outputs/apk/legacy/release/app-legacy-release.apk root@VPS:/root/flowvpn-apk/VPNFlow-android7.apk
+# rồi PATCH ngưỡng như trên — không cần build lại hay restart server
+```
+
+- `minimum_version` = bản mới ⇒ **bắt buộc** cài lại; thấp hơn `latest_version` ⇒ chỉ hiện ngưỡng
+  cần đạt, app vẫn chạy.
+- Nút *Tải/Cập nhật* mở `store_url` (Android luôn có link APK); bản ≥ 1.2.6 còn fallback về
+  `apk_url` rồi `https://api.meetflowai.site/v1/downloads/android` nếu cả hai rỗng.
+- Đổi ngưỡng **không cần deploy**: `app-config.db` trên VPS là nguồn sự thật.
+
 ## 5. Cấu hình thanh toán trên VPS (systemd drop-in)
 
 `/etc/systemd/system/flowvpn-cp.service.d/store-urls.conf`:

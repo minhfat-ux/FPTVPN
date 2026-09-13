@@ -45,6 +45,20 @@ class ModelsSerializationTest {
         assertEquals("Monthly_Premium", session.user.subscriptionStatus?.productId)
     }
 
+    @Test fun `parse android app version payload with apk_url`() {
+        val raw = """{"platform":"android","minimum_version":"1.2.6","latest_version":"1.2.6",
+            "apk_url":"https://meetflowai.site/v1/downloads/android",
+            "store_url":"https://meetflowai.site/v1/downloads/android"}"""
+        val info = json.decodeFromString<com.privatevpn.app.api.AppVersionInfo>(raw)
+        assertEquals("1.2.6", info.minimumVersion)
+        assertEquals("https://meetflowai.site/v1/downloads/android", info.apkUrl)
+        // payload cũ (không có apk_url) vẫn parse được
+        val old = json.decodeFromString<com.privatevpn.app.api.AppVersionInfo>(
+            """{"platform":"ios","minimum_version":"0.0.0","latest_version":"1.2.3","store_url":""}"""
+        )
+        assertEquals(null, old.apkUrl)
+    }
+
     @Test fun `exit node fallback contains working vn endpoints`() {
         val nodes = com.privatevpn.app.api.ExitNodeFallback.builtIn
         assertEquals(2, nodes.size)

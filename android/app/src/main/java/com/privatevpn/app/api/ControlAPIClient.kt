@@ -112,9 +112,14 @@ class ControlAPIClient(
         }
     }
 
-    /** Fetches the required/latest app version (force-update gate). */
+    /**
+     * Fetches the required/latest app version (force-update gate).
+     *
+     * `?platform=android` để server trả đúng kênh APK (`apk_url`), không lẫn link App Store
+     * của kênh iOS — hai kênh phát hành độc lập nhau.
+     */
     suspend fun fetchAppVersion(): AppVersionInfo {
-        val request = Request.Builder().url("$baseUrl/v1/app-version").get().build()
+        val request = Request.Builder().url("$baseUrl/v1/app-version?platform=android").get().build()
         val raw = execute(request, "app version")
         return json.decodeFromString(raw)
     }

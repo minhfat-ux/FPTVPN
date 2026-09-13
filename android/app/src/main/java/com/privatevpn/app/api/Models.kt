@@ -102,6 +102,8 @@ data class AppVersionInfo(
     @SerialName("minimum_version") val minimumVersion: String,
     @SerialName("latest_version") val latestVersion: String,
     @SerialName("store_url") val storeUrl: String,
+    /** Kênh Android (APK sideload): link tải APK — server cũng đặt `store_url` bằng link này. */
+    @SerialName("apk_url") val apkUrl: String? = null,
 )
 
 @Serializable

@@ -829,6 +829,23 @@ export function localizedPlanRows(lang, product = "vpn", options = {}) {
   });
 }
 
+/**
+ * Tên gói đã bản địa hoá, dùng cho hoá đơn email.
+ *
+ * `PLANS[id].label` là tiếng Anh và gắn cả giá ("Monthly (200,000 VND / 30 days)"), nên
+ * khách Việt/Trung trước đây nhận hoá đơn có tên gói tiếng Anh. Hoá đơn đã có dòng
+ * "Số tiền"/"Thời hạn" riêng, vì vậy ở đây chỉ cần ĐÚNG TÊN GÓI theo ngôn ngữ khách chọn,
+ * lấy cùng nguồn chữ với trang bán hàng (`localizedPlanRows`).
+ */
+export function planNameFor(lang, product, planId) {
+  const base = TEXTS[lang] || TEXTS.vi;
+  const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
+  const table = product === "ai" ? AI_PLANS : PLANS;
+  const plan = table[planId];
+  if (!plan) return "";
+  return t.planNames?.[planId] || plan.badge || planId;
+}
+
 /** Buy page HTML — dark theme, email + plan + method picker. */
 export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "" }) {
   lang = pickBuyLang(lang);

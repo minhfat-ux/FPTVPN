@@ -13,6 +13,7 @@ import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision } from "./device-limit.js";
+import { versionPayloadFor } from "./app-version.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
@@ -65,6 +66,7 @@ import {
   vndPerCny,
   vndPerUsd,
   cnyFromVnd,
+  planNameFor,
 } from "./payments.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1271,7 +1273,7 @@ app.post("/v1/admin/ai/users/:email/grant", requireAdminAuth, async (req, res) =
         await sendAiInvoiceEmail({
           to: email,
           orderCode: `ADMIN-${Date.now().toString().slice(-6)}`,
-          planLabel: AI_PLANS[plan].label,
+          planLabel: planNameFor(lang, "ai", plan),
           amount: 0,
           days,
           activatedAt: new Date().toISOString(),
@@ -1448,7 +1450,7 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
       const invoiceResult = await sendAiInvoiceEmail({
         to: email,
         orderCode,
-        planLabel: planCfg.label,
+        planLabel: planNameFor(pickMailLang(lang), "ai", plan),
         amount: planCfg.amount,
         days: planCfg.days,
         activatedAt: new Date().toISOString(),
@@ -1820,7 +1822,7 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
   const invoiceResult = await sendInvoiceEmail({
     to: email,
     orderCode,
-    planLabel: planCfg.label,
+    planLabel: planNameFor(pickMailLang(lang), "vpn", plan),
     amount: billedAmount,
     days: planCfg.days,
     activatedAt: new Date().toISOString(),
@@ -2133,13 +2135,30 @@ app.get("/v1/admin/nodes/:id/health", requireAdminAuth, async (req, res) => {
 // User administration (admin, Bearer AUTH_TOKEN): list users + subscription
 // status, grant a test subscription, revoke a user (kills their sessions).
 // App version (force-update): public for the apps, admin GET/PATCH to manage.
-app.get("/v1/app-version", (_req, res) => {
-  res.json({
-    platform: "ios",
-    minimum_version: appConfig.get("minimum_ios_version"),
-    latest_version: appConfig.get("latest_ios_version"),
-    store_url: appConfig.get("app_store_url"),
-  });
+// iOS (App Store) và Android (APK sideload) là hai kênh riêng — handler chọn kênh
+// theo `?platform=` rồi tới User-Agent, xem `app-version.js`.
+app.get("/v1/app-version", (req, res) => {
+  res.json(versionPayloadFor(req, { read: (key) => appConfig.get(key), baseUrl: siteBaseUrl() }));
+});
+
+/** Kênh phát hành Android (APK sideload) — admin xem/sửa ngưỡng ép cập nhật. */
+function vpnAndroidVersion() {
+  return versionPayloadFor(
+    { query: { platform: "android" } },
+    { read: (key) => appConfig.get(key), baseUrl: siteBaseUrl() },
+  );
+}
+
+app.get("/v1/admin/android-version", requireAdminAuth, (_req, res) => {
+  res.json(vpnAndroidVersion());
+});
+
+app.patch("/v1/admin/android-version", requireAdminAuth, (req, res) => {
+  const { latest_version, minimum_version, apk_url } = req.body ?? {};
+  if (latest_version !== undefined) appConfig.set("android_latest_version", latest_version);
+  if (minimum_version !== undefined) appConfig.set("android_minimum_version", minimum_version);
+  if (apk_url !== undefined) appConfig.set("android_apk_url", apk_url);
+  res.json(vpnAndroidVersion());
 });
 
 /** MeetFlow AI Android release channel (drives the in-app update gate). */

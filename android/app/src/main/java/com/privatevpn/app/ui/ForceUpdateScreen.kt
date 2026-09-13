@@ -23,7 +23,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.privatevpn.app.Config
 import com.privatevpn.app.api.AppVersionInfo
+import com.privatevpn.app.api.AppVersionService
 import com.privatevpn.app.l10n.LKey
 import com.privatevpn.app.l10n.LanguageStore
 import com.privatevpn.app.theme.VPNTheme
@@ -32,6 +34,12 @@ import com.privatevpn.app.theme.VPNTheme
 @Composable
 fun ForceUpdateScreen(info: AppVersionInfo, lang: LanguageStore) {
     val context = LocalContext.current
+    // Kênh Android: server trả apk_url (và store_url = apk_url). Vẫn có fallback phòng khi
+    // server chưa cấu hình — trước đây store_url rỗng làm nút bấm không mở gì.
+    val downloadUrl = AppVersionService.updateUrl(
+        info,
+        "${Config.CONTROL_PLANE_URL}/v1/downloads/android",
+    )
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -50,7 +58,7 @@ fun ForceUpdateScreen(info: AppVersionInfo, lang: LanguageStore) {
         Spacer(Modifier.height(24.dp))
         Button(
             onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.storeUrl))
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
                 ContextCompat.startActivity(context, intent, null)
             },
             shape = RoundedCornerShape(14.dp),
