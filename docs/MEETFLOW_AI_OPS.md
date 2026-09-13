@@ -436,22 +436,63 @@ Environment=PUBLIC_SITE_URL=https://meetflowai.site   # domain hiển thị tron
 ```
 Sau khi sửa: `systemctl daemon-reload && systemctl restart flowvpn-cp`.
 
-## 6. Email — chống vào Junk (QUAN TRỌNG)
+## 6. Email — chống vào Junk / Spam (QUAN TRỌNG)
 
-Hiện trạng DNS của `meetflowai.site`:
-- SPF: `v=spf1 include:spf.maychuemail.com ~all` ✅
-- DMARC: `v=DMARC1; p=none` ✅
-- **DKIM: chưa có** ❌ ← nguyên nhân chính khiến Hotmail/Outlook đẩy thư vào Junk
+### Chẩn đoán thật (13/09/2026, bằng `scripts/check-email-auth.sh`)
 
-Việc cần làm (một lần, phía nhà cung cấp mail):
-1. Vào trang quản trị mail (maychuemail.com / Mắt Bão) → bật **DKIM** cho `meetflowai.site`.
-2. Copy bản ghi TXT mà họ cung cấp (dạng `xxx._domainkey.meetflowai.site`) → thêm vào DNS.
-3. Kiểm tra: `dig +short TXT xxx._domainkey.meetflowai.site` phải trả về khoá công khai.
-4. Gửi thử tới Gmail/Hotmail, kiểm tra header `Authentication-Results: dkim=pass`.
+```
+SPF check:     pass          ✅  (include:spf.maychuemail.com)
+"iprev":       pass          ✅
+DKIM check:    permerror     ❌  key "dkim._domainkey.maychuemail.com" doesn't exist (NXDOMAIN)
+```
 
-Đã tối ưu sẵn trong code: có bản `text/plain` cho mọi email, `Reply-To: support@meetflowai.site`,
-From đúng thương hiệu theo sản phẩm, link dùng domain đẹp `meetflowai.site`.
-Log gửi thư ghi rõ `accepted=…`, `messageId=…`, `mailSent=true/false` để chẩn đoán nhanh.
+Nguyên nhân: máy chủ mail hiện tại **có ký DKIM nhưng ký bằng tên miền của họ**
+(`d=maychuemail.com`) và khoá công khai của selector đó **không tồn tại trong DNS**.
+Thư vì thế mang **chữ ký hỏng (permerror)** — với Gmail còn tệ hơn là không ký.
+Tên miền `meetflowai.site` hiện **chưa có DKIM** nào.
+
+DNS hiện tại: NS ở **PA Vietnam** (`ns1.pavietnam.vn`), MX `mail92231.maychuemail.com`,
+DMARC đang là `v=DMARC1; p=none` (không có `rua=` nên không nhận báo cáo).
+
+### Cách xử lý
+
+**Cách A — gửi qua Resend (khuyến nghị, code đã sẵn sàng)**
+
+1. [resend.com](https://resend.com/docs/add-a-domain) → *Add domain* = `meetflowai.site`
+2. Thêm các bản ghi DNS Resend cung cấp vào **PA Vietnam** (DKIM `resend._domainkey` + MX/TXT cho subdomain `send`)
+3. Bấm **Verify** trong Resend
+4. Trên VPS: thêm `Environment=RESEND_API_KEY=re_...` vào systemd drop-in → `systemctl daemon-reload && systemctl restart flowvpn-cp`
+5. Kiểm tra: `scripts/check-email-auth.sh` → phải thấy `DKIM check: pass`
+
+Mailer tự chọn transport: **có `RESEND_API_KEY` → Resend**, không có → SMTP như cũ.
+Nếu Resend lỗi thì **không tự fallback** sang SMTP (tránh gửi trùng) — log ghi rõ `Resend: ...`.
+Log lúc khởi động in `mail transport=smtp|resend|none`.
+
+**Cách B — yêu cầu nhà cung cấp mail sửa**
+
+Gửi hỗ trợ maychuemail: *“Bật DKIM ký bằng domain khách (`meetflowai.site`) và sửa selector
+`dkim._domainkey.maychuemail.com` đang NXDOMAIN”*. Họ sẽ đưa 1 TXT dạng
+`default._domainkey.meetflowai.site` → thêm vào DNS PA Vietnam.
+
+### Sau khi đổi DNS, luôn kiểm tra lại
+
+```bash
+scripts/check-email-auth.sh          # gửi thư test + đọc báo cáo SPF/DKIM/DMARC
+dig +short TXT default._domainkey.meetflowai.site   # phải có khoá công khai
+```
+
+### Nên sửa thêm DMARC (30 giây)
+
+```
+TXT _dmarc.meetflowai.site
+v=DMARC1; p=none; rua=mailto:dmarc@meetflowai.site; fo=1
+```
+(ổn định 1–2 tuần thì nâng `p=quarantine`). Lưu ý: mỗi tên miền **chỉ được có MỘT bản ghi TXT SPF** —
+nếu cần thêm include thì **gộp** vào bản ghi hiện có, đừng tạo bản ghi thứ hai.
+
+Đã tối ưu sẵn trong code: `text/plain` cho mọi email, `Reply-To: support@meetflowai.site`,
+From đúng thương hiệu theo sản phẩm, link dùng domain đẹp. Log gửi thư ghi `via smtp|resend`,
+`accepted=…`, `messageId/id=…`.
 
 ## 7. Kiểm tra nhanh hệ thống
 

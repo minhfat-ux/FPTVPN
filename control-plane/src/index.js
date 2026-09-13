@@ -25,6 +25,7 @@ import {
   sendAiInvoiceEmail,
   sendVerifyEmail,
   pickMailLang,
+  mailTransportName,
 } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
 import { AiUsersStore } from "./ai-users-store.js";
@@ -2957,6 +2958,7 @@ function onListen() {
   console.log(`PrivateVPN control plane listening on :${PORT} (${tlsReady ? "HTTPS" : "HTTP"})`);
   console.log(`  interface=${WG_INTERFACE} dryRun=${DRY_RUN} pool=${IP_POOL_CIDR}`);
   console.log(`  nodesFile=${NODES_FILE}`);
+  console.log(`  mail transport=${mailTransportName()} (resend if RESEND_API_KEY is set)`);
   console.log(`  adminAllowedIPs=${Array.from(ADMIN_ALLOWED_IPS).join(",")}`);
   if (!WG_SERVER_PUBKEY) console.warn("  WARNING: WG_SERVER_PUBKEY not set");
   if (!WG_PUBLIC_ENDPOINT) console.warn("  WARNING: WG_PUBLIC_ENDPOINT not set");

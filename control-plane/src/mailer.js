@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 /**
  * Transactional email — localized in Vietnamese, English and Chinese.
@@ -398,22 +399,84 @@ function smtpConfigured() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-async function deliver({ to, message, logTag, logContext, from }) {
-  if (!(process.env.NODE_ENV === "production" && smtpConfigured())) {
-    console.log(`[${logTag}] (dev, no SMTP)`, logContext);
-    return { sent: false };
-  }
-  try {
-    const info = await transport().sendMail({
-      from: from ?? process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
-      replyTo: REPLY_TO,
+/**
+ * Resend is used when RESEND_API_KEY is set, SMTP otherwise.
+ *
+ * Why it matters: the current mail host signs outgoing mail with its OWN domain
+ * (d=maychuemail.com) using a selector whose public key does not exist, so every
+ * message carries a broken DKIM signature (permerror) — worse for Gmail than no
+ * signature at all. Resend signs with meetflowai.site, which aligns with DMARC.
+ * Switching is therefore a config change: set the key, restart, done.
+ */
+let resendSingleton = null;
+
+function resendClient() {
+  const key = (process.env.RESEND_API_KEY ?? "").trim();
+  if (!key) return null;
+  if (!resendSingleton) resendSingleton = new Resend(key);
+  return resendSingleton;
+}
+
+/** Which mail transport would be used right now (for logs/diagnostics). */
+export function mailTransportName() {
+  if (resendClient()) return "resend";
+  return smtpConfigured() ? "smtp" : "none";
+}
+
+function mailConfigured() {
+  return Boolean(resendClient()) || smtpConfigured();
+}
+
+/**
+ * Sends one rendered message through the configured transport.
+ * Throws on failure so callers keep their existing error handling.
+ */
+async function sendMessage({ to, message, from, transporter }) {
+  const text = htmlToText(message.html);
+  const resend = transporter ? null : resendClient();
+  if (resend) {
+    const result = await resend.emails.send({
+      from,
       to,
       subject: message.subject,
       html: message.html,
-      text: htmlToText(message.html),
+      text,
+      replyTo: REPLY_TO,
     });
-    console.log(`[${logTag}] sent to ${to} accepted=${JSON.stringify(info.accepted)} id=${info.messageId}`);
-    return { sent: true, accepted: info.accepted, messageId: info.messageId };
+    if (result?.error) {
+      throw new Error(`Resend: ${result.error.message ?? "send failed"}`);
+    }
+    return { transport: "resend", id: result?.data?.id ?? null };
+  }
+  const info = await transport(transporter).sendMail({
+    from,
+    replyTo: REPLY_TO,
+    to,
+    subject: message.subject,
+    html: message.html,
+    text,
+  });
+  return { transport: "smtp", accepted: info.accepted, messageId: info.messageId };
+}
+
+async function deliver({ to, message, logTag, logContext, from }) {
+  if (!(process.env.NODE_ENV === "production" && mailConfigured())) {
+    console.log(`[${logTag}] (dev, no mail transport)`, logContext);
+    return { sent: false };
+  }
+  try {
+    const info = await sendMessage({
+      to,
+      message,
+      from: from ?? process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+    });
+    console.log(
+      `[${logTag}] sent to ${to} via ${info.transport} ` +
+        (info.transport === "resend"
+          ? `id=${info.id ?? "-"}`
+          : `accepted=${JSON.stringify(info.accepted)} id=${info.messageId}`),
+    );
+    return { sent: true, transport: info.transport, accepted: info.accepted, messageId: info.messageId ?? info.id };
   } catch (err) {
     console.error(`${logTag} failed to ${to}:`, redactError(err), err?.response ?? "");
     return { sent: false, error: err?.message ?? "send failed" };
@@ -424,17 +487,20 @@ async function deliver({ to, message, logTag, logContext, from }) {
 export function createSendOtpEmail({ transporter } = {}) {
   return async function sendOtpEmail({ email, code, lang }) {
     const message = renderOtpEmail({ code, lang });
-    if (process.env.NODE_ENV === "production" && smtpConfigured()) {
+    if (process.env.NODE_ENV === "production" && (mailConfigured() || transporter)) {
       try {
-        const info = await (transporter ?? transport()).sendMail({
-          from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
-          replyTo: REPLY_TO,
+        const info = await sendMessage({
           to: email,
-          subject: message.subject,
-          html: message.html,
-          text: htmlToText(message.html),
+          message,
+          from: process.env.FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+          transporter,
         });
-        console.log(`[otp] sent to ${email} accepted=${JSON.stringify(info.accepted)} id=${info.messageId}`);
+        console.log(
+          `[otp] sent to ${email} via ${info.transport} ` +
+            (info.transport === "resend"
+              ? `id=${info.id ?? "-"}`
+              : `accepted=${JSON.stringify(info.accepted)} id=${info.messageId}`),
+        );
         return { sent: true };
       } catch (err) {
         console.error("sendOtpEmail failed:", redactError(err));
