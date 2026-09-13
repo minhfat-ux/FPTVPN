@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  pickMailLang,
   renderInvoiceEmail,
   renderOtpEmail,
   renderPaymentAlert,
@@ -25,13 +26,13 @@ const BUILDERS = {
   verify: (lang) => renderVerifyEmail({ lang, to: "a@b.com", link: `${SITE}/v1/ai/verify-email/confirm?token=T`, reminders: 1 }),
   "invoice-vpn": (lang) => renderInvoiceEmail({
     lang, product: "vpn", brand: "VPNFlow Premium", to: "a@b.com", orderCode: "VF-1",
-    planLabel: planNameFor(lang, "vpn", "monthly"), amount: 200000, days: 30,
+    planLabel: planNameFor(pickMailLang(lang), "vpn", "monthly"), amount: 200000, days: 30,
     activatedAt: ACTIVATED, expiresAt: EXPIRES,
     appUrl: `${SITE}/open`, guideUrl: `${SITE}/guide`,
   }),
   "invoice-ai": (lang) => renderInvoiceEmail({
     lang, product: "ai", brand: "MeetFlow AI Pro", to: "a@b.com", orderCode: "MF-1",
-    planLabel: planNameFor(lang, "ai", "pass30"), amount: 150000, days: 30,
+    planLabel: planNameFor(pickMailLang(lang), "ai", "pass30"), amount: 150000, days: 30,
     activatedAt: ACTIVATED, expiresAt: EXPIRES,
     guideUrl: `${SITE}/ai/guide`, oneTime: true,
   }),
@@ -105,4 +106,24 @@ test("email báo đơn cho chủ shop là tiếng Việt CÓ CHỦ Ý (người 
   });
   assert.ok(alert.subject.includes("Đơn mới"), alert.subject);
   assert.ok(alert.html.includes("Xin chào"), "email báo đơn phải là tiếng Việt");
+});
+
+test("khách Nhật/Hàn (app có ja/ko, email chưa dịch) nhận bản TIẾNG ANH, không phải tiếng Việt", () => {
+  for (const [name, build] of Object.entries(BUILDERS)) {
+    const en = build("en");
+    for (const lang of ["ja", "ko", "fr", ""]) {
+      const other = build(lang);
+      assert.equal(other.subject, en.subject, `${name}/${lang} không rơi về tiêu đề tiếng Anh`);
+      assert.equal(other.html, en.html, `${name}/${lang} không rơi về nội dung tiếng Anh`);
+    }
+  }
+});
+
+test("nhãn gói trong email phải theo NGÔN NGỮ EMAIL, không theo ngôn ngữ app", () => {
+  // Khách Nhật: app ja nhưng email là tiếng Anh ⇒ nhãn gói cũng phải tiếng Anh,
+  // không được để "月額" lạc trong thư tiếng Anh (production gọi planNameFor(pickMailLang(lang), …)).
+  assert.equal(planNameFor(pickMailLang("ja"), "vpn", "monthly"), "Monthly");
+  assert.equal(planNameFor(pickMailLang("ko"), "vpn", "monthly"), "Monthly");
+  assert.equal(planNameFor(pickMailLang("zh"), "vpn", "monthly"), "月度");
+  assert.equal(planNameFor(pickMailLang("vi"), "vpn", "monthly"), "Hàng tháng");
 });
