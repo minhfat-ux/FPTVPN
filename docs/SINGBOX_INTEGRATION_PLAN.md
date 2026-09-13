@@ -417,6 +417,12 @@ ship Phase 1–4 mà không cần đổi server.
 }
 ```
 
+**Đã kiểm chứng:** ví dụ JSON trên **parse được** và **validate sạch (0 lỗi)** bằng JSON Schema chính thức của
+sing-box v1.14.0 (`docs/schema.json`, kiểm bằng `jsonschema` Draft 2020-12). Nguồn schema:
+<https://raw.githubusercontent.com/SagerNet/sing-box/v1.14.0/docs/schema.json>. Khi control plane đổi cấu trúc config,
+có thể dùng lại đúng cách kiểm này như một bài test (`node --test` không có JSON Schema built-in ⇒ cần tự viết kiểm tra
+shape, hoặc validate ở CI bằng công cụ ngoài — xem việc cần owner quyết §8).
+
 Ghi chú kỹ thuật đã kiểm chứng cho từng mảnh:
 
 | Mảnh | Kiểm chứng |
@@ -424,7 +430,7 @@ Ghi chú kỹ thuật đã kiểm chứng cho từng mảnh:
 | `urltest`: `type/tag/outbounds/url/interval/tolerance/idle_timeout/interrupt_exist_connections` | [URLTest outbound](https://sing-box.sagernet.org/configuration/outbound/urltest/) |
 | `selector` (nhóm chọn tay, để UI "đổi đường" và để ép đường khi test) | [Selector outbound](https://sing-box.sagernet.org/configuration/outbound/selector/) |
 | `vless`: `uuid/flow/network/tls/transport/…` | [VLESS outbound](https://sing-box.sagernet.org/configuration/outbound/vless/) |
-| `hysteria2`: `password/server_ports/hop_interval/up_mbps/down_mbps/obfs{salamander,gecko}/bbr_profile` | [Hysteria2 outbound](https://sing-box.sagernet.org/configuration/outbound/hysteria2/) — khớp đúng các tham số đang khai trong `Config.kt` |
+| `hysteria2`: `password/server_ports/hop_interval/up_mbps/down_mbps/obfs{salamander,gecko}/bbr_profile` | [Hysteria2 outbound](https://sing-box.sagernet.org/configuration/outbound/hysteria2/) — tương ứng các tham số đang khai trong `Config.kt`, **nhưng khác đơn vị**: `Config.kt` dùng `HY_UP_KBPS`/`HY_DOWN_KBPS` (Kbps) còn sing-box dùng `up_mbps`/`down_mbps` (Mbps) ⇒ phải chia 1000 khi sinh config |
 | `tls.utls` / `tls.reality` (`public_key`, `short_id`) | [TLS (shared)](https://sing-box.sagernet.org/configuration/shared/tls/) |
 | `tun`: `address/mtu/auto_route/strict_route/route_exclude_address/stack/platform.http_proxy` | [Tun inbound](https://sing-box.sagernet.org/configuration/inbound/tun/) |
 | DNS dạng **typed server** (từ 1.12): `{"type":"udp","tag":…,"server":…}` | [DNS Server](https://sing-box.sagernet.org/configuration/dns/server/) |
@@ -540,7 +546,7 @@ chạy được ở TQ).
 |---|---|---|---|---|
 | 1 | **Chấp nhận GPL**: mở source client, ship sing-box cả 2 store | Giải pháp kỹ thuật tốt nhất, nhanh nhất, dùng đúng core đã được kiểm chứng | Mất lợi thế source kín; đối thủ fork được; **rủi ro App Store vẫn còn** (GPL vs App Store) | Chỉ đủ nếu chấp nhận mở source **và** chấp nhận rủi ro bị Apple gỡ |
 | 2 | **Xin exception/dual-license từ tác giả sing-box** | Giữ được app kín; dùng core tốt nhất | **Chưa xác minh** là tác giả có bán license; chi phí/điều kiện không rõ; thời gian không kiểm soát được | Rủi ro cao về tiến độ, cần hỏi sớm (P0) |
-| 3 | **Đổi engine sang license permissive**: Xray-core (MPL-2.0) + hysteria core (MIT) | MPL-2.0 chỉ copyleft theo **file** ⇒ ít ràng buộc toàn app hơn GPL; Xray có VLESS/Reality; hysteria (đã ship) lo QUIC | Mất hẳn `urltest/selector` có sẵn và toàn bộ lớp route/DNS của sing-box ⇒ phải tự viết một phần logic chọn đường (đúng thứ đang muốn bỏ); Xray trên iOS cũng có vấn đề memory đã ghi nhận ([Xray-core#4422](https://github.com/XTLS/Xray-core/issues/4422)); libXray (MIT) chỉ là wrapper | Feasible nhưng **không** giải quyết trọn vẹn mục tiêu §1.1 |
+| 3 | **Đổi engine sang license permissive**: Xray-core (MPL-2.0) + hysteria core (MIT) | MPL-2.0 chỉ copyleft theo **file** ⇒ ít ràng buộc toàn app hơn GPL; hysteria (đã ship, MIT) lo phần QUIC | Không có `urltest/selector` đóng gói sẵn như sing-box (Xray có mô hình balancer/observatory khác — **cần kiểm tra**, Phụ lục B #12) ⇒ phải tự viết lại một phần logic chọn đường, đúng thứ đang muốn bỏ; Xray trên iOS cũng có vấn đề memory đã ghi nhận ([Xray-core#4422](https://github.com/XTLS/Xray-core/issues/4422)); libXray (MIT) chỉ là wrapper | Feasible nhưng **không** giải quyết trọn vẹn mục tiêu §1.1 |
 | 4 | **Chỉ dùng lớp tun2socks permissive** (MIT): Tun2SocksKit / hev-socks5-tunnel / tun2socks | Giấy phép sạch | Chỉ là TUN→SOCKS, vẫn phải có core (Xray/hysteria) + tự làm failover ⇒ **không** giảm được phần tự viết | Không đủ một mình |
 | 5 | **Core chạy ngoài tiến trình (out-of-process)** để tránh "dẫn xuất" | Về lý thuyết tách được GPL | **iOS: bất khả thi** — extension phải sở hữu fd TUN, iOS không cho spawn tiến trình phụ tuỳ ý; Android cũng bị hạn chế exec + vẫn là "giao tiếp chặt" nên **ranh giới pháp lý không chắc** | Không dùng được cho mục tiêu iOS |
 | 6 | **Core ở server-side** | Không đụng license | Không giải quyết được gì: chặn nằm ở **chặng cuối** từ máy khách tới node | Loại |
@@ -630,6 +636,7 @@ chạy được ở TQ).
 - `go.mod` v1.14.0 (`go 1.25.5`): <https://raw.githubusercontent.com/SagerNet/sing-box/v1.14.0/go.mod>
 - LICENSE (GPL-3.0-or-later + điều khoản tên): <https://raw.githubusercontent.com/SagerNet/sing-box/testing/LICENSE>
 - Build tags & linker flags: <https://sing-box.sagernet.org/installation/build-from-source/>
+- JSON Schema chính thức (dùng để validate ví dụ §5.1): <https://raw.githubusercontent.com/SagerNet/sing-box/v1.14.0/docs/schema.json>
 - API: `PlatformInterface` <https://raw.githubusercontent.com/SagerNet/sing-box/testing/experimental/libbox/platform.go> ·
   `CommandServer` <https://raw.githubusercontent.com/SagerNet/sing-box/testing/experimental/libbox/command_server.go> ·
   `CommandClient` (URLTest/SelectOutbound/streams) <https://raw.githubusercontent.com/SagerNet/sing-box/testing/experimental/libbox/command_client.go> ·
@@ -702,5 +709,5 @@ framework; node built-in http", nhưng `control-plane/package.json` khai `expres
 | 9 | Thứ tự TUN-up so với outbound-ready trong libbox (ảnh hưởng trực tiếp tính chất "không mất mạng") | P1: test pre-flight gate + rút mạng giữa chừng |
 | 10 | Có cần `Libbox.setup()`/`SetupOptions` trước khi start service trong app thật, và với tham số nào | Đọc `experimental/libbox/setup.go` + code SFA tại thời điểm code P1 |
 | 11 | Funnel có expose được path **WS** trên 443 cho VLESS hay phải thêm entry/port khác (HANDOVER ghi Funnel dùng `:8443` cho `wsrelay-hy`, `:10000` cho `wsrelay` WG) | Đo trực tiếp ở P5 (việc ops) |
-| 12 | Xray-core (MPL-2.0) có đủ nhu cầu nếu phải bỏ sing-box (Xray **không** có outbound hysteria2) | Đọc docs Xray tại thời điểm quyết định |
+| 12 | Nếu phải bỏ sing-box thì engine thay thế (Xray-core MPL-2.0 / mihomo GPL-3.0 / hysteria MIT) đáp ứng được tới đâu: có VLESS/Reality không, có cơ chế URL-test/failover tương đương không, memory trên iOS ra sao | Đọc docs của từng engine + thử nghiệm nhỏ ở P0 (trước khi chốt license) — **tôi chưa xác minh** phần này |
 | 13 | Tên/đường dẫn artifact SFI/SFA có đổi ở phiên bản mới (tài liệu này ghim v1.14.0) | Kiểm lại release notes khi bắt đầu P0 |
