@@ -8,6 +8,8 @@ import {
   verifySepayApiKey,
   verifySepaySignature,
   verifySepayUrlToken,
+  accountMatches,
+  clientIpAllowed,
 } from "../src/sepay.js";
 
 const SECRET = "spsk_test_example_secret";
@@ -136,4 +138,25 @@ test("nội dung KHÔNG có dấu gạch (vietqr.app bỏ gạch) vẫn đọc �
   assert.equal(extractOrderRef({ content: "CT DEN 57222538888 VPNFLOW1789319664NAM" }).orderCode, 1789319664);
   // không có tiền tố: vẫn lấy được nhóm số dính chữ
   assert.equal(extractOrderRef({ content: "chuyen tien 1789319664 nhe" }).orderCode, 1789319664);
+});
+
+test("tài khoản nhận: tiền phải vào đúng tài khoản của shop", () => {
+  const expected = ["57222538888"];
+  assert.equal(accountMatches({ payloadAccount: "57222538888", expectedAccounts: expected }), true);
+  // SePay có nơi trả kèm tên ngân hàng / khoảng trắng
+  assert.equal(accountMatches({ payloadAccount: "TPBank-57222538888", expectedAccounts: expected }), true);
+  assert.equal(accountMatches({ payloadAccount: "99999999999", expectedAccounts: expected }), false);
+  // Không cấu hình tài khoản, hoặc payload không gửi ⇒ không chặn (để chủ shop xác nhận tay)
+  assert.equal(accountMatches({ payloadAccount: "99999999999", expectedAccounts: [] }), true);
+  assert.equal(accountMatches({ payloadAccount: null, expectedAccounts: expected }), true);
+});
+
+test("whitelist IP của SePay: trống thì không chặn, có thì chỉ nhận đúng dải", () => {
+  assert.equal(clientIpAllowed({ ip: "1.2.3.4", allowlist: "" }), true, "chưa cấu hình ⇒ không chặn");
+  assert.equal(clientIpAllowed({ ip: "1.2.3.4", allowlist: "1.2.3.4,5.6.7.8" }), true);
+  assert.equal(clientIpAllowed({ ip: "9.9.9.9", allowlist: "1.2.3.4,5.6.7.8" }), false);
+  assert.equal(clientIpAllowed({ ip: "1.2.3.55", allowlist: "1.2.3.0/24" }), true);
+  assert.equal(clientIpAllowed({ ip: "1.2.4.1", allowlist: "1.2.3.0/24" }), false);
+  assert.equal(clientIpAllowed({ ip: "::ffff:1.2.3.4", allowlist: "1.2.3.4" }), true, "IPv4-mapped IPv6 vẫn khớp");
+  assert.equal(clientIpAllowed({ ip: "", allowlist: "1.2.3.4" }), false, "không xác định được IP ⇒ chặn");
 });

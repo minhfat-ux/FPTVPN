@@ -512,6 +512,31 @@ khác 0 nếu lệch — dùng được trong CI hoặc trước khi thông báo
   Lưu ý phụ: file trong worktree có thể còn bản cũ hơn index (khi stage bằng `git apply --cached`),
   nên **test trên worktree sạch** (`git show HEAD:…`) hoặc kiểm md5 trên server với `HEAD`.
 
+### ⚠️ Sự cố 14/09/2026 — một commit từ worktree chung xoá mất tính năng control-plane
+
+**Chuyện gì xảy ra:** agent khác commit bằng `git add -A` từ **worktree chung**, mà các file
+`control-plane/src/*.js` trong worktree đó vẫn là bản CŨ (mọi thay đổi của tôi trước đó chỉ nằm ở
+index/HEAD, không ghi vào worktree). Hai commit (`9af19fa`, `14c1389`) vì vậy đã **ghi đè** bằng bản
+cũ: mất tự xác nhận SePay, email đã-thanh-toán/cảnh báo, mã đơn duy nhất, kiểm tài khoản nhận,
+whitelist IP, nhật ký đối soát, chọn QR theo gói, và xoá luôn `test/pay-qr.test.js` +
+`scripts/diawi-upload.mjs`. Tệ hơn: lần deploy sau đó lấy `git show HEAD:…` (đã là bản cũ) nên
+**production cũng bị hạ cấp trong im lặng** — trang web vẫn chạy nên không ai thấy.
+
+**Đã sửa:** khôi phục 4 file `src` + 4 file test + script từ đúng commit còn nguyên tính năng, đồng
+thời **ghi lại bản đúng vào worktree chung** để lần `git add -A` sau không xoá nữa. Test: 153 pass.
+
+**Chốt để không tái diễn** — trước MỌI lần deploy, chạy:
+
+```bash
+node scripts/check-cp-features.mjs                      # kiểm bản trong repo
+node scripts/check-cp-features.mjs /tmp/live-index.js    # kiểm file đã copy từ server (nên làm)
+ssh node-2 'systemctl restart flowvpn-cp'                # chỉ restart khi cả hai đều ✔
+```
+
+Script này soi từng tính năng đã chốt trong `index.js`/`payments.js`/`mailer.js`/`sepay.js` và
+**thoát code 1** nếu thiếu mục nào (bản cũ thiếu 11 mục). Test guard trong `node --test` cũng bắt
+được, nhưng test có thể bị chính commit đó xoá — nên kiểm bằng script trên file sắp deploy.
+
 ### Kênh Diawi — link cài trực tiếp (iOS IPA, APK nhỏ) · 14/09/2026
 
 Chủ shop tải gói lên **Diawi** rồi lấy link HTTPS cho khách bấm là cài (không cần cắm cáp, không cần

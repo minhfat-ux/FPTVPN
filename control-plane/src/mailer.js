@@ -566,8 +566,117 @@ export async function sendPaymentAlert({
   });
 }
 
+/**
+ * Email **thông báo đã thanh toán** cho chủ shop — KHÔNG có nút xác nhận.
+ *
+ * Từ khi SePay báo tiền về qua webhook, việc xác nhận là tự động; chủ shop chỉ cần biết đơn nào
+ * đã trả tiền. Nút xác nhận tay chỉ còn dùng cho trường hợp tiền vào mà KHÔNG khớp đơn
+ * (`renderPaymentAlert`).
+ */
+export function renderPaidAlert({
+  orderCode,
+  buyerEmail,
+  plan,
+  amount,
+  product = "VPNFlow Premium",
+  methodInfo = null,
+  paidAt = null,
+  statusUrl = null,
+  confirmedBy = "sepay",
+}) {
+  const amt = Number(amount || 0).toLocaleString("vi-VN");
+  const when = paidAt ? new Date(paidAt).toLocaleString("vi-VN") : new Date().toLocaleString("vi-VN");
+  // Kênh WeChat/Alipay không có webhook nào theo dõi tiền về ⇒ chủ shop xác nhận tay;
+  // câu mở đầu phải nói đúng như vậy, không được ghi "SePay xác nhận".
+  const lead = confirmedBy === "manual"
+    ? "✅ <b>Anh đã xác nhận thanh toán cho đơn này</b> và hệ thống đã kích hoạt gói cho khách. Không cần làm gì thêm."
+    : "💰 <b>Đơn này đã được thanh toán và kích hoạt tự động</b> (SePay xác nhận tiền về). Không cần làm gì thêm.";
+  const channel = methodInfo
+    ? `<p style="margin:0 0 6px"><b>Kênh:</b> ${methodInfo.label}</p>` +
+      (methodInfo.account ? `<p style="margin:0 0 6px;color:#666;font-size:12.5px">Tài khoản nhận: ${methodInfo.account}</p>` : "")
+    : "";
+  return {
+    subject: `✅ Đã thanh toán (${product}) #${orderCode} — ${amt} đ · ${buyerEmail}`,
+    html: shell(`<p>Xin chào,</p>
+<p style="font-size:15px">${lead}</p>
+<table style="border-collapse:collapse">
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Mã đơn</td><td style="font-weight:bold">#${orderCode}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Email khách</td><td style="font-weight:bold">${buyerEmail}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Gói</td><td style="font-weight:bold">${plan}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Số tiền</td><td style="font-weight:bold">${amt} đ</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Thời điểm</td><td style="font-weight:bold">${when}</td></tr>
+</table>
+${channel}
+<p>Sản phẩm: <b>${product}</b></p>
+${statusUrl ? `<p style="color:#666;font-size:13px">Xem lại: <a href="${statusUrl}">${statusUrl}</a></p>` : ""}
+<p style="color:#999;font-size:12px">Hoá đơn/xác nhận đã được gửi cho khách kèm hướng dẫn kích hoạt.</p>`),
+  };
+}
+
+/**
+ * Email cảnh báo: **tiền đã vào nhưng KHÔNG khớp đơn nào** (khách ghi sai nội dung, chuyển thiếu,
+ * hoặc SePay thấy giao dịch ngoài luồng). Đây là email DUY NHẤT cần người xử lý — không có nút
+ * xác nhận vì còn phải xem lại đơn; link trỏ về bảng điều khiển.
+ */
+export function renderUnmatchedTransferAlert({
+  amount = 0,
+  content = "",
+  txId = "",
+  accountNumber = "",
+  reason = "không có mã đơn trong nội dung",
+  dashboardUrl = null,
+}) {
+  const amt = Number(amount || 0).toLocaleString("vi-VN");
+  return {
+    subject: `⚠️ Tiền vào ${amt} đ nhưng chưa khớp đơn — cần xem lại`,
+    html: shell(`<p>Xin chào,</p>
+<p style="font-size:15px">⚠️ Có giao dịch <b>tiền vào</b> mà hệ thống <b>chưa tự khớp được đơn</b>:</p>
+<table style="border-collapse:collapse">
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Số tiền</td><td style="font-weight:bold">${amt} đ</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Nội dung CK</td><td style="font-weight:bold">${String(content || "(trống)").slice(0, 120)}</td></tr>
+  ${accountNumber ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Tài khoản nhận</td><td style="font-weight:bold">${accountNumber}</td></tr>` : ""}
+  ${txId ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Mã giao dịch</td><td style="font-weight:bold">${txId}</td></tr>` : ""}
+  <tr><td style="padding:4px 12px 4px 0;color:#666">Lý do</td><td style="font-weight:bold">${reason}</td></tr>
+</table>
+<p>Khách có thể đã ghi sai nội dung hoặc chuyển thiếu tiền. Vào bảng điều khiển để xác nhận tay cho đúng đơn:</p>
+${dashboardUrl ? `<p><a href="${dashboardUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Mở bảng điều khiển</a></p>` : ""}
+<p style="color:#999;font-size:12px">Không cần trả lời email này.</p>`),
+  };
+}
+
 function redactError(err) {
   return { name: err?.name ?? "Error", message: err?.message ?? "unknown error" };
+}
+
+/** Gửi email cảnh báo tiền vào không khớp đơn. */
+export async function sendUnmatchedTransferAlert({ to, ...rest }) {
+  return deliver({
+    to,
+    message: renderUnmatchedTransferAlert(rest),
+    logTag: "unmatched-transfer",
+    logContext: { amount: rest.amount, txId: rest.txId },
+  });
+}
+
+/** Gửi email thông báo đã thanh toán (chủ shop). */
+export async function sendPaidAlert({
+  to,
+  orderCode,
+  buyerEmail,
+  plan,
+  amount,
+  product = "VPNFlow Premium",
+  methodInfo = null,
+  paidAt = null,
+  statusUrl = null,
+  confirmedBy = "sepay",
+}) {
+  return deliver({
+    to,
+    message: renderPaidAlert({ orderCode, buyerEmail, plan, amount, product, methodInfo, paidAt, statusUrl, confirmedBy }),
+    logTag: "paid-alert",
+    logContext: { orderCode, buyerEmail, amount },
+  });
 }
 
 /**
