@@ -181,3 +181,40 @@ Durable engineering decisions (see also `docs/adr/`).
   "Online Devices by ISP"; thêm bảng "Online Devices (live)".
 - **Bằng chứng**: `evidence/2026-09-13-dashboard-live-connections.log` (39/39 test pass +
   E2E 2 exit node + kiểm tra dashboard HTML/JS).
+
+## 2026-09-13 — Tầng 1: sửa gốc lỗi "connected nhưng không có mạng" (Android)
+
+Tiếp nhận từ `docs/HANDOVER_2026-09-13_china_ip_block_and_funnel.md`. Bốn hạng mục
+Tầng 1 (commit `3d46f51`, `f6d58fd`).
+
+- **Nguyên nhân gốc**: `WSRelayBridge` khi mất kết nối chỉ set `connected=false`.
+  Hysteria vẫn giữ socket UDP trỏ vào bridge nên `serve()` KHÔNG trả về → tunnel nằm
+  `tunnelUp=true` mà không gói nào đi đâu cả. Đúng log 21:41–21:42 ngày 13/09.
+- **QUYẾT ĐỊNH**: sửa ở tầng bridge, không ở tầng service. `WSRelayBridge` nhận callback
+  `onDead` (gọi từ `onFailure`/`onClosed`/`onClosing`), service gọi `Mobile.stop()` để
+  `serve()` trả về và `runTunnel()` dựng lại transport. Lý do: chỉ tầng bridge biết chắc
+  cầu đã từng mở rồi mới chết; service không phân biệt được "chưa từng lên" với "vừa chết".
+  Gác hai điều kiện `running` + `opened` và chỉ báo một lần, nên `stop()` chủ động của
+  service không bị coi là sự cố.
+- **Watchdog**: `probeThroughTunnel()` nay trả `Boolean`; 2 lần probe liên tiếp thấy tunnel
+  UP mà HTTP **và** DNS đều không trả lời thì `Mobile.stop()` để dựng lại (trước đây chỉ
+  `warn`). Để 2 lần vì mạng di động TQ hay mất gói từng cú; chỉ tính chết khi cả hai probe
+  đều tịt để tránh dương tính giả khi một trong hai bị chặn riêng.
+- **Trần thời gian bắt tay**: `armAttemptBudget()` (4s đường trực tiếp, 15s đường WS).
+  Cần vì client Go nằm trong `hysteria.aar` đóng sẵn, không truyền được timeout handshake
+  từ Kotlin; không có trần thì mỗi cổng chết treo tới hạn nội bộ của QUIC. Timer tự vô hiệu
+  theo TOKEN khi `reportUp()` hoặc khi lượt thử kết thúc — cố ý không đọc cờ toàn cục
+  `tunnelUp` vì cờ đó có thể còn giá trị cũ và sẽ làm timer không bao giờ nổ.
+- **Thứ tự thử transport**: preferred → 2 TCP relay → 1 cổng UDP trực tiếp → WS relay →
+  các cổng UDP còn lại. Người không bị chặn vẫn đi đường cũ (<1s); người bị chặn không phải
+  thử hết 5 cổng chết trước khi tới WS (trước ~25s, nay ~7–11s). Bỏ qua đường trực tiếp đã
+  thử ở lượt ưu tiên, nhưng KHÔNG bỏ qua `"ws"` (mở WS có thể hỏng tạm thời).
+- **Brutal CC đường relay**: thêm `HY_RELAY_UP_KBPS=800` / `HY_RELAY_DOWN_KBPS=4000` dùng
+  riêng cho lượt thử qua WS. Trước đây dùng chung 20Mbps của đường trực tiếp, mà đường relay
+  đi qua 2 chặng nên server pace theo số khai và tự gây nghẽn. Số này là mức khởi điểm bảo
+  thủ, **cần chỉnh theo số đo thật**.
+- **Bằng chứng**: `evidence/2026-09-13-tier1-android-tunnel-recovery.log`
+  (`:app:compileModernReleaseKotlin` OK, `:app:assembleModernRelease` OK gồm R8 + lintVital).
+  **CHƯA test trên thiết bị thật** — không có máy nào kết nối adb; các bước đo ghi ở mục 3
+  của file bằng chứng.
+
