@@ -451,16 +451,25 @@ Phát hành APK mới (kênh web/sideload, branch `main`):
 ```bash
 cd android && ./gradlew -p . -Pandroid.buildDir=$HOME/.vpnflow-build \
   :app:assembleModernRelease :app:assembleLegacyRelease     # ký bằng ~/keystores/vpnflow-signing.properties
-scp app/build/outputs/apk/modern/release/app-modern-release.apk root@VPS:/root/flowvpn-apk/VPNFlow-latest.apk
-scp app/build/outputs/apk/legacy/release/app-legacy-release.apk root@VPS:/root/flowvpn-apk/VPNFlow-android7.apk
+# file ra ở $HOME/.vpnflow-build/app/outputs/apk/{modern,legacy}/release/
+scp $HOME/.vpnflow-build/app/outputs/apk/modern/release/app-modern-release.apk \
+  root@VPS:/root/flowvpn-apk/VPNFlow-latest.apk
+scp $HOME/.vpnflow-build/app/outputs/apk/legacy/release/app-legacy-release.apk \
+  root@VPS:/root/flowvpn-apk/VPNFlow-android7.apk
+# nên upload vào tên *.incoming rồi md5sum so với máy build trước khi mv đè file đang phát
 # rồi PATCH ngưỡng như trên — không cần build lại hay restart server
 ```
 
 - `minimum_version` = bản mới ⇒ **bắt buộc** cài lại; thấp hơn `latest_version` ⇒ chỉ hiện ngưỡng
   cần đạt, app vẫn chạy.
+- Kiểm tra bản đang phát **không cần cài**: `unzip -p VPNFlow-latest.apk AndroidManifest.xml`
+  rồi đọc chuỗi UTF-16 (hoặc `aapt dump badging` ở máy build).
 - Nút *Tải/Cập nhật* mở `store_url` (Android luôn có link APK); bản ≥ 1.2.6 còn fallback về
   `apk_url` rồi `https://api.meetflowai.site/v1/downloads/android` nếu cả hai rỗng.
 - Đổi ngưỡng **không cần deploy**: `app-config.db` trên VPS là nguồn sự thật.
+- ⚠️ Deploy server: `control-plane/src/index.js` trên VPS phải là bản **đã commit**
+  (`git show HEAD:control-plane/src/index.js`), KHÔNG copy file đang sửa dở trong worktree —
+  bản WIP có thể import module chưa có trên server và làm service chết ngay khi restart.
 
 ## 5. Cấu hình thanh toán trên VPS (systemd drop-in)
 
@@ -550,6 +559,30 @@ scripts/set-resend-key.sh --clear  # quay lại SMTP nếu cần
 Mailer tự chọn transport: **có `RESEND_API_KEY` → Resend**, không có → SMTP như cũ.
 Nếu Resend lỗi thì **không tự fallback** sang SMTP (tránh gửi trùng) — log ghi rõ `Resend: ...`.
 Log lúc khởi động in `mail transport=smtp|resend|none`.
+
+### Đã gửi thử THẬT toàn bộ email bằng cả 3 ngôn ngữ (13/09/2026)
+
+6 loại email × 3 ngôn ngữ (vi/en/zh) = 18 thư, gửi qua chính mailer production tới hộp thư nội bộ,
+đọc lại header trong INBOX: **18/18 delivered, tất cả `dkim=pass`**, tiêu đề đúng ngôn ngữ
+(OTP, xác thực, hoá đơn VPNFlow, hoá đơn MeetFlow AI, nhắc gia hạn).
+
+```bash
+# chạy lại bất cứ lúc nào (trong repo hoặc trên VPS)
+cd control-plane && NODE_ENV=production node ../scripts/check-mail-langs.mjs no-reply@meetflowai.site
+# trên VPS:
+python3 /tmp/run-with-env.py /root/flowvpn-cp/scripts/check-mail-langs.mjs   # env đúng của service
+```
+
+Đã sửa kèm 2 lỗi phát hiện khi rà:
+
+1. **Tên gói trong hoá đơn bị tiếng Anh**: hoá đơn dùng `PLANS[id].label` ("Monthly (200,000 VND /
+   30 days)") cho mọi ngôn ngữ ⇒ khách Việt/Trung nhận tên gói tiếng Anh. Nay dùng
+   `payments.planNameFor(lang, product, planId)` → "Hàng tháng" / "Monthly" / "月度".
+2. **Bảng chữ tiếng Trung bị lặp 10 dòng** (khối `verify*` định nghĩa 2 lần trong `mailer.js`) —
+   dead code, đã xoá bản trùng.
+
+⚠️ `sendPaymentAlert` (email báo đơn cho **chủ shop**) cố ý chỉ tiếng Việt — người nhận là chủ shop,
+không phải khách. Muốn đổi thì sửa `renderPaymentAlert`.
 
 ### Việc còn lại (không chặn gì)
 
