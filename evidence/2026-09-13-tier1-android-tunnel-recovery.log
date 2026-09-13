@@ -85,3 +85,17 @@ chua do tren mang TQ that. Neu lan dau ket noi tren mang cham bi cat som, tang l
 
 Khong the kiem chung tu day: trang thai song cua server (Funnel/wsrelay/cloudflared/nodes.db) —
 AGENTS.md muc 1 cam ssh/sua production.
+
+################ 4. BỔ SUNG (sau commit 3d46f51) ################
+Phát hiện khi tự soát lại: nếu preference đang là một đường TRỰC TIẾP vừa chết
+(đúng sự cố 13/09 — IP bị chặn giữa phiên), oneConnectPass còn thử lại đúng đường
+đó thêm một lần nữa -> phí thêm ~4s (UDP) hoặc ~1.2s (TCP) mà chắc chắn cùng kết quả.
+Đã sửa: bỏ qua đường trực tiếp đã thử ở lượt ưu tiên. Riêng 'ws' KHÔNG bỏ qua vì
+mở WS có thể hỏng tạm thời và đó là đường duy nhất còn sống khi IP bị chặn.
+
+--- $ ./gradlew :app:compileModernReleaseKotlin (sau khi sửa) ---
+> Task :app:processModernReleaseResources UP-TO-DATE
+> Task :app:compileModernReleaseKotlin UP-TO-DATE
+
+BUILD SUCCESSFUL in 1s
+16 actionable tasks: 1 executed, 15 up-to-date

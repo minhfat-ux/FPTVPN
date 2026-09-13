@@ -298,19 +298,30 @@ class HysteriaVpnService : VpnService() {
             val outcome = preferredAttempt(preferred)
             if (outcome != 0) return outcome
         }
+        // Đường trực tiếp vừa thử ở lượt ưu tiên thì bỏ qua, đừng thử lại trong cùng
+        // lượt: trường hợp IP node bị chặn GIỮA phiên (đúng sự cố 13/09) thì
+        // preference cũ trỏ vào đường đã chết, thử lại chắc chắn cùng kết quả và chỉ
+        // làm người dùng chờ thêm.
+        // KHÔNG áp dụng cho "ws": mở WS có thể hỏng tạm thời (Funnel/Cloudflare chớp),
+        // nên vẫn cho nó thử lại — đây là đường duy nhất còn sống khi IP bị chặn.
+        val triedDirect = preferred?.takeIf { it != "ws" }
         for (relayPort in HY_TCP_RELAY_PORTS) {
+            if (triedDirect == "tcp:$relayPort") continue
             val outcome = tcpRelayAttempt(relayPort)
             if (outcome != 0) return outcome
         }
         // Một cổng UDP trực tiếp: đây là đường nhanh nhất khi không bị chặn.
-        val primaryUdp = udpAttempt(HY_PORTS[0])
-        if (primaryUdp != 0) return primaryUdp
+        if (triedDirect != "udp:${HY_PORTS[0]}") {
+            val primaryUdp = udpAttempt(HY_PORTS[0])
+            if (primaryUdp != 0) return primaryUdp
+        }
         // Đường duy nhất còn sống khi IP node bị chặn — đi qua hạ tầng dùng chung.
         val ws = wsRelayAttempt()
         if (ws != 0) return ws
         // WS cũng không mở được: thử nốt các cổng UDP trực tiếp còn lại (mạng chặn UDP
         // không đều, hoặc Funnel/Cloudflare tạm lỗi).
         for (port in HY_PORTS.drop(1)) {
+            if (triedDirect == "udp:$port") continue
             val outcome = udpAttempt(port)
             if (outcome != 0) return outcome
         }
