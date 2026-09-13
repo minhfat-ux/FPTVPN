@@ -194,3 +194,14 @@ test("guard: WeChat/Alipay luôn gửi email xác nhận tay, và xác nhận ta
   assert.ok(indexSrc.slice(indexSrc.indexOf('app.get("/v1/payments/confirm/:orderCode"'), indexSrc.indexOf('app.get("/v1/payments/confirm/:orderCode"') + 1200).includes('prefix: order.method || "bankqr"'),
     "link xác nhận VPN phải giữ đúng kênh khách dùng");
 });
+
+test("guard: tiền vào không khớp đơn NÀO thì phải báo chủ shop, nhưng webhook lặp thì im lặng", () => {
+  const block = indexSrc.slice(indexSrc.indexOf("sepay-webhook"), indexSrc.indexOf("app.get(\"/v1/payments/status"));
+  assert.ok(block.includes("async function orderKnown") || indexSrc.includes("async function orderKnown"),
+    "phải phân biệt mã đơn đã xử lý với mã đơn lạ");
+  assert.ok(/if \(await orderKnown\(ref\.orderCode, ref\.product\)\)/.test(block),
+    "đơn đã xử lý (webhook lặp) thì chỉ log, không báo lại");
+  assert.ok(block.includes("fireUnmatchedAlert({"), "đơn lạ thì phải gửi email cảnh báo");
+  assert.ok(block.includes("ignoreCodes"), "phải bỏ qua số tài khoản nhận khi dò mã đơn");
+  assert.ok(/logSepayWebhook\(payload, "no-order-code", \{ orderCode: ref\.orderCode, via: ref\.via \}\)/.test(block));
+});

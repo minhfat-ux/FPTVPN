@@ -160,3 +160,20 @@ test("whitelist IP của SePay: trống thì không chặn, có thì chỉ nhậ
   assert.equal(clientIpAllowed({ ip: "::ffff:1.2.3.4", allowlist: "1.2.3.4" }), true, "IPv4-mapped IPv6 vẫn khớp");
   assert.equal(clientIpAllowed({ ip: "", allowlist: "1.2.3.4" }), false, "không xác định được IP ⇒ chặn");
 });
+
+test("bỏ qua số tài khoản nhận khi dò mã đơn (SePay hay nhét số TK vào nội dung)", () => {
+  // Ca thật 14/09/2026: nội dung "NGUYEN BINH MINH chuyen tien den NGUYEN BINH MINH - 57222538888"
+  // bị đọc thành mã đơn 5722253888 (10 chữ số) ⇒ tưởng là "đơn đã xử lý" nên không báo chủ shop.
+  const content = "NGUYEN BINH MINH chuyen tien den NGUYEN BINH MINH - 57222538888";
+  const withIgnore = extractOrderRef({ content, ignoreCodes: ["57222538888"] });
+  assert.equal(withIgnore.orderCode, null, "số tài khoản không được coi là mã đơn");
+  const withoutIgnore = extractOrderRef({ content });
+  assert.equal(withoutIgnore.orderCode, 5722253888, "không truyền ignoreCodes thì vẫn đọc như cũ");
+
+  // Nội dung thật của khách vẫn phải đọc được
+  assert.equal(extractOrderRef({ content: "VPNFLOW-1789318609-THANG", ignoreCodes: ["57222538888"] }).orderCode, 1789318609);
+  assert.equal(extractOrderRef({ content: "ck 1789318609 57222538888", ignoreCodes: ["57222538888"] }).orderCode, 1789318609,
+    "bỏ số TK nhưng vẫn lấy được mã đơn đứng trước");
+  // Chỉ có mỗi số tài khoản ⇒ không có mã đơn
+  assert.equal(extractOrderRef({ code: "57222538888", ignoreCodes: ["57222538888"] }).orderCode, null);
+});

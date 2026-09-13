@@ -1969,6 +1969,14 @@ app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res
  * xem vietqr.js), nên ở đây khớp được đúng đơn. Chỉ tự kích hoạt khi tiền ĐỦ; thiếu tiền thì
  * để chủ shop xác nhận tay (alert cũ vẫn gửi) — thà chậm còn hơn cấp sai.
  */
+/** Mã đơn có tồn tại trong hệ thống không (kể cả đã thanh toán) — để phân biệt "đã xử lý" với "lạc". */
+async function orderKnown(orderCode, product) {
+  if (!orderCode) return false;
+  if (product !== "ai" && (await authStore.pendingPaymentByCode(orderCode))) return true;
+  if (product !== "vpn" && (await aiStore.pendingPayment(orderCode))) return true;
+  return false;
+}
+
 async function findPendingOrder({ orderCode, product }) {
   const wants = (p) => !product || product === p;
   if (wants("vpn")) {
@@ -2124,7 +2132,12 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
     }
 
     const paid = Number(payload.transferAmount ?? 0);
-    const ref = extractOrderRef({ code: payload.code, content: payload.content ?? payload.description });
+    const ref = extractOrderRef({
+      code: payload.code,
+      content: payload.content ?? payload.description,
+      // Số tài khoản nhận có thể nằm trong nội dung và trùng dạng 10 chữ số của mã đơn.
+      ignoreCodes: [bankQrConfig()?.accountNumber, momoQrConfig()?.accountNumber].filter(Boolean),
+    });
     if (!ref.orderCode) {
       console.warn(
         `sepay: giao dịch ${txId} ${paid}đ không có mã đơn trong nội dung ` +
@@ -2143,8 +2156,26 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
 
     const found = await findPendingOrder(ref);
     if (!found) {
-      console.log(`sepay: đơn ${ref.orderCode} không còn chờ xác nhận (đã xử lý hoặc hết hạn)`);
-      await logSepayWebhook(payload, "order-not-pending", { orderCode: ref.orderCode });
+      // Đã xử lý rồi (webhook lặp) thì im lặng; còn mã đơn KHÔNG tồn tại trong hệ thống nghĩa là
+      // tiền vào mà không gắn được với đơn nào (khách ghi sai/thiếu nội dung) ⇒ phải BÁO chủ shop,
+      // nếu không thì tiền vào mà không ai biết (đã gặp thật 14/09: 5.000đ, nội dung chỉ có số TK).
+      if (await orderKnown(ref.orderCode, ref.product)) {
+        console.log(`sepay: đơn ${ref.orderCode} không còn chờ xác nhận (đã xử lý hoặc hết hạn)`);
+        await logSepayWebhook(payload, "order-not-pending", { orderCode: ref.orderCode });
+        return res.json({ success: true });
+      }
+      console.warn(
+        `sepay: giao dịch ${txId} ${paid}đ không khớp đơn nào (mã đọc được: ${ref.orderCode}, ` +
+          `qua ${ref.via ?? "?"}) — báo chủ shop xác nhận tay`,
+      );
+      await fireUnmatchedAlert({
+        amount: paid,
+        content: payload.content ?? payload.description ?? "",
+        txId,
+        accountNumber: payload.accountNumber,
+        reason: `không khớp đơn nào trong hệ thống (mã đọc được: ${ref.orderCode})`,
+      });
+      await logSepayWebhook(payload, "no-order-code", { orderCode: ref.orderCode, via: ref.via });
       return res.json({ success: true });
     }
 
