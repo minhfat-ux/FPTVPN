@@ -209,3 +209,29 @@ Current task tracked here (schema per spec §31). Structured state also in
 - Node tooling: `tools/node-setup/` (hysteria + relay Go + systemd), `docs/AGENT_NEW_NODE_GUIDE.md`, `docs/EXIT_NODE_IP_GUIDE.md`.
 - MeetFlowAI: AAB 1.0.4 (play) + APK (china) + release notes 5 ngôn ngữ; trang support đổi sang bản release.
 - Workflow agent: `AGENTS.md` + `CLAUDE.md` + `RULE-DELEGATE-001` + template brief; đã kiểm chứng worker tự đọc luật.
+
+## 14/09/2026 — Android "Cannot reach VPNFlow service" (đã fix + phát hành 1.3.3)
+
+**Nguyên nhân (đo được trên đúng mạng khách):** GFW chặn cả 2 IP node (`ping` 100% loss) → mọi request
+API trực tiếp chết; **APK đang phát ở `/v1/downloads/android` là 1.2.8 (versionCode 8) — dex không có
+chuỗi `fcnvpn.tail303be3.ts.net`, tức KHÔNG có đường dự phòng**; bản 1.3.2 trên máy test có fallback
+nhưng phụ thuộc DNS cho host Funnel, mà khi tunnel UP + transport chết thì DNS bị hút vào tunnel
+(`Unable to resolve host "fcnvpn.tail303be3.ts.net"`); thêm nữa node-1 hết sạch đĩa (`/` 100% vì
+`/tmp/tcpcap.txt` 11,2 GB) và trả 502 cho host API.
+
+**Đã làm:**
+- App 1.3.3 (versionCode 13): ghim IP cho `api.meetflowai.site` + `fcnvpn.tail303be3.ts.net`
+  (`Config.PINNED_HOST_ADDRESSES`), resolver mới `api/PinnedDns.kt` (IP ghim trước, DNS hệ thống chỉ chờ
+  ≤1,2 s), `WSRelayBridge` dùng cùng resolver, fallback khi IOException **và** 502/503/504, so đúng origin,
+  nhớ host dự phòng 10 phút, connectTimeout 3 s. Test: `ApiFallbackTest` + `PinnedDnsConfigTest` → **20 test, 0 fail**.
+  **Đã kiểm chứng trên Fold5 ở mạng đang chặn**: log `api: dùng host dự phòng fcnvpn.tail303be3.ts.net (HTTP 200)`.
+- Phát hành APK modern + legacy 1.3.3 lên node-2 (`sha256` khớp build), gate `android_latest_version` = 1.3.3
+  (minimum giữ 1.2.6). Khách bị chặn tải được qua Funnel: `https://fcnvpn.tail303be3.ts.net/v1/downloads/android`.
+- Hạ tầng: dọn 11,2 GB `/tmp` node-1 (`/` 100% → 40%); `cp-proxy` đi **HTTPS** tới node-2 (SNI + verify cert);
+  Caddy node-1 trỏ upstream vào `cp-proxy` (7781) ⇒ **IP node-1 hết 502**, dùng lại được làm cửa dự phòng.
+
+**Còn lại:** (1) node-2 còn mở cổng 7778 công khai bằng HTTP → nên bind 127.0.0.1 (phải sửa `index.js`,
+file đang có session khác sửa); (2) iOS/macOS chưa có API dự phòng + chưa ghim IP; (3) thêm URL dự phòng
+thứ hai (Cloudflare) + ghim IP; (4) đổi IP node-1.
+
+Chi tiết đầy đủ: `docs/HANDOVER_2026-09-13_china_ip_block_and_funnel.md` §8.

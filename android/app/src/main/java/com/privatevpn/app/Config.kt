@@ -24,19 +24,6 @@ object Config {
     val API_FALLBACK_ADDRESSES = listOf("103.6.234.233", "103.173.155.50")
 
     /**
-     * Host API dự phòng — đi qua hạ tầng dùng chung (Cloudflare Tunnel / Tailscale
-     * Funnel) thay vì IP của node.
-     *
-     * Vì sao cần: GFW chặn theo IP, nên khi cả IP node bị chặn thì app không gọi được
-     * API và báo "cannot reach service" dù node vẫn chạy. Client nói chuyện với IP của
-     * hạ tầng dùng chung thì muốn chặn phải chặn cả một dải mà hàng triệu dịch vụ khác
-     * đang dùng — đây đúng cách Tailscale không bao giờ "chết vì chặn IP".
-     *
-     * Khi host chính lỗi transport, OkHttp tự thử lần lượt các host dưới đây
-     * (xem fallbackInterceptor trong ControlAPIClient). Cập nhật danh sách này khi
-     * đổi tunnel/domain.
-     */
-    /**
      * Relay WebSocket cho đường dữ liệu (Hysteria đi trong WSS qua Cloudflare Tunnel).
      * Dùng khi IP của mọi node đều bị chặn: client không còn nói chuyện trực tiếp với IP node.
      */
@@ -45,11 +32,40 @@ object Config {
     /** Cổng Hysteria mà relay đầu kia đang trỏ tới. */
     const val WS_RELAY_PORT = 8443
 
+    /**
+     * Host API dự phòng — đi qua hạ tầng dùng chung (Tailscale Funnel) thay vì IP của node.
+     *
+     * Vì sao cần: GFW chặn theo IP, nên khi cả IP node bị chặn thì app không gọi được
+     * API và báo "cannot reach service" dù node vẫn chạy. Client nói chuyện với IP của
+     * hạ tầng dùng chung thì muốn chặn phải chặn cả một dải mà hàng triệu dịch vụ khác
+     * đang dùng — đây đúng cách Tailscale không bao giờ "chết vì chặn IP".
+     *
+     * Khi host chính lỗi transport (hoặc trả 502/503/504 — node vẫn sống nhưng control
+     * plane sau nó chết), OkHttp thử lại lần lượt các host dưới đây
+     * (xem fallbackInterceptor trong ControlAPIClient). Cập nhật danh sách này khi
+     * đổi tunnel/domain.
+     */
     val API_FALLBACK_BASES = listOf(
         // Tailscale Funnel — URL cố định, đi qua relay toàn cầu của Tailscale nên
         // vào được cả những mạng đã chặn IP của mọi node (đã đo: 200 OK từ mạng TQ
         // đang chặn cả 103.173.155.50 lẫn 103.6.234.233).
         "https://fcnvpn.tail303be3.ts.net",
+    )
+
+    /**
+     * IP ghim cho những host app BẮT BUỘC phải vào được (xem `PinnedDns`).
+     *
+     * Vì sao cần thêm lớp này: khi tunnel đang UP mà transport đã chết, DNS của máy bị
+     * trỏ vào trong tunnel (`dns=1.1.1.1`) nên mọi truy vấn treo/thất bại — đúng lúc app
+     * cần resolve host dự phòng nhất. Diagnostics 14/09 ghi đúng lỗi đó:
+     * `ws-relay: failed: Unable to resolve host "fcnvpn.tail303be3.ts.net"`.
+     * Ghim IP thì đường thoát không còn phụ thuộc DNS; TLS vẫn xác thực đúng hostname nên
+     * ghim IP chỉ thêm đường vào, không thể bị dùng để chuyển hướng traffic. Cập nhật
+     * danh sách khi IP của hạ tầng đổi.
+     */
+    val PINNED_HOST_ADDRESSES: Map<String, List<String>> = mapOf(
+        "api.meetflowai.site" to API_FALLBACK_ADDRESSES,
+        "fcnvpn.tail303be3.ts.net" to listOf("103.84.155.217", "103.84.155.153"),
     )
 
     /** Web purchase page (plan picker + QR payment). Mirrors iOS/macOS. */

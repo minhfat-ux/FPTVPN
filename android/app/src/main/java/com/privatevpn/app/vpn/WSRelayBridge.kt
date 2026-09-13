@@ -55,6 +55,10 @@ class WSRelayBridge(
 
     private val client = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
+        // Cầu WS là đường THOÁT khi IP node bị chặn, nên không được phụ thuộc DNS hệ thống:
+        // khi tunnel đang UP mà transport chết, DNS bị hút vào tunnel và lỗi
+        // "Unable to resolve host fcnvpn.tail303be3.ts.net" (diagnostics 14/09).
+        .dns(com.privatevpn.app.api.PinnedDns)
         // Socket được protect NGAY khi tạo, trước khi connect → đi thẳng ra mạng nền,
         // không qua tunnel của chính mình.
         .socketFactory(object : javax.net.SocketFactory() {

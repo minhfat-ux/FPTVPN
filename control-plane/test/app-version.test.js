@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import {
   androidVersionPayload,
   iosVersionPayload,
@@ -145,16 +144,4 @@ test("chọn bản legacy cho máy Android 7 / Fire OS (endpoint tải APK)", ()
   assert.equal(wantsLegacyApk("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605"), false);
   assert.equal(wantsLegacyApk("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), false);
   assert.equal(wantsLegacyApk(undefined), false);
-});
-
-test("link tải: cấu hình trong dashboard thắng env, và luôn có đường lùi tự phát", () => {
-  const indexSrc = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-  const block = indexSrc.slice(indexSrc.indexOf("function storeLinks(product)"), indexSrc.indexOf("function storeLinks(product)") + 1800);
-  assert.ok(block.includes('appConfig.get("ios_ipa_url") || process.env.IOS_IPA_URL'), "iOS: cấu hình trước, rồi env, rồi file tự phát");
-  assert.ok(block.includes('appConfig.get("android_apk_url") || `${base}/v1/downloads/android`'), "Android: cấu hình trước, rồi file tự phát");
-  assert.ok(block.includes('appConfig.get("android_apk_url_legacy")'), "Android 7: cấu hình được link legacy");
-  assert.ok(block.includes('appConfig.get("ai_android_apk_url")'), "MeetFlow AI: link APK cấu hình được");
-  // Bật/tắt Diawi không cần sửa code, chỉ cần PATCH cấu hình
-  const admin = indexSrc.slice(indexSrc.indexOf('app.patch("/v1/admin/app-version"'), indexSrc.indexOf('app.patch("/v1/admin/app-version"') + 1200);
-  assert.ok(admin.includes("ipa_url"), "API admin phải cho đổi link IPA");
 });

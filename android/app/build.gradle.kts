@@ -41,8 +41,17 @@ android {
         applicationId = "com.privatevpn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.3.2"
+        versionCode = 13
+        versionName = "1.3.3"
+    }
+
+    /**
+     * Unit test chạy trên JVM nên `android.util.Log` là stub ném lỗi: trả giá trị mặc định
+     * thay vì nổ, nhờ vậy test được cả những đoạn có ghi DiagnosticsLog (ví dụ đường dự phòng
+     * của ControlAPIClient — đúng thứ vừa gây lỗi "cannot reach service").
+     */
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     /**

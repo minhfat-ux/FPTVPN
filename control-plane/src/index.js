@@ -469,29 +469,24 @@ function availablePaymentMethods() {
   return methods;
 }
 
-/**
- * Link tải trên trang buy. Thứ tự ưu tiên: cấu hình trong dashboard (appConfig) → biến môi
- * trường → file do server mình phát. Nhờ vậy đổi sang Diawi chỉ cần PATCH /v1/admin/app-version
- * (không phải sửa env rồi restart), mà link tự phát vẫn là đường lùi khi link ngoài hết hạn.
- */
 function storeLinks(product) {
   const base = publicBaseUrl();
   return product === "ai"
     ? {
         ios: process.env.APP_STORE_URL_MEETFLOW_AI || null,
         mac: process.env.APP_STORE_URL_MEETFLOW_MAC || null,
-        android: appConfig.get("ai_android_apk_url") || `${base}/v1/ai/downloads/android`,
+        android: `${base}/v1/ai/downloads/android`,
       }
     : {
         // Chủ dự án đã bỏ kênh App Store (14/09/2026): bản iOS phát trực tiếp từ server
         // của mình (IPA) — cùng kiểu với APK Android ở dưới.
-        ios: appConfig.get("ios_ipa_url") || process.env.IOS_IPA_URL || `${base}/v1/downloads/ios`,
+        ios: process.env.IOS_IPA_URL || `${base}/v1/downloads/ios`,
         mac: process.env.APP_STORE_URL_MAC || null,
         // Used while the app is only in beta (before App Store approval).
         testflight: process.env.TESTFLIGHT_URL_IOS || null,
-        android: appConfig.get("android_apk_url") || `${base}/v1/downloads/android`,
+        android: `${base}/v1/downloads/android`,
         // Android 7.0+ build for Fire TV / older devices (see the route below).
-        androidLegacy: appConfig.get("android_apk_url_legacy") || process.env.ANDROID_LEGACY_APK_URL || `${base}/v1/downloads/android-legacy`,
+        androidLegacy: process.env.ANDROID_LEGACY_APK_URL || `${base}/v1/downloads/android-legacy`,
       };
 }
 
@@ -2705,23 +2700,19 @@ app.get("/v1/admin/app-version", requireAdminAuth, (_req, res) => {
     minimum_version: appConfig.get("minimum_ios_version"),
     latest_version: appConfig.get("latest_ios_version"),
     store_url: appConfig.get("app_store_url"),
-    ipa_url: appConfig.get("ios_ipa_url"),
   });
 });
 
 app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
   try {
-    const { minimum_version, latest_version, store_url, ipa_url } = req.body ?? {};
+    const { minimum_version, latest_version, store_url } = req.body ?? {};
     if (minimum_version !== undefined) appConfig.set("minimum_ios_version", minimum_version);
     if (latest_version !== undefined) appConfig.set("latest_ios_version", latest_version);
     if (store_url !== undefined) appConfig.set("app_store_url", store_url);
-    // Link IPA phát cho khách (Diawi hoặc file của mình). Rỗng ⇒ quay về /v1/downloads/ios.
-    if (ipa_url !== undefined) appConfig.set("ios_ipa_url", ipa_url);
     res.json({
       minimum_version: appConfig.get("minimum_ios_version"),
       latest_version: appConfig.get("latest_ios_version"),
       store_url: appConfig.get("app_store_url"),
-      ipa_url: appConfig.get("ios_ipa_url"),
     });
   } catch (err) {
     res.status(500).json({ error: "Internal error" });

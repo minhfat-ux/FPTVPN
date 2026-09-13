@@ -1,6 +1,7 @@
 package com.privatevpn.app.api
 
 import com.privatevpn.app.Config
+import com.privatevpn.app.diag.DiagnosticsLog
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -8,8 +9,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
-import java.net.InetAddress
-import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -20,63 +19,102 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class ControlAPIClient(
     private val baseUrl: String = Config.CONTROL_PLANE_URL,
     private val joinToken: String = "",
+    /** Tham số hoá để test được đường dự phòng; production luôn dùng giá trị trong Config. */
+    private val fallbackBases: List<String> = Config.API_FALLBACK_BASES,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+
     /**
-     * Resolves the coordinator host with pinned fallback addresses.
-     *
-     * OkHttp tries every returned address in order, so a cached/poisoned/stale answer
-     * from the OS resolver no longer means "cannot reach the service". TLS verification
-     * still uses the requested hostname, so the certificate is still validated normally.
+     * Thử y nguyên request qua một host dự phòng (Tailscale Funnel — hạ tầng dùng chung,
+     * không phải IP của node). Trả về response nếu tới được, null nếu lỗi transport.
+     * Cert của host dự phòng hợp lệ nên không cần xử lý TLS đặc biệt.
      */
-    private val coordinatorDns = object : Dns {
-        override fun lookup(hostname: String): List<InetAddress> {
-            val host = java.net.URI(baseUrl).host ?: return Dns.SYSTEM.lookup(hostname)
-            if (hostname != host) return Dns.SYSTEM.lookup(hostname)
-            val pinned = Config.API_FALLBACK_ADDRESSES.mapNotNull { literal ->
-                runCatching { InetAddress.getByName(literal) }.getOrNull()
-            }
-            val system = runCatching { Dns.SYSTEM.lookup(hostname) }.getOrDefault(emptyList())
-            return (pinned + system).distinct()
+    /** Origin của một base dự phòng, dạng scheme://host:port (mặc định 443/80 theo scheme). */
+    private fun originOf(base: String): String? = runCatching {
+        val uri = java.net.URI(base)
+        val port = if (uri.port > 0) uri.port else if (uri.scheme == "https") 443 else 80
+        "${uri.scheme}://${uri.host}:$port"
+    }.getOrNull()
+
+    private fun tryFallbackBase(
+        chain: okhttp3.Interceptor.Chain,
+        request: Request,
+        base: String,
+        /** false khi đang thử lại host đã nhớ: không gia hạn ký ức, để còn dò lại host chính. */
+        refreshPreference: Boolean = true,
+    ): okhttp3.Response? {
+        val target = runCatching { java.net.URI(base) }.getOrNull() ?: return null
+        val altUrl = request.url.newBuilder()
+            .scheme(target.scheme)
+            .host(target.host)
+            .port(if (target.port > 0) target.port else if (target.scheme == "https") 443 else 80)
+            .build()
+        return try {
+            val response = chain.proceed(request.newBuilder().url(altUrl).build())
+            DiagnosticsLog.log("api: dùng host dự phòng ${target.host} (HTTP ${response.code})")
+            // Nhớ NGUYÊN base (có scheme + port), không chỉ host: base dự phòng có thể khác port mặc định.
+            if (refreshPreference) PreferredHost.remember(base)
+            response
+        } catch (e: java.io.IOException) {
+            DiagnosticsLog.warn("api: host dự phòng ${target.host} cũng lỗi: ${e.message}")
+            PreferredHost.forget()
+            null
         }
     }
 
     /**
-     * Khi host chính không tới được (IP bị chặn), thử lại y nguyên request qua các
-     * host dự phòng (Cloudflare Tunnel / Tailscale Funnel) — hạ tầng dùng chung, không
-     * phải IP của node. Cert của các host này hợp lệ nên không cần xử lý TLS đặc biệt.
+     * Khi host chính không tới được (IP bị chặn) hoặc trả 5xx (node vẫn sống nhưng control
+     * plane phía sau nó chết — đúng lỗi 502 của node-1 ngày 14/09), thử lại y nguyên request
+     * qua các host dự phòng.
+     *
+     * Thứ tự: host dự phòng đã chạy được lần trước (nếu còn nhớ) → host chính → các host
+     * dự phòng còn lại. Nhớ host tốt là bắt buộc ở mạng bị chặn IP: host chính bị nuốt gói
+     * nên mỗi lần gọi API phải chờ hết connect timeout mới rơi được xuống dự phòng.
      */
     private val fallbackInterceptor = okhttp3.Interceptor { chain ->
         val request = chain.request()
+        // Đang gọi chính host dự phòng rồi thì không thử lại (tránh vòng lặp vô hạn).
+        // So ĐÚNG origin (scheme + host + cổng): cùng host nhưng khác cổng là hai upstream khác nhau.
+        val requestOrigin = "${request.url.scheme}://${request.url.host}:${request.url.port}"
+        val onFallbackHost = fallbackBases.any { originOf(it) == requestOrigin }
+        if (!onFallbackHost) {
+            val remembered = PreferredHost.get()
+            if (remembered != null) {
+                tryFallbackBase(chain, request, remembered, refreshPreference = false)
+                    ?.let { return@Interceptor it }
+            }
+        }
         var lastError: java.io.IOException? = null
+        var primaryStatus = 0
         try {
-            return@Interceptor chain.proceed(request)
+            val primary = chain.proceed(request)
+            primaryStatus = primary.code
+            if (primary.isSuccessful || primary.code !in RETRYABLE_HTTP || onFallbackHost) {
+                return@Interceptor primary
+            }
+            // Phải đóng body trước khi gửi request khác trên cùng connection.
+            primary.close()
         } catch (e: java.io.IOException) {
             lastError = e
         }
-        for (base in Config.API_FALLBACK_BASES) {
-            val target = runCatching { java.net.URI(base) }.getOrNull() ?: continue
-            val altUrl = request.url.newBuilder()
-                .scheme(target.scheme)
-                .host(target.host)
-                .port(if (target.port > 0) target.port else if (target.scheme == "https") 443 else 80)
-                .build()
-            try {
-                return@Interceptor chain.proceed(request.newBuilder().url(altUrl).build())
-            } catch (e: java.io.IOException) {
-                lastError = e
-            }
+        DiagnosticsLog.warn(
+            "api: ${request.url.host} lỗi (${lastError?.message ?: "HTTP $primaryStatus"}) -> thử host dự phòng"
+        )
+        for (base in fallbackBases) {
+            tryFallbackBase(chain, request, base)?.let { return@Interceptor it }
         }
-        throw lastError ?: java.io.IOException("all API hosts unreachable")
+        throw lastError ?: java.io.IOException("all API hosts unreachable (HTTP $primaryStatus)")
     }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(6, TimeUnit.SECONDS)
+        // 3s: đủ cho TCP connect trên mạng di động, mà mạng bị chặn IP thì đỡ phải chờ
+        // hết timeout mới rơi xuống host dự phòng.
+        .connectTimeout(3, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .addInterceptor(fallbackInterceptor)
-        // Own resolver, see [coordinatorDns]: a stale system-DNS answer must not be able
-        // to keep the app offline after we move the API to another address.
-        .dns(coordinatorDns)
+        // Resolver có ghim IP (xem PinnedDns): câu trả lời cũ/đầu độc của DNS hệ thống —
+        // hoặc DNS bị hút vào tunnel đang chết — không còn giữ app offline được nữa.
+        .dns(PinnedDns)
         .build()
 
     /**
@@ -318,5 +356,39 @@ class ControlAPIClient(
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private val EMPTY = "{}".toRequestBody(JSON)
+
+        /**
+         * 5xx coi như "host chết": node vẫn trả lời nhưng control plane phía sau nó đã
+         * dừng (node-1 trả 502 cho `api.meetflowai.site` từ 14/09) — phải thử host dự phòng
+         * chứ không trả lỗi cho người dùng.
+         */
+        private val RETRYABLE_HTTP = setOf(502, 503, 504)
+    }
+}
+
+/**
+ * Nhớ host dự phòng vừa chạy được (trong bộ nhớ tiến trình, TTL 10 phút).
+ *
+ * Vì sao cần: ở mạng chặn IP node, host chính không trả lời (gói bị nuốt) nên MỖI request
+ * phải chờ hết connect timeout mới rơi được xuống host dự phòng — vừa chậm vừa tốn pin.
+ * Nhớ host tốt thì các request sau đi thẳng. TTL để còn dò lại host chính khi mạng đổi, và
+ * host dự phòng hỏng thì bị quên ngay (xem `forget` trong tryFallbackBase).
+ */
+internal object PreferredHost {
+    private const val TTL_MS = 10 * 60 * 1000L
+
+    @Volatile private var host: String? = null
+    @Volatile private var expiresAt = 0L
+
+    fun get(): String? = host?.takeIf { System.currentTimeMillis() < expiresAt }
+
+    fun remember(newHost: String) {
+        host = newHost
+        expiresAt = System.currentTimeMillis() + TTL_MS
+    }
+
+    fun forget() {
+        host = null
+        expiresAt = 0L
     }
 }

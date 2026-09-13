@@ -215,3 +215,69 @@ Còn lại (cần chủ dự án quyết / làm):
 5. Trang `/terms` hiện chỉ nêu "MeetFlow AI Terms of Use" (0 lần VPNFlow) trong khi nút "Điều khoản
    sử dụng" của app và link trên `/support` đều trỏ vào đó — cần bổ sung phạm vi VPNFlow hoặc tạo
    trang riêng.
+
+## 8. 14/09/2026 — "Cannot reach VPNFlow service" lần nữa: nguyên nhân + fix (đã phát hành 1.3.3)
+
+### 8.1 Số đo (từ chính mạng của khách, Wi-Fi ICONLABHOTEL, TQ)
+
+| Phép đo | Kết quả |
+|---|---|
+| `ping api.meetflowai.site` (→ 103.6.234.233) từ điện thoại | **100% packet loss** (IP bị chặn) |
+| `ping 103.173.155.50` (node-1) từ điện thoại | **100% packet loss** |
+| `ping fcnvpn.tail303be3.ts.net` từ điện thoại | 0% loss, ~110 ms ✅ |
+| `curl --interface en0 --resolve …:443:103.84.155.217` (Funnel, đúng SNI) | **HTTP 200 / 0,97 s** ✅ |
+| APK đang phát ở `/v1/downloads/android` | **1.2.8 (versionCode 8)** — dex **không có** chuỗi `fcnvpn.tail303be3.ts.net` ⇒ **không có đường dự phòng** |
+| APK trên máy test (1.3.2) | có fallback (2 lần xuất hiện chuỗi trên) |
+
+### 8.2 Chuỗi nguyên nhân
+
+1. GFW chặn **cả hai IP node** ⇒ mọi request API trực tiếp (2 IP ghim trong app) chết.
+2. **APK đang phát cho khách là 1.2.8 — không có** host dự phòng Funnel ⇒ ở mạng bị chặn, app
+   không còn đường nào vào API → đúng câu "Cannot reach VPNFlow service".
+3. Bản 1.3.2 (chỉ nằm trên máy test) có fallback nhưng **phụ thuộc DNS**: khi tunnel UP mà transport
+   đã chết, DNS của máy bị trỏ vào trong tunnel (`dns=1.1.1.1`) nên
+   `ws-relay: failed: Unable to resolve host "fcnvpn.tail303be3.ts.net"` (diagnostics 01:14–01:26)
+   ⇒ chính đường dự phòng cũng không mở được.
+4. Phụ: **node-1 hết sạch đĩa** — `/` 100% vì `/tmp/tcpcap.txt` **11,2 GB** còn sót từ đợt bắt gói;
+   journald/rsyslog báo `No space left on device`, và node-1 trả **502** cho host API (control plane
+   trên node-1 đã stop + disable theo thiết kế, nhưng Caddy vẫn trỏ vào 7778).
+
+### 8.3 Đã sửa & đã phát hành
+
+**App Android 1.3.3 (versionCode 13):**
+- `Config.PINNED_HOST_ADDRESSES` — ghim IP cho `api.meetflowai.site` và `fcnvpn.tail303be3.ts.net`
+  (103.84.155.217 / 103.84.155.153).
+- `api/PinnedDns.kt` — trả IP ghim TRƯỚC; câu trả lời của DNS hệ thống chỉ được chờ **≤1,2 s** rồi bỏ
+  (DNS treo vì bị hút vào tunnel chết không còn khoá được đường thoát). `WSRelayBridge` dùng cùng resolver.
+- `ControlAPIClient` — fallback khi **IOException *và* 502/503/504**; so **đúng origin** (scheme+host+cổng)
+  để không lặp; **nhớ host dự phòng đã chạy được** (TTL 10 phút) nên request sau đi thẳng, không phải chờ
+  hết connect timeout; connectTimeout 6 s → **3 s**.
+- Test: `ApiFallbackTest` (3 ca: refused → fallback, 502 → fallback, cả hai 502 → báo lỗi 1 lần) +
+  `PinnedDnsConfigTest` (2 ca). Tổng **20 test, 0 fail**.
+- **Đã kiểm chứng trên Fold5 thật, đúng mạng đang chặn IP**:
+  `W api: api.meetflowai.site lỗi (failed to connect to /103.173.155.50 (port 443) … 6000ms) -> thử host dự phòng`
+  rồi `I api: dùng host dự phòng fcnvpn.tail303be3.ts.net (HTTP 200)`.
+
+**Phát hành:**
+- APK `modern` (minSdk 26) và `legacy` (minSdk 24 / Fire OS) 1.3.3 đã đẩy lên node-2:
+  `/root/flowvpn-apk/VPNFlow-latest.apk`, `…/VPNFlow-android7.apk` (sha256 khớp bản build local).
+- `/v1/downloads/android` trả bản modern, UA Android 7 / Fire OS tự nhận bản legacy;
+  `/v1/downloads/android-legacy` cũng vậy. Gate `android_latest_version` = **1.3.3** (minimum giữ 1.2.6).
+- **Khách bị chặn IP tải được APK qua Funnel**: `https://fcnvpn.tail303be3.ts.net/v1/downloads/android`
+  (đã đo HTTP 200) — đây là đường duy nhất khi `meetflowai.site` bị chặn.
+
+**Hạ tầng:**
+- Dọn 11,2 GB `/tmp` trên node-1 (`/` 100% → 40%).
+- `cp-proxy` (node-1) nay đi **HTTPS** tới `api.meetflowai.site` (SNI + `checkServerIdentity` đầy đủ)
+  thay vì HTTP thẳng cổng 7778 — chặng node-1 → node-2 đi qua Internet nên token khách không được đi plaintext.
+- Caddy node-1: upstream `127.0.0.1:7778` → **`127.0.0.1:7781` (cp-proxy)** ⇒ IP node-1 **hết 502** và trở
+  lại làm cửa dự phòng: `curl --resolve api.meetflowai.site:443:103.173.155.50 /health` → **200**.
+
+### 8.4 Còn lại (khuyến nghị, theo thứ tự)
+
+1. **node-2 vẫn mở cổng 7778 ra Internet bằng HTTP** (`http://103.6.234.233:7778/health` → 200) —
+   nên bind `127.0.0.1`. Cần sửa `control-plane/src/index.js` (`listen(PORT, "127.0.0.1")`) + deploy;
+   **file này đang được session khác sửa** nên phải diff trước khi deploy.
+2. **iOS/macOS chưa có API dự phòng và chưa ghim IP** — cùng lớp lỗi sẽ xảy ra với khách iPhone.
+3. Thêm URL dự phòng thứ hai (Cloudflare quick tunnel) vào `API_FALLBACK_BASES` + ghim IP tương ứng.
+4. Đổi IP node-1 (đã yêu cầu nhà cung cấp) để có cửa vào không bị chặn.
