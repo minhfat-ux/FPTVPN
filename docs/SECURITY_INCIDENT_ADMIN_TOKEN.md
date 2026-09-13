@@ -90,3 +90,52 @@ Token chỉ xuất hiện ở `/etc/systemd/system/flowvpn-cp.service` trên ser
 - Đặt `VERIFY_LINK_SECRET` + `CONFIRM_SECRET` riêng (không phụ thuộc `AUTH_TOKEN`).
 - Rà lại thói quen: docs/evidence **không bao giờ** dán giá trị thật — dùng `$ENV_VAR` hoặc `<PLACEHOLDER>`
   (RULE-EVID-005, SECURITY.md §7).
+
+---
+
+## 6. Diễn biến xử lý — 2026-09-13 (agent, owner đã approve rotate)
+
+### 6.1 Xác nhận mức độ (trước khi rotate)
+
+```bash
+curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer <token đã lộ>" \
+  https://api.meetflowai.site/v1/admin/users      # → 200
+curl -s -o /dev/null -w '%{http_code}' https://api.meetflowai.site/v1/admin/users   # → 401 (không token)
+```
+
+⇒ Token **dùng được từ Internet**, không bị chặn theo IP (`requireAdminIP` chỉ áp cho **1** route;
+`/v1/admin/users` không có) ⇒ đúng mức **CRITICAL**.
+
+### 6.2 Đã rotate (2026-09-13)
+
+- Sinh token mới (24 byte hex), sửa `Environment=AUTH_TOKEN=...` trong
+  `/etc/systemd/system/flowvpn-cp.service`, backup unit: `/root/flowvpn-cp.service.bak-1789298466`,
+  `systemctl daemon-reload && systemctl restart flowvpn-cp` → service `active`.
+- **Verify sau rotate:** token **mới → 200**, token **cũ → 401** (giá trị cũ đã vô hiệu).
+- Token mới lưu tại `.tmp/flowvpn_admin_token.txt` (`chmod 600`, đã gitignore) — **không** vào repo/chat/log.
+- Ảnh hưởng phụ: link verify email / link confirm thanh toán đang treo (fallback secret) hết hiệu lực → gửi lại là được.
+
+### 6.3 Rà soát dấu hiệu lạm dụng
+
+- `auth.json`: 15 user / 14 subscription; `ai-users.json`: 9 user. Không thấy bất thường:
+  các gói `admin.manual` (09-10 13:31 và 13:35) khớp **cùng giây** với user được tạo (owner cấp tay),
+  còn lại là `bankqr.monthly` (mua thật) và `test.premium` (test nội bộ).
+- **Hạn chế:** control-plane **không ghi log request** ⇒ **không có audit trail** cho `/v1/admin/*`,
+  nên không thể loại trừ 100% việc token bị dùng. Khuyến nghị: thêm access log cho các route admin
+  (ghi method + path + IP, **không** ghi token).
+
+### 6.4 GitHub
+
+- **Dependabot đang disabled** ⇒ alert owner thấy gần như chắc chắn là **secret scanning** (đúng loại secret này).
+- **Repo vẫn PUBLIC**: PAT lưu trong keychain (`minhfat-ux`, fine-grained) **thiếu quyền Administration: write**
+  ⇒ `PATCH /repos/minhfat-ux/FPTVPN {"private":true}` trả *"Resource not accessible by personal access token"*.
+  Cần owner đổi bằng UI: **Settings → General → Danger Zone → Change repository visibility → Private**
+  (hoặc cấp PAT/`gh` có quyền admin để agent làm).
+- Sau khi rotate: vào alert của GitHub bấm **Revoked** (không cần purge lịch sử vì token cũ đã vô hiệu).
+
+### 6.5 Việc còn lại (khuyến nghị)
+
+- [ ] Owner: chuyển repo sang **Private** + bật **push protection** cho secret scanning.
+- [ ] Owner: đặt `VERIFY_LINK_SECRET` + `CONFIRM_SECRET` riêng (hiện fallback về `AUTH_TOKEN`).
+- [ ] Thêm access log cho `/v1/admin/*` (method + path + IP) để lần sau truy được vết.
+- [ ] Xoá `DEV_LOGIN_CODE` sau khi app được duyệt (đang để phục vụ review).
