@@ -235,3 +235,22 @@ file đang có session khác sửa); (2) iOS/macOS chưa có API dự phòng + c
 thứ hai (Cloudflare) + ghim IP; (4) đổi IP node-1.
 
 Chi tiết đầy đủ: `docs/HANDOVER_2026-09-13_china_ip_block_and_funnel.md` §8.
+
+## 14/09/2026 — Dọn đĩa + nghỉ hưu coordinator cũ trên node-1
+
+- **node-1: `/` 100% → 27%** (5,0 GB dùng / 14 GB trống). Đã xoá: `/tmp/tcpcap.txt` 11,2 GB +
+  `hycap.txt`/`speedtest.bin` (bắt gói còn sót), 9 APK VPNFlow cũ + 4 APK MeetFlowAI cũ trong
+  `/root/flowvpn-apk` (node-1 KHÔNG còn phục vụ APK — mọi request đi qua cp-proxy → node-2),
+  APK/AAB cũ trong `/var/www/flowvpn/dl` (1.2.2 ×2 147 MB, AAB 1.2.2/1.2.3/1.2.7, APK 1.2.6/1.2.7),
+  `VPNFlow-diag-1.2.4.apk`, `MeetFlowAI-debug.apk.bak`, các file `.bak` HTML, `/tmp/web.tgz` +
+  `cp-deps.tgz` + `cp-src-data.tgz`, bản `/tmp/cloudflared` trùng, apt cache, và `/root/privatevpn`.
+- **Nghỉ hưu `privatevpn.service`** (coordinator đời cũ, port 7777, chạy từ `/root/privatevpn`):
+  đã **stop + disable** (không ai nối vào 7777, Caddy không trỏ tới, `/health` trả 404) rồi mới xoá thư mục.
+  Unit file giữ nguyên để còn khôi phục nếu cần.
+- **Giữ lại ở node-1** (vì có link sống / để rollback): `MeetFlowAI-1.0.4-china.apk` (link trong trang support),
+  `VPNFlow-1.2.4-play-store.aab` (docs PLAY_SUBMISSION trỏ tới), bộ 1.2.8 trong `/dl`, video demo, `speedtest-50mb.bin`.
+- **node-2: 51% → 49%** — xoá 7 file backup/APK cũ trong `/root/flowvpn-apk` (382 MB), giữ đúng cặp đang phát
+  (1.3.3 modern + legacy) + 1 cặp backup gần nhất (1.2.8) + `MeetFlowAI-latest.apk`.
+- Kiểm chứng sau dọn: 3 cửa API (IP node-1 qua cp-proxy / DNS node-2 / Tailscale Funnel) đều 200;
+  `/v1/downloads/android` trả đúng 96.519.748 bytes (1.3.3) ở cả 3 cửa; file tĩnh `/dl/*` của node-1 vẫn 206;
+  gate `android_latest_version` = 1.3.3.
