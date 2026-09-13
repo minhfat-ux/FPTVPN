@@ -1,0 +1,44 @@
+# Evidence — Panel admin: không vào được từ mạng bị chặn + deploy bản sửa Base URL
+date: 2026-09-13T15:29:40Z
+commit: 7226ae6 (sau khi push)
+
+## 1. Chẩn đoán: panel KHÔNG hỏng, chỉ là mạng TQ (GFW) chặn IP node
+```
+$ nc -vz 103.6.234.233 {443,80,22}   # từ máy owner (mạng TQ)
+  443/80/22 -> Operation timed out (cả 3)
+$ nc -vz example.com 443 ; nc -vz github.com 22   # baseline
+  example.com:443 -> succeeded | github.com:22 -> succeeded  => egress không bị chặn chung
+$ traceroute -n -m 6 103.6.234.233   # đi qua China Mobile (183.x/221.183.x) rồi tắc
+
+$ từ node-1 (trong VN, không bị GFW):
+  https://meetflowai.site/PrivateVPN/Admin       -> HTTP 200
+  https://api.meetflowai.site/v1/health          -> HTTP 200
+
+$ qua Tailscale Funnel (từ chính máy owner, mạng bị chặn):
+  https://fcnvpn.tail303be3.ts.net/admin         -> HTTP 200
+  https://fcnvpn.tail303be3.ts.net/v1/admin/stats -> HTTP 401
+```
+
+## 2. Deploy bản sửa lên node-2 (backup + md5 + restart)
+```
+$ md5 local  : 7f41b172ef10c1cde1607af20a500fee
+$ md5 node-2 : 7f41b172ef10c1cde1607af20a500fee
+$ backup    : /root/admin-page.js.bak-2026-09-13-222909
+$ systemctl restart flowvpn-cp -> active
+```
+
+## 3. Sau deploy: HTML serve == code HEAD, và panel đọc được dữ liệu thật
+```
+  LOCAL (HEAD) : 3857f7f1705fa1fa 195249 bytes
+  PROD (Funnel): 3857f7f1705fa1fa 195249 bytes
+  GIỐNG NHAU   : CÓ
+  có logic mới : CÓ
+
+$ GET /v1/admin/stats trên production (chỉ in số liệu, không in IP/token):
+  totals             : {"devices": 9, "test_devices": 37, "users": 15, "active_devices": 6, "revoked_devices": 3, "online_peers": 0, "total_peers": 44, "exit_nodes": 2}
+  connections_totals : {"online": 0, "total": 87, "nodes": 2}
+  by_node:
+     Hanoi 1    online=0 peer=44 | Hanoi, VN
+     Hanoi 2    online=0 peer=43 | Hanoi, VN
+  online_devices     : 0 dòng (đã cắt=False)
+```

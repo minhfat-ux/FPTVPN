@@ -218,3 +218,27 @@ Tầng 1 (commit `3d46f51`, `f6d58fd`).
   **CHƯA test trên thiết bị thật** — không có máy nào kết nối adb; các bước đo ghi ở mục 3
   của file bằng chứng.
 
+
+## 2026-09-13 (tối) — Panel admin: vào được từ mạng bị chặn + sửa bẫy Base URL
+
+- **Owner báo "không access được link"**. Chẩn đoán thật: panel **không hỏng** — từ trong VN
+  `https://meetflowai.site/PrivateVPN/Admin` trả **200**. Nguyên nhân là **GFW chặn IP cả 2 node**
+  từ mạng TQ (đo từ chính máy owner: `103.6.234.233` tắc cả 443/80/22, trong khi `example.com:443`
+  và `github.com:22` OK; traceroute đi qua China Mobile rồi tắc) — đúng sự cố đã ghi ở
+  `docs/HANDOVER_2026-09-13_china_ip_block_and_funnel.md`.
+- **Đường vào khi bị chặn (đã kiểm chứng):** `https://fcnvpn.tail303be3.ts.net/admin` —
+  Tailscale Funnel → `cp-proxy` (node-1) → control plane node-2. Vì đi thẳng vào control plane
+  nên **KHÔNG có prefix `/PrivateVPN`**; API của panel gọi cùng origin nên vẫn chạy.
+- **Bẫy đã sửa (bug thật)**: panel tự suy `Base URL` từ `window.location`, nhưng giá trị **đã lưu
+  trong localStorage luôn được dùng lại**. Ai từng mở panel qua `meetflowai.site` rồi chuyển sang
+  mở qua Funnel (đúng tình huống mạng bị chặn) thì page vẫn gọi API về domain đang bị chặn ⇒ panel
+  trắng dữ liệu. Nay chỉ dùng lại base cũ khi **cùng origin** với trang đang mở.
+- **Đã deploy lên node-2** (`/root/flowvpn-cp/src/admin-page.js`, backup
+  `/root/admin-page.js.bak-2026-09-13-222909`, md5 khớp, `systemctl restart flowvpn-cp` → active;
+  HTML serve khớp tuyệt đối code HEAD `3857f7f1705fa1fa`).
+- **`check-public-surface.py`**: thêm `/PrivateVPN/Admin` vào `SITE_PATHS` — panel trước đây không
+  nằm trong bộ kiểm nên sự cố này vô hình.
+- **Bằng chứng phụ cho fix peer remote**: trên production, node "Hanoi 1" báo 44 peer còn
+  "Hanoi 2" báo 43 (union 44) ⇒ hai node đọc **hai interface khác nhau** (node-1 qua SSH), tức bản
+  sửa `WireGuardManager._read()` chạy đúng thật; trước đó cả hai đều đọc wg0 của coordinator.
+- **Bằng chứng**: `evidence/2026-09-13-admin-panel-blocked-network-access.log`.
