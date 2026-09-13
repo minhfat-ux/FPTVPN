@@ -615,6 +615,12 @@ không phải khách. Muốn đổi thì sửa `renderPaymentAlert`.
 mọi giá trị khác (`ja`, `ko`, rỗng, lạ), KHÔNG bao giờ rơi về tiếng Việt. Muốn thêm ja/ko thì bổ
 sung khoá vào bảng `T` trong `mailer.js` (đã tách theo từng ngôn ngữ) + cập nhật `MAIL_LANGS`.
 Có test khoá hành vi này: `test/mailer.test.js` → "pickMailLang: … rơi về TIẾNG ANH".
+
+Từ 13/09/2026 còn có **test chống rò tiếng Việt**: `test/mail-langs.test.js` render cả 5 loại email
+gửi khách bằng en/zh rồi soi ký tự/dấu tiếng Việt (bỏ qua đơn vị tiền `200.000 đ`), kiểm tiêu đề
+đúng chữ Hán/không chữ Hán, và 3 ngôn ngữ phải cho 3 tiêu đề khác nhau. Đã thử phá (gán nhãn gói
+tiếng Việt cho bản en): test **fail đúng chỗ** (`invoice-ai/en lọt chữ tiếng Việt "Gói"`) — tức
+test này thật sự bắt được lỗi, không phải test trang trí.
 Ngoài `mailer.js` **không** còn chỗ nào khác gửi thư (đã grep `nodemailer`/`sendMail`/Resend toàn
 repo); Firebase chỉ **sinh link** xác thực (`generateEmailVerificationLink`) rồi mình tự gửi,
 nên không có email nào của Firebase gửi khách bằng tiếng Anh mặc định.
