@@ -706,6 +706,31 @@ done
 Ghi nhớ: cert copy từ node-1 hết hạn **20/11/2026**. Node-2 sẽ tự xin cert mới qua ACME (HTTP-01
 chạy được vì DNS đang trỏ vào node-2) — nên kiểm lại hạn cert trước ~30/10, đừng để hết hạn mà không ai biết.
 
+**Tự động giữ cert khớp giữa hai node** — `scripts/sync-caddy-certs.sh` (đã cài cron **mỗi 6 giờ**
+trên node-1, log `/var/log/cert-sync.log`):
+
+```
+23 */6 * * * /root/flowvpn-cp/scripts/sync-caddy-certs.sh >> /var/log/cert-sync.log 2>&1
+```
+
+Vì sao cần: **chỉ node đang giữ bản ghi A mới gia hạn được cert** (HTTP-01/TLS-ALPN-01 kiểm tra theo
+tên miền). Node kia sẽ không gia hạn được ⇒ cert cũ đi và hết hạn sau ~90 ngày. Với DNS đang trỏ
+node-2 thì node-1 **không tự gia hạn được**, mà node-2 lại verify cert của node-1 khi proxy
+(`reverse_proxy https://…`, `insecure_skip_verify` không bật) ⇒ **cert node-1 hết hạn là sập web**
+dù DNS trỏ đúng. Script so hạn hai bên rồi đưa cert **xa hạn hơn** sang node kia (chiều nào cũng
+chạy được, nên nếu sau này đổi DNS về node-1 thì vẫn tự khớp) rồi restart Caddy ở node nhận.
+
+```bash
+scripts/sync-caddy-certs.sh --dry-run      # xem sẽ làm gì
+scripts/sync-caddy-certs.sh --no-restart   # copy cert nhưng không đụng Caddy (để thử)
+crontab -l | grep -v sync-caddy | crontab -   # tắt tự động (nhớ backup crontab trước!)
+```
+
+Đã kiểm thật 13/09/2026: chiều **kéo** (node-2 → node-1) và chiều **đẩy** (node-1 → node-2) đều copy
+đúng file + đúng quyền `caddy:caddy`, chạy lần 2 là no-op, node-2 không tới được thì thoát êm (exit 0),
+domain thiếu cert thì báo `CẦN XEM TAY` chứ không crash.
+
+
 
 ### Caddy ở edge — thêm route mới trong Node thì PHẢI thêm `handle` (13/09/2026)
 
