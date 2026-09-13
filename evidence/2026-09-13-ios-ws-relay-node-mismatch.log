@@ -1,0 +1,55 @@
+=== BẰNG CHỨNG: iPad chạy được — xác nhận nguyên nhân là LỆCH NODE ===
+Thời điểm: 2026-09-13 22:47-22:50 CST | iPad (A16) iPad15,7 | mạng WiFi khách sạn TQ
+
+PHÉP THỬ A/B trên cùng một máy, cùng mạng, cùng bản app. Chỉ khác node được chọn.
+
+################ A) Chọn vietnam-2 (node-2) — KHÔNG chạy ################
+  22:40:30 startTunnel requested
+  22:40:30 relay: started for 103.6.234.233 ports [9444, 8443]
+  22:41:00 health: reported vietnam-2 ok=true
+  peer key: OJPf...vZ2c  (= public_key của vietnam-2)
+  22:45:16 ws-relay: heartbeat udpFrames=47 udpBytes=6956 framesFromRelay=0 bytesFromRelay=0 wsOpen=true
+  22:45:28 wg: peer(OJPf...vZ2c) - Handshake did not complete after 5 seconds, retrying
+  => gui 47 goi handshake ra, NHAN VE 0 goi. Handshake khong bao gio xong.
+     App hien 'dang ket noi' mai mai (dung trieu chung 'connected nhung khong co mang').
+
+################ B) Chọn node-1 — CHẠY NGAY ################
+  22:47:07 startTunnel requested
+  22:47:07 relay: started for 103.173.155.50 ports [9444, 8443]
+  22:47:37 health: reported node-1 ok=true
+  peer key: N0vG...LIQ8  (= public_key của node-1)
+  22:47:15 ws-relay: started local udp 55053 for wss://fcnvpn.tail303be3.ts.net:10000
+  22:49:22 wg: peer(N0vG...LIQ8) - Received handshake response      <<< BẮT TAY XONG
+  22:50:00 ws-relay: heartbeat udpFrames=9627 udpBytes=3492712 framesFromRelay=10396 bytesFromRelay=8478160
+  => handshake xong, keepalive gui duoc, 8,5 MB di qua tunnel (2 chieu).
+  Thong luong do duoc: ~1,33 MB / 30s (~356 kbps) luc dang duyet web.
+
+################ KẾT LUẬN ################
+Nguyên nhân 'connected nhưng không có mạng' trên iOS ĐÃ XÁC NHẬN BẰNG THỰC NGHIỆM:
+  wss://fcnvpn.tail303be3.ts.net:10000 (wsrelay) hạ cánh vào WireGuard của NODE-1.
+  Client chọn node-2 thì được cấp khoá của node-2; gói handshake mã hoá tới node-2
+  nhưng lại tới wg0 của node-1 => node-1 không giải được, không có peer này,
+  WireGuard IM LẶNG TUYỆT ĐỐI (không phải mất gói — bị bỏ qua). => framesFromRelay=0.
+  Đổi sang node-1 thì khoá khớp => chạy ngay.
+
+  Android thoát được lỗi này vì Hysteria xác thực bằng MẬT KHẨU DÙNG CHUNG chứ không
+  theo peer key, nên relay hạ cánh node-1 vẫn chạy (chỉ là exit thành node-1).
+  WireGuard trên iOS thì xác thực bằng KHOÁ nên không thể bỏ qua chuyện lệch node.
+
+Đây cũng là lần đầu tiên đường WireGuard-over-WS cổng 10000 chạy thật — handover ghi
+nó 'chưa dùng', và trước hôm nay chưa từng được kiểm chứng.
+
+################ VIỆC CÒN LẠI — ĐÂY LÀ MÌN CHƯA GỠ ################
+Coordinator trả vietnam-2 (priority 50) ĐỨNG TRƯỚC node-1 (priority 100), nên app mặc
+định chọn node-2 — mà node-2 thì KHÔNG THỂ chạy được qua WS relay. Tức: người dùng mới
+ở TQ, để mặc định, sẽ dính đúng lỗi này. Ba hướng sửa, cần owner quyết:
+  (a) Cho WS relay tới được node-2: thêm một entry Funnel trỏ vào WG của node-2
+      (node-2 chưa lên tailnet nên cần lên, hoặc để node-1 forward sang node-2:443).
+  (b) Coordinator xếp node-1 lên trước cho client ở mạng bị chặn.
+  (c) Client: khi buộc phải đi đường WS relay thì phải được cấp config của ĐÚNG node
+      mà relay đó hạ cánh (hiện là node-1).
+Cả ba đều là việc production/server — ngoài phạm vi tôi được phép làm (AGENTS.md §1).
+
+Kiểm chứng phía client (tôi đã làm): Xcodegen + xcodebuild -destination
+'generic/platform=iOS' -> BUILD SUCCEEDED; cài lên iPad; và sửa UX để chạm cả dòng
+server là chọn (commit b7c4935) — chính là thứ cho phép đổi được sang node-1.
