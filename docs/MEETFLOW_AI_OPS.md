@@ -600,6 +600,15 @@ python3 /tmp/run-with-env.py /root/flowvpn-cp/scripts/check-mail-langs.mjs   # e
 ⚠️ `sendPaymentAlert` (email báo đơn cho **chủ shop**) cố ý chỉ tiếng Việt — người nhận là chủ shop,
 không phải khách. Muốn đổi thì sửa `renderPaymentAlert`.
 
+**Phạm vi ngôn ngữ của email:** chỉ có **vi / en / zh** (`MAIL_LANGS`). App hỗ trợ 5 ngôn ngữ
+(vi/en/zh/ja/ko) nên khách Nhật/Hàn sẽ nhận thư **tiếng Anh** — `pickMailLang()` rơi về `en` cho
+mọi giá trị khác (`ja`, `ko`, rỗng, lạ), KHÔNG bao giờ rơi về tiếng Việt. Muốn thêm ja/ko thì bổ
+sung khoá vào bảng `T` trong `mailer.js` (đã tách theo từng ngôn ngữ) + cập nhật `MAIL_LANGS`.
+Có test khoá hành vi này: `test/mailer.test.js` → "pickMailLang: … rơi về TIẾNG ANH".
+Ngoài `mailer.js` **không** còn chỗ nào khác gửi thư (đã grep `nodemailer`/`sendMail`/Resend toàn
+repo); Firebase chỉ **sinh link** xác thực (`generateEmailVerificationLink`) rồi mình tự gửi,
+nên không có email nào của Firebase gửi khách bằng tiếng Anh mặc định.
+
 ### Việc còn lại (không chặn gì)
 
 - Thêm `rua=` vào DMARC để nhận báo cáo tổng hợp (hiện `_dmarc` mới chỉ có `v=DMARC1; p=none`):

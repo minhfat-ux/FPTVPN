@@ -21,7 +21,7 @@ const SUPPORT_EMAIL = "support@meetflowai.site";
 
 export const MAIL_LANGS = ["vi", "en", "zh"];
 
-/** Normalizes a requested language; unknown values fall back to Vietnamese. */
+/** Normalizes a requested language; mọi giá trị khác (ja, ko, lạ) rơi về tiếng Anh. */
 export function pickMailLang(value) {
   const raw = String(value ?? "").trim().toLowerCase();
   if (raw.startsWith("zh")) return "zh";

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSendOtpEmail } from "../src/mailer.js";
+import { createSendOtpEmail, pickMailLang } from "../src/mailer.js";
 
 function makeFakeTransporter() {
   const sent = [];
@@ -114,4 +114,21 @@ test("production: send failure surfaces a safe message and never logs the code",
     !logged.some((line) => line.includes("222222")),
     "the OTP code must never be logged"
   );
+});
+
+test("pickMailLang: vi/en/zh giữ nguyên, zh-CN cũng là zh", () => {
+  assert.equal(pickMailLang("vi"), "vi");
+  assert.equal(pickMailLang("en"), "en");
+  assert.equal(pickMailLang("zh"), "zh");
+  assert.equal(pickMailLang("zh-CN"), "zh");
+  assert.equal(pickMailLang("ZH-hans"), "zh");
+  assert.equal(pickMailLang(" vi "), "vi");
+});
+
+test("pickMailLang: ngôn ngữ app chưa có bản dịch (ja/ko/…) rơi về TIẾNG ANH", () => {
+  // App hỗ trợ 5 ngôn ngữ (vi/en/zh/ja/ko) nhưng email chỉ có 3 bản dịch —
+  // khách Nhật/Hàn phải nhận thư tiếng Anh, KHÔNG phải tiếng Việt.
+  for (const value of ["ja", "ko", "ja-JP", "ko-KR", "", null, undefined, "fr", "xx"]) {
+    assert.equal(pickMailLang(value), "en", `pickMailLang(${JSON.stringify(value)}) phải là en`);
+  }
 });
