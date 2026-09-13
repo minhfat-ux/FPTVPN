@@ -55,14 +55,10 @@ object Config {
     /** Web purchase page (plan picker + QR payment). Mirrors iOS/macOS. */
     const val BUY_URL = "https://meetflowai.site/buy"
 
-    /** Google Play Billing product IDs (must match Play Console + backend). */
-    val PRODUCT_IDS = listOf("Monthly_Premium", "Yearly_Premium")
-
     /** Public support / privacy pages (also linked from the paywall). */
     const val SUPPORT_URL = "https://meetflowai.site/SupportPrivateVPN.html"
     const val PRIVACY_URL = "https://meetflowai.site/FlowVPNPrivacy.html"
     const val EULA_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
-    const val MANAGE_SUBSCRIPTION_URL = "https://play.google.com/store/account/subscriptions"
 
     /** WireGuard tunnel defaults (match iOS/macOS + backend). */
     const val WG_DNS = "1.1.1.1"

@@ -135,7 +135,11 @@ struct ContentViewMac: View {
                     .environmentObject(languageStore)
             }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showingPaywall) {
+        .sheet(isPresented: $showingPaywall, onDismiss: {
+            // Đóng paywall = thời điểm khách vừa có thể đã trả tiền trên trang web trong
+            // WebView, nên đọc lại quyền ngay (best-effort, im lặng nếu lỗi/404).
+            Task { await refreshEntitlementFromBackend() }
+        }) {
             MacPaywallView()
                 .environmentObject(subscriptionStore)
                 .environmentObject(languageStore)
@@ -168,11 +172,24 @@ struct ContentViewMac: View {
             showingLogin = !isSignedIn
             if !isSignedIn {
                 showingPaywall = false
+            } else {
+                // Vừa đăng nhập: đồng bộ quyền từ backend (best-effort).
+                Task { await refreshEntitlementFromBackend() }
             }
         }
         .task {
-            await subscriptionStore.start()
+            // Quyền Premium có thể được cấp trên web SAU lần đăng nhập cuối, còn session chỉ
+            // được cấp lúc đăng nhập — nên đọc lại ngay khi mở app (nút Connect bị khoá theo
+            // `isSubscribed`). Chạy SONG SONG với refreshNodes để mạng chậm không làm chậm việc
+            // mở khoá Connect hay cổng force-update. Best-effort: lỗi thì im lặng, giữ quyền.
+            async let entitlementRefresh: Void = refreshEntitlementFromBackend()
             await vpnManager.refreshNodes()
+            await entitlementRefresh
+            // `.onAppear` có thể đã kịp mở paywall theo session cache cũ; nếu backend vừa xác
+            // nhận khách đã trả tiền thì đóng lại, đừng chặn người đã mua.
+            if subscriptionStore.isSubscribed {
+                showingPaywall = false
+            }
             // Force-update gate (owner requirement): block usage below minimum_version.
             if let url = URL(string: vpnManager.coordinatorURL),
                let info = try? await AppVersionService.fetch(from: url),
@@ -184,6 +201,19 @@ struct ContentViewMac: View {
 
     private func syncBackendPremium() {
         subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+    }
+
+    /// Đọc lại session từ backend (best-effort) để quyền Premium sống qua lần mở app và hiện
+    /// ngay sau khi đăng nhập. Lỗi mạng / control plane cũ chưa có route thì im lặng và giữ
+    /// nguyên quyền đang có — không chặn mở app, không chặn nút Connect.
+    private func refreshEntitlementFromBackend() async {
+        guard authStore.isSignedIn else { return }
+        guard let baseURL = URL(string: vpnManager.coordinatorURL) else { return }
+        await subscriptionStore.refreshEntitlement(
+            baseURL: baseURL,
+            authStore: authStore,
+            reportFailure: false
+        )
     }
 
     private var subscriptionStatusCard: some View {

@@ -5,6 +5,15 @@ Cập nhật 2026-09-10 · phiên bản chuẩn bị nộp: **iOS 1.2.3 (build 2
 Mục tiêu: bản nộp lên App Store **chỉ dùng In-App Purchase (StoreKit)** — không có
 đường dẫn nào ra trang thanh toán web trong bản Release.
 
+> ⚠️ **MOOT từ 14/09/2026 — chủ dự án bỏ toàn bộ store billing.** Sản phẩm chỉ bán qua trang web
+> `https://meetflowai.site/buy`; StoreKit đã bị xoá khỏi code iOS **và macOS**, paywall cả hai giờ
+> **chỉ** là WebView của trang web. App **không còn nộp được App Store / Mac App Store** (3.1.1 đòi
+> IAP cho hàng số) — đây là hệ quả chủ dự án đã chấp nhận, không phải việc còn thiếu. Runbook này
+> giữ lại để tham khảo lịch sử; mọi chỗ nói về `PAYWALL_APPSTORE`, `StoreKitPaywallView`, sản phẩm
+> IAP trên ASC hay build "appstore" đều **không còn đúng** (đã đánh dấu ⚠️ bên dưới).
+> `scripts/archive-appstore.sh <ios|mac> appstore` giờ **thoát với lỗi**. Kênh TestFlight/sideload
+> (`ios direct` / `ios diawi`) vẫn chạy y như trước.
+
 ---
 
 ## 1. Đã làm trong code (không cần làm lại)
@@ -20,6 +29,10 @@ Mục tiêu: bản nộp lên App Store **chỉ dùng In-App Purchase (StoreKit)
 | Support URL | `/support` (VPNFlow) và `/ai/support` (MeetFlow AI) — trang mới trong `control-plane/src/support-page.js`, 5 ngôn ngữ, đã mở public trong middleware token và Caddy. |
 | Xoá tài khoản | Đã có sẵn: app **Settings → Delete Account** → `DELETE /v1/account` (Apple 5.1.1(v)). |
 | Legal trong app | Paywall + Settings có Terms (EULA của Apple) và Privacy Policy. |
+
+> ⚠️ 14/09/2026: ba dòng đầu của bảng trên — cờ `PAYWALL_APPSTORE` (paywall theo kênh phát hành),
+> `StoreKitPaywallView` và disclosure 3.1.2 trong nó — **đã bị xoá khỏi code**. Không còn cờ biên
+> dịch theo kênh; `PaywallView` luôn dựng WebView trang web. Các dòng còn lại vẫn đúng.
 
 Kiểm tra nhanh trên máy chủ (đã chạy, kết quả OK):
 
@@ -62,6 +75,9 @@ Apple chỉ cho phép app VPN bán trên App Store khi tài khoản Developer l�
   không bị áp Guideline 5.4) — đúng như thoả thuận trước đó cho VPNFlow iOS.
 
 ### 2.2 Sản phẩm IAP phải tồn tại trước khi nộp
+
+> ⚠️ **MOOT từ 14/09/2026**: iOS không còn StoreKit và app không còn nộp App Store — **đừng** tạo
+> sản phẩm IAP trên ASC cho app này. Giữ mục này chỉ để hiểu vì sao trước đây cần.
 
 Trong App Store Connect → app VPNFlow → *Monetization → Subscriptions*:
 
@@ -132,13 +148,20 @@ Notes:
 
 ## 3. Build & export IPA
 
+> ⚠️ **Cập nhật 14/09/2026**: `./scripts/archive-appstore.sh <ios|mac> appstore` **giờ thoát với
+> lỗi** (kênh App Store đã bị bỏ; cờ `PAYWALL_APPSTORE` không còn trong code iOS **lẫn macOS** nên
+> bản "appstore" chỉ là bản web y hệt `direct`). Dùng `ios direct` / `ios diawi` (macOS: `mac
+> direct` / `mac diawi`). Khối "cách thủ công" bên dưới truyền
+> `SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PAYWALL_APPSTORE'` — cờ đó **không còn tác
+> dụng** gì. Key UserDefaults `flowvpn.paywallMode` cũng đã bị xoá khỏi code.
+
 ### Cách chuẩn: dùng script (khuyến nghị)
 
 ```bash
 cd /Volumes/BIWIN/SourcesCode/PrivateVPN
 
-./scripts/archive-appstore.sh ios appstore   # -> build/ios-appstore-export/ipa/FlowVPN.ipa
 ./scripts/archive-appstore.sh ios direct     # -> build/ios-direct-export/ipa/FlowVPN.ipa
+./scripts/archive-appstore.sh ios diawi      # -> IPA cài trực tiếp qua Diawi
 # macOS: thay ios bằng mac
 ```
 
@@ -209,6 +232,10 @@ xcrun altool --upload-app -f build/ios-appstore-export/ipa/FlowVPN.ipa \
 
 ## 4. Kiểm tra trước khi bấm Submit
 
+> ⚠️ **MOOT từ 14/09/2026** — không còn bản nộp App Store để kiểm. Ba mục đầu (gói IAP + giá,
+> `grep -c "meetflowai.site/buy"` = 0, và "không thấy trang web thanh toán") đều dựa vào bản
+> `PAYWALL_APPSTORE` đã bị xoá; ba mục cuối vẫn hữu ích khi phát bản `direct`/`diawi`.
+
 - [ ] Cài bản IPA **do `scripts/archive-appstore.sh` tạo** lên máy thật (TestFlight
       internal trước cũng được), mở màn Subscription → thấy **gói IAP + giá**, có
       Restore Purchases, có link EULA/Privacy. **Không** thấy trang web thanh toán.
@@ -224,6 +251,9 @@ xcrun altool --upload-app -f build/ios-appstore-export/ipa/FlowVPN.ipa \
 ---
 
 ## 5. Sau khi app được duyệt
+
+> ⚠️ **MOOT từ 14/09/2026** — app không còn nộp được App Store nên không có bước "sau khi
+> được duyệt" nào; mục 3 (doanh thu IAP) và mục 4 (hai kênh song song) đặc biệt không còn đúng.
 
 1. Lấy link App Store (`https://apps.apple.com/app/id<APP_ID>`), cập nhật lại backend:
 
@@ -253,9 +283,9 @@ curl -s -X PATCH https://api.meetflowai.site/v1/admin/app-version \
 |---|---|
 | **5.4 VPN app cần Organization** | Nâng cấp/chuyển tài khoản sang Organization, hoặc phát qua TestFlight. |
 | 2.1 "Không đăng nhập được" | Review notes có sẵn email + mã cố định `246810`; mã luôn là 246810 kể cả khi bấm gửi lại. |
-| 3.1.1 "Có đường dẫn mua ngoài" | Bản nộp (`ios appstore`) chỉ còn StoreKit: `strings` trên binary không còn `meetflowai.site/buy`. Trả lời kèm ảnh chụp màn hình paywall. |
-| 3.1.2 thiếu disclosure | Đã có: giá, chu kỳ, tự động gia hạn, link EULA + privacy, Restore. |
+| 3.1.1 "Có đường dẫn mua ngoài" | ⚠️ **MOOT từ 14/09/2026** — không còn bản `ios appstore`: iOS chỉ bán qua web nên mọi bản build đều có đường dẫn mua ngoài, và app không còn nộp App Store. (Ghi chú cũ: Bản nộp (`ios appstore`) chỉ còn StoreKit: `strings` trên binary không còn `meetflowai.site/buy`. Trả lời kèm ảnh chụp màn hình paywall.) |
+| 3.1.2 thiếu disclosure | ⚠️ **MOOT từ 14/09/2026** — `StoreKitPaywallView` (nơi có disclosure) đã bị xoá cùng StoreKit. |
 | 4.2 "App quá đơn giản" | Nhấn: WireGuard tunnel, nhiều exit node, tự chọn node nhanh nhất, quản lý thiết bị, đăng nhập email OTP. |
 | 5.1.1 thiếu privacy policy | `https://meetflowai.site/FlowVPNPrivacy.html` (VPNFlow) — đặt trong App Store Connect + trong app. |
 | 5.1.1(v) thiếu xoá tài khoản | Đã có: Settings → Delete Account (`DELETE /v1/account`), kèm mô tả trong FAQ trang support. |
-| IAP không hiện khi test | Sản phẩm chưa "Ready to Submit"/chưa có ảnh review, hoặc thiếu `Paid Applications Agreement` + thông tin thuế/ngân hàng. |
+| IAP không hiện khi test | ⚠️ **MOOT từ 14/09/2026** — iOS không còn IAP. (Ghi chú cũ: Sản phẩm chưa "Ready to Submit"/chưa có ảnh review, hoặc thiếu `Paid Applications Agreement` + thông tin thuế/ngân hàng.) |

@@ -1,6 +1,5 @@
 import SwiftUI
 import WebKit
-import StoreKit
 
 /// Settings screen for account, devices and subscription actions.
 struct SettingsView: View {
@@ -32,7 +31,11 @@ struct SettingsView: View {
         .refreshable {
             await loadDevices()
         }
-        .sheet(isPresented: $showingPaywall) {
+        .sheet(isPresented: $showingPaywall, onDismiss: {
+            // Đóng paywall = thời điểm khách vừa có thể đã trả tiền trên trang web trong
+            // WebView, nên đọc lại quyền ngay (best-effort, im lặng nếu lỗi/404).
+            Task { await refreshEntitlement(reportFailure: false) }
+        }) {
             PaywallView()
                 .environmentObject(subscriptionStore)
                 .environmentObject(languageStore)
@@ -44,7 +47,6 @@ struct SettingsView: View {
                 .environmentObject(languageStore)
         }
         .task {
-            await subscriptionStore.start()
             await loadDevices()
         }
         .toolbar {
@@ -246,17 +248,46 @@ struct SettingsView: View {
 
             Button {
                 Task {
-                    await subscriptionStore.restorePurchases()
+                    await refreshEntitlement()
                 }
             } label: {
                 Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
             }
             .disabled(subscriptionStore.isLoading)
 
-            Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
-                Label(languageStore.t(.manageSubscription), systemImage: "slider.horizontal.3")
+            if let message = subscriptionStore.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// "Đã mua rồi" của luồng mua qua web: hỏi lại backend xem tài khoản đang đăng
+    /// nhập đã có gói chưa (xem `SubscriptionStore.refreshEntitlement`).
+    ///
+    /// `reportFailure: true` cho nút bấm tay (khách phải thấy lỗi); `false` cho các lần tự động
+    /// (đóng paywall) — lúc đó lỗi mạng/404 thì im lặng và giữ nguyên quyền đang có.
+    @MainActor
+    private func refreshEntitlement(reportFailure: Bool = true) async {
+        guard authStore.isSignedIn else {
+            if reportFailure {
+                subscriptionStore.errorMessage = languageStore.t(.signInRequired)
+            }
+            return
+        }
+        guard let baseURL = configStore.controlPlaneBaseURL else {
+            if reportFailure {
+                subscriptionStore.errorMessage = ControlAPIClient.ClientError
+                    .server("Coordinator URL is not configured.").localizedDescription
+            }
+            return
+        }
+        await subscriptionStore.refreshEntitlement(
+            baseURL: baseURL,
+            authStore: authStore,
+            reportFailure: reportFailure
+        )
     }
 
     private var supportSection: some View {
@@ -277,396 +308,89 @@ struct SettingsView: View {
 
 }
 
+/// Backend-only entitlement store.
+///
+/// Class này từng bọc StoreKit (product IDs, `Product.products(for:)`,
+/// `AppStore.sync()`, `Transaction.currentEntitlements/.updates`). Chủ dự án đã bỏ
+/// toàn bộ store billing ngày 14/09/2026 — sản phẩm chỉ bán qua trang web /buy —
+/// nên quyền Premium giờ chỉ đến từ backend (`subscription_status.is_active` của
+/// tài khoản đang đăng nhập). Đừng thêm lại StoreKit: không còn kênh nào bán qua
+/// App Store, và app cũng không còn nộp được App Store (Guideline 3.1.1 đòi IAP).
 @MainActor
 final class SubscriptionStore: ObservableObject {
-    static let productIDs = [
-        "Monthly_Premium",
-        "Yearly_Premium"
-    ]
-
-    @Published private(set) var products: [Product] = []
-    @Published private(set) var purchasedProductIDs: Set<String> = []
     /// Backend entitlement: true when the signed-in account has an active
     /// subscription (subscription_status.is_active from the coordinator).
     @Published var backendPremium = false
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
-    private var hasStarted = false
-    private var transactionUpdatesTask: Task<Void, Never>?
-
     var isSubscribed: Bool {
         // Dev bypass (chỉ trên máy chủ dự án): FORCE_PREMIUM=1 trong scheme environment,
         // hoặc `defaults write com.privatevpn.app flowvpn.forcePremium -bool YES`.
         // Bọc trong #if DEBUG để bản phát cho người dùng KHÔNG có đường mở khoá Premium
-        // (Apple coi tính năng ẩn như vậy là lỗi 2.3.1).
+        // (một tính năng ẩn như vậy là lỗi 2.3.1 nếu Apple phát hiện).
         #if DEBUG
         if ProcessInfo.processInfo.environment["FORCE_PREMIUM"] == "1"
             || UserDefaults.standard.bool(forKey: "flowvpn.forcePremium") {
             return true
         }
         #endif
-        return backendPremium || !purchasedProductIDs.isDisjoint(with: Self.productIDs)
+        return backendPremium
     }
 
-    var activePlanName: String {
-        if let activeProduct = products.first(where: { purchasedProductIDs.contains($0.id) }) {
-            return activeProduct.displayName
-        }
-        return isSubscribed ? "Premium" : "Free"
-    }
-
-    func start() async {
-        guard !hasStarted else { return }
-        hasStarted = true
-        observeTransactionUpdates()
-        await loadProducts()
-        await refreshEntitlements()
-    }
-
-    func loadProducts() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let loadedProducts = try await Product.products(for: Self.productIDs)
-            products = loadedProducts.sorted { left, right in
-                if left.type == right.type {
-                    return left.price < right.price
-                }
-                return left.id < right.id
-            }
-            errorMessage = loadedProducts.isEmpty ? "No StoreKit products found. Check product IDs in App Store Connect." : nil
-        } catch {
-            errorMessage = "Cannot load plans. Please try again."
-        }
-    }
-
-    func purchase(_ product: Product) async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await product.purchase()
-            switch result {
-            case .success(let verification):
-                guard case .verified(let transaction) = verification else {
-                    errorMessage = "Purchase could not be verified."
-                    return
-                }
-                await transaction.finish()
-                await refreshEntitlements()
-                errorMessage = nil
-            case .pending:
-                errorMessage = "Purchase is pending approval."
-            case .userCancelled:
-                break
-            @unknown default:
-                break
-            }
-        } catch {
-            errorMessage = "Purchase failed. Please try again."
-        }
-    }
-
-    func restorePurchases() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            try await AppStore.sync()
-            await refreshEntitlements()
-            errorMessage = isSubscribed ? nil : "No active Premium purchase was found."
-        } catch {
-            errorMessage = "Restore failed. Please try again."
-        }
-    }
-
-    func refreshEntitlements() async {
-        var activeProductIDs = Set<String>()
-
-        for await result in Transaction.currentEntitlements {
-            guard case .verified(let transaction) = result else { continue }
-            guard Self.productIDs.contains(transaction.productID) else { continue }
-            if transaction.revocationDate == nil,
-               transaction.expirationDate.map({ $0 > Date() }) ?? true {
-                activeProductIDs.insert(transaction.productID)
-            }
-        }
-
-        purchasedProductIDs = activeProductIDs
-    }
-
-    private func observeTransactionUpdates() {
-        transactionUpdatesTask?.cancel()
-        transactionUpdatesTask = Task(priority: .background) { [weak self] in
-            for await result in Transaction.updates {
-                guard let self else { return }
-                guard case .verified(let transaction) = result else { continue }
-                await transaction.finish()
-                await self.refreshEntitlements()
-            }
-        }
-    }
-
-    deinit {
-        transactionUpdatesTask?.cancel()
-    }
-}
-
-/// How the paywall is delivered.
-///
-/// - `appStore`: **In-App Purchase only.** App Store Review Guideline 3.1.1
-///   requires digital goods to be sold with IAP, and 3.1.3 forbids linking out
-///   to an external payment page — so this is the default, and the only mode
-///   that may be submitted.
-/// - `direct`: the web buy page (bank QR / WeChat / Alipay) used by builds we
-///   hand out ourselves (sideload / enterprise). Never submit this mode.
-enum PaywallDistribution {
-    case appStore
-    case direct
-
-    /// The App Store archive is built with `-DPAYWALL_APPSTORE` (see
-    /// `scripts/archive-appstore.sh`): that binary sells with In-App Purchase
-    /// only, so it can never present an out-of-app payment path (Guideline 3.1.1
-    /// / 3.1.3).
+    /// Đọc lại session từ coordinator (`GET /v1/auth/session`) và cập nhật quyền Premium.
     ///
-    /// Every other build is one we distribute ourselves (TestFlight / sideload),
-    /// where the web buy page IS the payment channel — it is the default there,
-    /// and can be switched for testing with:
-    ///   defaults write com.privatevpn.app flowvpn.paywallMode appstore
-    static var current: PaywallDistribution {
-        #if PAYWALL_APPSTORE
-        return .appStore
-        #else
-        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "appstore"
-            ? .appStore
-            : .direct
-        #endif
+    /// Dùng cho cả hai đường:
+    /// - nút "Làm mới trạng thái gói" → `reportFailure: true` (khách phải thấy lỗi);
+    /// - tự động lúc mở app và ngay sau khi đăng nhập → `reportFailure: false`.
+    ///
+    /// Vì sao có đường tự động: `syncBackendPremium()` chỉ đọc lại session ĐÃ CACHE, mà
+    /// `subscription_status` chỉ về một lần lúc đăng nhập. Trước đây StoreKit tự đọc quyền
+    /// trên máy nên khách mua trên web vẫn vào được; StoreKit đã bị gỡ (14/09/2026) nên nếu
+    /// không đọc lại, khách vừa trả tiền trên web sẽ bị đẩy vào paywall cho tới khi bấm tay.
+    ///
+    /// Lỗi (mất mạng, hoặc control plane cũ chưa có route này → 404) thì **giữ nguyên** quyền
+    /// đang có: không được tự hạ một khách đang trả tiền xuống Free, và lần gọi tự động thì im
+    /// lặng — không chặn mở app, không chặn nút Connect.
+    func refreshEntitlement(
+        baseURL: URL,
+        authStore: AuthSessionStore,
+        reportFailure: Bool = true
+    ) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let refreshed = try await ControlAPIClient(baseURL: baseURL, joinToken: "")
+                .fetchSession(accessToken: authStore.accessToken ?? "")
+            // Chỉ ghi keychain khi payload thật sự đổi: tránh ghi vô ích mỗi lần mở app.
+            if refreshed != authStore.session {
+                authStore.save(refreshed)
+            }
+            backendPremium = refreshed.user.subscription_status?.is_active ?? false
+            errorMessage = nil
+        } catch {
+            if reportFailure {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 }
 
+/// The paywall — always the web buy page.
+///
+/// View này từng rẽ nhánh theo kênh phát hành (`PaywallDistribution` +
+/// `-DPAYWALL_APPSTORE`) để bản App Store chỉ bán bằng StoreKit. Chủ dự án đã bỏ
+/// toàn bộ store billing ngày 14/09/2026 và chấp nhận app KHÔNG nộp được App Store
+/// (Guideline 3.1.1 đòi IAP cho hàng số), nên chỉ còn đúng một kênh mua: trang web
+/// /buy. Đừng thêm lại nhánh StoreKit / cờ biên dịch theo kênh.
 struct PaywallView: View {
     var body: some View {
-        #if PAYWALL_APPSTORE
-        // App Store build: In-App Purchase is the only payment path that exists.
-        StoreKitPaywallView()
-        #else
-        switch PaywallDistribution.current {
-        case .appStore:
-            StoreKitPaywallView()
-        case .direct:
-            WebBuyPaywallView()
-        }
-        #endif
+        WebBuyPaywallView()
     }
 }
 
-/// App Store paywall — StoreKit subscriptions, restore, legal links and the
-/// auto-renewal disclosure required by Guideline 3.1.2.
-struct StoreKitPaywallView: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var subscriptionStore: SubscriptionStore
-    @EnvironmentObject private var languageStore: AppLanguageStore
-
-    var body: some View {
-        ZStack {
-            VPNTheme.backgroundGradient
-                .ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: 22) {
-                    header
-                    benefits
-                    plans
-                    footer
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 28)
-                .padding(.bottom, 34)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .task {
-            await subscriptionStore.start()
-        }
-    }
-
-    private var header: some View {
-        VStack(spacing: 10) {
-            Image("AppLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 76, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
-
-            // Màu đã nằm trong brandTitle; đừng đặt .foregroundStyle ở ngoài.
-            VPNTheme.brandTitle(languageStore.t(.paywallTitle))
-                .font(.largeTitle.bold())
-                .multilineTextAlignment(.center)
-
-            Text(languageStore.t(.paywallSubtitle))
-                .font(.subheadline)
-                .foregroundStyle(VPNTheme.secondaryLabel)
-                .multilineTextAlignment(.center)
-        }
-    }
-
-    private var benefits: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            benefitRow("checkmark.shield.fill", languageStore.t(.benefitTunnel))
-            benefitRow("wifi.exclamationmark", languageStore.t(.benefitWifi))
-            benefitRow("bolt.fill", languageStore.t(.benefitFast))
-        }
-        .paywallCard()
-    }
-
-    private func benefitRow(_ icon: String, _ title: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.headline)
-                .foregroundStyle(VPNTheme.accent)
-                .frame(width: 26)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(VPNTheme.label)
-            Spacer()
-        }
-    }
-
-    private var plans: some View {
-        VStack(spacing: 12) {
-            if subscriptionStore.isLoading && subscriptionStore.products.isEmpty {
-                ProgressView()
-                    .tint(VPNTheme.accent)
-                    .padding(.vertical, 24)
-            }
-
-            ForEach(subscriptionStore.products, id: \.id) { product in
-                Button {
-                    Task {
-                        await subscriptionStore.purchase(product)
-                        if subscriptionStore.isSubscribed {
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    planRow(product)
-                }
-                .buttonStyle(.plain)
-                .disabled(subscriptionStore.isLoading)
-            }
-
-            if subscriptionStore.products.isEmpty && !subscriptionStore.isLoading {
-                VStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(languageStore.t(.noPlans))
-                        .font(.headline)
-                        .foregroundStyle(VPNTheme.label)
-                    Text(languageStore.t(.noPlansDetail))
-                        .font(.footnote)
-                        .foregroundStyle(VPNTheme.secondaryLabel)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.vertical, 16)
-            }
-
-            if let message = subscriptionStore.errorMessage {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 4)
-            }
-        }
-        .paywallCard()
-    }
-
-    private func planRow(_ product: Product) -> some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(product.displayName)
-                    .font(.headline)
-                    .foregroundStyle(VPNTheme.label)
-                Text(product.description)
-                    .font(.footnote)
-                    .foregroundStyle(VPNTheme.secondaryLabel)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 12)
-
-            Text(product.displayPrice)
-                .font(.headline.bold())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(VPNTheme.accent)
-                .clipShape(Capsule())
-        }
-        .padding(16)
-        .background(Color(uiColor: .tertiarySystemFill))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(VPNTheme.cardStroke, lineWidth: 1)
-        )
-    }
-
-    private var footer: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task {
-                    await subscriptionStore.restorePurchases()
-                }
-            } label: {
-                Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
-                    .font(.subheadline.bold())
-            }
-            .tint(VPNTheme.accent)
-            .disabled(subscriptionStore.isLoading)
-
-            HStack(spacing: 14) {
-                Link(languageStore.t(.privacy), destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!)
-                Link(languageStore.t(.support), destination: URL(string: "https://meetflowai.site/support")!)
-                Link(languageStore.t(.eula), destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
-            }
-            .font(.footnote)
-            .foregroundStyle(VPNTheme.secondaryLabel)
-
-            Text(languageStore.t(.subscriptionDisclosure))
-                .font(.caption)
-                .foregroundStyle(VPNTheme.secondaryLabel)
-                .multilineTextAlignment(.center)
-
-            Button(languageStore.t(.notNow)) {
-                dismiss()
-            }
-            .font(.footnote)
-            .foregroundStyle(VPNTheme.secondaryLabel)
-            .padding(.top, 4)
-        }
-    }
-}
-
-private extension View {
-    func paywallCard() -> some View {
-        self
-            .padding(18)
-            .frame(maxWidth: .infinity)
-            .background(VPNTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VPNTheme.cardStroke, lineWidth: 1)
-            )
-    }
-}
-
-/// Direct-distribution paywall: the web buy page (bank QR / WeChat / Alipay).
-/// Only shown when `flowvpn.paywallMode` is set to `direct`.
+/// The only paywall: the web buy page (bank QR / WeChat / Alipay).
 struct WebBuyPaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var languageStore: AppLanguageStore

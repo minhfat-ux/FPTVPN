@@ -104,7 +104,6 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
     LaunchedEffect(Unit) {
         app.vpnManager.fetchNodes()
         app.subscriptionStore.syncBackendPremium()
-        app.subscriptionStore.start()
         val info = runCatching { ControlAPIClient().fetchAppVersion() }.getOrNull()
         if (info != null && AppVersionService.isForcedUpdate(info, BuildConfig.VERSION_NAME)) {
             forcedUpdate = info
@@ -114,6 +113,14 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
     LaunchedEffect(authSession) {
         app.subscriptionStore.syncBackendPremium()
         showLogin = !app.authStore.isSignedIn
+    }
+
+    // Quyền Premium có thể được cấp trên web SAU lần đăng nhập cuối, còn session thì chỉ được
+    // cấp lúc đăng nhập — nên đọc lại khi app khởi động với session sẵn có và ngay sau khi đăng
+    // nhập (nút Connect bị khoá theo isSubscribed). Key là `isSignedIn` nên lần lưu session do
+    // chính request này gây ra KHÔNG làm request chạy lại. Best-effort: lỗi thì im lặng.
+    LaunchedEffect(isSignedIn) {
+        if (isSignedIn) app.subscriptionStore.refreshEntitlement(reportFailure = false)
     }
 
     // Observe pending VpnService consent intent and launch it.
@@ -137,8 +144,17 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
             )
             showPaywall -> PaywallScreen(
                 app = app,
-                onClose = { showPaywall = false },
-                onUpgraded = { showPaywall = false }
+                // Đóng paywall = thời điểm khách vừa có thể đã trả tiền trên trang web trong
+                // WebView, nên đọc lại quyền ngay (best-effort: lỗi thì im lặng, giữ nguyên
+                // quyền đang có — không bao giờ tự hạ khách xuống Free).
+                onClose = {
+                    showPaywall = false
+                    app.subscriptionStore.refreshEntitlement(reportFailure = false)
+                },
+                onUpgraded = {
+                    showPaywall = false
+                    app.subscriptionStore.refreshEntitlement(reportFailure = false)
+                }
             )
             showSettings -> SettingsScreen(
                 app = app,

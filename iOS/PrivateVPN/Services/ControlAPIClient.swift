@@ -476,6 +476,24 @@ struct ControlAPIClient {
         return try await send(request, endpoint: "apple login")
     }
 
+    /// Re-reads the signed-in session from the coordinator, so a change made while the app
+    /// was already signed in becomes visible without logging out and back in — today the
+    /// only thing that changes underneath us is a Premium plan granted from the web buy
+    /// page (`/buy`), which until now the app could not see at all.
+    ///
+    /// Requires `GET /v1/auth/session` on the control plane (added 14/09/2026). Deploy order
+    /// matters: an older coordinator answers 404, so callers must treat a failure as "keep the
+    /// entitlement we already have", never as "not subscribed".
+    func fetchSession(accessToken: String) async throws -> CoordinatorAuthSession {
+        guard !accessToken.isEmpty else { throw ClientError.missingSession }
+        let url = baseURL.appendingPathComponent("v1/auth/session")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        return try await send(request, endpoint: "session")
+    }
+
     /// Sends `request`, retrying it against the fallback hosts when the primary host
     /// cannot be reached at all, and reports the endpoint-scoped error the UI knows.
     private func sendWithFallback(
@@ -538,7 +556,8 @@ extension URLRequest {
     /// The same request aimed at another base host: scheme/host/port are replaced and
     /// everything else — path, query string, method, headers and body — is carried
     /// over untouched.
-    func rewritten(to base: URL) -> URLRequest {        guard let url,
+    func rewritten(to base: URL) -> URLRequest {
+        guard let url,
               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return self
         }

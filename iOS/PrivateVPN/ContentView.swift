@@ -78,7 +78,11 @@ struct ContentView: View {
                         .environmentObject(languageStore)
                 }
             }
-            .sheet(isPresented: $showingPaywall) {
+            .sheet(isPresented: $showingPaywall, onDismiss: {
+                // Đóng paywall = thời điểm khách vừa có thể đã trả tiền trên trang web trong
+                // WebView, nên đọc lại quyền ngay (best-effort, im lặng nếu lỗi/404).
+                Task { await refreshEntitlementFromBackend() }
+            }) {
                 PaywallView()
                     .environmentObject(subscriptionStore)
                     .environmentObject(languageStore)
@@ -132,6 +136,8 @@ struct ContentView: View {
         .onChange(of: authStore.isSignedIn) { _, isSignedIn in
             if isSignedIn {
                 showingLogin = false
+                // Vừa đăng nhập: đồng bộ quyền từ backend (best-effort).
+                Task { await refreshEntitlementFromBackend() }
             } else {
                 showingSettings = false
                 showingLogin = true
@@ -139,11 +145,16 @@ struct ContentView: View {
         }
         .task {
             vpnManager.refreshStatus()
+            // Quyền Premium có thể được cấp trên web SAU lần đăng nhập cuối, còn session chỉ
+            // được cấp lúc đăng nhập — nên đọc lại ngay khi mở app (nút Connect bị khoá theo
+            // `isSubscribed`). Chạy SONG SONG với fetchNodes để mạng chậm không làm chậm việc
+            // mở khoá Connect hay cổng force-update. Best-effort: lỗi thì im lặng, giữ quyền.
+            async let entitlementRefresh: Void = refreshEntitlementFromBackend()
             // Backend-first server selection (SRS A8): load exit nodes from the
             // coordinator before enabling Connect; never rely on hardcoded presets
             // in production.
             await vpnManager.fetchNodes(store: configStore)
-            await subscriptionStore.start()
+            await entitlementRefresh
             // Force-update gate: if the backend requires a newer build, block usage.
             if let baseURL = configStore.controlPlaneBaseURL,
                let info = try? await AppVersionService.fetch(from: baseURL),
@@ -161,6 +172,18 @@ struct ContentView: View {
 
     private func syncBackendPremium() {
         subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+    }
+
+    /// Đọc lại session từ backend (best-effort) để quyền Premium sống qua lần mở app và hiện
+    /// ngay sau khi đăng nhập. Lỗi mạng / control plane cũ chưa có route thì im lặng và giữ
+    /// nguyên quyền đang có — không chặn mở app, không chặn nút Connect.
+    private func refreshEntitlementFromBackend() async {
+        guard authStore.isSignedIn, let baseURL = configStore.controlPlaneBaseURL else { return }
+        await subscriptionStore.refreshEntitlement(
+            baseURL: baseURL,
+            authStore: authStore,
+            reportFailure: false
+        )
     }
 
     // MARK: - Header

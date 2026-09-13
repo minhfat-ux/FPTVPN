@@ -295,6 +295,26 @@ class ControlAPIClient(
         return json.decodeFromString(raw)
     }
 
+    /**
+     * Re-reads the signed-in session from the coordinator, so a change made while the app was
+     * already signed in becomes visible without logging out and back in — today the only thing
+     * that changes underneath us is a Premium plan granted from the web buy page (`/buy`).
+     *
+     * Requires `GET /v1/auth/session` on the control plane (added 14/09/2026). Deploy order
+     * matters: an older coordinator answers 404, so callers must treat a failure as "keep the
+     * entitlement we already have", never as "not subscribed".
+     */
+    suspend fun fetchSession(accessToken: String): CoordinatorAuthSession {
+        if (accessToken.isEmpty()) throw ClientError.MissingSession()
+        val request = Request.Builder()
+            .url("$baseUrl/v1/auth/session")
+            .get()
+            .header("Authorization", "Bearer $accessToken")
+            .build()
+        val raw = execute(request, "session")
+        return json.decodeFromString(raw)
+    }
+
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private val EMPTY = "{}".toRequestBody(JSON)

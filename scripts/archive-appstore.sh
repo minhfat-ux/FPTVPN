@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 #
-# Build + export the App Store IPA for VPNFlow.
+# Build + export an IPA for VPNFlow (iOS or macOS).
 #
-# The App Store binary must sell with In-App Purchase only (Guideline 3.1.1 /
-# 3.1.3), so this script compiles with PAYWALL_APPSTORE defined. TestFlight /
-# sideload builds of the same source keep the web buy page and must NOT be
-# submitted to App Store Review — archive those without this flag.
+# Kênh App Store đã bị BỎ theo quyết định của chủ dự án (14/09/2026): sản phẩm chỉ
+# bán qua trang web của mình (`https://meetflowai.site/buy`), nên không còn bản
+# In-App-Purchase nào để nộp. `PAYWALL_APPSTORE` đã bị xoá khỏi **cả** code iOS và
+# macOS, nghĩa là archive `appstore` sẽ ra **đúng** binary web-paywall như `direct` —
+# nộp lên App Store Review là bị từ chối 3.1.1. Vì vậy mode đó bị CHẶN thẳng (exit 2),
+# không âm thầm hạ cấp thành `direct`.
 #
 # Usage:
-#   scripts/archive-appstore.sh                      # iOS, App Store build
-#   scripts/archive-appstore.sh mac                  # macOS, App Store build
+#   scripts/archive-appstore.sh                      # iOS, our own distribution
 #   scripts/archive-appstore.sh ios direct           # iOS, TestFlight/sideload
-#                                                    #   build (web buy page ON)
+#   scripts/archive-appstore.sh ios diawi            # iOS, install via Diawi
+#   scripts/archive-appstore.sh mac direct           # macOS, our own distribution
+#   scripts/archive-appstore.sh mac diawi            # macOS, direct install
 #
 set -euo pipefail
 
@@ -19,15 +22,26 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 TARGET="${1:-ios}"
-MODE="${2:-appstore}"
+MODE="${2:-direct}"
 case "$TARGET" in
   ios) SCHEME="PrivateVPN";    PLATFORM="iOS";   DEST="generic/platform=iOS" ;;
   mac) SCHEME="PrivateVPNMac"; PLATFORM="macOS"; DEST="generic/platform=macOS" ;;
-  *) echo "usage: $0 [ios|mac] [appstore|direct|diawi]" >&2; exit 2 ;;
+  *) echo "usage: $0 [ios|mac] [direct|diawi]" >&2; exit 2 ;;
 esac
 case "$MODE" in
-  appstore|direct|diawi) ;;
-  *) echo "usage: $0 [ios|mac] [appstore|direct|diawi]" >&2; exit 2 ;;
+  direct|diawi) ;;
+  appstore)
+    # Không dùng lại nhánh im lặng: cờ biên dịch không còn nên bản "review" sẽ giống hệt
+    # bản web và chỉ gây nhầm là đã có bản nộp hợp lệ.
+    echo "ERROR: the App Store channel was removed by owner decision (14/09/2026)." >&2
+    echo "  iOS and macOS now sell only through the web buy page" >&2
+    echo "  (https://meetflowai.site/buy), and PAYWALL_APPSTORE no longer exists in the" >&2
+    echo "  code — an 'appstore' archive would be the SAME web-paywall binary as 'direct'" >&2
+    echo "  and would be rejected 3.1.1 if submitted." >&2
+    echo "  Use: $0 <ios|mac> direct    (or: $0 <ios|mac> diawi)" >&2
+    exit 2
+    ;;
+  *) echo "usage: $0 [ios|mac] [direct|diawi]" >&2; exit 2 ;;
 esac
 
 # Export method + compile flags theo kênh phát hành.
@@ -44,9 +58,10 @@ esac
 # Khi đã đăng nhập Apple ID + tạo profile ad-hoc (thêm UDID từng tester) thì đổi
 # METHOD ở đây sang `ad-hoc` — đúng chuẩn Diawi hơn và không bật get-task-allow.
 case "$MODE" in
-  appstore) METHOD="app-store-connect"; COND='$(inherited) PAYWALL_APPSTORE' ;;
-  direct)   METHOD="app-store-connect"; COND='$(inherited)' ;;
-  diawi)    METHOD="development";       COND='$(inherited)' ;;
+  # Không còn mode `appstore` (đã bị chặn ở trên), nên không còn cờ biên dịch nào để đặt:
+  # COND luôn chỉ là '$(inherited)'.
+  direct) METHOD="app-store-connect"; COND='$(inherited)' ;;
+  diawi)  METHOD="development";       COND='$(inherited)' ;;
 esac
 
 OUT="build/${TARGET}-${MODE}-export"
@@ -68,12 +83,7 @@ cat > "$OUT/ExportOptions.plist" <<PLIST
 </dict></plist>
 PLIST
 
-if [ "$MODE" = "appstore" ]; then
-  # PAYWALL_APPSTORE removes the web buy page from the paywall at compile time.
-  echo "==> Archiving $SCHEME ($PLATFORM) for App Store review (IAP only)"
-else
-  echo "==> Archiving $SCHEME ($PLATFORM) for our own distribution (web buy page ON)"
-fi
+echo "==> Archiving $SCHEME ($PLATFORM) for our own distribution (web buy page ON)"
 # COND đã được đặt ở khối case phía trên — không gán lại ở đây để chỉ có MỘT nguồn
 # sự thật cho cờ biên dịch (trước đây hai nơi cùng gán, thêm mode mới là lệch ngay).
 
@@ -96,12 +106,7 @@ else
 fi
 ls -1 "$IPA"/*.ipa
 echo
-if [ "$MODE" = "appstore" ]; then
-  echo "This IPA is the In-App-Purchase-only build -> submit to App Store Review."
-  echo "For TestFlight with our web payment page, run instead:"
-  echo "  $0 $TARGET direct"
-else
-  echo "This IPA contains the web buy page -> TestFlight / sideload ONLY."
-  echo "NEVER submit it for App Store review (Guideline 3.1.1 / 3.1.3);"
-  echo "build the review binary with: $0 $TARGET appstore"
-fi
+echo "This IPA contains the web buy page -> TestFlight / sideload ONLY."
+echo "NEVER submit it for App Store review: 3.1.1 requires In-App Purchase for"
+echo "digital goods, and the App Store channel was removed by owner decision"
+echo "(14/09/2026) — there is no IAP-only build to submit any more."

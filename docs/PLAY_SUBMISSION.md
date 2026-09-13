@@ -2,6 +2,14 @@
 
 _Trạng thái: chưa từng submit. Tài liệu này là checklist + nội dung để đưa app lên Play Console._
 
+> ⚠️ **MOOT từ 14/09/2026 — chủ dự án bỏ toàn bộ store billing.** Google Play Billing đã bị xoá
+> khỏi app (`billing-ktx` cũng đã gỡ khỏi gradle); Android chỉ bán qua trang web
+> `https://meetflowai.site/buy`. Hệ quả: khái niệm "bản `store` không có UI mua gói" ở §0 không
+> còn tồn tại (mọi bản build đều có paywall là WebView của trang web), và câu trong mô tả store
+> ("Cần gói đang hoạt động. Quản lý gói trong trang tài khoản.") **không còn đúng** — app đã bỏ
+> hàng "Manage Subscription" vì khách không có gói nào trong store để quản lý. Xem
+> `APP_STORE_READINESS_STATUS.md` §1. Phần còn lại của tài liệu giữ nguyên để tham khảo lịch sử.
+
 ## 0. Artifact đã sẵn sàng
 
 | File | Đường dẫn | Ghi chú |

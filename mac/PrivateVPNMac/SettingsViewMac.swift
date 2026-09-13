@@ -1,6 +1,5 @@
 import AppKit
 import WebKit
-import StoreKit
 import SwiftUI
 
 struct SettingsViewMac: View {
@@ -37,12 +36,18 @@ struct SettingsViewMac: View {
 
                 Button {
                     Task {
-                        await subscriptionStore.restorePurchases()
+                        await refreshEntitlement()
                     }
                 } label: {
                     Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
                 }
                 .disabled(subscriptionStore.isLoading)
+
+                if let message = subscriptionStore.errorMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(languageStore.t(.support)) {
@@ -62,7 +67,11 @@ struct SettingsViewMac: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .padding()
-        .sheet(isPresented: $showingPaywall) {
+        .sheet(isPresented: $showingPaywall, onDismiss: {
+            // Đóng paywall = thời điểm khách vừa có thể đã trả tiền trên trang web trong
+            // WebView, nên đọc lại quyền ngay (best-effort, im lặng nếu lỗi/404).
+            Task { await refreshEntitlement(reportFailure: false) }
+        }) {
             MacPaywallView()
                 .environmentObject(subscriptionStore)
                 .environmentObject(languageStore)
@@ -74,7 +83,6 @@ struct SettingsViewMac: View {
                 .environmentObject(languageStore)
         }
         .task {
-            await subscriptionStore.start()
             await loadDevices()
         }
         .onAppear {
@@ -83,6 +91,33 @@ struct SettingsViewMac: View {
         .onChange(of: authStore.session) { _, _ in
             subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
         }
+    }
+
+    /// "Đã mua rồi" của luồng mua qua web: hỏi lại backend xem tài khoản đang đăng
+    /// nhập đã có gói chưa (xem `MacSubscriptionStore.refreshEntitlement`).
+    ///
+    /// `reportFailure: true` cho nút bấm tay (khách phải thấy lỗi); `false` cho các lần tự động
+    /// (đóng paywall) — lúc đó lỗi mạng/404 thì im lặng và giữ nguyên quyền đang có.
+    @MainActor
+    private func refreshEntitlement(reportFailure: Bool = true) async {
+        guard authStore.isSignedIn else {
+            if reportFailure {
+                subscriptionStore.errorMessage = languageStore.t(.signInRequired)
+            }
+            return
+        }
+        guard let baseURL = URL(string: vpnManager.coordinatorURL) else {
+            if reportFailure {
+                subscriptionStore.errorMessage = ControlAPIClient.ClientError
+                    .server("Coordinator URL is not configured.").localizedDescription
+            }
+            return
+        }
+        await subscriptionStore.refreshEntitlement(
+            baseURL: baseURL,
+            authStore: authStore,
+            reportFailure: reportFailure
+        )
     }
 
     private var languageSection: some View {
@@ -279,23 +314,21 @@ struct SettingsViewMac: View {
 
 }
 
+/// Backend-only entitlement store — mirrors the iOS `SubscriptionStore`.
+///
+/// Class này từng bọc StoreKit (product IDs `Mac_monthly`/`Mac_yearly`,
+/// `Product.products(for:)`, `AppStore.sync()`, `Transaction.currentEntitlements/.updates`).
+/// Chủ dự án đã bỏ toàn bộ store billing ngày 14/09/2026 — macOS nay cũng chỉ bán qua trang
+/// web /buy — nên quyền Premium chỉ còn đến từ backend (`subscription_status.is_active` của
+/// tài khoản đang đăng nhập). Đừng thêm lại StoreKit: không còn kênh nào bán qua App Store,
+/// và app cũng không còn nộp được Mac App Store (Guideline 3.1.1 đòi IAP cho hàng số).
 @MainActor
 final class MacSubscriptionStore: ObservableObject {
-    static let productIDs = [
-        "Mac_monthly",
-        "Mac_yearly"
-    ]
-
-    @Published private(set) var products: [Product] = []
-    @Published private(set) var purchasedProductIDs: Set<String> = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
     /// Backend entitlement: true when the signed-in account has an active
     /// subscription (subscription_status.is_active from the coordinator).
     @Published var backendPremium = false
-
-    private var hasStarted = false
-    private var transactionUpdatesTask: Task<Void, Never>?
 
     var isSubscribed: Bool {
         // Dev bypass (chỉ trên máy chủ dự án): FORCE_PREMIUM=1 trong scheme environment,
@@ -307,150 +340,66 @@ final class MacSubscriptionStore: ObservableObject {
             return true
         }
         #endif
-        return backendPremium || !purchasedProductIDs.isDisjoint(with: Self.productIDs)
+        return backendPremium
     }
 
+    /// Tên gói hiển thị ở menu bar. Trước đây lấy `displayName` của sản phẩm StoreKit;
+    /// StoreKit đã bị gỡ nên chỉ còn hai giá trị này.
     var activePlanName: String {
-        if let activeProduct = products.first(where: { purchasedProductIDs.contains($0.id) }) {
-            return activeProduct.displayName
-        }
-        return isSubscribed ? "Premium" : "Free"
+        isSubscribed ? "Premium" : "Free"
     }
 
-    func start() async {
-        guard !hasStarted else { return }
-        hasStarted = true
-        observeTransactionUpdates()
-        await loadProducts()
-        await refreshEntitlements()
-    }
-
-    func loadProducts() async {
+    /// Đọc lại session từ coordinator (`GET /v1/auth/session`) và cập nhật quyền Premium.
+    ///
+    /// Dùng cho cả hai đường:
+    /// - nút "Làm mới trạng thái gói" / menu bar → `reportFailure: true` (khách phải thấy lỗi);
+    /// - tự động lúc mở app và ngay sau khi đăng nhập → `reportFailure: false`.
+    ///
+    /// Vì sao có đường tự động: quyền Premium có thể được cấp trên web SAU lần đăng nhập cuối,
+    /// còn session chỉ được cấp lúc đăng nhập. Trước đây StoreKit tự đọc quyền trên máy; StoreKit
+    /// đã bị gỡ (14/09/2026) nên không đọc lại thì khách vừa trả tiền sẽ bị đẩy vào paywall.
+    ///
+    /// Lỗi (mất mạng, hoặc control plane cũ chưa có route này → 404) thì **giữ nguyên** quyền
+    /// đang có: không được tự hạ một khách đang trả tiền xuống Free, và lần gọi tự động thì im
+    /// lặng — không chặn mở app, không chặn nút Connect.
+    func refreshEntitlement(
+        baseURL: URL,
+        authStore: AuthSessionStore,
+        reportFailure: Bool = true
+    ) async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            let loadedProducts = try await Product.products(for: Self.productIDs)
-            products = loadedProducts.sorted { left, right in
-                if left.type == right.type {
-                    return left.price < right.price
-                }
-                return left.id < right.id
+            let refreshed = try await ControlAPIClient(baseURL: baseURL, joinToken: "")
+                .fetchSession(accessToken: authStore.accessToken ?? "")
+            // Chỉ ghi keychain khi payload thật sự đổi: tránh ghi vô ích mỗi lần mở app.
+            if refreshed != authStore.session {
+                authStore.save(refreshed)
             }
-            errorMessage = loadedProducts.isEmpty ? "No StoreKit products found. Check Mac_monthly and Mac_yearly in App Store Connect." : nil
+            backendPremium = refreshed.user.subscription_status?.is_active ?? false
+            errorMessage = nil
         } catch {
-            errorMessage = "Cannot load plans. Please try again."
-        }
-    }
-
-    func purchase(_ product: Product) async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await product.purchase()
-            switch result {
-            case .success(let verification):
-                guard case .verified(let transaction) = verification else {
-                    errorMessage = "Purchase could not be verified."
-                    return
-                }
-                await transaction.finish()
-                await refreshEntitlements()
-                errorMessage = nil
-            case .pending:
-                errorMessage = "Purchase is pending approval."
-            case .userCancelled:
-                break
-            @unknown default:
-                break
-            }
-        } catch {
-            errorMessage = "Purchase failed. Please try again."
-        }
-    }
-
-    func restorePurchases() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            try await AppStore.sync()
-            await refreshEntitlements()
-            errorMessage = isSubscribed ? nil : "No active Premium purchase was found."
-        } catch {
-            errorMessage = "Restore failed. Please try again."
-        }
-    }
-
-    func refreshEntitlements() async {
-        var activeProductIDs = Set<String>()
-
-        for await result in Transaction.currentEntitlements {
-            guard case .verified(let transaction) = result else { continue }
-            guard Self.productIDs.contains(transaction.productID) else { continue }
-            if transaction.revocationDate == nil,
-               transaction.expirationDate.map({ $0 > Date() }) ?? true {
-                activeProductIDs.insert(transaction.productID)
+            if reportFailure {
+                errorMessage = error.localizedDescription
             }
         }
-
-        purchasedProductIDs = activeProductIDs
-    }
-
-    private func observeTransactionUpdates() {
-        transactionUpdatesTask?.cancel()
-        transactionUpdatesTask = Task(priority: .background) { [weak self] in
-            for await result in Transaction.updates {
-                guard let self else { return }
-                guard case .verified(let transaction) = result else { continue }
-                await transaction.finish()
-                await self.refreshEntitlements()
-            }
-        }
-    }
-
-    deinit {
-        transactionUpdatesTask?.cancel()
     }
 }
 
-/// How the paywall is delivered — mirrors the iOS `PaywallDistribution`.
-/// `appStore` (default) is the only mode that may be submitted to the Mac App
-/// Store: digital goods must use In-App Purchase and must not link out to an
-/// external payment page (Guidelines 3.1.1 / 3.1.3).
-enum MacPaywallDistribution {
-    case appStore
-    case direct
-
-    /// See the iOS `PaywallDistribution` note: the App Store archive is built
-    /// with `-DPAYWALL_APPSTORE` and sells with In-App Purchase only, while every
-    /// build we distribute ourselves defaults to the web buy page.
-    ///   defaults write com.privatevpn.mac flowvpn.paywallMode appstore
-    static var current: MacPaywallDistribution {
-        #if PAYWALL_APPSTORE
-        return .appStore
-        #else
-        return UserDefaults.standard.string(forKey: "flowvpn.paywallMode") == "appstore"
-            ? .appStore
-            : .direct
-        #endif
-    }
-}
-
+/// The paywall — always the web buy page.
+///
+/// View này từng rẽ nhánh theo kênh phát hành (`MacPaywallDistribution` +
+/// `-DPAYWALL_APPSTORE`) để bản Mac App Store chỉ bán bằng StoreKit. Chủ dự án đã bỏ toàn bộ
+/// store billing ngày 14/09/2026 (macOS nay cũng vậy) nên chỉ còn đúng một kênh mua: trang
+/// web /buy. Đừng thêm lại nhánh StoreKit / cờ biên dịch theo kênh.
 struct MacPaywallView: View {
     var body: some View {
-        switch MacPaywallDistribution.current {
-        case .appStore:
-            MacStoreKitPaywallView()
-        case .direct:
-            MacWebBuyPaywallView()
-        }
+        MacWebBuyPaywallView()
     }
 }
 
-/// Direct-distribution paywall: the web buy page (bank QR / WeChat / Alipay).
-/// Only shown when `flowvpn.paywallMode` is set to `direct`.
+/// The only paywall: the web buy page (bank QR / WeChat / Alipay).
 struct MacWebBuyPaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var languageStore: AppLanguageStore
@@ -481,229 +430,6 @@ struct MacWebBuyPaywallView: View {
         }
         .frame(width: 460, height: 760)
         .preferredColorScheme(.dark)
-    }
-}
-
-struct MacStoreKitPaywallView: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
-    @EnvironmentObject private var languageStore: AppLanguageStore
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VPNThemeMac.backgroundGradient
-                .ignoresSafeArea()
-
-            // ScrollView keeps the sheet usable on small screens: the
-            // content (header + benefits + plans + disclosure) can exceed
-            // the window height, so it scrolls instead of clipping/offsetting.
-            ScrollView {
-                VStack(spacing: 22) {
-                    header
-                    benefits
-                    plans
-                    footer
-                }
-                .frame(width: 390)
-                .padding(24)
-            }
-            .scrollIndicators(.hidden)
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(VPNThemeMac.textPrimary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.white.opacity(0.12))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(16)
-        }
-        .frame(width: 438, height: 720)   // fixed sheet size (390 + 2×24 padding)
-        .preferredColorScheme(.dark)
-        .task {
-            await subscriptionStore.start()
-        }
-    }
-
-    private var header: some View {
-        VStack(spacing: 10) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 76, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
-
-            Text(languageStore.t(.paywallTitle))
-                .font(.largeTitle.bold())
-                .foregroundStyle(VPNThemeMac.textPrimary)
-                .multilineTextAlignment(.center)
-
-            Text(languageStore.t(.paywallSubtitle))
-                .font(.subheadline)
-                .foregroundStyle(VPNThemeMac.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-    }
-
-    private var benefits: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            benefitRow("checkmark.shield.fill", languageStore.t(.benefitTunnel))
-            benefitRow("wifi.exclamationmark", languageStore.t(.benefitWifi))
-            benefitRow("bolt.fill", languageStore.t(.benefitFast))
-        }
-        .macPaywallCard()
-    }
-
-    private func benefitRow(_ icon: String, _ title: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.headline)
-                .foregroundStyle(VPNThemeMac.accent)
-                .frame(width: 26)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(VPNThemeMac.textPrimary)
-            Spacer()
-        }
-    }
-
-    private var plans: some View {
-        VStack(spacing: 12) {
-            if subscriptionStore.isLoading && subscriptionStore.products.isEmpty {
-                ProgressView()
-                    .tint(VPNThemeMac.accent)
-                    .padding(.vertical, 24)
-            }
-
-            ForEach(subscriptionStore.products, id: \.id) { product in
-                Button {
-                    Task {
-                        await subscriptionStore.purchase(product)
-                        if subscriptionStore.isSubscribed {
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    planRow(product)
-                }
-                .buttonStyle(.plain)
-                .disabled(subscriptionStore.isLoading)
-            }
-
-            if subscriptionStore.products.isEmpty && !subscriptionStore.isLoading {
-                VStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(languageStore.t(.noPlans))
-                        .font(.headline)
-                        .foregroundStyle(VPNThemeMac.textPrimary)
-                    Text(languageStore.t(.noPlansDetail))
-                        .font(.footnote)
-                        .foregroundStyle(VPNThemeMac.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.vertical, 16)
-            }
-
-            if let message = subscriptionStore.errorMessage {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 4)
-            }
-        }
-        .macPaywallCard()
-    }
-
-    private func planRow(_ product: Product) -> some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(product.displayName)
-                    .font(.headline)
-                    .foregroundStyle(VPNThemeMac.textPrimary)
-                Text(product.description)
-                    .font(.footnote)
-                    .foregroundStyle(VPNThemeMac.textSecondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 12)
-
-            Text(product.displayPrice)
-                .font(.headline.bold())
-                .foregroundStyle(.black)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(VPNThemeMac.accent)
-                .clipShape(Capsule())
-        }
-        .padding(16)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-    }
-
-    private var footer: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task {
-                    await subscriptionStore.restorePurchases()
-                }
-            } label: {
-                Label(languageStore.t(.restorePurchases), systemImage: "arrow.clockwise")
-                    .font(.subheadline.bold())
-            }
-            .tint(VPNThemeMac.accent)
-            .disabled(subscriptionStore.isLoading)
-
-            legalLinks
-            .font(.footnote)
-            .foregroundStyle(VPNThemeMac.textSecondary)
-
-            Text(languageStore.t(.subscriptionDisclosure))
-                .font(.caption)
-                .foregroundStyle(VPNThemeMac.textSecondary.opacity(0.7))
-                .multilineTextAlignment(.center)
-
-            Button(languageStore.t(.notNow)) {
-                dismiss()
-            }
-            .font(.footnote)
-            .foregroundStyle(VPNThemeMac.textSecondary)
-            .buttonStyle(.plain)
-            .padding(.top, 4)
-        }
-    }
-
-    private var legalLinks: some View {
-        HStack(spacing: 14) {
-            Link(languageStore.t(.privacy), destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!)
-            Link(languageStore.t(.support), destination: URL(string: "https://meetflowai.site/support")!)
-            Link(languageStore.t(.eula), destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
-        }
-    }
-}
-
-private extension View {
-    func macPaywallCard() -> some View {
-        self
-            .padding(18)
-            .frame(maxWidth: .infinity)
-            .background(VPNThemeMac.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
-            )
     }
 }
 

@@ -169,6 +169,75 @@ final class ControlAPIClientTests: XCTestCase {
         }
     }
 
+    /// `GET /v1/auth/session` re-reads the session for the token we already hold, so a
+    /// Premium plan granted on the web buy page becomes visible without signing out and
+    /// back in.
+    func testFetchSessionUsesAuthenticatedEndpointAndDecodesSubscription() async throws {
+        let client = makeMockedClient()
+        var capturedRequest: URLRequest?
+        let body = Data(#"{"access_token":"PVPN-AUTH-test","token_type":"Bearer","expires_at":"2026-10-01T00:00:00Z","user":{"id":"uuid-user-1","email":"buyer@example.com","subscription_status":{"is_active":true,"product_id":"Monthly_Premium","expires_at":"2026-10-01T00:00:00Z"}}}"#.utf8)
+        MockURLProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, body)
+        }
+
+        let session = try await client.fetchSession(accessToken: "PVPN-AUTH-test")
+
+        let request = try XCTUnwrap(capturedRequest)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.path, "/v1/auth/session")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer PVPN-AUTH-test")
+        XCTAssertEqual(session.access_token, "PVPN-AUTH-test")
+        XCTAssertEqual(session.user.email, "buyer@example.com")
+        XCTAssertEqual(session.user.subscription_status?.is_active, true)
+        XCTAssertEqual(session.user.subscription_status?.product_id, "Monthly_Premium")
+    }
+
+    func testFetchSessionRejectsMissingSessionBeforeNetwork() async throws {
+        let client = makeMockedClient()
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("Missing session should fail before making a request")
+            let response = HTTPURLResponse(
+                url: URL(string: "https://api.meetflowai.site")!, statusCode: 500, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await client.fetchSession(accessToken: "")
+            XCTFail("Expected missingSession")
+        } catch let error as ControlAPIClient.ClientError {
+            guard case .missingSession = error else {
+                return XCTFail("Expected missingSession, got \(error)")
+            }
+        }
+    }
+
+    /// Deploy order: a control plane deployed before this route exists answers 404. That must
+    /// surface as an error (so the caller keeps the entitlement it already has), never as a
+    /// "not subscribed" answer.
+    func testFetchSessionOnCoordinatorWithoutRouteSurfacesError() async throws {
+        let client = makeMockedClient()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"error":"Not found"}"#.utf8))
+        }
+
+        do {
+            _ = try await client.fetchSession(accessToken: "PVPN-AUTH-test")
+            XCTFail("Expected a ClientError for HTTP 404")
+        } catch let error as ControlAPIClient.ClientError {
+            guard case .server = error else {
+                return XCTFail("Expected .server error, got \(error)")
+            }
+        }
+    }
+
     func testRegisterUnauthorizedMapsToServerError() async throws {
         let client = makeMockedClient()
         MockURLProtocol.requestHandler = { request in

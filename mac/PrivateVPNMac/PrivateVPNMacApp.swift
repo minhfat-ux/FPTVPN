@@ -136,7 +136,13 @@ private struct MenuBarContent: View {
 
         Button(languageStore.t(.restorePurchases)) {
             Task {
-                await subscriptionStore.restorePurchases()
+                // Menu bar không có chỗ hiện lỗi: ghi vào store (Settings hiện lại) và
+                // giữ nguyên quyền đang có nếu gọi backend thất bại.
+                guard let url = URL(string: vpnManager.coordinatorURL) else {
+                    subscriptionStore.errorMessage = "Coordinator URL is not configured."
+                    return
+                }
+                await subscriptionStore.refreshEntitlement(baseURL: url, authStore: authStore)
             }
         }
         .disabled(subscriptionStore.isLoading)

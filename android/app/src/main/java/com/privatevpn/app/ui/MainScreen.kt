@@ -162,8 +162,7 @@ fun MainScreen(
 @Composable
 fun rememberIsSubscribed(sub: com.privatevpn.app.billing.SubscriptionStore): androidx.compose.runtime.State<Boolean> {
     val backendPremium by sub.backendPremium.collectAsState()
-    val purchased by sub.purchasedProductIDs.collectAsState()
-    val isSubscribed = remember(backendPremium, purchased) {
+    val isSubscribed = remember(backendPremium) {
         sub.isSubscribed
     }
     return androidx.compose.runtime.rememberUpdatedState(isSubscribed)

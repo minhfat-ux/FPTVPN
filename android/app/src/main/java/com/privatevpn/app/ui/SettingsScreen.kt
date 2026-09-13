@@ -72,6 +72,7 @@ fun SettingsScreen(
     var isLoadingDevices by remember { mutableStateOf(false) }
     var devicesMessage by remember { mutableStateOf<String?>(null) }
     var accountMessage by remember { mutableStateOf<String?>(null) }
+    var subscriptionMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadDevices() {
         if (!auth.isSignedIn) return
@@ -213,10 +214,21 @@ fun SettingsScreen(
                 )
             }
             ActionRow(text = lang.t(LKey.choosePlan)) { onShowPaywall() }
-            ActionRow(text = lang.t(LKey.restorePurchases)) { sub.restorePurchases() }
-            ActionRow(text = lang.t(LKey.manageSubscription)) {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Config.MANAGE_SUBSCRIPTION_URL))
-                ContextCompat.startActivity(context, intent, null)
+            ActionRow(text = lang.t(LKey.restorePurchases)) {
+                // Gói mua trên web được chủ shop xác nhận tay, nên nút này chỉ hỏi lại
+                // backend xem tài khoản đang đăng nhập đã có gói chưa
+                // (SubscriptionStore.refreshEntitlement) — chưa đăng nhập thì không có gì để hỏi.
+                if (auth.isSignedIn) {
+                    subscriptionMessage = null
+                    sub.refreshEntitlement()
+                } else {
+                    subscriptionMessage = lang.t(LKey.signInRequired)
+                }
+            }
+
+            val subscriptionError by sub.errorMessage.collectAsState()
+            (subscriptionMessage ?: subscriptionError)?.let {
+                Text(it, fontSize = 12.sp, color = VPNTheme.SecondaryLabel, modifier = Modifier.padding(top = 6.dp))
             }
         }
 
