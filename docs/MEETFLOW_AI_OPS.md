@@ -69,53 +69,43 @@ Trang mua tự chọn tiền tệ hiển thị (giá chính) theo ngôn ngữ kh
 `Environment=VND_PER_USD=25600` trong systemd drop-in. Log: `journalctl -u flowvpn-cp | grep "USD rate"`.
 Nếu chưa ghim thì tỷ giá USD đổi theo ngày, còn CNY đang ghim 3.500.
 
-### QR WeChat / Alipay có sẵn số tiền theo từng gói (ĐÃ BẬT 14/09/2026)
+### Nhập sẵn số tiền vào QR (WeChat / Alipay) — cơ chế có sẵn, hiện KHÔNG dùng
 
-Chủ shop đã tạo bộ ảnh QR **có đặt sẵn số tiền** bằng 微信 → 收付款 → 二维码收款 → **设置金额**
-và Alipay → 收钱 → **设置金额**, lưu vào `/root/flowvpn-pay/` với tên **theo gói**:
+> **Trạng thái 11/09/2026:** chủ shop chọn **giữ ảnh QR chung** cho WeChat / Alipay / MoMo
+> (khách tự nhập số tiền). Phần dưới là cơ chế ảnh-theo-mức-tiền — vẫn có sẵn trong code, chỉ cần thả ảnh
+> vào `/root/flowvpn-pay/` là tự bật, **không cần làm bây giờ**.
 
-| Gói (id trong code) | Giá | ¥ trong ảnh | File WeChat | File Alipay |
-|---|---|---|---|---|
-| `monthly` (tháng) | 200.000đ | ¥58 | `wechat-monthly.jpg` | `alipay-monthly.jpg` |
-| `quarterly` (3 tháng) | 550.000đ | ¥158 | `wechat-quarterly.jpg` | `alipay-quarterly.jpg` |
-| `semiannual` (6 tháng) | 950.000đ | ¥272 | `wechat-semiannual.jpg` | `alipay-semiannual.jpg` |
-| `yearly` (năm) | 1.800.000đ | ¥515 | `wechat-yearly.jpg` | `alipay-yearly.jpg` |
+- **Chuyển khoản ngân hàng (TPBank VietQR)** và **MoMo**: số tiền **đã được nhúng sẵn** trong QR động,
+  khách quét là app điền sẵn số tiền, chỉ cần xác nhận. Không phải làm gì thêm.
+- **WeChat Pay / Alipay (QR cá nhân)**: mã cá nhân không cho nhúng số tiền từ phía server.
+  Cách làm đúng: trong app WeChat/Alipay tạo **mã nhận tiền có đặt sẵn số tiền**
+  (微信: 收付款 → 二维码收款 → **设置金额**; Alipay: 收钱 → **设置金额**) rồi lưu ảnh QR cho **từng mức tiền**.
 
-Số ¥ trong bảng là **đọc trực tiếp từ ảnh** (OCR — ảnh đã có sẵn số tiền), khớp với quy đổi làm tròn
-lên ở tỷ giá ghim 1 CNY = 3.500 đ (¥58/¥158/¥272/¥515). Khách chọn gói nào ⇒ trang buy hiện **đúng
-ảnh QR của gói đó**, và hiện luôn số ¥ đó, **không cần nhập hay copy gì**.
-
-Thứ tự ưu tiên ảnh (`resolveQrFile()` trong `payments.js`):
+Server tự chọn ảnh theo thứ tự ưu tiên (thư mục `/root/flowvpn-pay`):
 
 ```
-<kênh>-<gói>.jpg        wechat-monthly.jpg        ← VPNFlow, ảnh đã có số tiền (đang dùng)
-<kênh>-ai-<gói>.jpg     wechat-ai-monthly.jpg     ← MeetFlow AI (giá khác nên phải có tiền tố -ai-)
-<kênh>-<số ¥>.jpg       wechat-58.jpg             ← ảnh theo mức tiền (cách đặt tên cũ)
-<kênh>-ai.jpg / <kênh>.jpg                        ← ảnh chung, khách tự nhập số tiền (đang dùng cho AI)
-```
-Đuôi file chấp nhận `.png .jpg .jpeg .webp` **và cả đuôi viết hoa** (`.JPG`). Ảnh của MeetFlow AI
-**bắt buộc** có `-ai-`, nếu không hệ thống sẽ không lấy ảnh của VPNFlow (200.000đ ≠ 130.000đ).
-
-Gói nào chưa có ảnh riêng thì tự lùi về ảnh chung — không bao giờ lỗi. Kiểm tra ảnh đang dùng:
-
-```bash
-curl -sI "https://api.meetflowai.site/v1/payments/qr/wechat?plan=yearly" | grep -i x-qr
-# X-QR-Variant: wechat-yearly.jpg
-# X-QR-Amount-Prefilled: 1
+<method>-<số ¥>.png      ví dụ wechat-20.png, alipay-43.png     ← có số tiền sẵn
+<method>-<tên gói>.png   ví dụ wechat-monthly.png               ← theo gói
+<method>.png             ảnh QR chung (khách tự nhập số tiền)    ← dự phòng
 ```
 
-#### Số ¥ hiện trên trang buy lấy từ đâu
+Có ảnh riêng thì trang mua tự báo khách *"Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận."*;
+chưa có thì vẫn hiện số ¥ to + nút sao chép như hiện nay (không bao giờ lỗi).
+Kiểm tra ảnh nào đang được dùng: response header `X-QR-Variant` và `X-QR-Amount-Prefilled`.
 
-`/root/flowvpn-pay/qr-amounts.json` khai số ¥ **in thật trong từng ảnh**; trang buy dùng số này
-(response `qrCny`) thay vì số quy đổi theo tỷ giá — nếu mai kia tỷ giá đổi, khách vẫn thấy đúng con số
-trong ví. Sửa file là có hiệu lực ngay (đọc lại theo mtime, **không cần restart**):
+**Nếu sau này muốn bật** (mỗi mức tiền 1 ảnh cho **cả WeChat và Alipay**) — hiện **không cần**:
 
-```json
-{ "wechat-monthly.jpg": 58, "wechat-quarterly.jpg": 158, "wechat-semiannual.jpg": 272, "wechat-yearly.jpg": 515,
-  "alipay-monthly.jpg": 58, "alipay-quarterly.jpg": 158, "alipay-semiannual.jpg": 272, "alipay-yearly.jpg": 515 }
-```
+| Số tiền | Dùng cho | Tên file |
+|---|---|---|
+| ¥58 | VPN tháng 200.000đ | `wechat-58.png`, `alipay-58.png` |
+| ¥158 | VPN 3 tháng 550.000đ | `wechat-158.png`, `alipay-158.png` |
+| ¥272 | VPN 6 tháng 950.000đ | `wechat-272.png`, `alipay-272.png` |
+| ¥515 | VPN năm 1.800.000đ | `wechat-515.png`, `alipay-515.png` |
+| ¥43 | MeetFlow AI pass 30 ngày | `wechat-43.png`, `alipay-43.png` |
+| ¥38 | MeetFlow AI tháng | `wechat-38.png`, `alipay-38.png` |
+| ¥300 | MeetFlow AI năm | `wechat-300.png`, `alipay-300.png` |
 
-Đổi giá gói ⇒ phải tạo lại ảnh QR trong app với số tiền mới, thay file, và sửa `qr-amounts.json`.
+Làm dần cũng được: gói nào chưa có ảnh riêng thì dùng ảnh QR chung như hiện tại.
 
 Trạng thái từng kênh (11/09/2026):
 
@@ -123,8 +113,8 @@ Trạng thái từng kênh (11/09/2026):
 |---|---|---|
 | Chuyển khoản ngân hàng (TPBank) | QR **động** do server tạo | ✅ nhúng sẵn + ghi mã đơn vào nội dung CK |
 | MoMo | QR **động** (VietQR BIN 971025) | ✅ nhúng sẵn + mã đơn |
-| WeChat Pay | ảnh theo gói `wechat-<gói>.jpg` (VPN) · `wechat.png` (AI) | ✅ VPN: có sẵn số tiền; AI: khách tự nhập ¥ |
-| Alipay | ảnh theo gói `alipay-<gói>.jpg` (VPN) · `alipay.png` (AI) | ✅ VPN: có sẵn số tiền; AI: khách tự nhập ¥ |
+| WeChat Pay | ảnh tĩnh `wechat.png` (ảnh cũ) | ❌ khách tự nhập ¥ (số ¥ hiện to + nút sao chép) |
+| Alipay | ảnh tĩnh `alipay.png` (ảnh cũ) | ❌ khách tự nhập ¥ |
 
 Muốn MoMo quay lại dùng ảnh tĩnh `momo.png`: thêm `Environment=MOMO_QR_DYNAMIC=0` rồi restart service.
 
@@ -158,11 +148,6 @@ CNY rate: 1 CNY = 3876 VND (open.er-api.com, cached 6h)          # chạy theo t
 ```
 
 ### Email báo đơn cho chủ shop — có ghi rõ kênh thanh toán
-
-> ⚠️ **Từ 14/09/2026 email này KHÔNG còn gửi mặc định.** Khi đã có webhook SePay tự xác nhận tiền,
-> chủ shop chỉ cần biết đơn **đã thanh toán** (xem §5b → *Email thông báo chủ shop*). Email mô tả
-> dưới đây chỉ còn gửi khi bật `OWNER_ALERT_ON_CREATE=1`, hoặc **luôn gửi cho WeChat/Alipay** vì hai
-> kênh đó không có webhook nào theo dõi.
 
 Mỗi đơn mới gửi 1 email tới `OWNER_ALERT_EMAIL` (mặc định `minhnb2@me.com`). Đầu email có **khung
 vàng** trả lời ngay 3 câu: khách trả qua kênh nào, mở app nào để kiểm tra, và số tiền cần khớp.
@@ -531,10 +516,8 @@ Sau khi sửa: `systemctl daemon-reload && systemctl restart flowvpn-cp`.
 ## 5b. SePay — tự xác nhận đơn chuyển khoản (IPN)
 
 SePay theo dõi biến động số dư tài khoản ngân hàng rồi POST về hệ thống mỗi khi có tiền vào ⇒ đơn
-VietQR/chuyển khoản được **kích hoạt tự động**, không phải chờ chủ shop bấm tay. Vì đã có webhook
-xác nhận tiền, **email xác nhận tay lúc tạo đơn mặc định KHÔNG gửi nữa**: chủ shop chỉ nhận email
-khi đơn **đã thanh toán** (và email cảnh báo khi có tiền vào mà không khớp đơn) — xem
-[Email thông báo](#email-thông-báo-chủ-shop-chỉ-báo-khi-đã-thanh-toán).
+VietQR/chuyển khoản được **kích hoạt tự động**, không phải chờ chủ shop bấm tay (luồng xác nhận tay
++ email alert cho chủ shop **vẫn giữ nguyên** làm đường dự phòng).
 
 ### URL cắm vào SePay (mục Webhooks / IPN)
 
@@ -598,112 +581,12 @@ hạn `12/11` (cộng dồn 30 ngày) — nội dung CK trong test đúng dạng
 | Tình huống | Hành vi |
 |---|---|
 | Tiền vào (`transferType=in`) đúng mã đơn, đủ tiền | tự kích hoạt + gửi hoá đơn: `sepay: TỰ KÍCH HOẠT đơn 1789317437 (vpn, 200000đ, tx 9990123)` |
-| Chuyển **thiếu** tiền | **KHÔNG** kích hoạt, log `đơn … chuyển 199000đ < cần 200000đ` **và gửi email cảnh báo** cho chủ shop |
+| Chuyển **thiếu** tiền | **KHÔNG** kích hoạt, chỉ log để chủ shop xác nhận: `đơn … chuyển 199000đ < cần 200000đ` |
 | Webhook **lặp** (SePay gửi lại) | không cấp lần hai: `đơn … không còn chờ xác nhận (đã xử lý hoặc hết hạn)` |
-| Nội dung **không có mã đơn** | log + **email cảnh báo** kèm nội dung CK, mã giao dịch, số tiền và link bảng điều khiển |
+| Nội dung **không có mã đơn** | log để xác nhận tay (alert cũ vẫn gửi) |
 | Giao dịch tiền **ra** | bỏ qua |
 | Sai chữ ký / không xác thực | HTTP **401** |
 | Chưa cấu hình secret | HTTP **503** (không nhận webhook trần) |
-
-### Email thông báo chủ shop: chỉ báo khi ĐÃ thanh toán
-
-| Email | Khi nào | Nội dung |
-|---|---|---|
-| `✅ Đã thanh toán (<sản phẩm>) #<mã đơn> — <số tiền> · <email>` | ngay khi SePay/PayOS xác nhận tiền và hệ thống kích hoạt xong | mã đơn, email khách, gói, số tiền, thời điểm, link `/buy/status/<mã>` (AI: `/ai/buy/status/<mã>`) — **không có nút xác nhận** vì không cần xác nhận gì nữa |
-| `⚠️ Tiền vào <số tiền> nhưng chưa khớp đơn — cần xem lại` | có tiền vào mà nội dung **không có mã đơn**, hoặc **chuyển thiếu** | số tiền, nội dung CK, tài khoản nhận, mã giao dịch, lý do, link bảng điều khiển (`/admin`) — đây là email duy nhất cần người xử lý |
-| Email "có đơn mới" (nút xác nhận tay) | **mặc định tắt**; bật lại bằng `OWNER_ALERT_ON_CREATE=1` trong drop-in env | như cũ |
-
-- **Ngoại lệ bắt buộc**: WeChat/Alipay là QR cá nhân, **không có webhook nào theo dõi tiền về**, nên
-  hai kênh này **vẫn nhận email đơn mới** kể cả khi cờ trên tắt (`shouldAlertOnCreate()` trong
-  `index.js`) — nếu tắt hết thì đơn CNY trả tiền sẽ im lặng.
-- Khách vẫn nhận **hoá đơn/hướng dẫn kích hoạt** qua email của chính họ khi đơn được kích hoạt.
-
-Bằng chứng thật 14/09/2026 (đơn test `1789322708`, webhook SePay ký HMAC):
-
-```
-sepay: đơn 1789322708 khớp giao dịch 990101
-[invoice] sent to <email khách> via resend id=…
-[paid-alert] sent to minhnb2@me.com via resend id=7a41ec4b-…
-paid-alert order 1789322708 to minhnb2@me.com: sent=true       # KHÔNG có dòng payment-alert nào lúc tạo đơn
-sepay: TỰ KÍCH HOẠT đơn 1789322708 (vpn, 200000đ, tx 990101, email …)
-```
-
-Tiêu đề thư lấy lại từ Resend API (`GET /emails/<id>` → `last_event: delivered`):
-
-```
-✅ Đã thanh toán (VPNFlow Premium) #1789322708 — 200.000 đ · <email khách>
-⚠️ Tiền vào 50.000 đ nhưng chưa khớp đơn — cần xem lại
-```
-
-### Mã đơn là duy nhất (2 khách mua trong cùng một giây)
-
-Mã đơn = epoch giây, nên hai khách bấm "Thanh toán" trong cùng giây sẽ ra **cùng mã**. Trước đây
-`recordPendingPayment` xoá mã trùng ⇒ đơn sau ghi đè đơn trước, và vì webhook SePay có thể trả mã
-đơn ở trường `code` (không kèm tiền tố sản phẩm), tiền của khách A có thể kích hoạt gói cho khách B.
-Từ 14/09/2026 đơn mới chỉ được tạo qua `createPendingOrder()` trong `index.js`:
-
-- kiểm tra trùng trên **cả hai kho** (VPN `auth.json` + MeetFlow AI `ai-access.json`) rồi **nhích
-  mã** cho tới khi trống, giữ 10 chữ số để khớp `normalizeOrderCode` của webhook;
-- nằm trong hàng đợi chung `withOrderCodeLock()` vì file JSON là đọc-sửa-ghi, hai request chạy xen
-  kẽ có thể cùng đọc một trạng thái rồi ghi đè nhau (mất đơn).
-
-```
-# 3 đơn đồng thời (đã tái hiện lỗi trước khi sửa: cả 3 ra cùng mã 1789322616)
-1789322696 qa-u1@… bankqr   | 1789322697 qa-u3@… momo | 1789322698 qa-u2@… wechat
-```
-
-### Checklist bảo mật webhook theo tài liệu SePay (đối chiếu 14/09/2026)
-
-Nguồn: [Xác thực webhook](https://developer.sepay.vn/vi/sepay-webhooks/xac-thuc) ·
-[Bảo mật webhook](https://developer.sepay.vn/vi/sepay-webhooks/bao-mat)
-
-| SePay khuyến nghị | Trạng thái trong code |
-|---|---|
-| **HMAC-SHA256** (khuyến nghị cao nhất: phát hiện payload bị sửa) | ✅ `verifySepaySignature()` — ký `{timestamp}.{raw_body}` bằng **raw body** (`express.json({verify})` giữ `req.rawBody`), so sánh bằng `timingSafeEqual`. Đã test thật: chữ ký đúng ⇒ 200 khi URL **không** kèm token |
-| Chống replay: từ chối timestamp lệch quá **5 phút** | ✅ đúng 300 giây (`DEFAULT_TOLERANCE_SEC`) — timestamp cũ 10 phút ⇒ **401** |
-| Đừng bao giờ "nhận tất" | ✅ không có header nào + không token ⇒ **401**; chưa cấu hình secret ⇒ **503** |
-| Không cho hạ cấp bảo mật | ✅ request **có chữ ký** thì chỉ chấp nhận chữ ký: chữ ký sai + token URL đúng vẫn **401** |
-| Whitelist IP của SePay | ⚙️ có sẵn, **mặc định tắt**: `SEPAY_IP_ALLOWLIST="1.2.3.4,5.6.7.0/24"` (drop-in phải có dòng `[Service]`). Bật ⇒ IP ngoài danh sách bị **403** + log. Đã test thật: 403 và `X-Forwarded-For` giả **không** lọt (Caddy ghi đè XFF của client) |
-| Validate trước khi xác nhận: số tiền · **tài khoản nhận** · mã đơn | ✅ `amountCovers()` + `accountMatches()` + `extractOrderRef()`. Tiền vào tài khoản khác ⇒ **không** kích hoạt, gửi email cảnh báo, ghi nhật ký `wrong-account` |
-| Lưu raw payload để audit/đối soát | ✅ `data/sepay-webhooks.log` (JSON lines) với `decision`: `activated` / `duplicate` / `underpaid` / `no-order-code` / `wrong-account` / `order-not-pending` / `rejected-ip` |
-| Đối soát định kỳ (webhook có thể mất nếu endpoint sập > 5 giờ) | ⏳ **chưa làm** — cần API token live của SePay; kế hoạch: cron 15–30 phút gọi API giao dịch, so với `sepay-webhooks.log` + `pendingPayments`, bù các giao dịch thiếu |
-
-#### Bật HMAC-SHA256 trong dashboard SePay (việc của chủ shop)
-
-1. SePay → **Webhooks** → sửa webhook đang dùng → mục **Bảo mật / Xác thực** → chọn **HMAC-SHA256**.
-2. Dán **Secret Key** = giá trị `SEPAY_WEBHOOK_SECRET` trong
-   `/etc/systemd/system/flowvpn-cp.service.d/sepay.conf` trên node-2 (khoá test hiện tại do SePay cấp;
-   khi chuyển sang tài khoản live thì tạo khoá mới rồi cập nhật **cả hai** nơi: dashboard + drop-in).
-3. Lưu → SePay gửi kèm `X-SePay-Signature` + `X-SePay-Timestamp` từ request sau.
-   Token trong URL (`?token=…`) **không cần nữa** khi đã bật HMAC (code tự bỏ qua token khi có chữ ký),
-   nhưng cứ để nguyên cũng không sao — chỉ dùng khi dashboard đổi về chế độ "Không xác thực".
-4. Muốn bật thêm whitelist IP: lấy danh sách IP tại <https://developer.sepay.vn/vi/sepay-webhooks/dia-chi-ip>
-   rồi thêm drop-in (nhớ `[Service]`):
-
-```ini
-# /etc/systemd/system/flowvpn-cp.service.d/sepay-ip.conf
-[Service]
-Environment=SEPAY_IP_ALLOWLIST=1.2.3.4,5.6.7.0/24
-```
-```bash
-systemctl daemon-reload && systemctl restart flowvpn-cp
-```
-
-⚠️ Drop-in **thiếu dòng `[Service]`** thì systemd bỏ qua toàn bộ biến (đã dính đúng lỗi này khi test:
-whitelist tưởng bật mà không có tác dụng) — luôn kiểm bằng
-`systemctl show flowvpn-cp -p Environment | tr ' ' '\n' | grep SEPAY_`.
-
-#### Kết quả test thật 7 chế độ xác thực (14/09/2026)
-
-| Ca | Kết quả |
-|---|---|
-| HMAC-SHA256 đúng, URL không kèm token | **200** |
-| HMAC sai + token URL đúng | **401** (đã chặn hạ cấp) |
-| HMAC đúng nhưng timestamp cũ 10 phút | **401** (chống replay) |
-| Không header + token URL đúng (chế độ "không xác thực") | **200** |
-| API Key đúng, không có chữ ký | **200** |
-| Không xác thực gì | **401** |
-| Token URL sai | **401** |
 
 ### Cách tự test
 
@@ -718,7 +601,7 @@ curl -s -X POST -H 'content-type: application/json' \
 SEPAY_SECRET=spsk_… node scripts/sepay-selftest.mjs --code <orderCode> --amount 200000
 ```
 
-Test tự động: `control-plane/test/sepay.test.js` (xác thực/đọc mã đơn/số tiền), `control-plane/test/paid-alert.test.js` (nội dung 2 email thông báo + guard luồng webhook, cổng `OWNER_ALERT_ON_CREATE`, mã đơn duy nhất), `control-plane/test/order-status.test.js` (trang tình trạng). Toàn bộ control-plane: `node --test` → 140 pass / 0 fail.
+Test tự động cho phần xác thực/đọc mã đơn/số tiền: `control-plane/test/sepay.test.js` (7 test).
 
 ## 6. Email — chống vào Junk / Spam (ĐÃ XỬ LÝ 13/09/2026)
 

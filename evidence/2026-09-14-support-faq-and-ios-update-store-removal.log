@@ -136,3 +136,54 @@ Byte-search binary đã phát hành (app + extension):
   /Volumes/BIWIN/Release/IoS/VPNFlow-1.3.2-b12-20260914.ipa
   sha256 VPNFlow-latest.ipa = 7d47bf63ba8406ef6da7bdf8cd10354a2e531ff3bb5bb4558d1e7fdb9c5d1b41
   (bản 1.2.3 của buổi sáng vẫn nằm đó để đối chiếu — DÙNG file ...latest.ipa)
+
+## 6. Deploy thật lên node-2 (14/09 ~01:30–01:36) — chủ dự án cho phép chạy ssh/scp
+
+Trước khi ghi đè, so md5 toàn bộ `src/*.js` giữa server và HEAD sạch:
+  chỉ KHÁC: app-version.js, support-page.js (đúng 2 fix chưa deploy)
+  chỉ CÓ TRÊN SERVER: dep-index.js, dep-payments.js, dep-sepay.js (bản backup của session khác,
+  không được import) ⇒ index.js/payments.js/sepay.js/auth-store.js… trùng HEAD từng byte.
+
+### 6.1 IPA
+$ scp -i ~/.ssh/fpt_vpn_node VPNFlow-latest.ipa root@103.6.234.233:/root/flowvpn-ipa/
+sha256 máy build : 7d47bf63ba8406ef6da7bdf8cd10354a2e531ff3bb5bb4558d1e7fdb9c5d1b41
+sha256 trên server: 7d47bf63ba8406ef6da7bdf8cd10354a2e531ff3bb5bb4558d1e7fdb9c5d1b41  (khớp)
+$ curl -sI https://api.meetflowai.site/v1/downloads/ios
+  HTTP/2 200 | content-disposition: attachment; filename="VPNFlow.ipa" | content-length: 4945632
+$ tải 200KB đầu → magic PK (ZIP/IPA) và cmp với file gốc: GIỐNG HỆT
+⇒ Nút tải trên /buy từ 404 "IPA not found..." thành 200.
+
+### 6.2 Control plane
+$ ssh node-2 'cp -a /root/flowvpn-cp/src /root/flowvpn-cp/src.bak-20260914-012621'   (40 file)
+$ rsync -az (chỉ src/, KHÔNG --delete) /tmp/cp-deploy/control-plane/src/ → /root/flowvpn-cp/src/
+$ systemctl restart flowvpn-cp → is-active: active, LISTEN *:7778
+md5 sau deploy: app-version.js 3ad2ba72…, support-page.js cf32f3c4… (trùng HEAD)
+Kiểm route webhook SePay còn nguyên (chỉ đọc file, không POST): sepay-webhook = 2, verifySepayUrlToken = 2
+
+$ curl -A "PrivateVPN/1.2.3 CFNetwork/1494 Darwin/23.4.0" https://api.meetflowai.site/v1/app-version
+{"platform":"ios","minimum_version":"0.0.0","latest_version":"1.2.3",
+ "ipa_url":"https://meetflowai.site/v1/downloads/ios",
+ "store_url":"https://meetflowai.site/v1/downloads/ios"}
+⇒ Trước deploy: store_url = "" (nút "Cập nhật" trên iOS đi vào ngõ cụt App Store).
+
+$ for L in vi en zh ja ko; do curl -s "https://meetflowai.site/support?lang=$L"; done
+  cả 5 ngôn ngữ: App Store=0  Apple ID=0  reportaproblem=0  Restore=0  VPNFlow=2  terms=1
+  (chữ "FlowVPN" còn 1 lần — là URL thật /FlowVPNPrivacy.html, không phải nhãn hiển thị)
+
+### 6.3 Caddy node-2 — thiếu route thì edge trả 404 dù Node trả 200
+Payload trả link `https://meetflowai.site/v1/downloads/ios` nhưng địa chỉ đó **404**: site block
+mở TỪNG đường (`/v1/downloads/android` có sẵn, ios thì chưa) — đúng ca `/guide` đã từng gặp.
+Đã thêm (backup `/etc/caddy/Caddyfile.bak-20260914-013452`):
+  	handle /v1/downloads/ios {
+  		reverse_proxy 127.0.0.1:7778
+  	}
+$ caddy validate … → "Valid configuration" | systemctl reload caddy → active
+Kiểm lại sau reload:
+  meetflowai.site/v1/downloads/ios        200   (trước: 404)
+  meetflowai.site/buy | /support | /terms | /guide | api/health   200 200 200 200 200
+
+### 6.4 Chưa làm (cố ý)
+- KHÔNG đổi `latest_ios_version` trong app-config: đây là quyết định sản phẩm (máy cũ sẽ được
+  nhắc cập nhật ⇒ phải tải IPA), để chủ dự án tự đặt trong tab admin.
+- KHÔNG sửa `payments.js`/`index.js` phần còn nhắc store (`iosLineStore`, badge App Store,
+  `DEFAULT_STORE_URL`, `app_store_url`): file đang thuộc vùng một session khác sửa dở.

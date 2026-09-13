@@ -1,6 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import QRCode from "qrcode";
 import { buildVietQRPayload } from "./vietqr.js";
 
@@ -390,7 +388,7 @@ const TEXTS = {
     steps: ["Download and install the app (iOS: the IPA above · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
         cnyNote: "WeChat Pay / Alipay settle in CNY — the ¥ amount is converted at",
         cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
-        amountPrefilled: "The amount is already in the QR — just scan and confirm, no need to type anything.",
+        amountPrefilled: "The amount is already filled in — just confirm.",
         copyAmount: "Copy amount",
         amountReminder: "Transfer EXACTLY this amount.",
         planChosen: "Your plan:",
@@ -466,7 +464,7 @@ const TEXTS = {
     steps: ["Tải và cài app (iOS: file IPA ở trên · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
         cnyNote: "WeChat Pay / Alipay thanh toán bằng CNY (Nhân dân tệ) — số ¥ quy đổi theo tỷ giá",
         cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
-        amountPrefilled: "Số tiền đã có sẵn trong mã QR — quét là ra đúng số, không cần nhập gì.",
+        amountPrefilled: "Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận.",
         copyAmount: "Sao chép số tiền",
         amountReminder: "Chuyển ĐÚNG số tiền này khi chuyển khoản.",
         planChosen: "Gói bạn đã chọn:",
@@ -542,7 +540,7 @@ const TEXTS = {
     steps: ["下载并安装应用（iOS：上方 IPA · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
         cnyNote: "微信支付 / 支付宝以人民币（CNY）结算 — 金额按以下汇率换算：",
         cnyEnter: "支付时请输入二维码上显示的人民币金额。",
-        amountPrefilled: "二维码中已包含金额 — 扫码即可，无需输入。",
+        amountPrefilled: "二维码中已填入金额 — 确认即可。",
         copyAmount: "复制金额",
         amountReminder: "请转账「此金额」，不要多也不要少。",
         planChosen: "您选择的套餐：",
@@ -618,7 +616,7 @@ const TEXTS = {
     steps: ["アプリをダウンロードしてインストール（iOS：上の IPA · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
         cnyNote: "WeChat Pay / Alipay は人民元（CNY）決済です — 金額は次のレートで換算：",
         cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
-        amountPrefilled: "金額はQRに含まれています — 読み取って確認するだけです。",
+        amountPrefilled: "金額は入力済みです — 確認するだけです。",
         copyAmount: "金額をコピー",
         amountReminder: "この金額をそのまま送金してください。",
         planChosen: "選択中のプラン：",
@@ -694,7 +692,7 @@ const TEXTS = {
     steps: ["앱을 내려받아 설치합니다 (iOS: 위의 IPA · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
         cnyNote: "WeChat Pay / Alipay는 위안화(CNY) 결제입니다 — 금액은 다음 환율로 환산:",
         cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
-        amountPrefilled: "금액이 QR에 포함되어 있습니다 — 스캔 후 확인만 하면 됩니다.",
+        amountPrefilled: "금액이 미리 입력되어 있습니다 — 확인만 하면 됩니다.",
         copyAmount: "금액 복사",
         amountReminder: "이 금액을 정확히 이체하세요.",
         planChosen: "선택한 요금제:",
@@ -966,69 +964,6 @@ export function displayCurrencyFor({ lang = "vi", cur = "" } = {}) {
 }
 
 /** ¥ amount, rounded up to a whole yuan (the customer types it by hand). */
-/**
- * Ảnh QR nhận tiền của chủ shop nằm trong `PAY_QR_DIR` (mặc định `/root/flowvpn-pay`).
- * Thứ tự ưu tiên — cái đầu tiên có trên đĩa sẽ được dùng:
- *
- *   1. `<kênh>-<gói>.<ext>`            (VPNFlow)      ví dụ `wechat-monthly.jpg`
- *      `<kênh>-ai-<gói>.<ext>`         (MeetFlow AI)  ví dụ `wechat-ai-monthly.jpg`
- *   2. `<kênh>-<số ¥>.<ext>`           ảnh đặt theo số tiền, ví dụ `wechat-58.png`
- *   3. `<kênh>-ai.<ext>` (AI) rồi `<kênh>.<ext>` — ảnh chung, khách tự nhập số tiền
- *
- * Ảnh theo GÓI được ưu tiên hơn ảnh theo số ¥ vì giá gói là thứ khách chọn, còn tỷ giá CNY
- * đổi theo ngày nên tên file theo số ¥ sẽ lệch. Ảnh của MeetFlow AI phải có `-ai-` để không
- * hiển nhầm ảnh giá của VPNFlow (200.000đ ≠ 130.000đ).
- *
- * `prefilled: true` = trong ảnh đã có sẵn số tiền, khách quét là ra đúng số, không phải nhập.
- */
-export function resolveQrFile(dir, name, { cny = null, plan = null, product = "vpn" } = {}) {
-  const exts = ["png", "jpg", "jpeg", "webp"];
-  const safePlan = plan ? String(plan).replace(/[^a-z0-9_-]/gi, "") : "";
-  const safeName = String(name).replace(/[^a-z0-9_-]/gi, "");
-  const bases = [];
-  if (safePlan) bases.push(product === "ai" ? `${safeName}-ai-${safePlan}` : `${safeName}-${safePlan}`);
-  const cnyValue = Number(cny);
-  if (Number.isFinite(cnyValue) && cnyValue > 0) bases.push(`${safeName}-${Math.round(cnyValue)}`);
-  if (product === "ai") bases.push(`${safeName}-ai`);
-  const generic = `${safeName}`;
-  bases.push(generic);
-
-  for (const base of bases) {
-    for (const ext of exts) {
-      // Ảnh chủ shop tải lên có thể là .JPG (viết hoa) — thử cả hai kiểu tên.
-      for (const candidate of [`${base}.${ext}`, `${base}.${ext.toUpperCase()}`]) {
-        const file = path.join(dir, candidate);
-        if (fs.existsSync(file)) {
-          return { file, variant: candidate, prefilled: base !== generic };
-        }
-      }
-    }
-  }
-  return { file: path.join(dir, `${generic}.png`), variant: `${generic}.png`, prefilled: false, missing: true };
-}
-
-/**
- * Số ¥ thật in trong ảnh QR (do chủ shop đặt bằng "设置金额" của WeChat/Alipay).
- * Đọc từ `PAY_QR_DIR/qr-amounts.json` dạng `{"wechat-monthly.jpg": 58}` để trang buy hiện
- * ĐÚNG con số khách sẽ thấy trong ví, thay vì số quy đổi theo tỷ giá (có thể lệch 1 ¥).
- * Đọc lại khi file đổi (cache theo mtime) nên sửa file là có hiệu lực ngay, không cần restart.
- */
-export function qrAmountsFor(dir) {
-  const file = path.join(dir, "qr-amounts.json");
-  try {
-    const stat = fs.statSync(file);
-    if (qrAmountsCache.file === file && qrAmountsCache.mtime === stat.mtimeMs) return qrAmountsCache.data;
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-    const data = parsed && typeof parsed === "object" ? parsed : {};
-    qrAmountsCache = { file, mtime: stat.mtimeMs, data };
-    return data;
-  } catch {
-    return {};
-  }
-}
-
-let qrAmountsCache = { file: null, mtime: 0, data: {} };
-
 export function cnyFromVnd(amountVnd, rate) {
   const r = Number(rate) > 0 ? Number(rate) : DEFAULT_VND_PER_CNY;
   return Math.max(1, Math.ceil(Number(amountVnd) / r));
@@ -1711,21 +1646,16 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             qrImg.src = remoteQr || localQr;
           }
           const methodIsCny = CNY_METHODS.indexOf(data.method) !== -1;
-          // Ảnh QR do chủ shop tạo bằng "设置金额" đã mang sẵn số tiền ⇒ hiện ĐÚNG số ¥ in
-          // trong ảnh (data.qrCny) thay vì số quy đổi theo tỷ giá, tránh lệch 1 ¥.
-          const qrPrefilled = data.amountPrefilled === true;
           if (methodIsCny) {
             // The customer types this into WeChat/Alipay, so lead with ¥ and let
             // the copy button copy the yuan figure.
-            const cnyValue = qrPrefilled && data.qrCny ? data.qrCny : cnyOf(data.amount);
+            const cnyValue = cnyOf(data.amount);
             // Show which plan the amount belongs to, right above the figure.
           const planEl = document.querySelector(".plan.active span");
           qrPlan.textContent = T.planChosen + " " + (planEl ? planEl.textContent.trim() : plan);
           qrAmt.textContent = "¥" + cnyValue;
-            qrAmtSub.textContent = qrPrefilled
-              ? "≈ " + money(data.amount) + " · " + usdLabel(data.amount) + " · " + T.amountPrefilled
-              : "≈ " + money(data.amount) + " · " + usdLabel(data.amount) +
-                " · 1 CNY ≈ " + new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
+            qrAmtSub.textContent = "≈ " + money(data.amount) + " · " + usdLabel(data.amount) +
+              " · 1 CNY ≈ " + new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
             qrCopyBtn.dataset.amount = String(cnyValue);
           } else {
             const planEl2 = document.querySelector(".plan.active span");
@@ -1742,14 +1672,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
           // không phải copy gì: chỉ để lại QR + tên gói + số tiền. Các kênh còn lại
           // (WeChat/Alipay dùng ảnh tĩnh) vẫn hiện số tiền + mã đơn để khách nhập tay.
           const selfContained = data.selfContained === true;
-          // QR đã có sẵn SỐ TIỀN (bankqr/MoMo động, hoặc ảnh WeChat/Alipay đặt số tiền) ⇒
-          // khách không phải copy gì: chỉ để lại QR + tên gói + số tiền.
-          const noTyping = selfContained || qrPrefilled;
-          [qrCopyBtn, qrCopyOrderBtn, qrAmtRemind].forEach((el) => {
-            if (el) el.style.display = noTyping ? "none" : "";
+          [qrCopyBtn, qrCopyOrderBtn, qrOrder, qrOrderHint, qrAmtRemind].forEach((el) => {
+            if (el) el.style.display = selfContained ? "none" : "";
           });
-          qrOrder.style.display = selfContained ? "none" : "";
-          qrOrderHint.style.display = selfContained ? "none" : "";
           qrOrder.textContent = T.orderPrefix + data.orderCode;
           // Same reference string the bank QR embeds, so the shop can match it.
           const orderRef = REF_PREFIX + "-" + data.orderCode;

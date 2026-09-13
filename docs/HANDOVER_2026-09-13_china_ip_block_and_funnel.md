@@ -183,18 +183,35 @@ lấy từ `subscription_status.is_active` của backend (`GET /v1/auth/session`
 - Phiên bản iOS/macOS **1.3.2 (build 12)** — khớp Android `versionCode 12` / `1.3.2`.
 - Bằng chứng đầy đủ: `evidence/2026-09-14-support-faq-and-ios-update-store-removal.log`.
 
-Còn lại (cần người có quyền — agent bị cấm ssh/scp/deploy):
-1. `bash scripts/upload-ios-ipa.sh` — đưa IPA lên node-2 (script mới; SSH thẳng node-2 từ Mac
-   đã kiểm là mở cổng 22).
-2. Deploy control plane (gồm commit `support-page` + `app-version`) rồi kiểm lại `/support`:
-   phải còn **0** chữ `App Store` / `Apple ID` / `reportaproblem`.
-3. Đặt `latest_ios_version = 1.3.2` trong tab admin để máy cũ được nhắc cập nhật.
-4. ⚠️ **Cảnh báo thương mại**: IPA đang ký `development` (4 UDID) nhưng `/buy` mời MỌI khách
+Đã deploy xong (14/09 ~01:30, chủ dự án cho phép agent chính ssh/scp):
+1. IPA 1.3.2 đã lên `/root/flowvpn-ipa/VPNFlow-latest.ipa` trên node-2 — sha256 trên server khớp
+   máy build (`7d47bf63…`), `GET /v1/downloads/ios` → **200**, 4.945.632 byte, 200KB đầu giống hệt
+   file gốc. Nút tải trên `/buy` đã hoạt động thật.
+2. Control plane đã rsync `src/` từ **HEAD sạch** lên node-2 (backup ở
+   `/root/flowvpn-cp/src.bak-20260914-012621`; đã so md5 trước khi ghi: server chỉ thiếu đúng 2
+   file `app-version.js` + `support-page.js`, còn lại trùng HEAD) rồi `systemctl restart flowvpn-cp`
+   → `active`, cổng 7778. `/support` cả 5 ngôn ngữ nay còn **0** chữ `App Store`/`Apple ID`/
+   `reportaproblem`/`Restore Purchases`; `/v1/app-version` (UA iOS) trả
+   `ipa_url` = `store_url` = link tải IPA (trước đó RỖNG ⇒ nút "Cập nhật" đi vào ngõ cụt).
+3. **Caddy node-2 (site `meetflowai.site`)**: thêm `handle /v1/downloads/ios` → `127.0.0.1:7778`.
+   Vì sao cần: site block mở TỪNG đường một (`/v1/downloads/android` có sẵn, ios thì chưa), nên
+   Node trả 200 nhưng edge trả 404 — đúng ca `/guide` đã từng gặp. Backup
+   `/etc/caddy/Caddyfile.bak-20260914-013452`, `caddy validate` = "Valid configuration",
+   `systemctl reload caddy` xong vẫn `active`; `/buy`, `/support`, `/terms`, `/guide`, `/health`
+   đều 200 sau reload.
+
+Còn lại (cần chủ dự án quyết / làm):
+1. Đặt `latest_ios_version = 1.3.2` trong tab admin để máy cũ được nhắc cập nhật (agent chính
+   KHÔNG tự đổi: đây là quyết định sản phẩm, ảnh hưởng khách đang dùng).
+2. ⚠️ **Cảnh báo thương mại**: IPA đang ký `development` (4 UDID) nhưng `/buy` mời MỌI khách
    "Tải cho iPhone / iPad" — máy không có UDID trong profile **không cài được**. Cần ghi rõ trên
    `/buy`, hoặc bỏ nút iOS cho tới khi có kênh cài được (ad-hoc/enterprise/TestFlight).
-5. `payments.js` còn nhánh `iosLineStore` + badge App Store/TestFlight; chúng chỉ hiện khi biến
+3. `payments.js` còn nhánh `iosLineStore` + badge App Store/TestFlight; chúng chỉ hiện khi biến
    môi trường `APP_STORE_URL_*`/TestFlight được cấu hình ⇒ **kiểm env server, nên xoá hẳn**.
    (File này đang được một session khác sửa dở — đừng sửa chồng.)
-6. `control-plane/src/index.js` còn `DEFAULT_STORE_URL = APP_STORE_URL ?? "https://apps.apple.com/app/flowvpn"`
+4. `control-plane/src/index.js` còn `DEFAULT_STORE_URL = APP_STORE_URL ?? "https://apps.apple.com/app/flowvpn"`
    và field `app_store_url` trong tab admin: giờ **vô tác dụng** (app-version không đọc nữa) —
-   nên xoá cùng lúc với mục 5.
+   nên xoá cùng lúc với mục 3.
+5. Trang `/terms` hiện chỉ nêu "MeetFlow AI Terms of Use" (0 lần VPNFlow) trong khi nút "Điều khoản
+   sử dụng" của app và link trên `/support` đều trỏ vào đó — cần bổ sung phạm vi VPNFlow hoặc tạo
+   trang riêng.
