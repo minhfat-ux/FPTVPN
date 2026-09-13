@@ -594,7 +594,7 @@ class HysteriaVpnService : VpnService() {
 
     private fun establish(): ParcelFileDescriptor {
         val builder = Builder()
-        builder.setSession("FlowVPN Hysteria")
+        builder.setSession("VPNFlow Hysteria")
         builder.setMtu(HY_MTU)
         builder.addAddress(HY_TUN_IPV4_IP, 30)
         builder.addRoute("0.0.0.0", 0)

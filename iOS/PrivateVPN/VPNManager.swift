@@ -8,6 +8,28 @@ import WireGuardKit
 final class VPNManager: ObservableObject {
     static let providerBundleIdentifier = "com.privatevpn.app.packet-tunnel"
 
+    /// Tên profile VPN hiển thị trong Settings > VPN. Đổi từ "FlowVPN" sang "VPNFlow"
+    /// cho khớp Android (`strings.xml`: `app_name = VPNFlow`) và khớp tên sản phẩm
+    /// trong tài liệu App Store (`docs/APP_STORE_SUBMISSION_IOS.md`: app VPNFlow).
+    private static let profileName = "VPNFlow"
+
+    /// Tên CŨ của profile. Máy đã cài bản trước còn profile mang tên này.
+    ///
+    /// Vì sao phải nhận ra cả tên cũ thay vì chỉ đổi chuỗi: `localizedDescription` là
+    /// KHOÁ để tìm lại profile của chính app. Đổi tên mà không nhận tên cũ thì
+    /// `loadAllFromPreferences()` không khớp profile đang có, kết quả là tạo thêm
+    /// profile mới và **bỏ rơi profile cũ** — người dùng thấy 2 profile VPN trong
+    /// Settings, và mất luôn đường dự phòng offline đọc từ chính profile đó
+    /// (`savedTunnelConfig`). Nhận cả hai tên thì lần connect kế tiếp sẽ đổi tên
+    /// profile cũ sang tên mới, tự lành.
+    private static let legacyProfileNames: Set<String> = ["FlowVPN"]
+
+    /// Có phải profile VPN của app này không (kể cả tên cũ trước khi đổi tên).
+    private static func isOwnProfile(_ description: String?) -> Bool {
+        guard let description else { return false }
+        return description == profileName || legacyProfileNames.contains(description)
+    }
+
     private let log = Logger(subsystem: "com.privatevpn.app", category: "vpn-manager")
 
     @Published private(set) var state: VPNState = .disconnected
@@ -426,7 +448,7 @@ final class VPNManager: ObservableObject {
         wsRelayURL: String? = nil
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
-        let matching = existing.filter { $0.localizedDescription == "FlowVPN" }
+        let matching = existing.filter { Self.isOwnProfile($0.localizedDescription) }
         let manager = matching.first ?? NETunnelProviderManager()
 
         for old in matching.dropFirst() {
@@ -449,7 +471,7 @@ final class VPNManager: ObservableObject {
         ]
 
         manager.protocolConfiguration = protocolConfig
-        manager.localizedDescription = "FlowVPN"
+        manager.localizedDescription = Self.profileName
         manager.isEnabled = true
         try await manager.saveToPreferences()
         try await manager.loadFromPreferences()
@@ -459,7 +481,7 @@ final class VPNManager: ObservableObject {
     private func loadManagerFromPreferences() async {
         do {
             let existing = try await NETunnelProviderManager.loadAllFromPreferences()
-            manager = existing.first { $0.localizedDescription == "FlowVPN" }
+            manager = existing.first { Self.isOwnProfile($0.localizedDescription) }
             refreshStatus()
         } catch {
             lastError = error.localizedDescription
@@ -467,7 +489,7 @@ final class VPNManager: ObservableObject {
         }
     }
 
-    /// Decodes the WireGuard config stored in the saved "FlowVPN" NEVPN
+    /// Decodes the WireGuard config stored in the saved VPNFlow NEVPN
     /// profile. Used as a fallback when the coordinator is unreachable — the
     /// profile persists across sessions, so this works even before
     /// TunnelConfigCache was ever written.

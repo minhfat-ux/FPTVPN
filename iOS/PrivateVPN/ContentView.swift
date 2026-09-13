@@ -197,7 +197,7 @@ struct ContentView: View {
                     .foregroundStyle(vpnManager.state.tint)
             }
 
-            Text("FlowVPN")
+            Text("VPNFlow")
                 .font(.title.bold())
                 .foregroundStyle(VPNTheme.label)
             Text(languageStore.t(.appSubtitle))

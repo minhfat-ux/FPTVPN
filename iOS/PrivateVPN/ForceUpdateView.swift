@@ -13,7 +13,7 @@ struct ForceUpdateView: View {
     private var updateURL: URL? {
         let raw = info.store_url.trimmingCharacters(in: .whitespacesAndNewlines)
         if !raw.isEmpty, let url = URL(string: raw) { return url }
-        return URL(string: "https://apps.apple.com/search?term=FlowVPN")
+        return URL(string: "https://apps.apple.com/search?term=VPNFlow")
     }
 
     var body: some View {
@@ -26,7 +26,7 @@ struct ForceUpdateView: View {
                     .font(.system(size: 64))
                     .foregroundStyle(VPNTheme.accent)
 
-                Text("FlowVPN")
+                Text("VPNFlow")
                     .font(.largeTitle.bold())
                     .foregroundStyle(VPNTheme.label)
 
