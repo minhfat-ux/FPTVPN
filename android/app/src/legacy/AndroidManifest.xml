@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Legacy sideload build (Fire OS 6 / Android 7+, minSdk 24).
+
+  The Hysteria AAR (gobind, package go.mobile.gojni) declares minSdk 26, which the
+  manifest merger would turn into an error. The override is scoped to this flavor
+  only, so the modern build keeps a hard minSdk of 26 - a too-low minSdk can never
+  slip into the APK that is already published and tested.
+
+  The Go client itself only needs API 21 (gomobile's own floor); the WireGuard
+  tunnel AAR needs API 24, which is why 24 is the legacy floor.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-sdk tools:overrideLibrary="go.mobile.gojni" />
+
+</manifest>

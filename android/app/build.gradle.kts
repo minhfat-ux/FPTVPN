@@ -45,6 +45,31 @@ android {
         versionName = "1.2.6"
     }
 
+    /**
+     * Two sideload builds from the same source, so the working Android 8+ APK is
+     * never touched by compatibility work:
+     *
+     *  - modern: unchanged, minSdk 26 (the build already published and tested).
+     *  - legacy: minSdk 24 so Fire OS 6 (Fire TV Stick 4K / Cube, Android 7.1) and
+     *    other Android 7 devices can install it — they fail with "There was a
+     *    problem parsing the package" on the modern APK, whose minSdk is 26.
+     *
+     * 24 is the floor: the WireGuard tunnel AAR declares minSdk 24. The Hysteria
+     * AAR declares 26, so the legacy manifest overrides that library
+     * (`tools:overrideLibrary`), see src/legacy/AndroidManifest.xml.
+     */
+    flavorDimensions += "androidLevel"
+    productFlavors {
+        create("modern") {
+            dimension = "androidLevel"
+            minSdk = 26
+        }
+        create("legacy") {
+            dimension = "androidLevel"
+            minSdk = 24
+        }
+    }
+
     signingConfigs {
         if (signingProps != null) {
             create("release") {
@@ -52,6 +77,11 @@ android {
                 storePassword = signingProps!!.getProperty("storePassword")
                 keyAlias = signingProps!!.getProperty("keyAlias")
                 keyPassword = signingProps!!.getProperty("keyPassword")
+                // v1 (JAR) as well as v2/v3: some sideload paths and older devices
+                // only understand v1, and it costs nothing on modern Android.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }

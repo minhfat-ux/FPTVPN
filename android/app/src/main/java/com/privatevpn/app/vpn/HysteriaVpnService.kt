@@ -192,16 +192,27 @@ class HysteriaVpnService : VpnService() {
 
     private fun buildNotification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "VPN", NotificationManager.IMPORTANCE_LOW)
-        )
+        // Notification channels and the channel-aware Builder only exist on API 26+;
+        // guarded so the legacy sideload build (Fire OS 6 / Android 7) can run too.
+        val hasChannels = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        if (hasChannels) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "VPN", NotificationManager.IMPORTANCE_LOW)
+            )
+        }
         val pi = PendingIntent.getActivity(
             this,
             0,
             Intent(this, com.privatevpn.app.MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        return Notification.Builder(this, CHANNEL_ID)
+        @Suppress("DEPRECATION")
+        val builder = if (hasChannels) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            Notification.Builder(this)
+        }
+        return builder
             .setContentTitle("VPNFlow")
             .setContentText("VPN active")
             .setSmallIcon(android.R.drawable.ic_lock_lock)

@@ -1,11 +1,13 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Always dark: FlowVPN navy palette (matches FPT Harness style). -->
     <style name="Theme.VPNFlow" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">#0A1F3B</item>
         <item name="android:navigationBarColor">#0A1F3B</item>
         <item name="android:windowBackground">#0A1F3B</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:forceDarkAllowed">false</item>
+        <!-- Both attributes below are ignored by older platforms; they are declared
+             with tools:targetApi so the legacy sideload build (minSdk 24) is clean. -->
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
+        <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
     </style>
 </resources>
