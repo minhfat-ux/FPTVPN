@@ -44,6 +44,21 @@ object DiagnosticsLog {
     @Volatile var relayLastRxAt: Long = 0
     @Volatile var relayLastTxAt: Long = 0
 
+    // ---- outer transport socket (the socket that carries the tunnel) ----------
+    /** Local address the outer socket is bound to, e.g. "192.168.1.7:41234".
+     *  This is what reveals a socket stranded on the WiFi network after it died. */
+    @Volatile var outerLocal: String = "-"
+    /** Which transport is actually carrying traffic: "hy-tcp:8443", "hy-udp:8443", "wg-relay", "none". */
+    @Volatile var outerDetail: String = "-"
+    /** Result of VpnService.protect() on that socket (false = it rides the tunnel). */
+    @Volatile var outerProtected: String = "-"
+    /** TUN interface name + counters, read from /proc/net/dev (real bytes through the tunnel). */
+    @Volatile var tunIface: String = "-"
+    @Volatile var tunRxBytes: Long = -1
+    @Volatile var tunTxBytes: Long = -1
+    /** Count of default-network changes seen since the tunnel came up. */
+    @Volatile var netChanges: Int = 0
+
     fun init(context: Context) {
         synchronized(lock) {
             if (file != null) return
