@@ -301,7 +301,11 @@ private fun ServerRow(
             .fillMaxWidth()
             .padding(vertical = 8.dp, horizontal = 6.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) VPNTheme.Accent.copy(alpha = 0.15f) else VPNTheme.CardStroke.copy(alpha = 0.35f))
+            // Dòng ĐƯỢC CHỌN phải là dòng SÁNG nhất. Trước đây dòng được chọn chỉ
+            // Accent 15% còn dòng không chọn là trắng ~4% — chênh nhau quá ít nên
+            // nhìn như bị ngược (dòng được chọn trông tối/mờ hơn). Nay: chọn = nền
+            // xanh accent 35%, không chọn = gần như trong suốt.
+            .background(if (isSelected) VPNTheme.Accent.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.05f))
             .clickable(enabled = !busy, onClick = onSelect)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -317,7 +321,9 @@ private fun ServerRow(
             serverTitle(node, lang),
             fontSize = 14.sp,
             maxLines = 1,
-            color = VPNTheme.Label,
+            // Chữ của dòng được chọn là trắng đủ; dòng không chọn mờ đi để thứ tự
+            // sáng/tối rõ ràng, không chỉ dựa vào nền.
+            color = if (isSelected) VPNTheme.Label else VPNTheme.SecondaryLabel,
             modifier = Modifier.weight(1f),
         )
     }

@@ -324,13 +324,23 @@ struct ContentView: View {
                 Text(serverTitle(for: node))
                     .font(.subheadline)
                     .lineLimit(1)
-                    .foregroundStyle(VPNTheme.label)
+                    // Chữ của dòng được chọn là trắng đủ; dòng không chọn mờ đi.
+                    .foregroundStyle(isSelected ? VPNTheme.label : VPNTheme.secondaryLabel)
 
                 Spacer(minLength: 8)
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 6)
-            .background(isSelected ? VPNTheme.accent.opacity(0.15) : Color(uiColor: .tertiarySystemFill))
+            // Dòng ĐƯỢC CHỌN phải là dòng SÁNG nhất.
+            //
+            // Trước đây dòng được chọn chỉ `accent` 15%, còn dòng không chọn dùng
+            // `Color(uiColor: .tertiarySystemFill)` — app này LUÔN ở dark mode
+            // (PrivateVPNApp: `.preferredColorScheme(.dark)`), nên màu đó là xám
+            // ~24%: SÁNG HƠN cả dòng được chọn => nhìn như bị ngược.
+            //
+            // Cũng bỏ luôn màu theo hệ thống ở đây: app ép theme navy tối cố định
+            // thì không nên trộn màu semantic của UIKit vào giữa.
+            .background(isSelected ? VPNTheme.accent.opacity(0.35) : Color.white.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             // Cả khối là vùng chạm, không chỉ phần có nội dung (khoảng trống giữa
             // tên server và mép phải cũng phải ăn).
