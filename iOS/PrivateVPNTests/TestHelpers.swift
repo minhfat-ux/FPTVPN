@@ -22,6 +22,10 @@ final class InMemoryKeychainBackend: KeychainBackend {
     func loadData(for account: String) throws -> Data? {
         store[account]
     }
+
+    func delete(for account: String) throws {
+        store[account] = nil
+    }
 }
 
 // MARK: - URLProtocol mock

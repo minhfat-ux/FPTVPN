@@ -310,10 +310,9 @@ struct ControlAPIClient {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (_, response) = try await session.data(for: request)
         } catch {
             throw ClientError.transport(endpoint: "account deletion", error)
         }

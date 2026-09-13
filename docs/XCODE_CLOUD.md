@@ -24,6 +24,50 @@ Nếu thiếu Go hoặc xcodegen hoặc không có shared scheme → script **ex
 - `./ci_scripts/ci_post_clone.sh` → sinh project + 2 shared scheme (`PrivateVPN`, `PrivateVPNMac`).
 - `make -C Vendor/WireGuardKit/Sources/WireGuardKitGo PLATFORM_NAME=iphoneos ARCHS=arm64 …` → **PASS**, tạo `libwg-go.a`
   (Go 1.26.6; `goruntime-*.diff` áp dụng sạch).
+- Build + test local đều xanh (chi tiết ở §"Kiểm chứng local" bên dưới).
+
+## Lỗi biên dịch đã sửa (2026-09-13)
+
+Ngoài 3 nguyên nhân hạ tầng ở trên, khi build lại local còn 2 lỗi **trong code** làm CI fail ở bước compile:
+
+1. `iOS/PrivateVPN/VPNManager.swift` — `logOutDeviceAndRetry` gọi `ControlAPIClient()` thiếu tham số
+   `baseURL`/`joinToken` (lỗi có từ commit `47c5fac`). Sửa thành
+   `ControlAPIClient(baseURL: store.controlPlaneBaseURL, joinToken: "")` — đồng thời `guard` luôn cả `baseURL`
+   để không gọi API khi chưa cấu hình control plane.
+2. `iOS/PrivateVPN/Services/ControlAPIClient.swift` — biến `data` không dùng trong `deleteAccount` (warning).
+
+Và 2 lỗi của **test target** (scheme `PrivateVPN` chạy cả action Test nên CI cũng sẽ fail):
+
+3. `project.yml` — app target có `PRODUCT_NAME: FlowVPN` nên **module name mặc định là `FlowVPN`**, trong khi
+   6 file test đều `@testable import PrivateVPN` ⇒ *unable to resolve module dependency*. Thêm
+   `PRODUCT_MODULE_NAME: PrivateVPN` (module = tên target, `PRODUCT_NAME` vẫn là tên hiển thị `FlowVPN`).
+4. `iOS/PrivateVPNTests/TestHelpers.swift` — `InMemoryKeychainBackend` chưa implement `delete(for:)` của protocol
+   `KeychainBackend` (protocol được mở rộng khi thêm `KeychainStore.rotatePrivateKey`).
+
+## Kiểm chứng local (chạy trước khi đẩy cho CI)
+
+```bash
+./ci_scripts/ci_post_clone.sh                      # sinh project + scheme
+
+# 1) App Release cho thiết bị thật (giống bước Archive của CI)
+xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN -configuration Release \
+  -destination 'generic/platform=iOS' -derivedDataPath /tmp/dd-ios \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+# → ** BUILD SUCCEEDED **
+
+# 2) Unit test trên simulator (trước đó phải tạo máy ảo nếu chưa có)
+xcrun simctl create "CI-iPhone17-iOS26.5" com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
+  com.apple.CoreSimulator.SimRuntime.iOS-26-5
+xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN -configuration Debug \
+  -destination 'platform=iOS Simulator,name=CI-iPhone17-iOS26.5' \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" test
+# → Executed 40 tests, with 0 failures — ** TEST SUCCEEDED **
+
+# 3) macOS (dùng chung ControlAPIClient/WireGuardConfig)
+xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPNMac -configuration Debug \
+  -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO build
+# → ** BUILD SUCCEEDED **
+```
 
 ## Cấu hình cần có trên Xcode Cloud
 
@@ -43,12 +87,19 @@ Nếu thiếu Go hoặc xcodegen hoặc không có shared scheme → script **ex
 3. **PreBuild "Build wireguard-go"**: nếu lỗi ở đây → kiểm tra `go version` trong log và output của `patch`/`rsync`.
 4. **Signing**: lỗi provisioning → kiểm tra App ID/entitlement (VPN entitlement: `Network Extensions`,
    `com.apple.developer.networking.networkextension`) đã bật cho cả app và PacketTunnel.
-5. **Build/Archive**: lỗi Swift → build local cùng scheme để tái hiện:
-   ```bash
-   ./ci_scripts/ci_post_clone.sh
-   xcodebuild -project PrivateVPN.xcodeproj -scheme PrivateVPN \
-     -destination 'generic/platform=iOS' -configuration Release build
-   ```
+5. **Build/Archive**: lỗi Swift → build local cùng scheme để tái hiện (`Build` cho app, `test` cho test target —
+   cả hai dùng đúng lệnh ở §"Kiểm chứng local"). Lưu ý action **Test** của workflow cũng biên dịch
+   `iOS/PrivateVPNTests`, nên lỗi ở test target cũng làm CI đỏ dù app build được.
+
+## Cấu hình workflow trên Xcode Cloud
+
+- **Scheme:** `PrivateVPN` (iOS). Nếu muốn build luôn macOS thì thêm scheme `PrivateVPNMac` trong workflow khác.
+- **Actions:** bật **Build** + **Test** (máy ảo iPhone mới nhất có sẵn trên image) + **Archive** cho release.
+  Test xanh local = 40 test, 0 failure.
+- **Start condition:** branch `main`.
+- Nếu Archive báo lỗi signing: kiểm tra App ID `com.privatevpn.app` + `com.privatevpn.app.packet-tunnel` đã có
+  trong App Store Connect, và **xoá** dòng `CODE_SIGN_IDENTITY: "iPhone Developer"` trong `project.yml`
+  (identity cũ) rồi để Xcode Cloud tự quản lý signing.
 
 ## Phương án thay thế (nếu không muốn CI tự sinh project)
 

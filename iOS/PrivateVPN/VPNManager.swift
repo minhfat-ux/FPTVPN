@@ -456,9 +456,11 @@ final class VPNManager: ObservableObject {
 
     /// Logs out one of the account's devices and retries the connection.
     func logOutDeviceAndRetry(deviceId: String, store: VPNConfigStore, authStore: AuthSessionStore) async {
-        guard let token = authStore.accessToken, !token.isEmpty else { return }
+        guard let token = authStore.accessToken, !token.isEmpty,
+              let baseURL = store.controlPlaneBaseURL else { return }
         do {
-            try await ControlAPIClient().revokeDevice(id: deviceId, accessToken: token)
+            try await ControlAPIClient(baseURL: baseURL, joinToken: "")
+                .revokeDevice(id: deviceId, accessToken: token)
             log.info("logged out device \(deviceId, privacy: .public)")
         } catch {
             log.error("device logout failed: \(error.localizedDescription, privacy: .public)")
