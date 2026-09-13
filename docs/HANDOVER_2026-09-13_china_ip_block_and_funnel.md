@@ -75,11 +75,38 @@ Tailnet hostname: `fcnvpn.tail303be3.ts.net`; node id funnel: `nxQSyDow6811CNTRL
 ## 4. Việc cần làm — thứ tự ưu tiên
 
 ### Tầng 1: cho ổn định (làm trước, ~1 giờ)
-1. `WSRelayBridge`: khi WS `onFailure`/`onClosed` → **gọi `Mobile.stop()`** để `serve()` trả về và vòng `runTunnel()` dựng lại transport + WS mới. Hiện chỉ set `connected=false` → tunnel nằm chết ở trạng thái `tunnelUp=true` (đúng triệu chứng "connected nhưng không có mạng", log 21:41–21:42 ngày 13/09).
-2. Watchdog: WS mất kết nối > ~10s → dừng tunnel để reconnect.
-3. Đưa `wsRelayAttempt()` **lên đầu** danh sách thử (hoặc hạ timeout attempt trực tiếp còn ~3s): hiện mỗi lượt phí ~25s trước khi tới WS → "quay tít".
-4. Cân nhắc **WireGuard-over-WS (cổng 10000)** thay Hysteria-over-WS: WG nhẹ hơn QUIC nhiều; đường WG qua relay từng chạy thật (peer qua `127.0.0.1`, 23MB).
-5. Hạ `HY_UP_KBPS/HY_DOWN_KBPS` cho đường relay (brutal CC đang khai 20Mbps, thực tế thấp hơn → tự gây nghẽn).
+
+> **Cập nhật cuối ngày 13/09 (phiên tiếp nhận):** mục 1, 2, 3, 5 đã XONG trên Android —
+> commits `3d46f51`, `f6d58fd`; bằng chứng `evidence/2026-09-13-tier1-android-tunnel-recovery.log`;
+> quyết định + lý do ở `.privatevpn/memory/DECISIONS.md`. **Chưa test trên thiết bị thật**
+> (không có máy nào kết nối adb) — các bước đo trên máy thật nằm ở mục 3 của file bằng chứng.
+> Mục 4 CHƯA làm.
+
+1. ✅ `WSRelayBridge`: khi WS `onFailure`/`onClosed`/`onClosing` → callback `onDead` →
+   service gọi `Mobile.stop()` để `serve()` trả về và vòng `runTunnel()` dựng lại transport
+   + WS mới. Gác hai điều kiện `running` + `opened` (stop() chủ động không bị coi là sự cố;
+   chưa từng mở được thì không báo động) và chỉ báo một lần.
+2. ✅ Watchdog: **cách làm khác handover một chút** — không đo "WS im lặng" mà dùng chính
+   probe end-to-end đã có (`probeThroughTunnel()`), nay trả `Boolean`. 2 lần probe liên tiếp
+   thấy tunnel UP mà HTTP **và** DNS đều không trả lời → `Mobile.stop()` để dựng lại. Lý do:
+   đo "WS im" sẽ dương tính giả khi tunnel khoẻ nhưng người dùng không tải gì; đo gói thật
+   thì bao được cả đường TCP relay/UDP trực tiếp, không riêng WS. Chỉ tính chết khi CẢ HAI
+   probe tịt (một trong hai có thể bị chặn riêng).
+3. ✅ Đã hạ **cả hai**: `TCP_CONNECT_TIMEOUT_MS` 2500 → 1200ms và `armAttemptBudget()` đặt
+   trần bắt tay 4s (đường trực tiếp) / 15s (đường WS). Cần trần này vì client Go nằm trong
+   `hysteria.aar` đóng sẵn, không truyền được timeout handshake từ Kotlin.
+   **Thứ tự mới**: preferred → 2 TCP relay → **1 cổng UDP trực tiếp** → WS relay → các cổng
+   UDP còn lại. Cố ý KHÔNG đưa WS lên đầu cho tất cả: người không bị chặn sẽ bị bắt đi vòng
+   qua Tailscale/Cloudflare oan, còn họ đang đi đường trực tiếp trong <1s. Kết quả: người bị
+   chặn từ ~25s xuống ~7–11s mới tới WS. Đường trực tiếp đã thử ở lượt ưu tiên thì bỏ qua
+   (trường hợp IP bị chặn giữa phiên), nhưng `"ws"` thì vẫn thử lại.
+4. ❌ **Chưa làm** — vẫn đang là Hysteria-over-WS. Chuyển sang WireGuard-over-WS cổng 10000
+   là một phần của việc Tầng 2 (sing-box): `docs/SINGBOX_INTEGRATION_PLAN.md` (đang được soạn
+   trong phiên 13/09 — nếu file chưa có thì việc đó chưa xong).
+5. ✅ Thêm `HY_RELAY_UP_KBPS = 800` / `HY_RELAY_DOWN_KBPS = 4000` trong `Config.kt`, dùng
+   riêng cho lượt thử qua WS (trước đây dùng chung 20Mbps của đường trực tiếp). **Số này là
+   mức khởi điểm bảo thủ, chưa đo trên mạng TQ thật — cần chỉnh theo số đo.**
+
 
 ### Tầng 2: fix triệt để
 - **Bỏ tự viết transport bằng Kotlin/Swift** — đó là gốc của lỗi hôm nay (socket loop, protect, watchdog, zombie, chậm).
