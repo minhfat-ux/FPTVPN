@@ -99,3 +99,22 @@ mở WS có thể hỏng tạm thời và đó là đường duy nhất còn s�
 
 BUILD SUCCESSFUL in 1s
 16 actionable tasks: 1 executed, 15 up-to-date
+
+################ 5. XÁC NHẬN APK CHỨA ĐÚNG MÃ TẦNG 1 (sau f6d58fd) ################
+Build lại từ nguồn cuối cùng: :app:assembleModernRelease -> BUILD SUCCESSFUL in 46s
+APK: ~/.vpnflow-build/app/outputs/apk/modern/release/app-modern-release.apk (22:01, 96801569 bytes)
+
+CẢNH BÁO VỀ CÁCH ĐO: lần đầu tôi dùng `unzip -p ... | grep -c '<chuỗi tiếng Việt>'` và ra 0
+cho TẤT CẢ các chuỗi mới -> trông như mã không vào APK. Thực ra đó là lỗi của phép đo:
+cùng cách đó cũng ra 0 với chuỗi tiếng Việt CÓ TỪ TRƯỚC ('thử transport qua Cloudflare'),
+trong khi chuỗi ASCII mới ('hy-attempt-budget', 'budget=') ra 1. Đổi sang tìm theo BYTE
+UTF-8 trên classes.dex (python) thì ra đủ. => Đừng tin `grep` trên APK với chuỗi có dấu.
+
+Kết quả tìm theo byte UTF-8 trên classes.dex:
+  #1 báo chết từ bridge: 'ws-relay: cầu WS chết'=1
+  #1 service dừng client: 'dừng client để dựng lại transport'=2
+  #2 watchdog: 'lần liên tiếp không có gói nào qua'=1
+  #3 trần bắt tay: 'hy-attempt-budget'=1, 'hết hạn bắt tay'=1, 'chưa lên -> dừng client'=1
+
+  (hằng số TCP_CONNECT_TIMEOUT_MS=1200, ATTEMPT_UP_BUDGET_MS=4000, HY_RELAY_*_KBPS
+   không phải chuỗi nên không kiểm được bằng cách này — đã kiểm ở mục 2.)
