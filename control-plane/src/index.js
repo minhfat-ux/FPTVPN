@@ -15,6 +15,14 @@ import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision } from "./device-limit.js";
 import { versionPayloadFor, wantsLegacyApk } from "./app-version.js";
+import {
+  amountCovers,
+  extractOrderRef,
+  isIncomingTransfer,
+  verifySepayApiKey,
+  verifySepaySignature,
+  verifySepayUrlToken,
+} from "./sepay.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
@@ -68,6 +76,7 @@ import {
   createPayosPaymentLink,
   createBankQrDataUrl,
   bankQrConfig,
+  bankQrImageUrl,
   verifyPayosWebhook,
   pickBuyLang,
   momoQrConfig,
@@ -76,6 +85,7 @@ import {
   vndPerUsd,
   cnyFromVnd,
   planNameFor,
+  transferNote,
 } from "./payments.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -190,7 +200,8 @@ const ptrLookup = createPTRLookup({ resolve: (ip) => dns.promises.reverse(ip) })
 const app = express();
 app.set("trust proxy", true);
 app.use(cors());
-app.use(express.json());
+// `verify` giữ lại raw body: webhook (SePay/PayOS) ký trên bytes gốc, JSON.stringify lại là lệch chữ ký.
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // Simple bearer-token auth (optional). Enable by setting AUTH_TOKEN.
 // /health is always public so it can be used as a liveness probe.
@@ -710,6 +721,8 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       if (cfg) {
         const qrDataUrl = await createBankQrDataUrl({
           prefix: "MEETFLOW",
+          product: "ai",
+          plan,
           accountNumber: cfg.accountNumber,
           accountName: cfg.accountName,
           bin: cfg.bin,
@@ -746,12 +759,21 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     }
     const qrDataUrl = await createBankQrDataUrl({
       prefix: "MEETFLOW",
+      product: "ai",
+      plan,
       accountNumber: bank.accountNumber,
       accountName: bank.accountName,
       amount: planCfg.amount,
       orderCode,
     });
-    return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+    const qrImageUrl = bankQrImageUrl({
+      amount: planCfg.amount,
+      note: `MEETFLOW-${transferNote({ orderCode, plan, product: "ai" })}`,
+      account: bank.accountNumber,
+      holder: bank.accountName,
+      store: process.env.BANK_QR_STORE_AI || "MeetFlow AI",
+    });
+    return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
   } catch (err) {
     console.error("POST /v1/ai/payments/create failed:", err);
     res.status(500).json({ code: "internal", error: "Internal error" });
@@ -1677,12 +1699,24 @@ app.post("/v1/payments/create", async (req, res) => {
       if (!bank) return res.status(502).json({ code: "bank_not_configured", error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
       const qrDataUrl = await createBankQrDataUrl({
         prefix: "VPNFLOW",
+        product: "vpn",
+        plan,
         accountNumber: bank.accountNumber,
         accountName: bank.accountName,
         amount: planCfg.amount,
         orderCode,
       });
-      return res.json({ qrDataUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
+      // Ảnh QR của SePay/vietqr.app (số tiền + nội dung điền sẵn) — trang buy ưu tiên ảnh này,
+      // tự rơi về `qrDataUrl` sinh tại chỗ nếu ảnh không tải được (mạng TQ hay chặn dịch vụ ngoài).
+      const qrImageUrl = bankQrImageUrl({
+        amount: planCfg.amount,
+        // Kèm tiền tố sản phẩm như QR tự sinh (vietqr.app bỏ dấu gạch):
+        // "VPNFLOW-1789318130-THANG" → nội dung CK "VPNFLOW1789318130THANG".
+        note: `VPNFLOW-${transferNote({ orderCode, plan, product: "vpn" })}`,
+        account: bank.accountNumber,
+        holder: bank.accountName,
+      });
+      return res.json({ qrDataUrl, qrImageUrl, orderCode, amount: planCfg.amount, method: "bankqr" });
     }
 
     if (method === "momo") {
@@ -1691,6 +1725,8 @@ app.post("/v1/payments/create", async (req, res) => {
       if (cfg) {
         const qrDataUrl = await createBankQrDataUrl({
           prefix: "VPNFLOW",
+          product: "vpn",
+          plan,
           accountNumber: cfg.accountNumber,
           accountName: cfg.accountName,
           bin: cfg.bin,
@@ -1869,6 +1905,146 @@ app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res
   } catch (err) {
     console.error("webhook failed:", err);
     res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * SePay (IPN) — ngân hàng báo có tiền ⇒ tự xác nhận đơn.
+ *
+ * Nội dung chuyển khoản do VietQR sinh ra có tiền tố sản phẩm (`VPNFLOW-…` / `MEETFLOW-…`,
+ * xem vietqr.js), nên ở đây khớp được đúng đơn. Chỉ tự kích hoạt khi tiền ĐỦ; thiếu tiền thì
+ * để chủ shop xác nhận tay (alert cũ vẫn gửi) — thà chậm còn hơn cấp sai.
+ */
+async function findPendingOrder({ orderCode, product }) {
+  const wants = (p) => !product || product === p;
+  if (wants("vpn")) {
+    const order = await authStore.pendingPaymentByCode(orderCode);
+    if (order && !order.paidAt) {
+      return {
+        product: "vpn",
+        order,
+        email: order.email,
+        expectedAmount: order.amount ?? PLANS_PUBLIC[order.plan]?.amount ?? null,
+      };
+    }
+  }
+  if (wants("ai")) {
+    const order = await aiStore.pendingPayment(orderCode);
+    if (order && !order.paidAt) {
+      return {
+        product: "ai",
+        order,
+        email: order.email,
+        expectedAmount: order.amount ?? AI_PLANS[order.plan]?.amount ?? null,
+      };
+    }
+  }
+  return null;
+}
+
+async function confirmPendingOrder(found, { method, txId }) {
+  if (found.product === "ai") {
+    const order = await aiStore.markPendingPaymentPaid(found.order.orderCode);
+    if (!order) return null;
+    return activateAiProAndInvoice({
+      orderCode: order.orderCode,
+      email: order.email,
+      plan: order.plan,
+      method: order.method ?? method,
+      lang: order.lang,
+    });
+  }
+  const order = await authStore.takePendingPayment(found.order.orderCode);
+  if (!order?.email) return null;
+  console.log(`sepay: đơn ${order.orderCode} khớp giao dịch ${txId}`);
+  return activatePaymentAndInvoice({
+    orderCode: order.orderCode,
+    email: order.email,
+    plan: order.plan,
+    prefix: method,
+    amount: order.amount ?? null,
+    lang: order.lang ?? null,
+  });
+}
+
+app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (req, res) => {
+  try {
+    const secret = process.env.SEPAY_WEBHOOK_SECRET || "";
+    const apiKey = process.env.SEPAY_API_KEY || "";
+    if (!secret && !apiKey) {
+      console.warn("sepay: chưa cấu hình SEPAY_WEBHOOK_SECRET/SEPAY_API_KEY — từ chối webhook");
+      return res.status(503).json({ success: false, error: "SePay chưa được cấu hình" });
+    }
+
+    const rawBody = req.rawBody ? req.rawBody.toString("utf8") : "";
+    const signatureOk = secret
+      ? verifySepaySignature({
+        rawBody,
+        signature: req.get("x-sepay-signature"),
+        timestamp: req.get("x-sepay-timestamp"),
+        secret,
+      })
+      : false;
+    const apiKeyOk = !signatureOk && apiKey
+      ? verifySepayApiKey({ authorization: req.get("authorization"), apiKey })
+      : false;
+    // Dự phòng cho chế độ "không xác thực" của SePay: token bí mật trong URL.
+    const urlTokenOk = !signatureOk && !apiKeyOk && process.env.SEPAY_URL_TOKEN
+      ? verifySepayUrlToken({ token: req.query?.token, urlToken: process.env.SEPAY_URL_TOKEN })
+      : false;
+    if (!signatureOk && !apiKeyOk && !urlTokenOk) {
+      console.warn(
+        `sepay: xác thực thất bại (signature=${Boolean(req.get("x-sepay-signature"))}, ` +
+          `apiKey=${Boolean(req.get("authorization"))}, urlToken=${Boolean(req.query?.token)}, ` +
+          `ua="${String(req.get("user-agent") ?? "-").slice(0, 60)}")`,
+      );
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const payload = req.body ?? {};
+    const txId = payload.id ?? payload.referenceCode ?? "?";
+    if (!isIncomingTransfer(payload)) {
+      console.log(`sepay: bỏ qua giao dịch ${txId} (transferType=${payload.transferType ?? "?"})`);
+      return res.json({ success: true });
+    }
+
+    const paid = Number(payload.transferAmount ?? 0);
+    const ref = extractOrderRef({ code: payload.code, content: payload.content ?? payload.description });
+    if (!ref.orderCode) {
+      console.warn(
+        `sepay: giao dịch ${txId} ${paid}đ không có mã đơn trong nội dung ` +
+          `"${String(payload.content ?? payload.description ?? "").slice(0, 80)}" — cần xác nhận tay`,
+      );
+      return res.json({ success: true });
+    }
+
+    const found = await findPendingOrder(ref);
+    if (!found) {
+      console.log(`sepay: đơn ${ref.orderCode} không còn chờ xác nhận (đã xử lý hoặc hết hạn)`);
+      return res.json({ success: true });
+    }
+
+    if (!amountCovers(paid, found.expectedAmount)) {
+      console.warn(
+        `sepay: đơn ${ref.orderCode} chuyển ${paid}đ < cần ${found.expectedAmount}đ ` +
+          `— KHÔNG tự kích hoạt, chờ chủ shop (tx ${txId})`,
+      );
+      return res.json({ success: true });
+    }
+
+    const activated = await confirmPendingOrder(found, { method: "sepay", txId });
+    if (!activated) {
+      console.warn(`sepay: đơn ${ref.orderCode} vừa được xử lý ở request khác (tx ${txId})`);
+      return res.json({ success: true });
+    }
+    console.log(
+      `sepay: TỰ KÍCH HOẠT đơn ${ref.orderCode} (${found.product}, ${paid}đ, tx ${txId}, ` +
+        `email ${found.email})`,
+    );
+    return res.json({ success: true, orderCode: ref.orderCode, product: found.product });
+  } catch (err) {
+    console.error("sepay webhook failed:", err);
+    return res.status(500).json({ success: false, error: "Internal error" });
   }
 });
 
