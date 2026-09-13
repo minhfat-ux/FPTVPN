@@ -8,6 +8,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import java.net.InetAddress
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -20,10 +22,89 @@ class ControlAPIClient(
     private val joinToken: String = "",
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    /**
+     * Resolves the coordinator host with pinned fallback addresses.
+     *
+     * OkHttp tries every returned address in order, so a cached/poisoned/stale answer
+     * from the OS resolver no longer means "cannot reach the service". TLS verification
+     * still uses the requested hostname, so the certificate is still validated normally.
+     */
+    private val coordinatorDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val host = java.net.URI(baseUrl).host ?: return Dns.SYSTEM.lookup(hostname)
+            if (hostname != host) return Dns.SYSTEM.lookup(hostname)
+            val pinned = Config.API_FALLBACK_ADDRESSES.mapNotNull { literal ->
+                runCatching { InetAddress.getByName(literal) }.getOrNull()
+            }
+            val system = runCatching { Dns.SYSTEM.lookup(hostname) }.getOrDefault(emptyList())
+            return (pinned + system).distinct()
+        }
+    }
+
+    /**
+     * Khi host chính không tới được (IP bị chặn), thử lại y nguyên request qua các
+     * host dự phòng (Cloudflare Tunnel / Tailscale Funnel) — hạ tầng dùng chung, không
+     * phải IP của node. Cert của các host này hợp lệ nên không cần xử lý TLS đặc biệt.
+     */
+    private val fallbackInterceptor = okhttp3.Interceptor { chain ->
+        val request = chain.request()
+        var lastError: java.io.IOException? = null
+        try {
+            return@Interceptor chain.proceed(request)
+        } catch (e: java.io.IOException) {
+            lastError = e
+        }
+        for (base in Config.API_FALLBACK_BASES) {
+            val target = runCatching { java.net.URI(base) }.getOrNull() ?: continue
+            val altUrl = request.url.newBuilder()
+                .scheme(target.scheme)
+                .host(target.host)
+                .port(if (target.port > 0) target.port else if (target.scheme == "https") 443 else 80)
+                .build()
+            try {
+                return@Interceptor chain.proceed(request.newBuilder().url(altUrl).build())
+            } catch (e: java.io.IOException) {
+                lastError = e
+            }
+        }
+        throw lastError ?: java.io.IOException("all API hosts unreachable")
+    }
+
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
+        .addInterceptor(fallbackInterceptor)
+        // Own resolver, see [coordinatorDns]: a stale system-DNS answer must not be able
+        // to keep the app offline after we move the API to another address.
+        .dns(coordinatorDns)
         .build()
+
+    /**
+     * Tells the coordinator whether this device could actually reach a node.
+     *
+     * Best-effort and intentionally silent: it runs while the app is already having
+     * network trouble, and the coordinator uses it to stop offering a node that only
+     * looks healthy from the server side (a GFW-blocked IP still answers from Vietnam).
+     */
+    suspend fun reportNodeHealth(nodeId: String, reachable: Boolean, reason: String? = null) {
+        if (nodeId.isBlank()) return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val payload = buildString {
+                    append("{\"ok\":").append(reachable)
+                    if (!reachable && !reason.isNullOrBlank()) {
+                        append(",\"reason\":\"").append(reason.replace("\"", "'").take(100)).append("\"")
+                    }
+                    append("}")
+                }
+                val request = Request.Builder()
+                    .url("$baseUrl/v1/nodes/$nodeId/report")
+                    .post(payload.toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(request).execute().close()
+            }
+        }
+    }
 
     sealed class ClientError(message: String) : Exception(message) {
         class BadResponse : ClientError("The coordinator returned an invalid response.")

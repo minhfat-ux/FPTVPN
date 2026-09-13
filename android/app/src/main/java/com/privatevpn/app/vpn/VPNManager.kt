@@ -213,6 +213,27 @@ class VPNManager(
         }
     }
 
+    /** Every usable node host, with [preferred] first and duplicates removed. */
+    private fun nodeHosts(preferred: String): List<String> {
+        val hosts = LinkedHashSet<String>()
+        preferred.takeIf { it.isNotBlank() }?.let { hosts.add(it) }
+        selectedNode?.endpoint?.substringBefore(':')?.takeIf { it.isNotBlank() }?.let { hosts.add(it) }
+        availableNodes.forEach { candidate ->
+            candidate.endpoint.substringBefore(':').takeIf { it.isNotBlank() }?.let { hosts.add(it) }
+        }
+        return hosts.toList()
+    }
+
+    /** Dẹt map host -> node id thành list phẳng [host, id, host, id, ...]. */
+    private fun hostIdsFor(hosts: List<String>): List<String> {
+        val byHost = HashMap<String, String>()
+        availableNodes.forEach { node ->
+            val nodeHost = node.endpoint.substringBefore(':').takeIf { it.isNotBlank() }
+            if (nodeHost != null) byHost[nodeHost] = node.id
+        }
+        return hosts.flatMap { host -> listOf(host, byHost[host] ?: "") }
+    }
+
     /** Closes the device-limit prompt without changing anything. */
     fun dismissDeviceLimit() {
         _deviceLimit.value = null
@@ -237,7 +258,17 @@ class VPNManager(
                 ?: Config.HY_SERVER
             val i = android.content.Intent(app, HysteriaVpnService::class.java)
             i.putExtra(HysteriaVpnService.EXTRA_HOST, host)
-            Log.e("VPNFLOW_DEBUG", "hysteria: connect node=${node?.name ?: "default"} host=$host")
+            // Every node we know, selected one first: the service rotates to the next
+            // host when the current one cannot be reached at all (a blocked node IP,
+            // e.g. after the GFW blocks it, must not leave the user without a tunnel).
+            val hostList = nodeHosts(host)
+            i.putStringArrayListExtra(HysteriaVpnService.EXTRA_HOSTS, ArrayList(hostList))
+            // host -> node id để service báo health về coordinator.
+            i.putStringArrayListExtra(
+                HysteriaVpnService.EXTRA_HOST_IDS,
+                ArrayList(hostIdsFor(hostList)),
+            )
+            Log.e("VPNFLOW_DEBUG", "hysteria: connect node=${node?.name ?: "default"} host=$host hosts=$hostList")
             // Plain startService: an active VpnService tunnel keeps the process
             // alive; Android 15+/16 dropped the "vpn" foregroundServiceType so
             // startForegroundService()+startForeground() is not usable here.
@@ -416,14 +447,16 @@ class VPNManager(
 
         // China transport: route WG through the TCP relay instead of raw UDP.
         val peerEndpoint: String = if (Config.USE_RELAY) {
-            Log.e("VPNFLOW_DEBUG", "relay: connecting to ${Config.RELAY_HOST}:${Config.RELAY_PORT}")
+            val relayHost = selectedNode?.endpoint?.substringBefore(':')?.takeIf { it.isNotBlank() }
+                ?: Config.RELAY_HOST
+            Log.e("VPNFLOW_DEBUG", "relay: connecting to $relayHost:${Config.RELAY_PORT}")
             val r = withContext(Dispatchers.IO) {
                 val net = runCatching {
                     val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
                     cm.activeNetwork
                 }.getOrNull()
                 Log.e("VPNFLOW_DEBUG", "relay: active network=$net")
-                val rr = WGRelay(Config.RELAY_HOST, Config.RELAY_PORT, net)
+                val rr = WGRelay(relayHost, Config.RELAY_PORT, net)
                 rr.start()
                 rr
             }

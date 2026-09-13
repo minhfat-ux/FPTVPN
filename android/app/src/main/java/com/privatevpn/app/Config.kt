@@ -8,6 +8,50 @@ object Config {
     /** Production coordinator. */
     const val CONTROL_PLANE_URL = "https://api.meetflowai.site"
 
+    /**
+     * Addresses for the coordinator host, tried in this order before the system DNS
+     * answer.
+     *
+     * Why this exists: the OS/ISP resolver cache is NOT cleared by reinstalling the app,
+     * so when the API moved to another IP every user whose resolver still held the old
+     * (already blocked) address got "cannot reach VPNFlow service" for up to an hour —
+     * even right after a fresh install. OkHttp tries each address in turn and TLS still
+     * validates the real hostname, so pinning addresses only adds a fallback path; it
+     * cannot be used to redirect traffic.
+     *
+     * Keep node-2's address first: it is the entry point that is reachable from China.
+     */
+    val API_FALLBACK_ADDRESSES = listOf("103.6.234.233", "103.173.155.50")
+
+    /**
+     * Host API dự phòng — đi qua hạ tầng dùng chung (Cloudflare Tunnel / Tailscale
+     * Funnel) thay vì IP của node.
+     *
+     * Vì sao cần: GFW chặn theo IP, nên khi cả IP node bị chặn thì app không gọi được
+     * API và báo "cannot reach service" dù node vẫn chạy. Client nói chuyện với IP của
+     * hạ tầng dùng chung thì muốn chặn phải chặn cả một dải mà hàng triệu dịch vụ khác
+     * đang dùng — đây đúng cách Tailscale không bao giờ "chết vì chặn IP".
+     *
+     * Khi host chính lỗi transport, OkHttp tự thử lần lượt các host dưới đây
+     * (xem fallbackInterceptor trong ControlAPIClient). Cập nhật danh sách này khi
+     * đổi tunnel/domain.
+     */
+    /**
+     * Relay WebSocket cho đường dữ liệu (Hysteria đi trong WSS qua Cloudflare Tunnel).
+     * Dùng khi IP của mọi node đều bị chặn: client không còn nói chuyện trực tiếp với IP node.
+     */
+    const val WS_RELAY_URL = "wss://fcnvpn.tail303be3.ts.net:8443"
+
+    /** Cổng Hysteria mà relay đầu kia đang trỏ tới. */
+    const val WS_RELAY_PORT = 8443
+
+    val API_FALLBACK_BASES = listOf(
+        // Tailscale Funnel — URL cố định, đi qua relay toàn cầu của Tailscale nên
+        // vào được cả những mạng đã chặn IP của mọi node (đã đo: 200 OK từ mạng TQ
+        // đang chặn cả 103.173.155.50 lẫn 103.6.234.233).
+        "https://fcnvpn.tail303be3.ts.net",
+    )
+
     /** Web purchase page (plan picker + QR payment). Mirrors iOS/macOS. */
     const val BUY_URL = "https://meetflowai.site/buy"
 

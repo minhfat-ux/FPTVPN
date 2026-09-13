@@ -31,6 +31,13 @@ class HysteriaVpnService : VpnService() {
     /** Hysteria server host, from the selected exit node (Config fallback). */
     private var runHost: String = DEFAULT_HOST
 
+    /** All known node hosts, selected node first: rotated when one is unreachable. */
+    private var hosts: List<String> = listOf(DEFAULT_HOST)
+    private var hostIndex = 0
+
+    /** host -> node id, dùng để báo lên coordinator node nào thật sự tới được. */
+    private var hostIds: Map<String, String> = emptyMap()
+
     /** Logs default-network changes while the tunnel runs (WiFi -> mobile data). */
     private var networkMonitor: NetworkMonitor? = null
     private var probeThread: Thread? = null
@@ -69,6 +76,14 @@ class HysteriaVpnService : VpnService() {
         DiagnosticsLog.log("service: onStartCommand startId=$startId")
         // Hysteria server host comes from the selected exit node; Config is the fallback.
         runHost = intent?.getStringExtra(EXTRA_HOST)?.takeIf { it.isNotBlank() } ?: DEFAULT_HOST
+        val extraHosts = intent?.getStringArrayListExtra(EXTRA_HOSTS)?.filter { it.isNotBlank() }.orEmpty()
+        hosts = (listOf(runHost) + extraHosts).distinct()
+        hostIndex = 0
+        // host -> node id, để báo health về coordinator (xem reportNodeHealth).
+        hostIds = intent?.getStringArrayListExtra(EXTRA_HOST_IDS)?.chunked(2)
+            ?.mapNotNull { pair -> if (pair.size == 2) pair[0] to pair[1] else null }
+            ?.toMap()
+            .orEmpty()
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: onStartCommand startId=$startId host=$runHost")
         Thread {
             try {
@@ -104,6 +119,7 @@ class HysteriaVpnService : VpnService() {
         // keep retrying with capped exponential backoff until the user stops us.
         var backoffMs = RETRY_BACKOFF_START_MS
         var everUp = false
+        var failedPasses = 0
         try {
             while (!stopping) {
                 val outcome = oneConnectPass()
@@ -111,6 +127,7 @@ class HysteriaVpnService : VpnService() {
                     1 -> return // user stop
                     2 -> { // transport dropped or was rebuilt for a network change
                         everUp = true
+                        failedPasses = 0
                         backoffMs = RETRY_BACKOFF_START_MS
                         reportReconnecting()
                         // Give the Go client a moment to release its socket/fd before
@@ -129,6 +146,20 @@ class HysteriaVpnService : VpnService() {
                             "VPNFLOW_DEBUG",
                             "hysteria: no transport reachable (pass failed$wasUp) -> retry in ${backoffMs}ms",
                         )
+                        failedPasses++
+                        // A node whose IP is blocked (GFW) never answers on any port, so
+                        // after a couple of dead passes move on to the next node instead
+                        // of retrying a black hole forever.
+                        if (failedPasses >= NODE_FAILOVER_AFTER_PASSES && hosts.size > 1) {
+                            val previous = runHost
+                            hostIndex = (hostIndex + 1) % hosts.size
+                            runHost = hosts[hostIndex]
+                            failedPasses = 0
+                            backoffMs = RETRY_BACKOFF_START_MS
+                            DiagnosticsLog.warn("node: $previous unreachable -> switching to $runHost")
+                            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: node $previous unreachable -> $runHost")
+                            reportNodeHealth(previous, reachable = false, reason = "unreachable from this network")
+                        }
                         Thread.sleep(backoffMs)
                         backoffMs = (backoffMs * 2).coerceAtMost(RETRY_BACKOFF_MAX_MS)
                     }
@@ -236,13 +267,51 @@ class HysteriaVpnService : VpnService() {
             val outcome = udpAttempt(port)
             if (outcome != 0) return outcome
         }
-        return 0
+        // Cuối cùng: đi qua relay WebSocket sau Cloudflare (khi IP node bị chặn hết).
+        return wsRelayAttempt()
+    }
+
+    /**
+     * Đường dữ liệu qua WebSocket: Hysteria trỏ vào bridge local, bridge gửi datagram
+     * qua WSS tới Cloudflare Tunnel rồi bung ra UDP tới Hysteria server của node.
+     */
+    private fun wsRelayAttempt(): Int {
+        if (stopping) return 1
+        val bridge = WSRelayBridge(protector = { sock -> protect(sock) })
+        if (!bridge.start()) return 0
+        DiagnosticsLog.log("ws-relay: thử transport qua Cloudflare (local port ${bridge.localPort})")
+        // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói.
+        val deadline = System.currentTimeMillis() + 6000
+        while (!bridge.connected && System.currentTimeMillis() < deadline && !stopping) {
+            Thread.sleep(200)
+        }
+        if (!bridge.connected) {
+            DiagnosticsLog.warn("ws-relay: chưa mở được WS, bỏ qua")
+            bridge.stop()
+            return 0
+        }
+        val previousHost = runHost
+        runHost = "127.0.0.1"
+        return try {
+            // Cổng phải là cổng BRIDGE đang nghe (127.0.0.1:<localPort>), không phải
+            // cổng Hysteria phía server — Hysteria dial vào bridge, bridge mới đẩy
+            // datagram qua WSS.
+            val outcome = udpAttempt(bridge.localPort)
+            // Nhớ để lượt sau (và lần mở app sau) đi thẳng qua WS, không phí ~25s thử
+            // UDP/TCP trực tiếp vốn đã chết khi IP node bị chặn.
+            if (outcome != 0) rememberTransport("ws")
+            outcome
+        } finally {
+            runHost = previousHost
+            bridge.stop()
+        }
     }
 
     /** "tcp:8443" / "udp:8443" — the transport stored by the last successful run. */
     private fun preferredAttempt(pref: String): Int {
         val parts = pref.split(":")
         if (parts.size != 2) return 0
+        if (parts[0] == "ws") return wsRelayAttempt()
         val port = parts[1].toIntOrNull() ?: return 0
         return if (parts[0] == "tcp") tcpRelayAttempt(port) else udpAttempt(port)
     }
@@ -432,11 +501,28 @@ class HysteriaVpnService : VpnService() {
     private fun reportUp() {
         DiagnosticsLog.tunnelUp = true
         DiagnosticsLog.log("tunnel: UP (${DiagnosticsLog.transport})")
+        reportNodeHealth(runHost, reachable = true)
         try {
             val app = application as VPNFlowApp
             app.vpnManager.onHysteriaUp()
         } catch (_: Exception) {
         }
+    }
+
+    /**
+     * Báo cho coordinator biết node này tới được hay không (best-effort, chạy nền).
+     * Đây là tín hiệu duy nhất phát hiện được node bị GFW chặn: server tự kiểm tra
+     * thì vẫn thấy node "sống" vì nó trả lời bình thường từ Việt Nam.
+     */
+    private fun reportNodeHealth(host: String, reachable: Boolean, reason: String? = null) {
+        val id = hostIds[host] ?: return
+        Thread {
+            runCatching {
+                kotlinx.coroutines.runBlocking {
+                    com.privatevpn.app.api.ControlAPIClient().reportNodeHealth(id, reachable, reason)
+                }
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     /** UI: we are (re)trying to bring the tunnel up. */
@@ -539,7 +625,7 @@ class HysteriaVpnService : VpnService() {
             val socket = java.net.Socket()
             try {
                 protect(socket)
-                socket.connect(java.net.InetSocketAddress(Config.RELAY_HOST, Config.RELAY_PORT), 2500)
+                socket.connect(java.net.InetSocketAddress(runHost, Config.RELAY_PORT), 2500)
                 ok = true
             } finally {
                 runCatching { socket.close() }
@@ -548,7 +634,7 @@ class HysteriaVpnService : VpnService() {
             detail = " (${e.javaClass.simpleName}: ${e.message})"
         }
         DiagnosticsLog.log(
-            "probe: relay ${Config.RELAY_HOST}:${Config.RELAY_PORT} reachable=$ok " +
+            "probe: relay $runHost:${Config.RELAY_PORT} reachable=$ok " +
                 "in ${System.currentTimeMillis() - started}ms$detail",
         )
     }
@@ -693,6 +779,15 @@ class HysteriaVpnService : VpnService() {
         }
 
         const val EXTRA_HOST = "hysteria_host"
+
+        /** All known node hosts, selected node first (see VPNManager.nodeHosts). */
+        const val EXTRA_HOSTS = "hysteria_hosts"
+
+        /** Cặp host,nodeId dẹt thành list để báo health về coordinator. */
+        const val EXTRA_HOST_IDS = "hysteria_host_ids"
+
+        /** Dead passes before moving to the next node (a blocked IP never answers). */
+        const val NODE_FAILOVER_AFTER_PASSES = 2
         const val DEFAULT_HOST = com.privatevpn.app.Config.HY_SERVER
         // legacy alias giữ nguyên cho các tham chiếu cũ (nếu có)
         const val HY_HOST = com.privatevpn.app.Config.HY_SERVER
