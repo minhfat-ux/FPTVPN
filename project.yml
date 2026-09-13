@@ -251,7 +251,15 @@ targets:
     type: app-extension
     platform: macOS
     sources:
-      - path: iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift
+      # Cùng nguồn với extension iOS (relay TCP/WS, health reporter, diagnostics) — tất cả
+      # chỉ dùng Foundation/Network/os/WireGuardKit nên chạy được trên macOS. Trước đây
+      # target macOS chỉ có PacketTunnelProvider.swift nên không compile được
+      # ("cannot find type 'WGRelayClient' in scope") sau khi iOS thêm relay.
+      - path: iOS/PrivateVPNPacketTunnel
+        excludes:
+          - "Info.plist"
+          - "PacketTunnel.entitlements"
+      - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
     info:
       path: mac/PrivateVPNMacPacketTunnel/Info.plist

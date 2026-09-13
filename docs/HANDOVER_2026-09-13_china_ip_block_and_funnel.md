@@ -281,3 +281,80 @@ Còn lại (cần chủ dự án quyết / làm):
 2. **iOS/macOS chưa có API dự phòng và chưa ghim IP** — cùng lớp lỗi sẽ xảy ra với khách iPhone.
 3. Thêm URL dự phòng thứ hai (Cloudflare quick tunnel) vào `API_FALLBACK_BASES` + ghim IP tương ứng.
 4. Đổi IP node-1 (đã yêu cầu nhà cung cấp) để có cửa vào không bị chặn.
+
+## 9. 14/09/2026 — Kiểm tra bản macOS có phát hành được chưa (test local)
+
+### 9.1 Kết luận ngắn
+
+**Chưa phát hành được.** Lý do không nằm ở code chất lượng mà ở **kênh phát hành** và **thiếu đường ống/backend
+cho macOS**. Ngoài ra bản macOS đã **không compile được** từ lúc iOS thêm relay — đã sửa trong repo (xem 9.2).
+
+### 9.2 Lỗi build đã sửa (chặn hẳn việc phát hành)
+
+`project.yml` target `PrivateVPNMacPacketTunnel` chỉ có `PacketTunnelProvider.swift` + `WireGuardConfig.swift`,
+trong khi iOS đã thêm `WGRelayClient.swift` / `WSRelayClient.swift` (có cả `WSRelayDefaults` nằm ở
+`ControlAPIClient.swift`) ⇒ build macOS chết:
+
+```
+iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift:17: error: cannot find type 'WGRelayClient' in scope
+iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift:20: error: cannot find type 'WSRelayClient' in scope
+iOS/PrivateVPNPacketTunnel/WSRelayClient.swift:39: error: cannot find 'WSRelayDefaults' in scope
+```
+
+Đã sửa: target macOS dùng **cùng nguồn** với extension iOS (trừ `Info.plist`/entitlements của iOS) +
+`ControlAPIClient.swift`. Sau đó:
+
+- `xcodebuild -scheme PrivateVPNMac -configuration Debug -destination generic/platform=macOS -allowProvisioningUpdates`
+  → **BUILD SUCCEEDED**, ký bằng `Apple Development: minhnb2@me.com`, profile tự tạo
+  `Mac Team Provisioning Profile: com.privatevpn.mac.packet-tunnel` (App ID đã có capability Network Extensions).
+- App chạy được: UI menu-bar "VPNFlow" hiện `Plan: Premium`, gọi API OK (có `cached.exitNodes.v1`),
+  tạo được profile NE `VPN (com.privatevpn.mac) "FlowVPN"` và **kết nối lên `Connected`**, overlay
+  `10.77.0.9` được gán vào `utun14`.
+- Thêm parity với iOS: `VPNManagerMac` nay truyền relay vào config
+  (`.withRelay().withNodeId(node.id).withWSRelayURL(node.ws_relay_url)`) — trước đó macOS không hề dùng relay.
+
+### 9.3 Vì sao test local vẫn "Connected nhưng không có mạng"
+
+Không phải lỗi macOS: **tài khoản test đã chạm giới hạn 3 thiết bị**. Log control plane (node-2):
+
+```
+02:39:15  POST /v1/peers/register failed: Error: Device has been revoked
+03:04:46  POST /v1/peers/register failed: Error: You can use VPNFlow on up to 3 devices…
+          code: 'device_limit_reached'
+03:05:30  (lặp lại)
+```
+
+⇒ Không có peer nào được cấp trên exit node cho khoá mới ⇒ handshake bị server bỏ im lặng ⇒ tunnel "Connected"
+mà không có gói nào đi. Kiểm chứng ngược: các thiết bị mới nhất `10.77.0.41…48` **đều có peer trên node-1** ✓
+nên đường cấp peer vẫn hoạt động; chỉ tài khoản này hết slot. Muốn test macOS thật: giải phóng 1 slot
+(Settings → Devices → revoke bớt) rồi bấm Connect lại.
+
+### 9.4 Blocker thật để phát hành macOS
+
+| # | Việc | Chi tiết |
+|---|---|---|
+| 1 | **Kênh phát hành** | Tunnel đang là **app extension** ⇒ chỉ dùng được khi phát qua **Mac App Store**. Phát trực tiếp (web/DMG) bắt buộc chuyển sang **Network Extension system extension** (`packet-tunnel-provider-systemextension`). Chính log máy còn ghi: *"Current bundle … does not have a SystemExtensions directory"*. |
+| 2 | **Không có đường ống build macOS** | `scripts/archive-appstore.sh mac direct` archive rồi export với `method=app-store-connect` và kết thúc bằng `ls "$IPA"/*.ipa` — đó là đường của **iOS**. macOS cần Developer ID + `.dmg`/`.zip` + `notarytool` + staple. |
+| 3 | **Backend chưa có kênh macOS** | `/v1/app-version` chỉ có `ios_*`/`android_*` ⇒ client macOS nhận payload **của iOS** (`store_url` = link IPA iOS) nên nút "Cập nhật" sẽ đưa khách Mac sang bản iPhone; `/v1/downloads/macos` **404**; gate không có `latest_macos_version`/`minimum_macos_version`. |
+| 4 | Phiên bản lệch | macOS `1.3.2`/12 trong khi Android đã `1.3.3`/13. |
+| 5 | Không có test cho macOS | `PrivateVPNMac` scheme đặt `testTargets: []`. |
+
+### 9.5 Việc nên làm (chọn 1 hướng)
+
+- **A. Nhanh (khuyến nghị nếu muốn có bản Mac sớm):** phát qua **TestFlight internal** — app extension hợp lệ,
+  không phải viết system extension; chỉ cần archive bằng method `app-store-connect` + upload (bản web-paywall
+  vẫn dùng được cho tester nội bộ).
+- **B. Đúng mô hình web (tự bán):** chuyển tunnel sang **system extension** rồi ký Developer ID + notarize,
+  thêm route `/v1/downloads/macos` + `latest_macos_version`. Ước lượng 1–2 ngày, có phần "duyệt" của người dùng
+  trong System Settings lần đầu bật.
+- **C. Tạm gác macOS**, tập trung Android/iOS.
+
+### 9.6 Cảnh báo vận hành khi test VPN trên máy Mac này
+
+- Máy đang đi Internet qua **Tailscale exit node = node-1**. Bật tunnel FlowVPN sẽ **ngắt Tailscale**
+  (macOS chỉ cho 1 VPN) ⇒ mọi kết nối bị chặn theo IP sẽ đứt. Sau khi test phải bật lại:
+  `"/Applications/Tailscale.app/Contents/MacOS/Tailscale" up --accept-routes --exit-node-allow-lan-access --exit-node=100.76.147.111`
+  (nếu chỉ chạy `up` trơn thì CLI từ chối đổi setting và máy mất mạng, dù `scutil` vẫn ghi Tailscale "Connected").
+- `ws_relay_url` của **cả node-1 và vietnam-2 đang NULL** trong coordinator (handover §2 bước 2 chưa làm/đã mất
+  khi migrate CP sang node-2). Client đang dùng giá trị đoán `wss://fcnvpn.tail303be3.ts.net:10000` (chỉ hạ cánh
+  ở node-1) ⇒ nên set lại cho node-1 để khỏi phải đoán.

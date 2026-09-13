@@ -254,3 +254,21 @@ Chi tiết đầy đủ: `docs/HANDOVER_2026-09-13_china_ip_block_and_funnel.md`
 - Kiểm chứng sau dọn: 3 cửa API (IP node-1 qua cp-proxy / DNS node-2 / Tailscale Funnel) đều 200;
   `/v1/downloads/android` trả đúng 96.519.748 bytes (1.3.3) ở cả 3 cửa; file tĩnh `/dl/*` của node-1 vẫn 206;
   gate `android_latest_version` = 1.3.3.
+
+## 14/09/2026 — macOS: build đã sửa, phát hành thì CHƯA (chi tiết §9 handover)
+
+- **Lỗi chặn build đã sửa**: target `PrivateVPNMacPacketTunnel` thiếu `WGRelayClient.swift`/`WSRelayClient.swift`
+  (và `WSRelayDefaults` nằm ở `ControlAPIClient.swift`) ⇒ macOS không compile từ lúc iOS thêm relay.
+  Nay target macOS dùng cùng nguồn với extension iOS ⇒ build + ký OK (Apple Development + profile tự tạo).
+- **Thêm parity**: `VPNManagerMac` truyền relay vào config (`.withRelay().withNodeId().withWSRelayURL()`).
+- **Test local**: app chạy, API OK, profile NE lên `Connected`, overlay `10.77.0.9` vào utun14 — nhưng KHÔNG có
+  traffic vì **tài khoản test chạm giới hạn 3 thiết bị** (`device_limit_reached` trong log CP; 1 lần trước đó là
+  `Device has been revoked`). Các thiết bị mới `.41…48` đều có peer trên node-1 ⇒ đường cấp peer vẫn tốt.
+- **Blocker phát hành**: (1) tunnel là app extension ⇒ chỉ Mac App Store, muốn phát web phải chuyển
+  **system extension**; (2) chưa có pipeline macOS (script hiện export IPA của iOS, chưa có DMG/notarize);
+  (3) backend chưa có kênh macOS (`/v1/app-version` trả payload iOS ⇒ nút Cập nhật đưa khách Mac sang IPA iPhone,
+  `/v1/downloads/macos` 404); (4) version lệch (mac 1.3.2/12 vs Android 1.3.3/13); (5) không có test macOS.
+- **Cảnh báo vận hành**: bật tunnel FlowVPN trên máy Mac này sẽ ngắt Tailscale; phải bật lại bằng
+  `tailscale up --accept-routes --exit-node-allow-lan-access --exit-node=100.76.147.111`, nếu không máy mất mạng
+  dù `scutil` vẫn ghi "Connected".
+- iOS sau khi sửa `project.yml` vẫn xanh: Release BUILD SUCCEEDED, **51 test 0 fail**.

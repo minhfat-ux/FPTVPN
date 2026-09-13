@@ -14,7 +14,7 @@ import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision } from "./device-limit.js";
-import { versionPayloadFor, wantsLegacyApk, iosInstallManifest } from "./app-version.js";
+import { versionPayloadFor, wantsLegacyApk } from "./app-version.js";
 import {
   amountCovers,
   extractOrderRef,
@@ -93,10 +93,8 @@ import {
   orderStatusPageHTML,
   resolveQrFile,
   qrAmountsFor,
-  downloadQrPng,
 } from "./payments.js";
 
-const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = parseInt(process.env.PORT ?? "8080", 10);
@@ -237,8 +235,6 @@ app.use((req, res, next) => {
   // Public app downloads (APK host): the regular build and the Android 7+ build
   // for Fire TV / older devices.
   if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy" || req.path === "/v1/downloads/ios") return next();
-  if (req.path.startsWith("/install/ios")) return next();
-  if (req.path === "/v1/downloads/qr") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
   if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
@@ -1909,77 +1905,6 @@ app.get("/v1/downloads/android", async (req, res) => {
  * Vì vậy link này là để TẢI FILE (máy tính, hoặc đưa lên Diawi/tool OTA); nếu muốn
  * cài thẳng từ trang buy thì phải thêm manifest OTA và ký ad-hoc/enterprise.
  */
-/**
- * Trang cài iOS tự phát: iOS KHÔNG cài được từ link .ipa trực tiếp (Safari chỉ tải file về),
- * muốn "bấm là cài" phải đi qua `itms-services://` + một manifest.plist — đó là việc Diawi làm.
- * Vì link Diawi có hạn (gói của chủ shop: 15 ngày / 50 lượt tải), ta tự phát luôn để màn ép cập
- * nhật trong app không bao giờ trỏ vào link đã chết.
- *
- * Apple yêu cầu manifest phải nằm trên HTTPS có chứng chỉ hợp lệ (domain mình đã có Let's Encrypt).
- */
-/**
- * Ảnh QR cho link tải (khách mở trang buy trên máy tính → quét mã là điện thoại mở đúng link cài).
- * Sinh tại chỗ, không phụ thuộc ảnh QR của dịch vụ ngoài ⇒ link ngoài hết hạn cũng không ảnh hưởng.
- * `target`: ios | android | android-legacy | ai-android (mặc định ios).
- */
-app.get("/v1/downloads/qr", async (req, res) => {
-  try {
-    const target = String(req.query?.target ?? "ios").trim();
-    const links = storeLinks("vpn");
-    const aiLinks = storeLinks("ai");
-    const url = {
-      ios: appConfig.get("ios_ipa_url") || links.ios,
-      android: links.android,
-      "android-legacy": links.androidLegacy,
-      "ai-android": aiLinks.android,
-    }[target];
-    if (!url) return res.status(404).json({ error: "unknown target" });
-    const png = await downloadQrPng(url, { size: Number(req.query?.size) > 0 ? Math.min(Number(req.query.size), 1024) : 320 });
-    res.type("png").set("Cache-Control", "public, max-age=3600");
-    res.send(png);
-  } catch (err) {
-    console.error("download qr failed:", err);
-    res.status(500).json({ error: "Internal error" });
-  }
-});
-
-app.get(["/install/ios/manifest.plist", "/v1/downloads/ios/manifest.plist"], (_req, res) => {
-  res.type("application/xml").send(iosInstallManifest({
-    baseUrl: siteBaseUrl(),
-    bundleId: process.env.IOS_BUNDLE_ID || "com.privatevpn.app",
-    version: appConfig.get("latest_ios_version") || "1.0",
-    build: process.env.IOS_IPA_BUILD || null,
-  }));
-});
-
-app.get(["/install/ios", "/install/ios/"], (_req, res) => {
-  const base = siteBaseUrl();
-  const manifest = `${base}/install/ios/manifest.plist`;
-  const itms = `itms-services://?action=download-manifest&amp;url=${encodeURIComponent(manifest)}`;
-  res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cài VPNFlow cho iPhone / iPad</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:460px;margin:24px;padding:28px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}.t{font-size:22px;font-weight:700;margin:0 0 6px}.s{color:rgba(255,255,255,.6);font-size:14px;margin:0 0 18px}a.b{display:block;text-align:center;background:#33c773;color:#06160d;text-decoration:none;font-weight:700;padding:14px;border-radius:10px;margin:8px 0 14px}ul{color:rgba(255,255,255,.72);font-size:13.5px;line-height:1.6;padding-left:18px;margin:0}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}</style>
-</head><body><div class="c">
-<p class="t">Cài VPNFlow lên iPhone / iPad</p>
-<p class="s">Bản ${appConfig.get("latest_ios_version") || "1.0"} · mở trang này bằng <b>Safari</b> để cài.</p>
-<a class="b" href="${itms}">📲 Cài đặt VPNFlow</a>
-<ul>
-<li>Bắt buộc mở bằng <b>Safari</b> (Chrome/Cốc Cốc không cài được).</li>
-<li>Bấm <b>Cài đặt</b> → hộp thoại hỏi cài đặt → chọn <b>Cài</b>.</li>
-<li>Máy chưa có trong danh sách UDID của bản build sẽ báo lỗi cài — gửi UDID cho shop để build lại.</li>
-<li>Cài xong nếu app báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
-<li>Cần hỗ trợ: <code>support@meetflowai.site</code></li>
-</ul>
-<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
-  <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">📱 Đang xem trên máy tính? Quét mã này bằng điện thoại</div>
-  <img src="/v1/downloads/qr?target=ios&size=260" alt="QR" width="150" height="150" style="background:#fff;padding:6px;border-radius:10px">
-  <div style="font-size:12.5px;color:rgba(255,255,255,.6);margin-top:8px">${base}/install/ios</div>
-</div>
-</ul>
-</div></body></html>`);
-});
-
 app.get("/v1/downloads/ios", async (_req, res) => {
   try {
     const ipaDir = process.env.IOS_IPA_DIR || "/root/flowvpn-ipa";
@@ -2044,14 +1969,6 @@ app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res
  * xem vietqr.js), nên ở đây khớp được đúng đơn. Chỉ tự kích hoạt khi tiền ĐỦ; thiếu tiền thì
  * để chủ shop xác nhận tay (alert cũ vẫn gửi) — thà chậm còn hơn cấp sai.
  */
-/** Mã đơn có tồn tại trong hệ thống không (kể cả đã thanh toán) — để phân biệt "đã xử lý" với "lạc". */
-async function orderKnown(orderCode, product) {
-  if (!orderCode) return false;
-  if (product !== "ai" && (await authStore.pendingPaymentByCode(orderCode))) return true;
-  if (product !== "vpn" && (await aiStore.pendingPayment(orderCode))) return true;
-  return false;
-}
-
 async function findPendingOrder({ orderCode, product }) {
   const wants = (p) => !product || product === p;
   if (wants("vpn")) {
@@ -2207,12 +2124,7 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
     }
 
     const paid = Number(payload.transferAmount ?? 0);
-    const ref = extractOrderRef({
-      code: payload.code,
-      content: payload.content ?? payload.description,
-      // Số tài khoản nhận có thể nằm trong nội dung và trùng dạng 10 chữ số của mã đơn.
-      ignoreCodes: [bankQrConfig()?.accountNumber, momoQrConfig()?.accountNumber].filter(Boolean),
-    });
+    const ref = extractOrderRef({ code: payload.code, content: payload.content ?? payload.description });
     if (!ref.orderCode) {
       console.warn(
         `sepay: giao dịch ${txId} ${paid}đ không có mã đơn trong nội dung ` +
@@ -2231,26 +2143,8 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
 
     const found = await findPendingOrder(ref);
     if (!found) {
-      // Đã xử lý rồi (webhook lặp) thì im lặng; còn mã đơn KHÔNG tồn tại trong hệ thống nghĩa là
-      // tiền vào mà không gắn được với đơn nào (khách ghi sai/thiếu nội dung) ⇒ phải BÁO chủ shop,
-      // nếu không thì tiền vào mà không ai biết (đã gặp thật 14/09: 5.000đ, nội dung chỉ có số TK).
-      if (await orderKnown(ref.orderCode, ref.product)) {
-        console.log(`sepay: đơn ${ref.orderCode} không còn chờ xác nhận (đã xử lý hoặc hết hạn)`);
-        await logSepayWebhook(payload, "order-not-pending", { orderCode: ref.orderCode });
-        return res.json({ success: true });
-      }
-      console.warn(
-        `sepay: giao dịch ${txId} ${paid}đ không khớp đơn nào (mã đọc được: ${ref.orderCode}, ` +
-          `qua ${ref.via ?? "?"}) — báo chủ shop xác nhận tay`,
-      );
-      await fireUnmatchedAlert({
-        amount: paid,
-        content: payload.content ?? payload.description ?? "",
-        txId,
-        accountNumber: payload.accountNumber,
-        reason: `không khớp đơn nào trong hệ thống (mã đọc được: ${ref.orderCode})`,
-      });
-      await logSepayWebhook(payload, "no-order-code", { orderCode: ref.orderCode, via: ref.via });
+      console.log(`sepay: đơn ${ref.orderCode} không còn chờ xác nhận (đã xử lý hoặc hết hạn)`);
+      await logSepayWebhook(payload, "order-not-pending", { orderCode: ref.orderCode });
       return res.json({ success: true });
     }
 
@@ -3748,38 +3642,6 @@ function parseSize(value, unit) {
 // ---------------- Renewal reminder job ----------------
 // Runs periodically: emails customers whose premium expires within 7/3/1 days,
 // once per window, with a link to the buy page. Thresholds are configurable.
-/**
- * Link tải iOS nằm ở dịch vụ ngoài (Diawi) sẽ HẾT HẠN (gói hiện tại: 15 ngày / 50 lượt tải) — mà
- * màn ép cập nhật trong app lại trỏ vào đó, link chết là khách không cập nhật được nữa. Nên mỗi
- * 6 giờ kiểm một lần: link ngoài không còn 200 thì tự đổi về trang cài tự phát (/install/ios) và
- * báo chủ shop để upload lại nếu muốn dùng Diawi tiếp.
- */
-async function runIosLinkGuard() {
-  const enabled = process.env.IOS_LINK_GUARD !== "0";
-  if (!enabled) return;
-  const current = appConfig.get("ios_ipa_url") || "";
-  if (!current || current.includes("/install/ios")) return; // đang dùng trang tự phát ⇒ không cần kiểm
-  try {
-    // Dùng curl chứ không dùng fetch: VPS có bản ghi AAAA cho *.diawi.com mà IPv6 không đi được,
-    // node fetch chọn IPv6 rồi treo tới ETIMEDOUT (đã gặp thật khi upload Diawi).
-    const { stdout } = await execFileAsync("curl", ["-sSI", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "25", current]);
-    const status = Number(String(stdout).trim());
-    if (status >= 200 && status < 400) return;
-    console.warn(`ios-link-guard: link tải iOS trả ${status} — chuyển về trang cài tự phát (${current})`);
-    appConfig.set("ios_ipa_url", `${siteBaseUrl()}/install/ios`);
-    const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
-    await sendUnmatchedTransferAlert({
-      to: owner,
-      amount: 0,
-      content: `Link tải iOS cũ: ${current}`,
-      reason: "link tải iOS (Diawi) đã hết hạn hoặc hết lượt tải — hệ thống đã tự chuyển sang trang cài trên server mình; upload lại IPA lên Diawi rồi PATCH /v1/admin/app-version {ipa_url}",
-      dashboardUrl: `${siteBaseUrl()}/admin`,
-    }).catch((err) => console.error("ios-link-guard alert failed:", err?.message ?? err));
-  } catch (err) {
-    console.warn(`ios-link-guard: không kiểm được link iOS (${current}): ${err?.message ?? err}`);
-  }
-}
-
 async function runRenewalReminders() {
   try {
     const due = await authStore.listUsersDueForRenewalReminder();
@@ -3838,8 +3700,6 @@ const RENEWAL_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6h
 if (process.env.ENABLE_RENEWAL_REMINDERS !== "0") {
   // Small initial delay so the server finishes booting before first run.
   setTimeout(runRenewalReminders, 60_000);
-  setTimeout(runIosLinkGuard, 90_000);
-  setInterval(runIosLinkGuard, Number(process.env.IOS_LINK_GUARD_INTERVAL_MS ?? 6 * 60 * 60 * 1000));
   setInterval(runRenewalReminders, RENEWAL_INTERVAL_MS);
   setTimeout(runAiRenewalReminders, 90_000);
   setInterval(runAiRenewalReminders, RENEWAL_INTERVAL_MS);

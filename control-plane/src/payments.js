@@ -238,44 +238,6 @@ export function transferNote({ orderCode, plan = "", product = "vpn" } = {}) {
  * registration needed — customer scans with any VN banking app, pays the
  * exact amount, and the note carries the order code for manual/auto matching.
  */
-/**
- * Ảnh QR (PNG) cho MỘT link tải bất kỳ — dùng cho khối "quét mã để cài trên điện thoại" ở trang buy
- * và ở trang cài iOS. Khách mở trang trên máy tính, quét mã là điện thoại mở đúng link.
- *
- * Sinh tại chỗ (không phụ thuộc dịch vụ ngoài như ảnh QR của Diawi) nên link Diawi hết hạn cũng
- * không ảnh hưởng, và không lộ link qua bên thứ ba.
- */
-export async function downloadQrPng(url, { size = 320, margin = 1 } = {}) {
-  const target = String(url ?? "").trim();
-  if (!target) throw new Error("downloadQrPng: thiếu url");
-  return QRCode.toBuffer(target, { type: "png", width: size, margin, errorCorrectionLevel: "M" });
-}
-
-/**
- * Khối HTML: QR + link dạng chữ (bấm được) + nút copy. Hiện dưới hai nút tải app ở trang buy.
- * Chuỗi dịch để trong hàm này (không nhét vào 10 object ngôn ngữ của 2 trang) cho gọn.
- */
-export function downloadQrSectionHTML({ lang = "vi", qrSrc, linkUrl, note = null } = {}) {
-  if (!qrSrc || !linkUrl) return "";
-  const L = {
-    vi: { title: "📱 Quét mã để cài trên điện thoại", hint: "Mở camera điện thoại và quét mã này — máy sẽ mở đúng trang cài.", link: "Hoặc mở link:", copy: "Sao chép link", copied: "Đã sao chép ✓" },
-    en: { title: "📱 Scan to install on your phone", hint: "Open your phone camera and scan — it opens the right install page.", link: "Or open the link:", copy: "Copy link", copied: "Copied ✓" },
-    zh: { title: "📱 扫码在手机上安装", hint: "用手机相机扫描此二维码，即可打开安装页面。", link: "或打开链接：", copy: "复制链接", copied: "已复制 ✓" },
-    ja: { title: "📱 スマホでインストールするにはスキャン", hint: "スマホのカメラでこのコードを読み取るとインストールページが開きます。", link: "またはリンクを開く：", copy: "リンクをコピー", copied: "コピーしました ✓" },
-    ko: { title: "📱 휴대폰 설치용 QR 스캔", hint: "휴대폰 카메라로 이 코드를 스캔하면 설치 페이지가 열립니다.", link: "또는 링크 열기:", copy: "링크 복사", copied: "복사됨 ✓" },
-  }[lang] ?? null;
-  const t = L ?? { title: "📱 Scan to install on your phone", hint: "Open your phone camera and scan — it opens the right install page.", link: "Or open the link:", copy: "Copy link", copied: "Copied ✓" };
-  return `<div class="dlqr">
-  <div class="dlqr-title">${t.title}</div>
-  <img class="dlqr-img" src="${qrSrc}" alt="QR" width="180" height="180" loading="lazy">
-  <div class="dlqr-hint">${t.hint}</div>
-  <div class="dlqr-link">${t.link} <a href="${linkUrl}" target="_blank" rel="noopener">${linkUrl.replace(/^https?:\/\//, "")}</a>
-    <button type="button" class="dlqr-copy" data-link="${linkUrl}" data-done="${t.copied}">${t.copy}</button>
-  </div>
-  ${note ? `<div class="dlqr-note">${note}</div>` : ""}
-</div>`;
-}
-
 export async function createBankQrDataUrl({
   accountNumber,
   accountName,
@@ -1277,14 +1239,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       color: rgba(255,255,255,.6); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
     }
     .curbar a.on { color: #06160d; background: #33c773; border-color: #33c773; }
-    .dlqr { margin-top: 18px; padding: 14px 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; text-align: center; }
-    .dlqr-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
-    .dlqr-img { display: block; margin: 0 auto 8px; background: #fff; padding: 6px; border-radius: 10px; }
-    .dlqr-hint { font-size: 12.5px; color: rgba(255,255,255,.6); margin-bottom: 8px; }
-    .dlqr-link { font-size: 12.5px; color: rgba(255,255,255,.72); word-break: break-all; }
-    .dlqr-link a { color: #7ab8ff; }
-    .dlqr-copy { margin-left: 6px; padding: 4px 10px; font-size: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: inherit; cursor: pointer; }
-    .dlqr-note { font-size: 12px; color: rgba(255,255,255,.55); margin-top: 8px; }
     .cnynote {
       display: none; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
       font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,.78);
@@ -1484,11 +1438,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
           </svg>
         </a>` : ""}
       </div>
-      ${downloadQrSectionHTML({
-        lang,
-        qrSrc: `/v1/downloads/qr?target=${product === "ai" ? "ai-android" : "ios"}`,
-        linkUrl: product === "ai" ? androidUrl : (iosUrl || androidUrl),
-      })}
     </div>` : ""}
 
     <form id="buyForm">

@@ -265,7 +265,14 @@ final class VPNManagerMac: ObservableObject {
                                       overlayIP: overlayIP,
                                       exitEndpoint: node.endpoint,
                                       exitPublicKey: node.public_key)
-        try await prepareConfiguration(config)
+        // Relay đi kèm config y như iOS: mạng bị chặn IP node thì extension tự đi qua relay
+        // TCP (cạnh exit node) rồi tới relay WS của ĐÚNG node này (Tailscale Funnel) — thiếu
+        // phần này thì macOS "Connected" mà không có mạng, đúng lỗi đo được 14/09.
+        try await prepareConfiguration(
+            config,
+            nodeId: node.id,
+            wsRelayURL: node.ws_relay_url
+        )
         guard let manager else {
             throw MacError.savedConfigurationMissing
         }
@@ -415,7 +422,11 @@ final class VPNManagerMac: ObservableObject {
         )
     }
 
-    private func prepareConfiguration(_ config: WireGuardConfig) async throws {
+    private func prepareConfiguration(
+        _ config: WireGuardConfig,
+        nodeId: String? = nil,
+        wsRelayURL: String? = nil
+    ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let staleProfiles = existing.filter { profile in
             profile.localizedDescription == "FlowVPN" || profile.localizedDescription == "FPT PrivateVPN"
@@ -426,12 +437,17 @@ final class VPNManagerMac: ObservableObject {
             try? await staleProfile.removeFromPreferences()
         }
 
+        // Cùng chuỗi transport với iOS/Android: WireGuard đi trong TCP tới relay cạnh exit
+        // node, không tới được thì extension chuyển sang relay WS của đúng node, cuối cùng mới
+        // dùng UDP trực tiếp. nodeId để extension báo health về coordinator.
+        let tunnelConfig = config.withRelay().withNodeId(nodeId).withWSRelayURL(wsRelayURL)
+
         let manager = NETunnelProviderManager()
         let protocolConfig = NETunnelProviderProtocol()
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier
-        protocolConfig.serverAddress = config.peers.first?.endpoint ?? "not-configured"
+        protocolConfig.serverAddress = tunnelConfig.peers.first?.endpoint ?? "not-configured"
         protocolConfig.providerConfiguration = [
-            "wireguard": try JSONEncoder().encode(config),
+            "wireguard": try JSONEncoder().encode(tunnelConfig.withoutPrivateKey()),
         ]
 
         manager.protocolConfiguration = protocolConfig

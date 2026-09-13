@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveQrFile, qrAmountsFor, downloadQrPng, downloadQrSectionHTML } from "../src/payments.js";
-import fs2 from "node:fs";
+import { resolveQrFile, qrAmountsFor } from "../src/payments.js";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "payqr-"));
 const touch = (name) => fs.writeFileSync(path.join(dir, name), "x");
@@ -60,35 +59,4 @@ test("qr-amounts.json: đọc số ¥ thật trong ảnh và đọc lại khi fi
   fs.writeFileSync(file, JSON.stringify({ "wechat-monthly.JPG": 59 }));
   fs.utimesSync(file, new Date(), new Date(Date.now() + 2000));
   assert.equal(qrAmountsFor(d5)["wechat-monthly.JPG"], 59, "sửa file là có hiệu lực ngay");
-});
-
-test("QR cho link tải: sinh PNG thật (magic bytes) và khác nhau theo từng link", async () => {
-  const ios = await downloadQrPng("https://meetflowai.site/install/ios");
-  const apk = await downloadQrPng("https://meetflowai.site/v1/downloads/android");
-  assert.ok(Buffer.isBuffer(ios) && ios.length > 200, "phải trả về buffer PNG");
-  assert.deepEqual([...ios.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], "phải là PNG (magic 89 50 4E 47)");
-  assert.notEqual(ios.toString("base64"), apk.toString("base64"), "QR khác link phải khác nội dung");
-  await assert.rejects(() => downloadQrPng(""), /thiếu url/);
-});
-
-test("khối QR ở trang buy: có ảnh, có link bấm được và nút copy, đúng ngôn ngữ", () => {
-  const vi = downloadQrSectionHTML({ lang: "vi", qrSrc: "/v1/downloads/qr?target=ios", linkUrl: "https://meetflowai.site/install/ios" });
-  assert.ok(vi.includes('src="/v1/downloads/qr?target=ios"'), "phải nhúng ảnh QR");
-  assert.ok(vi.includes('href="https://meetflowai.site/install/ios"'), "phải có link bấm được");
-  assert.ok(vi.includes("Quét mã để cài"), "tiêu đề tiếng Việt");
-  assert.ok(vi.includes("dlqr-copy"), "phải có nút copy link");
-  assert.ok(downloadQrSectionHTML({ lang: "en", qrSrc: "x", linkUrl: "y" }).includes("Scan to install"));
-  assert.ok(downloadQrSectionHTML({ lang: "zh", qrSrc: "x", linkUrl: "y" }).includes("扫码"));
-  assert.equal(downloadQrSectionHTML({ lang: "vi", qrSrc: "", linkUrl: "y" }), "", "thiếu ảnh thì không render gì");
-});
-
-test("guard: trang buy có khối QR và route QR phục vụ đúng link cấu hình", () => {
-  const pay = fs2.readFileSync(new URL("../src/payments.js", import.meta.url), "utf8");
-  const idx = fs2.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-  assert.ok(pay.includes("downloadQrSectionHTML({"), "trang buy phải chèn khối QR");
-  assert.ok(pay.includes('target=${product === "ai" ? "ai-android" : "ios"}'), "VPN quét QR iOS, MeetFlow AI quét QR APK");
-  assert.ok(idx.includes('app.get("/v1/downloads/qr"'), "phải có route sinh ảnh QR");
-  assert.ok(idx.includes("appConfig.get(\"ios_ipa_url\") || links.ios"), "QR iOS phải theo link đang cấu hình");
-  assert.ok(idx.includes("downloadQrPng(url"), "route phải dùng bộ sinh QR nội bộ");
-  assert.ok(idx.includes('src="/v1/downloads/qr?target=ios&size=260"'), "trang cài iOS cũng phải có QR");
 });
