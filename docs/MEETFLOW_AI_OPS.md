@@ -706,6 +706,40 @@ done
 Ghi nhớ: cert copy từ node-1 hết hạn **20/11/2026**. Node-2 sẽ tự xin cert mới qua ACME (HTTP-01
 chạy được vì DNS đang trỏ vào node-2) — nên kiểm lại hạn cert trước ~30/10, đừng để hết hạn mà không ai biết.
 
+**Bắt buộc: `trusted_proxies` trên node-1** — nếu không, **mọi IP khách bị dồn thành IP node-2**:
+
+```
+# /etc/caddy/Caddyfile trên node-1
+{
+	servers {
+		protocols h1 h2
+		trusted_proxies static 103.6.234.233   # tin node-2 để giữ X-Forwarded-For thật
+	}
+}
+```
+
+Caddy mặc định **không tin** proxy đứng trước nên nó thay `X-Forwarded-For` bằng IP của peer trực
+tiếp; đi qua 2 lớp proxy (node-2 → node-1 → control plane) mà không khai `trusted_proxies` thì
+control plane thấy **tất cả request đều từ 103.6.234.233**. Hệ quả: giới hạn theo IP bị dùng chung
+một rọ (ví dụ `/v1/ai/store/purchase` cho **40 lượt xác thực/giờ cho TOÀN BỘ khách** thay vì từng
+người), log/dashboard mất IP thật. Giới hạn OTP resend thì theo **email** nên không bị ảnh hưởng.
+
+Kiểm chứng (phải ra IP thật, và hai đường phải GIỐNG nhau):
+
+```bash
+# từ node-1 gọi qua cửa công khai → control plane phải ghi IP của node-1, không phải của node-2
+ssh node1 'curl -s -o /dev/null "https://api.meetflowai.site/v1/ai/entitlement?email=ipcheck@example.com"'
+ssh node1 'journalctl -u flowvpn-cp -n 20 --no-pager | grep ipcheck'   # ip=<IP thật>
+
+# từ máy bạn: qua node-2 và qua node-1 trực tiếp → cùng một IP
+curl -s -o /dev/null "https://api.meetflowai.site/v1/ai/entitlement?email=a@example.com"
+curl -s -o /dev/null --resolve api.meetflowai.site:443:103.173.155.50 "https://api.meetflowai.site/v1/ai/entitlement?email=b@example.com"
+```
+
+Ghi chú: `requireAdminIP` trong `control-plane/src/index.js` **được định nghĩa nhưng không gắn vào
+route nào** — bảng admin hiện chỉ bảo vệ bằng Bearer token (`requireAdminAuth`), KHÔNG chặn theo IP
+dù env `ADMIN_ALLOWED_IPS` có tồn tại. Cân nhắc gắn lại nếu muốn giới hạn thêm.
+
 **Tự động giữ cert khớp giữa hai node** — `scripts/sync-caddy-certs.sh` (đã cài cron **mỗi 6 giờ**
 trên node-1, log `/var/log/cert-sync.log`):
 
