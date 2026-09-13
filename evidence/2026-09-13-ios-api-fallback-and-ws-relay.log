@@ -76,3 +76,31 @@ Ghi chú khác chưa xử lý (subagent báo, KHÔNG do thay đổi này):
   target PrivateVPNMacPacketTunnel trong project.yml chỉ khai PacketTunnelProvider.swift +
   WireGuardConfig.swift, thiếu WGRelayClient/RelayDiagnostics/NodeHealthReporter/WSRelayClient
   nên hiện KHÔNG build được — tình trạng này có từ trước; project.yml nằm ngoài brief.
+
+################ 6. VÒNG 2 (sau review của agent chính) ################
+Ba việc, hai trong số đó do review của tôi:
+  a) NodeHealthReporter bỏ hẳn vòng lặp retry tự viết, nay gọi helper dùng chung
+     ControlAPIHosts.sendWithFallback(request, session:) — hết nhân bản logic giữa
+     app và extension. Đã kiểm: file không còn `URLSession.shared.dataTask` riêng.
+  b) Chuỗi transport: nếu startRelay KHÔNG bind được listener thì nay đi thẳng vào
+     bước 2 (WS relay) => đường sống khi bị chặn IP không còn bị bỏ qua chỉ vì relay
+     TCP không dựng nổi. Đã kiểm thêm một chỗ dễ sai: nhánh đó gọi
+     scheduleDirectFallback() trong khi `relay` là nil — hàm này guard trên `wsRelay`
+     (không phải `relay`) và nhánh đó vừa set wsRelay, nên KHÔNG bị no-op im lặng.
+  c) Ghi rõ trong doc rằng activeTransportIsConnected trả `true` khi không còn relay
+     nào là CHỦ Ý (false negative sẽ hạ oan node khoẻ).
+
+Bằng chứng test của vòng 2 (đọc thẳng .xcresult, cả 2 lần chạy đều xanh):
+  Test-PrivateVPN-2026.09.13_22-15-01-+0800.xcresult : Passed  passed=45  failed=0
+  Test-PrivateVPN-2026.09.13_22-16-48-+0800.xcresult : Passed  passed=45  failed=0
+  (vòng 1 là 43 test; +2 test health => 45)
+
+Hai test mới cho đường health (tôi yêu cầu, đã kiểm là có thật trong file):
+  - testHealthReportIsRetriedOnFallbackHostAfterTransportFailure
+  - testHealthReportIsNotRetriedOnFallbackHostAfterHTTPError
+  Test func trong file: 12 (vòng 1) -> 14. Vẫn KHÔNG nằm trong target test là
+  chính NodeHealthReporter.swift (chỉ được compile vào extension; thêm vào target
+  test cần sửa project.yml — ngoài phạm vi), nên 2 test này gọi đúng helper dùng
+  chung mà reporter gọi, với request dựng giống hệt.
+
+Còn lại chưa làm được: vẫn không có thiết bị iOS thật (mục 5 giữ nguyên hiệu lực).

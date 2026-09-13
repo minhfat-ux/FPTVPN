@@ -47,7 +47,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         // Chuỗi transport, đi một chiều và không quay lại: relay TCP → relay WS → UDP
-        // trực tiếp. Mỗi bước chỉ được thử khi bước trước vẫn chưa kết nối được.
+        // trực tiếp. Mỗi bước chỉ được thử khi bước trước vẫn chưa kết nối được, hoặc
+        // không dựng nổi listener (bước 1 bind lỗi thì vào thẳng bước 2).
         //
         // WireGuard-over-TCP relay (same transport the Android client uses): point the
         // peer at a local UDP listener and let the relay carry the datagrams over TCP

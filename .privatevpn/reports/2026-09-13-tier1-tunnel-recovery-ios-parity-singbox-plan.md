@@ -31,8 +31,8 @@ trước khi viết dòng code nào.
 | `iOS/PrivateVPN/Services/ControlAPIClient.swift` | `ControlAPIHosts.fallbackBaseURLs`, `sendWithFallback`, `URLRequest.rewritten(to:)`; định tuyến mọi chỗ gọi |
 | `iOS/PrivateVPNPacketTunnel/WSRelayClient.swift` | **MỚI** — UDP↔WS bridge tới `wss://fcnvpn.tail303be3.ts.net:10000` |
 | `iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift` | Chuỗi TCP relay → WS relay → UDP trực tiếp, một chiều; health report đọc transport đang hoạt động |
-| `iOS/PrivateVPNPacketTunnel/NodeHealthReporter.swift` | Dùng chung danh sách host dự phòng (lỗ hổng do review phát hiện) |
-| `iOS/PrivateVPNTests/ControlAPIClientTests.swift` | +3 test cho cơ chế dự phòng |
+| `iOS/PrivateVPNPacketTunnel/NodeHealthReporter.swift` | Dùng chung danh sách host dự phòng (lỗ hổng do review phát hiện); vòng 2 bỏ hẳn vòng retry tự viết, gọi helper dùng chung |
+| `iOS/PrivateVPNTests/ControlAPIClientTests.swift` | +3 test cơ chế dự phòng, +2 test cho đường health (tổng +5) |
 | `docs/SINGBOX_INTEGRATION_PLAN.md` | **MỚI** — kế hoạch Tầng 2, 713 dòng, §1–§10 + 2 phụ lục |
 | `docs/HANDOVER_2026-09-13_...md` | Cập nhật trạng thái Tầng 1 (mục 1,2,3,5 ✅ / mục 4 ❌) kèm lý do chỗ làm khác |
 | `.privatevpn/memory/DECISIONS.md` | Ghi quyết định Tầng 1 |
@@ -52,6 +52,7 @@ trước khi viết dòng code nào.
 | Trần bắt tay tự vô hiệu theo token, không đọc cờ `DiagnosticsLog.tunnelUp` | Cờ đó chỉ được dọn ở `reportReconnecting()`/`onDestroy()`, có thể còn giá trị cũ và làm timer không bao giờ nổ | `HysteriaVpnService.kt` |
 | iOS: chỉ thử host dự phòng khi lỗi transport, không khi có HTTP response | POST trùng sẽ nhân đôi tác dụng phụ (đăng ký thiết bị, gửi mã email) | `ControlAPIClient.swift`, test |
 | iOS: giữ chuỗi transport một chiều, mỗi bước 8s | Giữ đúng tính chất chống flapping của `scheduleDirectFallback` có sẵn | `PacketTunnelProvider.swift` |
+| iOS: gom logic retry thành một helper dùng chung thay vì hai bản sao | Review phát hiện `NodeHealthReporter` nhân bản vòng retry của `ControlAPIClient`; hai bản sao sẽ lệch nhau khi sửa quy tắc | `ControlAPIClient.swift` (`ControlAPIHosts.sendWithFallback`) |
 | Ghi bẫy đo vào file bằng chứng | `grep` trên APK ra 0 cho mọi chuỗi tiếng Việt kể cả chuỗi có từ trước → dễ kết luận sai là "mã không vào artifact" | 2 file `evidence/` |
 
 ## Evidence
@@ -62,7 +63,7 @@ trước khi viết dòng code nào.
 | EVID-20260913-002 | build_checked | `:app:compileModernReleaseKotlin` + `:app:assembleModernRelease` (gồm R8 + lintVital): BUILD SUCCESSFUL |
 | EVID-20260913-003 | build_checked | Byte-search `classes.dex` trong APK: đủ mọi chuỗi log của Tầng 1 (`ws-relay: cầu WS chết`=1, `dừng client để dựng lại transport`=2, `lần liên tiếp không có gói nào qua`=1, `hy-attempt-budget`=1, `hết hạn bắt tay`=1) |
 | EVID-20260913-004 | build_checked | iOS: `xcodegen generate` + `xcodebuild -destination 'generic/platform=iOS'`: **BUILD SUCCEEDED** (exit 0) |
-| EVID-20260913-005 | test_checked | iOS: đọc thẳng `.xcresult`: **result=Passed, 43 passed, 0 failed, 0 skipped** (CI-iPhone17-iOS26.5); test func 9→12 |
+| EVID-20260913-005 | test_checked | iOS: đọc thẳng `.xcresult`: **Passed, 45 passed, 0 failed, 0 skipped** (CI-iPhone17-iOS26.5). Vòng 1 = 43 test, sau vòng 2 (thêm 2 test health) = 45; test func trong file 9→12→14 |
 | EVID-20260913-006 | build_checked | Byte-search `PrivateVPNPacketTunnel.debug.dylib`: `wss://fcnvpn.tail303be3.ts.net:10000`=1, `ws-relay`=11, `health:`=3, `ControlAPIHosts`=13 |
 | EVID-20260913-007 | static_review | Ví dụ config §5.1 của plan validate **0 lỗi** bằng JSON Schema chính thức sing-box v1.14.0 (`jsonschema` Draft 2020-12), do tôi tự chạy lại; không lọt secret |
 | EVID-20260913-008 | static_review | GitHub API `releases/latest`: tag **v1.14.0**, 167 asset, **0** asset khớp `libbox\|aar\|xcframework`; kích thước 34.87 / 121.11 / 28.07 MB khớp đúng bảng §7.2 |
@@ -84,7 +85,11 @@ $ xcodegen generate && xcodebuild -scheme PrivateVPN -destination 'generic/platf
 ** BUILD SUCCEEDED **   (exit=0)
 
 $ xcodebuild test -scheme PrivateVPN -destination 'platform=iOS Simulator,name=CI-iPhone17-iOS26.5'
-result=Passed  passed=43  failed=0  skipped=0
+vòng 1: result=Passed  passed=43  failed=0  skipped=0
+vòng 2: result=Passed  passed=45  failed=0  skipped=0   (2 lần chạy, đều xanh)
+
+$ xcodebuild -scheme PrivateVPN -destination 'generic/platform=iOS' build   (cây cuối)
+** BUILD SUCCEEDED **   (exit=0)
 ```
 
 Result:
@@ -115,9 +120,10 @@ LỖI CỦA PHÉP ĐO, không phải mã thiếu — đã đổi sang tìm theo 
   đánh đổi có chủ ý.
 - **Timing của iOS chưa đo:** mỗi bước chuyển transport tốn một lần restart adapter WireGuard,
   worst case ~16s mới rơi xuống UDP trực tiếp.
-- **`NodeHealthReporter` nhân bản logic retry** của `ControlAPIClient` (dùng chung
-  `ControlAPIHosts` và `request.rewritten(to:)`, nhưng vòng lặp thử lại là bản sao riêng) và
-  **không có test**. Nếu sửa quy tắc retry ở một chỗ mà quên chỗ kia thì hai đường lệch nhau.
+- ~~`NodeHealthReporter` nhân bản logic retry và không có test~~ — **đã xử lý ở vòng 2**: logic
+  retry gom vào một helper dùng chung (`ControlAPIHosts.sendWithFallback`), và đường health có
+  2 test riêng. Rủi ro còn lại nhỏ hơn: `NodeHealthReporter.swift` vẫn không nằm trong target
+  test (chỉ compile vào extension), nên 2 test đó gọi helper chứ không gọi thẳng reporter.
 - **Blocker giấy phép cho Tầng 2** — rủi ro pháp lý/thương mại, chặn P1–P7 của plan.
 
 ## Open Questions
