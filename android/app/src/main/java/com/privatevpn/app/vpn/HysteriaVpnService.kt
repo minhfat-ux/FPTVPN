@@ -915,9 +915,17 @@ class HysteriaVpnService : VpnService() {
          * Số lần probe liên tiếp thấy tunnel UP mà không có gói thật nào qua được thì
          * dựng lại transport. Để 2 lần (không phải 1) vì trên mạng di động TQ một cú
          * mất gói đơn lẻ vẫn xảy ra bình thường — dựng lại vì nó chỉ làm mạng chậm thêm.
-         * Cần 2 lần nên phản ứng mất khoảng 30-45s, chậm hơn đường WS chết (bắt ngay
-         * qua onFailure ở WSRelayBridge) — watchdog này là lưới an toàn cho trường hợp
-         * WS vẫn "mở" nhưng relay âm thầm nuốt gói.
+         *
+         * Thời gian phản ứng thật: mỗi vòng probe tốn PROBE_INTERVAL_MS (15s) cộng thời
+         * gian đo, mà riêng probeThroughTunnel() có thể tốn tới ~14s khi transport chết
+         * (HTTP connect 4s + read 6s, DNS 4s) — nên một vòng tới ~30s. Cần 2 vòng liên
+         * tiếp => phát hiện trong khoảng ~30-60s, KHÔNG phải ~10s như handover mong
+         * muốn. Đổi lại là không dương tính giả khi mạng chỉ mất gói một cú.
+         *
+         * Đường WS chết thì nhanh hơn nhiều vì bắt ngay qua onFailure ở WSRelayBridge;
+         * watchdog này là lưới an toàn cho trường hợp WS vẫn "mở" nhưng relay âm thầm
+         * nuốt gói. Muốn nhanh hơn: hạ PROBE_INTERVAL_MS, hoặc hạ timeout trong
+         * probeThroughTunnel().
          */
         const val DEAD_PROBE_LIMIT = 2
         /**

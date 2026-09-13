@@ -92,6 +92,10 @@ Tailnet hostname: `fcnvpn.tail303be3.ts.net`; node id funnel: `nxQSyDow6811CNTRL
    đo "WS im" sẽ dương tính giả khi tunnel khoẻ nhưng người dùng không tải gì; đo gói thật
    thì bao được cả đường TCP relay/UDP trực tiếp, không riêng WS. Chỉ tính chết khi CẢ HAI
    probe tịt (một trong hai có thể bị chặn riêng).
+   **Lưu ý về con số:** phản ứng thật là **~30–60s**, KHÔNG phải ~10s như mục 2 gốc mong muốn —
+   một vòng probe tốn ~30s khi transport đã chết (15s interval + HTTP connect 4s + read 6s +
+   DNS 4s) và cần 2 vòng liên tiếp. Đổi lại là không dựng lại tunnel chỉ vì mạng mất gói một cú.
+   Muốn nhanh hơn thì hạ `PROBE_INTERVAL_MS` hoặc timeout trong `probeThroughTunnel()`.
 3. ✅ Đã hạ **cả hai**: `TCP_CONNECT_TIMEOUT_MS` 2500 → 1200ms và `armAttemptBudget()` đặt
    trần bắt tay 4s (đường trực tiếp) / 15s (đường WS). Cần trần này vì client Go nằm trong
    `hysteria.aar` đóng sẵn, không truyền được timeout handshake từ Kotlin.
