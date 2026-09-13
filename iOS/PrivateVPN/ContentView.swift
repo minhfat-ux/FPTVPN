@@ -409,7 +409,15 @@ struct ContentView: View {
         Button(action: handlePrimaryTap) {
             ZStack {
                 Circle()
-                    .fill(primaryButtonColor)
+                    // Chỉ làm mờ NỀN khi nút bị khoá, giống Android
+                    // (`MainScreen.kt`: `color.copy(alpha = if (disabled) 0.45f else 1f)`
+                    // đặt trên background, không phải trên cả nút).
+                    //
+                    // Trước đây iOS đặt `.opacity(...)` lên cả Button nên vòng xoay
+                    // trắng cũng bị mờ theo, trong khi Android giữ vòng xoay trắng rõ
+                    // trên nền cam đã mờ. Nhìn vào tưởng iOS không hiện trạng thái
+                    // "đang kết nối".
+                    .fill(primaryButtonColor.opacity(primaryButtonDisabled ? 0.45 : 1))
                     .frame(width: 132, height: 132)
                     .shadow(color: primaryButtonColor.opacity(0.45), radius: 22, y: 10)
                 Circle()
@@ -428,7 +436,6 @@ struct ContentView: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .opacity(primaryButtonDisabled ? 0.45 : 1)
         .disabled(primaryButtonDisabled)
         .animation(.easeInOut(duration: 0.25), value: vpnManager.state)
         .accessibilityHint(vpnManager.state.canConnect

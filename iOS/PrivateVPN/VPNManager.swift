@@ -67,6 +67,20 @@ final class VPNManager: ObservableObject {
     }
 
     func connect(store: VPNConfigStore, authStore: AuthSessionStore) async {
+        // Báo "đang kết nối" NGAY, TRƯỚC mọi lời gọi mạng — giống Android
+        // (VPNManager.kt: `_state.value = VPNState.CONNECTING` rồi mới `claimDevice`).
+        //
+        // Vì sao phải đặt sớm: cấp config qua control plane là lời gọi mạng, và trên
+        // mạng bị chặn nó còn lâu hơn nữa vì phải thử host dự phòng. Trước đây state
+        // chỉ được đặt SAU bước đó, nên suốt thời gian ấy nút Connect vẫn ở màu đỏ
+        // của "disconnected" và không có vòng xoay cam — người dùng bấm rồi tưởng app
+        // không phản ứng gì. Đặt sớm cũng làm banner "đang chuẩn bị quyền VPN" hiện ra
+        // đúng lúc, vì nó cũng dựa trên `state.isTransitioning`.
+        //
+        // Mọi nhánh lỗi bên dưới đều đặt lại .failed/.disconnected nên không bị kẹt
+        // ở trạng thái đang kết nối.
+        guard !state.isTransitioning else { return }
+        state = .connecting
         do {
             let config: WireGuardConfig
             if let baseURL = store.controlPlaneBaseURL {
@@ -75,7 +89,7 @@ final class VPNManager: ObservableObject {
                 config = try makeConfig(store: store)
             }
             try await prepareConfiguration(config, nodeId: store.selectedNodeID)
-            state = .connecting
+            // State đã là .connecting từ đầu hàm; giữ nguyên tới khi tunnel lên.
             try manager?.connection.startVPNTunnel()
             lastError = nil
             statusMessage = nil
