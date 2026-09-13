@@ -22,6 +22,8 @@ import {
   verifySepayApiKey,
   verifySepaySignature,
   verifySepayUrlToken,
+  accountMatches,
+  clientIpAllowed,
 } from "./sepay.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
@@ -106,6 +108,9 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN ?? "";
 const ADMIN_ALLOWED_IPS = parseAllowedIPs(process.env.ADMIN_ALLOWED_IPS ?? "");
 const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "devices.json");
 const AUTH_FILE = process.env.AUTH_FILE ?? path.join(__dirname, "..", "data", "auth.json");
+const DATA_DIR = path.dirname(AUTH_FILE);
+/** Nhật ký webhook SePay (JSON lines) — SePay khuyến nghị lưu payload gốc để đối soát/audit. */
+const SEPAY_LOG_FILE = process.env.SEPAY_LOG_FILE ?? path.join(DATA_DIR, "sepay-webhooks.log");
 const APP_CONFIG_DB = process.env.APP_CONFIG_DB ?? path.join(__dirname, "..", "data", "app-config.db");
 const DEFAULT_MIN_VERSION = process.env.MIN_IOS_VERSION ?? "1.0";
 const DEFAULT_LATEST_VERSION = process.env.LATEST_IOS_VERSION ?? "1.0";
@@ -2016,6 +2021,29 @@ async function confirmPendingOrder(found, { method, txId }) {
   });
 }
 
+/**
+ * Ghi lại từng webhook ĐÃ XÁC THỰC kèm quyết định xử lý (JSON lines). Dùng để đối soát khi
+ * webhook mất, và để biết tiền vào đã được kích hoạt hay chưa mà không phải dò journal.
+ */
+async function logSepayWebhook(payload, decision, extra = {}) {
+  const line = JSON.stringify({
+    at: new Date().toISOString(),
+    decision,
+    id: payload?.id ?? null,
+    content: payload?.content ?? payload?.description ?? null,
+    transferType: payload?.transferType ?? null,
+    transferAmount: payload?.transferAmount ?? null,
+    accountNumber: payload?.accountNumber ?? null,
+    referenceCode: payload?.referenceCode ?? null,
+    ...extra,
+  });
+  try {
+    await fs.promises.appendFile(SEPAY_LOG_FILE, `${line}\n`, "utf8");
+  } catch (err) {
+    console.error("sepay log append failed:", err?.message ?? err);
+  }
+}
+
 app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (req, res) => {
   try {
     const secret = process.env.SEPAY_WEBHOOK_SECRET || "";
@@ -2060,8 +2088,36 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
 
     const payload = req.body ?? {};
     const txId = payload.id ?? payload.referenceCode ?? "?";
+
+    // Whitelist IP (tuỳ chọn): chỉ nhận request từ IP của SePay khi đã cấu hình SEPAY_IP_ALLOWLIST.
+    const ipAllowed = clientIpAllowed({ ip: clientIPAddress(req), allowlist: process.env.SEPAY_IP_ALLOWLIST });
+    if (!ipAllowed) {
+      console.warn(`sepay: từ chối IP ${clientIPAddress(req)} (ngoài SEPAY_IP_ALLOWLIST) — tx ${txId}`);
+      await logSepayWebhook(payload, "rejected-ip", { ip: clientIPAddress(req) });
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
     if (!isIncomingTransfer(payload)) {
       console.log(`sepay: bỏ qua giao dịch ${txId} (transferType=${payload.transferType ?? "?"})`);
+      await logSepayWebhook(payload, "skipped-not-incoming");
+      return res.json({ success: true });
+    }
+
+    // Tiền phải vào ĐÚNG tài khoản nhận (SePay có thể theo dõi nhiều tài khoản).
+    const ourAccounts = [bankQrConfig()?.accountNumber, momoQrConfig()?.accountNumber].filter(Boolean);
+    if (!accountMatches({ payloadAccount: payload.accountNumber, expectedAccounts: ourAccounts })) {
+      console.warn(
+        `sepay: tx ${txId} tiền vào tài khoản ${payload.accountNumber} KHÔNG phải tài khoản nhận ` +
+          `(${ourAccounts.join(", ") || "chưa cấu hình"}) — không tự kích hoạt`,
+      );
+      await fireUnmatchedAlert({
+        amount: Number(payload.transferAmount ?? 0),
+        content: payload.content ?? payload.description ?? "",
+        txId,
+        accountNumber: payload.accountNumber,
+        reason: `tiền vào tài khoản ${payload.accountNumber}, không phải tài khoản nhận của shop`,
+      });
+      await logSepayWebhook(payload, "wrong-account", { ourAccounts });
       return res.json({ success: true });
     }
 
@@ -2079,12 +2135,14 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
         accountNumber: payload.accountNumber,
         reason: "không có mã đơn trong nội dung chuyển khoản",
       });
+      await logSepayWebhook(payload, "no-order-code");
       return res.json({ success: true });
     }
 
     const found = await findPendingOrder(ref);
     if (!found) {
       console.log(`sepay: đơn ${ref.orderCode} không còn chờ xác nhận (đã xử lý hoặc hết hạn)`);
+      await logSepayWebhook(payload, "order-not-pending", { orderCode: ref.orderCode });
       return res.json({ success: true });
     }
 
@@ -2100,18 +2158,25 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
         accountNumber: payload.accountNumber,
         reason: `chuyển thiếu: đơn ${ref.orderCode} cần ${found.expectedAmount}đ`,
       });
+      await logSepayWebhook(payload, "underpaid", { orderCode: ref.orderCode, expectedAmount: found.expectedAmount });
       return res.json({ success: true });
     }
 
     const activated = await confirmPendingOrder(found, { method: "sepay", txId });
     if (!activated) {
       console.warn(`sepay: đơn ${ref.orderCode} vừa được xử lý ở request khác (tx ${txId})`);
+      await logSepayWebhook(payload, "duplicate", { orderCode: ref.orderCode });
       return res.json({ success: true });
     }
     console.log(
       `sepay: TỰ KÍCH HOẠT đơn ${ref.orderCode} (${found.product}, ${paid}đ, tx ${txId}, ` +
         `email ${found.email})`,
     );
+    await logSepayWebhook(payload, "activated", {
+      orderCode: ref.orderCode,
+      product: found.product,
+      email: found.email,
+    });
     return res.json({ success: true, orderCode: ref.orderCode, product: found.product });
   } catch (err) {
     console.error("sepay webhook failed:", err);

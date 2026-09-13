@@ -149,3 +149,48 @@ export function amountCovers(paid, expected) {
   if (!Number.isFinite(expectedNum) || expectedNum <= 0) return true;
   return paidNum >= expectedNum;
 }
+
+/**
+ * Tiền phải vào ĐÚNG tài khoản nhận của mình (SePay có thể theo dõi nhiều tài khoản).
+ * Chỉ so phần chữ số vì payload có nơi trả "TPBank-57222538888" hoặc kèm khoảng trắng.
+ * Không cấu hình tài khoản (hoặc payload không gửi) ⇒ không chặn, để chủ shop xác nhận tay.
+ */
+export function accountMatches({ payloadAccount, expectedAccounts } = {}) {
+  const norm = (v) => String(v ?? "").replace(/\D/g, "");
+  const paid = norm(payloadAccount);
+  if (!paid) return true;
+  const expected = (Array.isArray(expectedAccounts) ? expectedAccounts : [expectedAccounts])
+    .map(norm)
+    .filter(Boolean);
+  if (expected.length === 0) return true;
+  return expected.some((acct) => paid === acct || paid.endsWith(acct) || acct.endsWith(paid));
+}
+
+/**
+ * Whitelist IP của SePay (tuỳ chọn, bật bằng SEPAY_IP_ALLOWLIST="1.2.3.4,5.6.7.0/24").
+ * Danh sách IP công bố ở https://developer.sepay.vn/vi/sepay-webhooks/dia-chi-ip — để trống
+ * nghĩa là KHÔNG chặn (mặc định), vì Caddy đứng trước nên IP đã được chuẩn hoá qua trusted_proxies.
+ */
+export function clientIpAllowed({ ip, allowlist } = {}) {
+  const entries = String(allowlist ?? "").split(",").map((part) => part.trim()).filter(Boolean);
+  if (entries.length === 0) return true;
+  const addr = String(ip ?? "").trim().replace(/^::ffff:/, "");
+  if (!addr) return false;
+  return entries.some((entry) => ipMatchesCidr(addr, entry));
+}
+
+function ipMatchesCidr(addr, entry) {
+  const [net, bitsRaw] = String(entry).split("/");
+  const bits = Number(bitsRaw);
+  if (!net.includes(":") && Number.isInteger(bits) && !net.includes("*")) {
+    const toInt = (v) => v.split(".").reduce((acc, part) => (acc << 8) + (Number(part) & 255), 0) >>> 0;
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(addr) || !/^\d+\.\d+\.\d+\.\d+$/.test(net)) return false;
+    const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+    return (toInt(addr) & mask) === (toInt(net) & mask);
+  }
+  if (entry.includes("*")) {
+    const pattern = new RegExp(`^${entry.split("*").map((p) => p.replace(/[.]/g, "\\.")).join("[^.]*")}$`);
+    return pattern.test(addr);
+  }
+  return addr === net;
+}

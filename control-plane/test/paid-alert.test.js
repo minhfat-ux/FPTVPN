@@ -123,3 +123,15 @@ test("guard: request có chữ ký thì không được hạ cấp sang API Key/
   assert.ok(block.includes("verifySepaySignature({"), "HMAC-SHA256 phải được kiểm trên raw body");
   assert.ok(block.includes("req.rawBody"), "chữ ký phải tính trên raw body (không phải body đã parse)");
 });
+
+test("guard: webhook kiểm tài khoản nhận, whitelist IP và ghi nhật ký đối soát", () => {
+  const block = indexSrc.slice(indexSrc.indexOf("sepay-webhook"), indexSrc.indexOf("app.get(\"/v1/payments/status"));
+  assert.ok(block.includes("accountMatches({"), "phải kiểm tiền vào đúng tài khoản nhận");
+  assert.ok(block.includes("SEPAY_IP_ALLOWLIST") && block.includes("clientIpAllowed({"),
+    "phải hỗ trợ whitelist IP của SePay");
+  assert.ok(block.includes("logSepayWebhook("), "phải ghi payload gốc để đối soát");
+  for (const decision of ["activated", "duplicate", "underpaid", "no-order-code", "wrong-account", "rejected-ip"]) {
+    assert.ok(block.includes(`"${decision}"`), `nhật ký phải phân biệt quyết định "${decision}"`);
+  }
+  assert.ok(indexSrc.includes("sepay-webhooks.log"), "đường dẫn nhật ký phải rõ ràng");
+});
