@@ -41,7 +41,7 @@ FIRE_TV_UA = "Mozilla/5.0 (Linux; Android 7.1.2; AFTMM Build/NS6265)"
 
 SITE_HOST = "meetflowai.site"
 API_HOST = "api.meetflowai.site"
-SITE_PATHS = ["/buy", "/ai/buy", "/guide", "/ai/guide", "/support", "/open", "/terms", "/privacy"]
+SITE_PATHS = ["/buy", "/ai/buy", "/guide", "/ai/guide", "/support", "/open", "/terms", "/privacy", "/PrivateVPN/Admin"]
 API_PATHS = ["/health", "/v1/app-version", "/v1/ai/app-version", "/v1/nodes"]
 
 

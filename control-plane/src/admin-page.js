@@ -725,14 +725,18 @@ export function adminPageHTML() {
 
     // Auto-detect the API base: when this page is served under
     // /PrivateVPN/Admin (Caddy strips the prefix), keep the prefix so API
-    // calls hit the proxy too; when served at /admin (SSH tunnel) use origin.
-    fields.baseUrl.value =
+    // calls hit the proxy too; when served at /admin (SSH tunnel/Funnel) use origin.
+    const detectedBase =
       window.location.origin +
       window.location.pathname.replace(/\\/admin\\/?$/i, "");
 
     // Persist token + base across visits so the page can auto-load nodes.
+    // Chỉ dùng lại base đã lưu khi nó CÙNG origin với trang đang mở: khi mạng
+    // chặn domain chính (GFW) phải mở panel qua đường khác (Tailscale Funnel),
+    // base cũ trỏ về domain đang bị chặn sẽ làm mọi lời gọi API treo.
     fields.token.value = localStorage.getItem("fvpn_admin_token") || "";
-    fields.baseUrl.value = localStorage.getItem("fvpn_admin_base") || fields.baseUrl.value;
+    const savedBase = localStorage.getItem("fvpn_admin_base") || "";
+    fields.baseUrl.value = savedBase.startsWith(window.location.origin) ? savedBase : detectedBase;
     fields.token.addEventListener("input", () => localStorage.setItem("fvpn_admin_token", fields.token.value.trim()));
     fields.baseUrl.addEventListener("input", () => localStorage.setItem("fvpn_admin_base", fields.baseUrl.value));
 

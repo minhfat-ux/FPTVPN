@@ -146,6 +146,15 @@ WireGuard mesh**; this appendix records the current reality.
   thời lượng kết nối, rx/tx). Peer của node remote đọc qua `ssh_target`
   (`wg show <iface> dump`); không dùng API geolocation bên thứ ba nên IP client không
   rời khỏi server (NFR-PRIV-001).
+  **2 đường vào panel** (dùng khi mạng bị chặn IP node, vd GFW):
+  1. `https://meetflowai.site/PrivateVPN/Admin` — qua Caddy (prefix bị strip), dùng khi
+     mạng không bị chặn.
+  2. `https://fcnvpn.tail303be3.ts.net/admin` — qua **Tailscale Funnel** → `cp-proxy`
+     (node-1) → control plane node-2; đường này **xuyên được mạng chặn**, và vì đi thẳng
+     vào control plane nên đường dẫn **KHÔNG có prefix** `/PrivateVPN`.
+  Bảng điều khiển tự suy `Base URL` cho API từ `window.location`; base đã lưu trong
+  localStorage chỉ được dùng lại khi **cùng origin** với trang đang mở — đổi đường vào
+  (domain ↔ Funnel) sẽ tự dùng base mới, tránh gọi API về domain đang bị chặn.
 
 ### B3. Provisioning flow (two modes; login = email-only, owner decision)
 
