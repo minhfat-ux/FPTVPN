@@ -91,3 +91,13 @@ test("guard: tiền vào không khớp đơn thì có cảnh báo chủ shop", (
   assert.ok(block.includes("fireUnmatchedAlert("), "nhánh webhook phải gọi cảnh báo");
   assert.ok(block.includes("chuyển thiếu"), "chuyển thiếu tiền cũng phải cảnh báo");
 });
+
+test("guard: mã đơn phải là duy nhất (không trùng khi 2 khách mua trong cùng giây)", () => {
+  assert.ok(indexSrc.includes("async function freshOrderCode()"), "phải có bộ sinh mã đơn duy nhất");
+  assert.ok(/while \(code < 9_999_999_999\)[\s\S]{0,200}?code \+= 1/.test(indexSrc),
+    "phải nhích mã khi mã đã bị dùng (giữ 10 chữ số cho normalizeOrderCode)");
+  const used = [...indexSrc.matchAll(/orderCode = await freshOrderCode\(\)/g)].length;
+  assert.equal(used, 2, "cả luồng VPN và MeetFlow AI đều phải dùng freshOrderCode()");
+  assert.ok(!/orderCode = Math\.floor\(Date\.now\(\) \/ 1000\)/.test(indexSrc),
+    "không còn chỗ nào tự sinh mã đơn từ epoch giây");
+});
