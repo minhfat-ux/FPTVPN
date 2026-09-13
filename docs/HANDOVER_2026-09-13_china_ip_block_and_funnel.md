@@ -165,3 +165,36 @@ hoặc xếp node-1 lên trước cho client ở mạng bị chặn.
 - Funnel API từ đường bị chặn: **200 / 1.56s** ✓
 - `wsrelay-hy` ✓ `wsrelay` ✓ `cp-proxy` ✓ hysteria(node-1) ×3 ✓ cloudflared ×3 ✓ Funnel 4 entry "Funnel on" ✓
 - Android đã **có mạng thật** qua Funnel+WS (chậm), nhưng cầu WS chết thì tunnel treo ở trạng thái "connected" → đúng việc Tầng 1 phải sửa.
+
+## 7. Trạng thái 14/09/2026 — bỏ store, phát qua web (đọc mục này trước khi làm tiếp)
+
+Quyết định của chủ dự án: **không nộp App Store / Google Play nữa**. Mọi gói bán qua
+`meetflowai.site/buy` (QR/chuyển khoản), mua **một lần, KHÔNG tự động gia hạn**. Quyền Premium
+lấy từ `subscription_status.is_active` của backend (`GET /v1/auth/session`).
+
+Đã làm xong:
+- Xoá StoreKit (iOS + macOS) và Play Billing (Android); paywall cả 3 nền tảng là WebView `/buy`.
+- iOS phát bằng file IPA của mình: `GET /v1/downloads/ios` đọc `/root/flowvpn-ipa/VPNFlow-latest.ipa`
+  trên **node-2** (route đã deploy — hiện trả 404 vì chưa có file).
+- Dọn mọi chỗ khách ĐỌC thấy còn nhắc store: FAQ `/support` (5 ngôn ngữ), câu "cần cập nhật"
+  (5 ngôn ngữ), nút "Điều khoản sử dụng" (trước là EULA của Apple), tên app `VPNFlow`.
+- Ép cập nhật iOS nay trả link tải IPA thay vì link App Store (`store_url` trước đây RỖNG ⇒ nút
+  "Cập nhật" trên máy khách đi vào trang App Store không có app).
+- Phiên bản iOS/macOS **1.3.2 (build 12)** — khớp Android `versionCode 12` / `1.3.2`.
+- Bằng chứng đầy đủ: `evidence/2026-09-14-support-faq-and-ios-update-store-removal.log`.
+
+Còn lại (cần người có quyền — agent bị cấm ssh/scp/deploy):
+1. `bash scripts/upload-ios-ipa.sh` — đưa IPA lên node-2 (script mới; SSH thẳng node-2 từ Mac
+   đã kiểm là mở cổng 22).
+2. Deploy control plane (gồm commit `support-page` + `app-version`) rồi kiểm lại `/support`:
+   phải còn **0** chữ `App Store` / `Apple ID` / `reportaproblem`.
+3. Đặt `latest_ios_version = 1.3.2` trong tab admin để máy cũ được nhắc cập nhật.
+4. ⚠️ **Cảnh báo thương mại**: IPA đang ký `development` (4 UDID) nhưng `/buy` mời MỌI khách
+   "Tải cho iPhone / iPad" — máy không có UDID trong profile **không cài được**. Cần ghi rõ trên
+   `/buy`, hoặc bỏ nút iOS cho tới khi có kênh cài được (ad-hoc/enterprise/TestFlight).
+5. `payments.js` còn nhánh `iosLineStore` + badge App Store/TestFlight; chúng chỉ hiện khi biến
+   môi trường `APP_STORE_URL_*`/TestFlight được cấu hình ⇒ **kiểm env server, nên xoá hẳn**.
+   (File này đang được một session khác sửa dở — đừng sửa chồng.)
+6. `control-plane/src/index.js` còn `DEFAULT_STORE_URL = APP_STORE_URL ?? "https://apps.apple.com/app/flowvpn"`
+   và field `app_store_url` trong tab admin: giờ **vô tác dụng** (app-version không đọc nữa) —
+   nên xoá cùng lúc với mục 5.

@@ -1,5 +1,12 @@
 # App Store Metadata — VPNFlow
 
+> ⚠️ **KHÔNG CÒN DÙNG từ 14/09/2026.** Chủ dự án bỏ App Store + Google Play và đã xoá toàn bộ
+> StoreKit / Play Billing khỏi app: mọi gói bán qua trang web `meetflowai.site/buy`, mua một
+> lần, **không tự động gia hạn**, hoàn tiền qua email. Vì vậy mọi câu trong file này nói về
+> "subscription auto-renews", "cancel in your Apple ID settings" hay giá theo IAP **đều sai**
+> với sản phẩm hiện tại. Giữ lại chỉ để tham khảo lịch sử; nguồn sự thật về giá/gói là
+> `control-plane` (tab admin → plans) và trang `/buy`.
+
 > Promotional Text (hiển thị đầu trang sản phẩm, giới hạn **170 ký tự**, đổi bất kỳ lúc nào không cần review).
 > Ghi 2026-08-24 — **bản macOS** (iPhone-sized UI, WireGuard + NetworkExtension, nhiều exit node VN).
 

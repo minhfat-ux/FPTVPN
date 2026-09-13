@@ -1,0 +1,138 @@
+# 2026-09-14 — Dọn tàn dư store: FAQ trang hỗ trợ, ép cập nhật iOS, bump phiên bản
+
+Người thực hiện: agent chính (DSH). Mọi số liệu dưới đây là output THẬT, dán nguyên văn.
+Mục đích: (1) FAQ trang hỗ trợ nói sai sự thật với khách, (2) nút "Cập nhật" trên iOS trỏ
+vào App Store không có app, (3) phiên bản iOS/macOS lệch Android.
+
+## 1. Bằng chứng lỗi — trạng thái PRODUCTION lúc 01:30 (trước khi sửa)
+
+$ curl -s https://meetflowai.site/support > live-support.html
+$ for w in reportaproblem "App Store" "Apple ID" "Restore Purchases" FlowVPN; do ...; done
+  reportaproblem       1
+  App Store            4
+  Apple ID             2
+  Restore Purchases    1
+  FlowVPN              3
+→ Khách đang đọc đúng những câu hướng dẫn huỷ/hoàn tiền qua App Store, và tên app cũ FlowVPN.
+
+$ curl -s -A "PrivateVPN/1.2.3 CFNetwork/1494 Darwin/23.4.0" https://api.meetflowai.site/v1/app-version
+{"platform":"ios","minimum_version":"0.0.0","latest_version":"1.2.3","store_url":""}
+→ store_url RỖNG ⇒ app iOS lùi về https://apps.apple.com/search?term=VPNFlow (trang tìm kiếm
+  App Store, nơi KHÔNG có app) ⇒ khách bấm "Cập nhật" là đi vào ngõ cụt. Lỗi đang sống.
+
+$ curl -s -o /dev/null -w "%{http_code} %{size_download}\n" https://api.meetflowai.site/v1/downloads/ios
+404 46
+$ curl -s https://api.meetflowai.site/v1/downloads/ios
+IPA not found. Contact support@meetflowai.site
+→ 46 byte = đúng chuỗi của route trong code ⇒ CODE ĐÃ DEPLOY (commit 9fb8b58), chỉ THIẾU FILE
+  IPA trên node-2 (/root/flowvpn-ipa/VPNFlow-latest.ipa). Trang /buy đã render link
+  https://api.meetflowai.site/v1/downloads/ios nhưng tải về là 404.
+
+$ curl -s -o /dev/null -w "%{http_code}\n" https://api.meetflowai.site/v1/auth/session
+401
+→ Route GET /v1/auth/session cũng đã deploy (401 = cần token).
+
+$ for u in https://meetflowai.site/terms https://meetflowai.site/FlowVPNPrivacy.html https://meetflowai.site/support https://meetflowai.site/buy; do curl -s -o /dev/null -w "..."; done
+  https://meetflowai.site/terms                  200 text/html 5185b
+  https://meetflowai.site/FlowVPNPrivacy.html    200 text/html 14412b
+  https://meetflowai.site/support                200 text/html 5975b
+  https://meetflowai.site/buy                    200 text/html 39790b
+→ /terms có thật ⇒ trỏ nút "Điều khoản sử dụng" trong app vào đây là hợp lệ.
+
+$ nc -z 103.6.234.233 22   → OPEN
+$ nc -z 103.173.155.50 22  → OPEN
+→ Từ máy này SSH thẳng node-2 được (TCP), scp IPA không cần đi vòng qua node-1.
+
+## 2. Sửa + kiểm chứng
+
+### 2.1 FAQ trang hỗ trợ (control-plane/src/support-page.js)
+- Bỏ 3 câu hỏi/đáp kiểu store ở cả 5 ngôn ngữ, thay bằng: gói web mua MỘT LẦN không tự động
+  gia hạn; hoàn tiền gửi email kèm mã đơn trong 7 ngày; đổi máy chỉ cần đăng nhập lại
+  (+ "Làm mới trạng thái gói" / "Refresh Purchase Status").
+- Xoá khoá `appStoreNote` + khối `<div class="note">` + CSS `.note`.
+- Sửa tên app trên trang: "FlowVPN" → "VPNFlow".
+
+$ cd control-plane && node --test test/support-page.test.js
+✔ trang hỗ trợ không còn nhắc tới kênh app store (5 ngôn ngữ)
+✔ trang hỗ trợ nói đúng cơ chế mua một lần, không tự động gia hạn
+✔ trang hỗ trợ vẫn giữ hoàn tiền theo kênh web và nút làm mới trạng thái
+✔ tên app trên trang hỗ trợ là VPNFlow, không phải FlowVPN
+✔ trang MeetFlow AI cũng không còn nhắc tới kênh app store
+✔ link Điều khoản sử dụng vẫn được render khi server truyền vào
+ℹ tests 6 / pass 6 / fail 0
+
+Test có biết ĐỎ không (tiêm lại chữ "App Store" vào bản vi rồi khôi phục):
+--- mutated: expect FAIL ---
+ℹ tests 6 / pass 4 / fail 2
+  AssertionError: trang hỗ trợ (vi) vẫn còn chữ "App Store" — kênh store đã bị bỏ, khách làm theo sẽ vô ích
+--- restored: expect PASS ---
+ℹ tests 6 / pass 6 / fail 0
+sha256 trước/sau khi khôi phục: 2fd384d5f98bde47c37e5dc978c73e818fffb4cf0c79a6aa7df1beaec8ec12b8 (khớp)
+
+### 2.2 Ép cập nhật iOS (control-plane/src/app-version.js)
+- iosVersionPayload trả `ipa_url` = `${baseUrl}/v1/downloads/ios` (hoặc `ios_ipa_url` nếu cấu
+  hình) và đặt luôn vào `store_url` cho các bản iOS đang cài chỉ đọc khoá cũ. Không đọc
+  `app_store_url` nữa.
+- App: `ForceUpdateView.swift` + `ForceUpdateViewMac.swift` bỏ fallback về App Store, lùi về
+  https://meetflowai.site/buy; `AppVersionInfo` thêm `ipa_url` (ưu tiên) + `downloadURL`.
+
+$ node --test test/app-version.test.js
+✔ payload iOS nay trỏ về file IPA của mình, KHÔNG còn link App Store
+✔ payload iOS: ios_ipa_url riêng trong cấu hình được ưu tiên
+ℹ tests 11 / pass 11 / fail 0
+
+### 2.3 Bump phiên bản (project.yml) — khớp Android (versionCode 12 / versionName 1.3.2)
+iOS app: MARKETING_VERSION 1.2.3→1.3.2, CURRENT_PROJECT_VERSION 2→12
+iOS tunnel: CFBundleShortVersionString 1.2.3→1.3.2, CFBundleVersion 2→12
+macOS app + macOS tunnel: 1.2.2/1 → 1.3.2/12
+(grep "1.2.3\"|1.2.2\"" project.yml → 0 dòng)
+
+## 3. Việc còn lại (không làm được từ trong repo — cần người có quyền)
+1. Deploy control plane (gồm support-page + app-version) rồi kiểm lại /support: 0 chữ store.
+2. Đưa IPA lên node-2: `bash scripts/upload-ios-ipa.sh` (script mới, đã `bash -n` OK; CHƯA chạy
+   thật vì agent chính bị cấm ssh/scp).
+3. Đặt `latest_ios_version` = 1.3.2 trong tab admin để máy cũ được nhắc cập nhật.
+
+## 4. Ghi chú quá trình (để người sau không lặp lại)
+- Commit 9fb8b58 (của agent chính) đã GHI ĐÈ control-plane/src/index.js từ bản cũ, làm mất
+  toàn bộ route webhook SePay; một session khác phát hiện và khôi phục ở ba4caec kèm test
+  chống mất route. Kiểm lại trên HEAD sạch: node --test → 110 pass / 0 fail.
+- Khi quét "khoá chết" phải quét CẢ `src/test/**`: khoá `subscriptionDisclosure` không còn
+  dùng trong UI nhưng vẫn được một unit test đọc ⇒ suýt bị xoá oan.
+- `grep "play.google"` KHÔNG bắt được "Google Play" (dấu `.` khớp mọi ký tự). Dùng
+  `grep -E "Google Play|App Store|Apple ID|iTunes|apps\.apple\.com"`.
+
+## 5. Sản phẩm cuối — kiểm trên chính file đã đóng gói
+
+### 5.1 APK Android (byte-search classes.dex, không tin grep văn bản)
+File: $HOME/.vpnflow-build/app/outputs/apk/modern/release/app-modern-release.apk (92 MB, 01:40)
+  Monthly_Premium   0      Google Play   0      billingclient  0      Apple ID   0
+  Yearly_Premium    0      App Store     0      reportaproblem 0
+  meetflowai.site/terms 1 | meetflowai.site/buy 6 | v1/downloads/android 1
+
+### 5.2 IPA iOS 1.3.2 (archive + export `development`)
+$ bash scripts/archive-appstore.sh ios diawi
+** ARCHIVE SUCCEEDED ** / ** EXPORT SUCCEEDED ** → build/ios-diawi-export/ipa/FlowVPN.ipa
+
+Trong gói:
+  CFBundleDisplayName = VPNFlow            (đúng tên app)
+  CFBundleShortVersionString = 1.3.2       CFBundleVersion = 12
+  Extension: 1.3.2 / 12                    (khớp app — lệch là bị từ chối khi cài)
+  ký: Apple Development, team G6XW3RN6LJ, profile 4 thiết bị, hết hạn 2027-09-10
+
+Byte-search binary đã phát hành (app + extension):
+  App Store 0 | Apple ID 0 | StoreKit 0 | Monthly_Premium 0 | Yearly_Premium 0
+  Mac_monthly 0 | Mac_yearly 0 | reportaproblem 0 | stdeula 0 | Restore Purchases 0
+  meetflowai.site/terms 1 | meetflowai.site/buy 7 | VPNFlow 11
+  ("StoreKit" trước đây xuất hiện 5 lần trong binary 1.2.3 — nay 0.)
+  "FlowVPN" còn 2 lần, cả hai hợp lệ: URL trang privacy `/FlowVPNPrivacy.html` (tên file
+  trên server, đổi là chết link) và tên profile VPN cũ trong danh sách migrate để xoá
+  profile cũ của khách.
+  KHÔNG có `v1/downloads/ios` trong binary là ĐÚNG thiết kế: link tải do server trả trong
+  payload `/v1/app-version` (`ipa_url`/`store_url`), app chỉ giữ fallback `meetflowai.site/buy`.
+
+Đã đưa vào thư mục phát hành (nguồn để upload lên node-2):
+  /Volumes/BIWIN/Release/IoS/VPNFlow-latest.ipa               (= 1.3.2, 4.7 MB)
+  /Volumes/BIWIN/Release/IoS/VPNFlow-1.3.2-b12-20260914.ipa
+  sha256 VPNFlow-latest.ipa = 7d47bf63ba8406ef6da7bdf8cd10354a2e531ff3bb5bb4558d1e7fdb9c5d1b41
+  (bản 1.2.3 của buổi sáng vẫn nằm đó để đối chiếu — DÙNG file ...latest.ipa)
