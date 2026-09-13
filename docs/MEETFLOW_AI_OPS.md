@@ -436,9 +436,56 @@ Environment=PUBLIC_SITE_URL=https://meetflowai.site   # domain hiển thị tron
 ```
 Sau khi sửa: `systemctl daemon-reload && systemctl restart flowvpn-cp`.
 
-## 6. Email — chống vào Junk / Spam (QUAN TRỌNG)
+## 6. Email — chống vào Junk / Spam (ĐÃ XỬ LÝ 13/09/2026)
 
-### Chẩn đoán thật (13/09/2026, bằng `scripts/check-email-auth.sh`)
+### Trạng thái hiện tại: gửi qua **Resend**, DKIM **pass** ✅
+
+Đã chuyển toàn bộ thư hệ thống (OTP đăng nhập, link xác thực, nhắc gia hạn, báo đơn cho chủ shop)
+sang **Resend**. Bằng chứng thật lấy từ header thư do chính mailer gửi:
+
+```bash
+# gửi OTP thật tới hộp thư nội bộ rồi đọc header trong INBOX
+curl -s -X POST -H 'content-type: application/json' \
+  -d '{"email":"no-reply@meetflowai.site","lang":"vi"}' \
+  https://api.meetflowai.site/v1/auth/email/start
+```
+
+Log VPS + header nhận được:
+
+```
+# journalctl -u flowvpn-cp
+mail transport=resend (resend if RESEND_API_KEY is set)
+[otp] sent to no-reply@meetflowai.site via resend id=<id>
+
+# Resend API GET /emails/<id> → last_event: delivered
+
+# Header thư trong INBOX (do server nhận mail92231 chấm):
+Authentication-Results: mail92231.maychuemail.com (amavis);
+    dkim=pass (1024-bit key) header.d=meetflowai.site header.b="..."
+    dkim=pass (1024-bit key) header.d=amazonses.com header.b="..."
+Return-Path: <...@rsend.meetflowai.site>
+  Received: from e234-57.smtp-out.ap-northeast-1.amazonses.com ... by mail92231.maychuemail.com (Postfix)
+```
+
+`dkim=pass header.d=meetflowai.site` + `From: no-reply@meetflowai.site` ⇒ **DMARC align pass**
+(kể cả khi DMARC đang `p=none`).
+
+### Bản ghi DNS đã thêm ở PA Vietnam (`ns1.pavietnam.vn`)
+
+| Bản ghi | Giá trị | Trạng thái Resend |
+|---|---|---|
+| `CNAME resend._domainkey.meetflowai.site` | khoá DKIM của Resend | verified |
+| `CNAME rsend.meetflowai.site` | return-path/SPF của Resend | verified (đã verify, không cần thêm gì) |
+| SPF (subdomain `send`) | do Resend cấp | verified |
+| MX (subdomain `send`) | do Resend cấp | **cố tình bỏ** (chỉ dùng để *nhận* thư, không cần) |
+
+Resend báo `partially_verified` là **bình thường**: mục *Receiving* (MX ở `send`) mình cố ý không thêm,
+vì hộp thư vẫn nằm ở maychuemail. Gửi thư **không** phụ thuộc mục đó.
+
+⚠️ Lỗi đã gặp: nếu ở `send.meetflowai.site` còn **MX/TXT cũ** thì không thêm được `CNAME` (DNS không
+cho CNAME đứng cạnh bản ghi khác) → phải **xoá MX/TXT ở `send` trước**, rồi mới thêm CNAME.
+
+### Vì sao phải đổi (chẩn đoán cũ, giữ lại để tra cứu)
 
 ```
 SPF check:     pass          ✅  (include:spf.maychuemail.com)
@@ -446,53 +493,33 @@ SPF check:     pass          ✅  (include:spf.maychuemail.com)
 DKIM check:    permerror     ❌  key "dkim._domainkey.maychuemail.com" doesn't exist (NXDOMAIN)
 ```
 
-Nguyên nhân: máy chủ mail hiện tại **có ký DKIM nhưng ký bằng tên miền của họ**
-(`d=maychuemail.com`) và khoá công khai của selector đó **không tồn tại trong DNS**.
-Thư vì thế mang **chữ ký hỏng (permerror)** — với Gmail còn tệ hơn là không ký.
-Tên miền `meetflowai.site` hiện **chưa có DKIM** nào.
+Máy chủ mail cũ **có ký DKIM nhưng ký bằng tên miền của họ** (`d=maychuemail.com`) và khoá công khai
+của selector đó **NXDOMAIN** ⇒ thư mang **chữ ký hỏng (permerror)**, với Gmail còn tệ hơn là không ký.
+`meetflowai.site` khi đó chưa có DKIM nào. (Cách B — yêu cầu maychuemail bật DKIM theo domain khách —
+vẫn để ngỏ nếu sau này muốn quay lại SMTP.)
 
-DNS hiện tại: NS ở **PA Vietnam** (`ns1.pavietnam.vn`), MX `mail92231.maychuemail.com`,
-DMARC đang là `v=DMARC1; p=none` (không có `rua=` nên không nhận báo cáo).
+### Bật / tắt Resend trên VPS (1 lệnh, key không lộ ra màn hình)
 
-### Cách xử lý
-
-**Cách A — gửi qua Resend (khuyến nghị, code đã sẵn sàng)**
-
-1. [resend.com](https://resend.com/docs/add-a-domain) → *Add domain* = `meetflowai.site`
-2. Thêm các bản ghi DNS Resend cung cấp vào **PA Vietnam** (DKIM `resend._domainkey` + MX/TXT cho subdomain `send`)
-3. Bấm **Verify** trong Resend
-4. Bật key trên VPS (1 lệnh, key không lộ ra màn hình):
-   ```bash
-   scripts/set-resend-key.sh          # hỏi key (re_...), ghi vào systemd drop-in rồi restart
-   scripts/set-resend-key.sh --clear  # quay lại SMTP nếu cần
-   ```
-5. Kiểm tra: `scripts/check-email-auth.sh` → phải thấy `DKIM check: pass`
+```bash
+scripts/set-resend-key.sh          # hỏi key (re_...), ghi vào systemd drop-in rồi restart
+scripts/set-resend-key.sh --clear  # quay lại SMTP nếu cần
+```
 
 Mailer tự chọn transport: **có `RESEND_API_KEY` → Resend**, không có → SMTP như cũ.
 Nếu Resend lỗi thì **không tự fallback** sang SMTP (tránh gửi trùng) — log ghi rõ `Resend: ...`.
 Log lúc khởi động in `mail transport=smtp|resend|none`.
 
-**Cách B — yêu cầu nhà cung cấp mail sửa**
+### Việc còn lại (không chặn gì)
 
-Gửi hỗ trợ maychuemail: *“Bật DKIM ký bằng domain khách (`meetflowai.site`) và sửa selector
-`dkim._domainkey.maychuemail.com` đang NXDOMAIN”*. Họ sẽ đưa 1 TXT dạng
-`default._domainkey.meetflowai.site` → thêm vào DNS PA Vietnam.
-
-### Sau khi đổi DNS, luôn kiểm tra lại
-
-```bash
-scripts/check-email-auth.sh          # gửi thư test + đọc báo cáo SPF/DKIM/DMARC
-dig +short TXT default._domainkey.meetflowai.site   # phải có khoá công khai
-```
-
-### Nên sửa thêm DMARC (30 giây)
-
-```
-TXT _dmarc.meetflowai.site
-v=DMARC1; p=none; rua=mailto:dmarc@meetflowai.site; fo=1
-```
-(ổn định 1–2 tuần thì nâng `p=quarantine`). Lưu ý: mỗi tên miền **chỉ được có MỘT bản ghi TXT SPF** —
-nếu cần thêm include thì **gộp** vào bản ghi hiện có, đừng tạo bản ghi thứ hai.
+- Thêm `rua=` vào DMARC để nhận báo cáo tổng hợp:
+  ```
+  TXT _dmarc.meetflowai.site
+  v=DMARC1; p=none; rua=mailto:dmarc@meetflowai.site; fo=1
+  ```
+  Ổn định 1–2 tuần thì nâng `p=quarantine`. Lưu ý: mỗi tên miền **chỉ được có MỘT bản ghi TXT SPF** —
+  cần thêm include thì **gộp** vào bản ghi hiện có, đừng tạo bản ghi thứ hai.
+- Khoá DKIM Resend đang là **1024-bit**; muốn 2048-bit thì xoay khoá trong Resend rồi cập nhật CNAME.
+- Có thể chạy lại `scripts/check-email-auth.sh` bất cứ lúc nào để xem báo cáo SPF/DKIM/DMARC của Port25.
 
 Đã tối ưu sẵn trong code: `text/plain` cho mọi email, `Reply-To: support@meetflowai.site`,
 From đúng thương hiệu theo sản phẩm, link dùng domain đẹp. Log gửi thư ghi `via smtp|resend`,
