@@ -639,6 +639,39 @@ curl -s "https://api.meetflowai.site/v1/app-version?platform=android"
 curl -sI https://meetflowai.site/v1/downloads/android                   # APK đang phát
 ```
 
+### Caddy ở edge — thêm route mới trong Node thì PHẢI thêm `handle` (13/09/2026)
+
+`meetflowai.site` **không** proxy toàn bộ vào control-plane: mỗi đường dẫn công khai phải có
+`handle` riêng trong `/etc/caddy/Caddyfile`, còn lại rơi vào `file_server` (`/var/www/flowvpn`).
+Vì vậy một route mới ở Node có thể **404 ở ngoài** dù gọi thẳng cổng 7778 lại 200 — đúng ca
+`/guide`: hoá đơn VPNFlow nào cũng link tới trang hướng dẫn này, nhưng edge trả 404 cho tới khi
+thêm `handle /guide*`.
+
+| Đường dẫn | Xử lý ở edge |
+|---|---|
+| `/buy`, `/buy/*`, `/v1/payments/*` | → control-plane 7778 |
+| `/ai/*`, `/v1/ai/*` (gồm `/ai/buy`, `/ai/guide`, `/ai/support`) | → control-plane 7778 |
+| `/guide`, `/guide/*` | → control-plane 7778 (thêm 13/09/2026) |
+| `/support`, `/support/*` | → control-plane 7778 |
+| `/v1/downloads/android`, `/v1/downloads/android-legacy` | → control-plane 7778 |
+| `/assets/*` | → control-plane 7778 (logo trang buy) |
+| `/open`, `/terms`, `/privacy`, `/PrivateVPN/*`, `/dl/*` | file tĩnh trong `/var/www/flowvpn` |
+| còn lại | `file_server` (404 nếu không có file) |
+
+Kiểm nhanh sau khi sửa Caddy — nhớ so **cả hai** phía (edge vs Node):
+
+```bash
+for p in /guide /support /ai/guide /buy /open; do
+  echo "$(curl -s -o /dev/null -w '%{http_code}' https://meetflowai.site$p) edge $p"
+done
+ssh VPS 'for p in /guide /support /ai/guide; do
+  echo "$(curl -s -o /dev/null -w "%{http_code}" -H "Host: meetflowai.site" http://127.0.0.1:7778$p) node $p"
+done'
+```
+
+Sửa Caddyfile: backup → `caddy validate --config /etc/caddy/Caddyfile` → `caddy reload`.
+Bản backup gần nhất nằm ở `/root/Caddyfile.backup-<timestamp>`.
+
 ### Đĩa trên VPS (theo dõi — đã có lúc chỉ còn 2.1G/20G)
 
 ```bash
