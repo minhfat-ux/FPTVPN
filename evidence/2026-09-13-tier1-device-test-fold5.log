@@ -1,0 +1,93 @@
+=== BẰNG CHỨNG THIẾT BỊ THẬT: Tầng 1 trên Galaxy Z Fold5 (SM-F9460), Android 16 ===
+Thời điểm: 2026-09-13 22:26-22:30 CST | adb qua USB (không phải qua mạng)
+APK: app-modern-release.apk (versionCode 12 / 1.3.2), cài đè lên bản cũ
+Chữ ký APK cài đè: SHA-256 dc6e484bf8ef2eea0dcd15a9192d8233fea1a05068b8ee4486cdc53f456b5e46
+  = KHỚP chữ ký bản đang cài => cài đè được, không mất dữ liệu/phiên đăng nhập.
+Mốc log trước khi cài: 172695 byte (chỉ đọc phần log MỚI để bằng chứng sạch).
+
+################ 1. FIX #1 CHẠY THẬT — 4/4 lần đều tự dựng lại được ################
+Chuỗi log nguyên văn (một lần điển hình):
+  22:27:36.247 I ws-relay: connected
+  22:27:37.109 I hy-udp:60276 protect=true local=:::35519 remote=127.0.0.1:60276 budget=15000ms up=800kbps down=4000kbps
+  22:27:37.125 I vpn: establish ok tun=154 underlying=underlying=wifi
+  22:27:37.129 I tunnel: UP (hy-udp:60276)
+  22:27:37.130 I hy-udp:60276 serve() start
+  22:27:37.250 W ws-relay: failed: Connection reset
+  22:27:37.251 W ws-relay: cầu WS chết (failed: Connection reset)
+  22:27:37.251 W ws-relay: failed: Connection reset -> dừng client để dựng lại transport
+  22:27:37.252 W transport ended on its own (hy-udp:60276 serve() returned) -> reconnecting
+  22:27:37.252 W tunnel: reconnecting / not serving
+
+  => serve() TRẢ VỀ sau 1ms kể từ khi cầu WS chết. Đây đúng là thứ trước kia không
+     xảy ra: tunnel nằm tunnelUp=true vĩnh viễn, người dùng thấy 'connected' mà
+     không có mạng, phải tự tắt/bật.
+
+Đếm trong 235 dòng log mới:
+  [ 6] cầu WS chết
+  [ 6] dựng lại transport
+  [ 6] serve() returned
+  [ 6] tunnel: UP
+  [ 6] ws-relay: connected
+  [21] attempt: quá
+  [23] Connection reset
+  [ 5] Unable to resolve host
+  => KHONG lan nao bi treo: moi lan cau WS chet (6) deu keo theo dung mot lan
+     'dung lai transport', mot lan serve() tra ve, va tunnel len lai (6).
+     Truoc fix: serve() khong tra ve, tunnel nam tunnelUp=true -> phai tu tat/bat.
+
+################ 2. FIX #3 VA #5 CUNG CHAY THAT ################
+  #3 tran thoi gian bat tay: 'attempt: quá 4000ms chưa lên -> dừng client để thử đường khác'
+     xuat hien 21 lan. Khong co no thi moi cong chet treo tới hạn nội bộ của QUIC.
+  #3 budget rieng cho duong WS dai hon: 'hy-udp:60276 ... budget=15000ms' => dung 15s.
+  #5 brutal rieng cho relay: '... up=800kbps down=4000kbps' => dung HY_RELAY_*_KBPS,
+     khong con dung chung 20Mbps cua duong truc tiep.
+
+################ 3. NHUNG APP VAN KHONG GIU DUOC TUNNEL — NGUYEN NHAN SÂU HƠN ################
+Sau khi fix, tunnel tu dung lai duoc, NHUNG khong lan nao giu duoc:
+  - ws-relay mo duoc ('connected' 6 lan) roi bi 'Connection reset' ngay sau khi TUN len
+  - 23 lan 'Connection reset', 5 lan 'Unable to resolve host fcnvpn.tail303be3.ts.net'
+
+DAU VET NGUYEN NHAN (bang chung manh, chua chung minh tron ven):
+  8/8 lan socket TCP relay bao 'protect=false' VA co local address = IP cua TUN:
+    hy-tcp:8443 socket protect=false local=/100.100.100.101:48586
+    hy-tcp:9445 socket protect=false local=/100.100.100.101:36030
+    hy-tcp:8443 socket protect=false local=/100.100.100.101:34058
+    hy-tcp:9445 socket protect=false local=/100.100.100.101:52030
+  tuc la socket KHONG duoc protect nen di XUYEN QUA tunnel (loop), roi connect()
+  tra ve true gia tao vi nguoi dung-space stack cua tunnel tu tra loi SYN.
+
+  Doi chieu: socket UDP thi protect LAI AN (protect=true). Tức:
+    VpnService.protect(DatagramSocket) -> true
+    VpnService.protect(java.net.Socket) -> FALSE (tren may nay, 8/8 lan)
+
+  Va WSRelayBridge dung CHINH protector do: HysteriaVpnService.kt:338
+    protector = { sock -> protect(sock) }
+  => socket TCP cua OkHttp/WS cung khong duoc protect => bi hut vao tunnel =>
+     'Connection reset' ngay sau khi TUN len. Khop dung dau hieu trong log.
+
+  Vi sao duong WireGuard thi OK: VPNManager.protectRelay() KHONG dung protect() cua
+  chinh no, ma bang reflection lay VpnService dang hoat dong cua WireGuard
+  (GoBackend.vpnService) roi goi protect() tren instance DO (VPNManager.kt:152-169,
+  goi sau khi tunnel WG da UP). Tức code truoc day DA biet cach nay moi an.
+
+  Ghi chu: 'protect=false' CO TU TRUOC fix — dem trong log cu (172695 byte dau):
+    4 lan 'protect=false', 19 lan 'Connection reset', 13 lan 'ws-relay: connected'.
+    => Day KHONG phai do thay doi Tầng 1 gay ra.
+
+################ 4. PHAT HIEN THEM: watchdog CU LA CODE CHET TREN DUONG NAY ################
+Canh bao cu 'TUNNEL UP BUT NO TRAFFIC' phu thuoc DiagnosticsLog.relayLastRxAt,
+  nhung bien do CHI duoc set o WGRelay.kt:110 (duong WireGuard-over-TCP).
+  Duong Hysteria/WS khong bao gio set => relayLastRxAt luon 0 => rxSilenceSec = -1
+  => dieu kien '> 45' khong bao gio dung. Do la ly do log cu co 0 lan canh bao nay.
+  Tức watchdog cu khong chi 'chi warn' nhu handover mo ta, ma la VO HIEU hoan toan
+  tren duong dang dung. Watchdog moi do bang HTTP/DNS that qua tunnel, khong phu thuoc
+  bien do => khong co loi nay.
+
+################ 5. KET LUAN ################
+  a) Tầng 1 #1 da duoc CHUNG MINH TREN THIET BAT THAT: 6/6 lan cau WS chet deu tu
+     dung lai, khong lan nao treo. Day la thu ma RULE-TEST-002 doi hoi.
+  b) #3 va #5 cung duoc xac nhan trong log that.
+  c) NHUNG nguoi dung VAN CHUA CO MANG: nguyen nhan nam o cho khac — socket TCP
+     cua duong relay (ca TCP relay lan WS) khong duoc protect nen bi hut vao tunnel.
+     Day la viec tiep theo, ngoai 5 hang muc ban dau.
+  d) Da force-stop app sau khi do de khong quay vong lien tuc.
