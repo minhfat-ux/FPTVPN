@@ -93,11 +93,21 @@ test("guard: tiền vào không khớp đơn thì có cảnh báo chủ shop", (
 });
 
 test("guard: mã đơn phải là duy nhất (không trùng khi 2 khách mua trong cùng giây)", () => {
-  assert.ok(indexSrc.includes("async function freshOrderCode()"), "phải có bộ sinh mã đơn duy nhất");
-  assert.ok(/while \(code < 9_999_999_999\)[\s\S]{0,200}?code \+= 1/.test(indexSrc),
+  assert.ok(indexSrc.includes("async function createPendingOrder("), "phải có bộ cấp mã đơn duy nhất");
+  assert.ok(/function withOrderCodeLock\(fn\)/.test(indexSrc),
+    "cấp mã + ghi đơn phải nằm trong hàng đợi chung (file JSON đọc-sửa-ghi, không tự bảo vệ)");
+  assert.ok(/while \(orderCode < 9_999_999_999\)[\s\S]{0,300}?orderCode \+= 1/.test(indexSrc),
     "phải nhích mã khi mã đã bị dùng (giữ 10 chữ số cho normalizeOrderCode)");
-  const used = [...indexSrc.matchAll(/orderCode = await freshOrderCode\(\)/g)].length;
-  assert.equal(used, 2, "cả luồng VPN và MeetFlow AI đều phải dùng freshOrderCode()");
-  assert.ok(!/orderCode = Math\.floor\(Date\.now\(\) \/ 1000\)/.test(indexSrc),
-    "không còn chỗ nào tự sinh mã đơn từ epoch giây");
+  const used = [...indexSrc.matchAll(/await createPendingOrder\(\{/g)].length;
+  assert.equal(used, 2, "cả luồng VPN và MeetFlow AI đều phải dùng createPendingOrder()");
+  assert.equal((indexSrc.match(/Math\.floor\(Date\.now\(\) \/ 1000\)/g) ?? []).length, 1,
+    "chỉ createPendingOrder() được sinh mã đơn từ epoch giây");
+  const allocator = indexSrc.slice(
+    indexSrc.indexOf("async function createPendingOrder("),
+    indexSrc.indexOf("app.post(\"/v1/payments/create\""),
+  );
+  const writes = (indexSrc.match(/(?:authStore|aiStore)\.recordPendingPayment\(/g) ?? []).length;
+  const writesInAllocator = (allocator.match(/(?:authStore|aiStore)\.recordPendingPayment\(/g) ?? []).length;
+  assert.equal(writes, 2, "chỉ createPendingOrder() được ghi đơn mới");
+  assert.equal(writesInAllocator, writes, "mọi lệnh ghi đơn mới phải nằm trong createPendingOrder()");
 });

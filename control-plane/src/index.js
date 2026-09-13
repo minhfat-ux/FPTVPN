@@ -705,8 +705,8 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     }
 
     if (orderCode == null) {
-      orderCode = await freshOrderCode();
-      await aiStore.recordPendingPayment(orderCode, {
+      orderCode = await createPendingOrder({
+        product: "ai",
         email,
         plan,
         method,
@@ -1680,22 +1680,38 @@ async function fireAiPaymentAlert(orderCode, email, plan, amount, method = null)
 }
 
 /**
- * Mã đơn = epoch giây nên hai khách bấm "Thanh toán" trong CÙNG một giây sẽ ra cùng mã đơn;
- * recordPendingPayment xoá mã trùng ⇒ đơn sau ghi đè đơn trước, và vì SePay tự kích hoạt theo
- * mã đơn trong nội dung chuyển khoản, tiền của khách A có thể bị kích hoạt cho khách B.
- * Vì vậy nhích mã lên cho tới khi chưa ai dùng (giữ 10 chữ số để khớp normalizeOrderCode).
+ * Cấp mã đơn + ghi đơn chờ thanh toán, CHẮC CHẮN không trùng và không bị ghi đè.
+ *
+ * Mã đơn = epoch giây, nên hai khách bấm "Thanh toán" trong cùng một giây sẽ ra cùng mã; mà
+ * SePay có thể trả mã đơn ở trường `code` (không kèm tiền tố sản phẩm) nên mã trùng giữa VPN và
+ * MeetFlow AI sẽ khiến tiền của sản phẩm này kích hoạt đơn của sản phẩm kia. Ngoài ra file JSON
+ * là đọc-sửa-ghi, hai request chạy xen kẽ có thể cùng đọc một trạng thái rồi ghi đè nhau (mất
+ * đơn). Vì vậy: một hàng đợi chung cho cả hai kho, kiểm tra trùng rồi mới ghi.
  */
-async function freshOrderCode() {
-  let code = Math.floor(Date.now() / 1000);
-  while (code < 9_999_999_999) {
-    const [vpn, ai] = await Promise.all([
-      authStore.pendingPaymentByCode(code),
-      aiStore.pendingPayment(code),
-    ]);
-    if (!vpn && !ai) return code;
-    code += 1;
-  }
-  return code;
+let orderCodeChain = Promise.resolve();
+function withOrderCodeLock(fn) {
+  const run = orderCodeChain.then(fn, fn);
+  orderCodeChain = run.then(() => {}, () => {});
+  return run;
+}
+
+async function createPendingOrder({ product, email, plan, method, lang, amount }) {
+  return withOrderCodeLock(async () => {
+    let orderCode = Math.floor(Date.now() / 1000);
+    // Giữ 10 chữ số để khớp normalizeOrderCode của webhook SePay.
+    while (orderCode < 9_999_999_999) {
+      const [vpn, ai] = await Promise.all([
+        authStore.pendingPaymentByCode(orderCode),
+        aiStore.pendingPayment(orderCode),
+      ]);
+      if (!vpn && !ai) break;
+      orderCode += 1;
+    }
+    const entry = { email, plan, method, lang, amount };
+    if (product === "ai") await aiStore.recordPendingPayment(orderCode, entry);
+    else await authStore.recordPendingPayment(orderCode, entry);
+    return orderCode;
+  });
 }
 
 app.post("/v1/payments/create", async (req, res) => {
@@ -1706,10 +1722,10 @@ app.post("/v1/payments/create", async (req, res) => {
     // Retired plans (e.g. lifetime) must not be orderable any more.
     if (!planCfg || planCfg.retired) return res.status(400).json({ code: "invalid_plan", error: "Gói không hợp lệ." });
 
-    const orderCode = await freshOrderCode();
     // Freeze the price with the order: a later price change must not re-price an
     // order the customer already saw (and may already have transferred).
-    await authStore.recordPendingPayment(orderCode, {
+    const orderCode = await createPendingOrder({
+      product: "vpn",
       email,
       plan,
       method,
