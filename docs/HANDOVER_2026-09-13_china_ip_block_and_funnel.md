@@ -1,0 +1,108 @@
+# HANDOVER — 2026-09-13: GFW chặn IP cả 2 node + kiến trúc "không phụ thuộc IP"
+
+Tài liệu này để phiên làm việc tiếp theo vào việc ngay, không phải dò lại.
+
+## 1. Sự việc
+
+- Từ WiFi khách sạn (Trung Quốc, IP công cộng `120.234.32.53`), GFW chặn **cả hai IP node**:
+  - node-1 `103.173.155.50` (VNPT) — chặn trước, ~19:00
+  - node-2 `103.6.234.233` (Online Data) — chặn sau, ~20:40 (sau khi API + toàn bộ client dồn về node-2)
+- Triệu chứng: app Android báo *"cannot reach VPNFlow service"*, app iOS không dựng nổi tunnel.
+- **Bằng chứng đo được (buộc đi thẳng WiFi bằng `--interface en0` / `IP_BOUND_IF`):**
+  - TCP `103.173.155.50:443`, `103.6.234.233:443/:9444` → timeout
+  - Trong khi `baidu.com` / `example.com` từ chính máy đó = 200, ping gateway 15ms → không phải lỗi máy/app
+  - Bắt gói trên node-1 lúc còn thông: SYN của client **tới được** server, server trả SYN-ACK, nhưng gói trả lời **không về tới TQ** → chặn ở chiều vào TQ đúng đặc trưng GFW.
+- Lưu ý: Mac "vẫn vào được API" là nhờ **Tailscale (exit node = node-1, đi qua DERP relay)**, không phải đường của khách.
+
+## 2. Kiến trúc hiện tại
+
+### node-2 `103.6.234.233` (Online Data) — đang là CỬA CHÍNH
+- `flowvpn-cp.service` — control plane, `127.0.0.1:7778` (đã chuyển từ node-1 sang, node-1 chỉ còn standby)
+- Caddy: `api.meetflowai.site` + `meetflowai.site` phục vụ **nội bộ** (static `/var/www/flowvpn` + `reverse_proxy 127.0.0.1:7778`); `/meetflow/*` vẫn proxy sang node-1 (backend MeetFlow AI chưa dời — phụ thuộc duy nhất còn lại)
+- `wgrelay-wg.service` TCP 9444 → UDP 443 (WireGuard)
+- `wgrelay.js` TCP 8443 → UDP 8443 (Hysteria); hysteria server ×3 (8443/28443/54443)
+- `wg0` UDP 443 (WireGuard), `node-self-report.timer` (5 phút/lần)
+- DNS: `api.meetflowai.site` và `meetflowai.site` → `103.6.234.233` (nên giữ TTL 60)
+
+### node-1 `103.173.155.50` (VNPT) — exit node + cửa dự phòng
+- `flowvpn-cp` **đã stop + disable** (dữ liệu giữ nguyên)
+- `cp-proxy.service` `127.0.0.1:7781` → control plane node-2 (dùng cho Funnel)
+- `wsrelay.service` `127.0.0.1:7782` → UDP 443 (WG) — mỗi binary message WS = 1 datagram
+- `wsrelay-hy.service` `127.0.0.1:7784` → UDP 8443 (Hysteria)
+- hysteria server ×3, `wg0` UDP 443, relay TCP 9444/8443, Tailscale 1.102 + Funnel
+- `node-self-report.timer` (5 phút/lần) — báo IP công cộng hiện tại về coordinator
+
+### Tailscale Funnel (URL cố định — đã kiểm chứng xuyên được mạng chặn)
+| Endpoint | Trỏ tới | Dùng cho |
+|---|---|---|
+| `https://fcnvpn.tail303be3.ts.net` | cp-proxy 7781 → control plane node-2 | API/buy/entitlement |
+| `wss://fcnvpn.tail303be3.ts.net:8443` | wsrelay-hy → Hysteria UDP 8443 | data path Android |
+| `wss://fcnvpn.tail303be3.ts.net:10000` | wsrelay → WG UDP 443 | data path iOS (chưa dùng) |
+
+Đo từ đường đang bị chặn: `API qua Funnel = http=200, ~1.4s` ✓
+Tailnet hostname: `fcnvpn.tail303be3.ts.net`; node id funnel: `nxQSyDow6811CNTRL`.
+
+### Cloudflare quick tunnels (tạm, giữ làm đường dự phòng thứ hai)
+- API: `https://additionally-indianapolis-totals-ties.trycloudflare.com`
+- Hysteria relay: `https://experts-competition-began-weekend.trycloudflare.com`
+- `cloudflared` ×3 trên node-1 (2 tunnel + precheck), URL đổi khi restart.
+
+### Coordinator: health + tự báo IP
+- `POST /v1/nodes/self` (header `X-Node-Secret`) — node tự báo IP → cập nhật `endpoint` trong `nodes.db`
+- `POST /v1/nodes/:id/report` `{ok, reason}` — client báo node tới được hay không
+- `GET /v1/nodes` xếp: node bị ≥3 báo lỗi trong 30 phút **tụt xuống dưới**, rồi mới theo `priority`
+- `nodes.db`: `vietnam-2` priority 50 (đứng đầu), `node-1` priority 100; `ssh_target` node-1 = `root@103.173.155.50`, vietnam-2 = NULL (local)
+- Secret nằm ở drop-in `/etc/systemd/system/flowvpn-cp.service.d/node-secret.conf` (node-1) và env service trên node-2
+
+## 3. Trạng thái client
+
+### Android (repo `android/`)
+- **1.3.2 (versionCode 12) đã cài trên Fold5**; các tính năng đã có:
+  - `Config.API_FALLBACK_ADDRESSES` (ghim IP, node-2 trước) + `coordinatorDns` trong `ControlAPIClient`
+  - `Config.API_FALLBACK_BASES = ["https://fcnvpn.tail303be3.ts.net"]` + `fallbackInterceptor` (thử lại request qua host dự phòng khi IOException)
+  - `Config.WS_RELAY_URL = "wss://fcnvpn.tail303be3.ts.net:8443"`, `Config.WS_RELAY_PORT = 8443`
+  - `vpn/WSRelayBridge.kt` — cầu UDP↔WS, socket OkHttp được `protect()` (bắt buộc, nếu không sẽ bị hút vào chính tunnel → `Connection reset`)
+  - `HysteriaVpnService`: `wsRelayAttempt()` (thử **cuối cùng**), nhớ transport `"ws"`, tự chuyển node sau 2 pass chết, báo health về coordinator
+- APK/AAB trên trang buy hiện vẫn là **1.2.8** (chưa cập nhật 1.3.x) — `https://meetflowai.site/dl/VPNFlow-1.3.x-*`
+- Build: `JAVA_HOME=~/jdk/jdk-17.0.20.1+1/Contents/Home`, `./gradlew :app:assembleModernRelease` / `:app:bundleModernRelease` (flavor `modern` minSdk 26, `legacy` minSdk 24)
+
+### iOS (repo `ios/`)
+- Đã có: relay TCP (WGRelayClient), health report (`NodeHealthReporter`, gửi sau 15s), `nodeId` trong `WireGuardConfig`
+- **Chưa có**: API dự phòng + WS bridge (spec: dùng `wss://fcnvpn.tail303be3.ts.net:10000` vì iOS dùng WireGuard)
+- Build: `xcodegen generate` (project.pbxproj KHÔNG commit) → `xcodebuild -scheme PrivateVPN -destination 'generic/platform=iOS' -derivedDataPath .dd-ios-ipad`
+- Cài: `xcrun devicectl device install app --device 5BA3126D-4776-5F75-8B10-0A60559ED1CC <app>` (iPad phải **mở khoá**)
+
+## 4. Việc cần làm — thứ tự ưu tiên
+
+### Tầng 1: cho ổn định (làm trước, ~1 giờ)
+1. `WSRelayBridge`: khi WS `onFailure`/`onClosed` → **gọi `Mobile.stop()`** để `serve()` trả về và vòng `runTunnel()` dựng lại transport + WS mới. Hiện chỉ set `connected=false` → tunnel nằm chết ở trạng thái `tunnelUp=true` (đúng triệu chứng "connected nhưng không có mạng", log 21:41–21:42 ngày 13/09).
+2. Watchdog: WS mất kết nối > ~10s → dừng tunnel để reconnect.
+3. Đưa `wsRelayAttempt()` **lên đầu** danh sách thử (hoặc hạ timeout attempt trực tiếp còn ~3s): hiện mỗi lượt phí ~25s trước khi tới WS → "quay tít".
+4. Cân nhắc **WireGuard-over-WS (cổng 10000)** thay Hysteria-over-WS: WG nhẹ hơn QUIC nhiều; đường WG qua relay từng chạy thật (peer qua `127.0.0.1`, 23MB).
+5. Hạ `HY_UP_KBPS/HY_DOWN_KBPS` cho đường relay (brutal CC đang khai 20Mbps, thực tế thấp hơn → tự gây nghẽn).
+
+### Tầng 2: fix triệt để
+- **Bỏ tự viết transport bằng Kotlin/Swift** — đó là gốc của lỗi hôm nay (socket loop, protect, watchdog, zombie, chậm).
+- Tích hợp **sing-box (libbox)** cho Android + iOS: nhiều outbound (Funnel WSS, Cloudflare tunnel, IP node), **URL-test tự chuyển**, tự reconnect khi mạng đổi, transport khó chặn (VLESS/Reality/Trojan/Hysteria2 + WS/TLS), uTLS.
+- Control plane (đang chạy tốt trên node-2) sinh config sing-box cho app.
+
+### Việc khác
+- iOS parity: API dự phòng + WS bridge cổng 10000.
+- **Play**: paywall Android vẫn là WebView nạp trang thanh toán web → rủi ro bị từ chối (Payments policy). Cần cờ build theo flavor: bản Play chỉ hiện Play Billing, bản web/china giữ WebView.
+- **IP mới node-1**: đã yêu cầu nhà cung cấp. Khi có IP mới: chạy `/root/ip-swap.sh <IP_MOI>` trên node-2 (cập nhật Caddy upstream + `nodes.db`), và `tailscale`/cloudflared không ảnh hưởng.
+- Thêm URL dự phòng thứ hai (Cloudflare tunnel) vào danh sách trong app.
+- `repo ↔ VPS`: đã đồng bộ `control-plane/src` (VPS = repo, gồm `connection-stats.js`). **Nhớ diff trước khi deploy** — đã từng gây 502 vì repo mới hơn VPS.
+
+## 5. Truy cập & công cụ
+
+- node-1: chỉ vào được qua **tailnet** `ssh -i secrets/.tmp/flowvpn_support_page_ed25519 root@100.76.147.111` (IP công cộng bị chặn từ TQ)
+- node-2: `sshpass -p <secrets/node2-103.6.234.233.env> ssh root@103.6.234.233` (từ TQ cũng bị chặn — đi vòng qua node-1 bằng key `/root/.ssh/id_node1`)
+- Secrets trong `secrets/`: `flowvpn-vps-root-access.env` (key + password node-1), `node2-103.6.234.233.env`
+- Máy Mac: Tailscale có CLI ở `/Applications/Tailscale.app/Contents/MacOS/Tailscale`; app Tailscale đang dùng node-1 làm exit node (nên test "đường thật" phải bind en0)
+- Log client: Android `adb shell tail /sdcard/Android/data/com.privatevpn.app/files/diagnostics.log` + `adb logcat -s VPNFLOW_DIAG VPNFLOW_DEBUG`; iOS: `xcrun devicectl device copy from --domain-type appDataContainer --domain-identifier com.privatevpn.app.packet-tunnel --source Documents/relay.log`
+
+## 6. Trạng thái kiểm chứng cuối (13/09 ~21:45)
+
+- Funnel API từ đường bị chặn: **200 / 1.56s** ✓
+- `wsrelay-hy` ✓ `wsrelay` ✓ `cp-proxy` ✓ hysteria(node-1) ×3 ✓ cloudflared ×3 ✓ Funnel 4 entry "Funnel on" ✓
+- Android đã **có mạng thật** qua Funnel+WS (chậm), nhưng cầu WS chết thì tunnel treo ở trạng thái "connected" → đúng việc Tầng 1 phải sửa.
