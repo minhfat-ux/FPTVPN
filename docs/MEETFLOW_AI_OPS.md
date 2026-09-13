@@ -596,7 +596,9 @@ Log lúc khởi động in `mail transport=smtp|resend|none`.
 # chạy lại bất cứ lúc nào (trong repo hoặc trên VPS)
 cd control-plane && NODE_ENV=production node ../scripts/check-mail-langs.mjs no-reply@meetflowai.site
 # trên VPS:
-python3 /tmp/run-with-env.py /root/flowvpn-cp/scripts/check-mail-langs.mjs   # env đúng của service
+# trên VPS: helper đọc env từ systemd unit + mọi drop-in rồi chuyển tiếp tham số cho node
+python3 scripts/run-with-service-env.py scripts/check-mail-langs.mjs no-reply@meetflowai.site zh --only=otp
+# (dùng biến SERVICE_UNIT=... nếu unit không phải flowvpn-cp)
 ```
 
 Đã sửa kèm 2 lỗi phát hiện khi rà:

@@ -9,7 +9,10 @@
  *   ... check-mail-langs.mjs hộp@thư vi,zh --only otp,invoice-vpn
  *
  * Trên VPS, chạy bằng ĐÚNG env của service (để dùng transport đang bật):
- *   python3 /tmp/run-with-env.py /root/flowvpn-cp/scripts/check-mail-langs.mjs
+ *   python3 scripts/run-with-service-env.py scripts/check-mail-langs.mjs no-reply@meetflowai.site zh --only=otp
+ *
+ * Nhớ chuyển tiếp tham số (helper cũ trong /tmp chỉ lấy tên script nên tham số bị mất →
+ * chạy mặc định gửi cả 18 email; bản trong repo đã sửa và có in ra tham số nhận được).
  *
  * Lưu ý: OTP chỉ thực sự gửi khi `NODE_ENV=production`; ngoài production hàm trả `devCode`
  * và KHÔNG gửi gì (đúng như thiết kế trong mailer.js).
