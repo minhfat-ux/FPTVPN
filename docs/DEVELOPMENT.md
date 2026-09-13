@@ -122,6 +122,20 @@ Env của control-plane nằm **inline trong unit** (`systemctl cat flowvpn-cp`)
 **Gotchas vận hành:** cache `~/.gradle/caches/8.11.1/kotlin-dsl` hỏng định kỳ → `./gradlew --stop && rm -rf` rồi build lại;
 adb trên máy Samsung test hay rớt (USB debugging tự tắt) → phải bật lại; file trong `/var/www` phải đúng owner/permission.
 
+**Gotcha git (repo nằm trên volume exFAT `BIWIN`):** `git rebase` / `git pull --rebase` fail vô cớ với
+`error: Your local changes to the following files would be overwritten by merge` **dù `git status` sạch**
+(index coi file là "racily clean" trên exFAT). Cách xử lý — **cherry-pick thay cho rebase**:
+
+```bash
+git fetch origin
+git checkout --detach origin/main      # HEAD = upstream
+git cherry-pick <commit-của-mình>      # replay lên trên
+git switch -C main                     # đưa branch main lên commit mới
+git push origin main
+```
+
+Đừng `git rebase --continue` trong trạng thái đó (todo bị lặp commit) — `git rebase --abort` rồi cherry-pick.
+
 ## 6. Commit conventions
 
 Commit message format (RULE-GIT-005, owner directive):

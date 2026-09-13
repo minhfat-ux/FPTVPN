@@ -181,12 +181,17 @@ Current task tracked here (schema per spec §31). Structured state also in
 ## Trạng thái cuối ngày 2026-09-13 (bàn giao — mai tiếp)
 
 ### Việc ĐANG CHỜ (owner quyết định mai làm)
-1. **iOS / Xcode Cloud** — *owner hoãn sang 2026-09-14*. Nguyên nhân fail đã tìm ra & đã fix (commit `f674e02`, `d7cd46d`):
+1. **iOS / Xcode Cloud** — nguyên nhân fail đã tìm ra & đã fix:
    - `.gitignore` có `*.xcodeproj/` ⇒ repo **không chứa** `PrivateVPN.xcodeproj`; nguồn sự thật là `project.yml` (xcodegen).
-   - Đã thêm **`ci_scripts/ci_post_clone.sh`** (mode 100755): cài Go + xcodegen → `xcodegen generate` → kiểm tra shared scheme.
-   - Đã kiểm chứng local: script sinh project + 2 shared scheme; `make -C Vendor/WireGuardKit/Sources/WireGuardKitGo PLATFORM_NAME=iphoneos ARCHS=arm64` PASS (Go 1.26.6).
-   - **Việc mai làm:** chạy lại workflow Xcode Cloud (chọn scheme `PrivateVPN`); nếu còn fail → dán tên bước + log cho agent.
-   - Chi tiết: `docs/XCODE_CLOUD.md`.
+   - Đã thêm **`ci_scripts/ci_post_clone.sh`** (mode 100755): cài Go + xcodegen → `xcodegen generate` → kiểm tra shared scheme (commit `f674e02`, `d7cd46d`).
+   - **2026-09-13 (tiếp):** build lại local phát hiện thêm 4 lỗi code chặn CI → đã fix (commit `08c847e`):
+     `VPNManager.logOutDeviceAndRetry` gọi `ControlAPIClient()` thiếu `baseURL`/`joinToken` (lỗi từ `47c5fac`);
+     warning `data` không dùng trong `deleteAccount`; test target không resolve được module vì `PRODUCT_NAME: FlowVPN`
+     ⇒ thêm `PRODUCT_MODULE_NAME: PrivateVPN` vào `project.yml`; `InMemoryKeychainBackend` thiếu `delete(for:)`.
+   - **Kiểm chứng local (xanh hết):** `PrivateVPN` Release `generic/platform=iOS` → BUILD SUCCEEDED;
+     scheme `PrivateVPN` test trên simulator iPhone 17 / iOS 26.5 → **40 test, 0 failure**; scheme `PrivateVPNMac` → BUILD SUCCEEDED.
+   - **Việc của owner:** chạy lại workflow Xcode Cloud (scheme `PrivateVPN`, nên bật cả action **Test**); nếu còn fail → dán tên bước + log cho agent.
+   - Chi tiết + lệnh kiểm chứng: `docs/XCODE_CLOUD.md`.
 2. **Google Play (VPNFlow)** — AAB sẵn sàng: `release/android/VPNFlow-1.2.4-play-store.aab` (link `https://meetflowai.site/dl/VPNFlow-1.2.4-play-store.aab`).
    Cần: khai **Foreground service type = specialUse** (text ở `docs/PLAY_SUBMISSION.md` §4c) + video demo (`https://meetflowai.site/dl/VPNFlow-foreground-service-demo.mp4`),
    App access `review@meetflowai.site` / code `246810` (account đã được dọn về 0 thiết bị), privacy `https://meetflowai.site/FlowVPNPrivacy.html`.
