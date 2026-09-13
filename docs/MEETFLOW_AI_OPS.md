@@ -807,6 +807,20 @@ curl -X PATCH https://api.meetflowai.site/v1/admin/android-version \
 scripts/check-apk-release.py           # sẽ báo lỗi nếu còn lệch
 ```
 
+### So APK giữa hai node (chống file cụt / lệch bản)
+
+`scripts/compare-nodes-apk.sh` — so md5 + dung lượng mọi file trong `/root/flowvpn-apk` của node-1
+và node-2, tách rõ file **đang phục vụ** (`VPNFlow-latest.apk`, `VPNFlow-android7.apk`,
+`MeetFlowAI-latest.apk`) với file lưu trữ; trả mã 1 kèm lệnh sửa nếu file đang phục vụ khác nhau.
+
+```bash
+scripts/compare-nodes-apk.sh
+# so hai thư mục khác nhau (khi thử):  APK_DIR1=… APK_DIR2=… scripts/compare-nodes-apk.sh
+```
+
+Bài học 13/09/2026: copy qua máy trạm bị đứt giữa đường ⇒ node-2 có `VPNFlow-android7.apk` cụt
+27MB/96MB mà endpoint vẫn phát. Chạy script này sau mỗi lần copy APK là thấy ngay.
+
 ### Quét toàn bộ bề mặt công khai sau mỗi lần đổi hạ tầng
 
 `scripts/check-public-surface.py` — một lệnh kiểm hết: DNS trỏ về đâu, TLS + số ngày còn lại của
