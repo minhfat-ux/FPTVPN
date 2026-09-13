@@ -61,6 +61,21 @@ export function verifySepayApiKey({ authorization, apiKey }) {
 }
 
 /**
+ * Chế độ dự phòng: SePay có tuỳ chọn "không xác thực" (và một số bản test mode chỉ gửi vậy),
+ * khi đó không có header nào để kiểm. Thay vì hạ chuẩn xuống "nhận tất", ta chấp nhận một token
+ * bí mật nằm trong URL: `/v1/payments/sepay-webhook?token=<SEPAY_URL_TOKEN>`.
+ *
+ * Yếu hơn HMAC (URL có thể lọt vào log/lịch sử), nên chỉ dùng khi dashboard không cho chọn
+ * HMAC-SHA256/API Key — xem docs §5b.
+ */
+export function verifySepayUrlToken({ token, urlToken }) {
+  if (!urlToken || !token) return false;
+  const a = Buffer.from(String(token).trim());
+  const b = Buffer.from(String(urlToken).trim());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/**
  * Giao dịch tiền RA (transferType "out") không liên quan tới đơn hàng.
  * Payload thiếu `transferType` vẫn nhận (một số bản test không gửi kèm).
  */

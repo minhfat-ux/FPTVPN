@@ -7,6 +7,7 @@ import {
   isIncomingTransfer,
   verifySepayApiKey,
   verifySepaySignature,
+  verifySepayUrlToken,
 } from "../src/sepay.js";
 
 const SECRET = "spsk_test_example_secret";
@@ -112,4 +113,12 @@ test("số tiền: đủ thì mới tự kích hoạt", () => {
   assert.equal(amountCovers(0, 200000), false);
   assert.equal(amountCovers(-5, 200000), false);
   assert.equal(amountCovers(200000, null), true, "không biết giá ⇒ để chủ shop xác nhận");
+});
+
+test("token trong URL (dự phòng cho chế độ 'không xác thực' của SePay)", () => {
+  assert.equal(verifySepayUrlToken({ token: "tok_abc123", urlToken: "tok_abc123" }), true);
+  assert.equal(verifySepayUrlToken({ token: " tok_abc123 ", urlToken: "tok_abc123" }), true, "bỏ khoảng trắng");
+  assert.equal(verifySepayUrlToken({ token: "tok_sai", urlToken: "tok_abc123" }), false);
+  assert.equal(verifySepayUrlToken({ token: "", urlToken: "tok_abc123" }), false);
+  assert.equal(verifySepayUrlToken({ token: "tok_abc123", urlToken: "" }), false, "chưa cấu hình ⇒ không nhận");
 });

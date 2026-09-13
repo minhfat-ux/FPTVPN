@@ -21,6 +21,7 @@ import {
   isIncomingTransfer,
   verifySepayApiKey,
   verifySepaySignature,
+  verifySepayUrlToken,
 } from "./sepay.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
@@ -1935,10 +1936,15 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
     const apiKeyOk = !signatureOk && apiKey
       ? verifySepayApiKey({ authorization: req.get("authorization"), apiKey })
       : false;
-    if (!signatureOk && !apiKeyOk) {
+    // Dự phòng cho chế độ "không xác thực" của SePay: token bí mật trong URL.
+    const urlTokenOk = !signatureOk && !apiKeyOk && process.env.SEPAY_URL_TOKEN
+      ? verifySepayUrlToken({ token: req.query?.token, urlToken: process.env.SEPAY_URL_TOKEN })
+      : false;
+    if (!signatureOk && !apiKeyOk && !urlTokenOk) {
       console.warn(
         `sepay: xác thực thất bại (signature=${Boolean(req.get("x-sepay-signature"))}, ` +
-          `apiKey=${Boolean(req.get("authorization"))})`,
+          `apiKey=${Boolean(req.get("authorization"))}, urlToken=${Boolean(req.query?.token)}, ` +
+          `ua="${String(req.get("user-agent") ?? "-").slice(0, 60)}")`,
       );
       return res.status(401).json({ success: false, error: "Unauthorized" });
     }
