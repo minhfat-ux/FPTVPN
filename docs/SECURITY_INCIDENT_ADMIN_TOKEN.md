@@ -139,3 +139,9 @@ curl -s -o /dev/null -w '%{http_code}' https://api.meetflowai.site/v1/admin/user
 - [ ] Owner: đặt `VERIFY_LINK_SECRET` + `CONFIRM_SECRET` riêng (hiện fallback về `AUTH_TOKEN`).
 - [ ] Thêm access log cho `/v1/admin/*` (method + path + IP) để lần sau truy được vết.
 - [ ] Xoá `DEV_LOGIN_CODE` sau khi app được duyệt (đang để phục vụ review).
+
+### 6.6 Rà các repo public khác của cùng tài khoản GitHub
+
+Đã clone nông và quét 3 repo public còn lại (`minhfat-ux/privateVPN`, `MeetflowNewsStudio`, `MeetFlowAIMac`):
+**không** có token cũ, không có `AIza…`/`re_…`/`sk-…`/`ghp_…`, không có private key, không có
+service-account JSON hay file `.env`/keystore nào bị commit. (Chỉ thấy *tên* biến môi trường trong code.)
