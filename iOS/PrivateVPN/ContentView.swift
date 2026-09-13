@@ -303,33 +303,41 @@ struct ContentView: View {
         )
     }
 
+    /// Một dòng server: CHẠM VÀO CẢ DÒNG là chọn, giống Android
+    /// (`MainScreen.kt`: `.clickable(enabled = !busy, onClick = onSelect)`).
+    ///
+    /// Trước đây chỉ chữ "Select" ở cuối dòng là Button, nên chạm vào tên server
+    /// không có tác dụng gì — khác hẳn Android và rất dễ tưởng app bị treo. Nay
+    /// bọc cả dòng trong Button + contentShape để toàn bộ khối chữ nhật là vùng
+    /// chạm, và bỏ hẳn nút "Select" (đã dùng chung một hành vi với Android).
     private func serverRow(_ node: ExitNode) -> some View {
         let isSelected = configStore.selectedNodeID == node.id
         let busy = vpnManager.state.isTransitioning
 
-        return HStack(spacing: 8) {
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? VPNTheme.accent : VPNTheme.tertiaryLabel)
+        return Button {
+            selectNode(id: node.id)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? VPNTheme.accent : VPNTheme.tertiaryLabel)
 
-            Text(serverTitle(for: node))
-                .font(.subheadline)
-                .lineLimit(1)
-                .foregroundStyle(VPNTheme.label)
+                Text(serverTitle(for: node))
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(VPNTheme.label)
 
-            Spacer(minLength: 8)
-
-            Button(languageStore.t(.select)) {
-                selectNode(id: node.id)
+                Spacer(minLength: 8)
             }
-            .font(.footnote.bold())
-            .foregroundStyle(VPNTheme.accent)
-            .buttonStyle(.plain)
-            .disabled(busy)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 6)
+            .background(isSelected ? VPNTheme.accent.opacity(0.15) : Color(uiColor: .tertiarySystemFill))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            // Cả khối là vùng chạm, không chỉ phần có nội dung (khoảng trống giữa
+            // tên server và mép phải cũng phải ăn).
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 6)
-        .background(isSelected ? VPNTheme.accent.opacity(0.15) : Color(uiColor: .tertiarySystemFill))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .buttonStyle(.plain)
+        .disabled(busy)
     }
 
     private func selectNode(id: String) {
@@ -429,15 +437,19 @@ struct ContentView: View {
         }
     }
 
+    /// Giống hệt Android (`MainScreen.kt` PowerButton): CHỈ khoá khi đang chuyển
+    /// trạng thái. Ở disconnected/failed thì luôn bấm được, kể cả khi chưa cấu
+    /// hình, vì control plane sẽ tự cấp cấu hình lúc bấm (Android ghi rõ: "always
+    /// allow: control plane provisions").
+    ///
+    /// Trước đây iOS khoá nút khi `!isConfigured && !hasControlPlane` nên chạm vào
+    /// không có phản ứng gì — một trong những lý do nút Connect "khác Android".
     private var primaryButtonDisabled: Bool {
         switch vpnManager.state {
         case .disconnecting, .connecting:
             return true
-        case .connected:
+        case .connected, .disconnected, .failed:
             return false
-        case .disconnected, .failed:
-            // Nothing to dial yet — unless the control plane can provision.
-            return !configStore.isConfigured && !configStore.hasControlPlane
         }
     }
 
