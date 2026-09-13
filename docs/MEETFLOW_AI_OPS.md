@@ -461,7 +461,11 @@ DMARC đang là `v=DMARC1; p=none` (không có `rua=` nên không nhận báo c�
 1. [resend.com](https://resend.com/docs/add-a-domain) → *Add domain* = `meetflowai.site`
 2. Thêm các bản ghi DNS Resend cung cấp vào **PA Vietnam** (DKIM `resend._domainkey` + MX/TXT cho subdomain `send`)
 3. Bấm **Verify** trong Resend
-4. Trên VPS: thêm `Environment=RESEND_API_KEY=re_...` vào systemd drop-in → `systemctl daemon-reload && systemctl restart flowvpn-cp`
+4. Bật key trên VPS (1 lệnh, key không lộ ra màn hình):
+   ```bash
+   scripts/set-resend-key.sh          # hỏi key (re_...), ghi vào systemd drop-in rồi restart
+   scripts/set-resend-key.sh --clear  # quay lại SMTP nếu cần
+   ```
 5. Kiểm tra: `scripts/check-email-auth.sh` → phải thấy `DKIM check: pass`
 
 Mailer tự chọn transport: **có `RESEND_API_KEY` → Resend**, không có → SMTP như cũ.
@@ -495,6 +499,11 @@ From đúng thương hiệu theo sản phẩm, link dùng domain đẹp. Log g�
 `accepted=…`, `messageId/id=…`.
 
 ## 7. Kiểm tra nhanh hệ thống
+
+```bash
+scripts/check-email-auth.sh    # SPF/DKIM/DMARC thật (gửi thư test + đọc báo cáo Port25)
+scripts/set-resend-key.sh      # bật Resend (--clear để quay lại SMTP)
+```
 
 ```bash
 curl -s https://api.meetflowai.site/v1/ai/app-version            # phiên bản Android đang phát
