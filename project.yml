@@ -62,15 +62,20 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app
         PRODUCT_NAME: FlowVPN
+        # Tên BUNDLE vẫn là FlowVPN (đổi tên bundle là đổi cả đường dẫn cài + profile ký).
+        # Tên người dùng NHÌN THẤY là CFBundleDisplayName = VPNFlow ở dưới — đó mới là tên
+        # hiện dưới icon; đừng nhầm PRODUCT_NAME với tên hiển thị.
         # Module name = target name: unit tests do `@testable import PrivateVPN`
-        # (PRODUCT_NAME is the display name "FlowVPN", so it can't be the module).
+        # (PRODUCT_MODULE_NAME phải là module, nên không thể lấy theo PRODUCT_NAME).
         PRODUCT_MODULE_NAME: PrivateVPN
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         CODE_SIGN_IDENTITY: "iPhone Developer"
-        CURRENT_PROJECT_VERSION: "2"
-        MARKETING_VERSION: "1.2.3"
+        # Khớp Android (versionCode 12 / versionName 1.3.2) — chủ dự án yêu cầu hai nền tảng
+        # cùng một số phiên bản.
+        CURRENT_PROJECT_VERSION: "12"
+        MARKETING_VERSION: "1.3.2"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -107,8 +112,9 @@ targets:
       path: iOS/PrivateVPNPacketTunnel/Info.plist
       properties:
         CFBundleDisplayName: VPNFlow Tunnel
-        CFBundleShortVersionString: "1.2.3"
-        CFBundleVersion: "2"
+        # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
+        CFBundleShortVersionString: "1.3.2"
+        CFBundleVersion: "12"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
@@ -188,8 +194,8 @@ targets:
         PRODUCT_NAME: FlowVPN
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.2.2"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.3.2"
+        CURRENT_PROJECT_VERSION: "12"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -270,8 +276,8 @@ targets:
         PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.2.2"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.3.2"
+        CURRENT_PROJECT_VERSION: "12"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         LIBRARY_SEARCH_PATHS:
