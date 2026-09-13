@@ -642,6 +642,59 @@ Từ 14/09/2026 đơn mới chỉ được tạo qua `createPendingOrder()` tron
 1789322696 qa-u1@… bankqr   | 1789322697 qa-u3@… momo | 1789322698 qa-u2@… wechat
 ```
 
+### Checklist bảo mật webhook theo tài liệu SePay (đối chiếu 14/09/2026)
+
+Nguồn: [Xác thực webhook](https://developer.sepay.vn/vi/sepay-webhooks/xac-thuc) ·
+[Bảo mật webhook](https://developer.sepay.vn/vi/sepay-webhooks/bao-mat)
+
+| SePay khuyến nghị | Trạng thái trong code |
+|---|---|
+| **HMAC-SHA256** (khuyến nghị cao nhất: phát hiện payload bị sửa) | ✅ `verifySepaySignature()` — ký `{timestamp}.{raw_body}` bằng **raw body** (`express.json({verify})` giữ `req.rawBody`), so sánh bằng `timingSafeEqual`. Đã test thật: chữ ký đúng ⇒ 200 khi URL **không** kèm token |
+| Chống replay: từ chối timestamp lệch quá **5 phút** | ✅ đúng 300 giây (`DEFAULT_TOLERANCE_SEC`) — timestamp cũ 10 phút ⇒ **401** |
+| Đừng bao giờ "nhận tất" | ✅ không có header nào + không token ⇒ **401**; chưa cấu hình secret ⇒ **503** |
+| Không cho hạ cấp bảo mật | ✅ request **có chữ ký** thì chỉ chấp nhận chữ ký: chữ ký sai + token URL đúng vẫn **401** |
+| Whitelist IP của SePay | ⚙️ có sẵn, **mặc định tắt**: `SEPAY_IP_ALLOWLIST="1.2.3.4,5.6.7.0/24"` (drop-in phải có dòng `[Service]`). Bật ⇒ IP ngoài danh sách bị **403** + log. Đã test thật: 403 và `X-Forwarded-For` giả **không** lọt (Caddy ghi đè XFF của client) |
+| Validate trước khi xác nhận: số tiền · **tài khoản nhận** · mã đơn | ✅ `amountCovers()` + `accountMatches()` + `extractOrderRef()`. Tiền vào tài khoản khác ⇒ **không** kích hoạt, gửi email cảnh báo, ghi nhật ký `wrong-account` |
+| Lưu raw payload để audit/đối soát | ✅ `data/sepay-webhooks.log` (JSON lines) với `decision`: `activated` / `duplicate` / `underpaid` / `no-order-code` / `wrong-account` / `order-not-pending` / `rejected-ip` |
+| Đối soát định kỳ (webhook có thể mất nếu endpoint sập > 5 giờ) | ⏳ **chưa làm** — cần API token live của SePay; kế hoạch: cron 15–30 phút gọi API giao dịch, so với `sepay-webhooks.log` + `pendingPayments`, bù các giao dịch thiếu |
+
+#### Bật HMAC-SHA256 trong dashboard SePay (việc của chủ shop)
+
+1. SePay → **Webhooks** → sửa webhook đang dùng → mục **Bảo mật / Xác thực** → chọn **HMAC-SHA256**.
+2. Dán **Secret Key** = giá trị `SEPAY_WEBHOOK_SECRET` trong
+   `/etc/systemd/system/flowvpn-cp.service.d/sepay.conf` trên node-2 (khoá test hiện tại do SePay cấp;
+   khi chuyển sang tài khoản live thì tạo khoá mới rồi cập nhật **cả hai** nơi: dashboard + drop-in).
+3. Lưu → SePay gửi kèm `X-SePay-Signature` + `X-SePay-Timestamp` từ request sau.
+   Token trong URL (`?token=…`) **không cần nữa** khi đã bật HMAC (code tự bỏ qua token khi có chữ ký),
+   nhưng cứ để nguyên cũng không sao — chỉ dùng khi dashboard đổi về chế độ "Không xác thực".
+4. Muốn bật thêm whitelist IP: lấy danh sách IP tại <https://developer.sepay.vn/vi/sepay-webhooks/dia-chi-ip>
+   rồi thêm drop-in (nhớ `[Service]`):
+
+```ini
+# /etc/systemd/system/flowvpn-cp.service.d/sepay-ip.conf
+[Service]
+Environment=SEPAY_IP_ALLOWLIST=1.2.3.4,5.6.7.0/24
+```
+```bash
+systemctl daemon-reload && systemctl restart flowvpn-cp
+```
+
+⚠️ Drop-in **thiếu dòng `[Service]`** thì systemd bỏ qua toàn bộ biến (đã dính đúng lỗi này khi test:
+whitelist tưởng bật mà không có tác dụng) — luôn kiểm bằng
+`systemctl show flowvpn-cp -p Environment | tr ' ' '\n' | grep SEPAY_`.
+
+#### Kết quả test thật 7 chế độ xác thực (14/09/2026)
+
+| Ca | Kết quả |
+|---|---|
+| HMAC-SHA256 đúng, URL không kèm token | **200** |
+| HMAC sai + token URL đúng | **401** (đã chặn hạ cấp) |
+| HMAC đúng nhưng timestamp cũ 10 phút | **401** (chống replay) |
+| Không header + token URL đúng (chế độ "không xác thực") | **200** |
+| API Key đúng, không có chữ ký | **200** |
+| Không xác thực gì | **401** |
+| Token URL sai | **401** |
+
 ### Cách tự test
 
 ```bash
