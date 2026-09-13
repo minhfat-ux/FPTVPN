@@ -165,21 +165,33 @@ final class WGRelayClient {
                 }
             }
             var ok = connected == 0
+            // Lý do hỏng phải ghi RÕ, không dùng lại `errno`: khi connect không hoàn tất thì
+            // `errno` vẫn là EINPROGRESS (36) — hằng số của chính lời gọi connect (Darwin),
+            // hoàn toàn không phải lỗi. Log cũ in "failed errno=36" nên đọc lên tưởng
+            // EINPROGRESS là nguyên nhân, trong khi thật ra là select hết hạn chờ. Đã mất
+            // thời gian vì chỗ này khi debug "connected nhưng không có mạng" trên iPad.
+            var failureReason = connected == 0 ? "" : "errno=\(errno)"
             if !ok && errno == EINPROGRESS {
                 var writeSet = fd_set()
                 setFD(fd, &writeSet)
                 var timeout = timeval(tv_sec: 10, tv_usec: 0)
-                if select(fd + 1, nil, &writeSet, nil, &timeout) > 0 {
+                let selected = select(fd + 1, nil, &writeSet, nil, &timeout)
+                if selected > 0 {
                     var error: Int32 = 0
                     var errorLength = socklen_t(MemoryLayout<Int32>.size)
                     _ = getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &errorLength)
                     ok = error == 0
+                    failureReason = error == 0 ? "" : "SO_ERROR=\(error)"
+                } else if selected == 0 {
+                    failureReason = "hết hạn 10s chờ connect hoàn tất (EINPROGRESS, không phải lỗi)"
+                } else {
+                    failureReason = "select errno=\(errno)"
                 }
             }
             _ = fcntl(fd, F_SETFL, flags)
 
             guard ok else {
-                note("connect \(self.host):\(port) failed errno=\(errno)")
+                note("connect \(self.host):\(port) failed: \(failureReason)")
                 close(fd)
                 Thread.sleep(forTimeInterval: 2)
                 continue
