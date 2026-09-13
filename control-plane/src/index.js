@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import crypto from "node:crypto";
+import dns from "node:dns";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
@@ -17,6 +18,11 @@ import { versionPayloadFor, wantsLegacyApk } from "./app-version.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
+import {
+  aggregateConnections,
+  clientIPFromEndpoint,
+  createPTRLookup,
+} from "./connection-stats.js";
 import { adminPageHTML } from "./admin-page.js";
 import {
   sendOtpEmail,
@@ -168,6 +174,10 @@ const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   ai_android_notes: process.env.AI_ANDROID_NOTES ?? "",
 });
 
+// Reverse-DNS (PTR) cho IP client hiển thị trên dashboard: cache 6h + timeout
+// 1.5s, best-effort. Không gọi API bên thứ ba nên IP người dùng không rời server.
+const ptrLookup = createPTRLookup({ resolve: (ip) => dns.promises.reverse(ip) });
+
 const app = express();
 app.set("trust proxy", true);
 app.use(cors());
@@ -178,6 +188,8 @@ app.use(express.json());
 app.use((req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.path === "/health" || req.path === "/v1/health" || req.path === "/nodes" || req.path === "/v1/nodes" || req.path === "/v1/app-version") return next();
+  // Node self-report (own secret) + client health reports (see /v1/nodes handlers).
+  if (req.path === "/v1/nodes/self" || /^\/v1\/nodes\/[^/]+\/report$/.test(req.path)) return next();
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
   // Public payment flow: buy page + create order + PayOS webhook.
   if (req.path === "/buy" || req.path.startsWith("/buy/") || req.path.startsWith("/v1/payments/")) return next();
@@ -266,12 +278,83 @@ app.get(["/admin", "/admin/"], (_req, res) => {
   res.type("html").send(adminPageHTML());
 });
 
+/**
+ * Node health bookkeeping — two independent signals, both needed:
+ *
+ *  - self-report: every exit node posts its CURRENT public IP on a timer, so a
+ *    provider IP change propagates by itself. Without this an IP swap needs a
+ *    manual edit here (and every client keeps dialling the dead address).
+ *  - client reports: an app that cannot reach a node tags it, and /v1/nodes then
+ *    serves healthier nodes first. This is the only truthful signal for "can users
+ *    actually reach it": the GFW blocks node IPs for Chinese networks while the
+ *    node still answers happily from Vietnam, so a check run from here sees
+ *    nothing wrong.
+ */
+const NODE_SELF_SECRET = process.env.NODE_SELF_SECRET ?? "";
+const NODE_FAILURE_WINDOW_MS = 30 * 60 * 1000;
+const NODE_FAILURES_TO_DEPRIORITISE = 3;
+const nodeHealth = new Map();
+
+function healthEntry(id) {
+  let entry = nodeHealth.get(id);
+  if (!entry) {
+    entry = { failures: [], lastOkAt: 0, lastFailAt: 0, lastReason: null };
+    nodeHealth.set(id, entry);
+  }
+  return entry;
+}
+
+function noteNodeFailure(id, reason) {
+  const entry = healthEntry(id);
+  const now = Date.now();
+  entry.failures = entry.failures.filter((at) => now - at < NODE_FAILURE_WINDOW_MS);
+  entry.failures.push(now);
+  entry.lastFailAt = now;
+  entry.lastReason = reason ?? null;
+}
+
+function noteNodeSuccess(id) {
+  const entry = healthEntry(id);
+  entry.lastOkAt = Date.now();
+  entry.failures = [];
+}
+
+/** true when reports say the node is currently unreachable for real users. */
+function nodeLooksDown(id) {
+  const entry = nodeHealth.get(id);
+  if (!entry) return false;
+  const now = Date.now();
+  const recent = entry.failures.filter((at) => now - at < NODE_FAILURE_WINDOW_MS);
+  if (recent.length < NODE_FAILURES_TO_DEPRIORITISE) return false;
+  // A success reported after the failures clears the flag.
+  return entry.lastOkAt < Math.max(...recent);
+}
+
+function healthSnapshot(id) {
+  const entry = nodeHealth.get(id);
+  if (!entry) return { reported: false, failures: 0, last_ok_at: null, last_fail_at: null, reason: null };
+  const now = Date.now();
+  return {
+    reported: true,
+    failures: entry.failures.filter((at) => now - at < NODE_FAILURE_WINDOW_MS).length,
+    last_ok_at: entry.lastOkAt ? new Date(entry.lastOkAt).toISOString() : null,
+    last_fail_at: entry.lastFailAt ? new Date(entry.lastFailAt).toISOString() : null,
+    reason: entry.lastReason,
+  };
+}
+
 // Public list of active exit nodes (Tailscale-style). The app fetches this to
 // present selectable locations instead of hardcoding them.
 const listPublicNodes = async (_req, res) => {
   try {
     const nodes = await nodeStore.active();
-    res.json({ nodes: nodes.map(publicNode) });
+    // Unhealthy nodes stay listed (a user may still reach them from another
+    // network) but sink below the ones that answered recently.
+    const ordered = [...nodes].sort((left, right) => {
+      const rank = (node) => (nodeLooksDown(node.id) ? 1 : 0);
+      return rank(left) - rank(right) || left.priority - right.priority || left.name.localeCompare(right.name);
+    });
+    res.json({ nodes: ordered.map(publicNode) });
   } catch (err) {
     console.error("GET /nodes failed:", err);
     res.status(500).json({ error: "Internal error" });
@@ -280,6 +363,59 @@ const listPublicNodes = async (_req, res) => {
 
 app.get("/nodes", listPublicNodes);
 app.get("/v1/nodes", listPublicNodes);
+
+/**
+ * An exit node reports its own current public IP (systemd timer on the node).
+ * This is what makes an IP swap self-healing: the provider changes the address,
+ * the node tells us, and clients are pointed at the new one automatically.
+ */
+app.post("/v1/nodes/self", async (req, res) => {
+  try {
+    if (!NODE_SELF_SECRET || req.get("x-node-secret") !== NODE_SELF_SECRET) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const id = String(req.body?.id ?? "").trim();
+    const ip = String(req.body?.ip ?? "").trim();
+    if (!id || !/^[0-9a-fA-F.:]+$/.test(ip)) {
+      return res.status(400).json({ error: "invalid_id_or_ip" });
+    }
+    const node = await nodeStore.findById(id);
+    if (!node) return res.status(404).json({ error: "unknown_node" });
+    const endpoint = ip.includes(":") ? `[${ip}]:443` : `${ip}:443`;
+    if (node.endpoint === endpoint && node.active) {
+      noteNodeSuccess(id);
+      return res.json({ ok: true, endpoint, changed: false });
+    }
+    await nodeStore.update(id, { endpoint });
+    noteNodeSuccess(id);
+    console.log(`[nodes] ${id} endpoint updated ${node.endpoint} -> ${endpoint}`);
+    res.json({ ok: true, endpoint, changed: true });
+  } catch (err) {
+    console.error("POST /v1/nodes/self failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * Client-side health report: an app that failed (or succeeded) to reach a node
+ * tells us, so the next /v1/nodes call can put a reachable node first. Public on
+ * purpose (apps are unauthenticated when this matters) and deliberately cheap.
+ */
+app.post("/v1/nodes/:id/report", async (req, res) => {
+  try {
+    const id = String(req.params.id ?? "");
+    const node = await nodeStore.findById(id);
+    if (!node) return res.status(404).json({ error: "unknown_node" });
+    const ok = req.body?.ok === true;
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 120) : null;
+    if (ok) noteNodeSuccess(id);
+    else noteNodeFailure(id, reason);
+    res.json({ ok: true, health: healthSnapshot(id) });
+  } catch (err) {
+    console.error("POST /v1/nodes/:id/report failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
 
 // ---------------- Web payments (PayOS: MoMo wallet + Bank QR VietQR) ----------------
 /**
@@ -2224,8 +2360,8 @@ app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
 });
 
 // Owner visibility (FR-ADMIN-001): dashboard statistics — device counts by
-// platform/status, live wg peer count, and region buckets derived from the
-// wg peer endpoint IP (public IP of the connected client).
+// platform/status, live wg peer count, thiết bị đang kết nối theo TỪNG exit node,
+// và ISP/location hint của client (suy từ PTR của IP công khai trong wg endpoint).
 app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res) => {
   try {
     const devices = await store.all();
@@ -2253,12 +2389,17 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
     }
 
     // Live peers: pull dump from every exit node (coordinator + remote nodes).
+    // Giữ nguyên peer theo từng node (peersByNode) để dashboard vẽ được chart
+    // "đang có bao nhiêu thiết bị kết nối vào mỗi server"; `peers` phẳng bên dưới
+    // giữ nguyên cho các field cũ (dedup theo public key).
     const peers = [];
+    const peersByNode = new Map();
     const nodeList = await nodeStore.all();
     const seen = new Set();
     for (const node of nodeList) {
       const mgr = wgForNode(node);
       const rows = await mgr.dump();
+      peersByNode.set(node.id, rows);
       for (const row of rows) {
         if (seen.has(row.publicKey)) continue;
         seen.add(row.publicKey);
@@ -2267,6 +2408,11 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
     }
     if (peers.length === 0) {
       const local = await wg.dump();
+      // Fallback cũ: nodeStore không trả peer nào (vd node remote chưa cấu hình
+      // SSH). Gắn dump local vào node coordinator (node không có ssh_target) để
+      // chart theo server không bị trống.
+      const coordinator = nodeList.find((n) => !n.ssh_target) ?? nodeList[0] ?? null;
+      if (coordinator) peersByNode.set(coordinator.id, local);
       for (const row of local) {
         if (!seen.has(row.publicKey)) peers.push(row);
       }
@@ -2276,6 +2422,14 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
       if (!p.latestHandshakeSec) return false;
       return Date.now() / 1000 - p.latestHandshakeSec < 180; // < 3 min
     });
+
+    // ISP/location hint cho IP công khai của client — tra PTR có cache, không
+    // dùng API bên thứ ba. IP không có PTR sẽ hiện "unknown ISP" trên dashboard.
+    const clientIPs = onlinePeers.map((p) => clientIPFromEndpoint(p.endpoint)).filter(Boolean);
+    const ispByIP = await ptrLookup.lookupMany(clientIPs);
+    const devicesByPublicKey = new Map(devices.map((d) => [d.publicKey, d]));
+    const connections = aggregateConnections({ nodes: nodeList, peersByNode, devicesByPublicKey, ispByIP });
+    const onlineDevicesLimit = 200;
 
     // Region buckets from the client endpoint's public IP (best-effort, no
     // external API — country code from IANA/ASN-lite mapping).
@@ -2301,6 +2455,15 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
       by_platform: byPlatform,
       by_status: byStatus,
       by_user: Object.values(byUser).sort((a, b) => b.total - a.total),
+      // Live connections (dashboard): per-server + per-ISP + chi tiết thiết bị.
+      by_node: connections.by_node,
+      by_location: connections.by_location,
+      online_devices: connections.online_devices.slice(0, onlineDevicesLimit).map((d) => ({
+        ...d,
+        user_email: d.user_id ? emailById.get(d.user_id) ?? d.user_id : null,
+      })),
+      online_devices_truncated: connections.online_devices.length > onlineDevicesLimit,
+      connections_totals: connections.totals,
       online_peer_endpoints: Object.entries(regionByIp)
         .map(([ip, count]) => ({ ip, count }))
         .sort((a, b) => b.count - a.count),
