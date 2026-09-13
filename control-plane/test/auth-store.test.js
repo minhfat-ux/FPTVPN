@@ -138,3 +138,50 @@ test("sessionPayloadForToken: token sai hoặc rỗng -> null (route trả 401)"
     await cleanup();
   }
 });
+
+test("mua thêm khi CHƯA hết hạn thì CỘNG DỒN, không tính lại từ hôm nay", async () => {
+  const { store, cleanup } = await makeStore();
+  const prevTrial = process.env.ENABLE_FREE_TRIAL;
+  process.env.ENABLE_FREE_TRIAL = "0"; // không có trial tự động, để số ngày đo được rõ ràng
+  const mail = "stack@example.com";
+  const DAY = 24 * 60 * 60 * 1000;
+  const daysLeft = async () => {
+    const sub = await store.subscriptionForUserEmail(mail);
+    return sub?.expiresAt ? Math.round((Date.parse(sub.expiresAt) - Date.now()) / DAY) : 0;
+  };
+  const setExpiry = async (userId, iso) => {
+    const data = await store._load();
+    for (const sub of data.subscriptions) if (sub.userId === userId) sub.expiresAt = iso;
+    await store._save(data);
+  };
+  try {
+    const { code } = await store.startEmailLogin(mail);
+    const session = await store.verifyEmailLogin(mail, code);
+    const uid = session.user.id;
+
+    await store.grantSubscription(uid, { productId: "sepay.monthly", days: 30 });
+    assert.equal(await daysLeft(), 30, "lần đầu: 30 ngày");
+
+    // Đây là điều chủ dự án yêu cầu: còn 30 ngày mà mua thêm 30 ⇒ phải còn ~60 ngày
+    await store.grantSubscription(uid, { productId: "sepay.monthly", days: 30 });
+    assert.ok((await daysLeft()) >= 59, `phải cộng dồn thành ~60 ngày, đang là ${await daysLeft()}`);
+
+    // mua gói 1 năm khi đang còn ~60 ngày ⇒ ~425 ngày
+    await store.grantSubscription(uid, { productId: "sepay.yearly", days: 365 });
+    assert.ok((await daysLeft()) >= 424, `phải ~425 ngày, đang là ${await daysLeft()}`);
+
+    // Gói đã HẾT HẠN thì tính lại từ hôm nay, không cộng vào quá khứ
+    await setExpiry(uid, new Date(Date.now() - 2 * DAY).toISOString());
+    assert.equal((await store.subscriptionForUserEmail(mail))?.expiresAt !== null, true);
+    await store.grantSubscription(uid, { productId: "sepay.monthly", days: 30 });
+    assert.equal(await daysLeft(), 30, "hết hạn rồi thì 30 ngày tính từ hôm nay");
+
+    // days = null ⇒ trọn đời (không có ngày hết hạn)
+    await store.grantSubscription(uid, { productId: "admin.manual", days: null });
+    assert.equal((await store.subscriptionForUserEmail(mail))?.expiresAt, null);
+  } finally {
+    if (prevTrial === undefined) delete process.env.ENABLE_FREE_TRIAL;
+    else process.env.ENABLE_FREE_TRIAL = prevTrial;
+    await cleanup();
+  }
+});

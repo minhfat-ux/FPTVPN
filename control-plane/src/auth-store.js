@@ -297,9 +297,15 @@ export class AuthStore {
     if (!user) throw badRequest("User not found");
     // days == null (or 0) means LIFETIME: no expiry.
     const lifetime = days == null || Number(days) <= 0;
+    // CỘNG DỒN: khách mua tiếp khi gói cũ CHƯA hết hạn thì cộng vào ngày hết hạn cũ, không
+    // tính lại từ hôm nay — nếu không khách mất phần thời gian còn lại (ví dụ còn 20 ngày,
+    // mua thêm 30 ngày ⇒ phải còn 50 ngày, không phải 30).
+    const current = activeSubscriptionFor(data, userId);
+    const currentExpiry = current?.expiresAt ? Date.parse(current.expiresAt) : 0;
+    const base = Number.isFinite(currentExpiry) && currentExpiry > Date.now() ? currentExpiry : Date.now();
     const expiresAt = lifetime
       ? null
-      : new Date(Date.now() + Number(days) * 24 * 60 * 60 * 1000).toISOString();
+      : new Date(base + Number(days) * 24 * 60 * 60 * 1000).toISOString();
     data.subscriptions = data.subscriptions.filter((entry) => entry.userId !== userId);
     data.subscriptions.push({
       id: crypto.randomUUID(),
