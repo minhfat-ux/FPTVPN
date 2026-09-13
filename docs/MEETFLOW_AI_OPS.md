@@ -69,43 +69,53 @@ Trang mua tự chọn tiền tệ hiển thị (giá chính) theo ngôn ngữ kh
 `Environment=VND_PER_USD=25600` trong systemd drop-in. Log: `journalctl -u flowvpn-cp | grep "USD rate"`.
 Nếu chưa ghim thì tỷ giá USD đổi theo ngày, còn CNY đang ghim 3.500.
 
-### Nhập sẵn số tiền vào QR (WeChat / Alipay) — cơ chế có sẵn, hiện KHÔNG dùng
+### QR WeChat / Alipay có sẵn số tiền theo từng gói (ĐÃ BẬT 14/09/2026)
 
-> **Trạng thái 11/09/2026:** chủ shop chọn **giữ ảnh QR chung** cho WeChat / Alipay / MoMo
-> (khách tự nhập số tiền). Phần dưới là cơ chế ảnh-theo-mức-tiền — vẫn có sẵn trong code, chỉ cần thả ảnh
-> vào `/root/flowvpn-pay/` là tự bật, **không cần làm bây giờ**.
+Chủ shop đã tạo bộ ảnh QR **có đặt sẵn số tiền** bằng 微信 → 收付款 → 二维码收款 → **设置金额**
+và Alipay → 收钱 → **设置金额**, lưu vào `/root/flowvpn-pay/` với tên **theo gói**:
 
-- **Chuyển khoản ngân hàng (TPBank VietQR)** và **MoMo**: số tiền **đã được nhúng sẵn** trong QR động,
-  khách quét là app điền sẵn số tiền, chỉ cần xác nhận. Không phải làm gì thêm.
-- **WeChat Pay / Alipay (QR cá nhân)**: mã cá nhân không cho nhúng số tiền từ phía server.
-  Cách làm đúng: trong app WeChat/Alipay tạo **mã nhận tiền có đặt sẵn số tiền**
-  (微信: 收付款 → 二维码收款 → **设置金额**; Alipay: 收钱 → **设置金额**) rồi lưu ảnh QR cho **từng mức tiền**.
+| Gói (id trong code) | Giá | ¥ trong ảnh | File WeChat | File Alipay |
+|---|---|---|---|---|
+| `monthly` (tháng) | 200.000đ | ¥58 | `wechat-monthly.jpg` | `alipay-monthly.jpg` |
+| `quarterly` (3 tháng) | 550.000đ | ¥158 | `wechat-quarterly.jpg` | `alipay-quarterly.jpg` |
+| `semiannual` (6 tháng) | 950.000đ | ¥272 | `wechat-semiannual.jpg` | `alipay-semiannual.jpg` |
+| `yearly` (năm) | 1.800.000đ | ¥515 | `wechat-yearly.jpg` | `alipay-yearly.jpg` |
 
-Server tự chọn ảnh theo thứ tự ưu tiên (thư mục `/root/flowvpn-pay`):
+Số ¥ trong bảng là **đọc trực tiếp từ ảnh** (OCR — ảnh đã có sẵn số tiền), khớp với quy đổi làm tròn
+lên ở tỷ giá ghim 1 CNY = 3.500 đ (¥58/¥158/¥272/¥515). Khách chọn gói nào ⇒ trang buy hiện **đúng
+ảnh QR của gói đó**, và hiện luôn số ¥ đó, **không cần nhập hay copy gì**.
+
+Thứ tự ưu tiên ảnh (`resolveQrFile()` trong `payments.js`):
 
 ```
-<method>-<số ¥>.png      ví dụ wechat-20.png, alipay-43.png     ← có số tiền sẵn
-<method>-<tên gói>.png   ví dụ wechat-monthly.png               ← theo gói
-<method>.png             ảnh QR chung (khách tự nhập số tiền)    ← dự phòng
+<kênh>-<gói>.jpg        wechat-monthly.jpg        ← VPNFlow, ảnh đã có số tiền (đang dùng)
+<kênh>-ai-<gói>.jpg     wechat-ai-monthly.jpg     ← MeetFlow AI (giá khác nên phải có tiền tố -ai-)
+<kênh>-<số ¥>.jpg       wechat-58.jpg             ← ảnh theo mức tiền (cách đặt tên cũ)
+<kênh>-ai.jpg / <kênh>.jpg                        ← ảnh chung, khách tự nhập số tiền (đang dùng cho AI)
+```
+Đuôi file chấp nhận `.png .jpg .jpeg .webp` **và cả đuôi viết hoa** (`.JPG`). Ảnh của MeetFlow AI
+**bắt buộc** có `-ai-`, nếu không hệ thống sẽ không lấy ảnh của VPNFlow (200.000đ ≠ 130.000đ).
+
+Gói nào chưa có ảnh riêng thì tự lùi về ảnh chung — không bao giờ lỗi. Kiểm tra ảnh đang dùng:
+
+```bash
+curl -sI "https://api.meetflowai.site/v1/payments/qr/wechat?plan=yearly" | grep -i x-qr
+# X-QR-Variant: wechat-yearly.jpg
+# X-QR-Amount-Prefilled: 1
 ```
 
-Có ảnh riêng thì trang mua tự báo khách *"Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận."*;
-chưa có thì vẫn hiện số ¥ to + nút sao chép như hiện nay (không bao giờ lỗi).
-Kiểm tra ảnh nào đang được dùng: response header `X-QR-Variant` và `X-QR-Amount-Prefilled`.
+#### Số ¥ hiện trên trang buy lấy từ đâu
 
-**Nếu sau này muốn bật** (mỗi mức tiền 1 ảnh cho **cả WeChat và Alipay**) — hiện **không cần**:
+`/root/flowvpn-pay/qr-amounts.json` khai số ¥ **in thật trong từng ảnh**; trang buy dùng số này
+(response `qrCny`) thay vì số quy đổi theo tỷ giá — nếu mai kia tỷ giá đổi, khách vẫn thấy đúng con số
+trong ví. Sửa file là có hiệu lực ngay (đọc lại theo mtime, **không cần restart**):
 
-| Số tiền | Dùng cho | Tên file |
-|---|---|---|
-| ¥58 | VPN tháng 200.000đ | `wechat-58.png`, `alipay-58.png` |
-| ¥158 | VPN 3 tháng 550.000đ | `wechat-158.png`, `alipay-158.png` |
-| ¥272 | VPN 6 tháng 950.000đ | `wechat-272.png`, `alipay-272.png` |
-| ¥515 | VPN năm 1.800.000đ | `wechat-515.png`, `alipay-515.png` |
-| ¥43 | MeetFlow AI pass 30 ngày | `wechat-43.png`, `alipay-43.png` |
-| ¥38 | MeetFlow AI tháng | `wechat-38.png`, `alipay-38.png` |
-| ¥300 | MeetFlow AI năm | `wechat-300.png`, `alipay-300.png` |
+```json
+{ "wechat-monthly.jpg": 58, "wechat-quarterly.jpg": 158, "wechat-semiannual.jpg": 272, "wechat-yearly.jpg": 515,
+  "alipay-monthly.jpg": 58, "alipay-quarterly.jpg": 158, "alipay-semiannual.jpg": 272, "alipay-yearly.jpg": 515 }
+```
 
-Làm dần cũng được: gói nào chưa có ảnh riêng thì dùng ảnh QR chung như hiện tại.
+Đổi giá gói ⇒ phải tạo lại ảnh QR trong app với số tiền mới, thay file, và sửa `qr-amounts.json`.
 
 Trạng thái từng kênh (11/09/2026):
 
@@ -113,8 +123,8 @@ Trạng thái từng kênh (11/09/2026):
 |---|---|---|
 | Chuyển khoản ngân hàng (TPBank) | QR **động** do server tạo | ✅ nhúng sẵn + ghi mã đơn vào nội dung CK |
 | MoMo | QR **động** (VietQR BIN 971025) | ✅ nhúng sẵn + mã đơn |
-| WeChat Pay | ảnh tĩnh `wechat.png` (ảnh cũ) | ❌ khách tự nhập ¥ (số ¥ hiện to + nút sao chép) |
-| Alipay | ảnh tĩnh `alipay.png` (ảnh cũ) | ❌ khách tự nhập ¥ |
+| WeChat Pay | ảnh theo gói `wechat-<gói>.jpg` (VPN) · `wechat.png` (AI) | ✅ VPN: có sẵn số tiền; AI: khách tự nhập ¥ |
+| Alipay | ảnh theo gói `alipay-<gói>.jpg` (VPN) · `alipay.png` (AI) | ✅ VPN: có sẵn số tiền; AI: khách tự nhập ¥ |
 
 Muốn MoMo quay lại dùng ảnh tĩnh `momo.png`: thêm `Environment=MOMO_QR_DYNAMIC=0` rồi restart service.
 
