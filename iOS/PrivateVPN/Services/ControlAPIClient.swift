@@ -153,6 +153,57 @@ struct AppVersionInfo: Equatable, Codable, Identifiable {
     var id: String { "\(minimum_version)-\(latest_version)" }
 }
 
+/// Hosts the coordinator is reachable through. Defined here because this file is a
+/// source of both the app and the packet-tunnel extension, so `NodeHealthReporter`
+/// uses the very same fallback list.
+enum ControlAPIHosts {
+    /// Fallback coordinator host: a fixed Tailscale Funnel URL that rides shared
+    /// infrastructure instead of a node's IP.
+    ///
+    /// Why this exists: the GFW blocks by IP, so once every node IP is blocked the
+    /// app cannot call the API at all even though the nodes are healthy. Blocking
+    /// this URL means blocking a range many unrelated services use. TLS still
+    /// validates the real hostname, so this only adds a route — it cannot be used
+    /// to redirect traffic.
+    static let fallbackBaseURLs: [URL] = [
+        URL(string: "https://fcnvpn.tail303be3.ts.net")!,
+    ]
+
+    /// Sends `request` to its own host and, after a transport failure (no response at all:
+    /// blocked IP, poisoned DNS, no route), retries the very same request against each
+    /// fallback host once.
+    ///
+    /// An HTTP status is an answer, not a blocked route, so it is never retried — retrying
+    /// would repeat the side effect of a POST. The request is preserved as-is (method,
+    /// headers, body) and only scheme/host/port are swapped, so the path and query string
+    /// survive. Attempts stay bounded: the caller's host once plus each fallback host once.
+    ///
+    /// Shared by `ControlAPIClient` and `NodeHealthReporter`: the health report is sent
+    /// from inside the censored network, so it is exactly the request that must still get
+    /// through when the node's host is blocked.
+    static func sendWithFallback(
+        _ request: URLRequest,
+        session: URLSession
+    ) async throws -> (Data, URLResponse) {
+        var lastError: Error?
+        do {
+            return try await session.data(for: request)
+        } catch {
+            lastError = error
+        }
+        for base in fallbackBaseURLs {
+            // Never hit the same host twice: the caller may already point at a fallback.
+            guard base.host != request.url?.host else { continue }
+            do {
+                return try await session.data(for: request.rewritten(to: base))
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? URLError(.cannotConnectToHost)
+    }
+}
+
 /// Talks to the PrivateVPN coordinator (mesh control plane) to register this
 /// device and learn the exit node it should connect to.
 struct ControlAPIClient {
@@ -224,13 +275,7 @@ struct ControlAPIClient {
         ]
         request.httpBody = try JSONEncoder().encode(body.compactMapValues { $0 })
 
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw ClientError.transport(endpoint: "registration", error)
-        }
+        let (data, response) = try await sendWithFallback(request, endpoint: "registration")
         guard let http = response as? HTTPURLResponse else {
             throw ClientError.badResponse
         }
@@ -261,7 +306,7 @@ struct ControlAPIClient {
             "peer_id": peerId,
             "credential": credential,
         ])
-        _ = try await session.data(for: request)
+        _ = try await sendWithFallback(request, endpoint: "heartbeat")
     }
 
     /// Fetches the list of available exit nodes from the coordinator.
@@ -273,13 +318,7 @@ struct ControlAPIClient {
         // networks) fails fast and the app can fall back to cached nodes
         // instead of hanging on "Loading servers…" forever.
         request.timeoutInterval = 10
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw ClientError.transport(endpoint: "locations", error)
-        }
+        let (data, response) = try await sendWithFallback(request, endpoint: "locations")
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             return []
         }
@@ -291,13 +330,7 @@ struct ControlAPIClient {
         let url = baseURL.appendingPathComponent("v1/app-version")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw ClientError.transport(endpoint: "app version", error)
-        }
+        let (data, response) = try await sendWithFallback(request, endpoint: "app version")
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw ClientError.badResponse
         }
@@ -310,12 +343,7 @@ struct ControlAPIClient {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        let response: URLResponse
-        do {
-            (_, response) = try await session.data(for: request)
-        } catch {
-            throw ClientError.transport(endpoint: "account deletion", error)
-        }
+        let (_, response) = try await sendWithFallback(request, endpoint: "account deletion")
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw ClientError.badResponse
         }
@@ -357,13 +385,7 @@ struct ControlAPIClient {
         if let adminToken {
             request.setValue("Bearer \(adminToken)", forHTTPHeaderField: "Authorization")
         }
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw ClientError.transport(endpoint: "token", error)
-        }
+        let (data, response) = try await sendWithFallback(request, endpoint: "token")
         guard let http = response as? HTTPURLResponse else {
             throw ClientError.badResponse
         }
@@ -383,13 +405,7 @@ struct ControlAPIClient {
         request.httpMethod = "POST"
         request.timeoutInterval = 10
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw ClientError.transport(endpoint: "enrollment token", error)
-        }
+        let (data, response) = try await sendWithFallback(request, endpoint: "enrollment token")
         guard let http = response as? HTTPURLResponse else {
             throw ClientError.badResponse
         }
@@ -435,15 +451,24 @@ struct ControlAPIClient {
         return try await send(request, endpoint: "apple login")
     }
 
-    @discardableResult
-    private func sendEmpty(_ request: URLRequest, endpoint: String) async throws -> Data {
-        let data: Data
-        let response: URLResponse
+    /// Sends `request`, retrying it against the fallback hosts when the primary host
+    /// cannot be reached at all, and reports the endpoint-scoped error the UI knows.
+    private func sendWithFallback(
+        _ request: URLRequest,
+        endpoint: String
+    ) async throws -> (Data, URLResponse) {
         do {
-            (data, response) = try await session.data(for: request)
+            return try await ControlAPIHosts.sendWithFallback(request, session: session)
         } catch {
             throw ClientError.transport(endpoint: endpoint, error)
         }
+    }
+
+    /// The single funnel every request goes through (hence not private: the unit tests
+    /// drive it directly with a hand-built request).
+    @discardableResult
+    func sendEmpty(_ request: URLRequest, endpoint: String) async throws -> Data {
+        let (data, response) = try await sendWithFallback(request, endpoint: endpoint)
         guard let http = response as? HTTPURLResponse else {
             throw ClientError.badResponse
         }
@@ -480,5 +505,23 @@ struct ControlAPIClient {
         let message: String?
         let devices: [CoordinatorDevice]?
         let max_devices: Int?
+    }
+}
+
+/// Not private: `NodeHealthReporter` retries its report through the same fallback hosts.
+extension URLRequest {
+    /// The same request aimed at another base host: scheme/host/port are replaced and
+    /// everything else — path, query string, method, headers and body — is carried
+    /// over untouched.
+    func rewritten(to base: URL) -> URLRequest {        guard let url,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return self
+        }
+        components.scheme = base.scheme
+        components.host = base.host
+        components.port = base.port
+        var copy = self
+        copy.url = components.url
+        return copy
     }
 }

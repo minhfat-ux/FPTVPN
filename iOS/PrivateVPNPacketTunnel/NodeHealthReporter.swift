@@ -21,13 +21,20 @@ enum NodeHealthReporter {
         if !reachable, let reason { body["reason"] = String(reason.prefix(100)) }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-        URLSession.shared.dataTask(with: request) { _, _, error in
-            if let error {
-                RelayDiagnostics.shared.log("health: report \(nodeId) ok=\(reachable) failed: \(error.localizedDescription)")
-            } else {
+        // Fire-and-forget: báo cáo không bao giờ được ném lỗi vào tunnel hay làm chậm
+        // startTunnel. Gửi qua đúng cơ chế dự phòng của `ControlAPIClient`
+        // (`ControlAPIHosts.sendWithFallback`): host chính là api.meetflowai.site — trỏ
+        // vào IP của node — nên khi IP đó bị chặn thì chính báo cáo này là thứ không đi
+        // được, mà nó lại là tín hiệu DUY NHẤT để coordinator biết node bị chặn và hạ nó
+        // xuống. Lỗi transport thì thử lại qua host dùng chung; có HTTP response thì thôi.
+        Task {
+            do {
+                _ = try await ControlAPIHosts.sendWithFallback(request, session: .shared)
                 RelayDiagnostics.shared.log("health: reported \(nodeId) ok=\(reachable)")
+            } catch {
+                RelayDiagnostics.shared.log("health: report \(nodeId) ok=\(reachable) failed: \(error.localizedDescription)")
             }
-        }.resume()
+        }
         log.debug("health report node=\(nodeId) ok=\(reachable)")
     }
 }

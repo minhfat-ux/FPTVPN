@@ -4,6 +4,9 @@ import os
 import Security
 import WireGuardKit
 
+/// How long each transport in the chain gets to come up before the next one is tried.
+private let transportGrace: TimeInterval = 8
+
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let log = Logger(
         subsystem: "com.privatevpn.app.packet-tunnel",
@@ -12,7 +15,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private var adapter: WireGuardAdapter?
     private var relay: WGRelayClient?
-    /// Configuration to restore when the relay never comes up (direct UDP endpoint).
+    /// WebSocket relay: only started when the TCP relay never came up (see
+    /// `scheduleWebSocketFallback`).
+    private var wsRelay: WSRelayClient?
+    /// Configuration to restore when the relays never come up (direct UDP endpoint).
     private var directConfiguration: TunnelConfiguration?
 
     override func startTunnel(
@@ -40,34 +46,45 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
+        // Chuỗi transport, đi một chiều và không quay lại: relay TCP → relay WS → UDP
+        // trực tiếp. Mỗi bước chỉ được thử khi bước trước vẫn chưa kết nối được.
+        //
         // WireGuard-over-TCP relay (same transport the Android client uses): point the
         // peer at a local UDP listener and let the relay carry the datagrams over TCP
         // to the exit node. Measured on a network where the raw-UDP handshake never
         // completed: the client kept re-sending handshakes every 5s while the server's
-        // answers never got through. If the relay cannot be reached we fall back to
-        // direct UDP, so nothing is lost on networks where UDP is fine.
+        // answers never got through. If the relay cannot be reached we try the
+        // WebSocket relay and then direct UDP, so nothing is lost on networks where
+        // UDP is fine.
         let directConfiguration = tunnelConfig
         if let relayHost = config.relayHost, let relayPorts = config.relayPorts,
-           let localPort = startRelay(host: relayHost, ports: relayPorts),
            !tunnelConfig.peers.isEmpty {
-            var peers = tunnelConfig.peers
-            peers[0].endpoint = Endpoint(host: NWEndpoint.Host("127.0.0.1"), port: localPort)
-            tunnelConfig = TunnelConfiguration(
-                name: tunnelConfig.name,
-                interface: tunnelConfig.interface,
-                peers: peers
-            )
-            log.info("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (relay \(relayHost):\(relayPorts.first ?? 0))")
-            RelayDiagnostics.shared.log("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue)")
-            scheduleDirectFallback(direct: directConfiguration)
+            if let localPort = startRelay(host: relayHost, ports: relayPorts) {
+                tunnelConfig = configuration(tunnelConfig, pointingAt: localPort)
+                log.info("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (relay \(relayHost):\(relayPorts.first ?? 0))")
+                RelayDiagnostics.shared.log("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue)")
+                scheduleWebSocketFallback(direct: directConfiguration)
+            } else if let localPort = startWebSocketRelay() {
+                // Bước 1 không dựng nổi listener (bind lỗi) thì vào chuỗi ở bước 2 luôn:
+                // đường WS không phụ thuộc IP node nên nó vẫn là đường sống khi bị chặn IP,
+                // bỏ qua nó chỉ vì relay TCP không bind được là mất đúng đường dự phòng.
+                tunnelConfig = configuration(tunnelConfig, pointingAt: localPort)
+                RelayDiagnostics.shared.log("ws-relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (TCP relay did not start)")
+                scheduleDirectFallback(direct: directConfiguration)
+            } else {
+                RelayDiagnostics.shared.log("relay: no relay transport could start — using direct UDP")
+            }
         }
 
         // Sau khi tunnel chạy, báo cho coordinator biết node này có tới được không:
         // node bị GFW chặn thì app phải tự nói, server tự kiểm tra không thấy được.
+        // Báo sau khi chuỗi transport đã chọn xong (2 mốc grace + 4s dự phòng) và đọc
+        // đúng transport đang chạy — nếu không, node tới được qua WS vẫn bị báo là không
+        // tới được, và coordinator lại xếp nó xuống dưới.
         let reportedNodeId = config.nodeId
-        let activeRelay = relay
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
-            let reachable = activeRelay?.isConnected ?? true
+        DispatchQueue.global().asyncAfter(deadline: .now() + transportGrace * 2 + 4) { [weak self] in
+            guard let self else { return }
+            let reachable = self.activeTransportIsConnected
             NodeHealthReporter.report(
                 nodeId: reportedNodeId,
                 reachable: reachable,
@@ -111,26 +128,122 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    /// Safety net for exit nodes without a relay: if the TCP link is still not up a
-    /// few seconds after the tunnel started, hand WireGuard the direct endpoint back.
-    /// One-way on purpose — flapping between transports would be worse than either.
-    private func scheduleDirectFallback(direct: TunnelConfiguration) {
-        directConfiguration = direct
+    /// Starts the WebSocket relay and returns the local UDP port WireGuard must use.
+    ///
+    /// Same reasoning as `startRelay`: no reachability probe, the client connects
+    /// asynchronously and reconnects on its own, and its local UDP port never changes
+    /// across those reconnects.
+    private func startWebSocketRelay() -> NWEndpoint.Port? {
+        let client = WSRelayClient(log: log)
+        do {
+            let localPort = try client.start()
+            wsRelay = client
+            log.info("ws-relay: started for \(WSRelayClient.defaultURL.absoluteString)")
+            RelayDiagnostics.shared.log("ws-relay: started local udp \(localPort) for \(WSRelayClient.defaultURL.absoluteString)")
+            return NWEndpoint.Port(rawValue: localPort)
+        } catch {
+            log.error("ws-relay: could not start — \(error)")
+            RelayDiagnostics.shared.log("ws-relay: could not start — \(error)")
+            return nil
+        }
+    }
+
+    /// Points the first peer at a local relay listener, keeping the rest untouched.
+    private func configuration(
+        _ config: TunnelConfiguration,
+        pointingAt localPort: NWEndpoint.Port
+    ) -> TunnelConfiguration {
+        var peers = config.peers
+        peers[0].endpoint = Endpoint(host: NWEndpoint.Host("127.0.0.1"), port: localPort)
+        return TunnelConfiguration(
+            name: config.name,
+            interface: config.interface,
+            peers: peers
+        )
+    }
+
+    /// Whether the transport WireGuard is currently pointed at is actually carrying
+    /// traffic.
+    ///
+    /// Direct UDP has no link to inspect, so it deliberately counts as REACHABLE, and so
+    /// does the moment before any transport exists. That default is intentional, not an
+    /// oversight: the coordinator only demotes a node after several "unreachable" reports
+    /// in a window, so a false negative would push a healthy node down the picker. Only a
+    /// relay that is actually active and never connected reports unreachable.
+    private var activeTransportIsConnected: Bool {
+        if let relay { return relay.isConnected }
+        if let wsRelay { return wsRelay.isConnected }
+        return true
+    }
+
+    /// Step 2 of the transport chain: when the TCP relay is still not connected after
+    /// its grace period, tear it down and carry the tunnel over the WebSocket relay
+    /// instead. That path talks to shared Tailscale infrastructure rather than the
+    /// node's own IP, so it is the one that survives a network blocking every node IP.
+    ///
+    /// One-way on purpose, like the rest of the chain: the switch happens at most once
+    /// and is never reversed. Each transport keeps its own local UDP port for its whole
+    /// lifetime, so WireGuard is reconfigured exactly once per step.
+    private func scheduleWebSocketFallback(direct: TunnelConfiguration) {
         guard let relay else { return }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 8) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + transportGrace) { [weak self] in
             guard let self, let adapter = self.adapter else { return }
             guard !relay.isConnected else {
                 RelayDiagnostics.shared.log("relay: link is up, keeping the relay transport")
                 return
             }
-            RelayDiagnostics.shared.log("relay: still not connected after 8s — falling back to direct UDP")
-            self.log.error("relay: not connected after 8s — falling back to direct UDP")
-            adapter.update(tunnelConfiguration: direct) { error in
+            let grace = Int(transportGrace)
+            RelayDiagnostics.shared.log("relay: still not connected after \(grace)s — trying the WebSocket relay")
+            self.log.error("relay: not connected after \(grace)s — trying the WebSocket relay")
+            relay.stop()
+            self.relay = nil
+
+            guard let localPort = self.startWebSocketRelay() else {
+                self.applyDirectEndpoint(direct, because: "the WebSocket relay could not start")
+                return
+            }
+            adapter.update(tunnelConfiguration: self.configuration(direct, pointingAt: localPort)) { error in
                 if let error {
-                    RelayDiagnostics.shared.log("relay: fallback update failed: \(error)")
+                    RelayDiagnostics.shared.log("ws-relay: update failed: \(error)")
                 } else {
-                    RelayDiagnostics.shared.log("relay: WireGuard endpoint restored to the direct node address")
+                    RelayDiagnostics.shared.log("ws-relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue)")
                 }
+            }
+            self.scheduleDirectFallback(direct: direct)
+        }
+    }
+
+    /// Step 3 of the chain: if the WebSocket link is still not up a few seconds after it
+    /// was handed to WireGuard, give the node's direct UDP endpoint back. One-way on
+    /// purpose — flapping between transports would be worse than either.
+    private func scheduleDirectFallback(direct: TunnelConfiguration) {
+        directConfiguration = direct
+        guard let wsRelay else { return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + transportGrace) { [weak self] in
+            guard let self else { return }
+            guard !wsRelay.isConnected else {
+                RelayDiagnostics.shared.log("ws-relay: link is up, keeping the WebSocket transport")
+                return
+            }
+            wsRelay.stop()
+            self.wsRelay = nil
+            self.applyDirectEndpoint(
+                direct,
+                because: "WebSocket relay still not connected after \(Int(transportGrace))s"
+            )
+        }
+    }
+
+    /// Last resort of the chain: hand WireGuard the node's own address back.
+    private func applyDirectEndpoint(_ direct: TunnelConfiguration, because reason: String) {
+        guard let adapter else { return }
+        RelayDiagnostics.shared.log("relay: \(reason) — falling back to direct UDP")
+        log.error("relay: \(reason) — falling back to direct UDP")
+        adapter.update(tunnelConfiguration: direct) { error in
+            if let error {
+                RelayDiagnostics.shared.log("relay: fallback update failed: \(error)")
+            } else {
+                RelayDiagnostics.shared.log("relay: WireGuard endpoint restored to the direct node address")
             }
         }
     }
@@ -143,6 +256,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         RelayDiagnostics.shared.log("stopTunnel reason=\(reason.rawValue)")
         relay?.stop()
         relay = nil
+        wsRelay?.stop()
+        wsRelay = nil
         adapter?.stop { [weak self] error in
             self?.adapter = nil
             if let error {

@@ -248,4 +248,162 @@ final class ControlAPIClientTests: XCTestCase {
             XCTFail("Expected DecodingError, got \(error)")
         }
     }
+
+    // MARK: - Fallback host (blocked-IP path)
+
+    func testTransportFailureOnPrimaryIsRetriedOnFallbackHost() async throws {
+        let client = makeMockedClient()
+        let fallbackHost = try XCTUnwrap(ControlAPIHosts.fallbackBaseURLs.first?.host)
+        var triedHosts: [String] = []
+        MockURLProtocol.requestHandler = { request in
+            let host = request.url?.host ?? ""
+            triedHosts.append(host)
+            guard host == fallbackHost else { throw URLError(.cannotConnectToHost) }
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"token":"PVPN-ENROLL-fallback"}"#.utf8))
+        }
+
+        let token = try await client.fetchEnrollmentToken(accessToken: "PVPN-AUTH-test")
+
+        XCTAssertEqual(token, "PVPN-ENROLL-fallback")
+        XCTAssertEqual(triedHosts, ["api.meetflowai.site", fallbackHost],
+                       "the same request must be retried once against the fallback host")
+    }
+
+    func testHTTPErrorOnPrimaryIsNotRetriedOnFallbackHost() async throws {
+        let client = makeMockedClient()
+        var triedHosts: [String] = []
+        MockURLProtocol.requestHandler = { request in
+            triedHosts.append(request.url?.host ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await client.fetchEnrollmentToken(accessToken: "PVPN-AUTH-test")
+            XCTFail("Expected a ClientError for HTTP 503")
+        } catch let error as ControlAPIClient.ClientError {
+            guard case .server(let message) = error else {
+                return XCTFail("Expected .server error, got \(error)")
+            }
+            XCTAssertEqual(message, "HTTP 503")
+        }
+        XCTAssertEqual(triedHosts, ["api.meetflowai.site"],
+                       "an HTTP answer is not a blocked route: it must not be retried")
+    }
+
+    func testFallbackRetryPreservesMethodPathQueryHeadersAndBody() async throws {
+        let client = makeMockedClient()
+        let fallback = try XCTUnwrap(ControlAPIHosts.fallbackBaseURLs.first)
+        var retriedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            guard request.url?.host == fallback.host else { throw URLError(.cannotConnectToHost) }
+            retriedRequest = request
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"ok":true}"#.utf8))
+        }
+
+        var request = URLRequest(url: URL(string: "https://api.meetflowai.site/v1/nodes?limit=5")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer PVPN-AUTH-test", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(#"{"node_id":"node-1"}"#.utf8)
+
+        _ = try await client.sendEmpty(request, endpoint: "fallback test")
+
+        let retried = try XCTUnwrap(retriedRequest)
+        XCTAssertEqual(retried.url?.scheme, fallback.scheme)
+        XCTAssertEqual(retried.url?.host, fallback.host)
+        XCTAssertEqual(retried.url?.port, fallback.port)
+        XCTAssertEqual(retried.url?.path, "/v1/nodes")
+        XCTAssertEqual(retried.url?.query, "limit=5")
+        XCTAssertEqual(retried.httpMethod, "POST")
+        XCTAssertEqual(retried.value(forHTTPHeaderField: "Authorization"), "Bearer PVPN-AUTH-test")
+        XCTAssertEqual(retried.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(bodyData(from: retried), Data(#"{"node_id":"node-1"}"#.utf8))
+    }
+
+    // MARK: - Health report (NodeHealthReporter's send path)
+
+    /// The exact request `NodeHealthReporter` builds. Its file is compiled into the
+    /// packet-tunnel target only, so the shared retry it calls is exercised here with a
+    /// byte-identical request.
+    private func healthReportRequest(reachable: Bool) -> URLRequest {
+        var request = URLRequest(
+            url: URL(string: "https://api.meetflowai.site/v1/nodes/node-1/report")!
+        )
+        request.httpMethod = "POST"
+        request.timeoutInterval = 8
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = ["ok": reachable]
+        if !reachable { body["reason"] = "relay unreachable from this network" }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
+    private func makeMockedSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    func testHealthReportIsRetriedOnFallbackHostAfterTransportFailure() async throws {
+        let fallbackHost = try XCTUnwrap(ControlAPIHosts.fallbackBaseURLs.first?.host)
+        var triedHosts: [String] = []
+        var retriedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            let host = request.url?.host ?? ""
+            triedHosts.append(host)
+            guard host == fallbackHost else { throw URLError(.cannotConnectToHost) }
+            retriedRequest = request
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"ok":true}"#.utf8))
+        }
+
+        let (_, response) = try await ControlAPIHosts.sendWithFallback(
+            healthReportRequest(reachable: false),
+            session: makeMockedSession()
+        )
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(triedHosts, ["api.meetflowai.site", fallbackHost],
+                       "a blocked node IP must not stop the health report: retry the fallback host")
+
+        let retried = try XCTUnwrap(retriedRequest)
+        XCTAssertEqual(retried.httpMethod, "POST")
+        XCTAssertEqual(retried.url?.path, "/v1/nodes/node-1/report")
+        let payload = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: try XCTUnwrap(bodyData(from: retried))) as? [String: Any]
+        )
+        XCTAssertEqual(payload["ok"] as? Bool, false)
+        XCTAssertEqual(payload["reason"] as? String, "relay unreachable from this network")
+    }
+
+    func testHealthReportIsNotRetriedOnFallbackHostAfterHTTPError() async throws {
+        var triedHosts: [String] = []
+        MockURLProtocol.requestHandler = { request in
+            triedHosts.append(request.url?.host ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        let (_, response) = try await ControlAPIHosts.sendWithFallback(
+            healthReportRequest(reachable: false),
+            session: makeMockedSession()
+        )
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 503)
+        XCTAssertEqual(triedHosts, ["api.meetflowai.site"],
+                       "an HTTP answer is not a blocked route: the report must not be retried")
+    }
 }

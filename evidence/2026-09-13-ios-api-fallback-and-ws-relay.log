@@ -1,0 +1,78 @@
+=== BẰNG CHỨNG: iOS parity — API dự phòng + WS bridge cổng 10000 ===
+Thời điểm: 2026-09-13 22:15   |  Máy: macOS (uname -m: arm64)
+Git HEAD lúc chạy: xem `git log` — thay đổi iOS còn ở working tree khi chạy bằng chứng này
+
+Mục tiêu (HANDOVER §3 iOS + §4 'Việc khác'): iOS còn THIẾU API dự phòng và WS bridge cổng
+10000 — spec: dùng wss://fcnvpn.tail303be3.ts.net:10000 vì iOS dùng WireGuard (Android dùng
+:8443 cho Hysteria; subagent cố ý KHÔNG copy cổng này sang iOS).
+
+################ 1. BUILD THIẾT BỊ (tôi tự chạy — không chép lời subagent) ################
+$ xcodegen generate
+  Created project at /Volumes/BIWIN/SourcesCode/PrivateVPN/PrivateVPN.xcodeproj
+
+$ xcodebuild -scheme PrivateVPN -destination 'generic/platform=iOS' -derivedDataPath .dd-ios-ipad build
+  Validate .dd-ios-ipad/Build/Products/Debug-iphoneos/FlowVPN.app (in target 'PrivateVPN')
+  ** BUILD SUCCEEDED **   (exit=0)
+
+################ 2. TEST (đọc thẳng từ .xcresult, KHÔNG qua lời kể) ################
+$ xcodebuild test -scheme PrivateVPN -destination 'platform=iOS Simulator,name=CI-iPhone17-iOS26.5'
+  bundle : Test-PrivateVPN-2026.09.13_22-11-51-+0800.xcresult
+  result : Passed
+  passed : 43
+  failed : 0
+  skipped: 0
+  device : CI-iPhone17-iOS26.5 / iOS 26.5 / iOS Simulator
+
+Ghi chú về máy test: không có simulator 'iPhone 16' trên máy này; chỉ có
+CI-iPhone17-iOS26.5, nên đó là máy đã dùng.
+
+3 test mới (do tôi yêu cầu, kiểm bằng cách đếm hàm trong file test):
+  - func test trong HEAD: 9  ->  trong working tree: 12   (+3)
+  - testTransportFailureOnPrimaryIsRetriedOnFallbackHost
+  - testHTTPErrorOnPrimaryIsNotRetriedOnFallbackHost
+  - testFallbackRetryPreservesMethodPathQueryHeadersAndBody
+    (assert cả method POST, path, query, header Authorization/Content-Type VÀ httpBody)
+
+################ 3. XÁC NHẬN MÃ MỚI CÓ TRONG ARTIFACT (theo BYTE, không dùng strings) ################
+BÀI HỌC ĐO (giống lần đo APK Android): lần đầu tôi chạy `strings` trên
+PrivateVPNPacketTunnel.appex/PrivateVPNPacketTunnel và ra 0 cho mọi chuỗi -> trông như mã
+không vào binary. Thực ra đó là file STUB 89.744 bytes (Xcode ENABLE_DEBUG_DYLIB); mã thật
+nằm trong PrivateVPNPacketTunnel.debug.dylib (4.673.904 bytes). Tìm trên đúng file thì ra đủ.
+
+  PrivateVPNPacketTunnel.debug.dylib: 4674688 bytes
+    [  1] wss://fcnvpn.tail303be3.ts.net:10000
+    [ 11] ws-relay
+    [  2] health:
+    [ 21] ControlAPIHosts
+
+################ 4. LỖ HỔNG TÔI TÌM RA LÚC REVIEW VÀ ĐÃ ĐƯỢC SỬA ################
+Brief yêu cầu NodeHealthReporter.swift dùng chung danh sách host dự phòng. Bản đầu KHÔNG
+sửa file này — vẫn hardcode https://api.meetflowai.site.
+
+Vì sao KHÔNG phải chuyện nhỏ: api.meetflowai.site trỏ về IP node-2 (103.6.234.233).
+NodeHealthReporter là TÍN HIỆU DUY NHẤT báo coordinator biết một node không tới được, và nó
+được gửi TỪ TRONG MẠNG BỊ CHẶN — tức đúng nơi host suy từ IP node bị chặn. Không sửa thì báo
+cáo không bao giờ tới được đúng lúc cần, coordinator không bao giờ biết node bị chặn, và thứ
+tự hạ node theo health ở GET /v1/nodes (commit 6d81f49) mất tác dụng thực tế.
+
+Đã sửa: dùng ControlAPIHosts.fallbackBaseURLs, thử lại qua host dự phòng KHI VÀ CHỈ KHI lỗi
+transport (có HTTP response thì không thử lại, đúng quy tắc của ControlAPIClient), số lần thử
+bị chặn bởi độ dài danh sách, mọi lỗi đều bị nuốt (best-effort, không ảnh hưởng tunnel).
+
+################ 5. CHƯA KIỂM CHỨNG — CẦN THIẾT BỊ THẬT ################
+Không có thiết bị iOS thật ở đây, nên TOÀN BỘ đường dữ liệu chưa được chứng minh:
+  - Tailscale Funnel :10000 có nhận WS từ trong extension không
+  - 1 binary message WS có đúng bằng 1 datagram ở đầu relay kia không
+  - WireGuard đổi endpoint sang 127.0.0.1:<wsPort> có bắt tay xong không
+  - thông lượng/độ trễ khi thêm 1 chặng, và hành vi trên mạng bị GFW chặn
+WSRelayClient KHÔNG có unit test: file không nằm trong target test và project.yml bị giới hạn
+trong brief. Cách đo trên thiết bị thật (iPad phải mở khoá):
+  xcrun devicectl device copy from --domain-type appDataContainer \
+    --domain-identifier com.privatevpn.app.packet-tunnel --source Documents/relay.log
+  rồi tìm: 'ws-relay: connected', 'ws-relay: WireGuard endpoint -> 127.0.0.1:<port>',
+  'heartbeat udpFrames=… framesFromRelay=…'
+
+Ghi chú khác chưa xử lý (subagent báo, KHÔNG do thay đổi này):
+  target PrivateVPNMacPacketTunnel trong project.yml chỉ khai PacketTunnelProvider.swift +
+  WireGuardConfig.swift, thiếu WGRelayClient/RelayDiagnostics/NodeHealthReporter/WSRelayClient
+  nên hiện KHÔNG build được — tình trạng này có từ trước; project.yml nằm ngoài brief.
