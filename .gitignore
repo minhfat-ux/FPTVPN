@@ -47,6 +47,7 @@ tasks/
 
 # Local build artifacts
 .derivedData-*/
+.dd-ios-ipad/
 FPT-Harness/
 
 # Local toolchains (JDK on BIWIN — ExFAT, keep out of git)
