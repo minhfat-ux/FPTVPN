@@ -335,7 +335,10 @@ class HysteriaVpnService : VpnService() {
     private fun wsRelayAttempt(): Int {
         if (stopping) return 1
         val bridge = WSRelayBridge(
-            protector = { sock -> protect(sock) },
+            // Dùng chung protectRelaySocket: socket WS của OkHttp cũng là java.net.Socket
+            // nên trước đây cũng bị protect() trả false => bị hút vào tunnel => Connection
+            // reset ngay sau khi TUN lên. Log kèm để lần sau không phải suy đoán.
+            protector = { sock -> protectRelaySocket(sock, "ws-relay") },
             onDead = { reason ->
                 // Mất cầu WS giữa lúc tunnel đang chạy: Hysteria vẫn giữ socket UDP
                 // tới bridge nên serve() KHÔNG tự trả về. Phải dừng client Go để
@@ -394,14 +397,60 @@ class HysteriaVpnService : VpnService() {
         return if (parts[0] == "tcp") tcpRelayAttempt(port) else udpAttempt(port)
     }
 
+    /**
+     * protect() cho socket TCP của đường relay, có tạo fd trước.
+     *
+     * Vì sao cần hàm này thay vì gọi protect() thẳng — đo trên Galaxy Z Fold5 (Android 16):
+     * `protect(java.net.Socket)` trả về **false 8/8 lần**, trong khi
+     * `protect(java.net.DatagramSocket)` trả về true. Hậu quả: socket TCP của đường relay
+     * đi XUYÊN QUA chính tunnel (local address đo được = IP của TUN, 100.100.100.101),
+     * rồi `connect()` trả về true giả tạo vì userspace stack của tunnel tự trả lời SYN.
+     * Nghĩa là mọi đường TCP relay đều chết, và socket WS của OkHttp cũng dùng chính
+     * protector này nên bị `Connection reset` ngay sau khi TUN lên.
+     *
+     * Nguyên nhân: `new java.net.Socket()` của OpenJDK tạo fd MUỘN (ở lần dùng đầu tiên),
+     * mà protect() cần fd có thật để đánh dấu; DatagramSocket tạo fd ngay trong hàm tạo nên
+     * không dính lỗi này. Cách sửa: bind() vào cổng 0 để fd tồn tại TRƯỚC khi protect().
+     * bind() chưa gửi gói nào nên vẫn đúng yêu cầu "protect trước connect".
+     *
+     * Log cả hai lần thử (kèm ngoại lệ) vì đây đúng là loại lỗi im lặng: protect() trả false
+     * chứ không ném, nên nếu chỉ nhìn "không có exception" thì tưởng đã bảo vệ xong.
+     *
+     * @return true nếu socket đã được bảo vệ (đi thẳng ra mạng nền, không qua tunnel).
+     */
+    private fun protectRelaySocket(sock: java.net.Socket, tag: String): Boolean {
+        val first = runCatching { protect(sock) }
+        if (first.getOrDefault(false)) {
+            DiagnosticsLog.log("protect[$tag]: ok ngay (fd đã có sẵn)")
+            return true
+        }
+        // Lần 1 hỏng: nhiều khả năng fd chưa tồn tại. Tạo fd rồi thử lại.
+        val bindError = runCatching { sock.bind(java.net.InetSocketAddress(0)) }.exceptionOrNull()
+        val second = runCatching { protect(sock) }
+        val secondOk = second.getOrDefault(false)
+        fun why(r: Result<Boolean>) = r.exceptionOrNull()?.let { " (${it.javaClass.simpleName}: ${it.message})" } ?: ""
+        DiagnosticsLog.log(
+            "protect[$tag]: lần 1=false${why(first)}, bind=>" +
+                (if (bindError == null) "ok" else "${bindError.javaClass.simpleName}: ${bindError.message}") +
+                ", lần 2=$secondOk${why(second)}",
+        )
+        if (!secondOk) {
+            DiagnosticsLog.warn(
+                "protect[$tag]: KHÔNG protect được — socket này sẽ đi xuyên qua tunnel và chết " +
+                    "(dấu hiệu: local address = IP của TUN)",
+            )
+        }
+        return secondOk
+    }
+
     /** Returns 0 = could not connect, 1 = user stop, 2 = transport ended (rebuild). */
     private fun tcpRelayAttempt(relayPort: Int): Int {
         if (stopping) return 1
         val sock = java.net.Socket()
-        // protect() BEFORE connect(): Android binds the socket to the network that is
-        // default at protect() time. Protecting afterwards is a no-op for an already
-        // connected socket, which is what left the transport pinned to dead WiFi.
-        val protected = runCatching { protect(sock) }.getOrDefault(false)
+        // protect() PHẢI trước connect() để socket được ghim vào mạng nền hiện tại thay vì
+        // đi vào tunnel. Nhưng protect() trước connect chỉ ăn nếu socket đã có fd — xem
+        // protectRelaySocket() (trước đây gọi protect() trần nên luôn trả false).
+        val protected = protectRelaySocket(sock, "tcp-relay:$relayPort")
         DiagnosticsLog.outerProtected = if (protected) "protect=ok" else "protect=false"
         val ok = try {
             sock.connect(java.net.InetSocketAddress(runHost, relayPort), TCP_CONNECT_TIMEOUT_MS)

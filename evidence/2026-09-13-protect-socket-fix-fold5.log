@@ -1,0 +1,57 @@
+=== BẰNG CHỨNG THIẾT BỊ THẬT: sửa gốc lỗi socket relay đi xuyên qua tunnel ===
+Thời điểm: 2026-09-13 22:34-22:38 CST | Galaxy Z Fold5 (SM-F9460), Android 16
+Máy đang ở mạng WiFi khách sạn TQ (nơi IP node bị GFW chặn) — đúng môi trường lỗi.
+Mốc log trước khi cài: 193071 byte (lần cài này) / 172695 byte (lần cài trước).
+
+################ 1. NGUYÊN NHÂN — ĐÃ ĐO ĐƯỢC, KHÔNG CÒN LÀ SUY ĐOÁN ################
+Trước fix, mọi socket TCP của đường relay đều báo protect=false và có local address
+= IP của TUN (tức đi xuyên qua chính tunnel):
+    hy-tcp:8443 socket protect=false local=/100.100.100.101:48586
+    hy-tcp:9445 socket protect=false local=/100.100.100.101:36030   (8/8 lần như vậy)
+  trong khi socket UDP thì protect=true. Bất đối xứng này là mấu chốt:
+  DatagramSocket tạo fd NGAY trong hàm tạo, còn java.net.Socket() của OpenJDK tạo fd
+  MUỘN (lần dùng đầu tiên) => protect() không có fd để đánh dấu => trả false, KHÔNG ném.
+
+################ 2. SAU FIX — log tự chứng minh cả hai lần thử ################
+Log nguyên văn (mỗi dòng do protectRelaySocket() in ra):
+  22:35:05.415 I protect[tcp-relay:8443]: lần 1=false, bind=>ok, lần 2=true
+  22:35:06.620 I protect[tcp-relay:9445]: lần 1=false, bind=>ok, lần 2=true
+  22:35:12.866 I protect[ws-relay]: lần 1=false, bind=>ok, lần 2=true
+  22:37:24.738 I protect[tcp-relay:9445]: lần 1=false, bind=>ok, lần 2=true
+  22:37:30.951 I protect[ws-relay]: lần 1=false, bind=>ok, lần 2=true
+  => lần 1 LUÔN false (đúng như chẩn đoán), bind() tạo fd, lần 2 LUÔN true.
+
+################ 3. HỆ QUẢ ĐO ĐƯỢC — TUNNEL CHỞ ĐƯỢC GIAO THÔNG THẬT ################
+Lần đầu tiên trong cả phiên, tunnel lên và GIỮ ĐƯỢC ~2 phút (22:35:15 -> 22:37:07),
+với giao thông hai chiều thật đi qua tunnel:
+    09-13 22:35:15.837 I tunnel: UP (hy-udp:55683)
+    09-13 22:35:21.340 I probe: THROUGH TUNNEL http 1.1.1.1:80 ok=HTTP/1.1 301 Moved Permanently in 976ms
+    09-13 22:35:25.347 I probe: THROUGH TUNNEL dns 1.1.1.1:53 FAIL SocketTimeoutException: Poll timed out in 4006ms
+    09-13 22:35:43.231 I probe: THROUGH TUNNEL http 1.1.1.1:80 ok=HTTP/1.1 301 Moved Permanently in 2868ms
+    09-13 22:35:43.779 I probe: THROUGH TUNNEL dns 1.1.1.1:53 answers=2 ip=172.66.147.243 in 547ms
+    09-13 22:36:00.022 I probe: THROUGH TUNNEL http 1.1.1.1:80 ok=HTTP/1.1 301 Moved Permanently in 1224ms
+    09-13 22:36:00.420 I probe: THROUGH TUNNEL dns 1.1.1.1:53 answers=2 ip=172.66.147.243 in 397ms
+    09-13 22:36:16.926 I probe: THROUGH TUNNEL http 1.1.1.1:80 ok=HTTP/1.1 301 Moved Permanently in 1476ms
+  => HTTP 301 thật + DNS trả 2 bản ghi, lặp lại 4 vòng probe liên tiếp, độ trễ 0.4-1.5s.
+
+So sánh trước/sau (cùng một mạng, cùng một máy):
+    TRƯỚC: 'Connection reset' 23 lần, tunnel lên 6 lần nhưng không lần nào giữ được,
+           mỗi lần chết ~1s sau khi TUN lên.
+    SAU  : 'Connection reset' 0 lần, 'cầu WS chết' 0 lần, 'tunnel: reconnecting' 0 lần.
+
+################ 4. LỢI ÍCH THỨ HAI: LỖI ĐƯỜNG TRỰC TIẾP GIỜ BÁO THẬT ################
+Trước fix, connect() tới IP node bị chặn trả về TRUE GIẢ TẠO vì userspace stack của
+tunnel tự trả lời SYN, nên lượt thử bị coi là 'kết nối được' rồi chết ngay sau đó.
+Sau fix, socket bind vào mạng thật nên connect() timeout THẬT và báo đúng:
+  22:37:24.737 E VPNFLOW_DEBUG: hysteria: TCP relay 8443 connect fail: failed to connect
+    to /103.173.155.50 (port 8443) from /10.0.3.247 (port 40175) after 1200ms
+  Chú ý 'from /10.0.3.247' = IP WiFi thật (trước fix là /100.100.100.101 = IP TUN),
+  và 'after 1200ms' = đúng TCP_CONNECT_TIMEOUT_MS mới.
+
+################ 5. GHI CHÚ TRUNG THỰC ################
+  - Lúc 22:37:07 service bị onDestroy rồi tự khởi động lại lúc 22:37:23. TÔI KHÔNG
+    XÁC ĐỊNH ĐƯỢC nguyên nhân (có thể do người dùng thao tác trên máy, hoặc do vòng
+    đời service). Không thấy dấu hiệu crash trong log. Sau khi khởi động lại, protect
+    vẫn ăn đúng như trên.
+  - Chưa đo được: băng thông thật, và thời lượng giữ tunnel dài hơn 2 phút.
+  - App vẫn đang chạy trên máy khi kết thúc phiên đo (tôi không force-stop lần này).
