@@ -666,6 +666,47 @@ curl -s "https://api.meetflowai.site/v1/app-version?platform=android"
 curl -sI https://meetflowai.site/v1/downloads/android                   # APK đang phát
 ```
 
+### node-2 là "cửa vào dự phòng" khi IP node-1 bị chặn (GFW) — ĐỌC TRƯỚC KHI ĐỔI DNS
+
+**Kiến trúc:** node-1 `103.173.155.50` chạy control plane + Caddy gốc; node-2 `103.6.234.233`
+(`fcnvps2`, SSH bằng `~/.ssh/fpt_vpn_node`) chỉ **kết thúc TLS rồi proxy sang node-1** qua đường
+VN↔VN (1–8ms). Nguồn sự thật vẫn là node-1 — node-2 không chạy control plane.
+
+```
+api.meetflowai.site { reverse_proxy https://103.173.155.50 { transport http { tls_server_name api.meetflowai.site } header_up Host {host} } }
+meetflowai.site     { … y hệt … }
+```
+
+⚠️ **Đổi bản ghi A của `meetflowai.site` / `api.meetflowai.site` sang node-2 mà node-2 chưa có
+chứng chỉ ⇒ TOÀN BỘ web + API chết** với mọi truy vấn DNS mới (TLS `internal error`), trong khi
+người còn cache DNS cũ vẫn vào bình thường — rất dễ tưởng là "chỉ một số người bị".
+Đã xảy ra thật 13/09/2026, phát hiện khi `check-mail-links` chạy trên VPS báo "6 link hỏng".
+
+**Trước khi trỏ DNS sang node-2, phải có cert trên node-2.** Cách nhanh và an toàn nhất là copy
+cert Let's Encrypt đang chạy tốt ở node-1 (cùng tên miền, Caddy cùng layout storage):
+
+```bash
+# 1) lấy cert từ node-1
+ssh node1 'tar -C /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory \
+  -cf - meetflowai.site api.meetflowai.site' > /tmp/certs.tar
+# 2) đặt vào node-2 rồi RESTART (reload không đủ — config không đổi nên Caddy không quét lại storage)
+ssh node2 'DEST=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory
+  mkdir -p "$DEST" && tar -C "$DEST" -xf - && chown -R caddy:caddy "$DEST" && systemctl restart caddy' < /tmp/certs.tar
+```
+
+Kiểm tra **từ ngoài** (đừng tin cache DNS của máy mình — dùng `--resolve` để ép đúng IP node-2):
+
+```bash
+for h in meetflowai.site api.meetflowai.site; do
+  curl -s -o /dev/null -w "%{http_code} $h\n" --resolve $h:443:103.6.234.233 https://$h/health
+done
+# rồi kiểm từ nhiều nước: https://check-host.net/check-http?host=https://api.meetflowai.site/health
+```
+
+Ghi nhớ: cert copy từ node-1 hết hạn **20/11/2026**. Node-2 sẽ tự xin cert mới qua ACME (HTTP-01
+chạy được vì DNS đang trỏ vào node-2) — nên kiểm lại hạn cert trước ~30/10, đừng để hết hạn mà không ai biết.
+
+
 ### Caddy ở edge — thêm route mới trong Node thì PHẢI thêm `handle` (13/09/2026)
 
 `meetflowai.site` **không** proxy toàn bộ vào control-plane: mỗi đường dẫn công khai phải có
