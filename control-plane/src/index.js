@@ -42,6 +42,8 @@ import {
   sendVerifyEmail,
   pickMailLang,
   mailTransportName,
+  sendPaidAlert,
+  sendUnmatchedTransferAlert,
 } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
 import { AiUsersStore } from "./ai-users-store.js";
@@ -714,7 +716,10 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       await aiUsersStore
         .touch(email, { source: "purchase", note: `${plan} via ${method ?? "bankqr"}` })
         .catch((err) => console.error("ai user touch failed:", err?.message ?? err));
-      fireAiPaymentAlert(orderCode, email, plan, planCfg.amount, method);
+      // Như VPN: mặc định không gửi email lúc tạo đơn, chỉ gửi khi tiền về.
+      if (process.env.OWNER_ALERT_ON_CREATE === "1") {
+        fireAiPaymentAlert(orderCode, email, plan, planCfg.amount, method);
+      }
     }
 
     if (method === "momo") {
@@ -1643,6 +1648,7 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
   console.log(
     `ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode}) mailSent=${mailSent}${mailError ? ` err=${mailError}` : ""}`,
   );
+  await firePaidAlert(orderCode, email, plan, planCfg.amount, method, "MeetFlow AI Pro");
   return { entitlement: ent, mailSent, mailError };
 }
 
@@ -1692,8 +1698,11 @@ app.post("/v1/payments/create", async (req, res) => {
       amount: planCfg.amount,
     });
 
-    // Alert the owner (email) with a signed one-click confirm link.
-    firePaymentAlert(orderCode, email, plan, planCfg.amount, method);
+    // Từ khi SePay tự xác nhận tiền về, email lúc TẠO đơn mặc định không gửi nữa (chủ shop chỉ cần
+    // biết đơn đã thanh toán). Bật lại bằng OWNER_ALERT_ON_CREATE=1 nếu muốn theo dõi cả đơn chưa trả.
+    if (process.env.OWNER_ALERT_ON_CREATE === "1") {
+      firePaymentAlert(orderCode, email, plan, planCfg.amount, method);
+    }
 
     if (method === "bankqr") {
       const bank = bankQrConfig();
@@ -2020,6 +2029,13 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
         `sepay: giao dịch ${txId} ${paid}đ không có mã đơn trong nội dung ` +
           `"${String(payload.content ?? payload.description ?? "").slice(0, 80)}" — cần xác nhận tay`,
       );
+      await fireUnmatchedAlert({
+        amount: paid,
+        content: payload.content ?? payload.description ?? "",
+        txId,
+        accountNumber: payload.accountNumber,
+        reason: "không có mã đơn trong nội dung chuyển khoản",
+      });
       return res.json({ success: true });
     }
 
@@ -2034,6 +2050,13 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
         `sepay: đơn ${ref.orderCode} chuyển ${paid}đ < cần ${found.expectedAmount}đ ` +
           `— KHÔNG tự kích hoạt, chờ chủ shop (tx ${txId})`,
       );
+      await fireUnmatchedAlert({
+        amount: paid,
+        content: payload.content ?? payload.description ?? "",
+        txId,
+        accountNumber: payload.accountNumber,
+        reason: `chuyển thiếu: đơn ${ref.orderCode} cần ${found.expectedAmount}đ`,
+      });
       return res.json({ success: true });
     }
 
@@ -2302,6 +2325,8 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
   console.log(
     `invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode}) mailSent=${invoiceResult?.sent === true}`,
   );
+  // Chủ shop chỉ cần được BÁO là đơn đã trả tiền (SePay tự xác nhận) — không cần bấm gì.
+  await firePaidAlert(orderCode, email, plan, billedAmount, prefix, "VPNFlow Premium");
   return user;
 }
 
@@ -2370,6 +2395,50 @@ async function cnyAmountForMethod(amount, method) {
   if (m !== "wechat" && m !== "alipay") return null;
   const { rate, source } = await vndPerCny();
   return { amount: cnyFromVnd(amount, rate), rate: Math.round(rate), source };
+}
+
+/**
+ * Báo chủ shop là **đơn đã được thanh toán** (webhook tự xác nhận) — không kèm nút xác nhận.
+ * Gửi cho cả 3 đường vào tiền: webhook SePay, webhook PayOS và xác nhận tay trên dashboard.
+ */
+async function firePaidAlert(orderCode, email, plan, amount, method = null, product = "VPNFlow Premium") {
+  const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
+  const methodInfo = paymentMethodInfo(method, { amountVnd: amount });
+  try {
+    const r = await sendPaidAlert({
+      to: owner,
+      orderCode,
+      buyerEmail: email,
+      plan,
+      amount,
+      methodInfo,
+      product,
+      paidAt: new Date().toISOString(),
+      statusUrl: `${siteBaseUrl()}${product === "MeetFlow AI Pro" ? "/ai/buy/status/" : "/buy/status/"}${orderCode}`,
+    });
+    console.log(`paid-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
+  } catch (err) {
+    console.error("firePaidAlert failed:", err);
+  }
+}
+
+/** Báo chủ shop: tiền vào nhưng không khớp đơn (email duy nhất cần người xử lý). */
+async function fireUnmatchedAlert({ amount, content, txId, accountNumber, reason }) {
+  const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
+  try {
+    const r = await sendUnmatchedTransferAlert({
+      to: owner,
+      amount,
+      content,
+      txId,
+      accountNumber,
+      reason,
+      dashboardUrl: `${publicBaseUrl()}/admin`,
+    });
+    console.log(`unmatched-alert tx ${txId} to ${owner}: sent=${r?.sent}`);
+  } catch (err) {
+    console.error("fireUnmatchedAlert failed:", err);
+  }
 }
 
 async function firePaymentAlert(orderCode, email, plan, amount, method = null) {
