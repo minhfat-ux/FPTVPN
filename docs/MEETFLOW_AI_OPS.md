@@ -536,9 +536,13 @@ https://api.meetflowai.site/v1/payments/sepay-webhook
   `signature=false, apiKey=false` — đã gặp thật 14/09/2026), dùng URL kèm token bí mật:
   `…/v1/payments/sepay-webhook?token=<SEPAY_URL_TOKEN>` (giá trị trong file drop-in nói trên, KHÔNG
   ghi vào repo). Yếu hơn HMAC vì URL có thể lọt vào log — chỉ dùng khi dashboard không cho chọn HMAC.
-- **Mã thanh toán**: nội dung chuyển khoản do VietQR sinh ra có dạng `VPNFLOW-<mã đơn>` (VPNFlow) và
-  `MEETFLOW-<mã đơn>` (MeetFlow AI) — xem `vietqr.js`. Cấu hình "mã thanh toán" trong SePay nên tách
-  phần số; nếu không cấu hình, code vẫn tự đọc tiền tố trong `content`.
+- **Mã thanh toán**: nội dung chuyển khoản do VietQR sinh ra có dạng `VPNFLOW-<mã đơn>-<gói>`
+  (VPNFlow) và `MEETFLOW-<mã đơn>-<gói>` (MeetFlow AI) — ví dụ `VPNFLOW-1789318609-THANG`,
+  `MEETFLOW-1789318130-30NG`. Token gói (`payments.transferNote`): THANG/3THANG/6THANG/NAM cho
+  VPNFlow, 30NG/THANG/NAM cho AI (không dấu, ngắn). **Mã đơn đứng trước** vì nội dung có thể bị
+  ngân hàng cắt ngắn (EMVCo field 62/01 tối đa 25 ký tự — mọi tổ hợp hiện tại ≤ 25). Cấu hình
+  "mã thanh toán" trong SePay nên tách phần số; nếu không cấu hình, code vẫn tự đọc tiền tố trong
+  `content` (bộ tách `sepay.js` khớp cả khi có/không có token gói).
 - Tài khoản ngân hàng phải là tài khoản đã nối với SePay (`BANK_QR_ACCOUNT`, hiện TPBank `57222538888`).
 
 ### Quy tắc an toàn đã cài (test thật 14/09/2026)
