@@ -554,11 +554,52 @@ Script gọi HTTP bằng **curl** (không phải node fetch): VPS có bản ghi 
 IPv6 không đi được, `fetch` chọn IPv6 rồi treo tới ETIMEDOUT; token truyền qua file cấu hình curl
 chmod 600 nên không lộ trong `ps`. Token lấy ở Diawi → Settings → API access.
 
-| Gói | Link Diawi | Ghi chú |
+**Chốt của chủ shop (14/09/2026): Diawi chỉ để bản iOS. APK Android (cả VPNFlow lẫn MeetFlow AI) giữ
+trên server mình.** Lý do: gói Diawi hiện tại **hết hạn sau 15 ngày và 50 lượt tải**, mà APK thì dung
+lượng lớn (96 MB) lại bị Diawi từ chối (`File size too large`). Vì vậy:
+
+| Kênh | Link đang phát | Ở đâu |
 |---|---|---|
-| VPNFlow iOS 1.3.2 build 12 (IPA 4,7 MB, md5 `7de3e103a678…`) | <https://i.diawi.com/gSn4ht> | upload kèm `--days 30 --find-by-udid`; hiện đang là link iOS của cả app lẫn trang buy |
-| MeetFlow AI 1.0.3 (APK 4,4 MB, md5 `716d32a31814…`) | <https://i.diawi.com/3G7reo> | |
-| VPNFlow Android 1.2.6 (APK **96 MB**) | ❌ Diawi từ chối: `File size too large` | giới hạn theo gói tài khoản ([KB](https://www.diawi.com/knowledge-base/Diawi/Maximum-upload-size)); Android vẫn phát từ server mình |
+| **iOS** (app + trang buy) | `https://meetflowai.site/install/ios` | **server mình** — trang cài tự phát, KHÔNG hết hạn, không giới hạn lượt tải (xem mục dưới) |
+| iOS — kênh phụ khi cần chia sẻ/thu UDID | <https://i.diawi.com/gSn4ht> (VPNFlow iOS 1.3.2 build 12, IPA 4,7 MB, md5 `7de3e103a678…`) | Diawi, upload kèm `--find-by-udid`; hết hạn ~15 ngày thì upload lại |
+| VPNFlow Android (`/buy`) | `https://meetflowai.site/v1/downloads/android` (+ `…/android-legacy` cho Android 7/Fire OS) | server mình |
+| MeetFlow AI Android (`/ai/buy`) | `https://meetflowai.site/v1/ai/downloads/android` | server mình |
+
+### Trang cài iOS tự phát — vì sao cần
+
+iOS **không cài được** từ link `.ipa` trực tiếp (Safari chỉ tải file về); muốn "bấm là cài" phải đi
+qua `itms-services://` + một `manifest.plist` — đúng cách Diawi làm. Ta tự phát để màn **ép cập nhật**
+của app không bao giờ trỏ vào link ngoài đã hết hạn:
+
+| Đường dẫn | Nội dung |
+|---|---|
+| `GET /install/ios` | trang hướng dẫn + nút 📲 (Safari bắt buộc, cảnh báo UDID, cách "Tin cậy" nhà phát triển) |
+| `GET /install/ios/manifest.plist` | plist OTA: `software-package` → `/v1/downloads/ios`, `bundle-identifier` `com.privatevpn.app`, `bundle-version` theo `latest_ios_version` |
+
+⚠️ **Bắt buộc có handle trong Caddyfile host `meetflowai.site`** (nếu không, Node trả 200 mà edge trả
+**404** — đúng ca `/guide`, `/v1/downloads/ios` trước đây):
+
+```
+handle /install/ios  { reverse_proxy 127.0.0.1:7778 }
+handle /install/ios/* { reverse_proxy 127.0.0.1:7778 }
+```
+
+Kiểm nhanh sau khi đổi:
+
+```bash
+curl -s https://meetflowai.site/install/ios/manifest.plist | python3 -c 'import plistlib,sys; d=plistlib.load(sys.stdin.buffer); print(d["items"][0]["assets"][0]["url"])'
+# https://meetflowai.site/v1/downloads/ios
+```
+
+### Tự chuyển link khi link ngoài chết (`runIosLinkGuard`)
+
+Mỗi **6 giờ**, control plane tự kiểm link iOS đang cấu hình: nếu không còn trả 200 (Diawi hết hạn/hết
+lượt) ⇒ **tự PATCH về `/install/ios`** + gửi email cảnh báo chủ shop để upload lại nếu muốn dùng Diawi
+tiếp. Đang dùng `/install/ios` thì bộ kiểm tự bỏ qua. Tắt bằng `IOS_LINK_GUARD=0`; đổi nhịp bằng
+`IOS_LINK_GUARD_INTERVAL_MS`.
+
+Bộ kiểm dùng **curl** chứ không dùng `fetch`: VPS có bản ghi AAAA cho `*.diawi.com` mà IPv6 không đi
+được, `fetch` chọn IPv6 rồi treo tới ETIMEDOUT (đã gặp thật khi upload Diawi).
 
 **Đổi link không cần deploy**: link tải của app đọc `app-config.db` trước biến môi trường
 (`storeLinks()` trong `index.js`), nên chỉ cần PATCH:
@@ -568,8 +609,9 @@ T=$(systemctl show flowvpn-cp -p Environment | tr ' ' '\n' | grep ^AUTH_TOKEN= |
 curl -s -X PATCH -H "Authorization: Bearer $T" -H 'content-type: application/json' \
   -d '{"ipa_url":"https://i.diawi.com/<mã>"}' http://127.0.0.1:7778/v1/admin/app-version      # iOS
 curl -s -X PATCH -H "Authorization: Bearer $T" -H 'content-type: application/json' \
-  -d '{"apk_url":"https://i.diawi.com/<mã>"}' http://127.0.0.1:7778/v1/admin/ai/app-version   # APK MeetFlow AI
-# về lại file tự phát: PATCH với "ipa_url":"" (rỗng) ⇒ dùng /v1/downloads/ios
+  -d '{"apk_url":"https://meetflowai.site/v1/ai/downloads/android"}' http://127.0.0.1:7778/v1/admin/ai/app-version
+# về lại file tự phát: ipa_url = "https://meetflowai.site/install/ios" (hoặc "" ⇒ /v1/downloads/ios,
+# nhưng link .ipa trực tiếp KHÔNG cài được trên iOS, nên dùng trang /install/ios)
 ```
 
 ⚠️ **Hai điều phải biết trước khi coi Diawi là kênh phát chính cho iOS**:
