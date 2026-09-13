@@ -212,7 +212,7 @@ private fun Header(
 
         Spacer(Modifier.height(4.dp))
 
-        Text("VPNFlow", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
+        Text(VPNTheme.brandName(), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
         Text(
             lang.t(LKey.appSubtitle),
             fontSize = 15.sp,

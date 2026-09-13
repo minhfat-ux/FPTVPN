@@ -11,6 +11,24 @@ enum VPNTheme {
     /// Success green — connected state (FlowVPN brand green #33C773).
     static let success = Color(red: 51/255, green: 199/255, blue: 115/255)
 
+    /// Tên app với "Flow" tô màu brand — giống trang buy.
+    ///
+    /// Trang buy render `'VPN<span>Flow</span> Premium'` và CSS `.logo span` đặt
+    /// `color: #33c773` (control-plane/src/payments.js), tức "Flow" xanh còn "VPN"
+    /// trắng. #33C773 đúng bằng `success` ở đây nên không cần thêm màu mới.
+    ///
+    /// Trả `Text` (không phải `some View`) để ghép chuỗi được và vẫn ăn font/size
+    /// đặt ở ngoài — đúng cách các màn hình đang dùng.
+    ///
+    /// Cố ý đặt màu TRẮNG cho "VPN" ngay trong đây, và các màn hình đã bỏ
+    /// `.foregroundStyle(VPNTheme.label)` ở ngoài: modifier `foregroundStyle` áp lên
+    /// cả `Text` đã ghép sẽ đè màu từng đoạn, tức "Flow" mất màu xanh và thay đổi
+    /// này im lặng không có tác dụng.
+    static var brandName: Text {
+        Text("VPN").foregroundStyle(label)
+            + Text("Flow").foregroundStyle(success)
+    }
+
     /// FlowVPN navy palette (FPT Harness style) — always dark.
     static let navyBase = Color(red: 10/255, green: 31/255, blue: 59/255)      // #0A1F3B
     static let navyLayer1 = Color(red: 14/255, green: 39/255, blue: 71/255)    // #0E2747

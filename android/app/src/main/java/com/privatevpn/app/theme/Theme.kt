@@ -2,6 +2,10 @@ package com.privatevpn.app.theme
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 
 /** Visual theme — mirrors iOS/macOS VPNTheme. Always dark, FlowVPN navy palette
  *  (matches FPT Harness style): #0A1F3B base, #0E2747 cards, #16385E bottom,
@@ -11,6 +15,21 @@ object VPNTheme {
     val Accent = Color(0xFF007AFF)
     // Success green — connected state (FlowVPN brand green #33C773).
     val Green = Color(0xFF33C773)
+
+    /**
+     * Tên app với "Flow" tô màu brand — giống trang buy.
+     *
+     * Trang buy render `'VPN<span>Flow</span> Premium'` và CSS `.logo span` đặt
+     * `color: #33c773` (control-plane/src/payments.js), tức chữ "Flow" xanh còn
+     * "VPN" trắng. #33C773 đúng bằng `Green` ở đây nên không cần thêm màu mới.
+     *
+     * Trả `AnnotatedString` chứ không trả chuỗi đã style sẵn: `Text(...)` vẫn nhận
+     * fontSize/fontWeight/color đặt ở ngoài, đúng cách các màn hình đang dùng.
+     */
+    fun brandName(): AnnotatedString = buildAnnotatedString {
+        append("VPN")
+        withStyle(SpanStyle(color = Green)) { append("Flow") }
+    }
     val Red = Color(0xFFFF3B30)
     val Orange = Color(0xFFFF9500)
     val Yellow = Color(0xFFFFD60A)

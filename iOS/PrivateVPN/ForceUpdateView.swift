@@ -26,9 +26,8 @@ struct ForceUpdateView: View {
                     .font(.system(size: 64))
                     .foregroundStyle(VPNTheme.accent)
 
-                Text("VPNFlow")
+                VPNTheme.brandName
                     .font(.largeTitle.bold())
-                    .foregroundStyle(VPNTheme.label)
 
                 Text(languageStore.t(.updateRequired))
                     .font(.title3.bold())

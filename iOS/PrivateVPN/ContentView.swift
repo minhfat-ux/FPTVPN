@@ -197,9 +197,10 @@ struct ContentView: View {
                     .foregroundStyle(vpnManager.state.tint)
             }
 
-            Text("VPNFlow")
+            // Màu đã nằm trong brandName (VPN trắng + Flow xanh brand); đừng đặt
+            // .foregroundStyle ở ngoài vì nó sẽ đè màu từng đoạn.
+            VPNTheme.brandName
                 .font(.title.bold())
-                .foregroundStyle(VPNTheme.label)
             Text(languageStore.t(.appSubtitle))
                 .font(.subheadline)
                 .foregroundStyle(VPNTheme.secondaryLabel)

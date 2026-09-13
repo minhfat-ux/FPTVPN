@@ -71,7 +71,7 @@ fun LoginScreen(
     ) {
         AppLogo(modifier = Modifier.size(76.dp))
         Spacer(Modifier.height(10.dp))
-        Text("VPNFlow", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
+        Text(VPNTheme.brandName(), fontSize = 30.sp, fontWeight = FontWeight.Bold, color = VPNTheme.Label)
         Text(
             lang.t(LKey.appSubtitle),
             fontSize = 15.sp,

@@ -72,9 +72,8 @@ struct LoginView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
 
-            Text("VPNFlow")
+            VPNTheme.brandName
                 .font(.largeTitle.bold())
-                .foregroundStyle(VPNTheme.label)
 
             Text(languageStore.t(.appSubtitle))
                 .font(.subheadline)
