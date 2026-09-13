@@ -9,8 +9,9 @@ final class VPNManager: ObservableObject {
     static let providerBundleIdentifier = "com.privatevpn.app.packet-tunnel"
 
     /// Tên profile VPN hiển thị trong Settings > VPN. Đổi từ "FlowVPN" sang "VPNFlow"
-    /// cho khớp Android (`strings.xml`: `app_name = VPNFlow`) và khớp tên sản phẩm
-    /// trong tài liệu App Store (`docs/APP_STORE_SUBMISSION_IOS.md`: app VPNFlow).
+    /// cho khớp Android (`strings.xml`: `app_name = VPNFlow`) và khớp `CFBundleDisplayName`
+    /// trong `project.yml`. (Tài liệu nộp App Store không còn dùng — chủ dự án bỏ App Store
+    /// 14/09/2026.)
     private static let profileName = "VPNFlow"
 
     /// Tên CŨ của profile. Máy đã cài bản trước còn profile mang tên này.

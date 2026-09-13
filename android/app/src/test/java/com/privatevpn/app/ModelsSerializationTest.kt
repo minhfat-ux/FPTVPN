@@ -37,12 +37,12 @@ class ModelsSerializationTest {
     @Test fun `parse auth session with subscription status`() {
         val raw = """{"access_token":"tok123","token_type":"bearer",
             "user":{"id":"u1","email":"a@b.com",
-              "subscription_status":{"is_active":true,"product_id":"Monthly_Premium","expires_at":"2026-09-22T00:00:00Z"}}}"""
+              "subscription_status":{"is_active":true,"product_id":"bankqr.monthly","expires_at":"2026-09-22T00:00:00Z"}}}"""
         val session = json.decodeFromString<CoordinatorAuthSession>(raw)
         assertEquals("tok123", session.accessToken)
         assertNotNull(session.user.subscriptionStatus)
         assertEquals(true, session.user.subscriptionStatus?.isActive)
-        assertEquals("Monthly_Premium", session.user.subscriptionStatus?.productId)
+        assertEquals("bankqr.monthly", session.user.subscriptionStatus?.productId)
     }
 
     @Test fun `parse android app version payload with apk_url`() {

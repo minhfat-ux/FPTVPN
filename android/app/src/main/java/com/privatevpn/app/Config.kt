@@ -1,7 +1,7 @@
 package com.privatevpn.app
 
 /**
- * App-owned configuration. Backend URLs and product IDs are centralized here
+ * App-owned configuration. Backend URLs are centralized here
  * (never shown in the public UI — NFR-PRIV / security rules).
  */
 object Config {
@@ -58,7 +58,7 @@ object Config {
     /** Public support / privacy pages (also linked from the paywall). */
     const val SUPPORT_URL = "https://meetflowai.site/SupportPrivateVPN.html"
     const val PRIVACY_URL = "https://meetflowai.site/FlowVPNPrivacy.html"
-    const val EULA_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+    const val TERMS_URL = "https://meetflowai.site/terms"
 
     /** WireGuard tunnel defaults (match iOS/macOS + backend). */
     const val WG_DNS = "1.1.1.1"

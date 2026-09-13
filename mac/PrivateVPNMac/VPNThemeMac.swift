@@ -73,9 +73,9 @@ enum AppTextKey: String {
     case systemLanguage, language, appSubtitle, subscription, status
     case premiumActive, premiumRequired, free, protectionUnlocked, choosePlanToStart
     case choosePlan, restorePurchases, support, contactSupport, privacyPolicy
-    case appleStandardEULA, upgrade, preparingPermission, vpnStartFailure
+    case termsOfUse, upgrade, preparingPermission, vpnStartFailure
     case paywallTitle, paywallSubtitle, benefitTunnel, benefitWifi, benefitFast
-    case noPlans, noPlansDetail, subscriptionDisclosure, privacy, eula, notNow
+    case privacy, notNow
     case plan, select, connect, disconnect, openSettings, upgradeToPremium, quit
     case disconnected, connecting, connected, disconnecting, failed
     case serverLocation, loadingLocations, noServerAvailable, refreshLocations
@@ -133,17 +133,16 @@ final class AppLanguageStore: ObservableObject {
             .signInTitle: "Sign In", .loginCode: "Login code", .sendCode: "Send Code", .verifyCode: "Verify Code", .signOut: "Sign Out",
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456", .invalidEmail: "Please enter a valid email address.",
             .devCode: "Dev code: %@", .loginCodeSent: "Login code sent",
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam", .updateRequired: "Update Required", .updateRequiredDetail: "A new version of FlowVPN is required to continue. Please update from the App Store.", .update: "Update", .deleteAccount: "Delete Account", .deleteAccountConfirm: "This permanently deletes your account and all data. This cannot be undone.", .deleteAccountDone: "Account deleted.", .cancel: "Cancel",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam", .updateRequired: "Update Required", .updateRequiredDetail: "A new version of VPNFlow is required to continue. Please download the latest version at meetflowai.site/buy.", .update: "Update", .deleteAccount: "Delete Account", .deleteAccountConfirm: "This permanently deletes your account and all data. This cannot be undone.", .deleteAccountDone: "Account deleted.", .cancel: "Cancel",
             .subscription: "Subscription", .status: "Status", .premiumActive: "Premium Active",
             .premiumRequired: "Premium Required", .free: "Free", .protectionUnlocked: "VPN protection is unlocked",
             .choosePlanToStart: "Choose a plan to start protection", .choosePlan: "Choose Plan",
             .restorePurchases: "Refresh Purchase Status", .support: "Support", .contactSupport: "Contact Support",
-            .privacyPolicy: "Privacy Policy", .appleStandardEULA: "Apple Standard EULA", .upgrade: "Upgrade",
+            .privacyPolicy: "Privacy Policy", .termsOfUse: "Terms of Use", .upgrade: "Upgrade",
             .preparingPermission: "Preparing VPN permission…", .vpnStartFailure: "VPN could not start. Please try again.", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "Unlock private, encrypted internet protection.", .benefitTunnel: "Secure VPN tunnel",
             .benefitWifi: "Protection on public Wi-Fi", .benefitFast: "Fast one-click connection",
-            .noPlans: "No plans available", .noPlansDetail: "StoreKit did not return Mac_monthly or Mac_yearly.", .subscriptionDisclosure: "Payment is charged to your Apple ID at confirmation of purchase. Subscriptions auto-renew unless canceled at least 24 hours before the end of the current period; your account is charged for renewal within 24 hours prior to the period end. Manage or cancel anytime in your Apple ID Account Settings. Any unused portion of a free trial, if offered, is forfeited upon purchasing a subscription.",
-            .privacy: "Privacy", .eula: "EULA", .notNow: "Not Now", .plan: "Plan",
+            .privacy: "Privacy", .notNow: "Not Now", .plan: "Plan",
             .select: "Select", .connect: "Connect", .disconnect: "Disconnect", .openSettings: "Open Settings",
             .upgradeToPremium: "Upgrade to Premium", .quit: "Quit FlowVPN",
             .disconnected: "Disconnected", .connecting: "Connecting", .connected: "Connected",
@@ -154,7 +153,7 @@ final class AppLanguageStore: ObservableObject {
             .devices: "Devices", .revoke: "Revoke", .revokeDeviceConfirm: "Revoke this device? It will no longer be able to connect.", .thisDevice: "This device", .deviceRevoked: "Device revoked.", .noDevices: "No devices registered.", .active: "Active", .revoked: "Revoked", .loadingDevices: "Loading devices…"
         ],
         .vietnamese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của FlowVPN để tiếp tục. Vui lòng cập nhật từ App Store.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của VPNFlow để tiếp tục. Vui lòng tải bản mới tại meetflowai.site/buy.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
             .signInRequired: "Cần đăng nhập",
             .signInTitle: "Đăng nhập", .invalidEmail: "Vui lòng nhập địa chỉ email hợp lệ.",
             .devCode: "Mã dev: %@", .loginCodeSent: "Mã đăng nhập đã được gửi",
@@ -163,12 +162,11 @@ final class AppLanguageStore: ObservableObject {
             .premiumRequired: "Cần Premium", .free: "Miễn phí", .protectionUnlocked: "Bảo vệ VPN đã được mở khóa",
             .choosePlanToStart: "Chọn gói để bắt đầu bảo vệ", .choosePlan: "Chọn gói",
             .restorePurchases: "Làm mới trạng thái gói", .support: "Hỗ trợ", .contactSupport: "Liên hệ hỗ trợ",
-            .privacyPolicy: "Chính sách quyền riêng tư", .appleStandardEULA: "EULA tiêu chuẩn của Apple", .upgrade: "Nâng cấp",
+            .privacyPolicy: "Chính sách quyền riêng tư", .termsOfUse: "Điều khoản sử dụng", .upgrade: "Nâng cấp",
             .preparingPermission: "Đang chờ cấp quyền VPN…", .vpnStartFailure: "Không thể khởi động VPN. Vui lòng thử lại.", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "Mở khóa bảo vệ internet riêng tư và mã hóa.", .benefitTunnel: "VPN tunnel bảo mật",
             .benefitWifi: "Bảo vệ khi dùng Wi-Fi công cộng", .benefitFast: "Kết nối nhanh một click",
-            .noPlans: "Chưa có gói khả dụng", .noPlansDetail: "StoreKit không trả về Mac_monthly hoặc Mac_yearly.", .subscriptionDisclosure: "Thanh toán sẽ được trừ vào tài khoản Apple ID khi bạn xác nhận mua. Gói đăng ký tự động gia hạn trừ khi bạn hủy ít nhất 24 giờ trước khi kết thúc kỳ hiện tại; tài khoản sẽ bị trừ phí gia hạn trong vòng 24 giờ trước khi kết thúc kỳ. Bạn có thể quản lý hoặc hủy gói đăng ký bất cứ lúc nào trong cài đặt tài khoản Apple ID. Mọi phần chưa dùng của thời gian dùng thử miễn phí (nếu có) sẽ bị mất khi bạn mua gói đăng ký.",
-            .privacy: "Quyền riêng tư", .eula: "EULA", .notNow: "Để sau", .plan: "Gói",
+            .privacy: "Quyền riêng tư", .notNow: "Để sau", .plan: "Gói",
             .select: "Chọn", .connect: "Kết nối", .disconnect: "Ngắt kết nối", .openSettings: "Mở Cài đặt",
             .upgradeToPremium: "Nâng cấp Premium", .quit: "Thoát FlowVPN",
             .disconnected: "Đã ngắt kết nối", .connecting: "Đang kết nối", .connected: "Đã kết nối",
@@ -179,7 +177,7 @@ final class AppLanguageStore: ObservableObject {
             .devices: "Thiết bị", .revoke: "Thu hồi", .revokeDeviceConfirm: "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", .thisDevice: "Thiết bị này", .deviceRevoked: "Đã thu hồi thiết bị.", .noDevices: "Chưa có thiết bị nào được đăng ký.", .active: "Hoạt động", .revoked: "Đã thu hồi", .loadingDevices: "Đang tải thiết bị…"
         ],
         .chinese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 FlowVPN 才能继续。请从 App Store 更新。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 VPNFlow 才能继续。请前往 meetflowai.site/buy 下载最新版本。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
             .signInRequired: "需要登录",
             .signInTitle: "登录", .invalidEmail: "请输入有效的邮箱地址。",
             .devCode: "开发者验证码：%@", .loginCodeSent: "登录验证码已发送",
@@ -188,12 +186,11 @@ final class AppLanguageStore: ObservableObject {
             .premiumRequired: "需要 Premium", .free: "免费", .protectionUnlocked: "VPN 保护已解锁",
             .choosePlanToStart: "选择套餐以开始保护", .choosePlan: "选择套餐",
             .restorePurchases: "刷新订阅状态", .support: "支持", .contactSupport: "联系支持",
-            .privacyPolicy: "隐私政策", .appleStandardEULA: "Apple 标准 EULA", .upgrade: "升级",
+            .privacyPolicy: "隐私政策", .termsOfUse: "使用条款", .upgrade: "升级",
             .preparingPermission: "正在等待 VPN 权限…", .vpnStartFailure: "VPN 无法启动。请重试。", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "解锁私密、加密的互联网保护。", .benefitTunnel: "安全 VPN 隧道",
             .benefitWifi: "公共 Wi-Fi 保护", .benefitFast: "一键快速连接",
-            .noPlans: "暂无可用套餐", .noPlansDetail: "StoreKit 未返回 Mac_monthly 或 Mac_yearly。", .subscriptionDisclosure: "付款将在购买确认时从您的 Apple ID 账户扣除。订阅会自动续订，除非在当前订阅期结束前至少 24 小时取消；续订费用将在当前订阅期结束前 24 小时内从您的账户扣除。您可随时在 Apple ID 账户设置中管理或取消订阅。若提供免费试用，未使用的试用时长将在购买订阅时被收回。",
-            .privacy: "隐私", .eula: "EULA", .notNow: "暂不", .plan: "套餐",
+            .privacy: "隐私", .notNow: "暂不", .plan: "套餐",
             .select: "选择", .connect: "连接", .disconnect: "断开", .openSettings: "打开设置",
             .upgradeToPremium: "升级到 Premium", .quit: "退出 FlowVPN",
             .disconnected: "未连接", .connecting: "正在连接", .connected: "已连接",
@@ -204,7 +201,7 @@ final class AppLanguageStore: ObservableObject {
             .devices: "设备", .revoke: "撤销", .revokeDeviceConfirm: "撤销此设备？该设备将无法再连接。", .thisDevice: "当前设备", .deviceRevoked: "设备已撤销。", .noDevices: "尚未注册任何设备。", .active: "活跃", .revoked: "已撤销", .loadingDevices: "正在加载设备…"
         ],
         .japanese: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "FlowVPN の新しいバージョンが必要です。App Store から更新してください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "VPNFlow の新しいバージョンが必要です。最新版は meetflowai.site/buy からダウンロードしてください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
             .signInRequired: "サインインが必要です",
             .signInTitle: "サインイン", .invalidEmail: "有効なメールアドレスを入力してください。",
             .devCode: "開発用コード: %@", .loginCodeSent: "ログインコードを送信しました",
@@ -213,12 +210,11 @@ final class AppLanguageStore: ObservableObject {
             .premiumRequired: "Premium が必要", .free: "無料", .protectionUnlocked: "VPN 保護が有効です",
             .choosePlanToStart: "保護を開始するにはプランを選択", .choosePlan: "プランを選択",
             .restorePurchases: "購入状態を更新", .support: "サポート", .contactSupport: "サポートに連絡",
-            .privacyPolicy: "プライバシーポリシー", .appleStandardEULA: "Apple 標準 EULA", .upgrade: "アップグレード",
+            .privacyPolicy: "プライバシーポリシー", .termsOfUse: "利用規約", .upgrade: "アップグレード",
             .preparingPermission: "VPN の許可を待機中…", .vpnStartFailure: "VPN を開始できませんでした。もう一度お試しください。", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "プライベートで暗号化されたインターネット保護を解除します。", .benefitTunnel: "安全な VPN トンネル",
             .benefitWifi: "公共 Wi-Fi での保護", .benefitFast: "ワンクリックで高速接続",
-            .noPlans: "利用可能なプランがありません", .noPlansDetail: "StoreKit が Mac_monthly または Mac_yearly を返しませんでした。", .subscriptionDisclosure: "お支払いは購入確定時に Apple ID アカウントに請求されます。サブスクリプションは、現在の期間終了の24時間前までにキャンセルしない限り自動更新され、更新料金は期間終了前24時間以内に請求されます。サブスクリプションは Apple ID アカウント設定でいつでも管理・キャンセルできます。無料トライアルが提供される場合、未使用分はサブスクリプション購入時に失われます。",
-            .privacy: "プライバシー", .eula: "EULA", .notNow: "後で", .plan: "プラン",
+            .privacy: "プライバシー", .notNow: "後で", .plan: "プラン",
             .select: "選択", .connect: "接続", .disconnect: "切断", .openSettings: "設定を開く",
             .upgradeToPremium: "Premium にアップグレード", .quit: "FlowVPN を終了",
             .disconnected: "未接続", .connecting: "接続中", .connected: "接続済み",
@@ -229,7 +225,7 @@ final class AppLanguageStore: ObservableObject {
             .devices: "デバイス", .revoke: "取り消す", .revokeDeviceConfirm: "このデバイスを取り消しますか？このデバイスは接続できなくなります。", .thisDevice: "このデバイス", .deviceRevoked: "デバイスを取り消しました。", .noDevices: "登録されたデバイスがありません。", .active: "アクティブ", .revoked: "取り消し済み", .loadingDevices: "デバイスを読み込み中…"
         ],
         .korean: [
-            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 FlowVPN 버전이 필요합니다. App Store에서 업데이트하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
+            .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 VPNFlow 버전이 필요합니다. 최신 버전을 meetflowai.site/buy에서 다운로드하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
             .signInRequired: "로그인이 필요합니다",
             .signInTitle: "로그인", .invalidEmail: "유효한 이메일 주소를 입력하세요.",
             .devCode: "개발자 코드: %@", .loginCodeSent: "로그인 코드가 전송되었습니다",
@@ -238,12 +234,11 @@ final class AppLanguageStore: ObservableObject {
             .premiumRequired: "Premium 필요", .free: "무료", .protectionUnlocked: "VPN 보호가 활성화되었습니다",
             .choosePlanToStart: "보호를 시작하려면 플랜을 선택하세요", .choosePlan: "플랜 선택",
             .restorePurchases: "구매 상태 새로 고침", .support: "지원", .contactSupport: "지원 문의",
-            .privacyPolicy: "개인정보 처리방침", .appleStandardEULA: "Apple 표준 EULA", .upgrade: "업그레이드",
+            .privacyPolicy: "개인정보 처리방침", .termsOfUse: "이용약관", .upgrade: "업그레이드",
             .preparingPermission: "VPN 권한을 기다리는 중…", .vpnStartFailure: "VPN을 시작할 수 없습니다. 다시 시도해 주세요.", .paywallTitle: "FlowVPN Premium",
             .paywallSubtitle: "비공개 암호화 인터넷 보호를 잠금 해제하세요.", .benefitTunnel: "보안 VPN 터널",
             .benefitWifi: "공용 Wi-Fi 보호", .benefitFast: "빠른 원클릭 연결",
-            .noPlans: "사용 가능한 플랜 없음", .noPlansDetail: "StoreKit이 Mac_monthly 또는 Mac_yearly을 반환하지 않았습니다.", .subscriptionDisclosure: "결제는 구매 확정 시 Apple ID 계정에 청구됩니다. 구독은 현재 기간 종료 최소 24시간 전에 취소하지 않으면 자동 갱신되며, 갱신 요금은 기간 종료 24시간 이내에 청구됩니다. 구독은 Apple ID 계정 설정에서 언제든지 관리하거나 취소할 수 있습니다. 무료 체험 기간이 제공되는 경우, 사용하지 않은 부분은 구독 구매 시 소멸됩니다.",
-            .privacy: "개인정보", .eula: "EULA", .notNow: "나중에", .plan: "플랜",
+            .privacy: "개인정보", .notNow: "나중에", .plan: "플랜",
             .select: "선택", .connect: "연결", .disconnect: "연결 해제", .openSettings: "설정 열기",
             .upgradeToPremium: "Premium으로 업그레이드", .quit: "FlowVPN 종료",
             .disconnected: "연결 끊김", .connecting: "연결 중", .connected: "연결됨",

@@ -245,8 +245,8 @@ fun SettingsScreen(
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Config.PRIVACY_URL))
                 ContextCompat.startActivity(context, intent, null)
             }
-            ActionRow(text = lang.t(LKey.eula)) {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Config.EULA_URL))
+            ActionRow(text = lang.t(LKey.termsOfUse)) {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Config.TERMS_URL))
                 ContextCompat.startActivity(context, intent, null)
             }
         }

@@ -300,8 +300,8 @@ struct SettingsView: View {
                 Label(languageStore.t(.privacyPolicy), systemImage: "hand.raised")
             }
 
-            Link(destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!) {
-                Label(languageStore.t(.appleStandardEULA), systemImage: "doc.text")
+            Link(destination: URL(string: "https://meetflowai.site/terms")!) {
+                Label(languageStore.t(.termsOfUse), systemImage: "doc.text")
             }
         }
     }
@@ -309,13 +309,7 @@ struct SettingsView: View {
 }
 
 /// Backend-only entitlement store.
-///
-/// Class này từng bọc StoreKit (product IDs, `Product.products(for:)`,
-/// `AppStore.sync()`, `Transaction.currentEntitlements/.updates`). Chủ dự án đã bỏ
-/// toàn bộ store billing ngày 14/09/2026 — sản phẩm chỉ bán qua trang web /buy —
-/// nên quyền Premium giờ chỉ đến từ backend (`subscription_status.is_active` của
-/// tài khoản đang đăng nhập). Đừng thêm lại StoreKit: không còn kênh nào bán qua
-/// App Store, và app cũng không còn nộp được App Store (Guideline 3.1.1 đòi IAP).
+/// Đừng thêm lại StoreKit/IAP: đã bỏ store billing 14/09/2026, không còn kênh nào bán qua store.
 @MainActor
 final class SubscriptionStore: ObservableObject {
     /// Backend entitlement: true when the signed-in account has an active
@@ -345,9 +339,7 @@ final class SubscriptionStore: ObservableObject {
     /// - tự động lúc mở app và ngay sau khi đăng nhập → `reportFailure: false`.
     ///
     /// Vì sao có đường tự động: `syncBackendPremium()` chỉ đọc lại session ĐÃ CACHE, mà
-    /// `subscription_status` chỉ về một lần lúc đăng nhập. Trước đây StoreKit tự đọc quyền
-    /// trên máy nên khách mua trên web vẫn vào được; StoreKit đã bị gỡ (14/09/2026) nên nếu
-    /// không đọc lại, khách vừa trả tiền trên web sẽ bị đẩy vào paywall cho tới khi bấm tay.
+    /// `subscription_status` chỉ về một lần lúc đăng nhập — không đọc lại thì khách vừa trả tiền trên web sẽ bị đẩy vào paywall.
     ///
     /// Lỗi (mất mạng, hoặc control plane cũ chưa có route này → 404) thì **giữ nguyên** quyền
     /// đang có: không được tự hạ một khách đang trả tiền xuống Free, và lần gọi tự động thì im
@@ -378,12 +370,7 @@ final class SubscriptionStore: ObservableObject {
 }
 
 /// The paywall — always the web buy page.
-///
-/// View này từng rẽ nhánh theo kênh phát hành (`PaywallDistribution` +
-/// `-DPAYWALL_APPSTORE`) để bản App Store chỉ bán bằng StoreKit. Chủ dự án đã bỏ
-/// toàn bộ store billing ngày 14/09/2026 và chấp nhận app KHÔNG nộp được App Store
-/// (Guideline 3.1.1 đòi IAP cho hàng số), nên chỉ còn đúng một kênh mua: trang web
-/// /buy. Đừng thêm lại nhánh StoreKit / cờ biên dịch theo kênh.
+/// Đừng thêm lại nhánh StoreKit/IAP hay cờ biên dịch theo kênh: chỉ còn một kênh mua là trang web /buy.
 struct PaywallView: View {
     var body: some View {
         WebBuyPaywallView()

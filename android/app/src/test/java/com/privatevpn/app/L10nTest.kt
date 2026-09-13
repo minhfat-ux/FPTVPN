@@ -35,9 +35,21 @@ class L10nTest {
         assertFalse(en == zh)
     }
 
-    @Test fun `subscription disclosure contains renewal requirement`() {
-        val en = L10n.text(LKey.subscriptionDisclosure, AppLanguage.ENGLISH)
-        assertTrue(en.contains("24 hours"))
-        assertTrue(en.contains("auto-renew"))
+    @Test fun `khong con chuoi nao nhac toi kenh store`() {
+        val storeWords = listOf(
+            "Google Play", "Play Store", "App Store", "Apple ID", "iTunes",
+            "apps.apple.com", "reportaproblem", "billingclient",
+        )
+        for (lang in AppLanguage.entries) {
+            for (key in LKey.entries) {
+                val text = L10n.text(key, lang)
+                for (word in storeWords) {
+                    assertFalse(
+                        "chuỗi ${key.name} ($lang) còn nhắc tới kênh store: \"$word\"",
+                        text.contains(word, ignoreCase = true),
+                    )
+                }
+            }
+        }
     }
 }

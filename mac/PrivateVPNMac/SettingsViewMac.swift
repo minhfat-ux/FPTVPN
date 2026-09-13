@@ -59,8 +59,8 @@ struct SettingsViewMac: View {
                     Label(languageStore.t(.privacyPolicy), systemImage: "hand.raised")
                 }
 
-                Link(destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!) {
-                    Label(languageStore.t(.appleStandardEULA), systemImage: "doc.text")
+                Link(destination: URL(string: "https://meetflowai.site/terms")!) {
+                    Label(languageStore.t(.termsOfUse), systemImage: "doc.text")
                 }
             }
         }
@@ -315,13 +315,7 @@ struct SettingsViewMac: View {
 }
 
 /// Backend-only entitlement store — mirrors the iOS `SubscriptionStore`.
-///
-/// Class này từng bọc StoreKit (product IDs `Mac_monthly`/`Mac_yearly`,
-/// `Product.products(for:)`, `AppStore.sync()`, `Transaction.currentEntitlements/.updates`).
-/// Chủ dự án đã bỏ toàn bộ store billing ngày 14/09/2026 — macOS nay cũng chỉ bán qua trang
-/// web /buy — nên quyền Premium chỉ còn đến từ backend (`subscription_status.is_active` của
-/// tài khoản đang đăng nhập). Đừng thêm lại StoreKit: không còn kênh nào bán qua App Store,
-/// và app cũng không còn nộp được Mac App Store (Guideline 3.1.1 đòi IAP cho hàng số).
+/// Đừng thêm lại StoreKit/IAP: đã bỏ store billing 14/09/2026, không còn kênh nào bán qua store.
 @MainActor
 final class MacSubscriptionStore: ObservableObject {
     @Published private(set) var isLoading = false
@@ -356,8 +350,7 @@ final class MacSubscriptionStore: ObservableObject {
     /// - tự động lúc mở app và ngay sau khi đăng nhập → `reportFailure: false`.
     ///
     /// Vì sao có đường tự động: quyền Premium có thể được cấp trên web SAU lần đăng nhập cuối,
-    /// còn session chỉ được cấp lúc đăng nhập. Trước đây StoreKit tự đọc quyền trên máy; StoreKit
-    /// đã bị gỡ (14/09/2026) nên không đọc lại thì khách vừa trả tiền sẽ bị đẩy vào paywall.
+    /// còn session chỉ được cấp lúc đăng nhập — không đọc lại thì khách vừa trả tiền sẽ bị đẩy vào paywall.
     ///
     /// Lỗi (mất mạng, hoặc control plane cũ chưa có route này → 404) thì **giữ nguyên** quyền
     /// đang có: không được tự hạ một khách đang trả tiền xuống Free, và lần gọi tự động thì im
@@ -388,11 +381,7 @@ final class MacSubscriptionStore: ObservableObject {
 }
 
 /// The paywall — always the web buy page.
-///
-/// View này từng rẽ nhánh theo kênh phát hành (`MacPaywallDistribution` +
-/// `-DPAYWALL_APPSTORE`) để bản Mac App Store chỉ bán bằng StoreKit. Chủ dự án đã bỏ toàn bộ
-/// store billing ngày 14/09/2026 (macOS nay cũng vậy) nên chỉ còn đúng một kênh mua: trang
-/// web /buy. Đừng thêm lại nhánh StoreKit / cờ biên dịch theo kênh.
+/// Đừng thêm lại nhánh StoreKit/IAP hay cờ biên dịch theo kênh: chỉ còn một kênh mua là trang web /buy.
 struct MacPaywallView: View {
     var body: some View {
         MacWebBuyPaywallView()

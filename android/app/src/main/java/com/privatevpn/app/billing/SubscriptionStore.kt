@@ -11,16 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * Backend-only entitlement store. Mirrors the iOS `SubscriptionStore`.
- *
- * Class này từng bọc Google Play Billing (`com.android.billingclient`: product IDs
- * Monthly_Premium / Yearly_Premium, queryProductDetails, launchBillingFlow,
- * queryPurchases, acknowledgePurchase). Chủ dự án đã bỏ toàn bộ store billing ngày
- * 14/09/2026 — sản phẩm chỉ bán qua trang web /buy — nên quyền Premium chỉ còn đến từ
- * backend (`subscription_status.is_active` của tài khoản đang đăng nhập). Dependency
- * `billing-ktx` cũng đã bị gỡ khỏi gradle. Đừng thêm lại Play Billing.
- */
+/** Backend-only entitlement store. Mirrors the iOS `SubscriptionStore`.
+ *  Từng bọc Google Play Billing; nay quyền Premium chỉ đọc `subscription_status.is_active` từ backend — đừng thêm lại billing vì không còn kênh nào bán qua store. */
 class SubscriptionStore(
     private val authStore: AuthSessionStore,
 ) {
