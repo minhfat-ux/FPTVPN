@@ -296,14 +296,16 @@ final class SubscriptionStore: ObservableObject {
     private var transactionUpdatesTask: Task<Void, Never>?
 
     var isSubscribed: Bool {
-        // Dev bypass (owner machine): FORCE_PREMIUM=1 in the scheme environment,
-        // or `defaults write com.privatevpn.app flowvpn.forcePremium -bool YES`
-        // on this device/simulator. Debug and Release behave identically; end
-        // users never have this flag set, so StoreKit/backend checks apply.
+        // Dev bypass (chỉ trên máy chủ dự án): FORCE_PREMIUM=1 trong scheme environment,
+        // hoặc `defaults write com.privatevpn.app flowvpn.forcePremium -bool YES`.
+        // Bọc trong #if DEBUG để bản phát cho người dùng KHÔNG có đường mở khoá Premium
+        // (Apple coi tính năng ẩn như vậy là lỗi 2.3.1).
+        #if DEBUG
         if ProcessInfo.processInfo.environment["FORCE_PREMIUM"] == "1"
             || UserDefaults.standard.bool(forKey: "flowvpn.forcePremium") {
             return true
         }
+        #endif
         return backendPremium || !purchasedProductIDs.isDisjoint(with: Self.productIDs)
     }
 
