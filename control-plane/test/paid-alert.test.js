@@ -111,3 +111,15 @@ test("guard: mã đơn phải là duy nhất (không trùng khi 2 khách mua tro
   assert.equal(writes, 2, "chỉ createPendingOrder() được ghi đơn mới");
   assert.equal(writesInAllocator, writes, "mọi lệnh ghi đơn mới phải nằm trong createPendingOrder()");
 });
+
+test("guard: request có chữ ký thì không được hạ cấp sang API Key/token URL", () => {
+  const block = indexSrc.slice(indexSrc.indexOf("sepay-webhook"), indexSrc.indexOf("app.get(\"/v1/payments/status"));
+  assert.ok(/const signedRequest = Boolean\(signatureHeader \?\? timestampHeader\)/.test(block),
+    "phải nhận diện request có chữ ký");
+  const apiKeyLine = block.match(/const apiKeyOk = [^;]+;/)?.[0] ?? "";
+  const urlTokenLine = block.match(/const urlTokenOk = [^;]+;/)?.[0] ?? "";
+  assert.ok(apiKeyLine.includes("!signedRequest"), "API Key chỉ dùng khi request KHÔNG có chữ ký");
+  assert.ok(urlTokenLine.includes("!signedRequest"), "token URL chỉ dùng khi request KHÔNG có chữ ký");
+  assert.ok(block.includes("verifySepaySignature({"), "HMAC-SHA256 phải được kiểm trên raw body");
+  assert.ok(block.includes("req.rawBody"), "chữ ký phải tính trên raw body (không phải body đã parse)");
+});

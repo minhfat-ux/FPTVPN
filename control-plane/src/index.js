@@ -2026,25 +2026,33 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
     }
 
     const rawBody = req.rawBody ? req.rawBody.toString("utf8") : "";
+    const signatureHeader = req.get("x-sepay-signature");
+    const timestampHeader = req.get("x-sepay-timestamp");
     const signatureOk = secret
       ? verifySepaySignature({
         rawBody,
-        signature: req.get("x-sepay-signature"),
-        timestamp: req.get("x-sepay-timestamp"),
+        signature: signatureHeader,
+        timestamp: timestampHeader,
         secret,
       })
       : false;
-    const apiKeyOk = !signatureOk && apiKey
+    // Nếu request CÓ chữ ký thì chỉ chấp nhận chữ ký, không cho hạ cấp sang API Key/token URL:
+    // token trong URL có thể lọt vào log, nếu vẫn nhận khi chữ ký sai thì HMAC coi như vô hiệu.
+    const signedRequest = Boolean(signatureHeader ?? timestampHeader);
+    const apiKeyOk = !signatureOk && !signedRequest && apiKey
       ? verifySepayApiKey({ authorization: req.get("authorization"), apiKey })
       : false;
     // Dự phòng cho chế độ "không xác thực" của SePay: token bí mật trong URL.
-    const urlTokenOk = !signatureOk && !apiKeyOk && process.env.SEPAY_URL_TOKEN
+    const urlTokenOk = !signatureOk && !apiKeyOk && !signedRequest && process.env.SEPAY_URL_TOKEN
       ? verifySepayUrlToken({ token: req.query?.token, urlToken: process.env.SEPAY_URL_TOKEN })
       : false;
     if (!signatureOk && !apiKeyOk && !urlTokenOk) {
       console.warn(
-        `sepay: xác thực thất bại (signature=${Boolean(req.get("x-sepay-signature"))}, ` +
+        `sepay: xác thực thất bại (signature=${Boolean(signatureHeader)}, ` +
           `apiKey=${Boolean(req.get("authorization"))}, urlToken=${Boolean(req.query?.token)}, ` +
+          `secretConfigured=${Boolean(secret)}, ` +
+          (signedRequest && !secret ? "LÝ DO: request có chữ ký nhưng SEPAY_WEBHOOK_SECRET trống; " : "") +
+          (signedRequest && secret ? "LÝ DO: chữ ký/timestamp không hợp lệ — KHÔNG hạ cấp sang token URL; " : "") +
           `ua="${String(req.get("user-agent") ?? "-").slice(0, 60)}")`,
       );
       return res.status(401).json({ success: false, error: "Unauthorized" });
