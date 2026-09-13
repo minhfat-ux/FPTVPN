@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
 """Đo thông lượng thật của đường tunnel từ log counter của app.
 
-Đọc log của iOS (`Documents/relay.log`) hoặc Android (`diagnostics.log`) và in
-thông lượng từng khoảng 15s, kèm trung bình và đỉnh.
+Đọc log của **iOS** (`Documents/relay.log`, dòng `ws-relay: heartbeat udpFrames=…`)
+và in thông lượng từng khoảng 15s, kèm trung bình và đỉnh.
 
 Vì sao cần: đọc số counter thô (udpBytes/bytesFromRelay) rất dễ kết luận sai —
 "8 MB" không cho biết là 8 MB trong 20 giây hay trong 3 tiếng. Muốn biết đường
 có nhanh lên sau khi đổi relay hay không thì phải so hai lần đo cùng cách.
 
+GIỚI HẠN ĐÃ KIỂM CHỨNG — ĐỪNG TƯỞNG SAI:
+    Script này **KHÔNG** đọc được `diagnostics.log` của Android. Bản đầu tôi viết
+    docstring nói đọc được cả hai, nhưng đã kiểm lại: log Android không có dòng
+    `udpFrames=`/`bytesFromRelay=` nào (grep = 0), vì `WSRelayBridge.kt` không đếm
+    byte và `probe#` chỉ in counter của WG relay (`wgRelayRx=`), mà đường WS thì
+    không dùng WG relay. Muốn đo thông lượng trên Android phải thêm counter vào
+    `WSRelayBridge` + in ra dòng probe trước.
+
 Dùng:
-    python3 scripts/measure-relay-throughput.py <log> [--from HH:MM:SS] [--to HH:MM:SS]
+    python3 scripts/measure-relay-throughput.py <log iOS> [--from HH:MM:SS] [--to HH:MM:SS]
 """
 import re
 import sys
 
-# iOS: "ws-relay: heartbeat udpFrames=.. udpBytes=.. framesFromRelay=.. bytesFromRelay=.."
-# Android: cùng tên nhưng có thể ở dòng "probe#N ..."
+# "ws-relay: heartbeat udpFrames=.. udpBytes=.. framesFromRelay=.. bytesFromRelay=.."
 ROW = re.compile(
     r'(\d\d:\d\d:\d\d)\.\d+.*?(?:ws-relay: heartbeat )?'
     r'udpFrames=(\d+) udpBytes=(\d+) framesFromRelay=(\d+) bytesFromRelay=(\d+)'
