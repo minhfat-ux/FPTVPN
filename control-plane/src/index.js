@@ -91,6 +91,8 @@ import {
   planNameFor,
   transferNote,
   orderStatusPageHTML,
+  resolveQrFile,
+  qrAmountsFor,
 } from "./payments.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -750,15 +752,16 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       // amount is already filled in when the customer scans it.
       const cnyInfo = await cnyAmountForMethod(planCfg.amount, method);
       const qrQuery = `plan=${encodeURIComponent(plan)}${cnyInfo ? `&cny=${cnyInfo.amount}` : ""}`;
-      const prefilled = Boolean(
-        resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", method, { cny: cnyInfo?.amount, plan }).prefilled,
-      );
+      const { resolved, qrCny } = qrForOrder({ method, product: "ai", plan, cny: cnyInfo?.amount });
       return res.json({
         qrImageUrl: `/v1/ai/payments/qr/${method}?${qrQuery}`,
         orderCode,
         amount: planCfg.amount,
         cny: cnyInfo?.amount ?? null,
-        amountPrefilled: prefilled,
+        amountPrefilled: !resolved.missing && resolved.prefilled,
+        qrVariant: resolved.missing ? null : resolved.variant,
+        // Số ¥ in sẵn trong ảnh (nếu có) — trang buy hiện đúng con số này.
+        qrCny,
         method,
       });
     }
@@ -813,6 +816,7 @@ app.get("/v1/ai/payments/qr/:name", async (req, res) => {
     const resolved = resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", name, {
       cny: req.query?.cny,
       plan: req.query?.plan,
+      product: "ai",
     });
     if (resolved.missing) return res.status(404).json({ error: "QR image not uploaded yet" });
     res.set("X-QR-Variant", resolved.variant);
@@ -1721,6 +1725,18 @@ async function createPendingOrder({ product, email, plan, method, lang, amount }
   });
 }
 
+/**
+ * Ảnh QR cho một đơn + số ¥ thật in trong ảnh (nếu chủ shop đã khai ở qr-amounts.json).
+ * Trang buy cần con số này để hiện ĐÚNG số tiền khách nhìn thấy trong ví.
+ */
+function qrForOrder({ method, product, plan, cny }) {
+  const dir = process.env.PAY_QR_DIR || "/root/flowvpn-pay";
+  const resolved = resolveQrFile(dir, method, { cny, plan, product });
+  const amounts = qrAmountsFor(dir);
+  const declared = Number(amounts[resolved.variant]);
+  return { resolved, qrCny: Number.isFinite(declared) && declared > 0 ? declared : null };
+}
+
 app.post("/v1/payments/create", async (req, res) => {
   try {
     const { email, plan, method, lang } = req.body ?? {};
@@ -1798,15 +1814,15 @@ app.post("/v1/payments/create", async (req, res) => {
       // types the amount shown on screen.
       const cnyInfo = await cnyAmountForMethod(planCfg.amount, method);
       const qrQuery = `plan=${encodeURIComponent(plan)}${cnyInfo ? `&cny=${cnyInfo.amount}` : ""}`;
-      const prefilled = Boolean(
-        resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", method, { cny: cnyInfo?.amount, plan }).prefilled,
-      );
+      const { resolved, qrCny } = qrForOrder({ method, product: "vpn", plan, cny: cnyInfo?.amount });
       return res.json({
         qrImageUrl: `/v1/payments/qr/${method}?${qrQuery}`,
         orderCode,
         amount: planCfg.amount,
         cny: cnyInfo?.amount ?? null,
-        amountPrefilled: prefilled,
+        amountPrefilled: !resolved.missing && resolved.prefilled,
+        qrVariant: resolved.missing ? null : resolved.variant,
+        qrCny,
         method,
       });
     }
@@ -1828,28 +1844,6 @@ app.post("/v1/payments/create", async (req, res) => {
 });
 
 // Serve the static personal WeChat/Alipay collection QR images.
-/**
- * Picks the QR image to serve for a method.
- *
- * WeChat Pay and Alipay personal receive codes cannot carry an amount unless the
- * owner generated them with one, so an owner who uses "设置金额" produces one
- * image per price. Preference order:
- *   <method>-<cny>.png  →  <method>-<plan>.png  →  <method>.png
- * The first hit means the amount is already inside the QR, which the buy page
- * reports to the customer as "amount pre-filled".
- */
-function resolveQrFile(dir, name, { cny = null, plan = null } = {}) {
-  const candidates = [];
-  const cnyValue = Number(cny);
-  if (Number.isFinite(cnyValue) && cnyValue > 0) candidates.push(`${name}-${Math.round(cnyValue)}.png`);
-  if (plan) candidates.push(`${name}-${String(plan).replace(/[^a-z0-9_-]/gi, "")}.png`);
-  candidates.push(`${name}.png`);
-  for (const candidate of candidates) {
-    const file = path.join(dir, candidate);
-    if (fs.existsSync(file)) return { file, variant: path.basename(candidate), prefilled: candidate !== `${name}.png` };
-  }
-  return { file: path.join(dir, `${name}.png`), variant: `${name}.png`, prefilled: false, missing: true };
-}
 
 app.get("/v1/payments/qr/:name", async (req, res) => {
   try {
@@ -1858,6 +1852,7 @@ app.get("/v1/payments/qr/:name", async (req, res) => {
     const resolved = resolveQrFile(process.env.PAY_QR_DIR || "/root/flowvpn-pay", name, {
       cny: req.query?.cny,
       plan: req.query?.plan,
+      product: "vpn",
     });
     if (resolved.missing) return res.status(404).json({ error: "QR image not uploaded yet" });
     res.set("X-QR-Variant", resolved.variant);
