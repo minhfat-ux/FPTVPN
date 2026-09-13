@@ -161,8 +161,17 @@ struct AppVersionInfo: Equatable, Codable, Identifiable {
     var platform: String?
     var minimum_version: String
     var latest_version: String
+    /// Link tải bản mới. Từ 14/09/2026 iOS phát bằng file IPA của mình nên server trả
+    /// `ipa_url` (và vẫn điền `store_url` cùng giá trị cho các bản đang cài chỉ đọc khoá cũ).
+    var ipa_url: String?
     var store_url: String
     var id: String { "\(minimum_version)-\(latest_version)" }
+
+    /// Link dùng để mở khi ép cập nhật — ưu tiên khoá mới, lùi về khoá cũ của server.
+    var downloadURL: String {
+        let ipa = (ipa_url ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return ipa.isEmpty ? store_url : ipa
+    }
 }
 
 /// Relay WS mặc định, dùng khi node không khai relay URL của riêng nó.

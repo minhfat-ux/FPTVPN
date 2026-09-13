@@ -1,11 +1,12 @@
 /**
  * App-version gate (force update) cho VPNFlow.
  *
- * iOS và Android dùng CHUNG endpoint `/v1/app-version` nhưng có hai đường phát hành
- * khác nhau: iOS cập nhật qua App Store, Android là APK sideload
- * (`meetflowai.site/v1/downloads/android`). Vì vậy không thể trả lời giống nhau cho cả
- * hai: iPhone phải được đưa tới App Store, còn Android phải nhận link tải APK — nếu
- * `store_url` rỗng thì nút "Cập nhật" trên màn force-update **bấm không mở gì cả**.
+ * iOS và Android dùng CHUNG endpoint `/v1/app-version`, và nay cả hai đều phát qua kênh
+ * của mình: iOS là file IPA (`meetflowai.site/v1/downloads/ios`), Android là APK sideload
+ * (`meetflowai.site/v1/downloads/android`). Không kênh nào dùng app store nữa (chủ dự án bỏ
+ * App Store + Google Play 14/09/2026) — vì vậy `store_url` ở CẢ HAI kênh phải là link tải
+ * của mình: bản đang cài sẵn chỉ đọc `store_url`, để rỗng thì nút "Cập nhật" trên màn
+ * force-update **bấm không mở gì cả**.
  *
  * Kênh được quyết định theo thứ tự: `?platform=android|ios` (bản app mới gửi kèm), rồi
  * mới tới User-Agent — nhờ vậy các bản **đã cài sẵn** (chưa từng gửi tham số) vẫn nhận
@@ -37,13 +38,22 @@ export function wantsLegacyApk(userAgent) {
   return LEGACY_UA.test(String(userAgent ?? ""));
 }
 
-/** Kênh iOS/macOS (App Store) — giữ nguyên hình dạng cũ để không phá bản đang chạy. */
-export function iosVersionPayload(read) {
+/** Kênh iOS/macOS — nay cũng phát bằng file IPA của mình, KHÔNG còn App Store.
+ *
+ * Trước 14/09/2026 iOS trả `store_url` = `app_store_url` (link App Store). Chủ dự án đã bỏ
+ * App Store nên link đó trỏ vào một trang KHÔNG có app — nút "Cập nhật" bấm vào là đi đâu
+ * mất. Giờ trả link tải IPA (`/v1/downloads/ios`), vẫn đặt vào `store_url` vì các bản iOS
+ * đang cài sẵn CHỈ đọc khoá đó; để rỗng là nút chết y như cảnh báo ở đầu file.
+ */
+export function iosVersionPayload(read, { baseUrl = "" } = {}) {
+  const site = String(baseUrl ?? "").replace(/\/$/, "");
+  const ipaUrl = read("ios_ipa_url") || `${site}/v1/downloads/ios`;
   return {
     platform: "ios",
     minimum_version: read("minimum_ios_version") ?? "0.0.0",
     latest_version: read("latest_ios_version") ?? "0.0.0",
-    store_url: read("app_store_url") ?? "",
+    ipa_url: ipaUrl,
+    store_url: ipaUrl,
   };
 }
 
@@ -77,5 +87,5 @@ export function versionPayloadFor(req, { read, baseUrl = "" } = {}) {
     ? req.get("user-agent")
     : req?.headers?.["user-agent"];
   const android = isAndroidClient({ platform: req?.query?.platform, userAgent });
-  return android ? androidVersionPayload(read, { baseUrl }) : iosVersionPayload(read);
+  return android ? androidVersionPayload(read, { baseUrl }) : iosVersionPayload(read, { baseUrl });
 }

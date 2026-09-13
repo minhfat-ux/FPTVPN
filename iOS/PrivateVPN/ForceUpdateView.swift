@@ -1,19 +1,19 @@
 import SwiftUI
 
 /// Full-screen forced-update gate: shown when the installed build is below the
-/// backend `minimum_version`. The user must update (App Store link) — there is
-/// no dismiss/continue path.
+/// backend `minimum_version`. The user must update — there is no dismiss path.
 struct ForceUpdateView: View {
     let info: AppVersionInfo
     @EnvironmentObject private var languageStore: AppLanguageStore
 
-    /// App Store link from the backend. Until the app has a public App Store
-    /// page the admin leaves `store_url` empty, so fall back to an App Store
-    /// search for the app name instead of a dead button.
+    /// Link tải từ backend. Từ 14/09/2026 không còn App Store: server trả link tải file
+    /// IPA (`/v1/downloads/ios`) trong `store_url`. Nếu admin để trống thì lùi về trang
+    /// mua/tải của mình — TUYỆT ĐỐI không lùi về App Store, vì ở đó không có app và khách
+    /// sẽ bấm mãi mà không thoát được màn ép cập nhật.
     private var updateURL: URL? {
-        let raw = info.store_url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = info.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if !raw.isEmpty, let url = URL(string: raw) { return url }
-        return URL(string: "https://apps.apple.com/search?term=VPNFlow")
+        return URL(string: "https://meetflowai.site/buy")
     }
 
     var body: some View {

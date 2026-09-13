@@ -81,18 +81,30 @@ test("payload Android: apk_url riêng trong cấu hình được ưu tiên", () 
   assert.equal(body.minimum_version, "0.0.0");
 });
 
-test("payload iOS giữ nguyên hình dạng cũ (App Store), không lẫn link APK", () => {
+test("payload iOS nay trỏ về file IPA của mình, KHÔNG còn link App Store", () => {
   const body = versionPayloadFor(req({ userAgent: "CFNetwork/1494 Darwin/23.4" }), {
     read: reader(CONFIG),
     baseUrl: "https://meetflowai.site",
   });
-  assert.deepEqual(body, {
-    platform: "ios",
-    minimum_version: "1.2.0",
-    latest_version: "1.2.6",
-    store_url: "https://apps.apple.com/app/id123",
-  });
+  assert.equal(body.platform, "ios");
+  assert.equal(body.minimum_version, "1.2.0");
+  assert.equal(body.latest_version, "1.2.6");
+  assert.equal(body.ipa_url, "https://meetflowai.site/v1/downloads/ios");
+  // bản iOS đang cài sẵn chỉ đọc `store_url` ⇒ phải là link tải thật, không được rỗng
+  assert.equal(body.store_url, body.ipa_url);
+  assert.notEqual(body.store_url, "");
   assert.equal("apk_url" in body, false);
+  // app_store_url cũ trong cấu hình KHÔNG được dùng nữa: trỏ vào đó là nút cập nhật đi vào
+  // một trang App Store không có app (chủ dự án đã bỏ App Store 14/09/2026)
+  assert.equal(/apps\.apple\.com/.test(body.store_url), false);
+});
+
+test("payload iOS: ios_ipa_url riêng trong cấu hình được ưu tiên", () => {
+  const body = iosVersionPayload(reader({ ios_ipa_url: "https://cdn.example.com/VPNFlow.ipa" }), {
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(body.ipa_url, "https://cdn.example.com/VPNFlow.ipa");
+  assert.equal(body.store_url, "https://cdn.example.com/VPNFlow.ipa");
 });
 
 test("payload iOS đọc được cả khi header không có get() (request tối giản)", () => {
@@ -103,11 +115,20 @@ test("payload iOS đọc được cả khi header không có get() (request tố
 });
 
 test("thiếu cấu hình ⇒ giá trị mặc định an toàn, không crash", () => {
+  // Không có baseUrl thì chỉ còn đường dẫn tương đối — giống hệt kênh Android, không rỗng.
   assert.deepEqual(iosVersionPayload(reader({})), {
     platform: "ios",
     minimum_version: "0.0.0",
     latest_version: "0.0.0",
-    store_url: "",
+    ipa_url: "/v1/downloads/ios",
+    store_url: "/v1/downloads/ios",
+  });
+  assert.deepEqual(iosVersionPayload(reader({}), { baseUrl: "https://meetflowai.site/" }), {
+    platform: "ios",
+    minimum_version: "0.0.0",
+    latest_version: "0.0.0",
+    ipa_url: "https://meetflowai.site/v1/downloads/ios",
+    store_url: "https://meetflowai.site/v1/downloads/ios",
   });
 });
 
