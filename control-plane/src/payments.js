@@ -221,7 +221,7 @@ const TEXTS = {
     sub: "Unlock a secure VPN for your account",
     dlTitle: "Get the VPNFlow app",
     dlSub: "Don't have the app yet? Choose your platform:",
-    androidTitle: "Get it on Google Play — or download the APK directly here",
+    androidTitle: "Download the APK directly", androidTop: "Download for Android", androidBadge: "APK", iosTop: "Download for iPhone / iPad", iosBadge: "iOS (IPA)",
     androidLegacyLabel: "Fire TV / older device",
     androidLegacySub: "APK for Android 7.0 and 7.1 — Fire TV Stick 4K, older phones and TVs",
     emailLabel: "Your VPNFlow account email",
@@ -243,11 +243,12 @@ const TEXTS = {
         testflightSub: "Join the beta",
         noteExtra: "Pro is activated for the email you enter above. If it is not active within 10 minutes after your transfer, contact support@meetflowai.site.",
         howToTitle: "How to activate after buying",
+    iosLineIpa: "Download the IPA above, install it on your iPhone/iPad, then sign in with the same email you used here; Premium unlocks automatically.",
     iosLineStore: "Available on the App Store — install it, then sign in with the same email you used here; Premium unlocks automatically.",
     iosLineTestflight: "iOS beta via TestFlight — join, install, then sign in with this email.",
-    iosLineSoon: "iOS version is coming to the App Store.",
+    iosLineSoon: "iOS version is coming soon.",
     androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.",
-    steps: ["Download and install the app (iOS: App Store · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
+    steps: ["Download and install the app (iOS: the IPA above · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
         cnyNote: "WeChat Pay / Alipay settle in CNY — the ¥ amount is converted at",
         cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
         amountPrefilled: "The amount is already filled in — just confirm.",
@@ -296,7 +297,7 @@ const TEXTS = {
     sub: "Mở khoá VPN an toàn cho tài khoản của bạn",
     dlTitle: "Tải app VPNFlow",
     dlSub: "Chưa có app? Chọn nền tảng của bạn:",
-    androidTitle: "Get it on Google Play — hoặc tải APK trực tiếp tại đây",
+    androidTitle: "Tải APK trực tiếp", androidTop: "Tải cho Android", androidBadge: "APK", iosTop: "Tải cho iPhone / iPad", iosBadge: "iOS (IPA)",
     androidLegacyLabel: "Fire TV / máy cũ",
     androidLegacySub: "APK cho Android 7.0 và 7.1 — Fire TV Stick 4K, điện thoại và TV đời cũ",
     emailLabel: "Email tài khoản VPNFlow",
@@ -318,11 +319,12 @@ const TEXTS = {
         testflightSub: "Tham gia bản thử",
         noteExtra: "Pro được kích hoạt theo email bạn nhập ở trên. Nếu sau 10 phút chuyển khoản vẫn chưa thấy kích hoạt, liên hệ support@meetflowai.site.",
         howToTitle: "Cách kích hoạt sau khi mua",
+    iosLineIpa: "Tải file IPA ở trên, cài lên iPhone/iPad, rồi đăng nhập bằng đúng email bạn dùng ở trang này; Premium tự bật.",
     iosLineStore: "Đã có trên App Store — tải về, rồi đăng nhập bằng đúng email bạn dùng ở trang này; Premium tự bật.",
     iosLineTestflight: "Bản iOS thử nghiệm qua TestFlight — tham gia, cài đặt, rồi đăng nhập bằng email này.",
-    iosLineSoon: "Bản iOS đang chờ phát hành trên App Store.",
+    iosLineSoon: "Bản iOS sẽ sớm được phát hành.",
     androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.",
-    steps: ["Tải và cài app (iOS: App Store · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
+    steps: ["Tải và cài app (iOS: file IPA ở trên · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
         cnyNote: "WeChat Pay / Alipay thanh toán bằng CNY (Nhân dân tệ) — số ¥ quy đổi theo tỷ giá",
         cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
         amountPrefilled: "Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận.",
@@ -371,7 +373,7 @@ const TEXTS = {
     sub: "为您的账户解锁安全 VPN",
     dlTitle: "获取 VPNFlow 应用",
     dlSub: "还没有应用？选择您的平台：",
-    androidTitle: "在 Google Play 获取 — 或在此直接下载 APK",
+    androidTitle: "直接下载 APK", androidTop: "下载 Android 版", androidBadge: "APK", iosTop: "下载 iPhone / iPad 版", iosBadge: "iOS (IPA)",
     androidLegacyLabel: "Fire TV / 旧设备",
     androidLegacySub: "适用于 Android 7.0 与 7.1 的 APK — Fire TV Stick 4K、旧款手机与电视",
     emailLabel: "您的 VPNFlow 账户邮箱",
@@ -393,11 +395,12 @@ const TEXTS = {
         testflightSub: "加入测试版",
         noteExtra: "Pro 将为您在上方填写的邮箱激活。若转账后 10 分钟内仍未激活，请联系 support@meetflowai.site。",
         howToTitle: "购买后如何激活",
+    iosLineIpa: "下载上方 IPA 文件并安装到 iPhone/iPad，然后用本页填写的同一邮箱登录，Premium 自动开启。",
     iosLineStore: "已在 App Store 上架 — 下载后使用本页填写的同一邮箱登录，Premium 自动开启。",
     iosLineTestflight: "iOS 测试版通过 TestFlight — 加入并安装后，用此邮箱登录。",
-    iosLineSoon: "iOS 版本即将在 App Store 上架。",
+    iosLineSoon: "iOS 版本即将发布。",
     androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。",
-    steps: ["下载并安装应用（iOS：App Store · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
+    steps: ["下载并安装应用（iOS：上方 IPA · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
         cnyNote: "微信支付 / 支付宝以人民币（CNY）结算 — 金额按以下汇率换算：",
         cnyEnter: "支付时请输入二维码上显示的人民币金额。",
         amountPrefilled: "二维码中已填入金额 — 确认即可。",
@@ -446,7 +449,7 @@ const TEXTS = {
     sub: "アカウントに安全なVPNを解放します",
     dlTitle: "VPNFlowアプリを入手",
     dlSub: "アプリをお持ちでない場合：プラットフォームを選択",
-    androidTitle: "Google Playで入手 — またはここでAPKを直接ダウンロード",
+    androidTitle: "APK を直接ダウンロード", androidTop: "Android 版をダウンロード", androidBadge: "APK", iosTop: "iPhone / iPad 版をダウンロード", iosBadge: "iOS (IPA)",
     androidLegacyLabel: "Fire TV / 旧端末",
     androidLegacySub: "Android 7.0 / 7.1 用 APK — Fire TV Stick 4K、旧型スマホ・テレビ",
     emailLabel: "VPNFlowアカウントのメール",
@@ -468,11 +471,12 @@ const TEXTS = {
         testflightSub: "ベータに参加",
         noteExtra: "Pro は上に入力したメールに有効化されます。送金後 10 分以上経っても有効にならない場合は support@meetflowai.site までご連絡ください。",
         howToTitle: "購入後の有効化方法",
+    iosLineIpa: "上の IPA をダウンロードして iPhone/iPad にインストールし、このページで使った同じメールでサインインすると Premium が有効になります。",
     iosLineStore: "App Store で配信中 — インストール後、このページで使った同じメールでサインインすると Premium が有効になります。",
     iosLineTestflight: "iOS ベータは TestFlight で配布中 — 参加・インストール後、このメールでサインインしてください。",
-    iosLineSoon: "iOS 版は App Store で近日公開予定です。",
+    iosLineSoon: "iOS 版は近日公開予定です。",
     androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。",
-    steps: ["アプリをダウンロードしてインストール（iOS：App Store · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
+    steps: ["アプリをダウンロードしてインストール（iOS：上の IPA · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
         cnyNote: "WeChat Pay / Alipay は人民元（CNY）決済です — 金額は次のレートで換算：",
         cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
         amountPrefilled: "金額は入力済みです — 確認するだけです。",
@@ -521,7 +525,7 @@ const TEXTS = {
     sub: "계정에 안전한 VPN을 활성화하세요",
     dlTitle: "VPNFlow 앱 받기",
     dlSub: "아직 앱이 없으신가요? 플랫폼을 선택하세요:",
-    androidTitle: "Google Play에서 받기 — 또는 여기서 APK 직접 다운로드",
+    androidTitle: "APK 직접 다운로드", androidTop: "Android용 다운로드", androidBadge: "APK", iosTop: "iPhone / iPad용 다운로드", iosBadge: "iOS (IPA)",
     androidLegacyLabel: "Fire TV / 구형 기기",
     androidLegacySub: "Android 7.0 / 7.1용 APK — Fire TV Stick 4K, 구형 휴대폰·TV",
     emailLabel: "VPNFlow 계정 이메일",
@@ -543,11 +547,12 @@ const TEXTS = {
         testflightSub: "베타 참여",
         noteExtra: "Pro는 위에 입력한 이메일로 활성화됩니다. 송금 후 10분이 지나도 활성화되지 않으면 support@meetflowai.site로 문의하세요.",
         howToTitle: "구매 후 활성화 방법",
+    iosLineIpa: "위의 IPA를 내려받아 iPhone/iPad에 설치한 뒤, 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동 활성화됩니다.",
     iosLineStore: "App Store에서 제공 중 — 설치 후 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동으로 활성화됩니다.",
     iosLineTestflight: "iOS 베타는 TestFlight로 제공 — 참여 후 설치하고 이 이메일로 로그인하세요.",
-    iosLineSoon: "iOS 버전은 곧 App Store에 출시됩니다.",
+    iosLineSoon: "iOS 버전이 곧 출시됩니다.",
     androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.",
-    steps: ["앱을 내려받아 설치합니다 (iOS: App Store · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
+    steps: ["앱을 내려받아 설치합니다 (iOS: 위의 IPA · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
         cnyNote: "WeChat Pay / Alipay는 위안화(CNY) 결제입니다 — 금액은 다음 환율로 환산:",
         cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
         amountPrefilled: "금액이 미리 입력되어 있습니다 — 확인만 하면 됩니다.",
@@ -930,8 +935,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   const testflightUrl = !iosUrl && links.testflight ? links.testflight : null;
   const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || macUrl || testflightUrl);
   // Activation instructions adapt to how iOS is distributed right now.
+  // Bản iOS phát bằng IPA từ server mình (không qua App Store), nên chỉ dùng câu
+  // "Available on the App Store" khi link ios THỰC SỰ là link store. Link trỏ về
+  // /v1/downloads/ios (hoặc IOS_IPA_URL) thì phải nói đúng là tải IPA.
+  const iosIsStoreLink = /apps\.apple\.com|itunes\.apple\.com/.test(iosUrl ?? "");
   const iosLine = iosUrl
-    ? t.iosLineStore
+    ? (iosIsStoreLink ? t.iosLineStore : (t.iosLineIpa ?? t.iosLineStore))
     : testflightUrl
       ? t.iosLineTestflight
       : t.iosLineSoon;
@@ -1175,12 +1184,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <div class="dl-title">${t.dlTitle}</div>
       <div class="dl-sub">${t.dlSub}</div>
       <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-        ${iosUrl ? `<a href="${iosUrl}" target="_blank" rel="noopener" title="Download on the App Store (iOS)">
+        ${iosUrl ? `<a href="${iosUrl}" target="_blank" rel="noopener" title="${t.iosTop}">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
             <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
             <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
-            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">Download on the</text>
-            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">App Store</text>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.iosTop}</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.iosBadge}</text>
           </svg>
         </a>` : ""}
         ${testflightUrl ? `<a href="${testflightUrl}" target="_blank" rel="noopener" title="TestFlight beta">
@@ -1209,8 +1218,8 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
               <path fill="#4285F4" d="M425.2 225.6l-58.9-34.1-65.7 64.5 65.7 64.5 60.1-34.1c18-14.3 18-46.5-1.2-60.8z"/>
               <path fill="#34A853" d="M104.6 499l280.8-161.2-60.1-60.1L104.6 499z"/>
             </g>
-            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">GET IT ON</text>
-            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Google Play</text>
+            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.androidTop}</text>
+            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.androidBadge}</text>
           </svg>
         </a>` : ""}
         ${androidLegacyUrl ? `<a href="${androidLegacyUrl}" target="_blank" rel="noopener" title="${t.androidLegacySub}">
