@@ -93,6 +93,7 @@ import {
   orderStatusPageHTML,
   resolveQrFile,
   qrAmountsFor,
+  downloadQrPng,
 } from "./payments.js";
 
 const execFileAsync = promisify(execFile);
@@ -237,6 +238,7 @@ app.use((req, res, next) => {
   // for Fire TV / older devices.
   if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy" || req.path === "/v1/downloads/ios") return next();
   if (req.path.startsWith("/install/ios")) return next();
+  if (req.path === "/v1/downloads/qr") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
   if (req.path === "/v1/tokens" && LEGACY_MODE === "1") return next();
@@ -1915,6 +1917,32 @@ app.get("/v1/downloads/android", async (req, res) => {
  *
  * Apple yêu cầu manifest phải nằm trên HTTPS có chứng chỉ hợp lệ (domain mình đã có Let's Encrypt).
  */
+/**
+ * Ảnh QR cho link tải (khách mở trang buy trên máy tính → quét mã là điện thoại mở đúng link cài).
+ * Sinh tại chỗ, không phụ thuộc ảnh QR của dịch vụ ngoài ⇒ link ngoài hết hạn cũng không ảnh hưởng.
+ * `target`: ios | android | android-legacy | ai-android (mặc định ios).
+ */
+app.get("/v1/downloads/qr", async (req, res) => {
+  try {
+    const target = String(req.query?.target ?? "ios").trim();
+    const links = storeLinks("vpn");
+    const aiLinks = storeLinks("ai");
+    const url = {
+      ios: appConfig.get("ios_ipa_url") || links.ios,
+      android: links.android,
+      "android-legacy": links.androidLegacy,
+      "ai-android": aiLinks.android,
+    }[target];
+    if (!url) return res.status(404).json({ error: "unknown target" });
+    const png = await downloadQrPng(url, { size: Number(req.query?.size) > 0 ? Math.min(Number(req.query.size), 1024) : 320 });
+    res.type("png").set("Cache-Control", "public, max-age=3600");
+    res.send(png);
+  } catch (err) {
+    console.error("download qr failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 app.get(["/install/ios/manifest.plist", "/v1/downloads/ios/manifest.plist"], (_req, res) => {
   res.type("application/xml").send(iosInstallManifest({
     baseUrl: siteBaseUrl(),
@@ -1942,6 +1970,12 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
 <li>Máy chưa có trong danh sách UDID của bản build sẽ báo lỗi cài — gửi UDID cho shop để build lại.</li>
 <li>Cài xong nếu app báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
 <li>Cần hỗ trợ: <code>support@meetflowai.site</code></li>
+</ul>
+<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
+  <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">📱 Đang xem trên máy tính? Quét mã này bằng điện thoại</div>
+  <img src="/v1/downloads/qr?target=ios&size=260" alt="QR" width="150" height="150" style="background:#fff;padding:6px;border-radius:10px">
+  <div style="font-size:12.5px;color:rgba(255,255,255,.6);margin-top:8px">${base}/install/ios</div>
+</div>
 </ul>
 </div></body></html>`);
 });
