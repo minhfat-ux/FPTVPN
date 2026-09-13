@@ -616,7 +616,25 @@ curl -s https://api.meetflowai.site/v1/ai/app-version            # phiên bản 
 curl -s "https://api.meetflowai.site/v1/ai/entitlement?email=X"  # quyền Pro của 1 email
 curl -sI https://meetflowai.site/v1/ai/downloads/android         # APK
 curl -s "$TOKEN" https://api.meetflowai.site/v1/admin/ai/payments/pending
+
+# VPNFlow (kênh APK sideload)
+curl -s -A "okhttp/4.12.0" https://api.meetflowai.site/v1/app-version   # client Android thấy gì
+curl -s "https://api.meetflowai.site/v1/app-version?platform=android"
+curl -sI https://meetflowai.site/v1/downloads/android                   # APK đang phát
 ```
+
+### Đĩa trên VPS (theo dõi — đã có lúc chỉ còn 2.1G/20G)
+
+```bash
+df -h /            # cảnh báo khi < 15%
+du -sh /root/flowvpn-apk   # mỗi APK ~92MB; giữ bản đang phát + 1 bản rollback, xoá bản cũ
+journalctl --disk-usage    # 13/09/2026: 683M — dọn bằng: journalctl --vacuum-size=200M
+apt-get clean
+```
+
+APK chỉ phục vụ qua `/v1/downloads/android` (file `VPNFlow-latest.apk`) và
+`/v1/downloads/android-legacy` (`VPNFlow-android7.apk`) — các file `VPNFlow-<version>.apk` chỉ để lưu
+trữ nên xoá được. Endpoint không tham chiếu tên file có phiên bản, nên **không** cần sửa cấu hình khi dọn.
 
 ## 8. Phát hành Android (play vs china) — cập nhật 2026-09-12
 
