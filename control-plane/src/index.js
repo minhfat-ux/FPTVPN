@@ -849,6 +849,7 @@ app.get("/v1/ai/payments/confirm/:orderCode", async (req, res) => {
       plan: order.plan,
       method: order.method,
       lang: order.lang,
+      confirmedBy: "manual",
     });
     res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã xác nhận</title><style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.c{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:48px;color:#33c773}h1{font-size:20px;margin:10px 0}p{color:rgba(255,255,255,.6);font-size:14px}</style></head><body><div class="c"><div class="ok">✅</div><h1>Đã xác nhận thanh toán</h1><p>MeetFlow Pro đã kích hoạt cho <b>${order.email}</b>.</p><p>${activated?.mailSent ? "📧 Hoá đơn / xác nhận đã gửi tới email khách." : "⚠️ Chưa gửi được email hoá đơn — kiểm tra SMTP."}</p></div></body></html>`);
   } catch (err) {
@@ -1302,6 +1303,7 @@ app.post("/v1/admin/ai/payments/:orderCode/confirm", requireAdminAuth, async (re
       plan: order.plan,
       method: order.method,
       lang: order.lang,
+      confirmedBy: "manual",
     });
     res.json({ ok: true, email: order.email, mailSent: activated?.mailSent === true, mailError: activated?.mailError ?? null });
   } catch (err) {
@@ -1610,7 +1612,7 @@ app.get("/v1/ai/entitlement", async (req, res) => {
 });
 
 /** Grants MeetFlow Pro for a paid order and emails the invoice. */
-async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankqr", lang }) {
+async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankqr", lang, confirmedBy = "sepay" }) {
   const planCfg = AI_PLANS[plan] ?? AI_PLANS.monthly;
   const ent = await aiStore.grantPro(email, {
     plan,
@@ -1653,7 +1655,7 @@ async function activateAiProAndInvoice({ orderCode, email, plan, method = "bankq
   console.log(
     `ai-invoice: ${method}.${plan} granted to ${email} (order ${orderCode}) mailSent=${mailSent}${mailError ? ` err=${mailError}` : ""}`,
   );
-  await firePaidAlert(orderCode, email, plan, planCfg.amount, method, "MeetFlow AI Pro");
+  await firePaidAlert(orderCode, email, plan, planCfg.amount, method, "MeetFlow AI Pro", confirmedBy);
   return { entitlement: ent, mailSent, mailError };
 }
 
@@ -2310,7 +2312,9 @@ app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, 
       orderCode: order.orderCode,
       email: order.email,
       plan: order.plan,
-      prefix: "bankqr",
+      // Giữ đúng kênh khách đã dùng (wechat/alipay/momo/bankqr) để bản ghi gói nói đúng sự thật.
+      prefix: order.method || "bankqr",
+      confirmedBy: "manual",
       lang: order.lang ?? (await authStore.langForEmail(order.email)),
       amount: order.amount ?? null,
     });
@@ -2378,7 +2382,9 @@ app.get("/v1/payments/confirm/:orderCode", async (req, res) => {
       orderCode: order.orderCode,
       email: order.email,
       plan: order.plan,
-      prefix: "bankqr",
+      // Giữ đúng kênh khách đã dùng (wechat/alipay/momo/bankqr) để bản ghi gói nói đúng sự thật.
+      prefix: order.method || "bankqr",
+      confirmedBy: "manual",
       lang: order.lang ?? (await authStore.langForEmail(order.email)),
       amount: order.amount ?? null,
     });
@@ -2399,7 +2405,15 @@ function paymentConfirmSignature(orderCode) {
  * invoice. Shared by all confirm paths (admin button, email confirm link,
  * PayOS webhook). `planCfg` = PLANS_PUBLIC entry (may be null -> monthly).
  */
-async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "bankqr", lang, amount = null }) {
+async function activatePaymentAndInvoice({
+  orderCode,
+  email,
+  plan,
+  prefix = "bankqr",
+  lang,
+  amount = null,
+  confirmedBy = "sepay",
+}) {
   const planCfg = PLANS_PUBLIC[plan] ?? PLANS_PUBLIC.monthly;
   // The price recorded with the order wins (price changes must not silently
   // re-price an order the customer already paid against).
@@ -2433,8 +2447,8 @@ async function activatePaymentAndInvoice({ orderCode, email, plan, prefix = "ban
   console.log(
     `invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode}) mailSent=${invoiceResult?.sent === true}`,
   );
-  // Chủ shop chỉ cần được BÁO là đơn đã trả tiền (SePay tự xác nhận) — không cần bấm gì.
-  await firePaidAlert(orderCode, email, plan, billedAmount, prefix, "VPNFlow Premium");
+  // Chủ shop chỉ cần được BÁO là đơn đã trả tiền — không cần bấm gì.
+  await firePaidAlert(orderCode, email, plan, billedAmount, prefix, "VPNFlow Premium", confirmedBy);
   return user;
 }
 
@@ -2509,7 +2523,7 @@ async function cnyAmountForMethod(amount, method) {
  * Báo chủ shop là **đơn đã được thanh toán** (webhook tự xác nhận) — không kèm nút xác nhận.
  * Gửi cho cả 3 đường vào tiền: webhook SePay, webhook PayOS và xác nhận tay trên dashboard.
  */
-async function firePaidAlert(orderCode, email, plan, amount, method = null, product = "VPNFlow Premium") {
+async function firePaidAlert(orderCode, email, plan, amount, method = null, product = "VPNFlow Premium", confirmedBy = "sepay") {
   const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
   const methodInfo = paymentMethodInfo(method, { amountVnd: amount });
   try {
@@ -2521,6 +2535,7 @@ async function firePaidAlert(orderCode, email, plan, amount, method = null, prod
       amount,
       methodInfo,
       product,
+      confirmedBy,
       paidAt: new Date().toISOString(),
       statusUrl: `${siteBaseUrl()}${product === "MeetFlow AI Pro" ? "/ai/buy/status/" : "/buy/status/"}${orderCode}`,
     });

@@ -582,9 +582,15 @@ export function renderPaidAlert({
   methodInfo = null,
   paidAt = null,
   statusUrl = null,
+  confirmedBy = "sepay",
 }) {
   const amt = Number(amount || 0).toLocaleString("vi-VN");
   const when = paidAt ? new Date(paidAt).toLocaleString("vi-VN") : new Date().toLocaleString("vi-VN");
+  // Kênh WeChat/Alipay không có webhook nào theo dõi tiền về ⇒ chủ shop xác nhận tay;
+  // câu mở đầu phải nói đúng như vậy, không được ghi "SePay xác nhận".
+  const lead = confirmedBy === "manual"
+    ? "✅ <b>Anh đã xác nhận thanh toán cho đơn này</b> và hệ thống đã kích hoạt gói cho khách. Không cần làm gì thêm."
+    : "💰 <b>Đơn này đã được thanh toán và kích hoạt tự động</b> (SePay xác nhận tiền về). Không cần làm gì thêm.";
   const channel = methodInfo
     ? `<p style="margin:0 0 6px"><b>Kênh:</b> ${methodInfo.label}</p>` +
       (methodInfo.account ? `<p style="margin:0 0 6px;color:#666;font-size:12.5px">Tài khoản nhận: ${methodInfo.account}</p>` : "")
@@ -592,7 +598,7 @@ export function renderPaidAlert({
   return {
     subject: `✅ Đã thanh toán (${product}) #${orderCode} — ${amt} đ · ${buyerEmail}`,
     html: shell(`<p>Xin chào,</p>
-<p style="font-size:15px">💰 <b>Đơn này đã được thanh toán và kích hoạt tự động</b> (SePay xác nhận tiền về). Không cần làm gì thêm.</p>
+<p style="font-size:15px">${lead}</p>
 <table style="border-collapse:collapse">
   <tr><td style="padding:4px 12px 4px 0;color:#666">Mã đơn</td><td style="font-weight:bold">#${orderCode}</td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666">Email khách</td><td style="font-weight:bold">${buyerEmail}</td></tr>
@@ -663,10 +669,11 @@ export async function sendPaidAlert({
   methodInfo = null,
   paidAt = null,
   statusUrl = null,
+  confirmedBy = "sepay",
 }) {
   return deliver({
     to,
-    message: renderPaidAlert({ orderCode, buyerEmail, plan, amount, product, methodInfo, paidAt, statusUrl }),
+    message: renderPaidAlert({ orderCode, buyerEmail, plan, amount, product, methodInfo, paidAt, statusUrl, confirmedBy }),
     logTag: "paid-alert",
     logContext: { orderCode, buyerEmail, amount },
   });

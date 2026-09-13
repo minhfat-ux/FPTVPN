@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { renderPaidAlert, renderUnmatchedTransferAlert } from "../src/mailer.js";
+import { renderPaidAlert, renderUnmatchedTransferAlert, renderPaymentAlert } from "../src/mailer.js";
 
 const indexSrc = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 
@@ -134,4 +134,63 @@ test("guard: webhook kiểm tài khoản nhận, whitelist IP và ghi nhật ký
     assert.ok(block.includes(`"${decision}"`), `nhật ký phải phân biệt quyết định "${decision}"`);
   }
   assert.ok(indexSrc.includes("sepay-webhooks.log"), "đường dẫn nhật ký phải rõ ràng");
+});
+
+test("email đã-thanh-toán sau khi XÁC NHẬN TAY không được nói 'SePay xác nhận'", () => {
+  const manual = renderPaidAlert({ ...base, confirmedBy: "manual" });
+  assert.ok(/Anh đã xác nhận thanh toán/.test(manual.html), "phải nói rõ là chủ shop xác nhận tay");
+  assert.ok(!/SePay xác nhận/.test(manual.html), "không được gán cho SePay khi kênh không có webhook");
+  const auto = renderPaidAlert({ ...base, confirmedBy: "sepay" });
+  assert.ok(/SePay xác nhận tiền về/.test(auto.html), "đơn tự xác nhận vẫn nói SePay");
+});
+
+test("email xác nhận tay cho WeChat/Alipay: có nút xác nhận, số ¥ cần khớp và nơi kiểm tra", () => {
+  const confirmUrl = "https://api.meetflowai.site/v1/payments/confirm/1789000001?t=abc123";
+  const methodInfo = {
+    short: "WeChat Pay",
+    label: "\ud83d\udcac WeChat Pay (\u5fae\u4fe1\u652f\u4ed8)",
+    where: "M\u1edf WeChat \u2192 \u6211 \u2192 \u670d\u52a1 \u2192 \u94b1\u5305 \u2192 \u8d26\u5355",
+    account: "V\u00ed WeChat nh\u1eadn ti\u1ec1n (m\u00e3 QR c\u00e1 nh\u00e2n)",
+    expected: "\u00a558 (\u2248 200.000 \u0111)",
+  };
+  const wechat = renderPaymentAlert({
+    orderCode: 1789000001, buyerEmail: "a@b.com", plan: "monthly", amount: 200000,
+    confirmUrl, method: "wechat", methodInfo, cny: { amount: 58, rate: 3450 },
+    product: "VPNFlow Premium",
+  });
+  assert.ok(wechat.subject.includes("WeChat Pay"), "tiêu đề phải ghi rõ kênh WeChat");
+  assert.ok(wechat.html.includes("Xác nhận đã nhận tiền"), "phải còn nút xác nhận cho kênh thủ công");
+  assert.ok(wechat.html.includes(confirmUrl), "nút phải trỏ đúng link xác nhận");
+  assert.ok(wechat.html.includes("¥58"), "phải ghi số ¥ chủ shop cần khớp");
+  assert.ok(/Kiểm tra ở/.test(wechat.html), "phải nói mở app nào để kiểm tra");
+
+  const alipay = renderPaymentAlert({
+    orderCode: 1789000002, buyerEmail: "a@b.com", plan: "monthly", amount: 200000,
+    confirmUrl, method: "alipay",
+    methodInfo: { ...methodInfo, short: "Alipay", label: "Alipay (\u652f\u4ed8\u5b9d)" },
+    cny: { amount: 58, rate: 3450 },
+  });
+  assert.ok(alipay.subject.includes("Alipay") && alipay.html.includes("Xác nhận đã nhận tiền"));
+});
+
+test("guard: WeChat/Alipay luôn gửi email xác nhận tay, và xác nhận tay ghi đúng kênh", () => {
+  assert.ok(/MANUAL_CHANNELS = new Set\(\["wechat", "alipay"\]\)/.test(indexSrc));
+  assert.ok(/function shouldAlertOnCreate\(method\) \{[^}]*OWNER_ALERT_ON_CREATE[^}]*MANUAL_CHANNELS\.has\(method\)/.test(indexSrc));
+  assert.ok(/cnyAmountForMethod/.test(indexSrc) && /m !== "wechat" && m !== "alipay"/.test(indexSrc.replace(/\\/g, "")),
+    "email cho WeChat/Alipay phải kèm số ¥ cần khớp");
+  // Mọi đường xác nhận TAY (link trong email + API admin, VPN + AI) đều phải giữ đúng kênh
+  // khách đã dùng và được đánh dấu confirmedBy="manual" để email không gán nhầm cho SePay.
+  const manualBlocks = [
+    ['link xác nhận VPN', indexSrc.indexOf('app.get("/v1/payments/confirm/:orderCode"'), indexSrc.indexOf('app.get("/v1/payments/confirm/:orderCode"') + 1200],
+    ['API admin VPN', indexSrc.indexOf('app.post("/v1/admin/payments/:orderCode/confirm"'), indexSrc.indexOf('app.post("/v1/admin/payments/:orderCode/confirm"') + 900],
+    ['link xác nhận AI', indexSrc.indexOf('app.get("/v1/ai/payments/confirm/:orderCode"'), indexSrc.indexOf('app.get("/v1/ai/payments/confirm/:orderCode"') + 1200],
+    ['API admin AI', indexSrc.indexOf('app.post("/v1/admin/ai/payments/:orderCode/confirm"'), indexSrc.indexOf('app.post("/v1/admin/ai/payments/:orderCode/confirm"') + 900],
+  ];
+  for (const [name, from, to] of manualBlocks) {
+    assert.ok(from > -1 && to > from, `không tìm thấy khối ${name}`);
+    const block = indexSrc.slice(from, to);
+    assert.ok(block.includes('confirmedBy: "manual"'), `${name} phải đánh dấu xác nhận tay`);
+  }
+  assert.ok(indexSrc.slice(indexSrc.indexOf('app.get("/v1/payments/confirm/:orderCode"'), indexSrc.indexOf('app.get("/v1/payments/confirm/:orderCode"') + 1200).includes('prefix: order.method || "bankqr"'),
+    "link xác nhận VPN phải giữ đúng kênh khách dùng");
 });
