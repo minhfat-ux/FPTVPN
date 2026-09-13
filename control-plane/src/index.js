@@ -717,7 +717,7 @@ app.post("/v1/ai/payments/create", async (req, res) => {
         .touch(email, { source: "purchase", note: `${plan} via ${method ?? "bankqr"}` })
         .catch((err) => console.error("ai user touch failed:", err?.message ?? err));
       // Như VPN: mặc định không gửi email lúc tạo đơn, chỉ gửi khi tiền về.
-      if (process.env.OWNER_ALERT_ON_CREATE === "1") {
+      if (shouldAlertOnCreate(method)) {
         fireAiPaymentAlert(orderCode, email, plan, planCfg.amount, method);
       }
     }
@@ -1699,8 +1699,8 @@ app.post("/v1/payments/create", async (req, res) => {
     });
 
     // Từ khi SePay tự xác nhận tiền về, email lúc TẠO đơn mặc định không gửi nữa (chủ shop chỉ cần
-    // biết đơn đã thanh toán). Bật lại bằng OWNER_ALERT_ON_CREATE=1 nếu muốn theo dõi cả đơn chưa trả.
-    if (process.env.OWNER_ALERT_ON_CREATE === "1") {
+    // biết đơn đã thanh toán) — xem shouldAlertOnCreate().
+    if (shouldAlertOnCreate(method)) {
       firePaymentAlert(orderCode, email, plan, planCfg.amount, method);
     }
 
@@ -2439,6 +2439,17 @@ async function fireUnmatchedAlert({ amount, content, txId, accountNumber, reason
   } catch (err) {
     console.error("fireUnmatchedAlert failed:", err);
   }
+}
+
+/**
+ * Email "có đơn mới" lúc TẠO đơn: mặc định TẮT, vì SePay (chuyển khoản TPBank) và PayOS đều tự
+ * xác nhận tiền về rồi báo "đã thanh toán" — chủ shop không cần đọc email xác nhận tay nữa.
+ * Riêng WeChat/Alipay là QR cá nhân, KHÔNG có webhook nào theo dõi, nên vẫn phải báo để kịp
+ * đối chiếu. Bật lại cho mọi kênh bằng OWNER_ALERT_ON_CREATE=1.
+ */
+const MANUAL_CHANNELS = new Set(["wechat", "alipay"]);
+function shouldAlertOnCreate(method) {
+  return process.env.OWNER_ALERT_ON_CREATE === "1" || MANUAL_CHANNELS.has(method);
 }
 
 async function firePaymentAlert(orderCode, email, plan, amount, method = null) {

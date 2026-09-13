@@ -61,15 +61,19 @@ test("guard: webhook SePay đã kích hoạt thì gửi email đã-thanh-toán, 
   assert.ok(!/firePaymentAlert\(\s*ref\.orderCode/.test(sepayBlock), "không gửi email xác nhận cho đơn đã khớp");
 });
 
-test("guard: email báo đơn mới chỉ gửi khi bật OWNER_ALERT_ON_CREATE", () => {
+test("guard: email báo đơn mới chỉ gửi khi shouldAlertOnCreate(method) cho phép", () => {
   assert.ok(indexSrc.includes('process.env.OWNER_ALERT_ON_CREATE === "1"'));
+  assert.ok(/MANUAL_CHANNELS = new Set\(\["wechat", "alipay"\]\)/.test(indexSrc),
+    "WeChat/Alipay là QR cá nhân không có webhook → vẫn phải báo đơn mới");
+  assert.ok(/function shouldAlertOnCreate\(method\) \{[^}]*OWNER_ALERT_ON_CREATE[^}]*MANUAL_CHANNELS\.has\(method\)/.test(indexSrc),
+    "shouldAlertOnCreate phải = cờ ENV hoặc kênh thủ công");
   const calls = [...indexSrc.matchAll(/(?<!function )(?:await )?fire(?:Ai)?PaymentAlert\(/g)];
   const gated = calls.filter((m) =>
-    /OWNER_ALERT_ON_CREATE === "1"\)\s*\{\s*(\/\/[^\n]*\n\s*)?(?:await )?fire(?:Ai)?PaymentAlert\(/.test(
-      indexSrc.slice(m.index - 120, m.index + m[0].length),
+    /if \(shouldAlertOnCreate\(method\)\) \{\s*(\/\/[^\n]*\n\s*)?fire(?:Ai)?PaymentAlert\(/.test(
+      indexSrc.slice(m.index - 160, m.index + m[0].length),
     ),
   ).length;
-  assert.ok(calls.length > 0 && gated === calls.length, `mọi lời gọi firePaymentAlert phải nằm sau cổng OWNER_ALERT_ON_CREATE (${gated}/${calls.length})`);
+  assert.ok(calls.length > 0 && gated === calls.length, `mọi lời gọi firePaymentAlert phải nằm sau shouldAlertOnCreate() (${gated}/${calls.length})`);
 });
 
 test("guard: kích hoạt xong (VPN + AI) đều bắn email đã-thanh-toán", () => {
