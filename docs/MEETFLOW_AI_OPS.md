@@ -472,10 +472,20 @@ scp $HOME/.vpnflow-build/app/outputs/apk/legacy/release/app-legacy-release.apk \
   rồi đọc chuỗi UTF-16 (hoặc `aapt dump badging` ở máy build).
 - Nút *Tải/Cập nhật* mở `store_url` (Android luôn có link APK); bản ≥ 1.2.6 còn fallback về
   `apk_url` rồi `https://api.meetflowai.site/v1/downloads/android` nếu cả hai rỗng.
+- **Endpoint tải tự chọn bản phù hợp**: `/v1/downloads/android` xem UA của trình duyệt /
+  DownloadManager — máy Android 1–7, Fire TV (`AFT*`), `Silk/`, `Fire OS` nhận
+  `VPNFlow-android7.apk` (minSdk 24); còn lại nhận `VPNFlow-latest.apk` (minSdk 26). Nhờ vậy
+  cả máy cũ **chưa có code mới** cũng không bị kẹt ở màn ép cập nhật.
+  ```bash
+  curl -sI -A "Mozilla/5.0 (Linux; Android 7.1.2; AFTMM Build/NS6265)" https://meetflowai.site/v1/downloads/android | grep -i content-disposition
+  curl -sI -A "Mozilla/5.0 (Linux; Android 14; Pixel 8)"              https://meetflowai.site/v1/downloads/android | grep -i content-disposition
+  ```
 - Đổi ngưỡng **không cần deploy**: `app-config.db` trên VPS là nguồn sự thật.
 - ⚠️ Deploy server: `control-plane/src/index.js` trên VPS phải là bản **đã commit**
   (`git show HEAD:control-plane/src/index.js`), KHÔNG copy file đang sửa dở trong worktree —
   bản WIP có thể import module chưa có trên server và làm service chết ngay khi restart.
+  Lưu ý phụ: file trong worktree có thể còn bản cũ hơn index (khi stage bằng `git apply --cached`),
+  nên **test trên worktree sạch** (`git show HEAD:…`) hoặc kiểm md5 trên server với `HEAD`.
 
 ## 5. Cấu hình thanh toán trên VPS (systemd drop-in)
 
