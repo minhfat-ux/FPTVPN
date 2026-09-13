@@ -28,8 +28,11 @@ final class WGRelayClient {
     }
 
     private let host: String
-    private let port: UInt16
+    /// Relay ports to try, in order (node-1 runs 9444 + 8443, node-2 only 8443).
+    private let ports: [UInt16]
     private let log: Logger
+    private var portIndex = 0
+    private var lastGoodPort: UInt16?
 
     private let lock = NSLock()
     private var udpFD: Int32 = -1
@@ -39,10 +42,18 @@ final class WGRelayClient {
     /// port (WireGuard picks its own source port).
     private var peerAddress: sockaddr_in?
 
-    init(host: String, port: UInt16, log: Logger) {
+    init(host: String, ports: [UInt16], log: Logger) {
         self.host = host
-        self.port = port
+        self.ports = ports.isEmpty ? [9444] : ports
         self.log = log
+    }
+
+    /// True while the TCP link to the relay is established. The tunnel uses this to
+    /// decide whether the local listener is actually carrying anything.
+    var isConnected: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return tcpFD >= 0
     }
 
     /// Opens the local UDP listener and starts the TCP link.
@@ -73,6 +84,13 @@ final class WGRelayClient {
         running = true
         lock.unlock()
 
+        Thread { [weak self] in
+            while let self, self.running {
+                Thread.sleep(forTimeInterval: 15)
+                self.note("heartbeat \(self.countersSummary())")
+            }
+        }.start()
+
         // The TCP link is established (and re-established) on its own thread, so a
         // relay that is briefly unreachable never blocks the tunnel from starting.
         let readThread = Thread { [weak self] in self?.tcpReadLoop() }
@@ -82,7 +100,7 @@ final class WGRelayClient {
         writeThread.name = "wg-relay-udp-write"
         writeThread.start()
 
-        log.info("relay: local udp listener 127.0.0.1:\(localPort) -> \(self.host):\(self.port)")
+        note("local udp listener 127.0.0.1:\(localPort) -> \(self.host):\(self.ports)")
         return localPort
     }
 
@@ -98,7 +116,7 @@ final class WGRelayClient {
 
         if tcp >= 0 { shutdown(tcp, SHUT_RDWR); close(tcp) }
         if udp >= 0 { close(udp) }
-        log.info("relay: stopped")
+        note("stopped")
     }
 
     // MARK: - TCP link
@@ -111,6 +129,9 @@ final class WGRelayClient {
                 log.error("relay: tcp socket errno=\(errno)")
                 return nil
             }
+
+            let port = lastGoodPort ?? ports[portIndex % ports.count]
+            if lastGoodPort == nil { portIndex += 1 }
 
             var address = sockaddr_in()
             address.sin_family = sa_family_t(AF_INET)
@@ -158,7 +179,7 @@ final class WGRelayClient {
             _ = fcntl(fd, F_SETFL, flags)
 
             guard ok else {
-                log.error("relay: connect \(self.host):\(self.port) failed errno=\(errno)")
+                note("connect \(self.host):\(port) failed errno=\(errno)")
                 close(fd)
                 Thread.sleep(forTimeInterval: 2)
                 continue
@@ -166,7 +187,8 @@ final class WGRelayClient {
 
             var noDelay: Int32 = 1
             _ = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &noDelay, socklen_t(MemoryLayout<Int32>.size))
-            log.info("relay: connected to \(self.host):\(self.port) in \(Int(Date().timeIntervalSince(started) * 1000))ms")
+            lastGoodPort = port
+            note("connected to \(self.host):\(port) in \(Int(Date().timeIntervalSince(started) * 1000))ms")
             return fd
         }
         return nil
@@ -187,6 +209,8 @@ final class WGRelayClient {
                 guard frameLength > 0, frameLength <= 65_535 else { continue }
                 var payload = [UInt8](repeating: 0, count: frameLength)
                 guard readExactly(fd, into: &payload, count: frameLength) else { break }
+                receivedFrames += 1
+                receivedBytes += frameLength
                 sendToWireGuard(payload)
             }
 
@@ -195,7 +219,7 @@ final class WGRelayClient {
             lock.unlock()
             shutdown(fd, SHUT_RDWR)
             close(fd)
-            if running { log.error("relay: TCP link dropped, reconnecting") }
+            if running { note("TCP link dropped, reconnecting") }
         }
     }
 
@@ -226,19 +250,60 @@ final class WGRelayClient {
             lock.unlock()
 
             // No link yet: drop it — WireGuard retries its handshake every 5s anyway.
-            guard fd >= 0 else { continue }
+            guard fd >= 0 else {
+                lock.lock(); udpDroppedNoLink += 1; lock.unlock()
+                continue
+            }
 
             var frame = [UInt8](repeating: 0, count: received + 2)
             frame[0] = UInt8((received >> 8) & 0xff)
             frame[1] = UInt8(received & 0xff)
             frame.replaceSubrange(2..<(received + 2), with: buffer[0..<received])
+            sentFrames += 1
+            sentBytes += received
             if !writeAll(fd, frame) {
-                log.error("relay: write to relay failed errno=\(errno)")
+                // The link is one-way broken (hotel NAT / relay restart): tear it down
+                // so the read loop reconnects. Without this, every later packet was
+                // dropped silently and the tunnel stayed "up" with no traffic.
+                note("write to relay failed errno=\(errno) — dropping link to reconnect")
+                dropLink(fd, reason: "write failure")
             }
         }
     }
 
     // MARK: - Socket helpers
+
+    // MARK: - Diagnostics
+
+    private var sentFrames = 0
+    private var sentBytes = 0
+    private var receivedFrames = 0
+    private var receivedBytes = 0
+    private var udpDroppedNoLink = 0
+
+    /// Logs to os_log *and* to the extension's diagnostic file (iOS offers no way to
+    /// stream an app-extension's log from the command line).
+    private func note(_ message: String) {
+        log.info("relay: \(message)")
+        RelayDiagnostics.shared.log("relay: \(message)")
+    }
+
+    /// Counters useful to spot which direction of the bridge went quiet.
+    func countersSummary() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return "udpFrames=\(sentFrames) udpBytes=\(sentBytes) framesFromRelay=\(receivedFrames) bytesFromRelay=\(receivedBytes) droppedNoLink=\(udpDroppedNoLink) tcpFd=\(tcpFD)"
+    }
+
+    /// Closes a broken link; the read loop notices and reconnects.
+    private func dropLink(_ fd: Int32, reason: String) {
+        note("dropping TCP link (fd=\(fd)): \(reason)")
+        lock.lock()
+        if tcpFD == fd { tcpFD = -1 }
+        lock.unlock()
+        shutdown(fd, SHUT_RDWR)
+        close(fd)
+    }
 
     private func currentUDPFD() -> Int32 {
         lock.lock()

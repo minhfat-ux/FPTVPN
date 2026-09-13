@@ -74,7 +74,7 @@ final class VPNManager: ObservableObject {
             } else {
                 config = try makeConfig(store: store)
             }
-            try await prepareConfiguration(config)
+            try await prepareConfiguration(config, nodeId: store.selectedNodeID)
             state = .connecting
             try manager?.connection.startVPNTunnel()
             lastError = nil
@@ -396,7 +396,7 @@ final class VPNManager: ObservableObject {
         }
     }
 
-    private func prepareConfiguration(_ config: WireGuardConfig) async throws {
+    private func prepareConfiguration(_ config: WireGuardConfig, nodeId: String?) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let matching = existing.filter { $0.localizedDescription == "FlowVPN" }
         let manager = matching.first ?? NETunnelProviderManager()
@@ -405,11 +405,18 @@ final class VPNManager: ObservableObject {
             try? await old.removeFromPreferences()
         }
 
+        // Same transport as Android: carry WireGuard inside a TCP link to the relay
+        // next to the exit node. The extension falls back to direct UDP when the
+        // relay cannot be reached.
+        // nodeId đi kèm config để extension báo health về coordinator: node bị GFW
+        // chặn thì chỉ client mới biết, server tự kiểm tra vẫn thấy nó "sống".
+        let tunnelConfig = config.withRelay().withNodeId(nodeId)
+
         let protocolConfig = NETunnelProviderProtocol()
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier
-        protocolConfig.serverAddress = config.peers.first?.endpoint ?? "not-configured"
+        protocolConfig.serverAddress = tunnelConfig.peers.first?.endpoint ?? "not-configured"
         protocolConfig.providerConfiguration = [
-            "wireguard": try JSONEncoder().encode(config.withoutPrivateKey()),
+            "wireguard": try JSONEncoder().encode(tunnelConfig.withoutPrivateKey()),
         ]
 
         manager.protocolConfiguration = protocolConfig

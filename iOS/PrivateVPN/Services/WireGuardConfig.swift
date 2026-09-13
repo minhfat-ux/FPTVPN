@@ -20,6 +20,16 @@ struct WireGuardConfig: Equatable, Codable {
     var addresses: [String]
     var dnsServers: [String]
     var peers: [WireGuardPeer]
+    /// WireGuard-over-TCP relay in front of the exit node. When set, the tunnel is
+    /// carried inside a TCP link to this host instead of raw UDP — the transport the
+    /// Android client already uses on networks where UDP is filtered or drops the
+    /// handshake answers. Ports are tried in order (the relay daemons on the exit
+    /// nodes listen on 9444 and/or 8443). nil = direct UDP.
+    var relayHost: String? = nil
+    var relayPorts: [UInt16]? = nil
+    /// Id của exit node đang dùng, để extension báo health về coordinator (node bị
+    /// GFW chặn vẫn "sống" khi tự kiểm tra từ server, chỉ client mới biết).
+    var nodeId: String? = nil
 
     struct WireGuardPeer: Equatable, Codable {
         var publicKeyBase64: String
@@ -80,6 +90,28 @@ struct WireGuardConfig: Equatable, Codable {
     func withoutPrivateKey() -> WireGuardConfig {
         var copy = self
         copy.privateKeyBase64 = ""
+        return copy
+    }
+
+    /// Routes this tunnel through the TCP relay that runs next to the exit node
+    /// (same host as the peer endpoint). Mirrors the Android client's transport, so
+    /// the tunnel works on networks where the raw WireGuard handshake never completes.
+    /// Returns `self` unchanged when the endpoint is missing or has no host part.
+    func withNodeId(_ id: String?) -> WireGuardConfig {
+        var copy = self
+        copy.nodeId = id
+        return copy
+    }
+
+    func withRelay(ports: [UInt16] = [9444, 8443]) -> WireGuardConfig {
+        guard let endpoint = peers.first?.endpoint,
+              let host = endpoint.split(separator: ":").first.map(String.init),
+              !host.isEmpty else {
+            return self
+        }
+        var copy = self
+        copy.relayHost = host
+        copy.relayPorts = ports
         return copy
     }
 
