@@ -766,6 +766,23 @@ domain thiếu cert thì báo `CẦN XEM TAY` chứ không crash.
 
 
 
+### Quét toàn bộ bề mặt công khai sau mỗi lần đổi hạ tầng
+
+`scripts/check-public-surface.py` — một lệnh kiểm hết: DNS trỏ về đâu, TLS + số ngày còn lại của
+cert, 8 trang công khai, 4 endpoint API, payload phiên bản, và **kênh tải APK theo UA** (máy thường
+phải nhận `VPNFlow.apk`, máy Android 7/Fire TV phải nhận `VPNFlow-android7.apk`). Trả mã **1** nếu
+có mục hỏng ⇒ dùng được trong cron/CI.
+
+```bash
+scripts/check-public-surface.py                       # qua DNS thật
+scripts/check-public-surface.py --ip 103.6.234.233    # ép kiểm đúng node-2 (như curl --resolve)
+scripts/check-public-surface.py --ip 103.173.155.50   # ép kiểm node-1
+scripts/check-public-surface.py --expect-site-ip 103.6.234.233   # cảnh báo nếu DNS đổi node
+```
+
+Chạy ngay **sau** khi đổi DNS/entry point/deploy — 2 sự cố 13/09/2026 đều vô hình với máy còn cache
+DNS, chỉ lộ ra khi kiểm từ bên ngoài hoặc bằng `--ip`.
+
 ### Caddy ở edge — thêm route mới trong Node thì PHẢI thêm `handle` (13/09/2026)
 
 `meetflowai.site` **không** proxy toàn bộ vào control-plane: mỗi đường dẫn công khai phải có
