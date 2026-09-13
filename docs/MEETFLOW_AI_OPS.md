@@ -766,6 +766,47 @@ domain thiếu cert thì báo `CẦN XEM TAY` chứ không crash.
 
 
 
+### Trạng thái hạ tầng 13/09/2026 — máy chính đã chuyển sang node-2
+
+Từ ~19:08–19:17 hôm nay: **node-2 (103.6.234.233, `fcnvps2`) là máy chính** — nó chạy
+`flowvpn-cp.service` + Caddyfile riêng (proxy `127.0.0.1:7778`), DNS `meetflowai.site` /
+`api.meetflowai.site` trỏ về đây. **Control plane trên node-1 đã `inactive`**, Caddy node-1 vẫn
+chạy nên nếu DNS quay lại node-1 thì `/buy` trả **502** (đã đo) — muốn quay lui phải bật lại CP
+trên node-1 trước.
+
+⚠️ **Máy chính phải có đủ 4 thư mục file**, thiếu cái nào là 404 đúng nhóm route đó:
+
+| Thư mục trên máy chính | Thiếu thì hỏng gì |
+|---|---|
+| `/root/flowvpn-apk/` (`VPNFlow-latest.apk`, `VPNFlow-android7.apk`) | `/v1/downloads/android`, `/android-legacy`, `/v1/ai/downloads/android` → 404 "APK not found" |
+| `/root/flowvpn-pay/` (`wechat.png`, `alipay.png`, `momo.png`) | `/v1/ai/payments/qr/wechat|alipay|momo` → 404 ⇒ **khách không quét được QR để trả tiền** |
+| `/root/flowvpn-cp/assets/` (`vpnflow-logo.png`, `meetflow-logo.png`) | `/assets/*` → 404; trang buy mất logo |
+| `/var/www/flowvpn/` | `/terms`, `/privacy`, `/open`, `/dl/*`, `/PrivateVPN/*` |
+
+Đã gặp thật hôm nay: node-2 thiếu cả 3 thư mục đầu (đã copy từ node-1 sang, xong kiểm 200).
+
+📌 **Cách copy APK an toàn** — **ĐỪNG** pipe qua máy trạm (`ssh node1 tar | ssh node2 tar`) vì
+kết nối đứt giữa đường sẽ để lại **file cụt** mà endpoint vẫn phát cho khách (đã xảy ra: 27MB/96MB).
+Chạy trong node-1 để đi thẳng VN↔VN, rồi **kiểm md5 + content-length cả hai bên**:
+
+```bash
+ssh node1 'tar -C /root -cf - flowvpn-apk/VPNFlow-latest.apk flowvpn-apk/VPNFlow-android7.apk \
+  | ssh node2 "tar -C /root -xf - && chmod 644 /root/flowvpn-apk/*.apk"'
+ssh node1 'md5sum /root/flowvpn-apk/*.apk'; ssh node2 'md5sum /root/flowvpn-apk/*.apk'   # phải giống nhau
+curl -sI https://meetflowai.site/v1/downloads/android | grep -i content-length           # phải khớp dung lượng file
+```
+
+📌 **Sau mỗi lần thay APK phải PATCH lại phiên bản đang quảng cáo.** Hiện APK là **1.2.8** nhưng
+`/v1/app-version` vẫn quảng cáo `latest_version=1.2.6` (lệch — app chưa dùng `latest_version` để
+nhắc nhẹ nên chưa gây hại, nhưng phải sửa cho khớp):
+
+```bash
+curl -X PATCH https://api.meetflowai.site/v1/admin/android-version \
+  -H "Authorization: Bearer $AUTH_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"latest_version":"1.2.8"}'      # thêm "minimum_version":"1.2.8" nếu muốn ép mọi người
+scripts/check-apk-release.py           # sẽ báo lỗi nếu còn lệch
+```
+
 ### Quét toàn bộ bề mặt công khai sau mỗi lần đổi hạ tầng
 
 `scripts/check-public-surface.py` — một lệnh kiểm hết: DNS trỏ về đâu, TLS + số ngày còn lại của
