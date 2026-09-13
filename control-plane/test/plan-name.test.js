@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planNameFor } from "../src/payments.js";
+import { planNameFor, transferNote } from "../src/payments.js";
 import { renderInvoiceEmail } from "../src/mailer.js";
+import { extractOrderRef } from "../src/sepay.js";
 
 test("tên gói trong hoá đơn được bản địa hoá theo ngôn ngữ khách", () => {
   assert.equal(planNameFor("vi", "vpn", "monthly"), "Hàng tháng");
@@ -42,4 +43,37 @@ test("hoá đơn ghép đúng tên gói đã bản địa hoá", () => {
 
   const vi = renderInvoiceEmail({ ...base, lang: "vi", planLabel: planNameFor("vi", "vpn", "monthly") });
   assert.ok(vi.html.includes("Hàng tháng"));
+});
+
+test("nội dung chuyển khoản có kèm tên gói, mã đơn đứng TRƯỚC", () => {
+  assert.equal(transferNote({ orderCode: 1789318130, plan: "monthly", product: "vpn" }), "1789318130-THANG");
+  assert.equal(transferNote({ orderCode: 1789318130, plan: "quarterly", product: "vpn" }), "1789318130-3THANG");
+  assert.equal(transferNote({ orderCode: 1789318130, plan: "semiannual", product: "vpn" }), "1789318130-6THANG");
+  assert.equal(transferNote({ orderCode: 1789318130, plan: "yearly", product: "vpn" }), "1789318130-NAM");
+  assert.equal(transferNote({ orderCode: 1789318130, plan: "pass30", product: "ai" }), "1789318130-30NG");
+  // gói lạ / không rõ ⇒ chỉ có mã đơn, không có token rác
+  assert.equal(transferNote({ orderCode: 1789318130, plan: "khong-co", product: "vpn" }), "1789318130");
+  assert.equal(transferNote({ orderCode: 1789318130 }), "1789318130");
+});
+
+test("nội dung CK vẫn nằm trong giới hạn 25 ký tự của QR (kể cả tiền tố sản phẩm)", () => {
+  const cases = [
+    ["vpn", "VPNFLOW", ["monthly", "quarterly", "semiannual", "yearly"]],
+    ["ai", "MEETFLOW", ["pass30", "monthly", "yearly"]],
+  ];
+  for (const [product, prefix, plans] of cases) {
+    for (const plan of plans) {
+      const total = `${prefix}-${transferNote({ orderCode: 1789318130, plan, product })}`;
+      assert.ok(total.length <= 25, `${total} dài ${total.length} ký tự (>25)`);
+    }
+  }
+});
+
+test("nội dung CK mới vẫn đọc được mã đơn bằng bộ tách của SePay", () => {
+  const memo = `VPNFLOW-${transferNote({ orderCode: 1789318130, plan: "monthly", product: "vpn" })}`;
+  assert.equal(memo, "VPNFLOW-1789318130-THANG");
+  assert.equal(extractOrderRef({ content: memo }).orderCode, 1789318130);
+  assert.equal(extractOrderRef({ content: memo }).product, "vpn");
+  // ngân hàng cắt mất phần tên gói ⇒ vẫn khớp đơn
+  assert.equal(extractOrderRef({ content: "VPNFLOW-1789318130" }).orderCode, 1789318130);
 });

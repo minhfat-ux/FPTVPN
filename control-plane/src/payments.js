@@ -105,16 +105,49 @@ function payosSignature({ checksumKey, orderCode, amount, description, cancelUrl
 }
 
 /**
+ * Token gói hàng ngắn để in vào NỘI DUNG CHUYỂN KHOẢN (không dấu, tối đa 5 ký tự).
+ *
+ * Ngân hàng cắt nội dung khá ngắn (EMVCo cho field 62/01 tối đa 25 ký tự) nên mã đơn phải đứng
+ * TRƯỚC — nếu bị cắt thì mất tên gói, không mất mã đơn (mất mã đơn là không khớp được đơn).
+ */
+const TRANSFER_PLAN_TOKENS = {
+  vpn: { monthly: "THANG", quarterly: "3THANG", semiannual: "6THANG", yearly: "NAM" },
+  ai: { pass30: "30NG", monthly: "THANG", yearly: "NAM" },
+};
+
+/**
+ * Nội dung chuyển khoản hiện cho khách khi quét QR: `<mã đơn>-<token gói>`.
+ * Ví dụ: `1789318130-THANG`. Phần tiền tố sản phẩm (`VPNFLOW-`/`MEETFLOW-`) do
+ * `buildVietQRPayload` thêm vào.
+ */
+export function transferNote({ orderCode, plan = "", product = "vpn" } = {}) {
+  const code = String(orderCode ?? "").trim();
+  const token = TRANSFER_PLAN_TOKENS[product]?.[plan] ?? "";
+  const note = token ? `${code}-${token}` : code;
+  return note.slice(0, 25);
+}
+
+/**
  * Builds a VietQR (direct bank transfer) as a QR data URL. No merchant
  * registration needed — customer scans with any VN banking app, pays the
  * exact amount, and the note carries the order code for manual/auto matching.
  */
-export async function createBankQrDataUrl({ accountNumber, accountName, amount, orderCode, bin, prefix = "VPNFLOW" }) {
+export async function createBankQrDataUrl({
+  accountNumber,
+  accountName,
+  amount,
+  orderCode,
+  bin,
+  prefix = "VPNFLOW",
+  plan = "",
+  product = "vpn",
+}) {
   const payload = buildVietQRPayload({
     accountNumber,
     accountName,
     amount,
-    content: String(orderCode),
+    // Nội dung chuyển khoản có kèm tên gói để chủ shop nhìn sao kê là biết khách mua gói nào.
+    content: transferNote({ orderCode, plan, product }),
     prefix,
     ...(bin ? { bin } : {}),
   });

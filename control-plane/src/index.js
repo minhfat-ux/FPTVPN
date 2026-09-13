@@ -710,6 +710,8 @@ app.post("/v1/ai/payments/create", async (req, res) => {
       if (cfg) {
         const qrDataUrl = await createBankQrDataUrl({
           prefix: "MEETFLOW",
+          product: "ai",
+          plan,
           accountNumber: cfg.accountNumber,
           accountName: cfg.accountName,
           bin: cfg.bin,
@@ -746,6 +748,8 @@ app.post("/v1/ai/payments/create", async (req, res) => {
     }
     const qrDataUrl = await createBankQrDataUrl({
       prefix: "MEETFLOW",
+      product: "ai",
+      plan,
       accountNumber: bank.accountNumber,
       accountName: bank.accountName,
       amount: planCfg.amount,
@@ -1677,6 +1681,8 @@ app.post("/v1/payments/create", async (req, res) => {
       if (!bank) return res.status(502).json({ code: "bank_not_configured", error: "Bank QR chưa được cấu hình (BANK_QR_ACCOUNT)." });
       const qrDataUrl = await createBankQrDataUrl({
         prefix: "VPNFLOW",
+        product: "vpn",
+        plan,
         accountNumber: bank.accountNumber,
         accountName: bank.accountName,
         amount: planCfg.amount,
@@ -1691,6 +1697,8 @@ app.post("/v1/payments/create", async (req, res) => {
       if (cfg) {
         const qrDataUrl = await createBankQrDataUrl({
           prefix: "VPNFLOW",
+          product: "vpn",
+          plan,
           accountNumber: cfg.accountNumber,
           accountName: cfg.accountName,
           bin: cfg.bin,
