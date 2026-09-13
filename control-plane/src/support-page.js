@@ -1,10 +1,10 @@
 /**
- * Support / help page — required by the App Store as the "Support URL" for
- * VPNFlow and MeetFlow AI, and linked from the buy pages and the apps.
+ * Support / help page — linked from the buy pages and from the apps themselves.
  *
- * Localized in the same 5 languages as the buy and guide pages, and honest
- * about how each purchase channel is refunded (Apple handles IAP refunds, the
- * web channel is handled by us).
+ * Localized in the same 5 languages as the buy and guide pages. Every purchase
+ * now goes through the web channel (bank QR / transfer) — there is no app-store
+ * channel any more (owner decision 14/09/2026), so the FAQ answers must only
+ * describe the web channel: one-time payment, no auto-renewal, refunds by email.
  */
 
 const PICK = (v) => (["en", "vi", "zh", "ja", "ko"].includes(v) ? v : "vi");
@@ -28,9 +28,9 @@ const T = {
       ["Tôi không nhận được mã đăng nhập.", "Kiểm tra cả hộp thư rác/quảng cáo. Bấm “Gửi lại mã” sau ít nhất 1 phút. Nếu vẫn không có, gửi email hỗ trợ kèm địa chỉ email đăng nhập để chúng tôi cấp mã trực tiếp."],
       ["Đã chuyển khoản nhưng app chưa lên Premium.", "Chuyển khoản ngân hàng thường được đối chiếu trong vài phút (tối đa 10 phút giờ làm việc). Hãy mở lại app hoặc đăng nhập lại. Nếu quá 30 phút, gửi email kèm mã đơn và ảnh chụp giao dịch."],
       ["VPN kết nối nhưng không vào được mạng.", "Thử đổi máy chủ khác trong danh sách, tắt/bật lại VPN, hoặc chuyển giữa Wi-Fi và 4G/5G. Một số mạng công cộng chặn VPN — thử máy chủ khác trước khi báo lỗi."],
-      ["Làm sao để huỷ gói mua trên App Store?", "Mở Cài đặt → tên Apple ID của bạn → Subscriptions (Đăng ký) → chọn ứng dụng → Cancel Subscription. Gỡ app không tự huỷ gói."],
-      ["Tôi muốn hoàn tiền.", "Gói mua qua App Store: yêu cầu hoàn tiền tại reportaproblem.apple.com (Apple xử lý, không phải chúng tôi). Gói mua trên web bằng QR/chuyển khoản: gửi email kèm mã đơn trong vòng 7 ngày."],
-      ["Tôi đổi điện thoại, có phải mua lại?", "Không. Premium gắn với tài khoản email — chỉ cần đăng nhập cùng email trên thiết bị mới. Với gói mua bằng App Store, bấm “Restore Purchases” trong màn hình nâng cấp."],
+      ["Gói của tôi có tự động gia hạn không?", "Không. Gói mua trên web là mua một lần (QR/chuyển khoản) và KHÔNG tự động gia hạn — hết hạn là dừng, không cần huỷ ở đâu. Muốn dừng trước hạn thì gửi email kèm email đăng nhập hoặc mã đơn."],
+      ["Tôi muốn hoàn tiền.", "Gói mua trên web (QR/chuyển khoản): gửi email kèm mã đơn trong vòng 7 ngày kể từ lúc thanh toán."],
+      ["Tôi đổi điện thoại, có phải mua lại?", "Không. Premium gắn với tài khoản email — chỉ cần đăng nhập cùng email trên thiết bị mới. Nếu Premium chưa hiện, vào Cài đặt → “Làm mới trạng thái gói”."],
       ["Làm sao xoá tài khoản của tôi?", "Trong app: Cài đặt → Xoá tài khoản. Toàn bộ dữ liệu tài khoản sẽ bị xoá; gói đang còn hiệu lực cũng chấm dứt."],
       ["Các bạn thu thập dữ liệu gì?", "Chỉ email đăng nhập, mã thiết bị và trạng thái gói để vận hành dịch vụ. Chúng tôi không ghi lại nội dung truy cập của bạn và không bán dữ liệu. Chi tiết ở Chính sách riêng tư."],
     ],
@@ -39,7 +39,6 @@ const T = {
     linkBuy: "Trang mua gói",
     linkPrivacy: "Chính sách riêng tư",
     linkTerms: "Điều khoản sử dụng",
-    appStoreNote: "Gói mua qua App Store được Apple quản lý và gia hạn tự động; quản lý hoặc huỷ trong phần Subscriptions của Apple ID.",
   },
   en: {
     htmlLang: "en",
@@ -59,9 +58,9 @@ const T = {
       ["I never received the login code.", "Check spam/junk as well. Tap “Resend code” after at least a minute. If it still does not arrive, email support with the login address and we will issue a code for you."],
       ["I paid but the app still is not Premium.", "Bank transfers are usually matched within a few minutes (up to 10 minutes in business hours). Reopen the app or sign in again. If it has been over 30 minutes, email us with the order code and a screenshot of the transfer."],
       ["The VPN connects but I have no internet.", "Try another server in the list, toggle the VPN off and on, and switch between Wi-Fi and mobile data. Some public networks block VPNs — test another server before reporting a fault."],
-      ["How do I cancel a subscription bought on the App Store?", "Settings → your Apple ID → Subscriptions → select the app → Cancel Subscription. Deleting the app does not cancel it."],
-      ["I would like a refund.", "App Store purchases: request a refund at reportaproblem.apple.com (Apple handles it, not us). Web purchases paid by QR/transfer: email us within 7 days with the order code."],
-      ["I changed phones — do I pay again?", "No. Premium is tied to your email account, so just sign in with the same email. For App Store subscriptions, tap “Restore Purchases” on the upgrade screen."],
+      ["Does my plan auto-renew?", "No. Web plans are one-time payments (QR / bank transfer) and never auto-renew — when the period ends the plan simply stops, so there is nothing to cancel. To end it early, email us with your login email or order code."],
+      ["I would like a refund.", "Web purchases paid by QR / bank transfer: email us within 7 days of paying, with your order code."],
+      ["I changed phones — do I pay again?", "No. Premium is tied to your email account, so just sign in with the same email. If Premium does not show up, open Settings → “Refresh Purchase Status”."],
       ["How do I delete my account?", "In the app: Settings → Delete Account. All account data is erased and any active plan ends."],
       ["What data do you collect?", "Only your login email, a device identifier and your subscription state, used to run the service. We do not log what you browse and we never sell data. See the Privacy Policy."],
     ],
@@ -70,7 +69,6 @@ const T = {
     linkBuy: "Buy page",
     linkPrivacy: "Privacy Policy",
     linkTerms: "Terms of Use",
-    appStoreNote: "App Store purchases are handled and auto-renewed by Apple; manage or cancel them under your Apple ID Subscriptions.",
   },
   zh: {
     htmlLang: "zh-Hans",
@@ -90,9 +88,9 @@ const T = {
       ["我没有收到登录验证码。", "请同时检查垃圾邮件箱。至少等待 1 分钟后点击“重新发送验证码”。若仍未收到，请用登录邮箱联系我们，我们会直接为您发放验证码。"],
       ["我已付款，但应用仍显示未开通。", "银行转账通常在几分钟内完成核对（工作时间最长 10 分钟）。请重新打开应用或重新登录。若超过 30 分钟，请附订单号与转账截图来信。"],
       ["VPN 已连接但无法上网。", "请尝试更换列表中的其他服务器、关闭再开启 VPN，或在 Wi-Fi 与移动数据之间切换。部分公共网络会屏蔽 VPN。"],
-      ["如何取消在 App Store 购买的订阅？", "设置 → 您的 Apple ID → 订阅 → 选择该应用 → 取消订阅。删除应用不会取消订阅。"],
-      ["我想退款。", "App Store 购买：请在 reportaproblem.apple.com 申请退款（由 Apple 处理）。网页扫码/转账购买：请在 7 天内附订单号来信。"],
-      ["换了手机需要重新购买吗？", "不需要。会员与邮箱账号绑定，用同一邮箱登录即可。App Store 订阅可在升级页面点“恢复购买”。"],
+      ["我的套餐会自动续订吗？", "不会。网页购买的套餐是一次性付款（扫码／转账），不会自动续订——到期即自动结束，无需取消。如需提前结束，请附登录邮箱或订单号来信。"],
+      ["我想退款。", "网页扫码／转账购买：请在付款后 7 天内附订单号来信。"],
+      ["换了手机需要重新购买吗？", "不需要。会员与邮箱账号绑定，用同一邮箱登录即可。若未显示会员，请在 设置 →“刷新订阅状态”。"],
       ["如何删除我的账号？", "在应用内：设置 → 删除账号。账号数据将被清除，正在生效的套餐同时终止。"],
       ["你们收集哪些数据？", "仅收集登录邮箱、设备标识与订阅状态，用于提供服务。我们不记录您的访问内容，也不出售数据。详见隐私政策。"],
     ],
@@ -101,7 +99,6 @@ const T = {
     linkBuy: "购买页面",
     linkPrivacy: "隐私政策",
     linkTerms: "使用条款",
-    appStoreNote: "通过 App Store 购买的订阅由 Apple 管理与自动续订；请在 Apple ID 的“订阅”中管理或取消。",
   },
   ja: {
     htmlLang: "ja",
@@ -121,9 +118,9 @@ const T = {
       ["ログインコードが届きません。", "迷惑メールフォルダもご確認ください。1分以上待ってから「コードを再送」を押してください。それでも届かない場合は、ログイン用メールアドレスを添えてご連絡いただければコードを発行します。"],
       ["支払ったのにプレミアムになりません。", "銀行振込の照合は通常数分（営業時間内で最大10分）です。アプリを再起動するか再ログインしてください。30分以上経過しても反映されない場合は、注文番号と振込のスクリーンショットを添えてご連絡ください。"],
       ["VPN は接続できるのに通信できません。", "一覧の別サーバーを試し、VPN をオフ／オンし、Wi-Fi とモバイルデータを切り替えてください。公共 Wi-Fi では VPN が遮断されることがあります。"],
-      ["App Store で購入した購読の解約方法は？", "設定 → Apple ID → サブスクリプション → 該当アプリ → サブスクリプションを解約。アプリを削除しても解約されません。"],
-      ["返金してほしい。", "App Store での購入：reportaproblem.apple.com から返金を申請してください（Apple が対応）。Web の QR／振込での購入：7日以内に注文番号を添えてご連絡ください。"],
-      ["機種変更したら再購入が必要ですか？", "いいえ。プレミアムはメールアカウントに紐づくため、同じメールでログインするだけです。App Store の購読はアップグレード画面の「購入を復元」から復元できます。"],
+      ["プランは自動更新されますか？", "いいえ。Web での購入は一度きりのお支払い（QR／振込）で、自動更新はありません。期間が終わればそのまま終了するため、解約の手続きは不要です。途中で終了したい場合は、ログイン用メールまたは注文番号を添えてご連絡ください。"],
+      ["返金してほしい。", "Web の QR／振込での購入：お支払いから 7日以内に注文番号を添えてご連絡ください。"],
+      ["機種変更したら再購入が必要ですか？", "いいえ。プレミアムはメールアカウントに紐づくため、同じメールでログインするだけです。表示されない場合は 設定 →「購入状態を更新」をお試しください。"],
       ["アカウントを削除するには？", "アプリ内：設定 → アカウントを削除。アカウントデータは消去され、有効なプランも終了します。"],
       ["どのようなデータを収集しますか？", "サービス提供のため、ログイン用メール、端末識別子、購読状態のみを収集します。閲覧内容の記録やデータの販売は行いません。詳細はプライバシーポリシーをご覧ください。"],
     ],
@@ -132,7 +129,6 @@ const T = {
     linkBuy: "購入ページ",
     linkPrivacy: "プライバシーポリシー",
     linkTerms: "利用規約",
-    appStoreNote: "App Store での購入は Apple が管理し自動更新されます。Apple ID の「サブスクリプション」で管理・解約できます。",
   },
   ko: {
     htmlLang: "ko",
@@ -152,9 +148,9 @@ const T = {
       ["로그인 코드가 오지 않습니다.", "스팸함도 확인해 주세요. 최소 1분 후 “코드 재전송”을 눌러주세요. 그래도 오지 않으면 로그인 이메일과 함께 문의해 주시면 코드를 발급해 드립니다."],
       ["결제했는데 앱이 아직 프리미엄이 아닙니다.", "계좌 이체는 보통 몇 분 내(업무 시간 기준 최대 10분) 확인됩니다. 앱을 다시 열거나 다시 로그인해 주세요. 30분이 지나도 반영되지 않으면 주문 번호와 이체 캡처를 보내주세요."],
       ["VPN은 연결되지만 인터넷이 안 됩니다.", "목록의 다른 서버로 바꿔보고, VPN을 껐다 켜고, Wi-Fi와 모바일 데이터를 전환해 보세요. 일부 공용 네트워크는 VPN을 차단합니다."],
-      ["App Store에서 구매한 구독은 어떻게 해지하나요?", "설정 → Apple ID → 구독 → 해당 앱 → 구독 취소. 앱을 삭제해도 구독은 해지되지 않습니다."],
-      ["환불을 받고 싶습니다.", "App Store 구매: reportaproblem.apple.com 에서 환불을 요청하세요(Apple이 처리). 웹 QR/계좌이체 구매: 7일 이내에 주문 번호와 함께 문의해 주세요."],
-      ["기기를 바꾸면 다시 결제해야 하나요?", "아니요. 프리미엄은 이메일 계정에 연결되어 있어 같은 이메일로 로그인하면 됩니다. App Store 구독은 업그레이드 화면에서 “구매 복원”을 누르세요."],
+      ["요금제가 자동 갱신되나요?", "아니요. 웹 구매는 일회성 결제(QR/계좌이체)이며 자동 갱신되지 않습니다. 기간이 끝나면 그대로 종료되므로 해지 절차가 필요 없습니다. 중간에 종료하려면 로그인 이메일 또는 주문 번호와 함께 문의해 주세요."],
+      ["환불을 받고 싶습니다.", "웹 QR/계좌이체 구매: 결제 후 7일 이내에 주문 번호와 함께 문의해 주세요."],
+      ["기기를 바꾸면 다시 결제해야 하나요?", "아니요. 프리미엄은 이메일 계정에 연결되어 있어 같은 이메일로 로그인하면 됩니다. 표시되지 않으면 설정 → “구매 상태 새로 고침”을 눌러주세요."],
       ["계정을 삭제하려면?", "앱에서: 설정 → 계정 삭제. 계정 데이터가 삭제되고 유효한 요금제도 종료됩니다."],
       ["어떤 데이터를 수집하나요?", "서비스 운영을 위해 로그인 이메일, 기기 식별자, 구독 상태만 수집합니다. 이용 기록을 저장하거나 데이터를 판매하지 않습니다. 자세한 내용은 개인정보 처리방침을 참고하세요."],
     ],
@@ -163,7 +159,6 @@ const T = {
     linkBuy: "구매 페이지",
     linkPrivacy: "개인정보 처리방침",
     linkTerms: "이용약관",
-    appStoreNote: "App Store 구매는 Apple이 관리하고 자동 갱신됩니다. Apple ID의 구독에서 관리하거나 취소할 수 있습니다.",
   },
 };
 
@@ -172,7 +167,7 @@ export function supportPageHTML({ lang = "vi", product = "vpn", supportEmail = "
   const code = PICK(lang);
   const t = T[code] || T.vi;
   const isAi = product === "ai";
-  const appName = isAi ? "MeetFlow AI" : "FlowVPN";
+  const appName = isAi ? "MeetFlow AI" : "VPNFlow";
 
   const includeList = t.include.map((line) => `<li>${line}</li>`).join("");
   const faq = t.faq.map(([q, a]) => `
@@ -214,8 +209,6 @@ export function supportPageHTML({ lang = "vi", product = "vpn", supportEmail = "
     .links { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 16px; }
     .links a { color: #33c773; text-decoration: none; font-size: 14px; font-weight: 600; }
     .links a:hover { text-decoration: underline; }
-    .note { margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.1);
-            color: rgba(255,255,255,.5); font-size: 12px; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -236,7 +229,6 @@ export function supportPageHTML({ lang = "vi", product = "vpn", supportEmail = "
     ${faq}
 
     <div class="links">${linkRows}</div>
-    <div class="note">${t.appStoreNote}</div>
   </div>
 </body>
 </html>`;
