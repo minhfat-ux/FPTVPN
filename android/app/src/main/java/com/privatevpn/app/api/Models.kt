@@ -104,6 +104,8 @@ data class AppVersionInfo(
     @SerialName("store_url") val storeUrl: String,
     /** Kênh Android (APK sideload): link tải APK — server cũng đặt `store_url` bằng link này. */
     @SerialName("apk_url") val apkUrl: String? = null,
+    /** Bản minSdk 24 cho Android 7.0/7.1 + Fire OS: APK thường (minSdk 26) không cài được. */
+    @SerialName("apk_url_legacy") val apkUrlLegacy: String? = null,
 )
 
 @Serializable

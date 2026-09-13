@@ -2,6 +2,7 @@ package com.privatevpn.app.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,11 +35,14 @@ import com.privatevpn.app.theme.VPNTheme
 @Composable
 fun ForceUpdateScreen(info: AppVersionInfo, lang: LanguageStore) {
     val context = LocalContext.current
-    // Kênh Android: server trả apk_url (và store_url = apk_url). Vẫn có fallback phòng khi
-    // server chưa cấu hình — trước đây store_url rỗng làm nút bấm không mở gì.
+    // Kênh Android: server trả apk_url (và store_url = apk_url). Máy Android 7 / Fire OS lấy
+    // apk_url_legacy vì APK thường (minSdk 26) không cài được. Fallback phòng khi server
+    // chưa cấu hình — trước đây store_url rỗng làm nút bấm không mở gì.
     val downloadUrl = AppVersionService.updateUrl(
         info,
-        "${Config.CONTROL_PLANE_URL}/v1/downloads/android",
+        fallbackUrl = "${Config.CONTROL_PLANE_URL}/v1/downloads/android",
+        sdkInt = Build.VERSION.SDK_INT,
+        fallbackLegacyUrl = "${Config.CONTROL_PLANE_URL}/v1/downloads/android-legacy",
     )
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),

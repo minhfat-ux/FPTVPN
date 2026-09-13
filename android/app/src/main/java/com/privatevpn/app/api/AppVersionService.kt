@@ -11,12 +11,28 @@ object AppVersionService {
     /**
      * Link để tải bản mới.
      *
-     * Kênh Android nhận thêm `apk_url`; bản cũ chỉ đọc `store_url`. Nếu server trả rỗng
-     * (đã từng xảy ra: nút "Cập nhật" bấm không mở gì) thì rơi về [fallbackUrl] — endpoint
-     * phát APK chuẩn của mình.
+     * Kênh Android nhận `apk_url`; bản cũ chỉ đọc `store_url`. Nếu server trả rỗng (đã từng
+     * xảy ra: nút "Cập nhật" bấm không mở gì) thì rơi về `fallbackUrl` — endpoint phát APK
+     * của mình.
+     *
+     * Máy Android 7.0/7.1 và Fire OS (Fire TV Stick 4K) **không cài được** APK thường
+     * (minSdk 26) — chúng báo "There was a problem parsing the package". Vì vậy với
+     * `sdkInt < 26` phải lấy bản `apk_url_legacy` (minSdk 24), không thì màn ép cập nhật
+     * chặn cứng nhóm người dùng này.
      */
-    fun updateUrl(info: AppVersionInfo, fallbackUrl: String): String =
-        listOf(info.storeUrl, info.apkUrl.orEmpty()).firstOrNull { it.isNotBlank() } ?: fallbackUrl
+    fun updateUrl(
+        info: AppVersionInfo,
+        fallbackUrl: String,
+        sdkInt: Int,
+        fallbackLegacyUrl: String = fallbackUrl,
+    ): String {
+        if (sdkInt in 1..25) {
+            return listOf(info.apkUrlLegacy.orEmpty(), fallbackLegacyUrl)
+                .firstOrNull { it.isNotBlank() } ?: fallbackLegacyUrl
+        }
+        return listOf(info.storeUrl, info.apkUrl.orEmpty(), fallbackUrl)
+            .firstOrNull { it.isNotBlank() } ?: fallbackUrl
+    }
 
     /** Numeric component-wise version compare ("1.0.2" < "1.0.10"). */
     fun isVersion(a: String, b: String): Boolean {

@@ -37,16 +37,22 @@ export function iosVersionPayload(read) {
  * Kênh Android (APK sideload).
  *
  * `store_url` cố ý bằng `apk_url`: bản cũ (≤ 1.2.4) chỉ đọc `store_url`, nếu để rỗng thì
- * màn force-update của họ có nút chết. Bản ≥ 1.2.6 đọc thêm `apk_url` và có fallback.
+ * màn force-update của họ có nút chết. Bản ≥ 1.2.6 đọc thêm `apk_url`/`apk_url_legacy`.
+ *
+ * `apk_url_legacy` là bản minSdk 24 cho Android 7.0/7.1 và Fire OS (Fire TV Stick 4K):
+ * APK thường (minSdk 26) cài lên máy đó báo "There was a problem parsing the package",
+ * nên app phải TỰ CHỌN theo SDK của máy — không thì ép cập nhật sẽ chặn cứng nhóm này.
  */
 export function androidVersionPayload(read, { baseUrl = "" } = {}) {
   const site = String(baseUrl ?? "").replace(/\/$/, "");
   const apkUrl = read("android_apk_url") || `${site}/v1/downloads/android`;
+  const apkUrlLegacy = read("android_apk_url_legacy") || `${site}/v1/downloads/android-legacy`;
   return {
     platform: "android",
     minimum_version: read("android_minimum_version") ?? "0.0.0",
     latest_version: read("android_latest_version") ?? "0.0.0",
     apk_url: apkUrl,
+    apk_url_legacy: apkUrlLegacy,
     store_url: apkUrl,
   };
 }

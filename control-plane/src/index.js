@@ -2154,10 +2154,11 @@ app.get("/v1/admin/android-version", requireAdminAuth, (_req, res) => {
 });
 
 app.patch("/v1/admin/android-version", requireAdminAuth, (req, res) => {
-  const { latest_version, minimum_version, apk_url } = req.body ?? {};
+  const { latest_version, minimum_version, apk_url, apk_url_legacy } = req.body ?? {};
   if (latest_version !== undefined) appConfig.set("android_latest_version", latest_version);
   if (minimum_version !== undefined) appConfig.set("android_minimum_version", minimum_version);
   if (apk_url !== undefined) appConfig.set("android_apk_url", apk_url);
+  if (apk_url_legacy !== undefined) appConfig.set("android_apk_url_legacy", apk_url_legacy);
   res.json(vpnAndroidVersion());
 });
 

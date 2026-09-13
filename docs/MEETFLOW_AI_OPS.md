@@ -430,10 +430,16 @@ theo **đúng kênh của client**:
 | Client | Nhận được |
 |---|---|
 | iPhone/macOS (`CFNetwork/Darwin`) | `{platform:"ios", minimum_version, latest_version, store_url}` — như cũ |
-| Android (`okhttp/*`, hoặc `?platform=android`) | `{platform:"android", minimum_version, latest_version, apk_url, store_url}` — `store_url` **bằng** `apk_url` |
+| Android (`okhttp/*`, hoặc `?platform=android`) | `{platform:"android", minimum_version, latest_version, apk_url, apk_url_legacy, store_url}` — `store_url` **bằng** `apk_url` |
 
 Cách nhận kênh: ưu tiên `?platform=android|ios` (bản ≥ 1.2.6 gửi kèm), nếu không có thì suy từ
 User-Agent — nhờ vậy **bản đã cài sẵn (≤ 1.2.4) cũng nhận đúng link APK**, không cần build lại.
+
+⚠️ **Máy Android 7.0/7.1 và Fire OS (Fire TV Stick 4K) phải lấy `apk_url_legacy`**: APK thường có
+`minSdk 26` nên cài lên máy đó báo *"There was a problem parsing the package"*. App (≥ 1.2.6) tự
+chọn theo `Build.VERSION.SDK_INT < 26`; server luôn trả kèm link legacy
+(`/v1/downloads/android-legacy`, flavor `legacy`, `minSdk 24`). Khi bật ép cập nhật mà chỉ có một
+link APK thì nhóm này bị **chặn cứng ở màn cập nhật** — đó là lý do có field riêng.
 
 ```bash
 # Xem ngưỡng ép cập nhật của kênh Android

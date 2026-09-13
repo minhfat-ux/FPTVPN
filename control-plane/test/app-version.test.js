@@ -53,8 +53,20 @@ test("payload Android có link tải APK, store_url KHÔNG được rỗng (nút
   assert.equal(body.latest_version, "1.2.6");
   assert.equal(body.minimum_version, "1.2.6");
   assert.equal(body.apk_url, "https://meetflowai.site/v1/downloads/android");
+  assert.equal(body.apk_url_legacy, "https://meetflowai.site/v1/downloads/android-legacy");
   assert.equal(body.store_url, body.apk_url);
   assert.notEqual(body.store_url, "");
+});
+
+test("payload Android: máy Android 7 cần link legacy riêng (APK minSdk 26 không cài được)", () => {
+  const body = androidVersionPayload(reader({}), { baseUrl: "https://meetflowai.site/" });
+  assert.equal(body.apk_url_legacy, "https://meetflowai.site/v1/downloads/android-legacy");
+  assert.notEqual(body.apk_url_legacy, body.apk_url);
+  // cấu hình riêng (CDN) vẫn thắng mặc định
+  const custom = androidVersionPayload(reader({ android_apk_url_legacy: "https://cdn.example.com/a7.apk" }), {
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(custom.apk_url_legacy, "https://cdn.example.com/a7.apk");
 });
 
 test("payload Android: apk_url riêng trong cấu hình được ưu tiên", () => {
