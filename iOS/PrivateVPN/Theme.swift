@@ -29,6 +29,25 @@ enum VPNTheme {
             + Text("Flow").foregroundStyle(success)
     }
 
+    /// Tiêu đề paywall với "Flow" tô màu brand — giống trang buy.
+    ///
+    /// Trang buy in `'VPN<span>Flow</span> Premium'`, nên tiêu đề trong app cũng phải
+    /// là "VPN" trắng + "Flow" xanh + phần còn lại trắng.
+    ///
+    /// Chỉ tô khi chuỗi BẮT ĐẦU bằng tên app (mọi bản dịch hiện tại đều vậy). Bản dịch
+    /// nào không bắt đầu bằng tên app thì trả nguyên chuỗi — KHÔNG đoán chỗ cắt, vì
+    /// cắt sai giữa câu sẽ tô màu vào chữ vô nghĩa.
+    ///
+    /// Màu trắng đặt ngay trong đây (và call site bỏ `.foregroundStyle` ở ngoài) vì
+    /// modifier đó áp lên cả `Text` đã ghép sẽ đè màu từng đoạn.
+    static func brandTitle(_ text: String) -> Text {
+        let prefix = "VPNFlow"
+        guard text.hasPrefix(prefix) else { return Text(text).foregroundStyle(label) }
+        return Text("VPN").foregroundStyle(label)
+            + Text("Flow").foregroundStyle(success)
+            + Text(String(text.dropFirst(prefix.count))).foregroundStyle(label)
+    }
+
     /// FlowVPN navy palette (FPT Harness style) — always dark.
     static let navyBase = Color(red: 10/255, green: 31/255, blue: 59/255)      // #0A1F3B
     static let navyLayer1 = Color(red: 14/255, green: 39/255, blue: 71/255)    // #0E2747

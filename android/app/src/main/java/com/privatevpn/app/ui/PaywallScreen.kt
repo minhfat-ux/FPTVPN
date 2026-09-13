@@ -65,7 +65,7 @@ fun PaywallScreen(
             }
             Spacer(Modifier.width(2.dp))
             Text(
-                lang.t(LKey.paywallTitle),
+                VPNTheme.brandTitle(lang.t(LKey.paywallTitle)),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = VPNTheme.Label,

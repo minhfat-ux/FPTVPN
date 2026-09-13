@@ -501,9 +501,9 @@ struct StoreKitPaywallView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
 
-            Text(languageStore.t(.paywallTitle))
+            // Màu đã nằm trong brandTitle; đừng đặt .foregroundStyle ở ngoài.
+            VPNTheme.brandTitle(languageStore.t(.paywallTitle))
                 .font(.largeTitle.bold())
-                .foregroundStyle(VPNTheme.label)
                 .multilineTextAlignment(.center)
 
             Text(languageStore.t(.paywallSubtitle))
@@ -679,9 +679,8 @@ struct WebBuyPaywallView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 HStack {
-                    Text(languageStore.t(.paywallTitle))
+                    VPNTheme.brandTitle(languageStore.t(.paywallTitle))
                         .font(.headline)
-                        .foregroundStyle(VPNTheme.label)
                     Spacer()
                     Button(languageStore.t(.notNow)) {
                         dismiss()

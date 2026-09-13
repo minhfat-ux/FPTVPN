@@ -30,6 +30,24 @@ object VPNTheme {
         append("VPN")
         withStyle(SpanStyle(color = Green)) { append("Flow") }
     }
+
+    /**
+     * Tiêu đề paywall với "Flow" tô màu brand — giống trang buy
+     * (`'VPN<span>Flow</span> Premium'`).
+     *
+     * Chỉ tô khi chuỗi BẮT ĐẦU bằng tên app (mọi bản dịch hiện tại đều vậy). Bản dịch
+     * nào không bắt đầu bằng tên app thì trả nguyên chuỗi — KHÔNG đoán chỗ cắt, vì cắt
+     * sai giữa câu sẽ tô màu vào chữ vô nghĩa.
+     */
+    fun brandTitle(text: String): AnnotatedString {
+        val prefix = "VPNFlow"
+        if (!text.startsWith(prefix)) return AnnotatedString(text)
+        return buildAnnotatedString {
+            append("VPN")
+            withStyle(SpanStyle(color = Green)) { append("Flow") }
+            append(text.substring(prefix.length))
+        }
+    }
     val Red = Color(0xFFFF3B30)
     val Orange = Color(0xFFFF9500)
     val Yellow = Color(0xFFFFD60A)
