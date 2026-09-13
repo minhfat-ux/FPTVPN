@@ -272,3 +272,14 @@ Chi tiết đầy đủ: `docs/HANDOVER_2026-09-13_china_ip_block_and_funnel.md`
   `tailscale up --accept-routes --exit-node-allow-lan-access --exit-node=100.76.147.111`, nếu không máy mất mạng
   dù `scutil` vẫn ghi "Connected".
 - iOS sau khi sửa `project.yml` vẫn xanh: Release BUILD SUCCEEDED, **51 test 0 fail**.
+
+### ⚠️ Ghi chú quy trình commit (14/09, agent DSH)
+
+Commit `6b6272a` (fix macOS) **vô tình gồm cả phần đang STAGED của session khác** trong `control-plane/`
+(`src/index.js`, `src/app-version.js`, `src/payments.js`, `src/sepay.js` + test) vì `git commit` lấy toàn bộ index,
+không chỉ các path mình vừa `git add`. **Không mất dữ liệu**: working tree của session kia vẫn còn nguyên các sửa
+đổi chưa staged, họ chỉ cần commit tiếp. Nhưng message của `6b6272a` không mô tả phần control-plane đó.
+
+**Từ giờ bắt buộc**: commit theo pathspec — `git commit -- <file...>` (hoặc `git commit -o <path>`) để không kéo
+theo thay đổi staged của session khác. Nhiều session dùng chung một checkout nên tuyệt đối không `git add -A`
+và không `git commit` trần.
