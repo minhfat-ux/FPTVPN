@@ -13,7 +13,7 @@ import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision } from "./device-limit.js";
-import { versionPayloadFor } from "./app-version.js";
+import { versionPayloadFor, wantsLegacyApk } from "./app-version.js";
 import { AuthStore } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
@@ -1634,14 +1634,19 @@ app.get("/v1/payments/qr/:name", async (req, res) => {
 });
 
 // Serve the Android APK for direct download (sideload distribution).
-app.get("/v1/downloads/android", async (_req, res) => {
+// Máy Android 7.0/7.1 và Fire OS KHÔNG cài được APK thường (minSdk 26) — chúng báo
+// "There was a problem parsing the package". Trình duyệt/DownloadManager của máy đó gửi kèm
+// phiên bản Android hoặc mã model AFT*/Silk, nên chọn bản legacy ngay tại đây để cả những
+// máy chưa có code mới (bản ≤ 1.2.4 chỉ mở `store_url`) vẫn tải được bản cài được.
+app.get("/v1/downloads/android", async (req, res) => {
   try {
     const apkDir = process.env.APK_DIR || "/root/flowvpn-apk";
-    const apkPath = path.join(apkDir, "VPNFlow-latest.apk");
+    const legacy = wantsLegacyApk(req.get("user-agent"));
+    const apkPath = path.join(apkDir, legacy ? "VPNFlow-android7.apk" : "VPNFlow-latest.apk");
     if (!fs.existsSync(apkPath)) {
       return res.status(404).send("APK not found. Contact support@meetflowai.site");
     }
-    res.download(apkPath, "VPNFlow.apk");
+    res.download(apkPath, legacy ? "VPNFlow-android7.apk" : "VPNFlow.apk");
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
   }

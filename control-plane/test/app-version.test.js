@@ -5,6 +5,7 @@ import {
   iosVersionPayload,
   isAndroidClient,
   versionPayloadFor,
+  wantsLegacyApk,
 } from "../src/app-version.js";
 
 /** appConfig giả: chỉ trả về key có mặt. */
@@ -108,4 +109,18 @@ test("thiếu cấu hình ⇒ giá trị mặc định an toàn, không crash", 
     latest_version: "0.0.0",
     store_url: "",
   });
+});
+
+test("chọn bản legacy cho máy Android 7 / Fire OS (endpoint tải APK)", () => {
+  // Máy quá cũ để cài APK minSdk 26 → phải nhận bản legacy
+  assert.equal(wantsLegacyApk("Mozilla/5.0 (Linux; Android 7.1.2; AFTMM Build/NS6265) Chrome/70"), true);
+  assert.equal(wantsLegacyApk("Mozilla/5.0 (Linux; Android 7.0; SM-G930F) Chrome/70"), true);
+  assert.equal(wantsLegacyApk("AndroidDownloadManager/7.1.2 (Linux; U; Android 7.1.2; AFTMM)"), true);
+  // Máy cài được bản thường → KHÔNG được trả bản legacy
+  assert.equal(wantsLegacyApk("Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/120"), false);
+  assert.equal(wantsLegacyApk("Mozilla/5.0 (Linux; Android 10; SM-G973F)"), false, "Android 10 không phải Android 1");
+  assert.equal(wantsLegacyApk("okhttp/4.12.0"), false);
+  assert.equal(wantsLegacyApk("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605"), false);
+  assert.equal(wantsLegacyApk("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), false);
+  assert.equal(wantsLegacyApk(undefined), false);
 });

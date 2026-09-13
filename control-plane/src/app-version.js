@@ -23,6 +23,20 @@ export function isAndroidClient({ platform, userAgent } = {}) {
   return ANDROID_UA.test(String(userAgent ?? ""));
 }
 
+/**
+ * UA của máy KHÔNG cài được APK thường (minSdk 26): Android 7.0/7.1 và Fire OS
+ * (Fire TV Stick 4K, Kindle) — trình duyệt/DownloadManager của máy đó gửi kèm phiên bản
+ * Android hoặc mã model `AFT*`/`Silk/`.
+ *
+ * Dùng để chọn bản legacy ngay ở endpoint tải, nhờ vậy cả những máy cũ CHƯA có code mới
+ * (bản ≤ 1.2.4 chỉ mở `store_url`) vẫn tải được bản cài được, không bị kẹt ở màn ép cập nhật.
+ */
+const LEGACY_UA = /Android\s+[1-7](?!\d)|AFT[A-Z]|Fire OS|Kindle|Silk\//i;
+
+export function wantsLegacyApk(userAgent) {
+  return LEGACY_UA.test(String(userAgent ?? ""));
+}
+
 /** Kênh iOS/macOS (App Store) — giữ nguyên hình dạng cũ để không phá bản đang chạy. */
 export function iosVersionPayload(read) {
   return {
