@@ -25,6 +25,10 @@ Nếu thiếu Go hoặc xcodegen hoặc không có shared scheme → script **ex
 - `make -C Vendor/WireGuardKit/Sources/WireGuardKitGo PLATFORM_NAME=iphoneos ARCHS=arm64 …` → **PASS**, tạo `libwg-go.a`
   (Go 1.26.6; `goruntime-*.diff` áp dụng sạch).
 - Build + test local đều xanh (chi tiết ở §"Kiểm chứng local" bên dưới).
+- **Mô phỏng đúng luồng CI** (2026-09-13): `git clone` repo sang `/tmp` (chỉ lấy file đã commit) →
+  `./ci_scripts/ci_post_clone.sh` → build Release `generic/platform=iOS` (**BUILD SUCCEEDED**) →
+  `test` trên simulator (**40 test, 0 failure**) ⇒ project sinh đủ từ `project.yml` + `Vendor/**` đã commit,
+  không phụ thuộc file nào chỉ có ở máy dev.
 
 ## Lỗi biên dịch đã sửa (2026-09-13)
 
