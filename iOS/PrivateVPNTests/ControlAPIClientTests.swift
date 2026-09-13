@@ -406,4 +406,46 @@ final class ControlAPIClientTests: XCTestCase {
         XCTAssertEqual(triedHosts, ["api.meetflowai.site"],
                        "an HTTP answer is not a blocked route: the report must not be retried")
     }
+
+    // MARK: - Relay WS theo từng node
+
+    /// Cache cũ (trước khi coordinator gửi `ws_relay_url`) PHẢI vẫn decode được.
+    /// Nếu không, người dùng đang có app sẽ mất danh sách server ngay sau khi cập
+    /// nhật — đây là lý do field để optional thay vì bắt buộc.
+    func testExitNodeCacheWithoutRelayFieldStillDecodes() throws {
+        let legacy = #"""
+        {"nodes":[{"id":"node-1","name":"Hanoi 1","country":"VN","city":"Hanoi",
+        "endpoint":"103.173.155.50:443","public_key":"pk1"}]}
+        """#
+        let decoded = try JSONDecoder().decode(NodesResponse.self, from: Data(legacy.utf8))
+        XCTAssertEqual(decoded.nodes.count, 1)
+        XCTAssertNil(decoded.nodes[0].ws_relay_url, "thiếu field => nil, không được ném lỗi")
+    }
+
+    /// Coordinator khẳng định node nào có relay, node nào không, thì client phải đọc
+    /// đúng — vì đi qua relay của node khác làm WireGuard im lặng hoàn toàn.
+    func testExitNodeDecodesPerNodeRelayURL() throws {
+        let json = #"""
+        {"nodes":[
+          {"id":"node-1","name":"Hanoi 1","country":"VN","city":"Hanoi",
+           "endpoint":"103.173.155.50:443","public_key":"pk1",
+           "ws_relay_url":"wss://relay.example:10000"},
+          {"id":"vietnam-2","name":"Hanoi 2","country":"VN","city":"Hanoi",
+           "endpoint":"103.6.234.233:443","public_key":"pk2","ws_relay_url":null}
+        ]}
+        """#
+        let decoded = try JSONDecoder().decode(NodesResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.nodes[0].ws_relay_url, "wss://relay.example:10000")
+        XCTAssertNil(decoded.nodes[1].ws_relay_url)
+    }
+
+    /// Danh sách dự phòng nằm trong app cũng phải nói đúng: chỉ node-1 có relay.
+    /// Nếu để cả hai nil thì đường offline sẽ rơi vào nhánh "đoán" và có thể đoán vào
+    /// node-2 — đúng cái bẫy đã gây lỗi iPad 13/09.
+    func testBuiltInFallbackOnlyNode1DeclaresRelay() {
+        let first = ExitNode.builtInFallback.first { $0.id == "node-1" }
+        let second = ExitNode.builtInFallback.first { $0.id == "vietnam-2" }
+        XCTAssertEqual(first?.ws_relay_url, WSRelayDefaults.url.absoluteString)
+        XCTAssertNil(second?.ws_relay_url, "node-2 không có relay trên hạ tầng dùng chung")
+    }
 }

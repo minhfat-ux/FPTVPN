@@ -88,7 +88,17 @@ final class VPNManager: ObservableObject {
             } else {
                 config = try makeConfig(store: store)
             }
-            try await prepareConfiguration(config, nodeId: store.selectedNodeID)
+            try await prepareConfiguration(
+                config,
+                nodeId: store.selectedNodeID,
+                // Relay WS của ĐÚNG node đang chọn, do control plane cấp theo từng node.
+                // Dùng chung một URL cho mọi node là gốc của lỗi "connected nhưng không
+                // có mạng": relay :10000 chỉ hạ cánh ở node-1, nên chọn node-2 thì
+                // handshake mã hoá tới khoá node-2 mà lại tới wg0 của node-1 => im lặng.
+                wsRelayURL: store.availableNodes
+                    .first { $0.id == store.selectedNodeID }?
+                    .ws_relay_url,
+            )
             // State đã là .connecting từ đầu hàm; giữ nguyên tới khi tunnel lên.
             try manager?.connection.startVPNTunnel()
             lastError = nil
@@ -410,7 +420,11 @@ final class VPNManager: ObservableObject {
         }
     }
 
-    private func prepareConfiguration(_ config: WireGuardConfig, nodeId: String?) async throws {
+    private func prepareConfiguration(
+        _ config: WireGuardConfig,
+        nodeId: String?,
+        wsRelayURL: String? = nil
+    ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let matching = existing.filter { $0.localizedDescription == "FlowVPN" }
         let manager = matching.first ?? NETunnelProviderManager()
@@ -424,7 +438,8 @@ final class VPNManager: ObservableObject {
         // relay cannot be reached.
         // nodeId đi kèm config để extension báo health về coordinator: node bị GFW
         // chặn thì chỉ client mới biết, server tự kiểm tra vẫn thấy nó "sống".
-        let tunnelConfig = config.withRelay().withNodeId(nodeId)
+        // wsRelayURL đi kèm vì relay phải khớp node: xem WireGuardConfig.wsRelayURL.
+        let tunnelConfig = config.withRelay().withNodeId(nodeId).withWSRelayURL(wsRelayURL)
 
         let protocolConfig = NETunnelProviderProtocol()
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier

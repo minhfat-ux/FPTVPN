@@ -1,5 +1,6 @@
 package com.privatevpn.app.api
 
+import com.privatevpn.app.Config
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -12,6 +13,22 @@ data class ExitNode(
     val city: String,
     val endpoint: String,
     @SerialName("public_key") val publicKey: String,
+    /**
+     * Relay WS dẫn tới CHÍNH node này, do control plane cấp theo từng node
+     * (ví dụ Tailscale Funnel -> wsrelay -> UDP 443 của node đó).
+     *
+     * Vì sao phải theo TỪNG node: một relay chỉ hạ cánh ở MỘT node. Client được cấp
+     * khoá của node A mà đi qua relay của node B thì gói handshake mã hoá tới khoá A
+     * nhưng lại tới `wg0` của B — B không giải được, cũng không có peer này, nên
+     * WireGuard im lặng tuyệt đối. Đó là lỗi "connected nhưng không có mạng" trên
+     * iPad 13/09, và nhìn log chỉ thấy "gửi hoài không có gì về" nên rất dễ chẩn đoán
+     * sai thành mất gói.
+     *
+     * null = node này không có relay (hoặc coordinator cũ chưa gửi field). Hai trường
+     * hợp đó KHÁC nhau về ý nghĩa nhưng client xử lý giống nhau — dùng hằng số mặc
+     * định và ghi log rõ là đang đoán, để lần sau không phải suy luận.
+     */
+    @SerialName("ws_relay_url") val wsRelayUrl: String? = null,
 )
 
 @Serializable
@@ -24,6 +41,9 @@ object ExitNodeFallback {
             id = "node-1", name = "vietnam-1", country = "VN", city = "Hanoi",
             endpoint = "103.173.155.50:443",
             publicKey = "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=",
+            // Chỉ node-1 có relay trên hạ tầng dùng chung; node-2 thì không. Ghi đúng
+            // ở đây để đường dự phòng (coordinator không tới được) cũng không đoán sai.
+            wsRelayUrl = Config.WS_RELAY_URL,
         ),
         ExitNode(
             id = "vietnam-2", name = "Vietnam 2", country = "VN", city = "Hanoi",

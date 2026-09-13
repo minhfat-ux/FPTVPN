@@ -37,10 +37,38 @@ Tài liệu này để phiên làm việc tiếp theo vào việc ngay, không p
 |---|---|---|
 | `https://fcnvpn.tail303be3.ts.net` | cp-proxy 7781 → control plane node-2 | API/buy/entitlement |
 | `wss://fcnvpn.tail303be3.ts.net:8443` | wsrelay-hy → Hysteria UDP 8443 | data path Android |
-| `wss://fcnvpn.tail303be3.ts.net:10000` | wsrelay → WG UDP 443 | data path iOS (chưa dùng) |
+| `wss://fcnvpn.tail303be3.ts.net:10000` | wsrelay → WG UDP 443 | data path iOS (ĐÃ CHẠY THẬT — xem dưới) |
 
 Đo từ đường đang bị chặn: `API qua Funnel = http=200, ~1.4s` ✓
 Tailnet hostname: `fcnvpn.tail303be3.ts.net`; node id funnel: `nxQSyDow6811CNTRL`.
+
+> **ĐÃ CHẠY THẬT (13/09 22:47, iPad):** cổng `:10000` trước đây ghi "chưa dùng" — nay đã
+> kiểm chứng: `Received handshake response`, 8,5 MB qua tunnel, ~429 kbps (đỉnh 604 kbps).
+> Đo lại bằng `python3 scripts/measure-relay-throughput.py <log>`.
+
+#### ⚠️ Relay WS là của TỪNG NODE, không dùng chung được
+`wss://…:10000` hạ cánh vào **WireGuard của node-1**. Vì WireGuard xác thực bằng **khoá**,
+client chọn node-2 (được cấp khoá node-2) mà đi qua relay này thì gói handshake mã hoá tới
+khoá node-2 nhưng lại tới `wg0` của node-1 → node-1 **không giải được và không có peer này**
+→ **im lặng tuyệt đối**, log chỉ thấy gửi hoài mà `framesFromRelay=0`. Đây là gốc lỗi
+"connected nhưng không có mạng" trên iPad. (Android thoát được vì Hysteria xác thực bằng mật
+khẩu dùng chung, không theo peer key — relay hạ cánh node-1 vẫn chạy, chỉ là exit thành node-1.)
+
+Đã sửa tận gốc: control plane cấp **`ws_relay_url` theo từng node** (`GET /v1/nodes`), client
+dùng đúng URL của node đang chọn, và ghi log rõ khi phải đoán.
+
+**Thứ tự deploy bắt buộc:**
+1. Deploy control plane (tự migrate thêm cột `ws_relay_url`; db cũ vẫn mở được — có test).
+2. Đặt relay cho node-1 qua admin API (`PATCH /v1/admin/nodes/node-1`, body
+   `{"ws_relay_url":"wss://fcnvpn.tail303be3.ts.net:10000"}`). **node-2 để null** vì nó
+   không có relay — đó chính là thông tin client cần.
+3. Rồi mới phát hành app. App cũ vẫn chạy bình thường ở bước 1–2 (chúng bỏ qua key lạ:
+   Android `ignoreUnknownKeys=true`, iOS `Codable`).
+
+**Việc còn lại (chưa làm, cần owner):** coordinator vẫn xếp `vietnam-2` priority 50 đứng trước
+`node-1` (100), nên người dùng mới ở TQ để mặc định sẽ chọn node-2 — mà node-2 **không có relay**
+và IP thì bị chặn. Hai hướng: cho node-2 một relay (thêm entry Funnel trỏ vào WG của node-2),
+hoặc xếp node-1 lên trước cho client ở mạng bị chặn.
 
 ### Cloudflare quick tunnels (tạm, giữ làm đường dự phòng thứ hai)
 - API: `https://additionally-indianapolis-totals-ties.trycloudflare.com`

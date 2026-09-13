@@ -32,7 +32,11 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
 
     /// Funnel endpoint that terminates TLS and forwards the stream to the relay that
     /// unwraps it to the exit node's WireGuard UDP 443.
-    static let defaultURL = URL(string: "wss://fcnvpn.tail303be3.ts.net:10000")!
+    ///
+    /// Giá trị thật nằm ở `WSRelayDefaults` (ControlAPIClient.swift) vì file đó được
+    /// compile vào cả app lẫn extension — danh sách node dự phòng trong app cũng cần
+    /// URL này. Chỉ dẫn tới node-1, nên đây là giá trị ĐOÁN khi node không khai relay.
+    static let defaultURL = WSRelayDefaults.url
 
     /// WireGuard datagrams held while the WebSocket is down. Bounded so an outage can
     /// never grow the extension's memory; WireGuard re-sends its handshake every 5s.

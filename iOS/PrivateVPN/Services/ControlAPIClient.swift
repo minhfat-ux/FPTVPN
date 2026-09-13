@@ -31,6 +31,15 @@ struct ExitNode: Equatable, Codable, Identifiable {
     var city: String
     var endpoint: String
     var public_key: String
+    /// Relay WS dẫn tới CHÍNH node này, do control plane cấp theo từng node.
+    ///
+    /// Một relay chỉ hạ cánh ở MỘT node: client được cấp khoá của node A mà đi qua
+    /// relay của node B thì handshake mã hoá tới khoá A nhưng lại tới `wg0` của B,
+    /// và WireGuard im lặng tuyệt đối (log chỉ thấy gửi hoài, `framesFromRelay=0`).
+    /// Đó là lỗi "connected nhưng không có mạng" trên iPad 13/09.
+    ///
+    /// Optional nên cache cũ chưa có field vẫn decode được.
+    var ws_relay_url: String? = nil
 }
 
 extension ExitNode {
@@ -40,7 +49,10 @@ extension ExitNode {
     static let builtInFallback: [ExitNode] = [
         ExitNode(id: "node-1", name: "vietnam-1", country: "VN", city: "Hanoi",
                  endpoint: "103.173.155.50:443",
-                 public_key: "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8="),
+                 public_key: "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=",
+                 // Chỉ node-1 có relay trên hạ tầng dùng chung; node-2 thì không. Ghi
+                 // đúng ở đây để cả đường offline cũng không đoán sai node.
+                 ws_relay_url: WSRelayDefaults.url.absoluteString),
         ExitNode(id: "vietnam-2", name: "Vietnam 2", country: "VN", city: "Hanoi",
                  endpoint: "103.6.234.233:443",
                  public_key: "OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=")
@@ -151,6 +163,19 @@ struct AppVersionInfo: Equatable, Codable, Identifiable {
     var latest_version: String
     var store_url: String
     var id: String { "\(minimum_version)-\(latest_version)" }
+}
+
+/// Relay WS mặc định, dùng khi node không khai relay URL của riêng nó.
+///
+/// Khai ở FILE NÀY chứ không phải `WSRelayClient`: ControlAPIClient được compile vào
+/// CẢ app lẫn packet-tunnel extension, còn `WSRelayClient.swift` chỉ thuộc extension.
+/// Danh sách node dự phòng trong app (`ExitNode.builtInFallback`) cũng cần giá trị
+/// này, nên nó phải nằm ở chỗ dùng chung được — nếu để ở WSRelayClient thì target app
+/// không build được.
+enum WSRelayDefaults {
+    /// Tailscale Funnel -> wsrelay -> UDP 443 của **node-1**. Chỉ dẫn tới node-1, nên
+    /// đây là giá trị ĐOÁN khi node không khai gì; xem `ExitNode.ws_relay_url`.
+    static let url = URL(string: "wss://fcnvpn.tail303be3.ts.net:10000")!
 }
 
 /// Hosts the coordinator is reachable through. Defined here because this file is a

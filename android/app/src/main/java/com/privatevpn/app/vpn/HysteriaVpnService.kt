@@ -38,6 +38,17 @@ class HysteriaVpnService : VpnService() {
     /** host -> node id, dùng để báo lên coordinator node nào thật sự tới được. */
     private var hostIds: Map<String, String> = emptyMap()
 
+    /**
+     * host -> relay WS của CHÍNH node đó, do control plane cấp theo từng node.
+     *
+     * Vì sao không dùng một hằng số chung cho mọi node: một relay chỉ hạ cánh ở MỘT
+     * node. Client được cấp khoá của node A mà đi qua relay của node B thì handshake
+     * mã hoá tới khoá A nhưng tới `wg0` của B — B không giải được và không có peer
+     * này, nên WireGuard im lặng tuyệt đối, log chỉ thấy "gửi hoài không có gì về".
+     * Đó đúng là lỗi "connected nhưng không có mạng" trên iPad 13/09.
+     */
+    private var hostRelays: Map<String, String> = emptyMap()
+
     /** Logs default-network changes while the tunnel runs (WiFi -> mobile data). */
     private var networkMonitor: NetworkMonitor? = null
     private var probeThread: Thread? = null
@@ -104,6 +115,11 @@ class HysteriaVpnService : VpnService() {
         hostIndex = 0
         // host -> node id, để báo health về coordinator (xem reportNodeHealth).
         hostIds = intent?.getStringArrayListExtra(EXTRA_HOST_IDS)?.chunked(2)
+            ?.mapNotNull { pair -> if (pair.size == 2) pair[0] to pair[1] else null }
+            ?.toMap()
+            .orEmpty()
+        // host -> relay WS của node đó; "" nghĩa là node không khai relay.
+        hostRelays = intent?.getStringArrayListExtra(EXTRA_HOST_RELAYS)?.chunked(2)
             ?.mapNotNull { pair -> if (pair.size == 2) pair[0] to pair[1] else null }
             ?.toMap()
             .orEmpty()
@@ -334,7 +350,22 @@ class HysteriaVpnService : VpnService() {
      */
     private fun wsRelayAttempt(): Int {
         if (stopping) return 1
+        // Relay phải là của CHÍNH node đang dùng. `runHost` ở đây vẫn là host node
+        // (nó chỉ bị đổi thành 127.0.0.1 bên dưới), nên tra theo nó.
+        val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
+        val relayUrl = relayForNode ?: WS_RELAY_URL
+        if (relayForNode == null) {
+            // Nói rõ là đang ĐOÁN. Đoán sai node thì handshake im lặng hoàn toàn, không
+            // có lỗi nào để lần ra — đúng loại lỗi đã làm mất cả buổi trên iPad.
+            DiagnosticsLog.warn(
+                "ws-relay: node $runHost không khai relay URL -> dùng mặc định $relayUrl " +
+                    "(đoán; nếu relay này dẫn tới node khác thì handshake sẽ im lặng)",
+            )
+        } else {
+            DiagnosticsLog.log("ws-relay: node $runHost -> relay $relayUrl (control plane cấp)")
+        }
         val bridge = WSRelayBridge(
+            url = relayUrl,
             // Dùng chung protectRelaySocket: socket WS của OkHttp cũng là java.net.Socket
             // nên trước đây cũng bị protect() trả false => bị hút vào tunnel => Connection
             // reset ngay sau khi TUN lên. Log kèm để lần sau không phải suy đoán.
@@ -1028,6 +1059,9 @@ class HysteriaVpnService : VpnService() {
         /** Cặp host,nodeId dẹt thành list để báo health về coordinator. */
         const val EXTRA_HOST_IDS = "hysteria_host_ids"
 
+        /** Cặp host,relayUrl dẹt thành list — relay WS của TỪNG node. */
+        const val EXTRA_HOST_RELAYS = "hysteria_host_relays"
+
         /** Dead passes before moving to the next node (a blocked IP never answers). */
         const val NODE_FAILOVER_AFTER_PASSES = 2
         const val DEFAULT_HOST = com.privatevpn.app.Config.HY_SERVER
@@ -1039,6 +1073,9 @@ class HysteriaVpnService : VpnService() {
         /** Brutal CC hạ xuống cho đường WS relay (đi qua 2 chặng) — xem wsRelayAttempt. */
         const val HY_RELAY_UP_KBPS = com.privatevpn.app.Config.HY_RELAY_UP_KBPS
         const val HY_RELAY_DOWN_KBPS = com.privatevpn.app.Config.HY_RELAY_DOWN_KBPS
+
+        /** Relay WS mặc định — chỉ dùng khi node không khai relay (xem wsRelayAttempt). */
+        const val WS_RELAY_URL = com.privatevpn.app.Config.WS_RELAY_URL
         const val HY_TCP_RELAY_HOST = com.privatevpn.app.Config.HY_TCP_RELAY_HOST
         val HY_TCP_RELAY_PORTS = com.privatevpn.app.Config.HY_TCP_RELAY_PORTS
         const val HY_PASSWORD = com.privatevpn.app.Config.HY_PASSWORD

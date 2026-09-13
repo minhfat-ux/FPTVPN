@@ -135,12 +135,30 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// asynchronously and reconnects on its own, and its local UDP port never changes
     /// across those reconnects.
     private func startWebSocketRelay() -> NWEndpoint.Port? {
-        let client = WSRelayClient(log: log)
+        // Relay phải là của ĐÚNG node đang dùng: một relay chỉ hạ cánh ở MỘT node, đi
+        // qua relay của node khác thì handshake mã hoá tới khoá của node đang chọn
+        // nhưng lại tới wg0 của node kia — node kia không giải được và không có peer
+        // này, nên WireGuard im lặng tuyệt đối (lỗi iPad 13/09: framesFromRelay=0 mãi).
+        let declared = configuration?.wsRelayURL?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let url: URL
+        if let declared, !declared.isEmpty, let parsed = URL(string: declared) {
+            url = parsed
+            RelayDiagnostics.shared.log("ws-relay: relay của node này (control plane cấp): \(declared)")
+        } else {
+            url = WSRelayClient.defaultURL
+            log.error("ws-relay: this node declared no relay URL — using the default")
+            RelayDiagnostics.shared.log(
+                "ws-relay: node không khai relay URL -> dùng mặc định \(url.absoluteString) " +
+                    "(đoán; nếu relay này dẫn tới node khác thì handshake sẽ im lặng)"
+            )
+        }
+        let client = WSRelayClient(url: url, log: log)
         do {
             let localPort = try client.start()
             wsRelay = client
-            log.info("ws-relay: started for \(WSRelayClient.defaultURL.absoluteString)")
-            RelayDiagnostics.shared.log("ws-relay: started local udp \(localPort) for \(WSRelayClient.defaultURL.absoluteString)")
+            log.info("ws-relay: started for \(url.absoluteString)")
+            RelayDiagnostics.shared.log("ws-relay: started local udp \(localPort) for \(url.absoluteString)")
             return NWEndpoint.Port(rawValue: localPort)
         } catch {
             log.error("ws-relay: could not start — \(error)")

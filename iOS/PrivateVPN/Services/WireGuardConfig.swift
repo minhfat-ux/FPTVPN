@@ -30,6 +30,17 @@ struct WireGuardConfig: Equatable, Codable {
     /// Id của exit node đang dùng, để extension báo health về coordinator (node bị
     /// GFW chặn vẫn "sống" khi tự kiểm tra từ server, chỉ client mới biết).
     var nodeId: String? = nil
+    /// Relay WS dẫn tới CHÍNH node đang dùng, do control plane cấp theo từng node.
+    ///
+    /// Vì sao phải theo TỪNG node: một relay chỉ hạ cánh ở MỘT node. Client được cấp
+    /// khoá của node A mà đi qua relay của node B thì gói handshake mã hoá tới khoá A
+    /// nhưng lại tới `wg0` của B — B không giải được, cũng không có peer này, nên
+    /// WireGuard im lặng tuyệt đối. Đó là lỗi "connected nhưng không có mạng" trên
+    /// iPad 13/09: log chỉ thấy gửi hoài mà `framesFromRelay=0`.
+    ///
+    /// nil = node không khai relay (hoặc coordinator cũ chưa gửi field); extension tự
+    /// quyết dùng URL mặc định và ghi log rõ là đang đoán.
+    var wsRelayURL: String? = nil
 
     struct WireGuardPeer: Equatable, Codable {
         var publicKeyBase64: String
@@ -100,6 +111,14 @@ struct WireGuardConfig: Equatable, Codable {
     func withNodeId(_ id: String?) -> WireGuardConfig {
         var copy = self
         copy.nodeId = id
+        return copy
+    }
+
+    /// Gắn relay WS của đúng node đang dùng (do control plane cấp theo từng node).
+    /// Xem `wsRelayURL` để biết vì sao không được dùng chung một URL cho mọi node.
+    func withWSRelayURL(_ url: String?) -> WireGuardConfig {
+        var copy = self
+        copy.wsRelayURL = url
         return copy
     }
 

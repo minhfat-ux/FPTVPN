@@ -234,6 +234,20 @@ class VPNManager(
         return hosts.flatMap { host -> listOf(host, byHost[host] ?: "") }
     }
 
+    /**
+     * host -> relay WS của node đó, dạng cặp dẹt [host, url, host, url, ...] để đi
+     * cùng một extra kiểu StringArrayList. Node không khai relay thì url = "" và
+     * service sẽ tự quyết (dùng mặc định + ghi log là đang đoán).
+     */
+    private fun hostRelaysFor(hosts: List<String>): List<String> {
+        val byHost = HashMap<String, String>()
+        availableNodes.forEach { node ->
+            val nodeHost = node.endpoint.substringBefore(':').takeIf { it.isNotBlank() }
+            if (nodeHost != null) byHost[nodeHost] = node.wsRelayUrl.orEmpty()
+        }
+        return hosts.flatMap { host -> listOf(host, byHost[host] ?: "") }
+    }
+
     /** Closes the device-limit prompt without changing anything. */
     fun dismissDeviceLimit() {
         _deviceLimit.value = null
@@ -267,6 +281,14 @@ class VPNManager(
             i.putStringArrayListExtra(
                 HysteriaVpnService.EXTRA_HOST_IDS,
                 ArrayList(hostIdsFor(hostList)),
+            )
+            // host -> relay WS của CHÍNH node đó. Phải đi kèm vì service tự đổi node
+            // giữa các lượt thử: dùng relay của node này cho node khác thì gói
+            // handshake mã hoá tới khoá của node kia nhưng hạ cánh xuống wg0 của node
+            // này, và WireGuard im lặng hoàn toàn (xem Models.ExitNode).
+            i.putStringArrayListExtra(
+                HysteriaVpnService.EXTRA_HOST_RELAYS,
+                ArrayList(hostRelaysFor(hostList)),
             )
             Log.e("VPNFLOW_DEBUG", "hysteria: connect node=${node?.name ?: "default"} host=$host hosts=$hostList")
             // Plain startService: an active VpnService tunnel keeps the process

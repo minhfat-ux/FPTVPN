@@ -25,16 +25,26 @@ export class NodeStore {
         endpoint TEXT NOT NULL,
         public_key TEXT NOT NULL,
         ssh_target TEXT,
+        ws_relay_url TEXT,
         priority INTEGER NOT NULL DEFAULT 100,
         active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
     `);
-    // Migrate: thêm cột ssh_target nếu bảng exit_nodes có từ phiên bản cũ.
+    // Migrate: thêm cột nếu bảng exit_nodes có từ phiên bản cũ.
     const cols = this.db.prepare("PRAGMA table_info(exit_nodes)").all().map((c) => c.name);
     if (!cols.includes("ssh_target")) {
       this.db.exec("ALTER TABLE exit_nodes ADD COLUMN ssh_target TEXT");
+    }
+    // ws_relay_url: địa chỉ WS relay DẪN TỚI CHÍNH NODE NÀY (ví dụ Tailscale
+    // Funnel -> wsrelay -> UDP 443 của node). Phải theo TỪNG node vì một relay
+    // chỉ hạ cánh ở một node: client đi qua relay của node A mà lại được cấp khoá
+    // của node B thì WireGuard im lặng tuyệt đối (gói handshake tới wg0 của A
+    // nhưng mã hoá tới khoá của B => A không giải được, không có peer này).
+    // NULL = node này KHÔNG có relay, client phải biết để đừng đoán.
+    if (!cols.includes("ws_relay_url")) {
+      this.db.exec("ALTER TABLE exit_nodes ADD COLUMN ws_relay_url TEXT");
     }
     this._seedIfEmpty();
   }
@@ -65,9 +75,9 @@ export class NodeStore {
 
   _insert(node) {
     this.db.prepare(`
-      INSERT INTO exit_nodes (id, name, country, city, endpoint, public_key, ssh_target, priority, active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(node.id, node.name, node.country, node.city, node.endpoint, node.public_key, node.ssh_target ?? null, node.priority, node.active ? 1 : 0, node.created_at, node.updated_at);
+      INSERT INTO exit_nodes (id, name, country, city, endpoint, public_key, ssh_target, ws_relay_url, priority, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(node.id, node.name, node.country, node.city, node.endpoint, node.public_key, node.ssh_target ?? null, node.ws_relay_url ?? null, node.priority, node.active ? 1 : 0, node.created_at, node.updated_at);
   }
 
   _rows() {
@@ -137,10 +147,11 @@ export class NodeStore {
     this.db.prepare(`
       UPDATE exit_nodes
       SET name = ?, country = ?, city = ?, endpoint = ?, public_key = ?, ssh_target = ?,
-          priority = ?, active = ?, updated_at = ?
+          ws_relay_url = ?, priority = ?, active = ?, updated_at = ?
       WHERE id = ?
     `).run(updated.name, updated.country, updated.city, updated.endpoint, updated.public_key,
-           updated.ssh_target ?? null, updated.priority, updated.active ? 1 : 0, updated.updated_at, id);
+           updated.ssh_target ?? null, updated.ws_relay_url ?? null, updated.priority,
+           updated.active ? 1 : 0, updated.updated_at, id);
     return updated;
   }
 
@@ -166,6 +177,11 @@ export function publicNode(node) {
     endpoint: node.endpoint,
     public_key: node.public_key,
     serverPublicKey: node.public_key,
+    // Relay WS dẫn tới CHÍNH node này, hoặc null nếu node không có relay.
+    // Client PHẢI phân biệt "không có field" (coordinator cũ, chưa biết) với
+    // "field = null" (coordinator khẳng định node này không có relay) — xem
+    // chú thích ở client Android/iOS.
+    ws_relay_url: node.ws_relay_url ?? null,
   };
 }
 
@@ -188,6 +204,7 @@ function rowToNode(row) {
     endpoint: row.endpoint,
     public_key: row.public_key,
     ssh_target: row.ssh_target ?? null,
+    ws_relay_url: row.ws_relay_url ?? null,
     priority: row.priority,
     active: row.active === 1,
     created_at: row.created_at,
@@ -205,6 +222,10 @@ function normalizeNode(node) {
     endpoint: String(node.endpoint ?? "").trim(),
     public_key: String(publicKey).trim(),
     ssh_target: node.ssh_target ?? node.sshTarget ?? null,
+    // Chuỗi rỗng / toàn khoảng trắng => null, tức "node này không có relay".
+    // Khác hẳn `undefined` (coordinator cũ không gửi field) — client dựa vào sự
+    // khác biệt đó để biết khi nào được phép đoán, khi nào không.
+    ws_relay_url: String(node.ws_relay_url ?? node.wsRelayUrl ?? "").trim() || null,
     active: node.active !== false,
     priority: Number.isFinite(Number(node.priority)) ? Number(node.priority) : 100,
     created_at: node.created_at ?? node.createdAt ?? new Date().toISOString(),
@@ -227,6 +248,23 @@ function validateNode(node) {
   const port = Number(node.endpoint.split(":").pop());
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     errors.push("endpoint port must be 1-65535");
+  }
+
+  // ws_relay_url (nếu có) phải là wss:// tuyệt đối: đây là đường dữ liệu của
+  // client, đi qua mạng bị kiểm duyệt, nên không chấp nhận ws:// trần.
+  if (node.ws_relay_url != null) {
+    let parsed = null;
+    try {
+      parsed = new URL(node.ws_relay_url);
+    } catch {
+      errors.push("ws_relay_url must be an absolute URL");
+    }
+    if (parsed && parsed.protocol !== "wss:") {
+      errors.push("ws_relay_url must use wss://");
+    }
+    if (parsed && !parsed.hostname) {
+      errors.push("ws_relay_url must include a host");
+    }
   }
 
   if (errors.length > 0) {
