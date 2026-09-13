@@ -464,7 +464,17 @@ scp $HOME/.vpnflow-build/app/outputs/apk/legacy/release/app-legacy-release.apk \
   root@VPS:/root/flowvpn-apk/VPNFlow-android7.apk
 # nên upload vào tên *.incoming rồi md5sum so với máy build trước khi mv đè file đang phát
 # rồi PATCH ngưỡng như trên — không cần build lại hay restart server
+
+# kiểm tra sau khi phát hành (1 lệnh, gói hết các bước kiểm tay):
+scripts/check-apk-release.py                 # quảng cáo + kích thước + UA routing
+scripts/check-apk-release.py --download      # tải thật về, so md5 + versionName trong file
+scripts/check-apk-release.py --self-test     # tự kiểm chính script bằng server giả
 ```
+
+`check-apk-release.py` so **bản build trên máy** với **bản đang phát**: versionName (đọc bằng aapt,
+tự dò trong Android SDK nếu chưa có trong PATH), `latest_version`/`minimum_version` server quảng cáo,
+kích thước + `Content-Disposition` khi tải bằng UA máy thường **và** UA Android 7/Fire TV. Trả mã
+khác 0 nếu lệch — dùng được trong CI hoặc trước khi thông báo "đã phát hành".
 
 - `minimum_version` = bản mới ⇒ **bắt buộc** cài lại; thấp hơn `latest_version` ⇒ chỉ hiện ngưỡng
   cần đạt, app vẫn chạy.
