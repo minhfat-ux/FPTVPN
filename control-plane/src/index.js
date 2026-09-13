@@ -86,6 +86,7 @@ import {
   cnyFromVnd,
   planNameFor,
   transferNote,
+  orderStatusPageHTML,
 } from "./payments.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1888,7 +1889,9 @@ app.post(["/v1/payments/webhook", "/v1/payments/payos-webhook"], async (req, res
     if (!evt) return res.status(400).json({ error: "Invalid webhook signature" });
     if (!evt.success) return res.json({ ok: true });
 
-    const pending = await authStore.takePendingPayment(evt.orderCode);
+    // markPendingPaymentPaid (KHÔNG phải takePendingPayment): giữ lại đơn đã đánh dấu paid để
+    // trang trạng thái và khách còn xem được — takePendingPayment xoá đơn nên khách cứ thấy "chờ".
+    const pending = await authStore.markPendingPaymentPaid(evt.orderCode);
     if (!pending?.email) {
       console.warn("webhook: no pending payment for order", evt.orderCode);
       return res.json({ ok: true });
@@ -1954,7 +1957,9 @@ async function confirmPendingOrder(found, { method, txId }) {
       lang: order.lang,
     });
   }
-  const order = await authStore.takePendingPayment(found.order.orderCode);
+  // Giữ lại đơn (đánh dấu paidAt) thay vì xoá: khách/chủ shop còn tra được tình trạng,
+  // và webhook lặp sẽ thấy paidAt nên không cấp lần hai.
+  const order = await authStore.markPendingPaymentPaid(found.order.orderCode);
   if (!order?.email) return null;
   console.log(`sepay: đơn ${order.orderCode} khớp giao dịch ${txId}`);
   return activatePaymentAndInvoice({
@@ -2045,6 +2050,74 @@ app.post(["/v1/payments/sepay-webhook", "/v1/payments/webhook/sepay"], async (re
   } catch (err) {
     console.error("sepay webhook failed:", err);
     return res.status(500).json({ success: false, error: "Internal error" });
+  }
+});
+
+/** Che bớt email khi hiển thị công khai: "minhfat@gmail.com" → "mi*****@gmail.com". */
+function maskEmail(email) {
+  const raw = String(email ?? "");
+  const at = raw.indexOf("@");
+  if (at <= 0) return "";
+  const name = raw.slice(0, at);
+  const keep = name.slice(0, Math.min(2, name.length));
+  return `${keep}${"*".repeat(Math.max(3, name.length - keep.length))}${raw.slice(at)}`;
+}
+
+/**
+ * Trang xem TÌNH TRẠNG CHUYỂN KHOẢN cho khách/chủ shop: /buy/status/<mã đơn>.
+ * Không lộ email đầy đủ; tự cập nhật 10 giây một lần khi còn chờ tiền.
+ */
+app.get(["/buy/status/:orderCode", "/buy/check/:orderCode"], async (req, res) => {
+  try {
+    res.type("html");
+    const order = await authStore.pendingPaymentByCode(req.params.orderCode);
+    if (!order) {
+      return res.status(404).send(orderStatusPageHTML({
+        lang: pickBuyLang(req.query?.lang), orderCode: req.params.orderCode, found: false,
+        product: "vpn", supportEmail: SUPPORT_EMAIL, buyUrl: `${publicBaseUrl()}/buy`,
+      }));
+    }
+    res.send(orderStatusPageHTML({
+      lang: pickBuyLang(req.query?.lang ?? order.lang),
+      orderCode: order.orderCode,
+      planLabel: planNameFor(pickBuyLang(req.query?.lang ?? order.lang), "vpn", order.plan),
+      amount: order.amount ?? PLANS_PUBLIC[order.plan]?.amount ?? 0,
+      paid: Boolean(order.paidAt),
+      emailMasked: maskEmail(order.email),
+      product: "vpn",
+      supportEmail: SUPPORT_EMAIL,
+      buyUrl: `${publicBaseUrl()}/buy`,
+    }));
+  } catch (err) {
+    console.error("buy status page failed:", err);
+    res.status(500).send("Internal error");
+  }
+});
+
+app.get(["/ai/buy/status/:orderCode", "/ai/buy/check/:orderCode"], async (req, res) => {
+  try {
+    res.type("html");
+    const order = await aiStore.pendingPayment(req.params.orderCode);
+    if (!order) {
+      return res.status(404).send(orderStatusPageHTML({
+        lang: pickBuyLang(req.query?.lang), orderCode: req.params.orderCode, found: false,
+        product: "ai", supportEmail: SUPPORT_EMAIL, buyUrl: `${publicBaseUrl()}/ai/buy`,
+      }));
+    }
+    res.send(orderStatusPageHTML({
+      lang: pickBuyLang(req.query?.lang ?? order.lang),
+      orderCode: order.orderCode,
+      planLabel: planNameFor(pickBuyLang(req.query?.lang ?? order.lang), "ai", order.plan),
+      amount: order.amount ?? AI_PLANS[order.plan]?.amount ?? 0,
+      paid: Boolean(order.paidAt),
+      emailMasked: maskEmail(order.email),
+      product: "ai",
+      supportEmail: SUPPORT_EMAIL,
+      buyUrl: `${publicBaseUrl()}/ai/buy`,
+    }));
+  } catch (err) {
+    console.error("ai buy status page failed:", err);
+    res.status(500).send("Internal error");
   }
 });
 
@@ -2308,7 +2381,11 @@ async function firePaymentAlert(orderCode, email, plan, amount, method = null) {
   const cny = await cnyAmountForMethod(amount, method).catch(() => null);
   const methodInfo = paymentMethodInfo(method, { amountVnd: amount, cny });
   try {
-    const r = await sendPaymentAlert({ to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, cny, method, methodInfo });
+    // Chủ shop mở link này để biết tiền đã về chưa (trang tự cập nhật 10 giây/lần).
+    const statusUrl = `${siteBaseUrl()}/buy/status/${orderCode}`;
+    const r = await sendPaymentAlert({
+      to: owner, orderCode, buyerEmail: email, plan, amount, confirmUrl, statusUrl, cny, method, methodInfo,
+    });
     console.log(`payment-alert order ${orderCode} to ${owner}: sent=${r?.sent}`);
   } catch (err) {
     console.error("firePaymentAlert failed:", err);

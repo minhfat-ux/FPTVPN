@@ -104,6 +104,77 @@ function payosSignature({ checksumKey, orderCode, amount, description, cancelUrl
   return crypto.createHmac("sha256", checksumKey).update(payload).digest("hex");
 }
 
+/** Chữ cho trang trạng thái chuyển khoản (chỉ 3 ngôn ngữ như email). */
+const STATUS_TEXTS = {
+  vi: {
+    title: "Tình trạng thanh toán", waiting: "⏳ Chưa nhận được tiền",
+    waitingNote: "Hệ thống đang tự kiểm tra. Trang này tự cập nhật mỗi 10 giây — không cần tải lại.",
+    paid: "✅ Đã nhận thanh toán", paidNote: "Gói đã được kích hoạt cho tài khoản bên dưới.",
+    order: "Mã đơn", plan: "Gói", amount: "Số tiền", account: "Tài khoản",
+    notFound: "Không tìm thấy đơn này", notFoundNote: "Kiểm tra lại mã đơn, hoặc liên hệ hỗ trợ.",
+    support: "Cần hỗ trợ?", back: "Về trang mua gói",
+  },
+  en: {
+    title: "Payment status", waiting: "⏳ Payment not received yet",
+    waitingNote: "We check automatically. This page refreshes every 10 seconds — no need to reload.",
+    paid: "✅ Payment received", paidNote: "The plan is now active for the account below.",
+    order: "Order", plan: "Plan", amount: "Amount", account: "Account",
+    notFound: "Order not found", notFoundNote: "Check the order code, or contact support.",
+    support: "Need help?", back: "Back to the store",
+  },
+  zh: {
+    title: "付款状态", waiting: "⏳ 尚未收到款项",
+    waitingNote: "系统会自动检查。本页每 10 秒自动刷新，无需手动刷新。",
+    paid: "✅ 已收到付款", paidNote: "套餐已为下方账号开通。",
+    order: "订单", plan: "套餐", amount: "金额", account: "账号",
+    notFound: "找不到该订单", notFoundNote: "请检查订单号，或联系客服。",
+    support: "需要帮助？", back: "返回购买页",
+  },
+};
+
+/**
+ * Trang HTML cho khách (và chủ shop) xem **tình trạng chuyển khoản** của một đơn:
+ * `/buy/status/<mã đơn>` (VPNFlow) và `/ai/buy/status/<mã đơn>` (MeetFlow AI).
+ *
+ * Tự cập nhật mỗi 10 giây. Không lộ email đầy đủ (che bớt) vì mã đơn chỉ là mốc thời gian
+ * nên có thể bị dò.
+ */
+export function orderStatusPageHTML({
+  lang = "vi", orderCode, planLabel = "", amount = 0, paid = false,
+  emailMasked = "", product = "vpn", supportEmail = "support@meetflowai.site",
+  buyUrl = "", found = true,
+} = {}) {
+  const t = STATUS_TEXTS[lang] || STATUS_TEXTS.vi;
+  const money = `${Number(amount || 0).toLocaleString("vi-VN")} đ`;
+  const head = paid ? t.paid : t.waiting;
+  const note = !found ? t.notFoundNote : (paid ? t.paidNote : t.waitingNote);
+  const rows = found
+    ? `<tr><th>${t.order}</th><td>#${orderCode}</td></tr>
+       <tr><th>${t.plan}</th><td>${planLabel}</td></tr>
+       <tr><th>${t.amount}</th><td>${money}</td></tr>
+       ${emailMasked ? `<tr><th>${t.account}</th><td>${emailMasked}</td></tr>` : ""}`
+    : "";
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${found ? head : t.notFound} — ${product === "ai" ? "MeetFlow AI" : "VPNFlow"}</title>
+${found && !paid ? '<meta http-equiv="refresh" content="10">' : ""}
+<style>
+body{min-height:100vh;margin:0;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}
+.c{max-width:440px;width:100%;margin:24px;padding:28px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}
+h1{font-size:19px;margin:0 0 6px}p{color:rgba(255,255,255,.65);font-size:14px;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th{text-align:left;color:rgba(255,255,255,.55);font-weight:400;font-size:13px;padding:6px 12px 6px 0;white-space:nowrap}
+td{font-weight:600;font-size:14px;padding:6px 0}
+a{color:#7fd3ff}
+</style></head><body><div class="c">
+<h1>${found ? head : t.notFound}</h1>
+<p>${note}</p>
+<table>${rows}</table>
+<p>${t.support} <a href="mailto:${supportEmail}">${supportEmail}</a>${buyUrl ? ` · <a href="${buyUrl}">${t.back}</a>` : ""}</p>
+</div></body></html>`;
+}
+
 /**
  * Ảnh QR chuyển khoản lấy từ vietqr.app (SePay dùng chính dịch vụ này) — ảnh "standee" có sẵn
  * branding ngân hàng, số tiền và nội dung CK điền sẵn.

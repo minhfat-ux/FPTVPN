@@ -22,6 +22,8 @@ const REQUIRED_IN_INDEX = [
   ["payload version theo kênh client", "versionPayloadFor(req"],
   ["nhãn gói bản địa hoá trong hoá đơn", "planNameFor(pickMailLang(lang)"],
   ["cờ QR tự chứa số tiền + nội dung", "selfContained: true"],
+  ["trang tình trạng chuyển khoản", "/buy/status/:orderCode"],
+  ["giữ đơn sau khi thanh toán (không xoá)", "markPendingPaymentPaid(evt.orderCode)"],
 ];
 
 const paymentsSource = fs.readFileSync(path.join(here, "../src/payments.js"), "utf8");
@@ -29,6 +31,7 @@ const REQUIRED_IN_PAYMENTS = [
   ["ẩn phần copy khi QR đã có số tiền + nội dung", "const selfContained = data.selfContained === true"],
   ["khai báo qrAmtRemind", 'const qrAmtRemind = document.getElementById("qrAmtRemind")'],
   ["ảnh QR SePay/vietqr.app", "export function bankQrImageUrl"],
+  ["trang tình trạng HTML", "export function orderStatusPageHTML"],
 ];
 
 for (const [name, needle] of REQUIRED_IN_PAYMENTS) {

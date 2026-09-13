@@ -332,6 +332,7 @@ export function renderPaymentAlert({
   plan,
   amount,
   confirmUrl,
+  statusUrl = null,
   product = "VPNFlow Premium",
   cny = null,
   method = null,
@@ -370,7 +371,8 @@ ${channelBox}
 <p>Sản phẩm: <b>${product}</b></p>
 <p>Sau khi kiểm tra đúng số tiền ở kênh trên, bấm nút dưới để kích hoạt cho khách:</p>
 <p><a href="${confirmUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">✅ Xác nhận đã nhận tiền</a></p>
-<p style="color:#999;font-size:12px">Link chỉ có hiệu lực 1 lần. Nếu bạn không tạo đơn này, hãy bỏ qua email.</p>`),
+${statusUrl ? `<p style="color:#666;font-size:13px">Theo dõi tình trạng chuyển tiền của đơn này: <a href="${statusUrl}">${statusUrl}</a></p>` : ""}
+<p style="color:#999;font-size:12px">Link xác nhận chỉ có hiệu lực 1 lần. Nếu bạn không tạo đơn này, hãy bỏ qua email.</p>`),
   };
 }
 
@@ -550,6 +552,7 @@ export async function sendPaymentAlert({
   plan,
   amount,
   confirmUrl,
+  statusUrl = null,
   product = "VPNFlow Premium",
   cny = null,
   method = null,
@@ -557,7 +560,7 @@ export async function sendPaymentAlert({
 }) {
   return deliver({
     to,
-    message: renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confirmUrl, product, cny, method, methodInfo }),
+    message: renderPaymentAlert({ orderCode, buyerEmail, plan, amount, confirmUrl, statusUrl, product, cny, method, methodInfo }),
     logTag: "payment-alert",
     logContext: { orderCode, buyerEmail, method: method ?? "?", channel: methodInfo?.short ?? null },
   });
