@@ -530,8 +530,12 @@ https://api.meetflowai.site/v1/payments/sepay-webhook
   dạng `sha256=<hex>` + `X-SePay-Timestamp`) — hoặc chọn *API Key* và dùng đúng secret đó
   (`Authorization: Apikey <key>`). Code hỗ trợ **cả hai**.
 - Secret nằm trong drop-in trên **node-2** (máy chính): `/etc/systemd/system/flowvpn-cp.service.d/sepay.conf`
-  (`SEPAY_WEBHOOK_SECRET`, `SEPAY_API_KEY`, chmod 600). Đổi key (sang key live) thì sửa file đó rồi
-  `systemctl daemon-reload && systemctl restart flowvpn-cp`.
+  (`SEPAY_WEBHOOK_SECRET`, `SEPAY_API_KEY`, `SEPAY_URL_TOKEN`, chmod 600). Đổi key (sang key live) thì
+  sửa file đó rồi `systemctl daemon-reload && systemctl restart flowvpn-cp`.
+- **Chế độ dự phòng "không xác thực"**: nếu webhook của SePay không gửi header nào (log ghi
+  `signature=false, apiKey=false` — đã gặp thật 14/09/2026), dùng URL kèm token bí mật:
+  `…/v1/payments/sepay-webhook?token=<SEPAY_URL_TOKEN>` (giá trị trong file drop-in nói trên, KHÔNG
+  ghi vào repo). Yếu hơn HMAC vì URL có thể lọt vào log — chỉ dùng khi dashboard không cho chọn HMAC.
 - **Mã thanh toán**: nội dung chuyển khoản do VietQR sinh ra có dạng `VPNFLOW-<mã đơn>` (VPNFlow) và
   `MEETFLOW-<mã đơn>` (MeetFlow AI) — xem `vietqr.js`. Cấu hình "mã thanh toán" trong SePay nên tách
   phần số; nếu không cấu hình, code vẫn tự đọc tiền tố trong `content`.
