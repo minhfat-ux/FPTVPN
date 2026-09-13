@@ -1,0 +1,77 @@
+# Evidence — Dashboard: thiết bị đang kết nối theo từng server + ISP/IP của thiết bị
+date: 2026-09-13T07:56:02Z
+scope: control-plane (src/connection-stats.js mới; src/index.js, src/wireguard.js, src/admin-page.js sửa)
+
+## 1. Unit tests — toàn bộ control-plane
+```
+✔ node remote lỗi SSH thì trả [] / null thay vì throw (88.02725ms)
+✔ dry-run không chạy lệnh nào và trả giá trị rỗng (0.201209ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3206.877459
+```
+
+## 2. End-to-end: GET /v1/admin/stats với 2 exit node (wg + ssh giả lập)
+Setup: node vn-hn (local, 3 peer: 2 online/1 stale) + node sg-1 qua ssh_target (1 online/1 stale).
+        wg stub + ssh stub trong PATH, DRY_RUN=0, PORT=18102.
+```
+$ curl -s -H 'Authorization: Bearer <AUTH_TOKEN>' http://127.0.0.1:18102/v1/admin/stats
+$ ssh stub được gọi cho node remote:
+  CALLED: -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/pvpn-verify/fake_key root@203.0.113.10 wg show wg0 dump
+
+connections_totals   : {"online":3,"total":4,"nodes":2}
+by_node (chart server):
+   Vietnam Hanoi    online=2 peer=3 | Hanoi, VN
+   Singapore 1      online=1 peer=1 | Singapore, SG
+by_location (chart ISP): {"totbb":1,"google":1,"myrepublic (SG)":1}
+online_devices (bảng):
+   vn-hn  iPhone cua Minh  ios      ip=203.113.10.5    isp=totbb      cc=- connected=13s rx/tx=1048576/2097152
+   sg-1   (chưa đăng ký)   -        ip=103.6.150.9     isp=myrepublic cc=SG connected=21s rx/tx=777/888
+   vn-hn  Pixel 9          android  ip=8.8.8.8         isp=google     cc=- connected=96s rx/tx=2048/4096
+back-compat (không đổi field cũ): totals = {"devices":2,"test_devices":0,"users":0,"active_devices":2,"revoked_devices":0,"online_peers":3,"total_peers":4,"exit_nodes":2}
+back-compat online_peer_endpoints = [{"ip":"203.113.10.5","count":1},{"ip":"8.8.8.8","count":1},{"ip":"103.6.150.9","count":1}]
+```
+
+## 2. End-to-end: GET /v1/admin/stats với 2 exit node (wg + ssh giả lập)
+Setup: node vn-hn (local, 3 peer: 2 online/1 stale) + node sg-1 qua ssh_target (1 online/1 stale).
+        wg stub + ssh stub trong PATH, DRY_RUN=0, PORT=18102.
+```
+$ curl -s -H 'Authorization: Bearer <AUTH_TOKEN>' http://127.0.0.1:18102/v1/admin/stats
+$ ssh stub được gọi cho node remote:
+  CALLED: -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/pvpn-verify/fake_key root@203.0.113.10 wg show wg0 dump
+
+connections_totals    : {"online":3,"total":4,"nodes":2}
+by_node (chart server):
+   Vietnam Hanoi    online=2 peer=3 | Hanoi, VN
+   Singapore 1      online=1 peer=1 | Singapore, SG
+by_location (chart ISP): {"totbb":1,"google":1,"myrepublic (SG)":1}
+online_devices (bảng):
+   vn-hn  iPhone cua Minh  ios      ip=203.113.10.5    isp=totbb      cc=- connected=13s rx/tx=1048576/2097152
+   sg-1   (chua dang ky)   -        ip=103.6.150.9     isp=myrepublic cc=SG connected=21s rx/tx=777/888
+   vn-hn  Pixel 9          android  ip=8.8.8.8         isp=google     cc=- connected=96s rx/tx=2048/4096
+back-compat totals   : {"devices":2,"test_devices":0,"users":0,"active_devices":2,"revoked_devices":0,"online_peers":3,"total_peers":4,"exit_nodes":2}
+back-compat endpoints: [{"ip":"203.113.10.5","count":1},{"ip":"8.8.8.8","count":1},{"ip":"103.6.150.9","count":1}]
+```
+
+## 3. Dashboard HTML (src/admin-page.js) — phần tử mới + JS parse
+```
+id=statsNodes     PRESENT
+id=statsOnline    PRESENT
+id=statsRegions   PRESENT
+id=statsPlatform  PRESENT
+id=statsCards     PRESENT
+heading: Online Devices per Server  PRESENT
+heading: Online Devices by ISP      PRESENT
+heading: Online Devices (live)      PRESENT
+renderOnlineDevices defined: true
+formatUptime reused       : true
+
+$ JS trong dashboard có parse được không (node --check):
+  extracted script block lines: 1622
+  node --check => JS parse OK
+```

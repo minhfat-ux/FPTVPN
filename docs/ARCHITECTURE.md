@@ -140,6 +140,12 @@ WireGuard mesh**; this appendix records the current reality.
 - **Admin page**: `https://meetflowai.site/PrivateVPN/Admin` (public page, token-protected
   API; list + separate edit views). **Per-node health**: `GET /v1/admin/nodes/:id/health`
   (ping latency, `wg show transfer` bandwidth, capability peers/uptime/load).
+  **Live connections** (`GET /v1/admin/stats`, tab Dashboard): `by_node` = số thiết bị
+  đang kết nối theo TỪNG exit node, `by_location` = ISP/country hint suy từ PTR của IP
+  công khai client, `online_devices` = chi tiết từng thiết bị (user, server, IP, ISP,
+  thời lượng kết nối, rx/tx). Peer của node remote đọc qua `ssh_target`
+  (`wg show <iface> dump`); không dùng API geolocation bên thứ ba nên IP client không
+  rời khỏi server (NFR-PRIV-001).
 
 ### B3. Provisioning flow (two modes; login = email-only, owner decision)
 

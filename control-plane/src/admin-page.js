@@ -573,9 +573,23 @@ export function adminPageHTML() {
           <div id="statsPlatform" class="stats-bars"></div>
         </div>
         <div>
-          <h2>Online Peer Regions</h2>
+          <h2>Online Devices by ISP</h2>
           <div id="statsRegions" class="stats-bars"></div>
         </div>
+      </div>
+
+      <h2 style="margin-top:18px;">Online Devices per Server</h2>
+      <div id="statsNodes" class="stats-bars"></div>
+
+      <h2 style="margin-top:18px;">Online Devices (live)</h2>
+      <div style="overflow-x:auto; margin-top:10px;">
+        <table>
+          <thead><tr>
+            <th>Thiết bị</th><th>Nền tảng</th><th>Tài khoản</th><th>Server</th>
+            <th>IP công khai</th><th>ISP / Location</th><th>Đã kết nối</th><th>Traffic</th>
+          </tr></thead>
+          <tbody id="statsOnline"><tr><td colspan="8">Bấm "Refresh".</td></tr></tbody>
+        </table>
       </div>
 
       <h2 style="margin-top:18px;">Devices by User</h2>
@@ -660,6 +674,8 @@ export function adminPageHTML() {
       statsCards: document.getElementById("statsCards"),
       statsPlatform: document.getElementById("statsPlatform"),
       statsRegions: document.getElementById("statsRegions"),
+      statsNodes: document.getElementById("statsNodes"),
+      statsOnline: document.getElementById("statsOnline"),
       statsStatus: document.getElementById("statsStatus"),
       loadStats: document.getElementById("loadStats"),
       autoStats: document.getElementById("autoStats"),
@@ -1207,6 +1223,40 @@ export function adminPageHTML() {
       }
     }
 
+    function renderOnlineDevices(devices, truncated) {
+      const tbody = fields.statsOnline;
+      tbody.innerHTML = "";
+      if (!devices.length) {
+        tbody.innerHTML = '<tr><td colspan="8">Không có thiết bị nào đang kết nối (wg handshake &lt; 3 phút).</td></tr>';
+        return;
+      }
+      for (const d of devices) {
+        const tr = document.createElement("tr");
+        const cell = (text) => {
+          const td = document.createElement("td");
+          td.textContent = text;
+          tr.appendChild(td);
+        };
+        cell(d.device_name || (d.device_id ? "device" : "không rõ (chưa đăng ký)"));
+        cell(d.platform || "—");
+        cell(d.user_email || "—");
+        cell(d.node_name + (d.node_location ? " (" + d.node_location + ")" : ""));
+        cell(d.client_ip || "—");
+        cell(d.isp ? d.isp + (d.country ? " (" + d.country + ")" : "") : "unknown ISP");
+        cell(d.connected_sec == null ? "—" : formatUptime(d.connected_sec) + " trước");
+        cell(formatBytes(d.rx_bytes) + " ↓ / " + formatBytes(d.tx_bytes) + " ↑");
+        tbody.appendChild(tr);
+      }
+      if (truncated) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 8;
+        td.textContent = "Chỉ hiển thị 200 thiết bị đầu tiên.";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      }
+    }
+
     async function loadStats() {
       try {
         fields.statsStatus.textContent = "Loading stats...";
@@ -1223,12 +1273,29 @@ export function adminPageHTML() {
         );
         renderBars(fields.statsPlatform, data.by_platform || {});
         renderUsersByUser(data.by_user || []);
-        const regions = {};
-        for (const e of data.online_peer_endpoints || []) regions[e.ip] = e.count;
-        renderBars(fields.statsRegions, regions);
+
+        // Thiết bị đang kết nối theo từng server: nhãn "Tên server · location".
+        const perNode = {};
+        let maxOnline = 1;
+        for (const n of data.by_node || []) {
+          const label = n.name + (n.location ? " · " + n.location : "");
+          perNode[label] = n.online;
+          if (n.online > maxOnline) maxOnline = n.online;
+        }
+        renderBars(fields.statsNodes, perNode, maxOnline);
+
+        // Location thật (best-effort từ PTR của IP công khai client).
+        renderBars(fields.statsRegions, data.by_location || {});
+
+        renderOnlineDevices(data.online_devices || [], data.online_devices_truncated);
+
+        const totals = data.connections_totals || {};
+        fields.statsStatus.style.color = "";
         fields.statsStatus.textContent =
           "Generated " + new Date(data.generated_at).toLocaleString() +
-          " · " + (data.online_peer_endpoints || []).length + " region(s)";
+          " · " + (totals.online ?? 0) + " online / " + (totals.total ?? 0) + " peer" +
+          " trên " + (totals.nodes ?? 0) + " server · " +
+          Object.keys(data.by_location || {}).length + " ISP group(s)";
       } catch (error) {
         fields.statsStatus.textContent = error.message;
         fields.statsStatus.style.color = "var(--danger)";

@@ -47,7 +47,7 @@ export class WireGuardManager {
   async listPeers() {
     if (this.dryRun) return null;
     try {
-      const { stdout } = await execFileAsync(this.wgBin, ["show", this.interfaceName, "peers"]);
+      const stdout = await this._read(["show", this.interfaceName, "peers"]);
       return stdout.split("\n").map((l) => l.trim()).filter(Boolean);
     } catch {
       return null;
@@ -63,7 +63,7 @@ export class WireGuardManager {
   async dump() {
     if (this.dryRun) return [];
     try {
-      const { stdout } = await execFileAsync(this.wgBin, ["show", this.interfaceName, "dump"]);
+      const stdout = await this._read(["show", this.interfaceName, "dump"]);
       const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
       const rows = [];
       for (const line of lines.slice(1)) { // first line = interface header
@@ -87,11 +87,33 @@ export class WireGuardManager {
   /** Returns the server's public key, or null on failure. */
   async serverPublicKey() {
     try {
-      const { stdout } = await execFileAsync(this.wgBin, ["show", this.interfaceName, "public-key"]);
+      const stdout = await this._read(["show", this.interfaceName, "public-key"]);
       return stdout.trim();
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Chạy lệnh wg read-only trên node tương ứng: qua SSH khi có `sshTarget`,
+   * ngược lại chạy local. Trước đây dump()/listPeers()/serverPublicKey() luôn
+   * chạy local nên peer của node remote không bao giờ được đọc (dashboard đếm
+   * thiếu, mọi node remote hiện 0 peer).
+   */
+  async _read(args) {
+    if (this.sshTarget) {
+      const { stdout } = await execFileAsync("ssh", this._sshArgs(args), { timeout: 12_000, killSignal: "SIGKILL" });
+      return stdout;
+    }
+    const { stdout } = await execFileAsync(this.wgBin, args, { timeout: 10_000, killSignal: "SIGKILL" });
+    return stdout;
+  }
+
+  _sshArgs(args) {
+    const sshArgs = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8"];
+    if (this.sshKey) sshArgs.push("-i", this.sshKey);
+    sshArgs.push(this.sshTarget, `${this.wgBin} ${args.join(" ")}`);
+    return sshArgs;
   }
 
   async _run(args) {
@@ -99,16 +121,9 @@ export class WireGuardManager {
       console.log(`[dry-run] ${this.wgBin} ${args.join(" ")}` + (this.sshTarget ? ` (ssh ${this.sshTarget})` : ""));
       return;
     }
-    if (this.sshTarget) {
-      const sshArgs = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8"];
-      if (this.sshKey) sshArgs.push("-i", this.sshKey);
-      sshArgs.push(this.sshTarget, `${this.wgBin} ${args.join(" ")}`);
-      // Hard total timeout so a hung remote node (unresponsive sshd / stalled
-      // network after TCP connect) cannot hang the register request forever,
-      // which would surface to clients as "Could not reach the coordinator".
-      await execFileAsync("ssh", sshArgs, { timeout: 12_000, killSignal: "SIGKILL" });
-      return;
-    }
-    await execFileAsync(this.wgBin, args, { timeout: 10_000, killSignal: "SIGKILL" });
+    // Hard total timeout so a hung remote node (unresponsive sshd / stalled
+    // network after TCP connect) cannot hang the register request forever,
+    // which would surface to clients as "Could not reach the coordinator".
+    await this._read(args);
   }
 }

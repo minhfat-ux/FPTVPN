@@ -160,3 +160,24 @@ Durable engineering decisions (see also `docs/adr/`).
 - Keystore backup: /Volumes/BIWIN/VPNFlow-Backup/release-signing/.
   CN khớp: Minh Nguyen Binh / VPNFlow (script setup-release-signing.sh đã
   align, f22f3d7).
+
+## 2026-09-13 — Dashboard: thiết bị đang kết nối theo từng server + ISP/IP thiết bị
+
+- **Yêu cầu owner**: dashboard hiện chart số thiết bị đang kết nối theo từng server,
+  và location thật của các thiết bị.
+- **Nguồn dữ liệu**: `wg show <iface> dump` của TỪNG exit node (endpoint = IP công khai
+  của client, latest_handshake, rx/tx) ghép với device registry (publicKey → user/device).
+- **QUYẾT ĐỊNH (owner chọn)**: KHÔNG dùng API geolocation bên thứ ba — chỉ hiển thị IP
+  công khai + ISP/country hint suy từ reverse DNS (PTR), cache 6h + timeout 1.5s; IP không
+  có PTR hiện "unknown ISP". Lý do: NFR-PRIV-001, không gửi IP người dùng ra ngoài.
+- **Bug phát hiện + sửa**: `WireGuardManager.dump()/listPeers()/serverPublicKey()` trước đây
+  LUÔN chạy `wg` ở máy coordinator và bỏ qua `ssh_target` → peer của mọi node remote không
+  bao giờ được đọc (dashboard đếm thiếu, node remote luôn 0 peer). Đã thêm `_read()` chạy qua
+  SSH khi node có `ssh_target`; `_run()` tái sử dụng `_sshArgs()`.
+- **API**: `GET /v1/admin/stats` thêm `by_node` (online/tổng peer theo server), `by_location`
+  (gom theo ISP), `online_devices` (chi tiết thiết bị, tối đa 200 + cờ
+  `online_devices_truncated`), `connections_totals`; giữ nguyên mọi field cũ (back-compat).
+- **UI**: tab Dashboard thêm chart "Online Devices per Server"; chart cũ đổi thành
+  "Online Devices by ISP"; thêm bảng "Online Devices (live)".
+- **Bằng chứng**: `evidence/2026-09-13-dashboard-live-connections.log` (39/39 test pass +
+  E2E 2 exit node + kiểm tra dashboard HTML/JS).
