@@ -67,3 +67,12 @@ Unresolved CRITICAL / blocking HIGH findings block gate verification (RULE-SEC-0
 
 - Sensitive evidence sanitized before storage (RULE-EVID-005).
 - Security-relevant claims require evidence; no narrative-only "secure".
+
+## 8. Incident log
+
+| Ngày | Sự việc | Mức độ | Chi tiết |
+|---|---|---|---|
+| 2026-09-13 | `AUTH_TOKEN` (bearer admin production) bị commit vào `docs/APP_STORE_SUBMISSION_IOS.md` trong repo **public** (`19bf6d3`, phơi nhiễm ~3 ngày) | CRITICAL | `docs/SECURITY_INCIDENT_ADMIN_TOKEN.md` |
+
+**Bài học bắt buộc:** không bao giờ dán giá trị secret (token/password/key) vào docs, evidence, log hay
+commit message — kể cả trong ví dụ `curl`. Dùng `$ENV_VAR` hoặc `<PLACEHOLDER>`; server giữ giá trị thật.

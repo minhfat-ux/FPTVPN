@@ -228,8 +228,10 @@ xcrun altool --upload-app -f build/ios-appstore-export/ipa/FlowVPN.ipa \
 1. Lấy link App Store (`https://apps.apple.com/app/id<APP_ID>`), cập nhật lại backend:
 
 ```bash
+# AUTH_TOKEN lấy từ unit trên VPS — KHÔNG dán giá trị thật vào repo/docs:
+#   ssh root@<node> "systemctl show flowvpn-cp -p Environment" | tr ' ' '\n' | grep ^AUTH_TOKEN=
 curl -s -X PATCH https://api.meetflowai.site/v1/admin/app-version \
-  -H "Authorization: Bearer 5111853ec2b1bd54942562e0500746ab4292fd13a95fb1ce" \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"store_url":"https://apps.apple.com/app/id<APP_ID>",
        "latest_version":"1.2.3","minimum_version":"1.2.3"}'
