@@ -591,6 +591,27 @@ curl -s https://meetflowai.site/install/ios/manifest.plist | python3 -c 'import 
 # https://meetflowai.site/v1/downloads/ios
 ```
 
+### QR + link tải ngay trên trang buy (14/09/2026)
+
+Khách thường mở trang buy trên máy tính rồi cần cài app lên điện thoại, nên dưới hai nút tải có thêm
+khối **QR + link dạng chữ + nút "Sao chép link"** (5 ngôn ngữ). QR **sinh tại chỗ** bằng thư viện
+`qrcode` sẵn có, KHÔNG dùng ảnh QR của Diawi — nên link ngoài hết hạn cũng không ảnh hưởng.
+
+| Endpoint | Nội dung |
+|---|---|
+| `GET /v1/downloads/qr?target=ios` | QR của link iOS **đang cấu hình** (`ios_ipa_url`) — hiện là `https://meetflowai.site/install/ios` |
+| `?target=android` / `android-legacy` | QR của link APK tương ứng |
+| `?target=ai-android` | QR APK MeetFlow AI |
+| `?size=…` | cạnh ảnh (mặc định 320, tối đa 1024) |
+
+- Trang `/buy` quét QR iOS (VPN), trang `/ai/buy` quét QR APK (MeetFlow AI).
+- Trang `/install/ios` cũng có QR của chính nó, cho ai đang xem trên máy tính.
+- QR iOS **tự đi theo cấu hình**: cắm link Diawi vào `ios_ipa_url` thì QR trỏ Diawi, đổi về
+  `/install/ios` thì QR trỏ về server mình.
+
+⚠️ `/v1/downloads/qr` cũng phải có `handle` trong Caddyfile host `meetflowai.site` (giống
+`/install/ios`, `/guide`): thiếu là edge trả 404 dù Node trả 200 — đúng lỗi đã gặp khi vừa làm xong.
+
 ### Tự chuyển link khi link ngoài chết (`runIosLinkGuard`)
 
 Mỗi **6 giờ**, control plane tự kiểm link iOS đang cấu hình: nếu không còn trả 200 (Diawi hết hạn/hết
