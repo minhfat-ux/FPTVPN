@@ -23,11 +23,30 @@ MODE="${2:-appstore}"
 case "$TARGET" in
   ios) SCHEME="PrivateVPN";    PLATFORM="iOS";   DEST="generic/platform=iOS" ;;
   mac) SCHEME="PrivateVPNMac"; PLATFORM="macOS"; DEST="generic/platform=macOS" ;;
-  *) echo "usage: $0 [ios|mac] [appstore|direct]" >&2; exit 2 ;;
+  *) echo "usage: $0 [ios|mac] [appstore|direct|diawi]" >&2; exit 2 ;;
 esac
 case "$MODE" in
-  appstore|direct) ;;
-  *) echo "usage: $0 [ios|mac] [appstore|direct]" >&2; exit 2 ;;
+  appstore|direct|diawi) ;;
+  *) echo "usage: $0 [ios|mac] [appstore|direct|diawi]" >&2; exit 2 ;;
+esac
+
+# Export method + compile flags theo kênh phát hành.
+#
+# Vì sao `diawi` KHÁC `direct` dù cùng cờ biên dịch: Diawi phát hành bằng cách cài
+# trực tiếp lên máy, nên IPA **phải** được ký bằng profile có UDID thiết bị
+# (development/ad-hoc). IPA xuất bằng `app-store-connect` KHÔNG cài được qua Diawi —
+# profile nhúng có 0 thiết bị (đã kiểm: app-store = 0, development = 4 thiết bị).
+# Trước đây script xuất cả `direct` bằng app-store-connect, tức kênh được chủ dự án
+# chọn để phát qua Diawi lại cho ra file không cài được.
+#
+# `development` chứ không phải `ad-hoc` vì máy này chưa có Apple ID trong Xcode nên
+# không tạo được profile ad-hoc (lỗi "No Accounts" / "No profiles ... were found").
+# Khi đã đăng nhập Apple ID + tạo profile ad-hoc (thêm UDID từng tester) thì đổi
+# METHOD ở đây sang `ad-hoc` — đúng chuẩn Diawi hơn và không bật get-task-allow.
+case "$MODE" in
+  appstore) METHOD="app-store-connect"; COND='$(inherited) PAYWALL_APPSTORE' ;;
+  direct)   METHOD="app-store-connect"; COND='$(inherited)' ;;
+  diawi)    METHOD="development";       COND='$(inherited)' ;;
 esac
 
 OUT="build/${TARGET}-${MODE}-export"
@@ -41,7 +60,7 @@ cat > "$OUT/ExportOptions.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>method</key><string>app-store-connect</string>
+  <key>method</key><string>$METHOD</string>
   <key>teamID</key><string>G6XW3RN6LJ</string>
   <key>uploadSymbols</key><true/>
   <key>compileBitcode</key><false/>
@@ -52,11 +71,11 @@ PLIST
 if [ "$MODE" = "appstore" ]; then
   # PAYWALL_APPSTORE removes the web buy page from the paywall at compile time.
   echo "==> Archiving $SCHEME ($PLATFORM) for App Store review (IAP only)"
-  COND='$(inherited) PAYWALL_APPSTORE'
 else
   echo "==> Archiving $SCHEME ($PLATFORM) for our own distribution (web buy page ON)"
-  COND='$(inherited)'
 fi
+# COND đã được đặt ở khối case phía trên — không gán lại ở đây để chỉ có MỘT nguồn
+# sự thật cho cờ biên dịch (trước đây hai nơi cùng gán, thêm mode mới là lệch ngay).
 
 xcodebuild -project PrivateVPN.xcodeproj -scheme "$SCHEME" \
   -configuration Release -destination "$DEST" \
@@ -64,13 +83,17 @@ xcodebuild -project PrivateVPN.xcodeproj -scheme "$SCHEME" \
   SWIFT_ACTIVE_COMPILATION_CONDITIONS="$COND" \
   archive -allowProvisioningUpdates
 
-echo "==> Exporting IPA"
+echo "==> Exporting IPA (method=$METHOD)"
 xcodebuild -exportArchive -archivePath "$ARCHIVE" \
   -exportOptionsPlist "$OUT/ExportOptions.plist" \
   -exportPath "$IPA" -allowProvisioningUpdates
 
 echo
-echo "==> Done. Upload this to App Store Connect / TestFlight:"
+if [ "$MODE" = "diawi" ]; then
+  echo "==> Done. IPA cài trực tiếp được — upload lên Diawi:"
+else
+  echo "==> Done. Upload this to App Store Connect / TestFlight:"
+fi
 ls -1 "$IPA"/*.ipa
 echo
 if [ "$MODE" = "appstore" ]; then
