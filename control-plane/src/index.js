@@ -2007,6 +2007,9 @@ const IOS_TEXTS = {
     waitReadyMsg: "Máy này đã được cấp bản cài riêng. Bấm nút dưới để cài (nhớ mở bằng Safari).",
     device: "Thiết bị",
     elapsed: (n) => `Đã chờ ${n} giây…`,
+    tfBoxTitle: 'Chưa cài được? Thử cách không cần đăng ký thiết bị',
+    tfBoxText: 'Cài app TestFlight của Apple (miễn phí) rồi bấm link mời — không cần UDID.',
+    tfBoxBtn: '📲 Hướng dẫn cài qua TestFlight',
     profileName: "VPNFlow — Đăng ký thiết bị",
     profileDesc: "Gửi mã thiết bị (UDID) cho VPNFlow để cấp bản cài phù hợp. Không thu thập dữ liệu khác.",
   },
@@ -2045,6 +2048,9 @@ const IOS_TEXTS = {
     waitReadyMsg: "This device now has its own build. Tap the button below to install (use Safari).",
     device: "Device",
     elapsed: (n) => `Waiting ${n}s…`,
+    tfBoxTitle: "Can't install this way? Try the no-registration method",
+    tfBoxText: "Install Apple's free TestFlight app, then tap the invite link — no UDID needed.",
+    tfBoxBtn: '📲 TestFlight install guide',
     profileName: "VPNFlow — Device registration",
     profileDesc: "Reports the device ID (UDID) to VPNFlow so we can issue a matching build. No other data is collected.",
   },
@@ -2083,6 +2089,9 @@ const IOS_TEXTS = {
     waitReadyMsg: "该设备已获得专属安装包，点击下方按钮安装（请用 Safari）。",
     device: "设备",
     elapsed: (n) => `已等待 ${n} 秒…`,
+    tfBoxTitle: '这种方式装不上的话？试试无需注册设备的方法',
+    tfBoxText: '先安装 Apple 免费的 TestFlight，再点邀请链接 —— 不需要设备码。',
+    tfBoxBtn: '📲 TestFlight 安装指南',
     profileName: "VPNFlow — 设备注册",
     profileDesc: "将设备码 (UDID) 上报给 VPNFlow，以便发放对应的安装包。不采集其他数据。",
   },
@@ -2121,6 +2130,9 @@ const IOS_TEXTS = {
     waitReadyMsg: "この端末用のビルドが用意できました。下のボタンでインストール（Safari で開いてください）。",
     device: "端末",
     elapsed: (n) => `待機中 ${n} 秒…`,
+    tfBoxTitle: 'うまくいかない場合は？端末登録不要の方法',
+    tfBoxText: 'Apple の無料 TestFlight を入れて招待リンクをタップ —— UDID 不要です。',
+    tfBoxBtn: '📲 TestFlight のインストール手順',
     profileName: "VPNFlow — 端末登録",
     profileDesc: "端末 ID (UDID) を VPNFlow に送信し、対応するビルドを発行するためのプロファイルです。他のデータは収集しません。",
   },
@@ -2159,10 +2171,132 @@ const IOS_TEXTS = {
     waitReadyMsg: "이 기기 전용 빌드가 준비되었습니다. 아래 버튼으로 설치하세요 (Safari).",
     device: "기기",
     elapsed: (n) => `${n}초 대기 중…`,
+    tfBoxTitle: '설치가 안 되나요? 기기 등록이 필요 없는 방법',
+    tfBoxText: 'Apple의 무료 TestFlight를 설치한 뒤 초대 링크를 누르세요 — UDID 불필요.',
+    tfBoxBtn: '📲 TestFlight 설치 안내',
     profileName: "VPNFlow — 기기 등록",
     profileDesc: "기기 ID (UDID)를 VPNFlow로 전송해 해당 빌드를 발급받기 위한 프로파일입니다. 다른 데이터는 수집하지 않습니다.",
   },
 };
+
+/**
+ * Hướng dẫn khách cài qua **TestFlight** (không cần UDID): cài TestFlight trước → bấm link mời → Install.
+ * Có bản TestFlight chỉ sống 90 ngày nên hướng dẫn phải nói rõ cách gia hạn.
+ */
+const IOS_TF_TEXTS = {
+  vi: {
+    title: "Cài VPNFlow qua TestFlight (không cần đăng ký thiết bị)",
+    intro: "Cách này dùng TestFlight của Apple nên <b>không cần UDID</b>. Chọn cách này nếu bước đăng ký thiết bị gặp trục trặc, hoặc bạn muốn cài nhanh.",
+    steps: [
+      "<b>1.</b> Cài app <b>TestFlight</b> (miễn phí, của Apple) từ App Store.",
+      "<b>2.</b> Mở <b>link mời</b> dưới đây bằng <b>Safari</b> trên chính iPhone cần cài.",
+      "<b>3.</b> Trong TestFlight, bấm <b>Install / Cài đặt</b> cho VPNFlow.",
+      "<b>4.</b> Mở VPNFlow → đăng nhập bằng email đã mua → bật VPN (cho phép cấu hình VPN khi iOS hỏi).",
+    ],
+    tfBtn: "Tải TestFlight trên App Store",
+    joinBtn: "Mở link mời VPNFlow",
+    notesTitle: "Cần biết",
+    notes: [
+      "Bản TestFlight chỉ sống <b>90 ngày</b>. Khi tới hạn, mở TestFlight → VPNFlow → <b>Update</b> (không phải cài lại từ đầu).",
+      "Nếu link báo <i>“This beta isn’t accepting new testers”</i>: nhắn shop để thêm bạn vào danh sách.",
+      "Cần iOS <b>17.0</b> trở lên.",
+      "TestFlight là app của Apple, không phải của shop — shop không thấy dữ liệu gì khác ngoài những gì bạn gửi trong app.",
+    ],
+    back: "← Về trang cài bằng đăng ký thiết bị",
+    support: "Hỗ trợ",
+  },
+  en: {
+    title: "Install VPNFlow via TestFlight (no device registration)",
+    intro: "This uses Apple's TestFlight, so <b>no UDID is needed</b>. Pick this if device registration didn't work for you or you want the fastest install.",
+    steps: [
+      "<b>1.</b> Install the free Apple <b>TestFlight</b> app from the App Store.",
+      "<b>2.</b> Open the <b>invite link</b> below in <b>Safari</b> on the iPhone you want to install on.",
+      "<b>3.</b> In TestFlight, tap <b>Install</b> for VPNFlow.",
+      "<b>4.</b> Open VPNFlow → sign in with the email you purchased with → turn the VPN on (allow the VPN configuration when iOS asks).",
+    ],
+    tfBtn: "Get TestFlight on the App Store",
+    joinBtn: "Open the VPNFlow invite link",
+    notesTitle: "Good to know",
+    notes: [
+      "TestFlight builds last <b>90 days</b>. When it expires, open TestFlight → VPNFlow → <b>Update</b> (no full reinstall).",
+      "If the link says <i>“This beta isn’t accepting new testers”</i>, message the shop to be added.",
+      "Requires iOS <b>17.0</b> or newer.",
+      "TestFlight is Apple's app, not the shop's — the shop doesn't see anything beyond what you send inside the app.",
+    ],
+    back: "← Back to the device-registration install page",
+    support: "Support",
+  },
+  zh: {
+    title: "通过 TestFlight 安装 VPNFlow（无需注册设备）",
+    intro: "此方式使用 Apple 的 TestFlight，<b>不需要设备码 (UDID)</b>。如果设备注册遇到问题或想最快安装，请用这种方式。",
+    steps: [
+      "<b>1.</b> 先在 App Store 安装免费的 <b>TestFlight</b>。",
+      "<b>2.</b> 用需要安装的 iPhone 上的 <b>Safari</b> 打开下面的<b>邀请链接</b>。",
+      "<b>3.</b> 在 TestFlight 中点击 VPNFlow 的 <b>安装</b>。",
+      "<b>4.</b> 打开 VPNFlow → 用购买时的邮箱登录 → 开启 VPN（弹出提示时请允许 VPN 配置）。",
+    ],
+    tfBtn: "在 App Store 获取 TestFlight",
+    joinBtn: "打开 VPNFlow 邀请链接",
+    notesTitle: "注意事项",
+    notes: [
+      "TestFlight 版本有效期 <b>90 天</b>；到期后在 TestFlight → VPNFlow 点 <b>更新</b> 即可，无需重装。",
+      "若提示 <i>“此测试版不再接受新测试员”</i>，请联系商家添加。",
+      "需要 iOS <b>17.0</b> 以上。",
+      "TestFlight 是 Apple 的应用，不是商家的应用。",
+    ],
+    back: "← 返回设备注册安装页",
+    support: "客服",
+  },
+  ja: {
+    title: "TestFlight で VPNFlow をインストール（端末登録なし）",
+    intro: "Apple の TestFlight を使うため <b>UDID は不要</b>です。端末登録がうまくいかない場合や、最短で入れたい場合にどうぞ。",
+    steps: [
+      "<b>1.</b> App Store で無料の <b>TestFlight</b> をインストール。",
+      "<b>2.</b> インストールしたい iPhone の <b>Safari</b> で下の<b>招待リンク</b>を開く。",
+      "<b>3.</b> TestFlight で VPNFlow の <b>インストール</b> をタップ。",
+      "<b>4.</b> VPNFlow を開く → 購入時のメールでログイン → VPN を ON（VPN 構成の許可を求められたら許可）。",
+    ],
+    tfBtn: "App Store で TestFlight を入手",
+    joinBtn: "VPNFlow の招待リンクを開く",
+    notesTitle: "ご注意",
+    notes: [
+      "TestFlight 版は <b>90 日</b>で失効します。失効したら TestFlight → VPNFlow → <b>アップデート</b>。",
+      "「このベータは新規テスターを受け付けていません」と出たら、ショップにご連絡ください。",
+      "iOS <b>17.0</b> 以上が必要です。",
+      "TestFlight は Apple のアプリであり、ショップのアプリではありません。",
+    ],
+    back: "← 端末登録のインストールページに戻る",
+    support: "サポート",
+  },
+  ko: {
+    title: "TestFlight로 VPNFlow 설치 (기기 등록 불필요)",
+    intro: "Apple의 TestFlight를 사용하므로 <b>UDID가 필요 없습니다</b>. 기기 등록이 안 되거나 가장 빠르게 설치하고 싶을 때 사용하세요.",
+    steps: [
+      "<b>1.</b> App Store에서 무료 <b>TestFlight</b> 앱을 설치합니다.",
+      "<b>2.</b> 설치할 iPhone의 <b>Safari</b>에서 아래 <b>초대 링크</b>를 엽니다.",
+      "<b>3.</b> TestFlight에서 VPNFlow의 <b>설치</b>를 누릅니다.",
+      "<b>4.</b> VPNFlow 실행 → 구매한 이메일로 로그인 → VPN 켜기 (iOS가 물으면 VPN 구성 허용).",
+    ],
+    tfBtn: "App Store에서 TestFlight 받기",
+    joinBtn: "VPNFlow 초대 링크 열기",
+    notesTitle: "알아두세요",
+    notes: [
+      "TestFlight 빌드는 <b>90일</b> 후 만료됩니다. 만료되면 TestFlight → VPNFlow → <b>업데이트</b>.",
+      "링크에 “이 베타는 새 테스터를 받지 않습니다”가 뜨면 판매자에게 알려주세요.",
+      "iOS <b>17.0</b> 이상 필요.",
+      "TestFlight는 Apple 앱이며 판매자의 앱이 아닙니다.",
+    ],
+    back: "← 기기 등록 설치 페이지로 돌아가기",
+    support: "지원",
+  },
+};
+
+const TESTFLIGHT_APP_URL = "https://apps.apple.com/app/testflight/id899247664";
+
+/** Link mời TestFlight: cấu hình trong dashboard trước, rồi env, rồi link nhóm công khai hiện tại. */
+function iosTestflightUrl() {
+  return appConfig.get("ios_testflight_url") || process.env.TESTFLIGHT_URL_IOS || "https://testflight.apple.com/join/1E2u6q7z";
+}
 
 const iosDevices = new IosDeviceStore(path.join(DATA_DIR, "ios-devices.json"));
 
@@ -2347,11 +2481,18 @@ code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size
 .wait{display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.75);font-size:13.5px;padding:6px 0}
 .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#33c773;border-radius:50%;animation:sp .9s linear infinite;display:inline-block}
 @keyframes sp{to{transform:rotate(360deg)}}.okmsg{color:#33c773;font-weight:600;font-size:13.5px;padding:4px 0}
+.tfbox{margin:0 0 12px;padding:13px;border-radius:14px;background:rgba(51,199,115,.10);border:1px solid rgba(51,199,115,.35)}
 .langs{margin-top:14px;text-align:center;font-size:12.5px}.langs a{color:rgba(255,255,255,.55);margin:0 5px;text-decoration:none}.langs a.on{color:#33c773;font-weight:600}
 </style>
 </head><body><div class="c">
 <p class="t">${t.pageTitle}</p>
 <p class="s">${t.intro(version)}</p>
+
+<div class="tfbox">
+  <div style="font-weight:600;font-size:14px;margin-bottom:6px">${t.tfBoxTitle ?? "Chưa cài được? Dùng TestFlight"}</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.7);margin-bottom:8px">${t.tfBoxText ?? "Cách khác không cần đăng ký thiết bị: cài app TestFlight của Apple rồi bấm link mời."}</div>
+  <a class="b b2" style="margin:0" href="/install/ios/testflight?lang=${lang}">${t.tfBoxBtn ?? "📲 Hướng dẫn cài qua TestFlight"}</a>
+</div>
 
 <div class="step">
   <div class="h"><span class="n">1</span>${t.step1}</div>
@@ -2398,6 +2539,44 @@ function poll() {
 poll();
 </script></body></html>`;
 }
+
+/**
+ * Trang hướng dẫn cài qua TestFlight — cho khách không muốn/không đăng ký được thiết bị.
+ * Thứ tự bắt buộc: cài TestFlight TRƯỚC → rồi mới bấm link mời → Install trong TestFlight.
+ */
+app.get(["/install/ios/testflight", "/v1/ios/testflight"], (req, res) => {
+  const lang = iosLang(req);
+  const t = IOS_TF_TEXTS[lang] ?? IOS_TF_TEXTS.vi;
+  const join = iosTestflightUrl();
+  const li = (items) => items.map((x) => `<li>${x}</li>`).join("");
+  console.log(`ios-install: testflight guide lang=${lang}`);
+  res.type("html").send(`<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${t.title}</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+.c{max-width:490px;margin:22px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}
+.t{font-size:20px;font-weight:700;margin:0 0 8px;line-height:1.35}.s{color:rgba(255,255,255,.72);font-size:13.5px;margin:0 0 16px;line-height:1.6}
+ul{color:rgba(255,255,255,.78);font-size:13.5px;line-height:1.65;padding-left:18px;margin:8px 0 14px}
+a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:10px;margin:10px 0}
+a.b1{background:#33c773;color:#06160d}a.b2{background:rgba(255,255,255,.14);color:#fff}
+code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px;word-break:break-all}
+.notes{margin-top:14px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px;font-size:13px}
+.notes b{display:block;margin-bottom:6px}
+.back{margin-top:14px;text-align:center;font-size:13px}.back a{color:rgba(255,255,255,.6);text-decoration:none}
+.langs{margin-top:12px;text-align:center;font-size:12.5px}.langs a{color:rgba(255,255,255,.55);margin:0 5px;text-decoration:none}.langs a.on{color:#33c773;font-weight:600}
+</style>
+</head><body><div class="c">
+<p class="t">${t.title}</p>
+<p class="s">${t.intro}</p>
+<a class="b b1" href="${TESTFLIGHT_APP_URL}">${t.tfBtn}</a>
+<ul>${li(t.steps)}</ul>
+<a class="b b2" href="${join}">${t.joinBtn}</a>
+<div style="font-size:12.5px;color:rgba(255,255,255,.5);text-align:center">${join}</div>
+<div class="notes"><b>${t.notesTitle}</b><ul style="margin:0">${li(t.notes)}</ul></div>
+<div class="langs">${["vi", "en", "zh", "ja", "ko"].map((c) => `<a class="${c === lang ? "on" : ""}" href="?lang=${c}">${c.toUpperCase()}</a>`).join("")}</div>
+<div class="back"><a href="/install/ios?lang=${lang}">${t.back}</a> · ${t.support}: support@meetflowai.site</div>
+</div></body></html>`);
+});
 
 app.get("/v1/downloads/ios", async (_req, res) => {
   try {
