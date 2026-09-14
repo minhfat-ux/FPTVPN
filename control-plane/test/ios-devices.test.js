@@ -174,3 +174,33 @@ test("đọc payload iOS: nhận cả plist thẳng, JSON và form có plist URL
   // trường hợp rác vẫn phải trả null (không được ném lỗi)
   assert.equal(decodeDevicePayload("không phải gì cả", { contentType: "text/plain" }), null);
 });
+
+test("đọc payload iOS 26: body là CMS/PKCS#7 đã ký, plist nằm trong khối nhị phân", () => {
+  // Đây là ĐÚNG dữ liệu thật lấy từ data/last-ios-callback.txt khi iPhone cài hồ sơ:
+  // content-type application/pkcs7-signature, trước plist là header DER, sau plist là chuỗi chứng chỉ.
+  const realPlist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PRODUCT</key>
+	<string>iPhone15,3</string>
+	<key>SERIAL</key>
+	<string>RY9V76N62J</string>
+	<key>UDID</key>
+	<string>00008120-00010D102E40C01E</string>
+	<key>VERSION</key>
+	<string>23H24</string>
+</dict>
+</plist>`;
+  const der = Buffer.from([0x30, 0x82, 0x0d, 0x1f, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02]);
+  const certs = Buffer.from([0x00, 0x00, 0x30, 0x82, 0x02, 0x5c, 0x30, 0x82]);
+  const body = Buffer.concat([der, Buffer.from(realPlist, "utf8"), certs]).toString("utf8");
+
+  const info = decodeDevicePayload(body, { contentType: "application/pkcs7-signature" });
+  assert.equal(info.udid, "00008120-00010D102E40C01E");
+  assert.equal(info.model, "iPhone15,3");
+  assert.equal(info.serial, "RY9V76N62J");
+  assert.equal(info.iosVersion, "23H24", "iOS gửi số build, phải giữ nguyên");
+  // Không có plist ⇒ vẫn phải trả null chứ không ném lỗi
+  assert.equal(decodeDevicePayload("0\x82\x0d\x1f rác nhị phân", { contentType: "application/pkcs7-signature" }), null);
+});
