@@ -22,13 +22,22 @@ test("manifest OTA: không truyền build thì lấy theo version, baseUrl có/k
   assert.ok(xml.includes("<key>bundle-version</key><string>1.3.2</string>"));
 });
 
-test("trang cài iOS: nút itms-services trỏ manifest của mình + cảnh báo dùng Safari", () => {
-  const page = indexSrc.slice(indexSrc.indexOf('app.get(["/install/ios"'), indexSrc.indexOf('app.get("/v1/downloads/ios"'));
-  assert.ok(page.includes("itms-services://?action=download-manifest"), "phải dùng itms-services mới cài được");
-  assert.ok(page.includes("${encodeURIComponent(manifest)}"), "URL manifest phải được encode");
-  assert.ok(page.includes("/install/ios/manifest.plist"), "trỏ manifest tự phát");
-  assert.ok(/Safari/.test(page), "phải nói rõ phải mở bằng Safari");
-  assert.ok(/UDID/.test(page), "phải cảnh báo máy chưa có UDID sẽ không cài được");
+test("trang cài iOS: nút itms-services + đa ngôn ngữ (vi/en/zh/ja/ko) đều nhắc Safari & UDID", () => {
+  const route = indexSrc.slice(indexSrc.indexOf('app.get(["/install/ios"'), indexSrc.indexOf("function iosInstallPageHTML"));
+  assert.ok(route.includes("itms-services://?action=download-manifest"), "phải dùng itms-services mới cài được");
+  assert.ok(route.includes("encodeURIComponent(manifest)"), "URL manifest phải được encode");
+  assert.ok(route.includes("iosInstallPageHTML({ base, itms, version, lang: iosLang(req) })"), "route phải chọn ngôn ngữ theo máy khách");
+  assert.ok(indexSrc.includes("/install/ios/register.mobileconfig?lang=${lang}"), "nút đăng ký mang theo ngôn ngữ");
+  const dict = indexSrc.slice(indexSrc.indexOf("const IOS_TEXTS = {"), indexSrc.indexOf("const iosDevices = new IosDeviceStore"));
+  for (const lang of ["vi", "en", "zh", "ja", "ko"]) {
+    assert.ok(dict.includes(`  ${lang}: {`), `thiếu ngôn ngữ ${lang}`);
+  }
+  assert.ok((dict.match(/Safari/g) ?? []).length >= 5, "mỗi ngôn ngữ phải nhắc mở bằng Safari");
+  assert.ok((dict.match(/UDID/g) ?? []).length >= 5, "mỗi ngôn ngữ phải nói gửi UDID");
+  assert.equal((dict.match(/installBtn:/g) ?? []).length, 5, "mỗi ngôn ngữ có nút cài");
+  // profile phát cho khách cũng theo ngôn ngữ + callback mang lang để màn hình chờ đúng thứ tiếng
+  assert.ok(indexSrc.includes("/install/ios/udid?lang=${lang}"), "callback phải mang theo lang");
+  assert.ok(indexSrc.includes("displayName: t.profileName"), "tên hồ sơ theo ngôn ngữ");
 });
 
 test("guard: link tải iOS ngoài (Diawi) hết hạn thì tự chuyển về trang cài tự phát", () => {
