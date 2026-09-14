@@ -161,3 +161,77 @@ test("ws_relay_url: db cũ (chưa có cột) vẫn mở được và được mi
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// Vì sao tách hai field: `ws_relay_url` cũ bị hai client hiểu theo hai nghĩa (iOS đọc là
+// relay WireGuard UDP 443, Android đọc là relay Hysteria UDP 8443). Một relay chỉ forward
+// tới MỘT cổng UDP, nên dùng chung một field thì client gửi Hysteria vào cổng WireGuard và
+// handshake im lặng — không có lỗi nào để lần ra. Nay tách tường minh:
+//   wg_relay_url = relay WireGuard (443) cho iOS/macOS
+//   hy_relay_url = relay Hysteria (8443) cho Android
+// `ws_relay_url` giữ lại chỉ để tương thích ngược (app đã phát hành vẫn đọc nó).
+test("wg_relay_url + hy_relay_url: tách tường minh hai transport, lưu/đọc/xoá độc lập", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    await store.create({
+      id: "node-1", name: "Hanoi 1", country: "VN", city: "Hanoi",
+      endpoint: "103.173.155.50:443", public_key: "pk1",
+      wg_relay_url: "wss://fcnvpn.tail303be3.ts.net:10000",
+      hy_relay_url: "wss://fcnvpn.tail303be3.ts.net:8443",
+    });
+    await store.create({
+      id: "node-2", name: "Hanoi 2", country: "VN", city: "Hanoi",
+      endpoint: "165.101.114.162:443", public_key: "pk2",
+    });
+
+    const one = await store.findById("node-1");
+    assert.equal(one.wg_relay_url, "wss://fcnvpn.tail303be3.ts.net:10000");
+    assert.equal(one.hy_relay_url, "wss://fcnvpn.tail303be3.ts.net:8443");
+    // Field cũ vẫn NULL: app đang phát hành đọc nó nên không được đổi hành vi của họ.
+    assert.equal(one.ws_relay_url, null, "ws_relay_url phải giữ null cho tương thích ngược");
+
+    const two = await store.findById("node-2");
+    assert.equal(two.wg_relay_url, null);
+    assert.equal(two.hy_relay_url, null);
+
+    // API công khai phải trả cả hai (client mới chỉ đọc hai field này).
+    const pub = publicNode(one);
+    assert.equal(pub.wg_relay_url, "wss://fcnvpn.tail303be3.ts.net:10000");
+    assert.equal(pub.hy_relay_url, "wss://fcnvpn.tail303be3.ts.net:8443");
+
+    // Sửa trường khác không được làm mất relay; xoá riêng từng field phải xoá đúng field đó.
+    await store.update("node-1", { city: "Hanoi (renamed)" });
+    assert.equal((await store.findById("node-1")).hy_relay_url, "wss://fcnvpn.tail303be3.ts.net:8443");
+    await store.update("node-1", { wg_relay_url: null });
+    const afterClear = await store.findById("node-1");
+    assert.equal(afterClear.wg_relay_url, null);
+    assert.equal(afterClear.hy_relay_url, "wss://fcnvpn.tail303be3.ts.net:8443", "xoá field này không được xoá field kia");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("cả hai field relay đều phải là wss:// tuyệt đối", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    for (const field of ["wg_relay_url", "hy_relay_url"]) {
+      await assert.rejects(
+        () => store.create({
+          id: `bad-${field}`, name: "Bad", country: "VN", city: "Hanoi",
+          endpoint: "1.2.3.4:443", public_key: "pk", [field]: "ws://relay.example/plain",
+        }),
+        /must use wss:\/\//,
+        `${field} phải từ chối ws:// trần`,
+      );
+      await assert.rejects(
+        () => store.create({
+          id: `rel-${field}`, name: "Rel", country: "VN", city: "Hanoi",
+          endpoint: "1.2.3.4:443", public_key: "pk", [field]: "not-a-url",
+        }),
+        /must be an absolute URL/,
+        `${field} phải từ chối chuỗi không phải URL`,
+      );
+    }
+  } finally {
+    await cleanup();
+  }
+});

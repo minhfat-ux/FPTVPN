@@ -26,6 +26,8 @@ export class NodeStore {
         public_key TEXT NOT NULL,
         ssh_target TEXT,
         ws_relay_url TEXT,
+        hy_relay_url TEXT,
+        wg_relay_url TEXT,
         priority INTEGER NOT NULL DEFAULT 100,
         active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
@@ -45,6 +47,21 @@ export class NodeStore {
     // NULL = node này KHÔNG có relay, client phải biết để đừng đoán.
     if (!cols.includes("ws_relay_url")) {
       this.db.exec("ALTER TABLE exit_nodes ADD COLUMN ws_relay_url TEXT");
+    }
+    // hy_relay_url: relay WS cho transport HYSTERIA (UDP 8443) của CHÍNH node này.
+    // Tách khỏi `ws_relay_url` vì hai transport hạ cánh ở hai CỔNG UDP KHÁC NHAU và một
+    // relay chỉ forward tới một cổng: dùng chung một field thì client gửi Hysteria vào
+    // cổng WireGuard (hoặc ngược lại) ⇒ handshake im lặng, không có lỗi nào để lần ra.
+    if (!cols.includes("hy_relay_url")) {
+      this.db.exec("ALTER TABLE exit_nodes ADD COLUMN hy_relay_url TEXT");
+    }
+    // wg_relay_url: relay WS cho transport WIREGUARD (UDP 443) của CHÍNH node này — đường
+    // iOS/macOS dùng. Tên riêng (không tái dùng `ws_relay_url`) vì field cũ đã bị hiểu
+    // theo hai nghĩa khác nhau ở hai client đang phát hành: iOS đọc nó như relay WireGuard,
+    // Android đọc nó như relay Hysteria. Giữ `ws_relay_url` = NULL (chỉ còn là bí danh cũ)
+    // nên app đã cài ngoài thị trường không đổi hành vi; bản mới đọc thẳng `wg_relay_url`.
+    if (!cols.includes("wg_relay_url")) {
+      this.db.exec("ALTER TABLE exit_nodes ADD COLUMN wg_relay_url TEXT");
     }
     this._seedIfEmpty();
   }
@@ -75,9 +92,9 @@ export class NodeStore {
 
   _insert(node) {
     this.db.prepare(`
-      INSERT INTO exit_nodes (id, name, country, city, endpoint, public_key, ssh_target, ws_relay_url, priority, active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(node.id, node.name, node.country, node.city, node.endpoint, node.public_key, node.ssh_target ?? null, node.ws_relay_url ?? null, node.priority, node.active ? 1 : 0, node.created_at, node.updated_at);
+      INSERT INTO exit_nodes (id, name, country, city, endpoint, public_key, ssh_target, ws_relay_url, hy_relay_url, wg_relay_url, priority, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(node.id, node.name, node.country, node.city, node.endpoint, node.public_key, node.ssh_target ?? null, node.ws_relay_url ?? null, node.hy_relay_url ?? null, node.wg_relay_url ?? null, node.priority, node.active ? 1 : 0, node.created_at, node.updated_at);
   }
 
   _rows() {
@@ -147,10 +164,11 @@ export class NodeStore {
     this.db.prepare(`
       UPDATE exit_nodes
       SET name = ?, country = ?, city = ?, endpoint = ?, public_key = ?, ssh_target = ?,
-          ws_relay_url = ?, priority = ?, active = ?, updated_at = ?
+          ws_relay_url = ?, hy_relay_url = ?, wg_relay_url = ?, priority = ?, active = ?, updated_at = ?
       WHERE id = ?
     `).run(updated.name, updated.country, updated.city, updated.endpoint, updated.public_key,
-           updated.ssh_target ?? null, updated.ws_relay_url ?? null, updated.priority,
+           updated.ssh_target ?? null, updated.ws_relay_url ?? null, updated.hy_relay_url ?? null,
+           updated.wg_relay_url ?? null, updated.priority,
            updated.active ? 1 : 0, updated.updated_at, id);
     return updated;
   }
@@ -177,11 +195,15 @@ export function publicNode(node) {
     endpoint: node.endpoint,
     public_key: node.public_key,
     serverPublicKey: node.public_key,
-    // Relay WS dẫn tới CHÍNH node này, hoặc null nếu node không có relay.
+    // Relay WS dẫn tới CHÍNH node này. Hai field vì hai transport hạ cánh ở hai cổng UDP
+    // khác nhau: `ws_relay_url` = WireGuard (443) cho iOS/macOS, `hy_relay_url` = Hysteria
+    // (8443) cho Android. Một relay chỉ forward tới MỘT cổng nên không dùng chung được.
     // Client PHẢI phân biệt "không có field" (coordinator cũ, chưa biết) với
     // "field = null" (coordinator khẳng định node này không có relay) — xem
     // chú thích ở client Android/iOS.
     ws_relay_url: node.ws_relay_url ?? null,
+    hy_relay_url: node.hy_relay_url ?? null,
+    wg_relay_url: node.wg_relay_url ?? null,
   };
 }
 
@@ -205,6 +227,8 @@ function rowToNode(row) {
     public_key: row.public_key,
     ssh_target: row.ssh_target ?? null,
     ws_relay_url: row.ws_relay_url ?? null,
+    hy_relay_url: row.hy_relay_url ?? null,
+    wg_relay_url: row.wg_relay_url ?? null,
     priority: row.priority,
     active: row.active === 1,
     created_at: row.created_at,
@@ -226,6 +250,8 @@ function normalizeNode(node) {
     // Khác hẳn `undefined` (coordinator cũ không gửi field) — client dựa vào sự
     // khác biệt đó để biết khi nào được phép đoán, khi nào không.
     ws_relay_url: String(node.ws_relay_url ?? node.wsRelayUrl ?? "").trim() || null,
+    hy_relay_url: String(node.hy_relay_url ?? node.hyRelayUrl ?? "").trim() || null,
+    wg_relay_url: String(node.wg_relay_url ?? node.wgRelayUrl ?? "").trim() || null,
     active: node.active !== false,
     priority: Number.isFinite(Number(node.priority)) ? Number(node.priority) : 100,
     created_at: node.created_at ?? node.createdAt ?? new Date().toISOString(),
@@ -252,18 +278,19 @@ function validateNode(node) {
 
   // ws_relay_url (nếu có) phải là wss:// tuyệt đối: đây là đường dữ liệu của
   // client, đi qua mạng bị kiểm duyệt, nên không chấp nhận ws:// trần.
-  if (node.ws_relay_url != null) {
+  for (const field of ["ws_relay_url", "hy_relay_url", "wg_relay_url"]) {
+    if (node[field] == null) continue;
     let parsed = null;
     try {
-      parsed = new URL(node.ws_relay_url);
+      parsed = new URL(node[field]);
     } catch {
-      errors.push("ws_relay_url must be an absolute URL");
+      errors.push(`${field} must be an absolute URL`);
     }
     if (parsed && parsed.protocol !== "wss:") {
-      errors.push("ws_relay_url must use wss://");
+      errors.push(`${field} must use wss://`);
     }
     if (parsed && !parsed.hostname) {
-      errors.push("ws_relay_url must include a host");
+      errors.push(`${field} must include a host`);
     }
   }
 
