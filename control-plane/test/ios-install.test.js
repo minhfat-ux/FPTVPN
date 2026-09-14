@@ -73,3 +73,14 @@ test("guard: API App Store Connect có đủ endpoint để tự đăng ký UDID
   assert.ok(indexSrc.includes("registerIosDeviceWithApple(device.udid"), "khách đăng ký máy phải tự đẩy UDID lên Apple");
   assert.ok(indexSrc.includes("markAppleError"), "lỗi Apple phải được ghi lại cho dashboard");
 });
+
+// Dropdown ngôn ngữ là inline handler ⇒ scope chain có `document`, mà `document.URL` là string
+// nên `new URL(...)` bị che ⇒ ném "URL is not a constructor" và dropdown im lặng không chạy.
+// Đã từng xảy ra thật trên /install/ios (2026-09): chọn ngôn ngữ không chuyển trang.
+test("langbar trang cài: inline handler phải dùng window.URL, không được dùng new URL", () => {
+  const fn = indexSrc.slice(indexSrc.indexOf("function iosLangSelectHTML"), indexSrc.indexOf("const iosDevices = new IosDeviceStore"));
+  const code = fn.split("\n").filter((line) => !line.trim().startsWith("//")).join("\n");
+  assert.ok(code.includes("new window.URL(location.href)"), "phải dùng window.URL để không bị document.URL che");
+  assert.ok(!/(^|[^.\w])new URL\(/.test(code), "không được dùng new URL(...) trong inline handler");
+  assert.ok(code.includes("searchParams.set('lang',this.value)"), "chọn xong phải ghi ?lang=<mã> rồi điều hướng");
+});
