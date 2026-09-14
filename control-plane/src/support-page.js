@@ -9,6 +9,24 @@
 
 const PICK = (v) => (["en", "vi", "zh", "ja", "ko"].includes(v) ? v : "vi");
 
+/**
+ * Điều khoản sử dụng của VPNFlow nằm ở trang RIÊNG `/vpnflow/terms`; `/terms` là điều khoản của
+ * MeetFlow AI (một sản phẩm khác, xem `terms-meetflow.html`). Trước đây trang hỗ trợ của VPNFlow
+ * trỏ vào `/terms`, tức khách đọc điều khoản của sản phẩm không phải thứ họ đang dùng.
+ *
+ * Lấy origin từ chính link server truyền vào (tôn trọng `PUBLIC_SITE_URL`) chứ không hardcode
+ * tên miền. Server vẫn có thể truyền `links.vpnTerms` để ghi đè nếu sau này URL đổi.
+ */
+function vpnTermsHref(links = {}) {
+  if (links.vpnTerms) return links.vpnTerms;
+  if (!links.terms) return "";
+  try {
+    return new URL("/vpnflow/terms", links.terms).href;
+  } catch {
+    return links.terms;
+  }
+}
+
 const T = {
   vi: {
     htmlLang: "vi",
@@ -172,11 +190,12 @@ export function supportPageHTML({ lang = "vi", product = "vpn", supportEmail = "
   const includeList = t.include.map((line) => `<li>${line}</li>`).join("");
   const faq = t.faq.map(([q, a]) => `
       <details><summary>${q}</summary><p>${a}</p></details>`).join("");
+  const termsHref = isAi ? links.terms : vpnTermsHref(links);
   const linkRows = [
     links.guide ? `<a href="${links.guide}">${t.linkGuide}</a>` : "",
     links.buy ? `<a href="${links.buy}">${t.linkBuy}</a>` : "",
     links.privacy ? `<a href="${links.privacy}">${t.linkPrivacy}</a>` : "",
-    links.terms ? `<a href="${links.terms}">${t.linkTerms}</a>` : "",
+    termsHref ? `<a href="${termsHref}">${t.linkTerms}</a>` : "",
   ].filter(Boolean).join("");
 
   return `<!doctype html>

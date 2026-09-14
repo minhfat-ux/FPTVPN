@@ -89,12 +89,36 @@ test("trang MeetFlow AI cũng không còn nhắc tới kênh app store", () => {
   }
 });
 
-test("link Điều khoản sử dụng vẫn được render khi server truyền vào", () => {
-  const html = supportPageHTML({
+test("VPNFlow trỏ tới điều khoản RIÊNG /vpnflow/terms, không dùng trang của MeetFlow AI", () => {
+  const vpn = supportPageHTML({
     lang: "vi",
     product: "vpn",
     links: { terms: "https://meetflowai.site/terms" },
   });
-  assert.ok(html.includes("https://meetflowai.site/terms"), "thiếu link điều khoản");
-  assert.ok(html.includes("Điều khoản sử dụng"), "thiếu nhãn điều khoản tiếng Việt");
+  assert.ok(
+    vpn.includes('href="https://meetflowai.site/vpnflow/terms"'),
+    "trang hỗ trợ VPNFlow phải trỏ tới điều khoản riêng của VPNFlow",
+  );
+  assert.ok(vpn.includes("Điều khoản sử dụng"), "thiếu nhãn điều khoản tiếng Việt");
+
+  // MeetFlow AI vẫn dùng trang /terms của chính nó — đừng đổi nhầm sản phẩm.
+  const ai = supportPageHTML({
+    lang: "vi",
+    product: "ai",
+    links: { terms: "https://meetflowai.site/terms" },
+  });
+  assert.ok(ai.includes('href="https://meetflowai.site/terms"'), "trang MeetFlow AI phải giữ /terms");
+  assert.equal(ai.includes("/vpnflow/terms"), false, "trang MeetFlow AI không được trỏ sang điều khoản VPNFlow");
+});
+
+test("links.vpnTerms truyền vào thì thắng mặc định; thiếu terms thì không render link rỗng", () => {
+  const overridden = supportPageHTML({
+    lang: "en",
+    product: "vpn",
+    links: { terms: "https://meetflowai.site/terms", vpnTerms: "https://cdn.example.com/vpn-terms" },
+  });
+  assert.ok(overridden.includes('href="https://cdn.example.com/vpn-terms"'));
+
+  const noTerms = supportPageHTML({ lang: "en", product: "vpn", links: {} });
+  assert.equal(noTerms.includes('href=""'), false, "không được render thẻ <a> rỗng");
 });
