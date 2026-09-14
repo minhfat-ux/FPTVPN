@@ -2187,7 +2187,7 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
     <li>Cài xong nếu báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
     <li>Vẫn không được: tắt WiFi dùng 4G rồi thử lại (máy có thể còn nhớ IP cũ của server).</li>
     <li>Không lấy được UDID / không muốn cài hồ sơ: <a href="/install/ios/udid-form" style="color:#7ab8ff">dán UDID vào đây</a> (hoặc gửi email cho shop).</li>
-    <li>Hỗ trợ: <code>support@meetflowai.site</code>${process.env.IOS_DIAWI_URL ? ` · kênh dự phòng: <a href="${process.env.IOS_DIAWI_URL}" style="color:#7ab8ff">Diawi</a>` : ""}</li>
+    <li>Hỗ trợ: <code>support@meetflowai.site</code>${(appConfig.get("ios_diawi_url") || process.env.IOS_DIAWI_URL) ? ` · kênh dự phòng: <a href="${appConfig.get("ios_diawi_url") || process.env.IOS_DIAWI_URL}" style="color:#7ab8ff">Diawi</a>` : ""}</li>
   </ul>
 </div>
 
@@ -3246,12 +3246,13 @@ app.get("/v1/admin/app-version", requireAdminAuth, (_req, res) => {
     store_url: appConfig.get("app_store_url"),
     ipa_url: appConfig.get("ios_ipa_url"),
     ipa_build: appConfig.get("ios_ipa_build"),
+    diawi_url: appConfig.get("ios_diawi_url"),
   });
 });
 
 app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
   try {
-    const { minimum_version, latest_version, store_url, ipa_url, ipa_build } = req.body ?? {};
+    const { minimum_version, latest_version, store_url, ipa_url, ipa_build, diawi_url } = req.body ?? {};
     if (minimum_version !== undefined) appConfig.set("minimum_ios_version", minimum_version);
     if (latest_version !== undefined) appConfig.set("latest_ios_version", latest_version);
     if (store_url !== undefined) appConfig.set("app_store_url", store_url);
@@ -3259,12 +3260,16 @@ app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
     if (ipa_url !== undefined) appConfig.set("ios_ipa_url", ipa_url);
     // Số build (CFBundleVersion) của IPA đang phát — manifest OTA phải ghi đúng số này.
     if (ipa_build !== undefined) appConfig.set("ios_ipa_build", ipa_build);
+    // Link Diawi (kênh phụ, hiện trong khối "không cài được?" của trang /install/ios). Giữ riêng để
+    // `ipa_url` luôn trỏ về trang đăng ký của mình — khách CHƯA đăng ký bấm thẳng Diawi sẽ lỗi.
+    if (diawi_url !== undefined) appConfig.set("ios_diawi_url", diawi_url);
     res.json({
       minimum_version: appConfig.get("minimum_ios_version"),
       latest_version: appConfig.get("latest_ios_version"),
       store_url: appConfig.get("app_store_url"),
       ipa_url: appConfig.get("ios_ipa_url"),
       ipa_build: appConfig.get("ios_ipa_build"),
+      diawi_url: appConfig.get("ios_diawi_url"),
     });
   } catch (err) {
     res.status(500).json({ error: "Internal error" });

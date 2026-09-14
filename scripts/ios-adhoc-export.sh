@@ -48,7 +48,7 @@ asc() { local m="$1" path="$2" body="${3:-}" jwt; jwt="$(mkjwt)"
   if [ -n "$body" ]; then curl -sS -g -X "$m" -H "Authorization: Bearer $jwt" -H "Content-Type: application/json" -d "$body" "https://api.appstoreconnect.apple.com$path"
   else curl -sS -g -X "$m" -H "Authorization: Bearer $jwt" "https://api.appstoreconnect.apple.com$path"; fi
 }
-py() { python3 - "$@"; }
+py() { python3 "$@"; }
 
 log "1) lấy thông tin tài khoản: bundle id, chứng chỉ Distribution, UDID iOS"
 BID_APP=$(asc GET "/v1/bundleIds?filter[identifier]=com.privatevpn.app" | py -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')
@@ -57,15 +57,15 @@ CERT_ID=$(asc GET "/v1/certificates?filter[certificateType]=DISTRIBUTION&limit=1
 DEV_IDS=$(asc GET "/v1/devices?filter[platform]=IOS&limit=200" | py -c 'import json,sys; print(json.dumps([{"type":"devices","id":x["id"]} for x in json.load(sys.stdin)["data"]]))')
 log "     app=$BID_APP ext=$BID_EXT cert=$CERT_ID · $DEV_IDS"
 
-mk_or_update_profile() { # $1 name  $2 bundleId-id  $3 existing-profile-id (rỗng = tạo mới)
-  local name="$1" bid="$2" pid="${3:-}" body
+# API của Apple KHÔNG cho UPDATE profile (chỉ CREATE/DELETE/GET) ⇒ muốn đổi danh sách UDID thì
+# xoá rồi tạo lại cùng tên. Tên giữ nguyên nên ExportOptions.plist vẫn trỏ đúng profile mới.
+mk_profile() { # $1 name  $2 bundleId-id  $3 profile-id cũ (rỗng = chưa có)
+  local name="$1" bid="$2" pid="${3:-}"
   if [ -n "$pid" ]; then
-    body="{\"data\":{\"type\":\"profiles\",\"id\":\"$pid\",\"attributes\":{\"name\":\"$name\",\"profileType\":\"IOS_APP_ADHOC\"},\"relationships\":{\"bundleId\":{\"data\":{\"type\":\"bundleIds\",\"id\":\"$bid\"}},\"certificates\":{\"data\":[{\"type\":\"certificates\",\"id\":\"$CERT_ID\"}]},\"devices\":{\"data\":$DEV_IDS}}}}"
-    asc PATCH "/v1/profiles/$pid" "$body"
-  else
-    body="{\"data\":{\"type\":\"profiles\",\"attributes\":{\"name\":\"$name\",\"profileType\":\"IOS_APP_ADHOC\"},\"relationships\":{\"bundleId\":{\"data\":{\"type\":\"bundleIds\",\"id\":\"$bid\"}},\"certificates\":{\"data\":[{\"type\":\"certificates\",\"id\":\"$CERT_ID\"}]},\"devices\":{\"data\":$DEV_IDS}}}}"
-    asc POST "/v1/profiles" "$body"
+    asc DELETE "/v1/profiles/$pid" >/dev/null || true
+    printf '  (đã xoá profile cũ %s để tạo lại với danh sách UDID mới)\n' "$name" >&2
   fi
+  asc POST "/v1/profiles" "{\"data\":{\"type\":\"profiles\",\"attributes\":{\"name\":\"$name\",\"profileType\":\"IOS_APP_ADHOC\"},\"relationships\":{\"bundleId\":{\"data\":{\"type\":\"bundleIds\",\"id\":\"$bid\"}},\"certificates\":{\"data\":[{\"type\":\"certificates\",\"id\":\"$CERT_ID\"}]},\"devices\":{\"data\":$DEV_IDS}}}}"
 }
 
 log "2) tạo/cập nhật profile Ad Hoc (đủ UDID đang có trong tài khoản)"
@@ -73,7 +73,7 @@ existing_id() { asc GET "/v1/profiles?filter[name]=$1&limit=1" | py -c 'import j
 APP_PID=$(existing_id "VPNFlow%20AdHoc%20App"); EXT_PID=$(existing_id "VPNFlow%20AdHoc%20Tunnel")
 for pair in "VPNFlow AdHoc App|$BID_APP|$APP_PID" "VPNFlow AdHoc Tunnel|$BID_EXT|$EXT_PID"; do
   IFS='|' read -r nm bid pid <<< "$pair"
-  mk_or_update_profile "$nm" "$bid" "$pid" > /tmp/adhoc-prof-resp.json
+  mk_profile "$nm" "$bid" "$pid" > /tmp/adhoc-prof-resp.json
   py - "$nm" <<'PY'
 import base64, json, os, sys
 d = json.load(open('/tmp/adhoc-prof-resp.json'))
@@ -115,7 +115,9 @@ scp "${SSH_OPTS[@]}" "$IPA" "$NODE2:/root/flowvpn-ipa/VPNFlow-latest.ipa" >/dev/
 LINK=$(ssh "${SSH_OPTS[@]}" "$NODE2" "cd /root && DIAWI_TOKEN=\$(cat /root/.diawi-token) node /root/diawi-upload.mjs --file /root/flowvpn-ipa/VPNFlow-latest.ipa --days ${DIAWI_DAYS:-30} --find-by-udid --comment 'VPNFlow iOS ad-hoc' --json" | py -c 'import json,sys; print(json.load(sys.stdin)["link"])')
 log "     link: $LINK"
 
-log "5) đổi link trong app-config + báo server đã ký lại"
+log "5) cập nhật link Diawi (kênh phụ) + báo server đã ký lại"
+# `ipa_url` GIỮ NGUYÊN là /install/ios: khách chưa đăng ký bấm thẳng Diawi sẽ báo 'Unable to Install'.
+# Link Diawi chỉ là kênh phụ hiện trong khối hướng dẫn của trang cài.
 T=$(ssh "${SSH_OPTS[@]}" "$NODE2" 'systemctl show flowvpn-cp -p Environment | tr " " "\n" | grep "^AUTH_TOKEN=" | cut -d= -f2-')
-ssh "${SSH_OPTS[@]}" "$NODE2" "curl -s -X PATCH -H 'Authorization: Bearer $T' -H 'content-type: application/json' -d '{\"ipa_url\":\"$LINK\"}' http://127.0.0.1:7778/v1/admin/app-version >/dev/null; curl -s -X POST -H 'Authorization: Bearer $T' -H 'content-type: application/json' -d '{\"note\":\"adhoc export\"}' http://127.0.0.1:7778/v1/admin/ios/devices/built >/dev/null"
+ssh "${SSH_OPTS[@]}" "$NODE2" "curl -s -X PATCH -H 'Authorization: Bearer $T' -H 'content-type: application/json' -d '{\"diawi_url\":\"$LINK\",\"ipa_url\":\"https://meetflowai.site/install/ios\"}' http://127.0.0.1:7778/v1/admin/app-version >/dev/null; curl -s -X POST -H 'Authorization: Bearer $T' -H 'content-type: application/json' -d '{\"note\":\"adhoc export\"}' http://127.0.0.1:7778/v1/admin/ios/devices/built >/dev/null"
 log "XONG — khách mở /install/ios là cài được: $LINK"
