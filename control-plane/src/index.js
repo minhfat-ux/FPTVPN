@@ -1990,28 +1990,42 @@ app.post(["/install/ios/udid", "/v1/ios/udid"], express.urlencoded({ extended: f
 });
 
 /** Trang khách thấy ngay sau khi cài profile — tự hỏi lại server để biết khi nào cài được. */
+/**
+ * Màn hình chờ sau khi khách cài hồ sơ đăng ký: spinner + đếm thời gian, tự hỏi lại server mỗi 5 giây,
+ * chỉ hiện nút "Cài đặt" khi bản ký lại cho máy này đã xong. UDID lưu vào localStorage để lần sau mở
+ * /install/ios vẫn biết máy đã sẵn sàng hay chưa.
+ */
 function iosRegisteredHTML({ udid, isNew }) {
   const short = String(udid).slice(-8);
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã đăng ký thiết bị</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:440px;margin:20px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:44px}.t{font-size:20px;font-weight:700;margin:8px 0}p{color:rgba(255,255,255,.7);font-size:14px;line-height:1.6}a.b{display:block;text-align:center;background:#33c773;color:#06160d;text-decoration:none;font-weight:700;padding:14px;border-radius:10px;margin-top:14px}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}</style>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Đang chuẩn bị bản cài…</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:440px;margin:20px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.t{font-size:20px;font-weight:700;margin:10px 0 6px}p{color:rgba(255,255,255,.7);font-size:14px;line-height:1.6}.spin{width:34px;height:34px;border:3px solid rgba(255,255,255,.2);border-top-color:#33c773;border-radius:50%;animation:sp .9s linear infinite;margin:6px auto 12px}@keyframes sp{to{transform:rotate(360deg)}}a.b{display:block;text-align:center;background:#33c773;color:#06160d;text-decoration:none;font-weight:700;padding:14px;border-radius:10px;margin-top:14px}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}.eta{font-size:12.5px;color:rgba(255,255,255,.45);margin-top:10px}</style>
 </head><body><div class="c">
-<div class="ok">✅</div>
-<div class="t">Đã đăng ký thiết bị</div>
-<p id="msg">${isNew ? "Máy của bạn vừa được thêm vào danh sách. Hệ thống đang chuẩn bị bản cài riêng cho máy này (thường dưới 2 phút)." : "Máy này đã có trong danh sách."}</p>
-<p style="font-size:12.5px;color:rgba(255,255,255,.5)">Thiết bị …<code>${short}</code></p>
+<div class="spin" id="spin"></div>
+<div class="t" id="title">Đã nhận đăng ký thiết bị</div>
+<p id="msg">${isNew
+    ? "Hệ thống đang chuẩn bị bản cài riêng cho máy này — thường dưới 2 phút. Giữ nguyên màn hình này, trang tự cập nhật."
+    : "Máy này đã đăng ký trước đó. Đang kiểm tra bản cài…"}</p>
 <a class="b" id="btn" href="/install/ios" style="display:none">📲 Cài đặt VPNFlow</a>
-<p id="wait" style="font-size:12.5px;color:rgba(255,255,255,.5)">Đang chờ bản cài… trang tự cập nhật.</p>
+<div class="eta" id="eta"></div>
+<p style="font-size:12.5px;color:rgba(255,255,255,.45)">Thiết bị …<code>${short}</code> · hỗ trợ: support@meetflowai.site</p>
 </div>
 <script>
 var udid = ${JSON.stringify(udid)};
+try { localStorage.setItem("vpnflow_udid", udid); } catch (e) {}
+var started = Date.now();
 function check() {
   fetch("/install/ios/status?udid=" + encodeURIComponent(udid)).then(function (r) { return r.json(); }).then(function (d) {
     if (d.ready) {
-      document.getElementById("msg").textContent = "Bản cài cho máy bạn đã sẵn sàng.";
+      document.getElementById("spin").style.display = "none";
+      document.getElementById("title").textContent = "Bản cài đã sẵn sàng";
+      document.getElementById("msg").textContent = "Máy này đã được cấp bản cài riêng. Bấm nút dưới để cài (nhớ mở bằng Safari).";
       document.getElementById("btn").style.display = "block";
-      document.getElementById("wait").textContent = "";
-    } else { setTimeout(check, 5000); }
+      document.getElementById("eta").textContent = "";
+      return;
+    }
+    document.getElementById("eta").textContent = "Đã chờ " + Math.round((Date.now() - started) / 1000) + " giây…";
+    setTimeout(check, 5000);
   }).catch(function () { setTimeout(check, 8000); });
 }
 check();
@@ -2066,7 +2080,7 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
   res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cài VPNFlow cho iPhone / iPad</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:470px;margin:24px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}.t{font-size:21px;font-weight:700;margin:0 0 4px}.s{color:rgba(255,255,255,.6);font-size:13.5px;margin:0 0 16px}.step{border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px;margin:0 0 12px;background:rgba(255,255,255,.04)}.step.off{opacity:.55}.n{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:#33c773;color:#06160d;font-weight:700;font-size:13px;margin-right:8px}.h{font-weight:600;font-size:14.5px}a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:10px;margin:10px 0 6px}a.b1{background:rgba(255,255,255,.14);color:#fff}a.b2{background:#33c773;color:#06160d}ul{color:rgba(255,255,255,.72);font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}.warn{margin-top:12px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px;font-size:13px}</style>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:470px;margin:24px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}.t{font-size:21px;font-weight:700;margin:0 0 4px}.s{color:rgba(255,255,255,.6);font-size:13.5px;margin:0 0 16px}.step{border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px;margin:0 0 12px;background:rgba(255,255,255,.04)}.step.off{opacity:.55}.n{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:#33c773;color:#06160d;font-weight:700;font-size:13px;margin-right:8px}.h{font-weight:600;font-size:14.5px}a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:10px;margin:10px 0 6px}a.b1{background:rgba(255,255,255,.14);color:#fff}a.b2{background:#33c773;color:#06160d}ul{color:rgba(255,255,255,.72);font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}.warn{margin-top:12px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px;font-size:13px}.wait{display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.75);font-size:13.5px;padding:6px 0}.spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#33c773;border-radius:50%;animation:sp .9s linear infinite;display:inline-block}@keyframes sp{to{transform:rotate(360deg)}}.okmsg{color:#33c773;font-weight:600;font-size:13.5px;padding:4px 0}</style>
 </head><body><div class="c">
 <p class="t">Cài VPNFlow lên iPhone / iPad</p>
 <p class="s">Bản ${version} · làm theo 2 bước dưới đây, mở trang này bằng <b>Safari</b>.</p>
@@ -2081,13 +2095,13 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
   <a class="b b1" href="/install/ios/register.mobileconfig">📝 Đăng ký thiết bị này</a>
 </div>
 
-<div class="step">
-  <div class="h"><span class="n">2</span>Cài ứng dụng</div>
-  <ul>
-    <li>Sau khi đăng ký, hệ thống chuẩn bị bản cài riêng cho máy này (<b>thường dưới 2 phút</b>).</li>
-    <li>Chờ một lát rồi bấm nút dưới; nếu báo <i>Unable to Install</i> thì chờ thêm ~1 phút rồi thử lại.</li>
-  </ul>
-  <a class="b b2" href="${itms}">📲 Cài đặt VPNFlow</a>
+<div class="step off" id="step2">
+  <div class="h"><span class="n" id="n2">2</span>Cài ứng dụng</div>
+  <div class="wait" id="wait2"><span class="spin"></span><span id="wait2txt">Hoàn thành bước 1 để mở bước này…</span></div>
+  <div id="ok2" style="display:none">
+    <div class="okmsg">✅ Bản cài cho máy này đã sẵn sàng</div>
+    <a class="b b2" href="${itms}">📲 Cài đặt VPNFlow</a>
+  </div>
 </div>
 
 <div class="warn">
@@ -2101,6 +2115,22 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
     <li>Hỗ trợ: <code>support@meetflowai.site</code>${process.env.IOS_DIAWI_URL ? ` · kênh dự phòng: <a href="${process.env.IOS_DIAWI_URL}" style="color:#7ab8ff">Diawi</a>` : ""}</li>
   </ul>
 </div>
+
+<script>
+// Bước 2 chỉ mở khi máy NÀY đã có bản cài: UDID lưu trong localStorage từ lần đăng ký.
+var udid = ""; try { udid = localStorage.getItem("vpnflow_udid") || ""; } catch (e) {}
+var step2 = document.getElementById("step2"), wait2 = document.getElementById("wait2");
+var wait2txt = document.getElementById("wait2txt"), ok2 = document.getElementById("ok2"), n2 = document.getElementById("n2");
+function showReady() { step2.classList.remove("off"); wait2.style.display = "none"; ok2.style.display = "block"; }
+function showWaiting(msg) { step2.classList.remove("off"); wait2.style.display = "flex"; ok2.style.display = "none"; wait2txt.textContent = msg; }
+function poll() {
+  if (!udid) return;
+  fetch("/install/ios/status?udid=" + encodeURIComponent(udid)).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.ready) { showReady(); } else { showWaiting("Máy đã đăng ký — đang chuẩn bị bản cài (thường dưới 2 phút)…"); setTimeout(poll, 5000); }
+  }).catch(function () { setTimeout(poll, 8000); });
+}
+poll();
+</script>
 
 <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
   <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">📱 Đang xem trên máy tính? Quét mã này bằng điện thoại</div>
