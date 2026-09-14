@@ -92,6 +92,7 @@ test("guard: trang buy KHÔNG còn khối QR cài app; route QR vẫn đúng lin
   assert.ok(idx.includes('app.get("/v1/downloads/qr"'), "phải còn route sinh ảnh QR");
   assert.ok(idx.includes("appConfig.get(\"ios_ipa_url\") || links.ios"), "QR iOS phải theo link đang cấu hình");
   assert.ok(idx.includes("downloadQrPng(url"), "route phải dùng bộ sinh QR nội bộ");
-  const install = idx.slice(idx.indexOf("function iosInstallPageHTML"), idx.indexOf("function iosRegisteredHTML"));
+  // hàm iosInstallPageHTML nằm SAU iosRegisteredHTML trong file ⇒ cắt tới route kế tiếp
+  const install = idx.slice(idx.indexOf("function iosInstallPageHTML"), idx.indexOf('app.get("/v1/downloads/ios"'));
   assert.ok(install.includes('/v1/downloads/qr?target=ios'), "trang cài iOS vẫn có QR cho người xem trên máy tính");
 });
