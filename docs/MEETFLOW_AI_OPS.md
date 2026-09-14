@@ -591,6 +591,27 @@ curl -s https://meetflowai.site/install/ios/manifest.plist | python3 -c 'import 
 # https://meetflowai.site/v1/downloads/ios
 ```
 
+### Phát hành IPA iOS mới — 4 việc, đúng thứ tự (đã chạy 14/09 với 1.3.3 build 13)
+
+```bash
+# 1) đưa IPA lên server (script repo, md5 phải khớp bản build)
+scripts/upload-ios-ipa.sh /đường/dẫn/VPNFlow.ipa
+# 2) cập nhật gate: version NGƯỠNG + số build của IPA (manifest OTA cần CFBundleVersion)
+T=$(systemctl show flowvpn-cp -p Environment | tr ' ' '\n' | grep ^AUTH_TOKEN= | cut -d= -f2-)
+curl -s -X PATCH -H "Authorization: Bearer $T" -H 'content-type: application/json' \
+  -d '{"latest_version":"1.3.3","minimum_version":"1.3.3","ipa_build":"13"}' \
+  http://127.0.0.1:7778/v1/admin/app-version
+# 3) kiểm manifest + IPA đang phát
+curl -s https://meetflowai.site/install/ios/manifest.plist | grep -A1 bundle-version
+# 4) tuỳ chọn: upload lại lên Diawi (kênh phụ, link cũ 15 ngày/50 lượt)
+node scripts/diawi-upload.mjs --file <ipa> --days 30 --find-by-udid --comment "VPNFlow iOS <ver> (<build>)"
+```
+
+Quên bước 2 thì app báo "đã mới nhất" trong khi server đã có bản mới; quên `ipa_build` thì manifest ghi
+sai số build. **`minimum_version` = ép cập nhật** — chỉ đặt bằng bản mới khi chắc mọi máy iOS của khách
+đã có UDID trong provisioning profile (bản dev/ad-hoc hiện chỉ có 4 UDID); muốn nới ra thì PATCH
+`{"minimum_version":"0.0.0"}`.
+
 ### QR + link tải ngay trên trang buy (14/09/2026)
 
 Khách thường mở trang buy trên máy tính rồi cần cài app lên điện thoại, nên dưới hai nút tải có thêm
