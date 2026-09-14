@@ -514,8 +514,21 @@ function storeLinks(product) {
 // email tài khoản, chọn gói, thanh toán; webhook kích hoạt premium.
 // ?lang=en|vi|zh|ja|ko maps the paywall to the app language.
 
+/**
+ * Ngôn ngữ cho MỌI trang công khai: `?lang=` → `Accept-Language` của máy khách → mặc định vi.
+ * Trước đây chỉ `?lang=` nên khách mở /guide, /support… từ email/link ngoài luôn thấy tiếng Việt.
+ */
+function requestLang(req) {
+  if (req?.query?.lang) return pickBuyLang(String(req.query.lang).slice(0, 8));
+  const header = String(req?.headers?.["accept-language"] ?? "").toLowerCase();
+  for (const code of ["vi", "zh", "ja", "ko", "en"]) {
+    if (header.includes(code)) return code;
+  }
+  return "vi";
+}
+
 function buyLang(req) {
-  return pickBuyLang(String(req.query?.lang ?? "").slice(0, 8));
+  return requestLang(req);
 }
 
 app.get(["/buy", "/buy/"], async (req, res) => {
@@ -1956,16 +1969,8 @@ app.get("/v1/downloads/qr", async (req, res) => {
  * Đường dẫn nằm dưới `/install/ios/*` là cố ý: Caddy của host meetflowai.site chỉ route các path có
  * `handle` — dùng lại prefix đã có thì không phải sửa Caddy (bài học từ /guide, /v1/downloads/qr).
  */
-/** Ngôn ngữ cho trang cài iOS: ?lang= → Accept-Language của máy khách → mặc định vi. */
-function iosLang(req) {
-  const explicit = pickBuyLang(String(req?.query?.lang ?? "").slice(0, 8));
-  if (req?.query?.lang) return explicit;
-  const header = String(req?.headers?.["accept-language"] ?? "").toLowerCase();
-  for (const code of ["vi", "zh", "ja", "ko", "en"]) {
-    if (header.includes(code)) return code;
-  }
-  return "vi";
-}
+/** Trang cài iOS dùng chung hàm chọn ngôn ngữ với các trang khác. */
+const iosLang = requestLang;
 
 /**
  * Chuỗi hiển thị của trang cài + màn hình chờ (5 ngôn ngữ như trang buy: vi/en/zh/ja/ko).
