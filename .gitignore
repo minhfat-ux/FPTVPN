@@ -49,6 +49,9 @@ tasks/
 .derivedData-*/
 .dd-ios-ipad/
 .dd-mac/
+# Mọi derived-data dựng tay/.dd-mac-rel/, .dd-mac-rel2/, .dd-mac-run/… — sinh lại được, và
+# vài GB mỗi thư mục nên đừng để lọt vào commit.
+.dd-*/
 FPT-Harness/
 
 # Local toolchains (JDK on BIWIN — ExFAT, keep out of git)

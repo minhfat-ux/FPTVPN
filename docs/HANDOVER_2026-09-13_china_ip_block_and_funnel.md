@@ -386,3 +386,69 @@ nên đường cấp peer vẫn hoạt động; chỉ tài khoản này hết sl
 - `ws_relay_url` của **cả node-1 và vietnam-2 đang NULL** trong coordinator (handover §2 bước 2 chưa làm/đã mất
   khi migrate CP sang node-2). Client đang dùng giá trị đoán `wss://fcnvpn.tail303be3.ts.net:10000` (chỉ hạ cánh
   ở node-1) ⇒ nên set lại cho node-1 để khỏi phải đoán.
+
+## 8. Đổi IP node KHÔNG còn ảnh hưởng khách (thiết kế + cách làm, 14/09)
+
+Mục tiêu: nhà cung cấp đổi IP node, hoặc IP bị GFW chặn ⇒ khách **không phải cài lại app** và
+không phải chờ người sửa thủ công.
+
+### 8.1 Những gì đã tự động
+- **Node tự báo IP**: `node-self-report.timer` (mỗi 5 phút) → `POST /v1/nodes/self` → control plane
+  cập nhật `exit_nodes.endpoint`. Bằng chứng 14/09: `vietnam-2` tự đổi thành `165.101.114.162:443`
+  lúc 10:11 mà không ai sửa tay.
+- **Client lấy endpoint từ server** (`GET /v1/nodes`) chứ không nhúng IP — app chỉ cần fetch lại.
+- **Đường relay dùng hostname**, không dùng IP: Tailscale Funnel `fcnvpn.tail303be3.ts.net`
+  (hostname không đổi khi IP node đổi). Đây là đường dữ liệu khi UDP trực tiếp bị chặn.
+
+### 8.2 Hai field relay tường minh (mới) — vì sao phải tách
+`ws_relay_url` cũ bị hai client hiểu hai nghĩa: **iOS đọc là relay WireGuard (UDP 443)**,
+**Android đọc là relay Hysteria (UDP 8443)**. Một relay chỉ forward tới MỘT cổng UDP nên dùng
+chung một field là gửi nhầm transport vào nhầm cổng ⇒ handshake im lặng. Nay:
+
+| field | nghĩa | ai đọc |
+|---|---|---|
+| `wg_relay_url` | relay WS → UDP **443** (WireGuard) của node đó | iOS + macOS |
+| `hy_relay_url` | relay WS → UDP **8443** (Hysteria) của node đó | Android |
+| `ws_relay_url` | **giữ NULL** — chỉ còn để bản app cũ đọc (không đổi hành vi của họ) | app cũ |
+
+Đặt giá trị bằng script (có kiểm tra `wss://`):
+```bash
+cd /root/flowvpn-cp
+node scripts/set-node-relay.mjs --show
+node scripts/set-node-relay.mjs vietnam-2 --wg wss://fcnvpn.tail303be3.ts.net/vn2
+node scripts/set-node-relay.mjs vietnam-2 --hy wss://fcnvpn.tail303be3.ts.net/vn2hy
+```
+
+Giá trị đang chạy (14/09):
+| node | endpoint (tự cập nhật) | wg_relay_url | hy_relay_url |
+|---|---|---|---|
+| node-1 | 103.173.155.50:443 | `wss://fcnvpn.tail303be3.ts.net:10000` | `wss://fcnvpn.tail303be3.ts.net:8443` |
+| vietnam-2 | 165.101.114.162:443 | `wss://fcnvpn.tail303be3.ts.net/vn2` | `wss://fcnvpn.tail303be3.ts.net/vn2hy` |
+
+### 8.3 Funnel (node-1) — đường vào độc lập với IP node
+| Funnel | → local | → thực tế |
+|---|---|---|
+| `:10000` | 127.0.0.1:7782 (`wsrelay`) | UDP **443** của node-1 (WireGuard) |
+| `:8443` | 127.0.0.1:7784 (`wsrelay-hy`) | UDP **8443** của node-1 (Hysteria) |
+| `/vn2` | 127.0.0.1:7783 (`wsrelay-vn2`) | UDP **443** của **node-2** (qua hostname `api.meetflowai.site`) |
+| `/vn2hy` | 127.0.0.1:7785 (`wsrelay-vn2hy`) | UDP **8443** của **node-2** |
+| `/` | 127.0.0.1:7781 | (dịch vụ khác) |
+
+Điểm mấu chốt: relay của node-2 cấu hình đích là **hostname** (`api.meetflowai.site`), và
+`wsrelay.js` resolve mỗi lần gửi ⇒ node-2 đổi IP thì đường relay **tự theo**, không phải sửa gì.
+Đã đo: `tcpdump` trên node-2 thấy đúng gói UDP tới `:443` (qua `/vn2`) và `:8443` (qua `/vn2hy`).
+
+### 8.4 Checklist khi đổi IP một node (mục tiêu: KHÔNG build lại app)
+1. Giữ `node-self-report.timer` chạy trên node (đã có) → `endpoint` tự cập nhật.
+2. Nếu node đó có relay qua hostname (như node-2 qua `api.meetflowai.site`): không phải làm gì.
+3. Kiểm: `node scripts/set-node-relay.mjs --show` và `curl` `/v1/nodes` thấy endpoint mới.
+4. Chỉ khi phải đổi **relay URL** mới cần `set-node-relay.mjs` (không cần phát hành app).
+
+### 8.5 Còn cứng trong app (việc còn lại)
+- `Config.API_FALLBACK_ADDRESSES` (Android) và các endpoint trong `ExitNode.builtInFallback`
+  (iOS/Android) vẫn là **IP** — chỉ dùng khi coordinator không tới được. Android có `PinnedDns`
+  (ghim IP rồi mới tới DNS) nên app cũ *vẫn vào được* bằng DNS, chỉ chậm hơn.
+- Việc nên làm tiếp: cấp **hostname riêng cho từng node** (`vn1.meetflowai.site`,
+  `vn2.meetflowai.site`, TTL 60) rồi thay các IP đó bằng hostname ⇒ hết hẳn IP trong app.
+- **TTL DNS đang 3600s** (PA Vietnam) — nên hạ về **60s** để đổi IP lan ra trong 1 phút.
+  Hiện app nào cache DNS cũ sẽ thấy "không kết nối được" tới 1 giờ dù IP mới đã sống.
