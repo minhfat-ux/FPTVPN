@@ -43,7 +43,15 @@ Updated: 2026-09-14
 - Bằng chứng: `evidence/2026-09-15-ios-adhoc-ota-buy-and-account-mapping.log`,
   `evidence/2026-09-15-ios-adhoc-asc-api-and-ready-email.log`.
 
+## KHOÁ APPLE — ĐÃ NẠP (2026-09-15)
+
+- Key ID `8GW3662G64`, Team `G6XW3RN6LJ`; khoá lưu ở `/root/flowvpn-cp/data/apple-asc.json` (0600),
+  KHÔNG nằm trong repo.
+- Verify: Apple kết nối OK, tài khoản có 4 thiết bị; 2 UDID trong hệ thống đã có sẵn trên Apple
+  ⇒ đánh dấu `appleAlreadyRegistered`.
+- Khách đăng ký máy mới ⇒ UDID tự được đẩy lên Apple.
+
 ## CÒN LẠI (cần chủ shop)
 
-- Nạp khoá thật: Issuer ID + Key ID + file `.p8` (App Store Connect → Users and Access → Integrations).
-- Ký IPA + tạo provisioning profile vẫn trên máy Mac (server chưa tự ký được).
+- Ký lại IPA + export provisioning profile chứa UDID mới trên máy Mac (server chưa tự ký được).
+- Cài thử trên iPhone thật rồi bấm Trust certificate.

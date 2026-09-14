@@ -286,3 +286,20 @@ Tầng 1 (commit `3d46f51`, `f6d58fd`).
   lại bản index.js **đã lọc chỉ 3 hunk của mình**. Từ nay: luôn `git diff HEAD` + soát `import` trước khi
   copy file lên server; không deploy file đang bị agent khác sửa.
 - Bằng chứng: `evidence/2026-09-15-ios-adhoc-ota-buy-and-account-mapping.log`.
+
+## 2026-09-15 — Nạp khoá App Store Connect thật → tự đăng ký UDID đã chạy
+
+- Chủ shop cung cấp `AuthKey_8GW3662G64.p8`. Key ID `8GW3662G64`, Issuer ID lấy từ
+  `scripts/ios-add-udid.sh` (`7a64d085-…`), Team `G6XW3RN6LJ`.
+- Khoá được nạp **trực tiếp vào store của control plane trên node-2**
+  (`/root/flowvpn-cp/data/apple-asc.json`, quyền 0600) — file `.p8` tạm trên server đã xoá sau khi nạp,
+  và khoá **không** nằm trong git/repo.
+- Verify thật: `GET /v1/admin/ios/apple` → `configured:true`, Apple trả về **4 thiết bị** của tài khoản
+  (MacBook Air, iPhone, iPad của chủ shop).
+- Đồng bộ trạng thái: `POST /v1/admin/ios/apple/register-pending` → 2 UDID trong hệ thống
+  (`00008101-000A55C01E85001E`, `00008120-0008299A26D80032`) hoá ra **đã có sẵn trên Apple**
+  ⇒ được đánh dấu `appleAlreadyRegistered`, panel hiện ✅ thay vì "—".
+- Từ giờ khách đăng ký máy mới ⇒ server **tự đẩy UDID lên Apple** ngay trong callback
+  (log: `ios-udid: Apple → OK`), không phải copy tay nữa.
+- Còn lại để cài được trên iPhone: ký lại IPA với provisioning profile chứa UDID mới (máy Mac),
+  rồi khách bấm link cài + Trust certificate.
