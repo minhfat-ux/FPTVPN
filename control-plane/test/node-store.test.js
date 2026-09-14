@@ -72,7 +72,7 @@ test("ws_relay_url: lưu và đọc lại theo từng node", async () => {
     });
     const withoutRelay = await store.create({
       id: "node-2", name: "Hanoi 2", country: "VN", city: "Hanoi",
-      endpoint: "103.6.234.233:443", public_key: "pk2",
+      endpoint: "165.101.114.162:443", public_key: "pk2",
     });
 
     assert.equal(withRelay.ws_relay_url, "wss://fcnvpn.tail303be3.ts.net:10000");

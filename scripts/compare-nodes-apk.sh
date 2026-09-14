@@ -12,7 +12,7 @@
 set -euo pipefail
 
 NODE1="${NODE1:-root@103.173.155.50}"
-NODE2="${NODE2:-root@103.6.234.233}"
+NODE2="${NODE2:-root@165.101.114.162}"
 KEY1="${KEY1:-$HOME/.ssh/fpt_tunnel}"
 KEY2="${KEY2:-$HOME/.ssh/fpt_vpn_node}"
 APK_DIR="${APK_DIR:-/root/flowvpn-apk}"

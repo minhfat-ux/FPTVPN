@@ -500,7 +500,7 @@ final class ControlAPIClientTests: XCTestCase {
            "endpoint":"103.173.155.50:443","public_key":"pk1",
            "ws_relay_url":"wss://relay.example:10000"},
           {"id":"vietnam-2","name":"Hanoi 2","country":"VN","city":"Hanoi",
-           "endpoint":"103.6.234.233:443","public_key":"pk2","ws_relay_url":null}
+           "endpoint":"165.101.114.162:443","public_key":"pk2","ws_relay_url":null}
         ]}
         """#
         let decoded = try JSONDecoder().decode(NodesResponse.self, from: Data(json.utf8))

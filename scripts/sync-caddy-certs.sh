@@ -16,7 +16,7 @@
 # Chạy trên node-1 (node-1 SSH sang node-2 được; chiều ngược lại thì không).
 set -euo pipefail
 
-NODE2="${NODE2:-root@103.6.234.233}"
+NODE2="${NODE2:-root@165.101.114.162}"
 CA_DIR="${CA_DIR:-/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory}"
 DOMAINS="${DOMAINS:-meetflowai.site api.meetflowai.site}"
 DRY=0

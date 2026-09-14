@@ -54,7 +54,7 @@ extension ExitNode {
                  // đúng ở đây để cả đường offline cũng không đoán sai node.
                  ws_relay_url: WSRelayDefaults.url.absoluteString),
         ExitNode(id: "vietnam-2", name: "Vietnam 2", country: "VN", city: "Hanoi",
-                 endpoint: "103.6.234.233:443",
+                 endpoint: "165.101.114.162:443",
                  public_key: "OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=")
     ]
 }

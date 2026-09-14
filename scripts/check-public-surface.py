@@ -12,7 +12,7 @@ thành IP node-2. Cả hai đều "im lặng" với người đang có cache DNS
   * Tải APK: UA máy thường phải nhận VPNFlow.apk, UA Android 7/Fire TV phải nhận VPNFlow-android7.apk
 
     scripts/check-public-surface.py                      # kiểm qua DNS thật
-    scripts/check-public-surface.py --ip 103.6.234.233   # ép kiểm đúng 1 node (--resolve)
+    scripts/check-public-surface.py --ip 165.101.114.162   # ép kiểm đúng 1 node (--resolve)
     scripts/check-public-surface.py --verbose
 
 Mã trả về: 0 nếu mọi thứ OK; 1 nếu có mục HỎNG.

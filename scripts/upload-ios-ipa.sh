@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SRC="${1:-/Volumes/BIWIN/Release/IoS/VPNFlow-latest.ipa}"
-HOST="${HOST:-root@103.6.234.233}"          # node-2: control plane đang chạy ở đây
+HOST="${HOST:-root@165.101.114.162}"          # node-2: control plane đang chạy ở đây
 KEY="${KEY:-$HOME/.ssh/fpt_vpn_node}"       # key SSH vào node-2 (docs/AGENT_NEW_NODE_GUIDE.md)
 DEST_DIR="${DEST_DIR:-/root/flowvpn-ipa}"
 VERIFY_URL="${VERIFY_URL:-https://api.meetflowai.site/v1/downloads/ios}"

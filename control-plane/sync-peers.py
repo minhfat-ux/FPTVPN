@@ -6,7 +6,7 @@ import json, subprocess
 DEVICES = "/root/flowvpn-cp/data/devices.json"
 NODES = [
     ("vietnam-1", None),                 # local wg0
-    ("vietnam-2", "root@103.6.234.233"), # remote qua SSH
+    ("vietnam-2", "root@165.101.114.162"), # remote qua SSH
 ]
 
 def wg(args, target):
