@@ -219,6 +219,20 @@ app.use(cors());
 // `verify` giữ lại raw body: webhook (SePay/PayOS) ký trên bytes gốc, JSON.stringify lại là lệch chữ ký.
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
+// Chẩn đoán luồng thu UDID: ghi lại MỌI request vào endpoint callback/hồ sơ — kể cả request
+// không parse được. Không có log này thì "khách cài hồ sơ mà server không thấy gì" là bó tay.
+app.use((req, res, next) => {
+  if (!req.path.includes("ios/udid") && !req.path.includes("register.mobileconfig")) return next();
+  const started = Date.now();
+  res.on("finish", () => {
+    console.log(
+      `ios-trace: ${req.method} ${req.path} -> ${res.statusCode} ${Date.now() - started}ms ` +
+        `bytes=${req.headers["content-length"] ?? 0} ua="${String(req.headers["user-agent"] ?? "").slice(0, 70)}" ip=${clientIPAddress(req)}`,
+    );
+  });
+  next();
+});
+
 // Simple bearer-token auth (optional). Enable by setting AUTH_TOKEN.
 // /health is always public so it can be used as a liveness probe.
 app.use((req, res, next) => {
@@ -462,7 +476,6 @@ app.post("/v1/nodes/:id/report", async (req, res) => {
  * can be filled in the moment each app is published (no code change):
  *   APP_STORE_URL_IOS            → VPNFlow iOS
  *   APP_STORE_URL_MAC            → VPNFlow macOS
- *   TESTFLIGHT_URL_IOS           → VPNFlow iOS TestFlight public link
  *   APP_STORE_URL_MEETFLOW_AI    → MeetFlow AI iOS
  *   APP_STORE_URL_MEETFLOW_MAC   → MeetFlow AI macOS
  * The Android link always works — the APK is served by this control plane.
@@ -505,8 +518,6 @@ function storeLinks(product) {
         // của mình (IPA) — cùng kiểu với APK Android ở dưới.
         ios: appConfig.get("ios_ipa_url") || process.env.IOS_IPA_URL || `${base}/v1/downloads/ios`,
         mac: process.env.APP_STORE_URL_MAC || null,
-        // Used while the app is only in beta (before App Store approval).
-        testflight: process.env.TESTFLIGHT_URL_IOS || null,
         android: appConfig.get("android_apk_url") || `${base}/v1/downloads/android`,
         // Android 7.0+ build for Fire TV / older devices (see the route below).
         androidLegacy: appConfig.get("android_apk_url_legacy") || process.env.ANDROID_LEGACY_APK_URL || `${base}/v1/downloads/android-legacy`,
