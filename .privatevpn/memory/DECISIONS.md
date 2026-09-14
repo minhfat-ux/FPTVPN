@@ -242,3 +242,31 @@ Tầng 1 (commit `3d46f51`, `f6d58fd`).
   "Hanoi 2" báo 43 (union 44) ⇒ hai node đọc **hai interface khác nhau** (node-1 qua SSH), tức bản
   sửa `WireGuardManager._read()` chạy đúng thật; trước đó cả hai đều đọc wg0 của coordinator.
 - **Bằng chứng**: `evidence/2026-09-13-admin-panel-blocked-network-access.log`.
+
+## 2026-09-14 — node-2 đổi IP 103.6.234.233 → 165.101.114.162: trang buy "không vào được"
+
+- **Triệu chứng owner báo**: trang buy không vào được, ngay sau khi đổi IP node-2.
+- **Chẩn đoán (đo thật)**: server KHÔNG hỏng — ép đi thẳng IP mới thì
+  `/buy` = 200, `/PrivateVPN/Admin` = 200, `/v1/health` = 200, assets + QR (momo/wechat/alipay)
+  đều 200, `/v1/nodes` đã trỏ `165.101.114.162:443`. Nguyên nhân là **cache DNS trên máy owner
+  vẫn giữ IP cũ**: `dscacheutil`/`ping` → `103.6.234.233` (đã chết, GFW chặn), còn `dig` → IP mới;
+  `curl` thường = HTTP 000 trong khi `curl --resolve <IP mới>` = 200. TTL bản ghi A = **3600**.
+  ⇒ Cần `sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder` (cần mật khẩu, agent không
+  chạy được) hoặc chờ hết TTL; nên hạ TTL về 60.
+- **Hỏng thật do đổi IP (đã sửa)**: `cp-proxy` trên node-1 vẫn `UPSTREAM_IP = 103.6.234.233`
+  ⇒ **Tailscale Funnel chết hoàn toàn** (mọi request `/buy`, `/admin` timeout) — đây là đường dự
+  phòng duy nhất cho mạng bị chặn. Đã sửa (backup `/root/cp-proxy.js.bak-2026-09-14-102244`),
+  restart, Funnel `/buy` = 200, `/admin` = 200.
+- **Đã sửa kèm**: `/etc/caddy/Caddyfile` node-1 `trusted_proxies` → IP mới (backup
+  `/root/Caddyfile.backup-2026-09-14-102244`, `caddy validate` OK, reload OK). Nếu không sửa, mọi
+  IP khách bị dồn thành IP node-2.
+- **Node-2 đã đúng sẵn** (do phiên khác cập nhật khi đổi IP): block `http://<IP>` trong Caddyfile,
+  `WG_PUBLIC_ENDPOINT=165.101.114.162:443`.
+- **Phát hiện phụ (chưa sửa)**: block `http://<IP>` của node-2 trỏ `/var/www/dl` — thư mục không
+  tồn tại trên cả 2 node ⇒ `http://<IP>/` = 404 (route chết từ trước). Endpoint chính
+  `/v1/downloads/android` vẫn 200 (~96.5 MB).
+- **Cảnh báo đang diễn ra**: trên node-2 có upload APK dở dang `/root/flowvpn-apk/.new-modern.apk`
+  (53 MB, 10:31) — phải kiểm dung lượng/md5 sau khi xong, tránh phát file cụt cho khách (lỗi đã
+  gặp 13/09).
+- **Đã ghi vào docs**: `docs/MEETFLOW_AI_OPS.md` — checklist 4 chỗ BẮT BUỘC sửa khi đổi IP máy chính
+  (cp-proxy, trusted_proxies node-1, block http://IP node-2, WG_PUBLIC_ENDPOINT) + cách xử lý cache.

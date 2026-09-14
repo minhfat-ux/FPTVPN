@@ -1111,6 +1111,35 @@ domain thiếu cert thì báo `CẦN XEM TAY` chứ không crash.
 
 
 
+### Đổi IP máy chính (node-2) — 4 chỗ BẮT BUỘC sửa, quên 1 chỗ là vỡ
+
+Đã xảy ra thật 14/09/2026 khi node-2 đổi `103.6.234.233` → `165.101.114.162`: chỉ quên
+`cp-proxy` là **toàn bộ đường dự phòng qua Tailscale Funnel chết** (`/buy`, `/admin` timeout hết,
+dù `meetflowai.site` gọi từ trong VN vẫn 200 — nên rất dễ tưởng "server hỏng").
+
+| # | Ở đâu | Sửa gì | Quên thì hỏng gì |
+|---|---|---|---|
+| 1 | node-1 `/usr/local/bin/cp-proxy.js` | `UPSTREAM_IP` = IP mới | Funnel `fcnvpn.tail303be3.ts.net` chết hẳn ⇒ mạng bị chặn mất luôn đường vào dự phòng |
+| 2 | node-1 `/etc/caddy/Caddyfile` | `trusted_proxies static <IP node-2>` | mọi IP khách bị dồn thành IP node-2 ⇒ rate-limit dùng chung một rọ, log/dashboard mất IP thật |
+| 3 | node-2 `/etc/caddy/Caddyfile` | block `http://<IP> { root * /var/www/dl }` | mất đường tải APK trực tiếp khi tên miền bị chặn theo SNI |
+| 4 | node-2 `flowvpn-cp.service` | `WG_PUBLIC_ENDPOINT=<IP>:443` | endpoint WireGuard quảng cáo sai (`/status`, seed fallback node) |
+
+Sau khi sửa: `caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy` ·
+`systemctl restart cp-proxy` · `systemctl daemon-reload && systemctl restart flowvpn-cp`; rồi kiểm
+`GET /v1/nodes` (endpoint phải là IP mới — `node-self-report.timer` tự cập nhật mỗi 5 phút) và
+`/buy`, `/PrivateVPN/Admin` qua **cả** đường domain lẫn Funnel.
+
+⚠️ **Máy đã cache DNS cũ vẫn hỏng dù server đã đúng.** TTL 2 bản ghi A đang **3600**, nên cache
+giữ IP cũ tới 1 giờ. Triệu chứng đặc trưng: `dig meetflowai.site` ra IP mới nhưng trình duyệt /
+`curl` thường vẫn timeout, và `dscacheutil -q host -a name meetflowai.site` (hoặc `ping`) vẫn ra
+**IP cũ**. Xử lý: `sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`, hoặc chờ hết TTL.
+**Nên hạ TTL 2 bản ghi A về 60** để lần đổi IP sau lan nhanh.
+
+📌 **Còn tồn (chưa sửa)**: block `http://<IP>` của node-2 trỏ `/var/www/dl` nhưng thư mục này
+**không tồn tại** trên cả 2 node ⇒ `http://165.101.114.162/` trả 404 (route chết từ trước, không
+phải do đổi IP). Endpoint chính vẫn tốt: `/v1/downloads/android` = 200 (~96.5 MB). Muốn dùng lại
+đường IP thì tạo `/var/www/dl` (`chown caddy:caddy`, `chmod 644`) và đặt APK vào đó.
+
 ### Trạng thái hạ tầng 13/09/2026 — máy chính đã chuyển sang node-2
 
 Từ ~19:08–19:17 hôm nay: **node-2 (165.101.114.162, `fcnvps2`) là máy chính** — nó chạy
