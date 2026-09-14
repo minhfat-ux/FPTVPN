@@ -73,6 +73,23 @@ case "$MODE" in
   adhoc)  METHOD="ad-hoc";            COND='$(inherited)' ;;
 esac
 
+# Xcode cần quyền truy cập tài khoản để tạo/tải profile (nhất là `ad-hoc`). Truyền App Store Connect
+# API key thì KHÔNG cần đăng nhập Apple ID trong Xcode — đúng cái đang chặn mode adhoc trước đây.
+ASC_KEY_ID="${ASC_KEY_ID:-8GW3662G64}"
+ASC_ISSUER_ID="${ASC_ISSUER_ID:-7a64d085-c03d-4b10-9b96-ff8e00c42e79}"
+ASC_P8="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8}"
+AUTH_ARGS=()
+if [ -f "$ASC_P8" ]; then
+  AUTH_ARGS=(-allowProvisioningUpdates
+             -authenticationKeyPath "$ASC_P8"
+             -authenticationKeyID "$ASC_KEY_ID"
+             -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+  echo "  (dùng App Store Connect API key $ASC_KEY_ID để lấy profile)"
+else
+  echo "  (không thấy API key $ASC_P8 — dựa vào Apple ID đã đăng nhập trong Xcode)"
+  AUTH_ARGS=(-allowProvisioningUpdates)
+fi
+
 OUT="build/${TARGET}-${MODE}-export"
 ARCHIVE="$OUT/$SCHEME.xcarchive"
 IPA="$OUT/ipa"
@@ -100,12 +117,12 @@ xcodebuild -project PrivateVPN.xcodeproj -scheme "$SCHEME" \
   -configuration Release -destination "$DEST" \
   -archivePath "$ARCHIVE" \
   SWIFT_ACTIVE_COMPILATION_CONDITIONS="$COND" \
-  archive -allowProvisioningUpdates
+  archive "${AUTH_ARGS[@]}"
 
 echo "==> Exporting IPA (method=$METHOD)"
 xcodebuild -exportArchive -archivePath "$ARCHIVE" \
   -exportOptionsPlist "$OUT/ExportOptions.plist" \
-  -exportPath "$IPA" -allowProvisioningUpdates
+  -exportPath "$IPA" "${AUTH_ARGS[@]}"
 
 echo
 if [ "$MODE" = "diawi" ]; then
