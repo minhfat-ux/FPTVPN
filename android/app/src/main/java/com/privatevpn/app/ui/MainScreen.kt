@@ -164,7 +164,7 @@ fun MainScreen(
 
         // Luôn hiện: chưa mua ⇒ mời chọn gói ("Nâng cấp"); đã mua ⇒ hiện ĐÚNG gói đang dùng
         // + ngày hết hạn, nút đổi thành "Gia hạn" (mở paywall để gia hạn / mua thêm).
-        if (isSignedIn) {
+        if (app.authStore.isSignedIn) {
             SubscriptionStatusCard(
                 app = app,
                 isSubscribed = isSubscribed,
