@@ -72,6 +72,7 @@ enum AppTextKey: String {
     case emailPlaceholder, codePlaceholder, invalidEmail, devCode, loginCodeSent
     case systemLanguage, language, appSubtitle, subscription, status
     case premiumActive, premiumRequired, free, protectionUnlocked, choosePlanToStart
+    case trialBannerTitle, trialBannerSubtitle
     case choosePlan, restorePurchases, support, contactSupport, privacyPolicy
     case termsOfUse, upgrade, preparingPermission, vpnStartFailure
     case paywallTitle, paywallSubtitle, benefitTunnel, benefitWifi, benefitFast
@@ -137,6 +138,7 @@ final class AppLanguageStore: ObservableObject {
             .subscription: "Subscription", .status: "Status", .premiumActive: "Premium Active",
             .premiumRequired: "Premium Required", .free: "Free", .protectionUnlocked: "VPN protection is unlocked",
             .choosePlanToStart: "Choose a plan to start protection", .choosePlan: "Choose Plan",
+            .trialBannerTitle: "🎁 You're on a free 1-day trial", .trialBannerSubtitle: "%@ hours of trial left. Buy a plan to keep using the VPN after it ends.",
             .restorePurchases: "Refresh Purchase Status", .support: "Support", .contactSupport: "Contact Support",
             .privacyPolicy: "Privacy Policy", .termsOfUse: "Terms of Use", .upgrade: "Upgrade",
             .preparingPermission: "Preparing VPN permission…", .vpnStartFailure: "VPN could not start. Please try again.", .paywallTitle: "FlowVPN Premium",
@@ -161,6 +163,7 @@ final class AppLanguageStore: ObservableObject {
             .subscription: "Gói đăng ký", .status: "Trạng thái", .premiumActive: "Premium đang hoạt động",
             .premiumRequired: "Cần Premium", .free: "Miễn phí", .protectionUnlocked: "Bảo vệ VPN đã được mở khóa",
             .choosePlanToStart: "Chọn gói để bắt đầu bảo vệ", .choosePlan: "Chọn gói",
+            .trialBannerTitle: "🎁 Bạn đang dùng bản dùng thử 1 ngày miễn phí", .trialBannerSubtitle: "Còn %@ giờ dùng thử. Mua gói để tiếp tục dùng VPN sau khi hết hạn.",
             .restorePurchases: "Làm mới trạng thái gói", .support: "Hỗ trợ", .contactSupport: "Liên hệ hỗ trợ",
             .privacyPolicy: "Chính sách quyền riêng tư", .termsOfUse: "Điều khoản sử dụng", .upgrade: "Nâng cấp",
             .preparingPermission: "Đang chờ cấp quyền VPN…", .vpnStartFailure: "Không thể khởi động VPN. Vui lòng thử lại.", .paywallTitle: "FlowVPN Premium",
@@ -185,6 +188,7 @@ final class AppLanguageStore: ObservableObject {
             .subscription: "订阅", .status: "状态", .premiumActive: "Premium 已激活",
             .premiumRequired: "需要 Premium", .free: "免费", .protectionUnlocked: "VPN 保护已解锁",
             .choosePlanToStart: "选择套餐以开始保护", .choosePlan: "选择套餐",
+            .trialBannerTitle: "🎁 您正在使用 1 天免费试用", .trialBannerSubtitle: "试用还剩 %@ 小时。购买套餐以便试用结束后继续使用 VPN。",
             .restorePurchases: "刷新订阅状态", .support: "支持", .contactSupport: "联系支持",
             .privacyPolicy: "隐私政策", .termsOfUse: "使用条款", .upgrade: "升级",
             .preparingPermission: "正在等待 VPN 权限…", .vpnStartFailure: "VPN 无法启动。请重试。", .paywallTitle: "FlowVPN Premium",
@@ -209,6 +213,7 @@ final class AppLanguageStore: ObservableObject {
             .subscription: "サブスクリプション", .status: "ステータス", .premiumActive: "Premium 有効",
             .premiumRequired: "Premium が必要", .free: "無料", .protectionUnlocked: "VPN 保護が有効です",
             .choosePlanToStart: "保護を開始するにはプランを選択", .choosePlan: "プランを選択",
+            .trialBannerTitle: "🎁 1日間の無料トライアルを利用中です", .trialBannerSubtitle: "トライアルは残り %@ 時間です。終了後も VPN を使い続けるにはプランをご購入ください。",
             .restorePurchases: "購入状態を更新", .support: "サポート", .contactSupport: "サポートに連絡",
             .privacyPolicy: "プライバシーポリシー", .termsOfUse: "利用規約", .upgrade: "アップグレード",
             .preparingPermission: "VPN の許可を待機中…", .vpnStartFailure: "VPN を開始できませんでした。もう一度お試しください。", .paywallTitle: "FlowVPN Premium",
@@ -233,6 +238,7 @@ final class AppLanguageStore: ObservableObject {
             .subscription: "구독", .status: "상태", .premiumActive: "Premium 활성화됨",
             .premiumRequired: "Premium 필요", .free: "무료", .protectionUnlocked: "VPN 보호가 활성화되었습니다",
             .choosePlanToStart: "보호를 시작하려면 플랜을 선택하세요", .choosePlan: "플랜 선택",
+            .trialBannerTitle: "🎁 무료 1일 체험판을 사용 중입니다", .trialBannerSubtitle: "체험판이 %@시간 남았습니다. 종료 후에도 VPN을 계속 사용하려면 플랜을 구매하세요.",
             .restorePurchases: "구매 상태 새로 고침", .support: "지원", .contactSupport: "지원 문의",
             .privacyPolicy: "개인정보 처리방침", .termsOfUse: "이용약관", .upgrade: "업그레이드",
             .preparingPermission: "VPN 권한을 기다리는 중…", .vpnStartFailure: "VPN을 시작할 수 없습니다. 다시 시도해 주세요.", .paywallTitle: "FlowVPN Premium",

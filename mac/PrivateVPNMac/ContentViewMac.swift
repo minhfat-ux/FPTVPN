@@ -57,6 +57,11 @@ struct ContentViewMac: View {
                 }
                 .padding(.top, 16)
 
+                // Bản dùng thử 1 ngày: khách ĐANG có quyền nhưng chưa trả tiền — nhắc mua gói.
+                if subscriptionStore.isOnFreeTrial {
+                    trialBanner
+                }
+
                 if !subscriptionStore.isSubscribed {
                     subscriptionStatusCard
                 }
@@ -200,7 +205,9 @@ struct ContentViewMac: View {
     }
 
     private func syncBackendPremium() {
-        subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+        let status = authStore.session?.user.subscription_status
+        subscriptionStore.backendSubscriptionStatus = status
+        subscriptionStore.backendPremium = status?.is_active ?? false
     }
 
     /// Đọc lại session từ backend (best-effort) để quyền Premium sống qua lần mở app và hiện
@@ -213,6 +220,53 @@ struct ContentViewMac: View {
             baseURL: baseURL,
             authStore: authStore,
             reportFailure: false
+        )
+    }
+
+    /// Banner bản dùng thử 1 ngày. Chỉ hiện khi backend nói `is_active` = true VÀ `is_trial`
+    /// = true (product_id "trial.") — trial hết hạn thì `is_active` = false, banner tự tắt và
+    /// paywall chặn Connect như khách chưa mua.
+    /// Nút mua mở đúng paywall web sẵn có (`MacPaywallView` → trang /buy) — không thêm URL mới.
+    private var trialBanner: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "gift.fill")
+                .font(.title3)
+                .foregroundStyle(VPNThemeMac.accent)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(languageStore.t(.trialBannerTitle))
+                    .font(.headline)
+                    .foregroundStyle(VPNThemeMac.textPrimary)
+                Text(String(
+                    format: languageStore.t(.trialBannerSubtitle),
+                    String(subscriptionStore.trialHoursLeft ?? 0)
+                ))
+                    .font(.subheadline)
+                    .foregroundStyle(VPNThemeMac.textSecondary)
+            }
+
+            Spacer()
+
+            Button {
+                showingPaywall = true
+            } label: {
+                Text(languageStore.t(.choosePlan))
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(VPNThemeMac.accent)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isConnectionTransitioning)
+        }
+        .padding(16)
+        .background(VPNThemeMac.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
         )
     }
 

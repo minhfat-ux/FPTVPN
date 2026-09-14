@@ -87,11 +87,19 @@ struct SettingsViewMac: View {
             await loadDevices()
         }
         .onAppear {
-            subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+            syncBackendSubscription()
         }
         .onChange(of: authStore.session) { _, _ in
-            subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+            syncBackendSubscription()
         }
+    }
+
+    /// Ghi quyền Premium + cờ dùng thử từ session ĐÃ CACHE (không gọi mạng) — giữ
+    /// `backendPremium` và `backendSubscriptionStatus` luôn cùng một nguồn.
+    private func syncBackendSubscription() {
+        let status = authStore.session?.user.subscription_status
+        subscriptionStore.backendSubscriptionStatus = status
+        subscriptionStore.backendPremium = status?.is_active ?? false
     }
 
     /// "Đã mua rồi" của luồng mua qua web: hỏi lại backend xem tài khoản đang đăng
@@ -324,6 +332,9 @@ final class MacSubscriptionStore: ObservableObject {
     /// Backend entitlement: true when the signed-in account has an active
     /// subscription (subscription_status.is_active from the coordinator).
     @Published var backendPremium = false
+    /// `subscription_status` đầy đủ của lần đọc session gần nhất. `backendPremium` chỉ giữ
+    /// `is_active`, còn cờ dùng thử (`is_trial` / `trial_hours_left`) thì cần cả struct.
+    @Published var backendSubscriptionStatus: CoordinatorSubscriptionStatus?
 
     var isSubscribed: Bool {
         // Dev bypass (chỉ trên máy chủ dự án): FORCE_PREMIUM=1 trong scheme environment,
@@ -336,6 +347,17 @@ final class MacSubscriptionStore: ObservableObject {
         }
         #endif
         return backendPremium
+    }
+
+    /// Đang dùng BẢN DÙNG THỬ 1 NGÀY miễn phí. Gắn với `isSubscribed` nên khi trial hết
+    /// (`is_active` = false) cờ này tự tắt và banner biến mất.
+    var isOnFreeTrial: Bool {
+        isSubscribed && backendSubscriptionStatus?.is_trial == true
+    }
+
+    /// Số giờ còn lại của trial (nil khi không phải trial hoặc backend không trả).
+    var trialHoursLeft: Int? {
+        backendSubscriptionStatus?.trial_hours_left
     }
 
     /// Tên gói hiển thị ở menu bar. Trước đây lấy `displayName` của sản phẩm StoreKit;
@@ -371,7 +393,9 @@ final class MacSubscriptionStore: ObservableObject {
             if refreshed != authStore.session {
                 authStore.save(refreshed)
             }
-            backendPremium = refreshed.user.subscription_status?.is_active ?? false
+            let status = refreshed.user.subscription_status
+            backendSubscriptionStatus = status
+            backendPremium = status?.is_active ?? false
             errorMessage = nil
         } catch {
             if reportFailure {
