@@ -237,3 +237,35 @@ Android đã lên `1.3.3` / versionCode 13 (session khác commit) ⇒ iOS/macOS 
   /v1/downloads/android-legacy 200  VPNFlow-android7.apk
   /vpnflow/terms               200
   /install/ios                 200  (trang OTA do session khác dựng)
+
+## 8. Gửi email thông báo bản mới + link mua cho toàn bộ user (14/09)
+
+Yêu cầu chủ dự án: thông báo cho mọi user về link mua để tải bản mới, cho cả MeetFlow AI và
+VPNFlow. Chủ dự án chọn **chỉ gửi VPNFlow** trong lượt này.
+
+Cách làm: `control-plane/scripts/broadcast-release.mjs` (mặc định dry-run; `--send` mới gửi).
+Không sửa `mailer.js` (đang bị session khác sửa; hàm gửi chung `deliver()` không export).
+
+Nguồn người nhận + con số TRƯỚC khi gửi (dry-run trên dữ liệu thật, email đã che):
+  VPNFlow (data/auth.json)   : 14 người — vi 2, zh 2, en 10 | bỏ qua 2 (t***@example.com, n***@meetflowai.site)
+  MeetFlow AI (ai-users.json):  8 người — zh 1, en 7       | bỏ qua 12 (phần lớn @example.com)
+  Tổng email duy nhất 19; 3 địa chỉ nằm cả 2 danh sách
+Lúc gửi thật danh sách VPNFlow đã thành **15** (có 1 user mới đăng ký giữa dry-run và lúc gửi) —
+đúng như thiết kế, script đọc lại dữ liệu mỗi lần chạy.
+
+Kết quả gửi thật qua SMTP `mail92231.maychuemail.com`, cách nhau 900ms:
+  ==> Xong: gửi 14 | lỗi 1 | bỏ qua vì đã gửi trước đó 0
+  Lỗi duy nhất: review@meetflowai.site → SMTP `550 5.1.1 ... User unknown` — hộp thư nội bộ
+  (allowlist review) không tồn tại, KHÔNG phải khách thật ⇒ không cần xử lý.
+  State: /root/flowvpn-cp/data/broadcast-state-1.3.3.json — quyền 600, 14 bản ghi, mỗi bản ghi là
+  `vpn:<sha256(email)>` (KHÔNG lưu email thô) ⇒ chạy lại sẽ bỏ qua người đã nhận.
+
+Nội dung (3 ngôn ngữ, vi/en/zh): bản mới đã sẵn sàng + nút "Tải VPNFlow bản mới" trỏ
+`/buy`; link riêng cho iPhone/iPad (trang cài OTA `/install/ios`) và Android (APK); nhắc
+"đăng nhập bằng đúng email này — Premium tự bật, không phải mua lại"; nhắc gói web mua MỘT LẦN,
+KHÔNG tự động gia hạn; kèm điều khoản `/vpnflow/terms`, privacy, hỗ trợ; cuối mail có câu giải
+thích vì sao nhận được và cách ngừng nhận.
+
+CHƯA gửi: MeetFlow AI (8 người) — chạy `python3 scripts/run-with-service-env.py
+/root/flowvpn-cp/scripts/broadcast-release.mjs --send --product ai` khi chủ dự án đồng ý.
+Lưu ý: 3 địa chỉ có mặt ở cả hai danh sách sẽ nhận 2 email (mỗi sản phẩm một email).
