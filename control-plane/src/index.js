@@ -2305,8 +2305,11 @@ function iosLangSelectHTML(lang = "vi") {
   const options = ["vi", "en", "zh", "ja", "ko"]
     .map((c) => `<option value="${c}"${c === lang ? " selected" : ""}>${names[c]}</option>`)
     .join("");
+  // Phải là `window.URL`, KHÔNG được là `new URL(...)`: scope chain của inline handler là
+  // element → form → document → global, mà `document.URL` là một string nên nó che `URL`
+  // toàn cục ⇒ ném "URL is not a constructor" ⇒ dropdown chọn ngôn ngữ không chạy.
   return `<div class="langbar"><span aria-hidden="true">🌐</span>
-  <select aria-label="Language" onchange="var u=new URL(location.href);u.searchParams.set('lang',this.value);location.href=u.toString()">${options}</select>
+  <select aria-label="Language" onchange="var u=new window.URL(location.href);u.searchParams.set('lang',this.value);location.href=u.toString()">${options}</select>
 </div>`;
 }
 
@@ -2355,7 +2358,9 @@ app.post(["/install/ios/udid", "/v1/ios/udid"], express.urlencoded({ extended: f
     if (mapped) console.log(`ios-udid: tự map ${device.udid} → ${mapped.email ?? mapped.userId}`);
     // Có khoá App Store Connect thì đăng ký UDID lên Apple ngay; lỗi ở đây KHÔNG được
     // làm khách thấy thất bại — chỉ ghi lại để dashboard báo chủ shop.
-    if (isNew) {
+    // Máy CŨ nhưng chưa có trên Apple cũng phải đẩy lại: khách đăng ký lại hồ sơ là cách
+    // tự nhiên để đồng bộ lại trạng thái (gọi lại là idempotent — Apple trả 409 thì coi như đã có).
+    if (isNew || !device.appleRegisteredAt) {
       registerIosDeviceWithApple(device.udid, { name: mapped?.email ?? null })
         .then((r) => console.log(`ios-udid: Apple → ${r.skipped ? "chưa cấu hình khoá" : r.ok ? "OK" : `lỗi: ${r.error}`}`))
         .catch((err) => console.error("ios-udid apple register failed:", err?.message ?? err));
