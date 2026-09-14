@@ -200,21 +200,49 @@ lấy từ `subscription_status.is_active` của backend (`GET /v1/auth/session`
    `systemctl reload caddy` xong vẫn `active`; `/buy`, `/support`, `/terms`, `/guide`, `/health`
    đều 200 sau reload.
 
+### 7b. Điều khoản riêng cho VPNFlow + phát bản 1.3.3 (14/09, sau khi node-2 đổi IP)
+
+- **node-2 đổi IP công cộng**: `103.6.234.233` → **`165.101.114.162`** (IT đổi; DNS
+  `meetflowai.site` + `api.meetflowai.site` trỏ IP mới, TTL 3600). Cùng một máy (`fcnvps2`), dữ
+  liệu và bản deploy cũ còn nguyên. **Lưu ý cho người sau**: máy nào còn cache DNS cũ sẽ thấy
+  web "chết" (curl 000) trong khi SSH vẫn vào được — kiểm bằng `dig @1.1.1.1`.
+  Session khác cũng đã dựng trang cài OTA `/install/ios` (manifest `itms-services`) cho nút
+  "Cập nhật" của app iOS.
+- **Trang điều khoản riêng**: `https://meetflowai.site/vpnflow/terms` (file
+  `site/terms-vpnflow.html` trong repo → deploy `/var/www/flowvpn/terms-vpnflow.html`). Trước đây
+  app và `/support` trỏ vào `/terms`, vốn là **điều khoản của MeetFlow AI** (`terms-meetflow.html`)
+  — khách VPNFlow đọc nhầm điều khoản của sản phẩm khác. Trang mới 3 thứ tiếng (EN/VI/ZH) như
+  `FlowVPNPrivacy.html`, nội dung khớp thực tế: mua trên web, MỘT LẦN, không tự động gia hạn.
+  Caddy: thêm `handle /vpnflow/terms` (+ `/vpnflow/terms/`) → file này; backup
+  `/etc/caddy/Caddyfile.bak-20260914-101617`; `/terms` vẫn phục vụ trang MeetFlow AI (không đè).
+- **Nối link**: `/support` của VPNFlow lấy `/vpnflow/terms` (support-page.js tự suy ra từ origin
+  server truyền vào, có `links.vpnTerms` để ghi đè; trang MeetFlow AI vẫn `/terms`); app iOS +
+  macOS + Android (`Config.TERMS_URL`) trỏ cùng URL đó.
+- **Phiên bản**: Android đã lên `1.3.3` (versionCode 13) do session khác commit ⇒ iOS/macOS bump
+  theo cho khớp: **1.3.3 (build 13)**.
+- **Artifact đã phát** (sha256 khớp máy build, chữ ký APK trùng bản cũ `dc6e484b…` nên cài đè được):
+  - IPA `d9fb68ab…` → `/root/flowvpn-ipa/VPNFlow-latest.ipa`
+  - APK modern `31849bd6…` → `/root/flowvpn-apk/VPNFlow-latest.apk`
+  - APK legacy (Android 7/Fire OS) `871f1a05…` → `/root/flowvpn-apk/VPNFlow-android7.apk`
+  - `/v1/downloads/ios` = 200 `VPNFlow.ipa`; `/v1/downloads/android` = 200 `VPNFlow.apk`;
+    `/v1/downloads/android-legacy` = 200 `VPNFlow-android7.apk`; `/vpnflow/terms` = 200.
+  Bản cũ giữ backup `*-backup-20260914-*.{ipa,apk}` cùng thư mục.
+
 Còn lại (cần chủ dự án quyết / làm):
-1. Đặt `latest_ios_version = 1.3.2` trong tab admin để máy cũ được nhắc cập nhật (agent chính
-   KHÔNG tự đổi: đây là quyết định sản phẩm, ảnh hưởng khách đang dùng).
+1. Đặt `latest_ios_version` = 1.3.3 trong tab admin để máy cũ được nhắc cập nhật (agent chính
+   KHÔNG tự đổi: đây là quyết định sản phẩm, ảnh hưởng khách đang dùng). Hiện server vẫn khai 1.3.2.
 2. ⚠️ **Cảnh báo thương mại**: IPA đang ký `development` (4 UDID) nhưng `/buy` mời MỌI khách
    "Tải cho iPhone / iPad" — máy không có UDID trong profile **không cài được**. Cần ghi rõ trên
    `/buy`, hoặc bỏ nút iOS cho tới khi có kênh cài được (ad-hoc/enterprise/TestFlight).
+   (Trang OTA `/install/ios` đã có, nhưng OTA cũng chỉ cài được trên máy có UDID trong profile.)
 3. `payments.js` còn nhánh `iosLineStore` + badge App Store/TestFlight; chúng chỉ hiện khi biến
    môi trường `APP_STORE_URL_*`/TestFlight được cấu hình ⇒ **kiểm env server, nên xoá hẳn**.
    (File này đang được một session khác sửa dở — đừng sửa chồng.)
 4. `control-plane/src/index.js` còn `DEFAULT_STORE_URL = APP_STORE_URL ?? "https://apps.apple.com/app/flowvpn"`
    và field `app_store_url` trong tab admin: giờ **vô tác dụng** (app-version không đọc nữa) —
    nên xoá cùng lúc với mục 3.
-5. Trang `/terms` hiện chỉ nêu "MeetFlow AI Terms of Use" (0 lần VPNFlow) trong khi nút "Điều khoản
-   sử dụng" của app và link trên `/support` đều trỏ vào đó — cần bổ sung phạm vi VPNFlow hoặc tạo
-   trang riêng.
+5. Trang điều khoản VPNFlow **chưa có bản tiếng Nhật/Hàn** (app hỗ trợ 5 ngôn ngữ, trang có 3) —
+   bổ sung nếu muốn khớp.
 
 ## 8. 14/09/2026 — "Cannot reach VPNFlow service" lần nữa: nguyên nhân + fix (đã phát hành 1.3.3)
 

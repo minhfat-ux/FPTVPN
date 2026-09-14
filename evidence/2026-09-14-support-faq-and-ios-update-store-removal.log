@@ -187,3 +187,53 @@ Kiểm lại sau reload:
   nhắc cập nhật ⇒ phải tải IPA), để chủ dự án tự đặt trong tab admin.
 - KHÔNG sửa `payments.js`/`index.js` phần còn nhắc store (`iosLineStore`, badge App Store,
   `DEFAULT_STORE_URL`, `app_store_url`): file đang thuộc vùng một session khác sửa dở.
+
+## 7. Trang điều khoản riêng cho VPNFlow + phát bản 1.3.3 (14/09 ~10:00–11:20)
+
+Bối cảnh: node-2 đổi IP công khai `103.6.234.233` → `165.101.114.162` (IT đổi). Cùng máy
+`fcnvps2`, dữ liệu + bản deploy cũ còn nguyên. Máy build còn cache DNS cũ nên mọi `curl` trả
+000 dù SSH vẫn vào được — kiểm bằng `dig @1.1.1.1` (cả 3 resolver công cộng trả IP mới, TTL 3600).
+
+### 7.1 Vì sao cần trang riêng
+`/terms` (Caddy rewrite → `/var/www/flowvpn/terms-meetflow.html`) là **điều khoản của MeetFlow AI**,
+0 lần nhắc VPNFlow; nhưng nút "Điều khoản sử dụng" trong app và link trên `/support` đều trỏ vào đó.
+
+### 7.2 Đã tạo + phát
+- File mới trong repo: `site/terms-vpnflow.html` (14.3 KB) — 3 thứ tiếng EN/VI/ZH như
+  `FlowVPNPrivacy.html`, dùng đúng CSS/logo của site; nội dung khớp thực tế: mua trên web, MỘT LẦN,
+  KHÔNG tự động gia hạn; hoàn tiền qua email kèm mã đơn trong 7 ngày. Cố ý KHÔNG nêu tên pháp nhân
+  (trang privacy đã duyệt cũng không nêu) — chỉ nói "đội ngũ VPNFlow (meetflowai.site)".
+- Deploy `/var/www/flowvpn/terms-vpnflow.html`, quyền `644 caddy:caddy` (lần đầu scp để 600 nên
+  Caddy trả **403** — bài học: file tĩnh phải đọc được bởi user `caddy`).
+- Caddy: thêm `handle /vpnflow/terms` + `/vpnflow/terms/` → rewrite file trên. Backup
+  `/etc/caddy/Caddyfile.bak-20260914-101617`; `caddy validate` = "Valid configuration";
+  `systemctl reload caddy` → active.
+- Kiểm: `/vpnflow/terms` → 200, title `VPNFlow Terms of Use`; `/terms` → 200 vẫn là
+  `MeetFlow AI Terms of Use` (không đè nhau).
+- Nối link: `/support` (VPNFlow) render `href="https://meetflowai.site/vpnflow/terms"`, trang
+  `/ai/support` (MeetFlow AI) vẫn `href="https://meetflowai.site/terms"`.
+  `support-page.js` tự suy URL từ origin server truyền vào (`new URL("/vpnflow/terms", links.terms)`),
+  có `links.vpnTerms` để ghi đè ⇒ không phải sửa `index.js` (file đang bị session khác sửa liên tục;
+  2 lần thử sửa bị từ chối vì file đổi giữa chừng).
+- App trỏ cùng URL: iOS `SettingsView.swift`, macOS `SettingsViewMac.swift`,
+  Android `Config.TERMS_URL`.
+- Test `control-plane/test/support-page.test.js`: 7 test / 0 fail, có case chốt "VPNFlow →
+  /vpnflow/terms" và "MeetFlow AI → /terms".
+
+### 7.3 Phiên bản + artifact phát lại
+Android đã lên `1.3.3` / versionCode 13 (session khác commit) ⇒ iOS/macOS bump theo:
+`MARKETING_VERSION 1.3.3`, `CURRENT_PROJECT_VERSION 13` (xcodegen sinh lại plist tunnel).
+  IPA : app 1.3.3/13, ext 1.3.3/13, ký development, 4 UDID, hết hạn 2027-09-10
+        binary: `vpnflow/terms` = 1 | `meetflowai.site/terms` = 0 | App Store/StoreKit/Apple ID = 0
+        sha256 d9fb68abc3524cc2ba312bb41abae787b19c124f5518bc9c2cbb53ebc9d43b31
+  APK modern : sha256 31849bd68f55b821aaf08e63b8b0f94f2f05eea35d7622c7536a13d9a3d146de
+  APK legacy : sha256 871f1a057f50f78fbc6b36feb9c6a4054418aa59e9ad60a356063703f0460fc0
+  Cả 3 sha256 trên server KHỚP máy build. Chữ ký APK trùng bản đang phát
+  (cert SHA-256 `dc6e484bf8ef2eea0dcd15a9192d8233fea1a05068b8ee4486cdc53f456b5e46`) ⇒ cài đè được.
+  Backup bản cũ: `VPNFlow-latest-backup-20260914-*.ipa/.apk`, `VPNFlow-android7-backup-*.apk`.
+Đường tải (kiểm từ trong máy chủ, `--resolve` sang IP mới):
+  /v1/downloads/ios            200  VPNFlow.ipa
+  /v1/downloads/android        200  VPNFlow.apk
+  /v1/downloads/android-legacy 200  VPNFlow-android7.apk
+  /vpnflow/terms               200
+  /install/ios                 200  (trang OTA do session khác dựng)
