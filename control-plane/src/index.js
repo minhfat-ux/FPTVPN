@@ -523,11 +523,15 @@ function storeLinks(product) {
  */
 function requestLang(req) {
   if (req?.query?.lang) return pickBuyLang(String(req.query.lang).slice(0, 8));
-  const header = String(req?.headers?.["accept-language"] ?? "").toLowerCase();
+  // Theo NGÔN NGỮ CỦA MÁY: lấy thẻ ngôn ngữ ưu tiên cao nhất trong Accept-Language
+  // ("vi-VN,vi;q=0.9,en;q=0.8" ⇒ vi), không quét cả chuỗi — quét cả chuỗi sẽ chọn sai khi
+  // ngôn ngữ ưu tiên thấp lại đứng trước trong danh sách cần tìm (vd máy en nhưng có vi;q=0.8).
+  const first = String(req?.headers?.["accept-language"] ?? "").split(",")[0]?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const base = first.split("-")[0];
   for (const code of ["vi", "zh", "ja", "ko", "en"]) {
-    if (header.includes(code)) return code;
+    if (base === code) return code;
   }
-  return "vi";
+  return "en";
 }
 
 function buyLang(req) {
@@ -1984,13 +1988,7 @@ const IOS_TEXTS = {
     pageTitle: "Cài VPNFlow lên iPhone / iPad",
     intro: (v) => `Bản ${v} · mở trang này bằng <b>Safari</b> và làm theo 2 bước.`,
     step1: "Đăng ký thiết bị (chỉ 1 lần)",
-    step1Items: [
-      "<b>1.</b> Bấm nút dưới — iOS báo <i>\"Hồ sơ đã tải về\"</i>.",
-      "<b>2.</b> Vào <b>Cài đặt → Đã tải về hồ sơ</b> → <b>Cài đặt</b> → nhập mật khẩu máy.",
-      "<b>3.</b> iOS hiện <i>\"Không ký / Not Signed\"</i> — cứ bấm <b>Cài đặt</b> tiếp (hồ sơ này chỉ để gửi mã thiết bị).",
-      "Hồ sơ chỉ gửi <b>mã thiết bị (UDID)</b>, model và phiên bản iOS — <b>gỡ được</b> bất cứ lúc nào.",
-      "Cài xong máy tự gửi mã về shop, trang này tự chuyển sang bước 2.",
-    ],
+    step1Items: ["Bấm nút xanh bên dưới → iOS báo <b>“Hồ sơ đã tải về”</b>.", "<b>Quan trọng:</b> iOS KHÔNG tự cài. Bạn phải mở <b>Cài đặt</b> và cài hồ sơ (xem hướng dẫn hiện ra ở dưới).", "Cài xong quay lại đây — trang tự chuyển sang bước 2."],
     regBtn: "📝 Đăng ký thiết bị này",
     step2: "Cài ứng dụng",
     waitLocked: "Hoàn thành bước 1 để mở bước này…",
@@ -2015,6 +2013,13 @@ const IOS_TEXTS = {
     waitReadyMsg: "Máy này đã được cấp bản cài riêng. Bấm nút dưới để cài (nhớ mở bằng Safari).",
     device: "Thiết bị",
     elapsed: (n) => `Đã chờ ${n} giây…`,
+    guideTitle: "Cách cài hồ sơ trong Cài đặt",
+    guideIntro: "iOS không tự cài hồ sơ. Làm đúng 4 bước sau:",
+    guideSteps: ["Mở app <b>Cài đặt</b> (biểu tượng bánh răng).", "Ở ngay trên cùng sẽ có dòng <b>“Đã tải hồ sơ”</b> → bấm vào.<br><span style=\"opacity:.75\">Không thấy? Vào <b>Cài đặt chung → VPN &amp; Quản lý thiết bị</b>.</span>", "Bấm dòng <b>VPNFlow — Đăng ký thiết bị</b> → bấm <b>Cài đặt</b> (góc phải trên).", "Nhập <b>mật khẩu máy</b>. Nếu iOS hiện <b>“Không ký”</b> thì bấm <b>Cài đặt</b> thêm một lần nữa."],
+    guideNote: "Hồ sơ chỉ gửi <b>mã thiết bị (UDID)</b>, model và phiên bản iOS — gỡ được bất cứ lúc nào.",
+    guideClose: "Đã hiểu, tôi mở Cài đặt",
+    guideBtn: "❓ Xem lại cách cài hồ sơ",
+    guideAfter: "Cài xong, quay lại Safari — trang này tự chuyển sang bước 2.",
     profileName: "VPNFlow — Đăng ký thiết bị",
     profileDesc: "Gửi mã thiết bị (UDID) cho VPNFlow để cấp bản cài phù hợp. Không thu thập dữ liệu khác.",
   },
@@ -2022,13 +2027,7 @@ const IOS_TEXTS = {
     pageTitle: "Install VPNFlow on your iPhone / iPad",
     intro: (v) => `Version ${v} · open this page in <b>Safari</b> and follow 2 steps.`,
     step1: "Register this device (once)",
-    step1Items: [
-      "<b>1.</b> Tap the button below — iOS shows <i>\"Profile Downloaded\"</i>.",
-      "<b>2.</b> Go to <b>Settings → Profile Downloaded</b> → <b>Install</b> → enter your passcode.",
-      "<b>3.</b> iOS may say <i>\"Not Signed\"</i> — just tap <b>Install</b> again (this profile only reports the device ID).",
-      "The profile only sends the <b>device ID (UDID)</b>, model and iOS version — you can <b>remove it</b> anytime.",
-      "Once installed, your device reports itself and this page moves to step 2 automatically.",
-    ],
+    step1Items: ["Tap the green button below → iOS shows <b>“Profile Downloaded”</b>.", "<b>Important:</b> iOS does NOT install it automatically. Open <b>Settings</b> and install the profile (guide below).", "Then come back here — this page moves to step 2 by itself."],
     regBtn: "📝 Register this device",
     step2: "Install the app",
     waitLocked: "Finish step 1 to unlock this step…",
@@ -2053,6 +2052,13 @@ const IOS_TEXTS = {
     waitReadyMsg: "This device now has its own build. Tap the button below to install (use Safari).",
     device: "Device",
     elapsed: (n) => `Waiting ${n}s…`,
+    guideTitle: "How to install the profile in Settings",
+    guideIntro: "iOS does not install the profile by itself. Follow these 4 steps:",
+    guideSteps: ["Open the <b>Settings</b> app (gear icon).", "At the very top you will see <b>“Profile Downloaded”</b> → tap it.<br><span style=\"opacity:.75\">Don’t see it? Go to <b>General → VPN &amp; Device Management</b>.</span>", "Tap <b>VPNFlow — Device registration</b> → tap <b>Install</b> (top right).", "Enter your <b>passcode</b>. If iOS says <b>“Not Signed”</b>, tap <b>Install</b> once more."],
+    guideNote: "The profile only reports the <b>device ID (UDID)</b>, model and iOS version — you can remove it anytime.",
+    guideClose: "Got it, open Settings",
+    guideBtn: "❓ Show the install guide again",
+    guideAfter: "When the profile is installed, come back to Safari — this page moves to step 2 by itself.",
     profileName: "VPNFlow — Device registration",
     profileDesc: "Reports the device ID (UDID) to VPNFlow so we can issue a matching build. No other data is collected.",
   },
@@ -2060,13 +2066,7 @@ const IOS_TEXTS = {
     pageTitle: "在 iPhone / iPad 上安装 VPNFlow",
     intro: (v) => `版本 ${v} · 请用 <b>Safari</b> 打开本页并完成两步。`,
     step1: "注册设备（仅需一次）",
-    step1Items: [
-      "<b>1.</b> 点击下方按钮 —— iOS 提示<i>“已下载描述文件”</i>。",
-      "<b>2.</b> 打开 <b>设置 → 已下载描述文件</b> → <b>安装</b> → 输入锁屏密码。",
-      "<b>3.</b> 若提示<i>“未签名”</i>，继续点击 <b>安装</b>（该描述文件仅用于上报设备码）。",
-      "描述文件只上报<b>设备码 (UDID)</b>、机型和 iOS 版本 —— 之后可随时<b>删除</b>。",
-      "安装完成后设备会自动上报，本页自动进入第 2 步。",
-    ],
+    step1Items: ["点击下面的绿色按钮 → iOS 提示<b>“已下载描述文件”</b>。", "<b>重要：</b>iOS 不会自动安装。请打开<b>设置</b>安装该描述文件（见下方指引）。", "安装完成后返回本页 —— 自动进入第 2 步。"],
     regBtn: "📝 注册此设备",
     step2: "安装应用",
     waitLocked: "完成第 1 步后即可解锁…",
@@ -2091,6 +2091,13 @@ const IOS_TEXTS = {
     waitReadyMsg: "该设备已获得专属安装包，点击下方按钮安装（请用 Safari）。",
     device: "设备",
     elapsed: (n) => `已等待 ${n} 秒…`,
+    guideTitle: "如何在“设置”中安装描述文件",
+    guideIntro: "iOS 不会自动安装描述文件。请按以下 4 步操作：",
+    guideSteps: ["打开<b>设置</b>（齿轮图标）。", "页面最上方会出现<b>“已下载描述文件”</b> → 点击它。<br><span style=\"opacity:.75\">没看到？请进入<b>通用 → VPN 与设备管理</b>。</span>", "点击<b>VPNFlow — 设备注册</b> → 点击右上角<b>安装</b>。", "输入<b>锁屏密码</b>。若提示<b>“未签名”</b>，请再点一次<b>安装</b>。"],
+    guideNote: "该描述文件只上报<b>设备码 (UDID)</b>、机型和 iOS 版本 —— 可随时删除。",
+    guideClose: "知道了，打开设置",
+    guideBtn: "❓ 再看一次安装指引",
+    guideAfter: "安装完成后返回 Safari —— 本页会自动进入第 2 步。",
     profileName: "VPNFlow — 设备注册",
     profileDesc: "将设备码 (UDID) 上报给 VPNFlow，以便发放对应的安装包。不采集其他数据。",
   },
@@ -2098,13 +2105,7 @@ const IOS_TEXTS = {
     pageTitle: "iPhone / iPad に VPNFlow をインストール",
     intro: (v) => `バージョン ${v} · <b>Safari</b> で開いて 2 ステップで完了します。`,
     step1: "端末を登録（1 回だけ）",
-    step1Items: [
-      "<b>1.</b> 下のボタンをタップ —— iOS が<i>「プロファイルをダウンロードしました」</i>と表示。",
-      "<b>2.</b> <b>設定 → ダウンロード済みプロファイル</b> → <b>インストール</b> → パスコード入力。",
-      "<b>3.</b> <i>「署名なし」</i>と出ても <b>インストール</b> を続けてください（端末 ID の送信のみ）。",
-      "プロファイルが送るのは<b>端末 ID (UDID)</b>・機種・iOS バージョンのみ。いつでも<b>削除できます</b>。",
-      "インストール後は自動で送信され、このページはステップ 2 に進みます。",
-    ],
+    step1Items: ["下の緑のボタンをタップ → iOS が<b>「プロファイルをダウンロードしました」</b>と表示。", "<b>重要：</b>iOS は自動ではインストールしません。<b>設定</b>を開いてインストールしてください（下の手順）。", "完了したらこのページに戻ってください —— 自動でステップ 2 に進みます。"],
     regBtn: "📝 この端末を登録",
     step2: "アプリをインストール",
     waitLocked: "ステップ 1 を完了すると解除されます…",
@@ -2129,6 +2130,13 @@ const IOS_TEXTS = {
     waitReadyMsg: "この端末用のビルドが用意できました。下のボタンでインストール（Safari で開いてください）。",
     device: "端末",
     elapsed: (n) => `待機中 ${n} 秒…`,
+    guideTitle: "「設定」でのプロファイルのインストール手順",
+    guideIntro: "iOS は自動でインストールしません。次の 4 ステップを行ってください：",
+    guideSteps: ["<b>設定</b>アプリを開きます（歯車アイコン）。", "一番上に<b>「ダウンロード済みプロファイル」</b>が表示されます → タップ。<br><span style=\"opacity:.75\">見つからない場合は<b>一般 → VPN とデバイス管理</b>へ。</span>", "<b>VPNFlow — 端末登録</b>をタップ → 右上の<b>インストール</b>をタップ。", "<b>パスコード</b>を入力。<b>「署名なし」</b>と表示されたら、もう一度<b>インストール</b>をタップ。"],
+    guideNote: "このプロファイルが送信するのは<b>端末 ID (UDID)</b>・機種・iOS バージョンのみ。いつでも削除できます。",
+    guideClose: "了解、設定を開きます",
+    guideBtn: "❓ インストール手順をもう一度見る",
+    guideAfter: "インストール後、Safari に戻ってください —— 自動でステップ 2 に進みます。",
     profileName: "VPNFlow — 端末登録",
     profileDesc: "端末 ID (UDID) を VPNFlow に送信し、対応するビルドを発行するためのプロファイルです。他のデータは収集しません。",
   },
@@ -2136,13 +2144,7 @@ const IOS_TEXTS = {
     pageTitle: "iPhone / iPad에 VPNFlow 설치",
     intro: (v) => `버전 ${v} · <b>Safari</b>로 열고 2단계만 진행하세요.`,
     step1: "기기 등록 (1회만)",
-    step1Items: [
-      "<b>1.</b> 아래 버튼을 탭하면 iOS가 <i>“프로파일 다운로드됨”</i>을 표시합니다.",
-      "<b>2.</b> <b>설정 → 다운로드된 프로파일</b> → <b>설치</b> → 암호 입력.",
-      "<b>3.</b> <i>“서명되지 않음”</i>이 나와도 <b>설치</b>를 계속하세요 (기기 ID 전송 용도).",
-      "프로파일은 <b>기기 ID (UDID)</b>, 모델, iOS 버전만 전송하며 언제든 <b>삭제할 수 있습니다</b>.",
-      "설치가 끝나면 자동으로 전송되고 이 페이지가 2단계로 넘어갑니다.",
-    ],
+    step1Items: ["아래 초록색 버튼을 누르세요 → iOS가 <b>“프로파일 다운로드됨”</b>을 표시합니다.", "<b>중요:</b> iOS는 자동으로 설치하지 않습니다. <b>설정</b>을 열어 프로파일을 설치하세요(아래 안내).", "완료 후 이 페이지로 돌아오세요 — 자동으로 2단계로 넘어갑니다."],
     regBtn: "📝 이 기기 등록",
     step2: "앱 설치",
     waitLocked: "1단계를 완료하면 잠금이 풀립니다…",
@@ -2167,6 +2169,13 @@ const IOS_TEXTS = {
     waitReadyMsg: "이 기기 전용 빌드가 준비되었습니다. 아래 버튼으로 설치하세요 (Safari).",
     device: "기기",
     elapsed: (n) => `${n}초 대기 중…`,
+    guideTitle: "설정에서 프로파일 설치하는 방법",
+    guideIntro: "iOS는 프로파일을 자동으로 설치하지 않습니다. 다음 4단계를 따라 하세요:",
+    guideSteps: ["<b>설정</b> 앱을 엽니다(톱니바퀴 아이콘).", "맨 위에 <b>“프로파일 다운로드됨”</b>이 표시됩니다 → 누르세요.<br><span style=\"opacity:.75\">안 보이면 <b>일반 → VPN 및 기기 관리</b>로 이동하세요.</span>", "<b>VPNFlow — 기기 등록</b>을 누르고 → 오른쪽 위 <b>설치</b>를 누르세요.", "<b>암호</b>를 입력하세요. <b>“서명되지 않음”</b>이 뜨면 <b>설치</b>를 한 번 더 누르세요."],
+    guideNote: "이 프로파일은 <b>기기 ID (UDID)</b>, 모델, iOS 버전만 전송하며 언제든 삭제할 수 있습니다.",
+    guideClose: "확인, 설정 열기",
+    guideBtn: "❓ 설치 안내 다시 보기",
+    guideAfter: "설치 후 Safari로 돌아오세요 — 자동으로 2단계로 넘어갑니다.",
     profileName: "VPNFlow — 기기 등록",
     profileDesc: "기기 ID (UDID)를 VPNFlow로 전송해 해당 빌드를 발급받기 위한 프로파일입니다. 다른 데이터는 수집하지 않습니다.",
   },
@@ -2201,6 +2210,9 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
     payloadName: t.profileName,
     description: t.profileDesc,
   });
+  // KHÔNG để Safari/Caddy cache hồ sơ: bản cũ bị cache làm khách cài lại đúng file hỏng
+  // (đã xảy ra thật: sửa XML xong nhưng máy vẫn tải bản cache ⇒ cài không gửi UDID).
+  res.set("Cache-Control", "no-store, must-revalidate");
   res.type("application/x-apple-aspen-config").send(profile);
 });
 
@@ -2581,6 +2593,16 @@ code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size
 .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#33c773;border-radius:50%;animation:sp .9s linear infinite;display:inline-block}
 @keyframes sp{to{transform:rotate(360deg)}}.okmsg{color:#33c773;font-weight:600;font-size:13.5px;padding:4px 0}
 .langbar{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:-6px 0 12px}.langbar select{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:5px 8px;font-size:12.5px;font-family:inherit}
+.modal{position:fixed;inset:0;background:rgba(3,10,20,.82);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:16px;z-index:99}
+.mbox{max-width:460px;width:100%;max-height:88vh;overflow:auto;background:#0d2036;border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:20px}
+.mtitle{font-size:17px;font-weight:700;margin:0 0 6px;color:#fff}
+.mintro{font-size:13.5px;color:rgba(255,255,255,.8);margin:0 0 10px}
+ol.msteps{color:rgba(255,255,255,.9);font-size:13.5px;line-height:1.65;padding-left:20px;margin:0 0 10px}
+ol.msteps li{margin-bottom:7px}
+.mnote{font-size:12.5px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.05);padding:9px 11px;border-radius:9px;margin:8px 0}
+.mafter{font-size:12.5px;color:#33c773;margin:8px 0 12px}
+.mbtn{width:100%;background:#33c773;color:#06160d;border:0;font-weight:700;font-size:15px;padding:14px;border-radius:11px;font-family:inherit}
+a.guidebtn{display:block;text-align:center;color:#8fd0ff;font-size:13px;margin:4px 0 8px;text-decoration:none}
 </style>
 </head><body><div class="c">
 ${iosLangSelectHTML(lang)}
@@ -2590,7 +2612,8 @@ ${iosLangSelectHTML(lang)}
 <div class="step">
   <div class="h"><span class="n">1</span>${t.step1}</div>
   <ul>${li(t.step1Items)}</ul>
-  <a class="b b1" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}">${t.regBtn}</a>
+  <a class="b b1" id="regLink" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}">${t.regBtn}</a>
+  <a class="guidebtn" href="#" onclick="showGuide();return false;">${t.guideBtn}</a>
 </div>
 
 <div class="step off" id="step2">
@@ -2615,8 +2638,26 @@ ${iosLangSelectHTML(lang)}
   <div style="font-size:12.5px;color:rgba(255,255,255,.5);margin-top:6px">${t.support}: support@meetflowai.site${fallback ? ` · ${t.fallback}: <a href="${fallback}" style="color:#7ab8ff">Diawi</a>` : ""}</div>
 </div>
 </div>
+
+<div class="modal" id="guide">
+  <div class="mbox">
+    <div class="mtitle">📲 ${t.guideTitle}</div>
+    <div class="mintro">${t.guideIntro}</div>
+    <ol class="msteps">${li(t.guideSteps)}</ol>
+    <div class="mnote">${t.guideNote}</div>
+    <div class="mafter">✅ ${t.guideAfter}</div>
+    <button class="mbtn" onclick="hideGuide()">${t.guideClose}</button>
+  </div>
+</div>
+</div>
 <script>
 var udid = ""; try { udid = localStorage.getItem("vpnflow_udid") || ""; } catch (e) {}
+// Sau khi khách bấm "Đăng ký thiết bị", iOS chỉ TẢI hồ sơ; phải tự mở Cài đặt để CÀI.
+// Popup này là hướng dẫn chính (theo ngôn ngữ của máy), hiện ngay để khách không bị lạc.
+function showGuide() { document.getElementById("guide").style.display = "flex"; }
+function hideGuide() { document.getElementById("guide").style.display = "none"; }
+var regLink = document.getElementById("regLink");
+if (regLink) regLink.addEventListener("click", function () { setTimeout(showGuide, 250); });
 var T = ${JSON.stringify({ waitReady: t.waitReady })};
 var step2 = document.getElementById("step2"), wait2 = document.getElementById("wait2");
 var wait2txt = document.getElementById("wait2txt"), ok2 = document.getElementById("ok2");
