@@ -111,7 +111,14 @@ export const ORDER_REF_PREFIXES = { VPNFLOW: "vpn", MEETFLOW: "ai", FLOWVPN: "vp
  *
  * @returns {{ orderCode: number|null, product: "vpn"|"ai"|null, via: string|null }}
  */
-export function extractOrderRef({ code, content } = {}) {
+export function extractOrderRef({ code, content, ignoreCodes = [] } = {}) {
+  // Số tài khoản nhận tiền hay bị SePay nhét vào nội dung ("… - 57222538888") và nó cũng là
+  // 10 chữ số nên rất dễ bị nhận nhầm thành mã đơn. Bỏ qua các số này khi dò.
+  const ignored = new Set(
+    (Array.isArray(ignoreCodes) ? ignoreCodes : [ignoreCodes])
+      .map((value) => normalizeOrderCode(value))
+      .filter((value) => Number.isFinite(value) && value > 0),
+  );
   const fields = [String(code ?? ""), String(content ?? "")];
   for (const field of fields) {
     // Không có `\b` ở cuối: vietqr.app bỏ dấu gạch nên nội dung có thể là
@@ -128,11 +135,17 @@ export function extractOrderRef({ code, content } = {}) {
 
   // SePay đã tách đúng mã đơn vào `code` (cấu hình "mã thanh toán" chỉ là số)
   const digitsInCode = String(code ?? "").trim().match(/^(\d{3,12})$/);
-  if (digitsInCode) return { orderCode: normalizeOrderCode(digitsInCode[1]), product: null, via: "code" };
+  if (digitsInCode) {
+    const orderCode = normalizeOrderCode(digitsInCode[1]);
+    if (!ignored.has(orderCode)) return { orderCode, product: null, via: "code" };
+  }
 
   // Khách gõ tay: lấy nhóm số trong nội dung (số có thể dính liền chữ, ví dụ "…1789319664NAM")
-  const inContent = String(content ?? "").match(/(?<!\d)(\d{5,12})(?!\d)/);
-  if (inContent) return { orderCode: normalizeOrderCode(inContent[1]), product: null, via: "content" };
+  const inContent = String(content ?? "").match(/(?<!\d)(\d{5,12})(?!\d)/g) ?? [];
+  for (const candidate of inContent) {
+    const orderCode = normalizeOrderCode(candidate);
+    if (!ignored.has(orderCode)) return { orderCode, product: null, via: "content" };
+  }
 
   return { orderCode: null, product: null, via: null };
 }
