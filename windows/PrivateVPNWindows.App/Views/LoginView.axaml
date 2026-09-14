@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VpnFlow.App.Views.LoginView">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="16">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Sign In" Classes="vpnTitle" HorizontalAlignment="Center" />
+        <TextBlock Text="Enter your email to receive a login code."
+                   Classes="vpnSubtitle"
+                   HorizontalAlignment="Center"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center" />
+      </StackPanel>
+
+      <Border Classes="vpnCard">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Email" Classes="vpnSectionTitle" />
+          <TextBox Name="EmailBox" Watermark="you@example.com" />
+          <Button Name="SendCodeButton" Classes="vpnPrimary" Content="Send Code" HorizontalAlignment="Left" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="vpnCard">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Login code" Classes="vpnSectionTitle" />
+          <TextBox Name="CodeBox" Watermark="123456" />
+          <Button Name="VerifyCodeButton" Classes="vpnPrimary" Content="Verify Code" HorizontalAlignment="Left" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

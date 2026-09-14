@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VpnFlow.App.Views.MainView">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="16">
+      <StackPanel Spacing="4">
+        <TextBlock Text="FlowVPN" Classes="vpnTitle" HorizontalAlignment="Center" />
+        <TextBlock Text="Private, encrypted internet from Vietnam"
+                   Classes="vpnSubtitle"
+                   HorizontalAlignment="Center"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center" />
+      </StackPanel>
+
+      <!-- Trạng thái kết nối -->
+      <Border Classes="vpnCard">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+            <Ellipse Name="StatusDot"
+                     Width="10"
+                     Height="10"
+                     Fill="{DynamicResource VpnDangerBrush}"
+                     VerticalAlignment="Center" />
+            <TextBlock Name="StatusText"
+                       Classes="vpnStatus"
+                       Foreground="{DynamicResource VpnDangerBrush}"
+                       Text="Disconnected" />
+          </StackPanel>
+          <TextBlock Text="Chưa kết nối tới máy chủ nào."
+                     Classes="vpnSubtitle"
+                     HorizontalAlignment="Center"
+                     TextAlignment="Center" />
+        </StackPanel>
+      </Border>
+
+      <!-- Chọn exit node -->
+      <Border Classes="vpnCard">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Server" Classes="vpnSectionTitle" />
+          <ComboBox Name="ExitNodeCombo" HorizontalAlignment="Stretch" SelectedIndex="0">
+            <ComboBoxItem>Vietnam · vietnam-1</ComboBoxItem>
+            <ComboBoxItem>Vietnam · vietnam-2</ComboBoxItem>
+            <ComboBoxItem>Singapore · singapore-1</ComboBoxItem>
+            <ComboBoxItem>Japan · japan-1</ComboBoxItem>
+          </ComboBox>
+          <Button Name="RefreshNodesButton"
+                  Classes="vpnNav"
+                  Content="Refresh servers"
+                  HorizontalAlignment="Left" />
+        </StackPanel>
+      </Border>
+
+      <!-- Nút Connect/Disconnect -->
+      <Button Name="ConnectButton"
+              Classes="vpnPrimary"
+              Content="Connect"
+              Width="200"
+              FontSize="16"
+              Click="OnConnectClick" />
+
+      <TextBlock Text="TUN mode requires administrator rights to install the WireGuard tunnel."
+                 Classes="vpnSubtitle"
+                 TextWrapping="Wrap"
+                 TextAlignment="Center" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

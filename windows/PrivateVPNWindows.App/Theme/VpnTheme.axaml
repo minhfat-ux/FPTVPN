@@ -1,0 +1,73 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <!-- Bảng màu lấy theo NFR-WIN-004 (đồng bộ bản macOS/iOS). -->
+    <SolidColorBrush x:Key="VpnAccentBrush" Color="#33C773" />
+    <SolidColorBrush x:Key="VpnDangerBrush" Color="#FF4D4D" />
+    <SolidColorBrush x:Key="VpnWarningBrush" Color="#FFA733" />
+    <SolidColorBrush x:Key="VpnTextPrimaryBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="VpnTextSecondaryBrush" Color="#99FFFFFF" />
+    <SolidColorBrush x:Key="VpnCardBrush" Color="#0FFFFFFF" />
+    <SolidColorBrush x:Key="VpnCardStrokeBrush" Color="#1FFFFFFF" />
+
+    <LinearGradientBrush x:Key="VpnBackgroundBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+      <GradientStop Color="#051525" Offset="0" />
+      <GradientStop Color="#0A1F3A" Offset="1" />
+    </LinearGradientBrush>
+  </Styles.Resources>
+
+  <Style Selector="TextBlock.vpnTitle">
+    <Setter Property="FontSize" Value="30" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource VpnTextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.vpnSubtitle">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.vpnStatus">
+    <Setter Property="FontSize" Value="22" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+
+  <Style Selector="TextBlock.vpnSectionTitle">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource VpnTextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="Border.vpnCard">
+    <Setter Property="Background" Value="{DynamicResource VpnCardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource VpnCardStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="16" />
+    <Setter Property="Padding" Value="16" />
+  </Style>
+
+  <Style Selector="Button.vpnPrimary">
+    <Setter Property="Background" Value="{DynamicResource VpnAccentBrush}" />
+    <Setter Property="Foreground" Value="#051525" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Padding" Value="18,10" />
+    <Setter Property="CornerRadius" Value="24" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button.vpnDanger">
+    <Setter Property="Background" Value="{DynamicResource VpnDangerBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Padding" Value="18,10" />
+    <Setter Property="CornerRadius" Value="24" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button.vpnNav">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="CornerRadius" Value="8" />
+  </Style>
+</Styles>

@@ -60,3 +60,8 @@ FPT-Harness/
 # Built release artifacts (APKs / archives) — regenerate with gradle/xcodebuild
 release/
 android/app/libs/hysteria-sources.jar
+
+# Windows client (C#/.NET + Avalonia) — không commit build output
+windows/**/bin/
+windows/**/obj/
+windows/dist/

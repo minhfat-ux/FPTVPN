@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VpnFlow.App.Views.MainWindow"
+        Title="FlowVPN"
+        Width="390"
+        Height="760"
+        MinWidth="360"
+        MinHeight="600"
+        Background="{DynamicResource VpnBackgroundBrush}"
+        RequestedThemeVariant="Dark">
+  <DockPanel LastChildFill="True">
+    <!-- Điều hướng tạm giữa các khung màn hình (chưa phải luồng nghiệp vụ thật). -->
+    <Border DockPanel.Dock="Bottom"
+            Padding="12,8"
+            Background="{DynamicResource VpnCardBrush}"
+            BorderBrush="{DynamicResource VpnCardStrokeBrush}"
+            BorderThickness="0,1,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+        <Button Name="NavMainButton" Classes="vpnNav" Content="Main" Click="OnNavMainClick" />
+        <Button Name="NavLoginButton" Classes="vpnNav" Content="Sign in" Click="OnNavLoginClick" />
+        <Button Name="NavSettingsButton" Classes="vpnNav" Content="Settings" Click="OnNavSettingsClick" />
+        <Button Name="NavUpdateButton" Classes="vpnNav" Content="Update" Click="OnNavUpdateClick" />
+      </StackPanel>
+    </Border>
+
+    <ContentControl Name="HostContent" />
+  </DockPanel>
+</Window>

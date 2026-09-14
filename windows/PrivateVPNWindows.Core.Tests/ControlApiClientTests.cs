@@ -1,0 +1,175 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using VpnFlow.Core.Api;
+
+namespace VpnFlow.Core.Tests;
+
+/// <summary>
+/// Kiểm tra tầng API: map JSON của coordinator, xử lý 403 device_limit_reached,
+/// nhường slot và đường dự phòng host khi transport lỗi.
+/// </summary>
+public class ControlApiClientTests
+{
+    private const string NodesJson =
+        """
+        {"nodes":[{"id":"node-1","name":"vietnam-1","country":"VN","city":"Hanoi","endpoint":"103.173.155.50:443","public_key":"AAA=","ws_relay_url":null,"wg_relay_url":"wss://wg","hy_relay_url":"wss://hy"}]}
+        """;
+
+    [Fact]
+    public void ExitNode_RelayFallbacks_PreferNewFields()
+    {
+        var node = JsonSerializer.Deserialize<ExitNode>(
+            """{"id":"n","name":"n","country":"VN","city":"H","endpoint":"h:1","public_key":"A","ws_relay_url":"wss://old","wg_relay_url":"wss://wg","hy_relay_url":"wss://hy"}""")!;
+
+        Assert.Equal("wss://wg", node.RelayUrl);
+        Assert.Equal("wss://hy", node.HysteriaRelayUrl);
+    }
+
+    [Fact]
+    public void ExitNode_RelayFallbacks_FallBackToLegacyField()
+    {
+        var node = JsonSerializer.Deserialize<ExitNode>(
+            """{"id":"n","name":"n","country":"VN","city":"H","endpoint":"h:1","public_key":"A","ws_relay_url":"wss://old"}""")!;
+
+        Assert.Equal("wss://old", node.RelayUrl);
+        Assert.Equal("wss://old", node.HysteriaRelayUrl);
+    }
+
+    [Fact]
+    public void DeviceRegistration_PreviousInstallCandidate_OnlyWhenExactlyOne()
+    {
+        var single = new[]
+        {
+            new CoordinatorDevice { DeviceId = "d1", Platform = "windows", Status = "active", PublicKey = "OLD" },
+        };
+        Assert.Equal("d1", DeviceRegistration.PreviousInstallCandidate(single, "windows", "NEW")?.DeviceId);
+
+        // Khoá trùng chính thiết bị đang đăng ký ⇒ không phải bản ghi cũ.
+        Assert.Null(DeviceRegistration.PreviousInstallCandidate(single, "windows", "OLD"));
+
+        // Khác platform (không được "cướp" slot của thiết bị khác loại).
+        Assert.Null(DeviceRegistration.PreviousInstallCandidate(single, "android", "NEW"));
+
+        // Nhiều ứng viên ⇒ không đoán.
+        var many = new[]
+        {
+            single[0],
+            new CoordinatorDevice { DeviceId = "d2", Platform = "windows", Status = "active", PublicKey = "OLD2" },
+        };
+        Assert.Null(DeviceRegistration.PreviousInstallCandidate(many, "windows", "NEW"));
+    }
+
+    [Fact]
+    public async Task Register_DeviceLimit_ThrowsWithDevicesAndMax()
+    {
+        const string body =
+            """
+            {"error":"device_limit_reached","message":"max","devices":[{"device_id":"d1","platform":"windows","status":"active","public_key":"PK"}],"max_devices":3}
+            """;
+        var client = Client(_ => Json(HttpStatusCode.Forbidden, body));
+
+        var ex = await Assert.ThrowsAsync<DeviceLimitException>(() => client.RegisterAsync(
+            "windows-x", "windows", "PUB", "0.0.0.0:51820", accessToken: "t", exitNodeId: "node-1"));
+
+        Assert.Equal(3, ex.MaxDevices);
+        Assert.Single(ex.Devices);
+        Assert.Equal("d1", ex.Devices[0].DeviceId);
+    }
+
+    [Fact]
+    public async Task Register_Success_ParsesOverlayAndReplaced()
+    {
+        const string body =
+            """
+            {"peer_id":"p1","overlay_ip":"10.77.0.9","network":"10.77.0.0/24","peer_credential":"c","peers":[],"replaced":{"device_id":"old","name":"windows-old"}}
+            """;
+        var client = Client(_ => Json(HttpStatusCode.Created, body));
+
+        var result = await client.RegisterAsync(
+            "windows-x", "windows", "PUB", "0.0.0.0:51820", accessToken: "t", replaceDeviceId: "old");
+
+        Assert.Equal("10.77.0.9", result.OverlayIp);
+        Assert.Equal("old", result.Replaced?.DeviceId);
+    }
+
+    [Fact]
+    public async Task FetchNodes_RetriesFallbackHost_OnTransportFailure()
+    {
+        var client = Client(request =>
+        {
+            if (request.RequestUri!.Host == "api.meetflowai.site")
+                throw new HttpRequestException("blocked");
+            return Json(HttpStatusCode.OK, NodesJson);
+        });
+
+        var nodes = await client.FetchNodesAsync();
+
+        Assert.Single(nodes);
+        Assert.Equal("node-1", nodes[0].Id);
+    }
+
+    [Fact]
+    public async Task FetchNodes_AllHostsFail_ThrowsTransport()
+    {
+        var client = Client(_ => throw new HttpRequestException("blocked"));
+
+        await Assert.ThrowsAsync<ApiTransportException>(() => client.FetchNodesAsync());
+    }
+
+    [Fact]
+    public async Task FetchEnrollmentToken_EmptySession_ThrowsMissingSession()
+    {
+        var client = Client(_ => Json(HttpStatusCode.OK, "{}"));
+
+        await Assert.ThrowsAsync<MissingSessionException>(() => client.FetchEnrollmentTokenAsync(""));
+    }
+
+    [Fact]
+    public async Task FetchSession_ParsesSubscriptionTrialFields()
+    {
+        const string body =
+            """
+            {"access_token":"tok","token_type":"Bearer","expires_at":"2026-12-31T00:00:00.000Z","user":{"id":"u1","email":"a@b.c","subscription_status":{"is_active":true,"product_id":"trial.1day","is_trial":true,"trial_hours_left":5,"plan_badge":"Trial"}}}
+            """;
+        var client = Client(_ => Json(HttpStatusCode.OK, body));
+
+        var session = await client.FetchSessionAsync("tok");
+
+        Assert.True(session.User.SubscriptionStatus!.IsTrial);
+        Assert.Equal(5, session.User.SubscriptionStatus.TrialHoursLeft);
+        Assert.Equal("Trial", session.User.SubscriptionStatus.PlanBadge);
+    }
+
+    [Fact]
+    public async Task FetchAppVersion_UsesStoreUrlWhenIpaMissing()
+    {
+        const string body =
+            """
+            {"platform":"windows","minimum_version":"1.0.0","latest_version":"1.1.0","store_url":"https://dl/setup.exe"}
+            """;
+        var client = Client(_ => Json(HttpStatusCode.OK, body));
+
+        var info = await client.FetchAppVersionAsync("windows");
+
+        Assert.Equal("https://dl/setup.exe", info.DownloadUrl);
+    }
+
+    private static ControlApiClient Client(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        => new("https://api.meetflowai.site", "", new HttpClient(new StubHandler(responder)));
+
+    private static HttpResponseMessage Json(HttpStatusCode status, string body)
+        => new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+
+    private sealed class StubHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
+
+        public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) => _responder = responder;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+            => Task.FromResult(_responder(request));
+    }
+}

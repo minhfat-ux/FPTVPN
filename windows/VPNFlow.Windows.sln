@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrivateVPNWindows.Core", "PrivateVPNWindows.Core\PrivateVPNWindows.Core.csproj", "{C036DE33-CB70-4D59-A280-AB8260BD6936}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrivateVPNWindows.App", "PrivateVPNWindows.App\PrivateVPNWindows.App.csproj", "{DE87FD4A-5C04-42FF-A506-A129351B0DB8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C036DE33-CB70-4D59-A280-AB8260BD6936}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C036DE33-CB70-4D59-A280-AB8260BD6936}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C036DE33-CB70-4D59-A280-AB8260BD6936}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C036DE33-CB70-4D59-A280-AB8260BD6936}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE87FD4A-5C04-42FF-A506-A129351B0DB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE87FD4A-5C04-42FF-A506-A129351B0DB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE87FD4A-5C04-42FF-A506-A129351B0DB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE87FD4A-5C04-42FF-A506-A129351B0DB8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

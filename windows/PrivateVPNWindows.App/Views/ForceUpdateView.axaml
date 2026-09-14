@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VpnFlow.App.Views.ForceUpdateView">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="16" VerticalAlignment="Center">
+      <TextBlock Text="Update Required" Classes="vpnTitle" HorizontalAlignment="Center" />
+      <TextBlock Text="A new version of VPNFlow is required to continue. Please download the latest version at meetflowai.site/buy."
+                 Classes="vpnSubtitle"
+                 TextWrapping="Wrap"
+                 TextAlignment="Center" />
+      <Button Name="UpdateButton" Classes="vpnPrimary" Content="Update" Width="160" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
