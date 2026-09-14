@@ -560,8 +560,8 @@ lượng lớn (96 MB) lại bị Diawi từ chối (`File size too large`). Vì
 
 | Kênh | Link đang phát | Ở đâu |
 |---|---|---|
-| **iOS** (app + trang buy) | Diawi <https://i.diawi.com/DRoBM6> (chủ shop chốt: iOS phát qua Diawi vì bản ad-hoc cần UDID) | `ios_ipa_url`; `/install/ios` là đường lùi và bộ `runIosLinkGuard` tự chuyển về đó khi link Diawi chết |
-| iOS — link đang phát (14/09, sau khi đổi IP node-2) | <https://i.diawi.com/DRoBM6> (VPNFlow iOS **1.3.3 build 13**, IPA 4,95 MB, md5 `10ce479a8740…`) | Diawi, upload kèm `--find-by-udid` (máy lạ tự đăng ký UDID); hết hạn ~15 ngày thì upload lại rồi PATCH `ipa_url` — link cũ 1.3.2/12: <https://i.diawi.com/gSn4ht> |
+| **iOS** (app + trang buy) | `https://meetflowai.site/install/ios` | **server mình** — trang cài tự phát, KHÔNG hết hạn, không giới hạn lượt tải (xem mục dưới) |
+| iOS — kênh phụ khi cần chia sẻ/thu UDID | <https://i.diawi.com/gSn4ht> (VPNFlow iOS 1.3.2 build 12, IPA 4,7 MB, md5 `7de3e103a678…`) | Diawi, upload kèm `--find-by-udid`; hết hạn ~15 ngày thì upload lại |
 | VPNFlow Android (`/buy`) | `https://meetflowai.site/v1/downloads/android` (+ `…/android-legacy` cho Android 7/Fire OS) | server mình |
 | MeetFlow AI Android (`/ai/buy`) | `https://meetflowai.site/v1/ai/downloads/android` | server mình |
 
@@ -611,19 +611,6 @@ Quên bước 2 thì app báo "đã mới nhất" trong khi server đã có bả
 sai số build. **`minimum_version` = ép cập nhật** — chỉ đặt bằng bản mới khi chắc mọi máy iOS của khách
 đã có UDID trong provisioning profile (bản dev/ad-hoc hiện chỉ có 4 UDID); muốn nới ra thì PATCH
 `{"minimum_version":"0.0.0"}`.
-
-
-### Vì sao bản iOS phải cài qua Diawi (hoặc OTA có UDID)
-
-Bản IPA hiện tại là **ad-hoc/dev** (`Profile type: Development`, **4 UDID**, `get-task-allow=true`):
-iOS chỉ cài được lên máy có UDID nằm trong provisioning profile. Tải file `.ipa` về máy rồi mở **không
-cài được** — phải đi qua OTA (`itms-services` + manifest.plist, đúng cách Diawi làm), và máy vẫn phải
-có trong profile. Máy lạ: dùng nút đăng ký UDID của Diawi → nhận UDID → **build lại kèm UDID đó**.
-
-Chuỗi kỹ thuật của trang tự phát đã được kiểm đúng (đều 200, không redirect): `/install/ios` →
-`itms-services://…manifest.plist` (nay trả `text/xml`) → manifest → `/v1/downloads/ios`. Nên nếu bấm
-mà không cài được thì nguyên nhân nằm ở máy (UDID/Safari/Tin cậy nhà phát triển/IP cũ trong cache),
-không phải ở server — trang `/install/ios` đã có khối hướng dẫn đúng 5 nguyên nhân này.
 
 ### QR + link tải ngay trên trang buy (14/09/2026)
 

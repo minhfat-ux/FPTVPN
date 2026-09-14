@@ -26,10 +26,10 @@ MODE="${2:-direct}"
 case "$TARGET" in
   ios) SCHEME="PrivateVPN";    PLATFORM="iOS";   DEST="generic/platform=iOS" ;;
   mac) SCHEME="PrivateVPNMac"; PLATFORM="macOS"; DEST="generic/platform=macOS" ;;
-  *) echo "usage: $0 [ios|mac] [direct|diawi]" >&2; exit 2 ;;
+  *) echo "usage: $0 [ios|mac] [direct|diawi|adhoc]" >&2; exit 2 ;;
 esac
 case "$MODE" in
-  direct|diawi) ;;
+  direct|diawi|adhoc) ;;
   appstore)
     # Không dùng lại nhánh im lặng: cờ biên dịch không còn nên bản "review" sẽ giống hệt
     # bản web và chỉ gây nhầm là đã có bản nộp hợp lệ.
@@ -62,6 +62,15 @@ case "$MODE" in
   # COND luôn chỉ là '$(inherited)'.
   direct) METHOD="app-store-connect"; COND='$(inherited)' ;;
   diawi)  METHOD="development";       COND='$(inherited)' ;;
+  # `adhoc` = ĐÚNG CHUẨN để phát cho khách qua Diawi/OTA:
+  #  - ký bằng chứng chỉ Apple Distribution + profile Ad Hoc (danh sách UDID)
+  #  - KHÔNG có get-task-allow ⇒ máy khách KHÔNG phải bật "Developer Mode" (iOS 16+)
+  # Điều kiện: máy build phải đăng nhập Apple ID của team G6XW3RN6LJ trong Xcode, hoặc truyền
+  # App Store Connect API key để xcodebuild tự lấy profile:
+  #   xcodebuild ... -allowProvisioningUpdates \
+  #     -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_XXX.p8 \
+  #     -authenticationKeyID XXX -authenticationKeyIssuerID <issuer-uuid>
+  adhoc)  METHOD="ad-hoc";            COND='$(inherited)' ;;
 esac
 
 OUT="build/${TARGET}-${MODE}-export"
