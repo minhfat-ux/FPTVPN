@@ -153,6 +153,10 @@ struct CoordinatorSubscriptionStatus: Equatable, Codable {
     /// Số giờ còn lại của trial: null khi không phải trial, 0 khi đã hết giờ
     /// (`auth-store.js` → `trialHoursLeft`).
     var trial_hours_left: Int? = nil
+
+    /// Tên gói khách đã mua (backend trả từ plan-store: "Monthly", "3 Months", "Yearly"…).
+    /// Optional để payload cũ vẫn decode được; nil thì app tự suy từ `product_id`.
+    var plan_badge: String? = nil
 }
 
 /// A device owned by the signed-in user (user-scoped device management,

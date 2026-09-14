@@ -13,6 +13,15 @@ const RESEND_RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 const LEGACY_JOIN_TTL_MS = 30 * 60 * 1000;
 
+/**
+ * Nơi tra tên gói ngắn (badge) theo `product_id` để app hiện ĐÚNG tên gói khách đã mua
+ * (Monthly / 3 Months / Yearly…). index.js bơm vào lúc boot vì PlanStore nằm ở đó.
+ */
+let planLabelResolver = null;
+export function setPlanLabelResolver(fn) {
+  planLabelResolver = typeof fn === "function" ? fn : null;
+}
+
 export class AuthStore {
   constructor(filePath) {
     this.filePath = filePath;
@@ -561,6 +570,9 @@ function publicUser(user, subscription = null) {
       // "đang dùng trial" thay vì im lặng coi như đã trả tiền.
       is_trial: Boolean(subscription?.productId?.startsWith("trial.")),
       trial_hours_left: trialHoursLeft(subscription),
+      // Tên gói để app hiển thị trong mục Subscription. App nào không đọc được field này thì
+      // vẫn tự suy từ product_id (giữ tương thích ngược).
+      plan_badge: planLabelResolver?.(subscription?.productId) ?? null,
     },
   };
 }

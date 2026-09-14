@@ -390,6 +390,29 @@ struct ContentView: View {
         "\(flagEmoji(for: node.country)) \(node.city), \(countryName(node.country)) · \(node.name)"
     }
 
+    /// Dòng phụ của thẻ Subscription: chưa mua ⇒ "chọn gói để bắt đầu"; đã mua ⇒
+    /// "3 Months · Hết hạn 13/12/2026 · Còn 27 ngày" (gói vĩnh viễn thì không có hạn).
+    private var subscriptionSubtitle: String {
+        guard subscriptionStore.isSubscribed else {
+            return languageStore.t(.choosePlanToStart)
+        }
+        var parts: [String] = []
+        let plan = subscriptionStore.activePlanName
+        if !plan.isEmpty { parts.append(plan) }
+        if let expiry = subscriptionStore.planExpiresAt {
+            parts.append(String(
+                format: languageStore.t(.expiresOn),
+                expiry.formatted(date: .abbreviated, time: .omitted)
+            ))
+            if let days = subscriptionStore.planDaysLeft, days <= 30 {
+                parts.append(String(format: languageStore.t(.daysLeft), days))
+            }
+        } else {
+            parts.append(languageStore.t(.protectionUnlocked))
+        }
+        return parts.joined(separator: " · ")
+    }
+
     private var subscriptionStatusCard: some View {
         HStack(spacing: 14) {
             Image(systemName: subscriptionStore.isSubscribed ? "checkmark.seal.fill" : "lock.shield.fill")
@@ -400,27 +423,29 @@ struct ContentView: View {
                 Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.premiumRequired))
                     .font(.headline)
                     .foregroundStyle(VPNTheme.label)
-                Text(subscriptionStore.isSubscribed ? languageStore.t(.protectionUnlocked) : languageStore.t(.choosePlanToStart))
+                // Đã mua gói ⇒ hiện ĐÚNG gói khách đang dùng + ngày hết hạn + số ngày còn lại
+                // (nút bên cạnh đổi thành "Gia hạn"). Chưa mua ⇒ mời chọn gói như trước.
+                Text(subscriptionSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(VPNTheme.secondaryLabel)
             }
 
             Spacer()
 
-            if !subscriptionStore.isSubscribed {
-                Button {
-                    showingPaywall = true
-                } label: {
-                    Text(languageStore.t(.upgrade))
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(VPNTheme.accent)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
+            // Luôn có nút: chưa mua ⇒ "Nâng cấp" (bán gói); đã mua ⇒ "Gia hạn"
+            // (paywall để gia hạn hoặc mua thêm) — đúng yêu cầu chủ shop.
+            Button {
+                showingPaywall = true
+            } label: {
+                Text(languageStore.t(subscriptionStore.isSubscribed ? .renew : .upgrade))
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(VPNTheme.accent)
+                    .clipShape(Capsule())
             }
+            .buttonStyle(.plain)
         }
         .padding(16)
         .background(VPNTheme.cardBackground)

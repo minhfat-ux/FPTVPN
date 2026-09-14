@@ -162,9 +162,12 @@ fun MainScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        if (!isSubscribed) {
+        // Luôn hiện: chưa mua ⇒ mời chọn gói ("Nâng cấp"); đã mua ⇒ hiện ĐÚNG gói đang dùng
+        // + ngày hết hạn, nút đổi thành "Gia hạn" (mở paywall để gia hạn / mua thêm).
+        if (isSignedIn) {
             SubscriptionStatusCard(
                 app = app,
+                isSubscribed = isSubscribed,
                 onUpgrade = onShowPaywall,
             )
         }
@@ -513,19 +516,38 @@ private fun FreeTrialBanner(
 @Composable
 private fun SubscriptionStatusCard(
     app: VPNFlowApp,
+    isSubscribed: Boolean,
     onUpgrade: () -> Unit,
 ) {
     val lang = app.languageStore
+    val planName by app.subscriptionStore.activePlanName.collectAsState()
+    val planExpiresAt by app.subscriptionStore.planExpiresAt.collectAsState()
+    val planDaysLeft by app.subscriptionStore.planDaysLeft.collectAsState()
+
+    // Chưa mua ⇒ mời chọn gói. Đã mua ⇒ "3 Months · Hết hạn 13/12/2026 · Còn 27 ngày"
+    // (gói vĩnh viễn không có hạn ⇒ nói rõ quyền đang mở).
+    val subtitle = if (!isSubscribed) {
+        lang.t(LKey.choosePlanToStart)
+    } else {
+        buildList {
+            planName.takeIf { it.isNotBlank() }?.let { add(it) }
+            planExpiresAt?.let { millis ->
+                add(lang.t(LKey.expiresOn).format(formatPlanDate(millis)))
+                planDaysLeft?.takeIf { it <= 30 }?.let { add(lang.t(LKey.daysLeft).format(it)) }
+            }
+        }.joinToString(" · ").ifEmpty { lang.t(LKey.protectionUnlocked) }
+    }
+
     CardContainer {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    lang.t(LKey.premiumRequired),
+                    lang.t(if (isSubscribed) LKey.premiumActive else LKey.premiumRequired),
                     style = MaterialTheme.typography.titleMedium,
                     color = VPNTheme.Label,
                 )
                 Text(
-                    lang.t(LKey.choosePlanToStart),
+                    subtitle,
                     fontSize = 14.sp,
                     color = VPNTheme.SecondaryLabel,
                 )
@@ -535,11 +557,21 @@ private fun SubscriptionStatusCard(
                 colors = ButtonDefaults.buttonColors(containerColor = VPNTheme.Accent),
                 shape = RoundedCornerShape(50),
             ) {
-                Text(lang.t(LKey.upgrade), color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    lang.t(if (isSubscribed) LKey.renew else LKey.upgrade),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
 }
+
+/** Ngày hết hạn hiển thị theo locale của máy. */
+private fun formatPlanDate(millis: Long): String =
+    java.time.Instant.ofEpochMilli(millis)
+        .atZone(java.time.ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
 
 @Composable
 fun CardContainer(content: @Composable () -> Unit) {

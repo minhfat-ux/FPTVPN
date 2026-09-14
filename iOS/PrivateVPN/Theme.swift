@@ -165,6 +165,7 @@ enum AppTextKey: String {
     case subscription, status, premiumActive, premiumRequired, free
     case protectionUnlocked, choosePlanToStart, choosePlan, restorePurchases
     case freeTrialTitle, freeTrialBody
+    case yourPlan, renew, expiresOn, daysLeft
     case support, contactSupport, privacyPolicy, termsOfUse, upgrade
     case preparingPermission, vpnStartFailure, diagnostics, state, location, message, notConfigured
     case secureExitNode, vietnam, startVPNHint, stopVPNHint
@@ -228,7 +229,8 @@ final class AppLanguageStore: ObservableObject {
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456", .invalidEmail: "Please enter a valid email address.",
             .devCode: "Dev code: %@", .loginCodeSent: "Login code sent",
             .configuration: "Configuration", .done: "Done", .subscription: "Subscription", .status: "Status",
-            .premiumActive: "Premium Active", .premiumRequired: "Premium Required", .free: "Free",
+            .premiumActive: "Premium Active",
+            .yourPlan: "Your plan", .renew: "Renew", .expiresOn: "Expires %@", .daysLeft: "%d days left", .premiumRequired: "Premium Required", .free: "Free",
             .protectionUnlocked: "VPN protection is unlocked", .choosePlanToStart: "Choose a plan to start protection",
             .freeTrialTitle: "🎁 You're on the free 1-day trial", .freeTrialBody: "%d hours of trial left. Buy a plan to keep using the VPN after it ends.",
             .choosePlan: "Choose Plan", .restorePurchases: "Refresh Purchase Status", .support: "Support",
@@ -256,7 +258,8 @@ final class AppLanguageStore: ObservableObject {
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của VPNFlow để tiếp tục. Vui lòng tải bản mới tại meetflowai.site/buy.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
             .configuration: "Cấu hình", .done: "Xong", .subscription: "Gói đăng ký", .status: "Trạng thái",
-            .premiumActive: "Premium đang hoạt động", .premiumRequired: "Cần Premium", .free: "Miễn phí",
+            .premiumActive: "Premium đang hoạt động",
+            .yourPlan: "Gói của bạn", .renew: "Gia hạn", .expiresOn: "Hết hạn %@", .daysLeft: "Còn %d ngày", .premiumRequired: "Cần Premium", .free: "Miễn phí",
             .protectionUnlocked: "Bảo vệ VPN đã được mở khóa", .choosePlanToStart: "Chọn gói để bắt đầu bảo vệ",
             .freeTrialTitle: "🎁 Bạn đang dùng bản dùng thử 1 ngày miễn phí", .freeTrialBody: "Còn %d giờ dùng thử. Mua gói để tiếp tục dùng VPN sau khi hết hạn.",
             .choosePlan: "Chọn gói", .restorePurchases: "Làm mới trạng thái gói", .support: "Hỗ trợ",
@@ -284,7 +287,8 @@ final class AppLanguageStore: ObservableObject {
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 VPNFlow 才能继续。请前往 meetflowai.site/buy 下载最新版本。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
             .configuration: "设置", .done: "完成", .subscription: "订阅", .status: "状态",
-            .premiumActive: "Premium 已激活", .premiumRequired: "需要 Premium", .free: "免费",
+            .premiumActive: "Premium 已激活",
+            .yourPlan: "您的套餐", .renew: "续费", .expiresOn: "到期 %@", .daysLeft: "剩余 %d 天", .premiumRequired: "需要 Premium", .free: "免费",
             .protectionUnlocked: "VPN 保护已解锁", .choosePlanToStart: "选择套餐以开始保护",
             .freeTrialTitle: "🎁 您正在使用 1 天免费试用版", .freeTrialBody: "试用还剩 %d 小时。购买套餐以在到期后继续使用 VPN。",
             .choosePlan: "选择套餐", .restorePurchases: "刷新订阅状态", .support: "支持",
@@ -311,7 +315,8 @@ final class AppLanguageStore: ObservableObject {
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .updateRequired: "アップデートが必要です", .updateRequiredDetail: "VPNFlow の新しいバージョンが必要です。最新版は meetflowai.site/buy からダウンロードしてください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
             .configuration: "設定", .done: "完了", .subscription: "サブスクリプション", .status: "ステータス",
-            .premiumActive: "Premium 有効", .premiumRequired: "Premium が必要", .free: "無料",
+            .premiumActive: "Premium 有効",
+            .yourPlan: "ご契約プラン", .renew: "更新", .expiresOn: "有効期限 %@", .daysLeft: "残り %d 日", .premiumRequired: "Premium が必要", .free: "無料",
             .protectionUnlocked: "VPN 保護が有効です", .choosePlanToStart: "保護を開始するにはプランを選択",
             .freeTrialTitle: "🎁 1日間の無料トライアルを利用中です", .freeTrialBody: "トライアルは残り %d 時間です。終了後も VPN を使い続けるにはプランをご購入ください。",
             .choosePlan: "プランを選択", .restorePurchases: "購入状態を更新", .support: "サポート",
@@ -338,7 +343,8 @@ final class AppLanguageStore: ObservableObject {
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 VPNFlow 버전이 필요합니다. 최신 버전을 meetflowai.site/buy에서 다운로드하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
             .configuration: "설정", .done: "완료", .subscription: "구독", .status: "상태",
-            .premiumActive: "Premium 활성화됨", .premiumRequired: "Premium 필요", .free: "무료",
+            .premiumActive: "Premium 활성화됨",
+            .yourPlan: "내 요금제", .renew: "갱신", .expiresOn: "%@ 만료", .daysLeft: "%d일 남음", .premiumRequired: "Premium 필요", .free: "무료",
             .protectionUnlocked: "VPN 보호가 활성화되었습니다", .choosePlanToStart: "보호를 시작하려면 플랜을 선택하세요",
             .freeTrialTitle: "🎁 1일 무료 체험판을 사용 중입니다", .freeTrialBody: "체험판이 %d시간 남았습니다. 종료 후에도 VPN을 계속 사용하려면 플랜을 구매하세요.",
             .choosePlan: "플랜 선택", .restorePurchases: "구매 상태 새로 고침", .support: "지원",

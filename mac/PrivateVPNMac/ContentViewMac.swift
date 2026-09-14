@@ -62,7 +62,9 @@ struct ContentViewMac: View {
                     trialBanner
                 }
 
-                if !subscriptionStore.isSubscribed {
+                // Luôn hiện thẻ Subscription: chưa mua ⇒ mời chọn gói; đã mua ⇒ hiện gói đã mua
+                // + ngày hết hạn, và nút đổi thành "Gia hạn" (mở paywall để gia hạn/mua thêm).
+                if authStore.isSignedIn {
                     subscriptionStatusCard
                 }
 
@@ -270,6 +272,29 @@ struct ContentViewMac: View {
         )
     }
 
+    /// Dòng phụ của thẻ Subscription: chưa mua ⇒ "chọn gói để bắt đầu"; đã mua ⇒
+    /// "3 Months · Hết hạn 13/12/2026 · Còn 27 ngày" (gói vĩnh viễn thì không có hạn).
+    private var subscriptionSubtitle: String {
+        guard subscriptionStore.isSubscribed else {
+            return languageStore.t(.choosePlanToStart)
+        }
+        var parts: [String] = []
+        let plan = subscriptionStore.activePlanName
+        if !plan.isEmpty { parts.append(plan) }
+        if let expiry = subscriptionStore.planExpiresAt {
+            parts.append(String(
+                format: languageStore.t(.expiresOn),
+                expiry.formatted(date: .abbreviated, time: .omitted)
+            ))
+            if let days = subscriptionStore.planDaysLeft, days <= 30 {
+                parts.append(String(format: languageStore.t(.daysLeft), days))
+            }
+        } else {
+            parts.append(languageStore.t(.protectionUnlocked))
+        }
+        return parts.joined(separator: " · ")
+    }
+
     private var subscriptionStatusCard: some View {
         HStack(spacing: 14) {
             Image(systemName: subscriptionStore.isSubscribed ? "checkmark.seal.fill" : "lock.shield.fill")
@@ -280,28 +305,26 @@ struct ContentViewMac: View {
                 Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.premiumRequired))
                     .font(.headline)
                     .foregroundStyle(VPNThemeMac.textPrimary)
-                Text(subscriptionStore.isSubscribed ? languageStore.t(.protectionUnlocked) : languageStore.t(.choosePlanToStart))
+                Text(subscriptionSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(VPNThemeMac.textSecondary)
             }
 
             Spacer()
 
-            if !subscriptionStore.isSubscribed {
-                Button {
-                    showingPaywall = true
-                } label: {
-                    Text(languageStore.t(.upgrade))
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(VPNThemeMac.accent)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(isConnectionTransitioning)
+            Button {
+                showingPaywall = true
+            } label: {
+                Text(languageStore.t(subscriptionStore.isSubscribed ? .renew : .upgrade))
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(VPNThemeMac.accent)
+                    .clipShape(Capsule())
             }
+            .buttonStyle(.plain)
+            .disabled(isConnectionTransitioning)
         }
         .padding(16)
         .background(VPNThemeMac.cardBackground)

@@ -32,6 +32,18 @@ class SubscriptionStore(
     private val _trialHoursLeft = MutableStateFlow<Int?>(null)
     val trialHoursLeft: StateFlow<Int?> = _trialHoursLeft.asStateFlow()
 
+    /** Tên gói đang dùng ("Monthly" / "3 Months"…): đọc `plan_badge` từ backend, không có thì suy từ product_id. */
+    private val _activePlanName = MutableStateFlow("")
+    val activePlanName: StateFlow<String> = _activePlanName.asStateFlow()
+
+    /** Ngày hết hạn của gói đã mua (null = vĩnh viễn hoặc chưa mua). */
+    private val _planExpiresAt = MutableStateFlow<Long?>(null)
+    val planExpiresAt: StateFlow<Long?> = _planExpiresAt.asStateFlow()
+
+    /** Số ngày còn lại của gói (null khi gói vĩnh viễn). */
+    private val _planDaysLeft = MutableStateFlow<Int?>(null)
+    val planDaysLeft: StateFlow<Int?> = _planDaysLeft.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -56,6 +68,22 @@ class SubscriptionStore(
         _backendPremium.value = active
         _isOnFreeTrial.value = active && status?.isTrial == true
         _trialHoursLeft.value = if (_isOnFreeTrial.value) status?.trialHoursLeft else null
+        // Gói đã mua: hiện đúng tên gói + hạn để mục Subscription nói rõ khách đang dùng gì.
+        _activePlanName.value = if (!active) "" else {
+            status?.planBadge?.takeIf { it.isNotBlank() }
+                ?: status?.productId?.takeIf { it.isNotBlank() }?.replaceFirstChar { it.uppercase() }
+                ?: "Premium"
+        }
+        val expiry = status?.expiresAt?.takeIf { it.isNotBlank() }?.let { raw ->
+            runCatching { java.time.Instant.parse(raw).toEpochMilli() }
+                .recoverCatching { java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli() }
+                .getOrNull()
+        }
+        _planExpiresAt.value = if (active) expiry else null
+        _planDaysLeft.value = _planExpiresAt.value?.let { millis ->
+            val left = millis - System.currentTimeMillis()
+            maxOf(0, Math.ceil(left / 86_400_000.0).toInt())
+        }
     }
 
     /**

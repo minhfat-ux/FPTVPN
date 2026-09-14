@@ -360,10 +360,30 @@ final class MacSubscriptionStore: ObservableObject {
         backendSubscriptionStatus?.trial_hours_left
     }
 
-    /// Tên gói hiển thị ở menu bar. Trước đây lấy `displayName` của sản phẩm StoreKit;
-    /// StoreKit đã bị gỡ nên chỉ còn hai giá trị này.
+    /// Tên gói hiển thị ở menu bar + thẻ Subscription: backend gửi `plan_badge`
+    /// ("Monthly" / "3 Months" / "Yearly"…); payload cũ không có thì suy từ `product_id`.
     var activePlanName: String {
-        isSubscribed ? "Premium" : "Free"
+        guard isSubscribed else { return "Free" }
+        if let badge = backendSubscriptionStatus?.plan_badge, !badge.isEmpty { return badge }
+        let id = backendSubscriptionStatus?.product_id ?? ""
+        guard !id.isEmpty else { return "Premium" }
+        return id.prefix(1).uppercased() + id.dropFirst()
+    }
+
+    /// Ngày hết hạn của gói đã mua (nil = vĩnh viễn hoặc chưa mua).
+    var planExpiresAt: Date? {
+        guard let raw = backendSubscriptionStatus?.expires_at, !raw.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let parsed = iso.date(from: raw) { return parsed }
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.date(from: raw)
+    }
+
+    /// Số ngày còn lại của gói (nil khi gói vĩnh viễn).
+    var planDaysLeft: Int? {
+        guard let date = planExpiresAt else { return nil }
+        return max(0, Int(ceil(date.timeIntervalSinceNow / 86_400)))
     }
 
     /// Đọc lại session từ coordinator (`GET /v1/auth/session`) và cập nhật quyền Premium.

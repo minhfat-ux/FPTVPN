@@ -115,6 +115,8 @@ data class CoordinatorSubscriptionStatus(
     @SerialName("is_trial") val isTrial: Boolean? = null,
     /** Số giờ còn lại của bản dùng thử; null khi không phải trial, 0 khi đã hết. */
     @SerialName("trial_hours_left") val trialHoursLeft: Int? = null,
+    /** Tên gói khách đã mua (backend trả từ plan-store: "Monthly", "3 Months"…). */
+    @SerialName("plan_badge") val planBadge: String? = null,
 )
 
 /** A device owned by the signed-in user. */

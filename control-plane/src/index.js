@@ -26,7 +26,7 @@ import {
   accountMatches,
   clientIpAllowed,
 } from "./sepay.js";
-import { AuthStore } from "./auth-store.js";
+import { AuthStore, setPlanLabelResolver } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { PlanStore } from "./plan-store.js";
@@ -196,6 +196,12 @@ const nodeStore = new NodeStore(NODES_DB_FILE, buildFallbackExitNode(), { legacy
 // và onChange nạp lại bảng đang chạy mỗi khi admin sửa -> trang /buy, tạo order
 // và hoá đơn dùng ngay giá mới, không cần deploy.
 const planStore = new PlanStore(PLANS_FILE, DEFAULT_PLANS, { onChange: applyPlans });
+// App hiển thị tên gói khách đã mua ⇒ backend trả `plan_badge` để 3 app không phải tự dịch tên gói.
+setPlanLabelResolver((productId) => {
+  if (!productId) return null;
+  const plan = planStore.get(productId);
+  return plan?.badge || plan?.label || null;
+});
 const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   minimum_ios_version: DEFAULT_MIN_VERSION,
   latest_ios_version: DEFAULT_LATEST_VERSION,

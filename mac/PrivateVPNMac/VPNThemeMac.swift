@@ -78,6 +78,7 @@ enum AppTextKey: String {
     case paywallTitle, paywallSubtitle, benefitTunnel, benefitWifi, benefitFast
     case privacy, notNow
     case plan, select, connect, disconnect, openSettings, upgradeToPremium, quit
+    case yourPlan, renew, expiresOn, daysLeft
     case disconnected, connecting, connected, disconnecting, failed
     case serverLocation, loadingLocations, noServerAvailable, refreshLocations
     case usingSavedServers
@@ -136,6 +137,7 @@ final class AppLanguageStore: ObservableObject {
             .devCode: "Dev code: %@", .loginCodeSent: "Login code sent",
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Private, encrypted internet from Vietnam", .updateRequired: "Update Required", .updateRequiredDetail: "A new version of VPNFlow is required to continue. Please download the latest version at meetflowai.site/buy.", .update: "Update", .deleteAccount: "Delete Account", .deleteAccountConfirm: "This permanently deletes your account and all data. This cannot be undone.", .deleteAccountDone: "Account deleted.", .cancel: "Cancel",
             .subscription: "Subscription", .status: "Status", .premiumActive: "Premium Active",
+            .yourPlan: "Your plan", .renew: "Renew", .expiresOn: "Expires %@", .daysLeft: "%d days left",
             .premiumRequired: "Premium Required", .free: "Free", .protectionUnlocked: "VPN protection is unlocked",
             .choosePlanToStart: "Choose a plan to start protection", .choosePlan: "Choose Plan",
             .trialBannerTitle: "🎁 You're on a free 1-day trial", .trialBannerSubtitle: "%@ hours of trial left. Buy a plan to keep using the VPN after it ends.",
@@ -161,6 +163,7 @@ final class AppLanguageStore: ObservableObject {
             .devCode: "Mã dev: %@", .loginCodeSent: "Mã đăng nhập đã được gửi",
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .subscription: "Gói đăng ký", .status: "Trạng thái", .premiumActive: "Premium đang hoạt động",
+            .yourPlan: "Gói của bạn", .renew: "Gia hạn", .expiresOn: "Hết hạn %@", .daysLeft: "Còn %d ngày",
             .premiumRequired: "Cần Premium", .free: "Miễn phí", .protectionUnlocked: "Bảo vệ VPN đã được mở khóa",
             .choosePlanToStart: "Chọn gói để bắt đầu bảo vệ", .choosePlan: "Chọn gói",
             .trialBannerTitle: "🎁 Bạn đang dùng bản dùng thử 1 ngày miễn phí", .trialBannerSubtitle: "Còn %@ giờ dùng thử. Mua gói để tiếp tục dùng VPN sau khi hết hạn.",
@@ -186,6 +189,7 @@ final class AppLanguageStore: ObservableObject {
             .devCode: "开发者验证码：%@", .loginCodeSent: "登录验证码已发送",
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .subscription: "订阅", .status: "状态", .premiumActive: "Premium 已激活",
+            .yourPlan: "您的套餐", .renew: "续费", .expiresOn: "到期 %@", .daysLeft: "剩余 %d 天",
             .premiumRequired: "需要 Premium", .free: "免费", .protectionUnlocked: "VPN 保护已解锁",
             .choosePlanToStart: "选择套餐以开始保护", .choosePlan: "选择套餐",
             .trialBannerTitle: "🎁 您正在使用 1 天免费试用", .trialBannerSubtitle: "试用还剩 %@ 小时。购买套餐以便试用结束后继续使用 VPN。",
@@ -211,6 +215,7 @@ final class AppLanguageStore: ObservableObject {
             .devCode: "開発用コード: %@", .loginCodeSent: "ログインコードを送信しました",
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .subscription: "サブスクリプション", .status: "ステータス", .premiumActive: "Premium 有効",
+            .yourPlan: "ご契約プラン", .renew: "更新", .expiresOn: "有効期限 %@", .daysLeft: "残り %d 日",
             .premiumRequired: "Premium が必要", .free: "無料", .protectionUnlocked: "VPN 保護が有効です",
             .choosePlanToStart: "保護を開始するにはプランを選択", .choosePlan: "プランを選択",
             .trialBannerTitle: "🎁 1日間の無料トライアルを利用中です", .trialBannerSubtitle: "トライアルは残り %@ 時間です。終了後も VPN を使い続けるにはプランをご購入ください。",
@@ -236,6 +241,7 @@ final class AppLanguageStore: ObservableObject {
             .devCode: "개발자 코드: %@", .loginCodeSent: "로그인 코드가 전송되었습니다",
             .emailPlaceholder: "you@example.com", .codePlaceholder: "123456",
             .subscription: "구독", .status: "상태", .premiumActive: "Premium 활성화됨",
+            .yourPlan: "내 요금제", .renew: "갱신", .expiresOn: "%@ 만료", .daysLeft: "%d일 남음",
             .premiumRequired: "Premium 필요", .free: "무료", .protectionUnlocked: "VPN 보호가 활성화되었습니다",
             .choosePlanToStart: "보호를 시작하려면 플랜을 선택하세요", .choosePlan: "플랜 선택",
             .trialBannerTitle: "🎁 무료 1일 체험판을 사용 중입니다", .trialBannerSubtitle: "체험판이 %@시간 남았습니다. 종료 후에도 VPN을 계속 사용하려면 플랜을 구매하세요.",
