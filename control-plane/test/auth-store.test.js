@@ -197,3 +197,23 @@ test("trạng thái gói nói rõ trial 1 ngày (app hiện thông báo, không 
   assert.equal(me.subscription_status.is_trial, true, "phải đánh dấu là trial");
   assert.ok(me.subscription_status.trial_hours_left >= 1, "phải nói còn bao nhiêu giờ");
 });
+
+test("enrollment token: lookup (không tiêu thụ) trả đúng account để tự map UDID", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    const { code } = await store.startEmailLogin("buyer@example.com");
+    const session = await store.verifyEmailLogin("buyer@example.com", code);
+    const userId = session.user.id;
+    await store.grantSubscriptionForTest(userId);
+    const token = await store.createEnrollmentToken(userId);
+
+    const found = await store.lookupEnrollmentToken(token);
+    assert.equal(found.userId, userId);
+    assert.equal(found.email, "buyer@example.com");
+    // lookup KHÔNG được tiêu thụ token: app còn phải dùng lại cho /v1/peers/register
+    assert.equal((await store.lookupEnrollmentToken(token)).userId, userId);
+    await assert.rejects(() => store.lookupEnrollmentToken("PVPN-ENROLL-kh\u00f4ng-t\u1ed3n-t\u1ea1i"));
+  } finally {
+    await cleanup();
+  }
+});

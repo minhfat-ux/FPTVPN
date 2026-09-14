@@ -72,6 +72,20 @@ test("store: đăng ký mới → chờ ký lại → markBuilt thì mọi máy 
   assert.equal((await store.statusFor("UDID-C")).ready, false, "máy mới lại phải chờ ký lại");
 });
 
+test("store: map UDID vào account và lưu lại sau khi đọc", async () => {
+  const store = new IosDeviceStore(tmpFile());
+  await store.register({ udid: "UDID-MAP", model: "iPhone15,2" });
+  const mapped = await store.mapAccount("UDID-MAP", {
+    userId: "user-123",
+    email: "customer@example.com",
+  });
+  assert.equal(mapped.userId, "user-123");
+  assert.equal(mapped.email, "customer@example.com");
+  const listed = await store.list();
+  assert.equal(listed.devices[0].userId, "user-123");
+  assert.equal(listed.devices[0].email, "customer@example.com");
+});
+
 test("guard: route đăng ký thiết bị nằm dưới /install/ios (đã có handle Caddy)", () => {
   const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
   assert.ok(idx.includes('"/install/ios/register.mobileconfig"'), "phải có đường tải profile đăng ký");

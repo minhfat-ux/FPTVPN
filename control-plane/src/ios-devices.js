@@ -49,6 +49,8 @@ export function decodeDevicePayload(body) {
     serial: pick("SERIAL"),
     model: pick("PRODUCT"),
     iosVersion: pick("VERSION"),
+    imei: pick("IMEI"),
+    iccid: pick("ICCID"),
   };
 }
 
@@ -58,6 +60,7 @@ export function decodeDevicePayload(body) {
  */
 export function buildDeviceProfile({
   callbackUrl,
+  deviceAttributes = ["UDID", "VERSION", "PRODUCT", "SERIAL"],
   displayName = "VPNFlow — Device registration",
   payloadName = displayName,
   description = "Reports the device ID (UDID) to VPNFlow so we can issue a matching build.",
@@ -73,11 +76,8 @@ export function buildDeviceProfile({
     <dict>
       <key>URL</key><string>${callbackUrl}</string>
       <key>DeviceAttributes</key>
-      <array>
-        <string>UDID</string>
-        <string>VERSION</string>
-        <string>PRODUCT</string>
-        <string>SERIAL</string>
+      <array>${deviceAttributes.map((attribute) => `
+        <string>${attribute}</string>`).join("")}
       </array>
       <key>PayloadType</key><string>Profile Service</string>
       <key>PayloadVersion</key><integer>1</integer>
@@ -143,12 +143,19 @@ export class IosDeviceStore {
       const data = await this.load();
       const udid = String(info.udid ?? "").trim();
       if (!udid) throw new Error("thiếu UDID");
+      const token = String(info.token ?? "").trim() || null;
       const now = new Date().toISOString();
       const existing = data.devices.find((d) => d.udid === udid);
       if (existing) {
         existing.lastSeenAt = now;
         existing.iosVersion = info.iosVersion ?? existing.iosVersion;
         existing.model = info.model ?? existing.model;
+        existing.serial = info.serial ?? existing.serial;
+        existing.imei = info.imei ?? existing.imei;
+        existing.iccid = info.iccid ?? existing.iccid;
+        existing.enrollmentToken = token ?? existing.enrollmentToken;
+        if (info.userId) existing.userId = info.userId;
+        if (info.email) existing.email = info.email;
         await this.save(data);
         return { device: existing, isNew: false, buildSerial: data.buildSerial };
       }
@@ -157,6 +164,11 @@ export class IosDeviceStore {
         model: info.model ?? null,
         iosVersion: info.iosVersion ?? null,
         serial: info.serial ?? null,
+        imei: info.imei ?? null,
+        iccid: info.iccid ?? null,
+        enrollmentToken: token,
+        userId: info.userId ?? null,
+        email: info.email ?? null,
         registeredAt: now,
         lastSeenAt: now,
         built: false,
@@ -164,6 +176,19 @@ export class IosDeviceStore {
       data.devices.push(device);
       await this.save(data);
       return { device, isNew: true, buildSerial: data.buildSerial };
+    });
+  }
+
+  async mapAccount(udid, { userId, email }) {
+    return this._withLock(async () => {
+      const data = await this.load();
+      const device = data.devices.find((entry) => entry.udid === String(udid ?? "").trim());
+      if (!device) throw new Error("Không tìm thấy UDID");
+      device.userId = userId ?? null;
+      device.email = email ?? null;
+      device.updatedAt = new Date().toISOString();
+      await this.save(data);
+      return device;
     });
   }
 

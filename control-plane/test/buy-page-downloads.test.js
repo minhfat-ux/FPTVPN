@@ -67,3 +67,24 @@ test("trang buy: bản AI (MeetFlow) không bị ảnh hưởng bởi thay đổ
   });
   assert.ok(html.includes("/v1/ai/downloads/android"), "AI vẫn dùng đường tải riêng của nó");
 });
+
+test("trang buy: bản iOS Ad Hoc phải hiện các bước + UDID cho khách", () => {
+  const html = page("vi", { ios: "https://meetflowai.site/install/ios" });
+  assert.ok(html.includes("howto adhoc"), "phải có khối hướng dẫn Ad Hoc");
+  const block = html.match(/class="howto adhoc"[\s\S]*?<\/ol>/)[0];
+  assert.ok(block.includes("Safari"), "phải nhắc mở bằng Safari");
+  assert.ok(/UDID/i.test(block), "phải nói iOS gửi UDID về shop");
+  assert.ok(block.includes("Tin cậy") || block.includes("Trust"), "phải có bước Trust certificate");
+  assert.ok(html.includes("https://meetflowai.site/install/ios"), "khối phải trỏ tới trang cài");
+});
+
+test("trang buy: iOS Ad Hoc có đủ bước ở cả 5 ngôn ngữ", () => {
+  for (const lang of ["vi", "en", "zh", "ja", "ko"]) {
+    const html = page(lang, { ios: "https://meetflowai.site/install/ios" });
+    const m = html.match(/class="howto adhoc"[\s\S]*?<\/ol>/);
+    assert.ok(m, `${lang}: thiếu khối Ad Hoc`);
+    assert.equal((m[0].match(/<li>/g) ?? []).length, 4, `${lang}: phải đủ 4 bước`);
+    assert.ok(/UDID/i.test(m[0]), `${lang}: thiếu UDID`);
+    assert.ok(/Safari/.test(m[0]), `${lang}: thiếu Safari`);
+  }
+});

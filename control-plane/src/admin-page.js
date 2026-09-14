@@ -287,6 +287,7 @@ export function adminPageHTML() {
     <div class="tabs">
       <button class="tab active" id="tabNodes">Nodes</button>
       <button class="tab" id="tabUsers">Users</button>
+      <button class="tab" id="tabIos">iOS UDID</button>
       <button class="tab" id="tabStats">Dashboard</button>
       <button class="tab" id="tabPayments">Payments</button>
       <button class="tab" id="tabPlans">Plans</button>
@@ -377,6 +378,21 @@ export function adminPageHTML() {
           <tbody id="usersBody">
             <tr><td colspan="7">No data loaded.</td></tr>
           </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== IOS UDID VIEW ===================== -->
+    <section class="card hidden" id="view-ios">
+      <h2>iOS Ad Hoc — quản lý UDID</h2>
+      <div class="actions">
+        <button id="loadIos">Refresh</button>
+        <span class="status-inline" id="iosStatus"></span>
+      </div>
+      <div style="overflow-x:auto; margin-top:12px;">
+        <table>
+          <thead><tr><th>UDID</th><th>Model / iOS</th><th>Email</th><th>User ID</th><th>Registered</th><th>Built</th><th>Map account</th></tr></thead>
+          <tbody id="iosBody"><tr><td colspan="7">Bấm Refresh.</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -724,6 +740,11 @@ export function adminPageHTML() {
       editTitle: document.getElementById("editTitle"),
       tabNodes: document.getElementById("tabNodes"),
       tabUsers: document.getElementById("tabUsers"),
+      tabIos: document.getElementById("tabIos"),
+      viewIos: document.getElementById("view-ios"),
+      iosBody: document.getElementById("iosBody"),
+      iosStatus: document.getElementById("iosStatus"),
+      loadIos: document.getElementById("loadIos"),
       tabStats: document.getElementById("tabStats"),
       viewStats: document.getElementById("view-stats"),
       statsCards: document.getElementById("statsCards"),
@@ -827,10 +848,12 @@ export function adminPageHTML() {
       const nodes = tab === "nodes";
       fields.tabNodes.classList.toggle("active", nodes);
       fields.tabUsers.classList.toggle("active", tab === "users");
+      fields.tabIos.classList.toggle("active", tab === "ios");
       fields.tabStats.classList.toggle("active", tab === "stats");
       fields.tabPayments.classList.toggle("active", tab === "payments");
       fields.viewList.classList.toggle("hidden", !nodes);
       fields.viewUsers.classList.toggle("hidden", tab !== "users");
+      fields.viewIos.classList.toggle("hidden", tab !== "ios");
       fields.viewStats.classList.toggle("hidden", tab !== "stats");
       fields.viewPayments.classList.toggle("hidden", tab !== "payments");
       if (fields.tabPlans) fields.tabPlans.classList.toggle("active", tab === "plans");
@@ -843,6 +866,7 @@ export function adminPageHTML() {
         fields.usersLoaded = true;
         loadUsers();
       }
+      if (tab === "ios") loadIosDevices();
       if (tab === "stats") loadStats();
       if (tab === "payments") loadPayments();
       if (tab === "plans") loadPlans();
@@ -878,6 +902,47 @@ export function adminPageHTML() {
         await loadUsers();
       } catch (error) {
         fields.addUserStatus.textContent = error.message;
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>\"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" }[char]));
+    }
+
+    async function loadIosDevices() {
+      try {
+        fields.iosStatus.textContent = "Loading...";
+        const data = await request("/v1/admin/ios/devices");
+        const devices = data.devices || [];
+        fields.iosBody.innerHTML = devices.length ? devices.map(function (d) {
+          return "<tr>" +
+            "<td><code>" + escapeHtml(d.udid || "") + "</code></td>" +
+            "<td>" + escapeHtml(d.model || "-") + " / " + escapeHtml(d.iosVersion || "-") + "</td>" +
+            "<td>" + escapeHtml(d.email || "-") + "</td>" +
+            "<td><code>" + escapeHtml(d.userId || "-") + "</code></td>" +
+            "<td>" + escapeHtml(d.registeredAt || "-") + "</td>" +
+            "<td>" + (d.built ? "✅" : "⏳") + "</td>" +
+            "<td><button class=\"secondary ios-map\" data-udid=\"" + escapeHtml(d.udid || "") + "\">Map</button></td>" +
+            "</tr>";
+        }).join("") : "<tr><td colspan=\"7\">Chưa có UDID.</td></tr>";
+        fields.iosBody.querySelectorAll(".ios-map").forEach((button) => {
+          button.onclick = async () => {
+            const email = window.prompt("Email account cần map:", "");
+            if (!email) return;
+            try {
+              await request("/v1/admin/ios/devices/" + encodeURIComponent(button.dataset.udid) + "/account", {
+                method: "POST",
+                body: JSON.stringify({ email }),
+              });
+              await loadIosDevices();
+            } catch (error) {
+              fields.iosStatus.textContent = error.message;
+            }
+          };
+        });
+        fields.iosStatus.textContent = "Loaded " + devices.length + " device(s).";
+      } catch (error) {
+        fields.iosStatus.textContent = error.message;
       }
     }
 
@@ -2449,12 +2514,14 @@ export function adminPageHTML() {
 
     document.getElementById("tabNodes").onclick = () => showTab("nodes");
     document.getElementById("tabUsers").onclick = () => showTab("users");
+    document.getElementById("tabIos").onclick = () => showTab("ios");
     document.getElementById("tabStats").onclick = () => showTab("stats");
     document.getElementById("tabPayments").onclick = () => showTab("payments");
     document.getElementById("tabPlans").onclick = () => showTab("plans");
     document.getElementById("tabAi").onclick = () => showTab("ai");
     document.getElementById("tabAiUsers").onclick = () => showTab("aiu");
     document.getElementById("loadUsers").onclick = loadUsers;
+    document.getElementById("loadIos").onclick = loadIosDevices;
     document.getElementById("addUserBtn").onclick = addUser;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;

@@ -182,6 +182,18 @@ export class AuthStore {
     return token;
   }
 
+  async lookupEnrollmentToken(token) {
+    const data = await this._load();
+    const enrollment = data.enrollmentTokens.find((entry) => entry.tokenHash === hashToken(String(token ?? "")));
+    if (!enrollment || enrollment.consumedAt || isExpired(enrollment.expiresAt)) {
+      throw unauthorized("Enrollment token is invalid or expired");
+    }
+    const user = data.users.find((entry) => entry.id === enrollment.userId);
+    if (!user || user.revokedAt) throw unauthorized("User session is no longer active");
+    if (!activeSubscriptionFor(data, user.id)) throw forbidden("Active subscription required");
+    return { userId: user.id, email: user.email ?? null, expiresAt: enrollment.expiresAt };
+  }
+
   async consumeEnrollmentToken(token, userId) {
     const data = await this._load();
     const enrollment = data.enrollmentTokens.find((entry) => entry.tokenHash === hashToken(token));

@@ -1,0 +1,63 @@
+# Evidence — iOS Ad Hoc OTA: trang buy + thu UDID + map account (deploy production)
+
+date: 2026-09-15 (giờ VN)
+
+## 1. Mục tiêu
+Buy → khách bấm cài iOS → tự đăng ký máy (.mobileconfig → iOS gửi UDID) → UDID tự map
+đúng account → shop ký IPA Ad Hoc → khách cài qua link/manifest trên server.
+
+## 2. Đã thay đổi (4 file + 3 hunk trong index.js)
+| File | Thay đổi |
+|---|---|
+| control-plane/src/payments.js | Khối "Cài trên iPhone / iPad (Ad Hoc)" 4 bước × 5 ngôn ngữ (Safari, UDID, Trust); nút iOS Ad Hoc khi chưa có link IPA; câu hướng dẫn iosLineIpa nói đúng luồng |
+| control-plane/src/ios-devices.js | Lưu `IMEI`/`ICCID`, `enrollmentToken`, `userId`, `email`; `mapAccount()` |
+| control-plane/src/auth-store.js | `lookupEnrollmentToken()` (KHÔNG tiêu thụ token) để tự map UDID → account |
+| control-plane/src/admin-page.js | Tab **iOS UDID**: list UDID/model/iOS/email/userId/built + nút Map |
+| control-plane/src/index.js | (3 hunk) callback mobileconfig mang `?token=`; callback tự map UDID vào account; `POST /v1/admin/ios/devices/:udid/account` |
+
+## 3. Test (local, trước deploy)
+    control-plane$ npm test
+    ℹ tests 177
+    ℹ pass 177
+    ℹ fail 0
+
+## 4. Deploy (node-2 165.101.114.162)
+    backup: /root/cp-backup-2026-09-15-004202
+    md5 trên server:
+      index.js        c7e0262eeb32   (bản đã LỌC: chỉ 3 hunk của mình)
+      payments.js     8da43aa30fc2   = local
+      auth-store.js   0e4cf3366214   = local
+      ios-devices.js  48d66d355ef9   = local
+      admin-page.js   71790531be02   = local
+    node --check trên server: cả 5 file OK
+    systemctl restart flowvpn-cp → active
+    local: /buy 200 · /install/ios 200 · /v1/admin/ios/devices 401 (route sống, cần token)
+
+## 5. Verify LIVE (sau deploy)
+    live /buy: HTTP 200 | 42931 bytes
+    khối Ad Hoc: CÓ
+      "📲 Cài trên iPhone / iPad (Ad Hoc) — Mở trang này bằng Safari trên chính iPhone/iPad cần
+       cài … Bấm Đăng ký thiết bị → cài hồ sơ (iOS tự gửi mã thiết bị / UDID về shop) …"
+    nhắc UDID: CÓ · Safari: CÓ · Trust: CÓ
+    link trang cài: href="https://meetflowai.site/install/ios"
+    mobileconfig mang token vào callback:
+      <key>URL</key><string>https://meetflowai.site/install/ios/udid?lang=vi&token=TESTTOKEN123</string>
+    admin live (Funnel): tabIos, view-ios, loadIosDevices đều có
+
+## 6. SỰ CỐ trong lúc deploy (ghi lại để không lặp)
+- Lần deploy đầu, `control-plane/src/index.js` trong working tree có chứa **thay đổi dở dang của
+  agent khác**: `import { applyDeviceReplace } from "./device-replace.js"` — file `device-replace.js`
+  có ở máy local nhưng KHÔNG có trên server ⇒ service crash loop:
+  `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/root/flowvpn-cp/src/device-replace.js'`.
+- Thời gian production down: ≈ 00:39 → 00:42 (khoảng 3–4 phút): `flowvpn-cp` ở trạng thái
+  `activating`, `/buy` trả 000.
+- Khắc phục: khôi phục 5 file từ `/root/cp-backup-2026-09-15-003902` → active, /buy 200 trong ~1 phút;
+  sau đó deploy lại **index.js đã lọc** (chỉ 3 hunk của mình) + 4 file kia.
+- Bài học: KHÔNG deploy file từ working tree khi có agent khác đang sửa cùng file; phải soát
+  `git diff HEAD` + `grep import` trước khi copy lên server.
+
+## 7. Còn lại
+- `control-plane/src/index.js` trong working tree vẫn là bản của em + agent khác ⇒ KHÔNG commit
+  file này; 3 hunk của em đã chạy trên production nhưng chưa vào git.
+- Chưa có: tự động đăng ký UDID qua App Store Connect API (đang là copy/export + ký tay).
+- Chưa gửi email link cài riêng sau khi ký xong (hiện khách tự mở lại /install/ios).

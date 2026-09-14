@@ -270,3 +270,19 @@ Tầng 1 (commit `3d46f51`, `f6d58fd`).
   gặp 13/09).
 - **Đã ghi vào docs**: `docs/MEETFLOW_AI_OPS.md` — checklist 4 chỗ BẮT BUỘC sửa khi đổi IP máy chính
   (cp-proxy, trusted_proxies node-1, block http://IP node-2, WG_PUBLIC_ENDPOINT) + cách xử lý cache.
+
+## 2026-09-15 — iOS Ad Hoc OTA nối vào trang buy + tự map UDID → account (đã deploy)
+
+- Trang buy giờ hiện khối **"Cài trên iPhone / iPad (Ad Hoc)"** (4 bước × 5 ngôn ngữ: mở bằng Safari,
+  đăng ký thiết bị → iOS gửi UDID, shop thêm UDID vào Apple + ký lại, cài rồi Trust certificate).
+  Khối chỉ hiện khi kênh iOS đang là trang cài tự phát; nếu là link App Store thật thì ẩn.
+- `?token=` (enrollment token của account đã mua) đi từ trang cài vào callback mobileconfig →
+  `authStore.lookupEnrollmentToken()` ⇒ UDID **tự map** đúng account (không tiêu thụ token, nên app
+  vẫn dùng lại được cho `/v1/peers/register`). Token sai/hết hạn chỉ là "chưa map", không chặn khách.
+- Admin có tab **iOS UDID** + `POST /v1/admin/ios/devices/:udid/account` để map/kiểm tra.
+- **Sự cố deploy (đã khắc phục)**: deploy đầu tiên copy `src/index.js` từ working tree — file này có
+  thay đổi dở của agent khác (`import "./device-replace.js"`, module không có trên server) ⇒ crash loop,
+  production down ~3–4 phút (00:39→00:42). Khôi phục từ `/root/cp-backup-2026-09-15-003902` rồi deploy
+  lại bản index.js **đã lọc chỉ 3 hunk của mình**. Từ nay: luôn `git diff HEAD` + soát `import` trước khi
+  copy file lên server; không deploy file đang bị agent khác sửa.
+- Bằng chứng: `evidence/2026-09-15-ios-adhoc-ota-buy-and-account-mapping.log`.
