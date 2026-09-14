@@ -56,7 +56,13 @@ export function decodeDevicePayload(body) {
  * Profile .mobileconfig để iOS gửi thông tin thiết bị về `callbackUrl`.
  * Khách cài: Cài đặt → Đã tải về hồ sơ → Cài đặt (1 lần, có thể gỡ sau).
  */
-export function buildDeviceProfile({ callbackUrl, displayName = "VPNFlow — Đăng ký thiết bị", organization = "VPNFlow" }) {
+export function buildDeviceProfile({
+  callbackUrl,
+  displayName = "VPNFlow — Device registration",
+  payloadName = displayName,
+  description = "Reports the device ID (UDID) to VPNFlow so we can issue a matching build.",
+  organization = "VPNFlow",
+}) {
   const uuid = crypto.randomUUID().toUpperCase();
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -77,8 +83,8 @@ export function buildDeviceProfile({ callbackUrl, displayName = "VPNFlow — Đ�
       <key>PayloadVersion</key><integer>1</integer>
       <key>PayloadIdentifier</key><string>site.meetflowai.vpnflow.device.${uuid}</string>
       <key>PayloadUUID</key><string>${uuid}</string>
-      <key>PayloadDisplayName</key><string>Đăng ký thiết bị</string>
-      <key>PayloadDescription</key><string>Gửi mã thiết bị (UDID) cho VPNFlow để cấp bản cài phù hợp. Không thu thập dữ liệu khác.</string>
+      <key>PayloadDisplayName</key><string>${payloadName}</string>
+      <key>PayloadDescription</key><string>${description}</string>
       <key>PayloadRemovalDisallowed</key><false/>
     </dict>
   </array>

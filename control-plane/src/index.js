@@ -2173,6 +2173,7 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
     // `?lang=` đi theo callback để màn hình chờ của khách hiện đúng thứ tiếng đang xem.
     callbackUrl: `${siteBaseUrl()}/install/ios/udid?lang=${lang}`,
     displayName: t.profileName,
+    payloadName: t.profileName,
     description: t.profileDesc,
   });
   res.type("application/x-apple-aspen-config").send(profile);
