@@ -2668,14 +2668,17 @@ app.get(["/install/ios", "/install/ios/"], (req, res) => {
   const manifest = `${base}/install/ios/manifest.plist`;
   const itms = `itms-services://?action=download-manifest&amp;url=${encodeURIComponent(manifest)}`;
   const version = appConfig.get("latest_ios_version") || "1.0";
-  res.type("html").send(iosInstallPageHTML({ base, itms, version, lang: iosLang(req) }));
+  res.type("html").send(iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? "").slice(0, 200) }));
 });
 
 /**
  * Trang cài iOS — 2 bước, đa ngôn ngữ (vi/en/zh/ja/ko như trang buy), bước 2 chỉ mở khi máy đã có bản cài.
  * Ngôn ngữ chọn theo `?lang=` → `Accept-Language` của máy khách → mặc định tiếng Việt.
  */
-function iosInstallPageHTML({ base, itms, version, lang = "vi" }) {
+function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "" }) {
+  // Token account (nếu khách mở link riêng /install/ios?token=…) phải đi tiếp sang hồ sơ đăng ký,
+  // nếu không UDID gửi về sẽ không tự map được vào account.
+  const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
   const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
   const fallback = appConfig.get("ios_diawi_url") || process.env.IOS_DIAWI_URL;
   const li = (items) => items.map((x) => `<li>${x}</li>`).join("");
@@ -2715,7 +2718,7 @@ ${iosLangSelectHTML(lang)}
 <div class="step">
   <div class="h"><span class="n">1</span>${t.step1}</div>
   <ul>${li(t.step1Items)}</ul>
-  <a class="b b1" href="/install/ios/register.mobileconfig?lang=${lang}">${t.regBtn}</a>
+  <a class="b b1" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}">${t.regBtn}</a>
 </div>
 
 <div class="step off" id="step2">

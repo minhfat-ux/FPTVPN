@@ -26,7 +26,10 @@ test("trang cài iOS: nút itms-services + đa ngôn ngữ (vi/en/zh/ja/ko) đ�
   const route = indexSrc.slice(indexSrc.indexOf('app.get(["/install/ios"'), indexSrc.indexOf("function iosInstallPageHTML"));
   assert.ok(route.includes("itms-services://?action=download-manifest"), "phải dùng itms-services mới cài được");
   assert.ok(route.includes("encodeURIComponent(manifest)"), "URL manifest phải được encode");
-  assert.ok(route.includes("iosInstallPageHTML({ base, itms, version, lang: iosLang(req) })"), "route phải chọn ngôn ngữ theo máy khách");
+  assert.ok(route.includes("iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? \"\")"),
+    "route phải chọn ngôn ngữ theo máy khách và chuyển tiếp token account");
+  assert.ok(indexSrc.includes("${tokenQS}"), "nút đăng ký phải mang token sang hồ sơ (không thì UDID không tự map được)");
+  assert.ok(indexSrc.includes("const tokenQS = token ?"), "trang cài phải dựng tokenQS khi có token");
   assert.ok(indexSrc.includes("/install/ios/register.mobileconfig?lang=${lang}"), "nút đăng ký mang theo ngôn ngữ");
   const dict = indexSrc.slice(indexSrc.indexOf("const IOS_TEXTS = {"), indexSrc.indexOf("const iosDevices = new IosDeviceStore"));
   for (const lang of ["vi", "en", "zh", "ja", "ko"]) {
