@@ -2062,39 +2062,51 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
   const base = siteBaseUrl();
   const manifest = `${base}/install/ios/manifest.plist`;
   const itms = `itms-services://?action=download-manifest&amp;url=${encodeURIComponent(manifest)}`;
+  const version = appConfig.get("latest_ios_version") || "1.0";
   res.type("html").send(`<!doctype html><html lang="vi"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cài VPNFlow cho iPhone / iPad</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:460px;margin:24px;padding:28px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}.t{font-size:22px;font-weight:700;margin:0 0 6px}.s{color:rgba(255,255,255,.6);font-size:14px;margin:0 0 18px}a.b{display:block;text-align:center;background:#33c773;color:#06160d;text-decoration:none;font-weight:700;padding:14px;border-radius:10px;margin:8px 0 14px}ul{color:rgba(255,255,255,.72);font-size:13.5px;line-height:1.6;padding-left:18px;margin:0}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}</style>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:470px;margin:24px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}.t{font-size:21px;font-weight:700;margin:0 0 4px}.s{color:rgba(255,255,255,.6);font-size:13.5px;margin:0 0 16px}.step{border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px;margin:0 0 12px;background:rgba(255,255,255,.04)}.step.off{opacity:.55}.n{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:#33c773;color:#06160d;font-weight:700;font-size:13px;margin-right:8px}.h{font-weight:600;font-size:14.5px}a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:10px;margin:10px 0 6px}a.b1{background:rgba(255,255,255,.14);color:#fff}a.b2{background:#33c773;color:#06160d}ul{color:rgba(255,255,255,.72);font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}.warn{margin-top:12px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px;font-size:13px}</style>
 </head><body><div class="c">
 <p class="t">Cài VPNFlow lên iPhone / iPad</p>
-<p class="s">Bản ${appConfig.get("latest_ios_version") || "1.0"} · mở trang này bằng <b>Safari</b> để cài.</p>
-<a class="b" href="${itms}">📲 Cài đặt VPNFlow</a>
-<ul>
-<li>Bắt buộc mở bằng <b>Safari</b> (Chrome/Cốc Cốc không cài được).</li>
-<li>Bấm <b>Cài đặt</b> → hộp thoại hỏi cài đặt → chọn <b>Cài</b>.</li>
-<li>Máy chưa có trong danh sách UDID của bản build sẽ báo lỗi cài — gửi UDID cho shop để build lại.</li>
-<li>Cài xong nếu app báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
-<li>Cần hỗ trợ: <code>support@meetflowai.site</code></li>
-</ul>
-<div style="margin-top:14px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px">
-  <div style="font-size:13.5px;font-weight:600;margin-bottom:6px">⚠️ Bấm nút mà không thấy hộp thoại cài, hoặc báo "Unable to Install"?</div>
-  <ul style="margin:0;padding-left:18px">
-    <li>Trang phải mở bằng <b>Safari</b> — Chrome/Cốc Cốc/trình duyệt trong app chat KHÔNG cài được.</li>
-    <li>Đây là bản <b>ad-hoc (bản thử nghiệm)</b>: máy phải nằm trong danh sách UDID đã đăng ký. Máy lạ sẽ báo
-        <i>Unable to Install "VPNFlow"</i> — gửi UDID máy cho shop để build lại (kênh Diawi bên dưới có phần đăng ký UDID).</li>
-    <li>Cần iOS ${appConfig.get("ios_min_ios") || "17.0"} trở lên.</li>
-    <li>Cài xong mà báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
+<p class="s">Bản ${version} · làm theo 2 bước dưới đây, mở trang này bằng <b>Safari</b>.</p>
+
+<div class="step">
+  <div class="h"><span class="n">1</span>Đăng ký thiết bị (chỉ 1 lần)</div>
+  <ul>
+    <li>Bấm nút dưới → iOS tải một <b>hồ sơ đăng ký</b> nhỏ.</li>
+    <li>Vào <b>Cài đặt → Đã tải về hồ sơ</b> → <b>Cài đặt</b> (nhập mật khẩu máy nếu được hỏi).</li>
+    <li>Hồ sơ chỉ gửi <b>mã thiết bị (UDID)</b>, model và phiên bản iOS — không thu dữ liệu gì khác, và anh/chị <b>gỡ được</b> sau khi đăng ký.</li>
+  </ul>
+  <a class="b b1" href="/install/ios/register.mobileconfig">📝 Đăng ký thiết bị này</a>
+</div>
+
+<div class="step">
+  <div class="h"><span class="n">2</span>Cài ứng dụng</div>
+  <ul>
+    <li>Sau khi đăng ký, hệ thống chuẩn bị bản cài riêng cho máy này (<b>thường dưới 2 phút</b>).</li>
+    <li>Chờ một lát rồi bấm nút dưới; nếu báo <i>Unable to Install</i> thì chờ thêm ~1 phút rồi thử lại.</li>
+  </ul>
+  <a class="b b2" href="${itms}">📲 Cài đặt VPNFlow</a>
+</div>
+
+<div class="warn">
+  <b>Không cài được?</b>
+  <ul>
+    <li>Phải mở bằng <b>Safari</b> (Chrome, Cốc Cốc, trình duyệt trong app chat đều không cài được).</li>
+    <li>Máy chưa đăng ký (hoặc vừa đăng ký xong) sẽ báo <i>Unable to Install "VPNFlow"</i> — làm lại bước 1 rồi chờ ~1–2 phút.</li>
+    <li>Cần iOS <b>17.0</b> trở lên.</li>
+    <li>Cài xong nếu báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
     <li>Vẫn không được: tắt WiFi dùng 4G rồi thử lại (máy có thể còn nhớ IP cũ của server).</li>
-    ${process.env.IOS_DIAWI_URL ? `<li>Kênh phụ (Diawi) — có phần đăng ký UDID cho máy mới: <a href="${process.env.IOS_DIAWI_URL}" style="color:#7ab8ff">mở trang cài Diawi</a>.</li>` : ""}
+    <li>Hỗ trợ: <code>support@meetflowai.site</code>${process.env.IOS_DIAWI_URL ? ` · kênh dự phòng: <a href="${process.env.IOS_DIAWI_URL}" style="color:#7ab8ff">Diawi</a>` : ""}</li>
   </ul>
 </div>
+
 <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
   <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">📱 Đang xem trên máy tính? Quét mã này bằng điện thoại</div>
   <img src="/v1/downloads/qr?target=ios&size=260" alt="QR" width="150" height="150" style="background:#fff;padding:6px;border-radius:10px">
   <div style="font-size:12.5px;color:rgba(255,255,255,.6);margin-top:8px">${base}/install/ios</div>
 </div>
-</ul>
 </div></body></html>`);
 });
 
