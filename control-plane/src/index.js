@@ -2648,10 +2648,11 @@ function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid 
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
 .c{max-width:480px;margin:22px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}
 .t{font-size:21px;font-weight:700;margin:0 0 4px}.s{color:rgba(255,255,255,.6);font-size:13.5px;margin:0 0 16px}
-.step{border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px;margin:0 0 12px;background:rgba(255,255,255,.04)}
+.step{border:1px solid rgba(51,199,115,.3);border-radius:14px;padding:14px;margin:0 0 12px;background:rgba(255,255,255,.04)}
 .step.off{opacity:.55}
-.n{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:#33c773;color:#06160d;font-weight:700;font-size:13px;margin-right:8px}
-.h{font-weight:600;font-size:14.5px}
+.stephead{display:flex;align-items:center;gap:12px;margin:0 0 8px}
+.n{flex:0 0 auto;width:36px;height:36px;line-height:36px;text-align:center;border-radius:50%;background:#33c773;color:#06160d;font-weight:800;font-size:19px;box-shadow:0 0 0 4px rgba(51,199,115,.18)}
+.h{font-weight:700;font-size:16.5px;line-height:1.3}
 a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:10px;margin:10px 0 6px}
 a.b1{background:rgba(255,255,255,.14);color:#fff}a.b2{background:#33c773;color:#06160d}
 ul{color:rgba(255,255,255,.72);font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0}
@@ -2678,14 +2679,16 @@ ${iosLangSelectHTML(lang)}
 <p class="s">${t.intro(version)}</p>
 
 <div class="step">
-  <div class="h"><span class="n">1</span>${t.step1}</div>
+  <div class="stephead"><span class="n">1</span><span class="h">${t.step1}</span></div>
   <ul>${li(t.step1Items)}</ul>
+  <a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}">${t.regBtn}</a>
+  <div id="statusline" class="wait" style="display:none"><span class="spin"></span><span id="statustxt"></span></div>
 </div>
 
-<a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}">${t.regBtn}</a>
-<div id="statusline" class="wait" style="display:none"><span class="spin"></span><span id="statustxt"></span></div>
-<div class="stepmark">${t.step2After}</div>
-<a class="b b2" id="installLink" href="${itms}">${t.downloadBtn}</a>
+<div class="step">
+  <div class="stephead"><span class="n">2</span><span class="h">${t.step2}</span></div>
+  <a class="b b2" id="installLink" href="${itms}">${t.downloadBtn}</a>
+</div>
 
 <div class="warn">
   <b>${t.warnTitle}</b>
