@@ -549,6 +549,12 @@ function buyLang(req) {
   return requestLang(req);
 }
 
+/** Trang buy mở từ TRONG app (paywall) ⇒ ẩn mọi thứ về tải/cài app. */
+function isInAppRequest(req) {
+  const flag = String(req?.query?.inapp ?? req?.query?.in_app ?? "").toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes";
+}
+
 app.get(["/buy", "/buy/"], async (req, res) => {
   // baseUrl is absolute so the page works from any host/path that proxies to
   // this control plane (api.meetflowai.site/buy, meetflowai.site/buy, or any
@@ -567,6 +573,8 @@ app.get(["/buy", "/buy/"], async (req, res) => {
       cny: await vndPerCny(),
       usd: await vndPerUsd(),
       cur: String(req.query?.cur ?? "").slice(0, 8),
+      // Mở từ TRONG app (paywall) ⇒ chỉ hiện đăng ký tài khoản + thanh toán, bỏ khối tải app.
+      inApp: isInAppRequest(req),
     }),
   );
 });
@@ -685,6 +693,7 @@ app.get(["/ai/buy", "/ai/buy/"], async (req, res) => {
       cny: await vndPerCny(),
       usd: await vndPerUsd(),
       cur: String(req.query?.cur ?? "").slice(0, 8),
+      inApp: isInAppRequest(req),
     }),
   );
 });

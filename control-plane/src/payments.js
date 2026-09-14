@@ -407,6 +407,7 @@ const TEXTS = {
     bankName: "VN Bank", bankScan: "Scan TPBank QR",
     wechatScan: "Scan QR", alipayScan: "Scan QR", momoScan: "Scan QR",
     payosName: "PayOS gateway", payosSub: "MoMo / QR / card",
+    inAppNote: "✅ You already have the app — just create your account with the email below and pay. Premium turns on automatically after payment.",
     payBtn: "Create payment QR",
     note: "After you transfer, Premium will be activated for this email.",
     modalTitle: "Scan the QR to pay",
@@ -483,6 +484,7 @@ const TEXTS = {
     bankName: "Ngân hàng VN", bankScan: "Quét QR TPBank",
     wechatScan: "Quét QR", alipayScan: "Quét QR", momoScan: "Quét QR MoMo",
     payosName: "Cổng PayOS", payosSub: "MoMo / QR / thẻ",
+    inAppNote: "✅ Bạn đã có app rồi — chỉ cần nhập email bên dưới để tạo tài khoản và thanh toán. Premium tự bật sau khi thanh toán.",
     payBtn: "Tạo mã thanh toán",
     note: "Sau khi chuyển tiền, premium sẽ được kích hoạt cho email này.",
     modalTitle: "Quét QR để thanh toán",
@@ -559,6 +561,7 @@ const TEXTS = {
     bankName: "越南银行", bankScan: "扫描 TPBank 二维码",
     wechatScan: "扫描二维码", alipayScan: "扫描二维码", momoScan: "扫描 MoMo 二维码",
     payosName: "PayOS 网关", payosSub: "MoMo / 二维码 / 银行卡",
+    inAppNote: "✅ 您已安装应用 —— 只需在下方填写邮箱创建账户并完成支付，支付后 Premium 自动开启。",
     payBtn: "生成支付二维码",
     note: "转账后，Premium 将为此邮箱激活。",
     modalTitle: "扫描二维码支付",
@@ -635,6 +638,7 @@ const TEXTS = {
     bankName: "ベトナムの銀行", bankScan: "TPBank QRをスキャン",
     wechatScan: "QRをスキャン", alipayScan: "QRをスキャン", momoScan: "MoMo QR をスキャン",
     payosName: "PayOS決済", payosSub: "MoMo / QR / カード",
+    inAppNote: "✅ アプリはインストール済みです —— 下のメールでアカウントを作成し、お支払いください。支払い後 Premium が自動で有効になります。",
     payBtn: "支払いQRを作成",
     note: "送金後、このメールでプレミアムが有効になります。",
     modalTitle: "QRをスキャンして支払う",
@@ -711,6 +715,7 @@ const TEXTS = {
     bankName: "베트남 은행", bankScan: "TPBank QR 스캔",
     wechatScan: "QR 스캔", alipayScan: "QR 스캔", momoScan: "MoMo QR 스캔",
     payosName: "PayOS 결제", payosSub: "MoMo / QR / 카드",
+    inAppNote: "✅ 앱은 이미 설치되어 있습니다 — 아래 이메일로 계정을 만들고 결제만 하시면 됩니다. 결제 후 Premium이 자동으로 켜집니다.",
     payBtn: "결제 QR 만들기",
     note: "송금 후 이 이메일로 프리미엄이 활성화됩니다.",
     modalTitle: "QR을 스캔하여 결제",
@@ -1153,7 +1158,7 @@ export function planNameFor(lang, product, planId) {
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "" }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "", inApp = false }) {
   lang = pickBuyLang(lang);
   product = productConfig(product);
   const base = TEXTS[lang];
@@ -1186,9 +1191,11 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   // link App Store) — nếu không, trang bán hàng sẽ nói sai về cách cài.
   const iosIsStore = /apps\.apple\.com|itunes\.apple\.com/.test(iosUrl ?? "");
   const iosAdhocStepsUrl = !iosIsStore ? (iosUrl && /\/install\/ios/.test(iosUrl) ? iosUrl : iosAdhocUrl) : null;
-  const iosAdhocSteps = iosAdhocStepsUrl && Array.isArray(t.adhocSteps) ? t.adhocSteps : null;
+  const iosAdhocSteps = !inApp && iosAdhocStepsUrl && Array.isArray(t.adhocSteps) ? t.adhocSteps : null;
   const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
-  const showDownloads = anyDownload;
+  // Mở TRONG app (paywall): khách đã có app rồi ⇒ chỉ để lại ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN,
+  // bỏ hết khối tải/cài app và hướng dẫn cài (vô nghĩa và làm rối).
+  const showDownloads = anyDownload && !inApp;
   // WeChat Pay / Alipay are priced in CNY (the customer types the amount by
   // hand), and the headline price follows the visitor: dong for Vietnamese,
   // yuan for Chinese pages, dollars for everyone else. `?cur=` overrides.
@@ -1348,6 +1355,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     .footer a:hover { color: #33c773; text-decoration: underline; }
     .footer .sep { color: rgba(255,255,255,.3); margin: 0 8px; }
 
+    .inapp-note{margin:16px 0;padding:12px 14px;border-radius:12px;background:rgba(51,199,115,.1);border:1px solid rgba(51,199,115,.3);font-size:13px;line-height:1.55;color:rgba(255,255,255,.85)}
     .dl-section { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,.1); }
     .howto.adhoc { border: 1px solid rgba(51,199,115,.35); background: rgba(51,199,115,.07); }
     .dl-title { text-align: center; font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
@@ -1523,7 +1531,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <a class="guidelnk" href="${iosAdhocStepsUrl}" target="_blank" rel="noopener">${iosAdhocStepsUrl}</a>
     </div>` : ""}
 
-    <div class="howto">
+    ${inApp ? `<div class="inapp-note">${t.inAppNote}</div>` : `<div class="howto">
       <div class="howto-title">📱 ${t.howToTitle}</div>
       <div class="howto-row"><span class="plat">iOS</span><span>${iosLine}</span></div>
       <div class="howto-row"><span class="plat">Android</span><span>${t.androidLine}</span></div>
@@ -1531,7 +1539,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         ${howToSteps.map((step) => `<li>${step}</li>`).join("")}
       </ol>
       <a class="guidelnk" href="${guideUrl}" target="_blank" rel="noopener">${t.guideLink}</a>
-    </div>
+    </div>`}
 
     <div class="footer">
       <a href="${meta.privacyUrl}" target="_blank" rel="noopener">${t.privacyLabel}</a>

@@ -84,7 +84,8 @@ fun PaywallScreen(
         // The buy page handles plans, payment and invoice delivery. Localize
         // the paywall to the in-app language via ?lang= (mirrors iOS/macOS).
         BuyWebView(
-            url = Config.BUY_URL + "?lang=" + lang.language.code,
+            // inapp=1: trong app chỉ cần đăng ký tài khoản + thanh toán, không hiện khối tải app.
+            url = Config.BUY_URL + "?lang=" + lang.language.code + "&inapp=1",
             modifier = Modifier.fillMaxSize(),
         )
     }

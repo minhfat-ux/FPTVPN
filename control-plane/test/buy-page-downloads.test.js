@@ -88,3 +88,28 @@ test("trang buy: iOS Ad Hoc có đủ bước ở cả 5 ngôn ngữ", () => {
     assert.ok(/Safari/.test(m[0]), `${lang}: thiếu Safari`);
   }
 });
+
+test("trang buy mở TRONG APP (paywall): chỉ đăng ký tài khoản + thanh toán, không có khối tải app", () => {
+  const links = { ios: "https://meetflowai.site/install/ios", android: "https://x/v1/downloads/android" };
+  const inApp = buyPageHTML({
+    baseUrl: "https://meetflowai.site", lang: "vi", product: "vpn", methods: ["bankqr"], links, inApp: true,
+  });
+  // Không được còn bất kỳ thứ gì về TẢI/CÀI app
+  assert.ok(!inApp.includes('<div class="dl-section">'), "trong app không được hiện khối tải app");
+  assert.ok(!inApp.includes('<div class="howto">'), "trong app không được hiện hướng dẫn cài/activate");
+  assert.ok(!inApp.includes("howto adhoc"), "trong app không được hiện hướng dẫn Ad Hoc");
+  // Kiểm LINK thật, không kiểm chuỗi "iOS (IPA)": chuỗi đó nằm trong khối i18n nhúng cho JS nên
+  // luôn có mặt trong HTML (kiểm nhầm là báo lỗi giả — đã gặp ở test khác trong file này).
+  assert.ok(!inApp.includes('href="https://meetflowai.site/install/ios"'), "trong app không được có link tải IPA");
+  assert.ok(!inApp.includes('href="https://x/v1/downloads/android"'), "trong app không được có link tải APK");
+  // Vẫn phải có: đăng ký tài khoản (email) + gói + thanh toán
+  assert.ok(inApp.includes('id="email"'), "phải còn ô email để tạo tài khoản");
+  assert.ok(inApp.includes("data-plan="), "phải còn danh sách gói");
+  assert.ok(inApp.includes('id="payBtn"'), "phải còn nút thanh toán");
+  assert.ok(inApp.includes('class="inapp-note"'), "phải có câu giải thích 'bạn đã có app rồi'");
+  // Và trang WEB (không inApp) vẫn giữ nguyên như cũ
+  const web = buyPageHTML({
+    baseUrl: "https://meetflowai.site", lang: "vi", product: "vpn", methods: ["bankqr"], links,
+  });
+  assert.ok(web.includes('<div class="dl-section">'), "trang web thường vẫn phải có khối tải app");
+});

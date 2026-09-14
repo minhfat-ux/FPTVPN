@@ -400,7 +400,9 @@ struct WebBuyPaywallView: View {
     @EnvironmentObject private var languageStore: AppLanguageStore
 
     private var buyURL: URL {
-        URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)")!
+        // inapp=1: khách đã có app rồi ⇒ trang chỉ hiện ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN,
+        // không hiện khối tải/cài app (vô nghĩa trong paywall).
+        URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)&inapp=1")!
     }
 
     var body: some View {
