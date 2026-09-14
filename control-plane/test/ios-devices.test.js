@@ -42,6 +42,21 @@ test("profile đăng ký: gửi đúng callback và có thể gỡ sau khi cài"
   assert.ok(xml.includes("<key>PayloadType</key><string>Profile Service</string>"));
   assert.ok(/<key>PayloadRemovalDisallowed<\/key><false\/>/.test(xml), "khách phải gỡ được profile sau khi đăng ký");
   assert.equal((xml.match(/<key>PayloadUUID<\/key>/g) ?? []).length, 2, "mỗi payload cần UUID riêng");
+  // Apple yêu cầu mỗi payload một UUID KHÁC nhau — trùng UUID cũng làm hồ sơ không hợp lệ.
+  const uuids = [...xml.matchAll(/<key>PayloadUUID<\/key><string>([^<]+)</g)].map((m) => m[1]);
+  assert.equal(new Set(uuids).size, 2, "hai PayloadUUID phải khác nhau");
+});
+
+test("profile: URL có & (token) phải được escape — nếu không iOS báo Invalid Profile", () => {
+  const xml = buildDeviceProfile({
+    callbackUrl: "https://meetflowai.site/install/ios/udid?lang=vi&token=ABC123",
+  });
+  assert.ok(xml.includes("?lang=vi&amp;token=ABC123"), "dấu & trong URL phải thành &amp;");
+  // Không được còn & thô nào ngoài entity hợp lệ — đây đúng là lỗi làm hồ sơ không cài được.
+  const stripped = xml.replace(/&(amp|lt|gt|quot|apos);/g, "");
+  assert.ok(!stripped.includes("&"), "hồ sơ còn & thô ⇒ XML không hợp lệ ⇒ iOS báo Invalid Profile");
+  const text = buildDeviceProfile({ callbackUrl: "https://x/y", displayName: "A & B <c>" });
+  assert.ok(text.includes("A &amp; B &lt;c&gt;"), "tên/描述 có ký tự đặc biệt cũng phải escape");
 });
 
 test("store: đăng ký mới → chờ ký lại → markBuilt thì mọi máy thành cài được", async () => {

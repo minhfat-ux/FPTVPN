@@ -2322,7 +2322,8 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
   const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
   const profile = buildDeviceProfile({
     // `?lang=` đi theo callback để màn hình chờ của khách hiện đúng thứ tiếng đang xem.
-    callbackUrl: `${siteBaseUrl()}/install/ios/udid?lang=${lang}&token=${encodeURIComponent(String(req.query?.token ?? ""))}`,
+    callbackUrl: `${siteBaseUrl()}/install/ios/udid?lang=${lang}` +
+      (String(req.query?.token ?? "").trim() ? `&token=${encodeURIComponent(String(req.query.token).trim())}` : ""),
     displayName: t.profileName,
     payloadName: t.profileName,
     description: t.profileDesc,

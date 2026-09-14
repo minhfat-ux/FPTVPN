@@ -61,3 +61,22 @@ Buy → khách bấm cài iOS → tự đăng ký máy (.mobileconfig → iOS g�
   file này; 3 hunk của em đã chạy trên production nhưng chưa vào git.
 - Chưa có: tự động đăng ký UDID qua App Store Connect API (đang là copy/export + ký tay).
 - Chưa gửi email link cài riêng sau khi ký xong (hiện khách tự mở lại /install/ios).
+
+## 8. SỰ CỐ "Invalid Profile" trên iPhone (đã sửa) — lỗi do mình
+
+- Triệu chứng: chủ shop bấm "Đăng ký thiết bị" trên iPhone → iOS báo **Invalid Profile**.
+- Nguyên nhân: tham số `token` thêm vào callback URL tạo ra **`&` thô trong XML** của `.mobileconfig`
+  (`…udid?lang=vi&token=…`) ⇒ plist KHÔNG well-formed:
+  `plistlib: not well-formed (invalid token): line 8, column 82`.
+  Kiểm chứng bằng cách parse chính file production tải về.
+- Lỗi thứ hai phát hiện cùng lúc: **hai payload dùng CHUNG một PayloadUUID** (Apple yêu cầu mỗi payload
+  một UUID riêng) — test cũ chỉ đếm số lượng UUID nên không bắt được.
+- Sửa:
+  - `buildDeviceProfile()` thêm `xmlEscape()` cho URL/tên/mô tả/attributes;
+  - payload con dùng `contentUuid` riêng, khác `uuid` của payload ngoài;
+  - index.js chỉ thêm `&token=` khi token THẬT SỰ có;
+  - thêm 2 test: mỗi PayloadUUID phải khác nhau; URL có `&` phải thành `&amp;`, không còn `&` thô.
+- Verify sau deploy (parse lại file production bằng XML parser thật):
+  `không token: XML hợp lệ ✓ | UUID riêng ✓ | URL …?lang=vi`
+  `có token  : XML hợp lệ ✓ | UUID riêng ✓ | URL …?lang=vi&amp;token=ABC123`
+- Khoảng thời gian hồ sơ hỏng: từ commit `d9eba80` tới bản sửa này (~40 phút, do chính mình gây ra).

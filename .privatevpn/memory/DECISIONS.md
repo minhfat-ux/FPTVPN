@@ -303,3 +303,14 @@ Tầng 1 (commit `3d46f51`, `f6d58fd`).
   (log: `ios-udid: Apple → OK`), không phải copy tay nữa.
 - Còn lại để cài được trên iPhone: ký lại IPA với provisioning profile chứa UDID mới (máy Mac),
   rồi khách bấm link cài + Trust certificate.
+
+## 2026-09-15 — Bug "Invalid Profile" khi cài hồ sơ UDID (tự gây ra, đã sửa)
+
+- Thêm `?token=` vào callback URL ⇒ dấu `&` **thô trong XML** ⇒ `.mobileconfig` không well-formed ⇒
+  iOS báo **Invalid Profile**, khách không đăng ký được máy. Phát hiện bằng cách parse chính file
+  production tải về (`plistlib`: `not well-formed (invalid token)`), không đoán.
+- Kèm theo: `buildDeviceProfile()` dùng **cùng một PayloadUUID cho cả 2 payload** — Apple yêu cầu mỗi
+  payload một UUID riêng (test cũ chỉ đếm số UUID nên lọt).
+- Đã sửa: `xmlEscape()` cho mọi giá trị nội suy, `contentUuid` riêng cho payload con, chỉ thêm token khi
+  có token; thêm 2 test chống tái diễn. Bài học: **mọi giá trị chèn vào plist XML phải escape**, và
+  test phải kiểm nội dung hợp lệ (parse được), không chỉ kiểm sự tồn tại của khoá.

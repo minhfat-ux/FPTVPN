@@ -58,6 +58,19 @@ export function decodeDevicePayload(body) {
  * Profile .mobileconfig để iOS gửi thông tin thiết bị về `callbackUrl`.
  * Khách cài: Cài đặt → Đã tải về hồ sơ → Cài đặt (1 lần, có thể gỡ sau).
  */
+/**
+ * Escape giá trị chèn vào plist XML. Thiếu bước này là hồ sơ hỏng ngay khi URL có `&`
+ * (vd callback mang `?lang=vi&token=…`) — iOS báo "Invalid Profile" và khách không cài được.
+ */
+export function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 export function buildDeviceProfile({
   callbackUrl,
   deviceAttributes = ["UDID", "VERSION", "PRODUCT", "SERIAL"],
@@ -67,6 +80,9 @@ export function buildDeviceProfile({
   organization = "VPNFlow",
 }) {
   const uuid = crypto.randomUUID().toUpperCase();
+  // Apple yêu cầu mỗi payload một PayloadUUID riêng — dùng chung một UUID cho cả hai
+  // payload cũng làm hồ sơ bị coi là không hợp lệ.
+  const contentUuid = crypto.randomUUID().toUpperCase();
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -74,23 +90,23 @@ export function buildDeviceProfile({
   <key>PayloadContent</key>
   <array>
     <dict>
-      <key>URL</key><string>${callbackUrl}</string>
+      <key>URL</key><string>${xmlEscape(callbackUrl)}</string>
       <key>DeviceAttributes</key>
       <array>${deviceAttributes.map((attribute) => `
-        <string>${attribute}</string>`).join("")}
+        <string>${xmlEscape(attribute)}</string>`).join("")}
       </array>
       <key>PayloadType</key><string>Profile Service</string>
       <key>PayloadVersion</key><integer>1</integer>
-      <key>PayloadIdentifier</key><string>site.meetflowai.vpnflow.device.${uuid}</string>
-      <key>PayloadUUID</key><string>${uuid}</string>
-      <key>PayloadDisplayName</key><string>${payloadName}</string>
-      <key>PayloadDescription</key><string>${description}</string>
+      <key>PayloadIdentifier</key><string>site.meetflowai.vpnflow.device.${contentUuid}</string>
+      <key>PayloadUUID</key><string>${contentUuid}</string>
+      <key>PayloadDisplayName</key><string>${xmlEscape(payloadName)}</string>
+      <key>PayloadDescription</key><string>${xmlEscape(description)}</string>
       <key>PayloadRemovalDisallowed</key><false/>
     </dict>
   </array>
-  <key>PayloadDisplayName</key><string>${displayName}</string>
+  <key>PayloadDisplayName</key><string>${xmlEscape(displayName)}</string>
   <key>PayloadIdentifier</key><string>site.meetflowai.vpnflow.registration</string>
-  <key>PayloadOrganization</key><string>${organization}</string>
+  <key>PayloadOrganization</key><string>${xmlEscape(organization)}</string>
   <key>PayloadType</key><string>Configuration</string>
   <key>PayloadUUID</key><string>${uuid}</string>
   <key>PayloadVersion</key><integer>1</integer>
