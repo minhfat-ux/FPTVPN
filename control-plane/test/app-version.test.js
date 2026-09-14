@@ -117,12 +117,16 @@ test("payload iOS đọc được cả khi header không có get() (request tố
 
 test("thiếu cấu hình ⇒ giá trị mặc định an toàn, không crash", () => {
   // Không có baseUrl thì chỉ còn đường dẫn tương đối — giống hệt kênh Android, không rỗng.
+  // `ipa_manifest_url` + `install_page_url` để app cài cập nhật TRỰC TIẾP (itms-services),
+  // không phải mở trang cài rồi bấm thêm bước nào.
   assert.deepEqual(iosVersionPayload(reader({})), {
     platform: "ios",
     minimum_version: "0.0.0",
     latest_version: "0.0.0",
     ipa_url: "/v1/downloads/ios",
     store_url: "/v1/downloads/ios",
+    ipa_manifest_url: "/install/ios/manifest.plist",
+    install_page_url: "/install/ios",
   });
   assert.deepEqual(iosVersionPayload(reader({}), { baseUrl: "https://meetflowai.site/" }), {
     platform: "ios",
@@ -130,6 +134,8 @@ test("thiếu cấu hình ⇒ giá trị mặc định an toàn, không crash", 
     latest_version: "0.0.0",
     ipa_url: "https://meetflowai.site/v1/downloads/ios",
     store_url: "https://meetflowai.site/v1/downloads/ios",
+    ipa_manifest_url: "https://meetflowai.site/install/ios/manifest.plist",
+    install_page_url: "https://meetflowai.site/install/ios",
   });
 });
 
