@@ -95,3 +95,23 @@ Kết quả cuối: **cài được app trên iPhone thật**.
 ### File chẩn đoán
 `/root/flowvpn-cp/data/last-ios-callback.txt` (0600, 8KB) giữ body cuối iOS gửi — chính nhờ nó mà
 xác định được định dạng PKCS#7 thay vì đoán. Xoá được khi không cần nữa.
+
+## 8. Paywall + mục Subscription theo yêu cầu chủ shop (2026-09-15)
+
+### 8a. Paywall trong app: chỉ ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN
+- Trang `/buy` có chế độ `?inapp=1`: ẩn khối tải app (IPA/APK), ẩn hướng dẫn cài/Ad Hoc, ẩn link guide;
+  giữ ô email (tạo tài khoản) + danh sách gói + nút thanh toán, kèm câu "bạn đã có app rồi…" (5 ngôn ngữ).
+- iOS `SettingsView.swift` và Android `PaywallScreen.kt` mở paywall kèm `&inapp=1`.
+- Verify LIVE: `/buy?inapp=1` không còn khối tải app; `/buy` thường vẫn đầy đủ (test 195/195 pass).
+
+### 8b. Mục Subscription: đã mua ⇒ hiện gói đã mua + nút GIA HẠN
+- Backend: `subscription_status.plan_badge` (từ plan-store qua hook `setPlanLabelResolver`) —
+  một nguồn duy nhất, không phải dịch tên gói 3 lần. Verify:
+  `monthly -> "Monthly"`, `quarterly -> "3 Months"`, `yearly -> "Yearly"`.
+- iOS + macOS (`ContentView.swift`, `ContentViewMac.swift`) và Android (`MainScreen.kt`):
+  - chưa mua ⇒ "Chọn gói để bắt đầu" + nút **Nâng cấp**
+  - đã mua ⇒ `"<Tên gói> · Hết hạn <ngày> · Còn N ngày"` + nút **Gia hạn** (mở paywall để gia hạn/mua thêm)
+  - gói vĩnh viễn (không có `expires_at`) ⇒ hiện "quyền đã mở"
+  - Thẻ Subscription trước đây chỉ hiện khi CHƯA mua; nay hiện cả khi đã mua (mac: khi đã đăng nhập).
+- Thêm 4 chuỗi (yourPlan / renew / expiresOn / daysLeft) cho 5 ngôn ngữ ở cả 3 nền tảng.
+- Build kiểm tra: iOS simulator **PASS**, macOS **PASS**; control-plane **195/195** test pass.

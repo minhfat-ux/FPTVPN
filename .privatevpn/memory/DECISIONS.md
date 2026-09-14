@@ -327,3 +327,16 @@ Kết quả: cài được app trên iPhone thật của chủ shop. 5 lỗi ph�
 5. iOS 26 gửi body **CMS/PKCS#7** ⇒ phải cắt plist XML trong khối nhị phân.
 Hành vi đã xác nhận: iOS **luôn hiện "Invalid Profile"** sau khi gửi UDID (vô hại, đã ghi trong popup);
 `VERSION` iOS gửi là số build; `Content-Disposition: attachment` phá luồng cài (đã bỏ).
+
+## 2026-09-15 — Paywall + mục Subscription (3 nền tảng)
+
+- **Paywall trong app** = chỉ ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN: trang `/buy` thêm `?inapp=1` để ẩn mọi
+  thứ về tải/cài app (khối tải, hướng dẫn Ad Hoc, link guide). iOS/Android mở paywall kèm cờ này.
+  Trang web thường KHÔNG đổi (khách mới vẫn cần nút tải).
+- **Mục Subscription**: đã đăng nhập + đã mua gói ⇒ hiện ĐÚNG gói đang dùng + ngày hết hạn + số ngày
+  còn lại, nút đổi thành **Gia hạn** (mở paywall để gia hạn/mua thêm). Chưa mua ⇒ như cũ (Nâng cấp).
+  Áp dụng iOS, macOS, Android.
+- Tên gói lấy từ backend (`subscription_status.plan_badge`, hook `setPlanLabelResolver` → plan-store):
+  một nguồn duy nhất thay vì dịch tên gói ở 3 app; app vẫn có fallback suy từ `product_id`.
+- Lưu ý commit `2e906dc`: message bị bash ăn mất chữ `plan_badge` (backtick trong lệnh) — nội dung code
+  không ảnh hưởng, chỉ thiếu chữ trong mô tả commit.
