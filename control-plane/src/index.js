@@ -69,6 +69,7 @@ import {
   generateEmailVerificationLink,
 } from "./firebase-users.js";
 import { guidePageHTML } from "./guide-page.js";
+import { IosDeviceStore, buildDeviceProfile, decodeDevicePayload } from "./ios-devices.js";
 import { supportPageHTML } from "./support-page.js";
 import {
   buyPageHTML,
@@ -238,6 +239,7 @@ app.use((req, res, next) => {
   // for Fire TV / older devices.
   if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy" || req.path === "/v1/downloads/ios") return next();
   if (req.path.startsWith("/install/ios")) return next();
+  if (req.path.startsWith("/v1/ios/")) return next();
   if (req.path === "/v1/downloads/qr") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
   // (it is authenticated inside the route: 410/403 when LEGACY_MODE != 1).
@@ -1939,6 +1941,109 @@ app.get("/v1/downloads/qr", async (req, res) => {
     res.send(png);
   } catch (err) {
     console.error("download qr failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * Đăng ký thiết bị iOS — "identify device" kiểu Diawi nhưng trên hệ thống mình.
+ *
+ * Bản IPA phát cho khách là ad-hoc ⇒ iOS chỉ cài được lên máy có UDID trong provisioning profile.
+ * Khách bấm "Đăng ký thiết bị" ở trang /install/ios → tải profile nhỏ dưới đây → iOS tự POST UDID về
+ * `/install/ios/udid` → server xếp hàng + báo chủ shop → máy Mac thêm UDID, ký lại IPA, upload Diawi.
+ * Trang chờ poll `/install/ios/status` và tự hiện nút "Cài đặt" khi xong.
+ *
+ * Đường dẫn nằm dưới `/install/ios/*` là cố ý: Caddy của host meetflowai.site chỉ route các path có
+ * `handle` — dùng lại prefix đã có thì không phải sửa Caddy (bài học từ /guide, /v1/downloads/qr).
+ */
+const iosDevices = new IosDeviceStore(path.join(DATA_DIR, "ios-devices.json"));
+
+app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"], (_req, res) => {
+  const profile = buildDeviceProfile({ callbackUrl: `${siteBaseUrl()}/install/ios/udid` });
+  res.type("application/x-apple-aspen-config").send(profile);
+});
+
+app.post(["/install/ios/udid", "/v1/ios/udid"], express.urlencoded({ extended: false, limit: "64kb" }), async (req, res) => {
+  try {
+    const info = decodeDevicePayload(req.body?.data ?? req.body?.payload ?? "");
+    if (!info) {
+      console.warn("ios-udid: payload không có UDID");
+      return res.status(400).type("html").send("<p>Không đọc được mã thiết bị. Vui lòng thử lại.</p>");
+    }
+    const { device, isNew } = await iosDevices.register(info);
+    console.log(`ios-udid: ${isNew ? "MỚI" : "đã có"} ${device.udid} (${device.model ?? "?"} · iOS ${device.iosVersion ?? "?"})`);
+    if (isNew) {
+      const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
+      await sendUnmatchedTransferAlert({
+        to: owner,
+        amount: 0,
+        content: `UDID ${device.udid} · ${device.model ?? "?"} · iOS ${device.iosVersion ?? "?"}`,
+        reason: "có thiết bị iOS MỚI đăng ký — cần thêm UDID rồi ký lại IPA (chạy scripts/ios-add-udid.sh trên máy Mac)",
+        dashboardUrl: `${siteBaseUrl()}/admin`,
+      }).catch((err) => console.error("ios-udid alert failed:", err?.message ?? err));
+    }
+    res.type("html").send(iosRegisteredHTML({ udid: device.udid, isNew }));
+  } catch (err) {
+    console.error("ios-udid failed:", err);
+    res.status(500).type("html").send("<p>Lỗi hệ thống. Liên hệ support@meetflowai.site</p>");
+  }
+});
+
+/** Trang khách thấy ngay sau khi cài profile — tự hỏi lại server để biết khi nào cài được. */
+function iosRegisteredHTML({ udid, isNew }) {
+  const short = String(udid).slice(-8);
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Đã đăng ký thiết bị</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:440px;margin:20px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.ok{font-size:44px}.t{font-size:20px;font-weight:700;margin:8px 0}p{color:rgba(255,255,255,.7);font-size:14px;line-height:1.6}a.b{display:block;text-align:center;background:#33c773;color:#06160d;text-decoration:none;font-weight:700;padding:14px;border-radius:10px;margin-top:14px}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}</style>
+</head><body><div class="c">
+<div class="ok">✅</div>
+<div class="t">Đã đăng ký thiết bị</div>
+<p id="msg">${isNew ? "Máy của bạn vừa được thêm vào danh sách. Hệ thống đang chuẩn bị bản cài riêng cho máy này (thường dưới 2 phút)." : "Máy này đã có trong danh sách."}</p>
+<p style="font-size:12.5px;color:rgba(255,255,255,.5)">Thiết bị …<code>${short}</code></p>
+<a class="b" id="btn" href="/install/ios" style="display:none">📲 Cài đặt VPNFlow</a>
+<p id="wait" style="font-size:12.5px;color:rgba(255,255,255,.5)">Đang chờ bản cài… trang tự cập nhật.</p>
+</div>
+<script>
+var udid = ${JSON.stringify(udid)};
+function check() {
+  fetch("/install/ios/status?udid=" + encodeURIComponent(udid)).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.ready) {
+      document.getElementById("msg").textContent = "Bản cài cho máy bạn đã sẵn sàng.";
+      document.getElementById("btn").style.display = "block";
+      document.getElementById("wait").textContent = "";
+    } else { setTimeout(check, 5000); }
+  }).catch(function () { setTimeout(check, 8000); });
+}
+check();
+</script></body></html>`;
+}
+
+app.get(["/install/ios/status", "/v1/ios/status"], async (req, res) => {
+  try {
+    const udid = String(req.query?.udid ?? "").trim();
+    if (!udid) return res.status(400).json({ error: "thiếu udid" });
+    res.json(await iosDevices.statusFor(udid));
+  } catch (err) {
+    console.error("ios status failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** Máy Mac gọi sau khi ký lại + upload Diawi xong. */
+app.post(["/v1/admin/ios/devices/built", "/admin/ios/devices/built"], requireAdminAuth, async (req, res) => {
+  try {
+    const serial = await iosDevices.markBuilt({ note: req.body?.note ?? null });
+    res.json({ ok: true, buildSerial: serial });
+  } catch (err) {
+    console.error("ios markBuilt failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+app.get(["/v1/admin/ios/devices", "/admin/ios/devices"], requireAdminAuth, async (_req, res) => {
+  try {
+    res.json(await iosDevices.list());
+  } catch (err) {
     res.status(500).json({ error: "Internal error" });
   }
 });
