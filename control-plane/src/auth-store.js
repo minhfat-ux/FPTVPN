@@ -545,8 +545,21 @@ function publicUser(user, subscription = null) {
       is_active: Boolean(subscription),
       product_id: subscription?.productId ?? null,
       expires_at: subscription?.expiresAt ?? null,
+      // Bản dùng thử 1 ngày (productId "trial.*") phải nói rõ cho app biết để hiện thông báo
+      // "đang dùng trial" thay vì im lặng coi như đã trả tiền.
+      is_trial: Boolean(subscription?.productId?.startsWith("trial.")),
+      trial_hours_left: trialHoursLeft(subscription),
     },
   };
+}
+
+/** Số giờ còn lại của bản dùng thử (null nếu không phải trial hoặc đã hết hạn). */
+function trialHoursLeft(subscription) {
+  if (!subscription?.productId?.startsWith("trial.")) return null;
+  if (!subscription.expiresAt) return null;
+  const ms = Date.parse(subscription.expiresAt) - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return 0;
+  return Math.max(1, Math.round(ms / 3_600_000));
 }
 
 function activeSubscriptionFor(data, userId) {

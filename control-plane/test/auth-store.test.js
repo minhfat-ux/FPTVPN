@@ -185,3 +185,15 @@ test("mua thêm khi CHƯA hết hạn thì CỘNG DỒN, không tính lại từ
     await cleanup();
   }
 });
+
+test("trạng thái gói nói rõ trial 1 ngày (app hiện thông báo, không im lặng coi như đã trả tiền)", async () => {
+  const { store, cleanup } = await makeStore();
+  const { code } = await store.startEmailLogin("trial-user@example.com");
+  await store.verifyEmailLogin("trial-user@example.com", code);
+  cleanup();
+  const me = (await store.listUsers()).find((u) => u.email === "trial-user@example.com");
+  assert.ok(me, "phải có user sau khi đăng nhập");
+  assert.equal(me.subscription_status.is_active, true, "trong 1 ngày trial vẫn active");
+  assert.equal(me.subscription_status.is_trial, true, "phải đánh dấu là trial");
+  assert.ok(me.subscription_status.trial_hours_left >= 1, "phải nói còn bao nhiêu giờ");
+});
