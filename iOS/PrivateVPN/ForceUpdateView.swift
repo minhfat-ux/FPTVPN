@@ -41,7 +41,12 @@ struct ForceUpdateView: View {
                     .padding(.horizontal, 24)
 
                 Button {
-                    if let url = updateURL {
+                    // Ưu tiên cài TRỰC TIẾP qua OTA: iOS tải IPA (đã ký kèm UDID máy này) và cài
+                    // luôn — khách không phải vào trang install bấm thêm bước nào. Không có
+                    // manifest (server cũ) thì mới lùi về mở link tải trên web.
+                    if let ota = info.otaInstallURL, UIApplication.shared.canOpenURL(ota) {
+                        UIApplication.shared.open(ota)
+                    } else if let url = updateURL {
                         UIApplication.shared.open(url)
                     }
                 } label: {

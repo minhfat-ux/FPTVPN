@@ -212,10 +212,25 @@ struct AppVersionInfo: Equatable, Codable, Identifiable {
     var store_url: String
     var id: String { "\(minimum_version)-\(latest_version)" }
 
+    /// Link manifest OTA của mình (`/install/ios/manifest.plist`). Có khoá này thì app cài
+    /// cập nhật TRỰC TIẾP, không phải mở trang /install/ios rồi bấm thêm bước nào.
+    var ipa_manifest_url: String?
+
     /// Link dùng để mở khi ép cập nhật — ưu tiên khoá mới, lùi về khoá cũ của server.
     var downloadURL: String {
         let ipa = (ipa_url ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return ipa.isEmpty ? store_url : ipa
+    }
+
+    /// URL `itms-services://` để iOS TẢI + CÀI bản mới ngay trong app. Không có manifest thì
+    /// nil ⇒ chỗ gọi lùi về mở link web (giữ tương thích với server cũ).
+    var otaInstallURL: URL? {
+        guard let manifest = ipa_manifest_url?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !manifest.isEmpty,
+              let escaped = manifest.addingPercentEncoding(
+                  withAllowedCharacters: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~:/"))
+              ) else { return nil }
+        return URL(string: "itms-services://?action=download-manifest&url=\(escaped)")
     }
 }
 

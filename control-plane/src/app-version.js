@@ -54,6 +54,10 @@ export function iosVersionPayload(read, { baseUrl = "" } = {}) {
     latest_version: read("latest_ios_version") ?? "0.0.0",
     ipa_url: ipaUrl,
     store_url: ipaUrl,
+    // Cập nhật NGAY TRONG APP: app mở `itms-services://…download-manifest&url=<manifest này>`
+    // ⇒ iOS tải IPA có UDID của máy và cài luôn, khách không phải vào lại trang /install/ios.
+    ipa_manifest_url: `${site}/install/ios/manifest.plist`,
+    install_page_url: `${site}/install/ios`,
   };
 }
 

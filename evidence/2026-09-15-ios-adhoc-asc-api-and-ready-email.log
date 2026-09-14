@@ -115,3 +115,23 @@ xác định được định dạng PKCS#7 thay vì đoán. Xoá được khi k
   - Thẻ Subscription trước đây chỉ hiện khi CHƯA mua; nay hiện cả khi đã mua (mac: khi đã đăng nhập).
 - Thêm 4 chuỗi (yourPlan / renew / expiresOn / daysLeft) cho 5 ngôn ngữ ở cả 3 nền tảng.
 - Build kiểm tra: iOS simulator **PASS**, macOS **PASS**; control-plane **195/195** test pass.
+
+## 9. Bấm Update trong app ⇒ tải + cài LUÔN (2026-09-15)
+
+Trước đây: màn "Cập nhật bắt buộc" mở link web (`/install/ios` hoặc `/buy`) ⇒ khách phải vào trang cài
+rồi bấm thêm 2 bước. Nay:
+
+- Backend `iosVersionPayload` trả thêm `ipa_manifest_url` (`https://meetflowai.site/install/ios/manifest.plist`)
+  + `install_page_url`. Verify qua API host:
+  `ipa_manifest_url: https://meetflowai.site/install/ios/manifest.plist` ✓ (manifest HTTP 200, text/xml).
+- iOS `AppVersionInfo.otaInstallURL` dựng `itms-services://?action=download-manifest&url=<manifest đã encode>`;
+  `ForceUpdateView` bấm Update ⇒ mở URL này ⇒ **iOS tải IPA (đã ký kèm UDID máy) và cài luôn**.
+  Không có manifest (server cũ) thì lùi về mở link web như trước — giữ tương thích.
+- Build iOS: **BUILD SUCCEEDED**. control-plane: **196/196 pass**.
+
+Ghi chú trạng thái 3 nền tảng khi bấm Update:
+- iOS: cài trực tiếp qua OTA (mới đổi).
+- Android: đã tải APK trực tiếp (bấm Update mở `/v1/downloads/android`, KHÔNG qua trang cài); muốn
+  "tải trong app rồi mở trình cài" thì cần thêm FileProvider + REQUEST_INSTALL_PACKAGES (chưa làm).
+- macOS: chưa có link build cho mac ⇒ nút Update vẫn mở web. Cần chốt cách phát bản mac (pkg/dmg/zip)
+  rồi thêm `mac_url` vào payload.
