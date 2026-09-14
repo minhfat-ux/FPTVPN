@@ -84,3 +84,22 @@ test("langbar trang cài: inline handler phải dùng window.URL, không đượ
   assert.ok(!/(^|[^.\w])new URL\(/.test(code), "không được dùng new URL(...) trong inline handler");
   assert.ok(code.includes("searchParams.set('lang',this.value)"), "chọn xong phải ghi ?lang=<mã> rồi điều hướng");
 });
+
+test("trang cài: đã đăng ký thì KHÓA nút đăng ký và BẬT nút tải & cài", () => {
+  assert.ok(indexSrc.includes('id="installLink"'), "phải có nút tải & cài riêng");
+  // Mặc định (chưa đăng ký): nút tải & cài bị khóa + có dòng nhắc vì cài trước khi đăng ký là lỗi chắc chắn.
+  assert.ok(indexSrc.includes('<a class="b b2 disabled" id="installLink"'), "nút tải & cài phải mặc định bị khóa");
+  assert.ok(indexSrc.includes('id="installHint"'), "phải có dòng nhắc vì sao nút bị khóa");
+  // Ba trạng thái phải tồn tại và được gọi đúng chỗ.
+  assert.ok(indexSrc.includes("function setNotRegistered()"), "thiếu trạng thái chưa đăng ký");
+  assert.ok(indexSrc.includes("function setRegistered(ready)"), "thiếu trạng thái đã đăng ký");
+  assert.ok(indexSrc.includes("setNotRegistered();"), "phải set trạng thái ban đầu khi tải trang");
+  const registered = indexSrc.slice(
+    indexSrc.indexOf("function setRegistered(ready)"),
+    indexSrc.indexOf("function setRegistered(ready)") + 420,
+  );
+  assert.ok(registered.includes('cta.classList.add("disabled")'), "đã đăng ký ⇒ KHÓA nút đăng ký");
+  assert.ok(registered.includes('installLink.classList.remove("disabled")'), "đã đăng ký ⇒ BẬT nút tải & cài");
+  assert.ok(indexSrc.includes("LBL.regDone"), "nút đăng ký phải đổi nhãn thành 'đã đăng ký'");
+  assert.ok(indexSrc.includes("regDone:") && indexSrc.includes("installLocked:"), "thiếu chuỗi regDone/installLocked");
+});

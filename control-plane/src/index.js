@@ -2049,6 +2049,8 @@ const IOS_TEXTS = {
     step2After: "Bước 2 · sau khi cài hồ sơ xong",
     downloadBtn: "📲 Tải &amp; cài VPNFlow",
     guideInvalid: "<b>Nếu iOS báo “Hồ sơ không hợp lệ / Invalid Profile”: máy bạn ĐÃ đăng ký xong</b> — bấm OK rồi quay lại trang này.",
+    regDone: "✅ Đã đăng ký thiết bị này",
+    installLocked: "Hoàn thành bước 1 để mở nút này",
     profileName: "VPNFlow — Đăng ký thiết bị",
     profileDesc: "Gửi mã thiết bị (UDID) cho VPNFlow để cấp bản cài phù hợp. Không thu thập dữ liệu khác.",
   },
@@ -2091,6 +2093,8 @@ const IOS_TEXTS = {
     step2After: "Step 2 · after the profile is installed",
     downloadBtn: "📲 Download &amp; install VPNFlow",
     guideInvalid: "<b>If iOS says “Invalid Profile”: your device was ALREADY registered</b> — tap OK and come back to this page.",
+    regDone: "✅ This device is registered",
+    installLocked: "Finish step 1 to unlock this button",
     profileName: "VPNFlow — Device registration",
     profileDesc: "Reports the device ID (UDID) to VPNFlow so we can issue a matching build. No other data is collected.",
   },
@@ -2133,6 +2137,8 @@ const IOS_TEXTS = {
     step2After: "第 2 步 · 描述文件安装完成后",
     downloadBtn: "📲 下载并安装 VPNFlow",
     guideInvalid: "<b>若 iOS 提示“描述文件无效”：说明设备已注册成功</b> —— 点击“好”，然后返回本页。",
+    regDone: "✅ 此设备已注册",
+    installLocked: "完成第 1 步即可解锁此按钮",
     profileName: "VPNFlow — 设备注册",
     profileDesc: "将设备码 (UDID) 上报给 VPNFlow，以便发放对应的安装包。不采集其他数据。",
   },
@@ -2175,6 +2181,8 @@ const IOS_TEXTS = {
     step2After: "ステップ 2 · プロファイルのインストール後",
     downloadBtn: "📲 VPNFlow をダウンロードしてインストール",
     guideInvalid: "<b>iOS が「プロファイルが無効です」と表示しても端末は登録済みです</b> —— OK を押してこのページに戻ってください。",
+    regDone: "✅ この端末は登録済みです",
+    installLocked: "ステップ 1 を完了するとこのボタンが使えます",
     profileName: "VPNFlow — 端末登録",
     profileDesc: "端末 ID (UDID) を VPNFlow に送信し、対応するビルドを発行するためのプロファイルです。他のデータは収集しません。",
   },
@@ -2217,6 +2225,8 @@ const IOS_TEXTS = {
     step2After: "2단계 · 프로파일 설치 후",
     downloadBtn: "📲 VPNFlow 다운로드 및 설치",
     guideInvalid: "<b>iOS가 “유효하지 않은 프로파일”을 표시해도 기기는 이미 등록되었습니다</b> — 확인을 누르고 이 페이지로 돌아오세요.",
+    regDone: "✅ 이 기기는 등록되었습니다",
+    installLocked: "1단계를 완료하면 이 버튼이 활성화됩니다",
     profileName: "VPNFlow — 기기 등록",
     profileDesc: "기기 ID (UDID)를 VPNFlow로 전송해 해당 빌드를 발급받기 위한 프로파일입니다. 다른 데이터는 수집하지 않습니다.",
   },
@@ -2655,6 +2665,10 @@ body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:c
 .h{font-weight:700;font-size:16.5px;line-height:1.3}
 a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:10px;margin:10px 0 6px}
 a.b1{background:rgba(255,255,255,.14);color:#fff}a.b2{background:#33c773;color:#06160d}
+a.b.disabled{opacity:.4;pointer-events:none;filter:grayscale(.35)}
+a.b.pulse{animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(51,199,115,.45)}50%{box-shadow:0 0 0 8px rgba(51,199,115,0)}}
+.hintlock{font-size:12.5px;color:rgba(255,255,255,.5);text-align:center;margin:2px 0 0}
 ul{color:rgba(255,255,255,.72);font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0}
 code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}
 .warn{margin-top:12px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px;font-size:13px}
@@ -2687,7 +2701,8 @@ ${iosLangSelectHTML(lang)}
 
 <div class="step">
   <div class="stephead"><span class="n">2</span><span class="h">${t.step2}</span></div>
-  <a class="b b2" id="installLink" href="${itms}">${t.downloadBtn}</a>
+  <a class="b b2 disabled" id="installLink" href="${itms}">${t.downloadBtn}</a>
+  <div class="hintlock" id="installHint">${t.installLocked}</div>
 </div>
 
 <div class="warn">
@@ -2727,24 +2742,47 @@ var udid = ""; try { udid = localStorage.getItem("vpnflow_udid") || ""; } catch 
 var ITMS = ${JSON.stringify(itms.replace(/&amp;/g, "&"))};
 var REG_BASE = ${JSON.stringify(`/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}`)};
 var REG_HREF = REG_BASE + (SID ? "&s=" + encodeURIComponent(SID) : "");
-var LBL = ${JSON.stringify({ reg: t.regBtn, install: t.installBtn, wait: t.waitReady, locked: t.waitLocked })};
+var LBL = ${JSON.stringify({ reg: t.regBtn, install: t.installBtn, wait: t.waitReady, locked: t.waitLocked, regDone: t.regDone, installLocked: t.installLocked })};
 var cta = document.getElementById("cta");
 var statusline = document.getElementById("statusline"), statustxt = document.getElementById("statustxt");
 function showGuide() { document.getElementById("guide").style.display = "flex"; }
 function hideGuide() { document.getElementById("guide").style.display = "none"; }
-function toRegister() { cta.href = REG_HREF; cta.textContent = LBL.reg; }
+var installLink = document.getElementById("installLink");
+var installHint = document.getElementById("installHint");
+// Trạng thái nút theo tình trạng máy:
+//  · chưa đăng ký  ⇒ nút Đăng ký BẬT, nút Tải & cài KHÓA (cài trước khi đăng ký là chắc chắn lỗi)
+//  · đã đăng ký    ⇒ nút Đăng ký KHÓA (không cho bấm lại) và nút Tải & cài BẬT
+function setNotRegistered() {
+  cta.classList.remove("disabled");
+  cta.textContent = LBL.reg;
+  installLink.classList.add("disabled");
+  installLink.classList.remove("pulse");
+  if (installHint) { installHint.textContent = LBL.locked; installHint.style.display = "block"; }
+}
+function setRegistered(ready) {
+  cta.classList.add("disabled");
+  cta.textContent = LBL.regDone;
+  installLink.classList.remove("disabled");
+  if (ready) installLink.classList.add("pulse");
+  if (installHint) installHint.style.display = "none";
+}
 function showReady() {
-  cta.href = ITMS; cta.textContent = LBL.install;
+  setRegistered(true);
   statusline.style.display = "none";
 }
-function showWaiting(msg) { toRegister(); statusline.style.display = "flex"; statustxt.textContent = msg; }
+function showWaiting(msg) {
+  setRegistered(false);
+  statusline.style.display = "flex";
+  statustxt.textContent = msg;
+}
+setNotRegistered();
 cta.addEventListener("click", function () { setTimeout(showGuide, 250); });
 function poll() {
   var q = udid ? "udid=" + encodeURIComponent(udid) : "session=" + encodeURIComponent(SID);
   fetch("/install/ios/status?" + q).then(function (r) { return r.json(); }).then(function (d) {
     if (d && d.udid) { udid = d.udid; try { localStorage.setItem("vpnflow_udid", udid); } catch (e) {} }
     if (d && d.registered) { if (d.ready) { showReady(); } else { showWaiting(LBL.wait); } }
-    else { toRegister(); statusline.style.display = "none"; }
+    else { setNotRegistered(); statusline.style.display = "none"; }
     setTimeout(poll, 5000);
   }).catch(function () { setTimeout(poll, 8000); });
 }
