@@ -2195,13 +2195,6 @@ const IOS_TF_TEXTS = {
     ],
     tfBtn: "Tải TestFlight trên App Store",
     joinBtn: "Mở link mời VPNFlow",
-    notesTitle: "Cần biết",
-    notes: [
-      "Bản TestFlight chỉ sống <b>90 ngày</b>. Khi tới hạn, mở TestFlight → VPNFlow → <b>Update</b> (không phải cài lại từ đầu).",
-      "Nếu link báo <i>“This beta isn’t accepting new testers”</i>: nhắn shop để thêm bạn vào danh sách.",
-      "Cần iOS <b>17.0</b> trở lên.",
-      "TestFlight là app của Apple, không phải của shop — shop không thấy dữ liệu gì khác ngoài những gì bạn gửi trong app.",
-    ],
     back: "← Về trang cài bằng đăng ký thiết bị",
     support: "Hỗ trợ",
   },
@@ -2560,8 +2553,6 @@ ul{color:rgba(255,255,255,.78);font-size:13.5px;line-height:1.65;padding-left:18
 a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding:13px;border-radius:10px;margin:10px 0}
 a.b1{background:#33c773;color:#06160d}a.b2{background:rgba(255,255,255,.14);color:#fff}
 code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px;word-break:break-all}
-.notes{margin-top:14px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px;font-size:13px}
-.notes b{display:block;margin-bottom:6px}
 .back{margin-top:14px;text-align:center;font-size:13px}.back a{color:rgba(255,255,255,.6);text-decoration:none}
 .langs{margin-top:12px;text-align:center;font-size:12.5px}.langs a{color:rgba(255,255,255,.55);margin:0 5px;text-decoration:none}.langs a.on{color:#33c773;font-weight:600}
 </style>
@@ -2572,7 +2563,6 @@ code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size
 <ul>${li(t.steps)}</ul>
 <a class="b b2" href="${join}">${t.joinBtn}</a>
 <div style="font-size:12.5px;color:rgba(255,255,255,.5);text-align:center">${join}</div>
-<div class="notes"><b>${t.notesTitle}</b><ul style="margin:0">${li(t.notes)}</ul></div>
 <div class="langs">${["vi", "en", "zh", "ja", "ko"].map((c) => `<a class="${c === lang ? "on" : ""}" href="?lang=${c}">${c.toUpperCase()}</a>`).join("")}</div>
 <div class="back"><a href="/install/ios?lang=${lang}">${t.back}</a> · ${t.support}: support@meetflowai.site</div>
 </div></body></html>`);
