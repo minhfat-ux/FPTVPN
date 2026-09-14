@@ -145,6 +145,14 @@ struct CoordinatorSubscriptionStatus: Equatable, Codable {
     var is_active: Bool
     var product_id: String?
     var expires_at: String?
+
+    /// Đang dùng BẢN DÙNG THỬ 1 NGÀY miễn phí (`product_id` bắt đầu bằng `trial.`).
+    /// Optional nên payload cũ (chưa có field) vẫn decode được.
+    var is_trial: Bool? = nil
+
+    /// Số giờ còn lại của trial: null khi không phải trial, 0 khi đã hết giờ
+    /// (`auth-store.js` → `trialHoursLeft`).
+    var trial_hours_left: Int? = nil
 }
 
 /// A device owned by the signed-in user (user-scoped device management,

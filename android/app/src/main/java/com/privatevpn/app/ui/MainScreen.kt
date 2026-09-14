@@ -80,6 +80,8 @@ fun MainScreen(
     val usingFallback by vpn.usingFallbackNodes.collectAsState()
     val statusMessage by vpn.statusMessage.collectAsState()
     val isSubscribed by rememberIsSubscribed(sub)
+    val isOnFreeTrial by sub.isOnFreeTrial.collectAsState()
+    val trialHoursLeft by sub.trialHoursLeft.collectAsState()
 
     Column(
         modifier = Modifier
@@ -104,6 +106,16 @@ fun MainScreen(
         }
 
         Header(app = app, state = state, isSubscribed = isSubscribed)
+
+        if (isOnFreeTrial) {
+            Spacer(Modifier.height(16.dp))
+            FreeTrialBanner(
+                app = app,
+                hoursLeft = trialHoursLeft,
+                // Trang mua trong app (PaywallScreen) đã load sẵn Config.BUY_URL — không tạo URL mới.
+                onBuy = onShowPaywall,
+            )
+        }
 
         Spacer(Modifier.height(20.dp))
 
@@ -462,6 +474,39 @@ private fun DiagRow(title: String, value: String, valueColor: Color) {
         Text(title, color = VPNTheme.SecondaryLabel, fontSize = 14.sp)
         Spacer(Modifier.weight(1f))
         Text(value, color = valueColor, fontSize = 14.sp, textAlign = TextAlign.End)
+    }
+}
+
+/** Banner bản dùng thử 1 ngày: backend báo `is_trial` nên Premium vẫn mở, nhưng hết hạn là mất. */
+@Composable
+private fun FreeTrialBanner(
+    app: VPNFlowApp,
+    hoursLeft: Int?,
+    onBuy: () -> Unit,
+) {
+    val lang = app.languageStore
+    CardContainer {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    lang.t(LKey.freeTrialTitle),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = VPNTheme.Label,
+                )
+                Text(
+                    lang.t(LKey.freeTrialBodyPrefix).replace("%s", "${hoursLeft ?: 0}"),
+                    fontSize = 14.sp,
+                    color = VPNTheme.SecondaryLabel,
+                )
+            }
+            Button(
+                onClick = onBuy,
+                colors = ButtonDefaults.buttonColors(containerColor = VPNTheme.Accent),
+                shape = RoundedCornerShape(50),
+            ) {
+                Text(lang.t(LKey.upgrade), color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 

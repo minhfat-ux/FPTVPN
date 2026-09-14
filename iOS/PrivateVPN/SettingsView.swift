@@ -316,6 +316,9 @@ final class SubscriptionStore: ObservableObject {
     /// Backend entitlement: true when the signed-in account has an active
     /// subscription (subscription_status.is_active from the coordinator).
     @Published var backendPremium = false
+    /// `subscription_status` đầy đủ của lần đọc session gần nhất. `backendPremium` chỉ giữ
+    /// `is_active`, còn cờ dùng thử (`is_trial` / `trial_hours_left`) thì cần cả struct.
+    @Published var backendSubscriptionStatus: CoordinatorSubscriptionStatus?
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
@@ -331,6 +334,17 @@ final class SubscriptionStore: ObservableObject {
         }
         #endif
         return backendPremium
+    }
+
+    /// Đang dùng BẢN DÙNG THỬ 1 NGÀY miễn phí. Gắn với `isSubscribed` nên khi trial hết
+    /// (`is_active` = false) cờ này tự tắt và banner biến mất.
+    var isOnFreeTrial: Bool {
+        isSubscribed && backendSubscriptionStatus?.is_trial == true
+    }
+
+    /// Số giờ còn lại của trial (nil khi không phải trial hoặc backend không trả).
+    var trialHoursLeft: Int? {
+        backendSubscriptionStatus?.trial_hours_left
     }
 
     /// Đọc lại session từ coordinator (`GET /v1/auth/session`) và cập nhật quyền Premium.
@@ -360,7 +374,9 @@ final class SubscriptionStore: ObservableObject {
             if refreshed != authStore.session {
                 authStore.save(refreshed)
             }
-            backendPremium = refreshed.user.subscription_status?.is_active ?? false
+            let status = refreshed.user.subscription_status
+            backendSubscriptionStatus = status
+            backendPremium = status?.is_active ?? false
             errorMessage = nil
         } catch {
             if reportFailure {

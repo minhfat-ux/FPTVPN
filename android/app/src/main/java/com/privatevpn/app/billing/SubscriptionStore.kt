@@ -2,6 +2,7 @@ package com.privatevpn.app.billing
 
 import com.privatevpn.app.BuildConfig
 import com.privatevpn.app.api.ControlAPIClient
+import com.privatevpn.app.api.CoordinatorSubscriptionStatus
 import com.privatevpn.app.auth.AuthSessionStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,14 @@ class SubscriptionStore(
     private val _backendPremium = MutableStateFlow(false)
     val backendPremium: StateFlow<Boolean> = _backendPremium.asStateFlow()
 
+    /** True khi tài khoản đang dùng bản dùng thử 1 ngày miễn phí (`is_active` + `is_trial`). */
+    private val _isOnFreeTrial = MutableStateFlow(false)
+    val isOnFreeTrial: StateFlow<Boolean> = _isOnFreeTrial.asStateFlow()
+
+    /** Số giờ còn lại của bản dùng thử; null khi không phải trial (xem `trial_hours_left`). */
+    private val _trialHoursLeft = MutableStateFlow<Int?>(null)
+    val trialHoursLeft: StateFlow<Int?> = _trialHoursLeft.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -38,7 +47,15 @@ class SubscriptionStore(
         }
 
     fun syncBackendPremium() {
-        _backendPremium.value = authStore.session.value?.user?.subscriptionStatus?.isActive ?: false
+        applySubscriptionStatus(authStore.session.value?.user?.subscriptionStatus)
+    }
+
+    /** Ghi quyền Premium + trạng thái trial từ một payload `subscription_status`. */
+    private fun applySubscriptionStatus(status: CoordinatorSubscriptionStatus?) {
+        val active = status?.isActive ?: false
+        _backendPremium.value = active
+        _isOnFreeTrial.value = active && status?.isTrial == true
+        _trialHoursLeft.value = if (_isOnFreeTrial.value) status?.trialHoursLeft else null
     }
 
     /**
@@ -68,7 +85,7 @@ class SubscriptionStore(
                 val refreshed = ControlAPIClient().fetchSession(token)
                 // Chỉ ghi storage khi payload thật sự đổi: tránh ghi vô ích mỗi lần mở app.
                 if (authStore.session.value != refreshed) authStore.save(refreshed)
-                _backendPremium.value = refreshed.user.subscriptionStatus?.isActive ?: false
+                applySubscriptionStatus(refreshed.user.subscriptionStatus)
                 _errorMessage.value = null
             } catch (e: Exception) {
                 if (reportFailure) _errorMessage.value = e.message ?: "Could not refresh your purchase."

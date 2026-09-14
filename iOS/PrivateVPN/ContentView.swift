@@ -24,6 +24,8 @@ struct ContentView: View {
                     VStack(spacing: 20) {
                         header
 
+                        freeTrialBanner
+
                         locationCard
 
                         if vpnManager.state.isTransitioning {
@@ -171,7 +173,9 @@ struct ContentView: View {
     }
 
     private func syncBackendPremium() {
-        subscriptionStore.backendPremium = authStore.session?.user.subscription_status?.is_active ?? false
+        let status = authStore.session?.user.subscription_status
+        subscriptionStore.backendSubscriptionStatus = status
+        subscriptionStore.backendPremium = status?.is_active ?? false
     }
 
     /// Đọc lại session từ backend (best-effort) để quyền Premium sống qua lần mở app và hiện
@@ -425,6 +429,49 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(VPNTheme.cardStroke, lineWidth: 1)
         )
+    }
+
+    /// Banner bản dùng thử 1 ngày miễn phí. Backend chỉ trả `is_trial = true` khi tài khoản
+    /// đang chạy gói `trial.*`, nên có cờ này là biết chắc khách đang dùng thử — nói rõ còn
+    /// bao nhiêu giờ và cho đường mua ngay, thay vì để trial hết rồi Connect bị chặn im lặng.
+    @ViewBuilder
+    private var freeTrialBanner: some View {
+        if subscriptionStore.isOnFreeTrial {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(languageStore.t(.freeTrialTitle))
+                        .font(.headline)
+                        .foregroundStyle(VPNTheme.label)
+                    // `%d` + String(format:) theo đúng convention của `.devCode` trong Theme.swift.
+                    Text(String(format: languageStore.t(.freeTrialBody), subscriptionStore.trialHoursLeft ?? 0))
+                        .font(.subheadline)
+                        .foregroundStyle(VPNTheme.secondaryLabel)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                // Mở đúng paywall sẵn có (trang web /buy qua PaywallView) — không hardcode URL mới.
+                Button {
+                    showingPaywall = true
+                } label: {
+                    Text(languageStore.t(.upgrade))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(VPNTheme.accent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(VPNTheme.accent.opacity(0.18))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(VPNTheme.accent.opacity(0.45), lineWidth: 1)
+            )
+        }
     }
 
     // MARK: - Single one-tap primary button (NFR-UX-001 / AC-022)

@@ -111,6 +111,10 @@ data class CoordinatorSubscriptionStatus(
     @SerialName("is_active") val isActive: Boolean,
     @SerialName("product_id") val productId: String? = null,
     @SerialName("expires_at") val expiresAt: String? = null,
+    /** Bản dùng thử 1 ngày miễn phí (`product_id` bắt đầu bằng `trial.`). */
+    @SerialName("is_trial") val isTrial: Boolean? = null,
+    /** Số giờ còn lại của bản dùng thử; null khi không phải trial, 0 khi đã hết. */
+    @SerialName("trial_hours_left") val trialHoursLeft: Int? = null,
 )
 
 /** A device owned by the signed-in user. */
