@@ -80,35 +80,29 @@ export function buildDeviceProfile({
   organization = "VPNFlow",
 }) {
   const uuid = crypto.randomUUID().toUpperCase();
-  // Apple yêu cầu mỗi payload một PayloadUUID riêng — dùng chung một UUID cho cả hai
-  // payload cũng làm hồ sơ bị coi là không hợp lệ.
-  const contentUuid = crypto.randomUUID().toUpperCase();
+  // CẤU TRÚC BẮT BUỘC của cơ chế "Profile Service" (đã sai một lần nên khách cài hồ sơ mà
+  // không có gì được gửi về): PayloadType ở CẤP CAO NHẤT phải là `Profile Service`, và
+  // `PayloadContent` phải là một <dict> chứa URL + DeviceAttributes — KHÔNG phải một <array>
+  // các payload con như profile cấu hình thường. Đặt sai ⇒ iOS vẫn cài được nhưng không POST gì.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>PayloadContent</key>
-  <array>
-    <dict>
-      <key>URL</key><string>${xmlEscape(callbackUrl)}</string>
-      <key>DeviceAttributes</key>
-      <array>${deviceAttributes.map((attribute) => `
-        <string>${xmlEscape(attribute)}</string>`).join("")}
-      </array>
-      <key>PayloadType</key><string>Profile Service</string>
-      <key>PayloadVersion</key><integer>1</integer>
-      <key>PayloadIdentifier</key><string>site.meetflowai.vpnflow.device.${contentUuid}</string>
-      <key>PayloadUUID</key><string>${contentUuid}</string>
-      <key>PayloadDisplayName</key><string>${xmlEscape(payloadName)}</string>
-      <key>PayloadDescription</key><string>${xmlEscape(description)}</string>
-      <key>PayloadRemovalDisallowed</key><false/>
-    </dict>
-  </array>
-  <key>PayloadDisplayName</key><string>${xmlEscape(displayName)}</string>
-  <key>PayloadIdentifier</key><string>site.meetflowai.vpnflow.registration</string>
+  <dict>
+    <key>URL</key><string>${xmlEscape(callbackUrl)}</string>
+    <key>DeviceAttributes</key>
+    <array>${deviceAttributes.map((attribute) => `
+      <string>${xmlEscape(attribute)}</string>`).join("")}
+    </array>
+  </dict>
   <key>PayloadOrganization</key><string>${xmlEscape(organization)}</string>
-  <key>PayloadType</key><string>Configuration</string>
+  <key>PayloadDisplayName</key><string>${xmlEscape(displayName)}</string>
+  <key>PayloadDescription</key><string>${xmlEscape(description)}</string>
+  <key>PayloadIdentifier</key><string>site.meetflowai.vpnflow.registration</string>
   <key>PayloadUUID</key><string>${uuid}</string>
+  <key>PayloadRemovalDisallowed</key><false/>
+  <key>PayloadType</key><string>Profile Service</string>
   <key>PayloadVersion</key><integer>1</integer>
 </dict>
 </plist>

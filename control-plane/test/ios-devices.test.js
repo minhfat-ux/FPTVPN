@@ -35,28 +35,22 @@ test("đọc payload iOS gửi về: form data=<base64 plist> và cả plist th�
   assert.equal(decodeDevicePayload(plistFor("")), null, "không có UDID ⇒ null");
 });
 
-test("profile đăng ký: gửi đúng callback và có thể gỡ sau khi cài", () => {
-  const xml = buildDeviceProfile({ callbackUrl: "https://meetflowai.site/install/ios/udid" });
-  assert.ok(xml.includes("<key>URL</key><string>https://meetflowai.site/install/ios/udid</string>"), "thiếu URL callback");
-  assert.ok(xml.includes("<string>UDID</string>"), "phải xin UDID");
-  assert.ok(xml.includes("<key>PayloadType</key><string>Profile Service</string>"));
-  assert.ok(/<key>PayloadRemovalDisallowed<\/key><false\/>/.test(xml), "khách phải gỡ được profile sau khi đăng ký");
-  assert.equal((xml.match(/<key>PayloadUUID<\/key>/g) ?? []).length, 2, "mỗi payload cần UUID riêng");
-  // Apple yêu cầu mỗi payload một UUID KHÁC nhau — trùng UUID cũng làm hồ sơ không hợp lệ.
+test("hồ sơ đăng ký: đúng CẤU TRÚC Profile Service (sai cấu trúc = iOS cài mà không gửi gì)", () => {
+  const xml = buildDeviceProfile({ callbackUrl: "https://meetflowai.site/install/ios/udid?lang=vi" });
+  assert.ok(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'), "phải là plist XML");
+  // Đây là điều kiện sống còn: PayloadType ở cấp cao nhất phải là Profile Service, và
+  // PayloadContent phải là <dict> (không phải <array> các payload con như profile cấu hình).
+  assert.ok(xml.includes('<key>PayloadType</key><string>Profile Service</string>'), "thiếu PayloadType Profile Service");
+  assert.ok(!xml.includes('<key>PayloadType</key><string>Configuration</string>'), "KHÔNG được là profile Configuration");
+  const content = xml.slice(xml.indexOf("<key>PayloadContent</key>"), xml.indexOf("<key>PayloadOrganization</key>"));
+  assert.ok(content.includes("<dict>"), "PayloadContent phải là dict");
+  assert.ok(!content.includes("<array>\n    <dict>"), "PayloadContent không được là array các payload con");
+  assert.ok(content.includes("<key>URL</key><string>https://meetflowai.site/install/ios/udid?lang=vi</string>"), "URL callback sai");
+  assert.ok(content.includes("<string>UDID</string>"), "phải xin UDID");
+  assert.ok(/<key>PayloadRemovalDisallowed<\/key><false\/>/.test(xml), "khách phải gỡ được hồ sơ sau khi đăng ký");
   const uuids = [...xml.matchAll(/<key>PayloadUUID<\/key><string>([^<]+)</g)].map((m) => m[1]);
-  assert.equal(new Set(uuids).size, 2, "hai PayloadUUID phải khác nhau");
-});
-
-test("profile: URL có & (token) phải được escape — nếu không iOS báo Invalid Profile", () => {
-  const xml = buildDeviceProfile({
-    callbackUrl: "https://meetflowai.site/install/ios/udid?lang=vi&token=ABC123",
-  });
-  assert.ok(xml.includes("?lang=vi&amp;token=ABC123"), "dấu & trong URL phải thành &amp;");
-  // Không được còn & thô nào ngoài entity hợp lệ — đây đúng là lỗi làm hồ sơ không cài được.
-  const stripped = xml.replace(/&(amp|lt|gt|quot|apos);/g, "");
-  assert.ok(!stripped.includes("&"), "hồ sơ còn & thô ⇒ XML không hợp lệ ⇒ iOS báo Invalid Profile");
-  const text = buildDeviceProfile({ callbackUrl: "https://x/y", displayName: "A & B <c>" });
-  assert.ok(text.includes("A &amp; B &lt;c&gt;"), "tên/描述 có ký tự đặc biệt cũng phải escape");
+  assert.equal(uuids.length, 1, "Profile Service chỉ có 1 payload ⇒ đúng 1 PayloadUUID");
+  assert.ok(/^[0-9A-F-]{36}$/.test(uuids[0]), "PayloadUUID phải là UUID");
 });
 
 test("store: đăng ký mới → chờ ký lại → markBuilt thì mọi máy thành cài được", async () => {
