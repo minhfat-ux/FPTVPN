@@ -22,6 +22,15 @@ test("đọc payload iOS gửi về: form data=<base64 plist> và cả plist th�
   assert.equal(fromForm.model, "iPhone15,2");
   assert.equal(fromForm.iosVersion, "17.5.1");
   assert.equal(decodeDevicePayload(plist).udid, "00008120-0008299A26D80032", "nhận cả plist thô để test được");
+  // iOS/curl gửi nhiều dạng khác nhau — đều phải đọc được:
+  const b64 = Buffer.from(plist, "utf8").toString("base64");
+  assert.equal(decodeDevicePayload(b64).udid, "00008120-0008299A26D80032", "nhận base64 trô");
+  assert.equal(decodeDevicePayload(b64.replace(/\+/g, " ")).udid, "00008120-0008299A26D80032",
+    "querystring đổi '+' thành dấu cách — vẫn phải đọc đúng");
+  assert.equal(decodeDevicePayload(b64.replace(/\+/g, "-").replace(/\//g, "_")).udid, "00008120-0008299A26D80032",
+    "nhận cả base64 urlsafe");
+  assert.equal(decodeDevicePayload("data=" + encodeURIComponent(b64)).udid, "00008120-0008299A26D80032",
+    "nhận form đã URL-encode (%2B)");
   assert.equal(decodeDevicePayload("không phải plist"), null);
   assert.equal(decodeDevicePayload(plistFor("")), null, "không có UDID ⇒ null");
 });

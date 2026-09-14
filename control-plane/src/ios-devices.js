@@ -22,11 +22,18 @@ export function decodeDevicePayload(body) {
   const raw = String(body ?? "").trim();
   if (!raw) return null;
   let plistText = raw;
-  if (!raw.startsWith("<?xml") && !raw.startsWith("<plist")) {
-    const data = new URLSearchParams(raw).get("data");
-    if (!data) return null;
+  if (!raw.startsWith("<")) {
+    // Chấp nhận mọi dạng iOS/curl gửi lên:
+    //  · form "data=<base64>" (iOS gửi vậy)  · chỉ mỗi chuỗi base64  · base64 urlsafe
+    const matched = /(?:^|&)data=([^&]+)/.exec(raw);
+    let candidate = matched ? matched[1] : raw;
     try {
-      plistText = Buffer.from(data.replace(/ /g, "+"), "base64").toString("utf8");
+      candidate = decodeURIComponent(candidate);
+    } catch { /* chuỗi base64 thô có '%' hiếm khi xảy ra — cứ dùng nguyên */ }
+    // express/querystring đổi '+' thành dấu cách khi parse form ⇒ trả lại '+'.
+    candidate = candidate.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
+    try {
+      plistText = Buffer.from(candidate, "base64").toString("utf8");
     } catch {
       return null;
     }
