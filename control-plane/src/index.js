@@ -2227,9 +2227,20 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
   res.type("application/x-apple-aspen-config").send(profile);
 });
 
-app.post(["/install/ios/udid", "/v1/ios/udid"], express.urlencoded({ extended: false, limit: "64kb" }), async (req, res) => {
+// Body của iOS có thể là form-urlencoded, plist thẳng hoặc JSON tuỳ phiên bản ⇒ nhận RAW rồi tự
+// nhận dạng (trước đây chỉ nhận form-urlencoded nên iOS gửi plist thẳng là trả 400).
+app.post(["/install/ios/udid", "/v1/ios/udid"], express.raw({ type: () => true, limit: "64kb" }), async (req, res) => {
   try {
-    const info = decodeDevicePayload(req.body?.data ?? req.body?.payload ?? "");
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body ?? "");
+    // Lưu body cuối cùng để chẩn đoán đúng định dạng iOS gửi (file 0600, tối đa 8KB).
+    try {
+      fs.writeFileSync(
+        path.join(DATA_DIR, "last-ios-callback.txt"),
+        `content-type: ${req.headers["content-type"] ?? ""}\nua: ${req.headers["user-agent"] ?? ""}\nlen: ${rawBody.length}\n\n${rawBody.slice(0, 8000)}`,
+        { mode: 0o600 },
+      );
+    } catch { /* chẩn đoán lỗi không được làm hỏng luồng chính */ }
+    const info = decodeDevicePayload(rawBody, { contentType: String(req.headers["content-type"] ?? "") });
     if (!info) {
       console.warn("ios-udid: payload không có UDID");
       return res.status(400).type("html").send("<p>Không đọc được mã thiết bị. Vui lòng thử lại.</p>");

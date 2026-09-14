@@ -101,7 +101,9 @@ test("guard: route đăng ký thiết bị nằm dưới /install/ios (đã có 
   assert.ok(idx.includes('"/install/ios/udid"'), "phải có endpoint nhận UDID iOS gửi về");
   assert.ok(idx.includes('"/install/ios/status"'), "phải có endpoint cho trang chờ");
   assert.ok(idx.includes("iosDevices.markBuilt"), "phải có API cho máy Mac báo đã ký lại");
-  assert.ok(idx.includes("express.urlencoded"), "endpoint nhận UDID phải đọc được form iOS gửi");
+  // iOS gửi nhiều định dạng (form-urlencoded / plist thẳng / JSON) ⇒ phải nhận RAW rồi tự nhận dạng.
+  assert.ok(idx.includes("express.raw({ type: () => true"), "endpoint nhận UDID phải nhận RAW body");
+  assert.ok(idx.includes("decodeDevicePayload(rawBody"), "phải tự nhận dạng định dạng payload iOS gửi");
 });
 
 test("guard: khách CHỈ đăng ký bằng hồ sơ tự động (không bắt khách dán UDID)", () => {
@@ -152,4 +154,23 @@ test("store: đánh dấu đã đăng ký Apple + ghi lỗi khi Apple từ chố
   const failed = await store.markAppleError("UDID-ERR", "Authentication credentials are missing");
   assert.match(failed.appleError, /credentials/);
   assert.equal(failed.appleRegisteredAt, null, "lỗi thì không được coi là đã đăng ký");
+});
+
+test("đọc payload iOS: nhận cả plist thẳng, JSON và form có plist URL-encode (không chỉ form base64)", () => {
+  const plist = plistFor("00008120-0008299A26D80032");
+  const b64 = Buffer.from(plist, "utf8").toString("base64");
+  // iOS 26 gửi plist thẳng với content-type riêng — đây là ca đã làm server trả 400.
+  assert.equal(decodeDevicePayload(plist, { contentType: "application/xml" }).udid, "00008120-0008299A26D80032");
+  assert.equal(decodeDevicePayload(plist).udid, "00008120-0008299A26D80032");
+  // form có plist đã URL-encode (không phải base64)
+  assert.equal(
+    decodeDevicePayload("data=" + encodeURIComponent(plist)).udid,
+    "00008120-0008299A26D80032",
+    "form chứa plist URL-encode phải đọc được",
+  );
+  // JSON
+  assert.equal(decodeDevicePayload(JSON.stringify({ data: b64 }), { contentType: "application/json" }).udid, "00008120-0008299A26D80032");
+  assert.equal(decodeDevicePayload(JSON.stringify({ UDID: "ABC-123", PRODUCT: "iPhone15,2" }), { contentType: "application/json" }).model, "iPhone15,2");
+  // trường hợp rác vẫn phải trả null (không được ném lỗi)
+  assert.equal(decodeDevicePayload("không phải gì cả", { contentType: "text/plain" }), null);
 });

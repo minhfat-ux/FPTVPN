@@ -18,26 +18,68 @@ import crypto from "node:crypto";
  * iOS POST về `data=<base64 plist>` (profile có khoá URL) — cũng nhận plist thô để test được.
  * Trả `null` nếu payload không có UDID.
  */
-export function decodeDevicePayload(body) {
-  const raw = String(body ?? "").trim();
+export function decodeDevicePayload(body, { contentType = "" } = {}) {
+  let raw = String(body ?? "").trim();
   if (!raw) return null;
-  let plistText = raw;
-  if (!raw.startsWith("<")) {
-    // Chấp nhận mọi dạng iOS/curl gửi lên:
-    //  · form "data=<base64>" (iOS gửi vậy)  · chỉ mỗi chuỗi base64  · base64 urlsafe
-    const matched = /(?:^|&)data=([^&]+)/.exec(raw);
-    let candidate = matched ? matched[1] : raw;
+
+  // iOS POST kiểu gì cũng phải đọc được — đã từng trả 400 vì chỉ chấp nhận đúng 1 định dạng
+  // (log: `POST /install/ios/udid -> 400 ua="Profile/1.0"`), tức máy CÓ gửi mà parser không hiểu.
+
+  // 1) Body JSON: {"data": "<base64 plist>"} hoặc {"UDID": "..."} hoặc {"payload": {...}}
+  if (/json/i.test(contentType) || raw.startsWith("{")) {
     try {
-      candidate = decodeURIComponent(candidate);
-    } catch { /* chuỗi base64 thô có '%' hiếm khi xảy ra — cứ dùng nguyên */ }
-    // express/querystring đổi '+' thành dấu cách khi parse form ⇒ trả lại '+'.
-    candidate = candidate.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
-    try {
-      plistText = Buffer.from(candidate, "base64").toString("utf8");
-    } catch {
-      return null;
-    }
+      const parsed = JSON.parse(raw);
+      const candidate = parsed?.data ?? parsed?.payload ?? parsed?.plist ?? parsed?.profile;
+      if (typeof candidate === "string" && candidate.trim()) {
+        raw = candidate.trim();
+      } else if (candidate && typeof candidate === "object") {
+        const udid = candidate.UDID ?? candidate.udid;
+        if (udid) {
+          return {
+            udid: String(udid),
+            serial: candidate.SERIAL ?? candidate.serial ?? null,
+            model: candidate.PRODUCT ?? candidate.model ?? null,
+            iosVersion: candidate.VERSION ?? candidate.iosVersion ?? null,
+            imei: candidate.IMEI ?? candidate.imei ?? null,
+            iccid: candidate.ICCID ?? candidate.iccid ?? null,
+          };
+        }
+      } else if (parsed && typeof parsed === "object" && (parsed.UDID ?? parsed.udid)) {
+        const udid = parsed.UDID ?? parsed.udid;
+        return {
+          udid: String(udid),
+          serial: parsed.SERIAL ?? null,
+          model: parsed.PRODUCT ?? null,
+          iosVersion: parsed.VERSION ?? null,
+          imei: parsed.IMEI ?? null,
+          iccid: parsed.ICCID ?? null,
+        };
+      }
+    } catch { /* không phải JSON hợp lệ — thử các dạng khác */ }
   }
+
+  // 2) form-urlencoded: lấy giá trị của data/payload/plist/profile rồi URL-decode
+  let text = raw;
+  const field = /(?:^|&)(?:data|payload|plist|profile)=([^&]*)/i.exec(raw);
+  if (field) {
+    text = field[1];
+    try {
+      text = decodeURIComponent(text);
+    } catch { /* giữ nguyên nếu chuỗi có '%' lạ */ }
+  }
+
+  // 3) Chuỗi thu được có thể là: plist thẳng, hoặc base64 (thường/urlsafe, có/không padding).
+  let plistText = null;
+  if (text.trimStart().startsWith("<")) {
+    plistText = text;
+  } else {
+    // querystring đổi '+' thành dấu cách ⇒ trả lại '+' trước khi giải base64.
+    const candidate = text.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
+    const decoded = Buffer.from(candidate, "base64").toString("utf8");
+    if (decoded.trimStart().startsWith("<")) plistText = decoded;
+  }
+  if (!plistText) return null;
+
   const pick = (key) => {
     const m = plistText.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`, "i"));
     return m ? m[1].trim() : null;
