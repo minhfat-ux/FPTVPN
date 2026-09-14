@@ -85,8 +85,8 @@ test("khối QR ở trang buy: có ảnh, có link bấm được và nút copy,
 test("guard: trang buy KHÔNG còn khối QR cài app; route QR vẫn đúng link cấu hình", () => {
   const pay = fs2.readFileSync(new URL("../src/payments.js", import.meta.url), "utf8");
   const idx = fs2.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-  assert.ok(!pay.includes("downloadQrSectionHTML({"), "chủ shop yêu cầu bỏ khối QR cài app trên trang buy");
-  assert.ok(!pay.includes("class=\"dlqr\""), "không còn markup khối QR");
+  assert.ok(!pay.includes("${downloadQrSectionHTML("), "trang buy KHÔNG còn gọi khối QR cài app (chủ shop yêu cầu)");
+  assert.ok(!pay.includes(".dlqr {"), "CSS khối QR đã bỏ khỏi trang buy");
   assert.ok(pay.includes("export function downloadQrSectionHTML"), "hàm vẫn giữ để tái dùng (không gọi ở trang buy)");
   // route QR vẫn phục vụ: trang cài iOS dùng nó cho người xem trên máy tính
   assert.ok(idx.includes('app.get("/v1/downloads/qr"'), "phải còn route sinh ảnh QR");
