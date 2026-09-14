@@ -97,6 +97,43 @@ sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
 
 ---
 
+## 5b) Admin token: chỗ lưu + cách xoay (14/09)
+
+`AUTH_TOKEN` là **biến môi trường tĩnh**, KHÔNG có cơ chế hết hạn trong code (`index.js`: bearer
+so khớp chuỗi). Nên "token hết hạn" thực chất là **token đang giữ không còn khớp server** (env bị
+ghi lại trong lúc đổi IP/deploy) — hoặc trang admin gọi API sai đường (xem bẫy bên dưới).
+
+- Nơi khai: drop-in `/etc/systemd/system/flowvpn-cp.service.d/admin-token.conf` (quyền 600, gồm
+  `AUTH_TOKEN` + `VERIFY_LINK_SECRET`). Drop-in **ghi đè** `Environment=` trong unit gốc.
+- Xoay token:
+  ```bash
+  openssl rand -hex 32 > /root/admin-token.new && chmod 600 /root/admin-token.new
+  sed -i "s|^Environment=AUTH_TOKEN=.*|Environment=AUTH_TOKEN=$(cat /root/admin-token.new)|" \
+    /etc/systemd/system/flowvpn-cp.service.d/admin-token.conf
+  systemctl daemon-reload && systemctl restart flowvpn-cp && rm -f /root/admin-token.new
+  ```
+- Token hiện hành (14/09, dấu vân tay `d4dd7e…c25c`, 64 hex): lưu ở **máy Mac của chủ dự án**
+  `~/.vpnflow-admin-token` (quyền 600). Xem bằng `cat ~/.vpnflow-admin-token`, copy bằng
+  `pbcopy < ~/.vpnflow-admin-token`. **Không dán token vào chat/doc/commit.**
+- `VERIFY_LINK_SECRET` tách riêng khỏi `AUTH_TOKEN` để xoay token KHÔNG làm chết link xác thực
+  email đã gửi (trước đây `VERIFY_LINK_SECRET || AUTH_TOKEN`).
+- Kiểm nhanh (chỉ in mã HTTP):
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $(cat ~/.vpnflow-admin-token)" https://api.meetflowai.site/v1/admin/stats   # 200
+  curl -s -o /dev/null -w '%{http_code}\n' https://api.meetflowai.site/v1/admin/stats                                                            # 401
+  ```
+- **App khách KHÔNG bị ảnh hưởng**: `/health`, `/v1/nodes`, `/v1/app-version`, `/v1/auth/*`,
+  `/buy`, `/v1/payments/*`, `/v1/ai/*`… được miễn khỏi `AUTH_TOKEN` trong middleware.
+
+### Bẫy mới: `/v1/admin/*` không có trên domain chính (đã fix)
+Trang admin canonical là `meetflowai.site/PrivateVPN/Admin` nhưng block `meetflowai.site` chỉ mở
+từng đường, và **thiếu `/v1/admin/*`** ⇒ trang tải được, mọi lời gọi API trả **404**, nhìn như
+"token hết hạn". Đã thêm `handle /v1/admin/*` → `127.0.0.1:7778` (giống `/v1/payments/*`), backup
+`Caddyfile.bak-*`, `caddy validate` OK + reload. Nay cả 3 base đều dùng được:
+`meetflowai.site`, `api.meetflowai.site`, `fcnvpn.tail303be3.ts.net`.
+
+---
+
 ## 6) Session-start prompt (dán vào session mới)
 
 ```text
