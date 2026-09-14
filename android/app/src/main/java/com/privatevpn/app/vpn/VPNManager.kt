@@ -243,7 +243,7 @@ class VPNManager(
         val byHost = HashMap<String, String>()
         availableNodes.forEach { node ->
             val nodeHost = node.endpoint.substringBefore(':').takeIf { it.isNotBlank() }
-            if (nodeHost != null) byHost[nodeHost] = node.wsRelayUrl.orEmpty()
+            if (nodeHost != null) byHost[nodeHost] = node.hysteriaRelayUrl().orEmpty()
         }
         return hosts.flatMap { host -> listOf(host, byHost[host] ?: "") }
     }

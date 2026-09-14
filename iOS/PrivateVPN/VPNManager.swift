@@ -120,7 +120,7 @@ final class VPNManager: ObservableObject {
                 // handshake mã hoá tới khoá node-2 mà lại tới wg0 của node-1 => im lặng.
                 wsRelayURL: store.availableNodes
                     .first { $0.id == store.selectedNodeID }?
-                    .ws_relay_url,
+                    .relayURL,
             )
             // State đã là .connecting từ đầu hàm; giữ nguyên tới khi tunnel lên.
             try manager?.connection.startVPNTunnel()

@@ -45,6 +45,30 @@ class ModelsSerializationTest {
         assertEquals("bankqr.monthly", session.user.subscriptionStatus?.productId)
     }
 
+    @Test fun `exit node doc ca hai field relay va uu tien field moi`() {
+        val json = """
+            {"nodes":[
+              {"id":"vietnam-2","name":"Hanoi 2","country":"VN","city":"Hanoi",
+               "endpoint":"165.101.114.162:443","public_key":"pk2",
+               "hy_relay_url":"wss://fcnvpn.tail303be3.ts.net/vn2hy",
+               "wg_relay_url":"wss://fcnvpn.tail303be3.ts.net/vn2"},
+              {"id":"node-1","name":"Hanoi 1","country":"VN","city":"Hanoi",
+               "endpoint":"103.173.155.50:443","public_key":"pk1",
+               "ws_relay_url":"wss://fcnvpn.tail303be3.ts.net:8443"}
+            ]}
+        """.trimIndent()
+        val nodes = Json { ignoreUnknownKeys = true }.decodeFromString<NodesResponse>(json).nodes
+
+        // Field mới thắng: relay Hysteria (8443) tách khỏi relay WireGuard (443).
+        assertEquals("wss://fcnvpn.tail303be3.ts.net/vn2hy", nodes[0].hyRelayUrl)
+        assertEquals("wss://fcnvpn.tail303be3.ts.net/vn2hy", nodes[0].hysteriaRelayUrl())
+        // `wg_relay_url` có trong JSON nhưng KHÔNG thuộc model Android (đó là relay WireGuard cho
+        // iOS/macOS): decode phải bỏ qua field lạ chứ không được ném lỗi.
+        assertEquals("165.101.114.162:443", nodes[0].endpoint)
+        // Node chưa có field mới vẫn phải chạy: lùi về field cũ.
+        assertEquals("wss://fcnvpn.tail303be3.ts.net:8443", nodes[1].hysteriaRelayUrl())
+    }
+
     @Test fun `parse android app version payload with apk_url`() {
         val raw = """{"platform":"android","minimum_version":"1.2.6","latest_version":"1.2.6",
             "apk_url":"https://meetflowai.site/v1/downloads/android",

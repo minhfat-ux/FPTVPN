@@ -500,21 +500,34 @@ final class ControlAPIClientTests: XCTestCase {
            "endpoint":"103.173.155.50:443","public_key":"pk1",
            "ws_relay_url":"wss://relay.example:10000"},
           {"id":"vietnam-2","name":"Hanoi 2","country":"VN","city":"Hanoi",
-           "endpoint":"165.101.114.162:443","public_key":"pk2","ws_relay_url":null}
+           "endpoint":"165.101.114.162:443","public_key":"pk2","ws_relay_url":null,"hy_relay_url":null,"wg_relay_url":"wss://fcnvpn.tail303be3.ts.net/vn2"}
         ]}
         """#
         let decoded = try JSONDecoder().decode(NodesResponse.self, from: Data(json.utf8))
         XCTAssertEqual(decoded.nodes[0].ws_relay_url, "wss://relay.example:10000")
         XCTAssertNil(decoded.nodes[1].ws_relay_url)
+        // `relayURL` là thứ đưa vào tunnel: ưu tiên field mới, lùi về field cũ để coordinator
+        // chưa cập nhật vẫn chạy được.
+        XCTAssertEqual(decoded.nodes[0].relayURL, "wss://relay.example:10000", "coordinator cũ chỉ có ws_relay_url")
+        XCTAssertEqual(decoded.nodes[1].relayURL, "wss://fcnvpn.tail303be3.ts.net/vn2", "field mới wg_relay_url phải thắng")
     }
 
-    /// Danh sách dự phòng nằm trong app cũng phải nói đúng: chỉ node-1 có relay.
-    /// Nếu để cả hai nil thì đường offline sẽ rơi vào nhánh "đoán" và có thể đoán vào
-    /// node-2 — đúng cái bẫy đã gây lỗi iPad 13/09.
-    func testBuiltInFallbackOnlyNode1DeclaresRelay() {
+    /// Danh sách dự phòng nằm trong app phải khai relay của TỪNG node.
+    ///
+    /// Bất biến: mỗi node có relay riêng, vì relay chỉ hạ cánh ở một node. Để nil thì đường
+    /// offline rơi vào nhánh "đoán" và có thể đoán sang node khác — đúng cái bẫy gây lỗi
+    /// "connected nhưng không có mạng" trên iPad 13/09. Từ 14/09 node-2 cũng đã có relay
+    /// riêng trên hạ tầng dùng chung (Funnel path /vn2 -> UDP 443 của node-2), nên cả hai
+    /// node đều phải khai — khác trước đây khi chỉ node-1 có.
+    func testBuiltInFallbackDeclaresRelayPerNode() {
         let first = ExitNode.builtInFallback.first { $0.id == "node-1" }
         let second = ExitNode.builtInFallback.first { $0.id == "vietnam-2" }
-        XCTAssertEqual(first?.ws_relay_url, WSRelayDefaults.url.absoluteString)
-        XCTAssertNil(second?.ws_relay_url, "node-2 không có relay trên hạ tầng dùng chung")
+        XCTAssertEqual(first?.relayURL, WSRelayDefaults.url.absoluteString)
+        XCTAssertEqual(
+            second?.relayURL,
+            WSRelayDefaults.nodeTwoURL.absoluteString,
+            "node-2 phải khai relay CỦA CHÍNH NÓ, không được để nil rồi đoán",
+        )
+        XCTAssertNotEqual(first?.relayURL, second?.relayURL, "relay phải khác nhau theo từng node")
     }
 }

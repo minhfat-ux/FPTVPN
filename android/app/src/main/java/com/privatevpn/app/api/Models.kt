@@ -29,7 +29,20 @@ data class ExitNode(
      * định và ghi log rõ là đang đoán, để lần sau không phải suy luận.
      */
     @SerialName("ws_relay_url") val wsRelayUrl: String? = null,
-)
+
+    /**
+     * Relay cho transport HYSTERIA (UDP 8443) của đúng node này.
+     *
+     * Vì sao tách khỏi [wsRelayUrl]: field cũ bị hai client hiểu hai nghĩa — iOS đọc là relay
+     * WireGuard (443), Android đọc là relay Hysteria (8443). Một relay chỉ forward tới MỘT cổng
+     * UDP, nên đưa Hysteria vào relay của WireGuard là handshake im lặng (đúng loại lỗi đã làm
+     * mất cả buổi trên iPad). Bản mới đọc field này; [wsRelayUrl] chỉ còn là đường lùi.
+     */
+    @SerialName("hy_relay_url") val hyRelayUrl: String? = null,
+) {
+    /** Relay cho nhánh Hysteria: ưu tiên field mới, lùi về field cũ. */
+    fun hysteriaRelayUrl(): String? = hyRelayUrl ?: wsRelayUrl
+}
 
 @Serializable
 data class NodesResponse(val nodes: List<ExitNode>)
@@ -43,12 +56,14 @@ object ExitNodeFallback {
             publicKey = "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=",
             // Chỉ node-1 có relay trên hạ tầng dùng chung; node-2 thì không. Ghi đúng
             // ở đây để đường dự phòng (coordinator không tới được) cũng không đoán sai.
-            wsRelayUrl = Config.WS_RELAY_URL,
+            hyRelayUrl = Config.WS_RELAY_URL,
         ),
         ExitNode(
             id = "vietnam-2", name = "Vietnam 2", country = "VN", city = "Hanoi",
-            endpoint = "103.6.234.233:443",
+            endpoint = "165.101.114.162:443",
             publicKey = "OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=",
+            // Relay Hysteria của node-2 (Funnel path /vn2hy), hostname nên không phụ thuộc IP.
+            hyRelayUrl = "wss://fcnvpn.tail303be3.ts.net/vn2hy",
         )
     )
 }

@@ -40,9 +40,20 @@ struct ExitNode: Equatable, Codable, Identifiable {
     ///
     /// Optional nên cache cũ chưa có field vẫn decode được.
     var ws_relay_url: String? = nil
+
+    /// Relay cho transport WIREGUARD (UDP 443) — đúng đường iOS/macOS dùng.
+    ///
+    /// Vì sao có field riêng: `ws_relay_url` cũ bị hai client hiểu hai nghĩa (iOS đọc là relay
+    /// WireGuard, Android đọc là relay Hysteria UDP 8443). Một relay chỉ forward tới MỘT cổng
+    /// UDP nên dùng chung một field là gửi nhầm transport vào nhầm cổng ⇒ handshake im lặng.
+    /// Control plane nay cấp cả hai field tường minh.
+    var wg_relay_url: String? = nil
 }
 
 extension ExitNode {
+    /// Relay đưa vào tunnel: ưu tiên field mới, lùi về field cũ cho coordinator chưa cập nhật.
+    var relayURL: String? { wg_relay_url ?? ws_relay_url }
+
     /// Fallback exit nodes used when the coordinator is unreachable (e.g. on
     /// censored networks where the control plane domain/IP is blocked). Mirrors
     /// the live production `exit_nodes` table — keep in sync with node-store.
@@ -52,10 +63,13 @@ extension ExitNode {
                  public_key: "N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=",
                  // Chỉ node-1 có relay trên hạ tầng dùng chung; node-2 thì không. Ghi
                  // đúng ở đây để cả đường offline cũng không đoán sai node.
-                 ws_relay_url: WSRelayDefaults.url.absoluteString),
+                 wg_relay_url: WSRelayDefaults.url.absoluteString),
         ExitNode(id: "vietnam-2", name: "Vietnam 2", country: "VN", city: "Hanoi",
                  endpoint: "165.101.114.162:443",
-                 public_key: "OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=")
+                 public_key: "OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=",
+                 // node-2 nay cũng có relay riêng (Funnel path /vn2 -> wsrelay -> UDP 443 của
+                 // node-2) nên đường dự phòng khi UDP bị chặn không phụ thuộc IP node-2 nữa.
+                 wg_relay_url: WSRelayDefaults.nodeTwoURL.absoluteString)
     ]
 }
 
@@ -185,6 +199,10 @@ enum WSRelayDefaults {
     /// Tailscale Funnel -> wsrelay -> UDP 443 của **node-1**. Chỉ dẫn tới node-1, nên
     /// đây là giá trị ĐOÁN khi node không khai gì; xem `ExitNode.ws_relay_url`.
     static let url = URL(string: "wss://fcnvpn.tail303be3.ts.net:10000")!
+
+    /// Relay WireGuard của **node-2** — cùng hostname Funnel, khác path. Hostname không đổi khi
+    /// IP node đổi, nên đây là đường dự phòng độc lập với IP.
+    static let nodeTwoURL = URL(string: "wss://fcnvpn.tail303be3.ts.net/vn2")!
 }
 
 /// Hosts the coordinator is reachable through. Defined here because this file is a
