@@ -2582,7 +2582,6 @@ function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "" }) {
   // nếu không UDID gửi về sẽ không tự map được vào account.
   const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
   const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
-  const fallback = appConfig.get("ios_diawi_url") || process.env.IOS_DIAWI_URL;
   const li = (items) => items.map((x) => `<li>${x}</li>`).join("");
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2623,18 +2622,11 @@ ${iosLangSelectHTML(lang)}
 <div class="step">
   <div class="h"><span class="n">1</span>${t.step1}</div>
   <ul>${li(t.step1Items)}</ul>
-  <a class="b b1" id="regLink" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}">${t.regBtn}</a>
-  <a class="guidebtn" href="#" onclick="showGuide();return false;">${t.guideBtn}</a>
+  <div class="wait" id="statusline" style="display:none"><span class="spin"></span><span id="statustxt"></span></div>
+  <div class="okmsg" id="okline" style="display:none">${t.readyMsg}</div>
 </div>
 
-<div class="step off" id="step2">
-  <div class="h"><span class="n" id="n2">2</span>${t.step2}</div>
-  <div class="wait" id="wait2"><span class="spin"></span><span id="wait2txt">${t.waitLocked}</span></div>
-  <div id="ok2" style="display:none">
-    <div class="okmsg">${t.readyMsg}</div>
-    <a class="b b2" href="${itms}">${t.installBtn}</a>
-  </div>
-</div>
+<a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}">${t.regBtn}</a>
 
 <div class="warn">
   <b>${t.warnTitle}</b>
@@ -2646,7 +2638,7 @@ ${iosLangSelectHTML(lang)}
   <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">${t.qrTitle}</div>
   <img src="/v1/downloads/qr?target=ios&size=260" alt="QR" width="150" height="150" style="background:#fff;padding:6px;border-radius:10px">
   <div style="font-size:12.5px;color:rgba(255,255,255,.6);margin-top:8px">${base}/install/ios</div>
-  <div style="font-size:12.5px;color:rgba(255,255,255,.5);margin-top:6px">${t.support}: support@meetflowai.site${fallback ? ` · ${t.fallback}: <a href="${fallback}" style="color:#7ab8ff">Diawi</a>` : ""}</div>
+  <div style="font-size:12.5px;color:rgba(255,255,255,.5);margin-top:6px">${t.support}: support@meetflowai.site</div>
 </div>
 </div>
 
@@ -2663,24 +2655,32 @@ ${iosLangSelectHTML(lang)}
 </div>
 <script>
 var udid = ""; try { udid = localStorage.getItem("vpnflow_udid") || ""; } catch (e) {}
+// Một nút DUY NHẤT cho cả hai bước: chưa đăng ký thì nó tải hồ sơ, đăng ký xong thì nó cài app.
+var ITMS = ${JSON.stringify(itms.replace(/&amp;/g, "&"))};
+var REG_HREF = ${JSON.stringify(`/install/ios/register.mobileconfig?lang=${lang}${tokenQS}`)};
+var LBL = ${JSON.stringify({ reg: t.regBtn, install: t.installBtn, wait: t.waitReady, locked: t.waitLocked })};
+var cta = document.getElementById("cta");
+var statusline = document.getElementById("statusline"), statustxt = document.getElementById("statustxt"), okline = document.getElementById("okline");
 // Sau khi khách bấm "Đăng ký thiết bị", iOS chỉ TẢI hồ sơ; phải tự mở Cài đặt để CÀI.
-// Popup này là hướng dẫn chính (theo ngôn ngữ của máy), hiện ngay để khách không bị lạc.
 function showGuide() { document.getElementById("guide").style.display = "flex"; }
 function hideGuide() { document.getElementById("guide").style.display = "none"; }
-var regLink = document.getElementById("regLink");
-if (regLink) regLink.addEventListener("click", function () { setTimeout(showGuide, 250); });
-var T = ${JSON.stringify({ waitReady: t.waitReady })};
-var step2 = document.getElementById("step2"), wait2 = document.getElementById("wait2");
-var wait2txt = document.getElementById("wait2txt"), ok2 = document.getElementById("ok2");
-function showReady() { step2.classList.remove("off"); wait2.style.display = "none"; ok2.style.display = "block"; }
-function showWaiting(msg) { step2.classList.remove("off"); wait2.style.display = "flex"; ok2.style.display = "none"; wait2txt.textContent = msg; }
+function toRegister() { cta.href = REG_HREF; cta.textContent = LBL.reg; }
+function showReady() {
+  cta.href = ITMS; cta.textContent = LBL.install;
+  statusline.style.display = "none"; okline.style.display = "block";
+}
+function showWaiting(msg) {
+  toRegister();
+  statusline.style.display = "flex"; okline.style.display = "none"; statustxt.textContent = msg;
+}
+cta.addEventListener("click", function () { setTimeout(showGuide, 250); });
 function poll() {
   if (!udid) return;
   fetch("/install/ios/status?udid=" + encodeURIComponent(udid)).then(function (r) { return r.json(); }).then(function (d) {
-    if (d.ready) { showReady(); } else { showWaiting(T.waitReady); setTimeout(poll, 5000); }
+    if (d.ready) { showReady(); } else { showWaiting(LBL.wait); setTimeout(poll, 5000); }
   }).catch(function () { setTimeout(poll, 8000); });
 }
-poll();
+if (udid) poll();
 </script></body></html>`;
 }
 
