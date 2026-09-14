@@ -77,6 +77,13 @@ const T = {
     expiresAt: (when) => `Hết hạn: ${when}`,
     support: "Cần hỗ trợ? Liên hệ",
     renewHint: "Link mở sẵn trang thanh toán của bạn.",
+    iosReadySubject: "VPNFlow — bản cài cho iPhone của bạn đã sẵn sàng",
+    iosReadyIntro: "Shop đã thêm mã thiết bị của bạn vào Apple và ký xong bản cài riêng. Bấm nút dưới để cài (nhớ mở bằng <b>Safari</b> trên chính iPhone/iPad đó).",
+    iosReadyDevice: "Thiết bị",
+    iosReadyNote: "Nếu iOS báo <b>“Untrusted Developer / Không tin cậy”</b>: vào <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn chứng chỉ của VPNFlow → <b>Tin cậy</b>.",
+    iosReadyCta: "📲 Cài VPNFlow",
+    iosReadyHint: "Nếu nút không mở được, copy link này dán vào Safari:",
+    iosReadyWait: "Chưa cài được? Hãy chắc chắn bạn đang mở bằng Safari (Chrome hoặc trình duyệt trong app chat không cài được) và đã hoàn thành bước đăng ký thiết bị.",
   },
   en: {
     greeting: "Hello,",
@@ -124,6 +131,13 @@ const T = {
     expiresAt: (when) => `Expires: ${when}`,
     support: "Need help? Contact",
     renewHint: "The link opens your pre-filled checkout page.",
+    iosReadySubject: "VPNFlow — your iPhone build is ready",
+    iosReadyIntro: "We added your device ID to Apple and signed a build for it. Tap the button below to install (open it in <b>Safari</b> on that same iPhone/iPad).",
+    iosReadyDevice: "Device",
+    iosReadyNote: "If iOS says <b>“Untrusted Developer”</b>: go to <b>Settings → General → VPN &amp; Device Management</b> → pick the VPNFlow certificate → <b>Trust</b>.",
+    iosReadyCta: "📲 Install VPNFlow",
+    iosReadyHint: "If the button does not open, copy this link into Safari:",
+    iosReadyWait: "Cannot install yet? Make sure you opened it in Safari (Chrome or in-app browsers cannot install) and that the device registration step is done.",
   },
   zh: {
     greeting: "您好，",
@@ -171,6 +185,13 @@ const T = {
     expiresAt: (when) => `到期时间：${when}`,
     support: "需要帮助？请联系",
     renewHint: "该链接会打开已填好信息的支付页面。",
+    iosReadySubject: "VPNFlow — 您的 iPhone 安装包已就绪",
+    iosReadyIntro: "我们已把您的设备码加入 Apple 并为该设备完成签名。请点击下面的按钮安装（请用该 iPhone/iPad 上的 <b>Safari</b> 打开）。",
+    iosReadyDevice: "设备",
+    iosReadyNote: "若提示 <b>“不受信任的开发者”</b>：进入 <b>设置 → 通用 → VPN 与设备管理</b> → 选择 VPNFlow 证书 → <b>信任</b>。",
+    iosReadyCta: "📲 安装 VPNFlow",
+    iosReadyHint: "如果按钮打不开，请把下面的链接复制到 Safari 打开：",
+    iosReadyWait: "还装不上？请确认是用 Safari 打开的（Chrome 或应用内浏览器无法安装），并且已完成设备注册步骤。",
   },
 };
 
@@ -541,6 +562,34 @@ export async function sendRenewalReminder({ to, lang, daysLeft, expiresAt, buyUr
     message: renderRenewalEmail({ lang, to, daysLeft, expiresAt, buyUrl }),
     logTag: "renewal",
     logContext: { to, daysLeft, lang: pickMailLang(lang) },
+  });
+}
+
+/** Email báo khách: bản cài Ad Hoc cho máy của họ đã ký xong và cài được. */
+export function renderIosInstallReadyEmail({ lang = "vi", udid = "", installUrl = "", brand = "VPNFlow Premium" }) {
+  const t = text(lang);
+  const short = String(udid).slice(-8);
+  return {
+    subject: t.iosReadySubject ?? `${brand} — your build is ready`,
+    html: shell(`<p>${t.greeting}</p>
+<p>${t.iosReadyIntro}</p>
+<p style="color:#666;font-size:13px">${t.iosReadyDevice}: <code>…${short}</code></p>
+<p><a href="${installUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">${t.iosReadyCta}</a></p>
+<p style="color:#666;font-size:12px">${t.iosReadyHint}<br/><span style="word-break:break-all">${installUrl}</span></p>
+<p style="font-size:13px">${t.iosReadyNote}</p>
+<p style="color:#666;font-size:12px">${t.iosReadyWait}</p>
+<p style="color:#999;font-size:12px">${t.support} <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
+<p>${t.signature}</p>`),
+  };
+}
+
+/** Gửi email "bản cài đã sẵn sàng" cho một thiết bị iOS. */
+export async function sendIosInstallReadyEmail({ to, lang, udid, installUrl }) {
+  return deliver({
+    to,
+    message: renderIosInstallReadyEmail({ lang, udid, installUrl }),
+    logTag: "ios-ready",
+    logContext: { to, udid: String(udid ?? "").slice(-8), lang: pickMailLang(lang) },
   });
 }
 

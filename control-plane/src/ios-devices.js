@@ -172,6 +172,10 @@ export class IosDeviceStore {
         registeredAt: now,
         lastSeenAt: now,
         built: false,
+        notifiedAt: null,
+        appleDeviceId: null,
+        appleRegisteredAt: null,
+        appleError: null,
       };
       data.devices.push(device);
       await this.save(data);
@@ -189,6 +193,55 @@ export class IosDeviceStore {
       device.updatedAt = new Date().toISOString();
       await this.save(data);
       return device;
+    });
+  }
+
+  /** Ghi nhận đã đăng ký UDID lên Apple (hoặc Apple báo đã có sẵn). */
+  async markAppleRegistered(udid, { deviceId = null, alreadyRegistered = false } = {}) {
+    return this._withLock(async () => {
+      const data = await this.load();
+      const device = data.devices.find((d) => d.udid === String(udid ?? "").trim());
+      if (!device) throw new Error("Không tìm thấy UDID");
+      device.appleDeviceId = deviceId ?? device.appleDeviceId ?? null;
+      device.appleRegisteredAt = new Date().toISOString();
+      device.appleAlreadyRegistered = Boolean(alreadyRegistered);
+      device.appleError = null;
+      await this.save(data);
+      return device;
+    });
+  }
+
+  /** Ghi lại lỗi đăng ký Apple để dashboard thấy (không chặn luồng khách). */
+  async markAppleError(udid, error) {
+    return this._withLock(async () => {
+      const data = await this.load();
+      const device = data.devices.find((d) => d.udid === String(udid ?? "").trim());
+      if (!device) throw new Error("Không tìm thấy UDID");
+      device.appleError = String(error ?? "unknown error").slice(0, 300);
+      await this.save(data);
+      return device;
+    });
+  }
+
+  /** Máy đã map email nhưng CHƯA được báo "bản cài sẵn sàng". */
+  async pendingNotify() {
+    const data = await this.load();
+    return data.devices.filter((d) => d.email && !d.notifiedAt);
+  }
+
+  /** Ghi nhận đã gửi email cho các máy này (để không gửi lại mỗi lần ký). */
+  async markNotified(udids) {
+    const list = Array.isArray(udids) ? udids.filter(Boolean) : [];
+    if (!list.length) return 0;
+    return this._withLock(async () => {
+      const data = await this.load();
+      const at = new Date().toISOString();
+      let n = 0;
+      for (const d of data.devices) {
+        if (list.includes(d.udid)) { d.notifiedAt = at; n += 1; }
+      }
+      await this.save(data);
+      return n;
     });
   }
 

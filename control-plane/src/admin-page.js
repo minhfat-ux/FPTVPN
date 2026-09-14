@@ -387,14 +387,44 @@ export function adminPageHTML() {
       <h2>iOS Ad Hoc — quản lý UDID</h2>
       <div class="actions">
         <button id="loadIos">Refresh</button>
+        <button class="secondary" id="ascRegisterAll">⬆️ Đăng ký tất cả lên Apple</button>
         <span class="status-inline" id="iosStatus"></span>
       </div>
+
+      <div class="fb-panel" id="ascPanel">
+        <div class="fb-title" id="ascTitle">App Store Connect API — chưa kiểm tra</div>
+        <div class="fb-body" id="ascBody">Nạp Issuer ID + Key ID + file .p8 để server tự thêm UDID lên Apple Developer (không phải copy tay).</div>
+        <details>
+          <summary>Nạp / đổi khoá API</summary>
+          <div class="grid" style="margin-top:10px">
+            <label>Key ID
+              <input id="ascKeyId" type="text" placeholder="ABC123DEFG" autocomplete="off">
+            </label>
+            <label>Issuer ID
+              <input id="ascIssuerId" type="text" placeholder="12345678-1234-1234-1234-123456789012" autocomplete="off">
+            </label>
+            <label>Team ID (tuỳ chọn)
+              <input id="ascTeamId" type="text" placeholder="ABCDE12345" autocomplete="off">
+            </label>
+          </div>
+          <label style="display:block;margin-top:8px">Nội dung file .p8 (dán cả dòng BEGIN/END)
+            <textarea id="ascKey" rows="6" placeholder="-----BEGIN PRIVATE KEY-----" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+          </label>
+          <div class="actions">
+            <button id="ascSave">Lưu khoá</button>
+            <button class="secondary" id="ascClear">Xoá khoá</button>
+            <span class="status-inline" id="ascStatus"></span>
+          </div>
+        </details>
+      </div>
+
       <div style="overflow-x:auto; margin-top:12px;">
         <table>
-          <thead><tr><th>UDID</th><th>Model / iOS</th><th>Email</th><th>User ID</th><th>Registered</th><th>Built</th><th>Map account</th></tr></thead>
-          <tbody id="iosBody"><tr><td colspan="7">Bấm Refresh.</td></tr></tbody>
+          <thead><tr><th>UDID</th><th>Model / iOS</th><th>Email</th><th>User ID</th><th>Registered</th><th>Built</th><th>Apple</th><th>Map account</th></tr></thead>
+          <tbody id="iosBody"><tr><td colspan="8">Bấm Refresh.</td></tr></tbody>
         </table>
       </div>
+      <div class="status" id="iosAppleStatus"></div>
     </section>
 
     <!-- ===================== PAYMENTS VIEW ===================== -->
@@ -745,6 +775,14 @@ export function adminPageHTML() {
       iosBody: document.getElementById("iosBody"),
       iosStatus: document.getElementById("iosStatus"),
       loadIos: document.getElementById("loadIos"),
+      ascTitle: document.getElementById("ascTitle"),
+      ascBody: document.getElementById("ascBody"),
+      ascKeyId: document.getElementById("ascKeyId"),
+      ascIssuerId: document.getElementById("ascIssuerId"),
+      ascTeamId: document.getElementById("ascTeamId"),
+      ascKey: document.getElementById("ascKey"),
+      ascStatus: document.getElementById("ascStatus"),
+      iosAppleStatus: document.getElementById("iosAppleStatus"),
       tabStats: document.getElementById("tabStats"),
       viewStats: document.getElementById("view-stats"),
       statsCards: document.getElementById("statsCards"),
@@ -909,6 +947,96 @@ export function adminPageHTML() {
       return String(value ?? "").replace(/[&<>\"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" }[char]));
     }
 
+    function iosAppleCell(d) {
+      if (d.appleRegisteredAt) return "✅ " + (d.appleAlreadyRegistered ? "đã có trên Apple" : "đã đăng ký");
+      if (d.appleError) return "⚠️ " + escapeHtml(d.appleError);
+      return "—";
+    }
+
+    async function loadAscStatus() {
+      try {
+        const data = await request("/v1/admin/ios/apple");
+        const c = data.credentials || {};
+        fields.ascTitle.textContent = c.configured
+          ? "App Store Connect API — đã cấu hình (Key " + (c.keyId || "?") + ")"
+          : "App Store Connect API — CHƯA cấu hình";
+        const apple = data.apple || {};
+        fields.ascBody.textContent = c.configured
+          ? (apple.ok
+              ? "Kết nối Apple OK · " + (apple.devices || []).length + " thiết bị trên tài khoản."
+              : "Chưa gọi được Apple: " + (apple.error || "lỗi không rõ"))
+          : "Nạp Issuer ID + Key ID + file .p8 để server tự thêm UDID lên Apple Developer.";
+        if (fields.ascKeyId && !fields.ascKeyId.value) fields.ascKeyId.value = c.keyId || "";
+        if (fields.ascTeamId && !fields.ascTeamId.value) fields.ascTeamId.value = c.teamId || "";
+      } catch (error) {
+        fields.ascTitle.textContent = "App Store Connect API — lỗi kiểm tra";
+        fields.ascBody.textContent = error.message;
+      }
+    }
+
+    async function saveAscCredential() {
+      const privateKey = (fields.ascKey.value || "").trim();
+      if (!fields.ascKeyId.value.trim() || !fields.ascIssuerId.value.trim() || !privateKey) {
+        fields.ascStatus.textContent = "Cần Key ID, Issuer ID và nội dung file .p8.";
+        return;
+      }
+      fields.ascStatus.textContent = "Đang lưu...";
+      try {
+        const data = await request("/v1/admin/ios/apple/credentials", {
+          method: "POST",
+          body: JSON.stringify({
+            keyId: fields.ascKeyId.value.trim(),
+            issuerId: fields.ascIssuerId.value.trim(),
+            teamId: fields.ascTeamId.value.trim(),
+            privateKey: privateKey,
+          }),
+        });
+        fields.ascKey.value = "";
+        fields.ascStatus.textContent = data.verified ? "✅ Đã lưu và kết nối Apple OK" : "⚠️ Đã lưu nhưng Apple từ chối: " + (data.verify_error || "");
+        await loadAscStatus();
+      } catch (error) {
+        fields.ascStatus.textContent = error.message;
+      }
+    }
+
+    async function clearAscCredential() {
+      if (!confirm("Xoá khoá App Store Connect đang lưu?")) return;
+      try {
+        await request("/v1/admin/ios/apple/credentials", { method: "DELETE" });
+        fields.ascStatus.textContent = "Đã xoá khoá.";
+        await loadAscStatus();
+      } catch (error) {
+        fields.ascStatus.textContent = error.message;
+      }
+    }
+
+    async function registerAllApple() {
+      if (!confirm("Đăng ký TẤT CẢ UDID chưa có lên Apple?")) return;
+      fields.iosAppleStatus.textContent = "Đang đăng ký lên Apple...";
+      try {
+        const data = await request("/v1/admin/ios/apple/register-pending", { method: "POST", body: JSON.stringify({}) });
+        fields.iosAppleStatus.textContent = "Đã đăng ký " + (data.registered || []).length + " máy" +
+          ((data.failed || []).length ? " · lỗi " + (data.failed || []).length + " máy" : "");
+        await loadIosDevices();
+      } catch (error) {
+        fields.iosAppleStatus.textContent = error.message;
+      }
+    }
+
+    async function registerOneApple(udid) {
+      fields.iosAppleStatus.textContent = "Đang đăng ký " + udid.slice(-8) + " lên Apple...";
+      try {
+        await request("/v1/admin/ios/devices/" + encodeURIComponent(udid) + "/register-apple", {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        fields.iosAppleStatus.textContent = "Đã đăng ký " + udid.slice(-8) + ".";
+        await loadIosDevices();
+      } catch (error) {
+        fields.iosAppleStatus.textContent = error.message;
+      }
+    }
+
     async function loadIosDevices() {
       try {
         fields.iosStatus.textContent = "Loading...";
@@ -922,17 +1050,21 @@ export function adminPageHTML() {
             "<td><code>" + escapeHtml(d.userId || "-") + "</code></td>" +
             "<td>" + escapeHtml(d.registeredAt || "-") + "</td>" +
             "<td>" + (d.built ? "✅" : "⏳") + "</td>" +
-            "<td><button class=\"secondary ios-map\" data-udid=\"" + escapeHtml(d.udid || "") + "\">Map</button></td>" +
+            "<td>" + iosAppleCell(d) + "</td>" +
+            "<td>" +
+              "<button class=\"secondary ios-map\" data-udid=\"" + escapeHtml(d.udid || "") + "\">Map</button> " +
+              (d.appleRegisteredAt ? "" : "<button class=\"secondary ios-apple\" data-udid=\"" + escapeHtml(d.udid || "") + "\">→ Apple</button>") +
+            "</td>" +
             "</tr>";
-        }).join("") : "<tr><td colspan=\"7\">Chưa có UDID.</td></tr>";
-        fields.iosBody.querySelectorAll(".ios-map").forEach((button) => {
-          button.onclick = async () => {
+        }).join("") : "<tr><td colspan=\"8\">Chưa có UDID.</td></tr>";
+        fields.iosBody.querySelectorAll(".ios-map").forEach(function (button) {
+          button.onclick = async function () {
             const email = window.prompt("Email account cần map:", "");
             if (!email) return;
             try {
               await request("/v1/admin/ios/devices/" + encodeURIComponent(button.dataset.udid) + "/account", {
                 method: "POST",
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ email: email }),
               });
               await loadIosDevices();
             } catch (error) {
@@ -940,7 +1072,11 @@ export function adminPageHTML() {
             }
           };
         });
+        fields.iosBody.querySelectorAll(".ios-apple").forEach(function (button) {
+          button.onclick = function () { registerOneApple(button.dataset.udid); };
+        });
         fields.iosStatus.textContent = "Loaded " + devices.length + " device(s).";
+        await loadAscStatus();
       } catch (error) {
         fields.iosStatus.textContent = error.message;
       }
@@ -2522,6 +2658,9 @@ export function adminPageHTML() {
     document.getElementById("tabAiUsers").onclick = () => showTab("aiu");
     document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadIos").onclick = loadIosDevices;
+    document.getElementById("ascSave").onclick = saveAscCredential;
+    document.getElementById("ascClear").onclick = clearAscCredential;
+    document.getElementById("ascRegisterAll").onclick = registerAllApple;
     document.getElementById("addUserBtn").onclick = addUser;
     document.getElementById("loadNodes").onclick = loadNodes;
     document.getElementById("addNode").onclick = openCreate;

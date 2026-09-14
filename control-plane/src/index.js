@@ -47,6 +47,7 @@ import {
   mailTransportName,
   sendPaidAlert,
   sendUnmatchedTransferAlert,
+  sendIosInstallReadyEmail,
 } from "./mailer.js";
 import { AiAccessStore } from "./ai-access-store.js";
 import { AiUsersStore } from "./ai-users-store.js";
@@ -71,6 +72,7 @@ import {
 } from "./firebase-users.js";
 import { guidePageHTML } from "./guide-page.js";
 import { IosDeviceStore, buildDeviceProfile, decodeDevicePayload } from "./ios-devices.js";
+import { AppleCredentialStore, registerDeviceWithApple, listAppleDevices } from "./apple-devices.js";
 import { supportPageHTML } from "./support-page.js";
 import {
   buyPageHTML,
@@ -2309,6 +2311,7 @@ function iosLangSelectHTML(lang = "vi") {
 }
 
 const iosDevices = new IosDeviceStore(path.join(DATA_DIR, "ios-devices.json"));
+const appleAsc = new AppleCredentialStore(path.join(DATA_DIR, "apple-asc.json"));
 
 app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"], (req, res) => {
   const lang = iosLang(req);
@@ -2350,6 +2353,13 @@ app.post(["/install/ios/udid", "/v1/ios/udid"], express.urlencoded({ extended: f
       email: mapped?.email ?? null,
     });
     if (mapped) console.log(`ios-udid: tự map ${device.udid} → ${mapped.email ?? mapped.userId}`);
+    // Có khoá App Store Connect thì đăng ký UDID lên Apple ngay; lỗi ở đây KHÔNG được
+    // làm khách thấy thất bại — chỉ ghi lại để dashboard báo chủ shop.
+    if (isNew) {
+      registerIosDeviceWithApple(device.udid, { name: mapped?.email ?? null })
+        .then((r) => console.log(`ios-udid: Apple → ${r.skipped ? "chưa cấu hình khoá" : r.ok ? "OK" : `lỗi: ${r.error}`}`))
+        .catch((err) => console.error("ios-udid apple register failed:", err?.message ?? err));
+    }
     console.log(`ios-udid: ${isNew ? "MỚI" : "đã có"} ${device.udid} (${device.model ?? "?"} · iOS ${device.iosVersion ?? "?"})`);
     if (isNew) {
       const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
@@ -2423,12 +2433,173 @@ app.get(["/install/ios/status", "/v1/ios/status"], async (req, res) => {
 });
 
 /** Máy Mac gọi sau khi ký lại + upload Diawi xong. */
+/**
+ * Báo khách "bản cài đã sẵn sàng" qua email (chỉ máy đã map email và chưa được báo).
+ * Gọi sau khi máy Mac ký lại IPA; `udids` để gửi lại cho một/nhiều máy cụ thể.
+ */
+async function notifyIosBuildReady({ udids = null, force = false } = {}) {
+  const { devices } = await iosDevices.list();
+  const wanted = Array.isArray(udids) && udids.length ? new Set(udids) : null;
+  const targets = devices.filter((d) => {
+    if (!d.email) return false;
+    if (wanted) return wanted.has(d.udid);
+    return force ? true : !d.notifiedAt;
+  });
+  const sent = [];
+  for (const device of targets) {
+    try {
+      const lang = (await authStore.langForEmail(device.email)) || "vi";
+      const installUrl = `${siteBaseUrl()}/install/ios?lang=${lang}&udid=${encodeURIComponent(device.udid)}`;
+      const result = await sendIosInstallReadyEmail({ to: device.email, lang, udid: device.udid, installUrl });
+      // Chỉ đánh dấu "đã báo" khi mail THẬT SỰ gửi được — sai cấu hình mailer thì để lần sau gửi lại,
+      // tránh việc khách không bao giờ nhận được link mà hệ thống tưởng đã báo.
+      if (result?.sent !== true) {
+        console.warn(`ios notify: chưa gửi được cho ${device.email} (${result?.error ?? "no mail transport"})`);
+        continue;
+      }
+      sent.push(device.udid);
+    } catch (err) {
+      console.error(`ios notify failed for ${device.udid}:`, err?.message ?? err);
+    }
+  }
+  if (sent.length) await iosDevices.markNotified(sent);
+  return { sent, remaining: devices.filter((d) => d.email && !d.notifiedAt).length };
+}
+
+/**
+ * Đăng ký UDID lên Apple (App Store Connect API). Chưa cấu hình khoá ⇒ trả {skipped:true}
+ * để luồng khách vẫn chạy và dashboard nhắc chủ shop cấu hình.
+ */
+async function registerIosDeviceWithApple(udid, { name = null } = {}) {
+  const token = await appleAsc.token();
+  if (!token) return { skipped: true, reason: "Chưa cấu hình App Store Connect API key" };
+  try {
+    const result = await registerDeviceWithApple({
+      token,
+      udid,
+      name: name || `VPNFlow ${String(udid).slice(-6)}`,
+    });
+    if (result.ok) {
+      await iosDevices.markAppleRegistered(udid, { deviceId: result.deviceId }).catch((err) => {
+        console.error("ios apple: không ghi được trạng thái đăng ký:", err?.message ?? err);
+      });
+      return { ok: true, deviceId: result.deviceId };
+    }
+    if (result.alreadyRegistered) {
+      await iosDevices.markAppleRegistered(udid, { alreadyRegistered: true }).catch(() => {});
+      return { ok: true, alreadyRegistered: true };
+    }
+    // Lỗi của Apple phải được trả NGUYÊN VĂN: trước đây lỗi ghi trạng thái ("Không tìm thấy UDID")
+    // che mất lý do thật khiến chủ shop không biết vì sao Apple từ chối.
+    await iosDevices.markAppleError(udid, result.error).catch((err) => {
+      console.error("ios apple: không ghi được lỗi:", err?.message ?? err);
+    });
+    return { ok: false, error: result.error, status: result.status };
+  } catch (err) {
+    await iosDevices.markAppleError(udid, err?.message ?? err).catch(() => {});
+    return { ok: false, error: err?.message ?? "Apple request failed" };
+  }
+}
+
+/** Trạng thái khoá App Store Connect + danh sách thiết bị bên Apple (nếu đã cấu hình). */
+app.get(["/v1/admin/ios/apple", "/admin/ios/apple"], requireAdminAuth, async (_req, res) => {
+  try {
+    const status = await appleAsc.status();
+    const token = status.configured ? await appleAsc.token() : null;
+    const list = token ? await listAppleDevices({ token }) : { ok: false, devices: [], error: "Chưa cấu hình API key" };
+    res.json({ credentials: status, apple: { ok: list.ok, error: list.error ?? null, devices: list.devices ?? [] } });
+  } catch (err) {
+    console.error("ios apple status failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** Nạp khoá App Store Connect (.p8). Khoá chỉ lưu trên server, không bao giờ trả lại. */
+app.post(["/v1/admin/ios/apple/credentials", "/admin/ios/apple/credentials"], requireAdminAuth, async (req, res) => {
+  try {
+    const keyId = String(req.body?.keyId ?? "").trim();
+    const issuerId = String(req.body?.issuerId ?? "").trim();
+    const teamId = String(req.body?.teamId ?? "").trim() || null;
+    const privateKey = String(req.body?.privateKey ?? "");
+    if (!keyId || !issuerId || !privateKey) {
+      return res.status(400).json({ error: "Cần keyId, issuerId và nội dung file .p8" });
+    }
+    await appleAsc.save({ keyId, issuerId, teamId, privateKey });
+    // Kiểm tra ngay: sai khoá thì báo lỗi luôn chứ không để dashboard hiện "đã cấu hình" mà gọi API nào cũng 401.
+    const probe = await listAppleDevices({ token: await appleAsc.token() });
+    res.json({ ok: true, credentials: await appleAsc.status(), verified: probe.ok, verify_error: probe.ok ? null : probe.error });
+  } catch (err) {
+    res.status(400).json({ error: err?.message ?? "Không lưu được khoá" });
+  }
+});
+
+app.delete(["/v1/admin/ios/apple/credentials", "/admin/ios/apple/credentials"], requireAdminAuth, async (_req, res) => {
+  try {
+    await appleAsc.clear();
+    res.json({ ok: true, credentials: await appleAsc.status() });
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** Đăng ký MỘT UDID lên Apple. */
+app.post(["/v1/admin/ios/devices/:udid/register-apple", "/admin/ios/devices/:udid/register-apple"], requireAdminAuth, async (req, res) => {
+  try {
+    const udid = String(req.params.udid ?? "").trim();
+    const { devices } = await iosDevices.list();
+    if (!devices.some((entry) => entry.udid === udid)) {
+      return res.status(404).json({ error: "UDID này chưa đăng ký trong hệ thống" });
+    }
+    const result = await registerIosDeviceWithApple(udid, { name: req.body?.name ?? null });
+    if (result.skipped) return res.status(503).json({ error: result.reason, code: "asc_not_configured" });
+    res.status(result.ok ? 200 : 502).json({ ok: result.ok, ...result });
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** Đăng ký TẤT CẢ UDID chưa có trên Apple (chủ shop bấm một nút sau khi nạp khoá). */
+app.post(["/v1/admin/ios/apple/register-pending", "/admin/ios/apple/register-pending"], requireAdminAuth, async (_req, res) => {
+  try {
+    const { devices } = await iosDevices.list();
+    const pending = devices.filter((d) => !d.appleRegisteredAt);
+    const registered = [];
+    const failed = [];
+    for (const device of pending) {
+      const result = await registerIosDeviceWithApple(device.udid, { name: device.email ?? null });
+      if (result.skipped) return res.status(503).json({ error: result.reason, code: "asc_not_configured" });
+      if (result.ok) registered.push(device.udid);
+      else failed.push({ udid: device.udid, error: result.error });
+    }
+    res.json({ ok: true, registered, failed, pending_before: pending.length });
+  } catch (err) {
+    console.error("ios apple register-pending failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 app.post(["/v1/admin/ios/devices/built", "/admin/ios/devices/built"], requireAdminAuth, async (req, res) => {
   try {
     const serial = await iosDevices.markBuilt({ note: req.body?.note ?? null });
-    res.json({ ok: true, buildSerial: serial });
+    const notify = await notifyIosBuildReady();
+    res.json({ ok: true, buildSerial: serial, notified: notify.sent.length, notify_pending: notify.remaining });
   } catch (err) {
     console.error("ios markBuilt failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/** Gửi lại email "bản cài sẵn sàng": ?udid=<UDID> hoặc toàn bộ máy chưa báo. */
+app.post(["/v1/admin/ios/devices/notify", "/admin/ios/devices/notify"], requireAdminAuth, async (req, res) => {
+  try {
+    const udid = String(req.body?.udid ?? req.query?.udid ?? "").trim();
+    const notify = await notifyIosBuildReady({
+      udids: udid ? [udid] : null,
+      force: req.body?.force === true || Boolean(udid),
+    });
+    res.json({ ok: true, notified: notify.sent, remaining: notify.remaining });
+  } catch (err) {
+    console.error("ios notify failed:", err);
     res.status(500).json({ error: "Internal error" });
   }
 });

@@ -1,0 +1,66 @@
+# Evidence — iOS Ad Hoc OTA: tự đăng ký UDID lên Apple + email "bản cài sẵn sàng"
+
+date: 2026-09-15 (giờ VN) · tiếp nối bản deploy sáng nay
+
+## 1. Tự đăng ký UDID qua App Store Connect API (thay thao tác tay)
+- Module mới `control-plane/src/apple-devices.js`:
+  - `signAscToken()` — JWT **ES256** (header `alg/kid/typ`, payload `iss/iat/exp/aud=appstoreconnect-v1`, hạn 15 phút).
+  - `derToJose()` — chuyển chữ ký DER của Node sang raw `r||s` 64 byte (không có bước này Apple trả 401).
+  - `registerDeviceWithApple()` / `listAppleDevices()` — gọi API, 409 = "đã có trên Apple" (không phải lỗi).
+  - `AppleCredentialStore` — lưu `.p8` bằng file quyền **0600**, `status()` KHÔNG bao giờ trả khoá.
+- Endpoint mới (đều `requireAdminAuth`):
+  - `GET    /v1/admin/ios/apple`
+  - `POST   /v1/admin/ios/apple/credentials` (lưu khoá + gọi thử Apple ngay để báo sai khoá)
+  - `DELETE /v1/admin/ios/apple/credentials`
+  - `POST   /v1/admin/ios/devices/:udid/register-apple`
+  - `POST   /v1/admin/ios/apple/register-pending` (đăng ký hàng loạt máy chưa có)
+- Dashboard tab **iOS UDID**: panel App Store Connect (nạp/xoá khoá, trạng thái kết nối), cột "Apple",
+  nút "→ Apple" từng máy, nút "Đăng ký tất cả lên Apple".
+- Khách đăng ký máy (callback) ⇒ **tự đẩy UDID lên Apple** nếu đã có khoá; lỗi Apple ghi vào
+  `appleError` để dashboard thấy, KHÔNG làm khách thất bại.
+
+## 2. Email "bản cài đã sẵn sàng" (vi/en/zh)
+- `mailer.js`: `renderIosInstallReadyEmail()` + `sendIosInstallReadyEmail()` — có link cài, đuôi UDID,
+  hướng dẫn **Trust certificate**.
+- Sau khi máy Mac ký lại IPA (`POST /v1/admin/ios/devices/built`) ⇒ tự gửi email cho các máy
+  **đã map email và chưa được báo**; `POST /v1/admin/ios/devices/notify` để gửi lại.
+- Chỉ đánh dấu `notifiedAt` khi mail **thật sự gửi được** (sai cấu hình mailer thì lần sau gửi lại,
+  không để khách không bao giờ nhận được link mà hệ thống tưởng đã báo).
+
+## 3. Test
+    control-plane$ npm test
+    ℹ tests 191
+    ℹ pass 191
+    ℹ fail 0
+Thêm 12 case: JWT ES256 verify được bằng public key, derToJose đủ 64 byte, request Apple đúng
+URL/body/header, 409 = đã đăng ký, credential store 0600 + không lộ khoá, pendingNotify/markNotified,
+email iOS ready 3 ngôn ngữ, guard route.
+
+## 4. E2E thật trên instance LOCAL (khoá giả) — chứng minh code chạy hết đường
+    GET  /v1/admin/ios/apple                      -> credentials.configured=false, error "Chưa cấu hình API key"
+    POST .../register-apple (chưa có khoá)        -> HTTP 503 {"code":"asc_not_configured"}
+    POST /v1/admin/ios/apple/credentials (khoá giả) -> ok=true, verified=false,
+        verify_error="Provide a properly configured and signed bearer token..."  ← Apple THẬT trả lời
+    POST .../register-apple (UDID có trong hệ thống, khoá giả) -> HTTP 502, error nguyên văn của Apple
+    POST .../register-apple (UDID không có)        -> HTTP 404 "UDID này chưa đăng ký trong hệ thống"
+    GET  /v1/admin/ios/devices                     -> appleError đã được ghi lại cho dashboard
+
+### Bug tìm ra trong lúc test E2E (đã sửa)
+Lỗi Apple từng bị che: `markAppleError()` throw "Không tìm thấy UDID" ⇒ API trả về thông báo sai,
+chủ shop không biết Apple từ chối vì lý do gì. Nay lỗi Apple trả nguyên văn + route kiểm tra UDID
+tồn tại trước (404 rõ ràng).
+
+## 5. Deploy production (node-2 165.101.114.162)
+    backup: /root/cp-backup-2026-09-15-004857 và 004202
+    file: apple-devices.js (mới) · index.js · ios-devices.js · mailer.js · admin-page.js
+    md5 khớp local từng file · node --check OK · flowvpn-cp active
+    local: /buy 200 · /install/ios 200 · /v1/admin/ios/apple 401 (cần token)
+    live : buy có khối Ad Hoc + UDID ✓ · admin có panel Apple (ascSave/ascRegisterAll/cột Apple) ✓
+
+## 6. Chưa xong (cần chủ shop)
+- **Cần khoá thật**: Issuer ID + Key ID + file `.p8` (App Store Connect → Users and Access →
+  Integrations → App Store Connect API). Chưa nạp thì nút đăng ký Apple trả 503 và dashboard
+  hiện "CHƯA cấu hình".
+- **Tạo lại provisioning profile + ký IPA** vẫn làm trên máy Mac (App Store Connect API có thể tạo
+  profile, nhưng bước ký/xuất IPA cần toolchain Mac — chưa đưa vào server).
+- Provisioning profile hết hạn thì phải ký lại (Apple giới hạn profile Ad Hoc theo năm tài khoản).

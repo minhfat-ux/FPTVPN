@@ -32,9 +32,18 @@ Updated: 2026-09-14
   - focused UDID/admin tests: 12 pass / 0 fail
   - full control-plane suite: 174 pass / 0 fail
 
-## NOT DONE / NEEDS MAIN AGENT REVIEW
+## DONE (2026-09-15, đã deploy production)
 
-- No commit/deploy performed yet.
-- Production endpoint was not modified.
-- Need review diff, decide whether mapping should require active subscription, and add a richer invite/account-token flow if required.
-- Need manually verify the served admin HTML after deploy.
+- Trang buy: khối "Cài trên iPhone / iPad (Ad Hoc)" 4 bước × 5 ngôn ngữ (Safari → đăng ký thiết bị → shop ký → Trust).
+- Callback `.mobileconfig` mang `?token=` → tự map UDID vào đúng account (`lookupEnrollmentToken`, không tiêu thụ token).
+- Admin: tab iOS UDID (list + Map) + panel App Store Connect (nạp .p8, trạng thái, đăng ký từng máy/hàng loạt).
+- Tự đăng ký UDID lên Apple qua App Store Connect API (JWT ES256) khi đã có khoá; lỗi ghi vào appleError.
+- Email "bản cài đã sẵn sàng" (vi/en/zh) tự gửi sau khi ký lại IPA; chỉ đánh dấu đã báo khi mail gửi được.
+- Test: 191 pass / 0 fail. E2E local với khoá giả: Apple trả lời thật (401) ⇒ code chạy hết đường.
+- Bằng chứng: `evidence/2026-09-15-ios-adhoc-ota-buy-and-account-mapping.log`,
+  `evidence/2026-09-15-ios-adhoc-asc-api-and-ready-email.log`.
+
+## CÒN LẠI (cần chủ shop)
+
+- Nạp khoá thật: Issuer ID + Key ID + file `.p8` (App Store Connect → Users and Access → Integrations).
+- Ký IPA + tạo provisioning profile vẫn trên máy Mac (server chưa tự ký được).

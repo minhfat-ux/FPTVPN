@@ -56,3 +56,17 @@ test("guard: manifest lấy số build IPA từ cấu hình, và API admin đổ
   const admin = indexSrc.slice(indexSrc.indexOf('app.patch("/v1/admin/app-version"'), indexSrc.indexOf('app.patch("/v1/admin/app-version"') + 1400);
   assert.ok(admin.includes("ipa_build"), "API admin phải cho đặt số build khi phát hành IPA mới");
 });
+
+test("guard: API App Store Connect có đủ endpoint để tự đăng ký UDID", () => {
+  for (const route of [
+    '"/v1/admin/ios/apple"',
+    '"/v1/admin/ios/apple/credentials"',
+    '"/v1/admin/ios/devices/:udid/register-apple"',
+    '"/v1/admin/ios/apple/register-pending"',
+  ]) {
+    assert.ok(indexSrc.includes(route), `thiếu route ${route}`);
+  }
+  assert.ok(indexSrc.includes("appleAsc.save"), "phải lưu được khoá .p8");
+  assert.ok(indexSrc.includes("registerIosDeviceWithApple(device.udid"), "khách đăng ký máy phải tự đẩy UDID lên Apple");
+  assert.ok(indexSrc.includes("markAppleError"), "lỗi Apple phải được ghi lại cho dashboard");
+});

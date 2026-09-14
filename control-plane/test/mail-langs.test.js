@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   pickMailLang,
   renderInvoiceEmail,
@@ -126,4 +127,28 @@ test("nhãn gói trong email phải theo NGÔN NGỮ EMAIL, không theo ngôn ng
   assert.equal(planNameFor(pickMailLang("ko"), "vpn", "monthly"), "Monthly");
   assert.equal(planNameFor(pickMailLang("zh"), "vpn", "monthly"), "月度");
   assert.equal(planNameFor(pickMailLang("vi"), "vpn", "monthly"), "Hàng tháng");
+});
+
+test("email iOS ready: có link cài + hướng dẫn Trust ở cả 3 ngôn ngữ mail", async () => {
+  const { renderIosInstallReadyEmail } = await import("../src/mailer.js");
+  for (const lang of ["vi", "en", "zh"]) {
+    const mail = renderIosInstallReadyEmail({
+      lang,
+      udid: "00008120-0008299A26D80032",
+      installUrl: `https://meetflowai.site/install/ios?lang=${lang}`,
+    });
+    assert.ok(mail.subject && mail.subject.length > 5, `${lang}: thiếu subject`);
+    assert.ok(mail.html.includes("https://meetflowai.site/install/ios"), `${lang}: thiếu link cài`);
+    assert.ok(mail.html.includes("D80032"), `${lang}: phải nói rõ máy nào (đuôi UDID)`);
+    assert.ok(/Trust|Tin cậy|信任/.test(mail.html), `${lang}: thiếu bước Trust certificate`);
+  }
+});
+
+test("index.js: sau khi ký lại IPA thì tự gửi email bản cài sẵn sàng", () => {
+  const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+  assert.ok(idx.includes("sendIosInstallReadyEmail"), "phải import hàm gửi mail iOS ready");
+  const built = idx.slice(idx.indexOf('"/v1/admin/ios/devices/built"'), idx.indexOf('"/v1/admin/ios/devices/built"') + 700);
+  assert.ok(built.includes("notifyIosBuildReady"), "ký xong phải báo khách");
+  assert.ok(idx.includes('"/v1/admin/ios/devices/notify"'), "phải có endpoint gửi lại");
+  assert.ok(idx.includes("markNotified"), "phải ghi nhận đã báo để không spam");
 });

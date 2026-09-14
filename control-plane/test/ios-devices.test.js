@@ -117,3 +117,30 @@ test("định dạng UDID: nhận đúng, loại sai", () => {
   assert.ok(!re.test("00008120-0008299A26D8003"), "thiếu ký tự ⇒ loại");
   assert.ok(!re.test(""));
 });
+
+test("store: chỉ báo khách có email và chưa báo; markNotified chống spam", async () => {
+  const store = new IosDeviceStore(tmpFile());
+  await store.register({ udid: "UDID-N1", email: "a@example.com" });
+  await store.register({ udid: "UDID-N2" }); // chưa map account
+  await store.register({ udid: "UDID-N3", email: "c@example.com" });
+
+  const pending = await store.pendingNotify();
+  assert.deepEqual(pending.map((d) => d.udid).sort(), ["UDID-N1", "UDID-N3"]);
+
+  assert.equal(await store.markNotified(["UDID-N1"]), 1);
+  assert.deepEqual((await store.pendingNotify()).map((d) => d.udid), ["UDID-N3"]);
+  assert.ok((await store.list()).devices.find((d) => d.udid === "UDID-N1").notifiedAt, "phải ghi thời điểm đã báo");
+});
+
+test("store: đánh dấu đã đăng ký Apple + ghi lỗi khi Apple từ chối", async () => {
+  const store = new IosDeviceStore(tmpFile());
+  await store.register({ udid: "UDID-ASC" });
+  const registered = await store.markAppleRegistered("UDID-ASC", { deviceId: "DEV-9" });
+  assert.equal(registered.appleDeviceId, "DEV-9");
+  assert.ok(registered.appleRegisteredAt, "phải ghi thời điểm đăng ký Apple");
+
+  await store.register({ udid: "UDID-ERR" });
+  const failed = await store.markAppleError("UDID-ERR", "Authentication credentials are missing");
+  assert.match(failed.appleError, /credentials/);
+  assert.equal(failed.appleRegisteredAt, null, "lỗi thì không được coi là đã đăng ký");
+});
