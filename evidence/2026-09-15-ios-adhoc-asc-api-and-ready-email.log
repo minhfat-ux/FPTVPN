@@ -64,3 +64,34 @@ tồn tại trước (404 rõ ràng).
 - **Tạo lại provisioning profile + ký IPA** vẫn làm trên máy Mac (App Store Connect API có thể tạo
   profile, nhưng bước ký/xuất IPA cần toolchain Mac — chưa đưa vào server).
 - Provisioning profile hết hạn thì phải ký lại (Apple giới hạn profile Ad Hoc theo năm tài khoản).
+
+## 7. CHỐT: luồng Ad Hoc OTA chạy thật trên iPhone của chủ shop (2026-09-15)
+
+Kết quả cuối: **cài được app trên iPhone thật**.
+
+    iPhone15,3 · iOS build 23H24 · serial RY9V76N62J · UDID 00008120-00010D102E40C01E
+    → UDID về server (POST /install/ios/udid -> 200, ua="Profile/1.0")
+    → tự đối chiếu Apple: "đã có trên Apple" (đăng ký từ 23/04/2026)
+    → IPA đang phát đã có UDID này trong profile "VPNFlow AdHoc App/Tunnel" (hạn 19/07/2027)
+    → manifest hợp lệ (com.privatevpn.app · build 13) → cài app thành công trên máy thật
+
+### 5 lỗi phải sửa để đi hết đường (đều ở phía mình)
+
+| # | Lỗi | Hậu quả khách thấy | Sửa |
+|---|---|---|---|
+| 1 | `.mobileconfig` bọc `Profile Service` trong `<array>` của profile `Configuration` | Cài được hồ sơ nhưng KHÔNG gửi UDID | `PayloadType` cấp cao nhất = `Profile Service`, `PayloadContent` = `<dict>` |
+| 2 | `&token=` chèn thô vào XML | iOS báo **Invalid Profile** | `xmlEscape()` mọi giá trị nội suy |
+| 3 | Trang poll theo UDID trong localStorage (khách không thấy trang callback) | Cài hồ sơ xong trang không biết ⇒ **không hiện nút cài app** | Thêm **mã phiên (sid)**: server sinh → vào link hồ sơ → callback lưu → trang poll `?session=`; đồng thời nút "Tải & cài" luôn hiện |
+| 4 | Parser chỉ nhận form-urlencoded base64 | iOS gửi về mà server trả **400** | Nhận raw body + tự nhận dạng (plist thẳng / form / JSON) |
+| 5 | Chưa hiểu body **CMS/PKCS#7** của iOS 26 | Vẫn 400 dù máy đã gửi UDID | Cắt plist XML trong khối nhị phân (`<?xml … </plist>`) trước khi xử lý |
+
+### Ghi chú hành vi đã xác nhận
+- iOS **vẫn hiện "Invalid Profile"** sau khi gửi UDID (đúng bản chất cơ chế Profile Service) ⇒ đã ghi
+  rõ trong popup: *"máy bạn ĐÃ đăng ký xong"* (5 ngôn ngữ).
+- iOS gửi `VERSION` là **số build** (23H24), không phải `26.0`.
+- `Content-Disposition: attachment` làm Safari coi hồ sơ là file tải về ⇒ đã bỏ (không dùng lại).
+- Mỗi lần mở trang, link hồ sơ có `&ts=` mới ⇒ không thể cài lại bản tải dở.
+
+### File chẩn đoán
+`/root/flowvpn-cp/data/last-ios-callback.txt` (0600, 8KB) giữ body cuối iOS gửi — chính nhờ nó mà
+xác định được định dạng PKCS#7 thay vì đoán. Xoá được khi không cần nữa.

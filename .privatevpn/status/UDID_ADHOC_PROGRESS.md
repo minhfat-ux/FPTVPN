@@ -51,7 +51,18 @@ Updated: 2026-09-14
   ⇒ đánh dấu `appleAlreadyRegistered`.
 - Khách đăng ký máy mới ⇒ UDID tự được đẩy lên Apple.
 
-## CÒN LẠI (cần chủ shop)
+## ĐÃ CHẠY THẬT TRÊN MÁY THẬT (2026-09-15)
 
-- Ký lại IPA + export provisioning profile chứa UDID mới trên máy Mac (server chưa tự ký được).
-- Cài thử trên iPhone thật rồi bấm Trust certificate.
+iPhone15,3 (build 23H24) của chủ shop: UDID về server → tự đối chiếu Apple (đã có) → IPA ký kèm UDID
+→ cài app thành công. Chi tiết + 5 lỗi đã sửa: `evidence/2026-09-15-ios-adhoc-asc-api-and-ready-email.log` §7.
+
+Lưu ý cần nhớ:
+- iOS **luôn hiện "Invalid Profile"** sau khi gửi UDID (bản chất cơ chế) — popup đã nói rõ với khách.
+- Trang cài dùng **mã phiên (sid)** để nhận ra máy, và **luôn có nút Tải & cài**.
+- iOS 26 gửi body dạng **CMS/PKCS#7**; `VERSION` là số build.
+
+## CÒN LẠI
+
+- Ký lại IPA trên máy Mac khi có UDID MỚI (server chưa tự ký được) — quy trình: thêm UDID (server tự làm)
+  → export profile → ký → upload → bấm "đã ký lại" (khách tự nhận email).
+- 3 UDID hiện có trong hệ thống chưa map account (map trong tab iOS UDID khi cần).

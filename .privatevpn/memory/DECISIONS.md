@@ -314,3 +314,16 @@ Tầng 1 (commit `3d46f51`, `f6d58fd`).
 - Đã sửa: `xmlEscape()` cho mọi giá trị nội suy, `contentUuid` riêng cho payload con, chỉ thêm token khi
   có token; thêm 2 test chống tái diễn. Bài học: **mọi giá trị chèn vào plist XML phải escape**, và
   test phải kiểm nội dung hợp lệ (parse được), không chỉ kiểm sự tồn tại của khoá.
+
+## 2026-09-15 — Ad Hoc OTA chạy thật trên iPhone (chốt) + 5 lỗi đã sửa
+
+Kết quả: cài được app trên iPhone thật của chủ shop. 5 lỗi phải sửa mới đi hết đường:
+1. `.mobileconfig` phải có `PayloadType` CẤP CAO NHẤT = `Profile Service` và `PayloadContent` = `<dict>`
+   (bọc trong `<array>` của profile `Configuration` ⇒ iOS cài mà KHÔNG gửi UDID).
+2. Mọi giá trị chèn vào plist XML phải `xmlEscape()` (`&token=` thô ⇒ iOS báo **Invalid Profile**).
+3. Trang cài phải nhận ra máy bằng **mã phiên (sid)** — iOS gửi UDID ngầm, khách không thấy trang
+   callback ⇒ poll theo UDID trong localStorage là không bao giờ biết. Và **luôn hiện nút Tải & cài**.
+4. Callback phải nhận RAW body và tự nhận dạng (plist thẳng / form / JSON).
+5. iOS 26 gửi body **CMS/PKCS#7** ⇒ phải cắt plist XML trong khối nhị phân.
+Hành vi đã xác nhận: iOS **luôn hiện "Invalid Profile"** sau khi gửi UDID (vô hại, đã ghi trong popup);
+`VERSION` iOS gửi là số build; `Content-Disposition: attachment` phá luồng cài (đã bỏ).
