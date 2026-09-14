@@ -40,3 +40,10 @@ test("guard: link tải iOS ngoài (Diawi) hết hạn thì tự chuyển về t
   assert.ok(fn.includes('current.includes("/install/ios")'), "đang dùng trang tự phát thì không kiểm nữa");
   assert.ok(indexSrc.includes("setInterval(runIosLinkGuard"), "phải chạy định kỳ");
 });
+
+test("guard: manifest lấy số build IPA từ cấu hình, và API admin đổi được", () => {
+  assert.ok(indexSrc.includes('appConfig.get("ios_ipa_build") || process.env.IOS_IPA_BUILD'),
+    "manifest phải đọc số build đang phát (CFBundleVersion), không đoán theo version");
+  const admin = indexSrc.slice(indexSrc.indexOf('app.patch("/v1/admin/app-version"'), indexSrc.indexOf('app.patch("/v1/admin/app-version"') + 1400);
+  assert.ok(admin.includes("ipa_build"), "API admin phải cho đặt số build khi phát hành IPA mới");
+});

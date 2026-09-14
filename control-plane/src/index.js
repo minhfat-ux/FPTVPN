@@ -1948,7 +1948,7 @@ app.get(["/install/ios/manifest.plist", "/v1/downloads/ios/manifest.plist"], (_r
     baseUrl: siteBaseUrl(),
     bundleId: process.env.IOS_BUNDLE_ID || "com.privatevpn.app",
     version: appConfig.get("latest_ios_version") || "1.0",
-    build: process.env.IOS_IPA_BUILD || null,
+    build: appConfig.get("ios_ipa_build") || process.env.IOS_IPA_BUILD || null,
   }));
 });
 
@@ -3010,22 +3010,26 @@ app.get("/v1/admin/app-version", requireAdminAuth, (_req, res) => {
     latest_version: appConfig.get("latest_ios_version"),
     store_url: appConfig.get("app_store_url"),
     ipa_url: appConfig.get("ios_ipa_url"),
+    ipa_build: appConfig.get("ios_ipa_build"),
   });
 });
 
 app.patch("/v1/admin/app-version", requireAdminAuth, async (req, res) => {
   try {
-    const { minimum_version, latest_version, store_url, ipa_url } = req.body ?? {};
+    const { minimum_version, latest_version, store_url, ipa_url, ipa_build } = req.body ?? {};
     if (minimum_version !== undefined) appConfig.set("minimum_ios_version", minimum_version);
     if (latest_version !== undefined) appConfig.set("latest_ios_version", latest_version);
     if (store_url !== undefined) appConfig.set("app_store_url", store_url);
     // Link IPA phát cho khách (Diawi hoặc file của mình). Rỗng ⇒ quay về /v1/downloads/ios.
     if (ipa_url !== undefined) appConfig.set("ios_ipa_url", ipa_url);
+    // Số build (CFBundleVersion) của IPA đang phát — manifest OTA phải ghi đúng số này.
+    if (ipa_build !== undefined) appConfig.set("ios_ipa_build", ipa_build);
     res.json({
       minimum_version: appConfig.get("minimum_ios_version"),
       latest_version: appConfig.get("latest_ios_version"),
       store_url: appConfig.get("app_store_url"),
       ipa_url: appConfig.get("ios_ipa_url"),
+      ipa_build: appConfig.get("ios_ipa_build"),
     });
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
