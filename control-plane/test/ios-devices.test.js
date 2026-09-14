@@ -80,3 +80,24 @@ test("guard: route đăng ký thiết bị nằm dưới /install/ios (đã có 
   assert.ok(idx.includes("iosDevices.markBuilt"), "phải có API cho máy Mac báo đã ký lại");
   assert.ok(idx.includes("express.urlencoded"), "endpoint nhận UDID phải đọc được form iOS gửi");
 });
+
+test("guard: đường 'khách gửi/dán UDID' dùng chung hàng đợi và kiểm định dạng", () => {
+  const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+  assert.ok(idx.includes('"/install/ios/udid-form"'), "phải có form dán UDID");
+  assert.ok(idx.includes("const UDID_RE"), "phải kiểm định dạng UDID trước khi nhận");
+  assert.ok(idx.includes('"/v1/admin/ios/devices"'), "phải có API admin thêm UDID bằng tay (khách gửi email)");
+  // cả hai đường phải ghi vào CÙNG hàng đợi để watcher ký lại
+  assert.ok((idx.match(/iosDevices\.register\(/g) ?? []).length >= 3, "profile, form và API admin đều ghi vào cùng queue");
+});
+
+test("định dạng UDID: nhận đúng, loại sai", () => {
+  const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+  const src = idx.slice(idx.indexOf("const UDID_RE"), idx.indexOf("const UDID_RE") + 120);
+  const re = eval(src.match(/= (\/.*\/[a-z]*)/)[1]);
+  assert.ok(re.test("00008120-0008299A26D80032"), "UDID iPhone mới");
+  assert.ok(re.test("00008101-000A55C01E85001E"));
+  assert.ok(re.test("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"), "UDID 40 hex (máy cũ)");
+  assert.ok(!re.test("không-phải-udid"));
+  assert.ok(!re.test("00008120-0008299A26D8003"), "thiếu ký tự ⇒ loại");
+  assert.ok(!re.test(""));
+});
