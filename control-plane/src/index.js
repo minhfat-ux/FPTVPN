@@ -1944,7 +1944,8 @@ app.get("/v1/downloads/qr", async (req, res) => {
 });
 
 app.get(["/install/ios/manifest.plist", "/v1/downloads/ios/manifest.plist"], (_req, res) => {
-  res.type("application/xml").send(iosInstallManifest({
+  // Tài liệu OTA của Apple dùng `text/xml`; iOS nhận cả hai nhưng để đúng loại cho chắc.
+  res.type("text/xml; charset=utf-8").send(iosInstallManifest({
     baseUrl: siteBaseUrl(),
     bundleId: process.env.IOS_BUNDLE_ID || "com.privatevpn.app",
     version: appConfig.get("latest_ios_version") || "1.0",
@@ -1971,6 +1972,18 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
 <li>Cài xong nếu app báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
 <li>Cần hỗ trợ: <code>support@meetflowai.site</code></li>
 </ul>
+<div style="margin-top:14px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px">
+  <div style="font-size:13.5px;font-weight:600;margin-bottom:6px">⚠️ Bấm nút mà không thấy hộp thoại cài, hoặc báo "Unable to Install"?</div>
+  <ul style="margin:0;padding-left:18px">
+    <li>Trang phải mở bằng <b>Safari</b> — Chrome/Cốc Cốc/trình duyệt trong app chat KHÔNG cài được.</li>
+    <li>Đây là bản <b>ad-hoc (bản thử nghiệm)</b>: máy phải nằm trong danh sách UDID đã đăng ký. Máy lạ sẽ báo
+        <i>Unable to Install "VPNFlow"</i> — gửi UDID máy cho shop để build lại (kênh Diawi bên dưới có phần đăng ký UDID).</li>
+    <li>Cần iOS ${appConfig.get("ios_min_ios") || "17.0"} trở lên.</li>
+    <li>Cài xong mà báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
+    <li>Vẫn không được: tắt WiFi dùng 4G rồi thử lại (máy có thể còn nhớ IP cũ của server).</li>
+    ${process.env.IOS_DIAWI_URL ? `<li>Kênh phụ (Diawi) — có phần đăng ký UDID cho máy mới: <a href="${process.env.IOS_DIAWI_URL}" style="color:#7ab8ff">mở trang cài Diawi</a>.</li>` : ""}
+  </ul>
+</div>
 <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
   <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">📱 Đang xem trên máy tính? Quét mã này bằng điện thoại</div>
   <img src="/v1/downloads/qr?target=ios&size=260" alt="QR" width="150" height="150" style="background:#fff;padding:6px;border-radius:10px">
