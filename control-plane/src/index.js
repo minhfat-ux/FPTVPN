@@ -2168,6 +2168,7 @@ const iosDevices = new IosDeviceStore(path.join(DATA_DIR, "ios-devices.json"));
 
 app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"], (req, res) => {
   const lang = iosLang(req);
+  console.log(`ios-install: KHÁCH BẤM ĐĂNG KÝ (tải hồ sơ) lang=${lang}`);
   const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
   const profile = buildDeviceProfile({
     // `?lang=` đi theo callback để màn hình chờ của khách hiện đúng thứ tiếng đang xem.
@@ -2310,6 +2311,8 @@ app.get(["/install/ios/manifest.plist", "/v1/downloads/ios/manifest.plist"], (_r
 });
 
 app.get(["/install/ios", "/install/ios/"], (req, res) => {
+  // Ghi lại lượt xem để chủ shop biết khách có thực sự vào trang hay không (không log IP).
+  console.log(`ios-install: page view lang=${iosLang(req)} ua="${String(req.get("user-agent") ?? "-").slice(0, 50)}"`);
   const base = siteBaseUrl();
   const manifest = `${base}/install/ios/manifest.plist`;
   const itms = `itms-services://?action=download-manifest&amp;url=${encodeURIComponent(manifest)}`;
