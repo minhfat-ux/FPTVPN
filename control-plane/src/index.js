@@ -2185,7 +2185,7 @@ const IOS_TEXTS = {
  */
 const IOS_TF_TEXTS = {
   vi: {
-    title: "Cài VPNFlow qua TestFlight (không cần đăng ký thiết bị)",
+    title: "Hướng dẫn cài đặt qua TestFlight",
     intro: "Cách này dùng TestFlight của Apple nên <b>không cần UDID</b>. Chọn cách này nếu bước đăng ký thiết bị gặp trục trặc, hoặc bạn muốn cài nhanh.",
     steps: [
       "<b>1.</b> Cài app <b>TestFlight</b> (miễn phí, của Apple) từ App Store.",
@@ -2199,7 +2199,7 @@ const IOS_TF_TEXTS = {
     support: "Hỗ trợ",
   },
   en: {
-    title: "Install VPNFlow via TestFlight (no device registration)",
+    title: "How to install via TestFlight",
     intro: "This uses Apple's TestFlight, so <b>no UDID is needed</b>. Pick this if device registration didn't work for you or you want the fastest install.",
     steps: [
       "<b>1.</b> Install the free Apple <b>TestFlight</b> app from the App Store.",
@@ -2220,7 +2220,7 @@ const IOS_TF_TEXTS = {
     support: "Support",
   },
   zh: {
-    title: "通过 TestFlight 安装 VPNFlow（无需注册设备）",
+    title: "通过 TestFlight 安装指南",
     intro: "此方式使用 Apple 的 TestFlight，<b>不需要设备码 (UDID)</b>。如果设备注册遇到问题或想最快安装，请用这种方式。",
     steps: [
       "<b>1.</b> 先在 App Store 安装免费的 <b>TestFlight</b>。",
@@ -2241,7 +2241,7 @@ const IOS_TF_TEXTS = {
     support: "客服",
   },
   ja: {
-    title: "TestFlight で VPNFlow をインストール（端末登録なし）",
+    title: "TestFlight でのインストール手順",
     intro: "Apple の TestFlight を使うため <b>UDID は不要</b>です。端末登録がうまくいかない場合や、最短で入れたい場合にどうぞ。",
     steps: [
       "<b>1.</b> App Store で無料の <b>TestFlight</b> をインストール。",
@@ -2262,7 +2262,7 @@ const IOS_TF_TEXTS = {
     support: "サポート",
   },
   ko: {
-    title: "TestFlight로 VPNFlow 설치 (기기 등록 불필요)",
+    title: "TestFlight 설치 안내",
     intro: "Apple의 TestFlight를 사용하므로 <b>UDID가 필요 없습니다</b>. 기기 등록이 안 되거나 가장 빠르게 설치하고 싶을 때 사용하세요.",
     steps: [
       "<b>1.</b> App Store에서 무료 <b>TestFlight</b> 앱을 설치합니다.",
@@ -2558,7 +2558,6 @@ code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size
 </style>
 </head><body><div class="c">
 <p class="t">${t.title}</p>
-<p class="s">${t.intro}</p>
 <a class="b b1" href="${TESTFLIGHT_APP_URL}">${t.tfBtn}</a>
 <ul>${li(t.steps)}</ul>
 <a class="b b2" href="${join}">${t.joinBtn}</a>
