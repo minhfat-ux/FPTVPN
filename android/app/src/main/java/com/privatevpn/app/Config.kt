@@ -74,7 +74,8 @@ object Config {
     /** Public support / privacy pages (also linked from the paywall). */
     const val SUPPORT_URL = "https://meetflowai.site/SupportPrivateVPN.html"
     const val PRIVACY_URL = "https://meetflowai.site/FlowVPNPrivacy.html"
-    const val TERMS_URL = "https://meetflowai.site/terms"
+    /** Điều khoản RIÊNG của VPNFlow — `meetflowai.site/terms` là điều khoản của MeetFlow AI. */
+    const val TERMS_URL = "https://meetflowai.site/vpnflow/terms"
 
     /** WireGuard tunnel defaults (match iOS/macOS + backend). */
     const val WG_DNS = "1.1.1.1"

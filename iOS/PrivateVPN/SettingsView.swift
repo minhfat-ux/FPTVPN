@@ -300,7 +300,8 @@ struct SettingsView: View {
                 Label(languageStore.t(.privacyPolicy), systemImage: "hand.raised")
             }
 
-            Link(destination: URL(string: "https://meetflowai.site/terms")!) {
+            // Điều khoản RIÊNG của VPNFlow — /terms là điều khoản của MeetFlow AI.
+            Link(destination: URL(string: "https://meetflowai.site/vpnflow/terms")!) {
                 Label(languageStore.t(.termsOfUse), systemImage: "doc.text")
             }
         }
