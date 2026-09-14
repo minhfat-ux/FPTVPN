@@ -2,7 +2,7 @@
 
 > Mục tiêu: đồng bộ ngữ cảnh nhanh giữa các session/agent.
 > Mỗi session mới: **đọc file này trước**, rồi mới trả lời/chạy lệnh.
-> Updated: 2026-09-14
+> Updated: 2026-09-15
 
 ---
 
@@ -21,6 +21,15 @@
   - `https://fcnvpn.tail303be3.ts.net/buy`
 
 ---
+
+## 1b) iOS phát hành KHÔNG qua App Store (trạng thái 15/09/2026)
+
+- **Đã chạy thật**: khách mở `/install/ios` → cài `.mobileconfig` → server nhận UDID → **tự đăng ký
+  Apple** (App Store Connect API) → IPA ký kèm UDID → `itms-services` → cài app.
+- **Cập nhật trong app**: `/v1/app-version` trả `ipa_manifest_url` ⇒ app bấm **Update** là iOS tải + cài luôn.
+- **Paywall trong app** = `/buy?inapp=1`: chỉ đăng ký tài khoản + thanh toán (ẩn khối tải app).
+- **Mục Subscription**: đã mua ⇒ hiện gói đang dùng + hạn + nút **Gia hạn** (iOS/macOS/Android).
+- Đọc trước khi sửa gì liên quan iOS: **`docs/IOS_ADHOC_OTA.md`** (có bảng 8 bẫy đã gặp thật).
 
 ## 2) Canonical links (đúng tại thời điểm hiện tại)
 
@@ -145,6 +154,14 @@ rồi mới trả lời câu hỏi chính của tôi.
 ---
 
 ## 7) Traceability / commits tham chiếu gần đây
+
+- `76eddf5` fix(ios-install): đã đăng ký ⇒ khóa nút đăng ký + bật nút tải & cài
+- `729ccf2` feat(update): bấm Update trong app iOS là tải + cài luôn (OTA)
+- `3078abe`/`2e906dc` feat(subscription): đã mua ⇒ hiện gói đã mua + nút Gia hạn (iOS/macOS/Android)
+- `162d083` feat(paywall): trong app chỉ còn đăng ký tài khoản + thanh toán (`?inapp=1`)
+- `78ffe60` fix(ios): hồ sơ đăng ký theo ĐÚNG cấu trúc `Profile Service`
+- `5159be8` feat(ios): tự đăng ký UDID lên Apple (ASC API) + email "bản cài sẵn sàng"
+
 
 - `7ab38d7` feat(control-plane): dashboard per-server + ISP/IP
 - `7226ae6` fix(admin): panel chạy ổn khi đổi domain/Funnel (base origin-safe)

@@ -210,6 +210,23 @@ grant/revoke subscription, revoke user (see `control-plane/README.md`).
 - macOS end-to-end exit-IP verification remains separate from build success and
   requires a Network Extension-capable signing profile on a real Mac.
 
+### B6. Phát hành iOS không qua App Store (Ad Hoc OTA) — as-built 2026-09-15
+
+Không còn App Store/TestFlight: iOS phát bằng **Ad Hoc OTA** ngay trên domain của mình.
+
+- Trang cài `/install/ios`: 2 bước có vòng tròn đánh số (đăng ký thiết bị → tải & cài); nút tự
+  khóa/mở theo tình trạng máy (đã đăng ký ⇒ khóa nút đăng ký, mở nút tải & cài). Trang nhận ra
+  "máy này" bằng **mã phiên** (`?s=`) vì iOS gửi UDID ngầm, khách không thấy trang callback.
+- Thu UDID bằng `.mobileconfig` kiểu **Profile Service** (`PayloadType` cấp cao nhất + `PayloadContent`
+  là dict). Callback iOS 26 là **CMS/PKCS#7** ⇒ server nhận raw body và tự nhận dạng định dạng.
+- Server **tự đăng ký UDID lên Apple** qua App Store Connect API (JWT ES256), lỗi ghi vào `appleError`.
+- IPA phát qua `manifest.plist` + `itms-services`; app **tự cập nhật trong app** bằng
+  `ipa_manifest_url` do `/v1/app-version` trả về (không phải vào lại trang cài).
+- Paywall trong app mở `/buy?inapp=1` ⇒ **chỉ đăng ký tài khoản + thanh toán** (ẩn mọi thứ về tải app).
+  Mục Subscription: đã mua ⇒ hiện gói đang dùng (backend `plan_badge`) + hạn + nút **Gia hạn**.
+
+Chi tiết + toàn bộ bẫy đã gặp: **`docs/IOS_ADHOC_OTA.md`**.
+
 ### B6. Android / Windows client clone target
 
 - Android and Windows clients reuse the production coordinator and exit-node

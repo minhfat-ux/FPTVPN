@@ -1,5 +1,7 @@
 # iOS Ad Hoc UDID Progress
 
+> Tài liệu đầy đủ (luồng, cấu trúc plist, bẫy đã gặp, cách kiểm tra): **`docs/IOS_ADHOC_OTA.md`**.
+
 Updated: 2026-09-14
 
 ## DONE

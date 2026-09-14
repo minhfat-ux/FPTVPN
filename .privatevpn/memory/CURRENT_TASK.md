@@ -1,11 +1,29 @@
 # Current Task
 
-- **Task ID:** TASK-20260825-MEETFLOWAI-BACKEND
-- **Title:** Fix MeetFlowAI backend & make it stable (review + research)
+- **Task ID:** TASK-20260915-IOS-ADHOC-OTA
+- **Title:** Phát hành iOS không qua App Store (Ad Hoc OTA) + paywall/subscription/update
 - **Owner:** main agent
-- **Status:** todo (planned for 2026-08-25)
-- **Created:** 2026-08-24 (note từ cuối phiên 2026-08-24)
-- **Updated:** 2026-08-24
+- **Status:** done (đã chạy thật trên máy thật 2026-09-15) — còn 2 việc nhỏ ở "Remaining"
+- **Created:** 2026-09-15
+- **Updated:** 2026-09-15
+
+## Done
+
+- Thu UDID qua `.mobileconfig` (cấu trúc `Profile Service` ĐÚNG) + callback đọc được CMS/PKCS#7 của iOS 26.
+- Tự đăng ký UDID lên Apple (App Store Connect API, JWT ES256) + panel nạp khoá `.p8`.
+- Trang `/install/ios`: 2 bước có vòng tròn số, mã phiên để nhận ra máy, nút tự khóa/mở, popup 5 ngôn ngữ.
+- Email "bản cài sẵn sàng" sau khi ký lại IPA; manifest + `itms-services`; cập nhật trong app bằng
+  `ipa_manifest_url` (bấm Update là cài luôn).
+- Paywall trong app (`?inapp=1`) chỉ còn đăng ký tài khoản + thanh toán; mục Subscription: đã mua thì
+  hiện gói đang dùng + nút Gia hạn (iOS/macOS/Android).
+- Test control-plane 196/196; iOS + macOS build PASS; Android assembleDebug PASS.
+- Tài liệu: `docs/IOS_ADHOC_OTA.md`, `docs/ARCHITECTURE.md` (B6), `docs/MEETFLOW_AI_OPS.md` (runbook phát hành).
+
+## Remaining
+
+- macOS: chốt cách phát bản Mac (pkg/dmg/zip) rồi thêm `mac_url` để nút Update tải trực tiếp.
+- Android: muốn tải APK trong app + mở trình cài thì thêm `FileProvider` + `REQUEST_INSTALL_PACKAGES`.
+- Chủ shop: xoay `NODE_SELF_SECRET` của node-2 (bị in ra log phiên 15/09).
 
 ## Objective
 

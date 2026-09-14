@@ -156,6 +156,33 @@ git push origin main
 
 Đừng `git rebase --continue` trong trạng thái đó (todo bị lặp commit) — `git rebase --abort` rồi cherry-pick.
 
+## 5d. iOS release — Ad Hoc OTA (as-built 2026-09-15)
+
+Không dùng App Store/TestFlight: app phát trực tiếp từ domain của mình.
+
+```bash
+# 1) Ký lại IPA trên máy Mac (provisioning profile phải chứa UDID khách cần phát)
+#    UDID do SERVER tự thêm lên Apple (tab iOS UDID → App Store Connect API)
+scripts/ios-add-udid.sh            # hỗ trợ export profile + upload
+
+# 2) Đưa IPA lên node-2
+scp <ipa> root@165.101.114.162:/root/flowvpn-ipa/VPNFlow-latest.ipa
+
+# 3) Bump số build trong panel (tab Nodes → app-version → ipa_build)
+
+# 4) Báo khách đã có bản mới (tự gửi mail cho máy đã map email)
+curl -X POST -H "Authorization: Bearer $AUTH_TOKEN" \
+  https://api.meetflowai.site/v1/admin/ios/devices/built -d '{"note":"1.3.4"}'
+```
+
+Luồng khách: `/install/ios` → cài `.mobileconfig` → server nhận UDID (log `ios-udid`) → tự đăng ký Apple
+→ khách bấm **Tải & cài**. Cập nhật về sau: app bấm **Update** là iOS tải + cài luôn
+(`/v1/app-version` trả `ipa_manifest_url`).
+
+⚠️ **Đọc trước khi sửa bất cứ thứ gì liên quan `.mobileconfig`/UDID/manifest:**
+`docs/IOS_ADHOC_OTA.md` — có cấu trúc plist BẮT BUỘC, định dạng body iOS 26 (CMS/PKCS#7), và bảng
+8 bẫy đã gặp thật (mỗi bẫy từng làm khách không cài được).
+
 ## 6. Commit conventions
 
 Commit message format (RULE-GIT-005, owner directive):

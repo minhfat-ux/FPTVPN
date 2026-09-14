@@ -560,8 +560,8 @@ lượng lớn (96 MB) lại bị Diawi từ chối (`File size too large`). Vì
 
 | Kênh | Link đang phát | Ở đâu |
 |---|---|---|
-| **iOS** (app + trang buy) | `https://meetflowai.site/install/ios` | **server mình** — trang cài tự phát, KHÔNG hết hạn, không giới hạn lượt tải (xem mục dưới) |
-| iOS — kênh phụ khi cần chia sẻ/thu UDID | <https://i.diawi.com/gSn4ht> (VPNFlow iOS 1.3.2 build 12, IPA 4,7 MB, md5 `7de3e103a678…`) | Diawi, upload kèm `--find-by-udid`; hết hạn ~15 ngày thì upload lại |
+| **iOS** (app + trang buy) | Diawi <https://i.diawi.com/DRoBM6> (chủ shop chốt: iOS phát qua Diawi vì bản ad-hoc cần UDID) | `ios_ipa_url`; `/install/ios` là đường lùi và bộ `runIosLinkGuard` tự chuyển về đó khi link Diawi chết |
+| iOS — link đang phát (14/09, sau khi đổi IP node-2) | <https://i.diawi.com/DRoBM6> (VPNFlow iOS **1.3.3 build 13**, IPA 4,95 MB, md5 `10ce479a8740…`) | Diawi, upload kèm `--find-by-udid` (máy lạ tự đăng ký UDID); hết hạn ~15 ngày thì upload lại rồi PATCH `ipa_url` — link cũ 1.3.2/12: <https://i.diawi.com/gSn4ht> |
 | VPNFlow Android (`/buy`) | `https://meetflowai.site/v1/downloads/android` (+ `…/android-legacy` cho Android 7/Fire OS) | server mình |
 | MeetFlow AI Android (`/ai/buy`) | `https://meetflowai.site/v1/ai/downloads/android` | server mình |
 
@@ -611,6 +611,19 @@ Quên bước 2 thì app báo "đã mới nhất" trong khi server đã có bả
 sai số build. **`minimum_version` = ép cập nhật** — chỉ đặt bằng bản mới khi chắc mọi máy iOS của khách
 đã có UDID trong provisioning profile (bản dev/ad-hoc hiện chỉ có 4 UDID); muốn nới ra thì PATCH
 `{"minimum_version":"0.0.0"}`.
+
+
+### Vì sao bản iOS phải cài qua Diawi (hoặc OTA có UDID)
+
+Bản IPA hiện tại là **ad-hoc/dev** (`Profile type: Development`, **4 UDID**, `get-task-allow=true`):
+iOS chỉ cài được lên máy có UDID nằm trong provisioning profile. Tải file `.ipa` về máy rồi mở **không
+cài được** — phải đi qua OTA (`itms-services` + manifest.plist, đúng cách Diawi làm), và máy vẫn phải
+có trong profile. Máy lạ: dùng nút đăng ký UDID của Diawi → nhận UDID → **build lại kèm UDID đó**.
+
+Chuỗi kỹ thuật của trang tự phát đã được kiểm đúng (đều 200, không redirect): `/install/ios` →
+`itms-services://…manifest.plist` (nay trả `text/xml`) → manifest → `/v1/downloads/ios`. Nên nếu bấm
+mà không cài được thì nguyên nhân nằm ở máy (UDID/Safari/Tin cậy nhà phát triển/IP cũ trong cache),
+không phải ở server — trang `/install/ios` đã có khối hướng dẫn đúng 5 nguyên nhân này.
 
 ### QR + link tải ngay trên trang buy (14/09/2026)
 
@@ -1160,6 +1173,29 @@ giữ IP cũ tới 1 giờ. Triệu chứng đặc trưng: `dig meetflowai.site`
 **không tồn tại** trên cả 2 node ⇒ `http://165.101.114.162/` trả 404 (route chết từ trước, không
 phải do đổi IP). Endpoint chính vẫn tốt: `/v1/downloads/android` = 200 (~96.5 MB). Muốn dùng lại
 đường IP thì tạo `/var/www/dl` (`chown caddy:caddy`, `chmod 644`) và đặt APK vào đó.
+
+### Phát hành bản iOS mới (Ad Hoc OTA) — 5 bước
+
+1. **Build + ký Ad Hoc trên máy Mac** (provisioning profile phải chứa UDID của khách cần phát).
+   `scripts/ios-add-udid.sh` lo phần export profile + upload; UDID thì server đã tự thêm lên Apple.
+2. **Upload IPA**: `scp <ipa> root@165.101.114.162:/root/flowvpn-ipa/VPNFlow-latest.ipa`
+3. **Bump số build trong panel** (tab Nodes → app-version: `ipa_build`) để iOS nhận là bản mới.
+4. **Kiểm tra IPA đang phát có UDID cần tìm** (script trong `docs/IOS_ADHOC_OTA.md` §5).
+5. **Báo khách**: bấm "đã ký lại" (`POST /v1/admin/ios/devices/built`) ⇒ mail "bản cài sẵn sàng" tự
+   gửi cho máy đã map email; khách mở app bấm **Update** là iOS tải + cài luôn.
+
+Luồng UDID tự động: khách mở `/install/ios` → cài hồ sơ → server nhận UDID (**POST `ios-trace` /
+`ios-udid`** trong `journalctl -u flowvpn-cp`) → tự đẩy lên Apple (cần khoá App Store Connect đã nạp
+trong tab *iOS UDID*).
+
+**Khoá App Store Connect**: nạp ở tab *iOS UDID* → panel App Store Connect (Key ID + Issuer ID + `.p8`).
+Lưu ở `/root/flowvpn-cp/data/apple-asc.json` (0600), không vào git. Chưa nạp thì nút đăng ký Apple trả
+`503 asc_not_configured` và panel hiện "CHƯA cấu hình".
+
+**Bẫy đã gặp thật** (chi tiết + cách sửa: `docs/IOS_ADHOC_OTA.md` §8): cấu trúc `Profile Service` sai ⇒
+iOS cài mà không gửi UDID; `&` thô trong XML hoặc `Content-Disposition: attachment` ⇒ **Invalid Profile**;
+parser không hiểu **CMS/PKCS#7** của iOS 26 ⇒ trả 400; trang cài không biết máy đã đăng ký (thiếu mã
+phiên) ⇒ không hiện nút cài app.
 
 ### Trạng thái hạ tầng 13/09/2026 — máy chính đã chuyển sang node-2
 
