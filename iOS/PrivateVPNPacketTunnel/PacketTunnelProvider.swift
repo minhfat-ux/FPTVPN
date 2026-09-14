@@ -302,8 +302,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard config.privateKeyBase64.isEmpty else {
             return config
         }
-        guard let privateKey = try? WireGuardPrivateKeyStore.loadPrivateKey() else {
-            log.error("Missing WireGuard private key in shared Keychain")
+        let privateKey: PrivateKey?
+        do {
+            privateKey = try WireGuardPrivateKeyStore.loadPrivateKey()
+        } catch {
+            // Lỗi thật khi đọc (ví dụ errSecMissingEntitlement / errSecInteractionNotAllowed) —
+            // phải in ra, vì trước đây `try?` nuốt lỗi nên log chỉ nói "Missing ..." và rất khó lần.
+            log.error("Đọc khoá WireGuard thất bại: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+        guard let privateKey else {
+            // errSecItemNotFound: app CHƯA ghi khoá vào nhóm chia sẻ (khác hẳn lỗi đọc).
+            log.error("Missing WireGuard private key in shared Keychain (errSecItemNotFound — app chưa ghi khoá?)")
             return nil
         }
         return config.withPrivateKey(privateKey)
@@ -316,7 +326,7 @@ private enum WireGuardPrivateKeyStore {
     static let privateKeyAccount = "wireguard.private-key"
 
     static func loadPrivateKey() throws -> PrivateKey? {
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: privateKeyAccount,
@@ -324,6 +334,12 @@ private enum WireGuardPrivateKeyStore {
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+        #if os(macOS)
+        // Keychain legacy của macOS BỎ QUA access group ⇒ extension không đọc được item do app ghi
+        // trong nhóm shared (errSecItemNotFound, đo 14/09). Data-protection keychain mới hỗ trợ
+        // access group ⇒ phải chỉ định, xem chú thích ở KeychainStore.
+        query[kSecUseDataProtectionKeychain as String] = true
+        #endif
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)

@@ -447,7 +447,17 @@ final class VPNManagerMac: ObservableObject {
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier
         protocolConfig.serverAddress = tunnelConfig.peers.first?.endpoint ?? "not-configured"
         protocolConfig.providerConfiguration = [
-            "wireguard": try JSONEncoder().encode(tunnelConfig.withoutPrivateKey()),
+            // macOS KHÁC iOS ở chỗ này: KHÔNG bỏ private key khỏi config.
+            //
+            // Vì sao: trên macOS, profile ký tự động chỉ cấp quyền keychain group dạng wildcard
+            // (`TEAMID.*`), mà data-protection keychain lại đòi ĐÚNG group cụ thể
+            // (`TEAMID.com.privatevpn.shared`) ⇒ app ghi được khoá nhưng extension (bundle id khác)
+            // đọc không thấy, tunnel chết ngay với "Missing WireGuard private key in shared
+            // Keychain" (đo trên máy 14/09, mọi cách chia sẻ keychain đều không qua được).
+            // Khoá nằm trong `providerConfiguration` của profile VPN — hệ thống lưu, chỉ app và
+            // extension của nó đọc được — nên vẫn kín; đổi lại macOS chạy được mà không phụ thuộc
+            // keychain chia sẻ. iOS vẫn dùng keychain như cũ (ở đó chia sẻ chạy tốt).
+            "wireguard": try JSONEncoder().encode(tunnelConfig),
         ]
 
         manager.protocolConfiguration = protocolConfig

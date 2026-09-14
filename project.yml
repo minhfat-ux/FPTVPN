@@ -188,6 +188,11 @@ targets:
       - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
       - path: iOS/PrivateVPN/Services/AppVersionService.swift
+      # KeychainStore dùng chung với extension: khoá WireGuard phải nằm trong CÙNG một
+      # keychain access group thì extension mới đọc được. Thiếu file này, app ghi khoá
+      # vào keychain riêng của nó còn extension đọc nhóm shared ⇒ tunnel chết với
+      # "Missing WireGuard private key in shared Keychain" (đo được 14/09).
+      - path: iOS/PrivateVPN/Services/KeychainStore.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac
@@ -230,6 +235,9 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
+        # Phải TRÙNG với extension thì khoá WireGuard mới chia sẻ được (xem KeychainStore).
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.privatevpn.shared
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
     postCompileScripts:
@@ -276,6 +284,8 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
         com.apple.security.network.server: true
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.privatevpn.shared
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
     settings:

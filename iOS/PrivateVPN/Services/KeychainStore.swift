@@ -64,6 +64,14 @@ struct SecurityKeychainBackend: KeychainBackend {
             kSecAttrAccount as String: account,
         ]
         query[kSecAttrAccessGroup as String] = KeychainStore.accessGroup
+        #if os(macOS)
+        // macOS có HAI keychain: legacy (file-based) và data-protection (iOS-style). Keychain legacy
+        // BỎ QUA `kSecAttrAccessGroup` — item chỉ được ACL cho app tạo ra nó, nên extension
+        // (bundle id khác) không đọc được và báo `errSecItemNotFound` dù app vừa ghi (đo 14/09).
+        // Chỉ định keychain data-protection thì access group mới có hiệu lực ⇒ app + extension
+        // chia sẻ được khoá WireGuard. iOS mặc định đã là data-protection nên không cần cờ này.
+        query[kSecUseDataProtectionKeychain as String] = true
+        #endif
         return query
     }
 }
