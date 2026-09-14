@@ -173,6 +173,27 @@ final class VPNManagerMac: ObservableObject {
                         accessToken: accessToken,
                         exitNodeId: selectedNodeID
                     )
+                } catch ControlAPIClient.ClientError.deviceLimit(let message, let devices) {
+                    // Hết hạn mức thiết bị: nếu bản ghi CŨ của chính máy này còn đó (xoay khoá làm server
+                    // coi là thiết bị mới) thì nhường slot rồi đăng ký lại (previousInstallCandidate).
+                    // Không đoán được (0 hoặc >1 ứng viên) thì ném lỗi để UI hiện danh sách thiết bị.
+                    guard let candidate = previousInstallCandidate(
+                        devices: devices,
+                        platform: "macos",
+                        publicKey: activeKeyPair.publicKey
+                    ) else {
+                        throw ControlAPIClient.ClientError.deviceLimit(message: message, devices: devices)
+                    }
+                    let retryToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
+                    response = try await registerDevice(
+                        baseURL: baseURL,
+                        joinToken: retryToken,
+                        name: deviceName,
+                        publicKey: activeKeyPair.publicKey,
+                        accessToken: accessToken,
+                        exitNodeId: selectedNodeID,
+                        replaceDeviceId: candidate.device_id
+                    )
                 } catch ControlAPIClient.ClientError.server(let message) {
                     if message.localizedCaseInsensitiveContains("revoked") {
                         // Device was revoked server-side; old key can never
@@ -322,7 +343,7 @@ final class VPNManagerMac: ObservableObject {
         }
     }
 
-    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String, exitNodeId: String?) async throws -> CoordinatorRegisterResponse {
+    private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String, exitNodeId: String?, replaceDeviceId: String? = nil) async throws -> CoordinatorRegisterResponse {
         let client = ControlAPIClient(baseURL: baseURL, joinToken: joinToken)
         return try await client.register(
             name: name,
@@ -330,7 +351,8 @@ final class VPNManagerMac: ObservableObject {
             wireguardPublicKey: publicKey,
             endpoint: "0.0.0.0:51820",
             accessToken: accessToken,
-            exitNodeId: exitNodeId
+            exitNodeId: exitNodeId,
+            replaceDeviceId: replaceDeviceId
         )
     }
 

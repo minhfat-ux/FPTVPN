@@ -171,6 +171,25 @@ struct CoordinatorDevice: Equatable, Codable, Identifiable {
     var isActive: Bool { status == "active" }
 }
 
+/// Bản ghi CŨ của CHÍNH máy này, dùng để nhường slot khi server chặn vì hết hạn mức thiết bị.
+///
+/// Vì sao chỉ nhận khi DUY NHẤT một ứng viên: server cho phép thu hồi bản ghi cùng `platform` của
+/// cùng tài khoản, nên nếu khách có hai máy Mac thì đoán sai là chiếc kia mất kết nối trong im lặng.
+/// Nhiều ứng viên ⇒ trả nil, để khách tự chọn trong màn hình Thiết bị.
+///
+/// Ca thật 14/09 (macOS): app xoay khoá WireGuard ⇒ server coi là thiết bị mới ⇒ 403
+/// `device_limit_reached` ⇒ tunnel vẫn lên nhưng KHÔNG có mạng vì peer không được tạo.
+func previousInstallCandidate(
+    devices: [CoordinatorDevice],
+    platform: String,
+    publicKey: String
+) -> CoordinatorDevice? {
+    let samePlatform = devices.filter {
+        ($0.platform ?? "") == platform && $0.isActive && ($0.public_key ?? "") != publicKey
+    }
+    return samePlatform.count == 1 ? samePlatform.first : nil
+}
+
 struct DevicesResponse: Equatable, Codable {
     var count: Int
     var devices: [CoordinatorDevice]
@@ -315,7 +334,8 @@ struct ControlAPIClient {
         wireguardPublicKey: String,
         endpoint: String,
         accessToken: String? = nil,
-        exitNodeId: String? = nil
+        exitNodeId: String? = nil,
+        replaceDeviceId: String? = nil
     ) async throws -> CoordinatorRegisterResponse {
         let url = baseURL.appendingPathComponent("v1/peers/register")
         var request = URLRequest(url: url)
@@ -332,6 +352,9 @@ struct ControlAPIClient {
             "endpoint": endpoint,
             "join_token": joinToken,
             "exit_node_id": exitNodeId,
+        // Nhường slot: xem `previousInstallCandidate` — server chỉ chấp nhận khi bản ghi đó là
+        // của CHÍNH tài khoản này và CÙNG platform (device-replace.js).
+        "replace_device_id": replaceDeviceId,
         ]
         request.httpBody = try JSONEncoder().encode(body.compactMapValues { $0 })
 

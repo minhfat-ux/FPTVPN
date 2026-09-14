@@ -14,6 +14,7 @@ import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision } from "./device-limit.js";
+import { applyDeviceReplace } from "./device-replace.js";
 import { versionPayloadFor, wantsLegacyApk, iosInstallManifest } from "./app-version.js";
 import {
   amountCovers,
@@ -2315,7 +2316,7 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
   const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
   const profile = buildDeviceProfile({
     // `?lang=` đi theo callback để màn hình chờ của khách hiện đúng thứ tiếng đang xem.
-    callbackUrl: `${siteBaseUrl()}/install/ios/udid?lang=${lang}`,
+    callbackUrl: `${siteBaseUrl()}/install/ios/udid?lang=${lang}&token=${encodeURIComponent(String(req.query?.token ?? ""))}`,
     displayName: t.profileName,
     payloadName: t.profileName,
     description: t.profileDesc,
@@ -2330,7 +2331,25 @@ app.post(["/install/ios/udid", "/v1/ios/udid"], express.urlencoded({ extended: f
       console.warn("ios-udid: payload không có UDID");
       return res.status(400).type("html").send("<p>Không đọc được mã thiết bị. Vui lòng thử lại.</p>");
     }
-    const { device, isNew } = await iosDevices.register(info);
+    // `?token=` đi từ trang cài (Buy → /install/ios?token=…) vào callback: token hợp lệ
+    // ⇒ tự gắn UDID với ĐÚNG account đã mua, không phải map tay ở admin. Token sai/hết
+    // hạn chỉ là "chưa map" (không chặn khách đăng ký), chủ shop map sau.
+    const enrollmentToken = String(req.query?.token ?? "").trim();
+    let mapped = null;
+    if (enrollmentToken) {
+      try {
+        mapped = await authStore.lookupEnrollmentToken(enrollmentToken);
+      } catch (err) {
+        console.warn(`ios-udid: token không dùng được (${err?.message ?? err}) — để admin map tay`);
+      }
+    }
+    const { device, isNew } = await iosDevices.register({
+      ...info,
+      token: enrollmentToken || null,
+      userId: mapped?.userId ?? null,
+      email: mapped?.email ?? null,
+    });
+    if (mapped) console.log(`ios-udid: tự map ${device.udid} → ${mapped.email ?? mapped.userId}`);
     console.log(`ios-udid: ${isNew ? "MỚI" : "đã có"} ${device.udid} (${device.model ?? "?"} · iOS ${device.iosVersion ?? "?"})`);
     if (isNew) {
       const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
@@ -2418,6 +2437,24 @@ app.get(["/v1/admin/ios/devices", "/admin/ios/devices"], requireAdminAuth, async
   try {
     res.json(await iosDevices.list());
   } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+app.post(["/v1/admin/ios/devices/:udid/account", "/admin/ios/devices/:udid/account"], requireAdminAuth, async (req, res) => {
+  try {
+    const udid = String(req.params.udid ?? "").trim();
+    const userId = String(req.body?.userId ?? "").trim() || null;
+    const email = String(req.body?.email ?? "").trim().toLowerCase() || null;
+    if (!userId && !email) return res.status(400).json({ error: "userId hoặc email là bắt buộc" });
+    const users = await authStore.listUsersWithExpiry();
+    const user = userId ? users.find((entry) => entry.id === userId) : users.find((entry) => entry.email === email);
+    if (!user) return res.status(404).json({ error: "Không tìm thấy account" });
+    const device = await iosDevices.mapAccount(udid, { userId: user.id, email: user.email ?? email });
+    res.json({ ok: true, device });
+  } catch (err) {
+    if (err?.message === "Không tìm thấy UDID") return res.status(404).json({ error: err.message });
+    console.error("admin ios device account map failed:", err);
     res.status(500).json({ error: "Internal error" });
   }
 });
@@ -3933,6 +3970,18 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
     if (!deviceKey) return res.status(400).json({ error: "device_key is required" });
 
     const all = await store.all();
+    // Khách xoay khoá (cài lại/đổi cách lưu khoá) làm server thấy "thiết bị mới"; nếu client khai
+    // `replace_device_id` là bản ghi CŨ của CHÍNH máy đó (cùng user + cùng platform) thì thu hồi bản
+    // ghi cũ để nhả slot TRƯỚC khi áp hạn mức — xem device-replace.js.
+    const replacedOnClaim = await applyDeviceReplace({
+      body: req.body,
+      userId,
+      platform,
+      publicKey: deviceKey,
+      store,
+      removePeer: removePeerForDevice,
+      log: console,
+    });
     const existing = all.find((d) => d.publicKey === deviceKey && d.userId === userId);
     const mine = all.filter((d) => d.userId === userId && d.active !== false);
     // Enforce the cap for EVERYONE, not just new devices: an account that is
@@ -3995,6 +4044,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       device_id: created.id,
       created: !result.transferred,
       transferred: Boolean(result.transferred),
+      replaced: replacedOnClaim.replaced,
     });
   } catch (err) {
     console.error("POST /v1/devices/claim failed:", err);
@@ -4175,6 +4225,17 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
     }
   }
 
+  // Nhường slot: cùng user + cùng platform ⇒ thu hồi bản ghi cũ (chính máy đó, xoay khoá nên
+  // thành "thiết bị mới") trước khi áp hạn mức — xem device-replace.js.
+  const { replaced } = await applyDeviceReplace({
+    body,
+    userId,
+    platform,
+    publicKey,
+    store,
+    removePeer: removePeerForDevice,
+    log: console,
+  });
   // Device limit (FR: max N active devices per account). A device that already
   // belongs to this user (or is being re-registered after a revoke) is exempt —
   // only a genuinely NEW device can push the account over the limit.
@@ -4222,6 +4283,7 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
       status: result.isNew ? 201 : 200,
       body: {
         peer_id: device.id,
+        replaced,
         overlay_ip: device.assignedIP,
         network: IP_POOL_CIDR,
         peer_credential: `PVPN-PEER-${crypto.randomUUID()}`,
