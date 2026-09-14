@@ -21,7 +21,7 @@ object Config {
      *
      * Keep node-2's address first: it is the entry point that is reachable from China.
      */
-    val API_FALLBACK_ADDRESSES = listOf("103.6.234.233", "103.173.155.50")
+    val API_FALLBACK_ADDRESSES = listOf("165.101.114.162", "103.173.155.50")
 
     /**
      * Relay WebSocket cho đường dữ liệu (Hysteria đi trong WSS qua Cloudflare Tunnel).
@@ -93,7 +93,7 @@ object Config {
      *  order — 8443 is the classic hysteria port (often UDP-blocked by ISPs),
      *  the others are the fallback listeners running on the same servers. */
     const val HYSTERIA_MODE = true
-    const val HY_SERVER = "103.173.155.50" // node1 (ok qua TQ); node2 = 103.6.234.233 (chờ đổi IP)
+    const val HY_SERVER = "103.173.155.50" // node1 (ok qua TQ); node2 = 165.101.114.162 (VNPT, đổi IP 14/09)
     // TCP relay trước UDP: mạng nào block UDP (GFW, corporate NAT) vẫn qua TCP.
     // Relay node1: TCP <-> UDP 127.0.0.1:8443 (wgrelay.js); app probe từng cổng.
     const val HY_TCP_RELAY_HOST = "103.173.155.50"
