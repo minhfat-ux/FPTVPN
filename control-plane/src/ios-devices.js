@@ -201,6 +201,7 @@ export class IosDeviceStore {
       const udid = String(info.udid ?? "").trim();
       if (!udid) throw new Error("thiếu UDID");
       const token = String(info.token ?? "").trim() || null;
+      const sessionId = String(info.sessionId ?? "").trim() || null;
       const now = new Date().toISOString();
       const existing = data.devices.find((d) => d.udid === udid);
       if (existing) {
@@ -211,6 +212,7 @@ export class IosDeviceStore {
         existing.imei = info.imei ?? existing.imei;
         existing.iccid = info.iccid ?? existing.iccid;
         existing.enrollmentToken = token ?? existing.enrollmentToken;
+        existing.sessionId = sessionId ?? existing.sessionId;
         if (info.userId) existing.userId = info.userId;
         if (info.email) existing.email = info.email;
         await this.save(data);
@@ -224,6 +226,7 @@ export class IosDeviceStore {
         imei: info.imei ?? null,
         iccid: info.iccid ?? null,
         enrollmentToken: token,
+        sessionId,
         userId: info.userId ?? null,
         email: info.email ?? null,
         registeredAt: now,
@@ -278,6 +281,14 @@ export class IosDeviceStore {
       await this.save(data);
       return device;
     });
+  }
+
+  /** Tìm máy theo mã phiên của trang cài (trang poll để biết máy đã đăng ký chưa). */
+  async findBySession(sessionId) {
+    const key = String(sessionId ?? "").trim();
+    if (!key) return null;
+    const data = await this.load();
+    return data.devices.find((d) => d.sessionId === key) ?? null;
   }
 
   /** Máy đã map email nhưng CHƯA được báo "bản cài sẵn sàng". */

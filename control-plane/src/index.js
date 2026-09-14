@@ -2031,6 +2031,9 @@ const IOS_TEXTS = {
     guideClose: "Đã hiểu, tôi mở Cài đặt",
     guideBtn: "❓ Xem lại cách cài hồ sơ",
     guideAfter: "Cài xong, quay lại Safari — trang này tự chuyển sang bước 2.",
+    step2After: "Bước 2 · sau khi cài hồ sơ xong",
+    downloadBtn: "📲 Tải &amp; cài VPNFlow",
+    guideInvalid: "<b>Nếu iOS báo “Hồ sơ không hợp lệ / Invalid Profile”: máy bạn ĐÃ đăng ký xong</b> — bấm OK rồi quay lại trang này.",
     profileName: "VPNFlow — Đăng ký thiết bị",
     profileDesc: "Gửi mã thiết bị (UDID) cho VPNFlow để cấp bản cài phù hợp. Không thu thập dữ liệu khác.",
   },
@@ -2070,6 +2073,9 @@ const IOS_TEXTS = {
     guideClose: "Got it, open Settings",
     guideBtn: "❓ Show the install guide again",
     guideAfter: "When the profile is installed, come back to Safari — this page moves to step 2 by itself.",
+    step2After: "Step 2 · after the profile is installed",
+    downloadBtn: "📲 Download &amp; install VPNFlow",
+    guideInvalid: "<b>If iOS says “Invalid Profile”: your device was ALREADY registered</b> — tap OK and come back to this page.",
     profileName: "VPNFlow — Device registration",
     profileDesc: "Reports the device ID (UDID) to VPNFlow so we can issue a matching build. No other data is collected.",
   },
@@ -2109,6 +2115,9 @@ const IOS_TEXTS = {
     guideClose: "知道了，打开设置",
     guideBtn: "❓ 再看一次安装指引",
     guideAfter: "安装完成后返回 Safari —— 本页会自动进入第 2 步。",
+    step2After: "第 2 步 · 描述文件安装完成后",
+    downloadBtn: "📲 下载并安装 VPNFlow",
+    guideInvalid: "<b>若 iOS 提示“描述文件无效”：说明设备已注册成功</b> —— 点击“好”，然后返回本页。",
     profileName: "VPNFlow — 设备注册",
     profileDesc: "将设备码 (UDID) 上报给 VPNFlow，以便发放对应的安装包。不采集其他数据。",
   },
@@ -2148,6 +2157,9 @@ const IOS_TEXTS = {
     guideClose: "了解、設定を開きます",
     guideBtn: "❓ インストール手順をもう一度見る",
     guideAfter: "インストール後、Safari に戻ってください —— 自動でステップ 2 に進みます。",
+    step2After: "ステップ 2 · プロファイルのインストール後",
+    downloadBtn: "📲 VPNFlow をダウンロードしてインストール",
+    guideInvalid: "<b>iOS が「プロファイルが無効です」と表示しても端末は登録済みです</b> —— OK を押してこのページに戻ってください。",
     profileName: "VPNFlow — 端末登録",
     profileDesc: "端末 ID (UDID) を VPNFlow に送信し、対応するビルドを発行するためのプロファイルです。他のデータは収集しません。",
   },
@@ -2187,6 +2199,9 @@ const IOS_TEXTS = {
     guideClose: "확인, 설정 열기",
     guideBtn: "❓ 설치 안내 다시 보기",
     guideAfter: "설치 후 Safari로 돌아오세요 — 자동으로 2단계로 넘어갑니다.",
+    step2After: "2단계 · 프로파일 설치 후",
+    downloadBtn: "📲 VPNFlow 다운로드 및 설치",
+    guideInvalid: "<b>iOS가 “유효하지 않은 프로파일”을 표시해도 기기는 이미 등록되었습니다</b> — 확인을 누르고 이 페이지로 돌아오세요.",
     profileName: "VPNFlow — 기기 등록",
     profileDesc: "기기 ID (UDID)를 VPNFlow로 전송해 해당 빌드를 발급받기 위한 프로파일입니다. 다른 데이터는 수집하지 않습니다.",
   },
@@ -2216,7 +2231,10 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
   const profile = buildDeviceProfile({
     // `?lang=` đi theo callback để màn hình chờ của khách hiện đúng thứ tiếng đang xem.
     callbackUrl: `${siteBaseUrl()}/install/ios/udid?lang=${lang}` +
-      (String(req.query?.token ?? "").trim() ? `&token=${encodeURIComponent(String(req.query.token).trim())}` : ""),
+      (String(req.query?.token ?? "").trim() ? `&token=${encodeURIComponent(String(req.query.token).trim())}` : "") +
+      // Mã phiên: iOS gửi UDID NGẦM sau khi cài hồ sơ, khách không thấy trang callback ⇒
+      // trang cài phải nhận ra máy mình qua mã này mới chuyển được sang nút tải app.
+      (String(req.query?.s ?? "").trim() ? `&s=${encodeURIComponent(String(req.query.s).trim().slice(0, 64))}` : ""),
     displayName: t.profileName,
     payloadName: t.profileName,
     description: t.profileDesc,
@@ -2224,7 +2242,8 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
   // KHÔNG để Safari/Caddy cache hồ sơ: bản cũ bị cache làm khách cài lại đúng file hỏng
   // (đã xảy ra thật: sửa XML xong nhưng máy vẫn tải bản cache ⇒ cài không gửi UDID).
   res.set("Cache-Control", "no-store, must-revalidate");
-  res.set("Content-Disposition", 'attachment; filename="vpnflow-udid.mobileconfig"');
+  // KHÔNG đặt Content-Disposition: với iOS, "attachment" làm Safari coi hồ sơ là file tải về
+  // (File app) thay vì mở luồng cài ⇒ khách thấy "Invalid Profile". Đã thử và phải bỏ.
   res.type("application/x-apple-aspen-config").send(profile);
 });
 
@@ -2250,6 +2269,7 @@ app.post(["/install/ios/udid", "/v1/ios/udid"], express.raw({ type: () => true, 
     // ⇒ tự gắn UDID với ĐÚNG account đã mua, không phải map tay ở admin. Token sai/hết
     // hạn chỉ là "chưa map" (không chặn khách đăng ký), chủ shop map sau.
     const enrollmentToken = String(req.query?.token ?? "").trim();
+    const sessionId = String(req.query?.s ?? "").trim().slice(0, 64);
     let mapped = null;
     if (enrollmentToken) {
       try {
@@ -2261,6 +2281,7 @@ app.post(["/install/ios/udid", "/v1/ios/udid"], express.raw({ type: () => true, 
     const { device, isNew } = await iosDevices.register({
       ...info,
       token: enrollmentToken || null,
+      sessionId: sessionId || null,
       userId: mapped?.userId ?? null,
       email: mapped?.email ?? null,
     });
@@ -2337,9 +2358,16 @@ check();
 
 app.get(["/install/ios/status", "/v1/ios/status"], async (req, res) => {
   try {
-    const udid = String(req.query?.udid ?? "").trim();
-    if (!udid) return res.status(400).json({ error: "thiếu udid" });
-    res.json(await iosDevices.statusFor(udid));
+    let udid = String(req.query?.udid ?? "").trim();
+    const session = String(req.query?.session ?? "").trim();
+    // Trang cài hỏi theo MÃ PHIÊN (khách không thấy được UDID) — có máy rồi thì trả luôn udid
+    // để trang lưu lại và lần sau hỏi nhanh hơn.
+    if (!udid && session) {
+      const device = await iosDevices.findBySession(session);
+      if (device) udid = device.udid;
+    }
+    if (!udid) return res.json({ registered: false, ready: false, udid: null });
+    res.json({ ...(await iosDevices.statusFor(udid)), udid });
   } catch (err) {
     console.error("ios status failed:", err);
     res.status(500).json({ error: "Internal error" });
@@ -2582,14 +2610,14 @@ app.get(["/install/ios", "/install/ios/"], (req, res) => {
   const manifest = `${base}/install/ios/manifest.plist`;
   const itms = `itms-services://?action=download-manifest&amp;url=${encodeURIComponent(manifest)}`;
   const version = appConfig.get("latest_ios_version") || "1.0";
-  res.type("html").send(iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? "").slice(0, 200) }));
+  res.type("html").send(iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? "").slice(0, 200), sid: crypto.randomUUID() }));
 });
 
 /**
  * Trang cài iOS — 2 bước, đa ngôn ngữ (vi/en/zh/ja/ko như trang buy), bước 2 chỉ mở khi máy đã có bản cài.
  * Ngôn ngữ chọn theo `?lang=` → `Accept-Language` của máy khách → mặc định tiếng Việt.
  */
-function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "" }) {
+function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid = "" }) {
   // Token account (nếu khách mở link riêng /install/ios?token=…) phải đi tiếp sang hồ sơ đăng ký,
   // nếu không UDID gửi về sẽ không tự map được vào account.
   const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
@@ -2637,11 +2665,12 @@ ${iosLangSelectHTML(lang)}
 <div class="step">
   <div class="h"><span class="n">1</span>${t.step1}</div>
   <ul>${li(t.step1Items)}</ul>
-  <div class="wait" id="statusline" style="display:none"><span class="spin"></span><span id="statustxt"></span></div>
-  <div class="okmsg" id="okline" style="display:none">${t.readyMsg}</div>
 </div>
 
 <a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}">${t.regBtn}</a>
+<div id="statusline" class="wait" style="display:none"><span class="spin"></span><span id="statustxt"></span></div>
+<div class="stepmark">${t.step2After}</div>
+<a class="b b2" id="installLink" href="${itms}">${t.downloadBtn}</a>
 
 <div class="warn">
   <b>${t.warnTitle}</b>
@@ -2663,39 +2692,45 @@ ${iosLangSelectHTML(lang)}
     <div class="mintro">${t.guideIntro}</div>
     <ol class="msteps">${li(t.guideSteps)}</ol>
     <div class="mnote">${t.guideNote}</div>
+    <div class="mnote" style="background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.3)">${t.guideInvalid}</div>
     <div class="mafter">✅ ${t.guideAfter}</div>
     <button class="mbtn" onclick="hideGuide()">${t.guideClose}</button>
   </div>
 </div>
 </div>
 <script>
+// Mã phiên: iOS gửi UDID NGẦM sau khi cài hồ sơ (khách không thấy trang callback), nên trang phải
+// nhận ra "máy này" qua mã phiên — nếu không thì sau khi cài hồ sơ trang vẫn không biết và không
+// hiện được nút tải app.
+var SID = "";
+try { SID = localStorage.getItem("vpnflow_sid") || ""; } catch (e) {}
+if (!SID) { SID = ${JSON.stringify(sid)}; try { localStorage.setItem("vpnflow_sid", SID); } catch (e) {} }
 var udid = ""; try { udid = localStorage.getItem("vpnflow_udid") || ""; } catch (e) {}
-// Một nút DUY NHẤT cho cả hai bước: chưa đăng ký thì nó tải hồ sơ, đăng ký xong thì nó cài app.
 var ITMS = ${JSON.stringify(itms.replace(/&amp;/g, "&"))};
-var REG_HREF = ${JSON.stringify(`/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}`)};
+var REG_BASE = ${JSON.stringify(`/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}`)};
+var REG_HREF = REG_BASE + (SID ? "&s=" + encodeURIComponent(SID) : "");
 var LBL = ${JSON.stringify({ reg: t.regBtn, install: t.installBtn, wait: t.waitReady, locked: t.waitLocked })};
 var cta = document.getElementById("cta");
-var statusline = document.getElementById("statusline"), statustxt = document.getElementById("statustxt"), okline = document.getElementById("okline");
-// Sau khi khách bấm "Đăng ký thiết bị", iOS chỉ TẢI hồ sơ; phải tự mở Cài đặt để CÀI.
+var statusline = document.getElementById("statusline"), statustxt = document.getElementById("statustxt");
 function showGuide() { document.getElementById("guide").style.display = "flex"; }
 function hideGuide() { document.getElementById("guide").style.display = "none"; }
 function toRegister() { cta.href = REG_HREF; cta.textContent = LBL.reg; }
 function showReady() {
   cta.href = ITMS; cta.textContent = LBL.install;
-  statusline.style.display = "none"; okline.style.display = "block";
+  statusline.style.display = "none";
 }
-function showWaiting(msg) {
-  toRegister();
-  statusline.style.display = "flex"; okline.style.display = "none"; statustxt.textContent = msg;
-}
+function showWaiting(msg) { toRegister(); statusline.style.display = "flex"; statustxt.textContent = msg; }
 cta.addEventListener("click", function () { setTimeout(showGuide, 250); });
 function poll() {
-  if (!udid) return;
-  fetch("/install/ios/status?udid=" + encodeURIComponent(udid)).then(function (r) { return r.json(); }).then(function (d) {
-    if (d.ready) { showReady(); } else { showWaiting(LBL.wait); setTimeout(poll, 5000); }
+  var q = udid ? "udid=" + encodeURIComponent(udid) : "session=" + encodeURIComponent(SID);
+  fetch("/install/ios/status?" + q).then(function (r) { return r.json(); }).then(function (d) {
+    if (d && d.udid) { udid = d.udid; try { localStorage.setItem("vpnflow_udid", udid); } catch (e) {} }
+    if (d && d.registered) { if (d.ready) { showReady(); } else { showWaiting(LBL.wait); } }
+    else { toRegister(); statusline.style.display = "none"; }
+    setTimeout(poll, 5000);
   }).catch(function () { setTimeout(poll, 8000); });
 }
-if (udid) poll();
+if (SID || udid) poll();
 </script></body></html>`;
 }
 
