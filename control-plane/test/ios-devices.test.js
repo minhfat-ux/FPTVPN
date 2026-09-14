@@ -81,13 +81,15 @@ test("guard: route đăng ký thiết bị nằm dưới /install/ios (đã có 
   assert.ok(idx.includes("express.urlencoded"), "endpoint nhận UDID phải đọc được form iOS gửi");
 });
 
-test("guard: đường 'khách gửi/dán UDID' dùng chung hàng đợi và kiểm định dạng", () => {
+test("guard: khách CHỈ đăng ký bằng hồ sơ tự động (không bắt khách dán UDID)", () => {
   const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-  assert.ok(idx.includes('"/install/ios/udid-form"'), "phải có form dán UDID");
-  assert.ok(idx.includes("const UDID_RE"), "phải kiểm định dạng UDID trước khi nhận");
-  assert.ok(idx.includes('"/v1/admin/ios/devices"'), "phải có API admin thêm UDID bằng tay (khách gửi email)");
-  // cả hai đường phải ghi vào CÙNG hàng đợi để watcher ký lại
-  assert.ok((idx.match(/iosDevices\.register\(/g) ?? []).length >= 3, "profile, form và API admin đều ghi vào cùng queue");
+  assert.ok(!idx.includes("udid-form"), "không còn form dán UDID trước mặt khách (chủ shop yêu cầu)");
+  assert.ok(idx.includes('"/install/ios/register.mobileconfig"'), "khách lấy UDID bằng cách tải hồ sơ");
+  assert.ok(idx.includes('"/install/ios/udid"'), "iOS tự gửi UDID về server sau khi cài hồ sơ");
+  // Đường admin vẫn giữ cho ca khách gửi email cho shop (không phải UI khách tự dùng)
+  assert.ok(idx.includes('"/v1/admin/ios/devices"'), "admin vẫn thêm UDID bằng tay được (khách gửi email)");
+  assert.ok(idx.includes("const UDID_RE"), "API admin phải kiểm định dạng UDID");
+  assert.ok((idx.match(/iosDevices\.register\(/g) ?? []).length >= 2, "hồ sơ + API admin dùng chung hàng đợi");
 });
 
 test("định dạng UDID: nhận đúng, loại sai", () => {

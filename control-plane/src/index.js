@@ -2038,61 +2038,6 @@ check();
  */
 const UDID_RE = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}$|^[0-9A-Fa-f]{40}$|^[0-9A-Fa-f]{24}$/;
 
-app.post(["/install/ios/udid-form", "/v1/ios/udid-form"],
-  express.urlencoded({ extended: false, limit: "16kb" }),
-  async (req, res) => {
-    try {
-      const raw = String(req.body?.udid ?? "").trim();
-      const udid = raw.toUpperCase();
-      if (!UDID_RE.test(udid)) {
-        return res.status(400).type("html").send(iosUdidFormHTML({
-          error: "Mã thiết bị không đúng định dạng. Ví dụ đúng: 00008120-0008299A26D80032",
-        }));
-      }
-      const { device, isNew } = await iosDevices.register({ udid, model: req.body?.model ?? null, iosVersion: req.body?.ios ?? null });
-      console.log(`ios-udid(form): ${isNew ? "MỚI" : "đã có"} ${device.udid}`);
-      if (isNew) {
-        const owner = process.env.OWNER_ALERT_EMAIL || "minhnb2@me.com";
-        await sendUnmatchedTransferAlert({
-          to: owner,
-          amount: 0,
-          content: `UDID ${device.udid} (khách dán vào form)`,
-          reason: "thiết bị iOS mới đăng ký qua form — cần ký lại IPA (watcher sẽ tự chạy, hoặc scripts/ios-adhoc-export.sh)",
-          dashboardUrl: `${siteBaseUrl()}/admin`,
-        }).catch((err) => console.error("ios-udid form alert failed:", err?.message ?? err));
-      }
-      res.type("html").send(iosRegisteredHTML({ udid: device.udid, isNew }));
-    } catch (err) {
-      console.error("ios-udid form failed:", err);
-      res.status(500).type("html").send("<p>Lỗi hệ thống. Liên hệ support@meetflowai.site</p>");
-    }
-  });
-
-/** Form dán UDID — cho khách không muốn cài hồ sơ (hoặc đã lấy UDID bằng máy tính). */
-function iosUdidFormHTML({ error = null } = {}) {
-  const value = process.env.SUPPORT_EMAIL || "support@meetflowai.site";
-  return `<!doctype html><html lang="vi"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Đăng ký thiết bị bằng UDID</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}.c{max-width:460px;margin:20px;padding:24px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}.t{font-size:20px;font-weight:700;margin:0 0 6px}p,li{color:rgba(255,255,255,.72);font-size:13.5px;line-height:1.6}input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:#fff;font-size:15px;letter-spacing:.3px}button{width:100%;margin-top:12px;padding:13px;border:0;border-radius:10px;background:#33c773;color:#06160d;font-weight:700;font-size:15px;cursor:pointer}.err{margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,90,90,.12);border:1px solid rgba(255,90,90,.4);font-size:13px}code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}</style>
-</head><body><div class="c">
-<p class="t">Đăng ký thiết bị bằng UDID</p>
-<p>Cách lấy UDID (chọn 1):</p>
-<ul>
-  <li><b>Có máy tính</b>: cắm iPhone vào Mac → mở <b>Finder</b> → chọn iPhone → bấm vào dòng dung lượng cho tới khi hiện <b>UDID</b> → copy.</li>
-  <li><b>Không có máy tính</b>: dùng <a href="/install/ios" style="color:#7ab8ff">cách đăng ký tự động</a> (cài 1 hồ sơ nhỏ, máy tự gửi UDID).</li>
-  <li>Hoặc gửi UDID cho shop qua email <code>${value}</code>.</li>
-</ul>
-<form method="post" action="/install/ios/udid-form">
-  <input name="udid" placeholder="00008120-0008299A26D80032" autocomplete="off" autocapitalize="characters" required>
-  <button type="submit">Đăng ký thiết bị này</button>
-</form>
-${error ? `<div class="err">${error}</div>` : ""}
-<p style="font-size:12.5px;color:rgba(255,255,255,.45);margin-top:12px">Sau khi đăng ký, shop chuẩn bị bản cài riêng cho máy này (thường 1–2 phút), rồi quay lại <a href="/install/ios" style="color:#7ab8ff">trang cài</a> để tải.</p>
-</div></body></html>`;
-}
-
-app.get(["/install/ios/udid-form", "/v1/ios/udid-form"], (_req, res) => res.type("html").send(iosUdidFormHTML()));
-
 /** Admin thêm UDID bằng tay (khách gửi email ⇒ shop dán vào 1 lệnh curl). */
 app.post(["/v1/admin/ios/devices", "/admin/ios/devices"], requireAdminAuth, async (req, res) => {
   try {
@@ -2162,9 +2107,11 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
 <div class="step">
   <div class="h"><span class="n">1</span>Đăng ký thiết bị (chỉ 1 lần)</div>
   <ul>
-    <li>Bấm nút dưới → iOS tải một <b>hồ sơ đăng ký</b> nhỏ.</li>
-    <li>Vào <b>Cài đặt → Đã tải về hồ sơ</b> → <b>Cài đặt</b> (nhập mật khẩu máy nếu được hỏi).</li>
-    <li>Hồ sơ chỉ gửi <b>mã thiết bị (UDID)</b>, model và phiên bản iOS — không thu dữ liệu gì khác, và anh/chị <b>gỡ được</b> sau khi đăng ký.</li>
+    <li><b>1.</b> Bấm nút dưới — iOS báo <i>"Hồ sơ đã tải về"</i>.</li>
+    <li><b>2.</b> Vào <b>Cài đặt → Đã tải về hồ sơ</b> → <b>Cài đặt</b> → nhập mật khẩu máy.</li>
+    <li><b>3.</b> iOS hiện <i>"Không ký" / "Not Signed"</i> — cứ bấm <b>Cài đặt</b> tiếp (hồ sơ này chỉ để gửi mã thiết bị).</li>
+    <li>Hồ sơ chỉ gửi <b>mã thiết bị (UDID)</b>, model và phiên bản iOS — <b>gỡ được</b> bất cứ lúc nào.</li>
+    <li>Cài xong máy tự gửi mã về shop, trang này tự chuyển sang bước 2.</li>
   </ul>
   <a class="b b1" href="/install/ios/register.mobileconfig">📝 Đăng ký thiết bị này</a>
 </div>
@@ -2186,7 +2133,6 @@ app.get(["/install/ios", "/install/ios/"], (_req, res) => {
     <li>Cần iOS <b>17.0</b> trở lên.</li>
     <li>Cài xong nếu báo "Untrusted Developer": <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → chọn nhà phát triển → <b>Tin cậy</b>.</li>
     <li>Vẫn không được: tắt WiFi dùng 4G rồi thử lại (máy có thể còn nhớ IP cũ của server).</li>
-    <li>Không lấy được UDID / không muốn cài hồ sơ: <a href="/install/ios/udid-form" style="color:#7ab8ff">dán UDID vào đây</a> (hoặc gửi email cho shop).</li>
     <li>Hỗ trợ: <code>support@meetflowai.site</code>${(appConfig.get("ios_diawi_url") || process.env.IOS_DIAWI_URL) ? ` · kênh dự phòng: <a href="${appConfig.get("ios_diawi_url") || process.env.IOS_DIAWI_URL}" style="color:#7ab8ff">Diawi</a>` : ""}</li>
   </ul>
 </div>
