@@ -2296,6 +2296,17 @@ function iosTestflightUrl() {
   return appConfig.get("ios_testflight_url") || process.env.TESTFLIGHT_URL_IOS || "https://testflight.apple.com/join/1E2u6q7z";
 }
 
+/** Dropdown chọn ngôn ngữ ở ĐẦU trang (thay cho hàng link chữ ở cuối trang trước đây). */
+function iosLangSelectHTML(lang = "vi") {
+  const names = { vi: "Tiếng Việt", en: "English", zh: "中文", ja: "日本語", ko: "한국어" };
+  const options = ["vi", "en", "zh", "ja", "ko"]
+    .map((c) => `<option value="${c}"${c === lang ? " selected" : ""}>${names[c]}</option>`)
+    .join("");
+  return `<div class="langbar"><span aria-hidden="true">🌐</span>
+  <select aria-label="Language" onchange="var u=new URL(location.href);u.searchParams.set('lang',this.value);location.href=u.toString()">${options}</select>
+</div>`;
+}
+
 const iosDevices = new IosDeviceStore(path.join(DATA_DIR, "ios-devices.json"));
 
 app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"], (req, res) => {
@@ -2480,9 +2491,10 @@ code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size
 .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#33c773;border-radius:50%;animation:sp .9s linear infinite;display:inline-block}
 @keyframes sp{to{transform:rotate(360deg)}}.okmsg{color:#33c773;font-weight:600;font-size:13.5px;padding:4px 0}
 .tfbox{margin:0 0 12px;padding:13px;border-radius:14px;background:rgba(51,199,115,.10);border:1px solid rgba(51,199,115,.35)}
-.langs{margin-top:14px;text-align:center;font-size:12.5px}.langs a{color:rgba(255,255,255,.55);margin:0 5px;text-decoration:none}.langs a.on{color:#33c773;font-weight:600}
+.langbar{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:-6px 0 12px}.langbar select{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:5px 8px;font-size:12.5px;font-family:inherit}
 </style>
 </head><body><div class="c">
+${iosLangSelectHTML(lang)}
 <p class="t">${t.pageTitle}</p>
 <p class="s">${t.intro(version)}</p>
 
@@ -2512,7 +2524,6 @@ code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size
   <ul>${li(t.warnItems)}</ul>
 </div>
 
-<div class="langs">${["vi", "en", "zh", "ja", "ko"].map((c) => `<a class="${c === lang ? "on" : ""}" href="?lang=${c}">${c.toUpperCase()}</a>`).join("")}</div>
 
 <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
   <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">${t.qrTitle}</div>
@@ -2559,15 +2570,15 @@ a.b{display:block;text-align:center;text-decoration:none;font-weight:700;padding
 a.b1{background:#33c773;color:#06160d}a.b2{background:rgba(255,255,255,.14);color:#fff}
 code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px;word-break:break-all}
 .back{margin-top:14px;text-align:center;font-size:13px}.back a{color:rgba(255,255,255,.6);text-decoration:none}
-.langs{margin-top:12px;text-align:center;font-size:12.5px}.langs a{color:rgba(255,255,255,.55);margin:0 5px;text-decoration:none}.langs a.on{color:#33c773;font-weight:600}
+.langbar{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:-6px 0 12px}.langbar select{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:5px 8px;font-size:12.5px;font-family:inherit}
 </style>
 </head><body><div class="c">
+${iosLangSelectHTML(lang)}
 <p class="t">${t.title}</p>
 <a class="b b1" href="${TESTFLIGHT_APP_URL}">${t.tfBtn}</a>
 <ul>${li(t.steps)}</ul>
 <a class="b b2" href="${join}">${t.joinBtn}</a>
 <div style="font-size:12.5px;color:rgba(255,255,255,.5);text-align:center">${join}</div>
-<div class="langs">${["vi", "en", "zh", "ja", "ko"].map((c) => `<a class="${c === lang ? "on" : ""}" href="?lang=${c}">${c.toUpperCase()}</a>`).join("")}</div>
 <div class="back"><a href="/install/ios?lang=${lang}">${t.back}</a> · ${t.support}: support@meetflowai.site</div>
 </div></body></html>`);
 });
