@@ -1277,14 +1277,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       color: rgba(255,255,255,.6); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
     }
     .curbar a.on { color: #06160d; background: #33c773; border-color: #33c773; }
-    .dlqr { margin-top: 18px; padding: 14px 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; text-align: center; }
-    .dlqr-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
-    .dlqr-img { display: block; margin: 0 auto 8px; background: #fff; padding: 6px; border-radius: 10px; }
-    .dlqr-hint { font-size: 12.5px; color: rgba(255,255,255,.6); margin-bottom: 8px; }
-    .dlqr-link { font-size: 12.5px; color: rgba(255,255,255,.72); word-break: break-all; }
-    .dlqr-link a { color: #7ab8ff; }
-    .dlqr-copy { margin-left: 6px; padding: 4px 10px; font-size: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: inherit; cursor: pointer; }
-    .dlqr-note { font-size: 12px; color: rgba(255,255,255,.55); margin-top: 8px; }
     .cnynote {
       display: none; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
       font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,.78);
@@ -1484,11 +1476,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
           </svg>
         </a>` : ""}
       </div>
-      ${downloadQrSectionHTML({
-        lang,
-        qrSrc: `/v1/downloads/qr?target=${product === "ai" ? "ai-android" : "ios"}`,
-        linkUrl: product === "ai" ? androidUrl : (iosUrl || androidUrl),
-      })}
     </div>` : ""}
 
     <form id="buyForm">
