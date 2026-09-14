@@ -2224,6 +2224,7 @@ app.get(["/install/ios/register.mobileconfig", "/v1/ios/register.mobileconfig"],
   // KHÔNG để Safari/Caddy cache hồ sơ: bản cũ bị cache làm khách cài lại đúng file hỏng
   // (đã xảy ra thật: sửa XML xong nhưng máy vẫn tải bản cache ⇒ cài không gửi UDID).
   res.set("Cache-Control", "no-store, must-revalidate");
+  res.set("Content-Disposition", 'attachment; filename="vpnflow-udid.mobileconfig"');
   res.type("application/x-apple-aspen-config").send(profile);
 });
 
@@ -2592,6 +2593,9 @@ function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "" }) {
   // Token account (nếu khách mở link riêng /install/ios?token=…) phải đi tiếp sang hồ sơ đăng ký,
   // nếu không UDID gửi về sẽ không tự map được vào account.
   const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
+  // Mỗi lần mở trang là một URL hồ sơ khác nhau: iOS/Safari không thể dùng lại file cũ
+  // đã tải (từng gây "Invalid Profile" vì cài lại bản tải dở), và tránh cache của CDN.
+  const freshQS = "&ts=" + Date.now();
   const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
   const li = (items) => items.map((x) => `<li>${x}</li>`).join("");
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
@@ -2637,7 +2641,7 @@ ${iosLangSelectHTML(lang)}
   <div class="okmsg" id="okline" style="display:none">${t.readyMsg}</div>
 </div>
 
-<a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}">${t.regBtn}</a>
+<a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}">${t.regBtn}</a>
 
 <div class="warn">
   <b>${t.warnTitle}</b>
@@ -2668,7 +2672,7 @@ ${iosLangSelectHTML(lang)}
 var udid = ""; try { udid = localStorage.getItem("vpnflow_udid") || ""; } catch (e) {}
 // Một nút DUY NHẤT cho cả hai bước: chưa đăng ký thì nó tải hồ sơ, đăng ký xong thì nó cài app.
 var ITMS = ${JSON.stringify(itms.replace(/&amp;/g, "&"))};
-var REG_HREF = ${JSON.stringify(`/install/ios/register.mobileconfig?lang=${lang}${tokenQS}`)};
+var REG_HREF = ${JSON.stringify(`/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}`)};
 var LBL = ${JSON.stringify({ reg: t.regBtn, install: t.installBtn, wait: t.waitReady, locked: t.waitLocked })};
 var cta = document.getElementById("cta");
 var statusline = document.getElementById("statusline"), statustxt = document.getElementById("statustxt"), okline = document.getElementById("okline");
