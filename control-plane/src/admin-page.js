@@ -995,6 +995,15 @@ export function adminPageHTML() {
     fields.token.addEventListener("input", () => localStorage.setItem("fvpn_admin_token", fields.token.value.trim()));
     fields.baseUrl.addEventListener("input", () => localStorage.setItem("fvpn_admin_base", fields.baseUrl.value));
 
+    // Enter trong ô token/base = bấm "Load Nodes" luôn, khỏi phải với chuột.
+    [fields.token, fields.baseUrl].forEach((input) => {
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        loadNodes();
+      });
+    });
+
     function setStatus(message, isError = false) {
       fields.status.textContent = message;
       fields.status.style.color = isError ? "var(--danger)" : "var(--muted)";
