@@ -460,6 +460,11 @@ export function adminPageHTML() {
       <h2>Payments - don cho xac nhan</h2>
       <div class="actions">
         <button id="loadPayments">Refresh</button>
+        <button class="secondary" id="deleteUnpaidPayments">Xoá tất cả đơn chưa thanh toán</button>
+        <button id="remindAllPayments">Gửi nhắc chuyển tiền</button>
+        <label style="display:inline-flex;align-items:center;gap:6px;color:var(--muted)">
+          <input type="checkbox" id="remindDryRun"> chạy thử (không gửi thật)
+        </label>
         <span class="status-inline" id="paymentsStatus"></span>
       </div>
       <div style="overflow-x:auto; margin-top:12px;">
@@ -467,6 +472,12 @@ export function adminPageHTML() {
           <thead><tr><th>Ma don</th><th>Email khach</th><th>Goi</th><th>Method</th><th>So tien</th><th>Ngay tao</th><th>Kich hoat</th><th>Het han</th><th>Trang thai</th><th>Action</th></tr></thead>
           <tbody id="paymentsBody"><tr><td colspan="10">Bam Refresh.</td></tr></tbody>
         </table>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button class="secondary" id="paymentsPrev">← Trước</button>
+        <span class="status-inline" id="paymentsPageInfo">Trang 1/1</span>
+        <button class="secondary" id="paymentsNext">Sau →</button>
+        <span class="status-inline" id="paymentsTotal"></span>
       </div>
     </section>
 
@@ -843,6 +854,13 @@ export function adminPageHTML() {
       paymentsBody: document.getElementById("paymentsBody"),
       paymentsStatus: document.getElementById("paymentsStatus"),
       loadPayments: document.getElementById("loadPayments"),
+      deleteUnpaidPayments: document.getElementById("deleteUnpaidPayments"),
+      remindAllPayments: document.getElementById("remindAllPayments"),
+      remindDryRun: document.getElementById("remindDryRun"),
+      paymentsPrev: document.getElementById("paymentsPrev"),
+      paymentsNext: document.getElementById("paymentsNext"),
+      paymentsPageInfo: document.getElementById("paymentsPageInfo"),
+      paymentsTotal: document.getElementById("paymentsTotal"),
       tabPlans: document.getElementById("tabPlans"),
       viewPlans: document.getElementById("view-plans"),
       plansBody: document.getElementById("plansBody"),
@@ -977,6 +995,8 @@ export function adminPageHTML() {
     // Trạng thái phân trang/lọc của hai bảng (dữ liệu đã tải về client).
     const usersState = { all: [], expiry: {}, page: 1 };
     const iosState = { all: [], page: 1 };
+    // Bảng Payments cũng phân trang 10 dòng/trang (adminPaginate tự kẹp trang).
+    const paymentsState = { all: [], page: 1 };
 
     // Auto-detect the API base: when this page is served under
     // /PrivateVPN/Admin (Caddy strips the prefix), keep the prefix so API
@@ -1808,41 +1828,124 @@ export function adminPageHTML() {
       try {
         fields.paymentsStatus.textContent = "Loading...";
         const data = await request("/v1/admin/payments/pending");
-        const orders = data.orders || [];
-        fields.paymentsBody.innerHTML = "";
-        if (!orders.length) fields.paymentsBody.innerHTML = '<tr><td colspan="7">Khong co don cho xac nhan.</td></tr>';
-        for (const o of orders) {
-          const tr = document.createElement("tr");
-          const isPaid = Boolean(o.paid);
-          tr.innerHTML = "<td>#" + o.orderCode + "</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
-          const tds = tr.querySelectorAll("td");
-          const amt = o.amount != null ? o.amount.toLocaleString("vi-VN") + " d" : "-";
-          tds[1].textContent = o.email;
-          tds[2].innerHTML = "<b>" + o.plan_label + "</b><br><small style='color:var(--muted)'>" + (o.days ? o.days + " ngay" : "") + "</small>";
-          tds[3].textContent = o.method || "-";
-          tds[4].textContent = amt;
-          tds[5].textContent = new Date(o.createdAt).toLocaleString();
-          tds[6].textContent = o.activatedAt ? new Date(o.activatedAt).toLocaleString() : "-";
-          tds[7].textContent = o.expiresAt ? new Date(o.expiresAt).toLocaleString() : "-";
-          tds[8].textContent = isPaid ? "Da kich hoat" : "Cho xac nhan";
-          tds[8].style.color = isPaid ? "var(--accent)" : "var(--warning)";
-          if (!isPaid) {
-            const btn = document.createElement("button");
-            btn.textContent = "Xac nhan da nhan tien";
-            btn.onclick = () => confirmOrder(o.orderCode);
-            tds[9].appendChild(btn);
-          } else tds[9].textContent = "-";
-          fields.paymentsBody.appendChild(tr);
-        }
-        fields.paymentsStatus.textContent = orders.length + " don.";
+        // Mới nhất lên trên rồi mới phân trang; adminPaginate tự kẹp trang khi
+        // danh sách ngắn lại sau khi xoá.
+        paymentsState.all = adminSortByTimeDesc(data.orders || [], function (o) { return o.createdAt; });
+        renderPayments();
+        fields.paymentsStatus.textContent = paymentsState.all.length + " don.";
       } catch (error) { fields.paymentsStatus.textContent = error.message; }
     }
+
+    function renderPayments() {
+      const view = adminPaginate(paymentsState.all, paymentsState.page, ADMIN_PAGE_SIZE);
+      paymentsState.page = view.page;
+      adminUpdatePager(fields.paymentsPrev, fields.paymentsNext, fields.paymentsPageInfo, fields.paymentsTotal, view, "don");
+      fields.paymentsBody.innerHTML = "";
+      if (!view.items.length) {
+        fields.paymentsBody.innerHTML = '<tr><td colspan="10">Khong co don cho xac nhan.</td></tr>';
+        return;
+      }
+      for (const o of view.items) {
+        const tr = document.createElement("tr");
+        const isPaid = Boolean(o.paid);
+        tr.innerHTML = "<td>#" + o.orderCode + "</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+        const tds = tr.querySelectorAll("td");
+        const amt = o.amount != null ? o.amount.toLocaleString("vi-VN") + " d" : "-";
+        tds[1].textContent = o.email;
+        tds[2].innerHTML = "<b>" + o.plan_label + "</b><br><small style='color:var(--muted)'>" + (o.days ? o.days + " ngay" : "") + "</small>";
+        tds[3].textContent = o.method || "-";
+        tds[4].textContent = amt;
+        tds[5].textContent = new Date(o.createdAt).toLocaleString();
+        tds[6].textContent = o.activatedAt ? new Date(o.activatedAt).toLocaleString() : "-";
+        tds[7].textContent = o.expiresAt ? new Date(o.expiresAt).toLocaleString() : "-";
+        tds[8].textContent = isPaid ? "Da kich hoat" : "Cho xac nhan";
+        tds[8].style.color = isPaid ? "var(--accent)" : "var(--warning)";
+        if (!isPaid) {
+          const btn = document.createElement("button");
+          btn.textContent = "Xac nhan da nhan tien";
+          btn.onclick = () => confirmOrder(o.orderCode);
+          tds[9].appendChild(btn);
+
+          const remindBtn = document.createElement("button");
+          remindBtn.className = "secondary";
+          remindBtn.textContent = "Nhắc CK";
+          remindBtn.style.marginLeft = "6px";
+          remindBtn.onclick = () => remindOne(o.orderCode);
+          tds[9].appendChild(remindBtn);
+        }
+        // Nút Xoá có trên MỌI dòng; server từ chối (409) đơn đã thanh toán.
+        const delBtn = document.createElement("button");
+        delBtn.className = "secondary";
+        delBtn.textContent = "Xoá";
+        delBtn.style.marginLeft = "6px";
+        delBtn.onclick = () => deleteOrder(o.orderCode);
+        tds[9].appendChild(delBtn);
+        fields.paymentsBody.appendChild(tr);
+      }
+    }
+
     async function confirmOrder(orderCode) {
       if (!confirm("Xac nhan da nhan tien don #" + orderCode + "? Premium se kich hoat ngay.")) return;
       try { await request("/v1/admin/payments/" + orderCode + "/confirm", { method: "POST" }); loadPayments(); }
       catch (error) { fields.paymentsStatus.textContent = error.message; }
     }
+
+    async function deleteOrder(orderCode) {
+      if (!confirm("Xoá đơn #" + orderCode + "? Chỉ xoá được đơn CHƯA thanh toán — không thể hoàn tác.")) return;
+      try {
+        await request("/v1/admin/payments/" + orderCode, { method: "DELETE" });
+        fields.paymentsStatus.textContent = "Đã xoá đơn #" + orderCode + ".";
+        await loadPayments();
+      } catch (error) { fields.paymentsStatus.textContent = error.message; }
+    }
+
+    async function deleteAllUnpaid() {
+      const unpaid = paymentsState.all.filter(function (o) { return !o.paid; });
+      if (!unpaid.length) { fields.paymentsStatus.textContent = "Không có đơn chưa thanh toán."; return; }
+      if (!confirm("Xoá TẤT CẢ " + unpaid.length + " đơn chưa thanh toán? Không thể hoàn tác.")) return;
+      try {
+        const r = await request("/v1/admin/payments", { method: "DELETE" });
+        fields.paymentsStatus.textContent = "Đã xoá " + (r.removed || 0) + " đơn chưa thanh toán.";
+        await loadPayments();
+      } catch (error) { fields.paymentsStatus.textContent = error.message; }
+    }
+
+    function reminderSummary(r) {
+      const parts = ["Đã gửi " + (r.sent || 0), "bỏ qua " + (r.skipped || 0), "lỗi " + (r.failed || 0)];
+      if (r.dry) parts.unshift("Chạy thử (không gửi thật)");
+      return parts.join(" · ");
+    }
+
+    async function remindAll() {
+      const dry = Boolean(fields.remindDryRun && fields.remindDryRun.checked);
+      if (!dry && !confirm("Gửi nhắc chuyển tiền cho tối đa 50 đơn đủ điều kiện? Đơn đã nhắc trong 24h sẽ bị bỏ qua.")) return;
+      try {
+        fields.paymentsStatus.textContent = "Đang gửi...";
+        const r = await request("/v1/admin/payments/remind" + (dry ? "?dry=1" : ""), { method: "POST" });
+        fields.paymentsStatus.textContent = reminderSummary(r);
+        if (!dry) await loadPayments();
+      } catch (error) { fields.paymentsStatus.textContent = error.message; }
+    }
+
+    async function remindOne(orderCode) {
+      const dry = Boolean(fields.remindDryRun && fields.remindDryRun.checked);
+      if (!dry && !confirm("Gửi email nhắc chuyển tiền cho đơn #" + orderCode + "?")) return;
+      try {
+        const r = await request("/v1/admin/payments/remind" + (dry ? "?dry=1" : ""), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderCode: orderCode }),
+        });
+        fields.paymentsStatus.textContent = "Đơn #" + orderCode + ": " + reminderSummary(r);
+        if (!dry) await loadPayments();
+      } catch (error) { fields.paymentsStatus.textContent = error.message; }
+    }
+
     fields.loadPayments.onclick = loadPayments;
+    fields.deleteUnpaidPayments.onclick = deleteAllUnpaid;
+    fields.remindAllPayments.onclick = remindAll;
+    fields.paymentsPrev.onclick = function () { paymentsState.page -= 1; renderPayments(); };
+    fields.paymentsNext.onclick = function () { paymentsState.page += 1; renderPayments(); };
 
     // ---------------- Bảng gói bán (giá/thời hạn sửa được, không cần deploy) ----------------
     // Sửa thẳng trong bảng rồi bấm Save: mỗi gói chỉ có 4 field ngắn nên không cần

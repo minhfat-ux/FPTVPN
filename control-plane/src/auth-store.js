@@ -12,6 +12,8 @@ const RESEND_RATE_MAX = 5;
 const RESEND_RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 const LEGACY_JOIN_TTL_MS = 30 * 60 * 1000;
+// Đơn chưa chuyển tiền chỉ được nhắc lại sau 24h — tránh dội hộp thư khách.
+const PAYMENT_REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Nơi tra tên gói ngắn (badge) theo `product_id` để app hiện ĐÚNG tên gói khách đã mua
@@ -451,6 +453,69 @@ export class AuthStore {
   async listPendingPayments() {
     const data = await this._load();
     return data.pendingPayments.slice(-50).reverse();
+  }
+
+  /**
+   * Xoá một đơn CHƯA thanh toán. Đơn đã paid/kích hoạt KHÔNG xoá được: còn phải
+   * đối soát và /buy/status phải tiếp tục báo "đã trả tiền" cho khách.
+   * Trả về `reason` để route phân biệt 404 (not_found) và 409 (paid).
+   */
+  async deletePendingPayment(orderCode) {
+    const data = await this._load();
+    const entry = data.pendingPayments.find((e) => e.orderCode === Number(orderCode));
+    if (!entry) return { ok: false, reason: "not_found" };
+    if (entry.paidAt) return { ok: false, reason: "paid", order: entry };
+    data.pendingPayments = data.pendingPayments.filter((e) => e.orderCode !== Number(orderCode));
+    await this._save(data);
+    return { ok: true, order: entry };
+  }
+
+  /** Xoá TẤT CẢ đơn chưa thanh toán; trả về số đơn đã xoá. */
+  async deleteUnpaidPendingPayments() {
+    const data = await this._load();
+    const removed = data.pendingPayments.filter((e) => !e.paidAt).length;
+    if (removed > 0) {
+      data.pendingPayments = data.pendingPayments.filter((e) => e.paidAt);
+      await this._save(data);
+    }
+    return { removed };
+  }
+
+  /**
+   * Đơn cần nhắc chuyển tiền: CHƯA thanh toán, có email hợp lệ, và chưa được
+   * nhắc trong `cooldownMs` gần nhất. `skipped` gồm đơn thiếu email hoặc còn
+   * trong cooldown — route đếm vào thống kê "bỏ qua". Đơn đã paid không nằm
+   * trong cả hai danh sách (không phải đối tượng nhắc).
+   */
+  async listPaymentsForReminder({ now = Date.now(), cooldownMs = PAYMENT_REMINDER_COOLDOWN_MS } = {}) {
+    const data = await this._load();
+    const cutoff = now - cooldownMs;
+    const due = [];
+    const skipped = [];
+    for (const entry of data.pendingPayments) {
+      if (entry.paidAt) continue;
+      if (!normalizeEmail(entry.email)) {
+        skipped.push(entry);
+        continue;
+      }
+      const last = entry.lastRemindedAt ? Date.parse(entry.lastRemindedAt) : 0;
+      if (Number.isFinite(last) && last > cutoff) {
+        skipped.push(entry);
+        continue;
+      }
+      due.push(entry);
+    }
+    return { due, skipped };
+  }
+
+  /** Ghi mốc thời gian nhắc gần nhất của một đơn (dùng cho cooldown 24h). */
+  async markPaymentReminded(orderCode) {
+    const data = await this._load();
+    const entry = data.pendingPayments.find((e) => e.orderCode === Number(orderCode));
+    if (!entry) return null;
+    entry.lastRemindedAt = new Date().toISOString();
+    await this._save(data);
+    return entry;
   }
 
   /**

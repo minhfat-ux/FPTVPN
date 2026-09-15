@@ -24,6 +24,10 @@ const REQUIRED_IN_INDEX = [
   ["cờ QR tự chứa số tiền + nội dung", "selfContained: true"],
   ["trang tình trạng chuyển khoản", "/buy/status/:orderCode"],
   ["giữ đơn sau khi thanh toán (không xoá)", "markPendingPaymentPaid(evt.orderCode)"],
+  ["route xoá đơn chưa thanh toán", 'app.delete("/v1/admin/payments/:orderCode", requireAdminAuth'],
+  ["route xoá tất cả đơn chưa thanh toán", 'app.delete("/v1/admin/payments", requireAdminAuth'],
+  ["route nhắc chuyển tiền (dry-run được)", 'app.post("/v1/admin/payments/remind", requireAdminAuth'],
+  ["dry-run nhắc chuyển tiền không gửi mail thật", 'req.query?.dry === "1"'],
 ];
 
 const paymentsSource = fs.readFileSync(path.join(here, "../src/payments.js"), "utf8");

@@ -77,6 +77,12 @@ const T = {
     expiresAt: (when) => `Hết hạn: ${when}`,
     support: "Cần hỗ trợ? Liên hệ",
     renewHint: "Link mở sẵn trang thanh toán của bạn.",
+    remindSubject: (orderCode) => `Nhắc thanh toán đơn #${orderCode} — VPNFlow`,
+    remindIntro: "Bạn còn một đơn VPNFlow <b>chưa hoàn tất thanh toán</b>.",
+    remindBody: "Nếu bạn vẫn muốn sử dụng dịch vụ, hãy chuyển khoản theo thông tin đơn dưới đây rồi mở app bằng đúng email này để nhận Premium. Nếu bạn đã chuyển tiền, vui lòng bỏ qua email này — chúng tôi sẽ kích hoạt ngay khi nhận được.",
+    remindCta: "💳 Thanh toán ngay",
+    remindFor: (to) => `Tài khoản: <b>${to}</b>`,
+    remindHint: "Link mở sẵn trang thanh toán với email và gói của bạn.",
     iosReadySubject: "VPNFlow — bản cài cho iPhone của bạn đã sẵn sàng",
     iosReadyIntro: "Shop đã thêm mã thiết bị của bạn vào Apple và ký xong bản cài riêng. Bấm nút dưới để cài (nhớ mở bằng <b>Safari</b> trên chính iPhone/iPad đó).",
     iosReadyDevice: "Thiết bị",
@@ -131,6 +137,12 @@ const T = {
     expiresAt: (when) => `Expires: ${when}`,
     support: "Need help? Contact",
     renewHint: "The link opens your pre-filled checkout page.",
+    remindSubject: (orderCode) => `Payment reminder for order #${orderCode} — VPNFlow`,
+    remindIntro: "You have a VPNFlow order that has <b>not been paid yet</b>.",
+    remindBody: "If you still want the service, please complete the bank transfer using the order details below, then open the app with this same email to get Premium. If you have already paid, you can ignore this email — we will activate it as soon as the transfer arrives.",
+    remindCta: "💳 Pay now",
+    remindFor: (to) => `Account: <b>${to}</b>`,
+    remindHint: "The link opens your checkout page with the email and plan pre-filled.",
     iosReadySubject: "VPNFlow — your iPhone build is ready",
     iosReadyIntro: "We added your device ID to Apple and signed a build for it. Tap the button below to install (open it in <b>Safari</b> on that same iPhone/iPad).",
     iosReadyDevice: "Device",
@@ -185,6 +197,12 @@ const T = {
     expiresAt: (when) => `到期时间：${when}`,
     support: "需要帮助？请联系",
     renewHint: "该链接会打开已填好信息的支付页面。",
+    remindSubject: (orderCode) => `订单 #${orderCode} 付款提醒 — VPNFlow`,
+    remindIntro: "您有一笔 VPNFlow 订单<b>尚未完成付款</b>。",
+    remindBody: "如果您仍希望使用该服务，请按下方订单信息完成银行转账，然后用同一邮箱登录应用即可获得 Premium。若您已经付款，请忽略此邮件——我们收到款项后会立即激活。",
+    remindCta: "💳 立即付款",
+    remindFor: (to) => `账户：<b>${to}</b>`,
+    remindHint: "该链接会打开已填好邮箱和套餐的支付页面。",
     iosReadySubject: "VPNFlow — 您的 iPhone 安装包已就绪",
     iosReadyIntro: "我们已把您的设备码加入 Apple 并为该设备完成签名。请点击下面的按钮安装（请用该 iPhone/iPad 上的 <b>Safari</b> 打开）。",
     iosReadyDevice: "设备",
@@ -319,6 +337,38 @@ export function renderRenewalEmail({ lang = "vi", to, daysLeft, expiresAt, buyUr
 <p style="color:#666;font-size:12px">${t.renewHint}</p>
 ${buyUrl ? `<p><a href="${buyUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">${t.renewCta}</a></p>
 <p style="color:#666;font-size:12px;word-break:break-all">${buyUrl}</p>` : ""}
+<p style="color:#999;font-size:12px">${t.support} <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
+<p>${t.signature}</p>`),
+  };
+}
+
+/**
+ * Builds the "you still have an unpaid order — please transfer" reminder.
+ * Dùng chung bảng dịch `T` như các thư khác nên ja/ko tự rơi về tiếng Anh
+ * (xem pickMailLang) — không hard-code một ngôn ngữ.
+ */
+export function renderPaymentReminderEmail({ lang = "vi", to, orderCode, planLabel, amount, buyUrl }) {
+  const t = text(lang);
+  const rows = [
+    [t.orderCode, `#${orderCode}`],
+    [t.plan, planLabel ?? "-"],
+    [t.amount, `<b>${money(amount, lang)}</b>`],
+  ]
+    .map(
+      ([k, v], i) =>
+        `<tr style="background:${i % 2 ? "rgba(0,0,0,.04)" : "transparent"}"><th style="text-align:left;padding:8px;white-space:nowrap">${k}</th><td style="padding:8px">${v}</td></tr>`,
+    )
+    .join("");
+  return {
+    subject: t.remindSubject(orderCode),
+    html: shell(`<p>${t.greeting}</p>
+<p>${t.remindIntro}</p>
+<p>${t.remindFor(to)}</p>
+<table style="border-collapse:collapse;width:100%;max-width:460px">${rows}</table>
+<p>${t.remindBody}</p>
+${buyUrl ? `<p><a href="${buyUrl}" style="display:inline-block;background:#33c773;color:#06160d;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">${t.remindCta}</a></p>
+<p style="color:#666;font-size:12px;word-break:break-all">${buyUrl}</p>` : ""}
+<p style="color:#666;font-size:12px">${t.remindHint}</p>
 <p style="color:#999;font-size:12px">${t.support} <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
 <p>${t.signature}</p>`),
   };
@@ -562,6 +612,16 @@ export async function sendRenewalReminder({ to, lang, daysLeft, expiresAt, buyUr
     message: renderRenewalEmail({ lang, to, daysLeft, expiresAt, buyUrl }),
     logTag: "renewal",
     logContext: { to, daysLeft, lang: pickMailLang(lang) },
+  });
+}
+
+/** Nhắc khách còn đơn CHƯA chuyển tiền (localized, kèm link thanh toán điền sẵn). */
+export async function sendPaymentReminderEmail({ to, lang, orderCode, planLabel, amount, buyUrl }) {
+  return deliver({
+    to,
+    message: renderPaymentReminderEmail({ lang, to, orderCode, planLabel, amount, buyUrl }),
+    logTag: "payment-reminder",
+    logContext: { to, orderCode, lang: pickMailLang(lang) },
   });
 }
 

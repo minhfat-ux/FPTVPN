@@ -48,7 +48,9 @@ import {
   sendPaidAlert,
   sendUnmatchedTransferAlert,
   sendIosInstallReadyEmail,
+  sendPaymentReminderEmail,
 } from "./mailer.js";
+import { runPaymentReminders } from "./payment-reminders.js";
 import { AiAccessStore } from "./ai-access-store.js";
 import { AiUsersStore } from "./ai-users-store.js";
 import { AiStorePurchaseStore } from "./ai-store-purchases.js";
@@ -3568,6 +3570,73 @@ app.post("/v1/admin/payments/:orderCode/confirm", requireAdminAuth, async (req, 
     });
     res.json({ ok: true, email: order.email });
   } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Admin: xoá một đơn CHƯA thanh toán (dọn đơn rác/khách bỏ ngang). Đơn đã trả
+// tiền KHÔNG xoá được (409) — còn phải đối soát và trang trạng thái phải tiếp
+// tục báo "đã trả tiền" cho khách. 404 khi không có đơn; 401 do requireAdminAuth.
+app.delete("/v1/admin/payments/:orderCode", requireAdminAuth, async (req, res) => {
+  try {
+    const result = await authStore.deletePendingPayment(req.params.orderCode);
+    if (!result.ok) {
+      if (result.reason === "not_found") {
+        return res.status(404).json({ error: "Không tìm thấy đơn" });
+      }
+      return res.status(409).json({ error: "Đơn đã thanh toán/kích hoạt nên không thể xoá" });
+    }
+    // Chỉ log mã đơn + trạng thái; KHÔNG log email/token/secret.
+    console.log(`admin payments: deleted order ${result.order.orderCode} (status=unpaid)`);
+    res.json({ ok: true, orderCode: result.order.orderCode });
+  } catch (err) {
+    console.error("DELETE /v1/admin/payments/:orderCode failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Admin: xoá TẤT CẢ đơn chưa thanh toán (nút dọn nhanh trên dashboard).
+app.delete("/v1/admin/payments", requireAdminAuth, async (_req, res) => {
+  try {
+    const { removed } = await authStore.deleteUnpaidPendingPayments();
+    console.log(`admin payments: deleted ${removed} unpaid order(s)`);
+    res.json({ ok: true, removed });
+  } catch (err) {
+    console.error("DELETE /v1/admin/payments failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// Admin: gửi email nhắc chuyển tiền cho đơn CHƯA thanh toán. Cooldown 24h/đơn,
+// tối đa 50 đơn/lần. `?dry=1` (hoặc body {dry:true}) = chạy thử, KHÔNG gửi thật.
+// body {orderCode} = chỉ nhắc đúng một đơn (nút nhắc riêng từng dòng).
+app.post("/v1/admin/payments/remind", requireAdminAuth, async (req, res) => {
+  try {
+    const dry = req.query?.dry === "1" || req.query?.dry === "true" || req.body?.dry === true;
+    const onlyOrderCode = req.body?.orderCode ?? null;
+    const result = await runPaymentReminders({
+      store: authStore,
+      dry,
+      onlyOrderCode,
+      sendReminder: async ({ email, lang, orderCode, plan, amount, buyUrl }) =>
+        sendPaymentReminderEmail({
+          to: email,
+          lang,
+          orderCode,
+          planLabel: planNameFor(pickMailLang(lang), "vpn", plan),
+          amount,
+          buyUrl,
+        }),
+      buildBuyUrl: ({ email, plan, lang }) =>
+        `${siteBaseUrl()}/buy?lang=${lang}&email=${encodeURIComponent(email)}&plan=${encodeURIComponent(plan ?? "monthly")}`,
+      langForEmail: (email) => authStore.langForEmail(email),
+    });
+    console.log(
+      `admin payments: remind${dry ? " (dry-run)" : ""} sent=${result.sent} skipped=${result.skipped} failed=${result.failed}`,
+    );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("POST /v1/admin/payments/remind failed:", err);
     res.status(500).json({ error: "Internal error" });
   }
 });
