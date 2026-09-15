@@ -52,6 +52,15 @@ final class VPNManagerMac: ObservableObject {
 
     private var manager: NETunnelProviderManager?
     private var statusPollTask: Task<Void, Never>?
+    /// Poll trạng thái extension qua `sendProviderMessage` để bắt ca "Connected nhưng
+    /// không có mạng" (mã TUNNEL_NO_TRAFFIC) và hiện thông báo cho khách.
+    private var providerProbeTask: Task<Void, Never>?
+    /// Đã xử lý mã chẩn đoán cho lần Connect hiện tại chưa — chặn việc vừa hạ tunnel vừa
+    /// poll lại ngay khi NEVPNStatus còn kịp báo Connected.
+    private var diagnosticHandled = false
+    /// Đang hiện cảnh báo RELAY_URL_MISSING (lỗi cấu hình, KHÔNG hạ tunnel) để xoá đúng
+    /// lúc khi extension báo đường trực tiếp đã có traffic.
+    private var relayConfigWarningShown = false
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
     nonisolated(unsafe) private var hostObserver: NSObjectProtocol?
 
@@ -60,6 +69,9 @@ final class VPNManagerMac: ObservableObject {
 
     init() {
         VPNManagerMac.sharedForTerminate = self
+        // Dọn trạng thái cũ còn sót (cache tunnel/node của bản trước) để lần Connect đầu
+        // tiên sau khi cập nhật là một phiên sạch. Chạy đúng một lần nhờ marker.
+        StaleStateMigration.runIfNeeded()
         refreshPublicKey()
         selectedNodeID = UserDefaults.standard.string(forKey: "selectedNodeID")
         statusObserver = NotificationCenter.default.addObserver(
@@ -99,19 +111,108 @@ final class VPNManagerMac: ObservableObject {
             NotificationCenter.default.removeObserver(hostObserver)
         }
         statusPollTask?.cancel()
+        providerProbeTask?.cancel()
     }
 
     private func refreshStatus() {
+        // Extension đã báo "Connected nhưng không có mạng": giữ nguyên trạng thái Failed
+        // (kèm thông báo ở `lastError`) thay vì để NEVPNStatus kéo về "Disconnected" và
+        // làm banner lỗi biến mất. `connect()` sẽ đặt lại cờ này cho lần kết nối sau.
+        if diagnosticHandled {
+            state = "Failed"
+            stopProviderDiagnosticsPolling()
+            return
+        }
         guard let connection = manager?.connection else {
             if state != "Connecting…" && state != "Disconnecting…" {
                 state = "Disconnected"
             }
+            stopProviderDiagnosticsPolling()
             return
         }
         state = stateString(for: connection.status)
         if connection.status == .disconnected {
             overlayIP = nil
         }
+        switch connection.status {
+        case .connecting, .connected, .reasserting:
+            if !diagnosticHandled {
+                startProviderDiagnosticsPolling()
+            }
+        default:
+            stopProviderDiagnosticsPolling()
+        }
+    }
+
+    // MARK: - Provider diagnostics ("Connected nhưng không có mạng")
+
+    /// Hỏi extension trạng thái phiên mỗi 2s. Extension không có UI và NetworkExtension
+    /// không trả lỗi provider cho app, nên đây là cách duy nhất để biết tunnel "lên" mà
+    /// không có traffic và hiện thông báo tiếng Việt kèm mã chẩn đoán.
+    private func startProviderDiagnosticsPolling() {
+        guard providerProbeTask == nil else { return }
+        providerProbeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self else { return }
+                await self.probeProviderDiagnostics()
+            }
+        }
+    }
+
+    private func stopProviderDiagnosticsPolling() {
+        providerProbeTask?.cancel()
+        providerProbeTask = nil
+    }
+
+    private func probeProviderDiagnostics() async {
+        guard let session = manager?.connection as? NETunnelProviderSession else { return }
+        let report: TunnelStatusReport? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(Data()) { data in
+                    guard let data,
+                          let decoded = try? JSONDecoder().decode(TunnelStatusReport.self, from: data) else {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(returning: decoded)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        guard let report, let code = report.code else {
+            // Extension đã xoá mã (ví dụ đường UDP trực tiếp có traffic): gỡ cảnh báo cấu
+            // hình cũ để không hiện lỗi giả cho phiên đang chạy.
+            if relayConfigWarningShown {
+                relayConfigWarningShown = false
+                lastError = nil
+            }
+            return
+        }
+        // Thiếu relay URL là lỗi CẤU HÌNH, không phải tunnel chết: extension đã lui về UDP
+        // trực tiếp nên phiên có thể vẫn chạy. Chỉ hiện cảnh báo, KHÔNG hạ tunnel — hạ ở
+        // đây sẽ cắt ngang một phiên trực tiếp đang hoạt động.
+        if code == TunnelDiagnosticCode.relayURLMissing {
+            log.error("provider diagnostics: code=\(code, privacy: .public) session=\(report.session) transport=\(report.transport, privacy: .public)")
+            lastError = report.message ?? "Node không khai địa chỉ relay (mã \(code))."
+            relayConfigWarningShown = true
+            return
+        }
+        guard code == TunnelDiagnosticCode.noTraffic || code == TunnelDiagnosticCode.startFailed else {
+            return
+        }
+        log.error("provider diagnostics: code=\(code, privacy: .public) session=\(report.session) rx=\(report.rxBytes) tx=\(report.txBytes) transport=\(report.transport, privacy: .public)")
+        lastError = report.message ?? "Tunnel không có dữ liệu (mã \(code)). Vui lòng thử lại."
+        // Tunnel đã chết nhưng hệ thống vẫn báo Connected: hạ nó xuống để khách không bị
+        // treo ở trạng thái giả. Thông báo ở `lastError` vẫn giữ nguyên sau khi Disconnect.
+        diagnosticHandled = true
+        stopProviderDiagnosticsPolling()
+        refreshStatus()
+        // Tunnel đã chết: hạ nó xuống để không blackhole toàn bộ traffic (route 0.0.0.0/0
+        // qua utun mà không có mạng chính là bug khách báo). `diagnosticHandled` giữ
+        // trạng thái Failed + thông báo cho tới lần Connect kế tiếp.
+        manager?.connection.stopVPNTunnel()
     }
 
     private func stateString(for status: NEVPNStatus) -> String {
@@ -160,6 +261,9 @@ final class VPNManagerMac: ObservableObject {
         guard state != "Connecting…", state != "Disconnecting…" else { return }
         state = "Connecting…"
         lastError = nil
+        // Lần Connect mới: cho phép poll lại chẩn đoán của extension.
+        diagnosticHandled = false
+        relayConfigWarningShown = false
 
         let privateKey = WireGuardKeychain.loadOrCreatePrivateKey()
 
@@ -316,10 +420,14 @@ final class VPNManagerMac: ObservableObject {
         // Relay đi kèm config y như iOS: mạng bị chặn IP node thì extension tự đi qua relay
         // TCP (cạnh exit node) rồi tới relay WS của ĐÚNG node này (Tailscale Funnel) — thiếu
         // phần này thì macOS "Connected" mà không có mạng, đúng lỗi đo được 14/09.
+        // `relayURL` = wg_relay_url ?? ws_relay_url: control plane nay cấp relay WireGuard ở
+        // field mới `wg_relay_url` và để `ws_relay_url` = null (chỉ còn là bí danh cũ). Đọc
+        // thẳng `ws_relay_url` như trước ⇒ luôn nil ⇒ extension rơi vào relay mặc định của
+        // node KHÁC và WireGuard im lặng (đúng log "this node declared no relay URL").
         try await prepareConfiguration(
             config,
             nodeId: node.id,
-            wsRelayURL: node.ws_relay_url
+            wsRelayURL: node.relayURL
         )
         guard let manager else {
             throw MacError.savedConfigurationMissing

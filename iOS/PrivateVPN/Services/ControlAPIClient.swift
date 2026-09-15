@@ -74,23 +74,83 @@ extension ExitNode {
     ]
 }
 
+/// Mã chẩn đoán mà extension gửi cho app khi phiên tunnel "lên nhưng không có mạng".
+/// Khách nhìn thấy mã này trong thông báo lỗi để báo lại chính xác khi cần hỗ trợ.
+enum TunnelDiagnosticCode {
+    /// Tunnel báo Connected nhưng peer không nhận byte nào sau khi watchdog đã dựng
+    /// lại tối đa `maxWatchdogRebuilds` lần.
+    static let noTraffic = "TUNNEL_NO_TRAFFIC"
+    /// `adapter.start` thất bại (cấu hình sai, hết quyền, …).
+    static let startFailed = "TUNNEL_START_FAILED"
+    /// Node không khai relay URL (`wg_relay_url`/`ws_relay_url` đều thiếu) nên extension
+    /// KHÔNG được đoán relay mặc định: một relay chỉ hạ cánh ở một node, đi nhầm relay làm
+    /// WireGuard im lặng tuyệt đối. Đây là lỗi cấu hình, không phải lỗi mạng tạm thời.
+    static let relayURLMissing = "RELAY_URL_MISSING"
+}
+
+/// Bản báo cáo trạng thái phiên tunnel do extension gửi cho app qua `sendProviderMessage`
+/// (extension trả lời trong `handleAppMessage`).
+///
+/// Vì sao cần: extension không có UI, và NetworkExtension không đưa lỗi của provider cho
+/// app chứa nó. Nếu không có kênh này thì ca "Connected nhưng không có mạng" chỉ được ghi
+/// vào log mà khách không thấy gì — đúng cái phải sửa.
+///
+/// Struct nằm trong file dùng chung app + extension nên hai bên không lệch khoá JSON.
+struct TunnelStatusReport: Codable, Equatable {
+    /// Số phiên tăng dần trong tiến trình extension (mỗi lần start/rebuild +1).
+    var session: Int
+    /// "starting" | "up" | "rebuilding" | "no_traffic" | "failed" | "stopped" | "idle".
+    var state: String
+    /// Mã chẩn đoán (xem `TunnelDiagnosticCode`) — nil khi phiên bình thường.
+    var code: String?
+    /// Thông báo tiếng Việt cho người dùng khi có sự cố.
+    var message: String?
+    var rxBytes: Int
+    var txBytes: Int
+    /// Transport đang dùng: "relay" (TCP) | "ws-relay" (WebSocket) | "direct" (UDP).
+    var transport: String
+}
+
+/// Dọn trạng thái cũ còn sót lại từ các bản trước để lần Connect đầu tiên sau khi cập
+/// nhật là một phiên sạch.
+///
+/// Vì sao cần: bug "Connected nhưng không có mạng" đo trên macOS 15/09 — cache tunnel/node
+/// của phiên cũ (`cached.tunnelConfig.v1` / `cached.exitNodes.v1`) bị replay lại thay vì
+/// lấy cấu hình MỚI từ server, và profile VPN cũ còn treo song song. Dọn một lần rồi đặt
+/// marker để không xoá nhầm dữ liệu mới ghi sau đó.
+///
+/// Chạy ở app khởi động (`VPNManagerMac.init`) và tự chạy trước mọi lần đọc/ghi cache nên
+/// không phụ thuộc thứ tự khởi động của app hay extension.
+enum StaleStateMigration {
+    static let markerKey = "migration.staleTunnelState.v1"
+
+    static func runIfNeeded(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: markerKey) else { return }
+        ExitNodeCache.clear(defaults: defaults)
+        TunnelConfigCache.clear(defaults: defaults)
+        defaults.set(true, forKey: markerKey)
+    }
+}
+
 /// Persists the last successfully fetched node list so the picker still shows
 /// servers when the coordinator is temporarily unreachable.
 enum ExitNodeCache {
     private static let key = "cached.exitNodes.v1"
 
-    static func load() -> [ExitNode]? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+    static func load(defaults: UserDefaults = .standard) -> [ExitNode]? {
+        StaleStateMigration.runIfNeeded(defaults: defaults)
+        guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(NodesResponse.self, from: data).nodes
     }
 
-    static func save(_ nodes: [ExitNode]) {
+    static func save(_ nodes: [ExitNode], defaults: UserDefaults = .standard) {
+        StaleStateMigration.runIfNeeded(defaults: defaults)
         guard let data = try? JSONEncoder().encode(NodesResponse(nodes: nodes)) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        defaults.set(data, forKey: key)
     }
 
-    static func clear() {
-        UserDefaults.standard.removeObject(forKey: key)
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
     }
 }
 
@@ -107,19 +167,21 @@ struct CachedTunnelConfig: Equatable, Codable {
 enum TunnelConfigCache {
     private static let key = "cached.tunnelConfig.v1"
 
-    static func load() -> CachedTunnelConfig? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+    static func load(defaults: UserDefaults = .standard) -> CachedTunnelConfig? {
+        StaleStateMigration.runIfNeeded(defaults: defaults)
+        guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(CachedTunnelConfig.self, from: data)
     }
 
-    static func save(overlayIP: String, node: ExitNode) {
+    static func save(overlayIP: String, node: ExitNode, defaults: UserDefaults = .standard) {
+        StaleStateMigration.runIfNeeded(defaults: defaults)
         let config = CachedTunnelConfig(overlayIP: overlayIP, node: node, savedAt: Date())
         guard let data = try? JSONEncoder().encode(config) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        defaults.set(data, forKey: key)
     }
 
-    static func clear() {
-        UserDefaults.standard.removeObject(forKey: key)
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
     }
 }
 

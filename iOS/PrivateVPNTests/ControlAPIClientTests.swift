@@ -646,4 +646,44 @@ final class ControlAPIClientTests: XCTestCase {
         )
         XCTAssertNotEqual(first?.relayURL, second?.relayURL, "relay phải khác nhau theo từng node")
     }
+
+    // MARK: - Dọn trạng thái cũ
+
+    /// Máy đã cài bản trước còn cache tunnel/node: lần khởi động đầu của bản mới phải dọn
+    /// sạch để Connect lấy cấu hình MỚI, không replay cấu hình phiên cũ (nguồn của lỗi
+    /// "Connected nhưng không có mạng"). Dọn đúng MỘT lần, không xoá dữ liệu ghi sau đó.
+    func testStaleStateMigrationClearsLegacyCachesExactlyOnce() throws {
+        let suiteName = "StaleStateMigrationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let node = ExitNode(
+            id: "node-1",
+            name: "vietnam-1",
+            country: "VN",
+            city: "Hanoi",
+            endpoint: "103.173.155.50:443",
+            public_key: "pk1"
+        )
+        // Giả lập trạng thái còn sót của bản cũ.
+        defaults.set(
+            try JSONEncoder().encode(NodesResponse(nodes: [node])),
+            forKey: "cached.exitNodes.v1"
+        )
+        defaults.set(
+            try JSONEncoder().encode(CachedTunnelConfig(overlayIP: "10.77.0.9", node: node, savedAt: Date())),
+            forKey: "cached.tunnelConfig.v1"
+        )
+
+        StaleStateMigration.runIfNeeded(defaults: defaults)
+
+        XCTAssertNil(defaults.data(forKey: "cached.exitNodes.v1"), "cache node cũ phải bị dọn")
+        XCTAssertNil(defaults.data(forKey: "cached.tunnelConfig.v1"), "cache tunnel cũ phải bị dọn")
+        XCTAssertTrue(defaults.bool(forKey: StaleStateMigration.markerKey), "phải đặt marker đã dọn")
+
+        // Marker đã đặt: cache MỚI ghi sau đó không được xoá nữa.
+        ExitNodeCache.save([node], defaults: defaults)
+        StaleStateMigration.runIfNeeded(defaults: defaults)
+        XCTAssertNotNil(defaults.data(forKey: "cached.exitNodes.v1"), "không được dọn lần hai")
+    }
 }

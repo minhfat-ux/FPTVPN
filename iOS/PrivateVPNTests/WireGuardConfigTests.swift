@@ -84,6 +84,38 @@ final class WireGuardConfigTests: XCTestCase {
         XCTAssertNoThrow(try restoredConfig.makeTunnelConfiguration())
     }
 
+    /// App ghi `WireGuardConfig` vào `providerConfiguration["wireguard"]` bằng `JSONEncoder`,
+    /// extension đọc lại bằng `JSONDecoder` trên CÙNG struct (một file dùng chung), nên khoá
+    /// JSON phải khớp tuyệt đối. Test này chốt bất biến đó cho `wsRelayURL` — nếu ai đổi
+    /// CodingKeys ở một phía (hoặc tách struct) thì relay của node sẽ rơi về nil và extension
+    /// lại đoán relay mặc định, đúng lỗi "connect mà không có mạng".
+    func testRelayURLSurvivesAppToExtensionEncodeDecode() throws {
+        let key = try KeychainStore.obtainOrCreatePrivateKey()
+        let config = WireGuardConfig(
+            name: "privatevpn",
+            privateKeyBase64: key.base64Key,
+            addresses: ["10.77.0.2/24"],
+            dnsServers: ["1.1.1.1"],
+            peers: [
+                WireGuardConfig.WireGuardPeer(
+                    publicKeyBase64: key.publicKey.base64Key,
+                    endpoint: "165.101.114.162:443",
+                    allowedIPs: ["0.0.0.0/0"],
+                    preSharedKeyBase64: nil,
+                    persistentKeepAlive: 25
+                )
+            ],
+            nodeId: "vietnam-2",
+            wsRelayURL: "wss://fcnvpn.tail303be3.ts.net/vn2"
+        )
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(WireGuardConfig.self, from: data)
+
+        XCTAssertEqual(decoded.wsRelayURL, "wss://fcnvpn.tail303be3.ts.net/vn2")
+        XCTAssertEqual(decoded.nodeId, "vietnam-2")
+    }
+
     func testMakeTunnelConfigurationRejectsInvalidAddress() throws {
         let key = try KeychainStore.obtainOrCreatePrivateKey()
         let config = WireGuardConfig(
