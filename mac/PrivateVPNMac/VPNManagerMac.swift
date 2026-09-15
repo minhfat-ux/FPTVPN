@@ -35,7 +35,9 @@ final class VPNManagerMac: ObservableObject {
     @Published private(set) var state: String = "Disconnected"
     @Published private(set) var overlayIP: String?
     @Published var lastError: String?
-    @Published var coordinatorURL: String = "https://api.meetflowai.site"
+    /// Base URL control-plane đang dùng: host chính, hoặc host dự phòng đã được xác nhận
+    /// sống (sticky) — xem `ControlAPIHosts`. UI dùng giá trị này để dựng link web.
+    @Published var coordinatorURL: String = ControlAPIHosts.currentBaseURL.absoluteString
     @Published var devicePublicKey: String?
     /// Exit nodes advertised by the coordinator (list of selectable servers).
     @Published var exitNodes: [ExitNode] = []
@@ -51,6 +53,7 @@ final class VPNManagerMac: ObservableObject {
     private var manager: NETunnelProviderManager?
     private var statusPollTask: Task<Void, Never>?
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var hostObserver: NSObjectProtocol?
 
     /// Static ref cho AppDelegate (applicationWillTerminate -> disconnect).
     nonisolated(unsafe) static weak var sharedForTerminate: VPNManagerMac?
@@ -68,6 +71,18 @@ final class VPNManagerMac: ObservableObject {
                 self?.refreshStatus()
             }
         }
+        // Host dự phòng vừa được xác nhận sống (hoặc mạng đổi): giữ `coordinatorURL` khớp
+        // với host đang dùng để các link web (Mua/Điều khoản) trỏ đúng chỗ.
+        hostObserver = NotificationCenter.default.addObserver(
+            forName: .controlAPIHostDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let host = note.object as? URL else { return }
+            Task { @MainActor in
+                self?.coordinatorURL = host.absoluteString
+            }
+        }
         refreshStatus()
         Task {
             await loadManagerFromPreferences()
@@ -79,6 +94,9 @@ final class VPNManagerMac: ObservableObject {
     deinit {
         if let statusObserver {
             NotificationCenter.default.removeObserver(statusObserver)
+        }
+        if let hostObserver {
+            NotificationCenter.default.removeObserver(hostObserver)
         }
         statusPollTask?.cancel()
     }

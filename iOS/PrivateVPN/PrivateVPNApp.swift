@@ -19,6 +19,11 @@ struct PrivateVPNApp: App {
     @StateObject private var authStore = AuthSessionStore()
     @StateObject private var languageStore = AppLanguageStore()
 
+    init() {
+        // Đổi mạng (Wi-Fi ⇄ 4G) ⇒ quên host control-plane đang sticky để thử lại host chính.
+        ControlAPIHosts.startNetworkMonitoring()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

@@ -17,6 +17,11 @@ struct PrivateVPNMacApp: App {
     @StateObject private var languageStore = AppLanguageStore()
     @State private var showSettings = false
 
+    init() {
+        // Đổi mạng (Wi-Fi ⇄ 4G) ⇒ quên host control-plane đang sticky để thử lại host chính.
+        ControlAPIHosts.startNetworkMonitoring()
+    }
+
     var body: some Scene {
         // Main window with the iOS-style themed UI.
         WindowGroup {

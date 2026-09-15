@@ -13,7 +13,7 @@ struct ForceUpdateView: View {
     private var updateURL: URL? {
         let raw = info.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if !raw.isEmpty, let url = URL(string: raw) { return url }
-        return URL(string: "https://meetflowai.site/buy")
+        return ControlAPIHosts.webURL("buy")
     }
 
     var body: some View {

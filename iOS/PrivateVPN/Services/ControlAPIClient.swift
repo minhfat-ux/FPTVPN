@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// A peer known to the PrivateVPN coordinator (mesh). The app connects to the
 /// chosen exit node using this info.
@@ -251,30 +252,85 @@ enum WSRelayDefaults {
     static let nodeTwoURL = URL(string: "wss://fcnvpn.tail303be3.ts.net/vn2")!
 }
 
-/// Hosts the coordinator is reachable through. Defined here because this file is a
-/// source of both the app and the packet-tunnel extension, so `NodeHealthReporter`
-/// uses the very same fallback list.
+/// Hosts the coordinator is reachable through, plus the sticky host-selection logic
+/// shared by the app and the packet-tunnel extension.
+///
+/// Bối cảnh (15/09/2026): GFW chặn TLS handshake theo SNI của `api.meetflowai.site`
+/// dù IP vẫn là Cloudflare. Một hostname KHÁC cùng hạ tầng, `t1.meetflowai.site`,
+/// không bị chặn và phục vụ đầy đủ API lẫn trang web (đã đo). Vì vậy client thử host
+/// chính trước, lỗi MẠNG/timeout thì tự chuyển sang host dự phòng, và NHỚ host vừa
+/// chạy để các lời gọi sau không phải chờ lại host chết.
+///
+/// Defined here because this file is a source of both the app and the packet-tunnel
+/// extension, so `NodeHealthReporter` uses the very same host list and selection.
 enum ControlAPIHosts {
-    /// Fallback coordinator host: a fixed Tailscale Funnel URL that rides shared
-    /// infrastructure instead of a node's IP.
-    ///
-    /// Why this exists: the GFW blocks by IP, so once every node IP is blocked the
-    /// app cannot call the API at all even though the nodes are healthy. Blocking
-    /// this URL means blocking a range many unrelated services use. TLS still
-    /// validates the real hostname, so this only adds a route — it cannot be used
-    /// to redirect traffic.
+    /// Host CHÍNH.
+    static let primaryBaseURL = URL(string: "https://api.meetflowai.site")!
+
+    /// Apex dùng cho các TRANG WEB (mua/support/privacy/terms). `api.meetflowai.site`
+    /// chỉ phục vụ API; trang web nằm ở `meetflowai.site`.
+    static let webApexBaseURL = URL(string: "https://meetflowai.site")!
+
+    /// Host dự phòng, theo thứ tự ưu tiên.
+    /// - `t1.meetflowai.site`: cùng hạ tầng, SNI khác nên chưa bị GFW chặn; phục vụ cả
+    ///   API lẫn trang web (đo 15/09/2026).
+    /// - `fcnvpn.tail303be3.ts.net`: Funnel hạ tầng dùng chung — dự phòng khi IP bị
+    ///   chặn. Chặn URL này nghĩa là chặn cả một dải nhiều dịch vụ khác dùng, còn TLS
+    ///   vẫn xác thực đúng hostname nên đây chỉ là thêm đường đi, không thể dùng để
+    ///   chuyển hướng lưu lượng.
     static let fallbackBaseURLs: [URL] = [
+        URL(string: "https://t1.meetflowai.site")!,
         URL(string: "https://fcnvpn.tail303be3.ts.net")!,
     ]
 
-    /// Sends `request` to its own host and, after a transport failure (no response at all:
-    /// blocked IP, poisoned DNS, no route), retries the very same request against each
-    /// fallback host once.
+    /// Toàn bộ host theo thứ tự thử khi chưa biết host nào sống.
+    static let allBaseURLs: [URL] = [primaryBaseURL] + fallbackBaseURLs
+
+    /// Timeout mỗi lần thử host: ngắn để khi host bị chặn (kết nối treo) khách không phải
+    /// chờ lâu trước khi app đổi sang host khác.
+    static let probeTimeout: TimeInterval = 5
+
+    /// Bộ chọn host dùng chung: nhớ host đang sống (sticky) cho mọi request của app và
+    /// của packet-tunnel extension. `nonisolated(unsafe)` + lock nội bộ vì đây là trạng
+    /// thái toàn cục, không gắn với một actor nào.
+    nonisolated(unsafe) static var selector = ControlAPIHostSelector(hosts: allBaseURLs)
+
+    /// Host đang dùng được (sticky) hoặc host chính nếu chưa xác định.
+    static var currentBaseURL: URL { selector.currentBaseURL }
+
+    /// Host dựng link web: ưu tiên host sticky; riêng host chính (API-only) thì dùng apex.
+    ///
+    /// Ở mạng bị chặn (GFW), sticky là `t1.meetflowai.site` — host này phục vụ cả web nên
+    /// nút Mua/Điều khoản vẫn mở được, thay vì trỏ vào tên miền đã bị chặn.
+    static var webBaseURL: URL {
+        let current = selector.currentBaseURL
+        if current.host == primaryBaseURL.host { return webApexBaseURL }
+        return current
+    }
+
+    /// Dựng URL trang web trên host đang sống (mua/support/privacy/terms/update).
+    static func webURL(_ path: String, queryItems: [URLQueryItem] = []) -> URL {
+        var components = URLComponents(url: webBaseURL, resolvingAgainstBaseURL: false)
+        components?.path = path.hasPrefix("/") ? path : "/" + path
+        if !queryItems.isEmpty { components?.queryItems = queryItems }
+        return components?.url ?? webBaseURL
+    }
+
+    /// Bắt đầu theo dõi đổi mạng để quên host sticky và thử lại host chính. Gọi một lần
+    /// lúc app khởi động (không gọi trong packet-tunnel extension).
+    static func startNetworkMonitoring() {
+        ControlAPINetworkMonitor.shared.start()
+    }
+
+    /// Sends `request` to the host currently believed to work and, after a transport
+    /// failure (no response at all: blocked SNI/IP, poisoned DNS, no route), retries the
+    /// very same request against the remaining hosts once.
     ///
     /// An HTTP status is an answer, not a blocked route, so it is never retried — retrying
-    /// would repeat the side effect of a POST. The request is preserved as-is (method,
-    /// headers, body) and only scheme/host/port are swapped, so the path and query string
-    /// survive. Attempts stay bounded: the caller's host once plus each fallback host once.
+    /// would repeat the side effect of a POST (and a 401/403 is a real answer from a host
+    /// that was reachable). The request is preserved as-is (method, headers, body) and only
+    /// scheme/host/port are swapped, so the path and query string survive. Attempts stay
+    /// bounded: each configured host at most once.
     ///
     /// Shared by `ControlAPIClient` and `NodeHealthReporter`: the health report is sent
     /// from inside the censored network, so it is exactly the request that must still get
@@ -283,22 +339,129 @@ enum ControlAPIHosts {
         _ request: URLRequest,
         session: URLSession
     ) async throws -> (Data, URLResponse) {
-        var lastError: Error?
-        do {
-            return try await session.data(for: request)
-        } catch {
-            lastError = error
+        try await selector.send(request, session: session)
+    }
+}
+
+/// Chọn host control-plane và NHỚ host vừa thành công (sticky).
+///
+/// Vì sao cần sticky: nếu mỗi request đều thử host chính rồi mới sang dự phòng thì trên
+/// mạng đã chặn SNI, MỌI request đều phải chờ hết timeout host chính — chậm và tốn pin.
+/// Nhớ host vừa chạy giúp các request sau đi thẳng tới host đó; chỉ khi mạng đổi mới thử
+/// lại host chính.
+final class ControlAPIHostSelector: @unchecked Sendable {
+    private let hosts: [URL]
+    private let lock = NSLock()
+    private var stickyIndex: Int?
+
+    init(hosts: [URL]) {
+        self.hosts = hosts
+    }
+
+    /// Host đang dùng (sticky) hoặc host chính nếu chưa xác định.
+    var currentBaseURL: URL {
+        lock.lock(); defer { lock.unlock() }
+        if let stickyIndex, hosts.indices.contains(stickyIndex) {
+            return hosts[stickyIndex]
         }
-        for base in fallbackBaseURLs {
-            // Never hit the same host twice: the caller may already point at a fallback.
-            guard base.host != request.url?.host else { continue }
+        return hosts.first ?? ControlAPIHosts.primaryBaseURL
+    }
+
+    /// Quên host sticky — gọi khi mạng đổi (Wi-Fi ⇄ 4G) để thử lại host chính.
+    func reset() {
+        lock.lock(); defer { lock.unlock() }
+        stickyIndex = nil
+    }
+
+    /// Ghi host vừa thành công làm sticky (chỉ với host có trong danh sách cấu hình).
+    func noteSuccess(_ base: URL) {
+        lock.lock()
+        let index = hosts.firstIndex { $0.host == base.host }
+        let changed = index != nil && index != stickyIndex
+        if let index { stickyIndex = index }
+        let newHost = index.map { hosts[$0] }
+        lock.unlock()
+
+        guard changed, let newHost else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .controlAPIHostDidChange, object: newHost)
+        }
+    }
+
+    /// Thứ tự host cần thử: host sticky trước (nếu có), rồi tới host của chính request,
+    /// cuối cùng là danh sách host cấu hình. Mỗi host chỉ xuất hiện một lần.
+    private func attemptOrder(for request: URLRequest) -> [URL] {
+        lock.lock()
+        let sticky = stickyIndex.flatMap { hosts.indices.contains($0) ? hosts[$0] : nil }
+        lock.unlock()
+
+        var ordered: [URL] = []
+        func append(_ url: URL?) {
+            guard let url, let host = url.host else { return }
+            guard !ordered.contains(where: { $0.host == host }) else { return }
+            ordered.append(url)
+        }
+        append(sticky)
+        if let requestURL = request.url,
+           let scheme = requestURL.scheme,
+           let host = requestURL.host {
+            var components = URLComponents()
+            components.scheme = scheme
+            components.host = host
+            components.port = requestURL.port
+            append(components.url)
+        }
+        hosts.forEach { append($0) }
+        return ordered
+    }
+
+    /// Gửi request, tự đổi host khi lỗi transport và ghi nhớ host thành công.
+    func send(_ request: URLRequest, session: URLSession) async throws -> (Data, URLResponse) {
+        var lastError: Error?
+        for base in attemptOrder(for: request) {
+            var attempt = request.rewritten(to: base)
+            // Mọi lần thử đều ngắn: host bị chặn thường treo kết nối tới hết timeout, nên
+            // cắt ngắn để còn kịp đổi host.
+            attempt.timeoutInterval = min(attempt.timeoutInterval, ControlAPIHosts.probeTimeout)
             do {
-                return try await session.data(for: request.rewritten(to: base))
+                let result = try await session.data(for: attempt)
+                noteSuccess(base)
+                return result
             } catch {
                 lastError = error
             }
         }
         throw lastError ?? URLError(.cannotConnectToHost)
+    }
+}
+
+extension Notification.Name {
+    /// Phát khi host control-plane đang dùng đổi (sticky sang host khác).
+    static let controlAPIHostDidChange = Notification.Name("com.privatevpn.controlAPIHostDidChange")
+}
+
+/// Theo dõi đổi mạng (Wi-Fi ⇄ 4G, mất rồi có lại) để quên host sticky — mạng mới có thể
+/// chặn host cũ, nên lần gọi kế tiếp phải thử lại host chính.
+final class ControlAPINetworkMonitor: @unchecked Sendable {
+    static let shared = ControlAPINetworkMonitor()
+
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "com.privatevpn.control-api.network")
+    private let lock = NSLock()
+    private var started = false
+
+    private init() {}
+
+    func start() {
+        lock.lock()
+        guard !started else { lock.unlock(); return }
+        started = true
+        lock.unlock()
+
+        monitor.pathUpdateHandler = { _ in
+            ControlAPIHosts.selector.reset()
+        }
+        monitor.start(queue: queue)
     }
 }
 

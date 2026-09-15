@@ -292,16 +292,18 @@ struct SettingsView: View {
 
     private var supportSection: some View {
         Section(languageStore.t(.support)) {
-            Link(destination: URL(string: "https://meetflowai.site/support")!) {
+            // Link theo host control-plane đang sống (`ControlAPIHosts.webURL`): ở mạng bị
+            // GFW chặn, tên miền chính không mở được nên phải dùng host dự phòng.
+            Link(destination: ControlAPIHosts.webURL("support")) {
                 Label(languageStore.t(.contactSupport), systemImage: "questionmark.circle")
             }
 
-            Link(destination: URL(string: "https://meetflowai.site/FlowVPNPrivacy.html")!) {
+            Link(destination: ControlAPIHosts.webURL("FlowVPNPrivacy.html")) {
                 Label(languageStore.t(.privacyPolicy), systemImage: "hand.raised")
             }
 
             // Điều khoản RIÊNG của VPNFlow — /terms là điều khoản của MeetFlow AI.
-            Link(destination: URL(string: "https://meetflowai.site/vpnflow/terms")!) {
+            Link(destination: ControlAPIHosts.webURL("vpnflow/terms")) {
                 Label(languageStore.t(.termsOfUse), systemImage: "doc.text")
             }
         }
@@ -427,8 +429,12 @@ struct WebBuyPaywallView: View {
 
     private var buyURL: URL {
         // inapp=1: khách đã có app rồi ⇒ trang chỉ hiện ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN,
-        // không hiện khối tải/cài app (vô nghĩa trong paywall).
-        URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)&inapp=1")!
+        // không hiện khối tải/cài app (vô nghĩa trong paywall). Host lấy theo host đang
+        // sống để paywall vẫn mở được ở mạng bị chặn.
+        ControlAPIHosts.webURL("buy", queryItems: [
+            URLQueryItem(name: "lang", value: languageStore.language.rawValue),
+            URLQueryItem(name: "inapp", value: "1"),
+        ])
     }
 
     var body: some View {

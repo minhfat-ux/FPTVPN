@@ -23,8 +23,15 @@ final class ControlAPIClientTests: XCTestCase {
         )
     }
 
+    override func setUp() {
+        super.setUp()
+        // Bộ chọn host là trạng thái toàn cục (sticky): reset để mỗi test bắt đầu từ host chính.
+        ControlAPIHosts.selector.reset()
+    }
+
     override func tearDown() {
         MockURLProtocol.requestHandler = nil
+        ControlAPIHosts.selector.reset()
         super.tearDown()
     }
 
@@ -396,6 +403,115 @@ final class ControlAPIClientTests: XCTestCase {
         XCTAssertEqual(retried.value(forHTTPHeaderField: "Authorization"), "Bearer PVPN-AUTH-test")
         XCTAssertEqual(retried.value(forHTTPHeaderField: "Content-Type"), "application/json")
         XCTAssertEqual(bodyData(from: retried), Data(#"{"node_id":"node-1"}"#.utf8))
+    }
+
+    /// Host dự phòng đầu tiên phải là `t1.meetflowai.site` (SNI khác nên GFW chưa chặn),
+    /// trước Funnel — nếu đảo thứ tự, client sẽ chậm hơn ở mạng Trung Quốc.
+    func testFallbackHostListPrefersT1Hostname() throws {
+        XCTAssertEqual(ControlAPIHosts.fallbackBaseURLs.first?.host, "t1.meetflowai.site")
+        XCTAssertEqual(ControlAPIHosts.allBaseURLs.first?.host, "api.meetflowai.site")
+    }
+
+    /// 401 là câu trả lời thật của host đang tới được, KHÔNG phải lỗi mạng ⇒ không được
+    /// thử lại host dự phòng (thử lại POST còn lặp side effect).
+    func testHTTP401OnPrimaryIsNotRetriedOnFallbackHost() async throws {
+        let client = makeMockedClient()
+        var triedHosts: [String] = []
+        MockURLProtocol.requestHandler = { request in
+            triedHosts.append(request.url?.host ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"error":"unauthorized"}"#.utf8))
+        }
+
+        do {
+            _ = try await client.fetchEnrollmentToken(accessToken: "PVPN-AUTH-test")
+            XCTFail("Expected a ClientError for HTTP 401")
+        } catch let error as ControlAPIClient.ClientError {
+            guard case .server = error else {
+                return XCTFail("Expected .server error, got \(error)")
+            }
+        }
+        XCTAssertEqual(triedHosts, ["api.meetflowai.site"],
+                       "401 là câu trả lời, không phải mạng hỏng: không đổi host")
+    }
+
+    /// 403 (kể cả device_limit) cũng là câu trả lời thật ⇒ giữ nguyên host chính.
+    func testHTTP403OnPrimaryIsNotRetriedOnFallbackHost() async throws {
+        let client = makeMockedClient()
+        var triedHosts: [String] = []
+        MockURLProtocol.requestHandler = { request in
+            triedHosts.append(request.url?.host ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"error":"device_limit_reached","message":"too many"}"#.utf8))
+        }
+
+        _ = try? await client.register(
+            name: "ios", platform: "ios", wireguardPublicKey: "k", endpoint: "0.0.0.0:51820"
+        )
+        XCTAssertEqual(triedHosts, ["api.meetflowai.site"],
+                       "403 là câu trả lời, không phải mạng hỏng: không đổi host")
+    }
+
+    /// Sau khi host dự phòng chạy được, các lời gọi sau phải đi THẲNG host đó (sticky),
+    /// không thử lại host chính — nếu không, mỗi request lại phải chờ hết timeout.
+    func testStickyHostIsReusedAfterFallbackSucceeds() async throws {
+        let client = makeMockedClient()
+        let fallbackHost = try XCTUnwrap(ControlAPIHosts.fallbackBaseURLs.first?.host)
+        var triedHosts: [String] = []
+        MockURLProtocol.requestHandler = { request in
+            let host = request.url?.host ?? ""
+            triedHosts.append(host)
+            guard host == fallbackHost else { throw URLError(.cannotConnectToHost) }
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"token":"PVPN-ENROLL-sticky"}"#.utf8))
+        }
+
+        _ = try await client.fetchEnrollmentToken(accessToken: "PVPN-AUTH-test")
+        XCTAssertEqual(triedHosts, ["api.meetflowai.site", fallbackHost],
+                       "lần đầu: thử host chính rồi mới sang dự phòng")
+        XCTAssertEqual(ControlAPIHosts.currentBaseURL.host, fallbackHost)
+
+        triedHosts.removeAll()
+        _ = try await client.fetchEnrollmentToken(accessToken: "PVPN-AUTH-test")
+        XCTAssertEqual(triedHosts, [fallbackHost],
+                       "host đã thành công phải được dùng tiếp, không thử lại host chính")
+    }
+
+    /// Đổi mạng ⇒ quên host sticky, lần gọi kế tiếp thử lại host chính (mạng mới có thể
+    /// không chặn host cũ, và ngược lại).
+    func testNetworkChangeResetsStickyHost() throws {
+        let fallback = try XCTUnwrap(ControlAPIHosts.fallbackBaseURLs.first)
+        ControlAPIHosts.selector.noteSuccess(fallback)
+        XCTAssertEqual(ControlAPIHosts.currentBaseURL.host, fallback.host)
+
+        ControlAPIHosts.selector.reset()
+        XCTAssertEqual(ControlAPIHosts.currentBaseURL.host, "api.meetflowai.site",
+                       "sau khi mạng đổi phải thử lại host chính")
+    }
+
+    /// Link web (Mua/Điều khoản) đi theo host đang sống: mặc định là apex, nhưng khi đang
+    /// chạy trên host dự phòng (mạng bị chặn) thì trỏ thẳng host đó để vẫn mở được.
+    func testWebLinksFollowStickyHost() throws {
+        XCTAssertEqual(ControlAPIHosts.webBaseURL.host, "meetflowai.site",
+                       "host chính là API-only nên link web mặc định dùng apex")
+
+        let fallback = try XCTUnwrap(ControlAPIHosts.fallbackBaseURLs.first)
+        ControlAPIHosts.selector.noteSuccess(fallback)
+
+        let buy = ControlAPIHosts.webURL("buy", queryItems: [
+            URLQueryItem(name: "lang", value: "vi"),
+            URLQueryItem(name: "inapp", value: "1"),
+        ])
+        XCTAssertEqual(buy.host, fallback.host)
+        XCTAssertEqual(buy.path, "/buy")
+        XCTAssertEqual(buy.query, "lang=vi&inapp=1")
+        XCTAssertEqual(ControlAPIHosts.webURL("support").host, fallback.host)
     }
 
     // MARK: - Health report (NodeHealthReporter's send path)

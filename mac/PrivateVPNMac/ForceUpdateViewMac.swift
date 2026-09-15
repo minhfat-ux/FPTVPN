@@ -35,8 +35,8 @@ struct ForceUpdateViewMac: View {
                     // Không còn App Store: server trả link tải IPA trong `store_url`. Nếu
                     // rỗng thì lùi về trang mua/tải của mình, đừng để nút bấm không mở gì.
                     let raw = info.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let url = URL(string: raw) ?? URL(string: "https://meetflowai.site/buy")
-                    if let url { NSWorkspace.shared.open(url) }
+                    let url = URL(string: raw) ?? ControlAPIHosts.webURL("buy")
+                    NSWorkspace.shared.open(url)
                 } label: {
                     Text(languageStore.t(.update))
                         .font(.headline.bold())
