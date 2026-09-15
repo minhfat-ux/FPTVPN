@@ -5,6 +5,7 @@ import {
   androidVersionPayload,
   iosVersionPayload,
   isAndroidClient,
+  isWindowsClient,
   versionPayloadFor,
   wantsLegacyApk,
 } from "../src/app-version.js";
@@ -163,4 +164,47 @@ test("link tải: cấu hình trong dashboard thắng env, và luôn có đườ
   // Bật/tắt Diawi không cần sửa code, chỉ cần PATCH cấu hình
   const admin = indexSrc.slice(indexSrc.indexOf('app.patch("/v1/admin/app-version"'), indexSrc.indexOf('app.patch("/v1/admin/app-version"') + 1200);
   assert.ok(admin.includes("ipa_url"), "API admin phải cho đổi link IPA");
+});
+
+// ---- Kênh Windows (bộ cài Inno Setup) -------------------------------------------------
+test("platform=windows → payload kênh Windows, KHÔNG lẫn sang iOS/Android", () => {
+  const payload = versionPayloadFor(req({ platform: "windows" }), {
+    read: reader({ windows_latest_version: "1.0.0", windows_minimum_version: "1.0.0" }),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(payload.platform, "windows");
+  assert.equal(payload.latest_version, "1.0.0");
+  assert.equal(payload.minimum_version, "1.0.0");
+  assert.equal(payload.installer_url, "https://meetflowai.site/dl/VPNFlow-Setup-latest.exe");
+  // App đang cài sẵn chỉ đọc store_url — để rỗng là nút "Cập nhật" bấm không mở gì.
+  assert.equal(payload.store_url, payload.installer_url);
+});
+
+test("UA Windows (không gửi platform) vẫn nhận kênh Windows; UA Android vẫn là Android", () => {
+  const fromUa = versionPayloadFor(req({ userAgent: "VPNFlow/1.0 (Windows NT 10.0; Win64; x64)" }), {
+    read: reader({}),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(fromUa.platform, "windows");
+
+  const android = versionPayloadFor(req({ userAgent: "okhttp/4.12.0" }), {
+    read: reader({}),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(android.platform, "android");
+
+  const ios = versionPayloadFor(req({ userAgent: "CFNetwork/1494.0.7 Darwin/23.4.0" }), {
+    read: reader({}),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(ios.platform, "ios");
+});
+
+test("installer_url đặt từ appConfig được ưu tiên hơn link mặc định", () => {
+  const payload = versionPayloadFor(req({ platform: "windows" }), {
+    read: reader({ windows_installer_url: "https://cdn.example.com/VPNFlow-Setup-9.9.9.exe" }),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(payload.installer_url, "https://cdn.example.com/VPNFlow-Setup-9.9.9.exe");
+  assert.equal(payload.store_url, "https://cdn.example.com/VPNFlow-Setup-9.9.9.exe");
 });

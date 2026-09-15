@@ -399,7 +399,7 @@ const TEXTS = {
     dlTitle: "Get the VPNFlow app",
     dlSub: "Don't have the app yet? Choose your platform:",
     androidTitle: "Download the APK directly", androidTop: "Download for Android", androidBadge: "APK", iosTop: "Download for iPhone / iPad", iosBadge: "iOS (IPA)",
-    macTop: "Download for Mac", macBadge: "macOS",
+    macTop: "Download for Mac", macBadge: "macOS", windowsTop: "Download for Windows", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / older device",
     androidLegacySub: "APK for Android 7.0 and 7.1 — Fire TV Stick 4K, older phones and TVs",
     emailLabel: "Your VPNFlow account email",
@@ -428,7 +428,7 @@ const TEXTS = {
     macAdhocSteps: ["Download the .zip installer above and open it.", "Drag <b>VPNFlow</b> into the <b>Applications</b> folder.", "If macOS says it can't verify the developer: <b>right-click</b> the app → <b>Open</b> → <b>Open</b> again, or go to <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "Open VPNFlow, sign in with the purchase email, click <b>Allow</b> when macOS asks for VPN configuration, then click <b>Connect</b>."],
     iosLineStore: "Available on the App Store — install it, then sign in with the same email you used here; Premium unlocks automatically.",
     iosLineSoon: "iOS version is coming soon.",
-    androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.",
+    androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.", windowsLine: "Windows must be installed directly: download the installer above, run it (it asks for admin rights to create the tunnel), then open the app and sign in with the SAME email.",
     steps: ["Download and install the app (iOS: the IPA above · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
         cnyNote: "WeChat Pay / Alipay settle in CNY — the ¥ amount is converted at",
         cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
@@ -479,7 +479,7 @@ const TEXTS = {
     dlTitle: "Tải app VPNFlow",
     dlSub: "Chưa có app? Chọn nền tảng của bạn:",
     androidTitle: "Tải APK trực tiếp", androidTop: "Tải cho Android", androidBadge: "APK", iosTop: "Tải cho iPhone / iPad", iosBadge: "iOS (IPA)",
-    macTop: "Tải cho Mac", macBadge: "macOS",
+    macTop: "Tải cho Mac", macBadge: "macOS", windowsTop: "Tải cho Windows", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / máy cũ",
     androidLegacySub: "APK cho Android 7.0 và 7.1 — Fire TV Stick 4K, điện thoại và TV đời cũ",
     emailLabel: "Email tài khoản VPNFlow",
@@ -508,7 +508,7 @@ const TEXTS = {
     macAdhocSteps: ["Tải file cài .zip ở trên rồi mở ra.", "Kéo <b>VPNFlow</b> vào thư mục <b>Applications</b> (Ứng dụng).", "Nếu macOS báo “không xác minh được nhà phát triển”: <b>chuột phải</b> vào app → <b>Open</b> → <b>Open</b> lần nữa, hoặc vào <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "Mở VPNFlow, đăng nhập bằng email đã mua, bấm <b>Allow</b> khi macOS hỏi cấu hình VPN rồi bấm <b>Connect</b>."],
     iosLineStore: "Đã có trên App Store — tải về, rồi đăng nhập bằng đúng email bạn dùng ở trang này; Premium tự bật.",
     iosLineSoon: "Bản iOS sẽ sớm được phát hành.",
-    androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.",
+    androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.", windowsLine: "Windows cũng cài trực tiếp: tải bộ cài ở trên, chạy file (app xin quyền admin để dựng tunnel), rồi mở app và đăng nhập bằng ĐÚNG email này.",
     steps: ["Tải và cài app (iOS: file IPA ở trên · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
         cnyNote: "WeChat Pay / Alipay thanh toán bằng CNY (Nhân dân tệ) — số ¥ quy đổi theo tỷ giá",
         cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
@@ -559,7 +559,7 @@ const TEXTS = {
     dlTitle: "获取 VPNFlow 应用",
     dlSub: "还没有应用？选择您的平台：",
     androidTitle: "直接下载 APK", androidTop: "下载 Android 版", androidBadge: "APK", iosTop: "下载 iPhone / iPad 版", iosBadge: "iOS (IPA)",
-    macTop: "下载 Mac 版", macBadge: "macOS",
+    macTop: "下载 Mac 版", macBadge: "macOS", windowsTop: "下载 Windows 版", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / 旧设备",
     androidLegacySub: "适用于 Android 7.0 与 7.1 的 APK — Fire TV Stick 4K、旧款手机与电视",
     emailLabel: "您的 VPNFlow 账户邮箱",
@@ -588,7 +588,7 @@ const TEXTS = {
     macAdhocSteps: ["下载上方 .zip 安装包并打开。", "将 <b>VPNFlow</b> 拖入 <b>Applications（应用程序）</b>文件夹。", "若 macOS 提示“无法验证开发者”：<b>右键</b>点击应用 → <b>Open</b> → 再点一次 <b>Open</b>，或进入 <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>。", "打开 VPNFlow，使用购买邮箱登录，macOS 询问配置 VPN 时点 <b>Allow</b>，然后点 <b>Connect</b>。"],
     iosLineStore: "已在 App Store 上架 — 下载后使用本页填写的同一邮箱登录，Premium 自动开启。",
     iosLineSoon: "iOS 版本即将发布。",
-    androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。",
+    androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。", windowsLine: "Windows 也需要直接安装：下载上面的安装包并运行（创建隧道时会请求管理员权限），然后打开应用，用同一个邮箱登录。",
     steps: ["下载并安装应用（iOS：上方 IPA · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
         cnyNote: "微信支付 / 支付宝以人民币（CNY）结算 — 金额按以下汇率换算：",
         cnyEnter: "支付时请输入二维码上显示的人民币金额。",
@@ -639,7 +639,7 @@ const TEXTS = {
     dlTitle: "VPNFlowアプリを入手",
     dlSub: "アプリをお持ちでない場合：プラットフォームを選択",
     androidTitle: "APK を直接ダウンロード", androidTop: "Android 版をダウンロード", androidBadge: "APK", iosTop: "iPhone / iPad 版をダウンロード", iosBadge: "iOS (IPA)",
-    macTop: "Mac 版をダウンロード", macBadge: "macOS",
+    macTop: "Mac 版をダウンロード", macBadge: "macOS", windowsTop: "Windows 版をダウンロード", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / 旧端末",
     androidLegacySub: "Android 7.0 / 7.1 用 APK — Fire TV Stick 4K、旧型スマホ・テレビ",
     emailLabel: "VPNFlowアカウントのメール",
@@ -668,7 +668,7 @@ const TEXTS = {
     macAdhocSteps: ["上の .zip インストーラをダウンロードして開きます。", "<b>VPNFlow</b> を <b>Applications（アプリケーション）</b>フォルダへドラッグ。", "「開発元を確認できない」と出たら：アプリを<b>右クリック</b> → <b>Open</b> → もう一度 <b>Open</b>、または <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>。", "VPNFlow を開き、購入時のメールでサインインし、VPN 構成の許可を求められたら <b>Allow</b> をクリックして <b>Connect</b>。"],
     iosLineStore: "App Store で配信中 — インストール後、このページで使った同じメールでサインインすると Premium が有効になります。",
     iosLineSoon: "iOS 版は近日公開予定です。",
-    androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。",
+    androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。", windowsLine: "Windows も直接インストールします。上のインストーラーをダウンロードして実行し（トンネル作成のため管理者権限を求められます）、アプリを開いて同じメールでサインインしてください。",
     steps: ["アプリをダウンロードしてインストール（iOS：上の IPA · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
         cnyNote: "WeChat Pay / Alipay は人民元（CNY）決済です — 金額は次のレートで換算：",
         cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
@@ -719,7 +719,7 @@ const TEXTS = {
     dlTitle: "VPNFlow 앱 받기",
     dlSub: "아직 앱이 없으신가요? 플랫폼을 선택하세요:",
     androidTitle: "APK 직접 다운로드", androidTop: "Android용 다운로드", androidBadge: "APK", iosTop: "iPhone / iPad용 다운로드", iosBadge: "iOS (IPA)",
-    macTop: "Mac용 다운로드", macBadge: "macOS",
+    macTop: "Mac용 다운로드", macBadge: "macOS", windowsTop: "Windows용 다운로드", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / 구형 기기",
     androidLegacySub: "Android 7.0 / 7.1용 APK — Fire TV Stick 4K, 구형 휴대폰·TV",
     emailLabel: "VPNFlow 계정 이메일",
@@ -748,7 +748,7 @@ const TEXTS = {
     macAdhocSteps: ["위의 .zip 설치 파일을 내려받아 엽니다.", "<b>VPNFlow</b>를 <b>Applications(응용 프로그램)</b> 폴더로 드래그하세요.", "“개발자를 확인할 수 없습니다”가 뜨면: 앱을 <b>오른쪽 클릭</b> → <b>Open</b> → 다시 <b>Open</b>, 또는 <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "VPNFlow를 열고 구매 이메일로 로그인한 뒤, macOS가 VPN 구성을 물으면 <b>Allow</b>를 누르고 <b>Connect</b>를 클릭하세요."],
     iosLineStore: "App Store에서 제공 중 — 설치 후 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동으로 활성화됩니다.",
     iosLineSoon: "iOS 버전이 곧 출시됩니다.",
-    androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.",
+    androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.", windowsLine: "Windows도 직접 설치합니다. 위 설치 파일을 내려받아 실행하고(터널 생성에 관리자 권한이 필요합니다), 앱을 열어 같은 이메일로 로그인하세요.",
     steps: ["앱을 내려받아 설치합니다 (iOS: 위의 IPA · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
         cnyNote: "WeChat Pay / Alipay는 위안화(CNY) 결제입니다 — 금액은 다음 환율로 환산:",
         cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
@@ -1195,7 +1195,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   // khi không có link store thật, badge Mac trỏ về trang hướng dẫn /install/mac
   // (giống cách iOS trỏ /install/ios qua iosAdhocUrl). Chỉ áp dụng cho VPNFlow.
   const macAdhocUrl = product === "vpn" ? (links.macAdhoc || `${baseUrl}/install/mac`) : (links.macAdhoc || null);
-  const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl || macAdhocUrl);
+  // Bộ cài Windows 1-click (Inno Setup), phát từ shop. Link cố định "-latest" nên trang
+  // /buy không phải sửa mỗi lần ra bản mới; chỉ hiện cho kênh VPNFlow.
+  const windowsUrl = product === "vpn" ? (links.windows || `${baseUrl}/dl/VPNFlow-Setup-latest.exe`) : null;
+  const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl || macAdhocUrl || windowsUrl);
   // Activation instructions adapt to how iOS is distributed right now.
   // Bản iOS phát bằng IPA từ server mình (không qua App Store), nên chỉ dùng câu
   // "Available on the App Store" khi link ios THỰC SỰ là link store. Link trỏ về
@@ -1503,6 +1506,19 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.androidBadge}</text>
           </svg>
         </a>` : ""}
+        ${windowsUrl ? `<a href="${windowsUrl}" target="_blank" rel="noopener" title="${t.windowsTop}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(13 14)">
+              <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022"/>
+              <rect x="12" y="0" width="10.5" height="10.5" fill="#7FBA00"/>
+              <rect x="0" y="12" width="10.5" height="10.5" fill="#00A4EF"/>
+              <rect x="12" y="12" width="10.5" height="10.5" fill="#FFB900"/>
+            </g>
+            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.windowsTop}</text>
+            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.windowsBadge}</text>
+          </svg>
+        </a>` : ""}
         ${androidLegacyUrl ? `<a href="${androidLegacyUrl}" target="_blank" rel="noopener" title="${t.androidLegacySub}">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
             <rect width="170" height="54" rx="8" fill="#0b0b0d" stroke="rgba(255,255,255,.18)"/>
@@ -1571,6 +1587,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <div class="howto-title">📱 ${t.howToTitle}</div>
       <div class="howto-row"><span class="plat">iOS</span><span>${iosLine}</span></div>
       <div class="howto-row"><span class="plat">Android</span><span>${t.androidLine}</span></div>
+      ${windowsUrl ? `<div class="howto-row"><span class="plat">Windows</span><span>${t.windowsLine}</span></div>` : ""}
       <ol class="howto-steps">
         ${howToSteps.map((step) => `<li>${step}</li>`).join("")}
       </ol>

@@ -16,6 +16,20 @@
 /** APK sideload clients (OkHttp) và bất kỳ UA Android nào. */
 const ANDROID_UA = /android|okhttp|vpnflow-android/i;
 
+/**
+ * Client Windows (app .NET/Avalonia gửi `platform=windows`) và UA của trình duyệt/app trên
+ * Windows (`Windows NT`). Bộ cài là file .exe Inno Setup phát trực tiếp từ shop.
+ */
+const WINDOWS_UA = /windows|win32|vpnflow-windows/i;
+
+/** Client này có phải kênh Windows không? */
+export function isWindowsClient({ platform, userAgent } = {}) {
+  const explicit = String(platform ?? "").trim().toLowerCase();
+  if (explicit === "windows" || explicit === "win32" || explicit === "win") return true;
+  if (explicit === "android" || explicit === "ios" || explicit === "macos") return false;
+  return WINDOWS_UA.test(String(userAgent ?? ""));
+}
+
 /** Client này có phải kênh Android (APK) không? */
 export function isAndroidClient({ platform, userAgent } = {}) {
   const explicit = String(platform ?? "").trim().toLowerCase();
@@ -62,6 +76,25 @@ export function iosVersionPayload(read, { baseUrl = "" } = {}) {
 }
 
 /**
+ * Kênh Windows — bộ cài 1-click (Inno Setup) phát trực tiếp từ shop.
+ *
+ * `store_url` cố ý bằng `installer_url` (giống iOS/Android): app đang cài sẵn chỉ đọc
+ * `store_url`, để rỗng thì nút "Cập nhật" trong app bấm không mở gì.
+ */
+export function windowsVersionPayload(read, { baseUrl = "" } = {}) {
+  const site = String(baseUrl ?? "").replace(/\/$/, "");
+  const installerUrl = read("windows_installer_url") || `${site}/dl/VPNFlow-Setup-latest.exe`;
+  return {
+    platform: "windows",
+    minimum_version: read("windows_minimum_version") ?? "0.0.0",
+    latest_version: read("windows_latest_version") ?? "0.0.0",
+    installer_url: installerUrl,
+    store_url: installerUrl,
+    install_page_url: `${site}/buy`,
+  };
+}
+
+/**
  * Kênh Android (APK sideload).
  *
  * `store_url` cố ý bằng `apk_url`: bản cũ (≤ 1.2.4) chỉ đọc `store_url`, nếu để rỗng thì
@@ -90,7 +123,11 @@ export function versionPayloadFor(req, { read, baseUrl = "" } = {}) {
   const userAgent = typeof req?.get === "function"
     ? req.get("user-agent")
     : req?.headers?.["user-agent"];
-  const android = isAndroidClient({ platform: req?.query?.platform, userAgent });
+  const platform = req?.query?.platform;
+  if (isWindowsClient({ platform, userAgent })) {
+    return windowsVersionPayload(read, { baseUrl });
+  }
+  const android = isAndroidClient({ platform, userAgent });
   return android ? androidVersionPayload(read, { baseUrl }) : iosVersionPayload(read, { baseUrl });
 }
 

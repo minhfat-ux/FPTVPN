@@ -113,3 +113,47 @@ test("trang buy mở TRONG APP (paywall): chỉ đăng ký tài khoản + thanh 
   });
   assert.ok(web.includes('<div class="dl-section">'), "trang web thường vẫn phải có khối tải app");
 });
+
+// ---- Windows: bộ cài 1-click (Inno Setup) ---------------------------------------------
+test("trang buy có nút tải Windows trỏ link cố định -latest", () => {
+  const html = page("vi");
+  const m = html.match(/<a href="([^"]*)"[^>]*title="Tải cho Windows"/);
+  assert.ok(m, "không thấy nút tải Windows trên trang buy");
+  assert.equal(m[1], "https://meetflowai.site/dl/VPNFlow-Setup-latest.exe");
+  assert.match(html, /Windows 10\/11/, "thiếu nhãn Windows 10/11 dưới nút");
+});
+
+test("link Windows đặt từ cấu hình (links.windows) được ưu tiên", () => {
+  const html = page("en", { windows: "https://cdn.example.com/VPNFlow-Setup-2.0.0.exe" });
+  const m = html.match(/<a href="([^"]*)"[^>]*title="Download for Windows"/);
+  assert.ok(m, "không thấy nút tải Windows (bản en)");
+  assert.equal(m[1], "https://cdn.example.com/VPNFlow-Setup-2.0.0.exe");
+});
+
+test("mỗi ngôn ngữ có dòng hướng dẫn cài Windows riêng", () => {
+  const expected = {
+    en: /Windows must be installed directly/,
+    vi: /Windows cũng cài trực tiếp/,
+    zh: /Windows 也需要直接安装/,
+    ja: /Windows も直接インストール/,
+    ko: /Windows도 직접 설치합니다/,
+  };
+  for (const [lang, pattern] of Object.entries(expected)) {
+    const html = page(lang);
+    const row = html.match(/class="plat">Windows<\/span><span>(.*?)<\/span>/s);
+    assert.ok(row, `thiếu dòng hướng dẫn Windows cho ngôn ngữ ${lang}`);
+    assert.match(row[1], pattern, `nội dung hướng dẫn Windows sai ở ${lang}`);
+  }
+});
+
+test("trang buy của MeetFlow AI KHÔNG hiện bộ cài Windows của VPNFlow", () => {
+  const html = buyPageHTML({
+    baseUrl: "https://meetflowai.site",
+    lang: "vi",
+    product: "ai",
+    methods: ["bankqr"],
+    links: {},
+  });
+  assert.doesNotMatch(html, /VPNFlow-Setup-latest\.exe/, "kênh AI không được quảng cáo bộ cài VPNFlow");
+  assert.doesNotMatch(html, /class="plat">Windows<\/span>/, "kênh AI không được có dòng hướng dẫn Windows");
+});

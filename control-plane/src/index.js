@@ -532,6 +532,10 @@ function storeLinks(product) {
         android: appConfig.get("android_apk_url") || `${base}/v1/downloads/android`,
         // Android 7.0+ build for Fire TV / older devices (see the route below).
         androidLegacy: appConfig.get("android_apk_url_legacy") || process.env.ANDROID_LEGACY_APK_URL || `${base}/v1/downloads/android-legacy`,
+        // Bộ cài Windows 1-click (Inno Setup) — sinh bởi windows/installer/build.ps1 rồi
+        // upload-windows-release.sh đặt vào /dl/. Link cố định "-latest" để trang /buy
+        // không phải sửa mỗi lần ra bản mới.
+        windows: appConfig.get("windows_installer_url") || process.env.WINDOWS_INSTALLER_URL || `${base}/dl/VPNFlow-Setup-latest.exe`,
       };
 }
 
@@ -1025,7 +1029,13 @@ app.post("/v1/ai/store/purchase", async (req, res) => {
     if (!productId) return res.status(400).json({ error: "Thiếu productId" });
 
     const platformRaw = String(body.platform ?? "android").toLowerCase();
-    const platform = platformRaw.includes("ios") || platformRaw.includes("apple") ? "ios" : "android";
+    // `windows` phải tách riêng: trước đây mọi nền tảng không phải iOS đều bị ghi là
+    // "android", nên thiết bị/billing của bản Windows lẫn vào nhóm Android.
+    const platform = platformRaw.includes("windows") || platformRaw.includes("win32")
+      ? "windows"
+      : platformRaw.includes("ios") || platformRaw.includes("apple")
+        ? "ios"
+        : "android";
     const email = String(body.email ?? "").trim();
 
     let row = await aiStorePurchaseStore.record({
@@ -4182,6 +4192,26 @@ app.patch("/v1/admin/android-version", requireAdminAuth, (req, res) => {
   if (apk_url !== undefined) appConfig.set("android_apk_url", apk_url);
   if (apk_url_legacy !== undefined) appConfig.set("android_apk_url_legacy", apk_url_legacy);
   res.json(vpnAndroidVersion());
+});
+
+/** Kênh phát hành Windows (bộ cài Inno Setup) — admin xem/sửa ngưỡng ép cập nhật. */
+function vpnWindowsVersion() {
+  return versionPayloadFor(
+    { query: { platform: "windows" } },
+    { read: (key) => appConfig.get(key), baseUrl: siteBaseUrl() },
+  );
+}
+
+app.get("/v1/admin/windows-version", requireAdminAuth, (_req, res) => {
+  res.json(vpnWindowsVersion());
+});
+
+app.patch("/v1/admin/windows-version", requireAdminAuth, (req, res) => {
+  const { latest_version, minimum_version, installer_url } = req.body ?? {};
+  if (latest_version !== undefined) appConfig.set("windows_latest_version", latest_version);
+  if (minimum_version !== undefined) appConfig.set("windows_minimum_version", minimum_version);
+  if (installer_url !== undefined) appConfig.set("windows_installer_url", installer_url);
+  res.json(vpnWindowsVersion());
 });
 
 /** MeetFlow AI Android release channel (drives the in-app update gate). */
