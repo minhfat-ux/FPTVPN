@@ -17,7 +17,7 @@ struct ForceUpdateViewMac: View {
                     .font(.system(size: 64))
                     .foregroundStyle(VPNThemeMac.accent)
 
-                Text("FlowVPN")
+                Text("VPNFlow")
                     .font(.largeTitle.bold())
                     .foregroundStyle(.white)
 

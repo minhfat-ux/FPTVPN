@@ -12,6 +12,26 @@ final class VPNManagerMac: ObservableObject {
 
     static let providerBundleIdentifier = "com.privatevpn.mac.packet-tunnel"
 
+    /// Tên profile VPN của bản này (đổi từ "FlowVPN" sang "VPNFlow" cho khớp tên app).
+    private static let currentProfileName = "VPNFlow"
+
+    /// So khớp profile do app này quản lý: chấp nhận cả tên mới "VPNFlow" lẫn tên cũ
+    /// "FlowVPN"/"FPT PrivateVPN" để máy đã cài từ bản trước vẫn nhận diện được và dọn
+    /// profile cũ đi, tránh treo 2 profile VPN cùng lúc.
+    private static func isManagedProfile(_ description: String?) -> Bool {
+        guard let description else { return false }
+        return description == currentProfileName
+            || description == "FlowVPN"
+            || description == "FPT PrivateVPN"
+    }
+
+    /// Ưu tiên profile tên mới; nếu chưa có (máy vừa nâng cấp bản) thì tạm lấy profile
+    /// tên cũ để trạng thái vẫn đúng trước lần connect đầu — connect sẽ dọn nó.
+    private static func preferredProfile(in managers: [NETunnelProviderManager]) -> NETunnelProviderManager? {
+        managers.first { $0.localizedDescription == currentProfileName }
+            ?? managers.first { isManagedProfile($0.localizedDescription) }
+    }
+
     @Published private(set) var state: String = "Disconnected"
     @Published private(set) var overlayIP: String?
     @Published var lastError: String?
@@ -451,7 +471,7 @@ final class VPNManagerMac: ObservableObject {
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let staleProfiles = existing.filter { profile in
-            profile.localizedDescription == "FlowVPN" || profile.localizedDescription == "FPT PrivateVPN"
+            Self.isManagedProfile(profile.localizedDescription)
         }
 
         for staleProfile in staleProfiles {
@@ -483,12 +503,12 @@ final class VPNManagerMac: ObservableObject {
         ]
 
         manager.protocolConfiguration = protocolConfig
-        manager.localizedDescription = "FlowVPN"
+        manager.localizedDescription = Self.currentProfileName
         manager.isEnabled = true
         try await manager.saveToPreferences()
 
         let refreshed = try await NETunnelProviderManager.loadAllFromPreferences()
-        guard let savedManager = refreshed.first(where: { $0.localizedDescription == "FlowVPN" }) else {
+        guard let savedManager = Self.preferredProfile(in: refreshed) else {
             throw MacError.savedConfigurationMissing
         }
         self.manager = savedManager
@@ -497,7 +517,7 @@ final class VPNManagerMac: ObservableObject {
     private func loadManagerFromPreferences() async {
         do {
             let existing = try await NETunnelProviderManager.loadAllFromPreferences()
-            manager = existing.first { $0.localizedDescription == "FlowVPN" }
+            manager = Self.preferredProfile(in: existing)
             refreshStatus()
         } catch {
             lastError = error.localizedDescription
@@ -505,7 +525,7 @@ final class VPNManagerMac: ObservableObject {
         }
     }
 
-    /// Decodes the WireGuard config stored in the currently saved "FlowVPN"
+    /// Decodes the WireGuard config stored in the currently saved "VPNFlow"
     /// NEVPN profile. Used as a fallback when the coordinator is unreachable —
     /// the profile persists across sessions even before TunnelConfigCache
     /// existed, so this works on the very first offline reconnect.

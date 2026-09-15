@@ -48,7 +48,7 @@ struct ContentViewMac: View {
                             .foregroundStyle(statusColor)
                     }
 
-                    Text("FlowVPN")
+                    Text("VPNFlow")
                         .font(.largeTitle.bold())
                         .foregroundStyle(VPNThemeMac.textPrimary)
                     Text(languageStore.t(.appSubtitle))

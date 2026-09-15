@@ -30,7 +30,7 @@ struct PrivateVPNMacApp: App {
         .windowResizability(.contentSize)
 
         // Menu bar (status bar) extra: status + Connect/Disconnect/Settings/Quit.
-        MenuBarExtra("FlowVPN", systemImage: menubarIcon) {
+        MenuBarExtra("VPNFlow", systemImage: menubarIcon) {
             MenuBarContent()
                 .environmentObject(vpnManager)
                 .environmentObject(subscriptionStore)

@@ -70,7 +70,7 @@ struct LoginViewMac: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
 
-            Text("FlowVPN")
+            Text("VPNFlow")
                 .font(.largeTitle.bold())
                 .foregroundStyle(VPNThemeMac.textPrimary)
 
