@@ -1,24 +1,64 @@
 import SwiftUI
 
-/// Shared visual theme for the PrivateVPN macOS UI — mirrors the iOS theme.
+/// Shared visual theme for the PrivateVPN macOS UI — mirrors the iOS theme
+/// (iOS/PrivateVPN/Theme.swift) so hai nền tảng render giống nhau: luôn dark,
+/// FlowVPN navy palette (#0A1F3B base, #0E2747 cards, #16385E gradient bottom),
+/// accent xanh system blue (#007AFF), trạng thái kết nối xanh brand (#33C773).
 enum VPNThemeMac {
-    /// Accent — green used for the connected state and the primary action.
-    static let accent = Color(red: 0.20, green: 0.78, blue: 0.45)
+    /// Accent — iOS system blue, dùng cho hành động chính và highlight.
+    static let accent = Color(red: 0/255, green: 122/255, blue: 255/255)
 
-    static let backgroundTop = Color(red: 0.02, green: 0.08, blue: 0.15)
-    static let backgroundBottom = Color(red: 0.04, green: 0.12, blue: 0.23)
+    /// Success green — trạng thái đã kết nối (FlowVPN brand green #33C773).
+    static let success = Color(red: 51/255, green: 199/255, blue: 115/255)
 
-    static let cardBackground = Color.white.opacity(0.06)
+    /// Tên app với "Flow" tô màu brand — giống bản iOS.
+    ///
+    /// Trả `Text` (không phải `some View`) để ghép chuỗi được và vẫn ăn font/size
+    /// đặt ở ngoài. Màu trắng đặt ngay trong đây vì `foregroundStyle` áp lên cả
+    /// `Text` đã ghép sẽ đè mất màu xanh của "Flow".
+    static var brandName: Text {
+        Text("VPN").foregroundStyle(label)
+            + Text("Flow").foregroundStyle(success)
+    }
+
+    /// Tiêu đề paywall với "Flow" tô màu brand — giống bản iOS.
+    static func brandTitle(_ text: String) -> Text {
+        let prefix = "VPNFlow"
+        guard text.hasPrefix(prefix) else { return Text(text).foregroundStyle(label) }
+        return Text("VPN").foregroundStyle(label)
+            + Text("Flow").foregroundStyle(success)
+            + Text(String(text.dropFirst(prefix.count))).foregroundStyle(label)
+    }
+
+    /// FlowVPN navy palette (FPT Harness style) — always dark.
+    static let navyBase = Color(red: 10/255, green: 31/255, blue: 59/255)      // #0A1F3B
+    static let navyLayer1 = Color(red: 14/255, green: 39/255, blue: 71/255)    // #0E2747
+    static let navyLayer2 = Color(red: 18/255, green: 48/255, blue: 82/255)    // #123052
+    static let navyLayer3 = Color(red: 22/255, green: 56/255, blue: 94/255)    // #16385E
+
+    static let backgroundTop = navyBase
+    static let backgroundBottom = navyLayer3
+
+    static let cardBackground = navyLayer1
     static let cardStroke = Color.white.opacity(0.12)
 
-    static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.6)
+    /// Nền ô nhập liệu — tương đương `.tertiarySystemFill` bản iOS (dark mode).
+    static let fieldBackground = Color.white.opacity(0.12)
 
     static let backgroundGradient = LinearGradient(
         colors: [backgroundTop, backgroundBottom],
         startPoint: .top,
         endPoint: .bottom
     )
+
+    // Dark-only semantic colors.
+    static let label = Color.white
+    static let secondaryLabel = Color.white.opacity(0.6)
+    static let tertiaryLabel = Color.white.opacity(0.4)
+
+    // Tên cũ giữ lại cho menu bar / paywall đang tham chiếu.
+    static let textPrimary = Color.white
+    static let textSecondary = Color.white.opacity(0.6)
 }
 
 enum AppLanguage: String, CaseIterable, Identifiable {
@@ -82,6 +122,9 @@ enum AppTextKey: String {
     case disconnected, connecting, connected, disconnecting, failed
     case serverLocation, loadingLocations, noServerAvailable, refreshLocations
     case usingSavedServers
+    case configuration, done, diagnostics, state, location, message, notConfigured, vietnam
+    case disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle
+    case startVPNHint, stopVPNHint
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
 }
 
@@ -154,7 +197,13 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "Loading servers…", .noServerAvailable: "No server available",
             .refreshLocations: "Refresh servers",
             .usingSavedServers: "Offline mode — using saved servers",
-            .devices: "Devices", .revoke: "Revoke", .revokeDeviceConfirm: "Revoke this device? It will no longer be able to connect.", .thisDevice: "This device", .deviceRevoked: "Device revoked.", .noDevices: "No devices registered.", .active: "Active", .revoked: "Revoked", .loadingDevices: "Loading devices…"
+            .devices: "Devices", .revoke: "Revoke", .revokeDeviceConfirm: "Revoke this device? It will no longer be able to connect.", .thisDevice: "This device", .deviceRevoked: "Device revoked.", .noDevices: "No devices registered.", .active: "Active", .revoked: "Revoked", .loadingDevices: "Loading devices…",
+            .configuration: "Configuration", .done: "Done", .diagnostics: "Diagnostics", .state: "State", .location: "Location", .message: "Message",
+            .notConfigured: "Not configured - tap to open Configuration", .vietnam: "Vietnam",
+            .disconnectedSubtitle: "Your VPN tunnel is off", .connectingSubtitle: "Starting secure VPN tunnel",
+            .connectedSubtitle: "Your traffic is protected", .disconnectingSubtitle: "Stopping VPN tunnel",
+            .failedSubtitle: "VPN needs attention",
+            .startVPNHint: "Starts the VPN tunnel to the selected location", .stopVPNHint: "Stops the VPN tunnel"
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của VPNFlow để tiếp tục. Vui lòng tải bản mới tại meetflowai.site/buy.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
@@ -180,7 +229,13 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "Đang tải máy chủ…", .noServerAvailable: "Chưa có máy chủ khả dụng",
             .refreshLocations: "Tải lại máy chủ",
             .usingSavedServers: "Chế độ offline — đang dùng máy chủ đã lưu",
-            .devices: "Thiết bị", .revoke: "Thu hồi", .revokeDeviceConfirm: "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", .thisDevice: "Thiết bị này", .deviceRevoked: "Đã thu hồi thiết bị.", .noDevices: "Chưa có thiết bị nào được đăng ký.", .active: "Hoạt động", .revoked: "Đã thu hồi", .loadingDevices: "Đang tải thiết bị…"
+            .devices: "Thiết bị", .revoke: "Thu hồi", .revokeDeviceConfirm: "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", .thisDevice: "Thiết bị này", .deviceRevoked: "Đã thu hồi thiết bị.", .noDevices: "Chưa có thiết bị nào được đăng ký.", .active: "Hoạt động", .revoked: "Đã thu hồi", .loadingDevices: "Đang tải thiết bị…",
+            .configuration: "Cấu hình", .done: "Xong", .diagnostics: "Chẩn đoán", .state: "Trạng thái", .location: "Vị trí", .message: "Thông báo",
+            .notConfigured: "Chưa cấu hình - chạm để mở Cấu hình", .vietnam: "Việt Nam",
+            .disconnectedSubtitle: "VPN tunnel đang tắt", .connectingSubtitle: "Đang khởi động VPN tunnel bảo mật",
+            .connectedSubtitle: "Lưu lượng của bạn đang được bảo vệ", .disconnectingSubtitle: "Đang dừng VPN tunnel",
+            .failedSubtitle: "VPN cần được kiểm tra",
+            .startVPNHint: "Bắt đầu VPN tunnel tới vị trí đã chọn", .stopVPNHint: "Dừng VPN tunnel"
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 VPNFlow 才能继续。请前往 meetflowai.site/buy 下载最新版本。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
@@ -206,7 +261,13 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "正在加载服务器…", .noServerAvailable: "暂无可用服务器",
             .refreshLocations: "刷新服务器",
             .usingSavedServers: "离线模式 — 正在使用已保存的服务器",
-            .devices: "设备", .revoke: "撤销", .revokeDeviceConfirm: "撤销此设备？该设备将无法再连接。", .thisDevice: "当前设备", .deviceRevoked: "设备已撤销。", .noDevices: "尚未注册任何设备。", .active: "活跃", .revoked: "已撤销", .loadingDevices: "正在加载设备…"
+            .devices: "设备", .revoke: "撤销", .revokeDeviceConfirm: "撤销此设备？该设备将无法再连接。", .thisDevice: "当前设备", .deviceRevoked: "设备已撤销。", .noDevices: "尚未注册任何设备。", .active: "活跃", .revoked: "已撤销", .loadingDevices: "正在加载设备…",
+            .configuration: "设置", .done: "完成", .diagnostics: "诊断", .state: "状态", .location: "位置", .message: "消息",
+            .notConfigured: "尚未配置 - 点击打开设置", .vietnam: "越南",
+            .disconnectedSubtitle: "VPN 隧道已关闭", .connectingSubtitle: "正在启动安全 VPN 隧道",
+            .connectedSubtitle: "你的流量正在受到保护", .disconnectingSubtitle: "正在停止 VPN 隧道",
+            .failedSubtitle: "VPN 需要检查",
+            .startVPNHint: "连接到所选位置的 VPN 隧道", .stopVPNHint: "停止 VPN 隧道"
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "VPNFlow の新しいバージョンが必要です。最新版は meetflowai.site/buy からダウンロードしてください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
@@ -232,7 +293,13 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "サーバーを読み込み中…", .noServerAvailable: "利用可能なサーバーがありません",
             .refreshLocations: "サーバーを更新",
             .usingSavedServers: "オフラインモード — 保存済みサーバーを使用中",
-            .devices: "デバイス", .revoke: "取り消す", .revokeDeviceConfirm: "このデバイスを取り消しますか？このデバイスは接続できなくなります。", .thisDevice: "このデバイス", .deviceRevoked: "デバイスを取り消しました。", .noDevices: "登録されたデバイスがありません。", .active: "アクティブ", .revoked: "取り消し済み", .loadingDevices: "デバイスを読み込み中…"
+            .devices: "デバイス", .revoke: "取り消す", .revokeDeviceConfirm: "このデバイスを取り消しますか？このデバイスは接続できなくなります。", .thisDevice: "このデバイス", .deviceRevoked: "デバイスを取り消しました。", .noDevices: "登録されたデバイスがありません。", .active: "アクティブ", .revoked: "取り消し済み", .loadingDevices: "デバイスを読み込み中…",
+            .configuration: "設定", .done: "完了", .diagnostics: "診断", .state: "状態", .location: "場所", .message: "メッセージ",
+            .notConfigured: "未設定 - タップして設定を開く", .vietnam: "ベトナム",
+            .disconnectedSubtitle: "VPN トンネルはオフです", .connectingSubtitle: "安全な VPN トンネルを開始中",
+            .connectedSubtitle: "通信は保護されています", .disconnectingSubtitle: "VPN トンネルを停止中",
+            .failedSubtitle: "VPN の確認が必要です",
+            .startVPNHint: "選択した場所への VPN トンネルを開始します", .stopVPNHint: "VPN トンネルを停止します"
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 VPNFlow 버전이 필요합니다. 최신 버전을 meetflowai.site/buy에서 다운로드하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
@@ -258,7 +325,13 @@ final class AppLanguageStore: ObservableObject {
             .loadingLocations: "서버를 불러오는 중…", .noServerAvailable: "사용 가능한 서버 없음",
             .refreshLocations: "서버 새로고침",
             .usingSavedServers: "오프라인 모드 — 저장된 서버 사용 중",
-            .devices: "기기", .revoke: "해지", .revokeDeviceConfirm: "이 기기를 해지하시겠습니까? 이 기기는 더 이상 연결할 수 없습니다.", .thisDevice: "현재 기기", .deviceRevoked: "기기가 해지되었습니다.", .noDevices: "등록된 기기가 없습니다.", .active: "활성", .revoked: "해지됨", .loadingDevices: "기기를 불러오는 중…"
+            .devices: "기기", .revoke: "해지", .revokeDeviceConfirm: "이 기기를 해지하시겠습니까? 이 기기는 더 이상 연결할 수 없습니다.", .thisDevice: "현재 기기", .deviceRevoked: "기기가 해지되었습니다.", .noDevices: "등록된 기기가 없습니다.", .active: "활성", .revoked: "해지됨", .loadingDevices: "기기를 불러오는 중…",
+            .configuration: "설정", .done: "완료", .diagnostics: "진단", .state: "상태", .location: "위치", .message: "메시지",
+            .notConfigured: "설정되지 않음 - 탭하여 설정 열기", .vietnam: "베트남",
+            .disconnectedSubtitle: "VPN 터널이 꺼져 있습니다", .connectingSubtitle: "보안 VPN 터널을 시작하는 중",
+            .connectedSubtitle: "트래픽이 보호되고 있습니다", .disconnectingSubtitle: "VPN 터널을 중지하는 중",
+            .failedSubtitle: "VPN 확인이 필요합니다",
+            .startVPNHint: "선택한 위치로 VPN 터널을 시작합니다", .stopVPNHint: "VPN 터널을 중지합니다"
         ],
     ]
 }
@@ -271,6 +344,52 @@ extension String {
         case "Disconnecting…": return AppLanguageStore.text(.disconnecting, language: language)
         case "Failed": return AppLanguageStore.text(.failed, language: language)
         default: return AppLanguageStore.text(.disconnected, language: language)
+        }
+    }
+
+    /// Dòng phụ mô tả trạng thái — tương ứng `VPNState.localizedSubtitle` bản iOS.
+    func localizedVPNStateSubtitle(_ language: AppLanguage) -> String {
+        switch self {
+        case "Connected": return AppLanguageStore.text(.connectedSubtitle, language: language)
+        case "Connecting…": return AppLanguageStore.text(.connectingSubtitle, language: language)
+        case "Disconnecting…": return AppLanguageStore.text(.disconnectingSubtitle, language: language)
+        case "Failed": return AppLanguageStore.text(.failedSubtitle, language: language)
+        default: return AppLanguageStore.text(.disconnectedSubtitle, language: language)
+        }
+    }
+
+    /// Đang chuyển trạng thái — tương ứng `VPNState.isTransitioning` bản iOS.
+    var vpnIsTransitioning: Bool {
+        self == "Connecting…" || self == "Disconnecting…"
+    }
+
+    /// Có thể bấm Connect — tương ứng `VPNState.canConnect` bản iOS.
+    var vpnCanConnect: Bool {
+        self == "Disconnected" || self == "Failed"
+    }
+
+    /// Có thể bấm Disconnect — tương ứng `VPNState.canDisconnect` bản iOS.
+    var vpnCanDisconnect: Bool {
+        self == "Connecting…" || self == "Connected"
+    }
+
+    /// Màu accent theo trạng thái — tương ứng `VPNState.tint` bản iOS.
+    var vpnStateTint: Color {
+        switch self {
+        case "Connected": return VPNThemeMac.success
+        case "Connecting…", "Disconnecting…": return .orange
+        case "Failed": return .red
+        default: return .secondary
+        }
+    }
+
+    /// SF Symbol theo trạng thái — tương ứng `VPNState.symbol` bản iOS.
+    var vpnStateSymbol: String {
+        switch self {
+        case "Connected": return "checkmark.shield.fill"
+        case "Connecting…", "Disconnecting…": return "shield.lefthalf.filled"
+        case "Failed": return "exclamationmark.triangle.fill"
+        default: return "shield.slash.fill"
         }
     }
 }

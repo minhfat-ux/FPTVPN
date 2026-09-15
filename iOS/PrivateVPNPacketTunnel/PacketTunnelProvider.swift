@@ -97,7 +97,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             if let error {
                 self?.log.error("Failed to start tunnel: \(error.localizedDescription)")
                 RelayDiagnostics.shared.log("Failed to start tunnel: \(error.localizedDescription)")
-                completionHandler(error)
+                // Start hỏng SAU khi setTunnelNetworkSettings đã áp DNS/route ⇒ phải tự gỡ
+                // trước khi báo lỗi, nếu không máy giữ nguyên DNS 1.1.1.1 + route qua utun
+                // (bug "Disconnect xong mất mạng" đo trên macOS 14/09). Xem stopTunnel.
+                self?.setTunnelNetworkSettings(nil) { _ in
+                    completionHandler(error)
+                }
             } else {
                 self?.log.info("WireGuard tunnel started")
                 RelayDiagnostics.shared.log("WireGuard tunnel started")
@@ -277,12 +282,32 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         relay = nil
         wsRelay?.stop()
         wsRelay = nil
-        adapter?.stop { [weak self] error in
-            self?.adapter = nil
-            if let error {
-                self?.log.error("Error stopping tunnel: \(error.localizedDescription)")
+
+        // Xoá cấu hình mạng của tunnel (DNS + route 0.0.0.0/0) trước khi báo hoàn tất.
+        // Vì sao: đây là bug thật đã làm khách "mất mạng" — macOS giữ nguyên DNS mà
+        // tunnel áp lên Wi-Fi nếu tunnel không tự gỡ. Đo thật sau khi Disconnect:
+        //   networksetup -getdnsservers Wi-Fi  →  1.1.1.1
+        //   scutil --dns | grep nameserver     →  nameserver[0] : 1.1.1.1
+        // 1.1.1.1 thường bị ISP Việt Nam chặn ⇒ không phân giải được tên miền; kèm
+        // ~35 route rác trỏ qua utun. setTunnelNetworkSettings(nil) buộc hệ thống trả
+        // lại DNS/route của interface vật lý (Wi-Fi) và dỡ route của tunnel.
+        // Gọi cả khi `adapter` nil (tunnel chưa/không start được) để không bỏ sót.
+        let clearNetworkSettingsAndFinish = {
+            self.setTunnelNetworkSettings(nil) { _ in
+                completionHandler()
             }
-            completionHandler()
+        }
+
+        if let adapter {
+            adapter.stop { [weak self] error in
+                if let error {
+                    self?.log.error("Error stopping tunnel: \(error.localizedDescription)")
+                }
+                self?.adapter = nil
+                clearNetworkSettingsAndFinish()
+            }
+        } else {
+            clearNetworkSettingsAndFinish()
         }
     }
 

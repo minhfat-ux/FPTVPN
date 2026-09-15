@@ -17,18 +17,17 @@ struct ForceUpdateViewMac: View {
                     .font(.system(size: 64))
                     .foregroundStyle(VPNThemeMac.accent)
 
-                Text("VPNFlow")
+                VPNThemeMac.brandName
                     .font(.largeTitle.bold())
-                    .foregroundStyle(.white)
 
                 Text(languageStore.t(.updateRequired))
                     .font(.title3.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(VPNThemeMac.label)
                     .multilineTextAlignment(.center)
 
                 Text(languageStore.t(.updateRequiredDetail))
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(VPNThemeMac.secondaryLabel)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
 
@@ -43,7 +42,7 @@ struct ForceUpdateViewMac: View {
                         .font(.headline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .foregroundStyle(.black)
+                        .foregroundStyle(.white)
                         .background(VPNThemeMac.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
@@ -55,5 +54,6 @@ struct ForceUpdateViewMac: View {
             .frame(width: 380)
         }
         .preferredColorScheme(.dark)
+        .interactiveDismissDisabled()
     }
 }

@@ -1,9 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Dedicated email-code sign-in screen for macOS. Shown whenever the user is
-/// not signed in: on launch, when tapping Connect while signed out, and via
-/// the Sign In button in Settings.
+/// Dedicated email-code sign-in screen for macOS — bố cục giống hệt bản iOS
+/// (`LoginView.swift`): logo + tên app, thẻ chứa ô email / mã, nút gửi & xác
+/// minh, banner thông báo. Khác desktop: kích thước cửa sổ sheet.
 struct LoginViewMac: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var vpnManager: VPNManagerMac
@@ -32,7 +32,7 @@ struct LoginViewMac: View {
 
                         if codeRequested {
                             Divider()
-                                .overlay(Color.white.opacity(0.15))
+                                .overlay(VPNThemeMac.cardStroke)
 
                             codeField
                             verifyButton
@@ -50,8 +50,10 @@ struct LoginViewMac: View {
                         messageView(message)
                     }
                 }
-                .padding(24)
-                .frame(width: 390)
+                .padding(.horizontal, 20)
+                .padding(.top, 40)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
         }
@@ -70,16 +72,14 @@ struct LoginViewMac: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
 
-            Text("VPNFlow")
+            VPNThemeMac.brandName
                 .font(.largeTitle.bold())
-                .foregroundStyle(VPNThemeMac.textPrimary)
 
             Text(languageStore.t(.appSubtitle))
                 .font(.subheadline)
-                .foregroundStyle(VPNThemeMac.textSecondary)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top, 20)
     }
 
     // MARK: - Fields & buttons
@@ -88,19 +88,19 @@ struct LoginViewMac: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(languageStore.t(.email))
                 .font(.subheadline)
-                .foregroundStyle(VPNThemeMac.textSecondary)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
 
             TextField(languageStore.t(.emailPlaceholder), text: $email)
                 .textFieldStyle(.plain)
                 .textContentType(.emailAddress)
                 .autocorrectionDisabled()
-                .foregroundStyle(VPNThemeMac.textPrimary)
-                .padding(12)
-                .background(Color.white.opacity(0.08))
+                .foregroundStyle(VPNThemeMac.label)
+                .padding(14)
+                .background(VPNThemeMac.fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
                 )
         }
     }
@@ -109,18 +109,18 @@ struct LoginViewMac: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(languageStore.t(.loginCode))
                 .font(.subheadline)
-                .foregroundStyle(VPNThemeMac.textSecondary)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
 
             TextField(languageStore.t(.codePlaceholder), text: $loginCode)
                 .textFieldStyle(.plain)
                 .textContentType(.oneTimeCode)
-                .foregroundStyle(VPNThemeMac.textPrimary)
-                .padding(12)
-                .background(Color.white.opacity(0.08))
+                .foregroundStyle(VPNThemeMac.label)
+                .padding(14)
+                .background(VPNThemeMac.fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
                 )
         }
     }
@@ -131,14 +131,14 @@ struct LoginViewMac: View {
                 if isSendingCode {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.black)
+                        .tint(.white)
                 }
                 Text(languageStore.t(.sendCode))
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .foregroundStyle(.black)
+            .foregroundStyle(.white)
             .background(isSendingCode ? VPNThemeMac.accent.opacity(0.6) : VPNThemeMac.accent)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
@@ -152,14 +152,14 @@ struct LoginViewMac: View {
                 if isVerifying {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.black)
+                        .tint(.white)
                 }
                 Text(languageStore.t(.verifyCode))
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .foregroundStyle(.black)
+            .foregroundStyle(.white)
             .background(isVerifying ? VPNThemeMac.accent.opacity(0.6) : VPNThemeMac.accent)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
@@ -173,7 +173,7 @@ struct LoginViewMac: View {
                 .foregroundStyle(message.isError ? .red : VPNThemeMac.accent)
             Text(message.text)
                 .font(.footnote)
-                .foregroundStyle(message.isError ? .red : VPNThemeMac.textPrimary.opacity(0.9))
+                .foregroundStyle(message.isError ? .red : VPNThemeMac.label)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)

@@ -27,7 +27,9 @@ struct PrivateVPNMacApp: App {
                 .environmentObject(languageStore)
                 .preferredColorScheme(.dark)
         }
-        .windowResizability(.contentSize)
+        // Cho phép người dùng kéo giãn cửa sổ (desktop), chỉ chặn nhỏ hơn kích thước tối thiểu
+        // mà ContentViewMac đặt ra.
+        .windowResizability(.contentMinSize)
 
         // Menu bar (status bar) extra: status + Connect/Disconnect/Settings/Quit.
         MenuBarExtra("VPNFlow", systemImage: menubarIcon) {

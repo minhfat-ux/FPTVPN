@@ -66,6 +66,8 @@ struct SettingsViewMac: View {
             }
         }
         .formStyle(.grouped)
+        .tint(VPNThemeMac.accent)
+        .navigationTitle(languageStore.t(.configuration))
         .frame(width: 460)
         .padding()
         .sheet(isPresented: $showingPaywall, onDismiss: {
@@ -439,29 +441,30 @@ struct MacWebBuyPaywallView: View {
     @EnvironmentObject private var languageStore: AppLanguageStore
 
     private var buyURL: URL {
-        URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)")!
+        // inapp=1: khách đã có app rồi ⇒ trang chỉ hiện ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN,
+        // không hiện khối tải/cài app (giống bản iOS).
+        URL(string: "https://meetflowai.site/buy?lang=\(languageStore.language.rawValue)&inapp=1")!
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VPNThemeMac.backgroundGradient
-                .ignoresSafeArea()
+        VStack(spacing: 0) {
+            HStack {
+                VPNThemeMac.brandTitle(languageStore.t(.paywallTitle))
+                    .font(.headline)
+                Spacer()
+                Button(languageStore.t(.notNow)) {
+                    dismiss()
+                }
+                .font(.subheadline)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(VPNThemeMac.backgroundTop)
 
             MacBuyWebView(url: buyURL)
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(VPNThemeMac.textPrimary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.white.opacity(0.12))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(16)
         }
+        .background(VPNThemeMac.backgroundGradient.ignoresSafeArea())
         .frame(width: 460, height: 760)
         .preferredColorScheme(.dark)
     }

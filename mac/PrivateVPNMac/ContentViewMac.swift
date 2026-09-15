@@ -1,6 +1,9 @@
 import AppKit
 import SwiftUI
 
+/// Main screen (macOS): bố cục giống hệt bản iOS (`ContentView.swift`) — cùng
+/// thứ tự thành phần, màu, bo góc, khoảng cách. Khác desktop: dùng ScrollView +
+/// kích thước cửa sổ co giãn được thay cho màn hình điện thoại.
 struct ContentViewMac: View {
     @EnvironmentObject private var vpnManager: VPNManagerMac
     @EnvironmentObject private var subscriptionStore: MacSubscriptionStore
@@ -8,6 +11,7 @@ struct ContentViewMac: View {
     @EnvironmentObject private var languageStore: AppLanguageStore
     @State private var showingPaywall = false
     @State private var showingLogin = false
+    @State private var showingSettings = false
     @State private var forcedUpdateInfo: AppVersionInfo?
 
     var body: some View {
@@ -15,133 +19,64 @@ struct ContentViewMac: View {
             VPNThemeMac.backgroundGradient
                 .ignoresSafeArea()
 
-            VStack(spacing: 20) {
-                // Header
-                VStack(spacing: 6) {
-                    ZStack(alignment: .topLeading) {
-                        Image(nsImage: NSApplication.shared.applicationIconImage)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 76, height: 76)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+            ScrollView {
+                VStack(spacing: 20) {
+                    header
 
-                        // Crown badge: active Premium → góc trái trên của app logo.
-                        if subscriptionStore.isSubscribed {
-                            Image(systemName: "crown.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(.yellow)
-                                .padding(3)
-                                .background(Circle().fill(Color.black.opacity(0.6)))
-                                .offset(x: -5, y: -5)
-                        }
-                    }
-                    .frame(width: 76, height: 76)
+                    freeTrialBanner
 
-                    // Connection status: chấm nhỏ + trạng thái, nằm ngay dưới logo.
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 8, height: 8)
-                        Text(vpnManager.state.localizedVPNState(languageStore.language))
-                            .font(.caption)
-                            .foregroundStyle(statusColor)
+                    locationCard
+
+                    if vpnManager.state.vpnIsTransitioning {
+                        transitioningBanner
                     }
 
-                    Text("VPNFlow")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(VPNThemeMac.textPrimary)
-                    Text(languageStore.t(.appSubtitle))
-                        .font(.subheadline)
-                        .foregroundStyle(VPNThemeMac.textSecondary)
-                }
-                .padding(.top, 16)
+                    primaryButton
 
-                // Bản dùng thử 1 ngày: khách ĐANG có quyền nhưng chưa trả tiền — nhắc mua gói.
-                if subscriptionStore.isOnFreeTrial {
-                    trialBanner
-                }
-
-                // Luôn hiện thẻ Subscription: chưa mua ⇒ mời chọn gói; đã mua ⇒ hiện gói đã mua
-                // + ngày hết hạn, và nút đổi thành "Gia hạn" (mở paywall để gia hạn/mua thêm).
-                if authStore.isSignedIn {
-                    subscriptionStatusCard
-                }
-
-                serverSelectionCard
-
-                // Status card: chỉ text + chi tiết (icon nhỏ đã nằm dưới logo).
-                VStack(spacing: 10) {
-                    HStack(spacing: 8) {
-                        if vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…" {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(statusColor)
-                        }
-                        Text(vpnManager.state.localizedVPNState(languageStore.language))
-                            .font(.title2.bold())
-                            .foregroundStyle(statusColor)
-                    }
-                    if vpnManager.state == "Connecting…" {
-                        Text(languageStore.t(.preparingPermission))
-                            .font(.footnote)
-                            .foregroundStyle(VPNThemeMac.textSecondary)
-                            .multilineTextAlignment(.center)
-                    }
                     if vpnManager.state == "Failed" {
-                        VStack(spacing: 4) {
-                            Text(languageStore.t(.vpnStartFailure))
-                            if let lastError = vpnManager.lastError, !lastError.isEmpty {
-                                Text(lastError)
-                                    .lineLimit(3)
-                            }
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                        errorBanner(vpnManager.lastError ?? languageStore.t(.vpnStartFailure))
                     }
+
+                    diagnosticsCard
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 28)
                 .frame(maxWidth: .infinity)
-                .padding(20)
-                .background(VPNThemeMac.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
-                )
-
-                Spacer()
-
-                // Primary toggle button: Connect when disconnected, Disconnect when connected.
-                Button(action: handlePrimaryTap) {
-                    Image(systemName: "power")
-                        .font(.system(size: 44, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 132, height: 132)
-                        .background(
-                            Circle()
-                                .fill(primaryButtonColor)
-                                .shadow(color: primaryButtonColor.opacity(0.45), radius: 22, y: 10)
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(.white.opacity(0.22), lineWidth: 1)
-                        )
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(primaryButtonDisabled)
-                .opacity(primaryButtonDisabled ? 0.72 : 1)
-                .padding(.bottom, 16)
             }
-            .padding(24)
-            .frame(width: 390, height: 760)
+            .scrollIndicators(.hidden)
         }
-            .sheet(item: $forcedUpdateInfo) { info in
-                ForceUpdateViewMac(info: info)
-                    .environmentObject(languageStore)
+        .frame(minWidth: 390, minHeight: 620)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .foregroundStyle(VPNThemeMac.secondaryLabel)
+                }
+                .help(languageStore.t(.configuration))
+                .disabled(vpnManager.state.vpnIsTransitioning)
             }
-        .preferredColorScheme(.dark)
+        }
+        .sheet(item: $forcedUpdateInfo) { info in
+            ForceUpdateViewMac(info: info)
+                .environmentObject(languageStore)
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsViewMac()
+                    .environmentObject(vpnManager)
+                    .environmentObject(subscriptionStore)
+                    .environmentObject(authStore)
+                    .environmentObject(languageStore)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(languageStore.t(.done)) { showingSettings = false }
+                        }
+                    }
+            }
+        }
         .sheet(isPresented: $showingPaywall, onDismiss: {
             // Đóng paywall = thời điểm khách vừa có thể đã trả tiền trên trang web trong
             // WebView, nên đọc lại quyền ngay (best-effort, im lặng nếu lỗi/404).
@@ -225,117 +160,100 @@ struct ContentViewMac: View {
         )
     }
 
-    /// Banner bản dùng thử 1 ngày. Chỉ hiện khi backend nói `is_active` = true VÀ `is_trial`
-    /// = true (product_id "trial.") — trial hết hạn thì `is_active` = false, banner tự tắt và
-    /// paywall chặn Connect như khách chưa mua.
-    /// Nút mua mở đúng paywall web sẵn có (`MacPaywallView` → trang /buy) — không thêm URL mới.
-    private var trialBanner: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "gift.fill")
-                .font(.title3)
-                .foregroundStyle(VPNThemeMac.accent)
+    // MARK: - Header
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(languageStore.t(.trialBannerTitle))
-                    .font(.headline)
-                    .foregroundStyle(VPNThemeMac.textPrimary)
-                Text(String(
-                    format: languageStore.t(.trialBannerSubtitle),
-                    String(subscriptionStore.trialHoursLeft ?? 0)
-                ))
-                    .font(.subheadline)
-                    .foregroundStyle(VPNThemeMac.textSecondary)
+    private var header: some View {
+        VStack(spacing: 6) {
+            ZStack(alignment: .topLeading) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 76, height: 76)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: .black.opacity(0.28), radius: 14, y: 8)
+
+                // Crown badge: active Premium → góc trái trên của app logo.
+                if subscriptionStore.isSubscribed {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.yellow)
+                        .padding(3)
+                        .background(Circle().fill(Color.black.opacity(0.6)))
+                        .offset(x: -5, y: -5)
+                }
+            }
+            .frame(width: 76, height: 76)
+
+            // Connection status: chấm nhỏ + trạng thái, nằm ngay dưới logo.
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(vpnManager.state.vpnStateTint)
+                    .frame(width: 8, height: 8)
+                Text(vpnManager.state.localizedVPNState(languageStore.language))
+                    .font(.caption)
+                    .foregroundStyle(vpnManager.state.vpnStateTint)
             }
 
-            Spacer()
-
-            Button {
-                showingPaywall = true
-            } label: {
-                Text(languageStore.t(.choosePlan))
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(VPNThemeMac.accent)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(isConnectionTransitioning)
+            // Màu đã nằm trong brandName (VPN trắng + Flow xanh brand); đừng đặt
+            // .foregroundStyle ở ngoài vì nó sẽ đè màu từng đoạn.
+            VPNThemeMac.brandName
+                .font(.title.bold())
+            Text(languageStore.t(.appSubtitle))
+                .font(.subheadline)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
         }
-        .padding(16)
-        .background(VPNThemeMac.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
-        )
+        .padding(.top, 14)
     }
 
-    /// Dòng phụ của thẻ Subscription: chưa mua ⇒ "chọn gói để bắt đầu"; đã mua ⇒
-    /// "3 Months · Hết hạn 13/12/2026 · Còn 27 ngày" (gói vĩnh viễn thì không có hạn).
-    private var subscriptionSubtitle: String {
-        guard subscriptionStore.isSubscribed else {
-            return languageStore.t(.choosePlanToStart)
-        }
-        var parts: [String] = []
-        let plan = subscriptionStore.activePlanName
-        if !plan.isEmpty { parts.append(plan) }
-        if let expiry = subscriptionStore.planExpiresAt {
-            parts.append(String(
-                format: languageStore.t(.expiresOn),
-                expiry.formatted(date: .abbreviated, time: .omitted)
-            ))
-            if let days = subscriptionStore.planDaysLeft, days <= 30 {
-                parts.append(String(format: languageStore.t(.daysLeft), days))
+    // MARK: - Free trial banner
+
+    /// Banner bản dùng thử 1 ngày miễn phí — giống bố cục iOS: nền accent mờ, nút
+    /// "Nâng cấp" mở đúng paywall web sẵn có (`MacPaywallView` → trang /buy).
+    @ViewBuilder
+    private var freeTrialBanner: some View {
+        if subscriptionStore.isOnFreeTrial {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(languageStore.t(.trialBannerTitle))
+                        .font(.headline)
+                        .foregroundStyle(VPNThemeMac.label)
+                    // `%@` + String(format:) theo convention có sẵn của mac (khác `%d` bản iOS).
+                    Text(String(
+                        format: languageStore.t(.trialBannerSubtitle),
+                        String(subscriptionStore.trialHoursLeft ?? 0)
+                    ))
+                        .font(.subheadline)
+                        .foregroundStyle(VPNThemeMac.secondaryLabel)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Button {
+                    showingPaywall = true
+                } label: {
+                    Text(languageStore.t(.upgrade))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(VPNThemeMac.accent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
-        } else {
-            parts.append(languageStore.t(.protectionUnlocked))
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(VPNThemeMac.accent.opacity(0.18))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(VPNThemeMac.accent.opacity(0.45), lineWidth: 1)
+            )
         }
-        return parts.joined(separator: " · ")
     }
 
-    private var subscriptionStatusCard: some View {
-        HStack(spacing: 14) {
-            Image(systemName: subscriptionStore.isSubscribed ? "checkmark.seal.fill" : "lock.shield.fill")
-                .font(.title3)
-                .foregroundStyle(subscriptionStore.isSubscribed ? VPNThemeMac.accent : .orange)
+    // MARK: - Location
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.premiumRequired))
-                    .font(.headline)
-                    .foregroundStyle(VPNThemeMac.textPrimary)
-                Text(subscriptionSubtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(VPNThemeMac.textSecondary)
-            }
-
-            Spacer()
-
-            Button {
-                showingPaywall = true
-            } label: {
-                Text(languageStore.t(subscriptionStore.isSubscribed ? .renew : .upgrade))
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(VPNThemeMac.accent)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(isConnectionTransitioning)
-        }
-        .padding(16)
-        .background(VPNThemeMac.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
-        )
-    }
-
-    private var serverSelectionCard: some View {
+    private var locationCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: "mappin.and.ellipse")
@@ -344,7 +262,7 @@ struct ContentViewMac: View {
 
                 Text(languageStore.t(.serverLocation))
                     .font(.headline)
-                    .foregroundStyle(VPNThemeMac.textPrimary)
+                    .foregroundStyle(VPNThemeMac.label)
 
                 Spacer()
 
@@ -356,19 +274,19 @@ struct ContentViewMac: View {
                         .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(VPNThemeMac.textSecondary)
-                .disabled(vpnManager.isRefreshingNodes || isConnectionTransitioning)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
+                .disabled(vpnManager.isRefreshingNodes || vpnManager.state.vpnIsTransitioning)
                 .help(languageStore.t(.refreshLocations))
             }
 
             if vpnManager.exitNodes.isEmpty {
-                Text(vpnManager.isRefreshingNodes ? languageStore.t(.loadingLocations) : languageStore.t(.noServerAvailable))
+                Text(languageStore.t(.noServerAvailable))
                     .font(.subheadline)
-                    .foregroundStyle(VPNThemeMac.textSecondary)
+                    .foregroundStyle(VPNThemeMac.secondaryLabel)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                // List view: tối đa 5 server hiển thị, cuộn được; nút Select
-                // chọn server đó và connect luôn (giống menu bar).
+                // List view: tối đa 5 server hiển thị, cuộn được. Mỗi dòng chọn server;
+                // bấm Connect (nút lớn) để kết nối — giống iOS/Android.
                 ScrollView {
                     VStack(spacing: 2) {
                         ForEach(vpnManager.exitNodes) { node in
@@ -377,9 +295,10 @@ struct ContentViewMac: View {
                     }
                     .padding(2)
                 }
-                .frame(height: min(CGFloat(vpnManager.exitNodes.count), 5) * 30)
+                .frame(height: min(CGFloat(vpnManager.exitNodes.count), 5) * 44)
                 .scrollIndicators(.visible)
-                if vpnManager.usingFallbackNodes && vpnManager.state == "Disconnected" {
+
+                if vpnManager.usingFallbackNodes {
                     Text(languageStore.t(.usingSavedServers))
                         .font(.caption)
                         .foregroundStyle(.orange)
@@ -396,10 +315,88 @@ struct ContentViewMac: View {
         )
     }
 
+    /// Một dòng server: chạm cả dòng là chọn (giống iOS `serverRow`), không connect.
+    private func serverRow(_ node: ExitNode) -> some View {
+        let isSelected = vpnManager.selectedNodeID == node.id
+        let busy = vpnManager.state.vpnIsTransitioning
+
+        return Button {
+            vpnManager.selectedNodeID = node.id
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? VPNThemeMac.accent : VPNThemeMac.tertiaryLabel)
+
+                Text(serverTitle(for: node))
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(isSelected ? VPNThemeMac.label : VPNThemeMac.secondaryLabel)
+
+                Spacer(minLength: 8)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 6)
+            .background(isSelected ? VPNThemeMac.accent.opacity(0.35) : Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
+    }
+
+    // MARK: - Transitioning banner
+
+    private var transitioningBanner: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(VPNThemeMac.accent)
+            Text(languageStore.t(.preparingPermission))
+                .font(.footnote)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(VPNThemeMac.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: - Single one-tap primary button
+
+    private var primaryButton: some View {
+        Button(action: handlePrimaryTap) {
+            ZStack {
+                Circle()
+                    // Chỉ làm mờ NỀN khi nút bị khoá, giống iOS/Android.
+                    .fill(primaryButtonColor.opacity(primaryButtonDisabled ? 0.45 : 1))
+                    .frame(width: 132, height: 132)
+                    .shadow(color: primaryButtonColor.opacity(0.45), radius: 22, y: 10)
+                Circle()
+                    .stroke(.white.opacity(0.22), lineWidth: 1)
+                    .frame(width: 132, height: 132)
+                if vpnManager.state.vpnIsTransitioning {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "power")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(primaryButtonDisabled)
+        .animation(.easeInOut(duration: 0.25), value: vpnManager.state)
+        .help(vpnManager.state.vpnCanConnect
+              ? languageStore.t(.startVPNHint)
+              : languageStore.t(.stopVPNHint))
+    }
+
     private var primaryButtonColor: Color {
         switch vpnManager.state {
         case "Connected":
-            return VPNThemeMac.accent
+            return VPNThemeMac.success
         case "Connecting…", "Disconnecting…":
             return .orange
         default:
@@ -407,8 +404,14 @@ struct ContentViewMac: View {
         }
     }
 
+    /// Giống iOS/Android: CHỈ khoá khi đang chuyển trạng thái; ở disconnected/failed
+    /// luôn bấm được để control plane tự cấp cấu hình lúc bấm.
+    private var primaryButtonDisabled: Bool {
+        vpnManager.state.vpnIsTransitioning
+    }
+
     private func handlePrimaryTap() {
-        if vpnManager.state == "Connected" || vpnManager.state == "Connecting…" {
+        if vpnManager.state.vpnCanDisconnect {
             vpnManager.disconnect()
         } else if !subscriptionStore.isSubscribed {
             showingPaywall = true
@@ -419,68 +422,91 @@ struct ContentViewMac: View {
         }
     }
 
-    private var primaryButtonDisabled: Bool {
-        isConnectionTransitioning || (vpnManager.state != "Connected" && vpnManager.exitNodes.isEmpty)
-    }
+    // MARK: - Diagnostics
 
-    private var isConnectionTransitioning: Bool {
-        vpnManager.state == "Connecting…" || vpnManager.state == "Disconnecting…"
-    }
+    private var diagnosticsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(languageStore.t(.diagnostics), systemImage: "waveform.path.ecg")
+                .font(.headline)
+                .foregroundStyle(VPNThemeMac.label)
 
-    private func serverRow(_ node: ExitNode) -> some View {
-        let isSelected = vpnManager.selectedNodeID == node.id
-        let isCurrent = isSelected && vpnManager.state == "Connected"
-        let busy = isConnectionTransitioning
+            Divider().overlay(VPNThemeMac.cardStroke)
 
-        return HStack(spacing: 8) {
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? VPNThemeMac.accent : VPNThemeMac.textSecondary)
-
-            Text(serverTitle(for: node))
-                .font(.body)
-                .lineLimit(1)
-                .foregroundStyle(VPNThemeMac.textPrimary)
-
-            Spacer(minLength: 8)
-
-            Button(isCurrent ? languageStore.t(.connected) : languageStore.t(.select)) {
-                vpnManager.selectedNodeID = node.id
-                if subscriptionStore.isSubscribed {
-                    Task { await vpnManager.connect(authStore: authStore) }
-                } else {
-                    showingPaywall = true
-                }
+            diagRow(
+                title: languageStore.t(.state),
+                value: vpnManager.state.localizedVPNState(languageStore.language),
+                valueColor: vpnManager.state.vpnStateTint
+            )
+            diagRow(title: languageStore.t(.location), value: nodeDisplay, valueColor: VPNThemeMac.secondaryLabel)
+            if let lastError = vpnManager.lastError, !lastError.isEmpty {
+                diagRow(title: languageStore.t(.message), value: lastError, valueColor: VPNThemeMac.secondaryLabel)
             }
-            .font(.footnote.bold())
-            .foregroundStyle(isCurrent ? Color.secondary : VPNThemeMac.accent)
-            .buttonStyle(.plain)
-            .disabled(busy || isCurrent)
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 6)
-        .background(isSelected ? VPNThemeMac.accent.opacity(0.12) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VPNThemeMac.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNThemeMac.cardStroke, lineWidth: 1)
+        )
+    }
+
+    private func diagRow(title: String, value: String, valueColor: Color) -> some View {
+        HStack(alignment: .top) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.subheadline.monospaced())
+                .foregroundStyle(valueColor)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private var nodeDisplay: String {
+        if let node = vpnManager.selectedNode {
+            return "\(node.city), \(countryName(node.country))"
+        }
+        return languageStore.t(.vietnam)
+    }
+
+    // MARK: - Helpers
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(VPNThemeMac.label)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(Color.red.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.red.opacity(0.35), lineWidth: 1)
+        )
     }
 
     private func serverTitle(for node: ExitNode) -> String {
-        "\(node.city), \(node.country) · \(node.name)"
+        "\(flagEmoji(for: node.country)) \(node.city), \(countryName(node.country)) · \(node.name)"
     }
 
-    private var statusSymbol: String {
-        switch vpnManager.state {
-        case "Connected": return "checkmark.shield.fill"
-        case "Connecting…": return "shield.lefthalf.filled"
-        case "Failed": return "exclamationmark.triangle.fill"
-        default: return "shield.slash.fill"
-        }
+    private func countryName(_ code: String) -> String {
+        code == "VN" ? languageStore.t(.vietnam) : code
     }
 
-    private var statusColor: Color {
-        switch vpnManager.state {
-        case "Connected": return VPNThemeMac.accent
-        case "Connecting…": return .orange
-        case "Failed": return .red
-        default: return .red
+    /// ISO 3166-1 alpha-2 country code → regional indicator flag emoji.
+    private func flagEmoji(for countryCode: String) -> String {
+        let base: UInt32 = 127397
+        return countryCode.uppercased().unicodeScalars.reduce(into: "") { result, scalar in
+            if let flag = UnicodeScalar(base + scalar.value) {
+                result.unicodeScalars.append(flag)
+            }
         }
     }
 }
