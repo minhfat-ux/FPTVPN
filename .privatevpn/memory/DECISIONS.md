@@ -340,3 +340,14 @@ Hành vi đã xác nhận: iOS **luôn hiện "Invalid Profile"** sau khi gửi 
   một nguồn duy nhất thay vì dịch tên gói ở 3 app; app vẫn có fallback suy từ `product_id`.
 - Lưu ý commit `2e906dc`: message bị bash ăn mất chữ `plan_badge` (backtick trong lệnh) — nội dung code
   không ảnh hưởng, chỉ thiếu chữ trong mô tả commit.
+
+## 2026-09-15 — Khách thật đăng ký máy mới: tự đăng ký Apple + ký lại IPA (đã phát)
+
+- Máy mới (iPhone17,2, build 23G90, UDID `00008140-00121C460C7B001C`) đăng ký lúc 09:09 ⇒ server
+  **tự đẩy UDID lên App Store Connect** (`ios-udid: Apple → OK`) — tính năng chạy thật với khách thật.
+- IPA đang phát chưa có UDID đó ⇒ chạy `scripts/ios-adhoc-export.sh --no-upload` (tạo lại profile Ad Hoc
+  qua ASC API, 4 UDID) → upload lên node-2 → `POST /v1/admin/ios/devices/built` (buildSerial 6).
+  Verify: file công khai 4.945.796 bytes, sha256 khớp, profile chứa cả 4 UDID.
+- **Sự cố tự gây (~1–2 phút)**: lệnh upload vòng qua node-1 sai quoting ⇒ IPA 0 byte trên node-2
+  (route tải trả file rỗng). Khôi phục từ node-1 + verify. Từ nay: sau khi copy file lớn qua 2 chặng
+  phải kiểm `size` + `sha256` tại đích trong cùng một lệnh.

@@ -135,3 +135,34 @@ Ghi chú trạng thái 3 nền tảng khi bấm Update:
   "tải trong app rồi mở trình cài" thì cần thêm FileProvider + REQUEST_INSTALL_PACKAGES (chưa làm).
 - macOS: chưa có link build cho mac ⇒ nút Update vẫn mở web. Cần chốt cách phát bản mac (pkg/dmg/zip)
   rồi thêm `mac_url` vào payload.
+
+## 10. Khách thật đăng ký máy mới ⇒ tự đăng ký Apple + ký lại IPA (2026-09-15 09:09)
+
+Máy mới: **iPhone17,2 · iOS build 23G90 · serial FGK9MXW7T5 · UDID `00008140-00121C460C7B001C`**
+(IP 39.144.54.4, ngôn ngữ hồ sơ `zh`).
+
+Log control plane (KHÔNG cần ai làm gì):
+```
+09:09:16  ios-udid: MỚI 00008140-00121C460C7B001C (iPhone17,2 · iOS 23G90)
+09:09:17  ios-udid: Apple → OK                 ← server tự đẩy UDID lên App Store Connect
+09:09:19  ios-trace: POST /install/ios/udid -> 200 ua="Profile/1.0"
+```
+Kiểm chéo Apple: `VPNFlow 7B001C | 00008140-00121C460C7B001C | ENABLED | thêm 2026-09-15` ✓
+
+Nhưng IPA đang phát **chưa** có UDID này ⇒ phải ký lại, nếu không khách bấm tải sẽ "Unable to Install".
+Đã chạy pipeline có sẵn của repo:
+```
+scripts/ios-adhoc-export.sh --no-upload     # tạo lại profile Ad Hoc (ASC API) + export IPA
+  → profile "VPNFlow AdHoc App"/"Tunnel" chứa 4 UDID
+  → build/ios-adhoc-export/ipa/FlowVPN.ipa (4.945.796 bytes, sha256 9dc105c4aa5d6f05…, 1.3.3 build 13)
+upload qua node-1 → /root/flowvpn-ipa/VPNFlow-latest.ipa
+POST /v1/admin/ios/devices/built → buildSerial 6
+```
+Verify công khai: `GET /v1/downloads/ios` → 4.945.796 bytes, sha256 khớp bản build, profile có **cả 4 UDID**
+(3 máy cũ + máy mới). Trang cài của máy mới: `{"registered":true,"ready":true}` ⇒ nút **Tải & cài** BẬT.
+
+### Sự cố nhỏ trong lúc upload (tự gây, ~1–2 phút)
+Lệnh upload đi vòng node-1 bị sai quoting ⇒ ghi **file IPA 0 byte** lên node-2 ⇒ route tải IPA trả file rỗng.
+Đã khôi phục từ bản còn nguyên trên node-1, verify lại sha256 + parse profile.
+**Bài học:** copy file lớn qua 2 chặng thì LUÔN kiểm `size` + `sha256` ở đích ngay trong cùng lệnh,
+và không nối nhiều lệnh ssh bằng dấu `;` với quoting lồng nhau.
