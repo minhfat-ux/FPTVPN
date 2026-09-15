@@ -37,6 +37,7 @@ import {
 } from "./connection-stats.js";
 import { adminPageHTML } from "./admin-page.js";
 import { provisionEverywhere, revokeEverywhere } from "./peer-mirror.js";
+import { alertChannels, sendAlert } from "./alerts.js";
 import {
   sendOtpEmail,
   sendPaymentAlert,
@@ -2472,6 +2473,16 @@ async function notifyIosBuildReady({ udids = null, force = false } = {}) {
     }
   }
   if (sent.length) await iosDevices.markNotified(sent);
+  if (sent.length) {
+    await sendAlert({
+      title: "Bản iOS đã ký xong",
+      level: "ok",
+      lines: [
+        `Đã báo ${sent.length} khách có link cài`,
+        udids ? `Theo yêu cầu cho: ${udids.join(", ")}` : "Danh sách chờ (auto)",
+      ],
+    });
+  }
   return { sent, remaining: devices.filter((d) => d.email && !d.notifiedAt).length };
 }
 
@@ -3871,6 +3882,18 @@ async function firePaidAlert(orderCode, email, plan, amount, method = null, prod
   } catch (err) {
     console.error("firePaidAlert failed:", err);
   }
+  // Song song email: bắn Telegram để chủ shop biết ngay trên điện thoại. Không chờ kết quả
+  // và không để lỗi alert ảnh hưởng luồng kích hoạt đơn (sendAlert tự bắt mọi lỗi).
+  await sendAlert({
+    title: "Đơn đã thanh toán",
+    level: "ok",
+    lines: [
+      `Mã đơn: ${orderCode}`,
+      `Khách: ${email || "(không có email)"}`,
+      `Gói: ${plan}${amount ? ` — ${Number(amount).toLocaleString("vi-VN")}đ` : ""}`,
+      `Kênh: ${product} (${confirmedBy})`,
+    ],
+  });
 }
 
 /** Báo chủ shop: tiền vào nhưng không khớp đơn (email duy nhất cần người xử lý). */
@@ -3889,7 +3912,18 @@ async function fireUnmatchedAlert({ amount, content, txId, accountNumber, reason
     console.log(`unmatched-alert tx ${txId} to ${owner}: sent=${r?.sent}`);
   } catch (err) {
     console.error("fireUnmatchedAlert failed:", err);
-  }
+  }  // Tiền vào mà không khớp đơn là ca DUY NHẤT cần người xử lý tay ⇒ báo cả Telegram.
+  await sendAlert({
+    title: "Tiền vào nhưng không khớp đơn",
+    level: "warn",
+    lines: [
+      `Số tiền: ${amount ? `${Number(amount).toLocaleString("vi-VN")}đ` : "(không rõ)"}`,
+      `Nội dung CK: ${content || "(trống)"}`,
+      txId ? `Mã giao dịch: ${txId}` : null,
+      accountNumber ? `TK nhận: ${accountNumber}` : null,
+      `Lý do: ${reason || "không khớp đơn nào"}`,
+    ],
+  });
 }
 
 /**
@@ -4212,6 +4246,35 @@ app.patch("/v1/admin/windows-version", requireAdminAuth, (req, res) => {
   if (minimum_version !== undefined) appConfig.set("windows_minimum_version", minimum_version);
   if (installer_url !== undefined) appConfig.set("windows_installer_url", installer_url);
   res.json(vpnWindowsVersion());
+});
+
+/**
+ * Alert tự động (Telegram) — admin xem kênh đang bật và bắn tin.
+ *
+ * GET  /v1/admin/alert         → { telegram, telegramChatId, email } (KHÔNG có token)
+ * POST /v1/admin/alert {title, lines|message, level} → gửi 1 tin (dùng cho tin thử + cập nhật tiến độ)
+ */
+app.get("/v1/admin/alert", requireAdminAuth, (_req, res) => {
+  res.json(alertChannels());
+});
+
+app.post("/v1/admin/alert", requireAdminAuth, async (req, res) => {
+  const { title, lines, message, level } = req.body ?? {};
+  const bodyLines = Array.isArray(lines)
+    ? lines
+    : (message ? String(message).split("\n") : []);
+  const safeLevel = ["info", "ok", "warn", "error"].includes(level) ? level : "info";
+  const result = await sendAlert({
+    title: title || "Tin từ admin",
+    lines: bodyLines,
+    level: safeLevel,
+  });
+  res.status(result.sent ? 200 : 502).json({
+    sent: result.sent,
+    reason: result.reason ?? null,
+    text: result.text,
+    channels: alertChannels(),
+  });
 });
 
 /** MeetFlow AI Android release channel (drives the in-app update gate). */
@@ -5135,6 +5198,52 @@ if (process.env.ENABLE_RENEWAL_REMINDERS !== "0") {
   console.log(`  renewal-reminders: every ${RENEWAL_INTERVAL_MS / 3_600_000}h (windows 7/3/1 days)`);
 }
 
+/**
+ * Watchdog node: ping định kỳ các exit node, CHỈ alert khi trạng thái đổi (lên↔xuống) để
+ * không spam Telegram mỗi vòng. Mặc định 5 phút; tắt bằng ALERT_WATCHDOG=0.
+ */
+const nodeOnlineState = new Map();
+
+async function watchNodesOnce() {
+  let nodes = [];
+  try {
+    nodes = await nodeStore.active();
+  } catch (err) {
+    console.error("alert watchdog: không đọc được danh sách node:", err?.message ?? err);
+    return;
+  }
+  for (const node of nodes) {
+    const host = String(node.endpoint ?? "").split(":").shift();
+    if (!host) continue;
+    const probe = await measureLatency(host);
+    const online = Boolean(probe?.ok);
+    const previous = nodeOnlineState.get(node.id);
+    nodeOnlineState.set(node.id, online);
+    if (previous === undefined || previous === online) continue;
+    await sendAlert({
+      title: online ? `Node ${node.name ?? node.id} đã trở lại` : `Node ${node.name ?? node.id} KHÔNG phản hồi`,
+      level: online ? "ok" : "error",
+      lines: [
+        `Endpoint: ${node.endpoint}`,
+        online ? `Ping: ${probe.ms ?? "?"} ms` : "Ping: timeout (khách đang dùng node này sẽ mất mạng)",
+      ],
+    });
+  }
+}
+
+function startAlertWatchdog() {
+  if (process.env.ALERT_WATCHDOG === "0") {
+    console.log("  alert watchdog: tắt (ALERT_WATCHDOG=0)");
+    return;
+  }
+  const everyMs = Math.max(60_000, Number(process.env.ALERT_WATCHDOG_MS || 300_000));
+  const timer = setInterval(() => {
+    watchNodesOnce().catch((err) => console.error("alert watchdog:", err?.message ?? err));
+  }, everyMs);
+  timer.unref?.();
+  console.log(`  alert watchdog: mỗi ${Math.round(everyMs / 1000)}s (kênh: telegram=${alertChannels().telegram ? "bật" : "tắt"})`);
+}
+
 function onListen() {
   console.log(`PrivateVPN control plane listening on :${PORT} (${tlsReady ? "HTTPS" : "HTTP"})`);
   console.log(`  interface=${WG_INTERFACE} dryRun=${DRY_RUN} pool=${IP_POOL_CIDR}`);
@@ -5145,6 +5254,7 @@ function onListen() {
   if (!WG_SERVER_PUBKEY) console.warn("  WARNING: WG_SERVER_PUBKEY not set");
   if (!WG_PUBLIC_ENDPOINT) console.warn("  WARNING: WG_PUBLIC_ENDPOINT not set");
   if (LEGACY_MODE === "1") console.warn("  WARNING: LEGACY_MODE=1 — unauthenticated join tokens + register enabled (App Store review window). Set LEGACY_MODE=0 after the authenticated app is released.");
+  startAlertWatchdog();
 }
 
 if (tlsReady) {
