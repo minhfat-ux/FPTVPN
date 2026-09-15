@@ -36,6 +36,7 @@ import {
   createPTRLookup,
 } from "./connection-stats.js";
 import { adminPageHTML } from "./admin-page.js";
+import { provisionEverywhere, revokeEverywhere } from "./peer-mirror.js";
 import {
   sendOtpEmail,
   sendPaymentAlert,
@@ -4737,12 +4738,13 @@ function wgForNode(node) {
 /// (kể cả khi node đã bị disable) — không fallback sang node khác để tránh
 /// xóa nhầm peer trên node active. Best-effort: a missing node is ignored.
 async function removePeerForDevice(device) {
-  const node = device.exitNodeId
-    ? await nodeStore.findById(device.exitNodeId)
-    : await nodeStore.firstActive();
-  if (node) {
-    await wgForNode(node).removePeer(device.publicKey);
-  }
+  // Thu hồi phải quét MỌI node: peer mirror sang nhiều node, chỉ xoá ở một node thì
+  // thiết bị đã bị thu hồi vẫn handshake được ở node còn lại.
+  await revokeEverywhere({
+    nodes: await nodeStore.active(),
+    publicKey: device.publicKey,
+    remove: (node, key) => wgForNode(node).removePeer(key),
+  });
 }
 
 /// Public shape of a device as seen by its owner (user-scoped endpoints).
@@ -4847,7 +4849,16 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
   });
   device = result.device;
 
-  await provisionPeer(selectedNode, publicKey, `${assignedIP}/32`);
+  // Cấp peer trên node khách sẽ dùng VÀ mirror sang mọi node đang bật. Nếu node chính
+  // lỗi thì ném ra (502 exit_node_provision_failed) thay vì trả 201 — trước đây lỗi bị
+  // nuốt nên khách nhận "Connected" mà không bao giờ handshake được (xem peer-mirror.js).
+  await provisionEverywhere({
+    primaryNode: selectedNode,
+    nodes: await nodeStore.active(),
+    publicKey,
+    allowedIPs: `${assignedIP}/32`,
+    upsert: (node, key, ips) => provisionPeer(node, key, ips),
+  });
 
   if (apiShape === "v1") {
     return {
