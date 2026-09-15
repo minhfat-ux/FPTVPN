@@ -114,6 +114,32 @@ Script làm đúng 5 việc (không gọi Xcode, không cần archive):
 4. Kiểm `codesign --verify --deep --strict` + in danh sách UDID trong profile.
 5. Upload lên node-2 (đi vòng qua node-1) và **kiểm sha256 ở đích**, rồi báo server "đã ký lại".
 
+### 4b-bis. Ký lại NGAY TRÊN SERVER (Linux, zsign) — bỏ phụ thuộc máy Mac
+
+Máy Mac không cần bật nữa: node-2 (Ubuntu 24.04) tự ký bằng **zsign** (bản dựng sẵn
+`zsign-linux-x86_64` v1.1.2, đã kiểm sha256 với `SHA256SUMS.txt` của release).
+
+| Thành phần trên node-2 | Việc |
+|---|---|
+| `/root/flowvpn-sign/refresh-profiles.mjs` | tạo lại profile Ad Hoc đủ UDID qua **ASC API** (khoá đã lưu trong control plane) |
+| `/root/flowvpn-sign/resign-ipa.sh` | thay profile + ký lại từng bundle bằng zsign → phát IPA mới → báo server |
+| `/root/flowvpn-sign/make-p12.sh` | ghép **khoá riêng** với **chuỗi chứng chỉ Apple** (leaf + WWDR + Root trích từ chính IPA đang phát) |
+| `/root/flowvpn-sign/watch.sh` + `flowvpn-sign.timer` | timer 15s: thấy máy chờ ký là tự ký (thay watcher trên Mac) |
+
+⚠️ **zsign đòi p12 PHẢI có đủ chuỗi chứng chỉ** — chỉ có khoá trơ thì báo
+`Unknown issuer hash … no usable CA chain` và ký hỏng. `make-p12.sh` lo phần ghép chuỗi.
+
+🔐 **Khoá riêng phải nằm trên server ⇒ cân nhắc bảo mật**: ai có root trên máy ký đều ký được app
+bằng chứng chỉ của shop. Nếu rò rỉ phải **revoke** chứng chỉ (mọi bản phát sau đó phải ký lại).
+Vì vậy có thể chọn máy ký ít lộ hơn (node-1) thay vì node-2 (đang chạy control plane + Caddy).
+
+Bật tự động (sau khi đã có `dist.p12`):
+
+```bash
+systemctl enable --now flowvpn-sign.timer      # từ đó khách đăng ký là tự có bản cài
+systemctl status flowvpn-sign.timer
+```
+
 **Chỉ build lại khi CODE đổi** (paywall, subscription, sửa bug trong app…): lúc đó
 `bash scripts/archive-appstore.sh ios adhoc` → `scripts/ios-adhoc-export.sh --no-upload` → upload.
 Bump `CURRENT_PROJECT_VERSION` trong `project.yml` khi phát bản mới.
@@ -175,8 +201,8 @@ PY
   (`.pkg` / `.dmg` / `.zip`, có notarize không) rồi thêm `mac_url` vào payload.
 - **Android**: nút Update đã tải APK trực tiếp (không qua trang cài); muốn tải **trong app** rồi mở
   trình cài thì cần `FileProvider` + quyền `REQUEST_INSTALL_PACKAGES`.
-- **Ký IPA khi có UDID mới**: server tự thêm UDID lên Apple, nhưng export profile + ký + upload vẫn
-  làm trên máy Mac (`scripts/ios-add-udid.sh` hỗ trợ phần export/upload).
+- **Ký IPA khi có UDID mới**: server tự thêm UDID lên Apple **và** tự ký lại bằng zsign (xem §4b-bis) —
+  chỉ cần nạp khoá `.p12` một lần; sau đó máy Mac không phải bật.
 - Provisioning profile Ad Hoc hết hạn theo năm tài khoản ⇒ nhớ lịch ký lại.
 
 ## 10. Kiểm tra nhanh
