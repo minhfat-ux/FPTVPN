@@ -11,6 +11,8 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Chỉ nhúng manifest (yêu cầu quyền admin) khi build/publish cho Windows. -->
     <ApplicationManifest Condition="$(RuntimeIdentifier.StartsWith('win'))">app.manifest</ApplicationManifest>
+    <!-- Icon app (hiện trên exe, shortcut và cả bộ cài Inno Setup). -->
+    <ApplicationIcon>..\assets\vpnflow.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

@@ -42,6 +42,26 @@ dotnet run --project windows\PrivateVPNWindows.App\PrivateVPNWindows.App.csproj 
 
 ## 3. Đóng gói
 
+### 3a. Bộ cài 1-click (Inno Setup) — cách phát cho khách
+
+Trên máy Windows có **.NET 8 SDK** + **Inno Setup 6** (`winget install --id JRSoftware.InnoSetup -e`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1
+# → windows\installer\out\VPNFlow-Setup-<version>.exe   (gửi đúng 1 file này cho khách)
+```
+
+Script tự làm: kiểm tra `windows\assets\wintun.dll` + `wireguard-go.exe` → `dotnet publish`
+self-contained win-x64 (khách **không cần cài .NET**, **không cần cài WireGuard**) → gọi
+`ISCC.exe` đóng gói. Tuỳ chọn: `-Version 1.2.0`, `-FrameworkDependent` (nhẹ hơn, máy khách phải có
+.NET 8 Desktop Runtime), `-SkipPublish` (chỉ build lại installer).
+
+Bộ cài: cài vào `%ProgramFiles%\VPNFlow`, tạo shortcut Start Menu (+ desktop tuỳ chọn), chặn cài nếu
+thiếu binary tunnel, hỏi có xoá phiên đăng nhập khi gỡ, và tự đóng app đang chạy khi nâng cấp.
+App cần quyền admin để dựng tunnel (`app.manifest: requireAdministrator`) nên khi mở app Windows sẽ hỏi UAC — đây là điều bắt buộc với userspace WireGuard/wintun.
+
+### 3b. Chạy trực tiếp bằng publish (khi phát triển)
+
 ```powershell
 # cần .NET 8 trên máy đích
 dotnet publish windows\PrivateVPNWindows.App\PrivateVPNWindows.App.csproj -c Release -r win-x64 --self-contained false -o dist
