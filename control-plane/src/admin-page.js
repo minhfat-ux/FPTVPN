@@ -632,6 +632,12 @@ export function adminPageHTML() {
         <button id="loadAiUsers">Refresh</button>
         <button class="secondary" id="aiuExport">Export CSV</button>
       </div>
+      <div class="actions" style="margin-top:8px">
+        <button class="secondary" id="aiuPrev">← Trước</button>
+        <span class="status-inline" id="aiuPageInfo">Trang 1/1</span>
+        <button class="secondary" id="aiuNext">Sau →</button>
+        <span class="status-inline" id="aiuTotal"></span>
+      </div>
       <div class="status" id="aiuStatusLine"></div>
 
       <div style="overflow-x:auto; margin-top:8px;">
@@ -889,6 +895,10 @@ export function adminPageHTML() {
       aiuSource: document.getElementById("aiuSource"),
       aiuSort: document.getElementById("aiuSort"),
       aiuLimit: document.getElementById("aiuLimit"),
+      aiuPrev: document.getElementById("aiuPrev"),
+      aiuNext: document.getElementById("aiuNext"),
+      aiuPageInfo: document.getElementById("aiuPageInfo"),
+      aiuTotal: document.getElementById("aiuTotal"),
       aiuExport: document.getElementById("aiuExport"),
       aiuDetail: document.getElementById("aiuDetail"),
       aiuSourcePanel: document.getElementById("aiuSourcePanel"),
@@ -2140,7 +2150,8 @@ export function adminPageHTML() {
     }
 
     // ---------------- MeetFlow AI users (dashboard + support actions) ----------------
-    var aiuState = { rows: [], stats: null, firebase: null };
+    // rows: dữ liệu đã lọc/sắp từ server; page: trang hiện tại (adminPaginate tự kẹp).
+    var aiuState = { rows: [], stats: null, firebase: null, page: 1 };
     var aiuSearchTimer = null;
 
     function aiuNum(value) {
@@ -2309,6 +2320,11 @@ export function adminPageHTML() {
         fields.aiuStatusLine.textContent = "Đang tải...";
         var data = await request("/v1/admin/ai/users?" + aiuQueryString());
         aiuState.rows = data.users || [];
+        // Mặc định "hoạt động gần nhất": AI users chỉ có lastSeen/firstSeen (không
+        // có created_at). Các kiểu sắp xếp khác đã do server trả về sẵn.
+        if ((fields.aiuSort ? fields.aiuSort.value : "recent") === "recent") {
+          aiuState.rows = adminSortByTimeDesc(aiuState.rows, function (r) { return r.lastSeen; });
+        }
         aiuState.stats = data.stats || {};
         aiuState.firebase = data.firebase || {};
         aiuRenderCards(aiuState.stats);
@@ -2316,7 +2332,7 @@ export function adminPageHTML() {
         var series = (aiuState.stats && aiuState.stats.series) || [];
         aiuRenderBars(fields.aiuRevenueBars, series, function (s) { return s.revenue; }, true);
         aiuRenderBars(fields.aiuNewUserBars, series, function (s) { return s.newUsers; }, false);
-        aiuRenderRows(aiuState.rows);
+        aiuRenderRows();
         aiuRenderStorePanel(data.play, aiuState.stats);
         fields.aiuStatusLine.textContent =
           "Hiển thị " + aiuState.rows.length + "/" + aiuNum(data.total) + " user (tổng " + aiuNum(data.totalKnown) + ")" +
@@ -2326,7 +2342,13 @@ export function adminPageHTML() {
       }
     }
 
-    function aiuRenderRows(rows) {
+    function aiuRenderRows() {
+      // Server đã lọc/sắp trên toàn bộ dữ liệu; ở đây chỉ cắt trang bằng đúng
+      // helper chung (tự kẹp về trang cuối khi refresh làm danh sách ngắn lại).
+      var view = adminPaginate(aiuState.rows, aiuState.page, ADMIN_PAGE_SIZE);
+      aiuState.page = view.page;
+      adminUpdatePager(fields.aiuPrev, fields.aiuNext, fields.aiuPageInfo, fields.aiuTotal, view, "user");
+      var rows = view.items;
       fields.aiuBody.innerHTML = "";
       if (!rows.length) {
         fields.aiuBody.innerHTML = '<tr><td colspan="10">Không có user nào khớp bộ lọc.</td></tr>';
@@ -2929,14 +2951,18 @@ export function adminPageHTML() {
     if (fields.loadFirebaseUsers) fields.loadFirebaseUsers.onclick = loadFirebaseUsers;
     var remindBulkBtn = document.getElementById("remindVerify");
     if (remindBulkBtn) remindBulkBtn.onclick = remindVerifyBulk;
-    if (fields.aiuStatus) fields.aiuStatus.onchange = loadAiUsers;
-    if (fields.aiuSource) fields.aiuSource.onchange = loadAiUsers;
-    if (fields.aiuSort) fields.aiuSort.onchange = loadAiUsers;
-    if (fields.aiuLimit) fields.aiuLimit.onchange = loadAiUsers;
+    // Đổi bộ lọc/sắp xếp → quay về trang 1; Refresh giữ trang để adminPaginate tự kẹp.
+    function aiuReloadFromFirstPage() { aiuState.page = 1; loadAiUsers(); }
+    if (fields.aiuPrev) fields.aiuPrev.onclick = function () { aiuState.page -= 1; aiuRenderRows(); };
+    if (fields.aiuNext) fields.aiuNext.onclick = function () { aiuState.page += 1; aiuRenderRows(); };
+    if (fields.aiuStatus) fields.aiuStatus.onchange = aiuReloadFromFirstPage;
+    if (fields.aiuSource) fields.aiuSource.onchange = aiuReloadFromFirstPage;
+    if (fields.aiuSort) fields.aiuSort.onchange = aiuReloadFromFirstPage;
+    if (fields.aiuLimit) fields.aiuLimit.onchange = aiuReloadFromFirstPage;
     if (fields.aiuSearch) {
       fields.aiuSearch.oninput = function () {
         clearTimeout(aiuSearchTimer);
-        aiuSearchTimer = setTimeout(loadAiUsers, 350);
+        aiuSearchTimer = setTimeout(aiuReloadFromFirstPage, 350);
       };
     }
     if (fields.aiuExport) {

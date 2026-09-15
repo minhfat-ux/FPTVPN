@@ -118,3 +118,28 @@ test("cả hai bảng sắp xếp theo thời gian đăng ký (created_at / regi
   assert.ok(html.includes("user.created_at"), "Users phải sắp theo created_at");
   assert.ok(html.includes("d.registeredAt"), "UDID phải sắp theo registeredAt");
 });
+
+test("bảng MeetFlow AI dùng chung cơ chế phân trang (adminPaginate + ADMIN_PAGE_SIZE)", () => {
+  const html = adminPageHTML();
+  assert.ok(
+    html.includes("adminPaginate(aiuState.rows, aiuState.page, ADMIN_PAGE_SIZE)"),
+    "AI users phải phân trang bằng helper chung",
+  );
+  assert.ok(
+    html.includes("adminUpdatePager(fields.aiuPrev, fields.aiuNext, fields.aiuPageInfo, fields.aiuTotal"),
+    "AI users phải cập nhật thanh phân trang bằng adminUpdatePager",
+  );
+});
+
+test("bảng MeetFlow AI có đủ điều khiển phân trang", () => {
+  const html = adminPageHTML();
+  for (const id of ["aiuPrev", "aiuNext", "aiuPageInfo", "aiuTotal"]) {
+    assert.ok(html.includes('id="' + id + '"'), `thiếu phần tử #${id} trong admin page`);
+  }
+});
+
+test("bảng MeetFlow AI sắp mặc định theo lastSeen (hoạt động gần nhất)", () => {
+  const html = adminPageHTML();
+  assert.ok(html.includes("adminSortByTimeDesc(aiuState.rows"), "AI users phải sắp bằng helper chung");
+  assert.ok(html.includes("return r.lastSeen;"), "trường thời gian của AI users là lastSeen");
+});
