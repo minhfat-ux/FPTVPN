@@ -362,6 +362,13 @@ export function adminPageHTML() {
         <span class="status-inline" id="addUserStatus"></span>
       </div>
       <div id="expirySummary" style="margin:10px 0;font-size:13px;line-height:2;"></div>
+      <div class="actions" style="margin-top:10px">
+        <input id="usersSearch" placeholder="Tìm theo email / User ID..." style="max-width:240px">
+        <button class="secondary" id="usersPrev">← Trước</button>
+        <span class="status-inline" id="usersPageInfo">Trang 1/1</span>
+        <button class="secondary" id="usersNext">Sau →</button>
+        <span class="status-inline" id="usersTotal"></span>
+      </div>
       <div style="overflow-x:auto; margin-top: 12px;">
         <table>
           <thead>
@@ -388,6 +395,7 @@ export function adminPageHTML() {
       <div class="actions">
         <button id="loadIos">Refresh</button>
         <button class="secondary" id="ascRegisterAll">⬆️ Đăng ký tất cả lên Apple</button>
+        <input id="iosSearch" placeholder="Tìm theo UDID / email..." style="max-width:240px">
         <span class="status-inline" id="iosStatus"></span>
       </div>
 
@@ -423,6 +431,12 @@ export function adminPageHTML() {
           <thead><tr><th>UDID</th><th>Model / iOS</th><th>Email</th><th>User ID</th><th>Registered</th><th>Built</th><th>Apple</th><th>Map account</th></tr></thead>
           <tbody id="iosBody"><tr><td colspan="8">Bấm Refresh.</td></tr></tbody>
         </table>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button class="secondary" id="iosPrev">← Trước</button>
+        <span class="status-inline" id="iosPageInfo">Trang 1/1</span>
+        <button class="secondary" id="iosNext">Sau →</button>
+        <span class="status-inline" id="iosTotal"></span>
       </div>
       <div class="status" id="iosAppleStatus"></div>
     </section>
@@ -764,6 +778,11 @@ export function adminPageHTML() {
       viewEdit: document.getElementById("view-edit"),
       viewUsers: document.getElementById("view-users"),
       usersBody: document.getElementById("usersBody"),
+      usersSearch: document.getElementById("usersSearch"),
+      usersPrev: document.getElementById("usersPrev"),
+      usersNext: document.getElementById("usersNext"),
+      usersPageInfo: document.getElementById("usersPageInfo"),
+      usersTotal: document.getElementById("usersTotal"),
       newUserEmail: document.getElementById("newUserEmail"),
       newUserDays: document.getElementById("newUserDays"),
       addUserStatus: document.getElementById("addUserStatus"),
@@ -774,6 +793,11 @@ export function adminPageHTML() {
       viewIos: document.getElementById("view-ios"),
       iosBody: document.getElementById("iosBody"),
       iosStatus: document.getElementById("iosStatus"),
+      iosSearch: document.getElementById("iosSearch"),
+      iosPrev: document.getElementById("iosPrev"),
+      iosNext: document.getElementById("iosNext"),
+      iosPageInfo: document.getElementById("iosPageInfo"),
+      iosTotal: document.getElementById("iosTotal"),
       loadIos: document.getElementById("loadIos"),
       ascTitle: document.getElementById("ascTitle"),
       ascBody: document.getElementById("ascBody"),
@@ -848,6 +872,72 @@ export function adminPageHTML() {
     };
 
     let editingId = null; // null = create mode
+
+    // ===== ADMIN PAGINATION HELPERS (giữ khối này liền mạch để test trích xuất) =====
+    // Số bản ghi mỗi trang cho "Quản lý user" và "Quản lý UDID".
+    // Đổi 1 chỗ này là đổi cho cả hai bảng.
+    const ADMIN_PAGE_SIZE = 10;
+
+    /**
+     * Sắp xếp bản ghi theo thời gian đăng ký mới nhất lên trên.
+     * getTime trả về chuỗi ISO (hoặc số) của thời điểm đăng ký. Bản ghi thiếu
+     * thời gian bị đẩy xuống cuối; thứ tự gốc được giữ ổn định khi bằng nhau.
+     */
+    function adminSortByTimeDesc(items, getTime) {
+      return (items || [])
+        .map(function (item, index) { return { item: item, index: index }; })
+        .sort(function (a, b) {
+          const ta = Date.parse(getTime(a.item));
+          const tb = Date.parse(getTime(b.item));
+          const va = Number.isFinite(ta) ? ta : -Infinity;
+          const vb = Number.isFinite(tb) ? tb : -Infinity;
+          if (va !== vb) return vb - va;
+          return a.index - b.index;
+        })
+        .map(function (entry) { return entry.item; });
+    }
+
+    /**
+     * Lọc trên TOÀN BỘ dữ liệu (trước khi phân trang). So khớp không phân biệt
+     * hoa/thường trên từng trường do getText trả về (chuỗi hoặc mảng chuỗi).
+     */
+    function adminFilterItems(items, query, getText) {
+      const q = String(query == null ? "" : query).trim().toLowerCase();
+      if (!q) return items || [];
+      return (items || []).filter(function (item) {
+        const raw = getText(item);
+        const parts = Array.isArray(raw) ? raw : [raw];
+        return parts.some(function (part) {
+          return String(part == null ? "" : part).toLowerCase().indexOf(q) >= 0;
+        });
+      });
+    }
+
+    /**
+     * Cắt danh sách theo trang. Tự kẹp page vào [1, totalPages] nên khi dữ
+     * liệu làm mới ngắn hơn (đang ở trang > tổng trang) sẽ tự về trang cuối.
+     */
+    function adminPaginate(items, page, pageSize) {
+      const list = items || [];
+      const size = pageSize > 0 ? pageSize : ADMIN_PAGE_SIZE;
+      const totalPages = Math.max(1, Math.ceil(list.length / size));
+      const current = Math.min(Math.max(1, Math.floor(Number(page) || 1)), totalPages);
+      const start = (current - 1) * size;
+      return { page: current, totalPages: totalPages, total: list.length, items: list.slice(start, start + size) };
+    }
+
+    /** Cập nhật thanh phân trang: nhãn "Trang X/Y", tổng số, disable nút đầu/cuối. */
+    function adminUpdatePager(prevBtn, nextBtn, infoEl, totalEl, view, unit) {
+      if (infoEl) infoEl.textContent = "Trang " + view.page + "/" + view.totalPages;
+      if (totalEl) totalEl.textContent = "Tổng " + view.total + " " + unit;
+      if (prevBtn) prevBtn.disabled = view.page <= 1;
+      if (nextBtn) nextBtn.disabled = view.page >= view.totalPages;
+    }
+    // ===== END ADMIN PAGINATION HELPERS =====
+
+    // Trạng thái phân trang/lọc của hai bảng (dữ liệu đã tải về client).
+    const usersState = { all: [], expiry: {}, page: 1 };
+    const iosState = { all: [], page: 1 };
 
     // Auto-detect the API base: when this page is served under
     // /PrivateVPN/Admin (Caddy strips the prefix), keep the prefix so API
@@ -1041,59 +1131,75 @@ export function adminPageHTML() {
       try {
         fields.iosStatus.textContent = "Loading...";
         const data = await request("/v1/admin/ios/devices");
-        const devices = data.devices || [];
-        fields.iosBody.innerHTML = devices.length ? devices.map(function (d) {
-          return "<tr>" +
-            "<td><code>" + escapeHtml(d.udid || "") + "</code></td>" +
-            "<td>" + escapeHtml(d.model || "-") + " / " + escapeHtml(d.iosVersion || "-") + "</td>" +
-            "<td>" + escapeHtml(d.email || "-") + "</td>" +
-            "<td><code>" + escapeHtml(d.userId || "-") + "</code></td>" +
-            "<td>" + escapeHtml(d.registeredAt || "-") + "</td>" +
-            "<td>" + (d.built ? "✅" : "⏳") + "</td>" +
-            "<td>" + iosAppleCell(d) + "</td>" +
-            "<td>" +
-              '<button class="secondary ios-map" data-udid="' + escapeHtml(d.udid || "") + '">Map</button> ' +
-              (d.appleRegisteredAt ? "" : '<button class="secondary ios-apple" data-udid="' + escapeHtml(d.udid || "") + '">→ Apple</button>') +
-            "</td>" +
-            "</tr>";
-        }).join("") : '<tr><td colspan="8">Chưa có UDID.</td></tr>';
-        fields.iosBody.querySelectorAll(".ios-map").forEach(function (button) {
-          button.onclick = async function () {
-            const email = window.prompt("Email account cần map:", "");
-            if (!email) return;
-            try {
-              await request("/v1/admin/ios/devices/" + encodeURIComponent(button.dataset.udid) + "/account", {
-                method: "POST",
-                body: JSON.stringify({ email: email }),
-              });
-              await loadIosDevices();
-            } catch (error) {
-              fields.iosStatus.textContent = error.message;
-            }
-          };
-        });
-        fields.iosBody.querySelectorAll(".ios-apple").forEach(function (button) {
-          button.onclick = function () { registerOneApple(button.dataset.udid); };
-        });
-        fields.iosStatus.textContent = "Loaded " + devices.length + " device(s).";
+        // Mặc định: UDID đăng ký mới nhất lên trên (client đã có registeredAt).
+        iosState.all = adminSortByTimeDesc(data.devices || [], function (d) { return d.registeredAt; });
+        renderIosDevices();
+        fields.iosStatus.textContent = "Loaded " + iosState.all.length + " device(s).";
         await loadAscStatus();
       } catch (error) {
         fields.iosStatus.textContent = error.message;
       }
     }
 
+    function renderIosDevices() {
+      // Lọc trên toàn bộ dữ liệu rồi mới cắt trang; adminPaginate tự kẹp trang.
+      const filtered = adminFilterItems(iosState.all, fields.iosSearch ? fields.iosSearch.value : "", function (d) {
+        return [d.udid, d.email, d.userId, d.model, d.iosVersion];
+      });
+      const view = adminPaginate(filtered, iosState.page, ADMIN_PAGE_SIZE);
+      iosState.page = view.page;
+      adminUpdatePager(fields.iosPrev, fields.iosNext, fields.iosPageInfo, fields.iosTotal, view, "UDID");
+      fields.iosBody.innerHTML = view.items.length ? view.items.map(function (d) {
+        return "<tr>" +
+          "<td><code>" + escapeHtml(d.udid || "") + "</code></td>" +
+          "<td>" + escapeHtml(d.model || "-") + " / " + escapeHtml(d.iosVersion || "-") + "</td>" +
+          "<td>" + escapeHtml(d.email || "-") + "</td>" +
+          "<td><code>" + escapeHtml(d.userId || "-") + "</code></td>" +
+          "<td>" + escapeHtml(d.registeredAt || "-") + "</td>" +
+          "<td>" + (d.built ? "✅" : "⏳") + "</td>" +
+          "<td>" + iosAppleCell(d) + "</td>" +
+          "<td>" +
+            '<button class="secondary ios-map" data-udid="' + escapeHtml(d.udid || "") + '">Map</button> ' +
+            (d.appleRegisteredAt ? "" : '<button class="secondary ios-apple" data-udid="' + escapeHtml(d.udid || "") + '">→ Apple</button>') +
+          "</td>" +
+          "</tr>";
+      }).join("") : '<tr><td colspan="8">Chưa có UDID.</td></tr>';
+      fields.iosBody.querySelectorAll(".ios-map").forEach(function (button) {
+        button.onclick = async function () {
+          const email = window.prompt("Email account cần map:", "");
+          if (!email) return;
+          try {
+            await request("/v1/admin/ios/devices/" + encodeURIComponent(button.dataset.udid) + "/account", {
+              method: "POST",
+              body: JSON.stringify({ email: email }),
+            });
+            await loadIosDevices();
+          } catch (error) {
+            fields.iosStatus.textContent = error.message;
+          }
+        };
+      });
+      fields.iosBody.querySelectorAll(".ios-apple").forEach(function (button) {
+        button.onclick = function () { registerOneApple(button.dataset.udid); };
+      });
+    }
+
     async function loadUsers() {
       try {
         setStatus("Loading users...");
         const data = await request("/v1/admin/users");
-        renderUsers(data.users || [], data.expiry || {});
-        setStatus("Loaded " + (data.users || []).length + " user(s).");
+        usersState.expiry = data.expiry || {};
+        // Mặc định: user đăng ký mới nhất lên trên (server trả created_at ISO).
+        usersState.all = adminSortByTimeDesc(data.users || [], function (user) { return user.created_at; });
+        renderUsers();
+        setStatus("Loaded " + usersState.all.length + " user(s).");
       } catch (error) {
         setStatus(error.message, true);
       }
     }
 
-    function renderUsers(users, expiry) {
+    function renderUsers() {
+      const expiry = usersState.expiry;
       const sumEl = document.getElementById("expirySummary");
       if (sumEl) {
         const e = expiry || {};
@@ -1108,12 +1214,19 @@ export function adminPageHTML() {
           ? chips.map((c) => '<span class="pill" style="margin:2px 6px 2px 0;color:' + c[2] + ';border-color:' + c[2] + '">' + c[0] + ': <b>' + c[1] + '</b></span>').join("")
           : '<span style="color:var(--muted)">Khong co user.</span>';
       }
-      if (!users.length) {
+      // Lọc trên toàn bộ dữ liệu rồi mới cắt trang; adminPaginate tự kẹp trang.
+      const filtered = adminFilterItems(usersState.all, fields.usersSearch ? fields.usersSearch.value : "", function (user) {
+        return [user.email, user.id, user.apple_user_id];
+      });
+      const view = adminPaginate(filtered, usersState.page, ADMIN_PAGE_SIZE);
+      usersState.page = view.page;
+      adminUpdatePager(fields.usersPrev, fields.usersNext, fields.usersPageInfo, fields.usersTotal, view, "user");
+      if (!view.items.length) {
         fields.usersBody.innerHTML = '<tr><td colspan="7">No users found.</td></tr>';
         return;
       }
       fields.usersBody.innerHTML = "";
-      for (const user of users) {
+      for (const user of view.items) {
         const row = document.createElement("tr");
         row.innerHTML = [
           '<td data-label="Email"></td>',
@@ -2658,6 +2771,18 @@ export function adminPageHTML() {
     document.getElementById("tabAiUsers").onclick = () => showTab("aiu");
     document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadIos").onclick = loadIosDevices;
+
+    // Phân trang + lọc cho bảng Users và UDID (lọc client trên toàn bộ dữ liệu).
+    if (fields.usersPrev) fields.usersPrev.onclick = function () { usersState.page -= 1; renderUsers(); };
+    if (fields.usersNext) fields.usersNext.onclick = function () { usersState.page += 1; renderUsers(); };
+    if (fields.usersSearch) {
+      fields.usersSearch.oninput = function () { usersState.page = 1; renderUsers(); };
+    }
+    if (fields.iosPrev) fields.iosPrev.onclick = function () { iosState.page -= 1; renderIosDevices(); };
+    if (fields.iosNext) fields.iosNext.onclick = function () { iosState.page += 1; renderIosDevices(); };
+    if (fields.iosSearch) {
+      fields.iosSearch.oninput = function () { iosState.page = 1; renderIosDevices(); };
+    }
     document.getElementById("ascSave").onclick = saveAscCredential;
     document.getElementById("ascClear").onclick = clearAscCredential;
     document.getElementById("ascRegisterAll").onclick = registerAllApple;
