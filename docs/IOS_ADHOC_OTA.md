@@ -116,8 +116,10 @@ Script làm đúng 5 việc (không gọi Xcode, không cần archive):
 
 ### 4b-bis. Ký lại NGAY TRÊN SERVER (Linux, zsign) — bỏ phụ thuộc máy Mac
 
-Máy Mac không cần bật nữa: node-2 (Ubuntu 24.04) tự ký bằng **zsign** (bản dựng sẵn
-`zsign-linux-x86_64` v1.1.2, đã kiểm sha256 với `SHA256SUMS.txt` của release).
+Máy Mac không cần bật nữa. **Máy ký = node-1** (chủ dự án chọn: ít lộ hơn node-2 vì không phục vụ
+web công khai) — Ubuntu 24.04, ký bằng **zsign** (bản dựng sẵn `zsign-linux-x86_64` v1.1.2, đã kiểm
+sha256 với `SHA256SUMS.txt` của release). Máy ký khác máy control plane nên script lấy IPA + báo
+"đã ký lại" **qua ssh sang node-2** (`CP_HOST=root@165.101.114.162`).
 
 | Thành phần trên node-2 | Việc |
 |---|---|
@@ -125,6 +127,11 @@ Máy Mac không cần bật nữa: node-2 (Ubuntu 24.04) tự ký bằng **zsign
 | `/root/flowvpn-sign/resign-ipa.sh` | thay profile + ký lại từng bundle bằng zsign → phát IPA mới → báo server |
 | `/root/flowvpn-sign/make-p12.sh` | ghép **khoá riêng** với **chuỗi chứng chỉ Apple** (leaf + WWDR + Root trích từ chính IPA đang phát) |
 | `/root/flowvpn-sign/watch.sh` + `flowvpn-sign.timer` | timer 15s: thấy máy chờ ký là tự ký (thay watcher trên Mac) |
+| `apple-asc.json` + `apple-devices.js` trên node-1 | để node-1 tự gọi ASC API (đã **test thật**: tạo lại 2 profile, 4 thiết bị) |
+
+Đã kiểm trên node-1: lấy IPA từ node-2 qua ssh OK (4.945.910 bytes), guard "chưa có khoá" thoát êm,
+`watch.sh` chạy đúng. **Còn thiếu duy nhất khoá `.p12`** → sau khi nạp thì
+`systemctl enable --now flowvpn-sign.timer` là chuỗi tự động hoàn chỉnh.
 
 ⚠️ **zsign đòi p12 PHẢI có đủ chuỗi chứng chỉ** — chỉ có khoá trơ thì báo
 `Unknown issuer hash … no usable CA chain` và ký hỏng. `make-p12.sh` lo phần ghép chuỗi.

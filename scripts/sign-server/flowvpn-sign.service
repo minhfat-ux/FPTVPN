@@ -1,7 +1,12 @@
 [Unit]
-Description=Ký lại IPA Ad Hoc khi có UDID mới (zsign, không build lại)
-After=network-online.target flowvpn-cp.service
+Description=Ký lại IPA Ad Hoc khi có UDID mới (zsign trên node-1; không build lại)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
+# Máy ký KHÁC máy control plane ⇒ lấy IPA + báo API qua ssh sang node-2.
+Environment=CP_HOST=root@165.101.114.162
+Environment=APPLE_MODULE=/root/flowvpn-sign/apple-devices.js
+Environment=ASC_CRED_FILE=/root/flowvpn-sign/apple-asc.json
 ExecStart=/root/flowvpn-sign/watch.sh

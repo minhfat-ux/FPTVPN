@@ -5,13 +5,16 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { AppleCredentialStore, signAscToken } from "/root/flowvpn-cp/src/apple-devices.js";
+// Đường dẫn cấu hình được để chạy trên máy ký bất kỳ (node-1 hoặc node-2).
+const MODULE = process.env.APPLE_MODULE || "/root/flowvpn-cp/src/apple-devices.js";
+const CRED_FILE = process.env.ASC_CRED_FILE || "/root/flowvpn-cp/data/apple-asc.json";
+const { AppleCredentialStore, signAscToken } = await import(MODULE);
 
 const OUT_DIR = process.argv[2] || "/root/flowvpn-sign";
-const store = new AppleCredentialStore("/root/flowvpn-cp/data/apple-asc.json");
+const store = new AppleCredentialStore(CRED_FILE);
 const creds = await store.load();
 if (!creds.keyId || !creds.issuerId || !creds.privateKey) {
-  console.error("  LỖI: chưa có khoá App Store Connect trong control plane");
+  console.error(`  LỖI: chưa có khoá App Store Connect (${CRED_FILE})`);
   process.exit(2);
 }
 const token = signAscToken({ keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey });
