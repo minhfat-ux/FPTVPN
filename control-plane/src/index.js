@@ -2054,6 +2054,8 @@ const IOS_TEXTS = {
     autoOpen: "✅ Bản cài cho máy bạn đã sẵn sàng — đang mở… Nếu iOS không hiện hộp thoại, bấm nút bên dưới.",
     unlock: "Tôi đã cài hồ sơ rồi — mở nút tải & cài",
     unlockWarn: "Nếu iOS báo “Unable to Install” thì bản cài chưa ký cho máy này — nhắn shop để được ký.",
+    dmTitle: "⚠️ iOS yêu cầu bật Chế độ nhà phát triển (chỉ 1 lần)",
+    dmBody: "iOS 16 trở lên BẮT BUỘC bật <b>Chế độ nhà phát triển</b> cho app cài ngoài App Store. Cách làm: <b>Cài đặt → Quyền riêng tư &amp; Bảo mật → Chế độ nhà phát triển → Bật</b> → máy hỏi khởi động lại → bấm <b>Khởi động lại</b>. Nếu chưa thấy mục đó: mở app VPNFlow một lần rồi vào lại Cài đặt.",
     profileName: "VPNFlow — Đăng ký thiết bị",
     profileDesc: "Gửi mã thiết bị (UDID) cho VPNFlow để cấp bản cài phù hợp. Không thu thập dữ liệu khác.",
   },
@@ -2101,6 +2103,8 @@ const IOS_TEXTS = {
     autoOpen: "✅ Your build is ready — opening… If iOS shows nothing, tap the button below.",
     unlock: "I already installed the profile — unlock the download",
     unlockWarn: "If iOS says “Unable to Install”, this build is not signed for your device yet — message the shop.",
+    dmTitle: "⚠️ iOS requires Developer Mode (one time only)",
+    dmBody: "iOS 16+ REQUIRES <b>Developer Mode</b> for apps installed outside the App Store. How: <b>Settings → Privacy &amp; Security → Developer Mode → On</b> → the phone asks to restart → tap <b>Restart</b>. Don’t see the menu? Open the VPNFlow app once, then check Settings again.",
     profileName: "VPNFlow — Device registration",
     profileDesc: "Reports the device ID (UDID) to VPNFlow so we can issue a matching build. No other data is collected.",
   },
@@ -2148,6 +2152,8 @@ const IOS_TEXTS = {
     autoOpen: "✅ 该设备的安装包已就绪 —— 正在打开… 若 iOS 没有弹出提示，请点下方按钮。",
     unlock: "我已安装描述文件 —— 解锁下载按钮",
     unlockWarn: "若 iOS 提示“无法安装”，说明该安装包尚未为您的设备签名 —— 请联系商家。",
+    dmTitle: "⚠️ iOS 需要开启开发者模式（仅需一次）",
+    dmBody: "iOS 16 及以上安装非 App Store 应用<b>必须开启开发者模式</b>。操作：<b>设置 → 隐私与安全性 → 开发者模式 → 打开</b> → 系统提示重启 → 点<b>重新启动</b>。若找不到该菜单：先打开一次 VPNFlow 应用，再回到设置查看。",
     profileName: "VPNFlow — 设备注册",
     profileDesc: "将设备码 (UDID) 上报给 VPNFlow，以便发放对应的安装包。不采集其他数据。",
   },
@@ -2195,6 +2201,8 @@ const IOS_TEXTS = {
     autoOpen: "✅ 端末用ビルドの準備ができました —— 開いています… 何も表示されない場合は下のボタンを押してください。",
     unlock: "プロファイルをインストール済み —— ダウンロードを有効にする",
     unlockWarn: "iOS が「インストールできません」と表示する場合、この端末用に署名されていません —— ショップにご連絡ください。",
+    dmTitle: "⚠️ iOS はデベロッパモードが必要です（1 回だけ）",
+    dmBody: "iOS 16 以降、App Store 以外からインストールしたアプリは<b>デベロッパモード</b>が必要です。手順：<b>設定 → プライバシーとセキュリティ → デベロッパモード → オン</b> → 再起動を求められるので<b>再起動</b>。メニューが出ない場合は、VPNFlow アプリを一度起動してから設定を開き直してください。",
     profileName: "VPNFlow — 端末登録",
     profileDesc: "端末 ID (UDID) を VPNFlow に送信し、対応するビルドを発行するためのプロファイルです。他のデータは収集しません。",
   },
@@ -2242,6 +2250,8 @@ const IOS_TEXTS = {
     autoOpen: "✅ 기기용 빌드가 준비되었습니다 — 여는 중… 아무 반응이 없으면 아래 버튼을 누르세요.",
     unlock: "프로파일을 이미 설치했습니다 — 다운로드 잠금 해제",
     unlockWarn: "iOS가 “설치할 수 없음”을 표시하면 이 기기용으로 서명되지 않은 빌드입니다 — 판매자에게 문의하세요.",
+    dmTitle: "⚠️ iOS는 개발자 모드가 필요합니다 (1회만)",
+    dmBody: "iOS 16 이상은 App Store 외부에서 설치한 앱에 <b>개발자 모드</b>가 필요합니다. 방법: <b>설정 → 개인정보 보호 및 보안 → 개발자 모드 → 켜기</b> → 재시동 요청 → <b>재시동</b>. 메뉴가 안 보이면 VPNFlow 앱을 한 번 실행한 뒤 설정을 다시 확인하세요.",
     profileName: "VPNFlow — 기기 등록",
     profileDesc: "기기 ID (UDID)를 VPNFlow로 전송해 해당 빌드를 발급받기 위한 프로파일입니다. 다른 데이터는 수집하지 않습니다.",
   },
@@ -2699,6 +2709,9 @@ a.b1{background:rgba(255,255,255,.14);color:#fff}a.b2{background:#33c773;color:#
 a.b.disabled{opacity:.4;pointer-events:none;filter:grayscale(.35)}
 a.b.pulse{animation:pulse 1.5s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(51,199,115,.45)}50%{box-shadow:0 0 0 8px rgba(51,199,115,0)}}
+.devmode{margin-top:12px;padding:11px 12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:11px}
+.dm-title{font-size:13.5px;font-weight:700;color:#ffd166;margin-bottom:4px}
+.dm-body{font-size:12.5px;color:rgba(255,255,255,.85);line-height:1.55}
 .hintlock{font-size:12.5px;color:rgba(255,255,255,.5);text-align:center;margin:2px 0 0}
 ul{color:rgba(255,255,255,.72);font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0}
 code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}
@@ -2734,6 +2747,10 @@ ${iosLangSelectHTML(lang)}
   <div class="stephead"><span class="n">2</span><span class="h">${t.step2}</span></div>
   <a class="b b2${registered ? "" : " disabled"}${registered && ready ? " pulse" : ""}" id="installLink" href="${itms}">${t.downloadBtn}</a>
   <div class="hintlock" id="installHint" style="${registered ? "display:none" : ""}">${t.installLocked}</div>
+  <div class="devmode">
+    <div class="dm-title">${t.dmTitle}</div>
+    <div class="dm-body">${t.dmBody}</div>
+  </div>
   <a class="hintlock" id="unlockLink" href="#" onclick="unlockInstall();return false;" style="${registered ? "display:none" : ""};color:#8fd0ff;text-decoration:underline">${t.unlock}</a>
 </div>
 

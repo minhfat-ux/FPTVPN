@@ -192,3 +192,24 @@ nhận ra máy ⇒ nút tải vẫn khoá. Máy khách `00008140-00121C460C7B001
 Khắc phục cho máy khách đang bị: gán `sessionId = rec-00008140-00121C460C7B001C` ⇒ link
 `https://meetflowai.site/install/ios?s=rec-00008140-00121C460C7B001C` → status trả
 `{"registered":true,"ready":true}` ⇒ nút tải BẬT + tự mở hộp thoại cài.
+
+## 12. Khách báo "cần Chế độ nhà phát triển / không khả dụng" (2026-09-15)
+
+**Không phải lỗi build.** Kiểm chứng IPA đang phát: ký bằng `Apple Distribution: Minh Nguyen (G6XW3RN6LJ)`,
+profile `VPNFlow AdHoc App` chứa ĐÚNG chứng chỉ đó, `get-task-allow = false` cho cả app lẫn tunnel appex
+⇒ đúng chuẩn Ad Hoc.
+
+Nguyên nhân: **quy định của Apple** — iOS 16+ BẮT BUỘC bật **Developer Mode** cho app cài ngoài App Store
+(Ad Hoc / Development). Nguồn: tài liệu PGYER `pgyer.com/doc/view/ios_install_failed`:
+> 「iOS 16 及以上版本安装 Ad Hoc 或 Development 方式打包的应用，必须开启开发者模式」
+> · Cài xong mở app một lần → hệ thống nhắc bật Chế độ nhà phát triển
+> · Mục này chỉ xuất hiện sau khi đã từng cài 1 app Ad Hoc
+> · App Store và Enterprise (In-House) KHÔNG bị giới hạn
+
+Đã thêm khối hướng dẫn vào trang `/install/ios` (5 ngôn ngữ, ngay dưới nút tải & cài):
+"⚠️ iOS yêu cầu bật Chế độ nhà phát triển (chỉ 1 lần)" + đường dẫn chính xác
+(Cài đặt → Quyền riêng tư & Bảo mật → Chế độ nhà phát triển → Bật → khởi động lại) + mẹo "chưa thấy mục
+thì mở app một lần".
+
+**Hệ quả cần quyết định:** mọi khách Ad Hoc đều phải tự bật Developer Mode một lần. TestFlight/App Store
+không cần bước này; Enterprise (In-House) cũng không — nhưng cả hai đều có ràng buộc riêng.
