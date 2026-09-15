@@ -24,4 +24,14 @@
     <ProjectReference Include="..\PrivateVPNWindows.Core\PrivateVPNWindows.Core.csproj" />
   </ItemGroup>
 
+  <!-- Binary tunnel userspace (xem windows/assets/THIRD_PARTY.md): copy ra cạnh exe để
+       WintunWireGuardDriver tự lo tunnel. Điều kiện Exists để build trên macOS vẫn chạy
+       được khi asset chưa tải (fetch-assets.sh). -->
+  <ItemGroup>
+    <None Include="..\assets\wintun.dll" Link="wintun.dll"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\wintun.dll')" />
+    <None Include="..\assets\wireguard-go.exe" Link="wireguard-go.exe"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\wireguard-go.exe')" />
+  </ItemGroup>
+
 </Project>

@@ -44,7 +44,9 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _driver = driver ?? new WireGuardWindowsDriver();
+        // Quy tắc chọn: có đủ wintun.dll + wireguard-go.exe cạnh app → WintunWireGuardDriver
+        // (không cần cài WireGuard for Windows); thiếu asset → lùi về wireguard.exe ngoài.
+        _driver = driver ?? WireGuardDriverSelector.Create();
         _log = logger ?? ConsoleTunnelLogger.Instance;
     }
 

@@ -19,7 +19,8 @@ public sealed class LoginViewModel : ObservableObject
 
         SendCodeCommand = new AsyncRelayCommand(SendCodeAsync, () => !IsSendingCode && !IsVerifying && IsEmailValid);
         VerifyCommand = new AsyncRelayCommand(VerifyAsync, () => !IsVerifying && !IsSendingCode && IsEmailValid && !string.IsNullOrWhiteSpace(Code));
-        OpenBuyCommand = new RelayCommand(() => UrlLauncher.Open(ControlApiDefaults.BuyUrl));
+        // URL bám theo host control-plane đang dùng được (đổi khi host chính bị chặn theo tên).
+        OpenBuyCommand = new RelayCommand(() => UrlLauncher.Open(_api.BuyUrl));
     }
 
     /// <summary>Bắn khi verify thành công để shell điều hướng sang màn chính.</summary>
