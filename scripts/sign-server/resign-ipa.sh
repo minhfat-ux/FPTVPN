@@ -66,8 +66,23 @@ plist = plistlib.loads(raw[start:end].encode())
 ents = plist.get("Entitlements")
 if not ents:
     sys.exit("profile không có Entitlements")
+ents = {k: v for k, v in ents.items()}
+# Profile distribution cấp `keychain-access-groups = TEAMID.*` (wildcard). App lại lưu session
+# vào NHÓM CỤ THỂ `TEAMID.com.privatevpn.shared` (KeychainStore.swift) — với wildcard thì
+# SecItemAdd trả errSecMissingEntitlement, session không lưu được, đăng nhập xong app vẫn coi
+# như chưa đăng nhập và kẹt ở màn hình nhập email (sự cố 16/09). Vì vậy khi ký lại phải ghi lại
+# đúng nhóm cụ thể mà app dùng; prefix lấy từ application-identifier của profile.
+bundle_id = ents.get("application-identifier") or ""
+prefix = bundle_id.split(".")[0] if bundle_id else ""
+if prefix:
+    groups = [f"{prefix}.com.privatevpn.shared"]
+    for extra in ents.get("keychain-access-groups") or []:
+        if extra.startswith("com.apple.") and extra not in groups:
+            groups.append(extra)
+    ents["keychain-access-groups"] = groups
+    print(f"     keychain-access-groups -> {groups}")
 with open(sys.argv[2], "wb") as fh:
-    plistlib.dump({k: v for k, v in ents.items()}, fh)
+    plistlib.dump(ents, fh)
 print(f"     entitlements: {len(ents)} khoá → {sys.argv[2].split('/')[-1]}")
 PY
 }
