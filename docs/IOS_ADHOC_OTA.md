@@ -116,7 +116,8 @@ Script làm đúng 5 việc (không gọi Xcode, không cần archive):
 
 ### 4b-bis. Ký lại NGAY TRÊN SERVER (Linux, zsign) — bỏ phụ thuộc máy Mac
 
-Máy Mac không cần bật nữa. **Máy ký = node-1** (chủ dự án chọn: ít lộ hơn node-2 vì không phục vụ
+Máy Mac không cần bật nữa — **kể cả khoá ký cũng không cần lấy từ Mac** (xem "chứng chỉ sinh trên server" bên dưới).
+**Máy ký = node-1** (chủ dự án chọn: ít lộ hơn node-2 vì không phục vụ
 web công khai) — Ubuntu 24.04, ký bằng **zsign** (bản dựng sẵn `zsign-linux-x86_64` v1.1.2, đã kiểm
 sha256 với `SHA256SUMS.txt` của release). Máy ký khác máy control plane nên script lấy IPA + báo
 "đã ký lại" **qua ssh sang node-2** (`CP_HOST=root@165.101.114.162`).
@@ -132,6 +133,30 @@ sha256 với `SHA256SUMS.txt` của release). Máy ký khác máy control plane 
 Đã kiểm trên node-1: lấy IPA từ node-2 qua ssh OK (4.945.910 bytes), guard "chưa có khoá" thoát êm,
 `watch.sh` chạy đúng. **Còn thiếu duy nhất khoá `.p12`** → sau khi nạp thì
 `systemctl enable --now flowvpn-sign.timer` là chuỗi tự động hoàn chỉnh.
+
+### 4b-ter. Khoá ký sinh NGAY TRÊN SERVER (không cần export từ keychain Mac)
+
+Khoá Apple Distribution nằm trong keychain macOS, chỉ export được khi người ngồi máy nhập mật khẩu ⇒
+hay bị tắc. Đường vòng hẳn: **sinh khoá + CSR trên máy ký rồi xin Apple cấp chứng chỉ mới** qua ASC API.
+
+```bash
+# trên node-1, một lần:
+cd /root/flowvpn-sign
+node create-cert.mjs /root/flowvpn-sign "FlowVPN-Sign-2026!"   # sinh khoá+CSR, xin cert, ghép dist.p12
+node create-cert.mjs --revoke <certId>                          # (nếu cần) thu hồi chứng chỉ thừa
+```
+
+- Chứng chỉ sinh ra: **H4DSJC5XU5** (hạn 15/09/2027); khoá riêng **chỉ nằm trên node-1**, không rời server.
+- `refresh-profiles.mjs` đưa **TẤT CẢ** chứng chỉ Distribution vào profile (cũ `KCX28GM58P` + mới) ⇒
+  khách đang cài bằng chứng chỉ cũ **không bị ảnh hưởng gì**, bản mới ký bằng chứng chỉ mới vẫn cài được.
+- ⚠️ Đừng chạy `create-cert.mjs` nhiều lần: lần thứ hai sẽ **sinh khoá mới ghi đè** ⇒ khoá không khớp
+  chứng chỉ (`No cert in -in file matches private key`). Script đã sửa để **giữ nguyên khoá** nếu đã có.
+- Apple giới hạn số chứng chỉ Distribution của tài khoản (hiện 2 cái) — tạo thêm mà bị `409` thì thu hồi
+  cái không dùng rồi tạo lại.
+
+**Kiểm chứng đã chạy thật (15/09/2026):** zsign ký trên node-1 → đẩy sang node-2 (sha256 khớp) →
+tải lại từ URL công khai → `codesign --verify --deep --strict` = **valid on disk** +
+**satisfies its Designated Requirement**; entitlements VPN giữ nguyên; profile 5 UDID.
 
 ⚠️ **zsign đòi p12 PHẢI có đủ chuỗi chứng chỉ** — chỉ có khoá trơ thì báo
 `Unknown issuer hash … no usable CA chain` và ký hỏng. `make-p12.sh` lo phần ghép chuỗi.

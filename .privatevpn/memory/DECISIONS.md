@@ -351,3 +351,23 @@ Hành vi đã xác nhận: iOS **luôn hiện "Invalid Profile"** sau khi gửi 
 - **Sự cố tự gây (~1–2 phút)**: lệnh upload vòng qua node-1 sai quoting ⇒ IPA 0 byte trên node-2
   (route tải trả file rỗng). Khôi phục từ node-1 + verify. Từ nay: sau khi copy file lớn qua 2 chặng
   phải kiểm `size` + `sha256` tại đích trong cùng một lệnh.
+
+## 2026-09-15 — Bỏ hẳn phụ thuộc máy Mac: ký IPA trên node-1 bằng zsign + chứng chỉ sinh trên server
+
+- **Vấn đề**: ký IPA cần macOS (`codesign` + khoá trong keychain). Máy Mac hay **ngủ/tắt Tailscale**
+  (hôm nay rớt 3–4 lần) ⇒ watcher trên Mac không đáng tin; export khoá `.p12` từ keychain lại cần người
+  ngồi máy nhập mật khẩu (thử 4 lần đều không ra file).
+- **Giải pháp**: dựng máy ký Linux **node-1**:
+  · `zsign` v1.1.2 (bản dựng sẵn, sha256 khớp release).
+  · `refresh-profiles.mjs` — tạo lại profile Ad Hoc **đủ UDID + tất cả chứng chỉ Distribution** qua ASC API
+    (dùng khoá ASC đã có trong control plane).
+  · `create-cert.mjs` — **sinh khoá + CSR bằng openssl trên server** rồi **xin Apple cấp chứng chỉ mới**
+    (`H4DSJC5XU5`); khoá riêng không bao giờ rời server ⇒ **không cần export từ keychain nữa**.
+  · `resign-ipa.sh` — lấy IPA từ node-2 qua ssh → thay profile → zsign ký appex + app → đẩy lại node-2
+    (kiểm sha256) → báo `built`.
+  · `flowvpn-sign.timer` (15s) trên node-1 = tự động hoàn toàn; **watcher trên Mac đã tắt**.
+- **Verify thật**: `codesign --verify --deep --strict` trên bản công khai = valid on disk + satisfies
+  Designated Requirement; chuỗi chứng chỉ đủ (leaf + WWDR + Apple Root); entitlements VPN nguyên vẹn;
+  profile 5 UDID. Khách mới (iPhone16,1) được xử lý tự động trong lúc triển khai.
+- **Lưu ý**: chứng chỉ cũ `KCX28GM58P` vẫn nằm trong profile ⇒ app khách đang cài không bị ảnh hưởng.
+  Không revoke nó (app đã ký bằng nó có thể không mở được nếu bị thu hồi).

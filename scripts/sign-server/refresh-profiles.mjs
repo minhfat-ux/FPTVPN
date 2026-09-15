@@ -34,7 +34,10 @@ const bundleId = async (identifier) =>
   (await asc("GET", `/v1/bundleIds?filter[identifier]=${identifier}`)).data[0].id;
 const appBid = await bundleId("com.privatevpn.app");
 const extBid = await bundleId("com.privatevpn.app.packet-tunnel");
-const certId = (await asc("GET", "/v1/certificates?filter[certificateType]=DISTRIBUTION&limit=1")).data[0].id;
+// Đưa TẤT CẢ chứng chỉ Distribution vào profile: chứng chỉ cũ (đang ký app cho khách hiện tại)
+// và chứng chỉ mới sinh trên máy ký — profile chứa nhiều cert thì ký bằng cert nào cũng cài được.
+const certIds = (await asc("GET", "/v1/certificates?filter[certificateType]=DISTRIBUTION&limit=20")).data.map((c) => c.id);
+if (!certIds.length) throw new Error("tài khoản không có chứng chỉ Distribution nào");
 const devices = (await asc("GET", "/v1/devices?filter[platform]=IOS&limit=200")).data.map((d) => ({
   type: "devices",
   id: d.id,
@@ -54,7 +57,7 @@ async function makeProfile(name, bid) {
       attributes: { name, profileType: "IOS_APP_ADHOC" },
       relationships: {
         bundleId: { data: { type: "bundleIds", id: bid } },
-        certificates: { data: [{ type: "certificates", id: certId }] },
+        certificates: { data: certIds.map((id) => ({ type: "certificates", id })) },
         devices: { data: devices },
       },
     },
@@ -71,4 +74,4 @@ for (const [name, bid, file] of [
   fs.writeFileSync(path.join(OUT_DIR, file), content, { mode: 0o600 });
   console.log(`  ✔ ${name} (${content.length} bytes) → ${file}`);
 }
-console.log(`  thiết bị trong profile: ${devices.length}`);
+console.log(`  thiết bị trong profile: ${devices.length} | chứng chỉ: ${certIds.length}`);
