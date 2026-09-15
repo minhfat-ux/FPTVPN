@@ -1052,11 +1052,11 @@ export function adminPageHTML() {
             "<td>" + (d.built ? "✅" : "⏳") + "</td>" +
             "<td>" + iosAppleCell(d) + "</td>" +
             "<td>" +
-              "<button class=\"secondary ios-map\" data-udid=\"" + escapeHtml(d.udid || "") + "\">Map</button> " +
-              (d.appleRegisteredAt ? "" : "<button class=\"secondary ios-apple\" data-udid=\"" + escapeHtml(d.udid || "") + "\">→ Apple</button>") +
+              '<button class="secondary ios-map" data-udid="' + escapeHtml(d.udid || "") + '">Map</button> ' +
+              (d.appleRegisteredAt ? "" : '<button class="secondary ios-apple" data-udid="' + escapeHtml(d.udid || "") + '">→ Apple</button>') +
             "</td>" +
             "</tr>";
-        }).join("") : "<tr><td colspan=\"8\">Chưa có UDID.</td></tr>";
+        }).join("") : '<tr><td colspan="8">Chưa có UDID.</td></tr>';
         fields.iosBody.querySelectorAll(".ios-map").forEach(function (button) {
           button.onclick = async function () {
             const email = window.prompt("Email account cần map:", "");

@@ -65,3 +65,18 @@ test("base cũ là chuỗi rỗng/không hợp lệ vẫn an toàn", () => {
     "https://fcnvpn.tail303be3.ts.net",
   );
 });
+
+/**
+ * Chặn lỗi "nhập token xong panel trắng": toàn bộ JS của admin page nằm trong MỘT
+ * template literal, nên `\"` trong đó bị template literal biến thành `"` thật —
+ * chỉ 1 chỗ như vậy là cả <script> sai cú pháp và không dòng nào chạy.
+ * Test này parse đúng đoạn JS mà server phát ra.
+ */
+test("JS nhúng trong admin page parse được (không lỗi cú pháp)", () => {
+  const html = adminPageHTML();
+  const start = html.indexOf("<script>");
+  const end = html.lastIndexOf("</script>");
+  assert.ok(start > 0 && end > start, "không tìm thấy <script> trong admin page");
+  const script = html.slice(start + "<script>".length, end);
+  assert.doesNotThrow(() => new Function(script), "JS của admin page sai cú pháp");
+});
