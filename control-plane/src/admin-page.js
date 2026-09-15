@@ -155,6 +155,9 @@ export function adminPageHTML() {
     }
     .tab.active { background: var(--accent); color: #06160d; border-color: var(--accent); }
 
+    .area-tabs { margin-bottom: 12px; }
+    .area-tabs .tab { padding: 12px 22px; font-size: 15px; }
+
     .backlink {
       display: inline-flex;
       align-items: center;
@@ -284,15 +287,26 @@ export function adminPageHTML() {
   </header>
 
   <main>
-    <div class="tabs">
-      <button class="tab active" id="tabNodes">Nodes</button>
+    <!-- Điều hướng cấp khu: tách bạch 2 sản phẩm + khu hệ thống. Cấp con: tab trong khu. -->
+    <nav class="tabs area-tabs" id="areaTabs">
+      <button class="tab active" id="areaVpn" data-area="vpn">VPNFlow</button>
+      <button class="tab" id="areaAi" data-area="ai">MeetFlow AI</button>
+      <button class="tab" id="areaSystem" data-area="system">Hệ thống</button>
+    </nav>
+
+    <div class="tabs" id="tabsVpn" data-area="vpn">
+      <button class="tab active" id="tabStats">Dashboard</button>
       <button class="tab" id="tabUsers">Users</button>
       <button class="tab" id="tabIos">iOS UDID</button>
-      <button class="tab" id="tabStats">Dashboard</button>
       <button class="tab" id="tabPayments">Payments</button>
       <button class="tab" id="tabPlans">Plans</button>
+    </div>
+    <div class="tabs hidden" id="tabsAi" data-area="ai">
       <button class="tab" id="tabAi">MeetFlow AI</button>
       <button class="tab" id="tabAiUsers">AI Users</button>
+    </div>
+    <div class="tabs hidden" id="tabsSystem" data-area="system">
+      <button class="tab" id="tabNodes">Nodes</button>
     </div>
 
     <!-- ===================== LIST VIEW ===================== -->
@@ -787,6 +801,12 @@ export function adminPageHTML() {
       newUserDays: document.getElementById("newUserDays"),
       addUserStatus: document.getElementById("addUserStatus"),
       editTitle: document.getElementById("editTitle"),
+      areaVpn: document.getElementById("areaVpn"),
+      areaAi: document.getElementById("areaAi"),
+      areaSystem: document.getElementById("areaSystem"),
+      tabsVpn: document.getElementById("tabsVpn"),
+      tabsAi: document.getElementById("tabsAi"),
+      tabsSystem: document.getElementById("tabsSystem"),
       tabNodes: document.getElementById("tabNodes"),
       tabUsers: document.getElementById("tabUsers"),
       tabIos: document.getElementById("tabIos"),
@@ -836,6 +856,7 @@ export function adminPageHTML() {
       addPlanBtn: document.getElementById("addPlanBtn"),
       addPlanStatus: document.getElementById("addPlanStatus"),
       viewAi: document.getElementById("view-ai"),
+      tabAi: document.getElementById("tabAi"),
       loadAi: document.getElementById("loadAi"),
       aiStatus: document.getElementById("aiStatus"),
       aiBody: document.getElementById("aiBody"),
@@ -935,6 +956,24 @@ export function adminPageHTML() {
     }
     // ===== END ADMIN PAGINATION HELPERS =====
 
+    // ===== ADMIN AREA NAV HELPERS (giữ khối này liền mạch để test trích xuất) =====
+    // Chia trang admin thành 3 khu theo sản phẩm. Mỗi tab con chỉ thuộc ĐÚNG một
+    // khu; thêm/bớt tab phải cập nhật bảng này để không sót panel.
+    const ADMIN_TAB_AREA = {
+      stats: "vpn", users: "vpn", ios: "vpn", payments: "vpn", plans: "vpn",
+      ai: "ai", aiu: "ai",
+      nodes: "system",
+    };
+    // Tab mặc định khi mở một khu (khu mặc định toàn trang là vpn → VPNFlow).
+    const ADMIN_AREA_DEFAULT_TAB = { vpn: "stats", ai: "ai", system: "nodes" };
+    // Deep-link: /Admin#vpnflow | #meetflow-ai | #he-thong
+    const ADMIN_AREA_HASH = { vpn: "vpnflow", ai: "meetflow-ai", system: "he-thong" };
+    const ADMIN_HASH_AREA = { vpnflow: "vpn", "meetflow-ai": "ai", "he-thong": "system" };
+    function adminAreaForTab(tab) {
+      return Object.prototype.hasOwnProperty.call(ADMIN_TAB_AREA, tab) ? ADMIN_TAB_AREA[tab] : "";
+    }
+    // ===== END ADMIN AREA NAV HELPERS =====
+
     // Trạng thái phân trang/lọc của hai bảng (dữ liệu đã tải về client).
     const usersState = { all: [], expiry: {}, page: 1 };
     const iosState = { all: [], page: 1 };
@@ -986,10 +1025,12 @@ export function adminPageHTML() {
       fields.viewPayments.classList.toggle("hidden", tab !== "payments");
       if (fields.tabPlans) fields.tabPlans.classList.toggle("active", tab === "plans");
       if (fields.viewPlans) fields.viewPlans.classList.toggle("hidden", tab !== "plans");
+      if (fields.tabAi) fields.tabAi.classList.toggle("active", tab === "ai");
       if (fields.viewAi) fields.viewAi.classList.toggle("hidden", tab !== "ai");
       if (fields.tabAiUsers) fields.tabAiUsers.classList.toggle("active", tab === "aiu");
       if (fields.viewAiUsers) fields.viewAiUsers.classList.toggle("hidden", tab !== "aiu");
       fields.viewEdit.classList.add("hidden");
+      adminSyncArea(tab);
       if (tab === "users" && !fields.usersLoaded) {
         fields.usersLoaded = true;
         loadUsers();
@@ -1000,6 +1041,54 @@ export function adminPageHTML() {
       if (tab === "plans") loadPlans();
       if (tab === "ai") loadAi();
       if (tab === "aiu") loadAiUsers();
+    }
+
+    /** Đồng bộ nav cấp khu + nhóm tab con với tab đang xem, và nhớ lựa chọn. */
+    function adminSyncArea(tab) {
+      const area = adminAreaForTab(tab) || "vpn";
+      if (fields.areaVpn) fields.areaVpn.classList.toggle("active", area === "vpn");
+      if (fields.areaAi) fields.areaAi.classList.toggle("active", area === "ai");
+      if (fields.areaSystem) fields.areaSystem.classList.toggle("active", area === "system");
+      if (fields.tabsVpn) fields.tabsVpn.classList.toggle("hidden", area !== "vpn");
+      if (fields.tabsAi) fields.tabsAi.classList.toggle("hidden", area !== "ai");
+      if (fields.tabsSystem) fields.tabsSystem.classList.toggle("hidden", area !== "system");
+      try {
+        localStorage.setItem("fvpn_admin_area", area);
+        localStorage.setItem("fvpn_admin_tab", tab);
+        localStorage.setItem("fvpn_admin_tab_" + area, tab);
+      } catch (error) { /* chế độ riêng tư có thể chặn localStorage */ }
+      try {
+        const hash = "#" + (ADMIN_AREA_HASH[area] || area);
+        if (window.location.hash !== hash) window.history.replaceState(null, "", hash);
+      } catch (error) { /* bỏ qua nếu history bị chặn */ }
+    }
+
+    /** Mở một khu; nhớ tab con đã xem lần trước, nếu không có thì mở tab mặc định. */
+    function showArea(area) {
+      let tab = "";
+      try { tab = localStorage.getItem("fvpn_admin_tab_" + area) || ""; } catch (error) { /* bỏ qua */ }
+      if (adminAreaForTab(tab) !== area) tab = ADMIN_AREA_DEFAULT_TAB[area] || "stats";
+      showTab(tab);
+    }
+
+    /**
+     * Chọn tab lúc mở trang: ưu tiên deep-link hash, rồi tab đã nhớ, cuối cùng
+     * là mặc định VPNFlow. Nhờ vậy F5 không nhảy về tab đầu.
+     */
+    function adminInitTab() {
+      const hash = String(window.location.hash || "").replace(/^#/, "").toLowerCase();
+      let tab = "";
+      if (Object.prototype.hasOwnProperty.call(ADMIN_HASH_AREA, hash)) {
+        const area = ADMIN_HASH_AREA[hash];
+        try { tab = localStorage.getItem("fvpn_admin_tab_" + area) || ""; } catch (error) { /* bỏ qua */ }
+        if (adminAreaForTab(tab) !== area) tab = ADMIN_AREA_DEFAULT_TAB[area] || "stats";
+      } else if (Object.prototype.hasOwnProperty.call(ADMIN_TAB_AREA, hash)) {
+        tab = hash;
+      } else {
+        try { tab = localStorage.getItem("fvpn_admin_tab") || ""; } catch (error) { /* bỏ qua */ }
+      }
+      if (!adminAreaForTab(tab)) tab = ADMIN_AREA_DEFAULT_TAB.vpn;
+      showTab(tab);
     }
 
     /** Adds a VPNFlow account by email and (optionally) activates Premium. */
@@ -2761,6 +2850,9 @@ export function adminPageHTML() {
 
     if (fields.loadAi) fields.loadAi.onclick = loadAi;
 
+    document.getElementById("areaVpn").onclick = () => showArea("vpn");
+    document.getElementById("areaAi").onclick = () => showArea("ai");
+    document.getElementById("areaSystem").onclick = () => showArea("system");
     document.getElementById("tabNodes").onclick = () => showTab("nodes");
     document.getElementById("tabUsers").onclick = () => showTab("users");
     document.getElementById("tabIos").onclick = () => showTab("ios");
@@ -2796,6 +2888,8 @@ export function adminPageHTML() {
       showView("list");
     };
 
+    // Mở đúng khu/tab đã chọn (mặc định VPNFlow) — F5 không nhảy về tab đầu.
+    adminInitTab();
     // Auto-load the existing node(s) on open when a token is already saved.
     if (fields.token.value) {
       loadNodes();
