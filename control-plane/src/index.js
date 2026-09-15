@@ -2643,23 +2643,37 @@ app.get(["/install/ios/manifest.plist", "/v1/downloads/ios/manifest.plist"], (_r
   }));
 });
 
-app.get(["/install/ios", "/install/ios/"], (req, res) => {
+app.get(["/install/ios", "/install/ios/"], async (req, res) => {
   // Ghi lại lượt xem để chủ shop biết khách có thực sự vào trang hay không (không log IP).
   console.log(`ios-install: page view lang=${iosLang(req)} ua="${String(req.get("user-agent") ?? "-").slice(0, 50)}"`);
   const base = siteBaseUrl();
   const manifest = `${base}/install/ios/manifest.plist`;
   const itms = `itms-services://?action=download-manifest&amp;url=${encodeURIComponent(manifest)}`;
   const version = appConfig.get("latest_ios_version") || "1.0";
-  res.type("html").send(iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? "").slice(0, 200), // Có ?s= (link hỗ trợ/recovery) thì DÙNG LUÔN mã đó — href render ra đã đúng mã phiên,
-    // không phụ thuộc JS chạy xong mới sửa lại.
-    sid: String(req.query?.s ?? "").trim().slice(0, 64) || crypto.randomUUID() }));
+  // Có ?s= (link hỗ trợ/recovery) thì DÙNG LUÔN mã đó — href render ra đã đúng mã phiên,
+  // không phụ thuộc JS chạy xong mới sửa lại.
+  const sid = String(req.query?.s ?? "").trim().slice(0, 64) || crypto.randomUUID();
+  // Tra máy theo mã phiên NGAY lúc render: nút Đăng ký / Tải & cài hiện ĐÚNG trạng thái ngay từ
+  // HTML đầu tiên — khách không phải chờ JS poll ~1s, và vẫn đúng khi JS bị chặn.
+  let known = null;
+  try {
+    known = await iosDevices.findBySession(sid);
+  } catch { /* lỗi đọc store không được làm trang trắng */ }
+  res.type("html").send(iosInstallPageHTML({
+    base, itms, version,
+    lang: iosLang(req),
+    token: String(req.query?.token ?? "").slice(0, 200),
+    sid,
+    registered: Boolean(known),
+    ready: Boolean(known?.built),
+  }));
 });
 
 /**
  * Trang cài iOS — 2 bước, đa ngôn ngữ (vi/en/zh/ja/ko như trang buy), bước 2 chỉ mở khi máy đã có bản cài.
  * Ngôn ngữ chọn theo `?lang=` → `Accept-Language` của máy khách → mặc định tiếng Việt.
  */
-function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid = "" }) {
+function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid = "", registered = false, ready = false }) {
   // Token account (nếu khách mở link riêng /install/ios?token=…) phải đi tiếp sang hồ sơ đăng ký,
   // nếu không UDID gửi về sẽ không tự map được vào account.
   const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
@@ -2712,15 +2726,15 @@ ${iosLangSelectHTML(lang)}
 <div class="step">
   <div class="stephead"><span class="n">1</span><span class="h">${t.step1}</span></div>
   <ul>${li(t.step1Items)}</ul>
-  <a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}&s=${encodeURIComponent(sid)}">${t.regBtn}</a>
-  <div id="statusline" class="wait" style="display:none"><span class="spin"></span><span id="statustxt"></span></div>
+  <a class="b b1${registered ? " disabled" : ""}" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}&s=${encodeURIComponent(sid)}">${registered ? t.regDone : t.regBtn}</a>
+  <div id="statusline" class="wait" style="${registered && !ready ? "" : "display:none"}"><span class="spin"></span><span id="statustxt">${t.waitReady}</span></div>
 </div>
 
 <div class="step">
   <div class="stephead"><span class="n">2</span><span class="h">${t.step2}</span></div>
-  <a class="b b2 disabled" id="installLink" href="${itms}">${t.downloadBtn}</a>
-  <div class="hintlock" id="installHint">${t.installLocked}</div>
-  <a class="hintlock" id="unlockLink" href="#" onclick="unlockInstall();return false;" style="display:none;color:#8fd0ff;text-decoration:underline">${t.unlock}</a>
+  <a class="b b2${registered ? "" : " disabled"}${registered && ready ? " pulse" : ""}" id="installLink" href="${itms}">${t.downloadBtn}</a>
+  <div class="hintlock" id="installHint" style="${registered ? "display:none" : ""}">${t.installLocked}</div>
+  <a class="hintlock" id="unlockLink" href="#" onclick="unlockInstall();return false;" style="${registered ? "display:none" : ""};color:#8fd0ff;text-decoration:underline">${t.unlock}</a>
 </div>
 
 <div class="warn">

@@ -26,8 +26,9 @@ test("trang cài iOS: nút itms-services + đa ngôn ngữ (vi/en/zh/ja/ko) đ�
   const route = indexSrc.slice(indexSrc.indexOf('app.get(["/install/ios"'), indexSrc.indexOf("function iosInstallPageHTML"));
   assert.ok(route.includes("itms-services://?action=download-manifest"), "phải dùng itms-services mới cài được");
   assert.ok(route.includes("encodeURIComponent(manifest)"), "URL manifest phải được encode");
-  assert.ok(route.includes("iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? \"\")"),
-    "route phải chọn ngôn ngữ theo máy khách và chuyển tiếp token account");
+  assert.ok(indexSrc.includes("iosInstallPageHTML({"), "phải dựng trang bằng iosInstallPageHTML");
+  assert.ok(indexSrc.includes("lang: iosLang(req)"), "route phải chọn ngôn ngữ theo máy khách");
+  assert.ok(indexSrc.includes('token: String(req.query?.token ?? "")'), "route phải chuyển tiếp token account");
   assert.ok(indexSrc.includes("${tokenQS}"), "nút đăng ký phải mang token sang hồ sơ (không thì UDID không tự map được)");
   assert.ok(indexSrc.includes("const tokenQS = token ?"), "trang cài phải dựng tokenQS khi có token");
   assert.ok(indexSrc.includes("/install/ios/register.mobileconfig?lang=${lang}"), "nút đăng ký mang theo ngôn ngữ");
@@ -88,7 +89,11 @@ test("langbar trang cài: inline handler phải dùng window.URL, không đượ
 test("trang cài: đã đăng ký thì KHÓA nút đăng ký và BẬT nút tải & cài", () => {
   assert.ok(indexSrc.includes('id="installLink"'), "phải có nút tải & cài riêng");
   // Mặc định (chưa đăng ký): nút tải & cài bị khóa + có dòng nhắc vì cài trước khi đăng ký là lỗi chắc chắn.
-  assert.ok(indexSrc.includes('<a class="b b2 disabled" id="installLink"'), "nút tải & cài phải mặc định bị khóa");
+  // Trạng thái nút do SERVER render ngay từ HTML đầu tiên (không phải chờ JS poll):
+  // chưa đăng ký ⇒ khoá; đã đăng ký ⇒ bật (thêm pulse khi bản cài sẵn sàng).
+  assert.ok(indexSrc.includes('class="b b2${registered ? "" : " disabled"}'), "nút tải & cài phải theo trạng thái registered");
+  assert.ok(indexSrc.includes('class="b b1${registered ? " disabled" : ""}"'), "nút đăng ký phải khoá khi đã đăng ký");
+  assert.ok(indexSrc.includes("registered: Boolean(known)"), "route phải tra máy theo mã phiên khi render");
   assert.ok(indexSrc.includes('id="installHint"'), "phải có dòng nhắc vì sao nút bị khóa");
   // Ba trạng thái phải tồn tại và được gọi đúng chỗ.
   assert.ok(indexSrc.includes("function setNotRegistered()"), "thiếu trạng thái chưa đăng ký");
