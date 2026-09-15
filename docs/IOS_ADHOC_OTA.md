@@ -93,6 +93,31 @@ escape (`&` → `&amp;`), nếu không iOS báo **Invalid Profile**.
 - Khách đăng ký máy mới ⇒ server tự đẩy UDID lên Apple; **máy cũ chưa có trên Apple cũng được đẩy lại**
   khi khách đăng ký lại hồ sơ.
 
+## 4b. Có UDID mới — CHỈ KÝ LẠI, KHÔNG build lại
+
+**Build lại code là không cần thiết** khi chỉ có thêm máy mới: binary app không đổi, chỉ có
+provisioning profile (danh sách UDID) và chữ ký đổi. Một lệnh duy nhất:
+
+```bash
+scripts/ios-resign-ipa.sh                 # tải IPA đang phát → cập nhật profile (ASC API)
+                                          # → thay profile + ký lại .appex/.app → upload + báo đã ký
+scripts/ios-resign-ipa.sh --no-upload      # chỉ tạo IPA mới ở build/ios-resign/
+scripts/ios-resign-ipa.sh --src file.ipa   # ký lại file khác
+```
+
+Script làm đúng 5 việc (không gọi Xcode, không cần archive):
+1. Tải IPA đang phát từ `/v1/downloads/ios`.
+2. Tạo lại profile Ad Hoc (**Apple không cho PATCH profile** ⇒ xoá rồi tạo cùng tên) với **đủ UDID**
+   đang có trong tài khoản, cho cả `com.privatevpn.app` và `com.privatevpn.app.packet-tunnel`.
+3. Thay `embedded.mobileprovision` trong `.appex` và `.app`, **ký lại bằng entitlements cũ**
+   (lấy từ chính chữ ký cũ — ký lại không được đổi quyền).
+4. Kiểm `codesign --verify --deep --strict` + in danh sách UDID trong profile.
+5. Upload lên node-2 (đi vòng qua node-1) và **kiểm sha256 ở đích**, rồi báo server "đã ký lại".
+
+**Chỉ build lại khi CODE đổi** (paywall, subscription, sửa bug trong app…): lúc đó
+`bash scripts/archive-appstore.sh ios adhoc` → `scripts/ios-adhoc-export.sh --no-upload` → upload.
+Bump `CURRENT_PROJECT_VERSION` trong `project.yml` khi phát bản mới.
+
 ## 5. Manifest + IPA
 
 - `manifest.plist`: `https://meetflowai.site/install/ios/manifest.plist` (route cũng có ở

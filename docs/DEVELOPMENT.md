@@ -161,9 +161,13 @@ git push origin main
 Không dùng App Store/TestFlight: app phát trực tiếp từ domain của mình.
 
 ```bash
-# 1) Ký lại IPA trên máy Mac (provisioning profile phải chứa UDID khách cần phát)
-#    UDID do SERVER tự thêm lên Apple (tab iOS UDID → App Store Connect API)
-scripts/ios-add-udid.sh            # hỗ trợ export profile + upload
+# A) Chỉ có UDID MỚI (không đổi code) → CHỈ KÝ LẠI, không build lại:
+scripts/ios-resign-ipa.sh          # profile mới (ASC API) + ký lại + upload + báo đã ký
+
+# B) CODE đổi (paywall/subscription/bug) → build lại rồi export:
+bash scripts/archive-appstore.sh ios adhoc        # bump CURRENT_PROJECT_VERSION trong project.yml trước
+scripts/ios-adhoc-export.sh --no-upload
+scripts/upload-ios-ipa.sh <ipa>                   # (hoặc để ios-resign-ipa.sh upload)
 
 # 2) Đưa IPA lên node-2
 scp <ipa> root@165.101.114.162:/root/flowvpn-ipa/VPNFlow-latest.ipa

@@ -1176,8 +1176,10 @@ phải do đổi IP). Endpoint chính vẫn tốt: `/v1/downloads/android` = 200
 
 ### Phát hành bản iOS mới (Ad Hoc OTA) — 5 bước
 
-1. **Build + ký Ad Hoc trên máy Mac** (provisioning profile phải chứa UDID của khách cần phát).
-   `scripts/ios-add-udid.sh` lo phần export profile + upload; UDID thì server đã tự thêm lên Apple.
+1. **UDID mới ⇒ CHỈ KÝ LẠI, không build lại**: `scripts/ios-resign-ipa.sh` (cập nhật profile qua ASC
+   API + ký lại IPA đang phát + upload + kiểm sha256 + báo server). Chỉ build lại khi **code** đổi:
+   `bash scripts/archive-appstore.sh ios adhoc` → `scripts/ios-adhoc-export.sh --no-upload`.
+   UDID do **server tự thêm lên Apple** (tab iOS UDID → App Store Connect API).
 2. **Upload IPA**: `scp <ipa> root@165.101.114.162:/root/flowvpn-ipa/VPNFlow-latest.ipa`
 3. **Bump số build trong panel** (tab Nodes → app-version: `ipa_build`) để iOS nhận là bản mới.
 4. **Kiểm tra IPA đang phát có UDID cần tìm** (script trong `docs/IOS_ADHOC_OTA.md` §5).
