@@ -260,8 +260,10 @@ app.use((req, res, next) => {
   if (req.path.startsWith("/assets/")) return next();
   // Public app downloads (APK host): the regular build and the Android 7+ build
   // for Fire TV / older devices.
-  if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy" || req.path === "/v1/downloads/ios") return next();
+  if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy" || req.path === "/v1/downloads/ios" || req.path === "/v1/downloads/mac") return next();
   if (req.path.startsWith("/install/ios")) return next();
+  // Trang cài macOS phát trực tiếp (giống iOS) — công khai, không cần token.
+  if (req.path.startsWith("/install/mac") || req.path.startsWith("/v1/install/mac")) return next();
   if (req.path.startsWith("/v1/ios/")) return next();
   if (req.path === "/v1/downloads/qr") return next();
   // LEGACY_MODE=1 keeps POST /v1/tokens working for the App-Store-review build
@@ -1968,7 +1970,7 @@ app.get("/v1/downloads/android", async (req, res) => {
 /**
  * Ảnh QR cho link tải (khách mở trang buy trên máy tính → quét mã là điện thoại mở đúng link cài).
  * Sinh tại chỗ, không phụ thuộc ảnh QR của dịch vụ ngoài ⇒ link ngoài hết hạn cũng không ảnh hưởng.
- * `target`: ios | android | android-legacy | ai-android (mặc định ios).
+ * `target`: ios | mac | android | android-legacy | ai-android (mặc định ios).
  */
 app.get("/v1/downloads/qr", async (req, res) => {
   try {
@@ -1977,6 +1979,8 @@ app.get("/v1/downloads/qr", async (req, res) => {
     const aiLinks = storeLinks("ai");
     const url = {
       ios: appConfig.get("ios_ipa_url") || links.ios,
+      // Bản Mac phát trực tiếp ⇒ QR trỏ về chính trang hướng dẫn cài macOS.
+      mac: `${siteBaseUrl()}/install/mac`,
       android: links.android,
       "android-legacy": links.androidLegacy,
       "ai-android": aiLinks.android,
@@ -2680,22 +2684,10 @@ app.get(["/install/ios", "/install/ios/"], async (req, res) => {
 });
 
 /**
- * Trang cài iOS — 2 bước, đa ngôn ngữ (vi/en/zh/ja/ko như trang buy), bước 2 chỉ mở khi máy đã có bản cài.
- * Ngôn ngữ chọn theo `?lang=` → `Accept-Language` của máy khách → mặc định tiếng Việt.
+ * CSS dùng chung cho trang hướng dẫn cài (iOS + macOS) — một khung giao diện duy nhất
+ * để hai trang luôn khớp nhau, không bị lệch khi chỉ sửa một bên.
  */
-function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid = "", registered = false, ready = false }) {
-  // Token account (nếu khách mở link riêng /install/ios?token=…) phải đi tiếp sang hồ sơ đăng ký,
-  // nếu không UDID gửi về sẽ không tự map được vào account.
-  const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
-  // Mỗi lần mở trang là một URL hồ sơ khác nhau: iOS/Safari không thể dùng lại file cũ
-  // đã tải (từng gây "Invalid Profile" vì cài lại bản tải dở), và tránh cache của CDN.
-  const freshQS = "&ts=" + Date.now();
-  const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
-  const li = (items) => items.map((x) => `<li>${x}</li>`).join("");
-  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${t.pageTitle}</title>
-<style>
+const INSTALL_PAGE_CSS = `
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051525,#0a1f3a);color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
 .c{max-width:480px;margin:22px;padding:26px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px}
 .t{font-size:21px;font-weight:700;margin:0 0 4px}.s{color:rgba(255,255,255,.6);font-size:13.5px;margin:0 0 16px}
@@ -2729,8 +2721,25 @@ ol.msteps li{margin-bottom:7px}
 .mnote{font-size:12.5px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.05);padding:9px 11px;border-radius:9px;margin:8px 0}
 .mafter{font-size:12.5px;color:#33c773;margin:8px 0 12px}
 .mbtn{width:100%;background:#33c773;color:#06160d;border:0;font-weight:700;font-size:15px;padding:14px;border-radius:11px;font-family:inherit}
-a.guidebtn{display:block;text-align:center;color:#8fd0ff;font-size:13px;margin:4px 0 8px;text-decoration:none}
-</style>
+a.guidebtn{display:block;text-align:center;color:#8fd0ff;font-size:13px;margin:4px 0 8px;text-decoration:none}`;
+
+/**
+ * Trang cài iOS — 2 bước, đa ngôn ngữ (vi/en/zh/ja/ko như trang buy), bước 2 chỉ mở khi máy đã có bản cài.
+ * Ngôn ngữ chọn theo `?lang=` → `Accept-Language` của máy khách → mặc định tiếng Việt.
+ */
+function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid = "", registered = false, ready = false }) {
+  // Token account (nếu khách mở link riêng /install/ios?token=…) phải đi tiếp sang hồ sơ đăng ký,
+  // nếu không UDID gửi về sẽ không tự map được vào account.
+  const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
+  // Mỗi lần mở trang là một URL hồ sơ khác nhau: iOS/Safari không thể dùng lại file cũ
+  // đã tải (từng gây "Invalid Profile" vì cài lại bản tải dở), và tránh cache của CDN.
+  const freshQS = "&ts=" + Date.now();
+  const t = IOS_TEXTS[lang] ?? IOS_TEXTS.vi;
+  const li = (items) => items.map((x) => `<li>${x}</li>`).join("");
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${t.pageTitle}</title>
+<style>${INSTALL_PAGE_CSS}</style>
 </head><body><div class="c">
 ${iosLangSelectHTML(lang)}
 <p class="t">${t.pageTitle}</p>
@@ -2887,6 +2896,240 @@ app.get("/v1/downloads/ios", async (_req, res) => {
       return res.status(404).send("IPA not found. Contact support@meetflowai.site");
     }
     res.download(ipaPath, "VPNFlow.ipa");
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * Chuỗi hiển thị của trang cài macOS (5 ngôn ngữ như trang iOS).
+ * Bản Mac phát trực tiếp từ shop (file .zip chứa VPNFlow.app) và CHƯA notarize qua Apple,
+ * nên bước 2 phải hướng dẫn đúng cách macOS chặn app: chuột phải → Open / Open Anyway.
+ */
+const MAC_TEXTS = {
+  vi: {
+    pageTitle: "Cài VPNFlow lên máy Mac",
+    intro: (v) => `Bản ${v} · tải file cài và làm theo 3 bước.`,
+    step1: "Tải file cài",
+    step1Items: [
+      "Bấm nút xanh bên dưới để tải file cài (.zip chứa <b>VPNFlow.app</b>).",
+      "File tải về thường nằm trong thư mục <b>Downloads</b>.",
+    ],
+    downloadBtn: "⬇️ Tải VPNFlow cho Mac",
+    directNote: "Bản Mac cài trực tiếp từ shop — không qua App Store.",
+    step2: "Cài ứng dụng",
+    step2Items: [
+      "Mở file .zip vừa tải → kéo <b>VPNFlow</b> vào thư mục <b>Applications</b> (Ứng dụng).",
+      "Nếu macOS báo “không mở được vì không xác minh được nhà phát triển”: mở <b>Applications</b>, <b>chuột phải</b> vào VPNFlow → <b>Open</b> → bấm <b>Open</b> lần nữa.<br><span style=\"opacity:.75\">Hoặc vào <b>System Settings → Privacy &amp; Security</b> → bấm <b>Open Anyway</b>.</span>",
+    ],
+    step3: "Đăng nhập &amp; bật VPN",
+    step3Items: [
+      "Mở <b>VPNFlow</b> từ Applications.",
+      "Đăng nhập bằng <b>email bạn đã mua</b>.",
+      "macOS hỏi cho phép cấu hình VPN → bấm <b>Allow</b> (bật trong <b>System Settings → Privacy &amp; Security → VPN</b>).",
+      "Bấm <b>Connect</b> để kết nối.",
+    ],
+    warnTitle: "Không cài được thì làm gì?",
+    warnItems: [
+      "Gỡ bản VPNFlow cũ trước khi cài bản mới: kéo app cũ vào <b>Trash</b> rồi cài lại.",
+      "Đóng app VPNFlow đang chạy trước khi cài hoặc cập nhật.",
+      "Bản Mac cài trực tiếp từ shop, <b>không qua App Store</b>.",
+    ],
+    qrTitle: "💻 Đang xem trên điện thoại? Quét mã này bằng máy Mac",
+    support: "Hỗ trợ",
+  },
+  en: {
+    pageTitle: "Install VPNFlow on your Mac",
+    intro: (v) => `Version ${v} · download the installer and follow 3 steps.`,
+    step1: "Download the installer",
+    step1Items: [
+      "Tap the green button below to download the installer (.zip with <b>VPNFlow.app</b>).",
+      "The file usually lands in your <b>Downloads</b> folder.",
+    ],
+    downloadBtn: "⬇️ Download VPNFlow for Mac",
+    directNote: "The Mac build is installed directly from the shop — not via the App Store.",
+    step2: "Install the app",
+    step2Items: [
+      "Open the .zip → drag <b>VPNFlow</b> into the <b>Applications</b> folder.",
+      "If macOS says it can't verify the developer: open <b>Applications</b>, <b>right-click</b> VPNFlow → <b>Open</b> → click <b>Open</b> again.<br><span style=\"opacity:.75\">Or go to <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.</span>",
+    ],
+    step3: "Sign in &amp; turn on the VPN",
+    step3Items: [
+      "Open <b>VPNFlow</b> from Applications.",
+      "Sign in with the <b>email you bought with</b>.",
+      "When macOS asks to allow VPN configuration, click <b>Allow</b> (in <b>System Settings → Privacy &amp; Security → VPN</b>).",
+      "Click <b>Connect</b>.",
+    ],
+    warnTitle: "Can't install?",
+    warnItems: [
+      "Remove the old VPNFlow first: drag the old app to <b>Trash</b>, then install again.",
+      "Quit any running VPNFlow before installing or updating.",
+      "The Mac build is installed directly from the shop, <b>not via the App Store</b>.",
+    ],
+    qrTitle: "💻 On your phone? Scan this code with your Mac",
+    support: "Support",
+  },
+  zh: {
+    pageTitle: "在 Mac 上安装 VPNFlow",
+    intro: (v) => `版本 ${v} · 下载安装包并完成 3 步。`,
+    step1: "下载安装包",
+    step1Items: [
+      "点击下方绿色按钮下载安装包（.zip，内含 <b>VPNFlow.app</b>）。",
+      "文件通常保存在 <b>下载</b> 文件夹中。",
+    ],
+    downloadBtn: "⬇️ 下载 Mac 版 VPNFlow",
+    directNote: "Mac 版由商店直接安装 — 不通过 App Store。",
+    step2: "安装应用",
+    step2Items: [
+      "打开 .zip → 将 <b>VPNFlow</b> 拖入 <b>Applications（应用程序）</b>文件夹。",
+      "若 macOS 提示“无法验证开发者”：打开 <b>Applications</b>，<b>右键</b>点击 VPNFlow → <b>Open</b> → 再点一次 <b>Open</b>。<br><span style=\"opacity:.75\">或进入 <b>System Settings → Privacy &amp; Security</b> 点击 <b>Open Anyway</b>。</span>",
+    ],
+    step3: "登录并连接 VPN",
+    step3Items: [
+      "从 Applications 打开 <b>VPNFlow</b>。",
+      "使用<b>购买时的邮箱</b>登录。",
+      "macOS 询问是否允许配置 VPN → 点击 <b>Allow</b>（可在 <b>System Settings → Privacy &amp; Security → VPN</b> 中开启）。",
+      "点击 <b>Connect</b> 连接。",
+    ],
+    warnTitle: "安装不了怎么办？",
+    warnItems: [
+      "先卸载旧版 VPNFlow：把旧应用拖入 <b>Trash（废纸篓）</b>，再重新安装。",
+      "安装或更新前请先退出正在运行的 VPNFlow。",
+      "Mac 版由商店直接安装，<b>不通过 App Store</b>。",
+    ],
+    qrTitle: "💻 在手机上？用 Mac 扫描此二维码",
+    support: "客服",
+  },
+  ja: {
+    pageTitle: "Mac に VPNFlow をインストール",
+    intro: (v) => `バージョン ${v} · インストーラをダウンロードして 3 ステップ。`,
+    step1: "インストーラをダウンロード",
+    step1Items: [
+      "下の緑のボタンでインストーラ（<b>VPNFlow.app</b> 入り .zip）をダウンロードします。",
+      "ファイルは通常 <b>ダウンロード</b> フォルダに保存されます。",
+    ],
+    downloadBtn: "⬇️ Mac 版 VPNFlow をダウンロード",
+    directNote: "Mac 版はショップから直接インストール — App Store は使いません。",
+    step2: "アプリをインストール",
+    step2Items: [
+      ".zip を開く → <b>VPNFlow</b> を <b>Applications（アプリケーション）</b>フォルダへドラッグ。",
+      "「開発元を確認できないため開けません」と出たら：<b>Applications</b> を開き、VPNFlow を<b>右クリック</b> → <b>Open</b> → もう一度 <b>Open</b>。<br><span style=\"opacity:.75\">または <b>System Settings → Privacy &amp; Security</b> で <b>Open Anyway</b> をクリック。</span>",
+    ],
+    step3: "サインインして VPN を接続",
+    step3Items: [
+      "Applications から <b>VPNFlow</b> を開きます。",
+      "<b>購入時のメール</b>でサインインします。",
+      "macOS が VPN 構成の許可を求めたら <b>Allow</b> をクリック（<b>System Settings → Privacy &amp; Security → VPN</b> で有効化）。",
+      "<b>Connect</b> をクリックして接続。",
+    ],
+    warnTitle: "インストールできない場合",
+    warnItems: [
+      "古い VPNFlow を先に削除：旧アプリを <b>Trash（ゴミ箱）</b>へドラッグしてから再インストール。",
+      "インストール・更新の前に起動中の VPNFlow を終了してください。",
+      "Mac 版はショップから直接インストールし、<b>App Store は使いません</b>。",
+    ],
+    qrTitle: "💻 スマホで見ていますか？Mac でこのコードを読み取ってください",
+    support: "サポート",
+  },
+  ko: {
+    pageTitle: "Mac에 VPNFlow 설치",
+    intro: (v) => `버전 ${v} · 설치 파일을 내려받고 3단계만 진행하세요.`,
+    step1: "설치 파일 다운로드",
+    step1Items: [
+      "아래 초록색 버튼을 눌러 설치 파일(.zip, <b>VPNFlow.app</b> 포함)을 내려받으세요.",
+      "파일은 보통 <b>다운로드</b> 폴더에 저장됩니다.",
+    ],
+    downloadBtn: "⬇️ Mac용 VPNFlow 다운로드",
+    directNote: "Mac 버전은 쇼핑몰에서 직접 설치 — App Store를 거치지 않습니다.",
+    step2: "앱 설치",
+    step2Items: [
+      ".zip 파일을 열고 <b>VPNFlow</b>를 <b>Applications(응용 프로그램)</b> 폴더로 드래그하세요.",
+      "“개발자를 확인할 수 없어 열 수 없습니다”가 뜨면: <b>Applications</b>를 열고 VPNFlow를 <b>오른쪽 클릭</b> → <b>Open</b> → 다시 <b>Open</b>을 누르세요.<br><span style=\"opacity:.75\">또는 <b>System Settings → Privacy &amp; Security</b>에서 <b>Open Anyway</b>를 누르세요.</span>",
+    ],
+    step3: "로그인 및 VPN 연결",
+    step3Items: [
+      "Applications에서 <b>VPNFlow</b>를 엽니다.",
+      "<b>구매에 사용한 이메일</b>로 로그인합니다.",
+      "macOS가 VPN 구성 허용을 물으면 <b>Allow</b>를 누르세요 (<b>System Settings → Privacy &amp; Security → VPN</b>에서 켤 수 있습니다).",
+      "<b>Connect</b>를 눌러 연결합니다.",
+    ],
+    warnTitle: "설치가 안 되나요?",
+    warnItems: [
+      "먼저 이전 VPNFlow를 삭제하세요: 이전 앱을 <b>Trash(휴지통)</b>로 드래그한 뒤 다시 설치합니다.",
+      "설치 또는 업데이트 전에 실행 중인 VPNFlow를 종료하세요.",
+      "Mac 버전은 쇼핑몰에서 직접 설치하며 <b>App Store를 거치지 않습니다</b>.",
+    ],
+    qrTitle: "💻 휴대폰으로 보고 있나요? Mac으로 이 코드를 스캔하세요",
+    support: "지원",
+  },
+};
+
+/**
+ * Trang cài macOS — 3 bước tĩnh, dùng CHUNG khung CSS + dropdown ngôn ngữ với trang iOS.
+ * Không có bước đăng ký UDID/ký lại như iOS: file .zip được phát trực tiếp từ shop.
+ */
+function macInstallPageHTML({ base, version, lang = "vi" }) {
+  const t = MAC_TEXTS[lang] ?? MAC_TEXTS.vi;
+  const li = (items) => items.map((x) => `<li>${x}</li>`).join("");
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${t.pageTitle}</title>
+<style>${INSTALL_PAGE_CSS}</style>
+</head><body><div class="c">
+${iosLangSelectHTML(lang)}
+<p class="t">${t.pageTitle}</p>
+<p class="s">${t.intro(version)}</p>
+
+<div class="step">
+  <div class="stephead"><span class="n">1</span><span class="h">${t.step1}</span></div>
+  <ul>${li(t.step1Items)}</ul>
+  <a class="b b2" href="/v1/downloads/mac">${t.downloadBtn}</a>
+  <div class="hintlock">${t.directNote}</div>
+</div>
+
+<div class="step">
+  <div class="stephead"><span class="n">2</span><span class="h">${t.step2}</span></div>
+  <ul>${li(t.step2Items)}</ul>
+</div>
+
+<div class="step">
+  <div class="stephead"><span class="n">3</span><span class="h">${t.step3}</span></div>
+  <ul>${li(t.step3Items)}</ul>
+</div>
+
+<div class="warn">
+  <b>${t.warnTitle}</b>
+  <ul>${li(t.warnItems)}</ul>
+</div>
+
+<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
+  <div style="font-size:13.5px;font-weight:600;margin-bottom:8px">${t.qrTitle}</div>
+  <img src="/v1/downloads/qr?target=mac&size=260" alt="QR" width="150" height="150" style="background:#fff;padding:6px;border-radius:10px">
+  <div style="font-size:12.5px;color:rgba(255,255,255,.6);margin-top:8px">${base}/install/mac</div>
+  <div style="font-size:12.5px;color:rgba(255,255,255,.5);margin-top:6px">${t.support}: support@meetflowai.site</div>
+</div>
+</div>
+</body></html>`;
+}
+
+app.get(["/install/mac", "/install/mac/", "/v1/install/mac"], (req, res) => {
+  // Ghi lại lượt xem giống trang iOS (không log IP).
+  console.log(`mac-install: page view lang=${requestLang(req)} ua="${String(req.get("user-agent") ?? "-").slice(0, 50)}"`);
+  res.type("html").send(macInstallPageHTML({
+    base: siteBaseUrl(),
+    version: appConfig.get("latest_mac_version") || process.env.MAC_APP_VERSION || "1.0",
+    lang: requestLang(req),
+  }));
+});
+
+app.get("/v1/downloads/mac", async (_req, res) => {
+  try {
+    // Bản Mac phát trực tiếp: file .zip (mặc định) hoặc .dmg nếu chủ shop đổi env.
+    const macPath = process.env.MAC_APP_ZIP_PATH || process.env.MAC_DMG_PATH || "/root/flowvpn-mac/VPNFlow-mac.zip";
+    if (!fs.existsSync(macPath)) {
+      return res.status(404).send("Mac installer not found. Contact support@meetflowai.site");
+    }
+    res.download(macPath, path.basename(macPath));
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
   }

@@ -399,6 +399,7 @@ const TEXTS = {
     dlTitle: "Get the VPNFlow app",
     dlSub: "Don't have the app yet? Choose your platform:",
     androidTitle: "Download the APK directly", androidTop: "Download for Android", androidBadge: "APK", iosTop: "Download for iPhone / iPad", iosBadge: "iOS (IPA)",
+    macTop: "Download for Mac", macBadge: "macOS",
     androidLegacyLabel: "Fire TV / older device",
     androidLegacySub: "APK for Android 7.0 and 7.1 — Fire TV Stick 4K, older phones and TVs",
     emailLabel: "Your VPNFlow account email",
@@ -423,6 +424,8 @@ const TEXTS = {
     iosLineIpa: "Open the install page on the same iPhone/iPad, register the device (UDID), then install the signed IPA we send; sign in with this email afterward.",
     adhocTitle: "Install on iPhone / iPad (Ad Hoc)",
     adhocSteps: ["Open <b>this page in Safari on the iPhone/iPad</b> you want to install on (Chrome and in-app browsers cannot install).", "Tap <b>Register this device</b> → install the profile (iOS sends the device ID / UDID to the shop).", "The shop adds your UDID to Apple and signs a build for your device (usually 1–2 minutes) — this page refreshes by itself.", "Tap <b>Install</b>. If iOS says “Untrusted Developer”: <b>Settings → General → VPN &amp; Device Management</b> → <b>Trust</b>."],
+    macAdhocTitle: "Install on Mac (direct download)",
+    macAdhocSteps: ["Download the .zip installer above and open it.", "Drag <b>VPNFlow</b> into the <b>Applications</b> folder.", "If macOS says it can't verify the developer: <b>right-click</b> the app → <b>Open</b> → <b>Open</b> again, or go to <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "Open VPNFlow, sign in with the purchase email, click <b>Allow</b> when macOS asks for VPN configuration, then click <b>Connect</b>."],
     iosLineStore: "Available on the App Store — install it, then sign in with the same email you used here; Premium unlocks automatically.",
     iosLineSoon: "iOS version is coming soon.",
     androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.",
@@ -476,6 +479,7 @@ const TEXTS = {
     dlTitle: "Tải app VPNFlow",
     dlSub: "Chưa có app? Chọn nền tảng của bạn:",
     androidTitle: "Tải APK trực tiếp", androidTop: "Tải cho Android", androidBadge: "APK", iosTop: "Tải cho iPhone / iPad", iosBadge: "iOS (IPA)",
+    macTop: "Tải cho Mac", macBadge: "macOS",
     androidLegacyLabel: "Fire TV / máy cũ",
     androidLegacySub: "APK cho Android 7.0 và 7.1 — Fire TV Stick 4K, điện thoại và TV đời cũ",
     emailLabel: "Email tài khoản VPNFlow",
@@ -500,6 +504,8 @@ const TEXTS = {
     iosLineIpa: "Mở trang cài trên chính iPhone/iPad, đăng ký thiết bị (UDID), rồi cài file IPA đã ký mà shop gửi; sau đó đăng nhập bằng đúng email này.",
     adhocTitle: "Cài trên iPhone / iPad (Ad Hoc)",
     adhocSteps: ["Mở <b>trang này bằng Safari trên chính iPhone/iPad</b> cần cài (Chrome, trình duyệt trong app chat đều không cài được).", "Bấm <b>Đăng ký thiết bị</b> → cài hồ sơ (iOS tự gửi mã thiết bị / UDID về shop).", "Shop thêm UDID vào Apple và ký bản cài riêng cho máy bạn (thường 1–2 phút) — trang này tự cập nhật.", "Bấm <b>Cài đặt</b>. Nếu iOS báo “Untrusted Developer”: <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → <b>Tin cậy</b>."],
+    macAdhocTitle: "Cài trên máy Mac (tải trực tiếp)",
+    macAdhocSteps: ["Tải file cài .zip ở trên rồi mở ra.", "Kéo <b>VPNFlow</b> vào thư mục <b>Applications</b> (Ứng dụng).", "Nếu macOS báo “không xác minh được nhà phát triển”: <b>chuột phải</b> vào app → <b>Open</b> → <b>Open</b> lần nữa, hoặc vào <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "Mở VPNFlow, đăng nhập bằng email đã mua, bấm <b>Allow</b> khi macOS hỏi cấu hình VPN rồi bấm <b>Connect</b>."],
     iosLineStore: "Đã có trên App Store — tải về, rồi đăng nhập bằng đúng email bạn dùng ở trang này; Premium tự bật.",
     iosLineSoon: "Bản iOS sẽ sớm được phát hành.",
     androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.",
@@ -553,6 +559,7 @@ const TEXTS = {
     dlTitle: "获取 VPNFlow 应用",
     dlSub: "还没有应用？选择您的平台：",
     androidTitle: "直接下载 APK", androidTop: "下载 Android 版", androidBadge: "APK", iosTop: "下载 iPhone / iPad 版", iosBadge: "iOS (IPA)",
+    macTop: "下载 Mac 版", macBadge: "macOS",
     androidLegacyLabel: "Fire TV / 旧设备",
     androidLegacySub: "适用于 Android 7.0 与 7.1 的 APK — Fire TV Stick 4K、旧款手机与电视",
     emailLabel: "您的 VPNFlow 账户邮箱",
@@ -577,6 +584,8 @@ const TEXTS = {
     iosLineIpa: "下载上方 IPA 文件并安装到 iPhone/iPad，然后用本页填写的同一邮箱登录，Premium 自动开启。",
     adhocTitle: "在 iPhone / iPad 上安装（Ad Hoc）",
     adhocSteps: ["请在<b>要安装的 iPhone/iPad 上用 Safari 打开本页</b>（Chrome 或应用内浏览器无法安装）。", "点击<b>注册此设备</b> → 安装描述文件（iOS 会把设备码 UDID 发送给商家）。", "商家把 UDID 加入 Apple 并为你的设备重新签名（通常 1–2 分钟）—— 本页会自动刷新。", "点击<b>安装</b>。若提示“不受信任的开发者”：<b>设置 → 通用 → VPN 与设备管理</b> → <b>信任</b>。"],
+    macAdhocTitle: "在 Mac 上安装（直接下载）",
+    macAdhocSteps: ["下载上方 .zip 安装包并打开。", "将 <b>VPNFlow</b> 拖入 <b>Applications（应用程序）</b>文件夹。", "若 macOS 提示“无法验证开发者”：<b>右键</b>点击应用 → <b>Open</b> → 再点一次 <b>Open</b>，或进入 <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>。", "打开 VPNFlow，使用购买邮箱登录，macOS 询问配置 VPN 时点 <b>Allow</b>，然后点 <b>Connect</b>。"],
     iosLineStore: "已在 App Store 上架 — 下载后使用本页填写的同一邮箱登录，Premium 自动开启。",
     iosLineSoon: "iOS 版本即将发布。",
     androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。",
@@ -630,6 +639,7 @@ const TEXTS = {
     dlTitle: "VPNFlowアプリを入手",
     dlSub: "アプリをお持ちでない場合：プラットフォームを選択",
     androidTitle: "APK を直接ダウンロード", androidTop: "Android 版をダウンロード", androidBadge: "APK", iosTop: "iPhone / iPad 版をダウンロード", iosBadge: "iOS (IPA)",
+    macTop: "Mac 版をダウンロード", macBadge: "macOS",
     androidLegacyLabel: "Fire TV / 旧端末",
     androidLegacySub: "Android 7.0 / 7.1 用 APK — Fire TV Stick 4K、旧型スマホ・テレビ",
     emailLabel: "VPNFlowアカウントのメール",
@@ -654,6 +664,8 @@ const TEXTS = {
     iosLineIpa: "上の IPA をダウンロードして iPhone/iPad にインストールし、このページで使った同じメールでサインインすると Premium が有効になります。",
     adhocTitle: "iPhone / iPad にインストール（Ad Hoc）",
     adhocSteps: ["<b>インストールする iPhone/iPad の Safari でこのページを開いてください</b>（Chrome やアプリ内ブラウザは不可）。", "「この端末を登録」をタップ → プロファイルをインストール（iOS が端末 ID / UDID を送信します）。", "ショップが UDID を Apple に追加して端末用に再署名します（通常 1〜2 分）—— このページは自動更新されます。", "「インストール」をタップ。「信頼されていないデベロッパ」と出たら: <b>設定 → 一般 → VPN とデバイス管理</b> → <b>信頼</b>。"],
+    macAdhocTitle: "Mac にインストール（直接ダウンロード）",
+    macAdhocSteps: ["上の .zip インストーラをダウンロードして開きます。", "<b>VPNFlow</b> を <b>Applications（アプリケーション）</b>フォルダへドラッグ。", "「開発元を確認できない」と出たら：アプリを<b>右クリック</b> → <b>Open</b> → もう一度 <b>Open</b>、または <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>。", "VPNFlow を開き、購入時のメールでサインインし、VPN 構成の許可を求められたら <b>Allow</b> をクリックして <b>Connect</b>。"],
     iosLineStore: "App Store で配信中 — インストール後、このページで使った同じメールでサインインすると Premium が有効になります。",
     iosLineSoon: "iOS 版は近日公開予定です。",
     androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。",
@@ -707,6 +719,7 @@ const TEXTS = {
     dlTitle: "VPNFlow 앱 받기",
     dlSub: "아직 앱이 없으신가요? 플랫폼을 선택하세요:",
     androidTitle: "APK 직접 다운로드", androidTop: "Android용 다운로드", androidBadge: "APK", iosTop: "iPhone / iPad용 다운로드", iosBadge: "iOS (IPA)",
+    macTop: "Mac용 다운로드", macBadge: "macOS",
     androidLegacyLabel: "Fire TV / 구형 기기",
     androidLegacySub: "Android 7.0 / 7.1용 APK — Fire TV Stick 4K, 구형 휴대폰·TV",
     emailLabel: "VPNFlow 계정 이메일",
@@ -731,6 +744,8 @@ const TEXTS = {
     iosLineIpa: "위의 IPA를 내려받아 iPhone/iPad에 설치한 뒤, 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동 활성화됩니다.",
     adhocTitle: "iPhone / iPad에 설치 (Ad Hoc)",
     adhocSteps: ["<b>설치할 iPhone/iPad의 Safari에서 이 페이지를 여세요</b> (Chrome, 앱 내 브라우저는 설치 불가).", "「이 기기 등록」을 눌러 프로파일을 설치하세요 (iOS가 기기 ID / UDID를 전송합니다).", "판매자가 UDID를 Apple에 추가하고 기기용으로 다시 서명합니다 (보통 1~2분) — 이 페이지는 자동 갱신됩니다.", "「설치」를 누르세요. “신뢰할 수 없는 개발자”가 뜨면: <b>설정 → 일반 → VPN 및 기기 관리</b> → <b>신뢰</b>."],
+    macAdhocTitle: "Mac에 설치 (직접 다운로드)",
+    macAdhocSteps: ["위의 .zip 설치 파일을 내려받아 엽니다.", "<b>VPNFlow</b>를 <b>Applications(응용 프로그램)</b> 폴더로 드래그하세요.", "“개발자를 확인할 수 없습니다”가 뜨면: 앱을 <b>오른쪽 클릭</b> → <b>Open</b> → 다시 <b>Open</b>, 또는 <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "VPNFlow를 열고 구매 이메일로 로그인한 뒤, macOS가 VPN 구성을 물으면 <b>Allow</b>를 누르고 <b>Connect</b>를 클릭하세요."],
     iosLineStore: "App Store에서 제공 중 — 설치 후 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동으로 활성화됩니다.",
     iosLineSoon: "iOS 버전이 곧 출시됩니다.",
     androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.",
@@ -1176,7 +1191,11 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   const iosUrl = links.ios || null;
   const iosAdhocUrl = links.iosAdhoc || `${baseUrl}/install/ios`;
   const macUrl = links.mac || null;
-  const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl);
+  // Bản macOS cũng phát trực tiếp từ shop (file .zip/.dmg), không qua App Store:
+  // khi không có link store thật, badge Mac trỏ về trang hướng dẫn /install/mac
+  // (giống cách iOS trỏ /install/ios qua iosAdhocUrl). Chỉ áp dụng cho VPNFlow.
+  const macAdhocUrl = product === "vpn" ? (links.macAdhoc || `${baseUrl}/install/mac`) : (links.macAdhoc || null);
+  const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl || macAdhocUrl);
   // Activation instructions adapt to how iOS is distributed right now.
   // Bản iOS phát bằng IPA từ server mình (không qua App Store), nên chỉ dùng câu
   // "Available on the App Store" khi link ios THỰC SỰ là link store. Link trỏ về
@@ -1192,6 +1211,10 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   const iosIsStore = /apps\.apple\.com|itunes\.apple\.com/.test(iosUrl ?? "");
   const iosAdhocStepsUrl = !iosIsStore ? (iosUrl && /\/install\/ios/.test(iosUrl) ? iosUrl : iosAdhocUrl) : null;
   const iosAdhocSteps = !inApp && iosAdhocStepsUrl && Array.isArray(t.adhocSteps) ? t.adhocSteps : null;
+  // Khối hướng dẫn cài macOS (tải trực tiếp): song song với adhocSteps của iOS.
+  // Chỉ hiện khi KHÔNG có link store thật (có store thì hướng dẫn kéo app là sai).
+  const macAdhocStepsUrl = !inApp && !macUrl && macAdhocUrl ? macAdhocUrl : null;
+  const macAdhocSteps = macAdhocStepsUrl && Array.isArray(t.macAdhocSteps) ? t.macAdhocSteps : null;
   const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
   // Mở TRONG app (paywall): khách đã có app rồi ⇒ chỉ để lại ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN,
   // bỏ hết khối tải/cài app và hướng dẫn cài (vô nghĩa và làm rối).
@@ -1459,6 +1482,13 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">Download on the</text>
             <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Mac App Store</text>
           </svg>
+        </a>` : macAdhocUrl ? `<a href="${macAdhocUrl}" target="_blank" rel="noopener" title="${t.macTop}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.macTop}</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.macBadge}</text>
+          </svg>
         </a>` : ""}
         ${androidUrl ? `<a href="${androidUrl}" target="_blank" rel="noopener" title="${t.androidTitle}">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
@@ -1529,6 +1559,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <div class="howto-title">📲 ${t.adhocTitle}</div>
       <ol class="howto-steps">${iosAdhocSteps.map((step) => `<li>${step}</li>`).join("")}</ol>
       <a class="guidelnk" href="${iosAdhocStepsUrl}" target="_blank" rel="noopener">${iosAdhocStepsUrl}</a>
+    </div>` : ""}
+
+    ${macAdhocSteps ? `<div class="howto adhoc">
+      <div class="howto-title">💻 ${t.macAdhocTitle}</div>
+      <ol class="howto-steps">${macAdhocSteps.map((step) => `<li>${step}</li>`).join("")}</ol>
+      <a class="guidelnk" href="${macAdhocStepsUrl}" target="_blank" rel="noopener">${macAdhocStepsUrl}</a>
     </div>` : ""}
 
     ${inApp ? `<div class="inapp-note">${t.inAppNote}</div>` : `<div class="howto">
