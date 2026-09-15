@@ -1,0 +1,7 @@
+[Unit]
+Description=Ký lại IPA Ad Hoc khi có UDID mới (zsign, không build lại)
+After=network-online.target flowvpn-cp.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/flowvpn-sign/watch.sh

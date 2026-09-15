@@ -1,0 +1,11 @@
+[Unit]
+Description=Canh hàng đợi UDID mỗi 15 giây và ký lại IPA
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=15
+AccuracySec=2
+Unit=flowvpn-sign.service
+
+[Install]
+WantedBy=timers.target
