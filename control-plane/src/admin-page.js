@@ -48,9 +48,9 @@ export function adminPageHTML() {
     }
 
     .logo {
-      width: 54px;
-      height: 54px;
-      border-radius: 14px;
+      width: 162px;
+      height: 162px;
+      border-radius: 42px;
       display: grid;
       place-items: center;
       background: radial-gradient(circle at 30% 30%, #58e694, #1c8f50 62%, #0f3d2b);
@@ -59,6 +59,7 @@ export function adminPageHTML() {
       font-weight: 800;
       color: #06160d;
     }
+    .logo img { width: 100%; height: 100%; display: block; }
 
     h1 { margin: 0; font-size: clamp(25px, 4vw, 38px); letter-spacing: 0; }
     h2 { margin: 0 0 14px; font-size: 17px; }
@@ -262,6 +263,7 @@ export function adminPageHTML() {
 
     @media (max-width: 760px) {
       .stats-cols { grid-template-columns: 1fr; }
+      .logo { width: 108px; height: 108px; border-radius: 28px; }
     }
 
     @media (max-width: 760px) {
