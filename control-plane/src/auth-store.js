@@ -76,12 +76,16 @@ export class AuthStore {
 
   async verifyEmailLogin(email, code) {
     const normalized = normalizeEmail(email);
-    if (!normalized || !code) throw badRequest("email and code are required");
+    // App gửi mã thô: iOS paste/autocorrect hay kèm khoảng trắng hoặc xuống dòng,
+    // trước đây hash nguyên chuỗi nên mã ĐÚNG vẫn bị coi là sai — khách gõ lại vài
+    // lần là hết lượt (MAX_VERIFY_ATTEMPTS) rồi mã bị xoá, thành vòng lặp không vào được.
+    const submitted = String(code ?? "").replace(/\s+/g, "");
+    if (!normalized || !submitted) throw badRequest("email and code are required");
 
     const data = await this._load();
     const otp = data.emailOtps.find((entry) => entry.email === normalized);
     if (!otp) throw unauthorized("Invalid or expired login code");
-    if (isExpired(otp.expiresAt) || otp.codeHash !== hashToken(String(code))) {
+    if (isExpired(otp.expiresAt) || otp.codeHash !== hashToken(submitted)) {
       otp.failedAttempts = (otp.failedAttempts ?? 0) + 1;
       if (otp.failedAttempts >= MAX_VERIFY_ATTEMPTS) {
         data.emailOtps = data.emailOtps.filter((entry) => entry !== otp);

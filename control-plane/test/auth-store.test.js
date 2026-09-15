@@ -217,3 +217,26 @@ test("enrollment token: lookup (không tiêu thụ) trả đúng account để t
     await cleanup();
   }
 });
+
+test("mã đăng nhập có khoảng trắng / xuống dòng vẫn vào được (app paste kèm space)", async () => {
+  const { store, cleanup } = await makeStore();
+  process.env.ENABLE_FREE_TRIAL = "0";
+  const email = "spacey@example.com";
+  const variants = [
+    (c) => ` ${c}`,
+    (c) => `${c} `,
+    (c) => `${c}\n`,
+    (c) => `\t${c} `,
+    (c) => c.split("").join(" "),
+  ];
+  try {
+    for (const wrap of variants) {
+      const { code } = await store.startEmailLogin(email);
+      const session = await store.verifyEmailLogin(email, wrap(code));
+      assert.equal(session.user.email, email);
+      assert.match(session.access_token, /^PVPN-AUTH-/);
+    }
+  } finally {
+    await cleanup();
+  }
+});
