@@ -7,6 +7,12 @@ import WireGuardKit
 /// How long each transport in the chain gets to come up before the next one is tried.
 private let transportGrace: TimeInterval = 8
 
+/// Sau khi tunnel "lên", chờ ngần này rồi kiểm tra peer đã có handshake/traffic chưa.
+/// Nếu chưa, phiên coi như "lên nhưng không có mạng" và watchdog dựng lại.
+private let watchdogGrace: TimeInterval = 11
+/// Số lần tối đa watchdog tự dựng lại phiên trước khi bỏ cuộc (tránh vòng lặp vô tận).
+private let maxWatchdogRebuilds = 2
+
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let log = Logger(
         subsystem: "com.privatevpn.app.packet-tunnel",
@@ -21,11 +27,65 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Configuration to restore when the relays never come up (direct UDP endpoint).
     private var directConfiguration: TunnelConfiguration?
 
+    /// Bộ đếm phiên: mỗi lần start tăng lên một lần. Mọi callback async của phiên cũ
+    /// (fallback transport, watchdog, báo health) phải kiểm tra `isCurrentSession` trước
+    /// khi chạm vào trạng thái dùng chung, nên phiên cũ KHÔNG thể dừng relay, ghi đè cấu
+    /// hình hay gỡ network settings của phiên mới. Đây là gốc của lỗi "Connect lần hai
+    /// tunnel lên nhưng không có mạng": callback phiên cũ còn sót đã dọn dở phiên mới.
+    private let sessionLock = NSLock()
+    private var sessionGeneration = 0
+    private var sessionActive = false
+    /// Các tác vụ hẹn giờ thuộc phiên hiện tại, huỷ hết khi stop/thay phiên.
+    private var scheduledWorkItems: [DispatchWorkItem] = []
+    /// Số lần watchdog đã dựng lại phiên trong lần Connect hiện tại.
+    private var watchdogRebuilds = 0
+
     override func startTunnel(
         options: [String: NSObject]?,
         completionHandler: @escaping (Error?) -> Void
     ) {
-        RelayDiagnostics.shared.log("startTunnel requested")
+        // Mỗi lần start là một phiên MỚI: tăng generation để mọi callback async của
+        // phiên trước tự vô hiệu, rồi dọn sạch adapter/relay còn sót trước khi dựng mới.
+        watchdogRebuilds = 0
+        let generation = beginSession()
+        resetSessionResources()
+        RelayDiagnostics.shared.log("startTunnel requested (session \(generation))")
+        log.info("startTunnel: begin session \(generation)")
+
+        guard let config = self.configuration,
+              (try? config.makeTunnelConfiguration()) != nil else {
+            let error = NSError(
+                domain: "com.privatevpn.tunnel",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid or missing WireGuard configuration"]
+            )
+            RelayDiagnostics.shared.log("startTunnel: invalid or missing WireGuard configuration")
+            completionHandler(error)
+            return
+        }
+
+        startSession(config: config, generation: generation, completion: completionHandler)
+    }
+
+    /// Dựng adapter + chuỗi transport cho MỘT phiên. Cấu hình được đọc lại từ
+    /// `configuration` (protocolConfiguration mới nhất) chứ không dùng biến còn sót.
+    /// `completion` là callback của NetworkExtension ở lần start đầu, và là log thuần
+    /// khi watchdog dựng lại phiên.
+    private func startSession(
+        config: WireGuardConfig,
+        generation: Int,
+        completion: @escaping (Error?) -> Void
+    ) {
+        guard var tunnelConfig = try? config.makeTunnelConfiguration() else {
+            let error = NSError(
+                domain: "com.privatevpn.tunnel",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid or missing WireGuard configuration"]
+            )
+            completion(error)
+            return
+        }
+
         let adapter = WireGuardAdapter(with: self) { [weak self] level, message in
             let osLevel: OSLogType = level == .error ? .error : .debug
             self?.log.log(level: osLevel, "\(message)")
@@ -34,17 +94,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             RelayDiagnostics.shared.log("wg: \(message)")
         }
         self.adapter = adapter
-
-        guard let config = self.configuration,
-              var tunnelConfig = try? config.makeTunnelConfiguration() else {
-            let error = NSError(
-                domain: "com.privatevpn.tunnel",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Invalid or missing WireGuard configuration"]
-            )
-            completionHandler(error)
-            return
-        }
 
         // Chuỗi transport, đi một chiều và không quay lại: relay TCP → relay WS → UDP
         // trực tiếp. Mỗi bước chỉ được thử khi bước trước vẫn chưa kết nối được, hoặc
@@ -64,14 +113,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 tunnelConfig = configuration(tunnelConfig, pointingAt: localPort)
                 log.info("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (relay \(relayHost):\(relayPorts.first ?? 0))")
                 RelayDiagnostics.shared.log("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue)")
-                scheduleWebSocketFallback(direct: directConfiguration)
+                scheduleWebSocketFallback(direct: directConfiguration, generation: generation)
             } else if let localPort = startWebSocketRelay() {
                 // Bước 1 không dựng nổi listener (bind lỗi) thì vào chuỗi ở bước 2 luôn:
                 // đường WS không phụ thuộc IP node nên nó vẫn là đường sống khi bị chặn IP,
                 // bỏ qua nó chỉ vì relay TCP không bind được là mất đúng đường dự phòng.
                 tunnelConfig = configuration(tunnelConfig, pointingAt: localPort)
                 RelayDiagnostics.shared.log("ws-relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (TCP relay did not start)")
-                scheduleDirectFallback(direct: directConfiguration)
+                scheduleDirectFallback(direct: directConfiguration, generation: generation)
             } else {
                 RelayDiagnostics.shared.log("relay: no relay transport could start — using direct UDP")
             }
@@ -83,8 +132,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // đúng transport đang chạy — nếu không, node tới được qua WS vẫn bị báo là không
         // tới được, và coordinator lại xếp nó xuống dưới.
         let reportedNodeId = config.nodeId
-        DispatchQueue.global().asyncAfter(deadline: .now() + transportGrace * 2 + 4) { [weak self] in
-            guard let self else { return }
+        schedule(after: transportGrace * 2 + 4) { [weak self] in
+            guard let self, self.isCurrentSession(generation) else { return }
             let reachable = self.activeTransportIsConnected
             NodeHealthReporter.report(
                 nodeId: reportedNodeId,
@@ -94,20 +143,127 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         adapter.start(tunnelConfiguration: tunnelConfig) { [weak self] error in
+            guard let self else {
+                completion(error)
+                return
+            }
+            let isCurrent = self.isCurrentSession(generation)
             if let error {
-                self?.log.error("Failed to start tunnel: \(error.localizedDescription)")
+                self.log.error("Failed to start tunnel: \(error.localizedDescription)")
                 RelayDiagnostics.shared.log("Failed to start tunnel: \(error.localizedDescription)")
                 // Start hỏng SAU khi setTunnelNetworkSettings đã áp DNS/route ⇒ phải tự gỡ
                 // trước khi báo lỗi, nếu không máy giữ nguyên DNS 1.1.1.1 + route qua utun
                 // (bug "Disconnect xong mất mạng" đo trên macOS 14/09). Xem stopTunnel.
-                self?.setTunnelNetworkSettings(nil) { _ in
-                    completionHandler(error)
+                // Nhưng nếu phiên mới đã bắt đầu thì để yên settings của nó.
+                if isCurrent, self.sessionNotRestarted(since: generation) {
+                    self.setTunnelNetworkSettings(nil) { _ in
+                        completion(error)
+                    }
+                } else {
+                    completion(error)
                 }
-            } else {
-                self?.log.info("WireGuard tunnel started")
-                RelayDiagnostics.shared.log("WireGuard tunnel started")
-                completionHandler(nil)
+                return
             }
+            guard isCurrent else {
+                // Phiên bị thay thế trong lúc adapter.start chạy: không áp watchdog/health
+                // lên phiên mới, chỉ báo huỷ cho NetworkExtension.
+                RelayDiagnostics.shared.log("startSession: stale session \(generation) started — ignoring")
+                completion(NSError(
+                    domain: "com.privatevpn.tunnel",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Session replaced before start completed"]
+                ))
+                return
+            }
+            self.log.info("WireGuard tunnel started (session \(generation))")
+            self.log.info("network settings applied: address=\(config.addresses.first ?? "?") dns=\(config.dnsServers.joined(separator: ","))")
+            RelayDiagnostics.shared.log("WireGuard tunnel started (session \(generation))")
+            RelayDiagnostics.shared.log("network settings applied: addr=\(config.addresses.first ?? "?") dns=\(config.dnsServers.joined(separator: ","))")
+            completion(nil)
+            self.scheduleWatchdog(generation: generation)
+        }
+    }
+
+    // MARK: - Session lifecycle
+
+    /// Bắt đầu một phiên mới: tăng generation, đánh dấu active và huỷ mọi tác vụ hẹn giờ
+    /// của phiên cũ. Không dừng tài nguyên ở đây — `resetSessionResources` làm việc đó.
+    private func beginSession() -> Int {
+        sessionLock.lock()
+        sessionGeneration += 1
+        sessionActive = true
+        let generation = sessionGeneration
+        let pending = scheduledWorkItems
+        scheduledWorkItems = []
+        sessionLock.unlock()
+        for item in pending { item.cancel() }
+        return generation
+    }
+
+    /// Kết thúc phiên hiện tại: đánh dấu không còn active và huỷ tác vụ hẹn giờ.
+    /// KHÔNG tăng generation — để callback dọn dẹp của chính lần stop này vẫn nhận ra
+    /// "chưa có phiên mới" mà gỡ network settings.
+    private func endSession() {
+        sessionLock.lock()
+        sessionActive = false
+        watchdogRebuilds = 0
+        let pending = scheduledWorkItems
+        scheduledWorkItems = []
+        sessionLock.unlock()
+        for item in pending { item.cancel() }
+    }
+
+    private func isCurrentSession(_ generation: Int) -> Bool {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        return sessionActive && sessionGeneration == generation
+    }
+
+    /// True khi CHƯA có phiên mới nào bắt đầu kể từ `generation` — dùng cho dọn dẹp lúc
+    /// stop để không gỡ network settings của phiên vừa được dựng.
+    private func sessionNotRestarted(since generation: Int) -> Bool {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        return sessionGeneration == generation
+    }
+
+    /// Hẹn một tác vụ thuộc phiên hiện tại; tác vụ được theo dõi để huỷ khi stop/thay phiên.
+    private func schedule(after delay: TimeInterval, _ work: @escaping () -> Void) {
+        let item = DispatchWorkItem(block: work)
+        sessionLock.lock()
+        scheduledWorkItems.append(item)
+        sessionLock.unlock()
+        DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    /// Dừng adapter/relay còn sót từ phiên trước (best-effort, không chờ) trước khi dựng mới.
+    private func resetSessionResources() {
+        relay?.stop()
+        relay = nil
+        wsRelay?.stop()
+        wsRelay = nil
+        directConfiguration = nil
+        if let adapter {
+            adapter.stop { _ in }
+        }
+        adapter = nil
+    }
+
+    /// Dừng tài nguyên phiên hiện tại và chỉ gọi `completion` khi adapter đã dừng hẳn —
+    /// watchdog dùng để dựng lại phiên trên nền đã sạch.
+    private func stopSessionResources(completion: @escaping () -> Void) {
+        relay?.stop()
+        relay = nil
+        wsRelay?.stop()
+        wsRelay = nil
+        directConfiguration = nil
+        if let adapter {
+            adapter.stop { [weak self] _ in
+                if self?.adapter === adapter { self?.adapter = nil }
+                completion()
+            }
+        } else {
+            completion()
         }
     }
 
@@ -208,10 +364,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// One-way on purpose, like the rest of the chain: the switch happens at most once
     /// and is never reversed. Each transport keeps its own local UDP port for its whole
     /// lifetime, so WireGuard is reconfigured exactly once per step.
-    private func scheduleWebSocketFallback(direct: TunnelConfiguration) {
+    private func scheduleWebSocketFallback(direct: TunnelConfiguration, generation: Int) {
         guard let relay else { return }
-        DispatchQueue.global().asyncAfter(deadline: .now() + transportGrace) { [weak self] in
-            guard let self, let adapter = self.adapter else { return }
+        schedule(after: transportGrace) { [weak self] in
+            guard let self, self.isCurrentSession(generation), let adapter = self.adapter else { return }
             guard !relay.isConnected else {
                 RelayDiagnostics.shared.log("relay: link is up, keeping the relay transport")
                 return
@@ -220,7 +376,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             RelayDiagnostics.shared.log("relay: still not connected after \(grace)s — trying the WebSocket relay")
             self.log.error("relay: not connected after \(grace)s — trying the WebSocket relay")
             relay.stop()
-            self.relay = nil
+            if self.relay === relay { self.relay = nil }
 
             guard let localPort = self.startWebSocketRelay() else {
                 self.applyDirectEndpoint(direct, because: "the WebSocket relay could not start")
@@ -233,24 +389,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     RelayDiagnostics.shared.log("ws-relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue)")
                 }
             }
-            self.scheduleDirectFallback(direct: direct)
+            self.scheduleDirectFallback(direct: direct, generation: generation)
         }
     }
 
     /// Step 3 of the chain: if the WebSocket link is still not up a few seconds after it
     /// was handed to WireGuard, give the node's direct UDP endpoint back. One-way on
     /// purpose — flapping between transports would be worse than either.
-    private func scheduleDirectFallback(direct: TunnelConfiguration) {
+    private func scheduleDirectFallback(direct: TunnelConfiguration, generation: Int) {
         directConfiguration = direct
         guard let wsRelay else { return }
-        DispatchQueue.global().asyncAfter(deadline: .now() + transportGrace) { [weak self] in
-            guard let self else { return }
+        schedule(after: transportGrace) { [weak self] in
+            guard let self, self.isCurrentSession(generation) else { return }
             guard !wsRelay.isConnected else {
                 RelayDiagnostics.shared.log("ws-relay: link is up, keeping the WebSocket transport")
                 return
             }
             wsRelay.stop()
-            self.wsRelay = nil
+            if self.wsRelay === wsRelay { self.wsRelay = nil }
             self.applyDirectEndpoint(
                 direct,
                 because: "WebSocket relay still not connected after \(Int(transportGrace))s"
@@ -276,12 +432,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         with reason: NEProviderStopReason,
         completionHandler: @escaping () -> Void
     ) {
-        log.info("Stopping tunnel; reason=\(reason.rawValue)")
-        RelayDiagnostics.shared.log("stopTunnel reason=\(reason.rawValue)")
+        let generation = currentGeneration()
+        endSession()
+        log.info("Stopping tunnel; reason=\(reason.rawValue) (session \(generation))")
+        RelayDiagnostics.shared.log("stopTunnel reason=\(reason.rawValue) session=\(generation)")
         relay?.stop()
         relay = nil
         wsRelay?.stop()
         wsRelay = nil
+        directConfiguration = nil
 
         // Xoá cấu hình mạng của tunnel (DNS + route 0.0.0.0/0) trước khi báo hoàn tất.
         // Vì sao: đây là bug thật đã làm khách "mất mạng" — macOS giữ nguyên DNS mà
@@ -292,8 +451,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // ~35 route rác trỏ qua utun. setTunnelNetworkSettings(nil) buộc hệ thống trả
         // lại DNS/route của interface vật lý (Wi-Fi) và dỡ route của tunnel.
         // Gọi cả khi `adapter` nil (tunnel chưa/không start được) để không bỏ sót.
-        let clearNetworkSettingsAndFinish = {
+        //
+        // Chốt an toàn cho bug "Connect lần hai không có mạng": nếu một phiên MỚI đã
+        // bắt đầu trong lúc adapter cũ đang dừng, KHÔNG gỡ settings nữa — phiên mới đã
+        // áp IP 10.77.x/DNS của nó, gỡ ở đây sẽ xoá đúng cấu hình đó.
+        let clearNetworkSettingsAndFinish = { [weak self] in
+            guard let self else {
+                completionHandler()
+                return
+            }
+            guard self.sessionNotRestarted(since: generation) else {
+                self.log.info("stopTunnel: a new session started — leaving its network settings untouched")
+                RelayDiagnostics.shared.log("stopTunnel: new session detected — skip setTunnelNetworkSettings(nil)")
+                completionHandler()
+                return
+            }
+            let logger = self.log
             self.setTunnelNetworkSettings(nil) { _ in
+                logger.info("stopTunnel: network settings removed")
+                RelayDiagnostics.shared.log("stopTunnel: network settings removed")
                 completionHandler()
             }
         }
@@ -303,12 +479,127 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 if let error {
                     self?.log.error("Error stopping tunnel: \(error.localizedDescription)")
                 }
-                self?.adapter = nil
+                // Chỉ xoá nếu đây vẫn là adapter của phiên này — tránh nil nhầm adapter
+                // mà phiên mới vừa tạo.
+                if self?.adapter === adapter { self?.adapter = nil }
                 clearNetworkSettingsAndFinish()
             }
         } else {
             clearNetworkSettingsAndFinish()
         }
+    }
+
+    // MARK: - Watchdog
+
+    /// Sau khi tunnel "lên", hẹn kiểm tra peer có handshake/traffic thật chưa.
+    private func scheduleWatchdog(generation: Int) {
+        schedule(after: watchdogGrace) { [weak self] in
+            guard let self, self.isCurrentSession(generation) else { return }
+            self.runWatchdogCheck(generation: generation)
+        }
+    }
+
+    /// Đọc runtime config của WireGuard để biết peer đã handshake/chuyển byte chưa.
+    /// Tunnel "lên" (NE báo connected) mà runtime rỗng nghĩa là client không có mạng —
+    /// đúng ca khách báo. Gặp ca đó thì dựng lại phiên.
+    private func runWatchdogCheck(generation: Int) {
+        guard let adapter else { return }
+        adapter.getRuntimeConfiguration { [weak self] text in
+            guard let self, self.isCurrentSession(generation) else { return }
+            // Runtime rỗng = adapter chưa ở trạng thái started (ví dụ iOS đang
+            // temporaryShutdown vì mất mạng). Chưa dựng lại, để nó tự hồi.
+            guard let text else {
+                self.log.info("watchdog: runtime config unavailable — deferring rebuild")
+                RelayDiagnostics.shared.log("watchdog: runtime config unavailable — deferring rebuild")
+                return
+            }
+            let stats = Self.parseRuntimeStats(text)
+            if stats.hasTraffic {
+                self.log.info("watchdog: tunnel carrying traffic (rx=\(stats.rxBytes) tx=\(stats.txBytes) handshakeAge=\(Int(stats.handshakeAge))s)")
+                RelayDiagnostics.shared.log("watchdog: traffic ok rx=\(stats.rxBytes) tx=\(stats.txBytes) handshakeAge=\(Int(stats.handshakeAge))s")
+                return
+            }
+            // Chưa có traffic nhưng relay vẫn đang kết nối: để chuỗi transport chạy tiếp,
+            // dựng lại lúc này chỉ cắt ngang bước fallback hợp lệ. Chỉ rebuild khi transport
+            // đang dùng đã "connected" (hoặc direct UDP) mà peer vẫn im lặng.
+            if !self.activeTransportIsConnected {
+                self.log.info("watchdog: transport still connecting after \(Int(watchdogGrace))s — deferring rebuild")
+                RelayDiagnostics.shared.log("watchdog: transport still connecting after \(Int(watchdogGrace))s — deferring rebuild")
+                return
+            }
+            self.log.error("watchdog: no handshake/traffic \(Int(watchdogGrace))s after start — rebuilding session")
+            RelayDiagnostics.shared.log("watchdog: no handshake after \(Int(watchdogGrace))s — rebuilding (attempt \(self.watchdogRebuilds + 1)/\(maxWatchdogRebuilds))")
+            self.rebuildFromWatchdog(generation: generation)
+        }
+    }
+
+    /// Dựng lại phiên "lên nhưng không có mạng": dừng sạch, đọc lại cấu hình MỚI từ
+    /// protocolConfiguration rồi start lại. Tối đa `maxWatchdogRebuilds` lần.
+    private func rebuildFromWatchdog(generation: Int) {
+        guard isCurrentSession(generation) else { return }
+        guard watchdogRebuilds < maxWatchdogRebuilds else {
+            log.error("watchdog: giving up after \(self.watchdogRebuilds) rebuilds")
+            RelayDiagnostics.shared.log("watchdog: giving up after \(watchdogRebuilds) rebuilds — tunnel left up but not carrying traffic")
+            return
+        }
+        watchdogRebuilds += 1
+
+        stopSessionResources { [weak self] in
+            guard let self else { return }
+            guard let config = self.configuration else {
+                RelayDiagnostics.shared.log("watchdog: cannot rebuild — configuration missing")
+                return
+            }
+            let newGeneration = self.beginSession()
+            self.log.info("watchdog: rebuilding session \(newGeneration) (attempt \(self.watchdogRebuilds))")
+            RelayDiagnostics.shared.log("watchdog: rebuilding session \(newGeneration)")
+            self.startSession(config: config, generation: newGeneration) { [weak self] error in
+                if let error {
+                    self?.log.error("watchdog: rebuild failed: \(error.localizedDescription)")
+                    RelayDiagnostics.shared.log("watchdog: rebuild failed: \(error.localizedDescription)")
+                } else {
+                    self?.log.info("watchdog: session rebuilt")
+                    RelayDiagnostics.shared.log("watchdog: session rebuilt")
+                }
+            }
+        }
+    }
+
+    private struct RuntimeStats {
+        var rxBytes = 0
+        var txBytes = 0
+        var handshakeAge: TimeInterval = 0
+        var hasTraffic: Bool { rxBytes > 0 || txBytes > 0 || handshakeAge > 0 }
+    }
+
+    /// Parse UAPI runtime config (`wgGetConfig`) — mỗi peer có `rx_bytes`, `tx_bytes`,
+    /// `last_handshake_time_sec`. Không phụ thuộc log của adapter.
+    private static func parseRuntimeStats(_ text: String) -> RuntimeStats {
+        var stats = RuntimeStats()
+        for line in text.split(separator: "\n") {
+            let pair = line.split(separator: "=", maxSplits: 1)
+            guard pair.count == 2 else { continue }
+            switch String(pair[0]) {
+            case "rx_bytes":
+                stats.rxBytes += Int(pair[1]) ?? 0
+            case "tx_bytes":
+                stats.txBytes += Int(pair[1]) ?? 0
+            case "last_handshake_time_sec":
+                let handshake = TimeInterval(Int(pair[1]) ?? 0)
+                if handshake > 0 {
+                    stats.handshakeAge = max(0, Date().timeIntervalSince1970 - handshake)
+                }
+            default:
+                break
+            }
+        }
+        return stats
+    }
+
+    private func currentGeneration() -> Int {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        return sessionGeneration
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {

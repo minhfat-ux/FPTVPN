@@ -145,22 +145,11 @@ final class VPNManagerMac: ObservableObject {
 
         let privateKey = WireGuardKeychain.loadOrCreatePrivateKey()
 
-        // Fast path: if a saved tunnel config exists for the selected node,
-        // replay it immediately — the VPN permission prompt appears at once
-        // instead of after coordinator timeouts (~20s) on censored networks.
-        // The coordinator is then refreshed in the background when reachable.
-        if let saved = savedTunnelSnapshot(), saved.node.id == (selectedNodeID ?? saved.node.id) {
-            do {
-                try await startTunnel(privateKey: privateKey, overlayIP: saved.overlayIP, node: saved.node)
-                usingFallbackNodes = true
-                log.info("connect: fast-path replay of saved config (overlay=\(saved.overlayIP, privacy: .public))")
-                Task { await refreshCoordinatorIfReachable(authStore: authStore, privateKey: privateKey) }
-                return
-            } catch {
-                log.warning("connect: fast-path replay failed (\(error.localizedDescription, privacy: .public)) — falling back to coordinator")
-            }
-        }
-
+        // Mỗi lần Connect đều hỏi control plane lấy cấu hình MỚI. Trước đây macOS có
+        // "fast path" replay cấu hình đã lưu (khác iOS): nó dựng lại overlay IP/node cũ,
+        // nên lần Connect thứ hai chạy trên cấu hình phiên trước — tunnel báo "lên" mà
+        // không có mạng. Chỉ dùng cache khi control plane KHÔNG tới được (nhánh
+        // `.transport` bên dưới) — đó là lý do rõ ràng để giữ lại.
         do {
             guard let baseURL = normalizedURL(coordinatorURL) else {
                 throw MacError.invalidURL(coordinatorURL)
@@ -331,38 +320,6 @@ final class VPNManagerMac: ObservableObject {
         startStatusPolling()
     }
 
-    /// After a fast-path replay, try to refresh the coordinator (register +
-    /// fresh node list) in the background so the next connect has up-to-date
-    /// config. Best effort — silently ignored when the coordinator is blocked.
-    private func refreshCoordinatorIfReachable(authStore: AuthSessionStore, privateKey: WireGuardKeychain.KeyPair) async {
-        guard let baseURL = normalizedURL(coordinatorURL) else { return }
-        let bootstrap = ControlAPIClient(baseURL: baseURL, joinToken: "")
-        do {
-            if let nodes = try? await bootstrap.fetchNodes(), !nodes.isEmpty {
-                exitNodes = nodes
-                ExitNodeCache.save(nodes)
-            }
-            guard let accessToken = authStore.accessToken else { return }
-            let token = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
-            let deviceName = "mac-\(Self.stableSuffix(from: privateKey.publicKey))"
-            let response = try await registerDevice(
-                baseURL: baseURL,
-                joinToken: token,
-                name: deviceName,
-                publicKey: privateKey.publicKey,
-                accessToken: accessToken,
-                exitNodeId: selectedNodeID
-            )
-            let node = exitNodes.first { $0.id == selectedNodeID } ?? exitNodes.first
-            if let node {
-                TunnelConfigCache.save(overlayIP: response.overlay_ip, node: node)
-            }
-            log.info("connect: background coordinator refresh ok (overlay=\(response.overlay_ip, privacy: .public))")
-        } catch {
-            log.info("connect: background coordinator refresh skipped (\(error.localizedDescription, privacy: .public))")
-        }
-    }
-
     private func registerDevice(baseURL: URL, joinToken: String, name: String, publicKey: String, accessToken: String, exitNodeId: String?, replaceDeviceId: String? = nil) async throws -> CoordinatorRegisterResponse {
         let client = ControlAPIClient(baseURL: baseURL, joinToken: joinToken)
         return try await client.register(
@@ -470,12 +427,19 @@ final class VPNManagerMac: ObservableObject {
         wsRelayURL: String? = nil
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
-        let staleProfiles = existing.filter { profile in
+        let managedProfiles = existing.filter { profile in
             Self.isManagedProfile(profile.localizedDescription)
         }
 
-        for staleProfile in staleProfiles {
-            log.info("configuration: removing stale VPN profile")
+        // DÙNG LẠI profile đang có thay vì xoá hết rồi tạo mới mỗi lần connect. Trước đây
+        // macOS xoá profile đang hoạt động ngay trước khi tạo profile khác: hệ thống dựng
+        // phiên mới trên nền phiên cũ chưa dọn xong, tunnel báo "lên" nhưng utun không còn
+        // IP 10.77.x ⇒ "Connect lần hai không có mạng". iOS đã dùng cách dùng lại này và
+        // reconnect ổn định, nên macOS theo đúng mẫu đó.
+        // Chỉ xoá các profile trùng/legacy, giữ đúng một profile để dùng lại.
+        let manager = Self.preferredProfile(in: managedProfiles) ?? NETunnelProviderManager()
+        for staleProfile in managedProfiles where staleProfile !== manager {
+            log.info("configuration: removing duplicate/legacy VPN profile")
             try? await staleProfile.removeFromPreferences()
         }
 
@@ -484,7 +448,6 @@ final class VPNManagerMac: ObservableObject {
         // dùng UDP trực tiếp. nodeId để extension báo health về coordinator.
         let tunnelConfig = config.withRelay().withNodeId(nodeId).withWSRelayURL(wsRelayURL)
 
-        let manager = NETunnelProviderManager()
         let protocolConfig = NETunnelProviderProtocol()
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier
         protocolConfig.serverAddress = tunnelConfig.peers.first?.endpoint ?? "not-configured"
@@ -506,12 +469,9 @@ final class VPNManagerMac: ObservableObject {
         manager.localizedDescription = Self.currentProfileName
         manager.isEnabled = true
         try await manager.saveToPreferences()
-
-        let refreshed = try await NETunnelProviderManager.loadAllFromPreferences()
-        guard let savedManager = Self.preferredProfile(in: refreshed) else {
-            throw MacError.savedConfigurationMissing
-        }
-        self.manager = savedManager
+        // Nạp lại để chắc chắn manager gắn với bản ghi hệ thống vừa lưu trước khi start.
+        try await manager.loadFromPreferences()
+        self.manager = manager
     }
 
     private func loadManagerFromPreferences() async {
@@ -548,50 +508,6 @@ final class VPNManagerMac: ObservableObject {
     private static func overlayIP(fromSaved config: WireGuardConfig) -> String {
         guard let address = config.addresses.first else { return "" }
         return address.split(separator: "/").first.map(String.init) ?? ""
-    }
-
-    /// Returns (overlay IP, node) for fast-path reconnect.
-    /// Overlay IP comes from the tunnel cache or the saved VPN profile; the
-    /// node comes from the *currently selected* exit node when known (its
-    /// endpoint comes from the cached/built-in node list) — a stale profile
-    /// pointing at a blocked node (e.g. node-1 unreachable from a censored
-    /// network while node-2 works) must not pin the replay to the dead node.
-    private func savedTunnelSnapshot() -> (overlayIP: String, node: ExitNode)? {
-        let overlayIP: String
-        if let cached = TunnelConfigCache.load() {
-            overlayIP = cached.overlayIP
-        } else if let saved = savedTunnelConfig() {
-            overlayIP = Self.overlayIP(fromSaved: saved)
-        } else {
-            return nil
-        }
-        // Prefer the currently selected node from the (cached/built-in) node
-        // list — it has the freshest endpoint + public key.
-        if let selected = selectedNodeID,
-           let node = exitNodes.first(where: { $0.id == selected }) {
-            return (overlayIP, node)
-        }
-        if let node = exitNodes.first {
-            return (overlayIP, node)
-        }
-        // Fall back to whatever the profile/cache remembers.
-        if let cached = TunnelConfigCache.load() {
-            return (overlayIP, cached.node)
-        }
-        if let saved = savedTunnelConfig(), let peer = saved.peers.first {
-            return (
-                overlayIP,
-                ExitNode(
-                    id: "saved",
-                    name: "Saved",
-                    country: "VN",
-                    city: "Hanoi",
-                    endpoint: peer.endpoint ?? "",
-                    public_key: peer.publicKeyBase64
-                )
-            )
-        }
-        return nil
     }
 
     /// The exit node to dial, always honoring the user's picker selection:
