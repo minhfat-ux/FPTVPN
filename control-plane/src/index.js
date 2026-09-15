@@ -2051,6 +2051,9 @@ const IOS_TEXTS = {
     guideInvalid: "<b>Nếu iOS báo “Hồ sơ không hợp lệ / Invalid Profile”: máy bạn ĐÃ đăng ký xong</b> — bấm OK rồi quay lại trang này.",
     regDone: "✅ Đã đăng ký thiết bị này",
     installLocked: "Hoàn thành bước 1 để mở nút này",
+    autoOpen: "✅ Bản cài cho máy bạn đã sẵn sàng — đang mở… Nếu iOS không hiện hộp thoại, bấm nút bên dưới.",
+    unlock: "Tôi đã cài hồ sơ rồi — mở nút tải & cài",
+    unlockWarn: "Nếu iOS báo “Unable to Install” thì bản cài chưa ký cho máy này — nhắn shop để được ký.",
     profileName: "VPNFlow — Đăng ký thiết bị",
     profileDesc: "Gửi mã thiết bị (UDID) cho VPNFlow để cấp bản cài phù hợp. Không thu thập dữ liệu khác.",
   },
@@ -2095,6 +2098,9 @@ const IOS_TEXTS = {
     guideInvalid: "<b>If iOS says “Invalid Profile”: your device was ALREADY registered</b> — tap OK and come back to this page.",
     regDone: "✅ This device is registered",
     installLocked: "Finish step 1 to unlock this button",
+    autoOpen: "✅ Your build is ready — opening… If iOS shows nothing, tap the button below.",
+    unlock: "I already installed the profile — unlock the download",
+    unlockWarn: "If iOS says “Unable to Install”, this build is not signed for your device yet — message the shop.",
     profileName: "VPNFlow — Device registration",
     profileDesc: "Reports the device ID (UDID) to VPNFlow so we can issue a matching build. No other data is collected.",
   },
@@ -2139,6 +2145,9 @@ const IOS_TEXTS = {
     guideInvalid: "<b>若 iOS 提示“描述文件无效”：说明设备已注册成功</b> —— 点击“好”，然后返回本页。",
     regDone: "✅ 此设备已注册",
     installLocked: "完成第 1 步即可解锁此按钮",
+    autoOpen: "✅ 该设备的安装包已就绪 —— 正在打开… 若 iOS 没有弹出提示，请点下方按钮。",
+    unlock: "我已安装描述文件 —— 解锁下载按钮",
+    unlockWarn: "若 iOS 提示“无法安装”，说明该安装包尚未为您的设备签名 —— 请联系商家。",
     profileName: "VPNFlow — 设备注册",
     profileDesc: "将设备码 (UDID) 上报给 VPNFlow，以便发放对应的安装包。不采集其他数据。",
   },
@@ -2183,6 +2192,9 @@ const IOS_TEXTS = {
     guideInvalid: "<b>iOS が「プロファイルが無効です」と表示しても端末は登録済みです</b> —— OK を押してこのページに戻ってください。",
     regDone: "✅ この端末は登録済みです",
     installLocked: "ステップ 1 を完了するとこのボタンが使えます",
+    autoOpen: "✅ 端末用ビルドの準備ができました —— 開いています… 何も表示されない場合は下のボタンを押してください。",
+    unlock: "プロファイルをインストール済み —— ダウンロードを有効にする",
+    unlockWarn: "iOS が「インストールできません」と表示する場合、この端末用に署名されていません —— ショップにご連絡ください。",
     profileName: "VPNFlow — 端末登録",
     profileDesc: "端末 ID (UDID) を VPNFlow に送信し、対応するビルドを発行するためのプロファイルです。他のデータは収集しません。",
   },
@@ -2227,6 +2239,9 @@ const IOS_TEXTS = {
     guideInvalid: "<b>iOS가 “유효하지 않은 프로파일”을 표시해도 기기는 이미 등록되었습니다</b> — 확인을 누르고 이 페이지로 돌아오세요.",
     regDone: "✅ 이 기기는 등록되었습니다",
     installLocked: "1단계를 완료하면 이 버튼이 활성화됩니다",
+    autoOpen: "✅ 기기용 빌드가 준비되었습니다 — 여는 중… 아무 반응이 없으면 아래 버튼을 누르세요.",
+    unlock: "프로파일을 이미 설치했습니다 — 다운로드 잠금 해제",
+    unlockWarn: "iOS가 “설치할 수 없음”을 표시하면 이 기기용으로 서명되지 않은 빌드입니다 — 판매자에게 문의하세요.",
     profileName: "VPNFlow — 기기 등록",
     profileDesc: "기기 ID (UDID)를 VPNFlow로 전송해 해당 빌드를 발급받기 위한 프로파일입니다. 다른 데이터는 수집하지 않습니다.",
   },
@@ -2635,7 +2650,9 @@ app.get(["/install/ios", "/install/ios/"], (req, res) => {
   const manifest = `${base}/install/ios/manifest.plist`;
   const itms = `itms-services://?action=download-manifest&amp;url=${encodeURIComponent(manifest)}`;
   const version = appConfig.get("latest_ios_version") || "1.0";
-  res.type("html").send(iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? "").slice(0, 200), sid: crypto.randomUUID() }));
+  res.type("html").send(iosInstallPageHTML({ base, itms, version, lang: iosLang(req), token: String(req.query?.token ?? "").slice(0, 200), // Có ?s= (link hỗ trợ/recovery) thì DÙNG LUÔN mã đó — href render ra đã đúng mã phiên,
+    // không phụ thuộc JS chạy xong mới sửa lại.
+    sid: String(req.query?.s ?? "").trim().slice(0, 64) || crypto.randomUUID() }));
 });
 
 /**
@@ -2695,7 +2712,7 @@ ${iosLangSelectHTML(lang)}
 <div class="step">
   <div class="stephead"><span class="n">1</span><span class="h">${t.step1}</span></div>
   <ul>${li(t.step1Items)}</ul>
-  <a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}">${t.regBtn}</a>
+  <a class="b b1" id="cta" href="/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}&s=${encodeURIComponent(sid)}">${t.regBtn}</a>
   <div id="statusline" class="wait" style="display:none"><span class="spin"></span><span id="statustxt"></span></div>
 </div>
 
@@ -2703,6 +2720,7 @@ ${iosLangSelectHTML(lang)}
   <div class="stephead"><span class="n">2</span><span class="h">${t.step2}</span></div>
   <a class="b b2 disabled" id="installLink" href="${itms}">${t.downloadBtn}</a>
   <div class="hintlock" id="installHint">${t.installLocked}</div>
+  <a class="hintlock" id="unlockLink" href="#" onclick="unlockInstall();return false;" style="display:none;color:#8fd0ff;text-decoration:underline">${t.unlock}</a>
 </div>
 
 <div class="warn">
@@ -2735,19 +2753,32 @@ ${iosLangSelectHTML(lang)}
 // Mã phiên: iOS gửi UDID NGẦM sau khi cài hồ sơ (khách không thấy trang callback), nên trang phải
 // nhận ra "máy này" qua mã phiên — nếu không thì sau khi cài hồ sơ trang vẫn không biết và không
 // hiện được nút tải app.
+// Mã phiên — thứ tự ưu tiên: (1) ?s= trên URL (link hỗ trợ/recovery), (2) localStorage,
+// (3) mã server sinh cho lần mở này. Link hồ sơ cũng đã mang sẵn mã này từ server nên khách
+// bấm nút là mã chắc chắn đi theo, không phụ thuộc JS đã chạy hay chưa.
 var SID = "";
-try { SID = localStorage.getItem("vpnflow_sid") || ""; } catch (e) {}
-if (!SID) { SID = ${JSON.stringify(sid)}; try { localStorage.setItem("vpnflow_sid", SID); } catch (e) {} }
+try { SID = new URLSearchParams(window.location.search).get("s") || ""; } catch (e) {}
+if (!SID) { try { SID = localStorage.getItem("vpnflow_sid") || ""; } catch (e) {} }
+if (!SID) { SID = ${JSON.stringify(sid)}; }
+try { localStorage.setItem("vpnflow_sid", SID); } catch (e) {}
 var udid = ""; try { udid = localStorage.getItem("vpnflow_udid") || ""; } catch (e) {}
 var ITMS = ${JSON.stringify(itms.replace(/&amp;/g, "&"))};
 var REG_BASE = ${JSON.stringify(`/install/ios/register.mobileconfig?lang=${lang}${tokenQS}${freshQS}`)};
-var REG_HREF = REG_BASE + (SID ? "&s=" + encodeURIComponent(SID) : "");
-var LBL = ${JSON.stringify({ reg: t.regBtn, install: t.installBtn, wait: t.waitReady, locked: t.waitLocked, regDone: t.regDone, installLocked: t.installLocked })};
+// Thay mã phiên trong href (href đã có &s= do server render) — tránh 2 tham số s= trùng nhau.
+function withSession(url, sid) {
+  if (!sid) return url;
+  return /[?&]s=/.test(url)
+    ? url.replace(/([?&])s=[^&]*/, "$1s=" + encodeURIComponent(sid))
+    : url + "&s=" + encodeURIComponent(sid);
+}
+var REG_HREF = withSession(REG_BASE, SID);
+var LBL = ${JSON.stringify({ reg: t.regBtn, install: t.installBtn, wait: t.waitReady, locked: t.waitLocked, regDone: t.regDone, installLocked: t.installLocked, autoOpen: t.autoOpen, unlock: t.unlock, unlockWarn: t.unlockWarn })};
 var cta = document.getElementById("cta");
 var statusline = document.getElementById("statusline"), statustxt = document.getElementById("statustxt");
 function showGuide() { document.getElementById("guide").style.display = "flex"; }
 function hideGuide() { document.getElementById("guide").style.display = "none"; }
 var installLink = document.getElementById("installLink");
+var unlockLink = document.getElementById("unlockLink");
 var installHint = document.getElementById("installHint");
 // Trạng thái nút theo tình trạng máy:
 //  · chưa đăng ký  ⇒ nút Đăng ký BẬT, nút Tải & cài KHÓA (cài trước khi đăng ký là chắc chắn lỗi)
@@ -2758,6 +2789,16 @@ function setNotRegistered() {
   installLink.classList.add("disabled");
   installLink.classList.remove("pulse");
   if (installHint) { installHint.textContent = LBL.locked; installHint.style.display = "block"; }
+  // Không bao giờ để khách bị tắc: trang có thể không nhận ra máy (khách cài hồ sơ từ link cũ,
+  // xoá dữ liệu Safari, mở trên trình duyệt khác…) nên luôn có đường mở khoá thủ công.
+  if (unlockLink) unlockLink.style.display = "block";
+}
+function unlockInstall() {
+  installLink.classList.remove("disabled");
+  installLink.classList.add("pulse");
+  if (installHint) { installHint.textContent = LBL.unlockWarn; installHint.style.display = "block"; }
+  if (unlockLink) unlockLink.style.display = "none";
+  statusline.style.display = "none";
 }
 function setRegistered(ready) {
   cta.classList.add("disabled");
@@ -2765,10 +2806,19 @@ function setRegistered(ready) {
   installLink.classList.remove("disabled");
   if (ready) installLink.classList.add("pulse");
   if (installHint) installHint.style.display = "none";
+  if (unlockLink) unlockLink.style.display = "none";
 }
+// Khách KHÔNG phải tự bấm tải: bản ký xong là trang tự mở hộp thoại cài (itms-services).
+// iOS bắt buộc người dùng bấm "Install" một lần — không có cách nào cài im lặng trên máy chưa jailbreak.
+var autoOpened = false;
 function showReady() {
   setRegistered(true);
-  statusline.style.display = "none";
+  statusline.style.display = "flex";
+  statustxt.textContent = LBL.autoOpen;
+  if (!autoOpened) {
+    autoOpened = true;
+    setTimeout(function () { try { window.location.href = ITMS; } catch (e) {} }, 700);
+  }
 }
 function showWaiting(msg) {
   setRegistered(false);

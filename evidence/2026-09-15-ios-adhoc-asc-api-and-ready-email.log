@@ -166,3 +166,29 @@ Lệnh upload đi vòng node-1 bị sai quoting ⇒ ghi **file IPA 0 byte** lên
 Đã khôi phục từ bản còn nguyên trên node-1, verify lại sha256 + parse profile.
 **Bài học:** copy file lớn qua 2 chặng thì LUÔN kiểm `size` + `sha256` ở đích ngay trong cùng lệnh,
 và không nối nhiều lệnh ssh bằng dấu `;` với quoting lồng nhau.
+
+## 11. Tự động hoá: watcher ký lại + khách không phải tự tải (2026-09-15)
+
+### 11a. Watcher tự ký lại (không build lại)
+`scripts/ios-udid-watch.sh` viết lại: poll `/v1/admin/ios/devices` mỗi **15s**, thấy máy `built=false`
+⇒ chạy `scripts/ios-resign-ipa.sh` (tải IPA đang phát → profile mới đủ UDID → ký lại → upload → kiểm
+sha256 → báo server). Có **lock** chống chạy chồng. Mọi lệnh đi vòng qua node-1 (Mac không SSH thẳng node-2).
+Test thật: đặt `built=false` cho 1 máy ⇒ 10:48:47 watcher phát hiện, ký lại xong 10:49:12, `buildSerial: 8`.
+
+### 11b. Khách không phải bấm tải: trang tự mở hộp thoại cài
+Khi status trả `ready:true`, trang tự `window.location.href = itms-services…` **một lần** ⇒ iOS hiện
+hộp thoại Install. (Apple bắt buộc người dùng bấm Install một lần — không có cách cài im lặng trên máy
+chưa jailbreak.) Kèm câu "đang mở… nếu không thấy hộp thoại thì bấm nút bên dưới" (5 ngôn ngữ).
+
+### 11c. LỖI KHÁCH GẶP: "cài hồ sơ xong mà nút tải không bật"
+Nguyên nhân thật: **máy khách không có `sessionId`** (hồ sơ họ cài không mang mã phiên) nên trang không
+nhận ra máy ⇒ nút tải vẫn khoá. Máy khách `00008140-00121C460C7B001C` có `sessionId: KHÔNG CÓ`.
+
+Đã sửa 3 lớp:
+1. **href hồ sơ mang `&s=` ngay từ server** (trước đây chỉ JS thêm vào ⇒ JS chưa chạy là mất mã phiên).
+2. **`?s=` trên URL là quyền cao nhất** (link hỗ trợ/recovery), server cũng dùng luôn `?s=` khi render href.
+3. **Nút mở khoá thủ công** "Tôi đã cài hồ sơ rồi — mở nút tải & cài" ⇒ không bao giờ tắc.
+
+Khắc phục cho máy khách đang bị: gán `sessionId = rec-00008140-00121C460C7B001C` ⇒ link
+`https://meetflowai.site/install/ios?s=rec-00008140-00121C460C7B001C` → status trả
+`{"registered":true,"ready":true}` ⇒ nút tải BẬT + tự mở hộp thoại cài.
