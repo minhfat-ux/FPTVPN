@@ -14,12 +14,27 @@ public static class ControlApiDefaults
     /// <summary>Coordinator production.</summary>
     public const string BaseUrl = "https://api.meetflowai.site";
 
-    /// <summary>Trang mua gói (plan picker + QR) — giống iOS/macOS.</summary>
-    public const string BuyUrl = "https://meetflowai.site/buy";
+    /// <summary>Web gốc (plan picker + QR payment) — host chính.</summary>
+    public const string WebUrl = "https://meetflowai.site";
+
+    /// <summary>Trang mua gói (plan picker + QR) — giống iOS/macOS. URL động khi đã chọn
+    /// được host dự phòng: xem <see cref="ControlPlaneHosts.BuyUrl"/>.</summary>
+    public const string BuyUrl = WebUrl + "/buy";
 
     public const string SupportUrl = "https://meetflowai.site/SupportPrivateVPN.html";
     public const string PrivacyUrl = "https://meetflowai.site/FlowVPNPrivacy.html";
     public const string TermsUrl = "https://meetflowai.site/vpnflow/terms";
+
+    /// <summary>
+    /// Web base tương ứng từng host API, để trang mua dựng theo host đang dùng được.
+    /// Host không có trong map (ví dụ tunnel dùng chung) lùi về <see cref="WebUrl"/>.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> WebBaseByApiBase { get; } =
+        new Dictionary<string, string>
+        {
+            [BaseUrl] = WebUrl,
+            ["https://t1.meetflowai.site"] = "https://t1.meetflowai.site",
+        };
 }
 
 /// <summary>
@@ -27,7 +42,7 @@ public static class ControlApiDefaults
 /// biết exit node cần nối tới. Bám sát `ControlAPIClient` —
 /// iOS/PrivateVPN/Services/ControlAPIClient.swift:307-629.
 /// </summary>
-public sealed class ControlApiClient
+public sealed class ControlApiClient : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -36,23 +51,48 @@ public sealed class ControlApiClient
     };
 
     private readonly HttpClient _httpClient;
+    private readonly ControlPlaneHosts _hosts;
+    private readonly bool _ownsHttpClient;
 
-    /// <summary>Base URL coordinator (không có dấu "/" cuối).</summary>
-    public string BaseUrl { get; }
+    /// <summary>Host chính của coordinator (không có dấu "/" cuối).</summary>
+    public string BaseUrl => _hosts.PrimaryBaseUrl;
+
+    /// <summary>URL trang mua dựng theo host đang dùng được (đổi khi đã chuyển host dự phòng).</summary>
+    public string BuyUrl => _hosts.BuyUrl;
 
     /// <summary>Join token một lần dùng để đăng ký thiết bị.</summary>
     public string JoinToken { get; }
 
-    public ControlApiClient(string baseUrl, string joinToken = "", HttpClient? httpClient = null)
+    /// <param name="baseUrl">Host chính (truyền từ App; mặc định <see cref="ControlApiDefaults.BaseUrl"/>).</param>
+    /// <param name="joinToken">Join token legacy.</param>
+    /// <param name="httpClient">HttpClient để test; null thì tự tạo (và tự Dispose).</param>
+    /// <param name="fallbackBaseUrls">Host dự phòng theo thứ tự; null thì dùng
+    /// <see cref="ControlApiHosts.FallbackBaseUrls"/>. Tham số hoá để test được quy tắc chuyển host.</param>
+    public ControlApiClient(
+        string baseUrl,
+        string joinToken = "",
+        HttpClient? httpClient = null,
+        IEnumerable<string>? fallbackBaseUrls = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("baseUrl là bắt buộc.", nameof(baseUrl));
 
-        BaseUrl = baseUrl.TrimEnd('/');
+        _hosts = new ControlPlaneHosts(baseUrl, fallbackBaseUrls);
         JoinToken = joinToken;
-        // Timeout 10s để mạng bị chặn thất bại nhanh rồi rơi xuống host dự phòng
-        // (Swift đặt timeoutInterval = 10 cho register/nodes/devices).
-        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _ownsHttpClient = httpClient is null;
+        // Mỗi lần thử một host tối đa 6s (khoảng 4–6s): host bị chặn (nuốt gói / SNI) phải
+        // thất bại nhanh để còn kịp rơi xuống host dự phòng. HttpClient.Timeout áp cho từng
+        // SendAsync nên đúng bằng một lần thử host.
+        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+    }
+
+    /// <summary>Mạng đổi -> thử lại host chính ở request sau.</summary>
+    public void OnNetworkChanged() => _hosts.OnNetworkChanged();
+
+    public void Dispose()
+    {
+        _hosts.Dispose();
+        if (_ownsHttpClient) _httpClient.Dispose();
     }
 
     // ---------------------------------------------------------------------
@@ -400,29 +440,26 @@ public sealed class ControlApiClient
     {
         Exception? lastError = null;
 
-        try
+        // Thứ tự host: host đang nhớ (sticky) trước, rồi host chính, rồi các host dự phòng.
+        foreach (var baseUrl in _hosts.Candidates())
         {
-            return await _httpClient.SendAsync(requestFactory(new Uri(BaseUrl)), cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex) when (IsTransportFailure(ex, cancellationToken))
-        {
-            lastError = ex;
-        }
-
-        foreach (var fallback in ControlApiHosts.FallbackBaseUrls)
-        {
-            // Không bao giờ đánh cùng host hai lần: caller có thể đã trỏ vào host dự phòng.
-            if (SameHost(fallback, BaseUrl)) continue;
-
             try
             {
-                return await _httpClient.SendAsync(requestFactory(new Uri(fallback)), cancellationToken)
+                var response = await _httpClient
+                    .SendAsync(requestFactory(new Uri(baseUrl)), cancellationToken)
                     .ConfigureAwait(false);
+
+                // HTTP status là "host có trả lời" (kể cả 401/403): nhớ host và trả response,
+                // KHÔNG thử host khác — đổi host không sửa được lỗi xác thực mà còn lặp
+                // side-effect của POST.
+                _hosts.Remember(baseUrl);
+                return response;
             }
             catch (Exception ex) when (IsTransportFailure(ex, cancellationToken))
             {
                 lastError = ex;
+                // Host đang nhớ vừa hỏng: quên ngay để lần sau còn dò lại từ host chính.
+                if (SameHost(baseUrl, _hosts.ActiveBaseUrl)) _hosts.Forget();
             }
         }
 

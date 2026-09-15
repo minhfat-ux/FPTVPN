@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
+import com.privatevpn.app.api.ControlPlaneHosts
 
 /**
  * Watches the networks around the tunnel. Two jobs:
@@ -173,6 +174,9 @@ class NetworkMonitor(
         lastUnderlying = label
         DiagnosticsLog.warn("net: UNDERLYING $previous -> $label ($trigger)")
         if (previous != null) {
+            // Mạng đổi: host chính có thể đã vào được ở mạng mới -> quên host dự phòng đang nhớ
+            // để request sau thử lại host chính trước.
+            ControlPlaneHosts.forget()
             runCatching { onUnderlyingChanged?.invoke() }
                 .onFailure { DiagnosticsLog.warn("net: rebuild callback failed: ${it.message}") }
         }

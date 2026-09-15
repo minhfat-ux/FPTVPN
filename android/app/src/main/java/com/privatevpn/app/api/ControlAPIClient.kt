@@ -20,7 +20,7 @@ class ControlAPIClient(
     private val baseUrl: String = Config.CONTROL_PLANE_URL,
     private val joinToken: String = "",
     /** Tham số hoá để test được đường dự phòng; production luôn dùng giá trị trong Config. */
-    private val fallbackBases: List<String> = Config.API_FALLBACK_BASES,
+    private val fallbackBases: List<String> = ControlPlaneHosts.fallbackApiBases,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -107,9 +107,9 @@ class ControlAPIClient(
     }
 
     private val client = OkHttpClient.Builder()
-        // 3s: đủ cho TCP connect trên mạng di động, mà mạng bị chặn IP thì đỡ phải chờ
-        // hết timeout mới rơi xuống host dự phòng.
-        .connectTimeout(3, TimeUnit.SECONDS)
+        // 5s: đủ cho TCP+TLS connect trên mạng di động, mà mạng bị chặn (nuốt gói / SNI)
+        // thì đỡ phải chờ hết timeout mới rơi xuống host dự phòng. Nằm trong khoảng 4–6s.
+        .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .addInterceptor(fallbackInterceptor)
         // Resolver có ghim IP (xem PinnedDns): câu trả lời cũ/đầu độc của DNS hệ thống —

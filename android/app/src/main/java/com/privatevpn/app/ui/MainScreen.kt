@@ -112,7 +112,7 @@ fun MainScreen(
             FreeTrialBanner(
                 app = app,
                 hoursLeft = trialHoursLeft,
-                // Trang mua trong app (PaywallScreen) đã load sẵn Config.BUY_URL — không tạo URL mới.
+                // Trang mua trong app (PaywallScreen) đã load sẵn ControlPlaneHosts.buyUrl() — không tạo URL mới.
                 onBuy = onShowPaywall,
             )
         }

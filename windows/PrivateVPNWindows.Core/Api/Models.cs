@@ -128,14 +128,20 @@ public static class WSRelayDefaults
 }
 
 /// <summary>
-/// Hosts mà coordinator có thể tới được. Sao chép `ControlAPIHosts` —
-/// ControlAPIClient.swift:257-268. Host dự phòng đi qua hạ tầng dùng chung
-/// (Tailscale Funnel) thay vì IP node, để mạng chặn IP vẫn gọi được API.
+/// Hosts mà coordinator có thể tới được, theo thứ tự thử. Sao chép `ControlAPIHosts` —
+/// ControlAPIClient.swift:257-268.
+///
+/// Vì sao có nhiều lớp dự phòng: GFW chặn theo TÊN (SNI) làm TLS handshake tới
+/// `api.meetflowai.site` fail dù IP vẫn là Cloudflare — lớp `t1.meetflowai.site` (đã kiểm
+/// chứng vào được từ TQ) đổi hẳn hostname. Lớp Tailscale Funnel đi qua hạ tầng dùng chung,
+/// cứu trường hợp bị chặn theo IP. Client chỉ chuyển host khi lỗi MẠNG/timeout, không chuyển
+/// khi server trả HTTP 4xx.
 /// </summary>
 public static class ControlApiHosts
 {
     public static IReadOnlyList<string> FallbackBaseUrls { get; } = new List<string>
     {
+        "https://t1.meetflowai.site",
         "https://fcnvpn.tail303be3.ts.net",
     };
 }

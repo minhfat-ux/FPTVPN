@@ -117,6 +117,96 @@ public class ControlApiClientTests
         await Assert.ThrowsAsync<ApiTransportException>(() => client.FetchNodesAsync());
     }
 
+    /// <summary>
+    /// 401/403 là server ĐÃ TRẢ LỜI (lỗi xác thực), không phải route bị chặn: không được
+    /// chuyển host (đổi host vô ích, còn lặp side-effect của POST).
+    /// </summary>
+    [Fact]
+    public async Task FetchAppVersion_DoesNotFallBack_OnForbidden()
+    {
+        var fallbackHits = 0;
+        var client = Client(request =>
+        {
+            if (request.RequestUri!.Host == "api.meetflowai.site")
+                return Json(HttpStatusCode.Forbidden, """{"error":"forbidden"}""");
+            fallbackHits++;
+            return Json(HttpStatusCode.OK, """{"platform":"windows","minimum_version":"1.0.0","latest_version":"1.1.0"}""");
+        }, "https://t1.meetflowai.site");
+
+        await Assert.ThrowsAsync<ApiServerException>(() => client.FetchAppVersionAsync("windows"));
+
+        Assert.Equal(0, fallbackHits);
+    }
+
+    /// <summary>Sticky: host dự phòng chạy được thì các request sau đi thẳng, không chờ host chính.</summary>
+    [Fact]
+    public async Task FetchNodes_StaysOnFallback_ForLaterRequests()
+    {
+        var primaryHits = 0;
+        var fallbackHits = 0;
+        var client = Client(request =>
+        {
+            if (request.RequestUri!.Host == "api.meetflowai.site")
+            {
+                primaryHits++;
+                throw new HttpRequestException("blocked");
+            }
+
+            fallbackHits++;
+            return Json(HttpStatusCode.OK, NodesJson);
+        }, "https://t1.meetflowai.site");
+
+        await client.FetchNodesAsync();
+        await client.FetchNodesAsync();
+
+        Assert.Equal(1, primaryHits);
+        Assert.Equal(2, fallbackHits);
+    }
+
+    /// <summary>Mạng đổi -> quên host đang nhớ để request sau thử lại host chính.</summary>
+    [Fact]
+    public async Task FetchNodes_TriesPrimaryAgain_AfterNetworkChanged()
+    {
+        var primaryHits = 0;
+        var client = Client(request =>
+        {
+            if (request.RequestUri!.Host == "api.meetflowai.site")
+            {
+                primaryHits++;
+                throw new HttpRequestException("blocked");
+            }
+
+            return Json(HttpStatusCode.OK, NodesJson);
+        }, "https://t1.meetflowai.site");
+
+        await client.FetchNodesAsync();
+        Assert.Equal(1, primaryHits);
+
+        client.OnNetworkChanged();
+
+        await client.FetchNodesAsync();
+        Assert.Equal(2, primaryHits);
+    }
+
+    /// <summary>Thứ tự host: chính -> t1 (chống SNI) -> Tailscale (chống chặn IP); URL mua bám host.</summary>
+    [Fact]
+    public void HostOrder_IsPrimaryThenT1ThenPinned_AndBuyUrlFollowsActiveHost()
+    {
+        using var hosts = new ControlPlaneHosts(ControlApiDefaults.BaseUrl);
+
+        Assert.Equal(ControlApiDefaults.BaseUrl, hosts.OrderedBaseUrls[0]);
+        Assert.Equal("https://t1.meetflowai.site", hosts.OrderedBaseUrls[1]);
+        Assert.Contains("https://fcnvpn.tail303be3.ts.net", hosts.OrderedBaseUrls);
+        Assert.Equal("https://meetflowai.site/buy", hosts.BuyUrl);
+
+        hosts.Remember("https://t1.meetflowai.site");
+        Assert.Equal("https://t1.meetflowai.site", hosts.Candidates()[0]);
+        Assert.Equal("https://t1.meetflowai.site/buy", hosts.BuyUrl);
+
+        hosts.OnNetworkChanged();
+        Assert.Equal(ControlApiDefaults.BaseUrl, hosts.Candidates()[0]);
+    }
+
     [Fact]
     public async Task FetchEnrollmentToken_EmptySession_ThrowsMissingSession()
     {
@@ -155,8 +245,14 @@ public class ControlApiClientTests
         Assert.Equal("https://dl/setup.exe", info.DownloadUrl);
     }
 
-    private static ControlApiClient Client(Func<HttpRequestMessage, HttpResponseMessage> responder)
-        => new("https://api.meetflowai.site", "", new HttpClient(new StubHandler(responder)));
+    private static ControlApiClient Client(
+        Func<HttpRequestMessage, HttpResponseMessage> responder,
+        params string[] fallbackBaseUrls)
+        => new(
+            "https://api.meetflowai.site",
+            "",
+            new HttpClient(new StubHandler(responder)),
+            fallbackBaseUrls.Length == 0 ? null : fallbackBaseUrls);
 
     private static HttpResponseMessage Json(HttpStatusCode status, string body)
         => new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };

@@ -9,6 +9,32 @@ object Config {
     const val CONTROL_PLANE_URL = "https://api.meetflowai.site"
 
     /**
+     * Host API dự phòng theo TÊN (không ghim IP), thử sau host chính khi lỗi MẠNG/timeout.
+     *
+     * Vì sao cần: GFW chặn `api.meetflowai.site` theo SNI — TLS ClientHello bị nuốt nên
+     * handshake fail dù IP đằng sau vẫn là Cloudflare. Ghim IP ([PINNED_HOST_ADDRESSES])
+     * KHÔNG cứu được kiểu chặn theo tên này vì tên miền vẫn lộ trong SNI; vì vậy phải có
+     * đường dự phòng đổi hẳn hostname. `t1.meetflowai.site` đã kiểm chứng vào được từ TQ và
+     * phục vụ đầy đủ API + web (trang mua, trang tải, các route /v1/downloads).
+     *
+     * Chỉ chuyển khi lỗi mạng/timeout, KHÔNG chuyển khi server trả HTTP 4xx (401/403 là lỗi
+     * xác thực — đổi host vô ích, còn lặp side-effect của POST).
+     */
+    val CONTROL_PLANE_FALLBACK_HOSTS = listOf("https://t1.meetflowai.site")
+
+    /** Web gốc (plan picker + QR payment) — host chính. */
+    const val WEB_URL = "https://meetflowai.site"
+
+    /**
+     * Web base tương ứng từng host API, để trang mua dựng theo host đang dùng được.
+     * Host không có trong map (ví dụ tunnel dùng chung) lùi về [WEB_URL].
+     */
+    val WEB_BASE_BY_API_BASE = mapOf(
+        CONTROL_PLANE_URL to WEB_URL,
+        "https://t1.meetflowai.site" to "https://t1.meetflowai.site",
+    )
+
+    /**
      * Addresses for the coordinator host, tried in this order before the system DNS
      * answer.
      *
@@ -68,8 +94,9 @@ object Config {
         "fcnvpn.tail303be3.ts.net" to listOf("103.84.155.217", "103.84.155.153"),
     )
 
-    /** Web purchase page (plan picker + QR payment). Mirrors iOS/macOS. */
-    const val BUY_URL = "https://meetflowai.site/buy"
+    // Trang mua web (plan picker + QR payment), mirrors iOS/macOS: URL KHÔNG cố định mà dựng
+    // theo host đang dùng được — xem ControlPlaneHosts.buyUrl() (host chính, hoặc
+    // `t1.meetflowai.site` khi host chính bị chặn theo tên).
 
     /** Public support / privacy pages (also linked from the paywall). */
     const val SUPPORT_URL = "https://meetflowai.site/SupportPrivateVPN.html"

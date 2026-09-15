@@ -27,8 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.privatevpn.app.Config
 import com.privatevpn.app.VPNFlowApp
+import com.privatevpn.app.api.ControlPlaneHosts
 import com.privatevpn.app.l10n.LKey
 import com.privatevpn.app.theme.VPNTheme
 
@@ -85,7 +85,7 @@ fun PaywallScreen(
         // the paywall to the in-app language via ?lang= (mirrors iOS/macOS).
         BuyWebView(
             // inapp=1: trong app chỉ cần đăng ký tài khoản + thanh toán, không hiện khối tải app.
-            url = Config.BUY_URL + "?lang=" + lang.language.code + "&inapp=1",
+            url = ControlPlaneHosts.buyUrl() + "?lang=" + lang.language.code + "&inapp=1",
             modifier = Modifier.fillMaxSize(),
         )
     }
