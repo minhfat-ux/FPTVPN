@@ -17,35 +17,23 @@ import os
 /// handshakes into the local listener and the relay re-establishes the link.
 final class WGRelayClient {
 
-    enum RelayError: Error, CustomStringConvertible {
-        case socket(String)
-
-        var description: String {
-            switch self {
-            case .socket(let detail): return "relay socket error: \(detail)"
-            }
-        }
-    }
-
     private let host: String
     /// Relay ports to try, in order (node-1 runs 9444 + 8443, node-2 only 8443).
     private let ports: [UInt16]
     private let log: Logger
+    private let listener: RelayUDPListener
     private var portIndex = 0
     private var lastGoodPort: UInt16?
 
     private let lock = NSLock()
-    private var udpFD: Int32 = -1
     private var tcpFD: Int32 = -1
     private var running = false
-    /// Last address WireGuard sent from — replies go back here, never to a hardcoded
-    /// port (WireGuard picks its own source port).
-    private var peerAddress: sockaddr_in?
 
     init(host: String, ports: [UInt16], log: Logger) {
         self.host = host
         self.ports = ports.isEmpty ? [9444] : ports
         self.log = log
+        self.listener = RelayUDPListener(label: "relay-udp", log: log)
     }
 
     /// True while the TCP link to the relay is established. The tunnel uses this to
@@ -59,28 +47,11 @@ final class WGRelayClient {
     /// Opens the local UDP listener and starts the TCP link.
     /// - Returns: the local UDP port WireGuard must send its datagrams to.
     func start() throws -> UInt16 {
-        let udp = socket(AF_INET, SOCK_DGRAM, 0)
-        guard udp >= 0 else { throw RelayError.socket("udp socket errno=\(errno)") }
-
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = 0
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let bound = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(udp, $0, length) }
-        }
-        let named = withUnsafeMutablePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(udp, $0, &length) }
-        }
-        guard bound == 0, named == 0 else {
-            close(udp)
-            throw RelayError.socket("udp bind errno=\(errno)")
+        let localPort = try listener.start { [weak self] datagram in
+            self?.forwardToRelay(datagram)
         }
 
-        let localPort = UInt16(bigEndian: address.sin_port)
         lock.lock()
-        udpFD = udp
         running = true
         lock.unlock()
 
@@ -96,9 +67,6 @@ final class WGRelayClient {
         let readThread = Thread { [weak self] in self?.tcpReadLoop() }
         readThread.name = "wg-relay-tcp-read"
         readThread.start()
-        let writeThread = Thread { [weak self] in self?.udpToTCPLoop() }
-        writeThread.name = "wg-relay-udp-write"
-        writeThread.start()
 
         note("local udp listener 127.0.0.1:\(localPort) -> \(self.host):\(self.ports)")
         return localPort
@@ -108,14 +76,16 @@ final class WGRelayClient {
         lock.lock()
         guard running else { lock.unlock(); return }
         running = false
-        let udp = udpFD
         let tcp = tcpFD
-        udpFD = -1
         tcpFD = -1
         lock.unlock()
 
-        if tcp >= 0 { shutdown(tcp, SHUT_RDWR); close(tcp) }
-        if udp >= 0 { close(udp) }
+        // Đóng socket UDP + CHỜ thread đọc thoát hẳn trước khi trả về, để phiên sau bind
+        // lại được và không bị thread cũ của phiên này đọc nhầm fd (xem RelayUDPListener).
+        listener.stop()
+        // TCP: shutdown để đánh thức `recv` đang chặn; chính `tcpReadLoop` sở hữu fd nên
+        // nó tự đóng, tránh đóng trùng.
+        if tcp >= 0 { shutdown(tcp, SHUT_RDWR) }
         note("stopped")
     }
 
@@ -223,7 +193,7 @@ final class WGRelayClient {
                 guard readExactly(fd, into: &payload, count: frameLength) else { break }
                 receivedFrames += 1
                 receivedBytes += frameLength
-                sendToWireGuard(payload)
+                listener.sendToPeer(payload)
             }
 
             lock.lock()
@@ -235,51 +205,33 @@ final class WGRelayClient {
         }
     }
 
-    /// Forwards every WireGuard datagram into the TCP link.
-    private func udpToTCPLoop() {
-        var buffer = [UInt8](repeating: 0, count: 65_535)
-        while running {
-            var sender = sockaddr_in()
-            var senderLength = socklen_t(MemoryLayout<sockaddr_in>.size)
-            let udp = currentUDPFD()
-            guard udp >= 0 else { Thread.sleep(forTimeInterval: 0.2); continue }
-            let received = buffer.withUnsafeMutableBytes { raw -> Int in
-                guard let base = raw.baseAddress else { return -1 }
-                return withUnsafeMutablePointer(to: &sender) { pointer in
-                    pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                        recvfrom(udp, base, raw.count, 0, $0, &senderLength)
-                    }
-                }
-            }
-            guard received > 0 else {
-                if running && errno != EINTR { Thread.sleep(forTimeInterval: 0.2) }
-                continue
-            }
+    /// Đẩy một datagram WireGuard nhận từ listener UDP vào link TCP, đóng gói
+    /// `[length: u16 big-endian][payload]`. Chạy trên thread đọc của listener.
+    private func forwardToRelay(_ datagram: Data) {
+        lock.lock()
+        let fd = tcpFD
+        lock.unlock()
 
-            lock.lock()
-            peerAddress = sender
-            let fd = tcpFD
-            lock.unlock()
+        // No link yet: drop it — WireGuard retries its handshake every 5s anyway.
+        guard fd >= 0 else {
+            lock.lock(); udpDroppedNoLink += 1; lock.unlock()
+            return
+        }
 
-            // No link yet: drop it — WireGuard retries its handshake every 5s anyway.
-            guard fd >= 0 else {
-                lock.lock(); udpDroppedNoLink += 1; lock.unlock()
-                continue
-            }
-
-            var frame = [UInt8](repeating: 0, count: received + 2)
-            frame[0] = UInt8((received >> 8) & 0xff)
-            frame[1] = UInt8(received & 0xff)
-            frame.replaceSubrange(2..<(received + 2), with: buffer[0..<received])
-            sentFrames += 1
-            sentBytes += received
-            if !writeAll(fd, frame) {
-                // The link is one-way broken (hotel NAT / relay restart): tear it down
-                // so the read loop reconnects. Without this, every later packet was
-                // dropped silently and the tunnel stayed "up" with no traffic.
-                note("write to relay failed errno=\(errno) — dropping link to reconnect")
-                dropLink(fd, reason: "write failure")
-            }
+        var frame = [UInt8](repeating: 0, count: datagram.count + 2)
+        frame[0] = UInt8((datagram.count >> 8) & 0xff)
+        frame[1] = UInt8(datagram.count & 0xff)
+        frame.replaceSubrange(2..<(datagram.count + 2), with: datagram)
+        lock.lock()
+        sentFrames += 1
+        sentBytes += datagram.count
+        lock.unlock()
+        if !writeAll(fd, frame) {
+            // The link is one-way broken (hotel NAT / relay restart): tear it down
+            // so the read loop reconnects. Without this, every later packet was
+            // dropped silently and the tunnel stayed "up" with no traffic.
+            note("write to relay failed errno=\(errno) — dropping link to reconnect")
+            dropLink(fd, reason: "write failure")
         }
     }
 
@@ -293,10 +245,10 @@ final class WGRelayClient {
     private var receivedBytes = 0
     private var udpDroppedNoLink = 0
 
-    /// Logs to os_log *and* to the extension's diagnostic file (iOS offers no way to
-    /// stream an app-extension's log from the command line).
+    /// Logs to os_log at `.default` (visible without `--info`) *and* to the extension's
+    /// diagnostic file. `privacy: .public` so the content is not redacted.
     private func note(_ message: String) {
-        log.info("relay: \(message)")
+        log.log(level: .default, "relay: \(message, privacy: .public)")
         RelayDiagnostics.shared.log("relay: \(message)")
     }
 
@@ -315,27 +267,6 @@ final class WGRelayClient {
         lock.unlock()
         shutdown(fd, SHUT_RDWR)
         close(fd)
-    }
-
-    private func currentUDPFD() -> Int32 {
-        lock.lock()
-        defer { lock.unlock() }
-        return udpFD
-    }
-
-    private func sendToWireGuard(_ payload: [UInt8]) {
-        lock.lock()
-        let udp = udpFD
-        let target = peerAddress
-        lock.unlock()
-        guard udp >= 0, var destination = target else { return }
-        _ = payload.withUnsafeBytes { raw in
-            withUnsafePointer(to: &destination) { pointer in
-                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    sendto(udp, raw.baseAddress, raw.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
-            }
-        }
     }
 
     private func readExactly(_ fd: Int32, into buffer: inout [UInt8], count: Int) -> Bool {

@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 import os
 
@@ -6,37 +5,20 @@ import os
 /// `WSRelayBridge`.
 ///
 /// The WireGuard interface inside this extension is pointed at a local UDP listener
-/// here, exactly like `WGRelayClient` does. Instead of a length-prefixed TCP frame,
-/// each datagram is shipped as one binary WebSocket message to the relay behind the
-/// Tailscale Funnel endpoint, which unwraps the stream to WireGuard's UDP 443 on the
-/// exit node and sends the answers back the same way (WebSocket keeps message
-/// boundaries, so one binary message is exactly one datagram — no framing needed).
+/// (`RelayUDPListener`). Instead of a length-prefixed TCP frame, each datagram is shipped
+/// as one binary WebSocket message to the relay behind the Tailscale Funnel endpoint,
+/// which unwraps the stream to WireGuard's UDP 443 on the exit node and sends the answers
+/// back the same way (WebSocket keeps message boundaries, so one binary message is exactly
+/// one datagram — no framing needed).
 ///
 /// This is the transport that survives a full IP block: the client talks to shared
 /// Tailscale infrastructure instead of the exit node's own IP, so blocking it means
 /// blocking a range many unrelated services use.
 ///
-/// The local UDP port is bound once in `start()` and is never re-bound: WebSocket
-/// reconnects reuse the same listener, so WireGuard is never reconfigured mid-tunnel.
-final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
-
-    enum RelayError: Error, CustomStringConvertible {
-        case socket(String)
-
-        var description: String {
-            switch self {
-            case .socket(let detail): return "ws relay socket error: \(detail)"
-            }
-        }
-    }
-
-    /// Funnel endpoint that terminates TLS and forwards the stream to the relay that
-    /// unwraps it to the exit node's WireGuard UDP 443.
-    ///
-    /// Giá trị thật nằm ở `WSRelayDefaults` (ControlAPIClient.swift) vì file đó được
-    /// compile vào cả app lẫn extension — danh sách node dự phòng trong app cũng cần
-    /// URL này. Chỉ dẫn tới node-1, nên đây là giá trị ĐOÁN khi node không khai relay.
-    static let defaultURL = WSRelayDefaults.url
+/// Mỗi phiên là một instance MỚI: listener UDP, link WebSocket, queue và task đều thuộc
+/// instance này. `stop()` huỷ hết, KHÔNG có trạng thái tĩnh dùng chung giữa các phiên —
+/// đây là điều kiện để "Connect lần hai" không tái dùng client đã chết của lần một.
+final class WSRelayClient: @unchecked Sendable {
 
     /// WireGuard datagrams held while the WebSocket is down. Bounded so an outage can
     /// never grow the extension's memory; WireGuard re-sends its handshake every 5s.
@@ -46,23 +28,26 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
     private static let pingInterval: TimeInterval = 20
     private static let minBackoff: TimeInterval = 1
     private static let maxBackoff: TimeInterval = 15
+    /// Nhịp log số frame trong 20 giây đầu (mỗi 5s một lần) để chẩn đoán được đường WS.
+    private static let frameLogInterval: TimeInterval = 5
+    private static let frameLogTicks = 4
 
     private let url: URL
     private let log: Logger
+    private let listener: RelayUDPListener
+    private let makeLink: @Sendable () -> RelayLink
 
-    /// Guards every field below: the UDP thread, the async loops and the URLSession
-    /// delegate queue all touch them.
+    /// Guards every field below: the async loops and the link callbacks all touch them.
     private let lock = NSLock()
-    private var udpFD: Int32 = -1
     private var running = false
-    /// Last address WireGuard sent from — replies go back here, never to a hardcoded
-    /// port (WireGuard picks its own source port).
-    private var peerAddress: sockaddr_in?
-    private var socketTask: URLSessionWebSocketTask?
+    /// The WebSocket link of the current attempt. Never reused across sessions.
+    private var link: RelayLink?
     private var open = false
     private var openedInThisAttempt = false
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
+    private var frameLogTask: Task<Void, Never>?
 
     private var sentFrames = 0
     private var sentBytes = 0
@@ -73,20 +58,20 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
     private let datagrams: AsyncStream<Data>
     private let datagramContinuation: AsyncStream<Data>.Continuation
 
-    private lazy var session = URLSession(
-        configuration: .default,
-        delegate: self,
-        delegateQueue: nil
-    )
-
-    init(url: URL = WSRelayClient.defaultURL, log: Logger) {
+    init(
+        url: URL,
+        log: Logger,
+        linkFactory: (@Sendable () -> RelayLink)? = nil
+    ) {
         self.url = url
         self.log = log
+        self.listener = RelayUDPListener(label: "ws-relay-udp", log: log)
+        // Mặc định dùng link WebSocket thật; test truyền link giả để không cần mạng.
+        self.makeLink = linkFactory ?? { URLSessionRelayLink(url: url) }
         (datagrams, datagramContinuation) = AsyncStream.makeStream(
             of: Data.self,
             bufferingPolicy: .bufferingNewest(WSRelayClient.sendBufferLimit)
         )
-        super.init()
     }
 
     /// True while the WebSocket to the relay is open. The tunnel uses this to decide
@@ -101,28 +86,11 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
     /// - Returns: the local UDP port WireGuard must send its datagrams to. It stays
     ///   the same for the whole lifetime of this client, WebSocket reconnects included.
     func start() throws -> UInt16 {
-        let udp = socket(AF_INET, SOCK_DGRAM, 0)
-        guard udp >= 0 else { throw RelayError.socket("udp socket errno=\(errno)") }
-
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = 0
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let bound = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(udp, $0, length) }
-        }
-        let named = withUnsafeMutablePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(udp, $0, &length) }
-        }
-        guard bound == 0, named == 0 else {
-            close(udp)
-            throw RelayError.socket("udp bind errno=\(errno)")
+        let localPort = try listener.start { [weak self] datagram in
+            self?.datagramContinuation.yield(datagram)
         }
 
-        let localPort = UInt16(bigEndian: address.sin_port)
         lock.lock()
-        udpFD = udp
         running = true
         lock.unlock()
 
@@ -130,12 +98,10 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
 
         // The WebSocket link is established (and re-established) on its own tasks, so a
         // relay that is briefly unreachable never blocks the tunnel from starting.
-        let readThread = Thread { [weak self] in self?.udpToWebSocketLoop() }
-        readThread.name = "ws-relay-udp"
-        readThread.start()
         startSendLoop()
         startWebSocketLoop()
         startHeartbeat()
+        startFrameLogging()
 
         return localPort
     }
@@ -144,71 +110,21 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
         lock.lock()
         guard running else { lock.unlock(); return }
         running = false
-        let udp = udpFD
-        let task = socketTask
-        udpFD = -1
-        socketTask = nil
+        let currentLink = link
+        link = nil
         open = false
         lock.unlock()
 
         datagramContinuation.finish()
         sendTask?.cancel()
         receiveTask?.cancel()
-        task?.cancel(with: .goingAway, reason: nil)
-        // URLSession retains its delegate, so the client would leak without this.
-        // A stopped client is never restarted; the tunnel builds a new one instead.
-        session.invalidateAndCancel()
-        if udp >= 0 { close(udp) }
+        heartbeatTask?.cancel()
+        frameLogTask?.cancel()
+        currentLink?.cancel()
+        // Đóng socket + CHỜ thread đọc thoát hẳn trước khi trả về, để phiên sau bind lại
+        // được và không bị thread cũ của phiên này đọc nhầm fd.
+        listener.stop()
         note("stopped")
-    }
-
-    // MARK: - UDP side
-
-    /// Forwards every WireGuard datagram to the WebSocket send loop.
-    private func udpToWebSocketLoop() {
-        var buffer = [UInt8](repeating: 0, count: 65_535)
-        while isRunning {
-            var sender = sockaddr_in()
-            var senderLength = socklen_t(MemoryLayout<sockaddr_in>.size)
-            let udp = currentUDPFD()
-            guard udp >= 0 else { Thread.sleep(forTimeInterval: 0.2); continue }
-            let received = buffer.withUnsafeMutableBytes { raw -> Int in
-                guard let base = raw.baseAddress else { return -1 }
-                return withUnsafeMutablePointer(to: &sender) { pointer in
-                    pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                        recvfrom(udp, base, raw.count, 0, $0, &senderLength)
-                    }
-                }
-            }
-            guard received > 0 else {
-                if isRunning && errno != EINTR { Thread.sleep(forTimeInterval: 0.2) }
-                continue
-            }
-
-            lock.lock()
-            peerAddress = sender
-            lock.unlock()
-
-            // Bounded queue: while the WebSocket is down the oldest datagrams are
-            // dropped rather than buffered without limit.
-            datagramContinuation.yield(Data(buffer[0..<received]))
-        }
-    }
-
-    /// Writes a datagram received from the relay back to the remembered WireGuard peer.
-    private func sendToWireGuard(_ payload: [UInt8]) {
-        lock.lock()
-        let udp = udpFD
-        let target = peerAddress
-        lock.unlock()
-        guard udp >= 0, var destination = target else { return }
-        _ = payload.withUnsafeBytes { raw in
-            withUnsafePointer(to: &destination) { pointer in
-                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    sendto(udp, raw.baseAddress, raw.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
-            }
-        }
     }
 
     // MARK: - WebSocket side
@@ -219,12 +135,12 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
             guard let stream = self?.datagrams else { return }
             for await datagram in stream {
                 guard let self, self.isRunning else { return }
-                guard let task = self.currentSocketTask(), self.isConnected else {
+                guard let link = self.currentLink(), link.isOpen else {
                     self.noteDropped()
                     continue
                 }
                 do {
-                    try await task.send(.data(datagram))
+                    try await link.send(datagram)
                     self.noteSent(datagram.count)
                 } catch {
                     // The receive loop sees the same failure and reconnects.
@@ -252,142 +168,133 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
     /// Serves one WebSocket connection until it closes or fails.
     /// - Returns: whether the socket ever opened, which drives the reconnect backoff.
     private func serveOnce() async -> Bool {
-        let task = session.webSocketTask(with: url)
-        guard beginAttempt(task) else {
-            task.cancel(with: .goingAway, reason: nil)
+        let link = makeLink()
+        guard beginAttempt(link) else {
+            link.cancel()
             return false
         }
 
-        task.resume()
-        let pingTask = startPingLoop(for: task)
+        link.connect(
+            onOpen: { [weak self] in self?.noteLinkOpened(link) },
+            onClose: { [weak self] reason in self?.noteLinkClosed(link, reason: reason) }
+        )
+        let pingTask = startPingLoop(for: link)
         defer { pingTask.cancel() }
 
         do {
             while isRunning {
-                handle(try await task.receive())
+                handle(try await link.receive())
             }
         } catch {
             if isRunning { note("websocket link dropped: \(error.localizedDescription)") }
         }
 
-        let opened = endAttempt(task)
-        task.cancel(with: .goingAway, reason: nil)
+        let opened = endAttempt(link)
+        link.cancel()
         return opened
     }
 
     /// Registers a new connection as the current one.
     /// - Returns: false when the client was stopped meanwhile.
-    private func beginAttempt(_ task: URLSessionWebSocketTask) -> Bool {
+    private func beginAttempt(_ link: RelayLink) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard running else { return false }
-        socketTask = task
+        self.link = link
         open = false
         openedInThisAttempt = false
         return true
     }
 
     /// Releases the current connection and reports whether it ever opened.
-    private func endAttempt(_ task: URLSessionWebSocketTask) -> Bool {
+    private func endAttempt(_ link: RelayLink) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        if socketTask === task { socketTask = nil }
+        if self.link === link { self.link = nil }
         let opened = openedInThisAttempt
         open = false
         return opened
     }
 
     /// One binary message is one datagram: hand it to WireGuard as-is.
-    private func handle(_ message: URLSessionWebSocketTask.Message) {
+    private func handle(_ message: RelayMessage) {
         switch message {
         case .data(let data):
             lock.lock()
             receivedFrames += 1
             receivedBytes += data.count
             lock.unlock()
-            sendToWireGuard([UInt8](data))
-        case .string(let text):
+            listener.sendToPeer([UInt8](data))
+        case .text(let text):
             note("ignoring text frame (\(text.count) chars)")
-        @unknown default:
-            break
         }
     }
 
     /// Pings the relay; a failing ping means the path is dead even though the socket
-    /// still looks open. Cancelling the task makes `serveOnce` reconnect.
-    private func startPingLoop(for task: URLSessionWebSocketTask) -> Task<Void, Never> {
+    /// still looks open. Cancelling the link makes `serveOnce` reconnect.
+    private func startPingLoop(for link: RelayLink) -> Task<Void, Never> {
         Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(WSRelayClient.pingInterval * 1_000_000_000))
                 guard !Task.isCancelled, let self, self.isRunning else { return }
                 do {
-                    try await self.ping(task)
+                    try await link.ping()
                 } catch {
                     self.note("ping failed: \(error.localizedDescription) — reconnecting")
-                    task.cancel(with: .goingAway, reason: nil)
+                    link.cancel()
                     return
                 }
             }
         }
     }
 
-    private func ping(_ task: URLSessionWebSocketTask) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            task.sendPing { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            }
-        }
-    }
+    // MARK: - Link callbacks
 
-    // MARK: - URLSessionWebSocketDelegate
-
-    func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didOpenWithProtocol protocol: String?
-    ) {
+    private func noteLinkOpened(_ link: RelayLink) {
         lock.lock()
-        openedInThisAttempt = true
-        open = true
+        if self.link === link { open = true; openedInThisAttempt = true }
         lock.unlock()
-        note("connected to \(url.absoluteString)")
+        note("handshake ok — connected to \(url.absoluteString)")
     }
 
-    func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
-        reason: Data?
-    ) {
+    private func noteLinkClosed(_ link: RelayLink, reason: String) {
         lock.lock()
-        open = false
+        if self.link === link { open = false }
         lock.unlock()
         // A deliberate stop() also closes the socket; that is not a failure.
-        if isRunning { note("websocket closed code=\(closeCode.rawValue)") }
+        if isRunning { note("handshake/link closed: \(reason)") }
     }
 
     // MARK: - Diagnostics
 
     private func startHeartbeat() {
-        let thread = Thread { [weak self] in
-            while let self, self.isRunning {
-                Thread.sleep(forTimeInterval: 15)
-                guard self.isRunning else { return }
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                guard !Task.isCancelled, let self, self.isRunning else { return }
                 self.note("heartbeat \(self.countersSummary())")
             }
         }
-        thread.name = "ws-relay-heartbeat"
-        thread.start()
     }
 
-    /// Logs to os_log *and* to the extension's diagnostic file (iOS offers no way to
-    /// stream an app-extension's log from the command line).
+    /// Log số frame nhận/gửi mỗi 5 giây trong 20 giây đầu — không có nó thì không ai
+    /// chẩn đoán được đường WS đang chết ở đâu (bind? handshake? chiều nào?).
+    private func startFrameLogging() {
+        frameLogTask = Task { [weak self] in
+            for tick in 1...WSRelayClient.frameLogTicks {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(WSRelayClient.frameLogInterval * 1_000_000_000)
+                )
+                guard !Task.isCancelled, let self, self.isRunning else { return }
+                self.note("frames t=\(Int(Double(tick) * WSRelayClient.frameLogInterval))s \(self.countersSummary())")
+            }
+        }
+    }
+
+    /// Logs to os_log at `.default` (visible without `--info`) *and* to the extension's
+    /// diagnostic file. `privacy: .public` so the content is not redacted.
     private func note(_ message: String) {
-        log.info("ws-relay: \(message)")
+        log.log(level: .default, "ws-relay: \(message, privacy: .public)")
         RelayDiagnostics.shared.log("ws-relay: \(message)")
     }
 
@@ -417,15 +324,9 @@ final class WSRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sen
         return running
     }
 
-    private func currentUDPFD() -> Int32 {
+    private func currentLink() -> RelayLink? {
         lock.lock()
         defer { lock.unlock() }
-        return udpFD
-    }
-
-    private func currentSocketTask() -> URLSessionWebSocketTask? {
-        lock.lock()
-        defer { lock.unlock() }
-        return socketTask
+        return link
     }
 }
