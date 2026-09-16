@@ -371,3 +371,39 @@ Hành vi đã xác nhận: iOS **luôn hiện "Invalid Profile"** sau khi gửi 
   profile 5 UDID. Khách mới (iPhone16,1) được xử lý tự động trong lúc triển khai.
 - **Lưu ý**: chứng chỉ cũ `KCX28GM58P` vẫn nằm trong profile ⇒ app khách đang cài không bị ảnh hưởng.
   Không revoke nó (app đã ký bằng nó có thể không mở được nếu bị thu hồi).
+
+## 2026-09-16 — Windows quay lại scope + nối UI vào tầng tunnel thật (owner đảo quyết định 27/08)
+
+- **Owner đảo quyết định**: ngày 27/08 đã chốt **bỏ client Windows**; hôm nay owner yêu cầu làm tiếp ⇒
+  **Windows trở lại scope**, kênh phát vẫn là bộ cài Inno Setup (`/dl/VPNFlow-Setup-latest.exe` trên `/buy`).
+  Các mục "bỏ Windows" trong memory coi như hết hiệu lực.
+- **Phát hiện (lỗi thật, không phải suy đoán)**: bản Windows đang phát **báo Connected giả** — nút Connect
+  chỉ lật một cờ `bool` trong `MainView.axaml.cs` rồi tự đổi chữ/màu, **không hề dựng tunnel**. Grep cả
+  project App cho thấy `VpnConnectionService`, `LoginViewModel`, `ControlApiClient`, `AuthSessionStore`,
+  `DeviceIdentity` **không được view nào tham chiếu**; `LoginView`/`SettingsView` chỉ gọi
+  `InitializeComponent` nên mọi nút đều không có handler; danh sách server hardcode 4 dòng.
+  Vi phạm ADR-0004 / FR-VPN-005 (no fake connected) — cùng loại lỗi đã xử lý cho iOS/Mac/Android ngày 08/09.
+- **Phạm vi owner chốt (option A)**: nối Connect vào tunnel thật + đăng nhập email-OTP + danh sách server
+  từ `GET /v1/nodes`; **CHƯA chặn theo subscription** (khách vẫn dùng tự do như hiện tại).
+  Việc chặn paywall + i18n 5 ngôn ngữ + claim hạn mức 3 máy để đợt sau.
+- **Cách làm**: thêm `ViewModels/AppServices.cs` làm composition root (`AppServices.Shared`), nối
+  `MainView` → `VpnConnectionService` (trạng thái suy từ tầng tunnel), `LoginView` → `LoginViewModel`,
+  `SettingsView` → đăng xuất + mở link web thật; bỏ thanh nav dev, điều hướng theo luồng macOS
+  (chưa đăng nhập ⇒ màn đăng nhập, bánh răng ⇒ Settings).
+- **Đăng ký thiết bị**: gọi `POST /v1/devices/claim` (Bearer session) để bản cài thuộc tài khoản và
+  hạn mức 3 máy có hiệu lực; lỗi mạng/hạ tầng KHÔNG chặn kết nối, chỉ `device_limit_reached` mới dừng.
+  Lấy IP overlay + peer qua đường legacy `POST /v1/tokens` → `POST /v1/peers/register`
+  (hệ quả của việc chưa chặn paywall — xem BUG-20260823-001).
+- **Verify**: `dotnet build` solution **0 warning / 0 error**; `dotnet test` Core **53 passed / 0 failed**;
+  build bộ cài OK (sha256 `7e14eddc119ca60f09373c9869c13a9e262003112eeb3b6acf86848d106e2b2e`); cài đè lên
+  `%ProgramFiles%\VPNFlow` và cả 4 file khớp byte-for-byte với output publish; app chạy, title `VPNFlow`,
+  `GET /v1/nodes` HTTP 200, `POST /v1/tokens` HTTP 201.
+- **Việc còn lại**: E2E bấm Connect trên máy Windows thật (cần người bấm); chưa test tunnel thật lần nào
+  trên Windows; `session.json` đang lưu **plaintext, không DPAPI** (lệch FR-WIN-001);
+  `AuthSessionStore` chưa bind thiết bị vào user ở đường legacy.
+- **Ghi chú build**: phải đặt `AVALONIA_TELEMETRY_OPTOUT=1` khi build trong sandbox (task telemetry của
+  Avalonia ghi `%LOCALAPPDATA%\AvaloniaUI\BuildServices\buildtasks.log`); shell của DSH là
+  **Windows PowerShell 5.1** nên `build.ps1` cần BOM UTF-8 để hiển thị đúng tiếng Việt.
+- **Lưu ý license**: ISCC in ra dòng "Non-commercial use only" — cần kiểm tra điều kiện cấp phép của
+  Inno Setup trước khi phát hành thương mại.
+
