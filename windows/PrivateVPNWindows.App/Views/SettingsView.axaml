@@ -4,7 +4,7 @@
   <!-- Bố cục bám SettingsViewMac.swift: các nhóm Language / Account / Subscription /
        Support trên nền navy, thẻ card giống iOS. -->
   <ScrollViewer>
-    <StackPanel Margin="20,20,20,28" Spacing="16">
+    <StackPanel Margin="16,14,16,20" Spacing="12">
       <TextBlock Text="Settings" Classes="vpnTitle" HorizontalAlignment="Center" />
 
       <Border Classes="vpnCard">
@@ -24,7 +24,7 @@
       <Border Classes="vpnCard">
         <StackPanel Spacing="10">
           <TextBlock Text="Account" Classes="vpnSectionTitle" />
-          <TextBlock Text="Not signed in." Classes="vpnSubtitle" />
+          <TextBlock Name="AccountText" Text="Not signed in." Classes="vpnSubtitle" TextWrapping="Wrap" />
           <Button Name="SignOutButton" Classes="vpnNav" Content="Sign Out" HorizontalAlignment="Left" />
         </StackPanel>
       </Border>
@@ -40,9 +40,9 @@
       <Border Classes="vpnCard">
         <StackPanel Spacing="6">
           <TextBlock Text="Support" Classes="vpnSectionTitle" Margin="0,0,0,4" />
-          <Button Classes="vpnNav" Content="Contact Support" HorizontalAlignment="Left" />
-          <Button Classes="vpnNav" Content="Privacy Policy" HorizontalAlignment="Left" />
-          <Button Classes="vpnNav" Content="Terms of Use" HorizontalAlignment="Left" />
+          <Button Name="ContactSupportButton" Classes="vpnNav" Content="Contact Support" HorizontalAlignment="Left" />
+          <Button Name="PrivacyButton" Classes="vpnNav" Content="Privacy Policy" HorizontalAlignment="Left" />
+          <Button Name="TermsButton" Classes="vpnNav" Content="Terms of Use" HorizontalAlignment="Left" />
         </StackPanel>
       </Border>
     </StackPanel>

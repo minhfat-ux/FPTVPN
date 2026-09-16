@@ -2,25 +2,32 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="VpnFlow.App.Views.MainWindow"
         Title="VPNFlow"
-        Width="390"
-        Height="760"
-        MinWidth="360"
-        MinHeight="600"
+        Width="350"
+        Height="600"
+        MinWidth="300"
+        MinHeight="440"
+        WindowStartupLocation="CenterScreen"
         Background="{DynamicResource VpnBackgroundBrush}"
         RequestedThemeVariant="Dark">
+  <!-- Không còn thanh nav dev ("Main / Sign in / Settings / Update"): điều hướng theo
+       đúng luồng bản macOS — chưa đăng nhập thì mở màn đăng nhập, bánh răng mở Settings. -->
   <DockPanel LastChildFill="True">
-    <!-- Điều hướng tạm giữa các khung màn hình (chưa phải luồng nghiệp vụ thật). -->
-    <Border DockPanel.Dock="Bottom"
-            Padding="12,8"
-            Background="{DynamicResource VpnCardBrush}"
-            BorderBrush="{DynamicResource VpnCardStrokeBrush}"
-            BorderThickness="0,1,0,0">
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
-        <Button Name="NavMainButton" Classes="vpnNav" Content="Main" Click="OnNavMainClick" />
-        <Button Name="NavLoginButton" Classes="vpnNav" Content="Sign in" Click="OnNavLoginClick" />
-        <Button Name="NavSettingsButton" Classes="vpnNav" Content="Settings" Click="OnNavSettingsClick" />
-        <Button Name="NavUpdateButton" Classes="vpnNav" Content="Update" Click="OnNavUpdateClick" />
-      </StackPanel>
+    <Border DockPanel.Dock="Top" Padding="10,6">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Button Grid.Column="0"
+                Name="BackButton"
+                Classes="vpnNav"
+                Content="Done"
+                IsVisible="False"
+                Click="OnBackClick" />
+        <Button Grid.Column="2"
+                Name="SettingsButton"
+                Classes="vpnIcon"
+                Click="OnSettingsClick"
+                ToolTip.Tip="Settings">
+          <TextBlock Text="⚙" FontSize="15" Foreground="{DynamicResource VpnTextSecondaryBrush}" />
+        </Button>
+      </Grid>
     </Border>
 
     <ContentControl Name="HostContent" />

@@ -6,4 +6,20 @@
     <FluentTheme />
     <StyleInclude Source="avares://PrivateVPNWindows.App/Theme/VpnTheme.axaml" />
   </Application.Styles>
+
+  <!-- Icon dưới khay hệ thống (giống Tailscale): app vẫn chạy khi cửa sổ được đóng,
+       tunnel không bị ngắt. Menu khay chỉ mở lại cửa sổ hoặc thoát hẳn. -->
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon Icon="avares://PrivateVPNWindows.App/Assets/applogo.png" ToolTipText="VPNFlow">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Open VPNFlow" Click="OnTrayOpen" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Quit" Click="OnTrayQuit" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
 </Application>

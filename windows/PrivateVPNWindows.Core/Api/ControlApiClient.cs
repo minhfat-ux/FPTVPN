@@ -105,6 +105,9 @@ public sealed class ControlApiClient : IDisposable
     /// là được). Tương ứng `register` — ControlAPIClient.swift:350-399.
     /// Ném <see cref="DeviceLimitException"/> khi server trả 403 `device_limit_reached`.
     /// </summary>
+    /// <param name="joinToken">Token vừa xin từ <see cref="FetchJoinTokenAsync"/> (legacy) hoặc
+    /// <see cref="FetchEnrollmentTokenAsync"/> (đã đăng nhập). Bỏ trống thì dùng token của
+    /// constructor.</param>
     public async Task<CoordinatorRegisterResponse> RegisterAsync(
         string name,
         string platform,
@@ -113,6 +116,7 @@ public sealed class ControlApiClient : IDisposable
         string? accessToken = null,
         string? exitNodeId = null,
         string? replaceDeviceId = null,
+        string? joinToken = null,
         CancellationToken cancellationToken = default)
     {
         var body = new Dictionary<string, object?>
@@ -121,7 +125,10 @@ public sealed class ControlApiClient : IDisposable
             ["platform"] = platform,
             ["wireguard_public_key"] = wireguardPublicKey,
             ["endpoint"] = endpoint,
-            ["join_token"] = JoinToken,
+            // Ưu tiên token truyền vào: token lấy từ /v1/tokens (legacy) hoặc
+            // /v1/enrollment-tokens (đã đăng nhập) đều đi qua field này. Không truyền thì
+            // lùi về token của constructor (tương ứng ControlAPIClient(baseURL:joinToken:)).
+            ["join_token"] = joinToken ?? JoinToken,
         };
         // Chỉ gửi khoá khi có giá trị — giống `compactMapValues { $0 }` (Swift:378).
         if (!string.IsNullOrEmpty(exitNodeId)) body["exit_node_id"] = exitNodeId;

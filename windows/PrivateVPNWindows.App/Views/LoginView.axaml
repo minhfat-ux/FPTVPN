@@ -4,12 +4,12 @@
   <!-- Bố cục bám LoginViewMac.swift: logo + tên VPNFlow, thẻ chứa ô email / mã,
        nút gửi & xác minh. -->
   <ScrollViewer>
-    <StackPanel Margin="20,40,20,28" Spacing="22">
+    <StackPanel Margin="16,24,16,20" Spacing="16">
 
-      <StackPanel Spacing="10" HorizontalAlignment="Center">
+      <StackPanel Spacing="8" HorizontalAlignment="Center">
         <Image Source="avares://PrivateVPNWindows.App/Assets/applogo.png"
-               Width="76"
-               Height="76"
+               Width="62"
+               Height="62"
                Stretch="Uniform"
                HorizontalAlignment="Center" />
         <TextBlock Classes="vpnBrand" HorizontalAlignment="Center">
@@ -22,9 +22,9 @@
                    TextAlignment="Center" />
       </StackPanel>
 
-      <Border Classes="vpnCard" CornerRadius="20" Padding="20">
-        <StackPanel Spacing="16">
-          <StackPanel Spacing="8">
+      <Border Classes="vpnCard" CornerRadius="14" Padding="14">
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="6">
             <TextBlock Text="Email" Classes="vpnFieldLabel" />
             <TextBox Name="EmailBox" Classes="vpnField" Watermark="you@example.com" />
           </StackPanel>
@@ -33,7 +33,7 @@
 
           <Border Height="1" Background="{DynamicResource VpnCardStrokeBrush}" />
 
-          <StackPanel Spacing="8">
+          <StackPanel Spacing="6">
             <TextBlock Text="Login code" Classes="vpnFieldLabel" />
             <TextBox Name="CodeBox" Classes="vpnField" Watermark="123456" />
           </StackPanel>
@@ -41,6 +41,14 @@
           <Button Name="VerifyCodeButton" Classes="vpnPrimary" Content="Verify Code" />
         </StackPanel>
       </Border>
+
+      <!-- Phản hồi thật từ coordinator: mã dev / đã gửi mã / lỗi xác minh. -->
+      <TextBlock Name="MessageText"
+                 Classes="vpnCaption"
+                 IsVisible="False"
+                 HorizontalAlignment="Center"
+                 TextAlignment="Center"
+                 TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

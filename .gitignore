@@ -65,3 +65,7 @@ android/app/libs/hysteria-sources.jar
 windows/**/bin/
 windows/**/obj/
 windows/dist/
+# Bộ cài Inno Setup: bản publish (~100 MB) + file .exe phát cho khách — dựng lại được
+# bằng `windows/installer/build.ps1`, nên đừng để lọt vào commit.
+windows/installer/out/
+windows/installer/publish/

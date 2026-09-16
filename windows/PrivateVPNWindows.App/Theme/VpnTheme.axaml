@@ -33,38 +33,38 @@
   </Styles.Resources>
 
   <Style Selector="TextBlock.vpnTitle">
-    <Setter Property="FontSize" Value="28" />
+    <Setter Property="FontSize" Value="21" />
     <Setter Property="FontWeight" Value="Bold" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextPrimaryBrush}" />
   </Style>
 
   <Style Selector="TextBlock.vpnBrand">
-    <Setter Property="FontSize" Value="30" />
+    <Setter Property="FontSize" Value="23" />
     <Setter Property="FontWeight" Value="Bold" />
   </Style>
 
   <Style Selector="TextBlock.vpnSubtitle">
-    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontSize" Value="11" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
   </Style>
 
   <Style Selector="TextBlock.vpnCaption">
-    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontSize" Value="10.5" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
   </Style>
 
   <Style Selector="TextBlock.vpnStatus">
-    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontSize" Value="10.5" />
   </Style>
 
   <Style Selector="TextBlock.vpnSectionTitle">
-    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontSize" Value="13" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextPrimaryBrush}" />
   </Style>
 
   <Style Selector="TextBlock.vpnFieldLabel">
-    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontSize" Value="11" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
   </Style>
 
@@ -72,18 +72,18 @@
     <Setter Property="Background" Value="{DynamicResource VpnCardBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource VpnCardStrokeBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="16" />
-    <Setter Property="Padding" Value="16" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="12" />
   </Style>
 
   <!-- Nút hành động chính: nền accent xanh, chữ trắng, bo tròn (giống iOS). -->
   <Style Selector="Button.vpnPrimary">
     <Setter Property="Background" Value="{DynamicResource VpnAccentBrush}" />
     <Setter Property="Foreground" Value="#FFFFFF" />
-    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontSize" Value="13" />
     <Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="Padding" Value="16,12" />
-    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Padding" Value="13,9" />
+    <Setter Property="CornerRadius" Value="11" />
     <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
   </Style>
@@ -100,15 +100,16 @@
   <Style Selector="Button.vpnNav">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
-    <Setter Property="Padding" Value="10,6" />
-    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="CornerRadius" Value="7" />
   </Style>
 
   <Style Selector="Button.vpnIcon">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="Padding" Value="4" />
-    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="3" />
+    <Setter Property="CornerRadius" Value="5" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
   </Style>
 
@@ -118,9 +119,9 @@
     <Setter Property="Foreground" Value="{DynamicResource VpnTextPrimaryBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource VpnCardStrokeBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="12" />
-    <Setter Property="Padding" Value="14,12" />
-    <Setter Property="FontSize" Value="15" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="11,8" />
+    <Setter Property="FontSize" Value="13" />
     <Setter Property="MinHeight" Value="0" />
   </Style>
 
@@ -128,16 +129,17 @@
     <Setter Property="Background" Value="{DynamicResource VpnFieldBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextPrimaryBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource VpnCardStrokeBrush}" />
-    <Setter Property="CornerRadius" Value="12" />
-    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="10,6" />
     <Setter Property="HorizontalAlignment" Value="Stretch" />
   </Style>
 
   <!-- Nút nguồn tròn (giống iOS: 132px, viền trắng mờ, nền đổi theo trạng thái). -->
   <Style Selector="Button.vpnPower">
-    <Setter Property="Width" Value="132" />
-    <Setter Property="Height" Value="132" />
-    <Setter Property="CornerRadius" Value="66" />
+    <Setter Property="Width" Value="104" />
+    <Setter Property="Height" Value="104" />
+    <Setter Property="CornerRadius" Value="52" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="BorderBrush" Value="#38FFFFFF" />
     <Setter Property="Background" Value="{DynamicResource VpnDangerBrush}" />
@@ -163,15 +165,15 @@
   </Style>
 
   <Style Selector="ListBox.vpnServerList ListBoxItem">
-    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="Padding" Value="8,5" />
     <Setter Property="Margin" Value="0,1" />
-    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="CornerRadius" Value="7" />
     <Setter Property="MinHeight" Value="0" />
   </Style>
 
   <Style Selector="ListBox.vpnServerList ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="#0DFFFFFF" />
-    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="CornerRadius" Value="7" />
   </Style>
 
   <Style Selector="ListBox.vpnServerList ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
@@ -183,7 +185,7 @@
   </Style>
 
   <Style Selector="ListBox.vpnServerList TextBlock.vpnServerName">
-    <Setter Property="FontSize" Value="14" />
+    <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource VpnTextSecondaryBrush}" />
   </Style>
 
