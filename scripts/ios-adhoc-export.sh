@@ -53,7 +53,20 @@ py() { python3 "$@"; }
 log "1) lấy thông tin tài khoản: bundle id, chứng chỉ Distribution, UDID iOS"
 BID_APP=$(asc GET "/v1/bundleIds?filter[identifier]=com.privatevpn.app" | py -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')
 BID_EXT=$(asc GET "/v1/bundleIds?filter[identifier]=com.privatevpn.app.packet-tunnel" | py -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')
-CERT_ID=$(asc GET "/v1/certificates?filter[certificateType]=DISTRIBUTION&limit=1" | py -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')
+# PHẢI chọn chứng chỉ Distribution CÓ KHOÁ RIÊNG trên máy này: profile Ad Hoc phải chứa đúng cert mà
+# xcodebuild dùng để ký, nếu không export sẽ báo "Provisioning profile ... doesn't include signing
+# certificate" (đã gặp thật: tài khoản có 2 cert Distribution, cert mới hơn không có khoá trên máy).
+CERT_ID="${ASC_CERT_ID:-}"
+if [ -z "$CERT_ID" ]; then
+  KC_CERT=$(security find-certificate -a -c "Apple Distribution" -p 2>/dev/null | openssl x509 -outform der 2>/dev/null | openssl base64 -A)
+  CERT_ID=$(asc GET "/v1/certificates?filter[certificateType]=DISTRIBUTION&limit=10&fields[certificates]=certificateContent" | KC_CERT="$KC_CERT" py -c '
+import json, os, sys
+kc = (os.environ.get("KC_CERT") or "").strip()
+data = json.load(sys.stdin).get("data", [])
+match = next((x["id"] for x in data if (x["attributes"].get("certificateContent") or "").strip() == kc), "")
+print(match or (data[0]["id"] if data else ""))')
+fi
+[ -n "$CERT_ID" ] || { echo "LỖI: không tìm được chứng chỉ Distribution (đặt ASC_CERT_ID để chỉ định)" >&2; exit 1; }
 DEV_IDS=$(asc GET "/v1/devices?filter[platform]=IOS&limit=200" | py -c 'import json,sys; print(json.dumps([{"type":"devices","id":x["id"]} for x in json.load(sys.stdin)["data"]]))')
 log "     app=$BID_APP ext=$BID_EXT cert=$CERT_ID · $DEV_IDS"
 
