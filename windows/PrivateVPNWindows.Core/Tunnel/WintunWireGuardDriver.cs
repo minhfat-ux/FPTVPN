@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -46,6 +48,10 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
 
     private Process? _process;
     private WireGuardConfig? _activeConfig;
+    private EndpointRoute? _endpointRoute;
+
+    /// <summary>Route loại trừ đã thêm cho IP endpoint (để xoá lại lúc ngắt kết nối).</summary>
+    private readonly record struct EndpointRoute(string Ip, string Interface, string Gateway);
 
     public WintunWireGuardDriver(string? assetDirectory = null, string? workingDirectory = null, ITunnelLogger? log = null)
     {
@@ -379,6 +385,10 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         WireGuardConfig config,
         CancellationToken cancellationToken)
     {
+        // PHẢI thêm route loại trừ endpoint TRƯỚC khi gắn route chia default, nếu không gói
+        // UDP của chính wireguard-go cũng bị đẩy vào tunnel ⇒ handshake chết, máy mất mạng.
+        await AddEndpointExclusionRouteAsync(config, cancellationToken).ConfigureAwait(false);
+
         foreach (var command in WireGuardWindowsCommands.BuildInterfaceConfiguration(tunnelName, config))
         {
             var (exitCode, stdout, stderr) = await RunProcessAsync(command.FileName, command.Arguments, cancellationToken)
@@ -389,6 +399,88 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
                 throw new WireGuardDriverException(
                     $"Cấu hình interface thất bại (exit {exitCode}): {command} — {detail.Trim()}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Thêm route /32 cho IP endpoint của peer đi qua gateway vật lý, để gói UDP của
+    /// wireguard-go tới node không bị route chia default hút vào tunnel.
+    /// Best-effort: không đọc được default route thì ghi WARN rồi đi tiếp.
+    /// </summary>
+    private async Task AddEndpointExclusionRouteAsync(WireGuardConfig config, CancellationToken cancellationToken)
+    {
+        var endpointIp = ResolveEndpointIp(config);
+        if (endpointIp is null)
+        {
+            _log.Warn("wintun: không xác định được IP endpoint — bỏ qua route loại trừ.");
+            return;
+        }
+
+        var getRoute = WireGuardWindowsCommands.GetDefaultRoute();
+        var (routeExit, routeOut, routeErr) = await RunProcessAsync(getRoute.FileName, getRoute.Arguments, cancellationToken)
+            .ConfigureAwait(false);
+
+        var parsed = WireGuardWindowsCommands.ParseDefaultRouteOutput(routeOut);
+        if (routeExit != 0 || parsed is null)
+        {
+            _log.Warn(
+                $"wintun: không đọc được default route (exit {routeExit}) — bỏ qua route loại trừ {endpointIp}: " +
+                $"{routeErr.Trim()}");
+            return;
+        }
+
+        var (gateway, @interface) = parsed.Value;
+        var command = WireGuardWindowsCommands.AddEndpointRoute(@interface, gateway, endpointIp);
+        var (addExit, addOut, addErr) = await RunProcessAsync(command.FileName, command.Arguments, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (addExit != 0)
+        {
+            var detail = string.IsNullOrWhiteSpace(addErr) ? addOut : addErr;
+            _log.Warn($"wintun: thêm route loại trừ {endpointIp}/32 qua {gateway} ({@interface}) thất bại: {detail.Trim()}");
+            return;
+        }
+
+        lock (_lock)
+        {
+            _endpointRoute = new EndpointRoute(endpointIp, @interface, gateway);
+        }
+
+        _log.Info($"wintun: đã thêm route loại trừ {endpointIp}/32 qua {gateway} ({@interface})");
+    }
+
+    /// <summary>IP endpoint IPv4 của peer đầu tiên; null nếu thiếu hoặc không phân giải được.</summary>
+    private static string? ResolveEndpointIp(WireGuardConfig config)
+    {
+        var endpoint = config.Peers.FirstOrDefault()?.Endpoint;
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return null;
+        }
+
+        var host = endpoint;
+        var colon = endpoint.LastIndexOf(':');
+        if (colon > 0)
+        {
+            host = endpoint[..colon];
+        }
+
+        host = host.Trim('[', ']');
+
+        if (IPAddress.TryParse(host, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetwork)
+        {
+            return parsed.ToString();
+        }
+
+        try
+        {
+            return Dns.GetHostAddresses(host)
+                .FirstOrDefault(address => address.AddressFamily == AddressFamily.InterNetwork)
+                ?.ToString();
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 
@@ -430,6 +522,21 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         foreach (var command in routeDeletes)
         {
             await RunBestEffortAsync(command).ConfigureAwait(false);
+        }
+
+        // Gỡ route loại trừ endpoint đã thêm lúc kết nối, trả bảng route về như trước.
+        EndpointRoute? endpointRoute;
+        lock (_lock)
+        {
+            endpointRoute = _endpointRoute;
+            _endpointRoute = null;
+        }
+
+        if (endpointRoute is { } route)
+        {
+            await RunBestEffortAsync(
+                WireGuardWindowsCommands.DeleteEndpointRoute(route.Interface, route.Gateway, route.Ip))
+                .ConfigureAwait(false);
         }
 
         await RunBestEffortAsync(WireGuardWindowsCommands.RemoveInterface(tunnelName)).ConfigureAwait(false);

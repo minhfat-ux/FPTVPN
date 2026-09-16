@@ -168,14 +168,69 @@ public static class WireGuardWindowsCommands
         => new(Netsh,
             $"interface ipv4 add dnsservers name=\"{interfaceName}\" address={server} index={index.ToString(CultureInfo.InvariantCulture)} validate=no");
 
-    /// <summary>
-    /// Gỡ adapter khỏi hệ thống. Dùng PowerShell <c>Remove-NetAdapter</c> vì netsh
+    /// <summary>Gỡ adapter khỏi hệ thống. Dùng PowerShell <c>Remove-NetAdapter</c> vì netsh
     /// không có lệnh xoá interface ảo. Chỉ gọi SAU khi đã kill wireguard-go (adapter
     /// đang được session giữ sẽ không xoá được).
-    /// </summary>
+    /// Lưu ý: module <c>NetAdapter</c> không có trên mọi máy — thiếu thì lệnh này thất bại
+    /// (đã log WARN) nhưng không chặn luồng ngắt kết nối.</summary>
     public static WindowsCommand RemoveInterface(string interfaceName)
         => new(PowerShell,
             $"-NoProfile -NonInteractive -Command \"Remove-NetAdapter -Name '{interfaceName}' -Confirm:$false -ErrorAction SilentlyContinue\"");
+
+    /// <summary>
+    /// Đọc default route đang dùng của máy, in ra <c>gateway|interface</c>.
+    ///
+    /// Vì sao cần: sau khi thêm <c>0.0.0.0/1</c> + <c>128.0.0.0/1</c> trỏ vào tunnel, gói UDP
+    /// của CHÍNH wireguard-go gửi tới endpoint cũng khớp route đó và bị hút vào tunnel chưa
+    /// hoạt động ⇒ handshake chết ngay sau khi kết nối và máy mất mạng. Phải thêm route /32
+    /// cho IP endpoint đi qua gateway vật lý để tránh vòng lặp này.
+    /// </summary>
+    public static WindowsCommand GetDefaultRoute()
+        => new(PowerShell,
+            "-NoProfile -NonInteractive -Command \"(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric,ifIndex | Select-Object -First 1) | ForEach-Object { $_.NextHop + '|' + $_.InterfaceAlias }\"");
+
+    /// <summary>Parsea output của <see cref="GetDefaultRoute"/>: dòng đầu dạng <c>gateway|interface</c>.</summary>
+    public static (string Gateway, string Interface)? ParseDefaultRouteOutput(string stdout)
+    {
+        if (string.IsNullOrWhiteSpace(stdout))
+        {
+            return null;
+        }
+
+        foreach (var raw in stdout.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var parts = line.Split('|');
+            if (parts.Length < 2)
+            {
+                continue;
+            }
+
+            var gateway = parts[0].Trim();
+            var @interface = parts[1].Trim();
+            if (gateway.Length > 0 && @interface.Length > 0)
+            {
+                return (gateway, @interface);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Route /32 cho IP endpoint của peer, đi qua gateway/interface vật lý.</summary>
+    public static WindowsCommand AddEndpointRoute(string physicalInterface, string gateway, string endpointIp)
+        => new(Netsh,
+            $"interface ipv4 add route prefix={endpointIp}/32 interface=\"{physicalInterface}\" nexthop={gateway} metric=1 store=active");
+
+    /// <summary>Xoá route loại trừ endpoint đã thêm lúc kết nối.</summary>
+    public static WindowsCommand DeleteEndpointRoute(string physicalInterface, string gateway, string endpointIp)
+        => new(Netsh,
+            $"interface ipv4 delete route prefix={endpointIp}/32 interface=\"{physicalInterface}\" nexthop={gateway}");
 
     /// <summary>Tập route cần thêm, từ AllowedIPs của mọi peer (đã chia default route).</summary>
     public static IReadOnlyList<WindowsCommand> BuildRouteAdds(string interfaceName, WireGuardConfig config)
