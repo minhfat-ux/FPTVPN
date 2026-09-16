@@ -6,8 +6,10 @@ namespace VpnFlow.App.Views;
 
 public partial class MainView : UserControl
 {
-    private static readonly IBrush AccentBrush = new SolidColorBrush(Color.Parse("#33C773"));
+    // Màu trạng thái lấy đúng bảng màu iOS/mac: đỏ khi chưa kết nối,
+    // xanh brand #33C773 khi đã kết nối.
     private static readonly IBrush DangerBrush = new SolidColorBrush(Color.Parse("#FF4D4D"));
+    private static readonly IBrush SuccessBrush = new SolidColorBrush(Color.Parse("#33C773"));
 
     // Chỉ là trạng thái hiển thị tạm — chưa nối vào tầng tunnel thật.
     private bool _connected;
@@ -18,13 +20,15 @@ public partial class MainView : UserControl
     {
         _connected = !_connected;
 
-        StatusText.Text = _connected ? "Connected" : "Disconnected";
-        ConnectButton.Content = _connected ? "Disconnect" : "Connect";
-        ConnectButton.Classes.Set("vpnPrimary", !_connected);
-        ConnectButton.Classes.Set("vpnDanger", _connected);
+        var brush = _connected ? SuccessBrush : DangerBrush;
+        var label = _connected ? "Connected" : "Disconnected";
 
-        var brush = _connected ? AccentBrush : DangerBrush;
-        StatusDot.Fill = brush;
+        StatusText.Text = label;
         StatusText.Foreground = brush;
+        StatusDot.Fill = brush;
+        DiagStateText.Text = label;
+        DiagStateText.Foreground = brush;
+
+        ConnectButton.Background = brush;
     }
 }

@@ -11,8 +11,10 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Chỉ nhúng manifest (yêu cầu quyền admin) khi build/publish cho Windows. -->
     <ApplicationManifest Condition="$(RuntimeIdentifier.StartsWith('win'))">app.manifest</ApplicationManifest>
-    <!-- Icon app (hiện trên exe, shortcut và cả bộ cài Inno Setup). -->
-    <ApplicationIcon>..\assets\vpnflow.ico</ApplicationIcon>
+    <!-- Icon app đúng thương hiệu VPNFlow (16/32/48/64/128/256), lấy từ bộ icon
+         chính thức của bản iOS (iOS/PrivateVPN/Assets.xcassets/AppIcon.appiconset).
+         Hiện trên exe, shortcut và cả bộ cài Inno Setup. -->
+    <ApplicationIcon>Assets\appicon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +26,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PrivateVPNWindows.Core\PrivateVPNWindows.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Logo thương hiệu dùng trong UI — cùng ảnh với iOS/AppLogo.imageset
+       (app-logo-76@3x.png) và logo bản mac, nhúng vào assembly để hiển thị
+       đúng tỉ lệ, không crop/méo. -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\applogo.png" />
   </ItemGroup>
 
   <!-- Binary tunnel userspace (xem windows/assets/THIRD_PARTY.md): copy ra cạnh exe để

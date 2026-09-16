@@ -120,7 +120,7 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
 
     public IBrush StatusBrush => State switch
     {
-        VpnConnectionState.Connected => VpnBrushes.Accent,
+        VpnConnectionState.Connected => VpnBrushes.Success,
         VpnConnectionState.Connecting => VpnBrushes.Warning,
         _ => VpnBrushes.Danger,
     };

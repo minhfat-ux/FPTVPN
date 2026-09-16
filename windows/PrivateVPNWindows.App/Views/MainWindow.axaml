@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="VpnFlow.App.Views.MainWindow"
-        Title="FlowVPN"
+        Title="VPNFlow"
         Width="390"
         Height="760"
         MinWidth="360"

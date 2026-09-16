@@ -1,10 +1,36 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="VpnFlow.App.Views.MainView">
+  <!-- Bố cục bám ContentViewMac.swift / ContentView.swift: header (logo + trạng thái +
+       tên VPNFlow), thẻ chọn server, nút nguồn tròn, thẻ chẩn đoán. -->
   <ScrollViewer>
-    <StackPanel Margin="24" Spacing="16">
-      <StackPanel Spacing="4">
-        <TextBlock Text="FlowVPN" Classes="vpnTitle" HorizontalAlignment="Center" />
+    <StackPanel Margin="20,10,20,28" Spacing="20">
+
+      <!-- Header -->
+      <StackPanel Spacing="6" HorizontalAlignment="Center">
+        <Image Source="avares://PrivateVPNWindows.App/Assets/applogo.png"
+               Width="76"
+               Height="76"
+               Stretch="Uniform"
+               HorizontalAlignment="Center" />
+
+        <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+          <Ellipse Name="StatusDot"
+                   Width="8"
+                   Height="8"
+                   Fill="{DynamicResource VpnDangerBrush}"
+                   VerticalAlignment="Center" />
+          <TextBlock Name="StatusText"
+                     Classes="vpnStatus"
+                     Foreground="{DynamicResource VpnDangerBrush}"
+                     Text="Disconnected" />
+        </StackPanel>
+
+        <!-- Tên thương hiệu: "VPN" trắng + "Flow" xanh brand (giống iOS/mac). -->
+        <TextBlock Classes="vpnBrand" HorizontalAlignment="Center">
+          <Run Text="VPN" Foreground="#FFFFFF" /><Run Text="Flow" Foreground="#33C773" />
+        </TextBlock>
+
         <TextBlock Text="Private, encrypted internet from Vietnam"
                    Classes="vpnSubtitle"
                    HorizontalAlignment="Center"
@@ -12,56 +38,128 @@
                    TextAlignment="Center" />
       </StackPanel>
 
-      <!-- Trạng thái kết nối -->
-      <Border Classes="vpnCard">
-        <StackPanel Spacing="8">
-          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-            <Ellipse Name="StatusDot"
-                     Width="10"
-                     Height="10"
-                     Fill="{DynamicResource VpnDangerBrush}"
-                     VerticalAlignment="Center" />
-            <TextBlock Name="StatusText"
-                       Classes="vpnStatus"
-                       Foreground="{DynamicResource VpnDangerBrush}"
-                       Text="Disconnected" />
-          </StackPanel>
-          <TextBlock Text="Chưa kết nối tới máy chủ nào."
-                     Classes="vpnSubtitle"
-                     HorizontalAlignment="Center"
-                     TextAlignment="Center" />
-        </StackPanel>
-      </Border>
-
       <!-- Chọn exit node -->
       <Border Classes="vpnCard">
         <StackPanel Spacing="10">
-          <TextBlock Text="Server" Classes="vpnSectionTitle" />
-          <ComboBox Name="ExitNodeCombo" HorizontalAlignment="Stretch" SelectedIndex="0">
-            <ComboBoxItem>Vietnam · vietnam-1</ComboBoxItem>
-            <ComboBoxItem>Vietnam · vietnam-2</ComboBoxItem>
-            <ComboBoxItem>Singapore · singapore-1</ComboBoxItem>
-            <ComboBoxItem>Japan · japan-1</ComboBoxItem>
-          </ComboBox>
-          <Button Name="RefreshNodesButton"
-                  Classes="vpnNav"
-                  Content="Refresh servers"
-                  HorizontalAlignment="Left" />
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <Path Grid.Column="0"
+                  Data="{StaticResource VpnPinGeometry}"
+                  Fill="{DynamicResource VpnAccentBrush}"
+                  Width="18"
+                  Height="18"
+                  Stretch="Uniform"
+                  VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Text="Server"
+                       Classes="vpnSectionTitle"
+                       Margin="10,0,0,0"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="2"
+                    Name="RefreshNodesButton"
+                    Classes="vpnIcon"
+                    ToolTip.Tip="Refresh servers">
+              <Path Data="{StaticResource VpnRefreshGeometry}"
+                    Fill="{DynamicResource VpnTextSecondaryBrush}"
+                    Width="16"
+                    Height="16"
+                    Stretch="Uniform" />
+            </Button>
+          </Grid>
+
+          <ListBox Name="ExitNodeList"
+                   Classes="vpnServerList"
+                   SelectionMode="Single"
+                   SelectedIndex="0"
+                   MaxHeight="220">
+            <ListBoxItem>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Panel Width="18" Height="18" VerticalAlignment="Center">
+                  <Path Classes="vpnCheckRing" Data="{StaticResource VpnCheckRingGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckCircle" Data="{StaticResource VpnCheckCircleGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckGlyph" Data="{StaticResource VpnCheckGlyphGeometry}" Width="12" Height="12" Stretch="Uniform" />
+                </Panel>
+                <TextBlock Classes="vpnServerName" Text="🇻🇳 Vietnam · vietnam-1" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Panel Width="18" Height="18" VerticalAlignment="Center">
+                  <Path Classes="vpnCheckRing" Data="{StaticResource VpnCheckRingGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckCircle" Data="{StaticResource VpnCheckCircleGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckGlyph" Data="{StaticResource VpnCheckGlyphGeometry}" Width="12" Height="12" Stretch="Uniform" />
+                </Panel>
+                <TextBlock Classes="vpnServerName" Text="🇻🇳 Vietnam · vietnam-2" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Panel Width="18" Height="18" VerticalAlignment="Center">
+                  <Path Classes="vpnCheckRing" Data="{StaticResource VpnCheckRingGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckCircle" Data="{StaticResource VpnCheckCircleGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckGlyph" Data="{StaticResource VpnCheckGlyphGeometry}" Width="12" Height="12" Stretch="Uniform" />
+                </Panel>
+                <TextBlock Classes="vpnServerName" Text="🇸🇬 Singapore · singapore-1" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Panel Width="18" Height="18" VerticalAlignment="Center">
+                  <Path Classes="vpnCheckRing" Data="{StaticResource VpnCheckRingGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckCircle" Data="{StaticResource VpnCheckCircleGeometry}" Width="18" Height="18" Stretch="Uniform" />
+                  <Path Classes="vpnCheckGlyph" Data="{StaticResource VpnCheckGlyphGeometry}" Width="12" Height="12" Stretch="Uniform" />
+                </Panel>
+                <TextBlock Classes="vpnServerName" Text="🇯🇵 Japan · japan-1" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+          </ListBox>
         </StackPanel>
       </Border>
 
-      <!-- Nút Connect/Disconnect -->
+      <!-- Nút Connect/Disconnect một chạm -->
       <Button Name="ConnectButton"
-              Classes="vpnPrimary"
-              Content="Connect"
-              Width="200"
-              FontSize="16"
-              Click="OnConnectClick" />
+              Classes="vpnPower"
+              Click="OnConnectClick">
+        <Path Data="{StaticResource VpnPowerGeometry}"
+              Stroke="#FFFFFF"
+              StrokeThickness="1.7"
+              StrokeLineCap="Round"
+              StrokeJoin="Round"
+              Width="52"
+              Height="52"
+              Stretch="Uniform" />
+      </Button>
 
-      <TextBlock Text="TUN mode requires administrator rights to install the WireGuard tunnel."
-                 Classes="vpnSubtitle"
-                 TextWrapping="Wrap"
-                 TextAlignment="Center" />
+      <!-- Diagnostics -->
+      <Border Classes="vpnCard">
+        <StackPanel Spacing="14">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Path Data="{StaticResource VpnPulseGeometry}"
+                  Stroke="{DynamicResource VpnAccentBrush}"
+                  StrokeThickness="1.6"
+                  StrokeLineCap="Round"
+                  Width="18"
+                  Height="18"
+                  Stretch="Uniform"
+                  VerticalAlignment="Center" />
+            <TextBlock Text="Diagnostics" Classes="vpnSectionTitle" />
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource VpnCardStrokeBrush}" />
+
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="State" Classes="vpnCaption" />
+            <TextBlock Grid.Column="1"
+                       Name="DiagStateText"
+                       Text="Disconnected"
+                       Classes="vpnCaption"
+                       Foreground="{DynamicResource VpnDangerBrush}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Location" Classes="vpnCaption" />
+            <TextBlock Grid.Column="1" Text="Vietnam" Classes="vpnCaption" />
+          </Grid>
+        </StackPanel>
+      </Border>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

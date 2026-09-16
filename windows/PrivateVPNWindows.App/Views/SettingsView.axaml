@@ -1,14 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="VpnFlow.App.Views.SettingsView">
+  <!-- Bố cục bám SettingsViewMac.swift: các nhóm Language / Account / Subscription /
+       Support trên nền navy, thẻ card giống iOS. -->
   <ScrollViewer>
-    <StackPanel Margin="24" Spacing="16">
+    <StackPanel Margin="20,20,20,28" Spacing="16">
       <TextBlock Text="Settings" Classes="vpnTitle" HorizontalAlignment="Center" />
 
       <Border Classes="vpnCard">
         <StackPanel Spacing="10">
           <TextBlock Text="Language" Classes="vpnSectionTitle" />
-          <ComboBox Name="LanguageCombo" HorizontalAlignment="Stretch" SelectedIndex="0">
+          <ComboBox Name="LanguageCombo" Classes="vpnField" SelectedIndex="0">
             <ComboBoxItem>System Setting</ComboBoxItem>
             <ComboBoxItem>English</ComboBoxItem>
             <ComboBoxItem>Vietnamese</ComboBoxItem>
@@ -31,13 +33,13 @@
         <StackPanel Spacing="10">
           <TextBlock Text="Subscription" Classes="vpnSectionTitle" />
           <TextBlock Text="Premium Required" Classes="vpnSubtitle" />
-          <Button Name="UpgradeButton" Classes="vpnPrimary" Content="Upgrade" HorizontalAlignment="Left" />
+          <Button Name="UpgradeButton" Classes="vpnPrimary" Content="Upgrade" />
         </StackPanel>
       </Border>
 
       <Border Classes="vpnCard">
         <StackPanel Spacing="6">
-          <TextBlock Text="Support" Classes="vpnSectionTitle" />
+          <TextBlock Text="Support" Classes="vpnSectionTitle" Margin="0,0,0,4" />
           <Button Classes="vpnNav" Content="Contact Support" HorizontalAlignment="Left" />
           <Button Classes="vpnNav" Content="Privacy Policy" HorizontalAlignment="Left" />
           <Button Classes="vpnNav" Content="Terms of Use" HorizontalAlignment="Left" />
