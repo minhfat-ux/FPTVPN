@@ -407,3 +407,41 @@ Hành vi đã xác nhận: iOS **luôn hiện "Invalid Profile"** sau khi gửi 
 - **Lưu ý license**: ISCC in ra dòng "Non-commercial use only" — cần kiểm tra điều kiện cấp phép của
   Inno Setup trước khi phát hành thương mại.
 
+## 2026-09-16 (tiếp) — Bản Windows chạy thật: 3 lỗi gốc đã sửa + đã gỡ bản cài cũ
+
+- **Đã sửa 3 lỗi, mỗi lỗi đều có bằng chứng đo thật** (commit tương ứng):
+  1. `2b426ad` — **"Call from invalid thread"**: `VpnConnectionService` đổi `State` bên trong
+     `await …ConfigureAwait(false)` nên `PropertyChanged` bắn từ thread pool; `MainView` phải đẩy
+     về UI thread. Kèm: nối UI vào tunnel thật, login email-OTP, server từ `/v1/nodes`, UI nhỏ hơn,
+     cửa sổ giữa màn hình, icon khay hệ thống, và **log ra file** `%APPDATA%\VPNFlow\vpnflow.log`
+     (trước đó app là WinExe nên mọi log bị nuốt — đây là lý do các lỗi sau "câm").
+  2. `5beefda` — **wireguard-go thoát exit 1**: pipe UAPI đặt owner `SYSTEM`; token admin đã elevated
+     vẫn **đang tắt** `SeRestorePrivilege`/`SeTakeOwnershipPrivilege` nên `CreateNamedPipe` bị từ chối.
+     Sửa bằng `ProcessPrivileges` (P/Invoke `AdjustTokenPrivileges`) bật trước khi spawn. Đồng thời
+     **truyền logger xuống driver** (trước đó driver dùng `NullTunnelLogger` nên stderr của
+     wireguard-go không vào log).
+  3. `a66bab7` — **mất mạng sau khi Connect**: thiếu route loại trừ IP endpoint, nên sau khi gắn
+     `0.0.0.0/1` + `128.0.0.0/1`, gói UDP của chính tunnel bị hút vào tunnel ⇒ handshake chết.
+     Sửa: thêm `<endpoint>/32` qua gateway vật lý trước khi gắn route chia đôi, xoá lại khi ngắt.
+- **Verify E2E (máy Windows thật)**: public IP từ 3 nguồn độc lập đều `165.101.114.162`;
+  `meetflowai.site/buy` 200; `gstatic/generate_204` 204; DNS qua `1.1.1.1`. Monitor 10 phút
+  (20 mẫu × 30s): **IP đúng 20/20**, adapter Up, route32 còn nguyên — nhưng có **re-handshake định kỳ**
+  (~16:58, 16:59, 17:01, "stopped hearing back after 15 seconds" rồi lấy lại ngay) ⇒ nghi chất lượng
+  UDP tới node, chưa phải lỗi routing.
+- **Đã gỡ bản cài cũ** theo yêu cầu owner: chạy `unins001.exe` rồi `unins000.exe` (máy có 2 entry
+  trùng). `C:\Program Files\VPNFlow` **xoá hẳn**, hết shortcut, hết entry registry. Bản mới hiện chạy
+  trực tiếp từ `windows\installer\publish\` (chưa cài lại vào Program Files).
+- ⚠️ **Bài học quan trọng**: bộ gỡ cài đặt hỏi "xoá dữ liệu đăng nhập?" và khi chạy silent Inno trả lời
+  mặc định **Yes** ⇒ **xoá `%APPDATA%\VPNFlow`** — nơi chứa **private key WireGuard** + session.
+  Đã sao lưu trước và khôi phục. **Lần sau: luôn sao lưu `%APPDATA%\VPNFlow` trước khi gỡ cài đặt.**
+- **Việc còn lại (chưa làm)**:
+  - 🔴 **Rò IPv6**: tunnel chỉ cấu hình IPv4; máy có IPv6 (`2404:6800::/…`) nên traffic IPv6 đi thẳng
+    ra ngoài, không qua tunnel (RULE-VPN-005 yêu cầu xử lý).
+  - Icon khay hệ thống chưa được xác nhận là có hiện (owner không tìm được chỗ thoát app trong 3 phút)
+    ⇒ nếu không hiện thì "đóng cửa sổ = ẩn xuống khay" thành không có đường thoát.
+  - Chưa cài lại bản cuối vào Program Files.
+  - Peer test `10.77.0.58` (`b74470e6-…`) tạo lúc repro vẫn còn trên server, cần token admin để xoá.
+  - Máy này **thiếu module `NetAdapter`** nên `Remove-NetAdapter` không chạy ⇒ dọn adapter có thể sót
+    (wireguard-go tự dọn ở lần chạy sau).
+
+
