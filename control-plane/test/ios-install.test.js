@@ -108,3 +108,25 @@ test("trang cài: đã đăng ký thì KHÓA nút đăng ký và BẬT nút tả
   assert.ok(indexSrc.includes("LBL.regDone"), "nút đăng ký phải đổi nhãn thành 'đã đăng ký'");
   assert.ok(indexSrc.includes("regDone:") && indexSrc.includes("installLocked:"), "thiếu chuỗi regDone/installLocked");
 });
+
+// Khách hỏi "làm sao để Diawi cài được?": bản trên Diawi chỉ cài được nếu profile bên trong IPA
+// đã có UDID của máy ⇒ chỉ hiện nút Diawi khi máy ĐÃ có bản ký (ready). Máy chưa đăng ký bấm vào
+// là chắc chắn lỗi, nên khối này phải bị ẩn lúc render và chỉ hé ra khi JS biết máy đã sẵn sàng.
+test("trang cài: nút Diawi dự phòng ẩn tới khi máy có bản ký, hiện đủ 5 ngôn ngữ", () => {
+  const route = indexSrc.slice(indexSrc.indexOf('app.get(["/install/ios"'), indexSrc.indexOf("function iosInstallPageHTML"));
+  assert.ok(route.includes('diawi: String(appConfig.get("ios_diawi_url")'), "route phải đọc link Diawi từ config");
+  assert.ok(indexSrc.includes('id="diawiFallback"'), "thiếu khối Diawi dự phòng");
+  assert.ok(
+    indexSrc.includes('class="diawifb" id="diawiFallback" style="${ready ? "" : "display:none"}"'),
+    "khối Diawi phải ẩn khi máy chưa có bản ký",
+  );
+  assert.ok(indexSrc.includes('href="${diawi}"'), "nút Diawi phải trỏ link trong config");
+  assert.ok(indexSrc.includes("function revealDiawi()"), "thiếu hàm hé nút Diawi");
+  for (const fn of ["function showReady()", "function unlockInstall()"]) {
+    const body = indexSrc.slice(indexSrc.indexOf(fn), indexSrc.indexOf(fn) + 380);
+    assert.ok(body.includes("revealDiawi()"), `${fn} phải hé nút Diawi khi máy đã có bản ký`);
+  }
+  const dict = indexSrc.slice(indexSrc.indexOf("const IOS_TEXTS = {"), indexSrc.indexOf("const iosDevices = new IosDeviceStore"));
+  assert.equal((dict.match(/diawiBtn:/g) ?? []).length, 5, "nút Diawi phải có đủ 5 ngôn ngữ");
+  assert.equal((dict.match(/diawiNote:/g) ?? []).length, 5, "ghi chú Diawi phải có đủ 5 ngôn ngữ");
+});

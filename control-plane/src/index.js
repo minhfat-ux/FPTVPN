@@ -2049,6 +2049,9 @@ const IOS_TEXTS = {
     ],
     support: "Hỗ trợ",
     fallback: "kênh dự phòng",
+    diawiTitle: "Vẫn không cài được?",
+    diawiBtn: "📥 Cài qua Diawi (kênh dự phòng)",
+    diawiNote: "Chỉ dùng khi nút cài phía trên báo lỗi. Bản này đã ký sẵn cho máy bạn — bấm là cài, và vẫn phải mở bằng Safari.",
     qrTitle: "📱 Đang xem trên máy tính? Quét mã này bằng điện thoại",
     waitPageTitle: "Đang chuẩn bị bản cài…",
     waitHeading: "Đã nhận đăng ký thiết bị",
@@ -2098,6 +2101,9 @@ const IOS_TEXTS = {
     ],
     support: "Support",
     fallback: "backup link",
+    diawiTitle: "Still can't install?",
+    diawiBtn: "📥 Install via Diawi (backup link)",
+    diawiNote: "Use this only if the button above fails. This build is already signed for your device — tap to install, and use Safari.",
     qrTitle: "📱 On a computer? Scan this code with your phone",
     waitPageTitle: "Preparing your build…",
     waitHeading: "Device registration received",
@@ -2147,6 +2153,9 @@ const IOS_TEXTS = {
     ],
     support: "客服",
     fallback: "备用链接",
+    diawiTitle: "还是无法安装？",
+    diawiBtn: "📥 通过 Diawi 安装（备用）",
+    diawiNote: "仅在页面上方按钮失败时使用。此安装包已为你的设备签名 —— 点击即可安装，请用 Safari 打开。",
     qrTitle: "📱 在电脑上？用手机扫描此二维码",
     waitPageTitle: "正在准备安装包…",
     waitHeading: "已收到设备注册",
@@ -2196,6 +2205,9 @@ const IOS_TEXTS = {
     ],
     support: "サポート",
     fallback: "予備リンク",
+    diawiTitle: "それでもインストールできない場合",
+    diawiBtn: "📥 Diawi からインストール（予備）",
+    diawiNote: "上のボタンで失敗した場合のみお使いください。このビルドはお使いの端末用に署名済みです。Safari で開いてください。",
     qrTitle: "📱 パソコンで見ていますか？スマホでこのコードを読み取ってください",
     waitPageTitle: "ビルドを準備中…",
     waitHeading: "端末登録を受け付けました",
@@ -2245,6 +2257,9 @@ const IOS_TEXTS = {
     ],
     support: "지원",
     fallback: "예비 링크",
+    diawiTitle: "그래도 설치가 안 되나요?",
+    diawiBtn: "📥 Diawi로 설치 (예비)",
+    diawiNote: "위 버튼이 실패할 때만 사용하세요. 이 빌드는 이미 기기용으로 서명되어 있습니다. Safari에서 열어 주세요.",
     qrTitle: "📱 컴퓨터로 보고 있나요? 휴대폰으로 이 코드를 스캔하세요",
     waitPageTitle: "빌드 준비 중…",
     waitHeading: "기기 등록이 접수되었습니다",
@@ -2705,6 +2720,9 @@ app.get(["/install/ios", "/install/ios/"], async (req, res) => {
     sid,
     registered: Boolean(known),
     ready: Boolean(known?.built),
+    // Kênh dự phòng Diawi: bản cài trên Diawi đã ký kèm UDID của các máy đã đăng ký, nên chỉ
+    // hiện cho máy đã có bản ký (ready) — khách chưa đăng ký bấm vào là chắc chắn lỗi.
+    diawi: String(appConfig.get("ios_diawi_url") ?? ""),
   }));
 });
 
@@ -2733,6 +2751,7 @@ a.b.pulse{animation:pulse 1.5s ease-in-out infinite}
 ul{color:rgba(255,255,255,.72);font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0}
 code{background:rgba(255,255,255,.1);padding:2px 6px;border-radius:5px;font-size:12.5px}
 .warn{margin-top:12px;padding:12px;background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:12px;font-size:13px}
+.diawifb{margin-top:11px;padding-top:11px;border-top:1px solid rgba(255,255,255,.14)}
 .wait{display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.75);font-size:13.5px;padding:6px 0}
 .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#33c773;border-radius:50%;animation:sp .9s linear infinite;display:inline-block}
 @keyframes sp{to{transform:rotate(360deg)}}.okmsg{color:#33c773;font-weight:600;font-size:13.5px;padding:4px 0}
@@ -2752,7 +2771,7 @@ a.guidebtn{display:block;text-align:center;color:#8fd0ff;font-size:13px;margin:4
  * Trang cài iOS — 2 bước, đa ngôn ngữ (vi/en/zh/ja/ko như trang buy), bước 2 chỉ mở khi máy đã có bản cài.
  * Ngôn ngữ chọn theo `?lang=` → `Accept-Language` của máy khách → mặc định tiếng Việt.
  */
-function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid = "", registered = false, ready = false }) {
+function iosInstallPageHTML({ base, itms, version, lang = "vi", token = "", sid = "", registered = false, ready = false, diawi = "" }) {
   // Token account (nếu khách mở link riêng /install/ios?token=…) phải đi tiếp sang hồ sơ đăng ký,
   // nếu không UDID gửi về sẽ không tự map được vào account.
   const tokenQS = token ? "&token=" + encodeURIComponent(token) : "";
@@ -2791,7 +2810,12 @@ ${iosLangSelectHTML(lang)}
 <div class="warn">
   <b>${t.warnTitle}</b>
   <ul>${li(t.warnItems)}</ul>
-</div>
+${diawi ? `  <div class="diawifb" id="diawiFallback" style="${ready ? "" : "display:none"}">
+    <div class="dm-title">${t.diawiTitle}</div>
+    <a class="b b1" id="diawiBtn" href="${diawi}" rel="noopener">${t.diawiBtn}</a>
+    <div class="hintlock" style="text-align:left">${t.diawiNote}</div>
+  </div>
+` : ""}</div>
 
 
 <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);text-align:center">
@@ -2864,6 +2888,13 @@ function unlockInstall() {
   if (installHint) { installHint.textContent = LBL.unlockWarn; installHint.style.display = "block"; }
   if (unlockLink) unlockLink.style.display = "none";
   statusline.style.display = "none";
+  revealDiawi();
+}
+// Diawi là kênh dự phòng: chỉ hé ra khi máy ĐÃ có bản ký (nút chính chạy được nhưng có thể lỗi
+// trên máy khoá cứng cài đặt), hoặc khi khách tự bấm mở khoá thủ công.
+function revealDiawi() {
+  var df = document.getElementById("diawiFallback");
+  if (df) df.style.display = "block";
 }
 function setRegistered(ready) {
   cta.classList.add("disabled");
@@ -2878,6 +2909,7 @@ function setRegistered(ready) {
 var autoOpened = false;
 function showReady() {
   setRegistered(true);
+  revealDiawi();
   statusline.style.display = "flex";
   statustxt.textContent = LBL.autoOpen;
   if (!autoOpened) {
