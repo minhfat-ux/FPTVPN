@@ -98,3 +98,42 @@ test("nhớ tab/khu qua localStorage (F5 không nhảy về tab đầu)", () => 
   assert.ok(html.includes('"fvpn_admin_tab"'), "thiếu key localStorage fvpn_admin_tab");
   assert.ok(html.includes('"fvpn_admin_area"'), "thiếu key localStorage fvpn_admin_area");
 });
+
+/**
+ * Ô Actions của tab Users từng append từng nút rời nhau (`append(grant, " ", revoke)`) nên các nút
+ * so le và rớt xuống dòng. Nay phải là 2 nhóm chức năng trong MỘT khối flex: Cấp hạn | vạch ngăn | Thu hồi.
+ */
+test("tab Users: ô Actions gom thành nhóm chức năng, cùng một hàng", () => {
+  const html = adminPageHTML();
+
+  // CSS: một hàng, không wrap; nhóm là flex con; vạch ngăn dọc giữa các nhóm.
+  const css = html.slice(html.indexOf(".act-groups {"), html.indexOf(".act-sep {"));
+  // Nhóm KHÔNG tự xuống dòng (nút trong nhóm luôn cùng hàng); container cho phép rớt CẢ nhóm khi hẹp.
+  assert.ok(css.includes(".act-group { display: inline-flex; flex-wrap: nowrap"), "nút trong một nhóm phải luôn cùng hàng");
+  assert.ok(css.includes("align-items: center"), "các nút phải thẳng hàng theo trục giữa");
+  assert.ok(html.includes(".act-groups { display: flex; flex-wrap: wrap"), "các nhóm xếp cạnh nhau, chỉ rớt cả nhóm khi hẹp");
+  assert.ok(html.includes(".act-sep {"), "thiếu vạch ngăn giữa hai nhóm chức năng");
+
+  // JS của tab Users: 1 container duy nhất gắn vào ô Actions (nhiều nút rời = so le).
+  const users = html.slice(html.indexOf("// Ô Actions: 2 NHÓM"), html.indexOf("fields.usersBody.appendChild(row)"));
+  assert.ok(users.includes('actions.className = "row-actions act-groups"'), "ô Actions phải dùng khối .act-groups");
+  assert.ok(users.includes('grantGroup.className = "act-group"'), "nút cấp hạn phải nằm trong nhóm riêng");
+  assert.ok(users.includes('revokeGroup.className = "act-group"'), "nút thu hồi phải nằm trong nhóm riêng");
+  assert.ok(users.includes("grantGroup.append(grant, grantYear)"), "hai nút cấp hạn nằm CÙNG nhóm, cạnh nhau");
+  assert.ok(users.includes("row.children[6].appendChild(actions)"), "chỉ gắn MỘT khối vào ô Actions");
+  assert.ok(!users.includes('row.children[6].append(grant, " ", revoke)'), "không được append nút rời như trước");
+  assert.ok(users.includes('actions.appendChild(sep)'), "phải có vạch ngăn giữa nhóm cấp hạn và nhóm thu hồi");
+
+  // Cân đối: hai nút cấp hạn cùng kiểu (không nút nào là secondary lệch tông), nhãn rõ thời gian.
+  assert.ok(users.includes('grant.textContent = "30 ngày"') && users.includes('grantYear.textContent = "1 năm"'), "nhãn nút cấp hạn phải ghi rõ số ngày/năm");
+  assert.ok(!/grant\.className = "secondary"/.test(users), "hai nút cấp hạn phải cùng một kiểu cho cân đối");
+  assert.ok(users.includes('grantLabel.textContent = "Cấp hạn"'), "thiếu nhãn nhóm cấp hạn");
+
+  // Tab AI Users dùng đúng cách bố trí đó (nhất quán giữa hai tab).
+  assert.ok(html.includes('actions.className = "row-actions act-groups"'), "tab AI Users cũng phải gom nhóm");
+  assert.ok(html.includes("function aiuSep()"), "thiếu helper vạch ngăn của tab AI Users");
+
+  // Màn hẹp: mỗi nhóm xuống một hàng, vạch ngăn ẩn đi (không còn ý nghĩa).
+  assert.ok(html.includes(".act-groups { flex-direction: column;"), "màn hẹp phải xếp dọc từng nhóm");
+  assert.ok(html.includes(".act-sep { display: none; }"), "màn hẹp phải ẩn vạch ngăn");
+});

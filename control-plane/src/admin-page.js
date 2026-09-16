@@ -97,6 +97,14 @@ export function adminPageHTML() {
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; align-items: center; }
     .actions button { min-height: 38px; min-width: 92px; display: inline-flex; align-items: center; justify-content: center; }
     .row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    /* Thao tác trên một user: mỗi nhóm chức năng (cấp hạn / thu hồi) là một khối KHÔNG tự xuống dòng,
+       các nhóm xếp cạnh nhau trên cùng một hàng và ngăn bằng vạch dọc; chỉ khi màn hình quá hẹp mới
+       cho nhóm rớt xuống dòng (rớt cả nhóm, không rớt lẻ nút — trước đây nút append rời nên so le). */
+    .act-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .act-group { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+    .act-label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .act-groups button { min-height: 34px; padding: 8px 12px; white-space: nowrap; }
+    .act-sep { width: 1px; align-self: stretch; min-height: 24px; background: var(--stroke); }
 
     button {
       border: 0;
@@ -269,6 +277,10 @@ export function adminPageHTML() {
       td::before { content: attr(data-label); display: block; color: var(--muted); font-size: 12px; margin-bottom: 3px; }
       .actions button, .row-actions button { width: 100%; }
       .actions { flex-direction: column; }
+      /* Màn hẹp: mỗi nhóm chức năng xuống một hàng, vạch ngăn không còn ý nghĩa. */
+      .act-groups { flex-direction: column; align-items: stretch; gap: 8px; }
+      .act-group { flex-direction: column; align-items: stretch; }
+      .act-sep { display: none; }
     }
   </style>
 </head>
@@ -1399,8 +1411,21 @@ export function adminPageHTML() {
           ? '<span class="pill off">revoked</span>'
           : '<span class="pill">active</span>';
 
+        // Ô Actions: 2 NHÓM chức năng riêng biệt, cùng một hàng —
+        //   nhóm "Cấp hạn" (30 ngày / 1 năm) | vạch ngăn | nhóm "Thu hồi".
+        // Gộp thành khối flex (thay vì append rời từng nút) để các nút thẳng hàng, không so le.
+        const actions = document.createElement("div");
+        actions.className = "row-actions act-groups";
+
+        const grantGroup = document.createElement("div");
+        grantGroup.className = "act-group";
+        const grantLabel = document.createElement("span");
+        grantLabel.className = "act-label";
+        grantLabel.textContent = "Cấp hạn";
+        grantGroup.appendChild(grantLabel);
+
         const grantYear = document.createElement("button");
-        grantYear.textContent = "Grant 1 nam";
+        grantYear.textContent = "1 năm";
         grantYear.disabled = !!user.revoked_at;
         grantYear.onclick = async () => {
           try {
@@ -1414,11 +1439,9 @@ export function adminPageHTML() {
             setStatus(error.message, true);
           }
         };
-        row.children[6].appendChild(grantYear);
 
         const grant = document.createElement("button");
-        grant.className = "secondary";
-        grant.textContent = "Grant 30d";
+        grant.textContent = "30 ngày";
         grant.disabled = !!user.revoked_at;
         grant.onclick = async () => {
           try {
@@ -1430,10 +1453,18 @@ export function adminPageHTML() {
             await loadUsers();
           } catch (error) { setStatus(error.message, true); }
         };
+        grantGroup.append(grant, grantYear);
+        actions.appendChild(grantGroup);
 
+        const sep = document.createElement("span");
+        sep.className = "act-sep";
+        actions.appendChild(sep);
+
+        const revokeGroup = document.createElement("div");
+        revokeGroup.className = "act-group";
         const revoke = document.createElement("button");
         revoke.className = "danger";
-        revoke.textContent = user.revoked_at ? "Revoked" : "Revoke";
+        revoke.textContent = user.revoked_at ? "Đã thu hồi" : "Thu hồi";
         revoke.disabled = !!user.revoked_at;
         revoke.onclick = async () => {
           if (!confirm("Revoke user " + (user.email || user.id) + "? Their sessions will stop working.")) return;
@@ -1443,8 +1474,10 @@ export function adminPageHTML() {
             await loadUsers();
           } catch (error) { setStatus(error.message, true); }
         };
+        revokeGroup.appendChild(revoke);
+        actions.appendChild(revokeGroup);
 
-        row.children[6].append(grant, " ", revoke);
+        row.children[6].appendChild(actions);
         fields.usersBody.appendChild(row);
       }
     }
@@ -2378,36 +2411,60 @@ export function adminPageHTML() {
         tds[7].textContent = r.orders.amount ? aiuMoney(r.orders.amount) : "-";
         tds[8].textContent = aiuFmtDay(r.lastSeen) + (r.inRegistry ? "" : " (Firebase)");
 
+        // Cùng cách bố trí như tab Users: nhóm chức năng tách bằng vạch ngăn, nút cùng hàng cùng cỡ.
         var actions = document.createElement("div");
-        actions.className = "row-actions";
+        actions.className = "row-actions act-groups";
 
+        var infoGroup = document.createElement("div");
+        infoGroup.className = "act-group";
         var detail = document.createElement("button");
         detail.className = "secondary";
         detail.textContent = "Chi tiết";
         detail.onclick = function (email) { return function () { aiuShowDetail(email); }; }(r.email);
-        actions.appendChild(detail);
+        infoGroup.appendChild(detail);
+        actions.appendChild(infoGroup);
+
+        actions.appendChild(aiuSep());
+
+        var grantGroup = document.createElement("div");
+        grantGroup.className = "act-group";
+        var grantLabel = document.createElement("span");
+        grantLabel.className = "act-label";
+        grantLabel.textContent = "Cấp hạn";
+        grantGroup.appendChild(grantLabel);
 
         var extend = document.createElement("button");
         extend.textContent = "+30 ngày";
         extend.onclick = function (email) { return function () { aiuGrant(email, 30); }; }(r.email);
-        actions.appendChild(extend);
+        grantGroup.appendChild(extend);
 
         var year = document.createElement("button");
-        year.className = "secondary";
         year.textContent = "+1 năm";
         year.onclick = function (email) { return function () { aiuGrant(email, 365); }; }(r.email);
-        actions.appendChild(year);
+        grantGroup.appendChild(year);
+        actions.appendChild(grantGroup);
 
         if (r.pro.active) {
+          actions.appendChild(aiuSep());
+          var revokeGroup = document.createElement("div");
+          revokeGroup.className = "act-group";
           var revoke = document.createElement("button");
           revoke.className = "danger";
           revoke.textContent = "Thu hồi";
           revoke.onclick = function (email) { return function () { aiuRevoke(email); }; }(r.email);
-          actions.appendChild(revoke);
+          revokeGroup.appendChild(revoke);
+          actions.appendChild(revokeGroup);
         }
         tds[9].appendChild(actions);
         fields.aiuBody.appendChild(tr);
       }
+    }
+
+    /** Vạch ngăn dọc giữa hai nhóm chức năng trong ô Actions (xem CSS .act-groups). */
+    function aiuSep() {
+      var sep = document.createElement("span");
+      sep.className = "act-sep";
+      return sep;
     }
 
     function aiuDetailItem(label, value) {
