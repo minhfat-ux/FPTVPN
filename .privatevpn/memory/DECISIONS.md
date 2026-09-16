@@ -435,8 +435,15 @@ Hành vi đã xác nhận: iOS **luôn hiện "Invalid Profile"** sau khi gửi 
   mặc định **Yes** ⇒ **xoá `%APPDATA%\VPNFlow`** — nơi chứa **private key WireGuard** + session.
   Đã sao lưu trước và khôi phục. **Lần sau: luôn sao lưu `%APPDATA%\VPNFlow` trước khi gỡ cài đặt.**
 - **Việc còn lại (chưa làm)**:
-  - 🔴 **Rò IPv6**: tunnel chỉ cấu hình IPv4; máy có IPv6 (`2404:6800::/…`) nên traffic IPv6 đi thẳng
-    ra ngoài, không qua tunnel (RULE-VPN-005 yêu cầu xử lý).
+  - ✅ **Rò IPv6 — ĐÃ SỬA** (`7fbee92`): tunnel chỉ định tuyến IPv4 nên IPv6 sẽ đi thẳng ra ngoài.
+    Sửa bằng 2 route `::/1` + `8000::/1` trỏ vào interface tunnel (interface không có địa chỉ IPv6
+    nên gói bị đen), gỡ lại khi ngắt kết nối. Đã đo thật: `netsh` chấp nhận (`exit 0 Ok.`),
+    sau khi chặn `curl -6` timeout, gỡ route thì IPv6 trở lại. **Lưu ý: máy test hiện KHÔNG có IPv6**
+    (không địa chỉ global, không default route, `ping -6` "transmit failed") nên không tái hiện được
+    rò tại chỗ — cơ chế chặn thì đã xác nhận chạy trong app: log
+    `wintun: đã chặn IPv6 (::/1 + 8000::/1 qua tunnel)`.
+  - ✅ **Route endpoint còn sót** — ĐÃ SỬA (`39fa259`): thêm route kiểu xoá-rồi-thêm để hết
+    `The object already exists` và không để lại route mồ côi.
   - Icon khay hệ thống chưa được xác nhận là có hiện (owner không tìm được chỗ thoát app trong 3 phút)
     ⇒ nếu không hiện thì "đóng cửa sổ = ẩn xuống khay" thành không có đường thoát.
   - Chưa cài lại bản cuối vào Program Files.
