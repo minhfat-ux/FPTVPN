@@ -2,7 +2,7 @@
 
 > Mục tiêu: đồng bộ ngữ cảnh nhanh giữa các session/agent.
 > Mỗi session mới: **đọc file này trước**, rồi mới trả lời/chạy lệnh.
-> Updated: 2026-09-15
+> Updated: 2026-09-16
 
 ---
 
@@ -16,6 +16,16 @@
 - **Domains**
   - `meetflowai.site` → site/buy/admin routes
   - `api.meetflowai.site` → API routes
+  - **DNS đang là Cloudflare (proxy bật, từ 16/09/2026)**: `dig +short meetflowai.site @1.1.1.1` trả
+    `104.21.83.112` / `172.67.175.138` — **KHÔNG phải IP node-2**. Origin vẫn là node-2 `:80/:443`,
+    Cloudflare đứng trước. Phân biệt lỗi do Cloudflare hay do origin:
+    ```bash
+    curl -sI https://meetflowai.site/buy | grep -iE '^(HTTP|server|cf-ray|cf-cache-status)'
+    curl -s -o /dev/null -w 'origin:%{http_code}\n' -H 'Host: meetflowai.site' http://165.101.114.162/buy   # chạy TỪ VPS
+    ```
+    `server: cloudflare` + có `cf-ray` ⇒ request đã qua CDN. Cache có thể giữ bản cũ của trang
+    (kiểm tra `cf-cache-status`), nên sau deploy nên xác nhận nội dung mới bằng cách gọi thẳng
+    `http://127.0.0.1:7778/...` trên node-2 trước khi kết luận deploy hỏng.
 - **Fallback (mạng bị chặn/GFW)**
   - `https://fcnvpn.tail303be3.ts.net/admin`
   - `https://fcnvpn.tail303be3.ts.net/buy`
@@ -27,6 +37,16 @@
 - **Đã chạy thật**: khách mở `/install/ios` → cài `.mobileconfig` → server nhận UDID → **tự đăng ký
   Apple** (App Store Connect API) → IPA ký kèm UDID → `itms-services` → cài app.
 - **Cập nhật trong app**: `/v1/app-version` trả `ipa_manifest_url` ⇒ app bấm **Update** là iOS tải + cài luôn.
+- **Kênh dự phòng Diawi** (16/09/2026): link lưu ở config `ios_diawi_url`, hiện trong khối
+  "Không cài được?" của `/install/ios` — **chỉ hé ra khi máy đã có bản ký** (`ready`), vì IPA trên
+  Diawi chỉ cài được nếu profile bên trong đã chứa UDID của máy. Máy mới ⇒ phải đăng ký trước,
+  `scripts/ios-adhoc-export.sh` ký lại rồi tự upload Diawi + PATCH `ios_diawi_url` và `ios_ipa_build`.
+  - Bẫy đã gặp: tài khoản có **2 chứng chỉ Distribution**, `limit=1` lấy nhầm cert không có khoá
+    riêng trên máy ⇒ export FAILED ⇒ link Diawi đứng ở bản cũ (thiếu UDID máy mới). Script nay khớp
+    `certificateContent` với keychain.
+  - Kiểm tra IPA thật đang phát: `ios_ipa_build` trong `/v1/admin/app-version` phải bằng
+    `CFBundleVersion` của `/root/flowvpn-ipa/VPNFlow-latest.ipa` (đang là build 14, 5 UDID, hết hạn
+    19/07/2027).
 - **Paywall trong app** = `/buy?inapp=1`: chỉ đăng ký tài khoản + thanh toán (ẩn khối tải app).
 - **Mục Subscription**: đã mua ⇒ hiện gói đang dùng + hạn + nút **Gia hạn** (iOS/macOS/Android).
 - Đọc trước khi sửa gì liên quan iOS: **`docs/IOS_ADHOC_OTA.md`** (có bảng 8 bẫy đã gặp thật).
