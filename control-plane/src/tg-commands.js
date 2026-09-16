@@ -1,3 +1,4 @@
+// Logic thuần cho bot Telegram (kiểm tra quyền, phân tích lệnh, nội dung trả lời).
 /**
  * Logic THUẦN cho bot Telegram 2 chiều: kiểm tra quyền, phân tích lệnh, nội dung trả lời.
  *
@@ -10,9 +11,9 @@
  *    trừ khi gọi kèm `force` (dùng cho chính chủ shop đã bấm Xác nhận).
  */
 
-export const READ_ONLY_COMMANDS = ["help", "status", "nodes", "devices", "orders", "ios", "alerts", "log", "ping"];
+export const READ_ONLY_COMMANDS = ["help", "status", "nodes", "devices", "orders", "ios", "alerts", "log", "ping", "build"];
 // /task chạy agent trên server (quyền ngang root) nên cũng phải xác nhận trước khi chạy.
-export const MUTATING_COMMANDS = ["report", "mirror", "restart", "task", "alerts_off", "alerts_on"];
+export const MUTATING_COMMANDS = ["report", "mirror", "restart", "task", "deploy", "alerts_off", "alerts_on"];
 
 /** Service được phép restart từ Telegram — danh sách trắng, không nhận tên tuỳ ý. */
 export const RESTARTABLE_SERVICES = {
@@ -92,12 +93,14 @@ export function helpText() {
     "/ios — khách đang chờ ký IPA",
     "/alerts — kênh alert + mốc giờ báo cáo",
     "/log cp|auth|nginx [số dòng] — log gần nhất",
+    "/build — chạy test control plane NGAY TRÊN SERVER",
     "/ping — bot còn sống không",
     "",
     "✍️ Lệnh có thay đổi (phải bấm Xác nhận):",
     "/report — gửi báo cáo ngay vào chat này",
     "/mirror — chạy ngay vòng đồng bộ peer",
     "/restart cp|auth|nginx|mirror — khởi động lại service",
+    "/deploy — đẩy thay đổi trong workspace lên bản đang chạy (script tự test + rollback)",
     "",
     "🧠 Việc tự do — agent chạy trên server:",
     "/task <việc cần làm> — ví dụ: /task kiểm tra vì sao node-2 nhiều peer mà ít online",

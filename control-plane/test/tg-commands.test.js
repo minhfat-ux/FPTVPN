@@ -74,6 +74,17 @@ test("parseCallback: đọc được nút xác nhận và huỷ", () => {
   assert.deepEqual(parseCallback("ok:restart;rm -rf /"), { action: "unknown" }, "không nhận callback lạ");
 });
 
+test("/build là lệnh đọc (chạy test), /deploy là lệnh thay đổi (phải xác nhận)", () => {
+  assert.equal(parseCommand("/build").mutating, false);
+  assert.equal(needsConfirmation(parseCommand("/build")), false);
+  const deploy = parseCommand("/deploy");
+  assert.equal(deploy.name, "deploy");
+  assert.equal(deploy.mutating, true);
+  assert.equal(needsConfirmation(deploy), true);
+  assert.match(helpText(), /\/build/);
+  assert.match(helpText(), /\/deploy/);
+});
+
 test("RESTARTABLE_SERVICES: danh sách trắng cố định, không nhận tên service tuỳ ý", () => {
   assert.equal(RESTARTABLE_SERVICES.cp, "flowvpn-cp.service");
   assert.equal(RESTARTABLE_SERVICES["rm -rf /"], undefined);

@@ -17,7 +17,8 @@
  *   node bot.mjs --simulate "/ping" --send     # gửi thật vào chat (để kiểm tra đường gửi)
  */
 import { execFile } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import https from "node:https";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -65,30 +66,114 @@ function audit(entry) {
  * Gọi Telegram Bot API, có THỬ LẠI: node-2 tới api.telegram.org thỉnh thoảng bị timeout
  * (thấy thật 16/09) — một cú timeout không được làm chết bot hay mất tin.
  */
+/**
+ * Gọi Telegram Bot API qua node:https với **IPv4 bắt buộc**.
+ *
+ * Vì sao không dùng fetch: node-2 phân giải api.telegram.org ra IPv6 trước nhưng máy không có
+ * IPv6, undici lại hay timeout sang IPv4 trong khi `curl` cùng IP vẫn 200 (đã kiểm chứng
+ * 16/09). https.Agent({ family: 4 }) đi đúng đường như curl, và nếu vẫn lỗi thì thử thẳng IP.
+ *
+ * Gửi thất bại sau tất cả lần thử ⇒ ghi vào OUTBOX để vòng poll sau gửi lại (không mất việc
+ * mà agent đã làm xong).
+ */
+const TG_HOST = "api.telegram.org";
+const TG_IPS = ["149.154.167.220", "149.154.166.110", "149.154.175.100"];
+const OUTBOX = ENV.OUTBOX_FILE ?? "/var/log/flowvpn-tg-outbox.jsonl";
+let tgAgent = null;
+function agent4() {
+  if (!tgAgent) tgAgent = new https.Agent({ keepAlive: true, family: 4, timeout: 10_000 });
+  return tgAgent;
+}
+
+function httpsJson(method, path, body, { host = TG_HOST, ip = null } = {}) {
+  const payload = JSON.stringify(body ?? {});
+  return new Promise((resolve, reject) => {
+    const options = {
+      method,
+      host: ip ?? host,
+      port: 443,
+      path,
+      agent: ip ? new https.Agent({ keepAlive: false, family: 4 }) : agent4(),
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload), Host: host },
+      timeout: 12_000,
+    };
+    if (ip) options.servername = host; // SNI + kiểm tra chứng chỉ theo tên miền thật
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        let parsed = null;
+        try { parsed = JSON.parse(data); } catch { /* để nguyên null */ }
+        if (res.statusCode >= 200 && res.statusCode < 300 && parsed?.ok !== false) resolve(parsed);
+        else reject(new Error(parsed?.description ?? `HTTP ${res.statusCode}`));
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("timeout 12s")));
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 async function tg(method, payload = {}, { attempts = 3 } = {}) {
   if (!TOKEN) throw new Error("thiếu TELEGRAM_BOT_TOKEN");
+  const path = `/bot${TOKEN}/${method}`;
   let lastErr;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const res = await fetch(`https://api.telegram.org/bot${TOKEN}/${method}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok || body?.ok === false) throw new Error(body?.description ?? `HTTP ${res.status}`);
-      return body.result;
+      const body = await httpsJson("POST", path, payload);
+      return body?.result ?? null;
     } catch (err) {
       lastErr = err;
       audit({ command: "tg-error", method, attempt, error: err?.message ?? String(err) });
       console.error(`tg-bot: ${method} lỗi lần ${attempt}/${attempts}: ${err?.message ?? err}`);
-      if (attempt < attempts) await new Promise((r) => setTimeout(r, 1500 * attempt));
+      if (attempt < attempts) await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+  // Thử thẳng từng IP Telegram (bỏ qua DNS) trước khi bỏ cuộc.
+  for (const ip of TG_IPS) {
+    try {
+      const body = await httpsJson("POST", path, payload, { ip });
+      console.log(`tg-bot: ${method} OK qua IP ${ip}`);
+      return body?.result ?? null;
+    } catch (err) {
+      lastErr = err;
+      console.error(`tg-bot: ${method} qua ${ip} lỗi: ${err?.message ?? err}`);
     }
   }
   throw lastErr;
 }
 
-/** Gửi tin, tự chia nhỏ nếu dài (Telegram giới hạn 4096 ký tự). */
+/** Tin không gửi được thì xếp hàng, vòng poll sau gửi lại. */
+function outboxPush(chatId, text, extra) {
+  try {
+    appendFileSync(OUTBOX, JSON.stringify({ ts: Date.now(), chatId, text, extra }) + "\n");
+    console.error("tg-bot: đã xếp tin vào outbox");
+  } catch (err) {
+    console.error("tg-bot: không ghi được outbox:", err?.message ?? err);
+  }
+}
+
+async function outboxFlush() {
+  let lines = [];
+  try {
+    lines = readFileSync(OUTBOX, "utf8").split("\n").filter(Boolean);
+  } catch { return; }
+  if (!lines.length) return;
+  const still = [];
+  for (const line of lines) {
+    let item;
+    try { item = JSON.parse(line); } catch { continue; }
+    try {
+      await tg("sendMessage", { chat_id: item.chatId, text: item.text, disable_web_page_preview: true, ...(item.extra ?? {}) }, { attempts: 1 });
+    } catch {
+      still.push(line);
+    }
+  }
+  try { writeFileSync(OUTBOX, still.length ? still.join("\n") + "\n" : ""); } catch { /* bỏ qua */ }
+  if (lines.length !== still.length) console.log(`tg-bot: outbox đã gửi lại ${lines.length - still.length} tin`);
+}
+
 async function send(chatId, text, extra = {}) {
   const chunks = String(text ?? "").match(/[\s\S]{1,3800}/g) ?? [""];
   let last = null;
@@ -97,6 +182,7 @@ async function send(chatId, text, extra = {}) {
       last = await tg("sendMessage", { chat_id: chatId, text: chunk, disable_web_page_preview: true, ...extra });
     } catch (err) {
       console.error("tg-bot: gửi tin thất bại:", err?.message ?? err);
+      outboxPush(chatId, chunk, extra);   // không mất tin, vòng sau gửi lại
       return null;
     }
   }
@@ -205,13 +291,64 @@ async function cmdRestart(args) {
   return `♻️ Đã restart ${service} — trạng thái: ${state}`;
 }
 
+/** Chạy test suite control plane trong workspace — "build được" trên server. */
+async function cmdBuild() {
+  const testLog = "/tmp/tg-bot-build.log";
+  try {
+    await sh("bash", ["-lc", `cd ${AGENT_WORKDIR}/control-plane && node --test test/*.test.js > ${testLog} 2>&1`], 300_000);
+  } catch (err) {
+    const tail = await sh("tail", ["-15", testLog]).catch(() => err.message);
+    return `❌ Test FAIL\n${tail}`;
+  }
+  const summary = await sh("grep", ["-E", "^ℹ (tests|pass|fail)", testLog]).catch(() => "");
+  return `✅ Build/test control plane trên server:\n${summary || "(không đọc được summary)"}`;
+}
+
+/** Deploy thay đổi trong workspace lên bản đang chạy (script có test + rollback). */
+async function cmdDeploy() {
+  const script = `${AGENT_WORKDIR}/scripts/server-agent/deploy-control-plane.sh`;
+  try {
+    const out = await sh("bash", [script], 600_000);
+    const diff = await workspaceDiff();
+    return `🚀 Deploy xong.\n${out}\n${diff}`;
+  } catch (err) {
+    const out = (err.stdout || "").trim() || (err.stderr || "").trim() || err.message;
+    return `❌ Deploy LỖI (đã tự rollback nếu health hỏng):\n${String(out).slice(-2500)}`;
+  }
+}
+
+/** Tóm tắt thay đổi trong workspace để đính kèm câu trả lời. */
+async function workspaceDiff() {
+  try {
+    const status = await sh("git", ["-C", AGENT_WORKDIR, "status", "--porcelain"], 15_000);
+    if (!status.trim()) return "📄 Workspace: không có file nào thay đổi.";
+    const stat = await sh("git", ["-C", AGENT_WORKDIR, "diff", "--stat"], 15_000);
+    return `📄 File đã đổi:\n${status}\n${stat}`;
+  } catch (err) {
+    return `(không đọc được git status: ${err.message})`;
+  }
+}
+
+/** Tiền tố nhắc agent biết nó đang ở đâu và được phép làm gì. */
+function agentPreamble() {
+  return [
+    "Bạn đang chạy trên SERVER VPNFlow (node-2), workspace " + AGENT_WORKDIR + ".",
+    "Đọc docs/SERVER_AGENT.md trước khi làm. Được phép: sửa control-plane/src/*.js, chạy test,",
+    "và deploy bằng scripts/server-agent/deploy-control-plane.sh (script tự test + rollback).",
+    "KHÔNG đọc/in secret, không sửa dữ liệu khách, không build app iOS/Android/Windows ở đây.",
+    "Trả lời ngắn gọn bằng tiếng Việt: đã làm gì, bằng chứng (lệnh + kết quả), còn gì chưa chắc.",
+    "",
+    "VIỆC CẦN LÀM:",
+  ].join("\n");
+}
+
 async function cmdTask(chatId, args) {
   const prompt = args.join(" ").trim();
   if (!prompt) return "❓ Dùng: /task <việc cần làm>";
   if (!AGENT_ENABLED) return "⛔ Agent trên server đang tắt (AGENT_ENABLED=0).";
   await send(chatId, `⏳ Đang giao việc cho agent trên server:\n${prompt}`);
   try {
-    const { stdout, stderr } = await execFileAsync(AGENT_CMD, [...AGENT_ARGS, prompt], {
+    const { stdout, stderr } = await execFileAsync(AGENT_CMD, [...AGENT_ARGS, agentPreamble() + prompt], {
       cwd: AGENT_WORKDIR,
       timeout: AGENT_TIMEOUT_MS,
       maxBuffer: 8 * 1024 * 1024,
@@ -220,7 +357,7 @@ async function cmdTask(chatId, args) {
     const result = (stdout || "").trim() || "(agent không in gì)";
     const warn = (stderr || "").trim();
     audit({ chat: chatId, command: "task", args: prompt, ok: true });
-    await send(chatId, `✅ Xong:\n${result}`);
+    await send(chatId, `✅ Xong:\n${result}\n\n${await workspaceDiff()}`);
     if (warn) await send(chatId, `(stderr)\n${warn.slice(-1500)}`);
     return null;
   } catch (err) {
@@ -245,6 +382,8 @@ async function handleCommand(parsed, chatId, { force = false, dryRun = false } =
     case "report": return cmdReport(chatId);
     case "mirror": return cmdMirror();
     case "restart": return cmdRestart(parsed.args);
+    case "build": return cmdBuild();
+    case "deploy": return cmdDeploy();
     case "task": return cmdTask(chatId, parsed.args);
     default:
       return `❓ Không hiểu lệnh "${parsed.unknown ?? ""}". Gõ /help để xem danh sách.`;
@@ -312,6 +451,7 @@ async function pollLoop() {
   console.log(`tg-bot: bắt đầu long-poll (chat cho phép: ${ALLOWED.join(", ") || "(chưa cấu hình!)"})`);
   for (;;) {
     try {
+      await outboxFlush();
       const updates = await tg("getUpdates", {
         offset,
         timeout: POLL_TIMEOUT_S,
