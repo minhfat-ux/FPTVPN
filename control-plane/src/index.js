@@ -38,6 +38,7 @@ import {
 import { adminPageHTML } from "./admin-page.js";
 import { provisionEverywhere, revokeEverywhere } from "./peer-mirror.js";
 import { alertChannels, deviceRegisteredAlert, invoiceConfirmedAlert, sendAlert } from "./alerts.js";
+import { GfwWatcher, parseGfwHosts } from "./gfw-watch.js";
 import { formatStatusReport, parseReportTimes, reportDue } from "./reports.js";
 import {
   sendOtpEmail,
@@ -132,6 +133,8 @@ const NODES_FILE = process.env.NODES_FILE ?? path.join(__dirname, "..", "data", 
 const NODES_DB_FILE = process.env.NODES_DB_FILE ?? path.join(__dirname, "..", "data", "nodes.db");
 // Bảng gói bán (giá/thời hạn) sửa được từ admin — xem plan-store.js.
 const PLANS_FILE = process.env.PLANS_FILE ?? path.join(__dirname, "..", "data", "plans.json");
+// Lịch sử health-watch chống chặn theo tên (SNI) — xem gfw-watch.js.
+const GFW_HISTORY_FILE = process.env.GFW_HISTORY_FILE ?? path.join(__dirname, "..", "data", "gfw-history.json");
 const ALLOW_DEV_TOKEN_BOOTSTRAP = process.env.ALLOW_DEV_TOKEN_BOOTSTRAP === "1" && !IS_PRODUCTION;
 // LEGACY_MODE=1 keeps the pre-auth join-token + unauthenticated /v1/peers/register
 // flow working so a build that is already submitted to App Store review can still
@@ -218,6 +221,13 @@ const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   ai_android_latest_version_name: process.env.AI_ANDROID_LATEST_NAME ?? "",
   ai_android_apk_url: process.env.AI_ANDROID_APK_URL ?? "",
   ai_android_notes: process.env.AI_ANDROID_NOTES ?? "",
+});
+// health-watch chống chặn theo tên: đo DNS/TCP/TLS(SNI) định kỳ, giữ lịch sử và
+// alert khi trạng thái ổn định đổi. Bật/tắt bằng GFW_WATCH, chu kỳ GFW_WATCH_MS.
+const gfwWatcher = new GfwWatcher({
+  filePath: GFW_HISTORY_FILE,
+  hosts: parseGfwHosts(process.env.GFW_HOSTS),
+  timeoutMs: Number(process.env.GFW_PROBE_TIMEOUT_MS) || undefined,
 });
 
 // Reverse-DNS (PTR) cho IP client hiển thị trên dashboard: cache 6h + timeout
@@ -3732,7 +3742,7 @@ app.post("/v1/admin/payments/remind", requireAdminAuth, async (req, res) => {
           buyUrl,
         }),
       buildBuyUrl: ({ email, plan, lang }) =>
-        `${siteBaseUrl()}/buy?lang=${lang}&email=${encodeURIComponent(email)}&plan=${encodeURIComponent(plan ?? "monthly")}`,
+        `${(process.env.EMAIL_SITE_URL || "https://t1.meetflowai.site")}/buy?lang=${lang}&email=${encodeURIComponent(email)}&plan=${encodeURIComponent(plan ?? "monthly")}`,
       langForEmail: (email) => authStore.langForEmail(email),
     });
     console.log(
@@ -4407,6 +4417,17 @@ app.post("/v1/admin/alert", requireAdminAuth, async (req, res) => {
     text: result.text,
     channels: alertChannels(),
   });
+});
+
+/**
+ * GET /v1/admin/gfw — trạng thái health-watch chống chặn theo tên (SNI) cho admin page.
+ *
+ * Trả { hosts: [{host, state, lastChangeAt, lastProbe, samples}], updatedAt } để hiển thị
+ * host nào đang bị chặn, từ lúc nào, và bằng chứng (DNS/TCP/TLS). Có requireAdminAuth như
+ * mọi route admin khác; watcher có thể chưa chạy lần nào (server vừa bật) nên trả rỗng.
+ */
+app.get("/v1/admin/gfw", requireAdminAuth, (_req, res) => {
+  res.json(gfwWatcher?.snapshot() ?? { hosts: [], updatedAt: null });
 });
 
 /** MeetFlow AI Android release channel (drives the in-app update gate). */
@@ -5531,6 +5552,13 @@ function onListen() {
   if (LEGACY_MODE === "1") console.warn("  WARNING: LEGACY_MODE=1 — unauthenticated join tokens + register enabled (App Store review window). Set LEGACY_MODE=0 after the authenticated app is released.");
   startAlertWatchdog();
   startReportScheduler();
+  if (process.env.GFW_WATCH === "0") {
+    console.log("  gfw-watch: tắt (GFW_WATCH=0)");
+  } else {
+    const everyMs = Math.max(60_000, Number(process.env.GFW_WATCH_MS || 300_000));
+    gfwWatcher.start(everyMs);
+    console.log(`  gfw-watch: mỗi ${Math.round(everyMs / 1000)}s (${gfwWatcher.hosts.length} host, telegram=${alertChannels().telegram ? "bật" : "tắt"})`);
+  }
 }
 
 if (tlsReady) {
