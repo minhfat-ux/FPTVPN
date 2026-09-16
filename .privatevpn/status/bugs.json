@@ -1,6 +1,28 @@
 {
-  "open": [],
+  "open": [
+    {
+      "id": "BUG-ANDROID-CPU-001",
+      "title": "App Android tốn nhiều CPU (Hysteria + gVisor + QUIC; probe 15s chạy 24/7)",
+      "area": "android",
+      "severity": "medium",
+      "reported": "2026-09-17",
+      "status": "investigating",
+      "impact": "Tốn pin/CPU; chưa rõ là khi đang dùng hay khi treo máy",
+      "evidence": [
+        "Config.HYSTERIA_MODE=true (Config.kt:123) -> HysteriaVpnService, nhanh WireGuard/WGRelay khong chay",
+        "libgojni.so: apernet/hysteria core v2 + sing-tun(gVisor) + quic-go + obfs salamander + brutal",
+        "HY_MTU=1500 (HysteriaVpnService.kt:1083, :598) trong khi di QUIC va cau WS",
+        "Probe 15s/1 luot chay 24/7: 2 TCP connect + HTTP GET + DNS xuyen tunnel + 4 dong log (HysteriaVpnService.kt:788-844, :991)",
+        "DiagnosticsLog mo/ghi/dong file cho tung dong log (DiagnosticsLog.kt:80-93)",
+        "Khong dung PowerManager/WakeLock/WorkManager -> probe + heartbeat 30s chay ca khi tat man hinh",
+        "Dau hieu client Go chua dung han: HysteriaVpnService.kt:657 'client still stopping ... retry in 800ms'"
+      ],
+      "next_steps": "Do 3 kich ban (VPN tat / bat-khong dung / bat+speedtest) bang top -H + dumpsys cpuinfo; roi lam A+B+C (MTU, gian nhip probe, log buffer) theo docs/ANDROID_CPU_TODO.md",
+      "doc": "docs/ANDROID_CPU_TODO.md",
+      "blocked_by": "JDK 17 tren Mac hong (chua build lai APK duoc); can 1 may Android that de do"
+    }
+  ],
   "regressions": [],
   "resolved": [],
-  "updated": "2026-08-19"
+  "updated": "2026-09-17"
 }
