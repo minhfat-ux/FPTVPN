@@ -63,4 +63,33 @@ public class WireGuardWindowsCommandsTests
         Assert.Contains(WireGuardWindowsCommands.DefaultRouteLowHalf, prefixes);
         Assert.Contains(WireGuardWindowsCommands.DefaultRouteHighHalf, prefixes);
     }
+
+    [Fact]
+    public void BuildIpv6BlockAdds_PhuToanBoIPv6QuaTunnel()
+    {
+        var commands = WireGuardWindowsCommands.BuildIpv6BlockAdds("vpnflow");
+
+        Assert.Equal(2, commands.Count);
+        Assert.All(commands, command => Assert.Equal("netsh.exe", command.FileName));
+
+        Assert.Contains("prefix=::/1", commands[0].Arguments);
+        Assert.Contains("prefix=8000::/1", commands[1].Arguments);
+        Assert.All(commands, command =>
+        {
+            Assert.Contains("interface=\"vpnflow\"", command.Arguments);
+            Assert.Contains("nexthop=::", command.Arguments);
+            Assert.Contains("store=active", command.Arguments);
+        });
+    }
+
+    [Fact]
+    public void BuildIpv6BlockDeletes_KhopVoiLucThem()
+    {
+        var commands = WireGuardWindowsCommands.BuildIpv6BlockDeletes("vpnflow");
+
+        Assert.Equal(2, commands.Count);
+        Assert.Contains("delete route", commands[0].Arguments);
+        Assert.Contains("prefix=::/1", commands[0].Arguments);
+        Assert.Contains("prefix=8000::/1", commands[1].Arguments);
+    }
 }

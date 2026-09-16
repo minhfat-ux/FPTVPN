@@ -49,6 +49,7 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
     private Process? _process;
     private WireGuardConfig? _activeConfig;
     private EndpointRoute? _endpointRoute;
+    private bool _ipv6Blocked;
 
     /// <summary>Route loại trừ đã thêm cho IP endpoint (để xoá lại lúc ngắt kết nối).</summary>
     private readonly record struct EndpointRoute(string Ip, string Interface, string Gateway);
@@ -400,6 +401,48 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
                     $"Cấu hình interface thất bại (exit {exitCode}): {command} — {detail.Trim()}");
             }
         }
+
+        // Tunnel chỉ định tuyến IPv4: chặn IPv6 để IP thật không rò ra ngoài qua IPv6.
+        await BlockIpv6Async(tunnelName, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Chặn IPv6 bằng hai nửa default route IPv6 trỏ vào interface tunnel (interface không có
+    /// địa chỉ IPv6 nên gói bị đen). Best-effort: máy tắt IPv6 sẵn thì lệnh có thể báo lỗi,
+    /// ghi WARN rồi đi tiếp — không được chặn việc kết nối.
+    /// </summary>
+    private async Task BlockIpv6Async(string tunnelName, CancellationToken cancellationToken)
+    {
+        var commands = WireGuardWindowsCommands.BuildIpv6BlockAdds(tunnelName);
+        var blocked = 0;
+
+        foreach (var command in commands)
+        {
+            var (exitCode, stdout, stderr) = await RunProcessAsync(command.FileName, command.Arguments, cancellationToken)
+                .ConfigureAwait(false);
+            if (exitCode == 0)
+            {
+                blocked++;
+                continue;
+            }
+
+            var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+            _log.Warn($"wintun: chặn IPv6 ({command.Arguments}) thất bại: {detail.Trim()}");
+        }
+
+        lock (_lock)
+        {
+            _ipv6Blocked = blocked > 0;
+        }
+
+        if (blocked == commands.Count)
+        {
+            _log.Info("wintun: đã chặn IPv6 (::/1 + 8000::/1 qua tunnel) — tránh rò IP thật qua IPv6");
+        }
+        else if (blocked > 0)
+        {
+            _log.Warn("wintun: chỉ chặn được một phần IPv6 — vẫn có thể rò IPv6.");
+        }
     }
 
     /// <summary>
@@ -537,6 +580,24 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
             await RunBestEffortAsync(
                 WireGuardWindowsCommands.DeleteEndpointRoute(route.Interface, route.Gateway, route.Ip))
                 .ConfigureAwait(false);
+        }
+
+        // Trả IPv6 về như trước khi kết nối (chỉ khi chính instance này đã chặn).
+        bool ipv6Blocked;
+        lock (_lock)
+        {
+            ipv6Blocked = _ipv6Blocked;
+            _ipv6Blocked = false;
+        }
+
+        if (ipv6Blocked)
+        {
+            foreach (var command in WireGuardWindowsCommands.BuildIpv6BlockDeletes(tunnelName))
+            {
+                await RunBestEffortAsync(command).ConfigureAwait(false);
+            }
+
+            _log.Info("wintun: đã gỡ chặn IPv6.");
         }
 
         await RunBestEffortAsync(WireGuardWindowsCommands.RemoveInterface(tunnelName)).ConfigureAwait(false);

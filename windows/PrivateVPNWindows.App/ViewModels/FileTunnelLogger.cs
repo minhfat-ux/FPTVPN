@@ -37,11 +37,15 @@ public sealed class FileTunnelLogger : ITunnelLogger
         {
             lock (_gate)
             {
-                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);                Rotate();
-                File.AppendAllText(
-                    _path,
-                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}{Environment.NewLine}",
-                    Encoding.UTF8);
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
+                Rotate();
+
+                // FileShare.ReadWrite: hai tiến trình app (vd bản cài + bản publish chạy song song)
+                // cùng ghi log vẫn không mất dòng. Dùng File.AppendAllText thì lượt ghi thứ hai ném
+                // IOException và bị nuốt — đã gặp thật: log mất hẳn phần khởi động của instance mới.
+                using var stream = new FileStream(_path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                using var writer = new StreamWriter(stream, Encoding.UTF8);
+                writer.Write($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}{Environment.NewLine}");
             }
         }
         catch

@@ -34,6 +34,14 @@ public static class WireGuardWindowsCommands
 
     public const string DefaultRouteHighHalf = "128.0.0.0/1";
 
+    /// <summary>
+    /// Hai nửa default route IPv6 dùng để CHẶN IPv6 khi tunnel chỉ có IPv4
+    /// (xem <see cref="AddIpv6BlockRoute"/>).
+    /// </summary>
+    public const string Ipv6BlockLowHalf = "::/1";
+
+    public const string Ipv6BlockHighHalf = "8000::/1";
+
     /// <summary>Chia các AllowedIPs thành tập route; 0.0.0.0/0 → hai nửa /1.</summary>
     public static IReadOnlyList<string> SplitAllowedIps(IEnumerable<string> allowedIps)
     {
@@ -231,6 +239,39 @@ public static class WireGuardWindowsCommands
     public static WindowsCommand DeleteEndpointRoute(string physicalInterface, string gateway, string endpointIp)
         => new(Netsh,
             $"interface ipv4 delete route prefix={endpointIp}/32 interface=\"{physicalInterface}\" nexthop={gateway}");
+
+    /// <summary>
+    /// Chặn IPv6 khi tunnel chỉ có IPv4: hai nửa default route IPv6 trỏ vào interface tunnel
+    /// (interface này không có địa chỉ IPv6) nên gói IPv6 bị đen.
+    ///
+    /// Vì sao bắt buộc: AllowedIPs của tunnel chỉ có <c>0.0.0.0/0</c>. Nếu máy có IPv6, mọi
+    /// kết nối IPv6 sẽ đi thẳng ra ngoài — rò IP thật ra khỏi VPN (RULE-VPN-005). Đã đo thật:
+    /// sau khi thêm 2 route này, <c>curl -6</c> timeout thay vì đi ra ngoài.
+    /// </summary>
+    public static WindowsCommand AddIpv6BlockRoute(string interfaceName, string cidr)
+        => new(Netsh,
+            $"interface ipv6 add route prefix={cidr} interface=\"{interfaceName}\" nexthop=:: metric=1 store=active");
+
+    /// <summary>Gỡ route chặn IPv6, trả IPv6 về như trước khi kết nối.</summary>
+    public static WindowsCommand DeleteIpv6BlockRoute(string interfaceName, string cidr)
+        => new(Netsh,
+            $"interface ipv6 delete route prefix={cidr} interface=\"{interfaceName}\" nexthop=::");
+
+    /// <summary>Hai route chặn IPv6 (::/1 + 8000::/1 phủ toàn bộ ::/0).</summary>
+    public static IReadOnlyList<WindowsCommand> BuildIpv6BlockAdds(string interfaceName)
+        => new[]
+        {
+            AddIpv6BlockRoute(interfaceName, Ipv6BlockLowHalf),
+            AddIpv6BlockRoute(interfaceName, Ipv6BlockHighHalf),
+        };
+
+    /// <summary>Gỡ hai route chặn IPv6.</summary>
+    public static IReadOnlyList<WindowsCommand> BuildIpv6BlockDeletes(string interfaceName)
+        => new[]
+        {
+            DeleteIpv6BlockRoute(interfaceName, Ipv6BlockLowHalf),
+            DeleteIpv6BlockRoute(interfaceName, Ipv6BlockHighHalf),
+        };
 
     /// <summary>Tập route cần thêm, từ AllowedIPs của mọi peer (đã chia default route).</summary>
     public static IReadOnlyList<WindowsCommand> BuildRouteAdds(string interfaceName, WireGuardConfig config)
