@@ -431,6 +431,55 @@ app.get("/nodes", listPublicNodes);
 app.get("/v1/nodes", listPublicNodes);
 
 /**
+ * GET /v1/bootstrap — danh sách "cửa vào" để client tự né chặn mà KHÔNG cần build lại app.
+ *
+ * Vì sao cần: GFW chặn theo TÊN MIỀN (SNI) và chặn theo kiểu bật/tắt. Khi một host bị chặn,
+ * chỉ cần server đổi pool ở đây là mọi client tự chuyển sang host/transport khác — thay vì
+ * phải phát hành bản app mới. Endpoint này KHÔNG chứa secret: chỉ hostname công khai,
+ * thứ tự transport, và version tối thiểu.
+ */
+app.get("/v1/bootstrap", async (_req, res) => {
+  try {
+    const apiHosts = String(process.env.API_HOSTS || "https://api.meetflowai.site,https://t1.meetflowai.site")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const transportOrder = String(process.env.TRANSPORT_ORDER || "hysteria,ws,udp")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    // Relay lấy từ chính nguồn mà /v1/nodes đang trả (gọi nội bộ, timeout ngắn).
+    // Không lấy được thì trả rỗng — client vẫn dùng host mặc định, không được lỗi ở đây.
+    let relayHosts = [];
+    try {
+      const port = process.env.PORT || 7778;
+      const r = await fetch(`http://127.0.0.1:${port}/v1/nodes`, { signal: AbortSignal.timeout(2500) });
+      const d = await r.json();
+      const nodes = Array.isArray(d?.nodes) ? d.nodes : [];
+      relayHosts = nodes.map((n) => ({
+        node: n.id ?? null,
+        wg: n.wg_relay_url ?? n.ws_relay_url ?? null,
+        hy: n.hy_relay_url ?? null,
+      }));
+    } catch {
+      relayHosts = [];
+    }
+    res.set("Cache-Control", "public, max-age=60");
+    res.json({
+      api_hosts: apiHosts,
+      relay_hosts: relayHosts,
+      transport_order: transportOrder,
+      min_app_version: appConfig.get("min_app_version") || process.env.MIN_APP_VERSION || null,
+      update_url: process.env.UPDATE_URL || `${apiHosts[0]}/install/ios`,
+      poll_after_seconds: Number(process.env.BOOTSTRAP_POLL_SECONDS || 900),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+
+/**
  * An exit node reports its own current public IP (systemd timer on the node).
  * This is what makes an IP swap self-healing: the provider changes the address,
  * the node tells us, and clients are pointed at the new one automatically.
