@@ -37,7 +37,7 @@ import {
 } from "./connection-stats.js";
 import { adminPageHTML } from "./admin-page.js";
 import { provisionEverywhere, revokeEverywhere } from "./peer-mirror.js";
-import { alertChannels, sendAlert } from "./alerts.js";
+import { alertChannels, deviceRegisteredAlert, invoiceConfirmedAlert, sendAlert } from "./alerts.js";
 import { formatStatusReport, parseReportTimes, reportDue } from "./reports.js";
 import {
   sendOtpEmail,
@@ -3787,6 +3787,18 @@ async function activatePaymentAndInvoice({
   console.log(
     `invoice: ${prefix}.${plan} granted to ${email} (order ${orderCode}) mailSent=${invoiceResult?.sent === true}`,
   );
+  // Báo Telegram: hoá đơn đã xác nhận cho khách (kèm cảnh báo nếu email KHÔNG gửi được —
+  // khách đã trả tiền mà không nhận được xác nhận là ca cần người xử lý).
+  await sendAlert(invoiceConfirmedAlert({
+    orderCode,
+    email,
+    plan: planNameFor(pickMailLang(lang), "vpn", plan),
+    amount: billedAmount,
+    days: planCfg.days,
+    expiresAt: sub?.expiresAt ?? null,
+    mailSent: invoiceResult?.sent === true,
+    product: prefix === "ai" ? "MeetFlow AI Pro" : "VPNFlow Premium",
+  }));
   // Chủ shop chỉ cần được BÁO là đơn đã trả tiền — không cần bấm gì.
   await firePaidAlert(orderCode, email, plan, billedAmount, prefix, "VPNFlow Premium", confirmedBy);
   return user;
@@ -4977,6 +4989,26 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
     allowedIPs: `${assignedIP}/32`,
     upsert: (node, key, ips) => provisionPeer(node, key, ips),
   });
+
+  // Báo Telegram khi KHÁCH đăng ký máy mới: chỉ thiết bị MỚI và thuộc account thật
+  // (thiết bị test/probe có userId null nên không làm phiền). Không chờ kết quả, không
+  // để lỗi alert ảnh hưởng việc đăng ký (sendAlert tự bắt mọi lỗi).
+  if (result.isNew && userId) {
+    let buyerEmail = null;
+    try {
+      buyerEmail = (await authStore.listUsers()).find((u) => u.id === userId)?.email ?? null;
+    } catch (err) {
+      console.error("device alert: không tra được email của user:", err?.message ?? err);
+    }
+    await sendAlert(deviceRegisteredAlert({
+      platform,
+      name: deviceName ?? device.deviceName,
+      email: buyerEmail,
+      ip: device.assignedIP ?? assignedIP,
+      node: selectedNode?.name ?? selectedNode?.id ?? null,
+      replaced: replaced?.deviceName ?? replaced?.id ?? null,
+    }));
+  }
 
   if (apiShape === "v1") {
     return {

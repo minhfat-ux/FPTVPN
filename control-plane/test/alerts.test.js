@@ -91,3 +91,41 @@ test("sendAlert: không bao giờ ném lỗi, luôn trả text đã render", asy
   assert.match(result.text, /^🚨 Sự cố/);
   assert.match(result.text, /node-1 unreachable/);
 });
+
+// ---- Nội dung 2 alert mới: khách đăng ký máy mới + xác nhận hoá đơn -------------------
+test("deviceRegisteredAlert: gộp thông tin máy mới của khách", async () => {
+  const { deviceRegisteredAlert } = await import("../src/alerts.js");
+  const alert = deviceRegisteredAlert({
+    platform: "ios",
+    name: "ios-166c028a",
+    email: "khach@example.com",
+    ip: "10.77.0.47",
+    node: "Hanoi 1",
+    replaced: "ios-9b0f4747",
+  });
+  assert.equal(alert.title, "Khách đăng ký máy mới");
+  assert.equal(alert.level, "info");
+  assert.equal(alert.lines.some((l) => l.includes("ios-166c028a")), true);
+  assert.equal(alert.lines.some((l) => l.includes("khach@example.com")), true);
+  assert.equal(alert.lines.some((l) => l.includes("Thay thế slot của")), true);
+});
+
+test("invoiceConfirmedAlert: gửi được email ⇒ ok; không gửi được ⇒ warn", async () => {
+  const { invoiceConfirmedAlert } = await import("../src/alerts.js");
+  const ok = invoiceConfirmedAlert({
+    orderCode: "1789322708",
+    email: "khach@example.com",
+    plan: "1 tháng",
+    amount: 200000,
+    days: 30,
+    expiresAt: "2026-10-16T00:00:00.000Z",
+    mailSent: true,
+  });
+  assert.equal(ok.level, "ok");
+  assert.equal(ok.lines.some((l) => l.includes("đã gửi email cho khách")), true);
+  assert.equal(ok.lines.some((l) => l.includes("200.000đ")), true);
+
+  const bad = invoiceConfirmedAlert({ orderCode: "1", email: "x@y.z", plan: "1 tháng", mailSent: false });
+  assert.equal(bad.level, "warn", "khách trả tiền mà không nhận được hoá đơn phải ở mức warn");
+  assert.equal(bad.lines.some((l) => l.includes("KHÔNG gửi được")), true);
+});

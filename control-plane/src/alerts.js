@@ -118,3 +118,45 @@ export async function sendAlert(input, deps = {}) {
     return { sent: false, reason: err?.message ?? String(err), text };
   }
 }
+
+/**
+ * Nội dung alert khi KHÁCH ĐĂNG KÝ MÁY MỚI (thiết bị mới của một account thật).
+ * Chỉ gọi cho device có `userId` (khách hàng), không gọi cho thiết bị test/probe.
+ */
+export function deviceRegisteredAlert({ platform, name, email, ip, node, replaced = null } = {}) {
+  const lines = [
+    `Nền tảng: ${platform || "không rõ"}`,
+    `Thiết bị: ${name || "(không tên)"}`,
+    `Tài khoản: ${email || "(chưa map tài khoản)"}`,
+    ip ? `IP trong tunnel: ${ip}` : null,
+    node ? `Node: ${node}` : null,
+    replaced ? `Thay thế slot của: ${replaced}` : null,
+  ].filter(Boolean);
+  return {
+    title: "Khách đăng ký máy mới",
+    level: "info",
+    lines,
+  };
+}
+
+/**
+ * Nội dung alert XÁC NHẬN HOÁ ĐƠN cho khách (sau khi đơn được kích hoạt).
+ * `mailSent=false` ⇒ hoá đơn chưa tới hộp thư khách (thường do mailer/Resend) — mức warn
+ * vì khách đã trả tiền mà không nhận được xác nhận.
+ */
+export function invoiceConfirmedAlert({ orderCode, email, plan, amount, days, expiresAt, mailSent = true, product = "VPNFlow Premium" } = {}) {
+  const lines = [
+    `Mã đơn: ${orderCode}`,
+    `Khách: ${email}`,
+    `Gói: ${plan}${days ? ` (${days} ngày)` : ""}`,
+    amount ? `Số tiền: ${Number(amount).toLocaleString("vi-VN")}đ` : null,
+    expiresAt ? `Hết hạn: ${String(expiresAt).slice(0, 10)}` : null,
+    `Kênh: ${product}`,
+    mailSent ? "Hoá đơn: đã gửi email cho khách" : "⚠️ Hoá đơn: KHÔNG gửi được email cho khách",
+  ].filter(Boolean);
+  return {
+    title: "Xác nhận hoá đơn cho khách",
+    level: mailSent ? "ok" : "warn",
+    lines,
+  };
+}
