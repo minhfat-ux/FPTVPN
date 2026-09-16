@@ -413,21 +413,24 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
     /// </summary>
     private async Task BlockIpv6Async(string tunnelName, CancellationToken cancellationToken)
     {
-        var commands = WireGuardWindowsCommands.BuildIpv6BlockAdds(tunnelName);
-        var blocked = 0;
-
-        foreach (var command in commands)
+        var cidrs = new[]
         {
-            var (exitCode, stdout, stderr) = await RunProcessAsync(command.FileName, command.Arguments, cancellationToken)
-                .ConfigureAwait(false);
-            if (exitCode == 0)
+            WireGuardWindowsCommands.Ipv6BlockLowHalf,
+            WireGuardWindowsCommands.Ipv6BlockHighHalf,
+        };
+
+        var blocked = 0;
+        foreach (var cidr in cidrs)
+        {
+            var added = await AddRouteIdempotentAsync(
+                WireGuardWindowsCommands.DeleteIpv6BlockRoute(tunnelName, cidr),
+                WireGuardWindowsCommands.AddIpv6BlockRoute(tunnelName, cidr),
+                cancellationToken).ConfigureAwait(false);
+
+            if (added)
             {
                 blocked++;
-                continue;
             }
-
-            var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-            _log.Warn($"wintun: chặn IPv6 ({command.Arguments}) thất bại: {detail.Trim()}");
         }
 
         lock (_lock)
@@ -435,7 +438,7 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
             _ipv6Blocked = blocked > 0;
         }
 
-        if (blocked == commands.Count)
+        if (blocked == cidrs.Length)
         {
             _log.Info("wintun: đã chặn IPv6 (::/1 + 8000::/1 qua tunnel) — tránh rò IP thật qua IPv6");
         }
@@ -443,6 +446,33 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         {
             _log.Warn("wintun: chỉ chặn được một phần IPv6 — vẫn có thể rò IPv6.");
         }
+    }
+
+    /// <summary>
+    /// Thêm route theo kiểu idempotent: xoá trước (bỏ qua lỗi) rồi thêm.
+    ///
+    /// Vì sao không thêm thẳng: route có thể còn sót từ phiên trước (app bị tắt đột ngột nên
+    /// không kịp dọn) → netsh trả "The object already exists", ta ghi WARN và **không ghi nhận**
+    /// route để dọn về sau, thành route mồ côi vĩnh viễn. Xoá trước là cách chắc chắn, không phụ
+    /// thuộc ngôn ngữ thông báo của netsh.
+    /// </summary>
+    private async Task<bool> AddRouteIdempotentAsync(
+        WindowsCommand delete,
+        WindowsCommand add,
+        CancellationToken cancellationToken)
+    {
+        await RunBestEffortAsync(delete).ConfigureAwait(false);
+
+        var (exitCode, stdout, stderr) = await RunProcessAsync(add.FileName, add.Arguments, cancellationToken)
+            .ConfigureAwait(false);
+        if (exitCode == 0)
+        {
+            return true;
+        }
+
+        var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+        _log.Warn($"wintun: {add.Arguments} thất bại: {detail.Trim()}");
+        return false;
     }
 
     /// <summary>
@@ -473,14 +503,13 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         }
 
         var (gateway, @interface) = parsed.Value;
-        var command = WireGuardWindowsCommands.AddEndpointRoute(@interface, gateway, endpointIp);
-        var (addExit, addOut, addErr) = await RunProcessAsync(command.FileName, command.Arguments, cancellationToken)
-            .ConfigureAwait(false);
+        var added = await AddRouteIdempotentAsync(
+            WireGuardWindowsCommands.DeleteEndpointRoute(@interface, gateway, endpointIp),
+            WireGuardWindowsCommands.AddEndpointRoute(@interface, gateway, endpointIp),
+            cancellationToken).ConfigureAwait(false);
 
-        if (addExit != 0)
+        if (!added)
         {
-            var detail = string.IsNullOrWhiteSpace(addErr) ? addOut : addErr;
-            _log.Warn($"wintun: thêm route loại trừ {endpointIp}/32 qua {gateway} ({@interface}) thất bại: {detail.Trim()}");
             return;
         }
 
