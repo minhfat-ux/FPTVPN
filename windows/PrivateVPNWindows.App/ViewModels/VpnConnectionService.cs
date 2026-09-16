@@ -46,7 +46,10 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         // Quy tắc chọn: có đủ wintun.dll + wireguard-go.exe cạnh app → WintunWireGuardDriver
         // (không cần cài WireGuard for Windows); thiếu asset → lùi về wireguard.exe ngoài.
-        _driver = driver ?? WireGuardDriverSelector.Create();
+        // PHẢI truyền _log: không truyền thì driver dùng NullTunnelLogger và stdout/stderr của
+        // wireguard-go bị nuốt sạch — đúng lý do lỗi "wireguard-go.exe đã thoát (exit code 1)"
+        // trước đây không có thêm thông tin nào để chẩn đoán.
+        _driver = driver ?? WireGuardDriverSelector.Create(log: logger);
         _log = logger ?? ConsoleTunnelLogger.Instance;
     }
 

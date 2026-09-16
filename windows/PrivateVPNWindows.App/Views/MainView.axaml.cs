@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using VpnFlow.App.ViewModels;
 using VpnFlow.Core.Api;
 
@@ -195,16 +196,33 @@ public partial class MainView : UserControl
         }
 
         HideError();
+        var log = _services.Logger;
+        log.Info($"connect: bắt đầu (node={node.Id}, transport={_services.Settings.Transport})");
+
+        // Dựng adapter Wintun cần quyền admin. Không có thì wireguard-go chỉ trả
+        // "Access is denied" rất khó đoán, nên chặn sớm và nói rõ.
+        if (!Environment.IsPrivilegedProcess)
+        {
+            log.Warn("connect: app KHÔNG chạy bằng quyền admin — dừng trước khi gọi wireguard-go");
+            _services.Connection.Fail(
+                "VPNFlow cần quyền Administrator để tạo tunnel. Hãy đóng app, mở lại và chọn Yes ở hộp thoại UAC.");
+            UpdateUi();
+            return;
+        }
+
         _services.Connection.BeginConnecting();
         try
         {
             var accessToken = _services.Auth.AccessToken;
             await RegisterDeviceAsync(accessToken);
+            log.Info("connect: đã claim bản cài cho tài khoản");
 
             // Join token một lần để coordinator cấp IP overlay + provision peer.
             // PHẢI truyền token này vào RegisterAsync: mặc định hàm đó dùng token của
             // constructor (đang rỗng) nên nếu bỏ qua sẽ bị 401 "Invalid or expired join token".
             var joinToken = await _services.Api.FetchJoinTokenAsync();
+            log.Info("connect: đã xin join token");
+
             var registration = await _services.Api.RegisterAsync(
                 name: _services.Device.RegistrationName(),
                 platform: "windows",
@@ -214,15 +232,18 @@ public partial class MainView : UserControl
                 exitNodeId: node.Id,
                 joinToken: joinToken,
                 cancellationToken: default);
+            log.Info($"connect: register xong (overlay={registration.OverlayIp})");
 
             await _services.Connection.StartTunnelAsync(node, registration, _services.Settings.Transport);
         }
         catch (DeviceLimitException ex)
         {
+            log.Warn($"connect: chạm hạn mức thiết bị: {ex.Message}");
             _services.Connection.Fail(DescribeDeviceLimit(ex));
         }
         catch (Exception ex)
         {
+            log.Error($"connect: thất bại: {ex.GetType().Name}: {ex.Message}");
             _services.Connection.Fail(ex.Message);
         }
 
@@ -259,6 +280,15 @@ public partial class MainView : UserControl
 
     private void UpdateUi()
     {
+        // VpnConnectionService đổi State bên trong các await có ConfigureAwait(false), nên
+        // PropertyChanged bắn từ thread pool. Chạm control từ đó thì Avalonia ném
+        // "Call from invalid thread" — phải đẩy về UI thread trước.
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(UpdateUi);
+            return;
+        }
+
         var connection = _services.Connection;
 
         var (label, subtitle, brush) = connection.State switch

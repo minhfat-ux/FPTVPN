@@ -1,5 +1,6 @@
 using VpnFlow.Core.Api;
 using VpnFlow.Core.Auth;
+using VpnFlow.Core.Tunnel;
 
 namespace VpnFlow.App.ViewModels;
 
@@ -26,7 +27,16 @@ public sealed class AppServices : IDisposable
         Auth = new AuthSessionStore();
         Device = DeviceIdentity.LoadOrCreate();
         Settings = new AppSettings();
-        Connection = new VpnConnectionService(Device, Settings);
+        Logger = new FileTunnelLogger();
+        Connection = new VpnConnectionService(Device, Settings, logger: Logger);
+        Logger.Info($"app: khởi động (device={Device.DeviceId}, signedIn={Auth.IsSignedIn}, log={Logger.LogPath})");
+        // Dựng tunnel Wintun/userspace BẮT BUỘC quyền admin — ghi ngay để lần sau đọc log là
+        // biết chắc, thay vì đoán qua thông báo "Access is denied" của wireguard-go.
+        Logger.Info(
+            $"app: elevated={Environment.IsPrivilegedProcess}, " +
+            $"driver={WireGuardDriverSelector.SelectKind(WireGuardDriverSelector.DefaultAssetDirectory)}, " +
+            $"assets={WireGuardDriverSelector.DefaultAssetDirectory}, " +
+            $"workDir={WintunWireGuardDriver.DefaultWorkingDirectory()}");
     }
 
     /// <summary>Client control-plane (đã có danh sách host dự phòng bên trong).</summary>
@@ -40,6 +50,9 @@ public sealed class AppServices : IDisposable
 
     /// <summary>Tuỳ chọn cục bộ (transport, node đã chọn…).</summary>
     public AppSettings Settings { get; }
+
+    /// <summary>Log ra file — WinExe không có console nên đây là kênh chẩn đoán duy nhất.</summary>
+    public FileTunnelLogger Logger { get; }
 
     /// <summary>Phiên kết nối thật: dựng config → chọn transport → cài tunnel.</summary>
     public VpnConnectionService Connection { get; }

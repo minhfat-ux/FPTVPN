@@ -263,6 +263,14 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
 
     private void StartProcess(string tunnelName)
     {
+        // wireguard-go phải mở named pipe UAPI đặt owner SYSTEM; token admin đã elevated
+        // vẫn đang TẮT SeRestorePrivilege/SeTakeOwnershipPrivilege nên CreateNamedPipe bị
+        // từ chối và tiến trình thoát ngay. Bật trước để con thừa hưởng.
+        var enabled = ProcessPrivileges.EnableForTunnelPipe();
+        _log.Info(enabled.Count > 0
+            ? $"wintun: đã bật privilege {string.Join(", ", enabled)} cho tiến trình tunnel"
+            : "wintun: KHÔNG bật được privilege nào (thiếu quyền admin?) — wireguard-go có thể không mở được UAPI pipe");
+
         var startInfo = new ProcessStartInfo
         {
             FileName = Path.Combine(_workingDirectory, WireGuardGoExeName),
