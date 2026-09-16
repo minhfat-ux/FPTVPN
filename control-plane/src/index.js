@@ -38,6 +38,7 @@ import {
 import { adminPageHTML } from "./admin-page.js";
 import { provisionEverywhere, revokeEverywhere } from "./peer-mirror.js";
 import { alertChannels, sendAlert } from "./alerts.js";
+import { formatStatusReport, parseReportTimes, reportDue } from "./reports.js";
 import {
   sendOtpEmail,
   sendPaymentAlert,
@@ -4255,7 +4256,31 @@ app.patch("/v1/admin/windows-version", requireAdminAuth, (req, res) => {
  * POST /v1/admin/alert {title, lines|message, level} → gửi 1 tin (dùng cho tin thử + cập nhật tiến độ)
  */
 app.get("/v1/admin/alert", requireAdminAuth, (_req, res) => {
-  res.json(alertChannels());
+  const times = parseReportTimes(process.env.ALERT_REPORT_TIMES ?? "08:00,20:00");
+  res.json({
+    ...alertChannels(),
+    reportTimes: times.map((t) => t.label),
+    reportEnabled: process.env.ALERT_REPORT !== "0",
+    lastReportAt: appConfig.get("alert_report_last_at") ?? null,
+  });
+});
+
+/** Bắn báo cáo ngay (không chờ mốc giờ) — dùng để kiểm tra đường gửi từ server. */
+app.post("/v1/admin/alert/report", requireAdminAuth, async (_req, res) => {
+  try {
+    const result = await sendStatusReport({ reason: "admin" });
+    res.status(result.sent ? 200 : 502).json({
+      sent: result.sent,
+      reason: result.reason ?? null,
+      level: result.level,
+      issues: result.issues,
+      lines: result.lines,
+      text: result.text,
+    });
+  } catch (err) {
+    console.error("POST /v1/admin/alert/report failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
 });
 
 app.post("/v1/admin/alert", requireAdminAuth, async (req, res) => {
@@ -5199,6 +5224,129 @@ if (process.env.ENABLE_RENEWAL_REMINDERS !== "0") {
 }
 
 /**
+ * BÁO CÁO ĐỊNH KỲ GỬI TỪ SERVER.
+ *
+ * Chủ shop yêu cầu rõ: báo cáo phải tự chạy trên server để **tắt máy Mac vẫn nhận được**.
+ * Vì vậy lịch chạy nằm trong chính control plane (node-2), dữ liệu lấy tại chỗ, và tin
+ * gửi thẳng tới Telegram Bot API từ server — không cần máy cá nhân nào bật.
+ *
+ * Mốc giờ: `ALERT_REPORT_TIMES` (mặc định "08:00,20:00", giờ server). Tắt: ALERT_REPORT=0.
+ * Mốc đã gửi được nhớ trong appConfig nên restart service không gửi trùng.
+ */
+async function buildStatusReport() {
+  const now = new Date();
+  const devices = await store.all();
+
+  // Node nào còn sống (ping thật) — để báo cáo phản ánh đúng cái khách đang dùng.
+  const activeNodes = await nodeStore.active();
+  const nodes = [];
+  // Peer được MIRROR sang mọi node, nên đếm theo public key duy nhất — nếu cộng dồn
+  // theo node thì báo cáo sẽ thổi số lên gấp đôi và trông như có sự cố.
+  const peerKeys = new Set();
+  const onlineKeys = new Set();
+  for (const node of activeNodes) {
+    const host = String(node.endpoint ?? "").split(":").shift();
+    const probe = host ? await measureLatency(host) : { ok: false };
+    nodes.push({ id: node.id, name: node.name ?? node.id, online: Boolean(probe?.ok), ms: probe?.ms ?? null });
+    try {
+      const rows = await wgForNode(node).dump();
+      for (const row of rows) {
+        peerKeys.add(row.publicKey);
+        if (row.latestHandshakeSec && Date.now() / 1000 - row.latestHandshakeSec < 180) onlineKeys.add(row.publicKey);
+      }
+    } catch (err) {
+      console.error(`report: không đọc được peer của ${node.id}:`, err?.message ?? err);
+    }
+  }
+
+  const realDevices = devices.filter((d) => d.userId);
+  const activeReal = realDevices.filter((d) => d.active !== false);
+  const byPlatform = {};
+  for (const d of activeReal) {
+    const plat = d.platform && d.platform !== "unknown" ? d.platform : "other";
+    byPlatform[plat] = (byPlatform[plat] ?? 0) + 1;
+  }
+  const dayAgo = Date.now() - 24 * 3600 * 1000;
+  const newLast24h = realDevices.filter((d) => {
+    const t = Date.parse(d.createdAt ?? "");
+    return Number.isFinite(t) && t >= dayAgo;
+  }).length;
+  // "Active mà thiếu peer" = khách sẽ thấy Connected nhưng không có mạng (sự cố 15/09).
+  const peerless = activeReal.filter((d) => !peerKeys.has(d.publicKey)).length;
+
+  let pendingSign = 0;
+  try {
+    const list = await iosDevices.list();
+    pendingSign = (list.devices ?? []).filter((d) => d.udid && !d.built).length;
+  } catch (err) {
+    console.error("report: không đọc được danh sách UDID:", err?.message ?? err);
+  }
+
+  let pendingPayments = 0;
+  try {
+    pendingPayments = (await authStore.listPendingPayments()).length;
+  } catch (err) {
+    console.error("report: không đọc được đơn chờ:", err?.message ?? err);
+  }
+
+  return formatStatusReport({
+    now,
+    nodes,
+    peers: { online: onlineKeys.size, total: peerKeys.size },
+    devices: {
+      active: activeReal.length,
+      total: realDevices.length,
+      test: devices.length - realDevices.length,
+      byPlatform,
+      newLast24h,
+      peerless,
+    },
+    ios: { pendingSign },
+    payments: { pending: pendingPayments },
+    extra: [`Kênh alert: telegram=${alertChannels().telegram ? "bật" : "tắt"}`],
+  });
+}
+
+/** Gửi báo cáo ngay (dùng cho lịch và cho endpoint admin). */
+async function sendStatusReport({ reason = "schedule" } = {}) {
+  const report = await buildStatusReport();
+  const result = await sendAlert(report);
+  if (result.sent) {
+    appConfig.set("alert_report_last_at", new Date().toISOString());
+    console.log(`report (${reason}): đã gửi telegram`);
+  } else {
+    console.warn(`report (${reason}): KHÔNG gửi được — ${result.reason}`);
+  }
+  return { ...report, ...result, reason };
+}
+
+function startReportScheduler() {
+  if (process.env.ALERT_REPORT === "0") {
+    console.log("  report scheduler: tắt (ALERT_REPORT=0)");
+    return;
+  }
+  const times = parseReportTimes(process.env.ALERT_REPORT_TIMES ?? "08:00,20:00");
+  const windowMinutes = Number(process.env.ALERT_REPORT_WINDOW_MIN || 10);
+  console.log(`  report scheduler: mốc ${times.map((t) => t.label).join(", ")} (giờ server), cửa sổ ${windowMinutes} phút`);
+  const tick = async () => {
+    try {
+      const due = reportDue({
+        now: new Date(),
+        times,
+        lastSentAt: appConfig.get("alert_report_last_at") ?? null,
+        windowMinutes,
+      });
+      if (due.due) await sendStatusReport({ reason: `schedule ${due.slot}` });
+    } catch (err) {
+      console.error("report scheduler:", err?.message ?? err);
+    }
+  };
+  const timer = setInterval(() => { tick().catch(() => {}); }, 60_000);
+  timer.unref?.();
+  tick().catch(() => {});
+}
+
+/**
  * Watchdog node: ping định kỳ các exit node, CHỈ alert khi trạng thái đổi (lên↔xuống) để
  * không spam Telegram mỗi vòng. Mặc định 5 phút; tắt bằng ALERT_WATCHDOG=0.
  */
@@ -5255,6 +5403,7 @@ function onListen() {
   if (!WG_PUBLIC_ENDPOINT) console.warn("  WARNING: WG_PUBLIC_ENDPOINT not set");
   if (LEGACY_MODE === "1") console.warn("  WARNING: LEGACY_MODE=1 — unauthenticated join tokens + register enabled (App Store review window). Set LEGACY_MODE=0 after the authenticated app is released.");
   startAlertWatchdog();
+  startReportScheduler();
 }
 
 if (tlsReady) {
