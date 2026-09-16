@@ -41,3 +41,26 @@ Tài liệu này để **chính agent** đọc trước khi làm việc: nó đa
 Trả lời **ngắn, tiếng Việt, có bằng chứng**: đã sửa file nào, lệnh nào đã chạy, kết quả thật (test pass/fail,
 health sau deploy), và **còn gì chưa chắc**. Nếu việc không làm được, nói rõ lý do thay vì đoán.
 Bot tự đính kèm `git status` + `git diff --stat` của workspace vào câu trả lời.
+
+## Vệ sinh dung lượng (làm ngày 16/09/2026)
+
+Cả 2 node chỉ có 20GB đĩa + 1GB RAM. Khi `df` vượt ~70% thì chạy — **chỉ những lệnh dưới đây là an toàn**:
+
+```bash
+journalctl --vacuum-size=200M                  # log hệ thống (đã đặt trần 300MB: /etc/systemd/journald.conf.d/99-cap.conf)
+apt-get clean && rm -rf /var/lib/apt/lists/*   # cache .deb + danh sách gói (apt tự tải lại)
+rm -rf /root/.npm/_cacache                     # cache npm (không phải node_modules)
+: > /var/log/btmp; : > /var/log/auth.log       # log brute-force SSH (vài chục MB/tuần)
+rm -f /tmp/*.tgz /tmp/*.apk                    # rác trung chuyển trong /tmp
+```
+
+Đã gỡ thêm: kernel cũ + headers không chạy (`apt-get purge linux-image-<cũ>-generic linux-headers-<cũ>*`),
+`linux-firmware` (VPS dùng virtio nên không cần firmware; cần lại thì `apt-get install linux-firmware`),
+và gói X11/Mesa/dev thừa qua `apt-get autoremove`.
+
+**Không xoá**: `/root/flowvpn-cp` (+ `src-backup-*`), `data/*.json`, `/root/flowvpn-apk/*.apk` bản mới nhất,
+`/var/www/flowvpn/dl` (bản phát hành cho khách), `/root/zsign`, `/root/flowvpn-agent` (workspace).
+
+Kiểm chứng bằng file đánh dấu (16/09): file chỉ đặt trên node-2 → tải công khai **200**, chỉ đặt trên node-1 → **404**.
+Nghĩa là **meetflowai.site do node-2 phục vụ**; file cho khách tải phải nằm ở **node-2** `/var/www/flowvpn/dl`.
+`/var/www/flowvpn` trên node-1 hiện là bản sao không còn phục vụ (≈330MB — có thể xoá khi cần chỗ).
