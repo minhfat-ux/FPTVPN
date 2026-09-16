@@ -265,7 +265,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith("/assets/")) return next();
   // Public app downloads (APK host): the regular build and the Android 7+ build
   // for Fire TV / older devices.
-  if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy" || req.path === "/v1/downloads/ios" || req.path === "/v1/downloads/mac") return next();
+  if (req.path === "/v1/downloads/android" || req.path === "/v1/downloads/android-legacy" || req.path === "/v1/downloads/ios" || req.path === "/v1/bootstrap" || req.path === "/v1/nodes" || req.path === "/v1/app-version" || req.path === "/v1/downloads/mac") return next();
   if (req.path.startsWith("/install/ios")) return next();
   // Trang cài macOS phát trực tiếp (giống iOS) — công khai, không cần token.
   if (req.path.startsWith("/install/mac") || req.path.startsWith("/v1/install/mac")) return next();
