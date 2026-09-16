@@ -4277,6 +4277,20 @@ app.get("/v1/admin/alert", requireAdminAuth, (_req, res) => {
   });
 });
 
+/**
+ * Đọc nội dung báo cáo mà KHÔNG gửi đi — bot Telegram dùng để trả lời /status, /devices
+ * ngay trong chat (nếu gọi POST /v1/admin/alert/report thì tin sẽ bắn 2 lần).
+ */
+app.get("/v1/admin/report", requireAdminAuth, async (_req, res) => {
+  try {
+    const report = await buildStatusReport();
+    res.json({ level: report.level, issues: report.issues, title: report.title, lines: report.lines });
+  } catch (err) {
+    console.error("GET /v1/admin/report failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 /** Bắn báo cáo ngay (không chờ mốc giờ) — dùng để kiểm tra đường gửi từ server. */
 app.post("/v1/admin/alert/report", requireAdminAuth, async (_req, res) => {
   try {

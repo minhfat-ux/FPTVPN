@@ -1,0 +1,14 @@
+[Unit]
+Description=VPNFlow Telegram bot (ra lenh 2 chieu tu Telegram)
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/flowvpn-tg-bot.env
+ExecStart=/usr/bin/node /root/flowvpn-tgbot/bot.mjs
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
