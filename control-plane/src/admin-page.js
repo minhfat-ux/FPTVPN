@@ -737,13 +737,14 @@ export function adminPageHTML() {
       <div id="statsNodes" class="stats-bars"></div>
 
       <h2 style="margin-top:18px;">Online Devices (live)</h2>
+      <div id="geoipNote" class="status" style="margin:2px 0 0"></div>
       <div style="overflow-x:auto; margin-top:10px;">
         <table>
           <thead><tr>
             <th>Thiết bị</th><th>Nền tảng</th><th>Tài khoản</th><th>Server</th>
-            <th>IP công khai</th><th>ISP / Location</th><th>Đã kết nối</th><th>Traffic</th>
+            <th>IP thật</th><th>Vị trí</th><th>Nhà mạng (ISP)</th><th>Đã kết nối</th><th>Traffic</th>
           </tr></thead>
-          <tbody id="statsOnline"><tr><td colspan="8">Bấm "Refresh".</td></tr></tbody>
+          <tbody id="statsOnline"><tr><td colspan="9">Bấm "Refresh".</td></tr></tbody>
         </table>
       </div>
 
@@ -860,6 +861,7 @@ export function adminPageHTML() {
       statsRegions: document.getElementById("statsRegions"),
       statsNodes: document.getElementById("statsNodes"),
       statsOnline: document.getElementById("statsOnline"),
+      geoipNote: document.getElementById("geoipNote"),
       statsStatus: document.getElementById("statsStatus"),
       loadStats: document.getElementById("loadStats"),
       autoStats: document.getElementById("autoStats"),
@@ -1769,11 +1771,33 @@ export function adminPageHTML() {
       }
     }
 
+    /**
+     * IP thật của máy khách: ưu tiên IP server thấy ở tầng HTTP (app ghi lại mỗi lần kết nối).
+     * Khách đi qua relay thì endpoint WireGuard là 127.0.0.1 — hiện số đó lên bảng chỉ gây nhiễu,
+     * nên trường hợp đó ghi rõ "chưa có IP" kèm gợi ý.
+     */
+    function realIpText(d) {
+      if (!d.client_ip) return "chưa có";
+      if (d.client_ip_source === "wg") return d.client_ip + " (vào thẳng)";
+      const when = d.client_ip_at ? " · " + formatWhen(d.client_ip_at) : "";
+      return d.client_ip + when;
+    }
+
+    function formatWhen(iso) {
+      const at = new Date(iso);
+      if (Number.isNaN(at.getTime())) return "?";
+      const minutes = Math.round((Date.now() - at.getTime()) / 60000);
+      if (minutes < 1) return "vừa xong";
+      if (minutes < 60) return minutes + " phút trước";
+      if (minutes < 60 * 24) return Math.round(minutes / 60) + " giờ trước";
+      return Math.round(minutes / (60 * 24)) + " ngày trước";
+    }
+
     function renderOnlineDevices(devices, truncated) {
       const tbody = fields.statsOnline;
       tbody.innerHTML = "";
       if (!devices.length) {
-        tbody.innerHTML = '<tr><td colspan="8">Không có thiết bị nào đang kết nối (wg handshake &lt; 3 phút).</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">Không có thiết bị nào đang kết nối (wg handshake &lt; 3 phút).</td></tr>';
         return;
       }
       for (const d of devices) {
@@ -1787,8 +1811,9 @@ export function adminPageHTML() {
         cell(d.platform || "—");
         cell(d.user_email || "—");
         cell(d.node_name + (d.node_location ? " (" + d.node_location + ")" : ""));
-        cell(d.client_ip || "—");
-        cell(d.isp ? d.isp + (d.country ? " (" + d.country + ")" : "") : "unknown ISP");
+        cell(realIpText(d));
+        cell(d.location || "—");
+        cell(d.isp || "—");
         cell(d.connected_sec == null ? "—" : formatUptime(d.connected_sec) + " trước");
         cell(formatBytes(d.rx_bytes) + " ↓ / " + formatBytes(d.tx_bytes) + " ↑");
         tbody.appendChild(tr);
@@ -1796,11 +1821,34 @@ export function adminPageHTML() {
       if (truncated) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 8;
+        td.colSpan = 9;
         td.textContent = "Chỉ hiển thị 200 thiết bị đầu tiên.";
         tr.appendChild(td);
         tbody.appendChild(tr);
       }
+    }
+
+    /** Dòng nhỏ dưới tiêu đề: bảng GeoIP nào đang dùng + cập nhật ngày nào (offline, không gọi API). */
+    function renderGeoipNote(info) {
+      if (!fields.geoipNote) return;
+      if (!info) {
+        fields.geoipNote.textContent = "";
+        return;
+      }
+      const parts = [];
+      for (const key of ["city", "asn"]) {
+        const db = info[key];
+        if (!db) continue;
+        if (!db.ok) {
+          parts.push(key + ": chưa có bảng (" + (db.error || "lỗi") + ")");
+          continue;
+        }
+        const updated = db.updated_at ? new Date(db.updated_at).toLocaleDateString() : "?";
+        parts.push(key + ": " + (db.database_type || "?") + " · cập nhật " + updated);
+      }
+      fields.geoipNote.textContent = parts.length
+        ? "Vị trí/ISP tra offline từ bảng GeoIP trên server (không gửi IP khách ra ngoài) — " + parts.join(" · ")
+        : "";
     }
 
     async function loadStats() {
@@ -1834,6 +1882,7 @@ export function adminPageHTML() {
         renderBars(fields.statsRegions, data.by_location || {});
 
         renderOnlineDevices(data.online_devices || [], data.online_devices_truncated);
+        renderGeoipNote(data.geoip);
 
         const totals = data.connections_totals || {};
         fields.statsStatus.style.color = "";

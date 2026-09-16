@@ -70,3 +70,30 @@ test("device: deactivate keeps the record (revoke history preserved)", async () 
     await cleanup();
   }
 });
+
+test("device: markSeen ghi lastSeenAt + IP công khai mà server nhìn thấy", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    const created = await store.upsertByPublicKey({
+      publicKey: "K1",
+      deviceName: "ios-1",
+      assignedIP: "10.77.0.9",
+      platform: "ios",
+      userId: "u1",
+    });
+
+    const seen = await store.markSeen(created.device.id, { at: "2026-09-16T10:00:00.000Z", clientIp: "113.161.80.1" });
+    assert.equal(seen.lastSeenAt, "2026-09-16T10:00:00.000Z");
+    assert.equal(seen.lastClientIp, "113.161.80.1");
+    assert.equal(seen.lastClientIpAt, "2026-09-16T10:00:00.000Z");
+
+    // Không truyền IP (vd request nội bộ/loopback) ⇒ chỉ cập nhật lastSeenAt, GIỮ IP cũ.
+    const later = await store.markSeen(created.device.id, { at: "2026-09-16T11:00:00.000Z", clientIp: null });
+    assert.equal(later.lastClientIp, "113.161.80.1", "IP cũ không được xoá khi lần này không có IP");
+    assert.equal(later.lastSeenAt, "2026-09-16T11:00:00.000Z");
+
+    assert.equal(await store.markSeen("khong-co-that", { clientIp: "8.8.8.8" }), null);
+  } finally {
+    await cleanup();
+  }
+});

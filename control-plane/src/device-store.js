@@ -43,6 +43,29 @@ export class DeviceStore {
   }
 
   /**
+   * Ghi nhận máy vừa kết nối: `lastSeenAt` (+ IP công khai server nhìn thấy, nếu có).
+   *
+   * IP này lấy từ HTTP request (Cloudflare/Caddy đã forward) chứ KHÔNG phải từ WireGuard:
+   * khách đi qua relay thì `wg show` chỉ thấy `127.0.0.1`, nên dashboard cần nguồn khác để
+   * hiển thị "IP thật". Chỉ dùng cho hiển thị/thống kê, KHÔNG dùng để xác thực.
+   *
+   * @param {string} id
+   * @param {{at?: string, clientIp?: string|null}} [seen]
+   */
+  async markSeen(id, { at, clientIp } = {}) {
+    const devices = await this._load();
+    const device = devices.find((d) => d.id === id);
+    if (!device) return null;
+    device.lastSeenAt = at ?? new Date().toISOString();
+    if (clientIp) {
+      device.lastClientIp = clientIp;
+      device.lastClientIpAt = device.lastSeenAt;
+    }
+    await this._save(devices);
+    return device;
+  }
+
+  /**
    * Creates or returns the existing device for a public key.
    *
    * `allowTransfer` lets an authenticated (and subscribed) user adopt a device

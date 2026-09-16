@@ -15,6 +15,7 @@ import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision } from "./device-limit.js";
 import { applyDeviceReplace } from "./device-replace.js";
+import { createGeoLookup, isPublicIp } from "./geoip.js";
 import { versionPayloadFor, wantsLegacyApk, iosInstallManifest } from "./app-version.js";
 import {
   amountCovers,
@@ -233,6 +234,15 @@ const gfwWatcher = new GfwWatcher({
 // Reverse-DNS (PTR) cho IP client hiển thị trên dashboard: cache 6h + timeout
 // 1.5s, best-effort. Không gọi API bên thứ ba nên IP người dùng không rời server.
 const ptrLookup = createPTRLookup({ resolve: (ip) => dns.promises.reverse(ip) });
+
+// Vị trí/ISP cho IP client: tra OFFLINE bằng bảng DB-IP Lite trên VPS (`scripts/geoip-update.sh`
+// cập nhật định kỳ) — IP khách không bị gửi sang API bên thứ ba. Cache 7 ngày ở
+// `data/geoip-cache.json` nên mỗi IP chỉ tra một lần.
+const geoLookup = createGeoLookup({
+  cityDb: process.env.GEOIP_CITY_DB,
+  asnDb: process.env.GEOIP_ASN_DB,
+  cacheFile: path.join(DATA_DIR, "geoip-cache.json"),
+});
 
 const app = express();
 app.set("trust proxy", true);
@@ -4580,6 +4590,59 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
       regionByIp[host] = (regionByIp[host] ?? 0) + 1;
     }
 
+    // ---- IP THẬT + VỊ TRÍ ---------------------------------------------------------------
+    // `wg dump` chỉ cho endpoint của relay (thường là 127.0.0.1) nên IP thật lấy từ
+    // `device.lastClientIp` — do chính app ghi lại mỗi lần kết nối (xem touchDeviceClientIp).
+    // Vị trí/ISP tra offline từ bảng DB-IP Lite, có cache.
+    const deviceById = new Map(devices.map((d) => [d.id, d]));
+    const ipForDevice = new Map();
+    const geoIps = new Set();
+    for (const d of connections.online_devices) {
+      const device = d.device_id ? deviceById.get(d.device_id) : null;
+      const fromApi = device?.lastClientIp && isPublicIp(device.lastClientIp) ? device.lastClientIp : null;
+      const fromWg = isPublicIp(d.client_ip) ? d.client_ip : null;
+      const ip = fromApi ?? fromWg;
+      if (!ip) continue;
+      ipForDevice.set(d, {
+        ip,
+        source: fromApi ? "api" : "wg",
+        at: fromApi ? device?.lastClientIpAt ?? device?.lastSeenAt ?? null : null,
+      });
+      geoIps.add(ip);
+    }
+    const geoByIp = await geoLookup.lookupMany([...geoIps]);
+    const geoFor = (ip) => (ip ? geoByIp.get(ip) ?? null : null);
+
+    const onlineDevices = connections.online_devices.slice(0, onlineDevicesLimit).map((d) => {
+      const info = ipForDevice.get(d);
+      const geo = geoFor(info?.ip);
+      return {
+        ...d,
+        // `client_ip` = IP THẬT của máy khách; endpoint WireGuard giữ riêng để chẩn đoán.
+        client_ip: info?.ip ?? null,
+        client_ip_source: info?.source ?? null,
+        client_ip_at: info?.at ?? null,
+        wg_endpoint_ip: d.client_ip,
+        isp: geo?.isp ?? d.isp,
+        country: geo?.country ?? d.country,
+        country_name: geo?.country_name ?? null,
+        region: geo?.region ?? null,
+        city: geo?.city ?? null,
+        location: geo?.location ?? d.location ?? null,
+        asn: geo?.asn ?? null,
+        geo_source: geo?.source ?? null,
+        user_email: d.user_id ? emailById.get(d.user_id) ?? d.user_id : null,
+      };
+    });
+
+    // Chart "Online Devices by ISP" nay ưu tiên VỊ TRÍ (thành phố/quốc gia), chỉ rơi về ISP
+    // khi bảng GeoIP không có dữ liệu cho IP đó.
+    const byLocation = {};
+    for (const d of onlineDevices) {
+      const label = d.location || (d.isp ? `${d.isp}${d.country ? ` (${d.country})` : ""}` : "unknown ISP");
+      byLocation[label] = (byLocation[label] ?? 0) + 1;
+    }
+
     res.json({
       generated_at: new Date().toISOString(),
       totals: {
@@ -4595,15 +4658,14 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
       by_platform: byPlatform,
       by_status: byStatus,
       by_user: Object.values(byUser).sort((a, b) => b.total - a.total),
-      // Live connections (dashboard): per-server + per-ISP + chi tiết thiết bị.
+      // Live connections (dashboard): per-server + vị trí/ISP + chi tiết thiết bị.
       by_node: connections.by_node,
-      by_location: connections.by_location,
-      online_devices: connections.online_devices.slice(0, onlineDevicesLimit).map((d) => ({
-        ...d,
-        user_email: d.user_id ? emailById.get(d.user_id) ?? d.user_id : null,
-      })),
+      by_location: byLocation,
+      online_devices: onlineDevices,
       online_devices_truncated: connections.online_devices.length > onlineDevicesLimit,
       connections_totals: connections.totals,
+      // Tình trạng bảng GeoIP (đường dẫn, ngày cập nhật) để biết dữ liệu có cũ không.
+      geoip: geoLookup.info(),
       online_peer_endpoints: Object.entries(regionByIp)
         .map(([ip, count]) => ({ ip, count }))
         .sort((a, b) => b.count - a.count),
@@ -4731,6 +4793,7 @@ app.post("/v1/peers/register", async (req, res) => {
         userId: enrollment.userId,
         apiShape: "v1",
       });
+      await touchDeviceClientIp(result.body?.peer_id ?? result.body?.device?.id ?? null, req);
       return res.status(result.status).json(result.body);
     }
 
@@ -4745,6 +4808,7 @@ app.post("/v1/peers/register", async (req, res) => {
       userId: null,
       apiShape: "v1",
     });
+    await touchDeviceClientIp(result.body?.peer_id ?? null, req);
     return res.status(result.status).json(result.body);
   } catch (err) {
     console.error("POST /v1/peers/register failed:", err);
@@ -4825,11 +4889,11 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       const refreshed = await store.all();
       const rec = refreshed.find((d) => d.id === existing.id);
       if (rec) {
-        rec.lastSeenAt = new Date().toISOString();
         rec.deviceName = name || rec.deviceName;
         rec.platform = platform || rec.platform;
         await store._save(refreshed);
       }
+      await touchDeviceClientIp(existing.id, req);
       return res.json({ ok: true, device_id: existing.id, created: false });
     }
 
@@ -4854,6 +4918,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       rec.lastSeenAt = new Date().toISOString();
       await store._save(latest);
     }
+    await touchDeviceClientIp(created.id, req);
     console.log(
       `device claim: user=${userId} ${result.transferred ? "adopted" : "new"} device ${created.id} (${platform}) ip=${created.assignedIP}`,
     );
@@ -4897,6 +4962,7 @@ app.post("/device", async (req, res) => {
       });
     }
     const result = await registerDeviceWithPayload({ body: req.body, userId: null, apiShape: "legacy" });
+    await touchDeviceClientIp(result.body?.device?.id ?? null, req);
     res.status(result.status).json(result.body);
   } catch (err) {
     console.error("POST /device failed:", err);
@@ -5196,6 +5262,29 @@ function clientIPAddress(req) {
     .map((part) => normalizeIP(part))
     .find(Boolean);
   return forwardedFor || normalizeIP(req.ip || req.socket.remoteAddress || "");
+}
+
+/**
+ * Ghi IP công khai THẬT của máy khách vào bản ghi thiết bị (dashboard hiển thị "IP thật").
+ *
+ * Vì sao không lấy từ WireGuard: khách đi qua relay (Cloudflare/wsrelay) nên `wg show` chỉ
+ * thấy endpoint `127.0.0.1` — vô nghĩa với chủ shop. IP thật chỉ có ở tầng HTTP, do
+ * Cloudflare/Caddy forward qua `X-Forwarded-For`. IP nội bộ/loopback bị bỏ qua (không ghi),
+ * vì ghi vào chỉ làm dashboard sai.
+ *
+ * @param {string|null} deviceId
+ * @param {import("express").Request} req
+ */
+async function touchDeviceClientIp(deviceId, req) {
+  if (!deviceId) return;
+  try {
+    const ip = clientIPAddress(req);
+    const publicIp = ip && isPublicIp(ip) ? ip : null;
+    await store.markSeen(deviceId, { clientIp: publicIp });
+  } catch (err) {
+    // Không được để việc thống kê làm hỏng luồng đăng ký/kết nối của khách.
+    console.error("device markSeen failed:", err?.message ?? err);
+  }
 }
 
 function normalizeIP(value) {
