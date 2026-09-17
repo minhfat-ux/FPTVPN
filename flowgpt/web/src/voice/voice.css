@@ -1,0 +1,252 @@
+/* ============================================================================
+   Voice mode — full-screen "talk to the assistant" overlay.
+   Layout, spacing and sizes only: every colour comes from a design-system
+   variable so the light and dark themes both stay correct.
+   ========================================================================= */
+
+.voice-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-4) var(--space-6);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  overflow-y: auto;
+}
+
+.voice-mode-top {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.voice-error {
+  width: 100%;
+  max-width: 720px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.voice-stage {
+  width: 100%;
+  max-width: 720px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------- orb */
+.voice-orb {
+  position: relative;
+  width: clamp(148px, 26vh, 232px);
+  height: clamp(148px, 26vh, 232px);
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: radial-gradient(circle at 32% 28%, var(--accent-soft), transparent 68%), var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  transform-origin: center;
+  transition: transform 90ms linear, background 220ms ease, border-color 220ms ease;
+  will-change: transform;
+}
+
+.voice-orb-core {
+  width: 46%;
+  height: 46%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  opacity: 0.9;
+  animation: voice-breathe 3.4s ease-in-out infinite;
+}
+
+.voice-orb-ring {
+  position: absolute;
+  inset: -8%;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  opacity: 0.7;
+}
+
+.voice-orb-listening {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 6px var(--accent-soft), var(--shadow-lg);
+}
+.voice-orb-listening .voice-orb-core { background: var(--accent); }
+
+.voice-orb-thinking {
+  border-color: var(--border-strong);
+  background: radial-gradient(circle at 32% 28%, var(--bg-hover), transparent 70%), var(--bg-elevated);
+}
+.voice-orb-thinking .voice-orb-core {
+  background: var(--text-faint);
+  animation-duration: 1.4s;
+}
+
+.voice-orb-speaking {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--brand-gradient);
+}
+.voice-orb-speaking .voice-orb-core {
+  background: var(--text);
+  opacity: 0.85;
+  animation-duration: 2s;
+}
+
+.voice-orb-error {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 14%, transparent), var(--shadow-lg);
+}
+.voice-orb-error .voice-orb-core { background: var(--danger); animation: none; }
+
+.voice-orb-idle { opacity: 0.92; }
+.voice-orb-idle .voice-orb-core { animation: none; background: var(--text-faint); }
+.voice-orb-muted { opacity: 0.5; }
+.voice-orb-muted .voice-orb-core { animation: none; background: var(--text-faint); }
+
+.voice-state {
+  margin-top: var(--space-3);
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.voice-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 460px;
+}
+
+/* ---------------------------------------------------------------- transcript */
+.voice-interim {
+  max-width: 620px;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.voice-turns {
+  width: 100%;
+  max-width: 640px;
+  max-height: 30vh;
+  margin-top: var(--space-3);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding-right: 2px;
+}
+
+.voice-turn {
+  display: flex;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.voice-turn-role {
+  flex: 0 0 auto;
+  min-width: 58px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  padding-top: 2px;
+}
+
+.voice-turn-text {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.voice-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 720px;
+}
+
+.voice-warning {
+  width: 100%;
+  max-width: 640px;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.spin { animation: voice-spin 1s linear infinite; }
+
+/* ------------------------------------------------- composer dictation button */
+.btn-mic-active {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: voice-mic-pulse 1.6s ease-in-out infinite;
+}
+.btn-mic-active:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.mic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  flex: 0 0 auto;
+  animation: voice-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voice-mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@keyframes voice-breathe {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
+}
+
+@keyframes voice-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 560px) {
+  .voice-mode { padding: var(--space-4) var(--space-3) var(--space-5); }
+  .voice-turns { max-height: 26vh; }
+}

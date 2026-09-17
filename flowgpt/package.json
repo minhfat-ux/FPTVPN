@@ -1,0 +1,22 @@
+{
+  "name": "flowgpt",
+  "private": true,
+  "version": "0.1.0",
+  "description": "FlowGpt — web AI chatbox (chat + image editing + PPT/Excel/data-analysis skills) for flowgpt.meetflowai.site",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev:server": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "build": "npm --workspace web run build",
+    "start": "node server/src/index.js",
+    "test": "npm --workspace server run test",
+    "check": "node --check server/src/index.js"
+  }
+}
