@@ -1,0 +1,44 @@
+XONG ĐỢT GIÁ MỚI + ĐÃ BÀN GIAO SANG MAC
+
+1. GIÁ KỸ NĂNG: 50.000Đ, TÁCH RỜI GIÁ CREDIT
+   - Giá kỹ năng giờ lưu bằng VND (price_vnd), không còn là credit.
+   - Đổi giá credit KHÔNG làm đổi giá chợ kỹ năng nữa.
+   - Cả 6 kỹ năng = 50.000đ; brand-voice miễn phí.
+   - Migration tự quy đổi giá cũ sang VND đúng 1 lần (log production:
+     "quy đổi giá 6 kỹ năng sang VND"), có test dựng DB định dạng cũ để canh.
+
+2. MỘT LƯỢT CHAT ≈ 200Đ — ĐÃ ĐO THẬT
+   - Đo 60 lượt trên production: trung bình 3.258 token, median 3.160.
+   - Chốt: 0,06 credit/token × 1đ/credit  =>  trung bình 196đ, median 190đ.
+   - Lượt chat thật vừa gửi: 2.694 token -> 162 credit, số dư 100.000 -> 99.838.
+     (đúng công thức ceil(2694 × 0,06) = 162)
+   - Tặng đăng nhập 10.000 credit = 10.000đ ≈ 51 lượt.
+   - Gói nạp: 10k / 50k / 200k credit = 10k / 50k / 200k đồng.
+
+3. LƯU Ý CẦN ANH BIẾT
+   - Tài khoản mới tặng 10.000đ, mà 1 kỹ năng giá 50.000đ => user phải nạp
+     thêm mới mua được kỹ năng. Đây là hệ quả của việc tách giá, không phải lỗi.
+     Nếu anh muốn user mua được ngay thì nâng "credit tặng đăng nhập" lên
+     50.000 trong Cài đặt -> Hệ thống.
+
+4. ĐÃ KIỂM CHỨNG
+   - 168/168 test pass, web build sạch.
+   - Chrome thật trên production: ĐẠT HẾT — bảng admin hiện 50.000đ, form Sửa
+     nạp sẵn chỉ dẫn, thẻ người dùng hiện 50.000đ, không còn chỗ nào hiện "token"
+     ở phần giá.
+   - Đã dọn 7 lượt dùng ảo (dữ liệu test) còn 0.
+
+5. BÀN GIAO SANG MAC HARNESS
+   - Đã push toàn bộ lên GitHub (nhánh origin/flowgpt), 0 commit còn treo.
+   - File bàn giao: docs/HANDOFF-MAC.md — có cách lấy code, lệnh chạy, việc còn
+     lại, và các bẫy đã gặp.
+   - Bên Mac chỉ cần: git clone -> checkout flowgpt -> đọc file đó là làm tiếp.
+   - KHÔNG copy transcript session sang Mac: tên thư mục session sinh từ đường dẫn
+     Windows nên sẽ lệch, và nội dung ghi đường dẫn tuyệt đối C:\... nên vỡ.
+
+6. CÒN LẠI (chưa làm)
+   - Nhập kỹ năng CodeBuddy: cần anh gửi danh sách/link. Công cụ đã sẵn.
+   - Voice chống trễ: chưa làm, đúng như anh dặn "đừng làm vội". Cần key Groq
+     (free) cho L2 và key Qwen/DashScope cho L3.
+   - SePay: module xong + test nhưng chưa cắm route; cần API token thật của SePay.
+   - Tên chủ tài khoản ngân hàng vẫn trống nên QR in "TPBANK".
