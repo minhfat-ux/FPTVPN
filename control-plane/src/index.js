@@ -4439,6 +4439,30 @@ app.post("/v1/admin/alert", requireAdminAuth, async (req, res) => {
  * host nào đang bị chặn, từ lúc nào, và bằng chứng (DNS/TCP/TLS). Có requireAdminAuth như
  * mọi route admin khác; watcher có thể chưa chạy lần nào (server vừa bật) nên trả rỗng.
  */
+/**
+ * POST /v1/admin/alert-test — gửi thử 1 alert để kiểm tra kênh (Telegram + email).
+ *
+ * Vì sao cần: muốn biết kênh alert còn sống thì phải gửi thật. Không thể "giả lập chặn"
+ * để test (chặn GFW là handshake bị ngắt, còn cert sai tên thì probe coi là OK) — nên có
+ * route này để chủ dự án tự kiểm kênh bất cứ lúc nào, dùng đúng env của service.
+ */
+app.post("/v1/admin/alert-test", requireAdminAuth, async (_req, res) => {
+  try {
+    const result = await sendAlert({
+      title: "Test kênh alert (từ admin)",
+      lines: [
+        "Nếu bạn thấy tin này: kênh alert đã hoạt động.",
+        "Được gửi từ chính tiến trình control-plane (đúng env của service).",
+      ],
+      level: "info",
+    });
+    console.log(`admin alert-test: sent=${result?.sent} reason=${result?.reason ?? "-"}`);
+    res.json({ ok: Boolean(result?.sent), ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message ?? err) });
+  }
+});
+
 app.get("/v1/admin/gfw", requireAdminAuth, (_req, res) => {
   res.json(gfwWatcher?.snapshot() ?? { hosts: [], updatedAt: null });
 });
