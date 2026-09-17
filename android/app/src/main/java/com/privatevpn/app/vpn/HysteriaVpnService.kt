@@ -86,6 +86,12 @@ class HysteriaVpnService : VpnService() {
     /** Số lần probe liên tiếp thấy tunnel UP mà không có gói nào qua được. */
     @Volatile private var deadProbes = 0
 
+    /**
+     * Kết quả probe mạng gần nhất khi tunnel đang UP. true = đã xác nhận thông.
+     * Dùng để bỏ hẳn probe định kỳ lúc kết nối đang tốt (xem startProbeLoop).
+     */
+    @Volatile private var lastProbeOk = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Foreground immediately: on metered networks (China mobile data) Android
         // blocks data for background apps (netpolicy blocked=APP_BACKGROUND), which
@@ -159,9 +165,23 @@ class HysteriaVpnService : VpnService() {
         var backoffMs = RETRY_BACKOFF_START_MS
         var everUp = false
         var failedPasses = 0
+        // Mốc kết thúc lượt trước: bảo đảm MỌI vòng (kể cả chuỗi outcome 2 liên tiếp)
+        // đều nghỉ tối thiểu, không quay CPU dựng/đổ transport liên tục.
+        var lastPassEndedAt = 0L
         try {
             while (!stopping) {
+                if (lastPassEndedAt != 0L) {
+                    val since = System.currentTimeMillis() - lastPassEndedAt
+                    if (since < MIN_PASS_INTERVAL_MS) {
+                        try {
+                            Thread.sleep(MIN_PASS_INTERVAL_MS - since)
+                        } catch (_: InterruptedException) {
+                            return
+                        }
+                    }
+                }
                 val outcome = oneConnectPass()
+                lastPassEndedAt = System.currentTimeMillis()
                 when (outcome) {
                     1 -> return // user stop
                     2 -> { // transport dropped or was rebuilt for a network change
@@ -383,12 +403,9 @@ class HysteriaVpnService : VpnService() {
         )
         if (!bridge.start()) return 0
         DiagnosticsLog.log("ws-relay: thử transport qua Cloudflare (local port ${bridge.localPort})")
-        // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói.
-        val deadline = System.currentTimeMillis() + 6000
-        while (!bridge.connected && System.currentTimeMillis() < deadline && !stopping) {
-            Thread.sleep(200)
-        }
-        if (!bridge.connected) {
+        // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói. Dùng latch chặn
+        // thay vì sleep(200) rồi kiểm tra lại — xem WSRelayBridge.awaitConnected().
+        if (!bridge.awaitConnected(WS_OPEN_TIMEOUT_MS)) {
             DiagnosticsLog.warn("ws-relay: chưa mở được WS, bỏ qua")
             bridge.stop()
             return 0
@@ -406,7 +423,8 @@ class HysteriaVpnService : VpnService() {
             // cổng Hysteria phía server — Hysteria dial vào bridge, bridge mới đẩy
             // datagram qua WSS.
             // Budget dài hơn đường trực tiếp: handshake qua relay chậm hơn thật.
-            val outcome = udpAttempt(bridge.localPort, WS_ATTEMPT_UP_BUDGET_MS)
+            // MTU hạ xuống HY_MTU_RELAY: WS/TCP đóng gói thêm nên 1500 dễ phân mảnh.
+            val outcome = udpAttempt(bridge.localPort, WS_ATTEMPT_UP_BUDGET_MS, HY_MTU_RELAY.toLong())
             // Nhớ để lượt sau (và lần mở app sau) đi thẳng qua WS, không phí thời gian
             // thử UDP/TCP trực tiếp vốn đã chết khi IP node bị chặn.
             if (outcome != 0) rememberTransport("ws")
@@ -527,7 +545,8 @@ class HysteriaVpnService : VpnService() {
             DiagnosticsLog.relayConnected = true
             if (!stopping) reportUp()
             DiagnosticsLog.log("hy-tcp:$relayPort serve() start")
-            Mobile.serve(tunFd, HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
+            // TCP relay đóng gói thêm (relay framing) -> hạ MTU để không phân mảnh.
+            Mobile.serve(tunFd, HY_MTU_RELAY.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
             return serveOutcome("hy-tcp:$relayPort serve() returned")
         } catch (e: Exception) {
             if (e.message?.contains("already running") == true) throw e
@@ -542,7 +561,7 @@ class HysteriaVpnService : VpnService() {
     }
 
     /** Direct UDP attempt (native QUIC — fast path when UDP is not blocked). */
-    private fun udpAttempt(port: Int, upBudgetMs: Long = ATTEMPT_UP_BUDGET_MS): Int {
+    private fun udpAttempt(port: Int, upBudgetMs: Long = ATTEMPT_UP_BUDGET_MS, mtu: Long = HY_MTU.toLong()): Int {
         if (stopping) return 1
         val ds = java.net.DatagramSocket()
         // Same ordering rule as the TCP relay: bind to the current underlying
@@ -579,7 +598,7 @@ class HysteriaVpnService : VpnService() {
             DiagnosticsLog.transport = "hy-udp:$port"
             if (!stopping) reportUp()
             DiagnosticsLog.log("hy-udp:$port serve() start")
-            Mobile.serve(tunFd, HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
+            Mobile.serve(tunFd, mtu, HY_TUN_IPV4, HY_TUN_IPV6)
             return serveOutcome("hy-udp:$port serve() returned")
         } catch (e: Exception) {
             if (e.message?.contains("already running") == true) throw e
@@ -707,6 +726,8 @@ class HysteriaVpnService : VpnService() {
         // đúng cái tunnel vừa dựng được.
         disarmAttemptBudget()
         DiagnosticsLog.tunnelUp = true
+        // Tunnel mới lên: cần một lần probe để xác nhận thông rồi mới ngừng probe định kỳ.
+        lastProbeOk = false
         DiagnosticsLog.log("tunnel: UP (${DiagnosticsLog.transport})")
         reportNodeHealth(runHost, reachable = true)
         try {
@@ -817,14 +838,28 @@ class HysteriaVpnService : VpnService() {
                     )
                 }
                 DiagnosticsLog.log("probe#$tick vpn underlying=${underlyingSummary()}")
+                // Khi tunnel đang TỐT (UP + lần probe trước OK) thì KHÔNG probe mạng định kỳ:
+                // đây là nguồn CPU/radio chính khi có traffic. Mất transport thật đã được
+                // phát hiện bởi serve() trả về, onDead của WS và NetworkMonitor; probe chỉ
+                // còn là lưới an toàn nên chỉ chạy khi chưa xác nhận hoặc vừa thất bại.
+                if (!DiagnosticsLog.tunnelUp) {
+                    // Chưa lên: runTunnel() đang tự thử transport, probe ở đây là thừa.
+                    lastProbeOk = false
+                    deadProbes = 0
+                    continue
+                }
+                if (lastProbeOk) {
+                    deadProbes = 0
+                    continue
+                }
+                // Tunnel UP nhưng chưa xác nhận / lần trước thất bại -> probe thật.
                 probeRelayReachable()
                 // Watchdog: tunnel "UP" mà gói thật không đi được thì phải dựng lại
                 // transport, không chỉ ghi log. Trước đây chỗ này chỉ warn nên tunnel
                 // nằm chết ở trạng thái connected cho tới khi người dùng tự tắt/bật.
                 val tunnelOk = probeThroughTunnel()
-                if (!DiagnosticsLog.tunnelUp) {
-                    deadProbes = 0
-                } else if (tunnelOk) {
+                lastProbeOk = tunnelOk
+                if (tunnelOk) {
                     deadProbes = 0
                 } else {
                     deadProbes++
@@ -1027,6 +1062,11 @@ class HysteriaVpnService : VpnService() {
         const val RETRY_BACKOFF_MAX_MS = 30000L
         /** Pause after a transport teardown so the Go client releases its socket. */
         const val REBUILD_SETTLE_MS = 700L
+        /**
+         * Khoảng nghỉ tối thiểu giữa 2 lượt connect, kể cả khi transport dựng rồi đổ
+         * liên tục: chặn vòng lặp WS <-> UDP quay CPU (và dựng/đổ client Go) liên tục.
+         */
+        const val MIN_PASS_INTERVAL_MS = 1000L
         /** Wait before retrying a connect that hit "already running". */
         const val CLIENT_RESTART_WAIT_MS = 800L
         const val NOTIF_ID = 4242
@@ -1081,6 +1121,15 @@ class HysteriaVpnService : VpnService() {
         const val HY_PASSWORD = com.privatevpn.app.Config.HY_PASSWORD
         const val HY_OBFS_PASSWORD = com.privatevpn.app.Config.HY_OBFS
         const val HY_MTU = 1500
+        /**
+         * MTU cho nhánh WS/TCP relay. Hai đường này bọc thêm lớp framing (WS message /
+         * TCP relay) quanh datagram Hysteria nên 1420/1500 dễ bị phân mảnh ở hạ tầng
+         * dùng chung; hạ xuống 1280 (đường IPv6 an toàn) để gói qua nguyên vẹn.
+         * Đường UDP trực tiếp giữ nguyên HY_MTU vì không có lớp bọc thêm.
+         */
+        const val HY_MTU_RELAY = 1280
+        /** Chờ WS relay mở, thay cho vòng sleep(200ms) ở wsRelayAttempt(). */
+        const val WS_OPEN_TIMEOUT_MS = 6_000L
         // Single overlay address 100.100.100.101/30 (must match Go wrapper default).
         const val HY_TUN_IPV4_IP = "100.100.100.101"
         const val HY_TUN_IPV4 = "100.100.100.101/30"
