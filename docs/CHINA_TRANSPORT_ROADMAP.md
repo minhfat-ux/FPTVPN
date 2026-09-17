@@ -205,3 +205,33 @@ phải đi relay ⇒ Cloudflare là cửa vào tốt nhất (PoP HKG, ~0,1 s TTF
 - `/v1/nodes` (public) trả đúng URL Cloudflare.
 - Tốc độ qua CF ≈ tốc độ đường truyền của khách (cùng thời điểm: CF 2,5 MB/s vs CF trực tiếp 2,6 MB/s;
   lúc đường truyền tốt: 13,7 MB/s) — tức CF không còn là nút thắt; DERP thì luôn kẹt ~2 MB/s.
+
+### Sự cố 18/09/2026: node-1 hết RAM → mất hysteria/Tailscale
+
+**Triệu chứng:** app Android treo "connecting"; Tailscale node-1 offline; Funnel chết (000); CP báo
+`/v1/admin/nodes/node-1/health → reachable:false`.
+
+**Nguyên nhân gốc (2 lớp):**
+1. node-1 (961 MB RAM) **không có swap** ⇒ khi có tải lớn, kernel OOM-kill `tailscaled` (và các tiến trình
+   userspace khác). MagicDNS của Tailscale là DNS của node-1 ⇒ tailscaled chết thì **DNS chết theo**
+   (`/etc/resolv.conf` trỏ 100.100.100.100) và Funnel/exit node mất.
+2. `hysteria` và `wgrelay` trên node-1 chạy **thủ công (không có unit systemd)** ⇒ sau khi VPS reboot,
+   Android mất luôn transport hysteria (Android đặt `HYSTERIA_MODE = true`).
+
+**Đã sửa (18/09/2026):**
+- node-1: tạo `/swapfile` **2 GB** + ghi `/etc/fstab` (`vm.swappiness=10`) — chống OOM tái diễn.
+- node-1: tạo `hysteria.service` (`/root/hysteria.bin server -c /etc/hysteria/server.yaml`) — đã `enable`.
+- node-2: tạo `hysteria.service` (`/usr/local/bin/hysteria server -c /etc/hysteria-server.yaml`) — đã `enable`.
+- node-1: `wgrelay.service` (TCP **9444**, cổng app Android dùng qua `Config.RELAY_PORT`) — đã `enable`.
+- Cả 2 node: thêm `ignoreClientBandwidth: true` vào config hysteria ⇒ server **bỏ qua mức băng thông client
+  tự khai** (app Android khai `HY_UP_KBPS=2000` / `HY_DOWN_KBPS=20000` ⇒ trước đây bị tự bóp còn 1,9 Mbps).
+- CP: điền `ws_relay_url` cho cả 2 node (client cũ đọc field này) và bật lại node-1.
+
+**Kiểm chứng:** client hysteria chạy tại node-1 trỏ `127.0.0.1:8443` tải được `https://api.ipify.org` ✓;
+4 đường `wss://api.meetflowai.site/relay/{vn1hy,vn2hy,vn1wg,vn2wg}` → HTTP 101 ✓; Funnel `:8443` → 101 ✓;
+`/v1/nodes` trả 2 node, cả hai `reachable:true`.
+
+**Còn nợ ở phía app Android (cần build lại APK):** `Config.WS_RELAY_URL` đang hardcode
+`wss://fcnvpn.tail303be3.ts.net:8443` (Funnel — nay là đường dự phòng, không phải đường chính);
+`HY_UP_KBPS`/`HY_DOWN_KBPS` nên nâng lên mức thật; timeout khi thử direct UDP nên ngắn lại để không
+"connecting hoài" khi mạng chặn UDP.
