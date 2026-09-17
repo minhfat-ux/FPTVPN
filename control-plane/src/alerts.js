@@ -15,8 +15,103 @@
  * kiểm tra cấu hình mà không cần đọc giá trị.
  */
 
+import https from "node:https";
+
 const TELEGRAM_API = "https://api.telegram.org";
 const DEFAULT_TIMEOUT_MS = 8000;
+
+/**
+ * IP của Telegram: dùng khi DNS của VPS chỉ trả IPv6 mà máy không có IPv6.
+ *
+ * Vì sao cần: node-2 phân giải `api.telegram.org` ra IPv6 trước, undici (fetch) đi IPv6 rồi
+ * "fetch failed" — trong khi `curl` cùng máy vẫn 200. Bot Telegram đã xử lý ca này từ 16/09
+ * (xem `scripts/tg-bot/bot.mjs`: https.Agent({family:4}) rồi thử thẳng IP), nhưng `alerts.js`
+ * thì chưa ⇒ **mọi alert/report tự động của control plane im lặng** (đơn trả tiền, khách đăng
+ * ký máy mới, node sập, GFW watch, báo cáo 08:00/20:00). Log chỉ ghi "fetch failed".
+ */
+const TG_HOST = "api.telegram.org";
+const TG_IPS = ["149.154.167.220", "149.154.166.110", "149.154.175.100"];
+
+let ipv4Agent = null;
+
+/** Agent buộc IPv4 (giống `curl -4`) — undici/fetch không có tuỳ chọn này. */
+function telegramAgent() {
+  if (!ipv4Agent) ipv4Agent = new https.Agent({ keepAlive: true, family: 4, timeout: 10_000 });
+  return ipv4Agent;
+}
+
+/**
+ * POST JSON qua node:https. `ip` = đi thẳng tới IP Telegram (SNI + kiểm tra chứng chỉ vẫn theo
+ * tên miền thật), dùng khi cả DNS lẫn IPv4 đều có vấn đề.
+ * @returns {Promise<{sent: boolean, reason?: string, messageId?: number|null, via: string}>}
+ */
+function postJsonViaHttps({ path, payload, timeoutMs, ip = null }) {
+  const via = ip ? `https-ip:${ip}` : "https-ipv4";
+  return new Promise((resolve) => {
+    const options = {
+      method: "POST",
+      host: ip ?? TG_HOST,
+      port: 443,
+      path,
+      agent: ip ? new https.Agent({ keepAlive: false, family: 4 }) : telegramAgent(),
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(payload),
+        Host: TG_HOST,
+      },
+      timeout: Math.max(1, timeoutMs),
+    };
+    if (ip) options.servername = TG_HOST; // SNI + verify theo tên miền
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        let body = null;
+        try { body = JSON.parse(data); } catch { /* giữ null */ }
+        if (res.statusCode >= 200 && res.statusCode < 300 && body?.ok !== false) {
+          resolve({ sent: true, messageId: body?.result?.message_id ?? null, via });
+        } else {
+          resolve({ sent: false, reason: body?.description ?? `HTTP ${res.statusCode}`, via });
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error(`timeout ${timeoutMs}ms`)));
+    req.on("error", (err) => resolve({ sent: false, reason: err?.message ?? String(err), via }));
+    req.write(payload);
+    req.end();
+  });
+}
+
+/** Sửa chuỗi bị "vỡ font" do bên gửi mã hoá sai (UTF-8 bị đọc như latin-1 rồi gửi tiếp). */
+const MOJIBAKE_MARKERS = /(?:Ã|Â|Ä|Å)[\u0080-\u00BF]|áº|á»|â€|ï»¿/g;
+
+/**
+ * "BÃ¡o cÃ¡o" (UTF-8 bị đọc như latin-1) → "Báo cáo".
+ *
+ * Chỉ sửa khi CHẮC CHẮN: chuỗi phải có dấu hiệu mojibake, bản sửa phải sạch hơn (ít dấu hiệu
+ * hơn, không sinh ký tự thay thế U+FFFD) và không dài hơn bản gốc. Chuỗi đã đúng thì trả nguyên
+ * (kể cả tiếng Việt có dấu bình thường).
+ *
+ * Lưu ý: trường hợp mất dữ liệu thật (bên gửi đã thay dấu bằng "?", kiểu PowerShell 5.1 gửi
+ * ISO-8859-1) thì KHÔNG cứu được — phải sửa phía gửi.
+ */
+export function repairMojibake(text) {
+  const value = String(text ?? "");
+  if (!value) return value;
+  const before = (value.match(MOJIBAKE_MARKERS) ?? []).length;
+  if (before === 0) return value;
+  let candidate;
+  try {
+    candidate = Buffer.from(value, "latin1").toString("utf8");
+  } catch {
+    return value;
+  }
+  if (candidate.includes("\uFFFD")) return value;
+  const after = (candidate.match(MOJIBAKE_MARKERS) ?? []).length;
+  if (after >= before) return value;
+  return candidate;
+}
 
 const LEVEL_ICON = {
   info: "ℹ️",
@@ -41,9 +136,9 @@ export function renderAlertText({ title, lines = [], level = "info", at = new Da
   const icon = LEVEL_ICON[level] ?? LEVEL_ICON.info;
   const body = (Array.isArray(lines) ? lines : [lines])
     .filter((line) => line !== undefined && line !== null && String(line).length > 0)
-    .map((line) => `• ${line}`)
+    .map((line) => `• ${repairMojibake(line)}`)
     .join("\n");
-  const head = `${icon} ${String(title ?? "Alert").trim()}`;
+  const head = `${icon} ${repairMojibake(String(title ?? "Alert").trim())}`;
   const stamp = at instanceof Date ? at.toISOString().replace("T", " ").slice(0, 16) + " UTC" : String(at);
   return body ? `${head}\n${body}\n\n_${stamp}_` : `${head}\n\n_${stamp}_`;
 }
@@ -52,13 +147,10 @@ export function renderAlertText({ title, lines = [], level = "info", at = new Da
  * Gửi 1 tin qua Telegram Bot API. Không ném lỗi.
  * @returns {Promise<{sent: boolean, reason?: string, messageId?: number|null}>}
  */
-export async function sendTelegram(text, { env = process.env, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function sendTelegram(text, { env = process.env, fetchImpl = null, httpsImpl = null, directIps = TG_IPS, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const { telegram } = alertChannels(env);
   if (!telegram) {
-    return { sent: false, reason: "telegram chưa cấu hình (thiếu TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID)" };
-  }
-  if (typeof fetchImpl !== "function") {
-    return { sent: false, reason: "runtime không có fetch" };
+    return { sent: false, reason: "telegram chưa cấu hình (thiếu TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID)", via: null };
   }
 
   const token = String(env.TELEGRAM_BOT_TOKEN).trim();
@@ -68,11 +160,42 @@ export async function sendTelegram(text, { env = process.env, fetchImpl = global
     text,
     disable_web_page_preview: true,
   });
+  const path = `/bot${token}/sendMessage`;
+  const budget = Math.max(1, Number(timeoutMs) || DEFAULT_TIMEOUT_MS);
 
+  // Test/dev bơm fetchImpl (và KHÔNG bơm httpsImpl) ⇒ chỉ dùng đúng cái đó, không rơi sang mạng thật.
+  if (typeof fetchImpl === "function" && typeof httpsImpl !== "function") {
+    return await viaFetch(fetchImpl, { path, payload, timeoutMs: budget });
+  }
+  const postJson = typeof httpsImpl === "function" ? httpsImpl : postJsonViaHttps;
+
+  // 1) fetch: nhanh, nhưng trên node-2 (DNS chỉ trả IPv6) undici hay trả "fetch failed".
+  const fetchAttempt = typeof fetchImpl === "function" ? fetchImpl : globalThis.fetch;
+  if (typeof fetchAttempt === "function") {
+    const attempt = await viaFetch(fetchAttempt, { path, payload, timeoutMs: budget });
+    if (attempt.sent) return attempt;
+    if (attempt.reason && attempt.reason !== "fetch failed") return { ...attempt, via: "fetch" };
+    // "fetch failed" = ca IPv6 ⇒ đi tiếp xuống các đường IPv4 bên dưới.
+  }
+
+  // 2) node:https buộc IPv4 (giống `curl -4`).
+  const ipv4 = await postJson({ path, payload, timeoutMs: budget });
+  if (ipv4.sent) return ipv4;
+
+  // 3) Thử thẳng IP của Telegram (DNS có vấn đề thì vẫn gửi được).
+  for (const ip of directIps ?? TG_IPS) {
+    const viaIp = await postJson({ path, payload, timeoutMs: budget, ip });
+    if (viaIp.sent) return viaIp;
+  }
+  return { sent: false, reason: `fetch failed; ${ipv4.reason ?? "IPv4 lỗi"}; thử ${(directIps ?? TG_IPS).length} IP Telegram đều lỗi`, via: null };
+}
+
+/** Đường fetch (giữ nguyên hành vi cũ + AbortController để không treo luồng nghiệp vụ). */
+async function viaFetch(fetchImpl, { path, payload, timeoutMs }) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Math.max(1, Number(timeoutMs) || DEFAULT_TIMEOUT_MS));
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(`${TELEGRAM_API}/bot${token}/sendMessage`, {
+    const res = await fetchImpl(`https://api.telegram.org${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
@@ -80,12 +203,12 @@ export async function sendTelegram(text, { env = process.env, fetchImpl = global
     });
     const body = await res.json().catch(() => null);
     if (!res.ok || body?.ok === false) {
-      return { sent: false, reason: body?.description ?? `HTTP ${res.status}` };
+      return { sent: false, reason: body?.description ?? `HTTP ${res.status}`, via: "fetch" };
     }
-    return { sent: true, messageId: body?.result?.message_id ?? null };
+    return { sent: true, messageId: body?.result?.message_id ?? null, via: "fetch" };
   } catch (err) {
     const reason = err?.name === "AbortError" ? `timeout ${timeoutMs}ms` : (err?.message ?? String(err));
-    return { sent: false, reason };
+    return { sent: false, reason, via: "fetch" };
   } finally {
     clearTimeout(timer);
   }
@@ -107,7 +230,7 @@ export async function sendAlert(input, deps = {}) {
   try {
     const result = await sendTelegram(text, deps);
     if (result.sent) {
-      log.log?.(`alert: đã gửi telegram — ${input?.title ?? "alert"}`);
+      log.log?.(`alert: đã gửi telegram (đường ${result.via ?? "fetch"}) — ${input?.title ?? "alert"}`);
     } else {
       log.warn?.(`alert: KHÔNG gửi được (${result.reason}) — ${input?.title ?? "alert"}`);
     }

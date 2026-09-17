@@ -78,3 +78,21 @@ Agent/harness chạy trên **máy Windows của chủ dự án** có một khoá
   ```
 - Upload file để có link công khai: web tĩnh phục vụ từ `/var/www/flowvpn`, URL `/dl/<file>` →
   `/var/www/flowvpn/dl/<file>`; sau khi `scp` phải `chown caddy:caddy` + `chmod 644` mới tải được.
+
+## Gửi Telegram từ server: 2 bẫy đã gặp thật (17/09)
+
+1. **`fetch` không gửi được, alert im lặng** — node-2 phân giải `api.telegram.org` ra **IPv6**
+   nhưng máy không có IPv6 ⇒ undici chỉ ném `fetch failed`. Hậu quả: **mọi alert/report tự động
+   của control plane không tới Telegram** (đơn trả tiền, khách đăng ký máy mới, node sập, GFW
+   watch, báo cáo 08:00/20:00) trong khi bot Telegram vẫn chạy (bot đã tự xử từ 16/09 bằng
+   `https.Agent({family:4})` + thử thẳng IP).
+   Đã sửa trong `control-plane/src/alerts.js`: `fetch` → `node:https` buộc IPv4 → thử thẳng
+   `149.154.167.220 / 149.154.166.110 / 149.154.175.100` (SNI vẫn theo tên miền). Log ghi rõ
+   đường đã dùng: `alert: đã gửi telegram (đường https-ipv4) — …`.
+   Kiểm tra nhanh: `journalctl -u flowvpn-cp | grep "alert:"`.
+
+2. **Chữ bị vỡ (mojibake)** — nếu bên gửi mã hoá sai (UTF-8 bị đọc như latin-1 rồi gửi tiếp,
+   kiểu `BÃ¡o cÃ¡o`), `renderAlertText()` tự sửa lại trước khi gửi. Nhưng nếu bên gửi đã **thay
+   dấu bằng `?`** (ca PowerShell 5.1 gửi body ISO-8859-1) thì dữ liệu mất thật, server không cứu
+   được — phải sửa phía gửi: gửi **bytes UTF-8** (`[System.Text.Encoding]::UTF8.GetBytes($json)`)
+   và `Content-Type: application/json; charset=utf-8`, hoặc dùng base64.

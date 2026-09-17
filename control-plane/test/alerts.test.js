@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { alertChannels, renderAlertText, sendAlert, sendTelegram } from "../src/alerts.js";
+import { alertChannels, renderAlertText, repairMojibake, sendAlert, sendTelegram } from "../src/alerts.js";
 
 const ENV = { TELEGRAM_BOT_TOKEN: "123:ABC", TELEGRAM_CHAT_ID: "999", ALERT_EMAIL: "owner@example.com" };
 const silent = { log: () => {}, warn: () => {}, error: () => {} };
@@ -128,4 +128,78 @@ test("invoiceConfirmedAlert: gửi được email ⇒ ok; không gửi được 
   const bad = invoiceConfirmedAlert({ orderCode: "1", email: "x@y.z", plan: "1 tháng", mailSent: false });
   assert.equal(bad.level, "warn", "khách trả tiền mà không nhận được hoá đơn phải ở mức warn");
   assert.equal(bad.lines.some((l) => l.includes("KHÔNG gửi được")), true);
+});
+
+/**
+ * Ca thật trên node-2 (16-17/09): DNS trả api.telegram.org là IPv6, máy không có IPv6 ⇒
+ * undici chỉ ném "fetch failed" và **mọi alert tự động im lặng** (đơn trả tiền, khách đăng ký
+ * máy mới, node sập, báo cáo 08:00/20:00). Phải có đường IPv4 dự phòng như bot Telegram đang dùng.
+ */
+test("sendTelegram: fetch 'fetch failed' ⇒ tự rơi sang đường IPv4 (node:https)", async () => {
+  const tried = [];
+  const httpsImpl = async ({ ip = null }) => {
+    tried.push(ip ?? "ipv4");
+    return ip ? { sent: false, reason: "ECONNREFUSED", via: `https-ip:${ip}` } : { sent: true, messageId: 77, via: "https-ipv4" };
+  };
+  const result = await sendTelegram("xin chào", {
+    env: ENV,
+    fetchImpl: async () => { throw new Error("fetch failed"); },
+    httpsImpl,
+    directIps: ["1.1.1.1", "2.2.2.2"],
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.via, "https-ipv4");
+  assert.equal(result.messageId, 77);
+  assert.deepEqual(tried, ["ipv4"], "IPv4 thành công thì không cần thử IP trực tiếp");
+});
+
+test("sendTelegram: IPv4 lỗi ⇒ thử thẳng từng IP Telegram (SNI theo tên miền)", async () => {
+  const tried = [];
+  const httpsImpl = async ({ ip = null }) => {
+    tried.push(ip ?? "ipv4");
+    if (ip === "2.2.2.2") return { sent: true, messageId: 9, via: `https-ip:${ip}` };
+    return { sent: false, reason: "timeout", via: `https-ip:${ip ?? "v4"}` };
+  };
+  const result = await sendTelegram("x", {
+    env: ENV,
+    fetchImpl: async () => { throw new Error("fetch failed"); },
+    httpsImpl,
+    directIps: ["1.1.1.1", "2.2.2.2"],
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.via, "https-ip:2.2.2.2");
+  assert.deepEqual(tried, ["ipv4", "1.1.1.1", "2.2.2.2"]);
+});
+
+test("sendTelegram: Telegram trả lỗi rõ ràng (ok=false) thì KHÔNG thử lại vô ích", async () => {
+  let httpsCalls = 0;
+  const result = await sendTelegram("x", {
+    env: ENV,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: false, description: "chat not found" }) }),
+    httpsImpl: async () => { httpsCalls += 1; return { sent: true, via: "https-ipv4" }; },
+  });
+  assert.equal(result.sent, false);
+  assert.match(result.reason, /chat not found/);
+  assert.equal(httpsCalls, 0, "lỗi cấu hình/Telegram từ chối thì không phải lỗi mạng");
+});
+
+test("repairMojibake: sửa đúng chuỗi UTF-8 bị đọc như latin-1, không đụng chuỗi đúng", () => {
+  // UTF-8 của "Báo cáo" bị đọc như latin-1 rồi gửi tiếp — đúng kiểu "vỡ font" trên Windows.
+  const broken = Buffer.from("Báo cáo thiết bị khách: đã đăng ký 🚀", "utf8").toString("latin1");
+  assert.notEqual(broken, "Báo cáo thiết bị khách: đã đăng ký 🚀");
+  assert.equal(repairMojibake(broken), "Báo cáo thiết bị khách: đã đăng ký 🚀");
+
+  for (const ok of ["Báo cáo VPNFlow", "Node: Hanoi 2 ✓", "plain ascii text", "", "Giá: 50.000₫ – ổn"]) {
+    assert.equal(repairMojibake(ok), ok, `chuỗi đúng không được sửa: ${ok}`);
+  }
+  // Mất dữ liệu thật (bên gửi đã thay bằng "?") thì không cứu được — trả nguyên trạng.
+  assert.equal(repairMojibake("B?o c?o"), "B?o c?o");
+});
+
+test("renderAlertText: tự sửa mojibake trong tiêu đề và từng dòng", () => {
+  const brokenTitle = Buffer.from("Khách đăng ký máy mới", "utf8").toString("latin1");
+  const brokenLine = Buffer.from("Thiết bị: iPhone — Hà Nội", "utf8").toString("latin1");
+  const text = renderAlertText({ title: brokenTitle, lines: [brokenLine], level: "info", at: new Date("2026-09-17T00:00:00Z") });
+  assert.ok(text.includes("Khách đăng ký máy mới"), text);
+  assert.ok(text.includes("Thiết bị: iPhone — Hà Nội"), text);
 });
