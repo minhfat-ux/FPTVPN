@@ -20,6 +20,34 @@
 
 ---
 
+## ĐƯỜNG ĐANG CHỌN — Mac chỉ chạy 1 lệnh để cấp quyền SSH cho máy Windows
+
+Máy Windows đã tạo sẵn keypair ed25519 (`C:\Users\Minhn\.ssh\id_ed25519`, không passphrase,
+fingerprint `SHA256:EHS/okspairrP++XPYWJlBXuY/bPjPZRaNo2/ByHvxg`). Máy Windows **không có** khoá
+nào vào node-1 nên bị `Permission denied (publickey,password)` — mạng thì đã thông.
+
+**Trên máy Mac, chạy 1 lệnh này** (Mac đang có khoá vào node-1):
+
+```bash
+PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ6ags2RodFw6+VMfyz+k/icvBKLjJhRWkGtdl7OK/YA dsh-windows-fptvpn'
+
+ssh root@103.173.155.50 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && grep -qxF '$PUBKEY' ~/.ssh/authorized_keys || echo '$PUBKEY' >> ~/.ssh/authorized_keys"
+
+ssh root@103.173.155.50 "grep -c dsh-windows-fptvpn ~/.ssh/authorized_keys"
+```
+
+Kỳ vọng: lệnh cuối in ra **≥ 1**. Xong bước này thì **máy Windows tự chạy BƯỚC 1–3 ở dưới**
+(không cần Mac nữa) — Mac **không cần** chạy BƯỚC 0/2. Phần dưới giữ lại làm phương án dự phòng.
+
+> Chỉ cần authorize trên **node-1** (`103.173.155.50`): script đẩy file sang node-2 bằng khoá
+> có sẵn giữa node-1 → node-2.
+
+> Lưu ý bảo mật: đây là **public key**, không phải bí mật. Private key nằm ở máy Windows và
+> **không rời khỏi máy đó**. Muốn thu hồi quyền sau này thì xoá đúng dòng chứa
+> `dsh-windows-fptvpn` trong `/root/.ssh/authorized_keys` của node-1.
+
+---
+
 ## 1. Ràng buộc
 
 - Chạy đúng các lệnh dưới đây. **Không** sửa code, **không** đổi cấu hình nào khác.
