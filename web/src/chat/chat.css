@@ -76,10 +76,22 @@
 
 /* ------------------------------------------------------------- transcript */
 
-/* Assistant avatar uses the flat accent tint instead of the legacy gradient. */
+/* Avatar của trợ lý = chính logo fBuddy (icon Culi), không dùng icon chung nữa.
+   Ô avatar là 32x32 bo góc 10px (xem .msg-avatar trong styles.css); ảnh phóng kín ô
+   và thừa hưởng độ bo góc, nên không cần nền accent phía sau. */
 .msg-assistant .msg-avatar {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
+  padding: 0;
+  overflow: hidden;
+}
+
+.msg-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
 }
 
 .msg-user { flex-direction: row-reverse; }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Sparkles, Square, User as UserIcon, Volume2 } from "lucide-react";
+import { RefreshCw, Square, User as UserIcon, Volume2 } from "lucide-react";
 import { api } from "../api/client";
 import { formatBytes } from "../state/store";
 import { CopyButton, Markdown } from "../components/ui";
@@ -151,7 +151,9 @@ export function MessageItem({
 
   return (
     <div className={`msg ${isUser ? "msg-user" : "msg-assistant"}`}>
-      <div className="msg-avatar">{isUser ? <UserIcon size={15} /> : <Sparkles size={15} />}</div>
+      <div className="msg-avatar">
+        {isUser ? <UserIcon size={15} /> : <img className="msg-avatar-img" src="/brand-mark.png?v=culi1" alt="" />}
+      </div>
       <div className="msg-body">
         <div className="msg-meta">
           <span className="bold">{isUser ? t("chat.message.roleUser") : "fBuddy"}</span>
@@ -222,7 +224,7 @@ export function StreamingMessage({
   return (
     <div className="msg msg-assistant">
       <div className="msg-avatar">
-        <Sparkles size={15} />
+        <img className="msg-avatar-img" src="/brand-mark.png?v=culi1" alt="" />
       </div>
       <div className="msg-body">
         <div className="msg-meta">
