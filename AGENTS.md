@@ -43,3 +43,21 @@ Nếu brief nói một đằng, code nói một nẻo → **theo code**, và ghi
 
 ## 5. Khi bị chặn
 Dừng và báo ngay (không tự xử theo hướng khác) nếu: brief mâu thuẫn với file này, cần quyền ngoài phạm vi, test không thể pass vì lý do ngoài phạm vi, hoặc phát hiện vấn đề bảo mật/rò rỉ dữ liệu.
+
+## 6. Phối hợp nhiều máy — BẮT BUỘC trước khi sửa file
+Repo này có nhiều agent sửa song song: **harness Windows (orchestrator)**, **harness Mac**, và
+**agent trên server** (`/root/flowvpn-agent`). Trước khi sửa bất kỳ file nào, phải hỏi bảng việc
+chung (nguồn sự thật: `node-2:/var/lib/flowvpn-coord/claims/`):
+
+```bash
+flowvpn-coord check <đường-dẫn-file> --owner <windows|mac|server>   # exit 1 = có người khác đang giữ
+flowvpn-coord claim --owner <owner> --area <vùng> --files <p1,p2> --note "<việc đang làm>"
+flowvpn-coord release --owner <owner> --area <vùng>
+flowvpn-coord list
+```
+
+- `check` báo **XUNG DOT** (exit code 1) → **dừng lại**, nhắn orchestrator qua Telegram, không tự sửa.
+- Đang làm thì phải giữ `claim`; xong thì `release`. Claim hết hạn sau 90 phút (gia hạn bằng
+  cách `claim` lại).
+- Chi tiết + lệnh cho từng máy: `.privatevpn/coordination/PROTOCOL.md`.
+- Mã nguồn tool: `scripts/coord/flowvpn-coord.mjs` (`selftest` để tự kiểm tra logic).
