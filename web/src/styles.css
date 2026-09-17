@@ -343,6 +343,119 @@ a:hover { text-decoration: underline; }
 .switch input:checked + .track { background: var(--accent); }
 .switch input:checked + .track::after { transform: translateX(18px); }
 
+/* ============================================================================
+   FLOWTECH SIGNATURE THEME
+   Lifted from the ecosystem popup (web/public/promo.css) so the app, the buy page
+   and the admin panel look like one product. Contract: docs/THEME.md.
+   Everything here is additive and goes through variables — the light theme keeps
+   its contrast, the dark theme gets the popup's navy gradient.
+   ========================================================================= */
+
+:root {
+  --accent-2: #22d3ee;
+  --accent-3: #7c3aed;
+  --accent-mint: #0f9d76;
+  --sig-gradient: linear-gradient(135deg, #33c773, #22d3ee);
+  --sig-ring: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
+  --sig-card-bg: linear-gradient(150deg, rgba(51, 199, 115, 0.08), transparent 60%);
+  --sig-radius-card: 22px;
+  --sig-radius-inner: 16px;
+  --sig-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-theme="dark"] {
+  --accent-mint: #7fe6c0;
+  --sig-card-bg: radial-gradient(130% 120% at 0% 0%, #14406c 0%, #0a1f3b 55%, #071628 100%);
+}
+
+/* --- nút chính: gradient thương hiệu + hào quang --------------------------- */
+.btn-primary {
+  background: var(--sig-gradient);
+  border-color: transparent;
+  color: #05202a;
+  box-shadow: 0 10px 24px -12px rgba(34, 211, 238, 0.7);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--sig-gradient);
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px -12px rgba(51, 199, 115, 0.8);
+}
+.btn-primary:active:not(:disabled) { transform: translateY(0); }
+
+/* --- card nổi bật: nền navy + viền gradient 1px + hào quang ---------------- */
+.card-feature,
+.topup-package,
+.hub-card,
+.price-panel {
+  position: relative;
+  background-image: var(--sig-card-bg), linear-gradient(var(--bg-panel), var(--bg-panel));
+  border-color: transparent;
+  border-radius: var(--sig-radius-card);
+  animation: sig-rise 0.36s var(--sig-ease) both;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+.card-feature::before,
+.topup-package::before,
+.hub-card::before,
+.price-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--sig-ring);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.8;
+  pointer-events: none;
+}
+.card-feature:hover,
+.topup-package:hover,
+.hub-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 44px -22px rgba(34, 211, 238, 0.55);
+}
+
+/* --- nhãn eyebrow (in hoa nhỏ, màu mint) ---------------------------------- */
+.eyebrow,
+.card-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent-mint);
+}
+
+/* --- hiệu ứng xuất hiện (một lần, không lặp khi cuộn) --------------------- */
+@keyframes sig-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sig-rise {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.modal-backdrop { animation: sig-fade 0.22s ease-out both; }
+.modal { animation: sig-rise 0.32s var(--sig-ease) both; }
+.toast { animation: sig-slide 0.24s var(--sig-ease) both; }
+@keyframes sig-slide {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.msg { animation: sig-slide 0.24s var(--sig-ease) both; }
+/* The live turn must not replay the animation on every token. */
+.msg-streaming, .msg:has(.streaming-cursor) { animation: none; }
+.eco-banner { animation: sig-rise 0.32s var(--sig-ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card-feature, .topup-package, .hub-card, .price-panel,
+  .modal-backdrop, .modal, .toast, .msg, .eco-banner {
+    animation: none;
+    transition: none;
+  }
+}
+
 /* ------------------------------------------------------------------- cards */
 
 .card {
@@ -584,6 +697,48 @@ a:hover { text-decoration: underline; }
   border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ------------------------------------- ecosystem banner (download the apps) */
+
+.eco-banner {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  margin: var(--space-3) var(--space-4) 0;
+  padding: 10px var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: linear-gradient(120deg, var(--accent-soft), var(--bg-panel) 62%);
+}
+.eco-mark { flex: 0 0 auto; }
+.eco-text { min-width: 0; flex: 1 1 220px; }
+.eco-title { font-weight: 700; font-size: 13.5px; }
+.eco-sub { font-size: 12px; color: var(--text-muted); }
+.eco-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.eco-never {
+  border: 0; background: none; padding: 0; font: inherit; font-size: 11.5px;
+  color: var(--text-faint); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.eco-never:hover { color: var(--text); }
+.eco-note { flex: 1 1 100%; }
+.eco-app {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elevated); flex: 1 1 340px; min-width: 0;
+}
+.eco-app-icon { border-radius: 8px; flex: 0 0 auto; }
+.eco-app-body { min-width: 0; flex: 1 1 150px; display: flex; flex-direction: column; }
+.eco-app-name { font-weight: 650; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.eco-app-pitch { display: block; }
+.eco-app-links { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.eco-others { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-muted); }
+.eco-others a { color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px; }
+.eco-others a:hover { color: var(--accent); }
+
+@media (max-width: 760px) {
+  .eco-banner { margin: var(--space-2) var(--space-3) 0; gap: var(--space-2); }
+  .eco-actions { width: 100%; }
+  .eco-app { flex-basis: 100%; }
+  .eco-app-links { align-items: flex-start; }
+  .eco-app-links .btn { min-height: 36px; }
+}
 
 /* ------------------------------------------------- signed-in devices (sessions) */
 

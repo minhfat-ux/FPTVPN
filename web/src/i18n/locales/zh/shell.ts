@@ -110,6 +110,35 @@ export const shell: Dict = {
   "shell.profile.viewAll": "查看全部",
   "shell.profile.historyLoading": "正在加载记录…",
   "shell.profile.historyEmpty": "还没有代币交易。",
+  "shell.ecosystem.title": "下载 FlowTech 生态应用",
+
+  "shell.ecosystem.sub": "VPNFlow 私密连接 · MeetFlow AI 随身助手 — 免费下载。",
+
+  "shell.ecosystem.subExpanded": "请选择适合本设备的版本：",
+
+  "shell.ecosystem.showApps": "下载应用",
+
+  "shell.ecosystem.allApps": "下载与购买",
+
+  "shell.ecosystem.dismiss": "隐藏横幅",
+
+  "shell.ecosystem.never": "不再显示",
+
+  "shell.ecosystem.snoozeNote": "隐藏 {days} 天",
+
+  "shell.ecosystem.vpnflowPitch": "高速私密连接，不限流量。",
+
+  "shell.ecosystem.meetflowPitch": "随身 AI 助手：问答、写作、翻译、生成图片。",
+
+  "shell.ecosystem.download.windows": "Windows",
+
+  "shell.ecosystem.download.macos": "macOS",
+
+  "shell.ecosystem.download.ios": "iPhone / iPad",
+
+  "shell.ecosystem.download.android": "Android",
+
+  "shell.ecosystem.download.other": "下载",
   "shell.sessions.title": "已登录设备",
 
   "shell.sessions.hint": "同一邮箱可以同时登录多台设备。在此退出只影响该设备；会话与上下文会跟随账号同步到其他设备。",

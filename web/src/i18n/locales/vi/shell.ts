@@ -110,6 +110,35 @@ export const shell: Dict = {
   "shell.profile.viewAll": "Xem tất cả",
   "shell.profile.historyLoading": "Đang tải lịch sử…",
   "shell.profile.historyEmpty": "Chưa có giao dịch token nào.",
+  "shell.ecosystem.title": "Cài app hệ sinh thái FlowTech",
+
+  "shell.ecosystem.sub": "VPNFlow cho kết nối riêng tư · MeetFlow AI trong túi — miễn phí tải về.",
+
+  "shell.ecosystem.subExpanded": "Chọn đúng bản cho thiết bị của anh:",
+
+  "shell.ecosystem.showApps": "Tải app",
+
+  "shell.ecosystem.allApps": "Trang tải & mua",
+
+  "shell.ecosystem.dismiss": "Ẩn banner",
+
+  "shell.ecosystem.never": "Không hiện lại",
+
+  "shell.ecosystem.snoozeNote": "Ẩn {days} ngày",
+
+  "shell.ecosystem.vpnflowPitch": "Kết nối riêng tư tốc độ cao, không giới hạn dung lượng.",
+
+  "shell.ecosystem.meetflowPitch": "Trợ lý AI đa năng: hỏi đáp, viết, dịch, tạo ảnh trên điện thoại.",
+
+  "shell.ecosystem.download.windows": "Windows",
+
+  "shell.ecosystem.download.macos": "macOS",
+
+  "shell.ecosystem.download.ios": "iPhone / iPad",
+
+  "shell.ecosystem.download.android": "Android",
+
+  "shell.ecosystem.download.other": "Tải về",
   "shell.sessions.title": "Thiết bị đang đăng nhập",
 
   "shell.sessions.hint": "Cùng một email có thể đăng nhập trên nhiều thiết bị. Đăng xuất ở đây chỉ ảnh hưởng thiết bị đó; hội thoại và ngữ cảnh vẫn theo tài khoản sang các máy khác.",

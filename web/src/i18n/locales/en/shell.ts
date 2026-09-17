@@ -110,6 +110,35 @@ export const shell: Dict = {
   "shell.profile.viewAll": "View all",
   "shell.profile.historyLoading": "Loading history…",
   "shell.profile.historyEmpty": "No token transactions yet.",
+  "shell.ecosystem.title": "Get the FlowTech apps",
+
+  "shell.ecosystem.sub": "VPNFlow for a private connection · MeetFlow AI in your pocket — free downloads.",
+
+  "shell.ecosystem.subExpanded": "Pick the build for this device:",
+
+  "shell.ecosystem.showApps": "Download apps",
+
+  "shell.ecosystem.allApps": "Downloads & pricing",
+
+  "shell.ecosystem.dismiss": "Hide banner",
+
+  "shell.ecosystem.never": "Don't show again",
+
+  "shell.ecosystem.snoozeNote": "Hidden for {days} days",
+
+  "shell.ecosystem.vpnflowPitch": "Fast private connection, unlimited data.",
+
+  "shell.ecosystem.meetflowPitch": "A pocket AI assistant: chat, write, translate, create images.",
+
+  "shell.ecosystem.download.windows": "Windows",
+
+  "shell.ecosystem.download.macos": "macOS",
+
+  "shell.ecosystem.download.ios": "iPhone / iPad",
+
+  "shell.ecosystem.download.android": "Android",
+
+  "shell.ecosystem.download.other": "Download",
   "shell.sessions.title": "Signed-in devices",
 
   "shell.sessions.hint": "The same email can be signed in on several devices. Signing out here only affects that device; conversations and context follow the account to the others.",

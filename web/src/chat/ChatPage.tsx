@@ -5,6 +5,7 @@ import { SkillPicker } from "./SkillPicker";
 import { MessageList } from "./MessageList";
 import { RequestCreditsForm } from "./RequestCreditsForm";
 import { useAutoScroll } from "../components/ui";
+import { EcosystemBanner } from "../components/EcosystemBanner";
 import { useChat } from "../state/chat";
 import { useCredits } from "../state/credits";
 import { useData, useToast } from "../state/store";
@@ -210,6 +211,7 @@ export function ChatPage({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      <EcosystemBanner />
       <MessageList
         messages={messages}
         streaming={streaming}
