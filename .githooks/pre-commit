@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# pre-commit — chan commit khi file sap commit nam trong claim dang hieu luc cua MAY KHAC.
+#
+# Vi sao: luat "check truoc khi sua" chi co tac dung neu agent nho. Hook nay bat o dung
+# thoi diem de va nhau nhat (luc commit) nen khong the quen.
+#
+# Cai dat (moi may chay 1 lan trong repo):
+#   git config core.hooksPath .githooks
+#   git config coord.owner windows        # windows | mac | server
+#   git config coord.cmd "flowvpn-coord"  # tuy may: server/mac goi truc tiep;
+#                                        # Windows: "ssh -o BatchMode=yes -J root@<node-1> root@<node-2> flowvpn-coord"
+#
+# Fail-open: khong goi duoc bang viec (mat mang, ssh loi) thi chi CANH BAO roi cho qua —
+# mot cai hook khong duoc phep treo ca doi.
+set -u
+
+owner="$(git config --get coord.owner || true)"
+if [ -z "$owner" ]; then
+  echo "coord: chua dat 'git config coord.owner <windows|mac|server>' — bo qua kiem tra bang viec" >&2
+  exit 0
+fi
+
+coord_cmd="$(git config --get coord.cmd || echo flowvpn-coord)"
+
+files=()
+while IFS= read -r -d '' f; do files+=("$f"); done < <(git diff --cached --name-only -z --diff-filter=ACM)
+if [ "${#files[@]}" -eq 0 ]; then exit 0; fi
+
+out="$($coord_cmd check --owner "$owner" "${files[@]}" 2>&1)"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+  exit 0
+fi
+if [ "$rc" -eq 1 ]; then
+  echo "$out" >&2
+  echo "" >&2
+  echo "coord: COMMIT BI CHAN. Dung lai, bao orchestrator (harness Windows) qua Telegram." >&2
+  echo "coord: neu that su can sua, xin nhuong claim hoac cho claim het han." >&2
+  exit 1
+fi
+echo "coord: khong kiem tra duoc bang viec (rc=$rc) — cho qua de khong treo viec:" >&2
+echo "$out" >&2
+exit 0

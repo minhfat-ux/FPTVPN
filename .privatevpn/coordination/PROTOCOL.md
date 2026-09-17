@@ -74,6 +74,25 @@ Ví dụ đang dùng: `tg-bot`, `control-plane`, `windows-app`, `harness-windows
 `release`, `docs`. Claim theo thư mục khi sửa lan nhiều file (`windows/PrivateVPNWindows.App`),
 theo file khi chỉ đụng một chỗ (`scripts/tg-bot/bot.mjs`).
 
-## 6. Đổi vai orchestrator
+## 6. Hook chặn commit (nên bật trên mọi máy)
+
+Luật "check trước khi sửa" chỉ có tác dụng nếu agent nhớ. `.githooks/pre-commit` bắt đúng lúc
+commit — không thể quên. Bật một lần cho mỗi clone:
+
+```bash
+git config core.hooksPath .githooks
+git config coord.owner windows        # windows | mac | server
+# server/Mac gọi trực tiếp bảng việc:
+git config coord.cmd "flowvpn-coord"
+# Windows (đi qua node-1):
+git config coord.cmd "ssh -o BatchMode=yes -J root@103.173.155.50 root@165.101.114.162 flowvpn-coord"
+```
+
+- Commit file nằm trong claim của máy khác ⇒ **bị chặn** (exit 1), in rõ ai đang giữ.
+- **Fail-open**: mất mạng / không gọi được bảng việc thì chỉ cảnh báo rồi cho qua — hook không
+  được phép treo việc.
+- Chưa đặt `coord.owner` thì hook bỏ qua (kèm cảnh báo).
+
+## 7. Đổi vai orchestrator
 
 Muốn đổi thì sửa đúng bảng ở §1 và commit — chỉ orchestrator được sửa file này.
