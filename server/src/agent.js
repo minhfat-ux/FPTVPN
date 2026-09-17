@@ -1,7 +1,7 @@
 import { streamChat } from "./providers/index.js";
 import { listAllTools, callTool, flattenToolResult, qualifiedToolName } from "./mcp.js";
 import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool, isKnownSkill } from "./skills/index.js";
-import { listProviderRows, readAppSettings, resolveProviderForChat } from "./settings.js";
+import { listProviderRows, nextUsableProvider, readAppSettings, resolveProviderForChat } from "./settings.js";
 import { getOwnedFile, asTextPayload, asImagePayload, publicFile } from "./files.js";
 import { all, audit, update } from "./db.js";
 import { toRuntimeProvider } from "./providers/index.js";
@@ -233,13 +233,37 @@ export async function buildModelMessages({ conversationId, systemPrompt, history
   return messages;
 }
 
+/** Provider failures worth retrying elsewhere: no credit, bad key, rate limit. */
+export function isProviderCreditError(error) {
+  const status = Number(error?.status ?? 0);
+  const message = String(error?.message ?? "");
+  if ([401, 402, 403, 429].includes(status)) return true;
+  return /余额|欠费|quota|balance|credit|insufficient|billing|rate.?limit|invalid.?api.?key|unauthor/i.test(message);
+}
+
+/** Replaces the throwing provider with the next usable one (once per turn). */
+function switchToFallbackProvider({ failed, attemptedIds }) {
+  const settings = readAppSettings();
+  const skipped = new Set(attemptedIds);
+  for (const row of listProviderRows()) {
+    if (Number(row.enabled) !== 1 || skipped.has(row.id) || row.id === failed.id) continue;
+    const candidate = nextUsableProvider({ excludeId: null, providerId: row.id });
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
 /**
  * Runs the assistant turn: streams text, executes built-in + MCP tool calls and
  * persists one assistant message holding the whole turn.
  */
 export async function runChatTurn({ user, turn, channel, signal }) {
-  const { settings, skill, provider, model, conversation, files } = turn;
+  const { settings, skill, conversation, files } = turn;
   const started = Date.now();
+  // These two may be swapped below when the configured provider has no credit.
+  let provider = turn.provider;
+  let model = turn.model;
+  const attemptedProviderIds = [provider.id];
 
   const builtin = toolDefinitionsForSkill(skill);
   const modelTools = builtin.map(toModelTool);
@@ -287,37 +311,65 @@ export async function runChatTurn({ user, turn, channel, signal }) {
       const pendingCalls = [];
       let iterationText = "";
 
-      for await (const event of streamChat({
-        provider,
-        model,
-        messages,
-        tools: useTools ? modelTools : [],
-        toolMode: turn.toolMode ?? "auto",
-        signal,
-      })) {
-        if (signal.aborted) break;
-        switch (event.type) {
-          case "delta":
-            iterationText += event.text;
-            text += event.text;
-            channel.send("delta", { text: event.text });
-            break;
-          case "reasoning":
-            channel.send("reasoning", { text: event.text });
-            break;
-          case "tool_call":
-            pendingCalls.push(event);
-            break;
-          case "usage":
-          case "usage_final":
-            usage = { in: event.in ?? usage?.in ?? 0, out: event.out ?? usage?.out ?? 0 };
-            break;
-          case "done":
-            finishReason = event.finishReason ?? "stop";
-            break;
-          default:
-            break;
+      let streamError = null;
+      try {
+        for await (const event of streamChat({
+          provider,
+          model,
+          messages,
+          tools: useTools ? modelTools : [],
+          toolMode: turn.toolMode ?? "auto",
+          signal,
+        })) {
+          if (signal.aborted) break;
+          switch (event.type) {
+            case "delta":
+              iterationText += event.text;
+              text += event.text;
+              channel.send("delta", { text: event.text });
+              break;
+            case "reasoning":
+              channel.send("reasoning", { text: event.text });
+              break;
+            case "tool_call":
+              pendingCalls.push(event);
+              break;
+            case "usage":
+            case "usage_final":
+              usage = { in: event.in ?? usage?.in ?? 0, out: event.out ?? usage?.out ?? 0 };
+              break;
+            case "done":
+              finishReason = event.finishReason ?? "stop";
+              break;
+            default:
+              break;
+          }
         }
+      } catch (err) {
+        streamError = err;
+      }
+
+      // The default provider may be out of credit or have a revoked key. As long
+      // as nothing was streamed yet, swap to another ready provider instead of
+      // failing the whole conversation.
+      if (streamError) {
+        const canSwap =
+          iteration === 0 && !text && !iterationText && !pendingCalls.length && isProviderCreditError(streamError);
+        const fallback = canSwap
+          ? switchToFallbackProvider({ failed: provider, attemptedIds: attemptedProviderIds })
+          : null;
+        if (!fallback) throw streamError;
+        attemptedProviderIds.push(fallback.provider.id);
+        channel.send("notice", {
+          message:
+            `Nhà cung cấp "${provider.name}" không dùng được (${truncate(String(streamError.message ?? ""), 160)}). ` +
+            `Lượt này chuyển sang "${fallback.provider.name}".`,
+        });
+        provider = fallback.provider;
+        model = fallback.model;
+        // Retry the same iteration with the replacement provider.
+        iteration -= 1;
+        continue;
       }
 
       if (usage) channel.send("usage", usage);

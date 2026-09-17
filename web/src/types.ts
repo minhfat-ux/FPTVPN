@@ -323,6 +323,7 @@ export type ChatEvent =
   | { event: "tool_result"; data: ToolResult }
   | { event: "artifact"; data: Artifact }
   | { event: "usage"; data: { in: number; out: number } }
+  | { event: "notice"; data: { message: string } }
   | { event: "done"; data: DoneEvent }
   | { event: "error"; data: { code: string; message: string } };
 
@@ -363,6 +364,8 @@ export interface StreamingTurn {
   artifacts: Artifact[];
   usage: { in: number; out: number } | null;
   error: string | null;
+  /** Mid-turn explanation, e.g. the provider was swapped because it ran out of credit. */
+  notice?: string | null;
   done: boolean;
   providerName?: string;
   model?: string;

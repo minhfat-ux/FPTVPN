@@ -169,6 +169,23 @@ export function resolveProviderForChat({ providerId = null, model = null } = {})
   return { provider: runtime, model: chosenModel, row, fallbackFrom };
 }
 
+/**
+ * The next provider that can actually serve a turn, skipping `excludeId`.
+ * Used when the default provider rejects the request (out of credit, revoked
+ * key, rate limit) so one bad provider cannot break every conversation.
+ */
+export function nextUsableProvider({ excludeId = null, providerId = null, model = null } = {}) {
+  const rows = listProviderRows().filter((row) => Number(row.enabled) === 1 && row.id !== excludeId);
+  const ready = rows.filter((row) => row.kind === "mock" || Boolean(decryptSecret(row.api_key_enc)));
+  if (!ready.length) return null;
+  const wanted = providerId ? ready.find((row) => row.id === providerId) : null;
+  const row = wanted ?? ready[0];
+  const runtime = toRuntimeProvider(row);
+  const chosenModel = model || runtime.defaultModel || runtime.models?.[0] || null;
+  if (!chosenModel) return null;
+  return { provider: runtime, model: chosenModel, row };
+}
+
 export function listModelsForUi() {
   const settings = getAppSettings();
   const items = [];

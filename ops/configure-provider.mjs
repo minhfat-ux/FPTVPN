@@ -37,7 +37,11 @@ function has(name) {
 
 const name = flag("name", "Provider");
 const kind = flag("kind", "openai-compatible");
-const baseUrl = flag("base-url", undefined);
+/** `--base-url` may list candidates (comma separated); the first that answers wins. */
+const baseUrlCandidates = (flag("base-url", "") || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 const models = (flag("models", "") || "").split(",").map((m) => m.trim()).filter(Boolean);
 const defaultModel = flag("default-model", undefined) || models[0] || undefined;
 const verifyModel = flag("verify-model", undefined) || defaultModel;
@@ -58,35 +62,59 @@ initDb();
 const settings = await import(`${SERVER}/settings.js`);
 const providers = await import(`${SERVER}/providers/index.js`);
 
-// 1. Live model list from the provider itself — never guess model ids.
-let liveModels = null;
-const probe = providers.toRuntimeProvider({
-  id: "probe",
-  name,
-  kind,
-  base_url: baseUrl ?? null,
-  api_key_enc: null,
-  models_json: [],
-  default_model: null,
-  image_model: null,
-  enabled: 1,
-});
-probe.apiKey = apiKey;
-try {
-  liveModels = await providers.providerModels({ provider: probe });
-  console.log(`Provider báo ${liveModels.length} model khả dụng.`);
-} catch (err) {
-  console.log(`Không lấy được danh sách model (bỏ qua): ${err?.message ?? err}`);
+function probeFor(candidateBaseUrl) {
+  const probe = providers.toRuntimeProvider({
+    id: "probe",
+    name,
+    kind,
+    base_url: candidateBaseUrl ?? null,
+    api_key_enc: null,
+    models_json: [],
+    default_model: null,
+    image_model: null,
+    enabled: 1,
+  });
+  probe.apiKey = apiKey;
+  return probe;
 }
+
+// 1. Pick a base URL that actually answers, then read the live model list.
+let baseUrl = null;
+let liveModels = null;
+const candidates = baseUrlCandidates.length ? baseUrlCandidates : [null];
+for (const candidate of candidates) {
+  const probe = probeFor(candidate);
+  try {
+    liveModels = await providers.providerModels({ provider: probe });
+    baseUrl = candidate;
+    console.log(`Base URL dùng được: ${candidate ?? "(mặc định của kind)"} — ${liveModels.length} model.`);
+    break;
+  } catch (err) {
+    // A gateway may answer /chat/completions but not /models — verify before giving up.
+    const message = String(err?.message ?? err);
+    const modelsUnsupported = /404|not found|không hỗ trợ/i.test(message);
+    try {
+      await providers.testProvider({ provider: probe, model: verifyModel ?? models[0] });
+      baseUrl = candidate;
+      liveModels = null;
+      console.log(`Base URL dùng được: ${candidate ?? "(mặc định của kind)"} (không có /models nhưng chat OK).`);
+      break;
+    } catch (chatErr) {
+      console.log(`  ✖ ${candidate ?? "(mặc định)"}: ${modelsUnsupported ? message.slice(0, 90) : String(chatErr?.message ?? chatErr).slice(0, 120)}`);
+    }
+  }
+}
+if (!baseUrl && baseUrlCandidates.length) baseUrl = baseUrlCandidates[0];
 
 // Prefer the live list, but keep the curated order the operator asked for.
 const chosen = models.length ? models : liveModels?.slice(0, 8) ?? [];
 if (liveModels && verifyModel && !liveModels.includes(verifyModel)) {
-  console.log(`⚠ Model "${verifyModel}" không có trong danh sách thật — thử model đầu tiên có thật.`);
+  console.log(`⚠ Model "${verifyModel}" không có trong danh sách thật — dùng model có thật.`);
 }
+const curatedInLive = models.find((model) => liveModels?.includes(model));
 const finalDefault =
   (liveModels && defaultModel && liveModels.includes(defaultModel) ? defaultModel : null) ||
-  (liveModels && liveModels.includes("google/gemini-2.5-flash") ? "google/gemini-2.5-flash" : null) ||
+  curatedInLive ||
   (liveModels ? liveModels[0] : defaultModel);
 
 // 2. Create or update the row.

@@ -185,6 +185,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             if (event.event === "artifact") {
               setPendingArtifacts((list) => dedupeArtifacts([...list, event.data]));
             }
+            if (event.event === "notice") {
+              push(event.data.message, "info");
+            }
 
             turn = reduceTurn(turn, event);
             setStreaming(turn);
@@ -320,6 +323,8 @@ export function reduceTurn(turn: StreamingTurn, event: ChatEvent): StreamingTurn
       return { ...turn, artifacts: dedupeArtifacts([...turn.artifacts, event.data]) };
     case "usage":
       return { ...turn, usage: event.data };
+    case "notice":
+      return { ...turn, notice: event.data.message };
     case "error":
       return { ...turn, error: event.data.message, status: null };
     case "done":
