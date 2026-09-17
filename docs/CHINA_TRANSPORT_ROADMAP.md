@@ -168,3 +168,40 @@ cd /tmp/hysteria/app && gomobile bind -target=android -androidapi=26 \
 ```
 (arm64/armv7/x86_64 auto). Put hysteria.aar under android/app/libs and add a gradle
 dependency. Then app code: VpnService.Builder.establish() -> fd -> HysteriaClient.Start(...).
+
+## Relay qua Cloudflare (đã triển khai 17–18/09/2026)
+
+**Vì sao:** đo trên máy chủ dự án (ISP Trung Quốc, IP 120.234.32.53) cho thấy đường relay cũ
+(chỉ expose qua **Tailscale Funnel**) bị giới hạn ~**1,7–2,5 MB/s** vì Funnel ingress đi qua DERP,
+trong khi cùng lúc đường **Cloudflare → node-2 đạt 13,7 MB/s** (= đúng tốc độ đường truyền của khách).
+Ngoài ra mọi IP node VN đều bị ISP Trung Quốc chặn (TCP 443/8443/10000/80 timeout), nên khách buộc
+phải đi relay ⇒ Cloudflare là cửa vào tốt nhất (PoP HKG, ~0,1 s TTFB).
+
+**Kiến trúc mới**
+- Frontend WS chạy trên **node-2** (`/root/wsrelay.js` + module `ws` ở `/root/node_modules/ws`),
+  4 unit systemd, bind `127.0.0.1`:
+  `relay-cf-vn2wg` 7783→UDP 127.0.0.1:443 (WG node-2) · `relay-cf-vn2hy` 7785→UDP 127.0.0.1:8443 (hysteria node-2)
+  `relay-cf-vn1wg` 7786→UDP 103.173.155.50:443 (WG node-1) · `relay-cf-vn1hy` 7787→UDP 103.173.155.50:8443 (hysteria node-1)
+- Caddy node-2 (origin của Cloudflare cho `api.meetflowai.site`) route `/relay/vn*` → các cổng trên,
+  có `flush_interval -1` cho WebSocket. Backup: `/etc/caddy/Caddyfile.bak-relaycf-*`.
+- Dữ liệu node trong control plane đã trỏ sang Cloudflare:
+  `node-1`: `wss://api.meetflowai.site/relay/vn1wg` · `/relay/vn1hy`
+  `vietnam-2`: `wss://api.meetflowai.site/relay/vn2wg` · `/relay/vn2hy`
+- **Funnel cũ vẫn bật** làm dự phòng (đã test vẫn trả 101).
+
+**Rollback** (1 lệnh mỗi node, qua `PATCH /v1/admin/nodes/:id`):
+- `node-1` → wg `wss://fcnvpn.tail303be3.ts.net:10000`, hy `wss://fcnvpn.tail303be3.ts.net:8443`
+- `vietnam-2` → wg `wss://fcnvpn.tail303be3.ts.net/vn2`, hy `wss://fcnvpn.tail303be3.ts.net/vn2hy`
+
+**Tinh chỉnh kèm theo (cùng ngày)**
+- `/etc/sysctl.d/99-flowvpn-net.conf` trên cả 2 node: `bbr` + `fq` + buffer 16 MB + `tcp_mtu_probing=1`
+  + `tcp_slow_start_after_idle=0` (node-2 trước đó là `cubic`/`pfifo_fast`/`rmem_max` 208 KB).
+- Gỡ hysteria server trên cổng 28443/54443 (không ai tham chiếu) ở cả 2 node.
+- Dừng + disable `flowvpn-harness.service` trên node-2 (swap 402 MB → 134 MB); bật lại:
+  `systemctl enable --now flowvpn-harness`.
+
+**Kiểm chứng**
+- 4 đường `wss://api.meetflowai.site/relay/{vn1wg,vn1hy,vn2wg,vn2hy}` → **HTTP 101** qua Cloudflare (CF-RAY HKG).
+- `/v1/nodes` (public) trả đúng URL Cloudflare.
+- Tốc độ qua CF ≈ tốc độ đường truyền của khách (cùng thời điểm: CF 2,5 MB/s vs CF trực tiếp 2,6 MB/s;
+  lúc đường truyền tốt: 13,7 MB/s) — tức CF không còn là nút thắt; DERP thì luôn kẹt ~2 MB/s.
