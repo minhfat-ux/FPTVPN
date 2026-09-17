@@ -71,7 +71,7 @@ sha256 : 37fde1c1a83cc10051e29060bcfac6716b340c395bb694e3e031dfbe29c7169d
 
 ```bash
 cd /Volumes/BIWIN/SourcesCode/PrivateVPN     # hoặc đường dẫn repo trên Mac
-git pull                                      # lấy code mới nhất (có commit a5c848c)
+git pull                                      # lấy code mới nhất — phải thấy fd41852 ở đầu `git log`
 scripts/upload-windows-release.sh /tmp/VPNFlow-Setup-1.0.0.exe 1.0.0
 ```
 
@@ -121,7 +121,7 @@ curl -sS "https://meetflowai.site/buy?lang=en" | grep -o 'https://[^"]*VPNFlow-S
 
 Mong đợi: `https://meetflowai.site/dl/VPNFlow-Setup-latest.exe` (KHÔNG còn `api.meetflowai.site`).
 
-> Đây là cách chữa cháy. Bản sửa gốc nằm ở commit **`a5c848c`** (`storeLinks()` dùng `siteBaseUrl()`
+> Đây là cách chữa cháy. Bản sửa gốc nằm ở commit **`8e54312`** (`storeLinks()` dùng `siteBaseUrl()`
 > cho link `/dl/`) — cần **deploy control-plane** để lần sau không tái diễn. Deploy theo
 > `docs/DEVELOPMENT.md` §5b, và theo `docs/MEETFLOW_AI_OPS.md`: chạy `scripts/check-cp-features.mjs`
 > trước khi restart, `systemctl restart flowvpn-cp` trên node-2.
@@ -156,11 +156,12 @@ Bộ cài chứa 5 fix của phiên 16–17/09 (đều đã verify trên máy Wi
 
 | Commit | Sửa gì |
 |---|---|
-| `2b426ad` | Nối nút Connect vào tunnel thật (trước đó báo "Connected" giả), login email-OTP, danh sách server từ `/v1/nodes`, UI nhỏ hơn + cửa sổ giữa màn hình + icon khay hệ thống, log ra `%APPDATA%\VPNFlow\vpnflow.log` |
-| `5beefda` | `wireguard-go` thoát exit 1 — bật `SeRestorePrivilege`/`SeTakeOwnershipPrivilege` để mở được UAPI pipe |
-| `a66bab7` | Mất mạng sau khi Connect — thêm route loại trừ IP endpoint qua gateway vật lý |
-| `7fbee92` | Chặn rò IPv6 (`::/1` + `8000::/1` qua tunnel) |
-| `39fa259` | Route idempotent (xoá-rồi-thêm) — hết `The object already exists` |
+| `dd1bbaa` | Nối nút Connect vào tunnel thật (trước đó báo "Connected" giả), login email-OTP, danh sách server từ `/v1/nodes`, UI nhỏ hơn + cửa sổ giữa màn hình + icon khay hệ thống, log ra `%APPDATA%\VPNFlow\vpnflow.log` |
+| `6510eca` | `wireguard-go` thoát exit 1 — bật `SeRestorePrivilege`/`SeTakeOwnershipPrivilege` để mở được UAPI pipe |
+| `8a02038` | Mất mạng sau khi Connect — thêm route loại trừ IP endpoint qua gateway vật lý |
+| `3036315` | Chặn rò IPv6 (`::/1` + `8000::/1` qua tunnel) |
+| `cfb2ce2` | Route idempotent (xoá-rồi-thêm) — hết `The object already exists` |
+| `8e54312` | Link tải Windows trên trang `/buy` trỏ sai host (401) — dùng `siteBaseUrl()` |
 
 Bằng chứng E2E: public IP từ 3 nguồn độc lập = `165.101.114.162`; `meetflowai.site/buy` 200;
 `gstatic/generate_204` 204; monitor 10 phút 20/20 mẫu giữ đúng IP.
