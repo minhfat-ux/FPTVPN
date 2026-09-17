@@ -34,6 +34,7 @@ const AGENT_CMD = ENV.AGENT_CMD ?? "dsh";
 const AGENT_ARGS = (ENV.AGENT_ARGS ?? "--profile headless").split(" ").filter(Boolean);
 const AGENT_WORKDIR = ENV.AGENT_WORKDIR ?? "/root/flowvpn-agent";
 const AGENT_TIMEOUT_MS = Number(ENV.AGENT_TIMEOUT_MS || 900_000);
+const CHAT_TIMEOUT_MS = Number(ENV.CHAT_TIMEOUT_MS || 600_000);
 const POLL_TIMEOUT_S = Number(ENV.POLL_TIMEOUT_S || 25);
 
 // Một nguồn sự thật cho logic thuần (đã có test trong control-plane/test/tg-commands.test.js).
@@ -53,6 +54,57 @@ const cmd = await loadCommands();
  */
 const pendingTasks = new Map(); // chatId -> { text, at }
 const PENDING_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Trạng thái /chat (chỉ trong RAM): ngữ cảnh hội thoại từng chat, chat nào đang bật
+ * "chế độ chat" (tin thường ⇒ trả lời), và chat nào đang có agent chạy (không chạy chồng).
+ */
+const chatHistories = new Map(); // chatId -> [{ role, content }]
+const chatModes = new Set();     // chatId đang bật chế độ chat
+const chatBusy = new Set();      // chatId đang chờ agent trả lời
+
+/**
+ * Sổ theo dõi việc agent do /task chạy (để /reporttasks báo cáo). Giữ trong RAM, tối đa
+ * TASK_HISTORY_MAX việc gần nhất. /task chạy NỀN nên vòng long-poll không bị chặn và có
+ * thể hỏi trạng thái trong lúc agent đang làm.
+ */
+const agentTasks = new Map(); // id -> { id, kind, chatId, prompt, status, startedAt, endedAt, error }
+let taskSeq = 0;
+const TASK_HISTORY_MAX = 30;
+
+function newTask(kind, chatId, prompt) {
+  taskSeq += 1;
+  const task = {
+    id: taskSeq,
+    kind,
+    chatId,
+    prompt: String(prompt ?? "").trim(),
+    status: "running",
+    startedAt: Date.now(),
+    endedAt: null,
+    error: null,
+  };
+  agentTasks.set(task.id, task);
+  pruneTasks();
+  return task;
+}
+
+function finishTask(task, status, error = null) {
+  task.status = status;
+  task.endedAt = Date.now();
+  if (error) task.error = String(error).slice(0, 300);
+}
+
+/** Chỉ dọn việc ĐÃ KẾT THÚC khi sổ vượt hạn — không bao giờ xoá việc đang chạy. */
+function pruneTasks() {
+  while (agentTasks.size > TASK_HISTORY_MAX) {
+    const oldest = [...agentTasks.values()]
+      .filter((t) => t.status !== "running")
+      .sort((a, b) => a.id - b.id)[0];
+    if (!oldest) return;
+    agentTasks.delete(oldest.id);
+  }
+}
 
 function audit(entry) {
   try {
@@ -81,11 +133,13 @@ const TG_IPS = ["149.154.167.220", "149.154.166.110", "149.154.175.100"];
 const OUTBOX = ENV.OUTBOX_FILE ?? "/var/log/flowvpn-tg-outbox.jsonl";
 let tgAgent = null;
 function agent4() {
-  if (!tgAgent) tgAgent = new https.Agent({ keepAlive: true, family: 4, timeout: 10_000 });
+  // Socket idle timeout phải rộng hơn long-poll (xem callTimeout trong tg()): getUpdates giữ
+  // kết nối im lặng tới 25s, agent timeout 10s sẽ cắt ngang giữa chừng.
+  if (!tgAgent) tgAgent = new https.Agent({ keepAlive: true, family: 4, timeout: 60_000 });
   return tgAgent;
 }
 
-function httpsJson(method, path, body, { host = TG_HOST, ip = null } = {}) {
+function httpsJson(method, path, body, { host = TG_HOST, ip = null, timeoutMs = 12_000 } = {}) {
   const payload = JSON.stringify(body ?? {});
   return new Promise((resolve, reject) => {
     const options = {
@@ -95,7 +149,7 @@ function httpsJson(method, path, body, { host = TG_HOST, ip = null } = {}) {
       path,
       agent: ip ? new https.Agent({ keepAlive: false, family: 4 }) : agent4(),
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload), Host: host },
-      timeout: 12_000,
+      timeout: timeoutMs,
     };
     if (ip) options.servername = host; // SNI + kiểm tra chứng chỉ theo tên miền thật
     const req = https.request(options, (res) => {
@@ -108,7 +162,7 @@ function httpsJson(method, path, body, { host = TG_HOST, ip = null } = {}) {
         else reject(new Error(parsed?.description ?? `HTTP ${res.statusCode}`));
       });
     });
-    req.on("timeout", () => req.destroy(new Error("timeout 12s")));
+    req.on("timeout", () => req.destroy(new Error(`timeout ${Math.round(timeoutMs / 1000)}s`)));
     req.on("error", reject);
     req.write(payload);
     req.end();
@@ -118,10 +172,14 @@ function httpsJson(method, path, body, { host = TG_HOST, ip = null } = {}) {
 async function tg(method, payload = {}, { attempts = 3 } = {}) {
   if (!TOKEN) throw new Error("thiếu TELEGRAM_BOT_TOKEN");
   const path = `/bot${TOKEN}/${method}`;
+  // getUpdates là long-poll: Telegram giữ kết nối tới `payload.timeout` giây rồi mới trả về
+  // rỗng. Timeout của client PHẢI lớn hơn (xem telegramCallTimeoutMs), nếu không mỗi vòng poll
+  // đều bị cắt ở 12s và bot rơi vào vòng "timeout → thử lại → thử IP" vô ích (log 17/09).
+  const callTimeout = cmd.telegramCallTimeoutMs(method, payload.timeout ?? POLL_TIMEOUT_S);
   let lastErr;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const body = await httpsJson("POST", path, payload);
+      const body = await httpsJson("POST", path, payload, { timeoutMs: callTimeout });
       return body?.result ?? null;
     } catch (err) {
       lastErr = err;
@@ -133,7 +191,7 @@ async function tg(method, payload = {}, { attempts = 3 } = {}) {
   // Thử thẳng từng IP Telegram (bỏ qua DNS) trước khi bỏ cuộc.
   for (const ip of TG_IPS) {
     try {
-      const body = await httpsJson("POST", path, payload, { ip });
+      const body = await httpsJson("POST", path, payload, { ip, timeoutMs: callTimeout });
       console.log(`tg-bot: ${method} OK qua IP ${ip}`);
       return body?.result ?? null;
     } catch (err) {
@@ -346,9 +404,17 @@ async function cmdTask(chatId, args) {
   const prompt = args.join(" ").trim();
   if (!prompt) return "❓ Dùng: /task <việc cần làm>";
   if (!AGENT_ENABLED) return "⛔ Agent trên server đang tắt (AGENT_ENABLED=0).";
-  await send(chatId, `⏳ Đang giao việc cho agent trên server:\n${prompt}`);
+  const task = newTask("task", chatId, prompt);
+  audit({ chat: chatId, command: "task", args: prompt, taskId: task.id, ok: true });
+  // Chạy NỀN: trả lời ngay để bot còn nhận /reporttasks, /status… trong lúc agent làm.
+  void runAgentTask(task);
+  return `⏳ Đã nhận việc #${task.id}:\n${prompt}\nEm chạy nền và báo khi xong — gõ /reporttasks để xem trạng thái.`;
+}
+
+/** Thực thi một việc agent ở nền rồi cập nhật sổ và gửi kết quả về chat đã giao việc. */
+async function runAgentTask(task) {
   try {
-    const { stdout, stderr } = await execFileAsync(AGENT_CMD, [...AGENT_ARGS, agentPreamble() + prompt], {
+    const { stdout, stderr } = await execFileAsync(AGENT_CMD, [...AGENT_ARGS, agentPreamble() + task.prompt], {
       cwd: AGENT_WORKDIR,
       timeout: AGENT_TIMEOUT_MS,
       maxBuffer: 8 * 1024 * 1024,
@@ -356,15 +422,74 @@ async function cmdTask(chatId, args) {
     });
     const result = (stdout || "").trim() || "(agent không in gì)";
     const warn = (stderr || "").trim();
-    audit({ chat: chatId, command: "task", args: prompt, ok: true });
-    await send(chatId, `✅ Xong:\n${result}\n\n${await workspaceDiff()}`);
-    if (warn) await send(chatId, `(stderr)\n${warn.slice(-1500)}`);
-    return null;
+    finishTask(task, "done");
+    audit({ chat: task.chatId, command: "task", args: task.prompt, taskId: task.id, ok: true });
+    await send(task.chatId, `✅ Xong việc #${task.id}:\n${result}\n\n${await workspaceDiff()}`);
+    if (warn) await send(task.chatId, `(stderr #${task.id})\n${warn.slice(-1500)}`);
+  } catch (err) {
+    const timedOut = Boolean(err?.killed) || err?.signal === "SIGTERM";
+    const detail = (err.stdout || "").trim() || (err.stderr || "").trim() || err.message;
+    finishTask(task, timedOut ? "timeout" : "failed", err.message);
+    audit({ chat: task.chatId, command: "task", args: task.prompt, taskId: task.id, ok: false, error: err.message });
+    await send(task.chatId, `❌ Việc #${task.id} ${timedOut ? "quá hạn" : "lỗi"}:\n${String(detail).slice(-2500)}`).catch(() => {});
+  }
+}
+
+/** /reporttasks — trạng thái các việc agent đang chạy / vừa xong. */
+function cmdReportTasks() {
+  return cmd.reportTasks([...agentTasks.values()], { limit: 10 });
+}
+
+// ------------------------------------------------------------------ /chat
+/**
+ * Chạy agent ở CHẾ ĐỘ CHAT rồi gửi câu trả lời. Tách khỏi cmdChat để cmdChat trả về ngay
+ * ("đang suy nghĩ"), không chặn vòng long-poll: chat có thể lâu (tra internet) mà anh vẫn
+ * gõ được /status. Mỗi chat chỉ chạy 1 agent một lúc (chatBusy).
+ */
+async function runChat(chatId, text) {
+  try {
+    const history = chatHistories.get(chatId) ?? [];
+    const prompt = cmd.buildChatPrompt(cmd.trimChatHistory(history), text);
+    audit({ chat: chatId, command: "chat", args: text.slice(0, 200), ok: true });
+    const { stdout } = await execFileAsync(AGENT_CMD, [...AGENT_ARGS, prompt], {
+      cwd: AGENT_WORKDIR,
+      timeout: CHAT_TIMEOUT_MS,
+      maxBuffer: 8 * 1024 * 1024,
+      env: { ...ENV, DSH_HOME: ENV.DSH_HOME ?? "/root/.dsh" },
+    });
+    const answer = (stdout || "").trim() || "(agent không trả lời)";
+    const next = [...history, { role: "user", content: text }, { role: "assistant", content: answer }];
+    chatHistories.set(chatId, cmd.trimChatHistory(next));
+    await send(chatId, `💬 ${answer}`);
   } catch (err) {
     const detail = (err.stdout || "").trim() || (err.stderr || "").trim() || err.message;
-    audit({ chat: chatId, command: "task", args: prompt, ok: false, error: err.message });
-    return `❌ Agent lỗi (${Math.round((err.killed ? AGENT_TIMEOUT_MS : 0) / 1000) || "?"}s):\n${String(detail).slice(-2500)}`;
+    audit({ chat: chatId, command: "chat", ok: false, error: err.message });
+    await send(chatId, `❌ Chat lỗi:\n${String(detail).slice(-2500)}`).catch(() => {});
+  } finally {
+    chatBusy.delete(chatId);
   }
+}
+
+async function cmdChat(chatId, args) {
+  const parsed = cmd.parseChatArgs(args);
+  if (parsed.kind === "help") return cmd.chatHelpText();
+  if (parsed.kind === "reset") {
+    chatHistories.delete(chatId);
+    return "🧹 Đã xoá ngữ cảnh hội thoại. Mình bắt đầu lại nhé.";
+  }
+  if (parsed.kind === "on") {
+    chatModes.add(chatId);
+    return "🟢 Đã bật chế độ chat — anh nhắn bình thường (không cần /chat) em trả lời.";
+  }
+  if (parsed.kind === "off") {
+    chatModes.delete(chatId);
+    return "🔴 Đã tắt chế độ chat. Nhắn /chat <câu hỏi> khi cần.";
+  }
+  if (!AGENT_ENABLED) return "⛔ Agent trên server đang tắt (AGENT_ENABLED=0).";
+  if (chatBusy.has(chatId)) return "⏳ Em còn đang trả lời tin trước, anh chờ chút rồi nhắn lại nhé.";
+  chatBusy.add(chatId);
+  void runChat(chatId, parsed.text);
+  return "🤔 Đang suy nghĩ & tra cứu internet… em trả lời ngay khi xong.";
 }
 
 // ------------------------------------------------------------- điều phối lệnh
@@ -379,12 +504,14 @@ async function handleCommand(parsed, chatId, { force = false, dryRun = false } =
     case "ios": return cmdIos();
     case "alerts": return cmdAlerts();
     case "log": return cmdLog(parsed.args);
+    case "reporttasks": case "tasks": return cmdReportTasks();
     case "report": return cmdReport(chatId);
     case "mirror": return cmdMirror();
     case "restart": return cmdRestart(parsed.args);
     case "build": return cmdBuild();
     case "deploy": return cmdDeploy();
     case "task": return cmdTask(chatId, parsed.args);
+    case "chat": return cmdChat(chatId, parsed.args);
     default:
       return `❓ Không hiểu lệnh "${parsed.unknown ?? ""}". Gõ /help để xem danh sách.`;
   }
@@ -399,6 +526,13 @@ async function onMessage(message) {
     return;
   }
   const parsed = cmd.parseCommand(text);
+  // Chế độ chat: tin thường (không bắt đầu bằng "/") mà không phải lệnh nào thì đưa cho agent.
+  if (parsed.name === "unknown" && !/^\s*\//.test(text) && chatModes.has(chatId)) {
+    audit({ chat: chatId, command: "chat", args: text.slice(0, 200), ok: true });
+    const reply = await cmdChat(chatId, text.split(/\s+/)).catch((err) => `❌ Lỗi: ${err.message}`);
+    if (reply) await send(chatId, reply);
+    return;
+  }
   audit({ chat: chatId, command: parsed.name, args: parsed.args, ok: true });
   if (cmd.needsConfirmation(parsed)) {
     if (parsed.name === "task") {
