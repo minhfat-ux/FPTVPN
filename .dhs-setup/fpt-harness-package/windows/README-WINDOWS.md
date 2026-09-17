@@ -50,7 +50,8 @@ Installer sẽ tự:
 2. Cài **DSH**: `npm install -g @deepseek-ai/dsh`
 3. Áp **patch FPT**: theme FlowVPN (màu brand `#33C773`), favicon, browse-picker (backup `.fpt.bak`)
 3b. Áp **branding FlowTech** (`patches/apply-flowtech-brand.py`, chạy SAU bước 3): đổi mark/logo,
-   tên hiển thị, tiêu đề trang và favicon sang thương hiệu **FlowTech / "HarnessFlow"**.
+   tên hiển thị, tiêu đề trang và icon tab (`favicon.png` + bọc lại `favicon.svg`, vì
+   `index.html` của DSH 0.1.5 trỏ icon tab vào `./favicon.svg`) sang thương hiệu **FlowTech / "HarnessFlow"**.
    Script idempotent, nhận cả 3 trạng thái đầu vào (DSH gốc / đã patch FPT / đã là FlowTech).
 4. Cài **profile** pin browse picker vào `%USERPROFILE%\.dsh\profiles\web`
 5. Tạo **SSH key** `%USERPROFILE%\.ssh\dsh_tunnel` (riêng tunnel)
@@ -58,7 +59,8 @@ Installer sẽ tự:
 7. Hỏi **password SSH VPS** 1 lần để cài pubkey lên `authorized_keys`
 
 > Asset thương hiệu nằm trong `patches/`: `flowtech-logo.png` (bản ngang, dùng ở sidebar/hero),
-> `flowtech-mark.png` (icon vuông), `flowtech-favicon.png` + `favicon.png` (icon tab).
+> `flowtech-mark.png` (icon vuông), `flowtech-favicon.png` + `favicon.png` (icon tab;
+> `favicon.svg` trong dist được sinh lại từ chính PNG này).
 > Ảnh đã bo góc sẵn — dùng đúng tỉ lệ (`object-fit: contain`), không crop.
 > Bản favicon Culi cũ được giữ lại thành `patches/favicon-culi.png.bak` nếu cần quay về.
 
