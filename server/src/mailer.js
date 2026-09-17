@@ -77,7 +77,7 @@ function layout({ title, intro, codeBlock, linkBlock, footer }) {
 <body style="margin:0;background:#f2f5f9;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0A1F3B">
   <div style="max-width:560px;margin:0 auto;padding:28px 18px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-      <img src="https://fbuddy.meetflowai.site/brand-mark.png" alt="FlowTech" width="34" height="34" style="display:block">
+      <img src="https://fbuddy.meetflowai.site/brand-mark.png?v=culi1" alt="FlowTech" width="34" height="34" style="display:block">
       <div style="font-size:18px;font-weight:700">fBuddy</div>
     </div>
     <div style="background:#0A1F3B;border-radius:16px;padding:28px 24px;color:#ffffff">

@@ -80,6 +80,14 @@ if (hasWeb) {
     express.static(webDist, {
       index: false,
       setHeaders(res, filePath) {
+        // Logo/favicon nằm ở URL CỐ ĐỊNH (khác asset của Vite có hash trong tên), nên
+        // tuyệt đối không đánh dấu `immutable`: đổi icon mà trình duyệt/CDN giữ bản cũ
+        // cả năm. Đã dính đúng lúc thay icon Culi (2026-09-18) — Cloudflare cache
+        // `/brand-mark.png` và không chịu lấy bản mới.
+        if (/(?:^|\/)(?:brand-mark|brand-logo|favicon)\.(?:png|svg|ico)$/i.test(filePath)) {
+          res.setHeader("Cache-Control", "public, max-age=300");
+          return;
+        }
         if (/\.(js|css|woff2?|png|svg|webp)$/.test(filePath)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
         }

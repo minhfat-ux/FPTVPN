@@ -187,7 +187,7 @@ export function Sidebar({
         <div className="sidebar-head">
           <div className="brand grow">
             <span className="brand-mark">
-              <img src="/brand-mark.png" alt="FlowTech" />
+              <img src="/brand-mark.png?v=culi1" alt="FlowTech" />
             </span>
             <span className="brand-text">
               <span className="brand-word">{meta?.appName ?? "fBuddy"}</span>

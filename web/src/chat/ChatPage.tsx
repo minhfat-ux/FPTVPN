@@ -229,7 +229,7 @@ export function ChatPage({
           <div className="chat-inner">
             <div className="hero">
               <div className="hero-brand">
-                <img className="hero-mark" src="/brand-mark.png" alt="FlowTech" />
+                <img className="hero-mark" src="/brand-mark.png?v=culi1" alt="FlowTech" />
                 <span className="hero-word brand-word">fBuddy</span>
               </div>
               <p>

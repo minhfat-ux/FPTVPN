@@ -36,7 +36,7 @@ export function EcosystemBanner() {
 
   return (
     <div className="eco-banner" role="region" aria-label={t("shell.ecosystem.title")}>
-      <img className="eco-mark" src="/brand-mark.png" alt="" width={26} height={26} />
+      <img className="eco-mark" src="/brand-mark.png?v=culi1" alt="" width={26} height={26} />
       <div className="eco-text">
         <div className="eco-title">{t("shell.ecosystem.title")}</div>
         <div className="eco-sub">
