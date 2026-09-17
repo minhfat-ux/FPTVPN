@@ -19,8 +19,12 @@ VERSION="${2:-}"
 NODE1="${NODE1:-root@103.173.155.50}"     # máy trung chuyển (Mac không SSH thẳng node-2 được)
 NODE2="${NODE2:-165.101.114.162}"         # máy phục vụ file tải
 DOCROOT_IP="${DOCROOT_IP:-/var/www/dl}"   # kênh tải theo IP (khách TQ/VN vào được dù domain bị chặn)
-DOCROOT_CDN="${DOCROOT_CDN:-/var/www/flowvpn}"  # kênh /dl/* của Caddy
+# Kênh /dl/* của Caddy: Caddyfile có `handle /dl/* { root * /var/www/flowvpn; file_server }`
+# nên URL /dl/<file> map tới /var/www/flowvpn/dl/<file> — PHẢI có thêm "/dl".
+# (Từng để thiếu "/dl" ⇒ file vào /var/www/flowvpn/<file>, Caddy trả 404 dù script báo OK.)
+DOCROOT_CDN="${DOCROOT_CDN:-/var/www/flowvpn/dl}"
 IP_HOST="${IP_HOST:-165.101.114.162}"
+CDN_HOST="${CDN_HOST:-meetflowai.site}"   # domain chính (Caddy phục vụ /dl/*)
 
 # Tên file công khai: giữ đúng tên nhưng luôn có 1 bản "latest" cho link cố định.
 BASE="$(basename "$FILE")"
@@ -44,15 +48,19 @@ ssh -o BatchMode=yes "$NODE1" "scp -q -o BatchMode=yes /tmp/$BASE root@$NODE2:/t
   rm -f /tmp/$BASE
 '"
 
-echo "== 2) kiểm tra tại đích (size + sha256 phải khớp nguồn)"
-REMOTE="$(ssh -o BatchMode=yes "$NODE1" "ssh -n -o BatchMode=yes root@$NODE2 'stat -c %s $DOCROOT_IP/$BASE; sha256sum $DOCROOT_IP/$BASE | cut -d\" \" -f1; ls -l $DOCROOT_IP/$BASE $DOCROOT_IP/$LATEST | wc -l'")"
-R_SIZE="$(echo "$REMOTE" | sed -n 1p)"; R_SHA="$(echo "$REMOTE" | sed -n 2p)"
-[ "$R_SIZE" = "$LOCAL_SIZE" ] || { echo "LỖI: size ở đích ($R_SIZE) khác nguồn ($LOCAL_SIZE) — KHÔNG phát" >&2; exit 1; }
-[ "$R_SHA" = "$LOCAL_SHA" ] || { echo "LỖI: sha256 ở đích khác nguồn — KHÔNG phát" >&2; exit 1; }
-echo "   OK: size + sha256 khớp"
+echo "== 2) kiểm tra tại đích (size + sha256 phải khớp nguồn, ở CẢ HAI docroot)"
+for d in "$DOCROOT_IP" "$DOCROOT_CDN"; do
+  REMOTE="$(ssh -o BatchMode=yes "$NODE1" "ssh -n -o BatchMode=yes root@$NODE2 'stat -c %s $d/$BASE 2>/dev/null; sha256sum $d/$BASE 2>/dev/null | cut -d\" \" -f1'")"
+  R_SIZE="$(echo "$REMOTE" | sed -n 1p)"; R_SHA="$(echo "$REMOTE" | sed -n 2p)"
+  [ "$R_SIZE" = "$LOCAL_SIZE" ] || { echo "LỖI: $d/$BASE size ở đích ($R_SIZE) khác nguồn ($LOCAL_SIZE) — KHÔNG phát" >&2; exit 1; }
+  [ "$R_SHA" = "$LOCAL_SHA" ] || { echo "LỖI: $d/$BASE sha256 ở đích khác nguồn — KHÔNG phát" >&2; exit 1; }
+  echo "   OK: $d/$BASE (size + sha256 khớp)"
+done
 
 echo "== 3) thử tải công khai như khách"
-for u in "http://$IP_HOST/$BASE" "http://$IP_HOST/$LATEST"; do
+# Dùng URL THEO PHIÊN BẢN cho kênh /dl/: Cloudflare cache /dl/* tới 4 giờ, nên link "-latest"
+# có thể còn phục vụ bản CŨ (hoặc 404 đã cache) tới 4h sau khi upload.
+for u in "http://$IP_HOST/$BASE" "http://$IP_HOST/$LATEST" "https://$CDN_HOST/dl/$BASE"; do
   code_size="$(curl -s -o /dev/null -w '%{http_code} %{size_download}' -m 60 -r 0-1048575 "$u")"
   echo "   $u → HTTP ${code_size% *} (đã đọc ${code_size#* } bytes đầu)"
   case "${code_size% *}" in 200|206) ;; *) echo "LỖI: link chưa tải được (${code_size% *})" >&2; exit 1;; esac
@@ -65,4 +73,9 @@ echo "   http://$IP_HOST/$BASE            (link theo phiên bản)"
 [ -n "$VERSION" ] && echo "   version: $VERSION"
 echo "   sha256 : $LOCAL_SHA"
 echo
-echo "Nhắc: nhớ cập nhật khối Windows trên trang /buy + /v1/app-version nếu version đổi."
+echo "Nhắc:"
+echo "  · Trang /buy lấy link từ windows_installer_url (PATCH /v1/admin/windows-version)."
+echo "    Nên đặt URL THEO PHIÊN BẢN: https://$CDN_HOST/dl/$BASE"
+echo "    — vì Cloudflare cache /dl/* tới 4h, link \"-latest\" sẽ phục vụ bản CŨ/404 đã cache"
+echo "      cho tới khi cache hết hạn (token Cloudflare trên VPS hiện KHÔNG có quyền purge)."
+echo "  · Kiểm tra lại bằng: curl -sI https://$CDN_HOST/dl/$BASE | head -3"
