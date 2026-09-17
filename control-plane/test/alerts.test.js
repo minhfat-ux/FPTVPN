@@ -196,6 +196,33 @@ test("repairMojibake: sửa đúng chuỗi UTF-8 bị đọc như latin-1, khôn
   assert.equal(repairMojibake("B?o c?o"), "B?o c?o");
 });
 
+test("repairMojibake: sửa được cả biến thể CP1252 (kiểu Windows), không phá chuỗi khác", () => {
+  // Windows giải mã UTF-8 bằng CP1252 (0x91 → ‘, 0x83 → ƒ, 0x87 → ‡) chứ không phải latin-1.
+  // Chuỗi dưới đây là mojibake THẬT của đúng những câu đó — hằng số, không sinh từ helper.
+  const cases = [
+    ["KhÃ¡ch Ä‘Äƒng kÃ½", "Khách đăng ký"],
+    // "Vào" có byte 0xA0 ⇒ CP1252 đọc thành NBSP (U+00A0), KHÔNG phải space thường.
+    ["VÃ\u00a0o há»‡ thá»‘ng", "Vào hệ thống"],
+    ["BÃ¡o cÃ¡o thiáº¿t bá»‹ khÃ¡ch", "Báo cáo thiết bị khách"],
+  ];
+  for (const [broken, expected] of cases) {
+    assert.equal(repairMojibake(broken), expected, `phải sửa: ${broken}`);
+  }
+
+  // Chuỗi chỉ giống mojibake nhưng chứa ký tự ngoài CP1252 thì trả nguyên (không đoán bừa).
+  const notCp1252 = "Ã\u4e2d văn";
+  assert.equal(repairMojibake(notCp1252), notCp1252);
+
+  // Alert thật: tiêu đề mojibake + dòng đúng sẵn đều phải ra chữ sạch.
+  const text = renderAlertText({
+    title: "KhÃ¡ch Ä‘Äƒng kÃ½ mÃ¡y má»›i",
+    lines: ["Thiết bị: iPhone", "Node: Hà Nội"],
+    level: "info",
+  });
+  assert.equal(text.includes("Khách đăng ký máy mới"), true, text);
+  assert.equal(text.includes("Ã"), false, text);
+});
+
 test("renderAlertText: tự sửa mojibake trong tiêu đề và từng dòng", () => {
   const brokenTitle = Buffer.from("Khách đăng ký máy mới", "utf8").toString("latin1");
   const brokenLine = Buffer.from("Thiết bị: iPhone — Hà Nội", "utf8").toString("latin1");

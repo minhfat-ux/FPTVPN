@@ -83,34 +83,94 @@ function postJsonViaHttps({ path, payload, timeoutMs, ip = null }) {
   });
 }
 
-/** Sửa chuỗi bị "vỡ font" do bên gửi mã hoá sai (UTF-8 bị đọc như latin-1 rồi gửi tiếp). */
+/** Sửa chuỗi bị "vỡ font" do bên gửi mã hoá sai (UTF-8 bị đọc như latin-1 hoặc CP1252 rồi gửi tiếp). */
 const MOJIBAKE_MARKERS = /(?:Ã|Â|Ä|Å)[\u0080-\u00BF]|áº|á»|â€|ï»¿/g;
 
 /**
+ * Bảng ngược của CP1252 cho vùng 0x80–0x9F.
+ *
+ * Cần vì Windows thường giải mã UTF-8 bằng **CP1252** (0x91 → ‘, 0x83 → ƒ, 0x87 → ‡ …), không
+ * phải latin-1. Khi đó `Buffer.from(text, "latin1")` không dựng lại được byte gốc (ký tự > 0xFF
+ * bị cắt thành byte thấp) nên bản sửa sinh U+FFFD và bị bỏ qua — chuỗi vẫn vỡ font.
+ */
+const CP1252_REVERSE = new Map([
+  [0x20ac, 0x80], [0x201a, 0x82], [0x0192, 0x83], [0x201e, 0x84], [0x2026, 0x85],
+  [0x2020, 0x86], [0x2021, 0x87], [0x02c6, 0x88], [0x2030, 0x89], [0x0160, 0x8a],
+  [0x2039, 0x8b], [0x0152, 0x8c], [0x017d, 0x8e], [0x2018, 0x91], [0x2019, 0x92],
+  [0x201c, 0x93], [0x201d, 0x94], [0x2022, 0x95], [0x2013, 0x96], [0x2014, 0x97],
+  [0x02dc, 0x98], [0x2122, 0x99], [0x0161, 0x9a], [0x203a, 0x9b], [0x0153, 0x9c],
+  [0x017e, 0x9e], [0x0178, 0x9f],
+]);
+
+/**
+ * Chuỗi chỉ gồm ký tự <= U+00FF? Chỉ khi đó nó mới có thể là kết quả của việc đọc UTF-8 như latin-1;
+ * ngược lại `Buffer.from(value, "latin1")` sẽ cắt cụt ký tự thật (> U+00FF) và phá chuỗi.
+ */
+function isLatin1(value) {
+  for (let i = 0; i < value.length; i += 1) {
+    if (value.charCodeAt(i) > 0xff) return false;
+  }
+  return true;
+}
+
+/**
+ * Dựng lại byte gốc khi chuỗi đã bị đọc như CP1252.
+ * @returns {Buffer|null} null nếu có ký tự nằm ngoài CP1252 (không thể là mojibake CP1252).
+ */
+function cp1252Bytes(value) {
+  const out = Buffer.allocUnsafe(value.length);
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0xff) {
+      out[i] = code;
+      continue;
+    }
+    const mapped = CP1252_REVERSE.get(code);
+    if (mapped === undefined) return null;
+    out[i] = mapped;
+  }
+  return out;
+}
+
+/**
  * "BÃ¡o cÃ¡o" (UTF-8 bị đọc như latin-1) → "Báo cáo".
+ * "KhÃ¡ch Ä‘Äƒng kÃ½" (UTF-8 bị đọc như CP1252 — kiểu Windows) → "Khách đăng ký".
  *
  * Chỉ sửa khi CHẮC CHẮN: chuỗi phải có dấu hiệu mojibake, bản sửa phải sạch hơn (ít dấu hiệu
  * hơn, không sinh ký tự thay thế U+FFFD) và không dài hơn bản gốc. Chuỗi đã đúng thì trả nguyên
  * (kể cả tiếng Việt có dấu bình thường).
  *
- * Lưu ý: trường hợp mất dữ liệu thật (bên gửi đã thay dấu bằng "?", kiểu PowerShell 5.1 gửi
- * ISO-8859-1) thì KHÔNG cứu được — phải sửa phía gửi.
+ * Lưu ý: trường hợp mất dữ liệu thật (bên gửi đã thay dấu bằng "?") thì KHÔNG cứu được — phải
+ * sửa phía gửi.
  */
 export function repairMojibake(text) {
   const value = String(text ?? "");
   if (!value) return value;
   const before = (value.match(MOJIBAKE_MARKERS) ?? []).length;
   if (before === 0) return value;
-  let candidate;
-  try {
-    candidate = Buffer.from(value, "latin1").toString("utf8");
-  } catch {
-    return value;
+
+  const candidates = [];
+  if (isLatin1(value)) {
+    try {
+      candidates.push(Buffer.from(value, "latin1").toString("utf8"));
+    } catch {
+      /* bỏ qua: thử tiếp ứng viên khác */
+    }
   }
-  if (candidate.includes("\uFFFD")) return value;
-  const after = (candidate.match(MOJIBAKE_MARKERS) ?? []).length;
-  if (after >= before) return value;
-  return candidate;
+  const bytes = cp1252Bytes(value);
+  if (bytes) candidates.push(bytes.toString("utf8"));
+
+  let best = value;
+  let bestMarkers = before;
+  for (const candidate of candidates) {
+    if (candidate.includes("\uFFFD")) continue;
+    const markers = (candidate.match(MOJIBAKE_MARKERS) ?? []).length;
+    if (markers < bestMarkers && candidate.length <= value.length) {
+      best = candidate;
+      bestMarkers = markers;
+    }
+  }
+  return best;
 }
 
 const LEVEL_ICON = {
