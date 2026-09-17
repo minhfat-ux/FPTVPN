@@ -39,16 +39,21 @@ else bad("API không trả vndPerCredit");
 
 const adminHub = await fetch(`${API}/admin/hub`, { headers: auth }).then((r) => r.json());
 const apiItems = adminHub.items ?? [];
-const priced = apiItems.filter((s) => s.price > 0);
-info(`API: ${apiItems.length} kỹ năng, ${priced.length} kỹ năng tính token`);
+const priced = apiItems.filter((s) => s.priceVnd > 0);
+info(`API: ${apiItems.length} kỹ năng, ${priced.length} kỹ năng tính tiền`);
 if (priced.length >= 6) ok(`${priced.length} kỹ năng đang bán`);
-else bad(`chỉ có ${priced.length} kỹ năng tính token`);
+else bad(`chỉ có ${priced.length} kỹ năng tính tiền`);
 const withPrompt = apiItems.filter((s) => (s.instructions ?? "").length > 0);
 if (withPrompt.length === apiItems.filter((s) => s.state === "published").length) {
   ok(`API trả prompt pack cho mọi kỹ năng đang bán (${withPrompt.length} kỹ năng)`);
 } else {
   bad(`chỉ ${withPrompt.length} kỹ năng có instructions — form Sửa sẽ trống`);
 }
+// Giá là VND; credit chỉ là bản quy đổi.
+for (const skill of priced) {
+  if (skill.priceVnd !== 50000) bad(`${skill.slug} bán ${skill.priceVnd}đ, không phải 50.000đ`);
+}
+ok(`mọi kỹ năng đang bán đều 50.000đ`);
 
 const targets = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
 const page = targets.find((t) => t.type === "page");
@@ -135,10 +140,10 @@ for (const row of table) info(`  ${row.slug} · ${row.price} · ${row.state} · 
 if (table.length === apiItems.length) ok(`bảng hiện đủ ${table.length} kỹ năng như API`);
 else bad(`bảng có ${table.length} dòng, API có ${apiItems.length}`);
 
-// Giá phải kèm quy đổi VND.
-const rowsWithVnd = table.filter((row) => /≈/.test(row.price) && /đ/.test(row.price));
-if (perCredit > 0 && rowsWithVnd.length === priced.length) ok(`${rowsWithVnd.length} dòng có quy đổi VND`);
-else bad(`chỉ ${rowsWithVnd.length}/${priced.length} dòng hiện quy đổi VND`);
+// Giá phải là VND cho người mua, kèm bản quy đổi credit cho admin.
+const rowsWithVnd = table.filter((row) => /đ/.test(row.price) && /50\.000/.test(row.price));
+if (rowsWithVnd.length === priced.length) ok(`${rowsWithVnd.length} dòng hiện giá VND 50.000đ`);
+else bad(`chỉ ${rowsWithVnd.length}/${priced.length} dòng hiện giá VND`);
 await shot("10-hub-admin-table");
 
 // Mở form Sửa của một kỹ năng đang bán và kiểm tra prefill.
@@ -170,11 +175,15 @@ if (instructions.trim() === (apiTarget.instructions ?? "").trim() && instruction
 } else {
   bad(`ô chỉ dẫn không khớp: form ${instructions.length} ký tự, API ${(apiTarget.instructions ?? "").length}`);
 }
-if (String(form.numbers[0]) === String(apiTarget.price)) ok(`giá trong form khớp API (${apiTarget.price} token)`);
-else bad(`giá form ${form.numbers[0]} khác API ${apiTarget.price}`);
-const expectedVnd = (apiTarget.price * perCredit).toLocaleString("vi-VN");
-if (form.vndHint && form.vndHint.includes(expectedVnd)) ok(`quy đổi đúng: ${expectedVnd}đ`);
-else bad(`quy đổi sai: cần ${expectedVnd}đ, thấy "${form.vndHint}"`);
+if (String(form.numbers[0]) === String(apiTarget.priceVnd)) {
+  ok(`giá trong form khớp API (${apiTarget.priceVnd.toLocaleString("vi-VN")}đ)`);
+} else {
+  bad(`giá form ${form.numbers[0]} khác API ${apiTarget.priceVnd}`);
+}
+// Ô giá nhập bằng VND; dòng gợi ý phải quy ra credit theo giá credit hiện hành.
+const expectedCredits = Math.max(1, Math.ceil(apiTarget.priceVnd / perCredit)).toLocaleString("vi-VN");
+if (form.vndHint && form.vndHint.includes(expectedCredits)) ok(`quy đổi đúng: ≈ ${expectedCredits} credit`);
+else bad(`quy đổi sai: cần ≈ ${expectedCredits} credit, thấy "${form.vndHint}"`);
 await shot("11-hub-edit-form");
 
 await evaluate(`document.querySelector('.modal .btn')?.click()`);
@@ -194,9 +203,11 @@ if (priceAfterEdit) {
   const cards = await evaluate(`[...document.querySelectorAll('.hub-card')].map((c) => c.innerText.replace(/\\s+/g, ' ').trim())`);
   info(`trang chợ: ${cards.length} thẻ`);
   const first = apiItems.find((s) => s.slug === targetSlug);
-  const wanted = first.price.toLocaleString("vi-VN");
-  if (cards.some((c) => c.includes(wanted))) ok(`thẻ kỹ năng hiện giá mới (${wanted} token)`);
-  else bad(`không thấy giá ${wanted} token trên thẻ`);
+  const wanted = first.priceVnd.toLocaleString("vi-VN");
+  if (cards.some((c) => c.includes(wanted))) ok(`thẻ kỹ năng hiện giá VND (${wanted}đ)`);
+  else bad(`không thấy giá ${wanted}đ trên thẻ`);
+  if (cards.some((c) => /token/.test(c))) bad("thẻ còn hiện giá bằng token");
+  else ok("không còn thẻ nào hiện giá bằng token");
   await shot("12-hub-user-page");
 } else {
   bad("không mở được trang chợ kỹ năng");

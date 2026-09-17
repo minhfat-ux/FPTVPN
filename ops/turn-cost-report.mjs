@@ -1,57 +1,63 @@
 #!/usr/bin/env node
 /**
- * Đo chi phí thật của một lượt chat từ sổ credit, và thử các hệ số giá.
+ * Đo chi phí thật của một lượt chat và thử các hệ số giá.
  *
- * Chạy ở nơi có database (node-2):
  *   FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/turn-cost-report.mjs
- *   FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/turn-cost-report.mjs 0.1 1
+ *   FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/turn-cost-report.mjs 0.06 1
  *
- * Tham số: [creditsPerToken] [vndPerCredit] — in ra mỗi lượt tốn bao nhiêu đồng
- * với hệ số đó, để chọn hệ số đạt mục tiêu "1 lượt ≈ 200đ" bằng số đo thật.
+ * Tham số: [creditsPerToken] [vndPerCredit].
+ *
+ * Nguồn số liệu là `messages.usage_json` (token vào/ra thật của từng lượt trả
+ * lời), **không** phải `credit_ledger`. Lý do: `delta` trong sổ đã bị nhân với
+ * `creditsPerToken` tại thời điểm ghi, nên sau khi đổi hệ số thì quy ngược lại
+ * sẽ trộn hai đơn vị. `usage_json` thì độc lập với hệ số giá.
  */
 
 import { all, db, getAppSettings, initDb } from "../server/src/db.js";
 
-const perToken = Number(process.argv[2] ?? 0.1);
+const perToken = Number(process.argv[2] ?? 0.06);
 const vndPerCredit = Number(process.argv[3] ?? 1);
 
 initDb();
 
 const settings = getAppSettings();
-const rows = all("credit_ledger", "reason = 'chat_usage'", [], { order: "created_at DESC", limit: 200 });
-const costs = rows.map((row) => Math.abs(Number(row.delta))).filter((value) => value > 0);
+console.log(`Đang chạy: creditsPerToken=${settings.creditsPerToken}, vndPerCredit=${settings.vndPerCredit}\n`);
 
-console.log(`Đang chạy: creditsPerToken=${settings.creditsPerToken}, vndPerCredit=${settings.vndPerCredit}`);
-console.log(`Sổ credit có ${rows.length} lượt chat_usage.\n`);
+// Mỗi lượt trả lời của trợ lý có thể kèm usage; lượt không có usage bị bỏ qua.
+const rows = all("messages", "role = 'assistant'", [], { order: "created_at DESC", limit: 300 });
+const turns = [];
+for (const row of rows) {
+  const usage = row.usage;
+  if (!usage) continue;
+  const tokens = Number(usage.in ?? 0) + Number(usage.out ?? 0);
+  if (tokens > 0) turns.push(tokens);
+}
 
-if (!costs.length) {
-  console.log("Chưa có lượt chat nào để đo.");
+if (!turns.length) {
+  console.log("Chưa có lượt chat nào kèm usage để đo.");
   db.close?.();
   process.exit(0);
 }
 
-// Hiện tại creditsPerToken = 1 nên delta chính là số token của lượt đó. Nếu chủ
-// máy đã đổi hệ số thì quy ngược lại token trước khi thử hệ số mới.
-const currentPerToken = Math.max(1e-9, Number(settings.creditsPerToken) || 1);
-const tokens = costs.map((credits) => Math.round(credits / currentPerToken));
-tokens.sort((a, b) => a - b);
+turns.sort((a, b) => a - b);
+const sum = turns.reduce((a, b) => a + b, 0);
+const avg = Math.round(sum / turns.length);
+const median = turns[Math.floor(turns.length / 2)];
+const p90 = turns[Math.min(turns.length - 1, Math.floor(turns.length * 0.9))];
 
-const sum = tokens.reduce((a, b) => a + b, 0);
-const avg = Math.round(sum / tokens.length);
-const median = tokens[Math.floor(tokens.length / 2)];
-
-console.log(`Token mỗi lượt: min ${tokens[0]} · median ${median} · trung bình ${avg} · max ${tokens[tokens.length - 1]}`);
-console.log(`Tổng ${sum.toLocaleString("vi-VN")} token qua ${tokens.length} lượt.\n`);
+console.log(`Số lượt đo được: ${turns.length} (nguồn: messages.usage_json)`);
+console.log(`Token mỗi lượt: min ${turns[0]} · median ${median} · trung bình ${avg} · p90 ${p90} · max ${turns[turns.length - 1]}\n`);
 
 const cost = (tokenCount) => Math.max(1, Math.ceil(tokenCount * perToken));
 const vnd = (tokenCount) => cost(tokenCount) * vndPerCredit;
 
 console.log(`--- Với creditsPerToken=${perToken}, vndPerCredit=${vndPerCredit} ---`);
 for (const [label, value] of [
-  ["rẻ nhất", tokens[0]],
+  ["rẻ nhất", turns[0]],
   ["median", median],
   ["trung bình", avg],
-  ["đắt nhất", tokens[tokens.length - 1]],
+  ["p90", p90],
+  ["đắt nhất", turns[turns.length - 1]],
 ]) {
   console.log(
     `  ${label.padEnd(10)} ${String(value).padStart(6)} token → ${String(cost(value)).padStart(5)} credit = ${vnd(value).toLocaleString("vi-VN")} đ`,
@@ -59,9 +65,9 @@ for (const [label, value] of [
 }
 
 const avgVnd = vnd(avg);
-console.log(`\nMột lượt trung bình: ${avgVnd.toLocaleString("vi-VN")} đ`);
 const target = 200;
 const delta = avgVnd - target;
+console.log(`\nMột lượt trung bình: ${avgVnd.toLocaleString("vi-VN")} đ`);
 console.log(
   Math.abs(delta) <= target * 0.15
     ? `✔ đạt mục tiêu ~${target}đ (lệch ${delta > 0 ? "+" : ""}${delta}đ)`
