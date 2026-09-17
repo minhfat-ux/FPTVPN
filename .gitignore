@@ -69,3 +69,6 @@ windows/dist/
 # bằng `windows/installer/build.ps1`, nên đừng để lọt vào commit.
 windows/installer/out/
 windows/installer/publish/
+
+# harness-shot.mjs: browser profile + screenshot output
+.shots/

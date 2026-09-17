@@ -137,4 +137,33 @@ curl -I https://dhs-win.meetflowai.site   # HTTPS public
 - **Port 13081** là mặc định cho Windows; nếu anh muốn chạy cả Mac + Windows song song thì giữ nguyên (Mac dùng 13080, Windows 13081).
 - Nếu máy Windows có **sẵn OpenSSH** (Windows 10 1809+): không cần cài gì thêm.
 - Chạy lại installer bất kỳ lúc nào đều an toàn (idempotent).
+- **Thứ tự patch quan trọng**: `apply-flowtech-brand.py` phải chạy SAU `apply-fpt-patches.py`
+  (bước 3 ghi lại `dist/favicon.svg` theo bản FPT). Installer đã đúng thứ tự; chạy tay thì
+  chạy FPT trước, FlowTech sau.
+- Bước theme (`flowvpn.css`) nay **cập nhật được**: chạy lại `apply-fpt-patches.py` sẽ ghi lại
+  CSS mới thay vì bỏ qua, nên sửa theme chỉ cần sửa `FLOWVPN_CSS` trong script rồi chạy lại.
+
+---
+
+## Chụp ảnh / đọc DOM của GUI (`tools/harness-shot.mjs`)
+
+Không cần cài gì: Chrome/Edge có sẵn + Node 22+ (`WebSocket`/`fetch` toàn cục). Script tự mint
+cookie phiên của Harness từ secret trong `%USERPROFILE%\.dsh\.credentials.yaml` nên vào được GUI
+mà không cần URL kèm token in ra lúc `dsh web`.
+
+```powershell
+node tools\harness-shot.mjs                                   # chụp màn hình -> .shots\shot-*.png
+node tools\harness-shot.mjs --out shot.png --full             # chụp cả trang
+node tools\harness-shot.mjs --width 1600 --height 1000 --color-scheme dark
+node tools\harness-shot.mjs --click "button[aria-label='Choose workspace']" `
+                            --click-text "Add workspace"      # mở dialog rồi mới chụp
+node tools\harness-shot.mjs --dom "[role=dialog] [class*=rowName]" --dom-out dom.json
+node tools\harness-shot.mjs --eval-file fix.js --keep-open    # chạy JS trong trang, giữ browser
+```
+
+- `--dom <selector>` đổ ra JSON: `text`, `color`, `backgroundColor`, `fontSize`, `rect`, `outerHTML`
+  — dùng để soi chữ mờ/chữ trùng màu nền mà không cần nhìn ảnh.
+- `--click` cần selector; PowerShell hay làm hỏng dấu `"` bên trong, nên viết
+  `"button[aria-label='Choose workspace']"` (nháy đơn bên trong) hoặc dùng `--click-text`.
+- Profile browser nằm ở `<root>\.shots\profile`; `--keep-open` để chụp nhiều lần liên tiếp.
 - Log Windows: `%TEMP%\dsh-tunnel.out.log`; DSH logs nằm trong `%USERPROFILE%\.dsh\`.
