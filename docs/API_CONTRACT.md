@@ -267,11 +267,16 @@ Trạng thái đơn: `pending` → `awaiting_confirmation` → `paid` (hoặc `c
 
 ## 10. Chợ kỹ năng (Skill Hub)
 
-- `GET /api/hub` (auth) → danh sách skill đang bán + `owned` + số dư.
+- `GET /api/hub` (auth) → danh sách skill đang bán + `owned` + số dư. **Không** trả `instructions`/`tools`.
 - `POST /api/hub/skills/:id/buy` (auth) → trừ credit (`skill_purchase`), ghi `hub_purchases`, tự cài vào `user_skills`
   (tối đa 10 kỹ năng). Giá 0 ⇒ vẫn ghi nhận sở hữu. Hết credit ⇒ **402**.
 - `GET/POST /api/admin/hub`, `PATCH/DELETE /api/admin/hub/:id` (admin) → CRUD prompt-pack
-  (name, tagline, description, category, icon, price, instructions, tools, state, sortOrder).
+  (name, tagline, description, category, icon, price, instructions, tools, state, sortOrder, installs).
+  `GET` và câu trả lời của `POST`/`PATCH` **có** `instructions`/`tools` để form Sửa nạp sẵn prompt pack.
+- `installs` là bộ đếm **suy ra được**: `PATCH { installs }` chỉ để admin sửa tay (dọn dữ liệu test);
+  nguồn sự thật vẫn là số dòng `hub_purchases` — `ops/hub-catalog-fix.mjs` tính lại từ đó.
+- Giá bán tính bằng credit; `ops/hub-catalog-fix.mjs` sửa giá + bộ đếm theo dữ liệu thật,
+  `ops/import-hub-skills.mjs` nhập hàng loạt từ thư mục `SKILL.md` (Claude/CodeBuddy) hoặc JSON.
 - Kỹ năng mua được chọn trong dropdown như kỹ năng built-in; prompt pack được chèn vào system prompt và có thể thu hẹp
   danh sách tool mà nó cần.
 

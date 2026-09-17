@@ -136,6 +136,14 @@ Một câu trong chỉ dẫn kỹ năng Sửa ảnh cũng đã sửa: “Image S
   ⚠️ **Cần anh cấp `bankAccount` + `bankAccountName`** thì ảnh VietQR mới hiện.
 - **Chợ kỹ năng**: mua prompt-pack bằng credit (6 skill thật + 1 coming soon), mua xong tự cài vào dropdown
   (tối đa 10 kỹ năng); admin CRUD trong Cài đặt → “Chợ kỹ năng”.
+  - Giá đã chỉnh lại theo **20đ/credit**: 1.500–3.500 token (30.000–70.000đ)/kỹ năng. Bảng admin và form Sửa
+    hiện luôn quy đổi VND, tự tính theo ô `vndPerCredit` trong Cài đặt → Hệ thống.
+  - `GET /api/admin/hub` trả kèm `instructions`/`tools` ⇒ form Sửa **nạp sẵn** prompt pack (trước đây trống,
+    không sửa được chỉ dẫn vì tưởng là rỗng). API công khai vẫn không lộ 2 trường này.
+  - `installs` là dữ liệu suy ra: `ops/hub-catalog-fix.mjs` tính lại từ `hub_purchases` (đã dọn 7 lượt ảo
+    do test trên production, thực tế 0 lượt mua).
+  - `ops/import-hub-skills.mjs` nhập hàng loạt từ thư mục `SKILL.md` (Claude/CodeBuddy) hoặc JSON,
+    tự map tool (`excel` → `generate_xlsx`, `ppt` → `generate_pptx`), mặc định chạy thử, `--apply` mới ghi.
 - **Đa ngôn ngữ**: hạ tầng i18n 3 thứ tiếng (vi/en/zh) cho cả shell; bản dịch đầy đủ đang được phủ dần theo từng khu vực.
 
 ### 11.4 Bug thật đã sửa trong đợt này
@@ -152,6 +160,7 @@ Một câu trong chỉ dẫn kỹ năng Sửa ảnh cũng đã sửa: “Image S
 |---|---|
 | `ops/credit-explain-check.mjs` | Tạo tài khoản mới rồi **hỏi chính FlowGpt** về credit; assert câu trả lời có công thức, mức tặng, cách xin/mua; so số dư với `token vào + ra`. Chạy: `node ops/credit-explain-check.mjs` |
 | `ops/ui-i18n-check.mjs` | Mở trình duyệt thật (CDP 9224), đăng nhập tài khoản tạm, đổi VI→EN→ZH, chụp ảnh từng ngôn ngữ, kiểm tra `html lang`, copy có đổi thật không và menu tài khoản có `LocaleSwitcher` |
+| `ops/ui-hub-check.mjs` | Chợ kỹ năng trên Chrome thật: bảng admin có quy đổi VND, **form Sửa nạp sẵn đúng chỉ dẫn từ server**, giá khớp API, trang chợ phía người dùng hiện giá mới. Chạy: `node ops/ui-hub-check.mjs https://flowgpt.meetflowai.site ops/ui-out-hub 9224 <adminToken>` |
 | `ops/prune-test-users.mjs` | Dọn tài khoản tạm (`credit-explain+%`, `i18n-ui+%`) **và** mọi dòng chúng sở hữu; mặc định chỉ xem trước, thêm `--apply` mới xoá |
 | `ops/report-telegram-credit.sh` | Báo cáo Telegram đợt credit (đã gửi, message_id 201) |
 

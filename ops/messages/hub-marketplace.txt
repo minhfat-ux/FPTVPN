@@ -1,0 +1,47 @@
+CHỢ KỸ NĂNG — ĐÃ XỬ LÝ XONG
+
+1. SỬA LỖI FORM "SỬA KỸ NĂNG" BỊ TRỐNG
+   - Nguyên nhân: GET /api/admin/hub trả về bản rút gọn, không có instructions/tools
+     -> mở form Sửa thì ô chỉ dẫn luôn trắng, không thấy nội dung đang chạy.
+   - Đã sửa: API admin trả kèm prompt pack (chỉ admin; API công khai vẫn không lộ).
+   - Form Sửa giờ nạp sẵn đúng chỉ dẫn + công cụ, và gửi đúng phần thay đổi
+     (kể cả khi anh xoá trắng để bỏ chỉ dẫn cũ).
+
+2. GIÁ LẠI THEO 20Đ/CREDIT
+   Giá cũ quá cao (6.000-15.000 token = 120.000-300.000đ cho 1 kỹ năng).
+   Giá mới:
+     Viết content bán hàng   8.000 -> 2.000 token  =  40.000đ
+     Tóm tắt cuộc họp        6.000 -> 1.500 token  =  30.000đ
+     Dịch tài liệu          10.000 -> 2.500 token  =  50.000đ
+     Soát hợp đồng          15.000 -> 3.500 token  =  70.000đ
+     Soạn bài giảng          7.000 -> 2.000 token  =  40.000đ
+     Kể chuyện bằng dữ liệu  9.000 -> 3.000 token  =  60.000đ
+   Bảng admin + form Sửa giờ hiện luôn quy đổi VND cạnh giá token, tự tính
+   theo ô "giá 1 credit" anh chỉnh trên control panel.
+
+3. DỌN DỮ LIỆU
+   - meeting-notes đang hiện 7 lượt dùng: đó là dữ liệu test, thực tế 0 lượt mua.
+   - Đã tính lại toàn bộ bộ đếm từ bảng mua thật -> tất cả về 0.
+   - Xác nhận trên production: 7 kỹ năng, 0 lượt mua thật, không mất dữ liệu gì.
+
+4. CÔNG CỤ MỚI
+   - ops/import-hub-skills.mjs: nhập kỹ năng hàng loạt từ thư mục SKILL.md
+     (định dạng Claude/CodeBuddy) hoặc file JSON. Chạy thử trước, thêm --apply
+     mới ghi. Tự nhận diện tool (excel -> generate_xlsx, ppt -> generate_pptx...).
+   - ops/hub-catalog-fix.mjs: sửa giá + tính lại bộ đếm từ dữ liệu thật.
+   - ops/ui-hub-check.mjs: kiểm tra chợ kỹ năng trên Chrome thật.
+
+5. ĐÃ KIỂM CHỨNG
+   - 165/165 test pass, web build sạch.
+   - Chrome thật: ĐẠT HẾT — bảng admin đủ 7 kỹ năng có quy đổi VND, form Sửa
+     nạp sẵn 343 ký tự chỉ dẫn, giá khớp API, trang chợ hiện giá mới.
+
+LƯU Ý VỀ GIÁ (cần anh quyết)
+   1 credit = 1 token, 1 lượt chat tốn ~1.700-2.200 token = ~34.000-44.000đ.
+   Tức 1 kỹ năng 40.000đ chỉ tương đương MỘT câu chat. Nếu muốn dễ bán hơn thì
+   hạ "giá 1 credit" (Cài đặt -> Hệ thống) hoặc giảm "credit mỗi token".
+   Hiện tài khoản mới tặng 10.000 token = 200.000đ, khá hào phóng.
+
+CÒN LẠI CỦA CHỢ KỸ NĂNG
+   - Cần anh gửi danh sách/link kỹ năng CodeBuddy muốn nhập -> em chạy import.
+   - Lớp voice (chống trễ) chưa làm tiếp theo đúng yêu cầu "đừng làm vội".
