@@ -384,7 +384,7 @@ class HysteriaVpnService : VpnService() {
         if (!bridge.start()) return 0
         DiagnosticsLog.log("ws-relay: thử transport qua Cloudflare (local port ${bridge.localPort})")
         // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói.
-        val deadline = System.currentTimeMillis() + 6000
+        val deadline = System.currentTimeMillis() + 15000
         while (!bridge.connected && System.currentTimeMillis() < deadline && !stopping) {
             Thread.sleep(200)
         }
@@ -1022,7 +1022,7 @@ class HysteriaVpnService : VpnService() {
          * TCP connect tới relay. 2500ms là lãng phí: khi IP node bị chặn thì connect
          * không bao giờ xong, còn khi tới được thì RTT từ TQ chỉ vài chục ms.
          */
-        const val TCP_CONNECT_TIMEOUT_MS = 1200
+        const val TCP_CONNECT_TIMEOUT_MS = 5000
         const val RETRY_BACKOFF_START_MS = 3000L
         const val RETRY_BACKOFF_MAX_MS = 30000L
         /** Pause after a transport teardown so the Go client releases its socket. */
