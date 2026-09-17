@@ -22,7 +22,7 @@ for a in "$@"; do
     *) HOSTS+=("$a") ;;
   esac
 done
-[ ${#HOSTS[@]} -eq 0 ] && HOSTS=(api.meetflowai.site t1.meetflowai.site meetflowai.site fcnvpn.tail303be3.ts.net)
+[ ${#HOSTS[@]} -eq 0 ] && HOSTS=(api.meetflowai.site t1.meetflowai.site home.meetflowai.site meetflowai.site fcnvpn.tail303be3.ts.net)
 
 resolve() { # in ra IP đầu tiên
   if command -v dig >/dev/null 2>&1; then dig +short +time=4 +tries=1 A "$1" 2>/dev/null | head -1
