@@ -8,6 +8,7 @@ import {
   buildChatPrompt,
   chatHelpText,
   chatPreamble,
+  chunkMessage,
   confirmationPrompt,
   formatDuration,
   helpText,
@@ -269,4 +270,44 @@ test("telegramCallTimeoutMs: long-poll getUpdates phải rộng hơn timeout c�
   assert.equal(telegramCallTimeoutMs("getUpdates", 0), 40_000);
   assert.equal(telegramCallTimeoutMs("getUpdates", "abc"), 40_000);
   assert.equal(telegramCallTimeoutMs("getUpdates", -3), 40_000);
+});
+
+test("chunkMessage: KHÔNG cắt đôi emoji ở ranh giới (lỗi 'chữ không ăn unicode')", () => {
+  const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+  // Emoji rơi đúng vào mốc cắt: cách cũ (match theo code unit) sinh 2 mảnh, mỗi mảnh một nửa.
+  const tricky = `${"a".repeat(3799)}🚀${"b".repeat(50)}`;
+  const chunks = chunkMessage(tricky, 3800);
+  assert.ok(chunks.length >= 1);
+  for (const c of chunks) {
+    assert.equal(loneSurrogate.test(c), false, `mảnh chứa surrogate lẻ: ${JSON.stringify(c.slice(-4))}`);
+    assert.ok(c.length <= 3800, `mảnh vượt giới hạn: ${c.length}`);
+  }
+  assert.equal(chunks.join(""), tricky, "ghép các mảnh phải ra đúng chuỗi gốc (emoji còn nguyên)");
+
+  // Emoji ở ngay ranh giới với max nhỏ: vẫn không được vỡ.
+  const small = "🙂".repeat(3) + "x".repeat(4);
+  for (const c of chunkMessage(small, 3)) assert.equal(loneSurrogate.test(c), false, JSON.stringify(c));
+  assert.equal(chunkMessage(small, 3).join(""), small);
+
+  // Ưu tiên cắt ở xuống dòng/khoảng trắng gần cuối để không vỡ từ.
+  const words = `${"x".repeat(18)} ${"y".repeat(30)}`;
+  const cut = chunkMessage(words, 20);
+  assert.equal(cut[0], `${"x".repeat(18)} `, JSON.stringify(cut[0]));
+  // Khoảng trắng nằm quá xa cuối (>20% đầu) thì cắt thẳng, không kéo dài mảnh.
+  const early = `${"ab".repeat(6)} ${"z".repeat(30)}`;
+  assert.equal(chunkMessage(early, 20)[0].length, 20);
+
+  // Ca biên: rỗng, max sai, chuỗi ngắn hơn giới hạn.
+  assert.deepEqual(chunkMessage(""), [""]);
+  assert.deepEqual(chunkMessage(null), [""]);
+  assert.deepEqual(chunkMessage("ngắn"), ["ngắn"]);
+  assert.equal(chunkMessage("x".repeat(10), 0).length, 1, "max sai ⇒ dùng mặc định 3800");
+  assert.equal(chunkMessage("x".repeat(4000), "abc")[0].length, 3800, "max sai ⇒ mặc định 3800");
+  // Tin rất dài nhiều emoji: mọi mảnh sạch và ghép lại đúng gốc.
+  const huge = "🔥Báo cáo VPNFlow ✅ ".repeat(400);
+  const hugeChunks = chunkMessage(huge, 3800);
+  assert.ok(hugeChunks.length > 1);
+  for (const c of hugeChunks) assert.equal(loneSurrogate.test(c), false);
+  assert.equal(hugeChunks.join(""), huge);
 });
