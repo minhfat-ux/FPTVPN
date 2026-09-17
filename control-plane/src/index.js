@@ -78,6 +78,7 @@ import {
   generateEmailVerificationLink,
 } from "./firebase-users.js";
 import { guidePageHTML } from "./guide-page.js";
+import { homePageHTML } from "./home-page.js";
 import { IosDeviceStore, buildDeviceProfile, decodeDevicePayload } from "./ios-devices.js";
 import { AppleCredentialStore, registerDeviceWithApple, listAppleDevices } from "./apple-devices.js";
 import { supportPageHTML } from "./support-page.js";
@@ -643,6 +644,42 @@ function isInAppRequest(req) {
   const flag = String(req?.query?.inapp ?? req?.query?.in_app ?? "").toLowerCase();
   return flag === "1" || flag === "true" || flag === "yes";
 }
+
+/**
+ * Trang chủ hệ sinh thái FlowTech (index của meetflowai.site).
+ *
+ * Vì sao ở control plane chứ không phải file tĩnh: bảng giá phải lấy từ plans thật
+ * (planStore) và trang phải theo ngôn ngữ của khách như các trang /buy, /guide.
+ * Caddy phải có `handle /` trỏ về đây, nếu không thì `/` rơi vào static site (404).
+ */
+app.get(["/", "/home"], (req, res) => {
+  try {
+    res.type("html").send(
+      homePageHTML({
+        lang: buyLang(req),
+        plans: planStore.all(),
+        buyUrl: `${publicBaseUrl()}/buy`,
+        aiBuyUrl: `${publicBaseUrl()}/ai/buy`,
+        downloads: storeLinks("vpn"),
+        reviews: [], // chưa có nguồn đánh giá thật ⇒ khối đánh giá tự ẩn (không bịa)
+        supportEmail: SUPPORT_EMAIL,
+        canonicalUrl: `${siteBaseUrl()}/`,
+        maxDevices: MAX_DEVICES_PER_USER,
+        links: {
+          guide: `${publicBaseUrl()}/guide`,
+          installIos: `${siteBaseUrl()}/install/ios`,
+          support: `${publicBaseUrl()}/support`,
+          privacy: `${siteBaseUrl()}/privacy`,
+          terms: `${siteBaseUrl()}/terms`,
+        },
+      }),
+    );
+  } catch (err) {
+    // Trang chủ là mặt tiền: lỗi render KHÔNG được trả 500 trắng — đẩy khách sang /buy.
+    console.error("GET / failed:", err);
+    res.redirect(302, "/buy");
+  }
+});
 
 app.get(["/buy", "/buy/"], async (req, res) => {
   // baseUrl is absolute so the page works from any host/path that proxies to

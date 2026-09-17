@@ -1,0 +1,1353 @@
+/**
+ * Trang chủ (index) của hệ sinh thái FlowTech — VPNFlow (VPN) + MeetFlow AI + FlowTech Harness.
+ *
+ * Vì sao có file này: trước đây khách chỉ gặp trang /buy (paywall) khi đã có link, còn
+ * meetflowai.site/ chưa có trang giới thiệu nào do mình phục vụ. Trang này là mặt tiền:
+ * nói rõ ba sản phẩm, bảng giá lấy ĐÚNG từ PlanStore của control plane, FAQ thật của sản
+ * phẩm, và hai nút mua trỏ về /buy + /ai/buy.
+ *
+ * Nguyên tắc nội dung (quan trọng hơn hình thức):
+ *   - Mọi con số/năng lực nêu trên trang phải kiểm chứng được trong repo (thanh toán QR
+ *     VietQR, hoá đơn email, 4 nền tảng app, 5 ngôn ngữ, giới hạn thiết bị theo
+ *     MAX_DEVICES_PER_USER). KHÔNG bịa số liệu, giải thưởng hay đánh giá khách.
+ *   - Khối "đánh giá khách" chỉ render khi người gọi truyền `reviews` thật (xem chú thích
+ *     ở reviewsHTML bên dưới) — không có dữ liệu thì ẩn hẳn, không dựng review giả.
+ *   - Bảng giá chỉ render khi có gói đang bán; `plans: []` ⇒ ẩn cả khối (không hiện bảng trống).
+ *
+ * Thuần Node ESM, không thư viện ngoài, không ảnh ngoài (logo vẽ bằng SVG inline để trang
+ * vẫn hiện đủ khi mạng hạn chế). Mọi chuỗi từ dữ liệu (plans, reviews, email, url) đi qua
+ * esc() trước khi vào HTML.
+ */
+
+/** 5 ngôn ngữ, cùng bộ mã với trang /buy và /guide (en/vi/zh/ja/ko). */
+const LANG_CODES = ["en", "vi", "zh", "ja", "ko"];
+
+/** Chuẩn hoá mã ngôn ngữ; mã lạ ⇒ vi (giữ hành vi cũ của các trang khác). */
+export function pickHomeLang(v) {
+  return LANG_CODES.includes(v) ? v : "vi";
+}
+
+const LOCALES = { en: "en-US", vi: "vi-VN", zh: "zh-CN", ja: "ja-JP", ko: "ko-KR" };
+
+const LANG_NAMES = { vi: "Tiếng Việt", en: "English", zh: "中文", ja: "日本語", ko: "한국어" };
+
+/**
+ * Escape mọi giá trị động trước khi nhét vào HTML (text và attribute).
+ * Dùng cho plans / reviews / email / url — những thứ không do file này kiểm soát.
+ */
+export function esc(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Chỉ cho phép href tương đối hoặc http(s)/mailto: — chặn `javascript:` / `data:` do dữ
+ * liệu bên ngoài (gói admin thêm, review) chui vào thuộc tính href.
+ * Trả về "" khi không hợp lệ để call site bỏ luôn thẻ <a>.
+ */
+function safeHref(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^(https?:|mailto:)/i.test(raw)) return raw;
+  if (raw.startsWith("//")) return ""; // protocol-relative: không nhận từ dữ liệu động
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return ""; // scheme khác (javascript:, data:, …)
+  return raw.startsWith("/") || raw.startsWith("?") || raw.startsWith("#") ? raw : `/${raw}`;
+}
+
+/** Nối `?plan=` vào url mua mà không phá query có sẵn (vd `/buy?lang=vi`). */
+function withPlan(url, planId) {
+  const href = safeHref(url);
+  if (!href || !planId) return href;
+  return `${href}${href.includes("?") ? "&" : "?"}plan=${encodeURIComponent(planId)}`;
+}
+
+/** Điền chỗ trống `{ten}` trong câu dịch bằng giá trị ĐÃ escape. */
+function fill(template, values) {
+  return String(template ?? "").replace(/\{(\w+)\}/g, (whole, key) =>
+    Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : whole);
+}
+
+/** Số nguyên dương (số ngày, số thiết bị) — sai/thiếu ⇒ null để không hiện số vô nghĩa. */
+function positiveInt(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/** Tiền tệ: VND (đ), CNY (¥), USD ($), còn lại `CODE 123`. Không bao giờ trả NaN. */
+function money(amount, currency, lang) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return "";
+  const locale = LOCALES[lang] || "vi-VN";
+  let num;
+  try {
+    num = new Intl.NumberFormat(locale).format(n);
+  } catch {
+    num = String(n);
+  }
+  const code = String(currency || "VND").toUpperCase();
+  if (code === "VND") return `${num} đ`;
+  if (code === "CNY") return `¥${num}`;
+  if (code === "USD") return Number.isInteger(n) ? `$${num}` : `$${n.toFixed(2)}`;
+  return `${code} ${num}`;
+}
+
+const TEXTS = {
+  en: {
+    htmlLang: "en",
+    pageTitle: "FlowTech — VPNFlow VPN and MeetFlow AI",
+    metaDescription:
+      "FlowTech builds VPNFlow (private VPN for iOS, Android, macOS and Windows) and MeetFlow AI (AI translation and meeting minutes). Pay by bank QR on the web, activate with your email.",
+    brandTagline: "VPN + AI ecosystem",
+    navAria: "Main navigation",
+    navProducts: "Products",
+    navPricing: "Pricing",
+    navFaq: "FAQ",
+    navBuy: "Buy now",
+    langAria: "Choose language",
+    heroKicker: "The FlowTech ecosystem",
+    heroTitle: "A private VPN and an AI meeting assistant, from one place",
+    heroSub:
+      "VPNFlow handles the private connection, MeetFlow AI handles translation and meeting minutes. Buy on the web with a bank QR, activate with the email you sign in with.",
+    ctaVpn: "Buy VPNFlow",
+    ctaAi: "Use MeetFlow AI",
+    trustAria: "What we actually offer",
+    trust: [
+      "Bank QR payment (VietQR) — scan, the amount is pre-filled, the transfer note carries your order code",
+      "Invoice and activation confirmations sent by email",
+      "Apps for iOS (IPA), Android (APK), macOS (.dmg) and Windows (one-click installer)",
+      "One account on up to {maxDevices} active devices, switch devices any time",
+      "Public pages in 5 languages: Vietnamese, English, Chinese, Japanese, Korean",
+    ],
+    productsTitle: "Products",
+    productsSub: "Three parts of the same ecosystem — buy only what you need.",
+    p1Name: "VPNFlow",
+    p1Tag: "Private VPN",
+    p1Desc: "A WireGuard-based VPN that ties your subscription to your email account.",
+    p1Bullets: [
+      "Sign in with an email one-time code — no password to remember",
+      "Install on iOS (IPA), Android (APK), macOS (.dmg) and Windows",
+      "Plans are one-time purchases: no auto-renewal, we email you before expiry",
+    ],
+    p1Cta: "Buy VPNFlow",
+    p2Name: "MeetFlow AI",
+    p2Tag: "AI assistant",
+    p2Desc: "AI translation and meeting minutes for your calls and recordings.",
+    p2Bullets: [
+      "Pro unlocks after checkout — the app verifies the email you bought with",
+      "Android APK and iOS build available",
+      "30-day pass, monthly and yearly plans, all one-time on the web",
+    ],
+    p2Cta: "Use MeetFlow AI",
+    p3Name: "FlowTech Harness",
+    p3Tag: "Agent toolkit",
+    p3Desc: "Our packaged agent harness: run the assistant on your own machine, reach it from anywhere.",
+    p3Bullets: [
+      "One-command installer for macOS plus a Windows installer in the same package",
+      "Optional VPS part: HTTPS domain with a login gate in front of your machine",
+      "Source and install scripts are kept in the project repository",
+    ],
+    p3Cta: "Install guide",
+    dlAria: "Download the app",
+    platforms: {
+      ios: "iOS (IPA)",
+      android: "Android (APK)",
+      androidLegacy: "Android 7.x (APK)",
+      mac: "macOS",
+      windows: "Windows 10/11",
+    },
+    pricingTitle: "Pricing",
+    pricingSub: "Prices are in VND. Bank QR, MoMo, WeChat Pay or Alipay — your choice at checkout.",
+    pricingOneTime: "Every plan is a one-time purchase: nothing renews by itself.",
+    pricingLifetime: "Lifetime (no expiry)",
+    pricingDays: "{days} days",
+    planCta: "Choose this plan",
+    faqTitle: "Frequently asked",
+    faq: [
+      [
+        "How do I pay with a bank QR?",
+        "Open the buy page, enter your account email, pick a plan and scan the QR with your banking app. The amount is already filled in and the transfer note carries the order code — transfer the exact amount and keep the note unchanged so the payment is matched.",
+      ],
+      [
+        "How long until my plan is activated?",
+        "We match the incoming transfer, activate the plan for the email you bought with and email you the invoice. It usually takes a few minutes; if nothing arrives after 10 minutes, email support with your order code.",
+      ],
+      [
+        "How many devices can one account use?",
+        "Up to {maxDevices} active devices per account. To move to a new device, sign out of an old one first.",
+      ],
+      [
+        "Does the plan renew automatically?",
+        "No. Bank QR payment is a one-time purchase that covers the plan's days; you will get a reminder email before it expires.",
+      ],
+      [
+        "What about refunds and support?",
+        "Email {supportEmail} with the order code and the email you bought with. Refund requests are handled under our terms of service — we do not promise automatic refunds.",
+      ],
+      [
+        "How do I install the app?",
+        "iOS: open /install/ios in Safari on the device itself and register it (UDID) so a signed build can be produced. Android: download the APK on the buy page and allow installs from unknown sources. macOS: download the .dmg. Windows: run the installer (it asks for admin rights to create the tunnel).",
+      ],
+      [
+        "Does a web purchase work on both iOS and Android?",
+        "Yes. The plan is tied to your email account, so signing in with the same email works on every supported device.",
+      ],
+      [
+        "Do I have to pay again on a new device?",
+        "No. Sign in with the same email on the new device; if the account already has {maxDevices} active devices, remove an old one first.",
+      ],
+    ],
+    reviewsTitle: "What customers say",
+    reviewsSub: "Reviews we received directly from customers.",
+    reviewsStars: "{stars} out of 5",
+    promoTitle: "One more thing while you are here",
+    promoBody:
+      "VPNFlow keeps the connection private, MeetFlow AI takes the notes. Both activate with your email right after payment.",
+    promoVpn: "Buy VPNFlow",
+    promoAi: "Try MeetFlow AI",
+    promoClose: "Close",
+    promoNever: "Do not show again",
+    footerProducts: "Products",
+    footerHelp: "Help &amp; legal",
+    footerBuy: "Buy VPNFlow",
+    footerAiBuy: "Buy MeetFlow AI",
+    footerGuide: "Activation guide",
+    footerInstallIos: "Install on iPhone / iPad",
+    footerSupport: "Support",
+    footerPrivacy: "Privacy policy",
+    footerTerms: "Terms of service",
+    footerContact: "Need help? Email",
+    footerRights: "© {year} FlowTech. All rights reserved.",
+  },
+
+  vi: {
+    htmlLang: "vi",
+    pageTitle: "FlowTech — VPNFlow và MeetFlow AI",
+    metaDescription:
+      "FlowTech làm VPNFlow (VPN riêng tư cho iOS, Android, macOS, Windows) và MeetFlow AI (dịch và ghi biên bản cuộc họp bằng AI). Thanh toán bằng QR ngân hàng trên web, kích hoạt theo email.",
+    brandTagline: "Hệ sinh thái VPN + AI",
+    navAria: "Điều hướng chính",
+    navProducts: "Sản phẩm",
+    navPricing: "Bảng giá",
+    navFaq: "Câu hỏi",
+    navBuy: "Mua ngay",
+    langAria: "Chọn ngôn ngữ",
+    heroKicker: "Hệ sinh thái FlowTech",
+    heroTitle: "VPN riêng tư và trợ lý AI cho cuộc họp, cùng một chỗ",
+    heroSub:
+      "VPNFlow lo phần kết nối riêng tư, MeetFlow AI lo phần dịch và ghi biên bản cuộc họp. Mua trên web bằng QR ngân hàng, kích hoạt theo đúng email bạn đăng nhập.",
+    ctaVpn: "Mua VPNFlow",
+    ctaAi: "Dùng MeetFlow AI",
+    trustAria: "Những gì chúng tôi thực sự có",
+    trust: [
+      "Thanh toán QR ngân hàng (VietQR) — quét là ra đúng số tiền, nội dung chuyển khoản có mã đơn",
+      "Hoá đơn và xác nhận kích hoạt gửi qua email",
+      "App cho iOS (IPA), Android (APK), macOS (.dmg) và Windows (bộ cài 1 lần bấm)",
+      "Một tài khoản dùng được tối đa {maxDevices} thiết bị đang hoạt động, đổi máy bất cứ lúc nào",
+      "Trang công khai đủ 5 ngôn ngữ: Việt, Anh, Trung, Nhật, Hàn",
+    ],
+    productsTitle: "Sản phẩm",
+    productsSub: "Ba phần trong cùng một hệ sinh thái — cần gì mua nấy.",
+    p1Name: "VPNFlow",
+    p1Tag: "VPN riêng tư",
+    p1Desc: "VPN chạy trên WireGuard, gói mua gắn với email tài khoản của bạn.",
+    p1Bullets: [
+      "Đăng nhập bằng mã dùng một lần gửi tới email — không cần nhớ mật khẩu",
+      "Cài trên iOS (IPA), Android (APK), macOS (.dmg) và Windows",
+      "Gói mua một lần, không tự động gia hạn; gần hết hạn sẽ có email nhắc",
+    ],
+    p1Cta: "Mua VPNFlow",
+    p2Name: "MeetFlow AI",
+    p2Tag: "Trợ lý AI",
+    p2Desc: "Dịch và ghi biên bản cuộc họp bằng AI cho cuộc gọi và bản ghi âm của bạn.",
+    p2Bullets: [
+      "Pro mở khoá ngay sau khi thanh toán — app kiểm tra đúng email đã mua",
+      "Có bản Android (APK) và bản iOS",
+      "Gói 30 ngày, theo tháng và theo năm — mua một lần trên web",
+    ],
+    p2Cta: "Dùng MeetFlow AI",
+    p3Name: "FlowTech Harness",
+    p3Tag: "Bộ công cụ agent",
+    p3Desc: "Bộ harness agent của chúng tôi: chạy trợ lý trên máy của bạn và mở nó từ xa.",
+    p3Bullets: [
+      "Cài bằng một lệnh trên macOS, kèm bộ cài Windows trong cùng gói",
+      "Phần VPS tuỳ chọn: tên miền HTTPS có cổng đăng nhập trước máy của bạn",
+      "Mã nguồn và script cài nằm trong kho của dự án",
+    ],
+    p3Cta: "Hướng dẫn cài",
+    dlAria: "Tải app",
+    platforms: {
+      ios: "iOS (IPA)",
+      android: "Android (APK)",
+      androidLegacy: "Android 7.x (APK)",
+      mac: "macOS",
+      windows: "Windows 10/11",
+    },
+    pricingTitle: "Bảng giá",
+    pricingSub: "Giá tính bằng VND. Lúc thanh toán bạn chọn QR ngân hàng, MoMo, WeChat Pay hoặc Alipay.",
+    pricingOneTime: "Mọi gói đều mua một lần — không có gói nào tự động gia hạn.",
+    pricingLifetime: "Vĩnh viễn (không hết hạn)",
+    pricingDays: "{days} ngày",
+    planCta: "Chọn gói này",
+    faqTitle: "Câu hỏi thường gặp",
+    faq: [
+      [
+        "Thanh toán bằng QR ngân hàng thế nào?",
+        "Mở trang mua, nhập email tài khoản, chọn gói rồi quét mã QR bằng app ngân hàng. Số tiền đã điền sẵn và nội dung chuyển khoản có mã đơn — chuyển đúng số tiền, giữ nguyên nội dung để hệ thống khớp được đơn.",
+      ],
+      [
+        "Bao lâu thì gói được kích hoạt?",
+        "Hệ thống đối soát tiền về, kích hoạt gói cho đúng email bạn đã mua và gửi hoá đơn qua email. Thường chỉ vài phút; sau 10 phút vẫn chưa thấy thì gửi email hỗ trợ kèm mã đơn.",
+      ],
+      [
+        "Một tài khoản dùng được mấy thiết bị?",
+        "Tối đa {maxDevices} thiết bị đang hoạt động cho mỗi tài khoản. Muốn chuyển sang máy mới, hãy đăng xuất một thiết bị cũ trước.",
+      ],
+      [
+        "Gói có tự động gia hạn không?",
+        "Không. Thanh toán QR là mua một lần, dùng đúng số ngày của gói; gần hết hạn bạn sẽ nhận email nhắc gia hạn.",
+      ],
+      [
+        "Hoàn tiền và hỗ trợ ra sao?",
+        "Gửi email tới {supportEmail} kèm mã đơn và email bạn đã mua. Yêu cầu hoàn tiền được xử lý theo điều khoản dịch vụ — chúng tôi không hứa hoàn tiền tự động.",
+      ],
+      [
+        "Cài app trên từng máy thế nào?",
+        "iOS: mở /install/ios bằng Safari trên chính máy đó rồi đăng ký thiết bị (UDID) để shop ký bản cài. Android: tải APK ở trang mua và cho phép cài từ nguồn không xác định. macOS: tải file .dmg. Windows: chạy bộ cài (app xin quyền admin để dựng tunnel).",
+      ],
+      [
+        "Mua trên web dùng được cho cả iOS và Android?",
+        "Được. Gói gắn với email tài khoản, nên đăng nhập bằng đúng email đã mua là dùng được trên mọi thiết bị được hỗ trợ.",
+      ],
+      [
+        "Đổi sang máy mới có phải mua lại?",
+        "Không. Chỉ cần đăng nhập cùng email trên máy mới; nếu tài khoản đã có đủ {maxDevices} thiết bị hoạt động thì gỡ một thiết bị cũ trước.",
+      ],
+    ],
+    reviewsTitle: "Khách nói gì",
+    reviewsSub: "Đánh giá do khách gửi trực tiếp cho chúng tôi.",
+    reviewsStars: "{stars} trên 5",
+    promoTitle: "Còn một thứ nữa",
+    promoBody:
+      "VPNFlow giữ kết nối riêng tư, MeetFlow AI ghi biên bản cuộc họp. Cả hai kích hoạt theo email ngay sau khi thanh toán.",
+    promoVpn: "Mua VPNFlow",
+    promoAi: "Dùng thử MeetFlow AI",
+    promoClose: "Đóng",
+    promoNever: "Không hiện lại",
+    footerProducts: "Sản phẩm",
+    footerHelp: "Hỗ trợ &amp; pháp lý",
+    footerBuy: "Mua VPNFlow",
+    footerAiBuy: "Mua MeetFlow AI",
+    footerGuide: "Hướng dẫn kích hoạt",
+    footerInstallIos: "Cài trên iPhone / iPad",
+    footerSupport: "Hỗ trợ",
+    footerPrivacy: "Chính sách bảo mật",
+    footerTerms: "Điều khoản dịch vụ",
+    footerContact: "Cần hỗ trợ? Email",
+    footerRights: "© {year} FlowTech. Bảo lưu mọi quyền.",
+  },
+
+  zh: {
+    htmlLang: "zh-Hans",
+    pageTitle: "FlowTech — VPNFlow 与 MeetFlow AI",
+    metaDescription:
+      "FlowTech 提供 VPNFlow（适用于 iOS、Android、macOS、Windows 的私有 VPN）与 MeetFlow AI（AI 翻译与会议纪要）。网页扫码付款，用邮箱激活。",
+    brandTagline: "VPN + AI 生态",
+    navAria: "主导航",
+    navProducts: "产品",
+    navPricing: "价格",
+    navFaq: "常见问题",
+    navBuy: "立即购买",
+    langAria: "选择语言",
+    heroKicker: "FlowTech 生态",
+    heroTitle: "私有 VPN 与 AI 会议助手，一个地方搞定",
+    heroSub:
+      "VPNFlow 负责私有连接，MeetFlow AI 负责翻译与会议纪要。网页用银行二维码付款，用登录邮箱激活。",
+    ctaVpn: "购买 VPNFlow",
+    ctaAi: "使用 MeetFlow AI",
+    trustAria: "我们真实提供的能力",
+    trust: [
+      "银行二维码付款（VietQR）——扫码即带金额，转账备注含订单号",
+      "发票与激活确认通过邮件发送",
+      "支持 iOS（IPA）、Android（APK）、macOS（.dmg）与 Windows（一键安装包）",
+      "一个账号最多 {maxDevices} 台在线设备，随时可换设备",
+      "公开页面支持 5 种语言：越语、英语、中文、日语、韩语",
+    ],
+    productsTitle: "产品",
+    productsSub: "同一生态的三部分 — 需要哪个买哪个。",
+    p1Name: "VPNFlow",
+    p1Tag: "私有 VPN",
+    p1Desc: "基于 WireGuard 的 VPN，套餐与你的账号邮箱绑定。",
+    p1Bullets: [
+      "用邮箱一次性验证码登录 — 不需要记密码",
+      "支持 iOS（IPA）、Android（APK）、macOS（.dmg）与 Windows",
+      "套餐为一次性购买，不会自动续订；到期前会发邮件提醒",
+    ],
+    p1Cta: "购买 VPNFlow",
+    p2Name: "MeetFlow AI",
+    p2Tag: "AI 助手",
+    p2Desc: "为通话与录音提供 AI 翻译与会议纪要。",
+    p2Bullets: [
+      "付款后即可解锁 Pro — 应用会校验购买时使用的邮箱",
+      "提供 Android（APK）与 iOS 版本",
+      "30 天通行证、月度、年度套餐，网页一次性购买",
+    ],
+    p2Cta: "使用 MeetFlow AI",
+    p3Name: "FlowTech Harness",
+    p3Tag: "Agent 工具箱",
+    p3Desc: "我们打包的 agent harness：在自己的机器上运行助手，并可远程访问。",
+    p3Bullets: [
+      "macOS 一条命令安装，同一安装包内含 Windows 安装程序",
+      "可选 VPS 部分：在机器前加 HTTPS 域名与登录门禁",
+      "源码与安装脚本保留在项目仓库中",
+    ],
+    p3Cta: "安装说明",
+    dlAria: "下载应用",
+    platforms: {
+      ios: "iOS (IPA)",
+      android: "Android (APK)",
+      androidLegacy: "Android 7.x (APK)",
+      mac: "macOS",
+      windows: "Windows 10/11",
+    },
+    pricingTitle: "价格",
+    pricingSub: "价格以越南盾（VND）计。付款时可选择银行二维码、MoMo、微信支付或支付宝。",
+    pricingOneTime: "所有套餐均为一次性购买 — 不会自动续订。",
+    pricingLifetime: "永久（不限时间）",
+    pricingDays: "{days} 天",
+    planCta: "选择此套餐",
+    faqTitle: "常见问题",
+    faq: [
+      [
+        "如何用银行二维码付款？",
+        "打开购买页，填写账号邮箱、选择套餐，用银行 App 扫描二维码。金额已填好，转账备注含订单号 — 请转入准确金额并保留备注，系统才能匹配订单。",
+      ],
+      [
+        "多久可以激活？",
+        "系统核对到账后为购买邮箱开通套餐，并把发票发到你的邮箱。通常几分钟；若 10 分钟后仍未收到，请带上订单号联系客服。",
+      ],
+      [
+        "一个账号可以几台设备使用？",
+        "每个账号最多 {maxDevices} 台在线设备。换新设备前请先退出一台旧设备。",
+      ],
+      [
+        "套餐会自动续订吗？",
+        "不会。二维码付款为一次性购买，覆盖套餐天数；到期前我们会发提醒邮件。",
+      ],
+      [
+        "退款与支持怎么处理？",
+        "请将订单号和购买邮箱发到 {supportEmail}。退款按服务条款处理 — 我们不承诺自动退款。",
+      ],
+      [
+        "各平台怎么安装？",
+        "iOS：在该设备上用 Safari 打开 /install/ios 并注册设备（UDID），我们才能为你签名。Android：在购买页下载 APK，并允许安装未知来源应用。macOS：下载 .dmg。Windows：运行安装包（创建隧道时会请求管理员权限）。",
+      ],
+      [
+        "网页购买能在 iOS 和 Android 上用吗？",
+        "可以。套餐绑定你的账号邮箱，用同一邮箱登录即可在所有支持的设备上使用。",
+      ],
+      [
+        "换设备需要重新购买吗？",
+        "不需要。在新设备上用同一邮箱登录即可；若账号已有 {maxDevices} 台在线设备，请先移除一台旧设备。",
+      ],
+    ],
+    reviewsTitle: "客户评价",
+    reviewsSub: "以下为顾客直接提交给我们的评价。",
+    reviewsStars: "{stars} 分（满分 5 分）",
+    promoTitle: "顺便说一句",
+    promoBody: "VPNFlow 负责私密连接，MeetFlow AI 负责记会议纪要。两者付款后都用邮箱激活。",
+    promoVpn: "购买 VPNFlow",
+    promoAi: "试试 MeetFlow AI",
+    promoClose: "关闭",
+    promoNever: "不再显示",
+    footerProducts: "产品",
+    footerHelp: "帮助与条款",
+    footerBuy: "购买 VPNFlow",
+    footerAiBuy: "购买 MeetFlow AI",
+    footerGuide: "激活指南",
+    footerInstallIos: "在 iPhone / iPad 上安装",
+    footerSupport: "支持",
+    footerPrivacy: "隐私政策",
+    footerTerms: "服务条款",
+    footerContact: "需要帮助？邮件",
+    footerRights: "© {year} FlowTech 保留所有权利。",
+  },
+
+  ja: {
+    htmlLang: "ja",
+    pageTitle: "FlowTech — VPNFlow と MeetFlow AI",
+    metaDescription:
+      "FlowTech は VPNFlow（iOS・Android・macOS・Windows 向けのプライベート VPN）と MeetFlow AI（AI 翻訳と議事録）を提供します。ウェブで銀行 QR 決済、メールで有効化。",
+    brandTagline: "VPN + AI エコシステム",
+    navAria: "メインナビゲーション",
+    navProducts: "製品",
+    navPricing: "料金",
+    navFaq: "よくある質問",
+    navBuy: "今すぐ購入",
+    langAria: "言語を選択",
+    heroKicker: "FlowTech エコシステム",
+    heroTitle: "プライベート VPN と AI 会議アシスタントを一箇所で",
+    heroSub:
+      "VPNFlow が接続のプライバシーを、MeetFlow AI が翻訳と議事録を担当します。ウェブで銀行 QR 決済し、ログインに使うメールで有効化します。",
+    ctaVpn: "VPNFlow を購入",
+    ctaAi: "MeetFlow AI を使う",
+    trustAria: "実際に提供している内容",
+    trust: [
+      "銀行 QR 決済（VietQR）— 読み取れば金額が入り、振込メモに注文番号が入ります",
+      "請求書と有効化の確認はメールで送信",
+      "iOS（IPA）・Android（APK）・macOS（.dmg）・Windows（ワンクリックインストーラ）対応",
+      "1 アカウントにつき最大 {maxDevices} 台の有効端末、機種変更はいつでも",
+      "公開ページは 5 言語：ベトナム語・英語・中国語・日本語・韓国語",
+    ],
+    productsTitle: "製品",
+    productsSub: "同じエコシステムの 3 つ — 必要なものだけ購入できます。",
+    p1Name: "VPNFlow",
+    p1Tag: "プライベート VPN",
+    p1Desc: "WireGuard ベースの VPN。プランはアカウントのメールに紐づきます。",
+    p1Bullets: [
+      "メールのワンタイムコードでログイン — パスワード不要",
+      "iOS（IPA）・Android（APK）・macOS（.dmg）・Windows にインストール可能",
+      "買い切りのプランで自動更新なし。期限前にリマインダーメールを送ります",
+    ],
+    p1Cta: "VPNFlow を購入",
+    p2Name: "MeetFlow AI",
+    p2Tag: "AI アシスタント",
+    p2Desc: "通話や録音に対する AI 翻訳と議事録。",
+    p2Bullets: [
+      "決済後に Pro が有効 — アプリが購入時のメールを確認します",
+      "Android（APK）版と iOS 版があります",
+      "30 日パス・月額・年額、いずれもウェブでの買い切り",
+    ],
+    p2Cta: "MeetFlow AI を使う",
+    p3Name: "FlowTech Harness",
+    p3Tag: "エージェントツールキット",
+    p3Desc: "当社の agent harness パッケージ。自分のマシンで実行し、外部から接続できます。",
+    p3Bullets: [
+      "macOS はコマンド 1 つでインストール、同じパッケージに Windows インストーラも同梱",
+      "任意の VPS 構成：HTTPS ドメインとログインゲートをマシンの手前に配置",
+      "ソースとインストールスクリプトはプロジェクトのリポジトリにあります",
+    ],
+    p3Cta: "インストール手順",
+    dlAria: "アプリをダウンロード",
+    platforms: {
+      ios: "iOS (IPA)",
+      android: "Android (APK)",
+      androidLegacy: "Android 7.x (APK)",
+      mac: "macOS",
+      windows: "Windows 10/11",
+    },
+    pricingTitle: "料金",
+    pricingSub: "価格は VND 表示。支払い時に銀行 QR・MoMo・WeChat Pay・Alipay から選べます。",
+    pricingOneTime: "すべて買い切りのプランです — 自動更新はありません。",
+    pricingLifetime: "永久（期限なし）",
+    pricingDays: "{days} 日",
+    planCta: "このプランを選ぶ",
+    faqTitle: "よくある質問",
+    faq: [
+      [
+        "銀行 QR での支払い方法は？",
+        "購入ページでアカウントのメールを入力し、プランを選んで銀行アプリで QR を読み取ります。金額は入力済みで、振込メモに注文番号が入ります — 正確な金額を、メモを変えずに振り込んでください。",
+      ],
+      [
+        "有効化までどのくらいかかりますか？",
+        "入金を確認し、購入したメールにプランを有効化して請求書をメールで送ります。通常は数分です。10 分経っても届かない場合は注文番号を添えてサポートへご連絡ください。",
+      ],
+      [
+        "1 アカウントで何台まで使えますか？",
+        "1 アカウントにつき最大 {maxDevices} 台の有効端末です。新しい端末に移す場合は、先に古い端末をログアウトしてください。",
+      ],
+      [
+        "プランは自動更新されますか？",
+        "いいえ。銀行 QR 決済は買い切りで、プランの日数分だけ利用できます。期限前にリマインダーメールをお送りします。",
+      ],
+      [
+        "返金とサポートは？",
+        "注文番号と購入時のメールを {supportEmail} までお送りください。返金は利用規約に沿って対応します — 自動的な返金をお約束するものではありません。",
+      ],
+      [
+        "アプリのインストール方法は？",
+        "iOS：その端末の Safari で /install/ios を開き、端末（UDID）を登録すると署名済みビルドを用意できます。Android：購入ページで APK をダウンロードし、提供元不明のアプリを許可します。macOS：.dmg をダウンロード。Windows：インストーラを実行（トンネル作成に管理者権限が必要です）。",
+      ],
+      [
+        "ウェブ購入は iOS と Android の両方で使えますか？",
+        "はい。プランはアカウントのメールに紐づくため、同じメールでログインすれば対応するすべての端末で使えます。",
+      ],
+      [
+        "機種変更で買い直しが必要ですか？",
+        "いいえ。新しい端末で同じメールにログインしてください。すでに {maxDevices} 台が有効な場合は、先に 1 台を解除してください。",
+      ],
+    ],
+    reviewsTitle: "お客様の声",
+    reviewsSub: "お客様から直接いただいたレビューです。",
+    reviewsStars: "5 点中 {stars} 点",
+    promoTitle: "もう一つご案内",
+    promoBody: "VPNFlow は接続のプライバシーを、MeetFlow AI は議事録を担当します。どちらも支払い後すぐにメールで有効化されます。",
+    promoVpn: "VPNFlow を購入",
+    promoAi: "MeetFlow AI を試す",
+    promoClose: "閉じる",
+    promoNever: "今後表示しない",
+    footerProducts: "製品",
+    footerHelp: "サポートと規約",
+    footerBuy: "VPNFlow を購入",
+    footerAiBuy: "MeetFlow AI を購入",
+    footerGuide: "有効化ガイド",
+    footerInstallIos: "iPhone / iPad にインストール",
+    footerSupport: "サポート",
+    footerPrivacy: "プライバシーポリシー",
+    footerTerms: "利用規約",
+    footerContact: "お困りですか？メール",
+    footerRights: "© {year} FlowTech. All rights reserved.",
+  },
+
+  ko: {
+    htmlLang: "ko",
+    pageTitle: "FlowTech — VPNFlow와 MeetFlow AI",
+    metaDescription:
+      "FlowTech는 VPNFlow(iOS·Android·macOS·Windows용 프라이빗 VPN)와 MeetFlow AI(AI 번역·회의록)를 만듭니다. 웹에서 은행 QR로 결제하고 이메일로 활성화하세요.",
+    brandTagline: "VPN + AI 생태계",
+    navAria: "주요 메뉴",
+    navProducts: "제품",
+    navPricing: "요금",
+    navFaq: "자주 묻는 질문",
+    navBuy: "지금 구매",
+    langAria: "언어 선택",
+    heroKicker: "FlowTech 생태계",
+    heroTitle: "프라이빗 VPN과 AI 회의 도우미를 한곳에서",
+    heroSub:
+      "VPNFlow는 안전한 연결을, MeetFlow AI는 번역과 회의록을 담당합니다. 웹에서 은행 QR로 결제하고 로그인에 쓰는 이메일로 활성화하세요.",
+    ctaVpn: "VPNFlow 구매",
+    ctaAi: "MeetFlow AI 사용",
+    trustAria: "실제로 제공하는 것",
+    trust: [
+      "은행 QR 결제(VietQR) — 스캔하면 금액이 채워지고 이체 메모에 주문번호가 들어갑니다",
+      "청구서와 활성화 확인은 이메일로 발송",
+      "iOS(IPA)·Android(APK)·macOS(.dmg)·Windows(원클릭 설치 파일) 지원",
+      "계정 1개당 최대 {maxDevices}대 동시 사용, 언제든 기기 변경 가능",
+      "공개 페이지 5개 언어: 베트남어·영어·중국어·일본어·한국어",
+    ],
+    productsTitle: "제품",
+    productsSub: "같은 생태계의 세 부분 — 필요한 것만 구매하세요.",
+    p1Name: "VPNFlow",
+    p1Tag: "프라이빗 VPN",
+    p1Desc: "WireGuard 기반 VPN이며, 요금제는 계정 이메일에 연결됩니다.",
+    p1Bullets: [
+      "이메일 일회용 코드로 로그인 — 비밀번호를 기억할 필요 없음",
+      "iOS(IPA)·Android(APK)·macOS(.dmg)·Windows에 설치 가능",
+      "1회 구매 요금제로 자동 갱신 없음, 만료 전에 알림 메일 발송",
+    ],
+    p1Cta: "VPNFlow 구매",
+    p2Name: "MeetFlow AI",
+    p2Tag: "AI 도우미",
+    p2Desc: "통화와 녹음에 대한 AI 번역과 회의록.",
+    p2Bullets: [
+      "결제 후 Pro가 열립니다 — 앱이 구매에 사용한 이메일을 확인합니다",
+      "Android(APK)와 iOS 버전 제공",
+      "30일 이용권·월간·연간 요금제, 웹에서 1회 구매",
+    ],
+    p2Cta: "MeetFlow AI 사용",
+    p3Name: "FlowTech Harness",
+    p3Tag: "에이전트 도구 모음",
+    p3Desc: "자체 패키징한 agent harness: 내 컴퓨터에서 실행하고 외부에서 접속합니다.",
+    p3Bullets: [
+      "macOS는 명령 한 줄로 설치, 같은 패키지에 Windows 설치 파일 포함",
+      "선택형 VPS 구성: 컴퓨터 앞에 HTTPS 도메인과 로그인 게이트",
+      "소스와 설치 스크립트는 프로젝트 저장소에 있습니다",
+    ],
+    p3Cta: "설치 안내",
+    dlAria: "앱 다운로드",
+    platforms: {
+      ios: "iOS (IPA)",
+      android: "Android (APK)",
+      androidLegacy: "Android 7.x (APK)",
+      mac: "macOS",
+      windows: "Windows 10/11",
+    },
+    pricingTitle: "요금",
+    pricingSub: "가격은 VND 기준입니다. 결제 시 은행 QR·MoMo·WeChat Pay·Alipay 중에서 선택하세요.",
+    pricingOneTime: "모든 요금제는 1회 구매입니다 — 자동 갱신되지 않습니다.",
+    pricingLifetime: "평생(만료 없음)",
+    pricingDays: "{days}일",
+    planCta: "이 요금제 선택",
+    faqTitle: "자주 묻는 질문",
+    faq: [
+      [
+        "은행 QR로 어떻게 결제하나요?",
+        "구매 페이지에서 계정 이메일을 입력하고 요금제를 고른 뒤 은행 앱으로 QR을 스캔하세요. 금액이 미리 채워져 있고 이체 메모에 주문번호가 들어 있습니다 — 정확한 금액을, 메모는 그대로 두고 이체하세요.",
+      ],
+      [
+        "활성화까지 얼마나 걸리나요?",
+        "입금을 확인해 구매한 이메일에 요금제를 활성화하고 청구서를 메일로 보냅니다. 보통 몇 분입니다. 10분이 지나도 없으면 주문번호와 함께 지원팀에 메일 주세요.",
+      ],
+      [
+        "계정 하나로 몇 대까지 쓸 수 있나요?",
+        "계정당 최대 {maxDevices}대까지 동시 사용할 수 있습니다. 새 기기로 옮기려면 이전 기기를 먼저 로그아웃하세요.",
+      ],
+      [
+        "요금제가 자동 갱신되나요?",
+        "아니요. 은행 QR 결제는 1회 구매이며 요금제 일수만큼 사용합니다. 만료 전에 알림 메일을 보내드립니다.",
+      ],
+      [
+        "환불과 지원은 어떻게 되나요?",
+        "주문번호와 구매에 사용한 이메일을 {supportEmail}로 보내주세요. 환불은 이용약관에 따라 처리하며, 자동 환불을 약속하지는 않습니다.",
+      ],
+      [
+        "앱은 어떻게 설치하나요?",
+        "iOS: 해당 기기의 Safari에서 /install/ios를 열고 기기(UDID)를 등록하면 서명된 빌드를 받을 수 있습니다. Android: 구매 페이지에서 APK를 받고 알 수 없는 출처 설치를 허용하세요. macOS: .dmg 다운로드. Windows: 설치 파일 실행(터널 생성에 관리자 권한 필요).",
+      ],
+      [
+        "웹 구매가 iOS와 Android 모두에서 되나요?",
+        "됩니다. 요금제는 계정 이메일에 연결되므로 같은 이메일로 로그인하면 지원되는 모든 기기에서 사용할 수 있습니다.",
+      ],
+      [
+        "기기를 바꾸면 다시 사야 하나요?",
+        "아니요. 새 기기에서 같은 이메일로 로그인하세요. 이미 {maxDevices}대가 활성 상태라면 이전 기기를 하나 해제하세요.",
+      ],
+    ],
+    reviewsTitle: "고객 후기",
+    reviewsSub: "고객이 직접 보내주신 후기입니다.",
+    reviewsStars: "5점 만점에 {stars}점",
+    promoTitle: "한 가지 더",
+    promoBody: "VPNFlow는 안전한 연결을, MeetFlow AI는 회의록을 담당합니다. 둘 다 결제 후 이메일로 바로 활성화됩니다.",
+    promoVpn: "VPNFlow 구매",
+    promoAi: "MeetFlow AI 사용해 보기",
+    promoClose: "닫기",
+    promoNever: "다시 표시하지 않기",
+    footerProducts: "제품",
+    footerHelp: "지원 및 약관",
+    footerBuy: "VPNFlow 구매",
+    footerAiBuy: "MeetFlow AI 구매",
+    footerGuide: "활성화 안내",
+    footerInstallIos: "iPhone / iPad에 설치",
+    footerSupport: "지원",
+    footerPrivacy: "개인정보 처리방침",
+    footerTerms: "이용약관",
+    footerContact: "도움이 필요하신가요? 이메일",
+    footerRights: "© {year} FlowTech. All rights reserved.",
+  },
+};
+
+/**
+ * Tên gói đã bản địa hoá theo id (giống planNames của trang /buy), để bảng giá ở trang chủ
+ * đọc cùng một tên với trang mua. Gói admin tự thêm chưa có tên ở đây thì dùng badge/label.
+ */
+const PLAN_NAMES = {
+  vi: { monthly: "Hàng tháng", quarterly: "3 tháng", semiannual: "6 tháng", yearly: "Hàng năm", lifetime: "Trọn đời", pass30: "MeetFlow Pro 30 ngày" },
+  en: { monthly: "Monthly", quarterly: "3 Months", semiannual: "6 Months", yearly: "Yearly", lifetime: "Lifetime", pass30: "MeetFlow Pro 30-Day Pass" },
+  zh: { monthly: "月度", quarterly: "3 个月", semiannual: "6 个月", yearly: "年度", lifetime: "终身", pass30: "MeetFlow Pro 30 天通行证" },
+  ja: { monthly: "月額", quarterly: "3 か月", semiannual: "6 か月", yearly: "年額", lifetime: "永久", pass30: "MeetFlow Pro 30 日パス" },
+  ko: { monthly: "월간", quarterly: "3개월", semiannual: "6개월", yearly: "연간", lifetime: "평생", pass30: "MeetFlow Pro 30일 이용권" },
+};
+
+/** Chuỗi đầu tiên không rỗng trong danh sách (badge ngắn trước, rồi name, rồi label). */
+function firstText(...values) {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+/**
+ * Chuẩn hoá MỘT gói thành dữ liệu hiển thị được. Nhận cả dạng row của PlanStore
+ * ({ id, amount, days, label, badge, retired }) lẫn dạng ngắn ({ id, name, price, currency }).
+ * Trả về null khi gói đã ngừng bán hoặc không còn gì để hiện — thà thiếu một hàng còn hơn
+ * hiện một hàng trống/giá rác.
+ */
+function normalizePlan(raw, lang) {
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.retired === true) return null;
+  const id = typeof raw.id === "string" ? raw.id.trim() : "";
+  const name = firstText(PLAN_NAMES[lang]?.[id], raw.badge, raw.name, raw.label, id);
+  const amountSource = raw.amount ?? raw.price;
+  const amountNumber = Number(amountSource);
+  const hasNumericPrice = Number.isFinite(amountNumber) && amountNumber > 0;
+  const priceText = hasNumericPrice
+    ? money(amountNumber, raw.currency, lang)
+    : (typeof amountSource === "string" ? amountSource.trim() : "");
+  if (!name && !priceText) return null;
+  const days = positiveInt(raw.days);
+  return {
+    id,
+    name,
+    priceText,
+    days,
+    lifetime: days === null && raw.days !== undefined,
+    product: raw.product === "ai" ? "ai" : "vpn",
+  };
+}
+
+/**
+ * Khối bảng giá. Ẩn hẳn khi không có gói đang bán (plans rỗng / toàn gói retired) — bảng
+ * trống vừa xấu vừa làm khách tưởng shop không bán gì.
+ */
+function pricingHTML({ t, plans, lang, buyUrl, aiBuyUrl }) {
+  const rows = (Array.isArray(plans) ? plans : []).map((p) => normalizePlan(p, lang)).filter(Boolean);
+  if (rows.length === 0) return "";
+  const cards = rows
+    .map((p) => {
+      const period = p.days ? fill(t.pricingDays, { days: p.days }) : (p.lifetime ? t.pricingLifetime : "");
+      const href = withPlan(p.product === "ai" ? aiBuyUrl : buyUrl, p.id);
+      const cta = href
+        ? `<a class="btn btn-ghost plan-cta" href="${esc(href)}">${t.planCta}</a>`
+        : "";
+      return `<li class="plan">
+          <div class="plan-name">${esc(p.name)}</div>
+          ${p.priceText ? `<div class="plan-price">${esc(p.priceText)}</div>` : ""}
+          ${period ? `<div class="plan-period">${esc(period)}</div>` : ""}
+          ${cta}
+        </li>`;
+    })
+    .join("\n        ");
+  return `<section class="section" id="pricing" aria-labelledby="pricingTitle">
+      <h2 id="pricingTitle">${t.pricingTitle}</h2>
+      <p class="sub">${t.pricingSub}</p>
+      <ul class="plans">
+        ${cards}
+      </ul>
+      <p class="note">${t.pricingOneTime}</p>
+    </section>`;
+}
+
+/**
+ * Khối đánh giá khách — CHỈ render khi người gọi truyền `reviews` thật.
+ *
+ * Lý do (cố ý, không phải thiếu sót): trang bán hàng không được bịa đánh giá. Repo này chưa
+ * có nguồn đánh giá nào (không có API review, không có file dữ liệu review), nên mặc định
+ * `reviews` là mảng rỗng ⇒ khối này biến mất hoàn toàn. Muốn hiện, phải truyền dữ liệu thật
+ * đã có sự đồng ý của khách: [{ name, text, stars }].
+ */
+function reviewsHTML({ t, reviews }) {
+  const list = (Array.isArray(reviews) ? reviews : [])
+    .map((r) => {
+      if (!r || typeof r !== "object") return null;
+      const text = firstText(r.text, r.comment, r.body);
+      if (!text) return null;
+      const raw = Math.round(Number(r.stars));
+      const stars = Number.isFinite(raw) ? Math.min(5, Math.max(1, raw)) : 0;
+      return { name: firstText(r.name, r.author), text, stars };
+    })
+    .filter(Boolean);
+  if (list.length === 0) return "";
+  const cards = list
+    .map((r) => {
+      const glyphs = r.stars > 0 ? "★".repeat(r.stars) + "☆".repeat(5 - r.stars) : "";
+      const label = r.stars > 0 ? fill(t.reviewsStars, { stars: r.stars }) : "";
+      return `<li class="review">
+          ${glyphs ? `<div class="stars" role="img" aria-label="${esc(label)}">${glyphs}</div>` : ""}
+          <p class="review-text">${esc(r.text)}</p>
+          ${r.name ? `<div class="review-name">${esc(r.name)}</div>` : ""}
+        </li>`;
+    })
+    .join("\n        ");
+  return `<section class="section" id="reviews" aria-labelledby="reviewsTitle">
+      <h2 id="reviewsTitle">${t.reviewsTitle}</h2>
+      <p class="sub">${t.reviewsSub}</p>
+      <ul class="reviews">
+        ${cards}
+      </ul>
+    </section>`;
+}
+
+/** Danh sách link tải app (chỉ hiện nền tảng nào server thực sự truyền vào). */
+function downloadLinksHTML({ t, downloads }) {
+  const map = [
+    ["ios", "ios"],
+    ["android", "android"],
+    ["androidLegacy", "androidLegacy"],
+    ["mac", "mac"],
+    ["windows", "windows"],
+  ];
+  const items = map
+    .map(([key, labelKey]) => {
+      const href = safeHref(downloads?.[key]);
+      if (!href) return "";
+      return `<a class="chip" href="${esc(href)}" rel="noopener">${esc(t.platforms[labelKey])}</a>`;
+    })
+    .filter(Boolean);
+  if (items.length === 0) return "";
+  return `<div class="chips" aria-label="${esc(t.dlAria)}">${items.join("")}</div>`;
+}
+
+/** Một thẻ sản phẩm (tên, nhãn, mô tả, gạch đầu dòng, nút hành động). */
+function productCard({ name, tag, desc, bullets, cta, href, extra = "" }) {
+  const list = (Array.isArray(bullets) ? bullets : []).filter((b) => typeof b === "string" && b.trim());
+  const link = safeHref(href);
+  return `<li class="card">
+        <div class="card-head">
+          <h3>${esc(name)}</h3>
+          <span class="tag">${esc(tag)}</span>
+        </div>
+        <p class="card-desc">${esc(desc)}</p>
+        <ul class="bullets">
+          ${list.map((b) => `<li>${esc(b)}</li>`).join("\n          ")}
+        </ul>
+        ${extra}
+        ${link ? `<a class="btn btn-primary" href="${esc(link)}">${esc(cta)}</a>` : ""}
+      </li>`;
+}
+
+/** Link ngôn ngữ: cùng pattern `?lang=` như trang /buy (giữ được khi mở trang ở mọi host). */
+function langPickerHTML({ lang, t }) {
+  const items = LANG_CODES.map((code) => {
+    const current = code === lang;
+    return `<a class="lang${current ? " on" : ""}" href="?lang=${code}" hreflang="${code}"${current ? ' aria-current="true"' : ""}>${esc(LANG_NAMES[code])}</a>`;
+  }).join("\n          ");
+  return `<details class="langmenu" id="langMenu">
+        <summary aria-label="${esc(t.langAria)}" title="${esc(t.langAria)}">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 6h-2.6a15.6 15.6 0 0 0-1.3-3.4A8 8 0 0 1 18.9 8zM12 4.2c.7 1 1.3 2.3 1.7 3.8h-3.4C10.7 6.5 11.3 5.2 12 4.2zM4.3 14A8 8 0 0 1 4 12c0-.7.1-1.4.3-2h3a19 19 0 0 0 0 4h-3zm.8 2h2.6c.3 1.2.8 2.4 1.3 3.4A8 8 0 0 1 5.1 16zm2.6-8H5.1a8 8 0 0 1 3.9-3.4C8.5 5.6 8 6.8 7.7 8zM12 19.8c-.7-1-1.3-2.3-1.7-3.8h3.4c-.4 1.5-1 2.8-1.7 3.8zM14.1 14H9.9a17 17 0 0 1 0-4h4.2a17 17 0 0 1 0 4zm1 5.4c.5-1 1-2.2 1.3-3.4h2.6a8 8 0 0 1-3.9 3.4zm1.6-5.4a19 19 0 0 0 0-4h3c.2.6.3 1.3.3 2s-.1 1.4-.3 2h-3z"/></svg>
+          <span class="langcur">${esc(LANG_NAMES[lang])}</span>
+        </summary>
+        <nav class="langlist">
+          ${items}
+        </nav>
+      </details>`;
+}
+
+/** Logo FlowTech vẽ bằng SVG inline: trang phải hiện đủ khi mạng hạn chế, không ảnh ngoài. */
+const LOGO_SVG = `<svg class="mark" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true" focusable="false">
+            <defs><linearGradient id="ftg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#33c773"/><stop offset="1" stop-color="#1f9e5a"/>
+            </linearGradient></defs>
+            <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#ftg)"/>
+            <path d="M9 11h14M9 16h9M9 21h12" stroke="#06160d" stroke-width="2.6" stroke-linecap="round"/>
+          </svg>`;
+
+/**
+ * Trang chủ FlowTech.
+ *
+ * @param {object}   [opts]
+ * @param {string}   [opts.lang]           mã ngôn ngữ (en/vi/zh/ja/ko), mặc định vi
+ * @param {object[]} [opts.plans]          gói đang bán (row của PlanStore: id/amount/days/label/badge/retired/…)
+ * @param {string}   [opts.buyUrl]         link mua VPNFlow
+ * @param {string}   [opts.aiBuyUrl]       link mua MeetFlow AI
+ * @param {object}   [opts.downloads]      link tải app: { ios, android, androidLegacy, mac, windows }
+ * @param {object}   [opts.user]           tài khoản đang đăng nhập (chỉ dùng để chào tên, có thể null)
+ * @param {object[]} [opts.reviews]        đánh giá THẬT [{ name, text, stars }] — rỗng thì ẩn khối
+ * @param {string}   [opts.supportEmail]   email hỗ trợ in ở FAQ + footer
+ * @param {string}   [opts.canonicalUrl]   có thì mới render <link rel="canonical">
+ * @param {number}   [opts.maxDevices]     giới hạn thiết bị/tài khoản (index.js truyền MAX_DEVICES_PER_USER)
+ * @param {object}   [opts.links]          ghi đè link phụ: { guide, installIos, support, privacy, terms, harness }
+ */
+export function homePageHTML({
+  lang = "vi",
+  plans = [],
+  buyUrl = "/buy",
+  aiBuyUrl = "/ai/buy",
+  downloads = {},
+  user = null,
+  reviews = [],
+  supportEmail = "support@meetflowai.site",
+  canonicalUrl = "",
+  maxDevices = Number(process.env.MAX_DEVICES_PER_USER || 3),
+  links = {},
+} = {}) {
+  const code = pickHomeLang(lang);
+  const t = TEXTS[code];
+  const deviceCap = positiveInt(maxDevices) ?? 3;
+  const safeSupportEmail = firstText(supportEmail) || "support@meetflowai.site";
+  const mailto = safeHref(`mailto:${safeSupportEmail}`);
+
+  const urlBuy = safeHref(buyUrl) || "/buy";
+  const urlAiBuy = safeHref(aiBuyUrl) || "/ai/buy";
+  const urlGuide = safeHref(links?.guide) || "/guide";
+  const urlInstallIos = safeHref(links?.installIos) || "/install/ios";
+  const urlSupport = safeHref(links?.support) || "/support";
+  const urlPrivacy = safeHref(links?.privacy) || "/privacy";
+  const urlTerms = safeHref(links?.terms) || "/terms";
+  const urlHarness = safeHref(links?.harness) || urlSupport;
+
+  // Chỗ trống trong câu dịch: giá trị đã escape trước khi nhét vào.
+  const slots = { maxDevices: esc(deviceCap), supportEmail: esc(safeSupportEmail) };
+  const canonical = safeHref(canonicalUrl);
+
+  const year = new Date().getFullYear();
+  const greeting = user && typeof user === "object" && firstText(user.email)
+    ? `<span class="who" title="${esc(user.email)}">👤 ${esc(user.email)}</span>`
+    : "";
+
+  const trustItems = (Array.isArray(t.trust) ? t.trust : [])
+    .map((item) => `<li>${fill(item, slots)}</li>`)
+    .join("\n        ");
+
+  const faqItems = (Array.isArray(t.faq) ? t.faq : [])
+    .map(([q, a]) => `
+        <details class="faq-item">
+          <summary>${fill(q, slots)}</summary>
+          <p>${fill(a, slots)}</p>
+        </details>`)
+    .join("");
+
+  const pricing = pricingHTML({ t, plans, lang: code, buyUrl: urlBuy, aiBuyUrl: urlAiBuy });
+  const reviewsBlock = reviewsHTML({ t, reviews });
+  const downloadsBlock = downloadLinksHTML({ t, downloads });
+
+  // Popup chỉ là quảng cáo chéo: nội dung chính KHÔNG nằm trong popup (không ảnh hưởng SEO),
+  // hiện sau ~1.5s, đóng được bằng Esc, và có nút "không hiện lại" nhớ bằng localStorage.
+  return `<!doctype html>
+<html lang="${t.htmlLang}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${t.pageTitle}</title>
+  <meta name="description" content="${esc(t.metaDescription)}">
+  <meta name="robots" content="index,follow">
+  ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ""}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="FlowTech">
+  <meta property="og:title" content="${esc(t.pageTitle)}">
+  <meta property="og:description" content="${esc(t.metaDescription)}">
+  ${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ""}
+  <meta name="twitter:card" content="summary">
+  <style>
+    :root { color-scheme: dark; --accent: #33c773; --ink: #06160d; --line: rgba(255,255,255,.12); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-height: 100vh;
+      font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans", Roboto, sans-serif;
+      color: #fff; background: linear-gradient(180deg, #051525, #0a1f3a); line-height: 1.55;
+    }
+    a { color: #7fd3ff; }
+    h1, h2, h3 { line-height: 1.25; }
+    .wrap { width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 20px; }
+
+    .hdr {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(5,21,37,.86); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+    .hdr-in { display: flex; align-items: center; gap: 14px; padding: 12px 20px; max-width: 1060px; margin: 0 auto; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; }
+    .brand .mark { border-radius: 9px; display: block; }
+    .brand-text { display: flex; flex-direction: column; }
+    .brand-name { font-weight: 800; font-size: 18px; letter-spacing: .2px; }
+    .brand-tag { font-size: 11.5px; color: rgba(255,255,255,.55); }
+    .hdr-nav { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+    .hdr-nav a.navlink { color: rgba(255,255,255,.72); text-decoration: none; font-size: 13.5px; }
+    .hdr-nav a.navlink:hover { color: #fff; }
+    .who { font-size: 12.5px; color: rgba(255,255,255,.6); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .langmenu { position: relative; }
+    .langmenu > summary {
+      list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 999px; font-size: 12.5px; color: rgba(255,255,255,.75);
+      background: rgba(255,255,255,.06); border: 1px solid var(--line);
+    }
+    .langmenu > summary::-webkit-details-marker { display: none; }
+    .langmenu[open] > summary, .langmenu > summary:hover { color: #fff; border-color: rgba(255,255,255,.3); }
+    .langlist {
+      position: absolute; right: 0; top: calc(100% + 8px); min-width: 168px; padding: 6px;
+      background: #0d1b30; border: 1px solid var(--line); border-radius: 12px;
+      box-shadow: 0 18px 40px rgba(0,0,0,.45); display: grid; gap: 2px;
+    }
+    .langlist a { padding: 8px 10px; border-radius: 8px; font-size: 13px; text-decoration: none; color: rgba(255,255,255,.78); }
+    .langlist a:hover { background: rgba(255,255,255,.07); color: #fff; }
+    .langlist a.on { color: var(--ink); background: var(--accent); font-weight: 700; }
+
+    .btn {
+      display: inline-block; padding: 11px 20px; border-radius: 12px; font-size: 14px; font-weight: 700;
+      text-decoration: none; border: 1px solid transparent; cursor: pointer; background: none; font-family: inherit;
+    }
+    .btn-primary { background: var(--accent); color: var(--ink); }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-ghost { border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.82); background: rgba(255,255,255,.05); }
+    .btn-ghost:hover { border-color: var(--accent); color: #fff; }
+
+    .hero { padding: 56px 0 34px; }
+    .kicker {
+      display: inline-block; font-size: 12px; letter-spacing: .8px; text-transform: uppercase;
+      color: var(--accent); border: 1px solid rgba(51,199,115,.35); background: rgba(51,199,115,.09);
+      padding: 4px 10px; border-radius: 999px; margin-bottom: 16px;
+    }
+    .hero h1 { font-size: 38px; font-weight: 800; max-width: 780px; }
+    .hero .lede { margin-top: 14px; color: rgba(255,255,255,.68); font-size: 16px; max-width: 700px; }
+    .cta-row { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 12px; }
+    .trust { list-style: none; margin-top: 34px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+    .trust li {
+      padding: 12px 14px 12px 34px; position: relative; font-size: 13px; color: rgba(255,255,255,.8);
+      background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 12px;
+    }
+    .trust li::before { content: "✓"; position: absolute; left: 12px; top: 12px; color: var(--accent); font-weight: 800; }
+
+    .section { padding: 36px 0; border-top: 1px solid rgba(255,255,255,.08); }
+    .section h2 { font-size: 24px; font-weight: 800; }
+    .section .sub { margin-top: 8px; color: rgba(255,255,255,.62); font-size: 14px; max-width: 720px; }
+    .section .note { margin-top: 14px; font-size: 12.5px; color: rgba(255,255,255,.55); }
+
+    .cards { list-style: none; margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .card {
+      display: flex; flex-direction: column; gap: 10px; padding: 20px;
+      background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 18px;
+    }
+    .card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .card-head h3 { font-size: 18px; font-weight: 800; }
+    .tag {
+      font-size: 11px; color: var(--accent); background: rgba(51,199,115,.12);
+      border: 1px solid rgba(51,199,115,.3); padding: 2px 8px; border-radius: 999px;
+    }
+    .card-desc { color: rgba(255,255,255,.7); font-size: 13.5px; }
+    .bullets { list-style: none; display: grid; gap: 7px; margin: 4px 0 6px; }
+    .bullets li { position: relative; padding-left: 16px; font-size: 13px; color: rgba(255,255,255,.76); }
+    .bullets li::before { content: "•"; position: absolute; left: 4px; color: var(--accent); }
+    .card .btn { margin-top: auto; text-align: center; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    .chip {
+      font-size: 11.5px; text-decoration: none; color: rgba(255,255,255,.78);
+      background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+    }
+    .chip:hover { border-color: var(--accent); color: #fff; }
+
+    .plans { list-style: none; margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+    .plan {
+      padding: 18px; border-radius: 16px; display: flex; flex-direction: column; gap: 6px;
+      background: rgba(255,255,255,.05); border: 1px solid var(--line);
+    }
+    .plan-name { font-weight: 700; font-size: 15px; }
+    .plan-price { font-size: 24px; font-weight: 800; color: var(--accent); }
+    .plan-period { font-size: 12.5px; color: rgba(255,255,255,.55); }
+    .plan-cta { margin-top: 10px; text-align: center; }
+
+    .faq { margin-top: 18px; display: grid; gap: 8px; }
+    .faq-item { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+    .faq-item summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+    .faq-item p { margin-top: 8px; font-size: 13px; color: rgba(255,255,255,.72); }
+
+    .reviews { list-style: none; margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .review { padding: 16px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+    .stars { color: #ffd166; letter-spacing: 2px; font-size: 14px; }
+    .review-text { margin-top: 8px; font-size: 13.5px; color: rgba(255,255,255,.8); }
+    .review-name { margin-top: 8px; font-size: 12.5px; color: rgba(255,255,255,.55); }
+
+    .footer { padding: 30px 0 44px; border-top: 1px solid var(--line); margin-top: 30px; }
+    .footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 20px; }
+    .footer h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: rgba(255,255,255,.45); margin-bottom: 10px; }
+    .footer ul { list-style: none; display: grid; gap: 7px; }
+    .footer a { color: rgba(255,255,255,.72); text-decoration: none; font-size: 13px; }
+    .footer a:hover { color: var(--accent); text-decoration: underline; }
+    .footer .contact { font-size: 13px; color: rgba(255,255,255,.62); }
+    .footer .rights {
+      margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08);
+      font-size: 12px; color: rgba(255,255,255,.42);
+    }
+
+    .promo {
+      position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
+      padding: 20px; background: rgba(0,0,0,.72);
+    }
+    .promo[hidden] { display: none; }
+    .promo-box {
+      width: 100%; max-width: 420px; padding: 24px; position: relative;
+      background: #0d1b30; border: 1px solid rgba(255,255,255,.14); border-radius: 18px;
+      box-shadow: 0 24px 60px rgba(0,0,0,.5);
+    }
+    .promo-box h2 { font-size: 18px; font-weight: 800; }
+    .promo-box p { margin-top: 10px; font-size: 13.5px; color: rgba(255,255,255,.72); }
+    .promo-ctas { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .promo-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .promo-x {
+      position: absolute; top: 8px; right: 10px; width: 32px; height: 32px; border: 0; cursor: pointer;
+      background: none; color: rgba(255,255,255,.6); font-size: 22px; line-height: 1; font-family: inherit;
+    }
+    .promo-never {
+      border: 1px solid var(--line); background: rgba(255,255,255,.05); color: rgba(255,255,255,.72);
+      border-radius: 10px; padding: 8px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+    }
+    .promo-never:hover { color: #fff; border-color: rgba(255,255,255,.3); }
+
+    @media (max-width: 760px) {
+      .hdr-in { flex-wrap: wrap; gap: 10px; }
+      .hdr-nav { width: 100%; margin-left: 0; justify-content: space-between; }
+      .hdr-nav a.navlink { display: none; }
+      .hero { padding: 34px 0 24px; }
+      .hero h1 { font-size: 27px; }
+      .hero .lede { font-size: 15px; }
+      .cards, .plans, .reviews, .trust, .footer-grid { grid-template-columns: 1fr; }
+      .cta-row .btn, .promo-ctas .btn { flex: 1 1 100%; text-align: center; }
+      .promo { padding: 0; align-items: flex-end; }
+      .promo-box { max-width: none; width: 100%; border-radius: 18px 18px 0 0; }
+      .langlist { right: auto; left: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .promo, .promo-box, .btn, .chip, .faq-item { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hdr">
+    <div class="hdr-in">
+      <a class="brand" href="./">
+        ${LOGO_SVG}
+        <span class="brand-text">
+          <span class="brand-name">FlowTech</span>
+          <span class="brand-tag">${esc(t.brandTagline)}</span>
+        </span>
+      </a>
+      <div class="hdr-nav" role="navigation" aria-label="${esc(t.navAria)}">
+        <a class="navlink" href="#products">${t.navProducts}</a>
+        ${pricing ? `<a class="navlink" href="#pricing">${t.navPricing}</a>` : ""}
+        <a class="navlink" href="#faq">${t.navFaq}</a>
+        ${greeting}
+        ${langPickerHTML({ lang: code, t })}
+        <a class="btn btn-primary" href="${esc(urlBuy)}">${t.navBuy}</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero" aria-labelledby="heroTitle">
+      <span class="kicker">${t.heroKicker}</span>
+      <h1 id="heroTitle">${t.heroTitle}</h1>
+      <p class="lede">${t.heroSub}</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="${esc(urlBuy)}">${t.ctaVpn}</a>
+        <a class="btn btn-ghost" href="${esc(urlAiBuy)}">${t.ctaAi}</a>
+      </div>
+      <ul class="trust" aria-label="${esc(t.trustAria)}">
+        ${trustItems}
+      </ul>
+    </section>
+
+    <section class="section" id="products" aria-labelledby="productsTitle">
+      <h2 id="productsTitle">${t.productsTitle}</h2>
+      <p class="sub">${t.productsSub}</p>
+      <ul class="cards">
+        ${productCard({
+          name: t.p1Name, tag: t.p1Tag, desc: t.p1Desc, bullets: t.p1Bullets, cta: t.p1Cta,
+          href: urlBuy, extra: downloadsBlock,
+        })}
+        ${productCard({
+          name: t.p2Name, tag: t.p2Tag, desc: t.p2Desc, bullets: t.p2Bullets, cta: t.p2Cta,
+          href: urlAiBuy,
+        })}
+        ${productCard({
+          name: t.p3Name, tag: t.p3Tag, desc: t.p3Desc, bullets: t.p3Bullets, cta: t.p3Cta,
+          href: urlHarness,
+        })}
+      </ul>
+    </section>
+
+    ${pricing}
+
+    <section class="section" id="faq" aria-labelledby="faqTitle">
+      <h2 id="faqTitle">${t.faqTitle}</h2>
+      <div class="faq">
+        ${faqItems}
+      </div>
+    </section>
+
+    ${reviewsBlock}
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div>
+          <h4>${t.footerProducts}</h4>
+          <ul>
+            <li><a href="${esc(urlBuy)}">${t.footerBuy}</a></li>
+            <li><a href="${esc(urlAiBuy)}">${t.footerAiBuy}</a></li>
+            <li><a href="${esc(urlGuide)}">${t.footerGuide}</a></li>
+            <li><a href="${esc(urlInstallIos)}">${t.footerInstallIos}</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>${t.footerHelp}</h4>
+          <ul>
+            <li><a href="${esc(urlSupport)}">${t.footerSupport}</a></li>
+            <li><a href="${esc(urlPrivacy)}">${t.footerPrivacy}</a></li>
+            <li><a href="${esc(urlTerms)}">${t.footerTerms}</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>${esc(safeSupportEmail)}</h4>
+          <p class="contact">${t.footerContact} <a href="${esc(mailto)}">${esc(safeSupportEmail)}</a></p>
+        </div>
+      </div>
+      <p class="rights">${fill(t.footerRights, { year })}</p>
+    </div>
+  </footer>
+
+  <div class="promo" id="promo" role="dialog" aria-modal="true" aria-labelledby="promoTitle" hidden>
+    <div class="promo-box">
+      <button type="button" class="promo-x" id="promoClose" aria-label="${esc(t.promoClose)}">&times;</button>
+      <h2 id="promoTitle">${t.promoTitle}</h2>
+      <p>${t.promoBody}</p>
+      <div class="promo-ctas">
+        <a class="btn btn-primary" href="${esc(urlBuy)}">${t.promoVpn}</a>
+        <a class="btn btn-ghost" href="${esc(urlAiBuy)}">${t.promoAi}</a>
+      </div>
+      <div class="promo-actions">
+        <button type="button" class="promo-never" id="promoNever">${t.promoNever}</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // Menu ngôn ngữ: <details> đã dùng được bằng bàn phím; chỉ thêm đóng khi bấm ra ngoài / Esc.
+      var langMenu = document.getElementById("langMenu");
+      if (langMenu) {
+        document.addEventListener("click", function (e) {
+          if (!langMenu.contains(e.target)) langMenu.removeAttribute("open");
+        });
+        langMenu.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            langMenu.removeAttribute("open");
+            var s = langMenu.querySelector("summary");
+            if (s && s.focus) s.focus();
+          }
+        });
+      }
+
+      // Popup quảng cáo chéo: hiện sau ~1.5s, 1 lần mỗi phiên, và tôn trọng lựa chọn
+      // "không hiện lại" (localStorage). Nội dung chính của trang KHÔNG nằm trong popup.
+      var PROMO_NEVER_KEY = "flowtech_promo_never";
+      var PROMO_SESSION_KEY = "flowtech_promo_seen";
+      var popup = document.getElementById("promo");
+      if (!popup) return;
+
+      function readFlag(store, key) {
+        try { return store.getItem(key) === "1"; } catch (e) { return true; }
+      }
+      function writeFlag(store, key) {
+        try { store.setItem(key, "1"); } catch (e) { /* chế độ riêng tư: bỏ qua */ }
+      }
+
+      var lastFocus = null;
+      function closePopup(remember) {
+        if (popup.hidden) return;
+        popup.hidden = true;
+        if (remember === "never") writeFlag(window.localStorage, PROMO_NEVER_KEY);
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+      }
+      function openPopup() {
+        lastFocus = document.activeElement;
+        popup.hidden = false;
+        var b = document.getElementById("promoClose");
+        if (b && b.focus) b.focus();
+      }
+
+      var btnClose = document.getElementById("promoClose");
+      if (btnClose) btnClose.addEventListener("click", function () { closePopup(); });
+      var btnNever = document.getElementById("promoNever");
+      if (btnNever) btnNever.addEventListener("click", function () { closePopup("never"); });
+      popup.addEventListener("click", function (e) { if (e.target === popup) closePopup(); });
+      document.addEventListener("keydown", function (e) {
+        if (!popup.hidden && (e.key === "Escape" || e.key === "Esc")) closePopup();
+      });
+
+      if (!readFlag(window.localStorage, PROMO_NEVER_KEY) && !readFlag(window.sessionStorage, PROMO_SESSION_KEY)) {
+        window.setTimeout(function () {
+          if (!popup.hidden) return;
+          writeFlag(window.sessionStorage, PROMO_SESSION_KEY);
+          openPopup();
+        }, 1500);
+      }
+    })();
+  </script>
+</body>
+</html>`;
+}
