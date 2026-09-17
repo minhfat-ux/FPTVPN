@@ -106,7 +106,7 @@ export function ImageStudio({ onOpenChat }: { onOpenChat?: () => void }) {
           onBakeAdjust={editor.bakeAdjust}
           onBakeText={editor.bakeText}
           onExport={editor.exportBlob}
-          onSave={editor.saveToFlowGpt}
+          onSave={editor.saveTofBuddy}
         />
       </div>
 

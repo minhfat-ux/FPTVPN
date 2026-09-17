@@ -102,7 +102,7 @@ export const PROVIDER_KINDS = [
     id: "mock",
     label: "Demo (không cần key)",
     defaultBaseUrl: null,
-    suggestedModels: ["flowgpt-demo"],
+    suggestedModels: ["fbuddy-demo"],
     defaultImageModel: null,
     supportsImages: true,
     supportsTools: true,

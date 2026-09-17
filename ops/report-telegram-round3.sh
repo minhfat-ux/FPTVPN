@@ -10,7 +10,7 @@ CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, 
 [ -n "${CHAT:-}" ] || { echo "Không có chat id"; exit 1; }
 
 TEXT=$(cat <<'MSG'
-🚀 FlowGpt — cập nhật lớn: OpenRouter mặc định + Nói chuyện bằng giọng nói + Chợ kỹ năng
+🚀 fBuddy — cập nhật lớn: OpenRouter mặc định + Nói chuyện bằng giọng nói + Chợ kỹ năng
 
 1) OPENROUTER LÀ MẶC ĐỊNH
 • Key đã nạp (mã hoá AES-256-GCM, không lưu dạng thô), OpenRouter báo 444 model khả dụng
@@ -41,7 +41,7 @@ BẰNG CHỨNG
 • 93/93 test tự động pass
 • Kiểm chứng trong trình duyệt thật: dropdown + chợ kỹ năng (bỏ/thêm/lưu đúng), voice mode vào trạng thái
   "Đang nghe…", tab Giọng nói, chat tạo file PPTX 64,9 KB tải được — 0 exception
-• Production: https://flowgpt.meetflowai.site (asset khớp đúng bản build)
+• Production: https://fbuddy.meetflowai.site (asset khớp đúng bản build)
 MSG
 )
 

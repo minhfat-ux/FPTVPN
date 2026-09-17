@@ -2,8 +2,8 @@
 /**
  * Đo chi phí thật của một lượt chat và thử các hệ số giá.
  *
- *   FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/turn-cost-report.mjs
- *   FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/turn-cost-report.mjs 0.06 1
+ *   FBUDDY_DATA_DIR=/var/lib/fbuddy node ops/turn-cost-report.mjs
+ *   FBUDDY_DATA_DIR=/var/lib/fbuddy node ops/turn-cost-report.mjs 0.06 1
  *
  * Tham số: [creditsPerToken] [vndPerCredit].
  *

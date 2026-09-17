@@ -1,4 +1,4 @@
-﻿# FlowGpt - send a Telegram report from Windows WITHOUT breaking Vietnamese.
+﻿# fBuddy - send a Telegram report from Windows WITHOUT breaking Vietnamese.
 #
 #   powershell -File ops\send-telegram.ps1 -MessageFile ops\messages\round4-fixed.txt
 #
@@ -17,7 +17,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$MessageFile,
   [string]$TargetHost = "165.101.114.162",
-  [string]$RemoteAppDir = "/opt/flowgpt"
+  [string]$RemoteAppDir = "/opt/fbuddy"
 )
 
 $ErrorActionPreference = "Continue"
@@ -31,7 +31,7 @@ $text = [System.IO.File]::ReadAllText($resolved, [System.Text.Encoding]::UTF8)
 $text = $text.TrimStart([char]0xFEFF) -replace "`r`n", "`n" -replace "`r", "`n"
 $text = $text.TrimEnd() + "`n"
 
-$tmp = Join-Path $env:TEMP "flowgpt-telegram.txt"
+$tmp = Join-Path $env:TEMP "fbuddy-telegram.txt"
 [System.IO.File]::WriteAllText($tmp, $text, $utf8)
 
 # 3. base64 of the normalised file's bytes.
@@ -55,7 +55,7 @@ Write-Host "    preview   : $preview" -ForegroundColor DarkGray
 if (-not $same) { throw "base64 does not round-trip - refusing to send" }
 
 # 5. Ship the bytes and let the server-side sender verify what Telegram returns.
-$remote = "echo $payload | base64 -d > /tmp/flowgpt-telegram.txt; cd $RemoteAppDir; python3 ops/send-telegram.py /tmp/flowgpt-telegram.txt; rm -f /tmp/flowgpt-telegram.txt"
+$remote = "echo $payload | base64 -d > /tmp/fbuddy-telegram.txt; cd $RemoteAppDir; python3 ops/send-telegram.py /tmp/fbuddy-telegram.txt; rm -f /tmp/fbuddy-telegram.txt"
 $output = ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 "root@$TargetHost" $remote
 $code = $LASTEXITCODE
 $output | ForEach-Object { Write-Host "    $_" }

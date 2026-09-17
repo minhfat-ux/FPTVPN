@@ -9,15 +9,15 @@ import type { CreditSummary } from "../types";
  *
  * The balance is fetched once per session and then kept fresh from the browser
  * events the chat layer dispatches:
- *   `flowgpt:credits`         → `{ balance, cost }` after every metered turn,
- *   `flowgpt:credits:refresh` → a hard re-fetch (admin granted credits, purchase).
+ *   `fbuddy:credits`         → `{ balance, cost }` after every metered turn,
+ *   `fbuddy:credits:refresh` → a hard re-fetch (admin granted credits, purchase).
  *
  * The hook never throws: a failed request leaves `credits = null` and exposes a
  * short Vietnamese `error`, so callers can simply hide when there is no data.
  */
 
-const CREDITS_EVENT = "flowgpt:credits";
-const REFRESH_EVENT = "flowgpt:credits:refresh";
+const CREDITS_EVENT = "fbuddy:credits";
+const REFRESH_EVENT = "fbuddy:credits:refresh";
 
 export interface CreditsState {
   credits: CreditSummary | null;
@@ -28,7 +28,7 @@ export interface CreditsState {
   applyBalance: (balance: number) => void;
 }
 
-/** `flowgpt:credits` payload — the server reports the balance after the turn. */
+/** `fbuddy:credits` payload — the server reports the balance after the turn. */
 interface CreditsEventDetail {
   balance?: number;
   cost?: number;

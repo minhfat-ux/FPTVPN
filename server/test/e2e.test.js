@@ -37,19 +37,19 @@ test("protected routes require a token", async () => {
 });
 
 test("the first registered account becomes admin", async () => {
-  const { user, token } = await registerAdmin("admin@flowgpt.test");
+  const { user, token } = await registerAdmin("admin@fbuddy.test");
   assert.equal(user.isAdmin, true);
   assert.equal(user.role, "admin");
   assert.ok(token);
   ctx.token = token;
 
   const me = await api("GET", "/auth/me", undefined, token);
-  assert.equal(me.user.email, "admin@flowgpt.test");
+  assert.equal(me.user.email, "admin@fbuddy.test");
 });
 
 test("a second account is a normal user and cannot read admin settings", async () => {
   const { user, token } = await api("POST", "/auth/register", {
-    email: "user@flowgpt.test",
+    email: "user@fbuddy.test",
     password: "matkhau12345",
   });
   assert.equal(user.isAdmin, false);
@@ -62,12 +62,12 @@ test("a second account is a normal user and cannot read admin settings", async (
 
 test("login rejects a wrong password without leaking whether the email exists", async () => {
   const wrong = await apiRaw("POST", "/auth/login", {
-    email: "admin@flowgpt.test",
+    email: "admin@fbuddy.test",
     password: "sai-mat-khau",
   });
   assert.equal(wrong.status, 401);
   const missing = await apiRaw("POST", "/auth/login", {
-    email: "khong-ton-tai@flowgpt.test",
+    email: "khong-ton-tai@fbuddy.test",
     password: "sai-mat-khau",
   });
   assert.equal(missing.status, 401);
@@ -92,7 +92,7 @@ test("admin configures the demo provider and masks its key", async () => {
   assert.equal(listed.items[0].apiKeyPreview, null);
 
   const models = await api("GET", "/models", undefined, ctx.token);
-  assert.equal(models.items[0].model, "flowgpt-demo");
+  assert.equal(models.items[0].model, "fbuddy-demo");
 });
 
 test("provider test endpoint reports a working connection", async () => {
@@ -102,7 +102,7 @@ test("provider test endpoint reports a working connection", async () => {
 });
 
 test("plain chat streams start → delta → done and persists the turn", async () => {
-  const events = await chat({ token: ctx.token, content: "Xin chào FlowGpt" });
+  const events = await chat({ token: ctx.token, content: "Xin chào fBuddy" });
   const names = events.map((e) => e.event);
   assert.equal(names[0], "start");
   assert.ok(names.includes("delta"));
@@ -111,17 +111,17 @@ test("plain chat streams start → delta → done and persists the turn", async 
   const start = events[0].data;
   assert.ok(start.conversationId.startsWith("c_"));
   assert.equal(start.providerName, "Demo (không cần key)");
-  assert.equal(start.model, "flowgpt-demo");
+  assert.equal(start.model, "fbuddy-demo");
   ctx.conversationId = start.conversationId;
 
   const text = textOf(events);
-  assert.match(text, /FlowGpt/);
+  assert.match(text, /fBuddy/);
 
   const stored = await api("GET", `/conversations/${ctx.conversationId}`, undefined, ctx.token);
   assert.equal(stored.messages.length, 2);
   assert.equal(stored.messages[0].role, "user");
   assert.equal(stored.messages[1].role, "assistant");
-  assert.equal(stored.conversation.title, "Xin chào FlowGpt");
+  assert.equal(stored.conversation.title, "Xin chào fBuddy");
 });
 
 test("the PPT skill proposes the deck first and only writes it after a confirmation", async () => {
@@ -130,7 +130,7 @@ test("the PPT skill proposes the deck first and only writes it after a confirmat
   //    tells it to propose a plan first).
   const plan = await chat({
     token: ctx.token,
-    content: "Làm slide giới thiệu FlowGpt",
+    content: "Làm slide giới thiệu fBuddy",
     skill: "ppt",
     conversationId: ctx.conversationId,
   });
@@ -267,7 +267,7 @@ test("the default chat skill still executes a real tool (skill steers, never gat
   // so "làm slide" answered "công cụ không khả dụng" instead of building a deck.
   const events = await chat({
     token: ctx.token,
-    content: "Làm slide giúp anh về FlowGpt",
+    content: "Làm slide giúp anh về fBuddy",
     skill: "chat",
     conversationId: ctx.conversationId,
   });
@@ -288,7 +288,7 @@ test("a file skill forces the first tool call instead of a prose outline", async
   // generate_pptx, so the user got text where a .pptx was expected.
   const events = await chat({
     token: ctx.token,
-    content: "Làm slide 4 trang về FlowGpt giúp anh",
+    content: "Làm slide 4 trang về fBuddy giúp anh",
     skill: "ppt",
     conversationId: ctx.conversationId,
   });
@@ -403,7 +403,7 @@ test("skills endpoint describes the four skills and their tools", async () => {
 test("admin can disable signup and create users manually", async () => {
   await api("PUT", "/settings/app", { settings: { allowSignup: false } }, ctx.token);
   const blocked = await apiRaw("POST", "/auth/register", {
-    email: "late@flowgpt.test",
+    email: "late@fbuddy.test",
     password: "matkhau12345",
   });
   assert.equal(blocked.status, 403);
@@ -411,10 +411,10 @@ test("admin can disable signup and create users manually", async () => {
   const created = await api(
     "POST",
     "/admin/users",
-    { email: "invited@flowgpt.test", password: "matkhau12345", role: "user" },
+    { email: "invited@fbuddy.test", password: "matkhau12345", role: "user" },
     ctx.token,
   );
-  assert.equal(created.user.email, "invited@flowgpt.test");
+  assert.equal(created.user.email, "invited@fbuddy.test");
 
   const stats = await api("GET", "/admin/stats", undefined, ctx.token);
   assert.equal(stats.users, 3);
@@ -422,9 +422,9 @@ test("admin can disable signup and create users manually", async () => {
 });
 
 test("change password invalidates old tokens", async () => {
-  const session = await api("POST", "/auth/login", { email: "user@flowgpt.test", password: "matkhau12345" });
+  const session = await api("POST", "/auth/login", { email: "user@fbuddy.test", password: "matkhau12345" });
   const oldToken = session.token;
-  assert.equal((await api("GET", "/auth/me", undefined, oldToken)).user.email, "user@flowgpt.test");
+  assert.equal((await api("GET", "/auth/me", undefined, oldToken)).user.email, "user@fbuddy.test");
 
   const changed = await apiRaw(
     "PATCH",
@@ -436,7 +436,7 @@ test("change password invalidates old tokens", async () => {
 
   const stale = await apiRaw("GET", "/auth/me", undefined, oldToken);
   assert.equal(stale.status, 401);
-  assert.equal((await api("POST", "/auth/login", { email: "user@flowgpt.test", password: "matkhaumoi123" })).user.email, "user@flowgpt.test");
+  assert.equal((await api("POST", "/auth/login", { email: "user@fbuddy.test", password: "matkhaumoi123" })).user.email, "user@fbuddy.test");
 });
 
 test("chat without any enabled provider returns a helpful SSE error", async () => {
@@ -453,7 +453,7 @@ test("chat without any enabled provider returns a helpful SSE error", async () =
 test("rate limiting eventually refuses a burst on the chat route", async () => {
   // A fresh token: the password-change test above invalidated older sessions.
   const session = await api("POST", "/auth/login", {
-    email: "user@flowgpt.test",
+    email: "user@fbuddy.test",
     password: "matkhaumoi123",
   });
   const responses = [];

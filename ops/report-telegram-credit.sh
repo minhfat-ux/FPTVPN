@@ -10,7 +10,7 @@ CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, 
 [ -n "${CHAT:-}" ] || { echo "Không có chat id"; exit 1; }
 
 TEXT=$(cat <<'MSG'
-💳 FlowGpt — credit: cách tính, vì sao tốn, và trợ lý đã biết giải thích
+💳 fBuddy — credit: cách tính, vì sao tốn, và trợ lý đã biết giải thích
 
 1) CÁCH TÍNH (đang chạy đúng như này)
 • 1 credit = 1 token, tính theo tổng token VÀO + token RA của mỗi lượt (kiểu ChatGPT)
@@ -28,18 +28,18 @@ TEXT=$(cat <<'MSG'
 • Hội thoại càng dài càng tốn vì gửi lại tối đa 24 message ngữ cảnh
 
 3) ĐÃ SỬA: TRỢ LÝ KHÔNG CÒN NÓI "MIỄN PHÍ"
-• System prompt trước đây không hề nhắc credit → hỏi thì trả lời kiểu "FlowGpt miễn phí"
+• System prompt trước đây không hề nhắc credit → hỏi thì trả lời kiểu "fBuddy miễn phí"
 • Nay mỗi lượt đều có khối số liệu thật: công thức, mức tặng, SỐ DƯ / ĐÃ DÙNG / TRUNG BÌNH MỖI LƯỢT
   của chính người đang hỏi, kèm đường đi tới nút "Xin thêm token" và "Mua thêm token"
-• Kiểm chứng thật trên production (tài khoản mới, hỏi "FlowGpt có miễn phí không? credit tính sao?"):
-  trả lời đúng "FlowGpt không phải là miễn phí", nêu công thức, nêu 10.000 credit được tặng,
+• Kiểm chứng thật trên production (tài khoản mới, hỏi "fBuddy có miễn phí không? credit tính sao?"):
+  trả lời đúng "fBuddy không phải là miễn phí", nêu công thức, nêu 10.000 credit được tặng,
   chỉ đúng ảnh đại diện → "Xin thêm token", và link trang nạp credit
 • Trang Nạp token có thêm 2 khối hướng dẫn: "Credit được cấp và tính như thế nào?" và
   "Cách xin thêm token hoặc mua thêm credit" (từng bước, có ảnh VietQR)
 
 4) ĐÃ SỬA THÊM
 • Lỗi thật: công cụ phân tích dữ liệu op "filter" LUÔN lỗi (đọc nhầm tham số) → đã sửa + test hồi quy
-• 133/133 test pass; đã deploy https://flowgpt.meetflowai.site
+• 133/133 test pass; đã deploy https://fbuddy.meetflowai.site
 
 5) CẦN ANH QUYẾT
 • Nạp tiền chưa chạy được vì CHƯA CÓ số tài khoản ngân hàng: cần STK + tên chủ tài khoản (+ ngân hàng)

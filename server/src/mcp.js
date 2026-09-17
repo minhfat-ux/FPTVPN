@@ -50,7 +50,7 @@ export function qualifiedToolName(slug, toolName) {
 
 async function openClient(config) {
   const client = new Client(
-    { name: "flowgpt", version: "0.1.0" },
+    { name: "fbuddy", version: "0.1.0" },
     { capabilities: {} },
   );
   const transport = buildTransport(config);

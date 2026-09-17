@@ -10,7 +10,7 @@ CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, 
 [ -n "${CHAT:-}" ] || { echo "Không có chat id"; exit 1; }
 
 TEXT=$(cat <<'MSG'
-✅ FlowGpt — xong đợt lớn: hỏi trước khi tạo file, đọc ảnh, nhiều thiết bị, 3 ngôn ngữ
+✅ fBuddy — xong đợt lớn: hỏi trước khi tạo file, đọc ảnh, nhiều thiết bị, 3 ngôn ngữ
 
 1) HỎI TRƯỚC KHI TẠO FILE (theo đúng yêu cầu)
 • Mọi yêu cầu tạo nội dung (PPT/Excel/ảnh→Excel/phân tích) giờ đi 2 bước:
@@ -31,7 +31,7 @@ TEXT=$(cat <<'MSG'
 3) NHIỀU THIẾT BỊ, NGỮ CẢNH XUYÊN MÁY
 • Đăng nhập cùng email trên nhiều máy KHÔNG đá nhau; mỗi máy 1 phiên riêng
 • Menu tài khoản có "Thiết bị đang đăng nhập": đăng xuất từng máy hoặc mọi máy khác
-• Mở FlowGpt ở máy khác là vào ĐÚNG hội thoại đang làm việc; tự đồng bộ tin nhắn mới
+• Mở fBuddy ở máy khác là vào ĐÚNG hội thoại đang làm việc; tự đồng bộ tin nhắn mới
 • Đổi mật khẩu → thu hồi hết phiên
 
 4) SỬA LỖI TRÊN IPHONE SAFARI

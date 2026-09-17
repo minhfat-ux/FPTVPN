@@ -86,7 +86,7 @@ function providerHeaders(provider, extra = {}) {
   const headers = { ...(provider.headers ?? {}), ...extra };
   if (provider.kind === "openrouter") {
     if (!headers["HTTP-Referer"] && provider.referer) headers["HTTP-Referer"] = provider.referer;
-    if (!headers["X-Title"]) headers["X-Title"] = "FlowGpt";
+    if (!headers["X-Title"]) headers["X-Title"] = "fBuddy";
   }
   return headers;
 }

@@ -6,12 +6,12 @@
  * transcript; it is stored AES-256-GCM encrypted by the app's own crypto module.
  * The key file is deleted at the end.
  *
- *   FLOWGPT_DATA_DIR=/var/lib/flowgpt NODE_ENV=production \
+ *   FBUDDY_DATA_DIR=/var/lib/fbuddy NODE_ENV=production \
  *   node ops/configure-provider.mjs <keyFile> --name OpenRouter --kind openrouter \
  *        [--base-url https://openrouter.ai/api/v1] [--models a,b,c] \
  *        [--default-model a] [--set-default] [--disable-demo] [--verify-model x]
  *
- * Requires the app env (FLOWGPT_SECRET) so encryption matches the running service.
+ * Requires the app env (FBUDDY_SECRET) so encryption matches the running service.
  */
 
 import fs from "node:fs";

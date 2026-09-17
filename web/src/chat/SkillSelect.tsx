@@ -43,7 +43,7 @@ export function SkillSelect({
   disabled = false,
 }: {
   skills: SkillDescriptor[];
-  /** Current skill id; "auto" means "let FlowGpt decide". */
+  /** Current skill id; "auto" means "let fBuddy decide". */
   value: string;
   onChange: (skillId: string) => void;
   onOpenPicker: () => void;

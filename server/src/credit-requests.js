@@ -7,7 +7,7 @@ import { creditSettings, getBalance, grantCredits } from "./credits.js";
 /**
  * "Xin thêm token": a user who runs out asks the owner for credits. The request
  * is written to the DB, pushed to Telegram with one-tap approve/reject links, and
- * can also be decided inside FlowGpt (Settings → Người dùng).
+ * can also be decided inside fBuddy (Settings → Người dùng).
  *
  * The Telegram buttons are plain URLs signed with the server secret, so the
  * approval works without a webhook — the existing polling bot keeps running
@@ -154,7 +154,7 @@ export function buildTelegramPayload(request) {
   const balance = getBalance(request.userId);
   const amount = Number(request.amount).toLocaleString("vi-VN");
   const text = [
-    "🔔 *FlowGpt — xin thêm token*",
+    "🔔 *fBuddy — xin thêm token*",
     "",
     `👤 ${request.email}${request.name ? ` (${request.name})` : ""}`,
     `💰 Số dư hiện tại: *${balance.toLocaleString("vi-VN")}* token`,
@@ -180,12 +180,12 @@ export function buildTelegramPayload(request) {
   };
 }
 
-/** Sends the notification through the Telegram bot configured for FlowGpt. */
+/** Sends the notification through the Telegram bot configured for fBuddy. */
 export async function notifyTelegram(request) {
-  const token = process.env.FLOWGPT_TELEGRAM_BOT_TOKEN ?? "";
-  const chatId = process.env.FLOWGPT_TELEGRAM_CHAT_ID ?? "";
+  const token = process.env.FBUDDY_TELEGRAM_BOT_TOKEN ?? "";
+  const chatId = process.env.FBUDDY_TELEGRAM_CHAT_ID ?? "";
   if (!token || !chatId) {
-    return { sent: false, message: "Chưa cấu hình FLOWGPT_TELEGRAM_BOT_TOKEN / FLOWGPT_TELEGRAM_CHAT_ID" };
+    return { sent: false, message: "Chưa cấu hình FBUDDY_TELEGRAM_BOT_TOKEN / FBUDDY_TELEGRAM_CHAT_ID" };
   }
   const payload = buildTelegramPayload(request);
   try {
@@ -220,7 +220,7 @@ export function decisionPageHtml({ ok, title, detail }) {
     <img src="/brand-mark.png" alt="FlowTech" width="48" height="48" style="display:block;margin:0 auto 16px">
     <div style="font-size:22px;font-weight:700;color:${colour};margin-bottom:10px">${title}</div>
     <div style="font-size:15px;line-height:1.6;color:rgba(255,255,255,.75)">${detail}</div>
-    <a href="https://flowgpt.meetflowai.site" style="display:inline-block;margin-top:22px;background:${colour};color:#0A1F3B;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:10px">Mở FlowGpt</a>
+    <a href="https://fbuddy.meetflowai.site" style="display:inline-block;margin-top:22px;background:${colour};color:#0A1F3B;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:10px">Mở fBuddy</a>
   </div>
 </body></html>`;
 }

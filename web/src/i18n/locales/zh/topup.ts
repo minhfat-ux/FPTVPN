@@ -92,7 +92,7 @@ export const topup: Dict = {
   "topup.guide.calc.turnNote":
     "一轮普通对话约消耗 1.500 – 2.200 credit；对话越长消耗越多，因为每轮都会重新发送上下文。附件和较长的指令也会增加输入代币。",
   "topup.guide.calc.signup": "新账号在首次登录时获赠 {amount} credit。",
-  "topup.guide.calc.noFree": "FlowGpt 并非免费：每次回答都会扣除 credit，余额用完则下一轮无法继续。",
+  "topup.guide.calc.noFree": "fBuddy 并非免费：每次回答都会扣除 credit，余额用完则下一轮无法继续。",
   "topup.guide.calc.chip": "当前使用的余额显示在右上角的 “Credit: …” 标签中。",
 
   "topup.guide.ways.title": "如何申请更多代币或购买更多 credit",

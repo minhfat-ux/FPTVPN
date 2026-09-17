@@ -1,4 +1,4 @@
-﻿# FlowGpt — deploy from Windows to node-2 (165.101.114.162).
+﻿# fBuddy — deploy from Windows to node-2 (165.101.114.162).
 #
 #   pwsh -File deploy\deploy.ps1                # full deploy
 #   pwsh -File deploy\deploy.ps1 -SkipBuild     # reuse web/dist from a previous build
@@ -8,7 +8,7 @@
 [CmdletBinding()]
 param(
   [string]$Host_ = "165.101.114.162",
-  [string]$RemoteAppDir = "/opt/flowgpt",
+  [string]$RemoteAppDir = "/opt/fbuddy",
   [switch]$SkipBuild,
   [switch]$SkipDeps
 )
@@ -18,7 +18,7 @@ param(
 # explicitly after every command instead.
 $ErrorActionPreference = "Continue"
 $repo = Split-Path -Parent $PSScriptRoot
-$tarball = Join-Path $env:TEMP "flowgpt-release.tar.gz"
+$tarball = Join-Path $env:TEMP "fbuddy-release.tar.gz"
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 # Runs a command in the current PowerShell host (works on Windows PowerShell 5.1
@@ -63,14 +63,14 @@ $size = [math]::Round((Get-Item $tarball).Length / 1MB, 2)
 Write-Host "    $tarball ($size MB)"
 
 Step "4/6 Upload lên node-2"
-Run "scp -o StrictHostKeyChecking=no `"$tarball`" root@${Host_}:/tmp/flowgpt-release.tar.gz"
+Run "scp -o StrictHostKeyChecking=no `"$tarball`" root@${Host_}:/tmp/fbuddy-release.tar.gz"
 
 Step "5/6 Cài đặt trên server"
 $installDeps = if ($SkipDeps) { "false" } else { "true" }
 $remote = @"
 set -euo pipefail
 mkdir -p $RemoteAppDir
-tar -xzf /tmp/flowgpt-release.tar.gz -C $RemoteAppDir
+tar -xzf /tmp/fbuddy-release.tar.gz -C $RemoteAppDir
 cd $RemoteAppDir
 if [ "$installDeps" = "true" ] && [ ! -d node_modules/express ] && [ ! -d server/node_modules/express ]; then
   echo '--- npm install (production deps) ---'
@@ -88,12 +88,12 @@ Run "ssh -o StrictHostKeyChecking=no root@${Host_} `"echo $encoded | base64 -d |
 if ($LASTEXITCODE -ne 0) { throw "Cài đặt trên server thất bại" }
 
 Step "6/6 Kiểm tra công khai"
-$publicCode = (curl.exe -s -o NUL -w "%{http_code}" --max-time 15 https://flowgpt.meetflowai.site/api/health) 2>$null
+$publicCode = (curl.exe -s -o NUL -w "%{http_code}" --max-time 15 https://fbuddy.meetflowai.site/api/health) 2>$null
 if ($publicCode -eq "200") {
-  Write-Host "    https://flowgpt.meetflowai.site/api/health -> 200" -ForegroundColor Green
+  Write-Host "    https://fbuddy.meetflowai.site/api/health -> 200" -ForegroundColor Green
 } else {
-  Write-Host "    https://flowgpt.meetflowai.site/api/health -> $publicCode" -ForegroundColor Yellow
-  Write-Host "    (Bình thường khi bản ghi DNS 'flowgpt' chưa tồn tại — app vẫn chạy ở 127.0.0.1:7790 trên node-2.)" -ForegroundColor Yellow
-  Write-Host "    Tạo DNS: bash /opt/flowgpt/deploy/dns-cloudflare.sh --apply" -ForegroundColor Yellow
+  Write-Host "    https://fbuddy.meetflowai.site/api/health -> $publicCode" -ForegroundColor Yellow
+  Write-Host "    (Bình thường khi bản ghi DNS 'fbuddy' chưa tồn tại — app vẫn chạy ở 127.0.0.1:7790 trên node-2.)" -ForegroundColor Yellow
+  Write-Host "    Tạo DNS: bash /opt/fbuddy/deploy/dns-cloudflare.sh --apply" -ForegroundColor Yellow
 }
-Write-Host "`nXong. Log: ssh root@$Host_ 'journalctl -u flowgpt -f'" -ForegroundColor Green
+Write-Host "`nXong. Log: ssh root@$Host_ 'journalctl -u fbuddy -f'" -ForegroundColor Green

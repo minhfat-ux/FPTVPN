@@ -77,7 +77,7 @@ console.log("1. Đã vào app");
 
 // Give the signed-in account some tokens so the UI has something to show.
 const seeded = await evaluate(`(async () => {
-  const token = localStorage.getItem('flowgpt.token');
+  const token = localStorage.getItem('fbuddy.token');
   const me = await (await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + token } })).json();
   return { email: me.user?.email, isAdmin: me.user?.isAdmin };
 })()`);
@@ -136,7 +136,7 @@ if (!opened) {
 
 console.log("5. API credit trả về đúng dữ liệu");
 const apiState = await evaluate(`(async () => {
-  const token = localStorage.getItem('flowgpt.token');
+  const token = localStorage.getItem('fbuddy.token');
   const res = await fetch('/api/credits', { headers: { Authorization: 'Bearer ' + token } });
   const json = await res.json();
   const c = json.credits ?? {};

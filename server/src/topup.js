@@ -5,7 +5,7 @@ import { badRequest, notFound, nowIso } from "./util.js";
 import { getBalance, grantCredits } from "./credits.js";
 
 /**
- * FlowGpt top-up page: token packages paid by bank transfer.
+ * fBuddy top-up page: token packages paid by bank transfer.
  *
  * The flow is deliberately self-contained (no dependency on the VPNFlow control
  * plane): the user picks a package, gets a VietQR code with a unique transfer
@@ -61,7 +61,7 @@ export function bankInfo() {
     bankId: String(settings.bankId ?? "970436"),
     account: String(settings.bankAccount ?? ""),
     accountName: String(settings.bankAccountName ?? ""),
-    notePrefix: String(settings.bankNotePrefix ?? "FLOWGPT"),
+    notePrefix: String(settings.bankNotePrefix ?? "FBUDDY"),
   };
 }
 
@@ -215,7 +215,7 @@ export function buildTopupTelegram(order) {
   const amount = Number(order.amountVnd).toLocaleString("vi-VN");
   const tokens = Number(order.tokens).toLocaleString("vi-VN");
   const text = [
-    "💰 *FlowGpt — khách báo đã chuyển khoản*",
+    "💰 *fBuddy — khách báo đã chuyển khoản*",
     "",
     `👤 ${order.email ?? "(không rõ)"}`,
     `📦 ${order.packageName} — ${tokens} token`,
@@ -237,10 +237,10 @@ export function buildTopupTelegram(order) {
 }
 
 export async function notifyTopupTelegram(order) {
-  const token = process.env.FLOWGPT_TELEGRAM_BOT_TOKEN ?? "";
-  const chatId = process.env.FLOWGPT_TELEGRAM_CHAT_ID ?? "";
+  const token = process.env.FBUDDY_TELEGRAM_BOT_TOKEN ?? "";
+  const chatId = process.env.FBUDDY_TELEGRAM_CHAT_ID ?? "";
   if (!token || !chatId) {
-    return { sent: false, message: "Chưa cấu hình FLOWGPT_TELEGRAM_BOT_TOKEN / FLOWGPT_TELEGRAM_CHAT_ID" };
+    return { sent: false, message: "Chưa cấu hình FBUDDY_TELEGRAM_BOT_TOKEN / FBUDDY_TELEGRAM_CHAT_ID" };
   }
   const payload = buildTopupTelegram(order);
   try {
@@ -275,7 +275,7 @@ export function topupPageHtml({ ok, title, detail }) {
     <img src="/brand-mark.png" alt="FlowTech" width="48" height="48" style="display:block;margin:0 auto 16px">
     <div style="font-size:22px;font-weight:700;color:${colour};margin-bottom:10px">${title}</div>
     <div style="font-size:15px;line-height:1.6;color:rgba(255,255,255,.75)">${detail}</div>
-    <a href="https://flowgpt.meetflowai.site/?view=topup" style="display:inline-block;margin-top:22px;background:${colour};color:#0A1F3B;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:10px">Mở FlowGpt</a>
+    <a href="https://fbuddy.meetflowai.site/?view=topup" style="display:inline-block;margin-top:22px;background:${colour};color:#0A1F3B;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:10px">Mở fBuddy</a>
   </div>
 </body></html>`;
 }

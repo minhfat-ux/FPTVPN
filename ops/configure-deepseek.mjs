@@ -6,10 +6,10 @@
  * transcript; it is stored AES-256-GCM encrypted by the app's own crypto module.
  * The key file is deleted afterwards.
  *
- *   FLOWGPT_DATA_DIR=/var/lib/flowgpt NODE_ENV=production \
- *     node ops/configure-deepseek.mjs /tmp/flowgpt-deepseek.key [baseUrl] [models]
+ *   FBUDDY_DATA_DIR=/var/lib/fbuddy NODE_ENV=production \
+ *     node ops/configure-deepseek.mjs /tmp/fbuddy-deepseek.key [baseUrl] [models]
  *
- * Requires the app's env (FLOWGPT_SECRET) to be loaded so encryption matches the
+ * Requires the app's env (FBUDDY_SECRET) to be loaded so encryption matches the
  * running service.
  */
 
@@ -21,7 +21,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Windows needs file:// URLs for absolute imports; Linux accepts both.
 const SERVER = pathToFileURL(path.join(HERE, "..", "server", "src")).href;
 
-const keyFile = process.argv[2] ?? "/tmp/flowgpt-deepseek.key";
+const keyFile = process.argv[2] ?? "/tmp/fbuddy-deepseek.key";
 const baseUrl = process.argv[3] ?? "https://api.deepseek.com/v1";
 const models = (process.argv[4] ?? "deepseek-chat,deepseek-reasoner").split(",").map((m) => m.trim());
 const defaultModel = models[0];

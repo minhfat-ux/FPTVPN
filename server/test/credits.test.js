@@ -23,7 +23,7 @@ function freshUser(email, role = "user") {
 }
 
 test("a new account starts at zero and the ledger explains every movement", () => {
-  const { user } = freshUser("credit-new@flowgpt.test");
+  const { user } = freshUser("credit-new@fbuddy.test");
   assert.equal(credits.getBalance(user.id), 0);
   assert.deepEqual(credits.getTotals(user.id), { granted: 0, spent: 0, entries: 0 });
 
@@ -46,11 +46,11 @@ test("a new account starts at zero and the ledger explains every movement", () =
 
 test("signup credits come from settings — the shipped default is 10.000", () => {
   settings.patchAppSettings({ signupCredits: 0 });
-  const none = freshUser("credit-signup0@flowgpt.test");
+  const none = freshUser("credit-signup0@fbuddy.test");
   assert.equal(credits.getBalance(none.user.id), 0);
 
   settings.patchAppSettings({ signupCredits: 10000 });
-  const welcome = freshUser("credit-signup1@flowgpt.test");
+  const welcome = freshUser("credit-signup1@fbuddy.test");
   assert.equal(credits.getBalance(welcome.user.id), 10000);
   assert.equal(credits.listLedger(welcome.user.id)[0].reason, "signup");
   assert.equal(credits.creditSummary(welcome.user.id).granted, 10000);
@@ -85,7 +85,7 @@ test("the shipped credit rate keeps one chat turn near 200đ", () => {
 
 test("the chat gate blocks a user with no credit and lets admins through", () => {
   settings.patchAppSettings({ creditsEnabled: true });
-  const user = freshUser("credit-gate@flowgpt.test");
+  const user = freshUser("credit-gate@fbuddy.test");
   const blocked = credits.assertCanChat(user.user);
   assert.equal(blocked.allowed, false);
   assert.match(blocked.message, /hết credit/);
@@ -94,7 +94,7 @@ test("the chat gate blocks a user with no credit and lets admins through", () =>
   credits.grantCredits({ userId: user.user.id, amount: 10 });
   assert.equal(credits.assertCanChat(user.user).allowed, true);
 
-  const admin = freshUser("credit-admin@flowgpt.test", "admin");
+  const admin = freshUser("credit-admin@fbuddy.test", "admin");
   assert.equal(credits.assertCanChat(admin.user).allowed, true, "admin không bị chặn");
 
   settings.patchAppSettings({ creditsEnabled: false });
@@ -105,9 +105,9 @@ test("the chat gate blocks a user with no credit and lets admins through", () =>
 test("a chat turn charges the user and reports the new balance", async () => {
   settings.patchAppSettings({ creditsEnabled: true, creditsPerKToken: 1, defaultProviderId: null, defaultModel: null });
   if (!settings.listProviders().some((provider) => provider.kind === "mock" && provider.enabled)) {
-    settings.createProvider({ name: "Demo credit", kind: "mock", models: ["flowgpt-demo"] });
+    settings.createProvider({ name: "Demo credit", kind: "mock", models: ["fbuddy-demo"] });
   }
-  const { token, user } = freshUser("credit-chat@flowgpt.test");
+  const { token, user } = freshUser("credit-chat@fbuddy.test");
   credits.grantCredits({ userId: user.id, amount: 1000 });
 
   const { baseUrl } = await bootServer();
@@ -127,7 +127,7 @@ test("a chat turn charges the user and reports the new balance", async () => {
 
 test("a user at zero gets a 402 with a buy link instead of an answer", async () => {
   settings.patchAppSettings({ creditsEnabled: true, signupCredits: 0 });
-  const { token } = freshUser("credit-broke@flowgpt.test");
+  const { token } = freshUser("credit-broke@fbuddy.test");
   const { baseUrl } = await bootServer();
   const response = await fetch(`${baseUrl}/api/chat/stream`, {
     method: "POST",
@@ -143,7 +143,7 @@ test("a user at zero gets a 402 with a buy link instead of an answer", async () 
 
 test("GET /api/credits returns the balance, pricing and history", async () => {
   settings.patchAppSettings({ signupCredits: 0 });
-  const { token, user } = freshUser("credit-api@flowgpt.test");
+  const { token, user } = freshUser("credit-api@fbuddy.test");
   credits.grantCredits({ userId: user.id, amount: 50000 });
   const result = await api("GET", "/credits", undefined, token);
   assert.equal(result.credits.balance, 50000);
@@ -161,13 +161,13 @@ test("GET /api/credits returns the balance, pricing and history", async () => {
 
 test("an admin can grant credits by email and the user list shows balances", async () => {
   settings.patchAppSettings({ signupCredits: 0 });
-  const admin = freshUser("credit-admin2@flowgpt.test", "admin");
-  const target = freshUser("credit-target@flowgpt.test");
+  const admin = freshUser("credit-admin2@fbuddy.test", "admin");
+  const target = freshUser("credit-target@fbuddy.test");
 
   const granted = await api(
     "POST",
     "/admin/credits",
-    { email: "credit-target@flowgpt.test", amount: 100000, note: "cấp sẵn cho chủ dự án" },
+    { email: "credit-target@fbuddy.test", amount: 100000, note: "cấp sẵn cho chủ dự án" },
     admin.token,
   );
   assert.equal(granted.balance, 100000);
@@ -178,16 +178,16 @@ test("an admin can grant credits by email and the user list shows balances", asy
   assert.equal(row.creditBalance, 100000);
 
   // Deducting with a negative number is allowed, and regular users cannot grant.
-  const deducted = await api("POST", "/admin/credits", { email: "credit-target@flowgpt.test", amount: -1 }, admin.token);
+  const deducted = await api("POST", "/admin/credits", { email: "credit-target@fbuddy.test", amount: -1 }, admin.token);
   assert.equal(deducted.balance, 99999);
 
-  const forbidden = await apiRaw("POST", "/admin/credits", { email: "credit-admin2@flowgpt.test", amount: 10 }, target.token);
+  const forbidden = await apiRaw("POST", "/admin/credits", { email: "credit-admin2@fbuddy.test", amount: 10 }, target.token);
   assert.equal(forbidden.status, 403);
 
-  const unknown = await apiRaw("POST", "/admin/credits", { email: "khong-ton-tai@flowgpt.test", amount: 10 }, admin.token);
+  const unknown = await apiRaw("POST", "/admin/credits", { email: "khong-ton-tai@fbuddy.test", amount: 10 }, admin.token);
   assert.equal(unknown.status, 404);
 
-  const zero = await apiRaw("POST", "/admin/credits", { email: "credit-target@flowgpt.test", amount: 0 }, admin.token);
+  const zero = await apiRaw("POST", "/admin/credits", { email: "credit-target@fbuddy.test", amount: 0 }, admin.token);
   assert.equal(zero.status, 400);
 });
 
@@ -201,7 +201,7 @@ test("meta publishes the popup timing and credit pricing for the promo script", 
   assert.equal(meta.credits.signupCredits, 10000);
   assert.equal(meta.credits.perToken, DEFAULT_APP_SETTINGS.creditsPerToken);
   assert.equal(meta.credits.vndPerCredit, DEFAULT_APP_SETTINGS.vndPerCredit);
-  // The shipped default points at FlowGpt's own top-up page, not an external shop.
+  // The shipped default points at fBuddy's own top-up page, not an external shop.
   assert.equal(meta.credits.buyUrl, settings.readAppSettings().creditBuyUrl);
   assert.match(meta.credits.buyUrl, /\?view=topup$/);
   settings.patchAppSettings({ signupCredits: 0 });
@@ -210,7 +210,7 @@ test("meta publishes the popup timing and credit pricing for the promo script", 
 test("the system prompt states the credit policy, the live balance and how to top up", async () => {
   settings.patchAppSettings({ signupCredits: 10000, creditsEnabled: true });
   const { buildSystemPrompt, buildCreditKnowledge } = await import("../src/agent.js");
-  const { user } = freshUser("credit-prompt@flowgpt.test");
+  const { user } = freshUser("credit-prompt@fbuddy.test");
   const appSettings = settings.readAppSettings();
 
   const prompt = buildSystemPrompt({ skill: "chat", files: [], settings: appSettings, user });
@@ -229,7 +229,7 @@ test("the system prompt states the credit policy, the live balance and how to to
   assert.match(prompt, /\?view=topup/);
 
   // Admins are told the gate does not apply to them, but metering still does.
-  const admin = freshUser("credit-prompt-admin@flowgpt.test", "admin");
+  const admin = freshUser("credit-prompt-admin@fbuddy.test", "admin");
   assert.match(buildCreditKnowledge(admin.user), /quản trị viên/);
 
   // Metering off ⇒ the model has nothing to say about credits.
@@ -243,7 +243,7 @@ test("the system prompt states the credit policy, the live balance and how to to
 
 test("average turn cost drives the 'còn lại bao nhiêu lượt' estimate", () => {
   settings.patchAppSettings({ signupCredits: 0 });
-  const { user } = freshUser("credit-average@flowgpt.test");
+  const { user } = freshUser("credit-average@fbuddy.test");
   credits.grantCredits({ userId: user.id, amount: 301 });
   credits.spendCredits({ userId: user.id, amount: 2, ref: "m1" });
   credits.spendCredits({ userId: user.id, amount: 4, ref: "m2" });

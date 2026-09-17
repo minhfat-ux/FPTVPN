@@ -18,8 +18,8 @@
  * run is interrupted).
  */
 
-const BASE = (process.argv[2] ?? "https://flowgpt.meetflowai.site/api").replace(/\/+$/, "");
-const EMAIL = `sessions-check+${Date.now()}@flowgpt.local`;
+const BASE = (process.argv[2] ?? "https://fbuddy.meetflowai.site/api").replace(/\/+$/, "");
+const EMAIL = `sessions-check+${Date.now()}@fbuddy.local`;
 const PASSWORD = "matkhau12345";
 const UA_LAPTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/153.0.0.0 Safari/537.36";
 const UA_PHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile/15E148 Safari/604.1";
@@ -58,7 +58,7 @@ async function login(userAgent) {
   return result.data.token;
 }
 
-console.log(`FlowGpt — kiểm tra nhiều thiết bị → ${BASE}`);
+console.log(`fBuddy — kiểm tra nhiều thiết bị → ${BASE}`);
 
 const registered = await call("POST", "/auth/register", { body: { email: EMAIL, password: PASSWORD } });
 if (!registered.ok) {

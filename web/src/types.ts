@@ -253,7 +253,7 @@ export interface ModelOption {
   providerName: string;
   kind: ProviderKind;
   model: string;
-  /** Public FlowGpt name shown in the picker (never the vendor's model id). */
+  /** Public fBuddy name shown in the picker (never the vendor's model id). */
   label?: string;
   isDefault: boolean;
   hasKey?: boolean;

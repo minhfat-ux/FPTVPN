@@ -1,5 +1,5 @@
 /* ============================================================================
-   FlowGpt design system — FlowTech Harness palette (navy + green), dark-first.
+   fBuddy design system — FlowTech Harness palette (navy + green), dark-first.
    Colours are lifted from the FlowTech/FlowVPN harness theme override:
      bg-base #0A1F3B · layer-1 #0E2747 · layer-2 #123052 · layer-3 #16385E
      brand  #33C773 · hover #3DD982 · brand text #0A1F3B · error #f25a5a
@@ -134,7 +134,7 @@ a:hover { text-decoration: underline; }
 .sidebar-head { padding: var(--space-3); display: flex; gap: var(--space-2); align-items: center; }
 
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px; font-weight: 700; letter-spacing: -0.01em; }
-/* FlowTech mark (brand-mark.png) + "FlowGpt" wordmark using the FlowTech gradient. */
+/* FlowTech mark (brand-mark.png) + "fBuddy" wordmark using the FlowTech gradient. */
 .brand-mark {
   width: 34px; height: 34px; border-radius: 9px;
   display: grid; place-items: center; flex: 0 0 34px;

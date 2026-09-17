@@ -151,7 +151,7 @@ export const settings: Dict = {
   "settings.app.maxUploadHint": "From 1 to 100 MB per file.",
   "settings.app.allowSignup": "Allow users to create their own accounts",
   "settings.app.languageLabel": "Language",
-  "settings.app.languageHint": "Choose the display language of FlowGpt.",
+  "settings.app.languageHint": "Choose the display language of fBuddy.",
   "settings.app.mailTitle": "Email & sign-in",
   "settings.app.mailDesc":
     "The app signs in with a one-time code sent by email (passwordless). Configure Resend to send real codes.",
@@ -253,7 +253,7 @@ export const settings: Dict = {
   "settings.voice.testResult": "{message} · {provider} · {ms}ms",
   "settings.voice.browserTestOk": "Played a sample with the browser voice",
   "settings.voice.testFailed": "The sample playback failed",
-  "settings.voice.sampleText": "Hello, I am FlowGpt. I can chat, create images, build slides and analyse data for you.",
+  "settings.voice.sampleText": "Hello, I am fBuddy. I can chat, create images, build slides and analyse data for you.",
   "settings.voice.languageVi": "Vietnamese (vi-VN)",
   "settings.voice.languageEn": "English (en-US)",
   "settings.voice.freeTitle": "Free default: the browser recognises speech and reads aloud",

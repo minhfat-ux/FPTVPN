@@ -37,7 +37,7 @@ export const common: Dict = {
   "common.user": "用户",
   "common.today": "今天",
   "common.language": "语言",
-  "common.languageHint": "选择 FlowGpt 的显示语言",
+  "common.languageHint": "选择 fBuddy 的显示语言",
   "common.token": "token",
   "common.tokens": "token",
 };

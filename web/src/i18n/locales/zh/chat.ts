@@ -45,7 +45,7 @@ export const chat: Dict = {
 
   // ---- 默认技能（/api/skills 尚未返回时）
   "chat.skill.auto": "自动",
-  "chat.skill.autoHint": "让 FlowGpt 自动选择合适的技能",
+  "chat.skill.autoHint": "让 fBuddy 自动选择合适的技能",
   "chat.skill.image": "图片",
   "chat.skill.imageHint": "用 AI 生成和编辑图片",
   "chat.skill.ppt": "PowerPoint",
@@ -57,7 +57,7 @@ export const chat: Dict = {
 
   // ---- SkillSelect：输入栏中的下拉菜单
   "chat.skillSelect.aria": "技能：{name}",
-  "chat.skillSelect.autoHint": "让 FlowGpt 自动选择回答方式",
+  "chat.skillSelect.autoHint": "让 fBuddy 自动选择回答方式",
   "chat.skillSelect.listAria": "选择技能",
   "chat.skillSelect.autoDesc": "不指定具体技能",
   "chat.skillSelect.empty": "还没有技能",

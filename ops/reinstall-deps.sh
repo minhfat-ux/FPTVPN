@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Reinstall production dependencies cleanly on node-2, then restart FlowGpt.
+# Reinstall production dependencies cleanly on node-2, then restart fBuddy.
 set -u
-cd /opt/flowgpt || exit 1
+cd /opt/fbuddy || exit 1
 
 echo "== npm install (production) =="
 npm install --omit=dev --no-audit --no-fund 2>&1 | tail -6
@@ -25,13 +25,13 @@ rc=$?
 if [ $rc -ne 0 ]; then echo "Cài đặt chưa đủ — dừng, không restart."; exit 1; fi
 
 echo "== restart service =="
-systemctl restart flowgpt
+systemctl restart fbuddy
 sleep 3
-systemctl is-active flowgpt
+systemctl is-active fbuddy
 for i in 1 2 3 4 5; do
   body=$(curl -s --max-time 5 http://127.0.0.1:7790/api/health || true)
   if [ -n "$body" ]; then echo "health: $body"; break; fi
   echo "  chờ service (lần $i)…"; sleep 3
 done
 echo "== log =="
-journalctl -u flowgpt -n 8 --no-pager | tail -8
+journalctl -u fbuddy -n 8 --no-pager | tail -8

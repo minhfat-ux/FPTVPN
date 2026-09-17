@@ -14,10 +14,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [url = "https://flowgpt.meetflowai.site", outDir = "ops/ui-out-i18n", portArg] = process.argv.slice(2);
+const [url = "https://fbuddy.meetflowai.site", outDir = "ops/ui-out-i18n", portArg] = process.argv.slice(2);
 const PORT = Number(portArg ?? 9224);
 const API = `${url.replace(/\/+$/, "")}/api`;
-const EMAIL = `i18n-ui+${Date.now()}@flowgpt.local`;
+const EMAIL = `i18n-ui+${Date.now()}@fbuddy.local`;
 const PASSWORD = "matkhau12345";
 fs.mkdirSync(outDir, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -97,7 +97,7 @@ await send("Runtime.enable");
 await send("Page.enable");
 await send("Page.navigate", { url });
 await sleep(4000);
-await evaluate(`localStorage.setItem("flowgpt.token", ${JSON.stringify(token)})`);
+await evaluate(`localStorage.setItem("fbuddy.token", ${JSON.stringify(token)})`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.sidebar'))", 25000, "app shell hiện ra");
 await sleep(1500);
@@ -109,7 +109,7 @@ const READ = `(() => {
   const sidebar = document.querySelector('.sidebar');
   return {
     lang: document.documentElement.lang,
-    locale: localStorage.getItem("flowgpt.locale"),
+    locale: localStorage.getItem("fbuddy.locale"),
     topbar: topbar ? topbar.innerText.replace(/\\s+/g, " ").trim().slice(0, 160) : null,
     nav: sidebar ? [...sidebar.querySelectorAll('button, a')].map((n) => n.innerText.replace(/\\s+/g, " ").trim()).filter(Boolean).slice(0, 8) : [],
     chips: [...document.querySelectorAll('.locale-switcher button')].map((b) => b.textContent.trim()),
@@ -118,7 +118,7 @@ const READ = `(() => {
 
 const results = {};
 for (const locale of ["vi", "en", "zh"]) {
-  await evaluate(`localStorage.setItem("flowgpt.locale", ${JSON.stringify(locale)})`);
+  await evaluate(`localStorage.setItem("fbuddy.locale", ${JSON.stringify(locale)})`);
   await send("Page.navigate", { url });
   await waitFor("Boolean(document.querySelector('.sidebar'))", 25000, `app shell (${locale})`);
   await sleep(1200);
@@ -131,7 +131,7 @@ for (const locale of ["vi", "en", "zh"]) {
 }
 
 // The switcher must be visible on the main screen (topbar), not only in a menu.
-await evaluate(`localStorage.setItem("flowgpt.locale", "vi")`);
+await evaluate(`localStorage.setItem("fbuddy.locale", "vi")`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.topbar-locale .locale-chip'))", 20000, "locale chips trong topbar");
 await sleep(600);
@@ -148,15 +148,15 @@ await shot("72-i18n-topbar");
 // System language: a French browser must land on English, not Vietnamese.
 await send("Emulation.setLocaleOverride", { locale: "fr-FR" });
 await send("Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", acceptLanguage: "fr-FR,fr;q=0.9,en;q=0.8" });
-await evaluate(`localStorage.removeItem("flowgpt.locale")`);
+await evaluate(`localStorage.removeItem("fbuddy.locale")`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.sidebar'))", 25000, "app shell (system locale)");
 await sleep(1200);
-const systemLocale = await evaluate(`({ lang: document.documentElement.lang, stored: localStorage.getItem("flowgpt.locale"), nav: [...document.querySelectorAll('.sidebar button, .sidebar a')].map((n) => n.innerText.trim()).filter(Boolean).slice(0, 3) })`);
+const systemLocale = await evaluate(`({ lang: document.documentElement.lang, stored: localStorage.getItem("fbuddy.locale"), nav: [...document.querySelectorAll('.sidebar button, .sidebar a')].map((n) => n.innerText.trim()).filter(Boolean).slice(0, 3) })`);
 console.log(`\nHệ thống = fr-FR → app chọn: ${systemLocale.lang} (nav: ${systemLocale.nav.join(" · ")})`);
 
 // The language switcher should be reachable from the profile menu.
-await evaluate(`localStorage.setItem("flowgpt.locale", "vi")`);
+await evaluate(`localStorage.setItem("fbuddy.locale", "vi")`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.sidebar'))", 25000, "app shell (switcher)");
 await sleep(1200);
@@ -177,7 +177,7 @@ const switcher = await evaluate(`(() => {
 await sleep(1200);
 const afterClick = await evaluate(`(() => ({
   lang: document.documentElement.lang,
-  locale: localStorage.getItem("flowgpt.locale"),
+  locale: localStorage.getItem("fbuddy.locale"),
   nav: [...document.querySelectorAll('.sidebar button, .sidebar a')].map((n) => n.innerText.replace(/\\s+/g, " ").trim()).filter(Boolean).slice(0, 8),
 }))()`);
 if (switcher) await shot("71-i18n-switcher-en");

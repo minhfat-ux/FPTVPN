@@ -120,7 +120,7 @@ function tokenFromRequest(req) {
   const header = req.headers.authorization ?? "";
   if (header.toLowerCase().startsWith("bearer ")) return header.slice(7).trim();
   const cookie = req.headers.cookie ?? "";
-  const match = cookie.match(/(?:^|;\s*)flowgpt_token=([^;]+)/);
+  const match = cookie.match(/(?:^|;\s*)fbuddy_token=([^;]+)/);
   if (match) return decodeURIComponent(match[1]);
   return null;
 }

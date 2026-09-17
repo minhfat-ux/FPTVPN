@@ -10,7 +10,7 @@ after(async () => {
 /// Session of the first account (admin) — codes are rate limited per email, so
 /// every later test reuses this one instead of requesting new codes.
 let adminToken = null;
-const ADMIN_EMAIL = "first.user@flowgpt.test";
+const ADMIN_EMAIL = "first.user@fbuddy.test";
 
 test("meta advertises passwordless email login and the future SSO providers", async () => {
   const { baseUrl } = await bootServer();
@@ -24,14 +24,14 @@ test("meta advertises passwordless email login and the future SSO providers", as
 });
 
 test("requesting a code creates the first account as admin and returns a dev code", async () => {
-  const result = await api("POST", "/auth/request-token", { email: "First.User@FlowGpt.test" });
+  const result = await api("POST", "/auth/request-token", { email: "First.User@fBuddy.test" });
   assert.equal(result.ok, true);
   assert.equal(result.delivered, false);
   assert.equal(result.mailerConfigured, false);
   assert.match(result.devCode, /^\d{6}$/);
   assert.ok(result.expiresInMin >= 5);
   // The magic link points back at the app with both parameters.
-  assert.match(result.devLink, /\?email=first\.user%40flowgpt\.test&token=/);
+  assert.match(result.devLink, /\?email=first\.user%40fbuddy\.test&token=/);
 
   const session = await api("POST", "/auth/verify-token", { email: ADMIN_EMAIL, token: result.devCode });
   assert.equal(session.user.isAdmin, true);
@@ -39,7 +39,7 @@ test("requesting a code creates the first account as admin and returns a dev cod
 });
 
 test("a wrong code is rejected and a correct code logs the user in once", async () => {
-  const email = "wrongcode@flowgpt.test";
+  const email = "wrongcode@fbuddy.test";
   const requested = await api("POST", "/auth/request-token", { email });
 
   const wrong = await apiRaw("POST", "/auth/verify-token", { email, token: "000000" });
@@ -61,7 +61,7 @@ test("a wrong code is rejected and a correct code logs the user in once", async 
 });
 
 test("the magic-link token works and invalidates sibling codes", async () => {
-  const email = "magiclink@flowgpt.test";
+  const email = "magiclink@fbuddy.test";
   const requested = await api("POST", "/auth/request-token", { email });
   const linkToken = new URL(requested.devLink).searchParams.get("token");
   assert.ok(linkToken && linkToken.length > 20);
@@ -75,7 +75,7 @@ test("the magic-link token works and invalidates sibling codes", async () => {
 });
 
 test("requesting a new code invalidates the previous one", async () => {
-  const email = "rotate@flowgpt.test";
+  const email = "rotate@fbuddy.test";
   const first = await api("POST", "/auth/request-token", { email });
   const second = await api("POST", "/auth/request-token", { email });
   assert.notEqual(first.devCode, second.devCode);
@@ -87,7 +87,7 @@ test("requesting a new code invalidates the previous one", async () => {
 });
 
 test("codes are rate limited per email address", async () => {
-  const email = "spam@flowgpt.test";
+  const email = "spam@fbuddy.test";
   for (let i = 0; i < 3; i += 1) {
     await api("POST", "/auth/request-token", { email });
   }
@@ -104,7 +104,7 @@ test("invalid emails are rejected before any mail is sent", async () => {
 test("unknown emails do not get a code when auto-creation is disabled", async () => {
   await api("PUT", "/settings/app", { settings: { autoCreateUserOnLogin: false } }, adminToken);
 
-  const result = await api("POST", "/auth/request-token", { email: "nguoi-la@flowgpt.test" });
+  const result = await api("POST", "/auth/request-token", { email: "nguoi-la@fbuddy.test" });
   assert.equal(result.ok, true);
   assert.equal(result.delivered, false);
   // No enumeration signal and no usable code.
@@ -150,7 +150,7 @@ test("app settings expose mailer state but never the Resend key", async () => {
 });
 
 test("mailer test endpoint refuses politely when no key is configured", async () => {
-  const result = await api("POST", "/settings/mailer/test", { to: "owner@flowgpt.test" }, adminToken);
+  const result = await api("POST", "/settings/mailer/test", { to: "owner@fbuddy.test" }, adminToken);
   assert.equal(result.ok, false);
   assert.match(result.message, /Resend API key/);
 
@@ -159,9 +159,9 @@ test("mailer test endpoint refuses politely when no key is configured", async ()
 });
 
 test("only admins can reach the mailer settings surface", async () => {
-  const requested = await api("POST", "/auth/request-token", { email: "normal@flowgpt.test" });
+  const requested = await api("POST", "/auth/request-token", { email: "normal@fbuddy.test" });
   const { token } = await api("POST", "/auth/verify-token", {
-    email: "normal@flowgpt.test",
+    email: "normal@fbuddy.test",
     token: requested.devCode,
   });
   const response = await apiRaw("POST", "/settings/mailer/test", { to: "x@y.com" }, token);

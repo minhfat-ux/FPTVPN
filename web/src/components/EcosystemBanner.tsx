@@ -14,7 +14,7 @@ import {
 } from "../ecosystem";
 
 /**
- * FlowGpt → banner "Cài app hệ sinh thái FlowTech".
+ * fBuddy → banner "Cài app hệ sinh thái FlowTech".
  *
  * The pre-login popup only appears once per browser, so signed-in users never saw
  * the download links again. This banner keeps them one tap away inside the app:

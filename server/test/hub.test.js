@@ -35,7 +35,7 @@ test("the seed fills the hub once and is idempotent", () => {
 });
 
 test("buying a skill charges credits for its VND price, records ownership and installs it", () => {
-  const { user } = userFor("hub-buy@flowgpt.test", "user", { balance: 200000 });
+  const { user } = userFor("hub-buy@fbuddy.test", "user", { balance: 200000 });
   const skill = hub.listHubSkills({}).find((item) => item.slug === "content-sales");
   assert.equal(skill.priceVnd, 50000, "kỹ năng mẫu bán 50.000đ");
   assert.equal(skill.price, 50000, "1 credit = 1đ nên giá credit bằng giá VND");
@@ -67,7 +67,7 @@ test("buying a skill charges credits for its VND price, records ownership and in
 });
 
 test("a user without enough credits is refused with the money price in the message", () => {
-  const { user } = userFor("hub-poor@flowgpt.test", "user", { balance: 100 });
+  const { user } = userFor("hub-poor@fbuddy.test", "user", { balance: 100 });
   const skill = hub.listHubSkills({}).find((item) => item.priceVnd > 0);
   assert.throws(
     () => hub.purchaseHubSkill({ user, idOrSlug: skill.slug }),
@@ -78,13 +78,13 @@ test("a user without enough credits is refused with the money price in the messa
 });
 
 test("coming-soon and unknown skills cannot be bought", () => {
-  const { user } = userFor("hub-soon@flowgpt.test", "user", { balance: 50000 });
+  const { user } = userFor("hub-soon@fbuddy.test", "user", { balance: 50000 });
   assert.throws(() => hub.purchaseHubSkill({ user, idOrSlug: "brand-voice" }), /chưa mở bán/);
   assert.throws(() => hub.purchaseHubSkill({ user, idOrSlug: "khong-co-skill-nay" }), /Không tìm thấy/);
 });
 
 test("a bought skill is selectable and steers the agent prompt", async () => {
-  const { user, token } = userFor("hub-agent@flowgpt.test", "user", { balance: 200000 });
+  const { user, token } = userFor("hub-agent@fbuddy.test", "user", { balance: 200000 });
   const skill = hub.listHubSkills({}).find((item) => item.slug === "meeting-notes");
   hub.purchaseHubSkill({ user, idOrSlug: skill.slug });
 
@@ -92,13 +92,13 @@ test("a bought skill is selectable and steers the agent prompt", async () => {
   const runtime = hub.hubSkillForUser({ skillId: skill.id, userId: user.id });
   assert.ok(runtime, "kỹ năng đã mua phải resolve được");
   assert.match(runtime.instructions, /biên bản họp/i);
-  assert.equal(hub.hubSkillForUser({ skillId: skill.id, userId: userFor("hub-other@flowgpt.test").user.id }), null);
+  assert.equal(hub.hubSkillForUser({ skillId: skill.id, userId: userFor("hub-other@fbuddy.test").user.id }), null);
   assert.equal(hub.isSelectableSkill({ skillId: skill.id, userId: user.id }), true);
   assert.equal(hub.isSelectableSkill({ skillId: "khong-ton-tai", userId: user.id }), false);
 
   // A real turn accepts the hub skill id and keeps working.
   if (!settings.listProviders().some((provider) => provider.kind === "mock" && provider.enabled)) {
-    settings.createProvider({ name: "Demo hub", kind: "mock", models: ["flowgpt-demo"] });
+    settings.createProvider({ name: "Demo hub", kind: "mock", models: ["fbuddy-demo"] });
   }
   const { baseUrl } = await bootServer();
   const response = await fetch(`${baseUrl}/api/chat/stream`, {
@@ -113,7 +113,7 @@ test("a bought skill is selectable and steers the agent prompt", async () => {
 });
 
 test("the hub API lists with prices and buys through HTTP", async () => {
-  const { token } = userFor("hub-api@flowgpt.test", "user", { balance: 200000 });
+  const { token } = userFor("hub-api@fbuddy.test", "user", { balance: 200000 });
   const listed = await api("GET", "/hub", undefined, token);
   assert.ok(listed.items.length >= 6);
   assert.equal(listed.currency, "token");
@@ -139,8 +139,8 @@ test("the hub API lists with prices and buys through HTTP", async () => {
 });
 
 test("only admins can manage the hub, and a created skill is immediately sellable", async () => {
-  const admin = userFor("hub-admin@flowgpt.test", "admin");
-  const buyer = userFor("hub-buyer@flowgpt.test", "user", { balance: 5000 });
+  const admin = userFor("hub-admin@fbuddy.test", "admin");
+  const buyer = userFor("hub-buyer@fbuddy.test", "user", { balance: 5000 });
 
   const forbidden = await apiRaw("GET", "/admin/hub", undefined, buyer.token);
   assert.equal(forbidden.status, 403);
@@ -180,8 +180,8 @@ test("only admins can manage the hub, and a created skill is immediately sellabl
 });
 
 test("the admin listing carries the prompt pack so the edit form can prefill it", async () => {
-  const admin = userFor("hub-admin-prefill@flowgpt.test", "admin");
-  const buyer = userFor("hub-prefill-buyer@flowgpt.test", "user");
+  const admin = userFor("hub-admin-prefill@fbuddy.test", "admin");
+  const buyer = userFor("hub-prefill-buyer@fbuddy.test", "user");
 
   const created = await api(
     "POST",

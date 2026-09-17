@@ -79,8 +79,58 @@ export function verifyToken(token) {
 
 // ------------------------------------------------- secret storage (AES-GCM)
 
+/**
+ * Khoá AES = scrypt(secret, SALT). Vì **salt nằm trong code**, đổi tên thương hiệu
+ * trong salt là đổi luôn khoá dẫn xuất — mọi credential đã lưu (API key của nhà cung
+ * cấp AI, Resend, SePay, MCP) sẽ không giải mã được nữa dù biến môi trường `*_SECRET`
+ * không hề đổi, và `decryptSecret()` trả `null` im lặng.
+ *
+ * Đó đúng là sự cố 2026-09-18 khi đổi tên sang fBuddy. Nên: **GHI bằng salt mới, ĐỌC
+ * được cả salt cũ**. Muốn bỏ hẳn đường cũ thì phải chạy `ops/reencrypt-secrets.mjs`
+ * để mã hoá lại toàn bộ dữ liệu trước, đừng xoá `LEGACY_SALTS` trước khi làm việc đó.
+ */
+const SECRET_SALT = "fbuddy-secret-v1";
+
+/** Salt thời còn tên cũ — chỉ dùng để ĐỌC dữ liệu đã mã hoá. */
+const LEGACY_SALTS = ["flowgpt-secret-v1"];
+
+/**
+ * Cache khoá đã dẫn xuất. `scrypt` khá đắt mà mỗi lần đọc cài đặt lại giải mã vài
+ * secret (Resend/SePay…) — không cache thì mỗi lần đọc phải chạy lại scrypt nhiều lần.
+ * Khoá chỉ nằm trong RAM, không ghi ra đâu.
+ */
+const keyCache = new Map();
+
+function deriveKey(secret, salt) {
+  const cacheKey = `${salt}\u0000${secret}`;
+  let key = keyCache.get(cacheKey);
+  if (!key) {
+    key = crypto.scryptSync(secret, salt, 32, { N: 16384, r: 8, p: 1 });
+    keyCache.set(cacheKey, key);
+  }
+  return key;
+}
+
+/** Khoá dùng để GHI secret mới. */
 function secretKey() {
-  return crypto.scryptSync(config.secret, "flowgpt-secret-v1", 32, { N: 16384, r: 8, p: 1 });
+  return deriveKey(config.secret, SECRET_SALT);
+}
+
+/**
+ * Các khoá dùng để ĐỌC, theo thứ tự thử: khoá hiện tại trước, rồi salt cũ với secret
+ * hiện tại, rồi salt cũ với secret CŨ (khi lần đổi tên trước đó cũng sinh secret mới —
+ * đặt secret cũ vào `FBUDDY_LEGACY_SECRET` hoặc để biến `FLOWGPT_SECRET` còn trong env).
+ */
+function readKeys() {
+  const legacySecret = process.env.FBUDDY_LEGACY_SECRET || process.env.FLOWGPT_SECRET || null;
+  const keys = [secretKey()];
+  for (const salt of LEGACY_SALTS) {
+    keys.push(deriveKey(config.secret, salt));
+    if (legacySecret && legacySecret.length >= 16 && legacySecret !== config.secret) {
+      keys.push(deriveKey(legacySecret, salt));
+    }
+  }
+  return keys;
 }
 
 export function encryptSecret(plain) {
@@ -91,24 +141,33 @@ export function encryptSecret(plain) {
   return `v1.${iv.toString("base64url")}.${enc.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}`;
 }
 
-export function decryptSecret(blob) {
-  if (!blob) return null;
-  try {
-    const [version, ivB64, dataB64, tagB64] = String(blob).split(".");
-    if (version !== "v1") return null;
-    const decipher = crypto.createDecipheriv(
-      "aes-256-gcm",
-      secretKey(),
-      Buffer.from(ivB64, "base64url"),
-    );
-    decipher.setAuthTag(Buffer.from(tagB64, "base64url"));
-    return Buffer.concat([
-      decipher.update(Buffer.from(dataB64, "base64url")),
-      decipher.final(),
-    ]).toString("utf8");
-  } catch {
-    return null;
+/**
+ * Giải mã, trả kèm thông tin đã dùng khoá nào — `legacy: true` nghĩa là blob còn
+ * thuộc khoá cũ và nên được mã hoá lại (`ops/reencrypt-secrets.mjs`).
+ */
+export function decryptSecretInfo(blob) {
+  if (!blob) return { plain: null, legacy: false };
+  const [version, ivB64, dataB64, tagB64] = String(blob).split(".");
+  if (version !== "v1") return { plain: null, legacy: false };
+  const keys = readKeys();
+  for (let index = 0; index < keys.length; index += 1) {
+    try {
+      const decipher = crypto.createDecipheriv("aes-256-gcm", keys[index], Buffer.from(ivB64, "base64url"));
+      decipher.setAuthTag(Buffer.from(tagB64, "base64url"));
+      const plain = Buffer.concat([
+        decipher.update(Buffer.from(dataB64, "base64url")),
+        decipher.final(),
+      ]).toString("utf8");
+      return { plain, legacy: index > 0 };
+    } catch {
+      // Sai khoá ⇒ GCM ném lỗi xác thực; thử khoá kế tiếp.
+    }
   }
+  return { plain: null, legacy: false };
+}
+
+export function decryptSecret(blob) {
+  return decryptSecretInfo(blob).plain;
 }
 
 /** `AIzaSyD…4f2` — enough for an admin to recognise a key, useless to an attacker. */

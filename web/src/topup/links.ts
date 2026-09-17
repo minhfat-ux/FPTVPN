@@ -1,6 +1,6 @@
 /**
  * The server hands out one "buy more tokens" URL (`credits.buyUrl`). When it
- * points back at FlowGpt's own top-up page (`?view=topup`) the button must switch
+ * points back at fBuddy's own top-up page (`?view=topup`) the button must switch
  * the view in place; any other URL stays an external link.
  */
 

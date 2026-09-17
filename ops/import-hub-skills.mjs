@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Imports skill packs into the FlowGpt Skill Hub (chợ kỹ năng).
+ * Imports skill packs into the fBuddy Skill Hub (chợ kỹ năng).
  *
  * Two input shapes are supported:
  *
@@ -20,7 +20,7 @@
  *   node ops/import-hub-skills.mjs ./skills.json --apply --price-vnd 50000 --state coming_soon
  *   node ops/import-hub-skills.mjs ./skills.json --apply --base http://127.0.0.1:7790/api
  *
- * The admin token is read from FLOWGPT_ADMIN_TOKEN, or from --token-file
+ * The admin token is read from FBUDDY_ADMIN_TOKEN, or from --token-file
  * (default %TEMP%/admin-token.txt). Existing slugs are UPDATEd, new ones are
  * POSTed, so re-running is safe. Output prints the exact admin-API calls made.
  */
@@ -58,7 +58,7 @@ if (!input) {
   process.exit(2);
 }
 
-const BASE = (flag("base", process.env.FLOWGPT_API_BASE ?? "https://flowgpt.meetflowai.site/api")).replace(/\/+$/, "");
+const BASE = (flag("base", process.env.FBUDDY_API_BASE ?? "https://fbuddy.meetflowai.site/api")).replace(/\/+$/, "");
 const APPLY = has("apply");
 const PRICE_VND_OVERRIDE = flag("price-vnd") === null ? null : Math.max(0, Math.trunc(Number(flag("price-vnd")) || 0));
 const STATE_OVERRIDE = flag("state");
@@ -66,9 +66,9 @@ const CATEGORY_OVERRIDE = flag("category");
 const TOKEN_FILE = flag("token-file", path.join(os.tmpdir(), "admin-token.txt"));
 
 function readToken() {
-  if (process.env.FLOWGPT_ADMIN_TOKEN) return process.env.FLOWGPT_ADMIN_TOKEN.trim();
+  if (process.env.FBUDDY_ADMIN_TOKEN) return process.env.FBUDDY_ADMIN_TOKEN.trim();
   if (fs.existsSync(TOKEN_FILE)) return readText(TOKEN_FILE).trim();
-  console.error(`Không tìm thấy token admin. Đặt FLOWGPT_ADMIN_TOKEN hoặc ghi token vào ${TOKEN_FILE}`);
+  console.error(`Không tìm thấy token admin. Đặt FBUDDY_ADMIN_TOKEN hoặc ghi token vào ${TOKEN_FILE}`);
   process.exit(2);
 }
 

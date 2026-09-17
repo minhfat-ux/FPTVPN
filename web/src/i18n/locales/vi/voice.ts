@@ -13,8 +13,8 @@ export const voice: Dict = {
   "voice.mode.stateSpeaking": "Đang nói…",
   "voice.mode.stateError": "Lỗi",
   "voice.mode.hintIdle": "Bấm micro để tiếp tục trò chuyện.",
-  "voice.mode.hintListening": "Anh/chị nói tự nhiên, FlowGpt sẽ trả lời ngay khi nghe xong.",
-  "voice.mode.hintThinking": "FlowGpt đang xử lý câu hỏi của anh/chị.",
+  "voice.mode.hintListening": "Anh/chị nói tự nhiên, fBuddy sẽ trả lời ngay khi nghe xong.",
+  "voice.mode.hintThinking": "fBuddy đang xử lý câu hỏi của anh/chị.",
   "voice.mode.hintSpeaking": "Nói xen vào để ngắt lời và hỏi tiếp.",
   "voice.mode.hintError": "Kiểm tra micro hoặc cấu hình trong Cài đặt → Giọng nói.",
   "voice.mode.mutedState": "Đã tắt micro",
@@ -31,7 +31,7 @@ export const voice: Dict = {
   "voice.mode.suggestionRole": "Gợi ý",
   "voice.mode.suggestionText": "Hãy nói: “Xin chào, bạn giúp được gì cho tôi?”",
   "voice.mode.roleUser": "Bạn",
-  "voice.mode.roleAssistant": "FlowGpt",
+  "voice.mode.roleAssistant": "fBuddy",
 
   // ---- Dòng engine
   "voice.engine.label": "Nhận dạng: {kind} · Giọng đọc: {voice}",

@@ -37,7 +37,7 @@ export const common: Dict = {
   "common.user": "User",
   "common.today": "Today",
   "common.language": "Language",
-  "common.languageHint": "Choose FlowGpt's display language",
+  "common.languageHint": "Choose fBuddy's display language",
   "common.token": "token",
   "common.tokens": "tokens",
 };

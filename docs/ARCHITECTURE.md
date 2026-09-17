@@ -1,4 +1,4 @@
-# Kiến trúc FlowGpt
+# Kiến trúc fBuddy
 
 ## 1. Tổng quan
 
@@ -6,7 +6,7 @@
 Trình duyệt (React 18 + Vite)
    │  fetch /api/*  (Bearer JWT hoặc cookie httpOnly)
    ▼
-Caddy (flowgpt.meetflowai.site)  ──TLS──▶  127.0.0.1:7790
+Caddy (fbuddy.meetflowai.site)  ──TLS──▶  127.0.0.1:7790
    ▼
 Express 5 (server/src/index.js)
    ├── auth.js        đăng nhập bằng mã email (passwordless) + mật khẩu dự phòng
@@ -19,7 +19,7 @@ Express 5 (server/src/index.js)
    ├── mailer.js      gửi mã đăng nhập qua Resend (fallback: hiện mã trên màn hình)
    └── db.js          node:sqlite (WAL) + helper insert/update/all/one
    ▼
-/var/lib/flowgpt/{flowgpt.db, files/*}
+/var/lib/fbuddy/{fbuddy.db, files/*}
 ```
 
 ## 2. Vòng đời một lượt chat
@@ -99,7 +99,7 @@ Mọi skill trả cùng một hình dạng: `{ ok, summary, data, artifacts, mod
 
 1. `POST /api/auth/request-token` → giới hạn **3 lần/email/15 phút**; email lạ sẽ được tạo tài khoản nếu
    `autoCreateUserOnLogin` (email đầu tiên của hệ thống luôn là **admin**).
-2. Sinh **mã 6 số** + **magic link** (cùng hạn `loginTokenTtlMin`), lưu **HMAC-SHA256 có pepper** (`FLOWGPT_SECRET`)
+2. Sinh **mã 6 số** + **magic link** (cùng hạn `loginTokenTtlMin`), lưu **HMAC-SHA256 có pepper** (`FBUDDY_SECRET`)
    — mã mới **vô hiệu hoá** mọi mã cũ chưa dùng.
 3. Gửi qua Resend nếu có key; nếu chưa cấu hình và `showLoginCodeWhenNoMailer` bật thì trả mã về UI để vẫn dùng được.
 4. `POST /api/auth/verify-token` → sai 5 lần là khoá mã; thành công thì mã bị đánh dấu đã dùng (một lần), các mã
@@ -129,7 +129,7 @@ Voice là **hai nửa độc lập**, mỗi nửa chọn "trình duyệt" hoặc
 
 ## 8. Bảo mật
 
-- API key provider/MCP: AES-256-GCM, khoá dẫn xuất từ `FLOWGPT_SECRET`; API chỉ trả preview.
+- API key provider/MCP: AES-256-GCM, khoá dẫn xuất từ `FBUDDY_SECRET`; API chỉ trả preview.
 - Mật khẩu (đường dự phòng): scrypt (`N=16384`), salt riêng mỗi lần, `timingSafeEqual`.
 - JWT HS256 30 ngày, có `token_version` để thu hồi; cookie `httpOnly` + `Secure` khi `PUBLIC_URL` là https.
 - Rate limit theo IP/user: `/api/auth/*` 20/phút, `/api/chat/stream` 60/phút, upload 40/phút, mã đăng nhập 3/15 phút.

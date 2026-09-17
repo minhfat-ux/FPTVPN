@@ -17,10 +17,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [url = "https://flowgpt.meetflowai.site", outDir = "ops/ui-out-mobile", portArg] = process.argv.slice(2);
+const [url = "https://fbuddy.meetflowai.site", outDir = "ops/ui-out-mobile", portArg] = process.argv.slice(2);
 const PORT = Number(portArg ?? 9224);
 const API = `${url.replace(/\/+$/, "")}/api`;
-const EMAIL = `mobile-check+${Date.now()}@flowgpt.local`;
+const EMAIL = `mobile-check+${Date.now()}@fbuddy.local`;
 const PASSWORD = "matkhau12345";
 const UA_IPHONE =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
@@ -151,7 +151,7 @@ await send("Emulation.setUserAgentOverride", { userAgent: UA_IPHONE, platform: "
 await send("Page.navigate", { url });
 await sleep(4000);
 // Forget any promo snooze so the popup is always part of this check.
-await evaluate(`localStorage.setItem("flowgpt.token", ${JSON.stringify(token)}); localStorage.removeItem("flowgpt:promo:apps:v1");`);
+await evaluate(`localStorage.setItem("fbuddy.token", ${JSON.stringify(token)}); localStorage.removeItem("fbuddy:promo:apps:v1");`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.chat-shell, .composer'))", 30000, "khung chat");
 await sleep(2500);

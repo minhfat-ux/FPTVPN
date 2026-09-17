@@ -93,7 +93,7 @@ export const topup: Dict = {
     "Một lượt chat thường tốn khoảng 1.500 – 2.200 credit; hội thoại càng dài càng tốn vì ngữ cảnh được gửi lại mỗi lượt. Tệp đính kèm và yêu cầu dài cũng làm tăng số token vào.",
   "topup.guide.calc.signup": "Tài khoản mới được tặng {amount} credit ở lần đăng nhập đầu tiên.",
   "topup.guide.calc.noFree":
-    "FlowGpt không miễn phí: mỗi lượt trả lời đều trừ credit, hết số dư thì lượt chat tiếp theo sẽ dừng.",
+    "fBuddy không miễn phí: mỗi lượt trả lời đều trừ credit, hết số dư thì lượt chat tiếp theo sẽ dừng.",
   "topup.guide.calc.chip": "Số dư đang dùng hiển thị ở chip “Credit: …” phía trên bên phải.",
 
   "topup.guide.ways.title": "Cách xin thêm token hoặc mua thêm credit",

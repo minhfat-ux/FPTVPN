@@ -5,7 +5,7 @@
  */
 
 const REPLY = [
-  "Dạ em là **FlowGpt** (chế độ demo, chưa cấu hình API key).",
+  "Dạ em là **fBuddy** (chế độ demo, chưa cấu hình API key).",
   "",
   "Em vẫn chạy được đầy đủ luồng chat, gọi công cụ và trả tệp. Anh vào **Cài đặt → Nhà cung cấp AI** để thêm key thật (Gemini, OpenAI, DeepSeek, OpenRouter… hoặc endpoint OpenAI-compatible bất kỳ) là dùng được ngay.",
 ].join("\n");
@@ -37,17 +37,17 @@ function previousToolName(messages) {
 function demoArgs(name, context) {
   if (name === "generate_pptx") {
     return {
-      title: "FlowGpt — bản demo",
+      title: "fBuddy — bản demo",
       subtitle: "Slide tạo tự động bằng chế độ demo",
       slides: [
-        { title: "FlowGpt là gì?", bullets: ["Chatbox AI trên web", "Có skill tạo PPT, Excel, phân tích dữ liệu", "Hỗ trợ MCP"] },
+        { title: "fBuddy là gì?", bullets: ["Chatbox AI trên web", "Có skill tạo PPT, Excel, phân tích dữ liệu", "Hỗ trợ MCP"] },
         { title: "Bước tiếp theo", bullets: ["Thêm API key trong Cài đặt", "Chọn model", "Bắt đầu trò chuyện thật"] },
       ],
     };
   }
   if (name === "generate_xlsx") {
     return {
-      filename: "flowgpt-demo.xlsx",
+      filename: "fbuddy-demo.xlsx",
       sheets: [
         {
           name: "Demo",
@@ -125,7 +125,7 @@ export async function* streamChat({ messages, tools, toolMode, delayMs = 0 }) {
 }
 
 export async function listModels() {
-  return ["flowgpt-demo"];
+  return ["fbuddy-demo"];
 }
 
 export async function testConnection() {

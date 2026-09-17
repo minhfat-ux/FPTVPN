@@ -46,7 +46,7 @@ export const chat: Dict = {
 
   // ---- Kỹ năng mặc định (khi /api/skills chưa trả lời)
   "chat.skill.auto": "Tự động",
-  "chat.skill.autoHint": "Để FlowGpt tự chọn kỹ năng phù hợp",
+  "chat.skill.autoHint": "Để fBuddy tự chọn kỹ năng phù hợp",
   "chat.skill.image": "Ảnh",
   "chat.skill.imageHint": "Tạo và sửa ảnh bằng AI",
   "chat.skill.ppt": "PowerPoint",
@@ -58,7 +58,7 @@ export const chat: Dict = {
 
   // ---- SkillSelect: dropdown trong composer
   "chat.skillSelect.aria": "Kỹ năng: {name}",
-  "chat.skillSelect.autoHint": "Để FlowGpt tự chọn cách trả lời",
+  "chat.skillSelect.autoHint": "Để fBuddy tự chọn cách trả lời",
   "chat.skillSelect.listAria": "Chọn kỹ năng",
   "chat.skillSelect.autoDesc": "Không chọn kỹ năng cụ thể",
   "chat.skillSelect.empty": "Chưa có kỹ năng nào",

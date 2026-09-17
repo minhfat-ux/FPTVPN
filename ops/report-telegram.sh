@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-off status report for the FlowGpt build. Reads the bot token from the
+# One-off status report for the fBuddy build. Reads the bot token from the
 # existing tg-bot env file; the token is never printed.
 set -euo pipefail
 set -a
@@ -11,7 +11,7 @@ CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, 
 if [ -z "${CHAT:-}" ]; then echo "Không có chat id trong env"; exit 1; fi
 
 TEXT=$(cat <<'MSG'
-🚀 FlowGpt — báo cáo tiến độ (DSH Windows)
+🚀 fBuddy — báo cáo tiến độ (DSH Windows)
 
 ĐÃ XONG
 • Backend Node/Express + SQLite: chat streaming (SSE), tool-calling, artifact tải về
@@ -26,10 +26,10 @@ TEXT=$(cat <<'MSG'
 • Theme đã áp palette FlowTech Harness (navy #0A1F3B + green #33C773) và logo FlowTech
 
 CẦN ANH XÁC NHẬN
-• Thêm bản ghi DNS: A  flowgpt  →  165.101.114.162  (Cloudflare, Proxied) để Caddy xin được cert cho flowgpt.meetflowai.site
+• Thêm bản ghi DNS: A  fbuddy  →  165.101.114.162  (Cloudflare, Proxied) để Caddy xin được cert cho fbuddy.meetflowai.site
 
 TIẾP THEO
-• Build web → deploy node-2: systemd flowgpt (port 7790) + block Caddy flowgpt.meetflowai.site
+• Build web → deploy node-2: systemd fbuddy (port 7790) + block Caddy fbuddy.meetflowai.site
 • Sau đó: anh vào /settings dán API key (hoặc bật provider Demo để thử ngay) và kết nối Resend để gửi mã đăng nhập thật
 MSG
 )

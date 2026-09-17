@@ -62,7 +62,7 @@ export async function generatePptx(args, ctx) {
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_16x9";
-  pptx.author = "FlowGpt";
+  pptx.author = "fBuddy";
   pptx.company = "MeetFlow AI";
   pptx.title = deckTitle;
 
@@ -172,6 +172,6 @@ function safeName(name) {
       .replace(/[^\w\s.-]+/g, "")
       .trim()
       .replace(/\s+/g, "-")
-      .slice(0, 60) || "flowgpt-slides"
+      .slice(0, 60) || "fbuddy-slides"
   );
 }

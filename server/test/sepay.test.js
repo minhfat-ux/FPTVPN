@@ -10,7 +10,7 @@ const sepay = await import("../src/sepay.js");
 const SECRET = "spsk_test_secret_0123456789";
 const TX = {
   id: "tx_1",
-  transaction_content: "CT DEN: FLOWGPT123456 chuyen tien nap",
+  transaction_content: "CT DEN: FBUDDY123456 chuyen tien nap",
   amount_in: "200000",
   transfer_type: "in",
   transaction_date: "2026-09-17 17:05:00",
@@ -18,7 +18,7 @@ const TX = {
 
 const ORDER = {
   id: "o_1",
-  transferNote: "FLOWGPT123456",
+  transferNote: "FBUDDY123456",
   amountVnd: 200000,
   tokens: 10000,
   status: "pending",
@@ -65,7 +65,7 @@ test("giao dịch SePay được chuẩn hoá và khớp đúng đơn theo nội
   const tx = sepay.normalizeTransaction(TX);
   assert.equal(tx.amountIn, 200000);
   assert.equal(tx.transferType, "in");
-  assert.match(tx.content, /FLOWGPT123456/);
+  assert.match(tx.content, /FBUDDY123456/);
 
   const match = sepay.matchOrderForTransaction({ transaction: TX, orders: [ORDER] });
   assert.ok(match, "phải khớp đơn theo transferNote");
@@ -73,7 +73,7 @@ test("giao dịch SePay được chuẩn hoá và khớp đúng đơn theo nội
   assert.equal(match.exactAmount, true);
 
   // Nội dung viết thường / có khoảng trắng vẫn khớp.
-  const messy = { ...TX, transaction_content: "flowgpt 123456" };
+  const messy = { ...TX, transaction_content: "fbuddy 123456" };
   assert.ok(sepay.matchOrderForTransaction({ transaction: messy, orders: [ORDER] }));
 
   // Tiền ra thì bỏ qua.
@@ -86,7 +86,7 @@ test("giao dịch SePay được chuẩn hoá và khớp đúng đơn theo nội
   assert.ok(sepay.matchOrderForTransaction({ transaction: { ...TX, amount_in: "195000" }, orders: [ORDER] }));
   // Đơn của người khác (mã khác) không bị khớp.
   assert.equal(
-    sepay.matchOrderForTransaction({ transaction: TX, orders: [{ ...ORDER, transferNote: "FLOWGPT999999" }] }),
+    sepay.matchOrderForTransaction({ transaction: TX, orders: [{ ...ORDER, transferNote: "FBUDDY999999" }] }),
     null,
   );
 });
@@ -98,7 +98,7 @@ test("chế độ poll: giao dịch khớp đơn thì cộng credit thật, giao
   const settings = await import("../src/settings.js");
   settings.patchAppSettings({ signupCredits: 0, bankAccount: "57222538888", vndPerCredit: 20 });
 
-  const email = `sepay-poll-${Date.now()}@flowgpt.test`;
+  const email = `sepay-poll-${Date.now()}@fbuddy.test`;
   createUser({ email, password: "matkhau12345" });
   const user = (await import("../src/db.js")).all("users", "email = ?", [email])[0];
 

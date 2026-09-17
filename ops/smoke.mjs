@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * End-to-end smoke test against a running FlowGpt instance.
+ * End-to-end smoke test against a running fBuddy instance.
  *
  *   node ops/smoke.mjs                                  # http://127.0.0.1:7790/api
- *   node ops/smoke.mjs https://flowgpt.meetflowai.site/api
+ *   node ops/smoke.mjs https://fbuddy.meetflowai.site/api
  *
  * Exercises the real HTTP surface: passwordless login → provider setup → a chat
  * turn that runs a tool → downloading the produced .pptx and checking its bytes.
@@ -11,7 +11,7 @@
  */
 
 const BASE = (process.argv[2] ?? "http://127.0.0.1:7790/api").replace(/\/+$/, "");
-const EMAIL = process.env.SMOKE_EMAIL ?? `smoke+${Date.now()}@flowgpt.local`;
+const EMAIL = process.env.SMOKE_EMAIL ?? `smoke+${Date.now()}@fbuddy.local`;
 
 let step = 0;
 const ok = (message) => console.log(`  \u001b[32m✔\u001b[0m ${message}`);
@@ -47,7 +47,7 @@ async function json(method, path, body, token) {
   return { ok: true, status: response.status, data: parsed };
 }
 
-console.log(`FlowGpt smoke test → ${BASE}`);
+console.log(`fBuddy smoke test → ${BASE}`);
 
 // ---------------------------------------------------------------- 1. health
 title("Sức khoẻ dịch vụ");
@@ -113,7 +113,7 @@ title("Chat streaming + gọi công cụ (skill PPT)");
 const response = await fetch(`${BASE}/chat/stream`, {
   method: "POST",
   headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-  body: JSON.stringify({ content: "Làm slide 2 trang giới thiệu FlowGpt", skill: "ppt" }),
+  body: JSON.stringify({ content: "Làm slide 2 trang giới thiệu fBuddy", skill: "ppt" }),
 });
 if (!response.ok) fail(`chat/stream lỗi ${response.status}`);
 if (!response.body) fail("chat/stream không trả về stream");
@@ -173,4 +173,4 @@ const anon = await json("GET", "/conversations");
 if (anon.ok) fail("Không cần token vẫn đọc được hội thoại!");
 ok("Không có token → 401 (đúng)");
 
-console.log(`\n\u001b[32mTẤT CẢ BƯỚC ĐỀU ĐẠT\u001b[0m — FlowGpt ở ${BASE} hoạt động.\n`);
+console.log(`\n\u001b[32mTẤT CẢ BƯỚC ĐỀU ĐẠT\u001b[0m — fBuddy ở ${BASE} hoạt động.\n`);

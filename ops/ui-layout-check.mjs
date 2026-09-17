@@ -77,7 +77,7 @@ console.log("1. Đã vào app");
 // A single 200-char token is the worst case for a flex row with ellipsis.
 const uglyTitle = `Bao-cao-${"X".repeat(190)}`;
 const created = await evaluate(`(async () => {
-  const token = localStorage.getItem('flowgpt.token');
+  const token = localStorage.getItem('fbuddy.token');
   const res = await fetch('/api/conversations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -92,7 +92,7 @@ await sleep(300);
 // Reload the conversation list so the new row is rendered.
 await evaluate("window.dispatchEvent(new Event('focus'))");
 await evaluate(`(async () => {
-  const token = localStorage.getItem('flowgpt.token');
+  const token = localStorage.getItem('fbuddy.token');
   await fetch('/api/conversations', { headers: { Authorization: 'Bearer ' + token } });
   return true;
 })()`);

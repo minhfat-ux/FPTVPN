@@ -154,7 +154,7 @@ export function assertCanChat(user) {
       balance,
       message:
         `Tài khoản đã hết credit (số dư: ${balance}). ` +
-        `Nạp thêm tại ${settings.buyUrl} để tiếp tục dùng FlowGpt.`,
+        `Nạp thêm tại ${settings.buyUrl} để tiếp tục dùng fBuddy.`,
     };
   }
   return { allowed: true, balance };

@@ -10,7 +10,7 @@ CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, 
 [ -n "${CHAT:-}" ] || { echo "Không có chat id"; exit 1; }
 
 TEXT=$(cat <<'MSG'
-🤖 FlowGpt — đã chuyển mặc định sang GLM (Zhipu)
+🤖 fBuddy — đã chuyển mặc định sang GLM (Zhipu)
 
 TRẠNG THÁI HIỆN TẠI
 • Mặc định: GLM · glm-4-flash (đã test thật: 1,7s + streaming tiếng Việt OK)

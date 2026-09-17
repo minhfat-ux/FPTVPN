@@ -46,7 +46,7 @@ export const chat: Dict = {
 
   // ---- Default skills (while /api/skills has not answered)
   "chat.skill.auto": "Auto",
-  "chat.skill.autoHint": "Let FlowGpt pick the right skill",
+  "chat.skill.autoHint": "Let fBuddy pick the right skill",
   "chat.skill.image": "Image",
   "chat.skill.imageHint": "Create and edit images with AI",
   "chat.skill.ppt": "PowerPoint",
@@ -58,7 +58,7 @@ export const chat: Dict = {
 
   // ---- SkillSelect: dropdown in the composer
   "chat.skillSelect.aria": "Skill: {name}",
-  "chat.skillSelect.autoHint": "Let FlowGpt choose how to answer",
+  "chat.skillSelect.autoHint": "Let fBuddy choose how to answer",
   "chat.skillSelect.listAria": "Choose a skill",
   "chat.skillSelect.autoDesc": "Do not pick a specific skill",
   "chat.skillSelect.empty": "No skills yet",

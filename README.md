@@ -1,4 +1,4 @@
-# FlowGpt — `flowgpt.meetflowai.site`
+# fBuddy — `fbuddy.meetflowai.site`
 
 Web AI chatbox kiểu ChatGPT/ChatFPT cho hệ MeetFlow AI: chat streaming có tool-calling, **bốn skill chạy thật**
 (sửa ảnh, tạo PowerPoint, tạo Excel, phân tích dữ liệu), **nói chuyện bằng giọng nói** (dictation, đọc câu trả lời,
@@ -7,13 +7,17 @@ chế độ rảnh tay có barge-in) và **cấu hình nhà cung cấp AI + MCP 
 > Đăng nhập hiện tại: **mã dùng một lần gửi qua email** (passwordless, có magic link). SSO Firebase/Facebook
 > đã chừa sẵn chỗ và sẽ bật sau. Đăng ký bằng email + mật khẩu không dùng nữa (vẫn giữ làm đường dự phòng cho admin).
 
+> **Đã đổi tên FlowGpt → fBuddy và đã migrate production (2026-09-18).** Domain mới
+> `fbuddy.meetflowai.site` đang chạy; domain cũ vẫn được Caddy reverse-proxy vào cùng ứng dụng
+> nên link và webhook cũ không chết. Nhật ký migrate + cách rollback: [`docs/RENAME-FBUDDY.md`](docs/RENAME-FBUDDY.md).
+
 ## Trạng thái production
 
 | | |
 |---|---|
-| URL | **https://flowgpt.meetflowai.site** |
-| Máy chủ | node-2 `165.101.114.162` — systemd `flowgpt`, cổng nội bộ `127.0.0.1:7790`, Caddy làm TLS |
-| Dữ liệu | `/var/lib/flowgpt` (SQLite + tệp + artifact) · cấu hình `/etc/flowgpt/flowgpt.env` (600) |
+| URL | **https://fbuddy.meetflowai.site** |
+| Máy chủ | node-2 `165.101.114.162` — systemd `fbuddy`, cổng nội bộ `127.0.0.1:7790`, Caddy làm TLS |
+| Dữ liệu | `/var/lib/fbuddy` (SQLite + tệp + artifact) · cấu hình `/etc/fbuddy/fbuddy.env` (600) |
 | Model mặc định | **OpenRouter** `google/gemini-2.5-flash` (key mã hoá AES-256-GCM). DeepSeek vẫn bật làm dự phòng. Đổi mặc định bằng nút **Đặt mặc định** trong Cài đặt → Nhà cung cấp AI |
 | Kỹ năng | Dropdown **top 10** trong ô chat (danh sách theo từng người dùng) + nút **Thêm kỹ năng** mở chợ kỹ năng: 5 kỹ năng đang chạy + 4 mục “Sắp có” (MCP, tài liệu, dịch, kỹ năng riêng của công ty) |
 | Giọng nói | **Miễn phí bằng trình duyệt** (Web Speech + SpeechSynthesis). Trên **Microsoft Edge** có sẵn giọng tiếng Việt natural **Hoài My / Nam Minh**. Muốn chất lượng đồng nhất mọi máy thì trỏ STT/TTS sang một provider (Gemini/Groq free tier) trong **Cài đặt → Giọng nói** |
@@ -27,7 +31,7 @@ model mặc định, email & đăng nhập, thống kê), *Người dùng*.
 
 
 ```
-flowgpt/
+fbuddy/
 ├── server/           Node 22+ (Express 5, ESM, node:sqlite) — API + agent + skills + MCP client
 ├── web/              React 18 + Vite + TypeScript — UI tiếng Việt, theme FlowTech
 ├── deploy/           systemd unit, Caddy block, script deploy lên node-2, script DNS Cloudflare
@@ -38,7 +42,7 @@ flowgpt/
 ## Chạy ở máy (dev)
 
 ```powershell
-cd "C:\Users\Minhn\FlowTech AI\flowgpt"
+cd "C:\Users\Minhn\FlowTech AI\fbuddy"
 npm install                      # đã cài sẵn; nếu chạy lại nhớ --ignore-scripts nếu sandbox chặn spawn
 npm run dev:server               # API ở http://127.0.0.1:7790
 npm run dev:web                  # UI ở http://localhost:5173 (proxy /api → 7790)
@@ -61,8 +65,8 @@ Sau khi vào được:
 ```powershell
 node --test "server/test/*.test.js"     # 133 ca: auth, provider (+OpenRouter/GLM), MCP, chat SSE, skill, credit, topup, chợ kỹ năng, voice, phân quyền, rate limit
 node ops/smoke.mjs http://127.0.0.1:7790/api            # smoke end-to-end (local)
-node ops/smoke.mjs https://flowgpt.meetflowai.site/api  # smoke qua domain công khai
-node ops/credit-explain-check.mjs                       # hỏi chính FlowGpt về credit và kiểm tra câu trả lời
+node ops/smoke.mjs https://fbuddy.meetflowai.site/api  # smoke qua domain công khai
+node ops/credit-explain-check.mjs                       # hỏi chính fBuddy về credit và kiểm tra câu trả lời
 node ops/ui-i18n-check.mjs                              # đổi VI/EN/ZH trong trình duyệt thật + chụp ảnh
 ```
 
@@ -92,14 +96,14 @@ GLM-4-Flash)** + system prompt (~120 token) + lịch sử tối đa 24 message. 
 `server/src/agent.js`) nên trả lời đúng khi được hỏi về credit thay vì nói "miễn phí".
 
 Người dùng có 3 đường lấy thêm: **Xin thêm token** (menu tài khoản → gửi yêu cầu → admin duyệt qua Telegram),
-**Mua thêm token** (trang nạp credit `?view=topup`, VietQR + đơn có mã `FLOWGPT######`), và **Chợ kỹ năng**
+**Mua thêm token** (trang nạp credit `?view=topup`, VietQR + đơn có mã `FBUDDY######`), và **Chợ kỹ năng**
 (`?view=hub`) để mua prompt-pack bằng credit. Chi tiết: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) §8–§10.
 
 ## Đa ngôn ngữ
 
 Ba locale `vi` (gốc) · `en` · `zh`, namespace `common|auth|shell|chat|settings|studio|voice|hub|topup` trong
 `web/src/i18n/locales/`. Dùng `const { t, n, d } = useI18n();` — số qua `n()`, ngày qua `d()`, không hardcode
-`vi-VN`. Ngôn ngữ lưu ở `localStorage["flowgpt.locale"]`, ép bằng `?lang=`, đổi trong menu tài khoản
+`vi-VN`. Ngôn ngữ lưu ở `localStorage["fbuddy.locale"]`, ép bằng `?lang=`, đổi trong menu tài khoản
 (`LocaleSwitcher`) hoặc Cài đặt → Hệ thống.
 
 
@@ -114,8 +118,8 @@ Ba locale `vi` (gốc) · `en` · `zh`, namespace `common|auth|shell|chat|settin
   secret khi trả về UI.
 - **Skill** (`server/src/skills/*`): `generate_pptx` (pptxgenjs), `generate_xlsx` (exceljs),
   `analyze_data` (parser CSV/Excel + thống kê + chart spec), `edit_image` (provider có model ảnh).
-- **Dữ liệu**: SQLite (`node:sqlite`) tại `FLOWGPT_DATA_DIR`; tệp và artifact nằm ngoài webroot, tải qua
-  endpoint có kiểm tra chủ sở hữu; API key provider/MCP mã hoá AES-256-GCM bằng `FLOWGPT_SECRET`.
+- **Dữ liệu**: SQLite (`node:sqlite`) tại `FBUDDY_DATA_DIR`; tệp và artifact nằm ngoài webroot, tải qua
+  endpoint có kiểm tra chủ sở hữu; API key provider/MCP mã hoá AES-256-GCM bằng `FBUDDY_SECRET`.
 
 Chi tiết: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · hợp đồng API: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) ·
 triển khai: [`docs/DEPLOY.md`](docs/DEPLOY.md).

@@ -17,8 +17,8 @@
 
 import fs from "node:fs";
 
-const BASE = (process.argv[2] ?? "https://flowgpt.meetflowai.site/api").replace(/\/+$/, "");
-const EMAIL = `skills-check+${Date.now()}@flowgpt.local`;
+const BASE = (process.argv[2] ?? "https://fbuddy.meetflowai.site/api").replace(/\/+$/, "");
+const EMAIL = `skills-check+${Date.now()}@fbuddy.local`;
 const PASSWORD = "matkhau12345";
 
 let failures = 0;
@@ -122,13 +122,13 @@ function report(name, outcome, detail) {
 // ---------------------------------------------------------------- the account
 const registered = await json("POST", "/auth/register", { email: EMAIL, password: PASSWORD });
 const token = registered.token;
-console.log(`FlowGpt — kiểm tra toàn bộ skill → ${BASE}`);
+console.log(`fBuddy — kiểm tra toàn bộ skill → ${BASE}`);
 console.log(`tài khoản test: ${EMAIL}\n`);
 
 // A full sweep burns ~20k credit and an account only gets the sign-up grant, so an
 // admin token (env) tops it up — otherwise the later cases fail on the credit gate
 // instead of on the skill.
-const adminToken = process.env.FLOWGPT_ADMIN_TOKEN ?? null;
+const adminToken = process.env.FBUDDY_ADMIN_TOKEN ?? null;
 if (adminToken) {
   try {
     await json("POST", "/admin/credits", { email: EMAIL, amount: 200000, note: "skills-check" }, adminToken);
@@ -137,7 +137,7 @@ if (adminToken) {
     info(`không cấp được credit qua admin token: ${err.message}`);
   }
 } else {
-  info("không có FLOWGPT_ADMIN_TOKEN → các ca sau có thể hết credit giữa chừng");
+  info("không có FBUDDY_ADMIN_TOKEN → các ca sau có thể hết credit giữa chừng");
 }
 
 const before = await json("GET", "/credits", undefined, token);
@@ -171,7 +171,7 @@ async function planThenCreate(token, { content, skill, attachments = [], convers
 console.log("\n2. Skill Làm PPT (đề xuất dàn ý → xác nhận → generate_pptx)");
 try {
   const { plan, created } = await planThenCreate(token, {
-    content: "Làm slide 3 trang giới thiệu FlowGpt: tính năng, lợi ích, cách bắt đầu.",
+    content: "Làm slide 3 trang giới thiệu fBuddy: tính năng, lợi ích, cách bắt đầu.",
     skill: "ppt",
   });
   const pptx = (created?.artifacts ?? []).find((a) => String(a.name).endsWith(".pptx"));

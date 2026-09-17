@@ -13,8 +13,8 @@ export const voice: Dict = {
   "voice.mode.stateSpeaking": "Speaking…",
   "voice.mode.stateError": "Error",
   "voice.mode.hintIdle": "Tap the microphone to keep talking.",
-  "voice.mode.hintListening": "Speak naturally — FlowGpt answers as soon as it finishes listening.",
-  "voice.mode.hintThinking": "FlowGpt is working on your question.",
+  "voice.mode.hintListening": "Speak naturally — fBuddy answers as soon as it finishes listening.",
+  "voice.mode.hintThinking": "fBuddy is working on your question.",
   "voice.mode.hintSpeaking": "Speak over it to interrupt and ask a follow-up.",
   "voice.mode.hintError": "Check the microphone or the configuration in Settings → Voice.",
   "voice.mode.mutedState": "Microphone off",
@@ -31,7 +31,7 @@ export const voice: Dict = {
   "voice.mode.suggestionRole": "Suggestion",
   "voice.mode.suggestionText": "Try saying: “Hello, what can you help me with?”",
   "voice.mode.roleUser": "You",
-  "voice.mode.roleAssistant": "FlowGpt",
+  "voice.mode.roleAssistant": "fBuddy",
 
   // ---- Engine line
   "voice.engine.label": "Recognition: {kind} · Voice: {voice}",

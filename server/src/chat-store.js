@@ -89,7 +89,7 @@ export function deleteConversation(id) {
 
 // ------------------------------------------------- last opened per ACCOUNT
 //
-// Kept per user, not per session: opening FlowGpt on another device has to land
+// Kept per user, not per session: opening fBuddy on another device has to land
 // on the conversation the user was just working on (see docs §13).
 
 export function setLastConversationId(userId, conversationId) {

@@ -19,7 +19,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = pathToFileURL(path.join(HERE, "..", "server", "src")).href;
 
 const BASE = (process.argv[2] ?? "http://127.0.0.1:7790/api").replace(/\/+$/, "");
-const PROMPT = process.argv[3] ?? "Làm slide 2 trang giới thiệu FlowGpt, nội dung ngắn gọn.";
+const PROMPT = process.argv[3] ?? "Làm slide 2 trang giới thiệu fBuddy, nội dung ngắn gọn.";
 
 const { initDb, db } = await import(`${SERVER}/db.js`);
 initDb();
@@ -30,7 +30,7 @@ const { config } = await import(`${SERVER}/config.js`);
 const picked = settings.resolveProviderForChat({});
 console.log(`Provider mặc định: ${picked.provider.name} · ${picked.model}`);
 
-const email = `verify+${Date.now()}@flowgpt.local`;
+const email = `verify+${Date.now()}@fbuddy.local`;
 const user = createUser({ email, password: crypto.randomBytes(24).toString("base64url") });
 const token = issueToken(user);
 console.log(`Tài khoản tạm: ${email}`);

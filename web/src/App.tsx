@@ -91,7 +91,7 @@ export function App() {
       <div className="auth-page">
         <div className="row gap-2">
           <span className="spinner" />
-          <span className="muted">{t("shell.loadingApp", { app: meta?.appName ?? "FlowGpt" })}</span>
+          <span className="muted">{t("shell.loadingApp", { app: meta?.appName ?? "fBuddy" })}</span>
         </div>
       </div>
     );

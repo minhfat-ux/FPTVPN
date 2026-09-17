@@ -53,7 +53,7 @@ const BUNDLES: Record<LocaleId, Dict> = {
   zh: { ...commonZh, ...authZh, ...shellZh, ...chatZh, ...settingsZh, ...studioZh, ...voiceZh, ...hubZh, ...topupZh },
 };
 
-const STORAGE_KEY = "flowgpt.locale";
+const STORAGE_KEY = "fbuddy.locale";
 
 export function localeMeta(locale: LocaleId) {
   return LOCALES.find((entry) => entry.id === locale) ?? LOCALES[0];

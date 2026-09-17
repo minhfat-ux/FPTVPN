@@ -1,4 +1,4 @@
-# Bàn giao — FlowGpt (`flowgpt.meetflowai.site`)
+# Bàn giao — fBuddy (`fbuddy.meetflowai.site`)
 
 Ngày: 2026-09-17 · Harness: DSH Windows · Trạng thái: **ĐANG CHẠY production**
 
@@ -21,7 +21,7 @@ Ngày: 2026-09-17 · Harness: DSH Windows · Trạng thái: **ĐANG CHẠY produ
 | UI | Nút **“Đặt mặc định”** ở từng nhà cung cấp + banner “Mặc định … chưa có API key” |
 
 > ⚠️ **Key OpenRouter đã được dán trong khung chat** để cấu hình. Key hiện lưu **mã hoá AES-256-GCM** trong
-> `/var/lib/flowgpt/flowgpt.db` và không nằm trong repo/log. Nếu đoạn chat này được chia sẻ, nên **xoay key**
+> `/var/lib/fbuddy/fbuddy.db` và không nằm trong repo/log. Nếu đoạn chat này được chia sẻ, nên **xoay key**
 > trên openrouter.ai rồi dán lại vào Cài đặt → Nhà cung cấp AI.
 
 ### 9.2 Nói chuyện bằng giọng nói (mặc định: miễn phí)
@@ -120,7 +120,7 @@ Cộng thêm lịch sử hội thoại (tối đa 24 message) nên hội thoại
 
 ### 11.2 Trợ lý đã biết giải thích credit
 
-Lỗi cũ: system prompt **không hề nhắc tới credit** nên khi được hỏi, trợ lý trả lời kiểu “FlowGpt miễn phí”.
+Lỗi cũ: system prompt **không hề nhắc tới credit** nên khi được hỏi, trợ lý trả lời kiểu “fBuddy miễn phí”.
 Nay `buildCreditKnowledge(user)` (`server/src/agent.js`) chèn vào **mỗi lượt** một khối gồm: công thức trừ credit,
 mức tặng khi đăng nhập, **số dư / đã dùng / trung bình mỗi lượt / số lượt còn lại của chính user đó**, và
 hướng dẫn 2 đường nạp kèm đúng nhãn nút trên UI (“Xin thêm token” trong menu tài khoản → gửi yêu cầu chờ duyệt;
@@ -131,7 +131,7 @@ Một câu trong chỉ dẫn kỹ năng Sửa ảnh cũng đã sửa: “Image S
 
 - **Xin thêm token**: menu tài khoản → “Xin thêm token” → gửi yêu cầu → Telegram của anh có 2 nút duyệt (link ký HMAC,
   idempotent). Mỗi user chỉ có 1 yêu cầu `pending`.
-- **Nạp credit**: trang riêng `?view=topup` — gói VND (mặc định 3 gói), tạo đơn có mã `FLOWGPT######`, ảnh VietQR,
+- **Nạp credit**: trang riêng `?view=topup` — gói VND (mặc định 3 gói), tạo đơn có mã `FBUDDY######`, ảnh VietQR,
   user bấm “đã chuyển khoản” → anh xác nhận bằng link ký (30 ngày) → credit vào tài khoản 1 lần duy nhất.
   ⚠️ **Cần anh cấp `bankAccount` + `bankAccountName`** thì ảnh VietQR mới hiện.
 - **Chợ kỹ năng**: mua prompt-pack bằng credit (6 skill thật + 1 coming soon), mua xong tự cài vào dropdown
@@ -158,9 +158,9 @@ Một câu trong chỉ dẫn kỹ năng Sửa ảnh cũng đã sửa: “Image S
 
 | Script | Việc |
 |---|---|
-| `ops/credit-explain-check.mjs` | Tạo tài khoản mới rồi **hỏi chính FlowGpt** về credit; assert câu trả lời có công thức, mức tặng, cách xin/mua; so số dư với `token vào + ra`. Chạy: `node ops/credit-explain-check.mjs` |
+| `ops/credit-explain-check.mjs` | Tạo tài khoản mới rồi **hỏi chính fBuddy** về credit; assert câu trả lời có công thức, mức tặng, cách xin/mua; so số dư với `token vào + ra`. Chạy: `node ops/credit-explain-check.mjs` |
 | `ops/ui-i18n-check.mjs` | Mở trình duyệt thật (CDP 9224), đăng nhập tài khoản tạm, đổi VI→EN→ZH, chụp ảnh từng ngôn ngữ, kiểm tra `html lang`, copy có đổi thật không và menu tài khoản có `LocaleSwitcher` |
-| `ops/ui-hub-check.mjs` | Chợ kỹ năng trên Chrome thật: bảng admin có quy đổi VND, **form Sửa nạp sẵn đúng chỉ dẫn từ server**, giá khớp API, trang chợ phía người dùng hiện giá mới. Chạy: `node ops/ui-hub-check.mjs https://flowgpt.meetflowai.site ops/ui-out-hub 9224 <adminToken>` |
+| `ops/ui-hub-check.mjs` | Chợ kỹ năng trên Chrome thật: bảng admin có quy đổi VND, **form Sửa nạp sẵn đúng chỉ dẫn từ server**, giá khớp API, trang chợ phía người dùng hiện giá mới. Chạy: `node ops/ui-hub-check.mjs https://fbuddy.meetflowai.site ops/ui-out-hub 9224 <adminToken>` |
 | `ops/prune-test-users.mjs` | Dọn tài khoản tạm (`credit-explain+%`, `i18n-ui+%`) **và** mọi dòng chúng sở hữu; mặc định chỉ xem trước, thêm `--apply` mới xoá |
 | `ops/report-telegram-credit.sh` | Báo cáo Telegram đợt credit (đã gửi, message_id 201) |
 
@@ -168,9 +168,9 @@ Một câu trong chỉ dẫn kỹ năng Sửa ảnh cũng đã sửa: “Image S
 
 ## 1. Tóm tắt
 
-Đã dựng và triển khai **FlowGpt** — web AI chatbox tiếng Việt (kiểu ChatGPT/ChatFPT) tại
-**https://flowgpt.meetflowai.site**, chạy trên **node-2** (`165.101.114.162`) sau Caddy, dưới systemd unit `flowgpt`
-(port nội bộ 7790), dữ liệu ở `/var/lib/flowgpt`.
+Đã dựng và triển khai **fBuddy** — web AI chatbox tiếng Việt (kiểu ChatGPT/ChatFPT) tại
+**https://fbuddy.meetflowai.site**, chạy trên **node-2** (`165.101.114.162`) sau Caddy, dưới systemd unit `fbuddy`
+(port nội bộ 7790), dữ liệu ở `/var/lib/fbuddy`.
 
 Có: chat streaming + tool-calling; 4 skill chạy thật (sửa ảnh, PPT, Excel, phân tích dữ liệu); cấu hình
 **nhà cung cấp AI** + **MCP server** từ backend; đăng nhập passwordless bằng mã gửi email; theme + logo FlowTech.
@@ -181,7 +181,7 @@ Mặc định hiện tại: **DeepSeek `deepseek-chat`** (key của chủ dự �
 | Việc | Lệnh | Kết quả thật |
 |---|---|---|
 | Bộ test tự động | `node --test "server/test/*.test.js"` | **64 pass / 0 fail** — gồm ca tạo `.pptx`/`.xlsx` byte thật (magic `PK`), MCP CRUD, phân quyền, rate limit, login bằng mã |
-| Smoke qua domain công khai | `node ops/smoke.mjs https://flowgpt.meetflowai.site/api` | **ĐẠT HẾT 7 bước** (login → provider → chat → tool → tải pptx 55.392 byte `PK`) |
+| Smoke qua domain công khai | `node ops/smoke.mjs https://fbuddy.meetflowai.site/api` | **ĐẠT HẾT 7 bước** (login → provider → chat → tool → tải pptx 55.392 byte `PK`) |
 | Smoke với model thật | `node ops/smoke.mjs http://127.0.0.1:7790/api` (DeepSeek) | 195 sự kiện SSE; DeepSeek tự gọi `generate_pptx`; tệp **58.074 byte**, tải về hợp lệ |
 | DeepSeek trên production | `ops/configure-deepseek.mjs` | Test 834ms + streaming thật trả lời tiếng Việt; key đã lưu mã hoá, file key tạm đã xoá |
 | UI trong trình duyệt (CDP) | `node ops/ui-check.mjs` / `ui-login-check.mjs` / `ui-chat-check.mjs` | Login bằng mã OK; chat render tool card + **thẻ tải tệp 54.1 KB**; Studio 4 tab + canvas; Settings 4 tab + modal provider; **0 exception, 0 console error** |
@@ -197,7 +197,7 @@ Mặc định hiện tại: **DeepSeek `deepseek-chat`** (key của chủ dự �
 | Skill | `server/src/skills/*` | `pptx.js` (pptxgenjs), `xlsx.js` (exceljs), `data.js` (parser + thống kê + chart spec), `image.js`, `index.js` |
 | Test | `server/test/*.test.js` | 5 file, 64 ca (crypto, util, data, settings, e2e, auth-token) |
 | Web | `web/src/**` | `App.tsx`, `main.tsx`, `styles.css` (palette FlowTech), `types.ts`, `api/client.ts`, `state/{store,chat}.tsx`, `auth/LoginPage.tsx`, `components/{ui,Sidebar,Chart}.tsx`, `chat/**`, `settings/**`, `studio/**` |
-| Deploy | `deploy/*` | `flowgpt.service`, `flowgpt.env.example`, `remote-setup.sh`, `deploy.ps1`, `dns-cloudflare.sh` |
+| Deploy | `deploy/*` | `fbuddy.service`, `fbuddy.env.example`, `remote-setup.sh`, `deploy.ps1`, `dns-cloudflare.sh` |
 | Vận hành | `ops/*` | `probe-node2.sh`, `probe-keys.sh`, `check-deploy.sh`, `finish-deploy.sh`, `fix-deps.sh`, `reinstall-deps.sh`, `reset-data.sh`, `enable-mailer.sh`, `diagnose-login.sh`, `check-owner-account.sh`, `check-dns-records.sh`, `caddy-issue-cert.sh`, `smoke.mjs`, `configure-deepseek.mjs`, `ui-check.mjs`, `ui-login-check.mjs`, `ui-chat-check.mjs`, `ui-settings-shot.mjs`, `report-telegram.sh` |
 | Tài liệu | `README.md`, `docs/API_CONTRACT.md`, `docs/ARCHITECTURE.md`, `docs/DEPLOY.md`, `docs/HANDOVER.md` | Hợp đồng API là nguồn sự thật cho FE/BE |
 
@@ -219,10 +219,10 @@ Mặc định hiện tại: **DeepSeek `deepseek-chat`** (key của chủ dự �
 
 | Thành phần | Giá trị |
 |---|---|
-| Service | `flowgpt.service` (systemd, `MemoryMax=600M`, `ProtectSystem=full`, chỉ ghi `/var/lib/flowgpt`) |
-| Cổng | `127.0.0.1:7790` → Caddy block `flowgpt.meetflowai.site` (cert Let's Encrypt đã cấp, hết hạn tự gia hạn) |
-| DNS | Cloudflare `A flowgpt → 165.101.114.162` (Proxied) |
-| Secret | `/etc/flowgpt/flowgpt.env` (600) — `FLOWGPT_SECRET` sinh tự động, **đổi là mất mọi API key đã lưu** |
+| Service | `fbuddy.service` (systemd, `MemoryMax=600M`, `ProtectSystem=full`, chỉ ghi `/var/lib/fbuddy`) |
+| Cổng | `127.0.0.1:7790` → Caddy block `fbuddy.meetflowai.site` (cert Let's Encrypt đã cấp, hết hạn tự gia hạn) |
+| DNS | Cloudflare `A fbuddy → 165.101.114.162` (Proxied) |
+| Secret | `/etc/fbuddy/fbuddy.env` (600) — `FBUDDY_SECRET` sinh tự động, **đổi là mất mọi API key đã lưu** |
 | Email | Dùng **Resend**, key lấy từ drop-in sẵn có của `flowvpn-cp` (không in ra), gửi từ `no-reply@meetflowai.site` |
 | LLM mặc định | **DeepSeek** `deepseek-chat` (key chủ dự án, mã hoá trong DB; provider demo đã tắt) |
 | Tài khoản | `minhnb2@fpt.com` = **admin** (email đăng nhập đầu tiên); `minhnb2@me.com` = user |
@@ -238,7 +238,7 @@ Mặc định hiện tại: **DeepSeek `deepseek-chat`** (key của chủ dự �
 4. **Bundle web 1.1 MB (317 KB gzip)**: chưa tách chunk (recharts + highlight.js chiếm phần lớn). Tối ưu sau.
 5. **Smoke test tạo tài khoản test** trên instance nó chạy vào. Nếu chạy trên production mới cài thì tài khoản đó
    thành admin — dùng `ops/reset-data.sh` để dọn (đã dọn 2 lần trong quá trình này).
-6. **Vấn đề có sẵn của hạ tầng, KHÔNG do FlowGpt**:
+6. **Vấn đề có sẵn của hạ tầng, KHÔNG do fBuddy**:
    - `dhs.meetflowai.site` và `dhs-win.meetflowai.site` **không có bản ghi DNS** trong zone `meetflowai.site`
      (Caddy vẫn cấu hình 2 host này nên log ACME báo NXDOMAIN liên tục).
    - `meetflowai.site/` trả 404 vì `/var/www/flowvpn` **không có `index.html`** (site chỉ có `/buy`, `/open`,

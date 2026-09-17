@@ -243,15 +243,15 @@ export function nextUsableProvider({ excludeId = null, providerId = null, model 
 
 /**
  * Public name for a model. Users should never see the vendor's model id — the
- * product is FlowGpt — while admins keep the real id for configuration.
+ * product is fBuddy — while admins keep the real id for configuration.
  */
 export function publicModelLabel(model, kind = null, aliases = null) {
   const map = aliases ?? getAppSettings().modelAliases ?? {};
   const raw = String(model ?? "");
   if (map[raw]) return map[raw];
-  // GLM family: glm-4.5-air → FlowGPT-4.5-Air (also covers future glm-* models).
+  // GLM family: glm-4.5-air → fBuddy-4.5-Air (also covers future glm-* models).
   if (kind === "glm" || /^glm-/i.test(raw)) {
-    return `FlowGPT-${raw.replace(/^glm-?/i, "")}`;
+    return `fBuddy-${raw.replace(/^glm-?/i, "")}`;
   }
   return raw;
 }
@@ -272,7 +272,7 @@ export function listModelsForUi() {
         providerName: row.name,
         kind: row.kind,
         model,
-        /** What the picker shows users: a FlowGpt brand name, never the vendor id. */
+        /** What the picker shows users: a fBuddy brand name, never the vendor id. */
         label: publicModelLabel(model, row.kind, aliases),
         isDefault: row.id === settings.defaultProviderId && (settings.defaultModel ?? row.default_model) === model,
         hasKey: ready,

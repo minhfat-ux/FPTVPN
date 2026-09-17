@@ -1,5 +1,5 @@
 /* ============================================================================
-   FlowGpt — popup quảng cáo ứng dụng (VPNFlow + MeetFlow AI)
+   fBuddy — popup quảng cáo ứng dụng (VPNFlow + MeetFlow AI)
    Trả lời "mọi người thấy link cài đặt": hiện 1 lần khi vào trang, có "Để sau"
    (1 ngày) và "Không hiện lại nữa".
 
@@ -10,7 +10,7 @@
 (function () {
   "use strict";
 
-  var STORE_KEY = "flowgpt:promo:apps:v1";
+  var STORE_KEY = "fbuddy:promo:apps:v1";
   var SNOOZE_MS = 24 * 60 * 60 * 1000;
   var DELAY_MS = 1400;
 
@@ -25,7 +25,7 @@
 
   function readToken() {
     try {
-      return localStorage.getItem("flowgpt.token");
+      return localStorage.getItem("fbuddy.token");
     } catch (err) {
       return null;
     }
@@ -45,7 +45,7 @@
           var soon = Math.max(1, Number(promo.reminderMinutes) || 5) * 60 * 1000;
           var later = Math.max(1, Number(promo.creditSnoozeMinutes) || 1440) * 60 * 1000;
           snoozeMs = hasCredit ? later : soon;
-          window.__flowgptPromoSnooze = { soon: soon, later: later };
+          window.__fbuddyPromoSnooze = { soon: soon, later: later };
         })
         .catch(function () {
           /* offline: giữ mốc mặc định */
@@ -62,7 +62,7 @@
           .then(function (data) {
             var credits = data && data.credits;
             hasCredit = Boolean(credits && credits.enabled && credits.balance > 0);
-            var bounds = window.__flowgptPromoSnooze;
+            var bounds = window.__fbuddyPromoSnooze;
             if (bounds) snoozeMs = hasCredit ? bounds.later : bounds.soon;
           })
           .catch(function () {

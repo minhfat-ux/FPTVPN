@@ -190,7 +190,7 @@ export function Sidebar({
               <img src="/brand-mark.png" alt="FlowTech" />
             </span>
             <span className="brand-text">
-              <span className="brand-word">{meta?.appName ?? "FlowGpt"}</span>
+              <span className="brand-word">{meta?.appName ?? "fBuddy"}</span>
               <small>{t("shell.brandTagline")}</small>
             </span>
           </div>

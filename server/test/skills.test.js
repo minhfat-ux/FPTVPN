@@ -45,7 +45,7 @@ test("isKnownSkill accepts built-ins plus auto and rejects the rest", () => {
 });
 
 test("a user with no rows gets everything ready, in catalogue order", () => {
-  const { user } = userFor("skills-default@flowgpt.test");
+  const { user } = userFor("skills-default@fbuddy.test");
   assert.deepEqual(installed.listInstalledSkillIds(user.id), ["chat", "image", "ppt", "excel", "data"]);
   assert.deepEqual(
     installed.listInstalledSkills(user.id).map((s) => s.label),
@@ -54,7 +54,7 @@ test("a user with no rows gets everything ready, in catalogue order", () => {
 });
 
 test("setting the list replaces it and keeps the order the user chose", () => {
-  const { user } = userFor("skills-set@flowgpt.test");
+  const { user } = userFor("skills-set@fbuddy.test");
   const saved = installed.setInstalledSkills(user.id, ["ppt", "data", "chat"]);
   assert.deepEqual(saved, ["ppt", "data", "chat"]);
   assert.deepEqual(
@@ -67,7 +67,7 @@ test("setting the list replaces it and keeps the order the user chose", () => {
 });
 
 test("the fast list is capped at ten and always keeps at least one skill", () => {
-  const { user } = userFor("skills-cap@flowgpt.test");
+  const { user } = userFor("skills-cap@fbuddy.test");
   assert.throws(
     () => installed.setInstalledSkills(user.id, Array.from({ length: 11 }, (_, i) => `s${i}`)),
     /Không có kỹ năng nào tên/,
@@ -77,13 +77,13 @@ test("the fast list is capped at ten and always keeps at least one skill", () =>
 });
 
 test("coming-soon skills cannot be installed yet, with a clear reason", () => {
-  const { user } = userFor("skills-soon@flowgpt.test");
+  const { user } = userFor("skills-soon@fbuddy.test");
   assert.throws(() => installed.setInstalledSkills(user.id, ["mcp_skill"]), /chợ kỹ năng/);
   assert.throws(() => installed.installSkill(user.id, "translate"), /chợ kỹ năng/);
 });
 
 test("install/uninstall behave like the marketplace buttons will", () => {
-  const { user } = userFor("skills-toggle@flowgpt.test");
+  const { user } = userFor("skills-toggle@fbuddy.test");
   installed.resetUserSkills(user.id);
   assert.deepEqual(installed.installSkill(user.id, "data"), ["chat", "image", "ppt", "excel", "data"]);
   assert.deepEqual(installed.uninstallSkill(user.id, "image"), ["chat", "ppt", "excel", "data"]);
@@ -94,7 +94,7 @@ test("install/uninstall behave like the marketplace buttons will", () => {
 });
 
 test("GET /api/skills returns the user's list plus the catalogue", async () => {
-  const { token } = userFor("skills-api@flowgpt.test");
+  const { token } = userFor("skills-api@fbuddy.test");
   const result = await api("GET", "/skills", undefined, token);
   assert.deepEqual(result.installed, ["chat", "image", "ppt", "excel", "data"]);
   assert.deepEqual(result.items.map((s) => s.id), result.installed);
@@ -104,7 +104,7 @@ test("GET /api/skills returns the user's list plus the catalogue", async () => {
 });
 
 test("PUT /api/skills/installed saves the user's choice and rejects bad input", async () => {
-  const { token } = userFor("skills-put@flowgpt.test");
+  const { token } = userFor("skills-put@fbuddy.test");
   const saved = await api("PUT", "/skills/installed", { ids: ["data", "ppt"] }, token);
   assert.deepEqual(saved.installed, ["data", "ppt"]);
   assert.deepEqual(saved.items.map((s) => s.id), ["data", "ppt"]);
@@ -122,8 +122,8 @@ test("PUT /api/skills/installed saves the user's choice and rejects bad input", 
 });
 
 test("skill choices are per user", async () => {
-  const a = userFor("skills-a@flowgpt.test");
-  const b = userFor("skills-b@flowgpt.test");
+  const a = userFor("skills-a@fbuddy.test");
+  const b = userFor("skills-b@fbuddy.test");
   await api("PUT", "/skills/installed", { ids: ["excel"] }, a.token);
   const other = await api("GET", "/skills", undefined, b.token);
   assert.deepEqual(other.installed, ["chat", "image", "ppt", "excel", "data"]);
@@ -132,9 +132,9 @@ test("skill choices are per user", async () => {
 test("the chat route accepts a catalogue skill and falls back for an unknown one", async () => {
   const settings = await import("../src/settings.js");
   if (!settings.listProviders().length) {
-    settings.createProvider({ name: "Demo", kind: "mock", models: ["flowgpt-demo"] });
+    settings.createProvider({ name: "Demo", kind: "mock", models: ["fbuddy-demo"] });
   }
-  const { token } = userFor("skills-chat@flowgpt.test");
+  const { token } = userFor("skills-chat@fbuddy.test");
   const { baseUrl } = await bootServer();
 
   const run = async (skill) => {

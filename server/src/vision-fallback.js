@@ -53,7 +53,7 @@ export async function applyVisionFallback({
   }
 
   channel?.send("notice", {
-    message: `Model đang chọn không xem được ảnh nên FlowGpt đang đọc ảnh bằng ${target.provider.name}…`,
+    message: `Model đang chọn không xem được ảnh nên fBuddy đang đọc ảnh bằng ${target.provider.name}…`,
   });
 
   let read = 0;
@@ -73,7 +73,7 @@ export async function applyVisionFallback({
           read += 1;
         }
       } catch (err) {
-        console.warn("[flowgpt] đọc ảnh thất bại:", err?.message ?? err);
+        console.warn("[fbuddy] đọc ảnh thất bại:", err?.message ?? err);
       }
     }
     message.images = [];

@@ -25,11 +25,11 @@ function userFor(email, role = "user", { credits: initial = 0 } = {}) {
 }
 
 test("a request is stored, signed links are produced and tampering is rejected", () => {
-  const { user } = userFor("req-sign@flowgpt.test");
+  const { user } = userFor("req-sign@fbuddy.test");
   const request = requests.createCreditRequest({ user, amount: 10000, note: "hết token rồi ạ" });
   assert.equal(request.status, "pending");
   assert.equal(request.amount, 10000);
-  assert.equal(request.email, "req-sign@flowgpt.test");
+  assert.equal(request.email, "req-sign@fbuddy.test");
   assert.equal(request.note, "hết token rồi ạ");
 
   const links = requests.decisionLinks(request.id);
@@ -45,14 +45,14 @@ test("a request is stored, signed links are produced and tampering is rejected",
 
   const telegram = requests.buildTelegramPayload(request);
   assert.match(telegram.text, /xin thêm token/i);
-  assert.match(telegram.text, /req-sign@flowgpt\.test/);
+  assert.match(telegram.text, /req-sign@fbuddy\.test/);
   assert.match(telegram.text, /10\.000/);
   assert.equal(telegram.reply_markup.inline_keyboard[0].length, 2);
   assert.match(telegram.reply_markup.inline_keyboard[0][0].url, /action=approve/);
 });
 
 test("only one pending request per user; a second one is refused with the existing one", () => {
-  const { user } = userFor("req-dup@flowgpt.test");
+  const { user } = userFor("req-dup@fbuddy.test");
   const first = requests.createCreditRequest({ user, amount: 5000 });
   assert.equal(requests.pendingRequestFor(user.id).id, first.id);
   assert.throws(() => requests.createCreditRequest({ user, amount: 9000 }), /đang chờ duyệt/);
@@ -63,7 +63,7 @@ test("only one pending request per user; a second one is refused with the existi
 });
 
 test("approving grants the tokens and rejecting leaves the balance alone", () => {
-  const { user } = userFor("req-decide@flowgpt.test", "user", { credits: 100 });
+  const { user } = userFor("req-decide@fbuddy.test", "user", { credits: 100 });
   const approve = requests.createCreditRequest({ user, amount: 700 });
   const result = requests.decideCreditRequest({ requestId: approve.id, approve: true, decidedBy: "telegram" });
   assert.equal(result.request.status, "approved");
@@ -86,7 +86,7 @@ test("approving grants the tokens and rejecting leaves the balance alone", () =>
 });
 
 test("the owner can approve with a different amount", () => {
-  const { user } = userFor("req-amount@flowgpt.test", "user", { credits: 10 });
+  const { user } = userFor("req-amount@fbuddy.test", "user", { credits: 10 });
   const request = requests.createCreditRequest({ user, amount: 100000 });
   const result = requests.decideCreditRequest({ requestId: request.id, approve: true, amount: 25000 });
   assert.equal(result.request.grantedAmount, 25000);
@@ -94,7 +94,7 @@ test("the owner can approve with a different amount", () => {
 });
 
 test("invalid amounts are refused", () => {
-  const { user } = userFor("req-invalid@flowgpt.test");
+  const { user } = userFor("req-invalid@fbuddy.test");
   assert.throws(() => requests.createCreditRequest({ user, amount: 0 }), /lớn hơn 0/);
   assert.throws(() => requests.createCreditRequest({ user, amount: -5 }), /lớn hơn 0/);
   assert.throws(() => requests.createCreditRequest({ user, amount: 99_000_000 }), /tối đa/);
@@ -102,14 +102,14 @@ test("invalid amounts are refused", () => {
 });
 
 test("the API lets a user ask and the owner approve (Telegram not configured in tests)", async () => {
-  const { token, user } = userFor("req-api@flowgpt.test");
-  const admin = userFor("req-admin@flowgpt.test", "admin");
+  const { token, user } = userFor("req-api@fbuddy.test");
+  const admin = userFor("req-admin@fbuddy.test", "admin");
 
   // No bot token in the test env → the request is still stored, and we say so.
   const created = await api("POST", "/credits/request", { amount: 10000, note: "cần thêm để làm slide" }, token);
   assert.equal(created.request.status, "pending");
   assert.equal(created.telegram.sent, false);
-  assert.match(created.telegram.message, /FLOWGPT_TELEGRAM/);
+  assert.match(created.telegram.message, /FBUDDY_TELEGRAM/);
 
   const again = await apiRaw("POST", "/credits/request", { amount: 10000 }, token);
   assert.equal(again.status, 409);
@@ -121,7 +121,7 @@ test("the API lets a user ask and the owner approve (Telegram not configured in 
   const pending = await api("GET", "/admin/credit-requests?status=pending", undefined, admin.token);
   const ours = pending.items.find((item) => item.id === created.request.id);
   assert.ok(ours, "yêu cầu phải nằm trong danh sách chờ duyệt");
-  assert.equal(ours.email, "req-api@flowgpt.test");
+  assert.equal(ours.email, "req-api@fbuddy.test");
 
   // A normal user cannot list or decide.
   assert.equal((await apiRaw("GET", "/admin/credit-requests", undefined, token)).status, 403);
@@ -142,10 +142,10 @@ test("the API lets a user ask and the owner approve (Telegram not configured in 
 });
 
 test("the signed Telegram link approves without a session and shows a page", async () => {
-  const { user } = userFor("req-link@flowgpt.test");
+  const { user } = userFor("req-link@fbuddy.test");
   const request = requests.createCreditRequest({ user, amount: 12000 });
   const links = requests.decisionLinks(request.id);
-  // In production these point at FLOWGPT_PUBLIC_URL; the test server listens on a
+  // In production these point at FBUDDY_PUBLIC_URL; the test server listens on a
   // random port, so keep the signed path and swap only the origin.
   assert.match(links.approve, /\/api\/credits\/requests\/[^/]+\/decide\?action=approve&t=/);
   const { baseUrl } = await bootServer();

@@ -20,12 +20,12 @@ export async function downloadCanvas(
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${fileName.replace(/\.[^.]+$/, "") || "flowgpt"}-${Date.now()}.${format === "jpeg" ? "jpg" : format}`;
+  link.download = `${fileName.replace(/\.[^.]+$/, "") || "fbuddy"}-${Date.now()}.${format === "jpeg" ? "jpg" : format}`;
   link.click();
   URL.revokeObjectURL(url);
 }
 
-/** Lưu canvas thành artifact trong FlowGpt và trả về thông tin tệp đã lưu. */
+/** Lưu canvas thành artifact trong fBuddy và trả về thông tin tệp đã lưu. */
 export async function uploadCanvas(canvas: HTMLCanvasElement, conversationId: string | null): Promise<SavedFile> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("Không đọc được ảnh từ canvas");

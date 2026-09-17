@@ -77,7 +77,7 @@ await waitFor("Boolean(document.querySelector('.composer textarea'))", 30000, "c
 
 console.log("1. Chuẩn bị provider Demo qua API trong trang");
 const provider = await evaluate(`(async () => {
-  const token = localStorage.getItem('flowgpt.token');
+  const token = localStorage.getItem('fbuddy.token');
   const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
   const list = await (await fetch('/api/settings/providers', { headers })).json();
   const enabled = (list.items || []).find((p) => p.enabled);
@@ -106,7 +106,7 @@ await sleep(500);
 await evaluate(`(() => {
   const ta = document.querySelector('.composer textarea');
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-  setter.call(ta, 'Làm slide 3 trang giới thiệu FlowGpt cho khách hàng');
+  setter.call(ta, 'Làm slide 3 trang giới thiệu fBuddy cho khách hàng');
   ta.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
 })()`);

@@ -70,19 +70,19 @@ test("the VietQR image is only offered when a bank account is configured", () =>
   assert.equal(topup.vietQrUrl({ amountVnd: 50000, note: "X", bank: { bankId: "970436", account: "", accountName: "" } }), null);
   const url = topup.vietQrUrl({
     amountVnd: 50000,
-    note: "FLOWGPT123456",
+    note: "FBUDDY123456",
     bank: { bankId: "970436", account: "123456789", accountName: "NGUYEN VAN A" },
   });
   assert.match(url, /^https:\/\/img\.vietqr\.io\/image\/970436-123456789-compact2\.png\?/);
   assert.match(url, /amount=50000/);
-  assert.match(url, /addInfo=FLOWGPT123456/);
+  assert.match(url, /addInfo=FBUDDY123456/);
 });
 
 test("creating an order makes a unique transfer note and reuses the unpaid one", () => {
-  const { user } = userFor("topup-create@flowgpt.test");
+  const { user } = userFor("topup-create@fbuddy.test");
   const first = topup.createTopupOrder({ user, packageId: "starter" });
   assert.equal(first.reused, false);
-  assert.match(first.order.transferNote, /^FLOWGPT\d{6}$/);
+  assert.match(first.order.transferNote, /^FBUDDY\d{6}$/);
   assert.equal(first.order.status, "pending");
   assert.equal(first.order.tokens > 0, true);
 
@@ -100,7 +100,7 @@ test("creating an order makes a unique transfer note and reuses the unpaid one",
 });
 
 test("confirming an order grants the tokens exactly once", () => {
-  const { user } = userFor("topup-confirm@flowgpt.test");
+  const { user } = userFor("topup-confirm@fbuddy.test");
   const { order } = topup.createTopupOrder({ user, packageId: "starter" });
   const tokens = order.tokens;
 
@@ -120,7 +120,7 @@ test("confirming an order grants the tokens exactly once", () => {
 });
 
 test("the owner can confirm with a custom token amount", () => {
-  const { user } = userFor("topup-custom@flowgpt.test");
+  const { user } = userFor("topup-custom@fbuddy.test");
   const { order } = topup.createTopupOrder({ user, packageId: "starter" });
   const result = topup.confirmTopupOrder({ orderId: order.id, tokens: 777 });
   assert.equal(result.order.tokens, 777);
@@ -128,13 +128,13 @@ test("the owner can confirm with a custom token amount", () => {
 });
 
 test("a user can mark an order transferred and cancel an unpaid one", async () => {
-  const { user } = userFor("topup-state@flowgpt.test");
+  const { user } = userFor("topup-state@fbuddy.test");
   const { order } = topup.createTopupOrder({ user, packageId: "starter" });
   const moved = await topup.markTopupAsTransferred({ user, orderId: order.id, bankTxnRef: "FT123" });
   assert.equal(moved.order.status, "awaiting_confirmation");
   assert.equal(moved.order.bankTxnRef, undefined); // không lộ ra API công khai
   assert.equal(moved.telegram.sent, false, "chưa cấu hình bot trong test");
-  assert.match(moved.telegram.message, /FLOWGPT_TELEGRAM/);
+  assert.match(moved.telegram.message, /FBUDDY_TELEGRAM/);
 
   const cancelled = topup.cancelTopupOrder({ orderId: order.id, userId: user.id });
   assert.equal(cancelled.status, "cancelled");
@@ -146,7 +146,7 @@ test("a user can mark an order transferred and cancel an unpaid one", async () =
 });
 
 test("the confirm token is signed and rejects tampering", () => {
-  const { user } = userFor("topup-token@flowgpt.test");
+  const { user } = userFor("topup-token@fbuddy.test");
   const { order } = topup.createTopupOrder({ user, packageId: "starter" });
   const url = topup.topupConfirmLink(order.id);
   assert.match(url, /\/api\/topup\/orders\/[^/]+\/confirm\?t=/);
@@ -159,8 +159,8 @@ test("the confirm token is signed and rejects tampering", () => {
 });
 
 test("the top-up API exposes packages, orders and the admin confirmation", async () => {
-  const { token, user } = userFor("topup-api@flowgpt.test");
-  const admin = userFor("topup-admin@flowgpt.test", "admin");
+  const { token, user } = userFor("topup-api@fbuddy.test");
+  const admin = userFor("topup-admin@fbuddy.test", "admin");
 
   const listing = await api("GET", "/topup", undefined, token);
   assert.ok(listing.packages.length >= 3);
@@ -169,7 +169,7 @@ test("the top-up API exposes packages, orders and the admin confirmation", async
 
   const created = await api("POST", "/topup/orders", { packageId: "starter" }, token);
   assert.equal(created.order.status, "pending");
-  assert.match(created.order.transferNote, /^FLOWGPT/);
+  assert.match(created.order.transferNote, /^FBUDDY/);
 
   const transferred = await api(
     "POST",

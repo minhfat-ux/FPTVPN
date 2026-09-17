@@ -28,12 +28,12 @@ import type {
 } from "../types";
 
 /**
- * Thin, typed wrapper over the FlowGpt API (see docs/API_CONTRACT.md).
+ * Thin, typed wrapper over the fBuddy API (see docs/API_CONTRACT.md).
  * The token is kept in localStorage and also sent as a Bearer header so the
  * app works both behind the cookie and in the Vite dev server.
  */
 
-const TOKEN_KEY = "flowgpt.token";
+const TOKEN_KEY = "fbuddy.token";
 const BASE = "/api";
 
 export class ApiError extends Error {

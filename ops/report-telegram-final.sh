@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FlowGpt status report to the project Telegram channel.
+# fBuddy status report to the project Telegram channel.
 # Reads the bot token from the existing tg-bot env file; the token is never printed.
 set -euo pipefail
 set -a
@@ -11,7 +11,7 @@ CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, 
 if [ -z "${CHAT:-}" ]; then echo "Không có chat id trong env"; exit 1; fi
 
 TEXT=$(cat <<'MSG'
-✅ FlowGpt — ĐÃ LÊN PRODUCTION: https://flowgpt.meetflowai.site
+✅ fBuddy — ĐÃ LÊN PRODUCTION: https://fbuddy.meetflowai.site
 
 ĐANG CHẠY
 • Model mặc định: DeepSeek (deepseek-chat) — đã test thật: trả lời 834ms, streaming tiếng Việt OK
@@ -37,11 +37,11 @@ CÒN LẠI
 • SSO Firebase/Facebook: chừa sẵn chỗ, sẽ bật sau
 • Nên thử tay Image Studio và một MCP server http/sse thật
 
-LƯU Ý HẠ TẦNG (có sẵn, không do FlowGpt)
+LƯU Ý HẠ TẦNG (có sẵn, không do fBuddy)
 • dhs.meetflowai.site và dhs-win.meetflowai.site KHÔNG có bản ghi DNS
 • meetflowai.site/ trả 404 vì thiếu index.html trong /var/www/flowvpn
 
-Chi tiết: flowgpt/docs/HANDOVER.md
+Chi tiết: fbuddy/docs/HANDOVER.md
 MSG
 )
 

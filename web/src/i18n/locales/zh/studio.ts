@@ -3,9 +3,9 @@ import type { Dict } from "../../types";
 /** 本命名空间的中文翻译。 */
 export const studio: Dict = {
   // ---- Studio 框架
-  "studio.title": "FlowGpt 工作室",
+  "studio.title": "fBuddy 工作室",
   "studio.intro":
-    "无需输入聊天指令，直接使用四项技能：在画布上修图、制作 PowerPoint 幻灯片、创建 Excel 表格、分析数据。AI 生成的成果（图片、PPTX、XLSX）会立即出现在工具中并保存到 FlowGpt。",
+    "无需输入聊天指令，直接使用四项技能：在画布上修图、制作 PowerPoint 幻灯片、创建 Excel 表格、分析数据。AI 生成的成果（图片、PPTX、XLSX）会立即出现在工具中并保存到 fBuddy。",
   "studio.tab.image": "修图",
   "studio.tab.ppt": "做 PPT",
   "studio.tab.excel": "做 Excel",
@@ -51,7 +51,7 @@ export const studio: Dict = {
   "studio.image.needTextPos": "点击图片以选择文字位置",
   "studio.image.textAdded": "已添加文字到图片",
   "studio.image.exportFailed": "无法以该格式导出图片",
-  "studio.image.savedToFlowGpt": "图片已保存到 FlowGpt",
+  "studio.image.savedTofBuddy": "图片已保存到 fBuddy",
   "studio.image.saveFailed": "无法保存图片",
   "studio.image.textDefault": "内容",
 
@@ -102,7 +102,7 @@ export const studio: Dict = {
   "studio.image.shape.color": "线条颜色",
   "studio.image.shape.hint": "在图片上拖动鼠标以绘制图形。",
   "studio.image.export.title": "导出图片",
-  "studio.image.export.save": "保存到 FlowGpt",
+  "studio.image.export.save": "保存到 fBuddy",
   "studio.image.export.quality": "压缩质量：{percent}%",
   "studio.image.export.saved": "已保存",
 
@@ -173,11 +173,11 @@ export const studio: Dict = {
   "studio.ppt.noteLine": "备注：{note}",
   "studio.ppt.noSlides": "还没有幻灯片。",
   "studio.ppt.instruction": "请根据以下 JSON 大纲生成 PowerPoint 文件，保持内容不变：",
-  "studio.ppt.defaultTitle": "FlowGpt 产品介绍幻灯片",
+  "studio.ppt.defaultTitle": "fBuddy 产品介绍幻灯片",
   "studio.ppt.defaultSubtitle": "面向越南企业的多技能 AI 助手",
 
   // ---- 幻灯片示例大纲
-  "studio.ppt.sample1.title": "FlowGpt — 面向越南企业的 AI 助手",
+  "studio.ppt.sample1.title": "fBuddy — 面向越南企业的 AI 助手",
   "studio.ppt.sample1.subtitle": "产品介绍报告",
   "studio.ppt.sample1.bullets": "多技能 AI 聊天平台\n自然支持越南语\n本地部署，数据安全",
   "studio.ppt.sample1.notes": "开头引用数据：70% 的重复请求可以自动化。",
@@ -234,7 +234,7 @@ export const studio: Dict = {
   "studio.excel.generatingHint": "处理中：AI 正在构建表格并设置文件格式，请稍候。",
   "studio.excel.files": "已生成的文件",
   "studio.excel.instruction": "请根据以下 JSON 数据生成 Excel 文件，保持内容不变：",
-  "studio.excel.defaultFileName": "flowgpt-报告",
+  "studio.excel.defaultFileName": "fbuddy-报告",
   "studio.excel.sampleFileName": "营收报告",
   "studio.excel.fallbackFileName": "表格",
   "studio.excel.sampleSheet": "营收",

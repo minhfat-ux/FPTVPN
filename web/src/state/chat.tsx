@@ -99,7 +99,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setMessages(result.messages);
         setPendingArtifacts([]);
         // Tell the backend this is the account's current thread, so opening
-        // FlowGpt on another device lands here too.
+        // fBuddy on another device lands here too.
         setLastConversationId(result.conversation.id);
         void api.activateConversation(result.conversation.id).catch(() => undefined);
       } catch (err) {
@@ -399,7 +399,7 @@ export function reduceTurn(turn: StreamingTurn, event: ChatEvent): StreamingTurn
       // The credit badge / profile modal listen for this and update instantly.
       if (event.data.credits && typeof window !== "undefined") {
         window.dispatchEvent(
-          new CustomEvent("flowgpt:credits", {
+          new CustomEvent("fbuddy:credits", {
             detail: { balance: event.data.credits.balance, cost: event.data.credits.cost },
           }),
         );

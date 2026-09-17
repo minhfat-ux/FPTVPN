@@ -94,7 +94,7 @@ export const topup: Dict = {
     "A typical chat turn costs about 1,500 – 2,200 credit; the longer the conversation, the more it costs because the context is re-sent every turn. Attachments and long requests also add input tokens.",
   "topup.guide.calc.signup": "A new account is granted {amount} credit on its first sign-in.",
   "topup.guide.calc.noFree":
-    "FlowGpt is not free: every answer charges credit, and when the balance runs out the next turn stops.",
+    "fBuddy is not free: every answer charges credit, and when the balance runs out the next turn stops.",
   "topup.guide.calc.chip": "The balance in use is shown in the “Credit: …” chip at the top right.",
 
   "topup.guide.ways.title": "How to ask for more tokens or buy more credit",

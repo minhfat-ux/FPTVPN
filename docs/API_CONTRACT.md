@@ -1,13 +1,13 @@
-# FlowGpt — API contract (nguồn sự thật cho FE/BE)
+# fBuddy — API contract (nguồn sự thật cho FE/BE)
 
 > Mọi thay đổi API phải sửa file này trước. Web (`web/`) và server (`server/`) đều bám theo đây.
-> Base: `https://flowgpt.meetflowai.site` (dev: web Vite proxy `/api` → `http://127.0.0.1:7790`).
+> Base: `https://fbuddy.meetflowai.site` (dev: web Vite proxy `/api` → `http://127.0.0.1:7790`).
 
 ## 0. Quy ước chung
 
 - Tất cả endpoint dưới `/api`. JSON vào/ra (`Content-Type: application/json`) trừ upload multipart.
 - Thời gian: ISO-8601 UTC string. ID: string (uuid v4).
-- Auth: JWT HS256. Client gửi `Authorization: Bearer <token>` **hoặc** cookie `flowgpt_token` (httpOnly).
+- Auth: JWT HS256. Client gửi `Authorization: Bearer <token>` **hoặc** cookie `fbuddy_token` (httpOnly).
   - Login/register trả `{ user, token }`; client lưu token (localStorage) và cũng nhận cookie.
 - Lỗi: HTTP status + body:
   ```json
@@ -138,7 +138,7 @@ Giới hạn upload: `app.maxUploadMb` (mặc định 25). Chỉ nhận: `image/
 ```json
 { "systemPrompt": "…", "defaultProviderId": "p_…", "defaultModel": "…",
   "defaultSkill": "auto", "maxToolIterations": 6, "maxUploadMb": 25,
-  "allowSignup": true, "appName": "FlowGpt", "imageModel": "…" }
+  "allowSignup": true, "appName": "fBuddy", "imageModel": "…" }
 ```
 
 ### 5.2 Providers (LLM) — `/api/settings/providers`
@@ -257,21 +257,49 @@ chat miễn phí.
 `buildCreditKnowledge(user)` trong `server/src/agent.js` chèn một khối vào system prompt **mỗi lượt**: công thức trừ
 credit, `signupCredits`, số dư/đã dùng/trung bình mỗi lượt của chính user, và hướng dẫn 2 đường nạp (“Xin thêm token”
 trong menu tài khoản, “Mua thêm token” → trang nạp credit). Nhờ vậy trợ lý trả lời đúng khi được hỏi về credit thay vì
-nói “FlowGpt miễn phí”. Tắt `creditsEnabled` thì khối này biến mất.
+nói “fBuddy miễn phí”. Tắt `creditsEnabled` thì khối này biến mất.
 
 ## 9. Nạp credit (`/api/topup`)
 
 | Method | Path | Việc |
 |---|---|---|
 | `GET` | `/api/topup` | gói đang bán + đơn gần đây của user + thông tin ngân hàng |
-| `POST` | `/api/topup/orders` | `{ packageId }` → đơn `pending` kèm mã `FLOWGPT######` và URL ảnh VietQR |
-| `POST` | `/api/topup/orders/:id/confirm` | user báo “đã chuyển khoản” → `awaiting_confirmation` + Telegram cho admin |
-| `GET` | `/api/topup/confirm?token=…` | admin xác nhận qua link có chữ ký (30 ngày) → `paid` + cộng credit |
-| `GET` | `/api/admin/topup` · `PATCH /api/admin/topup/orders/:id` | admin xem/đổi trạng thái đơn |
+| `POST` | `/api/topup/orders` | `{ packageId }` → đơn `pending` kèm mã `FBUDDY######` và URL ảnh VietQR |
+| `POST` | `/api/topup/orders/:id/transferred` | user báo “đã chuyển khoản” → `awaiting_confirmation` + Telegram cho admin |
+| `POST` | `/api/topup/orders/:id/cancel` | user huỷ đơn của mình |
+| `GET` | `/api/topup/orders/:id/confirm?t=…` | admin xác nhận qua link có chữ ký (30 ngày) → `paid` + cộng credit |
+| `GET` | `/api/admin/topup-orders` | admin xem đơn (lọc `?status=`) |
+| `POST` | `/api/admin/topup-orders/:id/confirm` | admin xác nhận thủ công |
+| `POST` | `/api/topup/sepay` | **SePay gọi vào** (webhook) — xem §9.1 |
+| `GET` | `/api/admin/sepay/status` | admin: bật/chế độ/đã có credential chưa/đơn đang chờ/vòng poll gần nhất |
+| `POST` | `/api/admin/sepay/poll` | admin: chạy một vòng poll ngay (cần API token) |
 
 Trạng thái đơn: `pending` → `awaiting_confirmation` → `paid` (hoặc `cancelled`). Credit chỉ được ghi **một lần**
 (`reason = topup_paid`) nên bấm lại link không cộng thêm. Cài đặt: `topupPackages`, `bankId`, `bankAccount`,
 `bankAccountName`, `bankNotePrefix`.
+
+### 9.1 SePay — tự động xác nhận nạp tiền
+
+Hai đường, chọn bằng `sepayMode`:
+
+- **`webhook`** — SePay POST về `/api/topup/sepay`. Xác thực bằng HMAC-SHA256
+  (`X-SePay-Signature: sha256=…` + `X-SePay-Timestamp`, chuỗi ký = `{timestamp}.{raw_body}`, lệch quá 300 giây bị
+  từ chối) **hoặc** `Authorization: Apikey <webhook secret>`. Route nhận **nguyên văn thân request**
+  (`index.js` gắn `express.raw` cho đúng path này trước `express.json`) vì chữ ký tính trên bytes gốc — proxy sửa body
+  là chữ ký hỏng. Đã xác thực thì luôn trả **200**, kể cả khi không khớp đơn nào (tiền vào vì việc khác), để SePay
+  không gửi lại vô ích; `403` khi `sepayEnabled = false`, `401` khi chữ ký sai, `400` khi thân không phải JSON.
+- **`poll`** — server tự gọi API giao dịch của SePay mỗi `sepayPollSeconds` (mặc định 60, kẹp 30–3600). Poller trong
+  `index.js` đọc lại cài đặt **mỗi vòng** nên bật/tắt hay đổi chu kỳ có hiệu lực ngay, không cần restart; chỉ chạy khi
+  đã bật, đang ở chế độ `poll` và đã có API token. Lỗi mạng chỉ ghi log rồi thử lại vòng sau.
+
+Credit chỉ được cộng qua `confirmTopupOrder` (đã idempotent) nên webhook gửi lại hay poll trùng đều **không** cộng hai
+lần. Khớp đơn theo mã chuyển khoản trong nội dung, và số tiền phải ≥ 80% giá đơn (ngân hàng trừ phí vẫn nhận, nhưng
+không khớp nhầm giao dịch nhỏ hơn).
+
+Cài đặt: `sepayEnabled`, `sepayMode`, `sepayPollSeconds`, `sepayApiToken` (chế độ poll), `sepayWebhookSecret`
+(webhook). Hai secret lưu **mã hoá AES-256-GCM**; API chỉ trả bản che (`hasSepayApiToken`, `sepayApiTokenPreview`,
+`hasSepayWebhookSecret`, `sepayWebhookSecretPreview`). Kiểm chứng thật: `ops/sepay-e2e-check.mjs`.
+
 
 ## 10. Chợ kỹ năng (Skill Hub)
 
@@ -298,7 +326,7 @@ Trạng thái đơn: `pending` → `awaiting_confirmation` → `paid` (hoặc `c
 
 `web/src/i18n/` — khoá dạng `namespace.key`, ba locale `vi` (gốc) · `en` · `zh`, namespace
 `common|auth|shell|chat|settings|studio|voice|hub|topup`. `useI18n()` cho `t()`, `n()` (số), `d()` (ngày);
-thiếu khoá ⇒ lùi về tiếng Việt rồi in ra chính khoá. Ngôn ngữ lưu ở `localStorage["flowgpt.locale"]`, ép bằng `?lang=`.
+thiếu khoá ⇒ lùi về tiếng Việt rồi in ra chính khoá. Ngôn ngữ lưu ở `localStorage["fbuddy.locale"]`, ép bằng `?lang=`.
 
 ## 8. Voice (nói chuyện bằng giọng nói)
 
@@ -332,7 +360,7 @@ Cài đặt voice nằm trong `app_settings`: `voiceSttProviderId`, `voiceSttMod
 
 ## 12. Bảo mật
 
-- API key provider/MCP lưu **mã hoá AES-256-GCM** (khoá từ `FLOWGPT_SECRET`); không bao giờ trả lại nguyên văn.
+- API key provider/MCP lưu **mã hoá AES-256-GCM** (khoá từ `FBUDDY_SECRET`); không bao giờ trả lại nguyên văn.
 - Rate limit: 60 request/phút/user cho `/api/chat/stream`, 20/phút cho `/api/auth/*` (theo IP).
 - Tệp lưu ngoài webroot; tải qua endpoint có kiểm tra chủ sở hữu.
-- CORS: chỉ cho phép `FLOWGPT_PUBLIC_URL` + `http://localhost:5173` (dev).
+- CORS: chỉ cho phép `FBUDDY_PUBLIC_URL` + `http://localhost:5173` (dev).

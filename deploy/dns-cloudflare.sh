@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates the Cloudflare DNS record for flowgpt.meetflowai.site (proxied A → node-2).
+# Creates the Cloudflare DNS record for fbuddy.meetflowai.site (proxied A → node-2).
 #
 # The Cloudflare token already lives on node-2 in the flowvpn control-plane
 # drop-in; this script reads it there and never prints it.
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ZONE_NAME="meetflowai.site"
-RECORD_NAME="flowgpt"
+RECORD_NAME="fbuddy"
 TARGET_IP="165.101.114.162"
 APPLY="false"
 [ "${1:-}" = "--apply" ] && APPLY="true"
@@ -46,7 +46,7 @@ EXISTING=$(api GET "/zones/$ZONE_ID/dns_records?name=$RECORD_NAME.$ZONE_NAME")
 echo "bản ghi hiện tại: $(echo "$EXISTING" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps([{"id":r["id"],"type":r["type"],"content":r["content"],"proxied":r["proxied"]} for r in d.get("result",[])]))')"
 
 RECORD_ID=$(echo "$EXISTING" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["result"][0]["id"] if d.get("result") else "")')
-PAYLOAD="{\"type\":\"A\",\"name\":\"$RECORD_NAME\",\"content\":\"$TARGET_IP\",\"proxied\":true,\"ttl\":1,\"comment\":\"FlowGpt web app\"}"
+PAYLOAD="{\"type\":\"A\",\"name\":\"$RECORD_NAME\",\"content\":\"$TARGET_IP\",\"proxied\":true,\"ttl\":1,\"comment\":\"fBuddy web app\"}"
 
 if [ "$APPLY" != "true" ]; then
   echo

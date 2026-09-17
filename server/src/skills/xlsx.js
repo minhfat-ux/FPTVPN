@@ -66,7 +66,7 @@ export async function generateXlsx(args, ctx) {
   }
   const prepared = normalizeSheets(args?.sheets);
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "FlowGpt";
+  workbook.creator = "fBuddy";
   workbook.created = new Date();
 
   let totalRows = 0;
@@ -127,7 +127,7 @@ export async function generateXlsx(args, ctx) {
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
-  const name = String(args?.filename ?? "flowgpt-data").replace(/\.xlsx?$/i, "");
+  const name = String(args?.filename ?? "fbuddy-data").replace(/\.xlsx?$/i, "");
   const row = await saveBuffer({
     userId: ctx.userId,
     conversationId: ctx.conversationId,
@@ -173,6 +173,6 @@ function safeName(name) {
       .replace(/[^\w\s.-]+/g, "")
       .trim()
       .replace(/\s+/g, "-")
-      .slice(0, 60) || "flowgpt-data"
+      .slice(0, 60) || "fbuddy-data"
   );
 }

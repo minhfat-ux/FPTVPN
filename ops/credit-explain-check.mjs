@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 /**
- * Asks FlowGpt itself how credits work, on a throwaway account.
+ * Asks fBuddy itself how credits work, on a throwaway account.
  *
  *   node ops/credit-explain-check.mjs                                    # production
  *   node ops/credit-explain-check.mjs http://127.0.0.1:7790/api
  *
  * Registers a fresh account (which receives the sign-up grant), asks a credit
  * question, prints the streamed answer and the ledger movement. This is the
- * regression guard for "the assistant says FlowGpt is free": the answer must
+ * regression guard for "the assistant says fBuddy is free": the answer must
  * mention the formula and how to get more tokens.
  *
  * Clean up the account afterwards:
  *   ssh root@165.101.114.162 "node -e \"…DELETE FROM users WHERE email LIKE 'credit-explain+%'\""
  */
 
-const BASE = (process.argv[2] ?? "https://flowgpt.meetflowai.site/api").replace(/\/+$/, "");
-const EMAIL = `credit-explain+${Date.now()}@flowgpt.local`;
+const BASE = (process.argv[2] ?? "https://fbuddy.meetflowai.site/api").replace(/\/+$/, "");
+const EMAIL = `credit-explain+${Date.now()}@fbuddy.local`;
 const PASSWORD = "matkhau12345";
 
 let failures = 0;
@@ -45,7 +45,7 @@ async function json(method, path, body, token) {
   return { ok: response.ok, status: response.status, data: parsed, text };
 }
 
-console.log(`FlowGpt — kiểm tra trợ lý giải thích credit → ${BASE}`);
+console.log(`fBuddy — kiểm tra trợ lý giải thích credit → ${BASE}`);
 
 const registered = await json("POST", "/auth/register", { email: EMAIL, password: PASSWORD });
 if (!registered.ok) {
@@ -63,7 +63,7 @@ if (!before.ok) {
 info(`số dư ban đầu: ${before.data.credits.balance} credit`);
 
 const question =
-  "FlowGpt có miễn phí không? Credit được cấp và tính như thế nào, và nếu hết thì em xin thêm token hoặc mua ở đâu?";
+  "fBuddy có miễn phí không? Credit được cấp và tính như thế nào, và nếu hết thì em xin thêm token hoặc mua ở đâu?";
 console.log(`\n> ${question}\n`);
 
 const response = await fetch(`${BASE}/chat/stream`, {
@@ -111,7 +111,7 @@ info(`usage: ${JSON.stringify(usage)}  →  trừ ${credits?.cost ?? "?"} credit
 
 const lowered = answer.toLowerCase();
 const checks = [
-  [/không (phải )?(là )?miễn phí|mất phí|trả phí|tốn credit/, "nói rõ FlowGpt KHÔNG miễn phí"],
+  [/không (phải )?(là )?miễn phí|mất phí|trả phí|tốn credit/, "nói rõ fBuddy KHÔNG miễn phí"],
   [/credit/, "nhắc tới credit"],
   [/token/, "nhắc tới token"],
   [/xin thêm token|yêu cầu thêm token|xin thêm/, "chỉ cách xin thêm token"],

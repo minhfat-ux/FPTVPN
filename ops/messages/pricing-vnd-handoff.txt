@@ -32,7 +32,7 @@ XONG ĐỢT GIÁ MỚI + ĐÃ BÀN GIAO SANG MAC
    - Đã push toàn bộ lên GitHub (nhánh origin/flowgpt), 0 commit còn treo.
    - File bàn giao: docs/HANDOFF-MAC.md — có cách lấy code, lệnh chạy, việc còn
      lại, và các bẫy đã gặp.
-   - Bên Mac chỉ cần: git clone -> checkout flowgpt -> đọc file đó là làm tiếp.
+   - Bên Mac chỉ cần: git clone -> checkout fbuddy -> đọc file đó là làm tiếp.
    - KHÔNG copy transcript session sang Mac: tên thư mục session sinh từ đường dẫn
      Windows nên sẽ lệch, và nội dung ghi đường dẫn tuyệt đối C:\... nên vỡ.
 

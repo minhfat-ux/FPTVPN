@@ -121,7 +121,7 @@ export function LoginPage() {
           <img src="/brand-mark.png" alt="FlowTech" width={44} height={44} style={{ display: "block" }} />
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>
-              <span className="brand-word">FlowGpt</span>
+              <span className="brand-word">fBuddy</span>
             </div>
             <div className="tiny muted">FlowTech · MeetFlow AI</div>
           </div>

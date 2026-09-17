@@ -94,7 +94,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lastConversationId, setLastConversationId] = useState<string | null>(null);
   // FlowTech Harness is dark-first — that is the default until the user chooses.
   const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem("flowgpt.theme");
+    const stored = localStorage.getItem("fbuddy.theme");
     if (stored === "light" || stored === "dark") return stored;
     return "dark";
   });
@@ -118,7 +118,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("flowgpt.theme", theme);
+    localStorage.setItem("fbuddy.theme", theme);
   }, [theme]);
 
   const refreshMeta = useCallback(async () => {

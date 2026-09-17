@@ -249,14 +249,14 @@ export function useImageEditor() {
     }
   };
 
-  const saveToFlowGpt = async () => {
+  const saveTofBuddy = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !loaded) return;
     setBusy(true);
     try {
       const file = await uploadCanvas(canvas, conversationId);
       setSaved((list) => [{ id: file.id, name: file.name }, ...list].slice(0, 6));
-      push(t("studio.image.savedToFlowGpt"), "success");
+      push(t("studio.image.savedTofBuddy"), "success");
     } catch (error) {
       push(errorMessage(error, t("studio.image.saveFailed")), "error");
     } finally {
@@ -310,6 +310,6 @@ export function useImageEditor() {
     bakeAdjust,
     bakeText,
     exportBlob,
-    saveToFlowGpt,
+    saveTofBuddy,
   };
 }

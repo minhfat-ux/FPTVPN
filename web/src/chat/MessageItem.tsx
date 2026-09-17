@@ -154,7 +154,7 @@ export function MessageItem({
       <div className="msg-avatar">{isUser ? <UserIcon size={15} /> : <Sparkles size={15} />}</div>
       <div className="msg-body">
         <div className="msg-meta">
-          <span className="bold">{isUser ? t("chat.message.roleUser") : "FlowGpt"}</span>
+          <span className="bold">{isUser ? t("chat.message.roleUser") : "fBuddy"}</span>
           <span>{d(message.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
 
@@ -226,7 +226,7 @@ export function StreamingMessage({
       </div>
       <div className="msg-body">
         <div className="msg-meta">
-          <span className="bold">FlowGpt</span>
+          <span className="bold">fBuddy</span>
         </div>
 
         {showStatus && (

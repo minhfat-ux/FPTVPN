@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Wire the Telegram bot into FlowGpt so token requests reach the owner, then fire
+# Wire the Telegram bot into fBuddy so token requests reach the owner, then fire
 # one real demo request through the API. Secrets are never printed.
 set -euo pipefail
 
-ENV_FILE=/etc/flowgpt/flowgpt.env
+ENV_FILE=/etc/fbuddy/fbuddy.env
 TG_ENV=/etc/flowvpn-tg-bot.env
 
 TOKEN=$(grep -hoP '^TELEGRAM_BOT_TOKEN=\K.*' "$TG_ENV" 2>/dev/null | tr -d '"' | tr -d "'" | head -1 || true)
@@ -16,18 +16,18 @@ if [ -z "${TOKEN:-}" ] || [ -z "${CHAT_ID:-}" ]; then
 fi
 echo "Đã lấy bot token (len ${#TOKEN}) và chat id (len ${#CHAT_ID}) — không in giá trị"
 
-grep -v '^FLOWGPT_TELEGRAM_BOT_TOKEN=' "$ENV_FILE" | grep -v '^FLOWGPT_TELEGRAM_CHAT_ID=' > "$ENV_FILE.tmp" 2>/dev/null || true
+grep -v '^FBUDDY_TELEGRAM_BOT_TOKEN=' "$ENV_FILE" | grep -v '^FBUDDY_TELEGRAM_CHAT_ID=' > "$ENV_FILE.tmp" 2>/dev/null || true
 {
-  printf 'FLOWGPT_TELEGRAM_BOT_TOKEN=%s\n' "$TOKEN"
-  printf 'FLOWGPT_TELEGRAM_CHAT_ID=%s\n' "$CHAT_ID"
+  printf 'FBUDDY_TELEGRAM_BOT_TOKEN=%s\n' "$TOKEN"
+  printf 'FBUDDY_TELEGRAM_CHAT_ID=%s\n' "$CHAT_ID"
 } >> "$ENV_FILE.tmp"
 install -m 600 "$ENV_FILE.tmp" "$ENV_FILE"
 rm -f "$ENV_FILE.tmp"
 echo "Đã ghi 2 biến Telegram vào $ENV_FILE (mode $(stat -c %a "$ENV_FILE"))"
 
-systemctl restart flowgpt
+systemctl restart fbuddy
 sleep 3
-systemctl is-active flowgpt
+systemctl is-active fbuddy
 
 echo
 echo "== gửi thử một yêu cầu xin token qua API =="
@@ -48,7 +48,7 @@ def call(method, path, body=None, token=None):
     except urllib.error.HTTPError as err:
         return err.code, json.loads(err.read().decode() or "{}")
 
-email = "demo-token-request@flowgpt.local"
+email = "demo-token-request@fbuddy.local"
 status, requested = call("POST", "/auth/request-token", {"email": email})
 code = requested.get("devCode")
 status, verified = call("POST", "/auth/verify-token", {"email": email, "token": code})

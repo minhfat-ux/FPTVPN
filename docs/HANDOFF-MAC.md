@@ -1,6 +1,6 @@
-# Bàn giao sang Mac Harness — FlowGpt (chợ kỹ năng + mô hình giá VND)
+# Bàn giao sang Mac Harness — fBuddy (chợ kỹ năng + mô hình giá VND)
 
-Ngày: 2026-09-17 · Nguồn: DSH Windows (`C:\Users\Minhn\FlowTech AI\flowgpt`) · Trạng thái: **production đang chạy bản mới**
+Ngày: 2026-09-17 · Nguồn: DSH Windows (`C:\Users\Minhn\FlowTech AI\fbuddy`) · Trạng thái: **production đang chạy bản mới**
 
 > Đọc file này là làm tiếp được, **không cần** mang transcript của session cũ.
 > Transcript nằm ở `~/.dsh/sessions/--C-Users-Minhn-FlowTech~0020AI--/` và tham chiếu đường dẫn
@@ -10,14 +10,16 @@ Ngày: 2026-09-17 · Nguồn: DSH Windows (`C:\Users\Minhn\FlowTech AI\flowgpt`)
 
 ## 1. Lấy code về
 
-Repo: `flowgpt` (monorepo) — remote GitHub `https://github.com/minhfat-ux/FPTVPN.git`, nhánh theo dõi `origin/flowgpt`.
+Repo: `fbuddy` (monorepo) — remote GitHub `https://github.com/minhfat-ux/FPTVPN.git`, nhánh theo dõi `origin/flowgpt`.
 
 ```bash
-git clone https://github.com/minhfat-ux/FPTVPN.git flowgpt
-cd flowgpt && git checkout flowgpt
+git clone https://github.com/minhfat-ux/FPTVPN.git fbuddy
+cd fbuddy && git checkout flowgpt
 ```
 
 - Nhánh làm việc ở Windows tên là `master`, push lên `origin/flowgpt`.
+- **Tên nhánh cố ý giữ nguyên `flowgpt`** dù sản phẩm đã đổi tên thành fBuddy (xem
+  `docs/RENAME-FBUDDY.md`): đổi tên nhánh remote cần push và phối hợp cả hai máy.
 - Toàn bộ việc chợ kỹ năng + mô hình giá đã push. Kiểm tra: `git log --oneline -8`.
 
 Cấu trúc: `server/` (Node 24 ESM, Express 5, `node:sqlite`), `web/` (React 18 + Vite + TS), `deploy/`, `docs/`, `ops/`.
@@ -29,10 +31,10 @@ Cấu trúc: `server/` (Node 24 ESM, Express 5, `node:sqlite`), `web/` (React 18
 | Test | `node --test "server/test/*.test.js"` (hiện **168/168 pass**) |
 | Build web | `npm --workspace web run build` (chạy `tsc --noEmit` trước Vite) |
 | Deploy | `pwsh -File deploy/deploy.ps1` (cần `ssh root@165.101.114.162` đã có key) |
-| Log production | `ssh root@165.101.114.162 'journalctl -u flowgpt -f'` |
+| Log production | `ssh root@165.101.114.162 'journalctl -u fbuddy -f'` |
 
-Production: node-2 `165.101.114.162` · systemd `flowgpt` · `127.0.0.1:7790` · Caddy `flowgpt.meetflowai.site` ·
-data `/var/lib/flowgpt` · env `/etc/flowgpt/flowgpt.env` (600).
+Production: node-2 `165.101.114.162` · systemd `fbuddy` · `127.0.0.1:7790` · Caddy `fbuddy.meetflowai.site` ·
+data `/var/lib/fbuddy` · env `/etc/fbuddy/fbuddy.env` (600).
 
 **Không có phụ thuộc mới** (không thêm package nào). Ưu tiên giải pháp miễn phí, màu qua `var(--…)`.
 
@@ -113,8 +115,51 @@ data `/var/lib/flowgpt` · env `/etc/flowgpt/flowgpt.env` (600).
   bản Telegram nhận được). Script nào gọi `process.exit()` ngay sau `fetch` sẽ crash libuv trên Windows
   (`0xC0000409`) — dùng `process.exitCode`.
 - **Token admin** để chạy script kiểm chứng: mint bằng script server (`auth.issueToken` cho `minhnb2@fpt.com`),
-  lưu ở `%TEMP%\admin-token.txt` (Windows) — **không in ra**. Trên Mac truyền qua `FLOWGPT_ADMIN_TOKEN`.
+  lưu ở `%TEMP%\admin-token.txt` (Windows) — **không in ra**. Trên Mac truyền qua `FBUDDY_ADMIN_TOKEN`.
 - Tài khoản production: `minhnb2@fpt.com` (admin, 100000 credit), `minhnb2@me.com`, `tranhoangnam081215@gmail.com`,
   `minhfat@gmail.com`.
 - Model mặc định: GLM `glm-4-flash` (không nhận ảnh — có `applyVisionFallback` tự OCR bằng OpenRouter
-  `google/gemini-2.5-flash`). Tên model bị ẩn với người dùng, hiện là `FlowGPT-*`.
+  `google/gemini-2.5-flash`). Tên model bị ẩn với người dùng, hiện là `fBuddy-*`.
+
+---
+
+## 7. Đợt 5 — Mac harness tiếp nhận (2026-09-18)
+
+### 7.1 Đã làm: SePay cắm route + poller (mục 5.3 của bàn giao)
+
+- `POST /api/topup/sepay` — webhook, xác thực HMAC **hoặc** `Apikey`; `express.raw` gắn riêng cho path này trong
+  `index.js` vì chữ ký tính trên **nguyên văn** thân request. Đã xác thực thì luôn 200 (kể cả không khớp đơn nào).
+- `GET /api/admin/sepay/status`, `POST /api/admin/sepay/poll` (admin).
+- Poller trong `index.js`: đọc lại cài đặt mỗi vòng ⇒ bật/tắt trong Cài đặt có hiệu lực ngay, không cần restart.
+- Kiểm chứng: `node --test "server/test/*.test.js"` → **177/177 pass** (thêm `server/test/sepay-routes.test.js`, 9 ca);
+  `npm --workspace web run build` sạch; `ops/sepay-e2e-check.mjs` chạy **trên production** → ĐẠT HẾT (webhook đã ký qua
+  HTTPS công khai đi qua Caddy, credit vào đúng, gửi lại không cộng thêm, không ký bị 401, dọn sạch tài khoản tạm).
+- **Còn lại của SePay:** cần **API token thật** (My SePay → API Access) hoặc **webhook secret** của chủ dự án mới bật
+  được thật; chưa có UI trong control panel (hiện đặt qua `PUT /api/settings/app`).
+
+### 7.2 Việc Mac hay vấp (dùng cho harness sau)
+
+- **SSH**: key mặc định của Mac bị từ chối. Dùng `ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162`
+  (key `fpt_tunnel` cũng vào được). `deploy/deploy.ps1` chỉ chạy trên Windows.
+- **`npm install` trên Mac**: cache `~/.npm` có file của root ⇒ `EPERM`. Thêm `--cache .npm-cache` (đã có trong
+  `--exclude` của deploy). Cài lần đầu hỏng giữa chừng thì phải `rm -rf node_modules` rồi cài lại, npm không tự sửa.
+- **Ổ đĩa BIWIN (exFAT) không hỗ trợ hardlink**: công cụ ghi file kiểu "atomic rename" báo
+  `ENOTSUP: operation not supported on socket`. Ghi file bằng heredoc (`cat > file <<'EOF'`) là được.
+
+### 7.3 Hai chỗ bàn giao cũ đã sai
+
+- **§9.6 (HANDOVER) nói dist đang phát chưa tham chiếu `promo.js`** — nay **đã tham chiếu và popup ĐANG chạy** trên
+  production (`/promo.js` trả 200, `dist/index.html` có `promo.css/promo.js?v=20260917b`). Deploy lần này không bật
+  thêm gì mới.
+- **`ops/prune-test-users.mjs` trỏ nhầm DB** ⇒ không dọn được tài khoản test. Nay script đọc
+  `FBUDDY_DB` (vẫn nhận `FLOWGPT_DB` trong lúc chuyển tên, xem `docs/RENAME-FBUDDY.md`) và đã
+  thêm mẫu `sepay-e2e+%`.
+
+### 7.4 Tencent SkillHub (mục 5.1) — **chặn ở tầng mạng, không phải tầng code**
+
+[`Tencent/skillhub`](https://github.com/Tencent/skillhub) (MIT, Open API `https://api.skillhub.cn`) **không kết nối
+được** từ cả Mac lẫn VPS production: DNS phân giải (EdgeOne `43.174.224.202`) nhưng TCP 443/80 timeout, trong khi
+baidu.com / cloud.tencent.com / npmjs đều 200 từ hai máy ⇒ giới hạn riêng của dịch vụ. `@tencent/skillhub` trên npm
+cũng chưa publish (404). Muốn dùng phải qua relay VPS Trung Quốc hoặc xin `skillhub@tencent.com` mở quyền
+(xem `docs/apply.md` của repo đó). Nguồn thay thế **vào được ngay**: ClawHub (`clawhub.ai`), `skills.sh`, SKILL.md
+trên GitHub — dùng lại `ops/import-hub-skills.mjs` đã có.

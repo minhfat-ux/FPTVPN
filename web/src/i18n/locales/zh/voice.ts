@@ -13,8 +13,8 @@ export const voice: Dict = {
   "voice.mode.stateSpeaking": "正在说话…",
   "voice.mode.stateError": "错误",
   "voice.mode.hintIdle": "点击麦克风继续对话。",
-  "voice.mode.hintListening": "请自然说话，FlowGpt 听完后会立即回答。",
-  "voice.mode.hintThinking": "FlowGpt 正在处理你的问题。",
+  "voice.mode.hintListening": "请自然说话，fBuddy 听完后会立即回答。",
+  "voice.mode.hintThinking": "fBuddy 正在处理你的问题。",
   "voice.mode.hintSpeaking": "可以插话打断，继续追问。",
   "voice.mode.hintError": "请检查麦克风，或前往“设置 → 语音”检查配置。",
   "voice.mode.mutedState": "麦克风已关闭",
@@ -31,7 +31,7 @@ export const voice: Dict = {
   "voice.mode.suggestionRole": "提示",
   "voice.mode.suggestionText": "试着说：“你好，你能帮我做什么？”",
   "voice.mode.roleUser": "你",
-  "voice.mode.roleAssistant": "FlowGpt",
+  "voice.mode.roleAssistant": "fBuddy",
 
   // ---- 引擎信息行
   "voice.engine.label": "识别：{kind} · 朗读：{voice}",

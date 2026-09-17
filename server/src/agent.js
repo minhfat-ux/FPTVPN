@@ -126,7 +126,7 @@ function resolveImageProvider(preferredId = null) {
 /**
  * Billing facts handed to the model on every turn.
  *
- * The prompt never mentioned credits, so the assistant answered "FlowGpt miễn
+ * The prompt never mentioned credits, so the assistant answered "fBuddy miễn
  * phí" whenever anyone asked about money. Every number here is read fresh so the
  * answer matches what the UI shows.
  */
@@ -151,7 +151,7 @@ export function buildCreditKnowledge(user) {
     "Mua kỹ năng là việc khác: mục “Chợ kỹ năng” trên thanh bên trái; giá kỹ năng tính bằng VND và trả một lần.",
     user.role === "admin"
       ? "Người dùng này là quản trị viên: hết credit vẫn chat được nhưng vẫn bị trừ credit."
-      : "Được hỏi về credit/token/giá/số dư: trả lời 1–3 câu, luôn nêu công thức trừ credit, quy đổi ra VND, mức credit được tặng khi đăng nhập lần đầu và 2 đường nạp (xin thêm / mua thêm) bằng đúng số liệu trên; không nói FlowGpt miễn phí, không bịa giá.",
+      : "Được hỏi về credit/token/giá/số dư: trả lời 1–3 câu, luôn nêu công thức trừ credit, quy đổi ra VND, mức credit được tặng khi đăng nhập lần đầu và 2 đường nạp (xin thêm / mua thêm) bằng đúng số liệu trên; không nói fBuddy miễn phí, không bịa giá.",
   ].join("\n");
 }
 
@@ -275,7 +275,7 @@ export async function prepareTurn({ user, body, channel }) {
   });
 
   // Any turn makes this the account's current thread, so the next device the
-  // user opens FlowGpt on lands exactly here.
+  // user opens fBuddy on lands exactly here.
   setLastConversationId(user.id, conversation.id);
 
   const titled = maybeSetTitleFromFirstMessage(conversation, content || attachments[0]?.name || "Hội thoại mới");
@@ -736,7 +736,7 @@ export async function runChatTurn({ user, turn, channel, signal }) {
       credits = { cost, balance: spendCredits({ userId: user.id, amount: cost, ref: assistantMessage.id }) };
     }
   } catch (err) {
-    console.warn("[flowgpt] không ghi được credit:", err?.message ?? err);
+    console.warn("[fbuddy] không ghi được credit:", err?.message ?? err);
   }
 
   channel.send("done", {

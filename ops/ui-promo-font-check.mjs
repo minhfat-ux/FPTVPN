@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [url = "https://flowgpt.meetflowai.site", outDir = "ops/ui-out-promo", portArg] = process.argv.slice(2);
+const [url = "https://fbuddy.meetflowai.site", outDir = "ops/ui-out-promo", portArg] = process.argv.slice(2);
 const PORT = Number(portArg ?? 9224);
 fs.mkdirSync(outDir, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -98,7 +98,7 @@ await send("Network.enable");
 
 // Lần 1: bình thường.
 await send("Page.navigate", { url });
-await evaluate(`localStorage.removeItem("flowgpt:promo:apps:v1")`);
+await evaluate(`localStorage.removeItem("fbuddy:promo:apps:v1")`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.fg-promo'))", 25000, "popup hiện");
 await sleep(600);
@@ -116,7 +116,7 @@ await shot("95-promo-font-normal");
 
 // Lần 2: CHẶN CSS của app — mô phỏng máy tải chậm / CSS bị chặn.
 await send("Network.setBlockedURLs", { urls: ["*/assets/index-*.css", "*/assets/*.css"] });
-await evaluate(`localStorage.removeItem("flowgpt:promo:apps:v1")`);
+await evaluate(`localStorage.removeItem("fbuddy:promo:apps:v1")`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.fg-promo'))", 25000, "popup hiện (CSS app bị chặn)");
 await sleep(600);

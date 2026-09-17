@@ -82,7 +82,7 @@ test("a provider that rejects the turn is swapped for another one mid-flight", a
     return REAL_FETCH(url, init);
   };
 
-  const { token } = userFor("failover@flowgpt.test");
+  const { token } = userFor("failover@fbuddy.test");
   const { baseUrl } = await bootServer();
   const response = await REAL_FETCH(`${baseUrl}/api/chat/stream`, {
     method: "POST",
@@ -160,7 +160,7 @@ test("a retired model retries on the provider's own default model first", async 
     return REAL_FETCH(url, init);
   };
 
-  const { token } = userFor("model-retired@flowgpt.test");
+  const { token } = userFor("model-retired@fbuddy.test");
   const { baseUrl } = await bootServer();
   const response = await REAL_FETCH(`${baseUrl}/api/chat/stream`, {
     method: "POST",
@@ -203,7 +203,7 @@ test("when every provider is out of credit the turn reports the error", async ()
     return REAL_FETCH(url, init);
   };
 
-  const { token } = userFor("failover2@flowgpt.test");
+  const { token } = userFor("failover2@fbuddy.test");
   const { baseUrl } = await bootServer();
   const response = await REAL_FETCH(`${baseUrl}/api/chat/stream`, {
     method: "POST",

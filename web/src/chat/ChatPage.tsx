@@ -230,7 +230,7 @@ export function ChatPage({
             <div className="hero">
               <div className="hero-brand">
                 <img className="hero-mark" src="/brand-mark.png" alt="FlowTech" />
-                <span className="hero-word brand-word">FlowGpt</span>
+                <span className="hero-word brand-word">fBuddy</span>
               </div>
               <p>
                 {t("chat.page.heroIntro")}

@@ -6,9 +6,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [url = "https://flowgpt.meetflowai.site", outDir = "ops/ui-out-theme", portArg, tokenArg] = process.argv.slice(2);
+const [url = "https://fbuddy.meetflowai.site", outDir = "ops/ui-out-theme", portArg, tokenArg] = process.argv.slice(2);
 const PORT = Number(portArg ?? 9224);
-const token = tokenArg ?? process.env.FLOWGPT_ADMIN_TOKEN ?? "";
+const token = tokenArg ?? process.env.FBUDDY_ADMIN_TOKEN ?? "";
 fs.mkdirSync(outDir, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -80,7 +80,7 @@ await send("Runtime.enable");
 await send("Page.enable");
 await send("Page.navigate", { url });
 await sleep(3000);
-await evaluate(`localStorage.setItem("flowgpt.token", ${JSON.stringify(token)}); localStorage.setItem("flowgpt.locale","vi"); localStorage.removeItem("flowgpt.ecosystem.banner"); localStorage.removeItem("flowgpt:promo:apps:v1");`);
+await evaluate(`localStorage.setItem("fbuddy.token", ${JSON.stringify(token)}); localStorage.setItem("fbuddy.locale","vi"); localStorage.removeItem("fbuddy.ecosystem.banner"); localStorage.removeItem("fbuddy:promo:apps:v1");`);
 await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.chat-shell'))", 25000, "khung chat");
 await sleep(2000);

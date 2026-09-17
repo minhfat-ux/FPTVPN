@@ -68,10 +68,10 @@ test("resolveProviderForChat explains what to do when nothing is configured", ()
   db.prepare("DELETE FROM providers").run();
   assert.throws(() => settings.resolveProviderForChat({}), /Chưa có nhà cung cấp AI nào/);
 
-  const provider = settings.createProvider({ name: "Demo", kind: "mock", models: ["flowgpt-demo"] });
+  const provider = settings.createProvider({ name: "Demo", kind: "mock", models: ["fbuddy-demo"] });
   const resolved = settings.resolveProviderForChat({});
   assert.equal(resolved.provider.id, provider.id);
-  assert.equal(resolved.model, "flowgpt-demo");
+  assert.equal(resolved.model, "fbuddy-demo");
   assert.equal(resolved.provider.kind, "mock");
 });
 

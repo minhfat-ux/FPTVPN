@@ -162,7 +162,7 @@ report("3. Gửi một lượt chat thật (chưa cấu hình provider)");
 await evaluate(`(() => {
   const ta = document.querySelector('.composer textarea');
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-  setter.call(ta, 'Xin chào FlowGpt');
+  setter.call(ta, 'Xin chào fBuddy');
   ta.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
 })()`);

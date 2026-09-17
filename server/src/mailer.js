@@ -17,7 +17,7 @@ function resolveApiKey(settings) {
   const fromSettings = settings?.resendApiKeyEnc ? decryptSecret(settings.resendApiKeyEnc) : null;
   return (
     fromSettings ||
-    process.env.FLOWGPT_RESEND_API_KEY ||
+    process.env.FBUDDY_RESEND_API_KEY ||
     process.env.RESEND_API_KEY ||
     null
   );
@@ -35,7 +35,7 @@ export function mailerStatus(settings) {
 
 function sender(settings) {
   const email = String(settings?.mailerFrom ?? "no-reply@meetflowai.site").trim();
-  const name = String(settings?.mailerFromName ?? "FlowGpt").trim();
+  const name = String(settings?.mailerFromName ?? "fBuddy").trim();
   return name ? `${name} <${email}>` : email;
 }
 
@@ -77,8 +77,8 @@ function layout({ title, intro, codeBlock, linkBlock, footer }) {
 <body style="margin:0;background:#f2f5f9;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0A1F3B">
   <div style="max-width:560px;margin:0 auto;padding:28px 18px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-      <img src="https://flowgpt.meetflowai.site/brand-mark.png" alt="FlowTech" width="34" height="34" style="display:block">
-      <div style="font-size:18px;font-weight:700">FlowGpt</div>
+      <img src="https://fbuddy.meetflowai.site/brand-mark.png" alt="FlowTech" width="34" height="34" style="display:block">
+      <div style="font-size:18px;font-weight:700">fBuddy</div>
     </div>
     <div style="background:#0A1F3B;border-radius:16px;padding:28px 24px;color:#ffffff">
       <div style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:10px">${title}</div>
@@ -92,7 +92,7 @@ function layout({ title, intro, codeBlock, linkBlock, footer }) {
 }
 
 export async function sendLoginCode({ settings, to, code, link, ttlMin }) {
-  const subject = `${code} là mã đăng nhập FlowGpt của bạn`;
+  const subject = `${code} là mã đăng nhập fBuddy của bạn`;
   const codeBlock = `
     <div style="margin:22px 0 8px;padding:16px;border-radius:12px;background:#123052;text-align:center">
       <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px">Mã đăng nhập</div>
@@ -106,13 +106,13 @@ export async function sendLoginCode({ settings, to, code, link, ttlMin }) {
        </div>`
     : "";
   const html = layout({
-    title: "Đăng nhập FlowGpt",
+    title: "Đăng nhập fBuddy",
     intro: "Dùng mã dưới đây để đăng nhập. Nếu không phải bạn yêu cầu, hãy bỏ qua email này — không ai đăng nhập được nếu không có mã.",
     codeBlock,
     linkBlock,
-    footer: `Email gửi tự động từ FlowGpt (FlowTech · MeetFlow AI). Không trả lời email này.`,
+    footer: `Email gửi tự động từ fBuddy (FlowTech · MeetFlow AI). Không trả lời email này.`,
   });
-  const text = `Mã đăng nhập FlowGpt: ${code}\nHiệu lực ${ttlMin} phút.${link ? `\nHoặc mở: ${link}` : ""}`;
+  const text = `Mã đăng nhập fBuddy: ${code}\nHiệu lực ${ttlMin} phút.${link ? `\nHoặc mở: ${link}` : ""}`;
 
   const result = await sendViaResend({ settings, to, subject, html, text }).catch((err) => ({
     sent: false,
@@ -126,16 +126,16 @@ export async function sendTestEmail({ settings, to }) {
   const code = String(crypto.randomInt(100000, 1000000));
   const html = layout({
     title: "Kiểm tra cấu hình email",
-    intro: "Nếu anh nhận được email này, FlowGpt đã gửi được mail — mã đăng nhập sẽ tới hộp thư như thế này.",
+    intro: "Nếu anh nhận được email này, fBuddy đã gửi được mail — mã đăng nhập sẽ tới hộp thư như thế này.",
     codeBlock: `<div style="margin:20px 0 4px;padding:14px;border-radius:12px;background:#123052;text-align:center;font-family:Consolas,Menlo,monospace;font-size:26px;letter-spacing:.24em;color:${BRAND_GREEN}">${code}</div>`,
     footer: "Đây là email kiểm tra, không dùng để đăng nhập.",
   });
   return sendViaResend({
     settings,
     to,
-    subject: "FlowGpt — email kiểm tra cấu hình",
+    subject: "fBuddy — email kiểm tra cấu hình",
     html,
-    text: `FlowGpt gửi được email. Mã kiểm tra: ${code}`,
+    text: `fBuddy gửi được email. Mã kiểm tra: ${code}`,
   }).catch((err) => ({ sent: false, reason: "network_error", detail: err?.message ?? String(err) }));
 }
 

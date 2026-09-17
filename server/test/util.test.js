@@ -27,7 +27,7 @@ test("rate limiter window expires", async () => {
 });
 
 test("conversation titles are derived from the first meaningful line", () => {
-  assert.equal(titleFromText("Làm slide về FlowGpt"), "Làm slide về FlowGpt");
+  assert.equal(titleFromText("Làm slide về fBuddy"), "Làm slide về fBuddy");
   assert.equal(titleFromText("# Tiêu đề markdown\nNội dung"), "Tiêu đề markdown");
   assert.equal(titleFromText("   \n\n  Dòng thứ hai  "), "Dòng thứ hai");
   assert.equal(titleFromText("Câu hỏi???"), "Câu hỏi");

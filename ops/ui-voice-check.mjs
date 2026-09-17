@@ -102,7 +102,7 @@ await send("Page.navigate", { url });
 await waitFor("Boolean(document.querySelector('.composer textarea, .sidebar'))", 30000, "app shell");
 
 const engine = await evaluate(`(async () => {
-  const r = await fetch('/api/voice/config', { headers: { Authorization: 'Bearer ' + localStorage.getItem('flowgpt.token') } });
+  const r = await fetch('/api/voice/config', { headers: { Authorization: 'Bearer ' + localStorage.getItem('fbuddy.token') } });
   if (!r.ok) return { status: r.status };
   const j = await r.json();
   return { status: 200, stt: j.config.stt.mode, tts: j.config.tts.mode, language: j.config.language };

@@ -272,7 +272,7 @@ export const SKILL_DESCRIPTORS = [
     label: "Làm PPT",
     icon: "ppt",
     description: "Tạo file .pptx nhiều slide có theme, ghi chú trình bày",
-    starterPrompts: ["Làm slide 8 trang giới thiệu sản phẩm FlowGpt", "Tạo bài giảng 10 slide về marketing căn bản"],
+    starterPrompts: ["Làm slide 8 trang giới thiệu sản phẩm fBuddy", "Tạo bài giảng 10 slide về marketing căn bản"],
   },
   {
     id: "excel",

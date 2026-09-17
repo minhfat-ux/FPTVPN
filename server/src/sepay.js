@@ -10,7 +10,7 @@ import { confirmTopupOrder, listTopupOrders } from "./topup.js";
  *  - `webhook`: SePay POST về /api/topup/sepay mỗi khi có tiền vào. Xác thực bằng
  *    HMAC-SHA256 (`X-SePay-Signature: sha256=…`, `X-SePay-Timestamp`, chuỗi ký =
  *    `{timestamp}.{raw_body}`) hoặc `Authorization: Apikey <secret>`.
- *  - `poll`: FlowGpt gọi API giao dịch của SePay theo chu kỳ (cần **API token**
+ *  - `poll`: fBuddy gọi API giao dịch của SePay theo chu kỳ (cần **API token**
  *    riêng, KHÁC webhook secret) và tự khớp nội dung chuyển khoản.
  *
  * Nguyên tắc giống VPNFlow: module này chỉ chứa hàm thuần (không I/O) để test được;
@@ -77,7 +77,7 @@ export function normalizeTransaction(raw = {}) {
   };
 }
 
-/** Bỏ khoảng trắng + viết hoa, để "flowgpt 000123" khớp "FLOWGPT000123". */
+/** Bỏ khoảng trắng + viết hoa, để "fbuddy 000123" khớp "FBUDDY000123". */
 function normalizeNote(value) {
   return String(value ?? "").replace(/[\s._-]/g, "").toUpperCase();
 }
@@ -85,7 +85,7 @@ function normalizeNote(value) {
 /**
  * Tìm đơn nạp khớp với một giao dịch. Hàm thuần (đưa vào để test).
  *
- * Khớp khi: giao dịch là tiền VÀO, nội dung chứa mã đơn (`FLOWGPT######`), và số
+ * Khớp khi: giao dịch là tiền VÀO, nội dung chứa mã đơn (`FBUDDY######`), và số
  * tiền >= giá đơn (thiếu một chút vẫn nhận, vì ngân hàng có thể trừ phí; nhưng
  * tuyệt đối không nhận khi nhỏ hơn 80% — tránh khớp nhầm giao dịch khác).
  */
@@ -115,7 +115,7 @@ export function sepayConfig() {
     pollSeconds: Math.min(3600, Math.max(30, Number(settings.sepayPollSeconds) || 60)),
     apiToken: settings.sepayApiTokenEnc ? decryptSecret(settings.sepayApiTokenEnc) : null,
     webhookSecret: settings.sepayWebhookSecretEnc ? decryptSecret(settings.sepayWebhookSecretEnc) : null,
-    notePrefix: String(settings.bankNotePrefix ?? "FLOWGPT"),
+    notePrefix: String(settings.bankNotePrefix ?? "FBUDDY"),
   };
 }
 

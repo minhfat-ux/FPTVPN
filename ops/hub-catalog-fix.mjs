@@ -15,9 +15,9 @@
  * (on node-2), and it is a dry run unless --apply is passed:
  *
  *   ssh root@165.101.114.162
- *   cd /opt/flowgpt
- *   FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/hub-catalog-fix.mjs           # show the diff
- *   FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/hub-catalog-fix.mjs --apply   # write it
+ *   cd /opt/fbuddy
+ *   FBUDDY_DATA_DIR=/var/lib/fbuddy node ops/hub-catalog-fix.mjs           # show the diff
+ *   FBUDDY_DATA_DIR=/var/lib/fbuddy node ops/hub-catalog-fix.mjs --apply   # write it
  *
  * Rollback: prices are re-derivable from this file's TARGET_PRICE_VND by
  * re-running with the old numbers; `installs` is always recomputed from

@@ -167,7 +167,7 @@ const saved = await evaluate(`(async () => {
   const save = [...modal.querySelectorAll('button')].find((b) => /Lưu danh sách/.test(b.textContent));
   save?.click();
   await new Promise((r) => setTimeout(r, 1500));
-  const token = localStorage.getItem('flowgpt.token');
+  const token = localStorage.getItem('fbuddy.token');
   const res = await fetch('/api/skills', { headers: { Authorization: 'Bearer ' + token } });
   const json = await res.json();
   return { action, changed, installed: json.installed, modalClosed: !document.querySelector('.modal') };
@@ -182,7 +182,7 @@ await shot("52-skill-saved");
 
 // Put the list back to the default so the instance is left as found.
 await evaluate(`(async () => {
-  const token = localStorage.getItem('flowgpt.token');
+  const token = localStorage.getItem('fbuddy.token');
   await fetch('/api/skills/installed', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },

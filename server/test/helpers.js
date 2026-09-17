@@ -10,11 +10,11 @@ import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
 
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "flowgpt-test-"));
-process.env.FLOWGPT_DATA_DIR = dataDir;
-process.env.FLOWGPT_SECRET = "test-secret-0123456789-abcdefghij";
-process.env.FLOWGPT_PORT = "0";
-process.env.FLOWGPT_HOST = "127.0.0.1";
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fbuddy-test-"));
+process.env.FBUDDY_DATA_DIR = dataDir;
+process.env.FBUDDY_SECRET = "test-secret-0123456789-abcdefghij";
+process.env.FBUDDY_PORT = "0";
+process.env.FBUDDY_HOST = "127.0.0.1";
 process.env.NODE_ENV = "test";
 
 export const TEST_DATA_DIR = dataDir;
@@ -87,7 +87,7 @@ export async function uploadFile({ name, mime, content, token, conversationId = 
 }
 
 /** Registers the first (admin) account and returns { token, user }. */
-export async function registerAdmin(email = "admin@flowgpt.test") {
+export async function registerAdmin(email = "admin@fbuddy.test") {
   const result = await api("POST", "/auth/register", {
     email,
     password: "matkhau12345",

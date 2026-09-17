@@ -1,5 +1,5 @@
 /**
- * The FlowTech app ecosystem shown inside FlowGpt (banner) — same links as the
+ * The FlowTech app ecosystem shown inside fBuddy (banner) — same links as the
  * pre-login promo popup (`web/public/promo.js`), kept here so React can render them.
  */
 
@@ -65,7 +65,7 @@ export function secondaryPlatforms(app: EcosystemApp, platform: EcosystemPlatfor
   return all.filter((item) => app.links[item] && item !== platform);
 }
 
-const STORAGE_KEY = "flowgpt.ecosystem.banner";
+const STORAGE_KEY = "fbuddy.ecosystem.banner";
 /** "Để sau" hides the banner for a week; "không hiện lại" is permanent. */
 export const BANNER_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 

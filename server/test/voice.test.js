@@ -68,7 +68,7 @@ function stubFetch(handler) {
 test("gemini STT sends base64 audio plus a transcription instruction", async () => {
   const calls = stubFetch(() =>
     new Response(
-      JSON.stringify({ candidates: [{ content: { parts: [{ text: "  Xin chào FlowGpt  " }] } }] }),
+      JSON.stringify({ candidates: [{ content: { parts: [{ text: "  Xin chào fBuddy  " }] } }] }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     ),
   );
@@ -80,7 +80,7 @@ test("gemini STT sends base64 audio plus a transcription instruction", async () 
     language: "vi",
   });
 
-  assert.equal(result.text, "Xin chào FlowGpt");
+  assert.equal(result.text, "Xin chào fBuddy");
   assert.equal(calls.length, 1);
   assert.match(calls[0].url, /gemini-2\.5-flash:generateContent$/);
   const body = JSON.parse(calls[0].init.body);
@@ -223,8 +223,8 @@ test("GET /api/voice/config requires auth and returns the browser hint", async (
 
   const { token } = await (async () => {
     const { createUser, issueToken } = await import("../src/auth.js");
-    const existing = all("users", "email = ?", ["voice@flowgpt.test"])[0];
-    const user = existing ?? createUser({ email: "voice@flowgpt.test", password: "matkhau12345", name: "Voice" });
+    const existing = all("users", "email = ?", ["voice@fbuddy.test"])[0];
+    const user = existing ?? createUser({ email: "voice@fbuddy.test", password: "matkhau12345", name: "Voice" });
     return { token: issueToken(user) };
   })();
 
@@ -236,8 +236,8 @@ test("GET /api/voice/config requires auth and returns the browser hint", async (
 test("server voice endpoints refuse politely while the browser handles voice", async () => {
   const { token } = await (async () => {
     const { createUser, issueToken } = await import("../src/auth.js");
-    const existing = all("users", "email = ?", ["voice2@flowgpt.test"])[0];
-    const user = existing ?? createUser({ email: "voice2@flowgpt.test", password: "matkhau12345" });
+    const existing = all("users", "email = ?", ["voice2@fbuddy.test"])[0];
+    const user = existing ?? createUser({ email: "voice2@fbuddy.test", password: "matkhau12345" });
     return { token: issueToken(user) };
   })();
 
@@ -262,8 +262,8 @@ test("server voice endpoints reach the provider once configured (stubbed fetch)"
 
   const { token } = await (async () => {
     const { createUser, issueToken } = await import("../src/auth.js");
-    const existing = all("users", "email = ?", ["voice3@flowgpt.test"])[0];
-    const user = existing ?? createUser({ email: "voice3@flowgpt.test", password: "matkhau12345" });
+    const existing = all("users", "email = ?", ["voice3@fbuddy.test"])[0];
+    const user = existing ?? createUser({ email: "voice3@fbuddy.test", password: "matkhau12345" });
     return { token: issueToken(user) };
   })();
 

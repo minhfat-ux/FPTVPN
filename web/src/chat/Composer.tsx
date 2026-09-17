@@ -137,7 +137,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   };
 
   const activeSkill = skills.find((item) => item.id === skill);
-  // Never print the vendor's model id at the user — show the FlowGpt label.
+  // Never print the vendor's model id at the user — show the fBuddy label.
   const selectedModelLabel = useMemo(() => {
     const model = modelValue.split("::")[1] ?? "";
     const option = models.find((item) => `${item.providerId}::${item.model}` === modelValue);

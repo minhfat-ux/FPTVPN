@@ -11,7 +11,7 @@ const settings = await import("../src/settings.js");
 
 // The cross-device test runs a real chat turn; the demo provider needs no network.
 if (!settings.listProviders().some((provider) => provider.kind === "mock" && provider.enabled)) {
-  settings.createProvider({ name: "Demo sessions", kind: "mock", models: ["flowgpt-demo"] });
+  settings.createProvider({ name: "Demo sessions", kind: "mock", models: ["fbuddy-demo"] });
 }
 
 after(async () => {
@@ -38,14 +38,14 @@ const UA_IPHONE =
 
 test("one account, three devices: every session keeps working", async () => {
   // Registering already opens a session (the browser doing the signup).
-  await api("POST", "/auth/register", { email: "multi@flowgpt.test", password: FULL });
-  const laptop = await loginDevice("multi@flowgpt.test", FULL, UA_CHROME);
-  const phone = await loginDevice("multi@flowgpt.test", FULL, UA_IPHONE);
+  await api("POST", "/auth/register", { email: "multi@fbuddy.test", password: FULL });
+  const laptop = await loginDevice("multi@fbuddy.test", FULL, UA_CHROME);
+  const phone = await loginDevice("multi@fbuddy.test", FULL, UA_IPHONE);
 
   // All three tokens are independent and valid at the same time.
   for (const [name, token] of [["laptop", laptop], ["phone", phone]]) {
     const me = await api("GET", "/auth/me", undefined, token);
-    assert.equal(me.user.email, "multi@flowgpt.test", `${name} phải đăng nhập được`);
+    assert.equal(me.user.email, "multi@fbuddy.test", `${name} phải đăng nhập được`);
     assert.ok(me.sessionId, `${name} phải có sessionId riêng`);
   }
   const laptopSessionId = (await api("GET", "/auth/me", undefined, laptop)).sessionId;
@@ -62,8 +62,8 @@ test("one account, three devices: every session keeps working", async () => {
 });
 
 test("revoking one device never touches the others", async () => {
-  const laptop = await loginDevice("multi@flowgpt.test", FULL, UA_CHROME);
-  const phone = await loginDevice("multi@flowgpt.test", FULL, UA_IPHONE);
+  const laptop = await loginDevice("multi@fbuddy.test", FULL, UA_CHROME);
+  const phone = await loginDevice("multi@fbuddy.test", FULL, UA_IPHONE);
 
   const list = await api("GET", "/auth/sessions", undefined, laptop);
   const phoneSession = list.items.find((s) => !s.current && /Safari/.test(s.label ?? ""));
@@ -84,14 +84,14 @@ test("revoking one device never touches the others", async () => {
 });
 
 test("logout only ends the calling device; revoke-others keeps it", async () => {
-  const laptop = await loginDevice("multi@flowgpt.test", FULL, UA_CHROME);
-  const phone = await loginDevice("multi@flowgpt.test", FULL, UA_IPHONE);
+  const laptop = await loginDevice("multi@fbuddy.test", FULL, UA_CHROME);
+  const phone = await loginDevice("multi@fbuddy.test", FULL, UA_IPHONE);
 
   await api("POST", "/auth/logout", {}, phone);
   assert.equal((await apiRaw("GET", "/auth/me", undefined, phone)).status, 401, "đăng xuất phải thu hồi phiên hiện tại");
   assert.equal((await apiRaw("GET", "/auth/me", undefined, laptop)).status, 200, "đăng xuất máy này không được đá máy kia");
 
-  const other = await loginDevice("multi@flowgpt.test", FULL, UA_IPHONE);
+  const other = await loginDevice("multi@fbuddy.test", FULL, UA_IPHONE);
   const result = await api("POST", "/auth/sessions/revoke-others", {}, laptop);
   assert.ok(result.revoked >= 1);
   assert.equal((await apiRaw("GET", "/auth/me", undefined, other)).status, 401);
@@ -102,29 +102,29 @@ test("logout only ends the calling device; revoke-others keeps it", async () => 
 });
 
 test("changing the password revokes every device", async () => {
-  const laptop = await loginDevice("multi@flowgpt.test", FULL, UA_CHROME);
-  const phone = await loginDevice("multi@flowgpt.test", FULL, UA_IPHONE);
+  const laptop = await loginDevice("multi@fbuddy.test", FULL, UA_CHROME);
+  const phone = await loginDevice("multi@fbuddy.test", FULL, UA_IPHONE);
   await api("PATCH", "/auth/me", { currentPassword: FULL, password: "matkhaumoi12345" }, laptop);
 
   assert.equal((await apiRaw("GET", "/auth/me", undefined, laptop)).status, 401);
   assert.equal((await apiRaw("GET", "/auth/me", undefined, phone)).status, 401);
-  const relogin = await loginDevice("multi@flowgpt.test", "matkhaumoi12345", UA_CHROME);
+  const relogin = await loginDevice("multi@fbuddy.test", "matkhaumoi12345", UA_CHROME);
   assert.equal((await apiRaw("GET", "/auth/me", undefined, relogin)).status, 200);
   // Put the password back so the remaining tests keep using FULL.
   await api("PATCH", "/auth/me", { currentPassword: "matkhaumoi12345", password: FULL }, relogin);
 });
 
 test("tokens minted before sessions existed still work (no forced logout on deploy)", async () => {
-  const user = createUser({ email: "legacy-session@flowgpt.test", password: FULL });
+  const user = createUser({ email: "legacy-session@fbuddy.test", password: FULL });
   const { issueToken } = await import("../src/auth.js");
   const legacy = issueToken(user); // no sid
   const me = await api("GET", "/auth/me", undefined, legacy);
-  assert.equal(me.user.email, "legacy-session@flowgpt.test");
+  assert.equal(me.user.email, "legacy-session@fbuddy.test");
   assert.equal(me.sessionId, null, "token cũ không có phiên để quản lý");
 });
 
 test("the device list is capped so it cannot grow forever", () => {
-  const user = createUser({ email: "many-devices@flowgpt.test", password: FULL });
+  const user = createUser({ email: "many-devices@fbuddy.test", password: FULL });
   for (let i = 0; i < sessions.MAX_SESSIONS_PER_USER + 3; i += 1) {
     startSession({ user, ip: "127.0.0.1", userAgent: `${UA_CHROME} build/${i}` });
   }
@@ -134,8 +134,8 @@ test("the device list is capped so it cannot grow forever", () => {
 });
 
 test("the conversation you were in follows the account to the next device", async () => {
-  const laptop = await loginDevice("multi@flowgpt.test", FULL, UA_CHROME);
-  const phone = await loginDevice("multi@flowgpt.test", FULL, UA_IPHONE);
+  const laptop = await loginDevice("multi@fbuddy.test", FULL, UA_CHROME);
+  const phone = await loginDevice("multi@fbuddy.test", FULL, UA_IPHONE);
 
   const events = await chat({ token: laptop, content: "Xin chào, đây là hội thoại trên laptop" });
   const started = events.find((event) => event.event === "start").data;
@@ -177,7 +177,7 @@ test("the conversation you were in follows the account to the next device", asyn
   assert.equal((await api("GET", "/auth/me", undefined, laptop)).lastConversationId, null);
 
   // Someone else's conversation cannot be pinned as "active".
-  const stranger = createUser({ email: "stranger-session@flowgpt.test", password: FULL });
+  const stranger = createUser({ email: "stranger-session@fbuddy.test", password: FULL });
   const strangerConversation = await api("POST", "/conversations", { title: "Riêng tư" }, startSession({ user: stranger }).token);
   const forbidden = await apiRaw(
     "POST",

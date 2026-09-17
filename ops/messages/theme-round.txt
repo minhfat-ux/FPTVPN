@@ -1,6 +1,6 @@
-🎨 FlowGpt — theme "FlowTech Signature" đã áp cho cả hệ sinh thái
+🎨 fBuddy — theme "FlowTech Signature" đã áp cho cả hệ sinh thái
 
-1) FLOWGPT (app chính)
+1) FBUDDY (app chính)
 • Nút chính gradient #33C773 → #22D3EE, chữ đậm, có hào quang, hover nhấc 1px
 • Card nổi bật (gói nạp, chợ kỹ năng, panel giá) dùng nền navy gradient + viền gradient 1px
 • Có animation xuất hiện (rise/fade/slide) và tôn trọng "giảm chuyển động" của hệ điều hành
@@ -19,7 +19,7 @@
 • Đã bump phiên bản file để máy đang cache lấy bản mới
 
 KIỂM CHỨNG
-• FlowGpt: banner có link tải thật, nút gradient, card viền gradient, 0 lỗi console (chụp 4 trang)
+• fBuddy: banner có link tải thật, nút gradient, card viền gradient, 0 lỗi console (chụp 4 trang)
 • Control plane: service active, 0 lần restart lỗi, /buy 200 (26 chỗ gradient), admin 200, các route phụ 200
 • 157/157 test tự động pass
 

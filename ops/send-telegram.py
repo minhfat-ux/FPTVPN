@@ -19,7 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ENV_FILE = os.environ.get("FLOWGPT_TG_ENV", "/etc/flowvpn-tg-bot.env")
+ENV_FILE = os.environ.get("FBUDDY_TG_ENV", "/etc/flowvpn-tg-bot.env")
 
 
 def load_env(path):

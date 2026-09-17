@@ -26,10 +26,14 @@ const patternsDefault = [
   "choice-e2e+%",
   "ocr-e2e+%",
   "tap-probe+%",
-  "smoke+%@flowgpt.local",
+  "sepay-e2e+%",
+  "smoke+%@fbuddy.local",
 ];
 const patterns = PATTERNS.length ? PATTERNS : patternsDefault;
-const DB = process.env.FLOWGPT_DB ?? "/var/lib/flowgpt/flowgpt.db";
+// Đường dẫn CSDL. Tên mới là FBUDDY_DB / fbuddy.db; FLOWGPT_DB và đường dẫn
+// /var/lib/flowgpt vẫn được nhận trong lúc production chưa migrate (xem
+// docs/RENAME-FBUDDY.md).
+const DB = process.env.FBUDDY_DB ?? process.env.FLOWGPT_DB ?? "/var/lib/fbuddy/fbuddy.db";
 
 const db = new DatabaseSync(DB);
 const tables = db

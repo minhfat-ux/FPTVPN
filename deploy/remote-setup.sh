@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Remote installer for FlowGpt on node-2 (fcnvps2 / 165.101.114.162).
+# Remote installer for fBuddy on node-2 (fcnvps2 / 165.101.114.162).
 #
 # Idempotent: safe to run on every deploy. Follows the VPS house rules —
 # back up Caddy before editing, `caddy validate` before reload, verify with curl.
 #
-# Usage (on the server, after the release tarball has been extracted to /opt/flowgpt):
-#   bash /opt/flowgpt/deploy/remote-setup.sh
+# Usage (on the server, after the release tarball has been extracted to /opt/fbuddy):
+#   bash /opt/fbuddy/deploy/remote-setup.sh
 set -euo pipefail
 
-APP_DIR=/opt/flowgpt
-ENV_DIR=/etc/flowgpt
-ENV_FILE=$ENV_DIR/flowgpt.env
-DATA_DIR=/var/lib/flowgpt
+APP_DIR=/opt/fbuddy
+ENV_DIR=/etc/fbuddy
+ENV_FILE=$ENV_DIR/fbuddy.env
+DATA_DIR=/var/lib/fbuddy
 PORT=7790
-DOMAIN=flowgpt.meetflowai.site
-SERVICE=flowgpt
+DOMAIN=fbuddy.meetflowai.site
+SERVICE=fbuddy
 CADDYFILE=/etc/caddy/Caddyfile
 STAMP=$(date +%Y%m%d-%H%M%S)
 
@@ -30,13 +30,13 @@ if [ ! -f "$ENV_FILE" ]; then
   log "Tạo $ENV_FILE lần đầu (secret sinh tự động, không in ra màn hình)"
   SECRET=$(openssl rand -base64 48 | tr -d '\n')
   cat > "$ENV_FILE" <<EOF
-FLOWGPT_SECRET=$SECRET
-FLOWGPT_PUBLIC_URL=https://$DOMAIN
-FLOWGPT_HOST=127.0.0.1
-FLOWGPT_PORT=$PORT
-FLOWGPT_DATA_DIR=$DATA_DIR
-FLOWGPT_APP_NAME=FlowGpt
-FLOWGPT_TRUST_PROXY=true
+FBUDDY_SECRET=$SECRET
+FBUDDY_PUBLIC_URL=https://$DOMAIN
+FBUDDY_HOST=127.0.0.1
+FBUDDY_PORT=$PORT
+FBUDDY_DATA_DIR=$DATA_DIR
+FBUDDY_APP_NAME=fBuddy
+FBUDDY_TRUST_PROXY=true
 EOF
   chmod 600 "$ENV_FILE"
 else
@@ -55,11 +55,11 @@ log "3/6 Caddy"
 if grep -qE "^[[:space:]]*$DOMAIN([[:space:],{]|$)" "$CADDYFILE"; then
   log "$DOMAIN đã có trong Caddyfile — bỏ qua"
 else
-  cp -a "$CADDYFILE" "$CADDYFILE.bak-flowgpt-$STAMP"
-  log "Backup: $CADDYFILE.bak-flowgpt-$STAMP"
+  cp -a "$CADDYFILE" "$CADDYFILE.bak-fbuddy-$STAMP"
+  log "Backup: $CADDYFILE.bak-fbuddy-$STAMP"
   cat >> "$CADDYFILE" <<EOF
 
-# FlowGpt — AI chatbox web (chat, sửa ảnh, PPT, Excel, phân tích dữ liệu).
+# fBuddy — AI chatbox web (chat, sửa ảnh, PPT, Excel, phân tích dữ liệu).
 # Node phục vụ ở $PORT (systemd $SERVICE). Thiếu block này là edge trả 404/525.
 $DOMAIN {
 	encode zstd gzip
@@ -71,7 +71,7 @@ EOF
     log "Caddy đã reload"
   else
     log "Caddyfile KHÔNG hợp lệ — khôi phục bản backup"
-    cp -a "$CADDYFILE.bak-flowgpt-$STAMP" "$CADDYFILE"
+    cp -a "$CADDYFILE.bak-fbuddy-$STAMP" "$CADDYFILE"
     caddy validate --config "$CADDYFILE"
     exit 1
   fi
@@ -89,13 +89,13 @@ systemctl is-active --quiet "$SERVICE" || {
 # --------------------------------------------------------------- 5. verify
 log "5/6 Kiểm tra"
 for i in 1 2 3 4 5; do
-  if curl -fsS "http://127.0.0.1:$PORT/api/health" >/tmp/flowgpt-health.json 2>/dev/null; then
+  if curl -fsS "http://127.0.0.1:$PORT/api/health" >/tmp/fbuddy-health.json 2>/dev/null; then
     break
   fi
   log "Chờ service lên (lần $i)…"
   sleep 2
 done
-cat /tmp/flowgpt-health.json
+cat /tmp/fbuddy-health.json
 echo
 
 # ------------------------------------------------------------- 6. summary

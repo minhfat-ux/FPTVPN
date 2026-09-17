@@ -75,7 +75,7 @@ await send("Page.reload", { ignoreCache: true });
 await waitFor("Boolean(document.querySelector('.auth-card'))", 20000, "login page after reload");
 console.log("1. Trang đăng nhập đã hiển thị");
 
-const email = `login-check-${Date.now()}@flowgpt.local`;
+const email = `login-check-${Date.now()}@fbuddy.local`;
 await evaluate(`(() => {
   const input = document.querySelector('.auth-card input[type="email"]');
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;

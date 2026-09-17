@@ -2,13 +2,13 @@
 # Diagnose a failed login-by-code attempt. Read-only apart from nothing.
 set -u
 echo "== các lần gọi auth trong log (500 dòng gần nhất) =="
-journalctl -u flowgpt -n 800 --no-pager | grep -E '"path":"/api/auth' | tail -25
+journalctl -u fbuddy -n 800 --no-pager | grep -E '"path":"/api/auth' | tail -25
 
 echo
 echo "== bảng email_tokens =="
 python3 - <<'PY'
 import sqlite3, datetime, json
-con = sqlite3.connect('/var/lib/flowgpt/flowgpt.db')
+con = sqlite3.connect('/var/lib/fbuddy/fbuddy.db')
 con.row_factory = sqlite3.Row
 rows = con.execute("select id,email,attempts,expires_at,consumed_at,created_at from email_tokens order by created_at desc limit 12").fetchall()
 if not rows:

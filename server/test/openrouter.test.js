@@ -54,7 +54,7 @@ test("openrouter requests carry the attribution headers OpenRouter asks for", as
 
   await providers.providerModels({ provider });
   assert.equal(calls[0].url, "https://openrouter.ai/api/v1/models");
-  assert.equal(calls[0].init.headers["X-Title"], "FlowGpt");
+  assert.equal(calls[0].init.headers["X-Title"], "fBuddy");
   assert.ok(calls[0].init.headers["HTTP-Referer"], "cần HTTP-Referer");
 
   globalThis.fetch = originalFetch;

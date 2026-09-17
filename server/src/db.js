@@ -290,7 +290,7 @@ function migrate() {
     const existing = new Set(db.prepare(`PRAGMA table_info(${entry.table})`).all().map((row) => row.name));
     if (existing.has(entry.column)) continue;
     db.exec(`ALTER TABLE ${entry.table} ADD COLUMN ${entry.column} ${entry.definition}`);
-    console.log(`[flowgpt] đã thêm cột ${entry.table}.${entry.column}`);
+    console.log(`[fbuddy] đã thêm cột ${entry.table}.${entry.column}`);
     if (entry.table === "hub_skills" && entry.column === "price_vnd") backfillHubPriceVnd();
   }
   COLUMN_CACHE.clear();
@@ -309,7 +309,7 @@ function backfillHubPriceVnd() {
     .prepare("UPDATE hub_skills SET price_vnd = price * ? WHERE price_vnd = 0 AND price > 0")
     .run(perCredit);
   if (result.changes) {
-    console.log(`[flowgpt] quy đổi giá ${result.changes} kỹ năng sang VND (${perCredit}đ/credit)`);
+    console.log(`[fbuddy] quy đổi giá ${result.changes} kỹ năng sang VND (${perCredit}đ/credit)`);
   }
 }
 
@@ -423,7 +423,7 @@ export function count(table, where = "", params = []) {
 
 export const DEFAULT_APP_SETTINGS = {
   systemPrompt: [
-    "Bạn là FlowGpt — trợ lý AI đa năng của MeetFlow AI, trả lời bằng tiếng Việt tự nhiên, ngắn gọn và chính xác.",
+    "Bạn là fBuddy — trợ lý AI đa năng của MeetFlow AI, trả lời bằng tiếng Việt tự nhiên, ngắn gọn và chính xác.",
     "Khi người dùng cần tạo tệp (slide, bảng tính, phân tích dữ liệu, sửa ảnh), hãy dùng công cụ tương ứng thay vì chỉ mô tả.",
     "Nếu thiếu thông tin quan trọng, hỏi lại tối đa một câu ngắn rồi vẫn đưa ra bản nháp hợp lý.",
     "Khi đã tạo tệp, chỉ nói ngắn gọn đã tạo gì và nêu vài số liệu chính; KHÔNG viết link tải kiểu sandbox:/… hay đường dẫn giả — giao diện đã hiện thẻ tệp cho người dùng bấm tải.",
@@ -435,7 +435,7 @@ export const DEFAULT_APP_SETTINGS = {
   maxToolIterations: 6,
   maxUploadMb: 25,
   allowSignup: true,
-  appName: "FlowGpt",
+  appName: "fBuddy",
   imageModel: null,
   /**
    * Which provider/model reads images (OCR, "đưa ảnh thành Excel") when the model
@@ -455,7 +455,7 @@ export const DEFAULT_APP_SETTINGS = {
   showLoginCodeWhenNoMailer: true,
   /** Sender identity for login mail. */
   mailerFrom: "no-reply@meetflowai.site",
-  mailerFromName: "FlowGpt",
+  mailerFromName: "fBuddy",
   /** AES-GCM encrypted Resend API key (never returned by the API as-is). */
   resendApiKeyEnc: null,
 
@@ -491,8 +491,8 @@ export const DEFAULT_APP_SETTINGS = {
    */
   vndPerCredit: 1,
   /** Where the "nạp thêm" button sends people. */
-  creditBuyUrl: "https://flowgpt.meetflowai.site/?view=topup",
-  /** Token packages sold on the FlowGpt top-up page (price in VND). */
+  creditBuyUrl: "https://fbuddy.meetflowai.site/?view=topup",
+  /** Token packages sold on the fBuddy top-up page (price in VND). */
   topupPackages: [
     { id: "starter", name: "Gói khởi đầu", tokens: 10000, priceVnd: null, bonusTokens: 0, note: "Phù hợp để thử" },
     { id: "pro", name: "Gói Pro", tokens: 50000, priceVnd: null, bonusTokens: 5000, note: "Phổ biến nhất" },
@@ -503,12 +503,12 @@ export const DEFAULT_APP_SETTINGS = {
   bankAccount: "",
   bankAccountName: "",
   /** Prefix of the transfer note so the owner can match a payment to an order. */
-  bankNotePrefix: "FLOWGPT",
+  bankNotePrefix: "FBUDDY",
 
   // --- SePay (tự động xác nhận nạp tiền) -----------------------------------
   /** Bật/tắt tự động cộng credit khi tiền vào. */
   sepayEnabled: false,
-  /** `webhook` = SePay gọi vào FlowGpt; `poll` = FlowGpt gọi API giao dịch. */
+  /** `webhook` = SePay gọi vào fBuddy; `poll` = fBuddy gọi API giao dịch. */
   sepayMode: "poll",
   /** Chu kỳ poll (giây). */
   sepayPollSeconds: 60,
@@ -522,17 +522,17 @@ export const DEFAULT_APP_SETTINGS = {
   promoCreditSnoozeMinutes: 1440,
   /**
    * Public model names shown to users (vendor names stay internal). Models that
-   * are not listed here still get a FlowGPT-style label when they come from a
+   * are not listed here still get a fBuddy-style label when they come from a
    * known family (see `publicModelLabel`).
    */
   modelAliases: {
-    "glm-4-flash": "FlowGPT-4-Flash",
-    "glm-4.5-air": "FlowGPT-4.5-Air",
-    "glm-4.5": "FlowGPT-4.5",
-    "glm-4.6": "FlowGPT-4.6",
-    "glm-4.7": "FlowGPT-4.7",
-    "glm-5.3-flash": "FlowGPT-5.3-Flash",
-    "glm-5.3": "FlowGPT-5.3",
+    "glm-4-flash": "fBuddy-4-Flash",
+    "glm-4.5-air": "fBuddy-4.5-Air",
+    "glm-4.5": "fBuddy-4.5",
+    "glm-4.6": "fBuddy-4.6",
+    "glm-4.7": "fBuddy-4.7",
+    "glm-5.3-flash": "fBuddy-5.3-Flash",
+    "glm-5.3": "fBuddy-5.3",
   },
 };
 

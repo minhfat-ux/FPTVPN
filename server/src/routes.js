@@ -89,6 +89,16 @@ import {
 } from "./skills/hub.js";
 import { listAllTools, refreshServer, testServerConfig } from "./mcp.js";
 import {
+  applyTransaction,
+  pendingOrders,
+  pollOnce,
+  recordPoll,
+  sepayConfig,
+  sepayStatus,
+  verifySepayApiKey,
+  verifySepaySignature,
+} from "./sepay.js";
+import {
   createConversation,
   deleteConversation,
   duplicateConversation,
@@ -139,6 +149,22 @@ const audioUpload = multer({
 
 function clientKey(req) {
   return `${req.user?.id ?? "anon"}:${req.ip}`;
+}
+
+/**
+ * Thân request dạng nguyên văn, để kiểm chữ ký HMAC của SePay.
+ *
+ * `index.js` gắn `express.raw` cho đúng route webhook nên `req.body` là Buffer;
+ * các trường hợp còn lại (test gọi thẳng router, body đã parse) được chấp nhận
+ * với điều kiện dựng lại được chuỗi JSON — chữ ký chỉ khớp khi chuỗi đó đúng
+ * nguyên văn bên gửi, nên sai thì bị từ chối chứ không xác thực nhầm.
+ */
+function rawBodyOf(req) {
+  if (Buffer.isBuffer(req.body)) return req.body.toString("utf8");
+  if (typeof req.body === "string") return req.body;
+  if (typeof req.rawBody === "string") return req.rawBody;
+  if (req.body && typeof req.body === "object") return JSON.stringify(req.body);
+  return "";
 }
 
 export function createApiRouter() {
@@ -272,7 +298,7 @@ export function createApiRouter() {
   router.post(
     "/auth/logout",
     asyncHandler(async (req, res) => {
-      res.setHeader("Set-Cookie", "flowgpt_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+      res.setHeader("Set-Cookie", "fbuddy_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
       const user = currentUser(req);
       if (user && req.sessionId) {
         revokeSession({ sessionId: req.sessionId, userId: user.id, reason: "logout" });
@@ -292,7 +318,7 @@ export function createApiRouter() {
     if (!result.ok) throw notFound("Không tìm thấy phiên đăng nhập");
     audit(req.user.id, "auth.session_revoke", req.params.id, { current: req.params.id === req.sessionId });
     if (req.params.id === req.sessionId) {
-      res.setHeader("Set-Cookie", "flowgpt_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+      res.setHeader("Set-Cookie", "fbuddy_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
     }
     res.json({ ok: true, current: req.params.id === req.sessionId, ...result });
   });
@@ -363,7 +389,7 @@ export function createApiRouter() {
 
   // NOTE: registered before `/conversations/:id` so "active" is not read as an id.
   /**
-   * Remembers which conversation this account is working on, so opening FlowGpt
+   * Remembers which conversation this account is working on, so opening fBuddy
    * on another device continues the same thread (per user, not per session).
    */
   router.post(
@@ -655,7 +681,7 @@ export function createApiRouter() {
       const row = getProviderRow(config.tts.providerId);
       if (!row) throw badRequest("Nhà cung cấp TTS đã bị xoá");
       const provider = toRuntimeProvider(row);
-      const text = String(req.body?.text ?? "Xin chào, em là FlowGpt. Giọng đọc này đang chạy tốt.");
+      const text = String(req.body?.text ?? "Xin chào, em là fBuddy. Giọng đọc này đang chạy tốt.");
       const started = Date.now();
       const result = await synthesizeSpeech({
         provider,
@@ -954,7 +980,7 @@ export function createApiRouter() {
           decisionPageHtml({
             ok: false,
             title: check.reason === "expired" ? "Liên kết đã hết hạn" : "Liên kết không hợp lệ",
-            detail: "Hãy mở FlowGpt → Cài đặt → Người dùng để duyệt yêu cầu này.",
+            detail: "Hãy mở fBuddy → Cài đặt → Người dùng để duyệt yêu cầu này.",
           }),
         );
       }
@@ -1134,7 +1160,7 @@ export function createApiRouter() {
           topupPageHtml({
             ok: false,
             title: check.reason === "expired" ? "Liên kết đã hết hạn" : "Liên kết không hợp lệ",
-            detail: "Mở FlowGpt → Cài đặt → Đơn nạp token để xác nhận thủ công.",
+            detail: "Mở fBuddy → Cài đặt → Đơn nạp token để xác nhận thủ công.",
           }),
         );
       }
@@ -1166,6 +1192,76 @@ export function createApiRouter() {
     }),
   );
 
+  // ------------------------------------------------- SePay: xác nhận tự động
+
+  /**
+   * SePay gọi vào đây mỗi khi tài khoản có tiền vào (chế độ `webhook`).
+   *
+   * Không dùng `requireAuth`: SePay không có phiên đăng nhập, nó xác thực bằng
+   * chữ ký HMAC (`X-SePay-Signature` + `X-SePay-Timestamp`) hoặc `Authorization:
+   * Apikey <webhook secret>`. Credit chỉ được cộng qua `confirmTopupOrder` (đã
+   * idempotent) nên webhook gửi lại nhiều lần cũng không cộng hai lần.
+   */
+  router.post(
+    "/topup/sepay",
+    asyncHandler(async (req, res) => {
+      const cfg = sepayConfig();
+      if (!cfg.enabled) {
+        throw new ApiError(403, "sepay_disabled", "SePay đang tắt trong Cài đặt → Hệ thống");
+      }
+
+      const rawBody = rawBodyOf(req);
+      const authorized =
+        verifySepaySignature({
+          rawBody,
+          signature: req.get("x-sepay-signature"),
+          timestamp: req.get("x-sepay-timestamp"),
+          secret: cfg.webhookSecret,
+        }) || verifySepayApiKey({ header: req.get("authorization"), secret: cfg.webhookSecret });
+      if (!authorized) throw new ApiError(401, "unauthorized", "Chữ ký SePay không hợp lệ");
+
+      let payload;
+      try {
+        payload = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        throw badRequest("Thân request không phải JSON hợp lệ");
+      }
+
+      const incoming = Array.isArray(payload?.transactions) ? payload.transactions : [payload];
+      const orders = pendingOrders();
+      const results = incoming
+        .filter((entry) => entry && typeof entry === "object")
+        .map((transaction) => applyTransaction({ transaction, orders }));
+
+      const applied = results.filter((item) => item.matched && !item.alreadyPaid && !item.error);
+      const failed = results.filter((item) => item.error);
+      const credits = applied.reduce((sum, item) => sum + Number(item.tokens ?? 0), 0);
+      if (applied.length || failed.length) {
+        console.log(
+          `[fbuddy] SePay webhook: ${incoming.length} giao dịch, khớp ${applied.length} đơn` +
+            (credits ? ` → ${credits.toLocaleString("vi-VN")} credit` : "") +
+            (failed.length ? `, ${failed.length} lỗi` : ""),
+        );
+      }
+
+      // Đã xác thực thì luôn trả 200: giao dịch không khớp đơn nào (tiền vào vì
+      // việc khác) là bình thường, trả lỗi chỉ khiến SePay gửi lại vô ích.
+      res.json({
+        ok: true,
+        checked: incoming.length,
+        applied: applied.length,
+        orders: applied.map((item) => ({
+          orderId: item.orderId,
+          transferNote: item.transferNote,
+          credits: item.tokens,
+        })),
+        ...(failed.length
+          ? { errors: failed.map((item) => ({ orderId: item.orderId, message: item.error })) }
+          : {}),
+      });
+    }),
+  );
+
   router.get("/admin/topup-orders", requireAdmin, (req, res) => {
     const status = ["pending", "awaiting_confirmation", "paid", "cancelled"].includes(String(req.query.status))
       ? String(req.query.status)
@@ -1184,6 +1280,37 @@ export function createApiRouter() {
       });
       audit(req.user.id, "topup.confirm", req.params.id, { balance: result.balance, tokens: result.order.tokens });
       res.json(result);
+    }),
+  );
+
+  // ------------------------------------------------------- admin: SePay
+
+  router.get("/admin/sepay/status", requireAdmin, (_req, res) => {
+    res.json(sepayStatus());
+  });
+
+  /**
+   * Chạy một vòng poll ngay (nút "Kiểm tra ngay" ở control panel) — dùng khi
+   * poller chưa bật, hoặc khi khách báo đã chuyển khoản mà muốn đối chiếu liền.
+   */
+  router.post(
+    "/admin/sepay/poll",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const cfg = sepayConfig();
+      if (!cfg.apiToken) {
+        throw badRequest("Chưa có SePay API token — dán vào Cài đặt → Hệ thống → SePay rồi lưu trước.");
+      }
+      let result;
+      try {
+        result = await pollOnce({ token: cfg.apiToken, limit: Number(req.body?.limit) || 50 });
+      } catch (err) {
+        recordPoll(null, err);
+        throw new ApiError(502, "sepay_api_error", `SePay API lỗi: ${err?.message ?? err}`);
+      }
+      recordPoll(result);
+      audit(req.user.id, "sepay.poll", null, { checked: result.checked, applied: result.applied.length });
+      res.json({ ...result, status: sepayStatus() });
     }),
   );
 
@@ -1245,7 +1372,7 @@ function setAuthCookie(res, token) {
   const secure = config.publicUrl.startsWith("https://") ? "; Secure" : "";
   res.setHeader(
     "Set-Cookie",
-    `flowgpt_token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`,
+    `fbuddy_token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`,
   );
 }
 

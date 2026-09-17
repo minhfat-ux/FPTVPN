@@ -10,7 +10,7 @@ CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, 
 [ -n "${CHAT:-}" ] || { echo "Không có chat id"; exit 1; }
 
 TEXT=$(cat <<'MSG'
-🎙 FlowGpt — đã có NÓI CHUYỆN BẰNG GIỌNG NÓI (bản miễn phí 100%)
+🎙 fBuddy — đã có NÓI CHUYỆN BẰNG GIỌNG NÓI (bản miễn phí 100%)
 
 CÁCH DÙNG (không cần key, không tốn phí)
 • Nút micro trong ô chat: nói → chữ tự hiện vào ô chat

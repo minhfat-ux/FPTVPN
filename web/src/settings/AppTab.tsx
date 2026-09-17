@@ -257,7 +257,7 @@ export function AppTab() {
             <input className="input input-mono" value={settings.mailerFrom} onChange={(event) => patch({ mailerFrom: event.target.value })} placeholder="no-reply@meetflowai.site" />
           </Field>
           <Field label={t("settings.app.mailerFromNameLabel")} hint={t("settings.app.mailerFromNameHint")}>
-            <input className="input" value={settings.mailerFromName} onChange={(event) => patch({ mailerFromName: event.target.value })} placeholder="FlowGpt" />
+            <input className="input" value={settings.mailerFromName} onChange={(event) => patch({ mailerFromName: event.target.value })} placeholder="fBuddy" />
           </Field>
         </div>
 

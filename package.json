@@ -1,8 +1,8 @@
 {
-  "name": "flowgpt",
+  "name": "fbuddy",
   "private": true,
   "version": "0.1.0",
-  "description": "FlowGpt — web AI chatbox (chat + image editing + PPT/Excel/data-analysis skills) for flowgpt.meetflowai.site",
+  "description": "fBuddy — web AI chatbox (chat + image editing + PPT/Excel/data-analysis skills) for fbuddy.meetflowai.site",
   "type": "module",
   "workspaces": [
     "server",

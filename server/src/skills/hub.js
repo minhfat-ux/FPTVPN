@@ -366,9 +366,9 @@ const SEED = [
   {
     slug: "brand-voice",
     name: "Giọng thương hiệu riêng",
-    tagline: "Skill riêng của công ty: dạy FlowGpt nói đúng giọng của anh",
+    tagline: "Skill riêng của công ty: dạy fBuddy nói đúng giọng của anh",
     description:
-      "Đang hoàn thiện: anh mô tả giọng thương hiệu (từ nên dùng, từ cấm, cách xưng hô, ví dụ câu mẫu) và FlowGpt sẽ viết mọi nội dung theo đúng giọng đó.",
+      "Đang hoàn thiện: anh mô tả giọng thương hiệu (từ nên dùng, từ cấm, cách xưng hô, ví dụ câu mẫu) và fBuddy sẽ viết mọi nội dung theo đúng giọng đó.",
     category: "Nội dung",
     icon: "sparkles",
     priceVnd: 0,

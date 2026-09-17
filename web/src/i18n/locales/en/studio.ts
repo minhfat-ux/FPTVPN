@@ -3,9 +3,9 @@ import type { Dict } from "../../types";
 /** English translations for this namespace. */
 export const studio: Dict = {
   // ---- Studio shell
-  "studio.title": "FlowGpt Studio",
+  "studio.title": "fBuddy Studio",
   "studio.intro":
-    "Work directly with four skills without typing chat commands: edit images on a canvas, build PowerPoint slides, create Excel spreadsheets and analyse data. Everything the AI produces (images, PPTX, XLSX) shows up right inside the tool and is saved to FlowGpt.",
+    "Work directly with four skills without typing chat commands: edit images on a canvas, build PowerPoint slides, create Excel spreadsheets and analyse data. Everything the AI produces (images, PPTX, XLSX) shows up right inside the tool and is saved to fBuddy.",
   "studio.tab.image": "Edit images",
   "studio.tab.ppt": "Build slides",
   "studio.tab.excel": "Build Excel",
@@ -51,7 +51,7 @@ export const studio: Dict = {
   "studio.image.needTextPos": "Click the image to choose where the text goes",
   "studio.image.textAdded": "Text added to the image",
   "studio.image.exportFailed": "Could not export the image in this format",
-  "studio.image.savedToFlowGpt": "Image saved to FlowGpt",
+  "studio.image.savedTofBuddy": "Image saved to fBuddy",
   "studio.image.saveFailed": "Could not save the image",
   "studio.image.textDefault": "Content",
 
@@ -102,7 +102,7 @@ export const studio: Dict = {
   "studio.image.shape.color": "Stroke colour",
   "studio.image.shape.hint": "Drag on the image to draw a shape.",
   "studio.image.export.title": "Export image",
-  "studio.image.export.save": "Save to FlowGpt",
+  "studio.image.export.save": "Save to fBuddy",
   "studio.image.export.quality": "Compression quality: {percent}%",
   "studio.image.export.saved": "Saved",
 
@@ -174,11 +174,11 @@ export const studio: Dict = {
   "studio.ppt.noteLine": "Note: {note}",
   "studio.ppt.noSlides": "No slides yet.",
   "studio.ppt.instruction": "Create a PowerPoint file from the following JSON outline, keeping the content unchanged:",
-  "studio.ppt.defaultTitle": "FlowGpt introduction deck",
+  "studio.ppt.defaultTitle": "fBuddy introduction deck",
   "studio.ppt.defaultSubtitle": "A multi-skill AI assistant for Vietnamese businesses",
 
   // ---- PptBuilder: sample outline
-  "studio.ppt.sample1.title": "FlowGpt — an AI assistant for Vietnamese businesses",
+  "studio.ppt.sample1.title": "fBuddy — an AI assistant for Vietnamese businesses",
   "studio.ppt.sample1.subtitle": "Product introduction report",
   "studio.ppt.sample1.bullets": "A multi-skill AI chat platform\nNatural Vietnamese support\nOn-premise deployment, safe data",
   "studio.ppt.sample1.notes": "Open with the number: 70% of repetitive requests can be automated.",
@@ -239,7 +239,7 @@ export const studio: Dict = {
   "studio.excel.generatingHint": "Working: the AI is building the table and formatting the file, please wait.",
   "studio.excel.files": "Created files",
   "studio.excel.instruction": "Create an Excel file from the following JSON data, keeping the content unchanged:",
-  "studio.excel.defaultFileName": "flowgpt-report",
+  "studio.excel.defaultFileName": "fbuddy-report",
   "studio.excel.sampleFileName": "revenue-report",
   "studio.excel.fallbackFileName": "spreadsheet",
   "studio.excel.sampleSheet": "Revenue",

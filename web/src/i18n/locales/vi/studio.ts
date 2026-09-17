@@ -3,9 +3,9 @@ import type { Dict } from "../../types";
 /** Nguồn sự thật (tiếng Việt). Thêm khoá mới ở đây trước, rồi dịch sang en/zh. */
 export const studio: Dict = {
   // ---- khung Studio
-  "studio.title": "Studio FlowGpt",
+  "studio.title": "Studio fBuddy",
   "studio.intro":
-    "Làm việc trực tiếp với bốn kỹ năng, không cần gõ lệnh chat: sửa ảnh trên canvas, dựng slide PowerPoint, tạo bảng tính Excel và phân tích dữ liệu. Kết quả AI tạo ra (ảnh, PPTX, XLSX) sẽ xuất hiện ngay trong công cụ và được lưu vào FlowGpt.",
+    "Làm việc trực tiếp với bốn kỹ năng, không cần gõ lệnh chat: sửa ảnh trên canvas, dựng slide PowerPoint, tạo bảng tính Excel và phân tích dữ liệu. Kết quả AI tạo ra (ảnh, PPTX, XLSX) sẽ xuất hiện ngay trong công cụ và được lưu vào fBuddy.",
   "studio.tab.image": "Sửa ảnh",
   "studio.tab.ppt": "Làm PPT",
   "studio.tab.excel": "Làm Excel",
@@ -51,7 +51,7 @@ export const studio: Dict = {
   "studio.image.needTextPos": "Bấm vào ảnh để chọn vị trí đặt chữ",
   "studio.image.textAdded": "Đã thêm chữ vào ảnh",
   "studio.image.exportFailed": "Không xuất được ảnh ở định dạng này",
-  "studio.image.savedToFlowGpt": "Đã lưu ảnh vào FlowGpt",
+  "studio.image.savedTofBuddy": "Đã lưu ảnh vào fBuddy",
   "studio.image.saveFailed": "Không lưu được ảnh",
   "studio.image.textDefault": "Nội dung",
 
@@ -102,7 +102,7 @@ export const studio: Dict = {
   "studio.image.shape.color": "Màu nét",
   "studio.image.shape.hint": "Kéo chuột trên ảnh để vẽ hình.",
   "studio.image.export.title": "Xuất ảnh",
-  "studio.image.export.save": "Lưu vào FlowGpt",
+  "studio.image.export.save": "Lưu vào fBuddy",
   "studio.image.export.quality": "Chất lượng nén: {percent}%",
   "studio.image.export.saved": "Đã lưu",
 
@@ -174,11 +174,11 @@ export const studio: Dict = {
   "studio.ppt.noteLine": "Ghi chú: {note}",
   "studio.ppt.noSlides": "Chưa có slide nào.",
   "studio.ppt.instruction": "Tạo file PowerPoint từ dàn ý JSON sau, giữ nguyên nội dung:",
-  "studio.ppt.defaultTitle": "Bộ slide giới thiệu FlowGpt",
+  "studio.ppt.defaultTitle": "Bộ slide giới thiệu fBuddy",
   "studio.ppt.defaultSubtitle": "Trợ lý AI đa kỹ năng cho doanh nghiệp Việt",
 
   // ---- PptBuilder: dàn ý mẫu
-  "studio.ppt.sample1.title": "FlowGpt — Trợ lý AI cho doanh nghiệp Việt",
+  "studio.ppt.sample1.title": "fBuddy — Trợ lý AI cho doanh nghiệp Việt",
   "studio.ppt.sample1.subtitle": "Báo cáo giới thiệu sản phẩm",
   "studio.ppt.sample1.bullets": "Nền tảng chat AI đa kỹ năng\nHỗ trợ tiếng Việt tự nhiên\nTriển khai nội bộ, an toàn dữ liệu",
   "studio.ppt.sample1.notes": "Mở đầu bằng con số: 70% yêu cầu lặp lại có thể tự động hoá.",
@@ -239,7 +239,7 @@ export const studio: Dict = {
   "studio.excel.generatingHint": "Đang xử lý: AI đang dựng bảng và định dạng tệp, vui lòng chờ.",
   "studio.excel.files": "Tệp đã tạo",
   "studio.excel.instruction": "Tạo file Excel từ dữ liệu JSON sau, giữ nguyên nội dung:",
-  "studio.excel.defaultFileName": "bao-cao-flowgpt",
+  "studio.excel.defaultFileName": "bao-cao-fbuddy",
   "studio.excel.sampleFileName": "bao-cao-doanh-thu",
   "studio.excel.fallbackFileName": "bang-tinh",
   "studio.excel.sampleSheet": "Doanh thu",

@@ -1,14 +1,14 @@
 [Unit]
-Description=FlowGpt — AI chatbox (chat, sửa ảnh, PPT, Excel, phân tích dữ liệu)
-Documentation=https://flowgpt.meetflowai.site
+Description=fBuddy — AI chatbox (chat, sửa ảnh, PPT, Excel, phân tích dữ liệu)
+Documentation=https://fbuddy.meetflowai.site
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/flowgpt
-EnvironmentFile=/etc/flowgpt/flowgpt.env
+WorkingDirectory=/opt/fbuddy
+EnvironmentFile=/etc/fbuddy/fbuddy.env
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/node server/src/index.js
 
@@ -19,7 +19,7 @@ KillSignal=SIGTERM
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=flowgpt
+SyslogIdentifier=fbuddy
 
 # node-2 has ~1GB RAM in total: keep one bad turn from taking the box down.
 MemoryMax=600M
@@ -33,7 +33,7 @@ ProtectHome=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-ReadWritePaths=/var/lib/flowgpt
+ReadWritePaths=/var/lib/fbuddy
 
 [Install]
 WantedBy=multi-user.target

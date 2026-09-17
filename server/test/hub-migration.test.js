@@ -13,7 +13,7 @@ import { TEST_DATA_DIR } from "./helpers.js";
  * The legacy database is built before `src/db.js` is imported, because `config.js`
  * resolves the data directory on import and `initDb()` runs the migration.
  */
-const legacyPath = path.join(TEST_DATA_DIR, "flowgpt.db");
+const legacyPath = path.join(TEST_DATA_DIR, "fbuddy.db");
 const legacy = new DatabaseSync(legacyPath);
 legacy.exec(`
 CREATE TABLE app_settings (

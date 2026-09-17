@@ -1,7 +1,7 @@
 # FlowTech Signature — theme dùng chung cho mọi sản phẩm
 
-Nguồn gốc: popup quảng cáo hệ sinh thái trên FlowGpt (`web/public/promo.css`).
-Đây là **hợp đồng style** để FlowGpt, trang buy, admin và control panel trông như một
+Nguồn gốc: popup quảng cáo hệ sinh thái trên fBuddy (`web/public/promo.css`).
+Đây là **hợp đồng style** để fBuddy, trang buy, admin và control panel trông như một
 sản phẩm duy nhất. Mọi giá trị dưới đây là con số thật đang chạy, không phải mô tả.
 
 ## 1. Token
@@ -81,7 +81,7 @@ Tôn trọng người dùng: bọc trong `@media (prefers-reduced-motion: reduce
 
 | Sản phẩm | Việc cần làm |
 |---|---|
-| **FlowGpt** (`web/src/styles.css`) | ✅ **ĐÃ ÁP** (mục "FLOWTECH SIGNATURE THEME"): token + nút chính gradient + viền gradient cho card nổi bật (gói nạp, chợ kỹ năng, panel giá) + `sig-rise` khi card/modal hiện. |
+| **fBuddy** (`web/src/styles.css`) | ✅ **ĐÃ ÁP** (mục "FLOWTECH SIGNATURE THEME"): token + nút chính gradient + viền gradient cho card nổi bật (gói nạp, chợ kỹ năng, panel giá) + `sig-rise` khi card/modal hiện. |
 | **Trang buy** (`flowvpn-cp` → `src/payments.js`, `buyPageHTML`) | ✅ **ĐÃ ÁP** (`/buy`, `/ai/buy`, `/buy/success`, `/buy/cancel`, `/buy/status`). |
 | **Admin + control panel** (`flowvpn-cp` → `src/admin-page.js`) | ✅ **ĐÃ ÁP** (`/PrivateVPN/Admin`). |
 | **Popup hệ sinh thái** | Đã là bản gốc — giữ nguyên, không đổi. |

@@ -151,7 +151,7 @@ export const settings: Dict = {
   "settings.app.maxUploadHint": "Từ 1 đến 100 MB cho mỗi tệp.",
   "settings.app.allowSignup": "Cho phép người dùng tự đăng ký tài khoản",
   "settings.app.languageLabel": "Ngôn ngữ",
-  "settings.app.languageHint": "Chọn ngôn ngữ hiển thị của FlowGpt.",
+  "settings.app.languageHint": "Chọn ngôn ngữ hiển thị của fBuddy.",
   "settings.app.mailTitle": "Email & đăng nhập",
   "settings.app.mailDesc":
     "Ứng dụng đăng nhập bằng mã một lần gửi qua email (passwordless). Cấu hình Resend để gửi mã thật.",
@@ -254,7 +254,7 @@ export const settings: Dict = {
   "settings.voice.browserTestOk": "Đã đọc thử bằng giọng của trình duyệt",
   "settings.voice.testFailed": "Đọc thử thất bại",
   "settings.voice.sampleText":
-    "Xin chào, tôi là FlowGpt. Tôi có thể trò chuyện, tạo ảnh, làm slide và phân tích dữ liệu cho anh chị.",
+    "Xin chào, tôi là fBuddy. Tôi có thể trò chuyện, tạo ảnh, làm slide và phân tích dữ liệu cho anh chị.",
   "settings.voice.languageVi": "Tiếng Việt (vi-VN)",
   "settings.voice.languageEn": "Tiếng Anh (en-US)",
   "settings.voice.freeTitle": "Mặc định miễn phí: trình duyệt tự nhận dạng và đọc",

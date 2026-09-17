@@ -10,7 +10,7 @@ const { excelChoices } = await import("../src/skills/vision.js");
 test("only a short approval counts as confirmation, not the original request", () => {
   // The request itself must NOT skip the plan step.
   assert.equal(isConfirmed("Tạo file excel dự toán chi phí marketing 3 tháng"), false);
-  assert.equal(isConfirmed("Làm slide 8 trang giới thiệu FlowGpt"), false);
+  assert.equal(isConfirmed("Làm slide 8 trang giới thiệu fBuddy"), false);
   assert.equal(isConfirmed("Đưa hết data trong ảnh thành excel giúp anh"), false);
   assert.equal(isConfirmed(""), false);
 
