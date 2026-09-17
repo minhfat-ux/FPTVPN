@@ -736,6 +736,11 @@ app.get("/assets/:file", async (req, res) => {
       "flowvpn-logo.png": "image/png", // legacy name used by the static pages
       "meetflow-logo.png": "image/png",
       "meetflowai-icon.png": "image/png", // legacy name used by the static pages
+      // Logo thương hiệu FlowTech (dùng cho trang chủ + popup hệ sinh thái, cùng bộ ảnh
+      // mà harness Mac/Windows đang dùng: /dl/flowtech-brand/).
+      "flowtech-logo.png": "image/png",
+      "flowtech-mark.png": "image/png",
+      "flowtech-icon.png": "image/png",
     };
     const type = allowed[req.params.file];
     if (!type) return res.status(404).send("Not found");
