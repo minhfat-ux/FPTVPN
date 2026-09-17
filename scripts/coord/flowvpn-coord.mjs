@@ -169,7 +169,7 @@ function cmdClaim(values) {
     "",
     "CANH BAO: claim nay de len claim dang hieu luc cua nguoi khac:",
     ...clashes.map((c) => `  - [${c.owner}] ${c.area}: ${(c.files ?? []).join(", ")}`),
-    "Dung lai va bao orchestrator (harness Windows) truoc khi sua.",
+    "Dung lai va bao orchestrator (harness Mac) truoc khi sua.",
   ].join("\n");
 }
 
@@ -202,7 +202,7 @@ function cmdCheck(values, files) {
   return [
     `XUNG DOT: ${files.join(", ")} nam trong claim dang hieu luc cua nguoi khac:`,
     ...clashes.map((c) => `  - [${c.owner}] ${c.area} (${minutesLeft(c)}m con lai): ${(c.files ?? []).join(", ")}${c.note ? ` — ${c.note}` : ""}`),
-    "DUNG LAI, bao orchestrator (harness Windows) qua Telegram truoc khi sua.",
+    "DUNG LAI, bao orchestrator (harness Mac) qua Telegram truoc khi sua.",
   ].join("\n");
 }
 

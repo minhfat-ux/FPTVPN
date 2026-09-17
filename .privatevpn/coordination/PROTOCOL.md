@@ -8,8 +8,8 @@ Cùng một repo đang có nhiều agent sửa song song:
 
 | Máy | Vai trò | Ghi chú |
 |---|---|---|
-| **Harness Windows** (máy anh Minh) | **Orchestrator** | Người giao việc, review, commit/push, deploy. Có SSH tới node-1/node-2. |
-| **Harness Mac** | Contributor | Đẩy code lên `origin/main`, làm bản Mac/iOS. |
+| **Harness Mac** | **Orchestrator** | Người phân xử khi hai máy muốn cùng vùng: nhường claim, xếp thứ tự, chốt phương án. Nơi báo khi gặp XUNG ĐỘT. |
+| **Harness Windows** (máy anh Minh) | Contributor | Làm bản Windows/harness-windows, release Windows. Có SSH tới node-1/node-2. |
 | **Agent trên server** (`/root/flowvpn-agent`, branch `master`) | Executor | Chạy việc qua `/task`, sửa file rồi deploy tại chỗ. |
 
 Ngày 17/09/2026 đã xảy ra đúng loại conflict cần chặn: agent trên server đang sửa
@@ -32,7 +32,9 @@ Ngày 17/09/2026 đã xảy ra đúng loại conflict cần chặn: agent trên 
    `--note` ngắn. Việc dài hơn TTL thì `claim` lại để gia hạn.
 2. **Xong việc** → `release` (mặc định `done`). Bỏ dở thì `release --status cancelled`.
 3. **Một vùng chỉ một người viết.** Không force-push, không sửa file ngoài vùng đã claim.
-   Orchestrator là người phân xử và là người duy nhất push `main`.
+   **Harness Mac (orchestrator) phân xử** khi hai máy cùng muốn một vùng. Mỗi máy vẫn tự
+   commit/push phần việc của mình lên `main` (không chờ duyệt, để không chặn tiến độ); chỉ
+   orchestrator được đổi luật trong file này và được force-push (gần như không bao giờ cần).
 4. **Báo cáo** theo mẫu `docs/templates/agentic-project/AGENT_HANDOFF.md` kèm bằng chứng lệnh
    đã chạy — như cũ.
 
@@ -95,4 +97,5 @@ git config coord.cmd "ssh -o BatchMode=yes -J root@103.173.155.50 root@165.101.1
 
 ## 7. Đổi vai orchestrator
 
-Muốn đổi thì sửa đúng bảng ở §1 và commit — chỉ orchestrator được sửa file này.
+Bảng ở §1 là nguồn sự thật: **harness Mac = orchestrator**, harness Windows = contributor.
+Muốn đổi nữa thì sửa đúng bảng đó và commit — chỉ orchestrator (Mac) được sửa file này.

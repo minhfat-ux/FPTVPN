@@ -34,7 +34,7 @@ fi
 if [ "$rc" -eq 1 ]; then
   echo "$out" >&2
   echo "" >&2
-  echo "coord: COMMIT BI CHAN. Dung lai, bao orchestrator (harness Windows) qua Telegram." >&2
+  echo "coord: COMMIT BI CHAN. Dung lai, bao orchestrator (harness Mac) qua Telegram." >&2
   echo "coord: neu that su can sua, xin nhuong claim hoac cho claim het han." >&2
   exit 1
 fi

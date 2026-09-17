@@ -45,7 +45,7 @@ Nếu brief nói một đằng, code nói một nẻo → **theo code**, và ghi
 Dừng và báo ngay (không tự xử theo hướng khác) nếu: brief mâu thuẫn với file này, cần quyền ngoài phạm vi, test không thể pass vì lý do ngoài phạm vi, hoặc phát hiện vấn đề bảo mật/rò rỉ dữ liệu.
 
 ## 6. Phối hợp nhiều máy — BẮT BUỘC trước khi sửa file
-Repo này có nhiều agent sửa song song: **harness Windows (orchestrator)**, **harness Mac**, và
+Repo này có nhiều agent sửa song song: **harness Mac (orchestrator)**, **harness Windows**, và
 **agent trên server** (`/root/flowvpn-agent`). Trước khi sửa bất kỳ file nào, phải hỏi bảng việc
 chung (nguồn sự thật: `node-2:/var/lib/flowvpn-coord/claims/`):
 
