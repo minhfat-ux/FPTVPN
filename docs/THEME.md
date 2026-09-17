@@ -81,10 +81,20 @@ Tôn trọng người dùng: bọc trong `@media (prefers-reduced-motion: reduce
 
 | Sản phẩm | Việc cần làm |
 |---|---|
-| **FlowGpt** (`web/src/styles.css`) | Token + nút chính gradient + viền gradient cho card nổi bật (credit, chợ kỹ năng, gói nạp) + `rise` khi card/modal hiện + eyebrow mint cho nhãn nhỏ. Nền dark dùng đúng gradient navy của popup. |
-| **Trang buy** (`flowvpn-cp`, `/buy`) | Khung gói dùng nền navy + viền gradient; nút tải/mua dùng nút chính; QR đặt trong card con 16px. |
-| **Admin + control panel** (`flowvpn-cp/admin-page.js`, `/PrivateVPN/Admin`) | Bảng: header dùng `--sig-mint`; hàng hover `rgba(255,255,255,.05)`; nút hành động theo nút chính/phụ; modal `rise`. |
+| **FlowGpt** (`web/src/styles.css`) | ✅ **ĐÃ ÁP** (mục "FLOWTECH SIGNATURE THEME"): token + nút chính gradient + viền gradient cho card nổi bật (gói nạp, chợ kỹ năng, panel giá) + `sig-rise` khi card/modal hiện. |
+| **Trang buy** (`flowvpn-cp` → `src/payments.js`, `buyPageHTML`) | ✅ **ĐÃ ÁP** (`/buy`, `/ai/buy`, `/buy/success`, `/buy/cancel`, `/buy/status`). |
+| **Admin + control panel** (`flowvpn-cp` → `src/admin-page.js`) | ✅ **ĐÃ ÁP** (`/PrivateVPN/Admin`). |
 | **Popup hệ sinh thái** | Đã là bản gốc — giữ nguyên, không đổi. |
+
+### Rollback (1 lệnh, chỉ control plane)
+
+```bash
+cd /root/flowvpn-cp/src
+cp payments.js.bak-theme-20260917-172919 payments.js
+cp admin-page.js.bak-theme-20260917-172919 admin-page.js
+systemctl restart flowvpn-cp
+```
+
 
 ## 5. Quy tắc
 
