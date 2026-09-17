@@ -606,7 +606,10 @@ function storeLinks(product) {
         // Bộ cài Windows 1-click (Inno Setup) — sinh bởi windows/installer/build.ps1 rồi
         // upload-windows-release.sh đặt vào /dl/. Link cố định "-latest" để trang /buy
         // không phải sửa mỗi lần ra bản mới.
-        windows: appConfig.get("windows_installer_url") || process.env.WINDOWS_INSTALLER_URL || `${base}/dl/VPNFlow-Setup-latest.exe`,
+        // PHẢI dùng siteBaseUrl() (meetflowai.site): /dl/* là thư mục tĩnh của Caddy trên
+        // domain chính. publicBaseUrl() là api.meetflowai.site — không có route /dl/* nên
+        // trả 401, nút tải Windows trên trang /buy chết (đã kiểm chứng trên production).
+        windows: appConfig.get("windows_installer_url") || process.env.WINDOWS_INSTALLER_URL || `${siteBaseUrl()}/dl/VPNFlow-Setup-latest.exe`,
       };
 }
 
