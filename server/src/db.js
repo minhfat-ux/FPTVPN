@@ -477,6 +477,18 @@ export const DEFAULT_APP_SETTINGS = {
   bankAccountName: "",
   /** Prefix of the transfer note so the owner can match a payment to an order. */
   bankNotePrefix: "FLOWGPT",
+
+  // --- SePay (tự động xác nhận nạp tiền) -----------------------------------
+  /** Bật/tắt tự động cộng credit khi tiền vào. */
+  sepayEnabled: false,
+  /** `webhook` = SePay gọi vào FlowGpt; `poll` = FlowGpt gọi API giao dịch. */
+  sepayMode: "poll",
+  /** Chu kỳ poll (giây). */
+  sepayPollSeconds: 60,
+  /** API token của SePay (user API) — mã hoá AES-GCM, không trả nguyên văn. */
+  sepayApiTokenEnc: null,
+  /** Webhook secret (spsk_…) để kiểm chữ ký — mã hoá AES-GCM. */
+  sepayWebhookSecretEnc: null,
   /** How often the promo popup nags a visitor who has no credit (minutes). */
   promoReminderMinutes: 5,
   /** Snooze for visitors who do have credit (minutes). */

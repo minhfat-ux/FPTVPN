@@ -457,12 +457,18 @@ export function patchAppSettings(patch) {
 
 /** App settings safe to send to the browser: secrets become previews only. */
 export function publicAppSettings(settings = getAppSettings()) {
-  const { resendApiKeyEnc, ...rest } = settings;
+  const { resendApiKeyEnc, sepayApiTokenEnc, sepayWebhookSecretEnc, ...rest } = settings;
   const key = resendApiKeyEnc ? decryptSecret(resendApiKeyEnc) : null;
+  const sepayToken = sepayApiTokenEnc ? decryptSecret(sepayApiTokenEnc) : null;
+  const sepaySecret = sepayWebhookSecretEnc ? decryptSecret(sepayWebhookSecretEnc) : null;
   return {
     ...rest,
     hasResendKey: Boolean(key),
     resendKeyPreview: key ? maskSecret(key, { head: 4, tail: 3 }) : null,
+    hasSepayApiToken: Boolean(sepayToken),
+    sepayApiTokenPreview: sepayToken ? maskSecret(sepayToken, { head: 6, tail: 3 }) : null,
+    hasSepayWebhookSecret: Boolean(sepaySecret),
+    sepayWebhookSecretPreview: sepaySecret ? maskSecret(sepaySecret, { head: 6, tail: 3 }) : null,
   };
 }
 
@@ -474,6 +480,18 @@ export function applyAppSettingsPatch(patch = {}) {
     if (raw === "") clean.resendApiKeyEnc = null;
     else if (!looksMasked(raw)) clean.resendApiKeyEnc = encryptSecret(raw.trim());
     delete clean.resendApiKey;
+  }
+  // SePay credentials follow the same rule: plain in, encrypted at rest, never
+  // returned verbatim (the UI only ever sees a masked preview).
+  for (const [field, column] of [
+    ["sepayApiToken", "sepayApiTokenEnc"],
+    ["sepayWebhookSecret", "sepayWebhookSecretEnc"],
+  ]) {
+    if (clean[field] === undefined) continue;
+    const raw = String(clean[field] ?? "");
+    if (raw === "") clean[column] = null;
+    else if (!looksMasked(raw)) clean[column] = encryptSecret(raw.trim());
+    delete clean[field];
   }
   return setAppSettings(clean);
 }
