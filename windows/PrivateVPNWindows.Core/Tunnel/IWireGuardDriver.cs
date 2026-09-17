@@ -14,6 +14,23 @@ public enum WireGuardTunnelState
 }
 
 /// <summary>
+/// Số liệu runtime THẬT của WireGuard cho một tunnel — dùng để biết tunnel có truyền được
+/// dữ liệu hay không, thay vì chỉ tin "service đang Running".
+///
+/// <see cref="Available"/> = false nghĩa là driver KHÔNG có kênh đọc số liệu (không kết luận
+/// được gì). Khi Available = true: <see cref="LastHandshake"/> null = chưa từng handshake
+/// (tunnel chắc chắn không truyền được), <see cref="RxBytes"/> = tổng byte đã NHẬN từ peer.
+/// </summary>
+public readonly record struct WireGuardRuntimeStats(bool Available, DateTimeOffset? LastHandshake, long RxBytes)
+{
+    /// <summary>Không đọc được số liệu — không được suy ra "khoẻ" cũng không được suy ra "chết".</summary>
+    public static readonly WireGuardRuntimeStats Unknown = new(false, null, 0);
+
+    public static WireGuardRuntimeStats Known(DateTimeOffset? lastHandshake, long rxBytes)
+        => new(true, lastHandshake, rxBytes);
+}
+
+/// <summary>
 /// Cài/gỡ/kiểm tra tunnel WireGuard trên Windows qua <c>wireguard.exe</c>.
 /// Không hard-code đường dẫn máy: driver tự dò wireguard.exe (xem
 /// <see cref="WireGuardWindowsDriver.ResolveExecutable"/>).
@@ -38,6 +55,19 @@ public interface IWireGuardDriver
 
     /// <summary>Kiểm tra service <c>WireGuardTunnel$&lt;name&gt;</c> đang chạy hay không.</summary>
     Task<WireGuardTunnelState> GetStateAsync(string tunnelName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Đọc handshake + byte nhận được của peer từ runtime WireGuard (UAPI <c>get=1</c> với
+    /// wireguard-go, <c>wg.exe show &lt;name&gt; dump</c> với wireguard.exe đóng sẵn).
+    ///
+    /// Vì sao cần: trạng thái service "Running" không nói gì về việc gói có đi qua tunnel hay
+    /// không — sự cố thật 19:05 cho thấy WireGuard liên tục "Handshake did not complete" mà app
+    /// vẫn báo "Đã kết nối" trong khi route full-tunnel đã trỏ vào tunnel chết.
+    ///
+    /// Trả <see cref="WireGuardRuntimeStats.Unknown"/> khi không đọc được (không phải Windows,
+    /// thiếu kênh đọc) — KHÔNG ném exception vì đây là đường đọc chẩn đoán.
+    /// </summary>
+    Task<WireGuardRuntimeStats> GetRuntimeStatsAsync(string tunnelName, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Lỗi khi điều khiển wireguard.exe (không tìm thấy, lệnh trả mã lỗi, …).</summary>
