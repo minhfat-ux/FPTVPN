@@ -230,9 +230,13 @@ export interface AppSettings {
   creditsEnabled: boolean;
   signupCredits: number;
   creditsPerToken: number;
+  /** Selling price of one credit in VND (packages derive from it). */
+  vndPerCredit: number;
   creditBuyUrl: string;
   promoReminderMinutes: number;
   promoCreditSnoozeMinutes: number;
+  /** Packages on the top-up page; `priceVnd: null` = derive from vndPerCredit. */
+  topupPackages?: TopupPackageSetting[];
   /** Public model names (vendor ids stay internal). */
   modelAliases: Record<string, string>;
 }
@@ -467,7 +471,20 @@ export interface TopupPackage {
   bonusTokens: number;
   totalTokens: number;
   priceVnd: number;
+  /** `package` when the price is set on the tier, `vndPerCredit` when derived. */
+  priceSource?: "package" | "vndPerCredit";
+  vndPerCredit?: number;
   note: string | null;
+}
+
+/** One tier as stored in app settings (admin editor). `priceVnd: null` = auto. */
+export interface TopupPackageSetting {
+  id: string;
+  name: string;
+  tokens: number;
+  bonusTokens: number;
+  priceVnd: number | null;
+  note?: string | null;
 }
 
 /** The owner's receiving bank account (public fields only). */

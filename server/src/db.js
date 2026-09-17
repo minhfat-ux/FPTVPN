@@ -457,13 +457,19 @@ export const DEFAULT_APP_SETTINGS = {
   signupCredits: 10000,
   /** Credits charged per token, counting input + output (1 = one credit/token). */
   creditsPerToken: 1,
+  /**
+   * Selling price of ONE credit in VND. The top-up packages derive their price
+   * from this (`credits × vndPerCredit`) unless a package sets its own price, so the
+   * owner only has to change one number here (Cài đặt → Hệ thống → Credit & giá).
+   */
+  vndPerCredit: 20,
   /** Where the "nạp thêm" button sends people. */
   creditBuyUrl: "https://flowgpt.meetflowai.site/?view=topup",
   /** Token packages sold on the FlowGpt top-up page (price in VND). */
   topupPackages: [
-    { id: "starter", name: "Gói khởi đầu", tokens: 100000, priceVnd: 50000, bonusTokens: 0, note: "Phù hợp để thử" },
-    { id: "pro", name: "Gói Pro", tokens: 1000000, priceVnd: 400000, bonusTokens: 100000, note: "Phổ biến nhất" },
-    { id: "business", name: "Gói doanh nghiệp", tokens: 5000000, priceVnd: 1800000, bonusTokens: 800000, note: "Cho cả nhóm" },
+    { id: "starter", name: "Gói khởi đầu", tokens: 10000, priceVnd: null, bonusTokens: 0, note: "Phù hợp để thử" },
+    { id: "pro", name: "Gói Pro", tokens: 50000, priceVnd: null, bonusTokens: 5000, note: "Phổ biến nhất" },
+    { id: "business", name: "Gói doanh nghiệp", tokens: 200000, priceVnd: null, bonusTokens: 30000, note: "Cho cả nhóm" },
   ],
   /** Bank account shown on the top-up page (VietQR image is built from these). */
   bankId: "970436",

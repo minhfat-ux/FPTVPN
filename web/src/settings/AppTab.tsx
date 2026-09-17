@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, RotateCcw, Save, Send } from "lucide-react";
 import { api, ApiError } from "../api/client";
-import { requestCreditsRefresh } from "../state/credits";
+import { requestCreditsRefresh, useCredits } from "../state/credits";
 import { useAuth, useToast } from "../state/store";
 import { ConfirmDialog, Field, Spinner, Switch } from "../components/ui";
 import { LocaleSwitcher, useI18n } from "../i18n";
@@ -45,6 +45,8 @@ export function AppTab() {
   const { user } = useAuth();
   const { push } = useToast();
   const { t, n } = useI18n();
+  // The admin's own average turn cost, so the pricing card can show real VND.
+  const { credits } = useCredits();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
@@ -296,7 +298,11 @@ export function AppTab() {
         </div>
       </div>
 
-      <CreditPricingCard settings={settings} onPatch={patch} />
+      <CreditPricingCard
+        settings={settings}
+        onPatch={patch}
+        averageTurnCost={credits?.averageCostPerTurn ?? null}
+      />
 
       <div className="card">
         <div className="row row-wrap gap-2">

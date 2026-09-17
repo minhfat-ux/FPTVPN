@@ -587,6 +587,23 @@ a:hover { text-decoration: underline; }
 
 /* ------------------------------------------------- signed-in devices (sessions) */
 
+/* Credit pricing panel (Cài đặt → Hệ thống): one price knob + the derived tiers. */
+.price-panel {
+  margin-top: var(--space-3); padding: var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+.price-panel-head { display: flex; align-items: center; gap: 8px; margin-bottom: var(--space-3); color: var(--accent); }
+.price-readout { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg-elevated); border: 1px solid var(--border); font-size: 13.5px; }
+.price-tiers { display: flex; flex-direction: column; gap: 8px; }
+.price-tier { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto auto; gap: 8px; align-items: center; }
+.price-tier .input { padding: 6px 9px; font-size: 13px; }
+.price-tier-value { white-space: nowrap; }
+.price-tier-head { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto auto; gap: 8px; margin-top: 6px; }
+@media (max-width: 760px) {
+  .price-tier, .price-tier-head { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .price-tier-value { grid-column: span 1; }
+}
 .session-block { margin-top: var(--space-4); }
 .session-list {
   display: flex; flex-direction: column; gap: 8px;

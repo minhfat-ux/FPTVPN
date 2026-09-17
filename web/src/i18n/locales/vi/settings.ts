@@ -377,6 +377,41 @@ export const settings: Dict = {
   "settings.mcpModal.addRow": "Thêm dòng",
 
   // ---- CreditPricingCard
+  "settings.credits.priceTitle": "Giá bán credit",
+
+  "settings.credits.vndPerCreditLabel": "Giá 1 credit (VND)",
+
+  "settings.credits.vndPerCreditHint": "Chỉ cần đổi số này: mọi gói bên dưới tự tính lại giá = số credit × giá 1 credit.",
+
+  "settings.credits.turnEstimateLabel": "Quy ra tiền",
+
+  "settings.credits.turnEstimateHint": "Một lượt chat trung bình tốn bao nhiêu credit và bao nhiêu tiền.",
+
+  "settings.credits.fromRealUsage": "(theo số liệu dùng thật của anh)",
+
+  "settings.credits.signupValue": "Tặng khi đăng nhập: {credits} credit ≈ {value}",
+
+  "settings.credits.packagesTitle": "Các gói bán trên trang nạp",
+
+  "settings.credits.packagesHint": "Để trống ô giá thì gói tự tính theo giá 1 credit; điền số vào ô giá nếu muốn giá riêng (khuyến mãi).",
+
+  "settings.credits.addPackage": "Thêm gói",
+
+  "settings.credits.newPackage": "Gói mới",
+
+  "settings.credits.packageName": "Tên gói",
+
+  "settings.credits.packageCredits": "Credit",
+
+  "settings.credits.packageBonus": "Tặng thêm",
+
+  "settings.credits.packagePrice": "Giá (VND)",
+
+  "settings.credits.priceAuto": "tự tính: {value}",
+
+  "settings.credits.priceOverridden": "giá riêng",
+
+  "settings.credits.noPackages": "Chưa có gói nào — bấm “Thêm gói”.",
   "settings.credits.title": "Credit & giá",
   "settings.credits.desc":
     "Cách tính credit cho từng lượt chat, số credit tặng khi đăng ký và nhịp nhắc nạp tiền. Lưu bằng nút “Lưu cấu hình” bên dưới.",

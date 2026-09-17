@@ -375,6 +375,41 @@ export const settings: Dict = {
   "settings.mcpModal.addRow": "Add row",
 
   // ---- CreditPricingCard
+  "settings.credits.priceTitle": "Credit pricing",
+
+  "settings.credits.vndPerCreditLabel": "Price per credit (VND)",
+
+  "settings.credits.vndPerCreditHint": "Change this one number: every tier below is repriced as credits × price per credit.",
+
+  "settings.credits.turnEstimateLabel": "What that means in money",
+
+  "settings.credits.turnEstimateHint": "Typical chat turn: credits and the money it represents.",
+
+  "settings.credits.fromRealUsage": "(from your real usage)",
+
+  "settings.credits.signupValue": "Sign-up grant: {credits} credits ≈ {value}",
+
+  "settings.credits.packagesTitle": "Tiers sold on the top-up page",
+
+  "settings.credits.packagesHint": "Leave the price empty to derive it from the price per credit; fill it in for a custom (promo) price.",
+
+  "settings.credits.addPackage": "Add tier",
+
+  "settings.credits.newPackage": "New tier",
+
+  "settings.credits.packageName": "Name",
+
+  "settings.credits.packageCredits": "Credits",
+
+  "settings.credits.packageBonus": "Bonus",
+
+  "settings.credits.packagePrice": "Price (VND)",
+
+  "settings.credits.priceAuto": "auto: {value}",
+
+  "settings.credits.priceOverridden": "custom price",
+
+  "settings.credits.noPackages": "No tiers yet — tap “Add tier”.",
   "settings.credits.title": "Credits & pricing",
   "settings.credits.desc":
     "How credits are charged per chat turn, the signup bonus and the top-up reminder cadence. Save with the “Save configuration” button below.",

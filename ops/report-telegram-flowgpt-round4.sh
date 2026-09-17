@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Report: plan-first file generation, OCR, multi-device sessions, i18n, mobile fixes.
+set -euo pipefail
+set -a
+# shellcheck disable=SC1091
+. /etc/flowvpn-tg-bot.env
+set +a
+
+CHAT=$(printf '%s' "${TELEGRAM_ALLOWED_CHATS:-${TELEGRAM_CHAT_ID:-}}" | cut -d, -f1 | tr -d ' ')
+[ -n "${CHAT:-}" ] || { echo "Không có chat id"; exit 1; }
+
+TEXT=$(cat <<'MSG'
+✅ FlowGpt — xong đợt lớn: hỏi trước khi tạo file, đọc ảnh, nhiều thiết bị, 3 ngôn ngữ
+
+1) HỎI TRƯỚC KHI TẠO FILE (theo đúng yêu cầu)
+• Mọi yêu cầu tạo nội dung (PPT/Excel/ảnh→Excel/phân tích) giờ đi 2 bước:
+  bước 1 nêu KẾ HOẠCH + lấy dữ liệu từ đâu, bước 2 người dùng bấm nút mới tạo tệp
+• Nút chọn do BACKEND sinh ra (không phụ thuộc model): "OK tạo theo kế hoạch" ·
+  "Gọn hơn" · "Sửa kế hoạch trước"
+• Nút được lưu cùng tin nhắn nên tải lại trang vẫn còn
+• PPT: siết quy tắc 6–10 trang, mỗi trang 1 ý, KHÔNG thêm trang "Cảm ơn"/mục lục,
+  không lặp nội dung → hết cảnh 20 trang dư thừa
+
+2) ẢNH → EXCEL (lỗi 400 của GLM đã hết)
+• Model không xem được ảnh thì backend tự đọc ảnh bằng model thị giác (OpenRouter Gemini)
+  rồi đưa nội dung vào ngữ cảnh — không còn lỗi "content.type 参数非法"
+• Công cụ mới xlsx_from_image: backend tự tạo Excel từ bảng đọc được (không bắt model gõ lại số)
+• Ảnh có CẢ bảng và chữ khác → hỏi chọn: cả hai / chỉ bảng / chỉ chữ / gửi ảnh rõ hơn
+• Đã kiểm chứng trên ảnh thật của anh (IMG_3737.jpeg): ra file .xlsx 6 cột × 8 dòng
+
+3) NHIỀU THIẾT BỊ, NGỮ CẢNH XUYÊN MÁY
+• Đăng nhập cùng email trên nhiều máy KHÔNG đá nhau; mỗi máy 1 phiên riêng
+• Menu tài khoản có "Thiết bị đang đăng nhập": đăng xuất từng máy hoặc mọi máy khác
+• Mở FlowGpt ở máy khác là vào ĐÚNG hội thoại đang làm việc; tự đồng bộ tin nhắn mới
+• Đổi mật khẩu → thu hồi hết phiên
+
+4) SỬA LỖI TRÊN IPHONE SAFARI
+• Popup quảng cáo bị lỗi font/mã hoá toàn bộ tiếng Việt (file bị double-encode) → đã sửa
+• Popup che mất app và không bấm được nút đóng (lỗi vh + flex-center) → đã sửa
+• Chọn kỹ năng bị cắt bởi bàn phím → menu nay nổi theo màn hình, luôn bấm được
+• Ô chọn model đè lên ô chọn kỹ năng → thanh soạn thảo tự xuống dòng, 0 chồng lấn
+
+5) ĐA NGÔN NGỮ + VỊ TRÍ BỘ CHỌN NGÔN NGỮ
+• 3 thứ tiếng đầy đủ: Việt / English / 中文 (1.400+ khoá, mọi khu vực)
+• Bộ chọn ngôn ngữ đặt NGAY TRÊN THANH TRÊN, cạnh nút Studio (như anh yêu cầu)
+• Mặc định lấy theo ngôn ngữ hệ thống; không phải Việt/Trung thì mặc định English
+
+KIỂM CHỨNG (chạy thật trên production, không phải "đã code xong")
+• 156/156 test tự động pass
+• Quét toàn bộ skill: chat · PPT · Excel · ảnh→Excel · phân tích dữ liệu · sửa ảnh ·
+  chợ kỹ năng · nhiều thiết bị → ĐẠT HẾT (script ops/skills-check.mjs)
+• Trình duyệt thật: 3 ngôn ngữ đổi đúng, bộ chọn trên topbar bấm được, hệ thống fr-FR
+  → mặc định English; khổ iPhone 390×844: 0 control chồng lấn, 0 lỗi console
+• Đã dọn 19 tài khoản test, DB còn đúng 4 tài khoản thật
+
+CÒN CHỜ ANH
+• Số tài khoản ngân hàng (STK + tên chủ TK + ngân hàng) để ảnh VietQR hoạt động
+• Chọn hướng giảm chi phí credit (lazy tools ~80% / hạ hệ số / tăng credit tặng)
+MSG
+)
+
+curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  -d "chat_id=${CHAT}" -d "disable_web_page_preview=true" \
+  --data-urlencode "text=${TEXT}" \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print("telegram sent:", d.get("ok"), d.get("result",{}).get("message_id") or d.get("description"))'

@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { api, apiRaw, bootServer, closeServer } from "./helpers.js";
 
-const { initDb, all } = await import("../src/db.js");
+const { initDb, all, DEFAULT_APP_SETTINGS } = await import("../src/db.js");
 initDb();
 const { createUser, issueToken } = await import("../src/auth.js");
 const settings = await import("../src/settings.js");
@@ -29,6 +29,41 @@ test("packages come from settings and are expanded with bonuses", () => {
   assert.equal(pro.totalTokens, pro.tokens + pro.bonusTokens);
   assert.ok(pro.priceVnd > 0);
   assert.ok(packages.every((pkg) => pkg.totalTokens > 0));
+});
+
+test("package prices follow vndPerCredit unless a tier overrides the price", () => {
+  settings.patchAppSettings({
+    vndPerCredit: 20,
+    topupPackages: [
+      { id: "a", name: "Gói A", tokens: 10000, bonusTokens: 0, priceVnd: null },
+      { id: "b", name: "Gói B", tokens: 50000, bonusTokens: 5000, priceVnd: null },
+      // A promo tier keeps its own price even when the rate changes.
+      { id: "promo", name: "Khuyến mãi", tokens: 20000, bonusTokens: 0, priceVnd: 99000 },
+    ],
+  });
+
+  const packages = topup.topupPackages();
+  assert.equal(packages[0].priceVnd, 200000, "10.000 credit × 20đ = 200.000đ");
+  assert.equal(packages[0].priceSource, "vndPerCredit");
+  // Bonus credits are part of what the buyer receives, so they count toward the price.
+  assert.equal(packages[1].priceVnd, 1100000, "55.000 credit × 20đ");
+  assert.equal(packages[2].priceVnd, 99000);
+  assert.equal(packages[2].priceSource, "package");
+
+  // Changing the single knob re-prices every derived tier…
+  settings.patchAppSettings({ vndPerCredit: 50 });
+  const repriced = topup.topupPackages();
+  assert.equal(repriced[0].priceVnd, 500000);
+  assert.equal(repriced[1].priceVnd, 2750000);
+  assert.equal(repriced[2].priceVnd, 99000, "gói có giá riêng không đổi");
+
+  // …and the helper used by the admin preview agrees.
+  assert.equal(topup.priceForCredits(2000), 100000, "1 lượt chat ~2.000 credit ≈ 100.000đ ở mức 50đ/credit");
+  assert.equal(topup.priceForCredits(0), 0);
+
+  // Back to the shipped defaults (20đ/credit, auto-priced tiers).
+  settings.patchAppSettings({ vndPerCredit: 20, topupPackages: DEFAULT_APP_SETTINGS.topupPackages });
+  assert.equal(topup.topupPackages()[0].priceVnd, 200000);
 });
 
 test("the VietQR image is only offered when a bank account is configured", () => {

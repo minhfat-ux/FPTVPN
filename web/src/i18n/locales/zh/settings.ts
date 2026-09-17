@@ -360,6 +360,41 @@ export const settings: Dict = {
   "settings.mcpModal.addRow": "添加一行",
 
   // ---- CreditPricingCard
+  "settings.credits.priceTitle": "额度定价",
+
+  "settings.credits.vndPerCreditLabel": "每 1 额度价格（VND）",
+
+  "settings.credits.vndPerCreditHint": "只需修改这个数字：下方每个套餐按 额度 × 单价 自动计价。",
+
+  "settings.credits.turnEstimateLabel": "折算成金额",
+
+  "settings.credits.turnEstimateHint": "一次普通对话消耗多少额度、折合多少钱。",
+
+  "settings.credits.fromRealUsage": "（按你的真实用量）",
+
+  "settings.credits.signupValue": "注册赠送：{credits} 额度 ≈ {value}",
+
+  "settings.credits.packagesTitle": "充值页出售的套餐",
+
+  "settings.credits.packagesHint": "价格留空则按单价自动计算；填写则使用自定义（促销）价格。",
+
+  "settings.credits.addPackage": "添加套餐",
+
+  "settings.credits.newPackage": "新套餐",
+
+  "settings.credits.packageName": "名称",
+
+  "settings.credits.packageCredits": "额度",
+
+  "settings.credits.packageBonus": "赠送",
+
+  "settings.credits.packagePrice": "价格（VND）",
+
+  "settings.credits.priceAuto": "自动：{value}",
+
+  "settings.credits.priceOverridden": "自定义价格",
+
+  "settings.credits.noPackages": "还没有套餐 — 点击“添加套餐”。",
   "settings.credits.title": "Credit 与价格",
   "settings.credits.desc": "每轮聊天的 credit 计算方式、注册赠送的 credit 以及提醒充值的节奏。使用下方的“保存配置”按钮保存。",
   "settings.credits.enable": "启用 credit（按 token 计费）",

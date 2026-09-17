@@ -16,22 +16,43 @@ import { getBalance, grantCredits } from "./credits.js";
 
 const LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * The packages shown on the top-up page.
+ *
+ * `vndPerCredit` is the single price knob the owner edits in the admin panel:
+ * a package without its own `priceVnd` is priced `credits × vndPerCredit`, so
+ * changing that one number re-prices the whole shop. `priceVnd` on a package is
+ * an override (e.g. a promo tier).
+ */
 export function topupPackages() {
   const settings = getAppSettings();
+  const perCredit = Math.max(0, Number(settings.vndPerCredit) || 0);
   const packages = Array.isArray(settings.topupPackages) ? settings.topupPackages : [];
   return packages.map((entry) => {
     const tokens = Math.max(0, Math.trunc(Number(entry.tokens) || 0));
     const bonusTokens = Math.max(0, Math.trunc(Number(entry.bonusTokens) || 0));
+    const explicit = Number(entry.priceVnd) > 0 ? Math.trunc(Number(entry.priceVnd)) : null;
+    const grant = tokens + bonusTokens;
     return {
       id: String(entry.id),
       name: String(entry.name ?? "Gói token"),
       tokens,
       bonusTokens,
-      priceVnd: Math.max(0, Math.trunc(Number(entry.priceVnd) || 0)),
+      // Derived when the package has no price of its own.
+      priceVnd: explicit ?? Math.round(grant * perCredit),
+      priceSource: explicit ? "package" : "vndPerCredit",
+      vndPerCredit: perCredit,
       note: entry.note ? String(entry.note) : null,
-      totalTokens: tokens + bonusTokens,
+      totalTokens: grant,
     };
   });
+}
+
+/** Price of a credit amount at the current rate (used by the admin preview). */
+export function priceForCredits(credits) {
+  const settings = getAppSettings();
+  const perCredit = Math.max(0, Number(settings.vndPerCredit) || 0);
+  return Math.round(Math.max(0, Math.trunc(Number(credits) || 0)) * perCredit);
 }
 
 export function bankInfo() {
