@@ -111,6 +111,66 @@ public sealed class WireGuardWindowsDriver : IWireGuardDriver
             : WireGuardTunnelState.Stopped;
     }
 
+    /// <summary>
+    /// Dò <c>wg.exe</c> — công cụ đi kèm WireGuard for Windows, đọc runtime của tunnel service qua
+    /// UAPI. Dò cạnh wireguard.exe trước (cùng thư mục cài), rồi tới PATH; không hard-code ổ đĩa.
+    /// </summary>
+    public string? ResolveWgExecutable()
+    {
+        const string wgExeName = "wg.exe";
+
+        var wireguard = ResolveExecutable();
+        var installDirectory = wireguard is null ? null : Path.GetDirectoryName(wireguard);
+        if (!string.IsNullOrWhiteSpace(installDirectory))
+        {
+            var sibling = Path.Combine(installDirectory, wgExeName);
+            if (File.Exists(sibling))
+            {
+                return sibling;
+            }
+        }
+
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = Path.Combine(dir.Trim(), wgExeName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Đọc runtime tunnel do wireguard.exe quản lý bằng <c>wg.exe show &lt;name&gt; dump</c>.
+    /// Không có wg.exe (hoặc lệnh lỗi) thì trả Unknown: driver ngoài không có kênh UAPI nào khác,
+    /// và "không đọc được" không được hoá thành "tunnel chết".
+    /// </summary>
+    public async Task<WireGuardRuntimeStats> GetRuntimeStatsAsync(
+        string tunnelName,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsSupported || string.IsNullOrWhiteSpace(tunnelName))
+        {
+            return WireGuardRuntimeStats.Unknown;
+        }
+
+        var wg = ResolveWgExecutable();
+        if (wg is null)
+        {
+            return WireGuardRuntimeStats.Unknown;
+        }
+
+        var (exitCode, stdout, _) = await RunProcessAsync(
+            wg,
+            $"show \"{tunnelName}\" dump",
+            cancellationToken).ConfigureAwait(false);
+
+        return exitCode == 0 ? WireGuardUapi.ParseWgShowDump(stdout) : WireGuardRuntimeStats.Unknown;
+    }
+
     private async Task RunAsync(string arguments, CancellationToken cancellationToken)
     {
         var exe = ResolveExecutable()

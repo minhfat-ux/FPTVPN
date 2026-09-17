@@ -175,6 +175,46 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
             UapiPipeExists(tunnelName) ? WireGuardTunnelState.Running : WireGuardTunnelState.NotInstalled);
     }
 
+    /// <summary>
+    /// Đọc handshake + <c>rx_bytes</c> qua UAPI <c>get=1</c> trên CÙNG named pipe đã dùng để nạp
+    /// conf. Đây là bằng chứng dữ liệu thật duy nhất mà driver userspace có: wireguard-go giữ
+    /// trạng thái peer trong tiến trình của nó, không có service nào để hỏi.
+    /// </summary>
+    public async Task<WireGuardRuntimeStats> GetRuntimeStatsAsync(
+        string tunnelName,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsSupported || string.IsNullOrWhiteSpace(tunnelName))
+        {
+            return WireGuardRuntimeStats.Unknown;
+        }
+
+        try
+        {
+            using var pipe = new NamedPipeClientStream(
+                ".", UapiPipeNameFor(tunnelName), PipeDirection.InOut, PipeOptions.Asynchronous);
+            await pipe.ConnectAsync(UapiConnectTimeoutMs, cancellationToken).ConfigureAwait(false);
+
+            // get=1 + dòng trống: cùng quy ước operation như set=1.
+            var payload = Encoding.UTF8.GetBytes("get=1\n\n");
+            await pipe.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+            await pipe.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+            var response = await ReadToEndOfOperationAsync(pipe, cancellationToken).ConfigureAwait(false);
+            return WireGuardUapi.ParseUapiGetResponse(response);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Pipe chưa mở / tiến trình vừa chết: "không đọc được" chứ không phải "tunnel chết".
+            _log.Warn($"wintun: không đọc được runtime UAPI get=1 ({ex.Message}) — bỏ qua lượt kiểm tra sức khoẻ này.");
+            return WireGuardRuntimeStats.Unknown;
+        }
+    }
+
     // MARK: - UAPI
 
     private async Task WaitForUapiPipeAsync(string tunnelName, CancellationToken cancellationToken)

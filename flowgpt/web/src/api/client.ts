@@ -1,0 +1,396 @@
+import type {
+  AnalysisPayload,
+  AppSettings,
+  ChatEvent,
+  Conversation,
+  FileRef,
+  McpServer,
+  Message,
+  Meta,
+  ModelOption,
+  Provider,
+  ProviderKindInfo,
+  QualifiedTool,
+  SkillDescriptor,
+  SkillCatalogResponse,
+  User,
+  VoiceConfigResponse,
+  VoiceTranscript,
+} from "../types";
+
+/**
+ * Thin, typed wrapper over the FlowGpt API (see docs/API_CONTRACT.md).
+ * The token is kept in localStorage and also sent as a Bearer header so the
+ * app works both behind the cookie and in the Vite dev server.
+ */
+
+const TOKEN_KEY = "flowgpt.token";
+const BASE = "/api";
+
+export class ApiError extends Error {
+  code: string;
+  status: number;
+  constructor(message: string, code = "internal_error", status = 500) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string | null) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* private mode */
+  }
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  if (!response.ok) {
+    const error = json?.error ?? {};
+    throw new ApiError(
+      error.message ?? `Lỗi ${response.status}`,
+      error.code ?? "internal_error",
+      response.status,
+    );
+  }
+  return json as T;
+}
+
+export const api = {
+  // ---- meta
+  meta: () => request<Meta>("GET", "/meta"),
+  health: () => request<{ ok: boolean; version: string; uptimeSec: number }>("GET", "/health"),
+
+  // ---- auth
+  register: (body: { email: string; password: string; name?: string }) =>
+    request<{ user: User; token: string }>("POST", "/auth/register", body),
+  login: (body: { email: string; password: string }) =>
+    request<{ user: User; token: string }>("POST", "/auth/login", body),
+  /** Passwordless login step 1 — emails a one-time code (and a magic link). */
+  requestLoginToken: (email: string) =>
+    request<{
+      ok: boolean;
+      delivered: boolean;
+      created: boolean;
+      expiresInMin: number;
+      mailerConfigured: boolean;
+      message?: string;
+      /** Present only while no mailer is configured (fresh install escape hatch). */
+      devCode?: string;
+      devLink?: string;
+    }>("POST", "/auth/request-token", { email }),
+  /** Passwordless login step 2 — redeems the code or the magic-link token. */
+  verifyLoginToken: (email: string, token: string) =>
+    request<{ user: User; token: string }>("POST", "/auth/verify-token", { email, token }),
+  logout: () => request<{ ok: boolean }>("POST", "/auth/logout", {}),
+  me: () => request<{ user: User }>("GET", "/auth/me"),
+  updateMe: (body: { name?: string; currentPassword?: string; password?: string }) =>
+    request<{ user: User }>("PATCH", "/auth/me", body),
+  testMailer: (body: { to: string }) =>
+    request<{ ok: boolean; message: string }>("POST", "/settings/mailer/test", body),
+
+  // ---- voice
+  voiceConfig: () => request<VoiceConfigResponse>("GET", "/voice/config"),
+  /** Server-side speech-to-text (only used when the config says mode === "server"). */
+  transcribeAudio: async (blob: Blob, options: { language?: string; hint?: string } = {}) => {
+    const form = new FormData();
+    form.append("audio", blob, `speech.${(blob.type || "audio/webm").includes("wav") ? "wav" : "webm"}`);
+    if (options.language) form.append("language", options.language);
+    if (options.hint) form.append("hint", options.hint);
+    const token = getToken();
+    const response = await fetch(`${BASE}/voice/transcribe`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new ApiError(json?.error?.message ?? "Nhận dạng giọng nói thất bại", json?.error?.code, response.status);
+    }
+    return json as VoiceTranscript;
+  },
+  /** Server-side text-to-speech; returns playable audio (wav/mp3). */
+  speakText: async (text: string, voice?: string | null): Promise<Blob> => {
+    const token = getToken();
+    const response = await fetch(`${BASE}/voice/speech`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text, voice: voice ?? undefined }),
+    });
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new ApiError(json?.error?.message ?? "Đọc văn bản thất bại", json?.error?.code, response.status);
+    }
+    return response.blob();
+  },
+  /** Admin: synthesize a sample sentence and report the provider latency. */
+  testVoice: async (text?: string) => {
+    const token = getToken();
+    const response = await fetch(`${BASE}/settings/voice/test`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (response.headers.get("Content-Type")?.includes("application/json")) {
+      const json = await response.json().catch(() => null);
+      return { ok: false as const, message: json?.message ?? json?.error?.message ?? "Không đọc được" };
+    }
+    return {
+      ok: true as const,
+      blob: await response.blob(),
+      provider: decodeURIComponent(response.headers.get("X-Voice-Provider") ?? ""),
+      latencyMs: Number(response.headers.get("X-Voice-Latency-Ms") ?? 0),
+      message: "Đọc thử thành công",
+    };
+  },
+
+  // ---- conversations
+  listConversations: (archived = false) =>
+    request<{ items: Conversation[] }>("GET", `/conversations${archived ? "?archived=1" : ""}`),
+  searchConversations: (q: string) =>
+    request<{ items: Conversation[] }>("GET", `/conversations/search?q=${encodeURIComponent(q)}`),
+  createConversation: (body: Partial<Pick<Conversation, "title" | "skill" | "providerId" | "model">>) =>
+    request<{ conversation: Conversation }>("POST", "/conversations", body),
+  getConversation: (id: string) =>
+    request<{ conversation: Conversation; messages: Message[] }>("GET", `/conversations/${id}`),
+  updateConversation: (id: string, body: Partial<Conversation>) =>
+    request<{ conversation: Conversation }>("PATCH", `/conversations/${id}`, body),
+  deleteConversation: (id: string) => request<{ ok: boolean }>("DELETE", `/conversations/${id}`),
+  duplicateConversation: (id: string) =>
+    request<{ conversation: Conversation }>("POST", `/conversations/${id}/duplicate`, {}),
+
+  // ---- files
+  upload: async (file: File, conversationId?: string | null): Promise<{ file: FileRef }> => {
+    const form = new FormData();
+    form.append("file", file);
+    if (conversationId) form.append("conversationId", conversationId);
+    const token = getToken();
+    const response = await fetch(`${BASE}/files`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new ApiError(json?.error?.message ?? "Tải tệp thất bại", json?.error?.code, response.status);
+    }
+    return json;
+  },
+  /** Uploads a canvas Blob (Image Studio export) as a new artifact. */
+  uploadBlob: async (blob: Blob, name: string, conversationId?: string | null) => {
+    const file = new File([blob], name, { type: blob.type || "image/png" });
+    return api.upload(file, conversationId);
+  },
+  listArtifacts: () => request<{ items: FileRef[] }>("GET", "/artifacts"),
+  deleteFile: (id: string) => request<{ ok: boolean }>("DELETE", `/files/${id}`),
+  fileUrl: (id: string, inline = false) => `${BASE}/files/${id}/content${inline ? "?inline=1" : ""}`,
+  async fetchFileBlob(id: string): Promise<Blob> {
+    const token = getToken();
+    const response = await fetch(api.fileUrl(id), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new ApiError("Không tải được tệp", "not_found", response.status);
+    return response.blob();
+  },
+
+  // ---- skills & models
+  skills: () => request<SkillCatalogResponse>("GET", "/skills"),
+  /** Saves the user's quick-list (the "Thêm kỹ năng" picker / future marketplace). */
+  setInstalledSkills: (ids: string[]) =>
+    request<{ installed: string[]; items: SkillDescriptor[] }>("PUT", "/skills/installed", { ids }),
+  models: () => request<{ items: ModelOption[] }>("GET", "/models"),
+
+  // ---- settings (admin)
+  appSettings: () => request<{ settings: AppSettings; defaults: AppSettings }>("GET", "/settings/app"),
+  saveAppSettings: (settings: Partial<AppSettings>) =>
+    request<{ settings: AppSettings }>("PUT", "/settings/app", { settings }),
+  providerKinds: () => request<{ items: ProviderKindInfo[] }>("GET", "/settings/provider-kinds"),
+  providers: () => request<{ items: Provider[] }>("GET", "/settings/providers"),
+  createProvider: (body: Record<string, unknown>) =>
+    request<{ provider: Provider }>("POST", "/settings/providers", body),
+  updateProvider: (id: string, body: Record<string, unknown>) =>
+    request<{ provider: Provider }>("PATCH", `/settings/providers/${id}`, body),
+  deleteProvider: (id: string) => request<{ ok: boolean }>("DELETE", `/settings/providers/${id}`),
+  testProvider: (id: string, body: { model?: string; listModels?: boolean } = {}) =>
+    request<{ ok: boolean; model: string; models?: string[] | null; latencyMs?: number; message: string }>(
+      "POST",
+      `/settings/providers/${id}/test`,
+      body,
+    ),
+
+  mcpServers: () => request<{ items: McpServer[] }>("GET", "/settings/mcp"),
+  createMcpServer: (body: Record<string, unknown>) =>
+    request<{ server: McpServer }>("POST", "/settings/mcp", body),
+  updateMcpServer: (id: string, body: Record<string, unknown>) =>
+    request<{ server: McpServer }>("PATCH", `/settings/mcp/${id}`, body),
+  deleteMcpServer: (id: string) => request<{ ok: boolean }>("DELETE", `/settings/mcp/${id}`),
+  testMcpServer: (id: string, override?: Record<string, unknown>) =>
+    request<{ ok: boolean; tools: McpServer["tools"]; latencyMs?: number; message: string }>(
+      "POST",
+      `/settings/mcp/${id}/test`,
+      { override },
+    ),
+  refreshMcpServer: (id: string) =>
+    request<{ server: McpServer | null }>("POST", `/settings/mcp/${id}/refresh`, {}),
+  mcpTools: () => request<{ items: QualifiedTool[] }>("GET", "/mcp/tools"),
+
+  adminUsers: () =>
+    request<{ items: (User & { conversationCount: number })[] }>("GET", "/admin/users"),
+  createUser: (body: { email: string; password: string; name?: string; role?: string }) =>
+    request<{ user: User }>("POST", "/admin/users", body),
+  deleteUser: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/users/${id}`),
+  adminStats: () =>
+    request<Record<string, number>>("GET", "/admin/stats"),
+};
+
+// ------------------------------------------------------------------ chat SSE
+
+export interface ChatRequest {
+  content: string;
+  conversationId?: string | null;
+  attachments?: string[];
+  skill?: string;
+  providerId?: string | null;
+  model?: string | null;
+  toolMode?: "auto" | "off" | "required";
+}
+
+/**
+ * Streams one assistant turn. Returns an abort function; events are delivered
+ * through the callbacks so the caller can render deltas as they arrive.
+ */
+export function streamChat(
+  body: ChatRequest,
+  handlers: {
+    onEvent: (event: ChatEvent) => void;
+    onError?: (error: ApiError) => void;
+    onClose?: () => void;
+  },
+  signal?: AbortSignal,
+): () => void {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal) signal.addEventListener("abort", abort, { once: true });
+
+  (async () => {
+    const token = getToken();
+    let response: Response;
+    try {
+      response = await fetch(`${BASE}/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        handlers.onError?.(new ApiError((err as Error).message, "network_error", 0));
+      }
+      handlers.onClose?.();
+      return;
+    }
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      let parsed: any = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      handlers.onError?.(
+        new ApiError(parsed?.error?.message ?? `Lỗi ${response.status}`, parsed?.error?.code, response.status),
+      );
+      handlers.onClose?.();
+      return;
+    }
+    if (!response.body) {
+      handlers.onError?.(new ApiError("Máy chủ không trả về stream", "stream_error", 500));
+      handlers.onClose?.();
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let index = buffer.indexOf("\n\n");
+        while (index !== -1) {
+          const block = buffer.slice(0, index);
+          buffer = buffer.slice(index + 2);
+          const parsed = parseSseBlock(block);
+          if (parsed) handlers.onEvent(parsed as ChatEvent);
+          index = buffer.indexOf("\n\n");
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        handlers.onError?.(new ApiError((err as Error).message, "stream_error", 0));
+      }
+    } finally {
+      handlers.onClose?.();
+    }
+  })();
+
+  return abort;
+}
+
+function parseSseBlock(block: string): { event: string; data: any } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith(":")) continue;
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+  }
+  if (!dataLines.length) return null;
+  try {
+    return { event, data: JSON.parse(dataLines.join("\n")) };
+  } catch {
+    return null;
+  }
+}
+
+export type { AnalysisPayload };

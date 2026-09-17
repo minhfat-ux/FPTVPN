@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Remote installer for FlowGpt on node-2 (fcnvps2 / 165.101.114.162).
+#
+# Idempotent: safe to run on every deploy. Follows the VPS house rules —
+# back up Caddy before editing, `caddy validate` before reload, verify with curl.
+#
+# Usage (on the server, after the release tarball has been extracted to /opt/flowgpt):
+#   bash /opt/flowgpt/deploy/remote-setup.sh
+set -euo pipefail
+
+APP_DIR=/opt/flowgpt
+ENV_DIR=/etc/flowgpt
+ENV_FILE=$ENV_DIR/flowgpt.env
+DATA_DIR=/var/lib/flowgpt
+PORT=7790
+DOMAIN=flowgpt.meetflowai.site
+SERVICE=flowgpt
+CADDYFILE=/etc/caddy/Caddyfile
+STAMP=$(date +%Y%m%d-%H%M%S)
+
+log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
+
+# ----------------------------------------------------------------- 1. layout
+log "1/6 Thư mục"
+install -d -m 755 "$APP_DIR" "$DATA_DIR"
+install -d -m 700 "$ENV_DIR"
+touch "$DATA_DIR/.keep"
+
+if [ ! -f "$ENV_FILE" ]; then
+  log "Tạo $ENV_FILE lần đầu (secret sinh tự động, không in ra màn hình)"
+  SECRET=$(openssl rand -base64 48 | tr -d '\n')
+  cat > "$ENV_FILE" <<EOF
+FLOWGPT_SECRET=$SECRET
+FLOWGPT_PUBLIC_URL=https://$DOMAIN
+FLOWGPT_HOST=127.0.0.1
+FLOWGPT_PORT=$PORT
+FLOWGPT_DATA_DIR=$DATA_DIR
+FLOWGPT_APP_NAME=FlowGpt
+FLOWGPT_TRUST_PROXY=true
+EOF
+  chmod 600 "$ENV_FILE"
+else
+  log "$ENV_FILE đã có — giữ nguyên secret hiện tại"
+  chmod 600 "$ENV_FILE"
+fi
+
+# ------------------------------------------------------------- 2. systemd
+log "2/6 systemd unit"
+install -m 644 "$APP_DIR/deploy/$SERVICE.service" "/etc/systemd/system/$SERVICE.service"
+systemctl daemon-reload
+systemctl enable "$SERVICE" >/dev/null
+
+# ---------------------------------------------------------------- 3. caddy
+log "3/6 Caddy"
+if grep -qE "^[[:space:]]*$DOMAIN([[:space:],{]|$)" "$CADDYFILE"; then
+  log "$DOMAIN đã có trong Caddyfile — bỏ qua"
+else
+  cp -a "$CADDYFILE" "$CADDYFILE.bak-flowgpt-$STAMP"
+  log "Backup: $CADDYFILE.bak-flowgpt-$STAMP"
+  cat >> "$CADDYFILE" <<EOF
+
+# FlowGpt — AI chatbox web (chat, sửa ảnh, PPT, Excel, phân tích dữ liệu).
+# Node phục vụ ở $PORT (systemd $SERVICE). Thiếu block này là edge trả 404/525.
+$DOMAIN {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:$PORT
+}
+EOF
+  if caddy validate --config "$CADDYFILE" >/dev/null 2>&1; then
+    systemctl reload caddy
+    log "Caddy đã reload"
+  else
+    log "Caddyfile KHÔNG hợp lệ — khôi phục bản backup"
+    cp -a "$CADDYFILE.bak-flowgpt-$STAMP" "$CADDYFILE"
+    caddy validate --config "$CADDYFILE"
+    exit 1
+  fi
+fi
+
+# --------------------------------------------------------------- 4. restart
+log "4/6 Khởi động $SERVICE"
+systemctl restart "$SERVICE"
+sleep 2
+systemctl is-active --quiet "$SERVICE" || {
+  journalctl -u "$SERVICE" -n 60 --no-pager
+  exit 1
+}
+
+# --------------------------------------------------------------- 5. verify
+log "5/6 Kiểm tra"
+for i in 1 2 3 4 5; do
+  if curl -fsS "http://127.0.0.1:$PORT/api/health" >/tmp/flowgpt-health.json 2>/dev/null; then
+    break
+  fi
+  log "Chờ service lên (lần $i)…"
+  sleep 2
+done
+cat /tmp/flowgpt-health.json
+echo
+
+# ------------------------------------------------------------- 6. summary
+log "6/6 Xong"
+cat <<EOF
+- App:     $APP_DIR
+- Dữ liệu: $DATA_DIR (SQLite + tệp + artifact)
+- Env:     $ENV_FILE (600)
+- Log:     journalctl -u $SERVICE -f
+- Nội bộ:  curl -s http://127.0.0.1:$PORT/api/health
+- Công khai: https://$DOMAIN  (cần bản ghi DNS A $DOMAIN -> IP node-2, proxied)
+EOF

@@ -233,7 +233,9 @@ async function outboxFlush() {
 }
 
 async function send(chatId, text, extra = {}) {
-  const chunks = String(text ?? "").match(/[\s\S]{1,3800}/g) ?? [""];
+  // Cắt theo code point (chunkMessage) để KHÔNG cắt đôi emoji — cắt theo code unit làm Telegram
+  // hiện ký tự vỡ giữa tin dài (report/chat đầy emoji).
+  const chunks = cmd.chunkMessage(text, 3800);
   let last = null;
   for (const chunk of chunks) {
     try {

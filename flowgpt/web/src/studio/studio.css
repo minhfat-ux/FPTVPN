@@ -1,0 +1,86 @@
+/* ============================================================================
+   Studio — chỉ định nghĩa bố cục, khoảng cách và kích thước.
+   Mọi màu sắc lấy từ biến trong styles.css (var(--…)), không hard-code màu.
+   ========================================================================= */
+
+.studio-intro { margin-bottom: var(--space-4); }
+
+.studio-intro-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 24px;
+}
+
+.tabs .tab-inner { display: inline-flex; align-items: center; gap: 7px; }
+
+/* ---------------------------------------------------------------- canvas */
+
+.canvas-stage {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  max-width: 100%;
+}
+
+.edit-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  touch-action: none;
+}
+
+.edit-canvas.crosshair { cursor: crosshair; }
+.edit-canvas:not(.crosshair) { cursor: default; }
+
+.crop-overlay {
+  position: absolute;
+  border: 2px dashed var(--accent);
+  background: var(--accent-soft);
+  outline: 9999px solid color-mix(in srgb, var(--bg) 55%, transparent);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.text-marker {
+  position: absolute;
+  transform: translateY(-2px);
+  pointer-events: none;
+  line-height: 1.15;
+  white-space: pre;
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--bg) 80%, transparent);
+}
+
+.color-input { height: 42px; padding: 4px; cursor: pointer; }
+
+/* ------------------------------------------------------ slide / excel grid */
+
+.slide-preview,
+.op-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  padding: var(--space-3);
+}
+
+.outline-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: var(--space-3); }
+.outline-bullets { margin: 4px 0 0; padding-left: 16px; }
+.outline-bullets li { margin-bottom: 2px; }
+
+.grid-input { padding: 6px 8px; font-size: 13px; min-width: 110px; }
+.row-index { width: 44px; text-align: right; }
+
+/* ----------------------------------------------------------------- data */
+
+.note-list { margin: 0 0 var(--space-3); padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+.chart-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  padding: var(--space-3);
+}

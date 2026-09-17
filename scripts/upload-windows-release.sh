@@ -66,6 +66,29 @@ for u in "http://$IP_HOST/$BASE" "http://$IP_HOST/$LATEST" "https://$CDN_HOST/dl
   case "${code_size% *}" in 200|206) ;; *) echo "LỖI: link chưa tải được (${code_size% *})" >&2; exit 1;; esac
 done
 
+echo "== 4) cập nhật link tải trên trang /buy (kèm ?v= để không dính cache Cloudflare 4h)"
+# Vì sao có bước này: /buy và /v1/app-version lấy link từ windows_installer_url của control plane.
+# Không tự cập nhật thì sau mỗi lần phát hành phải PATCH tay, và link cũ còn bị Cloudflare cache 4h.
+# Thêm ?v=<sha8> ⇒ mỗi bản là một URL mới ⇒ cache không phục vụ bản cũ, khách tải đúng bản mới ngay.
+if [ "${SKIP_BUY_UPDATE:-0}" = "1" ]; then
+  echo "   bỏ qua (SKIP_BUY_UPDATE=1)"
+else
+  ssh -o BatchMode=yes "$NODE1" "ssh -n -o BatchMode=yes root@$NODE2 'test -x /usr/local/bin/flowvpn-set-windows-url'" \
+    || { echo "LỖI: node-2 thiếu /usr/local/bin/flowvpn-set-windows-url (helper đặt windows_installer_url)" >&2; exit 1; }
+  PUB="https://$CDN_HOST/dl/$BASE?v=${LOCAL_SHA:0:8}"
+  echo "   URL mới: $PUB"
+  ssh -o BatchMode=yes "$NODE1" "ssh -n -o BatchMode=yes root@$NODE2 'flowvpn-set-windows-url \"$PUB\"'"
+  BUY_LINK="$(curl -s -m 30 "https://$CDN_HOST/buy" | grep -o "https://[^\"]*$BASE[^\"]*" | head -1)"
+  echo "   /buy đang trỏ: ${BUY_LINK:-(không đọc được)}"
+  case "$BUY_LINK" in
+    *"?v=${LOCAL_SHA:0:8}"*) echo "   OK: trang buy đã trỏ đúng bản vừa phát" ;;
+    *) echo "LỖI: trang buy chưa trỏ link mới — kiểm tra windows_installer_url" >&2; exit 1 ;;
+  esac
+  DL_SHA="$(curl -s -L -m 900 "https://$CDN_HOST/dl/$BASE?v=${LOCAL_SHA:0:8}" | sha256sum | cut -d' ' -f1)"
+  [ "$DL_SHA" = "$LOCAL_SHA" ] || { echo "LỖI: bản tải qua CDN có sha256 khác nguồn — KHÔNG phát" >&2; exit 1; }
+  echo "   OK: tải qua CDN khớp sha256 nguồn"
+fi
+
 echo
 echo "XONG. Link gửi khách / dán vào trang buy:"
 echo "   http://$IP_HOST/$LATEST          (link cố định, luôn trỏ bản mới nhất)"
@@ -74,8 +97,7 @@ echo "   http://$IP_HOST/$BASE            (link theo phiên bản)"
 echo "   sha256 : $LOCAL_SHA"
 echo
 echo "Nhắc:"
-echo "  · Trang /buy lấy link từ windows_installer_url (PATCH /v1/admin/windows-version)."
-echo "    Nên đặt URL THEO PHIÊN BẢN: https://$CDN_HOST/dl/$BASE"
-echo "    — vì Cloudflare cache /dl/* tới 4h, link \"-latest\" sẽ phục vụ bản CŨ/404 đã cache"
-echo "      cho tới khi cache hết hạn (token Cloudflare trên VPS hiện KHÔNG có quyền purge)."
-echo "  · Kiểm tra lại bằng: curl -sI https://$CDN_HOST/dl/$BASE | head -3"
+echo "  · Trang /buy + /v1/app-version đã được script trỏ sang: https://$CDN_HOST/dl/$BASE?v=${LOCAL_SHA:0:8}"
+echo "    (mỗi bản một ?v= nên Cloudflare không phục vụ bản cũ; token Cloudflare hiện KHÔNG có quyền purge)."
+echo "  · Bỏ qua bước đó khi cần: SKIP_BUY_UPDATE=1 $0 <file>"
+echo "  · Kiểm tra lại bằng: curl -sI \"https://$CDN_HOST/dl/$BASE?v=${LOCAL_SHA:0:8}\" | head -3"
