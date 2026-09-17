@@ -31,6 +31,21 @@ log() { printf '  %s\n' "$*"; }
 [ -d "$WS/src" ] || { echo "LỖI: không thấy $WS/src" >&2; exit 1; }
 [ -d "$LIVE/src" ] || { echo "LỖI: không thấy $LIVE/src" >&2; exit 1; }
 
+# --- 0) chặn tai nạn: workspace cũ hơn bản đang chạy --------------------------
+# Deploy copy MỌI file src/*.js khác nhau. Nếu bản đang chạy có file mà workspace không có,
+# lần deploy đó sẽ làm live mất tính năng tương ứng (suýt xảy ra thật 17/09: live có
+# geoip.js/gfw-watch.js/mmdb.js còn workspace thì không). Thà dừng lại bắt đồng bộ workspace.
+missing=()
+for f in "$LIVE"/src/*.js; do
+  base="$(basename "$f")"
+  [ -f "$WS/src/$base" ] || missing+=("$base")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  echo "LỖI: workspace thiếu file so với bản đang chạy: ${missing[*]}" >&2
+  echo "  → đồng bộ workspace trước (cp -a $LIVE/src/. $WS/src/), nếu không deploy sẽ làm mất tính năng." >&2
+  exit 1
+fi
+
 # --- 1) danh sách file .js khác nhau -----------------------------------------
 changed=()
 for f in "$WS"/src/*.js; do
