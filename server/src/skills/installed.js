@@ -1,6 +1,6 @@
 import { all, db, insert } from "../db.js";
 import { READY_SKILL_IDS, SKILL_CATALOG, publicSkillCatalog } from "./index.js";
-import { getHubSkillRow, hasPurchased, listHubSkills } from "./hub.js";
+import { getHubSkillRow, hasPurchased, listHubSkills, skillPriceVnd } from "./hub.js";
 import { badRequest, nowIso } from "../util.js";
 
 /**
@@ -19,7 +19,7 @@ function isAllowedSkill({ skillId, userId, role = "user" }) {
   if (READY_SKILL_IDS.includes(skillId)) return true;
   const row = getHubSkillRow(skillId);
   if (!row || row.state !== "published") return false;
-  if (Number(row.price ?? 0) === 0) return true;
+  if (skillPriceVnd(row) === 0) return true;
   return role === "admin" || hasPurchased(userId, row.id);
 }
 
@@ -45,6 +45,7 @@ export function listInstalledSkills(userId) {
       state: "ready",
       builtin: false,
       price: skill.price,
+      priceVnd: skill.priceVnd,
     });
   }
   return ids.map((id) => byId.get(id)).filter(Boolean);

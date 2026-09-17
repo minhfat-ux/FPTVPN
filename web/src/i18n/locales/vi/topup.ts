@@ -1,4 +1,4 @@
-import type { Dict } from "../../types";
+﻿import type { Dict } from "../../types";
 
 /** Nguồn sự thật (tiếng Việt). Thêm khoá mới ở đây trước, rồi dịch sang en/zh. */
 export const topup: Dict = {
@@ -124,9 +124,9 @@ export const topup: Dict = {
   "topup.skills.empty": "Chưa có kỹ năng nào để bán",
   "topup.skills.emptyHint": "Khi chủ tài khoản mở bán kỹ năng, chúng sẽ xuất hiện ở đây.",
   "topup.skills.free": "Miễn phí",
-  "topup.skills.price": "{amount} token",
+  "topup.skills.price": "{amount}đ",
   "topup.skills.buy": "Mua",
-  "topup.skills.buyWithPrice": "Mua · {amount} token",
+  "topup.skills.buyWithPrice": "Mua · {amount}đ",
   "topup.skills.getFree": "Dùng miễn phí",
   "topup.skills.buying": "Đang mua…",
   "topup.skills.bought": "Đã mua “{name}” — đã thêm vào danh sách kỹ năng",

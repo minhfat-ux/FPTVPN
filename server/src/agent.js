@@ -6,7 +6,15 @@ import { isConfirmed, planChoices } from "./skills/confirm.js";
 import { excelChoices } from "./skills/vision.js";
 import { hubSkillForUser, isSelectableSkill } from "./skills/hub.js";
 import { listProviderRows, nextUsableProvider, readAppSettings, resolveProviderForChat, resolveVisionTarget } from "./settings.js";
-import { assertCanChat, costForUsage, creditSettings, creditSummary, spendCredits } from "./credits.js";
+import {
+  assertCanChat,
+  costForUsage,
+  creditSettings,
+  creditSummary,
+  spendCredits,
+  TYPICAL_TURN_TOKENS,
+  typicalTurnCost,
+} from "./credits.js";
 import { getOwnedFile, asTextPayload, asImagePayload, publicFile } from "./files.js";
 import { all, audit, update } from "./db.js";
 import { toRuntimeProvider } from "./providers/index.js";
@@ -129,15 +137,21 @@ export function buildCreditKnowledge(user) {
   const buy = settings.buyUrl
     ? `“Mua thêm token” ở menu tài khoản → trang nạp credit ${settings.buyUrl}`
     : "“Mua thêm token” ở menu tài khoản";
+  const vnd = (credits) => `${Math.round(credits * settings.vndPerCredit).toLocaleString("vi-VN")}đ`;
+  const perCredit = settings.vndPerCredit % 1 === 0 ? String(settings.vndPerCredit) : settings.vndPerCredit.toFixed(2);
+  const typical = typicalTurnCost();
   return [
     "## Credit (số liệu thật, được phép nói với người dùng)",
-    `KHÔNG miễn phí: mỗi lượt trừ (token vào + token ra) × ${settings.perToken} credit, làm tròn lên, tối thiểu 1 (1 credit = 1 token). Đăng nhập lần đầu được tặng ${settings.signupCredits} credit.`,
-    `Của người dùng này: ${summary.balance} credit, đã dùng ${summary.spent}, trung bình ${summary.averageCostPerTurn}/lượt ≈ ${summary.estimatedTurnsLeft} lượt còn lại.`,
+    `KHÔNG miễn phí: mỗi lượt trừ (token vào + token ra) × ${settings.perToken} credit, làm tròn lên, tối thiểu 1. ` +
+      `1 credit = ${perCredit}đ. Một lượt chat thường ~${TYPICAL_TURN_TOKENS.toLocaleString("vi-VN")} token ≈ ${typical} credit ≈ ${vnd(typical)}. ` +
+      `Đăng nhập lần đầu được tặng ${settings.signupCredits} credit (≈ ${vnd(settings.signupCredits)}).`,
+    `Của người dùng này: ${summary.balance} credit (≈ ${vnd(summary.balance)}), đã dùng ${summary.spent}, ` +
+      `trung bình ${summary.averageCostPerTurn}/lượt ≈ ${summary.estimatedTurnsLeft} lượt còn lại.`,
     `Muốn thêm credit: (1) bấm ảnh đại diện (góc trên phải) → “Xin thêm token” để gửi yêu cầu chờ quản trị viên duyệt; (2) ${buy}.`,
-    "Mua kỹ năng là việc khác: mục “Chợ kỹ năng” trên thanh bên trái.",
+    "Mua kỹ năng là việc khác: mục “Chợ kỹ năng” trên thanh bên trái; giá kỹ năng tính bằng VND và trả một lần.",
     user.role === "admin"
       ? "Người dùng này là quản trị viên: hết credit vẫn chat được nhưng vẫn bị trừ credit."
-      : "Được hỏi về credit/token/giá/số dư: trả lời 1–3 câu, luôn nêu công thức trừ credit, mức credit được tặng khi đăng nhập lần đầu và 2 đường nạp (xin thêm / mua thêm) bằng đúng số liệu trên; không nói FlowGpt miễn phí, không bịa giá.",
+      : "Được hỏi về credit/token/giá/số dư: trả lời 1–3 câu, luôn nêu công thức trừ credit, quy đổi ra VND, mức credit được tặng khi đăng nhập lần đầu và 2 đường nạp (xin thêm / mua thêm) bằng đúng số liệu trên; không nói FlowGpt miễn phí, không bịa giá.",
   ].join("\n");
 }
 

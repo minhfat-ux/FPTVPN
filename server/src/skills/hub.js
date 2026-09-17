@@ -1,4 +1,4 @@
-import { all, db, getById, insert, one, remove, update } from "../db.js";
+import { all, db, getAppSettings, getById, insert, one, remove, update } from "../db.js";
 import { badRequest, notFound, slugify } from "../util.js";
 import { getBalance, spendCredits } from "../credits.js";
 import { READY_SKILL_IDS, SKILL_CATALOG } from "./index.js";
@@ -16,11 +16,36 @@ import { listInstalledSkillIds, setInstalledSkills, MAX_SELECTABLE_SKILLS } from
 
 export const HUB_CATEGORIES = ["Bán hàng", "Văn phòng", "Dữ liệu", "Nội dung", "Giáo dục", "Khác"];
 
+/**
+ * Selling price of a skill, in VND. **This is the stored, authoritative price** —
+ * the owner prices skills in money, separately from the price of a credit, so
+ * changing `vndPerCredit` never silently re-prices the shop.
+ */
+export function skillPriceVnd(row) {
+  if (!row) return 0;
+  return Math.max(0, Math.trunc(Number(row.price_vnd ?? 0) || 0));
+}
+
+/** Credits a user is charged for that price, at the current credit price. */
+export function creditsForPriceVnd(priceVnd, vndPerCredit = creditPrice()) {
+  const vnd = Math.max(0, Number(priceVnd) || 0);
+  if (!vnd) return 0;
+  const perCredit = Math.max(0, Number(vndPerCredit) || 0);
+  if (!perCredit) return 0;
+  // Never round down to free: a paid skill always costs at least one credit.
+  return Math.max(1, Math.ceil(vnd / perCredit));
+}
+
+function creditPrice() {
+  return Math.max(0, Number(getAppSettings().vndPerCredit) || 0);
+}
+
 function rowToSkill(
   row,
   { userId = null, owned = new Set(), installed = new Set(), withContent = false } = {},
 ) {
   if (!row) return null;
+  const priceVnd = skillPriceVnd(row);
   return {
     id: row.id,
     slug: row.slug,
@@ -29,7 +54,10 @@ function rowToSkill(
     description: row.description ?? "",
     category: row.category,
     icon: row.icon,
-    price: Number(row.price ?? 0),
+    /** Money price — what the shop shows and what the buyer pays. */
+    priceVnd,
+    /** Same price expressed in credits at today's credit price (derived, not stored). */
+    price: creditsForPriceVnd(priceVnd),
     state: row.state,
     installs: Number(row.installs ?? 0),
     sortOrder: Number(row.sort_order ?? 0),
@@ -45,11 +73,13 @@ function rowToSkill(
 /** Internal fields the agent needs (never sent to the browser as-is). */
 export function hubSkillRuntime(row) {
   if (!row) return null;
+  const priceVnd = skillPriceVnd(row);
   return {
     id: row.id,
     slug: row.slug,
     name: row.name,
-    price: Number(row.price ?? 0),
+    priceVnd,
+    price: creditsForPriceVnd(priceVnd),
     instructions: row.instructions ?? "",
     tools: row.tools ?? [],
     state: row.state,
@@ -104,25 +134,27 @@ export function purchaseHubSkill({ user, idOrSlug }) {
   if (row.state === "hidden") throw notFound("Không tìm thấy kỹ năng này");
 
   const alreadyOwned = hasPurchased(user.id, row.id);
-  const price = Number(row.price ?? 0);
+  const priceVnd = skillPriceVnd(row);
+  const price = creditsForPriceVnd(priceVnd);
   let balance = getBalance(user.id);
 
   if (!alreadyOwned) {
     if (price > 0) {
       if (user.role !== "admin" && balance < price) {
         const error = new Error(
-          `Cần ${price.toLocaleString("vi-VN")} token để mua "${row.name}", số dư hiện tại là ${balance.toLocaleString("vi-VN")}.`,
+          `Cần ${price.toLocaleString("vi-VN")} credit (${priceVnd.toLocaleString("vi-VN")}đ) để mua "${row.name}", ` +
+            `số dư hiện tại là ${balance.toLocaleString("vi-VN")} credit.`,
         );
         error.status = 402;
         error.code = "insufficient_credits";
-        error.details = { price, balance, buyUrl: null };
+        error.details = { price, priceVnd, balance, buyUrl: null };
         throw error;
       }
       balance = spendCredits({
         userId: user.id,
         amount: price,
         ref: row.id,
-        note: `Mua kỹ năng ${row.name}`,
+        note: `Mua kỹ năng ${row.name} (${priceVnd.toLocaleString("vi-VN")}đ)`,
         reason: "skill_purchase",
       });
     }
@@ -144,17 +176,32 @@ export function purchaseHubSkill({ user, idOrSlug }) {
     alreadyOwned,
     installed: installedNow,
     pricePaid: alreadyOwned ? 0 : price,
+    pricePaidVnd: alreadyOwned ? 0 : priceVnd,
   };
 }
 
 // ------------------------------------------------------------------- admin
+
+/**
+ * Resolves the money price of a write. `priceVnd` wins; the legacy `price`
+ * (credits) is still accepted so older callers and the import script keep
+ * working, and is converted at today's credit price.
+ */
+function resolvePriceVnd(input, fallbackVnd = 0) {
+  if (input?.priceVnd !== undefined) return Math.max(0, Math.trunc(Number(input.priceVnd) || 0));
+  if (input?.price !== undefined) {
+    const credits = Math.max(0, Math.trunc(Number(input.price) || 0));
+    return credits * creditPrice();
+  }
+  return fallbackVnd;
+}
 
 export function createHubSkill(input) {
   const name = String(input?.name ?? "").trim();
   if (!name) throw badRequest("Thiếu tên kỹ năng");
   const slug = slugify(input?.slug || name, "skill");
   if (one("hub_skills", "slug = ?", [slug])) throw badRequest(`Slug "${slug}" đã tồn tại`);
-  const price = Math.max(0, Math.trunc(Number(input?.price) || 0));
+  const priceVnd = resolvePriceVnd(input);
   const row = insert("hub_skills", {
     slug,
     name,
@@ -162,7 +209,8 @@ export function createHubSkill(input) {
     description: String(input?.description ?? "").slice(0, 2000) || null,
     category: HUB_CATEGORIES.includes(input?.category) ? input.category : "Khác",
     icon: String(input?.icon ?? "sparkles").slice(0, 40),
-    price,
+    price_vnd: priceVnd,
+    price: creditsForPriceVnd(priceVnd),
     instructions: String(input?.instructions ?? "").slice(0, 6000) || null,
     tools_json: Array.isArray(input?.tools) ? input.tools.map(String) : [],
     state: ["published", "coming_soon", "hidden"].includes(input?.state) ? input.state : "published",
@@ -180,7 +228,12 @@ export function updateHubSkill(id, patch) {
   if (patch.description !== undefined) changes.description = String(patch.description ?? "").slice(0, 2000) || null;
   if (patch.category !== undefined && HUB_CATEGORIES.includes(patch.category)) changes.category = patch.category;
   if (patch.icon !== undefined) changes.icon = String(patch.icon ?? "sparkles").slice(0, 40);
-  if (patch.price !== undefined) changes.price = Math.max(0, Math.trunc(Number(patch.price) || 0));
+  if (patch.priceVnd !== undefined || patch.price !== undefined) {
+    const priceVnd = resolvePriceVnd(patch, skillPriceVnd(existing));
+    changes.price_vnd = priceVnd;
+    // Kept as a credits cache for the raw table; readers derive it from price_vnd.
+    changes.price = creditsForPriceVnd(priceVnd);
+  }
   if (patch.instructions !== undefined) changes.instructions = String(patch.instructions ?? "").slice(0, 6000) || null;
   if (patch.tools !== undefined) changes.tools_json = Array.isArray(patch.tools) ? patch.tools.map(String) : [];
   if (patch.state !== undefined && ["published", "coming_soon", "hidden"].includes(patch.state)) {
@@ -210,8 +263,7 @@ export function deleteHubSkill(id) {
 export function hubSkillForUser({ skillId, userId, role = "user" }) {
   const row = getHubSkillRow(skillId);
   if (!row || row.state !== "published") return null;
-  const price = Number(row.price ?? 0);
-  const owned = price === 0 || role === "admin" || hasPurchased(userId, row.id);
+  const owned = skillPriceVnd(row) === 0 || role === "admin" || hasPurchased(userId, row.id);
   if (!owned) return null;
   return hubSkillRuntime(row);
 }
@@ -234,7 +286,7 @@ const SEED = [
       "Nhận sản phẩm + khách hàng mục tiêu, trả về bài bán hàng hoàn chỉnh: hook 2 giây, nỗi đau, lợi ích, bằng chứng, xử lý từ chối và lời kêu gọi hành động. Kèm 3 biến thể tiêu đề để A/B test.",
     category: "Bán hàng",
     icon: "megaphone",
-    price: 2000,
+    priceVnd: 50000,
     instructions:
       "Bạn viết content bán hàng theo công thức AIDA. Luôn trả về: (1) Hook 1 câu gây tò mò, (2) Nỗi đau của khách, " +
       "(3) 3 lợi ích cụ thể kèm con số nếu có, (4) Bằng chứng/chứng thực, (5) Xử lý 2 lời từ chối thường gặp, (6) CTA rõ ràng. " +
@@ -248,7 +300,7 @@ const SEED = [
       "Đưa file ghi âm đã chuyển thành văn bản (hoặc ghi chú thô), nhận về biên bản gọn: quyết định đã chốt, việc cần làm kèm người phụ trách và hạn, điểm còn tranh luận, rủi ro.",
     category: "Văn phòng",
     icon: "clipboard",
-    price: 1500,
+    priceVnd: 50000,
     instructions:
       "Bạn tạo biên bản họp. Đọc nội dung/đính kèm rồi trả về 4 phần: **Quyết định đã chốt**, **Việc cần làm** (bảng: việc | người phụ trách | hạn), " +
       "**Điểm còn tranh luận**, **Rủi ro & lưu ý**. Nếu thiếu người phụ trách hoặc hạn thì ghi rõ 'chưa xác định' — không tự bịa. " +
@@ -262,7 +314,7 @@ const SEED = [
       "Dịch tài liệu dài sang ngôn ngữ đích nhưng giữ nguyên cấu trúc, tiêu đề và bảng biểu; trích ra bảng thuật ngữ để dùng lại cho các lần sau.",
     category: "Nội dung",
     icon: "translate",
-    price: 2500,
+    priceVnd: 50000,
     instructions:
       "Bạn dịch tài liệu chuyên ngành. Nguyên tắc: giữ nguyên cấu trúc, tiêu đề, bảng biểu và định dạng markdown; " +
       "tên riêng/số liệu/mã sản phẩm giữ nguyên; thuật ngữ chuyên ngành chọn bản dịch phổ biến trong ngành và dùng nhất quán. " +
@@ -277,7 +329,7 @@ const SEED = [
       "Đọc hợp đồng (PDF/DOCX/ảnh) và trả về bảng rủi ro: điều khoản, mức độ rủi ro, vì sao rủi ro, câu sửa đề xuất. Kèm danh sách thông tin còn thiếu cần bổ sung.",
     category: "Văn phòng",
     icon: "scale",
-    price: 3500,
+    priceVnd: 50000,
     instructions:
       "Bạn soát hợp đồng ở góc nhìn bảo vệ người dùng (không thay thế luật sư). Trả về bảng: **Điều khoản | Mức độ (Cao/TB/Thấp) | Rủi ro | Đề xuất sửa**. " +
       "Tập trung vào: thanh toán & phạt, chấm dứt & hoàn tiền, phạm vi trách nhiệm, bảo mật dữ liệu, sở hữu trí tuệ, thay đổi đơn phương, luật áp dụng. " +
@@ -291,7 +343,7 @@ const SEED = [
       "Nhập chủ đề và thời lượng, nhận về bài giảng hoàn chỉnh: mục tiêu học tập, dàn slide chi tiết, hoạt động tương tác và bài kiểm tra nhanh cuối giờ.",
     category: "Giáo dục",
     icon: "graduation",
-    price: 2000,
+    priceVnd: 50000,
     instructions:
       "Bạn soạn bài giảng cho người dạy. Trả về: mục tiêu học tập (đo lường được), dàn bài theo từng phần kèm thời lượng, " +
       "2 hoạt động tương tác cho học viên, 5 câu hỏi kiểm tra nhanh và 1 bài tập về nhà. " +
@@ -305,7 +357,7 @@ const SEED = [
       "Đưa file dữ liệu, nhận về câu chuyện số liệu: 3 phát hiện quan trọng nhất, biểu đồ minh hoạ, điều cần hành động ngay và phần cảnh báo chất lượng dữ liệu.",
     category: "Dữ liệu",
     icon: "chart",
-    price: 3000,
+    priceVnd: 50000,
     instructions:
       "Bạn biến dữ liệu thành câu chuyện cho người ra quyết định. Quy trình: gọi analyze_data để có số liệu thật (không bịa số), " +
       "rồi trình bày **Tóm tắt trong 1 câu**, **3 phát hiện quan trọng** (mỗi phát hiện kèm số liệu), **biểu đồ** phù hợp, " +
@@ -319,7 +371,7 @@ const SEED = [
       "Đang hoàn thiện: anh mô tả giọng thương hiệu (từ nên dùng, từ cấm, cách xưng hô, ví dụ câu mẫu) và FlowGpt sẽ viết mọi nội dung theo đúng giọng đó.",
     category: "Nội dung",
     icon: "sparkles",
-    price: 0,
+    priceVnd: 0,
     state: "coming_soon",
     instructions: null,
   },
@@ -330,6 +382,7 @@ export function ensureHubSeed() {
   let created = 0;
   for (const [index, entry] of SEED.entries()) {
     if (one("hub_skills", "slug = ?", [entry.slug])) continue;
+    const priceVnd = Math.max(0, Math.trunc(Number(entry.priceVnd ?? 0) || 0));
     insert("hub_skills", {
       slug: entry.slug,
       name: entry.name,
@@ -337,7 +390,8 @@ export function ensureHubSeed() {
       description: entry.description,
       category: entry.category,
       icon: entry.icon,
-      price: entry.price,
+      price_vnd: priceVnd,
+      price: creditsForPriceVnd(priceVnd),
       instructions: entry.instructions,
       tools_json: entry.tools ?? [],
       state: entry.state ?? "published",

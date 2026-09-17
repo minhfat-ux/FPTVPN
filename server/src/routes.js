@@ -176,6 +176,7 @@ export function createApiRouter() {
       credits: {
         enabled: Boolean(settings.creditsEnabled),
         perToken: settings.creditsPerToken,
+        vndPerCredit: settings.vndPerCredit,
         signupCredits: settings.signupCredits,
         buyUrl: settings.creditBuyUrl,
       },

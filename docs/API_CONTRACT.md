@@ -210,29 +210,35 @@ Danh sách tool gửi cho model **luôn đầy đủ** (kỹ năng chỉ "steer"
 ## 7. Health & meta
 
 - `GET /api/health` → `{ ok: true, version, uptimeSec, providerCount, mcpCount }` (không cần auth).
-- `GET /api/meta` → `{ appName, version, allowSignup, firstUserIsAdmin, hasProvider, authMethods, mailer, loginTokenTtlMin, promo: { reminderMinutes, creditSnoozeMinutes }, credits: { enabled, signupCredits, perToken, buyUrl } }` (không cần auth).
+- `GET /api/meta` → `{ appName, version, allowSignup, firstUserIsAdmin, hasProvider, authMethods, mailer, loginTokenTtlMin, promo: { reminderMinutes, creditSnoozeMinutes }, credits: { enabled, signupCredits, perToken, vndPerCredit, buyUrl } }` (không cần auth).
 
 ## 8. Credit (cách cấp và cách trừ)
 
-**1 credit = 1 token, tính theo tổng token vào + token ra của mỗi lượt trả lời** (giống cách ChatGPT tính usage):
+**1 token = `creditsPerToken` credit, tính theo tổng token vào + token ra của mỗi lượt trả lời** (giống cách ChatGPT
+tính usage). `creditsPerToken` là số **thập phân** (mặc định **0,06**) nên đừng làm tròn nó thành số nguyên:
 
 ```
 credit bị trừ = max(1, ceil((token_vào + token_ra) × creditsPerToken))
+tiền bị trừ   = credit bị trừ × vndPerCredit        (mặc định 1đ/credit)
 ```
 
+- **Đơn giá đang chạy: 0,06 credit/token × 1đ/credit.** Đo thật trên production qua 48 lượt: median 3.345 token,
+  trung bình 3.483 token một lượt ⇒ **một lượt chat ≈ 210 credit ≈ 210đ**. Đây là con số mục tiêu đã chốt, có test
+  canh (`credits.test.js` → "the shipped credit rate keeps one chat turn near 200đ").
 - Số dư = `SUM(delta)` trên sổ cái `credit_ledger` (append-only, mỗi bút toán lưu `balance_after`). Lý do bút toán:
   `signup`, `admin_grant`, `chat_usage`, `request_approved`, `topup_paid`, `skill_purchase`.
-- Cấp credit: tài khoản mới nhận `signupCredits` (mặc định **10.000**) ngay lần đăng nhập đầu; admin cấp thêm bằng
-  `POST /api/admin/credits`; yêu cầu của user được duyệt thì ghi `request_approved`.
+- Cấp credit: tài khoản mới nhận `signupCredits` (mặc định **10.000** ≈ 10.000đ ≈ 47 lượt) ngay lần đăng nhập đầu;
+  admin cấp thêm bằng `POST /api/admin/credits`; yêu cầu của user được duyệt thì ghi `request_approved`.
 - Cổng chặn: hết credit ⇒ `POST /api/chat/stream` trả **402** `insufficient_credits` kèm `buyUrl`. Admin luôn qua được
   cổng (số dư có thể âm) nhưng **vẫn bị trừ credit** như người thường.
-- Vì sao một lượt chat tốn ~1.700–1.900 token: mỗi request gửi lại **toàn bộ schema công cụ (~1.600 token, đo thật trên
-  GLM-4-Flash)** + system prompt (~120 token) + lịch sử hội thoại (tối đa 24 message) + câu trả lời. Đo trên production
-  với cùng một câu “chào em”: có công cụ `prompt_tokens = 1.707`; không công cụ `= 114`; chỉ user `= 8`.
+- Vì sao một lượt chat tốn ~3.500 token: mỗi request gửi lại **toàn bộ schema công cụ (~1.600 token, đo thật trên
+  GLM-4-Flash)** + system prompt (~120 token) + lịch sử hội thoại (tối đa 24 message) + câu trả lời.
+- `averageCostPerTurn` trả về chi phí **một lượt điển hình** (`TYPICAL_TURN_TOKENS = 3.500`) khi user chưa có lượt nào,
+  thay vì "1 credit" — nếu không thì tài khoản mới sẽ thấy "còn 10.000 lượt" trong khi thực tế chỉ ~47.
 
 Endpoint:
 
-- `GET /api/credits` (auth) → `{ credits: { enabled, balance, granted, spent, entries, perToken, averageCostPerTurn, estimatedTurnsLeft, buyUrl, recent: [{ delta, reason, ref, balanceAfter, createdAt }] } }`.
+- `GET /api/credits` (auth) → `{ credits: { enabled, balance, granted, spent, entries, perToken, vndPerCredit, averageCostPerTurn, estimatedTurnsLeft, buyUrl, recent: [{ delta, reason, ref, balanceAfter, createdAt }] } }`.
 - `POST /api/admin/credits` (admin) `{ email, amount, note? }` → cấp (amount > 0) hoặc trừ (amount < 0); `amount = 0` ⇒ 400.
 - `GET /api/admin/users` (admin) → mỗi user kèm `creditBalance`.
 - `POST /api/credit-requests` (auth) `{ amount, reason? }` → 1 yêu cầu `pending`/user, gửi Telegram kèm 2 link duyệt có
@@ -241,8 +247,10 @@ Endpoint:
   link trong Telegram: `GET /api/credit-requests/decide?token=…` (hết hạn ⇒ 410, chữ ký sai ⇒ 403).
 - Popup nhắc nạp credit đọc `/api/meta` + `/api/credits`: **5 phút** khi số dư = 0, **1440 phút** khi còn credit.
 
-Cài đặt trong `app_settings`: `creditsEnabled`, `signupCredits`, `creditsPerToken`, `creditBuyUrl`,
-`promoReminderMinutes`, `promoCreditSnoozeMinutes`.
+Cài đặt trong `app_settings`: `creditsEnabled`, `signupCredits`, `creditsPerToken` (thập phân), `vndPerCredit`,
+`creditBuyUrl`, `promoReminderMinutes`, `promoCreditSnoozeMinutes`, `topupPackages`. Trên control panel, ô
+`creditsPerToken` phải giữ được phần thập phân (`decimalOr`, không phải `intOr`) — làm tròn nó về 0 sẽ khiến mọi lượt
+chat miễn phí.
 
 ### 8.1 Model biết gì về credit
 
@@ -270,13 +278,19 @@ Trạng thái đơn: `pending` → `awaiting_confirmation` → `paid` (hoặc `c
 - `GET /api/hub` (auth) → danh sách skill đang bán + `owned` + số dư. **Không** trả `instructions`/`tools`.
 - `POST /api/hub/skills/:id/buy` (auth) → trừ credit (`skill_purchase`), ghi `hub_purchases`, tự cài vào `user_skills`
   (tối đa 10 kỹ năng). Giá 0 ⇒ vẫn ghi nhận sở hữu. Hết credit ⇒ **402**.
+- **Giá kỹ năng tính bằng VND, tách rời giá credit.** `priceVnd` là giá **lưu trong DB** (nguồn sự thật);
+  `price` (credit) do server suy ra = `ceil(priceVnd / vndPerCredit)`, nên đổi giá credit KHÔNG đổi giá chợ.
+  Kỹ năng trả tiền luôn tốn tối thiểu 1 credit (không bao giờ thành miễn phí do làm tròn).
+  Đơn giá hiện tại: cả 6 kỹ năng = **50.000đ**.
 - `GET/POST /api/admin/hub`, `PATCH/DELETE /api/admin/hub/:id` (admin) → CRUD prompt-pack
-  (name, tagline, description, category, icon, price, instructions, tools, state, sortOrder, installs).
+  (name, tagline, description, category, icon, **priceVnd**, instructions, tools, state, sortOrder, installs).
   `GET` và câu trả lời của `POST`/`PATCH` **có** `instructions`/`tools` để form Sửa nạp sẵn prompt pack.
+  `price` (credit) vẫn nhận khi ghi để tương thích, quy đổi theo giá credit hiện hành.
 - `installs` là bộ đếm **suy ra được**: `PATCH { installs }` chỉ để admin sửa tay (dọn dữ liệu test);
   nguồn sự thật vẫn là số dòng `hub_purchases` — `ops/hub-catalog-fix.mjs` tính lại từ đó.
-- Giá bán tính bằng credit; `ops/hub-catalog-fix.mjs` sửa giá + bộ đếm theo dữ liệu thật,
-  `ops/import-hub-skills.mjs` nhập hàng loạt từ thư mục `SKILL.md` (Claude/CodeBuddy) hoặc JSON.
+- Giá bán tính bằng VND; `ops/hub-catalog-fix.mjs` sửa giá + bộ đếm theo dữ liệu thật,
+  `ops/import-hub-skills.mjs` nhập hàng loạt từ thư mục `SKILL.md` (Claude/CodeBuddy) hoặc JSON
+  (`--price-vnd 50000`).
 - Kỹ năng mua được chọn trong dropdown như kỹ năng built-in; prompt pack được chèn vào system prompt và có thể thu hẹp
   danh sách tool mà nó cần.
 

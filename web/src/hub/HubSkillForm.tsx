@@ -28,7 +28,7 @@ export interface HubFormState {
   description: string;
   category: string;
   icon: string;
-  price: string;
+  priceVnd: string;
   state: HubState;
   sortOrder: string;
   instructions: string;
@@ -41,7 +41,7 @@ export const EMPTY_HUB_FORM: HubFormState = {
   description: "",
   category: "",
   icon: "sparkles",
-  price: "0",
+  priceVnd: "0",
   state: "published",
   sortOrder: "0",
   instructions: "",
@@ -54,6 +54,17 @@ export function toHubNumber(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * Credits a buyer is charged for that money price. Mirrors the server
+ * (`creditsForPriceVnd`): rounded up, and a paid skill is never free.
+ */
+export function creditsForVnd(priceVnd: number, vndPerCredit: number): number {
+  const vnd = Math.max(0, Math.trunc(Number(priceVnd) || 0));
+  const perCredit = Math.max(0, Number(vndPerCredit) || 0);
+  if (!vnd || !perCredit) return 0;
+  return Math.max(1, Math.ceil(vnd / perCredit));
+}
+
 /** Prefills the form from a listed skill, including the admin-only prompt pack. */
 export function formFromSkill(skill: HubSkill): HubFormState {
   return {
@@ -63,7 +74,7 @@ export function formFromSkill(skill: HubSkill): HubFormState {
     description: skill.description ?? "",
     category: skill.category,
     icon: skill.icon || "sparkles",
-    price: String(skill.price ?? 0),
+    priceVnd: String(skill.priceVnd ?? 0),
     state: skill.state,
     sortOrder: String(skill.sortOrder ?? 0),
     instructions: skill.instructions ?? "",
@@ -178,14 +189,14 @@ export function HubSkillFormDialog({
             className="input w-num"
             type="number"
             min={0}
-            step={1000}
-            value={value.price}
-            onChange={(event) => onChange({ price: event.target.value })}
+            step={10000}
+            value={value.priceVnd}
+            onChange={(event) => onChange({ priceVnd: event.target.value })}
           />
           {vndPerCredit > 0 && (
             <span className="hint">
               {t("hub.form.priceVnd", {
-                vnd: `${n(toHubNumber(value.price) * vndPerCredit)} đ`,
+                credits: n(creditsForVnd(toHubNumber(value.priceVnd), vndPerCredit)),
                 perCredit: n(vndPerCredit),
               })}
             </span>

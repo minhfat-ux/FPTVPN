@@ -427,7 +427,7 @@ export interface CreditSummary {
   recent: CreditLedgerEntry[];
 }
 
-/** A skill sold in the Skill Hub (prompt pack priced in tokens). */
+/** A skill sold in the Skill Hub (prompt pack, priced in VND). */
 export interface HubSkill {
   id: string;
   slug: string;
@@ -436,6 +436,9 @@ export interface HubSkill {
   description: string;
   category: string;
   icon: string;
+  /** Money price in VND — the stored, authoritative price of the skill. */
+  priceVnd: number;
+  /** Same price in credits at today's credit price (derived server-side). */
   price: number;
   state: "published" | "coming_soon" | "hidden";
   installs: number;
@@ -454,6 +457,7 @@ export interface HubPurchaseResult {
   alreadyOwned: boolean;
   installed: boolean;
   pricePaid: number;
+  pricePaidVnd: number;
 }
 
 export interface HubListing {

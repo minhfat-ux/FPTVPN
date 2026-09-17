@@ -1,4 +1,4 @@
-import type { Dict } from "../../types";
+﻿import type { Dict } from "../../types";
 
 /** English translations for this namespace. */
 export const hub: Dict = {
@@ -29,8 +29,8 @@ export const hub: Dict = {
   // ---- skill card
   "hub.card.installs": "{count} users",
   "hub.card.free": "Free",
-  "hub.card.price": "{amount} tokens",
-  "hub.card.buy": "Buy · {amount} tokens",
+  "hub.card.price": "{amount} VND",
+  "hub.card.buy": "Buy · {amount} VND",
   "hub.card.getFree": "Get for free",
   "hub.card.buying": "Buying…",
   "hub.card.useNow": "Use now",
@@ -60,9 +60,9 @@ export const hub: Dict = {
   "hub.form.descriptionHint": "The full description shown in the skill detail dialog (2000 characters max).",
   "hub.form.iconLabel": "Icon",
   "hub.form.iconHint": "Icon names: {names}.",
-  "hub.form.priceLabel": "Price (tokens)",
-  "hub.form.priceHint": "0 = free.",
-  "hub.form.priceVnd": "≈ {vnd} · at {perCredit} đ/credit",
+  "hub.form.priceLabel": "Price (VND)",
+  "hub.form.priceHint": "0 = free. Priced in money — changing the credit price never moves it.",
+  "hub.form.priceVnd": "≈ {credits} credits at {perCredit}đ per credit",
   "hub.form.sortOrderLabel": "Display order",
   "hub.form.sortOrderHint": "Lower numbers come first.",
   "hub.form.stateLabel": "Status",
@@ -98,7 +98,7 @@ export const hub: Dict = {
   "hub.admin.colPrice": "Price",
   "hub.admin.colState": "Status",
   "hub.admin.colInstalls": "Installs",
-  "hub.admin.priceVnd": "≈ {vnd}",
+  "hub.admin.priceCredits": "≈ {credits} credits",
   "hub.admin.edit": "Edit",
   "hub.admin.delete": "Delete",
   "hub.admin.deleteHint": "Deleting a skill also drops the users' purchase records — this cannot be undone.",

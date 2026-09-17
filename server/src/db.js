@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS hub_skills (
   category TEXT NOT NULL DEFAULT 'Khác',
   icon TEXT NOT NULL DEFAULT 'sparkles',
   price INTEGER NOT NULL DEFAULT 0,
+  price_vnd INTEGER NOT NULL DEFAULT 0,
   instructions TEXT,
   tools_json TEXT NOT NULL DEFAULT '[]',
   state TEXT NOT NULL DEFAULT 'published',
@@ -279,6 +280,9 @@ export function initDb() {
  */
 const ADDED_COLUMNS = [
   { table: "messages", column: "choices_json", definition: "TEXT NOT NULL DEFAULT '[]'" },
+  // `price_vnd` is the authoritative skill price (VND). `price` stays as a legacy
+  // credits cache and is only read to seed `price_vnd` on the migration below.
+  { table: "hub_skills", column: "price_vnd", definition: "INTEGER NOT NULL DEFAULT 0" },
 ];
 
 function migrate() {
@@ -287,8 +291,26 @@ function migrate() {
     if (existing.has(entry.column)) continue;
     db.exec(`ALTER TABLE ${entry.table} ADD COLUMN ${entry.column} ${entry.definition}`);
     console.log(`[flowgpt] đã thêm cột ${entry.table}.${entry.column}`);
+    if (entry.table === "hub_skills" && entry.column === "price_vnd") backfillHubPriceVnd();
   }
   COLUMN_CACHE.clear();
+}
+
+/**
+ * Converts the legacy credits price of every existing skill into VND using the
+ * price of one credit at migration time, so a running shop keeps charging the
+ * same money. Runs once, right after `price_vnd` is added — running it on every
+ * boot would resurrect a skill the admin deliberately made free.
+ */
+function backfillHubPriceVnd() {
+  const perCredit = Math.max(0, Number(getAppSettings().vndPerCredit) || 0);
+  if (!perCredit) return;
+  const result = db
+    .prepare("UPDATE hub_skills SET price_vnd = price * ? WHERE price_vnd = 0 AND price > 0")
+    .run(perCredit);
+  if (result.changes) {
+    console.log(`[flowgpt] quy đổi giá ${result.changes} kỹ năng sang VND (${perCredit}đ/credit)`);
+  }
 }
 
 const COLUMN_CACHE = new Map();
@@ -455,14 +477,19 @@ export const DEFAULT_APP_SETTINGS = {
   creditsEnabled: true,
   /** Credits handed to a brand-new account on first login (0 = must buy first). */
   signupCredits: 10000,
-  /** Credits charged per token, counting input + output (1 = one credit/token). */
-  creditsPerToken: 1,
+  /**
+   * Credits charged per token, counting input + output. Calibrated against real
+   * usage: a turn measures ~3.500 tokens (tool schemas + prompt + history), so
+   * 0.06 credit/token × 1đ/credit ≈ 210đ per turn. Fractional on purpose —
+   * see `costForUsage`, which rounds up to a whole credit.
+   */
+  creditsPerToken: 0.06,
   /**
    * Selling price of ONE credit in VND. The top-up packages derive their price
    * from this (`credits × vndPerCredit`) unless a package sets its own price, so the
    * owner only has to change one number here (Cài đặt → Hệ thống → Credit & giá).
    */
-  vndPerCredit: 20,
+  vndPerCredit: 1,
   /** Where the "nạp thêm" button sends people. */
   creditBuyUrl: "https://flowgpt.meetflowai.site/?view=topup",
   /** Token packages sold on the FlowGpt top-up page (price in VND). */

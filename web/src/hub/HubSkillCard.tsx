@@ -47,7 +47,7 @@ export function HubSkillCard({
         <span className="badge">{skill.category}</span>
         {badge && <span className={`badge ${badge.className}`}>{badge.label}</span>}
         <span className="grow" />
-        <span className="hub-card-price">{formatPrice(skill.price, t, n)}</span>
+        <span className="hub-card-price">{formatPrice(skill.priceVnd, t, n)}</span>
       </div>
       <div className="hub-card-foot">{renderHubAction(skill, { buying, using, onBuy, onUse })}</div>
     </div>
@@ -93,7 +93,7 @@ export function renderHubAction(
   return (
     <button className={className} type="button" disabled={buying} onClick={stop(onBuy)}>
       {buying && <Loader2 size={size} className="hub-spin" />}
-      {buying ? t("hub.card.buying") : formatBuyLabel(skill.price, t, n)}
+      {buying ? t("hub.card.buying") : formatBuyLabel(skill.priceVnd, t, n)}
     </button>
   );
 }

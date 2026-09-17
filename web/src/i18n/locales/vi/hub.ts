@@ -1,4 +1,4 @@
-import type { Dict } from "../../types";
+﻿import type { Dict } from "../../types";
 
 /** Nguồn sự thật (tiếng Việt). Thêm khoá mới ở đây trước, rồi dịch sang en/zh. */
 export const hub: Dict = {
@@ -29,8 +29,8 @@ export const hub: Dict = {
   // ---- thẻ kỹ năng
   "hub.card.installs": "{count} người dùng",
   "hub.card.free": "Miễn phí",
-  "hub.card.price": "{amount} token",
-  "hub.card.buy": "Mua · {amount} token",
+  "hub.card.price": "{amount}đ",
+  "hub.card.buy": "Mua · {amount}đ",
   "hub.card.getFree": "Nhận miễn phí",
   "hub.card.buying": "Đang mua…",
   "hub.card.useNow": "Dùng ngay",
@@ -41,12 +41,12 @@ export const hub: Dict = {
   // ---- cửa sổ chi tiết
   "hub.detail.bulletsTitle": "Bạn nhận được gì",
   "hub.detail.priceNote":
-    "Trả một lần bằng token, dùng không giới hạn. Sau khi mua, kỹ năng được thêm vào danh sách kỹ năng trong ô soạn tin để chọn ngay cho hội thoại.",
+    "Trả một lần bằng tiền (VND), dùng không giới hạn. Sau khi mua, kỹ năng được thêm vào danh sách kỹ năng trong ô soạn tin để chọn ngay cho hội thoại.",
 
   // ---- form admin
   "hub.form.editTitle": "Sửa kỹ năng: {name}",
   "hub.form.createTitle": "Thêm kỹ năng",
-  "hub.form.description": "Slug được tạo tự động từ tên. Giá tính bằng token — để 0 là miễn phí.",
+  "hub.form.description": "Slug được tạo tự động từ tên. Giá tính bằng VND — để 0 là miễn phí.",
   "hub.form.cancel": "Huỷ",
   "hub.form.saving": "Đang lưu…",
   "hub.form.save": "Lưu kỹ năng",
@@ -60,9 +60,9 @@ export const hub: Dict = {
   "hub.form.descriptionHint": "Đoạn mô tả đầy đủ hiện trong cửa sổ chi tiết của kỹ năng (tối đa 2000 ký tự).",
   "hub.form.iconLabel": "Icon",
   "hub.form.iconHint": "Tên icon: {names}.",
-  "hub.form.priceLabel": "Giá (token)",
-  "hub.form.priceHint": "0 = miễn phí.",
-  "hub.form.priceVnd": "≈ {vnd} · theo {perCredit} đ/token",
+  "hub.form.priceLabel": "Giá (VND)",
+  "hub.form.priceHint": "0 = miễn phí. Giá tính bằng tiền, không đổi khi anh chỉnh giá credit.",
+  "hub.form.priceVnd": "≈ {credits} credit khi 1 credit = {perCredit}đ",
   "hub.form.sortOrderLabel": "Thứ tự hiển thị",
   "hub.form.sortOrderHint": "Số nhỏ hiện trước.",
   "hub.form.stateLabel": "Trạng thái",
@@ -98,7 +98,7 @@ export const hub: Dict = {
   "hub.admin.colPrice": "Giá",
   "hub.admin.colState": "Trạng thái",
   "hub.admin.colInstalls": "Lượt dùng",
-  "hub.admin.priceVnd": "≈ {vnd}",
+  "hub.admin.priceCredits": "≈ {credits} credit",
   "hub.admin.edit": "Sửa",
   "hub.admin.delete": "Xoá",
   "hub.admin.deleteHint": "Xoá một kỹ năng cũng bỏ bản ghi đã mua của người dùng — không thể hoàn tác.",

@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { api, apiRaw, bootServer, closeServer, readSse, eventsNamed } from "./helpers.js";
 
-const { initDb, all, db } = await import("../src/db.js");
+const { initDb, all, db, DEFAULT_APP_SETTINGS } = await import("../src/db.js");
 initDb();
 const { createUser, issueToken } = await import("../src/auth.js");
 const settings = await import("../src/settings.js");
@@ -57,13 +57,30 @@ test("signup credits come from settings — the shipped default is 10.000", () =
   settings.patchAppSettings({ signupCredits: 0 });
 });
 
-test("cost is 1 credit per token (input + output, like ChatGPT), never below 1", () => {
+test("cost is (input + output) × creditsPerToken, rounded up, never below 1", () => {
+  // The shipped rate is calibrated so a real ~3.500-token turn costs ~210đ.
+  settings.patchAppSettings({ creditsPerToken: 1 });
   assert.equal(credits.costForUsage({ in: 700, out: 300 }), 1000);
   assert.equal(credits.costForUsage({ in: 12, out: 7 }), 19);
   assert.equal(credits.costForUsage({ in: 0, out: 0 }), 1);
   assert.equal(credits.costForUsage(null), 1);
   assert.equal(credits.costForUsage({ in: 100, out: 100 }, 0.5), 100, "perToken có thể giảm giá");
   assert.equal(credits.costForUsage({ in: 100, out: 100 }, 0), 0, "tắt đo lường thì không tính");
+  // The real rate is fractional: 3.483 tokens × 0.06 = 209 credit, rounded up.
+  assert.equal(credits.costForUsage({ in: 3000, out: 483 }, 0.06), 209);
+  assert.equal(credits.costForUsage({ in: 1, out: 0 }, 0.06), 1, "luôn tối thiểu 1 credit");
+  settings.patchAppSettings({ creditsPerToken: DEFAULT_APP_SETTINGS.creditsPerToken });
+});
+
+test("the shipped credit rate keeps one chat turn near 200đ", () => {
+  const perToken = DEFAULT_APP_SETTINGS.creditsPerToken;
+  const vndPerCredit = DEFAULT_APP_SETTINGS.vndPerCredit;
+  const averageTurnTokens = 3500; // measured over 48 real turns on production
+  const perTurnVnd = credits.costForUsage({ in: averageTurnTokens, out: 0 }, perToken) * vndPerCredit;
+  assert.ok(
+    perTurnVnd >= 150 && perTurnVnd <= 260,
+    `một lượt ~${averageTurnTokens} token phải rơi vào khoảng 200đ, đang là ${perTurnVnd}đ`,
+  );
 });
 
 test("the chat gate blocks a user with no credit and lets admins through", () => {
@@ -131,7 +148,8 @@ test("GET /api/credits returns the balance, pricing and history", async () => {
   const result = await api("GET", "/credits", undefined, token);
   assert.equal(result.credits.balance, 50000);
   assert.equal(result.credits.granted, 50000);
-  assert.equal(result.credits.perToken, 1);
+  assert.equal(result.credits.perToken, DEFAULT_APP_SETTINGS.creditsPerToken);
+  assert.equal(result.credits.vndPerCredit, DEFAULT_APP_SETTINGS.vndPerCredit);
   assert.equal(result.credits.enabled, true);
   assert.ok(result.credits.buyUrl.includes("meetflowai.site"));
   assert.ok(Array.isArray(result.credits.recent));
@@ -181,7 +199,8 @@ test("meta publishes the popup timing and credit pricing for the promo script", 
   assert.equal(meta.promo.creditSnoozeMinutes, 1440);
   assert.equal(meta.credits.enabled, true);
   assert.equal(meta.credits.signupCredits, 10000);
-  assert.equal(meta.credits.perToken, 1);
+  assert.equal(meta.credits.perToken, DEFAULT_APP_SETTINGS.creditsPerToken);
+  assert.equal(meta.credits.vndPerCredit, DEFAULT_APP_SETTINGS.vndPerCredit);
   // The shipped default points at FlowGpt's own top-up page, not an external shop.
   assert.equal(meta.credits.buyUrl, settings.readAppSettings().creditBuyUrl);
   assert.match(meta.credits.buyUrl, /\?view=topup$/);
@@ -196,9 +215,13 @@ test("the system prompt states the credit policy, the live balance and how to to
 
   const prompt = buildSystemPrompt({ skill: "chat", files: [], settings: appSettings, user });
   assert.match(prompt, /KHÔNG miễn phí/);
-  assert.match(prompt, /\(token vào \+ token ra\) × 1 credit/);
+  assert.match(prompt, /\(token vào \+ token ra\) × 0\.06 credit/);
+  // The money story must be quotable: credit→VND and what a turn costs.
+  assert.match(prompt, /1 credit = 1đ/);
+  assert.match(prompt, /≈ 210 credit ≈ 210đ/);
   assert.match(prompt, /tặng 10000 credit/);
-  assert.match(prompt, /Của người dùng này: 10000 credit/);
+  assert.match(prompt, /Của người dùng này: 10000 credit \(≈ 10\.000đ\)/);
+  assert.match(prompt, /trung bình 210\/lượt ≈ 47 lượt còn lại/);
   // The exact labels the UI shows, so the model can point at them.
   assert.match(prompt, /Xin thêm token/);
   assert.match(prompt, /Mua thêm token/);

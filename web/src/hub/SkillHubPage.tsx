@@ -231,7 +231,7 @@ export function SkillHubPage() {
             detail && (
               <>
                 <span className="grow">
-                  <span className="hub-detail-price">{formatPrice(detail.price, t, n)}</span>
+                  <span className="hub-detail-price">{formatPrice(detail.priceVnd, t, n)}</span>
                 </span>
                 <button className="btn" type="button" onClick={() => setDetailId(null)}>
                   {t("hub.page.close")}

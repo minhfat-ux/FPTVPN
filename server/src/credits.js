@@ -15,8 +15,10 @@ export function creditSettings() {
   return {
     enabled: Boolean(settings.creditsEnabled),
     signupCredits: Math.max(0, Number(settings.signupCredits) || 0),
-    /** Credits charged per token (1 = one credit per token). */
+    /** Credits charged per token — fractional is fine (see `costForUsage`). */
     perToken: Math.max(0, Number(settings.creditsPerToken) || 0),
+    /** Money price of one credit, used to quote balances and skill prices in VND. */
+    vndPerCredit: Math.max(0, Number(settings.vndPerCredit) || 0),
     buyUrl: settings.creditBuyUrl ?? "",
     promoReminderMinutes: Math.max(1, Number(settings.promoReminderMinutes) || 5),
     promoCreditSnoozeMinutes: Math.max(1, Number(settings.promoCreditSnoozeMinutes) || 1440),
@@ -70,6 +72,21 @@ export function costForUsage(usage, perToken = creditSettings().perToken) {
   return Math.max(1, Math.ceil(tokens * perToken));
 }
 
+/**
+ * Tokens in one turn, measured over 48 real production turns: median 3.345,
+ * mean 3.483 (tool schemas + system prompt + history dominate). Used only when a
+ * user has no history of their own, so the UI never claims "10.000 lượt còn lại"
+ * for an account that has never chatted.
+ */
+export const TYPICAL_TURN_TOKENS = 3500;
+
+/** What one typical turn costs at today's rate. */
+export function typicalTurnCost() {
+  const { perToken } = creditSettings();
+  if (!perToken) return 0;
+  return Math.max(1, Math.ceil(TYPICAL_TURN_TOKENS * perToken));
+}
+
 /** Average cost of the last turns, so the UI can say "≈ N lượt còn lại". */
 export function averageCostPerTurn(userId, { sample = 20 } = {}) {
   const rows = all(
@@ -78,7 +95,9 @@ export function averageCostPerTurn(userId, { sample = 20 } = {}) {
     [userId],
     { order: "created_at DESC, rowid DESC", limit: sample },
   );
-  if (!rows.length) return 1;
+  // No history yet ⇒ fall back to the typical turn instead of "1 credit", which
+  // would promise thousands of turns to an account that has never sent one.
+  if (!rows.length) return typicalTurnCost();
   const total = rows.reduce((sum, row) => sum + Math.abs(Number(row.delta)), 0);
   return Math.max(1, Math.round(total / rows.length));
 }
@@ -154,6 +173,8 @@ export function creditSummary(userId) {
     spent: totals.spent,
     entries: totals.entries,
     perToken: settings.perToken,
+    /** Money so the UI can say "≈ 210đ một lượt" without a second request. */
+    vndPerCredit: settings.vndPerCredit,
     averageCostPerTurn: average,
     estimatedTurnsLeft: settings.enabled ? Math.max(0, Math.floor(balance / average)) : null,
     buyUrl: settings.buyUrl,

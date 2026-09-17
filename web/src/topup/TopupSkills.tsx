@@ -198,7 +198,7 @@ function SkillCard({
 }) {
   const { t, n } = useI18n();
   const owned = isOwned(skill);
-  const free = !skill.price;
+  const free = !skill.priceVnd;
   const comingSoon = skill.state === "coming_soon";
 
   return (
@@ -214,7 +214,7 @@ function SkillCard({
 
       <div className="row gap-2 mt-2">
         <span className="topup-skill-price">
-          {free ? t("topup.skills.free") : t("topup.skills.price", { amount: n(skill.price) })}
+          {free ? t("topup.skills.free") : t("topup.skills.price", { amount: n(skill.priceVnd) })}
         </span>
         {skill.installed && owned && <span className="badge badge-ok">{t("topup.skills.installedBadge")}</span>}
         {owned && !skill.installed && <span className="badge badge-accent">{t("topup.skills.ownedBadge")}</span>}
@@ -284,7 +284,7 @@ function SkillAction({
         ? t("topup.skills.buying")
         : free
           ? t("topup.skills.getFree")
-          : t("topup.skills.buyWithPrice", { amount: n(skill.price) })}
+          : t("topup.skills.buyWithPrice", { amount: n(skill.priceVnd) })}
     </button>
   );
 }

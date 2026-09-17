@@ -1,4 +1,4 @@
-import type { Dict } from "../../types";
+﻿import type { Dict } from "../../types";
 
 /** 本命名空间的中文翻译。 */
 export const hub: Dict = {
@@ -29,8 +29,8 @@ export const hub: Dict = {
   // ---- 技能卡片
   "hub.card.installs": "{count} 位用户",
   "hub.card.free": "免费",
-  "hub.card.price": "{amount} 代币",
-  "hub.card.buy": "购买 · {amount} 代币",
+  "hub.card.price": "{amount} 越南盾",
+  "hub.card.buy": "购买 · {amount} 越南盾",
   "hub.card.getFree": "免费领取",
   "hub.card.buying": "正在购买…",
   "hub.card.useNow": "立即使用",
@@ -59,9 +59,9 @@ export const hub: Dict = {
   "hub.form.descriptionHint": "显示在技能详情弹窗中的完整描述（最多 2000 个字符）。",
   "hub.form.iconLabel": "图标",
   "hub.form.iconHint": "图标名称：{names}。",
-  "hub.form.priceLabel": "价格（代币）",
-  "hub.form.priceHint": "0 = 免费。",
-  "hub.form.priceVnd": "≈ {vnd} · 按 {perCredit} 越南盾/代币",
+  "hub.form.priceLabel": "价格（越南盾）",
+  "hub.form.priceHint": "0 = 免费。以越南盾计价——修改代币价格不会影响它。",
+  "hub.form.priceVnd": "≈ {credits} 代币（1 代币 = {perCredit} 越南盾）",
   "hub.form.sortOrderLabel": "显示顺序",
   "hub.form.sortOrderHint": "数字越小越靠前。",
   "hub.form.stateLabel": "状态",
@@ -96,7 +96,7 @@ export const hub: Dict = {
   "hub.admin.colPrice": "价格",
   "hub.admin.colState": "状态",
   "hub.admin.colInstalls": "使用次数",
-  "hub.admin.priceVnd": "≈ {vnd}",
+  "hub.admin.priceCredits": "≈ {credits} 代币",
   "hub.admin.edit": "编辑",
   "hub.admin.delete": "删除",
   "hub.admin.deleteHint": "删除技能会同时清除用户的购买记录——无法撤销。",

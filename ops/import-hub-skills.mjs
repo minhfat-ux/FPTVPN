@@ -6,18 +6,18 @@
  *
  *   1. A Claude/CodeBuddy-style skill folder tree — every `SKILL.md` (or
  *      `skill.md`) becomes a hub skill. YAML frontmatter carries `name`,
- *      `description`, and optionally `category` / `price` / `tools`; the
+ *      `description`, and optionally `category` / `priceVnd` / `tools`; the
  *      markdown body becomes the model instructions.
  *
  *   2. A JSON file — either an array of skill objects or `{ skills: [...] }`
- *      with `{ slug?, name, tagline?, description?, category?, icon?, price?,
+ *      with `{ slug?, name, tagline?, description?, category?, icon?, priceVnd?,
  *      instructions?, tools?, state? }`.
  *
  * Usage (dry run by default — nothing is written without --apply):
  *
  *   node ops/import-hub-skills.mjs ./vendor/codebuddy-skills
  *   node ops/import-hub-skills.mjs ./skills.json --apply
- *   node ops/import-hub-skills.mjs ./skills.json --apply --price 2000 --state coming_soon
+ *   node ops/import-hub-skills.mjs ./skills.json --apply --price-vnd 50000 --state coming_soon
  *   node ops/import-hub-skills.mjs ./skills.json --apply --base http://127.0.0.1:7790/api
  *
  * The admin token is read from FLOWGPT_ADMIN_TOKEN, or from --token-file
@@ -32,7 +32,7 @@ import path from "node:path";
 const args = process.argv.slice(2);
 
 /** Options that take a value; everything else that is not `--flag` is the input path. */
-const VALUE_OPTIONS = new Set(["price", "state", "base", "token-file", "category", "icon"]);
+const VALUE_OPTIONS = new Set(["price-vnd", "state", "base", "token-file", "category", "icon"]);
 const options = new Map();
 const positional = [];
 for (let index = 0; index < args.length; index += 1) {
@@ -60,7 +60,7 @@ if (!input) {
 
 const BASE = (flag("base", process.env.FLOWGPT_API_BASE ?? "https://flowgpt.meetflowai.site/api")).replace(/\/+$/, "");
 const APPLY = has("apply");
-const PRICE_OVERRIDE = flag("price") === null ? null : Math.max(0, Math.trunc(Number(flag("price")) || 0));
+const PRICE_VND_OVERRIDE = flag("price-vnd") === null ? null : Math.max(0, Math.trunc(Number(flag("price-vnd")) || 0));
 const STATE_OVERRIDE = flag("state");
 const CATEGORY_OVERRIDE = flag("category");
 const TOKEN_FILE = flag("token-file", path.join(os.tmpdir(), "admin-token.txt"));
@@ -179,7 +179,7 @@ function fromSkillFile(file) {
     description: description || firstSentence(instructions, 400),
     category: data.category,
     icon: data.icon,
-    price: data.price,
+    priceVnd: data.priceVnd ?? data.price,
     tools: data.tools,
     state: data.state,
     instructions,
@@ -196,7 +196,7 @@ function fromJsonFile(file) {
     description: entry.description,
     category: entry.category,
     icon: entry.icon,
-    price: entry.price,
+    priceVnd: entry.priceVnd ?? entry.price,
     tools: entry.tools,
     state: entry.state,
     instructions: entry.instructions ?? "",
@@ -245,7 +245,7 @@ for (const draft of drafts) {
     description: String(draft.description ?? "").slice(0, 2000),
     category: CATEGORY_OVERRIDE ?? draft.category ?? "Khác",
     icon: String(draft.icon ?? "sparkles").slice(0, 40),
-    price: PRICE_OVERRIDE ?? Math.max(0, Math.trunc(Number(draft.price) || 0)),
+    priceVnd: PRICE_VND_OVERRIDE ?? Math.max(0, Math.trunc(Number(draft.priceVnd) || 0)),
     state: STATE_OVERRIDE ?? draft.state ?? "published",
     instructions: String(draft.instructions ?? "").slice(0, 6000),
     tools: normaliseTools(draft.tools),
@@ -276,7 +276,7 @@ let skipped = 0;
 
 for (const draft of cleaned) {
   const existing = bySlug.get(draft.slug);
-  const vnd = draft.price ? ` · ${draft.price.toLocaleString("vi-VN")} token` : " · miễn phí";
+  const vnd = draft.priceVnd ? ` · ${draft.priceVnd.toLocaleString("vi-VN")}đ` : " · miễn phí";
   const tools = draft.tools.length ? ` · tool: ${draft.tools.join(", ")}` : "";
   const label = `${existing ? "update" : "create"} ${draft.slug} — ${draft.name}${vnd}${tools}`;
   if (!APPLY) {

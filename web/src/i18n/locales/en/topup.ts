@@ -1,4 +1,4 @@
-import type { Dict } from "../../types";
+﻿import type { Dict } from "../../types";
 
 /** English translations for this namespace. */
 export const topup: Dict = {
@@ -126,9 +126,9 @@ export const topup: Dict = {
   "topup.skills.empty": "No skill is on sale yet",
   "topup.skills.emptyHint": "Skills will show up here as soon as the owner publishes them.",
   "topup.skills.free": "Free",
-  "topup.skills.price": "{amount} tokens",
+  "topup.skills.price": "{amount} VND",
   "topup.skills.buy": "Buy",
-  "topup.skills.buyWithPrice": "Buy · {amount} tokens",
+  "topup.skills.buyWithPrice": "Buy · {amount} VND",
   "topup.skills.getFree": "Get for free",
   "topup.skills.buying": "Buying…",
   "topup.skills.bought": "Bought “{name}” — added to your skill list",

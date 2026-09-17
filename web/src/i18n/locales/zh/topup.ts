@@ -1,4 +1,4 @@
-import type { Dict } from "../../types";
+﻿import type { Dict } from "../../types";
 
 /** 本命名空间的中文翻译。 */
 export const topup: Dict = {
@@ -121,9 +121,9 @@ export const topup: Dict = {
   "topup.skills.empty": "暂无可购买的技能",
   "topup.skills.emptyHint": "账号所有者上架技能后，会显示在这里。",
   "topup.skills.free": "免费",
-  "topup.skills.price": "{amount} 代币",
+  "topup.skills.price": "{amount} 越南盾",
   "topup.skills.buy": "购买",
-  "topup.skills.buyWithPrice": "购买 · {amount} 代币",
+  "topup.skills.buyWithPrice": "购买 · {amount} 越南盾",
   "topup.skills.getFree": "免费获取",
   "topup.skills.buying": "正在购买…",
   "topup.skills.bought": "已购买“{name}” — 已加入你的技能列表",

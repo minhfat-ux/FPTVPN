@@ -246,3 +246,54 @@ Mặc định hiện tại: **DeepSeek `deepseek-chat`** (key của chủ dự �
    - `meetflowai.io.vn` / `www.meetflowai.io.vn`: nameserver trả SERVFAIL (zone khác, ngoài zone này).
 7. **Rate limit theo email**: 3 mã/15 phút, 5 lần nhập sai là khoá mã. Nếu anh thao tác nhanh sẽ gặp 429 —
    đây là thiết kế, không phải lỗi.
+
+---
+
+## 12. Đợt 4 — chợ kỹ năng & mô hình giá mới (VND)
+
+### 12.1 Chợ kỹ năng: admin sửa được prompt pack
+
+`GET /api/admin/hub` trước đây dùng chung hàm với API công khai nên **không trả `instructions`/`tools`** ⇒ mở form
+"Sửa" thì ô chỉ dẫn luôn trắng và bấm Lưu không sửa được gì. Đã tách cờ `withContent` chỉ bật cho route admin; API
+công khai vẫn không lộ 2 trường này. Form Sửa giờ gửi **đúng phần thay đổi** (kể cả xoá trắng để bỏ chỉ dẫn cũ).
+
+### 12.2 Giá kỹ năng tính bằng VND, TÁCH RỜI giá credit
+
+Trước: `hub_skills.price` là **credit**, nên đổi giá credit là đổi luôn giá cả chợ. Nay:
+
+| | |
+|---|---|
+| Nguồn sự thật | `hub_skills.price_vnd` (VND), cột `price` chỉ còn là cache credit |
+| Giá đang bán | **50.000đ cho mỗi kỹ năng** (6 kỹ năng), `brand-voice` miễn phí |
+| Quy đổi | `credits = max(1, ceil(priceVnd / vndPerCredit))` — `creditsForPriceVnd()` trong `server/src/skills/hub.js` |
+| Migration | `ADDED_COLUMNS` + `backfillHubPriceVnd()`: quy đổi giá credit cũ sang VND **đúng một lần** theo giá credit lúc migrate. Chạy lại mỗi lần khởi động sẽ làm giá đã sửa tay "sống dậy" nên có test riêng canh (`hub-migration.test.js`) |
+| Sổ cái | Bút toán `skill_purchase` ghi rõ giá VND: `Mua kỹ năng Viết content bán hàng (50.000đ)` |
+
+### 12.3 Đơn giá credit: một lượt chat ≈ 200đ
+
+Đo thật 48 lượt trên production: **median 3.345 token, trung bình 3.483 token** một lượt (không phải 2.000 như phỏng
+đoán ban đầu — schema công cụ + system prompt + lịch sử chiếm phần lớn). Từ đó chốt:
+
+| Thông số | Giá trị | Ghi chú |
+|---|---|---|
+| `creditsPerToken` | **0,06** | **thập phân** — làm tròn thành `intOr` sẽ về 0 và mọi lượt chat miễn phí |
+| `vndPerCredit` | **1** | 1 credit = 1đ, số tiền hiện trên chợ trùng số credit |
+| Một lượt chat | ≈ 210 credit ≈ **210đ** | có test canh trong `credits.test.js` |
+| Tặng đăng nhập | 10.000 credit = 10.000đ | ≈ 47 lượt |
+| Gói nạp | 10k / 50k / 200k credit = 10k / 50k / 200k đ | giá suy ra từ `vndPerCredit`, không cần sửa |
+
+`averageCostPerTurn` giờ trả về **một lượt điển hình** (`TYPICAL_TURN_TOKENS = 3.500`) khi user chưa chat lần nào,
+thay vì "1 credit" — trước đây tài khoản mới thấy "còn 10.000 lượt" trong khi thực tế chỉ ~47.
+
+> ⚠️ **Hệ quả cần biết:** tài khoản mới được tặng 10.000đ, mà một kỹ năng giá 50.000đ ⇒ user phải nạp thêm mới mua
+> được kỹ năng. Đây là hệ quả của việc tách giá, không phải lỗi.
+
+### 12.4 Script & kiểm chứng mới
+
+| Script | Việc |
+|---|---|
+| `ops/import-hub-skills.mjs` | Nhập hàng loạt từ thư mục `SKILL.md` (Claude/CodeBuddy) hoặc JSON; tự map tool (`excel`→`generate_xlsx`, `ppt`→`generate_pptx`); mặc định chạy thử, `--apply` mới ghi, `--price-vnd 50000` |
+| `ops/hub-catalog-fix.mjs` | Sửa giá VND + tính lại `installs` từ `hub_purchases` thật (đã dọn 7 lượt ảo do test trên production) |
+| `ops/turn-cost-report.mjs` | Đo token/lượt thật từ sổ credit và thử các hệ số giá để chọn `creditsPerToken` |
+| `ops/ui-hub-check.mjs` | Chrome thật: bảng admin + form Sửa nạp sẵn prompt pack + trang chợ |
+| `server/test/hub-migration.test.js` | Dựng DB **định dạng cũ** rồi migrate: giá đúng, miễn phí vẫn miễn phí, và backfill không chạy lại |

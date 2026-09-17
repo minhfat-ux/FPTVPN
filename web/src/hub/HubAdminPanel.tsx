@@ -9,6 +9,7 @@ import { hubIcon } from "./icons";
 import {
   EMPTY_HUB_FORM,
   HubSkillFormDialog,
+  creditsForVnd,
   formFromSkill,
   toHubNumber,
   type HubFormState,
@@ -111,7 +112,7 @@ export function HubAdminPanel() {
         if (form.description !== (editing.description ?? "")) changes.description = form.description;
         if (form.category !== editing.category) changes.category = form.category;
         if (form.icon !== editing.icon) changes.icon = form.icon;
-        if (toHubNumber(form.price) !== editing.price) changes.price = toHubNumber(form.price);
+        if (toHubNumber(form.priceVnd) !== editing.priceVnd) changes.priceVnd = toHubNumber(form.priceVnd);
         if (form.state !== editing.state) changes.state = form.state;
         if (toHubNumber(form.sortOrder) !== Number(editing.sortOrder ?? 0)) {
           changes.sortOrder = toHubNumber(form.sortOrder);
@@ -133,7 +134,7 @@ export function HubAdminPanel() {
           description: form.description.trim(),
           category: form.category,
           icon: form.icon.trim() || "sparkles",
-          price: toHubNumber(form.price),
+          priceVnd: toHubNumber(form.priceVnd),
           state: form.state,
           sortOrder: toHubNumber(form.sortOrder),
           instructions: form.instructions.trim(),
@@ -218,12 +219,14 @@ export function HubAdminPanel() {
                     <td className="mono tiny">{skill.slug}</td>
                     <td className="small">{skill.category}</td>
                     <td className="small nowrap">
-                      {skill.price > 0 ? (
+                      {skill.priceVnd > 0 ? (
                         <>
-                          <span className="bold">{t("hub.card.price", { amount: n(skill.price) })}</span>
+                          <span className="bold">{t("hub.card.price", { amount: n(skill.priceVnd) })}</span>
                           {vndPerCredit > 0 && (
                             <span className="tiny faint" style={{ display: "block" }}>
-                              {t("hub.admin.priceVnd", { vnd: `${n(skill.price * vndPerCredit)} đ` })}
+                              {t("hub.admin.priceCredits", {
+                                credits: n(creditsForVnd(skill.priceVnd, vndPerCredit)),
+                              })}
                             </span>
                           )}
                         </>

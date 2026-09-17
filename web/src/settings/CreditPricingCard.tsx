@@ -16,8 +16,11 @@ export type CreditSettingsSlice = Pick<
   | "topupPackages"
 >;
 
-/** Typical chat turn measured on production (tool schemas + prompt + history). */
-const TYPICAL_TURN_CREDITS = 2000;
+/**
+ * Tokens in one real turn, measured over 48 production turns (median 3.345,
+ * mean 3.483). Mirrors `TYPICAL_TURN_TOKENS` on the server.
+ */
+const TYPICAL_TURN_TOKENS = 3500;
 
 /**
  * Settings → Hệ thống: "Credit & giá".
@@ -41,10 +44,12 @@ export function CreditPricingCard({
   const { t, n } = useI18n();
   const packages: TopupPackageSetting[] = settings.topupPackages ?? [];
   const perCredit = Math.max(0, Number(settings.vndPerCredit) || 0);
+  const perToken = Math.max(0, Number(settings.creditsPerToken) || 0);
   // Only trust the measured average when there is real history: a fresh account
-  // reports "1 credit per turn", which would show a laughably small VND figure.
+  // falls back to the typical turn, which is what the server charges in practice.
   const measured = Number(averageTurnCost) > 100 ? Math.round(Number(averageTurnCost)) : null;
-  const turnCredits = measured ?? TYPICAL_TURN_CREDITS;
+  const typicalCredits = Math.max(1, Math.ceil(TYPICAL_TURN_TOKENS * perToken));
+  const turnCredits = measured ?? typicalCredits;
   const vnd = (value: number) => `${n(Math.round(value))} đ`;
 
   const updatePackage = (index: number, patch: Partial<TopupPackageSetting>) => {
@@ -202,8 +207,11 @@ export function CreditPricingCard({
             className="input w-num"
             type="number"
             min={0}
+            step="0.01"
             value={settings.creditsPerToken}
-            onChange={(event) => onPatch({ creditsPerToken: intOr(event.target.value, settings.creditsPerToken, 1) })}
+            onChange={(event) =>
+              onPatch({ creditsPerToken: decimalOr(event.target.value, settings.creditsPerToken, 0) })
+            }
           />
         </Field>
       </div>
@@ -248,6 +256,17 @@ export function CreditPricingCard({
 /** Number input kept empty while typing: fall back instead of writing NaN. */
 function intOr(raw: string, fallback: number, min: number): number {
   const value = Math.trunc(Number(raw));
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, value);
+}
+
+/**
+ * Like `intOr` but keeps decimals. `creditsPerToken` is fractional on purpose
+ * (0.06 credit/token ≈ 210đ a turn); truncating it here would silently set the
+ * rate to 0 and make every chat free.
+ */
+function decimalOr(raw: string, fallback: number, min: number): number {
+  const value = Number(raw);
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, value);
 }

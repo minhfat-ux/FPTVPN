@@ -4,15 +4,15 @@ import type { HubSkill } from "../types";
 type T = (key: string, vars?: Record<string, string | number>) => string;
 type N = (value: number | null | undefined) => string;
 
-/** 0 → "Miễn phí", otherwise "10.000 token". */
-export function formatPrice(price: number, t: T, n: N): string {
-  const value = Number.isFinite(price) ? Math.trunc(price) : 0;
+/** 0 → "Miễn phí", otherwise "50.000đ". Prices are money, not credits. */
+export function formatPrice(priceVnd: number, t: T, n: N): string {
+  const value = Number.isFinite(priceVnd) ? Math.trunc(priceVnd) : 0;
   return value > 0 ? t("hub.card.price", { amount: n(value) }) : t("hub.card.free");
 }
 
 /** Primary button label while the skill is still being bought. */
-export function formatBuyLabel(price: number, t: T, n: N): string {
-  const value = Number.isFinite(price) ? Math.trunc(price) : 0;
+export function formatBuyLabel(priceVnd: number, t: T, n: N): string {
+  const value = Number.isFinite(priceVnd) ? Math.trunc(priceVnd) : 0;
   return value > 0 ? t("hub.card.buy", { amount: n(value) }) : t("hub.card.getFree");
 }
 
@@ -35,7 +35,7 @@ export function bullets(description: string): string[] {
 }
 
 export function isOwned(skill: HubSkill): boolean {
-  return skill.owned || skill.price === 0;
+  return skill.owned || skill.priceVnd === 0;
 }
 
 export function formatStateBadge(skill: HubSkill, t: T): { label: string; className: string } | null {
