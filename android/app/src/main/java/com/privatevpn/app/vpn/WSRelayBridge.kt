@@ -53,20 +53,6 @@ class WSRelayBridge(
     @Volatile private var opened = false
     private val deadReported = java.util.concurrent.atomic.AtomicBoolean(false)
 
-    /**
-     * Buffer + DatagramPacket tái dùng cho chiều WS -> UDP. onMessage() của OkHttp
-     * chạy tuần tự trên một thread đọc nên một bộ là đủ; trước đây mỗi gói tạo một
-     * byte[] + DatagramPacket mới — với traffic lớn đây là nguồn GC/CPU chính.
-     */
-    @Volatile private var rxBuffer: ByteArray? = null
-    @Volatile private var rxPacket: DatagramPacket? = null
-
-    /**
-     * Mở WS xong/hỏng thì đếm xuống: service chờ bằng I/O chặn (await) thay vì
-     * vòng sleep(200ms) rồi kiểm tra lại, tránh đánh thức CPU liên tục.
-     */
-    private val openLatch = java.util.concurrent.CountDownLatch(1)
-
     private val client = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
         // Cầu WS là đường THOÁT khi IP node bị chặn, nên không được phụ thuộc DNS hệ thống:
@@ -103,11 +89,6 @@ class WSRelayBridge(
             opened = false
             deadReported.set(false)
             running = true
-            // Cấp phát MỘT LẦN cho cả vòng đời cầu: chiều WS -> UDP dùng rxBuffer/rxPacket,
-            // chiều UDP -> WS dùng buffer/packet dưới thread.
-            val rx = ByteArray(MAX_DATAGRAM_BYTES)
-            rxBuffer = rx
-            rxPacket = DatagramPacket(rx, rx.size)
             DiagnosticsLog.log("ws-relay: local udp 127.0.0.1:${sock.localPort} -> $url")
 
             ws = client.newWebSocket(
@@ -116,27 +97,18 @@ class WSRelayBridge(
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         opened = true
                         connected = true
-                        openLatch.countDown()
                         DiagnosticsLog.log("ws-relay: connected")
                     }
 
                     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                         val target = peer.get() ?: return
-                        // Chép thẳng vào buffer tái dùng: bỏ byte[] + DatagramPacket
-                        // mới cho mỗi gói (xem rxBuffer/rxPacket).
-                        val buf = rxBuffer ?: return
-                        val pkt = rxPacket ?: return
-                        val n = bytes.size
-                        if (n > buf.size) return
-                        bytes.asByteBuffer().get(buf, 0, n)
-                        pkt.setData(buf, 0, n)
-                        pkt.setSocketAddress(target)
-                        runCatching { sock.send(pkt) }
+                        runCatching {
+                            sock.send(DatagramPacket(bytes.toByteArray(), bytes.size, target))
+                        }
                     }
 
                     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                         connected = false
-                        openLatch.countDown()
                         // Đầu kia chủ động đóng (relay restart, hạ tầng cắt): phải
                         // hoàn tất handshake đóng, và báo chết như mọi đường khác.
                         notifyDead("closing: $code $reason")
@@ -145,38 +117,27 @@ class WSRelayBridge(
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         connected = false
-                        openLatch.countDown()
                         DiagnosticsLog.warn("ws-relay: failed: ${t.message}")
                         notifyDead("failed: ${t.message}")
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         connected = false
-                        openLatch.countDown()
                         notifyDead("closed: $code $reason")
                     }
                 },
             )
 
             Thread {
-                val buffer = ByteArray(MAX_DATAGRAM_BYTES)
-                // Một DatagramPacket cho cả vòng lặp thay vì tạo mới mỗi gói.
-                val packet = DatagramPacket(buffer, buffer.size)
+                val buffer = ByteArray(65535)
                 while (running) {
-                    // receive() thu nhỏ length; phải trả lại kích thước buffer trước mỗi lần nhận.
-                    packet.length = buffer.size
+                    val packet = DatagramPacket(buffer, buffer.size)
                     try {
                         sock.receive(packet)
                     } catch (e: Exception) {
                         break
                     }
-                    val addr = packet.address ?: continue
-                    val port = packet.port
-                    val current = peer.get()
-                    // Chỉ cấp phát InetSocketAddress khi peer thật sự đổi (mỗi luồng chỉ 1 peer).
-                    if (current == null || current.port != port || current.address != addr) {
-                        peer.set(InetSocketAddress(addr, port))
-                    }
+                    peer.set(InetSocketAddress(packet.address, packet.port))
                     ws?.send(buffer.toByteString(0, packet.length))
                 }
             }.apply { isDaemon = true; name = "ws-relay-udp" }.start()
@@ -186,20 +147,6 @@ class WSRelayBridge(
             stop()
             false
         }
-    }
-
-    /**
-     * Chờ (blocking) tới khi WS mở hoặc hỏng, tối đa [timeoutMs]. Thay cho vòng
-     * `sleep(200)` rồi kiểm tra lại ở phía service: thread nằm chờ trên latch,
-     * không đánh thức CPU mỗi 200ms.
-     *
-     * @return true nếu WS đã mở (connected) trong hạn.
-     */
-    fun awaitConnected(timeoutMs: Long): Boolean = try {
-        openLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
-        connected
-    } catch (_: InterruptedException) {
-        false
     }
 
     /**
@@ -221,16 +168,9 @@ class WSRelayBridge(
         // Đặt running trước khi đóng: nếu không, chính lần đóng này lại bị coi là sự cố.
         running = false
         connected = false
-        // Đánh thức ai đang chờ WS mở (awaitConnected) để thoát ngay, không đợi hết hạn.
-        openLatch.countDown()
         runCatching { ws?.close(1000, null) }
         runCatching { udp?.close() }
         ws = null
         udp = null
-    }
-
-    private companion object {
-        /** Datagram UDP tối đa (kể cả IP + UDP header). */
-        const val MAX_DATAGRAM_BYTES = 65535
     }
 }

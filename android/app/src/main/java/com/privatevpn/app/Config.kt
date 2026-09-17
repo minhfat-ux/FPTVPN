@@ -139,12 +139,8 @@ object Config {
      * khai, gói bị dồn ở chặng giữa và độ trễ tăng vọt. Số dưới đây là mức khởi điểm
      * bảo thủ, chỉnh lại theo số đo thật trên thiết bị.
      */
-    // Trần băng thông khai với Hysteria (client dùng để tính congestion control).
-    // Đo thật 18/09: 800/4000 kbps quá thấp — đo qua tunnel chỉ đạt ~2,6 Mbps dù mạng khách
-    // ~93 Mbps, tức chính con số này bóp tốc độ. Nâng lên mức thực tế của node; chỉnh tiếp
-    // nếu uplink node thấp hơn (đặt cao hơn thực tế thì Hysteria tự giảm theo mất gói).
-    const val HY_RELAY_UP_KBPS = 20000
-    const val HY_RELAY_DOWN_KBPS = 100000
+    const val HY_RELAY_UP_KBPS = 800
+    const val HY_RELAY_DOWN_KBPS = 4000
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)
