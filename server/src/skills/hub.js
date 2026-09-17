@@ -16,7 +16,10 @@ import { listInstalledSkillIds, setInstalledSkills, MAX_SELECTABLE_SKILLS } from
 
 export const HUB_CATEGORIES = ["Bán hàng", "Văn phòng", "Dữ liệu", "Nội dung", "Giáo dục", "Khác"];
 
-function rowToSkill(row, { userId = null, owned = new Set(), installed = new Set() } = {}) {
+function rowToSkill(
+  row,
+  { userId = null, owned = new Set(), installed = new Set(), withContent = false } = {},
+) {
   if (!row) return null;
   return {
     id: row.id,
@@ -33,6 +36,9 @@ function rowToSkill(row, { userId = null, owned = new Set(), installed = new Set
     owned: owned.has(row.id),
     installed: installed.has(row.id),
     createdAt: row.created_at,
+    // The prompt pack is admin-only: `withContent` is set by the admin routes so
+    // the edit form can prefill instructions/tools. Never on public listings.
+    ...(withContent ? { instructions: row.instructions ?? "", tools: row.tools ?? [] } : {}),
   };
 }
 
@@ -50,12 +56,12 @@ export function hubSkillRuntime(row) {
   };
 }
 
-export function listHubSkills({ userId = null, includeHidden = false } = {}) {
+export function listHubSkills({ userId = null, includeHidden = false, withContent = false } = {}) {
   const where = includeHidden ? "" : "state != 'hidden'";
   const rows = all("hub_skills", where, [], { order: "sort_order ASC, created_at ASC" });
   const owned = new Set(ownedHubSkillIds(userId));
   const installed = new Set(userId ? listInstalledSkillIds(userId) : []);
-  return rows.map((row) => rowToSkill(row, { userId, owned, installed }));
+  return rows.map((row) => rowToSkill(row, { userId, owned, installed, withContent }));
 }
 
 export function getHubSkillRow(idOrSlug) {
@@ -68,7 +74,12 @@ export function getHubSkill(idOrSlug, options = {}) {
   if (!row) return null;
   const owned = new Set(ownedHubSkillIds(options.userId));
   const installed = new Set(options.userId ? listInstalledSkillIds(options.userId) : []);
-  return rowToSkill(row, { userId: options.userId, owned, installed });
+  return rowToSkill(row, {
+    userId: options.userId,
+    owned,
+    installed,
+    withContent: Boolean(options.withContent),
+  });
 }
 
 export function ownedHubSkillIds(userId) {
@@ -157,7 +168,7 @@ export function createHubSkill(input) {
     state: ["published", "coming_soon", "hidden"].includes(input?.state) ? input.state : "published",
     sort_order: Number(input?.sortOrder) || 0,
   });
-  return rowToSkill(row);
+  return rowToSkill(row, { withContent: true });
 }
 
 export function updateHubSkill(id, patch) {
@@ -175,8 +186,10 @@ export function updateHubSkill(id, patch) {
   if (patch.state !== undefined && ["published", "coming_soon", "hidden"].includes(patch.state)) {
     changes.state = patch.state;
   }
+  // Manual correction of the public "installs" counter (test data, migrations).
+  if (patch.installs !== undefined) changes.installs = Math.max(0, Math.trunc(Number(patch.installs) || 0));
   if (patch.sortOrder !== undefined) changes.sort_order = Number(patch.sortOrder) || 0;
-  return rowToSkill(update("hub_skills", id, changes));
+  return rowToSkill(update("hub_skills", id, changes), { withContent: true });
 }
 
 export function deleteHubSkill(id) {
@@ -221,7 +234,7 @@ const SEED = [
       "Nhận sản phẩm + khách hàng mục tiêu, trả về bài bán hàng hoàn chỉnh: hook 2 giây, nỗi đau, lợi ích, bằng chứng, xử lý từ chối và lời kêu gọi hành động. Kèm 3 biến thể tiêu đề để A/B test.",
     category: "Bán hàng",
     icon: "megaphone",
-    price: 8000,
+    price: 2000,
     instructions:
       "Bạn viết content bán hàng theo công thức AIDA. Luôn trả về: (1) Hook 1 câu gây tò mò, (2) Nỗi đau của khách, " +
       "(3) 3 lợi ích cụ thể kèm con số nếu có, (4) Bằng chứng/chứng thực, (5) Xử lý 2 lời từ chối thường gặp, (6) CTA rõ ràng. " +
@@ -235,7 +248,7 @@ const SEED = [
       "Đưa file ghi âm đã chuyển thành văn bản (hoặc ghi chú thô), nhận về biên bản gọn: quyết định đã chốt, việc cần làm kèm người phụ trách và hạn, điểm còn tranh luận, rủi ro.",
     category: "Văn phòng",
     icon: "clipboard",
-    price: 6000,
+    price: 1500,
     instructions:
       "Bạn tạo biên bản họp. Đọc nội dung/đính kèm rồi trả về 4 phần: **Quyết định đã chốt**, **Việc cần làm** (bảng: việc | người phụ trách | hạn), " +
       "**Điểm còn tranh luận**, **Rủi ro & lưu ý**. Nếu thiếu người phụ trách hoặc hạn thì ghi rõ 'chưa xác định' — không tự bịa. " +
@@ -249,7 +262,7 @@ const SEED = [
       "Dịch tài liệu dài sang ngôn ngữ đích nhưng giữ nguyên cấu trúc, tiêu đề và bảng biểu; trích ra bảng thuật ngữ để dùng lại cho các lần sau.",
     category: "Nội dung",
     icon: "translate",
-    price: 10000,
+    price: 2500,
     instructions:
       "Bạn dịch tài liệu chuyên ngành. Nguyên tắc: giữ nguyên cấu trúc, tiêu đề, bảng biểu và định dạng markdown; " +
       "tên riêng/số liệu/mã sản phẩm giữ nguyên; thuật ngữ chuyên ngành chọn bản dịch phổ biến trong ngành và dùng nhất quán. " +
@@ -264,7 +277,7 @@ const SEED = [
       "Đọc hợp đồng (PDF/DOCX/ảnh) và trả về bảng rủi ro: điều khoản, mức độ rủi ro, vì sao rủi ro, câu sửa đề xuất. Kèm danh sách thông tin còn thiếu cần bổ sung.",
     category: "Văn phòng",
     icon: "scale",
-    price: 15000,
+    price: 3500,
     instructions:
       "Bạn soát hợp đồng ở góc nhìn bảo vệ người dùng (không thay thế luật sư). Trả về bảng: **Điều khoản | Mức độ (Cao/TB/Thấp) | Rủi ro | Đề xuất sửa**. " +
       "Tập trung vào: thanh toán & phạt, chấm dứt & hoàn tiền, phạm vi trách nhiệm, bảo mật dữ liệu, sở hữu trí tuệ, thay đổi đơn phương, luật áp dụng. " +
@@ -278,7 +291,7 @@ const SEED = [
       "Nhập chủ đề và thời lượng, nhận về bài giảng hoàn chỉnh: mục tiêu học tập, dàn slide chi tiết, hoạt động tương tác và bài kiểm tra nhanh cuối giờ.",
     category: "Giáo dục",
     icon: "graduation",
-    price: 7000,
+    price: 2000,
     instructions:
       "Bạn soạn bài giảng cho người dạy. Trả về: mục tiêu học tập (đo lường được), dàn bài theo từng phần kèm thời lượng, " +
       "2 hoạt động tương tác cho học viên, 5 câu hỏi kiểm tra nhanh và 1 bài tập về nhà. " +
@@ -292,7 +305,7 @@ const SEED = [
       "Đưa file dữ liệu, nhận về câu chuyện số liệu: 3 phát hiện quan trọng nhất, biểu đồ minh hoạ, điều cần hành động ngay và phần cảnh báo chất lượng dữ liệu.",
     category: "Dữ liệu",
     icon: "chart",
-    price: 9000,
+    price: 3000,
     instructions:
       "Bạn biến dữ liệu thành câu chuyện cho người ra quyết định. Quy trình: gọi analyze_data để có số liệu thật (không bịa số), " +
       "rồi trình bày **Tóm tắt trong 1 câu**, **3 phát hiện quan trọng** (mỗi phát hiện kèm số liệu), **biểu đồ** phù hợp, " +

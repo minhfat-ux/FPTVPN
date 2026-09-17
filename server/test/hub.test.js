@@ -168,3 +168,70 @@ test("only admins can manage the hub, and a created skill is immediately sellabl
   const deleted = await api("DELETE", `/admin/hub/${created.skill.id}`, undefined, admin.token);
   assert.equal(deleted.ok, true);
 });
+
+test("the admin listing carries the prompt pack so the edit form can prefill it", async () => {
+  const admin = userFor("hub-admin-prefill@flowgpt.test", "admin");
+  const buyer = userFor("hub-prefill-buyer@flowgpt.test", "user");
+
+  const created = await api(
+    "POST",
+    "/admin/hub",
+    {
+      name: "Soạn thông cáo",
+      tagline: "Thông cáo báo chí 1 trang",
+      category: "Nội dung",
+      icon: "megaphone",
+      price: 2000,
+      instructions: "Viết thông cáo theo mô hình ngược: kết luận trước, chi tiết sau.",
+      tools: ["generate_xlsx", "list_files"],
+      sortOrder: 42,
+    },
+    admin.token,
+  );
+  // Create/update answer with the full pack too.
+  assert.match(created.skill.instructions, /thông cáo theo mô hình ngược/);
+  assert.deepEqual(created.skill.tools, ["generate_xlsx", "list_files"]);
+
+  const { items } = await api("GET", "/admin/hub", undefined, admin.token);
+  const row = items.find((item) => item.id === created.skill.id);
+  assert.ok(row, "kỹ năng vừa tạo phải có trong danh sách admin");
+  assert.equal(row.instructions, "Viết thông cáo theo mô hình ngược: kết luận trước, chi tiết sau.");
+  assert.deepEqual(row.tools, ["generate_xlsx", "list_files"]);
+  assert.equal(row.sortOrder, 42);
+
+  // The public listing must never leak the prompt pack.
+  const listed = await api("GET", "/hub", undefined, buyer.token);
+  const publicRow = listed.items.find((item) => item.id === created.skill.id);
+  assert.equal(publicRow.instructions, undefined);
+  assert.equal(publicRow.tools, undefined);
+
+  // Editing the pack round-trips (including clearing it).
+  const patched = await api(
+    "PATCH",
+    `/admin/hub/${created.skill.id}`,
+    { instructions: "Chỉ viết 150 từ.", tools: [] },
+    admin.token,
+  );
+  assert.equal(patched.skill.instructions, "Chỉ viết 150 từ.");
+  assert.deepEqual(patched.skill.tools, []);
+
+  // An admin can correct a counter inflated by test runs.
+  const reset = await api("PATCH", `/admin/hub/${created.skill.id}`, { installs: 0 }, admin.token);
+  assert.equal(reset.skill.installs, 0);
+  const bumped = await api("PATCH", `/admin/hub/${created.skill.id}`, { installs: -5 }, admin.token);
+  assert.equal(bumped.skill.installs, 0, "không cho số âm");
+
+  await api("DELETE", `/admin/hub/${created.skill.id}`, undefined, admin.token);
+});
+
+test("the seeded catalogue is priced for 20đ per credit", () => {
+  const priced = hub
+    .listHubSkills({ includeHidden: true })
+    .filter((skill) => skill.price > 0)
+    .map((skill) => skill.price);
+  assert.ok(priced.length >= 6);
+  for (const price of priced) {
+    assert.ok(price >= 1000 && price <= 5000, `giá ${price} token phải nằm trong khoảng bán được (1.000–5.000)`);
+    assert.equal(price % 500, 0, "giá nên là bội số của 500 cho dễ đọc");
+  }
+});

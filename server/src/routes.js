@@ -1040,7 +1040,10 @@ export function createApiRouter() {
   );
 
   router.get("/admin/hub", requireAdmin, (_req, res) => {
-    res.json({ items: listHubSkills({ includeHidden: true }), categories: HUB_CATEGORIES });
+    res.json({
+      items: listHubSkills({ includeHidden: true, withContent: true }),
+      categories: HUB_CATEGORIES,
+    });
   });
 
   router.post(

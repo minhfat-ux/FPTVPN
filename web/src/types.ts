@@ -443,6 +443,9 @@ export interface HubSkill {
   owned: boolean;
   installed: boolean;
   createdAt: string;
+  /** Admin-only (`GET /api/admin/hub`): the stored prompt pack, for prefilling the edit form. */
+  instructions?: string;
+  tools?: string[];
 }
 
 export interface HubPurchaseResult {

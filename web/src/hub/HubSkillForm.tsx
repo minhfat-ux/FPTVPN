@@ -54,7 +54,7 @@ export function toHubNumber(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** Prefills the form from a listed skill (instructions/tools are not returned by the API). */
+/** Prefills the form from a listed skill, including the admin-only prompt pack. */
 export function formFromSkill(skill: HubSkill): HubFormState {
   return {
     ...EMPTY_HUB_FORM,
@@ -66,6 +66,8 @@ export function formFromSkill(skill: HubSkill): HubFormState {
     price: String(skill.price ?? 0),
     state: skill.state,
     sortOrder: String(skill.sortOrder ?? 0),
+    instructions: skill.instructions ?? "",
+    tools: Array.isArray(skill.tools) ? [...skill.tools] : [],
   };
 }
 
@@ -79,6 +81,7 @@ export function HubSkillFormDialog({
   categories,
   value,
   saving,
+  vndPerCredit = 0,
   onChange,
   onClose,
   onSubmit,
@@ -88,11 +91,13 @@ export function HubSkillFormDialog({
   categories: string[];
   value: HubFormState;
   saving: boolean;
+  /** Owner-set 1-credit price; 0 hides the VND readout. */
+  vndPerCredit?: number;
   onChange: (next: Partial<HubFormState>) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, n } = useI18n();
   const categoryOptions = useMemo(() => {
     const all = [...categories];
     if (editing && !all.includes(editing.category)) all.push(editing.category);
@@ -177,6 +182,14 @@ export function HubSkillFormDialog({
             value={value.price}
             onChange={(event) => onChange({ price: event.target.value })}
           />
+          {vndPerCredit > 0 && (
+            <span className="hint">
+              {t("hub.form.priceVnd", {
+                vnd: `${n(toHubNumber(value.price) * vndPerCredit)} đ`,
+                perCredit: n(vndPerCredit),
+              })}
+            </span>
+          )}
         </Field>
         <Field label={t("hub.form.sortOrderLabel")} hint={t("hub.form.sortOrderHint")}>
           <input

@@ -34,9 +34,8 @@ function stateBadge(state: HubState): string {
  * Settings → Chợ kỹ năng: the admin side of the marketplace. A skill is a
  * prompt pack — name, price, instructions and the tools the agent may use.
  *
- * Note: `/api/admin/hub` returns the public skill shape, which carries neither
- * `instructions` nor `tools`. The form therefore cannot prefill them; on edit a
- * blank field means "keep the value already stored on the server".
+ * `/api/admin/hub` returns the full skill shape including `instructions` and
+ * `tools` (admin-only fields), so the edit form prefills the whole pack.
  */
 export function HubAdminPanel() {
   const { t, n } = useI18n();
@@ -51,6 +50,8 @@ export function HubAdminPanel() {
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<HubSkill | null>(null);
   const [deleting, setDeleting] = useState(false);
+  /** Owner-set price of one credit, so skill prices can be shown in VND too. */
+  const [vndPerCredit, setVndPerCredit] = useState(0);
 
   const loadFailed = t("hub.admin.loadFailedToast");
 
@@ -65,6 +66,13 @@ export function HubAdminPanel() {
       setError(err instanceof ApiError ? err.message : loadFailed);
     } finally {
       setLoading(false);
+    }
+    // Best effort: the price list still works when the settings call fails.
+    try {
+      const { settings } = await api.appSettings();
+      setVndPerCredit(Math.max(0, Number(settings.vndPerCredit) || 0));
+    } catch {
+      setVndPerCredit(0);
     }
   }, [loadFailed]);
 
@@ -94,8 +102,9 @@ export function HubAdminPanel() {
     setSaving(true);
     try {
       if (editing) {
-        // Only the changed fields travel: a PATCH must not clobber what the
-        // list response cannot show (instructions, tools).
+        const storedTools = Array.isArray(editing.tools) ? editing.tools : [];
+        const toolsChanged =
+          storedTools.length !== form.tools.length || form.tools.some((tool) => !storedTools.includes(tool));
         const changes: Record<string, unknown> = {};
         if (form.name.trim() !== editing.name) changes.name = form.name.trim();
         if (form.tagline !== (editing.tagline ?? "")) changes.tagline = form.tagline;
@@ -107,9 +116,11 @@ export function HubAdminPanel() {
         if (toHubNumber(form.sortOrder) !== Number(editing.sortOrder ?? 0)) {
           changes.sortOrder = toHubNumber(form.sortOrder);
         }
-        // Blank means "keep the stored prompt" — see the note above.
-        if (form.instructions.trim()) changes.instructions = form.instructions.trim();
-        if (form.tools.length) changes.tools = form.tools;
+        // The stored pack is prefilled, so any difference (including clearing it) travels.
+        if (form.instructions.trim() !== (editing.instructions ?? "")) {
+          changes.instructions = form.instructions.trim();
+        }
+        if (toolsChanged) changes.tools = form.tools;
         if (!Object.keys(changes).length) {
           push(t("hub.admin.noChanges"), "info");
           return;
@@ -207,7 +218,18 @@ export function HubAdminPanel() {
                     <td className="mono tiny">{skill.slug}</td>
                     <td className="small">{skill.category}</td>
                     <td className="small nowrap">
-                      {skill.price > 0 ? t("hub.card.price", { amount: n(skill.price) }) : t("hub.card.free")}
+                      {skill.price > 0 ? (
+                        <>
+                          <span className="bold">{t("hub.card.price", { amount: n(skill.price) })}</span>
+                          {vndPerCredit > 0 && (
+                            <span className="tiny faint" style={{ display: "block" }}>
+                              {t("hub.admin.priceVnd", { vnd: `${n(skill.price * vndPerCredit)} đ` })}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        t("hub.card.free")
+                      )}
                     </td>
                     <td>
                       <span className={`badge ${stateBadge(skill.state)}`}>{t(STATE_LABEL_KEYS[skill.state])}</span>
@@ -243,6 +265,7 @@ export function HubAdminPanel() {
         categories={categories}
         value={form}
         saving={saving}
+        vndPerCredit={vndPerCredit}
         onChange={patch}
         onClose={() => setFormOpen(false)}
         onSubmit={() => void save()}
