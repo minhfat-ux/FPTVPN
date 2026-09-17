@@ -1,0 +1,203 @@
+import { useMemo } from "react";
+import { RotateCcw, Undo2 } from "lucide-react";
+import { api } from "../api/client";
+import { Spinner } from "../components/ui";
+import { AiEditPanel } from "./AiEditPanel";
+import { CanvasStage } from "./CanvasStage";
+import { ToolPanels } from "./ToolPanels";
+import { useImageEditor } from "./useImageEditor";
+
+type Tool = "crop" | "rotate" | "resize" | "adjust" | "filters" | "text" | "brush" | "shape";
+
+const TOOLS: { id: Tool; label: string }[] = [
+  { id: "crop", label: "Cắt" },
+  { id: "rotate", label: "Xoay & lật" },
+  { id: "resize", label: "Kích thước" },
+  { id: "adjust", label: "Màu sắc" },
+  { id: "filters", label: "Bộ lọc nhanh" },
+  { id: "text", label: "Chữ" },
+  { id: "brush", label: "Vẽ tay" },
+  { id: "shape", label: "Hình khối" },
+];
+
+/** Trình sửa ảnh Canvas 2D: cắt, xoay, màu sắc, chữ, vẽ tay, hình khối và xuất tệp. */
+export function ImageStudio({ onOpenChat }: { onOpenChat?: () => void }) {
+  const editor = useImageEditor();
+  const imageArtifacts = useMemo(
+    () => editor.pendingArtifacts.filter((item) => item.kind === "image"),
+    [editor.pendingArtifacts],
+  );
+
+  const crosshair = editor.tool === "text" || editor.tool === "crop" || editor.tool === "brush" || editor.tool === "shape";
+  const cropReady = Boolean(editor.crop && Math.abs(editor.crop.width) >= 8 && Math.abs(editor.crop.height) >= 8);
+
+  const statusText = !editor.loaded
+    ? "Chưa có ảnh nào được nạp — các công cụ sẽ bật sau khi bạn chọn ảnh."
+    : editor.tool === "crop"
+      ? "Kéo chuột để chọn vùng cần giữ, sau đó bấm “Áp dụng cắt”."
+      : editor.tool === "brush" || editor.tool === "shape"
+        ? "Kéo chuột trên ảnh để vẽ."
+        : editor.tool === "text"
+          ? "Bấm vào ảnh để đặt vị trí chữ."
+          : null;
+
+  return (
+    <div className="studio">
+      <div className="stack">
+        <div className="card">
+          <div className="card-title mb-2">Công cụ</div>
+          <div className="stack gap-1">
+            {TOOLS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`btn ${editor.tool === item.id ? "btn-primary" : ""}`}
+                onClick={() => editor.setTool(item.id)}
+                disabled={!editor.loaded}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="divider" />
+          <div className="row gap-2">
+            <button className="btn btn-sm grow" type="button" onClick={editor.undo} disabled={!editor.history.length} title="Ctrl+Z">
+              <Undo2 size={14} /> Hoàn tác
+            </button>
+            <button className="btn btn-sm grow" type="button" onClick={editor.redo} disabled={!editor.future.length} title="Ctrl+Shift+Z">
+              <RotateCcw size={14} /> Làm lại
+            </button>
+          </div>
+          <button className="btn btn-sm btn-block mt-2" type="button" onClick={editor.reset} disabled={!editor.loaded}>
+            Đặt lại ảnh gốc
+          </button>
+          <div className="hint mt-2">Phím tắt: Ctrl+Z hoàn tác, Ctrl+Shift+Z làm lại, Ctrl+V dán ảnh.</div>
+        </div>
+
+        <ToolPanels
+          tool={editor.tool}
+          loaded={editor.loaded}
+          size={editor.size}
+          target={editor.target}
+          setTarget={editor.setTarget}
+          lockRatio={editor.lockRatio}
+          setLockRatio={editor.setLockRatio}
+          adjust={editor.adjust}
+          setAdjust={editor.setAdjust}
+          text={editor.text}
+          setText={editor.setText}
+          textPos={editor.textPos}
+          brush={editor.brush}
+          setBrush={editor.setBrush}
+          shape={editor.shape}
+          setShape={editor.setShape}
+          cropReady={cropReady}
+          quality={editor.quality}
+          setQuality={editor.setQuality}
+          saved={editor.saved}
+          busy={editor.busy}
+          sending={editor.sending}
+          onAction={editor.onAction}
+          onApplyCrop={editor.applyCrop}
+          onCancelCrop={() => editor.setCrop(null)}
+          onApplyResize={editor.applyResize}
+          onBakeAdjust={editor.bakeAdjust}
+          onBakeText={editor.bakeText}
+          onExport={editor.exportBlob}
+          onSave={editor.saveToFlowGpt}
+        />
+      </div>
+
+      <div className="stack">
+        {!editor.loaded && (
+          <div
+            className={`dropzone ${editor.over ? "over" : ""}`}
+            onClick={() => document.getElementById("image-studio-file")?.click()}
+            onDragOver={(event) => {
+              event.preventDefault();
+              editor.setOver(true);
+            }}
+            onDragLeave={() => editor.setOver(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              editor.setOver(false);
+              const file = event.dataTransfer.files[0];
+              if (file) void editor.loadFile(file);
+            }}
+          >
+            <div className="bold">Kéo &amp; thả ảnh vào đây</div>
+            <div className="small mt-1">hoặc bấm để chọn tệp — hỗ trợ dán từ clipboard (Ctrl+V)</div>
+          </div>
+        )}
+
+        <div className="card">
+          <div className="row gap-2 mb-2">
+            <div className="grow truncate small bold">{editor.fileName || "Chưa có ảnh"}</div>
+            <button className="btn btn-sm" type="button" onClick={() => document.getElementById("image-studio-file")?.click()}>
+              {editor.loaded ? "Đổi ảnh" : "Chọn ảnh"}
+            </button>
+            {editor.loaded && (
+              <span className="badge">
+                {editor.size.width} × {editor.size.height}px
+              </span>
+            )}
+          </div>
+
+          <CanvasStage
+            canvasRef={editor.canvasRef}
+            loaded={editor.loaded}
+            over={editor.over}
+            crosshair={crosshair}
+            crop={editor.crop}
+            sourceSize={editor.size}
+            text={editor.textPos ? { ...editor.text, x: editor.textPos.x, y: editor.textPos.y } : null}
+            statusText={statusText}
+            onPointerDown={editor.onPointerDown}
+            onPointerMove={editor.onPointerMove}
+            onPointerUp={editor.onPointerUp}
+            dropHandlers={{
+              onOver: editor.setOver,
+              onDropFile: (file) => void editor.loadFile(file),
+              onPick: () => document.getElementById("image-studio-file")?.click(),
+            }}
+          />
+
+          {editor.sending && (
+            <div className="mt-2">
+              <Spinner label="AI đang xử lý yêu cầu sửa ảnh…" />
+            </div>
+          )}
+        </div>
+
+        <AiEditPanel getCanvas={() => editor.canvasRef.current} onOpenChat={onOpenChat} />
+
+        {imageArtifacts.length > 0 && (
+          <div className="card">
+            <div className="card-title mb-2">Ảnh vừa tạo trong phiên chat</div>
+            {imageArtifacts.map((file) => (
+              <div key={file.id} className="artifact-card">
+                <div className="artifact-icon">IMG</div>
+                <div className="grow truncate small">{file.name}</div>
+                <a className="btn btn-sm" href={api.fileUrl(file.id)} download>
+                  Tải về
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <input
+          id="image-studio-file"
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void editor.loadFile(file);
+            event.target.value = "";
+          }}
+        />
+      </div>
+    </div>
+  );
+}

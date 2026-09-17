@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+data/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+*.db
+*.db-journal
+*.db-wal
+tmp/
+uploads/
+coverage/
