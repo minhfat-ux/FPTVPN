@@ -52,7 +52,7 @@ const DEFAULT_TIMEOUT = 30_000;
 function parseArgs(argv) {
 	const opts = {
 		url: process.env.DSH_WEB_URL ?? "http://127.0.0.1:3080",
-		path: "/",
+		path: undefined,
 		out: undefined,
 		width: 1440,
 		height: 900,
@@ -382,7 +382,7 @@ async function main() {
 	const opts = parseArgs(process.argv.slice(2));
 	const base = new URL(opts.url);
 	const origin = base.origin;
-	const target = new URL(opts.path, origin).toString();
+	const target = new URL(opts.path ?? `${base.pathname}${base.search}`, origin).toString();
 	const shotsDir = path.join(opts.root, ".shots");
 	const out = opts.out ?? path.join(shotsDir, `shot-${new Date().toISOString().replace(/[:.]/gu, "-")}.png`);
 	mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
