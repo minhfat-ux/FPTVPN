@@ -273,6 +273,9 @@ app.use((req, res, next) => {
   // Node self-report (own secret) + client health reports (see /v1/nodes handlers).
   if (req.path === "/v1/nodes/self" || /^\/v1\/nodes\/[^/]+\/report$/.test(req.path)) return next();
   if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
+  // Trang chủ hệ sinh thái FlowTech (index của meetflowai.site + home.meetflowai.site):
+  // mặt tiền phải mở cho khách, KHÔNG được đòi token admin.
+  if (req.path === "/" || req.path === "/home" || req.path === "/index.html") return next();
   // Public payment flow: buy page + create order + PayOS webhook.
   if (req.path === "/buy" || req.path.startsWith("/buy/") || req.path.startsWith("/v1/payments/")) return next();
   // Public MeetFlow AI purchase flow (buy page, create/status/qr/confirm,
