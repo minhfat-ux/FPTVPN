@@ -103,6 +103,18 @@ if (-not $SkipPatch) {
         Warn "Khong thay $patchPy - bo qua patch"
     }
 
+    # Branding FlowTech (mark / ten / title / favicon) — chay SAU ban FPT vi ban do
+    # giu lai phan theme + browse-picker. Script idempotent, nhan ca 3 trang thai dau vao
+    # (DSH goc / da patch FPT / da la FlowTech).
+    $brandPy = Join-Path $patchDir "apply-flowtech-brand.py"
+    if (Test-Path $brandPy) {
+        Log "Ap branding FlowTech (mark, ten, title, favicon)"
+        python $brandPy
+        Ok "Branding FlowTech xong"
+    } else {
+        Warn "Khong thay $brandPy - bo qua branding FlowTech"
+    }
+
     # profile pin browse picker
     Log "Cai profile (pin browse directory picker cho truy cap tu xa)"
     $profDir = Join-Path $env:USERPROFILE ".dsh\profiles\web"
@@ -178,7 +190,7 @@ Ok "Task FPT-DSH-Server (chay DSH khi login)"
 
 if ($VpsIP) {
     schtasks /create /f /tn "FPT-DSH-Tunnel" /tr "cmd /c `"$wrapper`"" /sc onlogon /rl limited | Out-Null
-    Ok "Task FPT-DSH-Tunnel (reverse tunnel -> $VpsIP:$TunnelPort)"
+    Ok "Task FPT-DSH-Tunnel (reverse tunnel -> ${VpsIP}:$TunnelPort)"
 } else {
     Warn "Khong co -VpsIP - bo qua task tunnel (chay lai voi -VpsIP khi co)"
 }

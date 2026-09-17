@@ -31,7 +31,7 @@ nguyên folder `windows/` sang máy Windows là chạy được, không thiếu 
 windows/                      ← giải nén ra thư mục này
 ├── install-fpt-harness.ps1   ← chạy cái này
 ├── README-WINDOWS.md
-├── patches/                  ← ĐÃ CÓ (theme, logo, favicon)
+├── patches/                  ← ĐÃ CÓ (theme FlowVPN + branding FlowTech: logo/mark/favicon)
 ├── profile/                  ← ĐÃ CÓ (browse-picker)
 └── vps/                      ← ĐÃ CÓ (script chạy trên VPS)
 ```
@@ -48,11 +48,19 @@ powershell -ExecutionPolicy Bypass -File install-fpt-harness.ps1 -VpsIP 103.173.
 Installer sẽ tự:
 1. Cài **Node.js LTS** + **Python 3.12** (qua winget) nếu thiếu
 2. Cài **DSH**: `npm install -g @deepseek-ai/dsh`
-3. Áp **patch FPT**: theme FlowVPN, logo Culi, favicon, browse-picker (backup `.fpt.bak`)
+3. Áp **patch FPT**: theme FlowVPN (màu brand `#33C773`), favicon, browse-picker (backup `.fpt.bak`)
+3b. Áp **branding FlowTech** (`patches/apply-flowtech-brand.py`, chạy SAU bước 3): đổi mark/logo,
+   tên hiển thị, tiêu đề trang và favicon sang thương hiệu **FlowTech / "HarnessFlow"**.
+   Script idempotent, nhận cả 3 trạng thái đầu vào (DSH gốc / đã patch FPT / đã là FlowTech).
 4. Cài **profile** pin browse picker vào `%USERPROFILE%\.dsh\profiles\web`
 5. Tạo **SSH key** `%USERPROFILE%\.ssh\dsh_tunnel` (riêng tunnel)
 6. Tạo **Task Scheduler** `FPT-DSH-Server` + `FPT-DSH-Tunnel` (tự chạy khi login)
 7. Hỏi **password SSH VPS** 1 lần để cài pubkey lên `authorized_keys`
+
+> Asset thương hiệu nằm trong `patches/`: `flowtech-logo.png` (bản ngang, dùng ở sidebar/hero),
+> `flowtech-mark.png` (icon vuông), `flowtech-favicon.png` + `favicon.png` (icon tab).
+> Ảnh đã bo góc sẵn — dùng đúng tỉ lệ (`object-fit: contain`), không crop.
+> Bản favicon Culi cũ được giữ lại thành `patches/favicon-culi.png.bak` nếu cần quay về.
 
 > Muốn đổi domain/port: `... -Domain dhs-win.meetflowai.site -TunnelPort 13081`
 
