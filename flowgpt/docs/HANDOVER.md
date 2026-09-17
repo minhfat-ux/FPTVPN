@@ -2,6 +2,85 @@
 
 Ngày: 2026-09-17 · Harness: DSH Windows · Trạng thái: **ĐANG CHẠY production**
 
+> **Cập nhật cuối ngày (đợt 2):** OpenRouter thành mặc định · Nói chuyện bằng giọng nói (miễn phí) ·
+> Kỹ năng thành dropdown top 10 + chợ kỹ năng · sửa lỗi vỡ layout lịch sử hội thoại. Chi tiết ở §9.
+
+---
+
+## 9. Đợt 2 — voice, chợ kỹ năng, OpenRouter
+
+### 9.1 OpenRouter là mặc định
+
+| | |
+|---|---|
+| Provider | `OpenRouter`, kind `openrouter` (dùng adapter OpenAI-compatible + header `HTTP-Referer`/`X-Title`) |
+| Model mặc định | `google/gemini-2.5-flash` |
+| Kiểm chứng | OpenRouter báo **444 model**; test thật **1368 ms**; streaming thật trả lời tiếng Việt |
+| Dự phòng | DeepSeek vẫn bật. **Cơ chế mới:** nhà cung cấp mặc định thiếu key sẽ bị bỏ qua, lượt chat tự lùi về provider có key và sự kiện `start` kèm `notice` giải thích (UI hiện toast, Cài đặt hiện banner) |
+| Cấu hình | `ops/configure-provider.mjs` (đọc key từ file → mã hoá → test thật → xoá file; **không in key**) |
+| UI | Nút **“Đặt mặc định”** ở từng nhà cung cấp + banner “Mặc định … chưa có API key” |
+
+> ⚠️ **Key OpenRouter đã được dán trong khung chat** để cấu hình. Key hiện lưu **mã hoá AES-256-GCM** trong
+> `/var/lib/flowgpt/flowgpt.db` và không nằm trong repo/log. Nếu đoạn chat này được chia sẻ, nên **xoay key**
+> trên openrouter.ai rồi dán lại vào Cài đặt → Nhà cung cấp AI.
+
+### 9.2 Nói chuyện bằng giọng nói (mặc định: miễn phí)
+
+| Nửa | Mặc định | Khi trỏ vào provider |
+|---|---|---|
+| STT | Web Speech API của trình duyệt (`vi-VN`) | `POST /api/voice/transcribe` → Gemini audio, hoặc OpenAI-compatible `/audio/transcriptions` (Groq `whisper-large-v3-turbo`) |
+| TTS | `SpeechSynthesis` — **Edge có sẵn Hoài My / Nam Minh (vi-VN natural, miễn phí)** | `POST /api/voice/speech` → Gemini TTS (PCM → WAV) hoặc `/audio/speech` (mp3) |
+
+Ba tính năng: **dictation** (nút micro → chữ vào ô chat), **đọc câu trả lời** (nút loa + công tắc tự đọc),
+**Nói chuyện** (chế độ rảnh tay: nghe → suy nghĩ → nói → nghe tiếp, phát hiện im lặng, **barge-in**, echoCancellation).
+Cấu hình ở **Cài đặt → Giọng nói** (ngôn ngữ, giọng, tốc độ, tự đọc, hoặc chọn provider).
+
+Chi phí tham khảo (giá công bố 2026): trình duyệt **$0** · Soniox STT $0,12/giờ + TTS ~$0,70/giờ ·
+Gemini Live ~$1,38/giờ · OpenAI Realtime-2 ~$6–18/giờ.
+
+### 9.3 Kỹ năng: dropdown top 10 + chợ kỹ năng
+
+- `skills/index.js` → `SKILL_CATALOG` (5 kỹ năng `ready` + 4 mục `coming_soon`: MCP, tài liệu, dịch, kỹ năng công ty).
+- `skills/installed.js` + bảng `user_skills` → danh sách **theo từng người dùng**, giữ thứ tự, tối đa 10, tối thiểu 1.
+- `GET /api/skills` trả `items` (dropdown) · `installed` · `catalog` · `maxSelectable`;
+  `PUT /api/skills/installed` lưu lựa chọn (id `coming_soon` bị từ chối kèm lý do).
+- UI: `chat/SkillSelect.tsx` (dropdown có icon + mô tả) và `chat/SkillPicker.tsx` (chợ kỹ năng: tìm kiếm, chọn/bỏ, đếm n/10).
+- Chat nhận **mọi id trong danh mục** → thêm kỹ năng mới không cần sửa server.
+
+### 9.4 Đã sửa trong đợt 2
+
+| Bug | Bằng chứng |
+|---|---|
+| Vỡ layout lịch sử hội thoại khi tiêu đề dài (span inline không cắt được ellipsis) | `ops/ui-layout-check.mjs`: 0 px tràn ngang ở mọi container; tiêu đề 198 ký tự cắt đúng |
+| Upload sai tên field trả 500 | nay trả **400** kèm hướng dẫn (đã thử thật) |
+| Lỗi export `getAudioContextCtor` làm subagent voice fail | tsc sạch (`exit 0`) |
+
+### 9.5 Kiểm chứng đợt 2
+
+| Việc | Kết quả |
+|---|---|
+| Test tự động | **93/93 pass** (thêm bộ `skills.test.js`, `openrouter.test.js`, `voice.test.js`) |
+| Dropdown + chợ kỹ năng (trình duyệt thật) | menu 6 mục, chọn “Làm PPT” đổi nhãn, modal 9 thẻ (5 chọn/4 sắp có), **bỏ 1 kỹ năng → server còn 4**, modal đóng, 0 exception |
+| Voice mode (Chrome micro giả) | `/api/voice/config` = browser/browser; nút micro + “Nói chuyện” có; overlay mở, orb hiện, trạng thái **“Đang nghe…”**, Escape đóng; tab **Giọng nói** có 4 radio/1 slider/1 switch/1 select + nhắc phương án miễn phí |
+| Regression | layout 0 tràn; chat tạo **PPTX 64,9 KB** tải được (DeepSeek); production render login bình thường, 0 lỗi console |
+| Production | asset khớp đúng bản build local; `providerCount=2`; lượt chat dùng **OpenRouter / google/gemini-2.5-flash** |
+
+### 9.6 Thay đổi KHÔNG do em (cần anh xác nhận)
+
+Một agent khác đã thêm **popup quảng cáo ứng dụng** (`web/public/promo.js`, `promo.css`) và sửa `web/index.html`
+(lúc 15:48) để nạp chúng. Hiện `/promo.js` tải được trên production nhưng **dist đang phát không tham chiếu** nên
+popup **chưa hiện** với người dùng — lần build+deploy tới nó sẽ bật lên. Em **không xoá** vì có thể là yêu cầu của anh
+từ luồng khác; nếu không cần, nói em một câu là em gỡ.
+
+## 10. Việc còn lại / điểm chưa chắc (đợt 2)
+
+1. **Image Studio** vẫn chưa thao tác bằng ảnh thật (chỉ kiểm chứng cấu trúc + render).
+2. **MCP server `stdio`** chưa test được từ sandbox Windows (chặn spawn tiến trình con); `http`/`sse` thì được.
+3. **Voice cần micro thật + HTTPS** trên thiết bị của anh; em mới test bằng micro giả của Chrome. Nếu anh dùng
+   **Chrome trên Windows**, cần cài gói giọng nói tiếng Việt của Windows, hoặc dùng **Edge** (có sẵn Hoài My/Nam Minh).
+4. Chưa có **SSO Firebase/Facebook** (đã chừa chỗ) và chưa có **đăng ký email + mật khẩu** (theo yêu cầu).
+5. Bundle web 1,16 MB (334 KB gzip) — có thể tách chunk sau.
+
 ---
 
 ## 1. Tóm tắt

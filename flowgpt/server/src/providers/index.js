@@ -6,7 +6,7 @@ import * as anthropic from "./anthropic.js";
 import * as gemini from "./gemini.js";
 import * as mock from "./mock.js";
 
-const ADAPTERS = { openai, "openai-compatible": openai, openrouter: openai, anthropic, gemini, mock };
+const ADAPTERS = { openai, "openai-compatible": openai, openrouter: openai, glm: openai, anthropic, gemini, mock };
 
 /** Kinds offered in Settings → Nhà cung cấp AI. */
 export const PROVIDER_KINDS = [
@@ -52,6 +52,21 @@ export const PROVIDER_KINDS = [
     supportsTools: true,
     supportsVision: true,
     keyHint: "Lấy key tại console.anthropic.com",
+  },
+  {
+    id: "glm",
+    label: "GLM (Zhipu AI · Z.ai)",
+    defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    // Thực tế trên khoá hiện tại: glm-4-flash và glm-4.5-air là miễn phí, các model
+    // 4.6/4.7/5.x cần số dư hoặc gói tài nguyên (lỗi 429 余额不足).
+    suggestedModels: ["glm-4.5-air", "glm-4-flash", "glm-4.5", "glm-4.6", "glm-5.3-flash", "glm-5.3"],
+    defaultImageModel: null,
+    supportsImages: false,
+    supportsTools: true,
+    supportsVision: true,
+    keyHint:
+      "Key dạng <32 hex>.<16 ký tự> tại bigmodel.cn (Trung Quốc) hoặc z.ai (quốc tế). " +
+      "glm-4-flash và glm-4.5-air miễn phí; model 5.x cần nạp tiền. Bấm Kiểm tra để nạp danh sách model thật.",
   },
   {
     id: "openrouter",

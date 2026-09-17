@@ -143,7 +143,7 @@ Giới hạn upload: `app.maxUploadMb` (mặc định 25). Chỉ nhận: `image/
 
 ### 5.2 Providers (LLM) — `/api/settings/providers`
 ```json
-{ "id": "p_…", "name": "Gemini", "kind": "openai|anthropic|gemini|openai-compatible|mock",
+{ "id": "p_…", "name": "Gemini", "kind": "openai|anthropic|gemini|openrouter|openai-compatible|mock",
   "baseUrl": "https://…", "models": ["…"], "defaultModel": "…", "imageModel": "…",
   "enabled": true, "hasApiKey": true, "apiKeyPreview": "AIza…4f2",
   "createdAt": "…", "updatedAt": "…" }
@@ -153,6 +153,9 @@ Giới hạn upload: `app.maxUploadMb` (mặc định 25). Chỉ nhận: `image/
 - `PATCH /:id` — gửi `apiKey` mới để thay; bỏ trống = giữ nguyên; `apiKey: ""` = xoá.
 - `DELETE /:id` → `{ ok: true }`.
 - `POST /:id/test` → `{ ok, latencyMs, models?: [...], message }` (gọi thật 1 request nhỏ).
+- **Lưu ý về mặc định thiếu key**: nhà cung cấp mặc định không có key vẫn được lưu là mặc định, nhưng lượt chat sẽ
+  **tự lùi** về nhà cung cấp đang bật đầu tiên có key; sự kiện `start` kèm `notice` giải thích. Nút
+  **“Đặt mặc định”** trong tab Nhà cung cấp AI gọi `PUT /api/settings/app` với `defaultProviderId` + `defaultModel`.
 
 ### 5.3 MCP servers — `/api/settings/mcp`
 ```json

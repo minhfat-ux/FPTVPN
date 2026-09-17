@@ -14,7 +14,8 @@ chế độ rảnh tay có barge-in) và **cấu hình nhà cung cấp AI + MCP 
 | URL | **https://flowgpt.meetflowai.site** |
 | Máy chủ | node-2 `165.101.114.162` — systemd `flowgpt`, cổng nội bộ `127.0.0.1:7790`, Caddy làm TLS |
 | Dữ liệu | `/var/lib/flowgpt` (SQLite + tệp + artifact) · cấu hình `/etc/flowgpt/flowgpt.env` (600) |
-| Model mặc định | **DeepSeek `deepseek-chat`** (key lưu mã hoá AES-256-GCM; đổi trong Cài đặt) |
+| Model mặc định | **OpenRouter** `google/gemini-2.5-flash` (key mã hoá AES-256-GCM). DeepSeek vẫn bật làm dự phòng. Đổi mặc định bằng nút **Đặt mặc định** trong Cài đặt → Nhà cung cấp AI |
+| Kỹ năng | Dropdown **top 10** trong ô chat (danh sách theo từng người dùng) + nút **Thêm kỹ năng** mở chợ kỹ năng: 5 kỹ năng đang chạy + 4 mục “Sắp có” (MCP, tài liệu, dịch, kỹ năng riêng của công ty) |
 | Giọng nói | **Miễn phí bằng trình duyệt** (Web Speech + SpeechSynthesis). Trên **Microsoft Edge** có sẵn giọng tiếng Việt natural **Hoài My / Nam Minh**. Muốn chất lượng đồng nhất mọi máy thì trỏ STT/TTS sang một provider (Gemini/Groq free tier) trong **Cài đặt → Giọng nói** |
 | Email | **Resend** (gửi từ `no-reply@meetflowai.site`) — mã đăng nhập đã gửi thật, `delivered` |
 | Vào hệ thống lần đầu | Email đăng nhập **đầu tiên** tự thành **quản trị viên** |
@@ -58,7 +59,7 @@ Sau khi vào được:
 ## Kiểm thử
 
 ```powershell
-node --test "server/test/*.test.js"     # 77 ca: auth, provider, MCP, chat SSE, 4 skill, voice, phân quyền, rate limit
+node --test "server/test/*.test.js"     # 93 ca: auth, provider (+OpenRouter), MCP, chat SSE, 4 skill, voice, phân quyền, rate limit
 node ops/smoke.mjs http://127.0.0.1:7790/api            # smoke end-to-end (local)
 node ops/smoke.mjs https://flowgpt.meetflowai.site/api  # smoke qua domain công khai
 ```
