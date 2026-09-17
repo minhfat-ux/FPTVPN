@@ -14,6 +14,66 @@
   var SNOOZE_MS = 24 * 60 * 60 * 1000;
   var DELAY_MS = 1400;
 
+  /*
+   * Nhắc lại theo tình trạng credit: người CHƯA có credit bị nhắc lại sớm (mặc định
+   * 5 phút) để họ thấy link mua gói; người ĐÃ có credit chỉ bị nhắc lại sau 1 ngày.
+   * Giá trị đọc từ /api/meta nên đổi được trong Cài đặt mà không phải build lại.
+   * Trước khi biết kết quả thì dùng mốc NGẮN (đúng ý đồ nhắc), tránh cửa sổ 24h oan.
+   */
+  var snoozeMs = 5 * 60 * 1000;
+  var hasCredit = false;
+
+  function readToken() {
+    try {
+      return localStorage.getItem("flowgpt.token");
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function resolveSnoozeMs() {
+    var tasks = [];
+
+    tasks.push(
+      fetch("/api/meta", { credentials: "same-origin" })
+        .then(function (response) {
+          return response.ok ? response.json() : null;
+        })
+        .then(function (meta) {
+          var promo = meta && meta.promo;
+          if (!promo) return;
+          var soon = Math.max(1, Number(promo.reminderMinutes) || 5) * 60 * 1000;
+          var later = Math.max(1, Number(promo.creditSnoozeMinutes) || 1440) * 60 * 1000;
+          snoozeMs = hasCredit ? later : soon;
+          window.__flowgptPromoSnooze = { soon: soon, later: later };
+        })
+        .catch(function () {
+          /* offline: giữ mốc mặc định */
+        }),
+    );
+
+    var token = readToken();
+    if (token) {
+      tasks.push(
+        fetch("/api/credits", { headers: { Authorization: "Bearer " + token } })
+          .then(function (response) {
+            return response.ok ? response.json() : null;
+          })
+          .then(function (data) {
+            var credits = data && data.credits;
+            hasCredit = Boolean(credits && credits.enabled && credits.balance > 0);
+            var bounds = window.__flowgptPromoSnooze;
+            if (bounds) snoozeMs = hasCredit ? bounds.later : bounds.soon;
+          })
+          .catch(function () {
+            hasCredit = false;
+          }),
+      );
+    }
+
+    return Promise.all(tasks);
+  }
+
   var BRAND_MARK = "/brand-mark.png";
   var ICON_VPNFLOW = "https://meetflowai.site/assets/flowvpn-logo.png";
   var ICON_MEETFLOW = "https://meetflowai.site/assets/meetflowai-icon.png";
@@ -285,7 +345,7 @@
   var lastFocus = null;
 
   function onKeydown(event) {
-    if (event.key === "Escape") hide({ until: Date.now() + SNOOZE_MS });
+    if (event.key === "Escape") hide({ until: Date.now() + snoozeMs });
   }
 
   function hide(state) {
@@ -302,17 +362,17 @@
     ui = build();
     lastFocus = document.activeElement;
     ui.close.addEventListener("click", function () {
-      hide({ until: Date.now() + SNOOZE_MS });
+      hide({ until: Date.now() + snoozeMs });
     });
     ui.later.addEventListener("click", function () {
-      hide({ until: Date.now() + SNOOZE_MS });
+      hide({ until: Date.now() + snoozeMs });
     });
     ui.never.addEventListener("click", function () {
       hide({ never: true });
     });
     ui.backdrop.addEventListener("click", function (event) {
       // Bấm ra ngoài = để sau, không phải tắt vĩnh viễn.
-      if (event.target === ui.backdrop) hide({ until: Date.now() + SNOOZE_MS });
+      if (event.target === ui.backdrop) hide({ until: Date.now() + snoozeMs });
     });
     document.addEventListener("keydown", onKeydown, true);
     document.body.style.overflow = "hidden";
@@ -321,7 +381,7 @@
   }
 
   function schedule() {
-    setTimeout(show, DELAY_MS);
+    resolveSnoozeMs().then(function () { setTimeout(show, DELAY_MS); });
   }
 
   if (document.readyState === "loading") {

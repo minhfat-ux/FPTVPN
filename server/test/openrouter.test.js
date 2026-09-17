@@ -118,3 +118,90 @@ test("models list marks providers that cannot answer yet", () => {
   resetProviders();
   globalThis.fetch = originalFetch;
 });
+
+// ---------------------------------------------------------------- vision gate
+
+function runtime(kind, { apiKey = "k", models = ["m"] } = {}) {
+  return providers.toRuntimeProvider({
+    id: `p_${kind}`,
+    name: kind,
+    kind,
+    api_key_enc: null,
+    api_key: apiKey,
+    models,
+    default_model: models[0],
+    enabled: 1,
+  });
+}
+
+test("images are only sent to models that can read them", () => {
+  const glm = runtime("glm", { models: ["glm-4-flash"] });
+  const glmVision = runtime("glm", { models: ["glm-4v-flash"] });
+  const openrouter = runtime("openrouter", { models: ["google/gemini-2.5-flash"] });
+  const deepseek = runtime("openai-compatible", { models: ["deepseek-chat"] });
+
+  // The regression: glm-4-flash answered "messages.content.type 参数非法".
+  assert.equal(providers.modelAcceptsImages(glm, "glm-4-flash"), false);
+  assert.equal(providers.modelAcceptsImages(glm, "glm-4.5-air"), false);
+  assert.equal(providers.modelAcceptsImages(glm, "glm-4.6"), false);
+  assert.equal(providers.modelAcceptsImages(deepseek, "deepseek-chat"), false);
+
+  // Vision models keep working, on any provider kind.
+  assert.equal(providers.modelAcceptsImages(glmVision, "glm-4v-flash"), true);
+  assert.equal(providers.modelAcceptsImages(glm, null), false);
+  assert.equal(providers.modelAcceptsImages(openrouter, "google/gemini-2.5-flash"), true);
+  assert.equal(providers.modelAcceptsImages(openrouter, "openai/gpt-4o-mini"), true);
+  assert.equal(providers.modelAcceptsImages(openrouter, "anthropic/claude-3.5-sonnet"), true);
+  assert.equal(providers.modelAcceptsImages(runtime("gemini"), "gemini-2.5-flash"), true);
+});
+
+test("a text-only model never receives an image_url part", () => {
+  const { buildRequest } = providers.adapterFor("glm");
+  const messages = [
+    { role: "system", content: "sys" },
+    {
+      role: "user",
+      content: "sửa ảnh này giúp em",
+      images: [{ mime: "image/png", dataBase64: "AAAA" }],
+    },
+  ];
+
+  const glmBody = buildRequest({ provider: runtime("glm", { models: ["glm-4-flash"] }), model: "glm-4-flash", messages, tools: [], toolMode: "auto" });
+  const serialised = JSON.stringify(glmBody);
+  assert.doesNotMatch(serialised, /image_url/, "GLM không được nhận image_url");
+  assert.doesNotMatch(serialised, /参数/, "không được để gateway tự chế lỗi");
+  const userPart = glmBody.messages.at(-1);
+  assert.equal(Array.isArray(userPart.content), true);
+  assert.deepEqual(userPart.content.map((part) => part.type), ["text", "text"]);
+  assert.match(userPart.content[0].text, /sửa ảnh này/);
+  assert.match(userPart.content[1].text, /1 ảnh đính kèm không gửi được/, "model phải biết là ảnh bị bỏ");
+
+  // A vision model still gets the real image part.
+  const visionBody = buildRequest({
+    provider: runtime("glm", { models: ["glm-4v-flash"] }),
+    model: "glm-4v-flash",
+    messages,
+    tools: [],
+    toolMode: "auto",
+  });
+  const parts = visionBody.messages.at(-1).content;
+  assert.deepEqual(parts.map((part) => part.type), ["text", "image_url"]);
+  assert.match(parts[1].image_url.url, /^data:image\/png;base64,/);
+});
+
+test("assistant tool-call turns send an empty string, not null content", () => {
+  const { buildRequest } = providers.adapterFor("openai-compatible");
+  const body = buildRequest({
+    provider: runtime("openai-compatible", { models: ["deepseek-chat"] }),
+    model: "deepseek-chat",
+    messages: [
+      { role: "user", content: "làm slide" },
+      { role: "assistant", content: "", toolCalls: [{ id: "call_1", name: "generate_pptx", args: { slides: [] } }] },
+    ],
+    tools: [],
+    toolMode: "auto",
+  });
+  const assistant = body.messages.at(-1);
+  assert.equal(assistant.content, "");
+  assert.equal(assistant.tool_calls[0].function.name, "generate_pptx");
+});

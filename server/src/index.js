@@ -12,6 +12,15 @@ import { countUsers } from "./auth.js";
 ensureDirs();
 initDb();
 
+// Seed the Skill Hub catalogue once (idempotent by slug).
+try {
+  const { ensureHubSeed } = await import("./skills/hub.js");
+  const created = ensureHubSeed();
+  if (created) console.log(`[flowgpt] Skill Hub: đã thêm ${created} kỹ năng mẫu`);
+} catch (err) {
+  console.warn("[flowgpt] Không seed được Skill Hub:", err?.message ?? err);
+}
+
 const app = express();
 app.disable("x-powered-by");
 if (config.trustProxy) app.set("trust proxy", true);

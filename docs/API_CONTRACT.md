@@ -196,19 +196,90 @@ Giới hạn upload: `app.maxUploadMb` (mặc định 25). Chỉ nhận: `image/
 
 | Tool name | Tham số | Kết quả |
 |---|---|---|
-| `generate_pptx` | `{ title, subtitle?, theme?, slides: [{ title, bullets?: string[], notes?, imageQuery? }] }` | artifact `.pptx` |
-| `generate_xlsx` | `{ filename?, sheets: [{ name, columns: string[], rows: any[][], numberFormats?, totalsRow? }] }` | artifact `.xlsx` |
-| `analyze_data` | `{ fileId, operations: [{ op, ... }] }` — op ∈ `describe`,`group_by`,`filter`,`sort`,`top`,`correlation`,`timeseries`,`value_counts` | `{ summary, tables, chart }` (chart = spec cho web vẽ) |
-| `edit_image` | `{ fileId, instruction, providerId?, model? }` | artifact ảnh mới (cần provider có `imageModel`) |
-| `render_chart` | `{ type: "bar|line|pie|scatter|area", title?, xLabel?, yLabel?, series: [{ name, points: [{x,y}] }] }` | artifact ảnh PNG + spec cho web |
+| `generate_pptx` | `{ title?, subtitle?, theme?, slides: [{ title, subtitle?, bullets?: string[], notes? }] }` | artifact `.pptx` |
+| `generate_xlsx` | `{ filename?, sheets: [{ name, columns: string[], rows: any[][], totalsRow? }] }` | artifact `.xlsx` |
+| `analyze_data` | `{ fileId, operations: [{ op, ... }] }` — op ∈ `describe`,`value_counts`,`group_by`,`timeseries`,`correlation`,`sort`,`filter`,`top`. `filter` dùng `column` + `op_filter` (∈ `eq`,`ne`,`gt`,`gte`,`lt`,`lte`,`contains`,`not_contains`,`in`,`is_null`,`not_null`) + `value`; `top` dùng `n`/`labelColumn`; `sort` dùng `desc`/`limit` | `{ summary, tables, chart }` (chart = spec cho web vẽ) |
+| `edit_image` | `{ fileId, instruction, model? }` | artifact ảnh mới (cần provider có model ảnh) |
+| `open_image_studio` | `{ fileId? }` | chỉ đường mở Image Studio (thao tác ở đó không tốn credit) |
 | `list_files` | `{}` | danh sách FileRef của user (để model biết `fileId`) |
 
 Quy tắc: mọi tool trả JSON ngắn gọn cho model (`summary` + dữ liệu cần), artifact trả qua event `artifact`.
+Danh sách tool gửi cho model **luôn đầy đủ** (kỹ năng chỉ "steer" bằng system prompt, không chặn tool); mọi schema
+đều được gửi lại ở **mỗi** request nên mô tả trong schema được viết rất ngắn để tiết kiệm token.
 
 ## 7. Health & meta
 
 - `GET /api/health` → `{ ok: true, version, uptimeSec, providerCount, mcpCount }` (không cần auth).
-- `GET /api/meta` → `{ appName, version, allowSignup, firstUserIsAdmin, hasProvider, authMethods, mailer, loginTokenTtlMin }` (không cần auth).
+- `GET /api/meta` → `{ appName, version, allowSignup, firstUserIsAdmin, hasProvider, authMethods, mailer, loginTokenTtlMin, promo: { reminderMinutes, creditSnoozeMinutes }, credits: { enabled, signupCredits, perToken, buyUrl } }` (không cần auth).
+
+## 8. Credit (cách cấp và cách trừ)
+
+**1 credit = 1 token, tính theo tổng token vào + token ra của mỗi lượt trả lời** (giống cách ChatGPT tính usage):
+
+```
+credit bị trừ = max(1, ceil((token_vào + token_ra) × creditsPerToken))
+```
+
+- Số dư = `SUM(delta)` trên sổ cái `credit_ledger` (append-only, mỗi bút toán lưu `balance_after`). Lý do bút toán:
+  `signup`, `admin_grant`, `chat_usage`, `request_approved`, `topup_paid`, `skill_purchase`.
+- Cấp credit: tài khoản mới nhận `signupCredits` (mặc định **10.000**) ngay lần đăng nhập đầu; admin cấp thêm bằng
+  `POST /api/admin/credits`; yêu cầu của user được duyệt thì ghi `request_approved`.
+- Cổng chặn: hết credit ⇒ `POST /api/chat/stream` trả **402** `insufficient_credits` kèm `buyUrl`. Admin luôn qua được
+  cổng (số dư có thể âm) nhưng **vẫn bị trừ credit** như người thường.
+- Vì sao một lượt chat tốn ~1.700–1.900 token: mỗi request gửi lại **toàn bộ schema công cụ (~1.600 token, đo thật trên
+  GLM-4-Flash)** + system prompt (~120 token) + lịch sử hội thoại (tối đa 24 message) + câu trả lời. Đo trên production
+  với cùng một câu “chào em”: có công cụ `prompt_tokens = 1.707`; không công cụ `= 114`; chỉ user `= 8`.
+
+Endpoint:
+
+- `GET /api/credits` (auth) → `{ credits: { enabled, balance, granted, spent, entries, perToken, averageCostPerTurn, estimatedTurnsLeft, buyUrl, recent: [{ delta, reason, ref, balanceAfter, createdAt }] } }`.
+- `POST /api/admin/credits` (admin) `{ email, amount, note? }` → cấp (amount > 0) hoặc trừ (amount < 0); `amount = 0` ⇒ 400.
+- `GET /api/admin/users` (admin) → mỗi user kèm `creditBalance`.
+- `POST /api/credit-requests` (auth) `{ amount, reason? }` → 1 yêu cầu `pending`/user, gửi Telegram kèm 2 link duyệt có
+  chữ ký HMAC. `GET /api/credit-requests` trả yêu cầu của user (admin thấy tất cả);
+  `POST /api/credit-requests/:id/decide` `{ decision: "approve"|"reject", note? }` (idempotent);
+  link trong Telegram: `GET /api/credit-requests/decide?token=…` (hết hạn ⇒ 410, chữ ký sai ⇒ 403).
+- Popup nhắc nạp credit đọc `/api/meta` + `/api/credits`: **5 phút** khi số dư = 0, **1440 phút** khi còn credit.
+
+Cài đặt trong `app_settings`: `creditsEnabled`, `signupCredits`, `creditsPerToken`, `creditBuyUrl`,
+`promoReminderMinutes`, `promoCreditSnoozeMinutes`.
+
+### 8.1 Model biết gì về credit
+
+`buildCreditKnowledge(user)` trong `server/src/agent.js` chèn một khối vào system prompt **mỗi lượt**: công thức trừ
+credit, `signupCredits`, số dư/đã dùng/trung bình mỗi lượt của chính user, và hướng dẫn 2 đường nạp (“Xin thêm token”
+trong menu tài khoản, “Mua thêm token” → trang nạp credit). Nhờ vậy trợ lý trả lời đúng khi được hỏi về credit thay vì
+nói “FlowGpt miễn phí”. Tắt `creditsEnabled` thì khối này biến mất.
+
+## 9. Nạp credit (`/api/topup`)
+
+| Method | Path | Việc |
+|---|---|---|
+| `GET` | `/api/topup` | gói đang bán + đơn gần đây của user + thông tin ngân hàng |
+| `POST` | `/api/topup/orders` | `{ packageId }` → đơn `pending` kèm mã `FLOWGPT######` và URL ảnh VietQR |
+| `POST` | `/api/topup/orders/:id/confirm` | user báo “đã chuyển khoản” → `awaiting_confirmation` + Telegram cho admin |
+| `GET` | `/api/topup/confirm?token=…` | admin xác nhận qua link có chữ ký (30 ngày) → `paid` + cộng credit |
+| `GET` | `/api/admin/topup` · `PATCH /api/admin/topup/orders/:id` | admin xem/đổi trạng thái đơn |
+
+Trạng thái đơn: `pending` → `awaiting_confirmation` → `paid` (hoặc `cancelled`). Credit chỉ được ghi **một lần**
+(`reason = topup_paid`) nên bấm lại link không cộng thêm. Cài đặt: `topupPackages`, `bankId`, `bankAccount`,
+`bankAccountName`, `bankNotePrefix`.
+
+## 10. Chợ kỹ năng (Skill Hub)
+
+- `GET /api/hub` (auth) → danh sách skill đang bán + `owned` + số dư.
+- `POST /api/hub/skills/:id/buy` (auth) → trừ credit (`skill_purchase`), ghi `hub_purchases`, tự cài vào `user_skills`
+  (tối đa 10 kỹ năng). Giá 0 ⇒ vẫn ghi nhận sở hữu. Hết credit ⇒ **402**.
+- `GET/POST /api/admin/hub`, `PATCH/DELETE /api/admin/hub/:id` (admin) → CRUD prompt-pack
+  (name, tagline, description, category, icon, price, instructions, tools, state, sortOrder).
+- Kỹ năng mua được chọn trong dropdown như kỹ năng built-in; prompt pack được chèn vào system prompt và có thể thu hẹp
+  danh sách tool mà nó cần.
+
+## 11. Đa ngôn ngữ (i18n)
+
+`web/src/i18n/` — khoá dạng `namespace.key`, ba locale `vi` (gốc) · `en` · `zh`, namespace
+`common|auth|shell|chat|settings|studio|voice|hub|topup`. `useI18n()` cho `t()`, `n()` (số), `d()` (ngày);
+thiếu khoá ⇒ lùi về tiếng Việt rồi in ra chính khoá. Ngôn ngữ lưu ở `localStorage["flowgpt.locale"]`, ép bằng `?lang=`.
 
 ## 8. Voice (nói chuyện bằng giọng nói)
 
@@ -240,7 +311,7 @@ chất lượng giống nhau trên mọi máy.
 Cài đặt voice nằm trong `app_settings`: `voiceSttProviderId`, `voiceSttModel`, `voiceTtsProviderId`,
 `voiceTtsModel`, `voiceTtsVoice`, `voiceLanguage`, `voiceAutoRead`, `voiceSpeakRate`.
 
-## 9. Bảo mật
+## 12. Bảo mật
 
 - API key provider/MCP lưu **mã hoá AES-256-GCM** (khoá từ `FLOWGPT_SECRET`); không bao giờ trả lại nguyên văn.
 - Rate limit: 60 request/phút/user cho `/api/chat/stream`, 20/phút cho `/api/auth/*` (theo IP).

@@ -3,6 +3,7 @@ import { FileDown, Plus, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../api/client";
 import type { Artifact } from "../types";
 import { Field, Spinner, Switch } from "../components/ui";
+import { useI18n } from "../i18n";
 import { useChat } from "../state/chat";
 import { useToast } from "../state/store";
 
@@ -13,18 +14,22 @@ interface GridRow {
   cells: Cell[];
 }
 
-const SAMPLE = {
-  name: "Doanh thu",
-  columns: ["Tháng", "Kênh", "Doanh thu", "Chi phí"],
-  rows: [
-    ["Tháng 1", "Cửa hàng", 420000000, 260000000],
-    ["Tháng 1", "Online", 310000000, 150000000],
-    ["Tháng 2", "Cửa hàng", 455000000, 268000000],
-    ["Tháng 2", "Online", 382000000, 171000000],
-    ["Tháng 3", "Cửa hàng", 498000000, 275000000],
-    ["Tháng 3", "Online", 431000000, 188000000],
-  ] as Cell[][],
-};
+/** Bảng mẫu, dựng lại theo ngôn ngữ đang chọn. */
+function sampleTable(t: (key: string) => string): { name: string; columns: string[]; rows: Cell[][] } {
+  const values = [420000000, 310000000, 455000000, 382000000, 498000000, 431000000];
+  const costs = [260000000, 150000000, 268000000, 171000000, 275000000, 188000000];
+  const rows: Cell[][] = values.map((value, index) => [
+    t(`studio.excel.sampleMonth${Math.floor(index / 2) + 1}`),
+    t(index % 2 ? "studio.excel.sampleChannelOnline" : "studio.excel.sampleChannelStore"),
+    value,
+    costs[index],
+  ]);
+  return {
+    name: t("studio.excel.sampleSheet"),
+    columns: [t("studio.excel.sampleCol1"), t("studio.excel.sampleCol2"), t("studio.excel.sampleCol3"), t("studio.excel.sampleCol4")],
+    rows,
+  };
+}
 
 const newRow = (width: number): GridRow => ({
   id: `r_${Math.random().toString(36).slice(2)}`,
@@ -82,12 +87,16 @@ function toCell(value: string): Cell {
 
 /** Dựng bảng tính rồi giao cho backend tạo tệp .xlsx qua một lượt chat (skill `excel`). */
 export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
+  const { t } = useI18n();
   const { send, sending, streaming, pendingArtifacts } = useChat();
   const { push } = useToast();
 
-  const [fileName, setFileName] = useState("bao-cao-flowgpt");
+  const [fileName, setFileName] = useState(() => t("studio.excel.defaultFileName"));
   const [sheetName, setSheetName] = useState("Sheet1");
-  const [columns, setColumns] = useState<string[]>(["Hạng mục", "Số lượng", "Đơn giá"]);
+  // Tên cột mặc định, dịch theo ngôn ngữ đang chọn.
+  const [columns, setColumns] = useState<string[]>(() =>
+    ["studio.excel.defaultCol1", "studio.excel.defaultCol2", "studio.excel.defaultCol3"].map((key) => t(key)),
+  );
   const [rows, setRows] = useState<GridRow[]>([newRow(3), newRow(3), newRow(3)]);
   const [totalsRow, setTotalsRow] = useState(true);
   const [csv, setCsv] = useState("");
@@ -112,17 +121,17 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
   const payload = useMemo(
     () => ({
       __tool: "generate_xlsx",
-      filename: fileName.trim() || "bang-tinh",
+      filename: fileName.trim() || t("studio.excel.fallbackFileName"),
       sheets: [
         {
           name: sheetName.trim() || "Sheet1",
-          columns: columns.map((column) => column.trim() || "Cột"),
+          columns: columns.map((column) => column.trim() || t("studio.excel.columnFallback")),
           rows: rows.map((row) => columns.map((_, index) => toCell(String(row.cells[index] ?? "")))),
           totalsRow,
         },
       ],
     }),
-    [fileName, sheetName, columns, rows, totalsRow],
+    [fileName, sheetName, columns, rows, totalsRow, t],
   );
 
   const artifacts: Artifact[] = streaming?.artifacts?.length
@@ -134,12 +143,27 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
 
   function setColumnCount(next: number) {
     const width = Math.max(1, next);
-    setColumns((list) => {
-      const copy = [...list];
-      while (copy.length < width) copy.push(`Cột ${copy.length + 1}`);
-      return copy.slice(0, width);
-    });
+    setColumns((list) =>
+      Array.from({ length: width }, (_, index) => list[index] ?? t("studio.excel.defaultColumn", { index: index + 1 })),
+    );
     setRows((list) => list.map((row) => ({ ...row, cells: Array.from({ length: width }, (_, index) => row.cells[index] ?? "") })));
+  }
+
+  function removeColumn(index: number) {
+    setColumns((list) => list.filter((_, i) => i !== index));
+    setRows((list) => list.map((row) => ({ ...row, cells: row.cells.filter((_, i) => i !== index) })));
+  }
+
+  function removeRow(rowId: string) {
+    setRows((list) => list.filter((item) => item.id !== rowId));
+  }
+
+  function pickSample() {
+    const sample = sampleTable(t);
+    setFileName(t("studio.excel.sampleFileName"));
+    setSheetName(sample.name);
+    setColumns(sample.columns);
+    setRows(sample.rows.map((line) => ({ id: `r_${Math.random().toString(36).slice(2)}`, cells: [...line] })));
   }
 
   function setCell(rowId: string, index: number, value: string) {
@@ -149,72 +173,65 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
   function applyCsv() {
     const parsed = parseDelimited(csv);
     if (!parsed.header.length) {
-      push("Chưa có nội dung CSV để dán", "error");
+      push(t("studio.excel.csvEmpty"), "error");
       return;
     }
     setColumns(parsed.header);
     setRows(parsed.rows.length ? parsed.rows.map((line) => ({ id: `r_${Math.random().toString(36).slice(2)}`, cells: line })) : [newRow(parsed.header.length)]);
-    push(`Đã nạp ${parsed.rows.length} dòng từ CSV`, "success");
+    push(t("studio.excel.csvLoaded", { count: parsed.rows.length }), "success");
   }
 
   async function generate() {
     if (!payload.sheets[0].columns.length) {
-      push("Cần ít nhất một cột", "error");
+      push(t("studio.excel.needOneColumn"), "error");
       return;
     }
     if (!payload.sheets[0].rows.some((row) => row.some((cell) => cell !== ""))) {
-      push("Bảng chưa có dữ liệu — hãy nhập hoặc dán CSV", "error");
+      push(t("studio.excel.needData"), "error");
       return;
     }
     await send({
-      content: `Tạo file Excel từ dữ liệu JSON sau, giữ nguyên nội dung:\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``,
+      content: `${t("studio.excel.instruction")}\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``,
       skill: "excel",
     });
-    push("Đã gửi bảng dữ liệu — tệp .xlsx sẽ xuất hiện sau khi xử lý xong", "info");
+    push(t("studio.excel.sent"), "info");
   }
 
   return (
     <div className="studio">
       <div className="stack">
         <div className="card">
-          <div className="card-title mb-2">Thông tin bảng tính</div>
-          <Field label="Tên tệp (không cần .xlsx)">
+          <div className="card-title mb-2">{t("studio.excel.infoTitle")}</div>
+          <Field label={t("studio.excel.fileName")}>
             <input className="input" value={fileName} onChange={(event) => setFileName(event.target.value)} />
           </Field>
-          <Field label="Tên sheet">
+          <Field label={t("studio.excel.sheetName")}>
             <input className="input" value={sheetName} onChange={(event) => setSheetName(event.target.value)} />
           </Field>
-          <Switch checked={totalsRow} onChange={setTotalsRow} label="Thêm dòng TỔNG cho cột số" />
+          <Switch checked={totalsRow} onChange={setTotalsRow} label={t("studio.excel.totalsRow")} />
         </div>
 
         <div className="card">
           <div className="row gap-2 mb-2">
-            <div className="card-title grow">Cột ({columns.length})</div>
+            <div className="card-title grow">{t("studio.excel.columns", { count: columns.length })}</div>
             <button className="btn btn-sm" type="button" onClick={() => setColumnCount(columns.length + 1)}>
-              <Plus size={14} /> Thêm cột
+              <Plus size={14} /> {t("studio.excel.addColumn")}
             </button>
             <button className="btn btn-sm btn-danger" type="button" disabled={columns.length <= 1} onClick={() => setColumnCount(columns.length - 1)}>
-              <Trash2 size={14} /> Bớt cột
+              <Trash2 size={14} /> {t("studio.excel.removeColumn")}
             </button>
           </div>
           <div className="stack gap-2">
             {columns.map((column, index) => (
               <div className="row gap-2" key={`col-${index}`}>
                 <span className="badge">{index + 1}</span>
-                <input
-                  className="input grow"
-                  value={column}
-                  onChange={(event) => setColumns((list) => list.map((item, i) => (i === index ? event.target.value : item)))}
-                />
+                <input className="input grow" value={column} onChange={(event) => setColumns((list) => list.map((item, i) => (i === index ? event.target.value : item)))} />
                 <button
                   className="btn btn-sm btn-icon btn-danger"
                   type="button"
-                  title="Xoá cột"
+                  title={t("studio.excel.removeColumnTitle")}
                   disabled={columns.length <= 1}
-                  onClick={() => {
-                    setColumns((list) => list.filter((_, i) => i !== index));
-                    setRows((list) => list.map((row) => ({ ...row, cells: row.cells.filter((_, i) => i !== index) })));
-                  }}
+                  onClick={() => removeColumn(index)}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -225,39 +242,25 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
 
         <div className="card">
           <div className="row gap-2 mb-2">
-            <div className="card-title grow">Dán CSV</div>
-            <button
-              className="btn btn-sm"
-              type="button"
-              onClick={() => {
-                setFileName("bao-cao-doanh-thu");
-                setSheetName(SAMPLE.name);
-                setColumns(SAMPLE.columns);
-                setRows(SAMPLE.rows.map((line) => ({ id: `r_${Math.random().toString(36).slice(2)}`, cells: [...line] })));
-              }}
-            >
-              <Sparkles size={14} /> Nạp bảng mẫu
+            <div className="card-title grow">{t("studio.excel.pasteCsv")}</div>
+            <button className="btn btn-sm" type="button" onClick={pickSample}>
+              <Sparkles size={14} /> {t("studio.excel.loadSample")}
             </button>
           </div>
-          <textarea
-            className="textarea"
-            placeholder={"Hạng mục,Số lượng,Đơn giá\nÁo sơ mi,120,250000\nQuần âu,80,420000"}
-            value={csv}
-            onChange={(event) => setCsv(event.target.value)}
-          />
+          <textarea className="textarea" placeholder={t("studio.excel.csvPlaceholder")} value={csv} onChange={(event) => setCsv(event.target.value)} />
           <button className="btn btn-sm btn-block mt-2" type="button" onClick={applyCsv} disabled={!csv.trim()}>
-            Phân tích CSV vào bảng
+            {t("studio.excel.parseCsv")}
           </button>
-          <div className="hint mt-2">Hỗ trợ dấu phẩy, dấu chấm phẩy, tab và trường có dấu nháy kép.</div>
+          <div className="hint mt-2">{t("studio.excel.csvHint")}</div>
         </div>
       </div>
 
       <div className="stack">
         <div className="card">
           <div className="row gap-2 mb-2">
-            <div className="card-title grow">Bảng dữ liệu ({rows.length} dòng)</div>
+            <div className="card-title grow">{t("studio.excel.dataTitle", { count: rows.length })}</div>
             <button className="btn btn-sm" type="button" onClick={() => setRows((list) => [...list, newRow(columns.length)])}>
-              <Plus size={14} /> Thêm dòng
+              <Plus size={14} /> {t("studio.excel.addRow")}
             </button>
           </div>
           {columns.length ? (
@@ -265,9 +268,9 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
               <table className="table">
                 <thead>
                   <tr>
-                    <th className="row-index">#</th>
+                    <th className="row-index">{t("studio.data.rowIndex")}</th>
                     {columns.map((column, index) => (
-                      <th key={`head-${index}`}>{column || `Cột ${index + 1}`}</th>
+                      <th key={`head-${index}`}>{column || t("studio.excel.defaultColumn", { index: index + 1 })}</th>
                     ))}
                     <th />
                   </tr>
@@ -278,20 +281,16 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
                       <td className="row-index faint">{rowIndex + 1}</td>
                       {columns.map((_, index) => (
                         <td key={`${row.id}-${index}`}>
-                          <input
-                            className="input input-mono grid-input"
-                            value={String(row.cells[index] ?? "")}
-                            onChange={(event) => setCell(row.id, index, event.target.value)}
-                          />
+                          <input className="input input-mono grid-input" value={String(row.cells[index] ?? "")} onChange={(event) => setCell(row.id, index, event.target.value)} />
                         </td>
                       ))}
                       <td>
                         <button
                           className="btn btn-sm btn-icon btn-danger"
                           type="button"
-                          title="Xoá dòng"
+                          title={t("studio.excel.removeRow")}
                           disabled={rows.length <= 1}
-                          onClick={() => setRows((list) => list.filter((item) => item.id !== row.id))}
+                          onClick={() => removeRow(row.id)}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -302,33 +301,31 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
               </table>
             </div>
           ) : (
-            <div className="hint">Thêm ít nhất một cột để bắt đầu.</div>
+            <div className="hint">{t("studio.excel.needColumn")}</div>
           )}
-          <div className="hint mt-2">Dùng phím Tab để di chuyển giữa các ô. Ô chỉ chứa số sẽ được gửi dạng số.</div>
+          <div className="hint mt-2">{t("studio.excel.gridHint")}</div>
         </div>
 
         <div className="card">
           <div className="card-head">
             <div className="grow">
-              <div className="card-title">Tạo file .xlsx</div>
-              <div className="card-desc">Bảng dữ liệu được gửi kèm hướng dẫn tiếng Việt để AI tạo tệp Excel thật.</div>
+              <div className="card-title">{t("studio.excel.generateTitle")}</div>
+              <div className="card-desc">{t("studio.excel.generateDesc")}</div>
             </div>
           </div>
           <button className="btn btn-primary btn-block" type="button" onClick={generate} disabled={sending}>
-            {sending ? <Spinner label="Đang tạo bảng tính…" /> : <><FileDown size={16} /> Tạo file .xlsx</>}
+            {sending ? <Spinner label={t("studio.excel.generating")} /> : <><FileDown size={16} /> {t("studio.excel.generate")}</>}
           </button>
-          {sending && <div className="hint mt-2">Đang xử lý: AI đang dựng bảng và định dạng tệp, vui lòng chờ.</div>}
+          {sending && <div className="hint mt-2">{t("studio.excel.generatingHint")}</div>}
           {onOpenChat && (
-            <button className="btn btn-sm btn-ghost mt-2" type="button" onClick={onOpenChat}>
-              Mở chat
-            </button>
+            <button className="btn btn-sm btn-ghost mt-2" type="button" onClick={onOpenChat}>{t("studio.action.openChat")}</button>
           )}
-          <div className="hint mt-2">Tệp được tạo trong phiên chat; mở khung chat nếu bạn muốn xem hội thoại đầy đủ.</div>
+          <div className="hint mt-2">{t("studio.ppt.chatHint")}</div>
         </div>
 
         {excelFiles.length > 0 && (
           <div className="card">
-            <div className="card-title mb-2">Tệp đã tạo</div>
+            <div className="card-title mb-2">{t("studio.excel.files")}</div>
             {excelFiles.map((file) => (
               <div className="artifact-card" key={file.id}>
                 <div className="artifact-icon">XLS</div>
@@ -337,7 +334,7 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
                   <div className="tiny faint">{file.mime || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}</div>
                 </div>
                 <a className="btn btn-sm btn-primary" href={api.fileUrl(file.id)} download>
-                  <FileDown size={14} /> Tải về
+                  <FileDown size={14} /> {t("studio.action.download")}
                 </a>
               </div>
             ))}

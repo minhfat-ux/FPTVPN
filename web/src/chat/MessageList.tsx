@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { ArtifactGrid } from "./ArtifactCard";
 import { MessageItem, StreamingMessage } from "./MessageItem";
 import { Spinner } from "../components/ui";
+import { useI18n } from "../i18n";
 import type { Artifact, Message, StreamingTurn } from "../types";
 
 /** Static transcript plus the live turn and any artifacts produced in this session. */
@@ -13,6 +14,7 @@ export function MessageList({
   pendingArtifacts,
   scrollRef,
   onRegenerate,
+  onChoose,
   providerName,
 }: {
   messages: Message[];
@@ -22,8 +24,11 @@ export function MessageList({
   pendingArtifacts: Artifact[];
   scrollRef: RefObject<HTMLDivElement>;
   onRegenerate: () => void;
+  /** Sends a tapped option (e.g. which parts of a photo go into the Excel). */
+  onChoose?: (value: string) => void;
   providerName: (providerId: string | null | undefined) => string | undefined;
 }) {
+  const { t } = useI18n();
   const streamedIds = new Set(
     streaming ? [streaming.messageId, streaming.userMessage.id].filter((id): id is string => Boolean(id)) : [],
   );
@@ -44,7 +49,7 @@ export function MessageList({
       <div className="chat-inner">
         {loading && (
           <div className="row self-center">
-            <Spinner label="Đang tải hội thoại…" />
+            <Spinner label={t("chat.list.loading")} />
           </div>
         )}
 
@@ -56,6 +61,7 @@ export function MessageList({
             isLastAssistant={message.id === lastAssistantId}
             canRegenerate={!busy && message.id === lastAssistantId}
             onRegenerate={onRegenerate}
+            onChoose={onChoose}
           />
         ))}
 
@@ -68,7 +74,7 @@ export function MessageList({
 
         {sessionArtifacts.length > 0 && (
           <div className="session-artifacts">
-            <div className="tiny faint">Tệp tạo trong phiên này</div>
+            <div className="tiny faint">{t("chat.list.sessionFiles")}</div>
             <ArtifactGrid files={sessionArtifacts} />
           </div>
         )}

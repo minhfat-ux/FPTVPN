@@ -4,6 +4,7 @@ import { api, ApiError } from "../api/client";
 import type { AnalysisPayload, DataTable, FileRef } from "../types";
 import { Chart } from "../components/Chart";
 import { EmptyState, Spinner } from "../components/ui";
+import { useI18n } from "../i18n";
 import { useChat } from "../state/chat";
 import { useToast } from "../state/store";
 import { DataOpsStep } from "./DataOpsStep";
@@ -11,6 +12,7 @@ import { MAX_ROWS, buildPayload, newOperation, newestAnalysis, type OperationRow
 
 /** Phân tích dữ liệu: chọn tệp → mô tả thao tác → chạy → xem bảng, ghi chú và biểu đồ. */
 export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
+  const { t, n } = useI18n();
   const { send, sending, streaming, messages } = useChat();
   const { push } = useToast();
 
@@ -68,7 +70,7 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
 
   async function upload(file: File) {
     if (!/\.(csv|tsv|xlsx|xls|json)$/i.test(file.name)) {
-      push("Chỉ hỗ trợ tệp CSV, TSV, Excel hoặc JSON", "error");
+      push(t("studio.data.badType"), "error");
       return;
     }
     setBusy(true);
@@ -76,9 +78,9 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
       const uploaded = await api.upload(file);
       setFiles((list) => [uploaded.file, ...list.filter((item) => item.id !== uploaded.file.id)]);
       pickFile(uploaded.file);
-      push("Đã tải tệp dữ liệu lên", "success");
+      push(t("studio.data.uploaded"), "success");
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Tải tệp thất bại", "error");
+      push(err instanceof ApiError ? err.message : t("studio.data.uploadFailed"), "error");
     } finally {
       setBusy(false);
     }
@@ -101,7 +103,7 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
 
   async function analyze() {
     if (!selected) {
-      push("Hãy chọn tệp dữ liệu trước", "error");
+      push(t("studio.data.needFile"), "error");
       return;
     }
     const payload = {
@@ -110,11 +112,11 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
       operations: operations.map(buildPayload),
     };
     await send({
-      content: `Phân tích dữ liệu theo yêu cầu JSON sau, giữ nguyên cấu hình:\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``,
+      content: `${t("studio.data.instruction")}\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``,
       attachments: [selected],
       skill: "data",
     });
-    push("Đã gửi yêu cầu phân tích", "info");
+    push(t("studio.data.sent"), "info");
   }
 
   const display: AnalysisPayload | null = result ?? produced ?? live;
@@ -123,7 +125,7 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
     <div className="studio">
       <div className="stack">
         <div className="card">
-          <div className="card-title mb-2">Bước 1 — Chọn tệp dữ liệu</div>
+          <div className="card-title mb-2">{t("studio.data.step1")}</div>
           <div
             className={`dropzone ${over ? "over" : ""}`}
             onClick={() => document.getElementById("datalab-file")?.click()}
@@ -140,8 +142,8 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
             }}
           >
             <Upload size={18} />
-            <div className="bold mt-1">Kéo &amp; thả tệp vào đây</div>
-            <div className="tiny mt-1">CSV, TSV, Excel (.xlsx/.xls) hoặc JSON</div>
+            <div className="bold mt-1">{t("studio.data.dropTitle")}</div>
+            <div className="tiny mt-1">{t("studio.data.dropHint")}</div>
           </div>
           <input
             id="datalab-file"
@@ -156,15 +158,15 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
           />
           {busy && (
             <div className="mt-2">
-              <Spinner label="Đang tải tệp lên…" />
+              <Spinner label={t("studio.data.uploading")} />
             </div>
           )}
           {selected && (
             <div className="row gap-2 mt-3">
-              <span className="badge badge-ok">Đang chọn</span>
+              <span className="badge badge-ok">{t("studio.data.selected")}</span>
               <span className="grow truncate small">{selected.name}</span>
               <button className="btn btn-sm" type="button" onClick={() => document.getElementById("datalab-file")?.click()}>
-                Đổi tệp
+                {t("studio.data.changeFile")}
               </button>
             </div>
           )}
@@ -172,8 +174,8 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
 
         <div className="card">
           <div className="row gap-2 mb-2">
-            <div className="card-title grow">Tệp đã tải lên</div>
-            <button className="btn btn-sm btn-icon" type="button" title="Tải lại" onClick={() => void loadFiles()}>
+            <div className="card-title grow">{t("studio.data.uploadedFiles")}</div>
+            <button className="btn btn-sm btn-icon" type="button" title={t("studio.data.reload")} onClick={() => void loadFiles()}>
               <RefreshCw size={14} />
             </button>
           </div>
@@ -192,7 +194,7 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
               ))}
             </div>
           ) : (
-            <div className="hint">Chưa có tệp dữ liệu nào. Hãy tải lên ở ô phía trên.</div>
+            <div className="hint">{t("studio.data.noFiles")}</div>
           )}
         </div>
       </div>
@@ -210,40 +212,40 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
         <div className="card">
           <div className="card-head">
             <div className="grow">
-              <div className="card-title">Bước 3 — Phân tích</div>
+              <div className="card-title">{t("studio.data.step3")}</div>
               <div className="card-desc">
                 {selected ? (
                   <>
-                    Tệp: <span className="mono">{selected.name}</span>
+                    {t("studio.data.fileLabel")} <span className="mono">{selected.name}</span>
                   </>
                 ) : (
-                  "Chưa chọn tệp dữ liệu."
+                  t("studio.data.noFilePicked")
                 )}
               </div>
             </div>
           </div>
           <button className="btn btn-primary btn-block" type="button" onClick={analyze} disabled={sending || !selected}>
-            {sending ? <Spinner label="Đang phân tích…" /> : <><BarChart3 size={16} /> Phân tích</>}
+            {sending ? <Spinner label={t("studio.data.analyzing")} /> : <><BarChart3 size={16} /> {t("studio.data.analyze")}</>}
           </button>
           {onOpenChat && (
             <button className="btn btn-sm btn-ghost mt-2" type="button" onClick={onOpenChat}>
-              Mở chat
+              {t("studio.action.openChat")}
             </button>
           )}
         </div>
 
         <div className="card">
           <div className="row gap-2 mb-2">
-            <div className="card-title grow">Bước 4 — Kết quả</div>
+            <div className="card-title grow">{t("studio.data.step4")}</div>
             {display && (
               <span className="badge badge-accent">
-                {display.rowCount} dòng × {display.columnCount} cột
+                {t("studio.data.shape", { rows: n(display.rowCount), cols: n(display.columnCount) })}
               </span>
             )}
           </div>
 
           {!display ? (
-            <EmptyState icon="📈" title="Chưa có kết quả" hint="Chọn tệp, thêm thao tác rồi bấm “Phân tích”." />
+            <EmptyState icon="📈" title={t("studio.data.emptyTitle")} hint={t("studio.data.emptyHint")} />
           ) : (
             <div className="stack">
               {display.notes.length > 0 && (
@@ -276,7 +278,7 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
                                 {row[columnIndex] === null || row[columnIndex] === undefined
                                   ? ""
                                   : typeof row[columnIndex] === "number"
-                                    ? (row[columnIndex] as number).toLocaleString("vi-VN")
+                                    ? n(row[columnIndex] as number)
                                     : String(row[columnIndex])}
                               </td>
                             ))}
@@ -285,14 +287,16 @@ export function DataLab({ onOpenChat }: { onOpenChat?: () => void }) {
                       </tbody>
                     </table>
                   </div>
-                  {table.rows.length > MAX_ROWS && <div className="hint mt-1">…và {table.rows.length - MAX_ROWS} dòng nữa</div>}
+                  {table.rows.length > MAX_ROWS && (
+                    <div className="hint mt-1">{t("studio.data.moreRows", { count: n(table.rows.length - MAX_ROWS) })}</div>
+                  )}
                   {table.note && <div className="hint mt-1">{table.note}</div>}
                 </div>
               ))}
 
               {display.chart && <Chart spec={display.chart} />}
 
-              {display.truncated && <div className="hint">Dữ liệu đã được rút gọn khi đọc tệp.</div>}
+              {display.truncated && <div className="hint">{t("studio.data.truncated")}</div>}
             </div>
           )}
         </div>

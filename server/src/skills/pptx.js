@@ -1,6 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import { saveBuffer, publicArtifact } from "../files.js";
 import { badRequest } from "../util.js";
+import { isConfirmed, planChoices, planPayload, wantsCompact } from "./confirm.js";
 
 const THEMES = {
   flow: { bg: "FFFFFF", accent: "1D4ED8", title: "0F172A", body: "334155", subtle: "F1F5F9" },
@@ -28,12 +29,36 @@ function normalizeSlides(input) {
   });
 }
 
-/** Builds a .pptx deck and stores it as a downloadable artifact. */
+/**
+ * Builds a .pptx deck and stores it as a downloadable artifact.
+ *
+ * The deck is *proposed* before anything is written: a small model cheerfully turns
+ * a five-line source into twenty padded slides. `ctx.userMessage` carries the
+ * user's answer, so the flow is deterministic instead of trusting the model.
+ */
 export async function generatePptx(args, ctx) {
   const theme = THEMES[args?.theme] ?? THEMES.flow;
   const slides = normalizeSlides(args?.slides);
   const deckTitle = String(args?.title ?? "Bộ slide").slice(0, 200);
   const subtitle = args?.subtitle ? String(args.subtitle).slice(0, 300) : null;
+
+  const userText = ctx?.userMessage ?? "";
+  const compact = wantsCompact(userText);
+  if (!isConfirmed(userText)) {
+    return planPayload({
+      kind: "pptx",
+      title: `"${deckTitle}" — ${slides.length} trang`,
+      detail: `${slides.length} trang`,
+      plan: slides.map((slide, index) => `${index + 1}. ${slide.title} (${slide.bullets.length} gạch đầu dòng)`),
+      notes: args?.sourceSummary
+        ? [`Nguồn nội dung: ${String(args.sourceSummary).slice(0, 300)}`]
+        : ["Nguồn nội dung: yêu cầu của người dùng trong hội thoại"],
+      choices: planChoices({ kind: "pptx", detail: `${slides.length} trang` }),
+    });
+  }
+
+  // "Gọn hơn": title slide + the main content slides, no padding.
+  const finalSlides = compact && slides.length > 4 ? [slides[0], ...slides.slice(1, 7)] : slides;
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_16x9";
@@ -41,7 +66,7 @@ export async function generatePptx(args, ctx) {
   pptx.company = "MeetFlow AI";
   pptx.title = deckTitle;
 
-  for (const [index, slide] of slides.entries()) {
+  for (const [index, slide] of finalSlides.entries()) {
     const s = pptx.addSlide();
     s.background = { color: theme.bg };
 
@@ -97,7 +122,7 @@ export async function generatePptx(args, ctx) {
         );
       }
       s.addShape(pptx.ShapeType.rect, { x: 0, y: 5.35, w: 10, h: 0.28, fill: { color: theme.subtle } });
-      s.addText(`${deckTitle}  •  ${index + 1}/${slides.length}`, {
+      s.addText(`${deckTitle}  •  ${index + 1}/${finalSlides.length}`, {
         x: 0.6,
         y: 5.36,
         w: 8.8,
@@ -119,15 +144,15 @@ export async function generatePptx(args, ctx) {
     buffer,
     kind: "pptx",
     origin: "artifact",
-    meta: { slideCount: slides.length, theme: args?.theme ?? "flow", tool: "generate_pptx" },
+    meta: { slideCount: finalSlides.length, theme: args?.theme ?? "flow", tool: "generate_pptx" },
   });
   const artifact = publicArtifact(row);
   return {
     ok: true,
-    summary: `Đã tạo ${slides.length} slide: ${artifact.name}`,
-    data: { slideCount: slides.length, title: deckTitle },
+    summary: `Đã tạo ${finalSlides.length} slide: ${artifact.name}`,
+    data: { slideCount: finalSlides.length, title: deckTitle },
     artifacts: [artifact],
-    modelText: `Đã tạo tệp PowerPoint "${artifact.name}" gồm ${slides.length} slide (id: ${artifact.id}).`,
+    modelText: `Đã tạo tệp PowerPoint "${artifact.name}" gồm ${finalSlides.length} slide (id: ${artifact.id}).`,
   };
 }
 

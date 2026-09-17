@@ -2,7 +2,15 @@ import crypto from "node:crypto";
 import { count, getById, insert, one, update, all, remove } from "./db.js";
 import { hashPassword, verifyPassword, signToken, verifyToken } from "./crypto.js";
 import { config } from "./config.js";
+import { grantSignupCredits } from "./credits.js";
 import { sendLoginCode, loginLink, mailerStatus } from "./mailer.js";
+import {
+  SESSION_TTL_SEC,
+  createSession,
+  isSessionActive,
+  revokeAllSessions,
+  touchSession,
+} from "./sessions.js";
 import { badRequest, forbidden, unauthorized, RateLimiter, nowIso, ApiError } from "./util.js";
 
 export const authLimiter = new RateLimiter({ limit: 20, windowMs: 60 * 1000 });
@@ -56,6 +64,8 @@ export function createUser({ email, password, name = null, role = null }) {
     password_hash: hashPassword(secret),
     role: role ?? (isFirst ? "admin" : "user"),
   });
+  // Optional welcome credit (app_settings.signupCredits, 0 by default).
+  grantSignupCredits(row.id);
   return row;
 }
 
@@ -67,8 +77,21 @@ export function authenticate({ email, password }) {
   return row;
 }
 
-export function issueToken(row) {
-  return signToken({ sub: row.id, email: row.email, role: row.role, tv: row.token_version ?? 1 });
+/**
+ * Signs a JWT. Passing `sessionId` ties the token to one device, so several
+ * devices can be signed in at once (see `sessions.js`).
+ */
+export function issueToken(row, { sessionId = null } = {}) {
+  return signToken(
+    { sub: row.id, email: row.email, role: row.role, tv: row.token_version ?? 1, ...(sessionId ? { sid: sessionId } : {}) },
+    { ttlSec: SESSION_TTL_SEC },
+  );
+}
+
+/** Opens a session for this device and returns both the row and its token. */
+export function startSession({ user, ip = null, userAgent = null }) {
+  const session = createSession({ userId: user.id, ip, userAgent });
+  return { session, token: issueToken(user, { sessionId: session.id }) };
 }
 
 export function changePassword(userId, { currentPassword, newPassword }) {
@@ -78,6 +101,9 @@ export function changePassword(userId, { currentPassword, newPassword }) {
     throw badRequest("Mật khẩu hiện tại không đúng");
   }
   const secret = validatePassword(newPassword);
+  // Bumping `token_version` kills every token; revoking the sessions as well
+  // keeps the device list honest instead of showing rows that can no longer work.
+  revokeAllSessions(userId, "password_changed");
   return update("users", userId, {
     password_hash: hashPassword(secret),
     token_version: (row.token_version ?? 1) + 1,
@@ -108,6 +134,13 @@ export function currentUser(req) {
   if (!row) return null;
   // Password changes bump token_version, invalidating older tokens.
   if (payload.tv !== undefined && Number(payload.tv) !== Number(row.token_version ?? 1)) return null;
+  if (payload.sid) {
+    // Per-device session: revoking one device cannot touch the others.
+    if (!isSessionActive(payload.sid, row.id)) return null;
+    touchSession(payload.sid);
+    req.sessionId = payload.sid;
+  }
+  // No `sid` = a token minted before sessions existed; accepted until it expires.
   return row;
 }
 

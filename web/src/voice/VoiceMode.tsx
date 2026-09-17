@@ -1,28 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Ear, Loader2, Mic, MicOff, PhoneOff, Volume2, VolumeX } from "lucide-react";
 import { useChat } from "../state/chat";
+import { useI18n } from "../i18n";
 import { pickVietnameseVoice, useVoiceConversation, isSpeechRecognitionSupported } from ".";
 import { useVoice } from "./VoiceProvider";
 import type { Message, VoiceState } from "../types";
 
-const STATE_LABELS: Record<VoiceState, string> = {
-  idle: "Đã dừng",
-  listening: "Đang nghe…",
-  thinking: "Đang suy nghĩ…",
-  speaking: "Đang nói…",
-  error: "Lỗi",
+/** i18n keys behind each voice-state label and hint. */
+const STATE_LABEL_KEYS: Record<VoiceState, string> = {
+  idle: "voice.mode.stateIdle",
+  listening: "voice.mode.stateListening",
+  thinking: "voice.mode.stateThinking",
+  speaking: "voice.mode.stateSpeaking",
+  error: "voice.mode.stateError",
 };
 
-const STATE_HINTS: Record<VoiceState, string> = {
-  idle: "Bấm micro để tiếp tục trò chuyện.",
-  listening: "Anh/chị nói tự nhiên, FlowGpt sẽ trả lời ngay khi nghe xong.",
-  thinking: "FlowGpt đang xử lý câu hỏi của anh/chị.",
-  speaking: "Nói xen vào để ngắt lời và hỏi tiếp.",
-  error: "Kiểm tra micro hoặc cấu hình trong Cài đặt → Giọng nói.",
+const STATE_HINT_KEYS: Record<VoiceState, string> = {
+  idle: "voice.mode.hintIdle",
+  listening: "voice.mode.hintListening",
+  thinking: "voice.mode.hintThinking",
+  speaking: "voice.mode.hintSpeaking",
+  error: "voice.mode.hintError",
 };
 
 /** Full-screen "talk to the assistant" mode, opened from the composer. */
 export function VoiceMode() {
+  const { t } = useI18n();
   const { config, sttMode, ttsMode, close, reload, vietnameseVoices, speak } = useVoice();
   const { messages, streaming, sending, send, conversation } = useChat();
 
@@ -125,23 +128,44 @@ export function VoiceMode() {
   }, [turns, interim]);
 
   const browserSttMissing = sttMode === "browser" && !isSpeechRecognitionSupported();
-  const voiceName = ttsMode === "browser" ? browserVoiceName(vietnameseVoices) : config.tts.voice || "mặc định";
-  const engineLabel = `Nhận dạng: ${sttMode === "browser" ? "trình duyệt" : providerLabel(config.stt.providerName)} · Giọng đọc: ${voiceName}`;
+  const voiceName =
+    ttsMode === "browser"
+      ? browserVoiceName(vietnameseVoices, t("voice.engine.browserDefaultVoice"))
+      : config.tts.voice || t("voice.engine.defaultVoice");
+  const engineLabel = t("voice.engine.label", {
+    kind:
+      sttMode === "browser"
+        ? t("voice.engine.browser")
+        : providerLabel(config.stt.providerName, t("voice.engine.providerFallback")),
+    voice: voiceName,
+  });
+  // The browser warning highlights the "Settings → Voice" path in bold.
+  const settingsLink = t("voice.browser.settingsLink");
+  const warningParts = t("voice.browser.unsupportedBody").split(settingsLink);
 
   return (
-    <div className="voice-mode" role="dialog" aria-modal="true" aria-label="Chế độ giọng nói">
+    <div className="voice-mode" role="dialog" aria-modal="true" aria-label={t("voice.mode.dialogLabel")}>
       <div className="voice-mode-top">
         <div className="row gap-2">
           <span className={`badge ${state === "listening" ? "badge-accent" : "badge-ok"}`}>
             {state === "listening" ? <Ear size={13} /> : <Volume2 size={13} />}
-            {state === "thinking" ? "Đang xử lý" : state === "speaking" ? "Đang đọc" : "Trực tuyến"}
+            {state === "thinking"
+              ? t("voice.mode.badgeProcessing")
+              : state === "speaking"
+                ? t("voice.mode.badgeReading")
+                : t("voice.mode.badgeOnline")}
           </span>
           <span className="tiny faint" data-engine={engine}>
             {engineLabel}
           </span>
         </div>
-        <button className="btn btn-sm btn-ghost" type="button" onClick={close} title="Thoát chế độ giọng nói (Esc)">
-          <PhoneOff size={15} /> Thoát
+        <button
+          className="btn btn-sm btn-ghost"
+          type="button"
+          onClick={close}
+          title={t("voice.mode.exitTitle")}
+        >
+          <PhoneOff size={15} /> {t("voice.mode.exit")}
         </button>
       </div>
 
@@ -160,21 +184,23 @@ export function VoiceMode() {
           <span className="voice-orb-ring" />
         </div>
 
-        <div className="voice-state">{muted ? "Đã tắt micro" : STATE_LABELS[state]}</div>
-        <div className="voice-hint">{muted ? "Bấm micro hoặc phím Space để nói tiếp." : STATE_HINTS[state]}</div>
+        <div className="voice-state">{muted ? t("voice.mode.mutedState") : t(STATE_LABEL_KEYS[state])}</div>
+        <div className="voice-hint">{muted ? t("voice.mode.mutedHint") : t(STATE_HINT_KEYS[state])}</div>
 
         {interim && <div className="voice-interim">{interim}</div>}
 
         <div className="voice-turns" ref={turnsRef}>
           {turns.length === 0 && !interim && (
             <div className="voice-turn">
-              <span className="voice-turn-role">Gợi ý</span>
-              <span className="voice-turn-text">Hãy nói: “Xin chào, bạn giúp được gì cho tôi?”</span>
+              <span className="voice-turn-role">{t("voice.mode.suggestionRole")}</span>
+              <span className="voice-turn-text">{t("voice.mode.suggestionText")}</span>
             </div>
           )}
           {turns.map((turn, index) => (
             <div className="voice-turn" key={`${turn.at}-${index}`}>
-              <span className="voice-turn-role">{turn.role === "user" ? "Bạn" : "FlowGpt"}</span>
+              <span className="voice-turn-role">
+                {turn.role === "user" ? t("voice.mode.roleUser") : t("voice.mode.roleAssistant")}
+              </span>
               <span className="voice-turn-text">{turn.text}</span>
             </div>
           ))}
@@ -186,31 +212,32 @@ export function VoiceMode() {
           className={`btn ${muted ? "btn-danger" : "btn-primary"}`}
           type="button"
           onClick={toggleMute}
-          title={muted ? "Bật micro (Space)" : "Tắt micro (Space)"}
+          title={t(muted ? "voice.mode.unmuteTitle" : "voice.mode.muteTitle")}
         >
           {muted ? <MicOff size={16} /> : <Mic size={16} />}
-          {muted ? "Bật micro" : "Tắt micro"}
+          {t(muted ? "voice.mode.unmute" : "voice.mode.mute")}
         </button>
 
         {state === "speaking" && (
-          <button className="btn" type="button" onClick={stop} title="Dừng đọc câu trả lời">
-            <VolumeX size={16} /> Dừng đọc
+          <button className="btn" type="button" onClick={stop} title={t("voice.mode.stopReadingTitle")}>
+            <VolumeX size={16} /> {t("voice.mode.stopReading")}
           </button>
         )}
 
         {state === "thinking" && (
           <span className="row gap-2 muted small">
-            <Loader2 size={15} className="spin" /> Đang chờ câu trả lời…
+            <Loader2 size={15} className="spin" /> {t("voice.mode.waiting")}
           </span>
         )}
       </div>
 
       {browserSttMissing && (
         <div className="voice-warning">
-          <strong>Trình duyệt này không hỗ trợ nhận dạng giọng nói.</strong>
+          <strong>{t("voice.browser.unsupportedTitle")}</strong>
           <div className="small mt-1">
-            Anh/chị hãy dùng Microsoft Edge hoặc Google Chrome, hoặc vào <b>Cài đặt → Giọng nói</b> để chọn nhà
-            cung cấp STT miễn phí (Gemini, Groq) — khi đó giọng nói vẫn dùng được trên mọi trình duyệt hiện đại.
+            {warningParts.flatMap((part, index) =>
+              index === 0 ? [part] : [<b key={index}>{settingsLink}</b>, part],
+            )}
           </div>
         </div>
       )}
@@ -218,14 +245,14 @@ export function VoiceMode() {
   );
 }
 
-function providerLabel(name: string | null): string {
+function providerLabel(name: string | null, fallback: string): string {
   const label = (name ?? "").trim();
-  return label || "nhà cung cấp";
+  return label || fallback;
 }
 
-function browserVoiceName(voices: SpeechSynthesisVoice[]): string {
+function browserVoiceName(voices: SpeechSynthesisVoice[], fallback: string): string {
   const picked = pickVietnameseVoice(voices);
-  return picked ? `${picked.name} (${picked.lang})` : "giọng mặc định của trình duyệt";
+  return picked ? `${picked.name} (${picked.lang})` : fallback;
 }
 
 function lastAssistant(messages: Message[]): Message | null {

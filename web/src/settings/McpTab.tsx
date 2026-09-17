@@ -3,19 +3,21 @@ import { Plus, RefreshCw, RotateCw, Pencil, Trash2, Plug, Info } from "lucide-re
 import { api, ApiError } from "../api/client";
 import { useToast } from "../state/store";
 import { ConfirmDialog, CopyButton, EmptyState, Spinner, Switch } from "../components/ui";
+import { useI18n } from "../i18n";
 import { McpModal } from "./McpModal";
 import type { McpServer, QualifiedTool } from "../types";
 
 const STATUS: Record<McpServer["status"], { label: string; badge: string }> = {
-  connected: { label: "Đã kết nối", badge: "badge-ok" },
-  error: { label: "Lỗi", badge: "badge-err" },
-  disabled: { label: "Đang tắt", badge: "badge-warn" },
-  unknown: { label: "Chưa kiểm tra", badge: "badge-warn" },
+  connected: { label: "settings.mcp.statusConnected", badge: "badge-ok" },
+  error: { label: "settings.mcp.statusError", badge: "badge-err" },
+  disabled: { label: "settings.mcp.statusDisabled", badge: "badge-warn" },
+  unknown: { label: "settings.mcp.statusUnknown", badge: "badge-warn" },
 };
 
 /** Settings → MCP server. */
 export function McpTab() {
   const { push } = useToast();
+  const { t, n } = useI18n();
   const [servers, setServers] = useState<McpServer[]>([]);
   const [tools, setTools] = useState<QualifiedTool[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,11 +36,11 @@ export function McpTab() {
       setServers(serverResult.items);
       setTools(toolResult.items);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không tải được MCP server", "error");
+      push(err instanceof ApiError ? err.message : t("settings.mcp.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [push]);
+  }, [push, t]);
 
   useEffect(() => {
     load();
@@ -52,7 +54,7 @@ export function McpTab() {
       const result = await api.updateMcpServer(server.id, { enabled });
       patchServer(result.server);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không cập nhật được MCP server", "error");
+      push(err instanceof ApiError ? err.message : t("settings.mcp.updateFailed"), "error");
     }
   };
 
@@ -60,10 +62,13 @@ export function McpTab() {
     setBusyId(server.id);
     try {
       const result = await api.testMcpServer(server.id);
-      push(`${server.name}: ${result.message}`, result.ok ? "success" : "error");
+      push(
+        t("settings.mcp.testResult", { name: server.name, message: result.message }),
+        result.ok ? "success" : "error",
+      );
       await load();
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Kiểm tra MCP thất bại", "error");
+      push(err instanceof ApiError ? err.message : t("settings.mcp.testFailed"), "error");
     } finally {
       setBusyId(null);
     }
@@ -74,10 +79,13 @@ export function McpTab() {
     try {
       const result = await api.refreshMcpServer(server.id);
       if (result.server) patchServer(result.server);
-      push(`Đã nạp lại ${server.name} — ${result.server?.toolCount ?? 0} tool`, "success");
+      push(
+        t("settings.mcp.refreshed", { name: server.name, count: n(result.server?.toolCount ?? 0) }),
+        "success",
+      );
       setTools((await api.mcpTools()).items);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Nạp lại MCP thất bại", "error");
+      push(err instanceof ApiError ? err.message : t("settings.mcp.refreshFailed"), "error");
     } finally {
       setBusyId(null);
     }
@@ -89,10 +97,10 @@ export function McpTab() {
     try {
       await api.deleteMcpServer(removing.id);
       setServers((current) => current.filter((item) => item.id !== removing.id));
-      push(`Đã xoá MCP server ${removing.name}`, "success");
+      push(t("settings.mcp.removed", { name: removing.name }), "success");
       setRemoving(null);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không xoá được MCP server", "error");
+      push(err instanceof ApiError ? err.message : t("settings.mcp.removeFailed"), "error");
     } finally {
       setDeleting(false);
     }
@@ -102,20 +110,16 @@ export function McpTab() {
     <div className="stack gap-3">
       <div className="banner banner-compact">
         <Info size={18} />
-        <div className="grow small">
-          MCP server được cấu hình ở đây ngay trên backend (không cần chạy gì ở máy người dùng). Mỗi khi bật và kết nối
-          thành công, toàn bộ tool của server sẽ được đưa cho model sử dụng trong hội thoại — model tự quyết định gọi
-          tool nào khi cần.
-        </div>
+        <div className="grow small">{t("settings.mcp.intro")}</div>
       </div>
 
       <div className="row">
         <div className="grow">
-          <div className="card-title">MCP server</div>
-          <div className="card-desc">stdio (chạy lệnh cục bộ) hoặc http/sse (kết nối tới một MCP endpoint từ xa).</div>
+          <div className="card-title">{t("settings.mcp.cardTitle")}</div>
+          <div className="card-desc">{t("settings.mcp.cardDesc")}</div>
         </div>
         <button className="btn btn-sm" type="button" onClick={load} disabled={loading}>
-          <RefreshCw size={14} /> Tải lại
+          <RefreshCw size={14} /> {t("common.reload")}
         </button>
         <button
           className="btn btn-primary btn-sm"
@@ -125,17 +129,17 @@ export function McpTab() {
             setModalOpen(true);
           }}
         >
-          <Plus size={15} /> Thêm MCP server
+          <Plus size={15} /> {t("settings.mcp.add")}
         </button>
       </div>
 
-      {loading && <Spinner label="Đang tải MCP server…" />}
+      {loading && <Spinner label={t("settings.mcp.loading")} />}
 
       {!loading && !servers.length && (
         <EmptyState
           icon="🧰"
-          title="Chưa có MCP server nào"
-          hint="Thêm server đầu tiên (ví dụ filesystem qua npx, hoặc một HTTP MCP endpoint) để cấp thêm công cụ cho model."
+          title={t("settings.mcp.emptyTitle")}
+          hint={t("settings.mcp.emptyHint")}
         />
       )}
 
@@ -160,22 +164,20 @@ export function McpTab() {
       <div className="card">
         <div className="card-head">
           <div className="grow">
-            <div className="card-title">Công cụ đang khả dụng cho model</div>
-            <div className="card-desc">
-              Đây là danh sách tool thực tế mà model nhìn thấy (tool có sẵn của hệ thống + tool từ các MCP server đang bật).
-            </div>
+            <div className="card-title">{t("settings.mcp.toolsTitle")}</div>
+            <div className="card-desc">{t("settings.mcp.toolsDesc")}</div>
           </div>
-          <span className="badge badge-accent">{tools.length} tool</span>
+          <span className="badge badge-accent">{t("settings.mcp.toolCount", { count: n(tools.length) })}</span>
         </div>
         {!tools.length ? (
-          <div className="muted small">Chưa có tool nào khả dụng — hãy bật một MCP server và bấm “Nạp lại”.</div>
+          <div className="muted small">{t("settings.mcp.toolsEmpty")}</div>
         ) : (
           <div className="tool-list">
             {tools.map((tool) => (
               <div className="tool-item" key={tool.qualifiedName}>
                 <div className="row row-wrap gap-2">
                   <span className="mono bold">{tool.qualifiedName}</span>
-                  <CopyButton value={tool.qualifiedName} label="Sao chép tên tool" />
+                  <CopyButton value={tool.qualifiedName} label={t("settings.mcp.copyToolName")} />
                   <span className="badge">{tool.serverName}</span>
                 </div>
                 {tool.description && <div className="small muted mt-1">{tool.description}</div>}
@@ -198,8 +200,8 @@ export function McpTab() {
 
       <ConfirmDialog
         open={Boolean(removing)}
-        title="Xoá MCP server"
-        message={`Xoá "${removing?.name ?? ""}"? Các tool của server này sẽ không còn khả dụng cho model.`}
+        title={t("settings.mcp.deleteTitle")}
+        message={t("settings.mcp.deleteMessage", { name: removing?.name ?? "" })}
         busy={deleting}
         onCancel={() => setRemoving(null)}
         onConfirm={remove}
@@ -225,6 +227,7 @@ function ServerCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { t, n } = useI18n();
   const status = STATUS[server.status] ?? STATUS.unknown;
 
   return (
@@ -234,12 +237,12 @@ function ServerCard({
           <div className="row row-wrap gap-2">
             <span className="entity-name">{server.name}</span>
             <span className="badge">{server.transport}</span>
-            <span className={`badge ${status.badge}`}>{status.label}</span>
+            <span className={`badge ${status.badge}`}>{t(status.label)}</span>
           </div>
           <div className="meta-line">
-            <span className="meta-pill">{server.toolCount} tool</span>
-            <span className="meta-pill">timeout {server.timeoutMs}ms</span>
-            {server.autoApprove && <span className="meta-pill">tự động duyệt</span>}
+            <span className="meta-pill">{t("settings.mcp.toolCount", { count: n(server.toolCount) })}</span>
+            <span className="meta-pill">{t("settings.mcp.timeout", { ms: n(server.timeoutMs) })}</span>
+            {server.autoApprove && <span className="meta-pill">{t("settings.mcp.autoApprove")}</span>}
             <span className="truncate mono">
               {server.transport === "stdio" ? `${server.command ?? ""} ${server.args.join(" ")}` : server.url ?? ""}
             </span>
@@ -252,19 +255,19 @@ function ServerCard({
         </div>
 
         <div className="stack gap-2" style={{ alignItems: "flex-end" }}>
-          <Switch checked={server.enabled} onChange={(value) => onToggle(server, value)} label="Bật" />
+          <Switch checked={server.enabled} onChange={(value) => onToggle(server, value)} label={t("common.on")} />
           <div className="row row-wrap gap-2">
             <button className="btn btn-sm" type="button" onClick={() => onTest(server)} disabled={busy}>
-              <Plug size={14} /> Kiểm tra
+              <Plug size={14} /> {t("settings.mcp.test")}
             </button>
             <button className="btn btn-sm" type="button" onClick={() => onRefresh(server)} disabled={busy}>
-              <RotateCw size={14} /> Nạp lại
+              <RotateCw size={14} /> {t("settings.mcp.refresh")}
             </button>
             <button className="btn btn-sm" type="button" onClick={onEdit}>
-              <Pencil size={14} /> Sửa
+              <Pencil size={14} /> {t("common.edit")}
             </button>
             <button className="btn btn-sm btn-danger" type="button" onClick={onDelete}>
-              <Trash2 size={14} /> Xoá
+              <Trash2 size={14} /> {t("common.delete")}
             </button>
           </div>
         </div>
@@ -272,14 +275,14 @@ function ServerCard({
 
       {server.tools.length > 0 && (
         <div className="mt-3">
-          <div className="hint mb-2">Tool của server ({server.tools.length}):</div>
+          <div className="hint mb-2">{t("settings.mcp.serverTools", { count: n(server.tools.length) })}</div>
           <div className="tool-list">
             {server.tools.map((tool) => (
               <div className="tool-item" key={tool.name}>
                 <div className="mono bold">{tool.name}</div>
                 {tool.description && <div className="small muted mt-1">{tool.description}</div>}
                 <details className="tool-details">
-                  <summary>Xem inputSchema</summary>
+                  <summary>{t("settings.mcp.viewSchema")}</summary>
                   <pre className="mono tool-schema">{JSON.stringify(tool.inputSchema ?? {}, null, 2)}</pre>
                 </details>
               </div>

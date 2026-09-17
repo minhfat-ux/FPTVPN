@@ -1,9 +1,16 @@
 import type {
   AnalysisPayload,
   AppSettings,
+  AuthSession,
   ChatEvent,
   Conversation,
+  CreditLedgerEntry,
+  CreditRequest,
+  CreditSummary,
   FileRef,
+  HubListing,
+  HubPurchaseResult,
+  HubSkill,
   McpServer,
   Message,
   Meta,
@@ -13,6 +20,8 @@ import type {
   QualifiedTool,
   SkillDescriptor,
   SkillCatalogResponse,
+  TopupListing,
+  TopupOrder,
   User,
   VoiceConfigResponse,
   VoiceTranscript,
@@ -112,7 +121,14 @@ export const api = {
   verifyLoginToken: (email: string, token: string) =>
     request<{ user: User; token: string }>("POST", "/auth/verify-token", { email, token }),
   logout: () => request<{ ok: boolean }>("POST", "/auth/logout", {}),
-  me: () => request<{ user: User }>("GET", "/auth/me"),
+  me: () =>
+    request<{ user: User; sessionId?: string | null; lastConversationId?: string | null }>("GET", "/auth/me"),
+  /** Signed-in devices for this account (several can be active at once). */
+  sessions: () => request<{ items: AuthSession[] }>("GET", "/auth/sessions"),
+  revokeSession: (id: string) =>
+    request<{ ok: boolean; current: boolean; revoked: boolean }>("DELETE", `/auth/sessions/${id}`),
+  revokeOtherSessions: () =>
+    request<{ ok: boolean; revoked: number; items: AuthSession[] }>("POST", "/auth/sessions/revoke-others", {}),
   updateMe: (body: { name?: string; currentPassword?: string; password?: string }) =>
     request<{ user: User }>("PATCH", "/auth/me", body),
   testMailer: (body: { to: string }) =>
@@ -186,8 +202,16 @@ export const api = {
     request<{ items: Conversation[] }>("GET", `/conversations/search?q=${encodeURIComponent(q)}`),
   createConversation: (body: Partial<Pick<Conversation, "title" | "skill" | "providerId" | "model">>) =>
     request<{ conversation: Conversation }>("POST", "/conversations", body),
-  getConversation: (id: string) =>
-    request<{ conversation: Conversation; messages: Message[] }>("GET", `/conversations/${id}`),
+  getConversation: (id: string, since?: string | null) =>
+    request<{ conversation: Conversation; messages: Message[]; partial?: boolean }>(
+      "GET",
+      `/conversations/${id}${since ? `?since=${encodeURIComponent(since)}` : ""}`,
+    ),
+  /** Remembers this thread for the whole account, so another device resumes it. */
+  activateConversation: (id: string) =>
+    request<{ ok: boolean; lastConversationId: string | null }>("POST", `/conversations/${id}/active`, {}),
+  clearActiveConversation: () =>
+    request<{ ok: boolean; lastConversationId: null }>("DELETE", "/conversations/active"),
   updateConversation: (id: string, body: Partial<Conversation>) =>
     request<{ conversation: Conversation }>("PATCH", `/conversations/${id}`, body),
   deleteConversation: (id: string) => request<{ ok: boolean }>("DELETE", `/conversations/${id}`),
@@ -270,7 +294,62 @@ export const api = {
   mcpTools: () => request<{ items: QualifiedTool[] }>("GET", "/mcp/tools"),
 
   adminUsers: () =>
-    request<{ items: (User & { conversationCount: number })[] }>("GET", "/admin/users"),
+    request<{ items: (User & { conversationCount: number; creditBalance: number })[] }>("GET", "/admin/users"),
+
+  // ---- credits
+  credits: () => request<{ credits: CreditSummary }>("GET", "/credits"),
+  creditLedger: (limit = 30) =>
+    request<{ items: CreditLedgerEntry[]; balance: number; credits: CreditSummary }>(
+      "GET",
+      `/credits/ledger?limit=${limit}`,
+    ),
+  /** Admin: positive adds credits, negative takes them back. */
+  grantCredits: (body: { email?: string; userId?: string; amount: number; note?: string }) =>
+    request<{ user: User; balance: number; credits: CreditSummary }>("POST", "/admin/credits", body),
+
+  // ---- asking the owner for more tokens (approved in Telegram or in Settings)
+  requestCredits: (body: { amount?: number; note?: string } = {}) =>
+    request<{ request: CreditRequest; telegram: { sent: boolean; message?: string } }>(
+      "POST",
+      "/credits/request",
+      body,
+    ),
+  myCreditRequests: () => request<{ items: CreditRequest[] }>("GET", "/credits/requests"),
+  pendingCreditRequests: () => request<{ items: CreditRequest[] }>("GET", "/admin/credit-requests?status=pending"),
+  decideCreditRequest: (id: string, body: { approve: boolean; amount?: number; note?: string }) =>
+    request<{ request: CreditRequest; balance: number }>("POST", `/admin/credit-requests/${id}/decide`, body),
+
+  // ---- top-up (bank transfer, confirmed by the owner)
+  topup: () => request<TopupListing>("GET", "/topup"),
+  createTopupOrder: (packageId: string) =>
+    request<{ order: TopupOrder; reused: boolean }>("POST", "/topup/orders", { packageId }),
+  markTopupTransferred: (orderId: string, bankTxnRef?: string) =>
+    request<{ order: TopupOrder; telegram: { sent: boolean; message?: string } }>(
+      "POST",
+      `/topup/orders/${orderId}/transferred`,
+      { bankTxnRef },
+    ),
+  cancelTopupOrder: (orderId: string) =>
+    request<{ order: TopupOrder }>("POST", `/topup/orders/${orderId}/cancel`, {}),
+  adminTopupOrders: (status?: string) =>
+    request<{ items: TopupOrder[] }>("GET", `/admin/topup-orders${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  confirmTopupOrder: (id: string, tokens?: number) =>
+    request<{ order: TopupOrder; balance: number; alreadyPaid?: boolean }>(
+      "POST",
+      `/admin/topup-orders/${id}/confirm`,
+      { tokens },
+    ),
+
+  // ---- skill hub (marketplace, paid with tokens)
+  hub: () => request<HubListing>("GET", "/hub"),
+  hubSkill: (id: string) => request<{ skill: HubSkill; balance: number }>("GET", `/hub/${id}`),
+  buyHubSkill: (id: string) => request<HubPurchaseResult>("POST", `/hub/${id}/purchase`, {}),
+  adminHub: () => request<{ items: HubSkill[]; categories: string[] }>("GET", "/admin/hub"),
+  createHubSkill: (body: Record<string, unknown>) =>
+    request<{ skill: HubSkill }>("POST", "/admin/hub", body),
+  updateHubSkill: (id: string, body: Record<string, unknown>) =>
+    request<{ skill: HubSkill }>("PATCH", `/admin/hub/${id}`, body),
+  deleteHubSkill: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/hub/${id}`),
   createUser: (body: { email: string; password: string; name?: string; role?: string }) =>
     request<{ user: User }>("POST", "/admin/users", body),
   deleteUser: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/users/${id}`),

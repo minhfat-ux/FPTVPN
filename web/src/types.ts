@@ -11,6 +11,21 @@ export interface User {
   createdAt: string;
 }
 
+/**
+ * One signed-in device. Several can exist for the same account at once:
+ * signing in on the phone never signs the laptop out, and either can be revoked.
+ */
+export interface AuthSession {
+  id: string;
+  label: string | null;
+  ip: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string | null;
+  /** True for the device making the request. */
+  current: boolean;
+}
+
 export type SkillId = "auto" | "chat" | "image" | "ppt" | "excel" | "data";
 
 export interface SkillDescriptor {
@@ -66,6 +81,17 @@ export interface ToolResult {
   artifacts: Artifact[];
   error: string | null;
   durationMs?: number;
+  /** Options the user can tap (e.g. what to put into the Excel built from a photo). */
+  choices?: Choice[];
+}
+
+/** One tappable option attached to an assistant turn. */
+export interface Choice {
+  id: string;
+  label: string;
+  hint?: string;
+  /** Sent as the next user message when tapped. */
+  value: string;
 }
 
 export interface Message {
@@ -77,6 +103,7 @@ export interface Message {
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
   artifacts?: Artifact[];
+  choices?: Choice[];
   providerId?: string | null;
   model?: string | null;
   usage?: { in: number; out: number } | null;
@@ -199,6 +226,15 @@ export interface AppSettings {
   voiceLanguage: string;
   voiceAutoRead: boolean;
   voiceSpeakRate: number;
+  // --- credits ---
+  creditsEnabled: boolean;
+  signupCredits: number;
+  creditsPerToken: number;
+  creditBuyUrl: string;
+  promoReminderMinutes: number;
+  promoCreditSnoozeMinutes: number;
+  /** Public model names (vendor ids stay internal). */
+  modelAliases: Record<string, string>;
 }
 
 export interface MailerStatus {
@@ -213,7 +249,11 @@ export interface ModelOption {
   providerName: string;
   kind: ProviderKind;
   model: string;
+  /** Public FlowGpt name shown in the picker (never the vendor's model id). */
+  label?: string;
   isDefault: boolean;
+  hasKey?: boolean;
+  isAppDefaultProvider?: boolean;
   supportsTools: boolean;
   supportsVision: boolean;
   supportsImages: boolean;
@@ -280,6 +320,8 @@ export interface Meta {
   };
   mailer?: MailerStatus;
   loginTokenTtlMin?: number;
+  /** Present when the server advertises the credit policy on the public meta. */
+  credits?: { signupCredits?: number };
 }
 
 export interface ChartPoint {
@@ -349,6 +391,131 @@ export interface DoneEvent {
   durationMs?: number;
   usage?: { in: number; out: number } | null;
   artifacts?: Artifact[];
+  /** Options to render under the answer (e.g. confirm the plan for a file). */
+  choices?: Choice[];
+  /** Set when the turn was metered: how much it cost and the new balance. */
+  credits?: { cost: number; balance: number } | null;
+}
+
+// ------------------------------------------------------------------ credits
+
+export interface CreditLedgerEntry {
+  id: string;
+  delta: number;
+  reason: string;
+  ref: string | null;
+  balanceAfter: number;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface CreditSummary {
+  enabled: boolean;
+  balance: number;
+  granted: number;
+  spent: number;
+  entries: number;
+  /** Credits charged per token (1 = one credit per token, input + output). */
+  perToken: number;
+  averageCostPerTurn: number;
+  estimatedTurnsLeft: number | null;
+  buyUrl: string;
+  recent: CreditLedgerEntry[];
+}
+
+/** A skill sold in the Skill Hub (prompt pack priced in tokens). */
+export interface HubSkill {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string;
+  description: string;
+  category: string;
+  icon: string;
+  price: number;
+  state: "published" | "coming_soon" | "hidden";
+  installs: number;
+  sortOrder?: number;
+  owned: boolean;
+  installed: boolean;
+  createdAt: string;
+}
+
+export interface HubPurchaseResult {
+  skill: HubSkill;
+  balance: number;
+  alreadyOwned: boolean;
+  installed: boolean;
+  pricePaid: number;
+}
+
+export interface HubListing {
+  items: HubSkill[];
+  categories: string[];
+  balance: number;
+  currency: string;
+  ownedCount: number;
+}
+
+// -------------------------------------------------------------------- top-up
+
+/** A token package the user can buy by bank transfer. */
+export interface TopupPackage {
+  id: string;
+  name: string;
+  tokens: number;
+  bonusTokens: number;
+  totalTokens: number;
+  priceVnd: number;
+  note: string | null;
+}
+
+/** The owner's receiving bank account (public fields only). */
+export interface BankInfo {
+  bankId: string;
+  account: string;
+  accountName: string;
+  notePrefix: string;
+}
+
+export interface TopupOrder {
+  id: string;
+  userId: string;
+  email: string | null;
+  packageId: string | null;
+  packageName: string;
+  tokens: number;
+  amountVnd: number;
+  transferNote: string;
+  status: "pending" | "awaiting_confirmation" | "paid" | "cancelled";
+  paidAt: string | null;
+  confirmedBy: string | null;
+  createdAt: string;
+  qrUrl: string | null;
+  bank: BankInfo;
+}
+
+export interface TopupListing {
+  packages: TopupPackage[];
+  bank: BankInfo | null;
+  orders: TopupOrder[];
+  balance: number;
+  credits: CreditSummary;
+}
+
+/** A user asking the owner for more tokens; the owner approves in Telegram or in Settings. */
+export interface CreditRequest {
+  id: string;
+  userId: string;
+  email: string;
+  name: string | null;
+  amount: number;
+  note: string | null;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  grantedAmount: number | null;
 }
 
 /** Live assistant turn rendered while the stream is open. */
@@ -364,8 +531,12 @@ export interface StreamingTurn {
   artifacts: Artifact[];
   usage: { in: number; out: number } | null;
   error: string | null;
+  /** Machine code of the last error (e.g. `insufficient_credits`). */
+  errorCode?: string | null;
   /** Mid-turn explanation, e.g. the provider was swapped because it ran out of credit. */
   notice?: string | null;
+  /** Options the server wants the user to choose from (e.g. confirm the file plan). */
+  choices?: Choice[];
   done: boolean;
   providerName?: string;
   model?: string;

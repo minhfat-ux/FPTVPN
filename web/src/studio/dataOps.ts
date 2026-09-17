@@ -23,14 +23,14 @@ export interface OperationRow {
   filterOp: string;
 }
 
-export const OPS: { id: OpKind; label: string }[] = [
-  { id: "describe", label: "Mô tả cột (describe)" },
-  { id: "value_counts", label: "Đếm giá trị (value_counts)" },
-  { id: "group_by", label: "Nhóm & tổng hợp (group_by)" },
-  { id: "timeseries", label: "Chuỗi thời gian (timeseries)" },
-  { id: "correlation", label: "Tương quan (correlation)" },
-  { id: "top", label: "Top giá trị (top)" },
-  { id: "filter", label: "Lọc dòng (filter)" },
+export const OPS: { id: OpKind; labelKey: string }[] = [
+  { id: "describe", labelKey: "studio.data.op.describe" },
+  { id: "value_counts", labelKey: "studio.data.op.valueCounts" },
+  { id: "group_by", labelKey: "studio.data.op.groupBy" },
+  { id: "timeseries", labelKey: "studio.data.op.timeseries" },
+  { id: "correlation", labelKey: "studio.data.op.correlation" },
+  { id: "top", labelKey: "studio.data.op.top" },
+  { id: "filter", labelKey: "studio.data.op.filter" },
 ];
 
 export const AGGS = ["sum", "avg", "count", "min", "max", "median", "std", "distinct"];

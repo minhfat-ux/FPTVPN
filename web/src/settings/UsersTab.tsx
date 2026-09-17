@@ -1,18 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Coins, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api/client";
+import { requestCreditsRefresh } from "../state/credits";
 import { useAuth, useToast } from "../state/store";
 import { ConfirmDialog, EmptyState, Field, Modal, Spinner } from "../components/ui";
+import { useI18n } from "../i18n";
+import { CreditRequestsCard } from "./CreditRequestsCard";
 import type { Role, User } from "../types";
 
-type AdminUser = User & { conversationCount: number };
+type AdminUser = User & { conversationCount: number; creditBalance: number };
 
 const EMPTY_FORM = { email: "", password: "", name: "", role: "user" as Role };
+const DEFAULT_GRANT = "100000";
+const DATE_STYLE: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", year: "numeric" };
 
 /** Settings → Người dùng. */
 export function UsersTab() {
   const { user: currentUser } = useAuth();
   const { push } = useToast();
+  const { t, n, d } = useI18n();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [removing, setRemoving] = useState<AdminUser | null>(null);
@@ -20,17 +26,20 @@ export function UsersTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
+  const [grantFor, setGrantFor] = useState<AdminUser | null>(null);
+  const [grantForm, setGrantForm] = useState({ amount: DEFAULT_GRANT, note: "" });
+  const [granting, setGranting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setUsers((await api.adminUsers()).items);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không tải được danh sách người dùng", "error");
+      push(err instanceof ApiError ? err.message : t("settings.users.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [push]);
+  }, [push, t]);
 
   useEffect(() => {
     load();
@@ -42,10 +51,10 @@ export function UsersTab() {
     try {
       await api.deleteUser(removing.id);
       setUsers((current) => current.filter((item) => item.id !== removing.id));
-      push(`Đã xoá người dùng ${removing.email}`, "success");
+      push(t("settings.users.removed", { email: removing.email }), "success");
       setRemoving(null);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không xoá được người dùng", "error");
+      push(err instanceof ApiError ? err.message : t("settings.users.removeFailed"), "error");
     } finally {
       setDeleting(false);
     }
@@ -53,7 +62,7 @@ export function UsersTab() {
 
   const create = async () => {
     if (!form.email.trim() || !form.password) {
-      push("Nhập email và mật khẩu", "error");
+      push(t("settings.users.createMissing"), "error");
       return;
     }
     setCreating(true);
@@ -64,43 +73,74 @@ export function UsersTab() {
         name: form.name.trim() || undefined,
         role: form.role,
       });
-      push(`Đã thêm người dùng ${form.email.trim()}`, "success");
+      push(t("settings.users.created", { email: form.email.trim() }), "success");
       setCreateOpen(false);
       setForm(EMPTY_FORM);
       await load();
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không tạo được người dùng", "error");
+      push(err instanceof ApiError ? err.message : t("settings.users.createFailed"), "error");
     } finally {
       setCreating(false);
     }
   };
 
+  const openGrant = (target: AdminUser) => {
+    setGrantFor(target);
+    setGrantForm({ amount: DEFAULT_GRANT, note: "" });
+  };
+
+  const grant = async () => {
+    if (!grantFor) return;
+    const amount = Math.trunc(Number(grantForm.amount));
+    if (!Number.isFinite(amount) || amount === 0) {
+      push(t("settings.users.grantInvalid"), "error");
+      return;
+    }
+    setGranting(true);
+    try {
+      const result = await api.grantCredits({
+        userId: grantFor.id,
+        amount,
+        note: grantForm.note.trim() || undefined,
+      });
+      push(t("settings.users.granted", { email: grantFor.email, balance: n(result.balance) }), "success");
+      if (grantFor.id === currentUser?.id) requestCreditsRefresh();
+      setGrantFor(null);
+      await load();
+    } catch (err) {
+      push(err instanceof ApiError ? err.message : t("settings.users.grantFailed"), "error");
+    } finally {
+      setGranting(false);
+    }
+  };
+
   return (
     <div className="stack gap-3">
+      <CreditRequestsCard />
+
       <div className="row">
         <div className="grow">
-          <div className="card-title">Người dùng</div>
-          <div className="card-desc">
-            Tài khoản đầu tiên của hệ thống luôn là quản trị viên. Bạn không thể tự xoá tài khoản đang đăng nhập.
-          </div>
+          <div className="card-title">{t("settings.users.cardTitle")}</div>
+          <div className="card-desc">{t("settings.users.cardDesc")}</div>
         </div>
         <button className="btn btn-sm" type="button" onClick={load} disabled={loading}>
-          <RefreshCw size={14} /> Tải lại
+          <RefreshCw size={14} /> {t("common.reload")}
         </button>
         <button className="btn btn-primary btn-sm" type="button" onClick={() => setCreateOpen(true)}>
-          <Plus size={15} /> Tạo người dùng bằng mật khẩu (dự phòng)
+          <Plus size={15} /> {t("settings.users.createButton")}
         </button>
       </div>
 
-      <div className="hint">
-        Người dùng thường đăng nhập bằng mã một lần gửi qua email (cấu hình ở tab Hệ thống). Cách tạo tài khoản kèm mật
-        khẩu dưới đây chỉ là đường dự phòng; đăng nhập SSO (Firebase/Facebook) sẽ được bổ sung sau.
-      </div>
+      <div className="hint">{t("settings.users.hint")}</div>
 
-      {loading && <Spinner label="Đang tải người dùng…" />}
+      {loading && <Spinner label={t("settings.users.loading")} />}
 
       {!loading && !users.length && (
-        <EmptyState icon="👥" title="Chưa có người dùng nào" hint="Thêm tài khoản đầu tiên bằng nút “Thêm người dùng”." />
+        <EmptyState
+          icon="👥"
+          title={t("settings.users.emptyTitle")}
+          hint={t("settings.users.emptyHint")}
+        />
       )}
 
       {!loading && users.length > 0 && (
@@ -108,12 +148,13 @@ export function UsersTab() {
           <table className="table">
             <thead>
               <tr>
-                <th>Email</th>
-                <th>Tên</th>
-                <th>Vai trò</th>
-                <th>Hội thoại</th>
-                <th>Ngày tạo</th>
-                <th aria-label="Thao tác" />
+                <th>{t("settings.users.colEmail")}</th>
+                <th>{t("settings.users.colName")}</th>
+                <th>{t("settings.users.colRole")}</th>
+                <th>{t("settings.users.colConversations")}</th>
+                <th>{t("settings.users.colCredit")}</th>
+                <th>{t("settings.users.colCreatedAt")}</th>
+                <th aria-label={t("settings.users.colActions")} />
               </tr>
             </thead>
             <tbody>
@@ -123,27 +164,42 @@ export function UsersTab() {
                   <tr key={item.id}>
                     <td className="mono">
                       {item.email}
-                      {self && <span className="badge badge-accent badge-inline">Bạn</span>}
+                      {self && <span className="badge badge-accent badge-inline">{t("settings.users.selfBadge")}</span>}
                     </td>
                     <td>{item.name ?? <span className="faint">—</span>}</td>
                     <td>
                       <span className={`badge ${item.role === "admin" ? "badge-accent" : ""}`}>
-                        {item.role === "admin" ? "Quản trị viên" : "Người dùng"}
+                        {item.role === "admin" ? t("common.admin") : t("common.user")}
                       </span>
                     </td>
-                    <td>{item.conversationCount}</td>
-                    <td className="nowrap">{formatDate(item.createdAt)}</td>
+                    <td>{n(item.conversationCount)}</td>
+                    <td className="nowrap">
+                      <span className={item.creditBalance <= 0 ? "credit-danger bold" : undefined}>
+                        {n(item.creditBalance)}
+                      </span>
+                    </td>
+                    <td className="nowrap">{d(item.createdAt, DATE_STYLE) || "—"}</td>
                     <td>
-                      {!self && (
+                      <div className="row gap-2">
                         <button
-                          className="btn btn-sm btn-danger"
+                          className="btn btn-sm nowrap"
                           type="button"
-                          onClick={() => setRemoving(item)}
-                          title={`Xoá ${item.email}`}
+                          onClick={() => openGrant(item)}
+                          title={t("settings.users.grantTitleFor", { email: item.email })}
                         >
-                          <Trash2 size={14} /> Xoá
+                          <Coins size={14} /> {t("settings.users.grantButton")}
                         </button>
-                      )}
+                        {!self && (
+                          <button
+                            className="btn btn-sm btn-danger nowrap"
+                            type="button"
+                            onClick={() => setRemoving(item)}
+                            title={t("settings.users.deleteTitleFor", { email: item.email })}
+                          >
+                            <Trash2 size={14} /> {t("common.delete")}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -155,31 +211,31 @@ export function UsersTab() {
 
       <Modal
         open={createOpen}
-        title="Tạo người dùng bằng mật khẩu (dự phòng)"
-        description="Dùng khi cần tạo tài khoản thủ công hoặc khi email đăng nhập chưa hoạt động. Người dùng có thể đổi mật khẩu trong phần tài khoản."
+        title={t("settings.users.createTitle")}
+        description={t("settings.users.createDesc")}
         onClose={() => setCreateOpen(false)}
         footer={
           <>
             <button className="btn" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
-              Huỷ
+              {t("common.cancel")}
             </button>
             <button className="btn btn-primary" type="button" onClick={create} disabled={creating}>
-              {creating ? "Đang tạo…" : "Tạo người dùng"}
+              {creating ? t("settings.users.creating") : t("settings.users.createSubmit")}
             </button>
           </>
         }
       >
-        <Field label="Email">
+        <Field label={t("settings.users.fieldEmail")}>
           <input
             className="input"
             type="email"
             autoComplete="off"
             value={form.email}
             onChange={(event) => setForm({ ...form, email: event.target.value })}
-            placeholder="nguoidung@congty.vn"
+            placeholder={t("settings.users.emailPlaceholder")}
           />
         </Field>
-        <Field label="Mật khẩu" hint="Tối thiểu 8 ký tự.">
+        <Field label={t("settings.users.fieldPassword")} hint={t("settings.users.passwordHint")}>
           <input
             className="input"
             type="password"
@@ -188,40 +244,75 @@ export function UsersTab() {
             onChange={(event) => setForm({ ...form, password: event.target.value })}
           />
         </Field>
-        <Field label="Tên hiển thị (tuỳ chọn)">
+        <Field label={t("settings.users.fieldName")}>
           <input
             className="input"
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
-            placeholder="Nguyễn Văn A"
+            placeholder={t("settings.users.namePlaceholder")}
           />
         </Field>
-        <Field label="Vai trò" hint="Quản trị viên xem được trang Cài đặt này và cấu hình nhà cung cấp/MCP.">
+        <Field label={t("settings.users.fieldRole")} hint={t("settings.users.roleHint")}>
           <select
             className="select"
             value={form.role}
             onChange={(event) => setForm({ ...form, role: event.target.value as Role })}
           >
-            <option value="user">Người dùng</option>
-            <option value="admin">Quản trị viên</option>
+            <option value="user">{t("common.user")}</option>
+            <option value="admin">{t("common.admin")}</option>
           </select>
+        </Field>
+      </Modal>
+
+      <Modal
+        open={Boolean(grantFor)}
+        title={t("settings.users.grantTitle")}
+        description={t("settings.users.grantDesc")}
+        onClose={() => setGrantFor(null)}
+        footer={
+          <>
+            <button className="btn" type="button" onClick={() => setGrantFor(null)} disabled={granting}>
+              {t("common.cancel")}
+            </button>
+            <button className="btn btn-primary" type="button" onClick={grant} disabled={granting}>
+              {granting ? t("settings.users.granting") : t("settings.users.grantSubmit")}
+            </button>
+          </>
+        }
+      >
+        <Field label={t("settings.users.fieldUser")}>
+          <input className="input" value={grantFor?.email ?? ""} readOnly />
+        </Field>
+        <Field label={t("settings.users.fieldAmount")} hint={t("settings.users.amountHint")}>
+          <input
+            className="input w-num"
+            type="number"
+            step={1}
+            value={grantForm.amount}
+            onChange={(event) => setGrantForm({ ...grantForm, amount: event.target.value })}
+          />
+        </Field>
+        <Field label={t("settings.users.fieldNote")} hint={t("settings.users.noteHint")}>
+          <input
+            className="input"
+            value={grantForm.note}
+            onChange={(event) => setGrantForm({ ...grantForm, note: event.target.value })}
+            placeholder={t("settings.users.notePlaceholder")}
+          />
         </Field>
       </Modal>
 
       <ConfirmDialog
         open={Boolean(removing)}
-        title="Xoá người dùng"
-        message={`Xoá tài khoản "${removing?.email ?? ""}" cùng ${removing?.conversationCount ?? 0} hội thoại của họ? Thao tác này không thể hoàn tác.`}
+        title={t("settings.users.deleteTitle")}
+        message={t("settings.users.deleteMessage", {
+          email: removing?.email ?? "",
+          count: n(removing?.conversationCount ?? 0),
+        })}
         busy={deleting}
         onCancel={() => setRemoving(null)}
         onConfirm={remove}
       />
     </div>
   );
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }

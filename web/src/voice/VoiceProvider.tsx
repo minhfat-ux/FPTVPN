@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import { useI18n } from "../i18n";
 import { useAuth, useToast } from "../state/store";
 import { useSpeechSynthesis } from "./useSpeechSynthesis";
 import { getAudioContextCtor } from "./useMicLevel";
@@ -52,6 +53,7 @@ export function useVoice(): VoiceContextValue {
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { push } = useToast();
+  const { t } = useI18n();
   const synthesis = useSpeechSynthesis();
 
   const [config, setConfig] = useState<VoiceConfig>(DEFAULT_CONFIG);
@@ -141,7 +143,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
             void audioCtx.close().catch(() => undefined);
           }
         } catch {
-          push("Không đọc được câu trả lời bằng nhà cung cấp TTS", "error");
+          push(t("voice.error.providerSpeakFailed"), "error");
         } finally {
           setServerSpeaking(false);
         }
@@ -153,7 +155,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         voiceName: opts?.voice ?? config.tts.voice ?? null,
       });
     },
-    [config.tts.mode, config.tts.voice, push, rate, stopSpeaking, synthesis],
+    [config.tts.mode, config.tts.voice, push, rate, stopSpeaking, synthesis, t],
   );
 
   const open = useCallback(() => setIsOpen(true), []);

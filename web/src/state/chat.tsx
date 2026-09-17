@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, streamChat, ApiError } from "../api/client";
+import { useI18n } from "../i18n";
 import type {
   Artifact,
   ChatEvent,
@@ -54,7 +55,8 @@ function localId() {
 }
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { t } = useI18n();
+  const { user, lastConversationId, setLastConversationId } = useAuth();
   const { upsertConversation, reloadConversations } = useData();
   const { push } = useToast();
 
@@ -68,6 +70,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const abortRef = useRef<(() => void) | null>(null);
   const lastRequestRef = useRef<SendOptions | null>(null);
+  // Cross-device sync reads the newest state without re-subscribing.
+  const stateRef = useRef({ conversationId, conversation, messages, sending, streaming });
+  stateRef.current = { conversationId, conversation, messages, sending, streaming };
+  const resumedRef = useRef(false);
 
   // A different account must never inherit the previous session's messages.
   useEffect(() => {
@@ -77,6 +83,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setMessages([]);
       setStreaming(null);
       setPendingArtifacts([]);
+      resumedRef.current = false;
     }
   }, [user]);
 
@@ -91,13 +98,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setConversation(result.conversation);
         setMessages(result.messages);
         setPendingArtifacts([]);
+        // Tell the backend this is the account's current thread, so opening
+        // FlowGpt on another device lands here too.
+        setLastConversationId(result.conversation.id);
+        void api.activateConversation(result.conversation.id).catch(() => undefined);
       } catch (err) {
-        push(err instanceof ApiError ? err.message : "Không mở được hội thoại", "error");
+        push(err instanceof ApiError ? err.message : t("shell.state.openConversationFailed"), "error");
       } finally {
         setLoading(false);
       }
     },
-    [push],
+    [push, setLastConversationId, t],
   );
 
   const startNewChat = useCallback(() => {
@@ -107,7 +118,64 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setMessages([]);
     setStreaming(null);
     setPendingArtifacts([]);
-  }, []);
+    setLastConversationId(null);
+    void api.clearActiveConversation().catch(() => undefined);
+  }, [setLastConversationId]);
+
+  // Resume the thread this account was working on — from any device. Runs once
+  // per app load; "chat mới" clears the pointer on the server, so it will not
+  // drag the user back into an old conversation afterwards.
+  useEffect(() => {
+    if (!user || resumedRef.current || !lastConversationId) return;
+    resumedRef.current = true;
+    if (conversationId) return;
+    void openConversation(lastConversationId);
+  }, [user, lastConversationId, conversationId, openConversation]);
+
+  // Cross-device continuity: while this tab is visible and idle, pick up turns
+  // another device just ran (cheap `?since=` poll, plus one sync on focus).
+  useEffect(() => {
+    if (!user || !conversationId) return;
+    let cancelled = false;
+    let polling = false;
+
+    const sync = async () => {
+      const state = stateRef.current;
+      if (cancelled || polling || state.sending || state.streaming) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      polling = true;
+      try {
+        const last = state.messages.at(-1)?.id ?? null;
+        const result = await api.getConversation(conversationId, last);
+        if (cancelled || !result.messages.length) return;
+        setConversation(result.conversation);
+        setMessages((current) => {
+          const seen = new Set(current.map((message) => message.id));
+          const fresh = result.messages.filter((message) => !seen.has(message.id));
+          return fresh.length ? [...current, ...fresh] : current;
+        });
+        upsertConversation(result.conversation);
+        reloadConversations();
+      } catch {
+        /* transient: try again on the next tick */
+      } finally {
+        polling = false;
+      }
+    };
+
+    const timer = window.setInterval(sync, 5000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void sync();
+    };
+    window.addEventListener("focus", onVisibility);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onVisibility);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [conversationId, user, reloadConversations, upsertConversation]);
 
   const stop = useCallback(() => {
     abortRef.current?.();
@@ -194,7 +262,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           },
           onError: (error) => {
             push(error.message, "error");
-            turn = { ...turn, error: error.message, done: true };
+            turn = { ...turn, error: error.message, errorCode: error.code, done: true };
             setStreaming(turn);
           },
           onClose: () => {
@@ -237,11 +305,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const result = await api.upload(file, conversationId);
         return result.file;
       } catch (err) {
-        push(err instanceof ApiError ? err.message : "Tải tệp thất bại", "error");
+        push(err instanceof ApiError ? err.message : t("shell.state.uploadFailed"), "error");
         return null;
       }
     },
-    [conversationId, push],
+    [conversationId, push, t],
   );
 
   const value = useMemo<ChatContextValue>(
@@ -326,13 +394,23 @@ export function reduceTurn(turn: StreamingTurn, event: ChatEvent): StreamingTurn
     case "notice":
       return { ...turn, notice: event.data.message };
     case "error":
-      return { ...turn, error: event.data.message, status: null };
+      return { ...turn, error: event.data.message, errorCode: event.data.code, status: null };
     case "done":
+      // The credit badge / profile modal listen for this and update instantly.
+      if (event.data.credits && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("flowgpt:credits", {
+            detail: { balance: event.data.credits.balance, cost: event.data.credits.cost },
+          }),
+        );
+      }
       return {
         ...turn,
         done: true,
         messageId: event.data.messageId,
         usage: event.data.usage ?? turn.usage,
+        // Buttons the server wants the user to choose from (e.g. "confirm this plan").
+        ...(event.data.choices?.length ? { choices: event.data.choices } : {}),
       };
     default:
       return turn;
@@ -349,6 +427,7 @@ export function turnToMessage(turn: StreamingTurn): Message {
     toolResults: turn.toolResults,
     artifacts: turn.artifacts,
     usage: turn.usage,
+    choices: turn.choices ?? [],
     model: turn.model ?? null,
     error: turn.error,
     createdAt: new Date().toISOString(),

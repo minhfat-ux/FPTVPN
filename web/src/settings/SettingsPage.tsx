@@ -1,20 +1,23 @@
 import { useState } from "react";
-import { Bot, Mic, Server, SlidersHorizontal, Users } from "lucide-react";
+import { Bot, Mic, Server, SlidersHorizontal, Store, Users } from "lucide-react";
 import { ProvidersTab } from "./ProvidersTab";
 import { McpTab } from "./McpTab";
 import { AppTab } from "./AppTab";
 import { UsersTab } from "./UsersTab";
 import { VoiceTab } from "./VoiceTab";
+import { HubAdminPanel } from "../hub/HubAdminPanel";
+import { useI18n } from "../i18n";
 import "./settings.css";
 
-type TabId = "providers" | "mcp" | "app" | "users" | "voice";
+type TabId = "providers" | "mcp" | "app" | "users" | "voice" | "hub";
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
-  { id: "providers", label: "Nhà cung cấp AI", icon: Bot },
-  { id: "mcp", label: "MCP server", icon: Server },
-  { id: "app", label: "Hệ thống", icon: SlidersHorizontal },
-  { id: "users", label: "Người dùng", icon: Users },
-  { id: "voice", label: "Giọng nói", icon: Mic },
+  { id: "providers", label: "settings.page.tabProviders", icon: Bot },
+  { id: "mcp", label: "settings.page.tabMcp", icon: Server },
+  { id: "app", label: "settings.page.tabApp", icon: SlidersHorizontal },
+  { id: "users", label: "settings.page.tabUsers", icon: Users },
+  { id: "voice", label: "settings.page.tabVoice", icon: Mic },
+  { id: "hub", label: "settings.page.tabHub", icon: Store },
 ];
 
 /**
@@ -22,6 +25,7 @@ const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
  * a slow provider test or MCP refresh never blocks the rest of the page.
  */
 export function SettingsPage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<TabId>("providers");
 
   return (
@@ -30,10 +34,8 @@ export function SettingsPage() {
         <div className="settings-head">
           <img src="/brand-mark.png" alt="" />
           <div>
-            <div className="settings-title">Cài đặt hệ thống</div>
-            <div className="card-desc">
-              Nhà cung cấp AI, MCP server và cấu hình dùng chung — chỉ quản trị viên truy cập được.
-            </div>
+            <div className="settings-title">{t("settings.page.title")}</div>
+            <div className="card-desc">{t("settings.page.subtitle")}</div>
           </div>
         </div>
 
@@ -49,7 +51,7 @@ export function SettingsPage() {
             >
               <span className="row gap-2">
                 <Icon size={15} />
-                {label}
+                {t(label)}
               </span>
             </button>
           ))}
@@ -60,6 +62,7 @@ export function SettingsPage() {
         {tab === "app" && <AppTab />}
         {tab === "users" && <UsersTab />}
         {tab === "voice" && <VoiceTab />}
+        {tab === "hub" && <HubAdminPanel />}
       </div>
     </div>
   );

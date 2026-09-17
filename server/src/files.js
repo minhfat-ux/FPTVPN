@@ -131,6 +131,41 @@ export function getOwnedFile(id, userId) {
   return row;
 }
 
+/**
+ * Resolves the file a tool was asked to work on.
+ *
+ * Models routinely pass the file *name* (`IMG_3737.jpeg`) where the schema asks
+ * for an id, which used to fail with a bare "Không tìm thấy tệp" and left the
+ * user staring at "tôi gặp vấn đề khi tạo Excel từ ảnh". An id wins; otherwise a
+ * name is accepted (newest first, ideally from this conversation) and the error
+ * tells the model exactly what to do next.
+ */
+export function resolveOwnedFile({ id = null, name = null, userId, conversationId = null, expectKind = null }) {
+  const wanted = String(id ?? name ?? "").trim();
+  if (!wanted) throw badRequest("Thiếu `fileId` (gọi list_files để lấy id)");
+
+  let row = getById("files", wanted);
+  if (row && row.user_id !== userId) row = null;
+
+  if (!row) {
+    const named = all("files", "user_id = ? AND name = ?", [userId, wanted], { order: "created_at DESC", limit: 5 });
+    row = (conversationId ? named.find((entry) => entry.conversation_id === conversationId) : null) ?? named[0] ?? null;
+  }
+
+  if (!row) {
+    const available = all("files", "user_id = ?", [userId], { order: "created_at DESC", limit: 8 });
+    const hint = available.length
+      ? `Tệp đang có: ${available.map((entry) => `${entry.name} (id: ${entry.id})`).join(", ")}`
+      : "Người dùng chưa tải tệp nào lên.";
+    throw badRequest(`Không tìm thấy tệp "${wanted}". Gọi list_files để lấy đúng id. ${hint}`);
+  }
+
+  if (expectKind && row.kind !== expectKind) {
+    throw badRequest(`${row.name} không phải ${expectKind === "image" ? "ảnh" : expectKind} (đang là ${row.kind})`);
+  }
+  return row;
+}
+
 export function listFiles(userId, { conversationId = null, origin = null, limit = 100 } = {}) {
   const clauses = ["user_id = ?"];
   const params = [userId];

@@ -4,7 +4,6 @@ import {
   Brain,
   FileSpreadsheet,
   Image as ImageIcon,
-  LogOut,
   MessageSquarePlus,
   Moon,
   MoreHorizontal,
@@ -12,19 +11,22 @@ import {
   Presentation,
   Search,
   Settings,
-  Shield,
+  Store,
   Sun,
   Table2,
   Trash2,
-  User as UserIcon,
+  Wallet,
 } from "lucide-react";
 import { api, ApiError } from "../api/client";
-import { formatRelativeTime, useAuth, useData, useToast } from "../state/store";
+import { useAuth, useData, useToast } from "../state/store";
 import { useChat } from "../state/chat";
+import { useI18n } from "../i18n";
 import { ConfirmDialog, EmptyState } from "./ui";
+import { CreditsBadge } from "./CreditsBadge";
+import { ProfileMenu } from "./ProfileMenu";
 import type { Conversation, SkillId } from "../types";
 
-export type View = "chat" | "studio" | "settings";
+export type View = "chat" | "studio" | "hub" | "topup" | "settings";
 
 const SKILL_ICONS: Record<SkillId, JSX.Element> = {
   auto: <Brain size={15} />,
@@ -46,8 +48,9 @@ export function Sidebar({
   open: boolean;
   onClose: () => void;
 }) {
-  const { user, logout, meta, theme, toggleTheme } = useAuth();
-  const { conversations, reloadConversations, removeConversation } = useData();
+  const { t } = useI18n();
+  const { user, meta, theme, toggleTheme } = useAuth();
+  const { conversations, reloadConversations, removeConversation, formatRelativeTime } = useData();
   const { conversationId, openConversation, startNewChat } = useChat();
   const { push } = useToast();
 
@@ -93,7 +96,7 @@ export function Sidebar({
       await api.updateConversation(conversation.id, { pinned: !conversation.pinned });
       await reloadConversations();
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không cập nhật được", "error");
+      push(err instanceof ApiError ? err.message : t("shell.sidebar.updateFailed"), "error");
     }
     setMenuFor(null);
   };
@@ -104,7 +107,7 @@ export function Sidebar({
       if (conversation.id === conversationId) startNewChat();
       await reloadConversations();
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không cập nhật được", "error");
+      push(err instanceof ApiError ? err.message : t("shell.sidebar.updateFailed"), "error");
     }
     setMenuFor(null);
   };
@@ -116,9 +119,9 @@ export function Sidebar({
       await api.deleteConversation(pendingDelete.id);
       removeConversation(pendingDelete.id);
       if (pendingDelete.id === conversationId) startNewChat();
-      push("Đã xoá hội thoại", "success");
+      push(t("shell.sidebar.deleted"), "success");
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không xoá được", "error");
+      push(err instanceof ApiError ? err.message : t("shell.sidebar.deleteFailed"), "error");
     } finally {
       setBusy(false);
       setPendingDelete(null);
@@ -144,7 +147,7 @@ export function Sidebar({
       <span className="conv-actions">
         <button
           className="btn btn-ghost btn-icon btn-sm"
-          title="Thêm"
+          title={t("shell.actionMenu")}
           onClick={(event) => {
             event.stopPropagation();
             setMenuFor(menuFor === conversation.id ? null : conversation.id);
@@ -157,10 +160,10 @@ export function Sidebar({
       {menuFor === conversation.id && (
         <div className="card" style={{ position: "absolute", right: 8, zIndex: 30, padding: 6, minWidth: 190 }} onClick={(e) => e.stopPropagation()}>
           <button className="nav-item" onClick={() => togglePin(conversation)} type="button">
-            <Pin size={14} /> {conversation.pinned ? "Bỏ ghim" : "Ghim lên đầu"}
+            <Pin size={14} /> {conversation.pinned ? t("shell.sidebar.unpin") : t("shell.sidebar.pin")}
           </button>
           <button className="nav-item" onClick={() => toggleArchive(conversation)} type="button">
-            <Archive size={14} /> {conversation.archived ? "Bỏ lưu trữ" : "Lưu trữ"}
+            <Archive size={14} /> {conversation.archived ? t("shell.sidebar.unarchive") : t("shell.sidebar.archive")}
           </button>
           <button
             className="nav-item"
@@ -170,7 +173,7 @@ export function Sidebar({
             }}
             type="button"
           >
-            <Trash2 size={14} /> Xoá hội thoại
+            <Trash2 size={14} /> {t("shell.sidebar.deleteConversation")}
           </button>
         </div>
       )}
@@ -188,10 +191,10 @@ export function Sidebar({
             </span>
             <span className="brand-text">
               <span className="brand-word">{meta?.appName ?? "FlowGpt"}</span>
-              <small>FlowTech · MeetFlow AI</small>
+              <small>{t("shell.brandTagline")}</small>
             </span>
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={toggleTheme} title="Đổi sáng/tối" type="button">
+          <button className="btn btn-ghost btn-icon" onClick={toggleTheme} title={t("shell.theme.toggle")} type="button">
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
         </div>
@@ -206,7 +209,7 @@ export function Sidebar({
             }}
             type="button"
           >
-            <MessageSquarePlus size={16} /> Hội thoại mới
+            <MessageSquarePlus size={16} /> {t("shell.sidebar.newChat")}
           </button>
         </div>
 
@@ -216,7 +219,7 @@ export function Sidebar({
             <input
               className="input"
               style={{ paddingLeft: 32 }}
-              placeholder="Tìm hội thoại…"
+              placeholder={t("shell.sidebar.searchPlaceholder")}
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
@@ -229,20 +232,28 @@ export function Sidebar({
         <nav className="sidebar-scroll">
           <button className={`nav-item${view === "studio" ? " active" : ""}`} onClick={() => onView("studio")} type="button">
             <span className="nav-icon"><Presentation size={16} /></span>
-            <span className="nav-label">Studio: Ảnh · PPT · Excel · Dữ liệu</span>
+            <span className="nav-label">{t("shell.sidebar.studio")}</span>
+          </button>
+          <button className={`nav-item${view === "hub" ? " active" : ""}`} onClick={() => onView("hub")} type="button">
+            <span className="nav-icon"><Store size={16} /></span>
+            <span className="nav-label">{t("shell.sidebar.hub")}</span>
+          </button>
+          <button className={`nav-item${view === "topup" ? " active" : ""}`} onClick={() => onView("topup")} type="button">
+            <span className="nav-icon"><Wallet size={16} /></span>
+            <span className="nav-label">{t("shell.sidebar.topup")}</span>
           </button>
           {user?.isAdmin && (
             <button className={`nav-item${view === "settings" ? " active" : ""}`} onClick={() => onView("settings")} type="button">
               <span className="nav-icon"><Settings size={16} /></span>
-              <span className="nav-label">Cài đặt & MCP</span>
+              <span className="nav-label">{t("shell.sidebar.settings")}</span>
             </button>
           )}
 
-          {pinned.length > 0 && <div className="section-title">Đã ghim</div>}
+          {pinned.length > 0 && <div className="section-title">{t("shell.sidebar.pinned")}</div>}
           {pinned.map(renderConversation)}
 
           <div className="section-title row" style={{ justifyContent: "space-between" }}>
-            <span>Hội thoại</span>
+            <span>{t("shell.sidebar.conversations")}</span>
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => {
@@ -252,41 +263,33 @@ export function Sidebar({
               }}
               type="button"
             >
-              {showArchived ? "Đang xem lưu trữ" : "Lưu trữ"}
+              {showArchived ? t("shell.sidebar.viewingArchived") : t("shell.sidebar.archived")}
             </button>
           </div>
 
           {!items.length && (
             <EmptyState
-              title={query ? "Không tìm thấy hội thoại" : showArchived ? "Chưa có hội thoại lưu trữ" : "Chưa có hội thoại"}
-              hint={query ? "Thử từ khoá khác" : "Bắt đầu bằng nút “Hội thoại mới”"}
+              title={
+                query
+                  ? t("shell.sidebar.empty.search")
+                  : showArchived
+                    ? t("shell.sidebar.empty.archived")
+                    : t("shell.sidebar.empty.none")
+              }
+              hint={query ? t("shell.sidebar.empty.searchHint") : t("shell.sidebar.empty.noneHint")}
             />
           )}
           {rest.map(renderConversation)}
         </nav>
 
-        <div className="sidebar-foot">
-          <div className="row">
-            <div className="msg-avatar" style={{ flex: "0 0 30px", width: 30, height: 30 }}>
-              <UserIcon size={15} />
-            </div>
-            <div className="grow" style={{ minWidth: 0 }}>
-              <div className="small bold truncate">{user?.name || user?.email}</div>
-              <div className="tiny faint row gap-1">
-                {user?.isAdmin ? <Shield size={11} /> : null}
-                {user?.isAdmin ? "Quản trị viên" : "Người dùng"}
-              </div>
-            </div>
-            <button className="btn btn-ghost btn-icon" onClick={() => logout()} title="Đăng xuất" type="button">
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
+        <CreditsBadge onOpenTopup={() => onView("topup")} />
+
+        <ProfileMenu onOpenTopup={() => onView("topup")} />
 
         <ConfirmDialog
           open={Boolean(pendingDelete)}
-          title="Xoá hội thoại?"
-          message={`Toàn bộ tin nhắn của “${pendingDelete?.title ?? ""}” sẽ bị xoá vĩnh viễn.`}
+          title={t("shell.sidebar.deleteTitle")}
+          message={t("shell.sidebar.deleteMessage", { title: pendingDelete?.title ?? "" })}
           onCancel={() => setPendingDelete(null)}
           onConfirm={confirmDelete}
           busy={busy}

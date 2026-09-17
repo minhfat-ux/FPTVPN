@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Composer, FALLBACK_SKILLS, usableSkills, type ComposerHandle } from "./Composer";
+import { CircleAlert, Coins, ExternalLink } from "lucide-react";
+import { Composer, fallbackSkills, usableSkills, type ComposerHandle } from "./Composer";
 import { SkillPicker } from "./SkillPicker";
 import { MessageList } from "./MessageList";
+import { RequestCreditsForm } from "./RequestCreditsForm";
 import { useAutoScroll } from "../components/ui";
 import { useChat } from "../state/chat";
+import { useCredits } from "../state/credits";
 import { useData, useToast } from "../state/store";
 import { ApiError } from "../api/client";
+import { useI18n } from "../i18n";
+import { isInternalTopupUrl } from "../topup/links";
 import type { FileRef, ModelOption, SkillDescriptor } from "../types";
 import "./chat.css";
 
 const DEFAULT_MAX_MB = 25;
+/** Server error code sent when the account has no credit left to spend. */
+const INSUFFICIENT_CREDITS = "insufficient_credits";
 
 interface ModelChoice {
   providerId: string | null;
@@ -26,8 +33,12 @@ function formatModelValue(providerId?: string | null, model?: string | null): st
   return providerId && model ? `${providerId}::${model}` : "";
 }
 
-export function ChatPage() {
+export function ChatPage({
+  onOpenHub,
+  onOpenTopup,
+}: { onOpenHub?: () => void; onOpenTopup?: () => void } = {}) {
   const { models, skills, skillCatalog, maxSelectableSkills, applyInstalledSkills } = useData();
+  const { t, n } = useI18n();
   const { push } = useToast();
   const {
     conversationId,
@@ -42,6 +53,7 @@ export function ChatPage() {
     uploadAttachment,
     pendingArtifacts,
   } = useChat();
+  const { credits, reload: reloadCredits } = useCredits();
 
   const composerRef = useRef<ComposerHandle>(null);
   const dragDepth = useRef(0);
@@ -60,6 +72,18 @@ export function ChatPage() {
   const maxUploadMb = DEFAULT_MAX_MB;
   const maxUploadBytes = maxUploadMb * 1024 * 1024;
   const isEmpty = messages.length === 0 && !streaming;
+
+  // The live turn reports the code first; after a reload the stored assistant
+  // message still carries it as `"insufficient_credits: …"`.
+  const outOfCredit = useMemo(() => {
+    if (streaming?.errorCode === INSUFFICIENT_CREDITS) return true;
+    const last = messages.at(-1);
+    return Boolean(last?.role === "assistant" && last.error?.startsWith(INSUFFICIENT_CREDITS));
+  }, [streaming?.errorCode, messages]);
+  // Keep the card up until the balance is positive again (or the feature is off).
+  const creditExhausted = outOfCredit && !!credits && credits.enabled && credits.balance <= 0;
+  // The top-up page can be opened in-app when the owner points the URL at it.
+  const internalTopup = Boolean(onOpenTopup) && isInternalTopupUrl(credits?.buyUrl);
 
   const scrollRef = useAutoScroll<HTMLDivElement>([
     messages.length,
@@ -94,7 +118,7 @@ export function ChatPage() {
     if (!heroSkillId) return undefined;
     return skills.find((item) => item.id === heroSkillId);
   }, [heroSkillId, skills]);
-  const heroSkills: SkillDescriptor[] = skills.length ? skills : FALLBACK_SKILLS;
+  const heroSkills: SkillDescriptor[] = skills.length ? skills : fallbackSkills(t);
   /** Ids of the user's quick list — the picker edits exactly this set. */
   const installedSkillIds = useMemo(() => skills.map((item) => item.id), [skills]);
 
@@ -104,7 +128,7 @@ export function ChatPage() {
       const accepted: File[] = [];
       for (const file of files) {
         if (file.size > maxUploadBytes) {
-          push(`“${file.name}” vượt quá ${maxUploadMb}MB nên bị bỏ qua`, "error");
+          push(t("chat.page.fileTooLarge", { name: file.name, max: n(maxUploadMb) }), "error");
           continue;
         }
         accepted.push(file);
@@ -127,7 +151,7 @@ export function ChatPage() {
         setUploading((count) => Math.max(0, count - accepted.length));
       }
     },
-    [maxUploadBytes, maxUploadMb, push, uploadAttachment],
+    [maxUploadBytes, maxUploadMb, n, push, t, uploadAttachment],
   );
 
   const removeAttachment = (id: string) => setAttachments((current) => current.filter((file) => file.id !== id));
@@ -139,7 +163,7 @@ export function ChatPage() {
     try {
       await send({ content, attachments: files, skill, providerId: choice.providerId, model: choice.model });
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không gửi được tin nhắn", "error");
+      push(err instanceof ApiError ? err.message : t("chat.page.sendFailed"), "error");
     }
   };
 
@@ -194,6 +218,7 @@ export function ChatPage() {
         pendingArtifacts={pendingArtifacts}
         scrollRef={scrollRef}
         onRegenerate={() => void regenerate()}
+        onChoose={(value) => void send({ content: value, conversationId, skill, attachments: [] })}
         providerName={providerName}
       />
 
@@ -206,8 +231,7 @@ export function ChatPage() {
                 <span className="hero-word brand-word">FlowGpt</span>
               </div>
               <p>
-                Trợ lý AI cho công việc hằng ngày: trò chuyện, tạo ảnh, làm slide, bảng tính và phân tích dữ liệu —
-                tất cả trong một khung chat.
+                {t("chat.page.heroIntro")}
               </p>
 
               <div className="chip-row hero-chips">
@@ -243,14 +267,48 @@ export function ChatPage() {
                   ))}
                 </div>
               ) : (
-                <div className="tiny faint mt-3">Chọn một kỹ năng để xem gợi ý bắt đầu.</div>
+                <div className="tiny faint mt-3">{t("chat.page.chooseSkill")}</div>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {dragOver && <div className="chat-dropzone">Thả tệp vào đây để đính kèm</div>}
+      {dragOver && <div className="chat-dropzone">{t("chat.page.dropzone")}</div>}
+
+      {creditExhausted && credits && (
+        <div className="credit-exhausted" role="alert">
+          <span className="credit-exhausted-icon">
+            <CircleAlert size={18} />
+          </span>
+          <div className="grow">
+            <div className="bold">{t("chat.page.outOfCredit.title")}</div>
+            <div className="small muted">
+              {t("chat.page.outOfCredit.body", {
+                balance: n(credits.balance),
+                perToken: n(credits.perToken),
+              })}
+            </div>
+            <RequestCreditsForm currentBalance={credits.balance} onOpenTopup={onOpenTopup} />
+          </div>
+          <div className="credit-exhausted-actions">
+            {credits.buyUrl ? (
+              internalTopup ? (
+                <button className="btn btn-sm" type="button" onClick={onOpenTopup}>
+                  <Coins size={14} /> {t("chat.page.topUp")}
+                </button>
+              ) : (
+                <a className="btn btn-sm" href={credits.buyUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} /> {t("chat.page.topUp")}
+                </a>
+              )
+            ) : null}
+            <button className="btn btn-sm" type="button" onClick={() => void reloadCredits()}>
+              {t("chat.page.checkAgain")}
+            </button>
+          </div>
+        </div>
+      )}
 
       <Composer
         ref={composerRef}
@@ -279,6 +337,7 @@ export function ChatPage() {
         installed={installedSkillIds}
         catalog={skillCatalog}
         maxSelectable={maxSelectableSkills}
+        onOpenHub={onOpenHub}
         onSaved={(items) => {
           applyInstalledSkills(items);
           // The dropdown may point at a skill the user just removed.

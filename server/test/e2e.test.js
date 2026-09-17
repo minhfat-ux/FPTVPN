@@ -124,20 +124,34 @@ test("plain chat streams start → delta → done and persists the turn", async 
   assert.equal(stored.conversation.title, "Xin chào FlowGpt");
 });
 
-test("the PPT skill runs generate_pptx and returns a real .pptx artifact", async () => {
-  const events = await chat({
+test("the PPT skill proposes the deck first and only writes it after a confirmation", async () => {
+  // 1) The first turn is a *planning* turn: no file, and the server attaches the
+  //    confirmation buttons itself (glm-4-flash ignores tool_choice when the prompt
+  //    tells it to propose a plan first).
+  const plan = await chat({
     token: ctx.token,
     content: "Làm slide giới thiệu FlowGpt",
     skill: "ppt",
     conversationId: ctx.conversationId,
   });
-  const calls = eventsNamed(events, "tool_call");
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].data.name, "generate_pptx");
-  assert.equal(calls[0].data.source, "builtin");
+  const planDone = eventsNamed(plan, "done")[0].data;
+  assert.equal(eventsNamed(plan, "artifact").length, 0, "lượt lập kế hoạch không được tạo tệp");
+  assert.ok(planDone.choices?.length >= 3, "phải có nút xác nhận cho người dùng");
+  assert.equal(planDone.choices.some((choice) => choice.id === "create"), true);
+  ctx.pptChoices = planDone.choices;
 
+  // 2) Approving the plan writes the .pptx.
+  const createChoice = planDone.choices.find((choice) => choice.id === "create");
+  const events = await chat({
+    token: ctx.token,
+    content: createChoice.value,
+    skill: "ppt",
+    conversationId: ctx.conversationId,
+  });
   const results = eventsNamed(events, "tool_result");
+  assert.equal(results[0].data.name, "generate_pptx");
   assert.equal(results[0].data.ok, true);
+  assert.equal(results[0].data.data.needsConfirm, undefined, "lượt xác nhận phải tạo tệp thật");
   assert.equal(results[0].data.artifacts.length, 1);
 
   const artifacts = eventsNamed(events, "artifact");
@@ -153,10 +167,21 @@ test("the PPT skill runs generate_pptx and returns a real .pptx artifact", async
   assert.equal(buffer.subarray(0, 2).toString(), "PK");
 });
 
-test("the Excel skill runs generate_xlsx and returns a real .xlsx artifact", async () => {
-  const events = await chat({
+test("the Excel skill also confirms the plan before writing the workbook", async () => {
+  const plan = await chat({
     token: ctx.token,
     content: "Lập bảng Excel dự toán",
+    skill: "excel",
+    conversationId: ctx.conversationId,
+  });
+  const planDone = eventsNamed(plan, "done")[0].data;
+  assert.equal(eventsNamed(plan, "artifact").length, 0, "lượt lập kế hoạch không được tạo tệp");
+  assert.ok(planDone.choices?.length >= 3);
+
+  const createChoice = planDone.choices.find((choice) => choice.id === "create");
+  const events = await chat({
+    token: ctx.token,
+    content: createChoice.value,
     skill: "excel",
     conversationId: ctx.conversationId,
   });
@@ -250,7 +275,26 @@ test("the default chat skill still executes a real tool (skill steers, never gat
   assert.equal(results.length, 1, "mong đợi đúng một tool result");
   assert.equal(results[0].data.name, "generate_pptx");
   assert.equal(results[0].data.ok, true, results[0].data.error ?? results[0].data.summary);
-  assert.equal(eventsNamed(events, "artifact").length, 1);
+  // In "chat" mode the deck is still proposed first (see confirm.js) — the point
+  // of this test is that the tool is *reachable*, not that it writes immediately.
+  assert.ok(
+    results[0].data.data.needsConfirm === true || eventsNamed(events, "artifact").length === 1,
+    "phải đề xuất dàn ý hoặc tạo tệp, không được báo thiếu công cụ",
+  );
+});
+
+test("a file skill forces the first tool call instead of a prose outline", async () => {
+  // Regression: glm-4-flash sometimes answered "đây là dàn ý…" and never called
+  // generate_pptx, so the user got text where a .pptx was expected.
+  const events = await chat({
+    token: ctx.token,
+    content: "Làm slide 4 trang về FlowGpt giúp anh",
+    skill: "ppt",
+    conversationId: ctx.conversationId,
+  });
+  const calls = eventsNamed(events, "tool_call").map((event) => event.data.name);
+  assert.ok(calls.length >= 1, `phải gọi công cụ ngay (đã gọi: ${calls.join(", ") || "không"})`);
+  assert.ok(calls.includes("generate_pptx"), `công cụ đầu tiên phải là generate_pptx (đã gọi: ${calls.join(", ")})`);
 });
 
 test("an unknown tool name yields a helpful error instead of a silent failure", async () => {
@@ -259,6 +303,32 @@ test("an unknown tool name yields a helpful error instead of a silent failure", 
   assert.equal(result.ok, false);
   assert.match(result.summary, /không có công cụ/i);
   assert.ok(TOOL_DEFINITIONS.length >= 5);
+});
+
+test("analyze_data actually filters rows (regression: the comparison op lives in op_filter)", async () => {
+  const { executeTool } = await import("../src/skills/index.js");
+  const me = await api("GET", "/auth/me", undefined, ctx.token);
+  const result = await executeTool(
+    "analyze_data",
+    {
+      fileId: ctx.csvFileId,
+      operations: [{ op: "filter", column: "khu-vuc", op_filter: "contains", value: "Mien Nam" }],
+    },
+    { userId: me.user.id, files: [] },
+  );
+  assert.equal(result.ok, true, result.error ?? "");
+  const table = result.data.tables[0];
+  assert.equal(table.rows.length, 2);
+  assert.ok(table.rows.every((row) => String(row[0]).includes("Mien Nam")));
+
+  // An unsupported comparison operator still fails loudly rather than silently.
+  const bad = await executeTool(
+    "analyze_data",
+    { fileId: ctx.csvFileId, operations: [{ op: "filter", column: "khu-vuc", op_filter: "khong-co", value: "x" }] },
+    { userId: me.user.id, files: [] },
+  );
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /Toán tử lọc/);
 });
 
 test("conversations: list, search, pin, duplicate, delete", async () => {

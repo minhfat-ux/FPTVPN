@@ -3,6 +3,7 @@ import { Download, Eye } from "lucide-react";
 import { api } from "../api/client";
 import { formatBytes } from "../state/store";
 import { Modal, fileIconLabel } from "../components/ui";
+import { useI18n } from "../i18n";
 import type { FileRef } from "../types";
 
 function isImage(file: FileRef): boolean {
@@ -11,6 +12,7 @@ function isImage(file: FileRef): boolean {
 
 /** One produced file: icon, name, size, download link and inline preview for images. */
 export function ArtifactCard({ file }: { file: FileRef }) {
+  const { t } = useI18n();
   const [preview, setPreview] = useState(false);
   const image = isImage(file);
 
@@ -27,11 +29,11 @@ export function ArtifactCard({ file }: { file: FileRef }) {
         <div className="row gap-2">
           {image && (
             <button className="btn btn-sm btn-ghost" onClick={() => setPreview(true)} type="button">
-              <Eye size={14} /> Xem
+              <Eye size={14} /> {t("chat.artifact.view")}
             </button>
           )}
-          <a className="btn btn-sm" href={api.fileUrl(file.id)} download={file.name} title="Tải xuống">
-            <Download size={14} /> Tải
+          <a className="btn btn-sm" href={api.fileUrl(file.id)} download={file.name} title={t("chat.artifact.download")}>
+            <Download size={14} /> {t("chat.artifact.downloadShort")}
           </a>
         </div>
       </div>
@@ -49,12 +51,15 @@ export function ArtifactCard({ file }: { file: FileRef }) {
       <Modal
         open={preview}
         title={file.name}
-        description={`${formatBytes(file.size ?? 0)} · ${file.mime || "không rõ định dạng"}`}
+        description={t("chat.artifact.meta", {
+          size: formatBytes(file.size ?? 0),
+          type: file.mime || t("chat.artifact.unknownType"),
+        })}
         onClose={() => setPreview(false)}
         wide
         footer={
           <a className="btn" href={api.fileUrl(file.id)} download={file.name}>
-            <Download size={14} /> Tải xuống
+            <Download size={14} /> {t("chat.artifact.download")}
           </a>
         }
       >

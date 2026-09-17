@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
+import { useI18n } from "../i18n";
 import { toSpeakableText, useSpeechRecognition, useSpeechSynthesis } from ".";
 import { getAudioContextCtor, transcribeClip, transcribeErrorMessage, useMicLevel } from "./useMicLevel";
 import type { SilenceDetector } from "./useMicLevel";
@@ -53,15 +54,16 @@ const TURN_TIMEOUT_MS = 15000;
 /** Milestone used to check whether the chat turn already finished. */
 const TURN_POLL_MS = 1200;
 
-const CHAT_BUSY_MESSAGE = "Hội thoại đang bận, anh/chị thử lại sau khi câu trả lời hoàn tất.";
-const AUDIO_FAILED = "Không đọc được câu trả lời bằng giọng nói.";
-const TTS_MISSING = "Trình duyệt này không đọc được văn bản. Vào Cài đặt → Giọng nói để chọn nhà cung cấp TTS.";
+const CHAT_BUSY_KEY = "voice.error.chatBusy";
+const AUDIO_FAILED_KEY = "voice.error.audioFailed";
+const TTS_MISSING_KEY = "voice.error.ttsUnsupported";
 
 interface Playback {
   aborted: boolean;
 }
 
 export function useVoiceConversation(options: VoiceConversationOptions): VoiceConversationController {
+  const { t } = useI18n();
   const latest = useRef(options);
   latest.current = options;
 
@@ -167,7 +169,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       if (text) sendUtterance(text);
       else if (canListen()) applyState("listening");
     } catch (err) {
-      if (!stoppedRef.current) fail(transcribeErrorMessage(err));
+      if (!stoppedRef.current) fail(t(transcribeErrorMessage(err)));
     } finally {
       transcribingRef.current = false;
     }
@@ -192,7 +194,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       return;
     }
     if (latest.current.turnBusy || latest.current.isSending) {
-      fail(CHAT_BUSY_MESSAGE);
+      fail(t(CHAT_BUSY_KEY));
       return;
     }
 
@@ -271,7 +273,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     try {
       if (latest.current.ttsMode === "browser") {
         if (!synthesis.supported) {
-          fail(TTS_MISSING);
+          fail(t(TTS_MISSING_KEY));
           return;
         }
         await synthesis.speak(text, { rate: latest.current.speakRate, voiceName: latest.current.ttsVoice });
@@ -283,13 +285,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         });
         if (playback.aborted || stoppedRef.current) return;
         if (!audio) {
-          fail(AUDIO_FAILED);
+          fail(t(AUDIO_FAILED_KEY));
           return;
         }
       }
     } catch (err) {
       if (!playback.aborted && !stoppedRef.current) {
-        fail(err instanceof ApiError ? err.message : AUDIO_FAILED);
+        fail(err instanceof ApiError ? err.message : t(AUDIO_FAILED_KEY));
       }
       return;
     }

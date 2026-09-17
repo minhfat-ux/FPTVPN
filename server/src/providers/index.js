@@ -115,6 +115,8 @@ export function providerKind(kind) {
   return PROVIDER_KINDS.find((k) => k.id === kind) ?? null;
 }
 
+export { modelAcceptsImages } from "./vision.js";
+
 export function adapterFor(kind) {
   const adapter = ADAPTERS[kind];
   if (!adapter) throw new ApiError(400, "bad_request", `Provider kind không hỗ trợ: ${kind}`);

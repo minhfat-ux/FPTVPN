@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS messages (
   provider_id TEXT,
   model TEXT,
   usage_json TEXT,
+  choices_json TEXT NOT NULL DEFAULT '[]',
   error TEXT,
   created_at TEXT NOT NULL
 );
@@ -135,6 +136,81 @@ CREATE TABLE IF NOT EXISTS user_skills (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_skills_unique ON user_skills(user_id, skill_id);
 CREATE INDEX IF NOT EXISTS idx_user_skills_user ON user_skills(user_id, sort_order);
 
+CREATE TABLE IF NOT EXISTS credit_ledger (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  delta INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  ref TEXT,
+  balance_after INTEGER NOT NULL,
+  note TEXT,
+  actor_id TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_user ON credit_ledger(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS credit_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email TEXT,
+  amount INTEGER NOT NULL,
+  balance_at_request INTEGER,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  decided_at TEXT,
+  decided_by TEXT,
+  granted_amount INTEGER,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_credit_requests_status ON credit_requests(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_credit_requests_user ON credit_requests(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS hub_skills (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  tagline TEXT,
+  description TEXT,
+  category TEXT NOT NULL DEFAULT 'Khác',
+  icon TEXT NOT NULL DEFAULT 'sparkles',
+  price INTEGER NOT NULL DEFAULT 0,
+  instructions TEXT,
+  tools_json TEXT NOT NULL DEFAULT '[]',
+  state TEXT NOT NULL DEFAULT 'published',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  installs INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hub_purchases (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  hub_skill_id TEXT NOT NULL,
+  price_paid INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hub_purchases_unique ON hub_purchases(user_id, hub_skill_id);
+CREATE INDEX IF NOT EXISTS idx_hub_purchases_user ON hub_purchases(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS topup_orders (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email TEXT,
+  package_id TEXT,
+  package_name TEXT NOT NULL,
+  tokens INTEGER NOT NULL,
+  amount_vnd INTEGER NOT NULL,
+  transfer_note TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  bank_txn_ref TEXT,
+  paid_at TEXT,
+  confirmed_by TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_topup_orders_user ON topup_orders(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_topup_orders_status ON topup_orders(status, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS usage_log (
   id TEXT PRIMARY KEY,
   user_id TEXT,
@@ -155,6 +231,32 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
+
+-- One row per signed-in device/browser. The JWT carries a session id (sid), so
+-- several devices for the same account coexist and each can be revoked on its own.
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  label TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  expires_at TEXT,
+  revoked_at TEXT,
+  revoked_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id, created_at DESC);
+
+-- Per-account (not per-device) state that has to follow the user everywhere,
+-- e.g. the conversation they last worked on.
+CREATE TABLE IF NOT EXISTS user_state (
+  user_id TEXT PRIMARY KEY,
+  last_conversation_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;
 
 export const db = new DatabaseSync(config.dbFile);
@@ -165,7 +267,28 @@ export function initDb() {
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec(SCHEMA);
+  migrate();
   return db;
+}
+
+/**
+ * Additive migrations for databases created by an older release. `CREATE TABLE IF
+ * NOT EXISTS` cannot add a column, and there is no migration framework — a plain
+ * `ALTER TABLE ... ADD COLUMN` guarded by a PRAGMA lookup is enough here (SQLite
+ * allows adding a NOT NULL column when a default is given).
+ */
+const ADDED_COLUMNS = [
+  { table: "messages", column: "choices_json", definition: "TEXT NOT NULL DEFAULT '[]'" },
+];
+
+function migrate() {
+  for (const entry of ADDED_COLUMNS) {
+    const existing = new Set(db.prepare(`PRAGMA table_info(${entry.table})`).all().map((row) => row.name));
+    if (existing.has(entry.column)) continue;
+    db.exec(`ALTER TABLE ${entry.table} ADD COLUMN ${entry.column} ${entry.definition}`);
+    console.log(`[flowgpt] đã thêm cột ${entry.table}.${entry.column}`);
+  }
+  COLUMN_CACHE.clear();
 }
 
 const COLUMN_CACHE = new Map();
@@ -281,6 +404,8 @@ export const DEFAULT_APP_SETTINGS = {
     "Bạn là FlowGpt — trợ lý AI đa năng của MeetFlow AI, trả lời bằng tiếng Việt tự nhiên, ngắn gọn và chính xác.",
     "Khi người dùng cần tạo tệp (slide, bảng tính, phân tích dữ liệu, sửa ảnh), hãy dùng công cụ tương ứng thay vì chỉ mô tả.",
     "Nếu thiếu thông tin quan trọng, hỏi lại tối đa một câu ngắn rồi vẫn đưa ra bản nháp hợp lý.",
+    "Khi đã tạo tệp, chỉ nói ngắn gọn đã tạo gì và nêu vài số liệu chính; KHÔNG viết link tải kiểu sandbox:/… hay đường dẫn giả — giao diện đã hiện thẻ tệp cho người dùng bấm tải.",
+    "Nếu ảnh đính kèm không xem được, đừng đoán nội dung ảnh: nói rõ là chưa đọc được ảnh.",
   ].join(" "),
   defaultProviderId: null,
   defaultModel: null,
@@ -290,6 +415,12 @@ export const DEFAULT_APP_SETTINGS = {
   allowSignup: true,
   appName: "FlowGpt",
   imageModel: null,
+  /**
+   * Which provider/model reads images (OCR, "đưa ảnh thành Excel") when the model
+   * the user picked cannot see. null = auto (a provider whose model has vision).
+   */
+  visionProviderId: null,
+  visionModel: null,
 
   // --- login by emailed token (passwordless) -------------------------------
   /** How long a login code/link stays valid. */
@@ -319,6 +450,45 @@ export const DEFAULT_APP_SETTINGS = {
   voiceAutoRead: false,
   /** Browser speech rate 0.5–2. */
   voiceSpeakRate: 1,
+
+  // --- credits -------------------------------------------------------------  /** Master switch for metering chat and blocking users who run out. */
+  creditsEnabled: true,
+  /** Credits handed to a brand-new account on first login (0 = must buy first). */
+  signupCredits: 10000,
+  /** Credits charged per token, counting input + output (1 = one credit/token). */
+  creditsPerToken: 1,
+  /** Where the "nạp thêm" button sends people. */
+  creditBuyUrl: "https://flowgpt.meetflowai.site/?view=topup",
+  /** Token packages sold on the FlowGpt top-up page (price in VND). */
+  topupPackages: [
+    { id: "starter", name: "Gói khởi đầu", tokens: 100000, priceVnd: 50000, bonusTokens: 0, note: "Phù hợp để thử" },
+    { id: "pro", name: "Gói Pro", tokens: 1000000, priceVnd: 400000, bonusTokens: 100000, note: "Phổ biến nhất" },
+    { id: "business", name: "Gói doanh nghiệp", tokens: 5000000, priceVnd: 1800000, bonusTokens: 800000, note: "Cho cả nhóm" },
+  ],
+  /** Bank account shown on the top-up page (VietQR image is built from these). */
+  bankId: "970436",
+  bankAccount: "",
+  bankAccountName: "",
+  /** Prefix of the transfer note so the owner can match a payment to an order. */
+  bankNotePrefix: "FLOWGPT",
+  /** How often the promo popup nags a visitor who has no credit (minutes). */
+  promoReminderMinutes: 5,
+  /** Snooze for visitors who do have credit (minutes). */
+  promoCreditSnoozeMinutes: 1440,
+  /**
+   * Public model names shown to users (vendor names stay internal). Models that
+   * are not listed here still get a FlowGPT-style label when they come from a
+   * known family (see `publicModelLabel`).
+   */
+  modelAliases: {
+    "glm-4-flash": "FlowGPT-4-Flash",
+    "glm-4.5-air": "FlowGPT-4.5-Air",
+    "glm-4.5": "FlowGPT-4.5",
+    "glm-4.6": "FlowGPT-4.6",
+    "glm-4.7": "FlowGPT-4.7",
+    "glm-5.3-flash": "FlowGPT-5.3-Flash",
+    "glm-5.3": "FlowGPT-5.3",
+  },
 };
 
 export function getAppSettings() {

@@ -1,4 +1,4 @@
-import { getOwnedFile, asImagePayload, saveBuffer, publicArtifact } from "../files.js";
+import { resolveOwnedFile, asImagePayload, saveBuffer, publicArtifact } from "../files.js";
 import { generateImage } from "../providers/images.js";
 import { badRequest } from "../util.js";
 
@@ -13,7 +13,13 @@ export async function editImage(args, ctx) {
   if (!fileId) throw badRequest("edit_image cần `fileId` của ảnh gốc");
   if (!instruction) throw badRequest("edit_image cần `instruction` (mô tả cần sửa gì)");
 
-  const fileRow = getOwnedFile(fileId, ctx.userId);
+  const fileRow = resolveOwnedFile({
+    id: fileId,
+    name: args?.fileName ?? null,
+    userId: ctx.userId,
+    conversationId: ctx.conversationId ?? null,
+    expectKind: "image",
+  });
   if (fileRow.kind !== "image") throw badRequest(`${fileRow.name} không phải ảnh`);
 
   const provider = await ctx.resolveImageProvider(args?.providerId ?? null);
@@ -59,7 +65,12 @@ export async function editImage(args, ctx) {
 export async function transformImage(args, ctx) {
   const fileId = args?.fileId;
   if (!fileId) throw badRequest("transform_image cần `fileId`");
-  const fileRow = getOwnedFile(fileId, ctx.userId);
+  const fileRow = resolveOwnedFile({
+    id: fileId,
+    userId: ctx.userId,
+    conversationId: ctx.conversationId ?? null,
+    expectKind: "image",
+  });
   if (fileRow.kind !== "image") throw badRequest(`${fileRow.name} không phải ảnh`);
   // No pixel library on the server on purpose (no native deps on a 1GB VPS):
   // the web Image Studio performs crop/rotate/filter/draw locally and uploads

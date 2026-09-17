@@ -13,12 +13,14 @@ import {
   Presentation,
   Search,
   Sparkles,
+  Store,
   Table2,
   Trash2,
 } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import { useToast } from "../state/store";
 import { Modal, Spinner } from "../components/ui";
+import { useI18n } from "../i18n";
 import type { SkillDescriptor } from "../types";
 
 /** Icon per catalogue entry (unknown ids fall back to a generic sparkle). */
@@ -37,7 +39,7 @@ export function skillIcon(icon: string, size = 16) {
   }
 }
 
-export function skillLabel(skills: SkillDescriptor[], id: string, fallback = "Tự động"): string {
+export function skillLabel(skills: SkillDescriptor[], id: string, fallback: string): string {
   if (id === "auto") return fallback;
   return skills.find((skill) => skill.id === id)?.label ?? id;
 }
@@ -54,6 +56,7 @@ export function SkillPicker({
   catalog,
   maxSelectable,
   onSaved,
+  onOpenHub,
 }: {
   open: boolean;
   onClose: () => void;
@@ -61,7 +64,10 @@ export function SkillPicker({
   catalog: SkillDescriptor[];
   maxSelectable: number;
   onSaved: (next: SkillDescriptor[]) => void;
+  /** Opens the skill marketplace; the entry is hidden when the prop is absent. */
+  onOpenHub?: () => void;
 }) {
+  const { t, n } = useI18n();
   const { push } = useToast();
   const [draft, setDraft] = useState<string[]>(installed);
   const [query, setQuery] = useState("");
@@ -94,7 +100,7 @@ export function SkillPicker({
     setDraft((current) => {
       if (current.includes(id)) return current.filter((skillId) => skillId !== id);
       if (current.length >= maxSelectable) {
-        push(`Danh sách nhanh tối đa ${maxSelectable} kỹ năng — bỏ một kỹ năng trước nhé.`, "info");
+        push(t("chat.skillPicker.maxReached", { max: n(maxSelectable) }), "info");
         return current;
       }
       return [...current, id];
@@ -106,10 +112,10 @@ export function SkillPicker({
     try {
       const result = await api.setInstalledSkills(draft);
       onSaved(result.items);
-      push(`Đã lưu ${result.items.length} kỹ năng cho danh sách nhanh`, "success");
+      push(t("chat.skillPicker.saved", { count: n(result.items.length) }), "success");
       onClose();
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không lưu được danh sách kỹ năng", "error");
+      push(err instanceof ApiError ? err.message : t("chat.skillPicker.saveFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -120,18 +126,32 @@ export function SkillPicker({
       open={open}
       onClose={onClose}
       wide
-      title="Thêm kỹ năng"
-      description={`Chọn kỹ năng hiện trong danh sách nhanh (tối đa ${maxSelectable}). Thứ tự hiển thị theo thứ tự anh chọn.`}
+      title={t("chat.skillPicker.title")}
+      description={t("chat.skillPicker.description", { max: n(maxSelectable) })}
       footer={
         <>
           <span className="tiny faint grow">
-            Đã chọn <span className="bold">{draft.length}</span>/{maxSelectable} kỹ năng
+            {t("chat.skillPicker.selectedLabel")}
+            <span className="bold">{n(draft.length)}</span>
+            {t("chat.skillPicker.selectedCount", { max: n(maxSelectable) })}
           </span>
+          {onOpenHub && (
+            <button
+              className="btn"
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenHub();
+              }}
+            >
+              <Store size={15} /> {t("chat.skillPicker.openHub")}
+            </button>
+          )}
           <button className="btn" type="button" onClick={onClose} disabled={saving}>
-            Huỷ
+            {t("common.cancel")}
           </button>
           <button className="btn btn-primary" type="button" onClick={save} disabled={saving || !draft.length}>
-            {saving ? <Spinner label="Đang lưu…" /> : <><Check size={15} /> Lưu danh sách</>}
+            {saving ? <Spinner label={t("common.saving")} /> : <><Check size={15} /> {t("chat.skillPicker.save")}</>}
           </button>
         </>
       }
@@ -141,7 +161,7 @@ export function SkillPicker({
         <input
           className="input"
           style={{ paddingLeft: 32 }}
-          placeholder="Tìm kỹ năng…"
+          placeholder={t("chat.skillPicker.searchPlaceholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           autoFocus
@@ -163,7 +183,7 @@ export function SkillPicker({
               <span className="grow" style={{ minWidth: 0 }}>
                 <span className="row gap-2">
                   <span className="bold small">{skill.label}</span>
-                  {skill.builtin === false && <span className="badge">bên ngoài</span>}
+                  {skill.builtin === false && <span className="badge">{t("chat.skillPicker.external")}</span>}
                 </span>
                 <span className="tiny muted" style={{ display: "block" }}>
                   {skill.description}
@@ -175,7 +195,9 @@ export function SkillPicker({
             </button>
           );
         })}
-        {!filteredReady.length && <div className="empty small">Không tìm thấy kỹ năng nào khớp “{query}”.</div>}
+        {!filteredReady.length && (
+          <div className="empty small">{t("chat.skillPicker.noMatch", { query })}</div>
+        )}
       </div>
 
       {filteredComing.length > 0 && (
@@ -183,11 +205,10 @@ export function SkillPicker({
           <div className="divider" />
           <div className="row gap-2 mb-2">
             <LayoutGrid size={15} />
-            <span className="bold small">Chợ kỹ năng — sắp có</span>
+            <span className="bold small">{t("chat.skillPicker.comingTitle")}</span>
           </div>
           <p className="hint mb-3">
-            Các kỹ năng dưới đây chưa mở. Khi chợ kỹ năng hoạt động, anh cũng sẽ tự thêm được kỹ năng riêng,
-            kỹ năng lấy từ MCP server hoặc mua/chia sẻ trong tổ chức.
+            {t("chat.skillPicker.comingHint")}
           </p>
           <div className="skill-picker-grid">
             {filteredComing.map((skill) => (
@@ -196,7 +217,7 @@ export function SkillPicker({
                 <span className="grow" style={{ minWidth: 0 }}>
                   <span className="row gap-2">
                     <span className="bold small">{skill.label}</span>
-                    <span className="badge badge-warn">Sắp có</span>
+                    <span className="badge badge-warn">{t("chat.skillPicker.comingBadge")}</span>
                   </span>
                   <span className="tiny muted" style={{ display: "block" }}>
                     {skill.description}
@@ -212,15 +233,15 @@ export function SkillPicker({
         <>
           <div className="divider" />
           <div className="row row-wrap gap-2">
-            <span className="tiny faint">Đang chọn:</span>
+            <span className="tiny faint">{t("chat.skillPicker.selecting")}</span>
             {draft.map((id) => (
               <span key={id} className="chip active">
                 {skillIcon(catalog.find((skill) => skill.id === id)?.icon ?? "", 14)}
-                {skillLabel(catalog, id)}
+                {skillLabel(catalog, id, t("chat.skill.auto"))}
                 <button
                   type="button"
                   className="btn btn-ghost btn-icon btn-sm"
-                  aria-label={`Bỏ ${skillLabel(catalog, id)}`}
+                  aria-label={t("chat.skillPicker.removeAria", { name: skillLabel(catalog, id, t("chat.skill.auto")) })}
                   onClick={(event) => {
                     event.stopPropagation();
                     toggle(id);

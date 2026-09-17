@@ -154,6 +154,77 @@ a:hover { text-decoration: underline; }
 .sidebar-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 var(--space-2) var(--space-3); min-height: 0; }
 .sidebar-foot { border-top: 1px solid var(--border); padding: var(--space-2); }
 
+/* Sidebar credit pill — sits directly above the signed-in user row. */
+.credit-badge {
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+  margin: var(--space-2) var(--space-2) 0; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-hover); color: var(--text-muted);
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.credit-badge:hover { border-color: var(--border-strong); color: var(--text); }
+.credit-badge-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.credit-badge-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.credit-badge-sub { font-size: 11px; color: var(--text-faint); }
+/* Out of credit is the one state that has to shout. */
+.credit-badge-empty {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger); font-weight: 650;
+}
+.credit-badge-empty .credit-badge-sub { color: var(--danger); }
+.credit-badge-empty:hover { border-color: var(--danger); color: var(--danger); }
+
+.credit-panel { display: flex; flex-direction: column; gap: var(--space-3); }
+.credit-danger { color: var(--danger); }
+.credit-plus { color: var(--ok); }
+.credit-minus { color: var(--text-muted); }
+.credit-history {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-subtle); padding: var(--space-3);
+}
+.credit-history-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-direction: column; }
+.credit-history-row {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border);
+}
+.credit-history-row:first-child { border-top: 0; }
+
+/* ----------------------------------------------------- profile / account
+   The footer row itself opens the "Tài khoản & token" modal. */
+.profile-row { display: flex; align-items: center; gap: var(--space-1); }
+.profile-open {
+  display: flex; align-items: center; gap: var(--space-2);
+  flex: 1; min-width: 0; padding: 6px; margin-left: calc(-1 * 6px);
+  border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.profile-open:hover, .profile-open:focus-visible { background: var(--bg-hover); }
+.profile-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.profile-avatar {
+  flex: 0 0 30px; width: 30px; height: 30px;
+  background: var(--bg-hover); color: var(--text-muted); font-weight: 700; font-size: 13px;
+}
+.profile-avatar-lg {
+  flex: 0 0 44px; width: 44px; height: 44px; font-size: 18px; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent);
+}
+
+.profile-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.profile-card {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+.profile-token {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.profile-balance { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
 .nav-item {
   display: flex; align-items: center; gap: 10px;
   width: 100%; padding: 9px 10px; border: 0; border-radius: var(--radius-sm);
@@ -200,7 +271,19 @@ a:hover { text-decoration: underline; }
 }
 .topbar .grow { flex: 1; min-width: 0; }
 .topbar-title { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topbar-sub { font-size: 12px; color: var(--text-muted); }
+
+/* Locale switcher — sits in the topbar next to the Studio shortcut, and in the
+   account menu / Settings (compact variant). */
+.locale-switcher { display: inline-flex; align-items: center; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--bg-subtle); }
+.locale-chip {
+  border: 0; background: transparent; color: var(--text-muted);
+  font: inherit; font-size: 11.5px; font-weight: 650; letter-spacing: 0.02em;
+  padding: 4px 9px; border-radius: var(--radius-full); cursor: pointer;
+  touch-action: manipulation; transition: background 0.15s, color 0.15s;
+}
+.locale-chip:hover { color: var(--text); background: var(--bg-hover); }
+.locale-chip.active { background: var(--accent); color: var(--accent-text); }
+.topbar-locale { display: flex; align-items: center; margin-right: 2px; }.topbar-sub { font-size: 12px; color: var(--text-muted); }
 
 .page { flex: 1; overflow-y: auto; min-height: 0; }
 .page-inner { max-width: 980px; margin: 0 auto; padding: var(--space-5) var(--space-4) 96px; }
@@ -405,10 +488,18 @@ a:hover { text-decoration: underline; }
   background: var(--bg-elevated); border: 1px solid var(--border-strong);
   border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px;
 }
+/* The menu is portalled to <body> and positioned against the visual viewport, so
+   it can never be clipped by .app's overflow or pushed off-screen by the iOS
+   keyboard. Height/left/top come from SkillSelect's measurement. */
+.skill-dropdown-portal {
+  position: fixed; bottom: auto; z-index: 70; min-width: 0;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+}
 .skill-dropdown-item {
   display: flex; align-items: center; gap: 9px; width: 100%;
   padding: 8px 9px; border: 0; border-radius: var(--radius-sm);
   background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  touch-action: manipulation;
 }
 .skill-dropdown-item:hover { background: var(--bg-hover); }
 .skill-dropdown-item.active { background: var(--accent-soft); }
@@ -423,8 +514,18 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 9px; border: 0; border-radius: var(--radius-sm);
   background: transparent; color: var(--accent); font: inherit; font-weight: 650; cursor: pointer; text-align: left;
+  touch-action: manipulation;
 }
 .skill-dropdown-more:hover { background: var(--accent-soft); }
+
+/* Touch devices: finger-sized rows (Apple/Google both ask for ~44px). */
+@media (pointer: coarse) {
+  .skill-dropdown { padding: 8px; }
+  .skill-dropdown-item, .skill-dropdown-more { min-height: 46px; padding: 10px 11px; }
+  .skill-dropdown-item .skill-dropdown-name { font-size: 14.5px; }
+  .skill-dropdown-item .skill-dropdown-desc { font-size: 12.5px; }
+  .skill-trigger { min-height: 38px; }
+}
 
 .skill-picker-grid { display: grid; gap: 8px; }
 @media (min-width: 640px) { .skill-picker-grid { grid-template-columns: 1fr 1fr; } }
@@ -484,6 +585,40 @@ a:hover { text-decoration: underline; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ------------------------------------------------- signed-in devices (sessions) */
+
+.session-block { margin-top: var(--space-4); }
+.session-list {
+  display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 8px;
+  background: var(--bg-panel);
+}
+.session-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: var(--radius-sm); background: var(--bg-elevated);
+}
+.session-icon {
+  display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 auto;
+  border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent);
+}
+
+/* Tappable options under an answer (which parts of a photo go into the Excel…). */
+.choice-row { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 2px; }
+.choice-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  touch-action: manipulation; transition: background 0.15s, border-color 0.15s;
+}
+.choice-chip:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--accent); }
+.choice-chip:disabled { opacity: 0.55; cursor: default; }
+
+@media (pointer: coarse) {
+  .session-item .btn { min-height: 36px; }
+}
+
 .skeleton {
   background: linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-active) 37%, var(--bg-hover) 63%);
   background-size: 400% 100%; animation: shimmer 1.3s ease infinite; border-radius: var(--radius-sm);
@@ -515,12 +650,22 @@ a:hover { text-decoration: underline; }
 
 /* ------------------------------------------------------------------- modal */
 
+/*
+ * iOS Safari: a grid-centred child taller than the *visual* viewport (keyboard
+ * open, toolbar showing) has unreachable areas — buttons at the bottom of a
+ * picker could not be tapped at all. The backdrop is now the scroll container
+ * and the dialog centres itself with auto margins: when it does not fit it just
+ * starts at the top and scrolls.
+ */
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(8, 12, 22, 0.55); backdrop-filter: blur(3px);
-  display: grid; place-items: center; padding: var(--space-4); z-index: 60;
+  display: flex; flex-direction: column; align-items: center;
+  padding: var(--space-4); z-index: 60;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
 }
 .modal {
-  width: 100%; max-width: 620px; max-height: 88vh; overflow-y: auto;
+  width: 100%; max-width: 620px; margin: auto 0;
+  max-height: 88vh; max-height: 88dvh; overflow-y: auto;
   background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg); padding: var(--space-5);
 }
@@ -528,6 +673,16 @@ a:hover { text-decoration: underline; }
 .modal-head { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-4); }
 .modal-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
 .modal-foot { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
+
+@media (max-width: 760px) {
+  .modal-backdrop { padding: var(--space-2); }
+  .modal { padding: var(--space-4); border-radius: var(--radius); }
+  /* Action buttons stay on screen even when the body scrolls on a phone. */
+  .modal-foot {
+    position: sticky; bottom: calc(-1 * var(--space-4));
+    background: var(--bg-elevated); padding-top: var(--space-3); margin-top: var(--space-3);
+  }
+}
 
 /* ------------------------------------------------------------------ toasts */
 
@@ -591,8 +746,13 @@ a:hover { text-decoration: underline; }
 .hidden { display: none; }
 
 @media (max-width: 860px) {
-  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 50; transform: translateX(-100%); transition: transform 0.2s ease; box-shadow: var(--shadow-lg); }
+  /* Above the toasts (z-index 80): on a phone a toast used to sit on top of the
+     sidebar footer and swallow taps on the account row. */
+  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 90; transform: translateX(-100%); transition: transform 0.2s ease; box-shadow: var(--shadow-lg); }
   .sidebar.open { transform: none; }
   .sidebar-backdrop { position: fixed; inset: 0; background: rgba(8, 12, 22, 0.5); z-index: 40; }
   .chat-inner { padding-left: var(--space-3); padding-right: var(--space-3); }
+  /* Keep the topbar usable on a phone: the locale chips and the Studio label shrink. */
+  .topbar-locale .locale-chip { padding: 3px 7px; font-size: 11px; }
+  .topbar .btn-sm .topbar-btn-label { display: none; }
 }

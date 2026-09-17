@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
+import { useI18n } from "../i18n";
 
 /**
  * Microphone plumbing shared by voice mode: one MediaStream, one AudioContext
@@ -46,8 +47,9 @@ const MAX_RECORD_MS = 20000;
 const MIN_CLIP_BYTES = 2048;
 /** Display gain applied on top of the smoothed RMS. */
 const METER_GAIN = 3.4;
-const MIC_ERROR = "Không mở được micro. Anh/chị kiểm tra quyền truy cập micro của trình duyệt.";
-const RECORD_UNSUPPORTED = "Trình duyệt không ghi được âm thanh để gửi lên máy chủ.";
+const MIC_ERROR_KEY = "voice.error.micOpenFailed";
+const RECORD_UNSUPPORTED_KEY = "voice.error.recordUnsupported";
+const TRANSCRIBE_FAILED_KEY = "voice.error.transcribeFailed";
 
 interface WindowWithLegacyAudio {
   AudioContext?: typeof AudioContext;
@@ -62,6 +64,7 @@ export function getAudioContextCtor(): typeof AudioContext {
 }
 
 export function useMicLevel(enabled: boolean, muted: boolean): MicLevelController {
+  const { t } = useI18n();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,7 +118,7 @@ export function useMicLevel(enabled: boolean, muted: boolean): MicLevelControlle
         setError(null);
         setReady(true);
       } catch {
-        if (!disposed) setError(MIC_ERROR);
+        if (!disposed) setError(t(MIC_ERROR_KEY));
       }
     };
 
@@ -133,7 +136,7 @@ export function useMicLevel(enabled: boolean, muted: boolean): MicLevelControlle
       void ctx?.close().catch(() => undefined);
       levelsRef.current = { level: 0, displayLevel: 0 };
     };
-  }, [enabled, muted]);
+  }, [enabled, muted, t]);
 
   const sample = useCallback(() => {
     const analyser = analyserRef.current;
@@ -188,7 +191,7 @@ export function useMicLevel(enabled: boolean, muted: boolean): MicLevelControlle
     (onCaptured: (blob: Blob | null) => void): (() => void) => {
       const stream = streamRef.current;
       if (!stream || typeof MediaRecorder === "undefined") {
-        setError(RECORD_UNSUPPORTED);
+        setError(t(RECORD_UNSUPPORTED_KEY));
         onCaptured(null);
         return () => undefined;
       }
@@ -207,7 +210,7 @@ export function useMicLevel(enabled: boolean, muted: boolean): MicLevelControlle
         }
       }
       if (!recorder) {
-        setError(RECORD_UNSUPPORTED);
+        setError(t(RECORD_UNSUPPORTED_KEY));
         onCaptured(null);
         return () => undefined;
       }
@@ -258,7 +261,8 @@ export function useMicLevel(enabled: boolean, muted: boolean): MicLevelControlle
       maxTimerRef.current = window.setTimeout(stop, MAX_RECORD_MS);
       return stop;
     },
-    [],
+    // `t` is stable per locale; re-creating the recorder on a language switch is fine.
+    [t],
   );
 
   return { ready, error, levels: levelsRef, analyser: analyserRef, sample, startRecording, createSilenceDetector };
@@ -270,7 +274,8 @@ export async function transcribeClip(blob: Blob, language: string): Promise<stri
   return (result.text ?? "").trim();
 }
 
+/** i18n key for a failed transcription (keys, not sentences: callers translate). */
 export function transcribeErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
-  return "Không nhận dạng được giọng nói, anh/chị thử lại nhé.";
+  return TRANSCRIBE_FAILED_KEY;
 }

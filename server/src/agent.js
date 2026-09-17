@@ -1,7 +1,12 @@
 import { streamChat } from "./providers/index.js";
 import { listAllTools, callTool, flattenToolResult, qualifiedToolName } from "./mcp.js";
-import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool, isKnownSkill } from "./skills/index.js";
-import { listProviderRows, nextUsableProvider, readAppSettings, resolveProviderForChat } from "./settings.js";
+import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool } from "./skills/index.js";
+import { applyVisionFallback } from "./vision-fallback.js";
+import { isConfirmed, planChoices } from "./skills/confirm.js";
+import { excelChoices } from "./skills/vision.js";
+import { hubSkillForUser, isSelectableSkill } from "./skills/hub.js";
+import { listProviderRows, nextUsableProvider, readAppSettings, resolveProviderForChat, resolveVisionTarget } from "./settings.js";
+import { assertCanChat, costForUsage, creditSettings, creditSummary, spendCredits } from "./credits.js";
 import { getOwnedFile, asTextPayload, asImagePayload, publicFile } from "./files.js";
 import { all, audit, update } from "./db.js";
 import { toRuntimeProvider } from "./providers/index.js";
@@ -13,32 +18,50 @@ import {
   historyForModel,
   maybeSetTitleFromFirstMessage,
   publicConversation,
+  setLastConversationId,
   touchConversation,
   updateConversation,
 } from "./chat-store.js";
 
 const MAX_TOOL_ITERATIONS_CAP = 12;
 
+/**
+ * Skills whose whole point is producing a file, and the phrasings that mean
+ * "make me one". With these two together the first model call is forced to use a
+ * tool (`tool_choice: "required"`): a small model otherwise sometimes answers
+ * with an outline in prose and never calls `generate_pptx`/`generate_xlsx`, which
+ * looks exactly like "làm Excel không ra file".
+ */
+const FILE_SKILLS = new Set(["ppt", "excel", "data"]);
+const WANTS_FILE =
+  /(tạo|làm|xuất|viết|soạn|lập|đưa|chuyển|thành|ra|file|tệp|bảng|biểu|slide|excel|ppt|word|pdf|phân tích|thống kê|tính|dự toán)/i;
+
 /** Skill-specific steering appended to the system prompt. */
 const SKILL_INSTRUCTIONS = {
   image: [
     "Người dùng đang ở chế độ Sửa ảnh.",
     "Nếu có ảnh đính kèm và yêu cầu là sửa nội dung ảnh bằng AI, gọi `edit_image` với fileId của ảnh.",
-    "Nếu yêu cầu chỉ là cắt/xoay/filter/chèn chữ, gọi `open_image_studio` để chỉ người dùng mở Image Studio (miễn phí).",
+    "Nếu yêu cầu chỉ là cắt/xoay/filter/chèn chữ, gọi `open_image_studio` để chỉ người dùng mở Image Studio (thao tác ở đó không tốn credit).",
     "Sau khi gọi công cụ, mô tả ngắn gọn kết quả và gợi ý bước tiếp theo.",
   ].join(" "),
   ppt: [
     "Người dùng đang ở chế độ Làm PPT.",
-    "Luôn gọi `generate_pptx` khi đã đủ ý. Tự soạn nội dung đầy đủ: mỗi slide có tiêu đề và 3–6 gạch đầu dòng súc tích, thêm `notes` khi hữu ích.",
-    "Slide đầu tiên là slide tiêu đề. Không hỏi lại nếu có thể tự quyết định hợp lý.",
+    "QUY TẮC BẮT BUỘC: đề xuất DÀN Ý trước, nêu rõ lấy nội dung từ đâu, rồi chờ người dùng xác nhận — chỉ gọi `generate_pptx` để tạo tệp sau khi họ đồng ý (nút chọn đã có trên giao diện).",
+    "Độ dài: 6–10 trang cho báo cáo thường; mỗi trang MỘT ý với 3–5 gạch đầu dòng. KHÔNG tạo một trang cho mỗi dòng dữ liệu, KHÔNG thêm trang 'Cảm ơn'/'Q&A'/mục lục nếu không được yêu cầu, KHÔNG lặp nội dung giữa các trang.",
+    "Nếu trong hội thoại đã có tài liệu/ảnh/bảng: chỉ lấy các ý CHÍNH, gom thành phần, và ghi rõ nguồn trong dàn ý. Nếu thiếu thông tin (đối tượng, mục tiêu, độ dài, dữ liệu), hỏi 1–2 câu kèm lựa chọn trước.",
   ].join(" "),
   excel: [
     "Người dùng đang ở chế độ Làm Excel.",
-    "Luôn gọi `generate_xlsx` với dữ liệu thật (không để ô trống kiểu '...'), đặt tên cột rõ ràng và bật `totalsRow` cho cột số khi phù hợp.",
+    "QUY TẮC BẮT BUỘC: nêu KẾ HOẠCH trước (mấy sheet, cột nào, bao nhiêu dòng, lấy dữ liệu từ đâu) rồi chờ người dùng xác nhận — chỉ gọi công cụ tạo tệp sau khi họ đồng ý (nút chọn đã có trên giao diện).",
+    "Dữ liệu phải là số liệu thật (không để ô trống kiểu '...'), tên cột rõ ràng, bật `totalsRow` cho cột số khi phù hợp.",
+    "Nếu dữ liệu nằm trong ẢNH (ảnh chụp bảng, hoá đơn, sổ sách): dùng `xlsx_from_image` với id ảnh — công cụ này đọc ảnh rồi tạo tệp bằng đúng số liệu đọc được. KHÔNG tự gõ lại bảng và KHÔNG đoán số liệu.",
+    "Nếu người dùng chưa nói rõ cần những cột/dữ liệu gì, hỏi 1–2 câu kèm lựa chọn trước khi tạo.",
   ].join(" "),
   data: [
     "Người dùng đang ở chế độ Phân tích dữ liệu.",
     "Nếu chưa biết fileId, gọi `list_files` trước. Sau đó gọi `analyze_data` với các thao tác phù hợp.",
+    "Nếu người dùng chưa nói rõ cần phân tích gì (cột nào, câu hỏi nào, so sánh gì), hỏi 1–2 câu kèm lựa chọn trước khi chạy — đừng đoán.",
+    "Nếu tệp là ẢNH, gọi `read_image` để lấy bảng trước rồi mới phân tích.",
     "Diễn giải kết quả bằng tiếng Việt: nêu con số nổi bật, xu hướng và bất thường. Không bịa số liệu ngoài kết quả công cụ.",
   ].join(" "),
   chat: "Người dùng đang ở chế độ Trò chuyện thường. Chỉ gọi công cụ khi thật sự cần thiết.",
@@ -92,13 +115,66 @@ function resolveImageProvider(preferredId = null) {
   return toRuntimeProvider(withImages[0]);
 }
 
-function buildSystemPrompt({ skill, files, settings }) {
+/**
+ * Billing facts handed to the model on every turn.
+ *
+ * The prompt never mentioned credits, so the assistant answered "FlowGpt miễn
+ * phí" whenever anyone asked about money. Every number here is read fresh so the
+ * answer matches what the UI shows.
+ */
+export function buildCreditKnowledge(user) {
+  const settings = creditSettings();
+  if (!settings.enabled || !user?.id) return "";
+  const summary = creditSummary(user.id);
+  const buy = settings.buyUrl
+    ? `“Mua thêm token” ở menu tài khoản → trang nạp credit ${settings.buyUrl}`
+    : "“Mua thêm token” ở menu tài khoản";
+  return [
+    "## Credit (số liệu thật, được phép nói với người dùng)",
+    `KHÔNG miễn phí: mỗi lượt trừ (token vào + token ra) × ${settings.perToken} credit, làm tròn lên, tối thiểu 1 (1 credit = 1 token). Đăng nhập lần đầu được tặng ${settings.signupCredits} credit.`,
+    `Của người dùng này: ${summary.balance} credit, đã dùng ${summary.spent}, trung bình ${summary.averageCostPerTurn}/lượt ≈ ${summary.estimatedTurnsLeft} lượt còn lại.`,
+    `Muốn thêm credit: (1) bấm ảnh đại diện (góc trên phải) → “Xin thêm token” để gửi yêu cầu chờ quản trị viên duyệt; (2) ${buy}.`,
+    "Mua kỹ năng là việc khác: mục “Chợ kỹ năng” trên thanh bên trái.",
+    user.role === "admin"
+      ? "Người dùng này là quản trị viên: hết credit vẫn chat được nhưng vẫn bị trừ credit."
+      : "Được hỏi về credit/token/giá/số dư: trả lời 1–3 câu, luôn nêu công thức trừ credit, mức credit được tặng khi đăng nhập lần đầu và 2 đường nạp (xin thêm / mua thêm) bằng đúng số liệu trên; không nói FlowGpt miễn phí, không bịa giá.",
+  ].join("\n");
+}
+
+/** Vision target for OCR when the chosen chat model cannot see images. */
+function resolveVisionProviderFor({ providerId = null, model = null } = {}) {
+  try {
+    return resolveVisionTarget({ preferProviderId: providerId, preferModel: model });
+  } catch {
+    return null;
+  }
+}
+
+export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false }) {
   const today = new Date().toISOString().slice(0, 10);
-  const parts = [settings.systemPrompt, `Hôm nay là ${today}.`, SKILL_INSTRUCTIONS[skill] ?? ""];
+  const parts = [
+    settings.systemPrompt,
+    `Hôm nay là ${today}.`,
+    SKILL_INSTRUCTIONS[skill] ?? "",
+    planFirst
+      ? "LƯỢT NÀY LÀ LƯỢT LẬP KẾ HOẠCH: hãy mô tả NGẮN GỌN kế hoạch sẽ làm (có gì, mấy phần/trang/sheet, cột nào, lấy dữ liệu từ đâu). " +
+        "KHÔNG gọi công cụ tạo tệp (generate_pptx/generate_xlsx/xlsx_from_image) trong lượt này — người dùng sẽ bấm nút xác nhận ở dưới. " +
+        "Chỉ gọi `list_files`/`read_image` nếu cần xem dữ liệu đã có để lập kế hoạch chính xác."
+      : "",
+    buildCreditKnowledge(user),
+  ];
+  if (hubSkill?.instructions) {
+    parts.push(`Kỹ năng đang dùng: ${hubSkill.name}\n${hubSkill.instructions}`);
+  }
   if (files.length) {
     parts.push(
-      "Tệp người dùng đã tải lên trong hội thoại này (dùng đúng id khi gọi công cụ):\n" +
-        files.map((f) => `- ${f.name} — id: ${f.id} (${f.kind})`).join("\n"),
+      "Tệp người dùng đã tải lên trong hội thoại này. Khi gọi công cụ hãy dùng `id` dưới đây (KHÔNG dùng tên tệp làm fileId):\n" +
+        files
+          .map((f) => {
+            const isImage = String(f.mime ?? "").startsWith("image/") || f.kind === "image";
+            return `- ${f.name} — id: ${f.id} (${f.kind})${isImage ? " · là ẢNH: muốn đưa vào Excel hãy gọi `xlsx_from_image` với id này; nội dung ảnh được đọc tự động" : ""}`;
+          })
+          .join("\n"),
     );
   }
   return parts.filter(Boolean).join("\n\n");
@@ -107,12 +183,27 @@ function buildSystemPrompt({ skill, files, settings }) {
 /** Normalises the request, persists the user turn and writes the SSE preamble. */
 export async function prepareTurn({ user, body, channel }) {
   const settings = readAppSettings();
-  // Any skill the catalogue knows (today's built-ins, tomorrow's marketplace
-  // additions) is accepted; unknown values fall back to the configured default.
-  const skill = isKnownSkill(body?.skill) ? body.skill : settings.defaultSkill ?? "auto";
+  // Built-in ids, free hub skills and hub skills the user owns are all valid;
+  // anything else falls back to the configured default skill.
+  const requestedSkill = body?.skill;
+  const skill = isSelectableSkill({ skillId: requestedSkill, userId: user.id, role: user.role })
+    ? requestedSkill
+    : settings.defaultSkill ?? "auto";
+  /** Prompt-pack skills bought from the Skill Hub (null for built-ins). */
+  const hubSkill = hubSkillForUser({ skillId: skill, userId: user.id, role: user.role });
   const content = String(body?.content ?? "").trim();
   const attachmentIds = Array.isArray(body?.attachments) ? body.attachments.slice(0, 10) : [];
   if (!content && !attachmentIds.length) throw new ApiError(400, "bad_request", "Nội dung trống");
+
+  // Credit gate: metering on + no balance + not an admin ⇒ refuse with a clear
+  // message (the UI turns this into a "nạp thêm" card).
+  const credit = assertCanChat(user);
+  if (!credit.allowed) {
+    throw new ApiError(402, "insufficient_credits", credit.message, {
+      balance: credit.balance,
+      buyUrl: creditSettings().buyUrl,
+    });
+  }
 
   const { provider, model, fallbackFrom } = resolveProviderForChat({
     providerId: body?.providerId ?? null,
@@ -124,6 +215,14 @@ export async function prepareTurn({ user, body, channel }) {
     ? `Nhà cung cấp mặc định "${fallbackFrom.name}" chưa có API key nên lượt này dùng "${provider.name}". ` +
       "Vào Cài đặt → Nhà cung cấp AI để dán key."
     : null;
+
+  // Force the *right* tool call when the user picked a file skill and asked for the
+  // artifact: naming the function is what makes it deterministic on a small model
+  // (`tool_choice: {type:"function",function:{name}}`). The exact tool depends on
+  // whether an image is attached, so the name is resolved further down.
+  // `planFirst` turns the first turn into a planning turn instead (see below).
+  const planFirst = FILE_SKILLS.has(skill) && !isConfirmed(content);
+  const forceTool = FILE_SKILLS.has(skill) && WANTS_FILE.test(content) && !planFirst;
 
   let conversation;
   if (body?.conversationId) {
@@ -161,6 +260,10 @@ export async function prepareTurn({ user, body, channel }) {
     attachments,
   });
 
+  // Any turn makes this the account's current thread, so the next device the
+  // user opens FlowGpt on lands exactly here.
+  setLastConversationId(user.id, conversation.id);
+
   const titled = maybeSetTitleFromFirstMessage(conversation, content || attachments[0]?.name || "Hội thoại mới");
   const updated = touchConversation(conversation.id, {
     preview: truncate(content || "(tệp đính kèm)", 120),
@@ -192,7 +295,19 @@ export async function prepareTurn({ user, body, channel }) {
     conversation.id,
   ], { order: "created_at DESC", limit: 50 }).map(publicFile);
 
-  return { settings, skill, content, provider, model, conversation, userMessage, files };
+  // Which tool the user's request needs, now that the attachments are known.
+  const wantsImage = files.some((file) => file.kind === "image" || String(file.mime ?? "").startsWith("image/"));
+  const forceToolName = !forceTool
+    ? null
+    : skill === "ppt"
+      ? "generate_pptx"
+      : skill === "data"
+        ? "analyze_data"
+        : wantsImage
+          ? "xlsx_from_image"
+          : "generate_xlsx";
+
+  return { settings, skill, hubSkill, content, provider, model, conversation, userMessage, files, forceTool, forceToolName, planFirst };
 }
 
 /** Turns the stored history + fresh user turn into provider-shaped messages. */
@@ -217,7 +332,9 @@ export async function buildModelMessages({ conversationId, systemPrompt, history
       if (!row) continue;
       const image = await asImagePayload(row);
       if (image) {
-        images.push({ mime: image.mime, dataBase64: image.dataBase64 });
+        // `fileId`/`name` ride along so the fallback OCR path knows which file
+        // the pixels belong to (the adapters only read mime/dataBase64).
+        images.push({ mime: image.mime, dataBase64: image.dataBase64, fileId: row.id, name: row.name });
         continue;
       }
       const text = await asTextPayload(row, { maxChars: 12000 });
@@ -239,6 +356,21 @@ export function isProviderCreditError(error) {
   const message = String(error?.message ?? "");
   if ([401, 402, 403, 429].includes(status)) return true;
   return /余额|欠费|quota|balance|credit|insufficient|billing|rate.?limit|invalid.?api.?key|unauthor/i.test(message);
+}
+
+/**
+ * The model itself is gone (retired on the gateway, wrong id…). Worth one retry
+ * with the provider's own default model before giving up on the provider.
+ */
+export function isProviderModelError(error) {
+  const status = Number(error?.status ?? 0);
+  const message = String(error?.message ?? "");
+  return (
+    status === 404 ||
+    /no endpoints? found|model\b[^.]{0,60}(not found|does not exist|unavailable|deactivated|deprecated|invalid)|unknown model|invalid model|not a valid model/i.test(
+      message,
+    )
+  );
 }
 
 /** Replaces the throwing provider with the next usable one (once per turn). */
@@ -266,7 +398,11 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   const attemptedProviderIds = [provider.id];
 
   const builtin = toolDefinitionsForSkill(skill);
-  const modelTools = builtin.map(toModelTool);
+  // A hub skill may narrow the toolset to the tools it actually needs.
+  const offered = turn.hubSkill?.tools?.length
+    ? builtin.filter((tool) => turn.hubSkill.tools.includes(tool.name) || tool.name === "list_files")
+    : builtin;
+  const modelTools = offered.map(toModelTool);
   // Resolution uses the FULL built-in list, not just the offered subset: a real
   // tool name must always execute, and an unknown name gets a useful message.
   const toolIndex = new Map(TOOL_DEFINITIONS.map((tool) => [tool.name, { source: "builtin" }]));
@@ -288,8 +424,28 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     }
   }
 
-  const systemPrompt = buildSystemPrompt({ skill, files, settings });
+  const systemPrompt = buildSystemPrompt({ skill, files, settings, hubSkill: turn.hubSkill, user, planFirst: Boolean(turn.planFirst) });
   const messages = await buildModelMessages({ conversationId: conversation.id, systemPrompt });
+
+  // Gateways hard-fail on an image part the model cannot handle (GLM: "content.type
+  // 参数非法"). Instead of dropping the picture, the backend falls back to a vision
+  // model: it reads the image, and the extracted text goes into this turn's context
+  // so the user's real request ("đưa hết data trong ảnh thành excel") still works.
+  const vision = await applyVisionFallback({ messages, provider, model, user, conversationId: conversation.id, signal, channel });
+  if (vision.applied && vision.read) {
+    if (messages[0]?.role === "system") {
+      // The text is already in context — say so, or the model calls read_image again
+      // (an extra vision round trip that costs the user time and tokens).
+      messages[0].content +=
+        `\n\nẢnh trong hội thoại này đã được đọc sẵn bằng ${vision.providerName} và nội dung nằm ngay trong tin nhắn của người dùng — KHÔNG gọi read_image cho ảnh đó nữa.`;
+    }
+    // Belt and braces: with a small model the prompt hint is not always obeyed, so
+    // take the tool away for this turn (its job is already done).
+    for (const name of ["read_image", "read_image_content"]) {
+      const index = modelTools.findIndex((tool) => tool.name === name);
+      if (index >= 0) modelTools.splice(index, 1);
+    }
+  }
 
   const toolCalls = [];
   const toolResults = [];
@@ -312,13 +468,22 @@ export async function runChatTurn({ user, turn, channel, signal }) {
       let iterationText = "";
 
       let streamError = null;
+      // First call of a file-skill turn: name the tool the user's request needs so
+      // the model cannot answer with prose instead of a file.
+      const forcedName =
+        iteration === 0 && useTools && turn.forceToolName && modelTools.some((tool) => tool.name === turn.forceToolName)
+          ? turn.forceToolName
+          : null;
+      const toolMode = forcedName ? "required" : turn.toolMode ?? "auto";
+      const toolChoice = forcedName ? { type: "function", function: { name: forcedName } } : undefined;
       try {
         for await (const event of streamChat({
           provider,
           model,
           messages,
           tools: useTools ? modelTools : [],
-          toolMode: turn.toolMode ?? "auto",
+          toolMode,
+          toolChoice,
           signal,
         })) {
           if (signal.aborted) break;
@@ -349,13 +514,28 @@ export async function runChatTurn({ user, turn, channel, signal }) {
         streamError = err;
       }
 
-      // The default provider may be out of credit or have a revoked key. As long
-      // as nothing was streamed yet, swap to another ready provider instead of
-      // failing the whole conversation.
+      // The default provider may be out of credit or have a revoked key, and a
+      // model may have been retired by the gateway. As long as nothing was
+      // streamed yet, recover: first retry the same provider with its own
+      // default model, then swap to another ready provider.
       if (streamError) {
-        const canSwap =
-          iteration === 0 && !text && !iterationText && !pendingCalls.length && isProviderCreditError(streamError);
-        const fallback = canSwap
+        const untouched = iteration === 0 && !text && !iterationText && !pendingCalls.length;
+        const modelError = untouched && isProviderModelError(streamError);
+        const creditError = untouched && isProviderCreditError(streamError);
+
+        if (modelError && provider.defaultModel && provider.defaultModel !== model) {
+          const from = model;
+          model = provider.defaultModel;
+          channel.send("notice", {
+            message:
+              `Model "${from}" không còn khả dụng (${truncate(String(streamError.message ?? ""), 120)}). ` +
+              `Đã chuyển sang model mặc định của ${provider.name}.`,
+          });
+          iteration -= 1;
+          continue;
+        }
+
+        const fallback = creditError || modelError
           ? switchToFallbackProvider({ failed: provider, attemptedIds: attemptedProviderIds })
           : null;
         if (!fallback) throw streamError;
@@ -403,7 +583,11 @@ export async function runChatTurn({ user, turn, channel, signal }) {
             conversationId: conversation.id,
             files,
             signal,
+            // The current user message: tools read the intent from the user's own
+            // words instead of trusting the model's arguments (see skills/vision.js).
+            userMessage: turn.content ?? "",
             resolveImageProvider: async (preferred) => resolveImageProvider(preferred),
+            resolveVisionTarget: async () => resolveVisionProviderFor({ providerId: provider.id, model }),
           });
         } else if (meta?.source === "mcp") {
           try {
@@ -455,6 +639,9 @@ export async function runChatTurn({ user, turn, channel, signal }) {
           artifacts: result.artifacts ?? [],
           error: result.error ?? null,
           durationMs: result.durationMs ?? Date.now() - startedAt,
+          // Tappable options the tool wants the user to choose from (the web
+          // renders them under the message; the value is sent as the next turn).
+          ...(result.choices?.length ? { choices: result.choices } : {}),
         };
         toolCalls.push(callRecord);
         toolResults.push(resultDto);
@@ -499,6 +686,18 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     return { messageId: assistantMessage.id, error: message };
   }
 
+  // A planning turn gets its confirmation buttons from the *server*, not from the
+  // model: glm-4-flash ignores `tool_choice` whenever the prompt says "propose a
+  // plan first", so the buttons are attached here instead. They are persisted with
+  // the message, so a reload keeps them.
+  const planImage = files.find((file) => file.kind === "image" || String(file.mime ?? "").startsWith("image/"));
+  const choices = turn.planFirst && !artifacts.length
+    ? skill === "excel" && planImage
+      ? // A photo in the request: the useful first question is *what to take from it*.
+        excelChoices(planImage.id, planImage.name)
+      : planChoices({ kind: skill === "ppt" ? "pptx" : "xlsx", detail: skill === "ppt" ? "theo dàn ý trên" : "theo kế hoạch trên" })
+    : [];
+
   const assistantMessage = createMessage({
     conversationId: conversation.id,
     userId: user.id,
@@ -510,9 +709,22 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     providerId: provider.id,
     model,
     usage,
+    choices,
   });
 
   touchConversation(conversation.id, { preview: truncate(text || "(công cụ)", 120), increment: 1 });
+
+  // Meter the turn. Gateways sometimes omit usage → charge the floor of 1.
+  let credits = null;
+  try {
+    const cost = costForUsage(usage, creditSettings().perToken);
+    if (cost > 0) {
+      credits = { cost, balance: spendCredits({ userId: user.id, amount: cost, ref: assistantMessage.id }) };
+    }
+  } catch (err) {
+    console.warn("[flowgpt] không ghi được credit:", err?.message ?? err);
+  }
+
   channel.send("done", {
     messageId: assistantMessage.id,
     finishReason,
@@ -520,6 +732,8 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     durationMs: Date.now() - started,
     usage,
     artifacts,
+    ...(choices.length ? { choices } : {}),
+    ...(credits ? { credits } : {}),
   });
   return { messageId: assistantMessage.id };
 }

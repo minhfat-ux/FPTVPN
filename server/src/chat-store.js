@@ -1,5 +1,5 @@
 import { all, count, db, getById, insert, remove, update } from "./db.js";
-import { notFound, titleFromText } from "./util.js";
+import { notFound, nowIso, titleFromText } from "./util.js";
 
 export function publicConversation(row) {
   if (!row) return null;
@@ -32,6 +32,7 @@ export function publicMessage(row) {
     providerId: row.provider_id ?? null,
     model: row.model ?? null,
     usage: row.usage ?? null,
+    choices: row.choices ?? [],
     error: row.error ?? null,
     createdAt: row.created_at,
   };
@@ -81,7 +82,35 @@ export function updateConversation(id, patch) {
 export function deleteConversation(id) {
   db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(id);
   remove("conversations", id);
+  // Never leave a dangling "conversation đang mở" pointer behind.
+  db.prepare("UPDATE user_state SET last_conversation_id = NULL WHERE last_conversation_id = ?").run(id);
   return { ok: true };
+}
+
+// ------------------------------------------------- last opened per ACCOUNT
+//
+// Kept per user, not per session: opening FlowGpt on another device has to land
+// on the conversation the user was just working on (see docs §13).
+
+export function setLastConversationId(userId, conversationId) {
+  const now = nowIso();
+  db.prepare(
+    `INSERT INTO user_state (user_id, last_conversation_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET last_conversation_id = excluded.last_conversation_id,
+                                        updated_at = excluded.updated_at`,
+  ).run(userId, conversationId ?? null, now, now);
+  return conversationId ?? null;
+}
+
+/** The stored pointer, but only when that conversation still exists and is owned. */
+export function getLastConversationId(userId) {
+  const row = db.prepare("SELECT last_conversation_id AS id FROM user_state WHERE user_id = ?").get(userId);
+  const id = row?.id ?? null;
+  if (!id) return null;
+  const conversation = getById("conversations", id);
+  if (!conversation || conversation.user_id !== userId || conversation.archived) return null;
+  return id;
 }
 
 export function duplicateConversation(id, userId) {
@@ -125,6 +154,7 @@ export function createMessage({
   providerId = null,
   model = null,
   usage = null,
+  choices = [],
   error = null,
 }) {
   return insert("messages", {
@@ -139,6 +169,7 @@ export function createMessage({
     provider_id: providerId,
     model,
     usage_json: usage,
+    choices_json: choices,
     error,
   });
 }
@@ -148,6 +179,25 @@ export function listMessages(conversationId, { limit = 500 } = {}) {
     order: "created_at ASC",
     limit,
   }).map(publicMessage);
+}
+
+/**
+ * Only the messages newer than `sinceMessageId` — used by the cross-device poll
+ * so a second browser can pick up a turn that another device just ran without
+ * re-downloading the whole thread. Falls back to the full list if the anchor is
+ * gone (conversation cleared, message deleted).
+ */
+export function listMessagesAfter(conversationId, sinceMessageId, { limit = 200 } = {}) {
+  const anchor = db
+    .prepare("SELECT created_at, rowid AS rid FROM messages WHERE id = ? AND conversation_id = ?")
+    .get(sinceMessageId, conversationId);
+  if (!anchor) return listMessages(conversationId);
+  return all(
+    "messages",
+    "conversation_id = ? AND (created_at > ? OR (created_at = ? AND rowid > ?))",
+    [conversationId, anchor.created_at, anchor.created_at, anchor.rid],
+    { order: "created_at ASC, rowid ASC", limit },
+  ).map(publicMessage);
 }
 
 export function messageCount(conversationId) {
@@ -178,7 +228,20 @@ export function historyForModel(conversationId, { maxMessages = 24 } = {}) {
   const rows = all("messages", "conversation_id = ? AND role IN ('user','assistant')", [conversationId], {
     order: "created_at DESC",
     limit: maxMessages,
-  }).reverse();
+  })
+    .reverse()
+    // Failed turns are stored as an assistant message with no text and no tool
+    // calls. Replaying those makes some gateways (GLM) answer with an empty
+    // completion — `finish_reason: stop`, zero tokens — so the user sees a turn
+    // that silently does nothing. They carry no information, so drop them.
+    .filter(
+      (row) =>
+        !(
+          row.role === "assistant" &&
+          !String(row.content ?? "").trim() &&
+          !(row.tool_calls ?? []).length
+        ),
+    );
 
   const history = [];
   for (const row of rows) {

@@ -7,15 +7,37 @@ import {
   changePassword,
   countUsers,
   createUser,
-  issueToken,
+  currentUser,
+  findUserByEmail,
   publicUser,
   requestLoginToken,
   requireAdmin,
   requireAuth,
+  startSession,
   updateProfile,
   verifyLoginToken,
   authLimiter,
 } from "./auth.js";
+import {
+  listSessions,
+  revokeOtherSessions,
+  revokeSession,
+} from "./sessions.js";
+import {
+  creditSettings,
+  creditSummary,
+  getBalance,
+  grantCredits,
+  listLedger,
+} from "./credits.js";
+import {
+  createCreditRequest,
+  decideCreditRequest,
+  decisionPageHtml,
+  listCreditRequests,
+  notifyTelegram,
+  verifyDecisionToken,
+} from "./credit-requests.js";
 import { mailerStatus, sendTestEmail } from "./mailer.js";
 import {
   applyAppSettingsPatch,
@@ -45,15 +67,38 @@ import {
   listInstalledSkills,
   setInstalledSkills,
 } from "./skills/installed.js";
+import {
+  bankInfo,
+  cancelTopupOrder,
+  confirmTopupOrder,
+  createTopupOrder,
+  listTopupOrders,
+  markTopupAsTransferred,
+  topupPackages,
+  topupPageHtml,
+  verifyConfirmToken,
+} from "./topup.js";
+import {
+  HUB_CATEGORIES,
+  createHubSkill,
+  deleteHubSkill,
+  getHubSkill,
+  listHubSkills,
+  purchaseHubSkill,
+  updateHubSkill,
+} from "./skills/hub.js";
 import { listAllTools, refreshServer, testServerConfig } from "./mcp.js";
 import {
   createConversation,
   deleteConversation,
   duplicateConversation,
+  getLastConversationId,
   getOwnedConversation,
   listConversations,
   listMessages,
+  listMessagesAfter,
   publicConversation,
+  setLastConversationId,
   updateConversation,
 } from "./chat-store.js";
 import { runChatTurn, sseChannel, prepareTurn } from "./agent.js";
@@ -128,6 +173,17 @@ export function createApiRouter() {
       },
       mailer: mailerStatus(settings),
       loginTokenTtlMin: settings.loginTokenTtlMin,
+      credits: {
+        enabled: Boolean(settings.creditsEnabled),
+        perToken: settings.creditsPerToken,
+        signupCredits: settings.signupCredits,
+        buyUrl: settings.creditBuyUrl,
+      },
+      /** Timing the promo popup uses (public — it runs before React mounts). */
+      promo: {
+        reminderMinutes: settings.promoReminderMinutes,
+        creditSnoozeMinutes: settings.promoCreditSnoozeMinutes,
+      },
     });
   });
 
@@ -157,7 +213,7 @@ export function createApiRouter() {
     "/auth/verify-token",
     asyncHandler(async (req, res) => {
       const user = verifyLoginToken({ email: req.body?.email, token: req.body?.token });
-      const token = issueToken(user);
+      const { token } = startSession({ user, ip: clientKey(req), userAgent: req.headers["user-agent"] });
       setAuthCookie(res, token);
       audit(user.id, "auth.login_token", null, { email: user.email });
       res.json({ user: publicUser(user), token });
@@ -182,7 +238,7 @@ export function createApiRouter() {
         name: req.body?.name ?? null,
       });
       audit(user.id, "auth.register", null, { email: user.email });
-      const token = issueToken(user);
+      const { token } = startSession({ user, ip: clientKey(req), userAgent: req.headers["user-agent"] });
       setAuthCookie(res, token);
       res.status(201).json({ user: publicUser(user), token });
     }),
@@ -202,19 +258,66 @@ export function createApiRouter() {
         );
       }
       const user = authenticate({ email: req.body?.email, password: req.body?.password });
-      const token = issueToken(user);
+      // A new device gets its own session — signing in here never logs the
+      // other devices out (that is the whole point of `auth_sessions`).
+      const { session, token } = startSession({ user, ip: clientKey(req), userAgent: req.headers["user-agent"] });
       setAuthCookie(res, token);
+      audit(user.id, "auth.login", session.id, { label: session.label, ip: session.ip });
       res.json({ user: publicUser(user), token });
     }),
   );
 
-  router.post("/auth/logout", (_req, res) => {
-    res.setHeader("Set-Cookie", "flowgpt_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
-    res.json({ ok: true });
+  /** Ends THIS device's session only; other devices stay signed in. */
+  router.post(
+    "/auth/logout",
+    asyncHandler(async (req, res) => {
+      res.setHeader("Set-Cookie", "flowgpt_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+      const user = currentUser(req);
+      if (user && req.sessionId) {
+        revokeSession({ sessionId: req.sessionId, userId: user.id, reason: "logout" });
+        audit(user.id, "auth.logout", req.sessionId, {});
+      }
+      res.json({ ok: true });
+    }),
+  );
+
+  /** The device list behind "Thiết bị đang đăng nhập". */
+  router.get("/auth/sessions", requireAuth, (req, res) => {
+    res.json({ items: listSessions(req.user.id, req.sessionId ?? null) });
   });
 
-  router.get("/auth/me", requireAuth, (req, res) => {
-    res.json({ user: publicUser(req.user) });
+  router.delete("/auth/sessions/:id", requireAuth, (req, res) => {
+    const result = revokeSession({ sessionId: req.params.id, userId: req.user.id, reason: "revoked_by_user" });
+    if (!result.ok) throw notFound("Không tìm thấy phiên đăng nhập");
+    audit(req.user.id, "auth.session_revoke", req.params.id, { current: req.params.id === req.sessionId });
+    if (req.params.id === req.sessionId) {
+      res.setHeader("Set-Cookie", "flowgpt_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+    }
+    res.json({ ok: true, current: req.params.id === req.sessionId, ...result });
+  });
+
+  /** "Đăng xuất mọi thiết bị khác" — the calling device keeps working. */
+  router.post("/auth/sessions/revoke-others", requireAuth, (req, res) => {
+    const result = revokeOtherSessions({
+      userId: req.user.id,
+      keepSessionId: req.sessionId ?? null,
+      reason: "revoked_other_devices",
+    });
+    audit(req.user.id, "auth.session_revoke_others", null, { revoked: result.revoked });
+    res.json({ ok: true, ...result, items: listSessions(req.user.id, req.sessionId ?? null) });
+  });
+
+  router.get("/auth/me", (req, res, next) => {
+    // Kept as an arrow with an explicit next so the response can carry the
+    // device's session id and the account's last opened conversation.
+    requireAuth(req, res, (err) => {
+      if (err) return next(err);
+      res.json({
+        user: publicUser(req.user),
+        sessionId: req.sessionId ?? null,
+        lastConversationId: getLastConversationId(req.user.id),
+      });
+    });
   });
 
   router.patch(
@@ -257,12 +360,41 @@ export function createApiRouter() {
     }),
   );
 
+  // NOTE: registered before `/conversations/:id` so "active" is not read as an id.
+  /**
+   * Remembers which conversation this account is working on, so opening FlowGpt
+   * on another device continues the same thread (per user, not per session).
+   */
+  router.post(
+    "/conversations/:id/active",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      getOwnedConversation(req.params.id, req.user.id);
+      setLastConversationId(req.user.id, req.params.id);
+      res.json({ ok: true, lastConversationId: req.params.id });
+    }),
+  );
+
+  /** Leaves the thread without opening another one (used by "chat mới"). */
+  router.delete(
+    "/conversations/active",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      setLastConversationId(req.user.id, null);
+      res.json({ ok: true, lastConversationId: null });
+    }),
+  );
+
   router.get(
     "/conversations/:id",
     requireAuth,
     asyncHandler(async (req, res) => {
       const row = getOwnedConversation(req.params.id, req.user.id);
-      res.json({ conversation: publicConversation(row), messages: listMessages(row.id) });
+      // `?since=<messageId>` returns only newer messages, so another device can
+      // poll cheaply and follow the same thread (see docs §13).
+      const since = typeof req.query.since === "string" && req.query.since ? req.query.since : null;
+      const messages = since ? listMessagesAfter(row.id, since) : listMessages(row.id);
+      res.json({ conversation: publicConversation(row), messages, partial: Boolean(since) });
     }),
   );
 
@@ -421,7 +553,7 @@ export function createApiRouter() {
     "/skills/installed",
     requireAuth,
     asyncHandler(async (req, res) => {
-      const installed = setInstalledSkills(req.user.id, req.body?.ids);
+      const installed = setInstalledSkills(req.user.id, req.body?.ids, { role: req.user.role });
       audit(req.user.id, "skills.update", null, { installed });
       res.json({ installed, items: listInstalledSkills(req.user.id) });
     }),
@@ -718,12 +850,346 @@ export function createApiRouter() {
     }),
   );
 
+  // ---------------------------------------------------------------- credits
+
+  router.get("/credits", requireAuth, (req, res) => {
+    res.json({ credits: creditSummary(req.user.id) });
+  });
+
+  router.get("/credits/ledger", requireAuth, (req, res) => {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 30));
+    res.json({
+      items: listLedger(req.user.id, { limit }),
+      balance: getBalance(req.user.id),
+      credits: creditSummary(req.user.id),
+    });
+  });
+
+  /** Admin: hand credits to an account (or take them back with a negative number). */
+  router.post(
+    "/admin/credits",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const amount = Number(req.body?.amount);
+      if (!Number.isFinite(amount) || amount === 0) throw badRequest("`amount` phải là số khác 0");
+      const target = req.body?.userId
+        ? getById("users", String(req.body.userId))
+        : req.body?.email
+          ? findUserByEmail(String(req.body.email))
+          : null;
+      if (!target) throw notFound("Không tìm thấy người dùng (cần `email` hoặc `userId`)");
+      const balance = grantCredits({
+        userId: target.id,
+        amount,
+        reason: amount > 0 ? "admin_grant" : "admin_deduct",
+        note: req.body?.note ? String(req.body.note).slice(0, 200) : null,
+        actorId: req.user.id,
+      });
+      audit(req.user.id, "credits.grant", target.id, { amount, balance });
+      res.json({ user: publicUser(target), balance, credits: creditSummary(target.id) });
+    }),
+  );
+
+  // ------------------------------------------- xin thêm token (chờ owner duyệt)
+
+  router.post(
+    "/credits/request",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const gate = authLimiter.check(`credit-request:${req.user.id}`);
+      if (!gate.ok) throw rateLimited("Gửi yêu cầu hơi nhanh — thử lại sau một phút nhé.");
+      const request = createCreditRequest({
+        user: req.user,
+        amount: req.body?.amount ?? undefined,
+        note: req.body?.note ?? null,
+      });
+      const telegram = await notifyTelegram(request);
+      audit(req.user.id, "credits.request", request.id, { amount: request.amount, telegram: telegram.sent });
+      res.status(201).json({ request, telegram });
+    }),
+  );
+
+  router.get("/credits/requests", requireAuth, (req, res) => {
+    res.json({ items: listCreditRequests({ userId: req.user.id, limit: 20 }) });
+  });
+
+  router.get("/admin/credit-requests", requireAdmin, (req, res) => {
+    const status = req.query.status === "pending" ? "pending" : null;
+    res.json({ items: listCreditRequests({ status, limit: 100 }) });
+  });
+
+  router.post(
+    "/admin/credit-requests/:id/decide",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const result = decideCreditRequest({
+        requestId: req.params.id,
+        approve: req.body?.approve !== false,
+        amount: req.body?.amount ?? null,
+        decidedBy: req.user.email ?? req.user.id,
+        note: req.body?.note ?? null,
+      });
+      audit(req.user.id, "credits.decide", req.params.id, {
+        approve: req.body?.approve !== false,
+        balance: result.balance,
+      });
+      res.json(result);
+    }),
+  );
+
+  /**
+   * Signed link from the Telegram buttons — no session on purpose (the owner taps
+   * it inside Telegram). Single use, expires after 7 days.
+   */
+  router.get(
+    "/credits/requests/:id/decide",
+    asyncHandler(async (req, res) => {
+      const action = req.query.action === "reject" ? "reject" : "approve";
+      const token = String(req.query.t ?? "");
+      const check = verifyDecisionToken(req.params.id, action, token);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (!check.ok) {
+        return res.status(check.reason === "expired" ? 410 : 403).send(
+          decisionPageHtml({
+            ok: false,
+            title: check.reason === "expired" ? "Liên kết đã hết hạn" : "Liên kết không hợp lệ",
+            detail: "Hãy mở FlowGpt → Cài đặt → Người dùng để duyệt yêu cầu này.",
+          }),
+        );
+      }
+      try {
+        const result = decideCreditRequest({
+          requestId: req.params.id,
+          approve: action === "approve",
+          decidedBy: "telegram",
+        });
+        if (result.alreadyDecided) {
+          return res.send(
+            decisionPageHtml({
+              ok: false,
+              title: "Yêu cầu đã được xử lý",
+              detail: `Trạng thái hiện tại: ${
+                result.request.status === "approved" ? "đã duyệt" : "đã từ chối"
+              } (${result.request.decidedAt ?? ""}).`,
+            }),
+          );
+        }
+        return res.send(
+          decisionPageHtml({
+            ok: action === "approve",
+            title: action === "approve" ? "Đã duyệt ✅" : "Đã từ chối",
+            detail:
+              action === "approve"
+                ? `Đã cấp ${Number(result.request.grantedAmount ?? 0).toLocaleString("vi-VN")} token cho ${
+                    result.request.email
+                  }. Số dư mới: <b>${Number(result.balance ?? 0).toLocaleString("vi-VN")}</b> token.`
+                : `Yêu cầu của ${result.request.email} đã bị từ chối.`,
+          }),
+        );
+      } catch (err) {
+        return res
+          .status(err?.status ?? 400)
+          .send(
+            decisionPageHtml({
+              ok: false,
+              title: "Không xử lý được",
+              detail: String(err?.message ?? err),
+            }),
+          );
+      }
+    }),
+  );
+
+  router.get("/admin/credit-requests/:id", requireAdmin, (req, res) => {
+    const request = listCreditRequests({ limit: 200 }).find((item) => item.id === req.params.id);
+    if (!request) throw notFound("Không tìm thấy yêu cầu");
+    res.json({ request, balance: getBalance(request.userId) });
+  });
+
+  // --------------------------------------------------------------- skill hub
+
+  router.get("/hub", requireAuth, (req, res) => {
+    const items = listHubSkills({ userId: req.user.id });
+    res.json({
+      items,
+      categories: HUB_CATEGORIES,
+      balance: getBalance(req.user.id),
+      currency: "token",
+      ownedCount: items.filter((skill) => skill.owned).length,
+    });
+  });
+
+  router.get("/hub/:id", requireAuth, (req, res) => {
+    const skill = getHubSkill(req.params.id, { userId: req.user.id });
+    if (!skill || skill.state === "hidden") throw notFound("Không tìm thấy kỹ năng");
+    res.json({ skill, balance: getBalance(req.user.id) });
+  });
+
+  /** Buys a skill with credits (free skills are recorded as owned for 0). */
+  router.post(
+    "/hub/:id/purchase",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const result = purchaseHubSkill({ user: req.user, idOrSlug: req.params.id });
+      audit(req.user.id, "hub.purchase", result.skill?.id ?? req.params.id, {
+        price: result.pricePaid,
+        balance: result.balance,
+      });
+      res.json(result);
+    }),
+  );
+
+  router.get("/admin/hub", requireAdmin, (_req, res) => {
+    res.json({ items: listHubSkills({ includeHidden: true }), categories: HUB_CATEGORIES });
+  });
+
+  router.post(
+    "/admin/hub",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const skill = createHubSkill(req.body ?? {});
+      audit(req.user.id, "hub.create", skill.id, { name: skill.name, price: skill.price });
+      res.status(201).json({ skill });
+    }),
+  );
+
+  router.patch(
+    "/admin/hub/:id",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const skill = updateHubSkill(req.params.id, req.body ?? {});
+      audit(req.user.id, "hub.update", skill.id, { keys: Object.keys(req.body ?? {}) });
+      res.json({ skill });
+    }),
+  );
+
+  router.delete(
+    "/admin/hub/:id",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const result = deleteHubSkill(req.params.id);
+      audit(req.user.id, "hub.delete", req.params.id);
+      res.json(result);
+    }),
+  );
+
+  // ------------------------------------------------------- nạp token (top-up)
+
+  router.get("/topup", requireAuth, (req, res) => {
+    const orders = listTopupOrders({ userId: req.user.id, limit: 20 });
+    res.json({
+      packages: topupPackages(),
+      bank: bankInfo(),
+      orders,
+      balance: getBalance(req.user.id),
+      credits: creditSummary(req.user.id),
+    });
+  });
+
+  router.post(
+    "/topup/orders",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const result = createTopupOrder({ user: req.user, packageId: req.body?.packageId });
+      audit(req.user.id, "topup.create", result.order.id, { packageId: result.order.packageId, reused: result.reused });
+      res.status(201).json(result);
+    }),
+  );
+
+  /** "Tôi đã chuyển khoản" → the owner gets a Telegram message with a confirm link. */
+  router.post(
+    "/topup/orders/:id/transferred",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const result = await markTopupAsTransferred({
+        user: req.user,
+        orderId: req.params.id,
+        bankTxnRef: req.body?.bankTxnRef ?? null,
+      });
+      audit(req.user.id, "topup.transferred", req.params.id, { telegram: result.telegram?.sent });
+      res.json(result);
+    }),
+  );
+
+  router.post(
+    "/topup/orders/:id/cancel",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      res.json({ order: cancelTopupOrder({ orderId: req.params.id, userId: req.user.id }) });
+    }),
+  );
+
+  /** Signed link from the Telegram button — the owner confirms the money arrived. */
+  router.get(
+    "/topup/orders/:id/confirm",
+    asyncHandler(async (req, res) => {
+      const check = verifyConfirmToken(req.params.id, String(req.query.t ?? ""));
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (!check.ok) {
+        return res.status(check.reason === "expired" ? 410 : 403).send(
+          topupPageHtml({
+            ok: false,
+            title: check.reason === "expired" ? "Liên kết đã hết hạn" : "Liên kết không hợp lệ",
+            detail: "Mở FlowGpt → Cài đặt → Đơn nạp token để xác nhận thủ công.",
+          }),
+        );
+      }
+      try {
+        const result = confirmTopupOrder({ orderId: req.params.id, confirmedBy: "telegram" });
+        if (result.alreadyPaid) {
+          return res.send(
+            topupPageHtml({
+              ok: false,
+              title: "Đơn đã được xác nhận",
+              detail: `Đơn ${result.order.transferNote} đã cộng token trước đó.`,
+            }),
+          );
+        }
+        return res.send(
+          topupPageHtml({
+            ok: true,
+            title: "Đã cộng token ✅",
+            detail: `${Number(result.order.tokens).toLocaleString("vi-VN")} token cho ${
+              result.order.email ?? ""
+            }. Số dư mới: <b>${Number(result.balance ?? 0).toLocaleString("vi-VN")}</b> token.`,
+          }),
+        );
+      } catch (err) {
+        return res
+          .status(err?.status ?? 400)
+          .send(topupPageHtml({ ok: false, title: "Không xử lý được", detail: String(err?.message ?? err) }));
+      }
+    }),
+  );
+
+  router.get("/admin/topup-orders", requireAdmin, (req, res) => {
+    const status = ["pending", "awaiting_confirmation", "paid", "cancelled"].includes(String(req.query.status))
+      ? String(req.query.status)
+      : null;
+    res.json({ items: listTopupOrders({ status, limit: 100 }) });
+  });
+
+  router.post(
+    "/admin/topup-orders/:id/confirm",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const result = confirmTopupOrder({
+        orderId: req.params.id,
+        confirmedBy: req.user.email ?? req.user.id,
+        tokens: req.body?.tokens ?? null,
+      });
+      audit(req.user.id, "topup.confirm", req.params.id, { balance: result.balance, tokens: result.order.tokens });
+      res.json(result);
+    }),
+  );
+
   // ------------------------------------------------------------------- admin
 
   router.get("/admin/users", requireAdmin, (_req, res) => {
     const users = all("users", "", [], { order: "created_at ASC" }).map((row) => ({
       ...publicUser(row),
       conversationCount: count("conversations", "user_id = ?", [row.id]),
+      creditBalance: getBalance(row.id),
     }));
     res.json({ items: users });
   });

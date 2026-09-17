@@ -3,6 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import { useToast } from "../state/store";
 import { Field, Modal, Switch } from "../components/ui";
+import { useI18n } from "../i18n";
 import type { McpServer, SecretEntry } from "../types";
 
 type Transport = McpServer["transport"];
@@ -52,6 +53,7 @@ export function McpModal({
   onSaved: (message: string) => void | Promise<void>;
 }) {
   const { push } = useToast();
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [transport, setTransport] = useState<Transport>("stdio");
   const [command, setCommand] = useState("");
@@ -96,15 +98,15 @@ export function McpModal({
 
   const save = async () => {
     if (!name.trim()) {
-      push("Nhập tên MCP server", "error");
+      push(t("settings.mcpModal.nameRequired"), "error");
       return;
     }
     if (transport === "stdio" && !command.trim()) {
-      push("Transport stdio cần lệnh (command), ví dụ: npx", "error");
+      push(t("settings.mcpModal.commandRequired"), "error");
       return;
     }
     if (transport !== "stdio" && !url.trim()) {
-      push(`Transport ${transport} cần URL`, "error");
+      push(t("settings.mcpModal.urlRequired", { transport }), "error");
       return;
     }
 
@@ -112,7 +114,7 @@ export function McpModal({
     const headerSecrets = collectSecrets(headers);
     const blank = [...envSecrets.blank, ...headerSecrets.blank];
     if (blank.length) {
-      push(`Còn ${blank.length} biến chưa có giá trị: ${blank.join(", ")}`, "error");
+      push(t("settings.mcpModal.blankSecrets", { count: blank.length, keys: blank.join(", ") }), "error");
       return;
     }
     const args = argsText
@@ -143,13 +145,13 @@ export function McpModal({
     try {
       if (isEdit && server) {
         await api.updateMcpServer(server.id, payload);
-        await onSaved(`Đã cập nhật MCP server ${payload.name}`);
+        await onSaved(t("settings.mcpModal.updated", { name: String(payload.name) }));
       } else {
         await api.createMcpServer(payload);
-        await onSaved(`Đã thêm MCP server ${payload.name}`);
+        await onSaved(t("settings.mcpModal.created", { name: String(payload.name) }));
       }
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không lưu được MCP server", "error");
+      push(err instanceof ApiError ? err.message : t("settings.mcpModal.saveFailed"), "error");
       setSaving(false);
     }
   };
@@ -158,31 +160,31 @@ export function McpModal({
     <Modal
       open={open}
       wide
-      title={isEdit ? `Sửa MCP server — ${server?.name ?? ""}` : "Thêm MCP server"}
-      description="Cấu hình được lưu trên backend và dùng cho mọi người dùng. Tool của server sẽ được cấp cho model sau khi nạp lại thành công."
+      title={isEdit ? t("settings.mcpModal.editTitle", { name: server?.name ?? "" }) : t("settings.mcpModal.createTitle")}
+      description={t("settings.mcpModal.desc")}
       onClose={onClose}
       footer={
         <>
           <button className="btn" type="button" onClick={onClose} disabled={saving}>
-            Huỷ
+            {t("common.cancel")}
           </button>
           <button className="btn btn-primary" type="button" onClick={save} disabled={saving}>
-            {saving ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Thêm server"}
+            {saving ? t("common.saving") : isEdit ? t("common.saveChanges") : t("settings.mcpModal.createSubmit")}
           </button>
         </>
       }
     >
       <div className="form-grid">
-        <Field label="Tên server" hint="Chỉ dùng để hiển thị; tool sẽ hiện dưới dạng tên-server__tên-tool.">
+        <Field label={t("settings.mcpModal.nameLabel")} hint={t("settings.mcpModal.nameHint")}>
           <input
             className="input"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Ví dụ: filesystem"
+            placeholder={t("settings.mcpModal.namePlaceholder")}
           />
         </Field>
 
-        <Field label="Kiểu kết nối (transport)" hint="stdio chạy lệnh trên máy chủ; http/sse kết nối tới một endpoint MCP.">
+        <Field label={t("settings.mcpModal.transportLabel")} hint={t("settings.mcpModal.transportHint")}>
           <div className="seg" role="group" aria-label="Transport">
             {(["stdio", "http", "sse"] as Transport[]).map((item) => (
               <button
@@ -200,7 +202,7 @@ export function McpModal({
 
         {transport === "stdio" ? (
           <>
-            <Field label="Lệnh (command)" hint="Ví dụ: npx, node, python, uvx hoặc đường dẫn tuyệt đối tới file thực thi.">
+            <Field label={t("settings.mcpModal.commandLabel")} hint={t("settings.mcpModal.commandHint")}>
               <input
                 className="input input-mono"
                 value={command}
@@ -208,7 +210,7 @@ export function McpModal({
                 placeholder="npx"
               />
             </Field>
-            <Field label="Tham số (args)" hint="Mỗi dòng một tham số.">
+            <Field label={t("settings.mcpModal.argsLabel")} hint={t("settings.mcpModal.argsHint")}>
               <textarea
                 className="textarea input-mono"
                 rows={4}
@@ -219,7 +221,7 @@ export function McpModal({
             </Field>
           </>
         ) : (
-          <Field label="URL" hint="Endpoint MCP đầy đủ, ví dụ https://mcp.example.com/mcp">
+          <Field label={t("settings.mcpModal.urlLabel")} hint={t("settings.mcpModal.urlHint")}>
             <input
               className="input input-mono"
               value={url}
@@ -231,24 +233,24 @@ export function McpModal({
 
         {transport === "stdio" ? (
           <KeyValueEditor
-            title="Biến môi trường (env)"
-            keyPlaceholder="TÊN_BIẾN"
+            title={t("settings.mcpModal.envTitle")}
+            keyPlaceholder={t("settings.mcpModal.envKeyPlaceholder")}
             rows={env}
             onChange={setEnv}
-            hint="Giá trị đã lưu chỉ hiển thị dạng rút gọn. Chỉ những ô bạn nhập mới bị ghi đè; ô để nguyên sẽ giữ giá trị cũ trên server."
+            hint={t("settings.mcpModal.envHint")}
           />
         ) : (
           <KeyValueEditor
-            title="Header"
+            title={t("settings.mcpModal.headersTitle")}
             keyPlaceholder="Authorization"
             rows={headers}
             onChange={setHeaders}
-            hint="Ví dụ Authorization: Bearer … Giá trị đã lưu chỉ hiển thị dạng rút gọn. Chỉ những ô bạn nhập mới bị ghi đè; ô để nguyên sẽ giữ giá trị cũ trên server."
+            hint={t("settings.mcpModal.headersHint")}
           />
         )}
 
         <div className="num-row">
-          <Field label="Thời gian chờ (ms)" hint="Mặc định 30000. Tăng lên nếu server khởi động chậm.">
+          <Field label={t("settings.mcpModal.timeoutLabel")} hint={t("settings.mcpModal.timeoutHint")}>
             <input
               className="input w-num"
               type="number"
@@ -259,12 +261,8 @@ export function McpModal({
             />
           </Field>
           <div className="stack gap-2">
-            <Switch checked={enabled} onChange={setEnabled} label="Bật server này" />
-            <Switch
-              checked={autoApprove}
-              onChange={setAutoApprove}
-              label="Tự động duyệt tool (không hỏi lại trước khi gọi)"
-            />
+            <Switch checked={enabled} onChange={setEnabled} label={t("settings.mcpModal.enable")} />
+            <Switch checked={autoApprove} onChange={setAutoApprove} label={t("settings.mcpModal.autoApprove")} />
           </div>
         </div>
       </div>
@@ -285,6 +283,7 @@ function KeyValueEditor({
   onChange: (rows: SecretRow[]) => void;
   hint: string;
 }) {
+  const { t } = useI18n();
   const update = (id: number, patch: Partial<SecretRow>) =>
     onChange(rows.map((row) => (row.id === id ? { ...row, ...patch } : row)));
 
@@ -304,8 +303,8 @@ function KeyValueEditor({
               <input
                 className="input kv-saved"
                 disabled
-                value={`${row.saved.preview ?? "••••"} — đã lưu — nhập đè để thay`}
-                title="Giá trị đã lưu (đã ẩn). Nhập vào ô này để thay thế."
+                value={t("settings.mcpModal.savedPreview", { preview: row.saved.preview ?? "••••" })}
+                title={t("settings.mcpModal.savedTitle")}
                 onChange={() => undefined}
               />
             ) : null}
@@ -314,14 +313,14 @@ function KeyValueEditor({
               type="password"
               autoComplete="new-password"
               value={row.value}
-              placeholder={row.saved ? "Nhập giá trị mới…" : "Giá trị"}
+              placeholder={row.saved ? t("settings.mcpModal.newValuePlaceholder") : t("settings.mcpModal.valuePlaceholder")}
               onChange={(event) => update(row.id, { value: event.target.value })}
             />
             <button
               className="btn btn-sm btn-ghost btn-icon"
               type="button"
-              title="Xoá dòng"
-              aria-label="Xoá dòng"
+              title={t("settings.mcpModal.removeRow")}
+              aria-label={t("settings.mcpModal.removeRow")}
               onClick={() => onChange(rows.filter((item) => item.id !== row.id))}
             >
               <Trash2 size={14} />
@@ -330,7 +329,7 @@ function KeyValueEditor({
         ))}
       </div>
       <button className="btn btn-sm mt-2" type="button" onClick={() => onChange([...rows, newRow()])}>
-        <Plus size={14} /> Thêm dòng
+        <Plus size={14} /> {t("settings.mcpModal.addRow")}
       </button>
       <div className="hint mt-2">{hint}</div>
     </div>

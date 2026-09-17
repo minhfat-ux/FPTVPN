@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { getOwnedFile, readFileBuffer } from "../files.js";
+import { resolveOwnedFile, readFileBuffer } from "../files.js";
 import { badRequest } from "../util.js";
 
 const MAX_ROWS = 50000;
@@ -453,7 +453,12 @@ function valueCounts(table, { column, limit = 20 }) {
 export async function analyzeData(args, ctx) {
   const fileId = args?.fileId;
   if (!fileId) throw badRequest("analyze_data cần `fileId` của tệp CSV/Excel đã tải lên");
-  const fileRow = getOwnedFile(fileId, ctx.userId);
+  const fileRow = resolveOwnedFile({
+    id: fileId,
+    name: args?.fileName ?? null,
+    userId: ctx.userId,
+    conversationId: ctx.conversationId ?? null,
+  });
   const table = await loadTable(fileRow);
   if (!table.columns.length) throw badRequest("Không đọc được cột nào từ tệp");
 
@@ -517,13 +522,21 @@ export async function analyzeData(args, ctx) {
         break;
       }
       case "filter": {
-        const rowsResult = applyFilter(table, operation);
+        // The comparison operator travels in `op_filter`: `op` already holds the
+        // operation name ("filter"), so reading `op` here always threw.
+        const rowsResult = applyFilter(table, {
+          column: operation.column,
+          op: operation.op_filter ?? "eq",
+          value: operation.value,
+        });
         tables.push({
-          name: `Lọc ${operation.column} ${operation.op ?? "eq"} ${operation.value}`,
+          name: `Lọc ${operation.column} ${operation.op_filter ?? "eq"} ${operation.value}`,
           columns: table.columns,
           rows: rowsResult.slice(0, MAX_TABLE_ROWS).map((row) => row.map(formatCell)),
         });
-        notes.push(`Lọc ${operation.column} ${operation.op ?? "eq"} ${operation.value}: ${rowsResult.length}/${table.rows.length} dòng`);
+        notes.push(
+          `Lọc ${operation.column} ${operation.op_filter ?? "eq"} ${operation.value}: ${rowsResult.length}/${table.rows.length} dòng`,
+        );
         break;
       }
       case "top": {

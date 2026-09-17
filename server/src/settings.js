@@ -2,6 +2,7 @@ import { all, getById, insert, remove, update, getAppSettings, setAppSettings } 
 import { decryptSecret, encryptSecret, maskSecret } from "./crypto.js";
 import { ApiError, badRequest, notFound, slugify } from "./util.js";
 import { PROVIDER_KINDS, providerKind, toRuntimeProvider } from "./providers/index.js";
+import { modelAcceptsImages } from "./providers/vision.js";
 
 /** Client echoes masked values back on PATCH — anything like "•••" or this sentinel keeps the stored secret. */
 export const KEEP_SECRET = "__KEEP__";
@@ -170,6 +171,60 @@ export function resolveProviderForChat({ providerId = null, model = null } = {})
 }
 
 /**
+ * The provider+model used to *read* an image (OCR / table extraction) when the
+ * model the user picked has no vision.
+ *
+ * Order: the configured `visionProviderId`/`visionModel`, then the provider that
+ * is already serving the chat (if it can see), then the default provider, then
+ * any enabled provider with a vision model. Returns null when the instance has
+ * no vision model at all.
+ */
+export function resolveVisionTarget({ preferProviderId = null, preferModel = null } = {}) {
+  const settings = getAppSettings();
+  const rows = listProviderRows().filter((row) => Number(row.enabled) === 1);
+  const isReady = (row) => row.kind === "mock" || Boolean(decryptSecret(row.api_key_enc));
+
+  /** First model of this provider that really accepts images. */
+  const visionModelFor = (runtime) => {
+    const candidates = [runtime.defaultModel, ...(runtime.models ?? [])].filter(Boolean);
+    const seen = new Set();
+    for (const candidate of candidates) {
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      if (modelAcceptsImages(runtime, candidate)) return candidate;
+    }
+    return null;
+  };
+
+  const pick = (row, forcedModel = null) => {
+    if (!row || !isReady(row)) return null;
+    const runtime = toRuntimeProvider(row);
+    const model = forcedModel && modelAcceptsImages(runtime, forcedModel) ? forcedModel : visionModelFor(runtime);
+    if (!model) return null;
+    return { provider: runtime, model, row };
+  };
+
+  const configured = settings.visionProviderId
+    ? pick(rows.find((row) => row.id === settings.visionProviderId) ?? null, settings.visionModel ?? null)
+    : null;
+  if (configured) return configured;
+
+  const already = preferProviderId ? pick(rows.find((row) => row.id === preferProviderId) ?? null, preferModel) : null;
+  if (already) return already;
+
+  const byDefault = settings.defaultProviderId
+    ? pick(rows.find((row) => row.id === settings.defaultProviderId) ?? null)
+    : null;
+  if (byDefault) return byDefault;
+
+  for (const row of rows) {
+    const target = pick(row);
+    if (target) return target;
+  }
+  return null;
+}
+
+/**
  * The next provider that can actually serve a turn, skipping `excludeId`.
  * Used when the default provider rejects the request (out of credit, revoked
  * key, rate limit) so one bad provider cannot break every conversation.
@@ -186,8 +241,24 @@ export function nextUsableProvider({ excludeId = null, providerId = null, model 
   return { provider: runtime, model: chosenModel, row };
 }
 
+/**
+ * Public name for a model. Users should never see the vendor's model id — the
+ * product is FlowGpt — while admins keep the real id for configuration.
+ */
+export function publicModelLabel(model, kind = null, aliases = null) {
+  const map = aliases ?? getAppSettings().modelAliases ?? {};
+  const raw = String(model ?? "");
+  if (map[raw]) return map[raw];
+  // GLM family: glm-4.5-air → FlowGPT-4.5-Air (also covers future glm-* models).
+  if (kind === "glm" || /^glm-/i.test(raw)) {
+    return `FlowGPT-${raw.replace(/^glm-?/i, "")}`;
+  }
+  return raw;
+}
+
 export function listModelsForUi() {
   const settings = getAppSettings();
+  const aliases = settings.modelAliases ?? {};
   const items = [];
   for (const row of listProviderRows()) {
     if (Number(row.enabled) !== 1) continue;
@@ -201,6 +272,8 @@ export function listModelsForUi() {
         providerName: row.name,
         kind: row.kind,
         model,
+        /** What the picker shows users: a FlowGpt brand name, never the vendor id. */
+        label: publicModelLabel(model, row.kind, aliases),
         isDefault: row.id === settings.defaultProviderId && (settings.defaultModel ?? row.default_model) === model,
         hasKey: ready,
         isAppDefaultProvider: row.id === settings.defaultProviderId,

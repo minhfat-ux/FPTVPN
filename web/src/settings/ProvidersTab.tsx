@@ -3,6 +3,7 @@ import { Plus, RefreshCw, Pencil, Trash2, Plug, Info, Star, AlertTriangle } from
 import { api, ApiError } from "../api/client";
 import { useToast } from "../state/store";
 import { ConfirmDialog, EmptyState, Spinner, Switch } from "../components/ui";
+import { useI18n } from "../i18n";
 import { ProviderModal } from "./ProviderModal";
 import type { Provider, ProviderKindInfo } from "../types";
 
@@ -17,12 +18,10 @@ export interface ProviderTestState {
 /** Settings → Nhà cung cấp AI. */
 export function ProvidersTab() {
   const { push } = useToast();
+  const { t, n } = useI18n();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [kinds, setKinds] = useState<ProviderKindInfo[]>([]);
-  const [appDefault, setAppDefault] = useState<{ providerId: string | null; model: string | null }>({
-    providerId: null,
-    model: null,
-  });
+  const [appDefault, setAppDefault] = useState<{ providerId: string | null; model: string | null }>({ providerId: null, model: null });
   const [loading, setLoading] = useState(true);
   const [tests, setTests] = useState<Record<string, ProviderTestState>>({});
   const [modalOpen, setModalOpen] = useState(false);
@@ -32,23 +31,16 @@ export function ProvidersTab() {
 
   const load = useCallback(async () => {
     try {
-      const [providerResult, kindResult, settingsResult] = await Promise.all([
-        api.providers(),
-        api.providerKinds(),
-        api.appSettings(),
-      ]);
+      const [providerResult, kindResult, settingsResult] = await Promise.all([api.providers(), api.providerKinds(), api.appSettings()]);
       setProviders(providerResult.items);
       setKinds(kindResult.items);
-      setAppDefault({
-        providerId: settingsResult.settings.defaultProviderId,
-        model: settingsResult.settings.defaultModel,
-      });
+      setAppDefault({ providerId: settingsResult.settings.defaultProviderId, model: settingsResult.settings.defaultModel });
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không tải được nhà cung cấp", "error");
+      push(err instanceof ApiError ? err.message : t("settings.providers.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [push]);
+  }, [push, t]);
 
   useEffect(() => {
     load();
@@ -63,13 +55,11 @@ export function ProvidersTab() {
       });
       setAppDefault({ providerId: result.settings.defaultProviderId, model: result.settings.defaultModel });
       push(
-        provider.hasApiKey
-          ? `Đã đặt ${provider.name} làm mặc định`
-          : `${provider.name} là mặc định nhưng chưa có API key — chat sẽ tạm dùng nhà cung cấp khác`,
+        provider.hasApiKey ? t("settings.providers.defaultSet", { name: provider.name }) : t("settings.providers.defaultNoKey", { name: provider.name }),
         provider.hasApiKey ? "success" : "info",
       );
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không đặt được mặc định", "error");
+      push(err instanceof ApiError ? err.message : t("settings.providers.setDefaultFailed"), "error");
     }
   };
 
@@ -83,7 +73,7 @@ export function ProvidersTab() {
       setProviders((current) => current.map((p) => (p.id === provider.id ? result.provider : p)));
     } catch (err) {
       setProviders((current) => current.map((p) => (p.id === provider.id ? { ...p, enabled: !enabled } : p)));
-      push(err instanceof ApiError ? err.message : "Không cập nhật được nhà cung cấp", "error");
+      push(err instanceof ApiError ? err.message : t("settings.providers.updateFailed"), "error");
     }
   };
 
@@ -91,13 +81,11 @@ export function ProvidersTab() {
     setTests((current) => ({ ...current, [provider.id]: { ok: true, message: "", loading: true } }));
     try {
       const result = await api.testProvider(provider.id, { listModels: true });
-      setTests((current) => ({
-        ...current,
-        [provider.id]: { ok: result.ok, message: result.message, latencyMs: result.latencyMs, models: result.models },
-      }));
-      push(result.ok ? `${provider.name}: ${result.message}` : `${provider.name}: ${result.message}`, result.ok ? "success" : "error");
+      const state = { ok: result.ok, message: result.message, latencyMs: result.latencyMs, models: result.models };
+      setTests((current) => ({ ...current, [provider.id]: state }));
+      push(t("settings.providers.testResult", { name: provider.name, message: result.message }), result.ok ? "success" : "error");
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Kiểm tra thất bại";
+      const message = err instanceof ApiError ? err.message : t("settings.providers.testFailed");
       setTests((current) => ({ ...current, [provider.id]: { ok: false, message } }));
       push(message, "error");
     }
@@ -108,9 +96,10 @@ export function ProvidersTab() {
     try {
       const result = await api.updateProvider(provider.id, { models: merged });
       setProviders((current) => current.map((p) => (p.id === provider.id ? result.provider : p)));
-      push(`Đã thêm ${merged.length - provider.models.length} model vào ${provider.name}`, "success");
+      const count = n(merged.length - provider.models.length);
+      push(t("settings.providers.modelsAdded", { count, name: provider.name }), "success");
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không lưu được model", "error");
+      push(err instanceof ApiError ? err.message : t("settings.providers.saveModelsFailed"), "error");
     }
   };
 
@@ -120,10 +109,10 @@ export function ProvidersTab() {
     try {
       await api.deleteProvider(removing.id);
       setProviders((current) => current.filter((p) => p.id !== removing.id));
-      push(`Đã xoá nhà cung cấp ${removing.name}`, "success");
+      push(t("settings.providers.removed", { name: removing.name }), "success");
       setRemoving(null);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không xoá được nhà cung cấp", "error");
+      push(err instanceof ApiError ? err.message : t("settings.providers.removeFailed"), "error");
     } finally {
       setBusy(false);
     }
@@ -134,20 +123,11 @@ export function ProvidersTab() {
       <div className="banner">
         <Info size={18} />
         <div className="grow">
-          <div className="banner-title">Chưa có key?</div>
-          <div className="small">
-            Bật nhà cung cấp <b>Demo</b> để thử toàn bộ luồng chat và công cụ mà không cần API key.
-          </div>
+          <div className="banner-title">{t("settings.providers.noKeyTitle")}</div>
+          <div className="small">{t("settings.providers.noKeyBody")}</div>
         </div>
-        <button
-          className="btn btn-primary btn-sm"
-          type="button"
-          onClick={() => {
-            setEditing(null);
-            setModalOpen(true);
-          }}
-        >
-          <Plus size={15} /> Thêm nhà cung cấp
+        <button className="btn btn-primary btn-sm" type="button" onClick={() => { setEditing(null); setModalOpen(true); }}>
+          <Plus size={15} /> {t("settings.providers.add")}
         </button>
       </div>
 
@@ -157,22 +137,16 @@ export function ProvidersTab() {
         <div className="banner" style={{ borderColor: "color-mix(in srgb, var(--warn) 45%, transparent)" }}>
           <AlertTriangle size={18} />
           <div className="grow">
-            <div className="banner-title">Mặc định “{defaultProvider.name}” chưa có API key</div>
+            <div className="banner-title">{t("settings.providers.defaultMissingKeyTitle", { name: defaultProvider.name })}</div>
             <div className="small">
-              Chat sẽ tạm dùng <b>{workingProvider?.name ?? "một nhà cung cấp khác"}</b> cho tới khi anh dán key vào{" "}
-              {defaultProvider.name}
-              {workingProvider ? "" : " — hiện chưa có nhà cung cấp nào dùng được"}.
+              {t(
+                workingProvider ? "settings.providers.defaultMissingKeyBody" : "settings.providers.defaultMissingKeyBodyNone",
+                { fallback: workingProvider?.name ?? t("settings.providers.otherProvider"), name: defaultProvider.name },
+              )}
             </div>
           </div>
-          <button
-            className="btn btn-sm"
-            type="button"
-            onClick={() => {
-              setEditing(defaultProvider);
-              setModalOpen(true);
-            }}
-          >
-            <Pencil size={14} /> Dán key
+          <button className="btn btn-sm" type="button" onClick={() => { setEditing(defaultProvider); setModalOpen(true); }}>
+            <Pencil size={14} /> {t("settings.providers.pasteKey")}
           </button>
         </div>
       )}
@@ -181,10 +155,9 @@ export function ProvidersTab() {
         <div className="banner">
           <Star size={18} />
           <div className="grow">
-            <div className="banner-title">Đang dùng mặc định: {defaultProvider.name}</div>
+            <div className="banner-title">{t("settings.providers.usingDefault", { name: defaultProvider.name })}</div>
             <div className="small">
-              Model {appDefault.model ?? defaultProvider.defaultModel} · đổi mặc định bằng nút “Đặt mặc định” ở từng nhà
-              cung cấp bên dưới.
+              {t("settings.providers.usingDefaultHint", { model: appDefault.model ?? defaultProvider.defaultModel ?? "" })}
             </div>
           </div>
         </div>
@@ -192,24 +165,18 @@ export function ProvidersTab() {
 
       <div className="row">
         <div className="grow">
-          <div className="card-title">Nhà cung cấp đã cấu hình</div>
-          <div className="card-desc">
-            Key được mã hoá ở backend và chỉ hiển thị dạng rút gọn. Model ở đây là những model được phép chọn khi chat.
-          </div>
+          <div className="card-title">{t("settings.providers.configuredTitle")}</div>
+          <div className="card-desc">{t("settings.providers.configuredDesc")}</div>
         </div>
         <button className="btn btn-sm" type="button" onClick={load} disabled={loading}>
-          <RefreshCw size={14} /> Tải lại
+          <RefreshCw size={14} /> {t("common.reload")}
         </button>
       </div>
 
-      {loading && <Spinner label="Đang tải nhà cung cấp…" />}
+      {loading && <Spinner label={t("settings.providers.loading")} />}
 
       {!loading && !providers.length && (
-        <EmptyState
-          icon="🔌"
-          title="Chưa có nhà cung cấp AI nào"
-          hint="Thêm OpenAI, Gemini, Anthropic, một gateway OpenAI-compatible… hoặc bật Demo để dùng thử ngay."
-        />
+        <EmptyState icon="🔌" title={t("settings.providers.emptyTitle")} hint={t("settings.providers.emptyHint")} />
       )}
 
       <div className="stack gap-3">
@@ -224,10 +191,7 @@ export function ProvidersTab() {
             onTest={test}
             onSaveModels={saveModels}
             onSetDefault={() => setAsDefault(provider)}
-            onEdit={() => {
-              setEditing(provider);
-              setModalOpen(true);
-            }}
+            onEdit={() => { setEditing(provider); setModalOpen(true); }}
             onDelete={() => setRemoving(provider)}
           />
         ))}
@@ -247,8 +211,8 @@ export function ProvidersTab() {
 
       <ConfirmDialog
         open={Boolean(removing)}
-        title="Xoá nhà cung cấp"
-        message={`Xoá "${removing?.name ?? ""}"? Hội thoại cũ vẫn giữ nguyên nhưng model của nhà cung cấp này sẽ không còn chọn được.`}
+        title={t("settings.providers.deleteTitle")}
+        message={t("settings.providers.deleteMessage", { name: removing?.name ?? "" })}
         busy={busy}
         onCancel={() => setRemoving(null)}
         onConfirm={remove}
@@ -280,6 +244,7 @@ function ProviderCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { t, n } = useI18n();
   const fresh = (test?.models ?? []).filter((model) => !provider.models.includes(model));
 
   return (
@@ -289,45 +254,45 @@ function ProviderCard({
           <div className="row row-wrap gap-2">
             <span className="entity-name">{provider.name}</span>
             <span className="badge badge-accent">{kind?.label ?? provider.kind}</span>
-            {isAppDefault && <span className="badge badge-ok"><Star size={11} /> Mặc định</span>}
-            {provider.hasApiKey === false && <span className="badge">Không cần key</span>}
+            {isAppDefault && <span className="badge badge-ok"><Star size={11} /> {t("common.default")}</span>}
+            {provider.hasApiKey === false && <span className="badge">{t("settings.providers.badgeNoKey")}</span>}
             {provider.enabled && provider.hasApiKey === false && provider.kind !== "mock" && (
-              <span className="badge badge-warn"><AlertTriangle size={11} /> Thiếu key</span>
+              <span className="badge badge-warn"><AlertTriangle size={11} /> {t("settings.providers.badgeMissingKey")}</span>
             )}
           </div>
           <div className="meta-line">
-            <span className="meta-pill">{provider.models.length} model</span>
-            {provider.defaultModel && <span className="meta-pill">mặc định: {provider.defaultModel}</span>}
+            <span className="meta-pill">{t("settings.providers.modelCount", { count: n(provider.models.length) })}</span>
+            {provider.defaultModel && <span className="meta-pill">{t("settings.providers.defaultModel", { model: provider.defaultModel })}</span>}
             {provider.baseUrl && <span className="truncate">{provider.baseUrl}</span>}
           </div>
           <div className="meta-line">
             <span className="mono key-preview">
-              {provider.hasApiKey ? provider.apiKeyPreview ?? "••••" : "Không cần key"}
+              {provider.hasApiKey ? provider.apiKeyPreview ?? "••••" : t("settings.providers.badgeNoKey")}
             </span>
           </div>
           <div className="meta-line">
-            {provider.supportsImages && <span className="badge badge-ok">Ảnh</span>}
-            {provider.supportsTools && <span className="badge badge-ok">Công cụ</span>}
-            {provider.supportsVision && <span className="badge badge-ok">Vision</span>}
+            {provider.supportsImages && <span className="badge badge-ok">{t("settings.providers.capImages")}</span>}
+            {provider.supportsTools && <span className="badge badge-ok">{t("settings.providers.capTools")}</span>}
+            {provider.supportsVision && <span className="badge badge-ok">{t("settings.providers.capVision")}</span>}
           </div>
         </div>
 
         <div className="stack gap-2" style={{ alignItems: "flex-end" }}>
-          <Switch checked={provider.enabled} onChange={(value) => onToggle(provider, value)} label="Bật" />
+          <Switch checked={provider.enabled} onChange={(value) => onToggle(provider, value)} label={t("common.on")} />
           <div className="row row-wrap gap-2">
             <button className="btn btn-sm" type="button" onClick={() => onTest(provider)} disabled={test?.loading}>
-              <Plug size={14} /> {test?.loading ? "Đang kiểm tra…" : "Kiểm tra"}
+              <Plug size={14} /> {test?.loading ? t("settings.providers.testing") : t("settings.providers.test")}
             </button>
             {!isAppDefault && (
-              <button className="btn btn-sm" type="button" onClick={onSetDefault} title="Dùng nhà cung cấp này cho mọi lượt chat mới">
-                <Star size={14} /> Đặt mặc định
+              <button className="btn btn-sm" type="button" onClick={onSetDefault} title={t("settings.providers.setDefaultTitle")}>
+                <Star size={14} /> {t("settings.providers.setDefault")}
               </button>
             )}
             <button className="btn btn-sm" type="button" onClick={onEdit}>
-              <Pencil size={14} /> Sửa
+              <Pencil size={14} /> {t("common.edit")}
             </button>
             <button className="btn btn-sm btn-danger" type="button" onClick={onDelete}>
-              <Trash2 size={14} /> Xoá
+              <Trash2 size={14} /> {t("common.delete")}
             </button>
           </div>
         </div>
@@ -336,16 +301,21 @@ function ProviderCard({
       {test && !test.loading && test.message && (
         <div className="mt-3">
           <div className={`small ${test.ok ? "" : "error-text"}`}>
-            <span className={`badge ${test.ok ? "badge-ok" : "badge-err"}`}>{test.ok ? "OK" : "Lỗi"}</span>{" "}
+            <span className={`badge ${test.ok ? "badge-ok" : "badge-err"}`}>
+              {test.ok ? t("settings.providers.testOk") : t("settings.providers.testError")}
+            </span>{" "}
             {test.message}
-            {typeof test.latencyMs === "number" && <span className="muted"> · {test.latencyMs}ms</span>}
+            {typeof test.latencyMs === "number" && (
+              <span className="muted"> · {t("settings.providers.latency", { ms: n(test.latencyMs) })}</span>
+            )}
           </div>
 
           {test.ok && test.models && test.models.length > 0 && (
             <div className="mt-2">
               <div className="hint">
-                Tìm thấy {test.models.length} model
-                {fresh.length ? " — bấm để lưu vào nhà cung cấp:" : " (tất cả đã có trong danh sách)."}
+                {fresh.length
+                  ? t("settings.providers.modelsFound", { count: n(test.models.length) })
+                  : t("settings.providers.modelsFoundAll", { count: n(test.models.length) })}
               </div>
               <div className="chip-list mt-1">
                 {test.models.slice(0, 60).map((model) => {
@@ -356,7 +326,7 @@ function ProviderCard({
                       type="button"
                       className={`chip${added ? " chip-added" : ""}`}
                       disabled={added}
-                      title={added ? "Đã có trong danh sách" : "Lưu model này"}
+                      title={added ? t("settings.providers.chipAdded") : t("settings.providers.chipSave")}
                       onClick={() => onSaveModels(provider, [model])}
                     >
                       {model}
@@ -366,7 +336,7 @@ function ProviderCard({
               </div>
               {fresh.length > 1 && (
                 <button className="btn btn-sm mt-2" type="button" onClick={() => onSaveModels(provider, fresh)}>
-                  <Plus size={14} /> Lưu tất cả {fresh.length} model mới
+                  <Plus size={14} /> {t("settings.providers.saveAll", { count: n(fresh.length) })}
                 </button>
               )}
             </div>

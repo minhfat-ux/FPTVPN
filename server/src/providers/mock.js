@@ -24,6 +24,16 @@ function pickTool(text) {
   return null;
 }
 
+/** Confirming a plan ("OK, tạo luôn theo kế hoạch này") repeats the previous tool. */
+const CONFIRMATION = /(tạo luôn|theo kế hoạch|đồng ý|ok(ay)?\b|xác nhận|triển khai|gọn hơn)/i;
+
+function previousToolName(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "tool" && messages[index].name) return messages[index].name;
+  }
+  return null;
+}
+
 function demoArgs(name, context) {
   if (name === "generate_pptx") {
     return {
@@ -80,7 +90,9 @@ export async function* streamChat({ messages, tools, toolMode, delayMs = 0 }) {
   const toolAlreadyRan = messages
     .slice(lastUserIndex + 1)
     .some((message) => message.role === "tool");
-  const wantsTool = !toolAlreadyRan && tools?.length && toolMode !== "off" ? pickTool(text) : null;
+  const wantsTool = !toolAlreadyRan && tools?.length && toolMode !== "off"
+    ? pickTool(text) ?? (CONFIRMATION.test(text) ? previousToolName(messages) : null)
+    : null;
 
   if (delayMs) await sleep(delayMs);
   yield { type: "status", stage: wantsTool ? "calling_tool" : "thinking" };

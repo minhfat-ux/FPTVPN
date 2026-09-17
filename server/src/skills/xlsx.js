@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { saveBuffer, publicArtifact, normalizeMime } from "../files.js";
 import { badRequest } from "../util.js";
+import { isConfirmed, planChoices, planPayload } from "./confirm.js";
 
 function normalizeSheets(input) {
   if (!Array.isArray(input) || !input.length) {
@@ -40,13 +41,36 @@ const TOTAL_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6
 
 /** Builds an .xlsx workbook (formatted headers, autofilter, optional totals row). */
 export async function generateXlsx(args, ctx) {
-  const sheets = normalizeSheets(args?.sheets);
+  const sheets = Array.isArray(args?.sheets) ? args.sheets : [];
+  if (!sheets.length) throw badRequest("generate_xlsx cần `sheets` là mảng có ít nhất 1 phần tử");
+
+  const userText = ctx?.userMessage ?? "";
+  // Same rule as the deck: show what will be built (sheets, columns, row counts and
+  // where the numbers come from) and wait for a yes before writing the file.
+  if (!isConfirmed(userText)) {
+    const totalRows = sheets.reduce((total, sheet) => total + (Array.isArray(sheet?.rows) ? sheet.rows.length : 0), 0);
+    return planPayload({
+      kind: "xlsx",
+      title: `${sheets.length} sheet · ${totalRows} dòng`,
+      detail: `${sheets.length} sheet`,
+      plan: sheets.map((sheet, index) => {
+        const columns = Array.isArray(sheet?.columns) ? sheet.columns : [];
+        const rows = Array.isArray(sheet?.rows) ? sheet.rows.length : 0;
+        return `Sheet ${index + 1} "${sheet?.name ?? "Du lieu"}": ${columns.length} cột (${columns.slice(0, 8).join(", ")}) · ${rows} dòng`;
+      }),
+      notes: args?.sourceSummary
+        ? [`Nguồn dữ liệu: ${String(args.sourceSummary).slice(0, 300)}`]
+        : ["Nguồn dữ liệu: nội dung trong yêu cầu của người dùng"],
+      choices: planChoices({ kind: "xlsx", detail: `${sheets.length} sheet` }),
+    });
+  }
+  const prepared = normalizeSheets(args?.sheets);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "FlowGpt";
   workbook.created = new Date();
 
   let totalRows = 0;
-  for (const sheet of sheets) {
+  for (const sheet of prepared) {
     const ws = workbook.addWorksheet(sheet.name, {
       views: [{ state: "frozen", ySplit: 1 }],
     });
@@ -112,7 +136,7 @@ export async function generateXlsx(args, ctx) {
     buffer: Buffer.from(buffer),
     kind: "xlsx",
     origin: "artifact",
-    meta: { sheetCount: sheets.length, rowCount: totalRows, tool: "generate_xlsx" },
+    meta: { sheetCount: prepared.length, rowCount: totalRows, tool: "generate_xlsx" },
   });
   const artifact = publicArtifact(row);
   return {

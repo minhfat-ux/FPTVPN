@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n";
 
 /**
  * Minimal local typings for the Web Speech API.
@@ -66,21 +67,24 @@ export function isSpeechRecognitionSupported(): boolean {
   return getSpeechRecognitionCtor() !== null;
 }
 
-/** Vietnamese explanation for every error code the browser can report. */
+/**
+ * i18n key for every error code the browser can report (keys, not sentences:
+ * this stays a pure function, callers translate).
+ */
 export function speechErrorMessage(code: string): string | null {
   switch (code) {
     case "not-allowed":
     case "service-not-allowed":
-      return "Anh/chị cần cho phép dùng micro trong trình duyệt.";
+      return "voice.error.micDenied";
     case "network":
-      return "Không kết nối được dịch vụ nhận dạng của trình duyệt (có thể bị chặn ở Trung Quốc). Vào Cài đặt → Giọng nói để chọn nhà cung cấp STT.";
+      return "voice.error.micNetwork";
     case "audio-capture":
-      return "Không tìm thấy micro.";
+      return "voice.error.micNotFound";
     case "no-speech":
     case "aborted":
       return null;
     default:
-      return "Nhận dạng giọng nói gặp lỗi, vui lòng thử lại.";
+      return "voice.error.recognitionFailed";
   }
 }
 
@@ -113,6 +117,7 @@ const RESTART_DELAY_MS = 350;
 const MAX_UTTERANCE_CHARS = 2000;
 
 export function useSpeechRecognition(options: SpeechRecognitionOptions): SpeechRecognitionController {
+  const { t } = useI18n();
   const [supported] = useState<boolean>(() => isSpeechRecognitionSupported());
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
@@ -123,6 +128,10 @@ export function useSpeechRecognition(options: SpeechRecognitionOptions): SpeechR
   useEffect(() => {
     latest.current = options;
   }, [options]);
+
+  /** Keeps the newest translator without rebuilding the recognition instance. */
+  const translateRef = useRef(t);
+  translateRef.current = t;
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const shouldListenRef = useRef(false);
@@ -189,7 +198,8 @@ export function useSpeechRecognition(options: SpeechRecognitionOptions): SpeechR
       const code = event.error || "unknown";
       if (code === "no-speech" || code === "aborted") return;
       shouldListenRef.current = false;
-      const message = speechErrorMessage(code);
+      const key = speechErrorMessage(code);
+      const message = key ? translateRef.current(key) : null;
       if (message && mountedRef.current) {
         setError(message);
         setListening(false);

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, getToken, setToken } from "../api/client";
+import { useI18n } from "../i18n";
 import type { Conversation, Meta, ModelOption, SkillDescriptor, User } from "../types";
 
 // ---------------------------------------------------------------- utilities
@@ -30,6 +31,11 @@ interface AuthContextValue {
   user: User | null;
   meta: Meta | null;
   ready: boolean;
+  /** Session id of THIS device (used to mark it in the device list). */
+  sessionId: string | null;
+  /** Conversation this account was last working on — resumes on any device. */
+  lastConversationId: string | null;
+  setLastConversationId: (id: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name?: string) => Promise<void>;
   /** Adopts the session returned by any login flow (email token, SSO later). */
@@ -60,6 +66,8 @@ interface DataContextValue {
   reloadConversations: () => Promise<void>;
   reloadModels: () => Promise<void>;
   reloadSkills: () => Promise<void>;
+  /** "3 phút trước" / "3 minutes ago" — locale-aware conversation timestamps. */
+  formatRelativeTime: (iso: string) => string;
   /** Adopts the list returned after the picker saves, without a round trip. */
   applyInstalledSkills: (items: SkillDescriptor[]) => void;
   upsertConversation: (conversation: Conversation) => void;
@@ -77,10 +85,13 @@ export function useData() {
 // ------------------------------------------------------------------ provider
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { t, n, d } = useI18n();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [ready, setReady] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastConversationId, setLastConversationId] = useState<string | null>(null);
   // FlowTech Harness is dark-first — that is the default until the user chooses.
   const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem("flowgpt.theme");
@@ -163,6 +174,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         try {
           const result = await api.me();
           setUser(result.user);
+          setSessionId(result.sessionId ?? null);
+          setLastConversationId(result.lastConversationId ?? null);
         } catch {
           setToken(null);
           setUser(null);
@@ -215,9 +228,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    // Revokes only THIS device's session server-side; other devices stay signed in.
     await api.logout().catch(() => undefined);
     setToken(null);
     setUser(null);
+    setSessionId(null);
+    setLastConversationId(null);
   }, []);
 
   const upsertConversation = useCallback((conversation: Conversation) => {
@@ -237,11 +253,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setConversations((current) => current.filter((c) => c.id !== id));
   }, []);
 
+  /** Shared by the sidebar list; rebuilt whenever the locale changes. */
+  const formatRelativeTime = useCallback(
+    (iso: string) => {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return "—";
+      const minutes = Math.round((Date.now() - date.getTime()) / 60000);
+      if (minutes < 1) return t("shell.relative.justNow");
+      if (minutes < 60) return t("shell.relative.minutes", { count: n(minutes) });
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return t("shell.relative.hours", { count: n(hours) });
+      const days = Math.round(hours / 24);
+      if (days < 30) return t("shell.relative.days", { count: n(days) });
+      return d(date, { dateStyle: "short" });
+    },
+    [d, n, t],
+  );
+
   const authValue = useMemo<AuthContextValue>(
     () => ({
       user,
       meta,
       ready,
+      sessionId,
+      lastConversationId,
+      setLastConversationId,
       login,
       register,
       completeLogin,
@@ -250,7 +286,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       theme,
       toggleTheme: () => setTheme((t) => (t === "dark" ? "light" : "dark")),
     }),
-    [user, meta, ready, login, register, completeLogin, logout, refreshMeta, theme],
+    [
+      user,
+      meta,
+      ready,
+      sessionId,
+      lastConversationId,
+      login,
+      register,
+      completeLogin,
+      logout,
+      refreshMeta,
+      theme,
+    ],
   );
 
   const dataValue = useMemo<DataContextValue>(
@@ -264,6 +312,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reloadConversations,
       reloadModels,
       reloadSkills,
+      formatRelativeTime,
       applyInstalledSkills,
       upsertConversation,
       removeConversation,
@@ -278,6 +327,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reloadConversations,
       reloadModels,
       reloadSkills,
+      formatRelativeTime,
       applyInstalledSkills,
       upsertConversation,
       removeConversation,
@@ -311,15 +361,3 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-export function formatRelativeTime(iso: string): string {
-  const date = new Date(iso);
-  const diff = Date.now() - date.getTime();
-  const minutes = Math.round(diff / 60000);
-  if (minutes < 1) return "vừa xong";
-  if (minutes < 60) return `${minutes} phút trước`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} giờ trước`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days} ngày trước`;
-  return date.toLocaleDateString("vi-VN");
-}

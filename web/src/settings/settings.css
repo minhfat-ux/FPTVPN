@@ -133,6 +133,20 @@ details.tool-details summary {
 }
 details.tool-details summary:hover { color: var(--text); }
 
+/* ------------------------------------------------------- credit requests */
+.credit-requests { display: flex; flex-direction: column; gap: var(--space-2); }
+.credit-requests .request-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+.credit-requests .request-actions { display: flex; gap: var(--space-2); margin-left: auto; }
+
 /* ------------------------------------------------------------- form bits */
 .form-grid .field:last-child { margin-bottom: 0; }
 .w-num { max-width: 150px; }

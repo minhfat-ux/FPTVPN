@@ -1,8 +1,9 @@
-import { useEffect, useImperativeHandle, useRef, forwardRef } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from "react";
 import { AudioLines, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { api } from "../api/client";
 import { formatBytes } from "../state/store";
 import { fileIconLabel } from "../components/ui";
+import { useI18n } from "../i18n";
 import { useSpeechRecognition } from "../voice";
 import { useVoice } from "../voice/VoiceProvider";
 import { SkillSelect } from "./SkillSelect";
@@ -35,33 +36,27 @@ export interface ComposerProps {
   onStop: () => void;
 }
 
-const AUTO_SKILL: SkillDescriptor = {
-  id: "chat",
-  label: "Tự động",
-  icon: "✨",
-  description: "Để FlowGpt tự chọn kỹ năng phù hợp",
-  starterPrompts: [],
-};
-
-/** Chips shown while `/api/skills` has not answered yet. */
-export const FALLBACK_SKILLS: SkillDescriptor[] = [
-  AUTO_SKILL,
-  { id: "image", label: "Ảnh", icon: "🎨", description: "Tạo và sửa ảnh bằng AI", starterPrompts: [] },
-  { id: "ppt", label: "PowerPoint", icon: "📊", description: "Tạo slide từ yêu cầu", starterPrompts: [] },
-  { id: "excel", label: "Excel", icon: "📈", description: "Tạo bảng tính", starterPrompts: [] },
-  { id: "data", label: "Dữ liệu", icon: "🧮", description: "Phân tích dữ liệu và vẽ biểu đồ", starterPrompts: [] },
+/** id, icon, label key, description key — for the chips shown before /api/skills answers. */
+const FALLBACK_ROWS: ReadonlyArray<readonly [string, string, string, string]> = [
+  ["chat", "✨", "chat.skill.auto", "chat.skill.autoHint"],
+  ["image", "🎨", "chat.skill.image", "chat.skill.imageHint"],
+  ["ppt", "📊", "chat.skill.ppt", "chat.skill.pptHint"],
+  ["excel", "📈", "chat.skill.excel", "chat.skill.excelHint"],
+  ["data", "🧮", "chat.skill.data", "chat.skill.dataHint"],
 ];
 
-const FALLBACK_BY_ID: SkillDescriptor[] = FALLBACK_SKILLS;
-
-/** The "Tự động" chip is only added when the server list has no chat entry. */
-function buildChips(skills: SkillDescriptor[]): SkillDescriptor[] {
-  return skills.some((item) => item.id === "chat") ? skills : [AUTO_SKILL, ...skills];
+/** Chips shown while `/api/skills` has not answered yet. */
+export function fallbackSkills(t: (key: string) => string): SkillDescriptor[] {
+  return FALLBACK_ROWS.map(([id, icon, key, hint]) => ({
+    id, icon, label: t(key), description: t(hint), starterPrompts: [],
+  }));
 }
 
 /** Skills list with a sane fallback so the chips never render empty. */
-export function usableSkills(skills: SkillDescriptor[]): SkillDescriptor[] {
-  return skills.length ? buildChips(skills) : FALLBACK_BY_ID;
+export function usableSkills(skills: SkillDescriptor[], t: (key: string) => string): SkillDescriptor[] {
+  if (!skills.length) return fallbackSkills(t);
+  // The "Tự động" chip is only added when the server list has no chat entry.
+  return skills.some((item) => item.id === "chat") ? skills : [fallbackSkills(t)[0], ...skills];
 }
 
 /** Input bar: textarea, attachments, skill chips, model picker, send/stop. */
@@ -88,6 +83,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { t, n } = useI18n();
   const { open: openVoiceMode, config, speaking, stopSpeaking } = useVoice();
 
   useImperativeHandle(ref, () => ({
@@ -141,7 +137,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   };
 
   const activeSkill = skills.find((item) => item.id === skill);
-  const chips = usableSkills(skills);
+  // Never print the vendor's model id at the user — show the FlowGpt label.
+  const selectedModelLabel = useMemo(() => {
+    const model = modelValue.split("::")[1] ?? "";
+    const option = models.find((item) => `${item.providerId}::${item.model}` === modelValue);
+    return option?.label ?? option?.model ?? model;
+  }, [modelValue, models]);
+  const chips = usableSkills(skills, t);
   const canSend = !sending && (draft.trim().length > 0 || attachments.length > 0);
 
   const listening = dictation.listening;
@@ -196,8 +198,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 <button
                   className="btn btn-ghost btn-icon btn-sm"
                   onClick={() => onRemoveAttachment(file.id)}
-                  aria-label={`Bỏ tệp ${file.name}`}
-                  title="Bỏ tệp"
+                  aria-label={t("chat.composer.removeFileAria", { name: file.name })}
+                  title={t("chat.composer.removeFile")}
                   type="button"
                 >
                   <X size={13} />
@@ -214,8 +216,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           rows={1}
-          aria-label="Nội dung tin nhắn"
-          placeholder="Nhập câu hỏi, yêu cầu tạo ảnh, PPT, Excel hoặc phân tích dữ liệu…"
+          aria-label={t("chat.composer.inputAria")}
+          placeholder={t("chat.composer.placeholder")}
         />
 
         <div className="composer-bar">
@@ -232,8 +234,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => fileRef.current?.click()}
-            title={`Đính kèm tệp (tối đa ${maxUploadMb}MB)`}
-            aria-label="Đính kèm tệp"
+            title={t("chat.composer.attachTitle", { max: n(maxUploadMb) })}
+            aria-label={t("chat.composer.attach")}
             type="button"
           >
             <Paperclip size={17} />
@@ -245,12 +247,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             disabled={!dictation.supported}
             title={
               !dictation.supported
-                ? "Trình duyệt không hỗ trợ nhập bằng giọng nói (hãy dùng Chrome hoặc Edge)"
+                ? t("chat.composer.dictationUnsupported")
                 : listening
-                  ? "Dừng nhập bằng giọng nói"
-                  : "Nhập bằng giọng nói"
+                  ? t("chat.composer.dictationStop")
+                  : t("chat.composer.dictationStart")
             }
-            aria-label="Nhập bằng giọng nói"
+            aria-label={t("chat.composer.dictationStart")}
             aria-pressed={listening}
             type="button"
           >
@@ -259,7 +261,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
           <div className="grow">
             <SkillSelect
-              skills={skills.length ? skills : FALLBACK_SKILLS.filter((item) => item.id !== "chat")}
+              skills={skills.length ? skills : fallbackSkills(t).filter((item) => item.id !== "chat")}
               value={skill}
               onChange={onSkill}
               onOpenPicker={onOpenSkillPicker}
@@ -271,14 +273,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             className="select composer-model"
             value={modelValue}
             onChange={(event) => onModelValue(event.target.value)}
-            aria-label="Chọn mô hình"
-            title="Chọn mô hình"
+            aria-label={t("chat.composer.modelSelect")} title={t("chat.composer.modelSelect")}
           >
-            <option value="">Mặc định</option>
+            <option value="">{t("chat.composer.modelDefault")}</option>
             {models.map((option) => (
               <option key={`${option.providerId}::${option.model}`} value={`${option.providerId}::${option.model}`}>
-                {option.providerName} · {option.model}
-                {option.isDefault ? " (mặc định)" : ""}
+                {option.label ?? option.model}
+                {option.isDefault ? t("chat.composer.modelIsDefault") : ""}
               </option>
             ))}
           </select>
@@ -290,23 +291,23 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               stopSpeaking();
               openVoiceMode();
             }}
-            title="Trò chuyện bằng giọng nói như ChatGPT voice mode"
+            title={t("chat.composer.voiceModeTitle")}
             type="button"
           >
-            <AudioLines size={16} /> Nói chuyện
+            <AudioLines size={16} /> {t("chat.composer.voiceMode")}
           </button>
 
           {sending ? (
-            <button className="btn btn-danger nowrap" onClick={onStop} type="button" title="Dừng trả lời">
-              <Square size={14} /> Dừng
+            <button className="btn btn-danger nowrap" onClick={onStop} type="button" title={t("chat.composer.stopTitle")}>
+              <Square size={14} /> {t("chat.composer.stop")}
             </button>
           ) : (
             <button
               className="btn btn-primary btn-icon"
               onClick={onSend}
               disabled={!canSend}
-              aria-label="Gửi tin nhắn"
-              title="Gửi (Enter)"
+              aria-label={t("chat.composer.send")}
+              title={t("chat.composer.sendTitle")}
               type="button"
             >
               <Send size={16} />
@@ -316,7 +317,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
         {uploading > 0 && (
           <div className="tiny faint mt-1 row gap-2">
-            <span className="spinner" /> Đang tải tệp lên…
+            <span className="spinner" /> {t("chat.composer.uploading")}
           </div>
         )}
 
@@ -326,7 +327,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               <>
                 <span className="mic-dot" />
                 <span className="muted">
-                  Đang nghe…{interimText ? ` “${interimText}”` : ""} — bấm micro để dừng.
+                  {t("chat.composer.listening", { interim: interimText ? t("chat.composer.listeningInterim", { text: interimText }) : "" })}
                 </span>
               </>
             ) : (
@@ -336,10 +337,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         )}
 
         <div className="tiny faint composer-hint">
-          Enter để gửi · Shift+Enter xuống dòng
-          {activeSkill ? ` · Kỹ năng: ${activeSkill.label}` : " · Kỹ năng: Tự động"}
-          {modelValue ? ` · ${modelValue.split("::")[1]}` : " · Mô hình mặc định"}
-          {` · Tệp tối đa ${maxUploadMb}MB`}
+          {t("chat.composer.hintEnter")}
+          {t("chat.composer.hintSkill", { name: activeSkill?.label ?? t("chat.skill.auto") })}
+          {modelValue ? t("chat.composer.hintModel", { name: selectedModelLabel }) : t("chat.composer.hintModelDefault")}
+          {t("chat.composer.hintMaxFile", { max: n(maxUploadMb) })}
         </div>
       </div>
     </div>

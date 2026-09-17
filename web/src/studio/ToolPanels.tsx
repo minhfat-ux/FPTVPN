@@ -1,27 +1,28 @@
 import { Field, Switch } from "../components/ui";
+import { useI18n } from "../i18n";
 import { DEFAULT_ADJUST, formatFilter } from "./canvasLib";
 import type { SavedFile } from "./imageExport";
 import { BrushPanel, ExportPanel, ShapePanel, TextPanel } from "./ToolPanelsExtra";
 import type { BrushState, CanvasAction, ShapeState, TextState, Tool } from "./useImageEditor";
 
 const SLIDERS = [
-  ["brightness", "Độ sáng", 0, 200],
-  ["contrast", "Tương phản", 0, 200],
-  ["saturate", "Độ bão hoà", 0, 200],
-  ["blur", "Độ mờ", 0, 20],
+  ["brightness", "studio.image.adjust.brightness", 0, 200],
+  ["contrast", "studio.image.adjust.contrast", 0, 200],
+  ["saturate", "studio.image.adjust.saturate", 0, 200],
+  ["blur", "studio.image.adjust.blur", 0, 20],
 ] as const;
 
-const PRESETS: { id: CanvasAction; label: string }[] = [
-  { id: "grayscale", label: "Xám" },
-  { id: "sepia", label: "Sepia" },
-  { id: "invert", label: "Đảo màu" },
+const PRESETS: { id: CanvasAction; labelKey: string }[] = [
+  { id: "grayscale", labelKey: "studio.image.filter.grayscale" },
+  { id: "sepia", labelKey: "studio.image.filter.sepia" },
+  { id: "invert", labelKey: "studio.image.filter.invert" },
 ];
 
-const ROTATIONS: { id: CanvasAction; label: string }[] = [
-  { id: "rotate-left", label: "Xoay trái 90°" },
-  { id: "rotate-right", label: "Xoay phải 90°" },
-  { id: "flip-h", label: "Lật ngang" },
-  { id: "flip-v", label: "Lật dọc" },
+const ROTATIONS: { id: CanvasAction; labelKey: string }[] = [
+  { id: "rotate-left", labelKey: "studio.image.rotate.left" },
+  { id: "rotate-right", labelKey: "studio.image.rotate.right" },
+  { id: "flip-h", labelKey: "studio.image.rotate.flipH" },
+  { id: "flip-v", labelKey: "studio.image.rotate.flipV" },
 ];
 
 export interface ToolPanelsProps {
@@ -59,20 +60,21 @@ export interface ToolPanelsProps {
 
 /** Panel điều khiển của từng công cụ trong Image Studio. */
 export function ToolPanels(props: ToolPanelsProps) {
+  const { t, n } = useI18n();
   const { tool, loaded, size, target, setTarget, lockRatio, setLockRatio, adjust, setAdjust, cropReady } = props;
   const { onAction, onApplyCrop, onCancelCrop, onApplyResize, onBakeAdjust } = props;
 
   if (tool === "crop") {
     return (
       <div className="card">
-        <div className="card-title mb-2">Cắt ảnh</div>
-        <div className="hint">Kéo chuột trên ảnh để chọn vùng giữ lại.</div>
+        <div className="card-title mb-2">{t("studio.image.crop.title")}</div>
+        <div className="hint">{t("studio.image.crop.hint")}</div>
         <div className="row gap-2 mt-3">
           <button className="btn btn-primary btn-sm grow" type="button" onClick={onApplyCrop} disabled={!cropReady}>
-            Áp dụng cắt
+            {t("studio.image.crop.apply")}
           </button>
           <button className="btn btn-sm" type="button" onClick={onCancelCrop} disabled={!cropReady}>
-            Huỷ
+            {t("studio.image.cancel")}
           </button>
         </div>
       </div>
@@ -82,11 +84,11 @@ export function ToolPanels(props: ToolPanelsProps) {
   if (tool === "rotate") {
     return (
       <div className="card">
-        <div className="card-title mb-2">Xoay &amp; lật</div>
+        <div className="card-title mb-2">{t("studio.image.rotate.title")}</div>
         <div className="grid grid-2">
           {ROTATIONS.map((item) => (
             <button key={item.id} className="btn btn-sm" type="button" disabled={!loaded} onClick={() => onAction(item.id)}>
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>
@@ -97,9 +99,9 @@ export function ToolPanels(props: ToolPanelsProps) {
   if (tool === "resize") {
     return (
       <div className="card">
-        <div className="card-title mb-2">Kích thước</div>
+        <div className="card-title mb-2">{t("studio.image.resize.title")}</div>
         <div className="grid grid-2">
-          <Field label="Chiều rộng (px)">
+          <Field label={t("studio.image.resize.width")}>
             <input
               className="input"
               type="number"
@@ -115,7 +117,7 @@ export function ToolPanels(props: ToolPanelsProps) {
               }}
             />
           </Field>
-          <Field label="Chiều cao (px)">
+          <Field label={t("studio.image.resize.height")}>
             <input
               className="input"
               type="number"
@@ -132,12 +134,12 @@ export function ToolPanels(props: ToolPanelsProps) {
             />
           </Field>
         </div>
-        <Switch checked={lockRatio} onChange={setLockRatio} label="Giữ tỉ lệ" />
+        <Switch checked={lockRatio} onChange={setLockRatio} label={t("studio.image.resize.lock")} />
         <button className="btn btn-primary btn-block mt-3" type="button" onClick={onApplyResize} disabled={!loaded}>
-          Áp dụng
+          {t("studio.image.apply")}
         </button>
         <div className="hint mt-2">
-          Kích thước hiện tại: {size.width} × {size.height}px
+          {t("studio.image.resize.current", { width: n(size.width), height: n(size.height) })}
         </div>
       </div>
     );
@@ -146,11 +148,11 @@ export function ToolPanels(props: ToolPanelsProps) {
   if (tool === "adjust") {
     return (
       <div className="card">
-        <div className="card-title mb-2">Màu sắc</div>
-        {SLIDERS.map(([key, label, min, max]) => (
+        <div className="card-title mb-2">{t("studio.image.adjust.title")}</div>
+        {SLIDERS.map(([key, labelKey, min, max]) => (
           <div className="field" key={key}>
             <span className="label">
-              {label}: {adjust[key]}
+              {t(labelKey)}: {adjust[key]}
               {key === "blur" ? "px" : "%"}
             </span>
             <input
@@ -165,13 +167,13 @@ export function ToolPanels(props: ToolPanelsProps) {
         ))}
         <div className="row gap-2">
           <button className="btn btn-primary btn-sm grow" type="button" onClick={onBakeAdjust} disabled={!loaded}>
-            Áp dụng vào ảnh
+            {t("studio.image.adjust.bake")}
           </button>
           <button className="btn btn-sm" type="button" onClick={() => setAdjust(DEFAULT_ADJUST)}>
-            Mặc định
+            {t("studio.image.adjust.reset")}
           </button>
         </div>
-        <div className="hint mt-2">Xem trước trực tiếp: {formatFilter(adjust)}</div>
+        <div className="hint mt-2">{t("studio.image.adjust.preview", { filter: formatFilter(adjust) })}</div>
       </div>
     );
   }
@@ -179,11 +181,11 @@ export function ToolPanels(props: ToolPanelsProps) {
   if (tool === "filters") {
     return (
       <div className="card">
-        <div className="card-title mb-2">Bộ lọc nhanh</div>
+        <div className="card-title mb-2">{t("studio.image.filters.title")}</div>
         <div className="stack gap-2">
           {PRESETS.map((item) => (
             <button key={item.id} className="btn btn-sm" type="button" disabled={!loaded} onClick={() => onAction(item.id)}>
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>

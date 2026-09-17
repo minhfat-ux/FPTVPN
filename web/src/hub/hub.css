@@ -1,0 +1,95 @@
+/* ============================================================================
+   Skill Hub (Chợ kỹ năng) additions. Only layout and spacing live here — every
+   colour comes from the design-system variables in styles.css.
+   ========================================================================= */
+
+/* ------------------------------------------------------------- page header */
+.hub-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.hub-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+
+.hub-balance {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  padding: var(--space-3) var(--space-4);
+  min-width: 220px;
+}
+.hub-balance-value { font-size: 22px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- toolbar */
+.hub-toolbar { display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-3); flex-wrap: wrap; }
+.hub-search { position: relative; flex: 1 1 260px; min-width: 0; display: flex; }
+.hub-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-faint); }
+.hub-search-input { padding-left: 32px; }
+.hub-chips { margin-bottom: var(--space-4); flex-wrap: wrap; overflow-x: visible; }
+
+/* ------------------------------------------------------------------- grid */
+.hub-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  cursor: pointer;
+  transition: border-color 0.12s, transform 0.12s;
+}
+.hub-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.hub-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.hub-card-top { display: flex; align-items: center; gap: var(--space-3); }
+.hub-card-icon {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.hub-card-name { font-weight: 650; }
+.hub-card-tagline {
+  font-size: 13px;
+  color: var(--text-muted);
+  min-height: 2.6em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hub-card-price { font-weight: 700; font-size: 14px; white-space: nowrap; }
+.hub-card-foot { margin-top: auto; padding-top: var(--space-1); }
+.hub-card-foot .btn { width: 100%; justify-content: center; }
+
+.hub-row-icon {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ modal */
+.hub-detail-price { font-size: 16px; font-weight: 750; }
+.hub-bullets { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text-muted); }
+.hub-bullets li { margin-bottom: 4px; }
+.hub-detail-note {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.hub-spin { animation: spin 0.8s linear infinite; }

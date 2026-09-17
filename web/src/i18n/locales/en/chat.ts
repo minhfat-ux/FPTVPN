@@ -1,0 +1,149 @@
+import type { Dict } from "../../types";
+
+/** English translations for this namespace. */
+export const chat: Dict = {
+  // ---- ChatPage: chat shell, hero, out of credit
+  "chat.page.fileTooLarge": "“{name}” is over {max}MB, so it was skipped",
+  "chat.page.sendFailed": "Could not send the message",
+  "chat.page.heroIntro":
+    "An AI assistant for everyday work: chat, images, slides, spreadsheets and data analysis — all in one chat window.",
+  "chat.page.chooseSkill": "Pick a skill to see starter ideas.",
+  "chat.page.dropzone": "Drop files here to attach them",
+  "chat.page.outOfCredit.title": "Out of credits",
+  "chat.page.outOfCredit.body":
+    "Current balance: {balance} credits. 1 credit = 1 token (input and output tokens both count); every answer costs {perToken} credits per token.",
+  "chat.page.topUp": "Top up",
+  "chat.page.checkAgain": "Check again",
+
+  // ---- Composer: input bar
+  "chat.composer.placeholder": "Ask a question, or request an image, PPT, Excel or data analysis…",
+  "chat.composer.inputAria": "Message content",
+  "chat.composer.removeFile": "Remove file",
+  "chat.composer.removeFileAria": "Remove file {name}",
+  "chat.composer.attach": "Attach files",
+  "chat.composer.attachTitle": "Attach files (max {max}MB)",
+  "chat.composer.dictationStart": "Dictate with your voice",
+  "chat.composer.dictationStop": "Stop dictation",
+  "chat.composer.dictationUnsupported":
+    "This browser does not support dictation (use Chrome or Edge)",
+  "chat.composer.modelSelect": "Choose a model",
+  "chat.composer.modelDefault": "Default",
+  "chat.composer.modelIsDefault": " (default)",
+  "chat.composer.voiceMode": "Talk",
+  "chat.composer.voiceModeTitle": "Talk by voice, like ChatGPT voice mode",
+  "chat.composer.stop": "Stop",
+  "chat.composer.stopTitle": "Stop the answer",
+  "chat.composer.send": "Send message",
+  "chat.composer.sendTitle": "Send (Enter)",
+  "chat.composer.uploading": "Uploading files…",
+  "chat.composer.listening": "Listening…{interim} — tap the mic to stop.",
+  "chat.composer.listeningInterim": " “{text}”",
+  "chat.composer.hintEnter": "Enter to send · Shift+Enter for a new line",
+  "chat.composer.hintSkill": " · Skill: {name}",
+  "chat.composer.hintModel": " · {name}",
+  "chat.composer.hintModelDefault": " · Default model",
+  "chat.composer.hintMaxFile": " · Max file {max}MB",
+
+  // ---- Default skills (while /api/skills has not answered)
+  "chat.skill.auto": "Auto",
+  "chat.skill.autoHint": "Let FlowGpt pick the right skill",
+  "chat.skill.image": "Image",
+  "chat.skill.imageHint": "Create and edit images with AI",
+  "chat.skill.ppt": "PowerPoint",
+  "chat.skill.pptHint": "Build slides from a request",
+  "chat.skill.excel": "Excel",
+  "chat.skill.excelHint": "Build spreadsheets",
+  "chat.skill.data": "Data",
+  "chat.skill.dataHint": "Analyse data and draw charts",
+
+  // ---- SkillSelect: dropdown in the composer
+  "chat.skillSelect.aria": "Skill: {name}",
+  "chat.skillSelect.autoHint": "Let FlowGpt choose how to answer",
+  "chat.skillSelect.listAria": "Choose a skill",
+  "chat.skillSelect.autoDesc": "Do not pick a specific skill",
+  "chat.skillSelect.empty": "No skills yet",
+  "chat.skillSelect.more": "Add a skill…",
+
+  // ---- SkillPicker: "Add skills" modal
+  "chat.skillPicker.title": "Add skills",
+  "chat.skillPicker.description":
+    "Pick the skills shown in the quick list (max {max}). They appear in the order you choose.",
+  "chat.skillPicker.maxReached": "The quick list holds at most {max} skills — remove one first.",
+  "chat.skillPicker.saved": "Saved {count} skills to the quick list",
+  "chat.skillPicker.saveFailed": "Could not save the skill list",
+  "chat.skillPicker.selectedLabel": "Selected ",
+  "chat.skillPicker.selectedCount": "/{max} skills",
+  "chat.skillPicker.openHub": "Open the skill marketplace",
+  "chat.skillPicker.save": "Save list",
+  "chat.skillPicker.searchPlaceholder": "Search skills…",
+  "chat.skillPicker.external": "external",
+  "chat.skillPicker.noMatch": "No skill matches “{query}”.",
+  "chat.skillPicker.comingTitle": "Skill marketplace — coming soon",
+  "chat.skillPicker.comingHint":
+    "The skills below are not open yet. Once the skill marketplace is live you will also be able to add your own skills, skills from an MCP server, or buy and share them inside your organisation.",
+  "chat.skillPicker.comingBadge": "Coming soon",
+  "chat.skillPicker.selecting": "Selected:",
+  "chat.skillPicker.removeAria": "Remove {name}",
+
+  // ---- MessageItem: message bubbles
+  "chat.message.roleUser": "You",
+  "chat.message.error": "Error: {message}",
+  "chat.message.usage": "{input} in · {output} out tokens",
+  "chat.choices.hint": "Choose what goes into the file:",
+  "chat.message.copy": "Copy content",
+  "chat.message.read": "Read",
+  "chat.message.stopReading": "Stop reading",
+  "chat.message.readTitle": "Read the answer aloud",
+  "chat.message.regenerate": "Regenerate",
+  "chat.message.regenerateTitle": "Regenerate the answer",
+  "chat.message.reasoning": "Reasoning process",
+  "chat.message.status.thinking": "Thinking…",
+  "chat.message.status.callingTool": "Calling a tool…",
+  "chat.message.status.finishing": "Finishing…",
+  "chat.message.status.readingFile": "Reading the file…",
+  "chat.message.status.processing": "Working…",
+
+  // ---- MessageList
+  "chat.list.loading": "Loading the conversation…",
+  "chat.list.sessionFiles": "Files created in this session",
+
+  // ---- ToolCard
+  "chat.tool.generatePptx": "Create PowerPoint",
+  "chat.tool.generateXlsx": "Create Excel",
+  "chat.tool.analyzeData": "Analyse data",
+  "chat.tool.editImage": "Edit image with AI",
+  "chat.tool.listFiles": "List files",
+  "chat.tool.xlsxFromImage": "Create Excel from image",
+  "chat.tool.readImage": "Read text from image (OCR)",
+  "chat.tool.openImageStudio": "Open Image Studio",
+  "chat.tool.status.running": "Running",
+  "chat.tool.status.done": "Done",
+  "chat.tool.status.error": "Error",
+  "chat.tool.args": "Arguments",
+  "chat.tool.rowsLimited": "Showing {shown} / {total} rows",
+  "chat.tool.durationMs": "{value} ms",
+  "chat.tool.durationSec": "{value} s",
+  "chat.tool.durationMinutes": "{minutes} min {seconds} s",
+
+  // ---- ArtifactCard
+  "chat.artifact.view": "View",
+  "chat.artifact.download": "Download",
+  "chat.artifact.downloadShort": "Download",
+  "chat.artifact.meta": "{size} · {type}",
+  "chat.artifact.unknownType": "unknown format",
+
+  // ---- RequestCreditsForm
+  "chat.request.title": "Ask for more tokens",
+  "chat.request.submit": "Ask for more tokens",
+  "chat.request.sending": "Sending…",
+  "chat.request.notePlaceholder": "Note (optional)",
+  "chat.request.topUp": "Top up tokens",
+  "chat.request.balanceHint": "Current balance {balance} credits. Send a request and the account owner can grant more.",
+  "chat.request.waitingTitle": "Request sent — waiting for approval",
+  "chat.request.waitingMeta": "{amount} credits · sent at {time}",
+  "chat.request.approveHint": "The account owner approves this request on Telegram or in Settings → Users.",
+  "chat.request.telegramFailed": "(Telegram could not be sent, the request was still recorded)",
+  "chat.request.sentToast": "Request for more tokens sent",
+  "chat.request.alreadyPending": "You already have a request waiting for approval",
+  "chat.request.sendFailed": "Could not send the request",
+};

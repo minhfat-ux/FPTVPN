@@ -59,17 +59,49 @@ Sau khi vào được:
 ## Kiểm thử
 
 ```powershell
-node --test "server/test/*.test.js"     # 93 ca: auth, provider (+OpenRouter), MCP, chat SSE, 4 skill, voice, phân quyền, rate limit
+node --test "server/test/*.test.js"     # 133 ca: auth, provider (+OpenRouter/GLM), MCP, chat SSE, skill, credit, topup, chợ kỹ năng, voice, phân quyền, rate limit
 node ops/smoke.mjs http://127.0.0.1:7790/api            # smoke end-to-end (local)
 node ops/smoke.mjs https://flowgpt.meetflowai.site/api  # smoke qua domain công khai
+node ops/credit-explain-check.mjs                       # hỏi chính FlowGpt về credit và kiểm tra câu trả lời
+node ops/ui-i18n-check.mjs                              # đổi VI/EN/ZH trong trình duyệt thật + chụp ảnh
 ```
 
 Bộ test dùng provider `mock` nên **không cần mạng và không cần API key**; các ca skill kiểm tra byte thật của
 tệp `.pptx`/`.xlsx` (magic `PK`) và nội dung bảng phân tích trả về.
 
 Các script vận hành khác trong `ops/`: `deploy`-helpers cho node-2 (`check-deploy.sh`, `reset-data.sh`,
-`enable-mailer.sh`, `diagnose-login.sh`), cấu hình model (`configure-deepseek.mjs`) và kiểm tra UI bằng trình duyệt
-headless (`ui-check.mjs`, `ui-login-check.mjs`, `ui-chat-check.mjs`, `ui-settings-shot.mjs`).
+`enable-mailer.sh`, `diagnose-login.sh`), cấu hình model (`configure-deepseek.mjs`), dọn tài khoản test
+(`prune-test-users.mjs`, mặc định chỉ xem trước) và kiểm tra UI bằng trình duyệt headless
+(`ui-check.mjs`, `ui-login-check.mjs`, `ui-chat-check.mjs`, `ui-settings-shot.mjs`, `ui-i18n-check.mjs`).
+
+## Credit (cách cấp và cách trừ)
+
+**1 credit = 1 token**, tính theo tổng token **vào + ra** của mỗi lượt:
+
+```
+credit bị trừ = max(1, ceil((token_vào + token_ra) × creditsPerToken))
+```
+
+Tài khoản mới nhận `signupCredits` (mặc định 10.000) ở lần đăng nhập đầu; số dư đọc từ sổ cái append-only
+`credit_ledger` nên mọi thay đổi đều giải thích được. Hết credit ⇒ `POST /api/chat/stream` trả **402** kèm link nạp;
+admin không bị chặn nhưng vẫn bị trừ.
+
+Vì sao một lượt chat tốn ~1.800 token: mỗi request gửi lại **toàn bộ schema công cụ (~1.600 token, đo thật trên
+GLM-4-Flash)** + system prompt (~120 token) + lịch sử tối đa 24 message. Số đo: có công cụ `1.707`, không công cụ
+`114`, chỉ câu hỏi `8`. Trợ lý được chèn một khối số liệu thật mỗi lượt (`buildCreditKnowledge` trong
+`server/src/agent.js`) nên trả lời đúng khi được hỏi về credit thay vì nói "miễn phí".
+
+Người dùng có 3 đường lấy thêm: **Xin thêm token** (menu tài khoản → gửi yêu cầu → admin duyệt qua Telegram),
+**Mua thêm token** (trang nạp credit `?view=topup`, VietQR + đơn có mã `FLOWGPT######`), và **Chợ kỹ năng**
+(`?view=hub`) để mua prompt-pack bằng credit. Chi tiết: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) §8–§10.
+
+## Đa ngôn ngữ
+
+Ba locale `vi` (gốc) · `en` · `zh`, namespace `common|auth|shell|chat|settings|studio|voice|hub|topup` trong
+`web/src/i18n/locales/`. Dùng `const { t, n, d } = useI18n();` — số qua `n()`, ngày qua `d()`, không hardcode
+`vi-VN`. Ngôn ngữ lưu ở `localStorage["flowgpt.locale"]`, ép bằng `?lang=`, đổi trong menu tài khoản
+(`LocaleSwitcher`) hoặc Cài đặt → Hệ thống.
+
 
 ## Kiến trúc trong 30 giây
 

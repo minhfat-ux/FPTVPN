@@ -81,6 +81,80 @@ từ luồng khác; nếu không cần, nói em một câu là em gỡ.
 4. Chưa có **SSO Firebase/Facebook** (đã chừa chỗ) và chưa có **đăng ký email + mật khẩu** (theo yêu cầu).
 5. Bundle web 1,16 MB (334 KB gzip) — có thể tách chunk sau.
 
+## 11. Đợt 3 — credit, nạp token, chợ kỹ năng, đa ngôn ngữ
+
+### 11.1 Credit được cấp và trừ như thế nào
+
+```
+credit bị trừ mỗi lượt = max(1, ceil((token_vào + token_ra) × creditsPerToken))     // mặc định creditsPerToken = 1
+```
+
+- **1 credit = 1 token**, tính theo tổng token vào + ra (giống cách ChatGPT tính usage), làm tròn lên, thấp nhất 1.
+- Tài khoản mới: **10.000 credit** ngay lần đăng nhập đầu (`signupCredits`), không cần làm gì.
+- Sổ cái `credit_ledger` là append-only, mỗi bút toán lưu `balance_after` ⇒ mọi thay đổi số dư đều giải thích được
+  (`signup`, `admin_grant`, `chat_usage`, `request_approved`, `topup_paid`, `skill_purchase`).
+- Hết credit ⇒ cổng chặn trả **402** kèm link nạp; **admin không bị chặn nhưng vẫn bị trừ credit**.
+
+**Vì sao một lượt chat tốn ~1.800 credit** — đo thật trên production (GLM-4-Flash, cùng câu “chào em”):
+
+| Gửi gì | `prompt_tokens` |
+|---|---|
+| system prompt + **toàn bộ schema 6 công cụ** | **1.707** |
+| chỉ system prompt | 114 |
+| chỉ câu của người dùng | 8 |
+
+⇒ **~93% chi phí một lượt chat là schema công cụ**, vì mỗi request phải gửi lại toàn bộ định nghĩa tool
+(`generate_pptx`, `generate_xlsx`, `analyze_data`, `edit_image`, `open_image_studio`, `list_files`).
+Ba lượt chat liên tiếp của anh hôm nay: `1.906 + 1.831 + 1.773 = 5.510` credit — khớp đúng công thức.
+Cộng thêm lịch sử hội thoại (tối đa 24 message) nên hội thoại càng dài càng tốn.
+
+Đòn giảm chi phí (chưa làm, chờ anh quyết):
+
+| Cách | Tiết kiệm | Đánh đổi |
+|---|---|---|
+| Hạ `creditsPerToken` (vd 0,2 ⇒ 1 credit = 5 token) | ~5× số lượt/10.000 credit | giá trị credit thay đổi, phải sửa giá skill trong chợ |
+| Tăng `signupCredits` (vd 50.000) | 5× số lượt cho user mới | tặng nhiều hơn |
+| Gửi tool theo kiểu “lazy” (chỉ 1 tool `request_tools` ở lượt đầu, model xin thì mới nạp schema) | **~80%** ở lượt chat thường | lượt cần tạo tệp tốn thêm 1 vòng gọi (~1s); rủi ro model quên xin tool |
+| Chỉ gửi schema của công cụ thuộc kỹ năng đang chọn | ~60% khi chọn kỹ năng cụ thể | đã từng gây lỗi “công cụ không khả dụng” ở chế độ Trò chuyện nên phải giữ đủ tool cho `auto`/`chat` |
+| Giảm `historyLimit` 24 → 12 | ~40% ở hội thoại dài | model nhớ ít ngữ cảnh hơn |
+
+### 11.2 Trợ lý đã biết giải thích credit
+
+Lỗi cũ: system prompt **không hề nhắc tới credit** nên khi được hỏi, trợ lý trả lời kiểu “FlowGpt miễn phí”.
+Nay `buildCreditKnowledge(user)` (`server/src/agent.js`) chèn vào **mỗi lượt** một khối gồm: công thức trừ credit,
+mức tặng khi đăng nhập, **số dư / đã dùng / trung bình mỗi lượt / số lượt còn lại của chính user đó**, và
+hướng dẫn 2 đường nạp kèm đúng nhãn nút trên UI (“Xin thêm token” trong menu tài khoản → gửi yêu cầu chờ duyệt;
+“Mua thêm token” → trang nạp credit; thêm kỹ năng ở “Chợ kỹ năng”). Có test riêng cho khối này.
+Một câu trong chỉ dẫn kỹ năng Sửa ảnh cũng đã sửa: “Image Studio (miễn phí)” → “(thao tác ở đó không tốn credit)”.
+
+### 11.3 Nạp credit, xin thêm token, chợ kỹ năng
+
+- **Xin thêm token**: menu tài khoản → “Xin thêm token” → gửi yêu cầu → Telegram của anh có 2 nút duyệt (link ký HMAC,
+  idempotent). Mỗi user chỉ có 1 yêu cầu `pending`.
+- **Nạp credit**: trang riêng `?view=topup` — gói VND (mặc định 3 gói), tạo đơn có mã `FLOWGPT######`, ảnh VietQR,
+  user bấm “đã chuyển khoản” → anh xác nhận bằng link ký (30 ngày) → credit vào tài khoản 1 lần duy nhất.
+  ⚠️ **Cần anh cấp `bankAccount` + `bankAccountName`** thì ảnh VietQR mới hiện.
+- **Chợ kỹ năng**: mua prompt-pack bằng credit (6 skill thật + 1 coming soon), mua xong tự cài vào dropdown
+  (tối đa 10 kỹ năng); admin CRUD trong Cài đặt → “Chợ kỹ năng”.
+- **Đa ngôn ngữ**: hạ tầng i18n 3 thứ tiếng (vi/en/zh) cho cả shell; bản dịch đầy đủ đang được phủ dần theo từng khu vực.
+
+### 11.4 Bug thật đã sửa trong đợt này
+
+| Bug | Nguyên nhân | Sửa |
+|---|---|---|
+| `analyze_data` op `filter` **luôn lỗi** | `applyFilter` đọc `operation.op` — nhưng `op` đã là tên thao tác (`"filter"`) nên rơi vào `default` ⇒ “Toán tử lọc không hỗ trợ: filter”; schema còn khai báo sai `op_filter` và thiếu `value`/`n`/`limit`/`desc`/`labelColumn` | Tách toán tử so sánh sang `op_filter`, khai báo đủ tham số trong schema, thêm test hồi quy (lọc 5 dòng CSV còn 2 + toán tử sai phải báo lỗi) |
+| Credit bị tính bằng `creditSettings().perKToken` (không tồn tại) | gõ nhầm tên khoá, may là `undefined` rơi vào giá trị mặc định nên không sai số | đổi thành `creditsPerToken` |
+| Test `meta.credits.buyUrl` fail | đổi mặc định sang trang nạp nội bộ `?view=topup` nhưng test còn so với URL cũ | so với chính `app_settings.creditBuyUrl` + khớp `?view=topup` |
+
+### 11.5 Script kiểm chứng mới (đều là kiểm chứng thật, không phải "đã viết xong")
+
+| Script | Việc |
+|---|---|
+| `ops/credit-explain-check.mjs` | Tạo tài khoản mới rồi **hỏi chính FlowGpt** về credit; assert câu trả lời có công thức, mức tặng, cách xin/mua; so số dư với `token vào + ra`. Chạy: `node ops/credit-explain-check.mjs` |
+| `ops/ui-i18n-check.mjs` | Mở trình duyệt thật (CDP 9224), đăng nhập tài khoản tạm, đổi VI→EN→ZH, chụp ảnh từng ngôn ngữ, kiểm tra `html lang`, copy có đổi thật không và menu tài khoản có `LocaleSwitcher` |
+| `ops/prune-test-users.mjs` | Dọn tài khoản tạm (`credit-explain+%`, `i18n-ui+%`) **và** mọi dòng chúng sở hữu; mặc định chỉ xem trước, thêm `--apply` mới xoá |
+| `ops/report-telegram-credit.sh` | Báo cáo Telegram đợt credit (đã gửi, message_id 201) |
+
 ---
 
 ## 1. Tóm tắt

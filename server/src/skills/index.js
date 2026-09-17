@@ -2,24 +2,28 @@ import { generatePptx } from "./pptx.js";
 import { generateXlsx } from "./xlsx.js";
 import { analyzeData, listFilesForModel } from "./data.js";
 import { editImage, transformImage } from "./image.js";
+import { readImageContent, xlsxFromImage } from "./vision.js";
 import { ApiError } from "../util.js";
 
 /**
  * Built-in skills exposed to the model as tools. `skill` drives which tools are
  * offered for the selected UI chip (`auto` = all of them).
+ *
+ * Every schema is sent on **every** request, so the wording here is deliberately
+ * terse: verbose descriptions were the single biggest part of a turn's token bill
+ * (the model pays for them even when it only chats).
  */
 export const TOOL_DEFINITIONS = [
   {
     name: "generate_pptx",
     skill: "ppt",
     label: "Tạo slide PowerPoint",
-    description:
-      "Tạo tệp .pptx hoàn chỉnh từ dàn ý. Dùng khi người dùng cần slide, bài giảng, thuyết trình, báo cáo trình bày.",
+    description: "Tạo tệp .pptx từ dàn ý (slide, bài giảng, thuyết trình, báo cáo).",
     inputSchema: {
       type: "object",
       properties: {
-        title: { type: "string", description: "Tiêu đề bộ slide" },
-        subtitle: { type: "string", description: "Phụ đề (tuỳ chọn)" },
+        title: { type: "string", description: "Tiêu đề" },
+        subtitle: { type: "string", description: "Phụ đề" },
         theme: { type: "string", enum: ["flow", "dark", "warm", "mint"], description: "Bảng màu" },
         slides: {
           type: "array",
@@ -30,7 +34,7 @@ export const TOOL_DEFINITIONS = [
               title: { type: "string" },
               subtitle: { type: "string" },
               bullets: { type: "array", items: { type: "string" }, description: "Gạch đầu dòng" },
-              notes: { type: "string", description: "Ghi chú cho người trình bày" },
+              notes: { type: "string", description: "Ghi chú trình bày" },
             },
             required: ["title"],
           },
@@ -44,12 +48,11 @@ export const TOOL_DEFINITIONS = [
     name: "generate_xlsx",
     skill: "excel",
     label: "Tạo bảng tính Excel",
-    description:
-      "Tạo tệp .xlsx nhiều sheet, có định dạng số, dòng tổng và autofilter. Dùng khi người dùng cần bảng tính, báo cáo số liệu, danh sách.",
+    description: "Tạo tệp .xlsx nhiều sheet, định dạng số, dòng tổng, autofilter.",
     inputSchema: {
       type: "object",
       properties: {
-        filename: { type: "string", description: "Tên tệp (không cần .xlsx)" },
+        filename: { type: "string", description: "Tên tệp (bỏ .xlsx)" },
         sheets: {
           type: "array",
           items: {
@@ -57,8 +60,8 @@ export const TOOL_DEFINITIONS = [
             properties: {
               name: { type: "string" },
               columns: { type: "array", items: { type: "string" } },
-              rows: { type: "array", items: { type: "array", items: {} }, description: "Mảng các dòng" },
-              totalsRow: { type: "boolean", description: "Thêm dòng TỔNG (SUM) cho cột số" },
+              rows: { type: "array", items: { type: "array", items: {} }, description: "Các dòng dữ liệu" },
+              totalsRow: { type: "boolean", description: "Thêm dòng TỔNG (SUM)" },
             },
             required: ["columns", "rows"],
           },
@@ -73,14 +76,15 @@ export const TOOL_DEFINITIONS = [
     skill: "data",
     label: "Phân tích dữ liệu",
     description:
-      "Phân tích tệp CSV/Excel/JSON đã tải lên: mô tả cột, lọc, nhóm, top, tương quan, chuỗi thời gian. Trả bảng kết quả và dữ liệu biểu đồ.",
+      "Phân tích CSV/Excel/JSON đã tải lên: mô tả cột, lọc, nhóm, top, tương quan, chuỗi thời gian. Trả bảng kết quả và dữ liệu biểu đồ.",
     inputSchema: {
       type: "object",
       properties: {
-        fileId: { type: "string", description: "id tệp dữ liệu (lấy từ list_files)" },
+        fileId: { type: "string", description: "id tệp (từ list_files)" },
+        fileName: { type: "string", description: "Tên tệp, nếu không có id" },
         operations: {
           type: "array",
-          description: "Danh sách thao tác chạy tuần tự",
+          description: "Các thao tác chạy tuần tự",
           items: {
             type: "object",
             properties: {
@@ -106,10 +110,19 @@ export const TOOL_DEFINITIONS = [
               valueColumn: { type: "string" },
               granularity: { type: "string", enum: ["day", "week", "month", "year"] },
               agg: { type: "string" },
-              op_filter: { type: "string" },
+              op_filter: {
+                type: "string",
+                enum: ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "not_contains", "in", "is_null", "not_null"],
+                description: "Toán tử so sánh (op=filter)",
+              },
+              value: { description: "Giá trị so sánh (op=filter)" },
+              n: { type: "number" },
+              limit: { type: "number" },
+              desc: { type: "boolean" },
+              labelColumn: { type: "string" },
             },
+            required: ["op"],
           },
-          required: ["op"],
         },
       },
       required: ["fileId"],
@@ -121,13 +134,14 @@ export const TOOL_DEFINITIONS = [
     skill: "image",
     label: "Sửa ảnh bằng AI",
     description:
-      "Sửa/tạo ảnh bằng AI từ một ảnh người dùng đã tải lên (xoá vật thể, đổi nền, đổi phong cách…). Cần provider có model ảnh.",
+      "Sửa/tạo ảnh bằng AI từ ảnh đã tải lên (xoá vật thể, đổi nền, đổi phong cách). Cần provider có model ảnh.",
     inputSchema: {
       type: "object",
       properties: {
         fileId: { type: "string", description: "id ảnh gốc" },
-        instruction: { type: "string", description: "Mô tả cần sửa (tiếng Việt hoặc tiếng Anh)" },
-        model: { type: "string", description: "Ghi đè model ảnh (tuỳ chọn)" },
+        fileName: { type: "string", description: "Tên ảnh, nếu không có id" },
+        instruction: { type: "string", description: "Mô tả cần sửa" },
+        model: { type: "string", description: "Ghi đè model ảnh" },
       },
       required: ["fileId", "instruction"],
     },
@@ -137,8 +151,7 @@ export const TOOL_DEFINITIONS = [
     name: "open_image_studio",
     skill: "image",
     label: "Gợi ý Image Studio",
-    description:
-      "Dùng khi yêu cầu chỉ là cắt/xoay/filter/chèn chữ — chỉ đường cho người dùng mở Image Studio trên web.",
+    description: "Chỉ đường mở Image Studio khi yêu cầu chỉ là cắt/xoay/filter/chèn chữ.",
     inputSchema: {
       type: "object",
       properties: { fileId: { type: "string" } },
@@ -146,10 +159,46 @@ export const TOOL_DEFINITIONS = [
     handler: transformImage,
   },
   {
+    name: "read_image",
+    skill: "image",
+    label: "Đọc chữ trong ảnh (OCR)",
+    description:
+      "Đọc toàn bộ chữ và bảng trong ảnh người dùng đã tải lên bằng một model có thị giác. Dùng khi model đang chạy không xem được ảnh, hoặc cần trích xuất bảng để tạo Excel.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fileId: { type: "string", description: "id ảnh (lấy từ list_files)" },
+        fileName: { type: "string", description: "Tên ảnh, nếu không có id" },
+        instruction: { type: "string", description: "Cần lấy gì từ ảnh (tuỳ chọn)" },
+      },
+      required: ["fileId"],
+    },
+    handler: readImageContent,
+  },
+  {
+    name: "xlsx_from_image",
+    skill: "excel",
+    label: "Tạo Excel từ ảnh",
+    description:
+      "Đọc bảng trong ảnh (chụp bảng, hoá đơn, sổ sách) rồi tạo luôn tệp .xlsx bằng chính dữ liệu đọc được — không cần tự gõ lại số liệu. Dùng khi người dùng muốn đưa dữ liệu trong ảnh vào Excel.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fileId: { type: "string", description: "id ảnh (lấy từ list_files)" },
+        fileName: { type: "string", description: "Tên ảnh, nếu không có id" },
+        filename: { type: "string", description: "Tên tệp Excel (tuỳ chọn)" },
+        sheetName: { type: "string", description: "Tên sheet (tuỳ chọn)" },
+        instruction: { type: "string", description: "Cần lấy gì từ ảnh (tuỳ chọn)" },
+      },
+      required: ["fileId"],
+    },
+    handler: xlsxFromImage,
+  },
+  {
     name: "list_files",
     skill: "auto",
     label: "Liệt kê tệp",
-    description: "Liệt kê các tệp người dùng đã tải lên (kèm id) để dùng cho các công cụ khác.",
+    description: "Liệt kê tệp người dùng đã tải lên kèm id cho các công cụ khác.",
     inputSchema: { type: "object", properties: {} },
     handler: listFilesForModel,
   },

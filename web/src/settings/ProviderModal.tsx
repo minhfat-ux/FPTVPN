@@ -3,6 +3,7 @@ import { TriangleAlert } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import { useToast } from "../state/store";
 import { Field, Modal, Switch } from "../components/ui";
+import { useI18n } from "../i18n";
 import type { Provider, ProviderKind, ProviderKindInfo } from "../types";
 
 /** Create/edit dialog for one AI provider, driven by /settings/provider-kinds. */
@@ -20,6 +21,7 @@ export function ProviderModal({
   onSaved: (message: string) => void | Promise<void>;
 }) {
   const { push } = useToast();
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ProviderKind>("openai");
   const [baseUrl, setBaseUrl] = useState("");
@@ -79,7 +81,7 @@ export function ProviderModal({
 
   const save = async () => {
     if (!name.trim()) {
-      push("Nhập tên nhà cung cấp", "error");
+      push(t("settings.providerModal.nameRequired"), "error");
       return;
     }
     const payload: Record<string, unknown> = {
@@ -103,13 +105,13 @@ export function ProviderModal({
     try {
       if (isEdit && provider) {
         await api.updateProvider(provider.id, payload);
-        await onSaved(`Đã cập nhật nhà cung cấp ${payload.name}`);
+        await onSaved(t("settings.providerModal.updated", { name: String(payload.name) }));
       } else {
         await api.createProvider(payload);
-        await onSaved(`Đã thêm nhà cung cấp ${payload.name}`);
+        await onSaved(t("settings.providerModal.created", { name: String(payload.name) }));
       }
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không lưu được nhà cung cấp", "error");
+      push(err instanceof ApiError ? err.message : t("settings.providerModal.saveFailed"), "error");
       setSaving(false);
     }
   };
@@ -118,31 +120,34 @@ export function ProviderModal({
     <Modal
       open={open}
       wide
-      title={isEdit ? `Sửa nhà cung cấp — ${provider?.name ?? ""}` : "Thêm nhà cung cấp AI"}
-      description="Key chỉ được lưu ở backend dưới dạng mã hoá; giao diện không bao giờ hiển thị key đầy đủ."
+      title={isEdit ? t("settings.providerModal.editTitle", { name: provider?.name ?? "" }) : t("settings.providerModal.createTitle")}
+      description={t("settings.providerModal.desc")}
       onClose={onClose}
       footer={
         <>
           <button className="btn" type="button" onClick={onClose} disabled={saving}>
-            Huỷ
+            {t("common.cancel")}
           </button>
           <button className="btn btn-primary" type="button" onClick={save} disabled={saving}>
-            {saving ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Thêm nhà cung cấp"}
+            {saving ? t("common.saving") : isEdit ? t("common.saveChanges") : t("settings.providerModal.createSubmit")}
           </button>
         </>
       }
     >
       <div className="form-grid">
-        <Field label="Tên nhà cung cấp" hint="Tên hiển thị trong danh sách chọn model khi chat.">
+        <Field label={t("settings.providerModal.nameLabel")} hint={t("settings.providerModal.nameHint")}>
           <input
             className="input"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Ví dụ: OpenAI công ty"
+            placeholder={t("settings.providerModal.namePlaceholder")}
           />
         </Field>
 
-        <Field label="Loại nhà cung cấp" hint={isEdit ? undefined : "Chọn loại để tự điền Base URL và model gợi ý."}>
+        <Field
+          label={t("settings.providerModal.kindLabel")}
+          hint={isEdit ? undefined : t("settings.providerModal.kindHint")}
+        >
           <select className="select" value={kind} onChange={(event) => onKindChange(event.target.value as ProviderKind)}>
             {kinds.map((item) => (
               <option key={item.id} value={item.id}>
@@ -153,7 +158,7 @@ export function ProviderModal({
         </Field>
 
         {kind !== "mock" && (
-          <Field label="Base URL" hint={info?.keyHint}>
+          <Field label={t("settings.providerModal.baseUrlLabel")} hint={info?.keyHint}>
             <input
               className="input input-mono"
               value={baseUrl}
@@ -164,10 +169,7 @@ export function ProviderModal({
         )}
 
         {kind !== "mock" && (
-          <Field
-            label="API key"
-            hint={isEdit ? undefined : info?.keyHint}
-          >
+          <Field label={t("settings.providerModal.apiKeyLabel")} hint={isEdit ? undefined : info?.keyHint}>
             <input
               className="input input-mono"
               type="password"
@@ -175,7 +177,7 @@ export function ProviderModal({
               value={apiKey}
               disabled={clearKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder={isEdit ? "Để trống nếu không đổi key" : "sk-…"}
+              placeholder={isEdit ? t("settings.providerModal.apiKeyKeepPlaceholder") : "sk-…"}
             />
           </Field>
         )}
@@ -183,7 +185,7 @@ export function ProviderModal({
         {isEdit && kind !== "mock" && (
           <div className="stack gap-2 mb-3">
             <span className="hint">
-              Đã lưu: <span className="mono">{provider?.apiKeyPreview ?? "chưa có key"}</span> — để trống nếu không đổi.
+              {t("settings.providerModal.keySaved", { preview: provider?.apiKeyPreview ?? t("settings.providerModal.noKey") })}
             </span>
             <Switch
               checked={clearKey}
@@ -191,12 +193,12 @@ export function ProviderModal({
                 setClearKey(value);
                 if (value) setApiKey("");
               }}
-              label="Xoá key đã lưu"
+              label={t("settings.providerModal.clearKey")}
             />
           </div>
         )}
 
-        <Field label="Model" hint="Mỗi dòng một model. Bấm chip gợi ý bên dưới để thêm nhanh.">
+        <Field label={t("settings.providerModal.modelsLabel")} hint={t("settings.providerModal.modelsHint")}>
           <textarea
             className="textarea input-mono"
             rows={5}
@@ -208,7 +210,7 @@ export function ProviderModal({
 
         {(info?.suggestedModels?.length ?? 0) > 0 && (
           <div className="mb-3">
-            <div className="hint mb-2">Model gợi ý cho {info?.label}:</div>
+            <div className="hint mb-2">{t("settings.providerModal.suggestedFor", { name: info?.label ?? "" })}</div>
             <div className="chip-list">
               {info?.suggestedModels.map((model) => (
                 <button
@@ -216,7 +218,7 @@ export function ProviderModal({
                   type="button"
                   className={`chip${models.includes(model) ? " chip-added" : ""}`}
                   onClick={() => appendModel(model)}
-                  title={models.includes(model) ? "Đã có trong danh sách" : "Thêm model này"}
+                  title={models.includes(model) ? t("settings.providerModal.chipAdded") : t("settings.providerModal.chipAdd")}
                 >
                   {model}
                 </button>
@@ -226,9 +228,9 @@ export function ProviderModal({
         )}
 
         <div className="grid grid-2">
-          <Field label="Model mặc định" hint="Dùng khi người dùng không chọn model khác.">
+          <Field label={t("settings.providerModal.defaultModelLabel")} hint={t("settings.providerModal.defaultModelHint")}>
             <select className="select" value={defaultModel} onChange={(event) => setDefaultModel(event.target.value)}>
-              <option value="">— Chưa chọn (dùng model đầu tiên) —</option>
+              <option value="">{t("settings.providerModal.defaultModelNone")}</option>
               {models.map((model) => (
                 <option key={model} value={model}>
                   {model}
@@ -238,12 +240,12 @@ export function ProviderModal({
           </Field>
 
           {info?.supportsImages ? (
-            <Field label="Model tạo ảnh" hint="Dùng cho kỹ năng tạo/sửa ảnh. Có thể để trống.">
+            <Field label={t("settings.providerModal.imageModelLabel")} hint={t("settings.providerModal.imageModelHint")}>
               <input
                 className="input input-mono"
                 value={imageModel}
                 onChange={(event) => setImageModel(event.target.value)}
-                placeholder={info?.defaultImageModel ?? "ví dụ: gpt-image-1"}
+                placeholder={info?.defaultImageModel ?? t("settings.providerModal.imageModelPlaceholder")}
               />
             </Field>
           ) : (
@@ -251,10 +253,10 @@ export function ProviderModal({
           )}
         </div>
 
-        <Switch checked={enabled} onChange={setEnabled} label="Bật nhà cung cấp này" />
+        <Switch checked={enabled} onChange={setEnabled} label={t("settings.providerModal.enable")} />
         {defaultModel && !models.includes(defaultModel) && (
           <div className="error-text mt-2 row gap-2">
-            <TriangleAlert size={14} /> Model mặc định không nằm trong danh sách model — hãy thêm hoặc chọn lại.
+            <TriangleAlert size={14} /> {t("settings.providerModal.defaultModelMissing")}
           </div>
         )}
       </div>

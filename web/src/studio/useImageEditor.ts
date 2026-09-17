@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n";
 import { useChat } from "../state/chat";
 import { useToast } from "../state/store";
 import { useCanvasPointer } from "./useCanvasPointer";
@@ -54,6 +55,7 @@ function inkColor(variable: string, fallback: string): string {
 
 /** Toàn bộ logic của Image Studio: nạp ảnh, hoàn tác, thao tác canvas, xuất và lưu tệp. */
 export function useImageEditor() {
+  const { t } = useI18n();
   const { conversationId, sending, pendingArtifacts } = useChat();
   const { push } = useToast();
 
@@ -69,7 +71,7 @@ export function useImageEditor() {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [target, setTarget] = useState({ width: 0, height: 0 });
   const [lockRatio, setLockRatio] = useState(true);
-  const [text, setText] = useState<TextState>({ value: "Nội dung", size: 42, color: "#ffffff", bold: true });
+  const [text, setText] = useState<TextState>(() => ({ value: t("studio.image.textDefault"), size: 42, color: "#ffffff", bold: true }));
   const [textPos, setTextPos] = useState<{ x: number; y: number } | null>(null);
   const [brush, setBrush] = useState<BrushState>(() => ({ color: inkColor("--danger", "#f25a5a"), width: 8 }));
   const [shape, setShape] = useState<ShapeState>(() => ({ kind: "rect", color: inkColor("--accent", "#33c773"), width: 4 }));
@@ -118,7 +120,7 @@ export function useImageEditor() {
   const loadFile = useCallback(
     async (file: File) => {
       if (!file.type.startsWith("image/")) {
-        push("Chỉ hỗ trợ tệp ảnh", "error");
+        push(t("studio.image.imageOnly"), "error");
         return;
       }
       const url = URL.createObjectURL(file);
@@ -133,14 +135,14 @@ export function useImageEditor() {
         setAdjust(DEFAULT_ADJUST);
         commit(image, null);
         setFileName(file.name);
-        push("Đã nạp ảnh vào trình sửa", "success");
+        push(t("studio.image.loaded"), "success");
       } catch {
-        push("Không đọc được tệp ảnh này", "error");
+        push(t("studio.image.loadFailed"), "error");
       } finally {
         URL.revokeObjectURL(url);
       }
     },
-    [clear, commit, push],
+    [clear, commit, push, t],
   );
 
   useEditorHotkeys({ onPasteImage: (file) => void loadFile(file), onUndo: () => undoRef.current(), onRedo: () => redoRef.current() });
@@ -201,11 +203,11 @@ export function useImageEditor() {
     if (!source || !crop) return;
     const box = normalizeBox(crop);
     if (box.width < 8 || box.height < 8) {
-      push("Vùng cắt quá nhỏ — hãy kéo chọn vùng lớn hơn", "error");
+      push(t("studio.image.cropTooSmall"), "error");
       return;
     }
     commit(cropImage(source, box), source);
-    push("Đã cắt ảnh", "success");
+    push(t("studio.image.cropped"), "success");
   };
 
   const applyResize = () => {
@@ -213,28 +215,28 @@ export function useImageEditor() {
     const width = Math.max(1, Math.round(target.width));
     const height = Math.max(1, Math.round(target.height));
     if (width === size.width && height === size.height) {
-      push("Kích thước chưa thay đổi", "info");
+      push(t("studio.image.sizeUnchanged"), "info");
       return;
     }
     commit(resizeImage(source, width, height), source);
-    push("Đã đổi kích thước ảnh", "success");
+    push(t("studio.image.resized"), "success");
   };
 
   const bakeAdjust = () => {
     if (!source) return;
     commit(bake(source, adjust), source);
     setAdjust(DEFAULT_ADJUST);
-    push("Đã áp dụng màu sắc vào ảnh", "success");
+    push(t("studio.image.adjustBaked"), "success");
   };
 
   const bakeText = () => {
     if (!source || !textPos) {
-      push("Bấm vào ảnh để chọn vị trí đặt chữ", "error");
+      push(t("studio.image.needTextPos"), "error");
       return;
     }
     const payload: DrawText = { text: text.value, x: textPos.x, y: textPos.y, size: text.size, color: text.color, bold: text.bold };
     commit(bake(source, adjust, payload), source);
-    push("Đã thêm chữ vào ảnh", "success");
+    push(t("studio.image.textAdded"), "success");
   };
 
   const exportBlob = async (format: "png" | "jpeg" | "webp") => {
@@ -243,7 +245,7 @@ export function useImageEditor() {
     try {
       await downloadCanvas(canvas, fileName, format, quality);
     } catch {
-      push("Không xuất được ảnh ở định dạng này", "error");
+      push(t("studio.image.exportFailed"), "error");
     }
   };
 
@@ -254,9 +256,9 @@ export function useImageEditor() {
     try {
       const file = await uploadCanvas(canvas, conversationId);
       setSaved((list) => [{ id: file.id, name: file.name }, ...list].slice(0, 6));
-      push("Đã lưu ảnh vào FlowGpt", "success");
+      push(t("studio.image.savedToFlowGpt"), "success");
     } catch (error) {
-      push(errorMessage(error, "Không lưu được ảnh"), "error");
+      push(errorMessage(error, t("studio.image.saveFailed")), "error");
     } finally {
       setBusy(false);
     }

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, KeyRound, Loader2, Mail, ShieldCheck } from "lucide-react";
 import { api, ApiError } from "../api/client";
+import { useI18n } from "../i18n";
 import { useAuth, useToast } from "../state/store";
 
 type Step = "email" | "code";
 
 export function LoginPage() {
+  const { t } = useI18n();
   const { completeLogin, login, meta } = useAuth();
   const { push } = useToast();
 
@@ -50,14 +52,14 @@ export function LoginPage() {
       setResendIn(60);
       if (result.devCode) {
         setDevCode(result.devCode);
-        setInfo("Chưa cấu hình email nên mã hiển thị ngay bên dưới (bật Resend trong Cài đặt để gửi thật).");
+        setInfo(t("auth.login.devCodeInfo"));
       } else if (result.delivered) {
-        setInfo(`Đã gửi mã tới ${normalisedEmail}. Mã có hiệu lực ${result.expiresInMin} phút.`);
+        setInfo(t("auth.login.sent", { email: normalisedEmail, minutes: result.expiresInMin }));
       } else {
-        setInfo(result.message ?? "Nếu email hợp lệ, mã đăng nhập sẽ được gửi tới hộp thư.");
+        setInfo(result.message ?? t("auth.login.sendFallback"));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không gửi được mã, thử lại sau");
+      setError(err instanceof ApiError ? err.message : t("auth.login.sendFailed"));
     } finally {
       setBusy(false);
     }
@@ -69,7 +71,7 @@ export function LoginPage() {
     // below runs in the same tick as the last keystroke).
     const value = String(explicitCode ?? code).trim();
     if (value.length !== 6) {
-      setError("Mã gồm 6 chữ số trong email. Anh kiểm tra lại giúp em nhé.");
+      setError(t("auth.login.codeLength"));
       return;
     }
     setBusy(true);
@@ -77,9 +79,9 @@ export function LoginPage() {
     try {
       const session = await api.verifyLoginToken(normalisedEmail, value);
       await completeLogin(session);
-      push("Đăng nhập thành công", "success");
+      push(t("auth.login.success"), "success");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Mã không đúng, thử lại");
+      setError(err instanceof ApiError ? err.message : t("auth.login.codeWrong"));
       // Keep what was typed so the user can fix a single digit instead of retyping.
       codeRef.current?.focus();
       codeRef.current?.select();
@@ -94,9 +96,9 @@ export function LoginPage() {
     setError(null);
     try {
       await login(normalisedEmail, password);
-      push("Đăng nhập thành công", "success");
+      push(t("auth.login.success"), "success");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không đăng nhập được");
+      setError(err instanceof ApiError ? err.message : t("auth.login.failed"));
     } finally {
       setBusy(false);
     }
@@ -130,13 +132,13 @@ export function LoginPage() {
             {step === "email" ? (
               <form onSubmit={requestCode}>
                 <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-                  Đăng nhập bằng email
+                  {t("auth.login.emailTitle")}
                 </h1>
                 <p className="muted small" style={{ marginTop: 0 }}>
-                  Nhập email công ty, em sẽ gửi một mã dùng một lần. Không cần mật khẩu.
+                  {t("auth.login.emailHint")}
                 </p>
                 <label className="field">
-                  <span className="label">Email</span>
+                  <span className="label">{t("auth.login.emailLabel")}</span>
                   <input
                     className="input"
                     type="email"
@@ -144,7 +146,7 @@ export function LoginPage() {
                     autoFocus
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="ban@congty.vn"
+                    placeholder={t("auth.login.emailPlaceholder")}
                     autoComplete="email"
                   />
                 </label>
@@ -152,41 +154,36 @@ export function LoginPage() {
                 <button className="btn btn-primary btn-block" type="submit" disabled={busy || !normalisedEmail}>
                   {busy ? (
                     <>
-                      <Loader2 size={16} className="spinner" /> Đang gửi mã…
+                      <Loader2 size={16} className="spinner" /> {t("auth.login.sendingCode")}
                     </>
                   ) : (
                     <>
-                      <Mail size={16} /> Gửi mã đăng nhập
+                      <Mail size={16} /> {t("auth.login.sendCode")}
                     </>
                   )}
                 </button>
                 {meta?.firstUserIsAdmin && (
                   <div className="hint mt-3 row gap-1">
-                    <ShieldCheck size={14} /> Đây là lần thiết lập đầu tiên — email đăng nhập đầu tiên sẽ trở thành
-                    quản trị viên.
+                    <ShieldCheck size={14} /> {t("auth.login.firstUserHint")}
                   </div>
                 )}
               </form>
             ) : (
               <form onSubmit={submitCode}>
                 <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => setStep("email")}>
-                  <ArrowLeft size={14} /> Đổi email khác
+                  <ArrowLeft size={14} /> {t("auth.login.changeEmail")}
                 </button>
-                <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>Nhập mã đăng nhập</h1>
+                <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{t("auth.login.codeTitle")}</h1>
                 <p className="muted small" style={{ marginTop: 0 }}>
                   {mailerReady ? (
-                    <>
-                      Mã 6 chữ số đã gửi tới <span className="bold">{normalisedEmail}</span>. Hiệu lực {ttl} phút.
-                    </>
+                    t("auth.login.codeSent", { email: normalisedEmail, minutes: ttl })
                   ) : (
-                    <>
-                      Mã đăng nhập cho <span className="bold">{normalisedEmail}</span>.
-                    </>
+                    t("auth.login.codeFor", { email: normalisedEmail })
                   )}
                 </p>
 
                 <label className="field">
-                  <span className="label">Mã đăng nhập</span>
+                  <span className="label">{t("auth.login.codeLabel")}</span>
                   <input
                     ref={codeRef}
                     className="input input-mono"
@@ -194,14 +191,14 @@ export function LoginPage() {
                     autoComplete="one-time-code"
                     value={code}
                     onChange={(event) => onCodeChange(event.target.value)}
-                    placeholder="••••••"
+                    placeholder={t("auth.login.codePlaceholder")}
                     style={{ letterSpacing: "0.4em", fontSize: 22, textAlign: "center" }}
                   />
                 </label>
 
                 {devCode && (
                   <div className="card mb-3" style={{ background: "var(--bg-elevated)" }}>
-                    <div className="tiny faint">Mã dùng ngay (chưa cấu hình email)</div>
+                    <div className="tiny faint">{t("auth.login.devCodeTitle")}</div>
                     <div
                       className="mono bold"
                       style={{ fontSize: 26, letterSpacing: "0.3em", color: "var(--accent)" }}
@@ -217,21 +214,21 @@ export function LoginPage() {
                 <button className="btn btn-primary btn-block" type="submit" disabled={busy || code.length < 4}>
                   {busy ? (
                     <>
-                      <Loader2 size={16} className="spinner" /> Đang kiểm tra…
+                      <Loader2 size={16} className="spinner" /> {t("auth.login.verifying")}
                     </>
                   ) : (
                     <>
-                      <KeyRound size={16} /> Đăng nhập
+                      <KeyRound size={16} /> {t("auth.login.submit")}
                     </>
                   )}
                 </button>
 
                 <div className="auth-switch">
                   {resendIn > 0 ? (
-                    <span className="tiny faint">Gửi lại mã sau {resendIn}s</span>
+                    <span className="tiny faint">{t("auth.login.resendIn", { seconds: resendIn })}</span>
                   ) : (
                     <button className="btn btn-ghost btn-sm" type="button" onClick={() => requestCode()} disabled={busy}>
-                      Gửi lại mã
+                      {t("auth.login.resend")}
                     </button>
                   )}
                 </div>
@@ -243,14 +240,14 @@ export function LoginPage() {
         {usePassword && (
           <form onSubmit={submitPassword}>
             <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => setUsePassword(false)}>
-              <ArrowLeft size={14} /> Về đăng nhập bằng email
+              <ArrowLeft size={14} /> {t("auth.login.backToEmail")}
             </button>
-            <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>Đăng nhập bằng mật khẩu</h1>
+            <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{t("auth.login.passwordTitle")}</h1>
             <p className="muted small" style={{ marginTop: 0 }}>
-              Dành cho tài khoản do quản trị viên tạo trực tiếp.
+              {t("auth.login.passwordHint")}
             </p>
             <label className="field">
-              <span className="label">Email</span>
+              <span className="label">{t("auth.login.emailLabel")}</span>
               <input
                 className="input"
                 type="email"
@@ -261,7 +258,7 @@ export function LoginPage() {
               />
             </label>
             <label className="field">
-              <span className="label">Mật khẩu</span>
+              <span className="label">{t("auth.login.passwordLabel")}</span>
               <input
                 className="input"
                 type="password"
@@ -273,7 +270,7 @@ export function LoginPage() {
             </label>
             {error && <div className="error-text mb-3">{error}</div>}
             <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
-              {busy ? <Loader2 size={16} className="spinner" /> : null} Đăng nhập
+              {busy ? <Loader2 size={16} className="spinner" /> : null} {t("auth.login.submit")}
             </button>
           </form>
         )}
@@ -281,18 +278,18 @@ export function LoginPage() {
         <div className="divider" />
 
         <div className="stack">
-          <div className="tiny faint">Sắp bổ sung</div>
+          <div className="tiny faint">{t("auth.login.comingSoon")}</div>
           <div className="row gap-2">
-            <button className="btn btn-sm grow" type="button" disabled title="Sẽ dùng Firebase Authentication">
+            <button className="btn btn-sm grow" type="button" disabled title={t("auth.login.googleTitle")}>
               Google / Firebase
             </button>
-            <button className="btn btn-sm grow" type="button" disabled title="Sẽ dùng Facebook Login">
+            <button className="btn btn-sm grow" type="button" disabled title={t("auth.login.facebookTitle")}>
               Facebook
             </button>
           </div>
           {passwordEnabled && !usePassword && (
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => setUsePassword(true)}>
-              Dùng mật khẩu (dự phòng)
+              {t("auth.login.usePassword")}
             </button>
           )}
         </div>

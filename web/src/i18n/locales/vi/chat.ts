@@ -1,0 +1,149 @@
+import type { Dict } from "../../types";
+
+/** Nguồn sự thật (tiếng Việt). Thêm khoá mới ở đây trước, rồi dịch sang en/zh. */
+export const chat: Dict = {
+  // ---- ChatPage: khung chat, hero, hết credit
+  "chat.page.fileTooLarge": "“{name}” vượt quá {max}MB nên bị bỏ qua",
+  "chat.page.sendFailed": "Không gửi được tin nhắn",
+  "chat.page.heroIntro":
+    "Trợ lý AI cho công việc hằng ngày: trò chuyện, tạo ảnh, làm slide, bảng tính và phân tích dữ liệu — tất cả trong một khung chat.",
+  "chat.page.chooseSkill": "Chọn một kỹ năng để xem gợi ý bắt đầu.",
+  "chat.page.dropzone": "Thả tệp vào đây để đính kèm",
+  "chat.page.outOfCredit.title": "Đã hết credit",
+  "chat.page.outOfCredit.body":
+    "Số dư hiện tại: {balance} credit. 1 credit = 1 token (tính cả token vào và ra); mỗi lượt trả lời trừ {perToken} credit cho mỗi token.",
+  "chat.page.topUp": "Nạp thêm",
+  "chat.page.checkAgain": "Kiểm tra lại",
+
+  // ---- Composer: thanh nhập
+  "chat.composer.placeholder": "Nhập câu hỏi, yêu cầu tạo ảnh, PPT, Excel hoặc phân tích dữ liệu…",
+  "chat.composer.inputAria": "Nội dung tin nhắn",
+  "chat.composer.removeFile": "Bỏ tệp",
+  "chat.composer.removeFileAria": "Bỏ tệp {name}",
+  "chat.composer.attach": "Đính kèm tệp",
+  "chat.composer.attachTitle": "Đính kèm tệp (tối đa {max}MB)",
+  "chat.composer.dictationStart": "Nhập bằng giọng nói",
+  "chat.composer.dictationStop": "Dừng nhập bằng giọng nói",
+  "chat.composer.dictationUnsupported":
+    "Trình duyệt không hỗ trợ nhập bằng giọng nói (hãy dùng Chrome hoặc Edge)",
+  "chat.composer.modelSelect": "Chọn mô hình",
+  "chat.composer.modelDefault": "Mặc định",
+  "chat.composer.modelIsDefault": " (mặc định)",
+  "chat.composer.voiceMode": "Nói chuyện",
+  "chat.composer.voiceModeTitle": "Trò chuyện bằng giọng nói như ChatGPT voice mode",
+  "chat.composer.stop": "Dừng",
+  "chat.composer.stopTitle": "Dừng trả lời",
+  "chat.composer.send": "Gửi tin nhắn",
+  "chat.composer.sendTitle": "Gửi (Enter)",
+  "chat.composer.uploading": "Đang tải tệp lên…",
+  "chat.composer.listening": "Đang nghe…{interim} — bấm micro để dừng.",
+  "chat.composer.listeningInterim": " “{text}”",
+  "chat.composer.hintEnter": "Enter để gửi · Shift+Enter xuống dòng",
+  "chat.composer.hintSkill": " · Kỹ năng: {name}",
+  "chat.composer.hintModel": " · {name}",
+  "chat.composer.hintModelDefault": " · Mô hình mặc định",
+  "chat.composer.hintMaxFile": " · Tệp tối đa {max}MB",
+
+  // ---- Kỹ năng mặc định (khi /api/skills chưa trả lời)
+  "chat.skill.auto": "Tự động",
+  "chat.skill.autoHint": "Để FlowGpt tự chọn kỹ năng phù hợp",
+  "chat.skill.image": "Ảnh",
+  "chat.skill.imageHint": "Tạo và sửa ảnh bằng AI",
+  "chat.skill.ppt": "PowerPoint",
+  "chat.skill.pptHint": "Tạo slide từ yêu cầu",
+  "chat.skill.excel": "Excel",
+  "chat.skill.excelHint": "Tạo bảng tính",
+  "chat.skill.data": "Dữ liệu",
+  "chat.skill.dataHint": "Phân tích dữ liệu và vẽ biểu đồ",
+
+  // ---- SkillSelect: dropdown trong composer
+  "chat.skillSelect.aria": "Kỹ năng: {name}",
+  "chat.skillSelect.autoHint": "Để FlowGpt tự chọn cách trả lời",
+  "chat.skillSelect.listAria": "Chọn kỹ năng",
+  "chat.skillSelect.autoDesc": "Không chọn kỹ năng cụ thể",
+  "chat.skillSelect.empty": "Chưa có kỹ năng nào",
+  "chat.skillSelect.more": "Thêm kỹ năng…",
+
+  // ---- SkillPicker: modal "Thêm kỹ năng"
+  "chat.skillPicker.title": "Thêm kỹ năng",
+  "chat.skillPicker.description":
+    "Chọn kỹ năng hiện trong danh sách nhanh (tối đa {max}). Thứ tự hiển thị theo thứ tự anh chọn.",
+  "chat.skillPicker.maxReached": "Danh sách nhanh tối đa {max} kỹ năng — bỏ một kỹ năng trước nhé.",
+  "chat.skillPicker.saved": "Đã lưu {count} kỹ năng cho danh sách nhanh",
+  "chat.skillPicker.saveFailed": "Không lưu được danh sách kỹ năng",
+  "chat.skillPicker.selectedLabel": "Đã chọn ",
+  "chat.skillPicker.selectedCount": "/{max} kỹ năng",
+  "chat.skillPicker.openHub": "Mở chợ kỹ năng",
+  "chat.skillPicker.save": "Lưu danh sách",
+  "chat.skillPicker.searchPlaceholder": "Tìm kỹ năng…",
+  "chat.skillPicker.external": "bên ngoài",
+  "chat.skillPicker.noMatch": "Không tìm thấy kỹ năng nào khớp “{query}”.",
+  "chat.skillPicker.comingTitle": "Chợ kỹ năng — sắp có",
+  "chat.skillPicker.comingHint":
+    "Các kỹ năng dưới đây chưa mở. Khi chợ kỹ năng hoạt động, anh cũng sẽ tự thêm được kỹ năng riêng, kỹ năng lấy từ MCP server hoặc mua/chia sẻ trong tổ chức.",
+  "chat.skillPicker.comingBadge": "Sắp có",
+  "chat.skillPicker.selecting": "Đang chọn:",
+  "chat.skillPicker.removeAria": "Bỏ {name}",
+
+  // ---- MessageItem: bong bóng tin nhắn
+  "chat.message.roleUser": "Bạn",
+  "chat.message.error": "Lỗi: {message}",
+  "chat.message.usage": "{input} vào · {output} ra token",
+  "chat.choices.hint": "Chọn cách đưa vào tệp:",
+  "chat.message.copy": "Sao chép nội dung",
+  "chat.message.read": "Đọc",
+  "chat.message.stopReading": "Dừng đọc",
+  "chat.message.readTitle": "Đọc câu trả lời",
+  "chat.message.regenerate": "Tạo lại",
+  "chat.message.regenerateTitle": "Tạo lại câu trả lời",
+  "chat.message.reasoning": "Quá trình suy luận",
+  "chat.message.status.thinking": "Đang suy nghĩ…",
+  "chat.message.status.callingTool": "Đang gọi công cụ…",
+  "chat.message.status.finishing": "Đang hoàn tất…",
+  "chat.message.status.readingFile": "Đang đọc tệp…",
+  "chat.message.status.processing": "Đang xử lý…",
+
+  // ---- MessageList
+  "chat.list.loading": "Đang tải hội thoại…",
+  "chat.list.sessionFiles": "Tệp tạo trong phiên này",
+
+  // ---- ToolCard
+  "chat.tool.generatePptx": "Tạo PowerPoint",
+  "chat.tool.generateXlsx": "Tạo Excel",
+  "chat.tool.analyzeData": "Phân tích dữ liệu",
+  "chat.tool.editImage": "Sửa ảnh bằng AI",
+  "chat.tool.listFiles": "Liệt kê tệp",
+  "chat.tool.xlsxFromImage": "Tạo Excel từ ảnh",
+  "chat.tool.readImage": "Đọc chữ trong ảnh (OCR)",
+  "chat.tool.openImageStudio": "Mở Image Studio",
+  "chat.tool.status.running": "Đang chạy",
+  "chat.tool.status.done": "Xong",
+  "chat.tool.status.error": "Lỗi",
+  "chat.tool.args": "Tham số",
+  "chat.tool.rowsLimited": "Chỉ hiển thị {shown} / {total} dòng",
+  "chat.tool.durationMs": "{value} ms",
+  "chat.tool.durationSec": "{value} s",
+  "chat.tool.durationMinutes": "{minutes} phút {seconds} s",
+
+  // ---- ArtifactCard
+  "chat.artifact.view": "Xem",
+  "chat.artifact.download": "Tải xuống",
+  "chat.artifact.downloadShort": "Tải",
+  "chat.artifact.meta": "{size} · {type}",
+  "chat.artifact.unknownType": "không rõ định dạng",
+
+  // ---- RequestCreditsForm
+  "chat.request.title": "Xin thêm token",
+  "chat.request.submit": "Xin thêm token",
+  "chat.request.sending": "Đang gửi…",
+  "chat.request.notePlaceholder": "Ghi chú (tuỳ chọn)",
+  "chat.request.topUp": "Nạp token",
+  "chat.request.balanceHint": "Số dư hiện tại {balance} credit. Gửi yêu cầu để chủ tài khoản cấp thêm.",
+  "chat.request.waitingTitle": "Đã gửi yêu cầu — chờ duyệt",
+  "chat.request.waitingMeta": "{amount} credit · gửi lúc {time}",
+  "chat.request.approveHint": "Chủ tài khoản duyệt yêu cầu này trên Telegram hoặc trong Cài đặt → Người dùng.",
+  "chat.request.telegramFailed": "(chưa gửi được Telegram, yêu cầu đã được ghi lại)",
+  "chat.request.sentToast": "Đã gửi yêu cầu xin thêm token",
+  "chat.request.alreadyPending": "Bạn đã có một yêu cầu đang chờ duyệt",
+  "chat.request.sendFailed": "Không gửi được yêu cầu",
+};

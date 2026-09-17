@@ -1,4 +1,5 @@
 import { parseSse, readJson } from "./sse.js";
+import { modelAcceptsImages } from "./vision.js";
 
 /**
  * OpenAI-compatible adapter — covers api.openai.com, DeepSeek, Groq, OpenRouter,
@@ -10,7 +11,7 @@ import { parseSse, readJson } from "./sse.js";
  *     toolCallId?, name? }
  */
 
-function toOpenAiMessages(messages) {
+function toOpenAiMessages(messages, { acceptsImages = true } = {}) {
   return messages.map((msg) => {
     if (msg.role === "tool") {
       return {
@@ -22,7 +23,8 @@ function toOpenAiMessages(messages) {
     if (msg.role === "assistant" && msg.toolCalls?.length) {
       return {
         role: "assistant",
-        content: msg.content || null,
+        // Empty string, not null: some gateways validate the type strictly.
+        content: msg.content || "",
         tool_calls: msg.toolCalls.map((call) => ({
           id: call.id,
           type: "function",
@@ -33,22 +35,32 @@ function toOpenAiMessages(messages) {
     if (msg.images?.length) {
       const parts = [];
       if (msg.content) parts.push({ type: "text", text: msg.content });
-      for (const image of msg.images) {
-        parts.push({
-          type: "image_url",
-          image_url: { url: `data:${image.mime};base64,${image.dataBase64}` },
-        });
+      if (acceptsImages) {
+        for (const image of msg.images) {
+          parts.push({
+            type: "image_url",
+            image_url: { url: `data:${image.mime};base64,${image.dataBase64}` },
+          });
+        }
+        return { role: msg.role, content: parts };
       }
+      // The model cannot read images and the gateway would answer 400 for an
+      // `image_url` part. Drop it, tell the model what happened (so it never
+      // invents the picture) and let the agent notify the user.
+      const note = `[${msg.images.length} ảnh đính kèm không gửi được vì model hiện tại không xem được ảnh]`;
+      parts.push({ type: "text", text: note });
       return { role: msg.role, content: parts };
     }
     return { role: msg.role, content: msg.content ?? "" };
   });
 }
 
-export function buildRequest({ provider, model, messages, tools, toolMode, temperature }) {
+export function buildRequest({ provider, model, messages, tools, toolMode, temperature, acceptsImages, toolChoice }) {
   const body = {
     model,
-    messages: toOpenAiMessages(messages),
+    messages: toOpenAiMessages(messages, {
+      acceptsImages: acceptsImages ?? modelAcceptsImages(provider, model),
+    }),
     stream: true,
     temperature: temperature ?? 0.7,
   };
@@ -61,7 +73,10 @@ export function buildRequest({ provider, model, messages, tools, toolMode, tempe
         parameters: tool.inputSchema ?? { type: "object", properties: {} },
       },
     }));
-    body.tool_choice = toolMode === "required" ? "required" : "auto";
+    // `toolChoice` may name one function ({type:"function",function:{name}}) —
+    // GLM, OpenAI and OpenRouter all accept that, and it is what makes "làm Excel"
+    // deterministic on a small model that would otherwise answer in prose.
+    body.tool_choice = toolChoice ?? (toolMode === "required" ? "required" : "auto");
   }
   return body;
 }
@@ -79,9 +94,9 @@ function providerHeaders(provider, extra = {}) {
 /** Provider capabilities differ: only some gateways accept stream_options. */
 const SUPPORTS_STREAM_USAGE = new Set(["openai", "deepseek", "groq", "openrouter"]);
 
-export async function* streamChat({ provider, model, messages, tools, toolMode, temperature, signal, includeUsage }) {
+export async function* streamChat({ provider, model, messages, tools, toolMode, temperature, signal, includeUsage, toolChoice }) {
   const url = `${trimSlash(provider.baseUrl || "https://api.openai.com/v1")}/chat/completions`;
-  const body = buildRequest({ provider, model, messages, tools, toolMode, temperature });
+  const body = buildRequest({ provider, model, messages, tools, toolMode, temperature, toolChoice });
   const wantsUsage = includeUsage ?? SUPPORTS_STREAM_USAGE.has(provider.kind);
   if (wantsUsage) body.stream_options = { include_usage: true };
 

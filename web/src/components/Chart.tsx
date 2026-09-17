@@ -19,6 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import type { ChartSpec } from "../types";
+import { useI18n } from "../i18n";
 import { EmptyState } from "./ui";
 
 /**
@@ -31,8 +32,8 @@ const TICK = { fill: "var(--text-muted)", fontSize: 12 } as const;
 const AXIS_STROKE = "var(--border-strong)";
 const GRID = { stroke: "var(--border)", strokeDasharray: "3 3", vertical: false } as const;
 
-function formatValue(value: unknown): string {
-  if (typeof value === "number" && Number.isFinite(value)) return value.toLocaleString("vi-VN");
+function formatValue(formatNumber: (value: number) => string, value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return formatNumber(value);
   if (value === null || value === undefined) return "";
   return String(value);
 }
@@ -61,6 +62,7 @@ function mergeSeries(spec: ChartSpec): Record<string, string | number>[] {
  * ra (`analyze_data`) rồi vẽ bằng recharts.
  */
 export function Chart({ spec }: { spec: ChartSpec }) {
+  const { t, n } = useI18n();
   const series = spec?.series ?? [];
   const hasData = series.some((item) => (item.points ?? []).length > 0);
 
@@ -81,12 +83,12 @@ export function Chart({ spec }: { spec: ChartSpec }) {
   );
 
   if (!spec || !hasData) {
-    return <EmptyState icon="📊" title="Chưa có dữ liệu biểu đồ" hint="Thêm thao tác phân tích để sinh biểu đồ." />;
+    return <EmptyState icon="📊" title={t("shell.ui.chartEmpty")} hint={t("shell.ui.chartEmptyHint")} />;
   }
 
   const tooltip = (
     <Tooltip
-      formatter={(value: unknown) => formatValue(value)}
+      formatter={(value: unknown) => formatValue((input) => n(input), value)}
       contentStyle={{
         background: "var(--bg-elevated)",
         border: "1px solid var(--border)",

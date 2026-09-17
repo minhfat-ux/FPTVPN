@@ -6,8 +6,9 @@ import { api, bootServer, closeServer, readSse, eventsNamed, textOf } from "./he
 const { initDb, all } = await import("../src/db.js");
 initDb();
 const settings = await import("../src/settings.js");
-const { isProviderCreditError } = await import("../src/agent.js");
+const { isProviderCreditError, isProviderModelError } = await import("../src/agent.js");
 const { createUser, issueToken } = await import("../src/auth.js");
+const { grantCredits } = await import("../src/credits.js");
 
 after(async () => {
   await closeServer();
@@ -20,6 +21,8 @@ globalThis.__realFetch = REAL_FETCH;
 function userFor(email) {
   const existing = all("users", "email = ?", [email])[0];
   const user = existing ?? createUser({ email, password: "matkhau12345" });
+  // The credit gate runs before the provider, so give the turn something to spend.
+  if (!existing) grantCredits({ userId: user.id, amount: 1000 });
   return { token: issueToken(user) };
 }
 
@@ -104,6 +107,78 @@ test("a provider that rejects the turn is swapped for another one mid-flight", a
   settings.patchAppSettings({ defaultProviderId: null, defaultModel: null });
   settings.updateProvider(glm.id, { enabled: false });
   settings.updateProvider(backup.id, { enabled: false });
+});
+
+test("retired models are recognised so the turn can recover", () => {
+  // The exact error OpenRouter returns for a model that no longer exists.
+  assert.equal(
+    isProviderModelError({ status: 404, message: "OpenRouter trả lỗi 404: No endpoints found for anthropic/claude-3.5-sonnet." }),
+    true,
+  );
+  assert.equal(isProviderModelError({ message: "The model `gpt-4o` does not exist" }), true);
+  assert.equal(isProviderModelError({ status: 400, message: "unknown model: glm-9" }), true);
+  assert.equal(isProviderModelError({ status: 429, message: "余额不足" }), false);
+  assert.equal(isProviderModelError({ status: 500, message: "internal error" }), false);
+  assert.equal(isProviderModelError(undefined), false);
+});
+
+test("a retired model retries on the provider's own default model first", async () => {
+  // Provider whose first model is retired; the default model still works.
+  const provider = settings.createProvider({
+    name: "Retired model provider",
+    kind: "openai-compatible",
+    baseUrl: "https://retired.example.com/v1",
+    apiKey: "sk-retired",
+    models: ["old-model", "good-model"],
+    defaultModel: "good-model",
+  });
+  settings.patchAppSettings({ defaultProviderId: provider.id, defaultModel: "old-model" });
+
+  const requested = [];
+  globalThis.fetch = async (url, init) => {
+    const target = String(url);
+    if (target.includes("retired.example.com")) {
+      const body = JSON.parse(init.body ?? "{}");
+      requested.push(body.model);
+      if (body.model === "old-model") {
+        return new Response(JSON.stringify({ error: { message: "No endpoints found for old-model." } }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const stream = [
+        'data: {"choices":[{"delta":{"content":"Trả lời bằng model mặc định."}}]}',
+        "",
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+        "",
+        "data: [DONE]",
+        "",
+        "",
+      ].join("\n");
+      return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+    }
+    return REAL_FETCH(url, init);
+  };
+
+  const { token } = userFor("model-retired@flowgpt.test");
+  const { baseUrl } = await bootServer();
+  const response = await REAL_FETCH(`${baseUrl}/api/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ content: "Xin chào", model: "old-model", providerId: provider.id }),
+  });
+  const events = await readSse(response);
+
+  assert.deepEqual(requested, ["old-model", "good-model"], "phải thử model cũ rồi tới model mặc định");
+  const notice = eventsNamed(events, "notice")[0];
+  assert.ok(notice, "phải thông báo cho người dùng");
+  assert.match(notice.data.message, /old-model/);
+  assert.match(textOf(events), /model mặc định/);
+  assert.ok(eventsNamed(events, "done").length >= 1);
+
+  globalThis.fetch = REAL_FETCH;
+  settings.updateProvider(provider.id, { enabled: false });
+  settings.patchAppSettings({ defaultProviderId: null, defaultModel: null });
 });
 
 test("when every provider is out of credit the turn reports the error", async () => {

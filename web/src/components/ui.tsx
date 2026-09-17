@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { Check, Copy, X } from "lucide-react";
+import { useI18n } from "../i18n";
 
 /** Markdown renderer with GFM tables, highlighted code and per-block copy. */
 export function Markdown({ content }: { content: string }) {
@@ -28,6 +29,7 @@ export function Markdown({ content }: { content: string }) {
 }
 
 function CodeBlock({ children }: { children?: React.ReactNode }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -44,7 +46,7 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
 
   return (
     <pre ref={ref}>
-      <button className="btn btn-sm btn-ghost copy-btn" onClick={copy} type="button" title="Sao chép">
+      <button className="btn btn-sm btn-ghost copy-btn" onClick={copy} type="button" title={t("shell.ui.copyBlock")}>
         {copied ? <Check size={14} /> : <Copy size={14} />}
       </button>
       {children}
@@ -71,6 +73,7 @@ export function Modal({
   footer?: React.ReactNode;
   wide?: boolean;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -89,7 +92,7 @@ export function Modal({
             <div className="modal-title">{title}</div>
             {description && <div className="card-desc mt-1">{description}</div>}
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Đóng" type="button">
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label={t("shell.ui.modalClose")} type="button">
             <X size={18} />
           </button>
         </div>
@@ -109,13 +112,14 @@ export function Toaster({
   toasts: { id: string; kind: string; message: string }[];
   onDismiss: (id: string) => void;
 }) {
+  const { t } = useI18n();
   if (!toasts.length) return null;
   return (
     <div className="toasts">
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast toast-${toast.kind}`} role="status">
           <div className="grow">{toast.message}</div>
-          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => onDismiss(toast.id)} aria-label="Đóng">
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => onDismiss(toast.id)} aria-label={t("shell.ui.toastDismiss")}>
             <X size={14} />
           </button>
         </div>
@@ -189,7 +193,7 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "Xoá",
+  confirmLabel,
   onCancel,
   onConfirm,
   busy = false,
@@ -202,6 +206,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   busy?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <Modal
       open={open}
@@ -210,10 +215,10 @@ export function ConfirmDialog({
       footer={
         <>
           <button className="btn" onClick={onCancel} type="button" disabled={busy}>
-            Huỷ
+            {t("common.cancel")}
           </button>
           <button className="btn btn-danger" onClick={onConfirm} type="button" disabled={busy}>
-            {busy ? "Đang xử lý…" : confirmLabel}
+            {busy ? t("shell.ui.busy") : confirmLabel ?? t("common.delete")}
           </button>
         </>
       }
@@ -224,13 +229,15 @@ export function ConfirmDialog({
 }
 
 /** Small copy-to-clipboard button used next to ids, keys and URLs. */
-export function CopyButton({ value, label = "Sao chép" }: { value: string; label?: string }) {
+export function CopyButton({ value, label }: { value: string; label?: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const title = label ?? t("shell.ui.copyBlock");
   return (
     <button
       className="btn btn-sm btn-ghost"
       type="button"
-      title={label}
+      title={title}
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(value);

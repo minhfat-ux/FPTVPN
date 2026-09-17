@@ -6,6 +6,7 @@ import { api, apiRaw, bootServer, closeServer } from "./helpers.js";
 const { initDb, all } = await import("../src/db.js");
 initDb();
 const { createUser, issueToken } = await import("../src/auth.js");
+const { grantCredits } = await import("../src/credits.js");
 const catalogue = await import("../src/skills/index.js");
 const installed = await import("../src/skills/installed.js");
 
@@ -16,6 +17,8 @@ after(async () => {
 function userFor(email, role = "user") {
   const existing = all("users", "email = ?", [email])[0];
   const user = existing ?? createUser({ email, password: "matkhau12345", name: "Skills", role });
+  // Chat turns are metered; these tests are about skills, not billing.
+  if (!existing && role !== "admin") grantCredits({ userId: user.id, amount: 1000 });
   return { user, token: issueToken(user) };
 }
 

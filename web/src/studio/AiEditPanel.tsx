@@ -3,14 +3,15 @@ import { ImageDown, Send, Sparkles } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import type { FileRef } from "../types";
 import { Field, Spinner } from "../components/ui";
+import { useI18n } from "../i18n";
 import { useChat } from "../state/chat";
 import { useData, useToast } from "../state/store";
 
 const PRESETS = [
-  "Xoá phông nền",
-  "Đổi nền thành studio ánh sáng mềm",
-  "Làm nét ảnh",
-  "Xoá vật thể không mong muốn",
+  "studio.image.ai.preset1",
+  "studio.image.ai.preset2",
+  "studio.image.ai.preset3",
+  "studio.image.ai.preset4",
 ];
 
 /**
@@ -24,11 +25,12 @@ export function AiEditPanel({
   getCanvas: () => HTMLCanvasElement | null;
   onOpenChat?: () => void;
 }) {
+  const { t } = useI18n();
   const { models } = useData();
   const { push } = useToast();
   const { send, sending, pendingArtifacts, streaming } = useChat();
 
-  const [instruction, setInstruction] = useState(PRESETS[0]);
+  const [instruction, setInstruction] = useState(() => t("studio.image.ai.preset1"));
   const [providerId, setProviderId] = useState("");
   const [model, setModel] = useState("");
   const [uploaded, setUploaded] = useState<FileRef | null>(null);
@@ -53,11 +55,11 @@ export function AiEditPanel({
   async function run() {
     const canvas = getCanvas();
     if (!canvas || !canvas.width || canvas.width < 2) {
-      push("Hãy nạp một ảnh trước khi sửa bằng AI", "error");
+      push(t("studio.image.ai.needImage"), "error");
       return;
     }
     if (!instruction.trim()) {
-      push("Nhập yêu cầu chỉnh sửa cho AI", "error");
+      push(t("studio.image.ai.needInstruction"), "error");
       return;
     }
     try {
@@ -67,15 +69,15 @@ export function AiEditPanel({
       setUploaded(result.file);
       const chosen = modelsForProvider.find((item) => item.model === model) ?? modelsForProvider[0];
       await send({
-        content: `${instruction.trim()}. Giữ nguyên bố cục chính của ảnh đính kèm.`,
+        content: `${instruction.trim()}. ${t("studio.image.ai.keepLayout")}`,
         attachments: [result.file],
         skill: "image",
         providerId: chosen?.providerId ?? null,
         model: chosen?.model ?? null,
       });
-      push("Đã gửi yêu cầu sửa ảnh — xem kết quả ở khung chat", "success");
+      push(t("studio.image.ai.sent"), "success");
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không gửi được yêu cầu sửa ảnh", "error");
+      push(err instanceof ApiError ? err.message : t("studio.image.ai.sendFailed"), "error");
     }
   }
 
@@ -84,16 +86,14 @@ export function AiEditPanel({
       <div className="card">
         <div className="card-head">
           <div className="grow">
-            <div className="card-title">Sửa ảnh bằng AI</div>
-            <div className="card-desc">Chưa có nhà cung cấp AI nào hỗ trợ tạo ảnh.</div>
+            <div className="card-title">{t("studio.image.ai.title")}</div>
+            <div className="card-desc">{t("studio.image.ai.noModels")}</div>
           </div>
         </div>
         <button className="btn btn-primary btn-block" type="button" disabled>
-          <Sparkles size={16} /> Sửa bằng AI
+          <Sparkles size={16} /> {t("studio.image.ai.button")}
         </button>
-        <div className="hint mt-2">
-          Vào <span className="bold">Cài đặt → Nhà cung cấp AI</span> để bật một nhà cung cấp có hỗ trợ ảnh, sau đó quay lại đây.
-        </div>
+        <div className="hint mt-2">{t("studio.image.ai.settingsHint")}</div>
       </div>
     );
   }
@@ -102,30 +102,30 @@ export function AiEditPanel({
     <div className="card">
       <div className="card-head">
         <div className="grow">
-          <div className="card-title">Sửa ảnh bằng AI</div>
-          <div className="card-desc">Mô tả điều bạn muốn thay đổi trên ảnh đang mở.</div>
+          <div className="card-title">{t("studio.image.ai.title")}</div>
+          <div className="card-desc">{t("studio.image.ai.desc")}</div>
         </div>
       </div>
 
-      <Field label="Yêu cầu chỉnh sửa">
+      <Field label={t("studio.image.ai.instruction")}>
         <textarea
           className="textarea"
           value={instruction}
           onChange={(event) => setInstruction(event.target.value)}
-          placeholder="Ví dụ: xoá phông nền và thay bằng nền trắng"
+          placeholder={t("studio.image.ai.placeholder")}
         />
       </Field>
 
       <div className="row row-wrap gap-1 mb-3">
         {PRESETS.map((preset) => (
-          <button key={preset} className="btn btn-sm" type="button" onClick={() => setInstruction(preset)}>
-            {preset}
+          <button key={preset} className="btn btn-sm" type="button" onClick={() => setInstruction(t(preset))}>
+            {t(preset)}
           </button>
         ))}
       </div>
 
       <div className="grid grid-2">
-        <Field label="Nhà cung cấp">
+        <Field label={t("studio.image.ai.provider")}>
           <select
             className="select"
             value={providerId}
@@ -134,7 +134,7 @@ export function AiEditPanel({
               setModel("");
             }}
           >
-            <option value="">Tự động</option>
+            <option value="">{t("studio.image.ai.providerAuto")}</option>
             {providers.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name}
@@ -142,9 +142,9 @@ export function AiEditPanel({
             ))}
           </select>
         </Field>
-        <Field label="Mô hình">
+        <Field label={t("studio.image.ai.model")}>
           <select className="select" value={model} onChange={(event) => setModel(event.target.value)}>
-            <option value="">Mặc định</option>
+            <option value="">{t("studio.image.ai.modelDefault")}</option>
             {modelsForProvider.map((item) => (
               <option key={`${item.providerId}:${item.model}`} value={item.model}>
                 {item.model}
@@ -155,18 +155,18 @@ export function AiEditPanel({
       </div>
 
       <button className="btn btn-primary btn-block" type="button" onClick={run} disabled={sending}>
-        {sending ? <Spinner label="Đang xử lý…" /> : <><Sparkles size={16} /> Sửa bằng AI</>}
+        {sending ? <Spinner label={t("studio.image.ai.processing")} /> : <><Sparkles size={16} /> {t("studio.image.ai.button")}</>}
       </button>
 
       <div className="hint mt-2">
-        Kết quả do AI tạo sẽ xuất hiện ở <span className="bold">khung chat</span>
-        {onOpenChat ? " — bấm “Mở chat” để xem." : "."}
-        {uploaded && <> Ảnh gửi đi: <span className="mono">{uploaded.name}</span>.</>}
+        {t("studio.image.ai.resultHint")}
+        {onOpenChat ? t("studio.image.ai.resultHintOpen") : t("studio.image.ai.resultHintPlain")}
+        {uploaded && <> {t("studio.image.ai.uploaded", { name: uploaded.name })}</>}
       </div>
 
       {onOpenChat && (
         <button className="btn btn-sm btn-ghost mt-2" type="button" onClick={onOpenChat}>
-          <Send size={14} /> Mở chat
+          <Send size={14} /> {t("studio.action.openChat")}
         </button>
       )}
 
@@ -174,11 +174,11 @@ export function AiEditPanel({
         <div key={artifact.id} className="artifact-card">
           <div className="artifact-icon">IMG</div>
           <div className="grow">
-            <div className="truncate bold small">Ảnh AI tạo — {artifact.name}</div>
+            <div className="truncate bold small">{t("studio.image.ai.artifact", { name: artifact.name })}</div>
             <div className="tiny faint">{(artifact.size / 1024).toFixed(0)} KB</div>
           </div>
           <a className="btn btn-sm" href={api.fileUrl(artifact.id)} download>
-            <ImageDown size={14} /> Tải về
+            <ImageDown size={14} /> {t("studio.action.download")}
           </a>
         </div>
       ))}

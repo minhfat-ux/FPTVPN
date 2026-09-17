@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, RotateCcw, Save, Send } from "lucide-react";
 import { api, ApiError } from "../api/client";
+import { requestCreditsRefresh } from "../state/credits";
 import { useAuth, useToast } from "../state/store";
 import { ConfirmDialog, Field, Spinner, Switch } from "../components/ui";
+import { LocaleSwitcher, useI18n } from "../i18n";
+import { CreditPricingCard } from "./CreditPricingCard";
 import type { AppSettings, ModelOption, Provider, SkillId } from "../types";
 
 /** App settings extended with the passwordless-login / mailer fields. */
@@ -20,27 +23,28 @@ type FullAppSettings = AppSettings & {
 type MailerTestResult = { ok: boolean; message: string };
 
 const STAT_LABELS: { key: string; label: string }[] = [
-  { key: "users", label: "Người dùng" },
-  { key: "conversations", label: "Hội thoại" },
-  { key: "messages", label: "Tin nhắn" },
-  { key: "files", label: "Tệp" },
-  { key: "providers", label: "Nhà cung cấp" },
-  { key: "mcpServers", label: "MCP server" },
+  { key: "users", label: "settings.app.statUsers" },
+  { key: "conversations", label: "settings.app.statConversations" },
+  { key: "messages", label: "settings.app.statMessages" },
+  { key: "files", label: "settings.app.statFiles" },
+  { key: "providers", label: "settings.app.statProviders" },
+  { key: "mcpServers", label: "settings.app.statMcpServers" },
 ];
 
 const SKILLS: { id: SkillId; label: string }[] = [
-  { id: "auto", label: "Tự động (auto)" },
-  { id: "chat", label: "Chat" },
-  { id: "image", label: "Tạo ảnh" },
-  { id: "ppt", label: "PowerPoint" },
-  { id: "excel", label: "Excel" },
-  { id: "data", label: "Phân tích dữ liệu" },
+  { id: "auto", label: "settings.app.skillAuto" },
+  { id: "chat", label: "settings.app.skillChat" },
+  { id: "image", label: "settings.app.skillImage" },
+  { id: "ppt", label: "settings.app.skillPpt" },
+  { id: "excel", label: "settings.app.skillExcel" },
+  { id: "data", label: "settings.app.skillData" },
 ];
 
 /** Settings → Hệ thống: thống kê, cấu hình mặc định và đăng nhập bằng email. */
 export function AppTab() {
   const { user } = useAuth();
   const { push } = useToast();
+  const { t, n } = useI18n();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
@@ -67,11 +71,11 @@ export function AppTab() {
       setProviders(providerResult.items);
       setModels(modelResult.items);
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không tải được cấu hình hệ thống", "error");
+      push(err instanceof ApiError ? err.message : t("settings.app.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [push]);
+  }, [push, t]);
 
   useEffect(() => {
     load();
@@ -101,9 +105,11 @@ export function AppTab() {
       setSettings(result.settings as FullAppSettings);
       setResendApiKey("");
       setClearResendKey(false);
-      push("Đã lưu cấu hình hệ thống", "success");
+      // Pricing/limits may have just changed: every open badge should re-read.
+      requestCreditsRefresh();
+      push(t("settings.app.saved"), "success");
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Không lưu được cấu hình", "error");
+      push(err instanceof ApiError ? err.message : t("settings.app.saveFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -111,7 +117,7 @@ export function AppTab() {
 
   const sendTestMail = async () => {
     if (!mailTo.trim()) {
-      push("Nhập địa chỉ email nhận thử", "error");
+      push(t("settings.app.testMailNoAddress"), "error");
       return;
     }
     setSendingMail(true);
@@ -120,20 +126,21 @@ export function AppTab() {
         testMailer?: (body: { to: string }) => Promise<MailerTestResult>;
       };
       if (!testMailer.testMailer) {
-        push("Backend chưa hỗ trợ gửi thử email (thiếu api.testMailer)", "error");
+        push(t("settings.app.testMailUnsupported"), "error");
         return;
       }
       const result = await testMailer.testMailer({ to: mailTo.trim() });
-      push(result.message || (result.ok ? "Đã gửi email thử" : "Gửi email thử thất bại"), result.ok ? "success" : "error");
+      const fallback = result.ok ? t("settings.app.testMailSent") : t("settings.app.testMailFailed");
+      push(result.message || fallback, result.ok ? "success" : "error");
     } catch (err) {
-      push(err instanceof ApiError ? err.message : "Gửi email thử thất bại", "error");
+      push(err instanceof ApiError ? err.message : t("settings.app.testMailFailed"), "error");
     } finally {
       setSendingMail(false);
     }
   };
 
-  if (loading && !settings) return <Spinner label="Đang tải cấu hình hệ thống…" />;
-  if (!settings) return <div className="muted small">Không đọc được cấu hình hệ thống.</div>;
+  if (loading && !settings) return <Spinner label={t("settings.app.loading")} />;
+  if (!settings) return <div className="muted small">{t("settings.app.loadError")}</div>;
 
   const providerModels = models.filter((item) => item.providerId === settings.defaultProviderId);
 
@@ -142,8 +149,8 @@ export function AppTab() {
       <div className="grid grid-3">
         {STAT_LABELS.map((item) => (
           <div className="stat" key={item.key}>
-            <div className="stat-value">{stats[item.key] ?? 0}</div>
-            <div className="stat-label">{item.label}</div>
+            <div className="stat-value">{n(stats[item.key] ?? 0)}</div>
+            <div className="stat-label">{t(item.label)}</div>
           </div>
         ))}
       </div>
@@ -151,268 +158,169 @@ export function AppTab() {
       <div className="card">
         <div className="card-head">
           <div className="grow">
-            <div className="card-title">Cấu hình chung</div>
-            <div className="card-desc">Áp dụng cho mọi người dùng. Nhà cung cấp và model mặc định dùng khi chat chưa chọn.</div>
+            <div className="card-title">{t("settings.app.generalTitle")}</div>
+            <div className="card-desc">{t("settings.app.generalDesc")}</div>
           </div>
           <button className="btn btn-sm" type="button" onClick={load} disabled={loading}>
-            <RefreshCw size={14} /> Tải lại
+            <RefreshCw size={14} /> {t("common.reload")}
           </button>
         </div>
 
-        <Field label="Tên ứng dụng" hint="Hiển thị trên thanh bên, trang đăng nhập và tiêu đề trình duyệt.">
+        <Field label={t("settings.app.appNameLabel")} hint={t("settings.app.appNameHint")}>
           <input className="input" value={settings.appName} onChange={(event) => patch({ appName: event.target.value })} />
         </Field>
 
-        <Field
-          label="System prompt"
-          hint="Chỉ dẫn gốc cho mọi hội thoại. Đây là phần được gửi trước tiên và có ảnh hưởng tới toàn bộ câu trả lời."
-        >
-          <textarea
-            className="textarea"
-            rows={8}
-            value={settings.systemPrompt}
-            onChange={(event) => patch({ systemPrompt: event.target.value })}
-          />
+        <Field label={t("settings.app.systemPromptLabel")} hint={t("settings.app.systemPromptHint")}>
+          <textarea className="textarea" rows={8} value={settings.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
         </Field>
 
         <div className="grid grid-2">
-          <Field label="Nhà cung cấp mặc định" hint="Chỉ hiện các nhà cung cấp đang bật.">
-            <select
-              className="select"
-              value={settings.defaultProviderId ?? ""}
-              onChange={(event) => patch({ defaultProviderId: event.target.value || null, defaultModel: null })}
-            >
-              <option value="">— Tự động chọn nhà cung cấp đang bật đầu tiên —</option>
-              {providers
-                .filter((provider) => provider.enabled)
-                .map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.name}
-                  </option>
-                ))}
+          <Field label={t("settings.app.defaultProviderLabel")} hint={t("settings.app.defaultProviderHint")}>
+            <select className="select" value={settings.defaultProviderId ?? ""} onChange={(event) => patch({ defaultProviderId: event.target.value || null, defaultModel: null })}>
+              <option value="">{t("settings.app.defaultProviderAuto")}</option>
+              {providers.filter((provider) => provider.enabled).map((provider) => (
+                <option key={provider.id} value={provider.id}>{provider.name}</option>
+              ))}
             </select>
           </Field>
 
           <Field
-            label="Model mặc định"
-            hint={
-              settings.defaultProviderId && !providerModels.length
-                ? "Nhà cung cấp này chưa có model nào trong danh sách chọn."
-                : "Danh sách lọc theo nhà cung cấp mặc định."
-            }
+            label={t("settings.app.defaultModelLabel")}
+            hint={settings.defaultProviderId && !providerModels.length ? t("settings.app.defaultModelNoModels") : t("settings.app.defaultModelHint")}
           >
-            <select
-              className="select"
-              value={settings.defaultModel ?? ""}
-              onChange={(event) => patch({ defaultModel: event.target.value || null })}
-            >
-              <option value="">— Dùng model mặc định của nhà cung cấp —</option>
+            <select className="select" value={settings.defaultModel ?? ""} onChange={(event) => patch({ defaultModel: event.target.value || null })}>
+              <option value="">{t("settings.app.defaultModelAuto")}</option>
               {modelChoices.map((item) => (
-                <option key={`${item.providerId}:${item.model}`} value={item.model}>
-                  {item.providerName} · {item.model}
-                </option>
+                <option key={`${item.providerId}:${item.model}`} value={item.model}>{item.providerName} · {item.model}</option>
               ))}
             </select>
           </Field>
         </div>
 
         <div className="grid grid-2">
-          <Field label="Kỹ năng mặc định" hint="Kỹ năng được chọn sẵn khi mở hội thoại mới.">
-            <select
-              className="select"
-              value={settings.defaultSkill}
-              onChange={(event) => patch({ defaultSkill: event.target.value as SkillId })}
-            >
+          <Field label={t("settings.app.defaultSkillLabel")} hint={t("settings.app.defaultSkillHint")}>
+            <select className="select" value={settings.defaultSkill} onChange={(event) => patch({ defaultSkill: event.target.value as SkillId })}>
               {SKILLS.map((skill) => (
-                <option key={skill.id} value={skill.id}>
-                  {skill.label}
-                </option>
+                <option key={skill.id} value={skill.id}>{t(skill.label)}</option>
               ))}
             </select>
           </Field>
 
-          <Field label="Model tạo ảnh (tuỳ chọn)" hint="Ghi đè model tạo ảnh của nhà cung cấp. Để trống để dùng mặc định.">
-            <input
-              className="input input-mono"
-              value={settings.imageModel ?? ""}
-              onChange={(event) => patch({ imageModel: event.target.value || null })}
-              placeholder="ví dụ: gemini-2.5-flash-image"
-            />
+          <Field label={t("settings.app.imageModelLabel")} hint={t("settings.app.imageModelHint")}>
+            <input className="input input-mono" value={settings.imageModel ?? ""} onChange={(event) => patch({ imageModel: event.target.value || null })} placeholder={t("settings.app.imageModelPlaceholder")} />
           </Field>
         </div>
 
         <div className="num-row">
-          <Field label="Số vòng gọi công cụ tối đa" hint="Từ 1 đến 12. Cao hơn cho phép model gọi nhiều tool liên tiếp.">
-            <input
-              className="input w-num"
-              type="number"
-              min={1}
-              max={12}
-              value={settings.maxToolIterations}
-              onChange={(event) => patch({ maxToolIterations: clamp(Number(event.target.value), 1, 12, 6) })}
-            />
+          <Field label={t("settings.app.maxToolIterationsLabel")} hint={t("settings.app.maxToolIterationsHint")}>
+            <input className="input w-num" type="number" min={1} max={12} value={settings.maxToolIterations}
+              onChange={(event) => patch({ maxToolIterations: clamp(Number(event.target.value), 1, 12, 6) })} />
           </Field>
-          <Field label="Giới hạn dung lượng tải lên (MB)" hint="Từ 1 đến 100 MB cho mỗi tệp.">
-            <input
-              className="input w-num"
-              type="number"
-              min={1}
-              max={100}
-              value={settings.maxUploadMb}
-              onChange={(event) => patch({ maxUploadMb: clamp(Number(event.target.value), 1, 100, 25) })}
-            />
+          <Field label={t("settings.app.maxUploadLabel")} hint={t("settings.app.maxUploadHint")}>
+            <input className="input w-num" type="number" min={1} max={100} value={settings.maxUploadMb}
+              onChange={(event) => patch({ maxUploadMb: clamp(Number(event.target.value), 1, 100, 25) })} />
           </Field>
         </div>
 
-        <Switch
-          checked={settings.allowSignup}
-          onChange={(value) => patch({ allowSignup: value })}
-          label="Cho phép người dùng tự đăng ký tài khoản"
-        />
+        <Switch checked={settings.allowSignup} onChange={(value) => patch({ allowSignup: value })} label={t("settings.app.allowSignup")} />
+
+        <div className="row row-wrap gap-2 mt-2">
+          <div className="grow">
+            <div className="label">{t("settings.app.languageLabel")}</div>
+            <div className="hint">{t("settings.app.languageHint")}</div>
+          </div>
+          <LocaleSwitcher />
+        </div>
       </div>
 
       <div className="card">
         <div className="card-head">
           <div className="grow">
-            <div className="card-title">Email &amp; đăng nhập</div>
-            <div className="card-desc">
-              Ứng dụng đăng nhập bằng mã một lần gửi qua email (passwordless). Cấu hình Resend để gửi mã thật.
-            </div>
+            <div className="card-title">{t("settings.app.mailTitle")}</div>
+            <div className="card-desc">{t("settings.app.mailDesc")}</div>
           </div>
           <span className={`badge ${settings.hasResendKey ? "badge-ok" : "badge-warn"}`}>
-            {settings.hasResendKey ? "Đã có Resend key" : "Chưa có key"}
+            {settings.hasResendKey ? t("settings.app.hasResendKey") : t("settings.app.noResendKey")}
           </span>
         </div>
 
         {!settings.hasResendKey && (
           <div className="banner banner-compact mb-3">
-            <div className="grow small">
-              Chưa cấu hình Resend API key: mã đăng nhập sẽ được hiển thị trực tiếp trên màn hình thay vì gửi qua email.
-            </div>
+            <div className="grow small">{t("settings.app.noResendBanner")}</div>
           </div>
         )}
 
         <div className="grid grid-2">
-          <Field label="Email gửi đi (mailerFrom)" hint="Ví dụ: no-reply@meetflowai.site — phải là domain đã xác thực với Resend.">
-            <input
-              className="input input-mono"
-              value={settings.mailerFrom}
-              onChange={(event) => patch({ mailerFrom: event.target.value })}
-              placeholder="no-reply@meetflowai.site"
-            />
+          <Field label={t("settings.app.mailerFromLabel")} hint={t("settings.app.mailerFromHint")}>
+            <input className="input input-mono" value={settings.mailerFrom} onChange={(event) => patch({ mailerFrom: event.target.value })} placeholder="no-reply@meetflowai.site" />
           </Field>
-          <Field label="Tên người gửi (mailerFromName)" hint="Tên hiển thị trong hộp thư của người dùng.">
-            <input
-              className="input"
-              value={settings.mailerFromName}
-              onChange={(event) => patch({ mailerFromName: event.target.value })}
-              placeholder="FlowGpt"
-            />
+          <Field label={t("settings.app.mailerFromNameLabel")} hint={t("settings.app.mailerFromNameHint")}>
+            <input className="input" value={settings.mailerFromName} onChange={(event) => patch({ mailerFromName: event.target.value })} placeholder="FlowGpt" />
           </Field>
         </div>
 
         <Field
-          label="Resend API key"
-          hint={
-            settings.hasResendKey
-              ? `Đang lưu: ${settings.resendKeyPreview ?? "••••"} — để trống nếu không đổi.`
-              : "Chưa có key. Dán key từ resend.com/api-keys để bật gửi email thật."
-          }
+          label={t("settings.app.resendKeyLabel")}
+          hint={settings.hasResendKey ? t("settings.app.resendKeySaved", { preview: settings.resendKeyPreview ?? "••••" }) : t("settings.app.resendKeyEmpty")}
         >
-          <input
-            className="input input-mono"
-            type="password"
-            autoComplete="new-password"
-            value={resendApiKey}
-            disabled={clearResendKey}
-            onChange={(event) => setResendApiKey(event.target.value)}
-            placeholder="re_…"
-          />
+          <input className="input input-mono" type="password" autoComplete="new-password" value={resendApiKey} disabled={clearResendKey}
+            onChange={(event) => setResendApiKey(event.target.value)} placeholder="re_…" />
         </Field>
         {settings.hasResendKey && (
-          <Switch
-            checked={clearResendKey}
-            onChange={(value) => {
-              setClearResendKey(value);
-              if (value) setResendApiKey("");
-            }}
-            label="Xoá Resend key đã lưu"
-          />
+          <Switch checked={clearResendKey} onChange={(value) => { setClearResendKey(value); if (value) setResendApiKey(""); }} label={t("settings.app.clearResendKey")} />
         )}
 
         <div className="divider" />
 
         <div className="row row-wrap gap-2">
-          <Field label="Gửi thử tới email" hint="Dùng để kiểm tra cấu hình Resend trước khi phát hành.">
-            <input
-              className="input"
-              type="email"
-              value={mailTo}
-              onChange={(event) => setMailTo(event.target.value)}
-              placeholder="ban@congty.vn"
-            />
+          <Field label={t("settings.app.testMailToLabel")} hint={t("settings.app.testMailToHint")}>
+            <input className="input" type="email" value={mailTo} onChange={(event) => setMailTo(event.target.value)} placeholder={t("settings.app.testMailPlaceholder")} />
           </Field>
           <button className="btn btn-inline" type="button" onClick={sendTestMail} disabled={sendingMail}>
-            <Send size={15} /> {sendingMail ? "Đang gửi…" : "Gửi thử email"}
+            <Send size={15} /> {sendingMail ? t("common.sending") : t("settings.app.sendTestMail")}
           </button>
         </div>
-        <div className="hint">Gửi một email thử bằng cấu hình Resend hiện tại (chưa cần lưu biểu mẫu).</div>
+        <div className="hint">{t("settings.app.testMailNote")}</div>
 
         <div className="num-row mt-2">
-          <Field label="Hiệu lực mã đăng nhập (phút)" hint="Từ 5 đến 60 phút. Mặc định 15.">
-            <input
-              className="input w-num"
-              type="number"
-              min={5}
-              max={60}
-              value={settings.loginTokenTtlMin}
-              onChange={(event) => patch({ loginTokenTtlMin: clamp(Number(event.target.value), 5, 60, 15) })}
-            />
+          <Field label={t("settings.app.loginTtlLabel")} hint={t("settings.app.loginTtlHint")}>
+            <input className="input w-num" type="number" min={5} max={60} value={settings.loginTokenTtlMin}
+              onChange={(event) => patch({ loginTokenTtlMin: clamp(Number(event.target.value), 5, 60, 15) })} />
           </Field>
         </div>
 
         <div className="stack gap-2 mt-2">
-          <Switch
-            checked={settings.passwordLoginEnabled}
-            onChange={(value) => patch({ passwordLoginEnabled: value })}
-            label="Cho phép đăng nhập bằng mật khẩu (dự phòng)"
-          />
-          <Switch
-            checked={settings.autoCreateUserOnLogin}
-            onChange={(value) => patch({ autoCreateUserOnLogin: value })}
-            label="Tự tạo tài khoản khi email đăng nhập lần đầu"
-          />
-          <Switch
-            checked={settings.showLoginCodeWhenNoMailer}
-            onChange={(value) => patch({ showLoginCodeWhenNoMailer: value })}
-            label="Hiện mã đăng nhập trên màn hình khi chưa có mailer"
-          />
+          <Switch checked={settings.passwordLoginEnabled} onChange={(value) => patch({ passwordLoginEnabled: value })} label={t("settings.app.passwordLogin")} />
+          <Switch checked={settings.autoCreateUserOnLogin} onChange={(value) => patch({ autoCreateUserOnLogin: value })} label={t("settings.app.autoCreateUser")} />
+          <Switch checked={settings.showLoginCodeWhenNoMailer} onChange={(value) => patch({ showLoginCodeWhenNoMailer: value })} label={t("settings.app.showLoginCode")} />
         </div>
       </div>
+
+      <CreditPricingCard settings={settings} onPatch={patch} />
 
       <div className="card">
         <div className="row row-wrap gap-2">
           <button className="btn btn-primary" type="button" onClick={save} disabled={saving}>
-            <Save size={15} /> {saving ? "Đang lưu…" : "Lưu cấu hình"}
+            <Save size={15} /> {saving ? t("common.saving") : t("settings.app.save")}
           </button>
           <button className="btn" type="button" onClick={() => setConfirmReset(true)} disabled={saving}>
-            <RotateCcw size={15} /> Khôi phục mặc định
+            <RotateCcw size={15} /> {t("settings.app.reset")}
           </button>
-          <span className="hint">Bỏ các thay đổi chưa lưu và đọc lại giá trị đang áp dụng trên server.</span>
+          <span className="hint">{t("settings.app.resetHint")}</span>
         </div>
       </div>
 
       <ConfirmDialog
         open={confirmReset}
-        title="Khôi phục cấu hình mặc định"
-        message="Tải lại cấu hình hiện có trên server và bỏ mọi thay đổi chưa lưu trong biểu mẫu này?"
-        confirmLabel="Tải lại"
+        title={t("settings.app.resetTitle")}
+        message={t("settings.app.resetMessage")}
+        confirmLabel={t("settings.app.resetConfirm")}
         busy={loading}
         onCancel={() => setConfirmReset(false)}
         onConfirm={async () => {
           setConfirmReset(false);
           await load();
-          push("Đã tải lại cấu hình từ server", "info");
+          push(t("settings.app.reloaded"), "info");
         }}
       />
     </div>
