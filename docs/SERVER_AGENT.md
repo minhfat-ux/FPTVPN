@@ -64,3 +64,17 @@ và gói X11/Mesa/dev thừa qua `apt-get autoremove`.
 Kiểm chứng bằng file đánh dấu (16/09): file chỉ đặt trên node-2 → tải công khai **200**, chỉ đặt trên node-1 → **404**.
 Nghĩa là **meetflowai.site do node-2 phục vụ**; file cho khách tải phải nằm ở **node-2** `/var/www/flowvpn/dl`.
 `/var/www/flowvpn` trên node-1 hiện là bản sao không còn phục vụ (≈330MB — có thể xoá khi cần chỗ).
+## Khoá SSH riêng cho máy Windows (harness)
+
+Agent/harness chạy trên **máy Windows của chủ dự án** có một khoá riêng để tự upload file lên VPS
+(không dùng chung khoá `fpt_vpn_node`/`fpt_tunnel` của Mac):
+
+- Public key nằm trong `authorized_keys` của **cả node-2 và node-1**, comment `windows-harness@flowtech`
+  (fingerprint `SHA256:eReS/LmH0b28aMS61vNQIbbWADv0JEBvbLupw0BiFOM`) — không dán nội dung khoá vào đây.
+- Private key chỉ nằm trên máy Windows: `%USERPROFILE%\.ssh\flowvpn_vps` (đã siết quyền bằng `icacls`).
+- **Thu hồi** (mất máy / đổi chủ):
+  ```bash
+  sed -i '/windows-harness@flowtech/d' /root/.ssh/authorized_keys     # chạy trên node-2 và node-1
+  ```
+- Upload file để có link công khai: web tĩnh phục vụ từ `/var/www/flowvpn`, URL `/dl/<file>` →
+  `/var/www/flowvpn/dl/<file>`; sau khi `scp` phải `chown caddy:caddy` + `chmod 644` mới tải được.
