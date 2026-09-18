@@ -70,23 +70,15 @@ async function sendViaResend({ settings, to, subject, html, text }) {
 }
 
 /** Minimal, dark-branded transactional layout (inline CSS for email clients). */
-function layout({
-  title,
-  intro,
-  codeBlock,
-  linkBlock,
-  footer,
-  brandName = "fBuddy",
-  brandMark = "https://fbuddy.meetflowai.site/brand-mark.png?v=culi2",
-}) {
+function layout({ title, intro, codeBlock, linkBlock, footer }) {
   return `<!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title></head>
 <body style="margin:0;background:#f2f5f9;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0A1F3B">
   <div style="max-width:560px;margin:0 auto;padding:28px 18px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-      <img src="${brandMark}" alt="FlowTech" width="34" height="34" style="display:block">
-      <div style="font-size:18px;font-weight:700">${brandName}</div>
+      <img src="https://fbuddy.meetflowai.site/brand-mark.png?v=culi2" alt="FlowTech" width="34" height="34" style="display:block">
+      <div style="font-size:18px;font-weight:700">fBuddy</div>
     </div>
     <div style="background:#0A1F3B;border-radius:16px;padding:28px 24px;color:#ffffff">
       <div style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:10px">${title}</div>
@@ -128,55 +120,6 @@ export async function sendLoginCode({ settings, to, code, link, ttlMin }) {
     detail: err?.message ?? String(err),
   }));
   return result;
-}
-
-/**
- * Email gửi mã kích hoạt cho app Windows.
- *
- * Mã này KHÔNG phải key Soniox/OpenRouter: nó chỉ đổi được thành token phiên ở
- * backend `flowdesk`, và chủ dự án thu hồi được bất cứ lúc nào.
- */
-export async function sendDesktopActivation({ settings, to, code, expiresAt = null, link = null, orderRef = null }) {
-  const subject = `${code} là mã kích hoạt MeetFlow AI trên Windows`;
-  const expiry = expiresAt ? new Date(expiresAt).toLocaleDateString("vi-VN") : null;
-  const codeBlock = `
-    <div style="margin:22px 0 8px;padding:16px;border-radius:12px;background:#123052;text-align:center">
-      <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px">Mã kích hoạt</div>
-      <div style="font-family:Consolas,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:.20em;color:${BRAND_GREEN}">${code}</div>
-    </div>
-    <div style="font-size:13px;color:rgba(255,255,255,.6)">Nhập mã này vào app MeetFlow AI (bản Windows)${
-      expiry ? ` — mã có hiệu lực đến ${expiry}` : ""
-    }. Không cần nhập key Soniox hay OpenRouter nữa.</div>`;
-  const steps = `
-    <div style="margin-top:20px;font-size:14px;line-height:1.75;color:rgba(255,255,255,.72)">
-      1. Tải app: <a href="https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip" style="color:${BRAND_GREEN}">MeetFlowAI-Overlay-latest-win-x64.zip</a><br>
-      2. Giải nén, mở <b>MeetFlowAI.Win.exe</b><br>
-      3. Mở tab <b>Kích hoạt</b>, dán mã ở trên rồi bấm Kích hoạt
-    </div>`;
-  const linkBlock = link
-    ? `<div style="margin-top:18px">
-         <a href="${link}" style="display:inline-block;background:rgba(255,255,255,.1);color:#fff;font-weight:700;text-decoration:none;padding:11px 18px;border-radius:10px">Xem lại / lấy mã mới</a>
-         <div style="font-size:12px;color:rgba(255,255,255,.45);margin-top:10px;word-break:break-all">Hoặc mở liên kết: ${link}</div>
-       </div>`
-    : "";
-  const html = layout({
-    title: "Kích hoạt MeetFlow AI trên Windows",
-    intro: `Cảm ơn anh/chị đã mua bản Windows của MeetFlow AI${
-      orderRef ? ` (đơn <b>${orderRef}</b>)` : ""
-    }. Mã kích hoạt ở dưới dùng để mở khoá app trên máy — không chia sẻ mã này cho người khác.`,
-    codeBlock: codeBlock + steps,
-    linkBlock,
-    footer: "Email gửi tự động từ fBuddy (FlowTech · MeetFlow AI). Không trả lời email này.",
-    brandName: "MeetFlow AI",
-  });
-  const text = `Mã kích hoạt MeetFlow AI trên Windows: ${code}${expiry ? `\nHiệu lực đến ${expiry}.` : ""}\nTải app: https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip${
-    link ? `\nXem lại / lấy mã mới: ${link}` : ""
-  }`;
-  return sendViaResend({ settings, to, subject, html, text }).catch((err) => ({
-    sent: false,
-    reason: "network_error",
-    detail: err?.message ?? String(err),
-  }));
 }
 
 export async function sendTestEmail({ settings, to }) {

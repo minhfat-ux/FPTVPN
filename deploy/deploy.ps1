@@ -10,10 +10,7 @@ param(
   [string]$Host_ = "165.101.114.162",
   [string]$RemoteAppDir = "/opt/fbuddy",
   [switch]$SkipBuild,
-  [switch]$SkipDeps,
-  # Cài/refresh luôn flowdesk (backend riêng cho bản Windows). Mặc định TẮT để
-  # deploy fBuddy không tự đụng vào service khác.
-  [switch]$WithDesk
+  [switch]$SkipDeps
 )
 
 # Native tools (ssh/scp/npm) write progress and warnings to stderr, which
@@ -100,13 +97,5 @@ if ($publicCode -eq "200") {
   Write-Host "    Tạo DNS: bash /opt/fbuddy/deploy/dns-cloudflare.sh --apply" -ForegroundColor Yellow
 }
 
-if ($WithDesk) {
-  Step "Thêm: cài/refresh flowdesk (backend riêng cho bản Windows)"
-  # Script từ chối khởi động nếu /etc/flowdesk/flowdesk.env chưa có (env chứa key
-  # Soniox/OpenRouter riêng), nên bước này không thể làm hỏng bản Mac hay fBuddy.
-  Run "ssh -o StrictHostKeyChecking=no root@${Host_} `"bash $RemoteAppDir/deploy/flowdesk-remote-setup.sh`""
-  $deskCode = (curl.exe -s -o NUL -w "%{http_code}" --max-time 15 https://desk.meetflowai.site/v1/desktop/health) 2>$null
-  Write-Host "    https://desk.meetflowai.site/v1/desktop/health -> $deskCode" -ForegroundColor $(if ($deskCode -eq "200") { "Green" } else { "Yellow" })
-}
 
 Write-Host "`nXong. Log: ssh root@$Host_ 'journalctl -u fbuddy -f'" -ForegroundColor Green

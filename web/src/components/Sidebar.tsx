@@ -4,7 +4,6 @@ import {
   Brain,
   FileSpreadsheet,
   Image as ImageIcon,
-  Laptop,
   MessageSquarePlus,
   Moon,
   MoreHorizontal,
@@ -27,7 +26,7 @@ import { CreditsBadge } from "./CreditsBadge";
 import { ProfileMenu } from "./ProfileMenu";
 import type { Conversation, SkillId } from "../types";
 
-export type View = "chat" | "studio" | "hub" | "topup" | "settings" | "desktop";
+export type View = "chat" | "studio" | "hub" | "topup" | "settings";
 
 const SKILL_ICONS: Record<SkillId, JSX.Element> = {
   auto: <Brain size={15} />,
@@ -242,10 +241,6 @@ export function Sidebar({
           <button className={`nav-item${view === "topup" ? " active" : ""}`} onClick={() => onView("topup")} type="button">
             <span className="nav-icon"><Wallet size={16} /></span>
             <span className="nav-label">{t("shell.sidebar.topup")}</span>
-          </button>
-          <button className={`nav-item${view === "desktop" ? " active" : ""}`} onClick={() => onView("desktop")} type="button">
-            <span className="nav-icon"><Laptop size={16} /></span>
-            <span className="nav-label">{t("shell.sidebar.desktop")}</span>
           </button>
           {user?.isAdmin && (
             <button className={`nav-item${view === "settings" ? " active" : ""}`} onClick={() => onView("settings")} type="button">

@@ -219,96 +219,51 @@ Vì đây là endpoint lộ ra internet — **không lặp lại lỗi `/tmp-key
 4. Sửa app WPF: bỏ 2 ô key, thêm ô dán mã kích hoạt, trỏ về service mới
 5. Deploy Caddy + systemd riêng, kiểm chứng một phiên thật đầu-cuối
 
-### 3.7 Trạng thái sau khi tiếp nhận bàn giao (session 2026-09-18 chiều)
+### 3.7 §3 (backend riêng cho bản Windows) — **ĐÃ BỎ**, chủ dự án chốt 2026-09-18 chiều
 
-Tên đang dùng (tạm, **chưa chốt với chủ dự án**): service **`flowdesk`**, port **7791**,
-host **`desk.meetflowai.site`** — tất cả đọc từ env nên đổi tên chỉ là đổi env + DNS.
+Chủ dự án quyết định: **mọi bản Windows vẫn để khách tự nhập key** Soniox/OpenRouter. Hướng
+"app không giữ key, đi qua backend riêng" là **sai hướng** và đã được **xoá hẳn khỏi repo**:
 
-**Đã xong 1, 3, phần lõi của 2 và 4. Còn 5 (cần key riêng + DNS) và view SPA của 2.**
-
-| Việc | Ở đâu | Bằng chứng |
-|---|---|---|
-| Service mới (node:http + node:sqlite + `ws`; không express) | `desk/src/*.js` | `desk/test/` — **55 test xanh** |
-| Quyền đọc từ `fbuddy.db` **read-only**, đơn `status='paid'` | `desk/src/entitlement.js` | `desk/test/entitlement.test.js` |
-| Bảng mã kích hoạt / thiết bị / mức dùng / audit | `desk/src/db.js` (`desk_invitations`, `desk_activations`, `desk_usage`, `desk_audit`) | `desk/test/codes.test.js`, `activations.test.js` |
-| Token phiên ký HMAC, thu hồi **hiệu lực ngay** | `desk/src/sessions.js` | `desk/test/activations.test.js` |
-| Rate limit + chặn dò mã theo IP | `desk/src/ratelimit.js` | `desk/test/http.test.js` (429) |
-| WS proxy Soniox: bỏ `api_key` client, chèn key thật, che key trong phản hồi | `desk/src/stt.js` | `desk/test/phase3.test.js` (Soniox giả) |
-| `/summary` → OpenRouter: key ở server, model do server chọn, trần ký tự | `desk/src/summary.js` | `desk/test/phase3.test.js` |
-| Hook khi đơn thành `paid` (chạy nền, không phá luồng cộng credit) | `server/src/topup.js` + `server/src/desktop.js` | `server/test/desktop.test.js` — có ca "flowdesk chết nhưng thanh toán vẫn xong" |
-| Email mã kích hoạt | `server/src/mailer.js` → `sendDesktopActivation()` | `server/test/desktop.test.js` |
-| Trang xem lại mã **không cần đăng nhập** (link ký HMAC 30 ngày) | `GET /api/desktop?u=&t=`, `POST /api/desktop/code`, `GET /api/desktop/status` | `server/test/desktop.test.js` |
-| View **`?view=desktop`** trong web app + thu hồi thiết bị của chính mình | `web/src/desktop/DesktopPage.tsx`, `App.tsx`, `components/Sidebar.tsx`, `api/client.ts`, i18n `shell.ts` (vi/en/zh) | `POST /api/desktop/activations/:id/revoke` có test; `tsc --noEmit` sạch; view có trong bundle đã build |
-| Cài đặt tự động | `deploy/flowdesk.service`, `deploy/flowdesk-remote-setup.sh`, `deploy/deploy.ps1 -WithDesk` | chưa chạy thật (mục 5) |
-
-Chạy test (Windows trong sandbox DSH — `node --test` bị chặn spawn tiến trình con):
-
-```bash
-node --test --test-isolation=none desk/test/*.test.js          # 56/56
-node --test --test-isolation=none server/test/desktop.test.js  # 9/9
-npx --prefix web tsc --noEmit -p web                           # sạch (0 lỗi)
-
-# App Windows (C#) — smoke thật, cần service flowdesk đang chạy:
-#   DESK_SONIOX_WS trỏ vào một Soniox giả, rồi:
-DESK_URL=http://127.0.0.1:7791 DESK_CODE=FBW-.... dotnet run --project MeetFlowAI.Win/artifacts/desk-smoke
-```
-
-Còn thiếu để khách dùng được thật:
-
-1. ~~**§3.6.4 app WPF**~~ — **xong ngày 2026-09-18 chiều** (xem §3.8). Còn lại: build lại zip
-   và phát hành **sau khi** service đã lên (phát trước là khách tải bản không chạy được).
-2. **§3.6.5 deploy** — tạo `/etc/flowdesk/flowdesk.env` (key Soniox/OpenRouter **riêng**
-   cho bản Windows), thêm DNS `desk`, rồi `.\deploy\deploy.ps1 -WithDesk`.
-   Nhớ thêm `FBUDDY_DESK_URL` + `FBUDDY_DESK_ADMIN_TOKEN` vào `/etc/fbuddy/fbuddy.env`
-   rồi restart fbuddy, nếu không fBuddy sẽ không phát mã khi đơn thành `paid`.
-3. ~~**View `?view=desktop`** trong web app~~ — **xong 2026-09-18 chiều**: `web/src/desktop/DesktopPage.tsx`
-   (tải app, lấy mã kích hoạt, danh sách thiết bị + thu hồi), vào từ sidebar "Bản Windows" hoặc
-   `?view=desktop`, i18n đủ vi/en/zh, route thu hồi `POST /api/desktop/activations/:id/revoke`
-   (chỉ thiết bị của chính mình — có test). **Chờ deploy** mới lên sóng.
-4. Lỗ bảo mật `/tmp-key` (§1) **vẫn đang mở** — không sửa được từ repo này.
-
-### 3.8 §3.6.4 — app WPF đã bỏ key, dùng mã kích hoạt (2026-09-18 chiều)
-
-Repo app: `C:\Users\Minhn\FPTVPN\MeetFlowAI_Win` — **LƯU Ý: thư mục này vẫn CHƯA nằm trong git
-của FPTVPN** (`git status` ở `C:\Users\Minhn\FPTVPN` hiện `?? MeetFlowAI_Win/`). Nên đưa lên
-git trước khi phát hành tiếp, nếu không sẽ lặp lại đúng vấn đề của `/opt/fbuddy`.
-
-| File | Thay đổi |
+| Đã xoá | Ghi chú |
 |---|---|
-| `Configuration/AppSettings.cs` | Bỏ `SonioxApiKey`, `OpenRouterApiKey`, `OpenRouterChatCompletionsUrl`, `OpenRouterModel`, `OpenRouterFallbackModel`, `ActivationApiUrl`; thêm `DeskBaseUrl` (mặc định `https://desk.meetflowai.site`) |
-| `Configuration/SecureConfigurationFile.cs` | Thiếu `appsettings.dat` thì chạy bằng giá trị mặc định thay vì **ném lỗi làm app chết ngay khi mở** |
-| `Services/IActivationService.cs` | Thêm `GetSessionTokenAsync()` |
-| `Services/ActivationService.cs` | Viết lại: gọi flowdesk `/v1/desktop/activate` + `/session`; lưu mã bằng **DPAPI** và token phiên vào `license.json`; tự gia hạn/tự kích hoạt lại khi token hết hạn; dịch mã lỗi (`code_expired`, `device_revoked`, `not_entitled_*`…) sang câu tiếng Việt. **Bỏ** `IsAutoActivatedMachine()` (miễn kích hoạt theo tên máy) và **bỏ** kiểu tự ký license bằng secret nhúng trong app |
-| `Services/SonioxRealtimeClient.cs` | Nối `wss://<desk>/v1/desktop/stt` kèm `Authorization: Bearer <token>`; cấu hình phiên **không còn `api_key`**; dịch lỗi 401/403/429 khi nâng cấp giao thức |
-| `Services/MeetingSummaryService.cs` | Gọi `POST /v1/desktop/summary` (key ở server, model do server chọn); bỏ vòng lặp thử nhiều model phía client |
-| `artifacts/desk-smoke/` | Project smoke mới: kích hoạt thật → token → `/v1/desktop/me` → mở phiên STT qua proxy |
+| `desk/` (service flowdesk + test + README) | xoá cả thư mục |
+| `server/src/desktop.js`, `server/test/desktop.test.js` | cầu nối fBuddy → flowdesk |
+| `sendDesktopActivation()` trong `server/src/mailer.js` | email mã kích hoạt |
+| Hook `queueDesktopActivation` trong `server/src/topup.js` | phát mã khi đơn thành `paid` |
+| Các route `/api/desktop*` trong `server/src/routes.js` | gồm cả trang công khai |
+| `web/src/desktop/` + nav/topbar/i18n/api client trong web | view `?view=desktop` |
+| `deploy/flowdesk.*` + `deploy.ps1 -WithDesk` | cài đặt service riêng |
 
-**Bằng chứng đã chạy (không phải kể lể):**
+**Chưa từng lên production** (đã kiểm md5: `/opt/fbuddy` vẫn là bản cũ), nên không có gì phải
+hoàn nguyên trên server.
 
-```
-dotnet build -c Release                          → Build succeeded, 0 warning, 0 error
-dotnet run --project artifacts/desk-smoke        → SMOKE PASS (9/9 mục)
-  OK  chưa kích hoạt ⇒ báo chưa kích hoạt
-  OK  mã sai ⇒ từ chối kèm thông báo dễ hiểu
-  OK  mã đúng ⇒ kích hoạt được (phiên đến 15:15)
-  OK  token phiên dài 225, được /v1/desktop/me chấp nhận (HTTP 200)
-  OK  mở phiên nhận dạng qua proxy KHÔNG cần key trong app
-  OK  nhận phụ đề: "xin chào|hello"
-  OK  cấu hình Soniox giả nhận được CHỈ có api_key của server, không có key nào từ app
-```
+Bài học giữ lại: thiết kế đã bàn với chủ dự án vẫn có thể đổi — **xác nhận lại trước khi làm cả
+một chuỗi 5 bước**, và đừng để một hướng mới "gần xong" rồi mới phát hiện là sai hướng.
 
-Bản cũ đã phát hành (zip trên `meetflowai.site/dl/`) vẫn dùng key khách tự nhập ⇒ **đừng phát
-hành bản mới trước khi flowdesk lên sóng**, nếu không khách tải về sẽ không kích hoạt được.
+### 3.8 App Windows — trạng thái hiện tại: **vẫn nhập key** (đã hoàn nguyên)
 
+| File | Trạng thái |
+|---|---|
+| `Configuration/AppSettings.cs` | Có `SonioxApiKey`, `OpenRouterApiKey`, `OpenRouterChatCompletionsUrl/Model/Fallback`, `ActivationApiUrl` |
+| `Services/SonioxRealtimeClient.cs` | Nối thẳng `wss://stt-rt.soniox.com/transcribe-websocket`, gửi `api_key` của khách |
+| `Services/MeetingSummaryService.cs` | Gọi thẳng OpenRouter bằng key của khách |
+| `Services/ActivationService.cs` + `IActivationService.cs` | Cơ chế cũ (license lưu máy + `ActivationApiUrl`) |
+| `Configuration/SecureConfigurationFile.cs` | Yêu cầu có `appsettings.dat` (như cũ) |
+| `artifacts/desk-smoke/` | đã xoá (project smoke của hướng cũ) |
 
+Bằng chứng: `dotnet build -c Release` → **0 warning / 0 error**; chuỗi trong DLL có `SonioxApiKey`,
+`OpenRouterApiKey`, `ActivationApiUrl` và **không có** `desk.meetflowai.site` — **giống bản zip
+đang phát hành** (`_meetflow-win-build`).
 
----
+⚠️ `C:\Users\Minhn\FPTVPN\MeetFlowAI_Win` **vẫn chưa nằm trong git** của FPTVPN
+(`git status` ở `C:\Users\Minhn\FPTVPN` hiện `?? MeetFlowAI_Win/`). Lần này phải hoàn nguyên
+bằng tay vì không có lịch sử — **nên đưa lên git trước khi sửa tiếp**.
 
 ## 4. Việc còn treo khác
 
 1. ~~**Popup fbuddy 3 ngôn ngữ theo region** (vi/en/zh)~~ — **xong 2026-09-18 chiều**, xem §4b.
    (Đang chờ deploy: bản trên sóng vẫn là promo.js cũ một thứ tiếng.)
-2. **Luồng cấp key qua trang buy** — backend + email đã xong (xem §3.7); còn app WPF (§3.6.4),
+2. ~~**Luồng cấp key qua trang buy**~~ — **đã bỏ** cùng §3 (chủ dự án chốt 18/09); bản Windows vẫn nhập key.
    deploy thật (§3.6.5) và view `?view=desktop` trong web app.
 3. ~~**Xác nhận `/opt/fbuddy` khớp commit nào của `origin/flowgpt`**~~ — **đã kiểm bằng md5 (2026-09-18 chiều)**:
    `/opt/fbuddy` (trừ `web/dist/` là bản build) **giống hệt `72c7779`**, đúng 1 khác biệt: các chỗ

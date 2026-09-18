@@ -3,7 +3,6 @@ import { all, getAppSettings, getById, insert, update } from "./db.js";
 import { config } from "./config.js";
 import { badRequest, notFound, nowIso } from "./util.js";
 import { getBalance, grantCredits } from "./credits.js";
-import { queueDesktopActivation } from "./desktop.js";
 
 /**
  * fBuddy top-up page: token packages paid by bank transfer.
@@ -201,11 +200,6 @@ export function confirmTopupOrder({ orderId, confirmedBy = "telegram", tokens = 
     paid_at: nowIso(),
     confirmed_by: confirmedBy,
   });
-
-  // Bản Windows mở quyền bằng chính đơn này ⇒ phát mã kích hoạt + gửi email.
-  // Chạy nền (fire-and-forget): cộng credit cho khách không được phép thất bại
-  // chỉ vì `flowdesk` đang bận hay chưa cấu hình.
-  queueDesktopActivation({ userId: updated.user_id, email: updated.email, orderId: updated.id });
 
   return { order: publicTopupOrder(updated), alreadyPaid: false, balance };
 }

@@ -233,6 +233,43 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 );
 
+-- Key kích hoạt cho app Windows (MeetFlow AI Overlay). CHỈ lưu hash của key: mất DB
+-- cũng không lộ key của khách. Sinh từ Control Panel, hoặc tự động khi đơn thành 'paid'.
+CREATE TABLE IF NOT EXISTS desktop_keys (
+  id TEXT PRIMARY KEY,
+  key_hash TEXT NOT NULL,
+  key_hint TEXT NOT NULL,
+  user_id TEXT,
+  email TEXT,
+  order_id TEXT,
+  plan TEXT NOT NULL DEFAULT 'windows',
+  max_devices INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'active',
+  note TEXT,
+  created_by TEXT,
+  sent_at TEXT,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_desktop_keys_user ON desktop_keys(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_desktop_keys_order ON desktop_keys(order_id);
+
+-- Mỗi dòng = một máy đã kích hoạt bằng key đó (thu hồi được từng máy).
+CREATE TABLE IF NOT EXISTS desktop_key_activations (
+  id TEXT PRIMARY KEY,
+  key_id TEXT NOT NULL,
+  machine_id TEXT NOT NULL,
+  machine_label TEXT,
+  ip TEXT,
+  activated_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_desktop_key_activations_key ON desktop_key_activations(key_id, activated_at);
+
 -- One row per signed-in device/browser. The JWT carries a session id (sid), so
 -- several devices for the same account coexist and each can be revoked on its own.
 CREATE TABLE IF NOT EXISTS auth_sessions (
