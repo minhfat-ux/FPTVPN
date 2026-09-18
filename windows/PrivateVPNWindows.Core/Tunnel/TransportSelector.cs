@@ -201,7 +201,7 @@ public static class TunnelHealth
     /// nên tunnel sống luôn nhận keepalive trả lời từ node (rx_bytes tăng, xem
     /// <see cref="TunnelHealthWatchdog"/>); tunnel chết thì rx đứng yên và handshake không mới lên.
     /// </summary>
-    public const int WatchdogNoEvidenceSeconds = 25;
+    public const int WatchdogNoEvidenceSeconds = 90;
 
     /// <summary>Handshake của peer có nằm trong ngưỡng "mới" hay không.</summary>
     public static bool IsHandshakeFresh(WireGuardRuntimeStats stats, DateTimeOffset now)

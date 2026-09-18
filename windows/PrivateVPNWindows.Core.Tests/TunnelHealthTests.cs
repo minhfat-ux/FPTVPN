@@ -243,37 +243,36 @@ public class TunnelHealthTests
     }
 
     [Fact]
-    public void Watchdog_NoEvidenceBeyondThresholdIsStale()
+    public void Watchdog_NoEvidenceForNinetySecondsIsStale()
     {
         var watchdog = new TunnelHealthWatchdog(Now, baselineRxBytes: 512);
-        var window = TunnelHealth.WatchdogNoEvidenceSeconds;
 
         // Handshake đã cũ ở mọi mốc, rx_bytes đứng yên: chỉ còn đồng hồ "mù" quyết định.
         var stale = WireGuardRuntimeStats.Known(Now.AddSeconds(-100), 512);
-
-        // Còn trong ngưỡng (một nửa ngưỡng) ⇒ vẫn Healthy và mốc bằng chứng chưa đổi.
-        Assert.Equal(TunnelHealthVerdict.Healthy, watchdog.Observe(stale, Now.AddSeconds(window / 2)));
+        Assert.Equal(TunnelHealthVerdict.Healthy, watchdog.Observe(stale, Now.AddSeconds(45)));
+        Assert.Equal(TunnelHealthVerdict.Healthy, watchdog.Observe(stale, Now.AddSeconds(89)));
         Assert.Equal(Now, watchdog.LastEvidenceAt);
 
-        // Vượt ngưỡng ⇒ Stale (đây là thứ cắt thời gian mất mạng của khách).
-        Assert.Equal(TunnelHealthVerdict.Stale, watchdog.Observe(stale, Now.AddSeconds(window + 5)));
+        Assert.Equal(TunnelHealthVerdict.Stale, watchdog.Observe(stale, Now.AddSeconds(90)));
     }
 
     [Fact]
     public void Watchdog_FreshHandshakeRefreshesEvidenceWindow()
     {
         var watchdog = new TunnelHealthWatchdog(Now, baselineRxBytes: 0);
-        var window = TunnelHealth.WatchdogNoEvidenceSeconds;
-        var freshHandshake = WireGuardRuntimeStats.Known(Now.AddSeconds(window - 5), 0);
 
-        // Ở mốc gần hết ngưỡng có handshake mới ⇒ đồng hồ mù được đặt lại.
-        Assert.Equal(TunnelHealthVerdict.Healthy, watchdog.Observe(freshHandshake, Now.AddSeconds(window)));
+        // Ở mốc 80s (sắp hết ngưỡng) có handshake mới ⇒ đồng hồ mù được đặt lại.
+        Assert.Equal(
+            TunnelHealthVerdict.Healthy,
+            watchdog.Observe(WireGuardRuntimeStats.Known(Now.AddSeconds(75), 0), Now.AddSeconds(80)));
 
-        // Vẫn trong ngưỡng tính từ handshake mới (tuổi handshake 15s < 25s) ⇒ Healthy.
-        Assert.Equal(TunnelHealthVerdict.Healthy, watchdog.Observe(freshHandshake, Now.AddSeconds(window + 10)));
+        Assert.Equal(
+            TunnelHealthVerdict.Healthy,
+            watchdog.Observe(WireGuardRuntimeStats.Known(Now.AddSeconds(75), 0), Now.AddSeconds(160)));
 
-        // Quá ngưỡng tính từ handshake đó ⇒ Stale.
-        Assert.Equal(TunnelHealthVerdict.Stale, watchdog.Observe(freshHandshake, Now.AddSeconds((window * 2) + 5)));
+        Assert.Equal(
+            TunnelHealthVerdict.Stale,
+            watchdog.Observe(WireGuardRuntimeStats.Known(Now.AddSeconds(75), 0), Now.AddSeconds(171)));
     }
 
     [Fact]
