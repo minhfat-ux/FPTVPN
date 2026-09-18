@@ -1,26 +1,27 @@
-# ═══════════════════════════════════════════════════════════════════════
-#  FPT HARNESS — 1-CLICK INSTALLER (WINDOWS)
+# =======================================================================
+#  FPT HARNESS - 1-CLICK INSTALLER (WINDOWS)
 #
-#  Cài TOÀN BỘ FPT Harness trên Windows chỉ với MỘT lệnh:
-#    branding + theme FlowVPN + logo FPT/Culi, browse-picker từ xa,
-#    auto-start DSH khi login, reverse tunnel (Task Scheduler, chống trùng),
-#    và phần VPS backend (Caddy HTTPS + nginx auth gate + login form).
+#  Cai TOAN BO FPT Harness tren Windows chi voi MOT lenh:
+#    branding + theme FlowVPN + logo FPT/Culi, browse-picker tu xa,
+#    auto-start DSH khi login, reverse tunnel (Task Scheduler, chong trung),
+#    va phan VPS backend (Caddy HTTPS + nginx auth gate + login form).
 #
-#  Cách dùng (chạy trong PowerShell với quyền user bình thường):
+#  Cach dung (chay trong PowerShell voi quyen user binh thuong):
 #    powershell -ExecutionPolicy Bypass -File install-fpt-harness.ps1
 #    powershell -ExecutionPolicy Bypass -File install-fpt-harness.ps1 -VpsIP 103.173.155.50 -Domain dhs-win.meetflowai.site
 #
-#  Tham số:
-#    -VpsIP      IP VPS backend (để trống = bỏ qua phần tunnel/VPS)
-#    -Domain     Domain DSH (mặc định dhs-win.meetflowai.site — cần DNS A record tới VPS)
-#    -SshUser    User SSH trên VPS (mặc định root)
-#    -TunnelPort Port tunnel trên VPS (mặc định 13081 — KHÔNG đụng 13080 của Mac)
-#    -AuthUser/-AuthPass  user/pass đăng nhập GUI harness (mặc định dhs / fgMR6h53TC5kMmRW)
-#    -SkipPatch  bỏ qua patch branding (nếu chỉ muốn tunnel)
-#    -Yes        không hỏi, dùng mặc định
+#  Tham so:
+#    -VpsIP      IP VPS backend (de trong = bo qua phan tunnel/VPS)
+#    -Domain     Domain DSH (mac dinh dhs-win.meetflowai.site - can DNS A record toi VPS)
+#    -SshUser    User SSH tren VPS (mac dinh root)
+#    -TunnelPort Port tunnel tren VPS (mac dinh 13081 - KHONG dung 13080 cua Mac)
+#    -AuthUser/-AuthPass  user/pass dang nhap GUI harness (BAT BUOC truyen -AuthPass khi
+#                         dung site cong khai; khong co mat khau mac dinh trong ma nguon)
+#    -SkipPatch  bo qua patch branding (neu chi muon tunnel)
+#    -Yes        khong hoi, dung mac dinh
 #
-#  An toàn khi chạy lại: mọi bước idempotent (patch .py có backup .fpt.bak).
-# ═══════════════════════════════════════════════════════════════════════
+#  An toan khi chay lai: moi buoc idempotent (patch .py co backup .fpt.bak).
+# =======================================================================
 param(
     [string]$VpsIP = "",
     [string]$Domain = "dhs-win.meetflowai.site",
@@ -33,9 +34,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SRC = Split-Path -Parent $MyInvocation.MyCommand.Path   # thư mục windows/ của package
-# patches/profile có thể nằm cạnh windows/ (cấu trúc package đầy đủ) HOẶC bên trong windows/
-# (bundle tự chứa). Tìm cả 2, ưu tiên cấu trúc đầy đủ.
+$SRC = Split-Path -Parent $MyInvocation.MyCommand.Path   # thu muc windows/ cua package
+# patches/profile co the nam canh windows/ (cau truc package day du) HOAC ben trong windows/
+# (bundle tu chua). Tim ca 2, uu tien cau truc day du.
 $PKG = Split-Path $SRC -Parent
 $patchDir = @((Join-Path $PKG "patches"), (Join-Path $SRC "patches")) | Where-Object { Test-Path $_ } | Select-Object -First 1
 $profSrc = @((Join-Path $PKG "profile\cordis.patch.yml"), (Join-Path $SRC "profile\cordis.patch.yml")) | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -54,7 +55,7 @@ Write-Host "   FPT HARNESS - CAI DAT 1-CLICK (WINDOWS)" -ForegroundColor Cyan
 Write-Host "  ============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ---------- [1] kiểm tra tiên quyết ----------
+# ---------- [1] kiem tra tien quyet ----------
 Log "Kiem tra tien quyet"
 
 # Node.js
@@ -62,7 +63,7 @@ $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
     Warn "Chua thay Node.js. Dang cai Node.js LTS qua winget..."
     winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
-    # refresh PATH trong session này
+    # refresh PATH trong session nay
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
     $node = Get-Command node -ErrorAction SilentlyContinue
     if (-not $node) { throw "Cai Node.js that bai. Tai tu https://nodejs.org roi chay lai." }
@@ -81,7 +82,7 @@ if (-not (Test-Path $dshRoot)) {
 }
 Ok "DSH: $dshRoot"
 
-# Python (cho script patch .py — dùng chung với bản Mac)
+# Python (cho script patch .py - dung chung voi ban Mac)
 $py = Get-Command python -ErrorAction SilentlyContinue
 if (-not $py) {
     Warn "Chua thay Python. Dang cai Python qua winget..."
@@ -103,7 +104,7 @@ if (-not $SkipPatch) {
         Warn "Khong thay $patchPy - bo qua patch"
     }
 
-    # Branding FlowTech (mark / ten / title / favicon) — chay SAU ban FPT vi ban do
+    # Branding FlowTech (mark / ten / title / favicon) - chay SAU ban FPT vi ban do
     # giu lai phan theme + browse-picker. Script idempotent, nhan ca 3 trang thai dau vao
     # (DSH goc / da patch FPT / da la FlowTech).
     $brandPy = Join-Path $patchDir "apply-flowtech-brand.py"
@@ -195,7 +196,7 @@ if ($VpsIP) {
     Warn "Khong co -VpsIP - bo qua task tunnel (chay lai voi -VpsIP khi co)"
 }
 
-# ---------- [5] cài pubkey lên VPS ----------
+# ---------- [5] cai pubkey len VPS ----------
 if ($VpsIP) {
     Log "Cai pubkey len VPS $SshUser@$VpsIP (se hoi password SSH)"
     $pub = Get-Content $keyPub
@@ -203,7 +204,7 @@ if ($VpsIP) {
     if ($LASTEXITCODE -eq 0) { Ok "Pubkey da cai len VPS" } else { Warn "Cai pubkey that bai - chay lai lenh ssh o tren tay" }
 }
 
-# ---------- [6] hướng dẫn VPS site ----------
+# ---------- [6] huong dan VPS site ----------
 Write-Host ""
 Write-Host "  ------------------------------------------------" -ForegroundColor Cyan
 Write-Host "   XONG! Buoc cuoi (tren VPS):" -ForegroundColor Cyan
