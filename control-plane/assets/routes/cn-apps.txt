@@ -1,0 +1,93 @@
+# Danh sách app Trung Quốc KHÔNG đi VPN (bypass) — nguồn sự thật.
+#
+# Vì sao: WeChat / Alipay / app TQ mất kết nối khi bật full-tunnel vì traffic bị đẩy qua
+# exit Việt Nam, server TQ thấy IP nước ngoài nên cắt kết nối.
+#
+# Định dạng: <package-name>   # <tên app>   (dấu # và phần sau là chú thích, client bỏ qua)
+# Client Android đọc file này rồi gọi VpnService.Builder.addDisallowedApplication(pkg)
+# cho từng app ĐÃ CÀI trên máy (app không cài thì bỏ qua).
+#
+# File được phục vụ tại: https://meetflowai.site/dl/routes/cn-apps.txt
+# => Thêm app mới chỉ cần sửa file này + chạy scripts/upload-route-lists.sh, KHÔNG cần phát hành app.
+#
+# Lưu ý: iOS/Windows không có API VPN theo từng app — hai nền tảng đó dùng danh sách IP
+# Trung Quốc (/dl/routes/cn.txt) để đi thẳng, không qua tunnel.
+
+# --- Nhắn tin / mạng xã hội ---
+com.tencent.mm                        # WeChat (微信)
+com.tencent.wework                    # WeCom / WeChat Work (企业微信)
+com.tencent.mobileqq                  # QQ
+com.tencent.tim                       # TIM (QQ công việc)
+com.tencent.androidqqmail             # QQ Mail
+com.sina.weibo                        # Weibo (微博)
+com.xingin.xhs                        # Xiaohongshu / RED (小红书)
+com.zhihu.android                     # Zhihu (知乎)
+com.douban.frodo                      # Douban (豆瓣)
+com.tencent.weread                    # WeChat Reading (微信读书)
+com.netease.newsreader.activity       # NetEase News (网易新闻)
+com.ss.android.article.news           # Toutiao (今日头条)
+com.tencent.news                      # Tencent News (腾讯新闻)
+
+# --- Thanh toán / ngân hàng / tài chính ---
+com.eg.android.AlipayGphone           # Alipay (支付宝)
+com.unionpay                          # UnionPay (云闪付)
+com.icbc                              # ICBC (工商银行)
+com.chinamworld.main                  # CCB (建设银行)
+com.android.bankabc                   # ABC (农业银行)
+com.chinamworld.bocmbci               # Bank of China (中国银行)
+cmb.pb                                # China Merchants Bank (招商银行)
+com.bankcomm.Bankcomm                 # Bank of Communications (交通银行)
+com.yitong.mbank.psbc                 # Postal Savings Bank (邮储银行)
+com.jd.jrapp                          # JD Finance (京东金融)
+com.cmbchina.ccd.pluto.cmbActivity    # CMB Life (招商银行掌上生活)
+
+# --- Mua sắm ---
+com.taobao.taobao                     # Taobao (淘宝)
+com.tmall.wireless                    # Tmall (天猫)
+com.alibaba.wireless                  # 1688 / Alibaba
+com.jingdong.app.mall                 # JD.com (京东)
+com.xunmeng.pinduoduo                 # Pinduoduo (拼多多)
+com.taobao.idlefish                   # Xianyu (闲鱼)
+com.suning.mobile.ebuy                # Suning (苏宁易购)
+com.cainiao.wireless                  # Cainiao (菜鸟裹裹)
+com.sf.activity                       # SF Express (顺丰)
+com.sf.activity.parent                # SF Express — biến thể package (nếu có)
+
+# --- Đồ ăn / du lịch / đi lại ---
+com.sankuai.meituan                   # Meituan (美团)
+com.sankuai.meituan.takeoutnew        # Meituan Waimai (美团外卖)
+com.dianping.v1                       # Dianping (大众点评)
+me.ele                                # Ele.me (饿了么)
+com.sdu.didi.psnger                   # Didi (滴滴出行)
+com.autonavi.minimap                  # Amap / Gaode Maps (高德地图)
+com.baidu.BaiduMap                    # Baidu Maps (百度地图)
+ctrip.android.view                    # Ctrip (携程)
+com.Qunar                             # Qunar (去哪儿)
+com.taobao.trip                       # Fliggy (飞猪)
+com.MobileTicket                      # 12306 (đặt vé tàu)
+
+# --- Video / nhạc / giải trí ---
+com.ss.android.ugc.aweme              # Douyin (抖音)
+com.ss.android.ugc.aweme.lite         # Douyin Lite (抖音极速版)
+com.ss.android.article.video          # Xigua Video (西瓜视频)
+com.smile.gifmaker                    # Kuaishou (快手)
+com.kuaishou.nebula                   # Kuaishou Express (快手极速版)
+tv.danmaku.bili                       # Bilibili (哔哩哔哩)
+com.qiyi.video                        # iQIYI (爱奇艺)
+com.tencent.qqlive                    # Tencent Video (腾讯视频)
+com.youku.phone                       # Youku (优酷)
+com.netease.cloudmusic                # NetEase Cloud Music (网易云音乐)
+com.tencent.qqmusic                   # QQ Music (QQ音乐)
+com.tencent.weishi                    # Weishi (微视)
+
+# --- Công cụ / văn phòng / nhà thông minh ---
+com.alibaba.android.rimet             # DingTalk (钉钉)
+com.tencent.docs                      # Tencent Docs (腾讯文档)
+cn.wps.moffice_eng                    # WPS Office
+com.baidu.searchbox                   # Baidu (百度)
+com.baidu.netdisk                     # Baidu Netdisk (百度网盘)
+com.xiaomi.smarthome                  # Mi Home / Mijia (米家)
+com.greenpoint.android.mc10086.activity  # China Mobile (中国移动)
+com.sinovatech.unicom.se                # China Unicom (中国联通)
+com.sinovatech.unicom.ui                # China Unicom — biến thể package (nếu có)
+com.ct.client                         # China Telecom (中国电信)
