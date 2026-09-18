@@ -141,8 +141,8 @@ object Config {
     //   khong khai (0/0 = BBR) -> 0-0,5 MB/s  ✗ (ban hysteria nay BBR hong)
     // ⇒ PHAI khai, va khai SAT bang thong that: khai cao hon duong truyen ⇒ nghen (do 5G: 13 Mbps
     // that ma khai 100 => tut con 0,6 MB/s). Vi vay chia theo loai mang, xem applyUnderlyingNetwork().
-    const val HY_UP_KBPS = 20000
-    const val HY_DOWN_KBPS = 80000
+    const val HY_UP_KBPS = 30000
+    const val HY_DOWN_KBPS = 100000
     /** Mang di dong (4G/5G) o Trung Quoc: thuc te 10-13 Mbps ⇒ khai sat de Brutal khong nghen. */
     const val MOBILE_UP_KBPS = 8000
     const val MOBILE_DOWN_KBPS = 12000
@@ -155,8 +155,8 @@ object Config {
      */
     // Do thuc te tren Mac (18/09): duong Cloudflare dat 13,7 MB/s => khai 0,8/4 Mbps
     // la tu bop nghẽn. Server cung da bat ignoreClientBandwidth.
-    const val HY_RELAY_UP_KBPS = 10000
-    const val HY_RELAY_DOWN_KBPS = 30000
+    const val HY_RELAY_UP_KBPS = 30000
+    const val HY_RELAY_DOWN_KBPS = 100000
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)
