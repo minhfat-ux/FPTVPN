@@ -183,7 +183,7 @@ public static class WireGuardWindowsCommands
     /// (đã log WARN) nhưng không chặn luồng ngắt kết nối.</summary>
     public static WindowsCommand RemoveInterface(string interfaceName)
         => new(PowerShell,
-            $"-NoProfile -NonInteractive -Command \"Remove-NetAdapter -Name '{interfaceName}' -Confirm:$false -ErrorAction SilentlyContinue\"");
+            $"-NoProfile -NonInteractive -Command \"Import-Module NetAdapter -ErrorAction SilentlyContinue; Remove-NetAdapter -Name '{interfaceName}' -Confirm:$false -ErrorAction SilentlyContinue\"");
 
     /// <summary>
     /// Đọc default route đang dùng của máy, in ra <c>gateway|interface</c>.

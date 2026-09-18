@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# flowvpn-notify — gửi thông báo giữa các máy/agent qua VPS (node-2).
+#
+#   echo "nội dung" | flowvpn-notify --from windows --to mac --topic "VPNFlow 1.0.5"
+#   flowvpn-notify --from mac --to windows --topic "iOS 1.4.0" --file /path/bao-cao.md
+#   flowvpn-notify --ping "nội dung ngắn"     # CHỈ gửi Telegram, KHÔNG ghi inbox
+#
+# Việc nó làm (2 kênh, độc lập nhau):
+#   1) LƯU BỀN: ghi vào /var/lib/flowvpn-coord/inbox/<to>/<UTC>-<from>-<slug>.md (nguồn sự thật)
+#   2) PING: gửi 1 tin Telegram NGẮN (tiêu đề + đường dẫn) để người/agent biết ngay
+# Poller trên từng máy đọc thư mục inbox/<máy mình>/ rồi "thức" agent (scripts/notify/inbox-poller.sh).
+#
+# `--ping` dùng cho việc báo trạng thái ngắn (đã nhận / đang làm / xong) — không đẻ thêm file
+# inbox, vì những việc đó gắn với file việc đã có sẵn.
+#
+# ĐÂY LÀ BẢN CHẠY TRÊN NODE-2 (/usr/local/bin/flowvpn-notify). Cập nhật:
+#   scp scripts/notify/flowvpn-notify root@165.101.114.162:/usr/local/bin/flowvpn-notify
+#   ssh root@165.101.114.162 'chmod 755 /usr/local/bin/flowvpn-notify'
+set -euo pipefail
+
+FROM=""; TO="all"; TOPIC=""; FILE=""; PING=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --from) FROM="${2:-}"; shift 2 ;;
+    --to) TO="${2:-}"; shift 2 ;;
+    --topic) TOPIC="${2:-}"; shift 2 ;;
+    --file) FILE="${2:-}"; shift 2 ;;
+    --ping) PING="${2:-}"; shift 2 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    *) echo "tham so la: $1" >&2; exit 2 ;;
+  esac
+done
+
+# Đọc token bot từ env của bot (KHÔNG in token ra) rồi gửi 1 tin Telegram.
+tg_send() {
+  local text="$1"
+  local ENVF=/etc/flowvpn-tg-bot.env
+  [ -f "$ENVF" ] || { echo "==> khong thay $ENVF, bo qua ping"; return 0; }
+  # shellcheck disable=SC1090
+  source "$ENVF"
+  local CHAT="${TELEGRAM_CHAT_ID:-${TELEGRAM_ALLOWED_CHATS%%,*}}"
+  if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "$CHAT" ]; then
+    echo "==> thieu TELEGRAM_BOT_TOKEN/chat, bo qua ping"
+    return 0
+  fi
+  local resp; resp="$(mktemp)"
+  if curl -4 -s -o "$resp" -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=$CHAT" --data-urlencode "text=$text" \
+      --data-urlencode "disable_web_page_preview=true"; then
+    local ok; ok=$(python3 -c "import json;print(json.load(open('$resp')).get('ok'))" 2>/dev/null || echo '?')
+    echo "==> telegram ping: ok=$ok"
+  else
+    echo "==> telegram ping: loi mang"
+  fi
+  rm -f "$resp"
+}
+
+# --- chế độ chỉ ping (không ghi inbox) ---
+if [ -n "$PING" ]; then
+  tg_send "$PING"
+  exit 0
+fi
+
+[ -n "$FROM" ] && [ -n "$TOPIC" ] || { echo "can --from va --topic (hoac --ping \"...\")" >&2; exit 2; }
+
+INBOX="/var/lib/flowvpn-coord/inbox/$TO"
+mkdir -p "$INBOX"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+SLUG="$(printf '%s' "$TOPIC" | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9-')"
+OUT="$INBOX/$TS-$FROM-${SLUG:0:40}.md"
+
+if [ -n "$FILE" ]; then cp -f "$FILE" "$OUT"; else cat > "$OUT"; fi
+chmod 644 "$OUT"
+echo "==> da luu: $OUT ($(wc -c < "$OUT") byte)"
+echo "$OUT"
+
+tg_send "[notify $FROM -> $TO] $TOPIC
+File: $OUT"

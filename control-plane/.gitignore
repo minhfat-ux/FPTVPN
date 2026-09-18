@@ -1,4 +1,16 @@
-node_modules/
+﻿# Runtime state + secrets của control plane: KHÔNG bao giờ commit.
 data/
+*.db
+*.db-wal
+*.db-shm
 *.log
-.env
+
+# Ảnh chụp/backup tại chỗ
+*.bak*
+*backup*
+node_modules*/
+._*
+
+# File tạm của hệ điều hành
+.DS_Store
+Thumbs.db

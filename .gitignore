@@ -72,3 +72,12 @@ windows/installer/publish/
 
 # harness-shot.mjs: browser profile + screenshot output
 .shots/
+
+# DSH harness: session state + checkpoint/spill files của máy cục bộ, không thuộc dự án
+.dsh/
+
+# App Windows "MeetFlow AI": repo git RIÊNG (github.com/minhfat-ux/MeetFlowAI_Win) nằm lồng
+# trong thư mục này. Để nguyên trong .gitignore: nếu commit như thư mục con, git sẽ ghi nó
+# thành gitlink (submodule) trỏ tới commit không có trên remote nào của repo này.
+# Muốn đổi app thì commit + push trong chính repo MeetFlowAI_Win.
+MeetFlowAI_Win/

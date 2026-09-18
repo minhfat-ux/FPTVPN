@@ -1,6 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import QRCode from "qrcode";
 import { buildVietQRPayload } from "./vietqr.js";
 
@@ -106,84 +104,6 @@ function payosSignature({ checksumKey, orderCode, amount, description, cancelUrl
   return crypto.createHmac("sha256", checksumKey).update(payload).digest("hex");
 }
 
-/** Chữ cho trang trạng thái chuyển khoản (chỉ 3 ngôn ngữ như email). */
-const STATUS_TEXTS = {
-  vi: {
-    title: "Tình trạng thanh toán", waiting: "⏳ Chưa nhận được tiền",
-    waitingNote: "Hệ thống đang tự kiểm tra. Trang này tự cập nhật mỗi 10 giây — không cần tải lại.",
-    paid: "✅ Đã nhận thanh toán", paidNote: "Gói đã được kích hoạt cho tài khoản bên dưới.",
-    order: "Mã đơn", plan: "Gói", amount: "Số tiền", account: "Tài khoản",
-    notFound: "Không tìm thấy đơn này", notFoundNote: "Kiểm tra lại mã đơn, hoặc liên hệ hỗ trợ.",
-    support: "Cần hỗ trợ?", back: "Về trang mua gói",
-  },
-  en: {
-    title: "Payment status", waiting: "⏳ Payment not received yet",
-    waitingNote: "We check automatically. This page refreshes every 10 seconds — no need to reload.",
-    paid: "✅ Payment received", paidNote: "The plan is now active for the account below.",
-    order: "Order", plan: "Plan", amount: "Amount", account: "Account",
-    notFound: "Order not found", notFoundNote: "Check the order code, or contact support.",
-    support: "Need help?", back: "Back to the store",
-  },
-  zh: {
-    title: "付款状态", waiting: "⏳ 尚未收到款项",
-    waitingNote: "系统会自动检查。本页每 10 秒自动刷新，无需手动刷新。",
-    paid: "✅ 已收到付款", paidNote: "套餐已为下方账号开通。",
-    order: "订单", plan: "套餐", amount: "金额", account: "账号",
-    notFound: "找不到该订单", notFoundNote: "请检查订单号，或联系客服。",
-    support: "需要帮助？", back: "返回购买页",
-  },
-};
-
-/**
- * Trang HTML cho khách (và chủ shop) xem **tình trạng chuyển khoản** của một đơn:
- * `/buy/status/<mã đơn>` (VPNFlow) và `/ai/buy/status/<mã đơn>` (MeetFlow AI).
- *
- * Tự cập nhật mỗi 10 giây. Không lộ email đầy đủ (che bớt) vì mã đơn chỉ là mốc thời gian
- * nên có thể bị dò.
- */
-export function orderStatusPageHTML({
-  lang = "vi", orderCode, planLabel = "", amount = 0, paid = false,
-  emailMasked = "", product = "vpn", supportEmail = "support@meetflowai.site",
-  buyUrl = "", found = true,
-} = {}) {
-  const t = STATUS_TEXTS[lang] || STATUS_TEXTS.vi;
-  const money = `${Number(amount || 0).toLocaleString("vi-VN")} đ`;
-  const head = paid ? t.paid : t.waiting;
-  const note = !found ? t.notFoundNote : (paid ? t.paidNote : t.waitingNote);
-  const rows = found
-    ? `<tr><th>${t.order}</th><td>#${orderCode}</td></tr>
-       <tr><th>${t.plan}</th><td>${planLabel}</td></tr>
-       <tr><th>${t.amount}</th><td>${money}</td></tr>
-       ${emailMasked ? `<tr><th>${t.account}</th><td>${emailMasked}</td></tr>` : ""}`
-    : "";
-  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex">
-<title>${found ? head : t.notFound} — ${product === "ai" ? "MeetFlow AI" : "VPNFlow"}</title>
-${found && !paid ? '<meta http-equiv="refresh" content="10">' : ""}
-<style>
-/* FlowTech Signature theme — docs/THEME.md (repo FlowGpt). Chỉ CSS. */
-:root{--accent:#33C773;--accent-2:#22D3EE;--accent-3:#7C3AED;--accent-text:#05202A;--sig-bg:#0A1F3B;--sig-bg-deep:#071628;--sig-text:#EAF2FF;--sig-muted:rgba(234,242,255,.74);--sig-faint:rgba(234,242,255,.5);--sig-mint:#7FE6C0;--sig-line:rgba(255,255,255,.12)}
-@keyframes sig-rise{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
-@keyframes sig-slide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-body{min-height:100vh;margin:0;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:var(--sig-text);background:radial-gradient(115% 70% at 6% -14%,rgba(51,199,115,.18),transparent 58%),radial-gradient(95% 65% at 98% -6%,rgba(34,211,238,.14),transparent 55%),linear-gradient(180deg,var(--sig-bg),var(--sig-bg-deep));background-attachment:fixed}
-.c{position:relative;max-width:440px;width:100%;margin:24px;padding:28px;background:radial-gradient(130% 120% at 0% 0%,#14406c 0%,#0a1f3b 55%,#071628 100%);border:1px solid var(--sig-line);border-radius:22px;animation:sig-rise .36s cubic-bezier(.22,1,.36,1) both}
-.c::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(135deg,#33c773,#22d3ee 46%,#7c3aed);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;opacity:.85;pointer-events:none}
-h1{font-size:19px;margin:0 0 6px}p{color:var(--sig-muted);font-size:14px;line-height:1.5}
-table{width:100%;border-collapse:collapse;margin:14px 0}
-th{text-align:left;color:var(--sig-mint);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:6px 12px 6px 0;white-space:nowrap}
-td{font-weight:600;font-size:14px;padding:6px 0;color:var(--sig-text)}
-tbody tr{animation:sig-slide .24s ease-out both}
-a{color:var(--sig-mint)}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-</style></head><body><div class="c">
-<h1>${found ? head : t.notFound}</h1>
-<p>${note}</p>
-<table>${rows}</table>
-<p>${t.support} <a href="mailto:${supportEmail}">${supportEmail}</a>${buyUrl ? ` · <a href="${buyUrl}">${t.back}</a>` : ""}</p>
-</div></body></html>`;
-}
-
 /**
  * Ảnh QR chuyển khoản lấy từ vietqr.app (SePay dùng chính dịch vụ này) — ảnh "standee" có sẵn
  * branding ngân hàng, số tiền và nội dung CK điền sẵn.
@@ -245,44 +165,6 @@ export function transferNote({ orderCode, plan = "", product = "vpn" } = {}) {
  * registration needed — customer scans with any VN banking app, pays the
  * exact amount, and the note carries the order code for manual/auto matching.
  */
-/**
- * Ảnh QR (PNG) cho MỘT link tải bất kỳ — dùng cho khối "quét mã để cài trên điện thoại" ở trang buy
- * và ở trang cài iOS. Khách mở trang trên máy tính, quét mã là điện thoại mở đúng link.
- *
- * Sinh tại chỗ (không phụ thuộc dịch vụ ngoài như ảnh QR của Diawi) nên link Diawi hết hạn cũng
- * không ảnh hưởng, và không lộ link qua bên thứ ba.
- */
-export async function downloadQrPng(url, { size = 320, margin = 1 } = {}) {
-  const target = String(url ?? "").trim();
-  if (!target) throw new Error("downloadQrPng: thiếu url");
-  return QRCode.toBuffer(target, { type: "png", width: size, margin, errorCorrectionLevel: "M" });
-}
-
-/**
- * Khối HTML: QR + link dạng chữ (bấm được) + nút copy. Hiện dưới hai nút tải app ở trang buy.
- * Chuỗi dịch để trong hàm này (không nhét vào 10 object ngôn ngữ của 2 trang) cho gọn.
- */
-export function downloadQrSectionHTML({ lang = "vi", qrSrc, linkUrl, note = null } = {}) {
-  if (!qrSrc || !linkUrl) return "";
-  const L = {
-    vi: { title: "📱 Quét mã để cài trên điện thoại", hint: "Mở camera điện thoại và quét mã này — máy sẽ mở đúng trang cài.", link: "Hoặc mở link:", copy: "Sao chép link", copied: "Đã sao chép ✓" },
-    en: { title: "📱 Scan to install on your phone", hint: "Open your phone camera and scan — it opens the right install page.", link: "Or open the link:", copy: "Copy link", copied: "Copied ✓" },
-    zh: { title: "📱 扫码在手机上安装", hint: "用手机相机扫描此二维码，即可打开安装页面。", link: "或打开链接：", copy: "复制链接", copied: "已复制 ✓" },
-    ja: { title: "📱 スマホでインストールするにはスキャン", hint: "スマホのカメラでこのコードを読み取るとインストールページが開きます。", link: "またはリンクを開く：", copy: "リンクをコピー", copied: "コピーしました ✓" },
-    ko: { title: "📱 휴대폰 설치용 QR 스캔", hint: "휴대폰 카메라로 이 코드를 스캔하면 설치 페이지가 열립니다.", link: "또는 링크 열기:", copy: "링크 복사", copied: "복사됨 ✓" },
-  }[lang] ?? null;
-  const t = L ?? { title: "📱 Scan to install on your phone", hint: "Open your phone camera and scan — it opens the right install page.", link: "Or open the link:", copy: "Copy link", copied: "Copied ✓" };
-  return `<div class="dlqr">
-  <div class="dlqr-title">${t.title}</div>
-  <img class="dlqr-img" src="${qrSrc}" alt="QR" width="180" height="180" loading="lazy">
-  <div class="dlqr-hint">${t.hint}</div>
-  <div class="dlqr-link">${t.link} <a href="${linkUrl}" target="_blank" rel="noopener">${linkUrl.replace(/^https?:\/\//, "")}</a>
-    <button type="button" class="dlqr-copy" data-link="${linkUrl}" data-done="${t.copied}">${t.copy}</button>
-  </div>
-  ${note ? `<div class="dlqr-note">${note}</div>` : ""}
-</div>`;
-}
-
 export async function createBankQrDataUrl({
   accountNumber,
   accountName,
@@ -406,7 +288,6 @@ const TEXTS = {
     dlTitle: "Get the VPNFlow app",
     dlSub: "Don't have the app yet? Choose your platform:",
     androidTitle: "Download the APK directly", androidTop: "Download for Android", androidBadge: "APK", iosTop: "Download for iPhone / iPad", iosBadge: "iOS (IPA)",
-    macTop: "Download for Mac", macBadge: "macOS", windowsTop: "Download for Windows", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / older device",
     androidLegacySub: "APK for Android 7.0 and 7.1 — Fire TV Stick 4K, older phones and TVs",
     emailLabel: "Your VPNFlow account email",
@@ -415,7 +296,6 @@ const TEXTS = {
     bankName: "VN Bank", bankScan: "Scan TPBank QR",
     wechatScan: "Scan QR", alipayScan: "Scan QR", momoScan: "Scan QR",
     payosName: "PayOS gateway", payosSub: "MoMo / QR / card",
-    inAppNote: "✅ You already have the app — just create your account with the email below and pay. Premium turns on automatically after payment.",
     payBtn: "Create payment QR",
     note: "After you transfer, Premium will be activated for this email.",
     modalTitle: "Scan the QR to pay",
@@ -426,21 +306,18 @@ const TEXTS = {
     mini: "Keep the order code for reference. Premium activates automatically after confirmation.",
         privacyLabel: "Privacy Policy",
     supportLabel: "Support",
+        testflightSub: "Join the beta",
         noteExtra: "Pro is activated for the email you enter above. If it is not active within 10 minutes after your transfer, contact support@meetflowai.site.",
-        deviceNote: "One account works on up to 3 devices. To switch devices, remove an old one first.",
         howToTitle: "How to activate after buying",
-    iosLineIpa: "Open the install page on the same iPhone/iPad, register the device (UDID), then install the signed IPA we send; sign in with this email afterward.",
-    adhocTitle: "Install on iPhone / iPad (Ad Hoc)",
-    adhocSteps: ["Open <b>this page in Safari on the iPhone/iPad</b> you want to install on (Chrome and in-app browsers cannot install).", "Tap <b>Register this device</b> → install the profile (iOS sends the device ID / UDID to the shop).", "The shop adds your UDID to Apple and signs a build for your device (usually 1–2 minutes) — this page refreshes by itself.", "Tap <b>Install</b>. If iOS says “Untrusted Developer”: <b>Settings → General → VPN &amp; Device Management</b> → <b>Trust</b>."],
-    macAdhocTitle: "Install on Mac (direct download)",
-    macAdhocSteps: ["Download the .dmg installer above and open it.", "Drag <b>VPNFlow</b> into the <b>Applications</b> folder.", "If macOS says it can't verify the developer: <b>right-click</b> the app → <b>Open</b> → <b>Open</b> again, or go to <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "Open VPNFlow, sign in with the purchase email, click <b>Allow</b> when macOS asks for VPN configuration, then click <b>Connect</b>."],
+    iosLineIpa: "Download the IPA above, install it on your iPhone/iPad, then sign in with the same email you used here; Premium unlocks automatically.",
     iosLineStore: "Available on the App Store — install it, then sign in with the same email you used here; Premium unlocks automatically.",
+    iosLineTestflight: "iOS beta via TestFlight — join, install, then sign in with this email.",
     iosLineSoon: "iOS version is coming soon.",
-    androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.", windowsLine: "Windows must be installed directly: download the installer above, run it (it asks for admin rights to create the tunnel), then open the app and sign in with the SAME email.",
+    androidLine: "Android must be installed directly: download the APK above, allow installs from unknown sources, then open the app.",
     steps: ["Download and install the app (iOS: the IPA above · Android: the APK above).", "Open the app and sign in with the SAME email you used on this page.", "Premium activates automatically — no code and nothing else to do."],
         cnyNote: "WeChat Pay / Alipay settle in CNY — the ¥ amount is converted at",
         cnyEnter: "Enter exactly the ¥ amount shown on the QR when paying.",
-        amountPrefilled: "The amount is already in the QR — just scan and confirm, no need to type anything.",
+        amountPrefilled: "The amount is already filled in — just confirm.",
         copyAmount: "Copy amount",
         amountReminder: "Transfer EXACTLY this amount.",
         planChosen: "Your plan:",
@@ -487,7 +364,6 @@ const TEXTS = {
     dlTitle: "Tải app VPNFlow",
     dlSub: "Chưa có app? Chọn nền tảng của bạn:",
     androidTitle: "Tải APK trực tiếp", androidTop: "Tải cho Android", androidBadge: "APK", iosTop: "Tải cho iPhone / iPad", iosBadge: "iOS (IPA)",
-    macTop: "Tải cho Mac", macBadge: "macOS", windowsTop: "Tải cho Windows", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / máy cũ",
     androidLegacySub: "APK cho Android 7.0 và 7.1 — Fire TV Stick 4K, điện thoại và TV đời cũ",
     emailLabel: "Email tài khoản VPNFlow",
@@ -496,7 +372,6 @@ const TEXTS = {
     bankName: "Ngân hàng VN", bankScan: "Quét QR TPBank",
     wechatScan: "Quét QR", alipayScan: "Quét QR", momoScan: "Quét QR MoMo",
     payosName: "Cổng PayOS", payosSub: "MoMo / QR / thẻ",
-    inAppNote: "✅ Bạn đã có app rồi — chỉ cần nhập email bên dưới để tạo tài khoản và thanh toán. Premium tự bật sau khi thanh toán.",
     payBtn: "Tạo mã thanh toán",
     note: "Sau khi chuyển tiền, premium sẽ được kích hoạt cho email này.",
     modalTitle: "Quét QR để thanh toán",
@@ -507,21 +382,18 @@ const TEXTS = {
     mini: "Giữ mã đơn để đối chiếu. Premium tự kích hoạt sau khi xác nhận.",
         privacyLabel: "Chính sách bảo mật",
     supportLabel: "Hỗ trợ",
+        testflightSub: "Tham gia bản thử",
         noteExtra: "Pro được kích hoạt theo email bạn nhập ở trên. Nếu sau 10 phút chuyển khoản vẫn chưa thấy kích hoạt, liên hệ support@meetflowai.site.",
-        deviceNote: "Mỗi tài khoản dùng được tối đa 3 thiết bị. Muốn đổi máy, hãy gỡ bớt một thiết bị cũ trước.",
         howToTitle: "Cách kích hoạt sau khi mua",
-    iosLineIpa: "Mở trang cài trên chính iPhone/iPad, đăng ký thiết bị (UDID), rồi cài file IPA đã ký mà shop gửi; sau đó đăng nhập bằng đúng email này.",
-    adhocTitle: "Cài trên iPhone / iPad (Ad Hoc)",
-    adhocSteps: ["Mở <b>trang này bằng Safari trên chính iPhone/iPad</b> cần cài (Chrome, trình duyệt trong app chat đều không cài được).", "Bấm <b>Đăng ký thiết bị</b> → cài hồ sơ (iOS tự gửi mã thiết bị / UDID về shop).", "Shop thêm UDID vào Apple và ký bản cài riêng cho máy bạn (thường 1–2 phút) — trang này tự cập nhật.", "Bấm <b>Cài đặt</b>. Nếu iOS báo “Untrusted Developer”: <b>Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị</b> → <b>Tin cậy</b>."],
-    macAdhocTitle: "Cài trên máy Mac (tải trực tiếp)",
-    macAdhocSteps: ["Tải file cài .dmg ở trên rồi mở ra.", "Kéo <b>VPNFlow</b> vào thư mục <b>Applications</b> (Ứng dụng).", "Nếu macOS báo “không xác minh được nhà phát triển”: <b>chuột phải</b> vào app → <b>Open</b> → <b>Open</b> lần nữa, hoặc vào <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "Mở VPNFlow, đăng nhập bằng email đã mua, bấm <b>Allow</b> khi macOS hỏi cấu hình VPN rồi bấm <b>Connect</b>."],
+    iosLineIpa: "Tải file IPA ở trên, cài lên iPhone/iPad, rồi đăng nhập bằng đúng email bạn dùng ở trang này; Premium tự bật.",
     iosLineStore: "Đã có trên App Store — tải về, rồi đăng nhập bằng đúng email bạn dùng ở trang này; Premium tự bật.",
+    iosLineTestflight: "Bản iOS thử nghiệm qua TestFlight — tham gia, cài đặt, rồi đăng nhập bằng email này.",
     iosLineSoon: "Bản iOS sẽ sớm được phát hành.",
-    androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.", windowsLine: "Windows cũng cài trực tiếp: tải bộ cài ở trên, chạy file (app xin quyền admin để dựng tunnel), rồi mở app và đăng nhập bằng ĐÚNG email này.",
+    androidLine: "Bản Android cần cài trực tiếp: tải file APK ở trên, cho phép cài từ nguồn không xác định, rồi mở app.",
     steps: ["Tải và cài app (iOS: file IPA ở trên · Android: file APK ở trên).", "Mở app và đăng nhập bằng ĐÚNG email bạn đã dùng ở trang này.", "Premium tự kích hoạt — không cần mã, không cần làm gì thêm."],
         cnyNote: "WeChat Pay / Alipay thanh toán bằng CNY (Nhân dân tệ) — số ¥ quy đổi theo tỷ giá",
         cnyEnter: "Nhập đúng số tiền ¥ hiện trên mã QR khi thanh toán.",
-        amountPrefilled: "Số tiền đã có sẵn trong mã QR — quét là ra đúng số, không cần nhập gì.",
+        amountPrefilled: "Số tiền đã có sẵn trong mã QR — chỉ cần xác nhận.",
         copyAmount: "Sao chép số tiền",
         amountReminder: "Chuyển ĐÚNG số tiền này khi chuyển khoản.",
         planChosen: "Gói bạn đã chọn:",
@@ -568,7 +440,6 @@ const TEXTS = {
     dlTitle: "获取 VPNFlow 应用",
     dlSub: "还没有应用？选择您的平台：",
     androidTitle: "直接下载 APK", androidTop: "下载 Android 版", androidBadge: "APK", iosTop: "下载 iPhone / iPad 版", iosBadge: "iOS (IPA)",
-    macTop: "下载 Mac 版", macBadge: "macOS", windowsTop: "下载 Windows 版", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / 旧设备",
     androidLegacySub: "适用于 Android 7.0 与 7.1 的 APK — Fire TV Stick 4K、旧款手机与电视",
     emailLabel: "您的 VPNFlow 账户邮箱",
@@ -577,7 +448,6 @@ const TEXTS = {
     bankName: "越南银行", bankScan: "扫描 TPBank 二维码",
     wechatScan: "扫描二维码", alipayScan: "扫描二维码", momoScan: "扫描 MoMo 二维码",
     payosName: "PayOS 网关", payosSub: "MoMo / 二维码 / 银行卡",
-    inAppNote: "✅ 您已安装应用 —— 只需在下方填写邮箱创建账户并完成支付，支付后 Premium 自动开启。",
     payBtn: "生成支付二维码",
     note: "转账后，Premium 将为此邮箱激活。",
     modalTitle: "扫描二维码支付",
@@ -588,21 +458,18 @@ const TEXTS = {
     mini: "请保留订单号以备核对。确认后 Premium 将自动激活。",
         privacyLabel: "隐私政策",
     supportLabel: "支持",
+        testflightSub: "加入测试版",
         noteExtra: "Pro 将为您在上方填写的邮箱激活。若转账后 10 分钟内仍未激活，请联系 support@meetflowai.site。",
-        deviceNote: "每个账号最多可在 3 台设备上使用；如需更换设备，请先移除一台旧设备。",
         howToTitle: "购买后如何激活",
     iosLineIpa: "下载上方 IPA 文件并安装到 iPhone/iPad，然后用本页填写的同一邮箱登录，Premium 自动开启。",
-    adhocTitle: "在 iPhone / iPad 上安装（Ad Hoc）",
-    adhocSteps: ["请在<b>要安装的 iPhone/iPad 上用 Safari 打开本页</b>（Chrome 或应用内浏览器无法安装）。", "点击<b>注册此设备</b> → 安装描述文件（iOS 会把设备码 UDID 发送给商家）。", "商家把 UDID 加入 Apple 并为你的设备重新签名（通常 1–2 分钟）—— 本页会自动刷新。", "点击<b>安装</b>。若提示“不受信任的开发者”：<b>设置 → 通用 → VPN 与设备管理</b> → <b>信任</b>。"],
-    macAdhocTitle: "在 Mac 上安装（直接下载）",
-    macAdhocSteps: ["下载上方 .dmg 安装包并打开。", "将 <b>VPNFlow</b> 拖入 <b>Applications（应用程序）</b>文件夹。", "若 macOS 提示“无法验证开发者”：<b>右键</b>点击应用 → <b>Open</b> → 再点一次 <b>Open</b>，或进入 <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>。", "打开 VPNFlow，使用购买邮箱登录，macOS 询问配置 VPN 时点 <b>Allow</b>，然后点 <b>Connect</b>。"],
     iosLineStore: "已在 App Store 上架 — 下载后使用本页填写的同一邮箱登录，Premium 自动开启。",
+    iosLineTestflight: "iOS 测试版通过 TestFlight — 加入并安装后，用此邮箱登录。",
     iosLineSoon: "iOS 版本即将发布。",
-    androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。", windowsLine: "Windows 也需要直接安装：下载上面的安装包并运行（创建隧道时会请求管理员权限），然后打开应用，用同一个邮箱登录。",
+    androidLine: "Android 需直接安装：下载上方 APK，允许“未知来源”安装，然后打开应用。",
     steps: ["下载并安装应用（iOS：上方 IPA · Android：上方 APK）。", "打开应用，使用本页填写的同一邮箱登录。", "Premium 自动激活 — 无需兑换码，无需其他操作。"],
         cnyNote: "微信支付 / 支付宝以人民币（CNY）结算 — 金额按以下汇率换算：",
         cnyEnter: "支付时请输入二维码上显示的人民币金额。",
-        amountPrefilled: "二维码中已包含金额 — 扫码即可，无需输入。",
+        amountPrefilled: "二维码中已填入金额 — 确认即可。",
         copyAmount: "复制金额",
         amountReminder: "请转账「此金额」，不要多也不要少。",
         planChosen: "您选择的套餐：",
@@ -649,7 +516,6 @@ const TEXTS = {
     dlTitle: "VPNFlowアプリを入手",
     dlSub: "アプリをお持ちでない場合：プラットフォームを選択",
     androidTitle: "APK を直接ダウンロード", androidTop: "Android 版をダウンロード", androidBadge: "APK", iosTop: "iPhone / iPad 版をダウンロード", iosBadge: "iOS (IPA)",
-    macTop: "Mac 版をダウンロード", macBadge: "macOS", windowsTop: "Windows 版をダウンロード", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / 旧端末",
     androidLegacySub: "Android 7.0 / 7.1 用 APK — Fire TV Stick 4K、旧型スマホ・テレビ",
     emailLabel: "VPNFlowアカウントのメール",
@@ -658,7 +524,6 @@ const TEXTS = {
     bankName: "ベトナムの銀行", bankScan: "TPBank QRをスキャン",
     wechatScan: "QRをスキャン", alipayScan: "QRをスキャン", momoScan: "MoMo QR をスキャン",
     payosName: "PayOS決済", payosSub: "MoMo / QR / カード",
-    inAppNote: "✅ アプリはインストール済みです —— 下のメールでアカウントを作成し、お支払いください。支払い後 Premium が自動で有効になります。",
     payBtn: "支払いQRを作成",
     note: "送金後、このメールでプレミアムが有効になります。",
     modalTitle: "QRをスキャンして支払う",
@@ -669,21 +534,18 @@ const TEXTS = {
     mini: "照合用に注文番号をお控えください。確認後、プレミアムは自動的に有効になります。",
         privacyLabel: "プライバシーポリシー",
     supportLabel: "サポート",
+        testflightSub: "ベータに参加",
         noteExtra: "Pro は上に入力したメールに有効化されます。送金後 10 分以上経っても有効にならない場合は support@meetflowai.site までご連絡ください。",
-        deviceNote: "1つのアカウントは最大3台のデバイスで利用できます。機種変更時は古いデバイスを1台削除してください。",
         howToTitle: "購入後の有効化方法",
     iosLineIpa: "上の IPA をダウンロードして iPhone/iPad にインストールし、このページで使った同じメールでサインインすると Premium が有効になります。",
-    adhocTitle: "iPhone / iPad にインストール（Ad Hoc）",
-    adhocSteps: ["<b>インストールする iPhone/iPad の Safari でこのページを開いてください</b>（Chrome やアプリ内ブラウザは不可）。", "「この端末を登録」をタップ → プロファイルをインストール（iOS が端末 ID / UDID を送信します）。", "ショップが UDID を Apple に追加して端末用に再署名します（通常 1〜2 分）—— このページは自動更新されます。", "「インストール」をタップ。「信頼されていないデベロッパ」と出たら: <b>設定 → 一般 → VPN とデバイス管理</b> → <b>信頼</b>。"],
-    macAdhocTitle: "Mac にインストール（直接ダウンロード）",
-    macAdhocSteps: ["上の .dmg インストーラをダウンロードして開きます。", "<b>VPNFlow</b> を <b>Applications（アプリケーション）</b>フォルダへドラッグ。", "「開発元を確認できない」と出たら：アプリを<b>右クリック</b> → <b>Open</b> → もう一度 <b>Open</b>、または <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>。", "VPNFlow を開き、購入時のメールでサインインし、VPN 構成の許可を求められたら <b>Allow</b> をクリックして <b>Connect</b>。"],
     iosLineStore: "App Store で配信中 — インストール後、このページで使った同じメールでサインインすると Premium が有効になります。",
+    iosLineTestflight: "iOS ベータは TestFlight で配布中 — 参加・インストール後、このメールでサインインしてください。",
     iosLineSoon: "iOS 版は近日公開予定です。",
-    androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。", windowsLine: "Windows も直接インストールします。上のインストーラーをダウンロードして実行し（トンネル作成のため管理者権限を求められます）、アプリを開いて同じメールでサインインしてください。",
+    androidLine: "Android は直接インストールが必要です：上の APK をダウンロードし、「提供元不明のアプリ」を許可してから開いてください。",
     steps: ["アプリをダウンロードしてインストール（iOS：上の IPA · Android：上の APK）。", "アプリを開き、このページで使った同じメールでサインインします。", "Premium は自動的に有効になります — コード入力は不要です。"],
         cnyNote: "WeChat Pay / Alipay は人民元（CNY）決済です — 金額は次のレートで換算：",
         cnyEnter: "お支払いの際は、QR に表示された人民元の金額を入力してください。",
-        amountPrefilled: "金額はQRに含まれています — 読み取って確認するだけです。",
+        amountPrefilled: "金額は入力済みです — 確認するだけです。",
         copyAmount: "金額をコピー",
         amountReminder: "この金額をそのまま送金してください。",
         planChosen: "選択中のプラン：",
@@ -730,7 +592,6 @@ const TEXTS = {
     dlTitle: "VPNFlow 앱 받기",
     dlSub: "아직 앱이 없으신가요? 플랫폼을 선택하세요:",
     androidTitle: "APK 직접 다운로드", androidTop: "Android용 다운로드", androidBadge: "APK", iosTop: "iPhone / iPad용 다운로드", iosBadge: "iOS (IPA)",
-    macTop: "Mac용 다운로드", macBadge: "macOS", windowsTop: "Windows용 다운로드", windowsBadge: "Windows 10/11",
     androidLegacyLabel: "Fire TV / 구형 기기",
     androidLegacySub: "Android 7.0 / 7.1용 APK — Fire TV Stick 4K, 구형 휴대폰·TV",
     emailLabel: "VPNFlow 계정 이메일",
@@ -739,7 +600,6 @@ const TEXTS = {
     bankName: "베트남 은행", bankScan: "TPBank QR 스캔",
     wechatScan: "QR 스캔", alipayScan: "QR 스캔", momoScan: "MoMo QR 스캔",
     payosName: "PayOS 결제", payosSub: "MoMo / QR / 카드",
-    inAppNote: "✅ 앱은 이미 설치되어 있습니다 — 아래 이메일로 계정을 만들고 결제만 하시면 됩니다. 결제 후 Premium이 자동으로 켜집니다.",
     payBtn: "결제 QR 만들기",
     note: "송금 후 이 이메일로 프리미엄이 활성화됩니다.",
     modalTitle: "QR을 스캔하여 결제",
@@ -750,21 +610,18 @@ const TEXTS = {
     mini: "대조용으로 주문번호를 보관하세요. 확인 후 프리미엄이 자동으로 활성화됩니다.",
         privacyLabel: "개인정보 처리방침",
     supportLabel: "지원",
+        testflightSub: "베타 참여",
         noteExtra: "Pro는 위에 입력한 이메일로 활성화됩니다. 송금 후 10분이 지나도 활성화되지 않으면 support@meetflowai.site로 문의하세요.",
-        deviceNote: "계정 1개는 최대 3대의 기기에서 사용할 수 있습니다. 기기를 변경하려면 이전 기기를 먼저 삭제하세요.",
         howToTitle: "구매 후 활성화 방법",
     iosLineIpa: "위의 IPA를 내려받아 iPhone/iPad에 설치한 뒤, 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동 활성화됩니다.",
-    adhocTitle: "iPhone / iPad에 설치 (Ad Hoc)",
-    adhocSteps: ["<b>설치할 iPhone/iPad의 Safari에서 이 페이지를 여세요</b> (Chrome, 앱 내 브라우저는 설치 불가).", "「이 기기 등록」을 눌러 프로파일을 설치하세요 (iOS가 기기 ID / UDID를 전송합니다).", "판매자가 UDID를 Apple에 추가하고 기기용으로 다시 서명합니다 (보통 1~2분) — 이 페이지는 자동 갱신됩니다.", "「설치」를 누르세요. “신뢰할 수 없는 개발자”가 뜨면: <b>설정 → 일반 → VPN 및 기기 관리</b> → <b>신뢰</b>."],
-    macAdhocTitle: "Mac에 설치 (직접 다운로드)",
-    macAdhocSteps: ["위의 .dmg 설치 파일을 내려받아 엽니다.", "<b>VPNFlow</b>를 <b>Applications(응용 프로그램)</b> 폴더로 드래그하세요.", "“개발자를 확인할 수 없습니다”가 뜨면: 앱을 <b>오른쪽 클릭</b> → <b>Open</b> → 다시 <b>Open</b>, 또는 <b>System Settings → Privacy &amp; Security</b> → <b>Open Anyway</b>.", "VPNFlow를 열고 구매 이메일로 로그인한 뒤, macOS가 VPN 구성을 물으면 <b>Allow</b>를 누르고 <b>Connect</b>를 클릭하세요."],
     iosLineStore: "App Store에서 제공 중 — 설치 후 이 페이지에서 사용한 동일한 이메일로 로그인하면 Premium이 자동으로 활성화됩니다.",
+    iosLineTestflight: "iOS 베타는 TestFlight로 제공 — 참여 후 설치하고 이 이메일로 로그인하세요.",
     iosLineSoon: "iOS 버전이 곧 출시됩니다.",
-    androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.", windowsLine: "Windows도 직접 설치합니다. 위 설치 파일을 내려받아 실행하고(터널 생성에 관리자 권한이 필요합니다), 앱을 열어 같은 이메일로 로그인하세요.",
+    androidLine: "Android는 직접 설치해야 합니다: 위의 APK를 내려받아 \"알 수 없는 출처\" 설치를 허용한 뒤 앱을 여세요.",
     steps: ["앱을 내려받아 설치합니다 (iOS: 위의 IPA · Android: 위의 APK).", "앱을 열고 이 페이지에서 사용한 동일한 이메일로 로그인합니다.", "Premium이 자동으로 활성화됩니다 — 코드 입력이 필요 없습니다."],
         cnyNote: "WeChat Pay / Alipay는 위안화(CNY) 결제입니다 — 금액은 다음 환율로 환산:",
         cnyEnter: "결제 시 QR에 표시된 위안 금액을 정확히 입력하세요.",
-        amountPrefilled: "금액이 QR에 포함되어 있습니다 — 스캔 후 확인만 하면 됩니다.",
+        amountPrefilled: "금액이 미리 입력되어 있습니다 — 확인만 하면 됩니다.",
         copyAmount: "금액 복사",
         amountReminder: "이 금액을 정확히 이체하세요.",
         planChosen: "선택한 요금제:",
@@ -1036,69 +893,6 @@ export function displayCurrencyFor({ lang = "vi", cur = "" } = {}) {
 }
 
 /** ¥ amount, rounded up to a whole yuan (the customer types it by hand). */
-/**
- * Ảnh QR nhận tiền của chủ shop nằm trong `PAY_QR_DIR` (mặc định `/root/flowvpn-pay`).
- * Thứ tự ưu tiên — cái đầu tiên có trên đĩa sẽ được dùng:
- *
- *   1. `<kênh>-<gói>.<ext>`            (VPNFlow)      ví dụ `wechat-monthly.jpg`
- *      `<kênh>-ai-<gói>.<ext>`         (MeetFlow AI)  ví dụ `wechat-ai-monthly.jpg`
- *   2. `<kênh>-<số ¥>.<ext>`           ảnh đặt theo số tiền, ví dụ `wechat-58.png`
- *   3. `<kênh>-ai.<ext>` (AI) rồi `<kênh>.<ext>` — ảnh chung, khách tự nhập số tiền
- *
- * Ảnh theo GÓI được ưu tiên hơn ảnh theo số ¥ vì giá gói là thứ khách chọn, còn tỷ giá CNY
- * đổi theo ngày nên tên file theo số ¥ sẽ lệch. Ảnh của MeetFlow AI phải có `-ai-` để không
- * hiển nhầm ảnh giá của VPNFlow (200.000đ ≠ 130.000đ).
- *
- * `prefilled: true` = trong ảnh đã có sẵn số tiền, khách quét là ra đúng số, không phải nhập.
- */
-export function resolveQrFile(dir, name, { cny = null, plan = null, product = "vpn" } = {}) {
-  const exts = ["png", "jpg", "jpeg", "webp"];
-  const safePlan = plan ? String(plan).replace(/[^a-z0-9_-]/gi, "") : "";
-  const safeName = String(name).replace(/[^a-z0-9_-]/gi, "");
-  const bases = [];
-  if (safePlan) bases.push(product === "ai" ? `${safeName}-ai-${safePlan}` : `${safeName}-${safePlan}`);
-  const cnyValue = Number(cny);
-  if (Number.isFinite(cnyValue) && cnyValue > 0) bases.push(`${safeName}-${Math.round(cnyValue)}`);
-  if (product === "ai") bases.push(`${safeName}-ai`);
-  const generic = `${safeName}`;
-  bases.push(generic);
-
-  for (const base of bases) {
-    for (const ext of exts) {
-      // Ảnh chủ shop tải lên có thể là .JPG (viết hoa) — thử cả hai kiểu tên.
-      for (const candidate of [`${base}.${ext}`, `${base}.${ext.toUpperCase()}`]) {
-        const file = path.join(dir, candidate);
-        if (fs.existsSync(file)) {
-          return { file, variant: candidate, prefilled: base !== generic };
-        }
-      }
-    }
-  }
-  return { file: path.join(dir, `${generic}.png`), variant: `${generic}.png`, prefilled: false, missing: true };
-}
-
-/**
- * Số ¥ thật in trong ảnh QR (do chủ shop đặt bằng "设置金额" của WeChat/Alipay).
- * Đọc từ `PAY_QR_DIR/qr-amounts.json` dạng `{"wechat-monthly.jpg": 58}` để trang buy hiện
- * ĐÚNG con số khách sẽ thấy trong ví, thay vì số quy đổi theo tỷ giá (có thể lệch 1 ¥).
- * Đọc lại khi file đổi (cache theo mtime) nên sửa file là có hiệu lực ngay, không cần restart.
- */
-export function qrAmountsFor(dir) {
-  const file = path.join(dir, "qr-amounts.json");
-  try {
-    const stat = fs.statSync(file);
-    if (qrAmountsCache.file === file && qrAmountsCache.mtime === stat.mtimeMs) return qrAmountsCache.data;
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-    const data = parsed && typeof parsed === "object" ? parsed : {};
-    qrAmountsCache = { file, mtime: stat.mtimeMs, data };
-    return data;
-  } catch {
-    return {};
-  }
-}
-
-let qrAmountsCache = { file: null, mtime: 0, data: {} };
-
 export function cnyFromVnd(amountVnd, rate) {
   const r = Number(rate) > 0 ? Number(rate) : DEFAULT_VND_PER_CNY;
   return Math.max(1, Math.ceil(Number(amountVnd) / r));
@@ -1185,7 +979,7 @@ export function planNameFor(lang, product, planId) {
 }
 
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "", inApp = false }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "" }) {
   lang = pickBuyLang(lang);
   product = productConfig(product);
   const base = TEXTS[lang];
@@ -1201,39 +995,24 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   // only when the server provides the link, so the page never shows a dead badge.
   const androidLegacyUrl = links.androidLegacy || null;
   const iosUrl = links.ios || null;
-  const iosAdhocUrl = links.iosAdhoc || `${baseUrl}/install/ios`;
   const macUrl = links.mac || null;
-  // Bản macOS cũng phát trực tiếp từ shop (file .zip/.dmg), không qua App Store:
-  // khi không có link store thật, badge Mac trỏ về trang hướng dẫn /install/mac
-  // (giống cách iOS trỏ /install/ios qua iosAdhocUrl). Chỉ áp dụng cho VPNFlow.
-  const macAdhocUrl = product === "vpn" ? (links.macAdhoc || `${baseUrl}/install/mac`) : (links.macAdhoc || null);
-  // Bộ cài Windows 1-click (Inno Setup), phát từ shop. Link cố định "-latest" nên trang
-  // /buy không phải sửa mỗi lần ra bản mới; chỉ hiện cho kênh VPNFlow.
-  const windowsUrl = product === "vpn" ? (links.windows || `${baseUrl}/dl/VPNFlow-Setup-latest.exe`) : null;
-  const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl || macAdhocUrl || windowsUrl);
+  // iOS can be distributed before App Store approval via a TestFlight public
+  // link; the App Store badge wins when both exist.
+  const testflightUrl = !iosUrl && links.testflight ? links.testflight : null;
+  const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || macUrl || testflightUrl);
   // Activation instructions adapt to how iOS is distributed right now.
   // Bản iOS phát bằng IPA từ server mình (không qua App Store), nên chỉ dùng câu
   // "Available on the App Store" khi link ios THỰC SỰ là link store. Link trỏ về
   // /v1/downloads/ios (hoặc IOS_IPA_URL) thì phải nói đúng là tải IPA.
   const iosIsStoreLink = /apps\.apple\.com|itunes\.apple\.com/.test(iosUrl ?? "");
-  const iosLine = iosAdhocUrl
-    ? (iosUrl && iosIsStoreLink ? t.iosLineStore : (t.iosLineIpa ?? t.iosLineStore))
-    : t.iosLineSoon;
+  const iosLine = iosUrl
+    ? (iosIsStoreLink ? t.iosLineStore : (t.iosLineIpa ?? t.iosLineStore))
+    : testflightUrl
+      ? t.iosLineTestflight
+      : t.iosLineSoon;
   const howToSteps = Array.isArray(t.steps) ? t.steps : [];
-  // Bản iOS phát Ad Hoc: khách phải tự đăng ký máy trước khi shop ký được bản cài.
-  // Chỉ hiện khối bước khi kênh iOS hiện tại ĐÚNG LÀ trang cài tự phát (không phải
-  // link App Store) — nếu không, trang bán hàng sẽ nói sai về cách cài.
-  const iosIsStore = /apps\.apple\.com|itunes\.apple\.com/.test(iosUrl ?? "");
-  const iosAdhocStepsUrl = !iosIsStore ? (iosUrl && /\/install\/ios/.test(iosUrl) ? iosUrl : iosAdhocUrl) : null;
-  const iosAdhocSteps = !inApp && iosAdhocStepsUrl && Array.isArray(t.adhocSteps) ? t.adhocSteps : null;
-  // Khối hướng dẫn cài macOS (tải trực tiếp): song song với adhocSteps của iOS.
-  // Chỉ hiện khi KHÔNG có link store thật (có store thì hướng dẫn kéo app là sai).
-  const macAdhocStepsUrl = !inApp && !macUrl && macAdhocUrl ? macAdhocUrl : null;
-  const macAdhocSteps = macAdhocStepsUrl && Array.isArray(t.macAdhocSteps) ? t.macAdhocSteps : null;
   const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
-  // Mở TRONG app (paywall): khách đã có app rồi ⇒ chỉ để lại ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN,
-  // bỏ hết khối tải/cài app và hướng dẫn cài (vô nghĩa và làm rối).
-  const showDownloads = anyDownload && !inApp;
+  const showDownloads = anyDownload;
   // WeChat Pay / Alipay are priced in CNY (the customer types the amount by
   // hand), and the headline price follows the visitor: dong for Vietnamese,
   // yuan for Chinese pages, dollars for everyone else. `?cur=` overrides.
@@ -1393,9 +1172,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     .footer a:hover { color: #33c773; text-decoration: underline; }
     .footer .sep { color: rgba(255,255,255,.3); margin: 0 8px; }
 
-    .inapp-note{margin:16px 0;padding:12px 14px;border-radius:12px;background:rgba(51,199,115,.1);border:1px solid rgba(51,199,115,.3);font-size:13px;line-height:1.55;color:rgba(255,255,255,.85)}
     .dl-section { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,.1); }
-    .howto.adhoc { border: 1px solid rgba(51,199,115,.35); background: rgba(51,199,115,.07); }
     .dl-title { text-align: center; font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
     .dl-sub { text-align: center; color: rgba(255,255,255,.5); font-size: 12px; margin-bottom: 14px; }
     .dl-section a { text-decoration: none; display: inline-block; transition: transform .1s; }
@@ -1444,246 +1221,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     }
     .modal .savehint { font-size: 11px; color: rgba(255,255,255,.5); margin-top: 8px; line-height: 1.4; }
     .modal .mini { font-size: 11px; color: rgba(255,255,255,.4); margin-top: 10px; }
-
-    /* ==========================================================================
-       FLOWTECH SIGNATURE THEME — hợp đồng style: docs/THEME.md (repo FlowGpt).
-       CHỈ thêm biến + override ở CUỐI khối CSS: không sửa/xoá khai báo nào phía
-       trên, không đổi HTML, không đổi JS, KHÔNG đổi chữ / số tiền / mã đơn / link
-       tải / logic thanh toán. Xoá khối này là trang về nguyên trạng.
-       ========================================================================== */
-    :root {
-      --accent: #33C773;
-      --accent-2: #22D3EE;
-      --accent-3: #7C3AED;
-      --accent-text: #05202A;
-      --sig-bg: #0A1F3B;
-      --sig-bg-deep: #071628;
-      --sig-bg-top: #14406C;
-      --sig-text: #EAF2FF;
-      --sig-muted: rgba(234, 242, 255, 0.74);
-      --sig-faint: rgba(234, 242, 255, 0.5);
-      --sig-mint: #7FE6C0;
-      --sig-line: rgba(255, 255, 255, 0.12);
-      --sig-card-bg: radial-gradient(130% 120% at 0% 0%, #14406c 0%, #0a1f3b 55%, #071628 100%);
-      --sig-r22: 22px;
-      --sig-r16: 16px;
-      --sig-r11: 11px;
-    }
-
-    @keyframes sig-fade { from { opacity: 0 } to { opacity: 1 } }
-    @keyframes sig-rise {
-      from { opacity: 0; transform: translateY(16px) scale(.97) }
-      to { opacity: 1; transform: none }
-    }
-    @keyframes sig-slide {
-      from { opacity: 0; transform: translateY(8px) }
-      to { opacity: 1; transform: none }
-    }
-
-    body {
-      color: var(--sig-text);
-      background:
-        radial-gradient(115% 70% at 6% -14%, rgba(51, 199, 115, .18), transparent 58%),
-        radial-gradient(95% 65% at 98% -6%, rgba(34, 211, 238, .14), transparent 55%),
-        linear-gradient(180deg, var(--sig-bg), var(--sig-bg-deep));
-      background-attachment: fixed;
-    }
-
-    /* Khung chính của trang: nền navy + viền gradient 1px bằng mask (THEME.md §2). */
-    .card {
-      position: relative;
-      background: var(--sig-card-bg);
-      border: 1px solid var(--sig-line);
-      border-radius: var(--sig-r22);
-      animation: sig-rise .36s cubic-bezier(.22, 1, .36, 1) both;
-    }
-    .card::before {
-      content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
-      background: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      mask-composite: exclude;
-      opacity: .85; pointer-events: none;
-    }
-    .card::after {
-      content: ""; position: absolute; top: -70px; left: 12%; width: 60%; height: 150px;
-      background: radial-gradient(closest-side, rgba(51, 199, 115, .4), transparent);
-      filter: blur(30px); pointer-events: none;
-    }
-
-    label { color: var(--sig-muted); }
-    input, select {
-      border-radius: var(--sig-r11);
-      background: rgba(10, 31, 59, .55);
-      border-color: var(--sig-line);
-      color: var(--sig-text);
-    }
-    input:focus, select:focus {
-      border-color: rgba(51, 199, 115, .5);
-      box-shadow: 0 0 0 3px rgba(34, 211, 238, .18);
-    }
-
-    /* Chip chọn ngôn ngữ / tiền tệ: chip 999px. */
-    .lang, .curbar a {
-      border-radius: 999px;
-      background: rgba(255, 255, 255, .07);
-      border: 1px solid rgba(255, 255, 255, .14);
-      color: var(--sig-muted);
-      transition: background .18s ease, border-color .18s ease, color .18s ease;
-    }
-    .lang:hover, .curbar a:hover { color: var(--sig-text); border-color: rgba(255, 255, 255, .28); }
-    .lang.on, .curbar a.on {
-      color: var(--accent-text);
-      background: linear-gradient(135deg, #33c773, #22d3ee);
-      border-color: transparent;
-    }
-
-    /* Khung gói: card con navy 16px; gói đang chọn được viền gradient. */
-    .plans { gap: 12px; }
-    .plan {
-      position: relative;
-      background: rgba(10, 31, 59, .55);
-      border: 1px solid var(--sig-line);
-      border-radius: var(--sig-r16);
-      color: var(--sig-text);
-      transition: transform .18s ease, border-color .18s ease, background .18s ease;
-      animation: sig-slide .24s ease-out both;
-    }
-    .plan:hover { transform: translateY(-2px); border-color: rgba(51, 199, 115, .45); }
-    .plan .price { color: var(--sig-mint); }
-    .plan .pricesub { color: var(--sig-faint); }
-    .plan.active {
-      border-color: transparent;
-      background: linear-gradient(180deg, rgba(51, 199, 115, .14), rgba(34, 211, 238, .07)), var(--sig-card-bg);
-    }
-    .plan.active::before {
-      content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
-      background: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      mask-composite: exclude;
-      opacity: .85; pointer-events: none;
-    }
-
-    /* Khung phương thức thanh toán */
-    .method {
-      position: relative;
-      background: rgba(10, 31, 59, .55);
-      border: 1px solid var(--sig-line);
-      border-radius: var(--sig-r16);
-      color: var(--sig-text);
-      transition: transform .18s ease, border-color .18s ease, background .18s ease;
-      animation: sig-slide .24s ease-out both;
-    }
-    .method:hover { transform: translateY(-2px); border-color: rgba(51, 199, 115, .45); }
-    .method small { color: var(--sig-faint); }
-    .method.active {
-      border-color: rgba(51, 199, 115, .55);
-      background: linear-gradient(180deg, rgba(51, 199, 115, .15), rgba(34, 211, 238, .07)), var(--sig-card-bg);
-    }
-
-    /* Nút chính (Tạo mã / Tải): gradient + hào quang, hover nhấc 1px. */
-    button {
-      border-radius: var(--sig-r11);
-      color: var(--accent-text);
-      background: linear-gradient(135deg, #33c773, #22d3ee);
-      box-shadow: 0 10px 24px -10px rgba(34, 211, 238, .75);
-      transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
-    }
-    button:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 14px 30px -10px rgba(51, 199, 115, .8);
-    }
-    button:active:not(:disabled) { transform: translateY(0); }
-    button:disabled { box-shadow: none; }
-
-    /* Modal QR: card nổi bật (nền navy + viền gradient), vào bằng sig-rise. */
-    .modal-overlay.show { animation: sig-fade .28s ease-out; }
-    .modal {
-      position: relative;
-      background: var(--sig-card-bg);
-      border: 1px solid var(--sig-line);
-      border-radius: var(--sig-r22);
-      animation: sig-rise .36s cubic-bezier(.22, 1, .36, 1) both;
-    }
-    .modal::before {
-      content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
-      background: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      mask-composite: exclude;
-      opacity: .85; pointer-events: none;
-    }
-    .modal .amtbox {
-      border-radius: var(--sig-r16);
-      background: rgba(51, 199, 115, .10);
-      border: 1px solid rgba(51, 199, 115, .35);
-    }
-    .modal .amt { color: var(--sig-mint); }
-    .modal .amtplan, .modal .oc { color: var(--sig-muted); }
-    .modal .hint { color: var(--sig-muted); }
-    .modal .qstatus { color: var(--sig-mint); }
-    .modal .mini, .modal .savehint { color: var(--sig-faint); }
-    /* Khung QR: card con navy 16px + viền gradient; ảnh QR vẫn nền TRẮNG để quét được.
-       Ảnh giữ nguyên kích thước hiển thị 230px (246 = 230 + padding 8px mỗi bên). */
-    .modal .qr-wrap {
-      position: relative;
-      padding: 10px;
-      background: var(--sig-bg-deep);
-      border: 1px solid var(--sig-line);
-      border-radius: var(--sig-r16);
-    }
-    .modal .qr-wrap::before {
-      content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
-      background: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      mask-composite: exclude;
-      opacity: .85; pointer-events: none;
-    }
-    .modal img {
-      width: 246px; height: 246px;
-      background: #fff; padding: 8px; border-radius: 10px;
-    }
-    .modal .close { box-shadow: none; border-radius: 999px; }
-    .modal .close:hover { background: rgba(255, 255, 255, .12); }
-    .modal button.copyamt, .modal button.save {
-      color: var(--sig-text);
-      background: rgba(255, 255, 255, .07);
-      border: 1px solid rgba(255, 255, 255, .14);
-      box-shadow: none;
-    }
-    .modal button.copyamt:hover, .modal button.save:hover { background: rgba(255, 255, 255, .14); }
-
-    /* Khối phụ trợ */
-    .brand-logo { border-radius: var(--sig-r16); }
-    .sub, .qrsub, .dl-sub { color: var(--sig-muted); }
-    .note { color: var(--sig-faint); }
-    .logo span, .guidelnk { color: var(--sig-mint); }
-    .guidelnk:hover { color: var(--sig-mint); }
-    .howto {
-      background: rgba(10, 31, 59, .5);
-      border: 1px solid var(--sig-line);
-      border-radius: var(--sig-r16);
-    }
-    .howto-title, .dl-title { color: var(--sig-text); }
-    .howto-row { color: var(--sig-muted); }
-    .howto-steps li { color: var(--sig-muted); }
-    .howto-row .plat { color: var(--sig-mint); }
-    .noteextra, .prefill, .cnynote, .inapp-note, .plannote { border-radius: var(--sig-r16); }
-    .dl-section { border-bottom: 1px solid var(--sig-line); }
-    .footer { border-top: 1px solid var(--sig-line); }
-    .footer a { color: var(--sig-muted); }
-    .footer a:hover { color: var(--sig-mint); }
-
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation: none !important; transition: none !important; }
-      button:hover:not(:disabled), .plan:hover, .method:hover { transform: none; }
-    }
   </style>
 </head>
 <body>
@@ -1721,12 +1258,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.iosBadge}</text>
           </svg>
         </a>` : ""}
-        ${!iosUrl && iosAdhocUrl ? `<a href="${iosAdhocUrl}" target="_blank" rel="noopener" title="${t.iosTop}">
+        ${testflightUrl ? `<a href="${testflightUrl}" target="_blank" rel="noopener" title="TestFlight beta">
           <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
-            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <rect width="170" height="54" rx="8" fill="#0b0b0d" stroke="rgba(255,255,255,.18)"/>
             <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
-            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.iosTop}</text>
-            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.iosBadge}</text>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.testflightSub}</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">TestFlight</text>
           </svg>
         </a>` : ""}
 
@@ -1736,13 +1273,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
             <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">Download on the</text>
             <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Mac App Store</text>
-          </svg>
-        </a>` : macAdhocUrl ? `<a href="${macAdhocUrl}" target="_blank" rel="noopener" title="${t.macTop}">
-          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
-            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
-            <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
-            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.macTop}</text>
-            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.macBadge}</text>
           </svg>
         </a>` : ""}
         ${androidUrl ? `<a href="${androidUrl}" target="_blank" rel="noopener" title="${t.androidTitle}">
@@ -1756,19 +1286,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             </g>
             <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.androidTop}</text>
             <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.androidBadge}</text>
-          </svg>
-        </a>` : ""}
-        ${windowsUrl ? `<a href="${windowsUrl}" target="_blank" rel="noopener" title="${t.windowsTop}">
-          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
-            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
-            <g transform="translate(13 14)">
-              <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022"/>
-              <rect x="12" y="0" width="10.5" height="10.5" fill="#7FBA00"/>
-              <rect x="0" y="12" width="10.5" height="10.5" fill="#00A4EF"/>
-              <rect x="12" y="12" width="10.5" height="10.5" fill="#FFB900"/>
-            </g>
-            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.windowsTop}</text>
-            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.windowsBadge}</text>
           </svg>
         </a>` : ""}
         ${androidLegacyUrl ? `<a href="${androidLegacyUrl}" target="_blank" rel="noopener" title="${t.androidLegacySub}">
@@ -1821,31 +1338,17 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <div class="status" id="status"></div>
       <div class="note">${t.note}</div>
       <div class="noteextra">ℹ️ ${t.noteExtra}</div>
-      <div class="noteextra">📱 ${t.deviceNote}</div>
     </form>
 
-    ${iosAdhocSteps ? `<div class="howto adhoc">
-      <div class="howto-title">📲 ${t.adhocTitle}</div>
-      <ol class="howto-steps">${iosAdhocSteps.map((step) => `<li>${step}</li>`).join("")}</ol>
-      <a class="guidelnk" href="${iosAdhocStepsUrl}" target="_blank" rel="noopener">${iosAdhocStepsUrl}</a>
-    </div>` : ""}
-
-    ${macAdhocSteps ? `<div class="howto adhoc">
-      <div class="howto-title">💻 ${t.macAdhocTitle}</div>
-      <ol class="howto-steps">${macAdhocSteps.map((step) => `<li>${step}</li>`).join("")}</ol>
-      <a class="guidelnk" href="${macAdhocStepsUrl}" target="_blank" rel="noopener">${macAdhocStepsUrl}</a>
-    </div>` : ""}
-
-    ${inApp ? `<div class="inapp-note">${t.inAppNote}</div>` : `<div class="howto">
+    <div class="howto">
       <div class="howto-title">📱 ${t.howToTitle}</div>
       <div class="howto-row"><span class="plat">iOS</span><span>${iosLine}</span></div>
       <div class="howto-row"><span class="plat">Android</span><span>${t.androidLine}</span></div>
-      ${windowsUrl ? `<div class="howto-row"><span class="plat">Windows</span><span>${t.windowsLine}</span></div>` : ""}
       <ol class="howto-steps">
         ${howToSteps.map((step) => `<li>${step}</li>`).join("")}
       </ol>
       <a class="guidelnk" href="${guideUrl}" target="_blank" rel="noopener">${t.guideLink}</a>
-    </div>`}
+    </div>
 
     <div class="footer">
       <a href="${meta.privacyUrl}" target="_blank" rel="noopener">${t.privacyLabel}</a>
@@ -1937,7 +1440,6 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     const qrHint = document.getElementById("qrHint");
     const qrStatus = document.getElementById("qrStatus");
     const qrAmtSub = document.getElementById("qrAmtSub");
-    const qrAmtRemind = document.getElementById("qrAmtRemind");
     const qrPlan = document.getElementById("qrPlan");
     applyCnyMode();
     const qrSaveBtn = document.getElementById("qrSaveBtn");
@@ -2072,21 +1574,16 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
             qrImg.src = remoteQr || localQr;
           }
           const methodIsCny = CNY_METHODS.indexOf(data.method) !== -1;
-          // Ảnh QR do chủ shop tạo bằng "设置金额" đã mang sẵn số tiền ⇒ hiện ĐÚNG số ¥ in
-          // trong ảnh (data.qrCny) thay vì số quy đổi theo tỷ giá, tránh lệch 1 ¥.
-          const qrPrefilled = data.amountPrefilled === true;
           if (methodIsCny) {
             // The customer types this into WeChat/Alipay, so lead with ¥ and let
             // the copy button copy the yuan figure.
-            const cnyValue = qrPrefilled && data.qrCny ? data.qrCny : cnyOf(data.amount);
+            const cnyValue = cnyOf(data.amount);
             // Show which plan the amount belongs to, right above the figure.
           const planEl = document.querySelector(".plan.active span");
           qrPlan.textContent = T.planChosen + " " + (planEl ? planEl.textContent.trim() : plan);
           qrAmt.textContent = "¥" + cnyValue;
-            qrAmtSub.textContent = qrPrefilled
-              ? "≈ " + money(data.amount) + " · " + usdLabel(data.amount) + " · " + T.amountPrefilled
-              : "≈ " + money(data.amount) + " · " + usdLabel(data.amount) +
-                " · 1 CNY ≈ " + new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
+            qrAmtSub.textContent = "≈ " + money(data.amount) + " · " + usdLabel(data.amount) +
+              " · 1 CNY ≈ " + new Intl.NumberFormat(NUM_LOCALE).format(Math.round(CNY.rate)) + " đ";
             qrCopyBtn.dataset.amount = String(cnyValue);
           } else {
             const planEl2 = document.querySelector(".plan.active span");
@@ -2099,23 +1596,11 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
               : "≈ " + usdLabel(data.amount) + " · " + cnyLabel(data.amount);
             qrCopyBtn.dataset.amount = String(data.amount);
           }
-          // QR đã mang sẵn SỐ TIỀN và NỘI DUNG (bankqr qua VietQR/SePay, MoMo động) ⇒ khách
-          // không phải copy gì: chỉ để lại QR + tên gói + số tiền. Các kênh còn lại
-          // (WeChat/Alipay dùng ảnh tĩnh) vẫn hiện số tiền + mã đơn để khách nhập tay.
-          const selfContained = data.selfContained === true;
-          // QR đã có sẵn SỐ TIỀN (bankqr/MoMo động, hoặc ảnh WeChat/Alipay đặt số tiền) ⇒
-          // khách không phải copy gì: chỉ để lại QR + tên gói + số tiền.
-          const noTyping = selfContained || qrPrefilled;
-          [qrCopyBtn, qrCopyOrderBtn, qrAmtRemind].forEach((el) => {
-            if (el) el.style.display = noTyping ? "none" : "";
-          });
-          qrOrder.style.display = selfContained ? "none" : "";
-          qrOrderHint.style.display = selfContained ? "none" : "";
           qrOrder.textContent = T.orderPrefix + data.orderCode;
           // Same reference string the bank QR embeds, so the shop can match it.
           const orderRef = REF_PREFIX + "-" + data.orderCode;
           qrCopyOrderBtn.dataset.ref = orderRef;
-          qrOrderHint.innerHTML = selfContained ? "" : (T.orderNoteHint + " <b>" + orderRef + "</b>");
+          qrOrderHint.innerHTML = T.orderNoteHint + " <b>" + orderRef + "</b>";
           const labels = {
             bankqr: T.hints.bankqr,
             wechat: T.hints.wechat,
@@ -2192,13 +1677,7 @@ export function paymentSuccessPageHTML(lang, product = "vpn") {
   const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   return `<!doctype html>
 <html lang="${t.htmlLang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${t.pageTitle} — ✓</title>
-<style>/* FlowTech Signature theme — docs/THEME.md. Chỉ CSS. */
-@keyframes sig-rise{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
-body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Segoe UI",sans-serif;color:#EAF2FF;background:radial-gradient(115% 70% at 6% -14%,rgba(51,199,115,.18),transparent 58%),linear-gradient(180deg,#0A1F3B,#071628);background-attachment:fixed}
-.card{position:relative;max-width:420px;padding:32px;background:radial-gradient(130% 120% at 0% 0%,#14406c 0%,#0a1f3b 55%,#071628 100%);border:1px solid rgba(255,255,255,.12);border-radius:22px;text-align:center;animation:sig-rise .36s cubic-bezier(.22,1,.36,1) both}
-.card::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(135deg,#33c773,#22d3ee 46%,#7c3aed);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;opacity:.85;pointer-events:none}
-.check{font-size:52px;color:#7FE6C0}h1{font-size:22px;margin:12px 0}p{color:rgba(234,242,255,.74);font-size:14px;line-height:1.5}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}</style></head>
+<style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Segoe UI",sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.card{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}.check{font-size:52px;color:#33c773}h1{font-size:22px;margin:12px 0}p{color:rgba(255,255,255,.6);font-size:14px;line-height:1.5}</style></head>
 <body><div class="card"><div class="check">✓</div><h1>${t.successTitle}</h1><p>${t.successBody}</p></div></body></html>`;
 }
 
@@ -2208,13 +1687,7 @@ export function paymentCancelPageHTML(lang, product = "vpn") {
   const t = product === "ai" ? { ...base, ...(AI_TEXTS[lang] || AI_TEXTS.vi) } : base;
   return `<!doctype html>
 <html lang="${t.htmlLang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${t.pageTitle} — ✕</title>
-<style>/* FlowTech Signature theme — docs/THEME.md. Chỉ CSS. */
-@keyframes sig-rise{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
-body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Segoe UI",sans-serif;color:#EAF2FF;background:radial-gradient(115% 70% at 6% -14%,rgba(51,199,115,.18),transparent 58%),linear-gradient(180deg,#0A1F3B,#071628);background-attachment:fixed}
-.card{position:relative;max-width:420px;padding:32px;background:radial-gradient(130% 120% at 0% 0%,#14406c 0%,#0a1f3b 55%,#071628 100%);border:1px solid rgba(255,255,255,.12);border-radius:22px;text-align:center;animation:sig-rise .36s cubic-bezier(.22,1,.36,1) both}
-.card::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(135deg,#33c773,#22d3ee 46%,#7c3aed);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;opacity:.85;pointer-events:none}
-h1{font-size:22px;margin:12px 0}p{color:rgba(234,242,255,.74);font-size:14px;line-height:1.5}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}</style></head>
+<style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Segoe UI",sans-serif;color:#fff;background:linear-gradient(180deg,#051525,#0a1f3a)}.card{max-width:420px;padding:32px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;text-align:center}h1{font-size:22px;margin:12px 0}p{color:rgba(255,255,255,.6);font-size:14px;line-height:1.5}</style></head>
 <body><div class="card"><h1>${t.cancelTitle}</h1><p>${t.cancelBody}</p></div></body></html>`;
 }
 

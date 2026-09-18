@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -6,19 +8,19 @@ using System.Text.Json.Serialization;
 namespace VpnFlow.Core.Api;
 
 /// <summary>
-/// Hằng số của tầng API, tập trung một chỗ (không hiện ra UI công khai).
-/// Nguồn: android .../Config.kt + docs/FLOWVPN_ANDROID_WINDOWS_PROMPT.md.
+/// Háº±ng sá»‘ cá»§a táº§ng API, táº­p trung má»™t chá»— (khÃ´ng hiá»‡n ra UI cÃ´ng khai).
+/// Nguá»“n: android .../Config.kt + docs/FLOWVPN_ANDROID_WINDOWS_PROMPT.md.
 /// </summary>
 public static class ControlApiDefaults
 {
     /// <summary>Coordinator production.</summary>
     public const string BaseUrl = "https://api.meetflowai.site";
 
-    /// <summary>Web gốc (plan picker + QR payment) — host chính.</summary>
+    /// <summary>Web gá»‘c (plan picker + QR payment) â€” host chÃ­nh.</summary>
     public const string WebUrl = "https://meetflowai.site";
 
-    /// <summary>Trang mua gói (plan picker + QR) — giống iOS/macOS. URL động khi đã chọn
-    /// được host dự phòng: xem <see cref="ControlPlaneHosts.BuyUrl"/>.</summary>
+    /// <summary>Trang mua gÃ³i (plan picker + QR) â€” giá»‘ng iOS/macOS. URL Ä‘á»™ng khi Ä‘Ã£ chá»n
+    /// Ä‘Æ°á»£c host dá»± phÃ²ng: xem <see cref="ControlPlaneHosts.BuyUrl"/>.</summary>
     public const string BuyUrl = WebUrl + "/buy";
 
     public const string SupportUrl = "https://meetflowai.site/SupportPrivateVPN.html";
@@ -26,8 +28,8 @@ public static class ControlApiDefaults
     public const string TermsUrl = "https://meetflowai.site/vpnflow/terms";
 
     /// <summary>
-    /// Web base tương ứng từng host API, để trang mua dựng theo host đang dùng được.
-    /// Host không có trong map (ví dụ tunnel dùng chung) lùi về <see cref="WebUrl"/>.
+    /// Web base tÆ°Æ¡ng á»©ng tá»«ng host API, Ä‘á»ƒ trang mua dá»±ng theo host Ä‘ang dÃ¹ng Ä‘Æ°á»£c.
+    /// Host khÃ´ng cÃ³ trong map (vÃ­ dá»¥ tunnel dÃ¹ng chung) lÃ¹i vá» <see cref="WebUrl"/>.
     /// </summary>
     public static IReadOnlyDictionary<string, string> WebBaseByApiBase { get; } =
         new Dictionary<string, string>
@@ -38,8 +40,8 @@ public static class ControlApiDefaults
 }
 
 /// <summary>
-/// Nói chuyện với PrivateVPN coordinator (mesh control plane) để đăng ký thiết bị và
-/// biết exit node cần nối tới. Bám sát `ControlAPIClient` —
+/// NÃ³i chuyá»‡n vá»›i PrivateVPN coordinator (mesh control plane) Ä‘á»ƒ Ä‘Äƒng kÃ½ thiáº¿t bá»‹ vÃ 
+/// biáº¿t exit node cáº§n ná»‘i tá»›i. BÃ¡m sÃ¡t `ControlAPIClient` â€”
 /// iOS/PrivateVPN/Services/ControlAPIClient.swift:307-629.
 /// </summary>
 public sealed class ControlApiClient : IDisposable
@@ -54,20 +56,20 @@ public sealed class ControlApiClient : IDisposable
     private readonly ControlPlaneHosts _hosts;
     private readonly bool _ownsHttpClient;
 
-    /// <summary>Host chính của coordinator (không có dấu "/" cuối).</summary>
+    /// <summary>Host chÃ­nh cá»§a coordinator (khÃ´ng cÃ³ dáº¥u "/" cuá»‘i).</summary>
     public string BaseUrl => _hosts.PrimaryBaseUrl;
 
-    /// <summary>URL trang mua dựng theo host đang dùng được (đổi khi đã chuyển host dự phòng).</summary>
+    /// <summary>URL trang mua dá»±ng theo host Ä‘ang dÃ¹ng Ä‘Æ°á»£c (Ä‘á»•i khi Ä‘Ã£ chuyá»ƒn host dá»± phÃ²ng).</summary>
     public string BuyUrl => _hosts.BuyUrl;
 
-    /// <summary>Join token một lần dùng để đăng ký thiết bị.</summary>
+    /// <summary>Join token má»™t láº§n dÃ¹ng Ä‘á»ƒ Ä‘Äƒng kÃ½ thiáº¿t bá»‹.</summary>
     public string JoinToken { get; }
 
-    /// <param name="baseUrl">Host chính (truyền từ App; mặc định <see cref="ControlApiDefaults.BaseUrl"/>).</param>
+    /// <param name="baseUrl">Host chÃ­nh (truyá»n tá»« App; máº·c Ä‘á»‹nh <see cref="ControlApiDefaults.BaseUrl"/>).</param>
     /// <param name="joinToken">Join token legacy.</param>
-    /// <param name="httpClient">HttpClient để test; null thì tự tạo (và tự Dispose).</param>
-    /// <param name="fallbackBaseUrls">Host dự phòng theo thứ tự; null thì dùng
-    /// <see cref="ControlApiHosts.FallbackBaseUrls"/>. Tham số hoá để test được quy tắc chuyển host.</param>
+    /// <param name="httpClient">HttpClient Ä‘á»ƒ test; null thÃ¬ tá»± táº¡o (vÃ  tá»± Dispose).</param>
+    /// <param name="fallbackBaseUrls">Host dá»± phÃ²ng theo thá»© tá»±; null thÃ¬ dÃ¹ng
+    /// <see cref="ControlApiHosts.FallbackBaseUrls"/>. Tham sá»‘ hoÃ¡ Ä‘á»ƒ test Ä‘Æ°á»£c quy táº¯c chuyá»ƒn host.</param>
     public ControlApiClient(
         string baseUrl,
         string joinToken = "",
@@ -75,18 +77,115 @@ public sealed class ControlApiClient : IDisposable
         IEnumerable<string>? fallbackBaseUrls = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
-            throw new ArgumentException("baseUrl là bắt buộc.", nameof(baseUrl));
+            throw new ArgumentException("baseUrl lÃ  báº¯t buá»™c.", nameof(baseUrl));
 
         _hosts = new ControlPlaneHosts(baseUrl, fallbackBaseUrls);
         JoinToken = joinToken;
         _ownsHttpClient = httpClient is null;
-        // Mỗi lần thử một host tối đa 6s (khoảng 4–6s): host bị chặn (nuốt gói / SNI) phải
-        // thất bại nhanh để còn kịp rơi xuống host dự phòng. HttpClient.Timeout áp cho từng
-        // SendAsync nên đúng bằng một lần thử host.
-        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+        // Má»—i láº§n thá»­ má»™t host tá»‘i Ä‘a 6s (khoáº£ng 4â€“6s): host bá»‹ cháº·n (nuá»‘t gÃ³i / SNI) pháº£i
+        // tháº¥t báº¡i nhanh Ä‘á»ƒ cÃ²n ká»‹p rÆ¡i xuá»‘ng host dá»± phÃ²ng. HttpClient.Timeout Ã¡p cho tá»«ng
+        // SendAsync nÃªn Ä‘Ãºng báº±ng má»™t láº§n thá»­ host.
+        _httpClient = httpClient ?? CreateHttpClientWithDohFallback();
     }
 
-    /// <summary>Mạng đổi -> thử lại host chính ở request sau.</summary>
+    /// <summary>
+    /// HttpClient cÃ³ fallback DNS qua DoH (1.1.1.1).
+    ///
+    /// VÃ¬ sao cáº§n: khi khÃ¡ch báº­t Clash Verge/v2rayN á»Ÿ cháº¿ Ä‘á»™ TUN + fake-IP, DNS há»‡ thá»‘ng tráº£ vá»
+    /// IP giáº£ hoáº·c bá»‹ cháº·n â‡’ app KHÃ”NG gá»i Ä‘Æ°á»£c API (khÃ´ng Ä‘Äƒng nháº­p, khÃ´ng nháº­n OTP). Ta chá»§ Ä‘á»™ng
+    /// phÃ¢n giáº£i tÃªn miá»n qua DoH rá»“i tá»± má»Ÿ socket tá»›i IP tháº­t; náº¿u DoH lá»—i thÃ¬ quay vá» DNS há»‡ thá»‘ng.
+    /// </summary>
+    private static HttpClient CreateHttpClientWithDohFallback()
+    {
+        var handler = new SocketsHttpHandler
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(5),
+            ConnectCallback = async (context, cancellationToken) =>
+            {
+                var host = context.DnsEndPoint.Host;
+                var port = context.DnsEndPoint.Port;
+
+                var addresses = await ResolveWithDohAsync(host, cancellationToken).ConfigureAwait(false);
+                if (addresses.Count == 0)
+                {
+                    try
+                    {
+                        addresses = (await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
+                            .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
+                            .ToList();
+                    }
+                    catch (SocketException)
+                    {
+                        // rÆ¡i xuá»‘ng dÆ°á»›i: nÃ©m HttpRequestException vá»›i thÃ´ng bÃ¡o rÃµ rÃ ng
+                    }
+                }
+
+                foreach (var ip in addresses)
+                {
+                    var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                    try
+                    {
+                        await socket.ConnectAsync(new IPEndPoint(ip, port), cancellationToken).ConfigureAwait(false);
+                        return new NetworkStream(socket, ownsSocket: true);
+                    }
+                    catch (Exception)
+                    {
+                        socket.Dispose();
+                    }
+                }
+
+                throw new HttpRequestException($"KhÃ´ng káº¿t ná»‘i Ä‘Æ°á»£c tá»›i {host}:{port} (DNS/DoH Ä‘á»u khÃ´ng cÃ³ IP dÃ¹ng Ä‘Æ°á»£c).");
+            },
+        };
+
+        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+    }
+
+    private static readonly Lazy<HttpClient> DohClient = new(() =>
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/dns-json");
+        return client;
+    });
+
+    /// <summary>PhÃ¢n giáº£i A record qua DoH cá»§a Cloudflare; lá»—i thÃ¬ tráº£ danh sÃ¡ch rá»—ng.</summary>
+    private static async Task<List<IPAddress>> ResolveWithDohAsync(string host, CancellationToken cancellationToken)
+    {
+        var result = new List<IPAddress>();
+        if (IPAddress.TryParse(host, out _))
+        {
+            return result;
+        }
+
+        try
+        {
+            var url = $"https://1.1.1.1/dns-query?name={Uri.EscapeDataString(host)}&type=A";
+            var json = await DohClient.Value.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("Answer", out var answers))
+            {
+                return result;
+            }
+
+            foreach (var answer in answers.EnumerateArray())
+            {
+                if (answer.TryGetProperty("data", out var data)
+                    && IPAddress.TryParse(data.GetString(), out var ip)
+                    && ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    result.Add(ip);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // DoH khÃ´ng dÃ¹ng Ä‘Æ°á»£c â‡’ Ä‘á»ƒ caller quay vá» DNS há»‡ thá»‘ng
+        }
+
+        return result;
+    }
+
+    /// <summary>Máº¡ng Ä‘á»•i -> thá»­ láº¡i host chÃ­nh á»Ÿ request sau.</summary>
     public void OnNetworkChanged() => _hosts.OnNetworkChanged();
 
     public void Dispose()
@@ -96,17 +195,17 @@ public sealed class ControlApiClient : IDisposable
     }
 
     // ---------------------------------------------------------------------
-    // Thiết bị (register / claim / revoke / devices)
+    // Thiáº¿t bá»‹ (register / claim / revoke / devices)
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// Đăng ký thiết bị với coordinator. `wireguardPublicKey` là khoá công khai WireGuard;
-    /// `endpoint` là endpoint WireGuard của chính máy (thiết bị outbound-only nên placeholder
-    /// là được). Tương ứng `register` — ControlAPIClient.swift:350-399.
-    /// Ném <see cref="DeviceLimitException"/> khi server trả 403 `device_limit_reached`.
+    /// ÄÄƒng kÃ½ thiáº¿t bá»‹ vá»›i coordinator. `wireguardPublicKey` lÃ  khoÃ¡ cÃ´ng khai WireGuard;
+    /// `endpoint` lÃ  endpoint WireGuard cá»§a chÃ­nh mÃ¡y (thiáº¿t bá»‹ outbound-only nÃªn placeholder
+    /// lÃ  Ä‘Æ°á»£c). TÆ°Æ¡ng á»©ng `register` â€” ControlAPIClient.swift:350-399.
+    /// NÃ©m <see cref="DeviceLimitException"/> khi server tráº£ 403 `device_limit_reached`.
     /// </summary>
-    /// <param name="joinToken">Token vừa xin từ <see cref="FetchJoinTokenAsync"/> (legacy) hoặc
-    /// <see cref="FetchEnrollmentTokenAsync"/> (đã đăng nhập). Bỏ trống thì dùng token của
+    /// <param name="joinToken">Token vá»«a xin tá»« <see cref="FetchJoinTokenAsync"/> (legacy) hoáº·c
+    /// <see cref="FetchEnrollmentTokenAsync"/> (Ä‘Ã£ Ä‘Äƒng nháº­p). Bá» trá»‘ng thÃ¬ dÃ¹ng token cá»§a
     /// constructor.</param>
     public async Task<CoordinatorRegisterResponse> RegisterAsync(
         string name,
@@ -125,15 +224,15 @@ public sealed class ControlApiClient : IDisposable
             ["platform"] = platform,
             ["wireguard_public_key"] = wireguardPublicKey,
             ["endpoint"] = endpoint,
-            // Ưu tiên token truyền vào: token lấy từ /v1/tokens (legacy) hoặc
-            // /v1/enrollment-tokens (đã đăng nhập) đều đi qua field này. Không truyền thì
-            // lùi về token của constructor (tương ứng ControlAPIClient(baseURL:joinToken:)).
+            // Æ¯u tiÃªn token truyá»n vÃ o: token láº¥y tá»« /v1/tokens (legacy) hoáº·c
+            // /v1/enrollment-tokens (Ä‘Ã£ Ä‘Äƒng nháº­p) Ä‘á»u Ä‘i qua field nÃ y. KhÃ´ng truyá»n thÃ¬
+            // lÃ¹i vá» token cá»§a constructor (tÆ°Æ¡ng á»©ng ControlAPIClient(baseURL:joinToken:)).
             ["join_token"] = joinToken ?? JoinToken,
         };
-        // Chỉ gửi khoá khi có giá trị — giống `compactMapValues { $0 }` (Swift:378).
+        // Chá»‰ gá»­i khoÃ¡ khi cÃ³ giÃ¡ trá»‹ â€” giá»‘ng `compactMapValues { $0 }` (Swift:378).
         if (!string.IsNullOrEmpty(exitNodeId)) body["exit_node_id"] = exitNodeId;
-        // Nhường slot: server chỉ chấp nhận khi bản ghi đó của CHÍNH tài khoản này
-        // và CÙNG platform (device-replace.js).
+        // NhÆ°á»ng slot: server chá»‰ cháº¥p nháº­n khi báº£n ghi Ä‘Ã³ cá»§a CHÃNH tÃ i khoáº£n nÃ y
+        // vÃ  CÃ™NG platform (device-replace.js).
         if (!string.IsNullOrEmpty(replaceDeviceId)) body["replace_device_id"] = replaceDeviceId;
 
         using var response = await SendWithFallbackAsync(
@@ -144,8 +243,8 @@ public sealed class ControlApiClient : IDisposable
         var raw = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            // Device limit: giữ message của coordinator VÀ danh sách thiết bị để UI
-            // hiện được "đăng xuất thiết bị cũ".
+            // Device limit: giá»¯ message cá»§a coordinator VÃ€ danh sÃ¡ch thiáº¿t bá»‹ Ä‘á»ƒ UI
+            // hiá»‡n Ä‘Æ°á»£c "Ä‘Äƒng xuáº¥t thiáº¿t bá»‹ cÅ©".
             var limit = TryDeserialize<DeviceLimitBody>(raw);
             if (limit is { Error: "device_limit_reached" })
             {
@@ -159,11 +258,11 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Gửi heartbeat giữ peer ở trạng thái online. LƯU Ý: route
-    /// `POST /v1/peers/heartbeat` KHÔNG tồn tại trong control-plane/src (đã đối chiếu
-    /// index.js) — Windows theo tài liệu requirements không dùng heartbeat, giữ kết nối
-    /// bằng reconnect + kiểm tra `/v1/devices` định kỳ. Giữ hàm để parity với Swift
-    /// (`heartbeat` — ControlAPIClient.swift:402-412).
+    /// Gá»­i heartbeat giá»¯ peer á»Ÿ tráº¡ng thÃ¡i online. LÆ¯U Ã: route
+    /// `POST /v1/peers/heartbeat` KHÃ”NG tá»“n táº¡i trong control-plane/src (Ä‘Ã£ Ä‘á»‘i chiáº¿u
+    /// index.js) â€” Windows theo tÃ i liá»‡u requirements khÃ´ng dÃ¹ng heartbeat, giá»¯ káº¿t ná»‘i
+    /// báº±ng reconnect + kiá»ƒm tra `/v1/devices` Ä‘á»‹nh ká»³. Giá»¯ hÃ m Ä‘á»ƒ parity vá»›i Swift
+    /// (`heartbeat` â€” ControlAPIClient.swift:402-412).
     /// </summary>
     public async Task HeartbeatAsync(
         string peerId,
@@ -182,8 +281,8 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Claim bản cài này cho user đang đăng nhập. Chế độ Hysteria không có WireGuard peer
-    /// nên hạn mức 3 thiết bị được áp ở đây. Tương ứng `claimDevice` —
+    /// Claim báº£n cÃ i nÃ y cho user Ä‘ang Ä‘Äƒng nháº­p. Cháº¿ Ä‘á»™ Hysteria khÃ´ng cÃ³ WireGuard peer
+    /// nÃªn háº¡n má»©c 3 thiáº¿t bá»‹ Ä‘Æ°á»£c Ã¡p á»Ÿ Ä‘Ã¢y. TÆ°Æ¡ng á»©ng `claimDevice` â€”
     /// android .../api/ControlAPIClient.kt:273-287; route index.js:4142-4231.
     /// </summary>
     public async Task<ClaimDeviceResponse> ClaimDeviceAsync(
@@ -225,8 +324,8 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Liệt kê thiết bị của user đang đăng nhập (active trước), kèm status, IP overlay
-    /// và public key (FR-REVOKE-001). Tương ứng `fetchMyDevices` — ControlAPIClient.swift:456-465.
+    /// Liá»‡t kÃª thiáº¿t bá»‹ cá»§a user Ä‘ang Ä‘Äƒng nháº­p (active trÆ°á»›c), kÃ¨m status, IP overlay
+    /// vÃ  public key (FR-REVOKE-001). TÆ°Æ¡ng á»©ng `fetchMyDevices` â€” ControlAPIClient.swift:456-465.
     /// </summary>
     public async Task<List<CoordinatorDevice>> FetchMyDevicesAsync(
         string accessToken,
@@ -243,8 +342,8 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Thu hồi một thiết bị của user (xoá wg peer để không kết nối được nữa — AC-011/AC-012).
-    /// Tương ứng `revokeDevice` — ControlAPIClient.swift:469-477.
+    /// Thu há»“i má»™t thiáº¿t bá»‹ cá»§a user (xoÃ¡ wg peer Ä‘á»ƒ khÃ´ng káº¿t ná»‘i Ä‘Æ°á»£c ná»¯a â€” AC-011/AC-012).
+    /// TÆ°Æ¡ng á»©ng `revokeDevice` â€” ControlAPIClient.swift:469-477.
     /// </summary>
     public async Task RevokeDeviceAsync(
         string id,
@@ -259,8 +358,8 @@ public sealed class ControlApiClient : IDisposable
             cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Xoá tài khoản user đang đăng nhập (Apple 5.1.1(v)): user, devices, sessions.
-    /// Tương ứng `deleteAccount` — ControlAPIClient.swift:443-452.</summary>
+    /// <summary>XoÃ¡ tÃ i khoáº£n user Ä‘ang Ä‘Äƒng nháº­p (Apple 5.1.1(v)): user, devices, sessions.
+    /// TÆ°Æ¡ng á»©ng `deleteAccount` â€” ControlAPIClient.swift:443-452.</summary>
     public async Task DeleteAccountAsync(string accessToken, CancellationToken cancellationToken = default)
     {
         await SendForStringAsync(
@@ -270,12 +369,12 @@ public sealed class ControlApiClient : IDisposable
     }
 
     // ---------------------------------------------------------------------
-    // Exit nodes / phiên bản app
+    // Exit nodes / phiÃªn báº£n app
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// Lấy danh sách exit node. Trả rỗng khi server trả non-2xx (để caller lùi về cache),
-    /// nhưng NÉM lỗi transport khi không tới được host nào — giống `fetchNodes`
+    /// Láº¥y danh sÃ¡ch exit node. Tráº£ rá»—ng khi server tráº£ non-2xx (Ä‘á»ƒ caller lÃ¹i vá» cache),
+    /// nhÆ°ng NÃ‰M lá»—i transport khi khÃ´ng tá»›i Ä‘Æ°á»£c host nÃ o â€” giá»‘ng `fetchNodes`
     /// (ControlAPIClient.swift:415-428).
     /// </summary>
     public async Task<List<ExitNode>> FetchNodesAsync(CancellationToken cancellationToken = default)
@@ -292,9 +391,9 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Lấy phiên bản app yêu cầu/mới nhất (cổng ép cập nhật). `platform` tuỳ chọn để server
-    /// trả đúng kênh (Windows cần backend bổ sung kênh — xem docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md §6).
-    /// Tương ứng `fetchAppVersion` — ControlAPIClient.swift:431-440.
+    /// Láº¥y phiÃªn báº£n app yÃªu cáº§u/má»›i nháº¥t (cá»•ng Ã©p cáº­p nháº­t). `platform` tuá»³ chá»n Ä‘á»ƒ server
+    /// tráº£ Ä‘Ãºng kÃªnh (Windows cáº§n backend bá»• sung kÃªnh â€” xem docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md Â§6).
+    /// TÆ°Æ¡ng á»©ng `fetchAppVersion` â€” ControlAPIClient.swift:431-440.
     /// </summary>
     public async Task<AppVersionInfo> FetchAppVersionAsync(
         string? platform = null,
@@ -312,13 +411,13 @@ public sealed class ControlApiClient : IDisposable
     }
 
     // ---------------------------------------------------------------------
-    // Token / đăng nhập
+    // Token / Ä‘Äƒng nháº­p
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// Xin một join token một lần từ coordinator (server có thể cần admin token).
-    /// App runtime không dùng bootstrap public/dev này trong production; dùng
-    /// `FetchEnrollmentTokenAsync` thay thế. Tương ứng `fetchJoinToken` —
+    /// Xin má»™t join token má»™t láº§n tá»« coordinator (server cÃ³ thá»ƒ cáº§n admin token).
+    /// App runtime khÃ´ng dÃ¹ng bootstrap public/dev nÃ y trong production; dÃ¹ng
+    /// `FetchEnrollmentTokenAsync` thay tháº¿. TÆ°Æ¡ng á»©ng `fetchJoinToken` â€”
     /// ControlAPIClient.swift:483-499.
     /// </summary>
     public async Task<string> FetchJoinTokenAsync(
@@ -334,8 +433,8 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Xin enrollment token một lần, gắn với user đang đăng nhập + subscription.
-    /// Tương ứng `fetchEnrollmentToken` — ControlAPIClient.swift:503-522.
+    /// Xin enrollment token má»™t láº§n, gáº¯n vá»›i user Ä‘ang Ä‘Äƒng nháº­p + subscription.
+    /// TÆ°Æ¡ng á»©ng `fetchEnrollmentToken` â€” ControlAPIClient.swift:503-522.
     /// </summary>
     public async Task<string> FetchEnrollmentTokenAsync(
         string accessToken,
@@ -352,8 +451,8 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Đăng nhập bằng mã email (fallback cho vùng chặn SSO). Trả `debug_code` nếu có.
-    /// Tương ứng `startEmailLogin` — ControlAPIClient.swift:525-533.
+    /// ÄÄƒng nháº­p báº±ng mÃ£ email (fallback cho vÃ¹ng cháº·n SSO). Tráº£ `debug_code` náº¿u cÃ³.
+    /// TÆ°Æ¡ng á»©ng `startEmailLogin` â€” ControlAPIClient.swift:525-533.
     /// </summary>
     public async Task<string?> StartEmailLoginAsync(string email, CancellationToken cancellationToken = default)
     {
@@ -367,7 +466,7 @@ public sealed class ControlApiClient : IDisposable
         return TryDeserialize<EmailLoginStartResponse>(raw)?.DebugCode;
     }
 
-    /// <summary>Xác minh mã email và nhận session. Tương ứng `verifyEmailLogin` —
+    /// <summary>XÃ¡c minh mÃ£ email vÃ  nháº­n session. TÆ°Æ¡ng á»©ng `verifyEmailLogin` â€”
     /// ControlAPIClient.swift:535-542.</summary>
     public async Task<CoordinatorAuthSession> VerifyEmailLoginAsync(
         string email,
@@ -388,7 +487,7 @@ public sealed class ControlApiClient : IDisposable
         return Deserialize<CoordinatorAuthSession>(raw);
     }
 
-    /// <summary>Đăng nhập bằng Sign in with Apple. Tương ứng `signInWithApple` —
+    /// <summary>ÄÄƒng nháº­p báº±ng Sign in with Apple. TÆ°Æ¡ng á»©ng `signInWithApple` â€”
     /// ControlAPIClient.swift:544-554.</summary>
     public async Task<CoordinatorAuthSession> SignInWithAppleAsync(
         string identityToken,
@@ -410,9 +509,9 @@ public sealed class ControlApiClient : IDisposable
     }
 
     /// <summary>
-    /// Đọc lại session từ coordinator để thấy thay đổi quyền Premium mà không phải
-    /// đăng xuất/đăng nhập lại. Coordinator cũ trả 404 ⇒ caller phải coi thất bại là
-    /// "giữ nguyên quyền đang có", KHÔNG phải "chưa mua". Tương ứng `fetchSession` —
+    /// Äá»c láº¡i session tá»« coordinator Ä‘á»ƒ tháº¥y thay Ä‘á»•i quyá»n Premium mÃ  khÃ´ng pháº£i
+    /// Ä‘Äƒng xuáº¥t/Ä‘Äƒng nháº­p láº¡i. Coordinator cÅ© tráº£ 404 â‡’ caller pháº£i coi tháº¥t báº¡i lÃ 
+    /// "giá»¯ nguyÃªn quyá»n Ä‘ang cÃ³", KHÃ”NG pháº£i "chÆ°a mua". TÆ°Æ¡ng á»©ng `fetchSession` â€”
     /// ControlAPIClient.swift:564-572.
     /// </summary>
     public async Task<CoordinatorAuthSession> FetchSessionAsync(
@@ -434,10 +533,10 @@ public sealed class ControlApiClient : IDisposable
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// Gửi request tới host của chính nó; sau lỗi transport (không có phản hồi: IP bị chặn,
-    /// DNS hỏng, mất route) thử lại y nguyên request qua từng host dự phòng một lần.
-    /// HTTP status là "có trả lời", không phải route bị chặn, nên KHÔNG thử lại — thử lại
-    /// sẽ lặp side-effect của POST. Tương ứng `ControlAPIHosts.sendWithFallback` —
+    /// Gá»­i request tá»›i host cá»§a chÃ­nh nÃ³; sau lá»—i transport (khÃ´ng cÃ³ pháº£n há»“i: IP bá»‹ cháº·n,
+    /// DNS há»ng, máº¥t route) thá»­ láº¡i y nguyÃªn request qua tá»«ng host dá»± phÃ²ng má»™t láº§n.
+    /// HTTP status lÃ  "cÃ³ tráº£ lá»i", khÃ´ng pháº£i route bá»‹ cháº·n, nÃªn KHÃ”NG thá»­ láº¡i â€” thá»­ láº¡i
+    /// sáº½ láº·p side-effect cá»§a POST. TÆ°Æ¡ng á»©ng `ControlAPIHosts.sendWithFallback` â€”
     /// ControlAPIClient.swift:282-302.
     /// </summary>
     private async Task<HttpResponseMessage> SendWithFallbackAsync(
@@ -447,7 +546,7 @@ public sealed class ControlApiClient : IDisposable
     {
         Exception? lastError = null;
 
-        // Thứ tự host: host đang nhớ (sticky) trước, rồi host chính, rồi các host dự phòng.
+        // Thá»© tá»± host: host Ä‘ang nhá»› (sticky) trÆ°á»›c, rá»“i host chÃ­nh, rá»“i cÃ¡c host dá»± phÃ²ng.
         foreach (var baseUrl in _hosts.Candidates())
         {
             try
@@ -456,16 +555,16 @@ public sealed class ControlApiClient : IDisposable
                     .SendAsync(requestFactory(new Uri(baseUrl)), cancellationToken)
                     .ConfigureAwait(false);
 
-                // HTTP status là "host có trả lời" (kể cả 401/403): nhớ host và trả response,
-                // KHÔNG thử host khác — đổi host không sửa được lỗi xác thực mà còn lặp
-                // side-effect của POST.
+                // HTTP status lÃ  "host cÃ³ tráº£ lá»i" (ká»ƒ cáº£ 401/403): nhá»› host vÃ  tráº£ response,
+                // KHÃ”NG thá»­ host khÃ¡c â€” Ä‘á»•i host khÃ´ng sá»­a Ä‘Æ°á»£c lá»—i xÃ¡c thá»±c mÃ  cÃ²n láº·p
+                // side-effect cá»§a POST.
                 _hosts.Remember(baseUrl);
                 return response;
             }
             catch (Exception ex) when (IsTransportFailure(ex, cancellationToken))
             {
                 lastError = ex;
-                // Host đang nhớ vừa hỏng: quên ngay để lần sau còn dò lại từ host chính.
+                // Host Ä‘ang nhá»› vá»«a há»ng: quÃªn ngay Ä‘á»ƒ láº§n sau cÃ²n dÃ² láº¡i tá»« host chÃ­nh.
                 if (SameHost(baseUrl, _hosts.ActiveBaseUrl)) _hosts.Forget();
             }
         }
@@ -473,7 +572,7 @@ public sealed class ControlApiClient : IDisposable
         throw new ApiTransportException(endpoint, lastError);
     }
 
-    /// <summary>Gửi request rồi trả body; non-2xx ⇒ <see cref="ApiServerException"/>.</summary>
+    /// <summary>Gá»­i request rá»“i tráº£ body; non-2xx â‡’ <see cref="ApiServerException"/>.</summary>
     private async Task<string> SendForStringAsync(
         Func<Uri, HttpRequestMessage> requestFactory,
         string endpoint,
@@ -523,7 +622,7 @@ public sealed class ControlApiClient : IDisposable
 
     private static bool IsTransportFailure(Exception exception, CancellationToken cancellationToken)
     {
-        // Caller chủ động huỷ ⇒ để OperationCanceledException nổi lên, không bọc thành transport.
+        // Caller chá»§ Ä‘á»™ng huá»· â‡’ Ä‘á»ƒ OperationCanceledException ná»•i lÃªn, khÃ´ng bá»c thÃ nh transport.
         if (cancellationToken.IsCancellationRequested) return false;
         return exception is HttpRequestException or OperationCanceledException
             or System.IO.IOException or System.Net.Sockets.SocketException;

@@ -1,19 +1,37 @@
 #!/usr/bin/env bash
-# (1) set windows latest_version = 1.0.3  (2) gui email thong bao update cho user (Resend).
+# (1) set windows latest_version = <version>  (2) gui email thong bao update cho user (Resend).
+# Dung: scripts/send-update-announcement.sh [version]     (mac dinh 1.0.7)
 # KHONG in token / API key / dia chi email ra man hinh.
 set -euo pipefail
+VERSION="${1:-1.0.7}"
 JUMP="root@103.173.155.50"
 NODE2="root@165.101.114.162"
 
-ssh -o BatchMode=yes -J "$JUMP" "$NODE2" bash -s <<'REMOTE'
+ssh -o BatchMode=yes -J "$JUMP" "$NODE2" bash -s -- "$VERSION" <<'REMOTE'
 set -e
+VERSION="$1"
 
-echo "== 1) set latest_version = 1.0.3 =="
-TOKEN="$(grep -h -oP '(?<=AUTH_TOKEN=).*' /etc/systemd/system/flowvpn-cp.service.d/*.conf 2>/dev/null | head -1)"
-curl -s -X PATCH "https://api.meetflowai.site/v1/admin/windows-version" \
+echo "== 1) set latest_version = $VERSION =="
+# Token PHAI lay tu drop-in *.conf (admin-token.conf override file chinh) hoac tu env cua
+# process dang chay. Doc nham /etc/systemd/system/flowvpn-cp.service se ra token CU =>
+# PATCH tra 401 va `curl -s` van exit 0 => release "thanh cong" nhung app KHONG duoc bao
+# co ban moi (da xay ra voi 1.0.7: buy page 1.0.7 nhung latest_version ket o 1.0.5).
+TOKEN="$(grep -h -oP '(?<=AUTH_TOKEN=).*' /etc/systemd/system/flowvpn-cp.service.d/*.conf 2>/dev/null | head -1 | tr -d '"'"'"' ')"
+if [ -z "$TOKEN" ]; then
+  PID="$(systemctl show -p MainPID --value flowvpn-cp 2>/dev/null || true)"
+  [ -n "$PID" ] && [ -r "/proc/$PID/environ" ] && \
+    TOKEN="$(tr '\0' '\n' < "/proc/$PID/environ" | grep '^AUTH_TOKEN=' | cut -d= -f2-)"
+fi
+[ -n "$TOKEN" ] || { echo "   LOI: khong tim thay AUTH_TOKEN"; exit 1; }
+
+RESP="$(curl -s -X PATCH "https://api.meetflowai.site/v1/admin/windows-version" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"latest_version":"1.0.3"}' | head -c 400
-echo
+  -d "{\"latest_version\":\"$VERSION\"}")"
+echo "   $RESP"
+case "$RESP" in
+  *"\"latest_version\":\"$VERSION\""*) echo "   OK: latest_version = $VERSION" ;;
+  *) echo "   LOI: PATCH khong dat latest_version = $VERSION (kiem tra token)"; exit 1 ;;
+esac
 
 echo "== 2) gui email thong bao =="
 python3 - <<'PY'
