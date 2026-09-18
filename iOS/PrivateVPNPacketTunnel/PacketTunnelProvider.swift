@@ -147,16 +147,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let directConfiguration = tunnelConfig
         if let relayHost = config.relayHost, let relayPorts = config.relayPorts,
            !tunnelConfig.peers.isEmpty {
-            if let localPort = startRelay(host: relayHost, ports: relayPorts) {
+            // ĐỔI THỨ TỰ (19/09/2026): WS/Cloudflare TRƯỚC, TCP relay sau.
+            // Vì sao: TCP relay trỏ THẲNG vào IP node (vd 165.101.114.162:9444) — trên mạng
+            // Trung Quốc / Wi-Fi khách sạn, IP node bị chặn nên đường này "kết nối được" ở tầng
+            // listener nhưng không có gói nào qua ⇒ WG handshake không xong ⇒ app tự dừng phiên
+            // sau ~15s (log: stopTunnel reason=11, transport=relay). Đường WS đi qua Cloudflare
+            // nên không phụ thuộc IP node — đo được 14 MB/s so với 0,3 MB/s của TCP relay.
+            if let localPort = startWebSocketRelay() {
                 tunnelConfig = configuration(tunnelConfig, pointingAt: localPort)
-                note("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (relay \(relayHost):\(relayPorts.first ?? 0))")
-                scheduleWebSocketFallback(direct: directConfiguration, generation: generation)
-            } else if let localPort = startWebSocketRelay() {
-                // Bước 1 không dựng nổi listener (bind lỗi) thì vào chuỗi ở bước 2 luôn:
-                // đường WS không phụ thuộc IP node nên nó vẫn là đường sống khi bị chặn IP,
-                // bỏ qua nó chỉ vì relay TCP không bind được là mất đúng đường dự phòng.
+                note("ws-relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (WS/Cloudflare ưu tiên)")
+                scheduleDirectFallback(direct: directConfiguration, generation: generation)
+            } else if let localPort = startRelay(host: relayHost, ports: relayPorts) {
                 tunnelConfig = configuration(tunnelConfig, pointingAt: localPort)
-                note("ws-relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (TCP relay did not start)")
+                note("relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (WS không dựng được, dùng TCP relay \(relayHost):\(relayPorts.first ?? 0))")
                 scheduleDirectFallback(direct: directConfiguration, generation: generation)
             } else {
                 note("relay: no relay transport could start — using direct UDP")
