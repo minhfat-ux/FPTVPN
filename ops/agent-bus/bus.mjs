@@ -29,6 +29,7 @@ const PORT = Number(process.env.AGENT_BUS_PORT || 7799);
 const HOST = process.env.AGENT_BUS_HOST || "0.0.0.0";
 const TOKEN = String(process.env.AGENT_BUS_TOKEN || "").trim();
 const STORE = process.env.AGENT_BUS_STORE || "/var/lib/agent-bus/messages.jsonl";
+const PRESENCE = process.env.AGENT_BUS_PRESENCE || "/var/lib/agent-bus/presence.json";
 const MAX_KEEP = Number(process.env.AGENT_BUS_MAX || 2000);
 
 const TG_TOKEN = String(process.env.AGENT_TG_TOKEN || "").trim();
@@ -94,6 +95,28 @@ if (!TOKEN) {
 }
 fs.mkdirSync(path.dirname(STORE), { recursive: true });
 if (!fs.existsSync(STORE)) fs.writeFileSync(STORE, "");
+
+/**
+ * Ai đang thực sự poll connector. Không có "presence" thì không biết bên kia còn sống hay không —
+ * đây chính là thứ phân biệt "đã gửi" với "đã có người nhận".
+ */
+function readPresence() {
+  try {
+    return JSON.parse(fs.readFileSync(PRESENCE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function touchPresence(agent, ip, since, count) {
+  const table = readPresence();
+  table[agent] = { at: new Date().toISOString(), ip, lastSince: since, messages: count };
+  try {
+    fs.writeFileSync(PRESENCE, JSON.stringify(table, null, 1));
+  } catch {
+    /* không ghi được thì thôi */
+  }
+}
 
 /** Đọc toàn bộ thông báo, cắt bớt nếu quá dài. */
 function readAll() {
@@ -189,12 +212,24 @@ const server = http.createServer(async (req, res) => {
       return send(res, 201, { ok: true, message });
     }
 
+    if (req.method === "GET" && url.pathname === "/presence") {
+      const table = readPresence();
+      const now = Date.now();
+      const agents = Object.entries(table).map(([agent, info]) => ({
+        agent,
+        ...info,
+        secondsAgo: Math.round((now - new Date(info.at).getTime()) / 1000),
+      }));
+      return send(res, 200, { agents });
+    }
+
     if (req.method === "GET" && url.pathname === "/pull") {
       const agent = String(url.searchParams.get("agent") ?? "").trim().toLowerCase();
       const since = Number(url.searchParams.get("since") ?? 0) || 0;
       if (!agent) return send(res, 400, { error: "thiếu `agent`" });
       const items = readAll();
       const messages = items.filter((item) => item.to === agent && item.id > since);
+      touchPresence(agent, clientIp(req), since, messages.length);
       return send(res, 200, { agent, since, latest: items.length ? items[items.length - 1].id : 0, messages });
     }
 
