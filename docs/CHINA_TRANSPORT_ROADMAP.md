@@ -260,3 +260,9 @@ phải đi relay ⇒ Cloudflare là cửa vào tốt nhất (PoP HKG, ~0,1 s TTF
 
 Kiểm chứng sau khi phát hành: `sha256` file tải từ `https://meetflowai.site/v1/downloads/android`
 phải **trùng** file build trên Mac, và `/v1/app-version?platform=android` trả đúng `latest_version`.
+
+## TODO 19/09/2026 (chủ dự án yêu cầu, làm sau)
+
+- **Bypass cho WeChat CHƯA xong** — cần làm tiếp (mục tiêu: WeChat không đi qua VPN / đi đúng đường nội địa để không bị chậm hoặc lỗi đăng nhập).
+- **Yêu cầu tối thiểu cho mọi bản client: xem video streaming phải mượt** (băng thông duy trì liên tục, không chỉ burst ngắn) ⇒ đây là tiêu chí nghiệm thu cho phần port transport bên dưới.
+- **Kiến trúc transport iOS/macOS/Windows**: hiện dùng WireGuard chồng trên TCP/WS relay ⇒ đo trên máy thật chỉ đạt **0,007–2 MB/s** và có lúc blackhole toàn bộ traffic (mất mạng). Đường ĐÚNG đã chứng minh là **hysteria2 qua Cloudflare** (app Android: **12–16 MB/s**). Việc port dùng **sing-box/libbox (XCframework)** cho Apple và bản Windows dùng cùng core — xem `docs/SINGBOX_INTEGRATION_PLAN.md`.
