@@ -201,6 +201,50 @@ Vì đây là endpoint lộ ra internet — **không lặp lại lỗi `/tmp-key
 4. Sửa app WPF: bỏ 2 ô key, thêm ô dán mã kích hoạt, trỏ về service mới
 5. Deploy Caddy + systemd riêng, kiểm chứng một phiên thật đầu-cuối
 
+### 3.7 Trạng thái sau khi tiếp nhận bàn giao (session 2026-09-18 chiều)
+
+Tên đang dùng (tạm, **chưa chốt với chủ dự án**): service **`flowdesk`**, port **7791**,
+host **`desk.meetflowai.site`** — tất cả đọc từ env nên đổi tên chỉ là đổi env + DNS.
+
+**Đã xong 1 và 3, xong phần lõi của 2. Còn 4, 5 và view SPA của 2.**
+
+| Việc | Ở đâu | Bằng chứng |
+|---|---|---|
+| Service mới (node:http + node:sqlite + `ws`; không express) | `desk/src/*.js` | `desk/test/` — **55 test xanh** |
+| Quyền đọc từ `fbuddy.db` **read-only**, đơn `status='paid'` | `desk/src/entitlement.js` | `desk/test/entitlement.test.js` |
+| Bảng mã kích hoạt / thiết bị / mức dùng / audit | `desk/src/db.js` (`desk_invitations`, `desk_activations`, `desk_usage`, `desk_audit`) | `desk/test/codes.test.js`, `activations.test.js` |
+| Token phiên ký HMAC, thu hồi **hiệu lực ngay** | `desk/src/sessions.js` | `desk/test/activations.test.js` |
+| Rate limit + chặn dò mã theo IP | `desk/src/ratelimit.js` | `desk/test/http.test.js` (429) |
+| WS proxy Soniox: bỏ `api_key` client, chèn key thật, che key trong phản hồi | `desk/src/stt.js` | `desk/test/phase3.test.js` (Soniox giả) |
+| `/summary` → OpenRouter: key ở server, model do server chọn, trần ký tự | `desk/src/summary.js` | `desk/test/phase3.test.js` |
+| Hook khi đơn thành `paid` (chạy nền, không phá luồng cộng credit) | `server/src/topup.js` + `server/src/desktop.js` | `server/test/desktop.test.js` — có ca "flowdesk chết nhưng thanh toán vẫn xong" |
+| Email mã kích hoạt | `server/src/mailer.js` → `sendDesktopActivation()` | `server/test/desktop.test.js` |
+| Trang xem lại mã **không cần đăng nhập** (link ký HMAC 30 ngày) | `GET /api/desktop?u=&t=`, `POST /api/desktop/code`, `GET /api/desktop/status` | `server/test/desktop.test.js` |
+| Cài đặt tự động | `deploy/flowdesk.service`, `deploy/flowdesk-remote-setup.sh`, `deploy/deploy.ps1 -WithDesk` | chưa chạy thật (mục 5) |
+
+Chạy test (Windows trong sandbox DSH — `node --test` bị chặn spawn tiến trình con):
+
+```bash
+node --test --test-isolation=none desk/test/*.test.js          # 55/55
+node --test --test-isolation=none server/test/desktop.test.js  # 8/8
+```
+
+Còn thiếu để khách dùng được thật:
+
+1. **§3.6.4 app WPF** — bỏ 2 ô key (Soniox/OpenRouter), thêm ô dán mã kích hoạt, trỏ
+   `wss://desk.meetflowai.site/v1/desktop/stt` (token qua `Authorization: Bearer`) và
+   `POST /v1/desktop/summary`. Nguồn: `C:\Users\Minhn\FPTVPN\MeetFlowAI_Win`
+   (`Services/SonioxRealtimeClient.cs`, `Services/MeetingSummaryService.cs`,
+   `Services/ActivationService.cs` — file này đã có sẵn khung "activation key").
+2. **§3.6.5 deploy** — tạo `/etc/flowdesk/flowdesk.env` (key Soniox/OpenRouter **riêng**
+   cho bản Windows), thêm DNS `desk`, rồi `.\deploy\deploy.ps1 -WithDesk`.
+   Nhớ thêm `FBUDDY_DESK_URL` + `FBUDDY_DESK_ADMIN_TOKEN` vào `/etc/fbuddy/fbuddy.env`
+   rồi restart fbuddy, nếu không fBuddy sẽ không phát mã khi đơn thành `paid`.
+3. **View `?view=desktop`** trong web app (đã có trang công khai từ email; view SPA dùng
+   `GET /api/desktop/status` + `POST /api/desktop/code` — nhớ i18n đủ 3 thứ tiếng).
+4. Lỗ bảo mật `/tmp-key` (§1) **vẫn đang mở** — không sửa được từ repo này.
+
+
 ---
 
 ## 4. Việc còn treo khác
@@ -214,7 +258,8 @@ Vì đây là endpoint lộ ra internet — **không lặp lại lỗi `/tmp-key
    - **Có lớp cache phía trước** (fetch lần đầu nhận bản cũ hơn) ⇒ sau khi sửa phải **bump `?v=` trong
      `web/dist/index.html`** (đang là `20260917b`).
    - Chọn ngôn ngữ theo `navigator.language` + `Intl…timeZone`, mặc định `en` khi không khớp.
-2. **Luồng cấp key qua trang buy** — chính là mục 3 (đang làm dở).
+2. **Luồng cấp key qua trang buy** — backend + email đã xong (xem §3.7); còn app WPF (§3.6.4),
+   deploy thật (§3.6.5) và view `?view=desktop` trong web app.
 3. **Xác nhận `/opt/fbuddy` khớp commit nào của `origin/flowgpt`** trước khi sửa tiếp (xem §0.2 — nguồn có trong git,
    chỉ thư mục deploy là không).
 4. Treo từ trước: voice chống trễ (chủ dự án dặn "đừng làm vội") · SSO Firebase/Facebook · đăng ký email+mật khẩu ·

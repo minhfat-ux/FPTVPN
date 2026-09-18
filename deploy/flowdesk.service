@@ -1,0 +1,42 @@
+[Unit]
+Description=flowdesk — backend riêng cho app Windows (MeetFlow AI Overlay)
+Documentation=https://desk.meetflowai.site/v1/desktop/health
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+# Code nằm trong checkout /opt/fbuddy (một nguồn sự thật, deploy bằng deploy.ps1),
+# nhưng chạy như một TIẾN TRÌNH RIÊNG: env riêng, DB riêng, port riêng, domain riêng.
+WorkingDirectory=/opt/fbuddy
+EnvironmentFile=/etc/flowdesk/flowdesk.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node desk/src/index.js
+
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+KillSignal=SIGTERM
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=flowdesk
+
+# node-2 chỉ có ~1GB RAM: không để service này kéo sập cả máy.
+MemoryMax=300M
+LimitNOFILE=65535
+
+# Hardening. Lưu ý: phải ĐỌC được /var/lib/fbuddy (DB đơn hàng) — chỉ đọc, không ghi.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/flowdesk
+ReadOnlyPaths=/var/lib/fbuddy
+
+[Install]
+WantedBy=multi-user.target

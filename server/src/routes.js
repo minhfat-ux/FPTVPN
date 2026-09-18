@@ -87,6 +87,15 @@ import {
   purchaseHubSkill,
   updateHubSkill,
 } from "./skills/hub.js";
+import {
+  WINDOWS_DOWNLOAD_URL,
+  desktopPageHtml,
+  desktopStatusFor,
+  escapeHtml,
+  issueAndEmailDesktopCode,
+  reissueFormHtml,
+  verifyActivationLink,
+} from "./desktop.js";
 import { listAllTools, refreshServer, testServerConfig } from "./mcp.js";
 import {
   applyTransaction,
@@ -1189,6 +1198,107 @@ export function createApiRouter() {
           .status(err?.status ?? 400)
           .send(topupPageHtml({ ok: false, title: "Không xử lý được", detail: String(err?.message ?? err) }));
       }
+    }),
+  );
+
+  // ------------------------------------------- bản Windows (service flowdesk)
+
+  /**
+   * Trạng thái cho trang `?view=desktop`: đã có đơn paid chưa, backend bản
+   * Windows có sống không, và những máy đã kích hoạt (thu hồi được).
+   */
+  router.get(
+    "/desktop/status",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      res.json(await desktopStatusFor({ user: req.user }));
+    }),
+  );
+
+  /**
+   * Người dùng bấm "lấy mã kích hoạt": phát mã MỚI (mã cũ hết hiệu lực) + gửi
+   * email. Đây là đường duy nhất trả mã gốc ra giao diện, và chỉ cho chính chủ.
+   */
+  router.post(
+    "/desktop/code",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const result = await issueAndEmailDesktopCode({ user: req.user, reason: "user_request" });
+      if (!result.ok) {
+        throw new ApiError(503, result.error ?? "desktop_unavailable", result.message ?? "Chưa lấy được mã kích hoạt");
+      }
+      audit(req.user.id, "desktop.code", result.invitation?.id ?? null, { emailed: result.emailed });
+      res.status(201).json({
+        code: result.code,
+        expiresAt: result.invitation?.expiresAt ?? null,
+        emailed: result.emailed,
+        mailReason: result.mailReason ?? null,
+        downloadUrl: WINDOWS_DOWNLOAD_URL,
+      });
+    }),
+  );
+
+  /**
+   * Trang công khai mở từ email (liên kết ký HMAC, sống 30 ngày): xem hướng dẫn
+   * và lấy lại mã. Cố ý KHÔNG cần đăng nhập — khách vừa mua thường mở email trên
+   * máy khác, và bắt đăng nhập lại chỉ tổ chặn họ.
+   */
+  router.get(
+    "/desktop",
+    asyncHandler(async (req, res) => {
+      const userId = String(req.query.u ?? "");
+      const token = String(req.query.t ?? "");
+      const check = verifyActivationLink(userId, token);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (!check.ok) {
+        return res.status(check.reason === "expired" ? 410 : 403).send(
+          desktopPageHtml({
+            ok: false,
+            title: check.reason === "expired" ? "Liên kết đã hết hạn" : "Liên kết không hợp lệ",
+            detail: "Đăng nhập fBuddy rồi mở mục <b>Bản Windows</b> để lấy mã kích hoạt mới.",
+          }),
+        );
+      }
+      const user = getById("users", userId);
+      if (!user) {
+        return res.status(404).send(
+          desktopPageHtml({ ok: false, title: "Không tìm thấy tài khoản", detail: "Liên kết này không còn dùng được." }),
+        );
+      }
+      const email = escapeHtml(user.email);
+      if (req.query.action !== "new") {
+        return res.send(
+          desktopPageHtml({
+            ok: true,
+            title: "Kích hoạt MeetFlow AI trên Windows",
+            detail: `Mã kích hoạt đã được gửi tới <b>${email}</b>. Nếu không thấy email — hoặc cần mã mới — bấm nút bên dưới.`,
+            reissueForm: reissueFormHtml({ userId, token }),
+          }),
+        );
+      }
+      const result = await issueAndEmailDesktopCode({ user: { id: user.id, email: user.email }, reason: "public_link" });
+      if (!result.ok) {
+        return res.status(503).send(
+          desktopPageHtml({
+            ok: false,
+            title: "Chưa lấy được mã",
+            detail: escapeHtml(result.message ?? result.error ?? "Không rõ nguyên nhân"),
+            reissueForm: reissueFormHtml({ userId, token, label: "Thử lại" }),
+          }),
+        );
+      }
+      return res.send(
+        desktopPageHtml({
+          ok: true,
+          title: "Mã kích hoạt của bạn",
+          code: result.code,
+          expiresAt: result.invitation?.expiresAt ?? null,
+          detail: `Đã gửi kèm email tới <b>${email}</b>. Mã cũ (nếu có) đã hết hiệu lực.${
+            result.emailed ? "" : " <b>Email chưa gửi được</b> — hãy dùng mã ở trên."
+          }`,
+          reissueForm: reissueFormHtml({ userId, token, label: "Lấy mã khác" }),
+        }),
+      );
     }),
   );
 
