@@ -48,6 +48,12 @@ class HysteriaVpnService : VpnService() {
      * Đó đúng là lỗi "connected nhưng không có mạng" trên iPad 13/09.
      */
     private var hostRelays: Map<String, String> = emptyMap()
+    /**
+     * Lượt thử trước đã thất bại hoàn toàn ⇒ lần này thử đường WS (Cloudflare) TRƯỚC.
+     * Trên data di động TQ mọi cổng trực tiếp đều chết, thử chúng trước chỉ làm
+     * 'connecting' kéo dài thêm ~10s mà không có cơ hội thành công nào.
+     */
+    @Volatile private var preferWsFirst = false
 
     /** Logs default-network changes while the tunnel runs (WiFi -> mobile data). */
     private var networkMonitor: NetworkMonitor? = null
@@ -167,6 +173,7 @@ class HysteriaVpnService : VpnService() {
                     2 -> { // transport dropped or was rebuilt for a network change
                         everUp = true
                         failedPasses = 0
+                          preferWsFirst = false
                         backoffMs = RETRY_BACKOFF_START_MS
                         reportReconnecting()
                         // Give the Go client a moment to release its socket/fd before
@@ -186,6 +193,7 @@ class HysteriaVpnService : VpnService() {
                             "hysteria: no transport reachable (pass failed$wasUp) -> retry in ${backoffMs}ms",
                         )
                         failedPasses++
+                        preferWsFirst = true
                         // A node whose IP is blocked (GFW) never answers on any port, so
                         // after a couple of dead passes move on to the next node instead
                         // of retrying a black hole forever.
@@ -321,6 +329,12 @@ class HysteriaVpnService : VpnService() {
         // KHÔNG áp dụng cho "ws": mở WS có thể hỏng tạm thời (Funnel/Cloudflare chớp),
         // nên vẫn cho nó thử lại — đây là đường duy nhất còn sống khi IP bị chặn.
         val triedDirect = preferred?.takeIf { it != "ws" }
+        // Lượt trước chết hết: thử WS trước, khỏi tốn thời gian cho cổng đã chứng minh là chết.
+        val wsAlreadyTried = preferWsFirst
+        if (wsAlreadyTried) {
+            val ws = wsRelayAttempt()
+            if (ws != 0) return ws
+        }
         for (relayPort in HY_TCP_RELAY_PORTS) {
             if (triedDirect == "tcp:$relayPort") continue
             val outcome = tcpRelayAttempt(relayPort)
@@ -332,8 +346,10 @@ class HysteriaVpnService : VpnService() {
             if (primaryUdp != 0) return primaryUdp
         }
         // Đường duy nhất còn sống khi IP node bị chặn — đi qua hạ tầng dùng chung.
-        val ws = wsRelayAttempt()
-        if (ws != 0) return ws
+        if (!wsAlreadyTried) {
+            val ws = wsRelayAttempt()
+            if (ws != 0) return ws
+        }
         // WS cũng không mở được: thử nốt các cổng UDP trực tiếp còn lại (mạng chặn UDP
         // không đều, hoặc Funnel/Cloudflare tạm lỗi).
         for (port in HY_PORTS.drop(1)) {
@@ -1016,7 +1032,7 @@ class HysteriaVpnService : VpnService() {
          * Trần thời gian bắt tay của MỘT đường trực tiếp. Đường trực tiếp khi thông thì
          * lên trong <1s; quá ngần này nghĩa là cổng/IP đó không tới được.
          */
-        const val ATTEMPT_UP_BUDGET_MS = 2_500L
+        const val ATTEMPT_UP_BUDGET_MS = 1_500L
         /**
          * Trần cho đường WS relay: phải đi qua 2 chặng nên handshake chậm hơn thật, cắt
          * sớm sẽ bỏ mất đúng đường duy nhất còn sống khi IP node bị chặn.
@@ -1028,7 +1044,7 @@ class HysteriaVpnService : VpnService() {
          * TCP connect tới relay. 2500ms là lãng phí: khi IP node bị chặn thì connect
          * không bao giờ xong, còn khi tới được thì RTT từ TQ chỉ vài chục ms.
          */
-        const val TCP_CONNECT_TIMEOUT_MS = 2000
+        const val TCP_CONNECT_TIMEOUT_MS = 1200
         const val RETRY_BACKOFF_START_MS = 3000L
         const val RETRY_BACKOFF_MAX_MS = 30000L
         /** Pause after a transport teardown so the Go client releases its socket. */
