@@ -57,21 +57,39 @@ trước khi làm tiếp.
 
 ---
 
-## 1. Lỗ bảo mật đang mở (ưu tiên cao nhất, không sửa được từ đây)
+## 1. Lỗ bảo mật `/tmp-key` — ĐÃ VÁ MỘT PHẦN (2026-09-18 chiều)
 
-```bash
-curl -s -X POST https://api.meetflowai.site/meetflow/tmp-key \
-  -H 'Content-Type: application/json' \
-  -d '{"clientReferenceId":"fchina-translator-android"}'
-# → HTTP 201  {"api_key":"snx_temp_…","expires_at":"…"}
-```
+**Nguyên nhân gốc:** backend `api.meetflowai.site/meetflow` (VPS **103.173.155.50**, service
+`meetflow-backend`, code `/opt/meetflow/backend/server.js`, repo `minhfat-ux/MeetFlowAI`) chạy với
+`ALLOW_UNAUTHENTICATED_CLIENTS=true`. Cờ này **cố ý** có để app vẫn dùng được khi thiết bị không lấy
+được Firebase token (mạng bị chặn — khách Trung Quốc), nhưng nó mở cho **mọi** route, nên người lạ
+`curl` một phát là nhận temp key Soniox thật (log 18/09 12:45 xác nhận: `curl/8.21.0` → 201).
 
-**Không gửi kèm Authorization nào mà vẫn nhận được Soniox temp key thật.**
+**Đã vá (đã deploy + kiểm chứng):**
 
-- Backend `api.meetflowai.site/meetflow` (VPS **103.173.155.50**) phát key cho người lạ ⇒ ai cũng đốt được tiền Soniox của chủ dự án.
-- Gating Pro của bản iOS/Android nằm ở **phía client** (entitlement từ StoreKit / `queryPurchasesAsync`), backend không kiểm tra.
-- Chủ dự án nói **không đụng được backend này** (bản Mac đang chạy tốt) ⇒ cần bên Mac thêm auth + entitlement.
-- Nên **xoay key Soniox** vì một temp key đã bị lấy qua mạng công khai trong quá trình kiểm tra.
+| Việc | Kết quả kiểm chứng |
+|---|---|
+| `/summary`, `/chat`, `/tts` (route đốt key LLM) **bắt buộc đăng nhập** | ẩn danh ⇒ **401** `This endpoint requires a signed-in account.` |
+| Token rác trên `/tmp-key` | ⇒ **401** `Invalid Firebase ID token.` |
+| Đường ẩn danh của `/tmp-key` (giữ cho khách bị chặn mạng) có **hạn mức ngày** | 20/IP/ngày, 100/ngày toàn cục; đo thật: gọi 5 lần liên tiếp ⇒ 201×4 rồi **429** |
+
+Số liệu để chọn hạn mức (đếm 30 ngày log): khách ẩn danh chỉ ~0,5 lượt/ngày, còn `MeetFlowAI_iOS`
+và `okhttp` thật có rơi vào nhánh ẩn danh (nên **không được tắt cờ ngay** — sẽ làm hỏng khách).
+
+**Đóng hẳn thì cần một bản phát hành app** (chủ dự án quyết):
+
+1. Đặt `CLIENT_APP_SECRET=<chuỗi ngẫu nhiên>` trong `/opt/meetflow/backend/.env` → đường ẩn danh
+   không có header `X-MeetFlow-Client` sẽ bị 401.
+2. App bản mới gửi kèm header đó: iOS thêm `request.setValue(secret, forHTTPHeaderField: "X-MeetFlow-Client")`
+   trong `sendAuthorized` (`FChinaTranslator/Services/BackendAPIClient.swift`); Android thêm
+   `.header("X-MeetFlow-Client", BuildConfig.CLIENT_APP_SECRET)` trong interceptor
+   (`data/remote/BackendApiClient.kt`, kèm field trong `build.gradle.kts`). **Chưa làm** — cố ý,
+   vì sửa client mà không build/chạy thử được thì rủi ro hơn là ghi rõ ra đây.
+
+**Không cần xoay key** (chủ dự án chốt): key Soniox/OpenAI/DeepSeek/OpenRouter vẫn chỉ nằm ở server,
+không lộ ra client; temp key là key dẫn xuất, ngắn hạn. File `.env.example` đã ghi cảnh báo về cờ
+này + hai biến hạn mức — trước đây cờ nguy hiểm đó **không hề được ghi trong tài liệu**.
+
 
 ---
 
