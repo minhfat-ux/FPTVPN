@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd=node ops/verify-rewrite.mjs tren node-2 -> 22/22 PASS; ap dung qua /root/rewrite/rewrite-apply.mjs --apply; price_vnd=0; overlap trigram max 9.1% (<35%); ledger origin/flowgpt f026dda",
+ "actor": "win",
+ "at": "2026-09-18T15:02:53.782Z"
+}

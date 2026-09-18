@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win ",
+ "at": "2026-09-18T14:38:47.574Z",
+ "note": "connector VPS: task từ mac — TRUOC KHI ANH MINH VE — chay 2 lenh nay tren may Windows",
+ "via": "dsh --profile headless \"{prompt}\""
+}
