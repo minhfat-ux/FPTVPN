@@ -141,6 +141,32 @@ Plugin `ops/dsh-plugin-agent-watch/` được copy vào `$DSH_HOME/profiles/node
 Tắt tạm: đặt `enabled: false` trong config. Kiểm tra composition:
 `dsh --profile web --dump-config | grep -A4 agent-watch`.
 
+#### Windows chỉ có PowerShell 5.1 (không có `pwsh` 7)
+
+Dùng file `.cmd` có sẵn — không cần `pwsh`:
+
+```bat
+ops\agent-watch.cmd            :: chạy liên tục (để Task Scheduler gọi)
+ops\agent-watch.cmd --once     :: chạy một vòng rồi thoát
+```
+
+Chạy nền khi đăng nhập:
+
+```bat
+schtasks /Create /TN AgentWatch /SC ONLOGON /TR "\"%CD%\ops\agent-watch.cmd\"" /F
+schtasks /Run /TN AgentWatch
+```
+
+Kịch bản `.ps1` vẫn dùng được bằng Windows PowerShell: `powershell -ExecutionPolicy Bypass -File ops\agent-watch-install.ps1`.
+
+**HAI LỖI THẬT ĐÃ GẶP — đừng lặp lại:**
+
+1. **Đặt biến sai kiểu** → `set AGENT_NAME=WIN && node …` cho giá trị `"WIN "` (dấu cách trước `&&`).
+   Hậu quả: tên file sự kiện thành `…-win -woken.json` và lọc presence sai. Luôn dùng dạng có ngoặc kép:
+   `set "AGENT_NAME=WIN"`. Code cũng đã `.trim()` tên agent để phòng.
+2. **Chạy nhiều watcher cùng lúc** → mỗi cái spawn một phiên riêng: đã thấy **7 sự kiện `woken` trong 1 phút**.
+   Watcher nay tự ghi pidfile `ops/tasks/.watch-<agent>.pid` và **từ chối chạy chồng** (dùng `--force` nếu thật sự cần).
+
 ### 7.2b Cài như dịch vụ nền (nếu không muốn phụ thuộc `dsh web`)
 - **macOS (launchd)** — `~/Library/LaunchAgents/site.meetflowai.agentwatch.plist` với
   `ProgramArguments`: `node`, `<repo>/ops/agent-watch.mjs`, `--auto`; `EnvironmentVariables`:

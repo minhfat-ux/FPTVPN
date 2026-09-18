@@ -29,7 +29,9 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawn as childProcessSpawn } from "node:child_process";
 
-const SELF = (process.env.AGENT_NAME || "MAC").toUpperCase();
+// .trim() là bắt buộc: trên Windows, `set AGENT_NAME=WIN && node …` biến giá trị thành "WIN "
+// (dấu cách trước &&), làm hỏng tên agent trong presence và tên file sự kiện (đã gặp thật).
+const SELF = (process.env.AGENT_NAME || "MAC").trim().toUpperCase();
 const PEER = SELF === "MAC" ? "WIN" : "MAC";
 const TASKS_DIR = path.join("ops", "tasks");
 const STATE_FILE = path.join(TASKS_DIR, `.watch-${SELF.toLowerCase()}.json`);
@@ -369,6 +371,48 @@ async function tick(state, { initializeOnly = false } = {}) {
   state.initialized = true;
   saveState(state);
   return woke;
+}
+
+// ---- chốt chống NHIỀU watcher cùng chạy (mỗi cái sẽ spawn một phiên riêng → bão đánh thức).
+// Đã gặp thật: 7 sự kiện `woken` trong 1 phút từ phía Windows.
+const PIDFILE = path.join(TASKS_DIR, `.watch-${SELF.toLowerCase()}.pid`);
+
+function watcherAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function claimLock() {
+  try {
+    const existing = Number(fs.readFileSync(PIDFILE, "utf8").trim());
+    if (existing && existing !== process.pid && watcherAlive(existing)) return existing;
+  } catch {
+    /* chưa có pidfile */
+  }
+  fs.mkdirSync(TASKS_DIR, { recursive: true });
+  fs.writeFileSync(PIDFILE, String(process.pid));
+  return null;
+}
+
+function releaseLock() {
+  try {
+    if (Number(fs.readFileSync(PIDFILE, "utf8").trim()) === process.pid) fs.rmSync(PIDFILE, { force: true });
+  } catch {
+    /* thôi */
+  }
+}
+
+if (!ONCE) {
+  const holder = claimLock();
+  if (holder && !args.includes("--force")) {
+    log(`đã có watcher khác đang chạy (pid ${holder}) — thoát để tránh đánh thức trùng. (--force để chạy chồng)`);
+    process.exit(0);
+  }
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => { releaseLock(); process.exit(0); });
 }
 
 const state = loadState();
