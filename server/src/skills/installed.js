@@ -30,11 +30,11 @@ export function listInstalledSkillIds(userId) {
   return rows.map((row) => row.skill_id).filter((id) => isAllowedSkill({ skillId: id, userId }));
 }
 
-export function listInstalledSkills(userId) {
+export function listInstalledSkills(userId, { lang = "vi" } = {}) {
   const ids = listInstalledSkillIds(userId);
-  const byId = new Map(publicSkillCatalog().map((skill) => [skill.id, skill]));
+  const byId = new Map(publicSkillCatalog(lang).map((skill) => [skill.id, skill]));
   // Hub skills are described by their own catalogue entry.
-  for (const skill of listHubSkills({ userId })) {
+  for (const skill of listHubSkills({ userId, lang })) {
     byId.set(skill.id, {
       id: skill.id,
       label: skill.name,

@@ -359,6 +359,54 @@ export function isKnownSkill(skillId) {
   return skillId === "auto" || READY_SKILL_IDS.includes(String(skillId));
 }
 
-export function publicSkillCatalog() {
-  return SKILL_CATALOG.map(({ order: _order, ...skill }) => skill);
+/**
+ * Nhãn/mô tả của kỹ năng dựng sẵn theo ngôn ngữ. Bản gốc trong `SKILL_CATALOG` là tiếng
+ * Việt; đây là bản dịch cho giao diện tiếng Anh / tiếng Trung. Kỹ năng nào thiếu bản
+ * dịch thì rơi về tiếng Việt (không bao giờ hiện khoá i18n thô ra giao diện).
+ */
+const CATALOG_I18N = {
+  chat: {
+    en: { label: "Chat", description: "Trò chuyện tự do với trợ lý" },
+    zh: { label: "聊天", description: "与助手自由对话" },
+  },
+  image: {
+    en: { label: "Edit images", description: "Sửa, cắt và tạo ảnh theo yêu cầu" },
+    zh: { label: "图片编辑", description: "按需求编辑、裁剪与生成图片" },
+  },
+  ppt: {
+    en: { label: "Make slides", description: "Tạo bộ slide hoàn chỉnh từ yêu cầu" },
+    zh: { label: "制作 PPT", description: "根据需求生成完整幻灯片" },
+  },
+  excel: {
+    en: { label: "Make spreadsheets", description: "Tạo bảng tính có công thức" },
+    zh: { label: "制作表格", description: "生成带公式的电子表格" },
+  },
+  data: {
+    en: { label: "Analyse data", description: "Phân tích dữ liệu và trực quan hoá" },
+    zh: { label: "数据分析", description: "分析数据并可视化" },
+  },
+  mcp_skill: {
+    en: { label: "Skills from MCP servers" },
+    zh: { label: "来自 MCP 服务器的技能" },
+  },
+  document: {
+    en: { label: "Document processing" },
+    zh: { label: "文档处理" },
+  },
+  translate: {
+    en: { label: "Document translation" },
+    zh: { label: "文档翻译" },
+  },
+  org_skill: {
+    en: { label: "Your company's own skills" },
+    zh: { label: "企业自有技能" },
+  },
+};
+
+/** Danh mục kỹ năng cho giao diện, đã dịch nhãn/mô tả theo `lang` (mặc định tiếng Việt). */
+export function publicSkillCatalog(lang = "vi") {
+  return SKILL_CATALOG.map(({ order: _order, ...skill }) => {
+    const translated = CATALOG_I18N[skill.id]?.[lang];
+    return translated ? { ...skill, ...translated } : skill;
+  });
 }

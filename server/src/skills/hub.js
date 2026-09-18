@@ -1,5 +1,5 @@
 import { all, db, getAppSettings, getById, insert, one, remove, update } from "../db.js";
-import { badRequest, notFound, slugify } from "../util.js";
+import { ApiError, badRequest, notFound, slugify } from "../util.js";
 import { getBalance, spendCredits } from "../credits.js";
 import { READY_SKILL_IDS, SKILL_CATALOG } from "./index.js";
 import { listInstalledSkillIds, setInstalledSkills, MAX_SELECTABLE_SKILLS } from "./installed.js";
@@ -14,7 +14,7 @@ import { listInstalledSkillIds, setInstalledSkills, MAX_SELECTABLE_SKILLS } from
  * PPTX/XLSX files, analyse data or edit images.
  */
 
-export const HUB_CATEGORIES = ["Bán hàng", "Văn phòng", "Dữ liệu", "Nội dung", "Giáo dục", "Khác"];
+export const HUB_CATEGORIES = ["Chuyên gia", "Bán hàng", "Văn phòng", "Dữ liệu", "Nội dung", "Giáo dục", "Khác"];
 
 /**
  * Selling price of a skill, in VND. **This is the stored, authoritative price** —
@@ -40,11 +40,68 @@ function creditPrice() {
   return Math.max(0, Number(getAppSettings().vndPerCredit) || 0);
 }
 
+/** Ngôn ngữ chợ kỹ năng hỗ trợ (bản gốc trong cột thường là tiếng Việt). */
+export const HUB_LANGS = ["vi", "en", "zh"];
+
+/**
+ * Bảng dịch của một hàng `hub_skills`.
+ *
+ * LƯU Ý: `db.js` bỏ hậu tố `_json` khi đọc và giải mã luôn — cột `i18n_json` trở thành
+ * `row.i18n` (giống `tools_json` → `tools`). Nhưng khi GHI thì vẫn dùng tên có `_json`.
+ * Đọc cả hai tên để không phụ thuộc chiều nào.
+ */
+function i18nTable(row) {
+  const raw = row?.i18n ?? row?.i18n_json;
+  if (!raw) return {};
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw) ?? {}; } catch { return {}; }
+  }
+  return typeof raw === "object" ? raw : {};
+}
+
+/** Hàng đã đè bản dịch của `lang` lên bản gốc — dùng cho MỌI chỗ trả dữ liệu ra ngoài. */
+export function localisedSkill(row, lang = "vi") {
+  if (!row || !lang || lang === "vi") return row;
+  const entry = i18nTable(row)[lang];
+  if (!entry || typeof entry !== "object") return row;
+  return {
+    ...row,
+    name: entry.name ?? row.name,
+    tagline: entry.tagline ?? row.tagline,
+    description: entry.description ?? row.description,
+    instructions: entry.instructions ?? row.instructions,
+  };
+}
+
+/** Các ngôn ngữ đã có bản dịch cho kỹ năng này (không tính bản gốc). */
+export function hubSkillLanguages(row) {
+  return Object.keys(i18nTable(row)).filter((lang) => HUB_LANGS.includes(lang));
+}
+
+/** Chuẩn hoá bản dịch trước khi ghi: chỉ nhận vi/en/zh, cắt theo trần của chợ. */
+export function normaliseI18n(input) {
+  if (!input || typeof input !== "object") return null;
+  const out = {};
+  for (const lang of HUB_LANGS) {
+    const entry = input[lang];
+    if (!entry || typeof entry !== "object") continue;
+    const clean = {};
+    if (entry.name !== undefined) clean.name = String(entry.name).slice(0, 120);
+    if (entry.tagline !== undefined) clean.tagline = String(entry.tagline ?? "").slice(0, 200);
+    if (entry.description !== undefined) clean.description = String(entry.description ?? "").slice(0, 2000);
+    if (entry.instructions !== undefined) clean.instructions = String(entry.instructions ?? "").slice(0, 6000);
+    if (Object.keys(clean).length) out[lang] = clean;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 function rowToSkill(
   row,
-  { userId = null, owned = new Set(), installed = new Set(), withContent = false } = {},
+  { userId = null, owned = new Set(), installed = new Set(), withContent = false, lang = "vi" } = {},
 ) {
   if (!row) return null;
+  // Đè bản dịch NGAY tại đây để mọi trường phía dưới (kể cả `instructions`) tự đúng ngôn ngữ.
+  row = localisedSkill(row, lang);
   const priceVnd = skillPriceVnd(row);
   return {
     id: row.id,
@@ -59,6 +116,8 @@ function rowToSkill(
     /** Same price expressed in credits at today's credit price (derived, not stored). */
     price: creditsForPriceVnd(priceVnd),
     state: row.state,
+    /** Ngôn ngữ đã có bản dịch (ngoài bản gốc tiếng Việt). */
+    languages: hubSkillLanguages(row),
     installs: Number(row.installs ?? 0),
     sortOrder: Number(row.sort_order ?? 0),
     owned: owned.has(row.id),
@@ -71,8 +130,9 @@ function rowToSkill(
 }
 
 /** Internal fields the agent needs (never sent to the browser as-is). */
-export function hubSkillRuntime(row) {
+export function hubSkillRuntime(row, lang = "vi") {
   if (!row) return null;
+  row = localisedSkill(row, lang);
   const priceVnd = skillPriceVnd(row);
   return {
     id: row.id,
@@ -86,12 +146,12 @@ export function hubSkillRuntime(row) {
   };
 }
 
-export function listHubSkills({ userId = null, includeHidden = false, withContent = false } = {}) {
+export function listHubSkills({ userId = null, includeHidden = false, withContent = false, lang = "vi" } = {}) {
   const where = includeHidden ? "" : "state != 'hidden'";
   const rows = all("hub_skills", where, [], { order: "sort_order ASC, created_at ASC" });
   const owned = new Set(ownedHubSkillIds(userId));
   const installed = new Set(userId ? listInstalledSkillIds(userId) : []);
-  return rows.map((row) => rowToSkill(row, { userId, owned, installed, withContent }));
+  return rows.map((row) => rowToSkill(row, { userId, owned, installed, withContent, lang }));
 }
 
 export function getHubSkillRow(idOrSlug) {
@@ -109,6 +169,7 @@ export function getHubSkill(idOrSlug, options = {}) {
     owned,
     installed,
     withContent: Boolean(options.withContent),
+    lang: options.lang ?? "vi",
   });
 }
 
@@ -141,14 +202,17 @@ export function purchaseHubSkill({ user, idOrSlug }) {
   if (!alreadyOwned) {
     if (price > 0) {
       if (user.role !== "admin" && balance < price) {
-        const error = new Error(
+        // ApiError (không phải Error thường): handler ở index.js chỉ trả nguyên văn
+        // `message` cho ApiError, còn Error thường bị bóp thành "Lỗi hệ thống, vui lòng
+        // thử lại" — người mua chỉ thấy lỗi chung chung dù server biết thiếu đúng bao nhiêu.
+        // `buyUrl` để giao diện mời nạp ngay tại chỗ.
+        throw new ApiError(
+          402,
+          "insufficient_credits",
           `Cần ${price.toLocaleString("vi-VN")} credit (${priceVnd.toLocaleString("vi-VN")}đ) để mua "${row.name}", ` +
-            `số dư hiện tại là ${balance.toLocaleString("vi-VN")} credit.`,
+            `số dư hiện tại là ${balance.toLocaleString("vi-VN")} credit. Nạp thêm để mua ngay.`,
+          { price, priceVnd, balance, buyUrl: String(getAppSettings().creditBuyUrl ?? "") || null },
         );
-        error.status = 402;
-        error.code = "insufficient_credits";
-        error.details = { price, priceVnd, balance, buyUrl: null };
-        throw error;
       }
       balance = spendCredits({
         userId: user.id,
@@ -213,6 +277,7 @@ export function createHubSkill(input) {
     price: creditsForPriceVnd(priceVnd),
     instructions: String(input?.instructions ?? "").slice(0, 6000) || null,
     tools_json: Array.isArray(input?.tools) ? input.tools.map(String) : [],
+    i18n_json: normaliseI18n(input?.i18n),
     state: ["published", "coming_soon", "hidden"].includes(input?.state) ? input.state : "published",
     sort_order: Number(input?.sortOrder) || 0,
   });
@@ -236,6 +301,8 @@ export function updateHubSkill(id, patch) {
   }
   if (patch.instructions !== undefined) changes.instructions = String(patch.instructions ?? "").slice(0, 6000) || null;
   if (patch.tools !== undefined) changes.tools_json = Array.isArray(patch.tools) ? patch.tools.map(String) : [];
+  // Bản dịch: gửi `i18n` (object) để đặt/ghi đè; gửi `i18n: null` để xoá hết bản dịch.
+  if (patch.i18n !== undefined) changes.i18n_json = normaliseI18n(patch.i18n);
   if (patch.state !== undefined && ["published", "coming_soon", "hidden"].includes(patch.state)) {
     changes.state = patch.state;
   }
@@ -260,12 +327,20 @@ export function deleteHubSkill(id) {
  * Returns null for built-in ids (they have their own instructions) and for hub
  * skills the user has not bought yet.
  */
-export function hubSkillForUser({ skillId, userId, role = "user" }) {
+/** Ngôn ngữ người dùng đã chọn (cột `users.locale`), mặc định tiếng Việt. */
+export function userLocale(userId) {
+  if (!userId) return "vi";
+  const row = getById("users", userId);
+  const lang = String(row?.locale ?? "").trim().toLowerCase();
+  return HUB_LANGS.includes(lang) ? lang : "vi";
+}
+
+export function hubSkillForUser({ skillId, userId, role = "user", lang = null }) {
   const row = getHubSkillRow(skillId);
   if (!row || row.state !== "published") return null;
   const owned = skillPriceVnd(row) === 0 || role === "admin" || hasPurchased(userId, row.id);
   if (!owned) return null;
-  return hubSkillRuntime(row);
+  return hubSkillRuntime(row, lang ?? userLocale(userId));
 }
 
 /** A skill id is selectable when it is built in, or a published free/owned hub skill. */

@@ -1,4 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { api, setApiLang } from "../api/client";
+import { useAuth } from "../state/store";
 import { common as commonVi } from "./locales/vi/common";
 import { common as commonEn } from "./locales/en/common";
 import { common as commonZh } from "./locales/zh/common";
@@ -126,6 +128,15 @@ export function translate(locale: LocaleId, key: string, vars?: TranslateVars) {
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<LocaleId>(() => detectLocale());
+
+  // Tên/mô tả kỹ năng nằm trong CSDL (có bản dịch vi/en/zh) nên API phải biết ngôn ngữ
+  // đang chọn; đồng thời lưu lên tài khoản để lượt chat lấy đúng bản chỉ dẫn.
+  const { user } = useAuth();
+  useEffect(() => {
+    setApiLang(locale);
+    // Lưu lên tài khoản để LƯỢT CHAT lấy đúng bản chỉ dẫn kỹ năng (server đọc users.locale).
+    if (user) void api.updateMe({ locale }).catch(() => undefined);
+  }, [locale, user]);
 
   useEffect(() => {
     const meta = localeMeta(locale);

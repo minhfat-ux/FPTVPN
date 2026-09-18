@@ -8,9 +8,18 @@ import { createApiRouter } from "./routes.js";
 import { ApiError } from "./util.js";
 import { closeAll, connectAll } from "./mcp.js";
 import { countUsers } from "./auth.js";
+import { ensureExtraColumns } from "./schema-extras.js";
 
 ensureDirs();
 initDb();
+
+// Cột cho tính năng mới (đa ngữ kỹ năng, ngôn ngữ người dùng) — xem schema-extras.js.
+try {
+  const added = ensureExtraColumns();
+  if (added.length) console.log(`[fbuddy] Đã thêm cột: ${added.join(", ")}`);
+} catch (err) {
+  console.warn("[fbuddy] Không thêm được cột bổ sung:", err?.message ?? err);
+}
 
 // Seed the Skill Hub catalogue once (idempotent by slug).
 try {

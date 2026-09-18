@@ -23,6 +23,8 @@ export function publicUser(row) {
     name: row.name ?? null,
     role: row.role,
     isAdmin: row.role === "admin",
+    /** Ngôn ngữ người dùng chọn (vi/en/zh) — dùng cho cả giao diện lẫn chỉ dẫn kỹ năng. */
+    locale: row.locale ?? null,
     createdAt: row.created_at,
   };
 }
@@ -113,6 +115,11 @@ export function changePassword(userId, { currentPassword, newPassword }) {
 export function updateProfile(userId, patch) {
   const changes = {};
   if (patch.name !== undefined) changes.name = patch.name ? String(patch.name).slice(0, 120) : null;
+  // Ngôn ngữ giao diện; chỉ nhận 3 mã đang hỗ trợ, giá trị lạ bị bỏ qua (không ghi rác).
+  if (patch.locale !== undefined) {
+    const locale = String(patch.locale ?? "").trim().toLowerCase();
+    if (["vi", "en", "zh"].includes(locale)) changes.locale = locale;
+  }
   return update("users", userId, changes);
 }
 

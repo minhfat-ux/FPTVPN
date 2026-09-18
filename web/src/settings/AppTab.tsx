@@ -6,6 +6,7 @@ import { useAuth, useToast } from "../state/store";
 import { ConfirmDialog, Field, Spinner, Switch } from "../components/ui";
 import { LocaleSwitcher, useI18n } from "../i18n";
 import { CreditPricingCard } from "./CreditPricingCard";
+import { SkillHubImportCard } from "./SkillHubImportCard";
 import type { AppSettings, ModelOption, Provider, SkillId } from "../types";
 
 /** App settings extended with the passwordless-login / mailer fields. */
@@ -303,6 +304,8 @@ export function AppTab() {
         onPatch={patch}
         averageTurnCost={credits?.averageCostPerTurn ?? null}
       />
+
+      <SkillHubImportCard />
 
       <div className="card">
         <div className="row row-wrap gap-2">

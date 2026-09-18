@@ -1,3 +1,15 @@
+/**
+ * Ngôn ngữ giao diện đang chọn, để API trả tên/mô tả kỹ năng đúng thứ tiếng.
+ * `I18nProvider` gọi `setApiLang()` mỗi khi người dùng đổi ngôn ngữ.
+ */
+let apiLang = "vi";
+export function setApiLang(lang: string) {
+  apiLang = ["vi", "en", "zh"].includes(lang) ? lang : "vi";
+}
+export function getApiLang() {
+  return apiLang;
+}
+
 import type {
   AnalysisPayload,
   AppSettings,
@@ -129,7 +141,7 @@ export const api = {
     request<{ ok: boolean; current: boolean; revoked: boolean }>("DELETE", `/auth/sessions/${id}`),
   revokeOtherSessions: () =>
     request<{ ok: boolean; revoked: number; items: AuthSession[] }>("POST", "/auth/sessions/revoke-others", {}),
-  updateMe: (body: { name?: string; currentPassword?: string; password?: string }) =>
+  updateMe: (body: { name?: string; locale?: string; currentPassword?: string; password?: string }) =>
     request<{ user: User }>("PATCH", "/auth/me", body),
   testMailer: (body: { to: string }) =>
     request<{ ok: boolean; message: string }>("POST", "/settings/mailer/test", body),
@@ -253,7 +265,7 @@ export const api = {
   },
 
   // ---- skills & models
-  skills: () => request<SkillCatalogResponse>("GET", "/skills"),
+  skills: () => request<SkillCatalogResponse>("GET", `/skills?lang=${apiLang}`),
   /** Saves the user's quick-list (the "Thêm kỹ năng" picker / future marketplace). */
   setInstalledSkills: (ids: string[]) =>
     request<{ installed: string[]; items: SkillDescriptor[] }>("PUT", "/skills/installed", { ids }),
@@ -341,10 +353,10 @@ export const api = {
     ),
 
   // ---- skill hub (marketplace, paid with tokens)
-  hub: () => request<HubListing>("GET", "/hub"),
-  hubSkill: (id: string) => request<{ skill: HubSkill; balance: number }>("GET", `/hub/${id}`),
+  hub: () => request<HubListing>("GET", `/hub?lang=${apiLang}`),
+  hubSkill: (id: string) => request<{ skill: HubSkill; balance: number }>("GET", `/hub/${id}?lang=${apiLang}`),
   buyHubSkill: (id: string) => request<HubPurchaseResult>("POST", `/hub/${id}/purchase`, {}),
-  adminHub: () => request<{ items: HubSkill[]; categories: string[] }>("GET", "/admin/hub"),
+  adminHub: () => request<{ items: HubSkill[]; categories: string[] }>("GET", `/admin/hub?lang=${apiLang}`),
   createHubSkill: (body: Record<string, unknown>) =>
     request<{ skill: HubSkill }>("POST", "/admin/hub", body),
   updateHubSkill: (id: string, body: Record<string, unknown>) =>
