@@ -152,6 +152,19 @@ const ASK_DOC = path.join("docs", "ASK-WINDOWS.md");
 const ASK_START = "<!-- AUTO-TASKS:START (do ops/task.mjs sinh, dung sua tay) -->";
 const ASK_END = "<!-- AUTO-TASKS:END -->";
 
+/**
+ * Thay khối giữa hai mốc bằng phương pháp CẮT CHUỖI (không dùng RegExp).
+ *
+ * Lỗi thật đã gặp: mốc chứa `(` `)` `.` nên `new RegExp(mốc)` không khớp, khối "tự sinh" vì thế
+ * KHÔNG BAO GIỜ được cập nhật — file cứ giữ nội dung cũ mà script vẫn báo "đã cập nhật".
+ */
+function replaceBlock(text, start, end, block) {
+  const from = text.indexOf(start);
+  const to = text.indexOf(end);
+  if (from < 0 || to < from) return null;
+  return text.slice(0, from) + block + text.slice(to + end.length);
+}
+
 function refreshAskDoc() {
   if (!fs.existsSync(ASK_DOC)) return null;
   const rows = [];
@@ -184,8 +197,9 @@ function refreshAskDoc() {
     ASK_END,
   ].join("\n");
   let text = fs.readFileSync(ASK_DOC, "utf8");
-  if (text.includes(ASK_START) && text.includes(ASK_END)) {
-    text = text.replace(new RegExp(`${ASK_START}[\\s\\S]*?${ASK_END}`), block);
+  const replaced = replaceBlock(text, ASK_START, ASK_END, block);
+  if (replaced !== null) {
+    text = replaced;
   } else {
     // Chèn ngay dưới tiêu đề H1 để nằm ở chỗ dễ thấy nhất khi người/agent đọc file.
     const lines = text.split("\n");
@@ -511,4 +525,15 @@ if (command === "new") {
       "  refresh                       cập nhật khối việc đang chờ trong docs/ASK-WINDOWS.md",
     ].join("\n"),
   );
+}
+
+// Sau mọi lệnh có ghi sự kiện: cập nhật bảng trạng thái (AGENTS.local.md) để phiên sau tự biết.
+// Best-effort, chạy nền, không chặn và không làm hỏng kết quả lệnh.
+if (["send", "ack", "progress", "blocked", "done", "verify"].includes(command)) {
+  try {
+    const { spawn } = await import("node:child_process");
+    spawn(process.execPath, ["ops/status-board.mjs"], { cwd: process.cwd(), detached: true, stdio: "ignore" }).unref();
+  } catch {
+    /* không cập nhật được bảng cũng không sao */
+  }
 }

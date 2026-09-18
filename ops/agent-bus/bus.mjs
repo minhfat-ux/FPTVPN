@@ -108,9 +108,9 @@ function readPresence() {
   }
 }
 
-function touchPresence(agent, ip, since, count) {
+function touchPresence(agent, ip, since, count, host = "") {
   const table = readPresence();
-  table[agent] = { at: new Date().toISOString(), ip, lastSince: since, messages: count };
+  table[agent] = { at: new Date().toISOString(), ip, host, lastSince: since, messages: count };
   try {
     fs.writeFileSync(PRESENCE, JSON.stringify(table, null, 1));
   } catch {
@@ -212,6 +212,14 @@ const server = http.createServer(async (req, res) => {
       return send(res, 201, { ok: true, message });
     }
 
+    // Xoá presence rác (ví dụ do test bằng vai của bên kia trên máy này) — nếu không, bảng trạng thái
+    // sẽ báo "đối tác đang poll" trong khi thực tế đối tác chưa hề nối vào.
+    if (req.method === "POST" && url.pathname === "/presence/reset") {
+      try { fs.rmSync(PRESENCE, { force: true }); } catch { /* thôi */ }
+      console.log("[bus] đã xoá presence");
+      return send(res, 200, { ok: true });
+    }
+
     if (req.method === "GET" && url.pathname === "/presence") {
       const table = readPresence();
       const now = Date.now();
@@ -229,7 +237,7 @@ const server = http.createServer(async (req, res) => {
       if (!agent) return send(res, 400, { error: "thiếu `agent`" });
       const items = readAll();
       const messages = items.filter((item) => item.to === agent && item.id > since);
-      touchPresence(agent, clientIp(req), since, messages.length);
+      touchPresence(agent, clientIp(req), since, messages.length, String(url.searchParams.get("host") ?? "").slice(0, 40));
       return send(res, 200, { agent, since, latest: items.length ? items[items.length - 1].id : 0, messages });
     }
 
