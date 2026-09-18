@@ -174,6 +174,12 @@ function runWake(prompt) {
 /** Ghi sự kiện `woken` rồi push — bằng chứng kênh đánh thức đã thông. */
 function recordWake(entry, reason) {
   if (DRY || NO_RECORD) return;
+  // Đánh thức vì một tin bus không gắn với task nào trong sổ thì KHÔNG ghi sự kiện — nếu ghi sẽ
+  // sinh thư mục task rác (đã gặp: `bus-6` không có `created`, hiện ra `[unknown]` trong `list`).
+  if (!fs.existsSync(path.join(TASKS_DIR, entry.id))) {
+    log(`không ghi sự kiện woken cho "${entry.id}" (không phải task trong sổ)`);
+    return;
+  }
   const file = path.join(TASKS_DIR, entry.id, `${new Date().toISOString().replace(/[:.]/g, "-")}-${SELF.toLowerCase()}-woken.json`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify({ type: "woken", actor: SELF.toLowerCase(), at: new Date().toISOString(), note: reason, via: WAKE_CMD }, null, 1)}\n`);
@@ -234,6 +240,14 @@ async function tickBus(state) {
     payload = await response.json();
   } catch (error) {
     log(`bus không gọi được: ${String(error?.message ?? error).slice(0, 120)}`);
+    return 0;
+  }
+  // Lần chạy đầu: bỏ qua lịch sử bus (giống cách bỏ qua sự kiện git cũ) để không đánh thức
+  // hàng loạt vì tin cũ. Muốn xử lý lại từ đầu thì chạy `--replay-bus`.
+  if (state.busSince === undefined && !args.includes("--replay-bus")) {
+    state.busSince = Number(payload?.latest ?? 0) || 0;
+    log(`lần chạy đầu với connector: bỏ qua ${(payload?.messages ?? []).length} tin cũ (busSince=${state.busSince})`);
+    saveState(state);
     return 0;
   }
   let woke = 0;

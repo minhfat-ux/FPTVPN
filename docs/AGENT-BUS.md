@@ -77,6 +77,15 @@ scp ops/agent-bus/bus.mjs root@165.101.114.162:/opt/agent-bus/bus.mjs && \
 Biến môi trường (`/etc/agent-bus.env`, quyền 600): `AGENT_BUS_TOKEN`, `AGENT_BUS_PORT=7799`,
 `AGENT_BUS_STORE`, `AGENT_TG_TOKEN`, `AGENT_TG_CHAT`.
 
+## 7b. Lần chạy đầu & dọn hàng đợi
+
+- Watcher **bỏ qua lịch sử bus** ở lần chạy đầu (giống cách bỏ qua sự kiện git cũ) để không đánh thức
+  hàng loạt vì tin cũ. Muốn xử lý lại từ đầu: `node ops/agent-watch.mjs --once --replay-bus`.
+- Xem tin đang nằm trong hàng đợi mà không cần watcher:
+  `curl "$BUS_URL/pull?agent=win&since=0" -H "Authorization: Bearer $TOKEN"`.
+- Đánh thức vì một tin bus **không gắn task nào trong sổ** thì watcher KHÔNG ghi sự kiện `woken`
+  (tránh sinh thư mục task rác; đã gặp thật với tin test và đã vá).
+
 ## 8. Giới hạn phải biết
 
 - Bus là hàng đợi **một chiều mỗi lần gửi**: ai cần tin thì phải poll (watcher làm việc đó).

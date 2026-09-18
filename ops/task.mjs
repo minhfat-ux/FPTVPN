@@ -440,6 +440,11 @@ if (command === "new") {
   for (const id of ids) {
     const events = eventsOf(id);
     const state = fold(events);
+    // Thư mục không có sự kiện `created` là rác (ví dụ đánh thức cho tin bus không gắn task).
+    if (!events.some((event) => event.type === "created")) {
+      rows.push({ id, state: { ...state, status: "rác (không có created)" }, source: "local" });
+      continue;
+    }
     const remote = flags.has("remote") ? eventsOf(id, true) : [];
     if (remote.length > events.length) rows.push({ id, state: fold(remote), source: "remote" });
     else rows.push({ id, state, source: "local" });
