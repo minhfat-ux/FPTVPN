@@ -35,8 +35,39 @@ public partial class MainView : UserControl
         _services = services ?? throw new ArgumentNullException(nameof(services));
         InitializeComponent();
 
+        ShowNetworkConflictBanner();
+
         _services.Connection.PropertyChanged += (_, _) => UpdateUi();
         Loaded += OnLoaded;
+    }
+
+    /// <summary>
+    /// Hiện cảnh báo nếu có phần mềm mạng khác đang tranh chấp (Clash Verge/Mihomo TUN, proxy
+    /// hệ thống…). Ưu tiên hiện cảnh báo nặng nhất trước — đây là lý do phổ biến nhất khiến
+    /// khách "connecting mãi" hoặc không đăng nhập/không nhận được mã OTP.
+    /// </summary>
+    private void ShowNetworkConflictBanner()
+    {
+        var conflicts = _services.SystemConflicts;
+        if (conflicts.Count == 0)
+        {
+            return;
+        }
+
+        var worst = conflicts
+            .OrderByDescending(c => c.Severity)
+            .First();
+
+        ConflictBanner.IsVisible = true;
+        ConflictTitle.Text = worst.Title;
+        ConflictDetail.Text = worst.Detail;
+        ConflictAdvice.Text = worst.Advice;
+
+        // Nhiều cảnh báo: ghi thêm số còn lại để khách biết vẫn còn việc phải xử lý.
+        if (conflicts.Count > 1)
+        {
+            ConflictAdvice.Text += $"\n\n(Còn {conflicts.Count - 1} cảnh báo khác — xem log: {_services.Logger.LogPath})";
+        }
     }
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)

@@ -1,3 +1,5 @@
+using PrivateVPNWindows.Core.Tunnel;
+using VpnFlow.App.Services;
 using VpnFlow.Core.Api;
 using VpnFlow.Core.Auth;
 using VpnFlow.Core.Tunnel;
@@ -37,7 +39,27 @@ public sealed class AppServices : IDisposable
             $"driver={WireGuardDriverSelector.SelectKind(WireGuardDriverSelector.DefaultAssetDirectory)}, " +
             $"assets={WireGuardDriverSelector.DefaultAssetDirectory}, " +
             $"workDir={WintunWireGuardDriver.DefaultWorkingDirectory()}");
+
+        // Phát hiện phần mềm mạng khác đang tranh chấp (Clash Verge/Mihomo TUN, proxy hệ thống…).
+        // Clash bật TUN chiếm default route + DNS fake-IP ⇒ VPNFlow không bắt tay được và không
+        // gọi được API (không đăng nhập/không nhận OTP), nhưng người dùng chỉ thấy "connecting mãi".
+        SystemConflicts = SystemConflictProbe.Detect();
+        foreach (var conflict in SystemConflicts)
+        {
+            Logger.Info($"net-conflict [{conflict.Severity}] {conflict.Title}: {conflict.Detail}");
+        }
+
+        if (SystemConflicts.Count == 0)
+        {
+            Logger.Info("net-conflict: không phát hiện phần mềm mạng nào tranh chấp");
+        }
     }
+
+    /// <summary>
+    /// Cảnh báo xung đột mạng phát hiện lúc khởi động (rỗng = hệ thống sạch).
+    /// Xem <see cref="NetworkConflictDetector"/> để biết vì sao Clash Verge TUN làm hỏng đăng nhập.
+    /// </summary>
+    public IReadOnlyList<NetworkConflict> SystemConflicts { get; }
 
     /// <summary>Client control-plane (đã có danh sách host dự phòng bên trong).</summary>
     public ControlApiClient Api { get; }

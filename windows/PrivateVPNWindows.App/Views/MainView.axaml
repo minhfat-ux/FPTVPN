@@ -7,6 +7,32 @@
   <ScrollViewer>
     <StackPanel Margin="16,8,16,20" Spacing="14">
 
+      <!-- Cảnh báo xung đột mạng (Clash Verge/Mihomo TUN, proxy hệ thống…).
+           Ẩn mặc định; code-behind bật lên khi NetworkConflictDetector phát hiện vấn đề. -->
+      <Border Name="ConflictBanner"
+              IsVisible="False"
+              Background="#3A2A0A"
+              BorderBrush="#E0A030"
+              BorderThickness="1"
+              CornerRadius="10"
+              Padding="12,10">
+        <StackPanel Spacing="6">
+          <TextBlock Name="ConflictTitle"
+                     FontWeight="Bold"
+                     FontSize="13"
+                     Foreground="#FFD37A"
+                     TextWrapping="Wrap" />
+          <TextBlock Name="ConflictDetail"
+                     FontSize="12"
+                     Foreground="#F2E4C8"
+                     TextWrapping="Wrap" />
+          <TextBlock Name="ConflictAdvice"
+                     FontSize="12"
+                     Foreground="#CFE9FF"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
       <!-- Header -->
       <StackPanel Spacing="5" HorizontalAlignment="Center">
         <Image Source="avares://PrivateVPNWindows.App/Assets/applogo.png"
