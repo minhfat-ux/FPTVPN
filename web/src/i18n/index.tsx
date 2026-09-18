@@ -1,6 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, setApiLang } from "../api/client";
-import { useAuth } from "../state/store";
+import { api, getToken, setApiLang } from "../api/client";
 import { common as commonVi } from "./locales/vi/common";
 import { common as commonEn } from "./locales/en/common";
 import { common as commonZh } from "./locales/zh/common";
@@ -131,12 +130,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   // Tên/mô tả kỹ năng nằm trong CSDL (có bản dịch vi/en/zh) nên API phải biết ngôn ngữ
   // đang chọn; đồng thời lưu lên tài khoản để lượt chat lấy đúng bản chỉ dẫn.
-  const { user } = useAuth();
+  //
+  // LƯU Ý: KHÔNG dùng useAuth() ở đây. `state/store` đã import `useI18n` từ file này,
+  // nên gọi ngược lại sẽ tạo import vòng và làm cả app trắng trang (useAuth undefined).
   useEffect(() => {
     setApiLang(locale);
     // Lưu lên tài khoản để LƯỢT CHAT lấy đúng bản chỉ dẫn kỹ năng (server đọc users.locale).
-    if (user) void api.updateMe({ locale }).catch(() => undefined);
-  }, [locale, user]);
+    if (getToken()) void api.updateMe({ locale }).catch(() => undefined);
+  }, [locale]);
 
   useEffect(() => {
     const meta = localeMeta(locale);
