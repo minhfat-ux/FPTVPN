@@ -33,6 +33,11 @@ const SELF = (process.env.AGENT_NAME || "MAC").toUpperCase();
 const PEER = SELF === "MAC" ? "WIN" : "MAC";
 const TASKS_DIR = path.join("ops", "tasks");
 const STATE_FILE = path.join(TASKS_DIR, `.watch-${SELF.toLowerCase()}.json`);
+const STATE_OVERRIDE_FLAG = (() => {
+  const index = process.argv.indexOf("--state");
+  return index >= 0 ? process.argv[index + 1] : null;
+})();
+const statePath = () => STATE_OVERRIDE_FLAG || STATE_FILE;
 
 const args = process.argv.slice(2);
 const flagValue = (name, fallback = null) => {
@@ -82,14 +87,14 @@ const log = (message) => console.log(`[${new Date().toISOString().slice(11, 19)}
 
 function loadState() {
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    return JSON.parse(fs.readFileSync(statePath(), "utf8"));
   } catch {
     return { seen: [], lastWake: {}, initialized: false };
   }
 }
 function saveState(state) {
-  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
-  fs.writeFileSync(STATE_FILE, `${JSON.stringify(state, null, 1)}\n`);
+  fs.mkdirSync(path.dirname(statePath()), { recursive: true });
+  fs.writeFileSync(statePath(), `${JSON.stringify(state, null, 1)}\n`);
 }
 
 /** Đọc sổ từ origin/flowgpt (không cần merge vào cây đang làm việc). */
@@ -123,6 +128,31 @@ function readLedger() {
     });
   }
   return { error: null, tasks };
+}
+
+/**
+ * Thời điểm sự kiện MỚI NHẤT trong sổ (đọc file cục bộ — nhanh, không cần git).
+ * Dùng làm mốc phân biệt tin bus CŨ (rác lịch sử) với tin bus MỚI (gửi trong lúc máy tắt).
+ */
+function ledgerNewestAt() {
+  let newest = 0;
+  if (!fs.existsSync(TASKS_DIR)) return newest;
+  for (const id of fs.readdirSync(TASKS_DIR)) {
+    if (id.startsWith(".")) continue;
+    const dir = path.join(TASKS_DIR, id);
+    let stat;
+    try { stat = fs.statSync(dir); } catch { continue; }
+    if (!stat.isDirectory()) continue;
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const event = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"));
+        const at = new Date(event.at ?? 0).getTime();
+        if (at > newest) newest = at;
+      } catch { /* bỏ file hỏng */ }
+    }
+  }
+  return newest;
 }
 
 /** Việc này có cần ĐÁNH THỨC tôi không? Trả về lý do hoặc null. */
@@ -245,10 +275,15 @@ async function tickBus(state) {
   // Lần chạy đầu: bỏ qua lịch sử bus (giống cách bỏ qua sự kiện git cũ) để không đánh thức
   // hàng loạt vì tin cũ. Muốn xử lý lại từ đầu thì chạy `--replay-bus`.
   if (state.busSince === undefined && !args.includes("--replay-bus")) {
-    state.busSince = Number(payload?.latest ?? 0) || 0;
-    log(`lần chạy đầu với connector: bỏ qua ${(payload?.messages ?? []).length} tin cũ (busSince=${state.busSince})`);
+    // KHÔNG bỏ qua tất cả: máy vừa bật lại sau khi tắt vẫn phải xử lý tin gửi trong lúc tắt.
+    // Chỉ bỏ qua tin CŨ HƠN sự kiện mới nhất trong sổ.
+    const newest = ledgerNewestAt();
+    const all = payload?.messages ?? [];
+    const stale = all.filter((message) => new Date(message.at ?? 0).getTime() <= newest);
+    const fresh = all.filter((message) => new Date(message.at ?? 0).getTime() > newest);
+    state.busSince = stale.length ? Math.max(...stale.map((message) => message.id)) : 0;
+    log(`lần chạy đầu với connector: bỏ qua ${stale.length} tin cũ, xử lý ${fresh.length} tin mới hơn sổ`);
     saveState(state);
-    return 0;
   }
   let woke = 0;
   for (const message of payload?.messages ?? []) {
