@@ -55,7 +55,8 @@ const opt = (name, fallback = null) => (options.has(name) ? options.get(name) : 
 const positional = args.filter((arg) => !arg.startsWith("--") && ![...options.values()].includes(arg));
 const [command, idArg] = positional;
 
-const ACTOR = (process.env.AGENT_NAME || "MAC").toLowerCase();
+// .trim() để `set AGENT_NAME=WIN && …` trên Windows không tạo ra actor "win ".
+const ACTOR = (process.env.AGENT_NAME || "MAC").trim().toLowerCase();
 const NOW = () => new Date().toISOString().replace(/[:.]/g, "-");
 const prettyTime = (iso) => String(iso ?? "").replace("T", " ").slice(0, 16);
 
