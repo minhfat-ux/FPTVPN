@@ -27,6 +27,8 @@ final class WSRelayClient: @unchecked Sendable {
     /// half-open socket still reports itself as open, and the ping is what notices.
     private static let pingInterval: TimeInterval = 20
     private static let minBackoff: TimeInterval = 1
+    /// Trần số gói chờ trong hàng đợi WS (vượt thì bỏ gói như UDP).
+    private static let maxSendInflight = 512
     private static let maxBackoff: TimeInterval = 15
     /// Nhịp log số frame trong 20 giây đầu (mỗi 5s một lần) để chẩn đoán được đường WS.
     private static let frameLogInterval: TimeInterval = 5
@@ -46,6 +48,9 @@ final class WSRelayClient: @unchecked Sendable {
     private var openedInThisAttempt = false
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
+    /// Số gói WS đang nằm trong hàng đợi của URLSession (không chờ từng gói).
+    /// Dùng OSAllocatedUnfairLock vì NSLock không được gọi trong ngữ cảnh async (Swift 6).
+    private let sendInflight = OSAllocatedUnfairLock(initialState: 0)
     private var heartbeatTask: Task<Void, Never>?
     private var frameLogTask: Task<Void, Never>?
 
@@ -139,12 +144,19 @@ final class WSRelayClient: @unchecked Sendable {
                     self.noteDropped()
                     continue
                 }
-                do {
-                    try await link.send(datagram)
-                    self.noteSent(datagram.count)
-                } catch {
-                    // The receive loop sees the same failure and reconnects.
+                // Không await từng gói: chờ từng gói làm tốc độ tụt còn ~1 gói/RTT
+                // (đo thật: 200–320 kbps). URLSessionWebSocketTask tự xếp hàng, nên ta
+                // chỉ cần chặn khi hàng đợi quá dài (tương đương UDP drop khi nghẽn).
+                let inflight = self.sendInflight.withLock { $0 }
+                if inflight >= WSRelayClient.maxSendInflight {
                     self.noteDropped()
+                    continue
+                }
+                self.sendInflight.withLock { $0 += 1 }
+                link.sendQueued(datagram) { [weak self] error in
+                    guard let self else { return }
+                    self.sendInflight.withLock { $0 -= 1 }
+                    if error == nil { self.noteSent(datagram.count) } else { self.noteDropped() }
                 }
             }
         }

@@ -24,10 +24,22 @@ protocol RelayLink: AnyObject, Sendable {
         onClose: @escaping @Sendable (String) -> Void
     )
     func send(_ datagram: Data) async throws
+
+    /// Gửi không chờ (pipelined) — xem chú thích ở WSRelayLink.sendQueued().
+    func sendQueued(_ datagram: Data, onComplete: @escaping @Sendable (Error?) -> Void)
     func receive() async throws -> RelayMessage
     /// Ping để phát hiện socket nửa-mở (vẫn "open" nhưng đường đã chết).
     func ping() async throws
     func cancel()
+}
+
+extension RelayLink {
+    /// Mặc định: chạy `send` trong Task riêng — link không tự pipeline vẫn đúng ngữ nghĩa.
+    func sendQueued(_ datagram: Data, onComplete: @escaping @Sendable (Error?) -> Void) {
+        Task {
+            do { try await send(datagram); onComplete(nil) } catch { onComplete(error) }
+        }
+    }
 }
 
 /// Link WebSocket thật dùng `URLSessionWebSocketTask`.
@@ -84,6 +96,19 @@ final class URLSessionRelayLink: NSObject, RelayLink, URLSessionWebSocketDelegat
     func send(_ datagram: Data) async throws {
         guard let task = currentTask() else { throw LinkError.notConnected }
         try await task.send(.data(datagram))
+    }
+
+    /// Gửi KHÔNG chờ (pipelined): URLSessionWebSocketTask tự xếp hàng message, nên không cần
+    /// `await` từng gói. Vì sao quan trọng: `await task.send(...)` xong mới gửi gói kế ⇒ tốc độ
+    /// bị chặn ở ~1 gói / RTT. Đo trên máy thật qua Cloudflare (RTT ~50–100ms) ⇒ chỉ 200–320 kbps,
+    /// đúng hiện tượng "VPN chậm dã man" của app iOS/Mac. Android (hysteria/QUIC, gửi bất đồng bộ)
+    /// trên cùng hạ tầng đạt 14 MB/s.
+    func sendQueued(_ datagram: Data, onComplete: @escaping @Sendable (Error?) -> Void) {
+        guard let task = currentTask() else {
+            onComplete(LinkError.notConnected)
+            return
+        }
+        task.send(.data(datagram), completionHandler: onComplete)
     }
 
     func receive() async throws -> RelayMessage {
