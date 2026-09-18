@@ -14,7 +14,8 @@
  *   --limit N            giới hạn số mục
  *   --instructions       DỊCH cả phần chỉ dẫn (mặc định chỉ dịch tên/mô tả)
  *   --translate vi,en,zh ngôn ngữ cần dịch (mặc định vi)
- *   --price-vnd          giá bán (mặc định 50000)
+ *   --price-vnd          giá bán (mặc định 0 = MIỄN PHÍ; nội dung bên thứ ba
+ *                        không được bán lại — xem docs/CONTENT-POLICY.md)
  *   --apply              ghi thật (mặc định chạy thử)
  */
 import fs from "node:fs/promises";
@@ -30,7 +31,9 @@ const TOKEN = process.env.FBUDDY_ADMIN_TOKEN ?? process.env.FLOWGPT_ADMIN_TOKEN 
 const APPLY = has("apply");
 const TRANS = String(flag("translate", "vi")).split(",").map((s) => s.trim()).filter(Boolean);
 const DO_INSTRUCTIONS = has("instructions");
-const PRICE = Math.max(0, Math.trunc(Number(flag("price-vnd")) || 50000));
+// Mặc định 0 (miễn phí): nội dung nhập từ WorkBuddy/SkillHub thuộc bản quyền
+// tác giả gốc + Tencent, không được bán lại. Xem docs/CONTENT-POLICY.md.
+const PRICE = Math.max(0, Math.trunc(Number(flag("price-vnd")) || 0));
 const LIMIT = Number(flag("limit")) || 0;
 
 const SKILL_CATEGORY = { marketing: "Nội dung", sales: "Bán hàng", finance: "Dữ liệu", ppt: "Văn phòng", researcher: "Dữ liệu", expert: "Chuyên gia", "giáo dục trẻ": "Giáo dục", "giải toán": "Giáo dục", "ngoại ngữ": "Giáo dục" };

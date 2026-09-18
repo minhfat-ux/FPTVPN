@@ -28,6 +28,13 @@ cụ thể** (không dán log dài). Việc gì cần lưu lâu thì ghi vào fi
   `web/src/settings/SkillHubImportCard.tsx`, `docs/mobile/*`.
 - **Đã gỡ xong**: `routes.js` (Mac vá lại 4 route SkillHub sau khi bị ghi đè lúc 16:34 — Windows
   nhớ đừng deploy bản `routes.js` cũ không có route SkillHub).
+- **CHỢ KỸ NĂNG ĐÃ ĐỂ MIỄN PHÍ TOÀN BỘ** (2026-09-18): 29/29 mục `price_vnd = 0`, `price = 0`.
+  Lý do bản quyền: nội dung nhập từ WorkBuddy/SkillHub là của tác giả gốc + Tencent, không được
+  bán lại. **Windows đừng gán giá lại** và đừng gửi email/thông báo mời mua. Chính sách đầy đủ:
+  [`docs/CONTENT-POLICY.md`](CONTENT-POLICY.md). Hai script nhập đã đổi mặc định giá về `0`.
+- **Trang trắng `fbuddy.meetflowai.site` đã sửa** (commit `a4dbbdb`): `I18nProvider` gọi `useAuth()`
+  trong khi nằm NGOÀI `<AppProvider>` ⇒ mọi render đều ném lỗi. **Static root thật là
+  `/opt/fbuddy/web/dist`** — extract vào `/opt/fbuddy/web` là sai cấp, origin vẫn trả bundle cũ.
 
 ### WINDOWS — Windows tự ghi vào đây
 <!-- Windows thêm mục: đang làm gì, file nào đang giữ, deploy lần cuối lúc nào -->
