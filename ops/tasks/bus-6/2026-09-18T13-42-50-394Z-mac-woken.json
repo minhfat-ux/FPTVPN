@@ -1,7 +1,0 @@
-{
- "type": "woken",
- "actor": "mac",
- "at": "2026-09-18T13:42:50.417Z",
- "note": "connector VPS: wake từ win — TEST kênh đánh thức VPS→Mac (không phải việc thật)",
- "via": "dsh --profile headless \"{prompt}\""
-}
