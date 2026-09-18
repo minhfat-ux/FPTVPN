@@ -640,7 +640,13 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         // Bypass Trung Quốc: WeChat/Alipay/web TQ đi THẲNG qua gateway vật lý (không vào tunnel).
         // Vì sao cần: đo 18/09/2026 — cả 2 exit đều KHÔNG kết nối được IP Trung Quốc, nên app TQ
         // qua VPN là chắc chắn mất kết nối.
-        await ApplyChinaBypassAsync(@interface, gateway, cancellationToken).ConfigureAwait(false);
+        //
+        // CHẠY NỀN (không await): thêm ~5.5k route mất hàng chục giây tới vài phút. Bản 1.0.4 chạy
+        // đồng bộ nên ĐÃ CHẶN luồng kết nối ⇒ app "connecting mãi" dù tunnel đã lên. Bypass là
+        // best-effort nên không được phép làm chậm/treo việc kết nối.
+        var bypassInterface = @interface;
+        var bypassGateway = gateway;
+        _ = Task.Run(() => ApplyChinaBypassAsync(bypassInterface, bypassGateway, CancellationToken.None));
     }
 
     /// <summary>Gateway + tên NIC vật lý đầu tiên (bỏ qua adapter ảo/TUN của phần mềm khác).</summary>
