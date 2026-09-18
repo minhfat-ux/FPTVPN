@@ -75,6 +75,22 @@ test("mã bị thu hồi ⇒ từ chối", () => {
   assert.throws(() => redeem(code), (err) => err.code === "code_revoked");
 });
 
+test("thu hồi thiết bị là DÍNH: cùng máy không tự kích hoạt lại được, máy khác vẫn được", () => {
+  const { code } = issueInvitation({ userId: "u_win", orderId: "ord_win" });
+  const first = redeem(code, { deviceId: "machine-sticky" });
+  revokeActivation({ id: first.activation.id, reason: "admin_revoked" });
+
+  assert.throws(() => redeem(code, { deviceId: "machine-sticky" }), (err) => {
+    assert.equal(err.status, 403);
+    assert.equal(err.code, "device_revoked");
+    return true;
+  });
+
+  // Máy khác trong hạn mức thiết bị của mã vẫn kích hoạt bình thường.
+  const other = redeem(code, { deviceId: "machine-khac" });
+  assert.equal(other.activation.deviceId, "machine-khac");
+});
+
 test("activation bị thu hồi ⇒ token cũ mất hiệu lực ngay", () => {
   const { code } = issueInvitation({ userId: "u_win", orderId: "ord_win" });
   const result = redeem(code, { deviceId: "machine-d" });

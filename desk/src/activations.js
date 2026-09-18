@@ -64,6 +64,30 @@ export function redeemCode({ code, deviceId = null, deviceLabel = null, ip = nul
   let created = false;
 
   if (!activation) {
+    // Thu hồi thiết bị phải "dính": cùng deviceId đã bị thu hồi thì KHÔNG được tự
+    // kích hoạt lại bằng mã cũ (app tự kích hoạt lại khi token hết hạn, nên nếu không
+    // chặn ở đây thì lệnh thu hồi của chủ dự án vô nghĩa). Khách vẫn dùng được máy
+    // khác trong hạn mức thiết bị của mã.
+    const revoked = cleanDeviceId
+      ? get(
+          `SELECT * FROM desk_activations
+            WHERE invitation_id = ? AND device_id = ? AND revoked_at IS NOT NULL
+            ORDER BY activated_at DESC LIMIT 1`,
+          invitation.id,
+          cleanDeviceId,
+        )
+      : null;
+    if (revoked) {
+      audit("activation_failed", {
+        ip,
+        invitationId: invitation.id,
+        userId: invitation.user_id,
+        activationId: revoked.id,
+        detail: { reason: "device_revoked" },
+      });
+      throw forbidden("Thiết bị này đã bị thu hồi quyền", "device_revoked");
+    }
+
     activation = withTransaction(() => {
       const fresh = get("SELECT * FROM desk_invitations WHERE id = ?", invitation.id);
       const usable = checkInvitation(fresh);

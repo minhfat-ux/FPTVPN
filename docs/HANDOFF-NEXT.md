@@ -206,7 +206,7 @@ Vì đây là endpoint lộ ra internet — **không lặp lại lỗi `/tmp-key
 Tên đang dùng (tạm, **chưa chốt với chủ dự án**): service **`flowdesk`**, port **7791**,
 host **`desk.meetflowai.site`** — tất cả đọc từ env nên đổi tên chỉ là đổi env + DNS.
 
-**Đã xong 1 và 3, xong phần lõi của 2. Còn 4, 5 và view SPA của 2.**
+**Đã xong 1, 3, phần lõi của 2 và 4. Còn 5 (cần key riêng + DNS) và view SPA của 2.**
 
 | Việc | Ở đâu | Bằng chứng |
 |---|---|---|
@@ -225,17 +225,18 @@ host **`desk.meetflowai.site`** — tất cả đọc từ env nên đổi tên 
 Chạy test (Windows trong sandbox DSH — `node --test` bị chặn spawn tiến trình con):
 
 ```bash
-node --test --test-isolation=none desk/test/*.test.js          # 55/55
+node --test --test-isolation=none desk/test/*.test.js          # 56/56
 node --test --test-isolation=none server/test/desktop.test.js  # 8/8
+
+# App Windows (C#) — smoke thật, cần service flowdesk đang chạy:
+#   DESK_SONIOX_WS trỏ vào một Soniox giả, rồi:
+DESK_URL=http://127.0.0.1:7791 DESK_CODE=FBW-.... dotnet run --project MeetFlowAI.Win/artifacts/desk-smoke
 ```
 
 Còn thiếu để khách dùng được thật:
 
-1. **§3.6.4 app WPF** — bỏ 2 ô key (Soniox/OpenRouter), thêm ô dán mã kích hoạt, trỏ
-   `wss://desk.meetflowai.site/v1/desktop/stt` (token qua `Authorization: Bearer`) và
-   `POST /v1/desktop/summary`. Nguồn: `C:\Users\Minhn\FPTVPN\MeetFlowAI_Win`
-   (`Services/SonioxRealtimeClient.cs`, `Services/MeetingSummaryService.cs`,
-   `Services/ActivationService.cs` — file này đã có sẵn khung "activation key").
+1. ~~**§3.6.4 app WPF**~~ — **xong ngày 2026-09-18 chiều** (xem §3.8). Còn lại: build lại zip
+   và phát hành **sau khi** service đã lên (phát trước là khách tải bản không chạy được).
 2. **§3.6.5 deploy** — tạo `/etc/flowdesk/flowdesk.env` (key Soniox/OpenRouter **riêng**
    cho bản Windows), thêm DNS `desk`, rồi `.\deploy\deploy.ps1 -WithDesk`.
    Nhớ thêm `FBUDDY_DESK_URL` + `FBUDDY_DESK_ADMIN_TOKEN` vào `/etc/fbuddy/fbuddy.env`
@@ -243,6 +244,40 @@ Còn thiếu để khách dùng được thật:
 3. **View `?view=desktop`** trong web app (đã có trang công khai từ email; view SPA dùng
    `GET /api/desktop/status` + `POST /api/desktop/code` — nhớ i18n đủ 3 thứ tiếng).
 4. Lỗ bảo mật `/tmp-key` (§1) **vẫn đang mở** — không sửa được từ repo này.
+
+### 3.8 §3.6.4 — app WPF đã bỏ key, dùng mã kích hoạt (2026-09-18 chiều)
+
+Repo app: `C:\Users\Minhn\FPTVPN\MeetFlowAI_Win` — **LƯU Ý: thư mục này vẫn CHƯA nằm trong git
+của FPTVPN** (`git status` ở `C:\Users\Minhn\FPTVPN` hiện `?? MeetFlowAI_Win/`). Nên đưa lên
+git trước khi phát hành tiếp, nếu không sẽ lặp lại đúng vấn đề của `/opt/fbuddy`.
+
+| File | Thay đổi |
+|---|---|
+| `Configuration/AppSettings.cs` | Bỏ `SonioxApiKey`, `OpenRouterApiKey`, `OpenRouterChatCompletionsUrl`, `OpenRouterModel`, `OpenRouterFallbackModel`, `ActivationApiUrl`; thêm `DeskBaseUrl` (mặc định `https://desk.meetflowai.site`) |
+| `Configuration/SecureConfigurationFile.cs` | Thiếu `appsettings.dat` thì chạy bằng giá trị mặc định thay vì **ném lỗi làm app chết ngay khi mở** |
+| `Services/IActivationService.cs` | Thêm `GetSessionTokenAsync()` |
+| `Services/ActivationService.cs` | Viết lại: gọi flowdesk `/v1/desktop/activate` + `/session`; lưu mã bằng **DPAPI** và token phiên vào `license.json`; tự gia hạn/tự kích hoạt lại khi token hết hạn; dịch mã lỗi (`code_expired`, `device_revoked`, `not_entitled_*`…) sang câu tiếng Việt. **Bỏ** `IsAutoActivatedMachine()` (miễn kích hoạt theo tên máy) và **bỏ** kiểu tự ký license bằng secret nhúng trong app |
+| `Services/SonioxRealtimeClient.cs` | Nối `wss://<desk>/v1/desktop/stt` kèm `Authorization: Bearer <token>`; cấu hình phiên **không còn `api_key`**; dịch lỗi 401/403/429 khi nâng cấp giao thức |
+| `Services/MeetingSummaryService.cs` | Gọi `POST /v1/desktop/summary` (key ở server, model do server chọn); bỏ vòng lặp thử nhiều model phía client |
+| `artifacts/desk-smoke/` | Project smoke mới: kích hoạt thật → token → `/v1/desktop/me` → mở phiên STT qua proxy |
+
+**Bằng chứng đã chạy (không phải kể lể):**
+
+```
+dotnet build -c Release                          → Build succeeded, 0 warning, 0 error
+dotnet run --project artifacts/desk-smoke        → SMOKE PASS (9/9 mục)
+  OK  chưa kích hoạt ⇒ báo chưa kích hoạt
+  OK  mã sai ⇒ từ chối kèm thông báo dễ hiểu
+  OK  mã đúng ⇒ kích hoạt được (phiên đến 15:15)
+  OK  token phiên dài 225, được /v1/desktop/me chấp nhận (HTTP 200)
+  OK  mở phiên nhận dạng qua proxy KHÔNG cần key trong app
+  OK  nhận phụ đề: "xin chào|hello"
+  OK  cấu hình Soniox giả nhận được CHỈ có api_key của server, không có key nào từ app
+```
+
+Bản cũ đã phát hành (zip trên `meetflowai.site/dl/`) vẫn dùng key khách tự nhập ⇒ **đừng phát
+hành bản mới trước khi flowdesk lên sóng**, nếu không khách tải về sẽ không kích hoạt được.
+
 
 
 ---
