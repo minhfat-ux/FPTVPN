@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrivateVPNWindows.Core", "P
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrivateVPNWindows.App", "PrivateVPNWindows.App\PrivateVPNWindows.App.csproj", "{DE87FD4A-5C04-42FF-A506-A129351B0DB8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrivateVPNWindows.Core.Tests", "PrivateVPNWindows.Core.Tests\PrivateVPNWindows.Core.Tests.csproj", "{7243D2DA-CAF9-4639-8ABC-ABF1892F5216}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{DE87FD4A-5C04-42FF-A506-A129351B0DB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DE87FD4A-5C04-42FF-A506-A129351B0DB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DE87FD4A-5C04-42FF-A506-A129351B0DB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7243D2DA-CAF9-4639-8ABC-ABF1892F5216}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7243D2DA-CAF9-4639-8ABC-ABF1892F5216}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7243D2DA-CAF9-4639-8ABC-ABF1892F5216}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7243D2DA-CAF9-4639-8ABC-ABF1892F5216}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
