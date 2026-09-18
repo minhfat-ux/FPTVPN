@@ -288,8 +288,13 @@ hành bản mới trước khi flowdesk lên sóng**, nếu không khách tải 
    (Đang chờ deploy: bản trên sóng vẫn là promo.js cũ một thứ tiếng.)
 2. **Luồng cấp key qua trang buy** — backend + email đã xong (xem §3.7); còn app WPF (§3.6.4),
    deploy thật (§3.6.5) và view `?view=desktop` trong web app.
-3. **Xác nhận `/opt/fbuddy` khớp commit nào của `origin/flowgpt`** trước khi sửa tiếp (xem §0.2 — nguồn có trong git,
-   chỉ thư mục deploy là không).
+3. ~~**Xác nhận `/opt/fbuddy` khớp commit nào của `origin/flowgpt`**~~ — **đã kiểm bằng md5 (2026-09-18 chiều)**:
+   `/opt/fbuddy` (trừ `web/dist/` là bản build) **giống hệt `72c7779`**, đúng 1 khác biệt: các chỗ
+   `brand-mark.png?v=` trên server là **`culi2`**, trong repo là `culi1` — tức là bản bump cache đã
+   được sửa **trực tiếp trên server** mà chưa từng commit. **Đã đưa `culi2` vào repo** (5 chỗ:
+   `server/src/topup.js`, `server/src/mailer.js`, `server/src/credit-requests.js`, `web/public/promo.js`,
+   `web/index.html`), nếu không lần deploy tới sẽ revert về `culi1` và **logo cũ quay lại từ cache CDN**.
+   Cách kiểm lại: `md5sum` file trên server (byte thô, LF) so với `git show <rev>:<path> | md5sum`.
 4. Treo từ trước: voice chống trễ (chủ dự án dặn "đừng làm vội") · SSO Firebase/Facebook · đăng ký email+mật khẩu ·
    MCP `stdio` không test được từ sandbox Windows.
 
@@ -349,6 +354,14 @@ repo đã có sẵn bản mới nên vẫn đúng.
   so khớp lại với bản Telegram nhận được). Đừng tự `Get-Content -Raw` rồi gửi.
 - **Quoting JSON qua `ssh`/PowerShell hay bị phá** ⇒ viết script ra file rồi `scp` sang, hoặc base64:
   `$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content f -Raw)))`.
+- **`tr -d "\r"` qua `ssh` từ PowerShell bị PowerShell nhân đôi dấu `\`** ⇒ `tr` xoá cả chữ `r` và dấu `\`
+  trong file, ra hash rác. So hash thì dùng Node `execFileSync("ssh", [...])` (giữ nguyên byte) hoặc
+  `md5sum` trần, đừng normalize kiểu đó.
+- **Sửa gì trên server thì phải commit lại vào repo.** Đã có chuyện bump cache `?v=culi1 → culi2` chỉ
+  nằm trên `/opt/fbuddy` (5 file), repo vẫn `culi1` ⇒ deploy là revert, logo cũ quay lại.
+- **`web/dist/` trong repo là bản build cũ** (từng còn tiêu đề "FlowGpt" trong khi nguồn đã là "fBuddy").
+  Deploy bằng `-SkipBuild` là đẩy bản mục đó lên sóng. `ops/promo-i18n-check.mjs` canh cả việc này
+  (tiêu đề dist phải khớp `web/index.html`, `dist/promo.js` phải giống `public/promo.js`).
 
 ---
 

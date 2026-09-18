@@ -74,7 +74,7 @@
     return Promise.all(tasks);
   }
 
-  var BRAND_MARK = "/brand-mark.png?v=culi1";
+  var BRAND_MARK = "/brand-mark.png?v=culi2";
   var ICON_VPNFLOW = "https://meetflowai.site/assets/flowvpn-logo.png";
   var ICON_MEETFLOW = "https://meetflowai.site/assets/meetflowai-icon.png";
 

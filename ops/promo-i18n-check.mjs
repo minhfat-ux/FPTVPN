@@ -142,6 +142,24 @@ if (fs.existsSync(DIST)) {
   console.log("BỎ QUA web/dist/promo.js (chưa build) — nhớ build trước khi deploy.");
 }
 
+/*
+ * `web/dist/` là bản build cũ nằm trong repo (bị .gitignore) nên rất dễ mục: đã có lúc
+ * nó còn tiêu đề "FlowGpt" trong khi web/index.html đã là "fBuddy". Deploy bằng
+ * `-SkipBuild` là đẩy nguyên bản mục đó lên sóng. So tiêu đề để bắt tại chỗ.
+ */
+const DIST_INDEX = path.resolve(HERE, "..", "web", "dist", "index.html");
+const SRC_INDEX = path.resolve(HERE, "..", "web", "index.html");
+if (fs.existsSync(DIST_INDEX) && fs.existsSync(SRC_INDEX)) {
+  const titleOf = (file) => (fs.readFileSync(file, "utf8").match(/<title>([^<]*)<\/title>/) ?? [])[1] ?? "";
+  const builtTitle = titleOf(DIST_INDEX);
+  const sourceTitle = titleOf(SRC_INDEX);
+  check(
+    builtTitle === sourceTitle,
+    "web/dist/index.html không mục (tiêu đề khớp web/index.html)",
+    builtTitle === sourceTitle ? "" : `dist="${builtTitle}" vs nguồn="${sourceTitle}" — chạy: npm --workspace web run build`,
+  );
+}
+
 console.log("");
 if (failures.length) {
   console.log(`I18N FAIL (${failures.length}): ${failures.join("; ")}`);

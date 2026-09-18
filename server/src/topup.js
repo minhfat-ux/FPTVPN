@@ -279,7 +279,7 @@ export function topupPageHtml({ ok, title, detail }) {
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0A1F3B;color:#fff;font-family:Segoe UI,Roboto,Arial,sans-serif">
   <div style="max-width:460px;padding:32px 28px;text-align:center">
-    <img src="/brand-mark.png?v=culi1" alt="FlowTech" width="48" height="48" style="display:block;margin:0 auto 16px">
+    <img src="/brand-mark.png?v=culi2" alt="FlowTech" width="48" height="48" style="display:block;margin:0 auto 16px">
     <div style="font-size:22px;font-weight:700;color:${colour};margin-bottom:10px">${title}</div>
     <div style="font-size:15px;line-height:1.6;color:rgba(255,255,255,.75)">${detail}</div>
     <a href="https://fbuddy.meetflowai.site/?view=topup" style="display:inline-block;margin-top:22px;background:${colour};color:#0A1F3B;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:10px">Mở fBuddy</a>
