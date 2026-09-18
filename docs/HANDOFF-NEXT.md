@@ -314,6 +314,57 @@ repo đã có sẵn bản mới nên vẫn đúng.
 
 ---
 
+## 4c. MÔ HÌNH CUỐI CÙNG cho bản Windows (chủ dự án chốt 2026-09-18 tối)
+
+> ⚠️ Mô hình này **thay hẳn** hai kết luận trước đó trong file: hướng "backend proxy giữ key" (§3.7,
+> đã bỏ) **và** hướng "khách tự nhập key Soniox/OpenRouter" (§3.8 — KHÔNG còn đúng nữa).
+
+**Chốt:** key Soniox và OpenRouter là **của chủ dự án, phải giấu** — khách **không bao giờ** nhập key
+nhà cung cấp. Khách **chỉ bấm Kích hoạt** (dán mã) là dùng được. App vẫn **nói chuyện trực tiếp** với
+Soniox/OpenRouter (không proxy), nhưng key do **server của mình cấp** sau khi kích hoạt.
+
+| Hạng mục | Chốt |
+|---|---|
+| Key nhà cung cấp | Của chủ dự án, **giấu khỏi khách**; cấp cho app sau khi kích hoạt (KHÔNG nhúng cứng vào build: nhúng thì xoay key phải build lại, mà lộ là lộ hết) |
+| Khách làm gì | Chỉ **dán mã kích hoạt** |
+| Dùng thử | **3 ngày**, hết hạn thì bắt activate |
+| Nơi quản lý | **Control Panel của FlowTech** (`flowvpn-cp`, port 7778 — đã đưa vào git, nhánh `control-plane-sync`), mục **MeetFlow AI → Bản Windows** |
+| Force update | **Chặn hẳn khi bật chức năng Live meeting**: version < `minSupported` thì không cho bật, chỉ hiện nút tải bản mới. Chỉ ép được **từ bản mới trở đi** (bản cũ không gọi về server mình — đã kiểm bằng source) |
+
+**Endpoint cần có (backend fBuddy — đã có sẵn lõi `server/src/desktop-keys.js`):**
+
+- `POST /api/desktop/activate` `{key, machineId}` → `{valid, message, plan, activatedAt, expiresAt}`
+  (đúng hợp đồng `ActivationService.cs`; đã có `activateKey()`).
+- `POST /api/desktop/trial` `{machineId, version}` → `{ok, expiresAt, daysLeft}` — trial lưu
+  **server-side** (xoá file cấu hình không reset được).
+- `POST /api/desktop/credentials` `{key | machineId}` → `{sonioxApiKey (temp, ngắn hạn),
+  openRouterApiKey, expiresAt}` — app gọi lại mỗi lần bắt đầu phiên.
+- `GET /api/desktop/version` → `{latest, minSupported, downloadUrl, note}` (admin đặt trên control panel).
+
+**Việc phải sửa ở app (`C:\Users\Minhn\FPTVPN\MeetFlowAI_Win`):**
+
+1. Bỏ yêu cầu phải có `appsettings.dat`/`appsettings.json` — thiếu thì chạy bằng giá trị mặc định
+   (**hiện đang ném lỗi ⇒ app chết ngay khi mở**, và bản zip đang phát hành không kèm file cấu hình nào).
+2. Lấy key nhà cung cấp từ `/api/desktop/credentials` (nạp vào `AppSettings` lúc chạy) thay vì đọc từ file.
+3. Màn hình trial (còn N ngày) + trạng thái đã kích hoạt; nút Start (Live meeting) chỉ mở khi
+   (trial còn hạn **hoặc** đã kích hoạt) **và** version >= `minSupported`.
+4. Điền mặc định `ActivationApiUrl` trỏ về server mình (hiện để trống nên ô Kích hoạt báo
+   "Activation endpoint is not configured").
+
+**Thứ tự làm:** (1) route + email + test cho `desktop-keys.js`; (2) `/trial` + `/version` +
+`/credentials`; (3) UI control panel (Gen key, danh sách key/máy, đặt latest/minSupported/downloadUrl);
+(4) sửa app + build zip mới; (5) thông báo khách đang dùng bản cũ.
+
+**Đừng phát hành zip trước khi (1)-(3) lên sóng.** Bản zip đang phục vụ trên `meetflowai.site/dl/` là
+bản cũ (nhập key); bản "kèm hướng dẫn khách dán key" tôi đã **rút lại** vì trái mô hình này.
+
+**Bài học vận hành khi phát hành zip:** upload vào tên `-2.0.0-` trước → `md5sum` so với bản local →
+**chỉ khi khớp** mới `cp` sang `-latest-`. Lần 18/09 upload bị cắt giữa đường làm file trên link hỏng
+mất ~1,5 KB; Cloudflare giữ bản cũ 4 giờ (`max-age=14400`) và token Cloudflare hiện **không có quyền
+purge** (lỗi 10000) ⇒ purge tay trên dashboard hoặc chờ hết TTL.
+
+---
+
 ## 4c. KẾ HOẠCH đã chốt với chủ dự án (2026-09-18 tối) — quản lý bản Windows
 
 Chủ dự án chốt lại hướng (thay hẳn hướng đã bỏ ở §3.7):
