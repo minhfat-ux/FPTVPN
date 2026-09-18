@@ -36,7 +36,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 const TASKS_DIR = path.join("ops", "tasks");
-const VALUE_OPTIONS = new Set(["title", "to", "detail", "verify", "due", "note", "reason", "evidence", "result", "id"]);
+const VALUE_OPTIONS = new Set(["title", "to", "detail", "verify", "due", "note", "reason", "evidence", "result", "id", "peer-wake"]);
 const args = process.argv.slice(2);
 const flags = new Set();
 const options = new Map();
@@ -227,6 +227,20 @@ if (command === "new") {
     const { commit, pushed } = pushLedger(idArg, "task: giao việc");
     console.log(`  git: ${commit.split("\n")[0]}\n  push: ${pushed.split("\n").slice(-1)[0]}`);
   }
+  // Đánh thức TRỰC TIẾP đối tác nếu có đường (ví dụ ssh sang máy kia). Watcher bên kia là
+  // đường chính; đây là đường phụ cho trường hợp watcher của họ chưa chạy.
+  const peerWake = opt("peer-wake", process.env.PEER_WAKE_CMD);
+  if (peerWake) {
+    try {
+      const { spawnSync } = await import("node:child_process");
+      const result = spawnSync(peerWake, { shell: true, encoding: "utf8", timeout: 60000 });
+      const out = String(result.stdout ?? "").trim().split("\n").slice(-2).join(" | ");
+      console.log(`  đánh thức trực tiếp (${peerWake.slice(0, 60)}): ${result.status === 0 ? `ok ${out}` : `lỗi ${result.status}`}`);
+    } catch (error) {
+      console.log(`  đánh thức trực tiếp lỗi: ${String(error.message).slice(0, 120)}`);
+    }
+  }
+
   if (flags.has("ping")) {
     const { sendPing } = await import("./lib/telegram.mjs");
     const task = state.task ?? {};
