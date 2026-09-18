@@ -329,7 +329,15 @@ if (command === "new") {
     const task = row.state.task ?? {};
     const mark = { verified: "✅", done: "🟡", acked: "🟢", in_progress: "…", sent: "📤", created: "📝", blocked: "⛔", reopened: "🔁" }[row.state.status] ?? "?";
     const overdue = task.due && new Date(task.due) < new Date() && row.state.status !== "verified" ? "  ⏰ QUÁ HẠN" : "";
-    console.log(`${mark} ${row.id}  [${row.state.status}]  ${task.from}→${task.to}  ${String(task.title).slice(0, 60)}${overdue}`);
+    // Cảnh báo kênh đánh thức: đã giao mà chưa thấy `woken`/`acked` ⇒ máy kia có thể chưa chạy watcher.
+    const sentEvent = row.state.events.find((event) => event.type === "sent");
+    const woke = row.state.events.some((event) => event.type === "woken" || event.type === "acked");
+    let silentHint = "";
+    if (sentEvent && !woke) {
+      const minutes = Math.round((Date.now() - new Date(sentEvent.at).getTime()) / 60000);
+      if (minutes >= 5) silentHint = `  ⚠ giao ${minutes} phút, CHƯA thấy đánh thức/ack (máy ${task.to} chưa chạy watcher?)`;
+    }
+    console.log(`${mark} ${row.id}  [${row.state.status}]  ${task.from}→${task.to}  ${String(task.title).slice(0, 60)}${overdue}${silentHint}`);
   }
 } else if (command === "push") {
   const { commit, pushed } = pushLedger(idArg ?? "ledger", opt("message", "task: cập nhật sổ giao việc"));
