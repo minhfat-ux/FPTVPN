@@ -153,3 +153,25 @@ details.tool-details summary:hover { color: var(--text); }
 .num-row { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .badge-inline { margin-left: var(--space-2); }
 .btn-inline { margin-top: 22px; }
+
+/* Bộ chọn model kiểu OpenRouter (xem ProviderModal.tsx) */
+.model-catalog {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.model-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 7px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.model-row:last-child { border-bottom: none; }
+.model-row:hover { background: rgba(255, 255, 255, 0.04); }
+.model-row-added { background: rgba(51, 199, 115, 0.08); }
+.model-row-name { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.badge-free { background: rgba(51, 199, 115, 0.16); color: #33c773; }
+.badge-paid { background: rgba(245, 158, 11, 0.16); color: #f59e0b; }
