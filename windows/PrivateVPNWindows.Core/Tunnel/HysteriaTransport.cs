@@ -28,10 +28,16 @@ public sealed class HysteriaOptions
     /// <summary>Obfs salamander password (Config.HY_OBFS); rỗng = không obfs.</summary>
     public string? ObfsPassword { get; init; }
 
-    /// <summary>Brutal CC up/down (kbps); 0 = CC mặc định. Mirror HY_UP_KBPS/HY_DOWN_KBPS.</summary>
-    public int UpKbps { get; init; } = 2000;
+    /// <summary>
+    /// Brutal CC up/down (kbps); 0 = KHÔNG khai báo, dùng CC mặc định (BBR).
+    /// Đo thật 18/09/2026 (client node-1 → exit node-2, tải 25 MB qua Cloudflare):
+    ///   800/4000 kbps → 45,5 Mbps · 20000/100000 kbps → 30,6 Mbps · không khai (0/0) → 68,6 Mbps.
+    /// Server đã bật `ignoreClientBandwidth: true` nên số client khai không chặn được nữa,
+    /// nhưng khai sai vẫn để Brutal bóp tốc độ — bỏ khai nhanh hơn ~50%.
+    /// </summary>
+    public int UpKbps { get; init; } = 0;
 
-    public int DownKbps { get; init; } = 20000;
+    public int DownKbps { get; init; } = 0;
 
     /// <summary>TLS SNI; null = dùng ServerHost (mobile.go:161 set ServerName = host).</summary>
     public string? Sni { get; init; }
