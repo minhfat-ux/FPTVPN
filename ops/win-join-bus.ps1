@@ -1,4 +1,4 @@
-<#
+﻿<#
   Cho máy WINDOWS vào connector trên VPS — một lệnh, tự lấy token qua tunnel VPN.
 
       pwsh -File ops\win-join-bus.ps1

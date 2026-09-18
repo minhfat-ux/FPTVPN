@@ -1,4 +1,4 @@
-<#
+﻿<#
   Cài watcher đánh thức trên máy WINDOWS (chạy 1 lần, sau đó không cần đụng tay nữa).
 
   Cách dùng (PowerShell, trong thư mục repo):
