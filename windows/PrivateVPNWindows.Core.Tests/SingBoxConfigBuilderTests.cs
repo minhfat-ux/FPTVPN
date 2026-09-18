@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
@@ -180,6 +181,37 @@ public class SingBoxConfigBuilderTests
     public void AllocateFreePort_tu_choi_so_luong_khong_hop_le()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => SingBoxConfigBuilder.AllocateFreePorts(0));
+    }
+
+    [Fact]
+    public void BuildSingBoxConfig_WeChat_va_ten_mien_cn_di_thang()
+    {
+        // "Vượt qua cho WeChat": traffic tới WeChat/Tencent và tên miền .cn phải đi THẲNG,
+        // không vòng qua node ở Việt Nam (đó là lý do WeChat lỗi/chậm khi bật VPN).
+        var json = SingBoxConfigBuilder.BuildSingBoxConfig(SocksPort, "/tmp/sing-box.log", ClashPort);
+
+        using var doc = JsonDocument.Parse(json);
+        var rules = doc.RootElement.GetProperty("route").GetProperty("rules");
+
+        JsonElement? directRule = null;
+        foreach (var rule in rules.EnumerateArray())
+        {
+            if (!rule.TryGetProperty("domain_suffix", out _)) continue;
+            if (rule.TryGetProperty("outbound", out var ob) && ob.GetString() == SingBoxConfigBuilder.DirectOutboundTag)
+            {
+                directRule = rule;
+            }
+        }
+
+        Assert.NotNull(directRule);
+        var suffixes = directRule!.Value.GetProperty("domain_suffix")
+            .EnumerateArray().Select(e => e.GetString()).ToList();
+        Assert.Contains("weixin.qq.com", suffixes);
+        Assert.Contains("qq.com", suffixes);
+        Assert.Contains("cn", suffixes);
+        // Rule đi thẳng phải đứng TRƯỚC rule DNS và trước "final" (route cuối = relay).
+        Assert.Equal(SingBoxConfigBuilder.RelayOutboundTag,
+            doc.RootElement.GetProperty("route").GetProperty("final").GetString());
     }
 
     [Fact]

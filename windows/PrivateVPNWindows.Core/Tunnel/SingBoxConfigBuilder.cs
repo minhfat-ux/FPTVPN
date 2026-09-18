@@ -34,6 +34,35 @@ public static class SingBoxConfigBuilder
     public const string DirectOutboundTag = "direct";
     public const string DnsServerTag = "remote";
 
+    /// <summary>
+    /// Tên miền đi THẲNG (không qua VPN), dùng cho "vượt qua cho WeChat" mà chủ dự án
+    /// yêu cầu: bật VPN làm WeChat lỗi đăng nhập/dùng chậm vì traffic bị vòng qua node ở
+    /// Việt Nam, trong khi dịch vụ nội địa Trung Quốc vốn truy cập tốt tại chỗ.
+    ///
+    /// Danh sách này là điểm khởi đầu (WeChat/Tencent + tên miền .cn). Phần đầy đủ hơn
+    /// (geoip:cn / geosite:cn theo rule-set) là việc tiếp theo — xem
+    /// docs/WINDOWS_HARNESS_TEST_PLAN.md và docs/TRANSPORT_SPEED_2026-09-19.md mục 7.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ChinaDirectDomainSuffixes = new[]
+    {
+        // WeChat / Tencent
+        "weixin.qq.com",
+        "wechat.com",
+        "weixinbridge.com",
+        "servicewechat.com",
+        "qpic.cn",
+        "gtimg.com",
+        "gtimg.cn",
+        "qlogo.cn",
+        "tencent.com",
+        "tencent-cloud.com",
+        "myqcloud.com",
+        "qq.com",
+        "qcloud.com",
+        // Tên miền quốc gia .cn nói chung
+        "cn",
+    };
+
     // JsonNode.ToJsonString cần TypeInfoResolver (net8.0 từ chối options chỉ có WriteIndented).
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -159,6 +188,13 @@ public static class SingBoxConfigBuilder
                     new JsonObject { ["action"] = "sniff" },
                     // LAN + dải nội bộ KHÔNG đi vào tunnel (mất truy cập máy in/NAS nếu đi).
                     new JsonObject { ["ip_is_private"] = true, ["outbound"] = DirectOutboundTag },
+                    // WeChat/Tencent + .cn đi thẳng: xem ChinaDirectDomainSuffixes.
+                    new JsonObject
+                    {
+                        ["domain_suffix"] = new JsonArray(
+                            ChinaDirectDomainSuffixes.Select(d => (JsonNode)d!).ToArray()),
+                        ["outbound"] = DirectOutboundTag,
+                    },
                     new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
                 },
                 ["final"] = RelayOutboundTag,

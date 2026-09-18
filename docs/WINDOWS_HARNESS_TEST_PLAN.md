@@ -48,6 +48,24 @@ curl.exe -s https://api.ipify.org      # phải ra IP nhà, KHÔNG phải 103.17
 **Tiêu chí đạt**: VPN ≥ 20 Mbps (≥ 2,5 MB/s) trên đường ≥ 100 Mbps; và không có lần
 nào tunnel "Connected" mà `api.ipify.org` không trả về IP node (dấu hiệu blackhole).
 
+## 2b. Kiểm phần "vượt qua cho WeChat" (đã có trong cấu hình sinh ra)
+
+Cấu hình sing-box mà app sinh ra nay có rule: **WeChat/Tencent + mọi tên miền `.cn` đi
+THẲNG** (không qua VPN) — vì đó là nguyên nhân WeChat lỗi/cực chậm khi bật VPN (traffic
+bị vòng qua node ở Việt Nam). Kiểm nhanh sau khi bật VPN:
+
+```powershell
+curl.exe -s -o NUL -w "wechat: %{http_code} %{time_total}s\n" https://weixin.qq.com
+curl.exe -s -o NUL -w "google: %{http_code} %{time_total}s\n" https://www.google.com
+curl.exe -s https://api.ipify.org      # phải là IP node (traffic còn lại đi qua VPN)
+```
+
+Kỳ vọng: `weixin.qq.com` vẫn vào được và **nhanh như khi không bật VPN**; traffic không
+thuộc danh sách đi thẳng vẫn ra IP node.
+
+Phần còn lại (chưa làm): split-tunnel đầy đủ theo `geoip:cn`/`geosite:cn` bằng
+**rule-set** của sing-box (danh sách tên miền hiện tại mới là điểm khởi đầu cho WeChat).
+
 ## 3. Bằng chứng cần gửi lại
 
 - Output `verify-relay.ps1` (nguyên văn).
