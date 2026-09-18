@@ -115,11 +115,25 @@ AGENT_NAME=WIN node ops/agent-watch.mjs --once --dry-run
   `ProgramArguments`: `node`, `<repo>/ops/agent-watch.mjs`, `--auto`; `EnvironmentVariables`:
   `AGENT_NAME=MAC`, `PATH` gồm đường dẫn `dsh`; `RunAtLoad=true`, `KeepAlive=true`. Nạp:
   `launchctl load -w ~/Library/LaunchAgents/site.meetflowai.agentwatch.plist`
-- **Windows (Task Scheduler)**:
-  `schtasks /Create /TN AgentWatch /SC ONLOGON /TR "cmd /c cd /d C:\\path\\repo && set AGENT_NAME=WIN && node ops\\agent-watch.mjs --auto" /F`
-- Không cài được dịch vụ thì chạy tay trong một cửa sổ terminal để mở:
-  `set AGENT_NAME=WIN && node ops\agent-watch.mjs --auto`
+- **Windows — một lệnh, tự cài** (khuyến nghị):
+  ```powershell
+  pwsh -File ops\agent-watch-install.ps1
+  ```
+  Script tự: kiểm tra `node`/`dsh`, chạy thử để in ra dòng `ĐÁNH THỨC …`, tạo Scheduled Task
+  `AgentWatch` chạy khi đăng nhập (ONLOGON), chạy ngay, rồi xác nhận tiến trình đang sống.
+  Chỉ muốn chạy thử: `pwsh -File ops\agent-watch-install.ps1 -NoAutostart`.
+- Chạy tay (không cài dịch vụ): `set AGENT_NAME=WIN && node ops\agent-watch.mjs --auto`
 
-**Giới hạn phải biết:** watcher chỉ đánh thức được khi **nó đang chạy** trên máy bên kia, và
-`dsh --profile headless` phải có trong `PATH` của tiến trình đó. Nếu watcher không chạy, việc vẫn
-nằm trong sổ ở trạng thái `sent` — `list` sẽ cho thấy rõ điều đó (không còn mơ hồ như ping suông).
+### 7.3 Vì sao PHẢI có watcher ở phía Windows (đo thật, không phỏng đoán)
+
+Không thể gọi VÀO máy Windows từ bên ngoài:
+
+| Đường | Kết quả thực đo |
+|---|---|
+| Telegram | hai bên gửi cùng một bot ⇒ `getUpdates` không trả lại tin của nhau (đã thử: gửi được, đọc rỗng) |
+| Tailscale | máy Windows **không** nằm trong tailnet (chỉ có Mac `100.109.31.16` và các node) |
+| VPNFlow | máy Windows là **client** `windows-57m1tfei` = `10.77.0.57`; từ server VPN: ping mất 100% gói, **không cổng nào mở** (22/3389/5985/445/3080/7790 đều đóng) ⇒ VPN một chiều client→server |
+
+Kết luận: chỉ tiến trình **chạy trên chính máy Windows** mới nhận được việc. Nếu watcher không chạy,
+`node ops/task.mjs list` cảnh báo thẳng: `⚠ giao N phút, CHƯA thấy đánh thức/ack` — không còn im lặng
+giả tạo.
