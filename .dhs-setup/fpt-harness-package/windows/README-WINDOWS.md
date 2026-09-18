@@ -89,7 +89,8 @@ Task Scheduler tự chạy:
 - `FPT-DSH-Server` → `dsh web` (DSH local 127.0.0.1:3080)
 - `FPT-DSH-Tunnel` → `ssh -R 127.0.0.1:13081:127.0.0.1:3080`
 
-Mở từ mọi thiết bị: **https://dhs-win.meetflowai.site** (login user `dhs` / pass mặc định `fgMR6h53TC5kMmRW`).
+Mở từ mọi thiết bị: **https://dhs-win.meetflowai.site** (login user `dhs` + mật khẩu do người cài đặt
+qua `-AuthPass`; mã nguồn **không** chứa mật khẩu mặc định).
 
 ---
 
