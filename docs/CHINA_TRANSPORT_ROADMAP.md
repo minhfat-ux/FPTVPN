@@ -235,3 +235,28 @@ phải đi relay ⇒ Cloudflare là cửa vào tốt nhất (PoP HKG, ~0,1 s TTF
 `wss://fcnvpn.tail303be3.ts.net:8443` (Funnel — nay là đường dự phòng, không phải đường chính);
 `HY_UP_KBPS`/`HY_DOWN_KBPS` nên nâng lên mức thật; timeout khi thử direct UDP nên ngắn lại để không
 "connecting hoài" khi mạng chặn UDP.
+
+### Phát hành APK từ máy chủ shop (bài học 18/09/2026)
+
+Đường mạng từ máy chủ shop (Trung Quốc) tới VPS rất không ổn định, đo được:
+
+| Đường | Tốc độ upload |
+|---|---|
+| SSH công khai `103.173.155.50:22` | **~26 KB/s** (bị bóp) |
+| Tailscale `100.76.147.111` | 0,05–1,3 MB/s, hay đứt giữa chừng |
+| **Cloudflare (qua `api.meetflowai.site`)** | **~0,4 MB/s, ổn định nhất** |
+
+**Cách phát hành đã dùng (chạy được):**
+1. Trên node-2 chạy tạm 1 HTTP server nhận PUT (`/tmp/up-server.py`, cổng 8099, token trong path)
+   và thêm route tạm `handle /apkup/* → 127.0.0.1:8099` vào Caddy của `api.meetflowai.site`
+   (backup `Caddyfile.bak-apkup-*`) ⇒ upload đi qua Cloudflare.
+2. **Cloudflare cắt request ở ~100 giây (HTTP 524)** ⇒ phải chia **≤ 12 MB/mảnh** rồi `cat` lại trên
+   node-2 và so `sha256` với file gốc trên Mac. 24 MB/mảnh là quá lớn (524 giữa chừng).
+3. Cài vào `/root/flowvpn-apk/VPNFlow-latest.apk` (giữ backup `*-backup-<ts>.apk`) — đó là file mà
+   `/v1/downloads/android` phát cho khách; bản legacy là `VPNFlow-android7.apk`.
+4. Cập nhật mốc phiên bản cho app tự nhắc cập nhật:
+   `PATCH /v1/admin/android-version {"latest_version":"<x.y.z>"}`.
+5. **Dọn route tạm `/apkup/*` + tắt server tạm** sau khi xong (đừng để lộ đường upload công khai).
+
+Kiểm chứng sau khi phát hành: `sha256` file tải từ `https://meetflowai.site/v1/downloads/android`
+phải **trùng** file build trên Mac, và `/v1/app-version?platform=android` trả đúng `latest_version`.
