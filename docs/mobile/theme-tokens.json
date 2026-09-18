@@ -1,0 +1,101 @@
+{
+  "$comment": "Token giao diện fBuddy — trích từ web/src/styles.css. Đây là bản máy đọc được để đối chiếu/sinh theme; THEME.md là bản giải thích cho người đọc.",
+  "source": { "web": "web/src/styles.css", "chat": "web/src/chat/chat.css", "extractedAt": "2026-09-18" },
+  "color": {
+    "dark": {
+      "bg": "#0A1F3B",
+      "bgSubtle": "#0E2747",
+      "bgPanel": "#0E2747",
+      "bgElevated": "#123052",
+      "bgSidebar": "#0A1F3B",
+      "bgCode": "#123052",
+      "bgHover": "rgba(51,199,115,0.08)",
+      "bgActive": "rgba(51,199,115,0.16)",
+      "bubbleUser": "#16385E",
+      "accent": "#33C773",
+      "accentStrong": "#3DD982",
+      "accentText": "#0A1F3B",
+      "accentSoft": "rgba(51,199,115,0.16)",
+      "accentMint": "#7FE6C0",
+      "ok": "#33C773",
+      "warn": "#E0A63C",
+      "danger": "#F25A5A",
+      "text": "#FFFFFF",
+      "textMuted": "rgba(255,255,255,0.6)",
+      "textFaint": "rgba(255,255,255,0.4)",
+      "border": "rgba(255,255,255,0.08)",
+      "borderStrong": "rgba(255,255,255,0.18)",
+      "shadowSm": "0 1px 2px rgba(0,0,0,0.30)",
+      "shadow": "0 8px 30px rgba(0,0,0,0.38)",
+      "shadowLg": "0 30px 70px rgba(0,0,0,0.50)"
+    },
+    "light": {
+      "bg": "#FFFFFF",
+      "bgSubtle": "#F4F7FB",
+      "bgPanel": "#FFFFFF",
+      "bgElevated": "#FFFFFF",
+      "bgSidebar": "#F4F7FB",
+      "bgCode": "#F1F5F9",
+      "bgHover": "rgba(10,31,59,0.05)",
+      "bgActive": "rgba(31,156,91,0.14)",
+      "bubbleUser": "rgba(31,156,91,0.12)",
+      "accent": "#1F9C5B",
+      "accentStrong": "#17864E",
+      "accentText": "#FFFFFF",
+      "accentSoft": "rgba(31,156,91,0.14)",
+      "ok": "#1F9C5B",
+      "warn": "#B7791F",
+      "danger": "#D64545",
+      "text": "#0A1F3B",
+      "textMuted": "#4A5A73",
+      "textFaint": "#7183A0",
+      "border": "#E2E8F2",
+      "borderStrong": "#CBD6E6"
+    }
+  },
+  "gradient": {
+    "brandGradient": "linear-gradient(120deg, #1E6BE0 0%, #6D5CE7 55%, #A855F7 100%)",
+    "sigCardBg": "radial-gradient(130% 120% at 0% 0%, #14406C 0%, #0A1F3B 55%, #071628 100%)",
+    "composerFade": "linear-gradient(to top, #0A1F3B 62%, transparent)"
+  },
+  "radius": { "sm": 8, "md": 12, "lg": 18, "full": 999 },
+  "space": { "1": 4, "2": 8, "3": 12, "4": 16, "5": 24, "6": 32 },
+  "size": {
+    "sidebarWidth": 288,
+    "topbarHeight": 56,
+    "brandMark": 34,
+    "brandMarkRadius": 9,
+    "avatar": 32,
+    "avatarRadius": 10,
+    "composerMaxWidth": 820,
+    "composerMinHeight": 26,
+    "composerMaxHeight": 220,
+    "attachmentThumb": 96
+  },
+  "type": {
+    "fontFamily": "Inter, Segoe UI, system-ui, -apple-system, Helvetica Neue, Arial, sans-serif",
+    "monoFamily": "JetBrains Mono, Cascadia Code, ui-monospace, SFMono-Regular, Menlo, monospace",
+    "wordmarkWeight": 800,
+    "heroSize": "clamp(30px, 5vw, 44px)",
+    "heroWeight": 800,
+    "heroLetterSpacing": "-0.03em",
+    "brandSub": { "size": 11, "weight": 500 },
+    "msgMeta": { "size": 12 },
+    "buttonSmall": { "size": 13 },
+    "buttonWeight": 550
+  },
+  "component": {
+    "btn": { "paddingX": 14, "paddingY": 9, "radius": 8, "weight": 550 },
+    "btnSm": { "paddingX": 10, "paddingY": 6 },
+    "bubbleUser": { "paddingX": 14, "paddingY": 10, "radius": 12 },
+    "composer": { "padding": [10, 12, 8], "radius": 18, "focusRing": 3 },
+    "chip": { "radius": 999 },
+    "card": { "background": "sigCardBg over bgPanel" }
+  },
+  "notes": [
+    "fBuddy là dark-first: bản phát hành đầu tiên khoá dark để khớp web.",
+    "accentSoft là rgba — trên Compose dùng Color(0x2933C773), Swift dùng .opacity(0.16).",
+    "Không hard-code màu ở màn hình; mọi màu đi qua Theme.swift / Theme.kt.",
+    "Ảnh logo trên web được phục vụ kèm ?v=culi2 để phá cache CDN; đừng hot-link URL không có ?v=."
+  ]
+}
