@@ -1,0 +1,279 @@
+# Bàn giao — tiếp tục ở session mới
+
+Ngày: 2026-09-18 · Nguồn: DSH Windows, workspace `C:\Users\Minhn\FlowTech AI`
+Trạng thái: **production đang chạy bình thường**, nhưng có 1 lỗ bảo mật đang mở và 1 việc hạ tầng cần chốt.
+
+> Đọc hết file này trước khi làm gì. Có 3 chỗ nếu làm theo bản năng sẽ **phá production**.
+
+---
+
+## 0. BA ĐIỀU KHÔNG ĐƯỢC LÀM SAI
+
+### 0.1 App đã đổi tên thành fBuddy — `flowgpt.service` đã chết
+
+| | |
+|---|---|
+| Tiến trình đang chạy | **`fbuddy.service`** — `WorkingDirectory=/opt/fbuddy`, port **7790**, env prefix **`FBUDDY_*`** |
+| `flowgpt.service` | **inactive (dead) + disabled** |
+| `/opt/flowgpt` | bản cũ, **không phục vụ gì** |
+| Dữ liệu | `/var/lib/fbuddy/fbuddy.db` (md5 `cb5d6964fbab5b84ca38044e4fc750b1`) — **giống hệt** `/var/lib/flowgpt/flowgpt.db` |
+| Caddy | **cả** `flowgpt.meetflowai.site` **và** `fbuddy.meetflowai.site` → `127.0.0.1:7790` |
+
+Bằng chứng: `GET https://flowgpt.meetflowai.site/api/meta` trả `"appName":"fBuddy"`; `<title>` là `fBuddy — Trợ lý AI đa năng`.
+
+**⇒ `deploy/deploy.ps1` hiện nhắm `/opt/flowgpt` — deploy vào đó KHÔNG lên sóng.**
+
+### 0.2 Deploy phải dùng code ĐÃ PULL từ `origin/flowgpt`
+
+`/opt/fbuddy` là **fork đã đổi tên** so với repo này **ở trạng thái cũ**:
+
+- **22 file khác nội dung**, chỉ 15 file giống; thêm file mới `server/src/skills/skillhub.js`
+- có **route SePay** (`grep -c sepay src/routes.js` = 15) mà bản cũ **không có** (`= 0`)
+- env đổi `FLOWGPT_*` → `FBUDDY_*`, DB `flowgpt.db` → `fbuddy.db`
+
+**Nhưng fork đó NẰM TRONG GIT** — trên `origin/flowgpt`, do harness Mac commit:
+
+```
+559d20d docs(mobile): bo tai lieu + template de dung app iOS & Android cho fBuddy
+646aba2 feat(chat): avatar tro ly trong khung chat dung logo fBuddy (icon Culi)
+175fefb fix(brand): icon Culi hien ngay — cache-busting + bo immutable cho logo/favicon
+655d73e feat(brand): dung icon Culi lam logo + icon chinh cua fBuddy
+44d8d9c feat(fbuddy): doi ten FlowGpt -> fBuddy + vien SePay + client SkillHub + va loi khoa ma hoa
+```
+
+Sai lầm của session trước: checkout local đang **tụt 5 commit** so với `origin/flowgpt`, nên bản local là code FlowGpt cũ
+⇒ suýt kết luận "phải tar bản cũ đè lên `/opt/fbuddy`". **Đã rebase xong, local giờ bằng `origin/flowgpt`.**
+
+**⇒ Quy tắc: `git pull` trước, rồi hãy deploy.** Deploy code đã pull vào `/opt/fbuddy` là ĐÚNG.
+Deploy từ checkout cũ là **mất rebrand fBuddy + skill hub + SePay**, và nhiều khả năng chết vì thiếu `FBUDDY_SECRET`.
+
+Remote còn có nhánh `origin/harness` và `main` đã được cập nhật (`03817f0..771eb8c`) — kiểm tra nhánh nào mới nhất
+trước khi làm tiếp.
+
+### 0.3 Thư mục deploy không phải git repo, nhưng nguồn thì có
+
+`git -C /opt/fbuddy log` → `fatal: not a git repository` (chỉ là thư mục deploy).
+**Nguồn thật = `origin/flowgpt`.** Nên xác nhận `/opt/fbuddy` đang khớp commit nào trước khi sửa.
+
+---
+
+## 1. Lỗ bảo mật đang mở (ưu tiên cao nhất, không sửa được từ đây)
+
+```bash
+curl -s -X POST https://api.meetflowai.site/meetflow/tmp-key \
+  -H 'Content-Type: application/json' \
+  -d '{"clientReferenceId":"fchina-translator-android"}'
+# → HTTP 201  {"api_key":"snx_temp_…","expires_at":"…"}
+```
+
+**Không gửi kèm Authorization nào mà vẫn nhận được Soniox temp key thật.**
+
+- Backend `api.meetflowai.site/meetflow` (VPS **103.173.155.50**) phát key cho người lạ ⇒ ai cũng đốt được tiền Soniox của chủ dự án.
+- Gating Pro của bản iOS/Android nằm ở **phía client** (entitlement từ StoreKit / `queryPurchasesAsync`), backend không kiểm tra.
+- Chủ dự án nói **không đụng được backend này** (bản Mac đang chạy tốt) ⇒ cần bên Mac thêm auth + entitlement.
+- Nên **xoay key Soniox** vì một temp key đã bị lấy qua mạng công khai trong quá trình kiểm tra.
+
+---
+
+## 2. Đã làm xong và đã kiểm chứng
+
+### 2.1 Trang chủ `meetflowai.site` (khác app — đây là control plane `flowvpn-cp`, port 7778)
+
+File nguồn: **`/root/flowvpn-cp/src/home-page.js`** (không có trong git; chỉ có backup `.bak-*` trên server).
+Bản làm việc local: `C:\Users\Minhn\FlowTech AI\_flowvpn-cp\home-page.js`.
+
+| Việc | Trạng thái |
+|---|---|
+| Áp theme popup (navy radial + quầng sáng, viền gradient 1px, nút gradient, `sig-rise`) | ✅ đã deploy |
+| Logo FlowTech thật ở header (`/assets/flowtech-mark.png`, thay ô vuông xanh giả) + favicon + apple-touch-icon | ✅ |
+| Dòng dưới tên FlowTech → **"AI Ecosystem"** (cả 5 ngôn ngữ) | ✅ |
+| Hero → **sứ mệnh** (AI cho network/education/utilities, productivity, "hai anh em cùng phát triển") | ✅ |
+| Products dựng lại theo card `.fg-prod` của popup fbuddy (ô logo + tên + nhãn gradient + mô tả + bullets + nút) | ✅ |
+| Đủ **5 sản phẩm, mỗi app một logo**: VPNFlow, MeetFlow AI, FlowTech Harness, **fBuddy** (mới), **SuperMom AI** (mới) | ✅ |
+| **Bỏ hẳn section Pricing** (+ link nav + hàm `pricingHTML`) | ✅ |
+| Card MeetFlow AI có đủ link tải (xem 2.2) | ✅ |
+
+**Logo từng app** (route `/assets/:file` của control plane, allow-list ở `src/index.js`):
+`vpnflow-logo.png`, `meetflow-logo.png`, `flowtech-icon.png`, `fbuddy-logo.png`, `supermom-logo.png`
+
+**Icon app thật** lấy từ: `flowtech-mark/icon.png` (mark cánh), `flowvpn-logo.png` (khiên), `meetflow-logo.png` (chữ M),
+`fbuddy-logo.png` (mascot CULI — nguồn là WebP đặt tên `.png`, đã convert sang **PNG thật** bằng canvas trong Chrome),
+`supermom-logo.png` (mẹ + bóng đèn, nén 1024→256px, 1.85 MB → 161 KB).
+
+### 2.2 MeetFlow AI — link tải trên card
+
+| Nền tảng | Link | Nhãn |
+|---|---|---|
+| iOS | `https://apps.apple.com/app/id6765590042` | App Store |
+| macOS | cùng link | App Store (macOS) |
+| Windows | `https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip` | Windows (overlay) |
+| Android | `https://api.meetflowai.site/v1/ai/downloads/android` | Android (APK) |
+
+**Không có chữ IPA** ở card MeetFlow (đúng yêu cầu); card VPNFlow vẫn phát IPA như cũ. Có test canh riêng cho cả hai
+(`_flowvpn-cp/check-meetflow-dl.mjs`).
+
+⚠️ **Hai App Store id khác nhau, đừng lẫn**: SuperMom AI = `id6768231353`, MeetFlow AI = `id6765590042`
+(bundle `FPT-China.FChinaTranslator`, tra từ repo `minhfat-ux/MeetFlowAI`).
+
+### 2.3 Bản Windows overlay — đã build và đã lên sóng
+
+Nguồn: `C:\Users\Minhn\FPTVPN\MeetFlowAI_Win` (WPF, .NET 8, overlay phụ đề song ngữ qua Soniox).
+
+```bash
+dotnet publish MeetFlowAI.Win/MeetFlowAI.Win.csproj -c Release -r win-x64 --self-contained true -o <out>
+# → 162 MB, nén zip 68 MB
+```
+
+Đã upload (verify: HTTP 200, `application/zip`, 71.363.017 bytes, magic `50 4b 03 04`):
+- `https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip`
+- `https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip`
+
+Không có file cài `.exe` vì máy này **không có Inno Setup** (script `.iss` có sẵn nhưng chưa compile được) ⇒ phát hành zip,
+khách giải nén chạy `MeetFlowAI.Win.exe`. App hiện **bắt khách tự nhập key** ⇒ đây chính là lý do phải làm mục 3.
+
+---
+
+## 3. Việc đang làm dở — backend riêng cho bản Windows
+
+### 3.1 Quyết định đã chốt với chủ dự án
+
+| Câu hỏi | Chốt |
+|---|---|
+| Bảo vệ key | **Mức 3** — app Windows **không giữ key**, đi qua backend của mình, thu hồi được |
+| Đơn nào mở khoá | **Mọi đơn `status = "paid"`** (ghi kèm `order_id` để sau siết thành gói riêng thì đổi 1 chỗ) |
+| Kênh gửi | **Email tự động** khi đơn thành `paid` **+** trang `?view=desktop` xem lại |
+| Backend | **Làm backend RIÊNG cho Windows**, không đụng backend `/meetflow` của bản Mac |
+
+### 3.2 Kiến trúc
+
+```
+App Windows (không key, không biết Soniox)
+   │  mã kích hoạt trong email → token phiên
+   ▼
+desk service MỚI   ← key Soniox + OpenRouter RIÊNG của bản Windows
+   │  đọc đơn đã "paid" để quyết định quyền (chỉ ĐỌC DB)
+   │  WS proxy PCM → Soniox · /summary → OpenRouter
+   ▼
+Soniox / OpenRouter
+```
+
+Tách 3 lớp để "tránh đụng bản Mac": **tiến trình riêng** (port riêng, systemd unit riêng) ·
+**key Soniox riêng** (xoay key bên này không chết bên kia, lộ cũng không đụng quota bản Mac) ·
+**tên miền riêng** (block Caddy riêng, không sửa Caddyfile của `api.meetflowai.site`).
+
+Tên tạm đề xuất (chưa chốt): service `flowdesk`, host `desk.meetflowai.site`, port `7791`.
+
+### 3.3 Điểm cắm duy nhất
+
+`/opt/fbuddy/server/src/topup.js` → **`confirmTopupOrder()`**, nhánh `status: "paid"` (dòng ~198).
+Hàm này **đã idempotent** (gặp đơn `paid` thì trả `alreadyPaid: true` và thoát ở dòng ~187) nên webhook trùng /
+poll trùng / duyệt Telegram 2 lần đều **không gửi email 2 lần**.
+
+Cả **4 đường** xác nhận thanh toán đều đi qua đây (đã kiểm trong code live):
+duyệt Telegram · link ký HMAC · SePay webhook (`applyTransaction`) · SePay poll.
+
+### 3.4 Endpoint của service mới
+
+| Endpoint | Việc |
+|---|---|
+| `POST /v1/desktop/activate` | dán mã trong email → token phiên ngắn hạn |
+| `POST /v1/desktop/session` | gia hạn token |
+| `WS /v1/desktop/stt` | proxy PCM 16 kHz mono → Soniox, key ở server |
+| `POST /v1/desktop/summary` | gọi OpenRouter, key ở server |
+| `GET /v1/desktop/health` | sống/chết |
+
+Bảng `desktop_activations`: `user_id`, `order_id`, `code_hash`, `issued_at`, `revoked_at`, `last_seen_at` (thu hồi được).
+
+### 3.5 Phải có NGAY từ bản đầu (đừng để sau)
+
+Vì đây là endpoint lộ ra internet — **không lặp lại lỗi `/tmp-key`**:
+
+- Auth thật cho mọi route (trừ `/health`)
+- Rate limit theo IP + theo tài khoản, **hạn mức audio/tháng mỗi user**
+- Token phiên ngắn hạn, thu hồi được, log mọi lần cấp quyền
+- **Không bao giờ** trả key Soniox/OpenRouter nguyên văn ra client
+
+### 3.6 Thứ tự làm
+
+1. Service mới + đọc quyền từ đơn `paid` + bảng `desktop_activations` + `/health` (chạy được, có test)
+2. Email tự động (thêm `sendDesktopActivation()` vào `mailer.js`, dùng lại sender Resend) + trang `?view=desktop`
+3. WS proxy Soniox + `/summary`
+4. Sửa app WPF: bỏ 2 ô key, thêm ô dán mã kích hoạt, trỏ về service mới
+5. Deploy Caddy + systemd riêng, kiểm chứng một phiên thật đầu-cuối
+
+---
+
+## 4. Việc còn treo khác
+
+1. **Popup fbuddy 3 ngôn ngữ theo region** (vi/en/zh) — đã định vị xong, chưa viết dòng nào:
+   - File **được phục vụ thật** = `/opt/fbuddy/web/dist/promo.js`. Phải sửa **cả** `/opt/fbuddy/web/public/promo.js`
+     (hai bản đang lệch đúng 1 dòng: public `?v=culi1`, dist `?v=culi2`).
+   - Toàn bộ chữ **hardcode tiếng Việt**, ~15 chỗ: aria "Đóng quảng cáo", eyebrow "Hệ sinh thái FlowTech",
+     title "Cài app dùng ngay trên mọi thiết bị", sub, `OS_LABEL`, "Tải cho …", "· bản cho máy bạn",
+     tên/tag/pitch từng sản phẩm, "Xem gói & mua", footer…
+   - **Có lớp cache phía trước** (fetch lần đầu nhận bản cũ hơn) ⇒ sau khi sửa phải **bump `?v=` trong
+     `web/dist/index.html`** (đang là `20260917b`).
+   - Chọn ngôn ngữ theo `navigator.language` + `Intl…timeZone`, mặc định `en` khi không khớp.
+2. **Luồng cấp key qua trang buy** — chính là mục 3 (đang làm dở).
+3. **Xác nhận `/opt/fbuddy` khớp commit nào của `origin/flowgpt`** trước khi sửa tiếp (xem §0.2 — nguồn có trong git,
+   chỉ thư mục deploy là không).
+4. Treo từ trước: voice chống trễ (chủ dự án dặn "đừng làm vội") · SSO Firebase/Facebook · đăng ký email+mật khẩu ·
+   MCP `stdio` không test được từ sandbox Windows.
+
+---
+
+## 5. Bẫy đã vấp — đừng vấp lại
+
+- **PowerShell 5.1 `Get-Content`/`Set-Content` lên file có tiếng Việt ⇒ mojibake.** Dùng công cụ file (read/write)
+  hoặc `[System.IO.File]::WriteAllText(..., UTF8Encoding($false))`. Đã tự làm hỏng 1 file vì lỗi này.
+- **`process.exit()` ngay sau `fetch` ⇒ crash libuv trên Windows** (`exit -1073740791`). Dùng `process.exitCode`.
+- **Đừng viết script sửa file bằng regex có bộ đếm rồi quên tăng bộ đếm đúng chỗ** — đã một lần làm **cả 5 ngôn ngữ
+  nhận tiêu đề tiếng Anh**, phải viết script kiểm tra riêng mới phát hiện. Luôn viết script assert + kiểm tra
+  "5 ngôn ngữ phải KHÁC NHAU".
+- **Neo regex vào giá trị cụ thể**, đừng neo vào tên khoá chung: một lần neo `windows: "` làm bộ đếm thành 6 vì
+  khối vừa chèn cũng khớp. Neo `windows: "Windows 10/11"` mới đúng.
+- **`pwsh` không có trên PATH** — gọi `& ".\deploy\deploy.ps1"`, đừng `pwsh -File`.
+- **`git ls-remote` dùng được credential đã cache** ⇒ đọc được cả repo **private** (`MeetFlowAI`, `SuperMomAI`).
+  `gh` CLI **không có**. API GitHub trả 404 với repo private.
+- **Telegram**: dùng `ops/send-telegram.ps1 -MessageFile ops/messages/<file>.txt` (đọc UTF-8 tường minh, base64,
+  so khớp lại với bản Telegram nhận được). Đừng tự `Get-Content -Raw` rồi gửi.
+- **Quoting JSON qua `ssh`/PowerShell hay bị phá** ⇒ viết script ra file rồi `scp` sang, hoặc base64:
+  `$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content f -Raw)))`.
+
+---
+
+## 6. Đường dẫn & lệnh hay dùng
+
+```bash
+# Test + build
+node --test "server/test/*.test.js"        # 168/168 pass (ở thời điểm bàn giao)
+npm --workspace web run build
+
+# Production
+ssh root@165.101.114.162
+systemctl is-active fbuddy flowgpt          # fbuddy active, flowgpt inactive
+journalctl -u fbuddy -f
+FLOWGPT_DATA_DIR=/var/lib/flowgpt node ops/db-peek.mjs   # xem nhanh DB (script ở flowgpt/ops)
+```
+
+| Thứ | Ở đâu |
+|---|---|
+| App fBuddy (live) | `/opt/fbuddy` · systemd `fbuddy` · port 7790 · env `/etc/fbuddy/fbuddy.env` |
+| DB live | `/var/lib/fbuddy/fbuddy.db` |
+| Control plane (trang chủ) | `/root/flowvpn-cp` · systemd `flowvpn-cp` · port 7778 · `src/home-page.js` |
+| Static tải app | `/var/www/flowvpn/dl/` (Caddy phục vụ tại `/dl/`) · assets ở `/root/flowvpn-cp/assets/` |
+| Backup để rollback | `/root/flowvpn-cp/src/home-page.js.bak-theme-*`, `.bak-products-*`, `.bak-meetflowdl-*`, `src/index.js.bak-*` |
+| Token admin | `%TEMP%\admin-token.txt` (Windows), mint bằng `auth.issueToken` cho `minhnb2@fpt.com`. **Không in ra.** |
+
+Thư mục tạm trong workspace (chủ dự án cho phép xoá): `_flowvpn-cp` (bản làm việc trang chủ),
+`_meetflow` (repo Apple), `_supermom` (repo SuperMom), `_live-fbuddy` (code live tải về để so),
+`_meetflow-win-build` (+ zip 68 MB).
+
+## 7. Tài khoản & cấu hình
+
+- Production: `minhnb2@fpt.com` (admin, 100000 credit), `minhnb2@me.com`, `tranhoangnam081215@gmail.com`,
+  `minhfat@gmail.com`, `chiaki04052014@gmail.com`
+- Đơn giá đang chạy: `creditsPerToken 0.06` × `vndPerCredit 1` ⇒ **1 lượt chat ≈ 210đ** (đo thật 60 lượt:
+  median 3.160 token). Kỹ năng chợ = **50.000đ** mỗi kỹ năng. Tặng đăng nhập 10.000 credit.
+- `creditsPerToken` là **số thập phân** — ô trên control panel phải dùng `decimalOr`, `intOr` sẽ làm tròn thành 0
+  và **mọi lượt chat miễn phí**.
