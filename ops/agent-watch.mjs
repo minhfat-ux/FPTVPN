@@ -27,7 +27,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn as childProcessSpawn } from "node:child_process";
 
 const SELF = (process.env.AGENT_NAME || "MAC").toUpperCase();
 const PEER = SELF === "MAC" ? "WIN" : "MAC";
@@ -252,6 +252,26 @@ async function alertHuman(text) {
 const WAKE_KINDS = new Set(["task", "sent", "done", "reopened", "blocked", "verify-fail", "alert-test", "wake"]);
 
 /** Kéo thông báo mới từ connector VPS; trả về số lần đánh thức. */
+/** Cập nhật bảng trạng thái (chạy nền, best-effort). */
+function refreshBoard() {
+  if (DRY) return;
+  try {
+    const { spawn } = require_childProcess();
+    spawn(process.execPath, ["ops/status-board.mjs"], { cwd: process.cwd(), detached: true, stdio: "ignore" }).unref();
+  } catch {
+    /* thôi */
+  }
+}
+
+function require_childProcess() {
+  return { spawn: spawnBoardProcess };
+}
+
+/** Tách riêng để tránh import động trong vòng lặp nóng. */
+function spawnBoardProcess(...args) {
+  return childProcessSpawn(...args);
+}
+
 async function tickBus(state) {
   if (NO_BUS) return 0;
   const bus = loadBusEnv();
@@ -259,7 +279,7 @@ async function tickBus(state) {
   const since = Number(state.busSince ?? 0) || 0;
   let payload;
   try {
-    const response = await fetch(`${bus.url}/pull?agent=${SELF.toLowerCase()}&since=${since}`, {
+    const response = await fetch(`${bus.url}/pull?agent=${SELF.toLowerCase()}&since=${since}&host=${encodeURIComponent(os.hostname())}`, {
       headers: { Authorization: `Bearer ${bus.token}` },
       signal: AbortSignal.timeout(10000),
     });
@@ -364,11 +384,14 @@ if (ONCE) {
   const busInfo = loadBusEnv();
   log(`connector: ${busInfo.url && busInfo.token ? busInfo.url : "(chưa có cấu hình bus — chỉ theo dõi git)"}`);
   log(`đang chạy: ${SELF} ← ${PEER} · poll ${INTERVAL}s · ${AUTO ? "TỰ ĐỘNG đánh thức" : "chỉ báo"} · cooldown ${COOLDOWN}s`);
+  let round = 0;
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, INTERVAL * 1000));
+    round += 1;
     try {
       await tick(state);
       await tickBus(state);
+      if (round % 3 === 0) refreshBoard();
     } catch (error) {
       log(`lỗi vòng lặp: ${String(error.message).split("\n")[0]}`);
     }

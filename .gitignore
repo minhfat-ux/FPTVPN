@@ -18,3 +18,4 @@ coverage/
 .npm-cache/
 ops/.rewrite-baseline.json
 ops/tasks/.watch-*.json
+AGENTS.local.md

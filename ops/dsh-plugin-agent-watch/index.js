@@ -84,6 +84,15 @@ export function apply(ctx, config = {}) {
       log(`không thấy ${scriptPath} — bỏ qua`);
       return;
     }
+    // Cập nhật bảng trạng thái trước khi vào việc: phiên mới mở ra là biết ngay tình hình.
+    try {
+      const board = spawn(process.execPath, [path.join("ops", "status-board.mjs")], { cwd, detached: true, stdio: "ignore" });
+      board.unref();
+      log("đã cập nhật bảng trạng thái AGENTS.local.md");
+    } catch (error) {
+      log(`không cập nhật được bảng trạng thái: ${error?.message ?? error}`);
+    }
+
     const stopped = stopWatchers(cwd, log);
     if (stopped) log(`đã dừng ${stopped} watcher cũ của repo này`);
 
