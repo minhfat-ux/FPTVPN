@@ -157,3 +157,57 @@ khác dùng).
 trình con do app .NET giám sát, tự rơi về đường WireGuard cũ nếu không lên được
 trong 20s. Binary nhúng vào `windows/assets/` (wintun.dll đã có sẵn); giấy phép ghi
 ở `windows/assets/THIRD_PARTY.md` (sing-box GPL-3.0 đã được chủ dự án duyệt).
+
+## 10. Nợ bảo mật đã biết (cần xử lý trước khi phát hành rộng)
+
+1. **Credential hysteria dùng chung, nằm trong app** (`HY_PASSWORD`/`HY_OBFS` trong APK,
+   `HysteriaRelayDefaults.cs` trên Windows, và bản Apple lấy từ xcconfig nội bộ khi
+   build). Kế hoạch: chuyển server sang auth theo người dùng (hysteria `userpass`) và
+   xoay giá trị hiện tại.
+2. **Client không xác thực chứng chỉ server**: `tools/hysteria-android/mobile.go:162`
+   đặt `TLSConfig.InsecureSkipVerify: true` (node dùng cert tự ký) — bản Apple và
+   Windows kế thừa cùng hành vi. Hướng xử lý: cấp cert thật cho node (hoặc ghim
+   fingerprint cert vào client và bật xác thực).
+3. **Relay WS không có xác thực riêng**: bảo vệ duy nhất là bí mật của path
+   (`/relay/vn*hy`) + TLS của Cloudflare. Nếu lộ URL, người khác dùng được relay
+   (nhưng vẫn không vào được hysteria nếu không có credential).
+
+## 11. Việc Apple còn lại (kế hoạch cụ thể để chạy tiếp)
+
+Trạng thái đã có trong repo:
+- `tools/hysteria-apple/build.sh` + `verify.sh` — build/verify framework hysteria2 cho
+  Apple (module `Hysteria`, API `MobileConnect`/`MobileServe`/`MobileStop`), đã chạy thật,
+  cả 2 toolchain gomobile đều OK.
+- `iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift` — transport (WS relay + fd utun
+  qua KVC `packetFlow.value(forKey: "socket")`), đã compile.
+- `iOS/PrivateVPN/Services/HysteriaDefaults.swift` — hằng số (KHÔNG có credential).
+- `PacketTunnelProvider.swift` — nhánh hysteria ĐÃ CÓ nhưng **chưa link framework**:
+  `hysteriaOptions()` đọc `providerConfiguration["hysteria"]`, thiếu thì chạy WireGuard
+  như cũ ⇒ hiện tại hành vi không đổi (an toàn).
+
+Bước còn lại (làm ở phiên sau, theo thứ tự):
+1. **Extension Apple phải là hysteria-only**: bỏ `- package: WireGuardKit` khỏi 2 target
+   `PrivateVPNPacketTunnel` và `PrivateVPNMacPacketTunnel`; gỡ các nhánh WireGuard trong
+   `PacketTunnelProvider.swift` (adapter, `TunnelConfiguration`, `WGRelayClient`,
+   `startWebSession`, fallback UDP trực tiếp). Lý do bắt buộc: hai runtime Go không cùng
+   một process (mục 8) — `duplicate symbol '__cgo_panic' / '_crosscall2' / '__cgo_topofstack'`.
+   Cách ít đụng nhất: tạo provider riêng cho macOS (ví dụ
+   `MacHysteriaPacketTunnelProvider`) chỉ gồm các file hysteria
+   (`HysteriaTransport.swift`, `WSRelayClient.swift`, `RelayLink.swift`,
+   `RelayUDPListener.swift`, `RelayDiagnostics.swift`, `NodeHealthReporter.swift`,
+   `HysteriaDefaults.swift`) rồi đổi `NSExtensionPrincipalClass` của target macOS.
+2. Thêm `framework: iOS/Frameworks/Hysteria.xcframework` cho target iOS và
+   `Hysteria-macos.xcframework` cho target macOS, **rồi build sạch** — cảnh báo: DerivedData
+   cũ còn `Hysteria.framework` trong `Build/Products` làm `canImport(Hysteria)` thành true
+   và linker kéo framework vào ⇒ lỗi trùng symbol dù project.yml đã bỏ khai báo. Gặp lỗi
+   này thì xoá DerivedData rồi build lại.
+3. App truyền credential: thêm `iOS/Hysteria.local.xcconfig` (**đã gitignore**) chứa
+   `HYSTERIA_PASSWORD`/`HYSTERIA_OBFS`, khai `configFiles` + 2 khoá Info.plist cho 2 app
+   target, rồi `VPNManager` đọc từ `Bundle.main` và truyền `providerConfiguration["hysteria"]`
+   (kèm `relayURL` lấy từ `hy_relay_url` của node, mặc định `/relay/vn2hy`).
+4. Đo A/B trên macOS: `xcodebuild -scheme PrivateVPNMac -configuration Release` → cài vào
+   `/Applications` → `scutil --nc list` + `scutil --nc start "<tên>"` → đo `curl --interface en0`
+   (raw) so với `curl` khi tunnel bật (cùng URL, ≥2 lần, kiểm `%{http_code}`), xác nhận IP
+   thoát là IP node, rồi **luôn `scutil --nc stop`**.
+5. iOS: build archive + IPA ad-hoc (`scripts/archive-appstore.sh ios adhoc` →
+   `scripts/ios-adhoc-export.sh` → `scripts/upload-ios-ipa.sh`) để cài lên iPad thật.

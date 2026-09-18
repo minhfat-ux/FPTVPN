@@ -109,6 +109,8 @@ targets:
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
       - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
       - path: iOS/PrivateVPN/Services/KeychainStore.swift
+      # Hằng số transport hysteria2 dùng chung với app (xem HysteriaDefaults).
+      - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
     info:
       path: iOS/PrivateVPNPacketTunnel/Info.plist
       properties:
@@ -276,6 +278,7 @@ targets:
           - "PacketTunnel.entitlements"
       - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
+      - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
     info:
       path: mac/PrivateVPNMacPacketTunnel/Info.plist
       properties:

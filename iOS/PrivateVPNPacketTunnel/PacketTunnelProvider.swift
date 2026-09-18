@@ -35,6 +35,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// WebSocket relay: only started when the TCP relay never came up (see
     /// `scheduleWebSocketFallback`).
     private var wsRelay: WSRelayClient?
+    /// Transport hysteria2 (QUIC qua WebSocket/Cloudflare). Chỉ dựng khi
+    /// `providerConfiguration["hysteria"]` được app truyền vào; không có thì giữ nguyên
+    /// hành vi WireGuard như trước (không có thay đổi ngầm).
+    private var hysteria: HysteriaTransport?
     /// Configuration to restore when the relays never come up (direct UDP endpoint).
     private var directConfiguration: TunnelConfiguration?
 
@@ -101,8 +105,128 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
-        startSession(config: config, generation: generation, completion: completionHandler)
+        // Transport hysteria2 (đường đã đo nhanh nhất khi IP node bị chặn). Chỉ chạy khi
+        // app đã truyền cấu hình hysteria; nếu không dựng được thì rơi về WireGuard
+        // ngay trong startHysteriaSession (không để tunnel "lên" mà không có mạng).
+        if let hysteriaOptions = hysteriaOptions() {
+            RelayDiagnostics.shared.log(
+                "startTunnel: transport hysteria2 -> \(hysteriaOptions.relayURL.absoluteString)"
+            )
+            startHysteriaSession(
+                options: hysteriaOptions,
+                fallback: config,
+                generation: generation,
+                completion: completionHandler
+            )
+        } else {
+            startSession(config: config, generation: generation, completion: completionHandler)
+        }
         scheduleOverallTimeout()
+    }
+
+    /// Đọc cấu hình hysteria do app truyền qua `providerConfiguration`.
+    ///
+    /// Trả nil nghĩa là "chạy đường WireGuard như cũ" — điều này giữ cho bản iOS/macOS
+    /// cũ (và bản chưa có credential) không đổi hành vi.
+    private func hysteriaOptions() -> HysteriaTransport.Options? {
+        guard let raw = self.protocolConfiguration as? NETunnelProviderProtocol,
+              let dict = raw.providerConfiguration?["hysteria"] as? [String: Any],
+              (dict["enabled"] as? Bool) ?? true,
+              let relayString = dict["relayURL"] as? String,
+              let relayURL = URL(string: relayString),
+              let serverHost = dict["serverHost"] as? String, !serverHost.isEmpty,
+              let password = dict["password"] as? String, !password.isEmpty else {
+            return nil
+        }
+        let port = UInt16(dict["serverPort"] as? Int ?? Int(HysteriaDefaults.serverPort))
+        return HysteriaTransport.Options(
+            relayURL: relayURL,
+            serverHost: serverHost,
+            serverPort: port ?? HysteriaDefaults.serverPort,
+            password: password,
+            obfs: dict["obfs"] as? String ?? "",
+            upKbps: dict["upKbps"] as? Int ?? HysteriaDefaults.upKbps,
+            downKbps: dict["downKbps"] as? Int ?? HysteriaDefaults.downKbps,
+            mtu: dict["mtu"] as? Int ?? HysteriaDefaults.mtu,
+            ipv4: HysteriaDefaults.tunIPv4Address,
+            ipv6: HysteriaDefaults.tunIPv6Address
+        )
+    }
+
+    /// Dựng tunnel bằng hysteria2: tự áp network settings (WireGuard adapter không chạy
+    /// trong đường này), lấy fd của utun rồi giao cho Go bơm gói.
+    ///
+    /// Mọi lỗi ở đây đều RƠI VỀ WireGuard — đó là điều kiện để bật đường mới mà không
+    /// làm mất mạng của khách.
+    private func startHysteriaSession(
+        options: HysteriaTransport.Options,
+        fallback: WireGuardConfig,
+        generation: Int,
+        completion: @escaping (Error?) -> Void
+    ) {
+        let transport = HysteriaTransport(log: log)
+        hysteria = transport
+
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: options.serverHost)
+        settings.mtu = NSNumber(value: options.mtu)
+        let ipv4 = NEIPv4Settings(
+            addresses: [HysteriaDefaults.tunIPv4Address],
+            subnetMasks: [HysteriaDefaults.tunIPv4SubnetMask]
+        )
+        ipv4.includedRoutes = [NEIPv4Route.default()]
+        // LAN + link-local đi thẳng: nếu đưa vào tunnel thì máy in/router trong nhà mất.
+        ipv4.excludedRoutes = [
+            NEIPv4Route(destinationAddress: "10.0.0.0", subnetMask: "255.0.0.0"),
+            NEIPv4Route(destinationAddress: "172.16.0.0", subnetMask: "255.240.0.0"),
+            NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
+            NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0")
+        ]
+        settings.ipv4Settings = ipv4
+        settings.dnsSettings = NEDNSSettings(servers: HysteriaDefaults.dnsServers)
+
+        setTunnelNetworkSettings(settings) { [weak self] error in
+            guard let self else { return }
+            if let error {
+                RelayDiagnostics.shared.log("hysteria: setTunnelNetworkSettings lỗi: \(error.localizedDescription)")
+                self.hysteria = nil
+                self.startSession(config: fallback, generation: generation, completion: completion)
+                return
+            }
+            guard let fd = HysteriaTransport.packetTunnelFileDescriptor(from: self.packetFlow) else {
+                // Không lấy được fd utun ⇒ KHÔNG chạy hysteria nửa vời (tunnel "lên" mà
+                // không có gói nào đi). Gỡ settings rồi rơi về WireGuard.
+                RelayDiagnostics.shared.log("hysteria: không lấy được fd utun — rơi về WireGuard")
+                self.hysteria = nil
+                self.setTunnelNetworkSettings(nil) { _ in
+                    self.startSession(config: fallback, generation: generation, completion: completion)
+                }
+                return
+            }
+            do {
+                try transport.start(options: options, tunnelFd: fd) { [weak self] reason in
+                    guard let self, self.isCurrentSession(generation) else { return }
+                    // Đường hysteria chết SAU khi đã lên: gỡ nó rồi dựng lại bằng
+                    // WireGuard để khách không mất mạng, và ghi rõ lý do vào chẩn đoán.
+                    RelayDiagnostics.shared.log("hysteria: transport chết (\(reason)) — chuyển sang WireGuard")
+                    self.setStatus(
+                        state: "no_traffic",
+                        code: TunnelDiagnosticCode.startFailed,
+                        message: "Đường hysteria2 dừng (\(reason)). Đang chuyển sang WireGuard."
+                    )
+                    self.hysteria?.stop()
+                    self.hysteria = nil
+                    self.startSession(config: fallback, generation: generation, completion: { _ in })
+                }
+                RelayDiagnostics.shared.log("hysteria: transport đã lên (relay udp 127.0.0.1:\(transport.relayLocalPort))")
+                completion(nil)
+            } catch {
+                RelayDiagnostics.shared.log("hysteria: dựng thất bại: \(error) — rơi về WireGuard")
+                self.hysteria = nil
+                self.setTunnelNetworkSettings(nil) { _ in
+                    self.startSession(config: fallback, generation: generation, completion: completion)
+                }
+            }
+        }
     }
 
     /// Dựng adapter + chuỗi transport cho MỘT phiên. Cấu hình được đọc lại từ
@@ -389,6 +513,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         relay = nil
         wsRelay?.stop()
         wsRelay = nil
+        hysteria?.stop()
+        hysteria = nil
         directConfiguration = nil
         if let adapter {
             adapter.stop { _ in }
