@@ -101,8 +101,8 @@ const TEXTS = {
     htmlLang: "en",
     pageTitle: "FlowTech — VPNFlow VPN and MeetFlow AI",
     metaDescription:
-      "FlowTech builds VPNFlow (private VPN for iOS, Android, macOS and Windows) and MeetFlow AI (AI translation and meeting minutes). Pay by bank QR on the web, activate with your email.",
-    brandTagline: "VPN + AI ecosystem",
+      "FlowTech is building an AI ecosystem for connectivity, education and the small utilities that fill a working day — so each person gets more done. Products: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy, SuperMom AI.",
+    brandTagline: "AI Ecosystem",
     navAria: "Main navigation",
     navProducts: "Products",
     navPricing: "Pricing",
@@ -110,9 +110,9 @@ const TEXTS = {
     navBuy: "Buy now",
     langAria: "Choose language",
     heroKicker: "The FlowTech ecosystem",
-    heroTitle: "A private VPN and an AI meeting assistant, from one place",
+    heroTitle: "An AI ecosystem for connectivity, learning and everyday work",
     heroSub:
-      "VPNFlow handles the private connection, MeetFlow AI handles translation and meeting minutes. Buy on the web with a bank QR, activate with the email you sign in with.",
+      "Our mission is to bring AI into networking, education and the small tools that fill a working day — so every person gets more done with less friction. The two of us build it together, one product at a time: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy and SuperMom AI.",
     ctaVpn: "Buy VPNFlow",
     ctaAi: "Use MeetFlow AI",
     trustAria: "What we actually offer",
@@ -124,7 +124,7 @@ const TEXTS = {
       "Public pages in 5 languages: Vietnamese, English, Chinese, Japanese, Korean",
     ],
     productsTitle: "Products",
-    productsSub: "Three parts of the same ecosystem — buy only what you need.",
+    productsSub: "Five parts of the same ecosystem — buy only what you need.",
     p1Name: "VPNFlow",
     p1Tag: "Private VPN",
     p1Desc: "A WireGuard-based VPN that ties your subscription to your email account.",
@@ -152,6 +152,24 @@ const TEXTS = {
       "Source and install scripts are kept in the project repository",
     ],
     p3Cta: "Install guide",
+    p4Name: "fBuddy",
+    p4Tag: "AI chat app",
+    p4Desc: "The friendly AI assistant app: ask, write, translate and summarise — on the web or on your phone.",
+    p4Bullets: [
+      "Chat by voice, in Vietnamese, English, Chinese, Japanese and Korean",
+      "Translation, writing and meeting summaries in one app",
+      "Opens in the browser — install it as an app on iOS and Android",
+    ],
+    p4Cta: "Open fBuddy",
+    p5Name: "SuperMom AI",
+    p5Tag: "AI study helper",
+    p5Desc: "An AI study companion for Vietnamese parents with children in grades 1–9: photograph a maths problem and get a step-by-step solution written so the parent understands it, not just the child.",
+    p5Bullets: [
+      "Snap a maths problem for a step-by-step solution, and check a finished worksheet for mistakes",
+      "English solver, a daily challenge, study notes with reminders, and an AI chat for parents",
+      "On the App Store for iPhone and iPad — a Vietnamese interface written for parents",
+    ],
+    p5Cta: "Download on the App Store",
     dlAria: "Download the app",
     platforms: {
       ios: "iOS (IPA)",
@@ -159,6 +177,9 @@ const TEXTS = {
       androidLegacy: "Android 7.x (APK)",
       mac: "macOS",
       windows: "Windows 10/11",
+      appStore: "App Store",
+      appStoreMac: "App Store (macOS)",
+      windowsOverlay: "Windows overlay",
     },
     pricingTitle: "Pricing",
     pricingSub: "Prices are in VND. Bank QR, MoMo, WeChat Pay or Alipay — your choice at checkout.",
@@ -228,8 +249,8 @@ const TEXTS = {
     htmlLang: "vi",
     pageTitle: "FlowTech — VPNFlow và MeetFlow AI",
     metaDescription:
-      "FlowTech làm VPNFlow (VPN riêng tư cho iOS, Android, macOS, Windows) và MeetFlow AI (dịch và ghi biên bản cuộc họp bằng AI). Thanh toán bằng QR ngân hàng trên web, kích hoạt theo email.",
-    brandTagline: "Hệ sinh thái VPN + AI",
+      "FlowTech đang xây một hệ sinh thái AI cho kết nối, giáo dục và những tiện ích lấp đầy một ngày làm việc — để mỗi người làm được nhiều hơn. Sản phẩm: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy và SuperMom AI.",
+    brandTagline: "AI Ecosystem",
     navAria: "Điều hướng chính",
     navProducts: "Sản phẩm",
     navPricing: "Bảng giá",
@@ -237,9 +258,9 @@ const TEXTS = {
     navBuy: "Mua ngay",
     langAria: "Chọn ngôn ngữ",
     heroKicker: "Hệ sinh thái FlowTech",
-    heroTitle: "VPN riêng tư và trợ lý AI cho cuộc họp, cùng một chỗ",
+    heroTitle: "Hệ sinh thái AI cho kết nối, học tập và công việc hằng ngày",
     heroSub:
-      "VPNFlow lo phần kết nối riêng tư, MeetFlow AI lo phần dịch và ghi biên bản cuộc họp. Mua trên web bằng QR ngân hàng, kích hoạt theo đúng email bạn đăng nhập.",
+      "Sứ mệnh của tụi mình là đưa AI vào network, education và những tiện ích nhỏ lấp đầy một ngày làm việc — để mỗi người làm được nhiều hơn mà bớt ma sát. Hai anh em cùng phát triển, mỗi lần một sản phẩm: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy và SuperMom AI.",
     ctaVpn: "Mua VPNFlow",
     ctaAi: "Dùng MeetFlow AI",
     trustAria: "Những gì chúng tôi thực sự có",
@@ -251,7 +272,7 @@ const TEXTS = {
       "Trang công khai đủ 5 ngôn ngữ: Việt, Anh, Trung, Nhật, Hàn",
     ],
     productsTitle: "Sản phẩm",
-    productsSub: "Ba phần trong cùng một hệ sinh thái — cần gì mua nấy.",
+    productsSub: "Năm phần trong cùng một hệ sinh thái — cần gì mua nấy.",
     p1Name: "VPNFlow",
     p1Tag: "VPN riêng tư",
     p1Desc: "VPN chạy trên WireGuard, gói mua gắn với email tài khoản của bạn.",
@@ -279,6 +300,24 @@ const TEXTS = {
       "Mã nguồn và script cài nằm trong kho của dự án",
     ],
     p3Cta: "Hướng dẫn cài",
+    p4Name: "fBuddy",
+    p4Tag: "App AI đa năng",
+    p4Desc: "App trợ lý AI thân thiện: hỏi đáp, viết, dịch và tóm tắt — dùng trên web hoặc trên điện thoại.",
+    p4Bullets: [
+      "Trò chuyện bằng giọng nói, hỗ trợ Việt, Anh, Trung, Nhật, Hàn",
+      "Dịch, viết và tóm tắt cuộc họp trong cùng một app",
+      "Mở ngay trên trình duyệt — cài thành app trên iOS và Android",
+    ],
+    p4Cta: "Mở fBuddy",
+    p5Name: "SuperMom AI",
+    p5Tag: "Trợ lý học tập AI",
+    p5Desc: "Trợ lý học tập bằng AI cho cha mẹ Việt Nam có con học lớp 1–9: chụp ảnh bài toán rồi nhận lời giải từng bước, viết để phụ huynh hiểu chứ không chỉ cho con.",
+    p5Bullets: [
+      "Chụp bài toán để giải từng bước, và kiểm tra lại bài con đã làm xem sai ở đâu",
+      "Giải bài tiếng Anh, thử thách mỗi ngày, ghi chú lịch học kèm nhắc nhở, chat với AI",
+      "Có trên App Store cho iPhone và iPad — giao diện tiếng Việt viết cho phụ huynh",
+    ],
+    p5Cta: "Tải trên App Store",
     dlAria: "Tải app",
     platforms: {
       ios: "iOS (IPA)",
@@ -286,6 +325,9 @@ const TEXTS = {
       androidLegacy: "Android 7.x (APK)",
       mac: "macOS",
       windows: "Windows 10/11",
+      appStore: "App Store",
+      appStoreMac: "App Store (macOS)",
+      windowsOverlay: "Windows (overlay)",
     },
     pricingTitle: "Bảng giá",
     pricingSub: "Giá tính bằng VND. Lúc thanh toán bạn chọn QR ngân hàng, MoMo, WeChat Pay hoặc Alipay.",
@@ -355,8 +397,8 @@ const TEXTS = {
     htmlLang: "zh-Hans",
     pageTitle: "FlowTech — VPNFlow 与 MeetFlow AI",
     metaDescription:
-      "FlowTech 提供 VPNFlow（适用于 iOS、Android、macOS、Windows 的私有 VPN）与 MeetFlow AI（AI 翻译与会议纪要）。网页扫码付款，用邮箱激活。",
-    brandTagline: "VPN + AI 生态",
+      "FlowTech 正在构建面向连接、教育与日常工作工具的 AI 生态——让每个人产出更多。产品：VPNFlow、MeetFlow AI、FlowTech Harness、fBuddy、SuperMom AI。",
+    brandTagline: "AI Ecosystem",
     navAria: "主导航",
     navProducts: "产品",
     navPricing: "价格",
@@ -364,9 +406,9 @@ const TEXTS = {
     navBuy: "立即购买",
     langAria: "选择语言",
     heroKicker: "FlowTech 生态",
-    heroTitle: "私有 VPN 与 AI 会议助手，一个地方搞定",
+    heroTitle: "面向连接、学习与日常工作的 AI 生态",
     heroSub:
-      "VPNFlow 负责私有连接，MeetFlow AI 负责翻译与会议纪要。网页用银行二维码付款，用登录邮箱激活。",
+      "我们的使命是把 AI 带进网络、教育和填满一天工作的小工具——让每个人以更少的阻力完成更多事情。由我们两个人一起开发，一次一个产品：VPNFlow、MeetFlow AI、FlowTech Harness、fBuddy 和 SuperMom AI。",
     ctaVpn: "购买 VPNFlow",
     ctaAi: "使用 MeetFlow AI",
     trustAria: "我们真实提供的能力",
@@ -378,7 +420,7 @@ const TEXTS = {
       "公开页面支持 5 种语言：越语、英语、中文、日语、韩语",
     ],
     productsTitle: "产品",
-    productsSub: "同一生态的三部分 — 需要哪个买哪个。",
+    productsSub: "同一生态的五部分 — 需要哪个买哪个。",
     p1Name: "VPNFlow",
     p1Tag: "私有 VPN",
     p1Desc: "基于 WireGuard 的 VPN，套餐与你的账号邮箱绑定。",
@@ -406,6 +448,24 @@ const TEXTS = {
       "源码与安装脚本保留在项目仓库中",
     ],
     p3Cta: "安装说明",
+    p4Name: "fBuddy",
+    p4Tag: "AI 对话应用",
+    p4Desc: "好用的 AI 助手应用：问答、写作、翻译、总结——网页和手机都能用。",
+    p4Bullets: [
+      "语音对话，支持越南语、英语、中文、日语、韩语",
+      "翻译、写作和会议纪要在同一个应用里完成",
+      "浏览器直接打开——也可在 iOS 和 Android 上安装为应用",
+    ],
+    p4Cta: "打开 fBuddy",
+    p5Name: "SuperMom AI",
+    p5Tag: "AI 学习助手",
+    p5Desc: "面向越南家长的 AI 学习助手，适合 1–9 年级孩子的家庭：拍下数学题，得到写给家长看的逐步讲解。",
+    p5Bullets: [
+      "拍数学题获得逐步解答，还能检查孩子做过的作业错在哪里",
+      "英语题解答、每日挑战、带提醒的学习笔记，以及与 AI 对话",
+      "已在 App Store 上架，支持 iPhone 和 iPad——越南语界面，为家长而写",
+    ],
+    p5Cta: "在 App Store 下载",
     dlAria: "下载应用",
     platforms: {
       ios: "iOS (IPA)",
@@ -413,6 +473,9 @@ const TEXTS = {
       androidLegacy: "Android 7.x (APK)",
       mac: "macOS",
       windows: "Windows 10/11",
+      appStore: "App Store",
+      appStoreMac: "App Store (macOS)",
+      windowsOverlay: "Windows 悬浮窗版",
     },
     pricingTitle: "价格",
     pricingSub: "价格以越南盾（VND）计。付款时可选择银行二维码、MoMo、微信支付或支付宝。",
@@ -481,8 +544,8 @@ const TEXTS = {
     htmlLang: "ja",
     pageTitle: "FlowTech — VPNFlow と MeetFlow AI",
     metaDescription:
-      "FlowTech は VPNFlow（iOS・Android・macOS・Windows 向けのプライベート VPN）と MeetFlow AI（AI 翻訳と議事録）を提供します。ウェブで銀行 QR 決済、メールで有効化。",
-    brandTagline: "VPN + AI エコシステム",
+      "FlowTech は、接続・教育・日々の仕事を支える小さな道具に AI を届けるエコシステムを作っています。製品：VPNFlow、MeetFlow AI、FlowTech Harness、fBuddy、SuperMom AI。",
+    brandTagline: "AI Ecosystem",
     navAria: "メインナビゲーション",
     navProducts: "製品",
     navPricing: "料金",
@@ -490,9 +553,9 @@ const TEXTS = {
     navBuy: "今すぐ購入",
     langAria: "言語を選択",
     heroKicker: "FlowTech エコシステム",
-    heroTitle: "プライベート VPN と AI 会議アシスタントを一箇所で",
+    heroTitle: "接続・学び・日々の仕事のための AI エコシステム",
     heroSub:
-      "VPNFlow が接続のプライバシーを、MeetFlow AI が翻訳と議事録を担当します。ウェブで銀行 QR 決済し、ログインに使うメールで有効化します。",
+      "私たちの使命は、AI をネットワーク、教育、そして一日の仕事を埋める小さな道具に届けること。一人ひとりがより少ない摩擦で、より多くを成し遂げられるように。二人で一緒に、一つずつ形にしています：VPNFlow、MeetFlow AI、FlowTech Harness、fBuddy、SuperMom AI。",
     ctaVpn: "VPNFlow を購入",
     ctaAi: "MeetFlow AI を使う",
     trustAria: "実際に提供している内容",
@@ -504,7 +567,7 @@ const TEXTS = {
       "公開ページは 5 言語：ベトナム語・英語・中国語・日本語・韓国語",
     ],
     productsTitle: "製品",
-    productsSub: "同じエコシステムの 3 つ — 必要なものだけ購入できます。",
+    productsSub: "同じエコシステムの 5 つ — 必要なものだけ購入できます。",
     p1Name: "VPNFlow",
     p1Tag: "プライベート VPN",
     p1Desc: "WireGuard ベースの VPN。プランはアカウントのメールに紐づきます。",
@@ -532,6 +595,24 @@ const TEXTS = {
       "ソースとインストールスクリプトはプロジェクトのリポジトリにあります",
     ],
     p3Cta: "インストール手順",
+    p4Name: "fBuddy",
+    p4Tag: "AI チャットアプリ",
+    p4Desc: "親しみやすい AI アシスタントアプリ。質問・作成・翻訳・要約を、Web でもスマホでも。",
+    p4Bullets: [
+      "音声で会話。ベトナム語・英語・中国語・日本語・韓国語に対応",
+      "翻訳・執筆・議事録をひとつのアプリで",
+      "ブラウザですぐ使える——iOS / Android にアプリとしても追加可能",
+    ],
+    p4Cta: "fBuddy を開く",
+    p5Name: "SuperMom AI",
+    p5Tag: "AI 学習アシスタント",
+    p5Desc: "ベトナムの保護者向け AI 学習アシスタント（1〜9 年生）。算数の問題を撮影すると、子どもだけでなく保護者が理解できる段階的な解説が返ります。",
+    p5Bullets: [
+      "算数の問題を撮影すると段階的な解答、解いた答案の間違いチェックも",
+      "英語の解答、毎日のチャレンジ、リマインダー付き学習メモ、AI チャット",
+      "App Store で iPhone / iPad 向けに公開——保護者向けのベトナム語 UI",
+    ],
+    p5Cta: "App Store でダウンロード",
     dlAria: "アプリをダウンロード",
     platforms: {
       ios: "iOS (IPA)",
@@ -539,6 +620,9 @@ const TEXTS = {
       androidLegacy: "Android 7.x (APK)",
       mac: "macOS",
       windows: "Windows 10/11",
+      appStore: "App Store",
+      appStoreMac: "App Store (macOS)",
+      windowsOverlay: "Windows（オーバーレイ）",
     },
     pricingTitle: "料金",
     pricingSub: "価格は VND 表示。支払い時に銀行 QR・MoMo・WeChat Pay・Alipay から選べます。",
@@ -607,8 +691,8 @@ const TEXTS = {
     htmlLang: "ko",
     pageTitle: "FlowTech — VPNFlow와 MeetFlow AI",
     metaDescription:
-      "FlowTech는 VPNFlow(iOS·Android·macOS·Windows용 프라이빗 VPN)와 MeetFlow AI(AI 번역·회의록)를 만듭니다. 웹에서 은행 QR로 결제하고 이메일로 활성화하세요.",
-    brandTagline: "VPN + AI 생태계",
+      "FlowTech는 연결, 교육, 일상 업무를 돕는 작은 도구에 AI를 담는 생태계를 만들고 있습니다. 제품: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy, SuperMom AI.",
+    brandTagline: "AI Ecosystem",
     navAria: "주요 메뉴",
     navProducts: "제품",
     navPricing: "요금",
@@ -616,9 +700,9 @@ const TEXTS = {
     navBuy: "지금 구매",
     langAria: "언어 선택",
     heroKicker: "FlowTech 생태계",
-    heroTitle: "프라이빗 VPN과 AI 회의 도우미를 한곳에서",
+    heroTitle: "연결, 학습, 일상을 위한 AI 생태계",
     heroSub:
-      "VPNFlow는 안전한 연결을, MeetFlow AI는 번역과 회의록을 담당합니다. 웹에서 은행 QR로 결제하고 로그인에 쓰는 이메일로 활성화하세요.",
+      "우리의 사명은 AI를 네트워크, 교육, 그리고 하루를 채우는 작은 도구들에 담는 것입니다. 각자가 더 적은 마찰로 더 많은 일을 해내도록. 두 사람이 함께 하나씩 만들어 갑니다: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy, SuperMom AI.",
     ctaVpn: "VPNFlow 구매",
     ctaAi: "MeetFlow AI 사용",
     trustAria: "실제로 제공하는 것",
@@ -630,7 +714,7 @@ const TEXTS = {
       "공개 페이지 5개 언어: 베트남어·영어·중국어·일본어·한국어",
     ],
     productsTitle: "제품",
-    productsSub: "같은 생태계의 세 부분 — 필요한 것만 구매하세요.",
+    productsSub: "같은 생태계의 다섯 부분 — 필요한 것만 구매하세요.",
     p1Name: "VPNFlow",
     p1Tag: "프라이빗 VPN",
     p1Desc: "WireGuard 기반 VPN이며, 요금제는 계정 이메일에 연결됩니다.",
@@ -658,6 +742,24 @@ const TEXTS = {
       "소스와 설치 스크립트는 프로젝트 저장소에 있습니다",
     ],
     p3Cta: "설치 안내",
+    p4Name: "fBuddy",
+    p4Tag: "AI 채팅 앱",
+    p4Desc: "친근한 AI 어시스턴트 앱. 질문, 작성, 번역, 요약을 웹과 휴대폰에서.",
+    p4Bullets: [
+      "음성 대화 지원, 베트남어·영어·중국어·일본어·한국어",
+      "번역, 작성, 회의 요약을 한 앱에서",
+      "브라우저에서 바로 사용——iOS·Android 앱으로도 설치 가능",
+    ],
+    p4Cta: "fBuddy 열기",
+    p5Name: "SuperMom AI",
+    p5Tag: "AI 학습 도우미",
+    p5Desc: "베트남 학부모를 위한 AI 학습 도우미(1~9학년). 수학 문제를 찍으면 아이뿐 아니라 학부모가 이해할 수 있도록 단계별 풀이를 제공합니다.",
+    p5Bullets: [
+      "수학 문제를 찍으면 단계별 풀이, 아이가 푼 답안의 오류 확인까지",
+      "영어 문제 풀이, 매일 챌린지, 알림이 있는 학습 메모, AI 채팅",
+      "App Store에서 iPhone·iPad용으로 제공——학부모를 위한 베트남어 UI",
+    ],
+    p5Cta: "App Store에서 다운로드",
     dlAria: "앱 다운로드",
     platforms: {
       ios: "iOS (IPA)",
@@ -665,6 +767,9 @@ const TEXTS = {
       androidLegacy: "Android 7.x (APK)",
       mac: "macOS",
       windows: "Windows 10/11",
+      appStore: "App Store",
+      appStoreMac: "App Store (macOS)",
+      windowsOverlay: "Windows(오버레이)",
     },
     pricingTitle: "요금",
     pricingSub: "가격은 VND 기준입니다. 결제 시 은행 QR·MoMo·WeChat Pay·Alipay 중에서 선택하세요.",
@@ -780,38 +885,6 @@ function normalizePlan(raw, lang) {
 }
 
 /**
- * Khối bảng giá. Ẩn hẳn khi không có gói đang bán (plans rỗng / toàn gói retired) — bảng
- * trống vừa xấu vừa làm khách tưởng shop không bán gì.
- */
-function pricingHTML({ t, plans, lang, buyUrl, aiBuyUrl }) {
-  const rows = (Array.isArray(plans) ? plans : []).map((p) => normalizePlan(p, lang)).filter(Boolean);
-  if (rows.length === 0) return "";
-  const cards = rows
-    .map((p) => {
-      const period = p.days ? fill(t.pricingDays, { days: p.days }) : (p.lifetime ? t.pricingLifetime : "");
-      const href = withPlan(p.product === "ai" ? aiBuyUrl : buyUrl, p.id);
-      const cta = href
-        ? `<a class="btn btn-ghost plan-cta" href="${esc(href)}">${t.planCta}</a>`
-        : "";
-      return `<li class="plan">
-          <div class="plan-name">${esc(p.name)}</div>
-          ${p.priceText ? `<div class="plan-price">${esc(p.priceText)}</div>` : ""}
-          ${period ? `<div class="plan-period">${esc(period)}</div>` : ""}
-          ${cta}
-        </li>`;
-    })
-    .join("\n        ");
-  return `<section class="section" id="pricing" aria-labelledby="pricingTitle">
-      <h2 id="pricingTitle">${t.pricingTitle}</h2>
-      <p class="sub">${t.pricingSub}</p>
-      <ul class="plans">
-        ${cards}
-      </ul>
-      <p class="note">${t.pricingOneTime}</p>
-    </section>`;
-}
-
-/**
  * Khối đánh giá khách — CHỈ render khi người gọi truyền `reviews` thật.
  *
  * Lý do (cố ý, không phải thiếu sót): trang bán hàng không được bịa đánh giá. Repo này chưa
@@ -851,15 +924,20 @@ function reviewsHTML({ t, reviews }) {
     </section>`;
 }
 
-/** Danh sách link tải app (chỉ hiện nền tảng nào server thực sự truyền vào). */
-function downloadLinksHTML({ t, downloads }) {
-  const map = [
-    ["ios", "ios"],
-    ["android", "android"],
-    ["androidLegacy", "androidLegacy"],
-    ["mac", "mac"],
-    ["windows", "windows"],
-  ];
+/**
+ * Danh sách link tải app (chỉ hiện nền tảng nào server thực sự truyền vào).
+ * `map` cho phép mỗi sản phẩm dùng nhãn riêng: VPNFlow phát iOS dạng IPA, còn
+ * MeetFlow AI chỉ có trên App Store nên nhãn phải khác.
+ */
+const VPN_DOWNLOAD_MAP = [
+  ["ios", "ios"],
+  ["android", "android"],
+  ["androidLegacy", "androidLegacy"],
+  ["mac", "mac"],
+  ["windows", "windows"],
+];
+
+function downloadLinksHTML({ t, downloads, map = VPN_DOWNLOAD_MAP }) {
   const items = map
     .map(([key, labelKey]) => {
       const href = safeHref(downloads?.[key]);
@@ -872,13 +950,22 @@ function downloadLinksHTML({ t, downloads }) {
 }
 
 /** Một thẻ sản phẩm (tên, nhãn, mô tả, gạch đầu dòng, nút hành động). */
-function productCard({ name, tag, desc, bullets, cta, href, extra = "" }) {
+/**
+ * Thẻ sản phẩm — dựng theo đúng card .fg-prod của popup quảng cáo hệ sinh thái
+ * (fbuddy.meetflowai.site): logo app trong ô bo góc + tên + nhãn gradient + mô tả
+ * + nút hành động. Mỗi app một logo riêng, phục vụ từ /assets/ cùng origin.
+ */
+function productCard({ name, tag, desc, bullets, cta, href, logo = "", extra = "" }) {
   const list = (Array.isArray(bullets) ? bullets : []).filter((b) => typeof b === "string" && b.trim());
   const link = safeHref(href);
-  return `<li class="card">
-        <div class="card-head">
-          <h3>${esc(name)}</h3>
-          <span class="tag">${esc(tag)}</span>
+  const icon = safeHref(logo);
+  return `<li class="card prod">
+        <div class="prod-top">
+          ${icon ? `<img class="prod-logo" src="${esc(icon)}" alt="" width="54" height="54" loading="lazy" decoding="async">` : ""}
+          <div class="prod-id">
+            <h3>${esc(name)}</h3>
+            <span class="tag">${esc(tag)}</span>
+          </div>
         </div>
         <p class="card-desc">${esc(desc)}</p>
         <ul class="bullets">
@@ -906,14 +993,12 @@ function langPickerHTML({ lang, t }) {
       </details>`;
 }
 
-/** Logo FlowTech vẽ bằng SVG inline: trang phải hiện đủ khi mạng hạn chế, không ảnh ngoài. */
-const LOGO_SVG = `<svg class="mark" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true" focusable="false">
-            <defs><linearGradient id="ftg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#33c773"/><stop offset="1" stop-color="#1f9e5a"/>
-            </linearGradient></defs>
-            <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#ftg)"/>
-            <path d="M9 11h14M9 16h9M9 21h12" stroke="#06160d" stroke-width="2.6" stroke-linecap="round"/>
-          </svg>`;
+/**
+ * Logo FlowTech thật, phục vụ từ /assets/flowtech-mark.png (cùng origin nên trang
+ * vẫn hiện đủ khi mạng hạn chế; route /assets/:file đã có sẵn cho trang chủ + popup).
+ * width/height đặt trước để không nhảy layout khi ảnh về.
+ */
+const LOGO_IMG = `<img class="mark" src="/assets/flowtech-mark.png" width="34" height="34" alt="" decoding="async">`;
 
 /**
  * Trang chủ FlowTech.
@@ -958,6 +1043,18 @@ export function homePageHTML({
   const urlPrivacy = safeHref(links?.privacy) || "/privacy";
   const urlTerms = safeHref(links?.terms) || "/terms";
   const urlHarness = safeHref(links?.harness) || urlSupport;
+  const urlFbuddy = safeHref(links?.fbuddy) || "https://fbuddy.meetflowai.site/";
+  // SuperMom AI hiện chỉ phát hành trên App Store (bundle com.minhnb2.SuperMom).
+  const urlSupermom = safeHref(links?.supermom) || "https://apps.apple.com/app/id6768231353";
+
+  // Logo từng app (thư mục /assets của control plane, phục vụ cùng origin).
+  const productLogos = {
+    vpnflow: "/assets/vpnflow-logo.png",
+    meetflow: "/assets/meetflow-logo.png",
+    harness: "/assets/flowtech-icon.png",
+    fbuddy: "/assets/fbuddy-logo.png",
+    supermom: "/assets/supermom-logo.png",
+  };
 
   // Chỗ trống trong câu dịch: giá trị đã escape trước khi nhét vào.
   const slots = { maxDevices: esc(deviceCap), supportEmail: esc(safeSupportEmail) };
@@ -980,9 +1077,27 @@ export function homePageHTML({
         </details>`)
     .join("");
 
-  const pricing = pricingHTML({ t, plans, lang: code, buyUrl: urlBuy, aiBuyUrl: urlAiBuy });
   const reviewsBlock = reviewsHTML({ t, reviews });
   const downloadsBlock = downloadLinksHTML({ t, downloads });
+
+  // MeetFlow AI: iOS + macOS cùng nằm trên App Store (khách tải qua store, KHÔNG phát IPA);
+  // Windows là bản overlay desktop mình tự phát hành; Android là APK.
+  const aiDownloads = {
+    ios: "https://apps.apple.com/app/id6765590042",
+    mac: "https://apps.apple.com/app/id6765590042",
+    windows: "https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip",
+    android: "https://api.meetflowai.site/v1/ai/downloads/android",
+  };
+  const aiDownloadsBlock = downloadLinksHTML({
+    t,
+    downloads: aiDownloads,
+    map: [
+      ["ios", "appStore"],
+      ["mac", "appStoreMac"],
+      ["windows", "windowsOverlay"],
+      ["android", "android"],
+    ],
+  });
 
   // Popup chỉ là quảng cáo chéo: nội dung chính KHÔNG nằm trong popup (không ảnh hưởng SEO),
   // hiện sau ~1.5s, đóng được bằng Esc, và có nút "không hiện lại" nhớ bằng localStorage.
@@ -991,6 +1106,9 @@ export function homePageHTML({
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/assets/flowtech-icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/flowtech-mark.png">
+  <meta name="theme-color" content="#071628">
   <title>${t.pageTitle}</title>
   <meta name="description" content="${esc(t.metaDescription)}">
   <meta name="robots" content="index,follow">
@@ -1140,6 +1258,15 @@ export function homePageHTML({
     .bullets li { position: relative; padding-left: 16px; font-size: 13px; color: rgba(234, 242, 255, 0.78); }
     .bullets li::before { content: "•"; position: absolute; left: 4px; color: var(--accent-mint); }
     .card .btn { margin-top: auto; text-align: center; }
+    /* Ô logo app — cùng tỉ lệ với .fg-prod__icon của popup quảng cáo. */
+    .prod-top { display: flex; align-items: center; gap: 12px; }
+    .prod-logo {
+      width: 54px; height: 54px; flex: none; border-radius: 14px; object-fit: cover;
+      background: linear-gradient(135deg, rgba(51, 199, 115, 0.35), rgba(34, 211, 238, 0.28));
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    }
+    .prod-id { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+    .prod-id h3 { font-size: 17px; font-weight: 700; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
     .chip {
       font-size: 11.5px; text-decoration: none; color: rgba(234, 242, 255, 0.8);
@@ -1279,7 +1406,7 @@ export function homePageHTML({
   <header class="hdr">
     <div class="hdr-in">
       <a class="brand" href="./">
-        ${LOGO_SVG}
+        ${LOGO_IMG}
         <span class="brand-text">
           <span class="brand-name">FlowTech</span>
           <span class="brand-tag">${esc(t.brandTagline)}</span>
@@ -1287,7 +1414,6 @@ export function homePageHTML({
       </a>
       <div class="hdr-nav" role="navigation" aria-label="${esc(t.navAria)}">
         <a class="navlink" href="#products">${t.navProducts}</a>
-        ${pricing ? `<a class="navlink" href="#pricing">${t.navPricing}</a>` : ""}
         <a class="navlink" href="#faq">${t.navFaq}</a>
         ${greeting}
         ${langPickerHTML({ lang: code, t })}
@@ -1316,20 +1442,27 @@ export function homePageHTML({
       <ul class="cards">
         ${productCard({
           name: t.p1Name, tag: t.p1Tag, desc: t.p1Desc, bullets: t.p1Bullets, cta: t.p1Cta,
-          href: urlBuy, extra: downloadsBlock,
+          href: urlBuy, logo: productLogos.vpnflow, extra: downloadsBlock,
         })}
         ${productCard({
           name: t.p2Name, tag: t.p2Tag, desc: t.p2Desc, bullets: t.p2Bullets, cta: t.p2Cta,
-          href: urlAiBuy,
+          href: urlAiBuy, logo: productLogos.meetflow, extra: aiDownloadsBlock,
         })}
         ${productCard({
           name: t.p3Name, tag: t.p3Tag, desc: t.p3Desc, bullets: t.p3Bullets, cta: t.p3Cta,
-          href: urlHarness,
+          href: urlHarness, logo: productLogos.harness,
+        })}
+        ${productCard({
+          name: t.p4Name, tag: t.p4Tag, desc: t.p4Desc, bullets: t.p4Bullets, cta: t.p4Cta,
+          href: urlFbuddy, logo: productLogos.fbuddy,
+        })}
+        ${productCard({
+          name: t.p5Name, tag: t.p5Tag, desc: t.p5Desc, bullets: t.p5Bullets, cta: t.p5Cta,
+          href: urlSupermom, logo: productLogos.supermom,
         })}
       </ul>
     </section>
 
-    ${pricing}
 
     <section class="section" id="faq" aria-labelledby="faqTitle">
       <h2 id="faqTitle">${t.faqTitle}</h2>
