@@ -689,6 +689,16 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
     {
         try
         {
+            // Náº¿u tunnel Ä‘Ã£ ngáº¯t trong lÃºc task ná»n Ä‘ang chá» máº¡ng/táº£i danh sÃ¡ch thÃ¬ Bá»Ž QUA â€”
+            // trÃ¡nh thÃªm 5.5k route sau khi Ä‘Ã£ dá»n (Ä‘Ãºng lá»—i Ä‘Ã£ gáº·p á»Ÿ 1.0.5: route rÃ¡c cÃ²n láº¡i).
+            lock (_lock)
+            {
+                if (_endpointRoute is null)
+                {
+                    _log.Info("china-bypass: tunnel Ä‘Ã£ ngáº¯t (bá» qua bypass)");
+                    return;
+                }
+            }
             var workDir = DefaultWorkingDirectory();
             Directory.CreateDirectory(workDir);
             var cachePath = Path.Combine(workDir, "routes-cn.txt");
