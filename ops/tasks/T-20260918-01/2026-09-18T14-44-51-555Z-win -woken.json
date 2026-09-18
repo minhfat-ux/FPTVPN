@@ -1,7 +1,0 @@
-{
- "type": "woken",
- "actor": "win ",
- "at": "2026-09-18T14:44:51.556Z",
- "note": "connector VPS: status từ mac — Mac da bat lai, doc dung so cua ban — lam tiep binh thuong",
- "via": "dsh --profile headless \"{prompt}\""
-}
