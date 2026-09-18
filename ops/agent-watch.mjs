@@ -53,6 +53,9 @@ const AUTO = args.includes("--auto");
 const NO_RECORD = args.includes("--no-record");
 const INTERVAL = Number(flagValue("interval", process.env.WAKE_INTERVAL ?? 20)) || 20;
 const COOLDOWN = Number(flagValue("cooldown", process.env.WAKE_COOLDOWN ?? 600)) || 600;
+// Watcher bên kia chết bao lâu thì báo NGƯỜI (Telegram) một lần — con người mới bật lại được.
+const PEER_STALE_MS = Number(process.env.PEER_STALE_MS || 20 * 60 * 1000);
+const PEER_ALERT_COOLDOWN_MS = Number(process.env.PEER_ALERT_COOLDOWN_MS || 30 * 60 * 1000);
 const WAKE_CMD = flagValue("wake-cmd", process.env.DSH_WAKE_CMD ?? 'dsh --profile headless "{prompt}"');
 // Connector trên VPS (máy ↔ máy). Telegram chỉ để alert cho người, không dùng làm kênh máy–máy.
 const BUS_URL = String(flagValue("bus-url", process.env.AGENT_BUS_URL ?? "") ?? "").replace(/\/$/, "");
@@ -241,6 +244,7 @@ function recordWake(entry, reason) {
 
 /** Alert cho NGƯỜI (Telegram) — mọi trao đổi đều phải thấy được. */
 async function alertHuman(text) {
+  if (DRY) return null; // chạy khô không gửi thật
   try {
     const { sendPing } = await import("./lib/telegram.mjs");
     const result = await sendPing(text, { prefix: "[ALERT]" });
@@ -328,6 +332,43 @@ async function tickBus(state) {
   }
   saveState(state);
   return woke;
+}
+
+/**
+ * Theo dõi SỨC KHOẺ watcher bên kia: nếu bên kia có việc đang chờ mà không poll connector quá
+ * ngưỡng, báo cho NGƯỜI một lần qua Telegram (có cooldown, không spam) — vì chỉ con người
+ * mới bật lại được watcher ở máy bên kia (VPN một chiều, không gọi vào được).
+ */
+async function tickHealth(state) {
+  if (NO_BUS) return 0;
+  const bus = loadBusEnv();
+  if (!bus.url || !bus.token) return 0;
+  try {
+    const response = await fetch(`${bus.url}/presence`, { headers: { Authorization: `Bearer ${bus.token}` }, signal: AbortSignal.timeout(6000) });
+    if (!response.ok) return 0;
+    const { agents = [] } = await response.json();
+    const peer = agents.find((agent) => String(agent.agent).toLowerCase() === PEER.toLowerCase());
+    if (!peer || peer.secondsAgo < PEER_STALE_MS / 1000) return 0;
+    const { tasks } = readLedger();
+    const waiting = tasks.some((entry) => {
+      const to = String(entry.task?.to ?? "").toLowerCase();
+      return to === PEER.toLowerCase() && !["done", "verified"].includes(entry.last?.type ?? "");
+    });
+    if (!waiting) return 0;
+    const lastAlert = state.lastPeerAlert ? new Date(state.lastPeerAlert).getTime() : 0;
+    if (Date.now() - lastAlert < PEER_ALERT_COOLDOWN_MS) return 0;
+    state.lastPeerAlert = new Date().toISOString();
+    saveState(state);
+    log(`watcher ${PEER} chết ${Math.round(peer.secondsAgo / 60)} phút mà còn việc đang chờ — báo người`);
+    await alertHuman(
+      `⚠ watcher ${PEER} đã ngừng poll ${Math.round(peer.secondsAgo / 60)} phút, đang có việc chờ nó.\n` +
+        `Chỉ NGƯỜI bật lại được: trên máy ${PEER} chạy \`ops\\agent-watch.cmd\` (Windows) hoặc khởi động lại watcher.\n` +
+        `Xem trạng thái: node ops/task.mjs list`,
+    );
+    return 1;
+  } catch {
+    return 0;
+  }
 }
 
 async function tick(state, { initializeOnly = false } = {}) {
@@ -422,7 +463,7 @@ if (!ONCE) {
   if (firstRun) log(`lần chạy đầu: bỏ qua ${state.seen.length} sự kiện cũ, chỉ đánh thức cho việc MỚI.`);
 }
 if (ONCE) {
-  const woke = (await tick(state)) + (await tickBus(state));
+  const woke = (await tick(state)) + (await tickBus(state)) + (await tickHealth(state));
   log(`--once xong (${woke} lần đánh thức, ${DRY ? "dry-run" : "thật"}).`);
 } else {
   const busInfo = loadBusEnv();
@@ -435,6 +476,7 @@ if (ONCE) {
     try {
       await tick(state);
       await tickBus(state);
+      await tickHealth(state);
       if (round % 3 === 0) refreshBoard();
     } catch (error) {
       log(`lỗi vòng lặp: ${String(error.message).split("\n")[0]}`);
