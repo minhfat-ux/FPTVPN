@@ -47,6 +47,29 @@ const NO_RECORD = args.includes("--no-record");
 const INTERVAL = Number(flagValue("interval", process.env.WAKE_INTERVAL ?? 20)) || 20;
 const COOLDOWN = Number(flagValue("cooldown", process.env.WAKE_COOLDOWN ?? 600)) || 600;
 const WAKE_CMD = flagValue("wake-cmd", process.env.DSH_WAKE_CMD ?? 'dsh --profile headless "{prompt}"');
+// Connector trên VPS (máy ↔ máy). Telegram chỉ để alert cho người, không dùng làm kênh máy–máy.
+const BUS_URL = String(flagValue("bus-url", process.env.AGENT_BUS_URL ?? "") ?? "").replace(/\/$/, "");
+const BUS_TOKEN = String(process.env.AGENT_BUS_TOKEN ?? "").trim();
+const NO_BUS = args.includes("--no-bus");
+
+/** Nếu env chưa có cấu hình bus thì đọc `.env.bus` trong repo (file này bị gitignore). */
+function loadBusEnv() {
+  if (BUS_URL && BUS_TOKEN) return { url: BUS_URL, token: BUS_TOKEN };
+  const file = path.join(process.cwd(), ".env.bus");
+  const values = {};
+  try {
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      const match = line.match(/^([A-Z_]+)=(.*)$/);
+      if (match) values[match[1]] = match[2].trim();
+    }
+  } catch {
+    /* không có file */
+  }
+  return {
+    url: String(BUS_URL || values.AGENT_BUS_URL || "").replace(/\/$/, ""),
+    token: String(BUS_TOKEN || values.AGENT_BUS_TOKEN || ""),
+  };
+}
 
 const git = (...argv) => {
   try {
@@ -178,6 +201,64 @@ function recordWake(entry, reason) {
   }
 }
 
+/** Alert cho NGƯỜI (Telegram) — mọi trao đổi đều phải thấy được. */
+async function alertHuman(text) {
+  try {
+    const { sendPing } = await import("./lib/telegram.mjs");
+    const result = await sendPing(text, { prefix: "[ALERT]" });
+    return result?.ok ? result.messageId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Những loại thông báo cần ĐÁNH THỨC (còn lại chỉ ghi log + alert). */
+const WAKE_KINDS = new Set(["task", "sent", "done", "reopened", "blocked", "verify-fail", "alert-test", "wake"]);
+
+/** Kéo thông báo mới từ connector VPS; trả về số lần đánh thức. */
+async function tickBus(state) {
+  if (NO_BUS) return 0;
+  const bus = loadBusEnv();
+  if (!bus.url || !bus.token) return 0;
+  const since = Number(state.busSince ?? 0) || 0;
+  let payload;
+  try {
+    const response = await fetch(`${bus.url}/pull?agent=${SELF.toLowerCase()}&since=${since}`, {
+      headers: { Authorization: `Bearer ${bus.token}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      log(`bus trả ${response.status}`);
+      return 0;
+    }
+    payload = await response.json();
+  } catch (error) {
+    log(`bus không gọi được: ${String(error?.message ?? error).slice(0, 120)}`);
+    return 0;
+  }
+  let woke = 0;
+  for (const message of payload?.messages ?? []) {
+    state.busSince = Math.max(Number(state.busSince ?? 0) || 0, message.id);
+    log(`BUS #${message.id} ${message.from}→${message.to} [${message.kind}] ${message.title}`);
+    if (!DRY) void alertHuman(`BUS #${message.id} · ${message.from}→${message.to} · ${message.kind}\n${message.title}${message.body ? `\n${message.body.slice(0, 300)}` : ""}`);
+    if (!WAKE_KINDS.has(String(message.kind)) && !message.ref) continue;
+    const entry = {
+      id: message.ref ?? `bus-${message.id}`,
+      task: { id: message.ref ?? `bus-${message.id}`, title: message.title, to: message.to, from: message.from, detail: "docs/TASK-PROTOCOL.md" },
+    };
+    const reason = `connector VPS: ${message.kind} từ ${message.from} — ${message.title}`;
+    if (AUTO) {
+      runWake(buildPrompt(entry, reason));
+      recordWake(entry, reason);
+    } else {
+      log(`  (chỉ báo) sẽ đánh thức vì ${reason}`);
+    }
+    woke += 1;
+  }
+  saveState(state);
+  return woke;
+}
+
 async function tick(state, { initializeOnly = false } = {}) {
   const fetched = git("fetch", "origin", "flowgpt");
   if (fetched.startsWith("!git")) log(`fetch lỗi: ${fetched}`);
@@ -228,14 +309,17 @@ if (!ONCE) {
   if (firstRun) log(`lần chạy đầu: bỏ qua ${state.seen.length} sự kiện cũ, chỉ đánh thức cho việc MỚI.`);
 }
 if (ONCE) {
-  const woke = await tick(state);
+  const woke = (await tick(state)) + (await tickBus(state));
   log(`--once xong (${woke} lần đánh thức, ${DRY ? "dry-run" : "thật"}).`);
 } else {
+  const busInfo = loadBusEnv();
+  log(`connector: ${busInfo.url && busInfo.token ? busInfo.url : "(chưa có cấu hình bus — chỉ theo dõi git)"}`);
   log(`đang chạy: ${SELF} ← ${PEER} · poll ${INTERVAL}s · ${AUTO ? "TỰ ĐỘNG đánh thức" : "chỉ báo"} · cooldown ${COOLDOWN}s`);
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, INTERVAL * 1000));
     try {
       await tick(state);
+      await tickBus(state);
     } catch (error) {
       log(`lỗi vòng lặp: ${String(error.message).split("\n")[0]}`);
     }

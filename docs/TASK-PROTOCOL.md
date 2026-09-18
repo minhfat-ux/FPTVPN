@@ -13,6 +13,12 @@ Nên: **Telegram chỉ để "hú"** cho người thật biết có việc mới
 là một file được push lên `origin/flowgpt`, nên có **commit sha làm bằng chứng**, kiểm tra được, không
 phải tin lời nhau.
 
+## 1b. Kênh vận chuyển: connector trên VPS
+
+Ngoài git (nguồn xác thực), tin được **đẩy qua connector trên VPS** để bên kia biết ngay: mỗi sự kiện trong
+`ops/task.mjs` tự `POST /push`, và watcher hai bên `GET /pull` mỗi 20s để đánh thức harness. Chi tiết, token
+và bằng chứng đo: [`AGENT-BUS.md`](AGENT-BUS.md). **Mọi trao đổi đều alert lên Telegram cho người theo dõi.**
+
 ## 2. Sổ giao việc
 
 ```

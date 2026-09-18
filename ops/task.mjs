@@ -201,6 +201,62 @@ function refreshAskDoc() {
   return ASK_DOC;
 }
 
+
+// ---------------------------------------------------------------- connector VPS + alert người
+//
+// Hai kênh tách bạch:
+//   - CONNECTOR (agent bus trên VPS): máy ↔ máy, có trạng thái trong git làm nguồn xác thực.
+//   - TELEGRAM: chỉ để ALERT cho người theo dõi, không phải kênh máy–máy.
+const BUS_URL = String(process.env.AGENT_BUS_URL ?? "https://fbuddy.meetflowai.site/agent-bus").replace(/\/$/, "");
+const BUS_TOKEN = String(process.env.AGENT_BUS_TOKEN ?? "").trim();
+
+/** Đẩy một thông báo sang bus cho bên kia (best-effort: lỗi bus không được làm hỏng sổ). */
+async function notifyPeer({ to, kind, title, body, ref }) {
+  if (!BUS_TOKEN) return null;
+  try {
+    const response = await fetch(`${BUS_URL}/push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${BUS_TOKEN}` },
+      body: JSON.stringify({ to, from: ACTOR, kind, title, body, ref }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      console.log(`  ! bus từ chối (${response.status}): ${JSON.stringify(json).slice(0, 120)}`);
+      return null;
+    }
+    return json?.message ?? null;
+  } catch (error) {
+    console.log(`  ! không đẩy được sang bus: ${String(error?.message ?? error).slice(0, 120)}`);
+    return null;
+  }
+}
+
+/** Alert cho NGƯỜI qua Telegram (không chặn luồng nếu lỗi). */
+async function alertHuman(text) {
+  try {
+    const { sendPing } = await import("./lib/telegram.mjs");
+    const result = await sendPing(text, { prefix: "[ALERT]" });
+    return result?.ok ? result.messageId : null;
+  } catch (error) {
+    console.log(`  ! alert Telegram lỗi: ${String(error?.message ?? error).slice(0, 120)}`);
+    return null;
+  }
+}
+
+/** Sau mỗi sự kiện: đẩy cho bên kia + alert cho người. */
+async function announce(state, kind, detail) {
+  const task = state.task ?? {};
+  const peer = String(task.to ?? "").toLowerCase() === ACTOR ? String(task.from ?? "").toLowerCase() : String(task.to ?? "").toLowerCase();
+  const title = `${task.id ?? ""} · ${task.title ?? ""}`.trim();
+  const message = await notifyPeer({ to: peer, kind, title, body: detail, ref: task.id ?? null });
+  const sent = await alertHuman(
+    `${kind.toUpperCase()} · ${task.id ?? ""} (${task.from ?? "?"}→${task.to ?? "?"})\n${task.title ?? ""}` +
+      `${detail ? `\n${detail.slice(0, 400)}` : ""}${message ? `\nbus #${message.id}` : ""}`,
+  );
+  return { message, sent };
+}
+
 function pushLedger(id, message) {
   const subject = `${message} [task ${id}]`;
   const doc = refreshAskDoc();
@@ -303,6 +359,8 @@ if (command === "new") {
     }
   }
 
+  await announce(state, "sent", `Nhận việc: node ops/task.mjs ack ${idArg} --push`);
+
   if (flags.has("ping")) {
     const { sendPing } = await import("./lib/telegram.mjs");
     const task = state.task ?? {};
@@ -320,6 +378,7 @@ if (command === "new") {
   if (state.status === "created") console.warn("! Task chưa được đánh dấu `sent` — vẫn ghi nhận ack.");
   writeEvent(idArg, { type: "acked", note: opt("note", "") });
   console.log(`✓ ${idArg}: đã xác nhận NHẬN việc${opt("note") ? ` — ${opt("note")}` : ""}`);
+  await announce(state, "ack", opt("note", ""));
   if (flags.has("push")) console.log(`  push: ${pushLedger(idArg, "task: xác nhận đã nhận").pushed.split("\n").slice(-1)[0]}`);
 } else if (command === "progress" || command === "blocked") {
   const { state } = requireTask(idArg);
@@ -331,6 +390,7 @@ if (command === "new") {
   }
   writeEvent(idArg, { type: command === "blocked" ? "blocked" : "progress", note });
   console.log(`${command === "blocked" ? "⛔" : "…"} ${idArg}: ${note}`);
+  await announce(state, command, note);
   if (flags.has("push")) console.log(`  push: ${pushLedger(idArg, `task: ${command}`).pushed.split("\n").slice(-1)[0]}`);
 } else if (command === "done") {
   const { state } = requireTask(idArg);
@@ -342,6 +402,7 @@ if (command === "new") {
   }
   writeEvent(idArg, { type: "done", evidence });
   console.log(`✓ ${idArg}: báo XONG — ${evidence}`);
+  await announce(state, "done", evidence);
   console.log(`  Chờ bên giao nghiệm thu: node ops/task.mjs verify ${idArg} --result pass`);
   if (flags.has("push")) console.log(`  push: ${pushLedger(idArg, "task: báo xong").pushed.split("\n").slice(-1)[0]}`);
 } else if (command === "verify") {
@@ -358,6 +419,7 @@ if (command === "new") {
   }
   writeEvent(idArg, { type: "verified", result, note: opt("note", "") });
   console.log(`${result === "pass" ? "✅ NGHIỆM THU PASS" : "❌ NGHIỆM THU FAIL"} ${idArg}${opt("note") ? ` — ${opt("note")}` : ""}`);
+  await announce(state, result === "pass" ? "verified" : "reopened", opt("note", ""));
   if (result === "fail") console.log(`  Đã mở lại việc: bên nhận phải ack + done lại.`);
   if (flags.has("push")) console.log(`  push: ${pushLedger(idArg, `task: nghiệm thu ${result}`).pushed.split("\n").slice(-1)[0]}`);
 } else if (command === "show") {

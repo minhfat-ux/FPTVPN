@@ -5,9 +5,13 @@
  * offset là tin biến mất với người kia. Telegram giữ tin ~24h nên chỉ đọc là đủ.
  */
 
+import dns from "node:dns";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+// Có máy chỉ resolve api.telegram.org sang IPv6 nhưng không có route IPv6 ⇒ fetch chết.
+dns.setDefaultResultOrder("ipv4first");
 
 export const SELF = (process.env.AGENT_NAME || "MAC").toUpperCase();
 export const PEER = SELF === "MAC" ? "WIN" : "MAC";
@@ -44,16 +48,36 @@ export function readCreds() {
 }
 
 /** Gửi một tin, trả về `{ ok, messageId }`. Tự thêm tiền tố `[MAC→WIN] `. */
-export async function sendPing(text) {
+export async function sendPing(text, { prefix = `[${SELF}→${PEER}]` } = {}) {
   const { token, chat } = readCreds();
   const body = new URLSearchParams({
     chat_id: chat,
-    text: `[${SELF}→${PEER}] ${text}`,
+    text: `${prefix} ${text}`,
     disable_web_page_preview: "true",
   });
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: "POST", body });
-  const json = await res.json().catch(() => null);
-  return { ok: Boolean(json?.ok), messageId: json?.result?.message_id ?? null, raw: json };
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: "POST", body });
+    const json = await res.json().catch(() => null);
+    return { ok: Boolean(json?.ok), messageId: json?.result?.message_id ?? null, raw: json };
+  } catch (error) {
+    // Một số máy để fetch chết vì IPv6/路由 (đã gặp trên VPS) — thử lại bằng curl -4.
+    try {
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const run = promisify(execFile);
+      const { stdout } = await run("curl", [
+        "-4", "-sS", "-m", "10", "-X", "POST",
+        `https://api.telegram.org/bot${token}/sendMessage`,
+        "--data-urlencode", `chat_id=${chat}`,
+        "--data-urlencode", `text=${prefix} ${text}`,
+        "--data-urlencode", "disable_web_page_preview=true",
+      ], { timeout: 12000 });
+      const json = JSON.parse(stdout || "{}");
+      return { ok: Boolean(json?.ok), messageId: json?.result?.message_id ?? null, raw: json, via: "curl" };
+    } catch (fallbackError) {
+      return { ok: false, messageId: null, raw: { fetch: String(error?.message ?? error), curl: String(fallbackError?.message ?? fallbackError) } };
+    }
+  }
 }
 
 /**
