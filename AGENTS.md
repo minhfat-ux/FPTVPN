@@ -61,3 +61,15 @@ flowvpn-coord list
   cách `claim` lại).
 - Chi tiết + lệnh cho từng máy: `.privatevpn/coordination/PROTOCOL.md`.
 - Mã nguồn tool: `scripts/coord/flowvpn-coord.mjs` (`selftest` để tự kiểm tra logic).
+
+### 6b. Vùng bảo vệ — chỉ harness Windows được sửa
+
+Các đường dẫn sau **chỉ owner `windows`** được commit/deploy (xem `PROTOCOL.md` §8):
+
+- `control-plane/src/home-page.js` (trang chủ `meetflowai.site`)
+- `control-plane/src/index.js`, `control-plane/assets/**`
+- `flowgpt/web/public/promo.*`
+
+Máy khác cần thay đổi → xin handoff qua Telegram + đợi nhường claim. Hook `.githooks/pre-commit`
+chặn cứng commit vào vùng này khi `coord.owner ≠ windows` (muốn ghi đè có ý thức:
+`ALLOW_PROTECTED=1 git commit ...`). **Deploy control plane: commit trước, deploy sau.**

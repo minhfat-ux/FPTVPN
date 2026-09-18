@@ -14,6 +14,33 @@
 # mot cai hook khong duoc phep treo ca doi.
 set -u
 
+# ---------------------------------------------------------------------------
+# VUNG BAO VE: chi owner "windows" duoc sua (xem .privatevpn/coordination/PROTOCOL.md §8).
+# Ly do: landing page meetflowai.site (control-plane/src/home-page.js ...) da bi may khac
+# ghi de mat ban moi nhat ngay 18/09/2026. Kiem tra nay chay LOCAL, khong phu thuoc mang,
+# nen KHONG fail-open.
+# Bo qua khi that su can: ALLOW_PROTECTED=1 git commit ...
+# ---------------------------------------------------------------------------
+PROTECTED_PATTERNS='^control-plane/src/home-page\.js$|^control-plane/src/index\.js$|^control-plane/assets/|^flowgpt/web/public/promo\.'
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+protected_hit="$(printf '%s\n' "$staged" | grep -E "$PROTECTED_PATTERNS" || true)"
+if [ -n "$protected_hit" ]; then
+  owner_now="$(git config --get coord.owner || true)"
+  if [ "${ALLOW_PROTECTED:-0}" != "1" ] && [ "$owner_now" != "windows" ]; then
+    echo "" >&2
+    echo "pre-commit: VUNG BAO VE — chi may 'windows' duoc commit cac file sau:" >&2
+    printf '   %s\n' $protected_hit >&2
+    echo "" >&2
+    echo "   coord.owner hien tai: '${owner_now:-<chua dat>}'" >&2
+    echo "   Day la khu vuc landing page / trang chu FlowTech. Neu ban la may khac (Mac/server)" >&2
+    echo "   va that su can sua: xin huong dan qua Telegram + doi claim tren bang viec, hoac" >&2
+    echo "   chay lai voi ALLOW_PROTECTED=1 (chi khi da duoc dong y)." >&2
+    echo "   Quy tac: .privatevpn/coordination/PROTOCOL.md §8" >&2
+    exit 1
+  fi
+  echo "pre-commit: vung bao ve, owner='${owner_now:-?}' — cho qua." >&2
+fi
+
 owner="$(git config --get coord.owner || true)"
 if [ -z "$owner" ]; then
   echo "coord: chua dat 'git config coord.owner <windows|mac|server>' — bo qua kiem tra bang viec" >&2

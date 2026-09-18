@@ -24,6 +24,24 @@
   #define SourceDir "publish"
 #endif
 
+; ---------------------------------------------------------------------------
+; Chặn NGAY LÚC BUILD (ISPP) nếu bộ publish thiếu binary tunnel.
+;
+; TUYỆT ĐỐI không kiểm tra kiểu này trong [Code] InitializeSetup: `{#SourceDir}` là
+; đường dẫn trên MÁY BUILD, nên khi khách chạy bộ cài trên máy họ thì FileExists luôn
+; sai ⇒ mọi khách đều bị báo "thiếu wintun.dll / wireguard-go.exe" rồi bộ cài tự huỷ.
+; (Đã xảy ra thực tế: khách tải bản trên trang buy và không cài được.)
+; ---------------------------------------------------------------------------
+#if !FileExists(AddBackslash(SourceDir) + "wintun.dll")
+  #error Bo publish thieu wintun.dll - chay: bash windows/assets/fetch-assets.sh roi publish lai
+#endif
+#if !FileExists(AddBackslash(SourceDir) + "wireguard-go.exe")
+  #error Bo publish thieu wireguard-go.exe - chay: bash windows/assets/fetch-assets.sh roi publish lai
+#endif
+#if !FileExists(AddBackslash(SourceDir) + "PrivateVPNWindows.App.exe")
+  #error Bo publish thieu PrivateVPNWindows.App.exe - chay lai dotnet publish
+#endif
+
 [Setup]
 AppId={{8C1F2E64-6B7A-4E8D-9C31-2F5A7D4B0E11}
 AppName={#AppName}
@@ -75,24 +93,27 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-{ Chặn sớm nếu bộ publish thiếu binary tunnel — thà báo lúc build còn hơn để khách cài ra app không kết nối được. }
-function InitializeSetup(): Boolean;
+// Kiểm tra SAU KHI CÀI — chạy trên MÁY KHÁCH, soi đúng thư mục cài đặt (ExpandConstant app).
+// Mục đích: nếu phần mềm diệt virus cách ly wintun.dll / wireguard-go.exe thì khách biết
+// ngay lý do, thay vì mở app rồi báo "không kết nối được".
+procedure CurStepChanged(CurStep: TSetupStep);
 var
   Missing: String;
 begin
-  Missing := '';
-  if not FileExists(ExpandConstant('{#SourceDir}\wintun.dll')) then
-    Missing := Missing + '  - wintun.dll' + #13#10;
-  if not FileExists(ExpandConstant('{#SourceDir}\wireguard-go.exe')) then
-    Missing := Missing + '  - wireguard-go.exe' + #13#10;
-  if Missing <> '' then
+  if CurStep = ssPostInstall then
   begin
-    MsgBox('Bộ cài thiếu binary tunnel:' + #13#10 + Missing + #13#10 +
-           'Chạy `bash windows/assets/fetch-assets.sh` rồi publish lại trước khi build bộ cài.', mbCriticalError, MB_OK);
-    Result := False;
-  end
-  else
-    Result := True;
+    Missing := '';
+    if not FileExists(ExpandConstant('{app}\wintun.dll')) then
+      Missing := Missing + '  - wintun.dll' + #13#10;
+    if not FileExists(ExpandConstant('{app}\wireguard-go.exe')) then
+      Missing := Missing + '  - wireguard-go.exe' + #13#10;
+    if Missing <> '' then
+      MsgBox('Cài đặt đã xong nhưng thiếu binary tunnel trong thư mục cài đặt:' + #13#10 +
+             Missing + #13#10 +
+             'Nguyên nhân thường gặp: phần mềm diệt virus cách ly tệp.' + #13#10 +
+             'Hãy thêm ngoại lệ (exception) cho thư mục cài đặt VPNFlow rồi chạy lại bộ cài này.',
+             mbCriticalError, MB_OK);
+  end;
 end;
 
 { Khi gỡ cài đặt: hỏi có xoá phiên đăng nhập (%APPDATA%\VPNFlow) hay không. }

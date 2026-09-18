@@ -99,3 +99,37 @@ git config coord.cmd "ssh -o BatchMode=yes -J root@103.173.155.50 root@165.101.1
 
 Bảng ở §1 là nguồn sự thật: **harness Mac = orchestrator**, harness Windows = contributor.
 Muốn đổi nữa thì sửa đúng bảng đó và commit — chỉ orchestrator (Mac) được sửa file này.
+
+## 8. Vùng bảo vệ — CHỈ harness Windows được sửa
+
+> Thêm ngày 18/09/2026 sau sự cố: `control-plane/src/home-page.js` (trang chủ
+> `meetflowai.site`) bị máy khác ghi đè, làm **mất bản mới nhất chưa commit**. Bản đó phải
+> khôi phục từ backup trên server.
+
+Các đường dẫn sau là **vùng bảo vệ**, chỉ owner `windows` được commit/deploy:
+
+| Vùng | Vì sao |
+|---|---|
+| `control-plane/src/home-page.js` | Trang chủ FlowTech / landing page `meetflowai.site` |
+| `control-plane/src/index.js` | Route + dữ liệu đổ vào trang chủ (plans, reviews, popup, /assets) |
+| `control-plane/assets/**` | Logo/brand assets phục vụ từ `/assets/...` |
+| `flowgpt/web/public/promo.*` | Popup quảng cáo hệ sinh thái |
+
+**Luật:**
+
+1. Máy khác **không** sửa/không deploy các đường dẫn trên. Cần thay đổi thì nhắn
+   orchestrator ↔ harness Windows qua Telegram và **xin handoff** (ghi rõ file + lý do).
+2. Máy khác vẫn được `check`/`list` bình thường; `check` sẽ báo XUNG ĐỘT khi Windows đang giữ claim.
+3. **Trước khi deploy CP**: commit trước, deploy sau. Bản chưa commit là bản dễ mất nhất.
+4. Trước khi ghi đè file trên server, luôn tạo backup có timestamp:
+   `cp -a <file> <file>.bak-<viec>-$(date +%Y%m%d-%H%M%S)`.
+5. Hook `.githooks/pre-commit` **chặn cứng**: commit vào vùng bảo vệ khi `coord.owner ≠ windows`
+   sẽ bị từ chối (kiểm tra local, không fail-open). Ghi đè có ý thức: `ALLOW_PROTECTED=1 git commit ...`.
+6. `control-plane/src/home-page.js` trên server đã **khoá immutable** (`chattr +i`) — ghi đè trực tiếp
+   sẽ báo `Operation not permitted`. Deploy đúng cách:
+
+   ```bash
+   bash scripts/deploy-landing-page.sh            # tự mở khoá -> backup -> ghi -> khoá lại -> restart -> verify
+   ```
+
+
