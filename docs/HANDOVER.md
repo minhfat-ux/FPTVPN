@@ -94,6 +94,9 @@ từ luồng khác; nếu không cần, nói em một câu là em gỡ.
 7. **Avatar cho chuyên gia**: kho nguồn có `experts/<slug>/avatars/expert.png` nhưng đó là tài sản
    hình ảnh của họ — **không copy**. Cần tự tạo avatar (monogram + màu thương hiệu, hoặc ảnh tự làm).
    Hiện chợ đang hiển thị icon Lucide chung (`hubIcon`) nên thẻ chuyên gia chưa có avatar.
+8. **Gói Cyber Security cho doanh nghiệp** — ĐÃ GHI KẾ HOẠCH, CHƯA LÀM: xem
+   [`docs/CYBER-SECURITY.md`](CYBER-SECURITY.md). V1 kiến nghị: retention/no-log, audit log UI,
+   PII redaction. Cần anh chốt giá gói + thứ tự ưu tiên trước khi bắt tay.
 
 ## 11. Đợt 3 — credit, nạp token, chợ kỹ năng, đa ngôn ngữ
 
