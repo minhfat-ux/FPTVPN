@@ -284,21 +284,51 @@ hành bản mới trước khi flowdesk lên sóng**, nếu không khách tải 
 
 ## 4. Việc còn treo khác
 
-1. **Popup fbuddy 3 ngôn ngữ theo region** (vi/en/zh) — đã định vị xong, chưa viết dòng nào:
-   - File **được phục vụ thật** = `/opt/fbuddy/web/dist/promo.js`. Phải sửa **cả** `/opt/fbuddy/web/public/promo.js`
-     (hai bản đang lệch đúng 1 dòng: public `?v=culi1`, dist `?v=culi2`).
-   - Toàn bộ chữ **hardcode tiếng Việt**, ~15 chỗ: aria "Đóng quảng cáo", eyebrow "Hệ sinh thái FlowTech",
-     title "Cài app dùng ngay trên mọi thiết bị", sub, `OS_LABEL`, "Tải cho …", "· bản cho máy bạn",
-     tên/tag/pitch từng sản phẩm, "Xem gói & mua", footer…
-   - **Có lớp cache phía trước** (fetch lần đầu nhận bản cũ hơn) ⇒ sau khi sửa phải **bump `?v=` trong
-     `web/dist/index.html`** (đang là `20260917b`).
-   - Chọn ngôn ngữ theo `navigator.language` + `Intl…timeZone`, mặc định `en` khi không khớp.
+1. ~~**Popup fbuddy 3 ngôn ngữ theo region** (vi/en/zh)~~ — **xong 2026-09-18 chiều**, xem §4b.
+   (Đang chờ deploy: bản trên sóng vẫn là promo.js cũ một thứ tiếng.)
 2. **Luồng cấp key qua trang buy** — backend + email đã xong (xem §3.7); còn app WPF (§3.6.4),
    deploy thật (§3.6.5) và view `?view=desktop` trong web app.
 3. **Xác nhận `/opt/fbuddy` khớp commit nào của `origin/flowgpt`** trước khi sửa tiếp (xem §0.2 — nguồn có trong git,
    chỉ thư mục deploy là không).
 4. Treo từ trước: voice chống trễ (chủ dự án dặn "đừng làm vội") · SSO Firebase/Facebook · đăng ký email+mật khẩu ·
    MCP `stdio` không test được từ sandbox Windows.
+
+---
+
+### 4b. §4.1 — popup quảng cáo 3 thứ tiếng (vi/en/zh) theo vùng — xong 2026-09-18 chiều
+
+| Việc | Ở đâu |
+|---|---|
+| Bảng chuỗi 3 thứ tiếng (17 khoá × 3) + `pickLanguage()` + `t()` | `web/public/promo.js` |
+| Bản **được phục vụ** | `web/dist/promo.js` — đã copy y hệt; deploy có build sẽ tạo lại từ `public/` |
+| Bump cache | `web/index.html` + `web/dist/index.html`: `?v=20260918a` (trước là `20260917b`) |
+| Script canh chuỗi | `ops/promo-i18n-check.mjs` |
+| Script canh render | `ops/promo-render-check.mjs` |
+
+`ops/promo-i18n-check.mjs` kiểm những thứ mắt thường bỏ qua: đủ khoá ở cả 3 thứ tiếng, **các thứ
+tiếng phải KHÁC nhau** (đúng loại lỗi đã từng xảy ra: mọi thứ tiếng nhận tiêu đề tiếng Anh), `en`
+không lẫn dấu tiếng Việt/chữ Hán, `zh` phải có chữ Hán, placeholder `{os}` còn nguyên, **không còn
+chữ tiếng Việt hardcode ngoài bảng STRINGS**, và `web/dist/promo.js` phải giống `web/public/promo.js`
+(hai bản này từng lệch nhau mà không ai biết).
+
+`ops/promo-render-check.mjs` chạy nguyên `promo.js` trong DOM giả rồi đọc chữ đã render — bắt được
+cả lỗi ở khâu chọn thứ tiếng.
+
+Thứ tự chọn thứ tiếng (cố ý, test đã khoá lại):
+
+1. **Múi giờ VN/TQ thắng** — vì khách Việt/Trung rất hay để trình duyệt `en-US`; nếu để ngôn ngữ
+   thắng thì họ mãi chỉ thấy tiếng Anh, đúng vấn đề của bản cũ.
+2. Ngôn ngữ trình duyệt nếu là `vi`/`zh`/`en`.
+3. Còn lại: `en`.
+
+```bash
+node ops/promo-i18n-check.mjs     # I18N OK — 3 thứ tiếng, 17 khoá, dist == public
+node ops/promo-render-check.mjs   # RENDER OK — 8 kịch bản (vi/en/zh/fr + đoán theo múi giờ)
+```
+
+⚠️ **Chưa lên sóng**: bản đang phục vụ trên VPS vẫn là `promo.js` cũ (một thứ tiếng). Phải deploy
+(`deploy.ps1`, có build web) mới có hiệu lực. Nếu deploy bằng `-SkipBuild` thì `web/dist/*` trong
+repo đã có sẵn bản mới nên vẫn đúng.
 
 ---
 
