@@ -125,4 +125,11 @@ Các đường dẫn sau là **vùng bảo vệ**, chỉ owner `windows` đượ
    `cp -a <file> <file>.bak-<viec>-$(date +%Y%m%d-%H%M%S)`.
 5. Hook `.githooks/pre-commit` **chặn cứng**: commit vào vùng bảo vệ khi `coord.owner ≠ windows`
    sẽ bị từ chối (kiểm tra local, không fail-open). Ghi đè có ý thức: `ALLOW_PROTECTED=1 git commit ...`.
+6. `control-plane/src/home-page.js` trên server đã **khoá immutable** (`chattr +i`) — ghi đè trực tiếp
+   sẽ báo `Operation not permitted`. Deploy đúng cách:
+
+   ```bash
+   bash scripts/deploy-landing-page.sh            # tự mở khoá -> backup -> ghi -> khoá lại -> restart -> verify
+   ```
+
 
