@@ -27,8 +27,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFileSync, spawn as childProcessSpawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn as childProcessSpawn } from "node:child_process";
 
 // .trim() là bắt buộc: trên Windows, `set AGENT_NAME=WIN && node …` biến giá trị thành "WIN "
 // (dấu cách trước &&), làm hỏng tên agent trong presence và tên file sự kiện (đã gặp thật).
@@ -54,21 +53,10 @@ const AUTO = args.includes("--auto");
 const NO_RECORD = args.includes("--no-record");
 const INTERVAL = Number(flagValue("interval", process.env.WAKE_INTERVAL ?? 20)) || 20;
 const COOLDOWN = Number(flagValue("cooldown", process.env.WAKE_COOLDOWN ?? 600)) || 600;
-/**
- * Lệnh đánh thức mặc định.
- *
- * Trên Windows KHÔNG nối thẳng prompt vào chuỗi lệnh: `spawn(cmd, { shell: true })` chạy qua
- * cmd.exe và cmd cắt lệnh ở DÒNG ĐẦU, nên phiên được đánh thức chỉ nhận dòng tiêu đề. Đã gặp thật
- * 2026-09-18: prompt 4 dòng mà phiên session-05c623cb chỉ thấy đúng dòng
- * "ĐÁNH THỨC TỰ ĐỘNG (WIN  ← watcher MAC)." ⇒ không biết việc phải làm.
- * Cách đúng: ghi prompt ra tệp, để `ops/wake-launch.mjs` truyền nguyên văn thành MỘT đối số argv.
- */
-const SELF_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_WAKE_CMD =
-  process.platform === "win32"
-    ? `"${process.execPath}" "${path.join(SELF_DIR, "wake-launch.mjs")}" --prompt-file "{promptFile}"`
-    : 'dsh --profile headless "{prompt}"';
-const WAKE_CMD = flagValue("wake-cmd", process.env.DSH_WAKE_CMD ?? DEFAULT_WAKE_CMD);
+// Watcher bên kia chết bao lâu thì báo NGƯỜI (Telegram) một lần — con người mới bật lại được.
+const PEER_STALE_MS = Number(process.env.PEER_STALE_MS || 20 * 60 * 1000);
+const PEER_ALERT_COOLDOWN_MS = Number(process.env.PEER_ALERT_COOLDOWN_MS || 30 * 60 * 1000);
+const WAKE_CMD = flagValue("wake-cmd", process.env.DSH_WAKE_CMD ?? 'dsh --profile headless "{prompt}"');
 // Connector trên VPS (máy ↔ máy). Telegram chỉ để alert cho người, không dùng làm kênh máy–máy.
 const BUS_URL = String(flagValue("bus-url", process.env.AGENT_BUS_URL ?? "") ?? "").replace(/\/$/, "");
 const BUS_TOKEN = String(process.env.AGENT_BUS_TOKEN ?? "").trim();
@@ -95,21 +83,9 @@ function loadBusEnv() {
 
 const git = (...argv) => {
   try {
-    // Ghi chú đo thật 2026-09-18 (phiên harness trên Windows): trong MỘT SỐ môi trường harness,
-    // tiến trình node KHÔNG spawn được tiến trình con (`execFileSync` lẫn `spawnSync` đều EPERM,
-    // error.code = "EPERM", status = null, stderr rỗng) ⇒ watcher mù cả kênh git lẫn bus và chỉ
-    // còn cách chạy tay hoặc cài Scheduled Task. Vì vậy khi `git` lỗi, in ra mã lỗi thật thay vì
-    // chuỗi rỗng — im lặng giả tạo là thứ giao thức này cấm.
-    const result = spawnSync("git", argv, { encoding: "utf8" });
-    const stderr = String(result.stderr ?? "").trim();
-    if (result.status !== 0) {
-      const detail = stderr || String(result.stdout ?? "").trim()
-        || `status=${result.status} error=${result.error?.code ?? "?"} signal=${result.signal ?? "-"}`;
-      return `!git: ${detail.split("\n")[0]}`;
-    }
-    return String(result.stdout ?? "").trim();
+    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   } catch (error) {
-    return `!git: ${String(error.message).trim().split("\n")[0]}`;
+    return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
   }
 };
 const log = (message) => console.log(`[${new Date().toISOString().slice(11, 19)} ${SELF}] ${message}`);
@@ -220,32 +196,12 @@ function buildPrompt(entry, reason) {
 }
 
 function runWake(prompt) {
-  let command;
-  if (WAKE_CMD.includes("{promptFile}")) {
-    // Đường an toàn: prompt đi qua tệp, không qua shell.
-    const promptFile = path.join(os.tmpdir(), `dsh-wake-${Date.now()}-${process.pid}.txt`);
-    try {
-      fs.writeFileSync(promptFile, prompt, "utf8");
-    } catch (error) {
-      log(`không ghi được tệp prompt tạm: ${String(error.message).split("\n")[0]} — bỏ qua lần đánh thức này`);
-      return;
-    }
-    command = WAKE_CMD.split("{promptFile}").join(promptFile);
-  } else if (WAKE_CMD.includes("{prompt}")) {
-    if (process.platform === "win32" && /[\r\n]/.test(prompt)) {
-      log("CẢNH BÁO: prompt nhiều dòng chạy qua shell trên Windows SẼ BỊ CẮT — nên dùng {promptFile}.");
-    }
-    command = WAKE_CMD.replace("{prompt}", prompt);
-  } else {
-    command = `${WAKE_CMD} ${prompt}`;
-  }
+  const command = WAKE_CMD.includes("{prompt}") ? WAKE_CMD.replace("{prompt}", prompt) : `${WAKE_CMD} ${prompt}`;
   if (DRY) {
     log(`(--dry-run) sẽ chạy: ${command.slice(0, 160)}…`);
     return;
   }
-  // Lưu ý: import ở đầu file đã đổi tên thành `childProcessSpawn`. Bản trước gọi trần `spawn`
-  // ⇒ ném ReferenceError, watcher không đánh thức được ai (đã sửa 2026-09-18).
-  const child = childProcessSpawn(command, { shell: true, detached: true, stdio: "ignore" });
+  const child = spawn(command, { shell: true, detached: true, stdio: "ignore" });
   child.unref();
   log(`đã đánh thức: ${command.split(" ").slice(0, 4).join(" ")}… (pid ${child.pid})`);
 }
@@ -288,6 +244,7 @@ function recordWake(entry, reason) {
 
 /** Alert cho NGƯỜI (Telegram) — mọi trao đổi đều phải thấy được. */
 async function alertHuman(text) {
+  if (DRY) return null; // chạy khô không gửi thật
   try {
     const { sendPing } = await import("./lib/telegram.mjs");
     const result = await sendPing(text, { prefix: "[ALERT]" });
@@ -343,8 +300,6 @@ async function tickBus(state) {
   }
   // Lần chạy đầu: bỏ qua lịch sử bus (giống cách bỏ qua sự kiện git cũ) để không đánh thức
   // hàng loạt vì tin cũ. Muốn xử lý lại từ đầu thì chạy `--replay-bus`.
-  // `baseline` = mốc đã xử lý; vòng lặp bên dưới PHẢI lọc theo nó (xem vá 2026-09-18).
-  let baseline = since;
   if (state.busSince === undefined && !args.includes("--replay-bus")) {
     // KHÔNG bỏ qua tất cả: máy vừa bật lại sau khi tắt vẫn phải xử lý tin gửi trong lúc tắt.
     // Chỉ bỏ qua tin CŨ HƠN sự kiện mới nhất trong sổ.
@@ -352,21 +307,13 @@ async function tickBus(state) {
     const all = payload?.messages ?? [];
     const stale = all.filter((message) => new Date(message.at ?? 0).getTime() <= newest);
     const fresh = all.filter((message) => new Date(message.at ?? 0).getTime() > newest);
-    baseline = stale.length ? Math.max(...stale.map((message) => message.id)) : 0;
-    state.busSince = baseline;
+    state.busSince = stale.length ? Math.max(...stale.map((message) => message.id)) : 0;
     log(`lần chạy đầu với connector: bỏ qua ${stale.length} tin cũ, xử lý ${fresh.length} tin mới hơn sổ`);
     saveState(state);
   }
   let woke = 0;
   for (const message of payload?.messages ?? []) {
     state.busSince = Math.max(Number(state.busSince ?? 0) || 0, message.id);
-    // Vá 2026-09-18 (bão đánh thức): vòng lặp cũ chạy CẢ những tin vừa bị coi là "cũ" ở trên, nên mỗi
-    // lần watcher khởi động lại là đánh thức cho toàn bộ lịch sử bus — đo thật: 2 watcher × 4 tin bus
-    // = 8 sự kiện `woken` và 8 phiên harness bật lên trong 1 phút.
-    if (Number(message.id) <= baseline) {
-      log(`bỏ qua tin bus cũ #${message.id} (${message.kind}) — không đánh thức`);
-      continue;
-    }
     log(`BUS #${message.id} ${message.from}→${message.to} [${message.kind}] ${message.title}`);
     if (!DRY) void alertHuman(`BUS #${message.id} · ${message.from}→${message.to} · ${message.kind}\n${message.title}${message.body ? `\n${message.body.slice(0, 300)}` : ""}`);
     if (!WAKE_KINDS.has(String(message.kind)) && !message.ref) continue;
@@ -385,6 +332,43 @@ async function tickBus(state) {
   }
   saveState(state);
   return woke;
+}
+
+/**
+ * Theo dõi SỨC KHOẺ watcher bên kia: nếu bên kia có việc đang chờ mà không poll connector quá
+ * ngưỡng, báo cho NGƯỜI một lần qua Telegram (có cooldown, không spam) — vì chỉ con người
+ * mới bật lại được watcher ở máy bên kia (VPN một chiều, không gọi vào được).
+ */
+async function tickHealth(state) {
+  if (NO_BUS) return 0;
+  const bus = loadBusEnv();
+  if (!bus.url || !bus.token) return 0;
+  try {
+    const response = await fetch(`${bus.url}/presence`, { headers: { Authorization: `Bearer ${bus.token}` }, signal: AbortSignal.timeout(6000) });
+    if (!response.ok) return 0;
+    const { agents = [] } = await response.json();
+    const peer = agents.find((agent) => String(agent.agent).toLowerCase() === PEER.toLowerCase());
+    if (!peer || peer.secondsAgo < PEER_STALE_MS / 1000) return 0;
+    const { tasks } = readLedger();
+    const waiting = tasks.some((entry) => {
+      const to = String(entry.task?.to ?? "").toLowerCase();
+      return to === PEER.toLowerCase() && !["done", "verified"].includes(entry.last?.type ?? "");
+    });
+    if (!waiting) return 0;
+    const lastAlert = state.lastPeerAlert ? new Date(state.lastPeerAlert).getTime() : 0;
+    if (Date.now() - lastAlert < PEER_ALERT_COOLDOWN_MS) return 0;
+    state.lastPeerAlert = new Date().toISOString();
+    saveState(state);
+    log(`watcher ${PEER} chết ${Math.round(peer.secondsAgo / 60)} phút mà còn việc đang chờ — báo người`);
+    await alertHuman(
+      `⚠ watcher ${PEER} đã ngừng poll ${Math.round(peer.secondsAgo / 60)} phút, đang có việc chờ nó.\n` +
+        `Chỉ NGƯỜI bật lại được: trên máy ${PEER} chạy \`ops\\agent-watch.cmd\` (Windows) hoặc khởi động lại watcher.\n` +
+        `Xem trạng thái: node ops/task.mjs list`,
+    );
+    return 1;
+  } catch {
+    return 0;
+  }
 }
 
 async function tick(state, { initializeOnly = false } = {}) {
@@ -479,7 +463,7 @@ if (!ONCE) {
   if (firstRun) log(`lần chạy đầu: bỏ qua ${state.seen.length} sự kiện cũ, chỉ đánh thức cho việc MỚI.`);
 }
 if (ONCE) {
-  const woke = (await tick(state)) + (await tickBus(state));
+  const woke = (await tick(state)) + (await tickBus(state)) + (await tickHealth(state));
   log(`--once xong (${woke} lần đánh thức, ${DRY ? "dry-run" : "thật"}).`);
 } else {
   const busInfo = loadBusEnv();
@@ -492,6 +476,7 @@ if (ONCE) {
     try {
       await tick(state);
       await tickBus(state);
+      await tickHealth(state);
       if (round % 3 === 0) refreshBoard();
     } catch (error) {
       log(`lỗi vòng lặp: ${String(error.message).split("\n")[0]}`);
