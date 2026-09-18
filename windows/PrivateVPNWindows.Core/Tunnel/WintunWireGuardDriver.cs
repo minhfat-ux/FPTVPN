@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
+using PrivateVPNWindows.Core.Tunnel;
 
 namespace VpnFlow.Core.Tunnel;
 
@@ -49,6 +50,9 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
     private Process? _process;
     private WireGuardConfig? _activeConfig;
     private EndpointRoute? _endpointRoute;
+
+    /// <summary>Thông tin route bypass Trung Quốc đã thêm (để xoá khi ngắt): NIC, gateway, file danh sách.</summary>
+    private (string Interface, string Gateway, string ActivePath)? _chinaBypassRoutes;
     private bool _ipv6Blocked;
 
     /// <summary>Route loại trừ đã thêm cho IP endpoint (để xoá lại lúc ngắt kết nối).</summary>
@@ -594,6 +598,28 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         }
 
         var (gateway, @interface) = parsed.Value;
+
+        // Máy có thể đang chạy Clash Verge/Mihomo/Tailscale… — khi đó default route thuộc adapter ẢO
+        // của phần mềm đó. Nếu ta thêm route loại trừ qua gateway ảo thì chính traffic tới node lại bị
+        // đẩy vào phần mềm kia ⇒ vòng lặp, tunnel không lên. Vì vậy: phát hiện adapter ảo và thay bằng
+        // gateway của NIC vật lý.
+        if (NetworkConflictDetector.IsForeignVirtualAdapter(@interface, @interface, false))
+        {
+            var physical = await TryGetPhysicalGatewayAsync(cancellationToken).ConfigureAwait(false);
+            if (physical is { } fallback)
+            {
+                _log.Warn(
+                    $"wintun: default route thuộc adapter ảo '{@interface}' — dùng gateway vật lý " +
+                    $"{fallback.Gateway} ({fallback.Interface}) để tránh vòng lặp.");
+                gateway = fallback.Gateway;
+                @interface = fallback.Interface;
+            }
+            else
+            {
+                _log.Warn($"wintun: chỉ thấy adapter ảo '{@interface}' — không tìm được NIC vật lý để loại trừ endpoint.");
+            }
+        }
+
         var added = await AddRouteIdempotentAsync(
             WireGuardWindowsCommands.DeleteEndpointRoute(@interface, gateway, endpointIp),
             WireGuardWindowsCommands.AddEndpointRoute(@interface, gateway, endpointIp),
@@ -610,6 +636,128 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         }
 
         _log.Info($"wintun: đã thêm route loại trừ {endpointIp}/32 qua {gateway} ({@interface})");
+
+        // Bypass Trung Quốc: WeChat/Alipay/web TQ đi THẲNG qua gateway vật lý (không vào tunnel).
+        // Vì sao cần: đo 18/09/2026 — cả 2 exit đều KHÔNG kết nối được IP Trung Quốc, nên app TQ
+        // qua VPN là chắc chắn mất kết nối.
+        await ApplyChinaBypassAsync(@interface, gateway, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Gateway + tên NIC vật lý đầu tiên (bỏ qua adapter ảo/TUN của phần mềm khác).</summary>
+    private async Task<(string Gateway, string Interface)?> TryGetPhysicalGatewayAsync(CancellationToken cancellationToken)
+    {
+        const string script =
+            "(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | " +
+            "Sort-Object RouteMetric | ForEach-Object { " +
+            "$a = Get-NetAdapter -InterfaceIndex $_.ifIndex -ErrorAction SilentlyContinue; " +
+            "if ($a -and $a.InterfaceDescription -notmatch 'clash|mihomo|wintun|tap|wireguard|sing-box|tailscale|zerotier|proxy|vpnflow') " +
+            "{ \"$($_.NextHop)|$($a.Name)\" } } | Select-Object -First 1)";
+
+        var (exitCode, stdout, _) = await RunProcessAsync(
+            "powershell",
+            $"-NoProfile -NonInteractive -Command \"{script}\"",
+            cancellationToken).ConfigureAwait(false);
+
+        if (exitCode != 0)
+        {
+            return null;
+        }
+
+        var line = stdout.Trim();
+        var separator = line.IndexOf('|');
+        if (separator <= 0 || separator >= line.Length - 1)
+        {
+            return null;
+        }
+
+        var gateway = line[..separator].Trim();
+        var name = line[(separator + 1)..].Trim();
+        return gateway.Length == 0 || name.Length == 0 ? null : (gateway, name);
+    }
+
+    /// <summary>
+    /// Thêm route trực tiếp cho các dải IP Trung Quốc (danh sách tải từ CDN, cache theo TTL).
+    /// Best-effort: lỗi mạng/không đọc được danh sách thì bỏ qua — KHÔNG được làm hỏng tunnel.
+    /// </summary>
+    private async Task ApplyChinaBypassAsync(string interfaceName, string gateway, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var workDir = DefaultWorkingDirectory();
+            Directory.CreateDirectory(workDir);
+            var cachePath = Path.Combine(workDir, "routes-cn.txt");
+            var activePath = Path.Combine(workDir, "routes-cn-active.txt");
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            var cidrs = await ChinaBypass.LoadAsync(http, cachePath, ChinaBypass.DefaultCacheTtl, cancellationToken)
+                .ConfigureAwait(false);
+            if (cidrs.Count == 0)
+            {
+                _log.Warn("china-bypass: không có danh sách CIDR Trung Quốc — bỏ qua bypass.");
+                return;
+            }
+
+            await File.WriteAllLinesAsync(activePath, cidrs, cancellationToken).ConfigureAwait(false);
+
+            // Một tiến trình PowerShell duy nhất cho cả danh sách (5.5k dải) — gọi netsh từng dòng sẽ mất
+            // vài phút; vòng lặp New-NetRoute trong cùng tiến trình nhanh hơn nhiều.
+            var script =
+                $"$ErrorActionPreference='SilentlyContinue'; $n=0; " +
+                $"foreach ($c in Get-Content '{activePath}') {{ " +
+                $"New-NetRoute -DestinationPrefix $c -InterfaceAlias '{interfaceName}' -NextHop '{gateway}' -PolicyStore ActiveStore | Out-Null; $n++ }}; " +
+                "$n";
+
+            var (exitCode, stdout, stderr) = await RunProcessAsync(
+                "powershell",
+                $"-NoProfile -NonInteractive -Command \"{script}\"",
+                cancellationToken).ConfigureAwait(false);
+
+            if (exitCode != 0)
+            {
+                _log.Warn($"china-bypass: lỗi thêm route (exit {exitCode}): {stderr.Trim()}");
+                return;
+            }
+
+            lock (_lock)
+            {
+                _chinaBypassRoutes = (interfaceName, gateway, activePath);
+            }
+
+            _log.Info($"china-bypass: đã thêm {stdout.Trim()} route đi thẳng qua {gateway} ({interfaceName})");
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"china-bypass: bỏ qua do lỗi — {ex.Message}");
+        }
+    }
+
+    /// <summary>Xoá các route bypass Trung Quốc đã thêm (gọi khi ngắt tunnel).</summary>
+    private async Task RemoveChinaBypassAsync(CancellationToken cancellationToken)
+    {
+        (string Interface, string Gateway, string ActivePath)? routes;
+        lock (_lock)
+        {
+            routes = _chinaBypassRoutes;
+            _chinaBypassRoutes = null;
+        }
+
+        if (routes is not { } active || !File.Exists(active.ActivePath))
+        {
+            return;
+        }
+
+        var script =
+            "$ErrorActionPreference='SilentlyContinue'; $n=0; " +
+            $"foreach ($c in Get-Content '{active.ActivePath}') {{ " +
+            $"Remove-NetRoute -DestinationPrefix $c -InterfaceAlias '{active.Interface}' -NextHop '{active.Gateway}' -Confirm:$false | Out-Null; $n++ }}; " +
+            "$n";
+
+        var (exitCode, stdout, _) = await RunProcessAsync(
+            "powershell",
+            $"-NoProfile -NonInteractive -Command \"{script}\"",
+            cancellationToken).ConfigureAwait(false);
+
+        _log.Info($"china-bypass: đã xoá route bypass (exit {exitCode}, {stdout.Trim()} dòng)");
     }
 
     /// <summary>IP endpoint IPv4 của peer đầu tiên; null nếu thiếu hoặc không phân giải được.</summary>
@@ -686,6 +834,9 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         {
             await RunBestEffortAsync(command).ConfigureAwait(false);
         }
+
+        // Gỡ route bypass Trung Quốc (WeChat/Alipay…) trước khi gỡ route endpoint.
+        await RemoveChinaBypassAsync(CancellationToken.None).ConfigureAwait(false);
 
         // Gỡ route loại trừ endpoint đã thêm lúc kết nối, trả bảng route về như trước.
         EndpointRoute? endpointRoute;
