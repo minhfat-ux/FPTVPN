@@ -81,6 +81,17 @@ file exe khi build/publish. Kiểm tra nhanh sau publish: `dir dist\wintun.dll d
 dotnet test windows\PrivateVPNWindows.Core.Tests\PrivateVPNWindows.Core.Tests.csproj -c Release
 ```
 
+### Bản release Windows mới nhất
+
+- Commit: `866ec9e` (`feat(windows): icon/logo dung thuong hieu + giao dien theo ban iOS`)
+- Test Release: **53/53 pass**
+- Installer self-contained x64: `windows/installer/out/VPNFlow-Setup-1.0.0.exe`
+- SHA-256: `0f06c4b5729d153b7c240054d26d6bd8ec1a0a61ea1dd999735e8ee7842928b4`
+- Nội dung gói: .NET runtime, `wintun.dll`, `wireguard-go.exe`, logo/icon FlowTech
+
+Đây là bản build để test trên Windows thật. Tunnel Wintun/userspace, UAC, route,
+DNS và adapter `vpnflow` vẫn cần được kiểm tra thực tế trên máy đích.
+
 ## 5. Những phần CHƯA kiểm chứng trên Windows
 
 - **Chưa chạy thử tunnel trên Windows thật** — toàn bộ `Tunnel/*` mới build + review tĩnh trên macOS. Các điểm cần xác nhận trên máy Windows thật:

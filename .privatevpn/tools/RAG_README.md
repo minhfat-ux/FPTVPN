@@ -25,6 +25,15 @@ Current machine state:
 - Chroma, FAISS, LlamaIndex, LangChain, sentence-transformers, and sklearn are
   not installed.
 
+## Indexed release fact
+
+The current Windows VPNFlow release is documented in `windows/README.md` and
+`.privatevpn/memory/PROJECT_STATE.md`: commit `866ec9e`, Core tests **53/53
+pass**, self-contained installer `windows/installer/out/VPNFlow-Setup-1.0.0.exe`,
+SHA-256 `0f06c4b5729d153b7c240054d26d6bd8ec1a0a61ea1dd999735e8ee7842928b4`, with
+bundled `wintun.dll` and `wireguard-go.exe`. The installer is for Windows test
+use; real tunnel/UAC/route/DNS/adapter validation remains outstanding.
+
 If semantic RAG is needed later, either set `OPENAI_API_KEY` for embeddings or
 pull an Ollama embedding model and add a vector index. For now this helper gives
 fast local retrieval over code, docs, and memory without network or secrets.

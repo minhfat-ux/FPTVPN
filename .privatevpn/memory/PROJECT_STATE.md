@@ -1,6 +1,6 @@
 # PROJECT_STATE.md
 
-- **Updated:** 2026-08-23
+- **Updated:** 2026-09-16
 - **Authoritative answer to "what is the state?"** — see also `.privatevpn/status/project.json`.
 
 ## What are we building?
@@ -47,6 +47,12 @@ allowedIPs 0.0.0.0/0.
 ```
 
 ## What is VERIFIED?
+- Windows VPNFlow release `866ec9e` is checked out and built on Windows. Core test
+  suite: **53/53 PASS**. Self-contained installer:
+  `windows/installer/out/VPNFlow-Setup-1.0.0.exe` (SHA-256
+  `0f06c4b5729d153b7c240054d26d6bd8ec1a0a61ea1dd999735e8ee7842928b4`), including
+  `wintun.dll` and `wireguard-go.exe`. The release includes FlowTech logo/icon assets
+  and the iOS-aligned Windows UI.
 - macOS app **FlowVPN** builds with the embedded
   `PrivateVPNMacPacketTunnel.appex`; the production macOS tunnel path is
   NetworkExtension + WireGuardKit, not `wg-quick`/sudo/Homebrew.
@@ -92,6 +98,9 @@ allowedIPs 0.0.0.0/0.
   via `GOOS_iphonesimulator := ios`).
 
 ## What is implemented but unverified?
+- Windows release installer has not yet been validated through a full real-device
+  VPN connect/disconnect cycle; UAC, Wintun adapter creation, routes, DNS, UAPI pipe,
+  and cleanup still require manual verification on the target Windows machine.
 - iOS App Store Archive, Validate, Upload, App Store Connect processing, and
   Review submission (iPhone E2E đã PASS — evidence `evidence/e2e/2026-08-23-iphone-e2e.md`).
 - macOS end-to-end connect: cần NE provisioning profile (0 profiles hiện tại;
