@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260918-01",
+  "title": "Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng Tencent)",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/TASK-WINDOWS-REWRITE.md",
+  "verify": "node ops/verify-rewrite.mjs → 22/22 PASS",
+  "due": "2026-09-20",
+  "createdAt": "2026-09-18T13:19:36.929Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-18T13:19:36.937Z"
+}
