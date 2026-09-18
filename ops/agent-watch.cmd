@@ -8,6 +8,8 @@ REM Kieu  set TEN=GIA TRI && lenh  se cho gia tri mot DAU CACH o cuoi — da gay
 REM ten agent thanh "WIN " nen ten file su kien thanh "win -woken.json".
 cd /d "%~dp0.."
 set "AGENT_NAME=WIN"
-set "PATH=%PATH%;%ProgramFiles%\nodejs"
+REM Them ca thu muc npm toan cuc: `dsh` nam o do (dsh.cmd). Task Scheduler thuong KHONG co san
+REM trong PATH, thieu no thi lenh danh thuc khong tim thay dsh.
+set "PATH=%PATH%;%ProgramFiles%\nodejs;%APPDATA%\npm"
 echo [agent-watch] repo=%CD%  agent=%AGENT_NAME%
 node ops\agent-watch.mjs --auto %*

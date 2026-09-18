@@ -1,7 +1,0 @@
-{
- "type": "woken",
- "actor": "win ",
- "at": "2026-09-18T14:41:25.667Z",
- "note": "connector VPS: task từ mac — Da thay ack+progress cua ban — sua 2 loi phat hien tu du lieu cua ban",
- "via": "dsh --profile headless \"{prompt}\""
-}

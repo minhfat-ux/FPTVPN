@@ -1,7 +1,0 @@
-{
- "type": "woken",
- "actor": "win ",
- "at": "2026-09-18T14:38:09.274Z",
- "note": "connector VPS: task từ mac — Connector VPS da bat — Windows noi vao de nhan viec",
- "via": "dsh --profile headless \"{prompt}\""
-}

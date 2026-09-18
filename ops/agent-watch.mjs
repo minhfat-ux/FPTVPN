@@ -27,7 +27,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawn as childProcessSpawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { execFileSync, spawn as childProcessSpawn, spawnSync } from "node:child_process";
 
 // .trim() là bắt buộc: trên Windows, `set AGENT_NAME=WIN && node …` biến giá trị thành "WIN "
 // (dấu cách trước &&), làm hỏng tên agent trong presence và tên file sự kiện (đã gặp thật).
@@ -53,7 +54,21 @@ const AUTO = args.includes("--auto");
 const NO_RECORD = args.includes("--no-record");
 const INTERVAL = Number(flagValue("interval", process.env.WAKE_INTERVAL ?? 20)) || 20;
 const COOLDOWN = Number(flagValue("cooldown", process.env.WAKE_COOLDOWN ?? 600)) || 600;
-const WAKE_CMD = flagValue("wake-cmd", process.env.DSH_WAKE_CMD ?? 'dsh --profile headless "{prompt}"');
+/**
+ * Lệnh đánh thức mặc định.
+ *
+ * Trên Windows KHÔNG nối thẳng prompt vào chuỗi lệnh: `spawn(cmd, { shell: true })` chạy qua
+ * cmd.exe và cmd cắt lệnh ở DÒNG ĐẦU, nên phiên được đánh thức chỉ nhận dòng tiêu đề. Đã gặp thật
+ * 2026-09-18: prompt 4 dòng mà phiên session-05c623cb chỉ thấy đúng dòng
+ * "ĐÁNH THỨC TỰ ĐỘNG (WIN  ← watcher MAC)." ⇒ không biết việc phải làm.
+ * Cách đúng: ghi prompt ra tệp, để `ops/wake-launch.mjs` truyền nguyên văn thành MỘT đối số argv.
+ */
+const SELF_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_WAKE_CMD =
+  process.platform === "win32"
+    ? `"${process.execPath}" "${path.join(SELF_DIR, "wake-launch.mjs")}" --prompt-file "{promptFile}"`
+    : 'dsh --profile headless "{prompt}"';
+const WAKE_CMD = flagValue("wake-cmd", process.env.DSH_WAKE_CMD ?? DEFAULT_WAKE_CMD);
 // Connector trên VPS (máy ↔ máy). Telegram chỉ để alert cho người, không dùng làm kênh máy–máy.
 const BUS_URL = String(flagValue("bus-url", process.env.AGENT_BUS_URL ?? "") ?? "").replace(/\/$/, "");
 const BUS_TOKEN = String(process.env.AGENT_BUS_TOKEN ?? "").trim();
@@ -80,9 +95,21 @@ function loadBusEnv() {
 
 const git = (...argv) => {
   try {
-    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    // Ghi chú đo thật 2026-09-18 (phiên harness trên Windows): trong MỘT SỐ môi trường harness,
+    // tiến trình node KHÔNG spawn được tiến trình con (`execFileSync` lẫn `spawnSync` đều EPERM,
+    // error.code = "EPERM", status = null, stderr rỗng) ⇒ watcher mù cả kênh git lẫn bus và chỉ
+    // còn cách chạy tay hoặc cài Scheduled Task. Vì vậy khi `git` lỗi, in ra mã lỗi thật thay vì
+    // chuỗi rỗng — im lặng giả tạo là thứ giao thức này cấm.
+    const result = spawnSync("git", argv, { encoding: "utf8" });
+    const stderr = String(result.stderr ?? "").trim();
+    if (result.status !== 0) {
+      const detail = stderr || String(result.stdout ?? "").trim()
+        || `status=${result.status} error=${result.error?.code ?? "?"} signal=${result.signal ?? "-"}`;
+      return `!git: ${detail.split("\n")[0]}`;
+    }
+    return String(result.stdout ?? "").trim();
   } catch (error) {
-    return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
+    return `!git: ${String(error.message).trim().split("\n")[0]}`;
   }
 };
 const log = (message) => console.log(`[${new Date().toISOString().slice(11, 19)} ${SELF}] ${message}`);
@@ -193,12 +220,32 @@ function buildPrompt(entry, reason) {
 }
 
 function runWake(prompt) {
-  const command = WAKE_CMD.includes("{prompt}") ? WAKE_CMD.replace("{prompt}", prompt) : `${WAKE_CMD} ${prompt}`;
+  let command;
+  if (WAKE_CMD.includes("{promptFile}")) {
+    // Đường an toàn: prompt đi qua tệp, không qua shell.
+    const promptFile = path.join(os.tmpdir(), `dsh-wake-${Date.now()}-${process.pid}.txt`);
+    try {
+      fs.writeFileSync(promptFile, prompt, "utf8");
+    } catch (error) {
+      log(`không ghi được tệp prompt tạm: ${String(error.message).split("\n")[0]} — bỏ qua lần đánh thức này`);
+      return;
+    }
+    command = WAKE_CMD.split("{promptFile}").join(promptFile);
+  } else if (WAKE_CMD.includes("{prompt}")) {
+    if (process.platform === "win32" && /[\r\n]/.test(prompt)) {
+      log("CẢNH BÁO: prompt nhiều dòng chạy qua shell trên Windows SẼ BỊ CẮT — nên dùng {promptFile}.");
+    }
+    command = WAKE_CMD.replace("{prompt}", prompt);
+  } else {
+    command = `${WAKE_CMD} ${prompt}`;
+  }
   if (DRY) {
     log(`(--dry-run) sẽ chạy: ${command.slice(0, 160)}…`);
     return;
   }
-  const child = spawn(command, { shell: true, detached: true, stdio: "ignore" });
+  // Lưu ý: import ở đầu file đã đổi tên thành `childProcessSpawn`. Bản trước gọi trần `spawn`
+  // ⇒ ném ReferenceError, watcher không đánh thức được ai (đã sửa 2026-09-18).
+  const child = childProcessSpawn(command, { shell: true, detached: true, stdio: "ignore" });
   child.unref();
   log(`đã đánh thức: ${command.split(" ").slice(0, 4).join(" ")}… (pid ${child.pid})`);
 }
