@@ -317,7 +317,9 @@ class HysteriaVpnService : VpnService() {
      * cũ trong <1s vì đường trực tiếp thử trước.
      */
     private fun oneConnectPass(): Int {
-        val preferred = lastGoodTransport()
+        val preferred = lastGoodTransport()?.takeIf { !preferWsFirst || it == "ws" }
+        // preferWsFirst=true nghia la luot truoc da chet het: uu tien cu (vi du tcp:8443
+        // tu phien Wi-Fi truoc) chi lam cham them ~1,2s moi luot. Bo qua no.
         if (preferred != null) {
             val outcome = preferredAttempt(preferred)
             if (outcome != 0) return outcome
@@ -404,7 +406,7 @@ class HysteriaVpnService : VpnService() {
         if (!bridge.start()) return 0
         DiagnosticsLog.log("ws-relay: thử transport qua Cloudflare (local port ${bridge.localPort})")
         // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói.
-        val deadline = System.currentTimeMillis() + 15000
+        val deadline = System.currentTimeMillis() + WS_OPEN_WAIT_MS
         while (!bridge.connected && System.currentTimeMillis() < deadline && !stopping) {
             Thread.sleep(200)
         }
@@ -1039,7 +1041,7 @@ class HysteriaVpnService : VpnService() {
          */
         const val WS_ATTEMPT_UP_BUDGET_MS = 15_000L
         /** Trần thời gian chờ mở cầu WS (đi 2 chặng + TLS tới Cloudflare). */
-        const val WS_OPEN_WAIT_MS = 15_000L
+        const val WS_OPEN_WAIT_MS = 8_000L
         /**
          * TCP connect tới relay. 2500ms là lãng phí: khi IP node bị chặn thì connect
          * không bao giờ xong, còn khi tới được thì RTT từ TQ chỉ vài chục ms.

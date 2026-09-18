@@ -90,7 +90,10 @@ object Config {
      * danh sách khi IP của hạ tầng đổi.
      */
     val PINNED_HOST_ADDRESSES: Map<String, List<String>> = mapOf(
-        "api.meetflowai.site" to API_FALLBACK_ADDRESSES,
+        // KHONG ghim IP cho api.meetflowai.site nua (18/09/2026): API_FALLBACK_ADDRESSES dang la
+        // IP cua 2 node, ma tren data di dong Trung Quoc IP node bi chan ⇒ moi lan ket noi phai
+        // cho het timeout (~8s) roi moi roi ve DNS he thong (Cloudflare) — do la ly do
+        // "connecting rat lau" tren 4G/5G. De DNS he thong tra ve IP Cloudflare.
         "fcnvpn.tail303be3.ts.net" to listOf("103.84.155.217", "103.84.155.153"),
     )
 
