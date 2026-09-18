@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { readTasks as readLedgerTasks, syncLedger } from "./lib/ledger.mjs";
 
 const SELF = (process.env.AGENT_NAME || "MAC").toUpperCase();
 const PEER = SELF === "MAC" ? "WIN" : "MAC";
@@ -35,47 +35,21 @@ const HINTS = {
   created: (id) => `node ops/task.mjs send ${id} --push`,
 };
 
-/** Đọc sổ cục bộ: mỗi thư mục task là một chuỗi sự kiện. */
+/**
+ * Đọc sổ qua lib dùng chung, SAU KHI kéo sổ mới nhất từ git.
+ * Không sync thì bảng sẽ nói sai (đã gặp: báo "im lặng 83 phút" khi bên kia đã ack).
+ */
 function readTasks() {
-  if (!fs.existsSync(TASKS_DIR)) return [];
-  const tasks = [];
-  for (const id of fs.readdirSync(TASKS_DIR)) {
-    if (id.startsWith(".")) continue;
-    const dir = path.join(TASKS_DIR, id);
-    let stat;
-    try {
-      stat = fs.statSync(dir);
-    } catch {
-      continue;
-    }
-    if (!stat.isDirectory()) continue;
-    const events = [];
-    for (const file of fs.readdirSync(dir)) {
-      if (!file.endsWith(".json")) continue;
-      try {
-        events.push(JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")));
-      } catch {
-        /* bỏ file hỏng */
-      }
-    }
-    events.sort((a, b) => String(a.at).localeCompare(String(b.at)));
-    const created = events.find((event) => event.type === "created");
-    if (!created) continue;
-    const task = created.task ?? { id };
-    let status = "created";
-    for (const event of events) {
-      if (event.type === "sent") status = "sent";
-      else if (event.type === "acked") status = "acked";
-      else if (event.type === "progress") status = "in_progress";
-      else if (event.type === "blocked") status = "blocked";
-      else if (event.type === "done") status = "done";
-      else if (event.type === "verified") status = event.result === "pass" ? "verified" : "reopened";
-    }
-    const sentEvent = events.find((event) => event.type === "sent");
-    const wokeOrAcked = events.some((event) => ["woken", "acked"].includes(event.type));
-    tasks.push({ id, task, status, events, last: events[events.length - 1], silentMinutes: sentEvent && !wokeOrAcked ? Math.round((Date.now() - new Date(sentEvent.at).getTime()) / 60000) : null });
-  }
-  return tasks.sort((a, b) => a.id.localeCompare(b.id));
+  const synced = syncLedger();
+  if (!synced.ok) console.error(`! không sync được sổ từ git: ${synced.reason}`);
+  return readLedgerTasks().map((entry) => {
+    const sentEvent = entry.events.find((event) => event.type === "sent");
+    const wokeOrAcked = entry.events.some((event) => ["woken", "acked"].includes(event.type));
+    return {
+      ...entry,
+      silentMinutes: sentEvent && !wokeOrAcked ? Math.round((Date.now() - new Date(sentEvent.at).getTime()) / 60000) : null,
+    };
+  });
 }
 
 /** Đọc `.env.bus` nếu env chưa có (giống watcher). */

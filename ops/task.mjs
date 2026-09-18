@@ -34,6 +34,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { syncLedger } from "./lib/ledger.mjs";
 
 const TASKS_DIR = path.join("ops", "tasks");
 const VALUE_OPTIONS = new Set(["title", "to", "detail", "verify", "due", "note", "reason", "evidence", "result", "id", "peer-wake"]);
@@ -302,6 +303,7 @@ function pushLedger(id, message) {
 // ---------------------------------------------------------------- trạng thái
 
 function requireTask(id) {
+  syncLedger(); // sự kiện của bên kia nằm trên origin — không sync thì trạng thái đọc sai
   const events = eventsOf(id);
   if (!events.length) {
     console.error(`Không có task "${id}". Xem: node ops/task.mjs list --all`);
@@ -450,6 +452,8 @@ if (command === "new") {
     console.log(`    ${prettyTime(event.at)}  ${event.actor.padEnd(4)} ${event.type.padEnd(9)} ${String(extra).slice(0, 120)}`);
   }
 } else if (command === "list") {
+  const synced = syncLedger();
+  if (!synced.ok) console.error(`! không sync được sổ từ git: ${synced.reason}`);
   const ids = localIds();
   const rows = [];
   for (const id of ids) {
