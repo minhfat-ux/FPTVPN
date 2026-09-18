@@ -19,6 +19,10 @@ export function creditSettings() {
     perToken: Math.max(0, Number(settings.creditsPerToken) || 0),
     /** Money price of one credit, used to quote balances and skill prices in VND. */
     vndPerCredit: Math.max(0, Number(settings.vndPerCredit) || 0),
+    /** Hệ số lời (>=1) áp khi tính credit theo CHI PHÍ THẬT của model. */
+    margin: Math.max(1, Number(settings.creditMargin) || 1.3),
+    /** Tỷ giá USD→VND dùng để quy đổi chi phí model sang credit. */
+    usdVnd: Math.max(0, Number(settings.creditUsdVnd) || 25500),
     buyUrl: settings.creditBuyUrl ?? "",
     promoReminderMinutes: Math.max(1, Number(settings.promoReminderMinutes) || 5),
     promoCreditSnoozeMinutes: Math.max(1, Number(settings.promoCreditSnoozeMinutes) || 1440),
@@ -70,6 +74,48 @@ export function costForUsage(usage, perToken = creditSettings().perToken) {
   if (!perToken) return 0;
   if (!tokens) return 1;
   return Math.max(1, Math.ceil(tokens * perToken));
+}
+
+/**
+ * Giá token (USD) của một model, lấy từ OpenRouter. `input_usd` = prompt/token,
+ * `output_usd` = completion/token, `cache_usd` = cache-read/token.
+ */
+export function getModelPricing(model) {
+  if (!model) return null;
+  const row = db.prepare("SELECT input_usd, output_usd, cache_usd FROM model_pricing WHERE model = ?").get(model);
+  return row
+    ? { input_usd: Number(row.input_usd ?? 0), output_usd: Number(row.output_usd ?? 0), cache_usd: Number(row.cache_usd ?? 0) }
+    : null;
+}
+
+export function setModelPricing(model, { input_usd = 0, output_usd = 0, cache_usd = 0 } = {}) {
+  db.prepare(
+    `INSERT INTO model_pricing (model, input_usd, output_usd, cache_usd, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(model) DO UPDATE SET
+       input_usd=excluded.input_usd, output_usd=excluded.output_usd,
+       cache_usd=excluded.cache_usd, updated_at=excluded.updated_at`,
+  ).run(model, input_usd, output_usd, cache_usd, nowIso());
+}
+
+/**
+ * Đốt credit theo ĐÚNG chi phí model, không lõm: trả cái LỚN HƠN giữa mức phẳng
+ * (costForUsage) và (chi phí thật × margin). Model free (chi phí 0) giữ mức phẳng
+ * — doanh thu thuần.
+ */
+export function costForModel(model, usage, perToken = creditSettings().perToken) {
+  const flat = costForUsage(usage, perToken);
+  const pricing = model ? getModelPricing(model) : null;
+  if (!pricing) return flat;
+  const usd =
+    Number(usage?.in ?? 0) * pricing.input_usd +
+    Number(usage?.out ?? 0) * pricing.output_usd +
+    Number(usage?.cacheIn ?? 0) * pricing.cache_usd;
+  if (usd <= 0) return flat;
+  const { margin, usdVnd, vndPerCredit } = creditSettings();
+  if (!vndPerCredit) return flat;
+  const costCredits = Math.ceil((usd * margin * usdVnd) / vndPerCredit);
+  return Math.max(flat || 1, costCredits);
 }
 
 /**
