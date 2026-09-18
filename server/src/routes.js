@@ -1268,6 +1268,13 @@ export function createApiRouter() {
         }
       }
 
+      // Ô chọn trạng thái bán trên UI ("Bán ngay" = published, "Sắp có" = coming_soon).
+      // Chỉ nhận giá trị hợp lệ; để trống thì `toHubDraft` tự quyết theo skill gốc.
+      const requestedState = String(req.body?.state ?? "").trim();
+      if (requestedState === "published" || requestedState === "coming_soon") {
+        draft = { ...draft, state: requestedState };
+      }
+
       const existing = listHubSkills().find((item) => item.slug === draft.slug);
       const payload = {
         slug: draft.slug,

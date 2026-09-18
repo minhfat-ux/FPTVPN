@@ -32,6 +32,9 @@ import type {
   QualifiedTool,
   SkillDescriptor,
   SkillCatalogResponse,
+  SkillHubDraft,
+  SkillHubImportResult,
+  SkillHubSearchItem,
   TopupListing,
   TopupOrder,
   User,
@@ -362,6 +365,25 @@ export const api = {
   updateHubSkill: (id: string, body: Record<string, unknown>) =>
     request<{ skill: HubSkill }>("PATCH", `/admin/hub/${id}`, body),
   deleteHubSkill: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/hub/${id}`),
+
+  // ---- nhập kỹ năng từ Tencent SkillHub. Server làm proxy nên khoá `X-API-Key`
+  // không bao giờ ra trình duyệt; server ở vùng IP bị chặn thì API trả 502 kèm
+  // hướng dẫn chạy `node ops/skillhub-import.mjs` từ máy có đường sang Trung Quốc.
+  /** `freeOnly` = chỉ lấy skill miễn phí (bỏ qua skill phải mua/đòi API key riêng). */
+  skillhubSearch: (keyword: string, limit = 12, freeOnly = false) =>
+    request<{ total: number; items: SkillHubSearchItem[] }>(
+      "GET",
+      `/admin/skillhub/search?q=${encodeURIComponent(keyword)}` +
+        `&limit=${Math.min(30, Math.max(1, Math.trunc(limit) || 12))}${freeOnly ? "&free=1" : ""}`,
+    ),
+  skillhubPreview: (slug: string, priceVnd = 0) =>
+    request<{ draft: SkillHubDraft }>(
+      "GET",
+      `/admin/skillhub/preview?slug=${encodeURIComponent(slug)}&priceVnd=${Math.max(0, Math.trunc(priceVnd) || 0)}`,
+    ),
+  skillhubImport: (body: { slug: string; priceVnd?: number; state?: string; translate?: string[] }) =>
+    request<SkillHubImportResult>("POST", "/admin/skillhub/import", body),
+
   createUser: (body: { email: string; password: string; name?: string; role?: string }) =>
     request<{ user: User }>("POST", "/admin/users", body),
   deleteUser: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/users/${id}`),
