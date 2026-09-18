@@ -1,5 +1,20 @@
 # Kênh trao đổi giữa hai harness (Mac ↔ Windows)
 
+## 0.0 GIAO VIỆC thì dùng sổ task (không dùng ping)
+
+Ping **không xác thực được** bên kia đã nhận hay chưa (và tin do bot gửi không quay lại `getUpdates`).
+Mọi việc giao nhau đi qua `ops/task.mjs` — xem [`TASK-PROTOCOL.md`](TASK-PROTOCOL.md):
+
+```bash
+node ops/task.mjs list                 # việc đang mở
+node ops/task.mjs sync                 # fetch + đọc sổ từ git
+AGENT_NAME=WIN node ops/task.mjs ack T-20260918-01 --push     # Windows xác nhận ĐÃ NHẬN
+AGENT_NAME=WIN node ops/task.mjs done T-20260918-01 --evidence "commit=…, cmd=…, kết quả=…" --push
+```
+
+Không có `ack` (bằng chứng trong git) thì coi như chưa nhận việc. Không có `verify pass` của bên giao
+thì việc **không** được coi là xong.
+
 ## 0. Cách ping nhau (đã thông)
 
 Bot: **@Minhnb2_bot** · chat id trong `.env.tg` (đã bị gitignore, KHÔNG commit).
