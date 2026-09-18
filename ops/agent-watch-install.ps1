@@ -1,4 +1,4 @@
-﻿<#
+<#
   Cài watcher đánh thức trên máy WINDOWS (chạy 1 lần, sau đó không cần đụng tay nữa).
 
   Cách dùng (PowerShell, trong thư mục repo):
@@ -43,11 +43,40 @@ Pop-Location
 
 if ($NoAutostart) { Write-Host "`n(-NoAutostart) bỏ qua tạo Scheduled Task." -ForegroundColor Yellow; exit 0 }
 
-# 3. Scheduled Task: chạy khi đăng nhập, tự chạy lại nếu thoát
-$action = "cmd /c cd /d `"$Repo`" && set AGENT_NAME=WIN && node ops\agent-watch.mjs --auto --interval $Interval"
+# 3. Scheduled Task: chạy khi đăng nhập, tự chạy lại nếu thoát.
+#    Vì sao KHÔNG dùng `schtasks /Create /TR $action`: schtasks cắt tham số /TR tại dấu cách
+#    đầu tiên, nên repo nằm trong thư mục có dấu cách ("...\FlowTech AI\flowgpt") sẽ báo
+#    "ERROR: Invalid argument/option". Register-ScheduledTask nhận đối số dạng mảng nên an toàn.
+$action = "cmd /c cd /d `"$Repo`" && set `"AGENT_NAME=WIN`" && node ops\agent-watch.mjs --auto --interval $Interval"
 Write-Host "`n-- Tạo Scheduled Task '$TaskName' --" -ForegroundColor Cyan
-schtasks /Create /TN $TaskName /SC ONLOGON /TR $action /F | Write-Host
-schtasks /Run /TN $TaskName | Write-Host
+try {
+  $taskAction = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c $action"
+  $taskTrigger = New-ScheduledTaskTrigger -AtLogOn
+  $taskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
+  Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger `
+    -Settings $taskSettings -Force -ErrorAction Stop | Out-Null
+  Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+  Write-Host "  ✓ đã đăng ký + chạy task '$TaskName' (ONLOGON)." -ForegroundColor Green
+} catch {
+  # Không có quyền admin thì Register-ScheduledTask trả "Access is denied". Đường lui KHÔNG cần
+  # admin: một launcher .vbs trong thư mục Startup của user — chạy khi đăng nhập và chạy ẩn
+  # (không nháy cửa sổ console), đúng cách repo đã dùng cho poller-windows.vbs.
+  Write-Host "  ! Register-ScheduledTask không được: $($_.Exception.Message)" -ForegroundColor Yellow
+  Write-Host "    -> dung launcher trong thu muc Startup (khong can admin)." -ForegroundColor Yellow
+  $startup = [Environment]::GetFolderPath("Startup")
+  $vbs = Join-Path $startup "AgentWatch.vbs"
+  $lines = @(
+    "' Watcher danh thuc harness (do ops/agent-watch-install.ps1 sinh ra). Chay an khi dang nhap.",
+    'Set sh = CreateObject("WScript.Shell")',
+    ('sh.CurrentDirectory = "' + $Repo + '"'),
+    ('sh.Run "cmd /c set ""AGENT_NAME=WIN"" && node ops\agent-watch.mjs --auto --interval ' + $Interval + '", 0, False')
+  )
+  Set-Content -Path $vbs -Value $lines -Encoding ASCII
+  Write-Host "  da tao: $vbs" -ForegroundColor Green
+  Start-Process -FilePath "wscript.exe" -ArgumentList "`"$vbs`"" -WindowStyle Hidden
+  Write-Host "  da chay watcher an ngay bay gio." -ForegroundColor Green
+}
 
 # 4. kiểm tra lại
 Start-Sleep -Seconds 3
