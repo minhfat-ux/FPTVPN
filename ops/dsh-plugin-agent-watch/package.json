@@ -1,0 +1,9 @@
+{
+  "name": "dsh-plugin-agent-watch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Khoi dong watcher danh thuc (ops/agent-watch.mjs) cung vong doi cua dsh web",
+  "type": "module",
+  "main": "index.js",
+  "exports": { ".": "./index.js" }
+}

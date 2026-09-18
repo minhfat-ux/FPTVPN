@@ -110,7 +110,32 @@ AGENT_NAME=WIN node ops/agent-watch.mjs --once --dry-run
 # → in ra "ĐÁNH THỨC vì có việc mới được giao → <id>" nghĩa là máy đó ĐÃ thấy việc
 ```
 
-### 7.2 Cài chạy nền
+### 7.2 Gắn vào vòng đời `dsh web` (đang dùng — không cần dịch vụ nền)
+
+Watcher được một **plugin của profile web** khởi động cùng `dsh web` và dừng khi `dsh web` tắt:
+
+```bash
+bash ops/install-agent-watch-plugin.sh          # cài/cập nhật (Mac: AGENT_NAME=MAC)
+AGENT_NAME=WIN bash ops/install-agent-watch-plugin.sh   # nếu muốn làm tương tự trên Windows
+```
+
+Plugin `ops/dsh-plugin-agent-watch/` được copy vào `$DSH_HOME/profiles/node_modules/`, và một dòng
+`insert` được thêm vào `$DSH_HOME/profiles/<profile>/cordis.patch.yml`:
+
+```yaml
+- insert:
+    - id: agent-watch
+      name: 'dsh-plugin-agent-watch'
+      config: { repo: /Volumes/BIWIN/FlowGPT, agentName: MAC, interval: 20, auto: true }
+```
+
+Đặc điểm: mỗi lần khởi động nó **dừng watcher cũ rồi chạy cái mới** (khớp theo tên script
+`agent-watch.mjs`, vì watcher chạy tay có thể có cmdline đường dẫn tương đối), dọn tiến trình bằng
+`ctx.effect` khi profile tắt, và **nuốt mọi lỗi** để không bao giờ làm hỏng việc boot harness.
+Tắt tạm: đặt `enabled: false` trong config. Kiểm tra composition:
+`dsh --profile web --dump-config | grep -A4 agent-watch`.
+
+### 7.2b Cài như dịch vụ nền (nếu không muốn phụ thuộc `dsh web`)
 - **macOS (launchd)** — `~/Library/LaunchAgents/site.meetflowai.agentwatch.plist` với
   `ProgramArguments`: `node`, `<repo>/ops/agent-watch.mjs`, `--auto`; `EnvironmentVariables`:
   `AGENT_NAME=MAC`, `PATH` gồm đường dẫn `dsh`; `RunAtLoad=true`, `KeepAlive=true`. Nạp:
