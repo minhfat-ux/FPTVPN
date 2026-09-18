@@ -75,3 +75,51 @@ Việc **chỉ được coi là xong khi có `verified pass`**. Không có bư�
 `T-20260918-01` — Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng Tencent).
 Chi tiết: [`TASK-WINDOWS-REWRITE.md`](TASK-WINDOWS-REWRITE.md) · nghiệm thu:
 `node ops/verify-rewrite.mjs` → cần 22/22 PASS (hiện 0/22).
+
+## 7. ĐÁNH THỨC bên kia (để họ biết ngay, không phải chờ ai mở máy)
+
+Ghi sổ vào git là chưa đủ: bên kia chỉ thấy khi họ `git fetch`. Telegram cũng **không** đánh thức
+được (hai bên gửi cùng một bot ⇒ `getUpdates` không trả lại tin của nhau). Nên có watcher:
+
+```bash
+# mỗi máy chạy một watcher (để lâu dài: xem mục 7.2)
+node ops/agent-watch.mjs --auto            # poll 20s; thấy việc của mình thì BOOT harness
+```
+
+Watcher làm gì khi thấy việc mới thuộc về mình:
+1. `git fetch origin flowgpt` (không đụng cây đang làm việc),
+2. thấy sự kiện mới (`sent` / `verify fail` / `blocked` / `done`) **gửi cho mình**,
+3. chạy lệnh đánh thức (mặc định `dsh --profile headless "<prompt>"`) — prompt đã gồm: sync → đọc
+   `docs/TASK-PROTOCOL.md` → **ack** → làm việc → `done --evidence`,
+4. ghi sự kiện **`woken`** vào sổ và push ⇒ bên giao **thấy được bằng chứng "đã đánh thức lúc …"**.
+
+Tùy chọn: `--auto` (đánh thức thật) · không có `--auto` thì chỉ báo · `--dry-run` (không làm gì) ·
+`--once` (một vòng) · `--interval <giây>` · `--cooldown <giây>` (chống spam cùng một việc, mặc định 600)
+· `--wake-cmd '…{prompt}…'` hoặc `DSH_WAKE_CMD` · `--replay` (xử lý cả sự kiện cũ) · `--no-record` (chỉ để thử).
+
+Đường phụ khi watcher bên kia **chưa chạy** — bên giao đánh thức trực tiếp:
+
+```bash
+PEER_WAKE_CMD='ssh <máy-windows> "cd <repo> && node ops/agent-watch.mjs --once --auto"' \
+  node ops/task.mjs send <id> --push --ping
+```
+
+### 7.1 Tự kiểm tra kênh đánh thức
+```bash
+AGENT_NAME=WIN node ops/agent-watch.mjs --once --dry-run
+# → in ra "ĐÁNH THỨC vì có việc mới được giao → <id>" nghĩa là máy đó ĐÃ thấy việc
+```
+
+### 7.2 Cài chạy nền
+- **macOS (launchd)** — `~/Library/LaunchAgents/site.meetflowai.agentwatch.plist` với
+  `ProgramArguments`: `node`, `<repo>/ops/agent-watch.mjs`, `--auto`; `EnvironmentVariables`:
+  `AGENT_NAME=MAC`, `PATH` gồm đường dẫn `dsh`; `RunAtLoad=true`, `KeepAlive=true`. Nạp:
+  `launchctl load -w ~/Library/LaunchAgents/site.meetflowai.agentwatch.plist`
+- **Windows (Task Scheduler)**:
+  `schtasks /Create /TN AgentWatch /SC ONLOGON /TR "cmd /c cd /d C:\\path\\repo && set AGENT_NAME=WIN && node ops\\agent-watch.mjs --auto" /F`
+- Không cài được dịch vụ thì chạy tay trong một cửa sổ terminal để mở:
+  `set AGENT_NAME=WIN && node ops\agent-watch.mjs --auto`
+
+**Giới hạn phải biết:** watcher chỉ đánh thức được khi **nó đang chạy** trên máy bên kia, và
+`dsh --profile headless` phải có trong `PATH` của tiến trình đó. Nếu watcher không chạy, việc vẫn
+nằm trong sổ ở trạng thái `sent` — `list` sẽ cho thấy rõ điều đó (không còn mơ hồ như ping suông).
