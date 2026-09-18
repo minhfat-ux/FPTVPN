@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260918-02",
+  "title": "Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi, du học)",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/TASK-WINDOWS-EDUCATION.md",
+  "verify": "node ops/verify-rewrite.mjs --slugs 'family-education-ma,ket-prep-team,vocab-craft-expert,study-planner,study-abroad-consultant,liuxue-yanxue-expert,ai-shifu,corporate-training-designer,innovation-startup-mentor,law-student-coach,ncre-expert,academic-tutor,english-exam-writing-reviewer,english-intensive-reader,open-lesson,teachany,tutor-skills'",
+  "due": "2026-09-21",
+  "createdAt": "2026-09-18T15:08:55.890Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-18T15:08:55.898Z"
+}
