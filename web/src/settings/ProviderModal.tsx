@@ -32,6 +32,11 @@ export function ProviderModal({
   const [imageModel, setImageModel] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Danh mục model tải từ OpenRouter (id/name/context) để chọn bằng chuột thay vì gõ tay.
+  const [catalog, setCatalog] = useState<Array<{ id: string; name: string; context_length?: number }>>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogFilter, setCatalogFilter] = useState("");
+  const [catalogFreeOnly, setCatalogFreeOnly] = useState(true);
 
   const isEdit = Boolean(provider);
   const info = kinds.find((k) => k.id === kind);
@@ -77,6 +82,34 @@ export function ProviderModal({
     if (models.includes(model)) return;
     setModelsText([...models, model].join("\n"));
     if (!defaultModel) setDefaultModel(model);
+  };
+
+  const isOpenRouter = String(kind) === "openrouter" || (baseUrl || "").includes("openrouter.ai");
+
+  const loadCatalog = async () => {
+    setCatalogLoading(true);
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/models");
+      const json = await res.json();
+      type CatalogModel = { id: string; name: string; context_length?: number };
+      const list: CatalogModel[] = (json?.data ?? [])
+        .map((m: { id?: unknown; name?: unknown; context_length?: number }) => ({
+          id: String(m.id ?? ""),
+          name: String(m.name ?? m.id ?? ""),
+          context_length: m.context_length,
+        }))
+        .sort((a: CatalogModel, b: CatalogModel) => Number(b.id.endsWith(":free")) - Number(a.id.endsWith(":free")));
+      setCatalog(list);
+    } catch {
+      push("Không tải được danh sách model từ OpenRouter", "error");
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  const toggleModel = (model: string) => {
+    if (models.includes(model)) setModelsText(models.filter((m) => m !== model).join("\n"));
+    else appendModel(model);
   };
 
   const save = async () => {
@@ -207,6 +240,59 @@ export function ProviderModal({
             placeholder={"gpt-4o-mini\ngpt-4o"}
           />
         </Field>
+
+        {isOpenRouter && (
+          <div className="mb-3 stack gap-2">
+            <div className="row gap-2" style={{ alignItems: "center" }}>
+              <button className="btn btn-sm" type="button" onClick={loadCatalog} disabled={catalogLoading}>
+                {catalogLoading ? "Đang tải…" : "Nạp model từ OpenRouter"}
+              </button>
+              {catalog.length > 0 && (
+                <>
+                  <input
+                    className="input"
+                    style={{ flex: 1, minWidth: 0 }}
+                    placeholder="Tìm model…"
+                    value={catalogFilter}
+                    onChange={(event) => setCatalogFilter(event.target.value)}
+                  />
+                  <label className="row gap-2" style={{ alignItems: "center", whiteSpace: "nowrap", cursor: "pointer" }}>
+                    <input type="checkbox" checked={catalogFreeOnly} onChange={(event) => setCatalogFreeOnly(event.target.checked)} /> Chỉ free
+                  </label>
+                </>
+              )}
+            </div>
+            {catalog.length > 0 && (
+              <div className="model-catalog">
+                {catalog
+                  .filter((m) => !catalogFreeOnly || m.id.endsWith(":free"))
+                  .filter(
+                    (m) =>
+                      !catalogFilter ||
+                      m.id.toLowerCase().includes(catalogFilter.toLowerCase()) ||
+                      (m.name || "").toLowerCase().includes(catalogFilter.toLowerCase()),
+                  )
+                  .map((m) => {
+                    const added = models.includes(m.id);
+                    return (
+                      <label key={m.id} className={`model-row${added ? " model-row-added" : ""}`}>
+                        <input type="checkbox" checked={added} onChange={() => toggleModel(m.id)} />
+                        <div className="grow" style={{ minWidth: 0 }}>
+                          <div className="model-row-name">
+                            <span className="ellipsis">{m.name || m.id}</span>
+                            <span className={`badge ${m.id.endsWith(":free") ? "badge-free" : "badge-paid"}`}>
+                              {m.id.endsWith(":free") ? "FREE" : "PAID"}
+                            </span>
+                          </div>
+                          <div className="tiny faint">{m.id}{m.context_length ? ` · ${Math.round(m.context_length / 1000)}K ctx` : ""}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        )}
 
         {(info?.suggestedModels?.length ?? 0) > 0 && (
           <div className="mb-3">
