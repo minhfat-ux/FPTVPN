@@ -27,17 +27,35 @@ Script làm đúng các bước: clone hysteria tag `app/v2.12.2` (mặc định
 (`-target=ios,iossimulator` và `-target=macos`) → `ditto` sang `OUT` → in `lipo -info`
 + `shasum -a 256`.
 
-Yêu cầu: Go ≥ 1.25 + Xcode + **gomobile fork của SagerNet**:
+## Toolchain: cả hai bản gomobile đều chạy được
 
-```bash
-go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
-go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
-```
+Yêu cầu: Go ≥ 1.25 + Xcode + gomobile. `build.sh` **tự nhận diện** toolchain đang dùng
+(đọc `go version -m $(command -v gomobile)`) và require đúng module tương ứng:
 
-Bản `golang.org/x/mobile` **không dùng được**: nó không có `-target=macos`, và `gobind`
-của fork load package `github.com/sagernet/gomobile/bind` từ **module đích**, nên thiếu
-bước `go get` sẽ lỗi `unable to import bind: no Go package in
-github.com/sagernet/gomobile/bind`.
+| Toolchain | Cài | Cách build | iOS+sim | macOS |
+|---|---|---|---|---|
+| fork SagerNet (mặc định máy này, `$HOME/go/bin/gomobile`) | `go install github.com/sagernet/gomobile/cmd/{gomobile,gobind}@v0.1.13` | `./build.sh` | ✅ | ✅ |
+| chính thống `golang.org/x/mobile` (cài GOBIN riêng để **không ghi đè** bản fork dùng cho libbox) | `GOBIN=/tmp/gomobile-std/bin go install golang.org/x/mobile/cmd/{gomobile,gobind}@latest` | `GOMOBILE=/tmp/gomobile-std/bin/gomobile ./build.sh` | ✅ | ✅ |
+
+Cả hai đã test **end-to-end** (`build.sh` EXIT=0, `verify.sh` EXIT=0, framework link+chạy
+thật): fork 31s, chính thống 34s, ra cùng module `Hysteria`, cùng 3 slice, cùng 3 hàm
+`MobileConnect/MobileServe/MobileStop`. Bản chính thống **có** `-target=macos` (usage:
+`android|ios|iossimulator|macos|maccatalyst`) — không cần `-target=ios-macos` (không tồn
+tại: `invalid -target="ios-macos"`) và **không cần** đường vòng
+`-buildmode=c-archive` + `xcodebuild -create-xcframework`. `gomobile init` cũng không cần
+cho target Apple.
+
+Lỗi `unable to import bind: no Go package in <module>/bind` (fork) /
+`missing golang.org/x/mobile dependency` (chính thống) **không phải** do "fork sai", mà do
+gobind resolve package `bind/objc` theo **module đích**: module hysteria phải require đúng
+module của toolchain đang chạy (`go get github.com/sagernet/gomobile@v0.1.13` hoặc
+`go get -tool golang.org/x/mobile/cmd/gobind`). Thêm nữa, `gomobile` gọi `gobind` qua
+`PATH`, nên `build.sh` prepend thư mục chứa gomobile để hai bản không bị trộn.
+
+Khác biệt nhỏ giữa hai bản: bản fork xuất layout **versioned** (`Hysteria.framework/
+Versions/A/…`) cho cả iOS, bản chính thống xuất **phẳng** cho iOS (`Hysteria.framework/
+Hysteria`) và versioned cho macOS — `build.sh`/`verify.sh` đã tự dò cả hai; bản chính
+thống còn kéo theo nâng `x/text`, `x/term`, `x/tools` trong module graph của hysteria.
 
 ## API xuất sang Swift / ObjC
 

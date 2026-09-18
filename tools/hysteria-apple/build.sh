@@ -112,10 +112,19 @@ grep -h '^FOUNDATION_EXPORT' "$OUT/Hysteria.xcframework/ios-arm64/Hysteria.frame
 
 echo "==> artifacts"
 du -sh "$OUT/Hysteria.xcframework" "$OUT/Hysteria-macos.xcframework"
+
+# fork SagerNet xuất framework kiểu versioned (Versions/A/<name>), bản chính thống
+# golang.org/x/mobile xuất bản phẳng (<name>.framework/<name>) — nhận cả hai.
+fw_bin() {  # $1 = thư mục <tên>.framework
+  local fw="$1" name
+  name="$(basename "$fw" .framework)"
+  if [ -f "$fw/Versions/A/$name" ]; then echo "$fw/Versions/A/$name"; else echo "$fw/$name"; fi
+}
+
 for lib in \
-  "$OUT/Hysteria.xcframework/ios-arm64/Hysteria.framework/Versions/A/Hysteria" \
-  "$OUT/Hysteria.xcframework/ios-arm64_x86_64-simulator/Hysteria.framework/Versions/A/Hysteria" \
-  "$OUT/Hysteria-macos.xcframework/macos-arm64_x86_64/Hysteria.framework/Versions/A/Hysteria"; do
+  "$(fw_bin "$OUT/Hysteria.xcframework/ios-arm64/Hysteria.framework")" \
+  "$(fw_bin "$OUT/Hysteria.xcframework/ios-arm64_x86_64-simulator/Hysteria.framework")" \
+  "$(fw_bin "$OUT/Hysteria-macos.xcframework/macos-arm64_x86_64/Hysteria.framework")"; do
   echo "--- $lib"
   lipo -info "$lib"
   shasum -a 256 "$lib"
