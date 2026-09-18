@@ -2,6 +2,15 @@ import type { Dict } from "../../types";
 
 /** English translations for this namespace. */
 export const auth: Dict = {
+  /* Landing (brand column on the sign-in page). */
+  "auth.landing.tagline": "FlowTech · MeetFlow AI",
+  "auth.landing.headline": "An AI assistant for your everyday work",
+  "auth.landing.pitch":
+    "Chat, live translation, slides and data work — all in one place, with costs you can control.",
+  "auth.landing.point1": "Multi-skill chat: text, images, spreadsheets, slides",
+  "auth.landing.point2": "Real-time translation and meeting notes",
+  "auth.landing.point3": "Business accounts: roles, quotas and audit log",
+
   "auth.login.emailTitle": "Sign in with email",
   "auth.login.emailHint": "Enter your work email and we will send a one-time code. No password needed.",
   "auth.login.emailLabel": "Email",

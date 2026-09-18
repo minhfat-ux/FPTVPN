@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, KeyRound, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { ArrowLeft, KeyRound, Languages, Loader2, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import { useI18n } from "../i18n";
 import { useAuth, useToast } from "../state/store";
@@ -116,182 +116,198 @@ export function LoginPage() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
-        <div className="auth-logo">
-          <img src="/brand-mark.png?v=culi2" alt="FlowTech" width={44} height={44} style={{ display: "block" }} />
+      {/* Cột thương hiệu: chỉ là phần giới thiệu, không chứa logic đăng nhập. */}
+      <div className="auth-hero">
+        <div className="auth-hero__brand">
+          <img className="auth-hero__mark" src="/brand-mark.png?v=culi2" alt="FlowTech" />
           <div>
-            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>
-              <span className="brand-word">fBuddy</span>
-            </div>
-            <div className="tiny muted">FlowTech · MeetFlow AI</div>
+            <div className="auth-hero__word brand-word">fBuddy</div>
+            <div className="auth-hero__sub">{t("auth.landing.tagline")}</div>
           </div>
         </div>
+        <h1 className="auth-hero__headline">{t("auth.landing.headline")}</h1>
+        <p className="auth-hero__pitch">{t("auth.landing.pitch")}</p>
+        <ul className="auth-hero__points">
+          <li className="auth-hero__point">
+            <Sparkles size={18} /> {t("auth.landing.point1")}
+          </li>
+          <li className="auth-hero__point">
+            <Languages size={18} /> {t("auth.landing.point2")}
+          </li>
+          <li className="auth-hero__point">
+            <ShieldCheck size={18} /> {t("auth.landing.point3")}
+          </li>
+        </ul>
+      </div>
 
-        {!usePassword && (
-          <>
-            {step === "email" ? (
-              <form onSubmit={requestCode}>
-                <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-                  {t("auth.login.emailTitle")}
-                </h1>
-                <p className="muted small" style={{ marginTop: 0 }}>
-                  {t("auth.login.emailHint")}
-                </p>
-                <label className="field">
-                  <span className="label">{t("auth.login.emailLabel")}</span>
-                  <input
-                    className="input"
-                    type="email"
-                    required
-                    autoFocus
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder={t("auth.login.emailPlaceholder")}
-                    autoComplete="email"
-                  />
-                </label>
-                {error && <div className="error-text mb-3">{error}</div>}
-                <button className="btn btn-primary btn-block" type="submit" disabled={busy || !normalisedEmail}>
-                  {busy ? (
-                    <>
-                      <Loader2 size={16} className="spinner" /> {t("auth.login.sendingCode")}
-                    </>
-                  ) : (
-                    <>
-                      <Mail size={16} /> {t("auth.login.sendCode")}
-                    </>
-                  )}
-                </button>
-                {meta?.firstUserIsAdmin && (
-                  <div className="hint mt-3 row gap-1">
-                    <ShieldCheck size={14} /> {t("auth.login.firstUserHint")}
-                  </div>
-                )}
-              </form>
-            ) : (
-              <form onSubmit={submitCode}>
-                <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => setStep("email")}>
-                  <ArrowLeft size={14} /> {t("auth.login.changeEmail")}
-                </button>
-                <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{t("auth.login.codeTitle")}</h1>
-                <p className="muted small" style={{ marginTop: 0 }}>
-                  {mailerReady ? (
-                    t("auth.login.codeSent", { email: normalisedEmail, minutes: ttl })
-                  ) : (
-                    t("auth.login.codeFor", { email: normalisedEmail })
-                  )}
-                </p>
-
-                <label className="field">
-                  <span className="label">{t("auth.login.codeLabel")}</span>
-                  <input
-                    ref={codeRef}
-                    className="input input-mono"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    value={code}
-                    onChange={(event) => onCodeChange(event.target.value)}
-                    placeholder={t("auth.login.codePlaceholder")}
-                    style={{ letterSpacing: "0.4em", fontSize: 22, textAlign: "center" }}
-                  />
-                </label>
-
-                {devCode && (
-                  <div className="card mb-3" style={{ background: "var(--bg-elevated)" }}>
-                    <div className="tiny faint">{t("auth.login.devCodeTitle")}</div>
-                    <div
-                      className="mono bold"
-                      style={{ fontSize: 26, letterSpacing: "0.3em", color: "var(--accent)" }}
-                    >
-                      {devCode}
+      <div className="auth-panel">
+        <div className="auth-card">
+          {!usePassword && (
+            <>
+              {step === "email" ? (
+                <form onSubmit={requestCode}>
+                  <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
+                    {t("auth.login.emailTitle")}
+                  </h1>
+                  <p className="muted small" style={{ marginTop: 0 }}>
+                    {t("auth.login.emailHint")}
+                  </p>
+                  <label className="field">
+                    <span className="label">{t("auth.login.emailLabel")}</span>
+                    <input
+                      className="input"
+                      type="email"
+                      required
+                      autoFocus
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder={t("auth.login.emailPlaceholder")}
+                      autoComplete="email"
+                    />
+                  </label>
+                  {error && <div className="error-text mb-3">{error}</div>}
+                  <button className="btn btn-primary btn-block" type="submit" disabled={busy || !normalisedEmail}>
+                    {busy ? (
+                      <>
+                        <Loader2 size={16} className="spinner" /> {t("auth.login.sendingCode")}
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={16} /> {t("auth.login.sendCode")}
+                      </>
+                    )}
+                  </button>
+                  {meta?.firstUserIsAdmin && (
+                    <div className="hint mt-3 row gap-1">
+                      <ShieldCheck size={14} /> {t("auth.login.firstUserHint")}
                     </div>
+                  )}
+                </form>
+              ) : (
+                <form onSubmit={submitCode}>
+                  <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => setStep("email")}>
+                    <ArrowLeft size={14} /> {t("auth.login.changeEmail")}
+                  </button>
+                  <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{t("auth.login.codeTitle")}</h1>
+                  <p className="muted small" style={{ marginTop: 0 }}>
+                    {mailerReady ? (
+                      t("auth.login.codeSent", { email: normalisedEmail, minutes: ttl })
+                    ) : (
+                      t("auth.login.codeFor", { email: normalisedEmail })
+                    )}
+                  </p>
+
+                  <label className="field">
+                    <span className="label">{t("auth.login.codeLabel")}</span>
+                    <input
+                      ref={codeRef}
+                      className="input input-mono"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={code}
+                      onChange={(event) => onCodeChange(event.target.value)}
+                      placeholder={t("auth.login.codePlaceholder")}
+                      style={{ letterSpacing: "0.4em", fontSize: 22, textAlign: "center" }}
+                    />
+                  </label>
+
+                  {devCode && (
+                    <div className="card mb-3" style={{ background: "var(--bg-elevated)" }}>
+                      <div className="tiny faint">{t("auth.login.devCodeTitle")}</div>
+                      <div
+                        className="mono bold"
+                        style={{ fontSize: 26, letterSpacing: "0.3em", color: "var(--accent)" }}
+                      >
+                        {devCode}
+                      </div>
+                    </div>
+                  )}
+
+                  {info && !error && <div className="hint mb-3">{info}</div>}
+                  {error && <div className="error-text mb-3">{error}</div>}
+
+                  <button className="btn btn-primary btn-block" type="submit" disabled={busy || code.length < 4}>
+                    {busy ? (
+                      <>
+                        <Loader2 size={16} className="spinner" /> {t("auth.login.verifying")}
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound size={16} /> {t("auth.login.submit")}
+                      </>
+                    )}
+                  </button>
+
+                  <div className="auth-switch">
+                    {resendIn > 0 ? (
+                      <span className="tiny faint">{t("auth.login.resendIn", { seconds: resendIn })}</span>
+                    ) : (
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => requestCode()} disabled={busy}>
+                        {t("auth.login.resend")}
+                      </button>
+                    )}
                   </div>
-                )}
-
-                {info && !error && <div className="hint mb-3">{info}</div>}
-                {error && <div className="error-text mb-3">{error}</div>}
-
-                <button className="btn btn-primary btn-block" type="submit" disabled={busy || code.length < 4}>
-                  {busy ? (
-                    <>
-                      <Loader2 size={16} className="spinner" /> {t("auth.login.verifying")}
-                    </>
-                  ) : (
-                    <>
-                      <KeyRound size={16} /> {t("auth.login.submit")}
-                    </>
-                  )}
-                </button>
-
-                <div className="auth-switch">
-                  {resendIn > 0 ? (
-                    <span className="tiny faint">{t("auth.login.resendIn", { seconds: resendIn })}</span>
-                  ) : (
-                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => requestCode()} disabled={busy}>
-                      {t("auth.login.resend")}
-                    </button>
-                  )}
-                </div>
-              </form>
-            )}
-          </>
-        )}
-
-        {usePassword && (
-          <form onSubmit={submitPassword}>
-            <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => setUsePassword(false)}>
-              <ArrowLeft size={14} /> {t("auth.login.backToEmail")}
-            </button>
-            <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{t("auth.login.passwordTitle")}</h1>
-            <p className="muted small" style={{ marginTop: 0 }}>
-              {t("auth.login.passwordHint")}
-            </p>
-            <label className="field">
-              <span className="label">{t("auth.login.emailLabel")}</span>
-              <input
-                className="input"
-                type="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
-              />
-            </label>
-            <label className="field">
-              <span className="label">{t("auth.login.passwordLabel")}</span>
-              <input
-                className="input"
-                type="password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-              />
-            </label>
-            {error && <div className="error-text mb-3">{error}</div>}
-            <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
-              {busy ? <Loader2 size={16} className="spinner" /> : null} {t("auth.login.submit")}
-            </button>
-          </form>
-        )}
-
-        <div className="divider" />
-
-        <div className="stack">
-          <div className="tiny faint">{t("auth.login.comingSoon")}</div>
-          <div className="row gap-2">
-            <button className="btn btn-sm grow" type="button" disabled title={t("auth.login.googleTitle")}>
-              Google / Firebase
-            </button>
-            <button className="btn btn-sm grow" type="button" disabled title={t("auth.login.facebookTitle")}>
-              Facebook
-            </button>
-          </div>
-          {passwordEnabled && !usePassword && (
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setUsePassword(true)}>
-              {t("auth.login.usePassword")}
-            </button>
+                </form>
+              )}
+            </>
           )}
+
+          {usePassword && (
+            <form onSubmit={submitPassword}>
+              <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => setUsePassword(false)}>
+                <ArrowLeft size={14} /> {t("auth.login.backToEmail")}
+              </button>
+              <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{t("auth.login.passwordTitle")}</h1>
+              <p className="muted small" style={{ marginTop: 0 }}>
+                {t("auth.login.passwordHint")}
+              </p>
+              <label className="field">
+                <span className="label">{t("auth.login.emailLabel")}</span>
+                <input
+                  className="input"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                />
+              </label>
+              <label className="field">
+                <span className="label">{t("auth.login.passwordLabel")}</span>
+                <input
+                  className="input"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                />
+              </label>
+              {error && <div className="error-text mb-3">{error}</div>}
+              <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
+                {busy ? <Loader2 size={16} className="spinner" /> : null} {t("auth.login.submit")}
+              </button>
+            </form>
+          )}
+
+          <div className="divider" />
+
+          <div className="stack">
+            <div className="tiny faint">{t("auth.login.comingSoon")}</div>
+            <div className="row gap-2">
+              <button className="btn btn-sm grow" type="button" disabled title={t("auth.login.googleTitle")}>
+                Google / Firebase
+              </button>
+              <button className="btn btn-sm grow" type="button" disabled title={t("auth.login.facebookTitle")}>
+                Facebook
+              </button>
+            </div>
+            {passwordEnabled && !usePassword && (
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setUsePassword(true)}>
+                {t("auth.login.usePassword")}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

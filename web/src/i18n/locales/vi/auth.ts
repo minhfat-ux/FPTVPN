@@ -2,6 +2,15 @@ import type { Dict } from "../../types";
 
 /** Nguồn sự thật (tiếng Việt). Thêm khoá mới ở đây trước, rồi dịch sang en/zh. */
 export const auth: Dict = {
+  /* Landing (cột thương hiệu bên trái trang đăng nhập). */
+  "auth.landing.tagline": "FlowTech · MeetFlow AI",
+  "auth.landing.headline": "Trợ lý AI cho công việc hằng ngày của bạn",
+  "auth.landing.pitch":
+    "Chat, dịch trực tiếp, tạo slide và xử lý dữ liệu — tất cả trong một chỗ, chi phí kiểm soát được.",
+  "auth.landing.point1": "Chat đa kỹ năng: văn bản, ảnh, bảng tính, slide",
+  "auth.landing.point2": "Dịch và ghi chú cuộc họp theo thời gian thực",
+  "auth.landing.point3": "Tài khoản doanh nghiệp: phân quyền, hạn mức, nhật ký",
+
   "auth.login.emailTitle": "Đăng nhập bằng email",
   "auth.login.emailHint": "Nhập email công ty, em sẽ gửi một mã dùng một lần. Không cần mật khẩu.",
   "auth.login.emailLabel": "Email",
