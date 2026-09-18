@@ -80,6 +80,16 @@ từ luồng khác; nếu không cần, nói em một câu là em gỡ.
    **Chrome trên Windows**, cần cài gói giọng nói tiếng Việt của Windows, hoặc dùng **Edge** (có sẵn Hoài My/Nam Minh).
 4. Chưa có **SSO Firebase/Facebook** (đã chừa chỗ) và chưa có **đăng ký email + mật khẩu** (theo yêu cầu).
 5. Bundle web 1,16 MB (334 KB gzip) — có thể tách chunk sau.
+6. **VIẾT LẠI (paraphrase) 14 chuyên gia + 8 kỹ năng nhập từ WorkBuddy/SkillHub** — hiện
+   `instructions` là **bản dịch gần nguyên văn** từ nguồn có bản quyền của tác giả gốc + Tencent
+   (kho `infometa/workbuddyskills` không có LICENSE và ghi rõ *"请勿用于未授权商业再分发"* —
+   cấm tái phân phối thương mại khi chưa được phép). **Đã xử lý tạm: để MIỄN PHÍ toàn bộ chợ**
+   (29/29 mục = 0đ, 0 credit, 2026-09-18). Việc cần làm: viết lại bằng văn phong riêng dựa trên
+   kiến thức chung + văn bản pháp luật công khai, **không dịch lại**; xong mới cân nhắc thu phí.
+   Chi tiết & quy tắc nhập nội dung: [`docs/CONTENT-POLICY.md`](CONTENT-POLICY.md).
+7. **Avatar cho chuyên gia**: kho nguồn có `experts/<slug>/avatars/expert.png` nhưng đó là tài sản
+   hình ảnh của họ — **không copy**. Cần tự tạo avatar (monogram + màu thương hiệu, hoặc ảnh tự làm).
+   Hiện chợ đang hiển thị icon Lucide chung (`hubIcon`) nên thẻ chuyên gia chưa có avatar.
 
 ## 11. Đợt 3 — credit, nạp token, chợ kỹ năng, đa ngôn ngữ
 

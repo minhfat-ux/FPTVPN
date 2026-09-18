@@ -11,7 +11,7 @@
  *   node ops/skillhub-import.mjs --search "excel" --limit 30 --free
  *   node ops/skillhub-import.mjs --slug <slug>                # chạy thử: in bản nháp, KHÔNG ghi
  *   node ops/skillhub-import.mjs --slug <slug> --apply        # ghi vào chợ (tạo mới hoặc cập nhật)
- *   node ops/skillhub-import.mjs --slug a --slug b --apply --price-vnd 50000 --state coming_soon
+ *   node ops/skillhub-import.mjs --slug a --slug b --apply --state coming_soon
  *
  * Biến môi trường:
  *   SKILLHUB_BASE_URL    mặc định https://api.skillhub.cn (đổi sang VPN/relay khi cần)
@@ -54,7 +54,9 @@ const list = (name) => {
 
 const CONFIG = skillhubConfig();
 const APPLY = has("apply");
-const PRICE_VND = flag("price-vnd") === null ? 50000 : Math.max(0, Math.trunc(Number(flag("price-vnd")) || 0));
+// Mặc định 0 (miễn phí): nội dung nhập từ SkillHub thuộc bản quyền tác giả gốc
+// + Tencent, không được bán lại. Xem docs/CONTENT-POLICY.md.
+const PRICE_VND = flag("price-vnd") === null ? 0 : Math.max(0, Math.trunc(Number(flag("price-vnd")) || 0));
 const STATE = flag("state");
 const CATEGORY = flag("category");
 const LIMIT = Math.min(100, Math.max(1, Number(flag("limit")) || 10));
