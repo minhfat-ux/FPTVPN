@@ -314,6 +314,47 @@ repo đã có sẵn bản mới nên vẫn đúng.
 
 ---
 
+## 4c. KẾ HOẠCH đã chốt với chủ dự án (2026-09-18 tối) — quản lý bản Windows
+
+Chủ dự án chốt lại hướng (thay hẳn hướng đã bỏ ở §3.7):
+
+| Yêu cầu | Chốt |
+|---|---|
+| Nơi quản lý | **Control Panel của FlowTech** (control plane `flowvpn-cp`, port 7778, phục vụ meetflowai.site) — thêm mục quản lý **bản Windows** vào phần **MeetFlow AI** |
+| Key kích hoạt | Sinh bằng **một nút trên control panel**, gửi cho khách; **tự động gửi email** khi webhook (SePay) xác nhận đã nhận tiền |
+| Bản Windows mới | **Dùng thử 3 ngày**, hết hạn thì **bắt activate** |
+| Chính sách force update | **Chặn hẳn tại thời điểm bật chức năng Live meeting** (không chặn cả app): bản cũ hơn `minSupported` thì không cho bật live meeting, chỉ hiện nút tải bản mới |
+
+**Điều KHÔNG thể (đã kiểm bằng source, đừng hứa với chủ dự án):** bản Windows **đã cài trên máy khách
+không gọi về server mình câu nào** — chỉ có `wss://stt-rt.soniox.com`, `https://openrouter.ai/...` và
+`{ActivationApiUrl}/activate` (mặc định RỖNG, chỉ gọi nếu khách tự điền). ⇒ **không ép từ xa được** các
+máy đã cài. Chỉ ép được **từ bản mới trở đi** (bản mới sẽ gọi server để trial/activate/check version).
+Với khách đang dùng bản cũ: chỉ còn cách **thông báo** (email toàn bộ khách đã mua · popup web · Telegram).
+
+**Kiến trúc đề xuất (chờ chủ dự án gật):**
+
+- **Backend đặt ở fBuddy** (`fbuddy.meetflowai.site`): đã có user/đơn/webhook SePay, và đã có sẵn module
+  lõi `server/src/desktop-keys.js` (bảng `desktop_keys` + `desktop_key_activations`, chỉ lưu **hash**
+  của key, thu hồi được từng máy). Endpoint cần thêm:
+  - `POST /api/desktop/activate` (công khai, rate limit) — app gọi `{key, machineId}` ⇒
+    `{valid, message, plan, activatedAt, expiresAt}` (đúng hợp đồng `ActivationService.cs`).
+  - `POST /api/desktop/trial` (công khai) — đăng ký dùng thử theo `machineId`, trả `expiresAt`;
+    trial lưu **server-side** để xoá file cấu hình không reset được.
+  - `GET /api/desktop/version` (công khai) — `{latest, minSupported, downloadUrl, note}`.
+  - Admin (token admin): `POST/GET /api/desktop/keys`, `POST /api/desktop/keys/:id/revoke`,
+    `POST /api/desktop/keys/:id/rotate`, `PUT /api/desktop/version`.
+- **Control panel (`/root/flowvpn-cp`)** chỉ là **UI**: card "MeetFlow AI → Bản Windows" gọi các API admin
+  trên (nút **Gen key**, danh sách key + máy đã kích hoạt, thu hồi, đặt `latest`/`minSupported`/`downloadUrl`).
+  ⚠️ `/root/flowvpn-cp` **không nằm trong git** (chỉ có `.bak-*` trên server) ⇒ **backup trước khi sửa**.
+- **App Windows**: mặc định `ActivationApiUrl` trỏ về fBuddy; thêm màn hình trial (còn N ngày) và khoá
+  nút bật Live meeting khi hết trial / khi version < `minSupported`.
+
+**Thứ tự làm:** (1) route + email + test cho `desktop-keys.js`; (2) `/trial` + `/version`;
+(3) UI trên control panel; (4) sửa app (trial 3 ngày + force khi bật live meeting) + build zip mới;
+(5) thông báo cho khách đang dùng bản cũ. **Đừng phát hành zip mới trước khi (1)-(3) lên sóng.**
+
+---
+
 ## 5. Bẫy đã vấp — đừng vấp lại
 
 - **PowerShell 5.1 `Get-Content`/`Set-Content` lên file có tiếng Việt ⇒ mojibake.** Dùng công cụ file (read/write)
