@@ -93,3 +93,16 @@
 }
 
 .hub-spin { animation: spin 0.8s linear infinite; }
+
+/* Avatar tự sinh (monogram) cho chuyên gia/kỹ năng — xem SkillAvatar.tsx */
+.skill-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}

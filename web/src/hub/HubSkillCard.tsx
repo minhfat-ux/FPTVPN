@@ -2,7 +2,7 @@ import { Check, Loader2, ShoppingBag } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useI18n } from "../i18n";
 import type { HubSkill } from "../types";
-import { hubIcon } from "./icons";
+import { SkillAvatar } from "./SkillAvatar";
 import { bullets, formatBuyLabel, formatInstalls, formatPrice, formatStateBadge, isOwned } from "./hubFormat";
 
 /**
@@ -36,7 +36,7 @@ export function HubSkillCard({
       onKeyDown={(event) => event.key === "Enter" && onOpen()}
     >
       <div className="hub-card-top">
-        <span className="hub-card-icon">{hubIcon(skill.icon, 20)}</span>
+        <SkillAvatar name={skill.name} seed={skill.slug} size={20} />
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="hub-card-name">{skill.name}</div>
           <div className="tiny faint">{formatInstalls(skill.installs, t, n)}</div>
@@ -114,7 +114,7 @@ export function HubSkillDetailBody({ skill }: { skill: HubSkill }) {
   return (
     <div className="stack gap-3">
       <div className="row gap-3">
-        <span className="hub-card-icon">{hubIcon(skill.icon, 22)}</span>
+        <SkillAvatar name={skill.name} seed={skill.slug} size={22} />
         <div className="grow">
           <div className="hub-card-name">{skill.name}</div>
           <div className="small muted">{skill.tagline}</div>
