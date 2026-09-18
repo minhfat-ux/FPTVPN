@@ -2,12 +2,14 @@ import { streamChat } from "./providers/index.js";
 import { listAllTools, callTool, flattenToolResult, qualifiedToolName } from "./mcp.js";
 import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool } from "./skills/index.js";
 import { applyVisionFallback } from "./vision-fallback.js";
+import { buildAppsKnowledge } from "./apps-knowledge.js";
 import { isConfirmed, planChoices } from "./skills/confirm.js";
 import { excelChoices } from "./skills/vision.js";
 import { hubSkillForUser, isSelectableSkill } from "./skills/hub.js";
 import { listProviderRows, nextUsableProvider, readAppSettings, resolveProviderForChat, resolveVisionTarget } from "./settings.js";
 import {
   assertCanChat,
+  costForModel,
   costForUsage,
   creditSettings,
   creditSummary,
@@ -74,6 +76,21 @@ const SKILL_INSTRUCTIONS = {
   ].join(" "),
   chat: "Người dùng đang ở chế độ Trò chuyện thường. Chỉ gọi công cụ khi thật sự cần thiết.",
 };
+
+/**
+ * Luật xưng hô — luôn được ghép vào system prompt ở tầng CODE, nên admin đổi prompt
+ * trong Cài đặt cũng không xoá được. Giữ đúng cặp xưng hô của người dùng suốt hội thoại.
+ */
+const PRONOUN_RULES = [
+  "XƯNG HÔ (bắt buộc, áp dụng cho MỌI câu trả lời):",
+  "• Trước khi trả lời, nhận diện cách người dùng tự xưng và cách họ gọi bạn, rồi giữ đúng cặp xưng hô đó suốt hội thoại.",
+  "• Người dùng xưng \"anh\" ⇒ bạn gọi họ là \"anh\" và tự xưng \"em\". Xưng \"chị\" ⇒ gọi \"chị\", tự xưng \"em\".",
+  "• Người dùng xưng \"em\" ⇒ bạn gọi họ là \"em\" và tự xưng \"anh\" (dùng \"chị\" nếu họ gọi bạn là chị).",
+  "• Người dùng xưng \"tôi\"/\"mình\"/\"tớ\", hoặc gọi bạn là \"bạn\" ⇒ bạn tự xưng \"mình\" và gọi họ là \"bạn\".",
+  "• Vai khác (con, cháu, cô, chú, bác, ông, bà, sếp, thầy, cô giáo…) ⇒ chọn cặp xưng hô tương ứng trong tiếng Việt và giữ nhất quán.",
+  "• Người dùng nói rõ cách gọi (\"gọi tôi là sếp\", \"đừng gọi anh\") ⇒ làm đúng yêu cầu đó, ưu tiên hơn mọi suy đoán.",
+  "• KHÔNG trộn vai trong cùng một câu trả lời và KHÔNG tự xưng \"tôi\" khi người dùng đang xưng anh/chị/em. Người dùng đổi cách xưng thì đổi theo ngay từ câu trả lời kế tiếp.",
+].join("\n");
 
 export function sseChannel(res) {
   res.writeHead(200, {
@@ -164,10 +181,13 @@ function resolveVisionProviderFor({ providerId = null, model = null } = {}) {
   }
 }
 
-export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false }) {
+export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "" }) {
   const today = new Date().toISOString().slice(0, 10);
+  const basePrompt = Array.isArray(settings.systemPrompt) ? settings.systemPrompt.join("\n") : settings.systemPrompt;
   const parts = [
-    settings.systemPrompt,
+    basePrompt,
+    PRONOUN_RULES,
+    buildAppsKnowledge({ message }),
     `Hôm nay là ${today}.`,
     SKILL_INSTRUCTIONS[skill] ?? "",
     planFirst
@@ -438,7 +458,7 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     }
   }
 
-  const systemPrompt = buildSystemPrompt({ skill, files, settings, hubSkill: turn.hubSkill, user, planFirst: Boolean(turn.planFirst) });
+  const systemPrompt = buildSystemPrompt({ skill, files, settings, hubSkill: turn.hubSkill, user, planFirst: Boolean(turn.planFirst), message: turn.content });
   const messages = await buildModelMessages({ conversationId: conversation.id, systemPrompt });
 
   // Gateways hard-fail on an image part the model cannot handle (GLM: "content.type
@@ -731,7 +751,7 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   // Meter the turn. Gateways sometimes omit usage → charge the floor of 1.
   let credits = null;
   try {
-    const cost = costForUsage(usage, creditSettings().perToken);
+    const cost = costForModel(model, usage);
     if (cost > 0) {
       credits = { cost, balance: spendCredits({ userId: user.id, amount: cost, ref: assistantMessage.id }) };
     }
