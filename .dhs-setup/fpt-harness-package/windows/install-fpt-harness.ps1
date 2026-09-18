@@ -15,7 +15,8 @@
 #    -Domain     Domain DSH (mặc định dhs-win.meetflowai.site — cần DNS A record tới VPS)
 #    -SshUser    User SSH trên VPS (mặc định root)
 #    -TunnelPort Port tunnel trên VPS (mặc định 13081 — KHÔNG đụng 13080 của Mac)
-#    -AuthUser/-AuthPass  user/pass đăng nhập GUI harness (mặc định dhs / fgMR6h53TC5kMmRW)
+#    -AuthUser/-AuthPass  user/pass đăng nhập GUI harness (BẮT BUỘC truyền -AuthPass khi
+#                         dựng site công khai; không có mật khẩu mặc định trong mã nguồn)
 #    -SkipPatch  bỏ qua patch branding (nếu chỉ muốn tunnel)
 #    -Yes        không hỏi, dùng mặc định
 #
@@ -213,7 +214,7 @@ if ($VpsIP) {
     Write-Host "     bash /tmp/fpt-harness-vps/add-windows-site.sh $Domain $TunnelPort" -ForegroundColor Green
     Write-Host "  2) Tro DNS: $Domain -> IP VPS" -ForegroundColor White
     Write-Host "  3) Dung tu moi thiet bi:  https://$Domain" -ForegroundColor Green
-    Write-Host "     Login: user $AuthUser / pass (mac dinh fgMR6h53TC5kMmRW)" -ForegroundColor White
+    Write-Host "     Login: user $AuthUser / pass (dat qua -AuthPass khi cai)" -ForegroundColor White
     Write-Host ""
     Write-Host "  (VPS side: nginx gate moi 127.0.0.1:3082 -> tunnel port $TunnelPort + Caddy site $Domain)" -ForegroundColor DarkGray
 } else {
