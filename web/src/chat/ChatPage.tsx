@@ -74,6 +74,12 @@ export function ChatPage({
   const maxUploadBytes = maxUploadMb * 1024 * 1024;
   const isEmpty = messages.length === 0 && !streaming;
 
+  // Khi chưa có hội thoại/model nào được chọn, luôn dùng model MẶC ĐỊNH của app.
+  const defaultModelValue = useMemo(() => {
+    const option = models.find((item) => item.isDefault) ?? models[0];
+    return option ? formatModelValue(option.providerId, option.model) : "";
+  }, [models]);
+
   // The live turn reports the code first; after a reload the stored assistant
   // message still carries it as `"insufficient_credits: …"`.
   const outOfCredit = useMemo(() => {
@@ -96,6 +102,11 @@ export function ChatPage({
   ]);
 
   // A conversation carries its own skill/model; the composer mirrors it once per conversation.
+  // Tự điền model mặc định khi modelValue còn rỗng (chat mới, hoặc hội thoại không lưu model).
+  useEffect(() => {
+    if (!modelValue && defaultModelValue) setModelValue(defaultModelValue);
+  }, [modelValue, defaultModelValue]);
+
   useEffect(() => {
     if (draftConversation.current === conversationId) return;
     draftConversation.current = conversationId;
