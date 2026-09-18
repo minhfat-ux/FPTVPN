@@ -87,6 +87,10 @@ từ luồng khác; nếu không cần, nói em một câu là em gỡ.
    (29/29 mục = 0đ, 0 credit, 2026-09-18). Việc cần làm: viết lại bằng văn phong riêng dựa trên
    kiến thức chung + văn bản pháp luật công khai, **không dịch lại**; xong mới cân nhắc thu phí.
    Chi tiết & quy tắc nhập nội dung: [`docs/CONTENT-POLICY.md`](CONTENT-POLICY.md).
+   **NGƯỜI THỰC HIỆN: harness Windows** — lệnh công việc đầy đủ (phạm vi 22 slug, quy tắc viết lại,
+   định dạng file, cách áp dụng) tại [`docs/TASK-WINDOWS-REWRITE.md`](TASK-WINDOWS-REWRITE.md).
+   Công cụ đã có: `ops/rewrite-apply.mjs` (Windows chạy, mặc định chạy thử) và
+   `ops/verify-rewrite.mjs` (Mac nghiệm thu trên node-2; hiện **0/22 PASS** vì chưa ai viết lại).
 7. **Avatar cho chuyên gia**: kho nguồn có `experts/<slug>/avatars/expert.png` nhưng đó là tài sản
    hình ảnh của họ — **không copy**. Cần tự tạo avatar (monogram + màu thương hiệu, hoặc ảnh tự làm).
    Hiện chợ đang hiển thị icon Lucide chung (`hubIcon`) nên thẻ chuyên gia chưa có avatar.

@@ -16,3 +16,4 @@ coverage/
 
 # Cache npm cục bộ (ổ BIWIN không ghi được vào ~/.npm) — không commit.
 .npm-cache/
+ops/.rewrite-baseline.json
