@@ -12,6 +12,9 @@ public partial class SettingsView : UserControl
 {
     private readonly AppServices _services;
 
+    /// <summary>Đang tự gán index từ settings — không được coi là người dùng vừa chọn.</summary>
+    private bool _syncingTransport;
+
     /// <summary>Đã đăng xuất → shell quay về màn đăng nhập.</summary>
     public event Action? SignedOut;
 
@@ -24,6 +27,7 @@ public partial class SettingsView : UserControl
         _services = services ?? throw new ArgumentNullException(nameof(services));
         InitializeComponent();
 
+        TransportCombo.SelectionChanged += (_, _) => OnTransportChanged();
         SignOutButton.Click += (_, _) => OnSignOut();
         UpgradeButton.Click += (_, _) => UrlLauncher.Open(_services.Api.BuyUrl);
         ContactSupportButton.Click += (_, _) => UrlLauncher.Open(WebUrl("SupportPrivateVPN.html"));
@@ -54,6 +58,38 @@ public partial class SettingsView : UserControl
             : "Not signed in.";
 
         SignOutButton.IsVisible = _services.Auth.IsSignedIn;
+
+        // Gán lại lựa chọn đang lưu. Cờ này chặn SelectionChanged ghi đè khi ta tự đổi index.
+        _syncingTransport = true;
+        try
+        {
+            TransportCombo.SelectedIndex = (int)_services.Settings.Transport;
+        }
+        finally
+        {
+            _syncingTransport = false;
+        }
+    }
+
+    /// <summary>
+    /// Người dùng đổi transport: lưu ngay để lần kết nối sau dùng đúng đường đã chọn.
+    /// Thứ tự item của ComboBox phải khớp <see cref="TransportPreference"/> (đọc theo index).
+    /// </summary>
+    private void OnTransportChanged()
+    {
+        if (_syncingTransport || TransportCombo.SelectedIndex < 0)
+        {
+            return;
+        }
+
+        var chosen = (TransportPreference)TransportCombo.SelectedIndex;
+        if (chosen == _services.Settings.Transport)
+        {
+            return;
+        }
+
+        _services.Settings.Transport = chosen;
+        _services.Settings.Save();
     }
 
     /// <summary>URL trang web (khác host API) — suy từ BuyUrl để đổi host dự phòng vẫn đúng.</summary>

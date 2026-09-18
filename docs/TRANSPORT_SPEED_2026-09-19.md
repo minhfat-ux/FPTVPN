@@ -110,3 +110,50 @@ Dùng ≥2 URL khác nhà cung cấp và kiểm `%{http_code}`.
 - [ ] Apple: đưa Libbox + transport hysteria vào NE, bỏ hẳn WireGuard-over-relay.
 - [ ] Bypass WeChat: làm bằng `route.rules` của sing-box (chưa làm).
 - [ ] Auth hysteria theo người dùng (`userpass`) để bỏ credential nhúng trong app.
+
+## 8. Phát hiện chặn đường của Apple: hai runtime Go không cùng một process
+
+Khi link framework hysteria2 vào packet-tunnel của macOS, link thất bại:
+
+```
+duplicate symbol '__cgo_panic' in:
+    .../PrivateVPN.build/.../wg/libwg-go.a[arm64][2](go.o)
+    .../Build/Products/Debug/Hysteria.framework/Versions/A/Hysteria[arm64][2](go.o)
+ld: 3 duplicate symbols
+```
+
+`WireGuardKit` mang theo `libwg-go.a` (Go runtime của wireguard-go), framework
+hysteria2 cũng mang một Go runtime ⇒ **không thể** cùng nằm trong một process
+extension. Hệ quả kiến trúc:
+
+- **Extension của Apple phải là hysteria-only** (bỏ WireGuardKit khỏi 2 target
+  extension). Đúng hướng nghiệp vụ luôn: WireGuard-chồng-relay đo chỉ 0,007–2 MB/s
+  và từng blackhole cả máy Mac.
+- Bất kỳ kế hoạch nào nhúng `Libbox.xcframework` vào extension cũng vướng đúng lỗi
+  này. Nếu sau này cần bộ định tuyến của sing-box trên Apple thì phải build **một**
+  framework Go duy nhất chứa cả libbox và hysteria (một runtime), chứ không phải
+  hai framework cạnh nhau.
+- Hysteria2 đã có sẵn chuỗi transport riêng (WS relay / direct UDP / TCP relay) nên
+  phần "định tuyến" trên Apple không cần WireGuard.
+
+Framework đã build được (gomobile chính thống `golang.org/x/mobile`; fork SagerNet
+chỉ dùng cho libbox):
+
+| Artifact | Slice | Ghi chú |
+|---|---|---|
+| `Hysteria.xcframework` (74 MB) | `ios-arm64`, `ios-arm64_x86_64-simulator` | module `Hysteria`, API hàm C: `MobileConnect` / `MobileServe` / `MobileStop` |
+| `Hysteria-macos.xcframework` (49 MB) | `macos-arm64_x86_64` | dùng cho extension macOS |
+
+Cách nối trong extension: `WSRelayClient` mở WebSocket tới `/relay/vn*hy` và bind
+một cổng UDP nội bộ (mỗi binary message = 1 datagram) → `MobileConnect` trỏ QUIC
+tới đúng cổng nội bộ đó → `MobileServe` đọc/ghi gói IP trên fd utun lấy từ
+`packetFlow.value(forKey: "socket")` (KVC, cùng cách các client NetworkExtension
+khác dùng).
+
+## 9. Windows: kiến trúc đang triển khai
+
+`flowvpnrelay.exe` (transport hysteria2-qua-WS, mở SOCKS5 TCP+UDP nội bộ) +
+`sing-box.exe` (TUN + `auto_route` + DNS, outbound = SOCKS tới relay) — hai tiến
+trình con do app .NET giám sát, tự rơi về đường WireGuard cũ nếu không lên được
+trong 20s. Binary nhúng vào `windows/assets/` (wintun.dll đã có sẵn); giấy phép ghi
+ở `windows/assets/THIRD_PARTY.md` (sing-box GPL-3.0 đã được chủ dự án duyệt).

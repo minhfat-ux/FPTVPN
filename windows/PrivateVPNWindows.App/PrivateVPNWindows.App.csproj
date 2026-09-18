@@ -43,6 +43,12 @@
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\wintun.dll')" />
     <None Include="..\assets\wireguard-go.exe" Link="wireguard-go.exe"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\wireguard-go.exe')" />
+    <!-- Đường "hysteria2 bọc trong WebSocket": flowvpnrelay.exe (SOCKS5 nội bộ) + sing-box.exe
+         (TUN/định tuyến). HysteriaRelayTunnel tìm chúng cạnh app (AppContext.BaseDirectory). -->
+    <None Include="..\assets\sing-box.exe" Link="sing-box.exe"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\sing-box.exe')" />
+    <None Include="..\assets\flowvpnrelay.exe" Link="flowvpnrelay.exe"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\flowvpnrelay.exe')" />
   </ItemGroup>
 
 </Project>

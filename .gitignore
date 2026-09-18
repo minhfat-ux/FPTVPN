@@ -81,3 +81,9 @@ windows/installer/publish/
 # thành gitlink (submodule) trỏ tới commit không có trên remote nào của repo này.
 # Muốn đổi app thì commit + push trong chính repo MeetFlowAI_Win.
 MeetFlowAI_Win/
+
+# Credential hysteria cho build nội bộ trên máy dev (KHÔNG commit).
+iOS/Hysteria.local.xcconfig
+
+# Framework hysteria2 cho Apple — build bằng tools/hysteria-apple/build.sh, KHÔNG commit binary.
+iOS/Frameworks/

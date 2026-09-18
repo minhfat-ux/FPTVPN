@@ -23,6 +23,24 @@
 
       <Border Classes="vpnCard">
         <StackPanel Spacing="10">
+          <TextBlock Text="Connection" Classes="vpnSectionTitle" />
+          <TextBlock Text="Transport" Classes="vpnFieldLabel" />
+          <!-- Thứ tự item PHẢI khớp thứ tự khai báo TransportPreference: code-behind đọc/ghi
+               theo index (SettingsView.axaml.cs). -->
+          <ComboBox Name="TransportCombo" Classes="vpnField">
+            <ComboBoxItem>Auto</ComboBoxItem>
+            <ComboBoxItem>WireGuard UDP</ComboBoxItem>
+            <ComboBoxItem>WebSocket Relay</ComboBoxItem>
+            <ComboBoxItem>Hysteria2 (chưa hỗ trợ)</ComboBoxItem>
+            <ComboBoxItem>Hysteria2 + sing-box (relay)</ComboBoxItem>
+          </ComboBox>
+          <TextBlock Name="TransportHintText" Classes="vpnSubtitle" TextWrapping="Wrap"
+                     Text="Auto thử đường Hysteria2-over-WebSocket (relay) trước, không lên thì tự rơi về WireGuard." />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="vpnCard">
+        <StackPanel Spacing="10">
           <TextBlock Text="Account" Classes="vpnSectionTitle" />
           <TextBlock Name="AccountText" Text="Not signed in." Classes="vpnSubtitle" TextWrapping="Wrap" />
           <Button Name="SignOutButton" Classes="vpnNav" Content="Sign Out" HorizontalAlignment="Left" />

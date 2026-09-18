@@ -17,6 +17,13 @@ public enum TransportPreference
 
     /// <summary>Hysteria2 (cần credential ngoài payload node — xem báo cáo).</summary>
     Hysteria,
+
+    /// <summary>
+    /// Hysteria2 bọc trong WebSocket + sing-box lo TUN/định tuyến (flowvpnrelay.exe +
+    /// sing-box.exe). Đây là đường đi được khi mạng chặn thẳng IP node — xem
+    /// <see cref="VpnFlow.Core.Tunnel.HysteriaRelayDefaults"/>.
+    /// </summary>
+    SingBoxHysteriaRelay,
 }
 
 /// <summary>

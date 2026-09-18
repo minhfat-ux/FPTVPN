@@ -1,14 +1,26 @@
 # Third-party binaries nhúng trong app Windows
 
-Hai file dưới đây được đóng gói kèm app (copy ra cạnh `PrivateVPNWindows.App.exe`)
-để app **tự lo tunnel WireGuard userspace**, người dùng không phải cài
-"WireGuard for Windows". Chúng KHÔNG được sinh ra lúc build .NET — xem
-`fetch-assets.sh` để tải/dựng lại.
+Bốn file dưới đây được đóng gói kèm app (copy ra cạnh `PrivateVPNWindows.App.exe`):
+
+- **`wintun.dll` + `wireguard-go.exe`** — app **tự lo tunnel WireGuard userspace**, người dùng
+  không phải cài "WireGuard for Windows".
+- **`flowvpnrelay.exe` + `sing-box.exe`** — đường **hysteria2 bọc trong WebSocket** (xem
+  `windows/PrivateVPNWindows.Core/Tunnel/HysteriaRelayTunnel.cs`): `flowvpnrelay` mở SOCKS5 nội
+  bộ đã đi qua relay WSS, `sing-box` nhận SOCKS5 đó làm outbound và lo TUN + định tuyến + DNS.
+
+Chúng KHÔNG được sinh ra lúc build .NET — xem `fetch-assets.sh` để tải/dựng lại (script bỏ qua
+file đã có và in sha256 của cả bốn file ở cuối).
 
 | File | Kích thước | SHA-256 |
 |---|---|---|
 | `wintun.dll` | 427 552 bytes | `e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce` |
 | `wireguard-go.exe` | 3 079 680 bytes | `fd257c7f42284af3d361547940c83bb61f786b8a9ef57e88e49b8a52f39ec2e9` |
+| `flowvpnrelay.exe` | 10 338 304 bytes | `7f344879c23afdff12a9d3fb2e87df240bef0a4a157a0148114b15a22dbde149` |
+| `sing-box.exe` | 81 883 648 bytes | `b838de45bd0b2e6ddbed1977e4745622f7dffab3b293807ff4c6b1b640fed909` |
+
+ⓘ `flowvpnrelay.exe` là bản build của CHÍNH chúng ta (mã nguồn trong repo:
+`tools/hysteria-relay/`), nên hash sẽ đổi mỗi lần build lại — cập nhật bảng này khi đổi.
+`sing-box.exe` là binary upstream tải nguyên bản, không sửa.
 
 ---
 
@@ -170,3 +182,140 @@ Go dùng để dựng: `go1.23.4 darwin/arm64` (đặt tại `.tools/go`, `go.mo
 `golang.org/x/net v0.39.0`, `golang.org/x/sys v0.32.0`,
 `golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2`,
 `gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c`.
+
+---
+
+## 3. flowvpnrelay.exe
+
+- **Là gì:** hysteria2 client (hysteria `app/v2.12.2`) + **một** thay đổi duy nhất của chúng ta:
+  thêm transport `wsrelay` để QUIC đi trong WebSocket. Bản CLI chính thức chỉ có transport UDP
+  (`udp`/`udphop`) nên không nối được vào relay WebSocket sau Cloudflare — đường duy nhất còn đi
+  được khi nhà mạng chặn thẳng IP node.
+- **Mã nguồn phần của VPNFlow:** `tools/hysteria-relay/runner.go` (client + SOCKS5 TCP/UDP) và
+  `tools/hysteria-relay/wsrelay.go` (`net.PacketConn` trên WebSocket; giao thức "1 binary WS
+  message = 1 UDP datagram", đúng giao thức relay phía server đang chạy).
+- **Cách dựng:** `TARGETS="windows/amd64" OUT_DIR=<workdir> bash tools/hysteria-relay/build.sh`
+  — script clone hysteria tag **`app/v2.12.2`** rồi COPY hai file trên vào checkout
+  (`app/flowvpnrelay/main.go`, `app/internal/wsrelay/wsrelay.go`); phần còn lại của hysteria
+  không bị sửa, nhờ vậy import được package `internal/...` của chính module đó.
+- **Dependency thêm vào bản build:** `github.com/gorilla/websocket v1.5.3` (dependency duy nhất).
+- **Go dùng để dựng:** `go1.26.6 darwin/arm64`, `CGO_ENABLED=0`, `-trimpath -ldflags "-s -w"`.
+- **Giấy phép:** MIT (© apernet) cho hysteria + BSD-3-Clause (© Gorilla WebSocket Authors) cho
+  `gorilla/websocket` + phần do VPNFlow viết. Nội dung hai giấy phép:
+
+```
+MIT License (hysteria — https://github.com/apernet/hysteria)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+```
+BSD 3-Clause License (gorilla/websocket — https://github.com/gorilla/websocket)
+
+Copyright (c) 2013 The Gorilla WebSocket Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+  Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+  Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+  Neither the name of the copyright holder nor the names of its contributors
+  may be used to endorse or promote products derived from this software
+  without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+---
+
+## 4. sing-box.exe
+
+- **Phiên bản:** sing-box **v1.14.1** (bản `windows-amd64`).
+- **Nguồn:** https://github.com/SagerNet/sing-box/releases/download/v1.14.1/sing-box-1.14.1-windows-amd64.zip
+  (mã nguồn tương ứng: tag `v1.14.1` của cùng repo).
+- **Lệnh lấy file:**
+  ```sh
+  curl -fsSL -o sing-box-1.14.1-windows-amd64.zip \
+    https://github.com/SagerNet/sing-box/releases/download/v1.14.1/sing-box-1.14.1-windows-amd64.zip
+  unzip sing-box-1.14.1-windows-amd64.zip
+  cp sing-box-1.14.1-windows-amd64/sing-box.exe windows/assets/sing-box.exe
+  ```
+- **Giấy phép:** **GPL-3.0-or-later** (© 2022 nekohasekai <contact-sagernet@sekai.icu>), kèm
+  điều khoản cấm dùng tên/ám chỉ liên hệ với ứng dụng gốc khi chưa được đồng ý. Nội dung license
+  đi kèm trong zip upstream:
+
+```
+Copyright (C) 2022 by nekohasekai <contact-sagernet@sekai.icu>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+In addition, no derivative work may use the name or imply association
+with this application without prior consent.
+```
+
+### Vì sao phân phối kèm một binary GPL là CÓ CHỦ ĐÍCH
+
+Đây không phải sơ suất cần "dọn" sau:
+
+1. **Quyết định của chủ dự án.** Chủ dự án đã duyệt dùng sing-box làm bộ TUN/định tuyến/DNS cho
+   bản Windows **kể cả khi biết nó là GPL-3.0** (xem `docs/CHINA_TRANSPORT_ROADMAP.md`).
+2. **Cách dùng tách tiến trình, không liên kết.** `sing-box.exe` được chạy như **tiến trình con
+   riêng**, giao tiếp qua SOCKS5 (TCP/UDP) trên loopback — không nhúng mã, không link tĩnh. Đây
+   là ranh giới rõ ràng giữa hai chương trình.
+3. **Nghĩa vụ GPL-3.0 đã được đáp ứng bằng cách công khai nguồn:** ta phát hành **binary nguyên
+   bản, không sửa**, kèm URL nguồn chính xác (tag `v1.14.1`) ở trên và bản license đầy đủ; bất kỳ
+   ai nhận bộ cài đều tải được mã nguồn tương ứng từ chính URL đó. Ta **không** dùng tên
+   "sing-box"/SagerNet để quảng bá sản phẩm (điều khoản "In addition…" ở trên).
+4. **Rủi ro còn lại, ghi rõ để không quên:** nếu sau này có yêu cầu pháp lý/phát hành (ví dụ bán
+   qua store có điều khoản cấm GPL), phương án thay thế đã có sẵn — dùng `flowvpnrelay.exe` +
+   WireGuard/TUN tự viết, hoặc tách sing-box thành gói tải riêng do người dùng tự cài. **Chưa**
+   làm vì chủ dự án đã chốt phương án hiện tại.
+
+### Ghi chú kỹ thuật
+
+- Bản `windows-amd64` **không** có `libcronet.dll` đi kèm: `objdump -p` cho thấy `sing-box.exe`
+  chỉ import tĩnh `kernel32.dll`, các DLL khác (nếu có) được `LoadLibrary` khi dùng. Kiểm chứng
+  lại `sing-box.exe version` trên máy Windows bằng `windows/installer/verify-relay.ps1`.
+- Cấu hình do `SingBoxConfigBuilder.BuildSingBoxConfig` sinh ra đã được kiểm bằng
+  `sing-box check -c` (v1.14.1), không lỗi.

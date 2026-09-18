@@ -3,9 +3,10 @@
   Đóng gói VPNFlow cho Windows thành 1 file cài 1-click (Inno Setup 6).
 
 .DESCRIPTION
-  1) kiểm tra binary tunnel (wintun.dll + wireguard-go.exe) đã có trong windows/assets
+  1) kiểm tra binary tunnel đã có trong windows/assets (wintun.dll, wireguard-go.exe,
+     flowvpnrelay.exe, sing-box.exe)
   2) `dotnet publish` bản self-contained win-x64 (khách không cần cài .NET)
-  3) kiểm tra output có đủ exe + wintun + wireguard-go
+  3) kiểm tra output có đủ exe + 4 binary tunnel
   4) gọi ISCC.exe để tạo windows\installer\out\VPNFlow-Setup-<version>.exe
 
 .EXAMPLE
@@ -13,6 +14,10 @@
   powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -Version 1.2.0
   powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -FrameworkDependent  # nhẹ hơn, máy khách phải có .NET 8 Desktop Runtime
   powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -SkipPublish          # chỉ build lại installer từ publish có sẵn
+
+.NOTES
+  Muốn kiểm tra RIÊNG đường hysteria2-over-WS trên máy này (trước khi mở app), chạy:
+    powershell -ExecutionPolicy Bypass -File windows\installer\verify-relay.ps1 -Password <HY_PASSWORD> -Obfs <HY_OBFS>
 #>
 [CmdletBinding()]
 param(
@@ -36,9 +41,11 @@ $appExe       = "PrivateVPNWindows.App.exe"
 
 function Step($m) { Write-Host "==> $m" -ForegroundColor Cyan }
 
-# 1) binary tunnel bắt buộc (nhúng sẵn để khách không phải cài WireGuard)
+# 1) binary tunnel bắt buộc: 2 file cho tunnel WireGuard userspace, 2 file cho đường
+# "hysteria2 bọc trong WebSocket" (flowvpnrelay = hysteria2-over-WS + SOCKS5, sing-box = TUN).
+# Thiếu bất kỳ file nào thì bộ cài vẫn tạo được nhưng đường tương ứng không chạy — chặn ở đây.
 Step "Kiểm tra binary tunnel trong windows\assets"
-foreach ($f in @("wintun.dll", "wireguard-go.exe")) {
+foreach ($f in @("wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe", "sing-box.exe")) {
   $p = Join-Path $assetsDir $f
   if (-not (Test-Path $p)) {
     throw "Thiếu windows\assets\$f. Chạy: bash windows/assets/fetch-assets.sh  (rồi chạy lại script này)"
@@ -59,7 +66,7 @@ if (-not $SkipPublish) {
 
 # 3) kiểm tra output
 Step "Kiểm tra output publish"
-foreach ($f in @($appExe, "wintun.dll", "wireguard-go.exe")) {
+foreach ($f in @($appExe, "wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe", "sing-box.exe")) {
   $p = Join-Path $publishDir $f
   if (-not (Test-Path $p)) { throw "Publish thiếu $f — kiểm tra lại bước publish/asset" }
 }

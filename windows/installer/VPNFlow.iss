@@ -2,7 +2,8 @@
 ;
 ; Vì sao Inno Setup: chỉ cần khách tải 1 file .exe, bấm Next là xong — không phải
 ; cài .NET, không phải cài WireGuard (bản app đã nhúng wintun.dll + wireguard-go.exe
-; chạy userspace, xem windows/assets/THIRD_PARTY.md).
+; chạy userspace, xem windows/assets/THIRD_PARTY.md), và cũng không phải cài thêm gì cho
+; đường "hysteria2 bọc trong WebSocket" (nhúng flowvpnrelay.exe + sing-box.exe).
 ;
 ; Build (trên máy Windows):
 ;   powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1
@@ -40,6 +41,14 @@
 #endif
 #if !FileExists(AddBackslash(SourceDir) + "PrivateVPNWindows.App.exe")
   #error Bo publish thieu PrivateVPNWindows.App.exe - chay lai dotnet publish
+#endif
+; Đường hysteria2-over-WS: app chạy 2 tiến trình con cạnh chính nó (AppContext.BaseDirectory),
+; thiếu file thì app vẫn mở nhưng đường relay không dựng được — chặn ngay ở đây.
+#if !FileExists(AddBackslash(SourceDir) + "flowvpnrelay.exe")
+  #error Bo publish thieu flowvpnrelay.exe - chay: bash windows/assets/fetch-assets.sh roi publish lai
+#endif
+#if !FileExists(AddBackslash(SourceDir) + "sing-box.exe")
+  #error Bo publish thieu sing-box.exe - chay: bash windows/assets/fetch-assets.sh roi publish lai
 #endif
 
 [Setup]
@@ -81,7 +90,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Toàn bộ output publish (self-contained: có sẵn .NET runtime, Avalonia, wintun.dll, wireguard-go.exe).
+; Toàn bộ output publish (self-contained: có sẵn .NET runtime, Avalonia, wintun.dll,
+; wireguard-go.exe, flowvpnrelay.exe, sing-box.exe).
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
@@ -169,8 +179,8 @@ begin
 end;
 
 // Kiểm tra SAU KHI CÀI — chạy trên MÁY KHÁCH, soi đúng thư mục cài đặt (ExpandConstant app).
-// Mục đích: nếu phần mềm diệt virus cách ly wintun.dll / wireguard-go.exe thì khách biết
-// ngay lý do, thay vì mở app rồi báo "không kết nối được".
+// Mục đích: nếu phần mềm diệt virus cách ly wintun.dll / wireguard-go.exe / flowvpnrelay.exe /
+// sing-box.exe thì khách biết ngay lý do, thay vì mở app rồi báo "không kết nối được".
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Missing: String;
@@ -187,6 +197,10 @@ begin
       Missing := Missing + '  - wintun.dll' + #13#10;
     if not FileExists(ExpandConstant('{app}\wireguard-go.exe')) then
       Missing := Missing + '  - wireguard-go.exe' + #13#10;
+    if not FileExists(ExpandConstant('{app}\flowvpnrelay.exe')) then
+      Missing := Missing + '  - flowvpnrelay.exe' + #13#10;
+    if not FileExists(ExpandConstant('{app}\sing-box.exe')) then
+      Missing := Missing + '  - sing-box.exe' + #13#10;
     if Missing <> '' then
       MsgBox('Cài đặt đã xong nhưng thiếu binary tunnel trong thư mục cài đặt:' + #13#10 +
              Missing + #13#10 +
