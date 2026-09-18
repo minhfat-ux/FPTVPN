@@ -135,13 +135,17 @@ object Config {
     /** Brutal congestion control (hysteria2): the client declares its real
      *  up/down bandwidth and the server paces to it, ignoring packet loss —
      *  this is what keeps speed usable on China mobile data. 0 = standard CC. */
-    // 0/0 = KHONG khai bao bang thong ⇒ hysteria dung BBR (tu do, thich ung theo mat goi).
-    // Vi sao bo khai bao (18/09/2026): Brutal CC gui dung theo so client khai, KHONG thich ung.
-    // Khai 20/100 Mbps trong khi data di dong TQ thuc te chi ~10-13 Mbps ⇒ client bom qua muc
-    // duong truyen chiu duoc ⇒ hang doi + mat goi ⇒ cham va treo. Do tren Windows: bo khai bao
-    // nhanh hon ~50%. Server cung da bat ignoreClientBandwidth nen so khai khong con tac dung gi.
-    const val HY_UP_KBPS = 0
-    const val HY_DOWN_KBPS = 0
+    // So khai bang thong = toc do Brutal CC se gui dung theo. Do tren may that (18/09/2026,
+    // server+client cung 1 may de loai bo moi yeu to mang):
+    //   khai 100/100 Mbps -> 10 MB/s   ✓
+    //   khong khai (0/0 = BBR) -> 0-0,5 MB/s  ✗ (ban hysteria nay BBR hong)
+    // ⇒ PHAI khai, va khai SAT bang thong that: khai cao hon duong truyen ⇒ nghen (do 5G: 13 Mbps
+    // that ma khai 100 => tut con 0,6 MB/s). Vi vay chia theo loai mang, xem applyUnderlyingNetwork().
+    const val HY_UP_KBPS = 20000
+    const val HY_DOWN_KBPS = 80000
+    /** Mang di dong (4G/5G) o Trung Quoc: thuc te 10-13 Mbps ⇒ khai sat de Brutal khong nghen. */
+    const val MOBILE_UP_KBPS = 8000
+    const val MOBILE_DOWN_KBPS = 12000
     /**
      * Brutal CC cho đường WS relay (khi IP node bị chặn). Đường này đi qua 2 chặng —
      * hạ tầng dùng chung (Tailscale Funnel/Cloudflare) rồi mới tới node — nên khai
@@ -151,8 +155,8 @@ object Config {
      */
     // Do thuc te tren Mac (18/09): duong Cloudflare dat 13,7 MB/s => khai 0,8/4 Mbps
     // la tu bop nghẽn. Server cung da bat ignoreClientBandwidth.
-    const val HY_RELAY_UP_KBPS = 0
-    const val HY_RELAY_DOWN_KBPS = 0
+    const val HY_RELAY_UP_KBPS = 10000
+    const val HY_RELAY_DOWN_KBPS = 30000
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)

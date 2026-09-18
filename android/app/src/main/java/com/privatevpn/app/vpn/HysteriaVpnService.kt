@@ -74,6 +74,8 @@ class HysteriaVpnService : VpnService() {
      * qua WS relay hạ xuống (xem wsRelayAttempt) vì đường đó đi qua 2 chặng.
      * Cùng kiểu với runHost: đổi quanh lời gọi rồi trả lại như cũ.
      */
+    /** Mang hien tai co phai di dong (metered) khong — dung de chon so khai bang thong. */
+    @Volatile private var meteredNow = true
     @Volatile private var attemptUpKbps = HY_UP_KBPS
     @Volatile private var attemptDownKbps = HY_DOWN_KBPS
 
@@ -421,8 +423,8 @@ class HysteriaVpnService : VpnService() {
         runHost = "127.0.0.1"
         // Đường này đi qua 2 chặng (hạ tầng dùng chung + node) nên brutal phải khai
         // thấp hơn đường trực tiếp, nếu không server pace theo số khai và tự gây nghẽn.
-        attemptUpKbps = HY_RELAY_UP_KBPS
-        attemptDownKbps = HY_RELAY_DOWN_KBPS
+        attemptUpKbps = if (meteredNow) MOBILE_UP_KBPS else HY_RELAY_UP_KBPS
+        attemptDownKbps = if (meteredNow) MOBILE_DOWN_KBPS else HY_RELAY_DOWN_KBPS
         return try {
             // Cổng phải là cổng BRIDGE đang nghe (127.0.0.1:<localPort>), không phải
             // cổng Hysteria phía server — Hysteria dial vào bridge, bridge mới đẩy
@@ -656,6 +658,12 @@ class HysteriaVpnService : VpnService() {
     private fun applyUnderlyingNetwork() {
         val net = networkMonitor?.underlyingNetwork()
         val label = net?.let { networkMonitor?.describe(it) } ?: "null"
+        // Brutal CC gui dung theo so khai ⇒ so khai phai sat bang thong that cua tung loai mang.
+        // Xem ghi chu o Config.HY_UP_KBPS (do 18/09: khai 100 Mbps tren 5G 13 Mbps lam tut con 0,6 MB/s).
+        val metered = label.contains("cell")
+        meteredNow = metered
+        attemptUpKbps = if (metered) MOBILE_UP_KBPS else HY_UP_KBPS
+        attemptDownKbps = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS
         val ok = runCatching {
             setUnderlyingNetworks(if (net != null) arrayOf(net) else null)
         }.getOrDefault(false)
@@ -1093,6 +1101,9 @@ class HysteriaVpnService : VpnService() {
         const val HY_HOST = com.privatevpn.app.Config.HY_SERVER
         val HY_PORTS = com.privatevpn.app.Config.HY_PORTS
         const val HY_UP_KBPS = com.privatevpn.app.Config.HY_UP_KBPS
+        // Mang di dong khai thap hon (Brutal gui dung theo so khai, khai cao hon duong truyen la nghen).
+        const val MOBILE_UP_KBPS = com.privatevpn.app.Config.MOBILE_UP_KBPS
+        const val MOBILE_DOWN_KBPS = com.privatevpn.app.Config.MOBILE_DOWN_KBPS
         const val HY_DOWN_KBPS = com.privatevpn.app.Config.HY_DOWN_KBPS
         /** Brutal CC hạ xuống cho đường WS relay (đi qua 2 chặng) — xem wsRelayAttempt. */
         const val HY_RELAY_UP_KBPS = com.privatevpn.app.Config.HY_RELAY_UP_KBPS
