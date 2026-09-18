@@ -296,6 +296,8 @@ async function tickBus(state) {
   }
   // Lần chạy đầu: bỏ qua lịch sử bus (giống cách bỏ qua sự kiện git cũ) để không đánh thức
   // hàng loạt vì tin cũ. Muốn xử lý lại từ đầu thì chạy `--replay-bus`.
+  // `baseline` = mốc đã xử lý; vòng lặp bên dưới PHẢI lọc theo nó (xem vá 2026-09-18).
+  let baseline = since;
   if (state.busSince === undefined && !args.includes("--replay-bus")) {
     // KHÔNG bỏ qua tất cả: máy vừa bật lại sau khi tắt vẫn phải xử lý tin gửi trong lúc tắt.
     // Chỉ bỏ qua tin CŨ HƠN sự kiện mới nhất trong sổ.
@@ -303,13 +305,21 @@ async function tickBus(state) {
     const all = payload?.messages ?? [];
     const stale = all.filter((message) => new Date(message.at ?? 0).getTime() <= newest);
     const fresh = all.filter((message) => new Date(message.at ?? 0).getTime() > newest);
-    state.busSince = stale.length ? Math.max(...stale.map((message) => message.id)) : 0;
+    baseline = stale.length ? Math.max(...stale.map((message) => message.id)) : 0;
+    state.busSince = baseline;
     log(`lần chạy đầu với connector: bỏ qua ${stale.length} tin cũ, xử lý ${fresh.length} tin mới hơn sổ`);
     saveState(state);
   }
   let woke = 0;
   for (const message of payload?.messages ?? []) {
     state.busSince = Math.max(Number(state.busSince ?? 0) || 0, message.id);
+    // Vá 2026-09-18 (bão đánh thức): vòng lặp cũ chạy CẢ những tin vừa bị coi là "cũ" ở trên, nên mỗi
+    // lần watcher khởi động lại là đánh thức cho toàn bộ lịch sử bus — đo thật: 2 watcher × 4 tin bus
+    // = 8 sự kiện `woken` và 8 phiên harness bật lên trong 1 phút.
+    if (Number(message.id) <= baseline) {
+      log(`bỏ qua tin bus cũ #${message.id} (${message.kind}) — không đánh thức`);
+      continue;
+    }
     log(`BUS #${message.id} ${message.from}→${message.to} [${message.kind}] ${message.title}`);
     if (!DRY) void alertHuman(`BUS #${message.id} · ${message.from}→${message.to} · ${message.kind}\n${message.title}${message.body ? `\n${message.body.slice(0, 300)}` : ""}`);
     if (!WAKE_KINDS.has(String(message.kind)) && !message.ref) continue;
