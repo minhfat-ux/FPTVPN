@@ -228,44 +228,6 @@ export function reportTasks(tasks, { now = Date.now(), limit = 10 } = {}) {
 }
 
 /**
- * Cắt tin dài thành nhiều mảnh vừa giới hạn Telegram (mặc định 3800 ký tự).
- *
- * Vì sao không dùng `text.match(/[\s\S]{1,3800}/g)`: cách đó cắt theo UTF-16 code unit nên có thể
- * **cắt đôi một emoji** — mảnh trước kết thúc bằng surrogate cao (\ud83d), mảnh sau mở đầu bằng
- * surrogate thấp. Telegram nhận surrogate lẻ ⇒ hiện ký tự vỡ (chữ "không ăn unicode") giữa tin.
- * Hàm này duyệt theo CODE POINT nên cặp surrogate luôn đi cùng nhau.
- *
- * Ưu tiên cắt ở ranh giới xuống dòng/khoảng trắng gần cuối (trong 20% cuối) để không vỡ từ.
- *
- * @param {string} text - nội dung cần gửi.
- * @param {number} [max] - số code unit tối đa mỗi mảnh.
- * @returns {string[]} các mảnh, mỗi mảnh <= max code unit.
- */
-export function chunkMessage(text, max = 3800) {
-  const value = String(text ?? "");
-  const limit = Number.isSafeInteger(max) && max > 0 ? max : 3800;
-  if (!value) return [""];
-
-  const out = [];
-  let buf = "";
-  for (const ch of value) {
-    if (buf.length + ch.length > limit) {
-      const cut = Math.max(buf.lastIndexOf("\n"), buf.lastIndexOf(" "));
-      if (cut > limit * 0.8) {
-        out.push(buf.slice(0, cut + 1));
-        buf = buf.slice(cut + 1);
-      } else {
-        out.push(buf);
-        buf = "";
-      }
-    }
-    buf += ch;
-  }
-  if (buf) out.push(buf);
-  return out;
-}
-
-/**
  * Timeout của client cho một lời gọi Telegram Bot API.
  *
  * `getUpdates` là long-poll: Telegram giữ kết nối tới `payload.timeout` giây rồi mới trả về
