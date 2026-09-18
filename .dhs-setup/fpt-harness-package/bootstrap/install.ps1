@@ -1,26 +1,30 @@
 <#
 .SYNOPSIS
-  FlowTech Harness — bootstrap tự cài MỌI thứ cho Windows, chạy 1 dòng lệnh.
+  FlowTech Harness - bootstrap tu cai MOI thu cho Windows, chay 1 dong lenh.
 
 .DESCRIPTION
-  Dán vào PowerShell (quyền user bình thường):
+  Dan vao PowerShell (quyen user binh thuong):
 
       irm https://meetflowai.site/dl/harness/install.ps1 | iex
 
-  Nó tự làm, theo thứ tự:
-    1) Node.js LTS (winget; nếu không có winget thì tải MSI từ nodejs.org)
+  No tu lam, theo thu tu:
+    1) Node.js LTS (winget; neu khong co winget thi tai MSI tu nodejs.org)
     2) DeepSeek Harness:  npm install -g @deepseek-ai/dsh
-    3) Python 3 (bước installer cài tiếp, qua winget)
-    4) Tải bộ cài đúng phiên bản mới nhất -> chạy installer (theme FlowVPN + branding FlowTech)
+    3) Python 3 (buoc installer cai tiep, qua winget)
+    4) Tai bo cai dung phien ban moi nhat -> chay installer (theme FlowVPN + branding FlowTech)
 
-  Bộ cài lấy từ latest.json (đọc kèm ?t=<epoch> để Cloudflare không trả bản cũ) và được
-  kiểm tra sha256 trước khi chạy.
+  Bo cai lay tu latest.json (doc kem ?t=<epoch> de Cloudflare khong tra ban cu) va duoc
+  kiem tra sha256 truoc khi chay.
+
+  LUU Y: file nay PHAI la ASCII thuan (khong dau tieng Viet). PowerShell 5.1 doc file .ps1
+  / phan hoi cua `irm` theo codepage ANSI khi khong co charset/BOM, nen ky tu UTF-8 da byte
+  (vi du dau gach dai U+2014) se bi bien thanh dau ngoac thong minh va lam vo chuoi -> loi parse.
 
 .PARAMETER BundleBase
-  Gốc chứa latest.json + zip (mặc định https://meetflowai.site/dl/harness).
+  Goc chua latest.json + zip (mac dinh https://meetflowai.site/dl/harness).
 
 .PARAMETER SkipPatch
-  Chỉ cài Node + DSH, không patch style.
+  Chi cai Node + DSH, khong patch style.
 #>
 [CmdletBinding()]
 param(
@@ -56,7 +60,7 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
     winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
     Update-Path
   } else {
-    Info "khong co winget — tai MSI Node.js LTS tu nodejs.org..."
+    Info "khong co winget - tai MSI Node.js LTS tu nodejs.org..."
     $ver = "v22.14.0"
     $msi = Join-Path $env:TEMP "node-lts-x64.msi"
     Invoke-WebRequest "https://nodejs.org/dist/$ver/node-$ver-x64.msi" -OutFile $msi -UseBasicParsing
@@ -95,7 +99,7 @@ $zip = Join-Path $env:TEMP $file
 Info "$BundleBase/$file"
 Invoke-WebRequest "$BundleBase/$file" -OutFile $zip -UseBasicParsing -TimeoutSec 300
 $gotSha = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-if ($gotSha -ne $wantSha) { throw "sha256 khong khop (mong doi $wantSha, nhan $gotSha) — thu lai" }
+if ($gotSha -ne $wantSha) { throw "sha256 khong khop (mong doi $wantSha, nhan $gotSha) - thu lai" }
 Ok "tai xong + sha256 khop ($($gotSha.Substring(0,12))...)"
 
 $dir = Join-Path $env:TEMP "flowvpn-harness"
@@ -106,9 +110,9 @@ Expand-Archive $zip $dir -Force
 Log "Buoc 4/4: ap style FlowVPN + branding FlowTech"
 $installer = Get-ChildItem $dir -Recurse -Filter "install-fpt-harness.ps1" | Select-Object -First 1
 if (-not $installer) { throw "Khong thay install-fpt-harness.ps1 trong bo cai" }
-$args = @("-ExecutionPolicy", "Bypass", "-File", $installer.FullName)
-if ($SkipPatch) { $args += "-SkipPatch" }
-& powershell @args
+$psArgs = @("-ExecutionPolicy", "Bypass", "-File", $installer.FullName)
+if ($SkipPatch) { $psArgs += "-SkipPatch" }
+& powershell @psArgs
 if ($LASTEXITCODE -ne 0) { throw "Installer tra loi (exit $LASTEXITCODE)" }
 
 Write-Host ""
