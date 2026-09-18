@@ -74,6 +74,47 @@ nền tảng Trung Quốc (小红书, 公众号…). Hai cách xử lý:
 2. **Dịch khi nhập**: thêm bước dịch sang tiếng Việt bằng chính provider đang cấu hình
    (chưa làm — nên làm nếu nhập nhiều).
 
+## 4b. Dịch sang tiếng Việt / tiếng Anh (đã làm)
+
+Skill Tencent viết bằng tiếng Trung; tên/mô tả phải là tiếng Việt thì người mua mới đọc được.
+Phần dịch dùng **chính provider đang cấu hình** (GLM/OpenRouter/DeepSeek), không gọi dịch vụ ngoài.
+
+```bash
+# qua CLI (máy chạy script KHÔNG cần key AI — server dịch hộ qua admin API)
+FBUDDY_ADMIN_TOKEN=… node ops/skillhub-import.mjs --slug powerpoint-pptx \
+  --translate vi,en --price-vnd 50000 --apply --base https://fbuddy.meetflowai.site/api
+```
+
+- Mỗi ngôn ngữ tốn **2 lượt gọi** (một lượt metadata dạng JSON, một lượt chỉ dẫn văn bản dài) —
+  gộp chung dễ bị model trả JSON hỏng hoặc cắt cụt.
+- **Bản tiếng Việt là bản ghi vào chợ** (thị trường chính); bản tiếng Anh nằm trong manifest
+  `--json-out` để dùng sau. DB hiện chỉ có **một** cột `instructions` — muốn bán song ngữ thật
+  thì cần thêm cột (việc tiếp theo, xem mục 6).
+- Model trả JSON hỏng ⇒ **giữ nguyên tên/mô tả gốc + cảnh báo**, chỉ dẫn vẫn được dịch.
+- Bản dịch dài hơn bản gốc >30% ⇒ có cảnh báo riêng, vì tiếng Việt thường dài hơn tiếng Trung
+  nên phần đã cắt vì trần 6.000 sẽ **bị cắt thêm**.
+- Route dịch trả **502** khi không dịch được ngôn ngữ nào (không trả 200 với bản rỗng, tránh
+  ghi vào chợ nội dung chưa dịch mà tưởng đã dịch) và **400** với ngôn ngữ không hỗ trợ.
+
+## 4c. Ô tìm + nhập trong control panel (đã làm)
+
+Cài đặt → Hệ thống → **"Nhập kỹ năng từ SkillHub (Tencent)"**:
+tìm theo từ khoá → **Xem trước** (tên, danh mục, độ dài chỉ dẫn, cảnh báo script/API key, nguồn)
+→ chọn **giá VND**, **trạng thái**, **ngôn ngữ dịch** → **Nhập vào chợ**.
+
+Bốn route admin đứng sau (server làm proxy nên khoá `X-API-Key` của SkillHub không lộ ra browser):
+
+| Route | Việc |
+|---|---|
+| `GET /api/admin/skillhub/search?q=&limit=&free=` | tìm trên SkillHub |
+| `GET /api/admin/skillhub/preview?slug=&priceVnd=` | ghép bản nháp + cảnh báo, chưa ghi gì |
+| `POST /api/admin/skillhub/translate` | dịch một prompt pack sang `vi`/`en` |
+| `POST /api/admin/skillhub/import` | lấy nội dung → (tuỳ chọn) dịch → ghi vào chợ (tạo mới hoặc cập nhật theo slug) |
+
+⚠️ Các route này chạy **trên server**, nên nếu server ở vùng IP bị SkillHub chặn thì ô tìm sẽ báo
+đúng câu lỗi kèm cách xử lý (`skillhub_unreachable`) — khi đó dùng CLI từ máy có đường sang TQ,
+hoặc trỏ `SKILLHUB_BASE_URL` qua relay.
+
 ## 5. Nguồn gốc & bản quyền
 
 - SkillHub là nền tảng cộng đồng: có skill `pricing_type: paid`, có skill của doanh nghiệp.
@@ -85,10 +126,12 @@ nền tảng Trung Quốc (小红书, 公众号…). Hai cách xử lý:
 
 ## 6. Việc nên làm tiếp (theo thứ tự giá trị)
 
-1. **Admin UI trong control panel**: ô tìm kiếm SkillHub + nút "Nhập" ngay trong
-   Cài đặt → Chợ kỹ năng, để không phải mở terminal mỗi lần nhập.
-2. **Bước dịch sang tiếng Việt** khi nhập (`--translate vi`) — quyết định lớn nhất về chất lượng.
-3. **Nhập một bộ chọn lọc lên production** (5–10 skill trung tính), đặt giá theo chợ hiện tại.
+1. ~~Admin UI trong control panel~~ — **đã làm** (mục 4c).
+2. ~~Bước dịch sang tiếng Việt~~ — **đã làm** (mục 4b).
+3. **Cột song ngữ trong DB** (`instructions_en`): hiện chỉ lưu được một ngôn ngữ; muốn bán
+   Việt + Anh cùng lúc thì phải thêm cột + cho người dùng chọn ngôn ngữ.
+4. **Nhập bộ chọn lọc lên production** theo 9 nhóm: marketing · bán hàng · tài chính · PPT ·
+   researcher · expert · giáo dục trẻ · giải toán · ngoại ngữ.
 4. Cân nhắc nâng trần chỉ dẫn **có kiểm soát** (ví dụ 12.000) sau khi đo lại chi phí credit/lượt.
 
 ## 7. Bẫy đã gặp khi làm

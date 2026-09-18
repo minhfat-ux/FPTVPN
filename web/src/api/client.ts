@@ -1,4 +1,7 @@
 import type {
+  SkillHubDraft,
+  SkillHubImportResult,
+  SkillHubSearchItem,
   AnalysisPayload,
   AppSettings,
   AuthSession,
@@ -350,6 +353,19 @@ export const api = {
   updateHubSkill: (id: string, body: Record<string, unknown>) =>
     request<{ skill: HubSkill }>("PATCH", `/admin/hub/${id}`, body),
   deleteHubSkill: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/hub/${id}`),
+  // ---- nhập kỹ năng từ Tencent SkillHub (admin) — server làm proxy, khoá không lộ ra browser
+  skillhubSearch: (q: string, limit = 12, free = true) =>
+    request<{ total: number; items: SkillHubSearchItem[] }>(
+      "GET",
+      `/admin/skillhub/search?q=${encodeURIComponent(q)}&limit=${limit}${free ? "&free=1" : ""}`,
+    ),
+  skillhubPreview: (slug: string, priceVnd: number) =>
+    request<{ draft: SkillHubDraft }>(
+      "GET",
+      `/admin/skillhub/preview?slug=${encodeURIComponent(slug)}&priceVnd=${priceVnd}`,
+    ),
+  skillhubImport: (body: { slug: string; priceVnd: number; state?: string; translate?: string[] }) =>
+    request<SkillHubImportResult>("POST", "/admin/skillhub/import", body),
   createUser: (body: { email: string; password: string; name?: string; role?: string }) =>
     request<{ user: User }>("POST", "/admin/users", body),
   deleteUser: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/users/${id}`),

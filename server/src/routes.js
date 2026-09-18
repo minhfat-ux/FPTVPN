@@ -89,6 +89,14 @@ import {
 } from "./skills/hub.js";
 import { listAllTools, refreshServer, testServerConfig } from "./mcp.js";
 import {
+  fetchSkillDraft,
+  getSkill as getSkillhubSkill,
+  readSkillInstructions,
+  searchSkills,
+  toHubDraft,
+} from "./skills/skillhub.js";
+import { translateSkill, TRANSLATION_TARGETS } from "./skills/translate.js";
+import {
   applyTransaction,
   pendingOrders,
   pollOnce,
@@ -1100,6 +1108,172 @@ export function createApiRouter() {
       const result = deleteHubSkill(req.params.id);
       audit(req.user.id, "hub.delete", req.params.id);
       res.json(result);
+    }),
+  );
+
+  // ------------------------------------------- chợ kỹ năng: nhập từ SkillHub
+
+  /**
+   * Tìm skill trên Tencent SkillHub. Đây là proxy phía server (khoá `X-API-Key` của
+   * SkillHub không được lộ ra trình duyệt) — và vì SkillHub chặn theo vùng IP, khi
+   * server không gọi được thì trả lỗi rõ ràng kèm cách xử lý, chứ không treo.
+   */
+  router.get(
+    "/admin/skillhub/search",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const keyword = String(req.query.q ?? "").trim();
+      const limit = Math.min(30, Math.max(1, Number(req.query.limit) || 12));
+      try {
+        const { total, skills } = await searchSkills({
+          keyword: keyword || undefined,
+          pageSize: limit,
+          sortBy: String(req.query.sortBy ?? "downloads"),
+          category: req.query.category ? String(req.query.category) : undefined,
+          free: req.query.free === "1" || req.query.free === "true",
+        });
+        res.json({ total, items: skills });
+      } catch (err) {
+        throw new ApiError(
+          502,
+          "skillhub_unreachable",
+          `Không gọi được SkillHub: ${err?.message ?? err}. Server có thể đang ở vùng IP bị chặn — ` +
+            "chạy `node ops/skillhub-import.mjs` từ máy có đường sang Trung Quốc rồi nhập qua API này.",
+        );
+      }
+    }),
+  );
+
+  /** Xem trước một skill: tên/mô tả/chỉ dẫn + cảnh báo (chưa ghi gì vào chợ). */
+  router.get(
+    "/admin/skillhub/preview",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const slug = String(req.query.slug ?? "").trim();
+      if (!slug) throw badRequest("Thiếu `slug`");
+      try {
+        const draft = await fetchSkillDraft(slug, { priceVnd: Number(req.query.priceVnd) || 0 });
+        res.json({ draft });
+      } catch (err) {
+        throw new ApiError(502, "skillhub_unreachable", `Không đọc được skill "${slug}": ${err?.message ?? err}`);
+      }
+    }),
+  );
+
+  /**
+   * Dịch một prompt pack sang ngôn ngữ khác bằng provider đang cấu hình.
+   * Tách riêng khỏi bước nhập để dùng được cả khi máy chạy script KHÔNG có key AI.
+   */
+  router.post(
+    "/admin/skillhub/translate",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const fields = req.body?.fields ?? {};
+      const targets = Array.isArray(req.body?.targets) ? req.body.targets : ["vi"];
+      const unknown = targets.filter((t) => !TRANSLATION_TARGETS[t]);
+      if (unknown.length) throw badRequest(`Ngôn ngữ không hỗ trợ: ${unknown.join(", ")}`);
+      if (!String(fields.instructions ?? "").trim() && !String(fields.name ?? "").trim()) {
+        throw badRequest("Không có nội dung nào để dịch");
+      }
+      try {
+        const result = await translateSkill(
+          {
+            name: String(fields.name ?? ""),
+            tagline: String(fields.tagline ?? ""),
+            description: String(fields.description ?? ""),
+            instructions: String(fields.instructions ?? ""),
+          },
+          { targets, concise: Boolean(req.body?.concise) },
+        );
+        // Không dịch được ngôn ngữ nào thì phải báo lỗi, đừng trả 200 với bản rỗng
+        // để nơi gọi lỡ ghi vào chợ nội dung chưa dịch mà tưởng đã dịch.
+        if (!Object.keys(result.translations).length) {
+          throw new ApiError(502, "translate_failed", `Không dịch được: ${result.warnings.join("; ") || "không rõ lý do"}`);
+        }
+        audit(req.user.id, "skillhub.translate", null, { targets, models: result.translations.vi?.model ?? null });
+        res.json(result);
+      } catch (err) {
+        throw new ApiError(502, "translate_failed", `Dịch không thành công: ${err?.message ?? err}`);
+      }
+    }),
+  );
+
+  /**
+   * Nhập (hoặc cập nhật) một skill SkillHub vào chợ chỉ bằng một lời gọi:
+   * lấy nội dung → (tuỳ chọn) dịch → ghi vào `hub_skills`.
+   * Slug giữ nguyên của SkillHub để lần nhập sau khớp đúng dòng cũ.
+   */
+  router.post(
+    "/admin/skillhub/import",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const slug = String(req.body?.slug ?? "").trim();
+      if (!slug) throw badRequest("Thiếu `slug`");
+      const priceVnd = Math.max(0, Math.trunc(Number(req.body?.priceVnd) || 0));
+      const targets = Array.isArray(req.body?.translate) ? req.body.translate.filter((t) => TRANSLATION_TARGETS[t]) : [];
+      const warnings = [];
+
+      let content;
+      try {
+        content = await readSkillInstructions(slug);
+      } catch (err) {
+        throw new ApiError(502, "skillhub_unreachable", `Không đọc được skill "${slug}": ${err?.message ?? err}`);
+      }
+      const detail = await getSkillhubSkill(slug);
+      let draft = toHubDraft({ skill: detail?.skill, content }, { priceVnd });
+
+      if (targets.length) {
+        if (!draft.instructions) {
+          warnings.push("skill không có chỉ dẫn nên bỏ qua bước dịch");
+        } else {
+          try {
+            const { translations, warnings: translateWarnings } = await translateSkill(
+              {
+                name: draft.name,
+                tagline: draft.tagline,
+                description: draft.description,
+                instructions: draft.instructions,
+              },
+              { targets },
+            );
+            warnings.push(...translateWarnings);
+            // Bản tiếng Việt là bản dùng để bán (thị trường chính); các bản khác trả về cho nơi gọi lưu lại.
+            const primary = translations.vi ?? translations[targets[0]];
+            if (primary) {
+              draft = {
+                ...draft,
+                name: primary.name,
+                tagline: primary.tagline,
+                description: primary.description,
+                instructions: primary.instructions,
+                translated: Object.fromEntries(
+                  Object.entries(translations).map(([lang, v]) => [lang, { name: v.name, tagline: v.tagline, description: v.description, model: v.model }]),
+                ),
+                translationWarnings: primary.warnings,
+              };
+            }
+          } catch (err) {
+            warnings.push(`dịch lỗi, giữ nguyên bản gốc: ${err?.message ?? err}`);
+          }
+        }
+      }
+
+      const existing = listHubSkills().find((item) => item.slug === draft.slug);
+      const payload = {
+        slug: draft.slug,
+        name: draft.name,
+        tagline: draft.tagline,
+        description: draft.description,
+        category: draft.category,
+        icon: draft.icon,
+        priceVnd: draft.priceVnd,
+        state: draft.state,
+        instructions: draft.instructions,
+        tools: draft.tools,
+      };
+      const skill = existing ? updateHubSkill(existing.id, payload) : createHubSkill(payload);
+      audit(req.user.id, "skillhub.import", skill.id, { slug, priceVnd, targets, updated: Boolean(existing) });
+      res.json({ skill, updated: Boolean(existing), warnings: [...warnings, ...(draft.warnings ?? [])], source: { slug, version: content.version } });
     }),
   );
 

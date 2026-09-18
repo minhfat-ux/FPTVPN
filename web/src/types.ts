@@ -460,6 +460,47 @@ export interface HubPurchaseResult {
   pricePaidVnd: number;
 }
 
+/** Một kết quả tìm trên Tencent SkillHub (rút gọn các trường cần cho UI). */
+export interface SkillHubSearchItem {
+  slug: string;
+  name?: string;
+  displayName?: string;
+  category?: string;
+  version?: string;
+  downloads?: number;
+  description?: string;
+  description_zh?: string;
+  labels?: Record<string, string> | null;
+}
+
+/** Bản nháp ghép từ SkillHub sang định dạng chợ kỹ năng (kèm cảnh báo). */
+export interface SkillHubDraft {
+  slug: string;
+  skillhubSlug: string;
+  name: string;
+  tagline: string;
+  description: string;
+  category: string;
+  icon: string;
+  priceVnd: number;
+  state: HubSkill["state"];
+  instructions: string;
+  instructionsTruncated: boolean;
+  originalLength: number;
+  version: string | null;
+  tools: string[];
+  warnings: string[];
+  needsApiKey: boolean;
+  downloads: number;
+}
+
+export interface SkillHubImportResult {
+  skill: HubSkill;
+  updated: boolean;
+  warnings: string[];
+  source: { slug: string; version: string | null };
+}
+
 export interface HubListing {
   items: HubSkill[];
   categories: string[];

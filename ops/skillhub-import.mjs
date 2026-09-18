@@ -29,7 +29,7 @@ import path from "node:path";
 import { fetchSkillDraft, searchSkills, skillhubConfig, listCategories } from "../server/src/skills/skillhub.js";
 
 const args = process.argv.slice(2);
-const VALUE_OPTIONS = new Set(["search", "slug", "limit", "price-vnd", "state", "category", "base", "token-file", "json-out", "page"]);
+const VALUE_OPTIONS = new Set(["search", "slug", "limit", "price-vnd", "state", "category", "base", "token-file", "json-out", "page", "translate"]);
 const options = new Map();
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index];
@@ -59,6 +59,11 @@ const STATE = flag("state");
 const CATEGORY = flag("category");
 const LIMIT = Math.min(100, Math.max(1, Number(flag("limit")) || 10));
 const JSON_OUT = flag("json-out");
+/** Ngôn ngữ cần dịch, ví dụ `--translate vi,en`. Dịch do SERVER làm (server có key AI). */
+const TRANSLATE = String(flag("translate", "") ?? "")
+  .split(",")
+  .map((part) => part.trim().toLowerCase())
+  .filter(Boolean);
 const API_BASE = String(
   flag("base", process.env.FBUDDY_API_BASE ?? process.env.FLOWGPT_API_BASE ?? "http://127.0.0.1:7790/api"),
 ).replace(/\/+$/, "");
@@ -157,6 +162,22 @@ async function admin(method, apiPath, body, token) {
   return text ? JSON.parse(text) : null;
 }
 
+/**
+ * Nhờ SERVER dịch prompt pack (server giữ key AI; máy chạy script không cần key).
+ * Trả `{ vi: {...}, en: {...} }` — ngôn ngữ nào lỗi thì thiếu ở đó, kèm cảnh báo.
+ */
+async function translateViaServer(fields) {
+  const response = await fetch(`${API_BASE}/admin/skillhub/translate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ fields, targets: TRANSLATE }),
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+  if (!response.ok) throw new Error(payload?.error?.message ?? `HTTP ${response.status}`);
+  return payload;
+}
+
 /** Chỉ gửi đúng các trường chợ hiểu — phần thừa (warnings, nguồn…) ở lại log/manifest. */
 function hubPayload(draft) {
   return {
@@ -173,7 +194,8 @@ function hubPayload(draft) {
   };
 }
 
-const token = APPLY ? readToken() : null;
+// Dịch cũng đi qua admin API nên cần token ngay cả khi chỉ chạy thử.
+const token = APPLY || TRANSLATE.length ? readToken() : null;
 let existing = [];
 if (APPLY) {
   try {
@@ -204,6 +226,34 @@ for (const slug of slugs) {
     else info("công cụ: (không có — skill thuần chỉ dẫn)");
     if (draft.version) info(`nguồn: skillhub.cn/${draft.skillhubSlug}@${draft.version} · ${draft.downloads.toLocaleString("vi-VN")} lượt tải`);
     for (const warning of draft.warnings) console.log(`    \u001b[33m!\u001b[0m ${warning}`);
+
+    // Dịch trước khi ghi (nếu được yêu cầu). Bản tiếng Việt là bản bán trong chợ.
+    if (TRANSLATE.length && draft.instructions) {
+      try {
+        const { translations, warnings: translateWarnings } = await translateViaServer({
+          name: draft.name,
+          tagline: draft.tagline,
+          description: draft.description,
+          instructions: draft.instructions,
+        });
+        for (const warning of translateWarnings ?? []) info(`dịch: ${warning}`);
+        const primary = translations.vi ?? translations[TRANSLATE[0]];
+        if (primary) {
+          draft.translations = translations;
+          draft.sourceLanguage = { instructions: draft.instructions.length };
+          draft.name = primary.name;
+          draft.tagline = primary.tagline;
+          draft.description = primary.description;
+          draft.instructions = primary.instructions;
+          info(`đã dịch sang ${Object.keys(translations).join(", ")} bằng ${primary.model} · chỉ dẫn ${draft.instructions.length.toLocaleString("vi-VN")} ký tự`);
+          for (const warning of primary.warnings ?? []) console.log(`    \u001b[33m!\u001b[0m ${warning}`);
+        } else {
+          info("không nhận được bản dịch nào — giữ nguyên bản gốc");
+        }
+      } catch (error) {
+        bad(`dịch lỗi (giữ nguyên bản gốc): ${error.message}`);
+      }
+    }
 
     if (APPLY) {
       const payload = hubPayload(draft);
