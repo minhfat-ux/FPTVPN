@@ -266,3 +266,21 @@ phải **trùng** file build trên Mac, và `/v1/app-version?platform=android` t
 - **Bypass cho WeChat CHƯA xong** — cần làm tiếp (mục tiêu: WeChat không đi qua VPN / đi đúng đường nội địa để không bị chậm hoặc lỗi đăng nhập).
 - **Yêu cầu tối thiểu cho mọi bản client: xem video streaming phải mượt** (băng thông duy trì liên tục, không chỉ burst ngắn) ⇒ đây là tiêu chí nghiệm thu cho phần port transport bên dưới.
 - **Kiến trúc transport iOS/macOS/Windows**: hiện dùng WireGuard chồng trên TCP/WS relay ⇒ đo trên máy thật chỉ đạt **0,007–2 MB/s** và có lúc blackhole toàn bộ traffic (mất mạng). Đường ĐÚNG đã chứng minh là **hysteria2 qua Cloudflare** (app Android: **12–16 MB/s**). Việc port dùng **sing-box/libbox (XCframework)** cho Apple và bản Windows dùng cùng core — xem `docs/SINGBOX_INTEGRATION_PLAN.md`.
+
+## Cập nhật 19/09/2026 (đêm) — số đo thật + hướng chốt
+
+Chi tiết đầy đủ (bảng số đo, cạm bẫy đo lường, việc còn lại):
+[`docs/TRANSPORT_SPEED_2026-09-19.md`](TRANSPORT_SPEED_2026-09-19.md). Tóm tắt:
+
+- **Số "raw" trước đây sai** vì Mac đang bật Tailscale exit node ⇒ "mạng thật" đo
+  lại được **122 Mbps** (15,3 MB/s). Khi đo phải `tailscale set --exit-node=`.
+- Đường nhanh nhất đã kiểm chứng lại: hysteria2 **bọc WebSocket qua Cloudflare**
+  (`/relay/vn2hy`) = **29,9 Mbps** (3,73 MB/s) khi đường khỏe; khi đường khách yếu
+  thì tunnel đạt 83–100% raw. WireGuard-over-relay vẫn chỉ 0,007–2 MB/s.
+- Đã viết transport dùng chung `tools/hysteria-relay/` (MIT hysteria + `wsrelay.go`
+  tự viết, **không sửa upstream**) và **sửa bug relay**: `wsrelay.js` trên node-1 +
+  node-2 cắt WebSocket sau 10 phút **bất kể có traffic** ⇒ mọi phiên streaming dài
+  bị đứt giữa chừng; nay timer được làm mới theo traffic.
+- Kiến trúc chốt: transport hysteria2-qua-WS + **sing-box** lo TUN/định tuyến/DNS
+  (chủ dự án đã duyệt GPL-3.0) — `Libbox.xcframework` v1.14.1 đã build được cho
+  iOS-device / iOS-simulator / macOS.

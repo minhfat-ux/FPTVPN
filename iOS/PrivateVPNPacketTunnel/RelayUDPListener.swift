@@ -91,6 +91,13 @@ final class RelayUDPListener: @unchecked Sendable {
                 socklen_t(MemoryLayout<timeval>.size)
             )
 
+            // Buffer lớn: socket này là đích WireGuard ghi vào (127.0.0.1:<port>). Mặc định
+            // macOS chỉ ~64KB nên khi burst (tải liên tục) gói bị nghẽn/drop ngay tại đây ⇒
+            // trần thực tế chỉ ~10–20 Mbps dù đường Cloudflare chịu được >100 Mbps.
+            var bufSize: Int32 = 8 * 1024 * 1024
+            _ = setsockopt(udp, SOL_SOCKET, SO_RCVBUF, &bufSize, socklen_t(MemoryLayout<Int32>.size))
+            _ = setsockopt(udp, SOL_SOCKET, SO_SNDBUF, &bufSize, socklen_t(MemoryLayout<Int32>.size))
+
             var address = sockaddr_in()
             address.sin_family = sa_family_t(AF_INET)
             address.sin_port = preferredPort.bigEndian

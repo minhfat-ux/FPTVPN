@@ -28,7 +28,9 @@ final class WSRelayClient: @unchecked Sendable {
     private static let pingInterval: TimeInterval = 20
     private static let minBackoff: TimeInterval = 1
     /// Trần số gói chờ trong hàng đợi WS (vượt thì bỏ gói như UDP).
-    private static let maxSendInflight = 512
+    /// Trần gói chờ trong hàng đợi WS. 512 gói ≈ 600KB in-flight ⇒ với RTT ~100ms qua
+    /// Cloudflare chỉ đạt ~6 MB/s lý thuyết. Nâng lên 4096 để không tự chặn băng thông.
+    private static let maxSendInflight = 4096
     private static let maxBackoff: TimeInterval = 15
     /// Nhịp log số frame trong 20 giây đầu (mỗi 5s một lần) để chẩn đoán được đường WS.
     private static let frameLogInterval: TimeInterval = 5
@@ -149,7 +151,11 @@ final class WSRelayClient: @unchecked Sendable {
                 // chỉ cần chặn khi hàng đợi quá dài (tương đương UDP drop khi nghẽn).
                 let inflight = self.sendInflight.withLock { $0 }
                 if inflight >= WSRelayClient.maxSendInflight {
-                    self.noteDropped()
+                    // Hàng đợi đầy: CHỜ một gói gửi xong rồi mới đọc gói tiếp (backpressure),
+                    // TUYỆT ĐỐI không vứt gói. Vứt gói ở đây làm WireGuard mất gói liên tục
+                    // ⇒ handshake/keepalive hỏng dần ⇒ "càng chạy càng chậm" (đo trên iPad).
+                    do { try await link.send(datagram); self.noteSent(datagram.count) }
+                    catch { self.noteDropped() }
                     continue
                 }
                 self.sendInflight.withLock { $0 += 1 }
