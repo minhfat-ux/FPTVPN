@@ -1,0 +1,10 @@
+# FPT Harness — pin the directory picker to the in-app browse interaction so
+# remote clients (phone/other devices) can pick a workspace without a
+# host-side native dialog.
+- id: directory-picker
+  disabled: true
+- insert:
+    - id: directory-picker-browse
+      name: '@deepseek-ai/dsh-host-directory-picker-browse'
+    - id: directory-picker-surface
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'

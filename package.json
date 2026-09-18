@@ -1,0 +1,26 @@
+{
+  "name": "flowvpn-harness",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Cai DeepSeek Harness roi ap style FlowVPN + branding FlowTech (Windows/macOS) bang mot dong lenh.",
+  "type": "module",
+  "bin": {
+    "flowvpn-harness": "cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "README.md",
+    "windows/",
+    "mac/",
+    "profile/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minhfat-ux/FPTVPN.git",
+    "directory": ""
+  }
+}
