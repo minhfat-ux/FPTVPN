@@ -442,8 +442,59 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
             }
         }
 
+        // MTU: lệnh `netsh interface ipv4 set subinterface` KHÔNG có tác dụng với adapter Wintun
+        // (interface không nằm trong bảng subinterface ⇒ netsh trả 0 nhưng MTU vẫn 65535).
+        // Đo thật 18/09/2026: MTU 65535 + path chỉ chở ~1390 byte ⇒ TCP trong tunnel phân mảnh,
+        // tốc độ sụp còn vài Mbps dù ping mất 0%. Vì vậy đặt lại bằng CIM rồi ĐỌC LẠI để xác nhận.
+        await EnsureMtuAsync(tunnelName, config.Mtu ?? WireGuardConfig.DefaultMtu, cancellationToken)
+            .ConfigureAwait(false);
+
         // Tunnel chỉ định tuyến IPv4: chặn IPv6 để IP thật không rò ra ngoài qua IPv6.
         await BlockIpv6Async(tunnelName, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Đặt MTU cho interface tunnel bằng CIM (Set-NetIPInterface) và xác nhận lại giá trị thật.
+    /// Không ném lỗi nếu không áp được — chỉ ghi WARN kèm MTU hiện tại để log còn chẩn đoán được.
+    /// </summary>
+    private async Task EnsureMtuAsync(string tunnelName, int mtu, CancellationToken cancellationToken)
+    {
+        if (mtu <= 0)
+        {
+            return;
+        }
+
+        var setScript =
+            $"try {{ Set-NetIPInterface -InterfaceAlias '{tunnelName}' -AddressFamily IPv4 -NlMtuBytes {mtu} -ErrorAction Stop }} catch {{ }}";
+        await RunProcessAsync(
+            "powershell",
+            $"-NoProfile -NonInteractive -Command \"{setScript}\"",
+            cancellationToken).ConfigureAwait(false);
+
+        var getScript = $"(Get-NetAdapter -Name '{tunnelName}' -ErrorAction SilentlyContinue).MtuSize";
+        var getResult = await RunProcessAsync(
+            "powershell",
+            $"-NoProfile -NonInteractive -Command \"{getScript}\"",
+            cancellationToken).ConfigureAwait(false);
+        var getExit = getResult.ExitCode;
+        var getOut = getResult.StdOut;
+
+        var actualText = getOut.Trim();
+        if (getExit == 0 && int.TryParse(actualText, out var actual))
+        {
+            if (actual == mtu)
+            {
+                _log.Info($"wintun: MTU interface = {actual} (đã đặt đúng)");
+            }
+            else
+            {
+                _log.Warn($"wintun: KHÔNG đặt được MTU {mtu} (hiện tại {actual}) — gói lớn có thể bị phân mảnh");
+            }
+        }
+        else
+        {
+            _log.Warn($"wintun: không đọc lại được MTU (kết quả: '{actualText}')");
+        }
     }
 
     /// <summary>
