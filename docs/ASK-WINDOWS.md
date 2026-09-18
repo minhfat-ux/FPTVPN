@@ -10,7 +10,7 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 |---|---|---|---|
 | `T-20260918-01` | verified | Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng  | `-` |
 | `T-20260918-02` | sent | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `AGENT_NAME=WIN node ops/task.mjs ack T-20260918-02 --push` |
-| `T-20260918-03` | created | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `chưa giao — chạy task.mjs send` |
+| `T-20260918-03` | sent | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `AGENT_NAME=WIN node ops/task.mjs ack T-20260918-03 --push` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->
