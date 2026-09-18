@@ -4,6 +4,7 @@ import {
   Brain,
   FileSpreadsheet,
   Image as ImageIcon,
+  Laptop,
   MessageSquarePlus,
   Moon,
   MoreHorizontal,
@@ -26,7 +27,7 @@ import { CreditsBadge } from "./CreditsBadge";
 import { ProfileMenu } from "./ProfileMenu";
 import type { Conversation, SkillId } from "../types";
 
-export type View = "chat" | "studio" | "hub" | "topup" | "settings";
+export type View = "chat" | "studio" | "hub" | "topup" | "settings" | "desktop";
 
 const SKILL_ICONS: Record<SkillId, JSX.Element> = {
   auto: <Brain size={15} />,
@@ -187,7 +188,7 @@ export function Sidebar({
         <div className="sidebar-head">
           <div className="brand grow">
             <span className="brand-mark">
-              <img src="/brand-mark.png?v=culi1" alt="FlowTech" />
+              <img src="/brand-mark.png?v=culi2" alt="FlowTech" />
             </span>
             <span className="brand-text">
               <span className="brand-word">{meta?.appName ?? "fBuddy"}</span>
@@ -241,6 +242,10 @@ export function Sidebar({
           <button className={`nav-item${view === "topup" ? " active" : ""}`} onClick={() => onView("topup")} type="button">
             <span className="nav-icon"><Wallet size={16} /></span>
             <span className="nav-label">{t("shell.sidebar.topup")}</span>
+          </button>
+          <button className={`nav-item${view === "desktop" ? " active" : ""}`} onClick={() => onView("desktop")} type="button">
+            <span className="nav-icon"><Laptop size={16} /></span>
+            <span className="nav-label">{t("shell.sidebar.desktop")}</span>
           </button>
           {user?.isAdmin && (
             <button className={`nav-item${view === "settings" ? " active" : ""}`} onClick={() => onView("settings")} type="button">

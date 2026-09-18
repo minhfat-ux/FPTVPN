@@ -340,6 +340,40 @@ export const api = {
       { tokens },
     ),
 
+  // ---- bản Windows (backend riêng `flowdesk`; app Windows không giữ key nhà cung cấp)
+  desktopStatus: () =>
+    request<{
+      configured: boolean;
+      healthy: boolean;
+      healthError: string | null;
+      entitled: boolean;
+      paidOrder: { id: string; paidAt: string | null; packageName: string | null } | null;
+      activations: {
+        id: string;
+        userId: string;
+        deviceLabel: string | null;
+        activatedAt: string;
+        lastSeenAt: string;
+        revokedAt: string | null;
+      }[];
+      downloadUrl: string;
+      guideUrl: string;
+    }>("GET", "/desktop/status"),
+  desktopCode: () =>
+    request<{
+      code: string;
+      expiresAt: string | null;
+      emailed: boolean;
+      mailReason: string | null;
+      downloadUrl: string;
+    }>("POST", "/desktop/code", {}),
+  revokeDesktopDevice: (activationId: string) =>
+    request<{ ok: boolean; activation: { id: string; revokedAt: string | null } }>(
+      "POST",
+      `/desktop/activations/${activationId}/revoke`,
+      {},
+    ),
+
   // ---- skill hub (marketplace, paid with tokens)
   hub: () => request<HubListing>("GET", "/hub"),
   hubSkill: (id: string) => request<{ skill: HubSkill; balance: number }>("GET", `/hub/${id}`),

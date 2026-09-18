@@ -130,9 +130,9 @@ gửi email cho khách.
 ## Trạng thái
 
 - [x] §3.6.1 Service + đọc quyền từ đơn `paid` + bảng activation + `/health` + test
+- [x] §3.6.2 Email tự động khi đơn `paid` + trang xem lại mã **không cần đăng nhập**
+      + view `?view=desktop` trong web app (lấy mã, xem/thu hồi thiết bị)
 - [x] §3.6.3 WS proxy Soniox + `/summary` (key ở server, hạn mức, che key)
-- [~] §3.6.2 Email tự động + trang xem lại mã: **xong phía fBuddy + trang công khai**;
-      còn lại view `?view=desktop` trong web app
 - [x] §3.6.4 App WPF bỏ key, dùng mã kích hoạt (build sạch + smoke 9/9 mục)
 - [ ] §3.6.5 Deploy thật + một phiên đầu-cuối (cần key Soniox/OpenRouter **riêng** cho
       bản Windows và bản ghi DNS `desk`)

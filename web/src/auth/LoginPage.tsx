@@ -118,7 +118,7 @@ export function LoginPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-logo">
-          <img src="/brand-mark.png?v=culi1" alt="FlowTech" width={44} height={44} style={{ display: "block" }} />
+          <img src="/brand-mark.png?v=culi2" alt="FlowTech" width={44} height={44} style={{ display: "block" }} />
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>
               <span className="brand-word">fBuddy</span>

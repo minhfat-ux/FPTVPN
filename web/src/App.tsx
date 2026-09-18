@@ -12,12 +12,19 @@ import { StudioPage } from "./studio/StudioPage";
 import { SettingsPage } from "./settings/SettingsPage";
 import { SkillHubPage } from "./hub/SkillHubPage";
 import { TopupPage } from "./topup/TopupPage";
+import { DesktopPage } from "./desktop/DesktopPage";
 
 /** Initial view, so the server's `?view=topup` link opens this page directly. */
 function initialView(): View {
   try {
     const requested = new URLSearchParams(window.location.search).get("view");
-    if (requested === "topup" || requested === "hub" || requested === "studio" || requested === "chat") {
+    if (
+      requested === "topup" ||
+      requested === "hub" ||
+      requested === "studio" ||
+      requested === "chat" ||
+      requested === "desktop"
+    ) {
       return requested;
     }
   } catch {
@@ -45,6 +52,9 @@ export function App() {
     }
     if (view === "topup") {
       return { title: t("shell.view.topup.title"), subtitle: t("shell.view.topup.subtitle") };
+    }
+    if (view === "desktop") {
+      return { title: t("shell.view.desktop.title"), subtitle: t("shell.view.desktop.subtitle") };
     }
     if (view === "settings") {
       return { title: t("shell.view.settings.title"), subtitle: t("shell.view.settings.subtitle") };
@@ -145,6 +155,7 @@ export function App() {
         {view === "studio" && <StudioPage />}
         {view === "hub" && <SkillHubPage />}
         {view === "topup" && <TopupPage onOpenHub={() => setView("hub")} />}
+        {view === "desktop" && <DesktopPage onOpenTopup={() => setView("topup")} />}
         {view === "settings" && <SettingsPage />}
       </div>
 

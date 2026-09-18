@@ -41,7 +41,12 @@ const fakeDesk = http.createServer((req, res) => {
       return json(200, { ok: true, service: "flowdesk", entitlementSource: { available: true } });
     }
     if (url.pathname === "/v1/desktop/activations" && req.method === "GET") {
-      return json(200, { ok: true, activations: [{ id: "act_gia_lap", userId: url.searchParams.get("userId"), revokedAt: null }] });
+      return json(200, { ok: true, activations: [{ id: "act_gia_lap", userId: url.searchParams.get("userId"), deviceLabel: "Máy giả lập", activatedAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), revokedAt: null }] });
+    }
+    const revokeMatch = /^\/v1\/desktop\/activations\/([^/]+)\/revoke$/.exec(url.pathname);
+    if (revokeMatch && req.method === "POST") {
+      if (entry.adminToken !== DESK_ADMIN_TOKEN) return json(401, { error: "Token admin không hợp lệ", code: "bad_admin_token" });
+      return json(200, { ok: true, activation: { id: decodeURIComponent(revokeMatch[1]), revokedAt: new Date().toISOString() } });
     }
     if (url.pathname === "/v1/desktop/invitations" && req.method === "POST") {
       if (entry.adminToken !== DESK_ADMIN_TOKEN) return json(401, { error: "Token admin không hợp lệ", code: "bad_admin_token" });
@@ -177,6 +182,24 @@ test("bấm 'lấy mã' trên trang công khai ⇒ phát mã mới và hiện ng
   assert.match(html, /FBW-\d{4}-\d{4}-\d{4}/);
   assert.equal(received.length, before + 1);
   assert.equal(received[received.length - 1].body.reason, "public_link");
+});
+
+test("thu hồi thiết bị: chỉ thu hồi được thiết bị của chính mình", async () => {
+  const ok = await api("POST", "/desktop/activations/act_gia_lap/revoke", {}, admin.token);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.activation.id, "act_gia_lap");
+
+  // Thiết bị không nằm trong danh sách của mình ⇒ 404 (không tin id client gửi lên).
+  await assert.rejects(
+    () => api("POST", "/desktop/activations/act_cua_nguoi_khac/revoke", {}, admin.token),
+    (err) => err.status === 404,
+  );
+
+  // Chưa đăng nhập ⇒ 401.
+  await assert.rejects(
+    () => api("POST", "/desktop/activations/act_gia_lap/revoke", {}),
+    (err) => err.status === 401,
+  );
 });
 
 test("flowdesk chết: trạng thái báo lỗi, /desktop/code trả 503, nhưng xác nhận thanh toán VẪN xong", async () => {

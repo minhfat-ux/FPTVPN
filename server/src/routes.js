@@ -94,6 +94,7 @@ import {
   escapeHtml,
   issueAndEmailDesktopCode,
   reissueFormHtml,
+  revokeDesktopActivation,
   verifyActivationLink,
 } from "./desktop.js";
 import { listAllTools, refreshServer, testServerConfig } from "./mcp.js";
@@ -1235,6 +1236,26 @@ export function createApiRouter() {
         mailReason: result.mailReason ?? null,
         downloadUrl: WINDOWS_DOWNLOAD_URL,
       });
+    }),
+  );
+
+  /**
+   * Thu hồi một thiết bị đã kích hoạt. Chỉ được thu hồi thiết bị CỦA CHÍNH MÌNH —
+   * danh sách lấy thẳng từ flowdesk nên không tin id do client gửi lên.
+   */
+  router.post(
+    "/desktop/activations/:id/revoke",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const status = await desktopStatusFor({ user: req.user });
+      const owned = (status.activations ?? []).some((device) => device.id === req.params.id);
+      if (!owned) throw notFound("Không tìm thấy thiết bị của bạn");
+      const result = await revokeDesktopActivation({ activationId: req.params.id, reason: "user_request" });
+      if (!result.ok) {
+        throw new ApiError(503, result.error ?? "desktop_unavailable", "Chưa thu hồi được thiết bị");
+      }
+      audit(req.user.id, "desktop.revoke", req.params.id);
+      res.json({ ok: true, activation: result.activation });
     }),
   );
 

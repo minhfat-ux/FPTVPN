@@ -32,7 +32,7 @@ export function SettingsPage() {
     <div className="page">
       <div className="page-inner settings-page">
         <div className="settings-head">
-          <img src="/brand-mark.png?v=culi1" alt="" />
+          <img src="/brand-mark.png?v=culi2" alt="" />
           <div>
             <div className="settings-title">{t("settings.page.title")}</div>
             <div className="card-desc">{t("settings.page.subtitle")}</div>

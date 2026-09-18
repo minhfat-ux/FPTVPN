@@ -152,7 +152,7 @@ export function MessageItem({
   return (
     <div className={`msg ${isUser ? "msg-user" : "msg-assistant"}`}>
       <div className="msg-avatar">
-        {isUser ? <UserIcon size={15} /> : <img className="msg-avatar-img" src="/brand-mark.png?v=culi1" alt="" />}
+        {isUser ? <UserIcon size={15} /> : <img className="msg-avatar-img" src="/brand-mark.png?v=culi2" alt="" />}
       </div>
       <div className="msg-body">
         <div className="msg-meta">
@@ -224,7 +224,7 @@ export function StreamingMessage({
   return (
     <div className="msg msg-assistant">
       <div className="msg-avatar">
-        <img className="msg-avatar-img" src="/brand-mark.png?v=culi1" alt="" />
+        <img className="msg-avatar-img" src="/brand-mark.png?v=culi2" alt="" />
       </div>
       <div className="msg-body">
         <div className="msg-meta">

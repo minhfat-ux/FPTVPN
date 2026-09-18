@@ -220,13 +220,15 @@ host **`desk.meetflowai.site`** — tất cả đọc từ env nên đổi tên 
 | Hook khi đơn thành `paid` (chạy nền, không phá luồng cộng credit) | `server/src/topup.js` + `server/src/desktop.js` | `server/test/desktop.test.js` — có ca "flowdesk chết nhưng thanh toán vẫn xong" |
 | Email mã kích hoạt | `server/src/mailer.js` → `sendDesktopActivation()` | `server/test/desktop.test.js` |
 | Trang xem lại mã **không cần đăng nhập** (link ký HMAC 30 ngày) | `GET /api/desktop?u=&t=`, `POST /api/desktop/code`, `GET /api/desktop/status` | `server/test/desktop.test.js` |
+| View **`?view=desktop`** trong web app + thu hồi thiết bị của chính mình | `web/src/desktop/DesktopPage.tsx`, `App.tsx`, `components/Sidebar.tsx`, `api/client.ts`, i18n `shell.ts` (vi/en/zh) | `POST /api/desktop/activations/:id/revoke` có test; `tsc --noEmit` sạch; view có trong bundle đã build |
 | Cài đặt tự động | `deploy/flowdesk.service`, `deploy/flowdesk-remote-setup.sh`, `deploy/deploy.ps1 -WithDesk` | chưa chạy thật (mục 5) |
 
 Chạy test (Windows trong sandbox DSH — `node --test` bị chặn spawn tiến trình con):
 
 ```bash
 node --test --test-isolation=none desk/test/*.test.js          # 56/56
-node --test --test-isolation=none server/test/desktop.test.js  # 8/8
+node --test --test-isolation=none server/test/desktop.test.js  # 9/9
+npx --prefix web tsc --noEmit -p web                           # sạch (0 lỗi)
 
 # App Windows (C#) — smoke thật, cần service flowdesk đang chạy:
 #   DESK_SONIOX_WS trỏ vào một Soniox giả, rồi:
@@ -241,8 +243,10 @@ Còn thiếu để khách dùng được thật:
    cho bản Windows), thêm DNS `desk`, rồi `.\deploy\deploy.ps1 -WithDesk`.
    Nhớ thêm `FBUDDY_DESK_URL` + `FBUDDY_DESK_ADMIN_TOKEN` vào `/etc/fbuddy/fbuddy.env`
    rồi restart fbuddy, nếu không fBuddy sẽ không phát mã khi đơn thành `paid`.
-3. **View `?view=desktop`** trong web app (đã có trang công khai từ email; view SPA dùng
-   `GET /api/desktop/status` + `POST /api/desktop/code` — nhớ i18n đủ 3 thứ tiếng).
+3. ~~**View `?view=desktop`** trong web app~~ — **xong 2026-09-18 chiều**: `web/src/desktop/DesktopPage.tsx`
+   (tải app, lấy mã kích hoạt, danh sách thiết bị + thu hồi), vào từ sidebar "Bản Windows" hoặc
+   `?view=desktop`, i18n đủ vi/en/zh, route thu hồi `POST /api/desktop/activations/:id/revoke`
+   (chỉ thiết bị của chính mình — có test). **Chờ deploy** mới lên sóng.
 4. Lỗ bảo mật `/tmp-key` (§1) **vẫn đang mở** — không sửa được từ repo này.
 
 ### 3.8 §3.6.4 — app WPF đã bỏ key, dùng mã kích hoạt (2026-09-18 chiều)
