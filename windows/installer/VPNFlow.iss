@@ -89,10 +89,85 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
+[InstallDelete]
+; Cài đè là UPDATE, không tạo app thứ hai: xoá sạch file cũ trong thư mục cài đặt trước khi copy.
+; (Dữ liệu người dùng nằm ở %APPDATA%\VPNFlow nên KHÔNG bị ảnh hưởng.)
+Type: filesandordirs; Name: "{app}"
+
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+// Bản cũ từng được cài với AppId/tên khác (PrivateVPN / FlowVPN / FlowTech …) nên Windows coi là
+// app riêng ⇒ khách thấy 2 app. Trước khi cài, tìm các mục đó trong registry và gỡ sạch.
+const
+  OwnUninstallKey = '{8C1F2E64-6B7A-4E8D-9C31-2F5A7D4B0E11}_is1';
+
+function IsLegacyBrand(const DisplayName: String): Boolean;
+begin
+  Result :=
+    (Pos('VPNFlow', DisplayName) > 0) or
+    (Pos('PrivateVPN', DisplayName) > 0) or
+    (Pos('FlowVPN', DisplayName) > 0) or
+    (Pos('FlowTech', DisplayName) > 0) or
+    (Pos('FPT Harness', DisplayName) > 0);
+end;
+
+procedure RemoveLegacyUninstallEntry(const RootKey: Integer; const Parent, SubKey: String);
+var
+  DisplayName, Uninstall, Loc, Quoted: String;
+  ResultCode: Integer;
+  Full: String;
+begin
+  Full := Parent + '\' + SubKey;
+  if not RegQueryStringValue(RootKey, Full, 'DisplayName', DisplayName) then
+    Exit;
+  if not IsLegacyBrand(DisplayName) then
+    Exit;
+  if CompareText(SubKey, OwnUninstallKey) = 0 then
+    Exit;   // chính bản này — để Inno tự nâng cấp
+
+  // 1) gỡ im lặng bản cũ (nếu có uninstaller)
+  if RegQueryStringValue(RootKey, Full, 'UninstallString', Uninstall) then
+  begin
+    Quoted := RemoveQuotes(Uninstall);
+    if FileExists(Quoted) then
+      Exec(Quoted, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE,
+           ewWaitUntilTerminated, ResultCode);
+  end;
+
+  // 2) dọn thư mục cài cũ còn sót (khác thư mục đang cài)
+  if RegQueryStringValue(RootKey, Full, 'InstallLocation', Loc) then
+  begin
+    Loc := RemoveBackslashUnlessRoot(Loc);
+    if (Loc <> '') and (CompareText(Loc, ExpandConstant('{app}')) <> 0) and DirExists(Loc) then
+      DelTree(Loc, True, True, True);
+  end;
+
+  // 3) xoá luôn mục registry cũ để "Apps & features" không còn 2 dòng
+  RegDeleteKeyIncludingSubkeys(RootKey, Full);
+end;
+
+procedure RemoveLegacyInstalls();
+var
+  Names: TArrayOfString;
+  i: Integer;
+  Parent: String;
+begin
+  Parent := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall';
+  if RegGetSubkeyNames(HKLM, Parent, Names) then
+    for i := 0 to GetArrayLength(Names) - 1 do
+      RemoveLegacyUninstallEntry(HKLM, Parent, Names[i]);
+  Parent := 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall';
+  if RegGetSubkeyNames(HKLM, Parent, Names) then
+    for i := 0 to GetArrayLength(Names) - 1 do
+      RemoveLegacyUninstallEntry(HKLM, Parent, Names[i]);
+  Parent := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall';
+  if RegGetSubkeyNames(HKCU, Parent, Names) then
+    for i := 0 to GetArrayLength(Names) - 1 do
+      RemoveLegacyUninstallEntry(HKCU, Parent, Names[i]);
+end;
+
 // Kiểm tra SAU KHI CÀI — chạy trên MÁY KHÁCH, soi đúng thư mục cài đặt (ExpandConstant app).
 // Mục đích: nếu phần mềm diệt virus cách ly wintun.dll / wireguard-go.exe thì khách biết
 // ngay lý do, thay vì mở app rồi báo "không kết nối được".
@@ -100,6 +175,11 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   Missing: String;
 begin
+  if CurStep = ssInstall then
+  begin
+    RemoveLegacyInstalls();
+  end;
+
   if CurStep = ssPostInstall then
   begin
     Missing := '';
