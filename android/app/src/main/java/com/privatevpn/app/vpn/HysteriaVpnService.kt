@@ -350,6 +350,10 @@ class HysteriaVpnService : VpnService() {
      */
     private fun wsRelayAttempt(): Int {
         if (stopping) return 1
+        // Đường WS cần thời gian mở cầu + bắt tay WG bên trong, dài hơn hẳn đường trực tiếp.
+        // Phải ARM NGAY tại đây: nếu để watchdog 4s của lượt trực tiếp trước còn hiệu lực,
+        // nó sẽ Mobile.stop() giữa lúc WS vừa mở -> app quay vòng "connecting" mãi.
+        armAttemptBudget(WS_OPEN_WAIT_MS + WS_ATTEMPT_UP_BUDGET_MS)
         // Relay phải là của CHÍNH node đang dùng. `runHost` ở đây vẫn là host node
         // (nó chỉ bị đổi thành 127.0.0.1 bên dưới), nên tra theo nó.
         val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
@@ -852,7 +856,7 @@ class HysteriaVpnService : VpnService() {
             val socket = java.net.Socket()
             try {
                 protect(socket)
-                socket.connect(java.net.InetSocketAddress(runHost, Config.RELAY_PORT), 2500)
+                socket.connect(java.net.InetSocketAddress(runHost, Config.RELAY_PORT), 1000)
                 ok = true
             } finally {
                 runCatching { socket.close() }
@@ -1012,17 +1016,19 @@ class HysteriaVpnService : VpnService() {
          * Trần thời gian bắt tay của MỘT đường trực tiếp. Đường trực tiếp khi thông thì
          * lên trong <1s; quá ngần này nghĩa là cổng/IP đó không tới được.
          */
-        const val ATTEMPT_UP_BUDGET_MS = 4_000L
+        const val ATTEMPT_UP_BUDGET_MS = 2_500L
         /**
          * Trần cho đường WS relay: phải đi qua 2 chặng nên handshake chậm hơn thật, cắt
          * sớm sẽ bỏ mất đúng đường duy nhất còn sống khi IP node bị chặn.
          */
         const val WS_ATTEMPT_UP_BUDGET_MS = 15_000L
+        /** Trần thời gian chờ mở cầu WS (đi 2 chặng + TLS tới Cloudflare). */
+        const val WS_OPEN_WAIT_MS = 15_000L
         /**
          * TCP connect tới relay. 2500ms là lãng phí: khi IP node bị chặn thì connect
          * không bao giờ xong, còn khi tới được thì RTT từ TQ chỉ vài chục ms.
          */
-        const val TCP_CONNECT_TIMEOUT_MS = 5000
+        const val TCP_CONNECT_TIMEOUT_MS = 2000
         const val RETRY_BACKOFF_START_MS = 3000L
         const val RETRY_BACKOFF_MAX_MS = 30000L
         /** Pause after a transport teardown so the Go client releases its socket. */

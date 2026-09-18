@@ -125,13 +125,15 @@ object Config {
     // TCP relay trước UDP: mạng nào block UDP (GFW, corporate NAT) vẫn qua TCP.
     // Relay node1: TCP <-> UDP 127.0.0.1:8443 (wgrelay.js); app probe từng cổng.
     const val HY_TCP_RELAY_HOST = "103.173.155.50"
-    val HY_TCP_RELAY_PORTS = intArrayOf(8443, 9445)
-    val HY_PORTS = intArrayOf(8443, 28443, 54443)
+    // Chi 8443: cac cong con lai da go khoi server (18/09/2026) — thu them chi lam
+    // moi vong "connecting" dai them ~5s ma khong co co hoi thanh cong nao.
+    val HY_TCP_RELAY_PORTS = intArrayOf(8443)
+    val HY_PORTS = intArrayOf(8443)
     /** Brutal congestion control (hysteria2): the client declares its real
      *  up/down bandwidth and the server paces to it, ignoring packet loss —
      *  this is what keeps speed usable on China mobile data. 0 = standard CC. */
-    const val HY_UP_KBPS = 2000
-    const val HY_DOWN_KBPS = 20000
+    const val HY_UP_KBPS = 20000
+    const val HY_DOWN_KBPS = 100000
     /**
      * Brutal CC cho đường WS relay (khi IP node bị chặn). Đường này đi qua 2 chặng —
      * hạ tầng dùng chung (Tailscale Funnel/Cloudflare) rồi mới tới node — nên khai
@@ -139,8 +141,10 @@ object Config {
      * khai, gói bị dồn ở chặng giữa và độ trễ tăng vọt. Số dưới đây là mức khởi điểm
      * bảo thủ, chỉnh lại theo số đo thật trên thiết bị.
      */
-    const val HY_RELAY_UP_KBPS = 800
-    const val HY_RELAY_DOWN_KBPS = 4000
+    // Do thuc te tren Mac (18/09): duong Cloudflare dat 13,7 MB/s => khai 0,8/4 Mbps
+    // la tu bop nghẽn. Server cung da bat ignoreClientBandwidth.
+    const val HY_RELAY_UP_KBPS = 20000
+    const val HY_RELAY_DOWN_KBPS = 100000
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)
