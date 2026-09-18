@@ -141,10 +141,72 @@ function writeEvent(id, event) {
  * `non-fast-forward`. Cách chắc ăn: nếu đẩy thẳng thất bại thì chép `ops/tasks/` sang một
  * worktree tạm của `origin/flowgpt`, commit ở đó rồi push — KHÔNG đụng tới cây đang làm việc.
  */
+/**
+ * Cầu nối sang kênh mà phía Windows đã tự dựng: `docs/ASK-WINDOWS.md`.
+ *
+ * Họ poll kênh riêng của họ (file này) chứ không nhất thiết poll `ops/tasks/`. Nên mỗi lần sổ thay
+ * đổi, ta SINH LẠI một khối trong file đó (giữa hai mốc AUTO-TASKS) để việc hiện ra đúng chỗ họ nhìn.
+ * Chỉ ghi trong khoảng giữa hai mốc — nội dung do người viết bên ngoài không bị đụng.
+ */
+const ASK_DOC = path.join("docs", "ASK-WINDOWS.md");
+const ASK_START = "<!-- AUTO-TASKS:START (do ops/task.mjs sinh, dung sua tay) -->";
+const ASK_END = "<!-- AUTO-TASKS:END -->";
+
+function refreshAskDoc() {
+  if (!fs.existsSync(ASK_DOC)) return null;
+  const rows = [];
+  for (const id of localIds()) {
+    const state = fold(eventsOf(id));
+    const task = state.task ?? {};
+    const who = String(task.to ?? "").toUpperCase();
+    const hints = {
+      sent: `AGENT_NAME=${who} node ops/task.mjs ack ${id} --push`,
+      reopened: `AGENT_NAME=${who} node ops/task.mjs ack ${id} --push   # làm lại`,
+      acked: `node ops/task.mjs progress ${id} --note "…" --push`,
+      in_progress: `node ops/task.mjs done ${id} --evidence "commit=…, cmd=…, kết quả=…" --push`,
+      blocked: "bên giao cần gỡ vướng",
+      done: "chờ bên giao nghiệm thu",
+      created: "chưa giao — chạy task.mjs send",
+    };
+    rows.push(`| \`${id}\` | ${state.status} | ${String(task.title ?? "").slice(0, 70)} | \`${hints[state.status] ?? "-"}\` |`);
+  }
+  const block = [
+    ASK_START,
+    "",
+    "## Việc đang chờ (tự sinh từ sổ giao việc — ĐỪNG sửa tay)",
+    "",
+    "Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`](TASK-PROTOCOL.md).",
+    "",
+    "| id | trạng thái | việc | lệnh tiếp theo |",
+    "|---|---|---|---|",
+    ...(rows.length ? rows : ["| — | — | không có việc nào đang mở | — |"]),
+    "",
+    ASK_END,
+  ].join("\n");
+  let text = fs.readFileSync(ASK_DOC, "utf8");
+  if (text.includes(ASK_START) && text.includes(ASK_END)) {
+    text = text.replace(new RegExp(`${ASK_START}[\\s\\S]*?${ASK_END}`), block);
+  } else {
+    // Chèn ngay dưới tiêu đề H1 để nằm ở chỗ dễ thấy nhất khi người/agent đọc file.
+    const lines = text.split("\n");
+    const titleAt = lines.findIndex((line) => line.startsWith("# "));
+    if (titleAt >= 0) {
+      lines.splice(titleAt + 1, 0, "", block, "");
+      text = lines.join("\n");
+    } else {
+      text = `${block}\n\n${text.trimEnd()}\n`;
+    }
+  }
+  fs.writeFileSync(ASK_DOC, text.endsWith("\n") ? text : `${text}\n`);
+  return ASK_DOC;
+}
+
 function pushLedger(id, message) {
   const subject = `${message} [task ${id}]`;
-  git("add", TASKS_DIR);
-  git("commit", "-m", subject, "--", TASKS_DIR);
+  const doc = refreshAskDoc();
+  if (doc) console.log(`  cập nhật khối "việc đang chờ" trong ${doc}`);
+  git("add", TASKS_DIR, ...(doc ? [doc] : []));
+  git("commit", "-m", subject, "--", TASKS_DIR, ...(doc ? [doc] : []));
   const direct = git("push", "origin", "HEAD:flowgpt");
   if (!direct.startsWith("!git")) return { commit: "cây chính", pushed: direct };
 
@@ -339,6 +401,9 @@ if (command === "new") {
     }
     console.log(`${mark} ${row.id}  [${row.state.status}]  ${task.from}→${task.to}  ${String(task.title).slice(0, 60)}${overdue}${silentHint}`);
   }
+} else if (command === "refresh") {
+  const doc = refreshAskDoc();
+  console.log(doc ? `đã cập nhật ${doc}` : "không thấy docs/ASK-WINDOWS.md");
 } else if (command === "push") {
   const { commit, pushed } = pushLedger(idArg ?? "ledger", opt("message", "task: cập nhật sổ giao việc"));
   console.log(`git: ${commit}\npush: ${pushed}`);
@@ -376,6 +441,7 @@ if (command === "new") {
       "  done <id> --evidence …        báo xong (BẮT BUỘC có bằng chứng)",
       "  verify <id> --result pass|fail  bên giao nghiệm thu",
       "  show <id> | list [--all] | sync",
+      "  refresh                       cập nhật khối việc đang chờ trong docs/ASK-WINDOWS.md",
     ].join("\n"),
   );
 }

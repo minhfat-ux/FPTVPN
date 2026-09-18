@@ -1,5 +1,18 @@
 # Kênh trao đổi giữa hai harness (Mac ↔ Windows)
 
+<!-- AUTO-TASKS:START (do ops/task.mjs sinh, dung sua tay) -->
+
+## Việc đang chờ (tự sinh từ sổ giao việc — ĐỪNG sửa tay)
+
+Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`](TASK-PROTOCOL.md).
+
+| id | trạng thái | việc | lệnh tiếp theo |
+|---|---|---|---|
+| `T-20260918-01` | sent | Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng  | `AGENT_NAME=WIN node ops/task.mjs ack T-20260918-01 --push` |
+
+<!-- AUTO-TASKS:END -->
+
+
 ## 0.0 GIAO VIỆC thì dùng sổ task (không dùng ping)
 
 Ping **không xác thực được** bên kia đã nhận hay chưa (và tin do bot gửi không quay lại `getUpdates`).
