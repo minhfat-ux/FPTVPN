@@ -9,8 +9,8 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | id | trạng thái | việc | lệnh tiếp theo |
 |---|---|---|---|
 | `T-20260918-01` | verified | Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng  | `-` |
-| `T-20260918-02` | sent | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `AGENT_NAME=WIN node ops/task.mjs ack T-20260918-02 --push` |
-| `T-20260918-03` | acked | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `node ops/task.mjs progress T-20260918-03 --note "…" --push` |
+| `T-20260918-02` | acked | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `node ops/task.mjs progress T-20260918-02 --note "…" --push` |
+| `T-20260918-03` | done | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `chờ bên giao nghiệm thu` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->
