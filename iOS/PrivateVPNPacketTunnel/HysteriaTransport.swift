@@ -154,7 +154,7 @@ final class HysteriaTransport: @unchecked Sendable {
 
         let candidates = relayCandidates(for: options)
         var lastError: Error = TransportError.relayNotStarted("không có relay URL nào để thử")
-        for (index, relayURL) in candidates.enumerated() {
+        for relayURL in candidates {
             do {
                 try attempt(relayURL: relayURL, options: options, tunnelFd: tunnelFd)
                 return
@@ -378,10 +378,29 @@ final class HysteriaTransport: @unchecked Sendable {
     ///
     /// Không chặn đường gói, không cần quyền đặc biệt. Đọc hỏng (sysctl bị chặn, chưa có tên
     /// utun) ⇒ trả nil, watchdog lùi về frame của relay — KHÔNG coi là "tunnel chết".
-    static func utunPacketCounters(fd: Int32) -> (toGo: Int, fromGo: Int, ifname: String)? {
+    static func utunPacketCounters(fd: Int32) -> UtunCounters? {
         guard let ifname = utunInterfaceName(fd: fd) else { return nil }
         guard let counters = interfacePacketCounters(ifname: ifname) else { return nil }
-        return (toGo: counters.out, fromGo: counters.in, ifname: ifname)
+        return UtunCounters(
+            toGo: counters.out,
+            fromGo: counters.in,
+            toGoBytes: counters.outBytes,
+            fromGoBytes: counters.inBytes,
+            ifname: ifname
+        )
+    }
+
+    /// Bộ đếm gói + BYTE của interface utun. Byte cần cho việc khai băng thông động
+    /// (`HysteriaBandwidthControl`): số khai cho Brutal CC phải sát băng thông thật, mà
+    /// gói thì không suy ra được byte (kích thước gói thay đổi theo tải).
+    struct UtunCounters {
+        var toGo: Int
+        var fromGo: Int
+        /// Byte MÁY đưa vào tunnel (`ifi_obytes`).
+        var toGoBytes: Int
+        /// Byte tunnel trả về MÁY (`ifi_ibytes`).
+        var fromGoBytes: Int
+        var ifname: String
     }
 
     /// `NET_RT_IFLIST2` = 6 và `RTM_IFINFO2` = 0x12 nằm trong `<net/route.h>`, header này
@@ -390,7 +409,9 @@ final class HysteriaTransport: @unchecked Sendable {
     private static let rtmIfinfo2: UInt8 = 0x12
 
     /// Đọc `if_msghdr2` của ĐÚNG interface `ifname` từ `sysctl(NET_RT_IFLIST2)`.
-    private static func interfacePacketCounters(ifname: String) -> (in: Int, out: Int)? {
+    private static func interfacePacketCounters(
+        ifname: String
+    ) -> (in: Int, out: Int, inBytes: Int, outBytes: Int)? {
         let index = if_nametoindex(ifname)
         guard index != 0 else { return nil }
         var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, netRtIflist2, 0]
@@ -411,7 +432,9 @@ final class HysteriaTransport: @unchecked Sendable {
             if header.ifm_type == rtmIfinfo2, header.ifm_index == index {
                 return (
                     in: Int(header.ifm_data.ifi_ipackets),
-                    out: Int(header.ifm_data.ifi_opackets)
+                    out: Int(header.ifm_data.ifi_opackets),
+                    inBytes: Int(header.ifm_data.ifi_ibytes),
+                    outBytes: Int(header.ifm_data.ifi_obytes)
                 )
             }
             offset += messageLength

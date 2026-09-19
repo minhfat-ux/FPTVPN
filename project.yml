@@ -123,6 +123,8 @@ targets:
       # không còn nằm trong target nào.
       - path: iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
       - path: iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
+      # Khai băng thông động cho Brutal CC (đo → nhớ theo mạng → ramp): xem chú thích đầu file.
+      - path: iOS/PrivateVPNPacketTunnel/HysteriaBandwidthControl.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
@@ -305,6 +307,7 @@ targets:
       # WireGuard vào lại qua đường include.
       - path: iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
       - path: iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
+      - path: iOS/PrivateVPNPacketTunnel/HysteriaBandwidthControl.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift

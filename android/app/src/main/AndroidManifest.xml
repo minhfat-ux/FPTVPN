@@ -3,6 +3,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+      Cần cho cơ chế khai băng thông động: WifiInfo.linkSpeed + RSSI là trần vật lý của
+      Wi-Fi (xem BandwidthMemory.wifiCeilingDownKbps). Đây là quyền THƯỜNG (không hỏi người
+      dùng, không phải quyền vị trí) và KHÔNG dùng để đọc SSID hay vị trí.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />

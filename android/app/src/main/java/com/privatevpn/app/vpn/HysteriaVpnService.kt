@@ -88,6 +88,26 @@ class HysteriaVpnService : VpnService() {
     @Volatile private var attemptDownKbps = HY_DOWN_KBPS
 
     /**
+     * Số khai ĐỘNG của mạng hiện tại (có thể theo số đo thật) + lý do + khoá mạng — xem
+     * BandwidthMemory. Phải giữ thành field vì (a) đường WS relay đọc lại để hạ số khai
+     * xuống mức 2 chặng, (b) dòng log `bw:` phải in đúng con số đã truyền vào client Go.
+     */
+    @Volatile private var bwUpKbps = HY_UP_KBPS
+    @Volatile private var bwDownKbps = HY_DOWN_KBPS
+    @Volatile private var bwReason = BandwidthPolicy.REASON_PROFILE
+    @Volatile private var bwKey = ""
+    @Volatile private var bwDisplay = "?"
+    @Volatile private var bwMeasuredKbps = 0
+    @Volatile private var bwCeilKbps = 0
+    /** Mạng đã đo trong phiên này: mỗi mạng chỉ đo một lần, không đo lại mỗi lần dựng transport. */
+    @Volatile private var bwProbedKey: String? = null
+    /**
+     * Nhớ tốc độ theo mạng + phép đo qua tunnel. Tạo muộn (trong onStartCommand) vì field
+     * initializer của Service chạy trước khi Context được gắn.
+     */
+    private var bandwidth: BandwidthMemory? = null
+
+    /**
      * Token của lượt thử đang chạy. Timer trần thời gian của lượt cũ thấy token đổi
      * thì tự thoát, nên không cần giữ tham chiếu Thread để huỷ.
      */
@@ -115,6 +135,7 @@ class HysteriaVpnService : VpnService() {
         // the instrumentation for "connected on hotel WiFi, walked outside, no
         // internet until reconnect".
         DiagnosticsLog.init(this)
+        if (bandwidth == null) bandwidth = BandwidthMemory(this)
         if (networkMonitor == null) {
             // The listener is what fixes the "connected on WiFi, walked outside, no
             // internet" bug: a transport rebuild is started the moment Android moves
@@ -440,6 +461,13 @@ class HysteriaVpnService : VpnService() {
         // thấp hơn đường trực tiếp, nếu không server pace theo số khai và tự gây nghẽn.
         attemptUpKbps = if (meteredNow) MOBILE_UP_KBPS else HY_RELAY_UP_KBPS
         attemptDownKbps = if (meteredNow) MOBILE_DOWN_KBPS else HY_RELAY_DOWN_KBPS
+        // Có SỐ ĐO (hoặc trần vật lý) cho mạng này thì lấy số đó làm trần của đường relay:
+        // phép đo đi qua chính tunnel nên đã tính cả chi phí 2 chặng, còn min() bảo đảm
+        // không bao giờ khai cao hơn mức relay đang chạy tốt.
+        if (bwReason == BandwidthPolicy.REASON_MEMORY || bwReason == BandwidthPolicy.REASON_CLAMP) {
+            attemptUpKbps = minOf(attemptUpKbps, bwUpKbps)
+            attemptDownKbps = minOf(attemptDownKbps, bwDownKbps)
+        }
         return try {
             // Cổng phải là cổng BRIDGE đang nghe (127.0.0.1:<localPort>), không phải
             // cổng Hysteria phía server — Hysteria dial vào bridge, bridge mới đẩy
@@ -666,7 +694,11 @@ class HysteriaVpnService : VpnService() {
     }
 
     /**
-     * Chốt số kbps khai cho Brutal CC theo loại mạng đang nằm dưới tunnel.
+     * Chốt số kbps khai cho Brutal CC theo mạng đang nằm dưới tunnel.
+     *
+     * Chuyển từ cơ chế TĨNH (metered 8/12, unmetered 30/100) sang ĐỘNG: số đo thật của
+     * CHÍNH mạng này (nhớ theo SSID/nhà mạng, xem BandwidthMemory) + trần sức mạng vật lý.
+     * Chưa có số đo nào thì dùng đúng nấc tĩnh cũ, nên đường lùi vẫn an toàn.
      *
      * Vì sao tách khỏi applyUnderlyingNetwork(): hàm này KHÔNG gọi API của VpnService
      * nên gọi được cả khi TUN chưa dựng. Đó là điều bắt buộc — connectClient() truyền
@@ -682,13 +714,32 @@ class HysteriaVpnService : VpnService() {
         // Xem ghi chu o Config.HY_UP_KBPS (do 18/09: khai 100 Mbps tren 5G 13 Mbps lam tut con 0,6 MB/s).
         val metered = label.contains("cell")
         meteredNow = metered
-        attemptUpKbps = if (metered) MOBILE_UP_KBPS else HY_UP_KBPS
-        attemptDownKbps = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS
-        // Log kèm LÝ DO (metered/unmetered) để lần sau chỉ cần đọc logcat là kiểm được
-        // app đã chọn đúng số cho loại mạng hiện tại hay chưa.
+        // Hai nấc TĨNH cũ — vẫn là mặc định khi chưa có số đo, và là trần trên của cơ chế động.
+        val staticUp = if (metered) MOBILE_UP_KBPS else HY_UP_KBPS
+        val staticDown = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS
+        val memory = bandwidth ?: BandwidthMemory(this).also { bandwidth = it }
+        val profile = memory.profileOf(net, label)
+        val measured = memory.rememberedMeasuredKbps(profile.key)
+        val decision = BandwidthPolicy.decide(
+            rememberedMeasuredKbps = measured,
+            rememberedDeclaredKbps = memory.rememberedDeclaredKbps(profile.key),
+            staticUpKbps = staticUp,
+            staticDownKbps = staticDown,
+            ceilingDownKbps = profile.ceilingDownKbps,
+        )
+        bwKey = profile.key
+        bwDisplay = profile.display
+        bwReason = decision.reason
+        bwMeasuredKbps = measured
+        bwCeilKbps = decision.ceilingDownKbps
+        attemptUpKbps = decision.upKbps
+        attemptDownKbps = decision.downKbps
+        // Một dòng log, đọc là biết VÌ SAO app khai con số đó (probe/memory/profile/clamp):
+        // net = mạng đang dùng, measured = số đã nhớ của mạng đó (0 = chưa đo),
+        // declared = số vừa truyền vào client, ctx = lượt gọi, ceil = trần vật lý đã kẹp.
         DiagnosticsLog.log(
-            "bw: $reason net=$label ${if (metered) "metered" else "unmetered"} " +
-                "-> up=${attemptUpKbps}kbps down=${attemptDownKbps}kbps",
+            "bw: net=$bwDisplay measured=$bwMeasuredKbps declared up=$attemptUpKbps " +
+                "down=$attemptDownKbps reason=${decision.reason} ctx=$reason ceil=$bwCeilKbps",
         )
         return net
     }
@@ -776,11 +827,67 @@ class HysteriaVpnService : VpnService() {
         DiagnosticsLog.tunnelUp = true
         DiagnosticsLog.log("tunnel: UP (${DiagnosticsLog.transport})")
         reportNodeHealth(runHost, reachable = true)
+        // Tunnel đã chở traffic: đo goodput thật rồi NHỚ theo mạng hiện tại (xem hàm dưới).
+        startBandwidthProbe()
         try {
             val app = application as VPNFlowApp
             app.vpnManager.onHysteriaUp()
         } catch (_: Exception) {
         }
+    }
+
+    /**
+     * Đo goodput qua tunnel và NHỚ theo mạng hiện tại (một lần cho mỗi mạng trong phiên).
+     *
+     * Số đo KHÔNG đổi được số khai của lượt đang chạy: đổi số khai phải dựng lại client
+     * hysteria (Mobile.connect nhận số ngay lúc mở), mà dựng lại giữa lúc đang chở traffic
+     * là đúng kiểu tự bóp mạng. Vì vậy số đo chỉ có tác dụng từ LẦN KẾT NỐI SAU vào cùng
+     * mạng — lúc đó refreshMeteredState() đọc lại và log reason=memory.
+     *
+     * Chạy nền, tổng thời gian <=3s (chờ [BandwidthMemory.PROBE_DELAY_MS] rồi đọc tối đa
+     * [BandwidthMemory.PROBE_MAX_MS]); lỗi/không đo được thì KHÔNG ghi nhớ gì, đường lùi
+     * vẫn là nấc tĩnh cũ.
+     */
+    private fun startBandwidthProbe() {
+        val memory = bandwidth ?: return
+        val key = bwKey
+        if (key.isEmpty() || key == bwProbedKey) return
+        // Vừa đo xong cho mạng này thì thôi: đo lại chỉ tốn dữ liệu của người dùng.
+        if (memory.ageMs(key) < BandwidthMemory.PROBE_MIN_INTERVAL_MS) return
+        bwProbedKey = key
+        val display = bwDisplay
+        val metered = meteredNow
+        val declared = attemptDownKbps
+        val ceiling = bwCeilKbps
+        Thread {
+            try {
+                Thread.sleep(BandwidthMemory.PROBE_DELAY_MS)
+            } catch (_: InterruptedException) {
+                return@Thread
+            }
+            // Mạng đổi giữa chừng thì số đo sẽ thuộc về mạng KHÁC — bỏ, lần sau đo lại.
+            if (stopping || !DiagnosticsLog.tunnelUp || bwKey != key) return@Thread
+            val measured = memory.measureDownKbps(
+                maxBytes = if (metered) BandwidthMemory.PROBE_BYTES_METERED else BandwidthMemory.PROBE_BYTES,
+                maxMs = BandwidthMemory.PROBE_MAX_MS,
+            )
+            if (measured <= 0) return@Thread
+            memory.remember(key, measured, declared)
+            // Số sẽ dùng cho lần kết nối sau — tính bằng ĐÚNG hàm quyết định lúc connect,
+            // nên dòng log này là bằng chứng số khai sẽ theo số đo.
+            val next = BandwidthPolicy.decide(
+                rememberedMeasuredKbps = memory.rememberedMeasuredKbps(key),
+                rememberedDeclaredKbps = memory.rememberedDeclaredKbps(key),
+                staticUpKbps = if (metered) MOBILE_UP_KBPS else HY_UP_KBPS,
+                staticDownKbps = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS,
+                ceilingDownKbps = ceiling,
+            )
+            DiagnosticsLog.log(
+                "bw: net=$display measured=${memory.rememberedMeasuredKbps(key)} " +
+                    "declared up=${next.upKbps} down=${next.downKbps} " +
+                    "reason=${BandwidthPolicy.REASON_PROBE} ctx=next-connect ceil=${next.ceilingDownKbps}",
+            )
+        }.apply { isDaemon = true; name = "hy-bw-probe" }.start()
     }
 
     /**

@@ -91,6 +91,42 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private var statusCode: String?
     private var statusMessage: String?
 
+    // MARK: Khai băng thông động cho Brutal CC (xem `HysteriaBandwidthControl`)
+
+    /// Số khai + bộ nhớ theo mạng của phiên hiện tại. `nil` ⇒ dùng đúng `HysteriaDefaults`.
+    private var bandwidth: BandwidthControl.SessionState?
+    /// Mạng nằm dưới tunnel. Cần để biết máy ĐÃ đổi mạng (Wi-Fi → 4G, đổi router) mà đổi khoá
+    /// bộ nhớ và số khai ở lần kết nối sau — `NWPathMonitor` giữ `currentPath` luôn mới.
+    private var bandwidthPathMonitor: NWPathMonitor?
+    /// Số khai của transport ĐANG chạy — cần để biết lần dựng lại có thật sự đổi số không.
+    private var activeUpKbps = 0
+    private var activeDownKbps = 0
+    private var activeBandwidthReason: BandwidthControl.Reason?
+    /// Có yêu cầu ramp đang chờ dựng lại transport ở ranh giới an toàn (tunnel rảnh).
+    private var bandwidthRampPending = false
+    /// Đang dựng lại transport để áp số khai — hai nhịp (1s và watchdog) không được cùng làm.
+    private var bandwidthRebuildInFlight = false
+    /// Mốc đã ghi bộ nhớ lần trước (để chốt đỉnh đo được ngay cả khi tunnel bị đứt).
+    private var measuredPeakDownKbps = 0
+    /// Nhịp lấy mẫu byte: 1s (yêu cầu "đo trong ≤3 giây" ⇒ mẫu thứ 2–3 đã có số nếu có traffic).
+    private static let bandwidthSampleInterval: TimeInterval = 1
+    /// Trần số lần dựng lại transport vì ramp trong MỘT phiên (ramp là tối ưu, không được
+    /// phép thành vòng lặp phá tunnel). Hết lượt ⇒ số mới đã nằm trong bộ nhớ, áp ở lần sau.
+    private static let rampMaxAttempts = 5
+    /// Ngưỡng ghi log `measured=`: dưới mức này chỉ là DNS/ping, không phải một lần đo.
+    private static let bandwidthLogMinKbps = 500
+    /// Số lượt thử dựng lại transport + nhịp chờ giữa hai lượt (xem `startTransportRetrying`).
+    private static let rampTransportRetries = 4
+    private static let rampTransportRetryDelay: TimeInterval = 0.3
+    /// Hàng đợi riêng cho mẫu băng thông: dựng lại transport CHẶN vài trăm ms (WS + QUIC), không
+    /// được để việc đó nằm chung nhịp với watchdog "tunnel có mạng không".
+    private let bandwidthQueue = DispatchQueue(label: "com.privatevpn.app.bandwidth-sample")
+    private let bandwidthLock = NSLock()
+    private var bandwidthTimer: DispatchSourceTimer?
+    private var bandwidthRampAttempts = 0
+    /// Cấu hình transport của phiên — cần giữ lại để dựng lại y nguyên khi chỉ đổi số khai.
+    private var currentOptions: HysteriaTransport.Options?
+
     // MARK: - Vòng đời
 
     override func startTunnel(
@@ -104,8 +140,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         flowLock.unlock()
 
         setStatus(state: "starting", code: nil, message: nil)
-        RelayDiagnostics.shared.log("startTunnel: bắt đầu phiên \(currentSession) (hysteria-only, macOS)")
+        RelayDiagnostics.shared.log("startTunnel: bắt đầu phiên \(currentSession) (hysteria-only)")
         log.log(level: .default, "startTunnel: begin session \(currentSession)")
+
+        // Khai băng thông động: nạp bộ nhớ theo MẠNG ĐANG DÙNG trước khi chốt số khai (xem
+        // `HysteriaBandwidthControl`). Không có bộ nhớ ⇒ số khai đúng như trước (HysteriaDefaults).
+        prepareBandwidthSession()
 
         switch hysteriaOptions() {
         case .success(let tunnelOptions):
@@ -136,6 +176,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         // Transport dừng TRƯỚC, rồi mới gỡ network settings.
         current?.stop()
         stopBridge()
+        // Chốt số đo cuối phiên vào bộ nhớ theo mạng TRƯỚC khi dừng đồng hồ lấy mẫu: lần kết
+        // nối sau vào cùng mạng sẽ khai luôn ở mức đã đạt.
+        stopBandwidthSampling()
+        bandwidth?.finish()
+        bandwidth = nil
+        currentOptions = nil
         setStatus(state: "stopped", code: nil, message: nil)
 
         // NetworkExtension đợi callback này; gọi hai lần là crash, không gọi là treo tiến
@@ -169,6 +215,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     // MARK: - Dựng tunnel
 
     private func bringUp(options: HysteriaTransport.Options, completion: @escaping (Error?) -> Void) {
+        currentOptions = options
         RelayDiagnostics.shared.log(
             "hysteria: áp network settings (utun \(HysteriaDefaults.tunIPv4Address)/\(HysteriaDefaults.tunIPv4SubnetMask), mtu \(options.mtu), dns \(HysteriaDefaults.dnsServers.joined(separator: ",")))"
         )
@@ -222,14 +269,69 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             created.start()
         }
 
+        let hysteria: HysteriaTransport
+        do {
+            hysteria = try startTransport(options: options, replaceExisting: false)
+        } catch {
+            RelayDiagnostics.shared.log("hysteria: dựng thất bại: \(error)")
+            flowLock.lock()
+            transport = nil
+            flowLock.unlock()
+            // fd tự tạo mà Go chưa kịp nhận thì phải tự đóng, không thì rò fd mỗi lần thử lại.
+            if tunnelFD.ownedByExtension { close(tunnelFD.fd) }
+            clearSettings()
+            failStart(reason: "\(error)", code: Self.codeStartFailed, completion: completion)
+            return
+        }
+
+        let localPort = hysteria.relayLocalPort
+        RelayDiagnostics.shared.log("hysteria: transport đã lên (relay udp 127.0.0.1:\(localPort))")
+        log.log(level: .default, "hysteria: transport up, relay udp 127.0.0.1:\(localPort)")
+        setStatus(state: "up", code: nil, message: nil)
+        activeUpKbps = options.upKbps
+        activeDownKbps = options.downKbps
+        activeBandwidthReason = bandwidth?.planReason
+        completeStart(completion, error: nil, session: currentSession)
+        startTrafficSupervisor()
+        startBandwidthSampling()
+    }
+
+    /// Dựng transport hysteria2 với fd utun ĐANG dùng của NetworkExtension.
+    ///
+    /// Tách khỏi `bringUp` vì đường ramp băng thông phải dựng lại transport giữa phiên (số
+    /// khai chỉ được Go đọc một lần trong `MobileConnect`) mà KHÔNG được đụng network settings
+    /// hay tự gỡ tunnel như khi transport chết.
+    @discardableResult
+    private func startTransport(
+        options: HysteriaTransport.Options,
+        replaceExisting: Bool
+    ) throws -> HysteriaTransport {
+        flowLock.lock()
+        let tunnelFd = tunnelFdForCounters
+        flowLock.unlock()
+        guard let tunnelFd else {
+            throw ConfigFailure("chưa có fd utun để dựng transport")
+        }
         let hysteria = HysteriaTransport(log: log)
+        // Cờ vào THẲNG closure: transport nào là transport cũ bị thay ra thì cái chết của nó
+        // KHÔNG được hạ tunnel. So identity ở đây là đủ và không phụ thuộc thứ tự gán `transport`.
+        let isReplacement = replaceExisting
         flowLock.lock()
         transport = hysteria
         flowLock.unlock()
-
         do {
-            try hysteria.start(options: options, tunnelFd: tunnelFD.fd) { [weak self] reason in
+            try hysteria.start(options: options, tunnelFd: tunnelFd) { [weak self] reason in
                 guard let self else { return }
+                // Đường ramp đã bỏ transport cũ ĐỂ DỰNG LẠI với số khai mới: cái chết đó là theo
+                // thiết kế (mọi thứ vẫn "Connected"), KHÔNG được hạ tunnel.
+                if isReplacement, self.currentTransport() !== hysteria {
+                    RelayDiagnostics.shared.log(
+                        "hysteria: transport cũ đã dừng để dựng lại (\(reason)) — tunnel giữ nguyên"
+                    )
+                    return
+                }
+                // Chỉ chết của transport ĐANG chạy mới được quyền gỡ tunnel.
+                guard !isReplacement, self.currentTransport() === hysteria else { return }
                 // Đường hysteria chết SAU khi đã lên: hạ tunnel ngay và báo lỗi cho app.
                 // Để nguyên chính là ca "Connected mà không có mạng".
                 RelayDiagnostics.shared.log("hysteria: transport chết (\(reason)) — hạ tunnel")
@@ -244,25 +346,336 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                 )
             }
         } catch {
-            RelayDiagnostics.shared.log("hysteria: dựng thất bại: \(error)")
-            flowLock.lock()
-            transport = nil
-            flowLock.unlock()
-            hysteria.stop()
+            // Dọn cầu (nếu có, chế độ bridge của macOS) trước khi ném lên: để nguyên là rò fd.
             stopBridge()
-            // fd tự tạo mà Go chưa kịp nhận thì phải tự đóng, không thì rò fd mỗi lần thử lại.
-            if tunnelFD.ownedByExtension { close(tunnelFD.fd) }
-            clearSettings()
-            failStart(reason: "\(error)", code: Self.codeStartFailed, completion: completion)
-            return
+            throw error
         }
+        return hysteria
+    }
 
-        let localPort = hysteria.relayLocalPort
-        RelayDiagnostics.shared.log("hysteria: transport đã lên (relay udp 127.0.0.1:\(localPort))")
-        log.log(level: .default, "hysteria: transport up, relay udp 127.0.0.1:\(localPort)")
-        setStatus(state: "up", code: nil, message: nil)
-        completeStart(completion, error: nil, session: currentSession)
-        startTrafficSupervisor()
+    // MARK: - Khai băng thông động
+
+    /// Bắt đầu lấy mẫu byte mỗi 1s + ghi telemetry `bw:`. Gọi ngay sau khi transport lên.
+    private func startBandwidthSampling() {
+        guard let bandwidth else { return }
+        let timer = DispatchSource.makeTimerSource(queue: bandwidthQueue)
+        timer.schedule(
+            deadline: .now() + Self.bandwidthSampleInterval,
+            repeating: Self.bandwidthSampleInterval
+        )
+        timer.setEventHandler { [weak self] in self?.bandwidthStep() }
+        bandwidthLock.lock()
+        bandwidthTimer?.cancel()
+        bandwidthTimer = timer
+        bandwidthLock.unlock()
+        timer.resume()
+        let plan = bandwidth.plan
+        RelayDiagnostics.shared.log(
+            "bw: net=\(bandwidth.key) measured=0 declared up=\(plan.upKbps) down=\(plan.downKbps) "
+                + "reason=\(plan.reason.rawValue) — bắt đầu đo (mẫu mỗi "
+                + "\(Int(Self.bandwidthSampleInterval))s, đỉnh trượt "
+                + "\(Int(BandwidthControl.peakWindow))s)"
+        )
+    }
+
+    /// Nạp bộ nhớ theo mạng + bật theo dõi mạng. Gọi ở đầu mỗi phiên `startTunnel`.
+    private func prepareBandwidthSession() {
+        bandwidthRampPending = false
+        bandwidthRampAttempts = 0
+        measuredPeakDownKbps = 0
+        activeBandwidthReason = nil
+        let monitor = NWPathMonitor()
+        let identity = BandwidthControl.currentNetworkIdentity(path: monitor.currentPath)
+        monitor.start(queue: bandwidthQueue)
+        bandwidthLock.lock()
+        bandwidthPathMonitor?.cancel()
+        bandwidthPathMonitor = monitor
+        bandwidthLock.unlock()
+        let state = BandwidthControl.SessionState(identity: identity)
+        bandwidth = state
+        let plan = state.plan
+        RelayDiagnostics.shared.log(
+            "bw: chuẩn bị phiên — net=\(identity.logLabel) "
+                + "(ssid=\(identity.ssid ?? "không có quyền vị trí/entitlement"), "
+                + "router=\(identity.routerMAC ?? "-"), if=\(identity.interfaceName)) "
+                + "declared up=\(plan.upKbps) down=\(plan.downKbps) reason=\(plan.reason.rawValue)"
+        )
+    }
+
+    private func stopBandwidthSampling() {
+        bandwidthLock.lock()
+        let timer = bandwidthTimer
+        bandwidthTimer = nil
+        let monitor = bandwidthPathMonitor
+        bandwidthPathMonitor = nil
+        bandwidthLock.unlock()
+        timer?.cancel()
+        monitor?.cancel()
+    }
+
+    /// Một nhịp (1s): đọc byte hai chiều của tunnel → cho `BandwidthControl` quyết định.
+    private func bandwidthStep() {
+        guard let bandwidth else { return }
+        guard let bytes = bandwidthBytes else { return }
+        let counters = trafficCounters
+        let now = Date()
+        let decision = bandwidth.sample(
+            bytes: bytes,
+            packetsIn: counters?.fromGo ?? 0,
+            packetsOut: counters?.toGo ?? 0,
+            at: now,
+            path: bandwidthPath
+        )
+        let averageDown = bandwidth.lastAverageDownKbps
+        if averageDown >= Self.bandwidthLogMinKbps, averageDown != measuredPeakDownKbps {
+            measuredPeakDownKbps = averageDown
+            RelayDiagnostics.shared.log(
+                "bw: net=\(bandwidth.key) measured=\(averageDown) declared up=\(bandwidth.upKbps) "
+                    + "down=\(bandwidth.downKbps) reason=\(bandwidth.planReason.rawValue)"
+            )
+        }
+        guard let decision else { return }
+        logRampDecision(decision, key: bandwidth.key)
+        // Ràng buộc cứng: số khai chỉ được đổi bằng cách dựng lại transport ⇒ CHỈ áp khi tunnel
+        // rảnh. Đang truyền thì để dành (pendingChange) cho lần rảnh/kết nối sau.
+        bandwidthLock.lock()
+        bandwidthRampPending = true
+        bandwidthLock.unlock()
+        applyBandwidthRampIfIdle(reason: decision.logReason)
+    }
+
+    /// Dòng telemetry khi ramp — yêu cầu `bw: ramp net=… observed=… old=… new=… reason=…`.
+    private func logRampDecision(_ decision: BandwidthControl.RampDecision, key: String) {
+        let line = "bw: ramp net=\(key) observed=\(decision.observedKbps) old=\(decision.oldUpKbps)/"
+            + "\(decision.oldDownKbps) new=\(decision.newUpKbps)/\(decision.newDownKbps) "
+            + "reason=\(decision.logReason)"
+        RelayDiagnostics.shared.log(line)
+        log.log(level: .default, "\(line, privacy: .public)")
+    }
+
+    /// Dòng telemetry của số khai ĐANG chạy thật (khác số đã quyết định: quyết định chỉ vào
+    /// hiệu lực sau khi dựng lại transport). Ghi kèm lý do của lần đổi gần nhất.
+    private func logActiveDeclaration(key: String, event: String) {
+        let line = "bw: net=\(key) measured=\(bandwidth?.lastAverageDownKbps ?? 0) "
+            + "declared up=\(activeUpKbps) down=\(activeDownKbps) "
+            + "reason=\(activeBandwidthReason?.label ?? BandwidthControl.Reason.probe.label) "
+            + "(\(event))"
+        RelayDiagnostics.shared.log(line)
+        log.log(level: .default, "\(line, privacy: .public)")
+    }
+
+    /// Byte hai chiều đã đi qua tunnel. Nguồn: cầu `packetFlow↔fd` (macOS) hoặc bộ đếm
+    /// interface utun (iOS) — CÙNG nguồn với watchdog, xem `trafficCounters`.
+    private var bandwidthBytes: BandwidthControl.ByteSample? {
+        if let counters = bridgeCounters {
+            return BandwidthControl.ByteSample(
+                inbound: counters.fromGoBytes,
+                outbound: counters.toGoBytes
+            )
+        }
+        #if os(iOS)
+        flowLock.lock()
+        let fd = tunnelFdForCounters
+        flowLock.unlock()
+        guard let fd, let counters = HysteriaTransport.utunPacketCounters(fd: fd) else { return nil }
+        return BandwidthControl.ByteSample(
+            inbound: counters.fromGoBytes,
+            outbound: counters.toGoBytes
+        )
+        #else
+        return nil
+        #endif
+    }
+
+    /// Cờ "có thay đổi đang chờ áp" — đọc/ghi từ hai hàng đợi nên luôn đi qua `bandwidthLock`.
+    private var isBandwidthRampPending: Bool {
+        bandwidthLock.lock(); defer { bandwidthLock.unlock() }
+        return bandwidthRampPending
+    }
+
+    private func markBandwidthRampNotPending() {
+        bandwidthLock.lock()
+        bandwidthRampPending = false
+        bandwidthLock.unlock()
+    }
+
+    /// `NWPath` hiện tại (mạng nằm dưới tunnel) nếu monitor đang chạy.
+    private var bandwidthPath: NWPath? {
+        bandwidthLock.lock(); defer { bandwidthLock.unlock() }
+        return bandwidthPathMonitor?.currentPath
+    }
+
+    /// Tunnel đã rảnh (không chở gói nào) đủ lâu để dựng lại transport chưa.
+    private func isBandwidthIdle() -> Bool {
+        guard let bandwidth else { return false }
+        return Date().timeIntervalSince(bandwidth.lastActivityAt) >= BandwidthControl.idleBeforeChange
+    }
+
+    /// Dựng lại transport để áp số khai mới — CHỈ khi tunnel rảnh (xem ràng buộc ở file
+    /// `HysteriaBandwidthControl`). Trả về true khi đã dựng lại và lên được.
+    ///
+    /// Vì sao phải dựng lại cả relay + QUIC: số khai được Go đọc MỘT LẦN trong
+    /// `MobileConnect` (`MaxTx/MaxRx` của Brutal CC, xem `tools/hysteria-android/mobile.go`)
+    /// — không có API đổi tại chỗ. Vòng đứt cũ đã chạy thật trên đường chẩn đoán của macOS
+    /// (`probeThroughTunnel` dừng transport rồi dựng lại trong cùng tiến trình), nhưng đây là
+    /// đường mới trên iOS nên có TRẦN SỐ LẦN THỬ (`rampMaxAttempts`): ramp là tối ưu, không
+    /// được phép thành vòng lặp phá tunnel.
+    @discardableResult
+    private func applyBandwidthRampIfIdle(reason: String) -> Bool {
+        guard BandwidthControl.allowsTransportRebuild else { return false }
+        guard let bandwidth, bandwidth.pendingChange else { return false }
+        guard isBandwidthRampPending else { return false }
+        guard isBandwidthIdle() else { return false }
+        // Chốt "đang dựng lại" trước mọi việc nặng: nhịp watchdog (5s) và nhịp lấy mẫu (1s) có
+        // thể cùng gọi hàm này ở hai hàng đợi khác nhau.
+        bandwidthLock.lock()
+        let alreadyRebuilding = bandwidthRebuildInFlight
+        if !alreadyRebuilding { bandwidthRebuildInFlight = true }
+        bandwidthLock.unlock()
+        guard !alreadyRebuilding else { return false }
+        defer {
+            bandwidthLock.lock()
+            bandwidthRebuildInFlight = false
+            bandwidthLock.unlock()
+        }
+        let plan = bandwidth.plan
+        guard plan.upKbps != activeUpKbps || plan.downKbps != activeDownKbps else {
+            // Số khai không đổi (ví dụ chỉ đổi mạng): không cần đứt stream, chỉ chốt lại.
+            bandwidth.applied(
+                BandwidthControl.RampDecision(
+                    multiplierUp: nil,
+                    multiplierDown: nil,
+                    reason: bandwidth.pendingReason ?? plan.reason,
+                    observedKbps: bandwidth.peakDownKbps,
+                    oldUpKbps: activeUpKbps,
+                    oldDownKbps: activeDownKbps,
+                    newUpKbps: activeUpKbps,
+                    newDownKbps: activeDownKbps
+                ),
+                ceiling: nil
+            )
+            markBandwidthRampNotPending()
+            return true
+        }
+        // Số lần thử có trần: hết lượt thì chốt vào bộ nhớ để lần kết nối sau khai sẵn số mới.
+        bandwidthLock.lock()
+        let attempt = bandwidthRampAttempts
+        bandwidthRampAttempts += 1
+        bandwidthLock.unlock()
+        let allowed = attempt < Self.rampMaxAttempts
+        let message = "bw: ramp \(reason) net=\(bandwidth.key) up=\(activeUpKbps)->\(plan.upKbps) "
+            + "down=\(activeDownKbps)->\(plan.downKbps)"
+            + (allowed ? "" : " — hết \(Self.rampMaxAttempts) lượt dựng lại của phiên, để dành lần kết nối sau")
+        RelayDiagnostics.shared.log(message)
+        log.log(level: .default, "\(message, privacy: .public)")
+        guard allowed else {
+            bandwidth.finish()
+            markBandwidthRampNotPending()
+            return false
+        }
+        guard let rebuilt = rebuildTransportForBandwidth(), rebuilt else { return false }
+        bandwidth.applied(
+            BandwidthControl.RampDecision(
+                multiplierUp: nil,
+                multiplierDown: nil,
+                reason: bandwidth.pendingReason ?? plan.reason,
+                observedKbps: bandwidth.peakDownKbps,
+                oldUpKbps: activeUpKbps,
+                oldDownKbps: activeDownKbps,
+                newUpKbps: plan.upKbps,
+                newDownKbps: plan.downKbps
+            ),
+            ceiling: nil
+        )
+        markBandwidthRampNotPending()
+        return true
+    }
+
+    /// Dừng transport cũ rồi dựng lại với số khai mới (giữ nguyên fd utun của NetworkExtension).
+    private func rebuildTransportForBandwidth() -> Bool? {
+        #if os(iOS)
+        guard let bandwidth, var options = currentOptions else { return nil }
+        let plan = bandwidth.plan
+        options.upKbps = plan.upKbps
+        options.downKbps = plan.downKbps
+        currentOptions = options
+        flowLock.lock()
+        let previous = transport
+        transport = nil
+        flowLock.unlock()
+        previous?.stop()
+        let started = Date()
+        do {
+            // Có THỬ LẠI vì `MobileStop` của Go không chờ `serve()` kết thúc: client cũ có thể
+            // còn trong `active` vài trăm ms ⇒ `MobileConnect` báo "hysteria client already
+            // running" (đua thật, xem `tools/hysteria-android/mobile.go` hàm `Stop`).
+            try startTransportRetrying(options: options)
+        } catch {
+            let message = "bw: dựng lại transport với số khai mới THẤT BẠI (\(error)) — "
+                + "quay về số khai đang chạy để không mất mạng"
+            RelayDiagnostics.shared.log(message)
+            log.error("\(message, privacy: .public)")
+            var fallback = options
+            fallback.upKbps = bandwidth.upKbps
+            fallback.downKbps = bandwidth.downKbps
+            currentOptions = fallback
+            // Đường lùi cũng phải thử lại: để tunnel không transport là máy mất mạng, và
+            // watchdog chỉ gỡ tunnel chứ không dựng lại được.
+            do {
+                try startTransportRetrying(options: fallback)
+            } catch {
+                RelayDiagnostics.shared.log(
+                    "bw: KHÔNG dựng lại được transport (\(error)) — gỡ tunnel để máy có mạng lại"
+                )
+                teardownAndCancel(
+                    code: Self.codeNoTraffic,
+                    message: "Không dựng lại được đường hysteria2 sau khi đổi số khai băng thông."
+                )
+            }
+            return false
+        }
+        activeUpKbps = options.upKbps
+        activeDownKbps = options.downKbps
+        activeBandwidthReason = bandwidth.planReason
+        RelayDiagnostics.shared.log(
+            "bw: ramp đã áp sau khi dựng lại transport (mất "
+                + "\(Self.seconds(Date().timeIntervalSince(started)))s, tunnel đang rảnh)"
+        )
+        logActiveDeclaration(key: bandwidth.key, event: "ramp đã áp")
+        return true
+        #else
+        // macOS chưa bật: ở đó Go KHÔNG đọc thẳng fd utun mà nhận fd của cặp socketpair do
+        // `TunnelBridge` bắc cầu (xem `HysteriaTransport.resolveTunnelFD`), nên đổi số khai là
+        // phải dựng lại CẢ cầu — việc đó cần đo thực địa trước khi bật. Số khai vẫn được kẹp
+        // theo mạng + bộ nhớ, chỉ không ramp giữa phiên.
+        return nil
+        #endif
+    }
+
+    /// Dựng transport, thử lại vài lượt khi Go còn giữ client cũ.
+    ///
+    /// Trần chờ: `rampTransportRetries * rampTransportRetryDelay` = 4 × 300 ms = 1,2s — tunnel
+    /// đang rảnh nên khoảng này không cắt ngang traffic nào.
+    private func startTransportRetrying(options: HysteriaTransport.Options) throws {
+        var lastError: Error?
+        for attempt in 0..<Self.rampTransportRetries {
+            do {
+                try startTransport(options: options, replaceExisting: true)
+                return
+            } catch {
+                lastError = error
+                // `stop()` trước lượt sau: lần thử hỏng có thể đã để lại transport nửa vời.
+                flowLock.lock()
+                let half = transport
+                transport = nil
+                flowLock.unlock()
+                half?.stop()
+                if attempt < Self.rampTransportRetries - 1 {
+                    Thread.sleep(forTimeInterval: Self.rampTransportRetryDelay)
+                }
+            }
+        }
+        throw lastError ?? ConfigFailure("không dựng được transport")
     }
 
     private func networkSettings(options: HysteriaTransport.Options) -> NEPacketTunnelNetworkSettings {
@@ -463,6 +876,17 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                         + "\(Int(Self.tcpBlackholeDeadline))s rồi tự gỡ"
                 )
             }
+        }
+
+        // Ramp băng thông: quyết định đã có ở nhịp 1s (`bandwidthStep`) nhưng CHỈ được áp khi
+        // tunnel rảnh — watchdog ở đây chạy mỗi \(Int(Self.trafficCheckInterval))s nên là chỗ
+        // tự nhiên để thử lại (nhịp 1s cũng thử, xem `bandwidthStep`).
+        if isBandwidthRampPending, isBandwidthIdle() {
+            _ = applyBandwidthRampIfIdle(
+                reason: bandwidth?.pendingReason == .lossBackoff
+                    ? BandwidthControl.Reason.lossBackoff.label
+                    : "idle-reconnect"
+            )
         }
 
         // Probe chẩn đoán: CHỈ ghi log mạng của máy (xem chú thích ở `startTrafficSupervisor`).
@@ -770,6 +1194,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     }
 
     private func cancelScheduledWork() {
+        stopBandwidthSampling()
+        bandwidth?.finish()
         cancelSupervisor()
         flowLock.lock()
         supervisorStopped = true
@@ -939,8 +1365,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             serverPort: port,
             password: password,
             obfs: dict["obfs"] as? String ?? "",
-            upKbps: diagUp ?? dict["upKbps"] as? Int ?? HysteriaDefaults.upKbps,
-            downKbps: diagDown ?? dict["downKbps"] as? Int ?? HysteriaDefaults.downKbps,
+            // Số khai cho Brutal CC: thứ tự ưu tiên (mạnh nhất trước)
+            //   1. ghi đè CHẨN ĐOÁN trong Documents/hysteria-diag.txt (người đo ép tay);
+            //   2. app truyền trong providerConfiguration (nếu app có ý kiến);
+            //   3. số ĐỘNG của `HysteriaBandwidthControl` (bộ nhớ theo mạng / số đo phiên);
+            //   4. mặc định HysteriaDefaults — y như trước khi có feature này.
+            upKbps: diagUp ?? dict["upKbps"] as? Int ?? bandwidth?.upKbps ?? HysteriaDefaults.upKbps,
+            downKbps: diagDown ?? dict["downKbps"] as? Int ?? bandwidth?.downKbps ?? HysteriaDefaults.downKbps,
             mtu: diagMTU ?? dict["mtu"] as? Int ?? HysteriaDefaults.mtu,
             // CIDR cho Go (netip.ParsePrefix) — xem HysteriaDefaults.tunIPv4CIDR.
             ipv4: HysteriaDefaults.tunIPv4CIDR,

@@ -146,6 +146,16 @@ object Config {
     /** Mang di dong (4G/5G) o Trung Quoc: thuc te 10-13 Mbps ⇒ khai sat de Brutal khong nghen. */
     const val MOBILE_UP_KBPS = 8000
     const val MOBILE_DOWN_KBPS = 12000
+
+    /**
+     * URL đo goodput qua tunnel cho cơ chế khai băng thông ĐỘNG (xem BandwidthMemory).
+     *
+     * Cùng endpoint mà phép đo ngoài thiết bị đang dùng (curl `speed.cloudflare.com/__down`):
+     * Cloudflare anycast nên vào được ngay cả khi IP node bị chặn, và nó trả ĐÚNG số byte
+     * yêu cầu nên phép đo ngắn (<=3s) là đủ để suy ra băng thông. App còn tự cắt theo
+     * BandwidthMemory.PROBE_BYTES nên `bytes` ở đây chỉ là mức trần phía server.
+     */
+    const val BW_PROBE_URL = "https://speed.cloudflare.com/__down?bytes=4000000"
     /**
      * Brutal CC cho đường WS relay (khi IP node bị chặn). Đường này đi qua 2 chặng —
      * hạ tầng dùng chung (Tailscale Funnel/Cloudflare) rồi mới tới node — nên khai
