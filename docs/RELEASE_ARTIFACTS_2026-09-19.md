@@ -54,3 +54,11 @@ Chủ dự án xác nhận bản iOS **1.4.0 (build 15)** đang chạy **tốt v
 - Bản đóng băng tương ứng: IPA ở `build/ios-1.3.3...` không dùng; bản đang dùng là **`build/ios-adhoc-export/ipa/FlowVPN.ipa`** (1.4.0/15, sha256 `b6bf9a04bf3331655dcefd062c957d22ee81d177d8880636ec4ba492d4150677` — xem bảng phía trên) tại commit `b08649d`.
 - Việc **hysteria2 cho iOS** (chuyển NE sang hysteria-only) **tạm dừng** cho tới khi chủ dự án mở khoá. Công việc Apple hiện chỉ làm trên **macOS**.
 - Lưu ý kỹ thuật: thư mục `iOS/PrivateVPNPacketTunnel/` được **dùng chung** với target extension macOS, nên sửa file trong đó có thể đổi binary iOS nếu build lại app iOS — vì vậy tuyệt đối không build lại iOS trong lúc khoá.
+
+## 🔒 ĐÓNG BĂNG Android (19/09/2026, theo yêu cầu chủ dự án)
+
+Chủ dự án xác nhận bản Android **1.4.0 (versionCode 20)** đã **sửa xong tốc độ, kết nối tốt** và yêu cầu **khoá lại, không sửa gì thêm**.
+
+- **Không sửa** `android/**` (đặc biệt `HysteriaVpnService.kt`, `Config.kt`), **không** đổi version, **không** build lại APK trừ khi chủ dự án yêu cầu.
+- Bản đóng băng = 2 APK ở bảng phía trên (modern `a780a773…56e8`, legacy `e36b4fcb…bc46`), release notes `release/android/RELEASE_NOTES_1.4.0.md`, commit `b08649d`.
+- Việc còn treo (không nằm trong bản đóng băng): **bypass WeChat cần test lại**; split-tunnel theo CN cho Android chưa làm.
