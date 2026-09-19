@@ -1,0 +1,8 @@
+{
+ "type": "blocked",
+ "actor": "win",
+ "transcribedBy": "mac",
+ "busId": 46,
+ "note": "Phien Windows bi sandbox: (1) repo minhfat-ux/fbuddy la PRIVATE, credential helper bi chan (Win32 error 5); (2) brief WIN-JOIN khong co trong checkout flowgpt; (3) lenh verify dung duong dan macOS. Can Mac mo duong.",
+ "at": "2026-09-19T10:05:00.904Z"
+}
