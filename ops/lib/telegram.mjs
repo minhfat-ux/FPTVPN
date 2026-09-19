@@ -71,7 +71,7 @@ export async function sendPing(text, { prefix = `[${SELF}→${PEER}]` } = {}) {
         "--data-urlencode", `chat_id=${chat}`,
         "--data-urlencode", `text=${prefix} ${text}`,
         "--data-urlencode", "disable_web_page_preview=true",
-      ], { timeout: 12000 });
+      ], { timeout: 12000, windowsHide: true });
       const json = JSON.parse(stdout || "{}");
       return { ok: Boolean(json?.ok), messageId: json?.result?.message_id ?? null, raw: json, via: "curl" };
     } catch (fallbackError) {

@@ -18,4 +18,8 @@ coverage/
 .npm-cache/
 ops/.rewrite-baseline.json
 ops/tasks/.watch-*.json
+# pidfile/trạng thái của watcher & bộ nghe là chuyện CỦA TỪNG MÁY — không được commit.
+# Đã gặp thật: pidfile bị đẩy lên git, `git restore` ghi đè pid của máy khác, và nếu pid đó
+# tình cờ trùng một tiến trình đang sống thì watcher tưởng "đã có watcher khác" rồi tự thoát.
+ops/tasks/.*
 AGENTS.local.md

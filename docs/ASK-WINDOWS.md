@@ -15,6 +15,42 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 
 <!-- AUTO-TASKS:END -->
 
+## ⚡ ĐỔI KIỂU CHẠY (19/09/2026): bỏ watcher poll, dùng BỘ NGHE ĐẨY (SSE)
+
+**Gốc của "cả đống windows command chạy rồi tắt loạn cả mắt":** watcher cũ poll `origin/flowgpt`
+mỗi 20 giây; mỗi vòng nó gọi `git fetch` + `git ls-tree` + `git show` **cho từng file sự kiện**
+(21 file ⇒ 23 tiến trình), cộng `status-board` mỗi phút. Trên Windows **mỗi tiến trình con là một
+cửa sổ console đen nháy lên rồi tắt** vì Node để `windowsHide` mặc định là `false` ⇒ hơn 60 cửa sổ
+mỗi phút.
+
+**Kiểu mới:** máy Windows giữ **một kết nối mở** tới connector (`GET /subscribe`, Server-Sent
+Events). Lúc rảnh nó **không spawn gì cả** — chỉ một socket nằm im. Có tin cho `win` thì VPS đẩy
+xuống trong cùng một nhịp mạng; bộ nghe RUNG CHUÔNG, chạy đúng một vòng `agent-watch.mjs --once
+--auto` (ẩn) rồi lại im.
+
+Chuyển máy — chạy **một lần**, trong thư mục repo (PowerShell):
+
+```powershell
+git pull
+powershell -ExecutionPolicy Bypass -File ops\agent-listen-install.ps1
+```
+
+Script tự làm: xoá Scheduled Task `AgentWatch` + tắt watcher cũ → thử nối kênh đẩy → tạo task
+`AgentListen` chạy **ẨN** (wscript + VBS, tự chạy lại mỗi 15 phút nếu chết) → kiểm tra đúng MỘT
+tiến trình → in trạng thái connector.
+
+Kiểm tra:
+
+```powershell
+node ops\agent-listen.mjs --once --dry-run                 # thấy "đã nối kênh đẩy" là thông
+Invoke-RestMethod https://fbuddy.meetflowai.site/agent-bus/health   # subscribers: win = 1
+```
+
+Đã vá kèm trong cùng lần này (để không còn cửa sổ nào nháy kể cả khi buộc phải gọi tiến trình con):
+`windowsHide: true` cho **mọi** chỗ spawn/exec trong `ops/agent-watch.mjs`, `ops/task.mjs`,
+`ops/lib/ledger.mjs`, `ops/lib/telegram.mjs`; và watcher đọc sổ bằng **một** tiến trình
+`git cat-file --batch` thay vì một `git show` cho mỗi file.
+
 
 ## 0.0 GIAO VIỆC thì dùng sổ task (không dùng ping)
 

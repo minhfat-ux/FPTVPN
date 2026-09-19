@@ -14,9 +14,15 @@ import { execFileSync } from "node:child_process";
 
 export const TASKS_DIR = path.join("ops", "tasks");
 
+/**
+ * Trên Windows mỗi tiến trình con là MỘT cửa sổ console đen nháy lên rồi tắt (`windowsHide` mặc
+ * định false). Mọi lần gọi git/node ở đây đều phải tắt cửa sổ đó. Trên macOS/Linux cờ này vô hại.
+ */
+const NO_WINDOW = { windowsHide: true };
+
 const git = (...argv) => {
   try {
-    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...NO_WINDOW }).trim();
   } catch (error) {
     return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
   }
@@ -42,7 +48,8 @@ export function eventsOf(id) {
     .filter((name) => name.endsWith(".json"))
     .map((name) => {
       try {
-        return { ...JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")), file: name };
+        // Cắt BOM: PowerShell 5.1 ghi UTF-8 kèm BOM, JSON.parse sẽ chết và sự kiện bị bỏ im lặng.
+        return { ...JSON.parse(fs.readFileSync(path.join(dir, name), "utf8").replace(/^\uFEFF/, "")), file: name };
       } catch {
         return null;
       }
@@ -80,7 +87,10 @@ export function foldStatus(events) {
   for (const event of events) {
     if (event.type === "sent") status = "sent";
     else if (event.type === "acked") status = "acked";
-    else if (event.type === "progress") status = "in_progress";
+    else if (event.type === "progress") {
+      // progress GHI SAU done chỉ là ghi chú thừa — không được kéo trạng thái lùi về in_progress.
+      if (status !== "done" && status !== "verified") status = "in_progress";
+    }
     else if (event.type === "blocked") status = "blocked";
     else if (event.type === "done") status = "done";
     else if (event.type === "verified") {

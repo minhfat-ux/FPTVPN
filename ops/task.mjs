@@ -61,9 +61,15 @@ const ACTOR = (process.env.AGENT_NAME || "MAC").trim().toLowerCase();
 const NOW = () => new Date().toISOString().replace(/[:.]/g, "-");
 const prettyTime = (iso) => String(iso ?? "").replace("T", " ").slice(0, 16);
 
+/**
+ * Trên Windows mỗi tiến trình con là MỘT cửa sổ console đen nháy lên rồi tắt (`windowsHide` mặc
+ * định false). Mọi lần gọi git/node trong file này đều phải tắt cửa sổ đó.
+ */
+const NO_WINDOW = { windowsHide: true };
+
 const git = (...argv) => {
   try {
-    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...NO_WINDOW }).trim();
   } catch (error) {
     return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
   }
@@ -114,7 +120,10 @@ function fold(events) {
       case "created": state.status = "created"; state.task = event.task; break;
       case "sent": state.status = "sent"; break;
       case "acked": state.status = "acked"; state.ack = event; break;
-      case "progress": state.status = "in_progress"; break;
+      case "progress":
+        // progress ghi sau done chỉ là ghi chú thừa — không lùi trạng thái.
+        if (state.status !== "done" && state.status !== "verified") state.status = "in_progress";
+        break;
       case "blocked": state.status = "blocked"; state.blocked = event; break;
       case "done": state.status = "done"; state.done = event; break;
       case "verified":
@@ -288,9 +297,9 @@ function pushLedger(id, message) {
   if (added.startsWith("!git")) return { commit: "cây chính", pushed: direct };
   try {
     fs.cpSync(TASKS_DIR, path.join(worktree, TASKS_DIR), { recursive: true });
-    execFileSync("git", ["add", TASKS_DIR], { cwd: worktree });
-    execFileSync("git", ["-c", "user.email=agent@flowtech", "-c", "user.name=FlowTech Agent", "commit", "-q", "-m", subject], { cwd: worktree });
-    const out = execFileSync("git", ["push", "origin", "HEAD:flowgpt"], { cwd: worktree, encoding: "utf8" });
+    execFileSync("git", ["add", TASKS_DIR], { cwd: worktree, ...NO_WINDOW });
+    execFileSync("git", ["-c", "user.email=agent@flowtech", "-c", "user.name=FlowTech Agent", "commit", "-q", "-m", subject], { cwd: worktree, ...NO_WINDOW });
+    const out = execFileSync("git", ["push", "origin", "HEAD:flowgpt"], { cwd: worktree, encoding: "utf8", ...NO_WINDOW });
     return { commit: `worktree (${git("rev-parse", "--short", "HEAD")})`, pushed: String(out).trim() || "pushed" };
   } catch (error) {
     return { commit: "cây chính", pushed: `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}` };
@@ -368,7 +377,7 @@ if (command === "new") {
   if (peerWake) {
     try {
       const { spawnSync } = await import("node:child_process");
-      const result = spawnSync(peerWake, { shell: true, encoding: "utf8", timeout: 60000 });
+      const result = spawnSync(peerWake, { shell: true, encoding: "utf8", timeout: 60000, ...NO_WINDOW });
       const out = String(result.stdout ?? "").trim().split("\n").slice(-2).join(" | ");
       console.log(`  đánh thức trực tiếp (${peerWake.slice(0, 60)}): ${result.status === 0 ? `ok ${out}` : `lỗi ${result.status}`}`);
     } catch (error) {
@@ -537,7 +546,7 @@ if (command === "new") {
 if (["send", "ack", "progress", "blocked", "done", "verify"].includes(command)) {
   try {
     const { spawn } = await import("node:child_process");
-    spawn(process.execPath, ["ops/status-board.mjs"], { cwd: process.cwd(), detached: true, stdio: "ignore" }).unref();
+    spawn(process.execPath, ["ops/status-board.mjs"], { cwd: process.cwd(), detached: true, stdio: "ignore", ...NO_WINDOW }).unref();
   } catch {
     /* không cập nhật được bảng cũng không sao */
   }
