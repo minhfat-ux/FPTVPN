@@ -101,25 +101,6 @@ export const RESEARCHER_PROFILES = [
     special: ["wikipedia"],
   },
   {
-    id: "toan-hoc",
-    label: "Toán học",
-    detect:
-      /toán|phương trình|đạo hàm|tích phân|hình học|định lý|công thức|logarit|xác suất|thống kê|số nguyên tố|ma trận|vector|chứng minh|tính toán|bài toán|phần trăm|%|bao nhiêu|trung bình cộng|chia hết|ước chung|bội chung|lãi suất|tỷ lệ|tỉ lệ/i,
-    wikiTitles: [],
-    preferDomains: ["vi.wikipedia.org", "en.wikipedia.org", "mathworld.wolfram.com"],
-    // Toán thì phép tính phải do công cụ `tinh_toan` làm, không phải do tra web — tra web chỉ để
-    // lấy định nghĩa/công thức. Nhắc thẳng trong kết quả để model không "tra ra số rồi chép".
-    note: "Phép tính cụ thể phải gọi `tinh_toan`; tra cứu chỉ để lấy định nghĩa, công thức, định lý.",
-  },
-  {
-    id: "ai",
-    label: "AI & công nghệ",
-    detect: /\bai\b|trí tuệ nhân tạo|mô hình|model|llm|gpt|transformer|học máy|machine learning|deep learning|neural|dataset|benchmark|thuật toán|api|framework|thư viện|lập trình|python|javascript|docker|kubernetes|arxiv|paper/i,
-    wikiTitles: [],
-    preferDomains: ["arxiv.org", "vi.wikipedia.org", "en.wikipedia.org", "github.com", "huggingface.co"],
-    special: ["arxiv", "wikipedia"],
-  },
-  {
     id: "kinh-te",
     label: "Kinh tế & số liệu thị trường (phải là số mới nhất)",
     detect:
@@ -145,6 +126,25 @@ export const RESEARCHER_PROFILES = [
     // Nguồn số liệu sống chạy trước: tỷ giá, tiền mã hoá, chỉ số vĩ mô.
     special: ["exchangeRates", "crypto", "worldbank"],
     siteQueries: ["site:gso.gov.vn", "site:sbv.gov.vn"],
+  },
+  {
+    id: "toan-hoc",
+    label: "Toán học",
+    detect:
+      /toán|phương trình|đạo hàm|tích phân|hình học|định lý|công thức|logarit|xác suất|thống kê|số nguyên tố|ma trận|vector|chứng minh|tính toán|bài toán|phần trăm|%|trung bình cộng|chia hết|ước chung|bội chung|lãi suất|tỷ lệ|tỉ lệ/i,
+    wikiTitles: [],
+    preferDomains: ["vi.wikipedia.org", "en.wikipedia.org", "mathworld.wolfram.com"],
+    // Toán thì phép tính phải do công cụ `tinh_toan` làm, không phải do tra web — tra web chỉ để
+    // lấy định nghĩa/công thức. Nhắc thẳng trong kết quả để model không "tra ra số rồi chép".
+    note: "Phép tính cụ thể phải gọi `tinh_toan`; tra cứu chỉ để lấy định nghĩa, công thức, định lý.",
+  },
+  {
+    id: "ai",
+    label: "AI & công nghệ",
+    detect: /\bai\b|trí tuệ nhân tạo|mô hình|model|llm|gpt|transformer|học máy|machine learning|deep learning|neural|dataset|benchmark|thuật toán|api|framework|thư viện|lập trình|python|javascript|docker|kubernetes|arxiv|paper/i,
+    wikiTitles: [],
+    preferDomains: ["arxiv.org", "vi.wikipedia.org", "en.wikipedia.org", "github.com", "huggingface.co"],
+    special: ["arxiv", "wikipedia"],
   },
   {
     id: "chinh-phu",
@@ -248,15 +248,61 @@ async function webSearch(query, limit = 5) {
   }
 }
 
+const STOPWORDS = new Set([
+  "của", "cho", "nào", "này", "the", "and", "là", "gì", "ở", "và", "có", "các", "một", "những",
+  "được", "khi", "với", "thì", "hay", "bao", "nhiêu", "tại", "trên", "dưới", "trong", "ngoài",
+]);
+
+const contentTokens = (text) =>
+  String(text)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length >= 3 && !STOPWORDS.has(word));
+
+/**
+ * Trang này có thật sự liên quan tới câu hỏi không?
+ *
+ * Vì sao cần: hỏi "Thủ đô của Peru là gì?" mà bộ tra cứu kéo về bài **Hồ Chí Minh** (bài dài nên
+ * có chữ "thủ đô") rồi nhồi 10.000 ký tự không liên quan vào prompt. Cổng lọc: tên trang phải chứa
+ * từ khoá chính của câu hỏi, hoặc phần đầu bài phải nhắc tới ít nhất 2 từ khoá.
+ */
+function isRelevantPage(title, text, question) {
+  const keys = contentTokens(question);
+  if (!keys.length) return true;
+  const titleNorm = String(title).toLowerCase();
+
+  // Từ khoá ĐỦ MẠNH: dài từ 4 ký tự trở lên ("peru", "chile"…). Từ ngắn kiểu "thủ", "đô" khớp bừa
+  // ("thủ môn", "đô la") nên không được dùng một mình — đã gặp thật: hỏi thủ đô Peru mà kéo về bài
+  // một cầu thủ người Peru chỉ vì bài đó có chữ "thủ môn" và "Peru".
+  const strongKeys = keys.filter((key) => key.length >= 4);
+  if (strongKeys.some((key) => titleNorm.includes(key))) return true;
+
+  // Cụm 2 từ liền nhau ("thủ đô", "biển số", "tỷ giá") là tín hiệu rõ hơn hẳn từng từ rời.
+  const bigrams = [];
+  for (let index = 0; index + 1 < keys.length; index += 1) bigrams.push(`${keys[index]} ${keys[index + 1]}`);
+
+  if (bigrams.some((phrase) => titleNorm.includes(phrase))) return true;
+
+  const head = String(text).slice(0, 1500).toLowerCase();
+  if (bigrams.some((phrase) => head.includes(phrase))) return true;
+  return strongKeys.some((key) => head.includes(key));
+}
+
 /** Wikipedia: tìm trang khớp nhất rồi lấy toàn văn (plaintext). */
 async function wikipediaExtract(titles = [], query = "") {
   const out = [];
-  const tryTitle = async (title, lang = "vi") => {
+  // `reference` PHẢI là câu hỏi gốc, không phải tiêu đề trang: bản trước truyền nhầm nên cổng lọc
+  // luôn so trang với chính nó ⇒ mọi trang đều "liên quan" (kéo về cả bài cầu thủ Claudio Pizarro
+  // khi hỏi thủ đô Peru).
+  const tryTitle = async (title, lang = "vi", reference = null) => {
     try {
       const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&explaintext=1&redirects=1&titles=${encodeURIComponent(title)}`;
       const json = JSON.parse(await getText(url));
       const page = Object.values(json?.query?.pages ?? {})[0];
-      if (page?.extract) out.push({ title: page.title, url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title)}`, text: page.extract });
+      if (!page?.extract) return;
+      // Bài không liên quan thì BỎ, đừng nhồi vào prompt — thà ít nguồn mà đúng.
+      if (!isRelevantPage(page.title, page.extract, reference || query || title)) return;
+      out.push({ title: page.title, url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title)}`, text: page.extract });
     } catch {
       /* bỏ qua */
     }
@@ -266,7 +312,7 @@ async function wikipediaExtract(titles = [], query = "") {
     try {
       const searchUrl = `https://vi.wikipedia.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(query)}`;
       const json = JSON.parse(await getText(searchUrl));
-      for (const hit of json?.query?.search ?? []) await tryTitle(hit.title);
+      for (const hit of json?.query?.search ?? []) await tryTitle(hit.title, "vi", query);
     } catch {
       /* bỏ qua */
     }
@@ -557,7 +603,7 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
  * Khối chữ để đưa lại cho model sau khi tra cứu. Cố ý nhắc thẳng: chỉ được nói phần có nguồn,
  * không thấy thì phải nói chưa chắc — đây là điểm khác biệt so với "trả lời theo trí nhớ".
  */
-export function researchToModelText(result) {
+export function researchToModelText(result, { maxChars = 7000 } = {}) {
   const lines = [
     `KẾT QUẢ TRA CỨU (researcher: ${result.researcher.label} · mức chắc chắn: ${result.confidence})`,
     `Câu hỏi tra: ${result.question}`,
@@ -604,7 +650,12 @@ export function researchToModelText(result) {
     "CÁCH DÙNG: chỉ khẳng định những gì có trong đoạn trích trên và nói rõ nguồn khi người dùng cần độ chính xác.",
     "Phần KHÔNG có trong kết quả tra cứu thì đừng thêm vào — kể cả khi bạn 'nhớ' là đúng.",
   );
-  return lines.join("\n");
+  const text = lines.join("\n");
+  // Prompt có hạn: khối tra cứu dài quá thì cắt bớt và nói rõ là đã cắt, để model không tưởng
+  // mình đã có đủ dữ liệu.
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n… (kết quả tra cứu đã được cắt bớt cho vừa ngữ cảnh — phần bị cắt KHÔNG có nghĩa là không tồn tại; cần thì gọi lại công cụ tra_cuu với câu hỏi hẹp hơn.)`;
+  
 }
 
 /**
