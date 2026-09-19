@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "repo moi da clone tai C:\\Users\\Minhn\\FlowTech AI\\flowgpt\\fbuddy (remote minhfat-ux/fbuddy, nhanh main, HEAD 4d70e58); RAG entry .privatefbuddy/knowledge/AGENT_ENGINEERING/KAE-003-win-da-tham-gia.md (verified_by: WIN); fbuddy ops/tasks T-20260919-01/02/03 deu co su kien win-acked; node v24.19.0; kenh nhan viec = BO NGHE DAY SSE (subscribers.win=1); Mac nghiem thu: cd fbuddy && node ops/verify-win-joined.mjs",
+ "actor": "win",
+ "at": "2026-09-19T10:04:26.892Z"
+}
