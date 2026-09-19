@@ -12,6 +12,7 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `T-20260918-02` | done | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `chờ bên giao nghiệm thu` |
 | `T-20260918-03` | done | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `chờ bên giao nghiệm thu` |
 | `T-20260919-01` | sent | Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE): bỏ poll 20 giây, hết bã | `AGENT_NAME=WIN node ops/task.mjs ack T-20260919-01 --push` |
+| `T-20260919-02` | sent | WIN: clone repo fbuddy mới (minhfat-ux/fbuddy) + join sổ task + ack 3  | `AGENT_NAME=WIN node ops/task.mjs ack T-20260919-02 --push` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->
