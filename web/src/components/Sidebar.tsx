@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import { useAuth, useData, useToast } from "../state/store";
+import { IS_CONSOLE } from "../console";
 import { useChat } from "../state/chat";
 import { useI18n } from "../i18n";
 import { ConfirmDialog, EmptyState } from "./ui";
@@ -179,6 +180,38 @@ export function Sidebar({
       )}
     </div>
   );
+
+  // Console (console.meetflowai.site) — chỉ là admin panel, không có chat/studio/hub.
+  if (IS_CONSOLE) {
+    return (
+      <>
+        {open && <div className="sidebar-backdrop" onClick={onClose} />}
+        <aside className={`sidebar${open ? " open" : ""}`}>
+          <div className="sidebar-head">
+            <div className="brand grow">
+              <span className="brand-mark">
+                <img src="/brand-mark.png?v=culi2" alt="FlowTech" />
+              </span>
+              <span className="brand-text">
+                <span className="brand-word">{meta?.appName ?? "fBuddy"}</span>
+                <small>{t("shell.brandTagline")}</small>
+              </span>
+            </div>
+            <button className="btn btn-ghost btn-icon" onClick={toggleTheme} title={t("shell.theme.toggle")} type="button">
+              {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+          </div>
+          <nav className="sidebar-scroll">
+            <button className={`nav-item${view === "settings" ? " active" : ""}`} onClick={() => onView("settings")} type="button">
+              <span className="nav-icon"><Settings size={16} /></span>
+              <span className="nav-label">{t("shell.sidebar.settings")}</span>
+            </button>
+          </nav>
+          <ProfileMenu onOpenTopup={() => onView("topup")} />
+        </aside>
+      </>
+    );
+  }
 
   return (
     <>

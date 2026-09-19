@@ -12,9 +12,11 @@ import { StudioPage } from "./studio/StudioPage";
 import { SettingsPage } from "./settings/SettingsPage";
 import { SkillHubPage } from "./hub/SkillHubPage";
 import { TopupPage } from "./topup/TopupPage";
+import { IS_CONSOLE } from "./console";
 
 /** Initial view, so the server's `?view=topup` link opens this page directly. */
 function initialView(): View {
+  if (IS_CONSOLE) return "settings";
   try {
     const requested = new URLSearchParams(window.location.search).get("view");
     if (requested === "topup" || requested === "hub" || requested === "studio" || requested === "chat") {
@@ -103,6 +105,15 @@ export function App() {
         <LoginPage />
         <Toaster toasts={toasts} onDismiss={dismiss} />
       </>
+    );
+  }
+
+  // Console chỉ dành cho admin.
+  if (IS_CONSOLE && !user.isAdmin) {
+    return (
+      <div className="auth-page">
+        <div className="muted">Chỉ quản trị viên FlowTech mới truy cập được console này.</div>
+      </div>
     );
   }
 
