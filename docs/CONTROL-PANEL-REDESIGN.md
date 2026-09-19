@@ -58,7 +58,7 @@ Một **FlowTech Console** duy nhất:
 
 ## 6. Quyết định cần anh chốt
 
-1. Console đặt ở domain nào? (vd `console.flowtech.ai` hay `fbuddy.meetflowai.site/admin`)
+1. ~~Console đặt ở domain nào?~~ → **ĐÃ CHỐT: `console.meetflowai.site`** (Cloudflare, cùng origin node-2 như `fbuddy.meetflowai.site`).
 2. P0 có cần **SSO chung** ngay, hay chấp nhận login admin riêng của fBuddy trước?
 3. VPN admin có bắt buộc phải gom vào Console ngay, hay ưu tiên **AI/fBuddy trước**?
 
