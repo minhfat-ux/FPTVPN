@@ -45,3 +45,12 @@ và xác nhận **cải thiện rất tốt**; số đo định lượng sau khi
   **cần test lại trên máy thật** trước khi coi là xong; Android/iOS/Mac chưa có split-tunnel (đang điều tra).
 - **Apple hysteria2**: macOS extension đã hysteria-only nhưng TCP còn blackhole (cần rebuild framework với
   stack gVisor); iOS chưa chuyển. Bản iOS 1.4.0 ở trên **không** dùng hysteria2.
+
+## 🔒 ĐÓNG BĂNG iOS (19/09/2026, theo yêu cầu chủ dự án)
+
+Chủ dự án xác nhận bản iOS **1.4.0 (build 15)** đang chạy **tốt và ổn định** và yêu cầu **khoá lại, không sửa gì thêm**.
+
+- **Không sửa** `iOS/**` (đặc biệt `iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift`, `WSRelayClient.swift`, `RelayUDPListener.swift`), **không** đổi version iOS, **không** build lại IPA trừ khi chủ dự án yêu cầu.
+- Bản đóng băng tương ứng: IPA ở `build/ios-1.3.3...` không dùng; bản đang dùng là **`build/ios-adhoc-export/ipa/FlowVPN.ipa`** (1.4.0/15, sha256 `b6bf9a04bf3331655dcefd062c957d22ee81d177d8880636ec4ba492d4150672` — xem bảng phía trên) tại commit `b08649d`.
+- Việc **hysteria2 cho iOS** (chuyển NE sang hysteria-only) **tạm dừng** cho tới khi chủ dự án mở khoá. Công việc Apple hiện chỉ làm trên **macOS**.
+- Lưu ý kỹ thuật: thư mục `iOS/PrivateVPNPacketTunnel/` được **dùng chung** với target extension macOS, nên sửa file trong đó có thể đổi binary iOS nếu build lại app iOS — vì vậy tuyệt đối không build lại iOS trong lúc khoá.
