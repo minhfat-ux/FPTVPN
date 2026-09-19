@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Van bi chan boi sandbox phien (workspace-write), da kiem chung that: (1) ghi ra ngoai workspace BI TU CHOI — thu tao C:\\Users\\Minhn\\FlowTech AI\\_sandbox-probe => 'Access to the path is denied' => KHONG clone duoc fbuddy ra duong dan may (vd C:\\Users\\Minhn\\FlowTech AI\\fbuddy); (2) moi tien trinh git con chet 'couldn't create signal pipe, Win32 error 5' => credential helper HTTPS va SSH deu khong chay => 'ack --push' trong repo fbuddy se chi ghi duoc file su kien cuc bo; (3) Startup/Scheduled Task cho bo nghe o repo moi cung nam ngoai workspace. DA XAC MINH: gh CLI dang nhap san minhfat-ux (scope repo, workflow) va 'gh api repos/minhfat-ux/fbuddy/...' DOC DUOC repo private, brief docs/tasks/WIN-JOIN-fbuddy-repo.md da doc day du. Nguoi chay NGOAI sandbox chi can: cd 'C:\\Users\\Minhn\\FlowTech AI'; gh repo clone minhfat-ux/fbuddy; cd fbuddy; tao .env.bus; set AGENT_NAME=WIN; node ops\\task.mjs sync; node ops\\task.mjs list; roi ack T-20260919-01/02/03 --note 'da nhan' --push (xem brief).",
+ "actor": "win",
+ "at": "2026-09-19T10:02:24.748Z"
+}
