@@ -610,6 +610,21 @@ function releaseLock() {
 }
 
 if (!ONCE) {
+  // BỘ NGHE ĐẨY (SSE) đang chạy thì KHÔNG được chạy watcher poll: hai đường cùng đánh thức thì mỗi
+  // tin bus boot hai phiên harness. Đã gặp thật 19/09/2026 — sau khi chuyển sang SSE, một phiên
+  // song song lại bật `agent-watch.mjs` ⇒ watcher poll quay lại (pid mới xuất hiện liên tục).
+  // Tự thoát ở đây là chốt chặn cuối, không phụ thuộc ai/cái gì gọi watcher.
+  // Vòng `--once` (do bộ nghe gọi) KHÔNG đi qua nhánh này nên không bị chặn.
+  try {
+    const listenPid = Number(fs.readFileSync(path.join(TASKS_DIR, `.listen-${SELF.toLowerCase()}.pid`), "utf8").trim());
+    if (listenPid && listenPid !== process.pid) {
+      process.kill(listenPid, 0); // ném lỗi nếu tiến trình đã chết
+      log(`bộ nghe đẩy đang chạy (pid ${listenPid}) — watcher poll tự thoát để không đánh thức trùng.`);
+      process.exit(0);
+    }
+  } catch {
+    /* không có bộ nghe (hoặc pidfile cũ) — watcher được phép chạy */
+  }
   const holder = claimLock();
   if (holder && !args.includes("--force")) {
     log(`đã có watcher khác đang chạy (pid ${holder}) — thoát để tránh đánh thức trùng. (--force để chạy chồng)`);
