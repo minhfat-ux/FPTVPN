@@ -43,6 +43,14 @@ export const REWRITE_SLUGS = [
   "accountant", "ciabao", "corp-financial-analysis", "social-media-lead-generation",
 ];
 
+/**
+ * `--slugs a,b,c` để nghiệm thu một danh sách khác (mặc định: 22 mục nhập từ nguồn ngoài).
+ * Dùng cho việc T-20260918-02 — 21 mục giáo dục:
+ *   node ops/verify-rewrite.mjs --slugs "family-education-ma,ket-prep-team,…"
+ */
+const SLUGS_ARG = value("slugs", null);
+const CHECK_SLUGS = SLUGS_ARG ? SLUGS_ARG.split(",").map((s) => s.trim()).filter(Boolean) : REWRITE_SLUGS;
+
 const CJK = /[\u3400-\u9fff\uf900-\ufaff]/;
 const hasCjk = (text) => CJK.test(String(text ?? ""));
 
@@ -91,7 +99,7 @@ const i18nOf = (row) => {
 };
 
 const report = [];
-for (const slug of REWRITE_SLUGS) {
+for (const slug of CHECK_SLUGS) {
   const row = rows.get(slug);
   if (!row) {
     report.push({ slug, verdict: "FAIL", reasons: ["không có trong chợ"], overlap: null, length: 0 });
@@ -126,7 +134,7 @@ for (const slug of REWRITE_SLUGS) {
 if (AS_JSON) {
   console.log(JSON.stringify({ checkedAt: new Date().toISOString(), maxOverlap: MAX_OVERLAP, report }, null, 1));
 } else {
-  console.log(`\n== NGHIỆM THU viết lại (${REWRITE_SLUGS.length} mục) — ${DB} ==\n`);
+  console.log(`\n== NGHIỆM THU viết lại (${CHECK_SLUGS.length} mục) — ${DB} ==\n`);
   for (const item of report) {
     const tag = item.verdict === "PASS" ? "✓ PASS" : "✗ FAIL";
     const overlap = item.overlap === null ? "  n/a" : `${(item.overlap * 100).toFixed(0)}%`.padStart(5);
