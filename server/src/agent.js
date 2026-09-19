@@ -3,6 +3,7 @@ import { listAllTools, callTool, flattenToolResult, qualifiedToolName } from "./
 import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool } from "./skills/index.js";
 import { applyVisionFallback } from "./vision-fallback.js";
 import { buildAppsKnowledge } from "./apps-knowledge.js";
+import { buildMemoryBlock, learnSelfReference } from "./memory.js";
 import { isConfirmed, planChoices } from "./skills/confirm.js";
 import { excelChoices } from "./skills/vision.js";
 import { hubSkillForUser, isSelectableSkill } from "./skills/hub.js";
@@ -181,13 +182,14 @@ function resolveVisionProviderFor({ providerId = null, model = null } = {}) {
   }
 }
 
-export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "" }) {
+export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "", conversationId = null }) {
   const today = new Date().toISOString().slice(0, 10);
   const basePrompt = Array.isArray(settings.systemPrompt) ? settings.systemPrompt.join("\n") : settings.systemPrompt;
   const parts = [
     basePrompt,
     PRONOUN_RULES,
     buildAppsKnowledge({ message }),
+    buildMemoryBlock({ userId: user?.id ?? null, query: message, conversationId, accountName: user?.name ?? null }),
     `Hôm nay là ${today}.`,
     SKILL_INSTRUCTIONS[skill] ?? "",
     planFirst
@@ -228,6 +230,10 @@ export async function prepareTurn({ user, body, channel }) {
   const content = String(body?.content ?? "").trim();
   const attachmentIds = Array.isArray(body?.attachments) ? body.attachments.slice(0, 10) : [];
   if (!content && !attachmentIds.length) throw new ApiError(400, "bad_request", "Nội dung trống");
+
+  // Học cách xưng hô từ chính câu người dùng vừa gõ (không tốn lượt AI): lần sau mở
+  // hội thoại mới là đã xưng đúng vai, không phải đoán.
+  learnSelfReference({ userId: user.id, text: content });
 
   // Credit gate: metering on + no balance + not an admin ⇒ refuse with a clear
   // message (the UI turns this into a "nạp thêm" card).
@@ -458,7 +464,7 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     }
   }
 
-  const systemPrompt = buildSystemPrompt({ skill, files, settings, hubSkill: turn.hubSkill, user, planFirst: Boolean(turn.planFirst), message: turn.content });
+  const systemPrompt = buildSystemPrompt({ skill, files, settings, hubSkill: turn.hubSkill, user, planFirst: Boolean(turn.planFirst), message: turn.content, conversationId: conversation.id });
   const messages = await buildModelMessages({ conversationId: conversation.id, systemPrompt });
 
   // Gateways hard-fail on an image part the model cannot handle (GLM: "content.type

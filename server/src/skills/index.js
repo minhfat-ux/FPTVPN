@@ -3,6 +3,7 @@ import { generateXlsx } from "./xlsx.js";
 import { analyzeData, listFilesForModel } from "./data.js";
 import { editImage, transformImage } from "./image.js";
 import { readImageContent, xlsxFromImage } from "./vision.js";
+import { rememberFact, searchPastChats } from "../memory.js";
 import { ApiError } from "../util.js";
 
 /**
@@ -201,6 +202,58 @@ export const TOOL_DEFINITIONS = [
     description: "Liệt kê tệp người dùng đã tải lên kèm id cho các công cụ khác.",
     inputSchema: { type: "object", properties: {} },
     handler: listFilesForModel,
+  },
+  {
+    name: "remember_fact",
+    skill: "auto",
+    label: "Ghi nhớ về người dùng",
+    description:
+      "Ghi nhớ một sự thật bền vững về người dùng (tên, vai trò, công ty, sở thích, cách xưng hô…) để lần sau không hỏi lại. Chỉ ghi khi người dùng nói rõ.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Nhãn ngắn, ví dụ 'tên', 'công ty', 'con học lớp'" },
+        value: { type: "string", description: "Nội dung ghi nhớ" },
+        kind: { type: "string", enum: ["fact", "preference", "profile"], description: "Loại (mặc định fact)" },
+      },
+      required: ["key", "value"],
+    },
+    handler: async (args, ctx) => {
+      const row = rememberFact({ userId: ctx.userId, key: args.key, value: args.value, kind: args.kind ?? "fact", source: "model" });
+      return {
+        ok: true,
+        summary: row ? `Đã ghi nhớ "${args.key}"` : "Không ghi được (thiếu dữ liệu)",
+        data: {},
+        artifacts: [],
+        modelText: row ? `Đã ghi nhớ: ${args.key} = ${args.value}.` : "Không ghi được mẩu nhớ này.",
+      };
+    },
+  },
+  {
+    name: "search_past_chats",
+    skill: "auto",
+    label: "Tìm ngữ cảnh cũ",
+    description: "Tìm trong các tin nhắn cũ của chính người dùng theo từ khoá để nhớ lại ngữ cảnh đã nói.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Từ khoá cần tìm" },
+      },
+      required: ["query"],
+    },
+    handler: async (args, ctx) => {
+      const hits = searchPastChats({ userId: ctx.userId, query: args.query, excludeConversationId: ctx.conversationId ?? null, limit: 5 });
+      if (!hits.length) {
+        return { ok: true, summary: "Không tìm thấy", data: { results: [] }, artifacts: [], modelText: "Không tìm thấy ngữ cảnh cũ nào khớp." };
+      }
+      return {
+        ok: true,
+        summary: `Tìm thấy ${hits.length} đoạn`,
+        data: { results: hits },
+        artifacts: [],
+        modelText: hits.map((h) => `[${h.date} · ${h.title}] ${h.role === "user" ? "người dùng" : "bạn"}: ${h.snippet}`).join("\n"),
+      };
+    },
   },
 ];
 

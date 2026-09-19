@@ -10,8 +10,10 @@ const {
   buildAppsKnowledge,
   buildAppsCatalogue,
   buildExpertSkillConnectorCatalogue,
+  buildModelKnowledge,
   appsQuestionLikely,
   expertSkillQuestionLikely,
+  modelQuestionLikely,
   PUBLISHED_APPS,
   COMING_SOON_APPS,
   EXPERTS_CATALOGUE,
@@ -158,6 +160,33 @@ test("câu hỏi về chuyên gia/kỹ năng thì ghép danh mục expert + skil
   // Cấu trúc dữ liệu nguồn vẫn còn nguyên (đủ 2 nhóm expert + 4 skill built-in).
   assert.equal(EXPERTS_CATALOGUE.length, 2);
   assert.equal(SKILLS_CATALOGUE.builtin.length, 4);
+});
+
+/**
+ * Hỏi "làm ảnh/video" hay "chọn model nào" thì fBuddy phải chỉ đúng model tạo ảnh
+ * (Gemini/OpenAI) và nói thẳng video CHƯA hỗ trợ sẽ nâng cấp — không bịa.
+ */
+test("câu hỏi làm ảnh/video thì ghép khối model, chỉ đúng model ảnh + báo video chưa có", () => {
+  for (const message of ["làm ảnh cho em", "tạo video giới thiệu", "chọn model nào để vẽ tranh", "sửa ảnh này"]) {
+    assert.equal(modelQuestionLikely(message), true, `phải nhận ra: ${message}`);
+    assert.match(buildAppsKnowledge({ message }), /## MODEL & KHẢ NĂNG ẢNH\/VIDEO/, `phải có khối model: ${message}`);
+  }
+
+  // Lượt thường không tốn token cho khối model.
+  for (const message of ["dịch đoạn văn này", "làm 8 slide tổng kết"]) {
+    assert.equal(modelQuestionLikely(message), false, `không nên ghép khối model: ${message}`);
+    assert.doesNotMatch(buildAppsKnowledge({ message }), /## MODEL & KHẢ NĂNG ẢNH\/VIDEO/);
+  }
+
+  const block = buildModelKnowledge();
+  // Chỉ 2 model tạo ảnh — không bịa thêm.
+  assert.match(block, /gemini-2\.5-flash-image/);
+  assert.match(block, /gpt-image-1/);
+  // Claude/GLM/OpenRouter chỉ đọc ảnh, không tạo được.
+  assert.match(block, /KHÔNG tạo được ảnh/);
+  // Video: nói thẳng chưa hỗ trợ + sẽ nâng cấp, không hứa ngày.
+  assert.match(block, /CHƯA hỗ trợ tạo\/sửa video/);
+  assert.match(block, /NÂNG CẤP/);
 });
 
 /**

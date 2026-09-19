@@ -233,43 +233,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 );
 
--- Key kích hoạt cho app Windows (MeetFlow AI Overlay). CHỈ lưu hash của key: mất DB
--- cũng không lộ key của khách. Sinh từ Control Panel, hoặc tự động khi đơn thành 'paid'.
-CREATE TABLE IF NOT EXISTS desktop_keys (
-  id TEXT PRIMARY KEY,
-  key_hash TEXT NOT NULL,
-  key_hint TEXT NOT NULL,
-  user_id TEXT,
-  email TEXT,
-  order_id TEXT,
-  plan TEXT NOT NULL DEFAULT 'windows',
-  max_devices INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'active',
-  note TEXT,
-  created_by TEXT,
-  sent_at TEXT,
-  revoked_at TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_desktop_keys_user ON desktop_keys(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_desktop_keys_order ON desktop_keys(order_id);
-
--- Mỗi dòng = một máy đã kích hoạt bằng key đó (thu hồi được từng máy).
-CREATE TABLE IF NOT EXISTS desktop_key_activations (
-  id TEXT PRIMARY KEY,
-  key_id TEXT NOT NULL,
-  machine_id TEXT NOT NULL,
-  machine_label TEXT,
-  ip TEXT,
-  activated_at TEXT NOT NULL,
-  last_seen_at TEXT NOT NULL,
-  revoked_at TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_desktop_key_activations_key ON desktop_key_activations(key_id, activated_at);
-
 -- One row per signed-in device/browser. The JWT carries a session id (sid), so
 -- several devices for the same account coexist and each can be revoked on its own.
 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -295,6 +258,49 @@ CREATE TABLE IF NOT EXISTS user_state (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------- bộ nhớ dài hạn
+-- Sự thật BỀN VỮNG về một người dùng, để lần sau không phải hỏi lại: tên, vai trò,
+-- công ty, sở thích, định dạng ưa thích, dự án đang làm, và cả cách họ tự xưng.
+-- Chỉ thuộc về chính người đó: mọi truy vấn đều lọc theo user_id.
+CREATE TABLE IF NOT EXISTS user_memories (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'fact',   -- fact | preference | pronoun | profile
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'model', -- user | model | system
+  confidence REAL NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(user_id, kind, key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_memories_user ON user_memories(user_id, updated_at DESC);
+
+-- Chỉ mục toàn văn cho tin nhắn cũ (FTS5, có sẵn trong node:sqlite) để tìm lại
+-- ngữ cảnh đã nói. Bảng độc lập (không external-content) để lọc được theo user_id;
+-- đồng bộ bằng trigger nên không có đường ghi nào bị bỏ sót.
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+  content,
+  message_id UNINDEXED,
+  user_id UNINDEXED,
+  conversation_id UNINDEXED,
+  role UNINDEXED,
+  created_at UNINDEXED,
+  tokenize = 'unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO messages_fts(content, message_id, user_id, conversation_id, role, created_at)
+  VALUES (new.content, new.id, new.user_id, new.conversation_id, new.role, new.created_at);
+END;
+CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN
+  DELETE FROM messages_fts WHERE message_id = old.id;
+END;
+CREATE TRIGGER IF NOT EXISTS messages_fts_au AFTER UPDATE ON messages BEGIN
+  DELETE FROM messages_fts WHERE message_id = old.id;
+  INSERT INTO messages_fts(content, message_id, user_id, conversation_id, role, created_at)
+  VALUES (new.content, new.id, new.user_id, new.conversation_id, new.role, new.created_at);
+END;
 `;
 
 export const db = new DatabaseSync(config.dbFile);
@@ -306,6 +312,7 @@ export function initDb() {
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec(SCHEMA);
   migrate();
+  backfillMessageSearch();
   return db;
 }
 
@@ -322,6 +329,26 @@ const ADDED_COLUMNS = [
   { table: "hub_skills", column: "price_vnd", definition: "INTEGER NOT NULL DEFAULT 0" },
 ];
 
+/**
+ * Nạp chỉ mục tìm kiếm cho những tin nhắn có TRƯỚC khi bảng FTS tồn tại. Chỉ chạy
+ * khi chỉ mục còn rỗng nên không tốn gì về sau; trigger lo phần tin nhắn mới.
+ */
+function backfillMessageSearch() {
+  try {
+    const indexed = Number(db.prepare("SELECT COUNT(*) AS n FROM messages_fts").get()?.n ?? 0);
+    if (indexed > 0) return;
+    const total = Number(db.prepare("SELECT COUNT(*) AS n FROM messages").get()?.n ?? 0);
+    if (!total) return;
+    db.exec(`INSERT INTO messages_fts(content, message_id, user_id, conversation_id, role, created_at)
+      SELECT content, id, user_id, conversation_id, role, created_at FROM messages WHERE content <> ''`);
+    const after = Number(db.prepare("SELECT COUNT(*) AS n FROM messages_fts").get()?.n ?? 0);
+    console.log(`[fbuddy] đã lập chỉ mục tìm kiếm cho ${after} tin nhắn cũ`);
+  } catch (err) {
+    // Tìm kiếm chỉ là tính năng phụ — không được làm hỏng khởi động.
+    console.error("[fbuddy] bỏ qua lập chỉ mục tìm kiếm:", err?.message ?? err);
+  }
+}
+
 function migrate() {
   for (const entry of ADDED_COLUMNS) {
     const existing = new Set(db.prepare(`PRAGMA table_info(${entry.table})`).all().map((row) => row.name));
@@ -330,7 +357,42 @@ function migrate() {
     console.log(`[fbuddy] đã thêm cột ${entry.table}.${entry.column}`);
     if (entry.table === "hub_skills" && entry.column === "price_vnd") backfillHubPriceVnd();
   }
+  fixLegacySystemPromptCompany();
   COLUMN_CACHE.clear();
+}
+
+/**
+ * Bản cũ gieo câu "trợ lý AI đa năng của MeetFlow AI" — đọc lên thành fBuddy thuộc về
+ * MeetFlow AI, và đó là một nguồn khiến trợ lý nhầm MeetFlow AI thành công ty mẹ của
+ * fBuddy (MeetFlow AI chỉ là tên MỘT sản phẩm khác; công ty là FlowTech).
+ *
+ * Chỉ thay đúng chuỗi do bản cũ gieo ra: prompt admin đã sửa tay thì không khớp nên
+ * không bị đụng tới. Idempotent — chạy lại vô hại.
+ *
+ * `systemPrompt` có HAI dạng đã gặp trên máy thật: một chuỗi dài, hoặc **mảng các đoạn**
+ * (mỗi đoạn là một dòng trong Cài đặt → Hệ thống). Production đang lưu dạng mảng, nên chỉ
+ * xử lý dạng chuỗi là bản vá im lặng không làm gì.
+ */
+export function fixLegacySystemPromptCompany() {
+  const LEGACY = "trợ lý AI đa năng của MeetFlow AI";
+  const FIXED = "trợ lý AI đa năng của FlowTech";
+  const row = db.prepare("SELECT value_json FROM app_settings WHERE key = 'systemPrompt'").get();
+  if (!row) return false;
+  let value;
+  try {
+    value = JSON.parse(row.value_json);
+  } catch {
+    return false;
+  }
+  const fixText = (text) => (typeof text === "string" ? text.replaceAll(LEGACY, FIXED) : text);
+  const next = Array.isArray(value) ? value.map(fixText) : fixText(value);
+  if (JSON.stringify(next) === JSON.stringify(value)) return false;
+  db.prepare("UPDATE app_settings SET value_json = ?, updated_at = ? WHERE key = 'systemPrompt'").run(
+    JSON.stringify(next),
+    nowIso(),
+  );
+  console.log("[fbuddy] đã sửa prompt hệ thống: công ty là FlowTech, MeetFlow AI là tên một sản phẩm");
+  return true;
 }
 
 /**
@@ -460,7 +522,11 @@ export function count(table, where = "", params = []) {
 
 export const DEFAULT_APP_SETTINGS = {
   systemPrompt: [
-    "Bạn là fBuddy — trợ lý AI đa năng của MeetFlow AI, trả lời bằng tiếng Việt tự nhiên, ngắn gọn và chính xác.",
+    // "của FlowTech" chứ không phải "của MeetFlow AI": MeetFlow AI là TÊN MỘT SẢN PHẨM
+    // khác (dịch + biên bản cuộc họp), công ty/hệ sinh thái mới là FlowTech. Câu chữ cũ
+    // chính là một nguồn khiến trợ lý nhầm MeetFlow AI thành công ty mẹ của fBuddy.
+    "Tên của bạn là fBuddy — trợ lý AI đa năng của FlowTech (hệ sinh thái có cả MeetFlow AI, VPNFlow, FlowTech Harness, SuperMom AI), trả lời bằng tiếng Việt tự nhiên, ngắn gọn và chính xác.",
+    "Khi được hỏi tên, LUÔN trả lời là fBuddy và KHÔNG tự nhận là FlowGpt/FlowGPT/FlowGpt-* hay bất kỳ tên cũ nào khác — kể cả khi lịch sử hội thoại, tài liệu hay tên model hiển thị có nhắc tới tên cũ đó.",
     "Khi người dùng cần tạo tệp (slide, bảng tính, phân tích dữ liệu, sửa ảnh), hãy dùng công cụ tương ứng thay vì chỉ mô tả.",
     "Nếu thiếu thông tin quan trọng, hỏi lại tối đa một câu ngắn rồi vẫn đưa ra bản nháp hợp lý.",
     "Khi đã tạo tệp, chỉ nói ngắn gọn đã tạo gì và nêu vài số liệu chính; KHÔNG viết link tải kiểu sandbox:/… hay đường dẫn giả — giao diện đã hiện thẻ tệp cho người dùng bấm tải.",

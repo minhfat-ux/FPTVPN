@@ -158,6 +158,16 @@ export function expertSkillQuestionLikely(message) {
   return EXPERT_SKILL_CONNECTOR_PATTERN.test(String(message ?? ""));
 }
 
+/** Câu hỏi có chạm tới làm ảnh/video hay chọn model không. */
+const MODEL_QUESTION_PATTERN =
+  /\b(làm ảnh|sửa ảnh|tạo ảnh|vẽ ảnh|vẽ tranh|tạo tranh|ảnh mới|làm video|tạo video|dựng video|làm clip|tạo clip|image|video|model nào|chọn model|dùng model nào)\b/i;
+
+/** true = ghép cả khối model (ảnh/video) cho lượt này. */
+export function modelQuestionLikely(message) {
+  if (APPS_KNOWLEDGE_ALWAYS) return true;
+  return MODEL_QUESTION_PATTERN.test(String(message ?? ""));
+}
+
 /**
  * Khối định danh — luôn ghép. Đủ để trả lời đúng câu hỏi kiểu "MeetFlow AI là gì,
  * có phải em không?" và đủ để chặn bịa khi danh mục chi tiết không có mặt.
@@ -224,9 +234,11 @@ export function buildAppsCatalogue() {
 export function buildAppsKnowledge({ message = "", full = false } = {}) {
   const withCatalogue = full || appsQuestionLikely(message);
   const withExperts = full || expertSkillQuestionLikely(message);
+  const withModels = full || modelQuestionLikely(message);
   const blocks = [CORE];
   if (withCatalogue) blocks.push(buildAppsCatalogue());
   if (withExperts) blocks.push(buildExpertSkillConnectorCatalogue());
+  if (withModels) blocks.push(buildModelKnowledge());
   return blocks.join("\n\n");
 }
 
@@ -341,4 +353,20 @@ export function buildExpertSkillConnectorCatalogue() {
   
   lines.push("", APP_RULES);
   return lines.join("\n");
+}
+
+/**
+ * Khối kiến thức MODEL — hướng dẫn chọn model làm ảnh/video. Ghép khi câu hỏi chạm
+ * tới "làm ảnh/video" hay "chọn model nào", để fBuddy chỉ đúng model thay vì bịa.
+ */
+export function buildModelKnowledge() {
+  return [
+    "## MODEL & KHẢ NĂNG ẢNH/VIDEO (dữ kiện thật — dùng khi user hỏi làm ảnh/video hoặc chọn model)",
+    "- Làm/sửa ảnh bằng AI (công cụ edit_image) cần model TẠO ẢNH. Chỉ có 2 lựa chọn:",
+    "  • Gemini — model `gemini-2.5-flash-image`.",
+    "  • OpenAI — model `gpt-image-1`.",
+    "- Claude (Anthropic), GLM (Zhipu), OpenRouter chỉ ĐỌC/HIỂU được ảnh (vision), KHÔNG tạo được ảnh. Nếu user đang dùng các provider này mà muốn làm ảnh, hướng dẫn thêm Gemini hoặc OpenAI trong Cài đặt → Nhà cung cấp AI.",
+    "- Sửa ảnh đơn giản (cắt/xoay/filter/vẽ chữ): mở Image Studio trên web — miễn phí, không cần key, không tốn credit.",
+    "- VIDEO: fBuddy CHƯA hỗ trợ tạo/sửa video. Khi user hỏi làm video, nói thẳng là chưa có và fBuddy sẽ NÂNG CẤP trong thời gian tới — KHÔNG bịa là có, KHÔNG hứa ngày cụ thể.",
+  ].join("\n");
 }
