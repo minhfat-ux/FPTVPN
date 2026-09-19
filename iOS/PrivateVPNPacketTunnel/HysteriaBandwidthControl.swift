@@ -18,6 +18,14 @@ import NetworkExtension
 ///   3. **Ramp**: khi số khai bị chính đường truyền chặn trần (dùng hết ≥85% số khai trong
 ///      ≥10s), tăng ×1,25/×1,5 — nhưng CHỈ áp ở ranh giới an toàn (xem `RampDecision`).
 ///
+/// Luật CHỐT SỐ KHAI (giống Android, sửa lỗi đo thật trên iPad 19/09):
+///   * **có số đo** ⇒ số khai = f(số đo) ≈85% (xem `downKbpsFromMeasurement`), sàn nhỏ
+///     500/1000 kbps, **tuyệt đối KHÔNG nâng lên nấc tĩnh** — đo 1,0–1,1 Mbps mà khai
+///     30/100 Mbps chính là Brutal tự bóp (log `bw: measured=1069 declared up=30000 down=100000`);
+///   * **chưa có số đo** ⇒ đúng `HysteriaDefaults` cũ (không regress);
+///   * **bộ nhớ chỉ nhận số ĐO** (`persistPeaksIfNeeded`) — nấc tĩnh/mặc định không bao giờ
+///     được ghi vào bộ nhớ rồi đọc lại như "số đã học".
+///
 /// Ràng buộc cứng của hysteria: số khai được Go đọc MỘT LẦN trong `MobileConnect` ⇒ đổi số
 /// = tạo client mới = QUIC/stream mới. Vì vậy quyết định ở đây **không** tự đổi gì: nó chỉ
 /// trả `RampDecision` để provider dựng lại transport ĐÚNG LÚC tunnel rảnh (≥2s không có gói),
@@ -55,11 +63,12 @@ enum BandwidthControl {
     static let busyBytesPerSecond = 2_000
     /// Cho phép DỰNG LẠI transport giữa phiên để áp số khai mới.
     ///
-    /// Chỉ bật trên iOS: ở đó Go đọc thẳng fd utun của NetworkExtension nên dựng lại transport
-    /// chỉ là mở relay + QUIC mới trên CÙNG fd. Trên macOS Go nhận fd của cặp socketpair do
-    /// `TunnelBridge` bắc cầu (`HysteriaTransport.resolveTunnelFD`) nên dựng lại là phải dựng
-    /// lại cả cầu — cần đo thực địa rồi mới bật; ở macOS số khai vẫn được kẹp theo mạng/bộ nhớ
-    /// và ramp chỉ để dành cho lần kết nối sau.
+    /// Chỉ bật trên iOS: số khai được Go đọc MỘT LẦN trong `MobileConnect`, còn fd chở gói thì
+    /// KHÔNG đổi khi dựng lại — trên iOS fd đó là đầu của cặp socketpair do extension tự tạo
+    /// (`HysteriaTransport.resolveTunnelFD`), cầu `TunnelBridge` vẫn chạy nguyên nên dựng lại
+    /// transport chỉ là mở relay + QUIC mới trên CÙNG fd. Trên macOS fd cũng là cặp socketpair
+    /// cùng cơ chế, nhưng đường dựng lại giữa phiên chưa đo thực địa nên vẫn tắt; ở macOS số
+    /// khai vẫn được kẹp theo mạng/bộ nhớ và ramp chỉ để dành cho lần kết nối sau.
     static var allowsTransportRebuild: Bool {
         #if os(iOS)
         return true
@@ -72,6 +81,37 @@ enum BandwidthControl {
     static let maxKbps = 10_000_000
     /// Sàn khi khai (dưới mức này thì hysteria chỉ bò — thà về 0 để dùng CC chuẩn).
     static let minKbps = 500
+
+    // MARK: - Chốt số khai theo SỐ ĐO (giống Android, xem `BandwidthPolicy` của
+    // `android/.../BandwidthMemory.kt`)
+
+    /// SÀN AN TOÀN NHỎ khi khai theo số đo (kbps), hai chiều.
+    ///
+    /// **KHÔNG phải nấc tĩnh.** Lấy nấc tĩnh (30/100 Mbps) làm sàn là đúng lỗi đã đo trên
+    /// Android 19/09 (Wi-Fi khách sạn: đo 1,0–1,5 Mbps mà sàn kéo số khai lên 8/12 Mbps ⇒
+    /// Brutal pace gấp ~10 lần sức mạng thật ⇒ tự flood ⇒ tắc). Sàn chỉ để không khai 0/vài
+    /// chục kbps; dưới mức này thì khai 0 cũng không khác gì.
+    static let floorDownKbps = 1_000
+    static let floorUpKbps = 500
+    /// Tỉ lệ của số đo được đem đi khai: ≈85%. Chừa ~15% cho chặng tunnel/relay và cho việc
+    /// Brutal pace sát trần (khai đúng bằng goodput đo được là khai vào vùng đã bão hoà).
+    static let declareRatioPct = 85
+    /// Dải điều chỉnh theo tỉ lệ `pct = số đo × 100 / số khai đã nhớ` (giống Android):
+    ///   ≥150% ⇒ đo VƯỢT XA số khai ⇒ số khai là nút cổ chai ⇒ nhảy lên 85% số đo;
+    ///   95–150% ⇒ đo chạm trần số khai ⇒ còn dư ⇒ dò lên 15%;
+    ///   80–95% ⇒ đo xấp xỉ số khai ⇒ GIỮ NGUYÊN (dải chết, chống dao động);
+    ///   <80% ⇒ số khai VƯỢT sức mạng thật ⇒ hạ về 85% số đo.
+    static let jumpUpPct = 150
+    static let saturatedPct = 95
+    static let deadbandPct = 80
+    static let explorePct = 115
+    /// Số khai KHAI VƯỢT hẳn sức mạng thật (đo < ngần này % số khai) LIÊN TỤC ⇒ hạ NGAY về
+    /// 85% số đo (không hạ từng bậc ×0,7: từ 100 Mbps về 1 Mbps là ~13 bậc, mà mỗi bậc là
+    /// một lần dựng lại transport).
+    static let underrunPct = 50
+    /// Một mẫu chỉ được coi là SỐ ĐO thật khi vượt ngần này (kbps): dưới mức đó chỉ là
+    /// DNS/ping. Trùng ngưỡng ghi log `bw: measured=` của provider (`bandwidthLogMinKbps`).
+    static let minMeasuredKbps = 500
     /// Bão hoà RÕ RÀNG (≥90% số khai) ⇒ tăng mạnh hơn một bậc, tiết kiệm số vòng ramp.
     static let saturatedStrongRatio = 0.9
     /// Cửa sổ bộ nhớ: quá ngần này không đo lại được thì bỏ (mạng có thể đã khác).
@@ -107,6 +147,10 @@ enum BandwidthControl {
 
     /// Lý do của dòng telemetry (`bw: … reason=…`).
     enum Reason: String {
+        /// Mạng này CHƯA có số đo nào ⇒ số khai đúng nấc TĨNH `HysteriaDefaults` (đường lùi an
+        /// toàn, không làm mạng nào chậm hơn trước). Khác `probe`: `profile` nói "đang khai nấc
+        /// tĩnh vì chưa đo được", `probe` chỉ nói "chưa chốt được gì".
+        case profile
         case probe
         case memory
         case clamp
@@ -229,10 +273,12 @@ enum BandwidthControl {
     /// Bản ghi của một mạng (UserDefaults trong container extension).
     struct Memory: Codable {
         /// Đỉnh tốt nhất từng đo được trên mạng này: giá trị LỚN NHẤT của trung bình trượt 10s
-        /// (không phải mẫu 1 giây), kbps.
+        /// (không phải mẫu 1 giây), kbps. Vừa là số đo để suy số khai, vừa là BẰNG CHỨNG duy
+        /// nhất cho biết bản ghi có số đã học thật hay không (xem `trustedMeasuredDownKbps`).
         var peakUpKbps: Int = 0
         var peakDownKbps: Int = 0
         /// Số khai của lần kết nối gần nhất — lần sau bắt đầu từ đây rồi ramp tiếp.
+        /// CHỈ được ghi khi phiên đó đã đo được số thật (xem `persistPeaksIfNeeded`).
         var lastUpKbps: Int = 0
         var lastDownKbps: Int = 0
         /// Số lần đã phải ramp (chỉ để chẩn đoán).
@@ -306,7 +352,13 @@ enum BandwidthControl {
         let newDownKbps: Int
 
         var logReason: String {
-            reason == .lossBackoff ? "loss-backoff" : "idle-reconnect"
+            switch reason {
+            case .lossBackoff: return "loss-backoff"
+            // Kẹp theo số đo: số khai mới KHÔNG phải một bậc ramp mà là f(số đo) — in thẳng ra
+            // để đọc log biết ngay vì sao số khai đổi (xem `underrunPct`).
+            case .clamp: return "clamp"
+            default: return "idle-reconnect"
+            }
         }
     }
 }
@@ -352,6 +404,9 @@ extension BandwidthControl {
         /// Dấu hiệu đang bão hoà (theo mốc thời gian, không phải đếm mẫu — mẫu bị bỏ vì
         /// khe thời gian xấu KHÔNG được tính là đã quan sát).
         private var saturatedSince: Date?
+        /// Mốc bắt đầu "số khai KHAI VƯỢT sức mạng thật" (xem `underrunPct`) — phải LIÊN TỤC
+        /// đủ lâu mới hạ, y như đường ramp (một mẫu tụt không được bóp cả phiên).
+        private var underrunSince: Date?
         /// Số giây liên tục đang mất gói.
         private var lossSeconds: TimeInterval = 0
         private var lastSavedPeakUp = 0
@@ -374,33 +429,41 @@ extension BandwidthControl {
             // Bản ghi gần nhất + đỉnh: lần sau vào cùng mạng bắt đầu từ đúng chỗ đã đạt.
             let base = remembered?.entry
             self.lossSeen = base?.lossBackoffSeen ?? false
-            let link = BandwidthControl.linkSpeedKbps(identity: identity)
-            let ceiling = BandwidthControl.effectiveCeiling(measured: nil, link: link)
-            // KHÔNG có bộ nhớ ⇒ đúng mặc định cũ (không làm mạng nào chậm hơn trước).
-            var up = base?.lastUpKbps ?? 0
-            var down = base?.lastDownKbps ?? 0
-            if up <= 0 { up = BandwidthControl.fallbackUpKbps }
-            if down <= 0 { down = BandwidthControl.fallbackDownKbps }
+            // Số ĐO đáng tin của bản ghi (0 = bản ghi chưa từng đo, hoặc bị nhiễm nấc tĩnh —
+            // xem `trustedMeasuredDownKbps`). Đây là chỗ chặn bộ nhớ nhiễm: có bản ghi mà
+            // KHÔNG có đỉnh đo thì coi như chưa có bộ nhớ.
+            let measured = base.map(BandwidthControl.trustedMeasuredDownKbps) ?? 0
+            // KHÔNG có số đo ⇒ đúng nấc tĩnh cũ (không làm mạng nào chậm hơn trước).
+            var up = BandwidthControl.fallbackUpKbps
+            var down = BandwidthControl.fallbackDownKbps
+            // `profile` (không phải `probe`): số khai đang chạy là NẤC TĨNH. Log phải phân biệt
+            // được "khai tĩnh vì chưa đo" với "đã đo và khai theo số đo" — nếu không thì không
+            // có cách nào nghiệm thu được lỗi "kẹp lên nấc tĩnh" từ log.
+            var reason = BandwidthControl.Reason.profile
+            if measured > 0 {
+                // CÓ số đo ⇒ số khai là f(số đo) (≈85%), không bao giờ kéo lên nấc tĩnh.
+                let chosen = BandwidthControl.clampedDeclaration(
+                    downKbps: BandwidthControl.downKbpsFromMeasurement(
+                        measuredDownKbps: measured,
+                        rememberedDeclaredKbps: base?.lastDownKbps ?? 0
+                    ),
+                    measuredDownKbps: measured
+                )
+                up = chosen.upKbps
+                down = chosen.downKbps
+                reason = chosen.clamped ? .clamp : .memory
+            }
             // Mạng từng mất gói: khởi động thận trọng hơn một bậc để không lặp lại cảnh bóp.
             if self.lossSeen {
                 up = max(BandwidthControl.minKbps, Int(Double(up) * BandwidthControl.lossBackoff))
                 down = max(BandwidthControl.minKbps, Int(Double(down) * BandwidthControl.lossBackoff))
-            }
-            // Trần trên (min(link speed, đỉnh đo × biên an toàn)) kẹp số khởi động. Chưa đo gì
-            // và không đọc được link speed ⇒ `ceiling == nil` ⇒ KHÔNG kẹp (đúng mặc định cũ).
-            var clampedByCeiling = false
-            if let ceiling, up > ceiling || down > ceiling {
-                up = min(up, ceiling)
-                down = min(down, ceiling)
-                clampedByCeiling = true
             }
             self.upKbps = BandwidthControl.clamp(up)
             self.downKbps = BandwidthControl.clamp(down)
             // Bộ nhớ đã đạt mức nào thì coi như vòng ramp trước đã dùng: lần này vẫn phải
             // QUAN SÁT đủ lâu mới tăng tiếp, trừ khi "bootstrap" của phiên đầu (xem `sample`).
             self.rampEvents = base?.rampEvents ?? 0
-            // Lý do để in telemetry: bị trần kẹp > dùng bộ nhớ > còn lại là lần đo đầu.
-            self.planReason = clampedByCeiling ? .clamp : (base == nil ? .probe : .memory)
+            self.planReason = reason
         }
 
         /// Số khai lúc này (đọc thuần, không side effect).
@@ -513,6 +576,50 @@ extension BandwidthControl {
                 )
             }
 
+            // (a0) KẸP XUỐNG theo số đo — lỗi đo THẬT trên iPad 19/09: đo 1,0–1,1 Mbps mà vẫn
+            // khai 30/100 Mbps (nấc tĩnh) ⇒ Brutal pace gấp ~100 lần sức mạng thật. Số khai
+            // VƯỢT hẳn sức mạng thật (đo < 50% số khai) LIÊN TỤC ⇒ hạ NGAY về 85% số đo.
+            //
+            // Vì sao không hạ từng bậc ×0,7 như đường mất gói: từ 100 Mbps về 1 Mbps là ~13
+            // bậc, mà mỗi bậc là một lần dựng lại transport (chờ tunnel rảnh) ⇒ không bao giờ
+            // tới đích. Cũng vì thế ngưỡng phải LIÊN TỤC `rampMinObserved`: trung bình trượt
+            // 10s của một đường ĐANG LÊN TỐC sẽ vượt 50% số khai trước khi hết 10s.
+            let underrun = BandwidthControl.isUnderrun(averageKbps: averageIn, declaredKbps: downKbps)
+            if underrun, underrunSince == nil { underrunSince = now }
+            if !underrun { underrunSince = nil }
+            if let since = underrunSince, now.timeIntervalSince(since) >= BandwidthControl.rampMinObserved {
+                underrunSince = nil
+                let oldUp = upKbps
+                let oldDown = downKbps
+                let chosen = BandwidthControl.clampedDeclaration(
+                    downKbps: BandwidthControl.downKbpsFromMeasurement(
+                        measuredDownKbps: averageIn,
+                        rememberedDeclaredKbps: downKbps
+                    ),
+                    measuredDownKbps: averageIn
+                )
+                if chosen.downKbps < downKbps {
+                    upKbps = chosen.upKbps
+                    downKbps = chosen.downKbps
+                    // Chốt ngay vào plan + telemetry: số khai mới là f(số đo), KHÔNG phải một
+                    // bậc ramp. Áp thật vẫn chỉ ở ranh giới rảnh (provider dựng lại transport).
+                    planReason = chosen.clamped ? .clamp : .memory
+                    pendingReason = planReason
+                    pendingChange = true
+                    persistPeaksIfNeeded(force: true)
+                    return RampDecision(
+                        multiplierUp: nil,
+                        multiplierDown: nil,
+                        reason: planReason,
+                        observedKbps: averageIn,
+                        oldUpKbps: oldUp,
+                        oldDownKbps: oldDown,
+                        newUpKbps: upKbps,
+                        newDownKbps: downKbps
+                    )
+                }
+            }
+
             // (b) TĂNG: chỉ khi CHÍNH số khai đang chặn trần (dùng hết ≥85% trong ≥10s),
             // hoặc thấy đỉnh vượt số khai ≥15%. Trung bình thấp mà đỉnh thấp ⇒ đường không
             // đủ nhanh, KHÔNG tăng (đó là ca khai quá cao của bản cũ).
@@ -533,9 +640,17 @@ extension BandwidthControl {
             // Chưa ramp lần nào trong phiên ⇒ số khai còn là số mặc định/đã nhớ, chưa từng được
             // chứng minh với mạng này: cho phép ramp ngay khi thấy đường nhanh hơn số khai.
             let bootstrap = rampEvents == 0
-            guard averageIn >= BandwidthControl.minTrustedMeasuredKbps,
-                  (saturatedSpan >= BandwidthControl.rampMinObserved || peakOverDeclared || bootstrap)
-            else { return nil }
+            // Đủ tin để TĂNG: đo được ≥5 Mbps (bằng chứng đường nhanh), HOẶC số đo đã CHẠM số
+            // khai đang dùng LIÊN TỤC ≥10s — lúc đó tăng theo TỈ LỆ là an toàn kể cả khi số khai
+            // nhỏ (số khai nhỏ đến từ chính lần kẹp theo số đo trước đó, không phải đường chậm;
+            // nếu chỉ đòi ≥5 Mbps thì sau khi bị kẹp về ~1 Mbps sẽ KHÔNG BAO GIỜ tăng lại được:
+            // Brutal pace đúng số khai nên goodput không bao giờ vượt 5 Mbps).
+            // Dưới `minMeasuredKbps` thì mọi "số đo" chỉ là DNS/ping ⇒ không tăng.
+            let trustedFast = averageIn >= BandwidthControl.minTrustedMeasuredKbps
+            let touchingDeclared = saturatedSpan >= BandwidthControl.rampMinObserved
+                && averageIn >= BandwidthControl.minMeasuredKbps
+            guard trustedFast || touchingDeclared else { return nil }
+            guard touchingDeclared || peakOverDeclared || (bootstrap && trustedFast) else { return nil }
             guard !pendingChange else { return nil }
             let oldUp = upKbps
             let oldDown = downKbps
@@ -595,6 +710,12 @@ extension BandwidthControl {
 
         /// Ghi số khai + đỉnh của phiên vào bộ nhớ (gọi khi kết thúc phiên hoặc khi có ramp).
         func persistPeaksIfNeeded(force: Bool = false) {
+            // CHỈ ghi khi phiên này ĐÃ ĐO được số thật (`everMeasured` = có ≥3 mẫu và vượt
+            // `minMeasuredKbps`). Vì sao là ràng buộc cứng: bản build cũ ghi `lastUp/lastDown`
+            // ngay cả khi CHƯA đo gì ⇒ nấc tĩnh 30/100 Mbps đi thẳng vào bộ nhớ, lần sau đọc
+            // lại như "số đã học" và log ra đúng dòng đã đo trên iPad 19/09:
+            //   bw: net=wifi|if:en0 measured=1069 declared up=30000 down=100000 reason=memory
+            guard everMeasured else { return }
             // Chỉ ghi khi đỉnh đã nhích đủ nhiều (hoặc khi được yêu cầu chốt): UserDefaults
             // không nên bị ghi mỗi giây.
             let moved = abs(peakUpKbps - lastSavedPeakUp) >= BandwidthControl.memoryWriteDeltaKbps
@@ -605,8 +726,30 @@ extension BandwidthControl {
             var entry = memory[key] ?? Memory()
             entry.peakUpKbps = max(entry.peakUpKbps, peakUpKbps)
             entry.peakDownKbps = max(entry.peakDownKbps, peakDownKbps)
-            entry.lastUpKbps = upKbps
-            entry.lastDownKbps = downKbps
+            // Số khai ghi kèm PHẢI suy từ SỐ ĐO, không bao giờ là NẤC TĨNH.
+            //
+            // Vì sao: phiên ĐẦU ở một mạng chưa có bộ nhớ vẫn đang khai `HysteriaDefaults`
+            // (30/100 Mbps) đúng lúc phép đo đầu tiên tới ⇒ ghi thẳng `upKbps/downKbps` là đưa
+            // nấc tĩnh vào bộ nhớ, lần sau đọc lại như "số đã học" và không bao giờ hạ được nữa
+            // (đúng dòng đã đo: `bw: net=wifi|if:en0 measured=1069 declared up=30000 down=100000
+            // reason=memory`). Kẹp về ≈`declareRatioPct`% ĐỈNH đã ĐO — đúng tỉ lệ mà
+            // `downKbpsFromMeasurement` dùng — nên bản ghi luôn nhất quán với phép đo đi kèm.
+            // Số khai do RAMP hợp lệ (≤85% đỉnh) không bị đụng tới: chỉ kẹp khi số khai đang
+            // VƯỢT thứ đã chứng minh được.
+            let measuredDeclaredDown = max(
+                peakDownKbps * 100 / BandwidthControl.declareRatioPct,
+                BandwidthControl.floorDownKbps
+            )
+            entry.lastDownKbps = min(downKbps, measuredDeclaredDown)
+            // Chiều LÊN giữ đúng tỉ lệ của nấc tĩnh (30/100) như `clampedDeclaration`.
+            entry.lastUpKbps = min(
+                upKbps,
+                max(
+                    entry.lastDownKbps * BandwidthControl.fallbackUpKbps
+                        / max(BandwidthControl.fallbackDownKbps, 1),
+                    BandwidthControl.floorUpKbps
+                )
+            )
             entry.rampEvents = rampEvents
             entry.updatedAt = Date()
             entry.lossBackoffSeen = lossSeen
@@ -654,6 +797,66 @@ extension BandwidthControl {
     /// Chuẩn hoá số khai: không âm, không vượt trần cứng.
     static func clamp(_ kbps: Int) -> Int {
         min(max(kbps, minKbps), maxKbps)
+    }
+
+    /// Số ĐO XUỐNG đáng tin của một bản ghi bộ nhớ (kbps). `0` = bản ghi KHÔNG có phép đo nào.
+    ///
+    /// Vì sao cần: bản build cũ ghi cả `lastUpKbps/lastDownKbps` khi **chưa đo gì** (nấc tĩnh
+    /// 30/100 Mbps đi thẳng vào bộ nhớ), nên "có bản ghi" KHÔNG đồng nghĩa "có số đã học".
+    /// Bằng chứng duy nhất của một phép đo là ĐỈNH (`peakDownKbps`) — nó chỉ được ghi khi
+    /// tunnel thật sự chở dữ liệu (xem `persistPeaksIfNeeded`).
+    static func trustedMeasuredDownKbps(_ entry: Memory) -> Int {
+        entry.peakDownKbps >= minMeasuredKbps ? entry.peakDownKbps : 0
+    }
+
+    /// Số khai XUỐNG suy từ một phép ĐO (kbps) — hàm THUẦN, test được ngoài app.
+    ///
+    /// `rememberedDeclaredKbps` = số khai của lần đo đã nhớ (`0` nếu chưa có). Bốn dải của
+    /// `pct` xem `jumpUpPct`/`saturatedPct`/`deadbandPct`. Đây là chỗ DUY NHẤT biến số đo
+    /// thành số khai: **có số đo thì số khai là f(số đo), không bao giờ nâng lên nấc tĩnh**.
+    static func downKbpsFromMeasurement(measuredDownKbps: Int, rememberedDeclaredKbps: Int) -> Int {
+        guard measuredDownKbps >= minMeasuredKbps else { return 0 }
+        // Chưa có số khai đi kèm (bản ghi cũ/thiếu) ⇒ coi như số khai cũ KHAI VƯỢT.
+        let pct = rememberedDeclaredKbps > 0
+            ? measuredDownKbps * 100 / rememberedDeclaredKbps
+            : jumpUpPct
+        if pct >= jumpUpPct { return measuredDownKbps * declareRatioPct / 100 }
+        if pct >= saturatedPct { return rememberedDeclaredKbps * explorePct / 100 }
+        if pct >= deadbandPct { return rememberedDeclaredKbps }
+        return measuredDownKbps * declareRatioPct / 100
+    }
+
+    /// Kẹp số khai suy từ SỐ ĐO bằng trần/sàn. Hàm THUẦN (test được ngoài app).
+    ///
+    /// Trần = `max(nấc tĩnh, số đo)`: nấc tĩnh chỉ được CHẶN TRÊN (bản ghi cũ khai 100 Mbps mà
+    /// đo được 1 Mbps thì trần không cứu được số đó — việc hạ do `downKbpsFromMeasurement`),
+    /// và **không bao giờ được NÂNG số khai lên nấc tĩnh** — đúng lỗi đang sửa. Mạng đã ĐO
+    /// được cao hơn nấc tĩnh thì trần theo số đo, nếu không mỗi lần kết nối lại bị kéo về
+    /// 100 Mbps rồi ramp lên lại (dao động quanh nấc tĩnh).
+    ///
+    /// Chiều LÊN suy từ chiều XUỐNG theo đúng tỉ lệ của nấc tĩnh (`up/down` = 30/100): phép đo
+    /// chỉ có chiều xuống, giữ nguyên độ bất đối xứng đã đo tốt.
+    static func clampedDeclaration(
+        downKbps: Int,
+        measuredDownKbps: Int,
+        staticDownKbps: Int = fallbackDownKbps,
+        staticUpKbps: Int = fallbackUpKbps
+    ) -> (upKbps: Int, downKbps: Int, clamped: Bool) {
+        let ratioDown = max(staticDownKbps, 1)
+        let ceilingDown = max(staticDownKbps, measuredDownKbps)
+        var clamped = false
+        var down = downKbps
+        if down > ceilingDown { down = ceilingDown; clamped = true }
+        if down < floorDownKbps, floorDownKbps <= ceilingDown { down = floorDownKbps; clamped = true }
+        var up = down * staticUpKbps / ratioDown
+        if up < floorUpKbps { up = floorUpKbps; clamped = true }
+        return (min(up, maxKbps), min(down, maxKbps), clamped)
+    }
+
+    /// Số khai đang KHAI VƯỢT sức mạng thật: đo được dưới `underrunPct`% số khai.
+    static func isUnderrun(averageKbps: Int, declaredKbps: Int) -> Bool {
+        guard declaredKbps > 0, averageKbps >= minMeasuredKbps else { return false }
+        return averageKbps * 100 < declaredKbps * underrunPct
     }
 
     /// Trần hiệu lực: min(link speed, số đo × biên an toàn). Chưa đo gì thì chỉ còn link speed.

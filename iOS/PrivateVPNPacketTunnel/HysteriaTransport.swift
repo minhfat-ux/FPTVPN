@@ -37,8 +37,10 @@ import Hysteria
 ///      nên gói thật đi qua WebSocket.
 ///   3. `Mobile.serve(tunFd:...)` bơm gói IP giữa utun của NetworkExtension và QUIC.
 ///
-/// Go runtime cần fd của utun; provider lấy fd đó từ `packetFlow` (xem
-/// `packetTunnelFileDescriptor()`), đúng cách các client NetworkExtension khác làm.
+/// Go runtime cần fd để chở gói; provider KHÔNG lấy được fd utun của NetworkExtension trên
+/// nền tảng nào (iOS: KVC `socket` trả nil; macOS: utun của NE không chở gói theo định dạng
+/// sing-tun parse) nên dùng `resolveTunnelFD`: cặp socketpair do extension tự tạo, bắc cầu hai
+/// chiều với `NEPacketTunnelFlow` qua `TunnelBridge`.
 final class HysteriaTransport: @unchecked Sendable {
 
     struct Options: Sendable {
@@ -308,15 +310,19 @@ final class HysteriaTransport: @unchecked Sendable {
         log.log("hysteria: đã dừng")
     }
 
-    /// fd của utun mà NetworkExtension đang dùng.
+    /// fd của utun mà NetworkExtension đang dùng (đường CŨ, chỉ còn dùng cho bản WireGuard cũ
+    /// `PacketTunnelProvider.swift` — không target nào build nó nữa).
     ///
     /// `NEPacketTunnelProvider` không có API công khai trả fd, nên có hai đường:
-    ///   1. KVC `packetFlow.value(forKey: "socket")` — chạy trên iOS.
+    ///   1. KVC `packetFlow.value(forKey: "socket")` — trả nil trên macOS 26.5 (19/09/2026) và
+    ///      trên iPad (19/09/2026, build 1.4.0/16) ⇒ KHÔNG tin được ở đâu cả.
     ///   2. Lục fd `0...1024` tìm socket control `com.apple.net.utun_control` của CHÍNH
     ///      tiến trình extension — cách WireGuardKit tự lấy fd utun
-    ///      (`Vendor/WireGuardKit/Sources/WireGuardKit/WireGuardAdapter.swift:64`) và là
-    ///      đường DUY NHẤT chạy được trên macOS: đo 19/09/2026, trên macOS KVC trả nil nên
-    ///      provider báo `TUNNEL_START_FAILED: không lấy được fd utun`.
+    ///      (`Vendor/WireGuardKit/Sources/WireGuardKit/WireGuardAdapter.swift:64`) và CHỈ chạy
+    ///      được trên macOS (SDK iPhoneOS không có `<sys/kern_control.h>`).
+    ///
+    /// Đường chạy của transport hysteria2 KHÔNG dùng hàm này: cả hai nền tảng đi qua
+    /// `resolveTunnelFD` (cặp socketpair bắc cầu qua `TunnelBridge`).
     /// Trả nil ⇒ provider phải DỪNG và báo rõ, đừng chạy hysteria nửa vời.
     static func packetTunnelFileDescriptor(from flow: NEPacketTunnelFlow) -> Int32? {
         if let fd = kvcSocketDescriptor(from: flow) { return fd }
@@ -325,8 +331,8 @@ final class HysteriaTransport: @unchecked Sendable {
         #else
         // iOS: SDK iPhoneOS KHÔNG có `<sys/kern_control.h>` nên `ctl_info`/`sockaddr_ctl`
         // không hiện ra trong Swift (kiểm chứng: `error: cannot find 'sockaddr_ctl' in
-        // scope`) ⇒ không dò được bảng fd như macOS. KVC là đường chính thức và chạy
-        // trên iOS, nên không có fd ở đây nghĩa là provider phải báo lỗi RÕ.
+        // scope`) ⇒ không dò được bảng fd như macOS. KVC cũng trả nil trên máy thật, nên ở
+        // iOS hàm này gần như luôn trả nil — đường chạy là `resolveTunnelFD` (socketpair).
         return nil
         #endif
     }
@@ -341,14 +347,15 @@ final class HysteriaTransport: @unchecked Sendable {
     }
 
     #if os(iOS)
-    /// fd utun của NetworkExtension trên iOS — đường DÙNG THẬT của extension iOS.
+    /// fd utun mà NetworkExtension công bố qua KVC `socket` trên iOS — nay chỉ là ĐƯỜNG LÙI.
     ///
-    /// Vì sao iOS KHÁC macOS (đo thật 19/09/2026, macOS 26.5): trên macOS utun của NE không
-    /// chở gói theo định dạng Go giả định, và KVC trả nil, nên macOS phải dò bảng fd rồi bắc
-    /// cầu qua `TunnelBridge` (xem `resolveTunnelFD`). Trên iOS thì KVC `socket` là fd utun
-    /// thật, chở gói 4-byte-header đúng thứ sing-tun parse, nên KHÔNG cần socketpair và cũng
-    /// không cần bắc cầu: `MobileServe` đọc/ghi thẳng fd đó.
+    /// Vì sao không còn là đường chính (đo thật trên iPad, build 1.4.0/16): KVC trả **nil**
+    /// ⇒ không có fd utun nào để giao cho Go, tunnel chết ngay sau khi áp network settings
+    /// (`hysteria: không lấy được fd nào để giao cho Go`). Đường chính nay là
+    /// `resolveTunnelFD`: cặp socketpair bắc cầu qua `TunnelBridge` — đúng đường đã chạy trên
+    /// macOS, không phụ thuộc API riêng nào của NE.
     ///
+    /// Vẫn giữ: máy nào KVC còn cho fd thì `resolveTunnelFD` lùi về đây khi `socketpair` lỗi.
     /// Trả nil ⇒ provider phải dừng và báo rõ (không chạy hysteria nửa vời).
     static func directTunnelFD(from flow: NEPacketTunnelFlow) -> TunnelFD? {
         var evidence: [String] = []
@@ -368,12 +375,61 @@ final class HysteriaTransport: @unchecked Sendable {
         )
     }
 
-    /// Bộ đếm gói THẬT của interface utun trên iOS, để watchdog có bằng chứng như macOS.
+    /// Chọn fd giao cho `MobileServe` trên **iOS** — dùng ĐÚNG đường đã chạy trên macOS
+    /// (`#if os(macOS)` ở dưới): cặp socketpair bắc cầu với `NEPacketTunnelFlow` qua
+    /// `TunnelBridge`.
     ///
-    /// Vì sao cần: extension iOS KHÔNG có cầu `TunnelBridge` (nên không tự đếm được gói), mà
-    /// tin vào frame của relay là không đủ — QUIC gửi Initial làm `sent > 0` trong khi máy
-    /// chẳng có gói nào đi qua tunnel, đúng ca "Connected mà không có mạng" mà watchdog sinh
-    /// ra để chặn. Bảng interface của kernel cho đúng hai chiều đó:
+    /// Vì sao (đo thật trên iPad, build 1.4.0/16, log `hysteria: không lấy được fd nào để giao
+    /// cho Go`): `packetFlow.value(forKey: "socket")` trả **nil**, mà SDK iPhoneOS không có
+    /// `<sys/kern_control.h>` nên KHÔNG dò được bảng fd như macOS (`ctl_info`/`sockaddr_ctl`
+    /// không hiện ra trong Swift trên iOS) ⇒ nhánh cũ không có fd nào cả và tunnel chết ngay
+    /// sau khi áp network settings. Cặp socketpair thì luôn tạo được và không phụ thuộc API
+    /// riêng của NE: Go đọc/ghi một đầu, `TunnelBridge` bơm hai chiều qua `packetFlow` — API
+    /// CÔNG KHAI, nên định dạng gói do mình quyết định (4 byte họ địa chỉ + gói IP, đúng thứ
+    /// sing-tun `tun_darwin.go` parse).
+    ///
+    /// KVC `socket` vẫn được ghi vào bằng chứng chẩn đoán và được dùng làm ĐƯỜNG LÙI khi
+    /// `socketpair` lỗi (hết fd) — nhưng đường chạy chính KHÔNG phụ thuộc nó.
+    static func resolveTunnelFD(from flow: NEPacketTunnelFlow) -> TunnelFD? {
+        let kvc = flow.value(forKey: "socket")
+        var evidence = [
+            "KVC packetFlow.value(forKey: \"socket\") = "
+                + (kvc.map { "\(type(of: $0)) \($0)" } ?? "nil"),
+        ]
+
+        var pair: [Int32] = [0, 0]
+        if socketpair(AF_UNIX, SOCK_DGRAM, 0, &pair) == 0 {
+            var one: Int32 = 1
+            for fd in pair {
+                // Đầu kia đóng thì `write` phải trả EPIPE/ECONNREFUSED chứ không giết tiến
+                // trình extension bằng SIGPIPE (extension chết giữa phiên = máy mất mạng).
+                _ = setsockopt(
+                    fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size)
+                )
+            }
+            evidence.append(
+                "socketpair(AF_UNIX, SOCK_DGRAM): fd cho Go = \(pair[0]), fd bắc cầu = \(pair[1])"
+            )
+            return TunnelFD(
+                fd: pair[0],
+                hostFd: pair[1],
+                source: .bridge,
+                ifname: nil,
+                evidence: evidence
+            )
+        }
+        evidence.append("socketpair lỗi errno=\(errno) — lùi về fd utun lấy qua KVC")
+        guard let direct = directTunnelFD(from: flow) else { return nil }
+        evidence.append(contentsOf: direct.evidence)
+        return direct
+    }
+
+    /// Bộ đếm gói THẬT của interface utun trên iOS — đường lùi khi phiên KHÔNG chạy cầu
+    /// `TunnelBridge` (chạy cầu thì `TunnelBridge` tự đếm, có cả cờ TCP).
+    ///
+    /// Vì sao vẫn cần: tin vào frame của relay là không đủ — QUIC gửi Initial làm `sent > 0`
+    /// trong khi máy chẳng có gói nào đi qua tunnel, đúng ca "Connected mà không có mạng" mà
+    /// watchdog sinh ra để chặn. Bảng interface của kernel cho đúng hai chiều đó:
     /// `ifi_opackets` = gói MÁY đưa vào tunnel, `ifi_ipackets` = gói tunnel trả về máy.
     ///
     /// Không chặn đường gói, không cần quyền đặc biệt. Đọc hỏng (sysctl bị chặn, chưa có tên

@@ -42,6 +42,9 @@ class BandwidthMemory(context: Context) {
     /** Khoá nhớ tốc độ + trần vật lý của mạng đang nằm dưới tunnel. */
     data class NetProfile(val key: String, val display: String, val ceilingDownKbps: Int)
 
+    /** Tên interface TUN, nhớ sau lần đọc /proc/net/dev đầu tiên. */
+    @Volatile private var ifaceName: String? = null
+
     /** Wi-Fi PHY đọc được từ WifiInfo (linkSpeed là tốc độ ĐÀM PHÁN, không phải tốc độ thật). */
     private class WifiRadio(val ssid: String?, val linkSpeedMbps: Int, val rssi: Int)
 
@@ -232,6 +235,71 @@ class BandwidthMemory(context: Context) {
         }
     }
 
+    // ---- đếm byte thật qua TUN (rẻ, 1s/lần) -----------------------------------
+
+    /**
+     * Số byte ĐÃ NHẬN qua TUN (dữ liệu tải XUỐNG mà người dùng thật sự nhận).
+     *
+     * Vì sao đọc /proc/net/dev thay vì API: đây là bộ đếm của nhân, đọc 1s/lần gần như
+     * miễn phí và KHÔNG tạo traffic — dùng để biết "mạng thực tế đang chở được bao nhiêu"
+     * trong lúc tunnel đang chạy (xem vòng ramp trong HysteriaVpnService).
+     *
+     * @return tổng byte rx, hoặc -1 nếu chưa đọc được (chưa có TUN / không đọc được file).
+     */
+    fun tunRxBytes(): Long = readTunCounters()?.first ?: -1L
+
+    /** @return (rxBytes, txBytes) của interface TUN, null nếu chưa có. */
+    private fun readTunCounters(): Pair<Long, Long>? {
+        val iface = tunIfaceName() ?: return null
+        return runCatching {
+            java.io.File("/proc/net/dev").readLines()
+                .firstOrNull { it.substringBefore(':').trim() == iface }
+                ?.let { line ->
+                    val cols = line.substringAfter(':').trim().split(Regex("\\s+"))
+                    val rx = cols.getOrNull(0)?.toLongOrNull() ?: return null
+                    val tx = cols.getOrNull(8)?.toLongOrNull() ?: return null
+                    rx to tx
+                }
+        }.getOrNull()
+    }
+
+    /**
+     * Tên interface TUN của app ("tun0" trên thực tế). Không có API nào trả tên này
+     * (Builder.establish() chỉ trả fd) nên đọc từ /proc/net/dev; nhớ lại sau lần đầu.
+     */
+    private fun tunIfaceName(): String? {
+        ifaceName?.let { return it }
+        val name = runCatching {
+            java.io.File("/proc/net/dev").readLines()
+                .map { it.substringBefore(':').trim() }
+                .filter { it.startsWith("tun") }
+                .let { list -> list.firstOrNull { it == "tun0" } ?: list.firstOrNull() }
+        }.getOrNull()
+        if (name != null) ifaceName = name
+        return name
+    }
+
+    // ---- đỉnh bền vững đã đạt theo mạng ---------------------------------------
+
+    /**
+     * Đỉnh bền vững CAO NHẤT từng đạt trên mạng này (kbps); 0 = chưa từng ramp.
+     *
+     * Vì sao lưu riêng khỏi số đo probe: probe cho biết "lúc đo được bao nhiêu", còn đỉnh
+     * cho biết "mức khai nào đã từng CHỞ ĐƯỢC traffic thật trong ≥10s". Lần sau vào cùng
+     * mạng thì bắt đầu luôn ở mức đó ⇒ ramp chỉ cần xảy ra MỘT lần cho mỗi mạng.
+     */
+    fun bestKbps(key: String): Int = runCatching {
+        prefs().getInt(kBest(key), 0)
+    }.getOrDefault(0)
+
+    /** Ghi đỉnh bền vững — chỉ GHI CAO LÊN (ramp giảm không xoá đỉnh đã chứng minh). */
+    fun rememberBest(key: String, kbps: Int) {
+        if (kbps <= bestKbps(key)) return
+        runCatching {
+            prefs().edit().putInt(kBest(key), kbps).apply()
+        }
+    }
+
     // ---- phép đo qua tunnel ---------------------------------------------------
 
     /**
@@ -300,6 +368,7 @@ class BandwidthMemory(context: Context) {
 
     private fun kMeasured(key: String) = "bw_kbps_$key"
     private fun kPrevious(key: String) = "bw_prev_$key"
+    private fun kBest(key: String) = "bw_best_$key"
     private fun kDeclared(key: String) = "bw_decl_$key"
     private fun kAt(key: String) = "bw_at_$key"
 
@@ -342,6 +411,8 @@ object BandwidthPolicy {
     const val REASON_CLAMP = "clamp"
     /** Lý do của dòng log phát ra từ chính phép đo. */
     const val REASON_PROBE = "probe"
+    /** Số khai của phiên đang được vòng ramp trong lúc chạy điều chỉnh. */
+    const val REASON_RAMP = "ramp"
 
     /**
      * Tỉ lệ của số đo được đem đi khai: chừa ~15% đầu cho chặng tunnel/relay và cho việc
@@ -387,9 +458,95 @@ object BandwidthPolicy {
      */
     const val DAMPING_PCT = 60
 
-    /** Sàn: số đo nhỏ bất thường (đường gần như chết) không được kéo số khai xuống vô nghĩa. */
+    /**
+     * SÀN khai tối thiểu (kbps): chỉ để KHÔNG BAO GIỜ khai 0/vài chục kbps cho Brutal CC.
+     *
+     * Đây là SÀN AN TOÀN NHỎ, **KHÔNG phải nấc tĩnh**. Vì sao tuyệt đối không lấy nấc tĩnh
+     * (metered 8/12 Mbps) làm sàn — đúng lỗi đo được trên Galaxy Z Fold5 lúc 22:52 19/09
+     * (Wi-Fi khách sạn bị hệ thống coi là metered):
+     *   bw: net=wifi-gw-10.0.3.254 measured=1555 declared up=8000 down=12000 reason=clamp
+     *   bw: probe 425210B/3199ms -> 1063kbps qua tunnel
+     * Đo được 1,0-1,5 Mbps mà sàn kéo số khai LÊN 8/12 Mbps ⇒ Brutal pace gấp ~10 lần sức
+     * mạng thật ⇒ tự flood ⇒ tắc (YouTube không kéo nổi). Sàn phải nhỏ hơn MỌI nấc tĩnh.
+     *
+     * Chiều LÊN giữ đúng tỉ lệ up/down của nấc tĩnh đang dùng (8000/12000) nên sàn lên
+     * tương ứng 500 kbps: dưới mức đó thì khai 0 cũng không khác gì.
+     */
     const val FLOOR_UP_KBPS = 500
-    const val FLOOR_DOWN_KBPS = 1000
+    const val FLOOR_DOWN_KBPS = 1_000
+
+    /** Trần cứng khi KHÔNG biết sức mạng vật lý (linkSpeed không đọc được). */
+    const val HARD_CEIL_KBPS = 200_000
+
+    // ---- vòng ramp trong lúc chạy (chỉ áp ở ranh giới an toàn) ----------------
+
+    /** Đỉnh bền vững = trung bình trượt [SUSTAINED_WINDOW_S] giây (brief: 10-15s). */
+    const val SUSTAINED_WINDOW_S = 12
+
+    /** Quan sát bền vững vượt trần đang khai từ ngần này % ⇒ coi là khai thấp. */
+    const val RAMP_TRIGGER_PCT = 115
+
+    /**
+     * Phải giữ điều kiện ramp LIÊN TỤC ngần này ms mới đổi số khai: một đợt burst ngắn
+     * (cache, ACK dồn) không đủ để dựng lại QUIC.
+     */
+    const val RAMP_HOLD_MS = 10_000L
+
+    /** Bước tăng / giảm trần khi ramp (chỉ đổi ở ranh giới an toàn). */
+    const val RAMP_UP_PCT = 125
+    const val RAMP_DOWN_PCT = 70
+
+    /** Mất gói (%) vượt ngần này ⇒ giảm trần (giảm thì an toàn hơn tăng nên ưu tiên ngay). */
+    const val RAMP_LOSS_PCT = 2
+
+    /** RTT vọt lên = gấp [RTT_SPIKE_X] lần mức nền, và ít nhất [RTT_SPIKE_MIN_MS] ms. */
+    const val RTT_SPIKE_X = 3
+    const val RTT_SPIKE_MIN_MS = 800
+
+    /**
+     * Quan sát bền vững TỤT so với trần đang khai (dưới ngần này %) trong [RAMP_HOLD_MS]
+     * ⇒ giảm trần. Đây là lưới an toàn cho trường hợp "bắt đầu ở đỉnh cũ nhưng mạng đã
+     * yếu hẳn" mà RTT không vọt (chặng relay bị bóp dung lượng nhưng không dồn hàng đợi).
+     */
+    const val UNDERRUN_PCT = 50
+
+    /**
+     * Đỉnh bền vững = trung bình trượt của [count] mẫu 1 giây gần nhất (kbps).
+     * Hàm THUẦN để test được trên JVM (vòng lấy mẫu nằm trong service).
+     */
+    fun sustainedKbps(samples: IntArray, count: Int): Int {
+        val n = minOf(count, samples.size)
+        if (n <= 0) return 0
+        var sum = 0L
+        for (i in 0 until n) sum += samples[i]
+        return (sum / n).toInt()
+    }
+
+    /** Quan sát bền vững vượt trần đang khai ≥ [RAMP_TRIGGER_PCT]% ⇒ đường còn dư thật. */
+    fun shouldRampUp(sustainedKbps: Int, declaredKbps: Int): Boolean =
+        declaredKbps > 0 && sustainedKbps.toLong() * 100 >= declaredKbps.toLong() * RAMP_TRIGGER_PCT
+
+    /** Giảm trần: mất gói vượt ngưỡng, hoặc RTT vọt lên so với mức nền. */
+    fun shouldRampDown(lossPct: Int, rttMs: Int, rttBaselineMs: Int): Boolean {
+        if (lossPct >= RAMP_LOSS_PCT) return true
+        if (rttMs <= 0 || rttBaselineMs <= 0) return false
+        return rttMs >= maxOf(rttBaselineMs.toLong() * RTT_SPIKE_X, RTT_SPIKE_MIN_MS.toLong())
+    }
+
+    /** Quan sát tụt hẳn so với trần đang khai (lưới an toàn, xem [UNDERRUN_PCT]). */
+    fun shouldRampDownUnderrun(sustainedKbps: Int, declaredKbps: Int): Boolean =
+        declaredKbps > 0 && sustainedKbps > 0 &&
+            sustainedKbps.toLong() * 100 < declaredKbps.toLong() * UNDERRUN_PCT
+
+    /** Bước TĂNG trần, kẹp bởi [ceilingKbps] (sức mạng vật lý) và không xuống dưới [floorKbps]. */
+    fun rampUp(currentKbps: Int, ceilingKbps: Int, floorKbps: Int): Int =
+        (currentKbps.toLong() * RAMP_UP_PCT / 100).toInt()
+            .coerceIn(floorKbps, maxOf(ceilingKbps, floorKbps))
+
+    /** Bước GIẢM trần (mất gói/RTT vọt/tụt sâu), cùng cách kẹp như [rampUp]. */
+    fun rampDown(currentKbps: Int, ceilingKbps: Int, floorKbps: Int): Int =
+        (currentKbps.toLong() * RAMP_DOWN_PCT / 100).toInt()
+            .coerceIn(floorKbps, maxOf(ceilingKbps, floorKbps))
 
     data class Decision(
         val upKbps: Int,
@@ -397,6 +554,8 @@ object BandwidthPolicy {
         val reason: String,
         /** Trần xuống thật đã dùng để kẹp (kbps) — in ra log để biết vì sao bị kẹp. */
         val ceilingDownKbps: Int,
+        /** Trần "sức mạng vật lý" (kbps) — vòng ramp trong phiên được phép bò tới đây. */
+        val physicalCeilingDownKbps: Int = ceilingDownKbps,
     )
 
     /**
@@ -412,36 +571,39 @@ object BandwidthPolicy {
         rememberedMeasuredKbps: Int,
         rememberedDeclaredKbps: Int,
         staticUpKbps: Int,
-        previousMeasuredKbps: Int = 0,
         staticDownKbps: Int,
         ceilingDownKbps: Int,
+        previousMeasuredKbps: Int = 0,
+        bestKbps: Int = 0,
     ): Decision {
-        // Trần xuống hiệu dụng: nhỏ hơn giữa sức mạng vật lý và nấc tĩnh cũ. Nhờ vậy cơ chế
-        // động KHÔNG BAO GIỜ khai cao hơn nấc tĩnh đang chạy tốt (30/100) — chỉ hạ xuống khi
-        // mạng thật yếu hơn, tức không mạng nào bị chậm đi so với trước.
-        val ceilDown = if (ceilingDownKbps > 0) minOf(ceilingDownKbps, staticDownKbps) else staticDownKbps
+        // Trần "sức mạng vật lý": vòng ramp TRONG PHIÊN được phép bò tới đây khi mạng đã
+        // CHỨNG MINH là chở được (xem BandwidthPolicy.rampUp).
+        val ceilPhysical = if (ceilingDownKbps > 0) ceilingDownKbps else HARD_CEIL_KBPS
+        // Nấc KHỞI ĐIỂM (chưa từng ramp trên mạng này) vẫn bị kẹp như cũ: không vượt nấc tĩnh
+        // đang chạy tốt (30/100) ⇒ mặc định của mọi mạng KHÔNG đổi so với trước.
+        val ceilStart = minOf(ceilPhysical, staticDownKbps)
+        // ĐÃ CÓ ĐỈNH bền vững trên mạng này ⇒ bắt đầu luôn ở mức cao nhất từng đạt (ramp chỉ
+        // cần xảy ra MỘT lần cho mỗi mạng), và lúc đó trần là sức mạng vật lý — vì đỉnh đã
+        // được chứng minh là chở được traffic thật, không phải con số đoán.
+        val ceilDown = if (bestKbps > 0) ceilPhysical else ceilStart
         // Chiều LÊN không đo riêng (phép đo chỉ tải xuống) nên lấy đúng tỉ lệ up/down của nấc
         // tĩnh (unmetered 30/100, metered 8/12) để giữ nguyên độ bất đối xứng đã đo tốt.
         val ratioUp = staticUpKbps.toLong()
         val ratioDown = staticDownKbps.coerceAtLeast(1).toLong()
         val ceilUp = minOf(
-            staticUpKbps.toLong(),
+            maxOf(staticUpKbps.toLong(), FLOOR_UP_KBPS.toLong()),
             maxOf(FLOOR_UP_KBPS.toLong(), ceilDown.toLong() * ratioUp / ratioDown),
         ).toInt()
 
         var down: Int
         var up: Int
         var reason: String
-        if (rememberedMeasuredKbps <= 0) {
+        if (rememberedMeasuredKbps <= 0 && bestKbps <= 0) {
+            // Chưa từng đo, chưa từng ramp mạng này: ĐÚNG cơ chế tĩnh cũ (đường lùi an toàn).
             down = staticDownKbps
             up = staticUpKbps
             reason = REASON_PROFILE
-        } else if (rememberedDeclaredKbps <= 0) {
-            // Có số đo mà không có số khai đi kèm (dữ liệu cũ/thiếu): coi như khai vượt.
-            down = rememberedMeasuredKbps * DECLARE_RATIO_PCT / 100
-            up = (down.toLong() * ratioUp / ratioDown).toInt()
-            reason = REASON_MEMORY
-        } else {
+        } else if (rememberedMeasuredKbps > 0 && rememberedDeclaredKbps > 0) {
             val pct = rememberedMeasuredKbps * 100 / rememberedDeclaredKbps
             down = when {
                 pct >= JUMPUP_PCT -> rememberedMeasuredKbps * DECLARE_RATIO_PCT / 100
@@ -454,6 +616,23 @@ object BandwidthPolicy {
             }
             up = (down.toLong() * ratioUp / ratioDown).toInt()
             reason = REASON_MEMORY
+        } else if (rememberedMeasuredKbps > 0) {
+            // Có số đo mà không có số khai đi kèm (dữ liệu cũ/thiếu): coi như khai vượt.
+            down = rememberedMeasuredKbps * DECLARE_RATIO_PCT / 100
+            up = (down.toLong() * ratioUp / ratioDown).toInt()
+            reason = REASON_MEMORY
+        } else {
+            // Chỉ có ĐỈNH (mạng đã từng ramp nhưng chưa có phép đo nào được lưu).
+            down = bestKbps
+            up = (down.toLong() * ratioUp / ratioDown).toInt()
+            reason = REASON_MEMORY
+        }
+
+        // Bắt đầu từ ĐỈNH đã đạt: không bao giờ khởi điểm thấp hơn mức mà chính mạng này đã
+        // từng chở được liên tục >=10s (điểm quan trọng nhất cho UX — brief mục 5).
+        if (bestKbps > down) {
+            down = bestKbps
+            up = (down.toLong() * ratioUp / ratioDown).toInt()
         }
 
         // Chỉ báo reason=clamp khi con số THỰC SỰ bị đổi (bước dò 15% chạm trần thì vẫn là
@@ -467,7 +646,8 @@ object BandwidthPolicy {
             up = ceilUp
             clamped = true
         }
-        // Sàn chỉ áp khi nó không vượt trần: trần vật lý luôn thắng.
+        // Sàn CHỈ để tránh khai 0 (xem FLOOR_DOWN_KBPS) — không bao giờ kéo số khai LÊN nấc
+        // tĩnh: có số đo thì số khai là f(số đo), nấc tĩnh chỉ là đường lùi khi CHƯA đo được.
         if (down < FLOOR_DOWN_KBPS && FLOOR_DOWN_KBPS <= ceilDown) {
             down = FLOOR_DOWN_KBPS
             clamped = true
@@ -477,6 +657,12 @@ object BandwidthPolicy {
             clamped = true
         }
         if (clamped) reason = REASON_CLAMP
-        return Decision(upKbps = up, downKbps = down, reason = reason, ceilingDownKbps = ceilDown)
+        return Decision(
+            upKbps = up,
+            downKbps = down,
+            reason = reason,
+            ceilingDownKbps = ceilDown,
+            physicalCeilingDownKbps = ceilPhysical,
+        )
     }
 }

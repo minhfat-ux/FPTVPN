@@ -108,6 +108,21 @@ class HysteriaVpnService : VpnService() {
     private var bandwidth: BandwidthMemory? = null
 
     /**
+     * Số khai XUỐNG mà VÒNG RAMP trong lúc chạy đã chốt cho phiên này (0 = chưa ramp).
+     * Sống qua các lượt dựng lại transport (đổi số khai = client hysteria mới, xem ramp).
+     */
+    @Volatile private var sessionRampDownKbps = 0
+    /** Trần "sức mạng vật lý" của mạng hiện tại (kbps) — vòng ramp không được vượt. */
+    @Volatile private var bwPhysicalCeilKbps = 0
+    /** Vòng lấy mẫu băng thông thật (1s/lần) + điều chỉnh trần. */
+    private var bwSampler: Thread? = null
+    /**
+     * Cầu WS của lượt thử đang chạy — nguồn byte DỰ PHÒNG khi app không đọc được /proc/net/dev
+     * (Android 10+ hạn chế /proc/net cho app thường). Xem startBandwidthSampler.
+     */
+    @Volatile private var wsBridgeStats: WSRelayBridge? = null
+
+    /**
      * Token của lượt thử đang chạy. Timer trần thời gian của lượt cũ thấy token đổi
      * thì tự thoát, nên không cần giữ tham chiếu Thread để huỷ.
      */
@@ -144,6 +159,7 @@ class HysteriaVpnService : VpnService() {
                 .also { it.start() }
         }
         startProbeLoop()
+        startBandwidthSampler()
         DiagnosticsLog.log("service: onStartCommand startId=$startId")
         // Hysteria server host comes from the selected exit node; Config is the fallback.
         runHost = intent?.getStringExtra(EXTRA_HOST)?.takeIf { it.isNotBlank() } ?: DEFAULT_HOST
@@ -442,6 +458,8 @@ class HysteriaVpnService : VpnService() {
             },
         )
         if (!bridge.start()) return 0
+        // Cho vòng ramp đọc được byte thật của đường này (nguồn dự phòng khi /proc/net/dev bị chặn).
+        wsBridgeStats = bridge
         DiagnosticsLog.log("ws-relay: thử transport qua Cloudflare (local port ${bridge.localPort})")
         // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói.
         val deadline = System.currentTimeMillis() + WS_OPEN_WAIT_MS
@@ -461,10 +479,11 @@ class HysteriaVpnService : VpnService() {
         // thấp hơn đường trực tiếp, nếu không server pace theo số khai và tự gây nghẽn.
         attemptUpKbps = if (meteredNow) MOBILE_UP_KBPS else HY_RELAY_UP_KBPS
         attemptDownKbps = if (meteredNow) MOBILE_DOWN_KBPS else HY_RELAY_DOWN_KBPS
-        // Có SỐ ĐO (hoặc trần vật lý) cho mạng này thì lấy số đó làm trần của đường relay:
-        // phép đo đi qua chính tunnel nên đã tính cả chi phí 2 chặng, còn min() bảo đảm
-        // không bao giờ khai cao hơn mức relay đang chạy tốt.
-        if (bwReason == BandwidthPolicy.REASON_MEMORY || bwReason == BandwidthPolicy.REASON_CLAMP) {
+        // Có SỐ ĐO cho mạng này thì lấy số đó làm trần của đường relay: phép đo đi qua chính
+        // tunnel nên đã tính cả chi phí 2 chặng, còn min() bảo đảm không bao giờ khai cao hơn
+        // mức relay đang chạy tốt. Điều kiện là "KHÔNG PHẢI đường lùi nấc tĩnh" (profile):
+        // ramp cũng là số đã chứng minh bằng traffic thật, nên không được nâng lên nấc tĩnh.
+        if (bwReason != BandwidthPolicy.REASON_PROFILE) {
             attemptUpKbps = minOf(attemptUpKbps, bwUpKbps)
             attemptDownKbps = minOf(attemptDownKbps, bwDownKbps)
         }
@@ -482,6 +501,7 @@ class HysteriaVpnService : VpnService() {
             runHost = previousHost
             attemptUpKbps = previousUp
             attemptDownKbps = previousDown
+            wsBridgeStats = null
             bridge.stop()
         }
     }
@@ -719,30 +739,48 @@ class HysteriaVpnService : VpnService() {
         val staticDown = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS
         val memory = bandwidth ?: BandwidthMemory(this).also { bandwidth = it }
         val profile = memory.profileOf(net, label)
+        // Đổi mạng: số ramp của mạng CŨ không còn nghĩa gì (mỗi mạng có đỉnh riêng).
+        val keyChanged = profile.key != bwKey
+        if (keyChanged) sessionRampDownKbps = 0
         val measured = memory.rememberedMeasuredKbps(profile.key)
+        val best = memory.bestKbps(profile.key)
         val decision = BandwidthPolicy.decide(
             rememberedMeasuredKbps = measured,
             rememberedDeclaredKbps = memory.rememberedDeclaredKbps(profile.key),
             staticUpKbps = staticUp,
             staticDownKbps = staticDown,
-            previousMeasuredKbps = memory.rememberedPreviousMeasuredKbps(profile.key),
             ceilingDownKbps = profile.ceilingDownKbps,
+            previousMeasuredKbps = memory.rememberedPreviousMeasuredKbps(profile.key),
+            bestKbps = best,
         )
+        // Số đang RAMP trong CHÍNH phiên này thắng quyết định khởi điểm: nó là mức đã được
+        // vòng ramp chứng minh bằng traffic thật (xem startBandwidthSampler).
+        var up = decision.upKbps
+        var down = decision.downKbps
+        var effectiveReason = decision.reason
+        val ramp = sessionRampDownKbps
+        if (!keyChanged && ramp > 0) {
+            down = minOf(ramp, if (bwPhysicalCeilKbps > 0) bwPhysicalCeilKbps else decision.physicalCeilingDownKbps)
+            up = ratioUpFrom(down)
+            effectiveReason = BandwidthPolicy.REASON_RAMP
+        }
         bwKey = profile.key
         bwDisplay = profile.display
-        bwReason = decision.reason
+        bwReason = effectiveReason
         bwMeasuredKbps = measured
         bwCeilKbps = decision.ceilingDownKbps
-        bwUpKbps = decision.upKbps
-        bwDownKbps = decision.downKbps
-        attemptUpKbps = decision.upKbps
-        attemptDownKbps = decision.downKbps
+        bwPhysicalCeilKbps = decision.physicalCeilingDownKbps
+        bwUpKbps = up
+        bwDownKbps = down
+        attemptUpKbps = up
+        attemptDownKbps = down
         // Một dòng log, đọc là biết VÌ SAO app khai con số đó (probe/memory/profile/clamp):
         // net = mạng đang dùng, measured = số đã nhớ của mạng đó (0 = chưa đo),
         // declared = số vừa truyền vào client, ctx = lượt gọi, ceil = trần vật lý đã kẹp.
         DiagnosticsLog.log(
             "bw: net=$bwDisplay measured=$bwMeasuredKbps declared up=$attemptUpKbps " +
-                "down=$attemptDownKbps reason=${decision.reason} ctx=$reason ceil=$bwCeilKbps",
+                "down=$attemptDownKbps reason=$effectiveReason ctx=$reason ceil=$bwCeilKbps " +
+                "best=$best",
         )
         return net
     }
@@ -894,6 +932,268 @@ class HysteriaVpnService : VpnService() {
         }.apply { isDaemon = true; name = "hy-bw-probe" }.start()
     }
 
+    /** Chiều LÊN suy từ chiều xuống theo đúng tỉ lệ của nấc tĩnh (phép đo chỉ đo chiều xuống). */
+    private fun ratioUpFrom(downKbps: Int): Int {
+        val staticUp = if (meteredNow) MOBILE_UP_KBPS else HY_UP_KBPS
+        val staticDown = if (meteredNow) MOBILE_DOWN_KBPS else HY_DOWN_KBPS
+        return maxOf(BandwidthPolicy.FLOOR_UP_KBPS, (downKbps.toLong() * staticUp / staticDown).toInt())
+    }
+
+    /**
+     * VÒNG RAMP TRONG LÚC CHẠY — tăng/giảm trần khai theo băng thông THẬT.
+     *
+     * Ràng buộc kỹ thuật (không được vi phạm): `BandwidthConfig` của hysteria chỉ đặt được
+     * MỘT LẦN lúc tạo client ⇒ đổi số khai = client mới = QUIC mới = ĐỨT mọi stream đang
+     * chạy. Vì vậy vòng này chỉ ĐỔI SỐ ở "ranh giới an toàn":
+     *   (a) tunnel RẢNH (không có traffic người dùng ~2s) ⇒ dựng lại client ngay, blip ngắn;
+     *   (b) không tìm được lúc rảnh ⇒ chỉ ghi số mới vào phiên, áp ở lần kết nối/đổi mạng kế;
+     *   (c) KHÔNG BAO GIỜ dựng lại khi đang có traffic.
+     *
+     * Nguồn số liệu (1s/lần, gần như miễn phí):
+     *  - byte thật qua TUN đọc từ /proc/net/dev ⇒ "đỉnh bền vững" = trung bình trượt 12s;
+     *  - RTT + mất gói của transport: TCP connect tới 1.1.1.1:80 qua chính tunnel mỗi 5s
+     *    (socket không protect nên đi xuyên TUN) — fail/timeout = một lần mất gói.
+     *
+     * Luật đổi số (xem BandwidthPolicy):
+     *  - TĂNG khi đỉnh bền vững vượt trần đang khai ≥15% LIÊN TỤC ≥10s ⇒ ×1,25 (kẹp trần).
+     *  - GIẢM khi mất gói ≥2% (bộ đếm 10 lần hỏi gần nhất) hoặc RTT vọt ≥3× nền ⇒ ×0,7;
+     *    giảm thì an toàn hơn tăng nên áp ngay ở ranh giới an toàn.
+     *  - Lưới an toàn: đỉnh bền vững tụt dưới 50% trần khai liên tục ≥10s ⇒ ×0,7 (trường
+     *    hợp bắt đầu ở đỉnh cũ nhưng mạng đã yếu hẳn mà RTT không vọt).
+     *  - Mỗi lần đổi cách nhau ≥[RAMP_COOLDOWN_MS] (mỗi lần đổi là một QUIC mới).
+     */
+    private fun startBandwidthSampler() {
+        if (bwSampler != null) return
+        bwSampler = Thread {
+            val samples = IntArray(BandwidthPolicy.SUSTAINED_WINDOW_S)
+            var count = 0
+            var idx = 0
+            var idleRun = 0
+            var overSince = 0L
+            var underSince = 0L
+            var lastRx = -1L
+            var lastAt = 0L
+            var lastRttAt = 0L
+            var rttLast = 0
+            var rttBaseline = 0
+            val loss = ArrayDeque<Boolean>()
+            var lastChangeAt = 0L
+            var lastSampleLogAt = 0L
+            var useProc: Boolean? = null
+            while (!stopping) {
+                try {
+                    Thread.sleep(SAMPLE_INTERVAL_MS)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                if (stopping) return@Thread
+                if (!DiagnosticsLog.tunnelUp) {
+                    // Chưa có tunnel (đang bắt tay/dựng lại): mọi mẫu cũ vô nghĩa.
+                    lastRx = -1L
+                    count = 0
+                    idx = 0
+                    idleRun = 0
+                    overSince = 0L
+                    underSince = 0L
+                    continue
+                }
+                val memory = bandwidth ?: continue
+                val now = System.currentTimeMillis()
+                // Nguồn byte: ưu tiên /proc/net/dev (thấy MỌI transport, kể cả UDP/TCP trực
+                // tiếp), nếu bị chặn đọc thì lùi về bộ đếm của cầu WS. Chọn MỘT nguồn cho cả
+                // phiên và ghi log — trộn hai thang đo khác nhau vào cùng một phép trừ là sai.
+                if (useProc == null) {
+                    useProc = memory.tunRxBytes() >= 0
+                    DiagnosticsLog.log(
+                        "bw: sampler nguồn byte = " +
+                            if (useProc == true) {
+                                "/proc/net/dev (tun)"
+                            } else {
+                                "cầu WS (app không đọc được /proc/net/dev)"
+                            },
+                    )
+                }
+                val rx = if (useProc == true) memory.tunRxBytes() else (wsBridgeStats?.rxBytes() ?: -1L)
+                if (rx < 0) continue
+                if (lastRx < 0 || rx < lastRx) {
+                    // Mẫu đầu tiên, hoặc bộ đếm bị reset (TUN mới) — bỏ qua, không tính bừa.
+                    lastRx = rx
+                    lastAt = now
+                    continue
+                }
+                val elapsedMs = (now - lastAt).coerceAtLeast(1L)
+                // bits/ms == kbit/s, nên công thức này ra thẳng kbps.
+                val kbps = (((rx - lastRx) * 8) / elapsedMs).toInt()
+                lastRx = rx
+                lastAt = now
+                samples[idx] = kbps
+                idx = (idx + 1) % samples.size
+                if (count < samples.size) count++
+                if (kbps < SAMPLER_IDLE_KBPS) idleRun++ else idleRun = 0
+
+                // RTT + mất gói của transport (hỏi nhẹ qua tunnel, 5s/lần).
+                if (now - lastRttAt >= RTT_PROBE_INTERVAL_MS) {
+                    lastRttAt = now
+                    rttLast = tunnelRttMs()
+                    loss.addLast(rttLast <= 0)
+                    while (loss.size > LOSS_WINDOW) loss.removeFirst()
+                    if (rttLast > 0) {
+                        rttBaseline = if (rttBaseline == 0) rttLast else (rttBaseline * 3 + rttLast) / 4
+                    }
+                }
+
+                val declared = bwDownKbps
+                if (declared <= 0) continue
+                val ceiling = if (bwPhysicalCeilKbps > 0) bwPhysicalCeilKbps else declared
+                val floor = BandwidthPolicy.FLOOR_DOWN_KBPS
+                val sustained = BandwidthPolicy.sustainedKbps(samples, count)
+
+                // Mất gói: đếm trên cửa sổ LOSS_WINDOW lần hỏi gần nhất, nhưng chỉ kết luận
+                // khi lần hỏi MỚI NHẤT đã hỏng hoặc mất gói đã lan rộng (≥2 lần) — một lần
+                // hỏng lẻ rồi thôi thì không đáng dựng lại QUIC.
+                val fails = loss.count { it }
+                val lossPct = if (loss.isEmpty()) 0 else fails * 100 / loss.size
+
+                // Telemetry [SAMPLE_LOG_INTERVAL_MS]/lần, chỉ khi có traffic thật: đọc logcat
+                // là biết vòng ramp đang NHÌN THẤY gì (observed) mà không phải suy đoán.
+                if (sustained > 0 && now - lastSampleLogAt >= SAMPLE_LOG_INTERVAL_MS) {
+                    lastSampleLogAt = now
+                    DiagnosticsLog.log(
+                        "bw: sample net=$bwDisplay observed=$sustained declared=$declared " +
+                            "rtt=${rttLast}ms loss=${lossPct}% ceil=$ceiling",
+                    )
+                }
+
+                if (now - lastChangeAt < RAMP_COOLDOWN_MS) continue
+                val lossBad = lossPct >= BandwidthPolicy.RAMP_LOSS_PCT &&
+                    (loss.lastOrNull() == true || fails >= 2)
+                val rttBad = BandwidthPolicy.shouldRampDown(0, rttLast, rttBaseline)
+                val bad = lossBad || rttBad
+                if (bad) {
+                    // Mất gói/RTT vọt là tín hiệu MẠNH: áp ngay ở ranh giới an toàn (giảm thì
+                    // an toàn hơn tăng), không cần giữ 10s như chiều tăng.
+                    overSince = 0L
+                    underSince = 0L
+                    val newDown = BandwidthPolicy.rampDown(declared, ceiling, floor)
+                    if (newDown < declared) {
+                        applyRampDecision(
+                            newDown,
+                            if (lossBad) "loss-backoff" else "rtt-backoff",
+                            sustained,
+                            idleRun >= SAMPLER_IDLE_SAMPLES,
+                            lossPct,
+                            rttLast,
+                        )
+                        lastChangeAt = now
+                    }
+                    continue
+                }
+                // CHỈ xét "tụt sâu" khi ĐANG có traffic thật: lúc tunnel rảnh thì trung bình
+                // trượt đương nhiên thấp, hạ trần vì lý do đó là sai (và sẽ hạ oan mỗi lần
+                // người dùng ngừng tải).
+                val busy = idleRun == 0
+                if (busy && BandwidthPolicy.shouldRampDownUnderrun(sustained, declared)) {
+                    if (underSince == 0L) underSince = now
+                } else {
+                    underSince = 0L
+                }
+                if (BandwidthPolicy.shouldRampUp(sustained, declared)) {
+                    if (overSince == 0L) overSince = now
+                } else {
+                    overSince = 0L
+                }
+                if (underSince > 0 && now - underSince >= BandwidthPolicy.RAMP_HOLD_MS) {
+                    val newDown = BandwidthPolicy.rampDown(declared, ceiling, floor)
+                    if (newDown < declared) {
+                        applyRampDecision(
+                            newDown, "underrun-backoff", sustained,
+                            idleRun >= SAMPLER_IDLE_SAMPLES, lossPct, rttLast,
+                        )
+                        lastChangeAt = now
+                    }
+                    underSince = 0L
+                    continue
+                }
+                if (overSince > 0 && now - overSince >= BandwidthPolicy.RAMP_HOLD_MS) {
+                    val newDown = BandwidthPolicy.rampUp(declared, ceiling, floor)
+                    if (newDown > declared) {
+                        applyRampDecision(
+                            newDown, "idle-reconnect", sustained,
+                            idleRun >= SAMPLER_IDLE_SAMPLES, lossPct, rttLast,
+                        )
+                        lastChangeAt = now
+                    }
+                    overSince = 0L
+                }
+            }
+        }.apply { isDaemon = true; name = "hy-bw-ramp" }.also { it.start() }
+    }
+
+    /**
+     * Áp một bước ramp. LUÔN ghi số mới vào phiên (để lần kết nối kế tiếp dùng), nhưng chỉ
+     * DỰNG LẠI client khi tunnel đang RẢNH — dựng lại lúc đang truyền là đứt stream.
+     */
+    private fun applyRampDecision(
+        newDownKbps: Int,
+        reason: String,
+        observedKbps: Int,
+        idle: Boolean,
+        lossPct: Int,
+        rttMs: Int,
+    ) {
+        val old = bwDownKbps
+        val newUp = ratioUpFrom(newDownKbps)
+        sessionRampDownKbps = newDownKbps
+        bwDownKbps = newDownKbps
+        bwUpKbps = newUp
+        attemptDownKbps = newDownKbps
+        attemptUpKbps = newUp
+        // Đỉnh bền vững đã CHỨNG MINH ⇒ lần sau vào mạng này bắt đầu luôn ở mức này (ramp
+        // chỉ cần xảy ra một lần cho mỗi mạng).
+        if (newDownKbps > old) bandwidth?.rememberBest(bwKey, newDownKbps)
+        DiagnosticsLog.log(
+            "bw: ramp net=$bwDisplay observed=$observedKbps old=$old new=$newDownKbps " +
+                "reason=$reason apply=${if (idle) "idle-now" else "deferred-next-connect"} " +
+                "loss=${lossPct}% rtt=${rttMs}ms",
+        )
+        if (idle) {
+            android.util.Log.e(
+                "VPNFLOW_DEBUG",
+                "hysteria: ramp -> rebuild client down $old -> $newDownKbps kbps (tunnel idle)",
+            )
+            // serve() trả về -> runTunnel() dựng lại transport với số khai mới.
+            runCatching { Mobile.stop() }
+        }
+    }
+
+    /**
+     * RTT của transport + tín hiệu MẤT GÓI, đo qua chính tunnel: TCP connect tới 1.1.1.1:80
+     * (socket KHÔNG protect nên đi xuyên TUN, giống probeThroughTunnel) rồi đọc 1 byte.
+     *
+     * Vì sao tự viết thay vì gọi probeThroughTunnel(): hàm kia làm cả HTTP + DNS và có thể
+     * tốn tới ~14s khi đường chết — quá nặng cho nhịp 5s của vòng ramp. Ở đây chỉ 1 lần
+     * connect + 1 byte, timeout [RTT_PROBE_TIMEOUT_MS].
+     *
+     * @return ms, hoặc 0 nếu fail/timeout (được tính là một lần mất gói).
+     */
+    private fun tunnelRttMs(): Int {
+        val started = System.currentTimeMillis()
+        return try {
+            java.net.Socket().use { s ->
+                s.connect(java.net.InetSocketAddress("1.1.1.1", 80), RTT_PROBE_TIMEOUT_MS)
+                s.soTimeout = RTT_PROBE_TIMEOUT_MS
+                s.getOutputStream().apply {
+                    write("GET / HTTP/1.0\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n".toByteArray())
+                    flush()
+                }
+                val n = s.getInputStream().read(ByteArray(16))
+                if (n > 0) (System.currentTimeMillis() - started).toInt() else 0
+            }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
     /**
      * Báo cho coordinator biết node này tới được hay không (best-effort, chạy nền).
      * Đây là tín hiệu duy nhất phát hiện được node bị GFW chặn: server tự kiểm tra
@@ -949,6 +1249,8 @@ class HysteriaVpnService : VpnService() {
         networkMonitor?.stop()
         networkMonitor = null
         probeThread = null
+        bwSampler = null
+        sessionRampDownKbps = 0
         closeTun()
         runCatching { stopForeground(Service.STOP_FOREGROUND_REMOVE) }
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: service onDestroy -> Mobile.stop()")
@@ -1167,6 +1469,21 @@ class HysteriaVpnService : VpnService() {
     companion object {
         /** Probe cadence: frequent enough to catch a handover, cheap enough to keep. */
         const val PROBE_INTERVAL_MS = 15_000L
+        /** Nhịp lấy mẫu băng thông THẬT qua TUN (đọc /proc/net/dev — gần như miễn phí). */
+        const val SAMPLE_INTERVAL_MS = 1_000L
+        /** Dưới ngần này (kbps) coi là "tunnel rảnh" — không có traffic người dùng. */
+        const val SAMPLER_IDLE_KBPS = 200
+        /** Số mẫu 1s liên tiếp phải rảnh trước khi dám dựng lại client để đổi số khai. */
+        const val SAMPLER_IDLE_SAMPLES = 2
+        /** Nhịp ghi telemetry của vòng ramp (chỉ khi có traffic thật). */
+        const val SAMPLE_LOG_INTERVAL_MS = 15_000L
+        /** Nhịp hỏi RTT/mất gói qua tunnel. */
+        const val RTT_PROBE_INTERVAL_MS = 5_000L
+        const val RTT_PROBE_TIMEOUT_MS = 3_000
+        /** Cửa sổ đếm mất gói (số lần hỏi gần nhất). */
+        const val LOSS_WINDOW = 10
+        /** Không đổi số khai dày hơn ngần này: mỗi lần đổi là một QUIC mới. */
+        const val RAMP_COOLDOWN_MS = 15_000L
         /** Warn when the tunnel claims to be up but nothing came back for this long. */
         const val RELAY_SILENCE_WARN_SEC = 45L
         /**

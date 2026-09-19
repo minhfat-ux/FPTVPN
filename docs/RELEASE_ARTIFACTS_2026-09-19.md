@@ -85,3 +85,18 @@ Chủ dự án xác nhận bản macOS (hysteria2/gVisor) **chạy ổn** và y�
 | Mốc hiển thị | `latest_mac_version = 1.4.0` — **không có API admin** cho khoá này: set trực tiếp SQLite `app_config` (DB `control-plane/data/app-config.db`) HOẶC env `MAC_APP_VERSION` rồi restart CP |
 
 Nội dung bản này: chuyển transport macOS sang **hysteria2 qua relay Cloudflare (stack gVisor)** thay cho WireGuard-chồng-relay; sửa lỗi "bật VPN mất toàn mạng" (TCP blackhole); **tự gỡ tunnel** khi blackhole 10s hoặc 0 gói 15s (kiểm mỗi 5s). Số đo: VPN 24–52 Mbps (median 27), RAW 66–105 Mbps cùng mạng.
+
+## 🔒 ĐÓNG BĂNG Android + iPad (19/09/2026 tối, "để test vài ngày")
+
+Chủ dự án yêu cầu **khoá 2 bản này để test vài ngày**. Các bản đang cài trên máy = bản đóng băng:
+
+| Nền tảng | Bản đóng băng | Bằng chứng |
+|---|---|---|
+| **Android** | 1.4.0 / versionCode **20** (APK modern sha256 `dee9f82370c415…589e4ff3`) | `adb shell dumpsys package com.privatevpn.app` → versionName 1.4.0; log `bw: ramp …` chạy thật |
+| **iPad/iOS** | 1.4.0 / build **16** (IPA sha256 `20050977c7cbf9…81ac7a74`) | `xcrun devicectl device info apps` → 1.4.0 (16); log `bridge: packetFlow→Go … SYN/SYN-ACK khớp` |
+
+**Quy tắc khi đang khoá:** không sửa `android/**` và `iOS/**` cho 2 nền tảng này, **không build lại APK/IPA**, **không cài đè** lên máy đang test — trừ khi chủ dự án yêu cầu. Các worker đang làm dở đã được **dừng** (Android: bỏ việc kéo số khai lên nấc tĩnh; iOS: sửa bộ nhớ bị nhiễm số tĩnh) — code dở được commit riêng, **chưa phát hành**.
+
+**macOS không nằm trong lệnh khoá này** (đang build lại với khai báo động + các fix trên).
+
+Việc treo khi khoá: 3 fix nhỏ (Android clamp, iOS memory, macOS khai động), multipath, telemetry client (`bw_policy`), node HK.

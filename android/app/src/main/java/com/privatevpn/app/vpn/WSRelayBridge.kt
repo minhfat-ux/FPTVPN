@@ -49,6 +49,20 @@ class WSRelayBridge(
     @Volatile var connected = false
         private set
 
+    /**
+     * Byte THẬT đã đi qua cầu WS (rx = dữ liệu TẢI XUỐNG người dùng nhận được).
+     *
+     * Vì sao cần: vòng ramp trong lúc chạy phải biết "mạng thực tế đang chở được bao nhiêu".
+     * Nguồn rẻ nhất là /proc/net/dev, nhưng từ Android 10 app thường có thể bị chặn đọc
+     * /proc/net — khi đó cầu WS là nguồn duy nhất nằm TRONG tiến trình app. Đây là byte của
+     * chặng ngoài cùng (có thêm chút overhead gói WS), đúng thứ cần để quyết định trần khai.
+     */
+    @Volatile private var rxTotal = 0L
+    @Volatile private var txTotal = 0L
+
+    fun rxBytes(): Long = rxTotal
+    fun txBytes(): Long = txTotal
+
     /** Đã từng mở được WS trong lần chạy này — trước đó thì không có gì để "chết". */
     @Volatile private var opened = false
     private val deadReported = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -86,6 +100,8 @@ class WSRelayBridge(
         return try {
             val sock = DatagramSocket(0, InetAddress.getByName("127.0.0.1"))
             udp = sock
+            rxTotal = 0L
+            txTotal = 0L
             opened = false
             deadReported.set(false)
             running = true
@@ -104,6 +120,7 @@ class WSRelayBridge(
                         val target = peer.get() ?: return
                         runCatching {
                             sock.send(DatagramPacket(bytes.toByteArray(), bytes.size, target))
+                            rxTotal += bytes.size
                         }
                     }
 
@@ -138,7 +155,9 @@ class WSRelayBridge(
                         break
                     }
                     peer.set(InetSocketAddress(packet.address, packet.port))
-                    ws?.send(buffer.toByteString(0, packet.length))
+                    if (ws?.send(buffer.toByteString(0, packet.length)) == true) {
+                        txTotal += packet.length
+                    }
                 }
             }.apply { isDaemon = true; name = "ws-relay-udp" }.start()
             true

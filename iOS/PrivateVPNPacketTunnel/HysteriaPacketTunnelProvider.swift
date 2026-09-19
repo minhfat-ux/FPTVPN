@@ -3,9 +3,10 @@ import Network
 import NetworkExtension
 import os
 
-/// Packet-tunnel provider Hysteria-only cho **macOS và iOS** (cùng một lớp, hai nhánh
-/// nền tảng ở đúng ba chỗ: lấy fd utun, network settings, và nguồn bộ đếm gói cho watchdog —
-/// tìm `#if os(`).
+/// Packet-tunnel provider Hysteria-only cho **macOS và iOS** (cùng một lớp; nhánh nền tảng
+/// chỉ còn ở network settings và đường ramp băng thông — tìm `#if os(`. Đường lấy fd và chở
+/// gói thì dùng CHUNG: cặp socketpair bắc cầu qua `NEPacketTunnelFlow`, xem
+/// `HysteriaTransport.resolveTunnelFD`).
 ///
 /// Vì sao tách khỏi `PacketTunnelProvider` (bản iOS): framework hysteria2 mang theo một
 /// Go runtime, WireGuardKit mang theo một runtime nữa (`libwg-go.a`) — link cả hai vào
@@ -64,10 +65,10 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private let queue = DispatchQueue(label: "com.privatevpn.mac.hysteria-tunnel")
     private let flowLock = NSLock()
     private var transport: HysteriaTransport?
-    /// Cầu `packetFlow ↔ fd` (chỉ có ở chế độ `bridge` của macOS, xem `HysteriaTransport.resolveTunnelFD`).
+    /// Cầu `packetFlow ↔ fd` — đường chở gói của CẢ HAI nền tảng
+    /// (xem `HysteriaTransport.resolveTunnelFD`).
     private var bridge: TunnelBridge?
-    /// fd đã giao cho Go — trên iOS dùng để đọc bộ đếm gói của interface utun
-    /// (xem `trafficCounters`).
+    /// fd đã giao cho Go (đầu của cặp socketpair; macOS/iOS như nhau).
     private var tunnelFdForCounters: Int32?
     private var session = 0
     private var startCompleted = false
@@ -228,16 +229,16 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             return
         }
 
-        // fd giao cho Go, kèm bằng chứng kiểm tra (xem `HysteriaTransport.resolveTunnelFD`:
-        // trên macOS fd utun của NetworkExtension KHÔNG chở gói — netstat cho
-        // ipkts=0/opkts=0/obytes=0 và ~23k lỗi/s — nên mặc định bắc cầu qua packetFlow).
-        #if os(macOS)
+        // fd giao cho Go, kèm bằng chứng kiểm tra (xem `HysteriaTransport.resolveTunnelFD`).
+        //
+        // CẢ HAI nền tảng đi CÙNG một đường: tự tạo cặp socketpair rồi bắc cầu qua
+        // `packetFlow` (`TunnelBridge`) — vì utun của NE không dùng thẳng được ở đâu cả:
+        //   * macOS 26.5 (đo 19/09/2026): gói ghi vào utun của NE bị kernel trả lỗi
+        //     (ipkts=0/opkts=0/obytes=0, ~23k lỗi/s), KVC `socket` cũng trả nil.
+        //   * iOS (đo 19/09/2026 trên iPad, build 1.4.0/16): `packetFlow.value(forKey:
+        //     "socket")` trả nil ⇒ nhánh cũ báo `không lấy được fd nào để giao cho Go` và
+        //     tunnel chết ngay sau khi áp network settings.
         let resolvedTunnelFD = HysteriaTransport.resolveTunnelFD(from: packetFlow)
-        #else
-        // iOS: KHÔNG cần socketpair/bắc cầu — KVC `packetFlow.value(forKey: "socket")` là fd
-        // utun thật và chở gói đúng định dạng sing-tun parse (xem `directTunnelFD`).
-        let resolvedTunnelFD = HysteriaTransport.directTunnelFD(from: packetFlow)
-        #endif
         guard let tunnelFD = resolvedTunnelFD else {
             RelayDiagnostics.shared.log("hysteria: không lấy được fd nào để giao cho Go")
             clearSettings()
@@ -260,7 +261,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         tunnelFdForCounters = tunnelFD.fd
         flowLock.unlock()
 
-        // Chế độ bắc cầu (chỉ macOS): gói đi qua `NEPacketTunnelFlow` (API công khai) rồi mới vào fd.
+        // Chế độ bắc cầu (đường chạy của CẢ HAI nền tảng): gói đi qua `NEPacketTunnelFlow`
+        // (API công khai) rồi mới vào fd.
         if let hostFd = tunnelFD.hostFd {
             let created = TunnelBridge(flow: packetFlow, hostFd: hostFd, log: log)
             flowLock.lock()
@@ -429,9 +431,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let averageDown = bandwidth.lastAverageDownKbps
         if averageDown >= Self.bandwidthLogMinKbps, averageDown != measuredPeakDownKbps {
             measuredPeakDownKbps = averageDown
+            // `best=` là ĐỈNH trượt đã đo của phiên: dòng log này là bằng chứng nghiệm thu
+            // "số khai bám số đo" (declared ≈ best × 85%), và là số được ghi vào bộ nhớ theo
+            // mạng cho lần kết nối sau.
             RelayDiagnostics.shared.log(
                 "bw: net=\(bandwidth.key) measured=\(averageDown) declared up=\(bandwidth.upKbps) "
-                    + "down=\(bandwidth.downKbps) reason=\(bandwidth.planReason.rawValue)"
+                    + "down=\(bandwidth.downKbps) reason=\(bandwidth.planReason.rawValue) "
+                    + "best=\(bandwidth.peakDownKbps)"
             )
         }
         guard let decision else { return }
@@ -459,7 +465,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let line = "bw: net=\(key) measured=\(bandwidth?.lastAverageDownKbps ?? 0) "
             + "declared up=\(activeUpKbps) down=\(activeDownKbps) "
             + "reason=\(activeBandwidthReason?.label ?? BandwidthControl.Reason.probe.label) "
-            + "(\(event))"
+            + "best=\(bandwidth?.peakDownKbps ?? 0) (\(event))"
         RelayDiagnostics.shared.log(line)
         log.log(level: .default, "\(line, privacy: .public)")
     }
@@ -591,7 +597,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         return true
     }
 
-    /// Dừng transport cũ rồi dựng lại với số khai mới (giữ nguyên fd utun của NetworkExtension).
+    /// Dừng transport cũ rồi dựng lại với số khai mới (giữ nguyên fd đã giao cho Go: đầu của
+    /// cặp socketpair — cầu `TunnelBridge` vẫn chạy nguyên, chỉ relay + QUIC được dựng lại).
     private func rebuildTransportForBandwidth() -> Bool? {
         #if os(iOS)
         guard let bandwidth, var options = currentOptions else { return nil }
@@ -644,10 +651,10 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         logActiveDeclaration(key: bandwidth.key, event: "ramp đã áp")
         return true
         #else
-        // macOS chưa bật: ở đó Go KHÔNG đọc thẳng fd utun mà nhận fd của cặp socketpair do
-        // `TunnelBridge` bắc cầu (xem `HysteriaTransport.resolveTunnelFD`), nên đổi số khai là
-        // phải dựng lại CẢ cầu — việc đó cần đo thực địa trước khi bật. Số khai vẫn được kẹp
-        // theo mạng + bộ nhớ, chỉ không ramp giữa phiên.
+        // macOS chưa bật: fd của phiên macOS cũng là cặp socketpair có cầu `TunnelBridge`
+        // (xem `HysteriaTransport.resolveTunnelFD`), nên về nguyên tắc dựng lại transport là
+        // đủ; nhưng đường này chưa được đo thực địa trên macOS nên ramp giữa phiên vẫn tắt ở
+        // đó. Số khai vẫn được kẹp theo mạng + bộ nhớ, chỉ không ramp giữa phiên.
         return nil
         #endif
     }
@@ -882,10 +889,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         // tunnel rảnh — watchdog ở đây chạy mỗi \(Int(Self.trafficCheckInterval))s nên là chỗ
         // tự nhiên để thử lại (nhịp 1s cũng thử, xem `bandwidthStep`).
         if isBandwidthRampPending, isBandwidthIdle() {
+            // Lý do in ra log lấy từ chính quyết định đang chờ: `clamp` (kẹp theo số đo — xem
+            // `underrunPct`) khác `loss-backoff` (mất gói); còn lại là đường ramp thường.
+            let pending = bandwidth?.pendingReason
             _ = applyBandwidthRampIfIdle(
-                reason: bandwidth?.pendingReason == .lossBackoff
-                    ? BandwidthControl.Reason.lossBackoff.label
-                    : "idle-reconnect"
+                reason: pending == .clamp
+                    ? BandwidthControl.Reason.clamp.label
+                    : (pending == .lossBackoff ? BandwidthControl.Reason.lossBackoff.label : "idle-reconnect")
             )
         }
 
@@ -1222,12 +1232,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Bộ đếm gói THẬT đã đi qua tunnel, chuẩn hoá cho cả hai nền tảng.
     ///
     /// Vì sao cần lớp này: watchdog chỉ được phép tự gỡ tunnel khi có BẰNG CHỨNG HỎNG nhìn từ
-    /// gói của CHÍNH MÁY (xem `startTrafficSupervisor`), mà nguồn bằng chứng khác nhau theo
-    /// nền tảng:
-    ///   * macOS — cầu `packetFlow ↔ fd` tự đếm (`TunnelBridge`), có cả SYN/SYN-ACK nên phát
-    ///     hiện TCP blackhole đúng như thiết kế (`countsTCPHandshake = true`).
-    ///   * iOS — không có cầu (Go đọc thẳng fd utun), nên lấy bộ đếm gói của interface utun
-    ///     (`HysteriaTransport.utunPacketCounters`): có hai chiều gói nhưng KHÔNG có cờ TCP.
+    /// gói của CHÍNH MÁY (xem `startTrafficSupervisor`), mà nguồn bằng chứng có hai loại:
+    ///   * cầu `packetFlow ↔ fd` tự đếm (`TunnelBridge`) — đường chạy của macOS VÀ iOS, có cả
+    ///     SYN/SYN-ACK nên phát hiện TCP blackhole đúng như thiết kế (`countsTCPHandshake = true`).
+    ///   * bộ đếm gói của interface utun (`HysteriaTransport.utunPacketCounters`) — chỉ dùng khi
+    ///     phiên KHÔNG chạy cầu (đường lùi hiếm: fd utun lấy được qua KVC); có hai chiều gói
+    ///     nhưng KHÔNG có cờ TCP.
     private struct TrafficCounters {
         /// Nguồn số liệu — ghi thẳng vào log để lần sau biết con số đến từ đâu.
         var origin: String
@@ -1245,7 +1255,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private var trafficCounters: TrafficCounters? {
         if let counters = bridgeCounters {
             return TrafficCounters(
-                origin: "cầu packetFlow↔fd (macOS)",
+                origin: "cầu packetFlow↔fd",
                 toGo: counters.toGo,
                 fromGo: counters.fromGo,
                 tcpSynToGo: counters.tcpSynToGo,
@@ -1367,11 +1377,16 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             obfs: dict["obfs"] as? String ?? "",
             // Số khai cho Brutal CC: thứ tự ưu tiên (mạnh nhất trước)
             //   1. ghi đè CHẨN ĐOÁN trong Documents/hysteria-diag.txt (người đo ép tay);
-            //   2. app truyền trong providerConfiguration (nếu app có ý kiến);
-            //   3. số ĐỘNG của `HysteriaBandwidthControl` (bộ nhớ theo mạng / số đo phiên);
+            //   2. số ĐỘNG của `HysteriaBandwidthControl` (bộ nhớ theo mạng / số đo phiên);
+            //   3. số app truyền trong providerConfiguration — app chỉ biết nấc TĨNH
+            //      (`HysteriaDefaults`), nên đứng SAU số động;
             //   4. mặc định HysteriaDefaults — y như trước khi có feature này.
-            upKbps: diagUp ?? dict["upKbps"] as? Int ?? bandwidth?.upKbps ?? HysteriaDefaults.upKbps,
-            downKbps: diagDown ?? dict["downKbps"] as? Int ?? bandwidth?.downKbps ?? HysteriaDefaults.downKbps,
+            // Vì sao (2) phải TRƯỚC (3): app LUÔN truyền `upKbps`/`downKbps` = nấc tĩnh
+            // (xem `VPNManager.hysteriaConfiguration`), nên để (3) trước là số động không bao
+            // giờ tới được Go — đo thật trên iPad 19/09: `bw: measured=1069 declared up=30000
+            // down=100000` dù plan động đã hạ xuống hàng trăm kbps.
+            upKbps: diagUp ?? bandwidth?.upKbps ?? dict["upKbps"] as? Int ?? HysteriaDefaults.upKbps,
+            downKbps: diagDown ?? bandwidth?.downKbps ?? dict["downKbps"] as? Int ?? HysteriaDefaults.downKbps,
             mtu: diagMTU ?? dict["mtu"] as? Int ?? HysteriaDefaults.mtu,
             // CIDR cho Go (netip.ParsePrefix) — xem HysteriaDefaults.tunIPv4CIDR.
             ipv4: HysteriaDefaults.tunIPv4CIDR,
