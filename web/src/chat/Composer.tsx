@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from "react";
 import { AudioLines, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { api } from "../api/client";
-import { formatBytes } from "../state/store";
+import { formatBytes, useAuth } from "../state/store";
 import { fileIconLabel } from "../components/ui";
 import { useI18n } from "../i18n";
 import { useSpeechRecognition } from "../voice";
@@ -85,6 +85,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const fileRef = useRef<HTMLInputElement>(null);
   const { t, n } = useI18n();
   const { open: openVoiceMode, config, speaking, stopSpeaking } = useVoice();
+  const { meta } = useAuth();
+  const voiceEnabled = meta?.voice?.enabled !== false;
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
@@ -241,6 +243,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <Paperclip size={17} />
           </button>
 
+          {voiceEnabled && (
           <button
             className={`btn btn-icon${listening ? " btn-mic-active" : " btn-ghost"}`}
             onClick={toggleDictation}
@@ -258,6 +261,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           >
             <Mic size={17} />
           </button>
+          )}
 
           <div className="grow">
             <SkillSelect
@@ -284,6 +288,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             ))}
           </select>
 
+          {voiceEnabled && (
           <button
             className="btn btn-ghost nowrap"
             onClick={() => {
@@ -296,6 +301,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           >
             <AudioLines size={16} /> {t("chat.composer.voiceMode")}
           </button>
+          )}
 
           {sending ? (
             <button className="btn btn-danger nowrap" onClick={onStop} type="button" title={t("chat.composer.stopTitle")}>

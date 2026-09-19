@@ -18,6 +18,7 @@ type VoiceSettings = Pick<
   | "voiceLanguage"
   | "voiceAutoRead"
   | "voiceSpeakRate"
+  | "voiceEnabled"
 >;
 
 const EMPTY: VoiceSettings = {
@@ -29,6 +30,7 @@ const EMPTY: VoiceSettings = {
   voiceLanguage: "vi-VN",
   voiceAutoRead: false,
   voiceSpeakRate: 1,
+  voiceEnabled: false,
 };
 
 const LANGUAGES = [
@@ -126,6 +128,15 @@ export function VoiceTab() {
 
   return (
     <div className="stack gap-3">
+      <div className="card">
+        <div className="row gap-3" style={{ alignItems: "center", justifyContent: "space-between" }}>
+          <div className="grow">
+            <div className="card-title">Bật/tắt giọng nói</div>
+            <div className="card-desc">Tắt nếu giọng nói chưa ổn định — nút micro và chế độ nói sẽ bị ẩn.</div>
+          </div>
+          <Switch checked={settings.voiceEnabled} onChange={(value) => patch({ voiceEnabled: value })} label={t("common.on")} />
+        </div>
+      </div>
       <div className="card">
         <div className="card-head">
           <div className="grow">
@@ -257,6 +268,7 @@ function pickVoice(settings: AppSettings): VoiceSettings {
     voiceLanguage: settings.voiceLanguage || "vi-VN",
     voiceAutoRead: Boolean(settings.voiceAutoRead),
     voiceSpeakRate: Number(settings.voiceSpeakRate) || 1,
+    voiceEnabled: Boolean(settings.voiceEnabled),
   };
 }
 
