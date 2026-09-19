@@ -62,3 +62,11 @@ Chủ dự án xác nhận bản Android **1.4.0 (versionCode 20)** đã **sửa
 - **Không sửa** `android/**` (đặc biệt `HysteriaVpnService.kt`, `Config.kt`), **không** đổi version, **không** build lại APK trừ khi chủ dự án yêu cầu.
 - Bản đóng băng = 2 APK ở bảng phía trên (modern `a780a773…56e8`, legacy `e36b4fcb…bc46`), release notes `release/android/RELEASE_NOTES_1.4.0.md`, commit `b08649d`.
 - Việc còn treo (không nằm trong bản đóng băng): **bypass WeChat cần test lại**; split-tunnel theo CN cho Android chưa làm.
+
+## 🔒 ĐÓNG BĂNG macOS (19/09/2026, theo yêu cầu chủ dự án)
+
+Chủ dự án xác nhận bản macOS (hysteria2/gVisor) **chạy ổn** và yêu cầu **khoá lại sau khi đóng gói release**.
+
+- Bản đóng băng = build **1.4.0 / build 14** (đang được đóng gói khi ghi dòng này; artifact + sha256 sẽ bổ sung vào mục macOS ở phía trên).
+- **Không sửa** `mac/**`, `iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift`, `HysteriaTransport.swift`, `tools/hysteria-apple/**` (trừ khi chủ dự án yêu cầu). Không build lại bản macOS trừ khi có yêu cầu.
+- Việc treo (KHÔNG nằm trong bản khoá, làm sau khi có yêu cầu): bỏ hiện tượng "lượt tải đầu sau Connect chậm rồi mới tăng"; tăng tốc hơn nữa; WeChat split-tunnel; iOS hysteria2 (bản test riêng).
