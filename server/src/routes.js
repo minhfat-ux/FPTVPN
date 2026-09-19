@@ -81,10 +81,15 @@ import {
 } from "./topup.js";
 import {
   HUB_CATEGORIES,
+  HUB_KINDS,
+  HUB_KIND_LABELS,
   HUB_LANGS,
+  HUB_ORIGINS,
+  HUB_ORIGIN_LABELS,
   createHubSkill,
   deleteHubSkill,
   getHubSkill,
+  hubSkillCatalog,
   listHubSkills,
   purchaseHubSkill,
   updateHubSkill,
@@ -582,8 +587,10 @@ export function createApiRouter() {
       // `items` = what the quick dropdown shows (installed, in the user's order).
       items: listInstalledSkills(req.user.id, { lang: requestLang(req) }),
       installed: listInstalledSkillIds(req.user.id),
-      // `catalog` = everything that exists, including what the marketplace will sell.
-      catalog: publicSkillCatalog(requestLang(req)),
+      // `catalog` = mọi thứ có thể thêm: kỹ năng dựng sẵn + mục trong chợ (miễn phí hoặc đã sở hữu).
+      // Trước đây chỉ có catalog dựng sẵn nên mục trong chợ KHÔNG xuất hiện ở dropdown của chat —
+      // người dùng phải vòng qua Chợ cài trước mới thấy.
+      catalog: [...publicSkillCatalog(requestLang(req)), ...hubSkillCatalog(req.user.id, requestLang(req))],
       maxSelectable: MAX_SELECTABLE_SKILLS,
       tools: TOOL_DEFINITIONS.map((tool) => ({
         name: tool.name,
@@ -1089,6 +1096,11 @@ export function createApiRouter() {
     res.json({
       items: listHubSkills({ includeHidden: true, withContent: true, lang: requestLang(req) }),
       categories: HUB_CATEGORIES,
+      // Bộ phân loại cho console: hình thức (chuyên gia/kỹ năng) và nguồn gốc (mình làm/clone về).
+      kinds: HUB_KINDS,
+      kindLabels: HUB_KIND_LABELS,
+      origins: HUB_ORIGINS,
+      originLabels: HUB_ORIGIN_LABELS,
     });
   });
 
@@ -1288,6 +1300,9 @@ export function createApiRouter() {
         state: draft.state,
         instructions: draft.instructions,
         tools: draft.tools,
+        // Nhập từ nguồn ngoài ⇒ luôn là "clone về": không được bán, và console hiện đúng nhóm.
+        // Muốn bán thì phải viết lại hoàn toàn rồi đổi nguồn gốc trên console.
+        origin: "clone",
       };
       const skill = existing ? updateHubSkill(existing.id, payload) : createHubSkill(payload);
       audit(req.user.id, "skillhub.import", skill.id, { slug, priceVnd, targets, updated: Boolean(existing) });

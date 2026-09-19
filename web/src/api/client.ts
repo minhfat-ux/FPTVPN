@@ -22,6 +22,7 @@ import type {
   FileRef,
   HubListing,
   HubPurchaseResult,
+  HubAdminListing,
   HubSkill,
   McpServer,
   Message,
@@ -359,7 +360,7 @@ export const api = {
   hub: () => request<HubListing>("GET", `/hub?lang=${apiLang}`),
   hubSkill: (id: string) => request<{ skill: HubSkill; balance: number }>("GET", `/hub/${id}?lang=${apiLang}`),
   buyHubSkill: (id: string) => request<HubPurchaseResult>("POST", `/hub/${id}/purchase`, {}),
-  adminHub: () => request<{ items: HubSkill[]; categories: string[] }>("GET", `/admin/hub?lang=${apiLang}`),
+  adminHub: () => request<HubAdminListing>("GET", `/admin/hub?lang=${apiLang}`),
   createHubSkill: (body: Record<string, unknown>) =>
     request<{ skill: HubSkill }>("POST", "/admin/hub", body),
   updateHubSkill: (id: string, body: Record<string, unknown>) =>

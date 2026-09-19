@@ -31,6 +31,19 @@ export function SkillHubPage() {
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [usingId, setUsingId] = useState<string | null>(null);
   const [creditsOpen, setCreditsOpen] = useState(false);
+  /** Ba nhóm như WorkBuddy: Chuyên gia · Kỹ năng · Kết nối. */
+  const [tab, setTab] = useState<"experts" | "skills" | "connectors">("experts");
+  const [connectors, setConnectors] = useState<Array<{ slug: string; name: string; purpose: string; category: string }>>([]);
+  const [connectorsTried, setConnectorsTried] = useState(false);
+
+  useEffect(() => {
+    if (tab !== "connectors" || connectorsTried) return;
+    setConnectorsTried(true);
+    fetch("/connectors.json")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list) => setConnectors(Array.isArray(list) ? list : []))
+      .catch(() => setConnectors([]));
+  }, [tab, connectorsTried]);
 
   const loadFailed = t("hub.page.loadFailed");
 
@@ -55,7 +68,14 @@ export function SkillHubPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // Tab theo `kind` (chuyên gia = prompt pack đóng vai, kỹ năng = quy trình). Dữ liệu cũ chưa
+    // có `kind` thì suy từ category như trước để không mất mục nào.
+    const isExpert = (skill: HubSkill) =>
+      skill.kind ? skill.kind === "expert" : skill.category === "Chuyên gia";
     return items.filter((skill) => {
+      if (tab === "experts" && !isExpert(skill)) return false;
+      if (tab === "skills" && isExpert(skill)) return false;
+      if (tab === "connectors") return false;
       if (category === "owned") {
         if (!isOwned(skill)) return false;
       } else if (category !== "all" && skill.category !== category) {
@@ -64,7 +84,7 @@ export function SkillHubPage() {
       if (!q) return true;
       return `${skill.name} ${skill.tagline ?? ""} ${skill.description ?? ""}`.toLowerCase().includes(q);
     });
-  }, [items, category, query]);
+  }, [items, category, query, tab]);
 
   const detail = useMemo(
     () => (detailId ? items.find((skill) => skill.id === detailId) ?? null : null),
@@ -140,6 +160,25 @@ export function SkillHubPage() {
           </div>
         </div>
 
+        <div className="tabs" role="tablist" style={{ marginTop: 12 }}>
+          {([
+            ["experts", "Chuyên gia"],
+            ["skills", "Kỹ năng"],
+            ["connectors", "Kết nối"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              className={`tab${tab === id ? " active" : ""}`}
+              role="tab"
+              aria-selected={tab === id}
+              type="button"
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="hub-toolbar">
           <div className="hub-search">
             <Search size={15} className="hub-search-icon" />
@@ -155,7 +194,33 @@ export function SkillHubPage() {
           </button>
         </div>
 
-        <div className="chip-row hub-chips">
+        {tab === "connectors" && (
+          <div className="card">
+            <div className="bold">Kết nối (connector)</div>
+            <div className="card-desc mt-1">
+              Danh mục connector dùng được với trợ lý. Quản trị viên bật/tắt và dán khoá trong
+              Cài đặt → MCP; sau khi bật, connector tự sinh công cụ cho trợ lý dùng.
+            </div>
+            {!connectors.length && <div className="hint mt-2">Đang tải danh mục…</div>}
+            <div className="mt-2">
+              {connectors.map((item) => (
+                <div
+                  key={item.slug}
+                  className="row gap-2"
+                  style={{ justifyContent: "space-between", padding: "8px 0", borderTop: "1px solid var(--border)" }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div className="bold" style={{ fontSize: 13 }}>{item.name || item.slug}</div>
+                    <div className="hint" style={{ fontSize: 12 }}>{(item.purpose || "").slice(0, 140)}</div>
+                  </div>
+                  <span className="chip" style={{ whiteSpace: "nowrap" }}>{item.category || "Khác"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab !== "connectors" && <div className="chip-row hub-chips">
           <button
             className={`chip${category === "all" ? " active" : ""}`}
             type="button"
@@ -180,7 +245,7 @@ export function SkillHubPage() {
               {name}
             </button>
           ))}
-        </div>
+        </div>}
 
         {loading && !listing && <Spinner label={t("hub.page.loading")} />}
 
@@ -195,7 +260,7 @@ export function SkillHubPage() {
           </div>
         )}
 
-        {!error && !loading && !filtered.length && (
+        {!error && !loading && tab !== "connectors" && !filtered.length && (
           <div className="card">
             <EmptyState
               icon="🛍️"

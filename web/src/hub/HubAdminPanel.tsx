@@ -43,6 +43,8 @@ export function HubAdminPanel() {
   const { push } = useToast();
   const [items, setItems] = useState<HubSkill[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [originLabels, setOriginLabels] = useState<Record<string, string>>({});
+  const [kindLabels, setKindLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<HubSkill | null>(null);
@@ -62,6 +64,8 @@ export function HubAdminPanel() {
       const result = await api.adminHub();
       setItems(result.items);
       setCategories(result.categories);
+      setOriginLabels(result.originLabels ?? {});
+      setKindLabels(result.kindLabels ?? {});
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : loadFailed);
@@ -111,6 +115,8 @@ export function HubAdminPanel() {
         if (form.tagline !== (editing.tagline ?? "")) changes.tagline = form.tagline;
         if (form.description !== (editing.description ?? "")) changes.description = form.description;
         if (form.category !== editing.category) changes.category = form.category;
+        if (form.kind !== editing.kind) changes.kind = form.kind;
+        if (form.origin !== editing.origin) changes.origin = form.origin;
         if (form.icon !== editing.icon) changes.icon = form.icon;
         if (toHubNumber(form.priceVnd) !== editing.priceVnd) changes.priceVnd = toHubNumber(form.priceVnd);
         if (form.state !== editing.state) changes.state = form.state;
@@ -133,6 +139,8 @@ export function HubAdminPanel() {
           tagline: form.tagline.trim(),
           description: form.description.trim(),
           category: form.category,
+          kind: form.kind,
+          origin: form.origin,
           icon: form.icon.trim() || "sparkles",
           priceVnd: toHubNumber(form.priceVnd),
           state: form.state,
@@ -196,6 +204,8 @@ export function HubAdminPanel() {
                   <th>{t("hub.admin.colSkill")}</th>
                   <th>{t("hub.admin.colSlug")}</th>
                   <th>{t("hub.admin.colCategory")}</th>
+                  <th>{t("hub.pricing.colKind")}</th>
+                  <th>{t("hub.pricing.colOrigin")}</th>
                   <th>{t("hub.admin.colPrice")}</th>
                   <th>{t("hub.admin.colState")}</th>
                   <th>{t("hub.admin.colInstalls")}</th>
@@ -218,6 +228,14 @@ export function HubAdminPanel() {
                     </td>
                     <td className="mono tiny">{skill.slug}</td>
                     <td className="small">{skill.category}</td>
+                    <td className="small">
+                      {kindLabels[skill.kind] ?? (skill.kind === "expert" ? t("hub.form.kindExpert") : t("hub.form.kindSkill"))}
+                    </td>
+                    <td className="small">
+                      <span className={`badge ${skill.origin === "own" ? "badge-ok" : "badge-warn"}`}>
+                        {originLabels[skill.origin] ?? skill.origin}
+                      </span>
+                    </td>
                     <td className="small nowrap">
                       {skill.priceVnd > 0 ? (
                         <>

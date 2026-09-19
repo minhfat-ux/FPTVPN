@@ -17,10 +17,44 @@ import { listInstalledSkillIds, setInstalledSkills, MAX_SELECTABLE_SKILLS } from
 export const HUB_CATEGORIES = ["Chuyên gia", "Bán hàng", "Văn phòng", "Dữ liệu", "Nội dung", "Giáo dục", "Khác"];
 
 /**
+ * `kind` — hình thức của mục trong chợ: chuyên gia (prompt pack đóng vai) hay kỹ năng (quy trình).
+ * Chợ hiện theo mô hình ba nhóm Chuyên gia · Kỹ năng · Kết nối, nên đây là thứ quyết định mục nằm
+ * ở tab nào; `category` vẫn là nhóm chủ đề (Bán hàng, Giáo dục…) dùng để lọc bên trong tab.
+ */
+export const HUB_KINDS = ["expert", "skill"];
+
+/**
+ * `origin` — nguồn gốc nội dung: "own" = mình viết hoàn toàn, "clone" = nhập/dựa nguồn bên thứ ba.
+ * Đây không chỉ là nhãn phân loại: theo docs/CONTENT-POLICY.md §3.1, CHỈ nội dung "own" mới được
+ * đặt giá; mục "clone" phải ở giá 0 (bán lại nội dung nguồn ngoài là tái phân phối thương mại).
+ */
+export const HUB_ORIGINS = ["own", "clone"];
+
+/** Nhãn tiếng Việt để API trả kèm cho console (UI hiển thị thẳng, không phải tự đoán). */
+export const HUB_ORIGIN_LABELS = { own: "Mình tự làm", clone: "Clone về" };
+export const HUB_KIND_LABELS = { expert: "Chuyên gia", skill: "Kỹ năng" };
+
+/**
  * Selling price of a skill, in VND. **This is the stored, authoritative price** —
  * the owner prices skills in money, separately from the price of a credit, so
  * changing `vndPerCredit` never silently re-prices the shop.
  */
+/** `kind` của một dòng, chịu được dữ liệu cũ chưa có cột (suy từ category). */
+export function skillKind(row) {
+  if (!row) return "skill";
+  return row.kind === "expert" || row.category === "Chuyên gia" ? "expert" : "skill";
+}
+
+/** `origin` của một dòng. Thiếu cột/giá trị lạ ⇒ "clone" (phía an toàn về bản quyền). */
+export function skillOrigin(row) {
+  return row?.origin === "own" ? "own" : "clone";
+}
+
+/** Mục có được đặt giá hay không: chỉ nội dung mình viết hoàn toàn (CONTENT-POLICY §3.1). */
+export function skillSellable(row) {
+  return skillOrigin(row) === "own";
+}
+
 export function skillPriceVnd(row) {
   if (!row) return 0;
   return Math.max(0, Math.trunc(Number(row.price_vnd ?? 0) || 0));
@@ -110,6 +144,12 @@ function rowToSkill(
     tagline: row.tagline ?? "",
     description: row.description ?? "",
     category: row.category,
+    /** "expert" (đóng vai) hay "skill" (quy trình) — quyết định tab trong chợ. */
+    kind: skillKind(row),
+    /** "own" (mình viết) hay "clone" (nguồn ngoài). Chỉ "own" mới được bán. */
+    origin: skillOrigin(row),
+    /** Có được đặt giá hay không — UI dùng để khoá ô giá của mục clone. */
+    sellable: skillSellable(row),
     icon: row.icon,
     /** Money price — what the shop shows and what the buyer pays. */
     priceVnd,
@@ -127,6 +167,29 @@ function rowToSkill(
     // the edit form can prefill instructions/tools. Never on public listings.
     ...(withContent ? { instructions: row.instructions ?? "", tools: row.tools ?? [] } : {}),
   };
+}
+
+/**
+ * Mục trong chợ ở dạng `SkillDescriptor` — để dropdown "Thêm kỹ năng" của chat hiển thị được.
+ *
+ * Chỉ trả mục dùng được NGAY: đang phát hành và (miễn phí hoặc đã sở hữu). Mục còn phải mua thuộc
+ * về Chợ; đưa vào danh sách thêm của chat sẽ chỉ tạo ra lỗi khi bấm.
+ */
+export function hubSkillCatalog(userId, lang = "vi") {
+  return listHubSkills({ userId, lang })
+    .filter((skill) => skill.state === "published" && (skill.priceVnd === 0 || skill.owned))
+    .map((skill) => ({
+      id: skill.id,
+      label: skill.name,
+      icon: skill.icon,
+      description: skill.tagline || skill.description || "",
+      starterPrompts: [],
+      category: skill.category,
+      kind: skill.kind,
+      origin: skill.origin,
+      state: "ready",
+      builtin: false,
+    }));
 }
 
 /** Internal fields the agent needs (never sent to the browser as-is). */
@@ -260,18 +323,41 @@ function resolvePriceVnd(input, fallbackVnd = 0) {
   return fallbackVnd;
 }
 
+/**
+ * Chỉ nội dung do mình viết hoàn toàn mới được đặt giá (docs/CONTENT-POLICY.md §3.1).
+ * Mục "clone về" mà đòi giá > 0 thì TỪ CHỐI kèm lý do — im lặng hạ giá sẽ khiến người
+ * đặt giá tưởng đã bán được.
+ */
+function assertSellablePrice(origin, priceVnd) {
+  if (priceVnd > 0 && origin !== "own") {
+    throw badRequest(
+      "Mục \"clone về\" (nội dung nhập/dựa nguồn bên thứ ba) không được đặt giá — " +
+        "chỉ nội dung mình viết hoàn toàn mới bán được (docs/CONTENT-POLICY.md §3.1). " +
+        "Viết lại hoàn toàn rồi đổi nguồn gốc sang \"Mình tự làm\" trước.",
+    );
+  }
+  return priceVnd;
+}
+
 export function createHubSkill(input) {
   const name = String(input?.name ?? "").trim();
   if (!name) throw badRequest("Thiếu tên kỹ năng");
   const slug = slugify(input?.slug || name, "skill");
   if (one("hub_skills", "slug = ?", [slug])) throw badRequest(`Slug "${slug}" đã tồn tại`);
-  const priceVnd = resolvePriceVnd(input);
+  const category = HUB_CATEGORIES.includes(input?.category) ? input.category : "Khác";
+  // Mục tạo tay qua API mặc định là "own" (người tạo tự viết); đường nhập từ nguồn ngoài
+  // (SkillHub/WorkBuddy) truyền origin: "clone" tường minh.
+  const origin = HUB_ORIGINS.includes(input?.origin) ? input.origin : "own";
+  const kind = HUB_KINDS.includes(input?.kind) ? input.kind : category === "Chuyên gia" ? "expert" : "skill";
+  const priceVnd = assertSellablePrice(origin, resolvePriceVnd(input));
   const row = insert("hub_skills", {
     slug,
     name,
     tagline: String(input?.tagline ?? "").slice(0, 200) || null,
     description: String(input?.description ?? "").slice(0, 2000) || null,
-    category: HUB_CATEGORIES.includes(input?.category) ? input.category : "Khác",
+    category,
+    kind,
+    origin,
     icon: String(input?.icon ?? "sparkles").slice(0, 40),
     price_vnd: priceVnd,
     price: creditsForPriceVnd(priceVnd),
@@ -292,12 +378,22 @@ export function updateHubSkill(id, patch) {
   if (patch.tagline !== undefined) changes.tagline = String(patch.tagline ?? "").slice(0, 200) || null;
   if (patch.description !== undefined) changes.description = String(patch.description ?? "").slice(0, 2000) || null;
   if (patch.category !== undefined && HUB_CATEGORIES.includes(patch.category)) changes.category = patch.category;
+  if (patch.kind !== undefined && HUB_KINDS.includes(patch.kind)) changes.kind = patch.kind;
+  if (patch.origin !== undefined && HUB_ORIGINS.includes(patch.origin)) changes.origin = patch.origin;
   if (patch.icon !== undefined) changes.icon = String(patch.icon ?? "sparkles").slice(0, 40);
+
+  // Nguồn gốc SAU khi vá: đổi giá và đổi nguồn gốc trong cùng một request phải xét trên giá trị mới.
+  const nextOrigin = changes.origin ?? skillOrigin(existing);
   if (patch.priceVnd !== undefined || patch.price !== undefined) {
-    const priceVnd = resolvePriceVnd(patch, skillPriceVnd(existing));
+    const priceVnd = assertSellablePrice(nextOrigin, resolvePriceVnd(patch, skillPriceVnd(existing)));
     changes.price_vnd = priceVnd;
     // Kept as a credits cache for the raw table; readers derive it from price_vnd.
     changes.price = creditsForPriceVnd(priceVnd);
+  } else if (changes.origin === "clone" && skillPriceVnd(existing) > 0) {
+    // Chuyển một mục đang bán thành "clone về" thì phải hạ giá về 0 ngay trong cùng lượt ghi —
+    // không để lại trạng thái bán nội dung nguồn ngoài dù chỉ một request.
+    changes.price_vnd = 0;
+    changes.price = 0;
   }
   if (patch.instructions !== undefined) changes.instructions = String(patch.instructions ?? "").slice(0, 6000) || null;
   if (patch.tools !== undefined) changes.tools_json = Array.isArray(patch.tools) ? patch.tools.map(String) : [];

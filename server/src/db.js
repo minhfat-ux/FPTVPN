@@ -327,6 +327,13 @@ const ADDED_COLUMNS = [
   // `price_vnd` is the authoritative skill price (VND). `price` stays as a legacy
   // credits cache and is only read to seed `price_vnd` on the migration below.
   { table: "hub_skills", column: "price_vnd", definition: "INTEGER NOT NULL DEFAULT 0" },
+  // `kind`: "expert" (prompt pack đóng vai) hay "skill" (quy trình/việc cụ thể) — quyết định
+  // mục nằm ở tab nào trong chợ.
+  { table: "hub_skills", column: "kind", definition: "TEXT NOT NULL DEFAULT 'skill'" },
+  // `origin`: "own" (mình viết hoàn toàn) hay "clone" (nhập/dựa nguồn bên thứ ba). Mặc định
+  // của CỘT là "clone" — phía an toàn về bản quyền; chỉ nội dung do mình viết mới được đặt giá
+  // (docs/CONTENT-POLICY.md §3.1). Mục tạo tay qua API mặc định "own", mục nhập từ SkillHub là "clone".
+  { table: "hub_skills", column: "origin", definition: "TEXT NOT NULL DEFAULT 'clone'" },
 ];
 
 /**
@@ -349,6 +356,21 @@ function backfillMessageSearch() {
   }
 }
 
+/**
+ * Suy `kind` cho dữ liệu có trước khi cột này tồn tại: nhóm "Chuyên gia" là prompt pack đóng vai,
+ * phần còn lại là kỹ năng. Chỉ chạy một lần (lúc thêm cột) và idempotent.
+ */
+function backfillHubKind() {
+  try {
+    const info = db
+      .prepare("UPDATE hub_skills SET kind = 'expert' WHERE category = 'Chuyên gia' AND kind <> 'expert'")
+      .run();
+    if (info.changes) console.log(`[fbuddy] đã đặt kind='expert' cho ${info.changes} mục nhóm Chuyên gia`);
+  } catch (err) {
+    console.error("[fbuddy] bỏ qua suy kind cho dữ liệu cũ:", err?.message ?? err);
+  }
+}
+
 function migrate() {
   for (const entry of ADDED_COLUMNS) {
     const existing = new Set(db.prepare(`PRAGMA table_info(${entry.table})`).all().map((row) => row.name));
@@ -356,6 +378,7 @@ function migrate() {
     db.exec(`ALTER TABLE ${entry.table} ADD COLUMN ${entry.column} ${entry.definition}`);
     console.log(`[fbuddy] đã thêm cột ${entry.table}.${entry.column}`);
     if (entry.table === "hub_skills" && entry.column === "price_vnd") backfillHubPriceVnd();
+    if (entry.table === "hub_skills" && entry.column === "kind") backfillHubKind();
   }
   fixLegacySystemPromptCompany();
   COLUMN_CACHE.clear();

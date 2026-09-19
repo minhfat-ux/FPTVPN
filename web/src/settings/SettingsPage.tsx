@@ -6,6 +6,7 @@ import { AppTab } from "./AppTab";
 import { UsersTab } from "./UsersTab";
 import { VoiceTab } from "./VoiceTab";
 import { HubAdminPanel } from "../hub/HubAdminPanel";
+import { HubPricingPanel } from "../hub/HubPricingPanel";
 import { useI18n } from "../i18n";
 import "./settings.css";
 
@@ -62,7 +63,13 @@ export function SettingsPage() {
         {tab === "app" && <AppTab />}
         {tab === "users" && <UsersTab />}
         {tab === "voice" && <VoiceTab />}
-        {tab === "hub" && <HubAdminPanel />}
+        {tab === "hub" && (
+          <>
+            {/* Giá & phân loại đứng TRƯỚC danh sách: đây là việc hay làm nhất khi vào console. */}
+            <HubPricingPanel />
+            <HubAdminPanel />
+          </>
+        )}
       </div>
     </div>
   );

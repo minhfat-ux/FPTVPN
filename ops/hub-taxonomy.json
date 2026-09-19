@@ -1,0 +1,62 @@
+{
+  "_doc": [
+    "Phân loại chợ kỹ năng fBuddy: hình thức (kind) và nguồn gốc (origin).",
+    "Áp vào DB bằng: node ops/hub-taxonomy-apply.mjs --apply",
+    "",
+    "origin=own  : nội dung do mình viết hoàn toàn — CHỈ nhóm này được đặt giá (CONTENT-POLICY §3.1).",
+    "origin=clone: nhập hoặc dựa trên nguồn bên thứ ba (WorkBuddy/Tencent, các kho archive) — phải ở giá 0.",
+    "kind=expert : prompt pack đóng vai (hiện ở tab Chuyên gia).",
+    "kind=skill  : quy trình/việc cụ thể (hiện ở tab Kỹ năng).",
+    "",
+    "Mọi mục không có tên trong `own` được coi là clone; không có tên trong `experts` được coi là skill.",
+    "Sửa được trực tiếp trên console (Chợ kỹ năng → Giá & phân loại) mà không cần chạy lại file này."
+  ],
+  "defaults": {
+    "kind": "skill",
+    "origin": "clone"
+  },
+  "own": [
+    "content-sales",
+    "meeting-notes",
+    "doc-translate",
+    "contract-review",
+    "lesson-plan",
+    "data-story",
+    "brand-voice"
+  ],
+  "experts": [
+    "thai-marketing-creative",
+    "indonesia-bd-expert",
+    "vietnam-finance-tax-expert",
+    "malaysia-marketing",
+    "sg-finance-tax",
+    "malaysia-finance-tax",
+    "sg-biz-dev",
+    "indonesia-digital-law-expert",
+    "malaysia-hr-admin",
+    "malaysia-legal",
+    "sg-hr-admin-expert",
+    "indonesia-pa-expert",
+    "thailand-hr-admin",
+    "vietnam-public-affairs",
+    "cmo",
+    "one-person-company-plus",
+    "accountant",
+    "family-education-ma",
+    "ket-prep-team",
+    "vocab-craft-expert",
+    "study-planner",
+    "study-abroad-consultant",
+    "liuxue-yanxue-expert",
+    "ai-shifu",
+    "corporate-training-designer",
+    "innovation-startup-mentor",
+    "law-student-coach",
+    "ncre-expert",
+    "academic-tutor",
+    "english-exam-writing-reviewer",
+    "teachany",
+    "ai-teacher-kids",
+    "xiaobai-coach"
+  ]
+}

@@ -106,3 +106,36 @@
   letter-spacing: 0.5px;
   line-height: 1;
 }
+
+/* ---- console: bảng "Giá & phân loại" ---- */
+.pricing-panel .pricing-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 0 4px;
+}
+.pricing-panel .pricing-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px dashed var(--border, rgba(255, 255, 255, 0.16));
+  border-radius: 10px;
+}
+.pricing-panel .pricing-note {
+  padding-top: 8px;
+}
+/* Mục clone về: khoá giá, nhưng vẫn phải đọc được — không làm mờ tới mức khó thấy. */
+.pricing-panel tr.pricing-locked td {
+  background: rgba(255, 176, 32, 0.06);
+}
+.pricing-panel .select-sm {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.pricing-warn {
+  color: var(--warn, #ffb020);
+}

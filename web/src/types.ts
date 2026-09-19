@@ -431,6 +431,15 @@ export interface CreditSummary {
 }
 
 /** A skill sold in the Skill Hub (prompt pack, priced in VND). */
+/** Hình thức của một mục trong chợ: prompt pack đóng vai, hay quy trình. */
+export type HubSkillKind = "expert" | "skill";
+
+/**
+ * Nguồn gốc nội dung: "own" = mình viết hoàn toàn, "clone" = nhập/dựa nguồn bên thứ ba.
+ * Chỉ "own" mới được đặt giá (docs/CONTENT-POLICY.md §3.1).
+ */
+export type HubSkillOrigin = "own" | "clone";
+
 export interface HubSkill {
   id: string;
   slug: string;
@@ -438,6 +447,12 @@ export interface HubSkill {
   tagline: string;
   description: string;
   category: string;
+  /** Quyết định mục nằm ở tab "Chuyên gia" hay "Kỹ năng" trong chợ. */
+  kind: HubSkillKind;
+  /** Quyết định mục có được bán hay không (và nhóm nào trên console). */
+  origin: HubSkillOrigin;
+  /** Server chốt: chỉ nội dung "own" mới đặt được giá. */
+  sellable: boolean;
   icon: string;
   /** Money price in VND — the stored, authoritative price of the skill. */
   priceVnd: number;
@@ -452,6 +467,16 @@ export interface HubSkill {
   /** Admin-only (`GET /api/admin/hub`): the stored prompt pack, for prefilling the edit form. */
   instructions?: string;
   tools?: string[];
+}
+
+/** `GET /api/admin/hub` — kèm bộ phân loại để console dựng bộ lọc và nhãn. */
+export interface HubAdminListing {
+  items: HubSkill[];
+  categories: string[];
+  kinds: HubSkillKind[];
+  kindLabels: Record<string, string>;
+  origins: HubSkillOrigin[];
+  originLabels: Record<string, string>;
 }
 
 export interface HubPurchaseResult {

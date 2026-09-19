@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Save } from "lucide-react";
 import { Field, Modal, Spinner } from "../components/ui";
 import { useI18n } from "../i18n";
-import type { HubSkill } from "../types";
+import type { HubSkill, HubSkillKind, HubSkillOrigin } from "../types";
 import { HUB_ICON_NAMES } from "./icons";
 
 type HubState = HubSkill["state"];
@@ -27,6 +27,10 @@ export interface HubFormState {
   tagline: string;
   description: string;
   category: string;
+  /** Chuyên gia (đóng vai) hay kỹ năng (quy trình) — quyết định tab trong chợ. */
+  kind: HubSkillKind;
+  /** Mình tự làm hay clone về — quyết định có được đặt giá hay không. */
+  origin: HubSkillOrigin;
   icon: string;
   priceVnd: string;
   state: HubState;
@@ -40,6 +44,9 @@ export const EMPTY_HUB_FORM: HubFormState = {
   tagline: "",
   description: "",
   category: "",
+  // Mục tạo tay mặc định là nội dung mình viết ("own"); đường nhập từ nguồn ngoài tự đặt "clone".
+  kind: "skill",
+  origin: "own",
   icon: "sparkles",
   priceVnd: "0",
   state: "published",
@@ -73,6 +80,8 @@ export function formFromSkill(skill: HubSkill): HubFormState {
     tagline: skill.tagline ?? "",
     description: skill.description ?? "",
     category: skill.category,
+    kind: skill.kind ?? (skill.category === "Chuyên gia" ? "expert" : "skill"),
+    origin: skill.origin ?? "clone",
     icon: skill.icon || "sparkles",
     priceVnd: String(skill.priceVnd ?? 0),
     state: skill.state,
@@ -157,6 +166,31 @@ export function HubSkillFormDialog({
         </Field>
       </div>
 
+      <div className="grid grid-2">
+        <Field label={t("hub.form.kindLabel")} hint={t("hub.form.kindHint")}>
+          <select
+            className="select"
+            value={value.kind}
+            onChange={(event) => onChange({ kind: event.target.value as HubSkillKind })}
+          >
+            <option value="expert">{t("hub.form.kindExpert")}</option>
+            <option value="skill">{t("hub.form.kindSkill")}</option>
+          </select>
+        </Field>
+        <Field label={t("hub.form.originLabel")} hint={t("hub.form.originHint")}>
+          <select
+            className="select"
+            value={value.origin}
+            onChange={(event) => onChange({ origin: event.target.value as HubSkillOrigin })}
+          >
+            <option value="own">{t("hub.form.originOwn")}</option>
+            <option value="clone">{t("hub.form.originClone")}</option>
+          </select>
+        </Field>
+      </div>
+
+      {value.origin === "clone" && <div className="hint pricing-warn">{t("hub.form.originCloneWarn")}</div>}
+
       <Field label={t("hub.form.taglineLabel")} hint={t("hub.form.taglineHint")}>
         <input
           className="input"
@@ -191,6 +225,8 @@ export function HubSkillFormDialog({
             min={0}
             step={10000}
             value={value.priceVnd}
+            // Mục "clone về" không được bán (server cũng chặn): khoá ô giá để không gõ công vô ích.
+            disabled={value.origin === "clone"}
             onChange={(event) => onChange({ priceVnd: event.target.value })}
           />
           {vndPerCredit > 0 && (
