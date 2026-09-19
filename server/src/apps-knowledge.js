@@ -297,9 +297,9 @@ export const SKILLS_CATALOGUE = {
   ],
   hub: {
     categories: ["Chuyên gia", "Bán hàng", "Văn phòng", "Dữ liệu", "Nội dung", "Giáo dục", "Khác"],
-    description: "Chợ kỹ năng — mua prompt-pack bằng credit. Mỗi skill là một prompt pack: tên, icon, giá, instructions. Các nhóm: Chuyên gia, Bán hàng, Văn phòng, Dữ liệu, Nội dung, Giáo dục, Khác.",
-    buying: "Mua bằng credit trong Chợ kỹ năng (bên trái). Giá bằng VND, trả một lần. Admin duyệt hoặc tự phục vụ.",
-    expertSkill: "Kỹ năng loại 'Expert' = prompt pack cho fBuddy đóng vai chuyên gia (ví dụ: vietnam-finance-tax-expert). Khi bật expert, fBuddy nói theo phong cách chuyên gia đó.",
+    description: "Chợ kỹ năng — nơi bật kỹ năng và chuyên gia (mỗi skill là một prompt pack: tên, icon, hướng dẫn). Hiện đang MIỄN PHÍ: bật là dùng được ngay, không tốn credit. Các nhóm: Chuyên gia, Bán hàng, Văn phòng, Dữ liệu, Nội dung, Giáo dục, Khác.",
+    free: "Hiện đang MIỄN PHÍ: mở Chợ kỹ năng (thanh bên trái) bật kỹ năng/chuyên gia là dùng được ngay — không tốn credit, không cần thanh toán.",
+    expertSkill: "Kỹ năng loại 'Expert' = prompt pack cho fBuddy đóng vai chuyên gia (ví dụ: vietnam-finance-tax-expert). Khi bật expert, fBuddy nói theo phong cách chuyên gia đó — hiện miễn phí.",
   },
 };
 
@@ -323,7 +323,7 @@ export function buildExpertSkillConnectorCatalogue() {
   lines.push("- **Experts (Chuyên gia):** fBuddy có thể đóng vai chuyên gia hoặc giới thiệu từ Chợ kỹ năng.");
   lines.push("  Nhóm **Giáo dục**: " + EXPERTS_CATALOGUE[0].items.join(", ") + ".");
   lines.push("  Nhóm **Chuyên gia VN/ĐNA (14 chuyên gia):** " + EXPERTS_CATALOGUE[1].items.join(", ") + ".");
-  lines.push("  Khi user cần chuyên môn sâu: gợi ý bật expert phù hợp trong Chợ kỹ năng (mua bằng credit).");
+  lines.push("  Khi user cần chuyên môn sâu: gợi ý bật expert phù hợp trong Chợ kỹ năng (hiện MIỄN PHÍ, không tốn credit).");
   
   lines.push("- **Skills (Kỹ năng built-in):**");
   for (const s of SKILLS_CATALOGUE.builtin) {
@@ -331,7 +331,7 @@ export function buildExpertSkillConnectorCatalogue() {
   }
   lines.push("- **Chợ kỹ năng (Skill Hub):** " + SKILLS_CATALOGUE.hub.description);
   lines.push("  Các nhóm: " + SKILLS_CATALOGUE.hub.categories.join(", ") + ".");
-  lines.push("  Mua bằng credit trong Chợ kỹ năng (bên trái). Giá bằng VND, trả một lần. Expert skill = prompt pack để fBuddy đóng vai chuyên gia.");
+  lines.push("  Bật kỹ năng/chuyên gia trong Chợ kỹ năng (bên trái) là MIỄN PHÍ, dùng ngay, không tốn credit. Expert skill = prompt pack để fBuddy đóng vai chuyên gia.");
   
   lines.push("- **Connector (Agent Bus):** " + CONNECTOR_KNOWLEDGE.endpoint);
   lines.push("  " + CONNECTOR_KNOWLEDGE.description);

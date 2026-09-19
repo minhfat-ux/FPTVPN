@@ -165,7 +165,7 @@ export function buildCreditKnowledge(user) {
     `Của người dùng này: ${summary.balance} credit (≈ ${vnd(summary.balance)}), đã dùng ${summary.spent}, ` +
       `trung bình ${summary.averageCostPerTurn}/lượt ≈ ${summary.estimatedTurnsLeft} lượt còn lại.`,
     `Muốn thêm credit: (1) bấm ảnh đại diện (góc trên phải) → “Xin thêm token” để gửi yêu cầu chờ quản trị viên duyệt; (2) ${buy}.`,
-    "Mua kỹ năng là việc khác: mục “Chợ kỹ năng” trên thanh bên trái; giá kỹ năng tính bằng VND và trả một lần.",
+    "Kỹ năng và chuyên gia trong mục “Chợ kỹ năng” (thanh bên trái) hiện đang MIỄN PHÍ — bật là dùng được ngay, không tốn credit, không liên quan tới việc trừ credit theo lượt chat.",
     user.role === "admin"
       ? "Người dùng này là quản trị viên: hết credit vẫn chat được nhưng vẫn bị trừ credit."
       : "Được hỏi về credit/token/giá/số dư: trả lời 1–3 câu, luôn nêu công thức trừ credit, quy đổi ra VND, mức credit được tặng khi đăng nhập lần đầu và 2 đường nạp (xin thêm / mua thêm) bằng đúng số liệu trên; không nói fBuddy miễn phí, không bịa giá.",

@@ -151,6 +151,9 @@ test("câu hỏi về chuyên gia/kỹ năng thì ghép danh mục expert + skil
   assert.match(catalogue, /Connector \(Agent Bus\)/);
   // Danh mục expert/skill cũng chịu cùng luật chống bịa.
   assert.match(catalogue, /KHÔNG bịa tính năng, giá, ngày ra mắt/);
+  // Hiện tại kỹ năng và chuyên gia đang MIỄN PHÍ — không được nói "mua bằng credit".
+  assert.match(catalogue, /MIỄN PHÍ/);
+  assert.doesNotMatch(catalogue, /mua bằng credit|giá bằng VND|trả một lần/);
 
   // Cấu trúc dữ liệu nguồn vẫn còn nguyên (đủ 2 nhóm expert + 4 skill built-in).
   assert.equal(EXPERTS_CATALOGUE.length, 2);
