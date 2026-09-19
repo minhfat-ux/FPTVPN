@@ -278,16 +278,59 @@ function buildPrompt(entry, reason) {
     `3) nếu việc thuộc về tôi: AGENT_NAME=${SELF} node ops/task.mjs ack ${entry.id} --push  rồi thực hiện`,
     `4) xong thì: AGENT_NAME=${SELF} node ops/task.mjs done ${entry.id} --evidence "commit=…, cmd=…, kết quả=…" --push`,
     `5) nếu tôi là bên giao: chạy đúng lệnh nghiệm thu trong sổ rồi verify --result pass|fail`,
+    // Máy Windows không có cú pháp `AGENT_NAME=WIN node …` của bash — nhắc luôn để phiên được
+    // đánh thức không mất một lượt thử-sai cho việc đặt biến môi trường.
+    process.platform === "win32" ? `   (Windows/PowerShell: $env:AGENT_NAME="${SELF}"; node ops/task.mjs ack ${entry.id} --push)` : "",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
+/**
+ * Ghi prompt ra tệp rồi gọi `ops/wake-launch.mjs` — KHÔNG để shell cắt prompt.
+ *
+ * LỖI THẬT (19/09/2026, đo được ngay trên phiên bị đánh thức): `WAKE_CMD` mặc định là
+ * `dsh --profile headless "{prompt}"`, prompt có 7 dòng, mà `spawn(chuỗi, { shell: true })` trên
+ * Windows chạy qua cmd.exe — cmd cắt lệnh ở dòng đầu. Hậu quả: harness được đánh thức CHỈ nhận
+ * đúng dòng `ĐÁNH THỨC TỰ ĐỘNG (WIN ← watcher MAC).`, mất sạch "Lý do / Task / việc phải làm"
+ * (đúng cảnh đã ghi trong ops/wake-launch.mjs — và nó vẫn tái diễn vì watcher chưa dùng launcher).
+ * Cách chữa: prompt đi qua TỆP, launcher truyền nó thành MỘT đối số argv, không shell nào diễn giải.
+ */
+const WAKE_LAUNCH = path.join("ops", "wake-launch.mjs");
+const PROMPT_DIR = path.join(os.tmpdir(), "dsh-wake-prompts");
+
+/** Lệnh đích = WAKE_CMD bỏ chỗ giữ chỗ `{prompt}` (kèm ngoặc kép quanh nó) để launcher tự nối. */
+function wakeTarget() {
+  return WAKE_CMD.replace(/["']?\{prompt\}["']?/g, "").trim();
+}
+
 function runWake(prompt) {
-  const command = WAKE_CMD.includes("{prompt}") ? WAKE_CMD.replace("{prompt}", prompt) : `${WAKE_CMD} ${prompt}`;
+  const inline = WAKE_CMD.includes("{prompt}");
+  const command = inline ? WAKE_CMD.replace("{prompt}", prompt) : `${WAKE_CMD} ${prompt}`;
+  const target = wakeTarget();
+  const viaLauncher = inline && Boolean(target) && fs.existsSync(WAKE_LAUNCH);
   if (DRY) {
-    log(`(--dry-run) sẽ chạy: ${command.slice(0, 160)}…`);
+    log(`(--dry-run) sẽ chạy${viaLauncher ? " qua wake-launch" : ""}: ${command.slice(0, 160)}…`);
     return;
+  }
+  if (viaLauncher) {
+    let promptFile = null;
+    try {
+      fs.mkdirSync(PROMPT_DIR, { recursive: true });
+      promptFile = path.join(PROMPT_DIR, `wake-${process.pid}-${Date.now()}.txt`);
+      fs.writeFileSync(promptFile, prompt, "utf8");
+      const child = childProcessSpawn(process.execPath, [WAKE_LAUNCH, "--prompt-file", promptFile, "--cmd", target], {
+        detached: true,
+        stdio: "ignore",
+        ...NO_WINDOW,
+      });
+      child.unref();
+      log(`đã đánh thức (wake-launch, không qua shell · prompt ${prompt.length} ký tự): ${target.slice(0, 60)}… (pid ${child.pid})`);
+      return;
+    } catch (error) {
+      if (promptFile) { try { fs.rmSync(promptFile, { force: true }); } catch { /* tệp tạm */ } }
+      log(`wake-launch lỗi (${String(error?.message ?? error).slice(0, 120)}) — quay về cách cũ (prompt có thể bị cắt)`);
+    }
   }
   // `spawn` KHÔNG có trong phạm vi file này (chỉ có `childProcessSpawn`) — gọi tên trần là
   // ReferenceError, và vì nó nằm trong runWake nên MỌI lần đánh thức đều chết ngay tại đây:

@@ -33,8 +33,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { syncLedger } from "./lib/ledger.mjs";
+import { gitCapture, runCapture } from "./lib/capture.mjs";
 
 const TASKS_DIR = path.join("ops", "tasks");
 const VALUE_OPTIONS = new Set(["title", "to", "detail", "verify", "due", "note", "reason", "evidence", "result", "id", "peer-wake"]);
@@ -67,13 +67,12 @@ const prettyTime = (iso) => String(iso ?? "").replace("T", " ").slice(0, 16);
  */
 const NO_WINDOW = { windowsHide: true };
 
-const git = (...argv) => {
-  try {
-    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...NO_WINDOW }).trim();
-  } catch (error) {
-    return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
-  }
-};
+/**
+ * `gitCapture` (ops/lib/capture.mjs) tự chuyển sang hứng output bằng TỆP TẠM khi sandbox chặn
+ * named pipe. Không có nó, phiên do watcher đánh thức chết ngay tại `sync` với `spawnSync git
+ * EPERM` ⇒ `ack`/`done` ghi được mà không push được sổ (lỗi thật 19/09/2026).
+ */
+const git = (...argv) => gitCapture(argv);
 
 // ---------------------------------------------------------------- ghi / đọc sự kiện
 

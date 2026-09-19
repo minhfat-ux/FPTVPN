@@ -10,23 +10,16 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { gitCapture } from "./capture.mjs";
 
 export const TASKS_DIR = path.join("ops", "tasks");
 
 /**
- * Trên Windows mỗi tiến trình con là MỘT cửa sổ console đen nháy lên rồi tắt (`windowsHide` mặc
- * định false). Mọi lần gọi git/node ở đây đều phải tắt cửa sổ đó. Trên macOS/Linux cờ này vô hại.
+ * Mọi lần gọi git đều qua `gitCapture` (ops/lib/capture.mjs): nó tự chuyển sang hứng output bằng
+ * TỆP TẠM khi sandbox chặn named pipe ⇒ phiên harness được watcher đánh thức vẫn `fetch` được sổ
+ * (trước đây chết với `spawnSync git EPERM`, xem đầu file capture.mjs).
  */
-const NO_WINDOW = { windowsHide: true };
-
-const git = (...argv) => {
-  try {
-    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...NO_WINDOW }).trim();
-  } catch (error) {
-    return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
-  }
-};
+const git = (...argv) => gitCapture(argv);
 
 /** Kéo sổ mới nhất từ git về cây cục bộ. Trả về { ok, reason }. */
 export function syncLedger({ fetch = true } = {}) {
