@@ -15,7 +15,7 @@ file đã có và in sha256 của cả bốn file ở cuối).
 |---|---|---|
 | `wintun.dll` | 427 552 bytes | `e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce` |
 | `wireguard-go.exe` | 3 079 680 bytes | `fd257c7f42284af3d361547940c83bb61f786b8a9ef57e88e49b8a52f39ec2e9` |
-| `flowvpnrelay.exe` | 10 338 304 bytes | `7f344879c23afdff12a9d3fb2e87df240bef0a4a157a0148114b15a22dbde149` |
+| `flowvpnrelay.exe` | 10 338 304 bytes | `cec746978ee30747183d0170cf7d75f925dabb183e8789398f808f4052189d75` |
 | `sing-box.exe` | 81 883 648 bytes | `b838de45bd0b2e6ddbed1977e4745622f7dffab3b293807ff4c6b1b640fed909` |
 
 ⓘ `flowvpnrelay.exe` là bản build của CHÍNH chúng ta (mã nguồn trong repo:
