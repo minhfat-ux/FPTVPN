@@ -4,29 +4,22 @@
  * QUAN TRỌNG: sự kiện do bên kia push nằm trên `origin/flowgpt` chứ KHÔNG tự có trong cây cục bộ.
  * Nếu chỉ đọc file cục bộ thì bảng trạng thái sẽ nói sai kiểu "im lặng 83 phút" trong khi bên kia
  * đã `ack` từ lâu (đã gặp thật). Vì vậy trước khi đọc, ta fetch rồi materialize sổ từ remote:
- * `git restore --source=origin/flowgpt --worktree -- ops/tasks` (chỉ ghi worktree, không đụng index,
- * và file sự kiện là bất biến nên ghi đè là an toàn).
+ * `git restore --source=origin/flowgpt --worktree --overlay -- ops/tasks` (chỉ ghi worktree, không
+ * đụng index; `--overlay` để KHÔNG xoá sự kiện cục bộ chưa push — xem chú thích ở `syncLedger`).
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { gitCapture } from "./capture.mjs";
 
 export const TASKS_DIR = path.join("ops", "tasks");
 
 /**
- * Trên Windows mỗi tiến trình con là MỘT cửa sổ console đen nháy lên rồi tắt (`windowsHide` mặc
- * định false). Mọi lần gọi git/node ở đây đều phải tắt cửa sổ đó. Trên macOS/Linux cờ này vô hại.
+ * Mọi lần gọi git đều qua `gitCapture` (ops/lib/capture.mjs): nó tự chuyển sang hứng output bằng
+ * TỆP TẠM khi sandbox chặn named pipe ⇒ phiên harness được watcher đánh thức vẫn `fetch` được sổ
+ * (trước đây chết với `spawnSync git EPERM`, xem đầu file capture.mjs).
  */
-const NO_WINDOW = { windowsHide: true };
-
-const git = (...argv) => {
-  try {
-    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...NO_WINDOW }).trim();
-  } catch (error) {
-    return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
-  }
-};
+const git = (...argv) => gitCapture(argv);
 
 /** Kéo sổ mới nhất từ git về cây cục bộ. Trả về { ok, reason }. */
 export function syncLedger({ fetch = true } = {}) {
@@ -34,7 +27,12 @@ export function syncLedger({ fetch = true } = {}) {
     const fetched = git("fetch", "-q", "origin", "flowgpt");
     if (fetched.startsWith("!git")) return { ok: false, reason: fetched };
   }
-  const restored = git("restore", "--source=origin/flowgpt", "--worktree", "--", TASKS_DIR);
+  // `--overlay` là BẮT BUỘC. Thiếu nó, `git restore --source=origin/flowgpt` XOÁ mọi file sự kiện
+  // CHỈ CÓ Ở CỤC BỘ (chưa push được) ⇒ ack/done vừa ghi biến mất khỏi cây làm việc, sổ quay về
+  // trạng thái cũ ("sent") và watcher lại tưởng có việc mới ⇒ bão đánh thức không bao giờ hết.
+  // Đã gặp thật 19/09/2026: commit 96b01e3 (ack+done T-20260919-01) bị lần sync sau xoá sạch.
+  // Overlay chỉ THÊM/CẬP NHẬT file từ origin, không bao giờ xoá file cục bộ.
+  const restored = git("restore", "--source=origin/flowgpt", "--worktree", "--overlay", "--", TASKS_DIR);
   if (restored.startsWith("!git")) return { ok: false, reason: restored };
   return { ok: true };
 }

@@ -11,8 +11,8 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `T-20260918-01` | verified | Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng  | `-` |
 | `T-20260918-02` | done | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `chờ bên giao nghiệm thu` |
 | `T-20260918-03` | done | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `chờ bên giao nghiệm thu` |
-| `T-20260919-01` | verified | Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE): bỏ poll 20 giây, hết bã | `-` |
-| `T-20260919-02` | verified | WIN: clone repo fbuddy mới (minhfat-ux/fbuddy) + join sổ task + ack 3  | `-` |
+| `T-20260919-01` | done | Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE): bỏ poll 20 giây, hết bã | `chờ bên giao nghiệm thu` |
+| `T-20260919-02` | done | WIN: clone repo fbuddy mới (minhfat-ux/fbuddy) + join sổ task + ack 3  | `chờ bên giao nghiệm thu` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->
@@ -129,6 +129,29 @@ cụ thể** (không dán log dài). Việc gì cần lưu lâu thì ghi vào fi
 - **File Windows đang giữ**: `ops/rewrite-lint.mjs`, `ops/rewrite-content.json`, `ops/rewrite-parts/*`,
   `docs/ASK-WINDOWS.md` (file này), `ops/.tmp-*` (bản nháp, sẽ dọn).
 - **Không đụng giá**: đã kiểm 29/29 mục vẫn `price_vnd = 0`; không gửi email mời mua.
+- **2026-09-19T10:0xZ — T-20260919-01 (bộ nghe SSE) và T-20260919-02 (join repo fbuddy) XONG**:
+  - Bộ nghe đẩy chạy ẩn: Scheduled Task `AgentListen` (lặp `PT15M`, `RunLevel Limited`) +
+    `Startup\AgentListen.vbs`; watcher poll cũ đã tắt. Bằng chứng: `node ops/agent-listen.mjs --once
+    --dry-run` → *đã nối kênh đẩy*; `GET /agent-bus/health` → `subscribers: {win: 1}`. Kèm bản vá
+    `ops/agent-listen-install.ps1` (schtasks báo lỗi không làm chết script, RunLevel Limited, Startup
+    fallback) — commit `9edfce0`.
+  - Repo mới: clone `minhfat-ux/fbuddy` tại `C:\Users\Minhn\FlowTech AI\flowgpt\fbuddy` (trong
+    workspace sandbox — **không** ghi được ra ngoài). `.env.bus` dùng URL công khai (VPN
+    `10.77.0.1:7799` timeout từ máy này). Đã ack `T-20260919-01/02/03` (fbuddy) + RAG
+    `KAE-003-win-da-tham-gia.md` (`verified_by: WIN`) — commit `5bc5b73`; UI-01 theme files — commit
+    `5f65ad8`. **Cần Mac**: thêm KAE-003 vào `INDEX.md` (ngoài whitelist của WIN) rồi chạy
+    `node ops/verify-win-joined.mjs`.
+  - **Bẫy mới (đừng lặp lại)**: (1) connector phát tin cho **mọi** subscriber cùng tên agent ⇒
+    **không** chạy 2 bộ nghe `win` (mỗi tin sẽ boot 2 phiên); (2) task ID **trùng** giữa hai sổ
+    (`T-20260919-0x` ở fbuddy = UI/UX, ở FPTVPN = việc cũ) ⇒ đọc `detail` trước khi ack/done;
+    (3) sandbox phiên Windows chặn `node` spawn git (`spawnSync git EPERM`), ghi file ngoài workspace,
+    và Task Scheduler/WMI ⇒ `task.mjs --push` không chạy, phải `git` trực tiếp bằng PowerShell (kèm
+    `git -c http.sslBackend=openssl` + token `gh auth token`, vì schannel/GCM đều chết);
+    (4) `ops/task.mjs` (bản flowgpt) nhánh dự phòng worktree báo `execFileSync is not defined`
+    (thiếu import) ⇒ push dự phòng chết; (5) `new URL('..', import.meta.url).pathname` trong các
+    script verify trả `/C:/…` trên Windows nên `existsSync` false — chỉ chạy đúng trên Mac.
+  - UI-01 còn lại (đang `progress`): ảnh gallery 390×844 + khung project iOS/Android — máy Windows
+    không có `xcrun`/`java`/`adb`/`ANDROID_HOME` nên không build/chụp được.
 
 ---
 

@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-19T11:03:34.288Z",
+ "note": "connector VPS: verified từ mac — T-20260919-02 · UI/UX: bộ asset logo/icon dựng từ asset của web (AppIcon + adaptive icon, không hot-link)",
+ "via": "dsh --profile headless \"{prompt}\""
+}

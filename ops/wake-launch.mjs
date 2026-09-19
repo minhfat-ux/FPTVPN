@@ -159,6 +159,9 @@ function main() {
   const child = spawn(program, argv, {
     detached: true,
     stdio: "ignore",
+    // Trên Windows mặc định `windowsHide:false` ⇒ mỗi lần đánh thức lại nháy một cửa sổ console
+    // (đúng thứ tự "bão cửa sổ" mà bộ nghe SSE đang dẹp). Ẩn đi; trên macOS/Linux vô hại.
+    windowsHide: true,
     shell: needsShell,
     cwd: process.cwd(),
     env: process.env,

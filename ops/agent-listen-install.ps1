@@ -27,6 +27,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 $env:AGENT_NAME = "WIN"
+
+# schtasks in ra stderr khi task KHONG ton tai; PowerShell 5.1 voi ErrorActionPreference=Stop bien
+# stderr cua lenh native thanh loi CHET ⇒ script dung ngay buoc "don watcher cu" (da gap that
+# 19/09/2026 tren may Windows: chua co task nao nen /Query luon bao loi). Boc qua ham nay de stderr
+# khong lam chet script ma van lay duoc ma thoat.
+function Invoke-Schtasks {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+  $ErrorActionPreference = "Continue"
+  $null = & schtasks.exe @Arguments 2>$null
+  return $LASTEXITCODE
+}
+
 Write-Host "== Cài BỘ NGHE ĐẨY cho harness WINDOWS ==" -ForegroundColor Cyan
 Write-Host "Repo: $Repo"
 
@@ -47,9 +59,8 @@ if (-not (Test-Path (Join-Path $Repo ".env.bus"))) {
 # 2. dọn watcher cũ (chính nó gây bão cửa sổ console)
 Write-Host "`n-- Dọn watcher cũ --" -ForegroundColor Cyan
 foreach ($name in @("AgentWatch", "AgentListen")) {
-  $null = schtasks /Query /TN $name 2>$null
-  if ($LASTEXITCODE -eq 0) {
-    $null = schtasks /Delete /TN $name /F 2>$null
+  if ((Invoke-Schtasks /Query /TN $name) -eq 0) {
+    $null = Invoke-Schtasks /Delete /TN $name /F
     Write-Host "  đã xoá Scheduled Task '$name'"
   }
 }
@@ -63,8 +74,10 @@ foreach ($p in $old) {
 # 3. thử nối kênh đẩy (không chạy gì)
 Write-Host "`n-- Thử nối kênh đẩy (không làm gì) --" -ForegroundColor Cyan
 Push-Location $Repo
+$eap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
 node ops\agent-listen.mjs --once --dry-run
 $probe = $LASTEXITCODE
+$ErrorActionPreference = $eap
 Pop-Location
 if ($probe -ne 0) {
   Write-Host "! Chưa nối được connector (mã $probe). Xem lại .env.bus / mạng, rồi chạy lại." -ForegroundColor Yellow
@@ -77,24 +90,50 @@ Write-Host "`n-- Tạo Scheduled Task '$TaskName' (chạy ẨN) --" -ForegroundC
 $vbs = Join-Path $Repo "ops\agent-listen-hidden.vbs"
 if (-not (Test-Path $vbs)) { Write-Host "! Không thấy $vbs — thiếu file chạy ẩn." -ForegroundColor Red; exit 1 }
 
-try {
-  $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`""
-  $triggers = @(
-    (New-ScheduledTaskTrigger -AtLogOn),
-    (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-      -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650))
-  )
-  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
-  $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Settings $settings -Principal $principal -Force | Out-Null
-  Write-Host "  đã tạo task (Register-ScheduledTask)"
-} catch {
-  Write-Host "  Register-ScheduledTask lỗi ($($_.Exception.Message)) — dùng schtasks" -ForegroundColor Yellow
-  $null = schtasks /Create /TN $TaskName /SC ONLOGON /TR "wscript.exe `"$vbs`"" /F
+$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`""
+$repeatTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
+  -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+  -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
+# -RunLevel Highest doi quyen admin ⇒ Register-ScheduledTask bao "Access is denied" tren tai khoan
+# nguoi dung thuong (da gap that 19/09/2026) ⇒ khong tao duoc task, bo nghe khong duoc cai. Bo nghe
+# chi can quyen nguoi dung (wscript + node trong profile), nen de Limited.
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+# Trigger AtLogOn la duong gon nhat, nhung co may/token tu choi "Access is denied" (da gap that
+# 19/09/2026). Khi do van tao task voi trigger lap 15 phut (tu chay lai neu chet) va bu phan
+# tu-khoi-dong-khi-dang-nhap bang mot muc trong thu muc Startup.
+try { $atLogon = New-ScheduledTaskTrigger -AtLogOn } catch { $atLogon = $null }
+
+$registered = $false
+foreach ($triggers in @(@($atLogon, $repeatTrigger), @($repeatTrigger))) {
+  if (-not $triggers[0]) { continue }
+  try {
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers `
+      -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null
+    if ($atLogon) { Write-Host "  đã tạo task (Register-ScheduledTask)" }
+    else { Write-Host "  đã tạo task (Register-ScheduledTask, KHÔNG có trigger đăng nhập — bù bằng Startup)" -ForegroundColor Yellow }
+    $registered = $true
+    break
+  } catch {
+    Write-Host "  Register-ScheduledTask lỗi ($($_.Exception.Message.Trim())) — thử cách khác" -ForegroundColor Yellow
+  }
+}
+if (-not $registered) {
+  $null = Invoke-Schtasks /Create /TN $TaskName /SC ONLOGON /TR "wscript.exe `"$vbs`"" /F
 }
 
-$null = schtasks /Run /TN $TaskName 2>$null
+# Bu tu-khoi-dong khi dang nhap — du dung ke ca khi khong dat duoc trigger AtLogOn.
+$startupVbs = Join-Path ([Environment]::GetFolderPath('Startup')) "AgentListen.vbs"
+if (-not (Test-Path $startupVbs)) {
+  Set-Content -Path $startupVbs -Encoding ASCII -Value @(
+    "' Khoi dong BO NGHE DAY (SSE) khi dang nhap - chay an, khong cua so.",
+    'Set sh = CreateObject("WScript.Shell")',
+    ('sh.Run """wscript.exe"" ""' + $vbs + '""", 0, False')
+  )
+  Write-Host "  đã thêm Startup: $startupVbs"
+}
+
+$null = Invoke-Schtasks /Run /TN $TaskName
 Start-Sleep -Seconds 5
 
 # 5. kiểm tra: đúng MỘT tiến trình, và không còn watcher nào
