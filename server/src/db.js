@@ -509,6 +509,8 @@ export const DEFAULT_APP_SETTINGS = {
   voiceAutoRead: false,
   /** Browser speech rate 0.5–2. */
   voiceSpeakRate: 1,
+  /** Master switch cho giọng nói (mic + chế độ nói). Tắt khi chưa ổn định. */
+  voiceEnabled: false,
 
   // --- credits -------------------------------------------------------------  /** Master switch for metering chat and blocking users who run out. */
   creditsEnabled: true,

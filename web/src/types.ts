@@ -226,6 +226,7 @@ export interface AppSettings {
   voiceLanguage: string;
   voiceAutoRead: boolean;
   voiceSpeakRate: number;
+  voiceEnabled: boolean;
   // --- credits ---
   creditsEnabled: boolean;
   signupCredits: number;
@@ -326,6 +327,8 @@ export interface Meta {
   loginTokenTtlMin?: number;
   /** Present when the server advertises the credit policy on the public meta. */
   credits?: { signupCredits?: number };
+  /** Master switch giọng nói (ẩn mic + chế độ nói khi false). */
+  voice?: { enabled?: boolean };
 }
 
 export interface ChartPoint {

@@ -217,6 +217,7 @@ export function createApiRouter() {
       },
       mailer: mailerStatus(settings),
       loginTokenTtlMin: settings.loginTokenTtlMin,
+      voice: { enabled: Boolean(settings.voiceEnabled) },
       credits: {
         enabled: Boolean(settings.creditsEnabled),
         perToken: settings.creditsPerToken,
