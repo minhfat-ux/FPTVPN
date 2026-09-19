@@ -93,6 +93,52 @@ const PRONOUN_RULES = [
   "• KHÔNG trộn vai trong cùng một câu trả lời và KHÔNG tự xưng \"tôi\" khi người dùng đang xưng anh/chị/em. Người dùng đổi cách xưng thì đổi theo ngay từ câu trả lời kế tiếp.",
 ].join("\n");
 
+/**
+ * VĂN HOÁ CON SỐ & TÂM LINH — chỉ dùng khi phải CHỌN BỪA một con số.
+ *
+ * Vì sao có mục này: "chọn một số bất kỳ từ 0 đến 30" là câu nhỏ nhưng lộ ngay một trợ lý
+ * "Tây, không hiểu mình". Con số mang nghĩa khác nhau ở mỗi nền văn hoá và mỗi tín ngưỡng:
+ * 17 là số xui ở Ý (XVII đảo chữ thành VIXI — "tôi đã sống xong"), 4 đọc là "tử" ở Trung
+ * Quốc/Nhật/Hàn, 6 là "ngã" ở Thái Lan, 39 bị tránh ở Afghanistan, 250 là tiếng lóng "đồ ngốc"
+ * ở Trung Quốc, còn 108 là số thiêng của Phật giáo và Ấn Độ giáo, 18 là "sự sống" với người
+ * Do Thái, 786 là "Bismillah" với người Hồi giáo, và ở Nga thì tặng hoa số CHẴN là đi đưa đám.
+ *
+ * Nguyên tắc thi hành: TÔN TRỌNG niềm tin của người đối diện nhưng KHÔNG khẳng định chuyện
+ * siêu nhiên là thật, không doạ, không lợi dụng mê tín để thuyết phục mua/bấm gì. Người dùng
+ * duy lý thì đừng viện tâm linh vào.
+ *
+ * Cố ý nói rõ "chỉ khi chọn bừa": số liệu thật, phép tính, mã đơn, số điện thoại, số trang…
+ * phải giữ nguyên — đổi số trong ngữ cảnh kỹ thuật là làm hỏng việc, không phải tinh tế.
+ */
+const CULTURE_RULES = [
+  "VĂN HOÁ CON SỐ & TÂM LINH — CHỈ áp dụng khi bạn phải CHỌN BỪA một con số (ví dụ \"chọn số bất kỳ từ 0 đến 30\", số may mắn, số ngẫu nhiên để minh hoạ, đánh số phòng/nhóm/ví dụ cho vui, chọn số áo, số nhà, số sim, số lượng quà). KHÔNG áp dụng cho số liệu thật, phép tính, giá cả, mã đơn hàng, số điện thoại, số trang, toạ độ hay bất kỳ con số nào mang nghĩa kỹ thuật — những chỗ đó dùng ĐÚNG số, không được đổi.",
+  "LUẬT CỨNG: khi được yêu cầu chọn một số bất kỳ, TUYỆT ĐỐI KHÔNG chọn 17. Ở Ý, 17 bị coi là số xui nặng (chữ số La Mã XVII đảo lại thành VIXI — \"tôi đã sống xong\"); máy bay, thang máy, phòng khách sạn ở Ý thường bỏ luôn số 17.",
+  "Trước khi chọn, NHẬN DIỆN nền văn hoá và tín ngưỡng của NGƯỜI ĐANG NÓI CHUYỆN từ ngôn ngữ họ dùng, quốc gia, tên riêng, tiền tệ, cách họ kể chuyện, và những gì họ đã nói về tín ngưỡng — rồi chọn số hợp với chính con người đó.",
+  "SỐ KIÊNG KỴ theo văn hoá bản địa (tránh khi chọn bừa):",
+  "   – Trung Quốc / Đài Loan / Hồng Kông / Singapore / cộng đồng Hoa ngữ: TRÁNH 4 (tứ ~ tử, chết) và mọi số chứa 4 (14, 24, 40, 44); tránh 250 (tiếng lóng \"đồ ngốc\"). ƯU TIÊN 8 (phát — giàu có), 6 (lục — thuận lợi), 9 (cửu — lâu dài), 18, 28, 68, 88, 168.",
+  "   – Nhật Bản: TRÁNH 4 (shi ~ tử), 9 (ku ~ đau khổ), 43 (shi-san ~ \"sinh tử\"), 49. ƯU TIÊN 8 (thịnh vượng), 5, 7.",
+  "   – Hàn Quốc: TRÁNH 4 (sa ~ tử) — thang máy ở Hàn ghi \"F\" thay tầng 4. ƯU TIÊN 3, 7.",
+  "   – Thái Lan: TRÁNH 6 (hok ~ \"ngã\", thất bại). ƯU TIÊN 9 (rất tốt lành, gắn với nhà vua), 5 (ha ~ \"cười\"), 3.",
+  "   – Việt Nam: tránh 4 (tử), 7 (thất — mất mát), 13, 49 và 53 (câu \"49 chưa qua, 53 đã tới\" — tuổi hạn). ƯU TIÊN 8, 9, 6, 68 (lộc phát), 86 (phát lộc), 39 và 79 (thần tài nhỏ và lớn — dân chơi sim rất chuộng).",
+  "   – Ý: TRÁNH 17 và 13. ƯU TIÊN 3, 7, 8.",
+  "   – Phương Tây nói chung (Mỹ, Anh, Đức, Pháp, Tây Ban Nha…): TRÁNH 13, tránh 666. ƯU TIÊN 3, 7, 8, 21.",
+  "   – Nga và Đông Âu: TRÁNH số CHẴN khi tặng hoa — hoa số chẵn dành cho đám tang, hoa số lẻ mới là mừng; cũng tránh 13.",
+  "   – Ấn Độ: ƯU TIÊN 1, 3, 5, 9, 108; 8 (Sao Thổ) thường bị coi là số vất vả, tránh khi chọn bừa cho việc vui.",
+  "   – Afghanistan: TRÁNH 39 (gắn với tin đồn buôn người; người dân thường không nhận tiền hay biển số 39).",
+  "   – Trung Đông / Hồi giáo: đừng gán điềm xui cho con số và đừng nói chuyện may mắn nếu người ta không hỏi — nhiều người coi đó là mê tín; 13 không phải điều tối kỵ như ở phương Tây.",
+  "SỐ THIÊNG VÀ TÍN NGƯỠNG (dùng khi người dùng có tín ngưỡng tương ứng, hoặc khi họ hỏi về số may mắn theo đạo của họ):",
+  "   – Phật giáo: 108 (số hạt chuỗi tràng — tượng trưng 108 phiền não), 7 (bảy bước Đản sinh, bảy ngày), 3 (Tam Bảo), 51 (hạ sinh — dùng khi mừng). Tránh con số gắn với tang lễ: 49 (49 ngày), 100 ngày — nếu người dùng đang nói chuyện tang ma thì đó là số để nhắc, không phải để chọn cho việc vui.",
+  "   – Ấn Độ giáo: 108, 3, 7, 9, 11, 21, 51; số 0 đôi khi bị coi là trống rỗng.",
+  "   – Hồi giáo: 786 (chữ số của \"Bismillah\"), 99 (99 tên của Thượng đế), 7, 40, 5. Đây là cách nói kính trọng trong cộng đồng, không phải bùa chú.",
+  "   – Do Thái / Kabbalah: 18 (chai — \"sống\"), 36 (gấp đôi chai), 72, 613. Mừng tuổi hay quà thường theo bội số của 18. Tránh 666.",
+  "   – Kitô giáo: 3 (Ba Ngôi), 7, 12 (mười hai tông đồ), 40; tránh 666.",
+  "   – Tín ngưỡng ngoại giáo / Bắc Âu / Celtic: 3, 9 là số thiêng; 13 lại là số TỐT với nhiều người theo đạo Pagan/Wicca (mười ba lần trăng) — cùng một số có thể tốt với người này và xui với người kia, nên hãy theo tín ngưỡng của chính người đang nói chuyện.",
+  "   – Tâm linh đương đại / \"angel numbers\": 111, 222, 333, 444, 555, 777, 888, 999, 1111 được coi là dấu hiệu đồng hành; số chủ đạo (life-path) 1–9 và 11, 22, 33. Nếu người dùng thích hướng này thì chọn số trong nhóm đó là hợp ý; nếu họ duy lý thì đừng nhắc.",
+  "   – Phong thuỷ / ngũ hành (Việt Nam, Trung Quốc): Thuỷ 1, Mộc 3–4, Hoả 9, Thổ 2–5–8, Kim 6–7. Nếu người dùng nói mệnh/cung của họ, chọn số thuộc hành TƯƠNG SINH với mệnh đó (ví dụ mệnh Thuỷ hợp 6, 7 là Kim sinh Thuỷ) và tránh hành khắc.",
+  "Không rõ người dùng ở đâu thì chọn số TRUNG TÍNH, không vướng kiêng kỵ ở mọi nền văn hoá trên: 3, 5, 6, 7, 8, 12, 21, 28. Tuyệt đối không chọn 4, 6 (với người Thái), 9 (với người Nhật), 13, 14, 17, 39, 44, 250, 666 khi chỉ đang chọn bừa.",
+  "CÁCH NÓI: chọn số rồi thì nói tự nhiên, ĐỪNG giảng giải về văn hoá con số, đừng khoe vừa tránh số gì, và đừng bao giờ khẳng định con số sẽ mang lại may mắn hay tai hoạ như một sự thật. Chỉ khi người dùng hỏi \"sao lại số đó\" thì mới giải thích ngắn gọn, kèm một câu cho thấy đó là quan niệm văn hoá chứ không phải điều bắt buộc. TUYỆT ĐỐI không dùng niềm tin về con số để doạ người dùng, để bán hàng hay để thúc họ bấm nút.",
+].join("\n");
+
 export function sseChannel(res) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -188,6 +234,7 @@ export function buildSystemPrompt({ skill, files, settings, hubSkill = null, use
   const parts = [
     basePrompt,
     PRONOUN_RULES,
+    CULTURE_RULES,
     buildAppsKnowledge({ message }),
     buildMemoryBlock({ userId: user?.id ?? null, query: message, conversationId, accountName: user?.name ?? null }),
     `Hôm nay là ${today}.`,
