@@ -15,6 +15,7 @@
  * Token: $AGENT_BUS_TOKEN → ~/.agent-bus.env → .env.agent-bus (repo, đã gitignore) → /etc/agent-bus.env.
  * KHÔNG in token. URL: $AGENT_BUS_URL, mặc định https://fbuddy.meetflowai.site/agent-bus
  */
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -51,14 +52,22 @@ function readToken() {
 const token = readToken();
 
 async function call(pathname, { method = "GET", body } = {}) {
-  const res = await fetch(`${BASE}${pathname}`, {
-    method,
-    headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    console.error(`bus lỗi ${res.status}: ${JSON.stringify(json).slice(0, 200)}`);
+  // Dùng curl.exe chứ KHÔNG dùng fetch: undici giữ socket keep-alive nên tiến trình không tự
+  // thoát; còn `process.exit()` để cắt thì trên Windows libuv báo
+  // "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)" và trả exit code 1.
+  const args = ["-4", "-sS", "-m", "20", "-X", method, "-H", `Authorization: Bearer ${token}`];
+  if (body) args.push("-H", "content-type: application/json", "--data-binary", JSON.stringify(body));
+  args.push(`${BASE}${pathname}`);
+  let out = "";
+  try {
+    out = execFileSync("curl.exe", args, { encoding: "utf8" });
+  } catch (error) {
+    console.error(`bus lỗi gọi ${pathname}: ${String(error.stderr || error.message).trim().slice(0, 200)}`);
+    process.exit(1);
+  }
+  const json = JSON.parse(out || "{}");
+  if (json.error) {
+    console.error(`bus trả lỗi: ${JSON.stringify(json).slice(0, 200)}`);
     process.exit(1);
   }
   return json;
