@@ -79,18 +79,32 @@ else
   cp "$WORK_DIR/hysteria-relay/flowvpnrelay-windows-amd64.exe" "$ASSETS_DIR/flowvpnrelay.exe"
 fi
 
-# --- sing-box.exe -----------------------------------------------------------
+# --- sing-box.exe (TỰ BUILD TỪ SOURCE, không tải bản phát hành) ---------------
 # Bộ não TUN/định tuyến/DNS; outbound trỏ vào SOCKS5 nội bộ của flowvpnrelay.
 # GPL-3.0 — xem THIRD_PARTY.md (phân phối kèm binary GPL là có chủ đích, chủ dự án đã duyệt).
+#
+# VÌ SAO TỰ BUILD (đo thật 19/09, đừng đổi lại thành tải zip):
+# hash của bản release `sing-box-1.14.1-windows-amd64.zip` nằm trong danh sách bị **Smart App
+# Control** chặn trên Windows 11 (policy `VerifiedAndReputableDesktop`, event CodeIntegrity
+# 3033/3077/3118, status 0xc0e90002 "did not meet the Enterprise signing level requirements").
+# Đã kiểm chứng là chặn THEO HASH: cùng file đó chỉ cần đổi 4 byte checksum là chạy được, còn
+# binary tự build từ đúng source v1.14.1 cũng chạy bình thường. Vì vậy asset phát hành phải là
+# bản do mình build (không sửa mã nguồn upstream, chỉ khác cờ build) — xem THIRD_PARTY.md.
+SING_BOX_TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale"
 if [ -f "$ASSETS_DIR/sing-box.exe" ]; then
-  echo "==> sing-box.exe đã có, bỏ qua tải"
+  echo "==> sing-box.exe đã có, bỏ qua build"
 else
-  echo "==> Tải sing-box $SING_BOX_VERSION (windows/amd64)"
+  echo "==> Build sing-box $SING_BOX_VERSION từ source (windows/amd64)"
   cd "$WORK_DIR"
-  curl -fsSL -o "$SING_BOX_ZIP" "$SING_BOX_URL"
-  rm -rf "sing-box-${SING_BOX_VERSION}-windows-amd64"
-  unzip -o -q "$SING_BOX_ZIP"
-  cp "sing-box-${SING_BOX_VERSION}-windows-amd64/sing-box.exe" "$ASSETS_DIR/sing-box.exe"
+  rm -rf sing-box-src
+  git clone --depth 1 --branch "v${SING_BOX_VERSION}" https://github.com/SagerNet/sing-box.git sing-box-src
+  (
+    cd sing-box-src
+    GOOS=windows GOARCH=amd64 "$GO_BIN" build -tags "$SING_BOX_TAGS" -trimpath \
+      -ldflags "-s -w -X github.com/sagernet/sing-box/constant.Version=${SING_BOX_VERSION}" \
+      -o "$ASSETS_DIR/sing-box.exe" ./cmd/sing-box
+  )
+  rm -rf sing-box-src
 fi
 
 # Kiểm tra phiên bản: chỉ chạy được .exe khi có Windows/Wine. Trên macOS/Linux thì in rõ là
