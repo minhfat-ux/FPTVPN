@@ -45,6 +45,17 @@ final class VPNManager: ObservableObject {
     private var manager: NETunnelProviderManager?
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
 
+    /// Poll trạng thái extension sau khi Connect (giống `VPNManagerMac`).
+    ///
+    /// Vì sao bắt buộc phải có trên iOS: `NEVPNStatus` chỉ nói "Connected" — nó KHÔNG nói
+    /// tunnel có chở gói hay không. Không có bước này thì ca "Connected mà không có mạng" là
+    /// vô hình với khách, và tệ hơn: lần Connect sau app REPLAY đúng cấu hình cũ từ cache
+    /// (`cached.tunnelConfig.v1` / `cached.exitNodes.v1`) ⇒ kẹt mãi, bấm Connect lại vẫn không
+    /// có mạng. Đây đúng bug đã gặp trên macOS 15/09 (xem `StaleStateMigration`).
+    private var providerProbeTask: Task<Void, Never>?
+    /// Đã xử lý chẩn đoán cho lần Connect này (tránh lặp lại thông báo/hạ tunnel nhiều lần).
+    private var diagnosticHandled = false
+
     /// Static ref cho AppDelegate (applicationWillTerminate -> disconnect).
     nonisolated(unsafe) static weak var sharedForTerminate: VPNManager?
 
@@ -67,12 +78,19 @@ final class VPNManager: ObservableObject {
     }
 
     deinit {
+        providerProbeTask?.cancel()
         if let statusObserver {
             NotificationCenter.default.removeObserver(statusObserver)
         }
     }
 
     func refreshStatus() {
+        // Extension đã báo "Connected nhưng không có mạng": giữ nguyên trạng thái Failed kèm
+        // thông báo, đừng để NEVPNStatus kéo về "Disconnected" và xoá mất lý do (giống macOS).
+        if diagnosticHandled {
+            state = .failed
+            return
+        }
         guard let connection = manager?.connection else {
             state = .disconnected
             statusMessage = nil
@@ -104,6 +122,10 @@ final class VPNManager: ObservableObject {
         // ở trạng thái đang kết nối.
         guard !state.isTransitioning else { return }
         state = .connecting
+        // TRƯỚC khi cấp cấu hình mới và ghi preferences: dọn phiên CŨ cho sạch.
+        // Thiếu bước này, Connect lại trong cùng vòng đời app là "lên mà không có mạng" và
+        // chỉ force-quit app mới hết (đo trên iPad 19/09) — xem `prepareForFreshSession`.
+        await prepareForFreshSession()
         do {
             let config: WireGuardConfig
             if let baseURL = store.controlPlaneBaseURL {
@@ -128,6 +150,8 @@ final class VPNManager: ObservableObject {
             statusMessage = nil
             deviceLimitMessage = nil
             deviceLimitDevices = []
+            diagnosticHandled = false
+            startProviderDiagnosticsPolling()
         } catch let error as ControlAPIClient.ClientError {
             if case .deviceLimit(let message, let devices) = error {
                 // Not a failure to hide behind "Coordinator rejected": show the
@@ -154,8 +178,111 @@ final class VPNManager: ObservableObject {
     }
 
     func disconnect() {
+        stopProviderDiagnosticsPolling()
         manager?.connection.stopVPNTunnel()
         refreshStatus()
+    }
+
+    // MARK: - Dọn phiên cũ trước mỗi lần Connect
+
+    /// Bảo đảm phiên VPN CŨ đã dừng hẳn và nạp lại profile từ preferences trước khi Connect.
+    ///
+    /// Vì sao BẮT BUỘC (bằng chứng: chủ dự án phải force-quit app rồi mở lại mới có mạng):
+    /// `prepareConfiguration` ghi `protocolConfiguration` MỚI rồi `saveToPreferences()`.
+    /// Nếu lúc đó phiên cũ còn `connected`/`connecting`/`disconnecting` (hoặc app vừa đặt
+    /// `.failed` trong khi session của NetworkExtension vẫn còn), iOS giữ nguyên session cũ,
+    /// và `startVPNTunnel()` sau đó không mở một phiên mới đúng nghĩa: tunnel "lên" nhưng
+    /// không có traffic, bấm Connect bao nhiêu lần cũng vậy. Khởi động lại app thì mọi object
+    /// `NETunnelProviderManager`/`NEVPNConnection` của tiến trình cũ mất đi ⇒ lại chạy được.
+    /// Vì vậy: dừng, CHỜ tới `.disconnected`, rồi mới nạp lại manager — đúng một phiên sạch.
+    private func prepareForFreshSession() async {
+        if let connection = manager?.connection, connection.status != .disconnected,
+           connection.status != .invalid {
+            log.info("connect: phiên cũ còn \(connection.status.rawValue) — dừng trước khi Connect lại")
+            connection.stopVPNTunnel()
+            let deadline = Date().addingTimeInterval(Self.sessionStopTimeout)
+            while Date() < deadline {
+                let status = connection.status
+                if status == .disconnected || status == .invalid { break }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            let status = connection.status
+            if status != .disconnected && status != .invalid {
+                // Không chặn vô hạn: vẫn đi tiếp, nhưng ghi rõ để lần sau đọc được nguyên nhân.
+                log.error("connect: phiên cũ chưa dừng sau \(Int(Self.sessionStopTimeout))s (status=\(status.rawValue))")
+                NSLog("iOSVPN: previous session still \(status.rawValue) after stop timeout")
+            }
+        }
+        // Nạp lại từ preferences: object manager cũ còn gắn với session vừa dừng, ghi
+        // preferences trên nó là nguồn của ca "Connect lại không có mạng".
+        await loadManagerFromPreferences()
+    }
+
+    /// Bao lâu chờ phiên cũ dừng hẳn trước khi Connect lại.
+    private static let sessionStopTimeout: TimeInterval = 6
+
+    // MARK: - Chẩn đoán từ extension ("Connected nhưng không có mạng")
+
+    /// Hỏi extension trạng thái phiên mỗi 2s trong lúc tunnel đang lên/chạy.
+    ///
+    /// Extension không có UI và NetworkExtension không đưa lỗi provider cho app, nên đây là
+    /// kênh DUY NHẤT để biết tunnel "lên" mà không chở gói. Việc quan trọng nhất khi phát
+    /// hiện ca đó: **xoá cache cấu hình** (`TunnelConfigCache`/`ExitNodeCache`) trước khi
+    /// khách bấm Connect lại — nếu không, app replay lại đúng cấu hình cũ và tình trạng
+    /// "Connect lại cũng không có mạng" lặp vô hạn (bug y hệt đã gặp trên macOS 15/09).
+    private func startProviderDiagnosticsPolling() {
+        guard providerProbeTask == nil else { return }
+        providerProbeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self else { return }
+                await self.probeProviderDiagnostics()
+            }
+        }
+    }
+
+    private func stopProviderDiagnosticsPolling() {
+        providerProbeTask?.cancel()
+        providerProbeTask = nil
+    }
+
+    private func probeProviderDiagnostics() async {
+        guard !diagnosticHandled,
+              let session = manager?.connection as? NETunnelProviderSession else { return }
+        let report: TunnelStatusReport? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(Data()) { data in
+                    guard let data,
+                          let decoded = try? JSONDecoder().decode(TunnelStatusReport.self, from: data) else {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(returning: decoded)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        guard !Task.isCancelled, let report, let code = report.code else { return }
+        guard code == TunnelDiagnosticCode.noTraffic || code == TunnelDiagnosticCode.startFailed else {
+            return
+        }
+        diagnosticHandled = true
+        stopProviderDiagnosticsPolling()
+        log.error("provider diagnostics: code=\(code, privacy: .public) session=\(report.session) rx=\(report.rxBytes) tx=\(report.txBytes) transport=\(report.transport, privacy: .public)")
+        NSLog("iOSVPN: provider diagnostics code=\(code) session=\(report.session) rx=\(report.rxBytes) tx=\(report.txBytes)")
+        lastError = report.message ?? "Tunnel không có dữ liệu (mã \(code)). Vui lòng thử lại."
+        statusMessage = lastError
+        // Cấu hình của phiên vừa chết KHÔNG được tái sử dụng: xoá cache tunnel/node để lần
+        // Connect sau lấy cấu hình MỚI (overlay IP + peer + relay URL đúng node) từ control
+        // plane. Không xoá thì đây chính là vòng lặp "Connect lại cũng không có mạng".
+        TunnelConfigCache.clear()
+        ExitNodeCache.clear()
+        log.error("provider diagnostics: đã xoá cache cấu hình tunnel/node (cached.tunnelConfig.v1, cached.exitNodes.v1)")
+        // Tunnel đã chết mà hệ thống vẫn báo Connected: hạ xuống để khách không bị treo ở
+        // trạng thái giả (route 0.0.0.0/0 qua utun mà không có mạng).
+        manager?.connection.stopVPNTunnel()
+        state = .failed
     }
 
     // MARK: - Device / keypair

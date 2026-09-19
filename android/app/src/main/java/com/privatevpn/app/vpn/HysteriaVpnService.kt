@@ -74,8 +74,16 @@ class HysteriaVpnService : VpnService() {
      * qua WS relay hạ xuống (xem wsRelayAttempt) vì đường đó đi qua 2 chặng.
      * Cùng kiểu với runHost: đổi quanh lời gọi rồi trả lại như cũ.
      */
-    /** Mang hien tai co phai di dong (metered) khong — dung de chon so khai bang thong. */
-    @Volatile private var meteredNow = true
+    /**
+     * Mang hien tai co phai di dong (metered) khong — dung de chon so khai bang thong.
+     *
+     * Mặc định **false** (coi như unmetered khi chưa biết gì). Trước đây mặc định là
+     * true nên lượt thử ĐẦU TIÊN luôn khai số mobile, kể cả trên Wi-Fi: đo thật trên
+     * Galaxy Z Fold5 (Wi-Fi khách sạn, `Metered hint: false`) tunnel khai 8000/12000
+     * kbps nên bị kẹp ở trần 12 Mbps — raw 49,82 Mbps mà qua VPN chỉ 13,44 Mbps.
+     * Giá trị thật do refreshMeteredState() chốt ở đầu mỗi lượt thử và mỗi lần đổi mạng.
+     */
+    @Volatile private var meteredNow = false
     @Volatile private var attemptUpKbps = HY_UP_KBPS
     @Volatile private var attemptDownKbps = HY_DOWN_KBPS
 
@@ -228,6 +236,9 @@ class HysteriaVpnService : VpnService() {
      * then opens a fresh socket, which protect() binds to the NEW network.
      */
     private fun onUnderlyingNetworkChanged() {
+        // Đổi mạng giữa phiên (Wi-Fi -> 4G): chốt lại số khai NGAY, trước khi transport
+        // được dựng lại, nếu không lượt dựng lại vẫn khai số của mạng cũ.
+        refreshMeteredState("network changed")
         if (tun == null) return // nothing serving yet; the next pass uses the new network
         rebuildRequested = true
         DiagnosticsLog.warn("rebuild: underlying network changed -> restarting transport")
@@ -319,6 +330,10 @@ class HysteriaVpnService : VpnService() {
      * cũ trong <1s vì đường trực tiếp thử trước.
      */
     private fun oneConnectPass(): Int {
+        // Chốt số khai băng thông TRƯỚC mọi lượt thử transport (kể cả lượt ws-relay,
+        // vốn đọc meteredNow ở wsRelayAttempt): mỗi lượt thử đều có thể mở client Go
+        // với số mới nhất, không phụ thuộc lượt trước đã kịp cập nhật hay chưa.
+        refreshMeteredState("pass start")
         val preferred = lastGoodTransport()?.takeIf { !preferWsFirst || it == "ws" }
         // preferWsFirst=true nghia la luot truoc da chet het: uu tien cu (vi du tcp:8443
         // tu phien Wi-Fi truoc) chi lam cham them ~1,2s moi luot. Bo qua no.
@@ -651,11 +666,16 @@ class HysteriaVpnService : VpnService() {
     }
 
     /**
-     * Tells Android which network the tunnel rides on — the same call the official
-     * WireGuard client makes. Without it the VPN keeps the underlying network it
-     * was established with, so a WiFi -> mobile-data handover is not applied.
+     * Chốt số kbps khai cho Brutal CC theo loại mạng đang nằm dưới tunnel.
+     *
+     * Vì sao tách khỏi applyUnderlyingNetwork(): hàm này KHÔNG gọi API của VpnService
+     * nên gọi được cả khi TUN chưa dựng. Đó là điều bắt buộc — connectClient() truyền
+     * số khai vào client Go ngay lúc mở, TRƯỚC khi TUN tồn tại, nên cập nhật muộn
+     * (chỉ trong ensureTun) là quá trễ và client khởi động bằng số mặc định.
+     *
+     * Trả về network đang dùng để applyUnderlyingNetwork() khỏi tra lại lần hai.
      */
-    private fun applyUnderlyingNetwork() {
+    private fun refreshMeteredState(reason: String): android.net.Network? {
         val net = networkMonitor?.underlyingNetwork()
         val label = net?.let { networkMonitor?.describe(it) } ?: "null"
         // Brutal CC gui dung theo so khai ⇒ so khai phai sat bang thong that cua tung loai mang.
@@ -664,6 +684,23 @@ class HysteriaVpnService : VpnService() {
         meteredNow = metered
         attemptUpKbps = if (metered) MOBILE_UP_KBPS else HY_UP_KBPS
         attemptDownKbps = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS
+        // Log kèm LÝ DO (metered/unmetered) để lần sau chỉ cần đọc logcat là kiểm được
+        // app đã chọn đúng số cho loại mạng hiện tại hay chưa.
+        DiagnosticsLog.log(
+            "bw: $reason net=$label ${if (metered) "metered" else "unmetered"} " +
+                "-> up=${attemptUpKbps}kbps down=${attemptDownKbps}kbps",
+        )
+        return net
+    }
+
+    /**
+     * Tells Android which network the tunnel rides on — the same call the official
+     * WireGuard client makes. Without it the VPN keeps the underlying network it
+     * was established with, so a WiFi -> mobile-data handover is not applied.
+     */
+    private fun applyUnderlyingNetwork() {
+        val net = refreshMeteredState("tun up")
+        val label = net?.let { networkMonitor?.describe(it) } ?: "null"
         val ok = runCatching {
             setUnderlyingNetworks(if (net != null) arrayOf(net) else null)
         }.getOrDefault(false)

@@ -31,6 +31,10 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>HysteriaObfs</key>
+	<string>$(HYST_OBFS)</string>
+	<key>HysteriaPassword</key>
+	<string>$(HYST_PASSWORD)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UILaunchScreen</key>

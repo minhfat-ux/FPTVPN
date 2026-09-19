@@ -41,6 +41,15 @@ final class WSRelayClient: @unchecked Sendable {
     private let listener: RelayUDPListener
     private let makeLink: @Sendable () -> RelayLink
 
+    /// Gọi khi link WebSocket ĐỨT (link tự báo: server đóng, hoặc `receive()` ném lỗi).
+    ///
+    /// Vì sao cần callback chứ không để tầng trên tự đoán: `framesFromRelay` đứng yên KHÔNG
+    /// có nghĩa là transport chết (tunnel im lặng thì relay cũng không gửi gì về), còn
+    /// bộ đếm byte của WireGuard lại TĂNG ngay cả khi relay chưa chở được gói nào
+    /// (`peer.SendBuffer` cộng `tx_bytes` khi gói được giao cho listener cục bộ —
+    /// `wireguard-go/device/peer.go:128`). Mốc "link đứt lúc t=+Ns" chỉ link mới biết.
+    var onLinkLost: (@Sendable (String) -> Void)?
+
     /// Guards every field below: the async loops and the link callbacks all touch them.
     private let lock = NSLock()
     private var running = false
@@ -61,6 +70,8 @@ final class WSRelayClient: @unchecked Sendable {
     private var receivedFrames = 0
     private var receivedBytes = 0
     private var droppedNoLink = 0
+    /// Đã báo "link đứt" cho lượt thử này chưa (mỗi lượt báo đúng một lần).
+    private var linkLossNotified = false
 
     private let datagrams: AsyncStream<Data>
     private let datagramContinuation: AsyncStream<Data>.Continuation
@@ -87,6 +98,17 @@ final class WSRelayClient: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return open
+    }
+
+    /// Link đã TỪNG mở (đã gửi hoặc nhận được ít nhất một frame).
+    ///
+    /// Tầng trên dùng cờ này để KHÔNG bỏ đường WebSocket chỉ vì một mẫu `isConnected == false`:
+    /// link vừa đứt và đang tự nối lại vẫn cho `isConnected == false`, nhưng bỏ nó ở thời điểm
+    /// đó nghĩa là tự tay cắt đường duy nhất đi qua Cloudflare (xem `scheduleDirectFallback`).
+    var hasEverOpened: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return sentFrames > 0 || receivedFrames > 0 || open
     }
 
     /// Opens the local UDP listener and starts the WebSocket link.
@@ -204,7 +226,10 @@ final class WSRelayClient: @unchecked Sendable {
                 handle(try await link.receive())
             }
         } catch {
-            if isRunning { note("websocket link dropped: \(error.localizedDescription)") }
+            if isRunning {
+                note("websocket link dropped: \(error.localizedDescription)")
+                notifyLinkLost("đọc WS lỗi: \(error.localizedDescription)")
+            }
         }
 
         let opened = endAttempt(link)
@@ -221,6 +246,7 @@ final class WSRelayClient: @unchecked Sendable {
         self.link = link
         open = false
         openedInThisAttempt = false
+        linkLossNotified = false
         return true
     }
 
@@ -280,7 +306,21 @@ final class WSRelayClient: @unchecked Sendable {
         if self.link === link { open = false }
         lock.unlock()
         // A deliberate stop() also closes the socket; that is not a failure.
-        if isRunning { note("handshake/link closed: \(reason)") }
+        if isRunning {
+            note("handshake/link closed: \(reason)")
+            notifyLinkLost("WS đóng: \(reason)")
+        }
+    }
+
+    /// Báo cho tầng trên biết link vừa đứt (mỗi lượt thử báo một lần). Không dùng để tự dựng
+    /// lại ngay: client vẫn tự nối lại với backoff — tầng trên chỉ cần mốc thời gian + lý do.
+    private func notifyLinkLost(_ reason: String) {
+        lock.lock()
+        guard !linkLossNotified else { lock.unlock(); return }
+        linkLossNotified = true
+        let callback = onLinkLost
+        lock.unlock()
+        callback?(reason)
     }
 
     // MARK: - Diagnostics
@@ -314,6 +354,18 @@ final class WSRelayClient: @unchecked Sendable {
     private func note(_ message: String) {
         log.log(level: .default, "ws-relay: \(message, privacy: .public)")
         RelayDiagnostics.shared.log("ws-relay: \(message)")
+    }
+
+    /// Số frame hai chiều đã đi qua WebSocket của phiên này.
+    ///
+    /// Vì sao cần tách khỏi `countersSummary()`: provider phải QUYẾT ĐỊNH được (không chỉ
+    /// ghi log) rằng đường hysteria có thật sự chở gói hay không — `framesFromRelay == 0`
+    /// sau khi QUIC đã gửi Initial nghĩa là relay/node không trả lời, tức tunnel "Connected
+    /// nhưng không có mạng", phải hạ chứ không để treo.
+    var frameCounts: (sent: Int, received: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (sentFrames, receivedFrames)
     }
 
     /// Counters useful to spot which direction of the bridge went quiet.

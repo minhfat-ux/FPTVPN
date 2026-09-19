@@ -15,6 +15,28 @@ private let maxWatchdogRebuilds = 2
 /// Số lần tối đa watchdog hoãn kiểm tra (transport còn kết nối / runtime chưa sẵn sàng)
 /// trước khi dựng lại phiên cho dù chưa xác định được transport đã "connected".
 private let maxWatchdogDeferrals = 2
+/// Nhịp kiểm tra SỐNG/CHẾT của transport trong suốt phiên (xem `scheduleLiveness`).
+///
+/// Vì sao phải có: `scheduleWatchdog` chỉ chạy MỘT lần ở giây thứ 11 sau khi tunnel lên.
+/// Sau mốc đó KHÔNG còn gì quan sát phiên nữa, nên khi transport chết giữa chừng (WS bị cắt
+/// sau một lúc chạy — đo thật: Cloudflare cắt WS idle ~100s, xem
+/// `tools/hysteria-relay/wsrelay.go` pingLoop) thì tunnel cứ ở trạng thái "Connected" mà
+/// không chở gói nào và KHÔNG bao giờ tự dựng lại — đúng ca khách báo "chạy được một lúc rồi
+/// mất mạng".
+private let livenessInterval: TimeInterval = 10
+/// Số nhịp liên tiếp thấy transport KHÔNG còn link mở trước khi kết luận "transport đã chết".
+/// Có trần để không dựng lại chỉ vì link đang tự nối lại (backoff tối đa 15s của WSRelayClient).
+private let maxLivenessMisses = 3
+/// Số lần tối đa watchdog sống/chết dựng lại phiên trong một lần Connect (tránh vòng lặp).
+private let maxLivenessRebuilds = 2
+/// Trần im lặng của ĐƯỜNG VỀ: quá ngần này mà relay không trả về gói nào VÀ peer WireGuard
+/// cũng không bắt tay lại thì đường về đã chết thật ⇒ dựng lại phiên.
+///
+/// Mốc an toàn: WireGuard tự bắt tay lại muộn nhất sau `RejectAfterTime` = 180s (khoá hết hạn
+/// ⇒ `SendStagedPackets` gửi handshake mới, wireguard-go/device/send.go:302) kể cả khi tunnel
+/// im lặng, nên 300s là ngưỡng rộng — phiên đang chạy tốt (kể cả đang im lặng) không bao giờ
+/// chạm ngưỡng này.
+private let livenessSilenceLimit: TimeInterval = 300
 /// Tổng thời gian tối đa một lần Connect được phép chạy mà CHƯA có traffic thật. Quá hạn
 /// thì extension tự dừng phiên và báo mã `TUNNEL_NO_TRAFFIC`.
 ///
@@ -57,6 +79,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Số lần watchdog hoãn kiểm tra (transport còn đang kết nối / runtime chưa sẵn sàng).
     /// Có trần để không hoãn mãi: hết trần thì vẫn dựng lại như yêu cầu.
     private var watchdogDeferrals = 0
+    /// Số lần watchdog sống/chết đã dựng lại phiên trong lần Connect hiện tại.
+    private var livenessRebuilds = 0
+    /// Số nhịp kiểm tra liên tiếp thấy transport không còn link mở.
+    private var livenessMisses = 0
+    /// Số nhịp đã kiểm (chỉ để log gọn, không dùng để quyết định).
+    private var livenessChecks = 0
+    /// Số frame relay đã trả về ở nhịp trước — tăng lên nghĩa là đường THÔNG thật.
+    private var livenessRelayFramesReceived = 0
+    /// Thời điểm cuối cùng thấy bằng chứng đường thông (gói về từ relay).
+    private var livenessLastDataAt: Date?
+    /// Số lần chuỗi transport đã được gia hạn thay vì bỏ đường WebSocket (xem
+    /// `scheduleDirectFallback`).
+    private var transportFallbackDeferrals = 0
+    /// Thời điểm bắt đầu phiên hiện tại (chỉ dùng cho log `t=+Ns`).
+    private var sessionStartedAt = Date()
 
     /// Trạng thái chẩn đoán của phiên hiện tại, app đọc qua `handleAppMessage`
     /// (`sendProviderMessage`). Extension không có UI nên đây là kênh DUY NHẤT để báo
@@ -84,6 +121,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // Mỗi lần start là một phiên MỚI: tăng generation để mọi callback async của
         // phiên trước tự vô hiệu, rồi dọn sạch adapter/relay còn sót trước khi dựng mới.
         watchdogRebuilds = 0
+        livenessRebuilds = 0
         let generation = beginSession()
         // Timeout tổng tính từ lần Connect này, không bị watchdog rebuild làm mới.
         sessionLock.lock()
@@ -148,8 +186,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             upKbps: dict["upKbps"] as? Int ?? HysteriaDefaults.upKbps,
             downKbps: dict["downKbps"] as? Int ?? HysteriaDefaults.downKbps,
             mtu: dict["mtu"] as? Int ?? HysteriaDefaults.mtu,
-            ipv4: HysteriaDefaults.tunIPv4Address,
-            ipv6: HysteriaDefaults.tunIPv6Address
+            // CIDR cho Go (netip.ParsePrefix) — xem HysteriaDefaults.tunIPv4CIDR.
+            ipv4: HysteriaDefaults.tunIPv4CIDR,
+            ipv6: HysteriaDefaults.tunIPv6CIDR
         )
     }
 
@@ -277,7 +316,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // listener nhưng không có gói nào qua ⇒ WG handshake không xong ⇒ app tự dừng phiên
             // sau ~15s (log: stopTunnel reason=11, transport=relay). Đường WS đi qua Cloudflare
             // nên không phụ thuộc IP node — đo được 14 MB/s so với 0,3 MB/s của TCP relay.
-            if let localPort = startWebSocketRelay() {
+            if let localPort = startWebSocketRelay(generation: generation) {
                 tunnelConfig = configuration(tunnelConfig, pointingAt: localPort)
                 note("ws-relay: WireGuard endpoint -> 127.0.0.1:\(localPort.rawValue) (WS/Cloudflare ưu tiên)")
                 scheduleDirectFallback(direct: directConfiguration, generation: generation)
@@ -353,6 +392,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // Dò byte đầu tiên sớm (3s/lần) để log kịp thời, rồi watchdog kiểm tra tổng thể.
             self.scheduleTrafficProbe(generation: generation, attempt: 1)
             self.scheduleWatchdog(generation: generation)
+            // Và theo dõi SỐNG/CHẾT suốt phiên: watchdog ở trên chỉ chạy một lần, còn
+            // transport có thể chết lúc nào cũng được (xem `scheduleLiveness`).
+            self.scheduleLiveness(generation: generation)
         }
     }
 
@@ -375,6 +417,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         statusTxBytes = 0
         firstTrafficLogged = false
         watchdogDeferrals = 0
+        // Watchdog sống/chết bắt đầu lại từ đầu cho phiên mới (bộ đếm frame của relay mới
+        // cũng bắt đầu từ 0 nên mốc so sánh phải reset theo).
+        livenessMisses = 0
+        livenessChecks = 0
+        livenessRelayFramesReceived = 0
+        livenessLastDataAt = Date()
+        transportFallbackDeferrals = 0
+        sessionStartedAt = Date()
         sessionLock.unlock()
         for item in pending { item.cancel() }
         return generation
@@ -387,6 +437,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         sessionLock.lock()
         sessionActive = false
         watchdogRebuilds = 0
+        livenessRebuilds = 0
         statusState = "stopped"
         let pending = scheduledWorkItems
         scheduledWorkItems = []
@@ -419,6 +470,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         overallTimeoutItem = nil
         sessionLock.unlock()
         guard active, !hasTraffic else { return }
+        // Chốt an toàn cuối: bộ đếm `tx_bytes` của WireGuard tăng NGAY khi gói được giao cho
+        // listener cục bộ (wireguard-go/device/peer.go:128), nên "không có traffic" theo
+        // runtime KHÔNG có nghĩa là đường chưa từng chở gói. Nếu relay đã trả về gói nào thì
+        // đường đang thông thật ⇒ tuyệt đối không dừng phiên (đây đúng là tiền lệ Android:
+        // watchdog cũ giết một phiên đang chạy tốt).
+        let frames = wsRelay?.frameCounts
+        if let frames, frames.received > 0 {
+            RelayDiagnostics.shared.log(
+                "start timeout: hết \(Int(overallTrafficTimeout))s nhưng relay đã trả về \(frames.received) gói — KHÔNG dừng phiên"
+            )
+            markSessionHasTraffic()
+            return
+        }
 
         let seconds = Int(overallTrafficTimeout)
         log.error("start timeout: no traffic after \(seconds)s — stopping session (TUNNEL_NO_TRAFFIC)")
@@ -567,7 +631,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Same reasoning as `startRelay`: no reachability probe, the client connects
     /// asynchronously and reconnects on its own, and its local UDP port never changes
     /// across those reconnects.
-    private func startWebSocketRelay() -> NWEndpoint.Port? {
+    private func startWebSocketRelay(generation: Int) -> NWEndpoint.Port? {
         // Relay phải là của ĐÚNG node đang dùng: một relay chỉ hạ cánh ở MỘT node, đi
         // qua relay của node khác thì handshake mã hoá tới khoá của node đang chọn
         // nhưng lại tới wg0 của node kia — node kia không giải được và không có peer
@@ -596,6 +660,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         note("ws-relay: relay của node này (control plane cấp): \(declared)")
         let client = WSRelayClient(url: url, log: log)
+        // Link tự báo khi đứt: đây là bằng chứng DUY NHẤT về mốc thời gian + lý do WS chết
+        // (bộ đếm byte của WireGuard tăng cả khi relay không chở được gói nào, và
+        // `framesFromRelay` đứng yên cũng đúng cả khi tunnel đang im lặng bình thường).
+        // Chỉ bắt các giá trị Sendable (Date/Int/RelayDiagnostics) — KHÔNG bắt `self`:
+        // closure này chạy trên task của WSRelayClient còn provider không phải kiểu Sendable.
+        let linkLostStartedAt = sessionStartedAt
+        let linkLostGeneration = generation
+        let diagnostics = RelayDiagnostics.shared
+        client.onLinkLost = { reason in
+            let elapsed = Int(Date().timeIntervalSince(linkLostStartedAt))
+            diagnostics.log(
+                "liveness: WS relay link ĐỨT tại t=+\(elapsed)s (\(reason)) phiên \(linkLostGeneration) — "
+                    + "client tự nối lại, watchdog sống/chết kiểm sau ≤\(Int(livenessInterval))s"
+            )
+        }
         do {
             let localPort = try client.start()
             wsRelay = client
@@ -667,7 +746,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             relay.stop()
             if self.relay === relay { self.relay = nil }
 
-            guard let localPort = self.startWebSocketRelay() else {
+            guard let localPort = self.startWebSocketRelay(generation: generation) else {
                 self.applyDirectEndpoint(direct, because: "the WebSocket relay could not start")
                 return
             }
@@ -692,6 +771,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             guard let self, self.isCurrentSession(generation) else { return }
             guard !wsRelay.isConnected else {
                 note("ws-relay: link is up, keeping the WebSocket transport")
+                return
+            }
+            // `isConnected` là một MẪU tại đúng thời điểm này: link vừa đứt và đang tự nối lại
+            // cũng cho false. Nếu link ĐÃ TỪNG mở thì đây không phải "transport không lên được"
+            // mà là transport đang tự hồi — bỏ nó lúc này là tự tay cắt đường duy nhất đi qua
+            // Cloudflare, rồi trỏ WireGuard vào IP node đang bị chặn (đo 19/09: TCP tới
+            // 165.101.114.162 và 103.173.155.50 đều timeout) ⇒ tunnel "Connected" mà không có
+            // gói nào và KHÔNG có đường quay lại WebSocket (chuỗi transport là một chiều).
+            // Gia hạn đúng một nhịp cho nó nối lại.
+            if wsRelay.hasEverOpened, self.transportFallbackDeferrals < 1 {
+                self.transportFallbackDeferrals += 1
+                let frames = wsRelay.frameCounts
+                RelayDiagnostics.shared.log(
+                    "ws-relay: link chưa mở lại sau \(Int(transportGrace))s nhưng đã từng chở gói "
+                        + "(udpFrames=\(frames.sent) framesFromRelay=\(frames.received)) — gia hạn thêm "
+                        + "\(Int(transportGrace))s, KHÔNG bỏ đường Cloudflare"
+                )
+                self.scheduleDirectFallback(direct: direct, generation: generation)
                 return
             }
             wsRelay.stop()
@@ -820,6 +917,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         firstTrafficLogged = true
         connectHasTraffic = true
         sessionLock.unlock()
+        // Đã có traffic thật ⇒ hết giai đoạn "chờ traffic": gỡ trần tổng của lần Connect để
+        // nó không thể cắt một phiên ĐANG chở gói (trần này chỉ để chặn vòng lặp "lên mà không
+        // có mạng" lúc khởi động, không phải để giám sát phiên đang chạy).
+        cancelOverallTimeout()
         guard !alreadyLogged else { return }
         // Cảnh báo RELAY_URL_MISSING chỉ đúng khi chưa có đường nào chạy. Khi peer đã có
         // traffic (đường UDP trực tiếp chạy được), xoá mã để app không hiện lỗi giả.
@@ -882,17 +983,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     /// Hoãn kiểm tra watchdog (transport còn kết nối / runtime chưa sẵn sàng) và hẹn kiểm
-    /// lại. Có trần `maxWatchdogDeferrals`: hết trần thì vẫn dựng lại phiên thay vì hoãn mãi.
+    /// lại. Có trần `maxWatchdogDeferrals`: hết trần thì mới phải quyết định.
     private func deferWatchdog(generation: Int, reason: String) {
         if watchdogDeferrals < maxWatchdogDeferrals {
             watchdogDeferrals += 1
             note("watchdog: \(reason) after \(Int(watchdogGrace))s — re-checking (\(self.watchdogDeferrals)/\(maxWatchdogDeferrals))")
             scheduleWatchdog(generation: generation)
-        } else {
-            log.error("watchdog: \(reason) after \(maxWatchdogDeferrals) re-checks — rebuilding anyway")
-            RelayDiagnostics.shared.log("watchdog: \(reason) after \(maxWatchdogDeferrals) re-checks — rebuilding anyway")
-            rebuildFromWatchdog(generation: generation)
+            return
         }
+        // Hết trần hoãn mà vẫn KHÔNG đọc được runtime: đây là "chưa biết", không phải "đã chết".
+        // Dựng lại ở đây là cắt một phiên có thể đang chạy tốt (đúng tiền lệ Android: watchdog
+        // cũ giết phiên vừa mở WS xong — `armAttemptBudget`/`reportUp` trong
+        // `HysteriaVpnService.kt`, và bản sửa ghi rõ "không thể cắt một tunnel đang chạy thật").
+        // Chỉ dựng lại khi chính TRANSPORT nói nó không kết nối được; còn lại giao cho watchdog
+        // sống/chết theo dõi tiếp bằng chứng thật (gói về từ relay / link đứt).
+        if activeTransportIsConnected {
+            log.error("watchdog: \(reason, privacy: .public) after \(maxWatchdogDeferrals) re-checks — transport vẫn báo đang chạy, KHÔNG dựng lại")
+            RelayDiagnostics.shared.log(
+                "watchdog: \(reason) sau \(maxWatchdogDeferrals) lần kiểm lại nhưng transport vẫn báo đang chạy "
+                    + "(relay[\(relayCounters)]) — không dựng lại, chuyển sang theo dõi sống/chết"
+            )
+            return
+        }
+        log.error("watchdog: \(reason, privacy: .public) after \(maxWatchdogDeferrals) re-checks — transport không kết nối, rebuilding")
+        RelayDiagnostics.shared.log("watchdog: \(reason) after \(maxWatchdogDeferrals) re-checks — rebuilding (transport not connected)")
+        rebuildFromWatchdog(generation: generation)
     }
 
     /// Dựng lại phiên "lên nhưng không có mạng": dừng sạch, đọc lại cấu hình MỚI từ
@@ -920,10 +1035,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             message: "Chưa nhận được dữ liệu — đang dựng lại phiên (lần \(watchdogRebuilds)/\(maxWatchdogRebuilds))"
         )
 
+        restartSession(
+            logPrefix: "watchdog",
+            reason: "không có handshake/traffic sau \(Int(watchdogGrace))s (lần \(watchdogRebuilds)/\(maxWatchdogRebuilds))"
+        )
+    }
+
+    /// Dừng sạch phiên hiện tại rồi dựng lại từ cấu hình MỚI nhất trong
+    /// `protocolConfiguration`. Dùng chung cho watchdog đầu phiên và watchdog sống/chết:
+    /// hai đường vào khác nhau nhưng việc phải làm y hệt, tách ra để không có hai bản dựng lại
+    /// lệch nhau (một bản quên `beginSession`, bản kia quên đọc lại cấu hình…).
+    private func restartSession(logPrefix: String, reason: String) {
         stopSessionResources { [weak self] in
             guard let self else { return }
             guard let config = self.configuration else {
-                RelayDiagnostics.shared.log("watchdog: cannot rebuild — configuration missing")
+                RelayDiagnostics.shared.log("\(logPrefix): cannot rebuild — configuration missing")
                 self.setStatus(
                     state: "failed",
                     code: TunnelDiagnosticCode.noTraffic,
@@ -932,17 +1058,179 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             let newGeneration = self.beginSession()
-            self.note("watchdog: rebuilding session \(newGeneration) (attempt \(self.watchdogRebuilds))")
+            self.note("\(logPrefix): rebuilding session \(newGeneration) (\(reason))")
             self.startSession(config: config, generation: newGeneration) { [weak self] error in
                 if let error {
-                    self?.log.error("watchdog: rebuild failed: \(error.localizedDescription)")
-                    RelayDiagnostics.shared.log("watchdog: rebuild failed: \(error.localizedDescription)")
+                    self?.log.error("\(logPrefix, privacy: .public): rebuild failed: \(error.localizedDescription, privacy: .public)")
+                    RelayDiagnostics.shared.log("\(logPrefix): rebuild failed: \(error.localizedDescription)")
                 } else {
-                    self?.note("watchdog: session rebuilt")
+                    self?.note("\(logPrefix): session rebuilt")
                 }
             }
         }
     }
+
+    // MARK: - Watchdog sống/chết (theo dõi suốt phiên)
+
+    /// Hẹn nhịp kiểm tra sống/chết tiếp theo. Chuỗi này tự nối tiếp nhau (mỗi nhịp hẹn nhịp
+    /// sau) nên chỉ có MỘT chuỗi chạy tại một thời điểm — không cần khoá cho các biến
+    /// `liveness*`.
+    private func scheduleLiveness(generation: Int) {
+        schedule(after: livenessInterval) { [weak self] in
+            guard let self, self.isCurrentSession(generation) else { return }
+            self.runLivenessCheck(generation: generation)
+        }
+    }
+
+    /// Kiểm tra transport có THẬT SỰ còn chở gói không, và dựng lại khi nó đã chết.
+    ///
+    /// Nguồn sự thật, theo thứ tự tin cậy:
+    /// 1. Gói relay trả VỀ (`framesFromRelay` tăng) — bằng chứng đường thông thật.
+    /// 2. `isConnected` của link + callback `onLinkLost` của link — link tự nói nó chết.
+    /// 3. `last_handshake_time_sec` của WireGuard — chỉ dùng để phát hiện đường VỀ chết khi
+    ///    link vẫn "mở" (khoá WG hết hạn sau 180s là tự bắt tay lại, nên handshake cũ mãi
+    ///    nghĩa là handshake không còn đi được).
+    ///
+    /// KHÔNG dùng `tx_bytes`/`rx_bytes` làm căn cứ dựng lại: `tx_bytes` tăng ngay khi gói được
+    /// giao cho listener cục bộ (wireguard-go/device/peer.go:128) — kể cả khi relay chưa chở
+    /// được byte nào — nên nó không phân biệt được "đang chạy tốt" với "đang blackhole".
+    private func runLivenessCheck(generation: Int) {
+        guard let adapter else { return }
+        livenessChecks += 1
+        let transport = activeTransportName
+        let linkOpen = activeTransportIsConnected
+        let frames = wsRelay?.frameCounts
+        let elapsed = Int(Date().timeIntervalSince(sessionStartedAt))
+
+        // 1) Có gói VỀ từ relay ⇒ đường thông thật: hết giai đoạn "chờ traffic" và không
+        //    bao giờ dựng lại phiên đang chở gói.
+        if let frames, frames.received > livenessRelayFramesReceived {
+            let previous = livenessRelayFramesReceived
+            livenessRelayFramesReceived = frames.received
+            livenessMisses = 0
+            livenessLastDataAt = Date()
+            markSessionHasTraffic()
+            if previous == 0 {
+                RelayDiagnostics.shared.log(
+                    "liveness: transport \(transport) ĐANG chở gói tại t=+\(elapsed)s "
+                        + "(udpFrames=\(frames.sent) framesFromRelay=\(frames.received)) — hết giai đoạn chờ traffic"
+                )
+            }
+        } else if !linkOpen {
+            // 2) Link không còn mở. Cho vài nhịp vì client tự nối lại (backoff ≤ 15s).
+            livenessMisses += 1
+            RelayDiagnostics.shared.log(
+                "liveness #\(livenessChecks) t=+\(elapsed)s: transport \(transport) KHÔNG mở link "
+                    + "(\(livenessMisses)/\(maxLivenessMisses)) relay[\(relayCounters)]"
+            )
+            if livenessMisses >= maxLivenessMisses {
+                rebuildFromLiveness(
+                    generation: generation,
+                    reason: "transport \(transport) không mở lại link sau \(Int(livenessInterval) * maxLivenessMisses)s (relay[\(relayCounters)])"
+                )
+                return
+            }
+        } else if frames != nil, let silence = silenceSeconds(), silence > livenessSilenceLimit {
+            // 3) Link "mở" nhưng đường về im lặng quá lâu VÀ WireGuard cũng không bắt tay lại
+            //    được ⇒ đường về đã chết thật (link nửa-mở). Đây là ca nguy hiểm nhất vì mọi
+            //    thứ trông vẫn "Connected".
+            RelayDiagnostics.shared.log(
+                "liveness #\(livenessChecks) t=+\(elapsed)s: link mở nhưng KHÔNG có gói về trong \(Int(silence))s "
+                    + "và peer không bắt tay lại được — dựng lại phiên"
+            )
+            rebuildFromLiveness(
+                generation: generation,
+                reason: "đường về im lặng \(Int(silence))s dù link vẫn mở (relay[\(relayCounters)])"
+            )
+            return
+        } else if livenessChecks % 3 == 0 {
+            // Nhịp "chưa kết luận được gì": log thưa (mỗi 30s) để file chẩn đoán còn đọc được.
+            relayStatsLine(generation: generation, elapsed: elapsed, transport: transport, frames: frames, adapter: adapter)
+        }
+
+        scheduleLiveness(generation: generation)
+    }
+
+    /// Số giây kể từ lần cuối thấy gói về từ relay (nil khi chưa từng thấy).
+    private func silenceSeconds() -> TimeInterval? {
+        guard let last = livenessLastDataAt else { return nil }
+        return Date().timeIntervalSince(last)
+    }
+
+    /// Log một dòng đầy đủ số liệu hai phía (relay + WireGuard) cho nhịp kiểm tra — lần sau
+    /// đọc relay.log là biết phiên chết ở chặng nào.
+    private func relayStatsLine(
+        generation: Int,
+        elapsed: Int,
+        transport: String,
+        frames: (sent: Int, received: Int)?,
+        adapter: WireGuardAdapter
+    ) {
+        adapter.getRuntimeConfiguration { [weak self] text in
+            guard let self, self.isCurrentSession(generation) else { return }
+            let stats = text.map { Self.parseRuntimeStats($0) }
+            let wg = stats.map { "rx=\($0.rxBytes) tx=\($0.txBytes) handshakeAge=\(Int($0.handshakeAge))s" }
+                ?? "runtime=unavailable"
+            let relay = frames.map { "udpFrames=\($0.sent) framesFromRelay=\($0.received)" } ?? "relayFrames=n/a"
+            RelayDiagnostics.shared.log(
+                "liveness #\(livenessChecks) t=+\(elapsed)s: transport \(transport) link mở, chưa có gói mới về "
+                    + "(im lặng \(Int(self.silenceSeconds() ?? 0))s) · \(relay) · \(wg) — giữ phiên"
+            )
+        }
+    }
+
+    /// Dựng lại phiên khi transport đã chết thật. Trần `maxLivenessRebuilds` cho mỗi lần
+    /// Connect: hết trần thì KHÔNG dựng lại nữa mà đặt mã chẩn đoán để app báo cho khách
+    /// (im lặng chính là lỗi cũ — khách chỉ thấy Connected rồi tự đoán).
+    private func rebuildFromLiveness(generation: Int, reason: String) {
+        guard isCurrentSession(generation) else { return }
+        guard livenessRebuilds < maxLivenessRebuilds else {
+            log.error("liveness: giving up after \(self.livenessRebuilds, privacy: .public) rebuilds")
+            RelayDiagnostics.shared.log(
+                "liveness: bỏ cuộc sau \(livenessRebuilds) lần dựng lại (\(reason)) — tunnel ở lại nhưng không chở gói"
+            )
+            setStatus(
+                state: "no_traffic",
+                code: TunnelDiagnosticCode.noTraffic,
+                message: "Đường truyền qua relay đã chết (\(reason)) và đã tự dựng lại \(livenessRebuilds) lần "
+                    + "mà vẫn không có dữ liệu (mã TUNNEL_NO_TRAFFIC). Vui lòng bấm Disconnect rồi Connect lại."
+            )
+            return
+        }
+        livenessRebuilds += 1
+        livenessMisses = 0
+        setStatus(
+            state: "rebuilding",
+            message: "Đường relay đã chết — đang dựng lại phiên (lần \(livenessRebuilds)/\(maxLivenessRebuilds))"
+        )
+        restartSession(
+            logPrefix: "liveness",
+            reason: "\(reason) (lần \(livenessRebuilds)/\(maxLivenessRebuilds))"
+        )
+    }
+
+    /// Ghi nhận bằng chứng đường THÔNG và gỡ trần "chờ traffic" của lần Connect: đã có gói
+    /// thật đi qua thì không được `cancelTunnelWithError` vì lý do "chưa có traffic" nữa.
+    private func markSessionHasTraffic() {
+        sessionLock.lock()
+        connectHasTraffic = true
+        sessionLock.unlock()
+        cancelOverallTimeout()
+    }
+
+    /// Gỡ trần tổng của lần Connect (đã có bằng chứng traffic thật).
+    private func cancelOverallTimeout() {
+        sessionLock.lock()
+        let timeout = overallTimeoutItem
+        overallTimeoutItem = nil
+        sessionLock.unlock()
+        timeout?.cancel()
+    }
+
+    /// Link WS vừa đứt (do chính link báo): mốc thời gian + lý do đã được ghi thẳng vào file
+    /// chẩn đoán từ closure của `WSRelayClient` (xem `startWebSocketRelay`). Không dựng lại
+    /// ngay — WSRelayClient tự nối lại; nếu nó không nối lại được thì watchdog sống/chết sẽ
+    /// thấy "link không mở" và dựng lại phiên.
 
     private struct RuntimeStats {
         var rxBytes = 0

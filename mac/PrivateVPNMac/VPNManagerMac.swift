@@ -99,6 +99,9 @@ final class VPNManagerMac: ObservableObject {
         Task {
             await loadManagerFromPreferences()
             await refreshNodes()
+            // Lưu sẵn providerConfiguration (kèm hysteria2) ngay khi app khởi động: nhờ vậy
+            // `scutil --nc start "VPNFlow"` từ terminal cũng dựng đúng provider.
+            await refreshSavedConfiguration()
             startStatusPolling()
         }
     }
@@ -427,7 +430,8 @@ final class VPNManagerMac: ObservableObject {
         try await prepareConfiguration(
             config,
             nodeId: node.id,
-            wsRelayURL: node.relayURL
+            wsRelayURL: node.relayURL,
+            hysteriaNode: node
         )
         guard let manager else {
             throw MacError.savedConfigurationMissing
@@ -550,7 +554,8 @@ final class VPNManagerMac: ObservableObject {
     private func prepareConfiguration(
         _ config: WireGuardConfig,
         nodeId: String? = nil,
-        wsRelayURL: String? = nil
+        wsRelayURL: String? = nil,
+        hysteriaNode: ExitNode? = nil
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let managedProfiles = existing.filter { profile in
@@ -577,7 +582,7 @@ final class VPNManagerMac: ObservableObject {
         let protocolConfig = NETunnelProviderProtocol()
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier
         protocolConfig.serverAddress = tunnelConfig.peers.first?.endpoint ?? "not-configured"
-        protocolConfig.providerConfiguration = [
+        var providerConfiguration: [String: Any] = [
             // macOS KHÁC iOS ở chỗ này: KHÔNG bỏ private key khỏi config.
             //
             // Vì sao: trên macOS, profile ký tự động chỉ cấp quyền keychain group dạng wildcard
@@ -591,6 +596,23 @@ final class VPNManagerMac: ObservableObject {
             "wireguard": try JSONEncoder().encode(tunnelConfig),
         ]
 
+        // Transport hysteria2: đây là đường DUY NHẤT extension macOS chạy (WireGuardKit
+        // không nằm trong extension macOS vì hai Go runtime không cùng một process — xem
+        // project.yml). Thiếu credential thì KHÔNG thêm khoá "hysteria" và phải nói rõ cho
+        // người dùng: extension không có nó sẽ báo TUNNEL_START_FAILED, còn im lặng thì
+        // khách chỉ thấy "Connected" mà không có mạng.
+        if let hysteria = Self.hysteriaConfiguration(node: hysteriaNode) {
+            providerConfiguration["hysteria"] = hysteria
+            let relay = hysteria["relayURL"] as? String ?? "?"
+            let host = hysteria["serverHost"] as? String ?? "?"
+            log.info("configuration: hysteria2 -> \(relay, privacy: .public) (server \(host, privacy: .public))")
+        } else {
+            let message = "Bản build thiếu credential hysteria2 (HysteriaPassword/HysteriaObfs trong Info.plist) — tunnel macOS không dựng được. Build lại kèm HYST_PASSWORD/HYST_OBFS (xem scripts/dev-hysteria-build-env.sh)."
+            lastError = message
+            log.error("configuration: \(message, privacy: .public)")
+        }
+        protocolConfig.providerConfiguration = providerConfiguration
+
         manager.protocolConfiguration = protocolConfig
         manager.localizedDescription = Self.currentProfileName
         manager.isEnabled = true
@@ -598,6 +620,92 @@ final class VPNManagerMac: ObservableObject {
         // Nạp lại để chắc chắn manager gắn với bản ghi hệ thống vừa lưu trước khi start.
         try await manager.loadFromPreferences()
         self.manager = manager
+    }
+
+    /// Cấu hình cho transport hysteria2 của extension macOS.
+    ///
+    /// Credential KHÔNG nằm trong repo: build truyền `HYST_PASSWORD`/`HYST_OBFS` vào
+    /// Info.plist của app (xem `scripts/dev-hysteria-build-env.sh`), app đọc lại rồi đưa
+    /// cho extension qua `providerConfiguration` — giống cách iOS đang làm.
+    ///
+    /// Trả nil khi thiếu credential hoặc không xác định được host: gọi ở đây phải nói rõ
+    /// cho người dùng, KHÔNG được lặng lẽ bỏ qua.
+    private static func hysteriaConfiguration(node: ExitNode?) -> [String: Any]? {
+        guard let password = Bundle.main.object(forInfoDictionaryKey: "HysteriaPassword") as? String,
+              !password.isEmpty,
+              let obfs = Bundle.main.object(forInfoDictionaryKey: "HysteriaObfs") as? String,
+              !obfs.isEmpty else {
+            return nil
+        }
+        let host = node.map { Self.host(fromEndpoint: $0.endpoint) } ?? ""
+        guard !host.isEmpty else { return nil }
+
+        // Relay: ưu tiên `hy_relay_url` của ĐÚNG node đang chọn (control plane đã cấp), rồi
+        // tới danh sách dùng chung. Relay WireGuard (`wg_relay_url`) KHÔNG dùng được ở đây:
+        // một relay chỉ hạ cánh ở một cổng UDP, gửi QUIC vào cổng WireGuard là im lặng.
+        let relay = node?.hysteriaRelayURL
+        return [
+            "serverHost": host,
+            "serverPort": Int(HysteriaDefaults.serverPort),
+            "relayURL": relay ?? HysteriaDefaults.relayURLCandidates.first ?? "",
+            "relayURLCandidates": HysteriaDefaults.relayURLCandidates,
+            "password": password,
+            "obfs": obfs,
+            "upKbps": HysteriaDefaults.upKbps,
+            "downKbps": HysteriaDefaults.downKbps,
+            "mtu": HysteriaDefaults.mtu,
+        ]
+    }
+
+    /// Host thuần từ endpoint của node ("165.101.114.162:443" → "165.101.114.162").
+    private static func host(fromEndpoint endpoint: String) -> String {
+        if endpoint.hasPrefix("[") { // IPv6 dạng [::1]:443
+            return endpoint.split(separator: "]").first.map { String($0.dropFirst()) } ?? ""
+        }
+        return endpoint.split(separator: ":").first.map(String.init) ?? ""
+    }
+
+    /// Dựng lại và LƯU profile VPN (kèm `providerConfiguration["hysteria"]`) mà KHÔNG cần
+    /// người dùng bấm Connect.
+    ///
+    /// Vì sao cần: profile NetworkExtension nằm trong preferences của hệ thống và trước đây
+    /// chỉ được ghi khi bấm Connect. Đo/chẩn đoán từ terminal — `scutil --nc start "VPNFlow"`
+    /// — cần profile đã có sẵn cấu hình hysteria, nếu không extension báo
+    /// TUNNEL_START_FAILED dù mọi thứ khác đúng. Hàm này chạy lúc app khởi động
+    /// (`VPNManagerMac.init`), nên chỉ cần mở app một lần.
+    func refreshSavedConfiguration() async {
+        if manager == nil {
+            await loadManagerFromPreferences()
+        }
+        if exitNodes.isEmpty {
+            await refreshNodes()
+        }
+        guard let node = selectedNode ?? exitNodes.first ?? ExitNode.builtInFallback.first else {
+            log.error("configuration: không có node nào để lưu cấu hình")
+            return
+        }
+
+        // Khoá WireGuard chỉ để profile còn đủ trường cho `savedTunnelConfig()` (đường
+        // offline); transport thật của macOS bây giờ là hysteria2.
+        let key = WireGuardKeychain.loadOrCreatePrivateKey()
+        let overlay = overlayIP ?? TunnelConfigCache.load()?.overlayIP ?? "10.77.0.2"
+        let config = Self.buildConfig(
+            privateKeyBase64: key.privateKey,
+            overlayIP: overlay,
+            exitEndpoint: node.endpoint,
+            exitPublicKey: node.public_key
+        )
+        do {
+            try await prepareConfiguration(
+                config,
+                nodeId: node.id,
+                wsRelayURL: node.relayURL,
+                hysteriaNode: node
+            )
+            log.info("configuration: đã lưu profile \(Self.currentProfileName, privacy: .public) kèm hysteria2 (node \(node.id, privacy: .public))")
+        } catch {
+            log.error("configuration: lưu profile thất bại: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func loadManagerFromPreferences() async {

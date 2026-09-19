@@ -49,11 +49,21 @@ struct ExitNode: Equatable, Codable, Identifiable {
     /// UDP nên dùng chung một field là gửi nhầm transport vào nhầm cổng ⇒ handshake im lặng.
     /// Control plane nay cấp cả hai field tường minh.
     var wg_relay_url: String? = nil
+
+    /// Relay cho transport HYSTERIA2 (QUIC trong WebSocket, hysteria UDP 8443 của node).
+    ///
+    /// Vì sao field riêng: relay hysteria và relay WireGuard hạ cánh ở HAI cổng UDP khác
+    /// nhau trên node; đưa relay WireGuard cho hysteria là QUIC gõ vào cổng WireGuard và
+    /// im lặng tuyệt đối. Control plane đã trả field này trong `/v1/nodes`.
+    var hy_relay_url: String? = nil
 }
 
 extension ExitNode {
     /// Relay đưa vào tunnel: ưu tiên field mới, lùi về field cũ cho coordinator chưa cập nhật.
     var relayURL: String? { wg_relay_url ?? ws_relay_url }
+
+    /// Relay cho transport hysteria2 (nil = client dùng mặc định của HysteriaDefaults).
+    var hysteriaRelayURL: String? { hy_relay_url }
 
     /// Fallback exit nodes used when the coordinator is unreachable (e.g. on
     /// censored networks where the control plane domain/IP is blocked). Mirrors

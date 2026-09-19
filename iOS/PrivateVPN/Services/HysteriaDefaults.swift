@@ -29,8 +29,15 @@ enum HysteriaDefaults {
     /// Địa chỉ utun, khớp Android (100.100.100.101/30).
     static let tunIPv4Address = "100.100.100.101"
     static let tunIPv4SubnetMask = "255.255.255.252"
+    /// Cùng địa chỉ nhưng ở dạng CIDR cho `MobileServe`: Go parse bằng `netip.ParsePrefix`
+    /// nên thiếu "/" là lỗi ngay (`bad ipv4 "100.100.100.101": no '/'`) và transport chết
+    /// đúng lúc vừa lên. Khớp `HY_TUN_IPV4` của Android (`HysteriaVpnService.kt:1121`).
+    static let tunIPv4CIDR = "100.100.100.101/30"
     static let tunIPv6Address = "2001::ffff:ffff:ffff:fff1"
     static let tunIPv6PrefixLength = 126
+    /// Địa chỉ IPv6 đưa cho `MobileServe`. Để RỖNG như Android (`HY_TUN_IPV6 = ""`):
+    /// tunnel của sản phẩm chỉ áp IPv4 settings, đưa IPv6 vào đây là lệch với utun thật.
+    static let tunIPv6CIDR = ""
 
     /// Brutal CC: khai SÁT băng thông thật của mạng đang dùng. Khai cao hơn thật
     /// làm Brutal tự bóp nghẽn (đo được: khai 300/1000 Mbps ⇒ 1,3 Mbps).
