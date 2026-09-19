@@ -86,10 +86,37 @@ Biến môi trường (`/etc/agent-bus.env`, quyền 600): `AGENT_BUS_TOKEN`, `A
 - Đánh thức vì một tin bus **không gắn task nào trong sổ** thì watcher KHÔNG ghi sự kiện `woken`
   (tránh sinh thư mục task rác; đã gặp thật với tin test và đã vá).
 
-## 8. Giới hạn phải biết
+## 8. Giới hạn của kiểu poll (trước 19/09/2026)
 
 - Bus là hàng đợi **một chiều mỗi lần gửi**: ai cần tin thì phải poll (watcher làm việc đó).
 - Nếu watcher không chạy ở một bên, tin vẫn nằm trong hàng đợi (không mất) nhưng **không ai đánh thức** —
   `node ops/task.mjs list` sẽ cảnh báo `⚠ giao N phút, CHƯA thấy đánh thức/ack`.
 - Token nằm trong file `.env.bus` (máy) và `/etc/agent-bus.env` (VPS). Lộ token = người khác đọc/ghi được
   hàng đợi — đổi token thì sửa cả hai nơi rồi restart `agent-bus`.
+
+## 9. KÊNH ĐẨY (SSE) — thay cho poll
+
+Từ 19/09/2026 connector có thêm `GET /subscribe?agent=win&since=<id>&host=<tên máy>`: giữ kết nối
+mở, có tin cho agent đó là **đẩy xuống ngay** (Server-Sent Events). Đây là cách đã bỏ hẳn kiểu poll
+20 giây — poll bắt máy Windows spawn git liên tục, mỗi tiến trình là một cửa sổ console nháy lên.
+
+- Phía máy: `node ops/agent-listen.mjs` (chạy ẩn bằng `ops\agent-listen-hidden.vbs`). Nhận tin thì
+  nó chạy **một vòng** `agent-watch.mjs --once --auto` — vòng đó vẫn là nơi duy nhất quyết định có
+  đánh thức harness hay không, nên không có hai đường xử lý tin.
+- Nhịp tim 20 giây chỉ để giữ kết nối khỏi bị cắt vì rảnh (Cloudflare cắt sau ~100 giây); client
+  **không** hỏi gì trong nhịp tim nên lúc rảnh không sinh tiến trình nào.
+- `/pull` vẫn giữ: dùng khi mới nối lại (vớt tin gửi trong lúc máy tắt) và làm đường dự phòng.
+- `/health` báo `subscribers` — nhìn đó là biết bên kia có đang nghe được hay không.
+- Client gửi `Accept-Encoding: identity` để không tầng nào (Caddy, Cloudflare) nén và đệm luồng;
+  endpoint tự đệm ~2KB ngay đầu để mọi tầng đệm xả dữ liệu đi thay vì giữ lại chờ đủ gói.
+
+Kiểm tra kênh từ máy bất kỳ:
+
+```bash
+curl -sN -H "Authorization: Bearer $TOKEN" -H "Accept-Encoding: identity" \
+  "$BUS_URL/subscribe?agent=mactest&host=probe"      # thấy comment đệm + event: hello là thông
+```
+
+## 10. Giới hạn phải biết (bản cũ, giữ để đối chiếu)
+
+Các dòng dưới đây nói về kiểu POLL trước đây — nay chỉ còn là đường dự phòng:

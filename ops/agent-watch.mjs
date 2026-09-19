@@ -81,9 +81,20 @@ function loadBusEnv() {
   };
 }
 
+/**
+ * Trên Windows, mỗi tiến trình con là MỘT cửa sổ console đen nháy lên rồi tắt: `windowsHide` mặc
+ * định là `false`, nên Node không truyền cờ CREATE_NO_WINDOW. Watcher gọi git hàng chục lần mỗi
+ * vòng poll ⇒ màn hình nháy không ngớt (đã gặp thật: "cả đống windows command chạy rồi tắt loạn
+ * cả mắt"). Đặt cờ này cho MỌI lần spawn/exec. Trên macOS/Linux nó vô hại.
+ */
+const NO_WINDOW = { windowsHide: true };
+
+/** JSON.parse chịu được BOM — file sự kiện do PowerShell 5.1 ghi có thể mở đầu bằng \uFEFF. */
+const parseJson = (text) => JSON.parse(String(text ?? "").replace(/^\uFEFF/, ""));
+
 const git = (...argv) => {
   try {
-    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return execFileSync("git", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...NO_WINDOW }).trim();
   } catch (error) {
     return `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
   }
@@ -99,26 +110,103 @@ function loadState() {
 }
 function saveState(state) {
   fs.mkdirSync(path.dirname(statePath()), { recursive: true });
-  fs.writeFileSync(statePath(), `${JSON.stringify(state, null, 1)}\n`);
+  const text = `${JSON.stringify(state, null, 1)}\n`;
+  // Ghi qua file tạm rồi đổi tên: hai tiến trình cùng ghi (đã gặp thật khi chạy chồng watcher)
+  // không thể để lại file cụt, và lần ghi sau luôn thấy bản hoàn chỉnh của lần trước.
+  const tmp = `${statePath()}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, text);
+    fs.renameSync(tmp, statePath());
+  } catch {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* thôi */ }
+    fs.writeFileSync(statePath(), text);
+  }
+}
+
+/**
+ * Chốt COOLDOWN dùng chung cho cả hai đường đánh thức (sổ git và connector).
+ *
+ * Vì sao cần: một việc có thể sinh nhiều tin trên connector (sent → progress → done), nếu mỗi tin
+ * đều boot một phiên thì chỉ một việc cũng đủ mở 3–4 session. Đã gặp thật: 4 session DSH trong 6 phút.
+ */
+function cooldownBlocked(state, id) {
+  const last = state.lastWake?.[id] ? new Date(state.lastWake[id]).getTime() : 0;
+  return Boolean(last) && Date.now() - last < COOLDOWN * 1000;
+}
+
+function markWake(state, id) {
+  if (!state.lastWake) state.lastWake = {};
+  state.lastWake[id] = new Date().toISOString();
+  saveState(state);
+}
+
+/**
+ * Đọc nhiều blob trong MỘT tiến trình git (`cat-file --batch`).
+ *
+ * Vì sao: bản cũ gọi `git show` cho TỪNG file sự kiện — mỗi file là một tiến trình ⇒ mỗi file là
+ * một cửa sổ console nháy trên Windows. Sổ càng dài thì bão càng dày. Một tiến trình cho tất cả.
+ */
+function gitCatFile(shas) {
+  if (!shas.length) return new Map();
+  let out;
+  try {
+    out = execFileSync("git", ["cat-file", "--batch"], {
+      input: `${shas.join("\n")}\n`,
+      // KHÔNG truyền encoding: mặc định 'buffer' mới cắt đúng theo BYTE (JSON tiếng Việt là
+      // UTF-8 nhiều byte, cắt theo ký tự sẽ lệch). Truyền encoding:"buffer" là lỗi — Node chê
+      // "Unknown encoding: buffer".
+      maxBuffer: 64 * 1024 * 1024,
+      ...NO_WINDOW,
+    });
+  } catch {
+    return null;
+  }
+  const blobs = new Map();
+  let offset = 0;
+  while (offset < out.length) {
+    const headerEnd = out.indexOf(10, offset);
+    if (headerEnd < 0) break;
+    // dạng: "<sha> <type> <size>" hoặc "<sha> missing"
+    const parts = out.toString("utf8", offset, headerEnd).trim().split(" ");
+    offset = headerEnd + 1;
+    if (parts.length < 3) continue;
+    const size = Number(parts[2]);
+    if (!Number.isFinite(size)) continue;
+    blobs.set(parts[0], out.toString("utf8", offset, offset + size));
+    offset += size + 1;
+  }
+  return blobs;
 }
 
 /** Đọc sổ từ origin/flowgpt (không cần merge vào cây đang làm việc). */
 function readLedger() {
-  const listing = git("ls-tree", "-r", "--name-only", "origin/flowgpt", `${TASKS_DIR}/`);
+  const listing = git("ls-tree", "-r", "origin/flowgpt", `${TASKS_DIR}/`);
   if (listing.startsWith("!git")) return { error: listing, tasks: [] };
-  const files = listing.split("\n").filter((line) => line.endsWith(".json") && !line.includes("/."));
+  const files = [];
+  for (const line of listing.split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab < 0) continue;
+    const path = line.slice(tab + 1);
+    if (!path.endsWith(".json") || path.includes("/.")) continue;
+    const sha = line.slice(0, tab).trim().split(/\s+/)[2];
+    if (sha) files.push({ path, sha });
+  }
+  const blobs = gitCatFile([...new Set(files.map((entry) => entry.sha))]);
+  if (!blobs) return { error: "!git: cat-file --batch thất bại", tasks: [] };
   const byTask = new Map();
-  for (const file of files) {
-    const id = file.split("/")[2];
+  for (const entry of files) {
+    const id = entry.path.split("/")[2];
     if (!id) continue;
     let event;
     try {
-      event = JSON.parse(git("show", `origin/flowgpt:${file}`));
+      // BOM: PowerShell 5.1 (`Set-Content -Encoding UTF8`, `echo >`) ghi kèm BOM \uFEFF, JSON.parse
+      // sẽ chết và sự kiện bị BỎ IM LẶNG. Đã gặp thật với 1 file win-progress. Phải cắt BOM.
+      event = parseJson(blobs.get(entry.sha));
     } catch {
       continue;
     }
     if (!byTask.has(id)) byTask.set(id, []);
-    byTask.get(id).push({ ...event, file });
+    byTask.get(id).push({ ...event, file: entry.path });
   }
   const tasks = [];
   for (const [id, events] of byTask) {
@@ -151,7 +239,7 @@ function ledgerNewestAt() {
     for (const file of fs.readdirSync(dir)) {
       if (!file.endsWith(".json")) continue;
       try {
-        const event = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"));
+        const event = parseJson(fs.readFileSync(path.join(dir, file), "utf8"));
         const at = new Date(event.at ?? 0).getTime();
         if (at > newest) newest = at;
       } catch { /* bỏ file hỏng */ }
@@ -201,7 +289,10 @@ function runWake(prompt) {
     log(`(--dry-run) sẽ chạy: ${command.slice(0, 160)}…`);
     return;
   }
-  const child = spawn(command, { shell: true, detached: true, stdio: "ignore" });
+  // `spawn` KHÔNG có trong phạm vi file này (chỉ có `childProcessSpawn`) — gọi tên trần là
+  // ReferenceError, và vì nó nằm trong runWake nên MỌI lần đánh thức đều chết ngay tại đây:
+  // không boot harness, cũng không ghi được bằng chứng `woken`. Đã gặp thật.
+  const child = childProcessSpawn(command, { shell: true, detached: true, stdio: "ignore", ...NO_WINDOW });
   child.unref();
   log(`đã đánh thức: ${command.split(" ").slice(0, 4).join(" ")}… (pid ${child.pid})`);
 }
@@ -263,7 +354,7 @@ function refreshBoard() {
   if (DRY) return;
   try {
     const { spawn } = require_childProcess();
-    spawn(process.execPath, ["ops/status-board.mjs"], { cwd: process.cwd(), detached: true, stdio: "ignore" }).unref();
+    spawn(process.execPath, ["ops/status-board.mjs"], { cwd: process.cwd(), detached: true, stdio: "ignore", ...NO_WINDOW }).unref();
   } catch {
     /* thôi */
   }
@@ -312,8 +403,31 @@ async function tickBus(state) {
     saveState(state);
   }
   let woke = 0;
-  for (const message of payload?.messages ?? []) {
-    state.busSince = Math.max(Number(state.busSince ?? 0) || 0, message.id);
+  const queue = payload?.messages ?? [];
+
+  // NHÍCH CON TRỎ NGAY và ghi xuống đĩa TRƯỚC khi đánh thức.
+  //
+  // Đây là gốc lỗi thật phía Windows: con trỏ kẹt ở 11 nên mỗi vòng poll lại thấy 6 tin cũ
+  // (13,18,23,24,25,26) và boot lại chúng ⇒ 4 session DSH trong 6 phút. Ghi con trỏ trước khi
+  // làm việc nặng thì dù tiến trình chết giữa chừng, tin đã xử lý cũng không thể phát lại.
+  const highest = queue.reduce((max, message) => Math.max(max, Number(message.id) || 0), Number(state.busSince ?? 0) || 0);
+  if (highest > (Number(state.busSince ?? 0) || 0)) {
+    state.busSince = highest;
+    saveState(state);
+  }
+
+  // Nhớ riêng từng id đã xử lý: kể cả con trỏ có bị lùi (chạy chồng, file trạng thái cũ) thì
+  // một tin cũng không bao giờ đánh thức hai lần.
+  const handled = new Set(state.seenBus ?? []);
+  for (const message of queue) {
+    if (handled.has(message.id)) {
+      log(`BUS #${message.id} đã xử lý trước đó — bỏ qua`);
+      continue;
+    }
+    handled.add(message.id);
+    state.seenBus = [...handled].slice(-500);
+    saveState(state);
+
     log(`BUS #${message.id} ${message.from}→${message.to} [${message.kind}] ${message.title}`);
     if (!DRY) void alertHuman(`BUS #${message.id} · ${message.from}→${message.to} · ${message.kind}\n${message.title}${message.body ? `\n${message.body.slice(0, 300)}` : ""}`);
     if (!WAKE_KINDS.has(String(message.kind)) && !message.ref) continue;
@@ -321,8 +435,14 @@ async function tickBus(state) {
       id: message.ref ?? `bus-${message.id}`,
       task: { id: message.ref ?? `bus-${message.id}`, title: message.title, to: message.to, from: message.from, detail: "docs/TASK-PROTOCOL.md" },
     };
+    // Nhiều tin cho CÙNG một việc (sent → progress → done) chỉ được boot MỘT phiên.
+    if (cooldownBlocked(state, entry.id)) {
+      log(`  #${message.id} thuộc ${entry.id} vừa đánh thức trong ${COOLDOWN}s — chỉ ghi nhận, không boot thêm`);
+      continue;
+    }
     const reason = `connector VPS: ${message.kind} từ ${message.from} — ${message.title}`;
     if (AUTO) {
+      markWake(state, entry.id);
       runWake(buildPrompt(entry, reason));
       recordWake(entry, reason);
     } else {
@@ -330,7 +450,6 @@ async function tickBus(state) {
     }
     woke += 1;
   }
-  saveState(state);
   return woke;
 }
 
@@ -392,14 +511,14 @@ async function tick(state, { initializeOnly = false } = {}) {
       state.seen.push(seenKey);
       continue;
     }
-    const lastWake = state.lastWake[entry.id] ? new Date(state.lastWake[entry.id]).getTime() : 0;
-    if (Date.now() - lastWake < COOLDOWN * 1000) {
+    if (cooldownBlocked(state, entry.id)) {
       state.seen.push(seenKey);
+      saveState(state);
       continue;
     }
     log(`ĐÁNH THỨC vì ${reason} → ${entry.id} (${entry.task.title ?? ""})`);
     state.seen.push(seenKey);
-    state.lastWake[entry.id] = new Date().toISOString();
+    markWake(state, entry.id);
     if (AUTO) {
       runWake(buildPrompt(entry, reason));
       recordWake(entry, reason);
