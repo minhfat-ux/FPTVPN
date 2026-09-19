@@ -16,11 +16,12 @@ file đã có và in sha256 của cả bốn file ở cuối).
 | `wintun.dll` | 427 552 bytes | `e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce` |
 | `wireguard-go.exe` | 3 079 680 bytes | `fd257c7f42284af3d361547940c83bb61f786b8a9ef57e88e49b8a52f39ec2e9` |
 | `flowvpnrelay.exe` | 10 338 304 bytes | `cec746978ee30747183d0170cf7d75f925dabb183e8789398f808f4052189d75` |
-| `sing-box.exe` | 81 883 648 bytes | `b838de45bd0b2e6ddbed1977e4745622f7dffab3b293807ff4c6b1b640fed909` |
+| `sing-box.exe` | 59 290 624 bytes | `2ee729bd808ead2188f8d6f438c9babd8793d45a64ed44c9a7a5f11fe4f67715` |
 
 ⓘ `flowvpnrelay.exe` là bản build của CHÍNH chúng ta (mã nguồn trong repo:
 `tools/hysteria-relay/`), nên hash sẽ đổi mỗi lần build lại — cập nhật bảng này khi đổi.
-`sing-box.exe` là binary upstream tải nguyên bản, không sửa.
+`sing-box.exe` **cũng là bản build của chính chúng ta** từ source upstream v1.14.1 (không sửa mã
+nguồn, chỉ khác cờ build) — xem §4 để biết vì sao KHÔNG dùng bản release tải sẵn.
 
 ---
 
@@ -260,16 +261,28 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## 4. sing-box.exe
 
-- **Phiên bản:** sing-box **v1.14.1** (bản `windows-amd64`).
-- **Nguồn:** https://github.com/SagerNet/sing-box/releases/download/v1.14.1/sing-box-1.14.1-windows-amd64.zip
-  (mã nguồn tương ứng: tag `v1.14.1` của cùng repo).
-- **Lệnh lấy file:**
+- **Phiên bản:** sing-box **v1.14.1** — **TỰ BUILD TỪ SOURCE** (tag `v1.14.1`), không tải bản
+  release sẵn.
+- **Vì sao không dùng bản release tải sẵn** (đo thật 19/09/2026, **đừng đổi lại**):
+  hash của `sing-box-1.14.1-windows-amd64.exe` (`b838de45…`) nằm trong danh sách bị **Smart App
+  Control** trên Windows 11 chặn — policy `VerifiedAndReputableDesktop`
+  (`PolicyGUID {0283ac0f-fff1-49ae-ada1-8a933130cad6}`), event CodeIntegrity **3033/3077/3118**,
+  `Requested Signing Level=2` / `Validated Signing Level=1`, **Status `0xc0e90002`**
+  ("did not meet the Enterprise signing level requirements"). Defender quét chính file đó:
+  *found no threats* — tức không phải mã độc, chỉ là hash bị đánh dấu.
+  Đã chứng minh là **chặn theo hash**: cùng file đó chỉ cần đổi 4 byte PE checksum là **chạy được**,
+  và bản tự build từ đúng source v1.14.1 cũng chạy bình thường trên máy bật Smart App Control.
+  ⇒ Asset phát hành phải là bản do mình build; không sửa mã nguồn upstream, chỉ khác cờ build.
+- **Lệnh build** (script `windows/assets/fetch-assets.sh` làm đúng lệnh này):
   ```sh
-  curl -fsSL -o sing-box-1.14.1-windows-amd64.zip \
-    https://github.com/SagerNet/sing-box/releases/download/v1.14.1/sing-box-1.14.1-windows-amd64.zip
-  unzip sing-box-1.14.1-windows-amd64.zip
-  cp sing-box-1.14.1-windows-amd64/sing-box.exe windows/assets/sing-box.exe
+  git clone --depth 1 --branch v1.14.1 https://github.com/SagerNet/sing-box.git sing-box-src
+  cd sing-box-src
+  go build \
+    -tags "with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale" \
+    -trimpath -ldflags "-s -w -X github.com/sagernet/sing-box/constant.Version=1.14.1" \
+    -o windows/assets/sing-box.exe ./cmd/sing-box
   ```
+  (Build trên Windows bằng Go 1.27.1; `CGO_ENABLED=0`.)
 - **Giấy phép:** **GPL-3.0-or-later** (© 2022 nekohasekai <contact-sagernet@sekai.icu>), kèm
   điều khoản cấm dùng tên/ám chỉ liên hệ với ứng dụng gốc khi chưa được đồng ý. Nội dung license
   đi kèm trong zip upstream:
