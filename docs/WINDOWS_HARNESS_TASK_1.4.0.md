@@ -20,3 +20,11 @@ Gửi số: READY mất bao lâu, tốc độ RAW vs VPN (Mbps), IP thoát, WeCh
 ## Lưu ý
 - Không cần DSH/SSH cho test này — chạy trực tiếp trên máy, chụp ảnh/báo số là đủ.
 - Nếu `verify-relay.ps1` không in READY: kiểm `curl.exe https://api.meetflowai.site/v1/health` có 200 không (mạng ra Cloudflare), và Windows Defender có chặn 2 file .exe không.
+
+## BỔ SUNG (theo yêu cầu chủ dự án): BUILD + PACKAGE trước, rồi mới test
+0. Build + đóng gói bản cài trên chính máy Windows (Admin, PowerShell):
+   - `cd <repo>\windows\installer`
+   - `powershell -ExecutionPolicy Bypass -File build.ps1`  → `dotnet publish` self-contained win-x64 + đóng gói Inno Setup ra `windows\installer\out\VPNFlow-Setup-*.exe` (cần Inno Setup 6 đã cài).
+   - Kiểm `out\` có `VPNFlow-Setup-*.exe` và publish có đủ `flowvpnrelay.exe`, `sing-box.exe`, `wintun.dll`, `wireguard-go.exe`.
+   - Cài bản `out\VPNFlow-Setup-*.exe` (hoặc chạy thẳng `windows\dist\PrivateVPNWindows.App.exe`) rồi test theo các bước 1–7 ở trên.
+   - Báo kết quả BUILD + đường dẫn installer + sha256 của file cài.
