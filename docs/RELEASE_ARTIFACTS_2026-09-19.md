@@ -100,3 +100,46 @@ Chủ dự án yêu cầu **khoá 2 bản này để test vài ngày**. Các b�
 **macOS không nằm trong lệnh khoá này** (đang build lại với khai báo động + các fix trên).
 
 Việc treo khi khoá: 3 fix nhỏ (Android clamp, iOS memory, macOS khai động), multipath, telemetry client (`bw_policy`), node HK.
+
+## macOS — ĐO THẬT + PHÁT HÀNH LẠI (20/09/2026 ~01:30, khách sạn Quảng Châu)
+
+### 1. Số đo (MacBook Air, node-1 `103.173.155.50`, relay `/relay/vn1hy`)
+
+| Phép đo | RAW (buộc ra `en0`) | Qua VPN | VPN/RAW |
+|---|---|---|---|
+| 1 luồng 50 MB (speed.cloudflare.com) | 49,7 Mbps | 31,3 / 36,3 / 38,3 / 41,5 / 41,8 / 45,5 / 48,2 / 49,3 Mbps (8 lượt) | 63–99% |
+| 4 luồng × 25 MB | 75,3 Mbps | 42,8 / 55,5 / 71,0 Mbps | 57–94% |
+| 8 luồng × 10 MB | — | 56,9 Mbps | — |
+
+Streaming qua VPN (YouTube, đo bằng realtime factor = thời lượng tải được / thời gian tải):
+
+| Stream | Goodput | realtime |
+|---|---|---|
+| 1080p60 AV1 (nominal 1,57 Mbps) | 3,0 Mbps | 1,52× |
+| 1440p60 AV1 (3,94 Mbps) | 7,5 Mbps | 1,56× |
+| 1440p60 VP9 (5,97 Mbps) | 11,6 Mbps | 1,46× |
+| 4K60 AV1 (8,98 Mbps) | 17,0 Mbps | 1,70× |
+| 4K60 VP9 (17,17 Mbps) | 28,6 Mbps | 1,42× |
+| 4K60 VP9 **liên tục 120 s** | 30,4 Mbps trung bình | 1,90× (không suy giảm) |
+| Apple HLS 1080p (bipbop) | — | 7× |
+
+Khác: tunnel lên lại sau **2 s** khi Connect; khai báo đọc từ bộ nhớ `up=20565/down=68552 kbps`; ICMP trong tunnel 0% loss (RTT do stack tunnel trả lời nên không phản ánh RTT thật); DNS qua tunnel 0,17–0,22 s; extension ăn **84–128% CPU 1 core**, RSS 72–78 MB khi chở 30 Mbps.
+
+⇒ Đạt và vượt chỉ tiêu ≥20 Mbps (đơn luồng 31–49 Mbps), 4K60 chạy êm không đệm.
+
+### 2. Lỗi tìm được khi đo
+
+1. **Link tải Mac phục vụ bản CŨ 5 ngày**: route `GET /v1/downloads/mac` trỏ vào `/root/flowvpn-mac/VPNFlow-mac.dmg` (env `MAC_APP_ZIP_PATH=/root/flowvpn-mac/VPNFlow-mac.dmg` trong `/etc/systemd/system/flowvpn-cp.service.d/store-urls.conf`), mà file DMG đó là **1.3.3 / build 13, last-modified 15/09** — người dùng tải về không phải bản 1.4.0. Đã thay bằng DMG 1.4.0/14 (mục dưới) và **kiểm bằng sha256 tải qua route công khai** (lần trước chỉ kiểm HTTP 200 nên lọt).
+2. **Bản macOS đang cài thiếu guard "ramp không được HẠ số khai"**: log thật `bw: ramp … observed=11036 old=20565/68552 new=16554/16554 reason=idle-reconnect` — hạ `down` 4 lần. Bản build mới (guard có trong binary, kiểm bằng chuỗi `không cho số khai`) log `observed=20696 old=20565/68552 new=25707/31044`, cả hai chiều đều tăng.
+3. **Build macOS phải kèm credential**: `xcodebuild` trần cho ra app **thiếu** `HysteriaPassword`/`HysteriaObfs` trong Info.plist ⇒ extension chết với `providerConfiguration thiếu khoá "hysteria"`. Phải `eval "$(scripts/dev-hysteria-build-env.sh)"` rồi truyền `HYST_PASSWORD=… HYST_OBFS=…`.
+
+### 3. Artifact đã phát hành (thay bản 1.3.3 trên route tải)
+
+| | |
+|---|---|
+| DMG | `/root/flowvpn-mac/VPNFlow-mac.dmg` — **23.961.684 bytes**, sha256 `d416b3ff45480add91596bd37f59b6ac6b9cfa90ebc1448f4bfd7731be19ecff` (backup bản 1.3.3: `VPNFlow-mac.dmg.backup-20260920-004817`) |
+| ZIP | `/root/flowvpn-mac/VPNFlow-mac.zip` — **21.496.293 bytes**, sha256 `72f06385c6a810ffcc20282ac0cfe995954c169d499b60c7bb978f70178b7715` |
+| Version | app + extension **1.4.0 / build 14**, extension sha256 `1ee5463afce7431f806aa30725fe56485717e7b721b29b67f9c9b890ffbb48da` |
+| Ký | `Apple Development: minhnb2@me.com`; chưa notarize |
+| Kiểm chứng | `curl https://meetflowai.site/v1/downloads/mac` → 23.961.684 bytes, sha256 khớp `d416b3ff…` ✅ |
+| Nguồn | build từ cây làm việc 20/09 (guard + `pendingForceAfter` + lọc bộ nhớ nhiễm); nguồn **không đổi** trong lúc build (`shasum iOS/PrivateVPNPacketTunnel/*.swift` trước/sau) |

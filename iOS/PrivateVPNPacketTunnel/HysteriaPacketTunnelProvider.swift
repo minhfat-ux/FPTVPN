@@ -114,8 +114,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Trần số lần dựng lại transport vì ramp trong MỘT phiên (ramp là tối ưu, không được
     /// phép thành vòng lặp phá tunnel). Hết lượt ⇒ số mới đã nằm trong bộ nhớ, áp ở lần sau.
     private static let rampMaxAttempts = 5
-    /// Ngưỡng ghi log `measured=`: dưới mức này chỉ là DNS/ping, không phải một lần đo.
-    private static let bandwidthLogMinKbps = 500
+    /// Ngưỡng ghi log `measured=`: dưới mức này chỉ là DNS/ping, không phải một lần đo. Trùng
+    /// `BandwidthControl.minMeasuredKbps` (300 kbps) — đo THẬT trên iPad 19/09/2026 ra
+    /// 503/513/570 kbps, sát ngưỡng 500 tới mức một mẫu thấp hơn chút là không có dòng log nào.
+    private static let bandwidthLogMinKbps = 300
+    /// Trần thời gian chờ bản cập nhật MẠNG đầu tiên của `NWPathMonitor` lúc mở phiên (xem
+    /// `prepareBandwidthSession`). Thực tế về trong <100ms; trần này chỉ để `startTunnel`
+    /// không bao giờ bị treo (ngân sách chung là `startTimeout` = 20s).
+    private static let bandwidthPathWait: TimeInterval = 1.5
     /// Số lượt thử dựng lại transport + nhịp chờ giữa hai lượt (xem `startTransportRetrying`).
     private static let rampTransportRetries = 4
     private static let rampTransportRetryDelay: TimeInterval = 0.3
@@ -387,8 +393,36 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         measuredPeakDownKbps = 0
         activeBandwidthReason = nil
         let monitor = NWPathMonitor()
-        let identity = BandwidthControl.currentNetworkIdentity(path: monitor.currentPath)
+        // PHẢI `start` rồi CHỜ bản cập nhật ĐẦU TIÊN rồi mới đọc `currentPath`.
+        //
+        // Vì sao: `currentPath` trước `start(queue:)` là path RỖNG (không interface) ⇒
+        // `currentNetworkIdentity` trả `other|if:unknown`, khoá này KHÔNG khớp bộ nhớ đã ghi
+        // (`wifi|if:en0`) nên số đã học bị bỏ qua và MỌI lần kết nối lại khai nấc tĩnh. Đo
+        // thật 19/09/2026 (đúng ca "Connect thứ hai"): bộ nhớ đã có `peakDownKbps=23377`,
+        // `lastDownKbps=7814` mà log vẫn
+        //   `bw: chuẩn bị phiên — net=other|if:unknown … declared up=30000 down=100000 reason=profile`
+        // rồi 3 giây sau mới `net đổi giữa phiên other|if:unknown -> wifi|if:en0`.
+        let firstPath = BandwidthPathBox()
+        let ready = DispatchSemaphore(value: 0)
+        monitor.pathUpdateHandler = { path in
+            // Bản cập nhật đầu tiên đôi khi vẫn chưa có interface: chỉ nhận path ĐÃ có
+            // interface (vẫn có trần `bandwidthPathWait` phòng khi máy không có mạng nào).
+            guard !path.availableInterfaces.isEmpty else { return }
+            if firstPath.store(path) { ready.signal() }
+        }
         monitor.start(queue: bandwidthQueue)
+        if ready.wait(timeout: .now() + Self.bandwidthPathWait) == .timedOut {
+            RelayDiagnostics.shared.log(
+                "bw: chưa có bản cập nhật mạng có interface sau \(Self.bandwidthPathWait)s — "
+                    + "dùng danh tính mạng hiện có (khả năng cao là chưa có mạng nào)"
+            )
+        }
+        // Giữ handler rỗng: `currentPath` phải tiếp tục được cập nhật suốt phiên
+        // (`bandwidthPath` đọc nó để phát hiện ĐỔI MẠNG giữa phiên).
+        monitor.pathUpdateHandler = { _ in }
+        let identity = BandwidthControl.currentNetworkIdentity(
+            path: firstPath.path ?? monitor.currentPath
+        )
         bandwidthLock.lock()
         bandwidthPathMonitor?.cancel()
         bandwidthPathMonitor = monitor
@@ -431,23 +465,48 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let averageDown = bandwidth.lastAverageDownKbps
         if averageDown >= Self.bandwidthLogMinKbps, averageDown != measuredPeakDownKbps {
             measuredPeakDownKbps = averageDown
-            // `best=` là ĐỈNH trượt đã đo của phiên: dòng log này là bằng chứng nghiệm thu
-            // "số khai bám số đo" (declared ≈ best × 85%), và là số được ghi vào bộ nhớ theo
-            // mạng cho lần kết nối sau.
-            RelayDiagnostics.shared.log(
-                "bw: net=\(bandwidth.key) measured=\(averageDown) declared up=\(bandwidth.upKbps) "
-                    + "down=\(bandwidth.downKbps) reason=\(bandwidth.planReason.rawValue) "
-                    + "best=\(bandwidth.peakDownKbps)"
+            logDeclaration(key: bandwidth.key)
+        }
+        if let decision {
+            logRampDecision(decision, key: bandwidth.key)
+        }
+        // Thay đổi đang chờ phải được THỬ ÁP ở MỌI nhịp, không chỉ nhịp sinh ra quyết định:
+        // quyết định kẹp chỉ sinh ra MỘT lần, còn việc áp nó có thể phải chờ tunnel rảnh (hoặc
+        // tới hạn buộc áp — xem `BandwidthControl.pendingForceAfter`). Chỉ thử khi có quyết
+        // định mới là bỏ rơi đúng ca tunnel không bao giờ rảnh ⇒ số khai sai nằm lại trong
+        // transport và đường nghẽn cho tới khi chết.
+        if bandwidth.pendingChange {
+            bandwidthLock.lock()
+            bandwidthRampPending = true
+            bandwidthLock.unlock()
+            applyBandwidthRampIfIdle(
+                reason: bandwidth.pendingReason?.label ?? BandwidthControl.Reason.probe.label
             )
         }
-        guard let decision else { return }
-        logRampDecision(decision, key: bandwidth.key)
-        // Ràng buộc cứng: số khai chỉ được đổi bằng cách dựng lại transport ⇒ CHỈ áp khi tunnel
-        // rảnh. Đang truyền thì để dành (pendingChange) cho lần rảnh/kết nối sau.
-        bandwidthLock.lock()
-        bandwidthRampPending = true
-        bandwidthLock.unlock()
-        applyBandwidthRampIfIdle(reason: decision.logReason)
+    }
+
+    /// Dòng telemetry `bw: …` của SỐ KHAI ĐANG CHẠY.
+    ///
+    /// `declared` ở đây là số nằm THẬT trong transport (Brutal CC pace theo đúng nó), không
+    /// phải số đã quyết định — chỉ số này mới là bằng chứng nghiệm thu "khai bám số đo"
+    /// (`declared ≈ best × 85%`). Khi quyết định mới CHƯA áp được (chờ tunnel rảnh / chờ hạn
+    /// buộc áp) thì in thêm `plan=…` để nhìn log biết ngay vì sao số đang chạy khác số đã chốt.
+    private func logDeclaration(key: String, event: String? = nil) {
+        guard let bandwidth else { return }
+        let plan = bandwidth.plan
+        var line = "bw: net=\(key) measured=\(bandwidth.lastAverageDownKbps) "
+            + "declared up=\(activeUpKbps) down=\(activeDownKbps) "
+            + "reason=\(activeBandwidthReason?.label ?? BandwidthControl.Reason.probe.label) "
+            + "best=\(bandwidth.peakDownKbps)"
+        if plan.upKbps != activeUpKbps || plan.downKbps != activeDownKbps {
+            line += " plan=up\(plan.upKbps)/down\(plan.downKbps) reason-plan=\(plan.reason.label)"
+            if bandwidth.pendingChange, let since = bandwidth.pendingSince {
+                line += " pending=\(Int(Date().timeIntervalSince(since)))s"
+            }
+        }
+        if let event { line += " (\(event))" }
+        RelayDiagnostics.shared.log(line)
+        if event != nil { log.log(level: .default, "\(line, privacy: .public)") }
     }
 
     /// Dòng telemetry khi ramp — yêu cầu `bw: ramp net=… observed=… old=… new=… reason=…`.
@@ -455,17 +514,6 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let line = "bw: ramp net=\(key) observed=\(decision.observedKbps) old=\(decision.oldUpKbps)/"
             + "\(decision.oldDownKbps) new=\(decision.newUpKbps)/\(decision.newDownKbps) "
             + "reason=\(decision.logReason)"
-        RelayDiagnostics.shared.log(line)
-        log.log(level: .default, "\(line, privacy: .public)")
-    }
-
-    /// Dòng telemetry của số khai ĐANG chạy thật (khác số đã quyết định: quyết định chỉ vào
-    /// hiệu lực sau khi dựng lại transport). Ghi kèm lý do của lần đổi gần nhất.
-    private func logActiveDeclaration(key: String, event: String) {
-        let line = "bw: net=\(key) measured=\(bandwidth?.lastAverageDownKbps ?? 0) "
-            + "declared up=\(activeUpKbps) down=\(activeDownKbps) "
-            + "reason=\(activeBandwidthReason?.label ?? BandwidthControl.Reason.probe.label) "
-            + "best=\(bandwidth?.peakDownKbps ?? 0) (\(event))"
         RelayDiagnostics.shared.log(line)
         log.log(level: .default, "\(line, privacy: .public)")
     }
@@ -531,7 +579,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         guard BandwidthControl.allowsTransportRebuild else { return false }
         guard let bandwidth, bandwidth.pendingChange else { return false }
         guard isBandwidthRampPending else { return false }
-        guard isBandwidthIdle() else { return false }
+        // HẠ số khai mà tunnel KHÔNG BAO GIỜ rảnh (đang flood) ⇒ buộc áp sau `pendingForceAfter`
+        // (xem chú thích hằng số): đây là việc CHỮA, không phải tối ưu, nên được phép đứt stream
+        // đang mở — để nguyên là số khai sai nằm lại trong transport cho tới khi tunnel chết.
+        // TĂNG thì vẫn chỉ áp ở ranh giới rảnh.
+        let forced = bandwidth.pendingForceExpired(Date())
+        if !forced, !isBandwidthIdle() { return false }
         // Chốt "đang dựng lại" trước mọi việc nặng: nhịp watchdog (5s) và nhịp lấy mẫu (1s) có
         // thể cùng gọi hàm này ở hai hàng đợi khác nhau.
         bandwidthLock.lock()
@@ -545,6 +598,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             bandwidthLock.unlock()
         }
         let plan = bandwidth.plan
+        if forced {
+            RelayDiagnostics.shared.log(
+                "bw: BUỘC áp số khai HẠ sau \(Int(BandwidthControl.pendingForceAfter))s tunnel không rảnh "
+                    + "(đang chở traffic) — đứt stream đang mở để hết flood, "
+                    + "up=\(activeUpKbps)->\(plan.upKbps) down=\(activeDownKbps)->\(plan.downKbps) "
+                    + "reason=\(bandwidth.pendingReason?.label ?? plan.reason.label)"
+            )
+        }
         guard plan.upKbps != activeUpKbps || plan.downKbps != activeDownKbps else {
             // Số khai không đổi (ví dụ chỉ đổi mạng): không cần đứt stream, chỉ chốt lại.
             bandwidth.applied(
@@ -648,7 +709,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             "bw: ramp đã áp sau khi dựng lại transport (mất "
                 + "\(Self.seconds(Date().timeIntervalSince(started)))s, tunnel đang rảnh)"
         )
-        logActiveDeclaration(key: bandwidth.key, event: "ramp đã áp")
+        logDeclaration(key: bandwidth.key, event: "ramp đã áp")
         return true
         #else
         // macOS chưa bật: fd của phiên macOS cũng là cặp socketpair có cầu `TunnelBridge`
@@ -885,18 +946,15 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             }
         }
 
-        // Ramp băng thông: quyết định đã có ở nhịp 1s (`bandwidthStep`) nhưng CHỈ được áp khi
-        // tunnel rảnh — watchdog ở đây chạy mỗi \(Int(Self.trafficCheckInterval))s nên là chỗ
-        // tự nhiên để thử lại (nhịp 1s cũng thử, xem `bandwidthStep`).
-        if isBandwidthRampPending, isBandwidthIdle() {
+        // Ramp băng thông: quyết định đã có ở nhịp 1s (`bandwidthStep`) nhưng số khai chỉ vào
+        // transport khi dựng lại được. Watchdog ở đây chạy mỗi `trafficCheckInterval` giây nên
+        // là chỗ thử lại tự nhiên (nhịp 1s cũng thử, xem `bandwidthStep`); điều kiện "rảnh hay
+        // buộc áp" nằm trong chính `applyBandwidthRampIfIdle`.
+        if isBandwidthRampPending {
             // Lý do in ra log lấy từ chính quyết định đang chờ: `clamp` (kẹp theo số đo — xem
             // `underrunPct`) khác `loss-backoff` (mất gói); còn lại là đường ramp thường.
             let pending = bandwidth?.pendingReason
-            _ = applyBandwidthRampIfIdle(
-                reason: pending == .clamp
-                    ? BandwidthControl.Reason.clamp.label
-                    : (pending == .lossBackoff ? BandwidthControl.Reason.lossBackoff.label : "idle-reconnect")
-            )
+            _ = applyBandwidthRampIfIdle(reason: pending?.label ?? "idle-reconnect")
         }
 
         // Probe chẩn đoán: CHỈ ghi log mạng của máy (xem chú thích ở `startTrafficSupervisor`).
@@ -1400,4 +1458,28 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 /// `DispatchSemaphore` mà không có cảnh báo Swift 6).
 private final class AppliedSettings: @unchecked Sendable {
     var ok = false
+}
+
+/// Hộp nhận `NWPath` ĐẦU TIÊN có interface của `NWPathMonitor`.
+///
+/// Cần hộp + khoá vì `pathUpdateHandler` chạy trên `bandwidthQueue` còn
+/// `prepareBandwidthSession` chờ ở luồng của NetworkExtension (xem chú thích ở đó), và chỉ
+/// bản cập nhật ĐẦU TIÊN mới được tính (`store` trả `false` cho các lần sau ⇒ chỉ `signal`
+/// một lần, không đua).
+private final class BandwidthPathBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: NWPath?
+
+    /// Lưu path; trả `true` đúng một lần — lần gọi ĐẦU TIÊN.
+    func store(_ path: NWPath) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard stored == nil else { return false }
+        stored = path
+        return true
+    }
+
+    var path: NWPath? {
+        lock.lock(); defer { lock.unlock() }
+        return stored
+    }
 }

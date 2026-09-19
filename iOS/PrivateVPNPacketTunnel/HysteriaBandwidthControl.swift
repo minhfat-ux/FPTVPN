@@ -59,6 +59,15 @@ enum BandwidthControl {
     static let lossBackoffMinObserved: TimeInterval = 5
     /// Tunnel rảnh ngần này mới được dựng lại transport để áp số khai mới.
     static let idleBeforeChange: TimeInterval = 2
+    /// Trần thời gian một thay đổi HẠ số khai được CHỜ tunnel rảnh; quá hạn ⇒ buộc dựng lại
+    /// transport dù đang chở traffic.
+    ///
+    /// Vì sao phải có trần: đường bị flood thì **không bao giờ rảnh** — máy vẫn đang cố tải,
+    /// gói vẫn vào tunnel nên "chờ rảnh" thành "chờ mãi", số khai 30/100 Mbps nằm lại trong
+    /// transport và tunnel nghẽn cho tới khi chết (đúng ca iPad 19/09/2026: đo 0,5 Mbps mà
+    /// `declared up=30000 down=100000`). HẠ số khai là việc CHỮA nên được phép đứt stream đang
+    /// mở; TĂNG thì vẫn chỉ áp ở ranh giới rảnh.
+    static let pendingForceAfter: TimeInterval = 5
     /// Một mẫu chỉ tính là "đang chở dữ liệu" khi vượt ngần này (dưới ngưỡng ⇒ coi như rảnh).
     static let busyBytesPerSecond = 2_000
     /// Cho phép DỰNG LẠI transport giữa phiên để áp số khai mới.
@@ -111,7 +120,13 @@ enum BandwidthControl {
     static let underrunPct = 50
     /// Một mẫu chỉ được coi là SỐ ĐO thật khi vượt ngần này (kbps): dưới mức đó chỉ là
     /// DNS/ping. Trùng ngưỡng ghi log `bw: measured=` của provider (`bandwidthLogMinKbps`).
-    static let minMeasuredKbps = 500
+    ///
+    /// Vì sao 300 chứ không phải 500 (bản đầu): log THẬT trên iPad 19/09/2026 đo được
+    /// 503/513/570 kbps — sát ngưỡng 500 tới mức một mẫu 480 kbps là LỌT RA NGOÀI, và khi đó
+    /// số khai 30/100 Mbps không bao giờ được hạ (đúng lỗi đang sửa). 300 kbps duy trì suốt cả
+    /// cửa sổ trượt 10s vẫn là traffic thật — DNS/ping chỉ ~1–20 kbps — nên đây là ngưỡng vừa
+    /// đủ chặt mà không bỏ sót đúng ca cần sửa.
+    static let minMeasuredKbps = 300
     /// Bão hoà RÕ RÀNG (≥90% số khai) ⇒ tăng mạnh hơn một bậc, tiết kiệm số vòng ramp.
     static let saturatedStrongRatio = 0.9
     /// Cửa sổ bộ nhớ: quá ngần này không đo lại được thì bỏ (mạng có thể đã khác).
@@ -298,12 +313,54 @@ enum BandwidthControl {
     /// dùng App Group vì target không có entitlement đó (thêm ⇒ phải cấp lại profile).
     static func loadMemory() -> [String: Memory] {
         memoryLock.lock()
-        defer { memoryLock.unlock() }
+        let decoded = readMemoryUnlocked()
+        memoryLock.unlock()
+        guard !decoded.isEmpty else { return [:] }
+        let now = Date()
+        let fresh = decoded.filter { now.timeIntervalSince($0.value.updatedAt) < memoryFreshness }
+        // Bản ghi NHIỄM bị XOÁ HẲN khỏi store (không chỉ bỏ qua lúc đọc): bản build cũ ghi số
+        // khai nấc tĩnh 30/100 Mbps vào bộ nhớ ngay khi CHƯA đo được gì, nên "có bản ghi" không
+        // đồng nghĩa "có số đã học" — đúng dòng đã đo trên iPad 19/09/2026:
+        //   bw: net=wifi|if:en0 measured=1069 declared up=30000 down=100000 reason=memory
+        // Để nguyên bản ghi đó thì mỗi lần vào cùng mạng lại phải lọc, và nó vẫn chiếm chỗ
+        // trong `maxRememberedNetworks`.
+        let split = splitContaminated(fresh)
+        if !split.removed.isEmpty {
+            RelayDiagnostics.shared.log(
+                "bw: xoá \(split.removed.count) bản ghi bộ nhớ NHIỄM (có số khai mà KHÔNG có "
+                    + "đỉnh ĐO nào): \(split.removed.joined(separator: ", "))"
+            )
+            saveMemory(split.kept)
+        }
+        return split.kept
+    }
+
+    /// Tách bản ghi nhiễm ra khỏi bộ nhớ dùng được (hàm THUẦN, test được ngoài app).
+    static func splitContaminated(_ memory: [String: Memory]) -> (kept: [String: Memory], removed: [String]) {
+        var kept: [String: Memory] = [:]
+        var removed: [String] = []
+        for (key, entry) in memory {
+            if isContaminated(entry) { removed.append(key) } else { kept[key] = entry }
+        }
+        return (kept, removed.sorted())
+    }
+
+    /// Bản ghi KHÔNG có bằng chứng đo nào (không đỉnh nào) — dấu vết của bản build cũ, thứ ghi
+    /// thẳng số khai ra bộ nhớ dù chưa đo gì (xem `persistPeaksIfNeeded`).
+    ///
+    /// Bộ nhớ CHỈ được giữ giá trị ĐO ĐƯỢC, mà bằng chứng duy nhất của một phép đo là ĐỈNH
+    /// (`peakDownKbps`/`peakUpKbps`): chúng chỉ được ghi khi tunnel thật sự chở dữ liệu vượt
+    /// `minMeasuredKbps`. Không có đỉnh ⇒ mọi `lastUp/lastDown` trong bản ghi là số CHƯA từng
+    /// chứng minh (thường đúng bằng nấc tĩnh) ⇒ bỏ.
+    static func isContaminated(_ entry: Memory) -> Bool {
+        entry.peakDownKbps <= 0 && entry.peakUpKbps <= 0
+    }
+
+    private static func readMemoryUnlocked() -> [String: Memory] {
         guard let data = UserDefaults.standard.data(forKey: defaultsKey),
               let decoded = try? JSONDecoder().decode([String: Memory].self, from: data)
         else { return [:] }
-        let now = Date()
-        return decoded.filter { now.timeIntervalSince($0.value.updatedAt) < memoryFreshness }
+        return decoded
     }
 
     static func saveMemory(_ memory: [String: Memory]) {
@@ -354,9 +411,12 @@ enum BandwidthControl {
         var logReason: String {
             switch reason {
             case .lossBackoff: return "loss-backoff"
-            // Kẹp theo số đo: số khai mới KHÔNG phải một bậc ramp mà là f(số đo) — in thẳng ra
-            // để đọc log biết ngay vì sao số khai đổi (xem `underrunPct`).
-            case .clamp: return "clamp"
+            // Số khai mới KHÔNG phải một bậc ramp mà là f(số đo) — in thẳng lý do đã chốt
+            // (`clamp` khi sàn/trần phải can thiệp, `memory` khi số đo tự quyết định) để đọc
+            // log biết ngay vì sao số khai đổi (xem `underrunPct`). Trước đây hai ca này in
+            // "idle-reconnect" — sai hẳn ngữ nghĩa: trên macOS KHÔNG hề dựng lại transport
+            // giữa phiên, số mới chỉ được ghi lại cho lần kết nối sau.
+            case .clamp, .memory: return reason.label
             default: return "idle-reconnect"
             }
         }
@@ -390,6 +450,12 @@ extension BandwidthControl {
         /// Có thay đổi đang chờ áp ở ranh giới an toàn không.
         private(set) var pendingChange = false
         private(set) var pendingReason: Reason?
+        /// Mốc bắt đầu "có thay đổi đang chờ áp" (nil = chưa có gì đang chờ). Dùng để biết đã
+        /// chờ quá `pendingForceAfter` chưa — tunnel bị flood thì không bao giờ rảnh.
+        private(set) var pendingSince: Date?
+        /// Thay đổi đang chờ có phải HẠ số khai không. Chỉ HẠ mới được buộc áp (đứt stream đang
+        /// mở); TĂNG thì vẫn chờ tunnel rảnh.
+        private(set) var pendingIsDecrease = false
         /// Lần cuối thấy tunnel chở dữ liệu thật (để biết "rảnh" hay "đang truyền").
         private(set) var lastActivityAt = Date()
         /// Bộ nhớ theo mạng đã nạp ở đầu phiên.
@@ -471,6 +537,22 @@ extension BandwidthControl {
             Plan(upKbps: upKbps, downKbps: downKbps, reason: planReason)
         }
 
+        /// Thay đổi đang chờ đã quá hạn "chờ tunnel rảnh" chưa — provider được phép BUỘC dựng
+        /// lại transport để áp (xem `BandwidthControl.pendingForceAfter`).
+        func pendingForceExpired(_ now: Date) -> Bool {
+            guard pendingChange, pendingIsDecrease, let pendingSince else { return false }
+            return now.timeIntervalSince(pendingSince) >= BandwidthControl.pendingForceAfter
+        }
+
+        /// Đánh dấu "có thay đổi đang chờ áp" + mốc thời gian. Đã có thay đổi đang chờ thì GIỮ
+        /// mốc cũ: nếu nhịp 1s nào đó đặt lại mốc, hạn buộc áp sẽ không bao giờ tới.
+        private func markPending(_ reason: Reason, decrease: Bool, at now: Date) {
+            if !pendingChange { pendingSince = now }
+            pendingChange = true
+            pendingReason = reason
+            pendingIsDecrease = pendingIsDecrease || decrease
+        }
+
         // MARK: Lấy mẫu 1s
 
         /// Một mẫu byte. Trả về quyết định khi cần đổi số khai — provider chỉ được áp ở
@@ -494,10 +576,7 @@ extension BandwidthControl {
                 let previousLabel = identity.logLabel
                 if identityNow.preferredKey != identity.preferredKey {
                     refreshIdentity(identityNow)
-                    if !pendingChange {
-                        pendingChange = true
-                        pendingReason = .memory
-                    }
+                    markPending(.memory, decrease: false, at: now)
                     RelayDiagnostics.shared.log(
                         "bw: net đổi giữa phiên \(previousLabel) -> \(identityNow.logLabel) — "
                             + "số khai của mạng mới chỉ áp ở lần kết nối sau (đang truyền thì không đụng transport)"
@@ -561,8 +640,7 @@ extension BandwidthControl {
                 // Hạ thì để dưới trần là đúng ý (trần chỉ giới hạn phía TĂNG), nhưng vẫn kẹp
                 // sàn để không khai về 0 (0 = hysteria dùng CC chuẩn ⇒ mất tính năng Brutal).
                 lossSeen = true
-                pendingReason = .lossBackoff
-                pendingChange = true
+                markPending(.lossBackoff, decrease: true, at: now)
                 persistPeaksIfNeeded(force: true)
                 return RampDecision(
                     multiplierUp: nil,
@@ -604,8 +682,7 @@ extension BandwidthControl {
                     // Chốt ngay vào plan + telemetry: số khai mới là f(số đo), KHÔNG phải một
                     // bậc ramp. Áp thật vẫn chỉ ở ranh giới rảnh (provider dựng lại transport).
                     planReason = chosen.clamped ? .clamp : .memory
-                    pendingReason = planReason
-                    pendingChange = true
+                    markPending(planReason, decrease: true, at: now)
                     persistPeaksIfNeeded(force: true)
                     return RampDecision(
                         multiplierUp: nil,
@@ -661,21 +738,47 @@ extension BandwidthControl {
             // Kẹp theo TRẦN TRÊN trước khi quyết định: trần = min(link speed, đỉnh đo × 1,5).
             // `up/down` là số sẽ khai SAU khi ramp (đã kẹp) — nhờ vậy chỉ cần một chỗ kẹp duy
             // nhất và quyết định "có tăng được không" nhìn thẳng vào hai số đó.
-            upKbps = BandwidthControl.clamp(ceiling.map { min(Int(Double(upKbps) * multiplier), $0) }
-                ?? Int(Double(upKbps) * multiplier))
-            downKbps = BandwidthControl.clamp(ceiling.map { min(Int(Double(downKbps) * multiplier), $0) }
-                ?? Int(Double(downKbps) * multiplier))
+            //
+            // Đồng thời xét "NHẢY THẲNG theo số đo": đo vượt xa số khai thì chính số khai là nút
+            // cổ chai (xem `jumpUpPct`), và `downKbpsFromMeasurement` cho ngay 85% số đo. Nhân
+            // ×1,25 từ 1 Mbps lên 20 Mbps là ~13 vòng dựng lại transport, mà mỗi phiên chỉ có
+            // `rampMaxAttempts` lượt — lấy giá trị LỚN HƠN giữa hai cách rồi vẫn kẹp trần/sàn.
+            let jumped = BandwidthControl.downKbpsFromMeasurement(
+                measuredDownKbps: averageIn,
+                rememberedDeclaredKbps: downKbps
+            )
+            let targetDown = max(Int(Double(downKbps) * multiplier), jumped)
+            let targetUp = max(
+                Int(Double(upKbps) * multiplier),
+                targetDown * BandwidthControl.fallbackUpKbps / max(BandwidthControl.fallbackDownKbps, 1)
+            )
+            upKbps = BandwidthControl.clamp(ceiling.map { min(targetUp, $0) } ?? targetUp)
+            downKbps = BandwidthControl.clamp(ceiling.map { min(targetDown, $0) } ?? targetDown)
             // Trần đã chặn hết phần tăng ⇒ tăng nữa cũng vô ích, đừng đứt stream (dựng lại
             // transport là mất mọi kết nối đang mở).
-            if upKbps == oldUp && downKbps == oldDown {
+            //
+            // Đường "TĂNG" này **KHÔNG BAO GIỜ được HẠ số khai**. Vì sao phải chặn riêng: trần
+            // ở trên suy từ ĐỈNH ĐO CỦA CHÍNH PHIÊN NÀY × biên an toàn, mà phiên vừa mở thì
+            // đỉnh mới có vài giây ⇒ trần có thể THẤP HƠN số khai vừa đọc từ bộ nhớ (85% đỉnh
+            // tốt nhất đã đo của mạng). Nhân hệ số tăng rồi kẹp trần khi đó ra số THẤP HƠN số
+            // đang khai — đo thật 19/09/2026 (cả trên bản cài cuối):
+            //   bw: ramp net=wifi|if:en0 observed=5736 old=9906/33020 new=8604/8604 reason=idle-reconnect
+            // Log nói "ramp" mà thực chất là HẠ số khai, và nó ghi `lastDownKbps=8604` vào bộ
+            // nhớ — xoá số vừa đọc từ bộ nhớ TRƯỚC khi đường hạ THẬT (`isUnderrun`, đòi liên
+            // tục 10 giây) kịp lên tiếng. Hạ số khai là việc của hai đường riêng, cả hai đều
+            // đòi bằng chứng LIÊN TỤC: `isUnderrun` (số khai vượt sức mạng thật) và
+            // `lossSeconds` (mất gói).
+            guard upKbps > oldUp || downKbps > oldDown else {
+                // Trả lại số cũ: hai biến đã bị nhân/kẹp ở trên.
+                upKbps = oldUp
+                downKbps = oldDown
                 RelayDiagnostics.shared.log(
-                    "bw: ramp bỏ qua — trần \(ceiling ?? 0) kbps đã chặn số khai "
-                        + "up=\(oldUp)/down=\(oldDown) (đo \(averageIn) kbps)"
+                    "bw: ramp bỏ qua — trần \(ceiling ?? 0) kbps không cho số khai "
+                        + "up=\(oldUp)/down=\(oldDown) tăng (đo \(averageIn) kbps)"
                 )
                 return nil
             }
-            pendingChange = true
-            pendingReason = .ramp
+            markPending(.ramp, decrease: false, at: now)
             return RampDecision(
                 multiplierUp: multiplier,
                 multiplierDown: multiplier,
@@ -699,6 +802,8 @@ extension BandwidthControl {
             rampEvents += 1
             pendingChange = false
             pendingReason = nil
+            pendingSince = nil
+            pendingIsDecrease = false
             saturatedSince = nil
             // Đo lại từ mốc mới sau khi dựng lại transport (số khai mới ⇒ tốc độ thật có thể
             // cao hơn). Cố ý KHÔNG xoá `everMeasured`: trần suy từ đỉnh cũ vẫn còn giá trị làm
