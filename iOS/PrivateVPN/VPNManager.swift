@@ -143,6 +143,11 @@ final class VPNManager: ObservableObject {
                 wsRelayURL: store.availableNodes
                     .first { $0.id == store.selectedNodeID }?
                     .relayURL,
+                // Node cho transport hysteria2: relay WS (`hy_relay_url`) chỉ hạ cánh ở cổng
+                // UDP của ĐÚNG node đó, nên phải truyền node đang chọn chứ không dùng một URL
+                // chung cho mọi node (xem `hysteriaConfiguration`).
+                hysteriaNode: store.availableNodes.first { $0.id == store.selectedNodeID }
+                    ?? store.availableNodes.first,
             )
             // State đã là .connecting từ đầu hàm; giữ nguyên tới khi tunnel lên.
             try manager?.connection.startVPNTunnel()
@@ -595,7 +600,8 @@ final class VPNManager: ObservableObject {
     private func prepareConfiguration(
         _ config: WireGuardConfig,
         nodeId: String?,
-        wsRelayURL: String? = nil
+        wsRelayURL: String? = nil,
+        hysteriaNode: ExitNode? = nil
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let matching = existing.filter { Self.isOwnProfile($0.localizedDescription) }
@@ -616,9 +622,32 @@ final class VPNManager: ObservableObject {
         let protocolConfig = NETunnelProviderProtocol()
         protocolConfig.providerBundleIdentifier = Self.providerBundleIdentifier
         protocolConfig.serverAddress = tunnelConfig.peers.first?.endpoint ?? "not-configured"
-        protocolConfig.providerConfiguration = [
+        var providerConfiguration: [String: Any] = [
             "wireguard": try JSONEncoder().encode(tunnelConfig.withoutPrivateKey()),
         ]
+
+        // Transport hysteria2 — đường DUY NHẤT extension iOS chạy (extension iOS là
+        // hysteria-only, y như extension macOS: hai Go runtime không cùng một process, xem
+        // project.yml). Khoá "wireguard" ở trên vẫn giữ: đó là cấu hình dự phòng/đối chiếu
+        // của app (`savedTunnelConfig`) và extension không đọc tới.
+        //
+        // Thiếu credential thì KHÔNG thêm khoá "hysteria" và phải nói RÕ cho người dùng:
+        // extension không có nó sẽ báo TUNNEL_START_FAILED, còn im lặng thì khách chỉ thấy
+        // "Connected" mà không có mạng.
+        if let hysteria = Self.hysteriaConfiguration(
+            node: hysteriaNode,
+            endpoint: tunnelConfig.peers.first?.endpoint
+        ) {
+            providerConfiguration["hysteria"] = hysteria
+            let relay = hysteria["relayURL"] as? String ?? "?"
+            let host = hysteria["serverHost"] as? String ?? "?"
+            log.info("configuration: hysteria2 -> \(relay, privacy: .public) (server \(host, privacy: .public))")
+        } else {
+            let message = "Bản build thiếu credential hysteria2 (HysteriaPassword/HysteriaObfs trong Info.plist) hoặc chưa xác định được node — tunnel iOS không dựng được. Build lại kèm HYST_PASSWORD/HYST_OBFS (xem scripts/dev-hysteria-build-env.sh)."
+            lastError = message
+            log.error("configuration: \(message, privacy: .public)")
+        }
+        protocolConfig.providerConfiguration = providerConfiguration
 
         manager.protocolConfiguration = protocolConfig
         manager.localizedDescription = Self.profileName
@@ -626,6 +655,52 @@ final class VPNManager: ObservableObject {
         try await manager.saveToPreferences()
         try await manager.loadFromPreferences()
         self.manager = manager
+    }
+
+    /// Cấu hình cho transport hysteria2 của extension iOS (giống `VPNManagerMac`).
+    ///
+    /// Credential KHÔNG nằm trong repo: build truyền `HYST_PASSWORD`/`HYST_OBFS` vào Info.plist
+    /// của app (xem `scripts/dev-hysteria-build-env.sh`), app đọc lại rồi đưa cho extension qua
+    /// `providerConfiguration` — extension không có quyền đọc Info.plist của app.
+    ///
+    /// Trả nil khi thiếu credential hoặc không xác định được host: gọi ở đây phải nói rõ cho
+    /// người dùng, KHÔNG được lặng lẽ bỏ qua.
+    private static func hysteriaConfiguration(node: ExitNode?, endpoint: String?) -> [String: Any]? {
+        guard let password = Bundle.main.object(forInfoDictionaryKey: "HysteriaPassword") as? String,
+              !password.isEmpty,
+              let obfs = Bundle.main.object(forInfoDictionaryKey: "HysteriaObfs") as? String,
+              !obfs.isEmpty else {
+            return nil
+        }
+        // Endpoint của peer trong config là nguồn sự thật về node đang dial; node truyền vào chỉ
+        // để lấy `hy_relay_url`.
+        let host = Self.host(fromEndpoint: endpoint ?? node?.endpoint ?? "")
+        guard !host.isEmpty else { return nil }
+
+        // Relay của ĐÚNG node đang dial, rồi tới relay mặc định (node-2). Relay WireGuard
+        // (`wg_relay_url`) KHÔNG dùng được ở đây: một relay chỉ hạ cánh ở một cổng UDP, gửi
+        // QUIC vào cổng WireGuard là im lặng.
+        let relay = (node?.endpoint == endpoint ? node?.hysteriaRelayURL : nil)
+            ?? HysteriaDefaults.relayURLCandidates.first ?? ""
+        return [
+            "serverHost": host,
+            "serverPort": Int(HysteriaDefaults.serverPort),
+            "relayURL": relay,
+            "relayURLCandidates": HysteriaDefaults.relayURLCandidates,
+            "password": password,
+            "obfs": obfs,
+            "upKbps": HysteriaDefaults.upKbps,
+            "downKbps": HysteriaDefaults.downKbps,
+            "mtu": HysteriaDefaults.mtu,
+        ]
+    }
+
+    /// Host thuần từ endpoint của node ("165.101.114.162:443" → "165.101.114.162").
+    private static func host(fromEndpoint endpoint: String) -> String {
+        if endpoint.hasPrefix("[") { // IPv6 dạng [::1]:443
+            return endpoint.split(separator: "]").first.map { String($0.dropFirst()) } ?? ""
+        }
+        return endpoint.split(separator: ":").first.map(String.init) ?? ""
     }
 
     private func loadManagerFromPreferences() async {

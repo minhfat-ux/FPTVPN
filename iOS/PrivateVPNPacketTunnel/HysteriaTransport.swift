@@ -319,17 +319,108 @@ final class HysteriaTransport: @unchecked Sendable {
     ///      provider báo `TUNNEL_START_FAILED: không lấy được fd utun`.
     /// Trả nil ⇒ provider phải DỪNG và báo rõ, đừng chạy hysteria nửa vời.
     static func packetTunnelFileDescriptor(from flow: NEPacketTunnelFlow) -> Int32? {
-        let value = flow.value(forKey: "socket")
-        if let number = value as? NSNumber {
-            let fd = number.int32Value
-            if fd > 0 { return fd }
-        }
-        if let fd = value as? Int32, fd > 0 {
-            return fd
-        }
+        if let fd = kvcSocketDescriptor(from: flow) { return fd }
+        #if os(macOS)
         return utunControlFileDescriptor()
+        #else
+        // iOS: SDK iPhoneOS KHÔNG có `<sys/kern_control.h>` nên `ctl_info`/`sockaddr_ctl`
+        // không hiện ra trong Swift (kiểm chứng: `error: cannot find 'sockaddr_ctl' in
+        // scope`) ⇒ không dò được bảng fd như macOS. KVC là đường chính thức và chạy
+        // trên iOS, nên không có fd ở đây nghĩa là provider phải báo lỗi RÕ.
+        return nil
+        #endif
     }
 
+    /// fd utun mà NetworkExtension công bố qua KVC `packetFlow.value(forKey: "socket")`.
+    /// Tách riêng để cả hai nền tảng dùng chung một cách đọc.
+    private static func kvcSocketDescriptor(from flow: NEPacketTunnelFlow) -> Int32? {
+        let value = flow.value(forKey: "socket")
+        if let number = value as? NSNumber, number.int32Value > 0 { return number.int32Value }
+        if let fd = value as? Int32, fd > 0 { return fd }
+        return nil
+    }
+
+    #if os(iOS)
+    /// fd utun của NetworkExtension trên iOS — đường DÙNG THẬT của extension iOS.
+    ///
+    /// Vì sao iOS KHÁC macOS (đo thật 19/09/2026, macOS 26.5): trên macOS utun của NE không
+    /// chở gói theo định dạng Go giả định, và KVC trả nil, nên macOS phải dò bảng fd rồi bắc
+    /// cầu qua `TunnelBridge` (xem `resolveTunnelFD`). Trên iOS thì KVC `socket` là fd utun
+    /// thật, chở gói 4-byte-header đúng thứ sing-tun parse, nên KHÔNG cần socketpair và cũng
+    /// không cần bắc cầu: `MobileServe` đọc/ghi thẳng fd đó.
+    ///
+    /// Trả nil ⇒ provider phải dừng và báo rõ (không chạy hysteria nửa vời).
+    static func directTunnelFD(from flow: NEPacketTunnelFlow) -> TunnelFD? {
+        var evidence: [String] = []
+        let kvc = flow.value(forKey: "socket")
+        evidence.append(
+            "KVC packetFlow.value(forKey: \"socket\") = "
+                + (kvc.map { "\(type(of: $0)) \($0)" } ?? "nil")
+        )
+        guard let fd = kvcSocketDescriptor(from: flow) else { return nil }
+        evidence.append(describeFD(fd: fd, origin: "KVC"))
+        return TunnelFD(
+            fd: fd,
+            hostFd: nil,
+            source: .networkExtension,
+            ifname: utunInterfaceName(fd: fd),
+            evidence: evidence
+        )
+    }
+
+    /// Bộ đếm gói THẬT của interface utun trên iOS, để watchdog có bằng chứng như macOS.
+    ///
+    /// Vì sao cần: extension iOS KHÔNG có cầu `TunnelBridge` (nên không tự đếm được gói), mà
+    /// tin vào frame của relay là không đủ — QUIC gửi Initial làm `sent > 0` trong khi máy
+    /// chẳng có gói nào đi qua tunnel, đúng ca "Connected mà không có mạng" mà watchdog sinh
+    /// ra để chặn. Bảng interface của kernel cho đúng hai chiều đó:
+    /// `ifi_opackets` = gói MÁY đưa vào tunnel, `ifi_ipackets` = gói tunnel trả về máy.
+    ///
+    /// Không chặn đường gói, không cần quyền đặc biệt. Đọc hỏng (sysctl bị chặn, chưa có tên
+    /// utun) ⇒ trả nil, watchdog lùi về frame của relay — KHÔNG coi là "tunnel chết".
+    static func utunPacketCounters(fd: Int32) -> (toGo: Int, fromGo: Int, ifname: String)? {
+        guard let ifname = utunInterfaceName(fd: fd) else { return nil }
+        guard let counters = interfacePacketCounters(ifname: ifname) else { return nil }
+        return (toGo: counters.out, fromGo: counters.in, ifname: ifname)
+    }
+
+    /// `NET_RT_IFLIST2` = 6 và `RTM_IFINFO2` = 0x12 nằm trong `<net/route.h>`, header này
+    /// KHÔNG có trong SDK iPhoneOS ⇒ khai lại tại chỗ, đúng cách đã khai `SYSPROTO_CONTROL`.
+    private static let netRtIflist2: Int32 = 6
+    private static let rtmIfinfo2: UInt8 = 0x12
+
+    /// Đọc `if_msghdr2` của ĐÚNG interface `ifname` từ `sysctl(NET_RT_IFLIST2)`.
+    private static func interfacePacketCounters(ifname: String) -> (in: Int, out: Int)? {
+        let index = if_nametoindex(ifname)
+        guard index != 0 else { return nil }
+        var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, netRtIflist2, 0]
+        var length = 0
+        guard sysctl(&mib, 6, nil, &length, nil, 0) == 0, length > 0 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: length)
+        let status = buffer.withUnsafeMutableBytes { pointer in
+            sysctl(&mib, 6, pointer.baseAddress, &length, nil, 0)
+        }
+        guard status == 0, length <= buffer.count else { return nil }
+        var offset = 0
+        while offset + MemoryLayout<if_msghdr2>.size <= length {
+            let header = buffer.withUnsafeBytes { pointer in
+                pointer.loadUnaligned(fromByteOffset: offset, as: if_msghdr2.self)
+            }
+            let messageLength = Int(header.ifm_msglen)
+            guard messageLength > 0, offset + messageLength <= length else { break }
+            if header.ifm_type == rtmIfinfo2, header.ifm_index == index {
+                return (
+                    in: Int(header.ifm_data.ifi_ipackets),
+                    out: Int(header.ifm_data.ifi_opackets)
+                )
+            }
+            offset += messageLength
+        }
+        return nil
+    }
+    #endif
+
+    #if os(macOS)
     /// `CTLIOCGINFO` không được export sang Swift. WireGuardKit khai lại đúng giá trị này
     /// trong `Vendor/WireGuardKit/Sources/WireGuardKitC/WireGuardKitC.h`
     /// (`#define CTLIOCGINFO 0xc0644e03UL`, = `_IOW('N', 3, struct ctl_info)`); ở đây khai
@@ -366,6 +457,7 @@ final class HysteriaTransport: @unchecked Sendable {
         }
         return nil
     }
+    #endif
 
     // MARK: - Chọn fd giao cho Go (dùng cho extension macOS)
 
@@ -403,6 +495,7 @@ final class HysteriaTransport: @unchecked Sendable {
     private static let utunOptIfname: Int32 = 2
     private static let utunControlName = "com.apple.net.utun_control"
 
+    #if os(macOS)
     /// Chọn fd giao cho `MobileServe`, kèm BẰNG CHỨNG kiểm tra từng ứng viên.
     ///
     /// Vì sao không dùng thẳng fd utun của NetworkExtension (đo thật 19/09/2026, macOS 26.5):
@@ -521,7 +614,13 @@ final class HysteriaTransport: @unchecked Sendable {
         return rc == 0 && addr.sc_family == AF_SYSTEM && addr.sc_id == controlID
     }
 
+    #endif
+
     /// Tên interface của fd utun (`getsockopt(UTUN_OPT_IFNAME)`) — bằng chứng fd này là utun nào.
+    ///
+    /// Dùng cho CẢ HAI nền tảng (iOS cần để (1) ghi log utun nào đang chở gói, (2) tra bộ đếm
+    /// gói của interface trong `utunPacketCounters`); `SYSPROTO_CONTROL`/`UTUN_OPT_IFNAME` được
+    /// khai lại bằng số ở dưới vì `<sys/kern_control.h>` không có trong SDK iPhoneOS.
     private static func utunInterfaceName(fd: Int32) -> String? {
         guard fd >= 0 else { return nil }
         var buffer = [UInt8](repeating: 0, count: Int(IFNAMSIZ))
@@ -535,6 +634,25 @@ final class HysteriaTransport: @unchecked Sendable {
         return String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
     }
 
+    /// Một dòng bằng chứng về một fd, KHÔNG cần `sockaddr_ctl` (dùng được cả iOS):
+    /// cờ fcntl, tên utun, ifindex.
+    private static func describeFD(fd: Int32, origin: String) -> String {
+        var parts = ["\(origin): fd=\(fd)"]
+        let flags = fcntl(fd, F_GETFL, 0)
+        if flags < 0 {
+            parts.append("fcntl(F_GETFL) errno=\(errno)")
+        } else {
+            parts.append("F_GETFL=0x\(String(flags, radix: 16))\((flags & O_NONBLOCK) != 0 ? " O_NONBLOCK" : " blocking")")
+        }
+        if let name = utunInterfaceName(fd: fd) {
+            parts.append("ifname=\(name) ifindex=\(if_nametoindex(name))")
+        } else {
+            parts.append("getsockopt(UTUN_OPT_IFNAME) không cho tên utun")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    #if os(macOS)
     /// Một dòng bằng chứng về một fd: cờ fcntl, họ socket (có phải utun control không), tên utun.
     private static func describe(fd: Int32, origin: String, controlID: UInt32?) -> String {
         var parts = ["\(origin): fd=\(fd)"]
@@ -592,6 +710,8 @@ final class HysteriaTransport: @unchecked Sendable {
         let count = framed.withUnsafeBytes { write(fd, $0.baseAddress, framed.count) }
         return "write(4 byte header + gói IPv4 20B)=\(count) errno=\(errno)"
     }
+
+    #endif
 
     /// Công tắc CHẨN ĐOÁN (không có trong bản phát hành): đọc `Documents/hysteria-diag.txt`
     /// với các dòng `mode=direct|bridge` / `probe=1` để A/B hai đường lấy fd trên máy thật

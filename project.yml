@@ -81,7 +81,9 @@ targets:
         # cùng một số phiên bản.
         # Bản ad-hoc 16/09/2026 tăng lên 14 để phân biệt với bản 13 đang phát (Android chưa build lại).
         # Bản 1.4.0 (build 15) sửa lỗi mất mạng sau khi bật VPN một lúc + ổn định relay Cloudflare.
-        CURRENT_PROJECT_VERSION: "15"
+        # Build 16 (20/09/2026): extension iOS chuyển sang HYSTERIA-ONLY (port từ macOS) nên
+        # cần số build mới để phân biệt với bản 15 đã phát.
+        CURRENT_PROJECT_VERSION: "16"
         MARKETING_VERSION: "1.4.0"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
@@ -111,22 +113,36 @@ targets:
     type: app-extension
     platform: iOS
     sources:
-      - iOS/PrivateVPNPacketTunnel
-      - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
-      - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
-      - path: iOS/PrivateVPN/Services/KeychainStore.swift
+      # Extension iOS là HYSTERIA-ONLY, đúng như extension macOS: framework hysteria2 mang
+      # theo một Go runtime, WireGuardKit mang thêm một runtime nữa (`libwg-go.a`) ⇒ link cả
+      # hai vào CÙNG một process là `duplicate symbol '__cgo_panic' / '_crosscall2' /
+      # '__cgo_topofstack'` (đã gặp thật, xem docs/TRANSPORT_SPEED_2026-09-19.md §8).
+      #
+      # Danh sách file TƯỜNG MINH (không include cả thư mục) để không kéo WireGuard vào lại
+      # qua đường include: PacketTunnelProvider.swift / WGRelayClient.swift (bản WireGuard cũ)
+      # không còn nằm trong target nào.
+      - path: iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
+      - path: iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
+      - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
+      - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
+      - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
+      - path: iOS/PrivateVPNPacketTunnel/RelayDiagnostics.swift
       # Hằng số transport hysteria2 dùng chung với app (xem HysteriaDefaults).
       - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
+      # KHÔNG kèm WireGuardConfig.swift/KeychainStore.swift/ControlAPIClient.swift: cả ba
+      # `import WireGuardKit`, mà target này cố ý không có WireGuardKit (xem trên).
+      # KHÔNG kèm NodeHealthReporter.swift: gọi ControlAPIHosts (ControlAPIClient.swift) và
+      # kéo theo nguyên một tầng mạng không cần cho tunnel — macOS cũng bỏ như vậy.
     info:
       path: iOS/PrivateVPNPacketTunnel/Info.plist
       properties:
         CFBundleDisplayName: VPNFlow Tunnel
         # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
         CFBundleShortVersionString: "1.4.0"
-        CFBundleVersion: "15"
+        CFBundleVersion: "16"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
     entitlements:
       path: iOS/PrivateVPNPacketTunnel/PacketTunnel.entitlements
       properties:
@@ -139,23 +155,17 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        LIBRARY_SEARCH_PATHS:
-          - "$(DERIVED_FILE_DIR)/wg"
-    preBuildScripts:
-      - name: Build wireguard-go
-        basedOnDependencyAnalysis: false
-        script: |
-          set -e
-          export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
-          WGK="${SRCROOT}/Vendor/WireGuardKit/Sources/WireGuardKitGo"
-          mkdir -p "${DERIVED_FILE_DIR}/wg" "${DERIVED_FILE_DIR}/wg-tmp"
-          make -C "$WGK" \
-            PLATFORM_NAME="$PLATFORM_NAME" \
-            ARCHS="$ARCHS" \
-            DESTDIR="${DERIVED_FILE_DIR}/wg" \
-            CONFIGURATION_TEMP_DIR="${DERIVED_FILE_DIR}/wg-tmp"
+        MARKETING_VERSION: "1.4.0"
+        CURRENT_PROJECT_VERSION: "16"
+        # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
+        # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
-      - package: WireGuardKit
+      # Framework hysteria2 cho iOS (module `Hysteria`, hàm C MobileConnect/MobileServe/
+      # MobileStop), bản STACK=gvisor — dựng bằng tools/hysteria-apple/build.sh. Là static
+      # archive ⇒ chỉ cần link; `embed` để artifact khớp bản phát hành.
+      - framework: iOS/Frameworks/Hysteria.xcframework
+        embed: true
+        codeSign: true
 
   PrivateVPNTests:
     type: bundle.unit-test
@@ -217,8 +227,8 @@ targets:
         PRODUCT_NAME: VPNFlow
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.3.3"
-        CURRENT_PROJECT_VERSION: "13"
+        MARKETING_VERSION: "1.4.0"
+        CURRENT_PROJECT_VERSION: "14"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -328,8 +338,8 @@ targets:
         PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.3.3"
-        CURRENT_PROJECT_VERSION: "13"
+        MARKETING_VERSION: "1.4.0"
+        CURRENT_PROJECT_VERSION: "14"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).

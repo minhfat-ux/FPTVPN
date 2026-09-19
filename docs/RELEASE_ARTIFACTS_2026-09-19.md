@@ -70,3 +70,18 @@ Chủ dự án xác nhận bản macOS (hysteria2/gVisor) **chạy ổn** và y�
 - Bản đóng băng = build **1.4.0 / build 14** (đang được đóng gói khi ghi dòng này; artifact + sha256 sẽ bổ sung vào mục macOS ở phía trên).
 - **Không sửa** `mac/**`, `iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift`, `HysteriaTransport.swift`, `tools/hysteria-apple/**` (trừ khi chủ dự án yêu cầu). Không build lại bản macOS trừ khi có yêu cầu.
 - Việc treo (KHÔNG nằm trong bản khoá, làm sau khi có yêu cầu): bỏ hiện tượng "lượt tải đầu sau Connect chậm rồi mới tăng"; tăng tốc hơn nữa; WeChat split-tunnel; iOS hysteria2 (bản test riêng).
+
+## macOS 1.4.0 (build 14) — ZIP (đóng gói 19/09, chưa upload)
+
+| | |
+|---|---|
+| File | `/tmp/VPNFlow-mac-1.4.0.zip` (bản bền: `~/.vpnflow-build/mac/VPNFlow-mac-1.4.0.zip`) |
+| Kích thước | 21.396.621 bytes (20,40 MiB) |
+| sha256 | `262634c62b4d775671771d8264efdca3a1ac135c23cdd0c3037d576f1450ed7b` |
+| Version | app `com.privatevpn.mac` **1.4.0/14**, extension `com.privatevpn.mac.packet-tunnel` **1.4.0/14** (universal x86_64 + arm64, yêu cầu macOS 14+) |
+| Ký | `Apple Development: minhnb2@me.com` (Team G6XW3RN6LJ); **CHƯA notarize** ⇒ máy khác lần đầu: chuột phải → Open |
+| Release notes | `release/mac/RELEASE_NOTES_1.4.0.md` |
+| Đích trên node-2 | `/root/flowvpn-mac/VPNFlow-mac.zip` (route `GET /v1/downloads/mac` đọc file này; env override `MAC_APP_ZIP_PATH`) |
+| Mốc hiển thị | `latest_mac_version = 1.4.0` — **không có API admin** cho khoá này: set trực tiếp SQLite `app_config` (DB `control-plane/data/app-config.db`) HOẶC env `MAC_APP_VERSION` rồi restart CP |
+
+Nội dung bản này: chuyển transport macOS sang **hysteria2 qua relay Cloudflare (stack gVisor)** thay cho WireGuard-chồng-relay; sửa lỗi "bật VPN mất toàn mạng" (TCP blackhole); **tự gỡ tunnel** khi blackhole 10s hoặc 0 gói 15s (kiểm mỗi 5s). Số đo: VPN 24–52 Mbps (median 27), RAW 66–105 Mbps cùng mạng.
