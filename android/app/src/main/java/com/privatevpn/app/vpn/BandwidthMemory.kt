@@ -193,6 +193,11 @@ class BandwidthMemory(context: Context) {
         prefs().getInt(kMeasured(key), 0)
     }.getOrDefault(0)
 
+    /** Số đo LIỀN TRƯỚC số đã nhớ (kbps); 0 nếu chưa có — mốc giảm xóc của BandwidthPolicy. */
+    fun rememberedPreviousMeasuredKbps(key: String): Int = runCatching {
+        prefs().getInt(kPrevious(key), 0)
+    }.getOrDefault(0)
+
     /** Số khai (kbps) của CHÍNH lượt đo đã nhớ — xem luật "chạm trần" trong BandwidthPolicy. */
     fun rememberedDeclaredKbps(key: String): Int = runCatching {
         prefs().getInt(kDeclared(key), 0)
@@ -216,8 +221,10 @@ class BandwidthMemory(context: Context) {
      * @param declaredKbps số khai đã dùng trong lượt đo vừa rồi.
      */
     fun remember(key: String, measuredKbps: Int, declaredKbps: Int) {
+        val previous = rememberedMeasuredKbps(key)
         runCatching {
             prefs().edit()
+                .putInt(kPrevious(key), previous)
                 .putInt(kMeasured(key), measuredKbps)
                 .putInt(kDeclared(key), declaredKbps)
                 .putLong(kAt(key), System.currentTimeMillis())
@@ -292,6 +299,7 @@ class BandwidthMemory(context: Context) {
         appContext.getSharedPreferences(HysteriaVpnService.PREFS, Context.MODE_PRIVATE)
 
     private fun kMeasured(key: String) = "bw_kbps_$key"
+    private fun kPrevious(key: String) = "bw_prev_$key"
     private fun kDeclared(key: String) = "bw_decl_$key"
     private fun kAt(key: String) = "bw_at_$key"
 
@@ -342,23 +350,42 @@ object BandwidthPolicy {
     const val DECLARE_RATIO_PCT = 85
 
     /**
-     * Hai ngưỡng chia số đo thành 3 dải, tính theo % của SỐ KHAI CŨ
-     * (`measured * 100 / declared`). Đây là vòng điều chỉnh chậm ±15% và CHỈ chạy ở ranh
-     * giới kết nối (đổi số khai phải dựng lại client hysteria):
+     * Bốn dải của tỉ lệ `pct = measured * 100 / declared` (đo được so với số khai cũ).
+     * Đây là vòng điều chỉnh và CHỈ chạy ở ranh giới kết nối — đổi số khai phải dựng lại
+     * client hysteria nên tuyệt đối không đổi giữa lúc đang chở traffic:
      *
-     *   >= 90%  ⇒ đo chạm trần số khai cũ ⇒ đường CÒN DƯ ⇒ DÒ LÊN 15% (bò dần tới đúng
-     *             sức mạng; nếu cứ giữ nguyên thì số khai kẹt ở nấc khởi điểm mãi mãi).
-     *   85-90%  ⇒ đo xấp xỉ số đang khai: số khai không phải nút cổ chai mà cũng không vượt
-     *             sức mạng ⇒ GIỮ NGUYÊN. Dải chết này chống dao động: hạ 15% ở đây thì mỗi
-     *             lần kết nối lại tụt một nấc, còn dò lên thì hai lượt liên tiếp đổi số qua
-     *             lại mà tốc độ thật không đổi.
-     *   < 85%   ⇒ đo thấp hơn hẳn số đang khai ⇒ số khai cũ KHAI VƯỢT sức mạng ⇒ hạ về
-     *             85% số đo (DECLARE_RATIO_PCT).
+     *   >= 150% ⇒ đo VƯỢT XA số khai ⇒ số khai là nút cổ chai rõ ràng ⇒ NHẢY LÊN theo số đo
+     *             (85% số đo). Cần dải này vì dò 15% mỗi lần kết nối thì từ 1 Mbps lên
+     *             40 Mbps phải mất hàng chục lần kết nối.
+     *   95-150% ⇒ đo chạm trần số khai (Brutal pace đúng số khai nên goodput = số khai khi
+     *             đường chưa bão hoà) ⇒ còn dư ⇒ DÒ LÊN 15% cho tới khi chạm trần thật.
+     *   80-95%  ⇒ đo xấp xỉ số đang khai ⇒ GIỮ NGUYÊN. Dải chết chống dao động: hạ ở đây thì
+     *             mỗi lần kết nối lại tụt một nấc, còn dò lên thì hai lượt liên tiếp đổi số
+     *             qua lại mà tốc độ thật không đổi.
+     *   < 80%   ⇒ đo thấp hơn hẳn số đang khai ⇒ số khai cũ KHAI VƯỢT sức mạng ⇒ hạ, nhưng
+     *             KHÔNG hạ quá [DAMPING_PCT]% số cũ trong một lần (xem DAMPING_PCT).
      */
-    const val SATURATED_PCT = 90
-    const val DEADBAND_PCT = 85
+    const val JUMPUP_PCT = 150
+    const val SATURATED_PCT = 95
+    const val DEADBAND_PCT = 80
     /** Bước dò lên khi đường còn dư (chỉ ở ranh giới kết nối). */
     const val EXPLORE_PCT = 115
+
+    /**
+     * Giảm xóc cho mẫu đo TỤT SÂU: khi hạ số khai, lấy mốc là số đo MỚI, nhưng nếu số đo mới
+     * nhỏ hơn 60% số đo LIỀN TRƯỚC thì chỉ tính 60% mốc cũ.
+     *
+     * Vì sao cần — đo thật trên Wi-Fi khách sạn ICONLABHOTEL (19/09): mạng chập chờn theo
+     * từng phút, ba lần đo RAW liên tiếp ra 42 / 0,79 / 119 Mbps. Một phép đo 3s rơi đúng
+     * lúc mạng đứng chỉ ra 573 kbps, mà luật "hạ về 85% số đo" sẽ khai 1 Mbps cho phiên sau
+     * — trong khi chính mạng đó lúc khác chở được 49 Mbps ⇒ một mẫu xấu làm chậm cả một
+     * phiên. Có giảm xóc thì mẫu tụt sâu chỉ kéo số khai xuống một nửa, và dải >=150% sẽ
+     * nhảy lên lại NGAY ở lần kết nối sau khi mạng thật sự còn dư.
+     *
+     * Mốc giảm xóc là SỐ ĐO trước đó (không phải SỐ KHAI trước đó): số khai có thể đang cao
+     * hơn hẳn sức mạng thật, lấy nó làm mốc thì số khai cứ bám mãi ở mức không tưởng.
+     */
+    const val DAMPING_PCT = 60
 
     /** Sàn: số đo nhỏ bất thường (đường gần như chết) không được kéo số khai xuống vô nghĩa. */
     const val FLOOR_UP_KBPS = 500
@@ -377,6 +404,7 @@ object BandwidthPolicy {
      *
      * @param rememberedMeasuredKbps số đã nhớ (0 = chưa từng đo mạng này).
      * @param rememberedDeclaredKbps số khai của chính lượt đo đã nhớ (0 nếu chưa có).
+     * @param previousMeasuredKbps số đo LIỀN TRƯỚC số đã nhớ (0 nếu chưa có) — mốc giảm xóc.
      * @param staticUpKbps/@param staticDownKbps nấc tĩnh cũ (metered 8/12, unmetered 30/100).
      * @param ceilingDownKbps trần "sức mạng vật lý" từ linkSpeed+RSSI/loại mạng; 0 = không biết.
      */
@@ -384,6 +412,7 @@ object BandwidthPolicy {
         rememberedMeasuredKbps: Int,
         rememberedDeclaredKbps: Int,
         staticUpKbps: Int,
+        previousMeasuredKbps: Int = 0,
         staticDownKbps: Int,
         ceilingDownKbps: Int,
     ): Decision {
@@ -415,9 +444,13 @@ object BandwidthPolicy {
         } else {
             val pct = rememberedMeasuredKbps * 100 / rememberedDeclaredKbps
             down = when {
+                pct >= JUMPUP_PCT -> rememberedMeasuredKbps * DECLARE_RATIO_PCT / 100
                 pct >= SATURATED_PCT -> rememberedDeclaredKbps * EXPLORE_PCT / 100
                 pct >= DEADBAND_PCT -> rememberedDeclaredKbps
-                else -> rememberedMeasuredKbps * DECLARE_RATIO_PCT / 100
+                else -> maxOf(
+                    rememberedMeasuredKbps,
+                    previousMeasuredKbps * DAMPING_PCT / 100,
+                ) * DECLARE_RATIO_PCT / 100
             }
             up = (down.toLong() * ratioUp / ratioDown).toInt()
             reason = REASON_MEMORY

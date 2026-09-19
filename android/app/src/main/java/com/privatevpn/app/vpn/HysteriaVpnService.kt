@@ -725,6 +725,7 @@ class HysteriaVpnService : VpnService() {
             rememberedDeclaredKbps = memory.rememberedDeclaredKbps(profile.key),
             staticUpKbps = staticUp,
             staticDownKbps = staticDown,
+            previousMeasuredKbps = memory.rememberedPreviousMeasuredKbps(profile.key),
             ceilingDownKbps = profile.ceilingDownKbps,
         )
         bwKey = profile.key
@@ -732,6 +733,8 @@ class HysteriaVpnService : VpnService() {
         bwReason = decision.reason
         bwMeasuredKbps = measured
         bwCeilKbps = decision.ceilingDownKbps
+        bwUpKbps = decision.upKbps
+        bwDownKbps = decision.downKbps
         attemptUpKbps = decision.upKbps
         attemptDownKbps = decision.downKbps
         // Một dòng log, đọc là biết VÌ SAO app khai con số đó (probe/memory/profile/clamp):
@@ -880,6 +883,7 @@ class HysteriaVpnService : VpnService() {
                 rememberedDeclaredKbps = memory.rememberedDeclaredKbps(key),
                 staticUpKbps = if (metered) MOBILE_UP_KBPS else HY_UP_KBPS,
                 staticDownKbps = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS,
+                previousMeasuredKbps = memory.rememberedPreviousMeasuredKbps(key),
                 ceilingDownKbps = ceiling,
             )
             DiagnosticsLog.log(

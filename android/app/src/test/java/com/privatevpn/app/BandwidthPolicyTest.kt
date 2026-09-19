@@ -27,7 +27,15 @@ class BandwidthPolicyTest {
         up: Int = staticUpUnmetered,
         down: Int = staticDownUnmetered,
         ceiling: Int = 0,
-    ) = BandwidthPolicy.decide(measured, declared, up, down, ceiling)
+        previous: Int = 0,
+    ) = BandwidthPolicy.decide(
+        rememberedMeasuredKbps = measured,
+        rememberedDeclaredKbps = declared,
+        staticUpKbps = up,
+        staticDownKbps = down,
+        previousMeasuredKbps = previous,
+        ceilingDownKbps = ceiling,
+    )
 
     @Test
     fun `chua co so do thi dung dung nac tinh cu`() {
@@ -66,10 +74,40 @@ class BandwidthPolicyTest {
 
     @Test
     fun `duong yeu hon so khai thi ha theo so do`() {
-        // Khai 100 Mbps ma chi do duoc 40 Mbps => lan sau khai 85% cua 40 = 34 Mbps.
-        val d = decide(measured = 40_000, declared = staticDownUnmetered)
+        // Khai 100 Mbps ma do duoc 40 Mbps (va truoc do cung 40 Mbps) => lan sau khai 85% cua
+        // 40 = 34 Mbps: so khai di theo suc mang that, khong bam vao so cu.
+        val d = decide(measured = 40_000, declared = staticDownUnmetered, previous = 40_000)
         assertEquals(34_000, d.downKbps)
         assertEquals(10_200, d.upKbps) // 34 Mbps * 30/100
+        assertEquals(BandwidthPolicy.REASON_MEMORY, d.reason)
+    }
+
+    @Test
+    fun `mot mau do xau khong keo so khai xuong day`() {
+        // Ca that tren Wi-Fi khach san 19/09: mang chap chon, mot phep do 3s roi dung luc
+        // mang dung => chi 573 kbps trong khi luot truoc do 40 Mbps. Neu lay 85% so do thi
+        // khai 487 kbps cho ca phien sau. Giam xoc: moc la 60% so do LIEN TRUOC.
+        val d = decide(measured = 573, declared = 100_000, previous = 40_000)
+        assertEquals(20_400, d.downKbps) // 85% cua (60% * 40 Mbps)
+        assertEquals(6_120, d.upKbps)
+        assertEquals(BandwidthPolicy.REASON_MEMORY, d.reason)
+    }
+
+    @Test
+    fun `mang tut that thi so khai di theo so do moi`() {
+        // Mang tut THAT (do hai lan lien tiep deu thap) => phai theo so do, khong giu so cu:
+        // giam xoc chi chan mot mau don le, khong chan xu huong.
+        val d = decide(measured = 3_000, declared = 100_000, previous = 3_500)
+        assertEquals(2_550, d.downKbps) // 85% cua 3 Mbps
+        assertEquals(BandwidthPolicy.REASON_MEMORY, d.reason)
+    }
+
+    @Test
+    fun `do vuot xa so khai thi nhay len ngay theo so do`() {
+        // So khai cu bi bop xuong 1 Mbps (sau mot mau xau) ma mang that do duoc 40 Mbps:
+        // do 15%/lan thi phai hang chuc lan ket noi moi len lai => phai nhay thang.
+        val d = decide(measured = 40_000, declared = 1_000)
+        assertEquals(34_000, d.downKbps) // 85% cua 40 Mbps
         assertEquals(BandwidthPolicy.REASON_MEMORY, d.reason)
     }
 
@@ -104,7 +142,9 @@ class BandwidthPolicyTest {
 
     @Test
     fun `so do nho bat thuong thi bi kep san`() {
-        val d = decide(measured = 300, declared = staticDownUnmetered)
+        // So khai cu da rat thap (1 Mbps) va do lai chi 300 kbps: 85% cua 300 = 255, san giam
+        // xoc 60% cua 1000 = 600 => van phai kep len SAN, khong khai vai tram kbps.
+        val d = decide(measured = 300, declared = 1_000)
         assertEquals(BandwidthPolicy.FLOOR_DOWN_KBPS, d.downKbps)
         assertEquals(BandwidthPolicy.FLOOR_UP_KBPS, d.upKbps)
         assertEquals(BandwidthPolicy.REASON_CLAMP, d.reason)
@@ -136,8 +176,8 @@ class BandwidthPolicyTest {
             memoryMeasured = achieved
             memoryDeclared = declared
         }
-        // Luot dau chua co so do => nac tinh cu (100 Mbps). Sau do ha ve sat suc mang THUC
-        // (40 Mbps) chu khong tut dan qua cac luot: 3 luot cuoi giong nhau.
+        // Luot dau chua co so do => nac tinh cu (100 Mbps). Sau do ve sat suc mang THUC
+        // (40 Mbps) trong vai luot va DUNG YEN, khong tut dan qua cac luot.
         assertEquals(staticDownUnmetered, decisions.first())
         assertEquals(decisions[5], decisions[6])
         assertEquals(decisions[6], decisions[7])
@@ -147,9 +187,10 @@ class BandwidthPolicyTest {
 
     @Test
     fun `so do cho mang di dong giu dung ti le 8 tren 12`() {
-        // 4G đo được 6 Mbps trong khi khai 12 Mbps -> khai 85% * 6 = 5,1 Mbps.
+        // 4G đo được 6 Mbps trong khi khai 12 Mbps: 85% * 6 = 5,1 Mbps, nhưng sàn giảm xóc
+        // là 60% * 12 = 7,2 Mbps => lần này khai 7,2 Mbps rồi lần sau mới về sát 6 Mbps.
         val d = decide(
-            measured = 6_000, declared = staticDownMobile,
+            measured = 6_000, declared = staticDownMobile, previous = 6_000,
             up = staticUpMobile, down = staticDownMobile,
         )
         assertEquals(5_100, d.downKbps)
