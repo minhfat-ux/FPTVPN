@@ -105,11 +105,11 @@ func (p *PacketConn) readLoop() {
 		case p.readCh <- buf:
 		case <-p.closed:
 			return
-		default:
-			// Hàng đợi đầy: bỏ gói như UDP thật (QUIC sẽ tự retransmit). Chặn ở đây
-			// sẽ làm nghẽn cả vòng đọc và mất nhiều gói hơn.
-			continue
 		}
+		// Hàng đợi đầy thì CHỜ (backpressure) thay vì bỏ gói: bỏ gói làm mất datagram
+		// QUIC giữa chừng => throughput tụt + dao động mạnh (đúng triệu chứng loss cao
+		// đo được trên Mac 19/09). Chờ ở đây khiến phía server relay chịu backpressure
+		// qua chính kết nối WS thay vì client tự vứt dữ liệu.
 	}
 }
 
