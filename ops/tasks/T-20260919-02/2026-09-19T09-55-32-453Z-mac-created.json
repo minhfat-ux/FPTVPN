@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260919-02",
+  "title": "WIN: clone repo fbuddy mới (minhfat-ux/fbuddy) + join sổ task + ack 3 việc UI/UX GATE 1",
+  "from": "mac",
+  "to": "win",
+  "detail": "Repo minhfat-ux/fbuddy (private) → docs/tasks/WIN-JOIN-fbuddy-repo.md",
+  "verify": "cd /Volumes/BIWIN/fbuddy && node ops/verify-win-joined.mjs",
+  "due": "2026-09-20",
+  "createdAt": "2026-09-19T09:55:32.432Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-19T09:55:32.453Z"
+}

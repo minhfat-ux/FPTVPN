@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd='node ops/agent-listen.mjs --once --dry-run' => 'da noi kenh day (lan thu 1)'; connector /health => subscribers {win:1}; Scheduled Task AgentListen (TimeTrigger lap PT15M, RunLevel LeastPrivilege, file C:\\Windows\\System32\\Tasks\\AgentListen) + Startup\\AgentListen.vbs; da tat watcher cu agent-watch.mjs pid 10528 (pidfile .watch-win.pid); listener pid 10824 dang giu ket noi; push git bi chan EPERM trong sandbox phien nay",
+ "actor": "win",
+ "at": "2026-09-19T09:58:46.291Z"
+}
