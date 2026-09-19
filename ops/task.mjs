@@ -37,7 +37,8 @@ import { syncLedger } from "./lib/ledger.mjs";
 import { gitCapture, runCapture } from "./lib/capture.mjs";
 
 const TASKS_DIR = path.join("ops", "tasks");
-const VALUE_OPTIONS = new Set(["title", "to", "detail", "verify", "due", "note", "reason", "evidence", "result", "id", "peer-wake"]);
+// "files" (vùng file), "from"/"type"/"bus" (dùng cho lệnh `relay` ghi hộ — RULE-DELEGATE-FB-015)
+const VALUE_OPTIONS = new Set(["title", "to", "detail", "verify", "due", "note", "reason", "evidence", "result", "id", "peer-wake", "files", "from", "type", "bus"]);
 const args = process.argv.slice(2);
 const flags = new Set();
 const options = new Map();
@@ -84,6 +85,19 @@ function taskDir(id) {
 function localIds() {
   if (!fs.existsSync(TASKS_DIR)) return [];
   return fs.readdirSync(TASKS_DIR, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+}
+
+/**
+ * Id task đang có trên `origin/flowgpt` — kể cả thư mục của bên kia chưa kéo về máy này.
+ * Một lệnh git, không cần merge; hỏng thì trả về rỗng để nơi gọi vẫn chạy được.
+ */
+function remoteIds() {
+  const listing = git("ls-tree", "-d", "--name-only", "origin/flowgpt", `${TASKS_DIR}/`);
+  if (listing.startsWith("!git")) return [];
+  return listing
+    .split("\n")
+    .map((line) => line.trim().replace(/\/$/, "").split("/").pop())
+    .filter((name) => name && !name.startsWith("."));
 }
 
 function readJson(file, fromRemote = false) {
@@ -139,8 +153,11 @@ function fold(events) {
 function writeEvent(id, event) {
   const dir = taskDir(id);
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${NOW()}-${ACTOR}-${event.type}.json`);
-  fs.writeFileSync(file, `${JSON.stringify({ ...event, actor: ACTOR, at: new Date().toISOString() }, null, 1)}\n`);
+  // `event.actor` cho phép bên giao GHI HỘ sự kiện của bên nhận (RULE-DELEGATE-FB-015);
+  // khi đó sự kiện mang actor gốc + `transcribedBy` + `busId` làm dấu vết.
+  const actor = event.actor ?? ACTOR;
+  const file = path.join(dir, `${NOW()}-${actor}-${event.type}.json`);
+  fs.writeFileSync(file, `${JSON.stringify({ ...event, actor, at: new Date().toISOString() }, null, 1)}\n`);
   return file;
 }
 
@@ -374,8 +391,20 @@ if (command === "new") {
     process.exit(2);
   }
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const used = localIds().filter((id) => id.startsWith(`T-${today}-`)).length;
-  const id = opt("id") || `T-${today}-${String(used + 1).padStart(2, "0")}`;
+  // Chọn số id TRỐNG NHỎ NHẤT, và phải trống ở CẢ HAI bên — không chỉ trên đĩa máy này.
+  //
+  // Đã gặp thật: Mac chọn `T-20260919-03` trong khi bên kia đã dùng đúng số đó cho một việc UI/UX
+  // khác, vì sổ cục bộ chưa có thư mục của họ. Hai việc khác nhau cùng một mã ⇒ đọc log/trao đổi
+  // là hiểu nhầm ngay. Vì vậy: đồng bộ sổ trước (hỏng mạng thì vẫn chạy), rồi hợp nhất id hai bên.
+  try {
+    syncLedger();
+  } catch {
+    /* không fetch được thì vẫn chọn id theo dữ liệu đang có */
+  }
+  const taken = new Set([...localIds(), ...remoteIds()]);
+  let seq = 1;
+  while (taken.has(`T-${today}-${String(seq).padStart(2, "0")}`)) seq += 1;
+  const id = opt("id") || `T-${today}-${String(seq).padStart(2, "0")}`;
   if (fs.existsSync(taskDir(id))) {
     console.error(`Task ${id} đã tồn tại.`);
     process.exit(2);
@@ -393,6 +422,36 @@ if (command === "new") {
   writeEvent(id, { type: "created", task });
   console.log(`Đã tạo ${id}: ${title}  (${task.from} → ${task.to})`);
   console.log(`Giao việc:  node ops/task.mjs send ${id} --push --ping`);
+} else if (command === "relay") {
+  // GHI HỘ sự kiện của bên nhận khi bên đó bị chặn git (RULE-DELEGATE-FB-015).
+  // Chỉ BÊN GIAO được chạy. Sự kiện ghi rõ: actor gốc, ai ghi hộ, id tin bus làm bằng chứng.
+  const { state } = requireTask(idArg);
+  assertActor(state, "assigner");
+  const from = String(opt("from", state.task?.to ?? "")).toLowerCase();
+  const type = String(opt("type", "")).toLowerCase();
+  const allowed = ["ack", "progress", "blocked", "done"];
+  if (!allowed.includes(type)) {
+    console.error(`relay cần --type <${allowed.join("|")}> (và nên có --bus <id tin bus> --note "<nguyên văn>")`);
+    process.exit(2);
+  }
+  if (from !== String(state.task?.to ?? "").toLowerCase()) {
+    console.error(`--from "${from}" không khớp bên nhận "${state.task?.to}".`);
+    process.exit(2);
+  }
+  const busId = opt("bus");
+  const file = writeEvent(idArg, {
+    type,
+    actor: from,
+    transcribedBy: ACTOR,
+    busId: busId ? Number(busId) : null,
+    note: opt("note", ""),
+  });
+  console.log(`✓ ${idArg}: ghi hộ "${type}" của ${from} (bên giao ${ACTOR} chép từ ${busId ? `bus #${busId}` : "báo cáo trực tiếp"}).`);
+  console.log(`  file: ${path.relative(process.cwd(), file)}`);
+  if (flags.has("push")) {
+    const { commit, pushed } = pushLedger(idArg, `task: ghi hộ ${type} (${from}) cho ${idArg}`);
+    console.log(`  git: ${commit.split("\n")[0]}\n  push: ${pushed.split("\n").slice(-1)[0]}`);
+  }
 } else if (command === "send") {
   const { state } = requireTask(idArg);
   assertActor(state, "assigner");

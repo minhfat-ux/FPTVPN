@@ -41,6 +41,24 @@ sao chép/phái sinh. Cách sạch nhất vẫn là **viết lại**.
 6. Ghi nguồn tham khảo khi phù hợp (attribution) — nên làm, nhưng **không thay thế** giấy phép.
 7. Có đường gỡ bỏ khi nhận khiếu nại: ẩn mục (`state = 'hidden'`) trong vòng 24h và lưu lại nguồn gốc.
 
+### 3.2 Phân loại nguồn gốc trong hệ thống (từ 2026-09-19)
+
+Quy tắc "chỉ bán nội dung mình viết hoàn toàn" nay được **mã hoá trong dữ liệu và server**, không
+còn chỉ là quy ước trên giấy:
+
+- `hub_skills.kind` = `expert` (prompt pack đóng vai) | `skill` (quy trình). Quyết định mục nằm ở
+  tab nào trong chợ (Chuyên gia · Kỹ năng · Kết nối).
+- `hub_skills.origin` = `own` (**mình tự làm**) | `clone` (**clone về** — nhập hoặc dựa nguồn bên
+  thứ ba). Mặc định của cột là `clone`: phía an toàn về bản quyền.
+- **Server chặn bán mục `clone`**: `createHubSkill`/`updateHubSkill` từ chối `priceVnd > 0` kèm lý
+  do; đổi một mục đang bán sang `clone` thì giá bị hạ về 0 ngay trong cùng lượt ghi. Đường nhập từ
+  SkillHub tự đặt `origin = "clone"`.
+- Console (Chợ kỹ năng → **Giá & phân loại**) cho đặt giá từng mục, đổi phân loại từng mục, và đặt
+  giá cho cả nhóm đang lọc — nhóm `clone` bị bỏ qua và báo lại số lượng.
+- Phân loại hàng loạt nằm trong git: `ops/hub-taxonomy.json` + `ops/hub-taxonomy-apply.mjs`
+  (chạy thử trước, `--apply` để ghi). Hiện tại: **7 mục mình tự làm** (7 seed của fBuddy) và
+  **33 chuyên gia**; 43 mục còn lại là clone về.
+
 ## 4. Việc còn lại (TODO lớn)
 
 - [ ] Viết lại 14 chuyên gia VN/ĐNA (nhóm "Chuyên gia") bằng văn phong riêng, bỏ toàn bộ câu chữ dịch từ nguồn.
