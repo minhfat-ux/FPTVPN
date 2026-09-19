@@ -647,6 +647,14 @@ final class TunnelBridge: @unchecked Sendable {
         var fromGoBadTCPChecksum = 0
         /// TCP có nguồn là địa chỉ utun = SYN-ACK/ACK do listener sing-tun gửi ra.
         var toGoTCPFromTun = 0
+        /// Sức khoẻ TCP của tunnel, đếm từ chính gói của MÁY (không phụ thuộc traffic của
+        /// extension — traffic của extension không đi qua tunnel của nó):
+        ///   `tcpSynToGo`    — máy gửi SYN vào tunnel (muốn mở kết nối).
+        ///   `tcpSynAckFromGo`/`tcpRstFromGo` — tunnel trả lời được.
+        /// SYN có mà không bao giờ có SYN-ACK/RST ⇒ TCP blackhole (đúng bug 19/09/2026).
+        var tcpSynToGo = 0
+        var tcpSynAckFromGo = 0
+        var tcpRstFromGo = 0
     }
 
     private let flow: NEPacketTunnelFlow
@@ -861,7 +869,8 @@ final class TunnelBridge: @unchecked Sendable {
         return "packetFlow→Go \(snapshot.toGo) gói/\(snapshot.toGoBytes) B (bỏ \(snapshot.toGoDropped); "
             + "TCP \(snapshot.toGoTCP), UDP \(snapshot.toGoUDP), ICMP \(snapshot.toGoICMP), subnet \(snapshot.toGoSubnet)), "
             + "Go→packetFlow \(snapshot.fromGo) gói/\(snapshot.fromGoBytes) B (gói hỏng \(snapshot.fromGoBad), checksum sai \(snapshot.fromGoBadChecksum) [TCP \(snapshot.fromGoBadTCPChecksum)]; "
-            + "TCP \(snapshot.fromGoTCP), UDP \(snapshot.fromGoUDP), ICMP \(snapshot.fromGoICMP), subnet \(snapshot.fromGoSubnet))"
+            + "TCP \(snapshot.fromGoTCP), UDP \(snapshot.fromGoUDP), ICMP \(snapshot.fromGoICMP), subnet \(snapshot.fromGoSubnet)); "
+            + "TCP sức khoẻ: SYN vào \(snapshot.tcpSynToGo), SYN-ACK về \(snapshot.tcpSynAckFromGo), RST về \(snapshot.tcpRstFromGo))"
     }
 
     /// Thông tin tối thiểu của một gói IP để chẩn đoán (chỉ ĐỌC, không sửa gói).
@@ -869,6 +878,10 @@ final class TunnelBridge: @unchecked Sendable {
         var proto: UInt8 = 0
         var touchesTunSubnet = false
         var fromTunAddress = false
+        /// Cờ TCP (chỉ có nghĩa khi proto == 6).
+        var tcpSyn = false
+        var tcpAck = false
+        var tcpRst = false
     }
 
     /// Subnet của utun (`HysteriaDefaults.tunIPv4CIDR` = 100.100.100.101/30) — stack Go NAT
@@ -886,11 +899,25 @@ final class TunnelBridge: @unchecked Sendable {
         let destination = Array(bytes[16..<20])
         summary.touchesTunSubnet = source.starts(with: tunSubnetPrefix) || destination.starts(with: tunSubnetPrefix)
         summary.fromTunAddress = source.starts(with: tunAddressPrefix)
+        if summary.proto == 6 {
+            let headerLength = Int(bytes[0] & 0x0f) * 4
+            if bytes.count >= headerLength + 14 {
+                let bits = bytes[headerLength + 13]
+                summary.tcpSyn = bits & 0x02 != 0
+                summary.tcpAck = bits & 0x10 != 0
+                summary.tcpRst = bits & 0x04 != 0
+            }
+        }
         return summary
     }
 
     private static func count(_ summary: PacketSummary, toGo: Bool, counters: inout Counters) {
         if toGo, summary.proto == 6, summary.fromTunAddress { counters.toGoTCPFromTun += 1 }
+        if summary.proto == 6 {
+            if toGo, summary.tcpSyn, !summary.tcpAck { counters.tcpSynToGo += 1 }
+            if !toGo, summary.tcpSyn, summary.tcpAck { counters.tcpSynAckFromGo += 1 }
+            if !toGo, summary.tcpRst { counters.tcpRstFromGo += 1 }
+        }
         switch (summary.proto, toGo) {
         case (6, true): counters.toGoTCP += 1
         case (6, false): counters.fromGoTCP += 1

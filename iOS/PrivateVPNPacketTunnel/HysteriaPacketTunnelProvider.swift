@@ -37,10 +37,25 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
     /// Trần thời gian cho TOÀN BỘ lần start (áp settings + dựng relay + bắt tay QUIC).
     private static let startTimeout: TimeInterval = 20
-    /// Sau khi tunnel "lên", chờ ngần này rồi kiểm tra relay có thật sự chở gói không.
-    private static let trafficGrace: TimeInterval = 12
-    /// Số lần tối đa hoãn kiểm tra traffic khi CHƯA có gì để kết luận (QUIC chưa gửi gói).
-    private static let maxTrafficDeferrals = 2
+
+    // MARK: Ngưỡng tự cứu (không bao giờ để "Connected mà mất mạng")
+
+    /// Mốc nghiệm thu: sau khi tunnel "lên", trong ngần này PHẢI chứng minh được có mạng
+    /// thật QUA tunnel (probe đọc được IP thoát), nếu không thì TỰ GỠ tunnel.
+    ///
+    /// Vì sao phải tự gỡ: NetworkExtension giữ tunnel "Connected" rất lâu, còn lỗi tầng
+    /// transport thì im lặng — 19/09/2026 khách bấm Connect là mất toàn mạng (TCP blackhole)
+    /// mà biểu tượng VPN vẫn xanh. Xem `selfRescue`.
+    private static let firstTrafficDeadline: TimeInterval = 15
+    /// Mốc riêng cho TCP blackhole: SYN đi mà không có SYN-ACK/RST về trong ngần này ⇒ gỡ.
+    /// Ngắn hơn `firstTrafficDeadline` vì đây là bằng chứng HỎNG rõ ràng, không phải "chưa thấy gì".
+    private static let tcpBlackholeDeadline: TimeInterval = 10
+    /// Nhịp kiểm tra (mỗi nhịp: đọc bộ đếm, ghi mốc gói đầu tiên, có thể probe).
+    private static let trafficCheckInterval: TimeInterval = 5
+    /// Nhịp chạy probe CHẨN ĐOÁN (chỉ để ghi log mạng của máy) — mỗi `probeEveryTicks` nhịp.
+    private static let probeEveryTicks = 2
+    /// Trần thời gian một lần probe.
+    private static let probeTimeout: TimeInterval = 3
 
     /// Hàng đợi riêng: `HysteriaTransport.start` CHẶN (chờ WS mở + bắt tay QUIC) nên không
     /// được chạy trên main thread của extension.
@@ -52,9 +67,21 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private var session = 0
     private var startCompleted = false
     private var stopCompleted = false
-    private var watchdog: DispatchWorkItem?
     private var overallTimeout: DispatchWorkItem?
-    private var trafficDeferrals = 0
+    /// Bộ giám sát "tunnel có mạng thật không" — xem `startTrafficSupervisor`.
+    private var supervisorTimer: DispatchSourceTimer?
+    private var supervisorSession = 0
+    private var supervisorStart: Date?
+    private var supervisorTick = 0
+    private var supervisorStopped = false
+    /// Chỉ đặt true khi đã CHỨNG MINH được có mạng qua tunnel (probe đọc được IP thoát).
+    private var trafficConfirmed = false
+    private var probeInFlight = false
+    private var firstPacketLogged = false
+    private var firstReturnPacketLogged = false
+    private var firstTCPHandshakeLogged = false
+    private var tcpWaitingLogged = false
+    private let probeQueue = DispatchQueue(label: "com.privatevpn.mac.hysteria-probe")
     private var statusState = "idle"
     private var statusCode: String?
     private var statusMessage: String?
@@ -69,7 +96,6 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         session += 1
         let currentSession = session
         startCompleted = false
-        trafficDeferrals = 0
         flowLock.unlock()
 
         setStatus(state: "starting", code: nil, message: nil)
@@ -220,7 +246,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         log.log(level: .default, "hysteria: transport up, relay udp 127.0.0.1:\(localPort)")
         setStatus(state: "up", code: nil, message: nil)
         completeStart(completion, error: nil, session: currentSession)
-        scheduleTrafficWatchdog()
+        startTrafficSupervisor()
     }
 
     private func networkSettings(options: HysteriaTransport.Options) -> NEPacketTunnelNetworkSettings {
@@ -245,52 +271,323 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
     // MARK: - Watchdog
 
-    /// Kiểm tra ĐƯỜNG THẬT có chở gói không, không chỉ tin `completionHandler(nil)`:
-    /// `MobileConnect` trả về trước khi QUIC bắt tay xong, nên relay/node hỏng vẫn cho ra
-    /// tunnel "Connected".
-    private func scheduleTrafficWatchdog() {
-        let item = DispatchWorkItem { [weak self] in
-            guard let self, let hysteria = self.currentTransport() else { return }
-            let counts = hysteria.relayFrameCounts
-            let sent = counts?.sent ?? 0
-            let received = counts?.received ?? 0
-            let wsOpen = hysteria.relayIsConnected
-            let bridge = self.bridgeCounters
+    // MARK: - Giám sát traffic & TỰ CỨU
+
+    /// Giám sát "tunnel có mạng thật không" và TỰ GỠ khi không có (xem `selfRescue`).
+    ///
+    /// Bằng chứng đến từ CHÍNH GÓI CỦA MÁY qua cầu `packetFlow ↔ fd` (bộ đếm trong
+    /// `TunnelBridge`), vì **traffic của tiến trình extension KHÔNG đi qua tunnel của nó**:
+    /// NetworkExtension giữ nó ở đường vật lý. Đo thật 19/09/2026 trên macOS 26.5:
+    ///   * probe `URLSession` trong extension trả `120.234.32.53` (IP nhà) trong khi máy đang
+    ///     route 0/0 qua utun của tunnel;
+    ///   * probe TCP bind nguồn `100.100.100.101` (địa chỉ utun) bị `bind()` từ chối:
+    ///     `errno=49` (EADDRNOTAVAIL).
+    /// ⇒ Một probe "chủ động" từ trong extension KHÔNG thể chứng minh đường tunnel. Vì vậy
+    /// quyết định tự gỡ dựa trên dấu hiệu HỎNG nhìn thấy từ gói thật của máy, còn probe chỉ
+    /// để ghi log mạng của máy (không dùng để gỡ tunnel — gỡ oan còn tệ hơn).
+    ///
+    /// Hai dấu hiệu tự gỡ:
+    ///   1. **TCP blackhole** (đúng bug khách báo): máy gửi SYN vào tunnel mà KHÔNG có
+    ///      SYN-ACK/RST nào quay về ⇒ TCP không thể chạy qua tunnel ⇒ gỡ ngay.
+    ///   2. **Không có gói nào** đi qua tunnel sau mốc 15s (cả hai chiều đều 0) ⇒ gỡ.
+    /// Ngoài ra transport chết (WS đứt) đã có đường riêng (`handleDeath`).
+    private func startTrafficSupervisor() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(
+            deadline: .now() + Self.trafficCheckInterval,
+            repeating: Self.trafficCheckInterval
+        )
+        timer.setEventHandler { [weak self] in self?.supervisorStep() }
+        flowLock.lock()
+        supervisorTimer?.cancel()
+        supervisorTimer = timer
+        supervisorSession = session
+        supervisorStart = Date()
+        supervisorTick = 0
+        supervisorStopped = false
+        trafficConfirmed = false
+        probeInFlight = false
+        firstPacketLogged = false
+        firstReturnPacketLogged = false
+        firstTCPHandshakeLogged = false
+        tcpWaitingLogged = false
+        flowLock.unlock()
+        timer.resume()
+        RelayDiagnostics.shared.log(
+            "giám sát: bắt đầu — mốc \(Int(Self.firstTrafficDeadline))s phải thấy gói thật qua tunnel; "
+                + "TCP blackhole (SYN mà không có SYN-ACK/RST) sau \(Int(Self.tcpBlackholeDeadline))s là GỠ NGAY; "
+                + "không có gói nào qua tunnel sau \(Int(Self.firstTrafficDeadline))s cũng gỡ"
+        )
+    }
+
+    /// Một nhịp: đọc bộ đếm, ghi mốc, quyết định tự gỡ.
+    private func supervisorStep() {
+        flowLock.lock()
+        let expected = supervisorSession
+        let started = supervisorStart ?? Date()
+        supervisorTick += 1
+        let tick = supervisorTick
+        let confirmed = trafficConfirmed
+        flowLock.unlock()
+        guard expected == currentSession else {
+            cancelSupervisor()
+            return
+        }
+        let elapsed = Date().timeIntervalSince(started)
+
+        // Chỉ tin bộ đếm khi tunnel chạy chế độ `bridge` (có cầu packetFlow ↔ fd). Chế độ
+        // `direct` không có bộ đếm ⇒ dùng số frame của relay làm proxy.
+        let counters = bridgeCounters
+        let inPackets = counters?.toGo ?? 0
+        let outPackets = counters?.fromGo ?? 0
+        let synToGo = counters?.tcpSynToGo ?? 0
+        let synAckFromGo = counters?.tcpSynAckFromGo ?? 0
+        let rstFromGo = counters?.tcpRstFromGo ?? 0
+        let frames = currentTransport()?.relayFrameCounts
+        let receivedFrames = frames?.received ?? 0
+        let sentFrames = frames?.sent ?? 0
+
+        noteFirstPackets(inPackets: inPackets, outPackets: outPackets, elapsed: elapsed)
+        noteFirstTCPHandshake(synAckFromGo: synAckFromGo, synToGo: synToGo, elapsed: elapsed)
+
+        // (1) TCP blackhole — dấu hiệu HỎNG rõ ràng nhất, đúng ca "connect là mất mạng".
+        if elapsed >= Self.tcpBlackholeDeadline, synToGo > 0, synAckFromGo == 0, rstFromGo == 0 {
+            selfRescue(
+                reason: "TCP blackhole: máy đã gửi \(synToGo) SYN vào tunnel nhưng KHÔNG có SYN-ACK/RST nào "
+                    + "quay về sau \(Int(elapsed))s (gói vào \(inPackets), gói ra \(outPackets))"
+            )
+            return
+        }
+
+        // (2) Không có gói nào qua tunnel sau mốc.
+        if counters != nil, elapsed >= Self.firstTrafficDeadline, inPackets == 0, outPackets == 0 {
+            selfRescue(
+                reason: "sau \(Int(elapsed))s KHÔNG có gói nào của máy đi qua tunnel (cả hai chiều đều 0; "
+                    + "relay frame gửi \(sentFrames)/nhận \(receivedFrames))"
+            )
+            return
+        }
+        if counters == nil, elapsed >= Self.firstTrafficDeadline, sentFrames == 0, receivedFrames == 0 {
+            selfRescue(
+                reason: "sau \(Int(elapsed))s relay không chở frame nào (gửi 0, nhận 0) — tunnel không có mạng"
+            )
+            return
+        }
+
+        // Xác nhận có mạng THẬT qua tunnel (chỉ để ghi log + trạng thái, không dùng để gỡ).
+        // KHÔNG coi "có gói khứ hồi" là đủ khi máy ĐANG thử TCP mà chưa handshake nào xong:
+        // đo thật 19/09/2026, tunnel blackhole vẫn có ICMP/DNS khứ hồi (574 vào/557 ra) nên
+        // chỉ nhìn gói là kết luận sai.
+        if !confirmed {
+            if synAckFromGo > 0 {
+                confirmTraffic(
+                    elapsed: elapsed,
+                    evidence: "TCP handshake hoàn tất \(synAckFromGo) lần (gói vào \(inPackets), ra \(outPackets))"
+                )
+            } else if synToGo == 0, inPackets > 0, outPackets > 0 {
+                confirmTraffic(
+                    elapsed: elapsed,
+                    evidence: "gói khứ hồi qua tunnel: vào \(inPackets), ra \(outPackets) (máy chưa thử TCP nào)"
+                )
+            } else if synToGo > 0, synAckFromGo == 0, !tcpWaitingLogged {
+                flowLock.lock()
+                tcpWaitingLogged = true
+                flowLock.unlock()
+                RelayDiagnostics.shared.log(
+                    "giám sát: máy đã gửi \(synToGo) SYN vào tunnel mà CHƯA có SYN-ACK nào quay về "
+                        + "(gói vào \(inPackets), ra \(outPackets)) — chờ tới mốc "
+                        + "\(Int(Self.tcpBlackholeDeadline))s rồi tự gỡ"
+                )
+            }
+        }
+
+        // Probe chẩn đoán: CHỈ ghi log mạng của máy (xem chú thích ở `startTrafficSupervisor`).
+        if tick % Self.probeEveryTicks == 0 { startProbe(expected: expected, elapsed: elapsed) }
+    }
+
+    /// Ghi log MỘT lần cho mỗi chiều gói đầu tiên đi qua cầu (mốc nghiệm thu).
+    private func noteFirstPackets(inPackets: Int, outPackets: Int, elapsed: TimeInterval) {
+        flowLock.lock()
+        let needIn = inPackets > 0 && !firstPacketLogged
+        let needOut = outPackets > 0 && !firstReturnPacketLogged
+        if needIn { firstPacketLogged = true }
+        if needOut { firstReturnPacketLogged = true }
+        flowLock.unlock()
+        if needIn {
             RelayDiagnostics.shared.log(
-                "hysteria: kiểm tra traffic (gui=\(sent) nhan=\(received) wsOpen=\(wsOpen)"
-                    + (bridge.map { ", cầu: packetFlow→Go \($0.toGo) gói, Go→packetFlow \($0.fromGo) gói" } ?? "")
-                    + ")"
-            )
-            // Có gói từ relay trả về ⇒ đường thông thật.
-            if received > 0 {
-                RelayDiagnostics.shared.log("hysteria: có traffic thật qua relay (gui=\(sent) nhan=\(received))")
-                return
-            }
-            // Chưa gửi gói nào (QUIC chưa bắt tay) ⇒ CHƯA kết luận được, hoãn có trần.
-            if sent == 0 && wsOpen {
-                self.flowLock.lock()
-                let deferrals = self.trafficDeferrals
-                self.trafficDeferrals += 1
-                self.flowLock.unlock()
-                if deferrals < Self.maxTrafficDeferrals {
-                    RelayDiagnostics.shared.log("hysteria: chưa có gói nào để kết luận — kiểm tra lại sau \(Int(Self.trafficGrace))s")
-                    self.scheduleTrafficWatchdog()
-                    return
-                }
-            }
-            RelayDiagnostics.shared.log("hysteria: relay không chở gói nào (gui=\(sent) nhan=\(received) wsOpen=\(wsOpen)) — hạ tunnel (TUNNEL_NO_TRAFFIC)")
-            self.setStatus(
-                state: "no_traffic",
-                code: Self.codeNoTraffic,
-                message: "Relay hysteria không trả về gói nào (wsOpen=\(wsOpen))."
-            )
-            self.teardownAndCancel(
-                code: Self.codeNoTraffic,
-                message: "Relay hysteria không trả về gói nào sau \(Int(Self.trafficGrace))s (đã gửi \(sent) frame, wsOpen=\(wsOpen))."
+                "giám sát: gói ĐẦU TIÊN của máy vào tunnel sau \(Self.seconds(elapsed))s (tổng \(inPackets) gói)"
             )
         }
-        watchdog = item
-        queue.asyncAfter(deadline: .now() + Self.trafficGrace, execute: item)
+        if needOut {
+            RelayDiagnostics.shared.log(
+                "giám sát: gói ĐẦU TIÊN từ tunnel về máy sau \(Self.seconds(elapsed))s (tổng \(outPackets) gói)"
+            )
+        }
+    }
+
+    /// Mốc quan trọng nhất: tunnel đã hoàn tất được MỘT handshake TCP với máy ⇒ TCP chạy.
+    private func noteFirstTCPHandshake(synAckFromGo: Int, synToGo: Int, elapsed: TimeInterval) {
+        flowLock.lock()
+        let needed = synAckFromGo > 0 && !firstTCPHandshakeLogged
+        if needed { firstTCPHandshakeLogged = true }
+        flowLock.unlock()
+        guard needed else { return }
+        RelayDiagnostics.shared.log(
+            "giám sát: TCP ĐÃ CHẠY qua tunnel — SYN-ACK đầu tiên về máy sau \(Self.seconds(elapsed))s "
+                + "(SYN vào \(synToGo), SYN-ACK về \(synAckFromGo))"
+        )
+    }
+
+    private func startProbe(expected: Int, elapsed: TimeInterval) {
+        flowLock.lock()
+        if probeInFlight {
+            flowLock.unlock()
+            return
+        }
+        probeInFlight = true
+        flowLock.unlock()
+        probeQueue.async { [weak self] in
+            guard let self else { return }
+            let ip = self.probeThroughTunnel()
+            self.finishProbe(ip: ip, expected: expected, elapsed: elapsed)
+        }
+    }
+
+    private func finishProbe(ip: String?, expected: Int, elapsed: TimeInterval) {
+        flowLock.lock()
+        probeInFlight = false
+        flowLock.unlock()
+        guard expected == currentSession else { return }
+        // KHÔNG dùng probe để gỡ tunnel: traffic của extension không đi qua tunnel của nó,
+        // nên probe chỉ nói lên "máy có Internet hay không", không nói gì về đường tunnel.
+        guard let ip else { return }
+        let counters = bridgeCounters
+        RelayDiagnostics.shared.log(
+            "giám sát: mạng NGOÀI tunnel của máy OK sau \(Self.seconds(elapsed))s — IP \(ip); "
+                + "gói QUA tunnel: vào \(counters?.toGo ?? 0), ra \(counters?.fromGo ?? 0), "
+                + "SYN vào \(counters?.tcpSynToGo ?? 0), SYN-ACK về \(counters?.tcpSynAckFromGo ?? 0), "
+                + "RST về \(counters?.tcpRstFromGo ?? 0)"
+        )
+    }
+
+    private func confirmTraffic(elapsed: TimeInterval, evidence: String) {
+        flowLock.lock()
+        let already = trafficConfirmed
+        trafficConfirmed = true
+        flowLock.unlock()
+        guard !already else { return }
+        RelayDiagnostics.shared.log(
+            "giám sát: XÁC NHẬN tunnel có mạng thật sau \(Self.seconds(elapsed))s — \(evidence)"
+        )
+    }
+
+    /// Probe CHẨN ĐOÁN mạng của máy (KHÔNG quyết định gỡ tunnel — xem
+    /// `startTrafficSupervisor`): traffic của extension không đi qua tunnel của nó nên probe
+    /// này chỉ nói "máy còn Internet hay không", giúp phân biệt "tunnel hỏng" với "cả mạng hỏng".
+    ///
+    /// KHÔNG bind nguồn = địa chỉ utun: macOS chặn (`bind` trả `errno=49` EADDRNOTAVAIL từ
+    /// tiến trình extension — đo thật 19/09/2026), nên một probe "qua tunnel" là bất khả thi
+    /// từ trong extension.
+    /// Hàm CHẶN nên chỉ được gọi trên `probeQueue`.
+    private func probeThroughTunnel() -> String? {
+        probeTrace()
+    }
+
+    /// TCP tới `1.1.1.1:80` (Cloudflare trace, không cần DNS), đọc `ip=` trong phản hồi.
+    private func probeTrace() -> String? {
+        let request = "GET /cdn-cgi/trace HTTP/1.0\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n"
+        let payload = Array(request.utf8)
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+
+        var remote = sockaddr_in()
+        remote.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        remote.sin_family = sa_family_t(AF_INET)
+        remote.sin_port = UInt16(80).bigEndian
+        guard inet_pton(AF_INET, "1.1.1.1", &remote.sin_addr) == 1 else { return nil }
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK)
+        let connected = withUnsafePointer(to: &remote) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        if connected != 0 {
+            guard errno == EINPROGRESS else { return nil }
+            var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            guard poll(&descriptor, 1, Int32(Self.probeTimeout * 1000)) > 0 else { return nil }
+            var socketError: Int32 = 0
+            var length = socklen_t(MemoryLayout<Int32>.size)
+            guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &length) == 0, socketError == 0 else { return nil }
+        }
+        _ = payload.withUnsafeBytes { write(fd, $0.baseAddress, payload.count) }
+
+        var buffer = [UInt8](repeating: 0, count: 2048)
+        var body = ""
+        let deadline = Date().addingTimeInterval(Self.probeTimeout)
+        while Date() < deadline {
+            var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            guard poll(&descriptor, 1, 300) > 0 else { continue }
+            let capacity = buffer.count
+            let count = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, capacity) }
+            if count <= 0 { break }
+            body += String(decoding: buffer[0..<count], as: UTF8.self)
+            if let ip = Self.exitIP(from: body) { return ip }
+        }
+        return Self.exitIP(from: body)
+    }
+
+    /// Tách IP thoát từ body của endpoint. Chỉ nhận token ĐÚNG dạng IP (`Network.IPv4Address` /
+    /// `IPv6Address` parse nghiêm) — đo thật 19/09/2026: regex lỏng từng nuốt cả timestamp
+    /// `05:08:45` trong header HTTP thành "IP".
+    private static func exitIP(from body: String?) -> String? {
+        guard let body else { return nil }
+        let separators: Set<Character> = ["\n", "\r", " ", "\t", "=", ",", "\"", "'"]
+        for token in body.split(whereSeparator: { separators.contains($0) }) {
+            let candidate = String(token)
+            guard !candidate.isEmpty, candidate.count <= 45 else { continue }
+            // IPv4 dạng đủ 4 octet (IPv4Address một mình còn nhận cả "301" — mã trạng thái HTTP).
+            if candidate.filter({ $0 == "." }).count == 3, IPv4Address(candidate) != nil { return candidate }
+            if candidate.contains(":"), IPv6Address(candidate) != nil { return candidate }
+        }
+        return nil
+    }
+
+    /// TỰ GỠ tunnel khi không chứng minh được có mạng — trả mạng của máy về như trước.
+    ///
+    /// Đây là điều kiện nghiệm thu của chủ dự án (19/09/2026): "connect vào mất toàn mạng"
+    /// là lỗi nặng nhất; thà ngắt tunnel kèm lỗi rõ còn hơn để máy ở trạng thái Connected
+    /// mà không có mạng.
+    private func selfRescue(reason: String) {
+        flowLock.lock()
+        let alreadyStopped = supervisorStopped
+        supervisorStopped = true
+        let elapsed = supervisorStart.map { Date().timeIntervalSince($0) } ?? 0
+        flowLock.unlock()
+        guard !alreadyStopped else { return }
+        RelayDiagnostics.shared.log("giám sát: QUYẾT ĐỊNH TỰ GỠ tunnel sau \(Self.seconds(elapsed))s — \(reason)")
+        log.error("traffic supervisor: self-rescue (\(reason, privacy: .public))")
+        setStatus(
+            state: "no_traffic",
+            code: Self.codeNoTraffic,
+            message: "Tự gỡ tunnel: \(reason)"
+        )
+        teardownAndCancel(
+            code: Self.codeNoTraffic,
+            message: "Tự gỡ tunnel vì không có mạng qua tunnel (đã gỡ network settings, mạng trở lại bình thường): \(reason)"
+        )
+    }
+
+    private func cancelSupervisor() {
+        flowLock.lock()
+        let timer = supervisorTimer
+        supervisorTimer = nil
+        flowLock.unlock()
+        timer?.cancel()
+    }
+
+    private static func seconds(_ value: TimeInterval) -> String {
+        String(format: "%.1f", value)
     }
 
     private func scheduleOverallTimeout(completion: @escaping (Error?) -> Void) {
@@ -343,6 +640,9 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         stopBridge()
         setTunnelNetworkSettings(nil) { [weak self] _ in
             guard let self else { return }
+            RelayDiagnostics.shared.log(
+                "giám sát: ĐÃ gỡ network settings (\\(code)) — mạng của máy quay lại đường cũ, báo lỗi cho hệ thống"
+            )
             self.cancelTunnelWithError(self.error(code: code, message: message))
         }
     }
@@ -405,8 +705,10 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     }
 
     private func cancelScheduledWork() {
-        watchdog?.cancel()
-        watchdog = nil
+        cancelSupervisor()
+        flowLock.lock()
+        supervisorStopped = true
+        flowLock.unlock()
     }
 
     /// Dừng cầu `packetFlow ↔ fd` (nếu phiên này chạy ở chế độ bridge).
