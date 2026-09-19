@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Nghiệm thu độc lập của bên giao trên DB production: node /tmp/verify-rewrite.mjs --db /var/lib/fbuddy/fbuddy.db --slugs '<21 slug>' -> 21/21 PASS, 0 FAIL. DB: hub_skills 50 mục, nhóm Giáo dục 22, tất cả state=published, price_vnd=0. Nguyên nhân 'không thấy trên UI' đã tìm ra và vá: chợ chia tab theo category nên 22 mục rơi hết vào tab Kỹ năng; nay có kind riêng -> 16 mục hiện ở tab Chuyên gia.",
+ "actor": "mac",
+ "at": "2026-09-19T14:04:17.110Z"
+}
