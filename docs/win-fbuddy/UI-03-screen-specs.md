@@ -12,7 +12,7 @@ bắt buộc** (rỗng / đang tải / lỗi / mất mạng), theo đúng templa
 [`docs/mobile/templates/SCREEN-SPEC.template.md`](../mobile/templates/SCREEN-SPEC.template.md).
 
 **8 màn hình:** (1) Đăng nhập · (2) Chat · (3) Danh sách hội thoại · (4) Chợ kỹ năng · (5) Chọn kỹ năng ·
-(6) Credit · (7) Nạp · (8) Tài khoản & thiết bị.
+(6) Credit · (7) **Hết credit & Xin thêm token** (KHÔNG có màn nạp/mua — QĐ 2026-09-19) · (8) Tài khoản & thiết bị.
 
 ## 2. Phạm vi file (whitelist)
 
