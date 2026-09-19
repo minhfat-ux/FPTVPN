@@ -281,27 +281,59 @@ async function announce(state, kind, detail) {
   return { message, sent };
 }
 
+/**
+ * Push lên git CÓ ĐƯỜNG DỰ PHÒNG XÁC THỰC.
+ *
+ * VÌ SAO CẦN (lỗi thật, 19/09/2026): harness do watcher đánh thức chạy trong sandbox. `~/.gitconfig`
+ * của máy này trỏ helper GitHub qua `!'…\gh.exe' auth git-credential`; helper dạng `!` phải chạy
+ * qua `sh.exe`, mà sandbox chặn named pipe của sh ⇒
+ *   `sh.exe: *** fatal error - couldn't create signal pipe, Win32 error 5`
+ *   `fatal: could not read Username for 'https://github.com'`
+ * Hệ quả: mọi `ack`/`done --push` của phiên được đánh thức đều nằm lại máy, bên giao không thấy
+ * bằng chứng (đã ghi nguyên văn trong `done` của T-20260919-01).
+ * CÁCH CHỮA: nếu push thường hỏng, lấy token bằng `gh auth token` rồi push thẳng bằng URL có token,
+ * kèm `-c credential.helper=` để không gọi helper nào. Token chỉ nằm trong argv tiến trình, không
+ * ghi ra đĩa và git in URL đã lược credential.
+ */
+function ghToken() {
+  const fromEnv = String(process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? "").trim();
+  if (fromEnv) return fromEnv;
+  const result = runCapture("gh", ["auth", "token"]);
+  return result.ok ? String(result.stdout).trim() : "";
+}
+
+function pushAuthed(ref, cwd = undefined) {
+  const direct = gitCapture(["push", "origin", ref], { cwd });
+  if (!direct.startsWith("!git")) return { ok: true, detail: direct };
+  const token = ghToken();
+  const url = gitCapture(["remote", "get-url", "origin"], { cwd });
+  if (!token || url.startsWith("!git")) return { ok: false, detail: direct };
+  const slug = String(url).trim().replace(/^https:\/\/[^@/]*@/, "https://").replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "");
+  if (!slug || slug.includes("://")) return { ok: false, detail: direct };
+  const retry = gitCapture(["-c", "credential.helper=", "push", `https://x-access-token:${token}@github.com/${slug}.git`, ref], { cwd });
+  if (retry.startsWith("!git")) return { ok: false, detail: `${direct} | token: ${retry}` };
+  return { ok: true, detail: `${retry} (qua token gh)` };
+}
+
 function pushLedger(id, message) {
   const subject = `${message} [task ${id}]`;
   const doc = refreshAskDoc();
   if (doc) console.log(`  cập nhật khối "việc đang chờ" trong ${doc}`);
   git("add", TASKS_DIR, ...(doc ? [doc] : []));
   git("commit", "-m", subject, "--", TASKS_DIR, ...(doc ? [doc] : []));
-  const direct = git("push", "origin", "HEAD:flowgpt");
-  if (!direct.startsWith("!git")) return { commit: "cây chính", pushed: direct };
+  const direct = pushAuthed("HEAD:flowgpt");
+  if (direct.ok) return { commit: "cây chính", pushed: direct.detail };
 
   const worktree = path.join(os.tmpdir(), `dsh-task-${process.pid}`);
   git("fetch", "origin", "flowgpt");
   const added = git("worktree", "add", "-q", "--detach", worktree, "origin/flowgpt");
-  if (added.startsWith("!git")) return { commit: "cây chính", pushed: direct };
+  if (added.startsWith("!git")) return { commit: "cây chính", pushed: direct.detail };
   try {
     fs.cpSync(TASKS_DIR, path.join(worktree, TASKS_DIR), { recursive: true });
-    execFileSync("git", ["add", TASKS_DIR], { cwd: worktree, ...NO_WINDOW });
-    execFileSync("git", ["-c", "user.email=agent@flowtech", "-c", "user.name=FlowTech Agent", "commit", "-q", "-m", subject], { cwd: worktree, ...NO_WINDOW });
-    const out = execFileSync("git", ["push", "origin", "HEAD:flowgpt"], { cwd: worktree, encoding: "utf8", ...NO_WINDOW });
-    return { commit: `worktree (${git("rev-parse", "--short", "HEAD")})`, pushed: String(out).trim() || "pushed" };
-  } catch (error) {
-    return { commit: "cây chính", pushed: `!git: ${String(error.stderr || error.message).trim().split("\n")[0]}` };
+    runCapture("git", ["add", TASKS_DIR], { cwd: worktree });
+    runCapture("git", ["-c", "user.email=agent@flowtech", "-c", "user.name=FlowTech Agent", "commit", "-q", "-m", subject], { cwd: worktree });
+    const retry = pushAuthed("HEAD:flowgpt", worktree);
+    return { commit: `worktree (${git("rev-parse", "--short", "HEAD")})`, pushed: retry.detail };
   } finally {
     git("worktree", "remove", "--force", worktree);
     git("worktree", "prune");
