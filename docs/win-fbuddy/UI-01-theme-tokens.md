@@ -30,7 +30,10 @@ Nếu buộc phải sửa thêm ⇒ **DỪNG và báo Mac** (`RULE-DELEGATE-FB-0
 
 ## 3. Nguồn sự thật
 
-- **Token:** `docs/mobile/theme-tokens.json` (104 token lá, trích từ `web/src/styles.css` + `web/src/chat/chat.css`).
+- **Token:** `docs/mobile/theme-tokens.json` — **46 token màu** (25 dark + 21 light), trong đó dark có
+  **10 giá trị hex khác nhau** (`#0A1F3B`, `#0E2747`, `#123052`, `#16385E`, `#33C773`, `#3DD982`, `#7FE6C0`,
+  `#E0A63C`, `#F25A5A`, `#FFFFFF`) cộng các token `rgba(...)`. Ngoài màu còn nhóm `radius/space/size/type/component`.
+  **Tiêu chí đếm là 10 hex dark + token màu, không phải "104".** (Số cũ ghi sai — Mac đính chính 2026-09-19.)
 - **Giải thích cho người đọc:** `docs/mobile/THEME.md`, `docs/THEME.md`.
 - **Luật:** `FR-UI-001`/`AC-038` — "100% token khớp hex với web; grep màn hình **không** thấy mã màu".
 - Màu chuẩn dark (để tự kiểm nhanh): accent `#33C773`, nền `#0A1F3B`, panel `#0E2747`,
@@ -87,3 +90,8 @@ node ops/verify-design-parity.mjs --section theme
 - **Không bị chặn bởi** `OQ-001` (bundle id) hay `OQ-002` (tài khoản store) ⇒ việc này được giao ngay.
 - Nếu Android build không chạy được trên máy Windows (thiếu JDK/SDK) ⇒ ghi `blocked` kèm **output lỗi thật**,
   **không** tự hạ tiêu chí và **không** bỏ phần Android mà không báo.
+
+> **Cập nhật của Mac (2026-09-19, sau khi WIN giao 4 file theme):** phần theme **đã PASS 5/5**
+> (`node ops/verify-design-parity.mjs --section theme`). Việc còn lại của brief này là **ảnh chụp
+> gallery 390×844** — nhưng máy Windows không có simulator/emulator nên **Mac** sẽ chụp sau khi dựng
+> khung iOS/Android (GATE 2). Vì vậy WIN **không** bị chặn bởi phần ảnh.

@@ -19,7 +19,7 @@ bắt buộc** (rỗng / đang tải / lỗi / mất mạng), theo đúng templa
 | Đường dẫn | Loại |
 |---|---|
 | `docs/design/SCREEN-SPEC-01-login.md` … `SCREEN-SPEC-08-account-devices.md` | tạo mới (8 file) |
-| `docs/design/ui-03-*.png` | ảnh so sánh |
+| `docs/design/ui-03-*.png` | ảnh so sánh **nếu có sẵn** (không bắt buộc — ảnh chụp app do Mac làm ở GATE 2) |
 
 **Cấm sửa** `docs/mobile/**` (kể cả template — **đây là vùng của Mac**), `docs/SRS.md`, `web/**`,
 `.privatefbuddy/**`, `ops/**`. Không chạy git. Không thêm dependency.
@@ -71,7 +71,7 @@ event `error`, và **báo Mac** để Mac sửa template (bạn không được 
 ## 6. Lệnh nghiệm thu (Mac chạy **đúng** lệnh này)
 
 ```bash
-node ops/verify-design-parity.mjs --section specs
+node ops/verify-design-parity.mjs --section specs   # chỉ DP-08 (tài liệu); ảnh chụp 390px là `--section shots`, do Mac ở GATE 2
 ```
 
 > Chưa tồn tại — Mac tạo cùng GATE 1. Nếu chưa có ⇒ `blocked`, không tự viết thay, không hạ tiêu chí.
@@ -81,7 +81,7 @@ node ops/verify-design-parity.mjs --section specs
 | # | Bằng chứng |
 |---|---|
 | 1 | Danh sách 8 file spec + số dòng mỗi file |
-| 2 | Output thật của `node ops/verify-design-parity.mjs --section specs` |
+| 2 | Output thật của `node ops/verify-design-parity.mjs --section specs   # chỉ DP-08 (tài liệu); ảnh chụp 390px là `--section shots`, do Mac ở GATE 2` |
 | 3 | **Ảnh chụp 390×844**: web ↔ app cho Chat, Đăng nhập, Credit (`docs/design/ui-03-*.png`) |
 | 4 | Bảng đối chiếu token: tên token · hex trong spec · hex trong `theme-tokens.json` |
 | 5 | Ghi chú phát hiện sai lệch (nếu template/spec cũ nói sai) để Mac mở CR |

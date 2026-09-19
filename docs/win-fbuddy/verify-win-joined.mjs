@@ -11,8 +11,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const ROOT = new URL('..', import.meta.url).pathname
+// fileURLToPath: `new URL(...).pathname` cho ra '/C:/...' trên Windows ⇒ existsSync luôn false.
+const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const TASKS = join(ROOT, 'ops/tasks')
 
 function git (args) {

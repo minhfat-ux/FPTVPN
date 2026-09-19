@@ -8,19 +8,30 @@
 //   node ops/verify-design-parity.mjs --json     # xuất JSON để dán vào bằng chứng
 //   node ops/verify-design-parity.mjs --section theme    # chỉ kiểm theme (task UI-01)
 //   node ops/verify-design-parity.mjs --section assets   # chỉ kiểm logo/icon (task UI-02)
-//   node ops/verify-design-parity.mjs --section specs    # chỉ kiểm screen-spec + ảnh (task UI-03)
+//   node ops/verify-design-parity.mjs --section specs    # chỉ kiểm screen-spec (task UI-03)
+//   node ops/verify-design-parity.mjs --section shots    # chỉ kiểm ảnh chụp 390px (GATE 2 — Mac)
 //
 // Exit 0 = PASS (mọi mục đạt) · Exit 1 = FAIL (in rõ mục nào chưa đạt).
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, extname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const ROOT = new URL('..', import.meta.url).pathname
+// fileURLToPath: `new URL(...).pathname` cho ra '/C:/...' trên Windows ⇒ existsSync luôn false.
+const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const JSON_OUT = process.argv.includes('--json')
 // --section theme|assets|specs : chỉ kiểm một phần (mỗi task UI/UX có lệnh nghiệm thu riêng)
 const secArg = process.argv.find(a => a.startsWith('--section'))
 const SECTION = secArg ? (secArg.includes('=') ? secArg.split('=')[1] : process.argv[process.argv.indexOf(secArg) + 1]) : null
-const SECTIONS = { theme: ['DP-01', 'DP-02', 'DP-03', 'DP-04', 'DP-05'], assets: ['DP-06', 'DP-07'], specs: ['DP-08', 'DP-09'] }
+const SECTIONS = {
+  theme: ['DP-01', 'DP-02', 'DP-03', 'DP-04', 'DP-05'],
+  assets: ['DP-06', 'DP-07'],
+  // DP-08 = tài liệu screen-spec (việc của Windows).
+  // DP-09 = ảnh chụp 390×844 — chỉ có được khi ĐÃ có app build (GATE 2, việc của Mac),
+  //         nên tách riêng để không chặn task screen-spec.
+  specs: ['DP-08'],
+  shots: ['DP-09'],
+}
 const checks = []
 const add = (id, title, ok, detail) => checks.push({ id, title, ok: !!ok, detail })
 
