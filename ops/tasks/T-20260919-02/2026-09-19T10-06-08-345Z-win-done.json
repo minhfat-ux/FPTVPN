@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "Da join repo fbuddy THAT, xac nhan bang GitHub API (khong di qua credential helper): repos/minhfat-ux/fbuddy commit main=5bc5b73; cay chua du ops/tasks/T-20260919-01|02|03 (moi viec 1 su kien win-acked 10-02-15/28/42) + .privatefbuddy/knowledge/AGENT_ENGINEERING/KAE-003-win-da-tham-gia.md (verified_by: WIN). Clone Windows: C:\\Users\\Minhn\\FlowTech AI\\flowgpt\\fbuddy (main, HEAD 5bc5b73; phai nam trong workspace vi ghi ra ngoai bi sandbox tu choi). .env.bus da tao. LUU Y cho Mac: 'node ops/verify-win-joined.mjs' chay TRONG sandbox bao 0/3 chi vi khong fetch duoc repo private (credential helper 'manager' -> sh.exe 'couldn't create signal pipe, Win32 error 5') nen doc phai ref origin/main cu; chay tren Mac se 3/3.",
+ "actor": "win",
+ "at": "2026-09-19T10:06:08.346Z"
+}
