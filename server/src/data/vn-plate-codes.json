@@ -1,0 +1,1653 @@
+{
+ "capNhat": "2026-09-19",
+ "nguonChuan": [
+  "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2023/7/39907/46044-1-2023887-88824-2023-tt-bca.pdf",
+  "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2025/6/45356/57302-1-2025887-88851-2025-tt-bca.pdf",
+  "https://congbao.chinhphu.vn/tai-ve-van-ban-so-202-2025-qh15-45050-56708",
+  "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2024/11/43337/53043-1-20241339-134079-2024-tt-bca.pdf",
+  "https://bocongan.gov.vn/hoi-dap/chi-tiet-cau-hoi/914b9897-ac04-4a82-bb7c-d3282126f7ed?page=/bo-voi-cu-tri",
+  "https://vnanet.vn/vi/graphic/kinh-te-4/danh-sach-bien-so-xe-cua-cac-tinh-thanh-sau-hop-nhat-8093280.html",
+  "https://luatvietnam.vn/tin-van-ban-moi/quy-dinh-ve-bien-so-xe-cua-34-tinh-thanh-tu-01-7-2025-186-102811-article.html",
+  "https://www.vietnam.vn/bien-so-xe-cua-cac-tinh-thanh-tu-1-7-tp-hcm-co-nhieu-dau-so-nhat",
+  "https://vi.wikipedia.org/wiki/Bi%E1%BB%83n_xe_c%C6%A1_gi%E1%BB%9Bi_Vi%E1%BB%87t_Nam",
+  "https://dat.bike/bien-so-xe-cac-tinh/",
+  "https://baophapluat.vn/giai-ma-64-ky-hieu-o-bien-so-xe-quan-doi-post233092.html"
+ ],
+ "ghiChu": "Phụ lục số 02 Thông tư 51/2025/TT-BCA ghi \"67, 68\". Lưu ý thứ tự: An Giang (đơn vị giữ tên) là 67, Kiên Giang là 68 — ngược với quy tắc \"mã đơn vị giữ tên đứng trước\" áp dụng ở các tỉnh khác, nên khi đọc đừng suy diễn thứ tự.",
+ "ghiChuChung": "Bảng chuẩn lấy từ Công báo Chính phủ: Phụ lục số 02 Thông tư 51/2025/TT-BCA (34 tỉnh/thành sau sáp nhập 01/7/2025) đối chiếu với Phụ lục số 02 Thông tư 24/2023/TT-BCA (63 tỉnh/thành trước sáp nhập) và Nghị quyết 202/2025/QH15. Xe đăng ký trước 01/7/2025 vẫn mang mã cũ; mã cũ nay thuộc tỉnh mới theo cột tinhHienTai.",
+ "nguonDoiChieu": [
+  "https://vi.wikipedia.org/wiki/Biển_xe_cơ_giới_Việt_Nam (bảng hiện hành + bản cũ 2025-05-19, dùng để đối chiếu chéo)"
+ ],
+ "doiChieu": {
+  "soMaLech": 0,
+  "ketLuan": "Hai nguồn khớp nhau"
+ },
+ "bangMoi": [
+  {
+   "tinh": "An Giang",
+   "ma": [
+    "67",
+    "68"
+   ],
+   "maChinh": [
+    "67"
+   ],
+   "gopTu": [
+    "An Giang",
+    "Kiên Giang"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Phụ lục số 02 Thông tư 51/2025/TT-BCA ghi \"67, 68\". Lưu ý thứ tự: An Giang (đơn vị giữ tên) là 67, Kiên Giang là 68 — ngược với quy tắc \"mã đơn vị giữ tên đứng trước\" áp dụng ở các tỉnh khác, nên khi đọc đừng suy diễn thứ tự."
+  },
+  {
+   "tinh": "Bắc Ninh",
+   "ma": [
+    "98",
+    "99"
+   ],
+   "maChinh": [
+    "99"
+   ],
+   "gopTu": [
+    "Bắc Giang",
+    "Bắc Ninh"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Bắc Ninh giữ 99 (cấp trước), sau đó đến 98 của Bắc Giang."
+  },
+  {
+   "tinh": "Cà Mau",
+   "ma": [
+    "69",
+    "94"
+   ],
+   "maChinh": [
+    "69"
+   ],
+   "gopTu": [
+    "Bạc Liêu",
+    "Cà Mau"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": ""
+  },
+  {
+   "tinh": "Cần Thơ",
+   "ma": [
+    "65",
+    "83",
+    "95"
+   ],
+   "maChinh": [
+    "65"
+   ],
+   "gopTu": [
+    "Cần Thơ",
+    "Sóc Trăng",
+    "Hậu Giang"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Xác nhận đúng như câu hỏi: 65, 83, 95; cấp 65 trước, hết thì cấp 83 rồi 95 (thứ tự từ thấp đến cao)."
+  },
+  {
+   "tinh": "Cao Bằng",
+   "ma": [
+    "11"
+   ],
+   "maChinh": [
+    "11"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập."
+  },
+  {
+   "tinh": "Đà Nẵng",
+   "ma": [
+    "43",
+    "92"
+   ],
+   "maChinh": [
+    "43"
+   ],
+   "gopTu": [
+    "Đà Nẵng",
+    "Quảng Nam"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Xác nhận đúng: Đà Nẵng giữ 43, tiếp nhận 92 của Quảng Nam."
+  },
+  {
+   "tinh": "Đắk Lắk",
+   "ma": [
+    "47",
+    "78"
+   ],
+   "maChinh": [
+    "47"
+   ],
+   "gopTu": [
+    "Đắk Lắk",
+    "Phú Yên"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": ""
+  },
+  {
+   "tinh": "Điện Biên",
+   "ma": [
+    "27"
+   ],
+   "maChinh": [
+    "27"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập."
+  },
+  {
+   "tinh": "Đồng Nai",
+   "ma": [
+    "39",
+    "60",
+    "93"
+   ],
+   "maChinh": [
+    "39",
+    "60"
+   ],
+   "gopTu": [
+    "Bình Phước",
+    "Đồng Nai"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Xác nhận đúng như câu hỏi; Phụ lục ghi \"39, 60, 93\" — Đồng Nai có 2 ký hiệu cũ (39, 60) cộng 93 của Bình Phước."
+  },
+  {
+   "tinh": "Đồng Tháp",
+   "ma": [
+    "63",
+    "66"
+   ],
+   "maChinh": [
+    "66"
+   ],
+   "gopTu": [
+    "Đồng Tháp",
+    "Tiền Giang"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Đồng Tháp giữ 66 cấp trước, sau đó đến 63 của Tiền Giang."
+  },
+  {
+   "tinh": "Gia Lai",
+   "ma": [
+    "77",
+    "81"
+   ],
+   "maChinh": [
+    "81"
+   ],
+   "gopTu": [
+    "Bình Định",
+    "Gia Lai"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Gia Lai giữ 81 cấp trước, sau đó đến 77 của Bình Định."
+  },
+  {
+   "tinh": "Hà Nội",
+   "ma": [
+    "29",
+    "30",
+    "31",
+    "32",
+    "33",
+    "40"
+   ],
+   "maChinh": [
+    "29",
+    "30",
+    "31",
+    "32",
+    "33",
+    "40"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập, giữ nguyên toàn bộ dải mã."
+  },
+  {
+   "tinh": "Hà Tĩnh",
+   "ma": [
+    "38"
+   ],
+   "maChinh": [
+    "38"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "KHÔNG sáp nhập với Nghệ An — Hà Tĩnh vẫn là một tỉnh riêng trong 34 đơn vị, giữ ký hiệu 38."
+  },
+  {
+   "tinh": "Hải Phòng",
+   "ma": [
+    "15",
+    "16",
+    "34"
+   ],
+   "maChinh": [
+    "15",
+    "16"
+   ],
+   "gopTu": [
+    "Hải Dương",
+    "Hải Phòng"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Xác nhận đúng: giữ 15, 16 và tiếp nhận 34 của Hải Dương."
+  },
+  {
+   "tinh": "Hưng Yên",
+   "ma": [
+    "17",
+    "89"
+   ],
+   "maChinh": [
+    "89"
+   ],
+   "gopTu": [
+    "Hưng Yên",
+    "Thái Bình"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Hưng Yên giữ 89 cấp trước, sau đó đến 17 của Thái Bình."
+  },
+  {
+   "tinh": "Khánh Hòa",
+   "ma": [
+    "79",
+    "85"
+   ],
+   "maChinh": [
+    "79"
+   ],
+   "gopTu": [
+    "Khánh Hòa",
+    "Ninh Thuận"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": ""
+  },
+  {
+   "tinh": "Lai Châu",
+   "ma": [
+    "25"
+   ],
+   "maChinh": [
+    "25"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập."
+  },
+  {
+   "tinh": "Lâm Đồng",
+   "ma": [
+    "48",
+    "49",
+    "86"
+   ],
+   "maChinh": [
+    "49"
+   ],
+   "gopTu": [
+    "Bình Thuận",
+    "Đắk Nông",
+    "Lâm Đồng"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Phụ lục ghi \"48, 49, 86\"."
+  },
+  {
+   "tinh": "Lạng Sơn",
+   "ma": [
+    "12"
+   ],
+   "maChinh": [
+    "12"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập."
+  },
+  {
+   "tinh": "Lào Cai",
+   "ma": [
+    "21",
+    "24"
+   ],
+   "maChinh": [
+    "24"
+   ],
+   "gopTu": [
+    "Lào Cai",
+    "Yên Bái"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Lào Cai giữ 24 cấp trước, sau đó đến 21 của Yên Bái."
+  },
+  {
+   "tinh": "Nghệ An",
+   "ma": [
+    "37"
+   ],
+   "maChinh": [
+    "37"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "KHÔNG sáp nhập (không gộp Hà Tĩnh); giữ nguyên 37. Giả định \"Nghệ An dùng 37, 38\" trong câu hỏi là SAI — 38 vẫn là của Hà Tĩnh."
+  },
+  {
+   "tinh": "Ninh Bình",
+   "ma": [
+    "18",
+    "35",
+    "90"
+   ],
+   "maChinh": [
+    "35"
+   ],
+   "gopTu": [
+    "Hà Nam",
+    "Nam Định",
+    "Ninh Bình"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Ninh Bình giữ 35 cấp trước, sau đó đến 18 (Nam Định) và 90 (Hà Nam)."
+  },
+  {
+   "tinh": "Phú Thọ",
+   "ma": [
+    "19",
+    "28",
+    "88"
+   ],
+   "maChinh": [
+    "19"
+   ],
+   "gopTu": [
+    "Hòa Bình",
+    "Phú Thọ",
+    "Vĩnh Phúc"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Phú Thọ giữ 19 cấp trước, sau đó 28 (Hòa Bình) và 88 (Vĩnh Phúc)."
+  },
+  {
+   "tinh": "Quảng Ngãi",
+   "ma": [
+    "76",
+    "82"
+   ],
+   "maChinh": [
+    "76"
+   ],
+   "gopTu": [
+    "Kon Tum",
+    "Quảng Ngãi"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": ""
+  },
+  {
+   "tinh": "Quảng Ninh",
+   "ma": [
+    "14"
+   ],
+   "maChinh": [
+    "14"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập."
+  },
+  {
+   "tinh": "Quảng Trị",
+   "ma": [
+    "73",
+    "74"
+   ],
+   "maChinh": [
+    "74"
+   ],
+   "gopTu": [
+    "Quảng Bình",
+    "Quảng Trị"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Quảng Trị giữ 74 cấp trước, sau đó đến 73 của Quảng Bình (Phụ lục ghi \"73, 74\")."
+  },
+  {
+   "tinh": "Sơn La",
+   "ma": [
+    "26"
+   ],
+   "maChinh": [
+    "26"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập."
+  },
+  {
+   "tinh": "Tây Ninh",
+   "ma": [
+    "62",
+    "70"
+   ],
+   "maChinh": [
+    "70"
+   ],
+   "gopTu": [
+    "Long An",
+    "Tây Ninh"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Tây Ninh giữ 70 cấp trước, sau đó đến 62 của Long An."
+  },
+  {
+   "tinh": "Thái Nguyên",
+   "ma": [
+    "20",
+    "97"
+   ],
+   "maChinh": [
+    "20"
+   ],
+   "gopTu": [
+    "Bắc Kạn",
+    "Thái Nguyên"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Thái Nguyên giữ 20 cấp trước, sau đó đến 97 của Bắc Kạn."
+  },
+  {
+   "tinh": "Thanh Hóa",
+   "ma": [
+    "36"
+   ],
+   "maChinh": [
+    "36"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Không sáp nhập."
+  },
+  {
+   "tinh": "Thừa Thiên Huế (TP. Huế)",
+   "ma": [
+    "75"
+   ],
+   "maChinh": [
+    "75"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Tên đơn vị hành chính nay là thành phố Huế; không sáp nhập, giữ nguyên 75."
+  },
+  {
+   "tinh": "TP. Hồ Chí Minh",
+   "ma": [
+    "41",
+    "50",
+    "51",
+    "52",
+    "53",
+    "54",
+    "55",
+    "56",
+    "57",
+    "58",
+    "59",
+    "61",
+    "72"
+   ],
+   "maChinh": [
+    "41",
+    "50",
+    "51",
+    "52",
+    "53",
+    "54",
+    "55",
+    "56",
+    "57",
+    "58",
+    "59"
+   ],
+   "gopTu": [
+    "Bình Dương",
+    "Bà Rịa - Vũng Tàu",
+    "TP. Hồ Chí Minh"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Xác nhận đúng như câu hỏi: 41; 50-59; 61; 72. Cổng TTĐT Bộ Công an trả lời công dân ngày 20/08/2025 nêu đúng dải này và nói rõ \"biển số có ký hiệu của TP.HCM trước khi sáp nhập (41, từ 50 đến 59) được cấp trước\", sau khi hết mới cấp 61 rồi 72."
+  },
+  {
+   "tinh": "Tuyên Quang",
+   "ma": [
+    "22",
+    "23"
+   ],
+   "maChinh": [
+    "22"
+   ],
+   "gopTu": [
+    "Hà Giang",
+    "Tuyên Quang"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": ""
+  },
+  {
+   "tinh": "Vĩnh Long",
+   "ma": [
+    "64",
+    "71",
+    "84"
+   ],
+   "maChinh": [
+    "64"
+   ],
+   "gopTu": [
+    "Bến Tre",
+    "Trà Vinh",
+    "Vĩnh Long"
+   ],
+   "doTinCay": "chac",
+   "ghiChu": "Vĩnh Long giữ 64 cấp trước, sau đó 71 (Bến Tre), 84 (Trà Vinh)."
+  },
+  {
+   "tinh": "Cục Cảnh sát giao thông (cơ quan trung ương)",
+   "ma": [
+    "80"
+   ],
+   "maChinh": [
+    "80"
+   ],
+   "gopTu": [],
+   "doTinCay": "chac",
+   "ghiChu": "Phụ lục số 02 Thông tư 51/2025 vẫn liệt kê \"Cục Cảnh sát giao thông — 80\" như một dòng riêng, không thuộc 34 tỉnh/thành."
+  }
+ ],
+ "bangCu": [
+  {
+   "ma": [
+    "11"
+   ],
+   "tinh": "Cao Bằng",
+   "ghiChu": "Phụ lục số 02 Thông tư 24/2023/TT-BCA (bản công bố trên Công báo Chính phủ) ghi 11; Wikipedia và dat.bike khớp.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "12"
+   ],
+   "tinh": "Lạng Sơn",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "14"
+   ],
+   "tinh": "Quảng Ninh",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "15",
+    "16"
+   ],
+   "tinh": "Hải Phòng",
+   "ghiChu": "Phụ lục ghi \"15-16\"; sau 1/7/2025 thêm 34 của Hải Dương.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "17"
+   ],
+   "tinh": "Thái Bình",
+   "ghiChu": "Từ 1/7/2025 Thái Bình sáp nhập vào Hưng Yên; mã 17 nay thuộc Hưng Yên.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "18"
+   ],
+   "tinh": "Nam Định",
+   "ghiChu": "Từ 1/7/2025 Nam Định sáp nhập vào Ninh Bình; mã 18 nay thuộc Ninh Bình.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "19"
+   ],
+   "tinh": "Phú Thọ",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "20"
+   ],
+   "tinh": "Thái Nguyên",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "21"
+   ],
+   "tinh": "Yên Bái",
+   "ghiChu": "Từ 1/7/2025 Yên Bái sáp nhập vào Lào Cai; mã 21 nay thuộc Lào Cai.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "22"
+   ],
+   "tinh": "Tuyên Quang",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "23"
+   ],
+   "tinh": "Hà Giang",
+   "ghiChu": "Từ 1/7/2025 Hà Giang sáp nhập vào Tuyên Quang; mã 23 nay thuộc Tuyên Quang.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "24"
+   ],
+   "tinh": "Lào Cai",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "25"
+   ],
+   "tinh": "Lai Châu",
+   "ghiChu": "Không sáp nhập, giữ nguyên.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "26"
+   ],
+   "tinh": "Sơn La",
+   "ghiChu": "Không sáp nhập, giữ nguyên.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "27"
+   ],
+   "tinh": "Điện Biên",
+   "ghiChu": "Không sáp nhập, giữ nguyên.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "28"
+   ],
+   "tinh": "Hòa Bình",
+   "ghiChu": "Từ 1/7/2025 Hòa Bình sáp nhập vào Phú Thọ; mã 28 nay thuộc Phú Thọ.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "29",
+    "30",
+    "31",
+    "32",
+    "33",
+    "40"
+   ],
+   "tinh": "Hà Nội",
+   "ghiChu": "Phụ lục ghi \"Từ 29 đến 33 và 40\". 33 là mã cũ của Hà Tây (sáp nhập 2008), 40 là đầu số cấp bổ sung sau này. Hà Nội không sáp nhập, giữ nguyên cả 6 ký hiệu.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "34"
+   ],
+   "tinh": "Hải Dương",
+   "ghiChu": "Từ 1/7/2025 Hải Dương sáp nhập vào Hải Phòng; mã 34 nay thuộc Hải Phòng.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "35"
+   ],
+   "tinh": "Ninh Bình",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "36"
+   ],
+   "tinh": "Thanh Hóa",
+   "ghiChu": "Không sáp nhập, giữ nguyên.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "37"
+   ],
+   "tinh": "Nghệ An",
+   "ghiChu": "Nghệ An KHÔNG sáp nhập với Hà Tĩnh (Điều 1 khoản 24 Nghị quyết 202/2025/QH15 nêu Nghệ An và Hà Tĩnh là 2 trong 11 tỉnh/thành không thực hiện sắp xếp).",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "38"
+   ],
+   "tinh": "Hà Tĩnh",
+   "ghiChu": "Không sáp nhập, giữ nguyên (giả định \"Nghệ An gộp Hà Tĩnh\" trong câu hỏi là SAI).",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "39",
+    "60"
+   ],
+   "tinh": "Đồng Nai",
+   "ghiChu": "Phụ lục số 02 Thông tư 24/2023 ghi \"39; 60\" — 39 là ký hiệu hợp nhất tồn tại từ trước, 60 là ký hiệu chính; cả hai đều được cấp cho Đồng Nai. Mã 39 KHÔNG phải ký hiệu dự trữ.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "41",
+    "50",
+    "51",
+    "52",
+    "53",
+    "54",
+    "55",
+    "56",
+    "57",
+    "58",
+    "59"
+   ],
+   "tinh": "TP. Hồ Chí Minh",
+   "ghiChu": "Phụ lục ghi \"41; từ 50 đến 59\". 41 là ký hiệu cũ/hợp nhất vẫn được cấp cho TP.HCM, KHÔNG phải ký hiệu dự trữ.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "43"
+   ],
+   "tinh": "Đà Nẵng",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "47"
+   ],
+   "tinh": "Đắk Lắk",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "48"
+   ],
+   "tinh": "Đắk Nông",
+   "ghiChu": "Từ 1/7/2025 Đắk Nông sáp nhập vào Lâm Đồng; mã 48 nay thuộc Lâm Đồng.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "49"
+   ],
+   "tinh": "Lâm Đồng",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "61"
+   ],
+   "tinh": "Bình Dương",
+   "ghiChu": "Từ 1/7/2025 Bình Dương sáp nhập vào TP.HCM; mã 61 nay thuộc TP.HCM.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "62"
+   ],
+   "tinh": "Long An",
+   "ghiChu": "Từ 1/7/2025 Long An sáp nhập vào Tây Ninh; mã 62 nay thuộc Tây Ninh.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "63"
+   ],
+   "tinh": "Tiền Giang",
+   "ghiChu": "Từ 1/7/2025 Tiền Giang sáp nhập vào Đồng Tháp; mã 63 nay thuộc Đồng Tháp.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "64"
+   ],
+   "tinh": "Vĩnh Long",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "65"
+   ],
+   "tinh": "Cần Thơ",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "66"
+   ],
+   "tinh": "Đồng Tháp",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "67"
+   ],
+   "tinh": "An Giang",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "68"
+   ],
+   "tinh": "Kiên Giang",
+   "ghiChu": "Từ 1/7/2025 Kiên Giang sáp nhập vào An Giang; mã 68 nay thuộc An Giang.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "69"
+   ],
+   "tinh": "Cà Mau",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "70"
+   ],
+   "tinh": "Tây Ninh",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "71"
+   ],
+   "tinh": "Bến Tre",
+   "ghiChu": "Từ 1/7/2025 Bến Tre sáp nhập vào Vĩnh Long; mã 71 nay thuộc Vĩnh Long.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "72"
+   ],
+   "tinh": "Bà Rịa - Vũng Tàu",
+   "ghiChu": "Từ 1/7/2025 sáp nhập vào TP.HCM; mã 72 nay thuộc TP.HCM.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "73"
+   ],
+   "tinh": "Quảng Bình",
+   "ghiChu": "Từ 1/7/2025 Quảng Bình sáp nhập vào Quảng Trị; mã 73 nay thuộc Quảng Trị.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "74"
+   ],
+   "tinh": "Quảng Trị",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "75"
+   ],
+   "tinh": "Thừa Thiên Huế",
+   "ghiChu": "Nay là thành phố Huế; không sáp nhập, giữ ký hiệu 75.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "76"
+   ],
+   "tinh": "Quảng Ngãi",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "77"
+   ],
+   "tinh": "Bình Định",
+   "ghiChu": "Từ 1/7/2025 Bình Định sáp nhập vào Gia Lai; mã 77 nay thuộc Gia Lai.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "78"
+   ],
+   "tinh": "Phú Yên",
+   "ghiChu": "Từ 1/7/2025 Phú Yên sáp nhập vào Đắk Lắk; mã 78 nay thuộc Đắk Lắk.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "79"
+   ],
+   "tinh": "Khánh Hòa",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "80"
+   ],
+   "tinh": "Cục Cảnh sát giao thông (xe cơ quan trung ương)",
+   "ghiChu": "Phụ lục ghi rõ \"Cục Cảnh sát giao thông — 80\"; đây không phải một tỉnh, dùng cho xe của các cơ quan, đơn vị trực thuộc Bộ Công an do Cục CSGT đăng ký. Vẫn giữ nguyên trong Phụ lục số 02 Thông tư 51/2025.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "81"
+   ],
+   "tinh": "Gia Lai",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "82"
+   ],
+   "tinh": "Kon Tum",
+   "ghiChu": "Từ 1/7/2025 Kon Tum sáp nhập vào Quảng Ngãi; mã 82 nay thuộc Quảng Ngãi.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "83"
+   ],
+   "tinh": "Sóc Trăng",
+   "ghiChu": "Từ 1/7/2025 Sóc Trăng sáp nhập vào Cần Thơ; mã 83 nay thuộc Cần Thơ.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "84"
+   ],
+   "tinh": "Trà Vinh",
+   "ghiChu": "Từ 1/7/2025 Trà Vinh sáp nhập vào Vĩnh Long; mã 84 nay thuộc Vĩnh Long.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "85"
+   ],
+   "tinh": "Ninh Thuận",
+   "ghiChu": "Từ 1/7/2025 Ninh Thuận sáp nhập vào Khánh Hòa; mã 85 nay thuộc Khánh Hòa.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "86"
+   ],
+   "tinh": "Bình Thuận",
+   "ghiChu": "Từ 1/7/2025 Bình Thuận sáp nhập vào Lâm Đồng; mã 86 nay thuộc Lâm Đồng.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "88"
+   ],
+   "tinh": "Vĩnh Phúc",
+   "ghiChu": "Từ 1/7/2025 Vĩnh Phúc sáp nhập vào Phú Thọ; mã 88 nay thuộc Phú Thọ.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "89"
+   ],
+   "tinh": "Hưng Yên",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "90"
+   ],
+   "tinh": "Hà Nam",
+   "ghiChu": "Từ 1/7/2025 Hà Nam sáp nhập vào Ninh Bình; mã 90 nay thuộc Ninh Bình.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "92"
+   ],
+   "tinh": "Quảng Nam",
+   "ghiChu": "Từ 1/7/2025 Quảng Nam sáp nhập vào Đà Nẵng; mã 92 nay thuộc Đà Nẵng.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "93"
+   ],
+   "tinh": "Bình Phước",
+   "ghiChu": "Từ 1/7/2025 Bình Phước sáp nhập vào Đồng Nai; mã 93 nay thuộc Đồng Nai.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "94"
+   ],
+   "tinh": "Bạc Liêu",
+   "ghiChu": "Đây là đáp án cho dấu \"?\" số 94: mã 94 = Bạc Liêu (trước 1/7/2025). Từ 1/7/2025 Bạc Liêu sáp nhập vào Cà Mau nên 94 nay thuộc Cà Mau.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "95"
+   ],
+   "tinh": "Hậu Giang",
+   "ghiChu": "Từ 1/7/2025 Hậu Giang sáp nhập vào Cần Thơ; mã 95 nay thuộc Cần Thơ.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "97"
+   ],
+   "tinh": "Bắc Kạn",
+   "ghiChu": "Phụ lục ghi \"Bắc Cạn\"; từ 1/7/2025 sáp nhập vào Thái Nguyên; mã 97 nay thuộc Thái Nguyên.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "98"
+   ],
+   "tinh": "Bắc Giang",
+   "ghiChu": "Từ 1/7/2025 Bắc Giang sáp nhập vào Bắc Ninh; mã 98 nay thuộc Bắc Ninh.",
+   "doTinCay": "chac"
+  },
+  {
+   "ma": [
+    "99"
+   ],
+   "tinh": "Bắc Ninh",
+   "ghiChu": "",
+   "doTinCay": "chac"
+  }
+ ],
+ "traNguoc": {
+  "11": {
+   "tinhHienTai": "Cao Bằng",
+   "tinhCu": "Cao Bằng",
+   "laMaChinh": true
+  },
+  "12": {
+   "tinhHienTai": "Lạng Sơn",
+   "tinhCu": "Lạng Sơn",
+   "laMaChinh": true
+  },
+  "14": {
+   "tinhHienTai": "Quảng Ninh",
+   "tinhCu": "Quảng Ninh",
+   "laMaChinh": true
+  },
+  "15": {
+   "tinhHienTai": "Hải Phòng",
+   "tinhCu": "Hải Phòng",
+   "laMaChinh": true
+  },
+  "16": {
+   "tinhHienTai": "Hải Phòng",
+   "tinhCu": "Hải Phòng",
+   "laMaChinh": true
+  },
+  "17": {
+   "tinhHienTai": "Hưng Yên",
+   "tinhCu": "Thái Bình",
+   "laMaChinh": false
+  },
+  "18": {
+   "tinhHienTai": "Ninh Bình",
+   "tinhCu": "Nam Định",
+   "laMaChinh": false
+  },
+  "19": {
+   "tinhHienTai": "Phú Thọ",
+   "tinhCu": "Phú Thọ",
+   "laMaChinh": true
+  },
+  "20": {
+   "tinhHienTai": "Thái Nguyên",
+   "tinhCu": "Thái Nguyên",
+   "laMaChinh": true
+  },
+  "21": {
+   "tinhHienTai": "Lào Cai",
+   "tinhCu": "Yên Bái",
+   "laMaChinh": false
+  },
+  "22": {
+   "tinhHienTai": "Tuyên Quang",
+   "tinhCu": "Tuyên Quang",
+   "laMaChinh": true
+  },
+  "23": {
+   "tinhHienTai": "Tuyên Quang",
+   "tinhCu": "Hà Giang",
+   "laMaChinh": false
+  },
+  "24": {
+   "tinhHienTai": "Lào Cai",
+   "tinhCu": "Lào Cai",
+   "laMaChinh": true
+  },
+  "25": {
+   "tinhHienTai": "Lai Châu",
+   "tinhCu": "Lai Châu",
+   "laMaChinh": true
+  },
+  "26": {
+   "tinhHienTai": "Sơn La",
+   "tinhCu": "Sơn La",
+   "laMaChinh": true
+  },
+  "27": {
+   "tinhHienTai": "Điện Biên",
+   "tinhCu": "Điện Biên",
+   "laMaChinh": true
+  },
+  "28": {
+   "tinhHienTai": "Phú Thọ",
+   "tinhCu": "Hòa Bình",
+   "laMaChinh": false
+  },
+  "29": {
+   "tinhHienTai": "Hà Nội",
+   "tinhCu": "Hà Nội",
+   "laMaChinh": true
+  },
+  "30": {
+   "tinhHienTai": "Hà Nội",
+   "tinhCu": "Hà Nội",
+   "laMaChinh": true
+  },
+  "31": {
+   "tinhHienTai": "Hà Nội",
+   "tinhCu": "Hà Nội",
+   "laMaChinh": true
+  },
+  "32": {
+   "tinhHienTai": "Hà Nội",
+   "tinhCu": "Hà Nội",
+   "laMaChinh": true
+  },
+  "33": {
+   "tinhHienTai": "Hà Nội",
+   "tinhCu": "Hà Nội",
+   "laMaChinh": true
+  },
+  "34": {
+   "tinhHienTai": "Hải Phòng",
+   "tinhCu": "Hải Dương",
+   "laMaChinh": false
+  },
+  "35": {
+   "tinhHienTai": "Ninh Bình",
+   "tinhCu": "Ninh Bình",
+   "laMaChinh": true
+  },
+  "36": {
+   "tinhHienTai": "Thanh Hóa",
+   "tinhCu": "Thanh Hóa",
+   "laMaChinh": true
+  },
+  "37": {
+   "tinhHienTai": "Nghệ An",
+   "tinhCu": "Nghệ An",
+   "laMaChinh": true
+  },
+  "38": {
+   "tinhHienTai": "Hà Tĩnh",
+   "tinhCu": "Hà Tĩnh",
+   "laMaChinh": true
+  },
+  "39": {
+   "tinhHienTai": "Đồng Nai",
+   "tinhCu": "Đồng Nai",
+   "laMaChinh": true
+  },
+  "40": {
+   "tinhHienTai": "Hà Nội",
+   "tinhCu": "Hà Nội",
+   "laMaChinh": true
+  },
+  "41": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "43": {
+   "tinhHienTai": "Đà Nẵng",
+   "tinhCu": "Đà Nẵng",
+   "laMaChinh": true
+  },
+  "47": {
+   "tinhHienTai": "Đắk Lắk",
+   "tinhCu": "Đắk Lắk",
+   "laMaChinh": true
+  },
+  "48": {
+   "tinhHienTai": "Lâm Đồng",
+   "tinhCu": "Đắk Nông",
+   "laMaChinh": false
+  },
+  "49": {
+   "tinhHienTai": "Lâm Đồng",
+   "tinhCu": "Lâm Đồng",
+   "laMaChinh": true
+  },
+  "50": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "51": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "52": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "53": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "54": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "55": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "56": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "57": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "58": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "59": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "TP. Hồ Chí Minh",
+   "laMaChinh": true
+  },
+  "60": {
+   "tinhHienTai": "Đồng Nai",
+   "tinhCu": "Đồng Nai",
+   "laMaChinh": true
+  },
+  "61": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "Bình Dương",
+   "laMaChinh": false
+  },
+  "62": {
+   "tinhHienTai": "Tây Ninh",
+   "tinhCu": "Long An",
+   "laMaChinh": false
+  },
+  "63": {
+   "tinhHienTai": "Đồng Tháp",
+   "tinhCu": "Tiền Giang",
+   "laMaChinh": false
+  },
+  "64": {
+   "tinhHienTai": "Vĩnh Long",
+   "tinhCu": "Vĩnh Long",
+   "laMaChinh": true
+  },
+  "65": {
+   "tinhHienTai": "Cần Thơ",
+   "tinhCu": "Cần Thơ",
+   "laMaChinh": true
+  },
+  "66": {
+   "tinhHienTai": "Đồng Tháp",
+   "tinhCu": "Đồng Tháp",
+   "laMaChinh": true
+  },
+  "67": {
+   "tinhHienTai": "An Giang",
+   "tinhCu": "An Giang",
+   "laMaChinh": true
+  },
+  "68": {
+   "tinhHienTai": "An Giang",
+   "tinhCu": "Kiên Giang",
+   "laMaChinh": false
+  },
+  "69": {
+   "tinhHienTai": "Cà Mau",
+   "tinhCu": "Cà Mau",
+   "laMaChinh": true
+  },
+  "70": {
+   "tinhHienTai": "Tây Ninh",
+   "tinhCu": "Tây Ninh",
+   "laMaChinh": true
+  },
+  "71": {
+   "tinhHienTai": "Vĩnh Long",
+   "tinhCu": "Bến Tre",
+   "laMaChinh": false
+  },
+  "72": {
+   "tinhHienTai": "TP. Hồ Chí Minh",
+   "tinhCu": "Bà Rịa - Vũng Tàu",
+   "laMaChinh": false
+  },
+  "73": {
+   "tinhHienTai": "Quảng Trị",
+   "tinhCu": "Quảng Bình",
+   "laMaChinh": false
+  },
+  "74": {
+   "tinhHienTai": "Quảng Trị",
+   "tinhCu": "Quảng Trị",
+   "laMaChinh": true
+  },
+  "75": {
+   "tinhHienTai": "Thừa Thiên Huế (TP. Huế)",
+   "tinhCu": "Thừa Thiên Huế",
+   "laMaChinh": true
+  },
+  "76": {
+   "tinhHienTai": "Quảng Ngãi",
+   "tinhCu": "Quảng Ngãi",
+   "laMaChinh": true
+  },
+  "77": {
+   "tinhHienTai": "Gia Lai",
+   "tinhCu": "Bình Định",
+   "laMaChinh": false
+  },
+  "78": {
+   "tinhHienTai": "Đắk Lắk",
+   "tinhCu": "Phú Yên",
+   "laMaChinh": false
+  },
+  "79": {
+   "tinhHienTai": "Khánh Hòa",
+   "tinhCu": "Khánh Hòa",
+   "laMaChinh": true
+  },
+  "80": {
+   "tinhHienTai": "Cục Cảnh sát giao thông (cơ quan trung ương)",
+   "tinhCu": "Cục Cảnh sát giao thông (xe cơ quan trung ương)",
+   "laMaChinh": true
+  },
+  "81": {
+   "tinhHienTai": "Gia Lai",
+   "tinhCu": "Gia Lai",
+   "laMaChinh": true
+  },
+  "82": {
+   "tinhHienTai": "Quảng Ngãi",
+   "tinhCu": "Kon Tum",
+   "laMaChinh": false
+  },
+  "83": {
+   "tinhHienTai": "Cần Thơ",
+   "tinhCu": "Sóc Trăng",
+   "laMaChinh": false
+  },
+  "84": {
+   "tinhHienTai": "Vĩnh Long",
+   "tinhCu": "Trà Vinh",
+   "laMaChinh": false
+  },
+  "85": {
+   "tinhHienTai": "Khánh Hòa",
+   "tinhCu": "Ninh Thuận",
+   "laMaChinh": false
+  },
+  "86": {
+   "tinhHienTai": "Lâm Đồng",
+   "tinhCu": "Bình Thuận",
+   "laMaChinh": false
+  },
+  "88": {
+   "tinhHienTai": "Phú Thọ",
+   "tinhCu": "Vĩnh Phúc",
+   "laMaChinh": false
+  },
+  "89": {
+   "tinhHienTai": "Hưng Yên",
+   "tinhCu": "Hưng Yên",
+   "laMaChinh": true
+  },
+  "90": {
+   "tinhHienTai": "Ninh Bình",
+   "tinhCu": "Hà Nam",
+   "laMaChinh": false
+  },
+  "92": {
+   "tinhHienTai": "Đà Nẵng",
+   "tinhCu": "Quảng Nam",
+   "laMaChinh": false
+  },
+  "93": {
+   "tinhHienTai": "Đồng Nai",
+   "tinhCu": "Bình Phước",
+   "laMaChinh": false
+  },
+  "94": {
+   "tinhHienTai": "Cà Mau",
+   "tinhCu": "Bạc Liêu",
+   "laMaChinh": false
+  },
+  "95": {
+   "tinhHienTai": "Cần Thơ",
+   "tinhCu": "Hậu Giang",
+   "laMaChinh": false
+  },
+  "97": {
+   "tinhHienTai": "Thái Nguyên",
+   "tinhCu": "Bắc Kạn",
+   "laMaChinh": false
+  },
+  "98": {
+   "tinhHienTai": "Bắc Ninh",
+   "tinhCu": "Bắc Giang",
+   "laMaChinh": false
+  },
+  "99": {
+   "tinhHienTai": "Bắc Ninh",
+   "tinhCu": "Bắc Ninh",
+   "laMaChinh": true
+  }
+ },
+ "bienDacBiet": [
+  {
+   "kyHieu": "NG",
+   "nghia": "Xe của cơ quan đại diện ngoại giao, cơ quan lãnh sự và nhân viên nước ngoài mang chứng minh thư ngoại giao. Biển nền trắng, chữ màu đỏ, số màu đen, ký hiệu \"NG\" màu đỏ. Xe của Đại sứ và Tổng Lãnh sự có thứ tự đăng ký là 01 và thêm gạch màu đỏ đè ngang giữa nhóm số quốc tịch và số thứ tự.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "QT",
+   "nghia": "Xe của cơ quan đại diện tổ chức quốc tế và nhân viên nước ngoài mang chứng minh thư ngoại giao của tổ chức đó. Biển nền trắng, chữ đỏ, số đen, ký hiệu \"QT\" màu đỏ. Người đứng đầu cơ quan đại diện các tổ chức của Liên hợp quốc có thêm gạch đỏ đè ngang.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "CV",
+   "nghia": "Xe của nhân viên hành chính kỹ thuật mang chứng minh thư công vụ của cơ quan đại diện ngoại giao, cơ quan lãnh sự, tổ chức quốc tế. Biển nền trắng, chữ và số màu đen.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "NN",
+   "nghia": "Xe của tổ chức, văn phòng đại diện, cá nhân nước ngoài (trừ các đối tượng được cấp NG, QT, CV). Biển nền trắng, chữ và số màu đen. Đây là ký hiệu ĐANG có hiệu lực theo khoản 6 Điều 37 Thông tư 79/2024/TT-BCA (sửa đổi bởi Thông tư 51/2025).",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "LD",
+   "nghia": "Ký hiệu của xe liên doanh (theo cách hiểu phổ biến). Thông tư 79/2024/TT-BCA chỉ còn nhắc \"LD\" trong Điều 39 khoản 1 và khoản 3 danh sách các ký hiệu CŨ không được coi là biển số định danh nhưng vẫn được tiếp tục tham gia giao thông: \"MK\", \"TĐ\", \"LD\", \"DA\", \"MĐ\", \"R\", \"CT\", \"LB\", \"CD\". Tôi KHÔNG tìm được định nghĩa gốc \"LD\" trong văn bản hiện hành để đối chiếu độc lập.",
+   "doTinCay": "nghi_ngo"
+  },
+  {
+   "kyHieu": "DA",
+   "nghia": "Ký hiệu của xe thuộc dự án (theo cách hiểu phổ biến). Cùng nhóm ký hiệu cũ với LD tại Điều 39 Thông tư 79/2024/TT-BCA (chỉ được tiếp tục lưu hành, không còn cấp mới). Tôi KHÔNG tìm được định nghĩa gốc \"DA\" trong văn bản hiện hành để đối chiếu độc lập.",
+   "doTinCay": "nghi_ngo"
+  },
+  {
+   "kyHieu": "KT",
+   "nghia": "Cấp cho xe của doanh nghiệp quân đội được Cục Xe - Máy, Bộ Quốc phòng đề nghị đăng ký (điểm e khoản 5 Điều 37 Thông tư 79/2024/TT-BCA). Ký hiệu này VẪN đang được dùng.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "CD",
+   "nghia": "Theo Thông tư 79/2024/TT-BCA (đang có hiệu lực): cấp cho xe máy chuyên dùng. Theo Thông tư 24/2023/TT-BCA (đã hết hiệu lực): cấp cho xe ô tô chuyên dùng, kể cả xe máy chuyên dùng của lực lượng Công an nhân dân sử dụng vào mục đích an ninh. \"CD\" cũng nằm trong danh sách ký hiệu cũ tại Điều 39 khoản 1, khoản 3 nên không được coi là biển số định danh.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "RM",
+   "nghia": "Cấp cho rơ moóc, sơ mi rơ moóc. Ký hiệu này vẫn đang được dùng (điểm e khoản 5 Điều 37 Thông tư 79/2024/TT-BCA).",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "HC",
+   "nghia": "Cấp cho xe ô tô phạm vi hoạt động hạn chế, xe chở người bốn bánh gắn động cơ, xe chở hàng bốn bánh gắn động cơ.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "MK",
+   "nghia": "Cấp cho máy kéo (theo Thông tư 24/2023/TT-BCA); nay chỉ còn trong danh sách ký hiệu cũ tại Điều 39 Thông tư 79/2024/TT-BCA (tiếp tục được lưu hành, không cấp mới).",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "TĐ",
+   "nghia": "Cấp cho xe sản xuất, lắp ráp trong nước được Thủ tướng Chính phủ cho phép triển khai thí điểm, kể cả xe chở người/xe chở hàng bốn bánh gắn động cơ (Thông tư 24/2023/TT-BCA); nay nằm trong danh sách ký hiệu cũ của Thông tư 79/2024/TT-BCA.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "MĐ, R, CT, LB",
+   "nghia": "Các ký hiệu CŨ được liệt kê cùng nhóm tại Điều 39 khoản 1 và khoản 3 Thông tư 79/2024/TT-BCA: xe đã mang các ký hiệu này vẫn được tiếp tục tham gia giao thông nhưng không được coi là biển số định danh và không còn được cấp mới. Tôi KHÔNG đối chiếu được định nghĩa gốc của từng ký hiệu trong văn bản hiện hành.",
+   "doTinCay": "nghi_ngo"
+  },
+  {
+   "kyHieu": "Biển tạm thời (đăng ký tạm thời)",
+   "nghia": "Xe đăng ký tạm thời được cấp \"chứng nhận đăng ký xe tạm thời\" và \"biển số xe tạm thời\"; theo khoản 1 Điều 37 Thông tư 79/2024/TT-BCA, biển số xe đăng ký tạm thời quy định tại Phụ lục số 02 được IN TRÊN GIẤY. Thời hạn: 15 ngày, gia hạn 1 lần không quá 15 ngày (di chuyển xe mới); xe phục vụ sự kiện/tạm nhập tái xuất theo thời hạn cơ quan thẩm quyền cho phép; xe chạy thử nghiệm không quá 6 tháng, gia hạn mỗi lần không quá 6 tháng. Ký hiệu/seri cụ thể không nêu trong Điều 37, tôi chưa tra được.",
+   "doTinCay": "nghi_ngo"
+  },
+  {
+   "kyHieu": "Biển xe quân đội",
+   "nghia": "Do Cục Xe - Máy (Bộ Quốc phòng) cấp theo Thông tư 169/2021/TT-BQP: biển nền đỏ, chữ và số màu trắng, gồm 2 CHỮ CÁI (mã đơn vị) + 4 chữ số (xe ô tô; xe mô tô là 3 chữ số). Rơ moóc thêm \"RM\", sơ mi rơ moóc thêm \"BM\". Ví dụ đối chiếu được: AA = Quân đoàn 1, AB = Quân đoàn 2, AC = Quân đoàn 3, AD = Quân đoàn 4, AT = Binh đoàn 12, AN = Binh đoàn 15, AV = Binh đoàn 11.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "64 ký hiệu quân đội (AA, AB, AC, AD, KA, KB, KC, KD, KV, KP, KK, QH, QA, QB, BB, BC, BP, BH, BT, BK, BS, BL, HA, HB, HC, HE, HD, HH, HT, HQ, HN, PK, PA, PY, PQ, PL, PX, PG, AP, AX, VB, VT, PM, DB, ND, CB, CA, CP, CM, TN, PP...)",
+   "nghia": "Danh sách đầy đủ 64 ký hiệu quân đội kèm tên đơn vị (Bộ Tổng Tham mưu - Cơ quan BQP, Tổng cục I, II, Quân khu 1-9, Quân chủng Phòng không - Không quân, Hải quân, Bộ đội Biên phòng, các binh chủng, học viện, binh đoàn, tổng công ty quân đội). Tôi mới đối chiếu được 1 nguồn báo chí; phần phụ lục ký hiệu của Thông tư 169/2021/TT-BQP trên file Công báo tôi tải về chỉ trích xuất được Phụ lục I (mẫu biểu), KHÔNG trích xuất được bảng ký hiệu đơn vị. Vì vậy chỉ 7 ký hiệu nêu ở dòng trên là tôi tạm coi đã đối chiếu, phần còn lại nên kiểm tra lại trước khi nhúng.",
+   "doTinCay": "nghi_ngo"
+  },
+  {
+   "kyHieu": "80",
+   "nghia": "KHÔNG phải ký hiệu loại xe mà là ký hiệu địa phương đặc biệt: xe do Cục Cảnh sát giao thông (Bộ Công an) đăng ký — tức xe của cơ quan trung ương, không thuộc tỉnh nào. Vẫn còn hiệu lực trong Phụ lục số 02 Thông tư 51/2025/TT-BCA.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "Biển trúng đấu giá",
+   "nghia": "Biển số xe trúng đấu giá có gắn tem nhận diện nền màu đỏ và màu vàng, chữ màu xanh (điểm e khoản 5 Điều 37 Thông tư 79/2024/TT-BCA).",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "Biển xe năng lượng sạch / xanh",
+   "nghia": "Biển số xe sử dụng năng lượng sạch, năng lượng xanh, thân thiện môi trường có gắn tem nhận diện màu xanh lá cây.",
+   "doTinCay": "chac"
+  },
+  {
+   "kyHieu": "Biển nền vàng chữ đỏ (khu kinh tế)",
+   "nghia": "Theo Thông tư 24/2023/TT-BCA: biển nền màu vàng, chữ và số màu đỏ, có ký hiệu địa phương đăng ký và hai chữ cái viết tắt của khu kinh tế theo quy định của Chính phủ. Lưu ý tôi KHÔNG tìm thấy quy định này trong Thông tư 79/2024/TT-BCA hiện hành.",
+   "doTinCay": "nghi_ngo"
+  }
+ ],
+ "quyTacDoc": [
+  "Biển 5 số trong nước (xe ô tô, xe máy chuyên dùng): hai số đầu là ký hiệu địa phương nơi đăng ký, tiếp theo là seri đăng ký (1 chữ cái), nhóm số thứ hai là thứ tự xe đăng ký gồm 05 chữ số tự nhiên từ 000.01 đến 999.99. Ví dụ 30A-123.45 nghĩa là 30 = Hà Nội, A = seri, 123.45 = số thứ tự. (điểm a khoản 3 Điều 37 Thông tư 79/2024/TT-BCA)",
+  "Biển xe mô tô trong nước: nhóm thứ nhất là ký hiệu địa phương + seri đăng ký, nhóm thứ hai là 05 chữ số tự nhiên từ 000.01 đến 999.99. Xe mô tô được cấp 01 biển gắn phía sau, kích thước cao 140 mm x dài 190 mm; ô tô được cấp 02 biển (01 ngắn 165x330 mm, 01 dài 110x520 mm). (khoản 3, khoản 4 Điều 37)",
+  "Seri biển số xe máy dùng 1 trong 20 chữ cái A, B, C, D, E, F, G, H, K, L, M, N, P, S, T, U, V, X, Y, Z kết hợp với một trong 20 chữ cái đó (ví dụ AB, AC...); biển ô tô dùng 1 trong 20 chữ cái đó. Lưu ý KHÔNG có các chữ cái I, J, O, Q, W trong danh sách seri.",
+  "Biển ô tô nền xanh, chữ và số trắng (seri A, B, C, D, E, F, G, H, K, L, M) cấp cho xe của cơ quan Đảng, Văn phòng Chủ tịch nước, Văn phòng Quốc hội, Văn phòng Đoàn ĐBQH và HĐND các cấp, Công an nhân dân, Tòa án, Viện kiểm sát, các bộ/ngành/UBND các cấp, tổ chức chính trị - xã hội, đơn vị sự nghiệp công lập... Biển xe máy của nhóm này cũng nền xanh chữ trắng nhưng seri là 1 chữ cái trong 11 chữ trên kết hợp 1 chữ số từ 1 đến 9.",
+  "Biển ô tô nền trắng, chữ và số đen cấp cho xe của tổ chức, cá nhân trong nước không thuộc nhóm xe cơ quan nhà nước nói trên.",
+  "Biển nền vàng, chữ và số màu đen cấp cho xe ô tô hoạt động kinh doanh vận tải.",
+  "Biển có ký hiệu quốc tịch và thứ tự đăng ký (NG, QT, NN, CV): hai số đầu vẫn là ký hiệu địa phương đăng ký xe, tiếp theo là ký hiệu tên nước/vùng lãnh thổ/tổ chức quốc tế gồm 03 số tự nhiên, tiếp theo là seri chỉ nhóm đối tượng, cuối cùng là thứ tự đăng ký 02 số tự nhiên từ 01 đến 99 (xe ô tô); với xe mô tô thì thứ tự đăng ký là 03 chữ số từ 001 đến 999.",
+  "Nguyên tắc cấp mã của địa phương: cấp lần lượt theo thứ tự ký hiệu từ thấp đến cao và dùng hết 20 seri của một ký hiệu rồi mới chuyển sang ký hiệu tiếp theo (khoản 7 Điều 37 Thông tư 79/2024/TT-BCA).",
+  "Sau sáp nhập tỉnh: ký hiệu biển số của địa phương sau hợp nhất bao gồm ký hiệu biển số của TẤT CẢ các địa phương được hợp nhất (khoản 4 Điều 1 Thông tư 51/2025/TT-BCA). Biển số có ký hiệu của địa phương được giữ nguyên tên sau sáp nhập (ví dụ Hưng Yên 89, Ninh Bình 35, Đồng Tháp 66, riêng An Giang cấp 68) được cấp TRƯỚC; sau khi cấp hết mới cấp đến các ký hiệu còn lại theo thứ tự từ thấp đến cao.",
+  "Xe đã đăng ký và đang mang biển số cũ KHÔNG bắt buộc phải đổi biển sau sáp nhập tỉnh: theo Điều 18 Thông tư 79/2024/TT-BCA, chỉ đổi khi chủ xe có nhu cầu hoặc khi làm thủ tục đổi/cấp lại/sang tên. Giấy tờ, biển số đã cấp trước thời điểm hợp nhất vẫn giữ nguyên giá trị pháp lý. (Cổng TTĐT Bộ Công an trả lời ngày 20/08/2025)",
+  "Biển 4 số (và 3 số) cũ: theo điểm a, b khoản 3 và điểm a khoản 4 Điều 37 Thông tư 79/2024/TT-BCA, nhóm số thứ tự nay là 05 chữ số từ 000.01 đến 999.99 — tức quy định HIỆN HÀNH là biển 5 số. Các biển 4 số/3 số đã cấp trước đây không bị thu hồi: xe đã đăng ký biển 3 số, biển 4 số tiếp tục được phép tham gia giao thông, chỉ đổi sang biển 5 số khi chủ xe có nhu cầu hoặc khi làm thủ tục đổi, cấp lại, sang tên (khoản 3 Điều 39 Thông tư 79/2024/TT-BCA).",
+  "Biển 5 số đã cấp trước 01/01/2025 (ngày Thông tư 79/2024 có hiệu lực) và chưa làm thủ tục thu hồi thì được xác định là biển số ĐỊNH DANH của chủ xe — trừ các biển có ký hiệu \"MK\", \"TĐ\", \"LD\", \"DA\", \"MĐ\", \"R\", \"CT\", \"LB\", \"CD\" (khoản 1 Điều 39).",
+  "Biển nhận diện sau khi sáp nhập KHÔNG phản ánh nơi chủ xe cư trú hiện tại: một xe ở Bình Dương cũ sau này có thể được cấp biển 61, 72, thậm chí 41 hoặc 50-59 (mã cũ của TP.HCM) vì TP.HCM cấp lần lượt hết ký hiệu cũ rồi mới sang ký hiệu khác. Khi trả lời người dùng, chỉ nên nói \"mã này thuộc địa phương X\" chứ không nên khẳng định nơi ở của chủ xe."
+ ],
+ "chuaChac": [
+  "Ngày tra: 20/09/2026 (ngày hệ thống). Các văn bản đối chiếu là Thông tư 79/2024/TT-BCA (hiệu lực 01/01/2025), Thông tư 51/2025/TT-BCA (hiệu lực 01/07/2025, thay thế Phụ lục số 02) và Nghị quyết 202/2025/QH15. Tôi KHÔNG tra được văn bản nào ban hành trong năm 2026 sửa đổi các phụ lục ký hiệu biển số, nên dải mã ở bangMoi là tình trạng mới nhất tôi xác minh được, chưa chắc đã là bản cập nhật mới nhất tại thời điểm bạn nhúng.",
+  "Mã 96: sau khi đối chiếu toàn bộ Phụ lục số 02 Thông tư 24/2023/TT-BCA (bảng 64 dòng từ 11 đến 99; các mã 39 và 41 được viết gộp trong ô \"39; 60\" và \"41; từ 50 đến 59\" nên không xuất hiện thành dòng riêng), tôi KHẲNG ĐỊNH mã 96 KHÔNG được gán cho tỉnh/thành nào. Đây là đáp án cho dấu \"?\" số 96: KHÔNG có tỉnh nào. Tuy nhiên tôi không tìm được văn bản nào giải thích chính thức vì sao 96 bị bỏ trống (một số trang thương mại gọi 96 là \"đầu số dự trữ\" nhưng không có nguồn pháp lý).",
+  "Mã 42, 87 và 10: KHÔNG được gán cho tỉnh/thành nào trong Phụ lục số 02 của cả Thông tư 24/2023 và Thông tư 51/2025. Tôi cũng không tra được văn bản giải thích lý do bỏ trống. Ngoài ra 42, 44-46, 87, 91 xuất hiện trong Phụ lục số 03 (ký hiệu biển số của tổ chức, cá nhân NƯỚC NGOÀI) — có thể gây nhầm lẫn: đó KHÔNG phải mã tỉnh. Ví dụ 041-045 = An Giê Ri, 046-050 = Ác Hê Ti Na.",
+  "Mã 39 và 41 là ký hiệu CŨ/HỢP NHẤT vẫn được cấp cho Đồng Nai (39) và TP.HCM (41) — không phải ký hiệu dự trữ. Tôi đối chiếu được từ Phụ lục số 02 Thông tư 24/2023 và Phụ lục số 02 Thông tư 51/2025. Tôi KHÔNG tra được văn bản gốc giải thích nguồn gốc lịch sử của hai mã này.",
+  "Định nghĩa GỐC của các ký hiệu cũ LD (liên doanh), DA (dự án), MĐ, R, CT, LB: tôi chỉ tra được rằng chúng thuộc danh sách ký hiệu cũ tại Điều 39 Thông tư 79/2024/TT-BCA (tiếp tục lưu hành, không cấp mới, không phải biển định danh), KHÔNG tra được định nghĩa trong văn bản hiện hành để đối chiếu chéo. Nếu trợ lý AI cần giải thích các ký hiệu này, nên kiểm tra thêm Thông tư 15/2014/TT-BCA hoặc Thông tư 36/2010/TT-BCA.",
+  "Ký hiệu/seri cụ thể của biển số XE ĐĂNG KÝ TẠM THỜI theo Thông tư 79/2024/TT-BCA: Điều 37 chỉ nói biển tạm thời in trên giấy, không nêu chữ cái ký hiệu; tôi chưa tra được Phụ lục số 02 bản đầy đủ của Thông tư 79/2024 (file Công báo chỉ có phần mẫu biểu). Tránh khẳng định dứt khoát biển tạm thời dùng chữ \"T\".",
+  "Danh sách 64 ký hiệu biển số quân đội (AA, AB, AC, AD...): chỉ đối chiếu được 1 nguồn báo chí (Báo Pháp luật Việt Nam). File Công báo của Thông tư 169/2021/TT-BQP và Thông tư 69/2024/TT-BQP tôi tải về chỉ trích xuất được Phụ lục I (mẫu biểu đăng ký), không trích xuất được bảng ký hiệu đơn vị. Cần đối chiếu thêm trước khi nhúng đầy đủ 64 ký hiệu.",
+  "Sự khác nhau giữa \"biển xanh\" của xe cơ quan nhà nước và xe năng lượng sạch: Thông tư 79/2024/TT-BCA dùng \"tem nhận diện màu xanh lá cây\" cho xe năng lượng sạch nên không phải màu nền xanh. Nếu người dùng hỏi \"biển xanh là xe gì\" thì câu trả lời đúng là xe cơ quan nhà nước, không phải xe điện.",
+  "Quy định biển nền vàng chữ đỏ cho xe của khu kinh tế (điểm e khoản 5 Điều 37 Thông tư 24/2023/TT-BCA) tôi KHÔNG tìm thấy trong Thông tư 79/2024/TT-BCA hiện hành — cần kiểm tra lại nếu trợ lý định giải thích loại biển này.",
+  "Tôi đã KIỂM TRA và thấy danh sách mã CŨ bạn đưa trong đề bài là CHÍNH XÁC, chỉ thiếu 42 (không tỉnh nào dùng), và hai chỗ cần sửa: (1) mã 96 KHÔNG phải tỉnh nào — không có đáp án để điền; (2) Nghệ An KHÔNG sáp nhập Hà Tĩnh, nên bangMoi giữ 37 và 38 thành hai dòng riêng. Ngoài ra mã 39 (Đồng Nai) và 41 (TP.HCM) không phải ký hiệu dự trữ như nhiều trang mạng viết.",
+  "Lưu ý về nguồn phụ: bảng mã CŨ tôi lấy từ bản PDF Công báo số 887+888 ngày 15-7-2023 của Thông tư 24/2023/TT-BCA (đã được Thông tư 79/2024 thay thế nhưng bảng địa phương không đổi). Bảng mã MỚI tôi lấy từ bản .doc Công báo số 887+888 ngày 15-7-2025 của Thông tư 51/2025/TT-BCA — Phụ lục số 02 trong bản này có lỗi đánh số thứ tự (hai dòng đều ghi \"16\", thiếu \"17\") nhưng nội dung tên địa phương và ký hiệu đầy đủ, đúng 35 dòng gồm 34 tỉnh/thành và Cục CSGT."
+ ]
+}

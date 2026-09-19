@@ -204,6 +204,115 @@ export const TOOL_DEFINITIONS = [
     handler: listFilesForModel,
   },
   {
+    name: "tinh_toan",
+    skill: "auto",
+    label: "Tính toán chính xác",
+    description:
+      "Tính một biểu thức số HỌC CHÍNH XÁC (phân số BigInt): cộng trừ nhân chia, luỹ thừa, phần trăm, giai thừa, " +
+      "căn/log/lượng giác, và đổi đơn vị. BẮT BUỘC dùng cho mọi phép tính có số cụ thể — KHÔNG tự tính nhẩm rồi trả lời.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expression: { type: "string", description: "Biểu thức, ví dụ \"2.400.000 * 15%\", \"1/3 + 1/6\", \"sqrt(2)\"." },
+        convert: {
+          type: "object",
+          description: "Đổi đơn vị thay vì tính biểu thức: { value, from, to }",
+          properties: {
+            value: { type: "number" },
+            from: { type: "string", description: "mm, cm, m, km, g, kg, tấn, m2, ha, l, m3, s, giờ, kb, mb, gb…" },
+            to: { type: "string" },
+          },
+          required: ["value", "from", "to"],
+        },
+      },
+    },
+    handler: async (args) => {
+      const math = await import("../math-exact.js");
+      if (args?.convert?.from && args?.convert?.to) {
+        const { value, from, to } = args.convert;
+        const result = math.convertUnits(Number(value), from, to);
+        return {
+          ok: true,
+          summary: `${value} ${from} = ${result.value} ${to}`,
+          data: result,
+          artifacts: [],
+          modelText: `Kết quả đổi đơn vị (chính xác): ${value} ${from} = ${result.value} ${to}.`,
+        };
+      }
+      const expression = String(args?.expression ?? "").trim();
+      if (!expression) {
+        return { ok: false, summary: "Thiếu biểu thức", data: {}, artifacts: [], error: "bad_request", modelText: "LỖI: cần `expression`." };
+      }
+      try {
+        const result = math.evaluateExpression(expression);
+        return {
+          ok: true,
+          summary: `${expression} = ${result.text}${result.exact ? "" : " (xấp xỉ)"}`,
+          data: { expression, value: Number(result.value.n) / Number(result.value.d), exact: result.exact },
+          artifacts: [],
+          modelText:
+            `Kết quả tính (công cụ, ${result.exact ? "CHÍNH XÁC" : "XẤP XỈ"}): ${expression} = ${result.text}. ` +
+            (result.exact
+              ? "Đây là kết quả chính xác của công cụ — hãy dùng đúng con số này."
+              : "Đây là kết quả LÀM TRÒN của công cụ — khi trả lời phải nói rõ là xấp xỉ, đừng trình bày như số đúng tuyệt đối."),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          summary: `Không tính được: ${error?.message ?? error}`,
+          data: {},
+          artifacts: [],
+          error: "math_error",
+          modelText: `LỖI TÍNH TOÁN: ${error?.message ?? error}. Hãy viết lại biểu thức rõ hơn rồi gọi lại công cụ — đừng tự tính nhẩm.`,
+        };
+      }
+    },
+  },
+  {
+    name: "tra_cuu",
+    skill: "auto",
+    label: "Tra cứu có nguồn",
+    description:
+      "Giao câu hỏi cho researcher tra cứu thật (Wikipedia, văn bản chính phủ, tìm kiếm web) rồi trả về đoạn trích kèm URL. " +
+      "BẮT BUỘC dùng cho dữ kiện tra được: biển số xe theo tỉnh, điều luật/nghị định/thông tư, mức phạt, ngày hiệu lực, " +
+      "giá thị trường, thông số sản phẩm, tin thời sự, số liệu thống kê. Không tra được thì phải nói chưa chắc — KHÔNG đoán.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "Câu cần tra, viết rõ ràng và đủ ngữ cảnh" },
+        domain: {
+          type: "string",
+          enum: ["bien-so", "dia-ly", "van-hoa", "giao-duc", "toan-hoc", "ai", "phap-luat", "chung"],
+          description:
+            "Chọn researcher: bien-so (biển số/đăng ký xe) · dia-ly (địa danh, quốc gia, số liệu) · " +
+            "van-hoa (văn hoá, lịch sử, tín ngưỡng) · giao-duc (học tập, thi cử) · toan-hoc (định nghĩa, công thức) · " +
+            "ai (AI, công nghệ, bài báo) · phap-luat (luật, thuế, xử phạt) · chung (còn lại)",
+        },
+        depth: { type: "string", enum: ["nhanh", "ky"], description: "ky = tra nhiều truy vấn hơn (chậm hơn)" },
+      },
+      required: ["question"],
+    },
+    handler: async (args) => {
+      const { research, researchToModelText } = await import("../researcher.js");
+      const result = await research({ question: String(args.question ?? ""), domain: args.domain ?? null, depth: args.depth ?? "nhanh" });
+      const nguon = result.sources.length;
+      return {
+        ok: result.findings.length > 0,
+        summary: nguon
+          ? `Tra cứu (${result.researcher.label}): ${nguon} nguồn · chắc chắn: ${result.confidence}`
+          : `Tra cứu (${result.researcher.label}): KHÔNG tìm được nguồn`,
+        data: {
+          researcher: result.researcher.id,
+          confidence: result.confidence,
+          sources: result.sources,
+          disagreements: result.disagreements,
+        },
+        artifacts: [],
+        modelText: researchToModelText(result),
+      };
+    },
+  },
+  {
     name: "remember_fact",
     skill: "auto",
     label: "Ghi nhớ về người dùng",

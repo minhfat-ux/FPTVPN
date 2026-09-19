@@ -1,0 +1,404 @@
+{
+  "sinhTu": "cong-bao",
+  "theoMa": {
+    "10": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không nằm trong dải mã địa phương: Phụ lục số 02 Thông tư 24/2023/TT-BCA ghi Hà Nội là \"Từ 29 đến 33 và 40\", các tỉnh còn lại bắt đầu từ 11. Không tỉnh/thành nào dùng mã 10."
+    },
+    "11": {
+      "tinhCu": "Cao Bằng",
+      "tinhHienTai": "Cao Bằng"
+    },
+    "12": {
+      "tinhCu": "Lạng Sơn",
+      "tinhHienTai": "Lạng Sơn"
+    },
+    "13": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 13 (bảng mã địa phương nhảy từ 12 sang 14)."
+    },
+    "14": {
+      "tinhCu": "Quảng Ninh",
+      "tinhHienTai": "Quảng Ninh"
+    },
+    "15": {
+      "tinhCu": "Hải Phòng",
+      "tinhHienTai": "Hải Phòng"
+    },
+    "16": {
+      "tinhCu": "Hải Phòng",
+      "tinhHienTai": "Hải Phòng"
+    },
+    "17": {
+      "tinhCu": "Thái Bình",
+      "tinhHienTai": "Hưng Yên",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Thái Bình -> Hưng Yên. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "18": {
+      "tinhCu": "Nam Định",
+      "tinhHienTai": "Ninh Bình",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Nam Định -> Ninh Bình. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "19": {
+      "tinhCu": "Phú Thọ",
+      "tinhHienTai": "Phú Thọ"
+    },
+    "20": {
+      "tinhCu": "Thái Nguyên",
+      "tinhHienTai": "Thái Nguyên"
+    },
+    "21": {
+      "tinhCu": "Yên Bái",
+      "tinhHienTai": "Lào Cai",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Yên Bái -> Lào Cai. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "22": {
+      "tinhCu": "Tuyên Quang",
+      "tinhHienTai": "Tuyên Quang"
+    },
+    "23": {
+      "tinhCu": "Hà Giang",
+      "tinhHienTai": "Tuyên Quang",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Hà Giang -> Tuyên Quang. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "24": {
+      "tinhCu": "Lào Cai",
+      "tinhHienTai": "Lào Cai"
+    },
+    "25": {
+      "tinhCu": "Lai Châu",
+      "tinhHienTai": "Lai Châu"
+    },
+    "26": {
+      "tinhCu": "Sơn La",
+      "tinhHienTai": "Sơn La"
+    },
+    "27": {
+      "tinhCu": "Điện Biên",
+      "tinhHienTai": "Điện Biên"
+    },
+    "28": {
+      "tinhCu": "Hòa Bình",
+      "tinhHienTai": "Phú Thọ",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Hòa Bình -> Phú Thọ. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "29": {
+      "tinhCu": "Hà Nội",
+      "tinhHienTai": "Hà Nội"
+    },
+    "30": {
+      "tinhCu": "Hà Nội",
+      "tinhHienTai": "Hà Nội"
+    },
+    "31": {
+      "tinhCu": "Hà Nội",
+      "tinhHienTai": "Hà Nội"
+    },
+    "32": {
+      "tinhCu": "Hà Nội",
+      "tinhHienTai": "Hà Nội"
+    },
+    "33": {
+      "tinhCu": "Hà Nội",
+      "tinhHienTai": "Hà Nội"
+    },
+    "34": {
+      "tinhCu": "Hải Dương",
+      "tinhHienTai": "Hải Phòng",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Hải Dương -> Hải Phòng. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "35": {
+      "tinhCu": "Ninh Bình",
+      "tinhHienTai": "Ninh Bình"
+    },
+    "36": {
+      "tinhCu": "Thanh Hóa",
+      "tinhHienTai": "Thanh Hóa"
+    },
+    "37": {
+      "tinhCu": "Nghệ An",
+      "tinhHienTai": "Nghệ An"
+    },
+    "38": {
+      "tinhCu": "Hà Tĩnh",
+      "tinhHienTai": "Hà Tĩnh"
+    },
+    "39": {
+      "tinhCu": "Đồng Nai",
+      "tinhHienTai": "Đồng Nai"
+    },
+    "40": {
+      "tinhCu": "Hà Nội",
+      "tinhHienTai": "Hà Nội"
+    },
+    "41": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "42": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 42 (bảng nhảy từ 41 sang 43). Lưu ý: 041-045 là ký hiệu TÊN NƯỚC của biển NN (Phụ lục số 03), không phải mã tỉnh."
+    },
+    "43": {
+      "tinhCu": "Đà Nẵng",
+      "tinhHienTai": "Đà Nẵng"
+    },
+    "44": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 44 (bảng nhảy từ 43 sang 47). Lưu ý: 041-045 là ký hiệu TÊN NƯỚC của biển NN (Phụ lục số 03), không phải mã tỉnh."
+    },
+    "45": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 45 (bảng nhảy từ 43 sang 47). Lưu ý: 046-050 là ký hiệu TÊN NƯỚC của biển NN (Phụ lục số 03), không phải mã tỉnh."
+    },
+    "46": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 46 (bảng nhảy từ 43 sang 47). Lưu ý: 046-050 là ký hiệu TÊN NƯỚC của biển NN (Phụ lục số 03), không phải mã tỉnh."
+    },
+    "47": {
+      "tinhCu": "Đắk Lắk",
+      "tinhHienTai": "Đắk Lắk"
+    },
+    "48": {
+      "tinhCu": "Đắk Nông",
+      "tinhHienTai": "Lâm Đồng",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Đắk Nông -> Lâm Đồng. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "49": {
+      "tinhCu": "Lâm Đồng",
+      "tinhHienTai": "Lâm Đồng"
+    },
+    "50": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "51": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "52": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "53": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "54": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "55": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "56": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "57": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "58": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "59": {
+      "tinhCu": "TP. Hồ Chí Minh",
+      "tinhHienTai": "TP. Hồ Chí Minh"
+    },
+    "60": {
+      "tinhCu": "Đồng Nai",
+      "tinhHienTai": "Đồng Nai"
+    },
+    "61": {
+      "tinhCu": "Bình Dương",
+      "tinhHienTai": "TP. Hồ Chí Minh",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bình Dương -> TP. Hồ Chí Minh. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "62": {
+      "tinhCu": "Long An",
+      "tinhHienTai": "Tây Ninh",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Long An -> Tây Ninh. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "63": {
+      "tinhCu": "Tiền Giang",
+      "tinhHienTai": "Đồng Tháp",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Tiền Giang -> Đồng Tháp. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "64": {
+      "tinhCu": "Vĩnh Long",
+      "tinhHienTai": "Vĩnh Long"
+    },
+    "65": {
+      "tinhCu": "Cần Thơ",
+      "tinhHienTai": "Cần Thơ"
+    },
+    "66": {
+      "tinhCu": "Đồng Tháp",
+      "tinhHienTai": "Đồng Tháp"
+    },
+    "67": {
+      "tinhCu": "An Giang",
+      "tinhHienTai": "An Giang"
+    },
+    "68": {
+      "tinhCu": "Kiên Giang",
+      "tinhHienTai": "An Giang",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Kiên Giang -> An Giang. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "69": {
+      "tinhCu": "Cà Mau",
+      "tinhHienTai": "Cà Mau"
+    },
+    "70": {
+      "tinhCu": "Tây Ninh",
+      "tinhHienTai": "Tây Ninh"
+    },
+    "71": {
+      "tinhCu": "Bến Tre",
+      "tinhHienTai": "Vĩnh Long",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bến Tre -> Vĩnh Long. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "72": {
+      "tinhCu": "Bà Rịa - Vũng Tàu",
+      "tinhHienTai": "TP. Hồ Chí Minh",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bà Rịa - Vũng Tàu -> TP. Hồ Chí Minh. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "73": {
+      "tinhCu": "Quảng Bình",
+      "tinhHienTai": "Quảng Trị",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Quảng Bình -> Quảng Trị. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "74": {
+      "tinhCu": "Quảng Trị",
+      "tinhHienTai": "Quảng Trị"
+    },
+    "75": {
+      "tinhCu": "Thừa Thiên Huế",
+      "tinhHienTai": "Thừa Thiên Huế (TP. Huế)"
+    },
+    "76": {
+      "tinhCu": "Quảng Ngãi",
+      "tinhHienTai": "Quảng Ngãi"
+    },
+    "77": {
+      "tinhCu": "Bình Định",
+      "tinhHienTai": "Gia Lai",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bình Định -> Gia Lai. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "78": {
+      "tinhCu": "Phú Yên",
+      "tinhHienTai": "Đắk Lắk",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Phú Yên -> Đắk Lắk. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "79": {
+      "tinhCu": "Khánh Hòa",
+      "tinhHienTai": "Khánh Hòa"
+    },
+    "80": {
+      "tinhCu": null,
+      "tinhHienTai": "Cục Cảnh sát giao thông (cơ quan trung ương)",
+      "ghiChu": "Không phải mã tỉnh: Phụ lục số 02 ghi \"Cục Cảnh sát giao thông — 80\", dùng cho xe của cơ quan trung ương do Cục CSGT đăng ký. Không có \"tỉnh cũ\"."
+    },
+    "81": {
+      "tinhCu": "Gia Lai",
+      "tinhHienTai": "Gia Lai"
+    },
+    "82": {
+      "tinhCu": "Kon Tum",
+      "tinhHienTai": "Quảng Ngãi",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Kon Tum -> Quảng Ngãi. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "83": {
+      "tinhCu": "Sóc Trăng",
+      "tinhHienTai": "Cần Thơ",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Sóc Trăng -> Cần Thơ. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "84": {
+      "tinhCu": "Trà Vinh",
+      "tinhHienTai": "Vĩnh Long",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Trà Vinh -> Vĩnh Long. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "85": {
+      "tinhCu": "Ninh Thuận",
+      "tinhHienTai": "Khánh Hòa",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Ninh Thuận -> Khánh Hòa. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "86": {
+      "tinhCu": "Bình Thuận",
+      "tinhHienTai": "Lâm Đồng",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bình Thuận -> Lâm Đồng. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "87": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 87 (bảng nhảy từ 86 sang 88). Lưu ý: 086-090 là ký hiệu TÊN NƯỚC của biển NN (Phụ lục số 03), không phải mã tỉnh."
+    },
+    "88": {
+      "tinhCu": "Vĩnh Phúc",
+      "tinhHienTai": "Phú Thọ",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Vĩnh Phúc -> Phú Thọ. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "89": {
+      "tinhCu": "Hưng Yên",
+      "tinhHienTai": "Hưng Yên"
+    },
+    "90": {
+      "tinhCu": "Hà Nam",
+      "tinhHienTai": "Ninh Bình",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Hà Nam -> Ninh Bình. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "91": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 91 (bảng nhảy từ 90 sang 92). Lưu ý: 091-095 là ký hiệu TÊN NƯỚC của biển NN (Phụ lục số 03), không phải mã tỉnh."
+    },
+    "92": {
+      "tinhCu": "Quảng Nam",
+      "tinhHienTai": "Đà Nẵng",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Quảng Nam -> Đà Nẵng. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "93": {
+      "tinhCu": "Bình Phước",
+      "tinhHienTai": "Đồng Nai",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bình Phước -> Đồng Nai. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "94": {
+      "tinhCu": "Bạc Liêu",
+      "tinhHienTai": "Cà Mau",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bạc Liêu -> Cà Mau. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "95": {
+      "tinhCu": "Hậu Giang",
+      "tinhHienTai": "Cần Thơ",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Hậu Giang -> Cần Thơ. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "96": {
+      "tinhCu": null,
+      "tinhHienTai": null,
+      "ghiChu": "Không tỉnh/thành nào dùng mã 96 — đây là dấu \"?\" trong đề bài và đáp án là KHÔNG có tỉnh nào. Không có nguồn pháp lý giải thích vì sao bị bỏ trống."
+    },
+    "97": {
+      "tinhCu": "Bắc Kạn",
+      "tinhHienTai": "Thái Nguyên",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bắc Kạn -> Thái Nguyên. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "98": {
+      "tinhCu": "Bắc Giang",
+      "tinhHienTai": "Bắc Ninh",
+      "ghiChu": "Mã đổi chủ sau sáp nhập 01/7/2025: Bắc Giang -> Bắc Ninh. Xe đã cấp biển trước mốc này vẫn giữ nguyên giá trị."
+    },
+    "99": {
+      "tinhCu": "Bắc Ninh",
+      "tinhHienTai": "Bắc Ninh"
+    }
+  }
+}

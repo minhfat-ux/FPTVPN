@@ -2,6 +2,10 @@ node_modules/
 dist/
 build/
 data/
+# Dữ liệu TRA CỨU nằm trong source (không phải dữ liệu chạy): bảng mã biển số theo Công báo.
+# `data/` bị bỏ qua vì thư mục dữ liệu chạy của server cũng tên vậy — phải mở ngoại lệ ở đây.
+!server/src/data/
+!server/src/data/*.json
 *.log
 .env
 .env.*

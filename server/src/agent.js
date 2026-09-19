@@ -3,6 +3,10 @@ import { listAllTools, callTool, flattenToolResult, qualifiedToolName } from "./
 import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool } from "./skills/index.js";
 import { applyVisionFallback } from "./vision-fallback.js";
 import { buildAppsKnowledge } from "./apps-knowledge.js";
+import { buildVnPlateKnowledge } from "./vn-plates.js";
+import { maybePreResearch } from "./researcher.js";
+import { buildSkillSuggestionBlock } from "./skills/suggest.js";
+import { userLocale } from "./skills/hub.js";
 import { buildMemoryBlock, learnSelfReference } from "./memory.js";
 import { isConfirmed, planChoices } from "./skills/confirm.js";
 import { excelChoices } from "./skills/vision.js";
@@ -139,6 +143,26 @@ const CULTURE_RULES = [
   "CÁCH NÓI: chọn số rồi thì nói tự nhiên, ĐỪNG giảng giải về văn hoá con số, đừng khoe vừa tránh số gì, và đừng bao giờ khẳng định con số sẽ mang lại may mắn hay tai hoạ như một sự thật. Chỉ khi người dùng hỏi \"sao lại số đó\" thì mới giải thích ngắn gọn, kèm một câu cho thấy đó là quan niệm văn hoá chứ không phải điều bắt buộc. TUYỆT ĐỐI không dùng niềm tin về con số để doạ người dùng, để bán hàng hay để thúc họ bấm nút.",
 ].join("\n");
 
+/**
+ * TRA CỨU TRƯỚC KHI NÓI — vì "trả lời nhanh mà sai" là kiểu sai tệ nhất.
+ *
+ * fBuddy từng tự thêm "41" vào nhóm biển Hà Nội. Với dữ liệu tra được, câu trả lời chỉ được
+ * dựa trên kết quả `tra_cuu` trả về; không tra được thì phải nói chưa chắc. Mục này cũng nói rõ
+ * việc gì KHÔNG cần tra, để trợ lý không gọi công cụ một cách máy móc cho mọi câu.
+ */
+const RESEARCH_RULES = [
+  "TRA CỨU TRƯỚC KHI NÓI (bắt buộc với dữ kiện tra được):",
+  "• PHẢI gọi công cụ `tra_cuu` trước khi trả lời, không được trả lời theo trí nhớ, với: địa lý và địa danh (thủ đô, quốc gia, tỉnh/thành, sông núi, dân số, diện tích…); văn hoá, lịch sử, tín ngưỡng, phong tục; giáo dục (chương trình học, thi cử, tuyển sinh, chứng chỉ); AI và công nghệ (mô hình, thuật toán, bài báo, thông số kỹ thuật); biển số/đăng ký xe theo tỉnh; pháp luật, nghị định, thông tư, mức phạt, thời hạn, ngày hiệu lực; thuế, lệ phí, biểu phí; giá cả thị trường; thông số sản phẩm; tin tức, sự kiện, số liệu thống kê; thông tin về một người hay tổ chức cụ thể.",
+  "• THÔNG TIN VỀ CHÍNH PHỦ/NHÀ NƯỚC (thủ tục hành chính, giấy tờ, chính sách, trợ cấp, thuế, đất đai, xuất nhập cảnh, xử phạt…): BẮT BUỘC gọi `tra_cuu` với `domain: \"chinh-phu\"` và CHỈ dùng nguồn chính thống (tên miền .gov.vn, chinhphu.vn, vanban.chinhphu.vn, vbpl.vn, quochoi.vn, dichvucong.gov.vn). TUYỆT ĐỐI không trả lời theo trí nhớ, không lấy blog/diễn đàn/trang tổng hợp, không tự suy ra thủ tục. Không tìm được nguồn chính thống thì nói thẳng là chưa tra được và chỉ người dùng tới cổng chính thức — người dùng sẽ mang câu trả lời đi làm thủ tục thật.",
+  "• KINH TẾ VÀ SỐ LIỆU THỊ TRƯỜNG (GDP, lạm phát, tỷ giá, lãi suất, giá vàng/xăng/dầu, chứng khoán, tiền mã hoá, xuất nhập khẩu, thất nghiệp, thu nhập bình quân…): BẮT BUỘC gọi `tra_cuu` với `domain: \"kinh-te\"`. Mọi con số phải nêu KỲ số liệu (năm/quý/ngày) và nguồn. KHÔNG đọc số theo trí nhớ, KHÔNG đoán giá hay tỷ giá — số kinh tế đổi liên tục nên số nhớ là số sai. Không lấy được số mới thì nói thẳng là chưa có số cập nhật và chỉ người dùng tới nguồn chính thức (Tổng cục Thống kê, Ngân hàng Nhà nước, Bộ Tài chính, World Bank).",
+  "• MỌI PHÉP TÍNH có số cụ thể (kể cả phần trăm, lãi suất, chia tiền, đổi đơn vị) PHẢI gọi công cụ `tinh_toan` rồi dùng đúng con số công cụ trả về. KHÔNG tự tính nhẩm. Công cụ nói kết quả là xấp xỉ thì khi trả lời cũng phải nói là xấp xỉ.",
+  "• Tra xong: CHỈ nói phần có trong kết quả trả về và nêu nguồn khi người dùng cần độ chính xác. Phần không có trong kết quả thì KHÔNG được thêm vào — kể cả khi bạn \"nhớ\" là đúng. Không tự thêm mã vào một nhóm tỉnh, không tự suy ra số điều luật.",
+  "• Nếu kết quả nói KHÔNG tìm thấy, hoặc các nguồn MÂU THUẪN nhau: nói thẳng là chưa chắc, nêu các khả năng, và chỉ người dùng tới nguồn chính thức (cơ quan nhà nước, văn bản gốc, nhà sản xuất). Đừng chọn bừa một bên rồi trả lời như thể chắc chắn.",
+  "• Đừng nói \"theo quy định hiện hành\" hay \"theo luật\" khi chưa tra. Không bịa số điều, số nghị định, mã tỉnh, ngày ban hành.",
+  "• Việc KHÔNG cần tra thì cứ trả lời bình thường, đừng gọi công cụ cho có: viết lách, dịch, lập trình, tính toán, hướng dẫn cách làm, kiến thức phổ thông ổn định, và mọi việc liên quan tới tệp/hội thoại của chính người dùng.",
+  "• Câu vừa cần dữ kiện vừa cần xử lý: TRA trước, rồi mới viết/sửa/tính theo dữ liệu vừa tra.",
+].join("\n");
+
 export function sseChannel(res) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -228,14 +252,27 @@ function resolveVisionProviderFor({ providerId = null, model = null } = {}) {
   }
 }
 
-export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "", conversationId = null }) {
+export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "", conversationId = null, autoResearch = null }) {
   const today = new Date().toISOString().slice(0, 10);
   const basePrompt = Array.isArray(settings.systemPrompt) ? settings.systemPrompt.join("\n") : settings.systemPrompt;
   const parts = [
     basePrompt,
     PRONOUN_RULES,
     CULTURE_RULES,
+    RESEARCH_RULES,
+    // Kết quả tra TRƯỚC (server tự tra, không chờ model gọi công cụ) — đặt ngay sau luật để model
+    // đọc luật rồi đọc luôn dữ liệu, tránh trường hợp model trả lời theo trí nhớ.
+    autoResearch?.text
+      ? `KẾT QUẢ TRA CỨU TRƯỚC (server đã tra cho lượt này bằng researcher "${autoResearch.label}", mức chắc chắn: ${autoResearch.confidence}).\n` +
+        "Đây là dữ liệu CHÍNH của lượt này: trả lời dựa trên nó, nêu nguồn khi người dùng cần độ chính xác.\n" +
+        "Phần không có trong kết quả tra cứu thì KHÔNG được thêm vào.\n\n" +
+        autoResearch.text
+      : "",
     buildAppsKnowledge({ message }),
+    // Gợi ý kỹnăng/chuyên gia có sẵn trong chợ cho đúng việc người dùng đang hỏi.
+    buildSkillSuggestionBlock({ message, userId: user?.id ?? null, lang: user?.id ? userLocale(user.id) : "vi" }),
+    // Bảng tra biển số chỉ ghép khi câu hỏi chạm tới biển số/xe — bảng dài, không nhét vào mọi lượt.
+    buildVnPlateKnowledge({ message }),
     buildMemoryBlock({ userId: user?.id ?? null, query: message, conversationId, accountName: user?.name ?? null }),
     `Hôm nay là ${today}.`,
     SKILL_INSTRUCTIONS[skill] ?? "",
@@ -281,6 +318,10 @@ export async function prepareTurn({ user, body, channel }) {
   // Học cách xưng hô từ chính câu người dùng vừa gõ (không tốn lượt AI): lần sau mở
   // hội thoại mới là đã xưng đúng vai, không phải đoán.
   learnSelfReference({ userId: user.id, text: content });
+
+  // TRA TRƯỚC cho câu hỏi thuộc lĩnh vực cần dữ kiện (địa lý, văn hoá, giáo dục, AI, kinh tế,
+  // chính phủ, biển số, toán). Không phụ thuộc việc model có chịu gọi `tra_cuu` hay không.
+  const autoResearch = await maybePreResearch({ message: content });
 
   // Credit gate: metering on + no balance + not an admin ⇒ refuse with a clear
   // message (the UI turns this into a "nạp thêm" card).
@@ -511,7 +552,17 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     }
   }
 
-  const systemPrompt = buildSystemPrompt({ skill, files, settings, hubSkill: turn.hubSkill, user, planFirst: Boolean(turn.planFirst), message: turn.content, conversationId: conversation.id });
+  const systemPrompt = buildSystemPrompt({
+    skill,
+    files,
+    settings,
+    hubSkill: turn.hubSkill,
+    user,
+    planFirst: Boolean(turn.planFirst),
+    message: turn.content,
+    conversationId: conversation.id,
+    autoResearch: turn.autoResearch ?? null,
+  });
   const messages = await buildModelMessages({ conversationId: conversation.id, systemPrompt });
 
   // Gateways hard-fail on an image part the model cannot handle (GLM: "content.type
