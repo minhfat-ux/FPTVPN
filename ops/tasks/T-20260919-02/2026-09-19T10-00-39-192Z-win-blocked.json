@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Phien Windows bi sandbox: (1) repo minhfat-ux/fbuddy la PRIVATE, clone/push can credential nhung credential helper bi chan (signal pipe Win32 error 5) va khong co kenh phe duyet mo rong; (2) docs/tasks/WIN-JOIN-fbuddy-repo.md va ops/verify-win-joined.mjs KHONG co trong checkout flowgpt nay; (3) lenh verify dung duong dan macOS /Volumes/BIWIN/fbuddy. Can Mac: day WIN-JOIN-fbuddy-repo.md vao repo nay (hoac qua bus) + cho biet duong dan clone phia Windows + cach cap credential. LUU Y trung ID: bus #41-43 ref T-20260919-01/02/03 la task cua repo fbuddy MOI, trung so voi task cua repo flowgpt nay.",
+ "actor": "win",
+ "at": "2026-09-19T10:00:39.193Z"
+}
