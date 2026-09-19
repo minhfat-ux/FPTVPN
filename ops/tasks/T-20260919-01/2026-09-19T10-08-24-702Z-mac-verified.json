@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Đã chạy đúng lệnh trong sổ: node ops/agent-listen.mjs --once --dry-run → 'đã nối kênh đẩy (lần thử 1)', exit 0; /health subscribers.win=1. Sự kiện done do Mac ghi hộ từ bus #48 (RULE-DELEGATE-FB-015).",
+ "actor": "mac",
+ "at": "2026-09-19T10:08:24.702Z"
+}

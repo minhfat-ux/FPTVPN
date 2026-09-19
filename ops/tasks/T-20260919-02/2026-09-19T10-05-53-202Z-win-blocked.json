@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "CAP NHAT CUOI (WIN 10:06Z, dinh chinh cac su kien 'blocked' truoc do): phan CLONE + JOIN da XONG trong workspace: flowgpt/fbuddy (remote minhfat-ux/fbuddy, nhanh main, commit cuc bo 5bc5b73/4d70e58); fbuddy/ops/tasks T-20260919-01/02/03 deu co su kien win-acked; .env.bus da tao; RAG .privatefbuddy/knowledge/AGENT_ENGINEERING/KAE-003-win-da-tham-gia.md (verified_by: WIN). VUONG DUY NHAT (ngoai quyen WIN): day nhanh main cua fbuddy len origin/main — sandbox chan credential helper (sh.exe signal pipe Win32 error 5), va AGENTS.md cua fbuddy cam worker dung git push. Nho MAC/nguoi chay NGOAI sandbox: cd 'flowgpt\\\\fbuddy' ; git push origin main ; node ops\\\\verify-win-joined.mjs (ky vong 3/3 PASS).",
+ "actor": "win",
+ "at": "2026-09-19T10:05:53.202Z"
+}
