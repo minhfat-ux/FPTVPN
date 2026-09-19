@@ -29,6 +29,8 @@ import {
 } from "./sepay.js";
 import { AuthStore, setPlanLabelResolver } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
+import { createBwPolicyProvider } from "./bw-policy.js";
+import { registerClientTelemetry } from "./client-telemetry.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { PlanStore } from "./plan-store.js";
 import {
@@ -224,6 +226,9 @@ const appConfig = new AppConfigStore(APP_CONFIG_DB, {
   ai_android_apk_url: process.env.AI_ANDROID_APK_URL ?? "",
   ai_android_notes: process.env.AI_ANDROID_NOTES ?? "",
 });
+// Tham số chính sách băng thông phát xuống client (/v1/bootstrap + /v1/nodes): default = hằng
+// số đang chạy trong app, override bằng app_config (admin sửa, không cần deploy) hoặc env.
+const bwPolicy = createBwPolicyProvider({ read: (key) => appConfig.get(key), env: process.env });
 // health-watch chống chặn theo tên: đo DNS/TCP/TLS(SNI) định kỳ, giữ lịch sử và
 // alert khi trạng thái ổn định đổi. Bật/tắt bằng GFW_WATCH, chu kỳ GFW_WATCH_MS.
 const gfwWatcher = new GfwWatcher({
@@ -250,6 +255,14 @@ app.set("trust proxy", true);
 app.use(cors());
 // `verify` giữ lại raw body: webhook (SePay/PayOS) ký trên bytes gốc, JSON.stringify lại là lệch chữ ký.
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
+
+// Telemetry client (POST /v1/client-telemetry) CỐ Ý đăng ký TRƯỚC cổng AUTH_TOKEN bên dưới:
+// app chưa có token khi cần gửi số đo băng thông. Endpoint tự lo trần byte + rate-limit +
+// validate schema (xem src/client-telemetry.js); trần dọn dữ liệu cũ cũng ở đó.
+registerClientTelemetry(app, {
+  dbPath: process.env.CLIENT_TELEMETRY_DB ?? path.join(DATA_DIR, "client-telemetry.db"),
+  env: process.env,
+});
 
 // Chẩn đoán luồng thu UDID: ghi lại MỌI request vào endpoint callback/hồ sơ — kể cả request
 // không parse được. Không có log này thì "khách cài hồ sơ mà server không thấy gì" là bó tay.
@@ -444,7 +457,7 @@ const listPublicNodes = async (_req, res) => {
       const rank = (node) => (nodeLooksDown(node.id) ? 1 : 0);
       return rank(left) - rank(right) || left.priority - right.priority || left.name.localeCompare(right.name);
     });
-    res.json({ nodes: ordered.map(publicNode) });
+    res.json({ nodes: ordered.map(publicNode), bw_policy: bwPolicy.payload() });
   } catch (err) {
     console.error("GET /nodes failed:", err);
     res.status(500).json({ error: "Internal error" });
@@ -496,6 +509,8 @@ app.get("/v1/bootstrap", async (_req, res) => {
       min_app_version: appConfig.get("min_app_version") || process.env.MIN_APP_VERSION || null,
       update_url: process.env.UPDATE_URL || `${apiHosts[0]}/install/ios`,
       poll_after_seconds: Number(process.env.BOOTSTRAP_POLL_SECONDS || 900),
+      // Tham số chính sách băng thông (ramp/hệ số/probe/trần-sàn) — client cũ bỏ qua field này.
+      bw_policy: bwPolicy.payload(),
     });
   } catch (err) {
     res.status(500).json({ error: "Internal error" });
