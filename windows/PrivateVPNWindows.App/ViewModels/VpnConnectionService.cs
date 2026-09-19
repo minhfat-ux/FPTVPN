@@ -214,7 +214,13 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
             // về NGUYÊN chuỗi WireGuard bên dưới — không xoá/đổi hành vi WireGuard.
             if (preference is TransportPreference.SingBoxHysteriaRelay or TransportPreference.Auto)
             {
-                if (await TryStartRelayTunnelAsync(node, token).ConfigureAwait(false))
+                // Máy bật Smart App Control: sing-box.exe bị chặn ⇒ biết chắc đường relay không lên
+                // được, bỏ qua luôn (không tốn ngân sách chờ) và nói rõ lý do trong log.
+                if (ApplicationControlGuard.RelayBlocked)
+                {
+                    _log.Warn("connect: " + ApplicationControlGuard.UserMessage());
+                }
+                else if (await TryStartRelayTunnelAsync(node, token).ConfigureAwait(false))
                 {
                     OverlayIp = registration.OverlayIp;
                     ActiveNodeTitle = NodeTitle(node);
@@ -231,9 +237,12 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
                     return;
                 }
 
-                _log.Warn(
-                    $"connect: {SingBoxRelayTransportId} không lên trong {RelayTunnelBudgetSeconds}s " +
-                    "— rơi về chuỗi WireGuard (đường cũ).");
+                else
+                {
+                    _log.Warn(
+                        $"connect: {SingBoxRelayTransportId} không lên trong {RelayTunnelBudgetSeconds}s " +
+                        "— rơi về chuỗi WireGuard (đường cũ).");
+                }
             }
 
             var candidates = BuildCandidates(node, preference);

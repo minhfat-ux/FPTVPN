@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Đóng gói VPNFlow cho Windows thành 1 file cài 1-click (Inno Setup 6).
 
@@ -55,7 +55,10 @@ foreach ($f in @("wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe", "sing-box
 
 # 2) publish
 if (-not $SkipPublish) {
-  $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
+  # KHONG dung `$x = if (...) {...} else {...}`: do la cu phap PowerShell 7, Windows
+  # PowerShell 5.1 (co san tren moi may Windows) bao "Missing closing '}'" va khong chay.
+  $selfContained = "true"
+  if ($FrameworkDependent) { $selfContained = "false" }
   Step "dotnet publish ($Configuration, win-x64, self-contained=$selfContained)"
   if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
   & dotnet publish $appProj -c $Configuration -r win-x64 --self-contained $selfContained -o $publishDir
@@ -80,7 +83,7 @@ if (-not $Version) {
     $Version = $Matches[1]
   } else {
     $fv = (Get-Item (Join-Path $publishDir $appExe)).VersionInfo.FileVersion
-    $Version = if ($fv) { ($fv -replace '\.0$', '') } else { "1.0.0" }
+    if ($fv) { $Version = ($fv -replace '\.0$', '') } else { $Version = "1.0.0" }
   }
 }
 Step "Version: $Version"

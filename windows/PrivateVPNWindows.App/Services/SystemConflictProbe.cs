@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using PrivateVPNWindows.Core.Tunnel;
+using VpnFlow.Core.Tunnel;
 
 namespace VpnFlow.App.Services;
 
@@ -78,7 +79,26 @@ public static class SystemConflictProbe
     }
 
     /// <summary>Phát hiện và trả về danh sách cảnh báo (rỗng = hệ thống sạch).</summary>
-    public static IReadOnlyList<NetworkConflict> Detect() => NetworkConflictDetector.Analyze(Capture());
+    public static IReadOnlyList<NetworkConflict> Detect()
+    {
+        var conflicts = NetworkConflictDetector.Analyze(Capture()).ToList();
+
+        // Máy khách bật Smart App Control: binary bên thứ ba chưa ký (sing-box.exe) bị Application
+        // Control chặn ⇒ đường hysteria2-over-WebSocket không lên được. Cảnh báo NGAY khi mở app
+        // thay vì để khách bấm Kết nối rồi thấy "connecting" rồi tự rơi về WireGuard mà không hiểu.
+        var singBox = Path.Combine(AppContext.BaseDirectory, HysteriaRelayDefaults.SingBoxExeName);
+        if (ApplicationControlGuard.ProbeBlocked(singBox))
+        {
+            conflicts.Add(new NetworkConflict(
+                NetworkConflictSeverity.Warning,
+                "Windows đang chặn công cụ tunnel (Smart App Control)",
+                "sing-box.exe bị Application Control chặn vì chưa ký số ⇒ đường hysteria2-over-WebSocket " +
+                "không dùng được. App sẽ tự đi đường WireGuard.",
+                ApplicationControlGuard.UserMessage()));
+        }
+
+        return conflicts;
+    }
 
     /// <summary>
     /// Proxy hệ thống: hỏi thẳng .NET xem có proxy nào đang áp cho HTTPS không
