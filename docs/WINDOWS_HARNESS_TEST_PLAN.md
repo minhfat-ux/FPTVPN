@@ -80,3 +80,14 @@ Phần còn lại (chưa làm): split-tunnel đầy đủ theo `geoip:cn`/`geosi
   `VPNFlow*`/`wintun` nào không; xoá route mặc định trỏ vào nó (`route print 0.0.0.0`),
   và tắt tiến trình `sing-box.exe` còn sót (`Stop-Process -Name sing-box`).
 - Đừng để lại `sing-box.exe`/`flowvpnrelay.exe` chạy nền sau khi test xong.
+
+---
+
+## ✅ TASK TO RESUME (sau khi bật lại máy — chủ dự án đã cắm lại ổ)
+
+Khi bật lại: mount BIWIN nếu thiếu → `git pull` (HEAD = `e06b6e5`) → chờ `tailscale status` thấy `desktop-852p1lt online` rồi chạy Windows test theo mục 1–3 ở trên (`verify-relay.ps1` → app → IP node → RAW vs VPN → WeChat → ngắt an toàn).
+
+Trạng thái đã khoá (release, chờ publisher):
+- iOS 1.4.0/15 (sha256 b6bf9a04…), Android 1.4.0/20 (2 APK), macOS 1.4.0/14 (zip sha256 262634c6…) — chi tiết `docs/RELEASE_ARTIFACTS_2026-09-19.md`.
+- iOS 1.4.0/16 = bản hysteria2 **test cho iPhone** (sha256 158649962d…), chưa cài.
+Việc treo: iOS hysteria2 chưa test trên máy thật (KVC fd + tự cứu); macOS lượt tải đầu chậm (ramp-up) + chưa notarize + app Mac chưa có kênh tự nhắc cập nhật; WeChat split-tunnel Android/iOS/Mac chưa làm.
