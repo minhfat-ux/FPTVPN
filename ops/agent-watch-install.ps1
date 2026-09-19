@@ -43,8 +43,10 @@ Pop-Location
 
 if ($NoAutostart) { Write-Host "`n(-NoAutostart) bỏ qua tạo Scheduled Task." -ForegroundColor Yellow; exit 0 }
 
-# 3. Scheduled Task: chạy khi đăng nhập, tự chạy lại nếu thoát
-$action = "cmd /c cd /d `"$Repo`" && set AGENT_NAME=WIN && node ops\agent-watch.mjs --auto --interval $Interval"
+# 3. Scheduled Task: chạy khi đăng nhập, tự chạy lại nếu thoát.
+#    Gọi qua ops\agent-watch.cmd (đặt biến bằng `set "AGENT_NAME=WIN"`) thay vì `set AGENT_NAME=WIN &&`
+#    — kiểu cũ để lại DẤU CÁCH ở cuối giá trị, tên agent thành "WIN " (đã gây lỗi thật 2026-09-18).
+$action = "cmd /c cd /d `"$Repo`" && ops\agent-watch.cmd --interval $Interval"
 Write-Host "`n-- Tạo Scheduled Task '$TaskName' --" -ForegroundColor Cyan
 schtasks /Create /TN $TaskName /SC ONLOGON /TR $action /F | Write-Host
 schtasks /Run /TN $TaskName | Write-Host
@@ -59,6 +61,6 @@ if ($running) {
   Write-Host "  Bằng chứng: sự kiện 'woken' xuất hiện trong ops/tasks/ và được push lên git."
 } else {
   Write-Host "`n! Chưa thấy tiến trình watcher. Mở terminal chạy tay để xem lỗi:" -ForegroundColor Yellow
-  Write-Host "  cd `"$Repo`" ; `$env:AGENT_NAME='WIN' ; node ops\agent-watch.mjs --auto"
+  Write-Host "  cd `"$Repo`" ; ops\agent-watch.cmd"
 }
 Write-Host "`nNhận việc đang chờ:  AGENT_NAME=WIN node ops/task.mjs ack T-20260918-01 --push"

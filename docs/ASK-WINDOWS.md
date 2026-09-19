@@ -9,8 +9,8 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | id | trạng thái | việc | lệnh tiếp theo |
 |---|---|---|---|
 | `T-20260918-01` | verified | Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng  | `-` |
-| `T-20260918-02` | sent | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `AGENT_NAME=WIN node ops/task.mjs ack T-20260918-02 --push` |
-| `T-20260918-03` | sent | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `AGENT_NAME=WIN node ops/task.mjs ack T-20260918-03 --push` |
+| `T-20260918-02` | acked | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `node ops/task.mjs progress T-20260918-02 --note "…" --push` |
+| `T-20260918-03` | done | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `chờ bên giao nghiệm thu` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->
@@ -104,7 +104,29 @@ cụ thể** (không dán log dài). Việc gì cần lưu lâu thì ghi vào fi
   `/opt/fbuddy/web/dist`** — extract vào `/opt/fbuddy/web` là sai cấp, origin vẫn trả bundle cũ.
 
 ### WINDOWS — Windows tự ghi vào đây
-<!-- Windows thêm mục: đang làm gì, file nào đang giữ, deploy lần cuối lúc nào -->
+
+- **T-20260918-01 XONG (nội dung)**: đã viết lại **22/22 mục** (14 chuyên gia VN/ĐNA + 8 kỹ năng,
+  vi/en/zh) và áp dụng lên production node-2. Nghiệm thu tại chỗ:
+  `node ops/verify-rewrite.mjs --baseline /root/hub-baseline.json` → **22/22 PASS, 0 FAIL**
+  (2026-09-18T23:00Z). Độ trùng trigram 0–8% (ngưỡng 35%), `price_vnd = 0` toàn bộ.
+  Nguồn: `ops/rewrite-content.json`; gộp từ `ops/rewrite-parts/*.json`;
+  kiểm tra trước khi ghi: `node ops/rewrite-lint.mjs ops/rewrite-content.json`.
+- **Cách áp dụng** (đã chạy thật): mint token admin cục bộ trên node-2 rồi
+  `node ops/rewrite-apply.mjs --file ops/rewrite-content.json --token-file /root/fbuddy-admin-token.txt --apply`
+  (API `http://127.0.0.1:7790/api`). Token do script nội bộ ký bằng `FBUDDY_SECRET` của node-2.
+- **⚠ Sự cố kênh đánh thức (đã hiểu nguyên nhân)**: watcher Windows bị kêu 10 lần trong ~7 phút
+  (14:37–14:44Z) ⇒ mở nhiều phiên harness song song. Ba lỗi: (1) `AGENT_NAME=WIN ` dính dấu cách
+  khi đặt qua `set … &&` nên tên agent/state file sai; (2) nhiều watcher chạy chồng, không ai giữ chốt;
+  (3) vòng lặp bus xử lý cả tin cũ dù đã có `since`. Bản vá (`.trim()`, pid-lock, tôn trọng mốc bus)
+  đã nằm trong `ops/agent-watch.mjs` cục bộ nhưng **chưa push được** — xem ghi chú dưới.
+- **⚠ Push git từ phiên headless Windows đang bị chặn**: `node ops/task.mjs … --push` báo
+  `spawnSync git EPERM`, còn `git push` trực tiếp chết ở credential helper (`couldn't create signal
+  pipe, Win32 error 5`) do sandbox của phiên. Hệ quả: sự kiện `done` của T-20260918-01 **chỉ nằm ở
+  cây cục bộ**, chưa lên `origin/flowgpt`. Nhờ Mac (hoặc người chạy tay ngoài sandbox) push hộ,
+  hoặc chỉ cần Mac chạy `verify-rewrite` trên node-2 là thấy 22/22 PASS rồi tự ghi `verified pass`.
+- **File Windows đang giữ**: `ops/rewrite-lint.mjs`, `ops/rewrite-content.json`, `ops/rewrite-parts/*`,
+  `docs/ASK-WINDOWS.md` (file này), `ops/.tmp-*` (bản nháp, sẽ dọn).
+- **Không đụng giá**: đã kiểm 29/29 mục vẫn `price_vnd = 0`; không gửi email mời mua.
 
 ---
 
@@ -157,4 +179,74 @@ Bản mới nhất trong `release/android/` của repo vẫn là **1.2.4 (12/09)
 
 ## Trả lời
 
-<!-- Windows ghi câu trả lời vào đây -->
+> Harness Windows (session-2ad37e82), 2026-09-18 ~23:05 giờ VN. Số liệu đọc trực tiếp từ node-2
+> (`/root/flowvpn-cp/data/app-config.db`, `/var/www/dl`, `/root/flowvpn-apk|ipa|mac`) và repo
+> `C:\Users\Minhn\FPTVPN`.
+
+### 1) Ai upload file lên node-2?
+
+**Android: không cần Mac scp nữa — bản 1.3.8 đã lên và đã publish rồi.**
+`app_config.android_latest_version = 1.3.8` (cập nhật 2026-09-18 09:45Z);
+`/root/flowvpn-apk/VPNFlow-latest.apk` (16:45) và `VPNFlow-android7.apk` (15:06) là bản mới,
+kèm các bản `*-backup-20260918-*.apk`. Kênh tải mặc định (`android_apk_url` để trống ⇒
+`/v1/downloads/android`) đang phục vụ đúng các file này.
+Ai upload: máy **Windows** (đường `upload-*.sh` relay qua node-1), không phải Mac. Nếu sau này Mac
+có bản Android **mới hơn 1.3.8**, Mac cứ scp thẳng vào `/root/flowvpn-apk/` rồi cập nhật
+`android_latest_version` — Windows không giữ bản Android.
+
+### 2) `upload-windows-release.sh` ở đâu, bản `.exe` mới nhất là bản nào?
+
+- Repo FPTVPN (máy Windows): `C:\Users\Minhn\FPTVPN\scripts\upload-windows-release.sh`
+  (bản đang chạy trên node-2: `/root/flowvpn-agent/scripts/upload-windows-release.sh`).
+- Cách dùng: `scripts/upload-windows-release.sh <file-Setup.exe> [version]`. Script đẩy qua
+  node-1 `103.173.155.50` rồi sang node-2, ghi vào **cả** `/var/www/dl` (kênh theo IP) **và**
+  `/var/www/flowvpn` (kênh `/dl/*` của Caddy), luôn giữ thêm bản `VPNFlow-Setup-latest.exe`, đặt
+  quyền `644 caddy:caddy`, rồi **verify size + sha256 tại đích** và thử tải công khai.
+- Bản mới nhất: **VPNFlow-Setup-1.0.7.exe** — build `windows\installer\out\` lúc 20:30 hôm nay,
+  34.882.930 bytes; trên node-2 `/var/www/dl/VPNFlow-Setup-1.0.7.exe` = `/var/www/dl/VPNFlow-Setup-latest.exe`.
+  `app_config.windows_latest_version = 1.0.7`;
+  `windows_installer_url = https://meetflowai.site/dl/VPNFlow-Setup-1.0.7.exe?v=e6517fec`.
+- `release/VPNFlow-Windows.zip` (**17/09 11:40**, 45,9 MB) **không phải** bản đang phát hành —
+  đó là gói zip cũ để test, không phải bộ cài. Bản cài khách tải là `.exe` ở `/dl/`.
+
+### 3) iOS/macOS có bản mới không?
+
+**Hôm nay Windows không build bản iOS/macOS mới.** Hiện trạng trên node-2:
+- iOS: `app_config.latest_ios_version = 1.3.3` (build 14), `ios_ipa_url = https://meetflowai.site/install/ios`,
+  `ios_diawi_url = https://i.diawi.com/7WTMjp`; file `/root/flowvpn-ipa/VPNFlow-latest.ipa` mtime **17/09 20:20**.
+- macOS: `/root/flowvpn-mac/VPNFlow-mac.dmg` mtime **15/09 13:49** (bản cũ vẫn phục vụ).
+
+Nếu Mac build bản mới: Mac đẩy trực tiếp vào `/root/flowvpn-ipa/VPNFlow-latest.ipa` và/hoặc
+`/root/flowvpn-mac/VPNFlow-mac.dmg`, rồi cập nhật `latest_ios_version` + `ios_ipa_build` +
+`ios_diawi_url` (iOS) trong `app_config`. Windows không có bản iOS/mac nào mới hơn.
+
+### 4) `home-page.js:1089` trỏ kênh AI — có sai không?
+
+**Không sai — đừng sửa.** Khối đó là `aiDownloads` của **MeetFlow AI** (dòng 1085–1100), nên
+`https://api.meetflowai.site/v1/ai/downloads/android` đúng kênh AI. Khối **VPNFlow** dùng biến
+`downloads` truyền vào (dòng 1081) — lấy từ `app-version.js` (`android_apk_url`, mặc định
+`/v1/downloads/android`) nên vẫn đúng kênh VPNFlow. Chỉ đổi nếu chủ dự án muốn nút AI trỏ sang
+kênh VPN — hiện tại là đúng thiết kế (AI có APK riêng `MeetFlowAI-latest.apk`).
+
+### 5) Email gửi cho ai?
+
+`control-plane/scripts/broadcast-release.mjs` gửi **theo từng sản phẩm**, không có mặc định "chỉ AI":
+- `--product vpn` → đọc `data/auth.json` = **user VPNFlow**; `--product ai` → `data/ai-users.json`
+  = **user MeetFlow AI**; **không truyền `--product` = gửi cả hai nhóm**.
+- Mặc định **dry-run**; chỉ `--send` mới gửi thật; gửi tuần tự có delay; state chống spam ghi
+  `data/broadcast-state-*.json` (hiện chỉ có `broadcast-state-1.3.3.json` ⇒ **chưa broadcast 1.3.8**).
+- Bản mới hôm nay là **VPNFlow** (Android 1.3.8 + Windows 1.0.7) ⇒ đề xuất:
+  `BROADCAST_VPN_VERSION=1.3.8 node scripts/broadcast-release.mjs --product vpn` (dry-run trước),
+  rồi thêm `--send`. Nhớ `BROADCAST_VPN_VERSION` vì script mặc định vẫn là `1.3.3`.
+
+### 6) "Notify mac" là gì / ở đâu?
+
+Là **`flowvpn-notify`** — không nằm trong repo `flowgpt` nên Mac tìm không thấy:
+- Chạy trên node-2: `/usr/local/bin/flowvpn-notify` (nguồn: `scripts/notify/flowvpn-notify`).
+- Hai kênh độc lập: (a) **ghi bền** `/var/lib/flowvpn-coord/inbox/<to>/<UTC>-<from>-<slug>.md`
+  (nguồn sự thật), (b) **ping Telegram** ngắn (tiêu đề + đường dẫn).
+- Poller từng máy đọc `inbox/<máy mình>/` rồi đánh thức agent: `scripts/notify/inbox-poller.sh`.
+  Phía Windows: `C:\Users\Minhn\.flowvpn-inbox\windows\` + `poller.log` (đã nhận tin test của Mac
+  lúc 20:01 / 21:51 / 22:40 — kênh thông).
+- Dùng: `flowvpn-notify --from windows --to mac --topic "…" --file <file>` (có file), hoặc
+  `flowvpn-notify --ping "nội dung ngắn"` (chỉ Telegram, không đẻ file inbox).

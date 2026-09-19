@@ -2,6 +2,14 @@ import type { Dict } from "../../types";
 
 /** 本命名空间的中文翻译。 */
 export const auth: Dict = {
+  /* 落地页（登录页左侧品牌栏）。 */
+  "auth.landing.tagline": "FlowTech · MeetFlow AI",
+  "auth.landing.headline": "为你日常工作打造的 AI 助手",
+  "auth.landing.pitch": "聊天、实时翻译、幻灯片与数据处理，集中在一处，成本可控。",
+  "auth.landing.point1": "多技能聊天：文本、图片、表格、幻灯片",
+  "auth.landing.point2": "实时翻译与会议记录",
+  "auth.landing.point3": "企业账号：权限、额度与操作日志",
+
   "auth.login.emailTitle": "使用邮箱登录",
   "auth.login.emailHint": "请输入公司邮箱，我们会发送一次性验证码，无需密码。",
   "auth.login.emailLabel": "邮箱",

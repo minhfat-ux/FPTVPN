@@ -39,6 +39,7 @@ import {
   verifyDecisionToken,
 } from "./credit-requests.js";
 import { mailerStatus, sendTestEmail } from "./mailer.js";
+import { activateKey } from "./desktop-keys.js";
 import {
   applyAppSettingsPatch,
   createProvider,
@@ -142,6 +143,8 @@ import {
 } from "./util.js";
 
 const chatLimiter = new RateLimiter({ limit: 60, windowMs: 60 * 1000 });
+// App Windows gọi /desktop/activate mà chưa có phiên đăng nhập ⇒ chặn theo IP.
+const activateLimiter = new RateLimiter({ limit: 30, windowMs: 60 * 1000 });
 const uploadLimiter = new RateLimiter({ limit: 40, windowMs: 60 * 1000 });
 const voiceLimiter = new RateLimiter({ limit: 120, windowMs: 60 * 1000 });
 
@@ -1266,6 +1269,13 @@ export function createApiRouter() {
         }
       }
 
+      // Ô chọn trạng thái bán trên UI ("Bán ngay" = published, "Sắp có" = coming_soon).
+      // Chỉ nhận giá trị hợp lệ; để trống thì `toHubDraft` tự quyết theo skill gốc.
+      const requestedState = String(req.body?.state ?? "").trim();
+      if (requestedState === "published" || requestedState === "coming_soon") {
+        draft = { ...draft, state: requestedState };
+      }
+
       const existing = listHubSkills().find((item) => item.slug === draft.slug);
       const payload = {
         slug: draft.slug,
@@ -1282,6 +1292,32 @@ export function createApiRouter() {
       const skill = existing ? updateHubSkill(existing.id, payload) : createHubSkill(payload);
       audit(req.user.id, "skillhub.import", skill.id, { slug, priceVnd, targets, updated: Boolean(existing) });
       res.json({ skill, updated: Boolean(existing), warnings: [...warnings, ...(draft.warnings ?? [])], source: { slug, version: content.version } });
+    }),
+  );
+
+  // ---------------------------- key kích hoạt cho app Windows (công khai)
+
+  /**
+   * App Windows gọi vào đây: `{ key, machineId }` ⇒
+   * `{ valid, message, plan, activatedAt, expiresAt }` — đúng hợp đồng `ActivationService.cs`.
+   * Không cần đăng nhập (app chưa có phiên), nhưng chặn theo IP và ghi audit.
+   */
+  router.post(
+    "/desktop/activate",
+    asyncHandler(async (req, res) => {
+      const gate = activateLimiter.check(clientKey(req));
+      if (!gate.ok) throw rateLimited("Quá nhiều lần kích hoạt, thử lại sau ít phút");
+
+      const machineId = req.body?.machineId ? String(req.body.machineId).slice(0, 128) : null;
+      const result = activateKey({
+        key: req.body?.key,
+        machineId,
+        machineLabel: req.body?.machineLabel ?? null,
+        ip: req.ip,
+      });
+      // KHÔNG ghi key vào audit — chỉ ghi máy + kết quả.
+      audit(null, "desktop.activate", machineId, { valid: result.valid, message: result.message });
+      res.json(result);
     }),
   );
 

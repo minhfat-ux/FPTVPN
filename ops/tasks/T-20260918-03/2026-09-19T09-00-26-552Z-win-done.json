@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=752e5a0 (ack), cmd=powershell -ExecutionPolicy Bypass -File ops\\disable-sleep.ps1 + powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE, ketqua=STANDBYIDLE AC=0x0 DC=0x0 (khong bao gio sleep); HIBERNATEIDLE AC=0x0 DC=0x7fffffff; luuy=9 lenh ghi powercfg bi tu choi do thieu quyen admin (UAC deny-only), may khong co LIDACTION nen phan lid khong ap dung",
+ "actor": "win",
+ "at": "2026-09-19T09:00:26.552Z"
+}
