@@ -49,10 +49,22 @@ public static class HysteriaRelayDefaults
     /// <summary>Cổng SOCKS5 mặc định của flowvpnrelay.exe (trùng mặc định runner.go).</summary>
     public const int DefaultSocksPort = 1081;
 
-    /// <summary>Brutal CC cho đường relay. Số khai = tốc độ server pace theo, nên phải khai
-    /// SÁT băng thông thật: khai cao hơn đường truyền là tự gây nghẽn.</summary>
-    public const int UpKbps = 30000;
-    public const int DownKbps = 100000;
+    /// <summary>
+    /// Băng thông khai cho hysteria2 (Brutal CC). <b>0 = KHÔNG khai</b> ⇒ hysteria dùng
+    /// congestion control thích ứng của nó (BBR) và tự bám theo đường truyền thật.
+    ///
+    /// Vì sao mặc định 0/0 (đo trên chính máy này, cùng node, cùng thời điểm):
+    /// khai báo 30/100 Mbps ⇒ ~45,5 Mbps; để 0/0 (BBR) ⇒ <b>~68,6 Mbps</b>. Số khai là TRẦN
+    /// mà Brutal pace theo, nên khai thấp hơn đường truyền là tự bóp mạng — đúng lỗi khách
+    /// phàn nàn "vào VPN là chậm". Hai node đều đã bật <c>ignoreClientBandwidth: true</c>,
+    /// nên phía server vốn đã không dùng số client khai.
+    ///
+    /// Muốn dùng Brutal (hữu ích trên link mất gói/nhiều RTT) thì ĐO băng thông thật rồi mới
+    /// khai — xem <see cref="HysteriaTransport.WithRelayBandwidth"/> và mục "tối đa tốc độ"
+    /// trong Settings; tuyệt đối không hardcode một con số thấp.
+    /// </summary>
+    public const int UpKbps = 0;
+    public const int DownKbps = 0;
 
     /// <summary>Trần dựng transport (WS + QUIC handshake) của một lần thử, tính bằng giây.</summary>
     public const int DialTimeoutSec = 12;

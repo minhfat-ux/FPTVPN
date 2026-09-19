@@ -134,6 +134,16 @@ public sealed class HysteriaRelayTunnel : IDisposable
         RequireBinary(relayExe);
         RequireBinary(singBoxExe);
 
+        // Máy khách bật Smart App Control thì sing-box.exe (binary bên thứ ba CHƯA KÝ) bị chặn
+        // ngay lúc khởi chạy. Phát hiện SỚM: không tốn thời gian bắt tay WebSocket rồi mới chết,
+        // và báo đúng nguyên nhân cho người dùng. Kết quả được ghi nhớ nên các lần kết nối sau
+        // thoát ra tức thì (xem ApplicationControlGuard).
+        if (ApplicationControlGuard.ProbeBlocked(singBoxExe))
+        {
+            throw new TunnelTransportException(
+                ApplicationControlGuard.UserMessage(Path.GetFileName(singBoxExe)));
+        }
+
         // Cổng cấp động: hard-code sẽ đụng khi máy khách đã có tiến trình khác giữ cổng đó.
         var ports = SingBoxConfigBuilder.AllocateFreePorts(2);
         RelaySocksPort = ports[0];
@@ -241,6 +251,13 @@ public sealed class HysteriaRelayTunnel : IDisposable
         try
         {
             process.Start();
+        }
+        catch (Exception ex) when (ApplicationControlGuard.IsBlocked(ex))
+        {
+            // Windows (Smart App Control / WDAC) chặn binary chưa ký: ghi nhớ để lần sau khỏi thử
+            // và báo đúng bản chất thay vì "không chạy được <tên file>".
+            ApplicationControlGuard.MarkBlocked(name);
+            throw new TunnelTransportException(ApplicationControlGuard.UserMessage(name), ex);
         }
         catch (Exception ex)
         {
