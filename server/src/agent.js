@@ -1000,13 +1000,16 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   const researchFindings = turn.autoResearch?.findings ?? [];
   const ackOnly = !text.replace(/Em (đã|đang) (đã )?hỏi chuyên gia tra cứu[^\n]*\n*/gi, "").trim();
   if (researchFindings.length && ackOnly) {
-    const lines = [
-      `${turn.autoResearch?.text ?? ""}`.trim(),
-      "",
-      "**Nguồn tra cứu:**",
-      ...researchFindings.slice(0, 6).map((hit, index) => `${index + 1}. ${hit.title || hit.url} — ${hit.url}`),
-    ];
-    const fallbackAnswer = `${lines.filter(Boolean).join("\n")}\n`;
+    // TUYỆT ĐỐI không dán `turn.autoResearch.text` ra đây: đó là PROMPT cho model (có dòng
+    // "KẾT QUẢ TRA CỨU (researcher: …)", "Câu hỏi tra:", các chỉ dẫn nội bộ). Bản trước dán nguyên
+    // khối đó nên web hiện ra "tra cứu" như một mớ JSON/ghi chú nội bộ — chủ dự án báo 20/09/2026.
+    // Câu trả lời dự phòng phải là VĂN NÓI VỚI NGƯỜI DÙNG, chỉ gồm tiêu đề + link nguồn.
+    const list = researchFindings
+      .slice(0, 6)
+      .map((hit, index) => `${index + 1}. ${hit.title ? `${hit.title} — ` : ""}${hit.url}`)
+      .join("\n");
+    const fallbackAnswer =
+      "Em tra được các nguồn sau cho câu hỏi này, anh/chị xem giúp em nhé:\n" + list + "\n";
     text = `${text}${fallbackAnswer}`;
     channel.send("delta", { text: fallbackAnswer });
     if (finishReason === "error") finishReason = "stop";
