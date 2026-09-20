@@ -7,6 +7,7 @@ import path from "node:path";
 const { initDb, db } = await import("../src/db.js");
 const { config } = await import("../src/config.js");
 const { runHousekeeping, dbStats, defaultRetention } = await import("../src/housekeeping.js");
+const filesApi = await import("../src/files.js");
 
 initDb();
 // Kho tệp trong môi trường test chưa chắc tồn tại — housekeeping có đụng tới đĩa.
@@ -130,4 +131,85 @@ test("defaultRetention đọc được env và có trần an toàn", () => {
   assert.equal(r.maxDeletePerRun, 5);
   const fallback = defaultRetention({ HK_CONVERSATION_DAYS: "khong-phai-so" });
   assert.equal(fallback.conversationDays, 120);
+});
+
+// ---- Hạn mức dung lượng mỗi khách (mặc định 100MB, chủ dự án chốt 20/09/2026) -------------
+
+function seedBigFile(userId, { mb, ageDays = 30, stored = null, conversationId = null }) {
+  const name = stored ?? `big-${++seq}.bin`;
+  fs.writeFileSync(path.join(config.filesDir, name), "x");
+  const id = `f-quota-${++seq}`;
+  db.prepare(
+    "INSERT INTO files (id, user_id, conversation_id, name, mime, size, stored_name, kind, origin, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+  ).run(id, userId, conversationId, "to.bin", "application/octet-stream", mb * 1024 * 1024, name, "document", "upload", daysAgo(ageDays));
+  return { id, stored: name };
+}
+
+test("hạn mức: chặn ghi khi vượt 100MB, cho qua khi còn chỗ", () => {
+  const userId = seedUser();
+  seedBigFile(userId, { mb: 60 });
+  // Còn chỗ ⇒ không ném lỗi.
+  filesApi.assertStorageQuota(userId, 10 * 1024 * 1024);
+  // Vượt hạn mức ⇒ ném 413 kèm số liệu.
+  const error = (() => {
+    try {
+      filesApi.assertStorageQuota(userId, 50 * 1024 * 1024);
+      return null;
+    } catch (err) {
+      return err;
+    }
+  })();
+  assert.ok(error, "phải chặn khi vượt hạn mức");
+  assert.equal(error.statusCode, 413);
+  assert.equal(error.code, "storage_quota_exceeded");
+  assert.equal(error.usage.limitBytes, 100 * 1024 * 1024);
+  assert.ok(/dung lượng/i.test(error.message));
+});
+
+test("hạn mức: userStorageUsage cộng đúng dung lượng và số tệp", () => {
+  const userId = seedUser();
+  seedBigFile(userId, { mb: 1 });
+  seedBigFile(userId, { mb: 2 });
+  const usage = filesApi.userStorageUsage(userId);
+  assert.equal(usage.fileCount, 2);
+  assert.equal(usage.usedBytes, 3 * 1024 * 1024);
+  assert.equal(usage.limitBytes, 100 * 1024 * 1024);
+});
+
+test("housekeeping: khách vượt hạn mức bị dọn tệp CŨ NHẤT, giữ tệp trong hội thoại pinned", () => {
+  const userId = seedUser();
+  const pinnedConv = `c-hk-${++seq}`;
+  const at = daysAgo(300);
+  db.prepare(
+    "INSERT INTO conversations (id, user_id, title, skill, pinned, archived, message_count, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+  ).run(pinnedConv, userId, "Ghim", "auto", 1, 0, 0, at, at);
+  const oldest = seedBigFile(userId, { mb: 70, ageDays: 90 });
+  const middle = seedBigFile(userId, { mb: 45, ageDays: 60 });
+  const pinnedFile = seedBigFile(userId, { mb: 20, ageDays: 120, conversationId: pinnedConv });
+
+  const report = runHousekeeping({
+    apply: true,
+    now: NOW,
+    retention: { userStorageMb: 100, quotaMinAgeDays: 3, quotaTargetRatio: 0.9, conversationDays: 100000, fileDays: 100000 },
+  });
+
+  const entry = report.steps.userQuota.users.find((row) => row.user_id === userId);
+  assert.ok(entry, "phải thấy user vượt hạn mức");
+  assert.equal(entry.usedBytes, 135 * 1024 * 1024);
+  assert.equal(db.prepare("SELECT id FROM files WHERE id = ?").get(oldest.id), undefined, "tệp cũ nhất phải bị xoá");
+  assert.equal(fs.existsSync(path.join(config.filesDir, oldest.stored)), false, "blob tệp cũ nhất phải bị xoá");
+  assert.ok(db.prepare("SELECT id FROM files WHERE id = ?").get(pinnedFile.id), "tệp trong hội thoại pinned phải được giữ");
+  assert.ok(db.prepare("SELECT id FROM files WHERE id = ?").get(middle.id), "chỉ xoá tới khi xuống dưới ngưỡng");
+});
+
+test("housekeeping: tệp VỪA gửi không bị dọn dù khách vượt hạn mức", () => {
+  const userId = seedUser();
+  const fresh = seedBigFile(userId, { mb: 120, ageDays: 0 });
+  const report = runHousekeeping({
+    apply: true,
+    now: NOW,
+    retention: { userStorageMb: 100, quotaMinAgeDays: 3, conversationDays: 100000, fileDays: 100000 },
+  });
+  assert.equal(report.steps.userQuota.users.length >= 1, true);
+  assert.ok(db.prepare("SELECT id FROM files WHERE id = ?").get(fresh.id), "tệp mới gửi phải được giữ");
 });

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
+import { db } from "./db.js";
 import { insert, getById, remove, all } from "./db.js";
 import { badRequest, notFound } from "./util.js";
 
@@ -83,6 +84,50 @@ export function publicArtifact(row) {
   };
 }
 
+/** Hạn mức dung lượng của một khách (bytes). Xem `config.userStorageMb`. */
+export function storageLimitBytes() {
+  return Math.max(0, Number(config.userStorageMb ?? 100)) * 1024 * 1024;
+}
+
+/**
+ * Dung lượng khách đang chiếm trên đĩa = tổng `files.size` của chính người đó.
+ * Đếm CẢ tệp khách tải lên và tệp app tạo (docx/xlsx/ảnh), vì cả hai đều chiếm đĩa VPS.
+ *
+ * @param {string} userId
+ * @returns {{usedBytes: number, limitBytes: number, fileCount: number}}
+ */
+export function userStorageUsage(userId) {
+  const row = db
+    .prepare("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS bytes FROM files WHERE user_id = ?")
+    .get(userId);
+  return {
+    usedBytes: Number(row?.bytes ?? 0),
+    fileCount: Number(row?.n ?? 0),
+    limitBytes: storageLimitBytes(),
+  };
+}
+
+/**
+ * Chặn khi vượt hạn mức — gọi TRƯỚC khi ghi đĩa để không tạo rác.
+ * Thông báo nêu rõ đang dùng bao nhiêu / hạn mức bao nhiêu để khách biết phải xoá gì.
+ */
+export function assertStorageQuota(userId, incomingBytes = 0) {
+  const { usedBytes, limitBytes } = userStorageUsage(userId);
+  const limit = limitBytes;
+  if (limit <= 0) return; // 0 = không giới hạn (để trống env khi cần mở lại)
+  const after = usedBytes + Math.max(0, incomingBytes);
+  if (after <= limit) return;
+  const mb = (value) => (value / 1024 / 1024).toFixed(1);
+  const error = badRequest(
+    `Dung lượng lưu trữ đã đầy: đang dùng ${mb(usedBytes)}MB / ${mb(limit)}MB. `
+      + "Xoá bớt tệp cũ trong mục Tệp (hoặc trong hội thoại) rồi thử lại.",
+  );
+  error.code = "storage_quota_exceeded";
+  error.statusCode = 413;
+  error.usage = { usedBytes, limitBytes, incomingBytes };
+  throw error;
+}
+
 export async function saveBuffer({
   userId,
   conversationId = null,
@@ -96,6 +141,8 @@ export async function saveBuffer({
   const size = buffer.length;
   const maxBytes = 25 * 1024 * 1024;
   if (size > maxBytes) throw badRequest(`Tệp vượt quá ${Math.round(maxBytes / 1024 / 1024)}MB`);
+  // Hạn mức mỗi khách (mặc định 100MB): chặn trước khi tạo bản ghi/ghi đĩa.
+  assertStorageQuota(userId, size);
   const resource = insert("files", {
     user_id: userId,
     conversation_id: conversationId,

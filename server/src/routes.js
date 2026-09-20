@@ -134,6 +134,7 @@ import {
   publicFile,
   readFileBuffer,
   saveBuffer,
+  userStorageUsage,
 } from "./files.js";
 import {
   ApiError,
@@ -209,6 +210,24 @@ export function createApiRouter() {
       return { built: false, error: String(error?.message ?? error) };
     }
   }
+
+  /**
+   * Nhật ký từ app di động (chỉ bản DEBUG, chỉ tài khoản quản trị).
+   *
+   * Vì sao có: 2026-09-20 app trên iPad "bấm gửi mà không có gì xảy ra", log server không thấy
+   * request nào ⇒ không có cách nào chẩn đoán từ xa. App gửi nhật ký của nó lên đây, server ghi
+   * vào journal (SyslogIdentifier=fbuddy) để người vận hành đọc ngay.
+   */
+  const clientLogLimiter = new RateLimiter({ limit: 30, windowMs: 60 * 1000 });
+  router.post("/debug/client-log", requireAuth, (req, res) => {
+    if (req.user?.role !== "admin") throw forbidden("Chỉ quản trị viên");
+    const gate = clientLogLimiter.check(req.user.id);
+    if (!gate.ok) return res.status(429).json({ ok: false });
+    const lines = Array.isArray(req.body?.lines) ? req.body.lines.slice(0, 60) : [];
+    for (const line of lines) console.log(`[app-log] ${req.user.email} | ${String(line).slice(0, 300)}`);
+    if (req.body?.note) console.log(`[app-log] ${req.user.email} | NOTE: ${String(req.body.note).slice(0, 300)}`);
+    return res.json({ ok: true, received: lines.length });
+  });
 
   router.get("/health", (_req, res) => {
     res.json({
@@ -551,6 +570,24 @@ export function createApiRouter() {
     }),
   );
 
+  /**
+   * Dung lượng khách đang dùng / hạn mức (mặc định 100MB — xem `config.userStorageMb`).
+   * Đặt TRƯỚC `/files/:id` để "usage" không bị hiểu là id tệp.
+   */
+  router.get(
+    "/files/usage",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const usage = userStorageUsage(req.user.id);
+      res.json({
+        ...usage,
+        usedMb: Number((usage.usedBytes / 1024 / 1024).toFixed(2)),
+        limitMb: Number((usage.limitBytes / 1024 / 1024).toFixed(2)),
+        remainingBytes: Math.max(0, usage.limitBytes - usage.usedBytes),
+      });
+    }),
+  );
+
   router.get(
     "/files/:id",
     requireAuth,
@@ -642,11 +679,14 @@ export function createApiRouter() {
     // Icon + màu nhấn theo từng app: tên icon khớp bộ icon của web (`hubIcon`). Không có logo
     // riêng cho từng app nên dùng icon vector cùng bộ với chợ kỹ năng — nhìn đồng nhất, và không
     // phải bịa logo thương hiệu của app khác.
+    // `iconUrl`: ảnh icon THẬT của từng app, lấy đúng như trang FlowTech (meetflowai.site/assets/…)
+    // và tự host trong `web/public/app-icons/` — không hot-link sang site kia (đứt là popup trắng).
+    // `icon`/`accent` giữ làm phương án dự phòng nếu ảnh không tải được.
     const LOOK = {
-      meetflow: { icon: "translate", accent: "#6b8afd" },
-      vpnflow: { icon: "shield", accent: "#34d399" },
-      harness: { icon: "terminal", accent: "#f59e0b" },
-      supermom: { icon: "graduation", accent: "#f472b6" },
+      meetflow: { icon: "translate", accent: "#6b8afd", file: "meetflow" },
+      vpnflow: { icon: "shield", accent: "#34d399", file: "vpnflow" },
+      harness: { icon: "terminal", accent: "#f59e0b", file: "harness" },
+      supermom: { icon: "graduation", accent: "#f472b6", file: "supermom" },
     };
     const items = PUBLISHED_APPS.filter((app) => !app.isSelf).map((app) => ({
       id: app.id,
@@ -655,6 +695,7 @@ export function createApiRouter() {
       summary: app.summary ?? "",
       icon: LOOK[app.id]?.icon ?? "sparkles",
       accent: LOOK[app.id]?.accent ?? null,
+      iconUrl: LOOK[app.id]?.file ? `/app-icons/${LOOK[app.id].file}.png` : null,
       // Ưu tiên link mua/dùng chính; kèm link tải theo nền tảng để UI chọn.
       url: app.links?.buy ?? app.links?.app ?? app.links?.download ?? null,
       links: app.links ?? {},

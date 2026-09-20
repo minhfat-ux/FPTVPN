@@ -53,6 +53,12 @@ export const config = {
   filesDir: path.join(dataDir, "files"),
   dbFile: path.join(dataDir, "fbuddy.db"),
   webDistDir: path.join(ROOT_DIR, "web", "dist"),
+  /**
+   * Hạn mức dung lượng mỗi khách (MB) — tính trên TỔNG `files.size` của người đó
+   * (tệp khách tải lên + tệp app tạo ra), vì cả hai đều nằm trên đĩa VPS.
+   * Mặc định 100 MB theo yêu cầu chủ dự án 20/09/2026; đổi bằng env, không cần build lại.
+   */
+  userStorageMb: envInt("FBUDDY_USER_STORAGE_MB", 100),
   secret: resolveSecret(),
   version: "0.1.0",
   appName: process.env.FBUDDY_APP_NAME ?? "fBuddy",

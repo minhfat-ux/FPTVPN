@@ -39,6 +39,12 @@ export function defaultRetention(env = process.env) {
     batchSize: num("HK_BATCH_SIZE", 400),
     maxDeletePerRun: num("HK_MAX_DELETE_PER_RUN", 20000),
     orphanGraceHours: num("HK_ORPHAN_GRACE_HOURS", 24),
+    /// Hạn mức dung lượng mỗi khách (MB) — trùng `config.userStorageMb` (mặc định 100MB).
+    userStorageMb: num("FBUDDY_USER_STORAGE_MB", Number(config.userStorageMb ?? 100)),
+    /// Chỉ dọn tệp khi vượt hạn mức nếu tệp đã cũ hơn ngần này ngày (tránh xoá tệp khách vừa gửi).
+    quotaMinAgeDays: num("HK_QUOTA_MIN_AGE_DAYS", 3),
+    /// Dọn xuống còn bao nhiêu phần trăm hạn mức (chừa chỗ cho lượt gửi kế tiếp).
+    quotaTargetRatio: num("HK_QUOTA_TARGET_RATIO", 0.9),
     vacuumFreePageRatio: num("HK_VACUUM_FREE_PAGE_RATIO", 0.2),
   };
 }
@@ -290,6 +296,70 @@ export function runHousekeeping({ apply = false, retention = {}, now = Date.now(
       }
     }
     report.steps.memoriesOverCap = { users: overCap.length, deleted: removed };
+  }
+
+  // 7b) Hạn mức dung lượng mỗi khách (mặc định 100MB): khách vượt hạn mức thì dọn tệp CŨ NHẤT
+  //     trước, bỏ qua tệp thuộc hội thoại khách đã ghim, và chỉ đụng tệp cũ hơn `quotaMinAgeDays`
+  //     (không xoá thứ khách vừa gửi). Dọn xuống `quotaTargetRatio` để còn chỗ cho lượt sau.
+  const quotaBytes = Math.max(0, r.userStorageMb) * 1024 * 1024;
+  report.steps.userQuota = { limitBytes: quotaBytes, users: [] };
+  if (quotaBytes > 0) {
+    const usage = db
+      .prepare(
+        `SELECT f.user_id AS user_id, COALESCE(SUM(f.size), 0) AS bytes
+           FROM files f
+          WHERE f.user_id IS NOT NULL
+          GROUP BY f.user_id
+         HAVING bytes > ?`,
+      )
+      .all(quotaBytes);
+    const quotaCutoff = isoDaysAgo(r.quotaMinAgeDays, now);
+    const target = Math.floor(quotaBytes * r.quotaTargetRatio);
+    for (const row of usage) {
+      const candidates = db
+        .prepare(
+          `SELECT f.id, f.stored_name, f.size FROM files f
+            WHERE f.user_id = ?
+              AND f.created_at < ?
+              AND (f.conversation_id IS NULL
+                   OR f.conversation_id NOT IN (SELECT id FROM conversations WHERE pinned = 1))
+            ORDER BY f.created_at ASC
+            LIMIT ?`,
+        )
+        .all(row.user_id, quotaCutoff, r.maxDeletePerRun);
+      let remaining = Number(row.bytes);
+      let planned = 0;
+      let plannedBytes = 0;
+      for (const file of candidates) {
+        if (remaining <= target) break;
+        remaining -= Number(file.size ?? 0);
+        planned += 1;
+        plannedBytes += Number(file.size ?? 0);
+      }
+      report.steps.userQuota.users.push({
+        user_id: row.user_id,
+        usedBytes: Number(row.bytes),
+        overBy: Math.max(0, Number(row.bytes) - quotaBytes),
+        files: planned,
+        bytes: plannedBytes,
+      });
+      if (apply && planned > 0) {
+        let deleted = 0;
+        for (const file of candidates.slice(0, planned)) {
+          if (file.stored_name) {
+            try {
+              fs.unlinkSync(path.join(config.filesDir, file.stored_name));
+            } catch {
+              /* blob đã mất: bỏ qua */
+            }
+          }
+          db.prepare("DELETE FROM files WHERE id = ?").run(file.id);
+          deleted += 1;
+        }
+        report.steps.userQuota.users.at(-1).deleted = deleted;
+      }
+    }
+    report.steps.userQuota.overQuotaUsers = report.steps.userQuota.users.length;
   }
 
   // 8) Tối ưu file DB: gộp WAL, cập nhật thống kê, và VACUUM khi có nhiều trang trống.
