@@ -998,13 +998,49 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   // KHÔNG được để khách phải hỏi lại — server tự ghép câu trả lời từ chính kết quả tra cứu.
   // Đúng ca chủ dự án báo 20/09/2026: "tra cứu xong, fbuddy không trả lời ngay, phải hỏi lại".
   const researchFindings = turn.autoResearch?.findings ?? [];
+  // Nguồn từ CHÍNH công cụ `tra_cuu` (khác `autoResearch`): model tự gọi công cụ thì kết quả nằm
+  // trong `toolResults`, không nằm ở `turn.autoResearch`.
+  // `resultDto` KHÔNG mang `sources` (chúng được gom vào mảng `sources` của lượt), nên lấy từ đó.
+  const toolResearchSources = sources.filter((s) => s.kind === "web" && s.url);
+  const hasResearch = researchFindings.length > 0 || toolResearchSources.length > 0;
   const ackOnly = !text.replace(/Em (đã|đang) (đã )?hỏi chuyên gia tra cứu[^\n]*\n*/gi, "").trim();
-  if (researchFindings.length && ackOnly) {
-    // TUYỆT ĐỐI không dán `turn.autoResearch.text` ra đây: đó là PROMPT cho model (có dòng
-    // "KẾT QUẢ TRA CỨU (researcher: …)", "Câu hỏi tra:", các chỉ dẫn nội bộ). Bản trước dán nguyên
-    // khối đó nên web hiện ra "tra cứu" như một mớ JSON/ghi chú nội bộ — chủ dự án báo 20/09/2026.
-    // Câu trả lời dự phòng phải là VĂN NÓI VỚI NGƯỜI DÙNG, chỉ gồm tiêu đề + link nguồn.
-    const list = researchFindings
+
+  // Lượt CHỐT: model đã tra xong (hoặc tự gọi `tra_cuu`) mà không viết câu trả lời — thường do
+  // vòng lặp hết số bước vì model gọi công cụ liên tục. Gọi THÊM MỘT LƯỢT với công cụ TẮT để buộc
+  // model viết câu trả lời từ dữ liệu đã tra, thay vì để khách phải hỏi lại (lỗi chủ dự án báo
+  // 20/09/2026: "tra cứu xong, fbuddy đang không trả lời lại").
+  if (hasResearch && ackOnly && !signal.aborted) {
+    try {
+      channel.send("status", { stage: "finishing" });
+      const closing = [
+        ...messages,
+        {
+          role: "user",
+          content:
+            "Hãy TRẢ LỜI NGAY cho người dùng bằng văn xuôi dựa trên kết quả tra cứu ở trên. " +
+            "Không gọi thêm công cụ, không nhắc lại việc đang tra cứu, không xin lỗi.",
+        },
+      ];
+      for await (const event of streamChat({ provider, model, messages: closing, tools: [], toolMode: "off", signal })) {
+        if (event.type === "delta") {
+          text += event.text;
+          channel.send("delta", { text: event.text });
+        } else if (event.type === "usage" || event.type === "usage_final") {
+          usage = { in: event.in ?? usage?.in ?? 0, out: event.out ?? usage?.out ?? 0 };
+        } else if (event.type === "done") {
+          finishReason = event.finishReason ?? finishReason;
+        }
+      }
+    } catch (err) {
+      console.error("chat: lượt trả lời chốt sau tra cứu thất bại:", err?.message ?? err);
+    }
+  }
+
+  // Vẫn không có chữ nào ⇒ ghép câu trả lời TỐI THIỂU từ chính nguồn đã tra (văn nói với người
+  // dùng, TUYỆT ĐỐI không dán prompt nội bộ `autoResearch.text`).
+  const stillAckOnly = !text.replace(/Em (đã|đang) (đã )?hỏi chuyên gia tra cứu[^\n]*\n*/gi, "").trim();
+  if (hasResearch && stillAckOnly) {
+    const list = [...researchFindings, ...toolResearchSources]
       .slice(0, 6)
       .map((hit, index) => `${index + 1}. ${hit.title ? `${hit.title} — ` : ""}${hit.url}`)
       .join("\n");
