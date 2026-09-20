@@ -1,5 +1,7 @@
 import {
   BarChart3,
+  Shield,
+  Terminal,
   Brain,
   ClipboardList,
   FileSpreadsheet,
@@ -38,12 +40,18 @@ export const HUB_ICON_NAMES = [
   "graduation",
   "chart",
   "mail",
+  "shield",
+  "terminal",
   "sparkles",
 ] as const;
 
 /** Hub icon name → lucide icon (unknown names fall back to a sparkle). */
 export function hubIcon(icon: string | null | undefined, size = 16): ReactElement {
   switch ((icon ?? "").trim().toLowerCase()) {
+    case "shield":
+      return <Shield size={size} />;
+    case "terminal":
+      return <Terminal size={size} />;
     case "chat":
       return <Brain size={size} />;
     case "image":

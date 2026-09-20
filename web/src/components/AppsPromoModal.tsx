@@ -5,6 +5,7 @@ import { Modal } from "./ui";
 import { useAuth } from "../state/store";
 import { useI18n } from "../i18n";
 import type { PromoApp } from "../types";
+import { hubIcon } from "../hub/icons";
 
 /** Khoá lưu "đã xem lúc nào" — để không réo người dùng ở mọi lần mở trang. */
 const SEEN_KEY = "fbuddy.appsPromoSeenAt";
@@ -98,7 +99,15 @@ export function AppsPromoGate() {
           return (
             <a className="apps-promo-card" key={app.id} href={link} target="_blank" rel="noopener noreferrer">
               <span className="apps-promo-head">
-                <span className="bold">{app.name}</span>
+                <span className="apps-promo-title">
+                  <span
+                    className="apps-promo-icon"
+                    style={app.accent ? { color: app.accent, background: `${app.accent}22`, borderColor: `${app.accent}55` } : undefined}
+                  >
+                    {hubIcon(app.icon ?? "sparkles", 18)}
+                  </span>
+                  <span className="bold">{app.name}</span>
+                </span>
                 <ExternalLink size={14} />
               </span>
               {app.kind ? <span className="tiny faint">{app.kind}</span> : null}

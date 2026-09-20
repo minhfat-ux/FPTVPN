@@ -644,6 +644,10 @@ export interface PromoApp {
   name: string;
   kind: string;
   summary: string;
+  /** Tên icon trong bộ icon của web (`hubIcon`). */
+  icon?: string;
+  /** Màu nhấn cho ô icon. */
+  accent?: string | null;
   url: string | null;
   links: Record<string, string>;
 }

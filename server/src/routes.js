@@ -639,11 +639,22 @@ export function createApiRouter() {
    * SAU KHI người dùng đăng nhập.
    */
   router.get("/apps", (_req, res) => {
+    // Icon + màu nhấn theo từng app: tên icon khớp bộ icon của web (`hubIcon`). Không có logo
+    // riêng cho từng app nên dùng icon vector cùng bộ với chợ kỹ năng — nhìn đồng nhất, và không
+    // phải bịa logo thương hiệu của app khác.
+    const LOOK = {
+      meetflow: { icon: "translate", accent: "#6b8afd" },
+      vpnflow: { icon: "shield", accent: "#34d399" },
+      harness: { icon: "terminal", accent: "#f59e0b" },
+      supermom: { icon: "graduation", accent: "#f472b6" },
+    };
     const items = PUBLISHED_APPS.filter((app) => !app.isSelf).map((app) => ({
       id: app.id,
       name: app.name,
       kind: (app.kind ?? "").split("—")[0].trim(),
       summary: app.summary ?? "",
+      icon: LOOK[app.id]?.icon ?? "sparkles",
+      accent: LOOK[app.id]?.accent ?? null,
       // Ưu tiên link mua/dùng chính; kèm link tải theo nền tảng để UI chọn.
       url: app.links?.buy ?? app.links?.app ?? app.links?.download ?? null,
       links: app.links ?? {},

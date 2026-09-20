@@ -44,7 +44,10 @@ if [ $do_server -eq 1 ]; then
   "${SSH[@]}" "tar xzf /tmp/fbuddy-server-sync.tgz -C $APP_DIR && cd $APP_DIR && for f in \$(find server/src -name '*.js'); do node --check \"\$f\" || { echo \"LỖI CÚ PHÁP \$f\"; exit 1; }; done && echo 'cú pháp OK'"
 
   echo "== 3/3: restart + kiểm tra =="
-  "${SSH[@]}" "systemctl restart fbuddy && sleep 5 && systemctl is-active fbuddy && ss -ltnp | grep $PORT && curl -s -o /dev/null -w 'web %{http_code}\n' http://127.0.0.1:$PORT/ && curl -s -o /dev/null -w 'api/hub %{http_code} (401 là đúng khi chưa đăng nhập)\n' http://127.0.0.1:$PORT/api/hub"
+  # Bước kiểm tra có thể trả mã khác 0 (ví dụ `grep` không khớp) — KHÔNG được để nó làm script
+  # thoát giữa chừng, vì như vậy phần --web phía sau sẽ bị bỏ qua trong im lặng (đã gặp thật:
+  # server lên bản mới mà web vẫn là bundle cũ).
+  "${SSH[@]}" "systemctl restart fbuddy && sleep 5 && systemctl is-active fbuddy && ss -ltnp | grep $PORT && curl -s -o /dev/null -w 'web %{http_code}\n' http://127.0.0.1:$PORT/ && curl -s -o /dev/null -w 'api/hub %{http_code} (401 là đúng khi chưa đăng nhập)\n' http://127.0.0.1:$PORT/api/hub" || echo "! Bước kiểm tra sau restart có lỗi — đọc kỹ kết quả phía trên trước khi làm tiếp."
 fi
 
 if [ $do_web -eq 1 ]; then

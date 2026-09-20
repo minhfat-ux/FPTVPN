@@ -1033,6 +1033,24 @@ a:hover { text-decoration: underline; }
   justify-content: space-between;
   gap: 6px;
 }
+.apps-promo-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+/* Ô icon: mỗi app một màu nhấn, cùng bộ icon vector với chợ kỹ năng. */
+.apps-promo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  background: rgba(255, 255, 255, 0.05);
+}
 .apps-promo-summary {
   line-height: 1.45;
 }
