@@ -40,4 +40,10 @@ export const common: Dict = {
   "common.languageHint": "选择 fBuddy 的显示语言",
   "common.token": "token",
   "common.tokens": "token",
+
+  // ---- popup quảng cáo app khác (chỉ hiện sau khi đăng nhập)
+  "appsPromo.title": "FlowTech 的其他应用",
+  "appsPromo.description": "除了 fBuddy，生态中还有其他应用，可能正好适合你手头的事。",
+  "appsPromo.later": "稍后再说",
+  "appsPromo.footnote": "点击应用将在新标签页打开。此弹窗仅在登录后显示，7 天内不会再次提醒。",
 };

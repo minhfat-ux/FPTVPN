@@ -1005,3 +1005,34 @@ a:hover { text-decoration: underline; }
   .topbar-locale .locale-chip { padding: 3px 7px; font-size: 11px; }
   .topbar .btn-sm .topbar-btn-label { display: none; }
 }
+
+/* ---- popup giới thiệu app khác trong hệ sinh thái ---- */
+.apps-promo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.apps-promo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.apps-promo-card:hover {
+  border-color: var(--accent, #6b8afd);
+  transform: translateY(-1px);
+}
+.apps-promo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.apps-promo-summary {
+  line-height: 1.45;
+}

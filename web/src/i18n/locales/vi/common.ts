@@ -40,4 +40,10 @@ export const common: Dict = {
   "common.languageHint": "Chọn ngôn ngữ hiển thị của fBuddy",
   "common.token": "token",
   "common.tokens": "token",
+
+  // ---- popup quảng cáo app khác (chỉ hiện sau khi đăng nhập)
+  "appsPromo.title": "Khám phá thêm app cùng nhà FlowTech",
+  "appsPromo.description": "Ngoài fBuddy, hệ sinh thái còn có mấy app khác có thể đúng việc anh đang cần.",
+  "appsPromo.later": "Để sau",
+  "appsPromo.footnote": "Bấm vào từng app để mở ở tab mới. Popup này chỉ hiện khi đã đăng nhập và sẽ không nhắc lại trong 7 ngày.",
 };

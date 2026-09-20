@@ -6,6 +6,7 @@ import { useChat } from "./state/chat";
 import { LocaleSwitcher, useI18n } from "./i18n";
 import { Sidebar, type View } from "./components/Sidebar";
 import { Toaster } from "./components/ui";
+import { AppsPromoGate } from "./components/AppsPromoModal";
 import { LoginPage } from "./auth/LoginPage";
 import { ChatPage } from "./chat/ChatPage";
 import { StudioPage } from "./studio/StudioPage";
@@ -103,6 +104,7 @@ export function App() {
     return (
       <>
         <LoginPage />
+        <AppsPromoGate />
         <Toaster toasts={toasts} onDismiss={dismiss} />
       </>
     );
