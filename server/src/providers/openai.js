@@ -55,6 +55,55 @@ function toOpenAiMessages(messages, { acceptsImages = true } = {}) {
   });
 }
 
+/**
+ * Model families that answer 400 for any `temperature` but the provider default:
+ * "Unsupported value: 'temperature' does not support 0.7 with this model.
+ *  Only the default (1) value is supported." (OpenAI o-series, gpt-5+).
+ *
+ * Gui kem `temperature` cho nhom nay la mat ca luot chat, nen chan TRUOC khi goi;
+ * gateway khac van nhan dung gia tri caller truyen vao.
+ */
+const TEMPERATURE_DEFAULT_ONLY = /^(?:o[1-9]|gpt-[5-9]|gpt-1\d)/i;
+
+export function supportsTemperature(model) {
+  return !TEMPERATURE_DEFAULT_ONLY.test(String(model ?? "").trim());
+}
+
+/**
+ * Hai cach viet cung mot tham so: model moi chi nhan `max_completion_tokens`,
+ * gateway cu (vLLM/Ollama/DeepSeek…) chi nhan `max_tokens`. Gap 400 thi DOI TEN
+ * chu khong bo, de giu nguyen y dinh gioi han do dai cau tra loi.
+ */
+const TOKEN_LIMIT_ALIASES = { max_tokens: "max_completion_tokens", max_completion_tokens: "max_tokens" };
+
+/** Chi nhung field nay moi duoc phep bo/doi ten khi model tu choi. */
+const DROPPABLE_FIELDS = new Set([
+  "stream_options",
+  "temperature",
+  "top_p",
+  "max_tokens",
+  "max_completion_tokens",
+  "tools",
+  "tool_choice",
+  "reasoning_effort",
+]);
+
+/**
+ * Doc ten field ma gateway phu nhan trong body loi 400. Tra `null` khi khong nhan ra
+ * hoac field do khong nam trong request (luc do retry la vo nghia).
+ */
+export function rejectedField(body, errorText) {
+  const match = /(?:unsupported|unknown|invalid|unrecognized)\s+(?:parameter|value|field|argument)s?[^A-Za-z0-9_]{0,4}['"`]?([a-z_]{3,32})/i
+    .exec(String(errorText ?? ""));
+  if (!match) return null;
+  const field = match[1].toLowerCase();
+  if (!(field in body) || !DROPPABLE_FIELDS.has(field)) return null;
+  return field;
+}
+
+/** So vong bo field toi da cho MOT luot goi — model hong khong duoc loop vo han. */
+const MAX_PARAM_RETRIES = 3;
+
 export function buildRequest({ provider, model, messages, tools, toolMode, temperature, acceptsImages, toolChoice }) {
   const body = {
     model,
@@ -62,8 +111,8 @@ export function buildRequest({ provider, model, messages, tools, toolMode, tempe
       acceptsImages: acceptsImages ?? modelAcceptsImages(provider, model),
     }),
     stream: true,
-    temperature: temperature ?? 0.7,
   };
+  if (supportsTemperature(model)) body.temperature = temperature ?? 0.7;
   if (tools?.length && toolMode !== "off") {
     body.tools = tools.map((tool) => ({
       type: "function",
@@ -94,32 +143,46 @@ function providerHeaders(provider, extra = {}) {
 /** Provider capabilities differ: only some gateways accept stream_options. */
 const SUPPORTS_STREAM_USAGE = new Set(["openai", "deepseek", "groq", "openrouter"]);
 
+function postChat(url, provider, body, signal) {
+  return fetch(url, {
+    method: "POST",
+    signal,
+    headers: providerHeaders(provider, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${provider.apiKey}`,
+    }),
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Goi `chat/completions` va TU CHUA khi model tu choi mot field: doc body 400, bo
+ * (hoac doi ten) dung field do roi goi lai. Nho vay adapter khong phai doan capability
+ * cua tung model/gateway, va mot field la khong lam chet ca luot chat.
+ */
+async function postChatTolerant(url, provider, body, signal) {
+  let response = await postChat(url, provider, body, signal);
+  for (let attempt = 0; attempt < MAX_PARAM_RETRIES; attempt += 1) {
+    if (response.ok || response.status !== 400) break;
+    const field = rejectedField(body, await response.clone().text());
+    if (!field) break;
+    const value = body[field];
+    delete body[field];
+    const alias = TOKEN_LIMIT_ALIASES[field];
+    if (alias && !(alias in body)) body[alias] = value;
+    response = await postChat(url, provider, body, signal);
+  }
+  return response;
+}
+
+
 export async function* streamChat({ provider, model, messages, tools, toolMode, temperature, signal, includeUsage, toolChoice }) {
   const url = `${trimSlash(provider.baseUrl || "https://api.openai.com/v1")}/chat/completions`;
   const body = buildRequest({ provider, model, messages, tools, toolMode, temperature, toolChoice });
   const wantsUsage = includeUsage ?? SUPPORTS_STREAM_USAGE.has(provider.kind);
   if (wantsUsage) body.stream_options = { include_usage: true };
 
-  const send = async (payload) =>
-    fetch(url, {
-      method: "POST",
-      signal,
-      headers: providerHeaders(provider, {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${provider.apiKey}`,
-      }),
-      body: JSON.stringify(payload),
-    });
-
-  let response = await send(body);
-  // Gateways that reject unknown fields answer 400 — retry once without usage.
-  if (!response.ok && wantsUsage && response.status === 400) {
-    const probe = await response.clone().text();
-    if (/stream_options/i.test(probe)) {
-      delete body.stream_options;
-      response = await send(body);
-    }
-  }
+  const response = await postChatTolerant(url, provider, body, signal);
   if (!response.ok) {
     await readJson(response, { providerName: provider.name });
     return;
@@ -207,20 +270,19 @@ export async function listModels({ provider, signal }) {
 export async function testConnection({ provider, model, signal }) {
   const started = Date.now();
   const url = `${trimSlash(provider.baseUrl || "https://api.openai.com/v1")}/chat/completions`;
-  const response = await fetch(url, {
-    method: "POST",
-    signal,
-    headers: providerHeaders(provider, {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${provider.apiKey}`,
-    }),
-    body: JSON.stringify({
+  // `max_completion_tokens` la ten moi (model OpenAI hien tai tra 400 neu gui
+  // `max_tokens`); gateway cu chi hieu `max_tokens` thi `postChatTolerant` tu doi ten.
+  const response = await postChatTolerant(
+    url,
+    provider,
+    {
       model,
       messages: [{ role: "user", content: "ping" }],
-      max_tokens: 8,
+      max_completion_tokens: 8,
       stream: false,
-    }),
-  });
+    },
+    signal,
+  );
   await readJson(response, { providerName: provider.name });
   return { latencyMs: Date.now() - started };
 }
