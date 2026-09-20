@@ -52,6 +52,15 @@ final class VPNManagerMac: ObservableObject {
 
     private var manager: NETunnelProviderManager?
     private var statusPollTask: Task<Void, Never>?
+    /// Heartbeat định kỳ giữ máy ở trạng thái "đang kết nối" trên dashboard.
+    ///
+    /// Vì sao cần: từ bản hysteria2, control plane KHÔNG còn thấy handshake WireGuard nên
+    /// dashboard chỉ còn `lastSeenAt` do heartbeat ghi lại (route `POST /v1/peers/heartbeat`).
+    /// Không gửi thì sau 30 phút máy vẫn đang chạy mà dashboard coi như đã tắt.
+    private var heartbeatTask: Task<Void, Never>?
+    /// Tunnel đã từng ở trạng thái `.connected` trong phiên này chưa — dùng để phân biệt
+    /// "chưa lên" (đang chuẩn bị profile) với "đã lên rồi tắt" khi quyết định dừng heartbeat.
+    private var tunnelWasConnected = false
     /// Poll trạng thái extension qua `sendProviderMessage` để bắt ca "Connected nhưng
     /// không có mạng" (mã TUNNEL_NO_TRAFFIC) và hiện thông báo cho khách.
     private var providerProbeTask: Task<Void, Never>?
@@ -136,6 +145,20 @@ final class VPNManagerMac: ObservableObject {
         state = stateString(for: connection.status)
         if connection.status == .disconnected {
             overlayIP = nil
+        }
+        // Heartbeat chỉ dừng khi tunnel ĐÃ từng lên rồi mới tắt. Trong lúc `connect()` chuẩn bị
+        // profile, NE báo `.disconnected` vài nhịp — nếu dừng theo trạng thái ngay thì heartbeat
+        // chết ngay sau khi vừa khởi động (đo thật 20/09/2026: "bắt đầu" rồi "dừng" sau 19 ms).
+        switch connection.status {
+        case .connected:
+            tunnelWasConnected = true
+        case .disconnected, .invalid:
+            if tunnelWasConnected {
+                tunnelWasConnected = false
+                stopHeartbeat()
+            }
+        default:
+            break
         }
         switch connection.status {
         case .connecting, .connected, .reasserting:
@@ -368,6 +391,7 @@ final class VPNManagerMac: ObservableObject {
                 log.info("connect: registered, overlay=\(overlayIP, privacy: .public)")
                 TunnelConfigCache.save(overlayIP: overlayIP, node: exitNode)
                 usingFallbackNodes = false
+                startHeartbeat(baseURL: baseURL, peerId: response.peer_id, credential: response.peer_credential)
             } catch ControlAPIClient.ClientError.transport {
                 // Coordinator unreachable (hotel captive portal / censored
                 // network): reconnect with the last successful tunnel config.
@@ -527,8 +551,39 @@ final class VPNManagerMac: ObservableObject {
 
     func disconnect() {
         state = "Disconnecting…"
+        stopHeartbeat()
         manager?.connection.stopVPNTunnel()
         refreshStatus()
+    }
+
+    // MARK: - Heartbeat (dashboard "đang kết nối")
+
+    /// Gửi heartbeat ngay rồi lặp lại mỗi 120s khi tunnel còn sống.
+    ///
+    /// Số khai 120s: control plane coi thiết bị "vừa báo cáo" trong cửa sổ 30 phút
+    /// (`ONLINE_DEVICE_WINDOW_MIN`), nên 120s là dư an toàn kể cả khi mạng chập chờn vài lượt.
+    private func startHeartbeat(baseURL: URL, peerId: String, credential: String) {
+        stopHeartbeat()
+        log.notice("heartbeat: bắt đầu giữ trạng thái online (peer=\(peerId.prefix(8), privacy: .public))")
+        heartbeatTask = Task { [weak self] in
+            let client = ControlAPIClient(baseURL: baseURL, joinToken: "")
+            while !Task.isCancelled {
+                guard let self else { return }
+                do {
+                    try await client.heartbeat(peerId: peerId, credential: credential)
+                    self.log.notice("heartbeat: ok")
+                } catch {
+                    // Không được để heartbeat làm phiền trải nghiệm: chỉ ghi log.
+                    self.log.error("heartbeat failed: \(error.localizedDescription, privacy: .public)")
+                }
+                try? await Task.sleep(nanoseconds: 120 * 1_000_000_000)
+            }
+        }
+    }
+
+    private func stopHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
     }
 
     // MARK: - Config
