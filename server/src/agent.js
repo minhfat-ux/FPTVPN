@@ -4,7 +4,7 @@ import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool } f
 import { applyVisionFallback } from "./vision-fallback.js";
 import { buildAppsKnowledge } from "./apps-knowledge.js";
 import { buildVnPlateKnowledge } from "./vn-plates.js";
-import { maybePreResearch } from "./researcher.js";
+import { maybePreResearch, vnNow } from "./researcher.js";
 import { buildSkillSuggestionBlock } from "./skills/suggest.js";
 import { userLocale } from "./skills/hub.js";
 import { buildMemoryBlock, learnSelfReference } from "./memory.js";
@@ -274,7 +274,9 @@ function resolveVisionProviderFor({ providerId = null, model = null } = {}) {
 }
 
 export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "", conversationId = null, autoResearch = null }) {
-  const today = new Date().toISOString().slice(0, 10);
+  // Mốc ngày phải theo GIỜ VIỆT NAM: server chạy UTC nên `toISOString()` cho ra ngày hôm qua vào
+  // buổi sáng ở Việt Nam — trợ lý sẽ nói sai "hôm nay" và tra cứu sai ngày (đã gặp thật).
+  const vnClock = vnNow();
   const basePrompt = Array.isArray(settings.systemPrompt) ? settings.systemPrompt.join("\n") : settings.systemPrompt;
   const parts = [
     basePrompt,
@@ -295,7 +297,7 @@ export function buildSystemPrompt({ skill, files, settings, hubSkill = null, use
     // Bảng tra biển số chỉ ghép khi câu hỏi chạm tới biển số/xe — bảng dài, không nhét vào mọi lượt.
     buildVnPlateKnowledge({ message }),
     buildMemoryBlock({ userId: user?.id ?? null, query: message, conversationId, accountName: user?.name ?? null }),
-    `Hôm nay là ${today}.`,
+    `Bây giờ là ${vnClock.stamp}. Dùng đúng mốc này khi nói "hôm nay", "tuần này" và khi tra cứu thông tin mới.`,
     SKILL_INSTRUCTIONS[skill] ?? "",
     planFirst
       ? "LƯỢT NÀY LÀ LƯỢT LẬP KẾ HOẠCH: hãy mô tả NGẮN GỌN kế hoạch sẽ làm (có gì, mấy phần/trang/sheet, cột nào, lấy dữ liệu từ đâu). " +

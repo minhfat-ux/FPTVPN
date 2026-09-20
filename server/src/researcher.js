@@ -217,6 +217,52 @@ function htmlToText(html = "") {
 const RECENCY_RE =
   /mới nhất|mới đây|gần đây|hiện nay|hiện tại|hôm nay|hôm qua|tuần này|tháng này|quý này|năm nay|vừa ra|mới ra|cập nhật|thời sự|tin tức|tin mới|giá |giá cả|tỷ giá|tỉ giá|lãi suất|chứng khoán|vn-?index|vàng|xăng|dầu|bitcoin|tỷ số|kết quả|bảng xếp hạng|xếp hạng|doanh thu|ra mắt|phát hành|phiên bản/i;
 
+/**
+ * MỐC THỜI GIAN NGƯỜI DÙNG ĐANG HỎI — tính theo giờ Việt Nam (UTC+7), không phải giờ máy chủ.
+ *
+ * Vì sao quan trọng: server chạy UTC, nên nếu lấy `new Date()` trực tiếp thì 6 giờ sáng ở Việt Nam
+ * vẫn là "ngày hôm qua" theo UTC — truy vấn "hôm nay" sẽ tìm sai ngày. Máy chủ đặt ở nước ngoài thì
+ * sai càng nặng. Mọi câu hỏi kiểu "hôm nay", "bây giờ", "mới nhất" đều phải dùng mốc này.
+ */
+export function vnNow() {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    weekday: "long",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  const day = get("day");
+  const month = get("month");
+  const year = get("year");
+  return {
+    iso: `${year}-${month}-${day}`,
+    /** 20/09/2026 — dạng người Việt viết. */
+    date: `${day}/${month}/${year}`,
+    /** "20 tháng 9 năm 2026" — dạng dùng để tìm kiếm. */
+    longDate: `${Number(day)} tháng ${Number(month)} năm ${year}`,
+    time: `${get("hour")}:${get("minute")}`,
+    weekday: get("weekday"),
+    stamp: `${get("hour")}:${get("minute")} ngày ${day}/${month}/${year} (${get("weekday")}, giờ Việt Nam)`,
+  };
+}
+
+/**
+ * Cửa sổ thời gian cần lọc: hỏi "hôm nay" ⇒ lọc trong NGÀY, "tuần này" ⇒ tuần, còn lại ⇒ tháng.
+ * DuckDuckGo nhận `df=d|w|m|y`.
+ */
+function freshnessWindow(question = "") {
+  const text = String(question).toLowerCase();
+  if (/hôm nay|hôm qua|bây giờ|hiện tại|vừa mới|mới nhất trong ngày|đang /.test(text)) return "d";
+  if (/tuần này|tuần trước|7 ngày/.test(text)) return "w";
+  return "m";
+}
+
 export function needsFreshness(question = "") {
   return RECENCY_RE.test(String(question));
 }
@@ -559,17 +605,21 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ...hit.value, cached: true };
 
   const fresh = needsFreshness(question);
-  const year = new Date().getFullYear();
+  const clock = vnNow();
+  const window = fresh ? freshnessWindow(question) : null;
   const queries = [question];
   if (profile.id === "bien-so" && !/biển/i.test(question)) queries.push(`biển số xe ${question}`);
-  // Câu hỏi cần độ mới: hỏi kèm NĂM hiện tại (mô hình tìm kiếm xếp bài mới lên trước) và lấy cả
-  // bản không năm để không bỏ sót.
-  if (fresh && !String(question).includes(String(year))) queries.push(`${question} ${year}`);
+  // Câu hỏi cần độ mới: hỏi kèm ĐÚNG NGÀY người dùng đang hỏi (không chỉ năm) — máy tìm kiếm xếp
+  // bài của ngày đó lên trước, và bài cũ cùng chủ đề sẽ bị đẩy xuống.
+  if (fresh) {
+    queries.push(`${question} ${clock.longDate}`);
+    if (!String(question).includes(String(clock.iso.slice(0, 4)))) queries.push(`${question} ${clock.iso.slice(0, 4)}`);
+  }
   // Hồ sơ chính thống: hỏi thẳng vào kho văn bản nhà nước trước, để kết quả không bị lẫn blog/diễn đàn.
   for (const site of profile.siteQueries ?? []) queries.push(`${question} ${site}`);
   const searches = [];
   for (const query of queries.slice(0, depth === "ky" ? 3 : 2)) {
-    searches.push(...(await webSearch(query, 5, fresh ? { fresh: "m" } : {})));
+    searches.push(...(await webSearch(query, 5, window ? { fresh: window } : {})));
   }
   // Vẫn thử bản không lọc để không mất nguồn tốt vì bộ lọc quá chặt, nhưng xếp sau.
   if (fresh) searches.push(...(await webSearch(queries[0], 4)));
@@ -657,6 +707,9 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
     note: profile.note ?? null,
     question,
     confidence,
+    askedAt: clock.stamp,
+    askedDate: clock.date,
+    timeWindow: window,
     strictOfficial: Boolean(profile.strictOfficial),
     requiresFresh: Boolean(profile.requiresFresh) || fresh,
     needsFreshness: fresh,
@@ -680,6 +733,8 @@ export function researchToModelText(result, { maxChars = 7000 } = {}) {
   const lines = [
     `KẾT QUẢ TRA CỨU (researcher: ${result.researcher.label} · mức chắc chắn: ${result.confidence})`,
     `Câu hỏi tra: ${result.question}`,
+    `MỐC THỜI GIAN: người dùng hỏi lúc ${result.askedAt ?? "?"}${result.timeWindow ? ` · lọc nguồn trong ${result.timeWindow === "d" ? "ngày" : result.timeWindow === "w" ? "tuần" : "tháng"} gần nhất` : ""}.`,
+    "Khi trả lời phải nói rõ số liệu tính tới lúc nào (ngày/giờ), và TUYỆT ĐỐI không trình bày dữ liệu cũ như thông tin của hôm nay.",
   ];
   if (!result.findings.length) {
     if (result.strictOfficial) {
