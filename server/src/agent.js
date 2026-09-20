@@ -144,11 +144,14 @@ const PRONOUN_RULES = [
  * (`formatVietlottDisclaimer`) nên model có quên thì câu trả lời vẫn đủ cảnh báo.
  */
 const VIETLOTT_RULES = [
-  "VIETLOTT (bắt buộc trung thực):",
+  "VIETLOTT (bắt buộc: trung thực + ĐÚNG GIỌNG CHUYÊN GIA):",
   "• Người dùng hỏi nên chọn số Vietlott (Mega 6/45, Power 6/55), thống kê tần suất hay số lâu chưa về ⇒ gọi công cụ `vietlott` để lấy dữ liệu kỳ quay THẬT rồi mới trả lời; không tự nghĩ ra số liệu.",
-  "• Chỉ được nói đây là \"gợi ý theo thống kê các kỳ quay đã qua\" (tần suất, số lâu chưa về, phân bố). TUYỆT ĐỐI không nói \"số dễ trúng\", \"chắc trúng\", \"tăng khả năng trúng\" — không có cách chọn số nào làm tăng xác suất.",
+  "• Giọng văn: chuyên gia phân tích dữ liệu — khô, rõ, đi thẳng vào số liệu; không hô hào, không cảm tính, không từ marketing. Dùng ngôn ngữ xác suất chuẩn: \"xác suất\", \"kỳ vọng toán học\", \"cỡ mẫu\", \"các kỳ độc lập\", \"không làm thay đổi xác suất\".",
+  "• Bố cục bắt buộc, theo đúng thứ tự: (1) Kỳ quay gần nhất — ngày + bộ số, nói rõ CỠ MẪU đang phân tích (\"dựa trên N kỳ gần nhất\"); (2) Thống kê nổi bật — bảng ngắn: số về nhiều nhất kèm số lần/tần suất, số lâu chưa về kèm số kỳ, phân bố chẵn/lẻ – thấp/cao – tổng; (3) Đề xuất 3–5 bộ số, MỖI bộ một dòng lý do (nóng / lâu chưa về / trải dải / tổng); (4) Ghi chú xác suất do server tự gắn ở cuối.",
+  "• Tần suất trong mẫu chỉ là mô tả quá khứ, KHÔNG phải kỳ vọng cho kỳ tới; mọi bộ số có cùng xác suất. TUYỆT ĐỐI không nói \"số dễ trúng\", \"chắc trúng\", \"chắc ăn\", \"tăng khả năng trúng\", \"bí kíp\", \"cầu đẹp\", \"đảm bảo\", \"vào bờ\", \"may mắn\", \"thần tài\", \"phát tài\" — không có cách chọn số nào làm tăng xác suất.",
+  "• Độ dài phần lời khuyên tối đa ~250 từ, số liệu để trong bảng/danh sách; xưng hô theo đúng cách người dùng đang dùng (họ xưng \"anh\" ⇒ gọi \"anh\" và tự xưng \"em\").",
   "• Không bịa kỳ quay, không bịa số liệu, không tự bịa xác suất; chưa lấy được dữ liệu thì nói thật là chưa có.",
-  "• Server tự gắn khối \"Miễn trừ trách nhiệm\" ở cuối câu trả lời — không cần chép lại, nhưng phải giữ đúng giọng trung thực đó.",
+  "• Server tự gắn khối \"Ghi chú xác suất\" ở cuối câu trả lời — KHÔNG chép lại (tránh lặp), chỉ cần nói 1 câu rằng đây là mô tả thống kê của mẫu quá khứ.",
 ].join("\n");
 
 /**
@@ -665,20 +668,24 @@ export function formatSourcesBlock(sources = [], { usedModelKnowledge = true } =
 }
 
 /**
- * Khối "Miễn trừ trách nhiệm (Vietlott)" gắn vào cuối câu trả lời về xổ số.
+ * Khối "Ghi chú xác suất" gắn vào cuối câu trả lời về xổ số (chủ dự án chốt 2026-09-20).
  *
  * Vì sao do SERVER soạn chứ không để model tự viết: model có thể quên, có thể xuôi theo người dùng
  * ("số này dễ trúng không?") và hứa hẹn. Xác suất ở đây là của GIẢI ĐẶC BIỆT (C(45,6) và C(55,6)),
- * lấy từ `vietlott.js` để chỉ có một nguồn sự thật. Khối này được LƯU cùng tin nhắn (như khối
- * "Nguồn tra cứu") nên mở lại hội thoại vẫn thấy, và được stream ngay khi lượt chat kết thúc.
+ * lấy từ `vietlott.js` để chỉ có một nguồn sự thật. Giọng văn: khô, rõ, đúng ngôn ngữ xác suất —
+ * KHÔNG doạ nạt, KHÔNG từ marketing (khối này hiện ở mọi client nên phải đọc được như một ghi chú
+ * kỹ thuật). Khối được LƯU cùng tin nhắn (như khối "Nguồn tra cứu") nên mở lại hội thoại vẫn thấy,
+ * và được stream ngay khi lượt chat kết thúc.
  */
 export function formatVietlottDisclaimer() {
   return (
-    "\n\n—\n**Miễn trừ trách nhiệm — Vietlott**\n" +
-    "• Xổ số là ngẫu nhiên và mỗi kỳ quay độc lập nhau: các số ở trên được gợi ý theo thống kê các kỳ quay ĐÃ QUA " +
-    "(tần suất, số lâu chưa về, phân bố) — ĐÂY KHÔNG PHẢI DỰ ĐOÁN KẾT QUẢ và không làm tăng xác suất trúng.\n" +
-    `• Xác suất trúng giải đặc biệt (Jackpot): Mega 6/45 là ${jackpotOddsText("mega645")}; Power 6/55 là ${jackpotOddsText("power655")}.\n` +
-    "• Chơi có trách nhiệm: chỉ dùng tiền nhàn rỗi, không dùng tiền ảnh hưởng tới sinh hoạt; người dưới 18 tuổi không được tham gia."
+    "\n\n—\n**Ghi chú xác suất — Vietlott**\n" +
+    "• Xổ số là ngẫu nhiên và các kỳ quay độc lập nhau. Các bộ số ở trên được chọn theo thống kê của mẫu quá khứ " +
+    "(tần suất, số kỳ chưa về, phân bố) — chúng KHÔNG làm thay đổi xác suất trúng, và không dự đoán kết quả kỳ tới.\n" +
+    "• Với mỗi kỳ, mọi bộ số có cùng xác suất. Xác suất trúng giải đặc biệt (Jackpot): " +
+    `Mega 6/45 là ${jackpotOddsText("mega645")}; Power 6/55 là ${jackpotOddsText("power655")}. ` +
+    "Số kỳ trong mẫu càng ít thì sai số thống kê càng lớn.\n" +
+    "• Chơi có trách nhiệm: chỉ dùng tiền nhàn rỗi, không dùng tiền ảnh hưởng chi tiêu thiết yếu; người dưới 18 tuổi không được tham gia."
   );
 }
 
@@ -1132,7 +1139,7 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   // Gắn "Nguồn tra cứu" vào chính nội dung: hiện ở web, ở app và cả sau khi tải lại.
   const sourcesBlock = formatSourcesBlock(sources);
   if (sourcesBlock && text.trim()) text = `${text}${sourcesBlock}`;
-  // Khối "Miễn trừ trách nhiệm — Vietlott" (yêu cầu chủ dự án): chỉ ghép cho lượt nói về Vietlott,
+  // Khối "Ghi chú xác suất — Vietlott" (chủ dự án chốt 2026-09-20): chỉ ghép cho lượt nói về Vietlott,
   // do SERVER tự viết nên model có quên thì câu trả lời vẫn đủ cảnh báo. Stream luôn để người dùng
   // thấy ngay, không phải tải lại trang.
   const vietlottBlock = (vietlottUsed || vietlottTopic) && text.trim() ? formatVietlottDisclaimer() : "";

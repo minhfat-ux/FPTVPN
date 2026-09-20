@@ -424,7 +424,7 @@ export const TOOL_DEFINITIONS = [
           enum: ["mega645", "power655"],
           description: "mega645 = Mega 6/45 · power655 = Power 6/55 (bắt buộc; chưa rõ thì hỏi lại người dùng)",
         },
-        count: { type: "number", description: "Số vé gợi ý (mặc định 3, tối đa 5)" },
+        count: { type: "number", description: "Số bộ số đề xuất (mặc định 3; khuôn trả lời dùng 3–5 bộ)" },
         strategy: {
           type: "string",
           enum: ["can_bang", "nong", "lau_chua_ve"],

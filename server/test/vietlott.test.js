@@ -277,6 +277,30 @@ test("công cụ `vietlott` có trong danh sách công cụ, schema đúng khuô
   assert.equal(typeof tool.handler, "function");
 });
 
+test("modelText hướng model đúng khuôn 4 phần + giọng chuyên gia, cấm từ marketing", async () => {
+  // Hàm THUẦN `vietlottReport` dựng câu trả lời từ chính dữ liệu fixture ⇒ test offline, tất định.
+  const modelText = vl.vietlottReport({ game: "mega645", draws: MEGA, count: 3 }).modelText;
+  assert.match(modelText, /CỠ MẪU 21 kỳ gần nhất/);
+  assert.match(modelText, /KHUÔN TRẢ LỜI BẮT BUỘC/);
+  assert.match(modelText, /\*\*Kỳ quay gần nhất\*\*/);
+  assert.match(modelText, /\*\*Thống kê nổi bật\*\*/);
+  assert.match(modelText, /\*\*Đề xuất bộ số\*\*/);
+  assert.match(modelText, /\*\*Ghi chú xác suất\*\*/);
+  assert.match(modelText, /cỡ mẫu/);
+  assert.match(modelText, /kỳ vọng toán học/);
+  assert.match(modelText, /các kỳ độc lập/);
+  assert.match(modelText, /không làm thay đổi xác suất/);
+  assert.match(modelText, /tối đa ~250 từ/);
+  assert.match(modelText, /xưng "anh"/);
+  assert.match(modelText, /BẢNG SỐ LIỆU/);
+  assert.match(modelText, /\| Nhóm \| Số \| Số liệu \|/);
+  assert.doesNotMatch(modelText.split("CẤM:")[0], /số dễ trúng|chắc trúng|bí kíp/i, "phần mô tả không được tự dùng từ cấm");
+  // Tần suất trong bảng phải là %, không phải tỉ lệ 0–1 (đã từng in "0.2%" cho 26/120 kỳ).
+  const top = vl.frequency(MEGA, { numbers: 45, window: MEGA.length })[0];
+  const expected = `${top.count} lần (${((top.count / MEGA.length) * 100).toFixed(1)}%)`;
+  assert.ok(modelText.includes(expected), `bảng phải ghi "${expected}"`);
+});
+
 test("công cụ `vietlott` chưa rõ game ⇒ hỏi lại, KHÔNG đoán số", async () => {
   const result = await skills.executeTool("vietlott", {}, { userMessage: "chọn giúp em mấy con số may mắn" });
   assert.equal(result.ok, false);
@@ -285,17 +309,22 @@ test("công cụ `vietlott` chưa rõ game ⇒ hỏi lại, KHÔNG đoán số",
   assert.equal(result.data.tickets, undefined, "không có vé nào khi chưa lấy được dữ liệu");
 });
 
-test("khối miễn trừ do SERVER soạn: đủ xác suất thật, nói rõ không tăng xác suất trúng", () => {
+test("khối SERVER soạn: đúng tên \"Ghi chú xác suất\", đủ xác suất thật, không tăng xác suất trúng", () => {
   const block = formatVietlottDisclaimer();
-  assert.match(block, /Miễn trừ trách nhiệm — Vietlott/);
+  assert.match(block, /\*\*Ghi chú xác suất — Vietlott\*\*/);
   assert.match(block, /ngẫu nhiên/);
-  assert.match(block, /độc lập nhau/);
-  assert.match(block, /KHÔNG PHẢI DỰ ĐOÁN KẾT QUẢ/);
-  assert.match(block, /không làm tăng xác suất trúng/);
+  assert.match(block, /các kỳ quay độc lập nhau/);
+  assert.match(block, /KHÔNG làm thay đổi xác suất trúng/);
+  assert.match(block, /không dự đoán kết quả kỳ tới/);
+  assert.match(block, /mọi bộ số có cùng xác suất/);
   assert.match(block, /Mega 6\/45 là 1\/8\.145\.060/);
   assert.match(block, /Power 6\/55 là 1\/28\.989\.675/);
+  assert.match(block, /sai số thống kê/);
   assert.match(block, /Chơi có trách nhiệm/);
-  assert.match(block, /không dùng tiền ảnh hưởng tới sinh hoạt/);
+  assert.match(block, /không dùng tiền ảnh hưởng chi tiêu thiết yếu/);
+  // Giọng chuyên gia: khô, không doạ, không từ marketing.
+  assert.doesNotMatch(block, /dễ trúng|chắc trúng|chắc ăn|bí kíp|cầu đẹp|vào bờ|thần tài|phát tài|đảm bảo/i);
+  assert.doesNotMatch(block, /nguy hiểm|hủy hoại|mất hết|tan nát|tuyệt vọng/i);
 });
 
 test("từ khoá quyết định gắn khối miễn trừ, không lấn sang chủ đề khác", () => {
@@ -378,18 +407,21 @@ test("lượt chat về Vietlott ⇒ câu trả lời được LƯU kèm khối 
   // (1) câu hỏi về Vietlott ⇒ có khối miễn trừ, và system prompt có luật Vietlott.
   const asked = await chat({ token, content: "Em nên chọn số Vietlott Mega 6/45 thế nào?", skill: "chat" });
   const answer = textOf(asked);
-  assert.match(answer, /Miễn trừ trách nhiệm — Vietlott/);
+  assert.match(answer, /\*\*Ghi chú xác suất — Vietlott\*\*/);
   assert.match(answer, /1\/8\.145\.060/);
   assert.match(answer, /1\/28\.989\.675/);
-  assert.match(answer, /không làm tăng xác suất trúng/);
-  assert.match(gateway.seen[0].system, /VIETLOTT \(bắt buộc trung thực\)/);
+  assert.match(answer, /KHÔNG làm thay đổi xác suất trúng/);
+  assert.match(gateway.seen[0].system, /VIETLOTT \(bắt buộc: trung thực \+ ĐÚNG GIỌNG CHUYÊN GIA\)/);
+  assert.match(gateway.seen[0].system, /Bố cục bắt buộc, theo đúng thứ tự/);
+  assert.match(gateway.seen[0].system, /kỳ vọng toán học/);
   assert.ok(gateway.seen[0].tools.includes("vietlott"), "model phải được cấp công cụ vietlott");
   assert.doesNotMatch(answer, /dễ trúng|chắc trúng/i);
+  assert.ok(answer.trimEnd().endsWith("người dưới 18 tuổi không được tham gia."), "ghi chú xác suất phải nằm CUỐI câu trả lời");
 
   // (2) chủ đề khác ⇒ KHÔNG được chèn khối miễn trừ vào câu trả lời.
   const other = await chat({ token, content: "Giải thích MCP là gì trong 5 dòng", skill: "chat" });
   const otherAnswer = textOf(other);
-  assert.doesNotMatch(otherAnswer, /Miễn trừ trách nhiệm/);
+  assert.doesNotMatch(otherAnswer, /Ghi chú xác suất/);
   assert.doesNotMatch(otherAnswer, /1\/8\.145\.060/);
-  assert.doesNotMatch(gateway.seen[1].system, /VIETLOTT \(bắt buộc trung thực\)/);
+  assert.doesNotMatch(gateway.seen[1].system, /VIETLOTT \(bắt buộc: trung thực/);
 });

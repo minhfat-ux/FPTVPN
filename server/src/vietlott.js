@@ -747,8 +747,99 @@ const fmt = (n) => String(n).padStart(2, "0");
 const vnDate = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "?");
 
 /**
- * Handler của công cụ `vietlott`: lấy dữ liệu THẬT (có cache) rồi trả số liệu + vé gợi ý.
- * Không bao giờ ném lỗi; không lấy được dữ liệu thì nói thật, KHÔNG bịa kỳ quay.
+ * Dựng câu trả lời cho công cụ từ DANH SÁCH KỲ QUAY ĐÃ CÓ — hàm THUẦN (không mạng, không đọc file),
+ * nên test được offline và số liệu trong `modelText` luôn khớp đúng dữ liệu truyền vào.
+ */
+export function vietlottReport({ game = "mega645", draws = [], count = 3, strategy = "can_bang", stale = false } = {}) {
+  const info = GAMES[normalizeGame(game) ?? "mega645"];
+  const rows = ensureOrder(draws);
+  if (!rows.length) return null;
+  const newest = rows[rows.length - 1];
+  const oldest = rows[0];
+  /**
+   * CỠ MẪU: mọi số liệu trong câu trả lời tính trên CHÍNH cỡ mẫu này (không trộn cửa sổ khác), để con
+   * số nêu trong phần "Thống kê nổi bật" khớp đúng với lý do của từng bộ số.
+   */
+  const window = rows.length;
+  const freq = frequency(rows, { numbers: info.max, window });
+  const gapRows = gaps(rows);
+  const dist = distribution(rows);
+  const tickets = suggestTickets(rows, {
+    // Khuôn trả lời của chủ dự án: đề xuất 3–5 bộ.
+    count: Math.min(Math.max(Math.floor(Number(count) || 3), 3), 5),
+    size: info.size,
+    strategy,
+    window,
+  });
+
+  /** Tần suất quan sát của một số = số kỳ có số đó / cỡ mẫu (đơn vị %). */
+  const pct = (count) => `${((count / window) * 100).toFixed(1)}%`;
+  const hotRows = freq.slice(0, 3);
+  const coldRows = gapRows.slice(0, 3);
+  const pairRows = pairs(rows, { limit: 3 });
+  const hotText = hotRows.map((row) => `${fmt(row.number)} (${row.count} lần · ${pct(row.count)})`).join(", ");
+  const coldText = coldRows.map((row) => `${fmt(row.number)} (${row.gap} kỳ)`).join(", ");
+  // Bóng Power đã nằm trong `reason` (kèm số kỳ chưa ra) nên KHÔNG lặp lại ở đầu dòng.
+  const ticketLines = tickets.map(
+    (ticket, index) => `${index + 1}. ${ticket.numbers.map(fmt).join(" ")} — ${ticket.reason}`,
+  );
+  /** Bảng thống kê dựng sẵn: model chỉ việc bê nguyên số liệu, không tự tính lại (tránh sai số). */
+  const statsTable = [
+    "| Nhóm | Số | Số liệu |",
+    "|---|---|---|",
+    `| Về nhiều nhất | ${hotRows.map((row) => fmt(row.number)).join(", ")} | ${hotRows.map((row) => `${row.count} lần (${pct(row.count)})`).join(" · ")} |`,
+    `| Lâu chưa về | ${coldRows.map((row) => fmt(row.number)).join(", ")} | ${coldRows.map((row) => `${row.gap} kỳ`).join(" · ")} |`,
+    `| Cặp về cùng nhau | ${pairRows.map((row) => `${fmt(row.a)}–${fmt(row.b)}`).join(", ")} | ${pairRows.map((row) => `${row.count} kỳ`).join(" · ")} |`,
+    `| Chẵn / lẻ | ${dist.evenOdd.even} / ${dist.evenOdd.odd} | ${((dist.evenOdd.even / (window * info.size)) * 100).toFixed(1)}% / ${((dist.evenOdd.odd / (window * info.size)) * 100).toFixed(1)}% |`,
+    `| Thấp / cao (≤${dist.lowHigh.threshold}) | ${dist.lowHigh.low} / ${dist.lowHigh.high} | ${((dist.lowHigh.low / (window * info.size)) * 100).toFixed(1)}% / ${((dist.lowHigh.high / (window * info.size)) * 100).toFixed(1)}% |`,
+    `| Tổng mỗi kỳ | p25–p75: ${dist.sum.band[0]}–${dist.sum.band[1]} | min ${dist.sum.min} · TB ${dist.sum.avg} · max ${dist.sum.max} |`,
+  ].join("\n");
+
+  return {
+    ok: true,
+    summary: `${info.name}: cỡ mẫu ${rows.length} kỳ (${vnDate(oldest.date)}–${vnDate(newest.date)}), đề xuất ${tickets.length} bộ số theo thống kê`,
+    // Nguồn thật để lượt chat gắn khối "Nguồn tra cứu" như mọi công cụ tra cứu khác.
+    sources: [
+      { kind: "web", label: `Kết quả ${info.name} — ${SOURCE_NAME}`, url: `${SOURCE_HOME}${info.pathFor(null)}` },
+    ],
+    data: {
+      game: info.id,
+      gameName: info.name,
+      source: { name: SOURCE_NAME, url: `${SOURCE_HOME}${info.pathFor(null)}` },
+      draws: { count: rows.length, from: oldest.date, to: newest.date, newestId: newest.id },
+      window,
+      hot: freq.slice(0, 8),
+      overdue: gapRows.slice(0, 8),
+      pairs: pairs(draws, { limit: 5 }),
+      distribution: dist,
+      tickets,
+      jackpotOdds: jackpotOddsText(info.id),
+      /** Khối miễn trừ do SERVER ghép ở agent.js — model không phải (và không được) tự viết. */
+      disclaimerAttachedByServer: true,
+      ...(stale ? { stale: true } : {}),
+    },
+    artifacts: [],
+    modelText:
+      `DỮ LIỆU THẬT ${info.name.toUpperCase()} — nguồn ${SOURCE_NAME}, CỠ MẪU ${rows.length} kỳ gần nhất (${vnDate(oldest.date)}–${vnDate(newest.date)}).\n` +
+      `Kỳ gần nhất ${newest.id ? `${newest.id} ` : ""}ngày ${vnDate(newest.date)}: ${newest.numbers.map(fmt).join(" ")}${newest.special ? ` | Bóng Power ${fmt(newest.special)}` : ""}.\n\n` +
+      `BẢNG SỐ LIỆU (dùng nguyên các con số này, KHÔNG tự tính lại):\n${statsTable}\n\n` +
+      `BỘ SỐ ĐỀ XUẤT (đúng ${tickets.length} bộ, mỗi bộ kèm 1 dòng lý do theo tiêu chí đã chọn):\n${ticketLines.join("\n")}\n\n` +
+      `KHUÔN TRẢ LỜI BẮT BUỘC (giọng CHUYÊN GIA PHÂN TÍCH DỮ LIỆU: khô, rõ, đi thẳng vào số liệu; KHÔNG hô hào, KHÔNG cảm tính, KHÔNG từ marketing):\n` +
+      `1) **Kỳ quay gần nhất** — ngày ${vnDate(newest.date)}: ${newest.numbers.map(fmt).join(" ")}${newest.special ? ` | Bóng Power ${fmt(newest.special)}` : ""}. Nêu rõ cỡ mẫu đang phân tích: "dựa trên ${rows.length} kỳ gần nhất (${vnDate(oldest.date)}–${vnDate(newest.date)})".\n` +
+      `2) **Thống kê nổi bật** — chép bảng số liệu ở trên (Markdown table, tối đa 7 dòng): số về nhiều nhất kèm số lần/tần suất, số lâu chưa về kèm số kỳ, nhận xét 1 câu về phân bố chẵn/lẻ, thấp/cao và tổng.\n` +
+      `3) **Đề xuất bộ số** — ${tickets.length} bộ (3–5 bộ), mỗi bộ MỘT dòng: bộ số + lý do ngắn theo tiêu chí (nóng / lâu chưa về / trải dải / tổng). Không thêm bộ nào ngoài danh sách trên.\n` +
+      `4) **Ghi chú xác suất** — do server tự gắn ở cuối câu trả lời: em KHÔNG viết lại, chỉ cần nói 1 câu rằng đây là mô tả thống kê của mẫu quá khứ.\n\n` +
+      `GIỌNG VĂN & NGÔN NGỮ (bắt buộc): dùng ngôn ngữ xác suất chuẩn — "xác suất", "kỳ vọng toán học", "cỡ mẫu", "các kỳ độc lập", "không làm thay đổi xác suất". ` +
+      `Tần suất trong mẫu chỉ là mô tả quá khứ, KHÔNG phải kỳ vọng cho kỳ tới; mọi bộ 6 số đều có cùng xác suất. ` +
+      `CẤM: "số dễ trúng", "chắc trúng", "chắc ăn", "tăng khả năng trúng", "bí kíp", "cầu đẹp", "đảm bảo", "vào bờ", "may mắn", "thần tài", "phát tài". ` +
+      `KHÔNG doạ nạt, KHÔNG bịa thêm kỳ quay hay số liệu ngoài dữ liệu trên. Xưng hô theo đúng cách người dùng đang dùng (họ xưng "anh" ⇒ gọi "anh" và tự xưng "em"; xưng "chị" ⇒ gọi "chị"; xưng "em"/"mình" thì theo luật xưng hô chung của fBuddy). ` +
+      `Độ dài: phần lời khuyên tối đa ~250 từ; số liệu để trong bảng/danh sách cho dễ đọc. Xác suất Jackpot ${info.name} là ${jackpotOddsText(info.id)}.`,
+  };
+}
+
+/**
+ * Handler của công cụ `vietlott`: lấy dữ liệu THẬT (có cache) rồi dựng câu trả lời bằng
+ * `vietlottReport`. Không bao giờ ném lỗi; không lấy được dữ liệu thì nói thật, KHÔNG bịa kỳ quay.
  */
 export async function vietlottAdvice(args = {}, ctx = {}) {
   const requested = normalizeGame(args?.game ?? args?.gameId ?? "") ?? gameFromMessage(ctx?.userMessage ?? "");
@@ -778,87 +869,15 @@ export async function vietlottAdvice(args = {}, ctx = {}) {
         ". Hãy nói THẬT với người dùng là chưa lấy được dữ liệu kỳ quay nên chưa gợi ý số, và đề nghị thử lại sau — TUYỆT ĐỐI không bịa số liệu, không bịa kỳ quay.",
     };
   }
-
-  const draws = report.draws;
-  const newest = draws[draws.length - 1];
-  const oldest = draws[0];
-  /**
-   * CỠ MẪU: mọi số liệu trong câu trả lời tính trên CHÍNH cỡ mẫu này (không trộn cửa sổ khác), để con
-   * số nêu trong phần "Thống kê nổi bật" khớp đúng với lý do của từng bộ số.
-   */
-  const window = draws.length;
-  const freq = frequency(draws, { numbers: info.max, window });
-  const gapRows = gaps(draws);
-  const dist = distribution(draws);
-  const tickets = suggestTickets(draws, {
-    // Khuôn trả lời của chủ dự án: đề xuất 3–5 bộ.
-    count: Math.min(Math.max(Math.floor(Number(args?.count) || 3), 3), 5),
-    size: info.size,
-    strategy: args?.strategy ?? "can_bang",
-    window,
-  });
-
-  const pct = (count) => `${(count / window).toFixed(1)}%`;
-  const hotRows = freq.slice(0, 3);
-  const coldRows = gapRows.slice(0, 3);
-  const pairRows = pairs(draws, { limit: 3 });
-  const hotText = hotRows.map((row) => `${fmt(row.number)} (${row.count} lần · ${pct(row.count)})`).join(", ");
-  const coldText = coldRows.map((row) => `${fmt(row.number)} (${row.gap} kỳ)`).join(", ");
-  const ticketLines = tickets.map(
-    (ticket, index) =>
-      `${index + 1}. ${ticket.numbers.map(fmt).join(" ")}${ticket.special ? ` | Bóng Power ${fmt(ticket.special)}` : ""}` +
-      ` — ${ticket.reason}`,
-  );
-  /** Bảng thống kê dựng sẵn: model chỉ việc bê nguyên số liệu, không tự tính lại (tránh sai số). */
-  const statsTable = [
-    "| Nhóm | Số | Số liệu |",
-    "|---|---|---|",
-    `| Về nhiều nhất | ${hotRows.map((row) => fmt(row.number)).join(", ")} | ${hotRows.map((row) => `${row.count} lần (${pct(row.count)})`).join(" · ")} |`,
-    `| Lâu chưa về | ${coldRows.map((row) => fmt(row.number)).join(", ")} | ${coldRows.map((row) => `${row.gap} kỳ`).join(" · ")} |`,
-    `| Cặp về cùng nhau | ${pairRows.map((row) => `${fmt(row.a)}–${fmt(row.b)}`).join(", ")} | ${pairRows.map((row) => `${row.count} kỳ`).join(" · ")} |`,
-    `| Chẵn / lẻ | ${dist.evenOdd.even} / ${dist.evenOdd.odd} | ${((dist.evenOdd.even / (window * info.size)) * 100).toFixed(1)}% / ${((dist.evenOdd.odd / (window * info.size)) * 100).toFixed(1)}% |`,
-    `| Thấp / cao (≤${dist.lowHigh.threshold}) | ${dist.lowHigh.low} / ${dist.lowHigh.high} | ${((dist.lowHigh.low / (window * info.size)) * 100).toFixed(1)}% / ${((dist.lowHigh.high / (window * info.size)) * 100).toFixed(1)}% |`,
-    `| Tổng mỗi kỳ | p25–p75: ${dist.sum.band[0]}–${dist.sum.band[1]} | min ${dist.sum.min} · TB ${dist.sum.avg} · max ${dist.sum.max} |`,
-  ].join("\n");
-
   return {
     ok: true,
-    summary: `${info.name}: cỡ mẫu ${draws.length} kỳ (${vnDate(oldest.date)}–${vnDate(newest.date)}), đề xuất ${tickets.length} bộ số theo thống kê`,
-    // Nguồn thật để lượt chat gắn khối "Nguồn tra cứu" như mọi công cụ tra cứu khác.
-    sources: [
-      { kind: "web", label: `Kết quả ${info.name} — ${SOURCE_NAME}`, url: `${SOURCE_HOME}${info.pathFor(null)}` },
-    ],
-    data: {
-      game: info.id,
-      gameName: info.name,
-      source: { name: SOURCE_NAME, url: `${SOURCE_HOME}${info.pathFor(null)}` },
-      draws: { count: draws.length, from: oldest.date, to: newest.date, newestId: newest.id },
-      window,
-      hot: freq.slice(0, 8),
-      overdue: gapRows.slice(0, 8),
-      pairs: pairs(draws, { limit: 5 }),
-      distribution: dist,
-      tickets,
-      jackpotOdds: jackpotOddsText(info.id),
-      /** Khối miễn trừ do SERVER ghép ở agent.js — model không phải (và không được) tự viết. */
-      disclaimerAttachedByServer: true,
-      ...(report.stale ? { stale: true } : {}),
-    },
     artifacts: [],
-    modelText:
-      `DỮ LIỆU THẬT ${info.name.toUpperCase()} — nguồn ${SOURCE_NAME}, CỠ MẪU ${draws.length} kỳ gần nhất (${vnDate(oldest.date)}–${vnDate(newest.date)}).\n` +
-      `Kỳ gần nhất ${newest.id ? `${newest.id} ` : ""}ngày ${vnDate(newest.date)}: ${newest.numbers.map(fmt).join(" ")}${newest.special ? ` | Bóng Power ${fmt(newest.special)}` : ""}.\n\n` +
-      `BẢNG SỐ LIỆU (dùng nguyên các con số này, KHÔNG tự tính lại):\n${statsTable}\n\n` +
-      `BỘ SỐ ĐỀ XUẤT (đúng ${tickets.length} bộ, mỗi bộ kèm 1 dòng lý do theo tiêu chí đã chọn):\n${ticketLines.join("\n")}\n\n` +
-      `KHUÔN TRẢ LỜI BẮT BUỘC (giọng CHUYÊN GIA PHÂN TÍCH DỮ LIỆU: khô, rõ, đi thẳng vào số liệu; KHÔNG hô hào, KHÔNG cảm tính, KHÔNG từ marketing):\n` +
-      `1) **Kỳ quay gần nhất** — ngày ${vnDate(newest.date)}: ${newest.numbers.map(fmt).join(" ")}${newest.special ? ` | Bóng Power ${fmt(newest.special)}` : ""}. Nêu rõ cỡ mẫu đang phân tích: "dựa trên ${draws.length} kỳ gần nhất (${vnDate(oldest.date)}–${vnDate(newest.date)})".\n` +
-      `2) **Thống kê nổi bật** — chép bảng số liệu ở trên (Markdown table, tối đa 7 dòng): số về nhiều nhất kèm số lần/tần suất, số lâu chưa về kèm số kỳ, nhận xét 1 câu về phân bố chẵn/lẻ, thấp/cao và tổng.\n` +
-      `3) **Đề xuất bộ số** — ${tickets.length} bộ (3–5 bộ), mỗi bộ MỘT dòng: bộ số + lý do ngắn theo tiêu chí (nóng / lâu chưa về / trải dải / tổng). Không thêm bộ nào ngoài danh sách trên.\n` +
-      `4) **Ghi chú xác suất** — do server tự gắn ở cuối câu trả lời: em KHÔNG viết lại, chỉ cần nói 1 câu rằng đây là mô tả thống kê của mẫu quá khứ.\n\n` +
-      `GIỌNG VĂN & NGÔN NGỮ (bắt buộc): dùng ngôn ngữ xác suất chuẩn — "xác suất", "kỳ vọng toán học", "cỡ mẫu", "các kỳ độc lập", "không làm thay đổi xác suất". ` +
-      `Tần suất trong mẫu chỉ là mô tả quá khứ, KHÔNG phải kỳ vọng cho kỳ tới; mọi bộ 6 số đều có cùng xác suất. ` +
-      `CẤM: "số dễ trúng", "chắc trúng", "chắc ăn", "tăng khả năng trúng", "bí kíp", "cầu đẹp", "đảm bảo", "vào bờ", "may mắn", "thần tài", "phát tài". ` +
-      `KHÔNG doạ nạt, KHÔNG bịa thêm kỳ quay hay số liệu ngoài dữ liệu trên. Xưng hô theo đúng cách người dùng đang dùng (họ xưng "anh" ⇒ gọi "anh" và tự xưng "em"; xưng "chị" ⇒ gọi "chị"; xưng "em"/"mình" thì theo luật xưng hô chung của fBuddy). ` +
-      `Độ dài: phần lời khuyên tối đa ~250 từ; số liệu để trong bảng/danh sách cho dễ đọc. Xác suất Jackpot ${info.name} là ${jackpotOddsText(info.id)}.`,
+    ...vietlottReport({
+      game: info.id,
+      draws: report.draws,
+      count: args?.count,
+      strategy: args?.strategy ?? "can_bang",
+      stale: Boolean(report.stale),
+    }),
   };
 }
