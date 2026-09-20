@@ -139,6 +139,17 @@ export async function chat({ token, content, skill = "auto", attachments = [], c
     toolMode,
   }, token);
   if (!response.ok) throw new Error(`chat/stream → ${response.status}: ${(await response.text()).slice(0, 300)}`);
+  const events = await readSse(response);
+  // `status` là tiến trình giao diện ("đang tra cứu…", "đang suy nghĩ…") và có thể tới trước `start`.
+  // Nó không phải nội dung lượt chat, nên bỏ ra khỏi kết quả trả cho test ⇒ test không còn phụ thuộc
+  // thứ tự (trước 2026-09-20 chúng giả định sự kiện đầu tiên luôn là `start` và đã đỏ hàng loạt).
+  return events.filter((event) => event.event !== "status");
+}
+
+/** Như `chat` nhưng GIỮ cả `status` — dùng khi cần kiểm tra tiến trình. */
+export async function chatWithStatus({ token, content, skill = "auto", attachments = [], conversationId = null, toolMode = "auto" }) {
+  const response = await apiRaw("POST", "/chat/stream", { content, skill, attachments, conversationId, toolMode }, token);
+  if (!response.ok) throw new Error(`chat/stream → ${response.status}`);
   return readSse(response);
 }
 

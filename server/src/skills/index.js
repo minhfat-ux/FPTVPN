@@ -1,7 +1,6 @@
 import { generatePptx } from "./pptx.js";
 import { generateXlsx } from "./xlsx.js";
 import { generateDocx } from "./docx.js";
-import { researchForModel } from "./research-tool.js";
 import { analyzeData, listFilesForModel } from "./data.js";
 import { editImage, transformImage } from "./image.js";
 import { readImageContent, xlsxFromImage } from "./vision.js";
@@ -112,26 +111,6 @@ export const TOOL_DEFINITIONS = [
       required: ["blocks"],
     },
     handler: generateDocx,
-  },
-  {
-    name: "research_web",
-    skill: null,
-    label: "Tra cứu nguồn ngoài",
-    description:
-      "Hỏi agent TRA CỨU (researcher) để lấy thông tin mới/kiểm chứng từ web: giá cả, tin tức, sự kiện, quy định, số liệu mới nhất. Trả về phát hiện kèm URL nguồn để trích dẫn.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        question: { type: "string", description: "Câu hỏi cần tra cứu, càng cụ thể càng tốt" },
-        domain: {
-          type: "string",
-          description: "Lĩnh vực (tuỳ chọn): phap-luat, y-te, tai-chinh, giao-duc, cong-nghe…",
-        },
-        freshness: { type: "string", enum: ["d", "w", "m"], description: "Chỉ lấy nguồn trong ngày/tuần/tháng gần nhất" },
-      },
-      required: ["question"],
-    },
-    handler: researchForModel,
   },
   {
     name: "analyze_data",
@@ -411,6 +390,9 @@ export const TOOL_DEFINITIONS = [
       const nguon = result.sources.length;
       return {
         ok: result.findings.length > 0,
+        // Nguồn để lượt chat gắn khối "Nguồn tra cứu" ở cuối câu trả lời (yêu cầu chủ dự án).
+        sources: (result.findings ?? []).filter((f) => f.url).slice(0, 8)
+          .map((f) => ({ kind: "web", label: String(f.title ?? f.url).slice(0, 140), url: String(f.url).slice(0, 300) })),
         summary: nguon
           ? `Tra cứu (${result.researcher.label}): ${nguon} nguồn · chắc chắn: ${result.confidence}`
           : `Tra cứu (${result.researcher.label}): KHÔNG tìm được nguồn`,

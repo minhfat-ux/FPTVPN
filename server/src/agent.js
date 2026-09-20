@@ -684,14 +684,6 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   // 参数非法"). Instead of dropping the picture, the backend falls back to a vision
   // model: it reads the image, and the extracted text goes into this turn's context
   // so the user's real request ("đưa hết data trong ảnh thành excel") still works.
-  if (turn.autoResearch?.findings?.length) {
-    for (const hit of turn.autoResearch.findings) {
-      sources.push({ kind: "web", label: hit.title || hit.url, url: hit.url });
-    }
-  }
-  for (const file of files ?? []) {
-    sources.push({ kind: "file", label: file.name ?? "tệp", id: file.id });
-  }
   const vision = await applyVisionFallback({ messages, provider, model, user, conversationId: conversation.id, signal, channel });
   if (vision.applied && vision.read) {
     if (messages[0]?.role === "system") {
@@ -711,8 +703,20 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   const toolCalls = [];
   const toolResults = [];
   const artifacts = [];
-  /** Nguồn tra cứu của lượt này — gắn vào cuối câu trả lời (yêu cầu chủ dự án 2026-09-20). */
+  /**
+   * Nguồn tra cứu của lượt này — gắn vào cuối câu trả lời (yêu cầu chủ dự án 2026-09-20).
+   *
+   * KHAI BÁO PHẢI Ở TRƯỚC MỌI CHỖ DÙNG: bản trước đặt khối gom nguồn phía trên dòng này nên gặp
+   * lỗi `Cannot access 'sources' before initialization` (TDZ) — chỉ nổ ở lượt CÓ tra cứu, nên
+   * trông như "thỉnh thoảng mới lỗi". Xem BUG-20260920-005.
+   */
   const sources = [];
+  for (const hit of turn.autoResearch?.findings ?? []) {
+    if (hit?.url) sources.push({ kind: "web", label: hit.title || hit.url, url: hit.url });
+  }
+  for (const file of files ?? []) {
+    sources.push({ kind: "file", label: file.name ?? "tệp", id: file.id });
+  }
   let text = "";
   let usage = null;
   /** Đã báo "đang hỏi chuyên gia tra cứu" cho lượt này chưa (chỉ báo một lần). */

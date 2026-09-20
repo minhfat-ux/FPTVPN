@@ -14,6 +14,7 @@ export const chat: Dict = {
     "Số dư hiện tại: {balance} credit. 1 credit = 1 token (tính cả token vào và ra); mỗi lượt trả lời trừ {perToken} credit cho mỗi token.",
   "chat.page.topUp": "Nạp thêm",
   "chat.page.checkAgain": "Kiểm tra lại",
+  "chat.page.jumpToBottom": "Xuống tin mới nhất",
 
   // ---- Composer: thanh nhập
   "chat.composer.placeholder": "Nhập câu hỏi, yêu cầu tạo ảnh, PPT, Excel hoặc phân tích dữ liệu…",

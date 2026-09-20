@@ -104,11 +104,14 @@ test("provider test endpoint reports a working connection", async () => {
 test("plain chat streams start → delta → done and persists the turn", async () => {
   const events = await chat({ token: ctx.token, content: "Xin chào fBuddy" });
   const names = events.map((e) => e.event);
-  assert.equal(names[0], "start");
+  // `status` (đang tra cứu / đang suy nghĩ) có thể tới TRƯỚC `start` — đó là chủ ý của server
+  // để người dùng thấy phản hồi ngay. Vì vậy tìm đúng sự kiện, đừng tin vào vị trí.
+  const startIndex = names.indexOf("start");
+  assert.ok(startIndex >= 0, `phải có sự kiện start, thấy: ${names.join(",")}`);
   assert.ok(names.includes("delta"));
   assert.equal(names[names.length - 1], "done");
 
-  const start = events[0].data;
+  const start = events[startIndex].data;
   assert.ok(start.conversationId.startsWith("c_"));
   assert.equal(start.providerName, "Demo (không cần key)");
   assert.equal(start.model, "fbuddy-demo");

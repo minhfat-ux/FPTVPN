@@ -14,6 +14,7 @@ export const chat: Dict = {
     "Current balance: {balance} credits. 1 credit = 1 token (input and output tokens both count); every answer costs {perToken} credits per token.",
   "chat.page.topUp": "Top up",
   "chat.page.checkAgain": "Check again",
+  "chat.page.jumpToBottom": "Jump to the newest message",
 
   // ---- Composer: input bar
   "chat.composer.placeholder": "Ask a question, or request an image, PPT, Excel or data analysis…",

@@ -503,7 +503,18 @@ a:hover { text-decoration: underline; }
 
 /* ------------------------------------------------------------------- chat */
 
-.chat-scroll { flex: 1; overflow-y: auto; min-height: 0; scroll-behavior: smooth; }
+/* `scroll-behavior: smooth` trên khung chat làm CUỘN TAY rất khó: mỗi token mới lại kích hoạt
+   một animation cuộn, tranh nhau với thao tác của người dùng (chủ dự án báo 2026-09-20).
+   Cuộn tự động phải TỨC THÌ; chỉ nút "xuống tin mới nhất" mới dùng smooth (đặt ở JS). */
+.chat-scroll { flex: 1; overflow-y: auto; min-height: 0; scroll-behavior: auto; overscroll-behavior: contain; }
+/* Nút "xuống tin mới nhất" khi người dùng đang xem lại phía trên. */
+.jump-bottom {
+  position: absolute; right: 18px; bottom: 96px; z-index: 5;
+  width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--border-strong);
+  background: var(--bg-elevated); color: var(--text); display: grid; place-items: center;
+  box-shadow: var(--shadow); cursor: pointer;
+}
+.jump-bottom:hover { border-color: var(--accent); color: var(--accent); }
 .chat-inner { max-width: min(1080px, 100%); margin: 0 auto; padding: var(--space-5) var(--space-4) 24px; }
 
 .hero { text-align: center; padding: 8vh 0 4vh; }

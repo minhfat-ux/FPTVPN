@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -266,25 +266,42 @@ export function useDebouncedValue<T>(value: T, delay = 300) {
 export function useAutoScroll<T extends HTMLElement>(deps: unknown[]) {
   const ref = useRef<T>(null);
   const sticky = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
     const onScroll = () => {
       const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
-      sticky.current = distance < 120;
+      const near = distance < 160;
+      sticky.current = near;
+      setAtBottom((prev) => (prev === near ? prev : near));
     };
-    node.addEventListener("scroll", onScroll);
+    node.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
     return () => node.removeEventListener("scroll", onScroll);
   }, []);
 
   const key = JSON.stringify(deps);
   useEffect(() => {
     const node = ref.current;
+    // Ghi trực tiếp `scrollTop` ⇒ cuộn TỨC THÌ, không tranh animation với người dùng.
     if (node && sticky.current) node.scrollTop = node.scrollHeight;
   }, [key]);
 
-  return ref;
+  /** Nút "xuống tin mới nhất": chỉ ở đây mới cuộn mượt. */
+  const scrollToBottom = useCallback((smooth = true) => {
+    const node = ref.current;
+    if (!node) return;
+    sticky.current = true;
+    if (smooth && typeof node.scrollTo === "function") {
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    } else {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, []);
+
+  return { ref, atBottom, scrollToBottom };
 }
 
 /** Short badge text shown on file/artifact cards. */

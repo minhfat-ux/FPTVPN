@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleAlert, Coins, ExternalLink } from "lucide-react";
+import { ArrowDown, CircleAlert, Coins, ExternalLink } from "lucide-react";
 import { Composer, fallbackSkills, usableSkills, type ComposerHandle } from "./Composer";
 import { SkillPicker } from "./SkillPicker";
 import { MessageList } from "./MessageList";
@@ -92,7 +92,7 @@ export function ChatPage({
   // The top-up page can be opened in-app when the owner points the URL at it.
   const internalTopup = Boolean(onOpenTopup) && isInternalTopupUrl(credits?.buyUrl);
 
-  const scrollRef = useAutoScroll<HTMLDivElement>([
+  const { ref: scrollRef, atBottom: chatAtBottom, scrollToBottom } = useAutoScroll<HTMLDivElement>([
     messages.length,
     streaming?.content.length ?? 0,
     streaming?.reasoning.length ?? 0,
@@ -223,6 +223,19 @@ export function ChatPage({
       onDrop={onDrop}
     >
       <EcosystemBanner />
+      {/* Cuộn lên xem lại thì không bị kéo về đáy; có nút để quay xuống (giống app). */}
+      {!chatAtBottom && messages.length > 0 && (
+        <button
+          className="jump-bottom"
+          type="button"
+          onClick={() => scrollToBottom()}
+          title={t("chat.page.jumpToBottom")}
+          aria-label={t("chat.page.jumpToBottom")}
+        >
+          <ArrowDown size={16} />
+        </button>
+      )}
+
       <MessageList
         messages={messages}
         streaming={streaming}

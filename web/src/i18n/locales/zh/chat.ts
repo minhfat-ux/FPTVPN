@@ -14,6 +14,7 @@ export const chat: Dict = {
     "当前余额：{balance} 额度。1 额度 = 1 token（输入和输出的 token 都计算）；每次回答每个 token 扣除 {perToken} 额度。",
   "chat.page.topUp": "充值",
   "chat.page.checkAgain": "重新检查",
+  "chat.page.jumpToBottom": "跳到最新消息",
 
   // ---- Composer：输入栏
   "chat.composer.placeholder": "输入问题，或要求生成图片、PPT、Excel 或做数据分析…",
