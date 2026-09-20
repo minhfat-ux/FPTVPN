@@ -75,8 +75,10 @@
   }
 
   var BRAND_MARK = "/brand-mark.png?v=culi2";
-  var ICON_VPNFLOW = "https://meetflowai.site/assets/flowvpn-logo.png";
-  var ICON_MEETFLOW = "https://meetflowai.site/assets/meetflowai-icon.png";
+  // Icon lấy từ CHÍNH repo (không hot-link site khác): CSP của fBuddy là `img-src 'self'`
+    // nên ảnh ngoài bị chặn ⇒ popup mất icon (lỗi chủ dự án báo 21/09/2026).
+    var ICON_VPNFLOW = "/app-icons/vpnflow.png";
+  var ICON_MEETFLOW = "/app-icons/meetflow.png";
 
   // Link đã kiểm chứng trả 200 (17/09/2026). Windows dùng bản "-latest" để không lỗi thời.
   var LINKS = {
@@ -101,126 +103,6 @@
     ios: "iPhone / iPad",
     android: "Android",
   };
-
-  /*
-   * Ba thứ tiếng: vi / en / zh. Trước đây toàn bộ chữ hardcode tiếng Việt nên khách
-   * nước ngoài (và khách Trung Quốc) đọc không hiểu.
-   *
-   * Quy tắc: MỌI chữ người dùng nhìn thấy phải đi qua `t()`. Không hardcode lại.
-   * `ops/promo-i18n-check.mjs` canh việc này (đủ khoá, và các thứ tiếng phải KHÁC nhau).
-   */
-  var STRINGS = {
-    vi: {
-      closeAria: "Đóng quảng cáo",
-      eyebrow: "Hệ sinh thái FlowTech",
-      title: "Cài app dùng ngay trên mọi thiết bị",
-      sub: "VPNFlow cho kết nối riêng tư, nhanh và ổn định — MeetFlow AI là trợ lý AI trong túi. Miễn phí tải về.",
-      forYourDevice: "· bản cho máy bạn",
-      downloadFor: "Tải cho {os}",
-      vpnPitch:
-        "Kết nối riêng tư tốc độ cao, không giới hạn dung lượng. Có bản cho Windows, macOS, iPhone/iPad và Android.",
-      vpnBuy: "Xem gói & mua",
-      aiIosLabel: "App Store (iOS)",
-      aiAndroidLabel: "Tải APK (Android)",
-      aiIosPrimary: "Tải trên App Store",
-      aiAndroidPrimary: "Tải APK cho Android",
-      aiPitch: "Trợ lý AI đa năng: hỏi đáp, viết, dịch, tóm tắt và tạo ảnh — dùng ngay trên điện thoại.",
-      aiBuy: "Giới thiệu & mua",
-      note: "Quảng cáo của FlowTech · bấm để tải, không thu phí tải về",
-      later: "Để sau",
-      never: "Không hiện lại nữa",
-    },
-    en: {
-      closeAria: "Close this ad",
-      eyebrow: "The FlowTech ecosystem",
-      title: "Install our apps on any device",
-      sub: "VPNFlow for a fast, stable private connection — MeetFlow AI is your AI assistant in your pocket. Free to download.",
-      forYourDevice: "· for your device",
-      downloadFor: "Download for {os}",
-      vpnPitch:
-        "High-speed private connection with unlimited data. Available for Windows, macOS, iPhone/iPad and Android.",
-      vpnBuy: "See plans & buy",
-      aiIosLabel: "App Store (iOS)",
-      aiAndroidLabel: "Download APK (Android)",
-      aiIosPrimary: "Get it on the App Store",
-      aiAndroidPrimary: "Download APK for Android",
-      aiPitch: "A multi-purpose AI assistant: ask, write, translate, summarise and create images — right on your phone.",
-      aiBuy: "Learn more & buy",
-      note: "An ad from FlowTech · tap to download, downloading is free",
-      later: "Later",
-      never: "Don't show again",
-    },
-    zh: {
-      closeAria: "关闭广告",
-      eyebrow: "FlowTech 生态系统",
-      title: "在任何设备上安装我们的应用",
-      sub: "VPNFlow 提供快速稳定的私人连接 —— MeetFlow AI 是你口袋里的 AI 助手。免费下载。",
-      forYourDevice: "· 适合你的设备",
-      downloadFor: "下载 {os} 版",
-      vpnPitch: "高速私人连接，流量不限。支持 Windows、macOS、iPhone/iPad 和 Android。",
-      vpnBuy: "查看套餐并购买",
-      aiIosLabel: "App Store (iOS)",
-      aiAndroidLabel: "下载 APK (Android)",
-      aiIosPrimary: "在 App Store 下载",
-      aiAndroidPrimary: "下载 Android 版 APK",
-      aiPitch: "多功能 AI 助手：问答、写作、翻译、总结和生成图片 —— 手机上即可使用。",
-      aiBuy: "了解详情并购买",
-      note: "由 FlowTech 提供的广告 · 点击即可下载，下载免费",
-      later: "稍后",
-      never: "不再显示",
-    },
-  };
-
-  /**
-   * Chọn thứ tiếng. Thứ tự ưu tiên (cố ý, đừng đảo):
-   *
-   *   1. Múi giờ Việt Nam / Trung Quốc THẮNG ngôn ngữ trình duyệt — vì khách Việt và
-   *      khách Trung rất hay để trình duyệt `en-US`, nếu để ngôn ngữ thắng thì họ mãi
-   *      chỉ thấy tiếng Anh (đúng vấn đề của bản cũ).
-   *   2. Ngôn ngữ trình duyệt nếu là thứ tiếng mình có (vi/en/zh).
-   *   3. Còn lại: `en`.
-   */
-  function pickLanguage() {
-    var zone = "";
-    try {
-      zone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "").toLowerCase();
-    } catch (err) {
-      zone = "";
-    }
-
-    if (/ho_chi_minh|saigon|hanoi|asia\/bangkok/.test(zone)) return "vi";
-    if (/shanghai|chongqing|urumqi|hong_kong|taipei|macau|asia\/beijing/.test(zone)) return "zh";
-
-    var candidates = [];
-    try {
-      candidates = (navigator.languages ? Array.prototype.slice.call(navigator.languages) : []).concat([
-        navigator.language || "",
-      ]);
-    } catch (err) {
-      candidates = [];
-    }
-
-    for (var i = 0; i < candidates.length; i += 1) {
-      var tag = String(candidates[i] || "").toLowerCase();
-      if (tag.indexOf("vi") === 0) return "vi";
-      if (tag.indexOf("zh") === 0) return "zh";
-      if (tag.indexOf("en") === 0) return "en";
-    }
-
-    return "en";
-  }
-
-  var LANG = pickLanguage();
-  var TEXT = STRINGS[LANG] || STRINGS.en;
-
-  /** Lấy chuỗi theo thứ tiếng đang dùng; thay `{os}`, `{count}`… nếu có. */
-  function t(key, vars) {
-    var value = TEXT[key] || STRINGS.en[key] || "";
-    if (!vars) return value;
-    return value.replace(/\{(\w+)\}/g, function (match, name) {
-      return Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match;
-    });
-  }
 
   function os() {
     var ua = navigator.userAgent || "";
@@ -300,7 +182,7 @@
     a.appendChild(svg(platform === "ios" || platform === "macos" ? "apple" : platform === "windows" ? "windows" : "download", 15));
     a.appendChild(el("span", null, label));
     if (primary) {
-      var hint = el("span", "fg-btn__os", t("forYourDevice"));
+      var hint = el("span", "fg-btn__os", "· bản cho máy bạn");
       a.appendChild(hint);
     }
     return a;
@@ -358,7 +240,7 @@
 
     var close = el("button", "fg-promo__close");
     close.type = "button";
-    close.setAttribute("aria-label", t("closeAria"));
+    close.setAttribute("aria-label", "Đóng quảng cáo");
     close.appendChild(svg("close", 16));
     card.appendChild(close);
 
@@ -369,11 +251,17 @@
     head.appendChild(mark);
 
     var headText = el("div");
-    headText.appendChild(el("div", "fg-promo__eyebrow", t("eyebrow")));
-    var title = el("h2", "fg-promo__title", t("title"));
+    headText.appendChild(el("div", "fg-promo__eyebrow", "Hệ sinh thái FlowTech"));
+    var title = el("h2", "fg-promo__title", "Cài app dùng ngay trên mọi thiết bị");
     title.id = "fg-promo-title";
     headText.appendChild(title);
-    headText.appendChild(el("p", "fg-promo__sub", t("sub")));
+    headText.appendChild(
+      el(
+        "p",
+        "fg-promo__sub",
+        "VPNFlow cho kết nối riêng tư, nhanh và ổn định — MeetFlow AI là trợ lý AI trong túi. Miễn phí tải về.",
+      ),
+    );
     head.appendChild(headText);
     card.appendChild(head);
 
@@ -393,7 +281,7 @@
         if (b.platform === current) return 1;
         return 0;
       });
-      vpnButtons[0].label = t("downloadFor", { os: OS_LABEL[current] });
+      vpnButtons[0].label = "Tải cho " + OS_LABEL[current];
     }
 
     grid.appendChild(
@@ -401,17 +289,18 @@
         name: "VPNFlow",
         tag: "VPN",
         icon: ICON_VPNFLOW,
-        pitch: t("vpnPitch"),
+        pitch:
+          "Kết nối riêng tư tốc độ cao, không giới hạn dung lượng. Có bản cho Windows, macOS, iPhone/iPad và Android.",
         buttons: vpnButtons,
         os: current,
-        buyLabel: t("vpnBuy"),
+        buyLabel: "Xem gói & mua",
         buyHref: LINKS.vpnflow.buy,
       }),
     );
 
     var aiButtons = [
-      { platform: "ios", href: LINKS.meetflow.ios, label: t("aiIosLabel") },
-      { platform: "android", href: LINKS.meetflow.android, label: t("aiAndroidLabel") },
+      { platform: "ios", href: LINKS.meetflow.ios, label: "App Store (iOS)" },
+      { platform: "android", href: LINKS.meetflow.android, label: "Tải APK (Android)" },
     ];
     aiButtons.sort(function (a, b) {
       if (a.platform === current) return -1;
@@ -419,7 +308,7 @@
       return 0;
     });
     if (current === "ios" || current === "android") {
-      aiButtons[0].label = current === "ios" ? t("aiIosPrimary") : t("aiAndroidPrimary");
+      aiButtons[0].label = current === "ios" ? "Tải trên App Store" : "Tải APK cho Android";
     }
 
     grid.appendChild(
@@ -427,10 +316,11 @@
         name: "MeetFlow AI",
         tag: "AI",
         icon: ICON_MEETFLOW,
-        pitch: t("aiPitch"),
+        pitch:
+          "Trợ lý AI đa năng: hỏi đáp, viết, dịch, tóm tắt và tạo ảnh — dùng ngay trên điện thoại.",
         buttons: aiButtons,
         os: current,
-        buyLabel: t("aiBuy"),
+        buyLabel: "Giới thiệu & mua",
         buyHref: LINKS.meetflow.guide,
       }),
     );
@@ -438,11 +328,11 @@
     card.appendChild(grid);
 
     var foot = el("div", "fg-promo__foot");
-    foot.appendChild(el("div", "fg-promo__note", t("note")));
+    foot.appendChild(el("div", "fg-promo__note", "Quảng cáo của FlowTech · bấm để tải, không thu phí tải về"));
     var links = el("div", "fg-promo__links");
-    var later = el("button", "fg-link", t("later"));
+    var later = el("button", "fg-link", "Để sau");
     later.type = "button";
-    var never = el("button", "fg-link", t("never"));
+    var never = el("button", "fg-link", "Không hiện lại nữa");
     never.type = "button";
     links.appendChild(never);
     links.appendChild(later);

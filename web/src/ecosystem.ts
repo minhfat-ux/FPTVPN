@@ -20,7 +20,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     name: "VPNFlow",
     tag: "VPN",
     pitchKey: "shell.ecosystem.vpnflowPitch",
-    icon: "https://meetflowai.site/assets/flowvpn-logo.png",
+    icon: "/app-icons/vpnflow.png", // icon nội bộ — CSP `img-src 'self'` chặn ảnh ngoài
     links: {
       buy: "https://meetflowai.site/buy",
       windows: "https://meetflowai.site/dl/VPNFlow-Setup-latest.exe",
@@ -34,7 +34,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     name: "MeetFlow AI",
     tag: "AI",
     pitchKey: "shell.ecosystem.meetflowPitch",
-    icon: "https://meetflowai.site/assets/meetflowai-icon.png",
+    icon: "/app-icons/meetflow.png",
     links: {
       buy: "https://meetflowai.site/ai/guide",
       ios: "https://apps.apple.com/vn/app/meetflow-ai/id6765590042",
