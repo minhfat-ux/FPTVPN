@@ -1,0 +1,15 @@
+[Unit]
+Description=fBuddy housekeeping — dọn hội thoại/tệp/bộ nhớ cũ + tối ưu SQLite
+Documentation=file:/opt/fbuddy/server/src/housekeeping.js
+After=fbuddy.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fbuddy
+EnvironmentFile=/etc/fbuddy/fbuddy.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node ops/housekeeping.mjs --apply
+# Chạy nền, ưu tiên thấp: VPS chỉ ~960 MB RAM, housekeeping không được tranh CPU/I-O với khách.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=15min

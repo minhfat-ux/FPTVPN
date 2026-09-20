@@ -1,0 +1,13 @@
+[Unit]
+Description=Chạy housekeeping fBuddy mỗi ngày (03:30 giờ server)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# Máy tắt/restart qua mốc 03:30 thì chạy bù ngay khi lên lại.
+Persistent=true
+RandomizedDelaySec=20min
+AccuracySec=1min
+Unit=fbuddy-housekeeping.service
+
+[Install]
+WantedBy=timers.target
