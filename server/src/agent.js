@@ -118,6 +118,7 @@ const SOURCE_RULES = [
   "• Nếu CHỈ dùng kiến thức sẵn có của model (không tra ngoài, không có tệp) ⇒ nói thẳng: \"phần này em trả lời theo kiến thức sẵn có, chưa tra nguồn ngoài\".",
   "• TUYỆT ĐỐI không bịa nguồn, không bịa URL, không gán số liệu cho một nguồn mà mình không đọc.",
   "• Nếu số liệu có mốc thời gian, nêu rõ số liệu tính tới ngày/giờ nào.",
+  "• Khi hệ thống đã báo với người dùng là đã hỏi chuyên gia tra cứu thì KHÔNG nhắc lại lời báo đó; vào thẳng câu trả lời kèm nguồn.",
 ].join("\n");
 
 const PRONOUN_RULES = [
@@ -368,7 +369,16 @@ export async function prepareTurn({ user, body, channel }) {
   if (channel && typeof channel.send === "function") {
     channel.send("status", { stage: "researching" });
   }
-  const autoResearch = await maybePreResearch({ message: content, timeoutMs: 8000 });
+  //
+  // Vì sao KHÔNG cắt ở 8s như trước: đo thật 20/09/2026 — tra cứu thật thường mất 9–20s, cắt ở 8s
+  // làm `maybePreResearch` trả null ⇒ mất kết quả vừa tra xong, fBuddy trả lời KHÔNG kèm dữ kiện
+  // và khách phải hỏi lại; lần hỏi lại mới nhanh vì kết quả đã nằm trong cache 10 phút của
+  // researcher. Nay chờ tới 25s (đổi bằng env RESEARCH_TIMEOUT_MS) để trả lời NGAY trong cùng lượt.
+  const researchTimeoutMs = Number(process.env.RESEARCH_TIMEOUT_MS ?? 25000);
+  const autoResearch = await maybePreResearch({
+    message: content,
+    timeoutMs: Number.isFinite(researchTimeoutMs) && researchTimeoutMs > 0 ? researchTimeoutMs : 25000,
+  });
 
   // Credit gate: metering on + no balance + not an admin ⇒ refuse with a clear
   // message (the UI turns this into a "nạp thêm" card).
@@ -705,6 +715,18 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   const sources = [];
   let text = "";
   let usage = null;
+  /** Đã báo "đang hỏi chuyên gia tra cứu" cho lượt này chưa (chỉ báo một lần). */
+  let researchAckSent = false;
+
+  // Báo NGAY cho người dùng là đang hỏi chuyên gia tra cứu (yêu cầu chủ dự án 2026-09-20:
+  // "câu hỏi mà người dùng bảo fbuddy update thì nó phải tự biết nói là đang hỏi thêm chuyên gia
+  //  về vấn đề đó và trả lời lại ngay"). Câu này do SERVER sinh — không phụ thuộc model có chịu nói
+  // hay không — và được LƯU cùng câu trả lời nên mở lại hội thoại vẫn thấy.
+  if (turn.autoResearch?.findings?.length) {
+    const ack = `Em đã hỏi chuyên gia tra cứu về vấn đề này (nguồn: ${turn.autoResearch.label ?? "web"}), em trả lời ngay đây ạ.`;
+    text = `${ack}\n\n`;
+    channel.send("delta", { text: `${ack}\n\n` });
+  }
   let finishReason = "stop";
   const maxIterations = Math.min(
     Number(settings.maxToolIterations) || 6,
@@ -753,6 +775,15 @@ export async function runChatTurn({ user, turn, channel, signal }) {
               pendingCalls.push(event);
               if (!sources.some((s) => s.kind === "tool" && s.label === event.name)) {
                 sources.push({ kind: "tool", label: event.name });
+              }
+              // Báo NGAY cho người dùng là fBuddy đang hỏi chuyên gia tra cứu (yêu cầu chủ dự án
+              // 2026-09-20), không để họ ngồi im không biết chuyện gì đang xảy ra.
+              if (event.name === "tra_cuu" && !researchAckSent) {
+                researchAckSent = true;
+                const ack = "Em đang hỏi chuyên gia tra cứu về vấn đề này, có kết quả em trả lời ngay ạ.\n\n";
+                text += ack;
+                channel.send("delta", { text: ack });
+                channel.send("status", { stage: "researching" });
               }
               break;
             case "usage":
@@ -901,6 +932,10 @@ export async function runChatTurn({ user, turn, channel, signal }) {
           // renders them under the message; the value is sent as the next turn).
           ...(result.choices?.length ? { choices: result.choices } : {}),
         };
+        // Nguồn web từ công cụ tra cứu (tra_cuu) ⇒ gom vào khối "Nguồn tra cứu".
+        for (const source of result.sources ?? []) {
+          if (source?.url && !sources.some((s) => s.url === source.url)) sources.push(source);
+        }
         toolCalls.push(callRecord);
         toolResults.push(resultDto);
         for (const artifact of result.artifacts ?? []) {
@@ -958,6 +993,24 @@ export async function runChatTurn({ user, turn, channel, signal }) {
           detail: skill === "ppt" ? "theo dàn ý trên" : "theo kế hoạch trên",
         })
     : [];
+
+  // Bảo hiểm: đã tra cứu xong mà model không trả lời chữ nào (hoặc chỉ có câu "đang tra cứu") thì
+  // KHÔNG được để khách phải hỏi lại — server tự ghép câu trả lời từ chính kết quả tra cứu.
+  // Đúng ca chủ dự án báo 20/09/2026: "tra cứu xong, fbuddy không trả lời ngay, phải hỏi lại".
+  const researchFindings = turn.autoResearch?.findings ?? [];
+  const ackOnly = !text.replace(/Em (đã|đang) (đã )?hỏi chuyên gia tra cứu[^\n]*\n*/gi, "").trim();
+  if (researchFindings.length && ackOnly) {
+    const lines = [
+      `${turn.autoResearch?.text ?? ""}`.trim(),
+      "",
+      "**Nguồn tra cứu:**",
+      ...researchFindings.slice(0, 6).map((hit, index) => `${index + 1}. ${hit.title || hit.url} — ${hit.url}`),
+    ];
+    const fallbackAnswer = `${lines.filter(Boolean).join("\n")}\n`;
+    text = `${text}${fallbackAnswer}`;
+    channel.send("delta", { text: fallbackAnswer });
+    if (finishReason === "error") finishReason = "stop";
+  }
 
   // Gắn "Nguồn tra cứu" vào chính nội dung: hiện ở web, ở app và cả sau khi tải lại.
   const sourcesBlock = formatSourcesBlock(sources);
