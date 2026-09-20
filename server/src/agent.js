@@ -4,6 +4,7 @@ import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool } f
 import { applyVisionFallback } from "./vision-fallback.js";
 import { buildAppsKnowledge } from "./apps-knowledge.js";
 import { buildVnPlateKnowledge } from "./vn-plates.js";
+import { jackpotOddsText, vietlottQuestionLikely } from "./vietlott.js";
 import { maybePreResearch, vnNow } from "./researcher.js";
 import { buildSkillSuggestionBlock } from "./skills/suggest.js";
 import { buildNewsBlock } from "./news.js";
@@ -131,6 +132,23 @@ const PRONOUN_RULES = [
   "• Vai khác (con, cháu, cô, chú, bác, ông, bà, sếp, thầy, cô giáo…) ⇒ chọn cặp xưng hô tương ứng trong tiếng Việt và giữ nhất quán.",
   "• Người dùng nói rõ cách gọi (\"gọi tôi là sếp\", \"đừng gọi anh\") ⇒ làm đúng yêu cầu đó, ưu tiên hơn mọi suy đoán.",
   "• KHÔNG trộn vai trong cùng một câu trả lời và KHÔNG tự xưng \"tôi\" khi người dùng đang xưng anh/chị/em. Người dùng đổi cách xưng thì đổi theo ngay từ câu trả lời kế tiếp.",
+].join("\n");
+
+/**
+ * LUẬT VIETLOTT — ghép ở tầng CODE (như luật xưng hô/nguồn), nên admin sửa system prompt trong
+ * Cài đặt cũng không xoá được. Chỉ ghép khi câu hỏi chạm tới Vietlott.
+ *
+ * Vì sao phải là luật cứng: xổ số là ngẫu nhiên, các kỳ ĐỘC LẬP nhau — không phương pháp nào làm
+ * tăng xác suất trúng. Model rất dễ trôi sang giọng "soi cầu", hứa hẹn, hoặc bịa thêm kỳ quay.
+ * Ngoài luật này, SERVER còn tự ghép khối miễn trừ trách nhiệm vào cuối câu trả lời
+ * (`formatVietlottDisclaimer`) nên model có quên thì câu trả lời vẫn đủ cảnh báo.
+ */
+const VIETLOTT_RULES = [
+  "VIETLOTT (bắt buộc trung thực):",
+  "• Người dùng hỏi nên chọn số Vietlott (Mega 6/45, Power 6/55), thống kê tần suất hay số lâu chưa về ⇒ gọi công cụ `vietlott` để lấy dữ liệu kỳ quay THẬT rồi mới trả lời; không tự nghĩ ra số liệu.",
+  "• Chỉ được nói đây là \"gợi ý theo thống kê các kỳ quay đã qua\" (tần suất, số lâu chưa về, phân bố). TUYỆT ĐỐI không nói \"số dễ trúng\", \"chắc trúng\", \"tăng khả năng trúng\" — không có cách chọn số nào làm tăng xác suất.",
+  "• Không bịa kỳ quay, không bịa số liệu, không tự bịa xác suất; chưa lấy được dữ liệu thì nói thật là chưa có.",
+  "• Server tự gắn khối \"Miễn trừ trách nhiệm\" ở cuối câu trả lời — không cần chép lại, nhưng phải giữ đúng giọng trung thực đó.",
 ].join("\n");
 
 /**
@@ -315,6 +333,8 @@ export function buildSystemPrompt({ skill, files, settings, hubSkill = null, use
     buildVnPlateKnowledge({ message }),
     // Tin mới nhất trong ngày — chỉ ghép khi câu hỏi chạm tới thời sự.
     buildNewsBlock({ message }),
+    // Luật Vietlott — chỉ ghép khi câu hỏi chạm tới xổ số Vietlott (luật ngắn, nhưng là luật cứng).
+    vietlottQuestionLikely(message) ? VIETLOTT_RULES : "",
     buildMemoryBlock({ userId: user?.id ?? null, query: message, conversationId, accountName: user?.name ?? null }),
     `Bây giờ là ${vnClock.stamp}. Dùng đúng mốc này khi nói "hôm nay", "tuần này" và khi tra cứu thông tin mới.`,
     SKILL_INSTRUCTIONS[skill] ?? "",
@@ -644,6 +664,24 @@ export function formatSourcesBlock(sources = [], { usedModelKnowledge = true } =
   return `\n\n—\n**Nguồn tra cứu**\n${lines.join("\n")}`;
 }
 
+/**
+ * Khối "Miễn trừ trách nhiệm (Vietlott)" gắn vào cuối câu trả lời về xổ số.
+ *
+ * Vì sao do SERVER soạn chứ không để model tự viết: model có thể quên, có thể xuôi theo người dùng
+ * ("số này dễ trúng không?") và hứa hẹn. Xác suất ở đây là của GIẢI ĐẶC BIỆT (C(45,6) và C(55,6)),
+ * lấy từ `vietlott.js` để chỉ có một nguồn sự thật. Khối này được LƯU cùng tin nhắn (như khối
+ * "Nguồn tra cứu") nên mở lại hội thoại vẫn thấy, và được stream ngay khi lượt chat kết thúc.
+ */
+export function formatVietlottDisclaimer() {
+  return (
+    "\n\n—\n**Miễn trừ trách nhiệm — Vietlott**\n" +
+    "• Xổ số là ngẫu nhiên và mỗi kỳ quay độc lập nhau: các số ở trên được gợi ý theo thống kê các kỳ quay ĐÃ QUA " +
+    "(tần suất, số lâu chưa về, phân bố) — ĐÂY KHÔNG PHẢI DỰ ĐOÁN KẾT QUẢ và không làm tăng xác suất trúng.\n" +
+    `• Xác suất trúng giải đặc biệt (Jackpot): Mega 6/45 là ${jackpotOddsText("mega645")}; Power 6/55 là ${jackpotOddsText("power655")}.\n` +
+    "• Chơi có trách nhiệm: chỉ dùng tiền nhàn rỗi, không dùng tiền ảnh hưởng tới sinh hoạt; người dưới 18 tuổi không được tham gia."
+  );
+}
+
 export async function runChatTurn({ user, turn, channel, signal }) {
   const { settings, skill, conversation, files } = turn;
   const started = Date.now();
@@ -733,6 +771,13 @@ export async function runChatTurn({ user, turn, channel, signal }) {
    * trông như "thỉnh thoảng mới lỗi". Xem BUG-20260920-005.
    */
   const sources = [];
+  /**
+   * Lượt này có nói về Vietlott không (gọi công cụ `vietlott`, hoặc câu hỏi khớp từ khoá
+   * vietlott/mega 6/45/power 6/55) ⇒ server tự ghép khối miễn trừ trách nhiệm.
+   * Khai báo TRƯỚC chỗ dùng (bài học TDZ của `sources`, xem BUG-20260920-005).
+   */
+  const vietlottTopic = vietlottQuestionLikely(turn.content ?? "");
+  let vietlottUsed = false;
   for (const hit of turn.autoResearch?.findings ?? []) {
     if (hit?.url) sources.push({ kind: "web", label: hit.title || hit.url, url: hit.url });
   }
@@ -802,6 +847,8 @@ export async function runChatTurn({ user, turn, channel, signal }) {
               break;
             case "tool_call":
               pendingCalls.push(event);
+              // Gọi công cụ Vietlott ⇒ lượt này BẮT BUỘC có khối miễn trừ ở cuối câu trả lời.
+              if (event.name === "vietlott") vietlottUsed = true;
               if (!sources.some((s) => s.kind === "tool" && s.label === event.name)) {
                 sources.push({ kind: "tool", label: event.name });
               }
@@ -1085,6 +1132,14 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   // Gắn "Nguồn tra cứu" vào chính nội dung: hiện ở web, ở app và cả sau khi tải lại.
   const sourcesBlock = formatSourcesBlock(sources);
   if (sourcesBlock && text.trim()) text = `${text}${sourcesBlock}`;
+  // Khối "Miễn trừ trách nhiệm — Vietlott" (yêu cầu chủ dự án): chỉ ghép cho lượt nói về Vietlott,
+  // do SERVER tự viết nên model có quên thì câu trả lời vẫn đủ cảnh báo. Stream luôn để người dùng
+  // thấy ngay, không phải tải lại trang.
+  const vietlottBlock = (vietlottUsed || vietlottTopic) && text.trim() ? formatVietlottDisclaimer() : "";
+  if (vietlottBlock) {
+    text = `${text}${vietlottBlock}`;
+    channel.send("delta", { text: vietlottBlock });
+  }
   const assistantMessage = createMessage({
     conversationId: conversation.id,
     userId: user.id,

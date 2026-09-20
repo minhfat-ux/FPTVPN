@@ -5,6 +5,7 @@ import { analyzeData, listFilesForModel } from "./data.js";
 import { editImage, transformImage } from "./image.js";
 import { readImageContent, xlsxFromImage } from "./vision.js";
 import { rememberFact, searchPastChats } from "../memory.js";
+import { vietlottAdvice } from "../vietlott.js";
 import { ApiError } from "../util.js";
 
 /**
@@ -406,6 +407,33 @@ export const TOOL_DEFINITIONS = [
         modelText: researchToModelText(result),
       };
     },
+  },
+  {
+    name: "vietlott",
+    skill: "auto",
+    label: "Gợi ý số Vietlott",
+    description:
+      "Dùng khi người dùng hỏi nên CHỌN SỐ Vietlott nào, hoặc hỏi thống kê kỳ quay: số về nhiều (tần suất), " +
+      "số lâu chưa về, phân bố chẵn/lẻ–thấp/cao. Lấy kết quả kỳ quay THẬT đã công bố rồi gợi ý vé theo thống kê " +
+      "các kỳ đã qua kèm lý do chọn. KHÔNG dự đoán kết quả và không làm tăng xác suất trúng.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        game: {
+          type: "string",
+          enum: ["mega645", "power655"],
+          description: "mega645 = Mega 6/45 · power655 = Power 6/55 (bắt buộc; chưa rõ thì hỏi lại người dùng)",
+        },
+        count: { type: "number", description: "Số vé gợi ý (mặc định 3, tối đa 5)" },
+        strategy: {
+          type: "string",
+          enum: ["can_bang", "nong", "lau_chua_ve"],
+          description: "can_bang = trộn số nóng + số lâu chưa về (mặc định) · nong = ưu tiên số về nhiều · lau_chua_ve = ưu tiên số lâu chưa về",
+        },
+      },
+      required: ["game"],
+    },
+    handler: vietlottAdvice,
   },
   {
     name: "remember_fact",
