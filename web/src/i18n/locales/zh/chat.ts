@@ -98,6 +98,7 @@ export const chat: Dict = {
   "chat.message.regenerateTitle": "重新生成回答",
   "chat.message.reasoning": "推理过程",
   "chat.message.status.thinking": "正在思考…",
+  "chat.message.status.researching": "正在检索资料…",
   "chat.message.status.callingTool": "正在调用工具…",
   "chat.message.status.finishing": "正在收尾…",
   "chat.message.status.readingFile": "正在读取文件…",

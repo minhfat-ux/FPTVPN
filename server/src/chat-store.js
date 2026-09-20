@@ -224,6 +224,44 @@ export function maybeSetTitleFromFirstMessage(conversation, text) {
 }
 
 /** Recent conversation context in the shape the provider adapters expect. */
+/**
+ * Tóm tắt THÔ phần hội thoại đã bị lược khỏi ngữ cảnh.
+ *
+ * Vì sao cần: `historyForModel` chỉ lấy 24 tin gần nhất, phần cũ hơn bị CẮT IM LẶNG — nên với hội
+ * thoại dài, fBuddy quên việc đã bàn, tên đã nhắc, quyết định đã chốt (đúng lỗi người dùng báo).
+ * Không gọi AI để tóm tắt (tốn tiền, chậm): lấy mỗi tin một đoạn ngắn, đủ để model biết trước đó
+ * đã nói gì và biết khi nào cần gọi `search_past_chats` để lấy chi tiết.
+ */
+export function droppedHistoryDigest(conversationId, keepCount = 24, { maxMessages = 40, maxChars = 4000 } = {}) {
+  const rows = all("messages", "conversation_id = ? AND role IN ('user','assistant')", [conversationId], {
+    order: "created_at DESC",
+    limit: keepCount + maxMessages,
+  })
+    .reverse()
+    .slice(0, Math.max(0, keepCount + maxMessages - keepCount));
+  const older = all("messages", "conversation_id = ? AND role IN ('user','assistant')", [conversationId], {
+    order: "created_at DESC",
+    limit: maxMessages,
+    offset: keepCount,
+  }).reverse();
+  if (!older.length) return "";
+  const lines = [];
+  for (const row of older) {
+    const text = String(row.content ?? "").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    const who = row.role === "user" ? "người dùng" : "bạn";
+    lines.push(`- ${who}: ${text.slice(0, 160)}`);
+  }
+  if (!lines.length) return "";
+  const body = lines.join("\n").slice(-maxChars);
+  return (
+    `NGỮ CẢNH TRƯỚC ĐÓ (đã lược khỏi khung chat, tóm tắt thô — ${older.length} tin cũ nhất trong ${rows.length + older.length} tin):\n` +
+    body +
+    "\nKhi người dùng nhắc tới việc cũ mà bạn không thấy chi tiết ở trên, gọi `search_past_chats` để tra lại — " +
+    "TUYỆT ĐỐI không nói là chưa từng nói về việc đó."
+  );
+}
+
 export function historyForModel(conversationId, { maxMessages = 24 } = {}) {
   const rows = all("messages", "conversation_id = ? AND role IN ('user','assistant')", [conversationId], {
     order: "created_at DESC",

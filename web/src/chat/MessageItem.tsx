@@ -12,6 +12,7 @@ import type { Choice, FileRef, Message, StreamingTurn, ToolResult } from "../typ
 /** i18n keys for the live-turn statuses reported by the server. */
 const STATUS_LABEL_KEYS: Record<string, string> = {
   thinking: "chat.message.status.thinking",
+  researching: "chat.message.status.researching",
   calling_tool: "chat.message.status.callingTool",
   finishing: "chat.message.status.finishing",
   reading_file: "chat.message.status.readingFile",

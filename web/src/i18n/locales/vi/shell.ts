@@ -58,7 +58,6 @@ export const shell: Dict = {
   "shell.view.chat.skill": "Kỹ năng: {skill}",
   "shell.view.chat.pick": "Chọn kỹ năng và bắt đầu trò chuyện",
 
-
   // ---- đăng nhập (khung/magic link)
   "shell.auth.loginFailed": "Liên kết đăng nhập không hợp lệ",
   "shell.auth.loginSuccess": "Đăng nhập thành công: {email}",

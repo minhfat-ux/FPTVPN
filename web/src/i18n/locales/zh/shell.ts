@@ -58,7 +58,6 @@ export const shell: Dict = {
   "shell.view.chat.skill": "技能：{skill}",
   "shell.view.chat.pick": "选择技能并开始对话",
 
-
   // ---- 登录（框架 / 魔法链接）
   "shell.auth.loginFailed": "登录链接无效",
   "shell.auth.loginSuccess": "登录成功：{email}",

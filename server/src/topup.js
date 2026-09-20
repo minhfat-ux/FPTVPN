@@ -200,7 +200,6 @@ export function confirmTopupOrder({ orderId, confirmedBy = "telegram", tokens = 
     paid_at: nowIso(),
     confirmed_by: confirmedBy,
   });
-
   return { order: publicTopupOrder(updated), alreadyPaid: false, balance };
 }
 

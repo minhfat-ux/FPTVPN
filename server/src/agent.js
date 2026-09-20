@@ -31,6 +31,7 @@ import {
   createMessage,
   getOwnedConversation,
   historyForModel,
+  droppedHistoryDigest,
   maybeSetTitleFromFirstMessage,
   publicConversation,
   setLastConversationId,
@@ -341,7 +342,14 @@ export async function prepareTurn({ user, body, channel }) {
 
   // TRA TRƯỚC cho câu hỏi thuộc lĩnh vực cần dữ kiện (địa lý, văn hoá, giáo dục, AI, kinh tế,
   // chính phủ, biển số, toán). Không phụ thuộc việc model có chịu gọi `tra_cuu` hay không.
-  const autoResearch = await maybePreResearch({ message: content });
+  //
+  // BẮT BUỘC báo trạng thái TRƯỚC khi tra: bước này có thể mất vài giây (mạng ngoài), mà trước đây
+  // nó chạy âm thầm trước khi mở luồng stream nên người dùng thấy màn hình ĐƠ, không biết app còn
+  // sống hay không. Nay hiện ngay "đang tra cứu nguồn…" rồi mới tra, và chỉ chờ tối đa 8 giây.
+  if (channel && typeof channel.send === "function") {
+    channel.send("status", { stage: "researching" });
+  }
+  const autoResearch = await maybePreResearch({ message: content, timeoutMs: 8000 });
 
   // Credit gate: metering on + no balance + not an admin ⇒ refuse with a clear
   // message (the UI turns this into a "nạp thêm" card).
@@ -461,9 +469,15 @@ export async function prepareTurn({ user, body, channel }) {
 }
 
 /** Turns the stored history + fresh user turn into provider-shaped messages. */
-export async function buildModelMessages({ conversationId, systemPrompt, historyLimit = 24 }) {
+export async function buildModelMessages({ conversationId, systemPrompt, historyLimit = 60 }) {
+  // 24 tin là quá ít cho hội thoại dài: phần cũ bị cắt IM LẶNG nên fBuddy quên ngữ cảnh.
+  // Nay lấy nhiều hơn (60 tin) và ghép thêm bản tóm tắt THÔ của phần bị lược, kèm nhắc gọi
+  // `search_past_chats` khi cần chi tiết — quên thì phải biết là mình đang thiếu, chứ không được
+  // trả lời như thể chưa từng bàn.
   const history = historyForModel(conversationId, { maxMessages: historyLimit });
   const messages = [{ role: "system", content: systemPrompt }];
+  const digest = droppedHistoryDigest(conversationId, historyLimit);
+  if (digest) messages.push({ role: "system", content: digest });
 
   for (const entry of history) {
     if (entry.role !== "user") {

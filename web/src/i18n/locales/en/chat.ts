@@ -100,6 +100,7 @@ export const chat: Dict = {
   "chat.message.regenerateTitle": "Regenerate the answer",
   "chat.message.reasoning": "Reasoning process",
   "chat.message.status.thinking": "Thinking…",
+  "chat.message.status.researching": "Researching sources…",
   "chat.message.status.callingTool": "Calling a tool…",
   "chat.message.status.finishing": "Finishing…",
   "chat.message.status.readingFile": "Reading the file…",

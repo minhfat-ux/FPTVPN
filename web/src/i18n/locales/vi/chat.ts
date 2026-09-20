@@ -100,6 +100,7 @@ export const chat: Dict = {
   "chat.message.regenerateTitle": "Tạo lại câu trả lời",
   "chat.message.reasoning": "Quá trình suy luận",
   "chat.message.status.thinking": "Đang suy nghĩ…",
+  "chat.message.status.researching": "Đang tra cứu nguồn…",
   "chat.message.status.callingTool": "Đang gọi công cụ…",
   "chat.message.status.finishing": "Đang hoàn tất…",
   "chat.message.status.readingFile": "Đang đọc tệp…",

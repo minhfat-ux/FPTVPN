@@ -58,7 +58,6 @@ export const shell: Dict = {
   "shell.view.chat.skill": "Skill: {skill}",
   "shell.view.chat.pick": "Pick a skill and start chatting",
 
-
   // ---- login (frame / magic link)
   "shell.auth.loginFailed": "This login link is not valid",
   "shell.auth.loginSuccess": "Signed in successfully: {email}",

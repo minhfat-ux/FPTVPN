@@ -210,8 +210,50 @@ function htmlToText(html = "") {
     .trim();
 }
 
+/**
+ * Câu hỏi có cần ĐỘ MỚI không? (giá, tin, sự kiện, "mới nhất", "hiện nay"…)
+ * Quyết định: tra theo bộ lọc thời gian, ưu tiên nguồn mới, và KHÔNG để Wikipedia dẫn dắt.
+ */
+const RECENCY_RE =
+  /mới nhất|mới đây|gần đây|hiện nay|hiện tại|hôm nay|hôm qua|tuần này|tháng này|quý này|năm nay|vừa ra|mới ra|cập nhật|thời sự|tin tức|tin mới|giá |giá cả|tỷ giá|tỉ giá|lãi suất|chứng khoán|vn-?index|vàng|xăng|dầu|bitcoin|tỷ số|kết quả|bảng xếp hạng|xếp hạng|doanh thu|ra mắt|phát hành|phiên bản/i;
+
+export function needsFreshness(question = "") {
+  return RECENCY_RE.test(String(question));
+}
+
+/** Trích ngày từ một đoạn văn — để biết nguồn này mới hay cũ. */
+function extractDate(text = "") {
+  const raw = String(text);
+  const now = Date.now();
+  const relative = /(\d+)\s*(phút|giờ|ngày|tuần|tháng)\s*trước/i.exec(raw);
+  if (relative) {
+    const amount = Number(relative[1]);
+    const unit = relative[2].toLowerCase();
+    const ms = { "phút": 60000, "giờ": 3600000, "ngày": 86400000, "tuần": 604800000, "tháng": 2592000000 }[unit] ?? 86400000;
+    return new Date(now - amount * ms);
+  }
+  if (/hôm nay|vừa xong|mới đăng/i.test(raw)) return new Date(now);
+  if (/hôm qua/i.test(raw)) return new Date(now - 86400000);
+  const dmy = /\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/.exec(raw);
+  if (dmy) {
+    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  const ymd = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(raw);
+  if (ymd) {
+    const date = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  const vn = /\b(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})/i.exec(raw);
+  if (vn) {
+    const date = new Date(Number(vn[3]), Number(vn[2]) - 1, Number(vn[1]));
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
 /** Tìm kiếm web: Tavily nếu có khoá, còn không thì HTML DuckDuckGo. */
-async function webSearch(query, limit = 5) {
+async function webSearch(query, limit = 5, { fresh = null } = {}) {
   const key = String(process.env.SEARCH_API_KEY ?? "").trim();
   if (key) {
     try {
@@ -230,7 +272,10 @@ async function webSearch(query, limit = 5) {
     }
   }
   try {
-    const html = await getText(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
+    // `df` = lọc theo thời gian của DuckDuckGo: d=ngày, w=tuần, m=tháng. Không có nó thì kết quả
+    // trả về bài cũ và câu trả lời "không hề latest" (đúng phản hồi của người dùng).
+    const filter = fresh ? `&df=${fresh}` : "";
+    const html = await getText(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}${filter}`);
     const results = [];
     const re = /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
     let match;
@@ -513,18 +558,27 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ...hit.value, cached: true };
 
+  const fresh = needsFreshness(question);
+  const year = new Date().getFullYear();
   const queries = [question];
   if (profile.id === "bien-so" && !/biển/i.test(question)) queries.push(`biển số xe ${question}`);
+  // Câu hỏi cần độ mới: hỏi kèm NĂM hiện tại (mô hình tìm kiếm xếp bài mới lên trước) và lấy cả
+  // bản không năm để không bỏ sót.
+  if (fresh && !String(question).includes(String(year))) queries.push(`${question} ${year}`);
   // Hồ sơ chính thống: hỏi thẳng vào kho văn bản nhà nước trước, để kết quả không bị lẫn blog/diễn đàn.
   for (const site of profile.siteQueries ?? []) queries.push(`${question} ${site}`);
   const searches = [];
   for (const query of queries.slice(0, depth === "ky" ? 3 : 2)) {
-    searches.push(...(await webSearch(query, 5)));
+    searches.push(...(await webSearch(query, 5, fresh ? { fresh: "m" } : {})));
   }
+  // Vẫn thử bản không lọc để không mất nguồn tốt vì bộ lọc quá chặt, nhưng xếp sau.
+  if (fresh) searches.push(...(await webSearch(queries[0], 4)));
 
   const sources = [];
   if (profile.id === "bien-so") sources.push(...(await plateData()));
-  sources.push(...(await wikipediaExtract(profile.wikiTitles, question)));
+  // Wikipedia là bách khoa, KHÔNG phải nguồn tin — với câu hỏi cần độ mới thì để xuống cuối.
+  const wiki = await wikipediaExtract(profile.wikiTitles, question);
+  sources.push(...wiki);
   // Nguồn có cấu trúc của lĩnh vực (địa danh, quốc gia, arXiv…) — chạy song song cho nhanh.
   const specialResults = await Promise.all((profile.special ?? []).map((name) => (SPECIAL_SOURCES[name] ? SPECIAL_SOURCES[name](question) : Promise.resolve([]))));
   for (const group of specialResults) sources.push(...group);
@@ -581,6 +635,22 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
     if (table.size > 1) disagreements.push(`Mã ${code} được các nguồn gắn với nhiều nơi: ${[...table.keys()].join(" / ")}`);
   }
 
+  // Gắn ngày cho từng phát hiện rồi xếp MỚI NHẤT LÊN ĐẦU khi câu hỏi cần độ mới.
+  for (const finding of kept) {
+    const haystack = `${finding.title} ${finding.passages.join(" ")}`;
+    const date = extractDate(haystack);
+    finding.detectedAt = date ? date.toISOString().slice(0, 10) : null;
+    finding.ageDays = date ? Math.round((Date.now() - date.getTime()) / 86400000) : null;
+  }
+  if (fresh) {
+    kept.sort((a, b) => {
+      const left = a.ageDays ?? 9999;
+      const right = b.ageDays ?? 9999;
+      return left - right;
+    });
+  }
+
+  const newest = kept.reduce((best, item) => (item.ageDays !== null && (best === null || item.ageDays < best) ? item.ageDays : best), null);
   const confidence = kept.length === 0 ? "thap" : disagreements.length ? "trung-binh" : kept.length >= 3 ? "cao" : "trung-binh";
   const value = {
     researcher: { id: profile.id, label: profile.label },
@@ -588,7 +658,10 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
     question,
     confidence,
     strictOfficial: Boolean(profile.strictOfficial),
-    requiresFresh: Boolean(profile.requiresFresh),
+    requiresFresh: Boolean(profile.requiresFresh) || fresh,
+    needsFreshness: fresh,
+    newestSourceAgeDays: newest,
+    checkedAtIso: new Date().toISOString(),
     droppedUnofficial: dropped,
     findings: kept.slice(0, 8),
     disagreements,
@@ -630,8 +703,15 @@ export function researchToModelText(result, { maxChars = 7000 } = {}) {
     lines.push("NGUỒN ĐÃ LỌC: chỉ giữ nguồn chính thống của nhà nước; trả lời phải nêu rõ tên văn bản/cổng thông tin.");
   }
   for (const finding of result.findings) {
-    lines.push(`• Nguồn: ${finding.title} — ${finding.url}`);
+    const when = finding.ageDays === null ? "không rõ ngày" : finding.ageDays === 0 ? "hôm nay" : `${finding.ageDays} ngày trước`;
+    lines.push(`• Nguồn (${when}): ${finding.title} — ${finding.url}`);
     for (const passage of finding.passages) lines.push(`   “${passage}”`);
+  }
+  if (result.needsFreshness && result.newestSourceAgeDays !== null && result.newestSourceAgeDays > 30) {
+    lines.push(
+      `CẢNH BÁO ĐỘ CŨ: nguồn MỚI NHẤT tìm được đã ${result.newestSourceAgeDays} ngày tuổi ⇒ phải nói rõ với người dùng`,
+      "là số liệu có thể chưa cập nhật, đừng trình bày như thông tin mới nhất.",
+    );
   }
   if (result.requiresFresh) {
     lines.push(
@@ -672,7 +752,9 @@ export async function maybePreResearch({ message = "", timeoutMs = 15000 } = {})
   const text = String(message ?? "").trim();
   if (text.length < 6) return null;
   const profile = pickResearcher(text);
-  if (profile.id === "chung") return null;
+  // Hồ sơ "chung" thường bị bỏ qua, NHƯNG câu hỏi cần độ mới (giá, tin, sự kiện, "mới nhất") thì
+  // phải tra — đó đúng là loại câu trả lời sai nếu lấy từ trí nhớ.
+  if (profile.id === "chung" && !needsFreshness(text)) return null;
   let timer = null;
   try {
     const result = await Promise.race([

@@ -16,7 +16,9 @@ import type { SkillHubDraft, SkillHubSearchItem } from "../types";
  * Chữ trong card này đang là tiếng Việt trực tiếp (màn quản trị chỉ chủ dự án dùng);
  * muốn đa ngữ thì đưa vào `i18n/locales/<lang>/settings.ts` như các thẻ khác.
  */
-const DEFAULT_PRICE_VND = 50000;
+// Mặc định 0 (miễn phí): nội dung nhập từ SkillHub thuộc bản quyền tác giả gốc +
+// Tencent, không được bán lại — xem docs/CONTENT-POLICY.md.
+const DEFAULT_PRICE_VND = 0;
 
 const MARKETS = ["Tự quyết theo skill", "published", "coming_soon"] as const;
 
