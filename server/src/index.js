@@ -5,7 +5,7 @@ import { config, ensureDirs } from "./config.js";
 import { initDb } from "./db.js";
 import { readAppSettings } from "./settings.js";
 import { createApiRouter } from "./routes.js";
-import { ApiError } from "./util.js";
+import { ApiError, RateLimiter } from "./util.js";
 import { closeAll, connectAll } from "./mcp.js";
 import { countUsers } from "./auth.js";
 import { ensureExtraColumns } from "./schema-extras.js";
@@ -33,6 +33,71 @@ try {
 const app = express();
 app.disable("x-powered-by");
 if (config.trustProxy) app.set("trust proxy", true);
+
+// ---------------------------------------------------------------- bảo mật
+//
+// 2026-09-20 (chủ dự án: "nhớ có các feature security nhé, dễ bị hack lắm đấy"):
+//  - header bảo mật cho MỌI phản hồi (chống nhúng iframe, dò MIME, rò referrer…)
+//  - CSP chặt: web chỉ nạp script/style của chính nó (không có script inline)
+//  - giới hạn tần suất TOÀN CỤC theo IP + theo người dùng: chống dò mật khẩu/mã đăng nhập,
+//    chống spam lượt chat (mỗi lượt tốn tiền model) và chống lạm dụng tải tệp.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  // React đặt style qua thuộc tính style={...} nên cần 'unsafe-inline' cho style.
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+app.use((req, res, next) => {
+  res.setHeader("Content-Security-Policy", CSP);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "microphone=(self), camera=(), geolocation=(), payment=()");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  if (config.publicUrl.startsWith("https://")) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  return next();
+});
+
+/**
+ * Giới hạn tần suất: khoá theo NGƯỜI DÙNG (nếu đã đăng nhập) hoặc theo IP.
+ * Ngưỡng rộng cho đọc dữ liệu, chặt cho việc tốn tiền (chat, tải tệp, đăng nhập).
+ */
+const apiLimiter = new RateLimiter({ limit: 300, windowMs: 60 * 1000 });
+const expensiveLimiter = new RateLimiter({ limit: 30, windowMs: 60 * 1000 });
+
+function clientKey(req, bucket) {
+  const who = req.user?.id ?? req.ip ?? "anon";
+  return `${bucket}:${who}`;
+}
+
+app.use("/api", (req, res, next) => {
+  const expensive = /^\/(chat\/stream|files|voice|topup)/.test(req.path) && req.method === "POST";
+  const limiter = expensive ? expensiveLimiter : apiLimiter;
+  const gate = limiter.check(clientKey(req, expensive ? "expensive" : "api"));
+  if (!gate.ok) {
+    const retryAfter = Math.ceil((gate.retryAfterMs ?? 60_000) / 1000);
+    res.setHeader("Retry-After", String(retryAfter));
+    return res.status(429).json({
+      error: {
+        code: "rate_limited",
+        message: `Bạn thao tác quá nhanh. Vui lòng thử lại sau ${retryAfter} giây.`,
+      },
+    });
+  }
+  return next();
+});
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -113,6 +178,12 @@ app.get(/^\/(?!api\/).*/, (req, res, next) => {
       .send("fBuddy API đang chạy. Web chưa build (chạy: npm run build).\n");
   }
   if (req.path.startsWith("/api/")) return next();
+  // Shell SPA KHÔNG được cache: sau mỗi lần deploy, `index.html` cũ vẫn trỏ tới bundle CŨ
+  // (asset có hash nằm ở edge gần như vĩnh viễn), nên khách mở lại tab là thấy GIAO DIỆN CŨ.
+  // Đúng ca 20/09/2026: login "nhảy" giữa 2 bản — bản FlowGpt cũ (1 card giữa trang) và bản
+  // fBuddy mới (slogan bên trái + box đăng nhập bên phải). Không cache ⇒ luôn lấy shell mới.
+  res.setHeader("Cache-Control", "no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   return res.sendFile(path.join(webDist, "index.html"));
 });
 
