@@ -143,3 +143,34 @@ Khác: tunnel lên lại sau **2 s** khi Connect; khai báo đọc từ bộ nh�
 | Ký | `Apple Development: minhnb2@me.com`; chưa notarize |
 | Kiểm chứng | `curl https://meetflowai.site/v1/downloads/mac` → 23.961.684 bytes, sha256 khớp `d416b3ff…` ✅ |
 | Nguồn | build từ cây làm việc 20/09 (guard + `pendingForceAfter` + lọc bộ nhớ nhiễm); nguồn **không đổi** trong lúc build (`shasum iOS/PrivateVPNPacketTunnel/*.swift` trước/sau) |
+
+## 20/09/2026 — Sửa dashboard "đang kết nối" + alert máy mới + login nhảy 2 bản
+
+### 1. Dashboard sai vì sao (đo thật)
+- Khách đang kết nối **2 máy** nhưng `/v1/admin/stats` trả `online_peers: 0`, `online_devices: []`.
+- Nguyên nhân gốc: dashboard chỉ đếm **handshake WireGuard**, mà từ 19/09 mọi bản app đi **hysteria2 qua relay Cloudflare** ⇒ không bao giờ có handshake.
+- Tín hiệu sống duy nhất còn lại là `lastSeenAt`, nhưng 3 client (iOS/Android/Windows) gọi `POST /v1/peers/heartbeat` mỗi 30s mà **route đó chưa từng tồn tại** ở server (404 im lặng). Máy Mac thì không gọi heartbeat chút nào.
+
+### 2. Đã sửa + deploy (node-2)
+| Việc | Chi tiết |
+|---|---|
+| `aggregateDeviceSessions()` | `control-plane/src/connection-stats.js` — thiết bị thật báo cáo trong 30 phút (`ONLINE_DEVICE_WINDOW_MIN`), gộp với nguồn WG legacy, dedup theo `device_id` |
+| `/v1/admin/stats` | trả `totals.online_devices`, `device_report_window_min`, `device_sessions_totals` |
+| `POST /v1/peers/heartbeat` | route MỚI + allowlist auth; credential được **lưu** vào bản ghi khi register/claim (trước đây sinh mới mỗi lần trả về nên không xác thực được). Bản ghi cũ: nhận lần đầu rồi ghim (TOFU) + ghi log |
+| Alert Telegram | `POST /v1/devices/claim` cho máy MỚI nay gửi `deviceRegisteredAlert` — trước 20/09 chỉ `/v1/peers/register` mới alert, nên máy Android claim lúc 10:46 chỉ để lại dòng log |
+| Mac client | gửi heartbeat mỗi 120s khi tunnel sống (`mac/PrivateVPNMac/VPNManagerMac.swift`); chỉ dừng khi tunnel ĐÃ từng lên rồi mới tắt (NE báo `.disconnected` vài nhịp lúc chuẩn bị profile, dừng sớm là chết ngay sau 19 ms) |
+
+Kiểm chứng: log `heartbeat: ok` cách nhau 122s; `/v1/admin/stats` → `online_devices: 3` (`mac-lnakgro1` reported 50s, `ios-166c028a` 167s, `android-ee8b6dae` 1627s).
+
+### 3. macOS 1.4.0/14 — DMG cập nhật (có heartbeat)
+| | |
+|---|---|
+| DMG | `/root/flowvpn-mac/VPNFlow-mac.dmg` — **23.972.080 bytes**, sha256 `0b54c12edd14d6e3627640e97e109cc736917113acfa5f7d8f12ab80404fa92a` (backup bản trước: `.backup-20260920-152902`) |
+| Kiểm chứng | `curl -sSI https://meetflowai.site/v1/downloads/mac` → 200 · content-length 23.972.080 |
+
+### 4. Login "nhảy" giữa 2 bản (fbuddy)
+- Triệu chứng: `https://fbuddy.meetflowai.site/` ra trang đúng (slogan trái + box đăng nhập phải) nhưng có lúc ra **trang login cũ** (1 card giữa trang, brand "FlowGpt"), kèm 502 lác đác.
+- Nguyên nhân: đang trong lúc chuyển service `flowgpt` → `fbuddy` (build mới lúc 14:22–14:23 ngày 20/09). Shell cũ trong cache trình duyệt/edge vẫn trỏ tới **bundle cũ** — asset có hash được cache `immutable` 1 năm, nên mở lại tab là thấy giao diện cũ. Route `/assets/index-BiAU-WYK.js` (bản cũ) vẫn `200 · cf-cache-status: HIT`.
+- Đã sửa: `index.html` trả `Cache-Control: no-store, must-revalidate` (+ `Pragma: no-cache`) — đã deploy `/opt/fbuddy/server/src/index.js` và kiểm header công khai (`cf-cache-status: DYNAMIC`).
+- Kiểm chứng bố cục sau khi sửa (Chrome headless dumps DOM): `fbuddy.meetflowai.site/`, `?lang=en`, `flowgpt.meetflowai.site/?lang=vi` đều có `auth-hero` (slogan trái) + `auth-panel/auth-card` (box phải), title "fBuddy — Trợ lý AI đa năng".
+- Còn lại: cache edge vẫn giữ bundle cũ; purge bằng token trong drop-in **không đủ quyền** (`Authentication error`) — cần purge tay trên Cloudflare dashboard nếu muốn sạch hẳn (không bắt buộc vì HTML đã no-store).
