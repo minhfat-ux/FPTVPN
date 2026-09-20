@@ -17,13 +17,26 @@
  *   - Tìm kiếm web: nếu có `SEARCH_API_KEY` (Tavily) thì dùng API; không thì dùng kết quả HTML của
  *     DuckDuckGo như phương án dự phòng cho tin thời sự. Lưu ý: đọc HTML của DuckDuckGo là cách
  *     chữa cháy, không phải kênh chính thức — muốn bền thì nên cắm khoá search API.
+ *   - Tin tức: `news-sources.js` (Google News RSS + RSS báo lớn VN), miễn phí và KHÔNG cần khoá. Chỉ
+ *     dùng để BỔ SUNG khi câu hỏi cần độ mới mà tìm kiếm web không trả về mục nào có ngày công bố.
  *
  * Nguyên tắc: KHÔNG bịa. Không tìm thấy ⇒ trả `confidence: "thap"` kèm lời nhắc nói thẳng là chưa
  * chắc và chỉ người dùng tới nguồn chính thức.
  */
 
+/**
+ * Nguồn tin miễn phí (Google News RSS + RSS báo lớn VN) — dùng khi tìm kiếm web không cho được tin
+ * có ngày công bố. Xem `news-sources.js` để biết vì sao chọn RSS và vì sao không cần khoá API.
+ */
+import { fetchNews } from "./news-sources.js";
+
 const UA = "fBuddy-research/1.0 (+https://fbuddy.meetflowai.site; tracuu)";
 const FETCH_TIMEOUT_MS = 12000;
+/**
+ * Ngân sách thời gian cho lượt bổ sung bằng RSS: chạy SONG SONG và tự cắt, vì đây là phần thêm vào
+ * chứ không phải đường chính — nguồn tin chậm không được kéo dài thời gian người dùng phải chờ.
+ */
+const NEWS_TIMEOUT_MS = 6000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_FETCH_PAGES = 3;
 
@@ -253,6 +266,19 @@ export function vnNow() {
 }
 
 /**
+ * Ngày theo LỊCH VIỆT NAM (UTC+7), dạng `YYYY-MM-DD`.
+ *
+ * Vì sao không cắt thẳng chuỗi ISO: server chạy UTC, nên một tin đăng 00:30 ngày 20/9 giờ Việt Nam
+ * là `2026-09-19T17:30Z` — cắt ISO sẽ ghi thành tin của ngày 19/9, tức là nói SAI ngày công bố đúng
+ * một ngày. Đây là chỗ người dùng dựa vào để biết tin mới hay cũ.
+ */
+function vnDate(date) {
+  const parts = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/**
  * Cửa sổ thời gian cần lọc: hỏi "hôm nay" ⇒ lọc trong NGÀY, "tuần này" ⇒ tuần, còn lại ⇒ tháng.
  * DuckDuckGo nhận `df=d|w|m|y`.
  */
@@ -267,7 +293,15 @@ export function needsFreshness(question = "") {
   return RECENCY_RE.test(String(question));
 }
 
-/** Trích ngày từ một đoạn văn — để biết nguồn này mới hay cũ. */
+/**
+ * Trích ngày từ một đoạn văn — để biết nguồn này mới hay cũ.
+ *
+ * Ngày chỉ có ngày–tháng–năm (không có giờ) được dựng ở mốc **UTC**, không phải nửa đêm giờ máy:
+ * `new Date(2026, 8, 20)` là nửa đêm giờ máy, mà máy chủ có thể lệch múi giờ (máy harness ở đây là
+ * GMT+8, VPS là UTC) nên khi quy về lịch Việt Nam sẽ ra NGÀY HÔM TRƯỚC. Gặp thật: tin "20 thg 9,
+ * 2026" bị ghi thành 2026-09-19 — sai đúng một ngày, mà đây là chỗ người dùng dựa vào để biết tin
+ * mới hay cũ.
+ */
 function extractDate(text = "") {
   const raw = String(text);
   const now = Date.now();
@@ -282,17 +316,29 @@ function extractDate(text = "") {
   if (/hôm qua/i.test(raw)) return new Date(now - 86400000);
   const dmy = /\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/.exec(raw);
   if (dmy) {
-    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    const date = new Date(Date.UTC(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])));
     if (!Number.isNaN(date.getTime())) return date;
   }
   const ymd = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(raw);
   if (ymd) {
-    const date = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+    const date = new Date(Date.UTC(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])));
     if (!Number.isNaN(date.getTime())) return date;
   }
   const vn = /\b(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})/i.exec(raw);
   if (vn) {
-    const date = new Date(Number(vn[3]), Number(vn[2]) - 1, Number(vn[1]));
+    const date = new Date(Date.UTC(Number(vn[3]), Number(vn[2]) - 1, Number(vn[1])));
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  // Ngày công bố của DuckDuckGo: giao diện tiếng Việt in "20 thg 9, 2026", tiếng Anh in "Sep 20, 2026".
+  const thgVi = /\b(\d{1,2})\s*thg\s*(\d{1,2}),?\s*(\d{4})/i.exec(raw);
+  if (thgVi) {
+    const date = new Date(Date.UTC(Number(thgVi[3]), Number(thgVi[2]) - 1, Number(thgVi[1])));
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  const monthEn = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/i.exec(raw);
+  if (monthEn) {
+    const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    const date = new Date(Date.UTC(Number(monthEn[3]), months.indexOf(monthEn[1].slice(0, 3).toLowerCase()), Number(monthEn[2])));
     if (!Number.isNaN(date.getTime())) return date;
   }
   return null;
@@ -318,12 +364,15 @@ async function webSearch(query, limit = 5, { fresh = null } = {}) {
     }
   }
   try {
-    // `df` = lọc theo thời gian của DuckDuckGo: d=ngày, w=tuần, m=tháng. Không có nó thì kết quả
-    // trả về bài cũ và câu trả lời "không hề latest" (đúng phản hồi của người dùng).
+    // `df` = lọc theo thời gian của DuckDuckGo: d=ngày, w=tuần, m=tháng — CHỈ gắn khi câu hỏi cần độ
+    // mới (`needsFreshness`), câu thường vẫn hỏi như trước. Không có `df` thì kết quả trả về bài cũ
+    // và câu trả lời "không hề latest" (đúng phản hồi của người dùng).
+    // `kl=vn-vn` neo kết quả về Việt Nam: fBuddy phục vụ người Việt, để mặc định (không `kl`) thì
+    // hỏi "giá vàng hôm nay" rất dễ nhận bảng giá vàng thế giới thay vì giá SJC/DOJI trong nước.
     const filter = fresh ? `&df=${fresh}` : "";
-    const html = await getText(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}${filter}`);
+    const html = await getText(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=vn-vn${filter}`);
     const results = [];
-    const re = /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
+    const re = /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
     let match;
     while ((match = re.exec(html)) && results.length < limit) {
       let url = match[1];
@@ -331,12 +380,46 @@ async function webSearch(query, limit = 5, { fresh = null } = {}) {
       if (decoded) {
         try { url = decodeURIComponent(decoded[1]); } catch { /* giữ nguyên */ }
       }
-      results.push({ title: htmlToText(match[2]).slice(0, 160), url, snippet: htmlToText(match[3] ?? "").slice(0, 400) });
+      // Đoạn mô tả nằm SAU thẻ tiêu đề nên phải cắt riêng trong khoảng tới kết quả kế tiếp: bản cũ
+      // nhét `[\s\S]*?(?:class="result__snippet"…)?` vào cùng một regex, nhưng nhóm tuỳ chọn sau
+      // lượng tử lười luôn khớp RỖNG ⇒ snippet không bao giờ lấy được, nên kết quả DuckDuckGo không
+      // vào được danh sách phát hiện (`findings` chỉ nhận mục có snippet).
+      const raw = html.slice(re.lastIndex, re.lastIndex + 2000);
+      // Cắt tại kết quả KẾ TIẾP: không cắt thì ngày của kết quả sau bị gán cho kết quả này.
+      const nextAt = raw.search(/class="result__a"/);
+      const tail = nextAt > 0 ? raw.slice(0, nextAt) : raw;
+      const snippetHtml = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(tail)?.[1] ?? "";
+      const title = htmlToText(match[2]).slice(0, 160);
+      const snippet = htmlToText(snippetHtml).slice(0, 400);
+      results.push({ title, url, snippet, publishedAt: ddgPublishedAt(tail, `${title} ${snippet}`) });
     }
     return results;
   } catch {
     return [];
   }
+}
+
+/**
+ * NGÀY CÔNG BỐ của một kết quả DuckDuckGo — chỉ trả khi HTML thật sự có, không thì `null`.
+ *
+ * DuckDuckGo bọc ngày trong `<span class="result__timestamp">` cho MỘT PHẦN kết quả; phần lớn thì
+ * không có ngày nào. Câu hỏi cần độ mới mà gắn ngày chạy máy vào thì người dùng bị lừa về độ mới,
+ * nên nguyên tắc ở đây là: không đọc được ⇒ để null và để tầng trên tự nói "không rõ ngày".
+ */
+function ddgPublishedAt(block = "", text = "") {
+  const stamp = /class="result__timestamp"[^>]*>([\s\S]*?)</.exec(String(block))?.[1];
+  if (stamp) {
+    const date = extractDate(stamp);
+    if (date) return vnDate(date);
+  }
+  // Không có nhãn ngày của DuckDuckGo thì chỉ nhận ngày ghi ĐỦ ngày–tháng–năm trong tiêu đề/mô tả.
+  // Cố ý KHÔNG dùng các mẫu tương đối ("hôm nay", "3 giờ trước", "hôm qua"): câu hỏi kiểu "tin AI
+  // mới nhất hôm nay" hay bài viết tiêu đề "Giá vàng hôm nay" đều chứa đúng mấy chữ đó, gán ngày
+  // hôm nay cho chúng là bịa ngày công bố.
+  const structured = /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[/.-]\d{1,2}[/.-]\d{4}\b|\b\d{1,2}\s*thg\s*\d{1,2},?\s*\d{4}\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b/i.exec(String(text));
+  if (!structured) return null;
+  const date = extractDate(structured[0]);
+  return date ? vnDate(date) : null;
 }
 
 const STOPWORDS = new Set([
@@ -624,6 +707,27 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   // Vẫn thử bản không lọc để không mất nguồn tốt vì bộ lọc quá chặt, nhưng xếp sau.
   if (fresh) searches.push(...(await webSearch(queries[0], 4)));
 
+  /**
+   * BỔ SUNG BẰNG RSS khi tìm kiếm web không cho được TIN CÓ NGÀY.
+   *
+   * Vì sao: DuckDuckGo trả về trang web chung và phần lớn không có ngày công bố — hỏi "tin AI mới
+   * nhất hôm nay" mà câu trả lời không nói được tin ngày nào thì người dùng không kiểm chứng được
+   * độ mới. RSS của toà soạn (và Google News gộp nhiều báo) thì mục nào cũng có giờ đăng.
+   *
+   * Chỉ chạy khi (a) câu hỏi cần độ mới, (b) tìm kiếm web hoặc KHÔNG có kết quả, hoặc không kết
+   * quả nào có ngày, và (c) hồ sơ không phải loại CHỈ dùng nguồn chính thống — RSS ở đây là báo chí,
+   * không phải .gov.vn, nên với hồ sơ "chinh-phu" mọi tin lấy thêm đều bị lọc bỏ: tra làm gì cho chậm.
+   * Câu hỏi thường giữ nguyên luồng cũ, không tốn thêm thời gian.
+   */
+  let news = [];
+  if (fresh && !profile.strictOfficial && !searches.some((item) => item.publishedAt)) {
+    try {
+      news = await fetchNews({ question, window, limit: 8, timeoutMs: NEWS_TIMEOUT_MS });
+    } catch {
+      /* nguồn tin hỏng thì thôi, không làm hỏng lượt tra */
+    }
+  }
+
   const sources = [];
   if (profile.id === "bien-so") sources.push(...(await plateData()));
   // Wikipedia là bách khoa, KHÔNG phải nguồn tin — với câu hỏi cần độ mới thì để xuống cuối.
@@ -653,7 +757,13 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
     if (passages.length) findings.push({ title: source.title, url: source.url, passages });
   }
   for (const item of searches.filter((s) => s.snippet)) {
-    findings.push({ title: item.title, url: item.url, passages: [item.snippet] });
+    findings.push({ title: item.title, url: item.url, passages: [item.snippet], publishedAt: item.publishedAt ?? null });
+  }
+  // Tin từ RSS: tiêu đề + mô tả đã có sẵn ngày công bố thật, nên giữ `publishedAt` để tầng dưới nói
+  // rõ "tin ngày nào" thay vì đoán ngày từ chữ trong bài.
+  for (const item of news) {
+    const passages = [item.snippet, item.title].filter((text) => String(text ?? "").trim());
+    findings.push({ title: item.source ? `${item.title} (${item.source})` : item.title, url: item.url, passages, publishedAt: item.publishedAt });
   }
 
   // Thông tin chính phủ: BỎ mọi nguồn không chính thống. Thà nói "chưa tra được nguồn chính thống"
@@ -688,9 +798,12 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   // Gắn ngày cho từng phát hiện rồi xếp MỚI NHẤT LÊN ĐẦU khi câu hỏi cần độ mới.
   for (const finding of kept) {
     const haystack = `${finding.title} ${finding.passages.join(" ")}`;
-    const date = extractDate(haystack);
-    finding.detectedAt = date ? date.toISOString().slice(0, 10) : null;
-    finding.ageDays = date ? Math.round((Date.now() - date.getTime()) / 86400000) : null;
+    // Nguồn RSS cho NGÀY CÔNG BỐ thật ⇒ ưu tiên nó; chỉ khi nguồn không kèm ngày mới đoán ngày từ
+    // chữ trong bài (và đoán không ra thì để null — không bịa).
+    const date = finding.publishedAt ? new Date(finding.publishedAt) : extractDate(haystack);
+    const valid = date && !Number.isNaN(date.getTime()) ? date : null;
+    finding.detectedAt = valid ? vnDate(valid) : null;
+    finding.ageDays = valid ? Math.round((Date.now() - valid.getTime()) / 86400000) : null;
   }
   if (fresh) {
     kept.sort((a, b) => {
@@ -758,7 +871,12 @@ export function researchToModelText(result, { maxChars = 7000 } = {}) {
     lines.push("NGUỒN ĐÃ LỌC: chỉ giữ nguồn chính thống của nhà nước; trả lời phải nêu rõ tên văn bản/cổng thông tin.");
   }
   for (const finding of result.findings) {
-    const when = finding.ageDays === null ? "không rõ ngày" : finding.ageDays === 0 ? "hôm nay" : `${finding.ageDays} ngày trước`;
+    // Nói NGÀY CỤ THỂ, không chỉ "N ngày trước": người dùng cần đối chiếu được tin với báo gốc, và
+    // model cần con số ngày để không trình bày tin cũ như tin hôm nay.
+    const when =
+      finding.detectedAt
+        ? `${finding.detectedAt}${finding.ageDays === 0 ? " (hôm nay)" : `, ${finding.ageDays} ngày trước`}`
+        : "không rõ ngày";
     lines.push(`• Nguồn (${when}): ${finding.title} — ${finding.url}`);
     for (const passage of finding.passages) lines.push(`   “${passage}”`);
   }
