@@ -83,6 +83,12 @@ app.get(/^\/(?!api\/).*/, (req, res, next) => {
       .send("FlowGpt API đang chạy. Web chưa build (chạy: npm run build).\n");
   }
   if (req.path.startsWith("/api/")) return next();
+  // Shell SPA KHONG duoc cache: sau moi lan deploy, index.html cu van tro toi bundle CU
+  // (asset co hash nam o edge gan nhu vinh vien), nen khach mo lai tab la thay GIAO DIEN CU.
+  // Dung ca 20/09/2026: login "nhay" giua 2 ban (FlowGpt cu 1 card giua trang vs fBuddy moi
+  // slogan trai + box dang nhap phai).
+  res.setHeader("Cache-Control", "no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   return res.sendFile(path.join(webDist, "index.html"));
 });
 
