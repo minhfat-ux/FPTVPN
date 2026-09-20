@@ -1044,12 +1044,19 @@ a:hover { text-decoration: underline; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
   border-radius: 10px;
   border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
   background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.apps-promo-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 .apps-promo-summary {
   line-height: 1.45;

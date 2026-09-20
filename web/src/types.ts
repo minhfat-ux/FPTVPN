@@ -648,6 +648,8 @@ export interface PromoApp {
   icon?: string;
   /** Màu nhấn cho ô icon. */
   accent?: string | null;
+  /** Ảnh icon thật của app (tự host), ưu tiên hơn icon vector. */
+  iconUrl?: string | null;
   url: string | null;
   links: Record<string, string>;
 }

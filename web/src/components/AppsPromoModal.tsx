@@ -45,6 +45,8 @@ export function AppsPromoGate() {
   const { user, ready } = useAuth();
   const [apps, setApps] = useState<PromoApp[]>([]);
   const [open, setOpen] = useState(false);
+  /** Ảnh icon nào tải lỗi — để rơi về icon vector thay vì ô trống. */
+  const [brokenIcons, setBrokenIcons] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     // Chưa đăng nhập (hoặc chưa biết trạng thái) thì KHÔNG tải, KHÔNG hiện.
@@ -104,7 +106,17 @@ export function AppsPromoGate() {
                     className="apps-promo-icon"
                     style={app.accent ? { color: app.accent, background: `${app.accent}22`, borderColor: `${app.accent}55` } : undefined}
                   >
-                    {hubIcon(app.icon ?? "sparkles", 18)}
+                    {/* Ảnh icon thật của app; ảnh lỗi thì rơi về icon vector cùng bộ với chợ. */}
+                    {app.iconUrl && !brokenIcons[app.id] ? (
+                      <img
+                        src={app.iconUrl}
+                        alt=""
+                        loading="lazy"
+                        onError={() => setBrokenIcons((current) => ({ ...current, [app.id]: true }))}
+                      />
+                    ) : (
+                      hubIcon(app.icon ?? "sparkles", 18)
+                    )}
                   </span>
                   <span className="bold">{app.name}</span>
                 </span>
