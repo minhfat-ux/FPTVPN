@@ -22,6 +22,15 @@ export interface ComposerProps {
   uploading: number;
   onFiles: (files: File[]) => void;
   skills: SkillDescriptor[];
+  /**
+   * Toàn bộ danh mục kỹ năng (gồm cả kỹ năng chưa ghim vào danh sách nhanh).
+   *
+   * Vì sao cần: người dùng có thể chọn một kỹ năng KHÔNG nằm trong danh sách nhanh
+   * (chọn từ Chợ kỹ năng, hoặc danh sách nhanh vừa đổi ở máy khác). Khi đó việc tra
+   * tên chỉ dựa vào `skills` sẽ trượt và giao diện in ra chính cái **id** (ví dụ
+   * "excel", "hub_…") thay vì tên kỹ năng — đúng lỗi chủ dự án báo 20/09/2026.
+   */
+  catalog?: SkillDescriptor[];
   /** Skill ids are plain strings (the catalogue is user-managed). */
   skill: string;
   onSkill: (skill: string) => void;
@@ -70,6 +79,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     uploading,
     onFiles,
     skills,
+    catalog,
     skill,
     onSkill,
     onOpenSkillPicker,
@@ -139,7 +149,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     onFiles(files);
   };
 
-  const activeSkill = skills.find((item) => item.id === skill);
+  // Tra tên kỹ năng trên HỢP của danh sách nhanh và toàn bộ danh mục ⇒ không bao giờ
+  // hiển thị id trần khi kỹ năng thật sự tồn tại trong hệ thống.
+  const labelSkills = useMemo(() => {
+    const seen = new Set(skills.map((item) => item.id));
+    return [...skills, ...(catalog ?? []).filter((item) => item && !seen.has(item.id))];
+  }, [skills, catalog]);
+  const activeSkill = labelSkills.find((item) => item.id === skill);
   // Never print the vendor's model id at the user — show the fBuddy label.
   const selectedModelLabel = useMemo(() => {
     const model = modelValue.split("::")[1] ?? "";
@@ -267,6 +283,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           <div className="grow">
             <SkillSelect
               skills={skills.length ? skills : fallbackSkills(t).filter((item) => item.id !== "chat")}
+              labelSkills={labelSkills}
               value={skill}
               onChange={onSkill}
               onOpenPicker={onOpenSkillPicker}

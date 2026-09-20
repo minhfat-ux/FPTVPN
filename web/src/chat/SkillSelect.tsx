@@ -37,12 +37,19 @@ interface Placement {
 
 export function SkillSelect({
   skills,
+  labelSkills,
   value,
   onChange,
   onOpenPicker,
   disabled = false,
 }: {
   skills: SkillDescriptor[];
+  /**
+   * Danh sách dùng để TRA TÊN (thường rộng hơn `skills`: gồm cả danh mục đầy đủ).
+   * Menu vẫn chỉ liệt kê `skills`; chỉ phần tra tên mới dùng danh sách này, nhờ vậy
+   * kỹ năng đã chọn mà không nằm trong danh sách nhanh vẫn hiện đúng tên.
+   */
+  labelSkills?: SkillDescriptor[];
   /** Current skill id; "auto" means "let fBuddy decide". */
   value: string;
   onChange: (skillId: string) => void;
@@ -111,8 +118,9 @@ export function SkillSelect({
     };
   }, [open, measure]);
 
-  const current = value === "auto" ? null : skills.find((skill) => skill.id === value) ?? null;
-  const label = value === "auto" ? t("chat.skill.auto") : current?.label ?? skillLabel(skills, value, t("chat.skill.auto"));
+  const lookup = labelSkills && labelSkills.length ? labelSkills : skills;
+  const current = value === "auto" ? null : lookup.find((skill) => skill.id === value) ?? null;
+  const label = value === "auto" ? t("chat.skill.auto") : current?.label ?? skillLabel(lookup, value, t("chat.skill.auto"));
 
   const pick = (skillId: string) => {
     onChange(skillId);

@@ -332,6 +332,7 @@ export function ChatPage({
         uploading={uploading}
         onFiles={(files) => void addFiles(files)}
         skills={skills}
+        catalog={skillCatalog}
         skill={skill}
         onSkill={setSkill}
         onOpenSkillPicker={() => setSkillPickerOpen(true)}
