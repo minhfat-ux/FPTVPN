@@ -1,0 +1,389 @@
+/* ============================================================================
+   fBuddy — popup quảng cáo ứng dụng (VPNFlow + MeetFlow AI)
+   Nạp từ /promo.js. Không phụ thuộc React/build, hiện cho cả khách chưa đăng nhập.
+
+   Ghi chú thiết kế: chữ trên card luôn nằm trên nền navy đậm của thương hiệu nên
+   tương phản không phụ thuộc theme sáng/tối của trang.
+   ========================================================================== */
+
+/*
+ * FONT: file này phải tự khai báo font, KHÔNG inherit từ trang.
+ * Popup hiện trước khi bundle React chạy, nên CSS của app (styles.css) có thể chưa
+ * tới — máy Windows/iOS khi đó rơi về font mặc định (Times) và chữ trông "lỗi font".
+ * Stack dưới đây có đủ dấu tiếng Việt trên mọi hệ điều hành; chỉ dùng các mức
+ * weight tĩnh (400/600/700) để không bị giả-bold khác nhau tuỳ máy.
+ */
+.fg-promo,
+.fg-promo button,
+.fg-promo input,
+.fg-promo a,
+.fg-promo span,
+.fg-promo div,
+.fg-promo p,
+.fg-promo h2 {
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
+    "Noto Sans", Roboto, Arial, "Liberation Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.fg-promo-backdrop {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.fg-promo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: rgba(3, 10, 20, 0.62);
+  -webkit-backdrop-filter: blur(8px) saturate(1.15);
+  backdrop-filter: blur(8px) saturate(1.15);
+  animation: fg-promo-fade 0.28s ease-out both;
+}
+
+.fg-promo {
+  position: relative;
+  width: min(720px, 100%);
+  margin: auto 0;
+  max-height: min(92vh, 780px);
+  max-height: min(92dvh, 780px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 22px;
+  padding: 22px;
+  color: #eaf2ff;
+  background:
+    radial-gradient(130% 120% at 0% 0%, #14406c 0%, #0a1f3b 55%, #071628 100%);
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  animation: fg-promo-rise 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Viền gradient + quầng sáng thương hiệu */
+.fg-promo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.fg-promo::after {
+  content: "";
+  position: absolute;
+  top: -70px;
+  left: 12%;
+  width: 60%;
+  height: 150px;
+  background: radial-gradient(closest-side, rgba(51, 199, 115, 0.4), transparent);
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+.fg-promo__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #dce8fb;
+  cursor: pointer;
+  touch-action: manipulation;
+  z-index: 3;
+  transition: transform 0.22s ease, background 0.22s ease, color 0.22s ease;
+}
+
+.fg-promo__close:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  transform: rotate(90deg);
+}
+
+.fg-promo__head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding-right: 34px;
+}
+
+.fg-promo__mark {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 14px rgba(34, 211, 238, 0.28));
+}
+
+.fg-promo__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7fe6c0;
+  font-weight: 700;
+}
+
+.fg-promo__title {
+  margin: 4px 0 6px;
+  font-size: clamp(19px, 3.3vw, 26px);
+  line-height: 1.22;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.fg-promo__sub {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: rgba(234, 242, 255, 0.74);
+}
+
+.fg-promo__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.fg-prod {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+}
+
+.fg-prod:hover {
+  transform: translateY(-2px);
+  border-color: rgba(51, 199, 115, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fg-prod__top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.fg-prod__icon {
+  width: 54px;
+  height: 54px;
+  flex: none;
+  border-radius: 14px;
+  object-fit: cover;
+  background: linear-gradient(135deg, rgba(51, 199, 115, 0.35), rgba(34, 211, 238, 0.28));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.fg-prod__name {
+  font-size: 16.5px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.fg-prod__tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #06202a;
+  background: linear-gradient(135deg, #33c773, #22d3ee);
+}
+
+.fg-prod__pitch {
+  margin: 0;
+  font-size: 12.8px;
+  line-height: 1.5;
+  color: rgba(234, 242, 255, 0.72);
+  flex: 1 1 auto;
+}
+
+.fg-prod__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.fg-btn--primary {
+  background: linear-gradient(135deg, #33c773, #22d3ee);
+  color: #05202a;
+  box-shadow: 0 10px 24px -10px rgba(34, 211, 238, 0.75);
+}
+
+.fg-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px -10px rgba(51, 199, 115, 0.8);
+}
+
+.fg-btn--ghost {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #e8f1ff;
+}
+
+.fg-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.fg-btn__os {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.fg-prod__buy {
+  font-size: 12.5px;
+  color: #7fe6c0;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(127, 230, 192, 0.45);
+  width: fit-content;
+}
+
+.fg-prod__buy:hover {
+  color: #a7f3d0;
+}
+
+.fg-promo__foot {
+  position: sticky;
+  bottom: -22px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* Kéo full chiều ngang card và dính đáy, để "Để sau / Không hiện lại" luôn bấm được
+     kể cả trên điện thoại khi nội dung phải cuộn. */
+  margin: 18px -22px -22px;
+  padding: 13px 22px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(to top, #0a1f3b 74%, rgba(10, 31, 59, 0.86));
+}
+
+.fg-promo__note {
+  font-size: 11.5px;
+  color: rgba(234, 242, 255, 0.5);
+}
+
+.fg-promo__links {
+  display: flex;
+  gap: 14px;
+}
+
+.fg-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: rgba(234, 242, 255, 0.72);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.fg-link:hover {
+  color: #fff;
+}
+
+.fg-promo :focus-visible {
+  outline: 2px solid #67e8f9;
+  outline-offset: 2px;
+}
+
+@keyframes fg-promo-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fg-promo-rise {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 660px) {
+  .fg-promo-backdrop {
+    padding: 12px;
+  }
+
+  .fg-promo {
+    padding: 18px;
+    border-radius: 18px;
+    max-height: 92vh;
+    max-height: 92dvh;
+  }
+
+  .fg-promo__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fg-prod__icon {
+    width: 46px;
+    height: 46px;
+  }
+
+  .fg-promo__foot {
+    bottom: -18px;
+    margin: 16px -18px -18px;
+    padding: 12px 18px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fg-promo-backdrop,
+  .fg-promo {
+    animation: none;
+  }
+
+  .fg-prod,
+  .fg-btn,
+  .fg-promo__close {
+    transition: none;
+  }
+}
