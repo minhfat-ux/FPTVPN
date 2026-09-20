@@ -109,6 +109,8 @@ export async function saveBuffer({
   });
   const ext = path.extname(String(name ?? "")).slice(0, 12);
   const storedName = `${resource.id}${ext}`;
+  // Không giả định thư mục đã có: lần chạy đầu trên máy mới (hoặc trong test) nó chưa tồn tại.
+  await fs.mkdir(config.filesDir, { recursive: true });
   await fs.writeFile(path.join(config.filesDir, storedName), buffer);
   const { update } = await import("./db.js");
   return update("files", resource.id, { stored_name: storedName });

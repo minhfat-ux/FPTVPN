@@ -53,6 +53,8 @@ export const chat: Dict = {
   "chat.skill.pptHint": "Tạo slide từ yêu cầu",
   "chat.skill.excel": "Excel",
   "chat.skill.excelHint": "Tạo bảng tính",
+  "chat.skill.word": "Làm Word",
+  "chat.skill.wordHint": "Tạo file .docx (báo cáo, công văn, biên bản, hợp đồng)",
   "chat.skill.data": "Dữ liệu",
   "chat.skill.dataHint": "Phân tích dữ liệu và vẽ biểu đồ",
 
@@ -110,6 +112,7 @@ export const chat: Dict = {
   // ---- ToolCard
   "chat.tool.generatePptx": "Tạo PowerPoint",
   "chat.tool.generateXlsx": "Tạo Excel",
+  "chat.tool.generateDocx": "Tạo tài liệu Word",
   "chat.tool.analyzeData": "Phân tích dữ liệu",
   "chat.tool.editImage": "Sửa ảnh bằng AI",
   "chat.tool.listFiles": "Liệt kê tệp",

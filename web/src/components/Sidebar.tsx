@@ -3,6 +3,7 @@ import {
   Archive,
   Brain,
   FileSpreadsheet,
+  FileText,
   Image as ImageIcon,
   MessageSquarePlus,
   Moon,
@@ -35,6 +36,7 @@ const SKILL_ICONS: Record<SkillId, JSX.Element> = {
   image: <ImageIcon size={15} />,
   ppt: <Presentation size={15} />,
   excel: <FileSpreadsheet size={15} />,
+  word: <FileText size={15} />,
   data: <Table2 size={15} />,
 };
 

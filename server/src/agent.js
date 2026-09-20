@@ -11,7 +11,7 @@ import { buildMemoryBlock, learnSelfReference } from "./memory.js";
 import { isConfirmed, planChoices } from "./skills/confirm.js";
 import { excelChoices } from "./skills/vision.js";
 import { hubSkillForUser, isSelectableSkill } from "./skills/hub.js";
-import { listProviderRows, nextUsableProvider, readAppSettings, resolveProviderForChat, resolveVisionTarget } from "./settings.js";
+import { listProviderRows, nextUsableProvider, readAppSettings, resolveFallbackTarget, resolveProviderForChat, resolveVisionTarget } from "./settings.js";
 import {
   assertCanChat,
   costForModel,
@@ -47,7 +47,21 @@ const MAX_TOOL_ITERATIONS_CAP = 12;
  * with an outline in prose and never calls `generate_pptx`/`generate_xlsx`, which
  * looks exactly like "làm Excel không ra file".
  */
-const FILE_SKILLS = new Set(["ppt", "excel", "data"]);
+const FILE_SKILLS = new Set(["ppt", "excel", "data", "word"]);
+/** Công cụ chỉ hữu ích khi lượt này thật sự tạo tệp / xử lý ảnh. */
+const FILE_TOOL_NAMES = new Set([
+  "generate_pptx",
+  "generate_xlsx",
+  "generate_docx",
+  "analyze_data",
+  "xlsx_from_image",
+  "edit_image",
+  "open_image_studio",
+  "read_image",
+]);
+const IMAGE_TOOL_NAMES = new Set(["edit_image", "open_image_studio", "read_image", "xlsx_from_image"]);
+/** Nhắc tới ảnh/hình ⇒ mở lại nhóm công cụ ảnh cho lượt đó. */
+const IMAGE_INTENT = /(ảnh|hình|photo|image|ocr|chữ trong ảnh|vẽ|logo|banner)/i;
 const WANTS_FILE =
   /(tạo|làm|xuất|viết|soạn|lập|đưa|chuyển|thành|ra|file|tệp|bảng|biểu|slide|excel|ppt|word|pdf|phân tích|thống kê|tính|dự toán)/i;
 
@@ -71,6 +85,12 @@ const SKILL_INSTRUCTIONS = {
     "Dữ liệu phải là số liệu thật (không để ô trống kiểu '...'), tên cột rõ ràng, bật `totalsRow` cho cột số khi phù hợp.",
     "Nếu dữ liệu nằm trong ẢNH (ảnh chụp bảng, hoá đơn, sổ sách): dùng `xlsx_from_image` với id ảnh — công cụ này đọc ảnh rồi tạo tệp bằng đúng số liệu đọc được. KHÔNG tự gõ lại bảng và KHÔNG đoán số liệu.",
     "Nếu người dùng chưa nói rõ cần những cột/dữ liệu gì, hỏi 1–2 câu kèm lựa chọn trước khi tạo.",
+  ].join(" "),
+  word: [
+    "Người dùng đang ở chế độ Làm Word.",
+    "QUY TẮC BẮT BUỘC: nêu DÀN Ý tài liệu trước (các mục chính, có bảng hay không, lấy nội dung từ đâu) rồi chờ người dùng xác nhận — chỉ gọi `generate_docx` để tạo tệp sau khi họ đồng ý (nút chọn đã có trên giao diện).",
+    "Cấu trúc: mở đầu bằng mục 1 (bối cảnh/mục đích), thân bài chia mục rõ ràng, kết bằng đề xuất/kết luận. Câu văn hành chính, gọn.",
+    "Số liệu trong bảng phải là số thật lấy từ dữ liệu người dùng cung cấp — KHÔNG bịa. Thiếu thông tin thì hỏi 1–2 câu kèm lựa chọn trước.",
   ].join(" "),
   data: [
     "Người dùng đang ở chế độ Phân tích dữ liệu.",
@@ -278,7 +298,7 @@ export function buildSystemPrompt({ skill, files, settings, hubSkill = null, use
     SKILL_INSTRUCTIONS[skill] ?? "",
     planFirst
       ? "LƯỢT NÀY LÀ LƯỢT LẬP KẾ HOẠCH: hãy mô tả NGẮN GỌN kế hoạch sẽ làm (có gì, mấy phần/trang/sheet, cột nào, lấy dữ liệu từ đâu). " +
-        "KHÔNG gọi công cụ tạo tệp (generate_pptx/generate_xlsx/xlsx_from_image) trong lượt này — người dùng sẽ bấm nút xác nhận ở dưới. " +
+        "KHÔNG gọi công cụ tạo tệp (generate_pptx/generate_xlsx/generate_docx/xlsx_from_image) trong lượt này — người dùng sẽ bấm nút xác nhận ở dưới. " +
         "Chỉ gọi `list_files`/`read_image` nếu cần xem dữ liệu đã có để lập kế hoạch chính xác."
       : "",
     buildCreditKnowledge(user),
@@ -429,7 +449,9 @@ export async function prepareTurn({ user, body, channel }) {
     ? null
     : skill === "ppt"
       ? "generate_pptx"
-      : skill === "data"
+      : skill === "word"
+        ? "generate_docx"
+        : skill === "data"
         ? "analyze_data"
         : wantsImage
           ? "xlsx_from_image"
@@ -505,6 +527,11 @@ export function isProviderModelError(error) {
 function switchToFallbackProvider({ failed, attemptedIds }) {
   const settings = readAppSettings();
   const skipped = new Set(attemptedIds);
+  // Ưu tiên cặp MODEL DỰ PHÒNG đã cấu hình (Cài đặt → Hệ thống) trước khi tự chọn nhà cung cấp khác.
+  const configured = resolveFallbackTarget();
+  if (configured && configured.provider.id !== failed.id && !skipped.has(configured.provider.id)) {
+    return { provider: configured.provider, model: configured.model, configured: true };
+  }
   for (const row of listProviderRows()) {
     if (Number(row.enabled) !== 1 || skipped.has(row.id) || row.id === failed.id) continue;
     const candidate = nextUsableProvider({ excludeId: null, providerId: row.id });
@@ -526,10 +553,19 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   const attemptedProviderIds = [provider.id];
 
   const builtin = toolDefinitionsForSkill(skill);
+  // Prompt economy: gửi CẢ bộ schema công cụ tốn ~5,4k ký tự (~1.5k token) mỗi lượt ⇒ model
+  // phải đọc hết mới trả token đầu (người dùng thấy chậm). Chỉ gửi công cụ tạo tệp/ảnh khi lượt
+  // này THẬT SỰ cần. Công cụ bị ẩn vẫn chạy được nếu model gọi tên (toolIndex dùng danh sách đầy đủ).
+  const fileIntent = FILE_SKILLS.has(skill) || Boolean(turn.forceToolName) || WANTS_FILE.test(turn.content ?? "");
+  const imageIntent = fileIntent || IMAGE_INTENT.test(turn.content ?? "") ||
+    files.some((file) => file.kind === "image" || String(file.mime ?? "").startsWith("image/"));
+  const toolWanted = (name) =>
+    !FILE_TOOL_NAMES.has(name) || (IMAGE_TOOL_NAMES.has(name) ? imageIntent : fileIntent);
+  const narrowed = builtin.filter((tool) => toolWanted(tool.name));
   // A hub skill may narrow the toolset to the tools it actually needs.
   const offered = turn.hubSkill?.tools?.length
-    ? builtin.filter((tool) => turn.hubSkill.tools.includes(tool.name) || tool.name === "list_files")
-    : builtin;
+    ? narrowed.filter((tool) => turn.hubSkill.tools.includes(tool.name) || tool.name === "list_files")
+    : narrowed;
   const modelTools = offered.map(toModelTool);
   // Resolution uses the FULL built-in list, not just the offered subset: a real
   // tool name must always execute, and an unknown name gets a useful message.
@@ -681,7 +717,9 @@ export async function runChatTurn({ user, turn, channel, signal }) {
         channel.send("notice", {
           message:
             `Nhà cung cấp "${provider.name}" không dùng được (${truncate(String(streamError.message ?? ""), 160)}). ` +
-            `Lượt này chuyển sang "${fallback.provider.name}".`,
+            (fallback.configured
+              ? `Lượt này chuyển sang model dự phòng: "${fallback.provider.name} · ${fallback.model}".`
+              : `Lượt này chuyển sang "${fallback.provider.name}".`),
         });
         provider = fallback.provider;
         model = fallback.model;
@@ -833,7 +871,10 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     ? skill === "excel" && planImage
       ? // A photo in the request: the useful first question is *what to take from it*.
         excelChoices(planImage.id, planImage.name)
-      : planChoices({ kind: skill === "ppt" ? "pptx" : "xlsx", detail: skill === "ppt" ? "theo dàn ý trên" : "theo kế hoạch trên" })
+      : planChoices({
+          kind: skill === "ppt" ? "pptx" : skill === "word" ? "docx" : "xlsx",
+          detail: skill === "ppt" ? "theo dàn ý trên" : "theo kế hoạch trên",
+        })
     : [];
 
   const assistantMessage = createMessage({

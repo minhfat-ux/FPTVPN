@@ -49,7 +49,9 @@ export function planPayload({ kind, title, detail, plan = [], choices, notes = [
     artifacts: [],
     choices,
     modelText: [
-      `CHƯA tạo tệp. Kế hoạch cho ${kind === "pptx" ? "PowerPoint" : kind === "xlsx" ? "Excel" : "kết quả"}: ${title}`,
+      `CHƯA tạo tệp. Kế hoạch cho ${
+        kind === "pptx" ? "PowerPoint" : kind === "xlsx" ? "Excel" : kind === "docx" ? "tài liệu Word" : "kết quả"
+      }: ${title}`,
       plan.length ? `Kế hoạch:\n${plan.map((line, index) => `  ${index + 1}. ${line}`).join("\n")}` : "",
       notes.length ? `Lưu ý về dữ liệu:\n${notes.map((line) => `  - ${line}`).join("\n")}` : "",
       "Hãy trình bày kế hoạch này NGẮN GỌN cho người dùng, nói rõ lấy dữ liệu từ đâu, rồi hỏi xác nhận — giao diện đã hiện nút cho họ bấm.",
@@ -62,7 +64,7 @@ export function planPayload({ kind, title, detail, plan = [], choices, notes = [
 
 /** Buttons for a plan: create · compact · edit. */
 export function planChoices({ kind = "file", detail = "" } = {}) {
-  const noun = kind === "pptx" ? "slide" : kind === "xlsx" ? "bảng" : "kết quả";
+  const noun = kind === "pptx" ? "slide" : kind === "xlsx" ? "bảng" : kind === "docx" ? "mục" : "kết quả";
   return [
     {
       id: "create",

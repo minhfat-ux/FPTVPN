@@ -26,7 +26,7 @@ export interface AuthSession {
   current: boolean;
 }
 
-export type SkillId = "auto" | "chat" | "image" | "ppt" | "excel" | "data";
+export type SkillId = "auto" | "chat" | "image" | "ppt" | "excel" | "word" | "data";
 
 export interface SkillDescriptor {
   id: Exclude<SkillId, "auto"> | string;
@@ -200,6 +200,9 @@ export interface QualifiedTool extends McpTool {
 export interface AppSettings {
   systemPrompt: string;
   defaultProviderId: string | null;
+  /** Model dự phòng cho model mặc định (dùng khi model chính lỗi). */
+  fallbackProviderId: string | null;
+  fallbackModel: string | null;
   defaultModel: string | null;
   defaultSkill: SkillId;
   maxToolIterations: number;
@@ -633,4 +636,14 @@ export interface StreamingTurn {
   done: boolean;
   providerName?: string;
   model?: string;
+}
+
+/** App khác trong hệ sinh thái — dùng cho popup quảng cáo sau khi đăng nhập. */
+export interface PromoApp {
+  id: string;
+  name: string;
+  kind: string;
+  summary: string;
+  url: string | null;
+  links: Record<string, string>;
 }

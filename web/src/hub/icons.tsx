@@ -26,6 +26,7 @@ export const HUB_ICON_NAMES = [
   "image",
   "ppt",
   "excel",
+  "word",
   "data",
   "mcp",
   "document",
@@ -51,6 +52,8 @@ export function hubIcon(icon: string | null | undefined, size = 16): ReactElemen
       return <Presentation size={size} />;
     case "excel":
       return <FileSpreadsheet size={size} />;
+    case "word":
+      return <FileText size={size} />;
     case "data":
       return <Table2 size={size} />;
     case "mcp":

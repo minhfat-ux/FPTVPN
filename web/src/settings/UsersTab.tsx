@@ -8,7 +8,17 @@ import { useI18n } from "../i18n";
 import { CreditRequestsCard } from "./CreditRequestsCard";
 import type { Role, User } from "../types";
 
-type AdminUser = User & { conversationCount: number; creditBalance: number };
+type AdminUser = User & {
+  conversationCount: number;
+  creditBalance: number;
+  /** Tổng credit đã tiêu thụ (burn). */
+  creditBurned: number;
+  creditGranted: number;
+  creditEntries: number;
+  creditLastAt: string | null;
+};
+
+type SortKey = "burned" | "balance" | "created";
 
 const EMPTY_FORM = { email: "", password: "", name: "", role: "user" as Role };
 const DEFAULT_GRANT = "100000";
@@ -29,6 +39,8 @@ export function UsersTab() {
   const [grantFor, setGrantFor] = useState<AdminUser | null>(null);
   const [grantForm, setGrantForm] = useState({ amount: DEFAULT_GRANT, note: "" });
   const [granting, setGranting] = useState(false);
+  // Chủ dự án 2026-09-20: cần thấy ai burn nhiều nhất ⇒ mặc định sắp theo burn giảm dần.
+  const [sort, setSort] = useState<SortKey>("burned");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,6 +126,13 @@ export function UsersTab() {
     }
   };
 
+  const sorted = [...users].sort((a, b) => {
+    if (sort === "burned") return b.creditBurned - a.creditBurned;
+    if (sort === "balance") return b.creditBalance - a.creditBalance;
+    return String(a.createdAt).localeCompare(String(b.createdAt));
+  });
+  const burnedTotal = users.reduce((sum, item) => sum + item.creditBurned, 0);
+
   return (
     <div className="stack gap-3">
       <CreditRequestsCard />
@@ -132,6 +151,11 @@ export function UsersTab() {
       </div>
 
       <div className="hint">{t("settings.users.hint")}</div>
+      {!loading && users.length > 0 && (
+        <div className="hint">
+          {t("settings.users.burnedSummary", { total: n(burnedTotal), users: n(users.length) })}
+        </div>
+      )}
 
       {loading && <Spinner label={t("settings.users.loading")} />}
 
@@ -152,13 +176,27 @@ export function UsersTab() {
                 <th>{t("settings.users.colName")}</th>
                 <th>{t("settings.users.colRole")}</th>
                 <th>{t("settings.users.colConversations")}</th>
-                <th>{t("settings.users.colCredit")}</th>
+                <th>
+                  <button
+                    className="th-sort"
+                    type="button"
+                    onClick={() => setSort("burned")}
+                    title={t("settings.users.burnedHint")}
+                  >
+                    {t("settings.users.colBurned")} {sort === "burned" ? "↓" : ""}
+                  </button>
+                </th>
+                <th>
+                  <button className="th-sort" type="button" onClick={() => setSort("balance")}>
+                    {t("settings.users.colCredit")} {sort === "balance" ? "↓" : ""}
+                  </button>
+                </th>
                 <th>{t("settings.users.colCreatedAt")}</th>
                 <th aria-label={t("settings.users.colActions")} />
               </tr>
             </thead>
             <tbody>
-              {users.map((item) => {
+              {sorted.map((item) => {
                 const self = item.id === currentUser?.id;
                 return (
                   <tr key={item.id}>
@@ -173,6 +211,12 @@ export function UsersTab() {
                       </span>
                     </td>
                     <td>{n(item.conversationCount)}</td>
+                    <td className="nowrap bold" title={t("settings.users.burnedTitle", {
+                      granted: n(item.creditGranted),
+                      entries: n(item.creditEntries),
+                    })}>
+                      {n(item.creditBurned)}
+                    </td>
                     <td className="nowrap">
                       <span className={item.creditBalance <= 0 ? "credit-danger bold" : undefined}>
                         {n(item.creditBalance)}

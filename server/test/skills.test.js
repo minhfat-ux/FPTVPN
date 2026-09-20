@@ -28,7 +28,7 @@ test("the catalogue marks what works today and what the marketplace will add", (
   const coming = catalog.filter((s) => s.state === "coming_soon");
   assert.deepEqual(
     ready.map((s) => s.id),
-    ["chat", "image", "ppt", "excel", "data"],
+    ["chat", "image", "ppt", "excel", "word", "data"],
   );
   assert.ok(coming.length >= 3, "cần vài mục 'Sắp có' để chợ kỹ năng có nội dung");
   assert.ok(coming.every((s) => s.builtin === false));
@@ -46,10 +46,10 @@ test("isKnownSkill accepts built-ins plus auto and rejects the rest", () => {
 
 test("a user with no rows gets everything ready, in catalogue order", () => {
   const { user } = userFor("skills-default@fbuddy.test");
-  assert.deepEqual(installed.listInstalledSkillIds(user.id), ["chat", "image", "ppt", "excel", "data"]);
+  assert.deepEqual(installed.listInstalledSkillIds(user.id), ["chat", "image", "ppt", "excel", "word", "data"]);
   assert.deepEqual(
     installed.listInstalledSkills(user.id).map((s) => s.label),
-    ["Trò chuyện", "Sửa ảnh", "Làm PPT", "Làm Excel", "Phân tích dữ liệu"],
+    ["Trò chuyện", "Sửa ảnh", "Làm PPT", "Làm Excel", "Làm Word", "Phân tích dữ liệu"],
   );
 });
 
@@ -85,8 +85,8 @@ test("coming-soon skills cannot be installed yet, with a clear reason", () => {
 test("install/uninstall behave like the marketplace buttons will", () => {
   const { user } = userFor("skills-toggle@fbuddy.test");
   installed.resetUserSkills(user.id);
-  assert.deepEqual(installed.installSkill(user.id, "data"), ["chat", "image", "ppt", "excel", "data"]);
-  assert.deepEqual(installed.uninstallSkill(user.id, "image"), ["chat", "ppt", "excel", "data"]);
+  assert.deepEqual(installed.installSkill(user.id, "data"), ["chat", "image", "ppt", "excel", "word", "data"]);
+  assert.deepEqual(installed.uninstallSkill(user.id, "image"), ["chat", "ppt", "excel", "word", "data"]);
   // Removing the last one is refused — the dropdown always needs a selection.
   installed.setInstalledSkills(user.id, ["ppt"]);
   assert.throws(() => installed.uninstallSkill(user.id, "ppt"), /ít nhất một kỹ năng/);
@@ -96,7 +96,7 @@ test("install/uninstall behave like the marketplace buttons will", () => {
 test("GET /api/skills returns the user's list plus the catalogue", async () => {
   const { token } = userFor("skills-api@fbuddy.test");
   const result = await api("GET", "/skills", undefined, token);
-  assert.deepEqual(result.installed, ["chat", "image", "ppt", "excel", "data"]);
+  assert.deepEqual(result.installed, ["chat", "image", "ppt", "excel", "word", "data"]);
   assert.deepEqual(result.items.map((s) => s.id), result.installed);
   assert.equal(result.maxSelectable, 10);
   assert.ok(result.catalog.some((s) => s.state === "coming_soon"));
@@ -126,7 +126,7 @@ test("skill choices are per user", async () => {
   const b = userFor("skills-b@fbuddy.test");
   await api("PUT", "/skills/installed", { ids: ["excel"] }, a.token);
   const other = await api("GET", "/skills", undefined, b.token);
-  assert.deepEqual(other.installed, ["chat", "image", "ppt", "excel", "data"]);
+  assert.deepEqual(other.installed, ["chat", "image", "ppt", "excel", "word", "data"]);
 });
 
 test("the chat route accepts a catalogue skill and falls back for an unknown one", async () => {
@@ -156,7 +156,7 @@ test("the chat route accepts a catalogue skill and falls back for an unknown one
   const unknown = await run("khong-ton-tai");
   assert.ok(unknown.start, "lượt chat vẫn phải chạy");
   assert.ok(
-    ["auto", "chat", "image", "ppt", "excel", "data"].includes(unknown.start.skill),
+    ["auto", "chat", "image", "ppt", "excel", "word", "data"].includes(unknown.start.skill),
     `skill dự phòng không hợp lệ: ${unknown.start.skill}`,
   );
 });

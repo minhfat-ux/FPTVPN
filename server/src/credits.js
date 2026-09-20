@@ -207,6 +207,41 @@ export function assertCanChat(user) {
 }
 
 /** Public payload for the UI (balance, spend history, pricing). */
+/**
+ * Tổng credit của MỌI người dùng trong MỘT truy vấn (console cần cột "đã burn" cho từng dòng;
+ * gọi getTotals theo từng user là N+1 truy vấn).
+ */
+export function getTotalsForAllUsers() {
+  const rows = db
+    .prepare(
+      `SELECT user_id,
+              COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS granted,
+              COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END), 0) AS burned,
+              COUNT(*) AS entries,
+              MAX(created_at) AS lastAt
+       FROM credit_ledger GROUP BY user_id`,
+    )
+    .all();
+  const map = new Map();
+  for (const row of rows) {
+    map.set(row.user_id, {
+      granted: Number(row.granted ?? 0),
+      burned: Number(row.burned ?? 0),
+      entries: Number(row.entries ?? 0),
+      lastAt: row.lastAt ?? null,
+    });
+  }
+  return map;
+}
+
+/** Tổng credit đã burn toàn hệ thống (cho /admin/stats). */
+export function totalBurned() {
+  const row = db
+    .prepare("SELECT COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END), 0) AS burned FROM credit_ledger")
+    .get();
+  return Number(row?.burned ?? 0);
+}
+
 export function creditSummary(userId) {
   const settings = creditSettings();
   const totals = getTotals(userId);

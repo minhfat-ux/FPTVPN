@@ -23,6 +23,7 @@ import type {
   HubListing,
   HubPurchaseResult,
   HubAdminListing,
+  PromoApp,
   HubSkill,
   McpServer,
   Message,
@@ -310,7 +311,17 @@ export const api = {
   mcpTools: () => request<{ items: QualifiedTool[] }>("GET", "/mcp/tools"),
 
   adminUsers: () =>
-    request<{ items: (User & { conversationCount: number; creditBalance: number })[] }>("GET", "/admin/users"),
+    request<{
+      items: (User & {
+        conversationCount: number;
+        creditBalance: number;
+        /** Tổng credit đã tiêu thụ (burn) — cột của console. */
+        creditBurned: number;
+        creditGranted: number;
+        creditEntries: number;
+        creditLastAt: string | null;
+      })[];
+    }>("GET", "/admin/users"),
 
   // ---- credits
   credits: () => request<{ credits: CreditSummary }>("GET", "/credits"),
@@ -361,6 +372,8 @@ export const api = {
   hubSkill: (id: string) => request<{ skill: HubSkill; balance: number }>("GET", `/hub/${id}?lang=${apiLang}`),
   buyHubSkill: (id: string) => request<HubPurchaseResult>("POST", `/hub/${id}/purchase`, {}),
   adminHub: () => request<HubAdminListing>("GET", `/admin/hub?lang=${apiLang}`),
+  /** App khác trong hệ sinh thái — dùng cho popup quảng cáo sau khi đăng nhập. */
+  apps: () => request<{ items: PromoApp[] }>("GET", "/apps"),
   createHubSkill: (body: Record<string, unknown>) =>
     request<{ skill: HubSkill }>("POST", "/admin/hub", body),
   updateHubSkill: (id: string, body: Record<string, unknown>) =>

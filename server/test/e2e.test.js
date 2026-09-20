@@ -393,9 +393,9 @@ test("MCP servers can be registered and are masked in responses", async () => {
 test("skills endpoint describes the four skills and their tools", async () => {
   const skills = await api("GET", "/skills", undefined, ctx.token);
   const ids = skills.items.map((s) => s.id);
-  assert.deepEqual(ids, ["chat", "image", "ppt", "excel", "data"]);
+  assert.deepEqual(ids, ["chat", "image", "ppt", "excel", "word", "data"]);
   const toolNames = skills.tools.map((t) => t.name);
-  for (const name of ["generate_pptx", "generate_xlsx", "analyze_data", "edit_image"]) {
+  for (const name of ["generate_pptx", "generate_xlsx", "generate_docx", "analyze_data", "edit_image"]) {
     assert.ok(toolNames.includes(name), `thiếu tool ${name}`);
   }
 });

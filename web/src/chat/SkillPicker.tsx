@@ -30,6 +30,7 @@ export function skillIcon(icon: string, size = 16) {
     case "image": return <ImageIcon size={size} />;
     case "ppt": return <Presentation size={size} />;
     case "excel": return <FileSpreadsheet size={size} />;
+    case "word": return <FileText size={size} />;
     case "data": return <Table2 size={size} />;
     case "mcp": return <Plug size={size} />;
     case "document": return <FileText size={size} />;

@@ -91,6 +91,7 @@ import {
   updateHubSkill,
 } from "./skills/hub.js";
 import { listAllTools, refreshServer, testServerConfig } from "./mcp.js";
+import { PUBLISHED_APPS } from "./apps-knowledge.js";
 import { confirmMemory, forgetMemory, listMemories, memoriesNeedingVerification } from "./memory.js";
 import {
   fetchSkillDraft,
@@ -626,6 +627,29 @@ export function createApiRouter() {
       res.json({ installed, items: listInstalledSkills(req.user.id) });
     }),
   );
+
+  // ------------------------------------------------- quảng cáo app khác trong hệ sinh thái
+
+  /**
+   * Danh sách app khác trong hệ sinh thái FlowTech — nguồn dữ liệu là `PUBLISHED_APPS`
+   * (cùng nguồn với kiến thức trợ lý đang dùng), nên nội dung quảng cáo không thể lệch với
+   * những gì trợ lý nói. Không trả chính fBuddy (`isSelf`).
+   *
+   * Công khai (không cần đăng nhập) vì đây chỉ là thông tin sản phẩm; giao diện chỉ mở popup
+   * SAU KHI người dùng đăng nhập.
+   */
+  router.get("/apps", (_req, res) => {
+    const items = PUBLISHED_APPS.filter((app) => !app.isSelf).map((app) => ({
+      id: app.id,
+      name: app.name,
+      kind: (app.kind ?? "").split("—")[0].trim(),
+      summary: app.summary ?? "",
+      // Ưu tiên link mua/dùng chính; kèm link tải theo nền tảng để UI chọn.
+      url: app.links?.buy ?? app.links?.app ?? app.links?.download ?? null,
+      links: app.links ?? {},
+    }));
+    res.json({ items });
+  });
 
   // ------------------------------------------------- bộ nhớ về người dùng (có kiểm chứng)
 

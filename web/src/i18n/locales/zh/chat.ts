@@ -52,6 +52,8 @@ export const chat: Dict = {
   "chat.skill.pptHint": "根据要求制作幻灯片",
   "chat.skill.excel": "Excel",
   "chat.skill.excelHint": "制作电子表格",
+  "chat.skill.word": "Word 文档",
+  "chat.skill.wordHint": "生成 .docx 文件（报告、公文、会议纪要、合同）",
   "chat.skill.data": "数据",
   "chat.skill.dataHint": "分析数据并绘制图表",
 
@@ -108,6 +110,7 @@ export const chat: Dict = {
   // ---- ToolCard
   "chat.tool.generatePptx": "生成 PowerPoint",
   "chat.tool.generateXlsx": "生成 Excel",
+  "chat.tool.generateDocx": "生成 Word 文档",
   "chat.tool.analyzeData": "分析数据",
   "chat.tool.editImage": "用 AI 修图",
   "chat.tool.listFiles": "列出文件",

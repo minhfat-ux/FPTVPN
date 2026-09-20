@@ -42,6 +42,7 @@ const FALLBACK_ROWS: ReadonlyArray<readonly [string, string, string, string]> = 
   ["image", "🎨", "chat.skill.image", "chat.skill.imageHint"],
   ["ppt", "📊", "chat.skill.ppt", "chat.skill.pptHint"],
   ["excel", "📈", "chat.skill.excel", "chat.skill.excelHint"],
+  ["word", "📝", "chat.skill.word", "chat.skill.wordHint"],
   ["data", "🧮", "chat.skill.data", "chat.skill.dataHint"],
 ];
 

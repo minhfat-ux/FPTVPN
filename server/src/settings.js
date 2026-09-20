@@ -123,6 +123,27 @@ export function deleteProvider(id) {
  * key (e.g. OpenRouter waiting for its key) the turn falls back to the first
  * provider that does, and reports `fallbackFrom` so the UI can explain it.
  */
+/**
+ * Cặp model dự phòng đã cấu hình (Cài đặt → Hệ thống → Model dự phòng).
+ * Trả về `{ provider, model, row }` khi cặp đó còn dùng được, ngược lại `null`.
+ */
+export function resolveFallbackTarget() {
+  const settings = getAppSettings();
+  if (!settings.fallbackProviderId) return null;
+  const row = listProviderRows().find((item) => item.id === settings.fallbackProviderId);
+  if (!row || Number(row.enabled) !== 1) return null;
+  const runtime = toRuntimeProvider(row);
+  const ready = row.kind === "mock" || Boolean(decryptSecret(row.api_key_enc));
+  if (!ready) return null;
+  const model = settings.fallbackModel || runtime.defaultModel || runtime.models?.[0] || null;
+  if (!model) return null;
+  if (runtime.models?.length && !runtime.models.includes(model)) {
+    const safe = runtime.defaultModel ?? runtime.models[0] ?? null;
+    return safe ? { provider: runtime, model: safe, row } : null;
+  }
+  return { provider: runtime, model, row };
+}
+
 export function resolveProviderForChat({ providerId = null, model = null } = {}) {
   const settings = getAppSettings();
   const rows = listProviderRows().filter((row) => Number(row.enabled) === 1);
@@ -142,6 +163,18 @@ export function resolveProviderForChat({ providerId = null, model = null } = {})
 
   let row = preferred && isReady(preferred) ? preferred : null;
   let fallbackFrom = null;
+  let usedFallbackModel = false;
+  let fallbackModel = null;
+  if (!row) {
+    // Ưu tiên cặp DỰ PHÒNG đã cấu hình trước khi tự chọn một nhà cung cấp bất kỳ.
+    const configured = resolveFallbackTarget();
+    if (configured) {
+      row = configured.row;
+      fallbackModel = configured.model;
+      usedFallbackModel = true;
+      if (preferred) fallbackFrom = { id: preferred.id, name: preferred.name, reason: "missing_api_key" };
+    }
+  }
   if (!row) {
     if (preferred) fallbackFrom = { id: preferred.id, name: preferred.name, reason: "missing_api_key" };
     row = rows.find(isReady) ?? null;
@@ -158,8 +191,27 @@ export function resolveProviderForChat({ providerId = null, model = null } = {})
 
   const runtime = toRuntimeProvider(row);
   const isDefaultProvider = row.id === settings.defaultProviderId;
+
+  // Client (web/app/hội thoại cũ) có thể vẫn gửi `providerId` + `model` của nhà cung cấp đã bị
+  // XOÁ (ví dụ OpenRouter). Trước đây server bỏ provider nhưng vẫn dùng model cũ ⇒ gọi nhà cung
+  // cấp khác bằng model của nhà cung cấp đã xoá ⇒ lỗi "model không tồn tại" + phải retry (chậm).
+  const providerWasRequested = Boolean(providerId);
+  const providerWasHonoured = providerWasRequested && row.id === providerId;
+  let requestedModel = typeof model === "string" && model.trim() ? model.trim() : null;
+  let ignoredModel = null;
+  if (requestedModel) {
+    if (providerWasRequested && !providerWasHonoured) {
+      ignoredModel = { model: requestedModel, reason: "provider_gone" };
+      requestedModel = null;
+      if (!fallbackFrom) fallbackFrom = { id: providerId, name: providerId, reason: "provider_gone" };
+    } else if (runtime.models?.length && !runtime.models.includes(requestedModel)) {
+      ignoredModel = { model: requestedModel, reason: "model_not_in_provider" };
+      requestedModel = null;
+    }
+  }
+
   const chosenModel =
-    model ||
+    requestedModel ||
     (isDefaultProvider ? settings.defaultModel : null) ||
     runtime.defaultModel ||
     runtime.models?.[0] ||
@@ -167,7 +219,20 @@ export function resolveProviderForChat({ providerId = null, model = null } = {})
   if (!chosenModel) {
     throw new ApiError(400, "bad_request", `Nhà cung cấp "${row.name}" chưa có model nào. Thêm model trong Cài đặt.`);
   }
-  return { provider: runtime, model: chosenModel, row, fallbackFrom };
+  const safeModel = runtime.models?.length && !runtime.models.includes(chosenModel)
+    ? runtime.defaultModel ?? runtime.models[0]
+    : chosenModel;
+  if (safeModel !== chosenModel && !ignoredModel) {
+    ignoredModel = { model: chosenModel, reason: "model_not_in_provider" };
+  }
+  return {
+    provider: runtime,
+    model: usedFallbackModel && fallbackModel ? fallbackModel : safeModel,
+    row,
+    fallbackFrom,
+    ignoredModel,
+    usedFallbackModel,
+  };
 }
 
 /**

@@ -38,6 +38,7 @@ const SKILLS: { id: SkillId; label: string }[] = [
   { id: "image", label: "settings.app.skillImage" },
   { id: "ppt", label: "settings.app.skillPpt" },
   { id: "excel", label: "settings.app.skillExcel" },
+  { id: "word", label: "settings.app.skillWord" },
   { id: "data", label: "settings.app.skillData" },
 ];
 
@@ -199,6 +200,32 @@ export function AppTab() {
             </select>
           </Field>
         </div>
+
+        {/* Model DỰ PHÒNG: khi model mặc định chết (hết credit/key hỏng/model bị gỡ)
+            thì lượt chat chạy bằng cặp này thay vì tự chọn bừa một nhà cung cấp khác. */}
+        <Field
+          label={t("settings.app.fallbackModelLabel")}
+          hint={settings.fallbackProviderId ? t("settings.app.fallbackModelHint") : t("settings.app.fallbackModelHintEmpty")}
+        >
+          <select
+            className="select"
+            value={settings.fallbackProviderId && settings.fallbackModel ? `${settings.fallbackProviderId}:${settings.fallbackModel}` : ""}
+            onChange={(event) => {
+              const [providerId, ...rest] = event.target.value.split(":");
+              patch({
+                fallbackProviderId: providerId || null,
+                fallbackModel: providerId ? rest.join(":") : null,
+              });
+            }}
+          >
+            <option value="">{t("settings.app.fallbackModelNone")}</option>
+            {models.map((item) => (
+              <option key={`${item.providerId}:${item.model}`} value={`${item.providerId}:${item.model}`}>
+                {item.providerName ?? item.providerId} · {item.model}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <div className="grid grid-2">
           <Field label={t("settings.app.defaultSkillLabel")} hint={t("settings.app.defaultSkillHint")}>
