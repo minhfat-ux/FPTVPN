@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import express from "express";
 import multer from "multer";
 import { config } from "./config.js";
@@ -23,13 +25,7 @@ import {
   revokeOtherSessions,
   revokeSession,
 } from "./sessions.js";
-import {
-  creditSettings,
-  creditSummary,
-  getBalance,
-  grantCredits,
-  listLedger,
-} from "./credits.js";
+import { creditSettings, creditSummary, getBalance, grantCredits, listLedger, getTotalsForAllUsers, totalBurned } from "./credits.js";
 import {
   createCreditRequest,
   decideCreditRequest,
@@ -95,6 +91,7 @@ import {
   updateHubSkill,
 } from "./skills/hub.js";
 import { listAllTools, refreshServer, testServerConfig } from "./mcp.js";
+import { confirmMemory, forgetMemory, listMemories, memoriesNeedingVerification } from "./memory.js";
 import {
   fetchSkillDraft,
   getSkill as getSkillhubSkill,
@@ -195,10 +192,28 @@ export function createApiRouter() {
 
   // ------------------------------------------------------------- meta/health
 
+  /** Bản web đang phục vụ: tên bundle (có hash) trong web/dist/index.html. */
+  function webBuildInfo() {
+    try {
+      const indexHtml = path.join(config.webDistDir, "index.html");
+      if (!fs.existsSync(indexHtml)) return { built: false };
+      const html = fs.readFileSync(indexHtml, "utf8");
+      return {
+        built: true,
+        bundle: /assets\/(index-[A-Za-z0-9_-]+\.js)/.exec(html)?.[1] ?? null,
+        builtAt: fs.statSync(indexHtml).mtime.toISOString(),
+        hasSplitLogin: html.includes("auth-hero") || null,
+      };
+    } catch (error) {
+      return { built: false, error: String(error?.message ?? error) };
+    }
+  }
+
   router.get("/health", (_req, res) => {
     res.json({
       ok: true,
       version: config.version,
+      web: webBuildInfo(),
       uptimeSec: Math.round(process.uptime()),
       providerCount: listProviders().filter((p) => p.enabled).length,
       mcpCount: listMcpServers().filter((s) => s.enabled).length,
@@ -322,7 +337,7 @@ export function createApiRouter() {
   router.post(
     "/auth/logout",
     asyncHandler(async (req, res) => {
-      res.setHeader("Set-Cookie", "fbuddy_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+      clearAuthCookie(res);
       const user = currentUser(req);
       if (user && req.sessionId) {
         revokeSession({ sessionId: req.sessionId, userId: user.id, reason: "logout" });
@@ -342,7 +357,7 @@ export function createApiRouter() {
     if (!result.ok) throw notFound("Không tìm thấy phiên đăng nhập");
     audit(req.user.id, "auth.session_revoke", req.params.id, { current: req.params.id === req.sessionId });
     if (req.params.id === req.sessionId) {
-      res.setHeader("Set-Cookie", "fbuddy_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+      clearAuthCookie(res);
     }
     res.json({ ok: true, current: req.params.id === req.sessionId, ...result });
   });
@@ -611,6 +626,45 @@ export function createApiRouter() {
       res.json({ installed, items: listInstalledSkills(req.user.id) });
     }),
   );
+
+  // ------------------------------------------------- bộ nhớ về người dùng (có kiểm chứng)
+
+  /**
+   * Người dùng xem đúng những gì fBuddy nhớ về mình, kèm trạng thái kiểm chứng.
+   * Đây là mặt KIỂM CHỨNG: nhớ mà người dùng không xem/sửa được thì sớm muộn cũng nhớ sai.
+   */
+  router.get("/memory", requireAuth, (req, res) => {
+    const memories = listMemories(req.user.id).map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      key: row.key,
+      value: row.value,
+      status: row.status ?? "unverified",
+      evidence: row.evidence ?? null,
+      source: row.source,
+      updatedAt: row.updated_at,
+      verifiedAt: row.verified_at ?? null,
+    }));
+    res.json({
+      memories,
+      needsVerification: memoriesNeedingVerification(req.user.id).map((row) => row.id),
+    });
+  });
+
+  /** Người dùng xác nhận (hoặc sửa lại rồi xác nhận) một mẩu nhớ. */
+  router.post("/memory/:id/confirm", requireAuth, (req, res) => {
+    const updated = confirmMemory(req.user.id, req.params.id, { value: req.body?.value ?? null });
+    if (!updated) throw notFound("Không tìm thấy mẩu nhớ");
+    audit(req.user.id, "memory.confirm", updated.id, { key: updated.key });
+    res.json({ memory: { id: updated.id, key: updated.key, value: updated.value, status: updated.status } });
+  });
+
+  /** Người dùng xoá một mẩu nhớ (quên đi). */
+  router.delete("/memory/:id", requireAuth, (req, res) => {
+    const ok = forgetMemory(req.user.id, req.params.id);
+    audit(req.user.id, "memory.forget", req.params.id);
+    res.json({ ok: Boolean(ok) });
+  });
 
   router.get("/models", requireAuth, (_req, res) => {
     res.json({ items: listModelsForUi() });
@@ -1550,11 +1604,21 @@ export function createApiRouter() {
   // ------------------------------------------------------------------- admin
 
   router.get("/admin/users", requireAdmin, (_req, res) => {
-    const users = all("users", "", [], { order: "created_at ASC" }).map((row) => ({
-      ...publicUser(row),
-      conversationCount: count("conversations", "user_id = ?", [row.id]),
-      creditBalance: getBalance(row.id),
-    }));
+    // Cột "đã burn" của console: lấy tổng theo từng người bằng MỘT truy vấn nhóm.
+    const totals = getTotalsForAllUsers();
+    const users = all("users", "", [], { order: "created_at ASC" }).map((row) => {
+      const stat = totals.get(row.id);
+      return {
+        ...publicUser(row),
+        conversationCount: count("conversations", "user_id = ?", [row.id]),
+        creditBalance: getBalance(row.id),
+        /** Tổng credit đã tiêu thụ (burn). */
+        creditBurned: stat?.burned ?? 0,
+        creditGranted: stat?.granted ?? 0,
+        creditEntries: stat?.entries ?? 0,
+        creditLastAt: stat?.lastAt ?? null,
+      };
+    });
     res.json({ items: users });
   });
 
@@ -1593,20 +1657,52 @@ export function createApiRouter() {
       messages: count("messages"),
       files: count("files"),
       providers: listProviders().length,
-      mcpServers: listMcpServers().length,
+      mcpServers: listMcpServers().length, 
+      creditsBurned: totalBurned(),
     });
   });
 
   return router;
 }
 
+/**
+ * Cookie phiên đăng nhập — CỐ Ý đặt trên miền cha để NHIỀU TÊN MIỀN DÙNG CHUNG MỘT PHIÊN.
+ *
+ * Vì sao: fBuddy đang chạy ở cả `fbuddy.meetflowai.site` và `flowgpt.meetflowai.site` (cùng một
+ * backend, cùng một bundle). Cookie không có `Domain` thì chỉ thuộc đúng một tên miền, nên đăng nhập
+ * ở link này mà mở link kia vẫn là khách chưa đăng nhập — chợ kỹ năng yêu cầu đăng nhập nên trống
+ * trơn, người dùng tưởng mất hết kỹ năng. Đặt `Domain=.meetflowai.site` thì hai link chung phiên.
+ *
+ * Đổi miền qua env `AUTH_COOKIE_DOMAIN` (đặt rỗng để quay lại cookie một tên miền).
+ */
+function authCookieDomain() {
+  if (process.env.AUTH_COOKIE_DOMAIN !== undefined) return String(process.env.AUTH_COOKIE_DOMAIN).trim();
+  try {
+    const host = new URL(config.publicUrl).hostname;
+    const parts = host.split(".");
+    // Chỉ đặt ở miền cha khi tên miền có ít nhất 3 phần (fbuddy.meetflowai.site → .meetflowai.site);
+    // với "localhost" hay "example.com" thì để cookie một tên miền cho an toàn.
+    if (parts.length < 3) return "";
+    return `.${parts.slice(1).join(".")}`;
+  } catch {
+    return "";
+  }
+}
+
+function cookieAttributes(maxAge) {
+  const secure = config.publicUrl.startsWith("https://") ? "; Secure" : "";
+  const domain = authCookieDomain();
+  return `Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${domain ? `; Domain=${domain}` : ""}${secure}`;
+}
+
 function setAuthCookie(res, token) {
   const maxAge = 60 * 60 * 24 * 30;
-  const secure = config.publicUrl.startsWith("https://") ? "; Secure" : "";
-  res.setHeader(
-    "Set-Cookie",
-    `fbuddy_token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`,
-  );
+  res.setHeader("Set-Cookie", `fbuddy_token=${encodeURIComponent(token)}; ${cookieAttributes(maxAge)}`);
+}
+
+/** Xoá cookie phiên — PHẢI cùng Domain với lúc đặt, nếu không cookie vẫn còn ở tên miền kia. */
+function clearAuthCookie(res) {
+  res.setHeader("Set-Cookie", `fbuddy_token=; ${cookieAttributes(0)}`);
 }
 
 export { KEEP_SECRET };

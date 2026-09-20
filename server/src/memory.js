@@ -42,19 +42,62 @@ function normaliseKind(kind) {
 // --------------------------------------------------------------- sự thật bền vững
 
 /** Ghi (hoặc cập nhật) một mẩu ký ức. Cùng (user, kind, key) thì ghi đè giá trị cũ. */
-export function rememberFact({ userId, key, value, kind = "fact", source = "model", confidence = 1 }) {
+/**
+ * Ghi nhớ một mẩu về người dùng — CÓ KIỂM CHỨNG.
+ *
+ * `status`:
+ *   - "confirmed": người dùng đã tự nói (kèm `evidence` là nguyên văn câu họ nói) hoặc đã xác nhận.
+ *   - "unverified": trợ lý suy ra. Vẫn lưu, nhưng KHÔNG được khẳng định; phải hỏi lại cho chắc.
+ *   - "conflict": thông tin mới khác thông tin cũ đã xác nhận ⇒ giữ nguyên giá trị CŨ, đánh dấu
+ *     mâu thuẫn để trợ lý hỏi người dùng cái nào đúng, thay vì âm thầm ghi đè.
+ *
+ * Trả về kèm cờ `conflict` / `unverified` để nơi gọi nói được với trợ lý phải làm gì tiếp.
+ */
+export function rememberFact({
+  userId,
+  key,
+  value,
+  kind = "fact",
+  source = "model",
+  confidence = 1,
+  evidence = null,
+  status = null,
+}) {
   const cleanKey = clean(key, MAX_KEY_CHARS);
   const cleanValue = clean(value, MAX_VALUE_CHARS);
   if (!userId || !cleanKey || !cleanValue) return null;
   const kindValue = normaliseKind(kind);
   const now = nowIso();
+  // Mặc định: có bằng chứng nguyên văn từ người dùng ⇒ đã xác nhận; không thì là suy đoán.
+  const resolvedStatus = status ?? (source === "user" && evidence ? "confirmed" : "unverified");
   const existing = get("user_memories", "user_id = ? AND kind = ? AND key = ?", [userId, kindValue, cleanKey]);
   if (existing) {
-    if (existing.value === cleanValue) return existing; // không ghi lại thứ không đổi
+    if (existing.value === cleanValue) {
+      // Cùng giá trị nhưng lần này có bằng chứng ⇒ nâng cấp từ suy đoán lên đã xác nhận.
+      if (resolvedStatus === "confirmed" && existing.status !== "confirmed") {
+        return { ...update("user_memories", existing.id, { status: "confirmed", evidence, verified_at: now, updated_at: now }), verifiedNow: true };
+      }
+      return existing; // không ghi lại thứ không đổi
+    }
+    // Khác giá trị.
+    if (existing.status === "confirmed" && resolvedStatus !== "confirmed") {
+      // Suy đoán mới KHÔNG được lật một điều người dùng đã xác nhận — đánh dấu mâu thuẫn để hỏi lại.
+      return {
+        ...update("user_memories", existing.id, {
+          status: "conflict",
+          evidence: `Trước đây: "${existing.value}". Vừa rồi có thông tin khác: "${cleanValue}".`,
+          updated_at: now,
+        }),
+        conflict: true,
+      };
+    }
     return update("user_memories", existing.id, {
       value: cleanValue,
       source,
       confidence,
+      status: resolvedStatus,
+      evidence,
+      verified_at: resolvedStatus === "confirmed" ? now : null,
       updated_at: now,
     });
   }
@@ -75,9 +118,40 @@ export function rememberFact({ userId, key, value, kind = "fact", source = "mode
     value: cleanValue,
     source,
     confidence,
+    status: resolvedStatus,
+    evidence,
+    verified_at: resolvedStatus === "confirmed" ? now : null,
     created_at: now,
     updated_at: now,
   });
+}
+
+/** Người dùng xác nhận một mẩu nhớ là đúng (hoặc sửa giá trị rồi xác nhận). */
+export function confirmMemory(userId, id, { value = null } = {}) {
+  const row = get("user_memories", "id = ? AND user_id = ?", [id, userId]);
+  if (!row) return null;
+  const now = nowIso();
+  return update("user_memories", id, {
+    value: value ? clean(value, MAX_VALUE_CHARS) || row.value : row.value,
+    status: "confirmed",
+    source: "user",
+    verified_at: now,
+    updated_at: now,
+  });
+}
+
+/**
+ * Mẩu nhớ nào cần kiểm chứng lại. Cũ quá (mặc định 180 ngày) thì cũng nên hỏi lại — người ta đổi
+ * việc, đổi công ty, đổi sở thích; "nhớ" mà không bao giờ soát lại là nhớ sai.
+ */
+export function memoriesNeedingVerification(userId, { maxAgeDays = 180 } = {}) {
+  const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
+  return listMemories(userId).filter(
+    (row) =>
+      row.status === "conflict" ||
+      row.status === "unverified" ||
+      (row.status === "confirmed" && (row.verified_at ?? row.updated_at) < cutoff),
+  );
 }
 
 export function countMemories(userId) {
@@ -294,13 +368,42 @@ export function buildMemoryBlock({ userId, query = "", conversationId = null, ac
   const selfPronoun = pronouns.find((m) => m.key === "self");
   const pair = formatPair(selfPronoun?.value, custom?.value);
   if (pair) lines.push(`• Xưng hô đã học: ${pair}.`);
-  if (facts.length) {
+  // Chia theo mức kiểm chứng: chỉ nhóm ĐÃ XÁC NHẬN mới được khẳng định.
+  const confirmed = facts.filter((m) => (m.status ?? "unverified") === "confirmed");
+  const unverified = facts.filter((m) => (m.status ?? "unverified") === "unverified");
+  const conflicts = facts.filter((m) => m.status === "conflict");
+  const staleCutoff = new Date(Date.now() - 180 * 86400000).toISOString();
+  const stale = confirmed.filter((m) => (m.verified_at ?? m.updated_at) < staleCutoff);
+
+  if (confirmed.length) {
     lines.push(
-      "• Đã ghi nhớ: " +
-        facts
+      "• Người dùng ĐÃ XÁC NHẬN (dùng được, không cần hỏi lại): " +
+        confirmed
+          .filter((m) => !stale.includes(m))
           .slice(0, 12)
           .map((m) => `${m.key}: ${m.value}`)
           .join(" · "),
+    );
+  }
+  if (stale.length) {
+    lines.push(
+      "• Nhớ đã LÂU chưa soát lại (nên hỏi lại cho chắc, đừng khẳng định): " +
+        stale.slice(0, 6).map((m) => `${m.key}: ${m.value}`).join(" · "),
+    );
+  }
+  if (conflicts.length) {
+    lines.push(
+      "• MÂU THUẪN — thông tin mới khác thông tin cũ, PHẢI hỏi người dùng cái nào đúng (đừng tự chọn):\n" +
+        conflicts
+          .slice(0, 6)
+          .map((m) => `   – ${m.key}: đang ghi "${m.value}". ${m.evidence ?? ""}`.trim())
+          .join("\n"),
+    );
+  }
+  if (unverified.length) {
+    lines.push(
+      "• CHƯA XÁC NHẬN — chỉ là điều bạn tự suy ra, TUYỆT ĐỐI không khẳng định; muốn dùng thì hỏi lại một câu ngắn trước: " +
+        unverified.slice(0, 8).map((m) => `${m.key}: ${m.value}`).join(" · "),
     );
   }
   if (skills.length) lines.push(`• Kỹ năng hay dùng: ${skills.join(", ")}`);
@@ -318,9 +421,16 @@ export function buildMemoryBlock({ userId, query = "", conversationId = null, ac
   const block =
     "BỘ NHỚ VỀ NGƯỜI DÙNG (chỉ của riêng người này; dùng để CÁ NHÂN HOÁ — đừng kể rằng bạn đang tra bộ nhớ):\n" +
     lines.join("\n") +
-    "\nCách dùng: thông tin nào đã có ở trên thì KHÔNG hỏi lại; chỉ hỏi ngắn phần còn thiếu và hỏi theo đúng cách xưng hô ở trên. " +
-    "Người dùng nói khác bộ nhớ thì theo thông tin MỚI và cập nhật lại (gọi `remember_fact`). " +
-    "Cần chi tiết cũ hơn thì gọi `search_past_chats` thay vì đoán.";
+    "\nCách dùng (có KIỂM CHỨNG — đọc kỹ):\n" +
+    "• Nhóm ĐÃ XÁC NHẬN: dùng tự nhiên, KHÔNG hỏi lại.\n" +
+    "• Nhóm CHƯA XÁC NHẬN: không được nói như sự thật. Nếu cần dùng thì hỏi một câu ngắn kiểu \"hình như anh làm ở … đúng không ạ?\".\n" +
+    "• Nhóm MÂU THUẪN: nêu cả hai và hỏi người dùng cái nào đúng; người dùng chốt thì gọi `verify_memory`.\n" +
+    "• Nhóm nhớ đã lâu: coi như cần xác nhận lại, nhất là việc làm, công ty, chức danh, sở thích.\n" +
+    "• Khi người dùng nói rõ một điều về họ: gọi `remember_fact` kèm `evidence` là NGUYÊN VĂN câu họ vừa nói — " +
+    "có nguyên văn thì mẩu nhớ được đánh dấu ĐÃ xác nhận, không có thì chỉ là suy đoán.\n" +
+    "• Đừng tự ghi những điều người dùng không nói (suy luận từ ngữ cảnh, từ tên, từ cách nói) — nếu cần thì ghi nhưng " +
+    "phải để trạng thái chưa xác nhận và hỏi lại.\n" +
+    "• Cần chi tiết cũ hơn thì gọi `search_past_chats` thay vì đoán.";
   return block.slice(0, MAX_BLOCK_CHARS);
 }
 

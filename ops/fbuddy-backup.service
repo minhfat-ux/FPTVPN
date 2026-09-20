@@ -1,0 +1,11 @@
+[Unit]
+Description=fBuddy — sao lưu DB (VACUUM INTO + nén + kiểm tra)
+Documentation=file:/opt/fbuddy/docs/PORTS-AND-SERVICES.md
+
+[Service]
+Type=oneshot
+# systemd không có PATH như phiên SSH ⇒ thiếu PATH là "node: command not found" (đã gặp thật).
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/bin/bash /opt/fbuddy/ops/backup-db.sh
+Nice=10
+IOSchedulingClass=idle

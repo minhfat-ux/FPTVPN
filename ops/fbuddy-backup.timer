@@ -1,0 +1,11 @@
+[Unit]
+Description=fBuddy — hẹn giờ sao lưu DB (4 lần/ngày)
+Documentation=file:/opt/fbuddy/docs/PORTS-AND-SERVICES.md
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:15:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

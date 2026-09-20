@@ -170,16 +170,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       await refreshMeta();
-      if (getToken()) {
-        try {
-          const result = await api.me();
-          setUser(result.user);
-          setSessionId(result.sessionId ?? null);
-          setLastConversationId(result.lastConversationId ?? null);
-        } catch {
-          setToken(null);
-          setUser(null);
-        }
+      // Luôn thử `me()` kể cả khi máy này CHƯA có token trong localStorage: phiên có thể đang nằm
+      // ở cookie dùng chung miền (đăng nhập ở fbuddy.meetflowai.site rồi mở flowgpt.meetflowai.site
+      // là vào luôn, không phải đăng nhập lại). Trước đây chỉ gọi khi có token nên link kia hiện ra
+      // như khách chưa đăng nhập — chợ kỹ năng yêu cầu đăng nhập nên trông như "mất hết kỹ năng".
+      try {
+        const result = await api.me();
+        setUser(result.user);
+        setSessionId(result.sessionId ?? null);
+        setLastConversationId(result.lastConversationId ?? null);
+      } catch {
+        if (getToken()) setToken(null);
+        setUser(null);
       }
       setReady(true);
     })();

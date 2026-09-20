@@ -1,5 +1,6 @@
 import { generatePptx } from "./pptx.js";
 import { generateXlsx } from "./xlsx.js";
+import { generateDocx } from "./docx.js";
 import { analyzeData, listFilesForModel } from "./data.js";
 import { editImage, transformImage } from "./image.js";
 import { readImageContent, xlsxFromImage } from "./vision.js";
@@ -71,6 +72,45 @@ export const TOOL_DEFINITIONS = [
       required: ["sheets"],
     },
     handler: generateXlsx,
+  },
+  {
+    name: "generate_docx",
+    skill: "word",
+    label: "Tạo tài liệu Word",
+    description: "Tạo tệp .docx (báo cáo, công văn, biên bản, hợp đồng, đề xuất) có tiêu đề, mục, bảng, gạch đầu dòng, đánh số bước.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filename: { type: "string", description: "Tên tệp (bỏ .docx)" },
+        title: { type: "string", description: "Tiêu đề tài liệu" },
+        subtitle: { type: "string", description: "Phụ đề / mô tả ngắn" },
+        author: { type: "string", description: "Người soạn (mặc định fBuddy)" },
+        theme: { type: "string", enum: ["flow", "dark", "warm", "mint"], description: "Màu tiêu đề" },
+        sourceSummary: { type: "string", description: "Nguồn nội dung: 1 câu, để người dùng đối chiếu ở bước xác nhận" },
+        blocks: {
+          type: "array",
+          description: "Nội dung tài liệu, theo thứ tự",
+          items: {
+            type: "object",
+            properties: {
+              type: {
+                type: "string",
+                enum: ["heading", "paragraph", "bullets", "numbers", "table", "quote", "pageBreak"],
+                description: "heading = mục (kèm level 1-3); bullets = gạch đầu dòng; numbers = bước đánh số; table = bảng",
+              },
+              level: { type: "number", description: "Cấp tiêu đề 1-3 (chỉ cho heading)" },
+              text: { type: "string", description: "Nội dung (heading/paragraph/quote)" },
+              items: { type: "array", items: { type: "string" }, description: "Danh sách (bullets/numbers)" },
+              columns: { type: "array", items: { type: "string" }, description: "Tiêu đề cột (table)" },
+              rows: { type: "array", items: { type: "array", items: { type: "string" } }, description: "Dữ liệu bảng" },
+            },
+            required: ["type"],
+          },
+        },
+      },
+      required: ["blocks"],
+    },
+    handler: generateDocx,
   },
   {
     name: "analyze_data",
@@ -317,24 +357,94 @@ export const TOOL_DEFINITIONS = [
     skill: "auto",
     label: "Ghi nhớ về người dùng",
     description:
-      "Ghi nhớ một sự thật bền vững về người dùng (tên, vai trò, công ty, sở thích, cách xưng hô…) để lần sau không hỏi lại. Chỉ ghi khi người dùng nói rõ.",
+      "Ghi nhớ một sự thật bền vững về người dùng (tên, vai trò, công ty, sở thích…) để lần sau không hỏi lại. " +
+      "BẮT BUỘC kèm `evidence` là NGUYÊN VĂN câu người dùng vừa nói: có nguyên văn thì mẩu nhớ được coi là ĐÃ xác nhận, " +
+      "không có thì chỉ là suy đoán (chưa xác nhận) và sẽ phải hỏi lại người dùng trước khi dùng.",
     inputSchema: {
       type: "object",
       properties: {
         key: { type: "string", description: "Nhãn ngắn, ví dụ 'tên', 'công ty', 'con học lớp'" },
         value: { type: "string", description: "Nội dung ghi nhớ" },
         kind: { type: "string", enum: ["fact", "preference", "profile"], description: "Loại (mặc định fact)" },
+        evidence: {
+          type: "string",
+          description: "Nguyên văn câu người dùng đã nói làm căn cứ (copy đúng chữ họ dùng). Bỏ trống nếu bạn chỉ đang suy đoán.",
+        },
       },
       required: ["key", "value"],
     },
     handler: async (args, ctx) => {
-      const row = rememberFact({ userId: ctx.userId, key: args.key, value: args.value, kind: args.kind ?? "fact", source: "model" });
+      // KIỂM CHỨNG: bằng chứng phải là câu người dùng THẬT SỰ nói trong lượt này, không phải do
+      // model tự viết ra rồi tự tin. Không khớp ⇒ ghi ở trạng thái chưa xác nhận.
+      const message = String(ctx?.userMessage ?? "");
+      const evidence = String(args?.evidence ?? "").trim();
+      const normalise = (text) => String(text).toLowerCase().replace(/\s+/g, " ").trim();
+      const verified = Boolean(evidence) && normalise(message).includes(normalise(evidence));
+      const row = rememberFact({
+        userId: ctx.userId,
+        key: args.key,
+        value: args.value,
+        kind: args.kind ?? "fact",
+        source: verified ? "user" : "model",
+        evidence: verified ? evidence : evidence || null,
+        status: verified ? "confirmed" : "unverified",
+      });
+      if (!row) {
+        return { ok: false, summary: "Không ghi được (thiếu dữ liệu)", data: {}, artifacts: [], modelText: "Không ghi được mẩu nhớ này." };
+      }
+      if (row.conflict) {
+        return {
+          ok: true,
+          summary: `Mâu thuẫn với điều đã xác nhận: "${args.key}"`,
+          data: { conflict: true },
+          artifacts: [],
+          modelText:
+            `Mẩu nhớ "${args.key}" đang MÂU THUẪN với điều người dùng đã xác nhận trước đó: đang ghi "${row.value}", ` +
+            `vừa có thông tin khác. Hãy hỏi người dùng cái nào đúng rồi gọi \`verify_memory\` — KHÔNG tự chọn một bên.`,
+        };
+      }
       return {
         ok: true,
-        summary: row ? `Đã ghi nhớ "${args.key}"` : "Không ghi được (thiếu dữ liệu)",
-        data: {},
+        summary: verified ? `Đã ghi nhớ (có căn cứ): "${args.key}"` : `Đã ghi nhớ (CHƯA xác nhận): "${args.key}"`,
+        data: { status: row.status, verified },
         artifacts: [],
-        modelText: row ? `Đã ghi nhớ: ${args.key} = ${args.value}.` : "Không ghi được mẩu nhớ này.",
+        modelText: verified
+          ? `Đã ghi nhớ (đã xác nhận vì có nguyên văn người dùng nói): ${args.key} = ${args.value}.`
+          : `Đã ghi tạm (CHƯA XÁC NHẬN, vì không có nguyên văn nào của người dùng): ${args.key} = ${args.value}. ` +
+            "Đừng khẳng định điều này như sự thật; muốn dùng thì hỏi lại người dùng một câu ngắn.",
+      };
+    },
+  },
+  {
+    name: "verify_memory",
+    skill: "auto",
+    label: "Xác nhận điều đã nhớ",
+    description:
+      "Đánh dấu một mẩu nhớ là ĐÃ ĐƯỢC NGƯỜI DÙNG XÁC NHẬN (hoặc sửa lại giá trị đúng rồi xác nhận). " +
+      "Gọi khi người dùng nói 'đúng rồi', hoặc đính chính một điều bạn nhớ sai.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Nhãn của mẩu nhớ cần xác nhận" },
+        value: { type: "string", description: "Giá trị ĐÚNG nếu người dùng vừa đính chính (bỏ trống nếu chỉ xác nhận)" },
+        kind: { type: "string", enum: ["fact", "preference", "profile"], description: "Loại (mặc định fact)" },
+      },
+      required: ["key"],
+    },
+    handler: async (args, ctx) => {
+      const { listMemories, confirmMemory } = await import("../memory.js");
+      const kind = args.kind ?? "fact";
+      const row = listMemories(ctx.userId, { kind }).find((item) => item.key === String(args.key).trim());
+      if (!row) {
+        return { ok: false, summary: "Không có mẩu nhớ nào tên vậy", data: {}, artifacts: [], modelText: `Chưa có mẩu nhớ "${args.key}" để xác nhận.` };
+      }
+      const updated = confirmMemory(ctx.userId, row.id, { value: args.value ?? null });
+      return {
+        ok: true,
+        summary: `Đã xác nhận "${updated.key}"`,
+        data: { key: updated.key, value: updated.value },
+        artifacts: [],
+        modelText: `Đã ghi nhận là ĐÚNG: ${updated.key} = ${updated.value}. Từ giờ dùng được mà không cần hỏi lại.`,
       };
     },
   },
@@ -442,6 +552,13 @@ export const SKILL_DESCRIPTORS = [
     icon: "excel",
     description: "Tạo file .xlsx nhiều sheet, công thức tổng, định dạng số",
     starterPrompts: ["Lập bảng dự toán chi phí marketing 6 tháng", "Tạo bảng theo dõi công việc nhóm 5 người"],
+  },
+  {
+    id: "word",
+    label: "Làm Word",
+    icon: "word",
+    description: "Tạo file .docx (báo cáo, công văn, biên bản, hợp đồng) có mục, bảng, gạch đầu dòng",
+    starterPrompts: ["Soạn công văn đề nghị thanh toán cho nhà cung cấp", "Viết báo cáo tuần cho nhóm 5 người"],
   },
   {
     id: "data",

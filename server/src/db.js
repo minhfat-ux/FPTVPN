@@ -224,6 +224,22 @@ CREATE TABLE IF NOT EXISTS usage_log (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at DESC);
 
+-- Per-model token prices in USD, refreshed from OpenRouter by
+-- ops/refresh-model-pricing.mjs. The table used to be created only by that
+-- script, so a brand-new database (fresh deploy, test run) had no table at all:
+-- getModelPricing() threw "no such table", costForModel() fell back to the flat
+-- rate inside a swallowed catch, and the turn was metered without pricing.
+-- Owning the schema here makes a fresh database behave like production.
+-- (Chú ý: phần schema này nằm trong template literal của JS, nên comment SQL
+--  KHÔNG được chứa dấu backtick — sẽ làm đứt chuỗi.)
+CREATE TABLE IF NOT EXISTS model_pricing (
+  model TEXT PRIMARY KEY,
+  input_usd REAL NOT NULL DEFAULT 0,
+  output_usd REAL NOT NULL DEFAULT 0,
+  cache_usd REAL NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id TEXT PRIMARY KEY,
   user_id TEXT,
@@ -334,6 +350,12 @@ const ADDED_COLUMNS = [
   // của CỘT là "clone" — phía an toàn về bản quyền; chỉ nội dung do mình viết mới được đặt giá
   // (docs/CONTENT-POLICY.md §3.1). Mục tạo tay qua API mặc định "own", mục nhập từ SkillHub là "clone".
   { table: "hub_skills", column: "origin", definition: "TEXT NOT NULL DEFAULT 'clone'" },
+  // Bộ nhớ về người dùng phải KIỂM CHỨNG được: `status` nói mẩu nhớ đã được người dùng xác nhận
+  // hay mới chỉ do trợ lý suy ra, `evidence` giữ nguyên văn câu người dùng đã nói, `verified_at`
+  // là lúc xác nhận. Không có mấy thứ này thì "nhớ" rất dễ thành nhớ sai mà vẫn khẳng định chắc.
+  { table: "user_memories", column: "status", definition: "TEXT NOT NULL DEFAULT 'unverified'" },
+  { table: "user_memories", column: "evidence", definition: "TEXT" },
+  { table: "user_memories", column: "verified_at", definition: "TEXT" },
 ];
 
 /**
@@ -371,6 +393,21 @@ function backfillHubKind() {
   }
 }
 
+/**
+ * Mẩu nhớ có TRƯỚC khi có cột `status`: cái nào do chính người dùng nói (source = user) hoặc do
+ * cách họ tự xưng (pronoun) thì coi là đã xác nhận; phần còn lại là trợ lý suy ra ⇒ "chưa xác nhận".
+ */
+function backfillMemoryStatus() {
+  try {
+    const info = db
+      .prepare("UPDATE user_memories SET status = 'confirmed', verified_at = updated_at WHERE source = 'user' OR kind = 'pronoun'")
+      .run();
+    if (info.changes) console.log(`[fbuddy] đã đánh dấu ${info.changes} mẩu nhớ là ĐÃ xác nhận (người dùng tự nói)`);
+  } catch (err) {
+    console.error("[fbuddy] bỏ qua đánh dấu trạng thái bộ nhớ:", err?.message ?? err);
+  }
+}
+
 function migrate() {
   for (const entry of ADDED_COLUMNS) {
     const existing = new Set(db.prepare(`PRAGMA table_info(${entry.table})`).all().map((row) => row.name));
@@ -379,6 +416,7 @@ function migrate() {
     console.log(`[fbuddy] đã thêm cột ${entry.table}.${entry.column}`);
     if (entry.table === "hub_skills" && entry.column === "price_vnd") backfillHubPriceVnd();
     if (entry.table === "hub_skills" && entry.column === "kind") backfillHubKind();
+    if (entry.table === "user_memories" && entry.column === "status") backfillMemoryStatus();
   }
   fixLegacySystemPromptCompany();
   COLUMN_CACHE.clear();
@@ -557,6 +595,9 @@ export const DEFAULT_APP_SETTINGS = {
   ].join(" "),
   defaultProviderId: null,
   defaultModel: null,
+  /** Model DỰ PHÒNG cho model mặc định (dùng khi model chính chết/hết credit/bị gỡ). */
+  fallbackProviderId: null,
+  fallbackModel: null,
   defaultSkill: "auto",
   maxToolIterations: 6,
   maxUploadMb: 25,
