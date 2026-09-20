@@ -3,16 +3,17 @@ import { ArrowDown, CircleAlert, Coins, ExternalLink } from "lucide-react";
 import { Composer, fallbackSkills, usableSkills, type ComposerHandle } from "./Composer";
 import { SkillPicker } from "./SkillPicker";
 import { MessageList } from "./MessageList";
+import { TemplatePicker } from "../templates/TemplatePicker";
 import { RequestCreditsForm } from "./RequestCreditsForm";
 import { useAutoScroll } from "../components/ui";
 import { EcosystemBanner } from "../components/EcosystemBanner";
 import { useChat } from "../state/chat";
 import { useCredits } from "../state/credits";
 import { useData, useToast } from "../state/store";
-import { ApiError } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { useI18n } from "../i18n";
 import { isInternalTopupUrl } from "../topup/links";
-import type { FileRef, ModelOption, SkillDescriptor } from "../types";
+import type { FileRef, ModelOption, SkillDescriptor, TemplateItem } from "../types";
 import "./chat.css";
 
 const DEFAULT_MAX_MB = 25;
@@ -65,6 +66,10 @@ export function ChatPage({
   const [uploading, setUploading] = useState(0);
   // Skill ids are plain strings now (the catalogue is user-managed).
   const [skill, setSkill] = useState<string>("chat");
+  // Mẫu Word/Excel/PPT người dùng chọn cho lượt này (thư viện template).
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [modelValue, setModelValue] = useState("");
   const [heroSkillId, setHeroSkillId] = useState<string | null>(null);
@@ -168,12 +173,19 @@ export function ChatPage({
 
   const removeAttachment = (id: string) => setAttachments((current) => current.filter((file) => file.id !== id));
 
+  useEffect(() => {
+    if (!templatesOpen) return;
+    void (async () => {
+      try { setTemplates((await api.templates()).items); } catch { /* im lặng: mở lại sẽ thử lại */ }
+    })();
+  }, [templatesOpen]);
+
   const runTurn = async (content: string, files: FileRef[]) => {
     const choice = parseModelValue(modelValue);
     setDraft("");
     setAttachments([]);
     try {
-      await send({ content, attachments: files, skill, providerId: choice.providerId, model: choice.model });
+      await send({ content, attachments: files, skill, providerId: choice.providerId, model: choice.model, templateId });
     } catch (err) {
       push(err instanceof ApiError ? err.message : t("chat.page.sendFailed"), "error");
     }
@@ -235,6 +247,13 @@ export function ChatPage({
           <ArrowDown size={16} />
         </button>
       )}
+
+      <TemplatePicker
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        value={templateId}
+        onSelect={(id) => { setTemplateId(id); }}
+      />
 
       <MessageList
         messages={messages}
@@ -349,6 +368,8 @@ export function ChatPage({
         skill={skill}
         onSkill={setSkill}
         onOpenSkillPicker={() => setSkillPickerOpen(true)}
+        templateName={templates.find((item) => item.id === templateId)?.name ?? null}
+        onOpenTemplates={() => setTemplatesOpen(true)}
         models={models}
         modelValue={modelValue}
         onModelValue={setModelValue}

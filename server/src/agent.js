@@ -13,6 +13,7 @@ import { isConfirmed, planChoices } from "./skills/confirm.js";
 import { excelChoices } from "./skills/vision.js";
 import { hubSkillForUser, isSelectableSkill } from "./skills/hub.js";
 import { listProviderRows, nextUsableProvider, readAppSettings, resolveFallbackTarget, resolveProviderForChat, resolveVisionTarget } from "./settings.js";
+import { describeTemplate, getTemplateRow, requireTemplateAccess } from "./templates.js";
 import {
   assertCanChat,
   costForModel,
@@ -288,7 +289,7 @@ function resolveVisionProviderFor({ providerId = null, model = null } = {}) {
   }
 }
 
-export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "", conversationId = null, autoResearch = null }) {
+export function buildSystemPrompt({ skill, files, settings, hubSkill = null, user = null, planFirst = false, message = "", conversationId = null, autoResearch = null, templateText = "" }) {
   // Mốc ngày phải theo GIỜ VIỆT NAM: server chạy UTC nên `toISOString()` cho ra ngày hôm qua vào
   // buổi sáng ở Việt Nam — trợ lý sẽ nói sai "hôm nay" và tra cứu sai ngày (đã gặp thật).
   const vnClock = vnNow();
@@ -323,6 +324,7 @@ export function buildSystemPrompt({ skill, files, settings, hubSkill = null, use
         "Chỉ gọi `list_files`/`read_image` nếu cần xem dữ liệu đã có để lập kế hoạch chính xác."
       : "",
     buildCreditKnowledge(user),
+    templateText,
   ];
   if (hubSkill?.instructions) {
     parts.push(`Kỹ năng đang dùng: ${hubSkill.name}\n${hubSkill.instructions}`);
@@ -388,6 +390,20 @@ export async function prepareTurn({ user, body, channel }) {
       balance: credit.balance,
       buyUrl: creditSettings().buyUrl,
     });
+  }
+
+  // Mẫu người dùng chọn cho lượt này (thư viện template): có thì fBuddy bám theo mẫu của họ.
+  let template = null;
+  let templateText = "";
+  if (body?.templateId) {
+    try {
+      template = requireTemplateAccess(getTemplateRow(String(body.templateId)), user);
+      templateText = await describeTemplate(template);
+    } catch (err) {
+      // Mẫu bị xoá hoặc không thuộc tài khoản: lượt chat vẫn chạy, không chặn người dùng.
+      template = null;
+      templateText = "";
+    }
   }
 
   const { provider, model, fallbackFrom } = resolveProviderForChat({
@@ -497,7 +513,12 @@ export async function prepareTurn({ user, body, channel }) {
   // `autoResearch` PHẢI được trả về: trước 2026-09-20 nó được tra xong rồi BỊ VỨT (không truyền
   // vào `buildSystemPrompt`), nên model không hề thấy kết quả tra cứu — tốn tới 8 giây mỗi câu hỏi
   // mà vẫn trả lời theo trí nhớ. Đây cũng là gốc của việc "không nói rõ nguồn".
-  return { settings, skill, hubSkill, content, provider, model, conversation, userMessage, files, forceTool, forceToolName, planFirst, autoResearch };
+  return {
+    settings, skill, hubSkill, content, provider, model, conversation, userMessage, files,
+    forceTool, forceToolName, planFirst, autoResearch,
+    /** Mẫu người dùng chọn (row) + mô tả mẫu để nhét vào prompt. */
+    template, templateText,
+  };
 }
 
 /** Turns the stored history + fresh user turn into provider-shaped messages. */
@@ -677,6 +698,7 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     message: turn.content,
     conversationId: conversation.id,
     autoResearch: turn.autoResearch ?? null,
+    templateText: turn.templateText ?? "",
   });
   const messages = await buildModelMessages({ conversationId: conversation.id, systemPrompt });
 
@@ -727,9 +749,12 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   //  về vấn đề đó và trả lời lại ngay"). Câu này do SERVER sinh — không phụ thuộc model có chịu nói
   // hay không — và được LƯU cùng câu trả lời nên mở lại hội thoại vẫn thấy.
   if (turn.autoResearch?.findings?.length) {
-    const ack = `Em đã hỏi chuyên gia tra cứu về vấn đề này (nguồn: ${turn.autoResearch.label ?? "web"}), em trả lời ngay đây ạ.`;
+    const ack = "Em đang hỏi chuyên gia tra cứu về vấn đề này, có kết quả em trả lời ngay ạ.";
     text = `${ack}\n\n`;
     channel.send("delta", { text: `${ack}\n\n` });
+    // Đánh dấu ĐÃ báo ⇒ khi agent gọi `tra_cuu` giữa lượt sẽ không báo lần thứ hai
+    // (bản trước in 2 câu gần giống nhau, trông như lỗi).
+    researchAckSent = true;
   }
   let finishReason = "stop";
   const maxIterations = Math.min(
@@ -879,6 +904,8 @@ export async function runChatTurn({ user, turn, channel, signal }) {
             // The current user message: tools read the intent from the user's own
             // words instead of trusting the model's arguments (see skills/vision.js).
             userMessage: turn.content ?? "",
+            // Mẫu người dùng chọn: `generate_xlsx` điền số liệu vào CHÍNH workbook mẫu.
+            templateRow: turn.template ?? null,
             resolveImageProvider: async (preferred) => resolveImageProvider(preferred),
             resolveVisionTarget: async () => resolveVisionProviderFor({ providerId: provider.id, model }),
           });

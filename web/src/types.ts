@@ -653,3 +653,15 @@ export interface PromoApp {
   url: string | null;
   links: Record<string, string>;
 }
+
+/** Mẫu Word/Excel/PPT người dùng tự tải lên để fBuddy dùng lại. */
+export interface TemplateItem {
+  id: string;
+  name: string;
+  description: string | null;
+  kind: "docx" | "xlsx" | "pptx" | string;
+  shared: boolean;
+  size: number;
+  createdAt: string;
+  ownerId: string;
+}

@@ -3,6 +3,14 @@ import path from "node:path";
 import express from "express";
 import multer from "multer";
 import { config } from "./config.js";
+import {
+  createTemplate,
+  deleteTemplate,
+  getTemplateRow,
+  listTemplates,
+  requireTemplateAccess,
+  templateKind,
+} from "./templates.js";
 import { all, audit, count, DEFAULT_APP_SETTINGS, getById, remove } from "./db.js";
 import {
   authenticate,
@@ -163,6 +171,12 @@ const audioUpload = multer({
   limits: { fileSize: 15 * 1024 * 1024, files: 1 },
 });
 
+/** Mẫu Word/Excel/PPT: một tệp, tối đa 15MB (khớp giới hạn trong templates.js). */
+const templateUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+});
+
 /** Ngôn ngữ trình duyệt muốn nhận (`?lang=en|zh` hoặc header `x-lang`). */
 function requestLang(req) {
   const raw = String(req.query?.lang ?? req.get?.("x-lang") ?? "").trim().toLowerCase();
@@ -227,6 +241,42 @@ export function createApiRouter() {
     for (const line of lines) console.log(`[app-log] ${req.user.email} | ${String(line).slice(0, 300)}`);
     if (req.body?.note) console.log(`[app-log] ${req.user.email} | NOTE: ${String(req.body.note).slice(0, 300)}`);
     return res.json({ ok: true, received: lines.length });
+  });
+
+  // ------------------------------------------------------- thư viện template
+  //
+  // Yêu cầu chủ dự án 2026-09-20: người dùng tự đưa mẫu Word/Excel/PPT lên để fBuddy dùng lại.
+  router.get("/templates", requireAuth, (req, res) => {
+    res.json({ items: listTemplates({ userId: req.user.id }) });
+  });
+
+  router.post("/templates", requireAuth, templateUpload.single("file"), asyncHandler(async (req, res) => {
+    const gate = uploadLimiter.check(`template:${req.user.id}`);
+    if (!gate.ok) throw new ApiError(429, "rate_limited", "Bạn tải lên hơi nhanh, thử lại sau một phút.");
+    if (!req.file) throw badRequest("Thiếu tệp mẫu (field `file`)");
+    if (!templateKind(req.file.originalname)) {
+      throw badRequest("Chỉ nhận mẫu .docx, .xlsx hoặc .pptx");
+    }
+    const wantShared = String(req.body?.shared ?? "") === "true";
+    const item = await createTemplate({
+      userId: req.user.id,
+      name: req.body?.name,
+      description: req.body?.description,
+      // Chỉ quản trị viên được đưa mẫu dùng chung cho cả công ty.
+      shared: wantShared && req.user.role === "admin",
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mime: req.file.mimetype,
+    });
+    audit(req.user.id, "template.create", item.id, { kind: item.kind, shared: item.shared });
+    res.status(201).json({ template: item });
+  }));
+
+  router.delete("/templates/:id", requireAuth, (req, res) => {
+    const row = requireTemplateAccess(getTemplateRow(req.params.id), req.user);
+    deleteTemplate(row.id, req.user);
+    audit(req.user.id, "template.delete", row.id);
+    res.json({ ok: true });
   });
 
   router.get("/health", (_req, res) => {

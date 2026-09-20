@@ -30,6 +30,14 @@ try {
   console.warn("[fbuddy] Không seed được Skill Hub:", err?.message ?? err);
 }
 
+// Bảng thư viện template (idempotent) — tạo sớm để route không phụ thuộc thứ tự.
+try {
+  const { ensureTemplatesTable } = await import("./templates.js");
+  ensureTemplatesTable();
+} catch (err) {
+  console.warn("[fbuddy] Không tạo được bảng templates:", err?.message ?? err);
+}
+
 const app = express();
 app.disable("x-powered-by");
 if (config.trustProxy) app.set("trust proxy", true);

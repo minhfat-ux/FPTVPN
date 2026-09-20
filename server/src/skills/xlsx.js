@@ -65,6 +65,37 @@ export async function generateXlsx(args, ctx) {
     });
   }
   const prepared = normalizeSheets(args?.sheets);
+
+  // Có MẪU của người dùng ⇒ điền số liệu vào CHÍNH workbook mẫu (giữ công thức, định dạng, logo).
+  if (ctx?.templateRow?.kind === "xlsx") {
+    try {
+      const { fillXlsxTemplate } = await import("../templates.js");
+      const { buffer, written } = await fillXlsxTemplate({ templateRow: ctx.templateRow, sheets: prepared });
+      const name = String(args?.filename ?? ctx.templateRow.name ?? "fbuddy-data").replace(/\.xlsx?$/i, "");
+      const row = await saveBuffer({
+        userId: ctx.userId,
+        conversationId: ctx.conversationId,
+        name: `${safeName(name)}.xlsx`,
+        mime: normalizeMime("", "a.xlsx"),
+        buffer,
+        kind: "xlsx",
+        origin: "artifact",
+        meta: { sheetCount: prepared.length, rowCount: written, templateId: ctx.templateRow.id, tool: "generate_xlsx" },
+      });
+      const artifact = publicArtifact(row);
+      return {
+        ok: true,
+        summary: `Đã điền ${written} dòng vào mẫu "${ctx.templateRow.name}": ${artifact.name}`,
+        data: { sheetCount: prepared.length, rowCount: written, template: ctx.templateRow.name },
+        artifacts: [artifact],
+        modelText: `Đã điền dữ liệu vào MẪU "${ctx.templateRow.name}" (${written} dòng) — tệp: ${artifact.name} (id: ${artifact.id}). Định dạng/công thức của mẫu được giữ nguyên.`,
+      };
+    } catch (err) {
+      // Mẫu hỏng/không đọc được thì rơi về cách tạo workbook mới, không làm hỏng lượt chat.
+      console.warn("[fbuddy] không dùng được mẫu xlsx:", err?.message ?? err);
+    }
+  }
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "fBuddy";
   workbook.created = new Date();

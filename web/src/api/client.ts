@@ -10,39 +10,7 @@ export function getApiLang() {
   return apiLang;
 }
 
-import type {
-  AnalysisPayload,
-  AppSettings,
-  AuthSession,
-  ChatEvent,
-  Conversation,
-  CreditLedgerEntry,
-  CreditRequest,
-  CreditSummary,
-  FileRef,
-  HubListing,
-  HubPurchaseResult,
-  HubAdminListing,
-  PromoApp,
-  HubSkill,
-  McpServer,
-  Message,
-  Meta,
-  ModelOption,
-  Provider,
-  ProviderKindInfo,
-  QualifiedTool,
-  SkillDescriptor,
-  SkillCatalogResponse,
-  SkillHubDraft,
-  SkillHubImportResult,
-  SkillHubSearchItem,
-  TopupListing,
-  TopupOrder,
-  User,
-  VoiceConfigResponse,
-  VoiceTranscript,
-} from "../types";
+import type { AnalysisPayload, AppSettings, AuthSession, ChatEvent, Conversation, CreditLedgerEntry, CreditRequest, CreditSummary, FileRef, HubListing, HubPurchaseResult, HubAdminListing, PromoApp, HubSkill, McpServer, Message, Meta, ModelOption, Provider, ProviderKindInfo, QualifiedTool, SkillDescriptor, SkillCatalogResponse, SkillHubDraft, SkillHubImportResult, SkillHubSearchItem, TopupListing, TopupOrder, User, VoiceConfigResponse, VoiceTranscript, TemplateItem } from "../types";
 
 /**
  * Thin, typed wrapper over the fBuddy API (see docs/API_CONTRACT.md).
@@ -310,6 +278,28 @@ export const api = {
     request<{ server: McpServer | null }>("POST", `/settings/mcp/${id}/refresh`, {}),
   mcpTools: () => request<{ items: QualifiedTool[] }>("GET", "/mcp/tools"),
 
+  /** Thư viện mẫu Word/Excel/PPT của người dùng. */
+  templates: () => request<{ items: TemplateItem[] }>("GET", "/templates"),
+  uploadTemplate: async (file: File, meta: { name?: string; description?: string; shared?: boolean } = {}) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (meta.name) form.append("name", meta.name);
+    if (meta.description) form.append("description", meta.description);
+    if (meta.shared) form.append("shared", "true");
+    const token = getToken();
+    const response = await fetch(`${BASE}/templates`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new ApiError(json?.error?.message ?? "Tải mẫu lên thất bại", json?.error?.code, response.status);
+    }
+    return json as { template: TemplateItem };
+  },
+  deleteTemplate: (id: string) => request<{ ok: boolean }>("DELETE", `/templates/${id}`),
+
   adminUsers: () =>
     request<{
       items: (User & {
@@ -415,6 +405,8 @@ export interface ChatRequest {
   providerId?: string | null;
   model?: string | null;
   toolMode?: "auto" | "off" | "required";
+  /** Mẫu (thư viện template) dùng cho lượt này. */
+  templateId?: string | null;
 }
 
 /**

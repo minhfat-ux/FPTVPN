@@ -36,6 +36,9 @@ export interface ComposerProps {
   onSkill: (skill: string) => void;
   /** Opens the "Thêm kỹ năng" picker / skill marketplace. */
   onOpenSkillPicker: () => void;
+  /** Mẫu (thư viện template) đang chọn cho lượt này — null = không dùng mẫu. */
+  templateName?: string | null;
+  onOpenTemplates: () => void;
   models: ModelOption[];
   modelValue: string;
   onModelValue: (value: string) => void;
@@ -83,6 +86,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     skill,
     onSkill,
     onOpenSkillPicker,
+    templateName,
+    onOpenTemplates,
     models,
     modelValue,
     onModelValue,
@@ -201,6 +206,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   return (
     <div className="composer-wrap">
       <div className="composer">
+        {/* Chọn MẪU cho lượt này (thư viện template Word/Excel/PPT của người dùng). */}
+        <div className="chip-row">
+          <button
+            className={`chip${templateName ? " active" : ""}`}
+            type="button"
+            onClick={onOpenTemplates}
+            title={t("chat.template.pickTitle")}
+          >
+            📄 {templateName ? t("chat.template.chipOn", { name: templateName }) : t("chat.template.chipOff")}
+          </button>
+        </div>
         {attachments.length > 0 && (
           <div className="chip-row composer-attachments">
             {attachments.map((file) => (

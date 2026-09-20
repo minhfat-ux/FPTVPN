@@ -23,6 +23,8 @@ export interface SendOptions {
   providerId?: string | null;
   model?: string | null;
   toolMode?: "auto" | "off" | "required";
+  /** Mẫu (thư viện template) người dùng chọn cho lượt này. */
+  templateId?: string | null;
 }
 
 interface ChatContextValue {
@@ -236,6 +238,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           providerId: options.providerId,
           model: options.model,
           toolMode: options.toolMode,
+          templateId: options.templateId ?? null,
         },
         {
           onEvent: (event) => {
