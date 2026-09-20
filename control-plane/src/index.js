@@ -287,7 +287,10 @@ app.use((req, res, next) => {
   if (req.path === "/health" || req.path === "/v1/health" || req.path === "/nodes" || req.path === "/v1/nodes" || req.path === "/v1/app-version") return next();
   // Node self-report (own secret) + client health reports (see /v1/nodes handlers).
   if (req.path === "/v1/nodes/self" || /^\/v1\/nodes\/[^/]+\/report$/.test(req.path)) return next();
-  if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
+  // `peers/heartbeat` do app gọi KHÔNG kèm session (chỉ peer_id + credential do server cấp),
+  // nên phải nằm trong allowlist giống `peers/register` — nếu không sẽ bị 401 và dashboard
+  // không bao giờ biết máy còn đang chạy (đúng lỗi đo 20/09/2026).
+  if (req.path.startsWith("/v1/auth/") || req.path === "/v1/enrollment-tokens" || req.path === "/v1/peers/register" || req.path === "/v1/peers/heartbeat" || req.path === "/v1/account" || req.path === "/v1/devices" || req.path.startsWith("/v1/devices/")) return next();
   // Trang chủ hệ sinh thái FlowTech (index của meetflowai.site + home.meetflowai.site):
   // mặt tiền phải mở cho khách, KHÔNG được đòi token admin.
   if (req.path === "/" || req.path === "/home" || req.path === "/index.html") return next();
@@ -4937,6 +4940,50 @@ app.post("/v1/peers/register", async (req, res) => {
   }
 });
 
+/**
+ * Heartbeat của thiết bị đang kết nối (client gọi mỗi 30s).
+ *
+ * Vì sao route này quan trọng: từ khi chuyển sang hysteria2 KHÔNG còn handshake WireGuard,
+ * nên đây là tín hiệu duy nhất cho biết máy còn đang chạy ⇒ dashboard đọc `lastSeenAt`.
+ * Trước 20/09/2026 route không tồn tại (mọi heartbeat 404) và dashboard chỉ đếm wg handshake
+ * nên luôn hiện 0 thiết bị online.
+ *
+ * Xác thực: credential do control plane cấp lúc register/claim và đã lưu trong bản ghi.
+ * Bản ghi CŨ (chưa có credential) nhận lần đầu rồi ghim lại (TOFU) + ghi log để rà soát.
+ */
+app.post(["/v1/peers/heartbeat", "/peers/heartbeat"], async (req, res) => {
+  try {
+    const peerId = String(req.body?.peer_id ?? "").trim();
+    const credential = String(req.body?.credential ?? "").trim();
+    if (!peerId || !credential) {
+      return res.status(400).json({ error: "peer_id and credential are required" });
+    }
+    const device = await store.findById(peerId);
+    if (!device || device.active === false) {
+      return res.status(404).json({ error: "unknown device" });
+    }
+    if (device.peerCredential && device.peerCredential !== credential) {
+      console.warn(`peers/heartbeat: credential KHÔNG khớp cho device ${peerId}`);
+      return res.status(403).json({ error: "invalid credential" });
+    }
+    if (!device.peerCredential) {
+      const devices = await store.all();
+      const rec = devices.find((d) => d.id === device.id);
+      if (rec) {
+        rec.peerCredential = credential;
+        rec.peerCredentialIssuedAt = new Date().toISOString();
+        await store._save(devices);
+      }
+      console.log(`peers/heartbeat: ghim credential cho device ${peerId} (bản ghi cũ chưa có)`);
+    }
+    await touchDeviceClientIp(device.id, req);
+    res.json({ ok: true, device_id: device.id });
+  } catch (err) {
+    console.error("POST /v1/peers/heartbeat failed:", err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 // User-scoped device management (FR-REVOKE-001/002): the signed-in user lists
 // and revokes their own devices. A revoked device keeps its record (status
 // "revoked") but loses its wg peer, so it cannot connect anymore (AC-011/AC-012).
@@ -5057,12 +5104,15 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
         replaced: replacedOnClaim.replaced?.deviceName ?? replacedOnClaim.replaced?.id ?? null,
       }));
     }
+    // Trả kèm credential để bản app sau này heartbeat định kỳ (bản đang cài bỏ qua field này).
+    const claimCredential = await issuePeerCredential(created.id);
     res.status(result.transferred ? 200 : 201).json({
       ok: true,
       device_id: created.id,
       created: !result.transferred,
       transferred: Boolean(result.transferred),
       replaced: replacedOnClaim.replaced,
+      peer_credential: claimCredential,
     });
   } catch (err) {
     console.error("POST /v1/devices/claim failed:", err);
@@ -5327,6 +5377,9 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
     }));
   }
 
+  // Credential dùng cho heartbeat định kỳ — cấp MỘT lần rồi lưu vào bản ghi thiết bị.
+  const peerCredential = await issuePeerCredential(device.id);
+
   if (apiShape === "v1") {
     return {
       status: result.isNew ? 201 : 200,
@@ -5335,7 +5388,7 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
         replaced,
         overlay_ip: device.assignedIP,
         network: IP_POOL_CIDR,
-        peer_credential: `PVPN-PEER-${crypto.randomUUID()}`,
+        peer_credential: peerCredential,
         peers: [],
       },
     };
@@ -5348,6 +5401,25 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
       config: buildClientConfig(device, selectedNode),
     },
   };
+}
+
+/**
+ * Cấp credential cho một thiết bị và LƯU vào registry.
+ *
+ * Vì sao phải lưu: client (iOS/Android/Windows) gọi `POST /v1/peers/heartbeat` mỗi 30s để
+ * giữ trạng thái "đang kết nối", nhưng route đó CHƯA TỪNG tồn tại ở server và credential
+ * cũng không được lưu (sinh mới mỗi lần trả về) ⇒ không có cách nào xác thực heartbeat.
+ * Đo thật 20/09/2026: dashboard hiện 0 thiết bị online trong khi khách đang kết nối 2 máy.
+ */
+async function issuePeerCredential(deviceId) {
+  const credential = `PVPN-PEER-${crypto.randomUUID()}`;
+  const devices = await store.all();
+  const device = devices.find((d) => d.id === deviceId);
+  if (!device) return credential;
+  device.peerCredential = credential;
+  device.peerCredentialIssuedAt = new Date().toISOString();
+  await store._save(devices);
+  return credential;
 }
 
 function buildClientConfig(device, node) {
