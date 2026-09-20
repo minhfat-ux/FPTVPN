@@ -1,6 +1,7 @@
 import { generatePptx } from "./pptx.js";
 import { generateXlsx } from "./xlsx.js";
 import { generateDocx } from "./docx.js";
+import { researchForModel } from "./research-tool.js";
 import { analyzeData, listFilesForModel } from "./data.js";
 import { editImage, transformImage } from "./image.js";
 import { readImageContent, xlsxFromImage } from "./vision.js";
@@ -111,6 +112,26 @@ export const TOOL_DEFINITIONS = [
       required: ["blocks"],
     },
     handler: generateDocx,
+  },
+  {
+    name: "research_web",
+    skill: null,
+    label: "Tra cứu nguồn ngoài",
+    description:
+      "Hỏi agent TRA CỨU (researcher) để lấy thông tin mới/kiểm chứng từ web: giá cả, tin tức, sự kiện, quy định, số liệu mới nhất. Trả về phát hiện kèm URL nguồn để trích dẫn.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "Câu hỏi cần tra cứu, càng cụ thể càng tốt" },
+        domain: {
+          type: "string",
+          description: "Lĩnh vực (tuỳ chọn): phap-luat, y-te, tai-chinh, giao-duc, cong-nghe…",
+        },
+        freshness: { type: "string", enum: ["d", "w", "m"], description: "Chỉ lấy nguồn trong ngày/tuần/tháng gần nhất" },
+      },
+      required: ["question"],
+    },
+    handler: researchForModel,
   },
   {
     name: "analyze_data",
@@ -306,6 +327,58 @@ export const TOOL_DEFINITIONS = [
           modelText: `LỖI TÍNH TOÁN: ${error?.message ?? error}. Hãy viết lại biểu thức rõ hơn rồi gọi lại công cụ — đừng tự tính nhẩm.`,
         };
       }
+    },
+  },
+  {
+    name: "tin_moi",
+    skill: "auto",
+    label: "Tin mới đã lấy về",
+    description:
+      "Tra trong kho tin fBuddy tự cập nhật mỗi ngày (báo chính thống Việt Nam + nguồn AI/công nghệ thế giới). " +
+      "Dùng khi người dùng hỏi tình hình, tin tức, sự kiện, 'có gì mới'. Trả về tiêu đề kèm NGUỒN và GIỜ ĐĂNG.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Từ khoá (vd 'giá vàng', 'OpenAI', 'bão')" },
+        topic: { type: "string", enum: ["vn", "ai", "tech", "chung"], description: "Nhóm tin: vn (Việt Nam), ai, tech" },
+        hours: { type: "number", description: "Chỉ lấy tin trong bao nhiêu giờ gần đây (mặc định 72)" },
+        limit: { type: "number", description: "Số tin tối đa (mặc định 12)" },
+      },
+    },
+    handler: async (args) => {
+      const { latestNews, newsStats } = await import("../news.js");
+      const rows = latestNews({
+        topic: args?.topic ?? null,
+        query: args?.query ?? null,
+        hours: Number(args?.hours) || 72,
+        limit: Math.min(30, Number(args?.limit) || 12),
+      });
+      const stats = newsStats();
+      if (!rows.length) {
+        return {
+          ok: false,
+          summary: "Không có tin nào khớp trong kho",
+          data: { total: stats.total },
+          artifacts: [],
+          modelText:
+            `Kho tin hiện có ${stats.total} tin nhưng KHÔNG có tin nào khớp truy vấn này. ` +
+            "Hãy nói thật là chưa thấy tin về việc đó, đừng suy diễn tình hình; muốn tra sâu hơn thì gọi `tra_cuu`.",
+        };
+      }
+      const lines = rows.map((row) => {
+        const when = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }).format(new Date(row.published_at));
+        return `- [${when}] ${row.title} — ${row.source} · ${row.url}`;
+      });
+      return {
+        ok: true,
+        summary: `${rows.length} tin (kho có ${stats.total})`,
+        data: { items: rows.map((row) => ({ title: row.title, url: row.url, source: row.source, publishedAt: row.published_at })) },
+        artifacts: [],
+        modelText:
+          `TIN TRONG KHO fBuddy (${rows.length} tin khớp, tổng ${stats.total} tin):\n` +
+          lines.join("\n") +
+          "\nKhi trả lời phải nêu nguồn và giờ đăng. Tin không có trong danh sách thì KHÔNG được kể.",
+      };
     },
   },
   {

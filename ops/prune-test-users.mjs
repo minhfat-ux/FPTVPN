@@ -19,6 +19,7 @@ const PATTERNS = process.argv
   .map((a) => a.slice("--like=".length));
 const patternsDefault = [
   "credit-explain+%",
+  "apps-explain+%",
   "i18n-ui+%",
   "skills-check+%",
   "mobile-check+%",

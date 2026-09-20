@@ -124,12 +124,30 @@ let failed = 0;
 for (const slug of targets) {
   const entry = content[slug] ?? {};
   const row = bySlug.get(slug);
+  const problems = validate(slug, entry);
+
+  // Slug chưa có trong chợ (mục MỚI, ví dụ 21 mục giáo dục) → TẠO mới thay vì cập nhật.
   if (!row) {
-    console.log(`✗ ${slug}: không có trong chợ — kiểm tra lại slug`);
-    failed += 1;
+    console.log(`${problems.length ? "!" : "＋"} ${slug}  (mới) → tạo category "${entry.category ?? "Giáo dục"}"`);
+    for (const problem of problems) console.log(`    - ${problem}`);
+    if (problems.length) { failed += 1; continue; }
+    if (!APPLY) { console.log("    (chạy thử — thêm --apply để tạo)"); continue; }
+    const created = await api("POST", "/admin/hub", {
+      slug,
+      name: String(entry.name ?? slug).slice(0, 120),
+      tagline: String(entry.tagline ?? "").slice(0, 200),
+      description: String(entry.description ?? "").slice(0, 2000),
+      category: entry.category ?? "Giáo dục",
+      icon: entry.icon ?? "sparkles",
+      instructions: String(entry.instructions).slice(0, 6000),
+      ...(entry.i18n ? { i18n: entry.i18n } : {}),
+      priceVnd: 0,
+      state: entry.state ?? "published",
+    }, token);
+    console.log(`    → đã TẠO (id ${created?.skill?.id ?? "?"})`);
     continue;
   }
-  const problems = validate(slug, entry);
+
   const before = String(row.instructions ?? "").length;
   const after = String(entry.instructions ?? "").trim().length;
   console.log(`${problems.length ? "!" : "✓"} ${slug}  ${before} → ${after} ký tự  (${row.name})`);

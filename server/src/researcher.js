@@ -824,6 +824,12 @@ export async function maybePreResearch({ message = "", timeoutMs = 15000 } = {})
       label: profile.label,
       confidence: result.confidence,
       text: researchToModelText(result),
+      // Giữ lại danh sách nguồn (có URL) để lượt chat NÓI RÕ đã tra ở đâu — yêu cầu chủ dự án
+      // 2026-09-20: "cần fbuddy nói rõ các nguồn tra cứu thông tin của nó".
+      findings: (result.findings ?? []).slice(0, 8).map((f) => ({
+        title: String(f.title ?? "").slice(0, 140),
+        url: String(f.url ?? "").slice(0, 300),
+      })).filter((f) => f.url),
     };
   } catch {
     return null;

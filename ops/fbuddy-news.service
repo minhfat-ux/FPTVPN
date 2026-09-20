@@ -1,0 +1,14 @@
+[Unit]
+Description=fBuddy — cập nhật tin tức hằng ngày (báo chính thống VN + AI/công nghệ thế giới)
+Documentation=file:/opt/fbuddy/docs/PORTS-AND-SERVICES.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# systemd không có PATH như phiên SSH ⇒ thiếu PATH là "node: command not found" (đã gặp thật).
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/node /opt/fbuddy/ops/news-refresh.mjs --hours 36
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=300

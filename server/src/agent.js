@@ -6,6 +6,7 @@ import { buildAppsKnowledge } from "./apps-knowledge.js";
 import { buildVnPlateKnowledge } from "./vn-plates.js";
 import { maybePreResearch, vnNow } from "./researcher.js";
 import { buildSkillSuggestionBlock } from "./skills/suggest.js";
+import { buildNewsBlock } from "./news.js";
 import { userLocale } from "./skills/hub.js";
 import { buildMemoryBlock, learnSelfReference } from "./memory.js";
 import { isConfirmed, planChoices } from "./skills/confirm.js";
@@ -107,6 +108,18 @@ const SKILL_INSTRUCTIONS = {
  * Luật xưng hô — luôn được ghép vào system prompt ở tầng CODE, nên admin đổi prompt
  * trong Cài đặt cũng không xoá được. Giữ đúng cặp xưng hô của người dùng suốt hội thoại.
  */
+/**
+ * Luật NGUỒN — ghép ở tầng CODE (như luật xưng hô), nên admin sửa system prompt trong Cài đặt
+ * cũng không xoá được. Yêu cầu chủ dự án 2026-09-20: "cần fbuddy nói rõ các nguồn tra cứu thông tin".
+ */
+const SOURCE_RULES = [
+  "NGUỒN THÔNG TIN (bắt buộc):",
+  "• Khi câu trả lời dựa trên tệp người dùng tải lên, kết quả tra cứu web, dữ liệu công cụ hoặc ghi nhớ hội thoại ⇒ NÓI RÕ nguồn ngay trong câu trả lời (ví dụ: \"theo tệp báo-cao.xlsx anh gửi\", \"theo nguồn <tên miền> (<url>)\").",
+  "• Nếu CHỈ dùng kiến thức sẵn có của model (không tra ngoài, không có tệp) ⇒ nói thẳng: \"phần này em trả lời theo kiến thức sẵn có, chưa tra nguồn ngoài\".",
+  "• TUYỆT ĐỐI không bịa nguồn, không bịa URL, không gán số liệu cho một nguồn mà mình không đọc.",
+  "• Nếu số liệu có mốc thời gian, nêu rõ số liệu tính tới ngày/giờ nào.",
+].join("\n");
+
 const PRONOUN_RULES = [
   "XƯNG HÔ (bắt buộc, áp dụng cho MỌI câu trả lời):",
   "• Trước khi trả lời, nhận diện cách người dùng tự xưng và cách họ gọi bạn, rồi giữ đúng cặp xưng hô đó suốt hội thoại.",
@@ -175,6 +188,7 @@ const RESEARCH_RULES = [
   "TRA CỨU TRƯỚC KHI NÓI (bắt buộc với dữ kiện tra được):",
   "• PHẢI gọi công cụ `tra_cuu` trước khi trả lời, không được trả lời theo trí nhớ, với: địa lý và địa danh (thủ đô, quốc gia, tỉnh/thành, sông núi, dân số, diện tích…); văn hoá, lịch sử, tín ngưỡng, phong tục; giáo dục (chương trình học, thi cử, tuyển sinh, chứng chỉ); AI và công nghệ (mô hình, thuật toán, bài báo, thông số kỹ thuật); biển số/đăng ký xe theo tỉnh; pháp luật, nghị định, thông tư, mức phạt, thời hạn, ngày hiệu lực; thuế, lệ phí, biểu phí; giá cả thị trường; thông số sản phẩm; tin tức, sự kiện, số liệu thống kê; thông tin về một người hay tổ chức cụ thể.",
   "• THÔNG TIN VỀ CHÍNH PHỦ/NHÀ NƯỚC (thủ tục hành chính, giấy tờ, chính sách, trợ cấp, thuế, đất đai, xuất nhập cảnh, xử phạt…): BẮT BUỘC gọi `tra_cuu` với `domain: \"chinh-phu\"` và CHỈ dùng nguồn chính thống (tên miền .gov.vn, chinhphu.vn, vanban.chinhphu.vn, vbpl.vn, quochoi.vn, dichvucong.gov.vn). TUYỆT ĐỐI không trả lời theo trí nhớ, không lấy blog/diễn đàn/trang tổng hợp, không tự suy ra thủ tục. Không tìm được nguồn chính thống thì nói thẳng là chưa tra được và chỉ người dùng tới cổng chính thức — người dùng sẽ mang câu trả lời đi làm thủ tục thật.",
+  "• TIN TỨC & TÌNH HÌNH: fBuddy có kho tin tự cập nhật mỗi ngày từ báo chính thống Việt Nam và nguồn AI/công nghệ thế giới. Khi được hỏi tin tức/sự kiện/'có gì mới', dùng khối TIN ĐÃ LẤY VỀ nếu có, hoặc gọi `tin_moi`; mọi tin phải nêu NGUỒN và GIỜ ĐĂNG. Không có tin trong kho thì nói chưa thấy tin, TUYỆT ĐỐI không kể tin theo trí nhớ (tin nhớ là tin cũ, dễ sai).",
   "• KINH TẾ VÀ SỐ LIỆU THỊ TRƯỜNG (GDP, lạm phát, tỷ giá, lãi suất, giá vàng/xăng/dầu, chứng khoán, tiền mã hoá, xuất nhập khẩu, thất nghiệp, thu nhập bình quân…): BẮT BUỘC gọi `tra_cuu` với `domain: \"kinh-te\"`. Mọi con số phải nêu KỲ số liệu (năm/quý/ngày) và nguồn. KHÔNG đọc số theo trí nhớ, KHÔNG đoán giá hay tỷ giá — số kinh tế đổi liên tục nên số nhớ là số sai. Không lấy được số mới thì nói thẳng là chưa có số cập nhật và chỉ người dùng tới nguồn chính thức (Tổng cục Thống kê, Ngân hàng Nhà nước, Bộ Tài chính, World Bank).",
   "• MỌI PHÉP TÍNH có số cụ thể (kể cả phần trăm, lãi suất, chia tiền, đổi đơn vị) PHẢI gọi công cụ `tinh_toan` rồi dùng đúng con số công cụ trả về. KHÔNG tự tính nhẩm. Công cụ nói kết quả là xấp xỉ thì khi trả lời cũng phải nói là xấp xỉ.",
   "• Tra xong: CHỈ nói phần có trong kết quả trả về và nêu nguồn khi người dùng cần độ chính xác. Phần không có trong kết quả thì KHÔNG được thêm vào — kể cả khi bạn \"nhớ\" là đúng. Không tự thêm mã vào một nhóm tỉnh, không tự suy ra số điều luật.",
@@ -281,6 +295,7 @@ export function buildSystemPrompt({ skill, files, settings, hubSkill = null, use
   const parts = [
     basePrompt,
     PRONOUN_RULES,
+    SOURCE_RULES,
     CULTURE_RULES,
     RESEARCH_RULES,
     // Kết quả tra TRƯỚC (server tự tra, không chờ model gọi công cụ) — đặt ngay sau luật để model
@@ -296,6 +311,8 @@ export function buildSystemPrompt({ skill, files, settings, hubSkill = null, use
     buildSkillSuggestionBlock({ message, userId: user?.id ?? null, lang: user?.id ? userLocale(user.id) : "vi" }),
     // Bảng tra biển số chỉ ghép khi câu hỏi chạm tới biển số/xe — bảng dài, không nhét vào mọi lượt.
     buildVnPlateKnowledge({ message }),
+    // Tin mới nhất trong ngày — chỉ ghép khi câu hỏi chạm tới thời sự.
+    buildNewsBlock({ message }),
     buildMemoryBlock({ userId: user?.id ?? null, query: message, conversationId, accountName: user?.name ?? null }),
     `Bây giờ là ${vnClock.stamp}. Dùng đúng mốc này khi nói "hôm nay", "tuần này" và khi tra cứu thông tin mới.`,
     SKILL_INSTRUCTIONS[skill] ?? "",
@@ -467,7 +484,10 @@ export async function prepareTurn({ user, body, channel }) {
           ? "xlsx_from_image"
           : "generate_xlsx";
 
-  return { settings, skill, hubSkill, content, provider, model, conversation, userMessage, files, forceTool, forceToolName, planFirst };
+  // `autoResearch` PHẢI được trả về: trước 2026-09-20 nó được tra xong rồi BỊ VỨT (không truyền
+  // vào `buildSystemPrompt`), nên model không hề thấy kết quả tra cứu — tốn tới 8 giây mỗi câu hỏi
+  // mà vẫn trả lời theo trí nhớ. Đây cũng là gốc của việc "không nói rõ nguồn".
+  return { settings, skill, hubSkill, content, provider, model, conversation, userMessage, files, forceTool, forceToolName, planFirst, autoResearch };
 }
 
 /** Turns the stored history + fresh user turn into provider-shaped messages. */
@@ -560,6 +580,39 @@ function switchToFallbackProvider({ failed, attemptedIds }) {
  * Runs the assistant turn: streams text, executes built-in + MCP tool calls and
  * persists one assistant message holding the whole turn.
  */
+/**
+ * Khối "Nguồn tra cứu" gắn vào cuối câu trả lời.
+ *
+ * Vì sao do SERVER soạn chứ không để model tự khai: server biết CHÍNH XÁC lượt này đã đọc tệp nào,
+ * gọi công cụ gì, tra web ở đâu. Yêu cầu chủ dự án 2026-09-20: "cần fbuddy nói rõ các nguồn tra cứu
+ * thông tin của nó". Khối này hiện ở MỌI client (web, app, sau khi tải lại) vì nó là một phần nội
+ * dung tin nhắn, không phải trang trí giao diện.
+ */
+export function formatSourcesBlock(sources = [], { usedModelKnowledge = true } = {}) {
+  const web = sources.filter((s) => s.kind === "web" && s.url);
+  const files = sources.filter((s) => s.kind === "file");
+  const tools = sources.filter((s) => s.kind === "tool" || s.kind === "mcp");
+  const other = sources.filter((s) => !["web", "file", "tool", "mcp"].includes(s.kind));
+  const lines = [];
+  if (web.length) {
+    lines.push("• Web: " + web.slice(0, 8).map((s) => `${s.label} — ${s.url}`).join(" | "));
+  }
+  if (files.length) {
+    lines.push("• Tệp trong hội thoại: " + files.slice(0, 8).map((s) => s.label).join(", "));
+  }
+  if (tools.length) {
+    lines.push("• Công cụ đã dùng: " + [...new Set(tools.map((s) => s.label))].slice(0, 10).join(", "));
+  }
+  if (other.length) {
+    lines.push("• Khác: " + [...new Set(other.map((s) => s.label))].slice(0, 6).join(", "));
+  }
+  if (usedModelKnowledge) {
+    lines.push("• Còn lại: kiến thức sẵn có của model + lịch sử hội thoại này (KHÔNG tra nguồn ngoài)");
+  }
+  if (!lines.length) return "";
+  return `\n\n—\n**Nguồn tra cứu**\n${lines.join("\n")}`;
+}
+
 export async function runChatTurn({ user, turn, channel, signal }) {
   const { settings, skill, conversation, files } = turn;
   const started = Date.now();
@@ -621,6 +674,14 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   // 参数非法"). Instead of dropping the picture, the backend falls back to a vision
   // model: it reads the image, and the extracted text goes into this turn's context
   // so the user's real request ("đưa hết data trong ảnh thành excel") still works.
+  if (turn.autoResearch?.findings?.length) {
+    for (const hit of turn.autoResearch.findings) {
+      sources.push({ kind: "web", label: hit.title || hit.url, url: hit.url });
+    }
+  }
+  for (const file of files ?? []) {
+    sources.push({ kind: "file", label: file.name ?? "tệp", id: file.id });
+  }
   const vision = await applyVisionFallback({ messages, provider, model, user, conversationId: conversation.id, signal, channel });
   if (vision.applied && vision.read) {
     if (messages[0]?.role === "system") {
@@ -640,6 +701,8 @@ export async function runChatTurn({ user, turn, channel, signal }) {
   const toolCalls = [];
   const toolResults = [];
   const artifacts = [];
+  /** Nguồn tra cứu của lượt này — gắn vào cuối câu trả lời (yêu cầu chủ dự án 2026-09-20). */
+  const sources = [];
   let text = "";
   let usage = null;
   let finishReason = "stop";
@@ -688,6 +751,9 @@ export async function runChatTurn({ user, turn, channel, signal }) {
               break;
             case "tool_call":
               pendingCalls.push(event);
+              if (!sources.some((s) => s.kind === "tool" && s.label === event.name)) {
+                sources.push({ kind: "tool", label: event.name });
+              }
               break;
             case "usage":
             case "usage_final":
@@ -893,6 +959,9 @@ export async function runChatTurn({ user, turn, channel, signal }) {
         })
     : [];
 
+  // Gắn "Nguồn tra cứu" vào chính nội dung: hiện ở web, ở app và cả sau khi tải lại.
+  const sourcesBlock = formatSourcesBlock(sources);
+  if (sourcesBlock && text.trim()) text = `${text}${sourcesBlock}`;
   const assistantMessage = createMessage({
     conversationId: conversation.id,
     userId: user.id,
@@ -924,6 +993,8 @@ export async function runChatTurn({ user, turn, channel, signal }) {
     messageId: assistantMessage.id,
     finishReason,
     iterations: toolCalls.length,
+    /** Danh sách nguồn của lượt này (để client hiện đẹp hơn nếu muốn). */
+    sources: sources.slice(0, 20),
     durationMs: Date.now() - started,
     usage,
     artifacts,

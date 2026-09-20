@@ -279,6 +279,22 @@ CREATE TABLE IF NOT EXISTS user_state (
 -- Sự thật BỀN VỮNG về một người dùng, để lần sau không phải hỏi lại: tên, vai trò,
 -- công ty, sở thích, định dạng ưa thích, dự án đang làm, và cả cách họ tự xưng.
 -- Chỉ thuộc về chính người đó: mọi truy vấn đều lọc theo user_id.
+-- TIN TỨC cập nhật hằng ngày cho trợ lý: lấy từ RSS của báo chính thống Việt Nam và các nguồn
+-- AI/công nghệ thế giới. Giữ ở DB (không nhét vào prompt) để tra được theo từ khoá và theo ngày.
+CREATE TABLE IF NOT EXISTS news_items (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL,
+  source TEXT NOT NULL,          -- tên báo/nguồn
+  topic TEXT NOT NULL DEFAULT 'chung', -- vn | ai | tech | chung
+  summary TEXT,
+  published_at TEXT NOT NULL,    -- thời điểm bài đăng (ISO, UTC)
+  fetched_at TEXT NOT NULL,
+  UNIQUE(url)
+);
+CREATE INDEX IF NOT EXISTS idx_news_published ON news_items(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_news_topic ON news_items(topic, published_at DESC);
+
 CREATE TABLE IF NOT EXISTS user_memories (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

@@ -27,7 +27,8 @@ Express 5 (server/src/index.js)
 1. UI gọi `POST /api/chat/stream` (JSON) → server mở **SSE** và phát ngay `start`.
 2. `prepareTurn()`: xác định skill/model/provider (chọn tường minh → hội thoại → mặc định → provider bật đầu tiên),
    tạo/ cập nhật hội thoại, lưu tin nhắn người dùng, gắn tệp đã upload.
-3. `buildModelMessages()`: system prompt (base + hướng dẫn theo skill + danh sách tệp kèm `fileId`) + lịch sử gần nhất;
+3. `buildModelMessages()`: system prompt (base + quy tắc xưng hô + **khối dữ kiện app** từ `apps-knowledge.js`
+   + khối credit thật của tài khoản + hướng dẫn theo skill + danh sách tệp kèm `fileId`) + lịch sử gần nhất;
    ảnh được chuyển thành payload vision, tệp văn bản/CSV được chèn dạng text.
 4. Vòng lặp tối đa `maxToolIterations` (mặc định 6, trần 12):
    - gọi `streamChat()` của provider → phát `delta` / `reasoning`;
@@ -84,6 +85,23 @@ Người dùng chưa lưu gì thì mặc định nhận mọi kỹ năng `ready`
 
 Mọi skill trả cùng một hình dạng: `{ ok, summary, data, artifacts, modelText }` — `modelText` là phần model đọc,
 `data` là phần UI đọc (bảng/biểu đồ), `artifacts` là tệp tải về.
+
+## 5b. Kiến thức ghép vào system prompt
+
+Hai khối dữ kiện **không** nằm trong `app_settings.systemPrompt` mà ở tầng code, nên admin đổi prompt hệ thống
+trong Cài đặt vẫn không mất:
+
+| Khối | Nguồn | Khi nào ghép | Vì sao |
+|---|---|---|---|
+| Xưng hô | `PRONOUN_RULES` (`agent.js`) | luôn | gọi sai vai là lỗi giao tiếp nặng |
+| App/hệ sinh thái | `apps-knowledge.js` | định danh: luôn · danh mục chi tiết: khi câu hỏi chạm tới app/công ty/nền tảng/giá/tải–cài | trợ lý từng nhầm MeetFlow AI thành fBuddy hoặc thành tên công ty |
+| Credit | `buildCreditKnowledge()` (`agent.js`) | luôn (khi bật metering) | trợ lý từng trả lời "fBuddy miễn phí" |
+
+Danh mục app tách làm hai mức vì lý do token: khối định danh ~900 ký tự, danh mục đầy đủ ~4.000 ký tự
+(≈ 1.200 token). Lượt làm việc thường chỉ trả phần định danh; đặt `APPS_KNOWLEDGE_ALWAYS = true` trong
+`apps-knowledge.js` nếu muốn ghép đủ mọi lượt. Dữ kiện trong file đó ghi rõ nguồn (meetflowai.site, App Store,
+code) và **không** chứa giá bằng số — giá đổi là câu trả lời sai ngay.
+Kiểm tra trên máy thật: `node ops/apps-explain-check.mjs <api-base>`.
 
 ## 6. Dữ liệu (SQLite)
 

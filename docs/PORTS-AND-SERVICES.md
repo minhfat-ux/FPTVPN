@@ -96,6 +96,23 @@ Hai node: **node-1** `103.173.155.50` (VPN `10.77.0.1`) và **node-2** `165.101.
 - Nhân bản sang node kia: `rsync -az --delete` qua SSH (node-2 → node-1), giữ cả bản tại chỗ để cứu được cả khi mất một node.
 - Cảnh báo: chạy hỏng thì gửi Telegram (`ops/lib/telegram.mjs`), không im lặng.
 
+## 6b. Job cập nhật tin tức hằng ngày (đang chạy)
+
+`fbuddy-news.timer` chạy `ops/news-refresh.mjs` **2 lần/ngày (06:05 và 18:05)**: lấy RSS của báo
+chính thống Việt Nam (VnExpress, Tuổi Trẻ, Thanh Niên, VietnamPlus/TTXVN, Nhân Dân) và nguồn
+AI/công nghệ thế giới (OpenAI, Google DeepMind, Hugging Face, TechCrunch AI, The Verge AI, MIT
+Technology Review, Ars Technica, Hacker News), ghi vào bảng `news_items` (dedupe theo URL).
+
+Mặt đọc: `server/src/news.js` — ghép khối "TIN ĐÃ LẤY VỀ" vào prompt khi câu hỏi chạm tới thời sự,
+và công cụ `tin_moi` để trợ lý tra sâu hơn. Mọi tin trả lời đều phải kèm **NGUỒN + GIỜ ĐĂNG**.
+
+Nguồn đã bỏ sau khi dò thật (đừng thêm lại): `vietnamnet.vn/rss/*` (404/301), `chinhphu.vn/rss/*`
+(404 — tin chính phủ tra qua researcher hồ sơ `chinh-phu`), `vneconomy.vn/rss/*` (feed rỗng),
+`rss.arxiv.org` (rỗng — câu hỏi bài báo AI đã có researcher gọi arXiv API), `anthropic.com/rss.xml`
+(404), `venturebeat.com/.../feed/` (429 liên tục).
+
+Kiểm tra: `systemctl list-timers fbuddy-news.timer` · `journalctl -u fbuddy-news -n 20`.
+
 ## 7. Health check & cân bằng tải (thiết kế)
 
 SQLite **không** dùng chung được cho nhiều node ghi đồng thời, nên không làm active-active. Mô hình đúng:

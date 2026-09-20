@@ -1,0 +1,11 @@
+[Unit]
+Description=fBuddy — hẹn giờ lấy tin (2 lần/ngày: 06:05 và 18:05)
+Documentation=file:/opt/fbuddy/docs/PORTS-AND-SERVICES.md
+
+[Timer]
+OnCalendar=*-*-* 06,18:05:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
