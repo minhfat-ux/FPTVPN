@@ -93,13 +93,14 @@ test("trang buy: link store Mac (nếu cấu hình) vẫn thắng mặc định"
   assert.ok(!html.includes('href="https://meetflowai.site/install/mac"'), "không render thêm badge ad hoc khi có link store");
 });
 
-test("trang buy: khối hướng dẫn Mac có đủ 4 bước ở cả 5 ngôn ngữ", () => {
+test("trang buy: khối hướng dẫn Mac có đủ bước ở cả 5 ngôn ngữ", () => {
   for (const lang of ["vi", "en", "zh", "ja", "ko"]) {
     const html = page(lang, { ios: "https://meetflowai.site/install/ios" });
     const blocks = html.match(/class="howto adhoc"[\s\S]*?<\/ol>/g) ?? [];
     const mac = blocks.find((b) => b.includes("💻"));
     assert.ok(mac, `${lang}: thiếu khối hướng dẫn Mac`);
-    assert.equal((mac.match(/<li>/g) ?? []).length, 4, `${lang}: phải đủ 4 bước`);
+    assert.ok((mac.match(/<li>/g) ?? []).length >= 4, `${lang}: phải đủ bước cài Mac`);
+    assert.ok(mac.includes("xattr -dr com.apple.quarantine"), `${lang}: thiếu bước gỡ quarantine (tuỳ chọn) cho người rành`);
     assert.ok(mac.includes("Open Anyway"), `${lang}: thiếu bước Open Anyway`);
     assert.ok(/\bAllow\b/.test(mac), `${lang}: thiếu bước cấp quyền VPN (Allow)`);
     assert.ok(mac.includes("Connect"), `${lang}: thiếu bước Connect`);
