@@ -6,7 +6,9 @@ import {
   isPeerOnline,
   ispHintFromPTR,
   aggregateConnections,
+  aggregateDeviceSessions,
   createPTRLookup,
+  DEFAULT_DEVICE_REPORT_WINDOW_MS,
 } from "../src/connection-stats.js";
 
 const NOW = 1_800_000_000; // giây, mốc thời gian cố định cho test
@@ -160,4 +162,62 @@ test("createPTRLookup có cache và chịu được resolver treo/lỗi", async 
 
 test("createPTRLookup bắt buộc có resolver", () => {
   assert.throws(() => createPTRLookup({}), /requires a resolve/);
+});
+
+// ---- Nguồn "đang kết nối" của thời hysteria2 (không còn handshake WireGuard) ----------
+//
+// Bối cảnh đo thật 20/09/2026: khách đang kết nối 2 máy mà dashboard hiện
+// `online_peers: 0` vì mọi bản app đi hysteria2 qua relay Cloudflare. App gọi
+// `/v1/devices/claim` mỗi lần kết nối nên `lastSeenAt` là tín hiệu thật còn lại.
+
+const NOW_MS = Date.parse("2026-09-20T07:00:00.000Z");
+
+test("aggregateDeviceSessions: thiết bị mới báo cáo được tính là online", () => {
+  const devices = [
+    { id: "d1", userId: "u1", active: true, platform: "macos", deviceName: "mac-a", lastSeenAt: "2026-09-20T06:59:10.000Z", lastClientIp: "1.2.3.4", lastClientIpAt: "2026-09-20T06:59:10.000Z", exitNodeId: "node-1" },
+    { id: "d2", userId: "u1", active: true, platform: "ios", deviceName: "iphone", lastSeenAt: "2026-09-20T06:45:00.000Z" },
+  ];
+  const nodes = [{ id: "node-1", name: "1", city: "Hanoi", country: "VN" }];
+  const users = [{ id: "u1", email: "khach@example.com" }];
+  const out = aggregateDeviceSessions({ devices, nodes, users, nowMs: NOW_MS });
+  assert.equal(out.rows.length, 2);
+  assert.equal(out.totals.reported, 2);
+  assert.equal(out.rows[0].source, "device");
+  assert.equal(out.rows[0].device_name, "mac-a");
+  assert.equal(out.rows[0].user_email, "khach@example.com");
+  assert.equal(out.rows[0].node_name, "1");
+  assert.equal(out.rows[0].node_location, "Hanoi, VN");
+  assert.equal(out.rows[0].client_ip, "1.2.3.4");
+  assert.equal(out.rows[0].reported_sec_ago, 50);
+  // Sắp xếp: mới báo cáo nhất lên đầu.
+  assert.equal(out.rows[1].device_id, "d2");
+});
+
+test("aggregateDeviceSessions: bỏ thiết bị probe (không user), đã thu hồi và quá cũ", () => {
+  const devices = [
+    { id: "probe", userId: null, active: true, lastSeenAt: "2026-09-20T06:59:00.000Z" },
+    { id: "revoked", userId: "u1", active: false, lastSeenAt: "2026-09-20T06:59:00.000Z" },
+    { id: "stale", userId: "u1", active: true, lastSeenAt: "2026-09-20T05:00:00.000Z" },
+    { id: "never", userId: "u1", active: true },
+  ];
+  const out = aggregateDeviceSessions({ devices, nowMs: NOW_MS });
+  assert.equal(out.rows.length, 0);
+  assert.equal(out.totals.skipped_not_real_device, 2); // probe (không user) + đã thu hồi
+  assert.equal(out.totals.skipped_stale, 2); // stale + chưa từng báo cáo
+});
+
+test("aggregateDeviceSessions: cửa sổ mặc định 30 phút, đổi được", () => {
+  assert.equal(DEFAULT_DEVICE_REPORT_WINDOW_MS, 30 * 60 * 1000);
+  const devices = [{ id: "d1", userId: "u1", active: true, lastSeenAt: "2026-09-20T06:45:00.000Z" }];
+  assert.equal(aggregateDeviceSessions({ devices, nowMs: NOW_MS }).rows.length, 1);
+  // Cửa sổ 10 phút => cùng thiết bị đó bị coi là cũ.
+  assert.equal(aggregateDeviceSessions({ devices, nowMs: NOW_MS, windowMs: 10 * 60 * 1000 }).rows.length, 0);
+});
+
+test("aggregateDeviceSessions không tính thiết bị chưa từng báo cáo node nào", () => {
+  const devices = [{ id: "d1", userId: "u1", active: true, lastSeenAt: "2026-09-20T06:59:00.000Z", exitNodeId: null }];
+  const out = aggregateDeviceSessions({ devices, nowMs: NOW_MS });
+  assert.equal(out.rows[0].node_id, null);
+  assert.equal(out.rows[0].node_name, null);
+  assert.equal(out.rows[0].node_location, null);
 });

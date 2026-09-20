@@ -1988,11 +1988,11 @@ export function adminPageHTML() {
       return Math.round(minutes / (60 * 24)) + " ngày trước";
     }
 
-    function renderOnlineDevices(devices, truncated) {
+    function renderOnlineDevices(devices, truncated, windowMin) {
       const tbody = fields.statsOnline;
       tbody.innerHTML = "";
       if (!devices.length) {
-        tbody.innerHTML = '<tr><td colspan="9">Không có thiết bị nào đang kết nối (wg handshake &lt; 3 phút).</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">Không có thiết bị nào vừa báo cáo (hysteria2) và không có peer WireGuard nào handshake &lt; 3 phút.</td></tr>';
         return;
       }
       for (const d of devices) {
@@ -2002,15 +2002,24 @@ export function adminPageHTML() {
           td.textContent = text;
           tr.appendChild(td);
         };
+        // Nguồn "device" = app tự báo cáo lúc kết nối (hysteria2, không có handshake):
+        // không có rx/tx, và thời gian hiển thị là "báo cáo cách đây bao lâu".
+        const fromDevice = d.source === "device";
         cell(d.device_name || (d.device_id ? "device" : "không rõ (chưa đăng ký)"));
         cell(d.platform || "—");
         cell(d.user_email || "—");
-        cell(d.node_name + (d.node_location ? " (" + d.node_location + ")" : ""));
+        cell(d.node_name ? d.node_name + (d.node_location ? " (" + d.node_location + ")" : "") : "—");
         cell(realIpText(d));
         cell(d.location || "—");
         cell(d.isp || "—");
-        cell(d.connected_sec == null ? "—" : formatUptime(d.connected_sec) + " trước");
-        cell(formatBytes(d.rx_bytes) + " ↓ / " + formatBytes(d.tx_bytes) + " ↑");
+        if (fromDevice) {
+          cell(d.reported_sec_ago == null ? "—" : "báo cáo " + formatUptime(d.reported_sec_ago) + " trước");
+          // Không có rx/tx theo từng thiết bị khi đi hysteria2 (số liệu nằm ở node).
+          cell("— (hysteria2)");
+        } else {
+          cell(d.connected_sec == null ? "—" : formatUptime(d.connected_sec) + " trước");
+          cell(formatBytes(d.rx_bytes) + " ↓ / " + formatBytes(d.tx_bytes) + " ↑");
+        }
         tbody.appendChild(tr);
       }
       if (truncated) {
@@ -2052,11 +2061,13 @@ export function adminPageHTML() {
         const data = await request("/v1/admin/stats");
         const t = data.totals || {};
         fields.statsCards.innerHTML = "";
+        const windowMin = t.device_report_window_min ?? 30;
         fields.statsCards.append(
           statCard(t.devices ?? 0, "Devices", "real, owned by users"),
           statCard(t.users ?? 0, "Users", "accounts"),
           statCard(t.active_devices ?? 0, "Active", "not revoked"),
-          statCard(t.online_peers ?? 0, "Online", "wg handshake < 3min"),
+          statCard(t.online_devices ?? 0, "Online", "báo cáo < " + windowMin + " phút"),
+          statCard(t.online_peers ?? 0, "WG peers", "handshake < 3min (bản cũ)"),
           statCard(t.test_devices ?? 0, "Test Devices", "no user (legacy)"),
           statCard(t.revoked_devices ?? 0, "Revoked", "disabled"),
         );
@@ -2076,15 +2087,16 @@ export function adminPageHTML() {
         // Location thật (best-effort từ PTR của IP công khai client).
         renderBars(fields.statsRegions, data.by_location || {});
 
-        renderOnlineDevices(data.online_devices || [], data.online_devices_truncated);
+        renderOnlineDevices(data.online_devices || [], data.online_devices_truncated, windowMin);
         renderGeoipNote(data.geoip);
 
         const totals = data.connections_totals || {};
         fields.statsStatus.style.color = "";
         fields.statsStatus.textContent =
           "Generated " + new Date(data.generated_at).toLocaleString() +
-          " · " + (totals.online ?? 0) + " online / " + (totals.total ?? 0) + " peer" +
-          " trên " + (totals.nodes ?? 0) + " server · " +
+          " · " + (t.online_devices ?? 0) + " thiết bị báo cáo < " + windowMin + " phút" +
+          " (nguồn app/hysteria2) · " + (t.online_peers ?? 0) + " peer WireGuard" +
+          " / " + (totals.total ?? 0) + " peer trên " + (totals.nodes ?? 0) + " server · " +
           Object.keys(data.by_location || {}).length + " ISP group(s)";
       } catch (error) {
         fields.statsStatus.textContent = error.message;

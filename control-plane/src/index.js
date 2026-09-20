@@ -35,8 +35,10 @@ import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { PlanStore } from "./plan-store.js";
 import {
   aggregateConnections,
+  aggregateDeviceSessions,
   clientIPFromEndpoint,
   createPTRLookup,
+  DEFAULT_DEVICE_REPORT_WINDOW_MS,
 } from "./connection-stats.js";
 import { adminPageHTML } from "./admin-page.js";
 import { provisionEverywhere, revokeEverywhere } from "./peer-mirror.js";
@@ -4670,6 +4672,18 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
     const connections = aggregateConnections({ nodes: nodeList, peersByNode, devicesByPublicKey, ispByIP });
     const onlineDevicesLimit = 200;
 
+    // Nguồn thứ hai (THẬT SỰ có tác dụng từ khi chuyển sang hysteria2): thiết bị đã
+    // báo cáo với control plane trong cửa sổ gần đây. Xem `aggregateDeviceSessions`.
+    const deviceWindowMs = Number(process.env.ONLINE_DEVICE_WINDOW_MIN ?? 0) > 0
+      ? Number(process.env.ONLINE_DEVICE_WINDOW_MIN) * 60 * 1000
+      : DEFAULT_DEVICE_REPORT_WINDOW_MS;
+    const deviceSessions = aggregateDeviceSessions({
+      devices,
+      nodes: nodeList,
+      users,
+      windowMs: deviceWindowMs,
+    });
+
     // Region buckets from the client endpoint's public IP (best-effort, no
     // external API — country code from IANA/ASN-lite mapping).
     const regionByIp = {};
@@ -4684,9 +4698,17 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
     // `device.lastClientIp` — do chính app ghi lại mỗi lần kết nối (xem touchDeviceClientIp).
     // Vị trí/ISP tra offline từ bảng DB-IP Lite, có cache.
     const deviceById = new Map(devices.map((d) => [d.id, d]));
+    // Gộp hai nguồn: peer WireGuard (bản cũ / Windows legacy) + thiết bị tự báo cáo
+    // (hysteria2 — nguồn đang chạy thật). Cùng một device_id thì bản WG được giữ vì
+    // có thêm rx/tx và thời điểm handshake; bản device chỉ bù thêm thiết bị WG không thấy.
+    const wgDeviceIds = new Set(connections.online_devices.map((d) => d.device_id).filter(Boolean));
+    const combinedRows = [
+      ...connections.online_devices,
+      ...deviceSessions.rows.filter((row) => !row.device_id || !wgDeviceIds.has(row.device_id)),
+    ];
     const ipForDevice = new Map();
     const geoIps = new Set();
-    for (const d of connections.online_devices) {
+    for (const d of combinedRows) {
       const device = d.device_id ? deviceById.get(d.device_id) : null;
       const fromApi = device?.lastClientIp && isPublicIp(device.lastClientIp) ? device.lastClientIp : null;
       const fromWg = isPublicIp(d.client_ip) ? d.client_ip : null;
@@ -4702,7 +4724,7 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
     const geoByIp = await geoLookup.lookupMany([...geoIps]);
     const geoFor = (ip) => (ip ? geoByIp.get(ip) ?? null : null);
 
-    const onlineDevices = connections.online_devices.slice(0, onlineDevicesLimit).map((d) => {
+    const onlineDevices = combinedRows.slice(0, onlineDevicesLimit).map((d) => {
       const info = ipForDevice.get(d);
       const geo = geoFor(info?.ip);
       return {
@@ -4740,7 +4762,11 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
         users: users.length,
         active_devices: byStatus.active,
         revoked_devices: byStatus.revoked,
+        // `online_peers` = handshake WireGuard (legacy: bản Windows cũ / mạng WG). Từ khi
+        // chuyển sang hysteria2 con số này luôn 0 — dashboard phải đọc `online_devices`.
         online_peers: onlinePeers.length,
+        online_devices: onlineDevices.length,
+        device_report_window_min: Math.round(deviceWindowMs / 60000),
         total_peers: peers.length,
         exit_nodes: nodeList.length,
       },
@@ -4751,8 +4777,9 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
       by_node: connections.by_node,
       by_location: byLocation,
       online_devices: onlineDevices,
-      online_devices_truncated: connections.online_devices.length > onlineDevicesLimit,
+      online_devices_truncated: combinedRows.length > onlineDevicesLimit,
       connections_totals: connections.totals,
+      device_sessions_totals: deviceSessions.totals,
       // Tình trạng bảng GeoIP (đường dẫn, ngày cập nhật) để biết dữ liệu có cũ không.
       geoip: geoLookup.info(),
       online_peer_endpoints: Object.entries(regionByIp)
@@ -5011,6 +5038,25 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
     console.log(
       `device claim: user=${userId} ${result.transferred ? "adopted" : "new"} device ${created.id} (${platform}) ip=${created.assignedIP}`,
     );
+    // Báo Telegram khi KHÁCH thêm máy mới qua đường claim (iOS/macOS/Android đi hysteria2).
+    // Vì sao phải thêm: alert chỉ có ở `/v1/peers/register`, nên máy claim lúc 10:46 ngày
+    // 20/09/2026 chỉ để lại dòng log "device claim: … new device …" mà không ai được báo.
+    if (!result.transferred) {
+      let claimEmail = null;
+      try {
+        claimEmail = (await authStore.listUsers()).find((u) => u.id === userId)?.email ?? null;
+      } catch (err) {
+        console.error("device claim alert: không tra được email của user:", err?.message ?? err);
+      }
+      await sendAlert(deviceRegisteredAlert({
+        platform,
+        name: created.deviceName ?? name,
+        email: claimEmail,
+        ip: created.assignedIP ?? null,
+        node: null,
+        replaced: replacedOnClaim.replaced?.deviceName ?? replacedOnClaim.replaced?.id ?? null,
+      }));
+    }
     res.status(result.transferred ? 200 : 201).json({
       ok: true,
       device_id: created.id,

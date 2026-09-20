@@ -198,6 +198,92 @@ export function aggregateConnections({
 }
 
 /**
+ * Cửa sổ "thiết bị vừa báo cáo" cho dashboard.
+ *
+ * Vì sao cần nguồn thứ hai ngoài WireGuard: từ 19/09/2026 mọi bản app (iOS/macOS/
+ * Android/Windows) đi **hysteria2 qua relay Cloudflare**, KHÔNG còn peer WireGuard
+ * ⇒ `wg dump` không bao giờ có handshake, nên dashboard cũ hiện "0 online" dù khách
+ * đang kết nối (đo thật 20/09: 2 máy đang chạy mà `online_peers: 0`).
+ *
+ * App gọi `POST /v1/devices/claim` (hoặc `/v1/peers/register`) mỗi lần kết nối và ghi
+ * lại `lastSeenAt`/`lastClientIp`; đó là tín hiệu THẬT duy nhất còn lại ở server.
+ */
+export const DEFAULT_DEVICE_REPORT_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * Thiết bị đã báo cáo trong `windowMs` gần đây — nguồn "đang kết nối" thay cho
+ * handshake WireGuard. Chỉ tính thiết bị thật (có userId, chưa thu hồi) vì bản ghi
+ * probe/test có userId null.
+ *
+ * @param {object} input
+ * @param {Array<object>} input.devices device registry
+ * @param {Array<object>} [input.nodes] exit nodes (để lấy tên/vị trí node)
+ * @param {Array<object>} [input.users] users (để hiện email)
+ * @param {number} [input.nowMs]
+ * @param {number} [input.windowMs]
+ * @returns {{rows: Array<object>, by_location: Record<string, number>, totals: object}}
+ */
+export function aggregateDeviceSessions({
+  devices = [],
+  nodes = [],
+  users = [],
+  nowMs = Date.now(),
+  windowMs = DEFAULT_DEVICE_REPORT_WINDOW_MS,
+} = {}) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const emailById = new Map(users.map((user) => [user.id, user.email ?? user.id]));
+  const rows = [];
+  let skippedNotReal = 0;
+  let skippedStale = 0;
+
+  for (const device of devices) {
+    if (!device || !device.userId || device.active === false) {
+      skippedNotReal += 1;
+      continue;
+    }
+    const seenAt = device.lastClientIpAt ?? device.lastSeenAt ?? null;
+    const at = seenAt ? Date.parse(seenAt) : NaN;
+    if (!Number.isFinite(at) || nowMs - at > windowMs) {
+      skippedStale += 1;
+      continue;
+    }
+    const node = device.exitNodeId ? nodeById.get(device.exitNodeId) ?? null : null;
+    rows.push({
+      source: "device",
+      device_id: device.id,
+      device_name: device.deviceName ?? null,
+      platform: device.platform ?? null,
+      user_id: device.userId,
+      user_email: emailById.get(device.userId) ?? null,
+      node_id: node?.id ?? device.exitNodeId ?? null,
+      node_name: node ? node.name ?? node.id : null,
+      node_location: node ? [node.city, node.country].filter(Boolean).join(", ") || null : null,
+      client_ip: device.lastClientIp ?? null,
+      isp: null,
+      country: null,
+      last_seen_at: seenAt,
+      reported_sec_ago: Math.max(0, Math.round((nowMs - at) / 1000)),
+      connected_sec: null,
+      rx_bytes: null,
+      tx_bytes: null,
+      allowed_ip: device.assignedIP ?? null,
+    });
+  }
+
+  rows.sort((a, b) => a.reported_sec_ago - b.reported_sec_ago);
+  return {
+    rows,
+    by_location: {},
+    totals: {
+      reported: rows.length,
+      window_ms: windowMs,
+      skipped_not_real_device: skippedNotReal,
+      skipped_stale: skippedStale,
+    },
+  };
+}
+
+/**
  * Cache reverse-DNS (PTR) có TTL + timeout + giới hạn song song.
  * IP không tra được trả { isp: null, country: null } thay vì làm treo request.
  *
