@@ -1,0 +1,620 @@
+[
+ {
+  "slug": "77ircloud",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "agentkey",
+  "name": "AgentKey là thị trường năng lực giúp trợ lý AI truy cập các công cụ đáng tin cậy và dữ liệu thời gian thực. Hỗ trợ tìm kiếm web, thu thập URL, tin tức, mạng xã hội, giá thị trường chứng khoán, dữ liệu sản phẩm thương mại điện tử, dữ liệu doanh nghiệp/công ty, thời tiết, bản đồ và vị trí địa lý, du lịch…",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic v.v.); cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "ai-hive",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "archive-hospital-mcp",
+  "name": "Dành cho kịch bản y tế/nhân viên hỗ trợ, cung cấp khả năng tra cứu danh sách bệnh nhân thuộc bác sĩ đang đăng nhập, truy vấn chi tiết bệnh nhân/nhãn hồ sơ/ghi chú/lịch sử bệnh, cùng tra cứu danh sách khoa được phân quyền.",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng; cần biến môi trường: `INVALID_TOKEN`",
+  "category": "Khác"
+ },
+ {
+  "slug": "awesun",
+  "name": "Công cụ CLI điều khiển từ xa Sunflower (AweSun). Cung cấp các chức năng quản lý danh sách thiết bị, quản lý phiên từ xa, điều khiển máy tính từ xa, thực thi lệnh từ xa, truyền tệp từ xa, chuyển tiếp cổng, tắt/khởi động lại/đánh thức từ xa. Người dùng đề cập đến Sunflower, Aw…",
+  "purpose": "Cần đăng nhập / OAuth / ủy quyền quét mã",
+  "category": "Khác"
+ },
+ {
+  "slug": "baidu-netdisk",
+  "name": "Quản lý tệp và tìm kiếm thông minh trên Baidu Netdisk. Hỗ trợ duyệt, tìm kiếm theo từ khóa và ngữ nghĩa, sắp xếp tệp, liên kết chia sẻ, truy vấn dung lượng, cũng như lưu nội dung văn bản hoặc chuyển tệp qua URL. Từ khóa kích hoạt: Baidu Netdisk,, baidu, netdi…",
+  "purpose": "Cần đăng nhập / OAuth / ủy quyền quét mã; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "bazhuayu",
+  "name": "Kỹ năng MCP thu thập dữ liệu đám mây Bāzhuǎyú (Octopus) - Tìm kiếm mẫu, khởi chạy và quản lý tác vụ, truy vấn tiến độ, xuất dữ liệu có cấu trúc",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "beisen-cli",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "bugly-token",
+  "name": "Xem tổng quan chất lượng sản phẩm Bugly (tỷ lệ crash, tỷ lệ ANR, tỷ lệ FOOM/OOM, thời gian khởi động, v.v.). Dùng khi người dùng hỏi về các chỉ số chất lượng tổng thể của ứng dụng, chất lượng phiên bản, chất lượng hôm nay, v.v.",
+  "purpose": "Có thể cần bật MCP / connector tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `BUGLY_ACCESS_TOKEN`",
+  "category": "Khác"
+ },
+ {
+  "slug": "canva",
+  "name": "Mục đích sử dụng: Sử dụng khả năng thiết kế của Canva: tạo và chỉnh sửa thiết kế, quản lý tài sản và tài nguyên thương hiệu…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "canva-ai",
+  "name": "Mục đích: Sử dụng khả năng thiết kế của Canva: tạo và chỉnh sửa thiết kế, quản lý tài sản và tài nguyên thương hiệu…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "chuhaijiang",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "cisp-mcp",
+  "name": "Mục đích: Truy vấn và xác minh dữ liệu công ty Trung Quốc. Hỗ trợ đăng ký kinh doanh, cổ đông, k…",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `CISP_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "cloudbase",
+  "name": "Dùng kỹ năng này khi bạn phát triển, thiết kế, xây dựng, triển khai, gỡ lỗi, di chuyển hoặc khắc phục sự cố C…",
+  "purpose": "Cần thông tin xác thực hoặc đăng nhập bằng quét mã liên quan đến WeChat/WeCom (WeChat/WeCom); cần đăng nhập / OAuth / ủy quyền quét mã; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "cnb-api",
+  "name": "Lệnh tương tác nền tảng CNB (nền tảng CNB), hỗ trợ các thao tác đọc ghi trên kho mã, Issue, PR, CI, kho sản phẩm, v.v.",
+  "purpose": "Không (có thể dùng API/tài khoản tùy chọn để tăng cường khả năng)",
+  "category": "Khác"
+ },
+ {
+  "slug": "ctrip-wendao",
+  "name": "Kích hoạt khi người dùng hỏi câu hỏi liên quan đến du lịch: tìm khách sạn, truy vấn chuyến bay, điểm tham quan…",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `WENDAO_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "dingtalk",
+  "name": "Quản lý năng lực sản phẩm DingTalk (Bảng AI/Tìm kiếm hỏi đáp AI/Lịch/Danh bạ/Trò chuyện nhóm và robot/Việc cần làm/Phê duyệt/Chấm công/Nhật ký/Tin nhắn DING/Tài liệu nền tảng mở/Tài liệu DingTalk/Ổ đĩa đám mây DingTalk/Tệp Markdown gốc/Ghi âm ghi chú AI/Email…",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "dknowc-mcp",
+  "name": "Sử dụng công cụ MCP của bảng làm việc đáng tin cậy Thâm Tri (Shenzhi) để hỏi đáp đáng tin cậy và tra cứu tài liệu chính thống; chỉ gọi tìm kiếm chuyên sâu khi người dùng yêu cầu rõ ràng nghiên cứu chuyên sâu hoặc so sánh phức tạp.",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / connector tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "edgeone-pages",
+  "name": "Mục đích sử dụng: edgeone-pages",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "emr-query",
+  "name": "Kỹ năng truy vấn chỉ đọc Tencent Cloud EMR — Tài liệu và mẫu gọi 48 API truy vấn chỉ đọc dựa trên tccli chính thức",
+  "purpose": "Cần đăng nhập / OAuth / quét mã để ủy quyền",
+  "category": "Khác"
+ },
+ {
+  "slug": "ezjoin-meeting",
+  "name": "Kỹ năng vận hành cuộc họp thông minh EzyJoin - Đặt phòng họp, tạo/hủy cuộc họp, tra cứu lịch họp và biên bản AI, tìm kiếm kho tri thức doanh nghiệp",
+  "purpose": "Cần thông tin xác thực ứng dụng Feishu (Lark) hoặc ủy quyền đăng nhập người dùng; cần thông tin xác thực liên quan WeChat/WeCom hoặc đăng nhập bằng quét mã; cần đăng nhập / OAuth / ủy quyền quét mã; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "fbs-connector",
+  "name": "Trình kết nối cộng tác người-máy Phúc Trợ Thủ: Danh tính, Gói bối cảnh, Gói niềm vui, Ghi nhận giá trị đầu tiên và Bàn giao siêu đối tác.",
+  "purpose": "Có thể cần kích hoạt MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "feishu",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "finenter",
+  "name": "Mục đích: Sử dụng Finenter Investment Research MCP để truy vấn thông tin chuyên sâu của tổ chức, báo cáo nghiên cứu…",
+  "purpose": "Cần thông tin xác thực liên quan đến WeChat/WeCom hoặc đăng nhập bằng quét mã; cần đăng nhập / OAuth / ủy quyền quét mã; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "fyopen-lawsearch",
+  "name": "·Tra cứu pháp luật MCP Skill (Pháp Nghiên·Tra cứu pháp luật và quy định MCP Skill)。Sử dụng khi liên quan đến các từ khóa như 「pháp luật và quy định」「điều luật」「điều khoản quy định」「Bộ luật Dân sự」「quy định hiện hành còn hiệu lực」. Hỗ trợ truy xuất chính xác, hiệu lực hiện hành các điều khoản pháp quy bằng ngôn ngữ tự nhiên, cung cấp chất lượng cao, khối lượng lớn các quy định pháp luật…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "gangtise-mcp",
+  "name": "Mục đích: Sử dụng công cụ Gangtise MCP cho báo giá tài chính, báo cáo nghiên cứu, cơ sở tri thức, cổ phiếu p…",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `GTS_ACCESS_KEY`, `GTS_SECRET_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "gildata",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `GILDATA_TOKEN`",
+  "category": "Khác"
+ },
+ {
+  "slug": "github",
+  "name": "Mục đích: Sử dụng trình kết nối github để truy cập các khả năng của github MCP thông qua github mcp server.",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "github-remote",
+  "name": "Mục đích: Sử dụng trình kết nối github-remote để truy cập các khả năng của github-remote MCP thông qua github-remote…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "gmail",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần biến môi trường: `EMAIL_PASSWORD`",
+  "category": "Khác"
+ },
+ {
+  "slug": "gongyi-open-mcp",
+  "name": "Kỹ năng kết nối nền tảng dịch vụ tổ chức từ thiện Tencent - Truy vấn dữ liệu nghiệp vụ phía tổ chức hiện tại qua MCP như người dùng, thông tin tổ chức, thành viên, dự án, tiến độ, công bố tài chính và từ điển dữ liệu",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "ima-mcp",
+  "name": "Cấu hình trình kết nối và kỹ năng",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "infimind-ecommerce-image",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `MCP_TOKEN`",
+  "category": "Khác"
+ },
+ {
+  "slug": "infimind-video",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `SORA_MCP_TOKEN`",
+  "category": "Khác"
+ },
+ {
+  "slug": "jinshuju",
+  "name": "Kỹ năng thao tác (Jinshuju, jinshuju.net) —— Tạo/sao chép/chỉnh sửa biểu mẫu và chủ đề, thêm/xóa/sửa/truy vấn và chỉnh sửa hàng loạt dữ liệu biểu mẫu, tải lên hình ảnh và tệp đính kèm, truy vấn gói tài khoản và thành viên nhóm. Từ khóa kích hoạt:,…",
+  "purpose": "Cần đăng nhập / OAuth / ủy quyền quét mã; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "jira",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần biến môi trường: `ATLASSIAN_API_TOKEN`, `JIRA_API_TOKEN`",
+  "category": "Khác"
+ },
+ {
+  "slug": "jiushuyun",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "kdocs",
+  "name": "Skill chính thức để thao tác với tài liệu đám mây Kingsoft Docs (WPS Cloud Docs / Kdocs / 365.kdocs.cn / www.kdocs.cn). Năng lực cốt lõi bao gồm tạo mới, đọc, chỉnh sửa, tìm kiếm, chia sẻ trên đám mây, …",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "kling-ai",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "kuaicha-search",
+  "name": ">",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `KUAICHA_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "lemonclaw",
+  "name": "Dùng để truy vấn hoặc thao tác dữ liệu nghiệp vụ Lemon Cloud, bao gồm xác thực, bộ sổ kế toán, SCM mua bán tồn kho, ERP nghiệp vụ - tài chính, ACC tài chính và invoice xuất hóa đơn độc lập. Hỗ trợ khách hàng, nhà cung cấp, hàng hóa, kho và các nền tảng cơ bản…",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); cần đăng nhập / OAuth / ủy quyền quét mã",
+  "category": "Khác"
+ },
+ {
+  "slug": "lexiang",
+  "name": "Lexiang Knowledge Base MCP Full-Function Skill 。Khi người dùng nhắc đến 「」「」「lexiang」, hoặc cung cấp liên kết lexiangla.com, hoặc liên quan đến các thao tác trên knowledge base như tìm kiếm/ghi/chỉnh sửa/tệp/cấu hình…",
+  "purpose": "Cần đăng nhập / OAuth / ủy quyền quét mã; có thể cần bật MCP / connector tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "linear-mcp",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "lingxing-mcp",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `LINGXING_MCP_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "linkfox-product-selection",
+  "name": "Cấu hình trình kết nối và kỹ năng",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `LINKFOX_AGENT_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "lovrabet-cli",
+  "name": "Lovrabet Runtime CLI — Bộ công cụ vận hành AI hướng đến kịch bản nghiệp vụ, quản lý thư mục ứng dụng, lệnh nghiệp vụ Service Tree, khám phá tài liệu API, truy vấn tập dữ liệu thông qua lệnh lovrabet, …",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; cần biến môi trường: `ACCESS_KEY`, `LOVRABET_ACCESS_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "mastergo-vibe-mcp",
+  "name": "Mục đích: Kết nối với canvas MasterGo để cho phép AI thiết kế, sửa đổi, đồng bộ hóa và truy xuất…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "miaoda",
+  "name": "Nền tảng xây dựng ứng dụng （Miaoda）, hỗ trợ tạo, sinh, chỉnh sửa và phát hành trang web/ứng dụng Web/mini program/ứng dụng di động thông qua hội thoại ngôn ngữ tự nhiên.",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền",
+  "category": "Khác"
+ },
+ {
+  "slug": "moka",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "mx-ds-mcp",
+  "name": "Dựa trên cơ sở dữ liệu Đông Phương Tài Phú, truy vấn bằng ngôn ngữ tự nhiên dữ liệu tài chính cổ phiếu A, quỹ, trái phiếu, chỉ số/ngành, cổ phiếu Mỹ, cổ phiếu Hồng Kông, dữ liệu chỉ số kinh tế vĩ mô và kinh tế ngành, sàng lọc chứng khoán theo điều kiện (cổ phiếu, quỹ, trái phiếu, v.v.), cùng tra cứu tin tức và công bố thông tin",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "mzl-trademark",
+  "name": "Kỹ năng tra cứu nhãn hiệu (Mozhilun) —— Tìm kiếm nhãn hiệu theo điều kiện (văn bản) và tìm kiếm bằng hình ảnh (tương tự hình đồ họa), bao phủ Trung Quốc và hơn 110 quốc gia/vùng lãnh thổ hải ngoại",
+  "purpose": "Cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "neo-crm",
+  "name": "Dùng ngôn ngữ tự nhiên để tra khách hàng, đẩy cơ hội, rà soát manh mối, nhận biển công, viết theo dõi, một câu nói thông suốt vòng lặp công việc bán hàng.",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "netease-mail",
+  "name": "Kết nối email qua IMAP/SMTP, hỗ trợ gửi/nhận email, tìm kiếm, tải tệp đính kèm. Hỗ trợ 163, 126, yeah.net và các email NetEase khác cùng các email chuẩn IMAP/SMTP khác. Từ khóa kích hoạt: email, hộp thư, …",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; cần cấu hình thông tin xác thực theo token-schema",
+  "category": "Khác"
+ },
+ {
+  "slug": "notion",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "opendata",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `REGION_INSIGHT_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "pandadata",
+  "name": "Mục đích: Truy vấn và phân tích dữ liệu tài chính thông qua PandaData MCP Connector. Sử dụng bất cứ khi nào…",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / connector tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "patsnap-search",
+  "name": "Mục đích: Tìm kiếm dữ liệu bằng sáng chế và tài liệu Patsnap thông qua trình kết nối Patsnap MCP.",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `PATSNAP_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "picset-commerce-images",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema",
+  "category": "Khác"
+ },
+ {
+  "slug": "picset-video-generation",
+  "name": "Người dùng WorkBuddy cần sử dụng khi tạo video ngắn thương mại điện tử thông qua trình kết nối Picset AI MCP.",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema",
+  "category": "Khác"
+ },
+ {
+  "slug": "pkulaw",
+  "name": "Kỹ năng MCP tra cứu và xác minh pháp lý chính thức của (Pháp Bảo Bắc Đại). Liên quan đến «pháp luật», «quy định pháp luật», «điều khoản pháp luật», «giải thích tư pháp», «án lệ», «vụ án tương tự», «nguyên nhân vụ án», «xem xét hợp đồng», «danh mục tuân thủ», «quy tắc xét xử», «căn cứ xét xử», «điểm tranh chấp», «hướng dẫn…",
+  "purpose": "Có thể cần kích hoạt MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "qcc-company",
+  "name": "Mục đích: Truy vấn và xác minh thông tin đăng ký doanh nghiệp. Hỗ trợ cơ cấu cổ đông, a…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "qcc-legal",
+  "name": "Truy xuất, nghiên cứu và xác minh pháp luật, quy định và án lệ Trung Quốc thông qua Connector · (Qichacha·Dữ liệu pháp lý). Khi yêu cầu của người dùng liên quan đến tìm căn cứ pháp lý, định vị quy định, lấy nguyên văn từng chữ của quy định/điều khoản, tra cứu án lệ tương tự, viện dẫn án lệ hướng dẫn/công báo/điển hình…",
+  "purpose": "Có thể cần bật MCP / connector tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "qingflow",
+  "name": "Kỹ năng vận hành nền tảng không mã hóa Qingflow - Tạo ứng dụng, quản lý dữ liệu biểu mẫu, xử lý quy trình phê duyệt, truy vấn và xuất dữ liệu",
+  "purpose": "Cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "qixinhuiyan-mcp",
+  "name": "Cấu hình trình kết nối và kỹ năng",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "qq-mail",
+  "name": "Kỹ năng thao tác toàn diện QQ (QQ Mail). Tình huống kích hoạt: xem hộp thư, kiểm tra email, hộp thư đến, xem thử email, có email mới không, email chưa đọc, giúp tôi xem hộp thư, mở hộp thư, email gần đây, danh sách email, gửi email, viết email, gửi một...",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "salesnail-instructor",
+  "name": "Tự phục vụ mở bản dùng thử giảng viên thông qua SalesNail Connector, duy trì Profile doanh nghiệp, tạo phương án khách hàng, và hoàn thành sáng tác trò chơi, cấu hình khóa học, dạy kèm lớp học trực tiếp, phân tích dữ liệu lớp học và đánh giá dựa trên bằng chứng.",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / connector tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "salestouch",
+  "name": "Mục đích: Kết nối SalesTouch để cấu hình hồ sơ tổ chức, đơn vị, quyền vai trò, nhân viên…",
+  "purpose": "Cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "seeyon-office-marketing-suite",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "shanglv-mcp-gateway",
+  "name": "Kỹ năng cổng ủy quyền MCP cấp doanh nghiệp - Tổng hợp truy vấn hóa đơn tài chính và dữ liệu giao dịch tài khoản ngân hàng (khách hàng/tài khoản/số dư/giao dịch/sao kê/phiếu báo có/số dư theo giờ), thống nhất qua Keycloak OAuth 2.1 + PKCE…",
+  "purpose": "Cần đăng nhập / OAuth / ủy quyền quét mã; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "shanlong-claw",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "sharecrm",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "supabase",
+  "name": "Cấu hình trình kết nối và kỹ năng",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tapd",
+  "name": "Kỹ năng quản lý dự án Agile TAPD - Quản lý yêu cầu, lỗi, nhiệm vụ, sprint, ca kiểm thử, Wiki, giờ công, bình luận và quy trình làm việc",
+  "purpose": "Cần thông tin xác thực liên quan đến WeChat/WeCom hoặc đăng nhập bằng quét mã; cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tc-chengxin",
+  "name": "Skill（：nền tảng du lịch Trung Quốc）。Dùng để tra cứu thời gian thực vé máy bay, vé tàu, khách sạn, khu danh thắng, vé xe khách, sản phẩm nghỉ dưỡng, lập kế hoạch hành trình, giao thông tổng hợp, đồng thời cung cấp lối vào đặt chỗ trên PC, lối vào mở trên điện thoại và mã QR quét bằng WeChat.",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); cần thông tin xác thực liên quan đến WeChat/WeCom hoặc đăng nhập bằng quét mã; cần đăng nhập / OAuth / ủy quyền quét mã; cần biến môi trường: `CHENGXIN_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "tdx-connector",
+  "name": "Mục đích: Truy vấn dữ liệu chứng khoán toàn cầu qua Tongdaxin MCP (MCP Tongdaxin), hỗ trợ sàng lọc và nghiên cứu.",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / trình kết nối tương ứng; cần biến môi trường: `TDX_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "tec-do",
+  "name": "Mục đích: Hướng dẫn WorkBuddy về thời điểm và cách sử dụng các công cụ Tec-Do MCP cũng như các bản thiết kế Skill cục bộ…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencent-docs",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencent-docs-oa",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencent-health-nges",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencent-map",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `TENCENT_MAP_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencent-qidian-cs",
+  "name": "Hướng dẫn gọi API cấp thấp của Connector （Tencent-Qidian-CS）. Bao gồm năm nhóm năng lực chính——quản lý phiếu công việc (tạo/sửa/truy vấn phiếu, thay đổi trạng thái phiếu), truy vấn nhân viên (giám sát trạng thái nhân viên chăm sóc khách hàng theo thời gian thực…",
+  "purpose": "Cần thông tin xác thực hoặc đăng nhập bằng mã QR liên quan đến WeChat/WeCom; cần đăng nhập / OAuth / ủy quyền quét mã QR; có thể cần bật MCP / connector tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencent-survey",
+  "name": "Tencent Questionnaire (wj.qq.com) MCP Skill. Được sử dụng khi thao tác với 「bảng hỏi」「khảo sát」「biểu mẫu」「bình chọn」「bài kiểm tra」「đánh giá」「wj.qq.com」v.v. Các khả năng được hỗ trợ: (1) Lấy chi tiết bảng hỏi (tiêu đề, thiết…",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencent-weiyun",
+  "name": "Kỹ năng đầy đủ cho giao diện MCP của (Weiyun Drive)。Bao gồm weiyun.list, weiyun.list_by_category, weiyun.download, weiyun.delete, weiy…",
+  "purpose": "Cần đăng nhập / OAuth / ủy quyền quét mã QR; có thể cần bật MCP / trình kết nối tương ứng; cần biến môi trường: `WEIYUN_MCP_TOKEN`",
+  "category": "Khác"
+ },
+ {
+  "slug": "tencentads",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "textin-xparse",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "tmeet",
+  "name": "CLI（tmeet）：Đăng nhập/Đăng xuất/Truy vấn trạng thái ủy quyền OAuth, Quản lý cuộc họp (Tạo/Cập nhật/Hủy/Truy vấn/Người được mời), Quản lý ghi âm (Danh sách/Địa chỉ phát/Biên bản thông minh/Chuyển văn bản/Đăng ký quyền ghi âm), Báo cáo cuộc họp…",
+  "purpose": "Cần đăng nhập / OAuth / Ủy quyền quét mã",
+  "category": "Khác"
+ },
+ {
+  "slug": "tongzhou-fin-research",
+  "name": "Kết nối dữ liệu thị trường công khai, tra cứu báo cáo nghiên cứu, bản đồ ngành và tài liệu nghiên cứu đầu tư Đồng Chu, cung cấp bằng chứng có thể kiểm chứng cho nghiên cứu thị trường chứng khoán.",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "tyc-mcp",
+  "name": "Kỹ năng tra cứu dữ liệu doanh nghiệp Tianyancha - Cổng dữ liệu doanh nghiệp tổng hợp, bao phủ hơn 160 khả năng dữ liệu doanh nghiệp như neo doanh nghiệp, hồ sơ cơ bản, tập đoàn cổ phần, ban giám đốc và quản lý cấp cao, rủi ro tư pháp, sở hữu trí tuệ, tài chính kinh doanh, đấu thầu...",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "wecom",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "weisheng-scrm",
+  "name": "Khi người dùng cần tra cứu hoặc quản lý thông tin khách hàng, nhãn khách hàng, nhóm khách hàng, tài liệu tiếp thị, mã động, gửi hàng loạt, ghi chú theo dõi, lịch sử trò chuyện, lưu trữ hội thoại, danh bạ, cơ hội kinh doanh, báo cáo, rút thăm, lịch khách hàng, khách… trong SCRM của WeCom (WeCom) thuộc ViSen",
+  "purpose": "Cần thông tin xác thực liên quan đến WeChat/WeCom hoặc đăng nhập bằng quét mã; có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `SCRM_APP_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "westock-mcp",
+  "name": "Cung cấp bảng giá thời gian thực, hỗ trợ chọn cổ phiếu theo điều kiện, quản lý danh mục tự chọn, nhắc nhở giá cổ phiếu và giao dịch mô phỏng",
+  "purpose": "Cần thông tin xác thực liên quan đến WeChat/WeCom (WeChat Doanh nghiệp) hoặc đăng nhập bằng quét mã QR; có thể cần bật MCP/trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "wind-finance",
+  "name": "Truy vấn cổ phiếu, quỹ, chỉ số, trái phiếu, thông báo, tin tức tài chính và dữ liệu kinh tế vĩ mô bằng ngôn ngữ tự nhiên.",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); có thể cần bật MCP / connector tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `WIND_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "wk-workbuddy",
+  "name": "Mục đích: name: wk-mcp",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "woscli",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ },
+ {
+  "slug": "wps-knowledgebase",
+  "name": ">",
+  "purpose": "Cần đăng nhập / OAuth / quét mã để ủy quyền",
+  "category": "Khác"
+ },
+ {
+  "slug": "xiaoe-cloud-cli",
+  "name": "（Xiaoe-Tong）：Dùng tài khoản đang đăng nhập và ngữ cảnh cửa hàng để quản lý khóa học, tài sản nội dung, chương, livestream, đơn hàng và tư liệu.",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "xingtu-claw-risk",
+  "name": "Kỹ năng Phân tích Rủi ro Doanh nghiệp Claw (Xingtu Claw) - Nhận diện ngành, Phân tích quan hệ bên liên quan giữa các doanh nghiệp",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "yingmi-mcp",
+  "name": "Kỹ năng sử dụng công cụ tài chính Yingmi MCP, hỗ trợ tra cứu dữ liệu quỹ và thị trường, phân tích đầu tư nghiên cứu, chẩn đoán danh mục, lập kế hoạch tài chính và tạo nội dung tài chính",
+  "purpose": "Cần API Key của mô hình lớn (OpenAI/Anthropic, v.v.); cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `YINGMI_API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "youshu-bd-mate",
+  "name": "Trợ lý thông minh tiếp thị doanh nghiệp dựa trên dữ liệu toàn diện của doanh nghiệp, cung cấp năng lực vòng lặp khép kín phát triển kinh doanh như báo cáo trước chuyến thăm, kịch bản tiếp thị, phân tích ngành, chân dung người ra quyết định, khớp sản phẩm tài chính. Tất cả công cụ tạo báo cáo ở chế độ bất đồng bộ, cần phối hợp get_report_run để luân chuyển…",
+  "purpose": "Cần API Key mô hình lớn (OpenAI/Anthropic v.v.); có thể cần bật MCP / connector tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `API_KEY`",
+  "category": "Khác"
+ },
+ {
+  "slug": "yuandian-mcp",
+  "name": "Cấu hình trình kết nối và kỹ năng",
+  "purpose": "Có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "yzf-invoice-mcp-server",
+  "name": "Kỹ năng nhân viên xuất hóa đơn AI — Gọi dịch vụ xuất hóa đơn backend thông qua công cụ MCP, hỗ trợ thăm dò bất đồng bộ để lấy tiến độ theo thời gian thực. Hiện chỉ hỗ trợ hóa đơn xanh (xuất hóa đơn thông thường/sửa hóa đơn), tạm thời chưa hỗ trợ hóa đơn đỏ (hóa đơn đỏ/hủy) và xuất hóa đơn hàng loạt. Từ khóa kích hoạt: xuất hóa đơn, lập hóa đơn, hóa đơn đặc biệt…",
+  "purpose": "Cần đăng nhập / OAuth / quét mã ủy quyền; có thể cần bật MCP / trình kết nối tương ứng",
+  "category": "Khác"
+ },
+ {
+  "slug": "zfs-fssc-ai",
+  "name": "Mục đích sử dụng: Trợ lý hoàn tiền AI cho ZTE FSSC",
+  "purpose": "Cần đăng nhập / OAuth / quét mã để ủy quyền; có thể cần bật MCP / trình kết nối tương ứng; cần cấu hình thông tin xác thực theo token-schema; cần biến môi trường: `ZFS_LOGIN_KEY`, `ZFS_PASSWORD`",
+  "category": "Khác"
+ },
+ {
+  "slug": "zsxq",
+  "name": "Cấu hình và kỹ năng kết nối",
+  "purpose": "Cần hoàn tất OAuth / quét mã hoặc cấu hình Token trong App",
+  "category": "Khác"
+ }
+]
