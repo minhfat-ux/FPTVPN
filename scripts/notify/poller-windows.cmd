@@ -2,28 +2,21 @@
 REM FPT-Notify-Poller --- chay 1 luot poller (Task Scheduler goi dinh ky).
 REM Khong in ra man hinh; ghi log vao %USERPROFILE%\.flowvpn-inbox\poller.log
 REM
-REM File nay con giu WATCHER harness song (keepalive). Vi sao can: watcher khoi dong tu mot phien
-REM terminal se bi job object cua phien do giet khi lenh ket thuc (da gap that: watcher "luc co luc
-REM khong"). Task Scheduler chay trong ngu canh cua no nen tien trinh no sinh ra song doc lap.
+REM 21/09/2026 --- BO keepalive watcher cu (agent-watch). Dong cu:
+REM     start "agent-watch" /min cmd /c ""%REPO%\ops\agent-watch.cmd""
+REM `start ... cmd /c` LUON mo mot cua so console MOI (thu nho nhung van hien ra man hinh /
+REM taskbar), va vi pidfile .watch-win.pid tro vao tien trinh da chet nen cu ~5 phut lai bat mot
+REM cua so ten "agent-watch" => dung thu lam "cứ bị bật mấy cái cửa sổ command".
+REM
+REM Nay harness Windows da chuyen sang BO NGHE DAY (SSE) `ops\agent-listen.mjs` (task AgentListen
+REM lo vong doi). Keepalive o day chi goi VBS chay AN: VBS tu kiem tra, bo nghe dang song thi
+REM thoat ngay (khong spawn gi), chet thi khoi dong lai bang node.exe khong qua cmd.
 set LOG=%USERPROFILE%\.flowvpn-inbox\poller.log
 if not exist "%USERPROFILE%\.flowvpn-inbox" mkdir "%USERPROFILE%\.flowvpn-inbox"
 
 set REPO=C:\Users\Minhn\FlowTech AI\flowgpt
-set WPIDFILE=%REPO%\ops\tasks\.watch-win.pid
 
-REM --- keepalive watcher: doc pid trong file, khong con song thi khoi dong lai ---
-set WPID=
-if exist "%WPIDFILE%" set /p WPID=<"%WPIDFILE%"
-if "%WPID%"=="" goto startwatch
-tasklist /FI "PID eq %WPID%" 2>nul | findstr /I "node.exe" >nul
-if errorlevel 1 goto startwatch
-goto afterwatch
+REM --- keepalive BO NGHE DAY, chay an hoan toan (khong cua so nao) ---
+if exist "%REPO%\ops\agent-listen-hidden.vbs" wscript.exe "%REPO%\ops\agent-listen-hidden.vbs"
 
-:startwatch
-if exist "%REPO%\ops\agent-watch.cmd" (
-  echo [%DATE% %TIME%] watcher khong chay - khoi dong lai>> "%LOG%"
-  start "agent-watch" /min cmd /c ""%REPO%\ops\agent-watch.cmd""
-)
-
-:afterwatch
 "C:\Program Files\Git\bin\bash.exe" "C:\Users\Minhn\FPTVPN\scripts\notify\inbox-poller.sh" --target windows --once >> "%LOG%" 2>&1
