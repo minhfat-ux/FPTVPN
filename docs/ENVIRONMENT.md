@@ -101,3 +101,24 @@ node /Users/minhnguyen/FlowGPT/ops/agent-watch.mjs --auto --interval 20
   (đĩa **đổi số** sau mỗi lần cắm — kiểm bằng `diskutil info` trước, đừng chạy mù).
 - Nếu fsck báo lỗi I/O: thử **hộp/bridge USB khác** trước khi kết luận ổ chết.
 - Bản làm việc hiện ở `~/FlowGPT`; dữ liệu đã commit nằm trên GitHub (`flowgpt`, `deploy/handoff`).
+
+### 8b. Đã vớt xong (2026-09-21) — và bài học "production đi trước repo"
+
+- Người dùng chạy First Aid: ổ **mount được** nhưng báo `failed` (sửa chữa thất bại). Vớt được
+  `~/backup-old-worktree-1126` (1311 tệp, trừ `web/dist`) và `~/rescue-delta-1127` (16 tệp lệch).
+- **Bài học đắt**: cây git sạch `~/FlowGPT` **cũ hơn** bản đang chạy thật. Bản làm việc trên ổ có
+  việc **chưa từng commit** mà production đã phục vụ: thư viện mẫu tài liệu trong Tài khoản,
+  `web/public/connectors.json` (danh mục 103 kết nối) và bản researcher đầy đủ
+  (`normalizeUrl`, cache RSS, `dedupeFindings`). Deploy từ cây sạch là **mất** những thứ đó.
+- Cách phát hiện trong 10 giây — so cây repo với bản đang chạy TRƯỚC khi deploy:
+  ```bash
+  curl -s -o /dev/null -w '%{http_code} %{size_download}\n' https://fbuddy.meetflowai.site/connectors.json
+  B=$(curl -s https://fbuddy.meetflowai.site/ | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1)
+  curl -s "https://fbuddy.meetflowai.site/$B" | grep -c "Mẫu của tôi"     # tính năng chỉ có ở bản mới
+  ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162 "grep -c dedupeFindings /opt/fbuddy/server/src/researcher.js"
+  ```
+  Tệp nào production có mà repo không có (hoặc khác) thì phải vớt về **trước** khi deploy.
+- Đã commit `5d44a1f` (kèm miễn trừ tra web cho câu hỏi về chính hệ sinh thái FlowTech — hồ sơ AI
+  bắt nhầm chữ "AI" trong "MeetFlow AI" nên tra oan 10–20s), deploy node-2, `293/293` test xanh.
+- Ổ BIWIN: chỉ **format sau khi** người dùng xác nhận không cần gì thêm; hai bản vớt vẫn nằm trong
+  `$HOME` (không đụng tới).
