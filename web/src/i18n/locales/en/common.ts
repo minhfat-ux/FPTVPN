@@ -45,5 +45,14 @@ export const common: Dict = {
   "appsPromo.title": "More apps from FlowTech",
   "appsPromo.description": "Besides fBuddy, the ecosystem has a few other apps that may fit what you are doing.",
   "appsPromo.later": "Later",
+  // Download buttons on each app card (your device's build is listed first).
+  "appsPromo.platform.windows": "Windows",
+  "appsPromo.platform.macos": "macOS",
+  "appsPromo.platform.ios": "App Store (iOS)",
+  "appsPromo.platform.android": "Android (APK)",
+  "appsPromo.platform.buy": "See plans & buy",
+  "appsPromo.platform.guide": "Install guide",
+  "appsPromo.platform.app": "Open app",
+  "appsPromo.platform.support": "Support",
   "appsPromo.footnote": "Tap an app to open it in a new tab. This popup only appears when you are signed in and will not show again for 7 days.",
 };

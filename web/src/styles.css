@@ -1072,3 +1072,30 @@ a:hover { text-decoration: underline; }
 .apps-promo-summary {
   line-height: 1.45;
 }
+/* Nút tải theo nền tảng: một app có nhiều bản (Windows/macOS/iOS/Android) + mua/hướng dẫn.
+   Trước 21/09/2026 thẻ chỉ có MỘT link nên bản Windows/macOS của MeetFlow AI không hiện ra. */
+.apps-promo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.apps-promo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+.apps-promo-link:hover {
+  border-color: var(--accent, #33c773);
+  background: rgba(51, 199, 115, 0.14);
+  transform: translateY(-1px);
+}

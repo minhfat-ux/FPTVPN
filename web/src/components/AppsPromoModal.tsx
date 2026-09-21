@@ -1,16 +1,52 @@
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Apple, AppWindow, BookOpen, Download, ExternalLink, ShoppingCart, Smartphone } from "lucide-react";
 import { api } from "../api/client";
 import { Modal } from "./ui";
 import { useAuth } from "../state/store";
 import { useI18n } from "../i18n";
 import type { PromoApp } from "../types";
 import { hubIcon } from "../hub/icons";
+import { detectPlatform } from "../ecosystem";
 
 /** Khoá lưu "đã xem lúc nào" — để không réo người dùng ở mọi lần mở trang. */
 const SEEN_KEY = "fbuddy.appsPromoSeenAt";
 /** Nhắc lại sau 7 ngày; bấm "để sau" thì tính từ lúc đó. */
 const REPEAT_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Nút tải theo nền tảng (thứ tự ưu tiên) rồi mới tới nút mua/hướng dẫn. */
+const PLATFORM_KEYS = ["windows", "macos", "ios", "android"];
+const EXTRA_KEYS = ["buy", "guide", "app", "support"];
+
+/** Icon cho từng nút — nhìn là biết bấm ra bản nào. */
+function linkIcon(key: string) {
+  if (key === "macos" || key === "ios") return <Apple size={12} />;
+  if (key === "windows") return <AppWindow size={12} />;
+  if (key === "android") return <Smartphone size={12} />;
+  if (key === "buy") return <ShoppingCart size={12} />;
+  if (key === "guide" || key === "support") return <BookOpen size={12} />;
+  return <Download size={12} />;
+}
+
+/**
+ * Các nút của một app: bản cài theo nền tảng TRƯỚC (bản của thiết bị đang dùng lên đầu để bấm là
+ * tải đúng), rồi mới tới "xem gói & mua" / "hướng dẫn cài". Trước 21/09/2026 thẻ chỉ có MỘT link
+ * nên bản Windows/macOS của MeetFlow AI không hiện ra (lỗi chủ dự án báo).
+ */
+function linkKeys(app: PromoApp): string[] {
+  const links = app.links ?? {};
+  const platform = detectPlatform();
+  const platforms = PLATFORM_KEYS.filter((key) => links[key]);
+  const index = platforms.indexOf(platform);
+  if (index > 0) platforms.unshift(platforms.splice(index, 1)[0]);
+  const keys = [...platforms, ...EXTRA_KEYS.filter((key) => links[key])];
+  // Cùng một link cho nhiều nền tảng (App Store dùng chung iPhone/iPad/Mac) thì chỉ hiện một nút.
+  const seen = new Set<string>();
+  return keys.filter((key) => {
+    if (seen.has(links[key])) return false;
+    seen.add(links[key]);
+    return true;
+  });
+}
 
 function seenRecently(): boolean {
   try {
@@ -98,9 +134,10 @@ export function AppsPromoGate() {
       <div className="apps-promo">
         {apps.map((app) => {
           const link = app.url ?? Object.values(app.links ?? {})[0] ?? "#";
+          const keys = linkKeys(app);
           return (
-            <a className="apps-promo-card" key={app.id} href={link} target="_blank" rel="noopener noreferrer">
-              <span className="apps-promo-head">
+            <div className="apps-promo-card" key={app.id}>
+              <a className="apps-promo-head" href={link} target="_blank" rel="noopener noreferrer">
                 <span className="apps-promo-title">
                   <span
                     className="apps-promo-icon"
@@ -121,10 +158,26 @@ export function AppsPromoGate() {
                   <span className="bold">{app.name}</span>
                 </span>
                 <ExternalLink size={14} />
-              </span>
+              </a>
               {app.kind ? <span className="tiny faint">{app.kind}</span> : null}
               <span className="small apps-promo-summary">{app.summary}</span>
-            </a>
+              {keys.length ? (
+                <span className="apps-promo-links">
+                  {keys.map((key) => (
+                    <a
+                      className="apps-promo-link"
+                      key={key}
+                      href={app.links[key]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {linkIcon(key)}
+                      {t(`appsPromo.platform.${key}`)}
+                    </a>
+                  ))}
+                </span>
+              ) : null}
+            </div>
           );
         })}
       </div>

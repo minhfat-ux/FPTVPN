@@ -1,7 +1,11 @@
 /* ============================================================================
-   fBuddy — popup quảng cáo ứng dụng (VPNFlow + MeetFlow AI)
+   fBuddy — popup quảng cáo ứng dụng hệ sinh thái FlowTech
    Trả lời "mọi người thấy link cài đặt": hiện 1 lần khi vào trang, có "Để sau"
    (1 ngày) và "Không hiện lại nữa".
+
+   Danh mục app (VPNFlow, MeetFlow AI, SuperMom AI, FlowTech Harness…) lấy từ
+   /api/apps — cùng nguồn với trang chủ FlowTech và câu trả lời của trợ lý — nên
+   mỗi app đều có nút tải theo nền tảng (Windows/macOS/iOS/Android).
 
    Vì sao vanilla JS: popup phải chạy cho cả khách CHƯA đăng nhập (trước khi React
    mount) và không phụ thuộc bước build của web/. Nạp bằng <script defer src="/promo.js">.
@@ -10,7 +14,9 @@
 (function () {
   "use strict";
 
-  var STORE_KEY = "fbuddy:promo:apps:v1";
+  var STORE_KEY = "fbuddy:promo:apps:v2";
+  /** Khoá của bản popup cũ — chỉ đọc để tôn trọng lựa chọn "không hiện lại nữa". */
+  var LEGACY_KEYS = ["fbuddy:promo:apps:v1"];
   var SNOOZE_MS = 24 * 60 * 60 * 1000;
   var DELAY_MS = 1400;
 
@@ -80,7 +86,13 @@
     var ICON_VPNFLOW = "/app-icons/vpnflow.png";
   var ICON_MEETFLOW = "/app-icons/meetflow.png";
 
-  // Link đã kiểm chứng trả 200 (17/09/2026). Windows dùng bản "-latest" để không lỗi thời.
+  /*
+   * Danh mục app của popup lấy từ `/api/apps` (nguồn server: PUBLISHED_APPS) — cùng nguồn với
+   * câu trả lời của trợ lý và trang chủ FlowTech, nên thêm/bớt/đổi link chỉ phải sửa MỘT chỗ và
+   * popup không thể lệch. Bản dựng sẵn dưới đây chỉ dùng khi mạng/API lỗi.
+   *
+   * Link đã kiểm chứng trả nội dung thật (21/09/2026). Windows dùng bản "-latest" để không lỗi thời.
+   */
   var LINKS = {
     vpnflow: {
       buy: "https://meetflowai.site/buy",
@@ -90,13 +102,61 @@
       android: "https://meetflowai.site/v1/downloads/android",
     },
     meetflow: {
-      buy: "https://meetflowai.site/ai/buy",
+      buy: "https://meetflowai.site/ai/guide",
       guide: "https://meetflowai.site/ai/guide",
       ios: "https://apps.apple.com/vn/app/meetflow-ai/id6765590042",
+      // App Store là bản dùng chung iPhone/iPad/Mac (trang chủ ghi "App Store (macOS)" cho đúng id
+      // này) — không bịa link .dmg không tồn tại.
+      macos: "https://apps.apple.com/vn/app/meetflow-ai/id6765590042",
+      windows: "https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip",
       android: "https://api.meetflowai.site/v1/ai/downloads/android",
     },
   };
 
+  /** Danh mục dựng sẵn — chỉ dùng khi `/api/apps` không trả được gì. */
+  var FALLBACK_APPS = [
+    {
+      id: "vpnflow",
+      name: "VPNFlow",
+      tag: "VPN",
+      icon: ICON_VPNFLOW,
+      pitch: "Kết nối riêng tư tốc độ cao, không giới hạn dung lượng. Có bản cho Windows, macOS, iPhone/iPad và Android.",
+      links: LINKS.vpnflow,
+    },
+    {
+      id: "meetflow",
+      name: "MeetFlow AI",
+      tag: "AI",
+      icon: ICON_MEETFLOW,
+      pitch: "Dịch hội thoại thời gian thực và ghi biên bản cuộc họp. Có bản Windows (overlay), macOS/iPhone/iPad trên App Store và Android.",
+      links: LINKS.meetflow,
+    },
+  ];
+
+  /** Nhãn nút theo nền tảng — khách bấm là tải đúng bản. */
+  var PLATFORM_LABEL = {
+    windows: "Windows",
+    macos: "macOS",
+    ios: "App Store (iOS)",
+    android: "Android (APK)",
+    linux: "Linux",
+  };
+  /** Nhãn nút tải — iOS phân biệt App Store thật với trang hướng dẫn cài IPA. */
+  function platformLabel(platform, href) {
+    if (platform === "ios") {
+      return /apps\.apple\.com/i.test(href) ? "App Store (iOS)" : "iPhone / iPad (IPA)";
+    }
+    return PLATFORM_LABEL[platform] || platform;
+  }
+  /** Thứ tự nút khi không xác định được hệ điều hành của khách. */
+  var PLATFORM_ORDER = ["windows", "macos", "ios", "android", "linux"];
+  /** Nhãn ngắn cho thẻ app khi server không gửi `kind`. */
+  var APP_TAG = { meetflow: "AI", vpnflow: "VPN", supermom: "Học tập", harness: "Agent" };
+  /** Nút phụ (không phải bản cài) — nhãn riêng cho từng loại. */
+  var EXTRA_LABEL = { buy: "Xem gói & mua", guide: "Hướng dẫn cài", app: "Mở app", support: "Hỗ trợ" };
+  var EXTRA_ORDER = ["buy", "guide", "app", "support"];
+
+  /** Tên thiết bị của khách — dùng cho dòng "· bản cho máy bạn". */
   var OS_LABEL = {
     windows: "Windows",
     macos: "macOS",
@@ -116,7 +176,20 @@
   function readState() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
-      return raw ? JSON.parse(raw) : null;
+      if (raw) return JSON.parse(raw);
+      // Khoá của bản popup CŨ (chỉ có VPNFlow + MeetFlow AI, thiếu link Windows/macOS). Nội dung
+      // quảng cáo đã đổi nên khách đã "để sau" được xem lại MỘT lần — nhưng ai đã bấm "không hiện
+      // lại nữa" thì vẫn được tôn trọng, không réo lại.
+      for (var i = 0; i < LEGACY_KEYS.length; i += 1) {
+        var legacy = localStorage.getItem(LEGACY_KEYS[i]);
+        if (!legacy) continue;
+        var parsed = JSON.parse(legacy);
+        if (parsed && parsed.never) {
+          writeState({ never: true });
+          return { never: true };
+        }
+      }
+      return null;
     } catch (err) {
       return null;
     }
@@ -219,16 +292,100 @@
     });
     card.appendChild(actions);
 
-    var buy = el("a", "fg-prod__buy", options.buyLabel + " →");
-    buy.href = options.buyHref;
-    buy.target = "_blank";
-    buy.rel = "noopener";
-    card.appendChild(buy);
+    // Không có link mua/hướng dẫn thật thì KHÔNG vẽ nút phụ (đừng bịa link cho đủ thẻ).
+    if (options.buyHref) {
+      var buy = el("a", "fg-prod__buy", options.buyLabel + " →");
+      buy.href = options.buyHref;
+      buy.target = "_blank";
+      buy.rel = "noopener";
+      card.appendChild(buy);
+    }
 
     return card;
   }
 
-  function build() {
+  /** Nút tải của một app: bản theo nền tảng, bản của khách lên ĐẦU để bấm là tải đúng. */
+  function appButtons(app, current) {
+    var links = app.links || {};
+    var buttons = PLATFORM_ORDER.filter(function (platform) {
+      return typeof links[platform] === "string" && links[platform];
+    }).map(function (platform) {
+      return { platform: platform, href: links[platform], label: platformLabel(platform, links[platform]) };
+    });
+    // Cùng một link cho nhiều nền tảng (App Store dùng chung iPhone/iPad/Mac) thì chỉ vẽ MỘT nút.
+    var seen = {};
+    buttons = buttons.filter(function (button) {
+      if (seen[button.href]) return false;
+      seen[button.href] = true;
+      return true;
+    });
+    var index = -1;
+    buttons.forEach(function (button, i) {
+      if (button.platform === current) index = i;
+    });
+    if (index !== -1) {
+      var first = buttons.splice(index, 1)[0];
+      first.label = "Tải cho " + (OS_LABEL[current] || first.label);
+      buttons.unshift(first);
+    }
+    return buttons;
+  }
+
+  /** Nút phụ của app: xem gói & mua / hướng dẫn cài. */
+  function appExtra(app) {
+    var links = app.links || {};
+    for (var i = 0; i < EXTRA_ORDER.length; i += 1) {
+      var key = EXTRA_ORDER[i];
+      if (typeof links[key] === "string" && links[key]) {
+        return { label: EXTRA_LABEL[key], href: links[key] };
+      }
+    }
+    return null;
+  }
+
+  function cardFor(app, current) {
+    var extra = appExtra(app);
+    return productCard({
+      name: app.name,
+      tag: app.tag || APP_TAG[app.id] || "App",
+      icon: app.icon || "/app-icons/" + app.id + ".png",
+      pitch: app.pitch || "",
+      buttons: appButtons(app, current),
+      os: current,
+      buyLabel: extra ? extra.label : null,
+      buyHref: extra ? extra.href : null,
+    });
+  }
+
+  /**
+   * Danh mục app cho popup. Nguồn là `/api/apps` (server đọc PUBLISHED_APPS) nên thêm app mới
+   * chỉ phải sửa một chỗ ở server; API lỗi thì rơi về bản dựng sẵn, popup không bao giờ trắng.
+   */
+  function loadApps() {
+    return fetch("/api/apps", { credentials: "same-origin" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (data) {
+        var items = (data && data.items) || [];
+        if (!items.length) return FALLBACK_APPS;
+        return items.map(function (item) {
+          return {
+            id: item.id,
+            name: item.name,
+            tag: APP_TAG[item.id] || String(item.kind || "App").slice(0, 16),
+            icon: item.iconUrl || "/app-icons/" + item.id + ".png",
+            pitch: item.summary || "",
+            links: item.links || {},
+          };
+        });
+      })
+      .catch(function () {
+        return FALLBACK_APPS;
+      });
+  }
+
+  function build(apps) {
     var current = os();
 
     var backdrop = el("div", "fg-promo-backdrop");
@@ -259,72 +416,18 @@
       el(
         "p",
         "fg-promo__sub",
-        "VPNFlow cho kết nối riêng tư, nhanh và ổn định — MeetFlow AI là trợ lý AI trong túi. Miễn phí tải về.",
+        "VPNFlow cho kết nối riêng tư, MeetFlow AI cho dịch & biên bản cuộc họp, SuperMom AI cho cha mẹ có con lớp 1–9, FlowTech Harness cho agent trên máy anh. Miễn phí tải về.",
       ),
     );
     head.appendChild(headText);
     card.appendChild(head);
 
+    // Mỗi app một thẻ, nút tải theo nền tảng (danh mục lấy từ /api/apps). Hết chỗ thì cuộn — thẻ
+    // nằm trong .fg-promo nên vẫn thấy được nút "Để sau".
     var grid = el("div", "fg-promo__grid");
-
-    var vpnButtons = [
-      { platform: "windows", href: LINKS.vpnflow.windows, label: "Windows" },
-      { platform: "macos", href: LINKS.vpnflow.macos, label: "macOS" },
-      { platform: "ios", href: LINKS.vpnflow.ios, label: "iOS" },
-      { platform: "android", href: LINKS.vpnflow.android, label: "Android" },
-    ];
-    // Nút đầu tiên là hệ điều hành của khách để bấm là tải đúng bản.
-    var vpnPrimaryFirst = ["windows", "macos", "ios", "android", "other"].indexOf(current) !== -1 ? current : "other";
-    if (vpnPrimaryFirst !== "other") {
-      vpnButtons.sort(function (a, b) {
-        if (a.platform === current) return -1;
-        if (b.platform === current) return 1;
-        return 0;
-      });
-      vpnButtons[0].label = "Tải cho " + OS_LABEL[current];
-    }
-
-    grid.appendChild(
-      productCard({
-        name: "VPNFlow",
-        tag: "VPN",
-        icon: ICON_VPNFLOW,
-        pitch:
-          "Kết nối riêng tư tốc độ cao, không giới hạn dung lượng. Có bản cho Windows, macOS, iPhone/iPad và Android.",
-        buttons: vpnButtons,
-        os: current,
-        buyLabel: "Xem gói & mua",
-        buyHref: LINKS.vpnflow.buy,
-      }),
-    );
-
-    var aiButtons = [
-      { platform: "ios", href: LINKS.meetflow.ios, label: "App Store (iOS)" },
-      { platform: "android", href: LINKS.meetflow.android, label: "Tải APK (Android)" },
-    ];
-    aiButtons.sort(function (a, b) {
-      if (a.platform === current) return -1;
-      if (b.platform === current) return 1;
-      return 0;
+    apps.forEach(function (app) {
+      grid.appendChild(cardFor(app, current));
     });
-    if (current === "ios" || current === "android") {
-      aiButtons[0].label = current === "ios" ? "Tải trên App Store" : "Tải APK cho Android";
-    }
-
-    grid.appendChild(
-      productCard({
-        name: "MeetFlow AI",
-        tag: "AI",
-        icon: ICON_MEETFLOW,
-        pitch:
-          "Trợ lý AI đa năng: hỏi đáp, viết, dịch, tóm tắt và tạo ảnh — dùng ngay trên điện thoại.",
-        buttons: aiButtons,
-        os: current,
-        buyLabel: "Giới thiệu & mua",
-        buyHref: LINKS.meetflow.guide,
-      }),
-    );
-
     card.appendChild(grid);
 
     var foot = el("div", "fg-promo__foot");
@@ -359,9 +462,9 @@
     if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   }
 
-  function show() {
+  function show(apps) {
     if (!shouldShow() || ui) return;
-    ui = build();
+    ui = build(apps);
     lastFocus = document.activeElement;
     ui.close.addEventListener("click", function () {
       hide({ until: Date.now() + snoozeMs });
@@ -383,7 +486,13 @@
   }
 
   function schedule() {
-    resolveSnoozeMs().then(function () { setTimeout(show, DELAY_MS); });
+    // Danh mục app và mốc nhắc lại lấy song song: chậm nhất là lúc API trả lời, không cộng dồn.
+    Promise.all([resolveSnoozeMs(), loadApps()]).then(function (results) {
+      var apps = results[1];
+      setTimeout(function () {
+        show(apps);
+      }, DELAY_MS);
+    });
   }
 
   if (document.readyState === "loading") {

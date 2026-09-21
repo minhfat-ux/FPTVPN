@@ -112,6 +112,32 @@ test("danh mục đủ 5 sản phẩm đã công bố và luôn có luật chố
   assert.match(catalogue, /3 thiết bị/);
 });
 
+/**
+ * Lỗi chủ dự án báo 21/09/2026: thẻ MeetFlow AI trong popup quảng cáo chỉ có link App Store +
+ * APK — khách dùng Windows/macOS không có gì để bấm tải. Link phải nằm ở đúng nguồn dữ liệu
+ * (PUBLISHED_APPS) và đủ bốn nền tảng cho những app có bản cài.
+ */
+test("app có bản cài thì đủ link Windows/macOS/iOS/Android, link nào cũng phải https", () => {
+  for (const app of PUBLISHED_APPS) {
+    for (const [key, url] of Object.entries(app.links ?? {})) {
+      assert.match(url, /^https:\/\//, `${app.id}.${key} phải là link https`);
+    }
+  }
+  for (const id of ["meetflow", "vpnflow"]) {
+    const app = PUBLISHED_APPS.find((item) => item.id === id);
+    for (const platform of ["windows", "macos", "ios", "android"]) {
+      assert.ok(app.links[platform], `${app.name} thiếu link tải cho ${platform}`);
+    }
+  }
+  // Bản macOS của MeetFlow AI là App Store dùng chung iPhone/iPad/Mac (trang chủ FlowTech ghi
+  // "App Store (macOS)" cho đúng id này) — không được bịa link .dmg không tồn tại.
+  const meetflow = PUBLISHED_APPS.find((item) => item.id === "meetflow");
+  assert.equal(meetflow.links.macos, meetflow.links.ios);
+  // Nút "mua/hướng dẫn" vẫn phải còn để khách xem gói.
+  assert.ok(meetflow.links.buy);
+  assert.ok(PUBLISHED_APPS.find((item) => item.id === "vpnflow").links.buy);
+});
+
 test("full: true ép ghép danh mục dù câu hỏi không nhắc app", () => {
   const forced = buildAppsKnowledge({ message: "chào em", full: true });
   assert.match(forced, /## DANH MỤC APP/);

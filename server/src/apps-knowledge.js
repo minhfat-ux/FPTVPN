@@ -64,12 +64,17 @@ export const PUBLISHED_APPS = [
       "dịch hội thoại đa ngôn ngữ theo thời gian thực cho cuộc gọi và cuộc họp",
       "ghi biên bản cuộc họp (meeting minutes) bằng AI từ cuộc gọi và bản ghi âm",
       "xem lại lịch sử hội thoại, xuất nội dung, nghe lại phần đã dịch (một số mục cần gói Pro)",
-      "có trên App Store cho iPhone/iPad (id6765590042), bản macOS, bản Android (APK) và bản Windows dạng overlay",
+      "có trên App Store cho iPhone/iPad VÀ macOS (id6765590042), bản Android (APK) và bản Windows dạng overlay",
+      "tải bản Windows (overlay) tại https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip; Android tải APK tại https://api.meetflowai.site/v1/ai/downloads/android",
       "gói 30 ngày / theo tháng / theo năm mua một lần trên web; Pro mở khoá ngay sau khi thanh toán bằng cách kiểm tra đúng email đã mua",
     ],
     links: {
       buy: "https://meetflowai.site/ai/guide",
       ios: "https://apps.apple.com/vn/app/meetflow-ai/id6765590042",
+      // App Store là bản dùng chung iPhone/iPad/Mac (trang chủ FlowTech ghi "App Store (macOS)"
+      // cho đúng id này) nên link macOS trỏ về đó — không bịa link .dmg không tồn tại.
+      macos: "https://apps.apple.com/vn/app/meetflow-ai/id6765590042",
+      windows: "https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip",
       android: "https://api.meetflowai.site/v1/ai/downloads/android",
     },
   },
@@ -116,7 +121,7 @@ export const PUBLISHED_APPS = [
       "kiểm tra lại bài con đã làm xem sai ở đâu, giải bài tiếng Anh, ghi chú lịch học kèm nhắc nhở",
       "có trên App Store cho iPhone và iPad (id6768231353)",
     ],
-    links: { ios: "https://apps.apple.com/app/id6768231353" },
+    links: { ios: "https://apps.apple.com/vn/app/supermom-ai/id6768231353" },
   },
 ];
 

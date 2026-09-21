@@ -45,5 +45,14 @@ export const common: Dict = {
   "appsPromo.title": "FlowTech 的其他应用",
   "appsPromo.description": "除了 fBuddy，生态中还有其他应用，可能正好适合你手头的事。",
   "appsPromo.later": "稍后再说",
+  // 每个应用卡片上的下载按钮（当前设备的版本排在最前）。
+  "appsPromo.platform.windows": "Windows",
+  "appsPromo.platform.macos": "macOS",
+  "appsPromo.platform.ios": "App Store (iOS)",
+  "appsPromo.platform.android": "Android (APK)",
+  "appsPromo.platform.buy": "查看套餐并购买",
+  "appsPromo.platform.guide": "安装指南",
+  "appsPromo.platform.app": "打开应用",
+  "appsPromo.platform.support": "支持",
   "appsPromo.footnote": "点击应用将在新标签页打开。此弹窗仅在登录后显示，7 天内不会再次提醒。",
 };

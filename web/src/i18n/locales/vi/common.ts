@@ -45,5 +45,14 @@ export const common: Dict = {
   "appsPromo.title": "Khám phá thêm app cùng nhà FlowTech",
   "appsPromo.description": "Ngoài fBuddy, hệ sinh thái còn có mấy app khác có thể đúng việc anh đang cần.",
   "appsPromo.later": "Để sau",
+  // Nút tải trong từng thẻ app (bản của thiết bị đang dùng được đẩy lên đầu).
+  "appsPromo.platform.windows": "Windows",
+  "appsPromo.platform.macos": "macOS",
+  "appsPromo.platform.ios": "App Store (iOS)",
+  "appsPromo.platform.android": "Android (APK)",
+  "appsPromo.platform.buy": "Xem gói & mua",
+  "appsPromo.platform.guide": "Hướng dẫn cài",
+  "appsPromo.platform.app": "Mở app",
+  "appsPromo.platform.support": "Hỗ trợ",
   "appsPromo.footnote": "Bấm vào từng app để mở ở tab mới. Popup này chỉ hiện khi đã đăng nhập và sẽ không nhắc lại trong 7 ngày.",
 };

@@ -38,6 +38,10 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     links: {
       buy: "https://meetflowai.site/ai/guide",
       ios: "https://apps.apple.com/vn/app/meetflow-ai/id6765590042",
+      // App Store là bản dùng chung iPhone/iPad/Mac — trang chủ FlowTech ghi "App Store (macOS)"
+      // cho đúng id này, nên bản macOS trỏ về đó (không bịa link .dmg không tồn tại).
+      macos: "https://apps.apple.com/vn/app/meetflow-ai/id6765590042",
+      windows: "https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip",
       android: "https://api.meetflowai.site/v1/ai/downloads/android",
     },
   },
