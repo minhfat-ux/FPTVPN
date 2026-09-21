@@ -248,6 +248,26 @@ function ledgerNewestAt() {
   return newest;
 }
 
+/**
+ * Tin bus này có nói về ĐÚNG việc trong sổ không? (không chỉ trùng mã)
+ *
+ * Vì sao cần: mã việc TRÙNG giữa hai sổ — `T-20260919-01` ở sổ fbuddy là "UI/UX: bộ token theme
+ * mobile", ở sổ FPTVPN là "Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE)". Nếu chỉ so mã thì một
+ * tin `done` của việc BÊN KIA sẽ bị coi là bản phát lại của việc bên này và bị bỏ qua im lặng.
+ * (Đã ghi trong docs/ASK-WINDOWS.md: "task ID trùng giữa hai sổ ⇒ đọc `detail` trước khi ack/done".)
+ */
+function sameSubject(busTitle, task) {
+  if (!busTitle || !task?.title) return false;
+  const strip = (text) => String(text).toLowerCase().replace(/\s+/g, " ").trim();
+  const prefix = new RegExp(`^${String(task.id ?? "").toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[·:—-]\\s*`);
+  const bus = strip(busTitle).replace(prefix, "");
+  const local = strip(task.title);
+  if (!bus || !local) return false;
+  // Tiêu đề trên bus có thể bị cắt ngắn — chỉ cần khớp phần đầu.
+  const length = Math.min(40, bus.length, local.length);
+  return bus.slice(0, length) === local.slice(0, length);
+}
+
 /** Việc này có cần ĐÁNH THỨC tôi không? Trả về lý do hoặc null. */
 function wakeReason(entry) {
   const to = String(entry.task.to ?? "").toLowerCase();
@@ -388,7 +408,14 @@ async function alertHuman(text) {
   }
 }
 
-/** Những loại thông báo cần ĐÁNH THỨC (còn lại chỉ ghi log + alert). */
+/**
+ * Những loại thông báo cần ĐÁNH THỨC (còn lại chỉ ghi log + alert).
+ *
+ * Cố ý KHÔNG có `ack` / `progress` / `verified` / `status` / `notify`: bên giao không cần mở một
+ * phiên chỉ vì đối tác đã nhận việc hay đang làm — giống hệt luật ở nhánh đọc sổ git
+ * (`wakeReason`). Trước 21/09/2026 đường bus còn có luật "hễ có `ref` là đánh thức", nên 4 tin
+ * `ack` cho T-20260919-04..07 đã boot 4 phiên không có gì làm.
+ */
 const WAKE_KINDS = new Set(["task", "sent", "done", "reopened", "blocked", "verify-fail", "alert-test", "wake"]);
 
 /** Kéo thông báo mới từ connector VPS; trả về số lần đánh thức. */
@@ -448,6 +475,19 @@ async function tickBus(state) {
   let woke = 0;
   const queue = payload?.messages ?? [];
 
+  // Tin bus có thể chỉ là BẢN PHÁT LẠI của một sự kiện đã nằm trong sổ (con trỏ bus lùi, máy tắt
+  // lâu rồi bật lại, tin cũ chưa từng thấy qua đường bus). Đã gặp thật 21/09/2026: MAC bị đánh
+  // thức cho `T-20260918-01` và `T-20260919-01` — cả hai sổ đã `verified` từ 19/09 — nên phiên mở
+  // ra không có gì để làm. Với tin bus trỏ tới một việc CÓ trong sổ, TRẠNG THÁI ĐÃ GỘP của sổ
+  // (nguồn xác thực) phải quyết định, không phải `kind` của tin bus.
+  // Chỉ tin sổ khi sổ đã BẮT KỊP tin nhắn (sự kiện mới nhất >= thời điểm tin bus); nếu sổ còn cũ
+  // hơn thì giữ nguyên cách cũ để không bỏ sót một `done` mà bên kia chưa push kịp lên git.
+  let ledgerById = null;
+  if (queue.some((message) => message.ref && fs.existsSync(path.join(TASKS_DIR, String(message.ref))))) {
+    const { tasks } = readLedger();
+    ledgerById = new Map(tasks.map((task) => [task.id, task]));
+  }
+
   // NHÍCH CON TRỎ NGAY và ghi xuống đĩa TRƯỚC khi đánh thức.
   //
   // Đây là gốc lỗi thật phía Windows: con trỏ kẹt ở 11 nên mỗi vòng poll lại thấy 6 tin cũ
@@ -473,11 +513,24 @@ async function tickBus(state) {
 
     log(`BUS #${message.id} ${message.from}→${message.to} [${message.kind}] ${message.title}`);
     if (!DRY) void alertHuman(`BUS #${message.id} · ${message.from}→${message.to} · ${message.kind}\n${message.title}${message.body ? `\n${message.body.slice(0, 300)}` : ""}`);
-    if (!WAKE_KINDS.has(String(message.kind)) && !message.ref) continue;
+    if (!WAKE_KINDS.has(String(message.kind))) continue;
     const entry = {
       id: message.ref ?? `bus-${message.id}`,
       task: { id: message.ref ?? `bus-${message.id}`, title: message.title, to: message.to, from: message.from, detail: "docs/TASK-PROTOCOL.md" },
     };
+    // Sổ đã bắt kịp tin này (và nói về đúng việc đó) mà bảo "không cần tôi hành động" ⇒ không đánh thức.
+    const ledgerEntry = message.ref ? ledgerById?.get(String(message.ref)) : null;
+    const ledgerCaughtUp = Boolean(ledgerEntry)
+      && sameSubject(message.title, ledgerEntry.task)
+      && new Date(ledgerEntry.last?.at ?? 0).getTime() >= new Date(message.at ?? 0).getTime();
+    if (ledgerCaughtUp) {
+      if (!wakeReason(ledgerEntry)) {
+        log(`  #${message.id} trỏ ${message.ref} — sổ đã ở "${ledgerEntry.last?.type}" (không cần tôi hành động), KHÔNG đánh thức (bản phát lại)`);
+        continue;
+      }
+      // Sổ là nguồn xác thực: dùng cả tiêu đề/chi tiết thật của việc trong sổ cho prompt.
+      entry.task = ledgerEntry.task;
+    }
     // Nhiều tin cho CÙNG một việc (sent → progress → done) chỉ được boot MỘT phiên.
     if (cooldownBlocked(state, entry.id)) {
       log(`  #${message.id} thuộc ${entry.id} vừa đánh thức trong ${COOLDOWN}s — chỉ ghi nhận, không boot thêm`);
