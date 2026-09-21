@@ -14,11 +14,28 @@
  *   - Wikipedia (vi/en) qua API chính thức: ổn định, có cấu trúc, ghi rõ nguồn.
  *   - vanban.chinhphu.vn: văn bản pháp luật nhà nước (ưu tiên cho câu hỏi luật/thuế/xử phạt).
  *   - Dữ liệu biển số đã kiểm chứng trong repo (`data/vn-plate-codes.json`).
- *   - Tìm kiếm web: nếu có `SEARCH_API_KEY` (Tavily) thì dùng API; không thì dùng kết quả HTML của
- *     DuckDuckGo như phương án dự phòng cho tin thời sự. Lưu ý: đọc HTML của DuckDuckGo là cách
- *     chữa cháy, không phải kênh chính thức — muốn bền thì nên cắm khoá search API.
- *   - Tin tức: `news-sources.js` (Google News RSS + RSS báo lớn VN), miễn phí và KHÔNG cần khoá. Chỉ
- *     dùng để BỔ SUNG khi câu hỏi cần độ mới mà tìm kiếm web không trả về mục nào có ngày công bố.
+ *   - Tìm kiếm web: NHIỀU ĐƯỜNG ĐỘC LẬP (`SEARCH_CHANNELS`) chạy SONG SONG, mỗi đường có timeout và
+ *     try/catch riêng nên một đường chết KHÔNG làm chết cả lượt tra; đường nào rỗng thì mới rơi
+ *     xuống đường dự phòng. Đường nào đã dùng, được bao nhiêu kết quả, vì sao rỗng — ghi hết vào
+ *     `result.searchChannels`. Khi KHÔNG có nguồn nào thì câu trả lời phải nêu lý do TỪNG đường,
+ *     tuyệt đối không nói chung chung "không tra được nguồn ngoài".
+ *       · Tavily — chỉ khi có `SEARCH_API_KEY`.
+ *       · DuckDuckGo HTML + biến thể `lite.duckduckgo.com/lite/`. Miễn phí, nhưng IP bị captcha là
+ *         chuyện thường gặp: gặp 202/captcha thì đường đó tự khai "bị chặn" chứ không im lặng trả rỗng
+ *         rồi để tầng trên kết luận sai là "internet không có gì".
+ *       · Bing HTML — miễn phí, không cần khoá; URL thật nằm trong tham số `u=a1…` của link chuyển
+ *         hướng. Đo thật: Bing từ IP lạ trả về cả kết quả KHÔNG khớp truy vấn, nên đường này có cổng
+ *         lọc liên quan riêng (`isRelevantHit`).
+ *       · SearXNG công khai (`search.disroot.org`) — chỉ chạy khi các đường chính đã rỗng; instance
+ *         công khai hay bị giới hạn tần suất nên không được để nó nằm trên đường chính.
+ *       · Wikipedia API `action=query&list=search` cho câu bách khoa/địa lý/lịch sử.
+ *   - Tin tức: `news-sources.js` (Google News RSS + RSS báo lớn VN), miễn phí và KHÔNG cần khoá. Dùng
+ *     khi câu hỏi cần độ mới; với hồ sơ CHỈ nhận nguồn chính thống thì dùng thêm Google News
+ *     `site:gov.vn` / `site:chinhphu.vn` để lấy tin CÓ NGÀY công bố từ cổng nhà nước. Lượt gọi RSS
+ *     chạy SONG SONG với tìm kiếm web (không cộng thêm thời gian chờ) và được cache vài phút.
+ *   - ĐỌC NỘI DUNG TRANG (phần "đọc nguồn" giống ChatGPT): lấy 3–4 kết quả đầu, tải SONG SONG, trích
+ *     các thẻ `<p>` sau khi bỏ nav/script/style, tối đa ~1.200 ký tự/trang, tổng ngân sách ~6 s. Nhờ
+ *     vậy `findings` có DỮ KIỆN để trả lời chứ không chỉ tiêu đề + link.
  *
  * Nguyên tắc: KHÔNG bịa. Không tìm thấy ⇒ trả `confidence: "thap"` kèm lời nhắc nói thẳng là chưa
  * chắc và chỉ người dùng tới nguồn chính thức.
@@ -33,12 +50,37 @@ import { fetchNews } from "./news-sources.js";
 const UA = "fBuddy-research/1.0 (+https://fbuddy.meetflowai.site; tracuu)";
 const FETCH_TIMEOUT_MS = 12000;
 /**
+ * NGÂN SÁCH THỜI GIAN — mỗi tầng có hạn riêng, vì người dùng không được chờ vô hạn chỉ vì một nguồn
+ * ngoài chậm. Tổng cho MỘT câu hỏi bị chặn trần ở `RESEARCH_BUDGET_MS`.
+ */
+const SEARCH_TIMEOUT_MS = 5500;
+const FALLBACK_TIMEOUT_MS = 4000;
+const PAGE_TIMEOUT_MS = 3500;
+/** Hạn cho cả giai đoạn tìm kiếm (đường chính + đường dự phòng). */
+const SEARCH_BUDGET_MS = 6500;
+/** Hạn cho giai đoạn đọc nội dung trang (chạy song song, tự cắt). */
+const READ_BUDGET_MS = 5500;
+/** Hạn CỨNG cho một lượt tra cứu — yêu cầu: không quá ~12 s/câu. */
+const RESEARCH_BUDGET_MS = SEARCH_BUDGET_MS + READ_BUDGET_MS;
+/** Chưa đủ ngần này kết quả thì mới bỏ thêm thời gian chạy các đường dự phòng. */
+const MIN_HITS_BEFORE_FALLBACK = 3;
+const SEARCH_RESULT_LIMIT = 5;
+/**
  * Ngân sách thời gian cho lượt bổ sung bằng RSS: chạy SONG SONG và tự cắt, vì đây là phần thêm vào
  * chứ không phải đường chính — nguồn tin chậm không được kéo dài thời gian người dùng phải chờ.
  */
 const NEWS_TIMEOUT_MS = 6000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
-const MAX_FETCH_PAGES = 3;
+/**
+ * Cache riêng cho kết quả RSS: ngắn hơn cache tra cứu vì tin thời sự đổi theo giờ, nhưng đủ để câu
+ * hỏi lặp lại (người dùng hỏi lại, hoặc model gọi `tra_cuu` cùng câu) trả về tức thì.
+ */
+const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;
+const NEWS_LIMIT = 8;
+/** Số trang đọc nội dung cho một lượt tra — yêu cầu: 3–5 kết quả đầu. */
+const MAX_FETCH_PAGES = 4;
+/** Trần ký tự lấy từ mỗi trang: đủ để có dữ kiện, không nhồi cả bài vào prompt. */
+const MAX_PAGE_CHARS = 1200;
 
 /**
  * NGUỒN CHÍNH THỐNG — thông tin về chính phủ, thủ tục, chính sách, luật thì CHỈ được lấy từ đây.
@@ -101,7 +143,7 @@ export const RESEARCHER_PROFILES = [
   {
     id: "van-hoa",
     label: "Văn hoá, lịch sử, tín ngưỡng",
-    detect: /văn hoá|văn hóa|phong tục|truyền thống|lễ hội|tín ngưỡng|tâm linh|tôn giáo|đạo |phật|chùa|nhà thờ|hồi giáo|kinh thánh|kinh phật|lịch sử|triều đại|ngày lễ|kiêng|may mắn|xui|tử vi|phong thuỷ|phong thủy/i,
+    detect: /văn hoá|văn hóa|phong tục|truyền thống|lễ hội|tín ngưỡng|tâm linh|tôn giáo|đạo (phật|thiên chúa|hồi|cao đài|hoà hảo|mẫu|ông)|phật|chùa|nhà thờ|hồi giáo|kinh thánh|kinh phật|lịch sử|triều đại|ngày lễ|kiêng|may mắn|xui|tử vi|phong thuỷ|phong thủy/i,
     wikiTitles: [],
     preferDomains: ["vi.wikipedia.org", "en.wikipedia.org"],
   },
@@ -112,6 +154,28 @@ export const RESEARCHER_PROFILES = [
     wikiTitles: [],
     preferDomains: ["vi.wikipedia.org", "moet.gov.vn", "en.wikipedia.org"],
     special: ["wikipedia"],
+  },
+  {
+    // Chủ dự án 21/09/2026: "anh chưa thấy chuyên gia vietlot cho fbuddy".
+    //
+    // Chuyên gia này tra KẾT QUẢ/ĐIỀU LỆ/GIẢI THƯỞNG của xổ số điện toán từ nguồn chính thức
+    // (vietlott.vn). Tuyệt đối KHÔNG dự đoán con số: xổ số là ngẫu nhiên, hứa hẹn trúng thưởng là
+    // sai sự thật và có hại. Hồ sơ chỉ ra con số đã quay + kỳ quay + ngày quay, kèm xác suất thật.
+    id: "vietlot",
+    label: "Xổ số điện toán (Vietlott)",
+    detect:
+      /vietlott|xổ số điện toán|xsđt|mega\s*6\s*[/\-]\s*45|power\s*6\s*[/\-]\s*55|keno|max\s*3d|max\s*4d|max\s*3d\s*pro|jackpot|trúng thưởng|trung thuong|kết quả xổ số|ket qua xo so|quay thưởng|quay thuong|kỳ quay|ky quay|vé số|vé số điện toán|lô tô|số đề|bao lô|dò vé|đổi thưởng|giải đặc biệt/i,
+    wikiTitles: ["Vietlott"],
+    // Nguồn sống quan trọng: kết quả phải là KỲ MỚI NHẤT, không được lấy kết quả cũ nói là hôm nay.
+    requiresFresh: true,
+    preferDomains: ["vietlott.vn", "vi.wikipedia.org"],
+    siteQueries: ["site:vietlott.vn"],
+    note:
+      "CHỈ nêu kết quả tra được từ nguồn chính thức (vietlott.vn) kèm KỲ QUAY và NGÀY QUAY. " +
+      "TUYỆT ĐỐI KHÔNG dự đoán con số sẽ ra, không gợi ý \"số đẹp/số may\", không hứa trúng thưởng, " +
+      "không tính toán \"quy luật\" để chọn số — xổ số là ngẫu nhiên, mỗi kỳ xác suất như nhau. " +
+      "Nếu người dùng nhờ chọn số, hãy nói rõ điều đó và chỉ có thể chọn ngẫu nhiên nếu họ muốn. " +
+      "Nêu xác suất trúng giải đặc biệt khi được hỏi, và nhắc việc tham gia là tự nguyện, không phải cách kiếm tiền.",
   },
   {
     id: "kinh-te",
@@ -199,6 +263,45 @@ const cache = new Map();
 
 function cacheKey(question, domain) {
   return `${domain}:${String(question).toLowerCase().replace(/\s+/g, " ").trim()}`;
+}
+
+/** Cache kết quả RSS: `key -> { at, value }` (giá trị đã lấy xong) hoặc `{ at, pending }` (đang lấy). */
+const newsCache = new Map();
+
+/**
+ * Khoá cache RSS theo CÂU HỎI ĐÃ CHUẨN HOÁ (bỏ dấu câu, gộp khoảng trắng, hạ chữ thường) + cửa sổ
+ * thời gian: "Giá vàng hôm nay?" và "giá  vàng hôm nay" là cùng một câu hỏi nên phải dùng chung kết
+ * quả. Cửa sổ nằm trong khoá vì nó đổi cả truy vấn `when:` lẫn hạn lọc độ mới.
+ */
+function newsCacheKey(question, window) {
+  const normalized = String(question ?? "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${window ?? "w"}:${normalized}`;
+}
+
+/**
+ * Gọi RSS có cache. Hai câu hỏi giống nhau trong vòng `NEWS_CACHE_TTL_MS` chỉ tốn ĐÚNG một lượt mạng;
+ * lượt đang chạy dở cũng được chia sẻ (lưu `pending`) nên hai lượt tra song song không nhân đôi request.
+ *
+ * KHÔNG bao giờ ném lỗi (nguồn tin hỏng chỉ được làm giảm dữ liệu, không được làm hỏng lượt tra) —
+ * nhờ vậy chỗ gọi có thể bỏ qua promise này mà không sinh unhandled rejection.
+ */
+function fetchNewsCached({ question = "", window = null } = {}) {
+  const key = newsCacheKey(question, window);
+  const hit = newsCache.get(key);
+  if (hit?.pending) return hit.pending;
+  if (hit?.value && Date.now() - hit.at < NEWS_CACHE_TTL_MS) return Promise.resolve(hit.value);
+  const pending = fetchNews({ question, window, limit: NEWS_LIMIT, timeoutMs: NEWS_TIMEOUT_MS })
+    .catch(() => [])
+    .then((items) => {
+      newsCache.set(key, { at: Date.now(), value: items });
+      return items;
+    });
+  newsCache.set(key, { at: Date.now(), pending });
+  return pending;
 }
 
 async function getText(url) {
@@ -301,19 +404,30 @@ export function needsFreshness(question = "") {
  * GMT+8, VPS là UTC) nên khi quy về lịch Việt Nam sẽ ra NGÀY HÔM TRƯỚC. Gặp thật: tin "20 thg 9,
  * 2026" bị ghi thành 2026-09-19 — sai đúng một ngày, mà đây là chỗ người dùng dựa vào để biết tin
  * mới hay cũ.
+ *
+ * `allowRelative` mặc định TẮT, và đó là chủ ý: chữ "hôm nay"/"mới nhất" trong BÀI VIẾT không phải
+ * ngày công bố của bài. Đo thật: trang wiki về "Thời sự (VTV)", "VTV1" — bài cũ nhiều năm — vẫn có
+ * câu "hôm nay" nên bị gắn ngày chạy máy, rồi xếp LÊN TRÊN tin thật của báo. Chỉ bật khi nguồn là
+ * dữ liệu máy đọc (RSS, nhãn `result__timestamp` của DuckDuckGo) — ở đó mốc tương đối do chính nguồn
+ * sinh ra nên là ngày công bố thật.
+ *
+ * @param {string} text
+ * @param {{ allowRelative?: boolean }} [options]
  */
-function extractDate(text = "") {
+export function extractDate(text = "", { allowRelative = false } = {}) {
   const raw = String(text);
   const now = Date.now();
-  const relative = /(\d+)\s*(phút|giờ|ngày|tuần|tháng)\s*trước/i.exec(raw);
-  if (relative) {
-    const amount = Number(relative[1]);
-    const unit = relative[2].toLowerCase();
-    const ms = { "phút": 60000, "giờ": 3600000, "ngày": 86400000, "tuần": 604800000, "tháng": 2592000000 }[unit] ?? 86400000;
-    return new Date(now - amount * ms);
+  if (allowRelative) {
+    const relative = /(\d+)\s*(phút|giờ|ngày|tuần|tháng)\s*trước/i.exec(raw);
+    if (relative) {
+      const amount = Number(relative[1]);
+      const unit = relative[2].toLowerCase();
+      const ms = { "phút": 60000, "giờ": 3600000, "ngày": 86400000, "tuần": 604800000, "tháng": 2592000000 }[unit] ?? 86400000;
+      return new Date(now - amount * ms);
+    }
+    if (/hôm nay|vừa xong|mới đăng/i.test(raw)) return new Date(now);
+    if (/hôm qua/i.test(raw)) return new Date(now - 86400000);
   }
-  if (/hôm nay|vừa xong|mới đăng/i.test(raw)) return new Date(now);
-  if (/hôm qua/i.test(raw)) return new Date(now - 86400000);
   const dmy = /\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/.exec(raw);
   if (dmy) {
     const date = new Date(Date.UTC(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])));
@@ -409,7 +523,9 @@ async function webSearch(query, limit = 5, { fresh = null } = {}) {
 function ddgPublishedAt(block = "", text = "") {
   const stamp = /class="result__timestamp"[^>]*>([\s\S]*?)</.exec(String(block))?.[1];
   if (stamp) {
-    const date = extractDate(stamp);
+    // Nhãn `result__timestamp` do DuckDuckGo sinh cho ô kết quả ⇒ mốc tương đối ("3 giờ trước") ở
+    // đây vẫn là NGÀY CÔNG BỐ thật, khác hẳn chữ "hôm nay" nằm trong tiêu đề bài viết.
+    const date = extractDate(stamp, { allowRelative: true });
     if (date) return vnDate(date);
   }
   // Không có nhãn ngày của DuckDuckGo thì chỉ nhận ngày ghi ĐỦ ngày–tháng–năm trong tiêu đề/mô tả.
@@ -677,6 +793,75 @@ async function plateData() {
 }
 
 /**
+ * Tham số chỉ dùng để ĐO/ĐẾM lượt truy cập, không bao giờ là nội dung của bài viết.
+ * `utm_*` là của Google Analytics, `fbclid`/`gclid`/`yclid` là mã theo dõi quảng cáo.
+ */
+const TRACKING_PARAMS = /^(utm_.+|fbclid|gclid|yclid|igshid|mc_cid|mc_eid|_ga|_gl)$/i;
+
+/**
+ * Chuẩn hoá URL để SO TRÙNG — không dùng để hiển thị (nguồn vẫn giữ URL gốc cho người dùng mở).
+ *
+ * Vì sao cần: cùng một bài báo xuất hiện nhiều lần dưới các dạng URL khác nhau (`?utm_source=…`,
+ * `http` vs `https`, `www.` vs không, có/không dấu `/` cuối) nên bản cũ đếm chúng thành nhiều phát
+ * hiện riêng. Đo thật: 4 slot trong 8 là cùng một trang (Đài Truyền hình Việt Nam / VTV1 lặp 2 lần),
+ * tức là người dùng mất chỗ cho nguồn thật.
+ *
+ * Cố ý KHÔNG sắp xếp lại tham số truy vấn (thứ tự tham số có thể mang nghĩa với vài trang) và KHÔNG
+ * bỏ tham số thật — `?oc=5` của Google News phải giữ vì nó là phần phân biệt bài.
+ */
+export function normalizeUrl(url = "") {
+  const raw = String(url ?? "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    // `#top` chỉ là vị trí cuộn trong cùng một trang.
+    parsed.hash = "";
+    // http/https khác giao thức chứ không phải khác nguồn.
+    parsed.protocol = "https:";
+    for (const param of [...parsed.searchParams.keys()]) {
+      if (TRACKING_PARAMS.test(param)) parsed.searchParams.delete(param);
+    }
+    parsed.hostname = parsed.hostname.replace(/^www\./, "");
+    // `toString()` thêm `/` cho URL không có đường dẫn; bỏ để "x.vn" và "x.vn/" là một.
+    return parsed.toString().replace(/\/$/, "").toLowerCase();
+  } catch {
+    // URL hỏng (không parse được): chuẩn hoá thô để vẫn so được phần còn lại.
+    return raw.replace(/[?#].*$/, "").replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+/**
+ * Điểm "đầy đủ" của một phát hiện. Khi hai phát hiện cùng URL thì giữ bản có NGÀY CÔNG BỐ thật
+ * (quan trọng hơn hẳn — đó là thứ người dùng dùng để biết tin mới hay cũ), rồi mới tới bản có đoạn
+ * trích dài hơn.
+ */
+function findingScore(finding = {}) {
+  const text = (finding.passages ?? []).join(" ").length;
+  return (finding.publishedAt ? 1000 : 0) + Math.min(text, 999);
+}
+
+/**
+ * Bỏ phát hiện TRÙNG URL, giữ đúng một bản cho mỗi nguồn (bản đầy đủ hơn) và giữ nguyên thứ tự
+ * xuất hiện của lần đầu — thứ tự này là cơ sở xếp hạng phía dưới nên không được xáo.
+ */
+function dedupeFindings(findings = []) {
+  const picked = new Map();
+  const order = [];
+  findings.forEach((finding, index) => {
+    // Phát hiện không có URL (hiếm) không gộp với nhau: khoá riêng theo vị trí.
+    const key = normalizeUrl(finding.url) || `#${index}`;
+    const current = picked.get(key);
+    if (!current) {
+      picked.set(key, finding);
+      order.push(key);
+      return;
+    }
+    if (findingScore(finding) > findingScore(current)) picked.set(key, finding);
+  });
+  return order.map((key) => picked.get(key));
+}
+
+/**
  * Tra cứu một câu hỏi. Trả về phát hiện + nguồn + độ chắc chắn + chỗ mâu thuẫn.
  *
  * @param {{ question: string, domain?: string, depth?: "nhanh"|"ky" }} input
@@ -700,13 +885,6 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   }
   // Hồ sơ chính thống: hỏi thẳng vào kho văn bản nhà nước trước, để kết quả không bị lẫn blog/diễn đàn.
   for (const site of profile.siteQueries ?? []) queries.push(`${question} ${site}`);
-  const searches = [];
-  for (const query of queries.slice(0, depth === "ky" ? 3 : 2)) {
-    searches.push(...(await webSearch(query, 5, window ? { fresh: window } : {})));
-  }
-  // Vẫn thử bản không lọc để không mất nguồn tốt vì bộ lọc quá chặt, nhưng xếp sau.
-  if (fresh) searches.push(...(await webSearch(queries[0], 4)));
-
   /**
    * BỔ SUNG BẰNG RSS khi tìm kiếm web không cho được TIN CÓ NGÀY.
    *
@@ -714,19 +892,29 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
    * nhất hôm nay" mà câu trả lời không nói được tin ngày nào thì người dùng không kiểm chứng được
    * độ mới. RSS của toà soạn (và Google News gộp nhiều báo) thì mục nào cũng có giờ đăng.
    *
-   * Chỉ chạy khi (a) câu hỏi cần độ mới, (b) tìm kiếm web hoặc KHÔNG có kết quả, hoặc không kết
-   * quả nào có ngày, và (c) hồ sơ không phải loại CHỈ dùng nguồn chính thống — RSS ở đây là báo chí,
-   * không phải .gov.vn, nên với hồ sơ "chinh-phu" mọi tin lấy thêm đều bị lọc bỏ: tra làm gì cho chậm.
-   * Câu hỏi thường giữ nguyên luồng cũ, không tốn thêm thời gian.
+   * KHỞI ĐỘNG TRƯỚC tìm kiếm web để chạy SONG SONG: bản trước chờ search xong mới gọi RSS nên mỗi
+   * lượt tra tin cộng thêm 1–2 giây chờ vô ích (đo thật: 6 câu, trung bình 17,1 s/câu). Ở đây chỉ
+   * khởi động; kết quả vẫn chỉ được DÙNG khi tìm kiếm web không trả về mục nào có ngày (điều kiện cũ)
+   * — nếu search đã có ngày thì không chờ RSS nữa, mà lượt lấy RSS đang chạy vẫn đổ vào cache cho
+   * câu hỏi lặp lại.
+   *
+   * Điều kiện chạy: (a) câu hỏi cần độ mới, (b) hồ sơ không phải loại CHỈ dùng nguồn chính thống —
+   * RSS ở đây là báo chí, không phải .gov.vn, nên với hồ sơ "chinh-phu" mọi tin lấy thêm đều bị lọc
+   * bỏ: tra làm gì cho chậm. Câu hỏi thường giữ nguyên luồng cũ, không tốn thêm thời gian.
    */
-  let news = [];
-  if (fresh && !profile.strictOfficial && !searches.some((item) => item.publishedAt)) {
-    try {
-      news = await fetchNews({ question, window, limit: 8, timeoutMs: NEWS_TIMEOUT_MS });
-    } catch {
-      /* nguồn tin hỏng thì thôi, không làm hỏng lượt tra */
-    }
+  const newsJob = fresh && !profile.strictOfficial ? fetchNewsCached({ question, window }) : null;
+
+  const searches = [];
+  for (const query of queries.slice(0, depth === "ky" ? 3 : 2)) {
+    searches.push(...(await webSearch(query, 5, window ? { fresh: window } : {})));
   }
+  // Vẫn thử bản không lọc để không mất nguồn tốt vì bộ lọc quá chặt, nhưng xếp sau.
+  if (fresh) searches.push(...(await webSearch(queries[0], 4)));
+
+  // `fetchNewsCached` không bao giờ ném lỗi nên chỗ này không cần try/catch (nguồn tin hỏng thì thôi,
+  // không làm hỏng lượt tra).
+  let news = [];
+  if (newsJob && !searches.some((item) => item.publishedAt)) news = await newsJob;
 
   const sources = [];
   if (profile.id === "bien-so") sources.push(...(await plateData()));
@@ -752,6 +940,8 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   }
 
   const findings = [];
+  /** Phát hiện đến từ RSS — nơi mốc thời gian tương đối là dữ liệu của nguồn, không phải chữ trong bài. */
+  const fromFeed = new WeakSet();
   for (const source of sources) {
     const passages = relevantPassages(source.text ?? "", question, 3);
     if (passages.length) findings.push({ title: source.title, url: source.url, passages });
@@ -763,16 +953,22 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   // rõ "tin ngày nào" thay vì đoán ngày từ chữ trong bài.
   for (const item of news) {
     const passages = [item.snippet, item.title].filter((text) => String(text ?? "").trim());
-    findings.push({ title: item.source ? `${item.title} (${item.source})` : item.title, url: item.url, passages, publishedAt: item.publishedAt });
+    const finding = { title: item.source ? `${item.title} (${item.source})` : item.title, url: item.url, passages, publishedAt: item.publishedAt };
+    fromFeed.add(finding);
+    findings.push(finding);
   }
+
+  // Một URL chỉ được chiếm MỘT slot: cùng bài báo có thể về từ nhiều đường (bài trên wiki được lấy
+  // hai lần, Google News và RSS trang chủ cùng trỏ một bài…) với URL khác nhau chút ít.
+  const unique = dedupeFindings(findings);
 
   // Thông tin chính phủ: BỎ mọi nguồn không chính thống. Thà nói "chưa tra được nguồn chính thống"
   // còn hơn trả lời đúng nội dung nhưng nguồn là blog — người dùng sẽ mang đi làm thủ tục thật.
   let dropped = 0;
-  let kept = findings;
+  let kept = unique;
   if (profile.strictOfficial) {
-    kept = findings.filter((finding) => isOfficialUrl(finding.url));
-    dropped = findings.length - kept.length;
+    kept = unique.filter((finding) => isOfficialUrl(finding.url));
+    dropped = unique.length - kept.length;
   }
 
   // Mâu thuẫn: nếu hai nguồn khác nhau nói khác nhau về cùng con số/mã trong câu hỏi thì phải nêu ra.
@@ -798,9 +994,12 @@ export async function research({ question = "", domain = null, depth = "nhanh" }
   // Gắn ngày cho từng phát hiện rồi xếp MỚI NHẤT LÊN ĐẦU khi câu hỏi cần độ mới.
   for (const finding of kept) {
     const haystack = `${finding.title} ${finding.passages.join(" ")}`;
-    // Nguồn RSS cho NGÀY CÔNG BỐ thật ⇒ ưu tiên nó; chỉ khi nguồn không kèm ngày mới đoán ngày từ
-    // chữ trong bài (và đoán không ra thì để null — không bịa).
-    const date = finding.publishedAt ? new Date(finding.publishedAt) : extractDate(haystack);
+    // Nguồn RSS cho NGÀY CÔNG BỐ thật ⇒ ưu tiên nó. Nguồn khác chỉ được nhận ngày ghi ĐỦ
+    // ngày–tháng–năm trong bài (`allowRelative` TẮT) — chữ "hôm nay"/"mới nhất" trong bài viết không
+    // phải ngày công bố, gán ngày chạy máy cho nó là bịa và còn đẩy bài cũ lên trên tin thật.
+    const date = finding.publishedAt
+      ? new Date(finding.publishedAt)
+      : extractDate(haystack, { allowRelative: fromFeed.has(finding) });
     const valid = date && !Number.isNaN(date.getTime()) ? date : null;
     finding.detectedAt = valid ? vnDate(valid) : null;
     finding.ageDays = valid ? Math.round((Date.now() - valid.getTime()) / 86400000) : null;

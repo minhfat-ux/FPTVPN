@@ -375,11 +375,11 @@ export const TOOL_DEFINITIONS = [
         question: { type: "string", description: "Câu cần tra, viết rõ ràng và đủ ngữ cảnh" },
         domain: {
           type: "string",
-          enum: ["bien-so", "dia-ly", "van-hoa", "giao-duc", "toan-hoc", "ai", "phap-luat", "chung"],
+          enum: ["bien-so", "dia-ly", "van-hoa", "giao-duc", "toan-hoc", "ai", "phap-luat", "vietlot", "chung"],
           description:
             "Chọn researcher: bien-so (biển số/đăng ký xe) · dia-ly (địa danh, quốc gia, số liệu) · " +
             "van-hoa (văn hoá, lịch sử, tín ngưỡng) · giao-duc (học tập, thi cử) · toan-hoc (định nghĩa, công thức) · " +
-            "ai (AI, công nghệ, bài báo) · phap-luat (luật, thuế, xử phạt) · chung (còn lại)",
+            "ai (AI, công nghệ, bài báo) · phap-luat (luật, thuế, xử phạt) · vietlot (xổ số điện toán: kết quả, điều lệ, giải thưởng) · chung (còn lại)",
         },
         depth: { type: "string", enum: ["nhanh", "ky"], description: "ky = tra nhiều truy vấn hơn (chậm hơn)" },
       },

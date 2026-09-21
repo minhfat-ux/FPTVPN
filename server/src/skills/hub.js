@@ -201,6 +201,8 @@ export function hubSkillRuntime(row, lang = "vi") {
     id: row.id,
     slug: row.slug,
     name: row.name,
+    /** "expert" (chuyên gia đóng vai) hay "skill" (quy trình). */
+    kind: skillKind(row),
     priceVnd,
     price: creditsForPriceVnd(priceVnd),
     instructions: row.instructions ?? "",
@@ -450,6 +452,33 @@ export function isSelectableSkill({ skillId, userId, role = "user" }) {
 
 const SEED = [
   {
+    // Chủ dự án 21/09/2026: "chuyên gia vietlot đưa lên expert trên chợ kỹ năng ấy".
+    // Danh mục "Chuyên gia" ⇒ tự động là `kind: expert` (xem `skillKind`).
+    slug: "chuyen-gia-vietlott",
+    name: "Chuyên gia Vietlott",
+    tagline: "Kết quả, điều lệ và cơ cấu giải xổ số điện toán — chỉ từ nguồn chính thức",
+    description:
+      "Mega 6/45 · Power 6/55 · Keno · Max 3D/4D: tra kết quả theo Kỳ quay, điều lệ tham gia, cơ cấu giải thưởng, " +
+      "thời hạn lĩnh thưởng và xác suất trúng. Luôn nêu rõ KỲ QUAY + NGÀY QUAY và dẫn nguồn vietlott.vn. " +
+      "KHÔNG dự đoán con số, không hứa trúng thưởng.",
+    category: "Chuyên gia",
+    icon: "chart",
+    priceVnd: 0,
+    tools: ["tra_cuu"],
+    instructions:
+      "Bạn là CHUYÊN GIA về xổ số điện toán Việt Nam (Vietlott): Mega 6/45, Power 6/55, Keno, Max 3D, Max 3D Pro, Max 4D. " +
+      "QUY TẮC BẮT BUỘC: (1) Mọi dữ liệu về kết quả, điều lệ, cơ cấu giải, thời hạn lĩnh thưởng PHẢI tra bằng công cụ `tra_cuu` " +
+      "với domain `vietlot` (nguồn chính thức vietlott.vn) — tuyệt đối không trả lời theo trí nhớ. " +
+      "(2) Luôn nói rõ KỲ QUAY (số kỳ) và NGÀY QUAY của kết quả; nếu chưa tra được kỳ mới nhất thì nói thẳng là chưa có, " +
+      "không lấy kết quả cũ trình bày như kết quả hôm nay. (3) TUYỆT ĐỐI KHÔNG dự đoán con số sẽ ra, không gợi ý 'số đẹp/số may mắn', " +
+      "không tính 'quy luật' để chọn số, không hứa trúng thưởng: xổ số là ngẫu nhiên và mỗi kỳ xác suất như nhau. " +
+      "Nếu người dùng nhờ chọn số, hãy nói rõ điều đó rồi chỉ chọn NGẪU NHIÊN nếu họ vẫn muốn, và nói rõ xác suất trúng giải đặc biệt là cực thấp. " +
+      "(4) Khi được hỏi, giải thích được: cách chơi từng sản phẩm, giá vé, số kỳ quay mỗi ngày, cơ cấu giải, thuế thu nhập cá nhân với giải thưởng lớn " +
+      "(trên 10 triệu đồng), thời hạn lĩnh thưởng và nơi lĩnh. (5) Nhắc ngắn gọn rằng tham gia là TỰ NGUYỆN, không phải cách kiếm tiền; " +
+      "nếu người dùng có dấu hiệu chơi quá nhiều thì khuyên họ dừng lại và tìm hỗ trợ. " +
+      "(6) Trả lời bằng tiếng Việt, gọn, có mục rõ ràng.",
+  },
+  {
     slug: "content-sales",
     name: "Viết content bán hàng",
     tagline: "Bài bán hàng theo công thức AIDA, có hook và CTA",
@@ -565,6 +594,9 @@ export function ensureHubSeed() {
       price: creditsForPriceVnd(priceVnd),
       instructions: entry.instructions,
       tools_json: entry.tools ?? [],
+      // `kind` là hình thức trong chợ: "expert" (chuyên gia đóng vai) hay "skill" (quy trình).
+      // Trước đây suy từ category; nay ghi thẳng để mục mới tự quyết định.
+      kind: entry.kind ?? (entry.category === "Chuyên gia" ? "expert" : "skill"),
       state: entry.state ?? "published",
       sort_order: (index + 1) * 10,
     });
