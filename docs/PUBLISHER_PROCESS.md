@@ -31,6 +31,11 @@
 | Size sau upload | `stat -c %s <file>` trên node-2 | khớp size file local |
 
 ## 3. Đích trên node-2 (route nào đọc file nào)
+
+> **Ngoại lệ KHÔNG được đổi host: relay WS.** Mọi link khách bấm đều dùng `t1.meetflowai.site`, nhưng
+> relay (`wss://api.meetflowai.site/relay/vn1wg|vn1hy|vn2wg|vn2hy`) **phải giữ host `api.meetflowai.site`**
+> vì Caddy chỉ route `/relay/*` trên host đó — đổi là toàn bộ khách mất mạng. `check-public-surface.py`
+> có mục kiểm riêng cho việc này.
 | Nền tảng | File trên node-2 | Route phát |
 |---|---|---|
 | iOS (IPA ad-hoc) | `/root/flowvpn-ipa/VPNFlow-latest.ipa` | `GET /v1/downloads/ios` |

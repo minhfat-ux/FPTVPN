@@ -223,6 +223,18 @@ def main() -> int:
                    f"{type(exc).__name__}: {exc}")
 
     print("\n6) Link khách tải phải nằm ở host chuẩn t1")
+    # Relay WS (wss://.../relay/...) PHAI giu nguyen host api.meetflowai.site: Caddy chi route
+    # /relay/* tren host do (xem Caddyfile). Khanh chot 21/09/2026: KHONG doi relay sang t1 —
+    # doi la toan bo khach mat mang (bai hoc relay cu da tung xay ra).
+    try:
+        boot = json.loads(fetch(f"https://{CANON_HOST}/v1/bootstrap", ip)["body"].decode("utf-8"))
+        relays = [r for node in (boot.get("relay_hosts") or []) for r in (node.get("wg"), node.get("hy")) if r]
+        bad = [r for r in relays if not r.startswith(f"wss://{API_HOST}/relay/")]
+        record("relay WS vẫn ở host api (KHÔNG đổi sang t1)", bool(relays) and not bad,
+               ", ".join(bad[:2]) if bad else f"{len(relays)} relay OK")
+    except Exception as exc:  # noqa: BLE001
+        record("đọc /v1/bootstrap để kiểm relay", False, f"{type(exc).__name__}: {exc}")
+
     link_fields = ("ipa_url", "store_url", "ipa_manifest_url", "install_page_url",
                    "download_url", "apk_url", "apk_url_legacy", "installer_url")
     seen_urls: list[str] = []

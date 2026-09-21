@@ -164,3 +164,9 @@ Các đường dẫn sau là **vùng bảo vệ**, chỉ owner `windows` đượ
 Chính sách đổi ở `/etc/flowvpn-guard.env` (cửa sổ khách mới, cooldown, ngưỡng escalate, giờ yên tĩnh).
 Chạy tay để soi: `python3 /root/flowvpn-guard/guard.py --dry-run --explain`.
 
+## 10. Việc KHÔNG được tự ý đổi
+
+- **Relay WS**: `wss://api.meetflowai.site/relay/*` — giữ nguyên host `api.meetflowai.site` (Caddy chỉ
+  route `/relay/*` ở đó). Mọi link **khách tải** thì dùng `t1.meetflowai.site`.
+- Đổi hạ tầng relay/entry point phải chạy **song song đường cũ** trước, tránh khách cache URL cũ mất mạng.
+
