@@ -919,14 +919,14 @@ const PRODUCT_META = {
   vpn: {
     logoPath: "/assets/vpnflow-logo.png",
     brandName: "VPNFlow",
-    privacyUrl: "https://meetflowai.site/FlowVPNPrivacy.html",
-    supportUrl: "https://meetflowai.site/SupportPrivateVPN.html",
+    privacyUrl: "https://t1.meetflowai.site/FlowVPNPrivacy.html",
+    supportUrl: "https://t1.meetflowai.site/SupportPrivateVPN.html",
   },
   ai: {
     logoPath: "/assets/meetflow-logo.png",
     brandName: "MeetFlow AI",
-    privacyUrl: "https://meetflowai.site/privacy",
-    supportUrl: "https://meetflowai.site/support.html",
+    privacyUrl: "https://t1.meetflowai.site/privacy",
+    supportUrl: "https://t1.meetflowai.site/support.html",
   },
 };
 

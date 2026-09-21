@@ -60,6 +60,19 @@ flowvpn-coord list
 - Đang làm thì phải giữ `claim`; xong thì `release`. Claim hết hạn sau 90 phút (gia hạn bằng
   cách `claim` lại).
 - Chi tiết + lệnh cho từng máy: `.privatevpn/coordination/PROTOCOL.md`.
+
+### 6a. Task do guard phát hiện — PHẢI có approve của chủ dự án
+`flowvpn-guard` trên server tự phát hiện khách mới chưa cài/chưa chạy được và tạo **task** ở
+`/var/lib/flowvpn-coord/tasks/`. Trước khi sửa bất cứ gì cho một task:
+
+```bash
+flowvpn-coord task list          # việc đang mở (kèm bằng chứng + khách bị ảnh hưởng)
+flowvpn-coord task claim <id> --owner <mac|windows|server>   # LỖI nếu task chưa được approve
+```
+
+Task ở trạng thái `pending_approval` **không được thi hành**: chủ dự án approve trên Telegram
+(`/approve <id>`). Sửa xong thì `flowvpn-coord task done <id> --note "<đã sửa gì + bằng chứng>"`;
+không sửa thì `flowvpn-coord task reject <id> --reason "<lý do>"` để guard không đề xuất lại.
 - Mã nguồn tool: `scripts/coord/flowvpn-coord.mjs` (`selftest` để tự kiểm tra logic).
 
 ### 6b. Vùng bảo vệ — chỉ harness Windows được sửa

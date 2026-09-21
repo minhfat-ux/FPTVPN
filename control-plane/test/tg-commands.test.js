@@ -311,3 +311,28 @@ test("chunkMessage: KHÔNG cắt đôi emoji ở ranh giới (lỗi 'chữ khôn
   for (const c of hugeChunks) assert.equal(loneSurrogate.test(c), false);
   assert.equal(hugeChunks.join(""), huge);
 });
+
+test("/guard là lệnh đọc, /approve và /reject là lệnh thay đổi (phải bấm Xác nhận)", () => {
+  // Guard đề xuất việc sửa; CHỈ chủ dự án approve thì agent mới được sửa/publish.
+  assert.equal(parseCommand("/guard").name, "guard");
+  assert.equal(parseCommand("/guard").mutating, false);
+  assert.equal(needsConfirmation(parseCommand("/guard")), false);
+
+  const approve = parseCommand("/approve G1758440000");
+  assert.equal(approve.name, "approve");
+  assert.deepEqual(approve.args, ["G1758440000"]);
+  assert.equal(approve.mutating, true);
+  assert.equal(needsConfirmation(approve), true);
+  assert.equal(needsConfirmation(approve, { force: true }), false);
+
+  const reject = parseCommand("/reject G1758440000 khong can sua");
+  assert.equal(reject.name, "reject");
+  assert.deepEqual(reject.args, ["G1758440000", "khong", "can", "sua"]);
+  assert.equal(reject.mutating, true);
+});
+
+test("nút Xác nhận của /approve mang đúng id task (không phải nội dung dài)", () => {
+  const parsed = parseCommand("/approve G1758440000");
+  const cb = parseCallback(`ok:${parsed.name}:${parsed.args.join(",")}`);
+  assert.deepEqual(cb, { action: "confirm", name: "approve", args: ["G1758440000"] });
+});

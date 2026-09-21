@@ -29,6 +29,7 @@ import path from "node:path";
 
 const BOARD = process.env.COORD_DIR ?? "/var/lib/flowvpn-coord";
 const CLAIMS_DIR = path.join(BOARD, "claims");
+const TASKS_DIR = path.join(BOARD, "tasks");
 const DEFAULT_TTL_MIN = Number(process.env.COORD_TTL_MIN || 90);
 const OWNER_RE = /^[a-z0-9][a-z0-9-]{0,30}$/;
 const AREA_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
@@ -239,12 +240,126 @@ function cmdSelftest() {
 }
 
 // --------------------------------------------------------------------------------- main
+// --------------------------------------------------------------------------- task (viec)
+// Task do agent tren server (flowvpn-guard) tao ra khi phat hien KHACH BI TAC theo mau.
+// Nguyen tac: task KHONG duoc thuc thi khi chua co approve cua chu du an (tren Telegram).
+function ensureTasks() {
+  mkdirSync(TASKS_DIR, { recursive: true, mode: 0o700 });
+}
+
+function taskPath(id) {
+  const clean = String(id ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{3,40}$/.test(clean)) throw new Error(`id task khong hop le: ${clean}`);
+  return path.join(TASKS_DIR, `${clean}.json`);
+}
+
+function readTask(id) {
+  const file = taskPath(id);
+  if (!existsSync(file)) throw new Error(`khong thay task ${id}`);
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
+function writeTask(task) {
+  ensureTasks();
+  const target = taskPath(task.id);
+  const tmp = `${target}.tmp-${process.pid}`;
+  writeFileSync(tmp, `${JSON.stringify(task, null, 2)}\n`, { mode: 0o600 });
+  renameSync(tmp, target);
+}
+
+function readTasks() {
+  ensureTasks();
+  const out = [];
+  for (const name of readdirSync(TASKS_DIR)) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const t = JSON.parse(readFileSync(path.join(TASKS_DIR, name), "utf8"));
+      if (t && t.id) out.push(t);
+    } catch {
+      /* task hong thi bo qua */
+    }
+  }
+  return out.sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
+}
+
+function taskLine(t) {
+  const customers = Array.isArray(t.customers) ? t.customers.length : 0;
+  return `  ${String(t.id).padEnd(12)} ${String(t.status).padEnd(16)} owner=${String(t.owner ?? "?").padEnd(8)} ` +
+    `${String(t.platform || "-").padEnd(8)} ${customers} khach · ${t.kind ?? ""}\n      ${t.evidence?.summary ?? ""}`;
+}
+
+function cmdTaskList(values) {
+  const tasks = readTasks().filter((t) => values.all || t.status !== "done");
+  if (values.json) return JSON.stringify(tasks, null, 2);
+  if (!tasks.length) return "Khong co task nao.";
+  const pending = tasks.filter((t) => t.status === "pending_approval");
+  const head = `Task: ${tasks.length} (${pending.length} cho approve)`;
+  return [head, ...tasks.map(taskLine)].join("\n");
+}
+
+function cmdTaskShow(id, values) {
+  const t = readTask(id);
+  return values.json ? JSON.stringify(t, null, 2) : [
+    `Task ${t.id} · ${t.kind} · ${t.status}`,
+    `  owner      : ${t.owner}`,
+    `  platform   : ${t.platform || "-"}`,
+    `  tao luc    : ${t.createdAt}`,
+    t.approvedAt ? `  approve    : ${t.approvedAt} boi ${t.approvedBy ?? "?"}` : "",
+    t.rejectedAt ? `  reject     : ${t.rejectedAt} — ${t.rejectReason ?? ""}` : "",
+    `  bang chung : ${t.evidence?.summary ?? "-"}`,
+    `  yeu cau    : ${t.requested_action ?? "-"}`,
+    `  khach      : ${(t.customers ?? []).map((c) => c.email).join(", ")}`,
+  ].filter(Boolean).join("\n");
+}
+
+function cmdTaskApprove(id, values) {
+  const t = readTask(id);
+  if (t.status === "approved" || t.status === "in_progress") return `Task ${t.id} da duoc approve truoc do (${t.approvedAt}).`;
+  t.status = "approved";
+  t.approvedAt = new Date().toISOString();
+  t.approvedBy = String(values.by ?? "telegram").trim() || "telegram";
+  writeTask(t);
+  return `DA APPROVE task ${t.id} (owner ${t.owner}) — agent ${t.owner} co the bat dau sua.\n${cmdTaskShow(id, {})}`;
+}
+
+function cmdTaskReject(id, values) {
+  const t = readTask(id);
+  t.status = "rejected";
+  t.rejectedAt = new Date().toISOString();
+  t.rejectReason = String(values.reason ?? "khong co ly do").trim();
+  t.rejectedBy = String(values.by ?? "telegram").trim() || "telegram";
+  writeTask(t);
+  return `DA REJECT task ${t.id}: ${t.rejectReason}`;
+}
+
+function cmdTaskClaim(id, values) {
+  const t = readTask(id);
+  if (t.status === "pending_approval") throw new Error(`task ${t.id} chua duoc chu du an approve — khong duoc lam`);
+  if (t.status === "rejected") throw new Error(`task ${t.id} da bi reject — khong duoc lam`);
+  t.status = "in_progress";
+  t.claimedBy = requireOwner(values.owner);
+  t.claimedAt = new Date().toISOString();
+  writeTask(t);
+  return `Task ${t.id} -> in_progress (owner ${t.claimedBy})`;
+}
+
+function cmdTaskDone(id, values) {
+  const t = readTask(id);
+  t.status = "done";
+  t.doneAt = new Date().toISOString();
+  t.doneNote = String(values.note ?? "").trim();
+  writeTask(t);
+  return `Task ${t.id} -> done${t.doneNote ? ` (${t.doneNote})` : ""}`;
+}
+
 const USAGE = `flowvpn-coord — bang viec dung chung cho cac agent
 
   flowvpn-coord list [--all] [--json]
   flowvpn-coord check <path...> [--owner <owner>]
   flowvpn-coord claim --owner <o> --area <a> --files <p1,p2> [--note <text>] [--ttl <phut>]
   flowvpn-coord release --owner <o> --area <a> [--status done|stale|cancelled]
+  flowvpn-coord task list [--all] [--json]
+  flowvpn-coord task show|approve|reject|claim|done <id> [--by <ten>] [--reason <text>] [--owner <o>] [--note <text>]
   flowvpn-coord selftest
 
 Noi luu: ${CLAIMS_DIR} (COORD_DIR de doi).`;
@@ -265,6 +380,8 @@ function main() {
       host: { type: "string" },
       branch: { type: "string" },
       status: { type: "string" },
+      by: { type: "string" },
+      reason: { type: "string" },
       all: { type: "boolean" },
       json: { type: "boolean" },
       help: { type: "boolean", short: "h" },
@@ -274,7 +391,7 @@ function main() {
   if (values.help || command === "help") return USAGE;
   // Chi `check` moi nhan duong dan tu do. Cac lenh khac nhan tham so roi thi phai bao loi:
   // neu im lang bo qua, mot --note bi shell cat tai dau cach se am tham ghi sai bang viec.
-  if (positionals.length && command !== "check") {
+  if (positionals.length && command !== "check" && command !== "task") {
     process.stderr.write(`flowvpn-coord: lenh ${command} khong nhan tham so tu do: ${positionals.join(" ")}\n(tham so co dau cach phai duoc quote)\n`);
     process.exit(2);
   }
@@ -283,6 +400,20 @@ function main() {
     case "check": return cmdCheck(values, positionals);
     case "claim": return cmdClaim(values);
     case "release": return cmdRelease(values);
+    case "task": {
+      const [sub, id] = positionals;
+      if (sub === "add") throw new Error(`task add do flowvpn-guard ghi truc tiep vao ${TASKS_DIR}`);
+      if (!sub || sub === "list") return cmdTaskList(values);
+      if (!id) throw new Error(`thieu id task: flowvpn-coord task ${sub} <id>`);
+      switch (sub) {
+        case "show": return cmdTaskShow(id, values);
+        case "approve": return cmdTaskApprove(id, values);
+        case "reject": return cmdTaskReject(id, values);
+        case "claim": return cmdTaskClaim(id, values);
+        case "done": return cmdTaskDone(id, values);
+        default: throw new Error(`task ${sub} khong ho tro (list|show|approve|reject|claim|done)`);
+      }
+    }
     case "selftest": return cmdSelftest();
     default:
       process.stderr.write(`lenh la khong biet: ${command}\n\n${USAGE}\n`);

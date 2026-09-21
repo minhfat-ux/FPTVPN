@@ -438,6 +438,66 @@ async function runAgentTask(task) {
 }
 
 /** /reporttasks — trạng thái các việc agent đang chạy / vừa xong. */
+const COORD_BIN = ENV.COORD_BIN ?? "/usr/local/bin/flowvpn-coord";
+const GUARD_TASKS_DIR = ENV.GUARD_TASKS_DIR ?? "/var/lib/flowvpn-coord/tasks";
+
+/** Gọi flowvpn-coord (bang viec chung) và trả stdout. */
+async function coord(args) {
+  const { stdout } = await execFileAsync(COORD_BIN, args, { timeout: 20_000 });
+  return String(stdout ?? "").trim();
+}
+
+/** /guard — task do flowvpn-guard tao ra, dang cho chu du an approve. */
+async function cmdGuard() {
+  const out = await coord(["task", "list"]);
+  return out || "Khong co task nao.";
+}
+
+function readGuardTask(id) {
+  try {
+    return JSON.parse(readFileSync(`${GUARD_TASKS_DIR}/${id}.json`, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * /approve <id> — CHO PHEP sua. Day la cong duy nhat mo khoa viec sua/publish:
+ * task do guard tao luon o trang thai pending_approval, agent khac claim se bi tu choi.
+ * Task thuoc owner `server` thi bot giao luon cho agent tren server chay nen.
+ */
+async function cmdApprove(chatId, args) {
+  const id = String(args[0] ?? "").trim();
+  if (!id) return "❓ Dùng: /approve <id>  (xem /guard để lấy id)";
+  const out = await coord(["task", "approve", id, "--by", "telegram"]);
+  const task = readGuardTask(id);
+  if (task?.owner === "server") {
+    if (!AGENT_ENABLED) return `${out}\n⛔ Agent trên server đang tắt (AGENT_ENABLED=0) — task đã approve, tự chạy sau.`;
+    const prompt = [
+      `Task ${id} do flowvpn-guard tạo đã được chủ dự án APPROVE trên Telegram. Hãy điều tra và sửa:`,
+      `- Loại: ${task.kind} · nền tảng: ${task.platform || "không rõ"}`,
+      `- Bằng chứng: ${task.evidence?.summary ?? "-"}`,
+      `- Khách bị ảnh hưởng: ${(task.customers ?? []).map((c) => c.email).join(", ")}`,
+      `- Việc cần làm: ${task.requested_action ?? "điều tra nguyên nhân gốc rồi sửa"}`,
+      "Yêu cầu: sửa nguyên nhân gốc, chạy test, deploy bằng /deploy khi xong, rồi cập nhật task:",
+      `  flowvpn-coord task done ${id} --note "<đã sửa gì>"`,
+    ].join("\n");
+    const t = newTask("guard", chatId, prompt);
+    void runAgentTask(t);
+    return `${out}\n🤖 Đã giao agent trên server chạy nền (việc #${t.id}) — /reporttasks để xem, /report để lấy báo cáo.`;
+  }
+  return `${out}\n📋 Agent phụ trách: ${task?.owner ?? "?"}. Nhận việc bằng:\n` +
+    `flowvpn-coord task claim ${id} --owner ${task?.owner ?? "<owner>"}`;
+}
+
+/** /reject <id> <lý do> — không sửa; guard ghi lý do vào task để không đề xuất lại. */
+async function cmdReject(args) {
+  const id = String(args[0] ?? "").trim();
+  if (!id) return "❓ Dùng: /reject <id> <lý do>";
+  const reason = args.slice(1).join(" ").trim() || "chủ dự án từ chối";
+  return await coord(["task", "reject", id, "--reason", reason, "--by", "telegram"]);
+}
+
 function cmdReportTasks() {
   return cmd.reportTasks([...agentTasks.values()], { limit: 10 });
 }
@@ -512,6 +572,9 @@ async function handleCommand(parsed, chatId, { force = false, dryRun = false } =
     case "restart": return cmdRestart(parsed.args);
     case "build": return cmdBuild();
     case "deploy": return cmdDeploy();
+    case "guard": return cmdGuard();
+    case "approve": return cmdApprove(chatId, parsed.args);
+    case "reject": return cmdReject(parsed.args);
     case "task": return cmdTask(chatId, parsed.args);
     case "chat": return cmdChat(chatId, parsed.args);
     default:

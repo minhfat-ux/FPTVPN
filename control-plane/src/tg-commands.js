@@ -11,9 +11,11 @@
  *    trừ khi gọi kèm `force` (dùng cho chính chủ shop đã bấm Xác nhận).
  */
 
-export const READ_ONLY_COMMANDS = ["help", "status", "nodes", "devices", "orders", "ios", "alerts", "log", "ping", "build", "chat", "reporttasks", "tasks"];
+export const READ_ONLY_COMMANDS = ["help", "status", "nodes", "devices", "orders", "ios", "alerts", "log", "ping", "build", "chat", "reporttasks", "tasks", "guard"];
 // /task chạy agent trên server (quyền ngang root) nên cũng phải xác nhận trước khi chạy.
-export const MUTATING_COMMANDS = ["report", "mirror", "restart", "task", "deploy", "alerts_off", "alerts_on"];
+// /approve + /reject ĐỔI TRẠNG THÁI task do flowvpn-guard tạo: chỉ sau khi chủ dự án approve thì
+// agent phụ trách mới được phép sửa/publish (xem scripts/guard/guard.py + flowvpn-coord task).
+export const MUTATING_COMMANDS = ["report", "mirror", "restart", "task", "deploy", "alerts_off", "alerts_on", "approve", "reject"];
 
 /** Nhãn trạng thái của một việc agent (dùng cho /reporttasks). */
 export const TASK_STATUSES = {
@@ -307,8 +309,15 @@ export function helpText() {
     "/chat <câu hỏi> — nói chuyện với agent, tự tìm thông tin trên internet",
     "/chat on|off|reset — bật/tắt chế độ chat, xoá ngữ cảnh hội thoại",
     "",
+    "🩺 Guard — tự phát hiện khách chưa cài/chưa chạy được:",
+    "/guard — task đang chờ anh approve (kèm bằng chứng + khách bị ảnh hưởng)",
+    "",
     "🧠 Việc tự do — agent chạy trên server:",
     "/task <việc cần làm> — ví dụ: /task kiểm tra vì sao node-2 nhiều peer mà ít online",
+    "",
+    "✅ Duyệt việc guard đề xuất (phải bấm Xác nhận):",
+    "/approve <id> — cho phép agent phụ trách sửa + publish bản mới",
+    "/reject <id> <lý do> — không sửa (guard ghi lý do vào task)",
     "",
     "Anh nhắn /help để xem lại danh sách này.",
   ].join("\n");

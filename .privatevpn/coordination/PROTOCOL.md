@@ -70,6 +70,17 @@ ssh root@165.101.114.162 flowvpn-coord release --owner mac --area ios
 Mã nguồn của tool: `scripts/coord/flowvpn-coord.mjs` (bản chạy trên server:
 `/usr/local/bin/flowvpn-coord`). Kiểm tra logic: `node scripts/coord/flowvpn-coord.mjs selftest`.
 
+**Việc do guard phát hiện (TASK — chỉ làm sau khi chủ dự án approve):**
+
+```bash
+flowvpn-coord task list [--all] [--json]      # task đang mở (mặc định ẩn task đã done)
+flowvpn-coord task show <id>                  # bằng chứng + khách bị ảnh hưởng + yêu cầu
+flowvpn-coord task claim <id> --owner mac     # nhận việc (LỖI nếu chưa được approve/reject)
+flowvpn-coord task done  <id> --note "..."
+```
+
+Task nằm ở `/var/lib/flowvpn-coord/tasks/<id>.json`. Agent trên server tự tạo task (xem §9).
+
 ## 5. Vùng (area) — đặt tên theo thư mục, không theo cảm hứng
 
 Ví dụ đang dùng: `tg-bot`, `control-plane`, `windows-app`, `harness-windows`, `ios`, `android`,
@@ -132,4 +143,24 @@ Các đường dẫn sau là **vùng bảo vệ**, chỉ owner `windows` đượ
    bash scripts/deploy-landing-page.sh            # tự mở khoá -> backup -> ghi -> khoá lại -> restart -> verify
    ```
 
+## 9. Guard — task tự động từ lỗi của khách
+
+`flowvpn-guard.service` (trên node-2, mã `scripts/guard/guard.py`) chạy mỗi 5 phút và:
+
+1. Phát hiện **khách mới đăng ký mà CHƯA TẢI hoặc CHƯA CHẠY ĐƯỢC**:
+   - `never_installed`: có tài khoản + gói nhưng chưa có device nào ⇒ app chưa từng chạy.
+   - `never_connected`: đã đăng ký device nhưng `lastSeenAt` rỗng ⇒ chưa từng lên mạng.
+   Khách đã từng kết nối thì KHÔNG bao giờ bị gửi (chống spam).
+2. Tự gửi email hướng dẫn theo **đúng nền tảng + phiên bản đang phát** (đọc `app_config.db`),
+   tối đa 3 lần/khách/giai đoạn, cách nhau 48h, không gửi trong giờ yên tĩnh (23h–7h VN).
+3. Khi **≥3 khách mới cùng nền tảng** bị tắc trong 24h ⇒ tạo TASK `pending_approval` +
+   alert Telegram cho chủ dự án.
+4. **Task chỉ được thi hành sau khi chủ dự án approve trên Telegram** (`/approve <id>`).
+   Task owner `server` ⇒ bot giao luôn cho agent trên server chạy nền; owner `mac`/`windows`
+   ⇒ agent máy đó `flowvpn-coord task claim <id> --owner <owner>` rồi sửa.
+5. Khi bản mới đã publish (phiên bản trong `app_config.db` đổi so với lúc tạo task) ⇒ guard tự
+   đóng task và **mời lại đúng những khách bị ảnh hưởng** cập nhật.
+
+Chính sách đổi ở `/etc/flowvpn-guard.env` (cửa sổ khách mới, cooldown, ngưỡng escalate, giờ yên tĩnh).
+Chạy tay để soi: `python3 /root/flowvpn-guard/guard.py --dry-run --explain`.
 

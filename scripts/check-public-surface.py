@@ -41,6 +41,9 @@ FIRE_TV_UA = "Mozilla/5.0 (Linux; Android 7.1.2; AFTMM Build/NS6265)"
 
 SITE_HOST = "meetflowai.site"
 API_HOST = "api.meetflowai.site"
+# Host CHUẨN cho mọi link khách bấm (trang cài, manifest OTA, /dl/*, link tải trong app).
+# Chủ dự án chốt 21/09/2026: t1.meetflowai.site — meetflowai.site bị chặn theo SNI ở Trung Quốc.
+CANON_HOST = "t1.meetflowai.site"
 SITE_PATHS = ["/buy", "/ai/buy", "/guide", "/ai/guide", "/support", "/open", "/terms", "/privacy", "/PrivateVPN/Admin"]
 API_PATHS = ["/health", "/v1/app-version", "/v1/ai/app-version", "/v1/nodes"]
 
@@ -113,7 +116,8 @@ class _ResolvedHTTPS(HTTPSConnection):
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
 
 
-def fetch(url: str, ip: str = "", ua: str = "", method: str = "GET", timeout: int = 20) -> dict:
+def fetch(url: str, ip: str = "", ua: str = "", method: str = "GET", timeout: int = 20,
+          limit: int = 4096) -> dict:
     """GET/HEAD url. Nếu `ip` có giá trị thì nối thẳng tới IP đó nhưng vẫn gửi Host/SNI đúng
     (urllib không có tuỳ chọn kiểu `curl --resolve`). Lưu ý: hàm này tên `fetch`, KHÔNG đặt là
     `http` vì sẽ che module `http` và làm `http.client...` hỏng."""
@@ -128,14 +132,23 @@ def fetch(url: str, ip: str = "", ua: str = "", method: str = "GET", timeout: in
         conn.putheader("User-Agent", ua or "surface-check/1")
         conn.endheaders()
         res = conn.getresponse()
-        body = b"" if method == "HEAD" else res.read(4096)
+        body = b"" if method == "HEAD" else res.read(limit)
         out = {"status": res.status, "headers": dict(res.getheaders()), "body": body}
         conn.close()
         return out
     req = urllib.request.Request(url, method=method, headers={"User-Agent": ua or "surface-check/1"})
     with urllib.request.urlopen(req, timeout=timeout, context=SSL_CTX) as res:
-        body = b"" if method == "HEAD" else res.read(4096)
+        body = b"" if method == "HEAD" else res.read(limit)
         return {"status": res.status, "headers": dict(res.getheaders()), "body": body}
+
+
+def header(res: dict, name: str) -> str:
+    """Đọc header KHÔNG phân biệt hoa/thường: Cloudflare trả `content-disposition` (lowercase)
+    qua HTTP/1.1, còn node trả `Content-Disposition` — tra đúng chữ hoa là FAIL giả."""
+    for key, value in res.get("headers", {}).items():
+        if key.lower() == name.lower():
+            return value
+    return ""
 
 
 def main() -> int:
@@ -201,13 +214,56 @@ def main() -> int:
 
     for ua, must in ((OKHTTP_UA, "VPNFlow.apk"), (FIRE_TV_UA, "VPNFlow-android7.apk")):
         try:
-            res = fetch(f"https://{SITE_HOST}/v1/downloads/android", ip, ua=ua, method="HEAD")
-            disp = res["headers"].get("Content-Disposition", "")
+            res = fetch(f"https://{CANON_HOST}/v1/downloads/android", ip, ua=ua, method="HEAD")
+            disp = header(res, "content-disposition")
             record(f"UA {'Fire TV' if ua == FIRE_TV_UA else 'máy thường'} nhận {must}",
                    must in disp, disp or f"HTTP {res['status']}")
         except Exception as exc:  # noqa: BLE001
             record(f"HEAD APK (UA {'Fire TV' if ua == FIRE_TV_UA else 'máy thường'})", False,
                    f"{type(exc).__name__}: {exc}")
+
+    print("\n6) Link khách tải phải nằm ở host chuẩn t1")
+    link_fields = ("ipa_url", "store_url", "ipa_manifest_url", "install_page_url",
+                   "download_url", "apk_url", "apk_url_legacy", "installer_url")
+    seen_urls: list[str] = []
+    for plat in ("ios", "macos", "android", "windows"):
+        try:
+            res = fetch(f"https://{CANON_HOST}/v1/app-version?platform={plat}", ip)
+            payload = json.loads(res["body"].decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            record(f"/v1/app-version?platform={plat}", False, f"{type(exc).__name__}: {exc}")
+            continue
+        for key in link_fields:
+            val = payload.get(key)
+            if not isinstance(val, str) or not val:
+                continue
+            good = val.startswith(f"https://{CANON_HOST}/")
+            record(f"{plat}.{key} → host chuẩn", good, val)
+            if good and val not in seen_urls:
+                seen_urls.append(val)
+    for url in seen_urls:
+        try:
+            res = fetch(url, ip, method="HEAD")
+            size = header(res, "content-length") or "?"
+            record(f"tải được {url.split('?')[0]}", res["status"] == 200, f"HTTP {res['status']} · {size} B")
+        except Exception as exc:  # noqa: BLE001
+            record(f"HEAD {url}", False, f"{type(exc).__name__}: {exc}")
+
+    def _looks_like_download(u: str) -> bool:
+        return any(tok in u for tok in ("/install/", "/dl/", "/v1/downloads/", ".dmg", ".apk", ".ipa", ".exe"))
+
+    for path in ("/install/ios", "/install/mac", "/buy"):
+        try:
+            body = fetch(f"https://{CANON_HOST}{path}", ip, limit=400_000)["body"].decode("utf-8", "replace")
+        except Exception as exc:  # noqa: BLE001
+            record(f"đọc {path}", False, f"{type(exc).__name__}: {exc}")
+            continue
+        urls = {u.rstrip('"').rstrip("'") for u in re.findall(r"https://[^\"'<> )]+", body)}
+        bad = sorted(u for u in urls if _looks_like_download(u) and not u.startswith(f"https://{CANON_HOST}/"))
+        record(f"{path}: link tải không trỏ host cũ", not bad, ", ".join(bad[:3]) if bad else "OK")
+        if path == "/install/ios":
+            record("itms-services trỏ manifest trên t1",
+                   f"{CANON_HOST}/install/ios/manifest.plist" in body.replace("%2F", "/"))
 
     print()
     if FAILS:
