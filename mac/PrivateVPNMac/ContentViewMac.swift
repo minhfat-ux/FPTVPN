@@ -14,6 +14,11 @@ struct ContentViewMac: View {
     @State private var showingSettings = false
     @State private var forcedUpdateInfo: AppVersionInfo?
 
+    /// Bản mới CHƯA bắt buộc (`latest_version` > bản đang chạy nhưng chưa vượt `minimum_version`).
+    /// macOS trước đây CHỈ có cổng chặn cứng ⇒ khách Mac không bao giờ biết có bản mới, dù
+    /// `latest_mac_version` đã tăng. Xem `AppVersionService.isUpdateAvailable`.
+    @State private var availableUpdateInfo: AppVersionInfo?
+
     var body: some View {
         ZStack {
             VPNThemeMac.backgroundGradient
@@ -62,6 +67,21 @@ struct ContentViewMac: View {
         .sheet(item: $forcedUpdateInfo) { info in
             ForceUpdateViewMac(info: info)
                 .environmentObject(languageStore)
+        }
+        // Nhắc mềm: khách vẫn dùng được app, chỉ được báo là có bản mới và mở đúng link tải mac
+        // (`store_url` trong payload macOS = /v1/downloads/mac).
+        .alert(
+            languageStore.t(.updateRequired),
+            isPresented: Binding(
+                get: { availableUpdateInfo != nil },
+                set: { if !$0 { availableUpdateInfo = nil } }
+            ),
+            presenting: availableUpdateInfo
+        ) { info in
+            Button(languageStore.t(.update)) { openUpdateLink(info) }
+            Button(languageStore.t(.cancel), role: .cancel) { availableUpdateInfo = nil }
+        } message: { _ in
+            Text(languageStore.t(.updateRequiredDetail))
         }
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
@@ -133,12 +153,26 @@ struct ContentViewMac: View {
                 showingPaywall = false
             }
             // Force-update gate (owner requirement): block usage below minimum_version.
+            // Kèm NHẮC MỀM khi có bản mới nhưng chưa bắt buộc — trước đây chỉ có cổng chặn cứng
+            // nên khách Mac ở bản cũ không bao giờ được thông báo (xem `latest_mac_version`).
             if let url = URL(string: vpnManager.coordinatorURL),
-               let info = try? await AppVersionService.fetch(from: url),
-               AppVersionService.isForcedUpdate(info) {
-                forcedUpdateInfo = info
+               let info = try? await AppVersionService.fetch(from: url) {
+                if AppVersionService.isForcedUpdate(info) {
+                    forcedUpdateInfo = info
+                } else if AppVersionService.isUpdateAvailable(info) {
+                    availableUpdateInfo = info
+                }
             }
         }
+    }
+
+    /// Mở link cập nhật cho nhắc mềm — CÙNG logic với `ForceUpdateViewMac` (mở `store_url`, tức
+    /// `/v1/downloads/mac`; rỗng thì lùi về trang mua/tải, không để nút bấm không mở gì).
+    private func openUpdateLink(_ info: AppVersionInfo) {
+        let raw = info.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `webURL` KHÔNG trả optional ⇒ `??` cho ra URL (không phải URL?) — không dùng `if let`.
+        let url = URL(string: raw) ?? ControlAPIHosts.webURL("buy")
+        NSWorkspace.shared.open(url)
     }
 
     private func syncBackendPremium() {

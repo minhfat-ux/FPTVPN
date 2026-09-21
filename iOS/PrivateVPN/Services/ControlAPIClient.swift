@@ -663,8 +663,31 @@ struct ControlAPIClient {
     }
 
     /// Fetches the required/latest app version (force-update gate).
+    ///
+    /// PHẢI gửi kèm KÊNH của chính app: iOS và macOS cùng dùng User-Agent `CFNetwork/Darwin` nên
+    /// server KHÔNG thể phân biệt hai kênh bằng UA. Không gửi tham số thì app macOS nhận payload
+    /// **iOS** — tức nó so phiên bản của mình với số của iOS và nút "Cập nhật" mở trang cài iOS.
+    /// Hệ quả thực tế (đo 21/09/2026): khách Mac **không bao giờ** được nhắc cập nhật dù bản macOS
+    /// đã phát lại nhiều lần, còn khi iOS lên số mới thì khách Mac bị nhắc rồi mở nhầm trang iOS.
+    /// Phía server: `control-plane/src/app-version.js` (nhánh `macVersionPayload`).
     func fetchAppVersion() async throws -> AppVersionInfo {
-        let url = baseURL.appendingPathComponent("v1/app-version")
+        #if os(macOS)
+        let platform = "macos"
+        #else
+        let platform = "ios"
+        #endif
+
+        guard var components = URLComponents(
+            url: baseURL.appendingPathComponent("v1/app-version"),
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw ClientError.badResponse
+        }
+        components.queryItems = [URLQueryItem(name: "platform", value: platform)]
+        guard let url = components.url else {
+            throw ClientError.badResponse
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         let (data, response) = try await sendWithFallback(request, endpoint: "app version")

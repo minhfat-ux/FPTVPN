@@ -176,14 +176,36 @@ public static class WireGuardWindowsCommands
         => new(Netsh,
             $"interface ipv4 add dnsservers name=\"{interfaceName}\" address={server} index={index.ToString(CultureInfo.InvariantCulture)} validate=no");
 
-    /// <summary>Gỡ adapter khỏi hệ thống. Dùng PowerShell <c>Remove-NetAdapter</c> vì netsh
-    /// không có lệnh xoá interface ảo. Chỉ gọi SAU khi đã kill wireguard-go (adapter
+    /// <summary>Gỡ adapter khỏi hệ thống. Chỉ gọi SAU khi đã kill wireguard-go (adapter
     /// đang được session giữ sẽ không xoá được).
-    /// Lưu ý: module <c>NetAdapter</c> không có trên mọi máy — thiếu thì lệnh này thất bại
-    /// (đã log WARN) nhưng không chặn luồng ngắt kết nối.</summary>
+    ///
+    /// Vì sao KHÔNG dùng <c>Remove-NetAdapter</c>: cmdlet đó **không tồn tại** — module
+    /// <c>NetAdapter</c> chỉ có Disable/Enable/Set/Rename/Restart (kiểm trên Windows 11:
+    /// <c>Get-Command Remove-NetAdapter</c> ⇒ không có). Lệnh cũ vì thế **luôn thất bại** và chỉ
+    /// để lại dòng WARN trong log; adapter chỉ mất khi tiến trình wintun thoát.
+    ///
+    /// Nay dùng thác 3 tầng, tầng nào có trên máy thì dùng:
+    ///  1. <c>Remove-PnpDevice</c> — có trên Windows mới.
+    ///  2. <c>pnputil /remove-device &lt;InstanceId&gt;</c> — có từ Windows 10 1903 (không có trên
+    ///     máy test này thì <c>Remove-PnpDevice</c> cũng thiếu, nên tầng 2 là đường thật).
+    ///  3. <c>Disable-NetAdapter</c> — luôn có; adapter không còn hoạt động/giữ route.
+    /// Tất cả đều <c>-ErrorAction SilentlyContinue</c>: dọn dẹp không được thì KHÔNG chặn luồng
+    /// ngắt kết nối.</summary>
     public static WindowsCommand RemoveInterface(string interfaceName)
         => new(PowerShell,
-            $"-NoProfile -NonInteractive -Command \"Import-Module NetAdapter -ErrorAction SilentlyContinue; Remove-NetAdapter -Name '{interfaceName}' -Confirm:$false -ErrorAction SilentlyContinue\"");
+            $"-NoProfile -NonInteractive -Command \"" +
+            $"$n='{interfaceName}'; " +
+            "Import-Module PnpDevice -ErrorAction SilentlyContinue; " +
+            "Import-Module NetAdapter -ErrorAction SilentlyContinue; " +
+            "$d=@(Get-PnpDevice -Class Net -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -eq $n -or $_.FriendlyName -like ('*'+$n+'*') }); " +
+            "foreach ($x in $d) { " +
+            "  if (Get-Command Remove-PnpDevice -ErrorAction SilentlyContinue) { $x | Remove-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue } " +
+            "  else { pnputil /remove-device $x.InstanceId | Out-Null } " +
+            "} " +
+            // Kết thúc bằng `exit 0`: khi không có adapter nào để gỡ, Disable-NetAdapter báo lỗi
+            // (đã -ErrorAction SilentlyContinue) nhưng PowerShell vẫn lấy mã thoát theo lệnh cuối
+            // ⇒ app ghi WARN "trả exit 1 (bỏ qua)". Dọn dẹp không có gì để làm là OK, không phải WARN.
+            "Disable-NetAdapter -Name $n -Confirm:$false -ErrorAction SilentlyContinue; exit 0\"");
 
     /// <summary>
     /// Đọc default route đang dùng của máy, in ra <c>gateway|interface</c>.

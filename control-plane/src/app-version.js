@@ -8,7 +8,7 @@
  * của mình: bản đang cài sẵn chỉ đọc `store_url`, để rỗng thì nút "Cập nhật" trên màn
  * force-update **bấm không mở gì cả**.
  *
- * Kênh được quyết định theo thứ tự: `?platform=android|ios` (bản app mới gửi kèm), rồi
+ * Kênh được quyết định theo thứ tự: `?platform=android|ios|macos|windows` (bản app mới gửi kèm), rồi
  * mới tới User-Agent — nhờ vậy các bản **đã cài sẵn** (chưa từng gửi tham số) vẫn nhận
  * đúng link: OkHttp gửi `okhttp/x.y`, còn iOS/macOS gửi `CFNetwork/Darwin`.
  */
@@ -22,11 +22,27 @@ const ANDROID_UA = /android|okhttp|vpnflow-android/i;
  */
 const WINDOWS_UA = /windows|win32|vpnflow-windows/i;
 
+/**
+ * Token nhận biết client macOS qua User-Agent. Đây CHỈ là đường lùi: iOS và macOS cùng gửi
+ * `CFNetwork/Darwin` nên KHÔNG thể phân biệt hai kênh bằng UA — bản macOS phải gửi
+ * `?platform=macos` (xem `isMacClient`). Regex này để bản macOS nào tự đặt UA riêng
+ * (`VPNFlow-mac/1.4.0`…) cũng được nhận đúng kênh.
+ */
+const MACOS_UA = /vpnflow[-_ ]?mac|flowvpn[-_ ]?mac|vpnflowmacos/i;
+
+/** Client này có phải kênh macOS không? */
+export function isMacClient({ platform, userAgent } = {}) {
+  const explicit = String(platform ?? "").trim().toLowerCase();
+  if (explicit === "macos" || explicit === "mac" || explicit === "darwin" || explicit === "osx") return true;
+  if (explicit === "ios" || explicit === "android" || explicit === "windows" || explicit === "win") return false;
+  return MACOS_UA.test(String(userAgent ?? ""));
+}
+
 /** Client này có phải kênh Windows không? */
 export function isWindowsClient({ platform, userAgent } = {}) {
   const explicit = String(platform ?? "").trim().toLowerCase();
   if (explicit === "windows" || explicit === "win32" || explicit === "win") return true;
-  if (explicit === "android" || explicit === "ios" || explicit === "macos") return false;
+  if (explicit === "android" || explicit === "ios" || explicit === "macos" || explicit === "mac") return false;
   return WINDOWS_UA.test(String(userAgent ?? ""));
 }
 
@@ -34,7 +50,7 @@ export function isWindowsClient({ platform, userAgent } = {}) {
 export function isAndroidClient({ platform, userAgent } = {}) {
   const explicit = String(platform ?? "").trim().toLowerCase();
   if (explicit === "android") return true;
-  if (explicit === "ios") return false;
+  if (explicit === "ios" || explicit === "macos" || explicit === "mac") return false;
   return ANDROID_UA.test(String(userAgent ?? ""));
 }
 
@@ -104,6 +120,31 @@ export function windowsVersionPayload(read, { baseUrl = "" } = {}) {
  * APK thường (minSdk 26) cài lên máy đó báo "There was a problem parsing the package",
  * nên app phải TỰ CHỌN theo SDK của máy — không thì ép cập nhật sẽ chặn cứng nhóm này.
  */
+/**
+ * Kênh macOS — file .dmg (hoặc .zip) phát trực tiếp từ `/v1/downloads/mac`.
+ *
+ * Vì sao phải có nhánh riêng: trước đây `/v1/app-version` chỉ có ios/android/windows nên client
+ * macOS rơi vào payload **iOS** — app Mac (dùng chung `ControlAPIClient` với iOS) so phiên bản của
+ * mình với `latest_version` của iOS, và nút cập nhật mở `install_page_url` = **trang cài iOS**.
+ * Hệ quả: khách Mac không bao giờ được nhắc cập nhật (bản macOS phát lại nhiều lần vẫn cùng số
+ * 1.4.0), mà nếu iOS lên số mới thì khách Mac bị nhắc rồi mở nhầm trang iOS.
+ *
+ * `minimum_mac_version` KHÔNG tồn tại trong app_config ⇒ mặc định "0.0.0" = không ép cập nhật,
+ * chỉ nhắc. `store_url` cố ý = link tải vì bản đang cài sẵn chỉ đọc khoá đó.
+ */
+export function macVersionPayload(read, { baseUrl = "" } = {}) {
+  const site = String(baseUrl ?? "").replace(/\/$/, "");
+  const downloadUrl = read("mac_download_url") || `${site}/v1/downloads/mac`;
+  return {
+    platform: "macos",
+    minimum_version: read("minimum_mac_version") ?? "0.0.0",
+    latest_version: read("latest_mac_version") ?? "0.0.0",
+    download_url: downloadUrl,
+    store_url: downloadUrl,
+    install_page_url: `${site}/install/mac`,
+  };
+}
+
 export function androidVersionPayload(read, { baseUrl = "" } = {}) {
   const site = String(baseUrl ?? "").replace(/\/$/, "");
   const apkUrl = read("android_apk_url") || `${site}/v1/downloads/android`;
@@ -126,6 +167,11 @@ export function versionPayloadFor(req, { read, baseUrl = "" } = {}) {
   const platform = req?.query?.platform;
   if (isWindowsClient({ platform, userAgent })) {
     return windowsVersionPayload(read, { baseUrl });
+  }
+  // macOS TRƯỚC iOS: hai kênh dùng chung UA `CFNetwork/Darwin`, nên chỉ phân biệt được bằng
+  // `?platform=macos`. Không có nhánh này thì client Mac rơi vào payload iOS (xem macVersionPayload).
+  if (isMacClient({ platform, userAgent })) {
+    return macVersionPayload(read, { baseUrl });
   }
   const android = isAndroidClient({ platform, userAgent });
   return android ? androidVersionPayload(read, { baseUrl }) : iosVersionPayload(read, { baseUrl });
