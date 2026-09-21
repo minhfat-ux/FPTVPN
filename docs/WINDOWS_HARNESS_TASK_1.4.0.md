@@ -94,3 +94,23 @@ App **vẫn có fallback WireGuard** nên không mất mạng, nhưng mất đú
   mà Brutal pace theo ⇒ khai thấp hơn đường truyền là tự bóp mạng; hai node đều đã bật
   `ignoreClientBandwidth` nên phía server vốn không dùng số client khai.
 - Test: **167/167 PASS** (thêm `ApplicationControlGuardTests`).
+
+## XÁC NHẬN THỰC TẾ bản 1.4.1 (chủ dự án dùng thật, 21/09/2026)
+Chủ dự án báo: *"bản win đang chạy khá ổn định, không bị mất mạng"* — đúng lỗi gốc hôm 18–19/09
+("app chạy một lúc thì tự mất mạng"). Số liệu đối chiếu trên máy đang chạy:
+
+| hạng mục | giá trị đo được |
+|---|---|
+| App đã chạy liên tục | **3,4 giờ** (từ 10:45:45), không tắt lại |
+| Đường đang dùng | `singbox-hy-relay` (hysteria2-over-WS), exit IP **165.101.114.162** (node-2) |
+| Sức khoẻ | `tun0` Up, default route qua `tun0`, `api/v1/health` **HTTP 200** (0,96 s) |
+| **Watchdog kết luận "đứng"** | **0 lần** (không báo oan trong suốt phiên) |
+| Sự cố / tự dựng lại | 1 / 1 — **đều do Windows chủ động kill `sing-box.exe`** để test (12:19), app tự dựng lại sau ~3 s |
+| ERROR | 2 — cùng thuộc lần test đó |
+
+⇒ Trong 3,4 giờ dùng thật: **không có sự cố tự phát, không mất mạng, watchdog không báo oan**.
+
+**Hai bản vá CHƯA nằm trong 1.4.1** (đã commit `4850b6c`, sẽ vào bản kế tiếp):
+1. Lệnh dọn adapter dùng cmdlet **không tồn tại** (`Remove-NetAdapter`) → nay là thác
+   `Remove-PnpDevice` → `pnputil /remove-device` → `Disable-NetAdapter`, kết thúc `exit 0`.
+2. Bộ cài `CloseApplications=yes → force` (nguyên nhân cài đè báo **exit 5** khi app đang chạy).
