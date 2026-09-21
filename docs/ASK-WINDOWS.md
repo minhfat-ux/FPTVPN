@@ -14,6 +14,7 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `T-20260919-01` | verified | Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE): bỏ poll 20 giây, hết bã | `-` |
 | `T-20260919-02` | verified | WIN: clone repo fbuddy mới (minhfat-ux/fbuddy) + join sổ task + ack 3  | `-` |
 | `T-20260919-03` | verified | Deploy bản phân loại/giá chợ lên node-2 (Mac bị chặn SSH) | `-` |
+| `T-20260921-01` | sent | Nâng DSH harness lên 0.1.5-rc.1 + cài plugin AgentTeams (để session nh | `AGENT_NAME=WIN node ops/task.mjs ack T-20260921-01 --push` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->
