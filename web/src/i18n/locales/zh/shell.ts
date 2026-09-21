@@ -185,4 +185,9 @@ export const shell: Dict = {
   "shell.ui.busy": "处理中…",
   "shell.ui.chartEmpty": "暂无图表数据",
   "shell.ui.chartEmptyHint": "添加分析步骤以生成图表。",
+  "shell.profile.templatesTitle": "我的模板（Word · Excel · PPT）",
+  "shell.profile.templatesDesc": "上传你自己的模板，让 fBuddy 按公司格式生成文档。",
+  "shell.profile.templatesGuide1": "想让 fBuddy 按公司模板制作幻灯片/Word/Excel？请先在这里上传模板。",
+  "shell.profile.templatesGuide2": "然后在聊天框中点击“选择模板”芯片，为本次对话使用该模板。",
+  "shell.profile.templatesGuide3": "Excel：直接填写你的模板（保留公式、格式与 logo）。Word/PPT：遵循模板结构与章节顺序。",
 };

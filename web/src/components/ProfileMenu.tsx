@@ -7,6 +7,7 @@ import { RequestCreditsForm } from "../chat/RequestCreditsForm";
 import { LocaleSwitcher, useI18n } from "../i18n";
 import { Modal } from "./ui";
 import { SessionList } from "./SessionList";
+import { TemplateLibraryPanel } from "../templates/TemplatePicker";
 import { recentEntries } from "./creditLabels";
 import { CreditHistoryRow, CreditStat } from "./creditRows";
 import { isInternalTopupUrl } from "../topup/links";
@@ -113,6 +114,24 @@ export function ProfileMenu({ onOpenTopup }: { onOpenTopup?: () => void } = {}) 
                 )}
               </div>
             </div>
+          </div>
+
+          {/* MẪU CỦA TÔI — người dùng tải mẫu Word/Excel/PPT của họ để fBuddy dùng lại.
+              Đặt trong Tài khoản vì đây là phần quản lý tài sản của người dùng, không phải
+              thao tác cho từng lượt chat (chọn mẫu cho lượt nằm ở ô nhập chat). */}
+          <div className="card">
+            <div className="card-head" style={{ marginBottom: 6 }}>
+              <div className="grow">
+                <div className="card-title">{t("shell.profile.templatesTitle")}</div>
+                <div className="card-desc">{t("shell.profile.templatesDesc")}</div>
+              </div>
+            </div>
+            <ul className="tiny muted" style={{ margin: "0 0 10px", paddingLeft: 18 }}>
+              <li>{t("shell.profile.templatesGuide1")}</li>
+              <li>{t("shell.profile.templatesGuide2")}</li>
+              <li>{t("shell.profile.templatesGuide3")}</li>
+            </ul>
+            <TemplateLibraryPanel />
           </div>
 
           {enabled && credits && (

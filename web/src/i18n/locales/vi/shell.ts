@@ -185,4 +185,9 @@ export const shell: Dict = {
   "shell.ui.busy": "Đang xử lý…",
   "shell.ui.chartEmpty": "Chưa có dữ liệu biểu đồ",
   "shell.ui.chartEmptyHint": "Thêm thao tác phân tích để sinh biểu đồ.",
+  "shell.profile.templatesTitle": "Mẫu của tôi (Word · Excel · PPT)",
+  "shell.profile.templatesDesc": "Tải mẫu riêng của anh lên để fBuddy làm tài liệu ĐÚNG định dạng công ty.",
+  "shell.profile.templatesGuide1": "Anh muốn fBuddy làm slide/Word/Excel theo mẫu của công ty? Tải mẫu lên đây trước.",
+  "shell.profile.templatesGuide2": "Sau đó vào ô chat, bấm chip “Chọn mẫu” để dùng mẫu cho lượt đó.",
+  "shell.profile.templatesGuide3": "Excel: fBuddy điền số liệu vào chính file mẫu (giữ công thức, định dạng, logo). Word/PPT: bám đúng bố cục và thứ tự mục của mẫu.",
 };
