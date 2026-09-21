@@ -59,8 +59,11 @@ Trên **WIN** (mở `cmd`/PowerShell thường, **không phải** ô chat của 
 
 ```bat
 cd <đường-dẫn-repo>\FlowGPT
+git pull origin flowgpt
 ops\install-agent-teams.cmd
 ```
+
+> `git pull` trước để có `ops\install-agent-teams.cmd` + tài liệu này (commit `edce4e8`).
 
 Trên **MAC/Linux**:
 
