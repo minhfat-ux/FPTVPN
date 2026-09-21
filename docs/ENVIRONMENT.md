@@ -69,6 +69,20 @@ web 502. Deploy nguyên gói (tar) + `node --check` + kiểm tra cổng/API mớ
   ("exceeds the context window"). Muốn cửa sổ lớn: `gpt-4.1*` (1.05M), `gpt-5.x` (272k–400k).
 - Vá cấu hình cho máy khác: `node ops/dsh-fix-providers.mjs --apply` (tự sao lưu, idempotent).
 
+### Watcher gắn vào vòng đời `dsh web`
+
+`~/.dsh/profiles/web/cordis.patch.yml` có một dòng plugin `dsh-plugin-agent-watch` giữ watcher sống
+cùng `dsh web` (dsh web tắt là watcher tắt, không để tiến trình mồ côi). Sau khi ổ BIWIN hỏng, dòng
+`repo` ở đó đã đổi sang **`/Users/minhnguyen/FlowGPT`** — harness nạp lại patch ngay, và log xác nhận
+watcher chạy đúng đường dẫn mới:
+
+```
+[agent-watch] đã khởi động watcher pid 17579 · MAC · poll 20s · tự đánh thức
+node /Users/minhnguyen/FlowGPT/ops/agent-watch.mjs --auto --interval 20
+```
+
+Đổi máy/đổi đường dẫn thì sửa đúng dòng `repo` này (file có sao lưu `.bak-<ngày-giờ>` cạnh đó).
+
 ## 7. Sự cố đã gặp — nhận biết trong 10 giây
 
 | Hiện tượng | Nguyên nhân thật | Cách nhận biết |
