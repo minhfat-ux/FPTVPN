@@ -76,7 +76,11 @@ ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 MinVersion=10.0.17763
 ; Nâng cấp đè bản cũ: đóng app đang chạy thay vì báo lỗi "file đang dùng".
-CloseApplications=yes
+; Vì sao `force` (đã kiểm chứng 21/09/2026): app chạy elevated nên khi chỉ để `yes`, bộ cài
+; KHÔNG đóng được app ⇒ cài silent trả **exit code 5** (2 lần liên tiếp trên máy test) và khách
+; phải tự tắt app trước. `force` đóng thẳng không hỏi, nên cài đè luôn sạch (đã cài lại OK với
+; /FORCECLOSEAPPLICATIONS). `RestartApplications=no` giữ nguyên: app tự bật lại khi khách mở.
+CloseApplications=force
 RestartApplications=no
 AllowNoIcons=yes
 

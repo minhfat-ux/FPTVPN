@@ -195,13 +195,22 @@ public class WintunWireGuardDriverTests
     }
 
     [Fact]
-    public void RemoveInterface_UsesPowerShellRemoveNetAdapter()
+    public void RemoveInterface_UsesWorkingCascade_NotTheNonExistentRemoveNetAdapter()
     {
         var command = WireGuardWindowsCommands.RemoveInterface("vpnflow");
 
         Assert.Equal("powershell.exe", command.FileName);
-        Assert.Contains("Remove-NetAdapter", command.Arguments);
+        // Remove-NetAdapter KHÔNG tồn tại (module NetAdapter không xuất cmdlet đó) và
+        // Remove-PnpDevice cũng thiếu trên Windows 11 phổ thông ⇒ phải có thác:
+        // Remove-PnpDevice (nếu có) → pnputil /remove-device → Disable-NetAdapter (luôn có).
+        Assert.DoesNotContain("Remove-NetAdapter", command.Arguments);
+        Assert.Contains("Remove-PnpDevice", command.Arguments);
+        Assert.Contains("pnputil /remove-device", command.Arguments);
+        Assert.Contains("Disable-NetAdapter", command.Arguments);
+        Assert.Contains("Get-PnpDevice", command.Arguments);
         Assert.Contains("'vpnflow'", command.Arguments);
+        // Kết thúc bằng `exit 0`: không có adapter để gỡ thì cũng KHÔNG được trả mã lỗi (app sẽ ghi WARN).
+        Assert.Contains("exit 0", command.Arguments);
     }
 
     [Fact]
