@@ -248,12 +248,36 @@ function refreshAskDoc() {
 // Hai kênh tách bạch:
 //   - CONNECTOR (agent bus trên VPS): máy ↔ máy, có trạng thái trong git làm nguồn xác thực.
 //   - TELEGRAM: chỉ để ALERT cho người theo dõi, không phải kênh máy–máy.
-const BUS_URL = String(process.env.AGENT_BUS_URL ?? "https://fbuddy.meetflowai.site/agent-bus").replace(/\/$/, "");
-const BUS_TOKEN = String(process.env.AGENT_BUS_TOKEN ?? "").trim();
+/**
+ * `.env.bus` trong repo (gitignore) là nơi Mac để token connector. `agent-watch.mjs` đã tự đọc file
+ * này, nhưng `task.mjs` thì KHÔNG — nên mọi sự kiện `--push` của phiên do watcher đánh thức (env
+ * không có `AGENT_BUS_TOKEN`) đã IM LẶNG không đẩy sang bus: `notifyPeer` trả `null`.
+ * Hậu quả thật 21/09/2026: `verify` T-20260918-03 chỉ tới WIN qua git, connector hoàn toàn không có tin.
+ * Đọc y hệt cách `agent-watch.mjs` làm; env đặt tay vẫn được ưu tiên.
+ */
+function readBusEnvFile() {
+  const values = {};
+  try {
+    for (const line of fs.readFileSync(path.join(process.cwd(), ".env.bus"), "utf8").split("\n")) {
+      const match = line.match(/^([A-Z_]+)=(.*)$/);
+      if (match) values[match[1]] = match[2].trim();
+    }
+  } catch {
+    /* không có file → dùng env hoặc mặc định */
+  }
+  return values;
+}
+
+const BUS_FILE_ENV = readBusEnvFile();
+const BUS_URL = String(process.env.AGENT_BUS_URL || BUS_FILE_ENV.AGENT_BUS_URL || "https://fbuddy.meetflowai.site/agent-bus").replace(/\/$/, "");
+const BUS_TOKEN = String(process.env.AGENT_BUS_TOKEN || BUS_FILE_ENV.AGENT_BUS_TOKEN || "").trim();
 
 /** Đẩy một thông báo sang bus cho bên kia (best-effort: lỗi bus không được làm hỏng sổ). */
 async function notifyPeer({ to, kind, title, body, ref }) {
-  if (!BUS_TOKEN) return null;
+  if (!BUS_TOKEN) {
+    console.log("  ! bỏ qua connector: thiếu AGENT_BUS_TOKEN (env hoặc .env.bus) — sự kiện này chỉ tới bên kia qua git.");
+    return null;
+  }
   try {
     const response = await fetch(`${BUS_URL}/push`, {
       method: "POST",
