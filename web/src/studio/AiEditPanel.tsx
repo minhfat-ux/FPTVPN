@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { downloadFileFromApi } from "../files/download";
 import { ImageDown, Send, Sparkles } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import type { FileRef } from "../types";
@@ -177,9 +178,9 @@ export function AiEditPanel({
             <div className="truncate bold small">{t("studio.image.ai.artifact", { name: artifact.name })}</div>
             <div className="tiny faint">{(artifact.size / 1024).toFixed(0)} KB</div>
           </div>
-          <a className="btn btn-sm" href={api.fileUrl(artifact.id)} download>
+          <button className="btn btn-sm" type="button" onClick={() => void downloadFileFromApi(artifact.id, artifact.name)}>
             <ImageDown size={14} /> {t("studio.action.download")}
-          </a>
+          </button>
         </div>
       ))}
     </div>

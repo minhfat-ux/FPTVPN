@@ -1,4 +1,5 @@
 import { Download, Loader } from "lucide-react";
+import { downloadFileFromApi } from "../files/download";
 import { api } from "../api/client";
 import { Field, Switch } from "../components/ui";
 import { useI18n } from "../i18n";
@@ -180,9 +181,9 @@ export function ExportPanel({
       {saved.map((file) => (
         <div key={file.id} className="row gap-2 mt-2">
           <span className="badge badge-ok">{t("studio.image.export.saved")}</span>
-          <a className="grow truncate small" href={api.fileUrl(file.id)} download>
+          <button className="grow truncate small" type="button" onClick={() => void downloadFileFromApi(file.id, file.name)}>
             {file.name}
-          </a>
+          </button>
         </div>
       ))}
     </div>

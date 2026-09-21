@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { openFileFromApi } from "../files/download";
 import { RefreshCw, Square, User as UserIcon, Volume2 } from "lucide-react";
 import { api } from "../api/client";
 import { formatBytes } from "../state/store";
@@ -82,7 +83,12 @@ export function AttachmentStrip({ files }: { files: FileRef[] }) {
     <div className="msg-attachments">
       {files.map((file) =>
         isImage(file) ? (
-          <a key={file.id} href={api.fileUrl(file.id, true)} target="_blank" rel="noreferrer noopener">
+          <a
+            key={file.id}
+            href={api.fileUrl(file.id, true)}
+            onClick={(event) => { event.preventDefault(); void openFileFromApi(file.id); }}
+            rel="noreferrer noopener"
+          >
             <img className="msg-attachment-thumb" src={api.fileUrl(file.id, true)} alt={file.name} loading="lazy" />
           </a>
         ) : (

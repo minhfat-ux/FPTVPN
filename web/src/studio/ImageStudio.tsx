@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { downloadFileFromApi } from "../files/download";
 import { RotateCcw, Undo2 } from "lucide-react";
 import { api } from "../api/client";
 import { Spinner } from "../components/ui";
@@ -180,9 +181,9 @@ export function ImageStudio({ onOpenChat }: { onOpenChat?: () => void }) {
               <div key={file.id} className="artifact-card">
                 <div className="artifact-icon">IMG</div>
                 <div className="grow truncate small">{file.name}</div>
-                <a className="btn btn-sm" href={api.fileUrl(file.id)} download>
+                <button className="btn btn-sm" type="button" onClick={() => void downloadFileFromApi(file.id, file.name)}>
                   {t("studio.action.download")}
-                </a>
+                </button>
               </div>
             ))}
           </div>

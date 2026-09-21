@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { downloadFileFromApi } from "../files/download";
 import { FileDown, Plus, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../api/client";
 import type { Artifact } from "../types";
@@ -333,9 +334,9 @@ export function ExcelBuilder({ onOpenChat }: { onOpenChat?: () => void }) {
                   <div className="truncate bold small">{file.name}</div>
                   <div className="tiny faint">{file.mime || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}</div>
                 </div>
-                <a className="btn btn-sm btn-primary" href={api.fileUrl(file.id)} download>
+                <button className="btn btn-sm btn-primary" type="button" onClick={() => void downloadFileFromApi(file.id, file.name)}>
                   <FileDown size={14} /> {t("studio.action.download")}
-                </a>
+                </button>
               </div>
             ))}
           </div>

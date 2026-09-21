@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { downloadFileFromApi } from "../files/download";
 import { Download, Eye } from "lucide-react";
 import { api } from "../api/client";
 import { formatBytes } from "../state/store";
@@ -32,9 +33,14 @@ export function ArtifactCard({ file }: { file: FileRef }) {
               <Eye size={14} /> {t("chat.artifact.view")}
             </button>
           )}
-          <a className="btn btn-sm" href={api.fileUrl(file.id)} download={file.name} title={t("chat.artifact.download")}>
+          <button
+            className="btn btn-sm"
+            type="button"
+            onClick={() => void downloadFileFromApi(file.id, file.name)}
+            title={t("chat.artifact.download")}
+          >
             <Download size={14} /> {t("chat.artifact.downloadShort")}
-          </a>
+          </button>
         </div>
       </div>
 
@@ -58,9 +64,9 @@ export function ArtifactCard({ file }: { file: FileRef }) {
         onClose={() => setPreview(false)}
         wide
         footer={
-          <a className="btn" href={api.fileUrl(file.id)} download={file.name}>
+          <button className="btn" type="button" onClick={() => void downloadFileFromApi(file.id, file.name)}>
             <Download size={14} /> {t("chat.artifact.download")}
-          </a>
+          </button>
         }
       >
         <div className="artifact-modal-body">
