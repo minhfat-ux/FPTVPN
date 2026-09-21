@@ -14,6 +14,11 @@ struct ContentView: View {
     @State private var showingLogin = false
     @State private var forcedUpdateInfo: AppVersionInfo?
 
+    /// Bản mới CHƯA bắt buộc (latest_version > bản đang chạy nhưng minimum_version thì chưa vượt).
+    /// Trước đây app chỉ có cổng CHẶN CỨNG nên khách ở build cũ KHÔNG BAO GIỜ biết có bản mới —
+    /// kể cả khi server đã tăng `ios_ipa_build`/`latest_mac_version`.
+    @State private var availableUpdateInfo: AppVersionInfo?
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -99,6 +104,21 @@ struct ContentView: View {
                 ForceUpdateView(info: info)
                     .environmentObject(languageStore)
             }
+            // Nhắc MỀM khi có bản mới: khách vẫn dùng được app (không phải cổng chặn cứng), nhưng
+            // biết là có bản mới và cập nhật ngay bằng đúng luồng OTA của ForceUpdateView.
+            .alert(
+                languageStore.t(.updateRequired),
+                isPresented: Binding(
+                    get: { availableUpdateInfo != nil },
+                    set: { if !$0 { availableUpdateInfo = nil } }
+                ),
+                presenting: availableUpdateInfo
+            ) { info in
+                Button(languageStore.t(.update)) { openUpdateLink(info) }
+                Button(languageStore.t(.cancel), role: .cancel) { availableUpdateInfo = nil }
+            } message: { _ in
+                Text(languageStore.t(.updateRequiredDetail))
+            }
         }
         // Device cap hit: show the real reason + let the user log out an old
         // device instead of a vague "Coordinator rejected this device".
@@ -159,10 +179,31 @@ struct ContentView: View {
             await entitlementRefresh
             // Force-update gate: if the backend requires a newer build, block usage.
             if let baseURL = configStore.controlPlaneBaseURL,
-               let info = try? await AppVersionService.fetch(from: baseURL),
-               AppVersionService.isForcedUpdate(info) {
-                forcedUpdateInfo = info
+               let info = try? await AppVersionService.fetch(from: baseURL) {
+                if AppVersionService.isForcedUpdate(info) {
+                    forcedUpdateInfo = info
+                } else if AppVersionService.isUpdateAvailable(info) {
+                    // Có bản mới nhưng chưa bắt buộc ⇒ NHẮC. Trước đây nhánh này không tồn tại nên
+                    // khách ở build cũ im lặng mãi; server có tăng `ios_ipa_build` cũng vô ích.
+                    availableUpdateInfo = info
+                }
             }
+        }
+    }
+
+    /// Mở link cập nhật cho nhắc mềm — CÙNG logic với `ForceUpdateView` (ưu tiên OTA
+    /// `itms-services` để cài ngay trong app, không có manifest thì mở link tải trên web).
+    private func openUpdateLink(_ info: AppVersionInfo) {
+        if let ota = info.otaInstallURL, UIApplication.shared.canOpenURL(ota) {
+            UIApplication.shared.open(ota)
+            return
+        }
+        let raw = info.downloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: raw) {
+            UIApplication.shared.open(url)
+        } else {
+            // `webURL` KHÔNG trả optional — không dùng `if let` ở đây.
+            UIApplication.shared.open(ControlAPIHosts.webURL("buy"))
         }
     }
 
