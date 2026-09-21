@@ -32,6 +32,7 @@ for name in os.listdir(conf):
             if '=' in b:
                 k, v = b.split('=', 1)
                 env[k.strip()] = v.strip().strip('"')
+data = '/root/flowvpn-cp/data'
 api_key = env.get('RESEND_API_KEY', '')
 alert = env.get('ALERT_EMAIL', '')
 if not api_key:
@@ -162,7 +163,15 @@ def send(to, email_for_body):
                                           'User-Agent': 'VPNFlow-Mailer/1.0 (+https://meetflowai.site)'})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
-            return bool(json.loads(r.read().decode()).get('id')), None
+            rid = json.loads(r.read().decode()).get('id')
+            # Lưu vết để sau này truy được ai đã nhận email nào (publisher cần audit).
+            try:
+                with open(f'{data}/reinstall-guide-log.jsonl', 'a', encoding='utf-8') as fh:
+                    fh.write(json.dumps({'ts': time.strftime('%Y-%m-%dT%H:%M:%S'),
+                                         'to': to, 'resend_id': rid}) + '\n')
+            except OSError:
+                pass
+            return bool(rid), None
     except urllib.error.HTTPError as e:
         return False, f'HTTP {e.code}: {e.read().decode()[:140]}'
     except Exception as e:
@@ -170,7 +179,6 @@ def send(to, email_for_body):
 
 
 # ---------- xác định khách bị tắc từ dữ liệu thật ----------
-data = '/root/flowvpn-cp/data'
 auth = json.load(open(f'{data}/auth.json', encoding='utf-8'))
 dev = json.load(open(f'{data}/devices.json', encoding='utf-8'))
 rows = dev if isinstance(dev, list) else list(dev.values())
