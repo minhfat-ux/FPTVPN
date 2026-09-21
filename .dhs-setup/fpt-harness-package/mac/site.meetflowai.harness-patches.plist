@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- MẪU tham chiếu. plist THẬT do `bash scripts/harness-patches-install.sh` sinh ra và trỏ vào bản
+     cài trên Ổ TRONG (~/.local/share/harness-patches) vì launchd bị TCC chặn đọc /Volumes/BIWIN.
+     Việc: `npm i -g @deepseek-ai/dsh` xoá patch (theme #33C773, logo FlowTech, tên HarnessFlow,
+     icon Culi) -> agent vá lại trong <=15 phút + nhắn Telegram. Không tự restart `dsh web`. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>site.meetflowai.harness-patches</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Volumes/BIWIN/SourcesCode/PrivateVPN/scripts/harness-ensure-patches.sh</string>
+    <string>--quiet</string>
+    <string>--notify</string>
+  </array>
+  <key>StartInterval</key><integer>900</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/tmp/harness-patches.log</string>
+  <key>StandardErrorPath</key><string>/tmp/harness-patches.log</string>
+</dict>
+</plist>

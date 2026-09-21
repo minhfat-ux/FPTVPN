@@ -73,6 +73,23 @@ if [ "$APPLY" = "1" ]; then
   done
 fi
 
+# 4) Patch theme/brand FlowTech: phát hiện DSH bị nâng cấp làm mất patch -> tự vá lại.
+#    Sự cố 21/09/2026: `npm i -g @deepseek-ai/dsh` xoá sạch file đã patch (theme #33C773, logo
+#    FlowTech, tên HarnessFlow) khiến harness mất theme/layout. Script dưới đây idempotent.
+ENSURE="$(cd "$(dirname "$0")/.." && pwd)/harness-ensure-patches.sh"
+if [ -f "$ENSURE" ]; then
+  if [ "$APPLY" = "1" ]; then
+    echo "-- patch theme/brand FlowTech --"
+    bash "$ENSURE" || echo "   (vá patch thất bại — xem log phía trên)"
+  else
+    if bash "$ENSURE" --check >/dev/null 2>&1; then
+      echo "  • patch theme/brand FlowTech: OK"
+    else
+      echo "  • patch theme/brand FlowTech: THIẾU (chạy với --apply để vá lại)"
+    fi
+  fi
+fi
+
 AFTER=$(du -sk "$DSH_HOME" 2>/dev/null | awk '{print $1}')
 echo "== dung lượng ~/.dsh: $(mb $((BEFORE * 1024))) MB -> $(mb $((AFTER * 1024))) MB =="
 [ "$APPLY" = "1" ] || echo "(DRY-RUN: chưa xoá gì. Thêm --apply để chạy thật.)"

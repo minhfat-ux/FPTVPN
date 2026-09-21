@@ -126,3 +126,27 @@ cập nhật `latest.json`, đồng bộ lại `fpt-harness-windows-bundle.zip` 
 `--upload`) copy lên `/var/www/flowvpn/dl/harness`, `chown caddy:caddy`, và verify HTTP 200 +
 sha256 khớp qua chính URL public. Tên file zip đổi theo `<sha8>` nên bản cũ vẫn tải được —
 xóa tay các bản cũ trên server khi muốn dọn.
+
+## 9. Tự vá lại theme/brand sau khi nâng cấp DSH (đọc trước khi `npm i -g`)
+
+`npm install -g @deepseek-ai/dsh@<ver>` **thay cả thư mục package** ⇒ xoá sạch patch (theme
+`#33C773`, logo FlowTech, tên **HarnessFlow**, **icon Culi**). Sự cố 21/09/2026: nâng cấp lên
+`0.1.5-rc.1` làm harness mất theme/layout, icon quay về DeepSeek mà không ai biết.
+
+Bộ tự vá (idempotent, tự backup `.fpt.bak`):
+
+```bash
+bash scripts/harness-ensure-patches.sh          # kiểm tra + vá ngay (--check = chỉ kiểm, --notify = báo Telegram)
+bash scripts/harness-patches-install.sh         # cài bản chạy nền vào ổ trong + bật LaunchAgent
+```
+
+- LaunchAgent `site.meetflowai.harness-patches` chạy **mỗi 15 phút** (`StartInterval=900`), tự vá lại
+  và nhắn Telegram khi vừa vá.
+- **Vì sao bản cài nằm ở `~/.local/share/harness-patches`**: launchd bị TCC chặn đọc ổ ngoài
+  (`/Volumes/BIWIN`) — agent trỏ thẳng vào repo sẽ chết im lặng (`Operation not permitted`). Sau khi
+  sửa script/patch trong repo phải chạy lại `harness-patches-install.sh` để đồng bộ bản ổ trong.
+- **Icon harness = hình Culi** (`patches/culi-icon.png` 512×512) cho `favicon.png`, `favicon.svg`
+  (SVG nhúng PNG) và `brand-mark.png` (icon trong sidebar); logo FlowTech có chữ vẫn dùng cho
+  hero/login (`brand-logo.png`).
+- Sau khi vá: khởi động lại `dsh web` rồi **Cmd+Shift+R**; nếu icon trên tab vẫn cũ, đóng/mở lại tab
+  (Chrome cache favicon rất dai).
