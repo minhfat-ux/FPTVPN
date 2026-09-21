@@ -2,7 +2,7 @@ import { streamChat } from "./providers/index.js";
 import { listAllTools, callTool, flattenToolResult, qualifiedToolName } from "./mcp.js";
 import { TOOL_DEFINITIONS, toolDefinitionsForSkill, toModelTool, executeTool } from "./skills/index.js";
 import { applyVisionFallback } from "./vision-fallback.js";
-import { buildAppsKnowledge } from "./apps-knowledge.js";
+import { buildAppsKnowledge, appsQuestionLikely } from "./apps-knowledge.js";
 import { buildVnPlateKnowledge } from "./vn-plates.js";
 import { jackpotOddsText, vietlottQuestionLikely } from "./vietlott.js";
 import { maybePreResearch, vnNow } from "./researcher.js";
@@ -391,7 +391,14 @@ export async function prepareTurn({ user, body, channel }) {
   // BẮT BUỘC báo trạng thái TRƯỚC khi tra: bước này có thể mất vài giây (mạng ngoài), mà trước đây
   // nó chạy âm thầm trước khi mở luồng stream nên người dùng thấy màn hình ĐƠ, không biết app còn
   // sống hay không. Nay hiện ngay "đang tra cứu nguồn…" rồi mới tra, và chỉ chờ tối đa 8 giây.
-  if (channel && typeof channel.send === "function") {
+  //
+  // Miễn trừ: câu hỏi về CHÍNH hệ sinh thái FlowTech (fBuddy, MeetFlow AI, giá, tải–cài…) đã có
+  // khối kiến thức app — nguồn sự thật nằm ngay trong repo — nên tra web thêm là thừa: chỉ làm lượt
+  // chat chậm 10–20s và bắn lời báo "đang hỏi chuyên gia tra cứu" cho câu fBuddy biết chắc câu trả
+  // lời. Đây cũng là lý do câu "MeetFlow AI là gì?" bị hồ sơ AI bắt nhầm (chữ "AI") rồi tra oan.
+  // Nếu thật sự cần dữ kiện ngoài, model vẫn gọi được công cụ `tra_cuu` giữa lượt.
+  const ownAppQuestion = appsQuestionLikely(content);
+  if (!ownAppQuestion && channel && typeof channel.send === "function") {
     channel.send("status", { stage: "researching" });
   }
   //
@@ -400,10 +407,12 @@ export async function prepareTurn({ user, body, channel }) {
   // và khách phải hỏi lại; lần hỏi lại mới nhanh vì kết quả đã nằm trong cache 10 phút của
   // researcher. Nay chờ tới 25s (đổi bằng env RESEARCH_TIMEOUT_MS) để trả lời NGAY trong cùng lượt.
   const researchTimeoutMs = Number(process.env.RESEARCH_TIMEOUT_MS ?? 25000);
-  const autoResearch = await maybePreResearch({
-    message: content,
-    timeoutMs: Number.isFinite(researchTimeoutMs) && researchTimeoutMs > 0 ? researchTimeoutMs : 25000,
-  });
+  const autoResearch = ownAppQuestion
+    ? null
+    : await maybePreResearch({
+        message: content,
+        timeoutMs: Number.isFinite(researchTimeoutMs) && researchTimeoutMs > 0 ? researchTimeoutMs : 25000,
+      });
 
   // Credit gate: metering on + no balance + not an admin ⇒ refuse with a clear
   // message (the UI turns this into a "nạp thêm" card).

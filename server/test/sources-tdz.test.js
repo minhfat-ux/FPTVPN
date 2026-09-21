@@ -65,7 +65,8 @@ test("lượt CÓ kết quả tra cứu chạy được (không lỗi TDZ) và g
   assert.ok(row, "tin nhắn trợ lý phải được lưu");
   assert.match(row.content, /Nguồn tra cứu/, "phải có khối nguồn");
   assert.match(row.content, /giavang\.com\.vn/, "phải nêu URL nguồn đã tra");
-  assert.match(row.content, /đã hỏi chuyên gia tra cứu/, "phải báo ngay là đang hỏi chuyên gia");
+  assert.match(row.content, /đang hỏi chuyên gia tra cứu/, "phải báo ngay là đang hỏi chuyên gia");
+  assert.equal((row.content.match(/chuyên gia tra cứu/g) ?? []).length, 1, "lời báo chỉ được xuất hiện MỘT lần");
   const done = sent.find((e) => e.event === "done");
   assert.ok(done?.data?.sources?.length, "sự kiện done phải kèm danh sách nguồn");
   assert.equal(formatSourcesBlock([{ kind: "web", label: "x", url: "https://x.vn" }]).includes("https://x.vn"), true);

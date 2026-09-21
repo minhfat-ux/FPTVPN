@@ -13,16 +13,19 @@ import type { TemplateItem } from "../types";
  * Mẫu được chọn cho từng lượt chat: `.xlsx` thì fBuddy ĐIỀN số liệu vào chính workbook mẫu
  * (giữ công thức/định dạng/logo), `.docx`/`.pptx` thì bám đúng bố cục và thứ tự mục của mẫu.
  */
-export function TemplatePicker({
-  open,
-  onClose,
+/**
+ * Nội dung thư viện mẫu — dùng được ở HAI nơi:
+ *  - trong modal mở từ ô chat (chọn mẫu cho lượt này),
+ *  - trong mục Tài khoản (quản lý mẫu: tải lên/xoá).
+ */
+export function TemplateLibraryPanel({
   value,
   onSelect,
+  autoLoad = true,
 }: {
-  open: boolean;
-  onClose: () => void;
-  value: string | null;
-  onSelect: (id: string | null) => void;
+  value?: string | null;
+  onSelect?: (id: string | null) => void;
+  autoLoad?: boolean;
 }) {
   const { t, d } = useI18n();
   const { push } = useToast();
@@ -43,8 +46,8 @@ export function TemplatePicker({
   }, [push, t]);
 
   useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
+    if (autoLoad) void load();
+  }, [autoLoad, load]);
 
   const upload = async (file: File | null) => {
     if (!file) return;
@@ -69,7 +72,7 @@ export function TemplatePicker({
   const remove = async (item: TemplateItem) => {
     try {
       await api.deleteTemplate(item.id);
-      if (value === item.id) onSelect(null);
+      if (value && value === item.id) onSelect?.(null);
       setItems((current) => current.filter((entry) => entry.id !== item.id));
       push(t("chat.template.deleted", { name: item.name }), "success");
     } catch (err) {
@@ -81,19 +84,7 @@ export function TemplatePicker({
     kind === "xlsx" ? <FileSpreadsheet size={16} /> : kind === "pptx" ? <Presentation size={16} /> : <FileText size={16} />;
 
   return (
-    <Modal
-      open={open}
-      title={t("chat.template.title")}
-      description={t("chat.template.description")}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn" type="button" onClick={() => onSelect(null)}>{t("chat.template.clear")}</button>
-          <button className="btn btn-primary" type="button" onClick={onClose}>{t("common.close")}</button>
-        </>
-      }
-    >
-      <div className="stack gap-3">
+    <div className="stack gap-3">
         <div className="row gap-2" style={{ alignItems: "center" }}>
           <input
             className="input"
@@ -122,7 +113,7 @@ export function TemplatePicker({
             key={item.id}
             className={`card hub-card ${value === item.id ? "active" : ""}`}
             style={{ padding: "12px 14px", cursor: "pointer" }}
-            onClick={() => onSelect(item.id)}
+            onClick={() => onSelect?.(item.id)}
           >
             <div className="row gap-2" style={{ alignItems: "center" }}>
               <span className="hub-card-icon" style={{ flex: "0 0 34px", width: 34, height: 34 }}>{icon(item.kind)}</span>
@@ -146,7 +137,37 @@ export function TemplatePicker({
             </div>
           </div>
         ))}
-      </div>
+    </div>
+  );
+}
+
+/** Modal mở từ ô chat: chọn mẫu cho LƯỢT NÀY (quản lý mẫu nằm ở Tài khoản). */
+export function TemplatePicker({
+  open,
+  onClose,
+  value,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  value: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Modal
+      open={open}
+      title={t("chat.template.title")}
+      description={t("chat.template.description")}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" type="button" onClick={() => onSelect(null)}>{t("chat.template.clear")}</button>
+          <button className="btn btn-primary" type="button" onClick={onClose}>{t("common.close")}</button>
+        </>
+      }
+    >
+      {open && <TemplateLibraryPanel value={value} onSelect={onSelect} autoLoad={open} />}
     </Modal>
   );
 }

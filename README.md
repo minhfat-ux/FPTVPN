@@ -99,6 +99,27 @@ Người dùng có 3 đường lấy thêm: **Xin thêm token** (menu tài kho�
 **Mua thêm token** (trang nạp credit `?view=topup`, VietQR + đơn có mã `FBUDDY######`), và **Chợ kỹ năng**
 (`?view=hub`) để mua prompt-pack bằng credit. Chi tiết: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) §8–§10.
 
+## Trợ lý biết gì về app của mình
+
+`server/src/apps-knowledge.js` là **nguồn sự thật duy nhất** về hệ sinh thái FlowTech và được ghép vào
+system prompt ở tầng code (như quy tắc xưng hô và khối credit) nên vẫn còn hiệu lực dù admin đổi prompt
+hệ thống trong Cài đặt:
+
+- **Luôn ghép** khối định danh (~900 ký tự): FlowTech là công ty/hệ sinh thái; **fBuddy và MeetFlow AI là
+  hai sản phẩm khác nhau**, kèm luật cấm nói MeetFlow AI là fBuddy / bản mobile của fBuddy / công ty mẹ.
+- **Ghép thêm danh mục chi tiết** (5 sản phẩm đã công bố + luật chống bịa + app chưa công bố chỉ có tên)
+  **chỉ khi câu hỏi chạm tới app/công ty/nền tảng/giá/tải–cài** (`appsQuestionLikely()`), để lượt làm việc
+  bình thường không phải trả thêm ~1.200 token mỗi lượt. Muốn ghép đủ mọi lượt: đặt `APPS_KNOWLEDGE_ALWAYS = true`.
+
+Sửa dữ kiện thì sửa đúng trong file đó — mỗi mục ghi rõ nguồn (meetflowai.site, App Store, code). Giá bằng
+số cụ thể **không** đưa vào prompt (đổi giá là hỏng câu trả lời), trợ lý chỉ mời xem trang mua. App chưa
+công bố chỉ được có tên: không mô tả tính năng, không hứa ngày ra mắt, không có link.
+
+```bash
+node --test "server/test/apps-knowledge.test.js"                       # luật ghép + dữ kiện
+node ops/apps-explain-check.mjs https://fbuddy.meetflowai.site/api     # hỏi thật fBuddy 3 câu, có chấm đạt/không
+```
+
 ## Đa ngôn ngữ
 
 Ba locale `vi` (gốc) · `en` · `zh`, namespace `common|auth|shell|chat|settings|studio|voice|hub|topup` trong
@@ -127,5 +148,21 @@ triển khai: [`docs/DEPLOY.md`](docs/DEPLOY.md).
 ## Giao diện
 
 Theme lấy đúng palette **FlowTech Harness** (navy `#0A1F3B`, layer `#0E2747`/`#123052`/`#16385E`,
-accent `#33C773`, chữ trên nền accent `#0A1F3B`) và logo FlowTech (`web/public/brand-mark.png`,
-`brand-logo.png`, `favicon.png`). Mọi màu đi qua biến CSS trong `web/src/styles.css` — không hard-code màu ở component.
+accent `#33C773`, chữ trên nền accent `#0A1F3B`). Mọi màu đi qua biến CSS trong `web/src/styles.css` — không hard-code màu ở component.
+
+### Icon / avatar (Culi)
+
+| Tệp | Kích thước | Dùng ở đâu |
+|---|---|---|
+| `web/public/brand-mark.png` | 206×206, trong suốt ngoài hình tròn | avatar trợ lý trong chat, logo sidebar, trang đăng nhập, hero, trang Cài đặt, banner hệ sinh thái, popup quảng cáo, đầu email (đăng nhập/nạp tiền/đổi credit) |
+| `web/public/favicon.png` | 406×406, trong suốt ngoài hình tròn | favicon tab trình duyệt |
+| `web/public/brand-logo.png` | 480×160 | **chưa dùng ở đâu** trong app (asset cũ: mark xanh + chữ đen) |
+| `web/public/favicon.svg` | 64×64 | asset cũ, không còn được tham chiếu |
+
+Ảnh gốc của Culi là hình tròn **trên nền đen đục**; đã cắt thành hình tròn nền trong suốt (script cắt:
+bán kính `0.39×chiều rộng` — đúng mép vòng sáng của artwork — rồi cắt sát viền nên hình lấp đầy khung).
+
+> ⚠️ Đổi icon phải **tăng tham số cache** trong mọi chỗ tham chiếu: hiện là `?v=culi2`
+> (`web/index.html`, các component trong `web/src`, `web/public/promo.js`, và 3 template email
+> trong `server/src/`). Không tăng thì trình duyệt/Cloudflare giữ ảnh cũ — đã từng dính đúng lúc
+> thay icon Culi. Server đặt `Cache-Control: public, max-age=300` cho các tệp này (xem `server/src/index.js`).

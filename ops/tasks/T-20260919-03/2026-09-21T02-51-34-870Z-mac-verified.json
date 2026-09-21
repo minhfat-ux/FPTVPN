@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap, bang chung day du: hash 5 file tren node-2 == origin/flowgpt (db.js 410d47c5, routes.js db5439a0, hub.js 1e066dc1, hub-taxonomy.json 50f16318, hub-taxonomy-apply.mjs d3637599); hub-taxonomy-apply.mjs idempotent ('Se ap: 0 muc'); DB /var/lib/fbuddy/fbuddy.db 50 muc kind expert=33/skill=17 origin own=7/clone=43; nhom Giao duc 22 = 16 expert o tab Chuyen gia + 6 skill; /api/admin/hub 200 co kinds/origins; bundle cong khai chua UI 'Gia & phan loai'; /api/health ok. Ket luan: PASS.",
+ "actor": "mac",
+ "at": "2026-09-21T02:51:34.874Z"
+}

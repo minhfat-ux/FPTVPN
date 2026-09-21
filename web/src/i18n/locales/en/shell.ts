@@ -185,4 +185,9 @@ export const shell: Dict = {
   "shell.ui.busy": "Working…",
   "shell.ui.chartEmpty": "No chart data yet",
   "shell.ui.chartEmptyHint": "Add an analysis step to generate a chart.",
+  "shell.profile.templatesTitle": "My templates (Word · Excel · PPT)",
+  "shell.profile.templatesDesc": "Upload your own templates so fBuddy produces documents in your company format.",
+  "shell.profile.templatesGuide1": "Want fBuddy to build slides/Word/Excel in your company template? Upload it here first.",
+  "shell.profile.templatesGuide2": "Then in the chat box tap the “Choose template” chip to use it for that turn.",
+  "shell.profile.templatesGuide3": "Excel: fBuddy fills your actual template (formulas, formatting and logos kept). Word/PPT: it follows the template structure and section order.",
 };
