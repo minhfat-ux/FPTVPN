@@ -166,7 +166,10 @@ if (hasWeb) {
         // tuyệt đối không đánh dấu `immutable`: đổi icon mà trình duyệt/CDN giữ bản cũ
         // cả năm. Đã dính đúng lúc thay icon Culi (2026-09-18) — Cloudflare cache
         // `/brand-mark.png` và không chịu lấy bản mới.
-        if (/(?:^|\/)(?:brand-mark|brand-logo|favicon)\.(?:png|svg|ico)$/i.test(filePath)) {
+        // promo.js/promo.css cũng nằm ở URL CỐ ĐỊNH (`/promo.js?v=…`): đánh immutable là
+        // Cloudflare giữ bản cũ, đổi icon trong popup mà khách vẫn thấy bản cũ (đúng ca
+        // 21/09/2026 — popup quảng cáo ở trang fBuddy mất hết icon app).
+        if (/(?:^|\/)(?:brand-mark|brand-logo|favicon|promo)\.(?:png|svg|ico|js|css)$/i.test(filePath)) {
           res.setHeader("Cache-Control", "public, max-age=300");
           return;
         }
