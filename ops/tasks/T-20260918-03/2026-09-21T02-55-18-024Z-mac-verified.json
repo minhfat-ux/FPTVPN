@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Bên giao MAC nghiệm thu. Lệnh trong sổ là lệnh Windows — Mac KHÔNG chạy được (đã thử: powercfg command not found) và không gọi vào máy Windows được (docs/ENVIRONMENT.md §1). Căn cứ: bằng chứng done của WIN (commit 752e5a0) ghi nguyên văn output lệnh 'powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE' = STANDBYIDLE AC=0x0 DC=0x0 (đúng tiêu chí '-> 0'); HIBERNATEIDLE AC=0x0 DC=0x7fffffff. Đối chiếu tiền đề: ENVIRONMENT.md §7 đã xác nhận 2026-09-21 rằng Windows im lặng là do MẤT VPN, KHÔNG phải sleep, nên mục tiêu chạy 24/7 nay do SSE listener + watchdog VPN (commit 3d074ad/0364598) đảm nhiệm. Hạn chế đã ghi nhận: 9 lệnh ghi powercfg bị UAC từ chối và máy không có LIDACTION nên phần lid không áp dụng — giá trị 0 hiện tại có thể đã có sẵn, không do script. Kết luận: PASS theo đúng tiêu chí trong sổ.",
+ "actor": "mac",
+ "at": "2026-09-21T02:55:18.024Z"
+}

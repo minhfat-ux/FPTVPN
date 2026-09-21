@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-21T02:53:11.806Z",
+ "note": "connector VPS: ack từ win — T-20260919-02 · WIN: clone repo fbuddy mới (minhfat-ux/fbuddy) + join sổ task + ack 3 việc UI/UX GATE 1",
+ "via": "dsh --profile headless \"{prompt}\""
+}
