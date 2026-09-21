@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Phan 1 DAT: dsh --version = 0.1.5-rc.1 (da dung san). Phan 2-3 VUONG: phien harness bi file-sandbox che do workspace-write, tu choi moi ghi ra ngoai repo — dsh plugin add bao [EPERM] ...\\.dsh\\profiles\\web\\_tmp_... ; da xin quyen danger-full-access nhung 'no approval channel is available' nen fail-closed. Can nguoi chay tay: ops\\\\install-agent-teams.cmd (hoac: dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.20) roi restart harness + refresh trinh duyet. Chi tiet + bang chung: docs/TASK-dsh-agent-teams-upgrade.md KHONG ton tai o bat ky branch nao (detail tro sai).",
+ "actor": "win",
+ "at": "2026-09-21T06:55:45.382Z"
+}
