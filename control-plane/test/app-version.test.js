@@ -5,6 +5,7 @@ import {
   androidVersionPayload,
   iosVersionPayload,
   isAndroidClient,
+  isMacClient,
   isWindowsClient,
   versionPayloadFor,
   wantsLegacyApk,
@@ -207,4 +208,68 @@ test("installer_url đặt từ appConfig được ưu tiên hơn link mặc đ�
   });
   assert.equal(payload.installer_url, "https://cdn.example.com/VPNFlow-Setup-9.9.9.exe");
   assert.equal(payload.store_url, "https://cdn.example.com/VPNFlow-Setup-9.9.9.exe");
+});
+
+// --- macOS -------------------------------------------------------------------
+// Vì sao có nhóm test này: iOS và macOS CÙNG gửi UA `CFNetwork/Darwin`, trước đây endpoint chỉ có
+// ios/android/windows nên client Mac luôn nhận payload iOS ⇒ (a) khách Mac không bao giờ được nhắc
+// cập nhật (payload iOS mang số của iOS), (b) nút cập nhật mở nhầm trang cài iOS. Bản macOS phải
+// gửi `?platform=macos`; đây là hợp đồng khoá lại điều đó.
+
+test("kênh macOS: ?platform=macos được nhận, kể cả khi UA là CFNetwork/Darwin", () => {
+  assert.equal(isMacClient({ platform: "macos", userAgent: "CFNetwork/1494.0.7 Darwin/23.4.0" }), true);
+  assert.equal(isMacClient({ platform: "mac" }), true);
+  // Không gửi gì + UA CFNetwork ⇒ KHÔNG được đoán là macOS (giữ nguyên hành vi cũ: iOS).
+  assert.equal(isMacClient({ userAgent: "PrivateVPN/1.4.0 CFNetwork/1494.0.7 Darwin/23.4.0" }), false);
+});
+
+test("payload macOS: dùng latest_mac_version + link tải mac + trang cài mac", () => {
+  const payload = versionPayloadFor(req({ platform: "macos" }), {
+    read: reader({ latest_mac_version: "1.4.0" }),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(payload.platform, "macos");
+  assert.equal(payload.latest_version, "1.4.0");
+  assert.equal(payload.download_url, "https://meetflowai.site/v1/downloads/mac");
+  assert.equal(payload.store_url, payload.download_url);
+  assert.equal(payload.install_page_url, "https://meetflowai.site/install/mac");
+  // KHÔNG được lẫn trường của iOS (nút cập nhật của app Mac sẽ mở nhầm trang iOS).
+  assert.equal(payload.ipa_url, undefined);
+  assert.equal(payload.ipa_manifest_url, undefined);
+});
+
+test("payload macOS: thiếu latest_mac_version thì không ép cập nhật (0.0.0)", () => {
+  const payload = versionPayloadFor(req({ platform: "macos" }), { read: reader({}), baseUrl: "" });
+  assert.equal(payload.latest_version, "0.0.0");
+  assert.equal(payload.minimum_version, "0.0.0");
+});
+
+test("payload macOS: minimum_mac_version có thì được trả (để ép cập nhật khi cần)", () => {
+  const payload = versionPayloadFor(req({ platform: "macos" }), {
+    read: reader({ latest_mac_version: "1.5.0", minimum_mac_version: "1.5.0" }),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(payload.minimum_version, "1.5.0");
+});
+
+test("iOS KHÔNG bị đổi hành vi: không platform + UA CFNetwork vẫn là kênh iOS", () => {
+  const payload = versionPayloadFor(req({ userAgent: "PrivateVPN/1.4.0 CFNetwork/1494.0.7 Darwin/23.4.0" }), {
+    read: reader(CONFIG),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(payload.platform, "ios");
+  assert.equal(payload.ipa_manifest_url, "https://meetflowai.site/install/ios/manifest.plist");
+});
+
+test("macOS không giành kênh của Windows/Android khi có ?platform rõ ràng", () => {
+  assert.equal(isMacClient({ platform: "windows", userAgent: "VPNFlow-mac/1.4.0" }), false);
+  assert.equal(isMacClient({ platform: "android", userAgent: "VPNFlow-mac/1.4.0" }), false);
+  assert.equal(
+    versionPayloadFor(req({ platform: "windows" }), { read: reader({}), baseUrl: "" }).platform,
+    "windows",
+  );
+  assert.equal(
+    versionPayloadFor(req({ platform: "android" }), { read: reader({}), baseUrl: "" }).platform,
+    "android",
+  );
 });
