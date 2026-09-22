@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "DMG cũ thực ra ĐÃ staple; lỗi thật là VPNFlow.app + appex bên trong CHƯA có vé. Đã staple app+appex, đóng gói lại, notarize Accepted (77a9ee05…), staple DMG. Artifact mới 21.458.057 B sha256 f1b802da… route 200.",
+ "actor": "mac",
+ "at": "2026-09-22T04:58:37.930Z"
+}
