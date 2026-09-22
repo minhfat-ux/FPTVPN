@@ -219,10 +219,37 @@ def version_android(path: str) -> dict:
     }
 
 
+def _run(command) -> tuple:
+    """Chạy lệnh, trả (exit_code, dòng cuối của output). Không bao giờ ném."""
+    try:
+        proc = subprocess.run(command, capture_output=True, text=True, errors="replace")
+        tail = ((proc.stdout or "") + (proc.stderr or "")).strip().splitlines()
+        return proc.returncode, (tail[-1].strip() if tail else "")
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 127, str(exc)
+
+
 def version_macos(path: str) -> dict:
-    """DMG: mount rồi đọc Info.plist của .app (chỉ làm được trên macOS)."""
+    """DMG: version + **vé staple + Gatekeeper + chữ ký** (chỉ làm được trên macOS).
+
+    Vì sao kiểm staple ở đây: 22/09/2026 khách cài DMG xong mở app báo *"không thể mở"*. DMG đã
+    `notarytool` Accepted nhưng **chưa staple** ⇒ máy khách (nhất là khi không có mạng) không có vé
+    để Gatekeeper đối chiếu ⇒ chặn. `spctl` trên máy build vẫn báo Notarized nên rất dễ tưởng đã xong.
+    """
     if sys.platform != "darwin":
-        return {"error": "cần macOS (hdiutil) để đọc version trong DMG — chạy trên máy Mac"}
+        return {"error": "cần macOS (hdiutil/stapler/spctl) để kiểm DMG — chạy trên máy Mac"}
+    out: dict = {}
+    # (1) vé staple của chính file DMG
+    code, line = _run(["xcrun", "stapler", "validate", path])
+    out["staple_ok"] = code == 0
+    out["staple_note"] = line
+    # (2) Gatekeeper đánh giá đúng như khách mở lần đầu
+    code, line = _run(
+        ["spctl", "-a", "-t", "open", "--context", "context:primary-signature", "-vv", path]
+    )
+    out["spctl_ok"] = code == 0
+    out["spctl_note"] = line
+
     mount = tempfile.mkdtemp(prefix="vpnflow-dmg-")
     try:
         attach = subprocess.run(
@@ -244,10 +271,19 @@ def version_macos(path: str) -> dict:
             if info_path:
                 with open(info_path, "rb") as handle:
                     info = plistlib.load(handle)
-                return {
+                # (3) chữ ký của app bên trong (deep: gồm cả extension + framework)
+                code, line = _run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", root])
+                out["codesign_ok"] = code == 0
+                out["codesign_note"] = line
+                # (4) vé staple của chính .app (app phải tự mang vé, không chỉ DMG)
+                code, line = _run(["xcrun", "stapler", "validate", root])
+                out["app_staple_ok"] = code == 0
+                out["app_staple_note"] = line
+                out.update({
                     "version": info.get("CFBundleShortVersionString"),
                     "build": str(info.get("CFBundleVersion") or ""),
-                }
+                })
+                return out
         return {"error": "không thấy .app/Contents/Info.plist (hoặc .app/Info.plist) trong DMG"}
     finally:
         subprocess.run(["hdiutil", "detach", mount, "-quiet"], capture_output=True, text=True)
@@ -418,6 +454,30 @@ def main() -> int:
                             f"rồi sinh lại profile và ký lại IPA")
             else:
                 result.ok("Nhóm keychain khớp profile", f"{sig}")
+
+        # macOS: vé staple + Gatekeeper + chữ ký — đúng những gì khách gặp khi mở lần đầu.
+        if "staple_ok" in internal:
+            if internal.get("staple_ok"):
+                result.ok("Vé staple của DMG", internal.get("staple_note") or "hợp lệ")
+            else:
+                result.fail("DMG CHƯA STAPLE",
+                            f"`xcrun stapler validate` thất bại ({internal.get('staple_note')}) ⇒ máy khách "
+                            f"không có vé để Gatekeeper đối chiếu ⇒ mở app báo 'không thể mở'. "
+                            f"Chạy `xcrun stapler staple <dmg>`; nếu phải ký lại DMG thì đúng thứ tự: "
+                            f"ký → notarytool submit --wait (Accepted) → staple")
+            if internal.get("app_staple_ok") is False:
+                result.fail("App bên trong chưa staple",
+                            "staple cả VPNFlow.app rồi mới tạo DMG (app phải tự mang vé, không chỉ DMG)")
+            if internal.get("spctl_ok") is False:
+                result.fail("Gatekeeper chặn (spctl)",
+                            f"{internal.get('spctl_note')} — khách sẽ không mở được")
+            elif internal.get("spctl_ok"):
+                result.ok("Gatekeeper (spctl)", internal.get("spctl_note") or "accepted")
+            if internal.get("codesign_ok") is False:
+                result.fail("Chữ ký app KHÔNG hợp lệ",
+                            f"codesign --verify --deep --strict: {internal.get('codesign_note')}")
+            elif internal.get("codesign_ok"):
+                result.ok("codesign --deep --strict", "valid on disk")
 
     # Windows: kiểm thêm exe app bên trong (nơi thực sự mang số hiệu người dùng thấy)
     if args.app_exe:

@@ -61,6 +61,19 @@ spctl -a -t open --context context:primary-signature -vv VPNFlow-mac.dmg   # acc
 ```
 ⚠️ **Ký DMG SAU khi staple sẽ làm vé staple mất hiệu lực** ⇒ nếu ký lại, phải **submit + staple lại** (đúng thứ tự: ký → submit → staple).
 
+### 4a. CỔNG CHẶN BẮT BUỘC (thêm 22/09/2026 — sau sự cố khách báo *"cài xong không mở được"*)
+```bash
+python3 scripts/check-publish-version.py --platform macos --file VPNFlow-mac.dmg --version 1.4.0 --build 14
+```
+Cổng này (chạy trên macOS) kiểm **4 thứ** và **chặn** nếu sai: `xcrun stapler validate` trên DMG,
+`stapler validate` trên `.app` bên trong, `spctl -a -t open --context context:primary-signature`,
+và `codesign --verify --deep --strict`. Trên máy không phải macOS nó báo `KHÔNG KIỂM ĐƯỢC` (exit 2),
+**không** giả vờ đạt.
+
+Vì sao cần: `spctl` trên **máy build** vẫn báo `Notarized Developer ID` dù DMG **chưa staple** (macOS
+đối chiếu online), nên rất dễ tưởng đã xong — trong khi máy khách (nhất là khi mạng yếu/không mạng)
+**không có vé** để đối chiếu ⇒ Gatekeeper chặn: *"không thể mở"*. Đúng ca 22/09/2026.
+
 ## 5. Phát hành
 ```bash
 cp backup: mv /root/flowvpn-mac/VPNFlow-mac.dmg /root/flowvpn-mac/VPNFlow-mac-unsigned-<date>.dmg
