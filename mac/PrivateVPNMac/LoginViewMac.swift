@@ -274,9 +274,11 @@ private enum LoginMessageMac: Equatable {
     }
 }
 
+#if DEBUG
 #Preview {
     LoginViewMac()
         .environmentObject(VPNManagerMac())
         .environmentObject(AuthSessionStore())
         .environmentObject(AppLanguageStore())
 }
+#endif

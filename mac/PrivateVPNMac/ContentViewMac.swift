@@ -545,6 +545,7 @@ struct ContentViewMac: View {
     }
 }
 
+#if DEBUG
 #Preview {
     ContentViewMac()
         .environmentObject(VPNManagerMac())
@@ -552,3 +553,4 @@ struct ContentViewMac: View {
         .environmentObject(AuthSessionStore())
         .environmentObject(AppLanguageStore())
 }
+#endif

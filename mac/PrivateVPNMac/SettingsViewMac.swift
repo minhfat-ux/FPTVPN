@@ -561,6 +561,7 @@ private struct MacBuyWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {}
 }
 
+#if DEBUG
 #Preview {
     SettingsViewMac()
         .environmentObject(VPNManagerMac())
@@ -568,3 +569,4 @@ private struct MacBuyWebView: NSViewRepresentable {
         .environmentObject(AuthSessionStore())
         .environmentObject(AppLanguageStore())
 }
+#endif

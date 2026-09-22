@@ -802,6 +802,7 @@ struct ContentView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     ContentView()
         .environmentObject(VPNManager())
@@ -810,3 +811,4 @@ struct ContentView: View {
         .environmentObject(AuthSessionStore())
         .environmentObject(AppLanguageStore())
 }
+#endif

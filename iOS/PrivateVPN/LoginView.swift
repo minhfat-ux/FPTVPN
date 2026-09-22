@@ -267,9 +267,11 @@ private enum LoginMessage: Equatable {
     }
 }
 
+#if DEBUG
 #Preview {
     LoginView()
         .environmentObject(VPNConfigStore())
         .environmentObject(AuthSessionStore())
         .environmentObject(AppLanguageStore())
 }
+#endif

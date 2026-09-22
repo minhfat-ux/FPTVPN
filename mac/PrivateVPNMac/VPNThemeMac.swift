@@ -126,6 +126,8 @@ enum AppTextKey: String {
     case disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle
     case startVPNHint, stopVPNHint
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
+    // T-20260922-02: mục About/Version trong Settings macOS (thiếu ở enum này làm target Mac không build được).
+    case about, version, latestOnServer, latestDifferent, latestUnavailable
 }
 
 @MainActor
@@ -203,7 +205,8 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "Your VPN tunnel is off", .connectingSubtitle: "Starting secure VPN tunnel",
             .connectedSubtitle: "Your traffic is protected", .disconnectingSubtitle: "Stopping VPN tunnel",
             .failedSubtitle: "VPN needs attention",
-            .startVPNHint: "Starts the VPN tunnel to the selected location", .stopVPNHint: "Stops the VPN tunnel"
+            .startVPNHint: "Starts the VPN tunnel to the selected location", .stopVPNHint: "Stops the VPN tunnel",
+            .about: "About", .version: "Version", .latestOnServer: "Latest on server", .latestDifferent: "DIFFERENT from installed build", .latestUnavailable: "(unavailable)"
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của VPNFlow để tiếp tục. Vui lòng tải bản mới tại meetflowai.site/buy.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
@@ -235,7 +238,8 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN tunnel đang tắt", .connectingSubtitle: "Đang khởi động VPN tunnel bảo mật",
             .connectedSubtitle: "Lưu lượng của bạn đang được bảo vệ", .disconnectingSubtitle: "Đang dừng VPN tunnel",
             .failedSubtitle: "VPN cần được kiểm tra",
-            .startVPNHint: "Bắt đầu VPN tunnel tới vị trí đã chọn", .stopVPNHint: "Dừng VPN tunnel"
+            .startVPNHint: "Bắt đầu VPN tunnel tới vị trí đã chọn", .stopVPNHint: "Dừng VPN tunnel",
+            .about: "Giới thiệu", .version: "Phiên bản", .latestOnServer: "Bản mới nhất trên server", .latestDifferent: "KHÁC bản đang cài", .latestUnavailable: "(không đọc được)"
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 VPNFlow 才能继续。请前往 meetflowai.site/buy 下载最新版本。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
@@ -267,7 +271,8 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN 隧道已关闭", .connectingSubtitle: "正在启动安全 VPN 隧道",
             .connectedSubtitle: "你的流量正在受到保护", .disconnectingSubtitle: "正在停止 VPN 隧道",
             .failedSubtitle: "VPN 需要检查",
-            .startVPNHint: "连接到所选位置的 VPN 隧道", .stopVPNHint: "停止 VPN 隧道"
+            .startVPNHint: "连接到所选位置的 VPN 隧道", .stopVPNHint: "停止 VPN 隧道",
+            .about: "关于", .version: "版本", .latestOnServer: "服务器最新版本", .latestDifferent: "与已安装版本不同", .latestUnavailable: "(无法读取)"
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "VPNFlow の新しいバージョンが必要です。最新版は meetflowai.site/buy からダウンロードしてください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
@@ -299,7 +304,8 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN トンネルはオフです", .connectingSubtitle: "安全な VPN トンネルを開始中",
             .connectedSubtitle: "通信は保護されています", .disconnectingSubtitle: "VPN トンネルを停止中",
             .failedSubtitle: "VPN の確認が必要です",
-            .startVPNHint: "選択した場所への VPN トンネルを開始します", .stopVPNHint: "VPN トンネルを停止します"
+            .startVPNHint: "選択した場所への VPN トンネルを開始します", .stopVPNHint: "VPN トンネルを停止します",
+            .about: "情報", .version: "バージョン", .latestOnServer: "サーバーの最新版", .latestDifferent: "インストール済みと異なります", .latestUnavailable: "(取得できません)"
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 VPNFlow 버전이 필요합니다. 최신 버전을 meetflowai.site/buy에서 다운로드하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
@@ -331,7 +337,8 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN 터널이 꺼져 있습니다", .connectingSubtitle: "보안 VPN 터널을 시작하는 중",
             .connectedSubtitle: "트래픽이 보호되고 있습니다", .disconnectingSubtitle: "VPN 터널을 중지하는 중",
             .failedSubtitle: "VPN 확인이 필요합니다",
-            .startVPNHint: "선택한 위치로 VPN 터널을 시작합니다", .stopVPNHint: "VPN 터널을 중지합니다"
+            .startVPNHint: "선택한 위치로 VPN 터널을 시작합니다", .stopVPNHint: "VPN 터널을 중지합니다",
+            .about: "정보", .version: "버전", .latestOnServer: "서버 최신 버전", .latestDifferent: "설치된 버전과 다름", .latestUnavailable: "(읽을 수 없음)"
         ],
     ]
 }
