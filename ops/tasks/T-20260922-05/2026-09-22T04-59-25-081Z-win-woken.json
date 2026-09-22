@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T04:59:25.082Z",
+ "note": "connector VPS: done từ mac — T-20260922-05 · macOS KHAN: DMG chua staple => khach cai xong bao 'khong the mo' - staple + verify + phat lai",
+ "via": "dsh --profile headless \"{prompt}\""
+}
