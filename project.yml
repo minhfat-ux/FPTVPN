@@ -142,6 +142,11 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/RelayDiagnostics.swift
       # Hằng số transport hysteria2 dùng chung với app (xem HysteriaDefaults).
       - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
+      # A7 — bản bundle dự phòng danh sách IP TQ (trùng file production; xem ChinaRouteBypass).
+      - path: docs/routes/cn.txt
+        buildPhase: resources
+      - path: docs/routes/cn6.txt
+        buildPhase: resources
       # KHÔNG kèm WireGuardConfig.swift/KeychainStore.swift/ControlAPIClient.swift: cả ba
       # `import WireGuardKit`, mà target này cố ý không có WireGuardKit (xem trên).
       # KHÔNG kèm NodeHealthReporter.swift: gọi ControlAPIHosts (ControlAPIClient.swift) và
@@ -199,6 +204,11 @@ targets:
       # A7/A9: chia đường theo IP TQ + client route-report — thuần logic, test không cần extension.
       - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
       - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
+      # A7: bản bundle dự phòng (test `ChinaRouteBypassTests` đọc qua Bundle).
+      - path: docs/routes/cn.txt
+        buildPhase: resources
+      - path: docs/routes/cn6.txt
+        buildPhase: resources
     dependencies:
       - target: PrivateVPN
     settings:
@@ -344,6 +354,11 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/RelayDiagnostics.swift
       # Hằng số transport dùng chung với app (xem HysteriaDefaults).
       - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
+      # A7 — bản bundle dự phòng danh sách IP TQ (trùng file production; xem ChinaRouteBypass).
+      - path: docs/routes/cn.txt
+        buildPhase: resources
+      - path: docs/routes/cn6.txt
+        buildPhase: resources
       # KHÔNG kèm NodeHealthReporter.swift: nó gọi ControlAPIHosts
       # (ControlAPIClient.swift) và kéo theo nguyên một tầng mạng không cần cho tunnel.
     info:

@@ -95,3 +95,32 @@ wc -l <(curl -s https://meetflowai.site/dl/routes/cn.txt)   # 5494 dải IP TQ
   `providerConfiguration` và (2) máy trạng thái ở `DEV_PLAN` §5b bước 2.
 - **macOS**: A7 chưa bật (chờ giai đoạn 2, cần cách vòng tunnel khác vì `excludedRoutes` đã gây lệch
   route — `HysteriaPacketTunnelProvider.swift:817`).
+
+## 5. Follow-up bus #146 + commit `92f60c9` (WIN, 22/09): bundle sẵn + bịt rò IPv6
+
+### 5.1 Đã làm: bundle `cn.txt` + `cn6.txt` làm bản dự phòng
+
+`ChinaRouteBypass.cached()` / `cachedIPv6()` nay theo thứ tự: **bản nhớ (`UserDefaults`)** →
+**bản bundle sẵn** (tài nguyên `cn.txt` + `cn6.txt`, chép vào bundle của extension iOS/macOS + test
+target trong `project.yml`). Nhờ vậy lần đầu chạy/mạng yếu/DNS bị chặn mà tải thất bại thì A7 **vẫn
+có tác dụng** (app TQ không bị đẩy qua VPN). Bản mới vẫn được tải ở LUỒNG NỀN rồi ghi đè bản nhớ.
+
+### 5.2 IPv6: đã bịt rò — TQ đi thẳng, phần còn lại CHẶN (theo chốt của chủ dự án ở `92f60c9`)
+
+Sự thật trước đây (đã soát code): `HysteriaPacketTunnelProvider.networkSettings()` **chỉ** đặt
+`settings.ipv4Settings`, **không** có `settings.ipv6Settings` ⇒ **MỌI** IPv6 đi thẳng ra nhà mạng
+(rò IP thật). Không phải "TQ IPv6 đi qua VPN" như bản mô tả `2b9173d`; vấn đề là **rò IPv6**.
+
+Thiết kế đã chốt + đã cài: server **không có IPv6** (`92f60c9`: `curl -6` fail, không default route,
+forwarding=0) nên **không thể** đưa `::/0` vào tunnel để "đi ra". Vì vậy:
+
+| | Cài đặt |
+|---|---|
+| Dữ liệu | `docs/routes/cn6.txt` = **2.015 prefix IPv6** (WIN sinh từ APNIC, đã kiểm phủ đủ 2.043 dải) + `cn.txt` IPv4 |
+| Parse IPv6 | `ChinaRouteBypass.parseIPv6/normalizedIPv6CIDR/isValidIPv6` — loại `::/0` (dùng làm excluded sẽ rò toàn bộ IPv6), loại prefix > 128/sai |
+| `ipv6Settings` | iOS: `addresses = [HysteriaDefaults.tunIPv6Address]`, `prefix = 126`; `includedRoutes = [::/0]`; `excludedRoutes = cn6.txt` ⇒ **IPv6 TQ đi thẳng**, IPv6 còn lại vào tunnel — core không có IPv6 nên bị **chặn**, không rò |
+| Không chặn connect | vẫn nạp/áp ở luồng nền sau `completeStart`, cùng cơ chế với IPv4 |
+| Chưa làm được ở máy này | Phải test trên iPhone thật: IPv6 TQ đi thẳng + IPv6 khác bị chặn + **không** làm hỏng IPv4/tunnel (vuông `T-20260922-04`) |
+
+**macOS:** vẫn để nguyên (không bật `excludedRoutes`) như trước — đo cũ cho thấy `excludedRoutes`
+làm lệch route trên macOS (`HysteriaPacketTunnelProvider.swift:817`); bật ở giai đoạn 2 kèm test máy thật.

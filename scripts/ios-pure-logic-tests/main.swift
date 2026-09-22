@@ -421,6 +421,21 @@ do {
     )
     checkEqual(capped.count, 3, "tôn trọng trần số dải")
     checkEqual(ChinaRouteBypass.uint32ToIPv4(ChinaRouteBypass.ipv4ToUInt32("1.2.3.4")!), "1.2.3.4", "round-trip IPv4")
+
+    // IPv6 (cn6.txt): TQ đi thẳng, `::/0` bị loại vì sẽ rò toàn bộ IPv6.
+    let sample6 = """
+    # comment
+    2001:250::/30
+    2001:250::/30
+    ::/0
+    not-an-ipv6
+    2001:db8::1/129
+    2400:cb00::/32
+    """
+    checkEqual(ChinaRouteBypass.parseIPv6(sample6), ["2001:250::/30", "2400:cb00::/32"], "parse IPv6 + bỏ ::/0/trùng/sai")
+    checkEqual(ChinaRouteBypass.normalizedIPv6CIDR("::1/128"), "::1/128", "IPv6 ::1/128")
+    check(ChinaRouteBypass.normalizedIPv6CIDR("2400:cb00::/129") == nil, "prefix IPv6 > 128 ⇒ nil")
+    check(ChinaRouteBypass.normalizedIPv6CIDR("1.2.3.4/24") == nil, "IPv4 không lọt vào parse IPv6")
 }
 
 print("")
