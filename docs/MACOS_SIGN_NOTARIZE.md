@@ -61,6 +61,34 @@ spctl -a -t open --context context:primary-signature -vv VPNFlow-mac.dmg   # acc
 ```
 ⚠️ **Ký DMG SAU khi staple sẽ làm vé staple mất hiệu lực** ⇒ nếu ký lại, phải **submit + staple lại** (đúng thứ tự: ký → submit → staple).
 
+### 4b. Phải staple CẢ app + appex BÊN TRONG DMG — không chỉ staple file DMG
+> Bài học P0 22/09/2026: DMG đang phát **đã staple** (spctl `accepted`), nhưng `stapler validate`
+> trên `VPNFlow.app` (và `PrivateVPNMacPacketTunnel.appex`) bên trong lại báo **chưa có vé** ⇒ khách
+> cài xong mở app bị Gatekeeper chặn (nhất là máy không ra được dịch vụ notarize của Apple, ví dụ ở TQ).
+> `stapler staple <file>.dmg` **chỉ** gắn vé cho file DMG, KHÔNG gắn cho code bên trong.
+
+Quy trình sửa lại một DMG đã notarize (không cần build lại app):
+```bash
+# 1) mở DMG ra bản đọc-ghi, staple app + extension BÊN TRONG
+hdiutil convert VPNFlow-mac.dmg -format UDRW -o rw.dmg
+hdiutil attach rw.dmg -nobrowse -readwrite -mountpoint /tmp/vpnflow-rw
+APP=/tmp/vpnflow-rw/VPNFlow.app
+xcrun stapler staple "$APP"
+xcrun stapler staple "$APP/Contents/PlugIns/PrivateVPNMacPacketTunnel.appex"
+xcrun stapler validate "$APP"     # "The validate action worked!"
+hdiutil detach /tmp/vpnflow-rw
+# 2) đóng gói lại rồi ký MỚI → notarize → staple theo đúng §3–§4
+hdiutil convert rw.dmg -format UDZO -o VPNFlow-mac.dmg
+codesign --force --timestamp --sign "$ID" VPNFlow-mac.dmg
+xcrun notarytool submit VPNFlow-mac.dmg --key ~/.vpnflow-asc/AuthKey.p8 \
+      --key-id "$KEYID" --issuer "$ISSUER" --wait          # Accepted
+xcrun stapler staple VPNFlow-mac.dmg
+```
+Kiểm chứng cuối — **cả 3** phải đạt: `xcrun stapler validate <DMG>`, `xcrun stapler validate <app-trong-DMG>`
+(và `.appex`), `spctl -a -t open --context context:primary-signature -vv <DMG>`.
+⚠️ `Hysteria.framework` bên trong appex có thể không có vé riêng (stapler trả *Error 73*) — bỏ qua được,
+miễn app + appex đã có vé.
+
 ## 5. Phát hành
 ```bash
 cp backup: mv /root/flowvpn-mac/VPNFlow-mac.dmg /root/flowvpn-mac/VPNFlow-mac-unsigned-<date>.dmg
@@ -76,3 +104,4 @@ curl -sI https://t1.meetflowai.site/v1/downloads/mac     # 200 + content-length 
 | notarize **Invalid**: *“…/Hysteria.framework/…/Hysteria: binary is not signed with a valid Developer ID certificate / no secure timestamp”* | framework Go nhúng chưa ký | ký framework **trước** appex/app (§2b) |
 | TestFlight: *90171 Invalid bundle structure … standalone executables* | App Store **cấm** binary rời trong framework (luật khác macOS) | phải **bỏ/đóng gói lại** framework cho bản App Store (chưa xong — xem manifest “Việc chưa xong”) |
 | Khách vẫn thấy cảnh báo dù đã notarize | DMG chưa ký hoặc staple sai thứ tự | làm đúng §3–§4 rồi `spctl` kiểm lại |
+| Khách cài xong mở app báo *“không thể mở”*, mà `spctl` trên DMG vẫn `accepted` | DMG **đã** staple nhưng **app/.appex bên trong chưa có vé** (stapler chỉ gắn vé cho file DMG) | staple app + appex bên trong rồi đóng gói/ký/notarize/staple lại — xem §4b (đã xử 22/09/2026) |
