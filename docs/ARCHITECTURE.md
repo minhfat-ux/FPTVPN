@@ -176,6 +176,17 @@ LEGACY (App-Store-review build, LEGACY_MODE=1 only):
   → same provisioning as above
 ```
 
+> **⚠️ SUPERSEDED (2026-09-22) — see `docs/adr/0005-legacy-mode-fail-closed.md`.**
+> The "App-Store-review build" justification above is no longer valid for iOS: §B6 records that
+> iOS ships by **Ad Hoc OTA**, not through App Store review. Production was re-confirmed to be
+> running `LEGACY_MODE=1` (see `evidence/2026-09-22-legacy-mode-production-probe.md`), so
+> `POST /v1/tokens` is currently open to the internet. The **only** remaining client dependency is
+> Windows (`windows/PrivateVPNWindows.App/Views/MainView.axaml.cs:254`); iOS, macOS and Android all
+> provision through `/v1/enrollment-tokens` with a session and an active-subscription check.
+> ADR-0005 retires this path in four ordered phases. Also note `LEGACY_MODE` defaults to `"1"`
+> (fail-open) at `control-plane/src/index.js:151` — the only dev/legacy flag without an
+> `!IS_PRODUCTION` guard.
+
 Note: Sign in with Apple and Firebase Auth are explicitly NOT used (owner decision
 2026-08-23); production login is email-OTP only, delivered by the owner SMTP mail server
 (Postfix 465; SPF pass + DMARC p=none verified 2026-08-23 — iCloud/Gmail receive OTP).
@@ -227,7 +238,7 @@ Không còn App Store/TestFlight: iOS phát bằng **Ad Hoc OTA** ngay trên dom
 
 Chi tiết + toàn bộ bẫy đã gặp: **`docs/IOS_ADHOC_OTA.md`**.
 
-### B6. Android / Windows client clone target
+### B7. Android / Windows client clone target
 
 - Android and Windows clients reuse the production coordinator and exit-node
   registry. They should not duplicate backend functionality.

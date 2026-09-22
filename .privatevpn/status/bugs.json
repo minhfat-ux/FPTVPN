@@ -1,6 +1,35 @@
 {
   "open": [
     {
+      "id": "BUG-20260823-001",
+      "title": "Production /v1/tokens mở không cần auth (LEGACY_MODE=1) — bypass paywall + bypass revoke",
+      "area": "control-plane",
+      "severity": "high",
+      "reported": "2026-08-23",
+      "status": "open",
+      "reconfirmed": "2026-09-22",
+      "impact": "Ai cũng mint được join token -> dùng exit node VN miễn phí (bypass paywall). Thiết bị đã revoke có thể đăng ký lại qua nhánh legacy (userId=null) -> FR-REVOKE-002 bị đe doạ (chưa kiểm chứng). Peer tạo qua legacy không gắn user -> có thể nằm ngoài hạn mức 3 thiết bị.",
+      "evidence": [
+        "control-plane/src/index.js:151 - const LEGACY_MODE = process.env.LEGACY_MODE ?? \"1\" (fail-OPEN)",
+        "control-plane/src/index.js:4283 - /v1/tokens cấp token không auth khi LEGACY_MODE === \"1\"",
+        "control-plane/src/index.js:318 - middleware AUTH_TOKEN miễn trừ /v1/tokens",
+        "control-plane/src/index.js:144,152,153 - 3 cờ dev/legacy khác đều có !IS_PRODUCTION; LEGACY_MODE là cờ DUY NHẤT thiếu guard này",
+        "control-plane/src/index.js:4919-4931 - nhánh register legacy không auth, userId=null",
+        "Evidence 2026-09-22: POST /v1/peers/register (không bearer, join_token rác) -> 401 {\"error\":\"Invalid or expired join token\"} = chỉ đến từ nhánh legacy => production ĐANG ở LEGACY_MODE=1",
+        "evidence/2026-09-22-legacy-mode-production-probe.md"
+      ],
+      "blocker": "Windows là client DUY NHẤT còn phụ thuộc: windows/PrivateVPNWindows.App/Views/MainView.axaml.cs:254 gọi FetchJoinTokenAsync() + :262 accessToken: null trên MỌI lần Connect. Đặt LEGACY_MODE=0 ngay sẽ làm mọi máy Windows mất kết nối ở lần Connect kế tiếp. ControlApiClient.cs:439-451 đã có sẵn FetchEnrollmentTokenAsync -> thiếu phần nối dây, không thiếu năng lực.",
+      "next_steps": "Theo docs/adr/0005-legacy-mode-fail-closed.md: P0 đổi default sang opt-in + xoá control-plane/src/dep-index.js (bản trùng chết, có cùng logic LEGACY_MODE, không được tham chiếu ở đâu); P1 log mọi lần gọi /v1/tokens; P2 sửa Windows sang enrollment token + Bearer; P3 LEGACY_MODE=0; P4 xoá hẳn route + createJoinToken/consumeJoinToken. LƯU Ý: P0 phải kiểm tra systemd unit có set LEGACY_MODE=1 tường minh không, nếu không thì P0 chính là cú cắt.",
+      "doc": "docs/adr/0005-legacy-mode-fail-closed.md",
+      "blocked_by": "Cần 1 bản Windows mới được phát hành trước khi cắt; control-plane/src/index.js là vùng bảo vệ của owner windows (AGENTS.md §6b) nên mac không được sửa",
+      "owner_decision_needed": [
+        "systemd unit production có set LEGACY_MODE=1 tường minh không?",
+        "Có chấp nhận đưa bản Windows lên đường găng trước khi cắt không?",
+        "Windows có cần gate premium phía client hay chỉ cần thông báo 403 rõ ràng?",
+        "Cửa sổ rollback 1 tuần đã đủ chưa?"
+      ]
+    },
+    {
       "id": "BUG-ANDROID-CPU-001",
       "title": "App Android tốn nhiều CPU (Hysteria + gVisor + QUIC; probe 15s chạy 24/7)",
       "area": "android",
@@ -24,5 +53,5 @@
   ],
   "regressions": [],
   "resolved": [],
-  "updated": "2026-09-17"
+  "updated": "2026-09-22"
 }
