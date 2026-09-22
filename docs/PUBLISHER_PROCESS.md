@@ -77,6 +77,11 @@ khác nhau cho **cùng một version** ⇒ chỉ lấy bản có xác nhận tes
 chủ dự án/orchestrator — publisher không tự phán.
 
 ## 3. Đích trên node-2 (route nào đọc file nào)
+
+> **Ngoại lệ KHÔNG được đổi host: relay WS.** Mọi link khách bấm đều dùng `t1.meetflowai.site`, nhưng
+> relay (`wss://api.meetflowai.site/relay/vn1wg|vn1hy|vn2wg|vn2hy`) **phải giữ host `api.meetflowai.site`**
+> vì Caddy chỉ route `/relay/*` trên host đó — đổi là toàn bộ khách mất mạng. `check-public-surface.py`
+> có mục kiểm riêng cho việc này.
 | Nền tảng | File trên node-2 | Route phát |
 |---|---|---|
 | iOS (IPA ad-hoc) | `/root/flowvpn-ipa/VPNFlow-latest.ipa` | `GET /v1/downloads/ios` |
@@ -117,9 +122,17 @@ python3 scripts/send-reinstall-guide.py --all-stuck --test   # gửi thử tới
 - Vết gửi: `/root/flowvpn-cp/data/reinstall-guide-log.jsonl`; đối chiếu trạng thái thật bằng Resend list API (`last_event = delivered`).
 - Nhịp: chạy `--stuck` sau mỗi lần phát hành; khách đăng ký mới mà quá 24h chưa có device ⇒ thêm vào danh sách gửi.
 
+## 5c. Guard tự động (khách mới chưa cài/chưa chạy được)
+`flowvpn-guard.service` trên node-2 chạy mỗi 5 phút: phát hiện khách **mới đăng ký** mà không có
+device (`never_installed`) hoặc có device nhưng `lastSeenAt` rỗng (`never_connected`) → tự gửi email
+hướng dẫn theo đúng nền tảng + phiên bản đang phát; ≥3 khách cùng nền tảng trong 24h → tạo task +
+alert Telegram, **chờ chủ dự án `/approve` mới được sửa**; khi bản mới publish → tự đóng task và mời
+lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi tiết: `PROTOCOL.md` §9.
+
 ## 6. Nhật ký phát hành (cập nhật mỗi lần)
 | Ngày | Nền tảng | Version/build | Ghi chú |
 |---|---|---|---|
+| 2026-09-22 | Windows | **1.4.2** | Sửa **metadata version** (bản 1.4.1 phát ra có `FileVersion 1.0.0.0` dù installer tên 1.4.1) + `Settings → About` hiện số hiệu và đối chiếu mốc server. Setup 52.794.169 B · sha256 `60ea6f31…86c6` · `/buy` trỏ `?v=60ea6f31` · mốc `latest_version=1.4.2` · **cổng chặn `scripts/check-publish-version.py` chạy cả 2 chế độ: pre ĐẠT, post ĐẠT** (đọc version trong file ĐANG PHÁT = 1.4.2) |
 | 2026-09-20 | iOS | 1.4.0 (16) | **Ký lại Ad Hoc cho 8 UDID** (`get-task-allow=false` ⇒ khách KHÔNG cần Developer Mode) · IPA đang phát 8.135.823 B · manifest `bundle-version` 16 |
 | 2026-09-19 | iOS | 1.4.0 (15) | IPA 5.049.845 B · sha256 `b6bf9a04…0677` · đã upload + set mốc |
 | 2026-09-19 | Android | 1.4.0 (20) | file đang phát trên node-2: modern 96.536.145 B (`/root/flowvpn-apk/VPNFlow-latest.apk`, 19/09 22:25 — sau fix timeout `a41bc6e`+`2c34cfb`) · legacy 96.536.152 B |
@@ -129,6 +142,8 @@ python3 scripts/send-reinstall-guide.py --all-stuck --test   # gửi thử tới
 | 2026-09-18 | Android | 1.3.9 | trước 1.4.0 |
 | 2026-09-20 | macOS | 1.3.3 (13) | **Ký Developer ID + notarize + staple** (DMG 21.617.309 B) → khách mở không cảnh báo · email 3 ngôn ngữ gửi 17/17 khách |
 | 2026-09-22 | macOS | 1.4.0 (14) | **Đo lại bằng cổng chặn §5b**: DMG đang phát (21.617.309 B · sha256 `9d05f271…`) đọc từ trong file ra `CFBundleShortVersionString=1.4.0`, `CFBundleVersion=14` → **khớp** mốc `latest_mac_version=1.4.0`; đính chính mục 1d |
+
+| 2026-09-21 | dev | guard + link | **Thống nhất mọi link khách tải về `t1.meetflowai.site`** (env `PUBLIC_SITE_URL`+`API_HOSTS`, `ios_ipa_url`/`android_apk_url(_legacy)`/`windows_installer_url`) · thêm `flowvpn-guard` (email tự động cho khách mới bị tắc + task chờ approve trên Telegram: `/guard`, `/approve`, `/reject`) |
 
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
