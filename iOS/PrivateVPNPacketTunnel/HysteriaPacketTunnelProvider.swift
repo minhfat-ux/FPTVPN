@@ -60,6 +60,20 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Trần thời gian một lần probe.
     private static let probeTimeout: TimeInterval = 3
 
+    // MARK: Ngưỡng watchdog SỐNG-CÒN chạy suốt phiên (parity Windows 1.4.1)
+
+    /// Nhịp kiểm tra sống-còn. Cùng nhịp 15s của `RelayHealthWatchdog` bản Windows.
+    private static let livenessInterval: TimeInterval = 15
+    /// Chiều VỀ (`fromGo`) đứng yên ngần này thì mới coi là "im" — đủ dài để không nhầm với
+    /// một khoảng lặng bình thường khi người dùng không duyệt web.
+    private static let livenessSilenceLimit: TimeInterval = 60
+    /// Số nhịp liên tiếp "im VÀ máy vẫn gửi gói vào tunnel" để kết luận đường hỏng.
+    private static let livenessStrikesToRebuild = 3
+    /// Trần số lần TỰ DỰNG LẠI transport trước khi chịu thua và gỡ tunnel (giống Windows).
+    private static let livenessRebuildMax = 3
+    /// Nhịp chờ trước mỗi lượt dựng lại — Windows dùng đúng 2s/5s/10s.
+    private static let livenessRebuildBackoff: [TimeInterval] = [2, 5, 10]
+
     /// Hàng đợi riêng: `HysteriaTransport.start` CHẶN (chờ WS mở + bắt tay QUIC) nên không
     /// được chạy trên main thread của extension.
     private let queue = DispatchQueue(label: "com.privatevpn.mac.hysteria-tunnel")
@@ -92,6 +106,19 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private var statusCode: String?
     private var statusMessage: String?
 
+    // MARK: Watchdog SỐNG-CÒN suốt phiên (xem `startLivenessWatchdog`)
+
+    /// Quyết định thuần logic (test được) — bơm bộ đếm gói vào mỗi nhịp.
+    private var liveness: LivenessWatchdog?
+    private var livenessTimer: DispatchSourceTimer?
+    private var livenessSession = 0
+    /// Đang trong chuỗi tự dựng lại: nhịp watchdog không được chồng thêm và không đụng vào.
+    private var livenessRecovering = false
+    /// Số lượt dựng lại đã dùng của chuỗi phục hồi hiện tại.
+    private var livenessRebuildAttempts = 0
+    /// Phiên đã dừng: mọi callback `asyncAfter` còn treo phải tự bỏ.
+    private var livenessCancelled = false
+
     // MARK: Khai băng thông động cho Brutal CC (xem `HysteriaBandwidthControl`)
 
     /// Số khai + bộ nhớ theo mạng của phiên hiện tại. `nil` ⇒ dùng đúng `HysteriaDefaults`.
@@ -105,8 +132,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private var activeBandwidthReason: BandwidthControl.Reason?
     /// Có yêu cầu ramp đang chờ dựng lại transport ở ranh giới an toàn (tunnel rảnh).
     private var bandwidthRampPending = false
-    /// Đang dựng lại transport để áp số khai — hai nhịp (1s và watchdog) không được cùng làm.
-    private var bandwidthRebuildInFlight = false
+    /// Chủ sở hữu ĐỘC QUYỀN việc dựng lại transport: `"bandwidth"` (ramp) hoặc `"liveness"`
+    /// (watchdog sống-còn). Cả hai đều thay transport trên cùng fd/cầu nên chồng nhau là hỏng;
+    /// một thời điểm chỉ một đường được giữ.
+    private var transportRebuildOwner: String?
+    private let rebuildLock = NSLock()
     /// Mốc đã ghi bộ nhớ lần trước (để chốt đỉnh đo được ngay cả khi tunnel bị đứt).
     private var measuredPeakDownKbps = 0
     /// Nhịp lấy mẫu byte: 1s (yêu cầu "đo trong ≤3 giây" ⇒ mẫu thứ 2–3 đã có số nếu có traffic).
@@ -279,7 +309,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
         let hysteria: HysteriaTransport
         do {
-            hysteria = try startTransport(options: options, replaceExisting: false)
+            hysteria = try startTransport(options: options)
         } catch {
             RelayDiagnostics.shared.log("hysteria: dựng thất bại: \(error)")
             flowLock.lock()
@@ -302,6 +332,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         completeStart(completion, error: nil, session: currentSession)
         startTrafficSupervisor()
         startBandwidthSampling()
+        startLivenessWatchdog()
     }
 
     /// Dựng transport hysteria2 với fd utun ĐANG dùng của NetworkExtension.
@@ -311,8 +342,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// hay tự gỡ tunnel như khi transport chết.
     @discardableResult
     private func startTransport(
-        options: HysteriaTransport.Options,
-        replaceExisting: Bool
+        options: HysteriaTransport.Options
     ) throws -> HysteriaTransport {
         flowLock.lock()
         let tunnelFd = tunnelFdForCounters
@@ -321,37 +351,24 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             throw ConfigFailure("chưa có fd utun để dựng transport")
         }
         let hysteria = HysteriaTransport(log: log)
-        // Cờ vào THẲNG closure: transport nào là transport cũ bị thay ra thì cái chết của nó
-        // KHÔNG được hạ tunnel. So identity ở đây là đủ và không phụ thuộc thứ tự gán `transport`.
-        let isReplacement = replaceExisting
         flowLock.lock()
         transport = hysteria
         flowLock.unlock()
         do {
             try hysteria.start(options: options, tunnelFd: tunnelFd) { [weak self] reason in
                 guard let self else { return }
-                // Đường ramp đã bỏ transport cũ ĐỂ DỰNG LẠI với số khai mới: cái chết đó là theo
-                // thiết kế (mọi thứ vẫn "Connected"), KHÔNG được hạ tunnel.
-                if isReplacement, self.currentTransport() !== hysteria {
+                // Transport nào KHÔNG còn là transport ĐANG chạy thì cái chết của nó là theo
+                // thiết kế (ramp băng thông hoặc tự phục hồi đã thay nó ra) — KHÔNG được hạ tunnel.
+                // So identity là đủ và không phụ thuộc thứ tự gán `transport`.
+                guard self.currentTransport() === hysteria else {
                     RelayDiagnostics.shared.log(
-                        "hysteria: transport cũ đã dừng để dựng lại (\(reason)) — tunnel giữ nguyên"
+                        "hysteria: transport cũ đã dừng (\(reason)) — tunnel giữ nguyên"
                     )
                     return
                 }
-                // Chỉ chết của transport ĐANG chạy mới được quyền gỡ tunnel.
-                guard !isReplacement, self.currentTransport() === hysteria else { return }
-                // Đường hysteria chết SAU khi đã lên: hạ tunnel ngay và báo lỗi cho app.
-                // Để nguyên chính là ca "Connected mà không có mạng".
-                RelayDiagnostics.shared.log("hysteria: transport chết (\(reason)) — hạ tunnel")
-                self.setStatus(
-                    state: "no_traffic",
-                    code: Self.codeNoTraffic,
-                    message: "Đường hysteria2 dừng (\(reason))."
-                )
-                self.teardownAndCancel(
-                    code: Self.codeNoTraffic,
-                    message: "Đường hysteria2 dừng: \(reason)"
-                )
+                // Transport ĐANG chạy chết giữa phiên: thử TỰ DỰNG LẠI (3 lần, 2/5/10s) trước khi
+                // gỡ tunnel. Để nguyên chính là ca "Connected mà không có mạng" (parity Windows 1.4.1).
+                self.handleTransportDeath(reason: reason)
             }
         } catch {
             // Dọn cầu (nếu có, chế độ bridge của macOS) trước khi ném lên: để nguyên là rò fd.
@@ -547,6 +564,34 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         return bandwidthRampPending
     }
 
+    /// Đang dựng lại transport để ramp băng thông — watchdog sống-còn phải nhường.
+    private var isBandwidthRebuildInFlight: Bool {
+        rebuildLock.lock(); defer { rebuildLock.unlock() }
+        return transportRebuildOwner == "bandwidth"
+    }
+
+    /// Đang trong chuỗi tự phục hồi sống-còn — đường ramp phải nhường.
+    private var isLivenessRecovering: Bool {
+        flowLock.lock(); defer { flowLock.unlock() }
+        return livenessRecovering
+    }
+
+    /// Giành quyền dựng lại transport (chỉ một đường giữ tại một thời điểm). Trả `false` nếu
+    /// đường khác đang giữ.
+    private func acquireTransportRebuild(owner: String) -> Bool {
+        rebuildLock.lock(); defer { rebuildLock.unlock() }
+        guard transportRebuildOwner == nil else { return false }
+        transportRebuildOwner = owner
+        return true
+    }
+
+    /// Nhả quyền — chỉ nhả nếu đúng là chủ sở hữu hiện tại (tránh nhả hộ đường khác).
+    private func releaseTransportRebuild(owner: String) {
+        rebuildLock.lock()
+        if transportRebuildOwner == owner { transportRebuildOwner = nil }
+        rebuildLock.unlock()
+    }
+
     private func markBandwidthRampNotPending() {
         bandwidthLock.lock()
         bandwidthRampPending = false
@@ -579,24 +624,19 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         guard BandwidthControl.allowsTransportRebuild else { return false }
         guard let bandwidth, bandwidth.pendingChange else { return false }
         guard isBandwidthRampPending else { return false }
+        // Tự phục hồi sống-còn đang dựng lại transport: để nó làm xong, đừng tranh fd.
+        guard !isLivenessRecovering else { return false }
         // HẠ số khai mà tunnel KHÔNG BAO GIỜ rảnh (đang flood) ⇒ buộc áp sau `pendingForceAfter`
         // (xem chú thích hằng số): đây là việc CHỮA, không phải tối ưu, nên được phép đứt stream
         // đang mở — để nguyên là số khai sai nằm lại trong transport cho tới khi tunnel chết.
         // TĂNG thì vẫn chỉ áp ở ranh giới rảnh.
         let forced = bandwidth.pendingForceExpired(Date())
         if !forced, !isBandwidthIdle() { return false }
-        // Chốt "đang dựng lại" trước mọi việc nặng: nhịp watchdog (5s) và nhịp lấy mẫu (1s) có
-        // thể cùng gọi hàm này ở hai hàng đợi khác nhau.
-        bandwidthLock.lock()
-        let alreadyRebuilding = bandwidthRebuildInFlight
-        if !alreadyRebuilding { bandwidthRebuildInFlight = true }
-        bandwidthLock.unlock()
-        guard !alreadyRebuilding else { return false }
-        defer {
-            bandwidthLock.lock()
-            bandwidthRebuildInFlight = false
-            bandwidthLock.unlock()
-        }
+        // Chốt "đang dựng lại" trước mọi việc nặng: nhịp watchdog (15s) và nhịp lấy mẫu (1s) có
+        // thể cùng gọi hàm này ở hai hàng đợi khác nhau, và watchdog sống-còn cũng dựng lại
+        // transport — độc quyền theo chủ sở hữu (xem `acquireTransportRebuild`).
+        guard acquireTransportRebuild(owner: "bandwidth") else { return false }
+        defer { releaseTransportRebuild(owner: "bandwidth") }
         let plan = bandwidth.plan
         if forced {
             RelayDiagnostics.shared.log(
@@ -660,8 +700,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
     /// Dừng transport cũ rồi dựng lại với số khai mới (giữ nguyên fd đã giao cho Go: đầu của
     /// cặp socketpair — cầu `TunnelBridge` vẫn chạy nguyên, chỉ relay + QUIC được dựng lại).
+    ///
+    /// Dùng CHUNG cho iOS và macOS (parity 1.4.1): fd của macOS cũng là cặp socketpair qua
+    /// `TunnelBridge` (`HysteriaTransport.resolveTunnelFD`) nên dựng lại transport trên cùng fd
+    /// là đủ — nhờ vậy số đo trong phiên được áp NGAY, không phải chờ lần kết nối sau.
     private func rebuildTransportForBandwidth() -> Bool? {
-        #if os(iOS)
         guard let bandwidth, var options = currentOptions else { return nil }
         let plan = bandwidth.plan
         options.upKbps = plan.upKbps
@@ -711,13 +754,6 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         )
         logDeclaration(key: bandwidth.key, event: "ramp đã áp")
         return true
-        #else
-        // macOS chưa bật: fd của phiên macOS cũng là cặp socketpair có cầu `TunnelBridge`
-        // (xem `HysteriaTransport.resolveTunnelFD`), nên về nguyên tắc dựng lại transport là
-        // đủ; nhưng đường này chưa được đo thực địa trên macOS nên ramp giữa phiên vẫn tắt ở
-        // đó. Số khai vẫn được kẹp theo mạng + bộ nhớ, chỉ không ramp giữa phiên.
-        return nil
-        #endif
     }
 
     /// Dựng transport, thử lại vài lượt khi Go còn giữ client cũ.
@@ -728,7 +764,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         var lastError: Error?
         for attempt in 0..<Self.rampTransportRetries {
             do {
-                try startTransport(options: options, replaceExisting: true)
+                try startTransport(options: options)
                 return
             } catch {
                 lastError = error
@@ -1143,6 +1179,267 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         timer?.cancel()
     }
 
+    // MARK: - Watchdog SỐNG-CÒN suốt phiên (parity Windows 1.4.1)
+
+    /// Bật watchdog "tunnel còn sống nhưng không chở gói" cho SUỐT phiên. Gọi sau khi transport
+    /// đã lên; huỷ trong `cancelScheduledWork` (cả `stopTunnel` lẫn `teardownAndCancel`).
+    ///
+    /// Nhịp 15s: đọc bộ đếm gói thật rồi giao `LivenessWatchdog` quyết định. Chỉ tự dựng lại khi
+    /// chiều VỀ im ≥60s VÀ máy VẪN gửi gói vào tunnel (bất đối xứng) đủ 3 nhịp — người dùng ngồi
+    /// yên không bị cắt oan (bài học từ `RelayHealthWatchdog` của Windows).
+    private func startLivenessWatchdog() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(
+            deadline: .now() + Self.livenessInterval,
+            repeating: Self.livenessInterval
+        )
+        timer.setEventHandler { [weak self] in self?.livenessStep() }
+        flowLock.lock()
+        livenessTimer?.cancel()
+        livenessTimer = timer
+        livenessSession = session
+        liveness = LivenessWatchdog(
+            now: Date(),
+            interval: Self.livenessInterval,
+            silenceLimit: Self.livenessSilenceLimit,
+            strikesToRebuild: Self.livenessStrikesToRebuild
+        )
+        livenessRecovering = false
+        livenessRebuildAttempts = 0
+        livenessCancelled = false
+        flowLock.unlock()
+        timer.resume()
+        RelayDiagnostics.shared.log(
+            "giám sát sống-còn: bật SUỐT phiên — nhịp \(Int(Self.livenessInterval))s; chiều về im "
+                + "\(Int(Self.livenessSilenceLimit))s VÀ máy vẫn gửi gói mới kết luận; đủ "
+                + "\(Self.livenessStrikesToRebuild) strike ⇒ tự dựng lại tối đa "
+                + "\(Self.livenessRebuildMax) lần (chờ 2/5/10s)"
+        )
+    }
+
+    private func cancelLivenessWatchdog() {
+        flowLock.lock()
+        let timer = livenessTimer
+        livenessTimer = nil
+        livenessCancelled = true
+        livenessRecovering = false
+        liveness = nil
+        flowLock.unlock()
+        // Nhả quyền dựng lại nếu chuỗi phục hồi còn treo (idempotent, chỉ nhả đúng chủ).
+        releaseTransportRebuild(owner: "liveness")
+        timer?.cancel()
+    }
+
+    /// Một nhịp: đọc bộ đếm, hỏi `LivenessWatchdog`, thi hành quyết định.
+    private func livenessStep() {
+        flowLock.lock()
+        let expected = livenessSession
+        let cancelled = livenessCancelled
+        let recovering = livenessRecovering
+        flowLock.unlock()
+        guard !cancelled, expected == currentSession else {
+            cancelLivenessWatchdog()
+            return
+        }
+        guard !recovering else { return }
+        // KHÔNG đọc bộ đếm trong lúc giữ `flowLock`: `trafficCounters` tự lấy khoá này.
+        let counters = trafficCounters
+        let rampInFlight = isBandwidthRebuildInFlight
+        flowLock.lock()
+        var verdict: LivenessWatchdog.Verdict = .idle
+        if var dog = liveness {
+            verdict = dog.tick(
+                now: Date(),
+                fromGo: counters?.fromGo,
+                toGo: counters?.toGo,
+                rampInFlight: rampInFlight
+            )
+            liveness = dog
+        }
+        flowLock.unlock()
+
+        switch verdict {
+        case .idle, .alive:
+            return
+        case .strike(let count):
+            RelayDiagnostics.shared.log(
+                "giám sát sống-còn: chiều về im ≥\(Int(Self.livenessSilenceLimit))s nhưng máy vẫn "
+                    + "gửi gói vào tunnel — strike \(count)/\(Self.livenessStrikesToRebuild) "
+                    + "(gói vào \(counters?.toGo ?? 0), ra \(counters?.fromGo ?? 0), nguồn "
+                    + "\(counters?.origin ?? "không đọc được"))"
+            )
+        case .rebuild:
+            RelayDiagnostics.shared.log(
+                "giám sát sống-còn: đủ \(Self.livenessStrikesToRebuild) strike — TỰ DỰNG LẠI transport"
+            )
+            beginTransportRecovery(
+                reason: "tunnel sống nhưng không chở gói (chiều về im "
+                    + "≥\(Int(Self.livenessSilenceLimit))s mà máy vẫn gửi)"
+            )
+        }
+    }
+
+    /// Transport ĐANG chạy chết giữa phiên ⇒ thử tự dựng lại (parity Windows 1.4.1) thay vì gỡ
+    /// tunnel ngay. Hết 3 lượt mới trả mạng về đường trực tiếp.
+    private func handleTransportDeath(reason: String) {
+        RelayDiagnostics.shared.log(
+            "hysteria: transport chết (\(reason)) — thử TỰ DỰNG LẠI (tối đa "
+                + "\(Self.livenessRebuildMax) lần) thay vì gỡ tunnel"
+        )
+        setStatus(
+            state: "reconnecting",
+            code: nil,
+            message: "Đường hysteria2 dừng (\(reason)). Đang tự dựng lại…"
+        )
+        beginTransportRecovery(reason: "transport chết: \(reason)")
+    }
+
+    /// Bắt đầu chuỗi tự dựng lại transport có trần (3 lần, chờ 2/5/10s). Không chồng lên chuỗi
+    /// khác và không tranh fd với đường ramp băng thông (độc quyền theo `transportRebuildOwner`).
+    private func beginTransportRecovery(reason: String) {
+        flowLock.lock()
+        let already = livenessRecovering
+        let cancelled = livenessCancelled
+        if !already {
+            livenessRecovering = true
+            livenessRebuildAttempts = 0
+        }
+        flowLock.unlock()
+        guard !already, !cancelled else { return }
+        guard acquireTransportRebuild(owner: "liveness") else {
+            // Đường ramp băng thông đang dựng lại transport: nhường nó (số khai mới rồi sẽ lên).
+            flowLock.lock()
+            livenessRecovering = false
+            flowLock.unlock()
+            RelayDiagnostics.shared.log(
+                "tự phục hồi: bỏ qua (\(reason)) vì đường ramp băng thông đang dựng lại transport"
+            )
+            return
+        }
+        RelayDiagnostics.shared.log(
+            "tự phục hồi: \(reason) — thử dựng lại tối đa \(Self.livenessRebuildMax) lần "
+                + "(chờ 2/5/10s), phiên \(currentSession)"
+        )
+        scheduleTransportRecoveryAttempt(expected: currentSession, reason: reason)
+    }
+
+    /// Lên lịch lượt kế tiếp (chờ theo backoff) hoặc chịu thua khi hết trần.
+    private func scheduleTransportRecoveryAttempt(expected: Int, reason: String) {
+        flowLock.lock()
+        let cancelled = livenessCancelled
+        let attempts = livenessRebuildAttempts
+        flowLock.unlock()
+        guard !cancelled, expected == currentSession else {
+            finishTransportRecovery(gaveUp: false, reason: reason)
+            return
+        }
+        guard attempts < Self.livenessRebuildMax else {
+            finishTransportRecovery(gaveUp: true, reason: reason)
+            return
+        }
+        let next = attempts + 1
+        let wait = Self.livenessRebuildBackoff[
+            min(next - 1, Self.livenessRebuildBackoff.count - 1)
+        ]
+        flowLock.lock()
+        livenessRebuildAttempts = next
+        flowLock.unlock()
+        RelayDiagnostics.shared.log(
+            "tự phục hồi: lần \(next)/\(Self.livenessRebuildMax) — chờ \(Int(wait))s rồi dựng lại"
+        )
+        queue.asyncAfter(deadline: .now() + wait) { [weak self] in
+            self?.runTransportRecoveryAttempt(next, expected: expected, reason: reason)
+        }
+    }
+
+    private func runTransportRecoveryAttempt(_ attempt: Int, expected: Int, reason: String) {
+        flowLock.lock()
+        let cancelled = livenessCancelled
+        flowLock.unlock()
+        guard !cancelled, expected == currentSession else { return }
+        if rebuildTransportForLiveness() {
+            let counters = trafficCounters
+            flowLock.lock()
+            if var dog = liveness {
+                dog.resetAfterRebuild(
+                    now: Date(),
+                    fromGo: counters?.fromGo ?? dog.lastFromGo,
+                    toGo: counters?.toGo ?? dog.baselineToGo
+                )
+                liveness = dog
+            }
+            livenessRecovering = false
+            livenessRebuildAttempts = 0
+            flowLock.unlock()
+            releaseTransportRebuild(owner: "liveness")
+            RelayDiagnostics.shared.log(
+                "tự phục hồi: ĐÃ dựng lại transport (lần \(attempt)) — tunnel giữ nguyên, "
+                    + "tiếp tục giám sát"
+            )
+            return
+        }
+        RelayDiagnostics.shared.log(
+            "tự phục hồi: lần \(attempt) dựng lại thất bại — thử lượt kế"
+        )
+        scheduleTransportRecoveryAttempt(expected: expected, reason: reason)
+    }
+
+    /// Kết thúc chuỗi phục hồi: thành công thì thôi; chịu thua thì gỡ tunnel để máy có mạng lại.
+    private func finishTransportRecovery(gaveUp: Bool, reason: String) {
+        flowLock.lock()
+        livenessRecovering = false
+        livenessRebuildAttempts = 0
+        flowLock.unlock()
+        releaseTransportRebuild(owner: "liveness")
+        guard gaveUp else { return }
+        RelayDiagnostics.shared.log(
+            "tự phục hồi: hết \(Self.livenessRebuildMax) lượt mà chưa lên — gỡ tunnel, trả mạng về "
+                + "đường trực tiếp (\(reason))"
+        )
+        setStatus(
+            state: "no_traffic",
+            code: Self.codeNoTraffic,
+            message: "Đã thử tự dựng lại \(Self.livenessRebuildMax) lần nhưng chưa được."
+        )
+        teardownAndCancel(
+            code: Self.codeNoTraffic,
+            message: "Không tự dựng lại được đường hysteria2 sau \(Self.livenessRebuildMax) lần "
+                + "(\(reason))."
+        )
+    }
+
+    /// Dừng transport hiện tại rồi dựng lại y nguyên `currentOptions` (giữ fd + cầu). Khác đường
+    /// ramp ở chỗ KHÔNG đổi số khai băng thông.
+    private func rebuildTransportForLiveness() -> Bool {
+        guard currentSession == livenessSession else { return false }
+        guard let options = currentOptions else {
+            RelayDiagnostics.shared.log(
+                "tự phục hồi: chưa có currentOptions — không dựng lại được"
+            )
+            return false
+        }
+        flowLock.lock()
+        let previous = transport
+        transport = nil
+        flowLock.unlock()
+        previous?.stop()
+        let started = Date()
+        do {
+            try startTransportRetrying(options: options)
+        } catch {
+            RelayDiagnostics.shared.log("tự phục hồi: dựng lại transport thất bại (\(error))")
+            return false
+        }
+        activeUpKbps = options.upKbps
+        activeDownKbps = options.downKbps
+        activeBandwidthReason = bandwidth?.planReason
+        RelayDiagnostics.shared.log(
+            "tự phục hồi: transport mới đã lên sau "
+                + "\(Self.seconds(Date().timeIntervalSince(started)))s"
+        )
+        return true
+    }
+
     private static func seconds(_ value: TimeInterval) -> String {
         String(format: "%.1f", value)
     }
@@ -1265,6 +1562,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         stopBandwidthSampling()
         bandwidth?.finish()
         cancelSupervisor()
+        cancelLivenessWatchdog()
         flowLock.lock()
         supervisorStopped = true
         flowLock.unlock()

@@ -144,6 +144,13 @@ Khác: tunnel lên lại sau **2 s** khi Connect; khai báo đọc từ bộ nh�
 | Kiểm chứng | `curl https://meetflowai.site/v1/downloads/mac` → 23.961.684 bytes, sha256 khớp `d416b3ff…` ✅ |
 | Nguồn | build từ cây làm việc 20/09 (guard + `pendingForceAfter` + lọc bộ nhớ nhiễm); nguồn **không đổi** trong lúc build (`shasum iOS/PrivateVPNPacketTunnel/*.swift` trước/sau) |
 
+> **Chốt 22/09/2026 — hai DMG 1.4.0/14 ở bảng trên KHÔNG còn là bản route đang phát.**
+> Đọc thẳng artifact hiện phục vụ (`GET /v1/downloads/mac`): DMG **21.617.309 B**, sha256
+> `9d05f271232b75ddbae281059ff48355d5162032cb2a86114fafc130bfd54597`; `Info.plist` app + extension =
+> **1.4.0 / build 14**; ký `Developer ID Application: Minh Nguyen (G6XW3RN6LJ)`; `spctl` =
+> `Notarized Developer ID`; `stapler validate` = **chưa staple**. Bảng trên là vết trung gian
+> 19–20/09 (23.961.684 / 23.972.080 B, Apple Development, chưa notarize) — giữ để đối chiếu lịch sử.
+
 ## 20/09/2026 — Sửa dashboard "đang kết nối" + alert máy mới + login nhảy 2 bản
 
 ### 1. Dashboard sai vì sao (đo thật)
