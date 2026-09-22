@@ -47,6 +47,7 @@ Số khai băng thông chỉ còn là tham số phụ (giữ để không tự b
 | **STABLE** | đạt mốc | **khoá** đường + số khai; ghi `stable at <X> Mbps`; **cấm** dựng lại vì lý do tốc độ | đường hỏng (A5) → DEGRADED; kênh dò chứng minh lãi → RAMP | `stable at <X> Mbps (path=<x>)` |
 | **PROBE** | trong STABLE, phiên rảnh ≥5 s | mở **kênh riêng** (mục 4.4); nhịp 5 phút → ×2 → trần 30 phút | gain ≥1,25× ở **2 lần liên tiếp** → RAMP; không → giữ nguyên | `probe: no gain (X vs Y) -> keep stable` |
 | **DEGRADED** | goodput <2 Mbps **và** probe hỏng, hoặc watchdog kết luận | chuyển đường/node kế tiếp; **phát hiện ≤15 s, có mạng lại ≤15 s** | có mạng → STABLE (mức cũ hoặc thấp hơn) | `degraded: detected in <t>s -> switching` |
+| **HOLD** (hết đường — chủ dự án chốt 22/09) | đã thử hết bậc đường mà vẫn không có mạng | **GIỮ đường đã chọn**, tunnel vẫn UP, **KHÔNG** `closeTun()` (không rò rỉ ra nhà mạng), **KHÔNG** hạ tunnel; **ping định kỳ ≤15 s** để chờ mạng về | ping thành công → về STABLE (mức cũ) rồi PROBE lại | `hold: giữ <path>, ping lại mỗi <t>s (lần <n>)` |
 
 ## 4. Thiết kế kỹ thuật (file:line, tái dùng tối đa)
 
@@ -80,8 +81,11 @@ mục tiêu ≤1–3 s. Nếu vượt ⇒ rollback về bậc cũ (giữ STABLE)
 ### 4.5 Watchdog (A5) — merge việc Mac đã làm
 Merge `LivenessWatchdog.swift` + vòng 15 s từ nhánh `mac/parity-1.4.1` vào `main`, rồi **chỉnh ngưỡng
 theo A5**: kết luận "đứng" khi im ≥ **15 s** (không phải 60 s) **và** có bằng chứng bất đối xứng
-(máy gửi mà không nhận); tự dựng lại tối đa 3 lần (2/5/10 s) rồi mới `teardownAndCancel` +
-`TUNNEL_NO_TRAFFIC`. Giữ nguyên tinh thần "không báo oan" (chỉ kết luận khi 2 tín hiệu cùng xấu).
+(máy gửi mà không nhận); tự dựng lại tối đa 3 lần (2/5/10 s).
+⚠️ **Sửa theo quyết định 22/09:** hết 3 lần dựng lại ⇒ **KHÔNG** `teardownAndCancel` nữa. Chuyển sang
+pha **HOLD** (§3): giữ nguyên đường đã chọn + tunnel UP + ping định kỳ ≤15 s chờ mạng về. Mã
+`TUNNEL_NO_TRAFFIC` chỉ dùng để **hiển thị/log**, không dùng để hạ tunnel. Giữ nguyên tinh thần
+"không báo oan" (chỉ kết luận khi 2 tín hiệu cùng xấu).
 
 ### 4.6 Rà 2 lỗi nhỏ nhưng khách thấy
 - **State/message lệch UI** (Android từng bị "Connected" + "Reconnecting…"): kiểm nhánh cập nhật
@@ -121,11 +125,14 @@ done
 
 ## 7. Ba câu hỏi PHẢI chủ dự án chốt trước khi code (không tự quyết)
 
-1. **Chính sách khi không còn đường nào** (`YEU_CAU_TOC_DO_ON_DINH.md` §4.2): Android hiện `closeTun()`
-   ⇒ máy **đi thẳng ra mạng nhà mạng (KHÔNG qua VPN)**, đổi lại "không mất mạng". iOS/macOS đang giữ
-   interface (không rò rỉ) nhưng gói bị chặn ⇒ khách thấy **mất mạng**. Chọn kiểu nào?
-   *(Đề xuất: giữ "không rò rỉ" cho VPN, nhưng **hạ tunnel + báo UI rõ** sau khi hết trần dựng lại —
-   an toàn hơn cho khách ở TQ; cần chủ dự án xác nhận.)*
+1. **Chính sách khi không còn đường nào** (`YEU_CAU_TOC_DO_ON_DINH.md` §4.2) — ✅ **CHỐT 22/09/2026 (chủ dự án):**
+   *"Hết mọi đường thì dùng được đã chọn và chờ ping tiếp thôi."*
+   ⇒ Nghĩa là: **KHÔNG** `closeTun()` (không để máy đi thẳng ra mạng nhà mạng), **KHÔNG** hạ tunnel,
+   **KHÔNG** báo lỗi rồi đứng. Giữ **đường đã chọn** (last-good), tunnel vẫn `Connected`, và **ping định
+   kỳ** (nhịp ≤15 s để thoả A5) chờ mạng về; ping được ⇒ về STABLE mức cũ rồi chạy lại PROBE.
+   Đây là pha **HOLD** ở §3. Hệ quả kỹ thuật: khi ở HOLD, UI **không** được đổi trạng thái VPN (vẫn
+   Connected); thông báo (nếu có) chỉ là dòng phụ, không chặn; và **cấm** mọi lần `closeTun()`/teardown
+   vì lý do tốc độ.
 2. **Mốc 8 Mbps khi mạng gốc thấp hơn 8**: giữ STABLE ở mức thấp nhất đạt được (không coi là fail) —
    đúng ý "stable ở mức đó" chứ? *(Đề xuất: có, kèm log `stable at <X> (below target)`.)*
 3. **Có được nâng cấp sang node KHÁC không** (A6 nêu "WS relay của node khác"): đổi node giữa phiên có
@@ -144,23 +151,3 @@ done
   đề xuất đợt này là **1.5.0** (iOS `CURRENT_PROJECT_VERSION` 18, macOS 16) — *chờ chủ dự án chốt số*.
   Sau khi build: cổng chặn → test iPhone thật (`PUBLISHER_PROCESS.md` §2c) → sổ `release-record append`
   → tag → email do publisher gửi.
-
-## 9. Trạng thái thi công (cập nhật 22/09/2026, T-20260922-10)
-
-Phần làm được NGAY (không phụ thuộc 3 câu hỏi §7) — nhánh `mac/toc-do-p0`, đã hợp vào `main`:
-
-| # | Việc | Trạng thái | Bằng chứng |
-|---|---|---|---|
-| P0-1 | Merge `mac/parity-1.4.1` (watchdog + tự dựng lại) + chỉnh ngưỡng A5 | ✅ | merge commit `ab04047`; ngưỡng: nhịp 15 s, im ≥**15 s** (trước 60 s) **VÀ** bất đối xứng ⇒ kết luận ở nhịp kế tiếp; tự dựng lại tối đa 3 lần (2/5/10 s) rồi `teardownAndCancel` + `TUNNEL_NO_TRAFFIC` |
-| P0-2 | `TransportLadder` + `GoodputMeter` (thuần logic) | ✅ | `iOS/PrivateVPNPacketTunnel/{TransportLadder,GoodputMeter}.swift`; test `iOS/PrivateVPNTests/{TransportLadder,GoodputMeter}Tests.swift`; harness `bash scripts/ios-pure-logic-tests/run.sh` → **39/39 PASS** |
-| P1-1a | State/message lệch UI | ✅ đã sửa | Sau khi tự dựng lại transport THÀNH CÔNG, extension không xoá state/message "đang dựng lại" ⇒ app giữ "Connected" + "Reconnecting…". Nay `setStatus(state: "up", code: nil, message: nil)`; state tạm đổi `reconnecting` → `rebuilding` cho khớp hợp đồng `TunnelStatusReport` |
-| P1-1b | 16 KB page size | ✅ ĐẠT, không cần build lại | Nhị phân iOS cuối (`PrivateVPNPacketTunnel`, arm64) có mọi `LC_SEGMENT_64` (`__TEXT`/`__DATA_CONST`/`__DATA`/`__LINKEDIT`) `vmaddr`+`fileoff` là bội số `0x4000` = 16 KB. Static archive (`libwg-go.a`, `Hysteria` framework) là object tái định vị, align nhỏ (≤ 2^5) — trang do bước link cuối quyết định nên không phải build lại gomobile/Go |
-
-**Chưa làm (đang chờ §7):** P0-3 máy trạng thái START/RAMP/STABLE/PROBE/DEGRADED, P0-4 kênh dò,
-P1-2 giảm dựng lại vì ramp. Ba câu hỏi §7 **chưa được trả lời** ⇒ không tự quyết.
-
-**Lỗ hổng tài liệu phát hiện khi thi công:** `docs/YEU_CAU_TOC_DO_ON_DINH.md` và `docs/VERSIONING.md`
-được kế hoạch này trích dẫn là "đầu vào bắt buộc đọc trước" nhưng **không tồn tại trong repo**
-(đã `git log --all -- '*YEU_CAU_TOC_DO*'`/`'*VERSIONING*'` = rỗng). Cần bổ sung để các mốc A1–A6 và
-luật tăng version có nguồn thật, tránh thi công dựa vào bản tóm tắt.
-
