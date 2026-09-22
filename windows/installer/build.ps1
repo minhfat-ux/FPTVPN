@@ -53,6 +53,22 @@ foreach ($f in @("wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe", "sing-box
   Write-Host ("    OK {0} ({1:N0} KB)" -f $f, ((Get-Item $p).Length / 1KB))
 }
 
+# 1b) VERSION phải giải TRƯỚC khi publish.
+#     Vì sao: trước 21/09/2026 khối này nằm SAU bước publish nên `dotnet publish` không nhận
+#     `/p:Version`, app tự khai 1.0.0 trong khi installer tên `VPNFlow-Setup-1.4.1.exe` — cổng
+#     `scripts/check-publish-version.py` bắt được (FileVersion 1.0.0.0 ≠ định phát 1.4.1).
+#     Thứ tự: tham số -Version > <Version> trong csproj > 1.0.0.
+if (-not $Version) {
+  $projText = Get-Content $appProj -Raw
+  if ($projText -match "<Version>\s*([^<\s]+)\s*</Version>") {
+    $Version = $Matches[1]
+  } else {
+    $Version = "1.0.0"
+  }
+}
+Step "Version: $Version"
+$versionArgs = @("/p:Version=$Version", "/p:FileVersion=$Version", "/p:InformationalVersion=$Version")
+
 # 2) publish
 if (-not $SkipPublish) {
   # KHONG dung `$x = if (...) {...} else {...}`: do la cu phap PowerShell 7, Windows
@@ -61,7 +77,7 @@ if (-not $SkipPublish) {
   if ($FrameworkDependent) { $selfContained = "false" }
   Step "dotnet publish ($Configuration, win-x64, self-contained=$selfContained)"
   if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
-  & dotnet publish $appProj -c $Configuration -r win-x64 --self-contained $selfContained -o $publishDir
+  & dotnet publish $appProj -c $Configuration -r win-x64 --self-contained $selfContained -o $publishDir @versionArgs
   if ($LASTEXITCODE -ne 0) { throw "dotnet publish thất bại (exit $LASTEXITCODE)" }
 } else {
   Step "Bỏ qua publish (-SkipPublish): dùng $publishDir"
@@ -76,17 +92,13 @@ foreach ($f in @($appExe, "wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe", 
 $sizeMb = [math]::Round(((Get-ChildItem $publishDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1)
 Write-Host "    $publishDir ($sizeMb MB)"
 
-# 4) version: tham số > <Version> trong csproj > FileVersion của exe > 1.0.0
-if (-not $Version) {
-  $projText = Get-Content $appProj -Raw
-  if ($projText -match "<Version>\s*([^<\s]+)\s*</Version>") {
-    $Version = $Matches[1]
-  } else {
-    $fv = (Get-Item (Join-Path $publishDir $appExe)).VersionInfo.FileVersion
-    if ($fv) { $Version = ($fv -replace '\.0$', '') } else { $Version = "1.0.0" }
-  }
+# 3b) CỔNG CHẶN: số hiệu trong app exe PHẢI khớp số định phát (không tin tên installer).
+$builtVersion = (Get-Item (Join-Path $publishDir $appExe)).VersionInfo.FileVersion
+$normalized = if ($builtVersion) { $builtVersion -replace '\.0$', '' } else { "" }
+if ($normalized -ne $Version) {
+  throw "App exe mang version '$builtVersion' nhưng định phát '$Version' — DỪNG (kiểm -SkipPublish: bản publish cũ chưa được dựng lại kèm /p:Version)."
 }
-Step "Version: $Version"
+Write-Host "    app exe FileVersion = $builtVersion (khớp $Version)" -ForegroundColor Green
 
 # 5) tìm Inno Setup 6
 Step "Tìm Inno Setup 6 (ISCC.exe)"

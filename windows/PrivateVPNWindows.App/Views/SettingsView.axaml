@@ -63,6 +63,17 @@
           <Button Name="TermsButton" Classes="vpnNav" Content="Terms of Use" HorizontalAlignment="Left" />
         </StackPanel>
       </Border>
+
+      <Border Classes="vpnCard">
+        <StackPanel Spacing="6">
+          <TextBlock Text="About" Classes="vpnSectionTitle" Margin="0,0,0,4" />
+          <!-- Số hiệu lấy từ metadata của chính file .exe (không tin tên bộ cài) + số mốc trên
+               server, để nhìn là biết bản đã publish có đúng không (21/09/2026: installer tên
+               1.4.1 nhưng app khai 1.0.0, không nhìn ra được). -->
+          <TextBlock Name="VersionText" Classes="vpnSubtitle" Text="Version" />
+          <TextBlock Name="ServerVersionText" Classes="vpnSubtitle" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia.Controls;
 using VpnFlow.App.ViewModels;
 
@@ -14,6 +15,9 @@ public partial class SettingsView : UserControl
 
     /// <summary>Đang tự gán index từ settings — không được coi là người dùng vừa chọn.</summary>
     private bool _syncingTransport;
+
+    /// <summary>Số hiệu app đang cài — để đối chiếu với mốc phiên bản trên server.</summary>
+    private string _version = "";
 
     /// <summary>Đã đăng xuất → shell quay về màn đăng nhập.</summary>
     public event Action? SignedOut;
@@ -35,6 +39,7 @@ public partial class SettingsView : UserControl
         TermsButton.Click += (_, _) => UrlLauncher.Open(WebUrl("terms"));
 
         Refresh();
+        _ = RefreshServerVersionAsync();
     }
 
     private void OnSignOut()
@@ -58,6 +63,7 @@ public partial class SettingsView : UserControl
             : "Not signed in.";
 
         SignOutButton.IsVisible = _services.Auth.IsSignedIn;
+        RefreshVersionText();
 
         // Gán lại lựa chọn đang lưu. Cờ này chặn SelectionChanged ghi đè khi ta tự đổi index.
         _syncingTransport = true;
@@ -103,5 +109,48 @@ public partial class SettingsView : UserControl
         }
 
         return $"{baseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+    }
+
+    /// <summary>
+    /// Dòng "Phiên bản" lấy từ metadata của CHÍNH file .exe, không lấy từ tên bộ cài.
+    /// Vì sao: 21/09/2026 bộ cài tên `VPNFlow-Setup-1.4.1.exe` nhưng app bên trong khai 1.0.0
+    /// (build.ps1 giải version SAU bước publish nên `dotnet publish` không nhận `/p:Version`).
+    /// Hiện số thật để kiểm chứng được bản đã publish, khỏi đoán theo tên file.
+    /// </summary>
+    private void RefreshVersionText()
+    {
+        var assembly = typeof(SettingsView).Assembly;
+        var version = assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var informational =
+            assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
+        var plus = informational.IndexOf('+');
+        var commit = plus >= 0 && plus + 1 < informational.Length ? informational[(plus + 1)..] : "";
+        if (commit.Length > 7)
+        {
+            commit = commit[..7];
+        }
+
+        _version = version;
+        VersionText.Text = commit.Length > 0 ? $"Phiên bản {version} (build {commit})" : $"Phiên bản {version}";
+    }
+
+    /// <summary>
+    /// Mốc phiên bản trên server, hiện ngay dưới số của app: khác nhau nghĩa là bản publish chưa
+    /// đúng (hoặc khách đang ở bản cũ) — nhìn là biết, không phải mở log. Lỗi mạng thì ghi rõ
+    /// "(không đọc được)" chứ không im lặng.
+    /// </summary>
+    private async Task RefreshServerVersionAsync()
+    {
+        try
+        {
+            var info = await _services.Api.FetchAppVersionAsync("windows");
+            ServerVersionText.Text = string.Equals(info.LatestVersion, _version, StringComparison.OrdinalIgnoreCase)
+                ? $"Bản mới nhất trên server: {info.LatestVersion} (khớp)"
+                : $"Bản mới nhất trên server: {info.LatestVersion} — KHÁC bản đang cài";
+        }
+        catch (Exception)
+        {
+            ServerVersionText.Text = "Bản mới nhất trên server: (không đọc được)";
+        }
     }
 }

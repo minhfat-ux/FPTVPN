@@ -9,16 +9,39 @@
              ⚠️ manifest ghi rõ mục "Việc chưa xong" — publisher KHÔNG được quảng cáo mấy mục đó
       ↓
 [publisher]  1. CLAIM vùng release trên bảng việc chung (AGENTS.md §6)
+             1b. XÁC NHẬN ĐÚNG BẢN MỚI NHẤT ĐÃ TEST (§2b) — đối chiếu manifest + commit với bản
+                 Dev đã test/verify; lệch hoặc mơ hồ ⇒ DỪNG, hỏi lại bên build
+             1c. CỔNG CHẶN VERSION (bắt buộc, TỰ ĐỘNG — không đạt thì DỪNG):
+                 python3 scripts/check-publish-version.py --platform <ios|macos|android|windows> \
+                     --file <artifact> --version <định phát> [--build <build>] [--app-exe <exe>]
+                 · exit 0 = được upload
+                 · exit 1 = DỪNG (version trong file ≠ định phát, thiếu extension, hoặc PHÁT LÙI)
+                 · exit 2 = KHÔNG KIỂM ĐƯỢC (thiếu công cụ: DMG cần macOS, .exe cần Windows,
+                   APK cần aapt2) ⇒ chạy trên máy đủ công cụ rồi mới upload
              2. VERIFY từng file (bảng §2) — sai/không khớp ⇒ DỪNG, báo lại bên build
              3. BACKUP bản đang phát trên node-2 (đổi tên có ngày)
              4. UPLOAD đúng đường dẫn route đọc (§3)
              5. VERIFY link phát hành: HTTP 200 + content-length KHỚP size file
+             5b. CHẠY LẠI CỔNG ở chế độ SAU-upload (đọc version trong file ĐANG PHÁT, đối chiếu mốc):
+                 python3 scripts/check-publish-version.py --platform <p> --mode post --version <định phát>
+                 (đây là bước bắt được ca macOS 21/09: file đang phát là 1.3.3 nhưng mốc ghi 1.4.0)
              6. SET MỐC version (§4) ×em response thật, không tin exit code curl
              7. RELEASE NOTES đã có trong repo ⇒ ghi nhật ký (§6)
              8. EMAIL thông báo user (§5) — nội dung chỉ nêu tính năng ĐÃ xong
              9. Xác nhận trên kênh khách: /buy, /install/ios, /install/mac trỏ bản mới
             10. Báo cáo bằng chứng + RELEASE claim
 ```
+
+### 1d. Vì sao có cổng chặn 1c/5b (hai sự cố thật, 21/09/2026)
+- **macOS**: route `/v1/downloads/mac` phát DMG **21.617.309 B** (bản **1.3.3 build 13** theo nhật ký §6)
+  trong khi mốc `latest_mac_version` quảng bá **1.4.0**, và `minimum_mac_version = 0.0.0` nên không ai
+  được nhắc cập nhật ⇒ khách tải "1.4.0" nhưng nhận 1.3.3. Tin tên file / tin mốc là **không thấy**.
+- **Windows**: bộ cài tên `VPNFlow-Setup-1.4.1.exe` nhưng app bên trong khai `FileVersion = 1.0.0.0`
+  (`windows/installer/build.ps1` giải version **sau** bước `dotnet publish` nên không truyền
+  `/p:Version`) ⇒ không cách nào biết bản đã cài là bản nào. Đã sửa thứ tự + thêm cổng ngay trong
+  `build.ps1` (bước 3b) và hiện số hiệu ở **Settings → About** của app (số của app + mốc trên server,
+  khác nhau là thấy ngay).
+
 
 ## 2. Bắt buộc verify trước khi upload (không có ngoại lệ)
 | Kiểm | Lệnh | Điều kiện đạt |
@@ -29,13 +52,24 @@
 | Keychain group iOS | `codesign -d --entitlements - /tmp/x/Payload/*.app \| grep -o 'G6XW3RN6LJ[A-Za-z.]*'` | đúng `G6XW3RN6LJ.com.privatevpn.app` (sai ⇒ app kẹt màn hình đăng nhập) |
 | APK | `aapt2 dump badging <apk> \| grep ^package:` | `versionName`/`versionCode` khớp manifest; **cả modern + legacy cùng cert** |
 | Size sau upload | `stat -c %s <file>` trên node-2 | khớp size file local |
+| Cổng chặn version §2b (chạy TRƯỚC khi upload) | `python3 scripts/check-publish-version.py --platform <ios\|android\|android-legacy\|macos\|windows> --file <artifact> --version <ver> [--build <n>]` | exit **0 = ĐẠT** · **1 = KHÔNG ĐẠT ⇒ DỪNG** · **2 = không kiểm được ⇒ chạy lại trên máy đủ công cụ** (macOS cho DMG, Windows cho `.exe`, Android SDK cho APK). Sau khi upload kiểm lại bằng `--mode post` |
+
+## 2b. Bắt buộc: chỉ phát hành bản MỚI NHẤT đã được test + verify với Dev
+> Thêm 2026-09-22 (yêu cầu chủ dự án). Publisher **không tự chọn** bản để phát hành — chỉ phát đúng
+> bản mà Dev đã test và xác nhận. **Thiếu 1 trong 4 điều kiện dưới đây ⇒ DỪNG**, báo lại bên build.
+
+| # | Kiểm | Điều kiện đạt |
+|---|---|---|
+| 1 | Manifest bàn giao | `docs/RELEASE_ARTIFACTS_<ngày>.md` có bảng version/size/sha256/commit **đúng nền tảng**; đọc cả mục "Việc chưa xong" trước khi viết email |
+| 2 | Bản mới nhất về nguồn | commit trong manifest là commit mới nhất đã verify: `git log -1` khớp, và **không** có commit sau nó đụng `ios/**`, `android/**`, `mac/**`, `windows/**` mà chưa test |
+| 3 | Xác nhận của Dev | có dấu "đã test + verify" của người làm ra bản đó: **ai · ngày · máy/thiết bị · kết quả thật** (log/số đo/evidence). Chỉ nhận xác nhận cho **đúng sha256 + version** mình sắp phát |
+| 4 | So với bản đang phát | file trên node-2 + mốc `latest_version` đang phát phải **cũ hơn** bản mới; bản định phát **≤** bản đang phát ⇒ DỪNG (tránh phát lùi/phát trùng) |
+
+**Kênh xác nhận:** note trong `claim` ở bảng việc chung (AGENTS.md §6) + Telegram. Hai bên build đưa 2 bản
+khác nhau cho **cùng một version** ⇒ chỉ lấy bản có xác nhận test **mới hơn**; còn mơ hồ ⇒ **dừng**, hỏi
+chủ dự án/orchestrator — publisher không tự phán.
 
 ## 3. Đích trên node-2 (route nào đọc file nào)
-
-> **Ngoại lệ KHÔNG được đổi host: relay WS.** Mọi link khách bấm đều dùng `t1.meetflowai.site`, nhưng
-> relay (`wss://api.meetflowai.site/relay/vn1wg|vn1hy|vn2wg|vn2hy`) **phải giữ host `api.meetflowai.site`**
-> vì Caddy chỉ route `/relay/*` trên host đó — đổi là toàn bộ khách mất mạng. `check-public-surface.py`
-> có mục kiểm riêng cho việc này.
 | Nền tảng | File trên node-2 | Route phát |
 |---|---|---|
 | iOS (IPA ad-hoc) | `/root/flowvpn-ipa/VPNFlow-latest.ipa` | `GET /v1/downloads/ios` |
@@ -76,13 +110,6 @@ python3 scripts/send-reinstall-guide.py --all-stuck --test   # gửi thử tới
 - Vết gửi: `/root/flowvpn-cp/data/reinstall-guide-log.jsonl`; đối chiếu trạng thái thật bằng Resend list API (`last_event = delivered`).
 - Nhịp: chạy `--stuck` sau mỗi lần phát hành; khách đăng ký mới mà quá 24h chưa có device ⇒ thêm vào danh sách gửi.
 
-## 5c. Guard tự động (khách mới chưa cài/chưa chạy được)
-`flowvpn-guard.service` trên node-2 chạy mỗi 5 phút: phát hiện khách **mới đăng ký** mà không có
-device (`never_installed`) hoặc có device nhưng `lastSeenAt` rỗng (`never_connected`) → tự gửi email
-hướng dẫn theo đúng nền tảng + phiên bản đang phát; ≥3 khách cùng nền tảng trong 24h → tạo task +
-alert Telegram, **chờ chủ dự án `/approve` mới được sửa**; khi bản mới publish → tự đóng task và mời
-lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi tiết: `PROTOCOL.md` §9.
-
 ## 6. Nhật ký phát hành (cập nhật mỗi lần)
 | Ngày | Nền tảng | Version/build | Ghi chú |
 |---|---|---|---|
@@ -94,8 +121,6 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 | 2026-09-18 | iOS | 1.3.3 (14) | bản trước, đã được thay bằng 1.4.0 |
 | 2026-09-18 | Android | 1.3.9 | trước 1.4.0 |
 | 2026-09-20 | macOS | 1.3.3 (13) | **Ký Developer ID + notarize + staple** (DMG 21.617.309 B) → khách mở không cảnh báo · email 3 ngôn ngữ gửi 17/17 khách |
-
-| 2026-09-21 | dev | guard + link | **Thống nhất mọi link khách tải về `t1.meetflowai.site`** (env `PUBLIC_SITE_URL`+`API_HOSTS`, `ios_ipa_url`/`android_apk_url(_legacy)`/`windows_installer_url`) · thêm `flowvpn-guard` (email tự động cho khách mới bị tắc + task chờ approve trên Telegram: `/guard`, `/approve`, `/reject`) |
 
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
@@ -112,3 +137,10 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 - Upload xong **không** verify size ⇒ phát hành file cụt.
 - **Khách TQ tải file lớn hay đứt**: log Caddy 20 ngày có 58 lượt `/v1/downloads/*` bị `aborting with incomplete response` (27 lượt từ CN, phần lớn UA WeChat/`MicroMessenger`). Server **đã** hỗ trợ `Range` (206) nên tải lại là tiếp, không mất phần đã tải ⇒ hướng dẫn khách tải bằng Chrome/Safari, **không mở trong WeChat**.
 - **Link cài iOS dùng host bị chặn ở TQ**: manifest + nút cài lấy từ `siteBaseUrl()` = `PUBLIC_SITE_URL` (mặc định `https://meetflowai.site`). Khách ở TQ bấm "Cài đặt VPNFlow" có thể fail vì host này bị chặn theo SNI. Trang cài nên tự dùng host khách đang mở (host-aware) rồi fallback `t1.meetflowai.site` — sửa trong `control-plane/src/index.js` (**vùng bảo vệ: cần handoff owner windows**). Tạm thời: luôn gửi khách link `t1.` trong email.
+- **Phát hành bản KHÔNG phải bản mới nhất đã test (20/09)**: route `/v1/downloads/mac` phục vụ DMG
+  `1.3.3 / build 13` (last-modified 15/09) trong khi bản đã test là `1.4.0 / build 14` ⇒ khách tải nhầm
+  bản cũ **5 ngày** (nguồn: `docs/RELEASE_ARTIFACTS_2026-09-19.md` §2.1). Từ 22/09 việc này là bước
+  **1b/§2b** bắt buộc: chỉ phát hành bản mới nhất đã được test + Dev xác nhận.
+- **Tên file/mốc không phải version thật (21/09)**: bản Windows cài trên máy ghi `FileVersion = 1.0.0`
+  trong khi installer tên `VPNFlow-Setup-1.4.1.exe` (ghi nhận trong `scripts/check-publish-version.py`)
+  ⇒ **luôn đọc version từ BÊN TRONG artifact**, không tin tên file lẫn mốc `latest_version`.
