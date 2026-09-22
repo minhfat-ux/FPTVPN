@@ -65,6 +65,9 @@ DOWNLOAD_ROUTES = {
 }
 # Windows phát qua /dl/<tên file>, không phải route cố định.
 WINDOWS_DL = "/dl/{name}"
+# Nhóm keychain mà code iOS thực sự dùng (KeychainStore.accessGroup + PacketTunnelProvider) —
+# cổng chặn bắt buộc profile phải cấp ĐÚNG nhóm này, không chấp nhận wildcard `TEAMID.*`.
+DEFAULT_IOS_KEYCHAIN_GROUP = "G6XW3RN6LJ.com.privatevpn.shared"
 
 
 class Result:
@@ -149,6 +152,164 @@ def version_ios(path: str) -> dict:
             out["ext_version"] = ext.get("CFBundleShortVersionString")
             out["ext_build"] = str(ext.get("CFBundleVersion") or "")
         return out
+
+
+# ------------------------------------------- chữ ký vs PROFILE (sự cố 22/09/2026)
+# Vì sao có khối này: IPA 1.4.0/16 (8.135.823 B) khai trong CHỮ KÝ
+# `keychain-access-groups = G6XW3RN6LJ.com.privatevpn.shared`, nhưng `embedded.mobileprovision`
+# chỉ cấp nhóm wildcard `G6XW3RN6LJ.*` ⇒ iOS không coi nhóm cụ thể là được cấp ⇒ `SecItemAdd`
+# trả `errSecMissingEntitlement` (-34018) ⇒ `AuthSessionStore.save()` nuốt lỗi, `isSignedIn=false`,
+# app kẹt ở màn hình đăng nhập (và khoá WireGuard không lưu được ⇒ tunnel chết). Cổng cũ chỉ soi
+# CHỮ KÝ (thấy `.shared` nên PASS oan) mà không soi PROFILE. Luật mới: kiểm CẢ HAI, cho app + extension.
+TEAM_PREFIX_RE = re.compile(r"^\$\((?:AppIdentifierPrefix|TeamIdentifierPrefix)\)")
+TEAM_WILDCARD_RE = re.compile(r"^[A-Z0-9]{10}\.\*$")
+
+
+def _plist_bytes(raw: bytes):
+    """Bóc khối XML plist ra khỏi vỏ CMS của file `.mobileprovision`."""
+    start = raw.find(b"<?xml")
+    end = raw.rfind(b"</plist>")
+    if start < 0 or end < 0:
+        return None
+    try:
+        return plistlib.loads(raw[start:end + len(b"</plist>")])
+    except Exception:
+        return None
+
+
+def _ios_bundles(root: str) -> dict:
+    """Đường dẫn Payload/*.app và .appex bên trong thư mục đã giải nén."""
+    payload = os.path.join(root, "Payload")
+    if not os.path.isdir(payload):
+        return {"app": None, "ext": None}
+    app = next((os.path.join(payload, n) for n in sorted(os.listdir(payload)) if n.endswith(".app")), None)
+    ext = None
+    if app:
+        plugins = os.path.join(app, "PlugIns")
+        if os.path.isdir(plugins):
+            ext = next((os.path.join(plugins, n) for n in sorted(os.listdir(plugins)) if n.endswith(".appex")), None)
+    return {"app": app, "ext": ext}
+
+
+def _codesign_entitlements(bundle: str) -> dict:
+    """Entitlements đang có trong chữ ký của bundle (cần macOS + codesign)."""
+    if not bundle or not os.path.isdir(bundle):
+        return {}
+    proc = subprocess.run(["codesign", "-d", "--entitlements", ":-", bundle], capture_output=True)
+    plist = _plist_bytes((proc.stdout or b"") + (proc.stderr or b""))
+    return plist if isinstance(plist, dict) else {}
+
+
+def ios_entitlement_report(path: str) -> tuple[dict | None, str]:
+    """Trả ({'app': {sig, profile}, 'ext': {...}}, lỗi) cho một IPA."""
+    if not shutil.which("codesign"):
+        return None, "cần macOS + codesign để đọc entitlements trong chữ ký (chạy cổng này trên máy Mac)"
+    work = tempfile.mkdtemp(prefix="vpnflow-ipa-")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            archive.extractall(work)
+        bundles = _ios_bundles(work)
+        if not bundles["app"]:
+            return None, "IPA không có Payload/*.app"
+        report: dict = {}
+        for label in ("app", "ext"):
+            bundle = bundles[label]
+            if not bundle:
+                continue
+            profile = {}
+            profile_path = os.path.join(bundle, "embedded.mobileprovision")
+            if os.path.isfile(profile_path):
+                with open(profile_path, "rb") as handle:
+                    profile = (_plist_bytes(handle.read()) or {}).get("Entitlements") or {}
+            report[label] = {"sig": _codesign_entitlements(bundle), "profile": profile}
+        return report, ""
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _team_id(ents: dict) -> str:
+    app_id = str(ents.get("application-identifier") or "")
+    return app_id.split(".")[0] if app_id else ""
+
+
+def _keychain_groups(ents: dict, team: str) -> list:
+    """Nhóm keychain do bundle khai (bỏ nhóm hệ thống `com.apple.*`), đã giải `$(TeamIdentifierPrefix)`."""
+    groups: list = []
+    for group in ents.get("keychain-access-groups") or []:
+        if not isinstance(group, str) or group.startswith("com.apple."):
+            continue
+        resolved = TEAM_PREFIX_RE.sub((team + ".") if team else "", group)
+        if resolved not in groups:
+            groups.append(resolved)
+    return groups
+
+
+def _has_team_wildcard(groups: list) -> bool:
+    return any(TEAM_WILDCARD_RE.match(g or "") for g in groups)
+
+
+def check_ios_keychain(result: "Result", path: str, allow_wildcard: bool = False,
+                       required: list | None = None) -> None:
+    """Đối chiếu nhóm keychain trong CHỮ KÝ với nhóm PROFILE thực sự cấp (app + extension).
+
+    `required` = nhóm cụ thể mà code app thực sự dùng (mặc định lấy hằng số của app này).
+    Chỉ khi nhóm đó có mặt ở CẢ chữ ký LẪN profile thì `SecItemAdd` mới chắc chắn chạy.
+    """
+    report, error = ios_entitlement_report(path)
+    if error:
+        result.unknown_("Keychain iOS (chữ ký vs profile)", error)
+        return
+    required = required or []
+    shared: dict = {}
+    for label, name in (("app", "App"), ("ext", "Extension")):
+        item = report.get(label)
+        if not item:
+            continue
+        team = _team_id(item["sig"]) or _team_id(item["profile"])
+        sig_groups = _keychain_groups(item["sig"], team)
+        prof_groups = _keychain_groups(item["profile"], team)
+        shared[label] = tuple(sig_groups)
+
+        # `application-identifier` của chữ ký phải khớp profile (bắt lỗi ký sai entitlements —
+        # đúng ca appex 1.4.0/16 bị ký bằng entitlements của app).
+        sig_app = item["sig"].get("application-identifier")
+        prof_app = item["profile"].get("application-identifier")
+        if sig_app and prof_app and sig_app != prof_app:
+            result.fail(f"application-identifier iOS ({name})",
+                        f"chữ ký {sig_app} ≠ profile {prof_app} (bundle bị ký sai entitlements)")
+
+        if required:
+            for group in required:
+                sig_ok = group in sig_groups or (allow_wildcard and _has_team_wildcard(sig_groups))
+                prof_ok = group in prof_groups or (allow_wildcard and _has_team_wildcard(prof_groups))
+                if not sig_ok:
+                    result.fail(f"Keychain group iOS ({name})",
+                                f"CHỮ KÝ không khai nhóm {group} (đang khai {sig_groups or 'không có'})")
+                if not prof_ok:
+                    result.fail(f"Keychain group iOS ({name})",
+                                f"PROFILE không cấp nhóm {group} (profile: {prof_groups or 'không có'}) — "
+                                f"SecItemAdd sẽ trả errSecMissingEntitlement (-34018) ⇒ app kẹt màn hình đăng nhập")
+                if sig_ok and prof_ok:
+                    result.ok(f"Keychain group iOS ({name})", f"{group} có ở cả chữ ký lẫn profile")
+            continue
+
+        if not sig_groups:
+            result.warn(f"Keychain group iOS ({name})", "chữ ký không khai keychain-access-groups")
+            continue
+        # Không biết nhóm runtime ⇒ đối chiếu chung: mọi nhóm chữ ký phải có trong profile
+        # (wildcard `TEAMID.*` KHÔNG tính là cấp nhóm cụ thể — kẽ hở làm lọt bản 1.4.0/16).
+        missing = [g for g in sig_groups
+                   if g not in prof_groups and not (allow_wildcard and _has_team_wildcard(prof_groups))]
+        if missing:
+            result.fail(f"Keychain group iOS ({name})",
+                        f"chữ ký khai {sig_groups} nhưng PROFILE không cấp {missing} "
+                        f"(profile: {prof_groups or 'không có'}) — SecItemAdd sẽ trả "
+                        f"errSecMissingEntitlement (-34018) ⇒ app kẹt màn hình đăng nhập")
+        else:
+            result.ok(f"Keychain group iOS ({name})", f"{sig_groups} có trong profile")
+    if shared.get("app") and shared.get("ext") and shared["app"] != shared["ext"]:
+        result.fail("Nhóm keychain app ≠ extension",
+                    f"app {shared['app']} vs ext {shared['ext']} — app và extension PHẢI cùng nhóm")
 
 
 def version_android(path: str) -> dict:
@@ -297,6 +458,12 @@ def main() -> int:
     parser.add_argument("--internal-version", help="dùng khi không đọc được version trong artifact")
     parser.add_argument("--allow-same", action="store_true",
                         help="cho phép phát lại ĐÚNG version đang là mốc (mặc định: cảnh báo)")
+    parser.add_argument("--allow-keychain-wildcard", action="store_true",
+                        help="iOS: coi nhóm wildcard TEAMID.* trong profile là đủ (mặc định: BẮT BUỘC "
+                             "profile liệt kê đúng nhóm cụ thể mà chữ ký khai)")
+    parser.add_argument("--require-keychain-group", action="append", default=None,
+                        help="iOS: nhóm keychain BẮT BUỘC có ở cả chữ ký lẫn profile "
+                             f"(mặc định: {DEFAULT_IOS_KEYCHAIN_GROUP})")
     args = parser.parse_args()
 
     result = Result()
@@ -305,6 +472,7 @@ def main() -> int:
 
     # ---- 1. version BÊN TRONG artifact
     internal = None
+    artifact = None
     if args.internal_version:
         internal = {"version": args.internal_version, "build": args.build or "", "source": "tham số --internal-version"}
         result.warn("Nguồn version", "dùng --internal-version (không đọc từ file)")
@@ -318,6 +486,7 @@ def main() -> int:
             result.fail("Artifact", f"không thấy file: {target}")
             target = None
         if target:
+            artifact = target
             reader = READERS[args.platform]
             info = reader(target)
             if "error" in info:
@@ -351,6 +520,11 @@ def main() -> int:
             result.fail("Thiếu extension", "IPA không có .appex (PUBLISHER_PROCESS §2)")
         if internal.get("product"):
             result.ok("ProductVersion", str(internal["product"]))
+
+    # ---- 1b. iOS: nhóm keychain phải được CẢ chữ ký LẪN profile cấp (sự cố 22/09/2026)
+    if args.platform == "ios" and artifact:
+        required = args.require_keychain_group or [DEFAULT_IOS_KEYCHAIN_GROUP]
+        check_ios_keychain(result, artifact, args.allow_keychain_wildcard, required)
 
     # Windows: kiểm thêm exe app bên trong (nơi thực sự mang số hiệu người dùng thấy)
     if args.app_exe:

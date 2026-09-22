@@ -9,6 +9,40 @@
 - Khách **chỉ cần 2 việc**: (1) máy đã đăng ký UDID với shop, (2) **Trust** hồ sơ nhà phát triển sau khi cài.
 - Nếu iOS **đòi Developer Mode** ⇒ khách đang cài **bản ký Development** (bản nội bộ, không phải bản shop) → tải lại từ `https://t1.meetflowai.site/install/ios`.
 
+## 0a. "Nhập code xong KHÔNG vào được app" — profile thiếu nhóm keychain `.shared` (22/09/2026)
+
+**Triệu chứng:** khách nhập đúng code, màn hình đăng nhập **không đóng** và **không hiện thông báo lỗi**
+(`AuthSessionStore.save()` nuốt lỗi). Tunnel cũng không dùng được vì khoá WireGuard không lưu.
+
+**Nguyên nhân gốc** (đo trên chính IPA đang phát 1.4.0/16, 8.135.823 B):
+- Chữ ký app + extension khai `keychain-access-groups = G6XW3RN6LJ.com.privatevpn.shared`.
+- Nhưng `embedded.mobileprovision` chỉ cấp nhóm **wildcard** `G6XW3RN6LJ.*` — **không** liệt kê `.shared`.
+- iOS cấp nhóm theo **PROFILE** ⇒ `SecItemAdd` trả `errSecMissingEntitlement` (-34018) ⇒ session không lưu
+  ⇒ `isSignedIn = false` ⇒ app đứng ở màn hình đăng nhập.
+- Kèm lỗi ký: appex 1.4.0/16 có `application-identifier = G6XW3RN6LJ.com.privatevpn.app` trong khi profile
+  của nó là `.packet-tunnel` (bundle bị ký sai entitlements).
+
+**Vì sao lọt:** lệnh verify cũ chỉ soi **chữ ký** (có `.shared` nên PASS) mà **không soi profile**.
+
+**Kiểm bằng cổng chặn (chạy trên máy Mac, có `codesign`):**
+```bash
+python3 scripts/check-publish-version.py --platform ios --file <ipa> --version <ver> --build <n>
+# → [KHÔNG ĐẠT] Keychain group iOS (App/Extension) ... PROFILE không cấp nhóm ...shared
+```
+
+**Cách sửa (Apple Developer portal, máy Mac):**
+1. Identifiers → App ID `com.privatevpn.app` → **Keychain Sharing** → thêm nhóm `com.privatevpn.shared`.
+2. Làm y hệt cho `com.privatevpn.app.packet-tunnel` — **app + extension PHẢI cùng nhóm**.
+3. Regenerate profile Ad Hoc/Development ⇒ profile **phải liệt kê** `G6XW3RN6LJ.com.privatevpn.shared`
+   (không chỉ `G6XW3RN6LJ.*`).
+4. Ký lại IPA (`scripts/ios-resign-ipa.sh` hoặc `scripts/sign-server/resign-ipa.sh`) — chữ ký app **và**
+   appex đều phải khai đúng `.shared`.
+5. Chạy lại cổng chặn tới khi **ĐẠT**, rồi test trên **iPhone thật** trước khi phát (§2c).
+
+**Nếu portal không cho tạo nhóm `.shared`:** đổi nhóm trong `KeychainStore.accessGroup` +
+`PacketTunnelProvider.accessGroup` sang nhóm profile **thật sự cấp** — nhưng phải **cùng một nhóm ở cả
+app lẫn extension**; sửa code thì phải **build lại + test máy thật** (không chỉ ký lại).
+
 ## 1. Luồng cài đúng (3 bước, đã có trên email + trang cài)
 1. Mở **Safari trên chính iPhone/iPad** → `https://t1.meetflowai.site/install/ios` → **Đăng ký thiết bị** → cài hồ sơ (Settings → **Profile Downloaded** → Install). Bước này gửi UDID về shop.
 2. Chờ shop ký (thường vài phút) → quay lại trang, bấm **Cài đặt VPNFlow**.
