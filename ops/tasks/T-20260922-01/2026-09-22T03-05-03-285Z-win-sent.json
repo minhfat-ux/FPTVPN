@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "Brief day du: docs/MAC_IOS_PARITY_1.4.1.md (nhanh main, commit c315475). P0: watchdog suot phien + tu dung lai 3 lan (2/5/10s) trong iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift. P1: bo tran khai bao bang thong tinh 30/100. P1b: bat ramp giua phien cho macOS. P2: bump 1.4.1/17 (iOS) + 1.4.1/15 (macOS) SAU khi test thiet bi. P3: chot lai so hieu DMG macOS dang phat (3 tai lieu mau thuan).",
+ "actor": "win",
+ "at": "2026-09-22T03:05:03.286Z"
+}
