@@ -1,5 +1,9 @@
 # VPNFlow Windows 1.4.3 — release notes
 
+> **TRẠNG THÁI: LOCKED** — chủ dự án chốt 22/09/2026 (*"bản windows mới cài đang chạy khá tốt, có thể
+> lock windows được rồi, đang vẫn cắm để testing"*). Windows **đóng băng ở 1.4.3**: không sửa/không phát
+> hành gì thêm cho tới khi có yêu cầu mới. Máy test vẫn được cắm để theo dõi.
+>
 > Ngày build: 22/09/2026 · Nền tảng: **windows** · Người build: harness Windows
 > Nguồn version: `windows/PrivateVPNWindows.App/PrivateVPNWindows.App.csproj` `<Version>`
 > Quy trình: `docs/PUBLISHER_PROCESS.md` §0/§1 · Sổ phát hành: `release/releases.jsonl` (`docs/VERSIONING.md`)
@@ -56,14 +60,18 @@ route, `forwarding=0`) ⇒ tunnel IPv6 sẽ đen hết. Đây là thiết kế �
 - Kiểm độc lập danh sách: 2.043 dải APNIC CN IPv6 → phủ đủ, **0 dải mất**, **0 prefix bịa**.
 
 ## CHƯA kiểm chứng (bắt buộc phải test trước khi coi là xong)
-1. **A7 IPv6 trên máy Windows CÓ IPv6**: máy build **không có IPv6** và shell **không phải
-   Administrator** nên không thể thêm route thật. Dùng
-   `powershell -ExecutionPolicy Bypass -File scripts\check-china-bypass-ipv6.ps1`
-   (cần Administrator; exit 3 = máy không có IPv6 ⇒ bỏ qua đúng thiết kế).
-2. **WeChat/Alipay thật trên IPv6**: mở app TQ, xác nhận đăng nhập + giữ kết nối, và **byte của
-   tunnel KHÔNG tăng** khi chỉ dùng app TQ.
-3. **Ca máy có Clash/Mihomo/Tailscale**: xác nhận tunnel **lên được** (đây là ca lỗi chính của 1.4.3).
-4. Phần cài đặt/gỡ cài đặt trên Windows 10 và Windows 11 sạch.
+1. **Ca máy có Clash/Mihomo/Tailscale**: xác nhận tunnel **lên được** — đây là ca lỗi CHÍNH của 1.4.3,
+   phải test trước tiên.
+2. **App Trung Quốc (WeChat/Alipay) trên IPv4**: đăng nhập + giữ kết nối được khi VPN bật, và
+   **byte của tunnel KHÔNG tăng** khi chỉ dùng app TQ (tiêu chí A7 — chỉ xét IPv4).
+3. Phần cài đặt/gỡ cài đặt trên Windows 10 và Windows 11 sạch.
+
+### IPv6 — BỎ QUA (chủ dự án chốt 22/09/2026: *"bỏ qua ipv6 đã"*)
+Phần **A7 IPv6** (dải TQ đi thẳng trên IPv6) **không còn là hạng mục phải kiểm chứng**. Mã đã nằm trong
+1.4.3 và **vô hại**: máy không có IPv6 thì bỏ qua hoàn toàn; máy có IPv6 thì chỉ mở đường cho dải TQ,
+phần IPv6 còn lại **vẫn bị chặn như trước 1.4.3** (không rò IP thật, không nới lỏng bảo mật).
+Vì vậy **không cần phát hành bản mới để gỡ**. Không dùng `scripts/check-china-bypass-ipv6.ps1` nữa
+(giữ lại trong repo làm tài liệu, không nằm trong điều kiện phát hành).
 
 ## Liên quan
 - Commit sửa gốc: `f64b462` (Windows) · dữ liệu: `92f60c9` (`cn6.txt`) · `2b9173d` (`cn.txt`)
