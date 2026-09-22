@@ -94,8 +94,12 @@ Hệ quả bắt buộc:
    kèm hướng dẫn vòng.
 3. Khách đã nhận bản lỗi ⇒ xử lý bằng **phát hành bản đã staple** + báo khách **tải lại**; tuyệt đối
    không hướng dẫn khách vượt Gatekeeper.
-4. Lỗi kiểu này **phải tìm ra trước khi khách báo**: thêm bước chạy §4a trên file đang phát vào lịch
-   kiểm định kỳ (xem `scripts/install-release-audit-watch.sh`).
+4. Lỗi kiểu này **phải tìm ra trước khi khách báo**: cài lịch kiểm định kỳ **trên máy Mac**
+   (`scripts/install-release-audit-watch.sh` → launchd `site.meetflowai.release-audit-watch`,
+   mặc định 6 giờ/lần; nó tải file đang phát của **mọi kênh** rồi đọc version + kiểm DMG, alert Telegram
+   khi lệch). **Server không làm được việc này** — không có `hdiutil`/`stapler`/`spctl`, chạy từ Windows
+   cũng chỉ ra `KHÔNG KIỂM ĐƯỢC`. Đã kiểm 22/09/2026: trên node-2 **chưa** có timer/cron nào ⇒ lỗi này
+   không ai bắt được trước khách.
 
 **Vì sao có luật**: khách không phải kỹ thuật — mỗi dòng lệnh là một chỗ để bỏ cuộc; và nếu khách phải
 vượt Gatekeeper bằng tay thì app đang phụ thuộc thao tác thủ công, cài lại/đổi máy là hỏng lại.
