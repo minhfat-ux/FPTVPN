@@ -483,7 +483,7 @@ async function cmdVibecode(chatId, args, implicitTarget = "") {
   const bus = path.join(AGENT_WORKDIR, "scripts/notify/agent-bus.mjs");
   let busOk = false;
   if (existsSync(bus)) {
-    const res = await runQuiet(process.execPath, [bus, "push", "--to", target, "--kind", "task", "--title", title, "--body", body, "--ref", "TG-VIBECODE"], { cwd: AGENT_WORKDIR });
+    const res = await runQuiet(process.execPath, [bus, "push", "--to", target, "--kind", "task", "--title", title, "--body", body, "--ref", "TG-VIBECODE"], { cwd: AGENT_WORKDIR, env: { ...ENV, AGENT_BUS_ME: "owner" } });
     const out = `${res.stdout}\n${res.stderr}`.trim();
     if (res.ok) {
       busOk = true;

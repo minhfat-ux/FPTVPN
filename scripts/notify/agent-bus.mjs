@@ -52,15 +52,21 @@ function readToken() {
 const token = readToken();
 
 async function call(pathname, { method = "GET", body } = {}) {
-  // Dùng curl.exe chứ KHÔNG dùng fetch: undici giữ socket keep-alive nên tiến trình không tự
-  // thoát; còn `process.exit()` để cắt thì trên Windows libuv báo
+  // Dùng curl chứ KHÔNG dùng fetch: undici giữ socket keep-alive nên tiến trình không tự thoát;
+  // còn `process.exit()` để cắt thì trên Windows libuv báo
   // "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)" và trả exit code 1.
+  //
+  // Tên binary phải theo hệ điều hành: trên Windows là `curl.exe` (C:\Windows\System32\curl.exe),
+  // trên Linux/macOS là `curl`. Trước đây gọi cứng "curl.exe" nên **mọi lần push từ server Linux
+  // đều lỗi ENOENT** — mà server chính là nơi bot Telegram gọi vào (xem lệnh /vibecode trong
+  // scripts/tg-bot/bot.mjs). Đo 22/09/2026: /usr/bin/curl có sẵn nhưng `curl.exe` thì không.
+  const curl = process.platform === "win32" ? "curl.exe" : "curl";
   const args = ["-4", "-sS", "-m", "20", "-X", method, "-H", `Authorization: Bearer ${token}`];
   if (body) args.push("-H", "content-type: application/json", "--data-binary", JSON.stringify(body));
   args.push(`${BASE}${pathname}`);
   let out = "";
   try {
-    out = execFileSync("curl.exe", args, { encoding: "utf8" });
+    out = execFileSync(curl, args, { encoding: "utf8" });
   } catch (error) {
     console.error(`bus lỗi gọi ${pathname}: ${String(error.stderr || error.message).trim().slice(0, 200)}`);
     process.exit(1);
