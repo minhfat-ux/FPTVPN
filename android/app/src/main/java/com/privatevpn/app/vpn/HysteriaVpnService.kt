@@ -685,7 +685,11 @@ class HysteriaVpnService : VpnService() {
         builder.setMtu(HY_MTU)
         builder.addAddress(HY_TUN_IPV4_IP, 30)
         builder.addRoute("0.0.0.0", 0)
-        builder.addDnsServer("1.1.1.1")
+        // ≥2 resolver: resolver đầu không trả lời thì hệ điều hành tự hỏi cái kế tiếp — xem
+        // Config.HY_DNS_SERVERS (một resolver duy nhất làm DNS chết ngẫu nhiên khi đường rớt gói).
+        for (dns in com.privatevpn.app.Config.HY_DNS_SERVERS) {
+            builder.addDnsServer(dns)
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             builder.setMetered(false)
         }
@@ -1615,7 +1619,16 @@ class HysteriaVpnService : VpnService() {
         val HY_TCP_RELAY_PORTS = com.privatevpn.app.Config.HY_TCP_RELAY_PORTS
         const val HY_PASSWORD = com.privatevpn.app.Config.HY_PASSWORD
         const val HY_OBFS_PASSWORD = com.privatevpn.app.Config.HY_OBFS
-        const val HY_MTU = 1500
+        /**
+         * MTU của `tun0` — hạ từ 1500 xuống 1300 (22/09/2026).
+         *
+         * Hysteria bọc mỗi gói thêm ~60-100 byte (IP/UDP + QUIC + auth/frame), nên gói 1500 byte
+         * trong tunnel thành 1560-1600 byte ⇒ vượt path-MTU của đường nền (đo thật: mạng di động
+         * `rmnet_data7` MTU 1400) ⇒ mất gói âm thầm, biểu hiện là DNS "unknown host" ngẫu nhiên và
+         * `Connection reset` ngay trong TLS handshake — xem `docs/TUNNEL_MTU_DNS_BUGREPORT.md` §4.1
+         * (P0 khuyến nghị 1280-1360). Chọn 1300 để chừa biên an toàn mà không cắt payload quá sâu.
+         */
+        const val HY_MTU = 1300
         // Single overlay address 100.100.100.101/30 (must match Go wrapper default).
         const val HY_TUN_IPV4_IP = "100.100.100.101"
         const val HY_TUN_IPV4 = "100.100.100.101/30"
