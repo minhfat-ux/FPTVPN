@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-05",
+  "title": "macOS KHAN: DMG chua staple => khach cai xong bao 'khong the mo' - staple + verify + phat lai",
+  "from": "win",
+  "to": "mac",
+  "detail": "P0 macOS - khach cai DMG xong mo app bao 'khong the mo'. NGUYEN NHAN: DMG da notarize nhung CHUA STAPLE (chinh Mac do 22/09: spctl=Notarized Developer ID nhung 'stapler validate' = CHUA staple) => Gatekeeper chan tren may khach (dac biet khi khong co mang hoac lan mo dau). CACH SUA (may Mac): (1) xcrun stapler staple VPNFlow-mac.dmg && xcrun stapler validate VPNFlow-mac.dmg; neu phai ky lai DMG thi dung thu tu ky -> notarytool submit --wait (Accepted) -> staple (ky SAU staple la mat ve). (2) Staple ca VPNFlow.app BEN TRONG roi moi tao DMG de app tu mang ve. (3) Verify: spctl -a -t open --context context:primary-signature -vv VPNFlow-mac.dmg => accepted/Notarized Developer ID; codesign --verify --deep --strict --verbose=2 VPNFlow.app => valid on disk. (4) Test tren MAY MAC KHAC (khong phai may build): tai DMG tu route -> cai -> mo bang double-click (khong right-click) => mo duoc, khong canh bao. (5) Upload lai + bao sha256 MOI + size khop + curl -sI route mac = 200. (6) Bao lai: sha256 moi + ket qua stapler validate + spctl + anh mo app tren may khac. Trong luc cho, khach mo bang right-click -> Open hoac Settings -> Privacy & Security -> 'Open Anyway' (docs/MACOS_SIGN_NOTARIZE.md §4-§6 da ghi).",
+  "verify": null,
+  "due": null,
+  "createdAt": "2026-09-22T04:31:30.557Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T04:31:30.558Z"
+}
