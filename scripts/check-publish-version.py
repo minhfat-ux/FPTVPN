@@ -127,8 +127,35 @@ def marker_latest(platform: str) -> tuple[str | None, str | None]:
 # ---------------------------------------------------------------- đọc version trong artifact
 
 
+def _entitlement_blobs(data: bytes):
+    """Các khối XML plist entitlements nhúng trong binary Mach-O (code signature)."""
+    for match in re.finditer(rb"<\?xml[^>]*\?>", data):
+        start = match.start()
+        end = data.find(b"</plist>", start)
+        if end == -1:
+            continue
+        blob = data[start : end + 8]
+        if b"keychain-access-groups" in blob or b"application-identifier" in blob:
+            yield blob.decode("utf-8", "replace")
+
+
+def _keychain_groups(blob: str) -> list:
+    match = re.search(r"<key>keychain-access-groups</key>\s*<array>(.*?)</array>", blob, re.S)
+    if not match:
+        return []
+    return re.findall(r"<string>([^<]*)</string>", match.group(1))
+
+
 def version_ios(path: str) -> dict:
-    """IPA: Payload/*.app/Info.plist (+ kiểm extension có mặt — luật §2)."""
+    """IPA: version + extension + NHÓM KEYCHAIN (code signature vs provisioning profile).
+
+    Vì sao kiểm nhóm keychain ở đây: 22/09/2026 bản iOS đang phát bị đúng lỗi này — binary
+    khai `keychain-access-groups = G6XW3RN6LJ.com.privatevpn.shared` nhưng **profile Ad Hoc
+    không có nhóm đó** (`ProvisionedDevices` chỉ cấp `…com.privatevpn.app` và
+    `…app.packet-tunnel`). iOS cấp nhóm theo PROFILE ⇒ `SecItemAdd` trả `errSecMissingEntitlement
+    (-34018)` ⇒ lưu phiên đăng nhập thất bại ⇒ "nhập code xong không vào được app".
+    Lệnh verify cũ chỉ soi code signature nên vẫn PASS trong khi khách không dùng được.
+    """
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         app_info = [n for n in names if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", n)]
@@ -148,6 +175,29 @@ def version_ios(path: str) -> dict:
                 ext = plistlib.load(handle)
             out["ext_version"] = ext.get("CFBundleShortVersionString")
             out["ext_build"] = str(ext.get("CFBundleVersion") or "")
+
+        # Nhóm keychain: lấy từ code signature của app + extension, và từ 2 provisioning profile.
+        signature_groups = set()
+        for name in names:
+            if name.endswith("embedded.mobileprovision"):
+                continue  # profile xét riêng ở dưới, không trộn vào code signature
+            if re.fullmatch(r"Payload/[^/]+\.app/[^/]+", name) or re.fullmatch(
+                r"Payload/[^/]+\.app/PlugIns/[^/]+\.appex/[^/]+", name
+            ):
+                for blob in _entitlement_blobs(archive.read(name)):
+                    signature_groups.update(_keychain_groups(blob))
+        profile_groups = set()
+        for name in names:
+            if name.endswith("embedded.mobileprovision"):
+                data = archive.read(name)
+                profile_groups.update(
+                    match.decode() for match in re.findall(rb"G6XW3RN6LJ\.[A-Za-z0-9._-]+", data)
+                )
+        # `com.apple.token` là nhóm hệ thống, không tính là nhóm chia sẻ của app.
+        app_groups = sorted(g for g in signature_groups if not g.startswith("com.apple.") and "*" not in g)
+        out["keychain_signature"] = app_groups
+        out["keychain_profile"] = sorted(profile_groups)
+        out["keychain_missing"] = [g for g in app_groups if g not in profile_groups]
         return out
 
 
@@ -351,6 +401,23 @@ def main() -> int:
             result.fail("Thiếu extension", "IPA không có .appex (PUBLISHER_PROCESS §2)")
         if internal.get("product"):
             result.ok("ProductVersion", str(internal["product"]))
+
+        # iOS: nhóm keychain phải có trong CẢ code signature LẪN provisioning profile.
+        # Thiếu ở profile ⇒ SecItemAdd trả -34018 ⇒ không lưu được phiên ⇒ "nhập code xong
+        # không vào được app" (ca thật 22/09/2026).
+        if "keychain_signature" in internal:
+            sig, prof = internal["keychain_signature"], internal.get("keychain_profile") or []
+            missing = internal.get("keychain_missing") or []
+            if not sig:
+                result.unknown_("Nhóm keychain", "không đọc được keychain-access-groups trong binary")
+            elif missing:
+                result.fail("Nhóm keychain THIẾU trong profile",
+                            f"binary khai {missing} nhưng profile chỉ cấp {prof} ⇒ keychain trả "
+                            f"errSecMissingEntitlement (-34018), app không lưu được phiên đăng nhập. "
+                            f"Sửa: bật Keychain Sharing cho App ID (nhóm G6XW3RN6LJ.com.privatevpn.shared) "
+                            f"rồi sinh lại profile và ký lại IPA")
+            else:
+                result.ok("Nhóm keychain khớp profile", f"{sig}")
 
     # Windows: kiểm thêm exe app bên trong (nơi thực sự mang số hiệu người dùng thấy)
     if args.app_exe:
