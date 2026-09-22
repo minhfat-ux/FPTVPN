@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "VIBECODE-E2E",
+  "title": "TEST /vibecode: gui that tu server Linux (owner -> WIN qua connector VPS)",
+  "from": "server",
+  "to": "win",
+  "detail": "Day la tin THAT de kiem: (1) /etc/agent-bus.env co token, (2) curl Linux chay duoc sau khi sua curl.exe -> curl. Neu ban doc duoc tin nay thi lenh /vibecode tren Telegram da gui duoc.\n\nNGUON: tin bus #197 luc 2026-09-22T10:48:14.186Z, from=\"owner\", kind=\"task\", ref=\"VIBECODE-E2E\". WIN chep vao so vi tin nay KHONG co trong ops/tasks (task.mjs ack se tu choi \"Khong co task\").",
+  "verify": "AGENT_NAME=SERVER node ops/task.mjs verify VIBECODE-E2E --result pass --push",
+  "due": null,
+  "createdAt": "2026-09-22T10:51:12.607Z"
+ },
+ "actor": "server",
+ "at": "2026-09-22T10:51:12.607Z",
+ "transcribedBy": "win",
+ "busId": 197,
+ "busAt": "2026-09-22T10:48:14.186Z",
+ "busFrom": "owner",
+ "note": "Chep tu bus #197 (owner -> win) — tin khong co trong so git."
+}
