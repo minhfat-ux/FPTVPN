@@ -1,0 +1,51 @@
+{
+  "_doc": "Chép sang ~/.config/mac-selfdefense/config.json rồi sửa. Bỏ trống file này thì dùng mặc định trong selfdefense.mjs.",
+  "mode": "enforce",
+  "pollMs": 5000,
+  "vault": null,
+  "watchDirs": [
+    "~/Library/LaunchAgents",
+    "/Library/LaunchAgents",
+    "/Library/LaunchDaemons"
+  ],
+  "suspiciousPathPrefixes": [
+    "~/Desktop/",
+    "~/Downloads/",
+    "~/Documents/",
+    "~/Public/",
+    "/tmp/",
+    "/var/tmp/",
+    "/private/tmp/"
+  ],
+  "allow": {
+    "pathPrefixes": [
+      "/System/",
+      "/usr/",
+      "/bin/",
+      "/sbin/",
+      "/Library/Apple/",
+      "/Library/Frameworks/",
+      "/Applications/",
+      "/opt/homebrew/",
+      "/usr/local/",
+      "/opt/local/"
+    ],
+    "labels": [
+      "com.apple.",
+      "site.meetflowai."
+    ]
+  },
+  "tcc": {
+    "enabled": true,
+    "sensitiveOnly": true,
+    "source": "auto",
+    "everyMs": 60000
+  },
+  "protectSelf": true,
+  "notify": {
+    "transport": "auto",
+    "relayHost": null,
+    "relayKey": null
+  },
+  "_notify_doc": "auto = thu direct api.telegram.org truoc, that bai thi relay qua SSH toi relayHost bang relayKey."
+}

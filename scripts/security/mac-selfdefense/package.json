@@ -1,0 +1,14 @@
+{
+  "name": "mac-selfdefense",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tu bao ve may Mac: phat hien persistence/tien trinh/quyen TCC nghi van, tu khoa + cach ly + alert Telegram",
+  "type": "module",
+  "main": "selfdefense.mjs",
+  "scripts": {
+    "test": "node --test",
+    "status": "node selfdefense.mjs status",
+    "once": "node selfdefense.mjs once"
+  },
+  "engines": { "node": ">=18" }
+}

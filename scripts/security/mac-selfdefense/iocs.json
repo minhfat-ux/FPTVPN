@@ -1,0 +1,30 @@
+{
+  "_doc": "IOC từ sự cố 2026-08-24 trên Mac chủ dự án: LaunchAgent giả danh VMware, dropper curl|bash. Cập nhật khi có sự cố mới.",
+  "_incident": "2026-08-24 com.vmware.storage.identitydaemonworker.eq03",
+  "labels": [
+    "com.vmware.storage.identitydaemonworker.eq03",
+    "com.vmware.storage.identitydaemonworker"
+  ],
+  "domains": [
+    "v3ctorium.link",
+    "blue-metric-42.technology",
+    "the8-thsignal.com"
+  ],
+  "namePatterns": [
+    "identitydaemonworker",
+    "system-updater.app",
+    "SystemUpdater.app",
+    "PermissionFlow_PermissionFlow"
+  ],
+  "markers": [
+    "--noproxy"
+  ],
+  "_sha256_note": "Chỉ hash được các file còn nằm local. Payload lớn (node 244MB, payload.tar.gz, app.js) đã bị iCloud evict (blocks=0) nên KHÔNG hash được.",
+  "sha256": [
+    "4ac89f512f5718959ac696c16fb4149be2dad0c8fe94b116b477c945e99cafa4",
+    "fa3a60a98cadb6a2cb897e0dffe31cdb922968c0705a28fffd5c6a988e047d3d",
+    "5ebc458d1d224698735a518b906d255f62dda2c75f636344491de73e26102d15",
+    "0f1bad70c7bd1e0a69562853ec529355462fcd0423263a3d39d6d0d70b780443",
+    "d74c2030f0a14b76f3be2c7352c2d931c8dd827afa90023c48f4bae4b81e66d5"
+  ]
+}
