@@ -23,6 +23,13 @@ không lưu được ⇒ tunnel không dựng được.)
 và **chặn** (đã chạy thử trên chính IPA lỗi: `KHÔNG ĐẠT — Nhóm keychain THIẾU trong profile`).
 
 **Cách sửa (làm ở Apple Developer portal, máy Mac):**
+
+> ⛔ **BẮT BUỘC LÀM TAY — API KHÔNG LÀM ĐƯỢC** (Mac đã thử 22/09/2026): App Store Connect API
+> `POST /v1/bundleIdCapabilities` trả **409 `KEYCHAIN_SHARING is not a valid value`** (enum chỉ có
+> ICLOUD, APP_GROUPS, NETWORK_EXTENSIONS…). Nghĩa là **không thể thêm nhóm keychain bằng script**:
+> phải có **người có quyền Developer portal** bật tay. Đây chính là việc đang chặn việc deploy lại
+> bản iOS lên iPhone để test.
+
 1. Certificates, Identifiers & Profiles → **Identifiers** → App ID `com.privatevpn.app` →
    bật **Keychain Sharing** → thêm nhóm `G6XW3RN6LJ.com.privatevpn.shared`.
 2. Làm y hệt cho App ID `com.privatevpn.app.packet-tunnel` (app và extension PHẢI cùng nhóm thì
@@ -35,6 +42,14 @@ và **chặn** (đã chạy thử trên chính IPA lỗi: `KHÔNG ĐẠT — Nh�
 > Nếu portal **không cho** tạo nhóm `com.privatevpn.shared` (ví dụ App ID đã có nhóm khác), thì
 > phương án hai là đổi `KeychainStore.accessGroup` sang nhóm **profile thật sự cấp** — nhưng phải
 > cùng nhóm ở **cả app lẫn extension**, nếu không tunnel sẽ không đọc được khoá.
+
+> **Phát hiện kèm (Mac đo độc lập, 22/09/2026)** — phải sửa luôn khi ký lại, nếu không sẽ lặp lại:
+> 1. Trong IPA 1.4.0/16, **`.appex` bị ký bằng entitlements CỦA APP**:
+>    `application-identifier = G6XW3RN6LJ.com.privatevpn.app` trong khi profile của extension là
+>    `…com.privatevpn.app.packet-tunnel`. Ký lại phải dùng **đúng profile cho từng target**.
+> 2. Profile đang phát chỉ có nhóm **wildcard** `G6XW3RN6LJ.*`, **không** có nhóm cụ thể `.shared`
+>    ⇒ đừng dựa vào wildcard; nhóm chia sẻ phải là nhóm **cụ thể** và xuất hiện trong **profile của
+>    cả app lẫn extension**. Cổng chặn đã siết để bắt cả hai điểm (bản Mac: commit `d8086ee`).
 
 
 > Nguồn sự thật: chính IPA đang phát. Kiểm bằng:
