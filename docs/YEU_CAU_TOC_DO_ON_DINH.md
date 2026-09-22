@@ -180,6 +180,7 @@ Mọi lần đổi (dù do server hay do app) đều theo đúng §2c: giữ int
 | A7 | **App TQ đi đường riêng** | WeChat/Alipay/Meituan/Didi/Taobao… **đăng nhập + giữ kết nối** khi VPN bật; byte của tunnel **không tăng** khi chỉ dùng app TQ; Android dùng `addDisallowedApplication`, iOS/macOS/Windows dùng rule `geosite:cn`/`geoip:cn → direct` |
 | A8 | **Đo mạng thực tế TRƯỚC khi khai** | Có bước đo thật **trước khi mở client**; log chứng minh số khai suy từ phép đo; đo hỏng thì lùi về số nhớ/nấc tĩnh và **không chặn kết nối**; chỉ đo 1 lần/mạng/phiên |
 | A9 | **Server quyết định đường, không có thì app tự chọn** | App gửi số đo lên `/v1/route-report`; **chỉ đổi theo server khi có `recommended`** (khác đường đang dùng, `ttl_s` còn hạn, trả lời ≤ 2 s); server không trả lời ⇒ **app tự chọn đường tốt nhất** bằng kênh dò/bộ nhớ (hoặc giữ nguyên nếu không chứng minh được); định danh mạng gửi dạng **băm**; nhịp báo ≤ 1 lần/5 phút |
+| A10 | **Hiện số live + trạng thái ramp trên màn hình** | Thẻ Diagnostics hiện **live mỗi 1 s**: tốc độ tải xuống, tải lên, **đo được của đường ramp**, **khai báo hiện tại**, và **khai báo còn lên được +X%** hoặc **"Đã tối đa ở thời điểm này"**; cộng đường đang dùng + mức đã khoá (stable); tunnel chưa phục vụ ⇒ `—` (không hiện số 0 gây hiểu nhầm) |
 
 Tham chiếu Android (đo 22/09, sau bản vá 1.4.2): phát hiện đúng 15,5 s ✓; hồi **29 s** (chưa đạt A5,
 trước vá là 41–51 s) — còn phải rút tiếp.
@@ -244,3 +245,51 @@ done
 - Đo cả **gốc** (VPN tắt) cùng lúc để biết trần của nhà mạng — Android 22/09: gốc 16,4–21,5 Mbps.
 - **Cảnh báo bẫy đo** (đã từng sai): `speed.cloudflare.com` cho số rất thấp trên đường RTT cao
   (máy thật 22/09: 493 kbps, jitter 992 ms) — dùng file lớn 1 luồng để đo băng thông duy trì.
+
+## 2g. HIỆN SỐ LIVE + TRẠNG THÁI RAMP TRÊN MÀN HÌNH (bắt buộc, mọi nền tảng)
+
+> Nguyên văn yêu cầu: *"trên màn hình, báo luôn tốc độ của đường đo ramp, nếu ramp được thì show luôn
+> số % tốc độ có thể ramp lên thêm. Hoặc đã là maximize ở thời điểm hiện tại"* — và *"đưa vào phần
+> Diagnostics ấy"*, *"nhìn chạy live thông số down/up giống của ookla luôn"*.
+
+**Đặt ở đâu:** thẻ **Diagnostics** có sẵn của app (không thêm thẻ mới). Nhịp cập nhật **1 giây** —
+đúng nhịp lấy mẫu sẵn có, KHÔNG thêm phép đo, không thêm pin.
+
+**Các dòng bắt buộc:**
+
+| Dòng | Nguồn số | Ghi chú |
+|---|---|---|
+| `Tốc độ tải xuống ↓` | delta byte RX của interface TUN mỗi 1 s | live kiểu Ookla |
+| `Tốc độ tải lên ↑` | delta byte TX của TUN (dự phòng: bộ đếm TX của cầu WS) | |
+| `Đo được (đường ramp)` | trung bình trượt 12 s của goodput qua tunnel (`sustained`) | cùng nguồn với dòng log `bw: sample observed=` |
+| `Khai báo hiện tại` | số đang khai cho client (`declared`) | |
+| `Khai báo còn lên được` | `(mục tiêu kế tiếp / khai báo − 1) × 100`; mục tiêu = `min(đo được × hệ số ramp, trần sức mạng)` | nhãn phải ghi rõ là **khai báo** còn lên được (không hứa tốc độ tải tăng, xem §3.1) |
+| `Đã tối đa ở thời điểm này` | khi đo được ≥ **95% trần**, HOẶC kênh dò §2c vừa kết luận `no gain` | khớp luật "không lên được thì keep stable" |
+| `Đường đang dùng` | transport + node (vd `Cầu WS · Hanoi-2`, `Trực tiếp QUIC · Hanoi-1`) | để nhìn là biết đang đi đường nào |
+| `Mức đã khoá (stable)` | `stableKbps` của pha STABLE (§2b) | `—` khi chưa vào STABLE |
+
+**Luật hiển thị:**
+1. Tunnel chưa phục vụ (không có byte) ⇒ hiện `—`, **không** hiện `0` (tránh hiểu nhầm là mạng chết).
+2. Số dùng đơn vị **Mbps, 1 chữ số thập phân**; tốc độ dưới 1 Mbps hiện theo kbps.
+3. Không che trạng thái thật: khi cầu WS chập, số phải tụt về `—`/thấp đúng lúc — đó là tín hiệu để
+   khách và kỹ thuật nhìn ra "khựng vì đường", không phải đoán.
+4. Không đổi notification (chủ dự án đã chốt để sau) — chỉ màn hình chính.
+## 2h. KHAI BÁO **AN TOÀN TRƯỚC**, RAMP SAU (bắt buộc, mọi nền tảng)
+
+> Nguyên văn chủ dự án 22/09/2026: *"nên khai báo an toàn với ngưỡng mạng thật đã, rồi mới ramp tiếp"* —
+> xuất phát từ lỗi đo được trên Android: app khai `up=8 Mbps / down=13,1 Mbps` (lấy `best` nhớ từ lúc
+> mạng còn tốt) trong khi đường thật chỉ **56–152 kbps, loss 30–60%, RTT 2,3–2,8 s**. Với Brutal CC,
+> **số `up` do client tự pace** nên khai vống ⇒ hàng đợi phình, mất gói tăng, cả chiều tải xuống sụp
+> (đã ghi trong repo: *khai 100 Mbps trên 5G 13 Mbps làm tụt còn 0,6 MB/s*).
+
+| # | Luật | Chi tiết |
+|---|---|---|
+| 1 | **Khởi điểm không bao giờ vống** | Có **số đo thật** ⇒ khai = **đo được × 0,8**. Chưa có số đo ⇒ `min(nấc tĩnh, số nhớ × 0,6)`; nếu đường đang **loss cao** thì **bỏ `best` cũ**, khởi điểm ≤ **4 Mbps down / 1 Mbps up** |
+| 2 | **Ramp lên phải có điều kiện** | Chỉ ramp lên khi **loss thấp** và goodput chứng minh **2 lần liên tiếp**; **loss cao ⇒ CẤM ramp lên** dù goodput trông cao |
+| 3 | **Hạ số khai áp NGAY** | Down-ramp (loss cao + goodput sụp) được **dựng lại MỘT lần khi phiên rảnh**, giữ nguyên interface VPN (khựng 2–3 s). Lý do: số khai chỉ áp ở lần connect sau ⇒ nếu đường sống lâu (như sau khi vá relay: 64 phút) thì **số khai sai dính suốt phiên**. Up-ramp vẫn để lần sau để không cắt stream |
+| 4 | **Ưu tiên WS không được gán cứng** | Chỉ ưu tiên đường WS khi đường trực tiếp **đã được kênh dò xác nhận là không mở được** (§2c) — không suy ra từ việc "phiên trước chạy WS" |
+| 5 | **Nhìn thấy được** | Thẻ Diagnostics phải hiện `up/down đang khai`, `đo được`, `loss%`, `rtt`, `đường đang dùng`, `% còn lên được` / `Đã tối đa ở thời điểm này` (§2g) — để nhìn màn hình là biết khai có vống hay không |
+
+**Tiêu chí nghiệm thu A11:** sau khi kết nối ≤ 30 s, số khai `down` **không vượt quá 0,8 × goodput đo được**;
+không có trường hợp loss ≥ 30% mà app vẫn khai > 2× goodput thực; khi loss cao kéo dài thì app **hạ khai
+trong ≤ 15 s** (một lần dựng lại khi rảnh) chứ không chờ connect sau; và **không ramp lên** khi loss ≥ ngưỡng.
