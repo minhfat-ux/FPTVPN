@@ -6,6 +6,21 @@
 > Phạm vi: **iOS + macOS** (hai bên dùng chung source — `project.yml:215-225,308-316`), làm trước Android/Windows.
 > Trạng thái: **KẾ HOẠCH — chờ chủ dự án chốt 3 câu hỏi ở §7 rồi Mac thi công.**
 
+## 0b. YÊU CẦU ĐÃ CẬP NHẬT (22/09 16:23) — THÊM A7/A8/A9, kế hoạch bổ sung ngay
+> Chủ dự án: *"yêu cầu tốc độ ổn định đã có update, check lại"*. File yêu cầu nay **246 dòng** (trước 133),
+> phần §1 thành **7 vế** (thêm vế 5/6/7) và §2 thêm **A7/A8/A9**:
+
+| Mới | Yêu cầu | Việc cho iOS/macOS | Ai |
+|---|---|---|---|
+| **A7** | **App TQ đi ĐƯỜNG RIÊNG, không qua VPN** (§2d): WeChat/Alipay/Meituan/Didi/Taobao… đăng nhập + giữ kết nối khi VPN bật; **byte của tunnel KHÔNG tăng** khi chỉ dùng app TQ | iOS/macOS **không có API loại trừ theo app** ⇒ phải chia **theo ĐÍCH ĐẾN**: rule `geosite:cn` + `geoip:cn → direct`, phần còn lại → tunnel. **Phải xác nhận core nào đã tích hợp** trong extension (hysteria2 có ACL geoip/geosite; nếu là sing-box/libbox thì dùng rule của nó) rồi chọn cách làm; danh sách nguồn: `https://meetflowai.site/dl/routes/cn-apps.txt`. Tải/cập nhật rule ở luồng nền, **không** chặn đường kết nối (bài học Windows 1.0.4 "connecting mãi") | Mac |
+| **A8** | **ĐO MẠNG THỰC TẾ TRƯỚC RỒI MỚI KHAI** (§2e): đo **trước khi mở client** (trước khi số khai được truyền vào), không đợi tunnel lên | ⚠️ **Sửa lại §4.7**: đo **trước** khi tạo transport (không phải sau khi tunnel lên như bản đầu). Thông số theo Android: **1,5 MB, tối đa 2,5 s, tối thiểu 200 KB** mới coi là số hợp lệ; **1 lần/mạng/phiên** (đổi mạng thì đo lại); **số đo tươi thắng bộ nhớ**; đo hỏng ⇒ lùi về số nhớ/nấc tĩnh, **không bao giờ chặn kết nối**; log bắt buộc chứng minh số khai suy từ phép đo | Mac |
+| **A9** | **SERVER quyết định đường tốt nhất** (§2f): app gửi số đo lên control plane, **chỉ đổi khi server bảo**, không có quyết định thì **app tự chọn** | (1) **Client**: gửi `POST /v1/route-report` (platform, app_version, network{type, carrier, **identity_hash**, raw_kbps}, current{transport,node,rtt_ms,goodput_kbps,stable_kbps,reconnects,window_s}, candidates[…]); nhận `{recommended:{transport,port,node,reason}, ttl_s}` hoặc `{recommended:null}`. **Thứ tự quyết định**: server (≤**2000 ms**) → app tự chọn theo kênh dò → giữ nguyên. Nhịp báo **≤1 lần/5 phút**; chỉ gửi số tổng hợp, định danh mạng **dạng băm**; đổi đường vẫn theo §2c (giữ interface, khựng ≤3 s, ≤3 lần/phiên, chỉ khi rảnh ≥5 s) + **quay lại đường cũ 1 lần nếu đường mới không lên được**. (2) **Server**: thêm endpoint + luật chọn đường — **control-plane là vùng bảo vệ của harness Windows** (`AGENTS.md` §6b) ⇒ Windows làm, **commit trước rồi mới deploy**; app cũ gặp API thiếu phải **bỏ qua im lặng** | Mac (client) + **Windows (control-plane)** |
+
+**Thứ tự làm (iOS trước)** — bổ sung vào §5b: giai đoạn 1 iOS nay gồm cả **A7, A8, A9-client**; phần
+**A9-server (control-plane)** là nhánh việc của Windows, có thể làm **song song** vì app phải chạy đúng
+khi API chưa có.
+
+
 ## 1. Kết luận quan trọng nhất: hướng "ramp" hiện tại của iOS/macOS SAI theo yêu cầu mới
 
 `docs/YEU_CAU_TOC_DO_ON_DINH.md` §3.1 đã đo và kết luận: **nâng số khai băng thông (hysteria2 Brutal)
@@ -115,9 +130,16 @@ pha **HOLD** (§3): giữ nguyên đường đã chọn + tunnel UP + ping đị
 > Nguyên văn: *"Mạng gốc thấp thì đương nhiên VPN cũng bị bóp rồi. Nên cần biết mạng gốc đang ra sao
 > rồi mới khai báo cho VPN."*
 
-- **Đo bằng socket `protect()`** (đi thẳng ra nhà mạng, **KHÔNG** qua tunnel) — hoặc đo ngay trước khi
-  bật tunnel. Burst **2–3 s / 1–3 MB** tới cùng URL đo (`https://proof.ovh.net/files/10Mb.dat`) để so
-  được với goodput qua VPN.
+- ⚠️ **Thời điểm (yêu cầu §2e — sửa 22/09): đo TRƯỚC khi mở client**, tức trước khi số khai được truyền
+  vào transport — **không** đợi tunnel lên mới đo (bản đầu của kế hoạch ghi "sau khi tunnel lên" là SAI).
+- **Đo bằng socket `protect()`** (đi thẳng ra nhà mạng, **KHÔNG** qua tunnel). Thông số lấy đúng chuẩn
+  Android để so được giữa các nền tảng: **1,5 MB, tối đa 2,5 s, tối thiểu 200 KB** mới coi là số hợp lệ;
+  URL đo `https://proof.ovh.net/files/10Mb.dat`.
+- **Tần suất**: **1 lần cho mỗi mạng trong mỗi phiên** (đổi mạng ⇒ đo lại). Không đo lại ở các lần dựng
+  lại transport sau đó — nếu không sẽ vi phạm A5 (hồi ≤15 s).
+- **Số đo TƯƠI thắng bộ nhớ** khi chốt số khai; vẫn ghi lại đỉnh vào bộ nhớ theo mạng cho lần sau.
+- **Đo hỏng ⇒ lùi về số nhớ/nấc tĩnh, KHÔNG bao giờ chặn kết nối**, không ném lỗi.
+- Log bắt buộc (mẫu Android): `bw: DO MANG THUC TE truoc khi khai net=<key> = <X>kbps (mat <t>ms) - dung so nay lam so khai`.
 - **Nhớ theo mạng**: lưu raw + thời điểm đo vào đúng bộ nhớ theo `NetworkIdentity` đang có
   (`HysteriaBandwidthControl` đã nhớ theo SSID/router/interface) ⇒ Wi-Fi nhà và 4G có số riêng, lần sau
   không phải đo lại ngay. Đo lại khi **đổi mạng** hoặc mỗi ~10 phút.
@@ -152,6 +174,9 @@ pha **HOLD** (§3): giữ nguyên đường đã chọn + tunnel UP + ping đị
 |---|---|---|
 | 0 | **Điều kiện tiên quyết (đang chặn):** bật **Keychain Sharing** cho App ID ở Apple Developer portal (việc làm tay — ASC API trả 409) rồi sinh lại profile + ký lại IPA | cổng `check-publish-version.py --platform ios` **ĐẠT** (không còn "Nhóm keychain THIẾU trong profile") và **đăng nhập được** trên iPhone |
 | 1 | P0-1 merge watchdog + ngưỡng A5 15 s/15 s; P0-2 `TransportLadder` + `GoodputMeter` | unit test harness PASS |
+| 1b | **A8** — đo mạng thật **TRƯỚC khi mở client** (§4.7) đúng chuẩn 1,5 MB/≤2,5 s/≥200 KB | log `bw: DO MANG THUC TE truoc khi khai …` |
+| 1c | **A7** — app TQ đi đường riêng: rule `geosite:cn`/`geoip:cn → direct` (xác nhận core trước) | WeChat/Alipay đăng nhập được + **byte tunnel không tăng** |
+| 1d | **A9 (client)** — gửi `/v1/route-report`, chỉ đổi khi có `recommended` (≤2 s, ttl còn hạn), không có thì tự chọn; nhịp ≤1/5 phút; identity **dạng băm** | log request/response + nhánh "server không trả lời" |
 | 2 | P0-3 máy trạng thái (START/RAMP/STABLE/PROBE/DEGRADED/**HOLD**) + §4.7 `RawLinkProbe` | log thiết bị có `raw:`, `stable at <X> Mbps`, `hold:` |
 | 3 | P0-4 **kênh dò** (§4.4) — trên iOS dùng `protect()` (API có sẵn, đúng chỗ nhất để làm trước) | log `probe: …`, 2 lần ≥1,25× |
 | 4 | P1-1 rà state/message + 16 KB; P1-2 giảm dựng lại transport vì ramp về 0 | ảnh UI + `otool` |
@@ -225,16 +250,3 @@ done
   đề xuất đợt này là **1.5.0** (iOS `CURRENT_PROJECT_VERSION` 18, macOS 16) — *chờ chủ dự án chốt số*.
   Sau khi build: cổng chặn → test iPhone thật (`PUBLISHER_PROCESS.md` §2c) → sổ `release-record append`
   → tag → email do publisher gửi.
-
-## 9. Trạng thái thi công (cập nhật 22/09/2026, T-20260922-10 — sau khi chốt cả 3 câu hỏi)
-
-| # | Việc | Trạng thái | Bằng chứng |
-|---|---|---|---|
-| P0-1 + chốt Q1 | Hết trần 3 lần dựng lại ⇒ KHÔNG `teardownAndCancel` nữa mà chuyển pha **HOLD**: giữ đường đã chọn, tunnel vẫn `Connected`, ping lại mỗi nhịp ≤15 s; mạng về ⇒ STABLE mức cũ + PROBE lại | ✅ | `LivenessWatchdog.beginHold/holdTick/resetAfterRebuild`; `HysteriaPacketTunnelProvider.enterLivenessHold/holdStep/finishLivenessHold` + nhánh HOLD trong `livenessStep`; `selfRescue` bỏ qua khi HOLD; đường ramp thất bại cũng vào HOLD. Log đúng `hold: giu <path>, ping lai moi <t>s (lan <n>)` |
-| P0-2 + chốt Q3 | `TransportLadder`: node khác là bậc HỢP LỆ (`allowsOtherNodeRungs = true`) nhưng bị cổng chứng minh kênh dò chặn; `NodeUpgradePolicy` giữ chốt chặn ≥1,25× ×2 và ưu tiên node khách chọn (sống lại + ngang bằng ⇒ quay về) | ✅ | `TransportLadder.markProven/canUseRung` + `NodeUpgradePolicy` |
-| Test | Bằng chứng chạy thật | ✅ | `bash scripts/ios-pure-logic-tests/run.sh` → **54/54 PASS** (trước 39/39); `swiftc -frontend -parse iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift` → exit 0 |
-| P0-3, P0-4, §4.7 | Máy trạng thái START/RAMP/STABLE/PROBE/DEGRADED + kênh dò mạng thật (`ProbeChannel`) + đo mạng gốc (`RawLinkProbe`) | ⏳ chưa làm | Việc lớn; làm tiếp theo đúng các chốt ở §4.1/§4.4/§4.7. `NodeUpgradePolicy` là phần logic đã sẵn sàng cho kênh dò |
-
-**Lỗ hổng tài liệu vẫn còn:** `docs/YEU_CAU_TOC_DO_ON_DINH.md` và `docs/VERSIONING.md` (nguồn A1–A6 +
-luật version) vẫn **không tồn tại trong repo**; cần bổ sung để thi công P0-3/P0-4 dựa trên nguồn thật.
-
