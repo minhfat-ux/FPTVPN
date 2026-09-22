@@ -168,6 +168,16 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 2. Đưa **release notes** lên web (hiện chỉ nằm trong repo `release/<platform>/RELEASE_NOTES_<ver>.md`).
 3. Tự động hoá: 1 script `publish-ios.sh <ipa> <ver> <build>` + `publish-android.sh <apk-modern> <apk-legacy> <ver>` chạy đủ 10 bước §1 và in bằng chứng.
 4. Kiểm tra định kỳ: link phát hành còn 200 + size khớp (đưa vào `health-watch`).
+5. **AUDIT toàn kênh (chủ dự án yêu cầu 22/09/2026)** — mỗi nền tảng phải đang phục vụ ĐÚNG bản latest;
+   kênh nào lệch thì **cập nhật lại link tải + set mốc + thông báo khách**:
+   ```bash
+   python3 scripts/audit-releases.py            # tải TỪNG artifact thật rồi đọc version BÊN TRONG
+   python3 scripts/audit-releases.py --no-download   # chỉ mốc + size (nhanh, KHÔNG kết luận đạt)
+   ```
+   Mã thoát: `0` mọi kênh khớp · `1` có kênh LỆCH (phải xử lý) · `2` có kênh chưa đối chiếu được
+   (macOS cần chạy trên máy Mac, APK cần `aapt2`). Lần chạy đầu (22/09): Windows **khớp 1.4.2**;
+   iOS **LỆCH** — phát đúng 1.4.0 nhưng profile thiếu nhóm keychain `.shared` nên khách không đăng
+   nhập được ⇒ phải sửa + ký lại + thông báo khách.
 
 ## 8. Lỗi đã từng xảy ra (đọc để không lặp)
 - Link trên `/buy` trỏ sai host (`api.` ⇒ 401). Link tải phải là `t1.` hoặc `meetflowai.site`.
