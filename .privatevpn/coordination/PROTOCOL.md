@@ -61,10 +61,15 @@ flowvpn-coord release --owner server --area tg-bot
 **Từ harness Mac:**
 
 ```bash
-ssh root@165.101.114.162 flowvpn-coord list
-ssh root@165.101.114.162 flowvpn-coord check scripts/tg-bot/bot.mjs
-ssh root@165.101.114.162 flowvpn-coord claim --owner mac --area ios --files ios/ --note "build IPA"
-ssh root@165.101.114.162 flowvpn-coord release --owner mac --area ios
+# BẮT BUỘC có -i: root@node-2 chỉ nhận khoá fpt_vpn_node (hoặc fpt_tunnel). Thiếu -i sẽ
+# báo "Permission denied (publickey,password)". KHÔNG dùng alias `node-2` trong ~/.ssh/config
+# vì block đó thiếu HostName (ssh -G node-2 ra hostname=node-2, không resolve được).
+SSH="ssh -o BatchMode=yes -o ConnectTimeout=10 -i $HOME/.ssh/fpt_vpn_node root@165.101.114.162"
+
+$SSH flowvpn-coord list
+$SSH flowvpn-coord check scripts/tg-bot/bot.mjs
+$SSH flowvpn-coord claim --owner mac --area ios --files ios/ --note "build IPA"
+$SSH flowvpn-coord release --owner mac --area ios
 ```
 
 Mã nguồn của tool: `scripts/coord/flowvpn-coord.mjs` (bản chạy trên server:
@@ -95,8 +100,12 @@ commit — không thể quên. Bật một lần cho mỗi clone:
 ```bash
 git config core.hooksPath .githooks
 git config coord.owner windows        # windows | mac | server
-# server/Mac gọi trực tiếp bảng việc:
+# server chạy trên node-2 nên gọi trực tiếp bảng việc:
 git config coord.cmd "flowvpn-coord"
+# Mac: bảng việc nằm trên node-2 ⇒ phải đi qua ssh, kèm -i (xem §4). Dùng $HOME, ĐỪNG dùng ~:
+# hook chạy chuỗi này KHÔNG qua shell nên ~ không được expand, ssh sẽ nhận literal "~/.ssh/...".
+# Có ConnectTimeout: hook là fail-open, nhưng ssh treo sẽ làm `git commit` treo theo.
+git config coord.cmd "ssh -o BatchMode=yes -o ConnectTimeout=10 -i $HOME/.ssh/fpt_vpn_node root@165.101.114.162 flowvpn-coord"
 # Windows (đi qua node-1):
 git config coord.cmd "ssh -o BatchMode=yes -J root@103.173.155.50 root@165.101.114.162 flowvpn-coord"
 ```

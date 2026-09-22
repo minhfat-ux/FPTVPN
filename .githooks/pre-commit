@@ -7,8 +7,11 @@
 # Cai dat (moi may chay 1 lan trong repo):
 #   git config core.hooksPath .githooks
 #   git config coord.owner windows        # windows | mac | server
-#   git config coord.cmd "flowvpn-coord"  # tuy may: server/mac goi truc tiep;
+#   git config coord.cmd "flowvpn-coord"  # tuy may: server goi truc tiep (chay tren node-2);
+#                                        # Mac: "ssh -o BatchMode=yes -i $HOME/.ssh/fpt_vpn_node root@165.101.114.162 flowvpn-coord"
 #                                        # Windows: "ssh -o BatchMode=yes -J root@<node-1> root@<node-2> flowvpn-coord"
+#                                        # LUU Y: chuoi nay chay khong qua shell => dung $HOME (da expand
+#                                        # luc `git config`), dung ~ se khong duoc expand.
 #
 # Fail-open: khong goi duoc bang viec (mat mang, ssh loi) thi chi CANH BAO roi cho qua —
 # mot cai hook khong duoc phep treo ca doi.

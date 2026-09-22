@@ -57,6 +57,10 @@ FPT-Harness/
 # Local toolchains (JDK on BIWIN — ExFAT, keep out of git)
 .tools/
 
+# Python bytecode — scripts/*.py chạy trực tiếp, .pyc sinh lại được mỗi lần chạy
+__pycache__/
+*.pyc
+
 # Built release artifacts (APKs / archives) — regenerate with gradle/xcodebuild
 release/
 android/app/libs/hysteria-sources.jar
