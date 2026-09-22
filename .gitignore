@@ -27,3 +27,6 @@ ops/tasks/.watch-*.json
 # tình cờ trùng một tiến trình đang sống thì watcher tưởng "đã có watcher khác" rồi tự thoát.
 ops/tasks/.*
 AGENTS.local.md
+
+# State runtime của plugin AgentTeams — không commit.
+.agent-teams/

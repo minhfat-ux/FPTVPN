@@ -118,3 +118,57 @@ agent_teams_resume        agent_teams_delete
 ```sh
 node ops/task.mjs done T-20260921-01 --evidence "commit=<sha>, cmd=ops\install-agent-teams.cmd, kết quả=<3 lệnh §6 + 14/14 tool>" --push
 ```
+
+---
+
+# PHỤ LỤC (MAC) — vì sao phải nâng host, và các lựa chọn khác
+
+## A. Nguyên nhân gốc (đã kiểm tra, không phải phỏng đoán)
+
+Host **0.1.1-rc.2** thiếu hẳn package `@deepseek-ai/dsh-api-session-controller`, nên **không có service
+nào gửi được tin vào inbox của một session khác**. Các đường đã kiểm tra và loại trừ:
+
+| Đường | Kết quả |
+|---|---|
+| `agentTeams` | Chỉ là *khai báo* trong catalog API của DSH (`dsh-tool-cordis`), **không package nào cài đặt** → `ctx.get('agentTeams')` trả `undefined` |
+| `send_message` (tool có sẵn) | Chỉ gửi được cho subagent do **chính session đó** sinh ra. Gửi sang session khác (kể cả sau khi nâng host) đều bị từ chối: `belongs to another parent session` |
+| `subagents.followup` | Yêu cầu phải là **session cha** của đích |
+| `agentTeams.sendMessage` | Không dùng được vì service không mount |
+| Event của Host | Đọc hết catalog Event: **không có** event nào đưa tin vào inbox session khác |
+| `sessions.list()` / `sessionQuery` | Chỉ **đọc** được, không gửi được |
+
+⇒ Không thể "nhắn cho session đang chạy" trên host cũ bằng bất kỳ đường nào. **Bắt buộc nâng host.**
+
+## B. Bằng chứng bên MAC
+
+| Bước | Lệnh | Kết quả |
+|---|---|---|
+| Cài pnpm (máy chưa có) | `npm install -g pnpm` | `pnpm 12.5.1` tại `/opt/homebrew/bin/pnpm` |
+| Sao lưu cấu hình | `cp ~/.dsh/profiles/web/{package.json,cordis.patch.yml,cordis.yml,pnpm-workspace.yaml} ~/.dsh/backups/…` | `~/.dsh/backups/flowtech-agent-teams-20260921-143441/` |
+| Nâng host | `npm install -g @deepseek-ai/dsh@0.1.5-rc.1` | `0.1.1-rc.2` → `0.1.5-rc.1` |
+| Cài plugin | `dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.20` | vào `dsh.profile.bundles` của profile `web` |
+| Kiểm composition | `dsh --profile web --dump-config \| grep -A3 agent-teams` | có row `id: agent-teams` (tổng 156 row) |
+| Kiểm **runtime** | thêm plugin vào profile `headless`, chạy một lượt rồi gỡ ra | agent tự liệt kê **đủ 14 tool** `agent_teams_*`, gồm `agent_teams_send_message` |
+| Sau restart | session `web` gọi `agent_teams_status` | trả lời đúng ngữ cảnh domain (tool đã sống) |
+
+Chọn **`0.1.5-rc.1`** chứ không phải `0.1.5-rc.2`: peerDependencies của plugin ghi rõ
+`"0.1.5-rc.1 || 0.1.2-rc.1 || 0.1.2-alpha.5 || 0.1.2-alpha.2"` — `rc.2` **không** nằm trong danh sách.
+Còn `@huangjiangheng/dsh-cross-session` (3 tool `sessions_list/read/send`, đúng kiểu "nhắn session khác")
+thì lại yêu cầu host `0.1.5-rc.2` và **không có trên npm**, phải cài từ GitHub.
+
+## C. Hai lựa chọn khác nếu sau này cần
+
+| Gói | Cho gì | Ghi chú |
+|---|---|---|
+| `@deepseek-ai/dsh-experimental-agent-team` + `@deepseek-ai/dsh-experimental-tool-agent-team` | Bản **chính thức**, cung cấp đúng service `agentTeams` mà catalog DSH khai báo | Đang ở `0.1.5-alpha.2`, cần host `^0.1.5-alpha.2`; profile mẫu ở `deepseek-ai/deepseek-harness/packages/experimental/agent-team-profile/cordis.patch.yml` |
+| `github:MrHuangJser/dsh-cross-session` | `sessions_list`, `sessions_read`, `sessions_send` — nhắn thẳng vào inbox session khác | Không có trên npm; tác giả xác nhận chạy với host `0.1.5-rc.2` |
+
+## D. Cảnh báo thêm
+
+- **DSH Desktop**: bản desktop nhúng core riêng — nâng CLI toàn cục **không** nâng core trong app.
+  Nếu chạy desktop thì phải cập nhật app, hoặc chuyển sang `dsh web` từ CLI.
+- Quay lại bản cũ: `npm install -g @deepseek-ai/dsh@0.1.1-rc.2` rồi
+  `dsh plugin --profile web remove @nanmicoder/dsh-agent-teams`.
+- Giới hạn đã biết của AgentTeams: thành viên là subagent **do captain sinh ra**, nên nó **không** nhắn
+  được cho một session có sẵn thuộc session cha khác. Muốn đúng session đó nhận việc thì phải do session
+  cha của nó chuyển tiếp, hoặc dùng `dsh-cross-session` ở mục C.
