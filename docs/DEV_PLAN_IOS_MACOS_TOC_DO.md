@@ -42,7 +42,7 @@ Số khai băng thông chỉ còn là tham số phụ (giữ để không tự b
 
 | Pha | Vào pha | Việc | Ra pha | Log bắt buộc |
 |---|---|---|---|---|
-| **START** | vừa connect | nối bằng **đường tốt nhất đã nhớ** (lưu trong UserDefaults theo `NetworkIdentity` — đã có), đo goodput 1 s, cửa sổ trượt 12 s | có mẫu goodput đầu tiên | `start: path=<x> goodput=<y>` |
+| **START** | vừa connect | **ĐO MẠNG GỐC trước** (§4.7) rồi mới khai báo; nối bằng **đường tốt nhất đã nhớ** (lưu trong UserDefaults theo `NetworkIdentity` — đã có), đo goodput 1 s, cửa sổ trượt 12 s | có mẫu goodput đầu tiên | `start: raw=<r> Mbps, path=<x> goodput=<y>` |
 | **RAMP** | 15–90 s | goodput < 8 Mbps **và** còn bậc đường chưa thử ⇒ **nâng cấp đường**, tối đa 3 lần, một chiều | goodput ≥ 8 Mbps bền 10 s → STABLE; hết bậc → STABLE mức thấp nhất | `ramp: <bậc cũ> → <bậc mới> (goodput <y>)` |
 | **STABLE** | đạt mốc | **khoá** đường + số khai; ghi `stable at <X> Mbps`; **cấm** dựng lại vì lý do tốc độ | đường hỏng (A5) → DEGRADED; kênh dò chứng minh lãi → RAMP | `stable at <X> Mbps (path=<x>)` |
 | **PROBE** | trong STABLE, phiên rảnh ≥5 s | mở **kênh riêng** (mục 4.4); nhịp 5 phút → ×2 → trần 30 phút | gain ≥1,25× ở **2 lần liên tiếp** → RAMP; không → giữ nguyên | `probe: no gain (X vs Y) -> keep stable` |
@@ -96,6 +96,25 @@ pha **HOLD** (§3): giữ nguyên đường đã chọn + tunnel UP + ping đị
   gomobile/Go với `-Wl,-z,max-page-size=16384` (Go ≥1.23). Đây là cảnh báo của Android 16 nhưng cùng
   toolchain gomobile nên phải kiểm.
 
+### 4.7 `RawLinkProbe` — MỚI: đo **MẠNG GỐC** trước khi khai báo (chủ dự án chốt 22/09)
+> Nguyên văn: *"Mạng gốc thấp thì đương nhiên VPN cũng bị bóp rồi. Nên cần biết mạng gốc đang ra sao
+> rồi mới khai báo cho VPN."*
+
+- **Đo bằng socket `protect()`** (đi thẳng ra nhà mạng, **KHÔNG** qua tunnel) — hoặc đo ngay trước khi
+  bật tunnel. Burst **2–3 s / 1–3 MB** tới cùng URL đo (`https://proof.ovh.net/files/10Mb.dat`) để so
+  được với goodput qua VPN.
+- **Nhớ theo mạng**: lưu raw + thời điểm đo vào đúng bộ nhớ theo `NetworkIdentity` đang có
+  (`HysteriaBandwidthControl` đã nhớ theo SSID/router/interface) ⇒ Wi-Fi nhà và 4G có số riêng, lần sau
+  không phải đo lại ngay. Đo lại khi **đổi mạng** hoặc mỗi ~10 phút.
+- **Dùng để làm 3 việc**:
+  1. **Trần mục tiêu** = `min(8 Mbps, raw × biên an toàn)` — mạng gốc thấp thì không coi là fail;
+  2. **Chốt số khai** cho VPN: **không vượt** mạng gốc (khai cao hơn ⇒ Brutal flood ⇒ mất gói), cũng
+     **không** thấp hơn nhiều (tự bóp);
+  3. **Mốc so sánh để biết nút thắt ở đâu**: `VPN goodput << raw` ⇒ nút thắt là **ĐƯỜNG/NODE** ⇒ ramp
+     đường có ích; `VPN goodput ≈ raw` ⇒ đã chạm trần mạng thật ⇒ **đừng** ramp vô ích (tiết kiệm pin,
+     tránh dựng lại oan).
+- Chạy trên hàng đợi riêng, **không** chặn phiên chính; log bắt buộc: `raw: <x> Mbps (net=<identity>)`.
+
 ## 5. Thứ tự thi công & bằng chứng
 
 | # | Việc | Ai | Bằng chứng |
@@ -133,10 +152,25 @@ done
    Đây là pha **HOLD** ở §3. Hệ quả kỹ thuật: khi ở HOLD, UI **không** được đổi trạng thái VPN (vẫn
    Connected); thông báo (nếu có) chỉ là dòng phụ, không chặn; và **cấm** mọi lần `closeTun()`/teardown
    vì lý do tốc độ.
-2. **Mốc 8 Mbps khi mạng gốc thấp hơn 8**: giữ STABLE ở mức thấp nhất đạt được (không coi là fail) —
-   đúng ý "stable ở mức đó" chứ? *(Đề xuất: có, kèm log `stable at <X> (below target)`.)*
-3. **Có được nâng cấp sang node KHÁC không** (A6 nêu "WS relay của node khác"): đổi node giữa phiên có
-   thể ảnh hưởng quota/chi phí và IP thoát của khách — cho phép hay chỉ nâng cấp **đường** trên cùng node?
+2. **Mạng gốc < 8 Mbps** — ✅ **CHỐT 22/09/2026 (chủ dự án):** *"Mạng gốc thấp thì đương nhiên VPN
+   cũng bị bóp rồi. Nên cần biết mạng gốc đang ra sao rồi mới khai báo cho VPN."*
+   ⇒ Không coi là fail. Nhưng **bắt buộc đo mạng gốc TRƯỚC** rồi mới khai báo: trần mục tiêu =
+   `min(8 Mbps, mạng gốc × biên an toàn)`; nếu mạng gốc < 8 thì STABLE ở mức đạt được và ghi log
+   `target capped by raw=<x> Mbps`. Số khai **không được vượt** mạng gốc (khai cao hơn chỉ làm Brutal
+   flood ⇒ mất gói), và cũng **không** khai thấp hơn nhiều (tự bóp). Chi tiết: §4.7.
+3. **Có được nâng cấp sang node KHÁC không** (A6 nêu "WS relay của node khác") — ⏳ *chờ chốt; đã giải thích cho chủ dự án 22/09.*
+   **Node = máy chủ thoát** (node-1 `103.173.155.50`, node-2 `165.101.114.162`); khách chọn trong
+   Settings (`VPNManager.swift:138-150`) và **IP thoát = IP của node đó**.
+   - *Nâng cấp ĐƯỜNG* (QUIC/UDP → TCP relay → WS relay): **giữ nguyên node, IP thoát KHÔNG đổi** — đây
+     là phần chính của kế hoạch, khách gần như không thấy gì.
+   - *Nâng cấp NODE* (node-1 → node-2): **ĐỔI IP thoát** ⇒ web/ngân hàng/streaming có thể bắt đăng nhập
+     lại, captcha, đổi vùng; phải bắt tay lại với khoá/config **của node khác** (đã có bug thật khi
+     dùng chung URL relay cho mọi node — `VPNManager.swift:140-142`); hạ tầng có thể tính phiên/quota
+     theo node.
+   Ba lựa chọn: **(A)** không bao giờ đổi node giữa phiên (node chết ⇒ HOLD, khách tự đổi node);
+   **(B)** chỉ nhảy node khi node hiện tại **CHẾT HẲN** (không phải chỉ chậm) — ưu tiên giữ node, node
+   sống lại thì quay về node khách đã chọn; **(C)** nhảy cả khi chỉ chậm (đổi IP liên tục) — **không
+   đề xuất**. *Đề xuất của Windows harness: **(B)**.*
 
 ## 8. Phụ thuộc & rủi ro
 
