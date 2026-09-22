@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-12",
+  "title": "GAP toi nay: cai ban moi len macOS + iPhone de chu du an test mang khach san",
+  "from": "win",
+  "to": "mac",
+  "detail": "Chu du an can toi NAY: cai ban moi len CA macOS LAN iPhone. Build tu main hom nay, PHAI co 479a6d7 (bo ipv6Settings ::/0 - loi iOS mat mang khi connect) va c5d7564 (A10 the Diagnostics live 1s + A11 khai bao an toan truoc). macOS: build roi cai vao /Applications tren may Mac. iPhone: build IPA (can Hysteria.xcframework - KHONG co trong git, tao bang 'bash tools/hysteria-apple/build.sh', gomobile bind tu apernet/hysteria tag app/v2.12.2; build NGOAI sandbox vi SwiftPM bi chan) roi cai bang devicectl khi da cam cap. Tang CURRENT_PROJECT_VERSION don dieu (iOS dang 17). Vi sao gap: mang khach san thuong IPv6/dual-stack (ban cu con ::/0 rat de mat mang), thuong chan UDP (can xac nhan transport tu roi ve cau WS), co captive portal (phai dang nhap portal TRUOC khi bat VPN). Chi tiet: bus #190 cua WIN.",
+  "verify": "Bao lai bang chung: (1) version+build da cai tren macOS (About trong app) va ket qua cai vao /Applications; (2) version+build IPA da cai len iPhone (devicectl) + anh man hinh; (3) ten commit da build. NEU vuong thi bao NGAY, ghi ro vuong o dau: (a) thieu Hysteria.xcframework / SwiftPM bi sandbox chan; (b) iPhone chua cam cap; (c) Keychain Sharing chua bat trong Apple Developer portal (ASC API tra 409, phai lam tay) - neu (c) chua xong thi iPhone KHONG dang nhap duoc nen phai bao ngay cho chu du an.",
+  "due": "2026-09-22",
+  "createdAt": "2026-09-22T10:26:08.195Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T10:26:08.197Z"
+}
