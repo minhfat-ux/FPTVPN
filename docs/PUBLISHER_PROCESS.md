@@ -3,6 +3,33 @@
 > Vai trò **publisher** = harness Mac. Tài liệu này là **luật**: làm sai thứ tự ⇒ dừng, hỏi chủ dự án.
 > Đọc kèm: `docs/RELEASE_RUNBOOK.md` (lệnh chi tiết), `docs/RELEASE_ARTIFACTS_<ngày>.md` (bàn giao từ bên build).
 
+## 0. PROCESS ĐÃ ĐỔI (22/09/2026) — MỌI BÊN ĐỌC TRƯỚC KHI PUBLISH
+> Sinh ra từ **3 sự cố thật trong cùng một ngày** (khách Windows cài bản ghi `FileVersion 1.0.0`;
+> khách iOS nhập code xong không vào được app; khách macOS cài xong báo *"không thể mở"*).
+> Bảng này là **việc phải cập nhật vào process của từng bên** — không phải gợi ý.
+
+| # | Luật mới | Mục | Ai phải làm |
+|---|---|---|---|
+| 1 | **Cổng chặn version bắt buộc trước upload**: đọc version TỪ BÊN TRONG artifact (không tin tên file/size/nhật ký), đối chiếu số định phát + mốc; chặn phát lùi/phát trùng | §1c bước 1c, §2 | publisher (mọi nền tảng) |
+| 2 | **Sau upload chạy lại cổng ở `--mode post`** — đọc version trong file ĐANG PHÁT, đối chiếu mốc | §1c bước 5b | publisher |
+| 3 | **iOS: nhóm keychain phải có trong CẢ code signature LẪN provisioning profile.** Profile thiếu nhóm (hoặc chỉ có wildcard `…*`) ⇒ `SecItemAdd` trả `-34018` ⇒ khách **không đăng nhập được** | §2, `IOS_INSTALL_TROUBLESHOOTING.md` §0a | bên ký iOS (Mac) + publisher verify |
+| 4 | **iOS: test trên iPhone THẬT** (Simulator không tính) theo bảng 7 mục §2c trước khi phát | §2c | bên build iOS (Mac) |
+| 5 | **macOS: DMG phải STAPLE**; `stapler validate` + `spctl` + `codesign --deep --strict` đều phải đạt. `spctl` một mình **KHÔNG đủ** (máy build báo Notarized dù chưa staple) | `MACOS_SIGN_NOTARIZE.md` §4a | bên ký macOS (Mac) |
+| 6 | **Windows: số hiệu phải nằm trong metadata .exe** (`<Version>` trong csproj + `/p:Version` khi publish) và **UI hiện version** để đối chiếu mốc server | `windows/installer/build.ps1` bước 3b, Settings → About | Windows harness |
+| 7 | **PUBLISHER lo CẢ publish LẪN email.** Windows harness chỉ phát hành bản Windows rồi bàn giao số liệu — **không tự gửi email khách** | §5 | publisher |
+| 8 | **Audit toàn kênh định kỳ**: kênh nào chưa phải latest ⇒ cập nhật lại link tải + set mốc + **thông báo khách** | §7 mục 5 (`scripts/audit-releases.py`) | publisher |
+| 9 | Chỉ phát **bản mới nhất đã được test** — publisher không tự chọn bản | §2b | publisher |
+
+**Công cụ dùng chung cho mọi bên:**
+```bash
+python3 scripts/check-publish-version.py --platform <ios|macos|android|windows> \
+    --file <artifact> --version <định phát> [--build <n>] [--app-exe <exe>]   # TRƯỚC khi upload
+python3 scripts/check-publish-version.py --platform <p> --mode post --version <định phát>   # SAU khi upload
+python3 scripts/audit-releases.py        # audit toàn bộ kênh (đọc version bên trong từng artifact)
+```
+`check-publish-version.py` chạy trên máy **không đủ công cụ** sẽ báo `KHÔNG KIỂM ĐƯỢC` (exit 2) —
+**không** giả vờ đạt. DMG cần macOS, `.exe` cần Windows, APK cần `aapt2`.
+
 ## 1. Luồng bắt buộc: BUILD → HANDOFF → PUBLISH → ANNOUNCE
 ```
 [máy build]  build xong, ghi docs/RELEASE_ARTIFACTS_<ngày>.md (bảng: file, size, sha256, version, ký, đích node-2, mốc)
