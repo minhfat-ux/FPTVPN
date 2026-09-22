@@ -3,7 +3,11 @@
 - **Người làm**: DSH main agent (owner `windows`)
 - **Ngày**: 2026-09-22
 - **Phạm vi**: verify cây làm việc + commit/push lên GitHub `minhfat-ux/FPTVPN`
-- **Kết quả cuối**: `main = 0ac7d4c` (đã có trên GitHub), cây làm việc **sạch**
+- **Kết quả cuối**: `main = 660d9c2` (GitHub), cây làm việc **khớp GitHub, sạch**
+  - `0ac7d4c` — việc thật của Android (3 file) — **đã push**
+  - `6d58919` — báo cáo này — **đã push**
+  - `5add22f`, `2779a64`, `660d9c2` — agent khác push song song trong lúc tôi làm (Windows 1.4.2 metadata,
+    trả lại `<Version>1.4.2` trong csproj, publisher doc iOS) — đã rebase, không xung đột nội dung
 
 ## 1. Phát hiện chính (bằng chứng ở §3)
 
@@ -102,3 +106,17 @@ $ git diff --stat origin/main                    -> (trống, khớp GitHub)
    chạy đủ cần `npm --prefix control-plane ci`.
 4. `git fetch` trong phiên này cần quyền rộng hơn sandbox mặc định (`schannel … SEC_E_NO_CREDENTIALS`);
    push đã chạy được sau khi được cấp quyền.
+5. **⚠️ CẢNH BÁO — có tiến trình NGOÀI đang ghi đè file trong repo này.** Bằng chứng: trong lúc tôi
+   làm, `scripts/check-publish-version.py` bị ghi lại lúc **11:37:12** và csproj bị ghi lại, đều mang
+   **nội dung CŨ** (bản `5c80340`/trước `2779a64`). Hệ quả thật đã suýt xảy ra: commit local của tôi
+   khi đó **xoá 12 dòng fix DMG của agent khác** và **xoá `<Version>1.4.2</Version>`** — nếu push
+   nguyên trạng là phá việc vừa làm của họ. Tôi đã phát hiện bằng `git diff origin/main..HEAD` **trước
+   khi push**, nên đã `reset --hard origin/main` và bỏ commit trùng đó.
+   - Nghi phạm: cơ chế checkpoint/sync của harness (ảnh chụp cũ `da70183`, mtime 17–18/09) tự "khôi
+     phục" cây làm việc về ảnh chụp.
+   - **Bắt buộc làm trước mỗi lần commit khi còn hiện tượng này**: `git diff --stat origin/main` và
+     `git diff origin/main..HEAD` để chắc không có dòng nào bị mất; thấy file lạ bị sửa thì
+     `git checkout -- <file>` rồi fetch/rebase lại.
+6. Việc của tôi đã nằm trên GitHub: `0ac7d4c` (Android) + `6d58919` (báo cáo này). Các commit publisher
+   doc/relay mà tôi định ghi thêm thì **agent khác đã ghi trước** (`660d9c2`, `5add22f`), nên tôi bỏ
+   commit trùng, không tạo nhiễu lịch sử.
