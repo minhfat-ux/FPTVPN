@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "Cung yeu cau chu du an ngay 22/09: 'UI nen ghi version de biet chac da publish version dung' + 'check version voi publisher truoc khi chay publish'. Windows DA XONG (commit 7defd33): Settings -> About hien 'Phien ban X (build sha)' + moc moi nhat tren server; scripts/check-publish-version.py (doc version TU BEN TRONG artifact, chan phat lui/lech, --mode post kiem file dang phat); docs/PUBLISHER_PROCESS.md §1c/§1d/§5b bat buoc. VIEC CHO APPLE+ANDROID: (1) iOS/PrivateVPN/SettingsView.swift + mac/PrivateVPNMac/SettingsViewMac.swift: them muc About hien AppVersionService.currentVersion + CFBundleVersion + moc latest_version tu server, khac nhau thi hien ro 'KHAC ban dang cai'; (2) Android SettingsScreen.kt: hien BuildConfig.VERSION_NAME + versionCode + moc; (3) publisher chay cong truoc khi upload: python3 scripts/check-publish-version.py --platform ios --file <ipa> --version <v> --build <n> (va macos/android), sau upload chay --mode post; (4) dung --mode post chot lai ca macOS dang phat (DMG 21.617.309 B = 1.3.3 build 13) trong khi moc latest_mac_version=1.4.0.",
+ "actor": "win",
+ "at": "2026-09-22T03:21:18.602Z"
+}
