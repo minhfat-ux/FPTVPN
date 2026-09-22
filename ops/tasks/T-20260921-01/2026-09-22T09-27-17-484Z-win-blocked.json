@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Phan 1 DAT: dsh --version=0.1.5-rc.1. Phan 2 VUONG that su, da thu lai 22/09: chay cmd /c ops\\install-agent-teams.cmd -> [EPERM] open 'C:\\Users\\Minhn\\.dsh\\profiles\\web\\_tmp_...' (pnpm fail). Retry y nguyen lenh voi sandbox danger-full-access -> 'requires approval, but no approval channel is available' => fail-closed (session do watcher boot, khong co kenh phe duyet). Cung EPERM khi ghi npm-cache C:\\Users\\Minhn\\AppData\\Local\\npm-cache => moi ghi ngoai workspace deu bi chan. Profile web xac nhan thieu plugin: package.json chi co dsh-git-rollback + bundles dsh-base/dsh-web-app, KHONG co @nanmicoder/dsh-agent-teams. => CAN NGUOI chay tay NGOAI harness: mo cmd/PowerShell thuong, cd repo, chay 'ops\\install-agent-teams.cmd', roi TAT HAN dsh web va mo lai + refresh trinh duyet; sau do mo session web hoi 'liet ke cac tool agent_teams_*' (can 14/14).",
+ "actor": "win",
+ "at": "2026-09-22T09:27:17.484Z"
+}
