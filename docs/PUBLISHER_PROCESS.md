@@ -19,6 +19,7 @@
 | 7 | **PUBLISHER lo CẢ publish LẪN email.** Windows harness chỉ phát hành bản Windows rồi bàn giao số liệu — **không tự gửi email khách** | §5 | publisher |
 | 8 | **Audit toàn kênh định kỳ**: kênh nào chưa phải latest ⇒ cập nhật lại link tải + set mốc + **thông báo khách** | §7 mục 5 (`scripts/audit-releases.py`) | publisher |
 | 9 | Chỉ phát **bản mới nhất đã được test** — publisher không tự chọn bản | §2b | publisher |
+| 10 | **ĐỌC HẾT HANDOFF TRƯỚC KHI LÀM** (thêm 22/09 sau ca *báo trùng việc đã xong*): trước khi claim / kiểm / publish phải chạy `ls -t docs/handoff/` → **đọc file mới nhất**, rồi đối chiếu `release/releases.jsonl` + `git tag -l`; việc đã xong ⇒ **không báo lại, không phát lại** (phát trùng cùng version khác hash = cấm) | §0 luật này · `docs/VERSIONING.md` §3.3 | **mọi agent** — nhất là publisher khi nhận lệnh "check & publish" |
 
 **Công cụ dùng chung cho mọi bên:**
 ```bash
