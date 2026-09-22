@@ -53,6 +53,12 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
 
     /// <summary>Thông tin route bypass Trung Quốc đã thêm (để xoá khi ngắt): NIC, gateway, file danh sách.</summary>
     private (string Interface, string Gateway, string ActivePath)? _chinaBypassRoutes;
+
+    /// <summary>
+    /// Như <see cref="_chinaBypassRoutes"/> nhưng cho IPv6. Tách riêng vì NIC/gateway của IPv6
+    /// khác IPv4, và máy có thể chỉ có một trong hai.
+    /// </summary>
+    private (string Interface, string Gateway, string ActivePath)? _chinaBypassRoutesV6;
     private bool _ipv6Blocked;
 
     /// <summary>Route loại trừ đã thêm cho IP endpoint (để xoá lại lúc ngắt kết nối).</summary>
@@ -470,16 +476,10 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
 
         var setScript =
             $"try {{ Set-NetIPInterface -InterfaceAlias '{tunnelName}' -AddressFamily IPv4 -NlMtuBytes {mtu} -ErrorAction Stop }} catch {{ }}";
-        await RunProcessAsync(
-            "powershell",
-            $"-NoProfile -NonInteractive -Command \"{setScript}\"",
-            cancellationToken).ConfigureAwait(false);
+        await RunPowerShellAsync(setScript, cancellationToken).ConfigureAwait(false);
 
         var getScript = $"(Get-NetAdapter -Name '{tunnelName}' -ErrorAction SilentlyContinue).MtuSize";
-        var getResult = await RunProcessAsync(
-            "powershell",
-            $"-NoProfile -NonInteractive -Command \"{getScript}\"",
-            cancellationToken).ConfigureAwait(false);
+        var getResult = await RunPowerShellAsync(getScript, cancellationToken).ConfigureAwait(false);
         var getExit = getResult.ExitCode;
         var getOut = getResult.StdOut;
 
@@ -652,59 +652,64 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
     /// <summary>Gateway + tên NIC vật lý đầu tiên (bỏ qua adapter ảo/TUN của phần mềm khác).</summary>
     private async Task<(string Gateway, string Interface)?> TryGetPhysicalGatewayAsync(CancellationToken cancellationToken)
     {
-        const string script =
-            "(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | " +
-            "Sort-Object RouteMetric | ForEach-Object { " +
-            "$a = Get-NetAdapter -InterfaceIndex $_.ifIndex -ErrorAction SilentlyContinue; " +
-            "if ($a -and $a.InterfaceDescription -notmatch 'clash|mihomo|wintun|tap|wireguard|sing-box|tailscale|zerotier|proxy|vpnflow') " +
-            "{ \"$($_.NextHop)|$($a.Name)\" } } | Select-Object -First 1)";
-
-        var (exitCode, stdout, _) = await RunProcessAsync(
-            "powershell",
-            $"-NoProfile -NonInteractive -Command \"{script}\"",
-            cancellationToken).ConfigureAwait(false);
+        var (exitCode, stdout, _) = await RunPowerShellAsync(PhysicalGatewayV4ProbeScript, cancellationToken)
+            .ConfigureAwait(false);
 
         if (exitCode != 0)
         {
+            _log.Warn("wintun: không dò được gateway vật lý IPv4 (script lỗi) — xem log chẩn đoán.");
             return null;
         }
 
-        var line = stdout.Trim();
-        var separator = line.IndexOf('|');
-        if (separator <= 0 || separator >= line.Length - 1)
-        {
-            return null;
-        }
-
-        var gateway = line[..separator].Trim();
-        var name = line[(separator + 1)..].Trim();
-        return gateway.Length == 0 || name.Length == 0 ? null : (gateway, name);
+        return ParseGatewayLine(stdout);
     }
 
     /// <summary>
     /// Thêm route trực tiếp cho các dải IP Trung Quốc (danh sách tải từ CDN, cache theo TTL).
     /// Best-effort: lỗi mạng/không đọc được danh sách thì bỏ qua — KHÔNG được làm hỏng tunnel.
+    /// Gồm cả IPv4 (<c>cn.txt</c>) và IPv6 (<c>cn6.txt</c>) — hai phần độc lập, một phần lỗi
+    /// không được kéo phần kia chết theo.
     /// </summary>
     private async Task ApplyChinaBypassAsync(string interfaceName, string gateway, CancellationToken cancellationToken)
     {
         try
         {
-            // Náº¿u tunnel Ä‘Ã£ ngáº¯t trong lÃºc task ná»n Ä‘ang chá» máº¡ng/táº£i danh sÃ¡ch thÃ¬ Bá»Ž QUA â€”
-            // trÃ¡nh thÃªm 5.5k route sau khi Ä‘Ã£ dá»n (Ä‘Ãºng lá»—i Ä‘Ã£ gáº·p á»Ÿ 1.0.5: route rÃ¡c cÃ²n láº¡i).
+            // Nếu tunnel đã ngắt trong lúc task nền đang chờ mạng/tải danh sách thì BỎ QUA —
+            // tránh thêm route sau khi đã dọn (đúng lỗi đã gặp ở 1.0.5: route rác còn lại).
             lock (_lock)
             {
                 if (_endpointRoute is null)
                 {
-                    _log.Info("china-bypass: tunnel Ä‘Ã£ ngáº¯t (bá» qua bypass)");
+                    _log.Info("china-bypass: tunnel đã ngắt (bỏ qua bypass)");
                     return;
                 }
             }
+
             var workDir = DefaultWorkingDirectory();
             Directory.CreateDirectory(workDir);
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            await ApplyChinaBypassV4Async(http, workDir, interfaceName, gateway, cancellationToken).ConfigureAwait(false);
+            await ApplyChinaBypassV6Async(http, workDir, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"china-bypass: bỏ qua do lỗi — {ex.Message}");
+        }
+    }
+
+    private async Task ApplyChinaBypassV4Async(
+        HttpClient http,
+        string workDir,
+        string interfaceName,
+        string gateway,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
             var cachePath = Path.Combine(workDir, "routes-cn.txt");
             var activePath = Path.Combine(workDir, "routes-cn-active.txt");
 
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
             var cidrs = await ChinaBypass.LoadAsync(http, cachePath, ChinaBypass.DefaultCacheTtl, cancellationToken)
                 .ConfigureAwait(false);
             if (cidrs.Count == 0)
@@ -723,10 +728,7 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
                 $"New-NetRoute -DestinationPrefix $c -InterfaceAlias '{interfaceName}' -NextHop '{gateway}' -PolicyStore ActiveStore | Out-Null; $n++ }}; " +
                 "$n";
 
-            var (exitCode, stdout, stderr) = await RunProcessAsync(
-                "powershell",
-                $"-NoProfile -NonInteractive -Command \"{script}\"",
-                cancellationToken).ConfigureAwait(false);
+            var (exitCode, stdout, stderr) = await RunPowerShellAsync(script, cancellationToken).ConfigureAwait(false);
 
             if (exitCode != 0)
             {
@@ -743,37 +745,188 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         }
         catch (Exception ex)
         {
-            _log.Warn($"china-bypass: bỏ qua do lỗi — {ex.Message}");
+            _log.Warn($"china-bypass: IPv4 bỏ qua do lỗi — {ex.Message}");
         }
     }
 
-    /// <summary>Xoá các route bypass Trung Quốc đã thêm (gọi khi ngắt tunnel).</summary>
+    /// <summary>
+    /// Bypass IPv6 cho dải Trung Quốc. Máy không có IPv6 ra Internet (không có default route
+    /// <c>::/0</c>) thì BỎ QUA hoàn toàn — khi đó IPv6 vẫn bị chặn như cũ, không rò IP thật.
+    ///
+    /// Vì sao vẫn thêm được route dù đang chặn IPv6: route chặn là <c>::/1</c> và <c>8000::/1</c>
+    /// (prefix dài 1), còn dải TQ là /30…/48 ⇒ theo luật "prefix dài nhất thắng", chỉ đúng dải TQ
+    /// được đi thẳng, phần IPv6 còn lại vẫn đen.
+    /// </summary>
+    private async Task ApplyChinaBypassV6Async(HttpClient http, string workDir, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var physical = await TryGetPhysicalGatewayV6Async(cancellationToken).ConfigureAwait(false);
+            if (physical is not { } v6)
+            {
+                _log.Info("china-bypass: máy không có IPv6 ra Internet (không có default route ::/0) — bỏ qua bypass IPv6.");
+                return;
+            }
+
+            lock (_lock)
+            {
+                if (_endpointRoute is null)
+                {
+                    return;
+                }
+            }
+
+            var cachePath = Path.Combine(workDir, "routes-cn6.txt");
+            var activePath = Path.Combine(workDir, "routes-cn6-active.txt");
+
+            var cidrs = await ChinaBypass.LoadIpv6Async(http, cachePath, ChinaBypass.DefaultCacheTtl, cancellationToken)
+                .ConfigureAwait(false);
+            if (cidrs.Count == 0)
+            {
+                _log.Warn("china-bypass: không có danh sách CIDR IPv6 Trung Quốc — bỏ qua bypass IPv6.");
+                return;
+            }
+
+            await File.WriteAllLinesAsync(activePath, cidrs, cancellationToken).ConfigureAwait(false);
+
+            var script =
+                $"$ErrorActionPreference='SilentlyContinue'; $n=0; " +
+                $"foreach ($c in Get-Content '{activePath}') {{ " +
+                $"New-NetRoute -DestinationPrefix $c -InterfaceAlias '{v6.Interface}' {Ipv6NextHopArgument(v6.Gateway)}-PolicyStore ActiveStore | Out-Null; $n++ }}; " +
+                "$n";
+
+            var (exitCode, stdout, stderr) = await RunPowerShellAsync(script, cancellationToken).ConfigureAwait(false);
+
+            if (exitCode != 0)
+            {
+                _log.Warn($"china-bypass: lỗi thêm route IPv6 (exit {exitCode}): {stderr.Trim()}");
+                return;
+            }
+
+            lock (_lock)
+            {
+                _chinaBypassRoutesV6 = (v6.Interface, v6.Gateway, activePath);
+            }
+
+            _log.Info($"china-bypass: đã thêm {stdout.Trim()} route IPv6 đi thẳng qua {v6.Gateway} ({v6.Interface})");
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"china-bypass: IPv6 bỏ qua do lỗi — {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gateway IPv6 của NIC vật lý đầu tiên (bỏ qua adapter ảo/TUN). Trả null khi máy không có
+    /// IPv6 ra Internet — trường hợp này KHÔNG được thêm route bypass IPv6 nào.
+    /// </summary>
+    private async Task<(string Gateway, string Interface)?> TryGetPhysicalGatewayV6Async(CancellationToken cancellationToken)
+    {
+        var (exitCode, stdout, _) = await RunPowerShellAsync(PhysicalGatewayV6ProbeScript, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (exitCode != 0)
+        {
+            _log.Warn("china-bypass: không dò được gateway vật lý IPv6 (script lỗi) — bỏ qua bypass IPv6.");
+            return null;
+        }
+
+        return ParseGatewayLine(stdout);
+    }
+
+    /// <summary>
+    /// Đọc kết quả dạng <c>gateway|tên NIC</c> do hai script dò gateway trả về.
+    /// NextHop link-local có thể kèm zone id ("fe80::1%17"); <c>New-NetRoute</c> không nhận dạng đó
+    /// (đã có <c>-InterfaceAlias</c> để xác định phạm vi) ⇒ bỏ phần zone.
+    /// </summary>
+    internal static (string Gateway, string Interface)? ParseGatewayLine(string? stdout)
+    {
+        var line = (stdout ?? string.Empty).Trim();
+        var separator = line.IndexOf('|');
+        if (separator <= 0 || separator >= line.Length - 1)
+        {
+            return null;
+        }
+
+        var gateway = line[..separator].Trim();
+        var name = line[(separator + 1)..].Trim();
+
+        var zone = gateway.IndexOf('%');
+        if (zone > 0)
+        {
+            gateway = gateway[..zone];
+        }
+
+        return gateway.Length == 0 || name.Length == 0 ? null : (gateway, name);
+    }
+
+    /// <summary>
+    /// Tham số <c>-NextHop</c> cho <c>New-NetRoute</c>/<c>Remove-NetRoute</c> IPv6.
+    /// NextHop <c>::</c> nghĩa là route on-link ⇒ KHÔNG truyền <c>-NextHop</c> (truyền "::" bị lỗi
+    /// "parameter is incorrect"); route on-link là đúng cho mạng IPv6 gắn trực tiếp.
+    /// </summary>
+    private static string Ipv6NextHopArgument(string gateway)
+        => gateway == "::" ? string.Empty : $"-NextHop '{gateway}' ";
+
+    /// <summary>Xoá các route bypass Trung Quốc đã thêm (gọi khi ngắt tunnel) — cả IPv4 lẫn IPv6.</summary>
     private async Task RemoveChinaBypassAsync(CancellationToken cancellationToken)
     {
         (string Interface, string Gateway, string ActivePath)? routes;
+        (string Interface, string Gateway, string ActivePath)? routesV6;
         lock (_lock)
         {
             routes = _chinaBypassRoutes;
             _chinaBypassRoutes = null;
+            routesV6 = _chinaBypassRoutesV6;
+            _chinaBypassRoutesV6 = null;
         }
 
-        if (routes is not { } active || !File.Exists(active.ActivePath))
+        if (routes is { } active)
+        {
+            await RemoveChinaBypassRoutesAsync(
+                active.Interface,
+                active.Gateway,
+                active.ActivePath,
+                isIpv6: false,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (routesV6 is { } activeV6)
+        {
+            await RemoveChinaBypassRoutesAsync(
+                activeV6.Interface,
+                activeV6.Gateway,
+                activeV6.ActivePath,
+                isIpv6: true,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RemoveChinaBypassRoutesAsync(
+        string interfaceName,
+        string gateway,
+        string activePath,
+        bool isIpv6,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(activePath))
         {
             return;
         }
 
+        // Phải khớp ĐÚNG tham số lúc thêm, nếu không Remove-NetRoute không tìm thấy route:
+        // IPv4 luôn kèm -NextHop; IPv6 on-link (gateway '::') thì thêm không kèm nên xoá cũng không kèm.
+        var nextHopArgument = isIpv6 ? Ipv6NextHopArgument(gateway) : $"-NextHop '{gateway}' ";
+
         var script =
             "$ErrorActionPreference='SilentlyContinue'; $n=0; " +
-            $"foreach ($c in Get-Content '{active.ActivePath}') {{ " +
-            $"Remove-NetRoute -DestinationPrefix $c -InterfaceAlias '{active.Interface}' -NextHop '{active.Gateway}' -Confirm:$false | Out-Null; $n++ }}; " +
+            $"foreach ($c in Get-Content '{activePath}') {{ " +
+            $"Remove-NetRoute -DestinationPrefix $c -InterfaceAlias '{interfaceName}' {nextHopArgument}-Confirm:$false | Out-Null; $n++ }}; " +
             "$n";
 
-        var (exitCode, stdout, _) = await RunProcessAsync(
-            "powershell",
-            $"-NoProfile -NonInteractive -Command \"{script}\"",
-            cancellationToken).ConfigureAwait(false);
+        var (exitCode, stdout, _) = await RunPowerShellAsync(script, cancellationToken).ConfigureAwait(false);
 
-        _log.Info($"china-bypass: đã xoá route bypass (exit {exitCode}, {stdout.Trim()} dòng)");
+        _log.Info($"china-bypass: đã xoá route bypass {(isIpv6 ? "IPv6" : "IPv4")} (exit {exitCode}, {stdout.Trim()} dòng)");
     }
 
     /// <summary>IP endpoint IPv4 của peer đầu tiên; null nếu thiếu hoặc không phân giải được.</summary>
@@ -916,6 +1069,49 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
     }
 
     // MARK: - process helper
+
+    /// <summary>
+    /// Script PowerShell dò gateway IPv4 của NIC vật lý (bỏ qua adapter ảo/TUN của phần mềm khác).
+    /// Để <c>internal</c> cho test chạy thật — xem <see cref="RunPowerShellAsync"/>.
+    /// </summary>
+    internal const string PhysicalGatewayV4ProbeScript =
+        "(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | " +
+        "Sort-Object RouteMetric | ForEach-Object { " +
+        "$a = Get-NetAdapter -InterfaceIndex $_.ifIndex -ErrorAction SilentlyContinue; " +
+        "if ($a -and $a.InterfaceDescription -notmatch 'clash|mihomo|wintun|tap|wireguard|sing-box|tailscale|zerotier|proxy|vpnflow') " +
+        "{ \"$($_.NextHop)|$($a.Name)\" } } | Select-Object -First 1)";
+
+    /// <summary>Như <see cref="PhysicalGatewayV4ProbeScript"/> nhưng cho IPv6 (<c>::/0</c>).</summary>
+    internal const string PhysicalGatewayV6ProbeScript =
+        "(Get-NetRoute -DestinationPrefix '::/0' -ErrorAction SilentlyContinue | " +
+        "Sort-Object RouteMetric | ForEach-Object { " +
+        "$a = Get-NetAdapter -InterfaceIndex $_.ifIndex -ErrorAction SilentlyContinue; " +
+        "if ($a -and $a.Status -eq 'Up' -and $a.InterfaceDescription -notmatch 'clash|mihomo|wintun|tap|wireguard|sing-box|tailscale|zerotier|proxy|vpnflow') " +
+        "{ \"$($_.NextHop)|$($a.Name)\" } } | Select-Object -First 1)";
+
+    /// <summary>
+    /// Chạy một script PowerShell.
+    ///
+    /// Vì sao KHÔNG dùng <c>-Command "{script}"</c>: PowerShell 5.1 làm MẤT dấu <c>"</c> bên trong
+    /// script khi nó được truyền qua dòng lệnh, nên script có chuỗi trong dấu <c>"</c> (ví dụ
+    /// <c>{ "$($_.NextHop)|$($a.Name)" }</c>) bị vỡ cú pháp. Đo thật 22/09/2026:
+    /// <c>exit=1 · "Expressions are only allowed as the first element of a pipeline"</c> ⇒
+    /// <c>TryGetPhysicalGatewayAsync</c> luôn trả null, tức là máy có Clash/Mihomo/Tailscale
+    /// (default route thuộc adapter ảo) KHÔNG lấy được gateway vật lý ⇒ thêm route loại trừ endpoint
+    /// qua chính adapter ảo ⇒ vòng lặp, tunnel không lên — im lặng, chỉ có một dòng WARN.
+    ///
+    /// <c>-EncodedCommand</c> truyền Base64 UTF-16LE nên không còn vấn đề trích dẫn nào.
+    /// </summary>
+    internal static async Task<(int ExitCode, string StdOut, string StdErr)> RunPowerShellAsync(
+        string script,
+        CancellationToken cancellationToken)
+    {
+        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        return await RunProcessAsync(
+            "powershell",
+            $"-NoProfile -NonInteractive -EncodedCommand {encoded}",
+            cancellationToken).ConfigureAwait(false);
+    }
 
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunProcessAsync(
         string fileName,

@@ -251,6 +251,83 @@ public class WintunWireGuardDriverTests
         Assert.Equal(new[] { "1.1.1.1", "8.8.8.8" }, parsed.DnsServers);
     }
 
+    // MARK: - chống tái phát: script PowerShell có dấu " (lỗi 22/09/2026)
+
+    /// <summary>
+    /// LỖI ĐÃ SỬA 22/09/2026 — không được tái phát: script PowerShell chứa dấu <c>"</c> bị MẤT khi
+    /// truyền qua <c>-Command</c>, làm <c>TryGetPhysicalGatewayAsync</c> luôn trả null (đo thật:
+    /// <c>exit=1 · "Expressions are only allowed as the first element of a pipeline"</c>).
+    /// Test này chạy THẬT qua <c>RunPowerShellAsync</c> và đòi stdout giữ nguyên dấu <c>"</c>.
+    /// </summary>
+    [Fact]
+    public async Task RunPowerShellAsync_giu_nguyen_dau_ngoac_kep_trong_script()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return; // cần Windows thật (powershell.exe).
+        }
+
+        var (exitCode, stdout, stderr) = await WintunWireGuardDriver.RunPowerShellAsync(
+            "Write-Output \"10.193.44.1|Wi-Fi\"",
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("10.193.44.1|Wi-Fi", stdout.Trim());
+        // stderr có thể chứa CLIXML tiến trình của PowerShell (vô hại) — chỉ cấm lỗi cú pháp.
+        Assert.DoesNotContain("ParserError", stderr);
+    }
+
+    /// <summary>
+    /// Script dò gateway thật phải CHẠY ĐƯỢC (exit 0) — trước khi sửa thì exit 1 vì lỗi cú pháp.
+    /// Máy không có default route thì stdout rỗng, điều đó vẫn hợp lệ.
+    /// </summary>
+    [Theory]
+    [InlineData(WintunWireGuardDriver.PhysicalGatewayV4ProbeScript)]
+    [InlineData(WintunWireGuardDriver.PhysicalGatewayV6ProbeScript)]
+    public async Task Probe_gateway_that_chay_duoc_khong_loi_cu_phap(string script)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var (exitCode, stdout, stderr) = await WintunWireGuardDriver.RunPowerShellAsync(script, CancellationToken.None);
+
+        Assert.True(exitCode == 0, $"exit={exitCode} · stderr={stderr.Trim()}");
+        Assert.DoesNotContain("ParserError", stderr);
+        Assert.DoesNotContain("Expressions are only allowed", stderr);
+
+        // Có kết quả thì phải đúng dạng "gateway|NIC" mà ParseGatewayLine đọc được.
+        if (stdout.Trim().Length > 0)
+        {
+            Assert.NotNull(WintunWireGuardDriver.ParseGatewayLine(stdout));
+        }
+    }
+
+    [Theory]
+    [InlineData("10.193.44.1|Wi-Fi", "10.193.44.1", "Wi-Fi")]
+    [InlineData("fe80::1%17|Ethernet", "fe80::1", "Ethernet")]   // bỏ zone id
+    [InlineData("  ::|Ethernet  ", "::", "Ethernet")]             // route on-link
+    public void ParseGatewayLine_doc_dung_gateway_va_ten_nic(string input, string gateway, string nic)
+    {
+        var parsed = WintunWireGuardDriver.ParseGatewayLine(input);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(gateway, parsed!.Value.Gateway);
+        Assert.Equal(nic, parsed.Value.Interface);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("khong-co-dau-pipe")]
+    [InlineData("|Wi-Fi")]
+    [InlineData("10.0.0.1|")]
+    public void ParseGatewayLine_tra_null_khi_thieu_du_lieu(string input)
+    {
+        Assert.Null(WintunWireGuardDriver.ParseGatewayLine(input));
+    }
+
     [Fact]
     public async Task InstallAndUninstall_OnNonWindows_FailSoft()
     {
