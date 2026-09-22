@@ -22,6 +22,7 @@ KEY_ID="${ASC_KEY_ID:-8GW3662G64}"; ISSUER="${ASC_ISSUER_ID:-7a64d085-c03d-4b10-
 P8="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8}"
 TEAM="${TEAM_ID:-G6XW3RN6LJ}"
 IDENTITY="${SIGN_IDENTITY:-Apple Distribution}"
+KEYCHAIN_GROUP_NAME="${IOS_KEYCHAIN_GROUP_NAME:-com.privatevpn.shared}"
 OUT_DIR="${OUT_DIR:-build/ios-resign}"
 SERVED_URL="${SERVED_URL:-https://meetflowai.site/v1/downloads/ios}"
 
@@ -113,11 +114,43 @@ APP=$(find "$WORK/Payload" -maxdepth 1 -name "*.app" | head -1)
 [ -n "$APP" ] || die "IPA không có Payload/*.app"
 APPEX=$(find "$APP/PlugIns" -maxdepth 1 -name "*.appex" 2>/dev/null | head -1 || true)
 
-# Giữ nguyên entitlements mà binary đang có (lấy từ chính chữ ký cũ) — ký lại không được đổi quyền.
+# Giữ nguyên quyền binary đang có (lấy từ chính chữ ký cũ) — ký lại không được đổi quyền —
+# NHƯNG chuẩn hoá `keychain-access-groups` về ĐÚNG nhóm cụ thể mà app dùng
+# (KeychainStore.accessGroup). Vì sao bắt buộc: profile Ad Hoc cấp wildcard `TEAMID.*`, nhưng
+# iOS chỉ cho dùng nhóm CÓ TÊN TƯỜNG MINH trong entitlements của chữ ký; wildcard trong chữ ký
+# ⇒ `SecItemAdd` trả errSecMissingEntitlement (-34018) ⇒ AuthSessionStore không lưu được session
+# ⇒ app kẹt ở màn hình đăng nhập (đo trên iPhone thật 22/09/2026: chữ ký `TEAMID.*` → -34018,
+# chữ ký `.shared` → 0; profile wildcard KHÔNG phải nguyên nhân).
+# Bug cũ: ký lại sao chép y nguyên wildcard từ chữ ký cũ nên không bao giờ tự sửa được.
+normalize_keychain_groups() { # $1 file entitlements
+  python3 - "$1" "$KEYCHAIN_GROUP_NAME" <<'PY'
+import plistlib, sys
+path, suffix = sys.argv[1], sys.argv[2]
+try:
+    d = plistlib.loads(open(path, "rb").read())
+except Exception:
+    sys.exit(0)  # không đọc được: để bước kiểm ở dưới chặn
+if not isinstance(d, dict):
+    sys.exit(0)
+app_id = str(d.get("application-identifier") or "")
+prefix = app_id.split(".")[0]
+if not app_id or not prefix:
+    sys.exit("LỖI: không đọc được application-identifier để suy prefix nhóm keychain")
+groups = [f"{prefix}.{suffix}"]
+for extra in d.get("keychain-access-groups") or []:
+    if isinstance(extra, str) and extra.startswith("com.apple.") and extra not in groups:
+        groups.append(extra)
+d["keychain-access-groups"] = groups
+open(path, "wb").write(plistlib.dumps(d))
+print(f"     keychain-access-groups -> {groups}")
+PY
+}
 codesign -d --entitlements :- "$APP" > "$OUT_DIR/app.entitlements" 2>/dev/null || true
+normalize_keychain_groups "$OUT_DIR/app.entitlements"
 cp "$OUT_DIR/app.mobileprovision" "$APP/embedded.mobileprovision"
 if [ -n "$APPEX" ]; then
   codesign -d --entitlements :- "$APPEX" > "$OUT_DIR/ext.entitlements" 2>/dev/null || true
+  normalize_keychain_groups "$OUT_DIR/ext.entitlements"
   cp "$OUT_DIR/ext.mobileprovision" "$APPEX/embedded.mobileprovision"
   log "   ký lại: $(basename "$APPEX")"
   codesign --force --sign "$IDENTITY" --timestamp=none \
@@ -131,6 +164,30 @@ codesign --force --sign "$IDENTITY" --timestamp=none "$APP"
 
 log "4) kiểm tra chữ ký + profile sau khi ký lại"
 codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tail -2 | sed 's/^/     /'
+# Cổng cứng: chữ ký app VÀ appex PHẢI khai nhóm keychain cụ thể (không nhận wildcard) — thiếu là
+# đúng lỗi -34018 làm app kẹt màn hình đăng nhập, KHÔNG được phát.
+python3 - "$APP" "$APPEX" "$KEYCHAIN_GROUP_NAME" <<'PY'
+import plistlib, subprocess, sys
+app, appex, suffix = sys.argv[1], sys.argv[2], sys.argv[3]
+bad = 0
+for label, bundle in (("app", app), ("appex", appex)):
+    if not bundle:
+        continue
+    raw = subprocess.run(["codesign", "-d", "--entitlements", ":-", bundle], capture_output=True).stdout
+    try:
+        ents = plistlib.loads(raw)
+    except Exception:
+        ents = {}
+    app_id = str(ents.get("application-identifier") or "")
+    prefix = app_id.split(".")[0]
+    want = f"{prefix}.{suffix}"
+    groups = [g for g in (ents.get("keychain-access-groups") or []) if isinstance(g, str)]
+    ok = want in groups and not any(g.endswith(".*") for g in groups)
+    print(f"     {label}: keychain-access-groups={groups} {'OK' if ok else 'THIẾU ' + want}")
+    if not ok:
+        bad = 1
+sys.exit("LỖI: chữ ký thiếu nhóm keychain cụ thể — app sẽ kẹt đăng nhập (-34018)" if bad else 0)
+PY
 python3 - "$APP/embedded.mobileprovision" <<'PY'
 import re, sys
 raw = open(sys.argv[1], "rb").read().decode("utf-8", "replace")

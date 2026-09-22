@@ -259,6 +259,85 @@ def _find_aapt2() -> str | None:
     return None
 
 
+# Nhóm keychain mà code iOS dùng thật (KeychainStore.accessGroup + PacketTunnelProvider).
+DEFAULT_IOS_KEYCHAIN_GROUP = "G6XW3RN6LJ.com.privatevpn.shared"
+
+
+def _plist_from_cms(raw: bytes):
+    """Bóc khối XML plist ra khỏi vỏ CMS của file `.mobileprovision`."""
+    start, end = raw.find(b"<?xml"), raw.rfind(b"</plist>")
+    if start < 0 or end < 0:
+        return None
+    try:
+        return plistlib.loads(raw[start:end + len(b"</plist>")])
+    except Exception:
+        return None
+
+
+def check_ios_keychain(result: "Result", path: str, required: str) -> None:
+    """Chữ ký PHẢI khai nhóm keychain CỤ THỂ; profile phải phủ nhóm đó (khớp hoặc wildcard).
+
+    Sự cố 22/09/2026: chữ ký IPA 1.4.1/17 khai `keychain-access-groups = G6XW3RN6LJ.*`
+    (wildcard) trong khi code đòi ĐÚNG `G6XW3RN6LJ.com.privatevpn.shared`. iOS chỉ cho dùng
+    nhóm CÓ TÊN TƯỜNG MINH trong chữ ký ⇒ `SecItemAdd` trả errSecMissingEntitlement (-34018)
+    ⇒ `AuthSessionStore` không lưu được session ⇒ app kẹt ở màn hình đăng nhập.
+    ĐO TRÊN iPHONE THẬT: chữ ký wildcard → -34018; chữ ký `.shared` → 0 (profile vẫn wildcard).
+    Vì vậy cổng này bắt CHỮ KÝ phải có nhóm cụ thể (KHÔNG nhận wildcard), còn PROFILE chỉ cần
+    phủ nhóm đó — wildcard `TEAMID.*` trong profile là hợp lệ.
+    """
+    if not shutil.which("codesign"):
+        result.unknown_("Keychain group iOS", "cần macOS + codesign để đọc entitlements trong chữ ký")
+        return
+    work = tempfile.mkdtemp(prefix="vpnflow-ipa-kc-")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            archive.extractall(work)
+        payload = os.path.join(work, "Payload")
+        if not os.path.isdir(payload):
+            result.fail("Keychain group iOS", "IPA không có Payload/")
+            return
+        app = next((os.path.join(payload, n) for n in sorted(os.listdir(payload)) if n.endswith(".app")), None)
+        if not app:
+            result.fail("Keychain group iOS", "IPA không có Payload/*.app")
+            return
+        plugins = os.path.join(app, "PlugIns")
+        ext = next((os.path.join(plugins, n) for n in sorted(os.listdir(plugins)) if n.endswith(".appex")),
+                   None) if os.path.isdir(plugins) else None
+        for label, bundle in (("App", app), ("Extension", ext)):
+            if not bundle:
+                if label == "Extension":
+                    result.warn("Keychain group iOS (Extension)", "IPA không có .appex")
+                continue
+            proc = subprocess.run(["codesign", "-d", "--entitlements", ":-", bundle], capture_output=True)
+            sig = _plist_from_cms((proc.stdout or b"") + (proc.stderr or b"")) or {}
+            prof = {}
+            prof_path = os.path.join(bundle, "embedded.mobileprovision")
+            if os.path.isfile(prof_path):
+                with open(prof_path, "rb") as handle:
+                    prof = (_plist_from_cms(handle.read()) or {}).get("Entitlements") or {}
+            app_id = str(sig.get("application-identifier") or "")
+            prefix = app_id.split(".")[0]
+            sig_groups = [g for g in (sig.get("keychain-access-groups") or []) if isinstance(g, str)]
+            prof_groups = [g for g in (prof.get("keychain-access-groups") or []) if isinstance(g, str)]
+            explicit = required in sig_groups
+            covers = required in prof_groups or (prefix and f"{prefix}.*" in prof_groups) or "*" in prof_groups
+            same_id = not prof.get("application-identifier") or prof.get("application-identifier") == app_id
+            if explicit and covers and same_id:
+                result.ok(f"Keychain group iOS ({label})", f"chữ ký có {required}; profile phủ nhóm")
+            else:
+                why = []
+                if not explicit:
+                    why.append(f"CHỮ KÝ thiếu {required} tường minh (wildcard trong chữ ký KHÔNG đủ ⇒ -34018)")
+                if not covers:
+                    why.append(f"PROFILE không phủ {required}")
+                if not same_id:
+                    why.append("application-identifier chữ ký ≠ profile")
+                result.fail(f"Keychain group iOS ({label})",
+                            "; ".join(why) + f" · sig={sig_groups} · profile={prof_groups}")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def version_android(path: str) -> dict:
     """APK: aapt2 dump badging (công cụ chuẩn của luật §2)."""
     aapt2 = _find_aapt2()
@@ -439,6 +518,9 @@ def main() -> int:
                         choices=["ios", "android", "android-legacy", "macos", "windows"])
     parser.add_argument("--file", help="artifact cần kiểm (mode pre: bắt buộc)")
     parser.add_argument("--app-exe", help="Windows: thêm exe app bên trong để kiểm version")
+    parser.add_argument("--require-keychain-group", default=DEFAULT_IOS_KEYCHAIN_GROUP,
+                        help="iOS: nhóm keychain chữ ký PHẢI khai tường minh "
+                             f"(mặc định {DEFAULT_IOS_KEYCHAIN_GROUP})")
     parser.add_argument("--version", required=True, help="version ĐỊNH phát hành, vd 1.4.1")
     parser.add_argument("--build", help="build/bundleVersion/versionCode (iOS bắt buộc)")
     parser.add_argument("--mode", choices=["pre", "post"], default="pre",
@@ -501,23 +583,6 @@ def main() -> int:
         if internal.get("product"):
             result.ok("ProductVersion", str(internal["product"]))
 
-        # iOS: nhóm keychain phải có trong CẢ code signature LẪN provisioning profile.
-        # Thiếu ở profile ⇒ SecItemAdd trả -34018 ⇒ không lưu được phiên ⇒ "nhập code xong
-        # không vào được app" (ca thật 22/09/2026).
-        if "keychain_signature" in internal:
-            sig, prof = internal["keychain_signature"], internal.get("keychain_profile") or []
-            missing = internal.get("keychain_missing") or []
-            if not sig:
-                result.unknown_("Nhóm keychain", "không đọc được keychain-access-groups trong binary")
-            elif missing:
-                result.fail("Nhóm keychain THIẾU trong profile",
-                            f"binary khai {missing} nhưng profile chỉ cấp {prof} ⇒ keychain trả "
-                            f"errSecMissingEntitlement (-34018), app không lưu được phiên đăng nhập. "
-                            f"Sửa: bật Keychain Sharing cho App ID (nhóm G6XW3RN6LJ.com.privatevpn.shared) "
-                            f"rồi sinh lại profile và ký lại IPA")
-            else:
-                result.ok("Nhóm keychain khớp profile", f"{sig}")
-
         # macOS: vé staple + Gatekeeper + chữ ký — đúng những gì khách gặp khi mở lần đầu.
         if "staple_ok" in internal:
             if internal.get("staple_ok"):
@@ -541,6 +606,10 @@ def main() -> int:
                             f"codesign --verify --deep --strict: {internal.get('codesign_note')}")
             elif internal.get("codesign_ok"):
                 result.ok("codesign --deep --strict", "valid on disk")
+
+    # iOS: chữ ký phải khai nhóm keychain cụ thể (sự cố -34018, 22/09/2026) — chạy TRƯỚC upload.
+    if args.platform == "ios" and args.mode == "pre" and args.file and os.path.isfile(args.file):
+        check_ios_keychain(result, args.file, args.require_keychain_group)
 
     # Windows: kiểm thêm exe app bên trong (nơi thực sự mang số hiệu người dùng thấy)
     if args.app_exe:
