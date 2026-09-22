@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=494c0ade65a757231b610461ac6d65fe68868a98 (origin/main, da push). cmd: trong worktree _work/bus169 @ origin/main - node scripts/release-record.mjs tag --platform windows; node scripts/release-record.mjs list; node scripts/release-record.mjs verify. ket qua: (a) tag -> 'tag windows-v1.4.3 da ton tai va dang tro dung commit 64e07c7c6fa9... - khong lam gi.' exit 0, KHONG con fatal/uncaught (truoc khi sua: fatal: tag already exists + stack trace, exit 1); (b) list -> cot TAG in du 'android-legacy-v1.4.0' + '1.4.0/20', khong cat; (c) verify -> 12 DAT / 21 CANH BAO / 0 KHONG DAT, exit 0; (d) them: tag tro SAI commit -> bao loi cung ro rang exit 1 khong stack trace; tao tag moi (ledger tong hop windows 9.9.9, commit 8f44ccf) -> peel == commit build, ledger +1 dong, exit 0. Goc loi: sandbox Windows chan spawn co pipe (EPERM) nen phai ghi stdout ra file tam thay vi pipe - day la ly do ban dau doc .git bang fs, nhung cach do vo trong worktree.",
+ "actor": "win",
+ "at": "2026-09-22T09:49:36.219Z"
+}
