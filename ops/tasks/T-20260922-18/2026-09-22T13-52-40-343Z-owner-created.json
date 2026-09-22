@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-18",
+  "title": "TG /vibecode: tốc độ download trong Diagnostics chưa đúng — đo ra rất chậm nhưng vẫn xem được Netflix",
+  "from": "owner",
+  "to": "win",
+  "detail": "Việc chủ dự án giao TRỰC TIẾP qua Telegram (/vibecode).\nGiao lúc: 2026-09-22T13:38:10.110Z\n\ncó vẻ tốc độ download trong diagnotics đang chưa đúng, đo ra tốc độ rất chậm nhưng anh vẫn xem được netflix\n\nNGUON: tin bus #232 luc 2026-09-22T13:38:12.235Z, from=\"owner\", kind=\"task\", ref=\"TG-VIBECODE\".",
+  "verify": null,
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T13:52:40.343Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-22T13:52:40.343Z",
+ "transcribedBy": "win",
+ "busId": 232,
+ "busAt": "2026-09-22T13:38:12.235Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #232 (owner → win); tin không có trong sổ git. Task TG-VIBECODE cũ (owner→mac, bus #203) đã done nên mở mã mới cho lượt giao này."
+}
