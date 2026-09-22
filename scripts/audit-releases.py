@@ -17,6 +17,12 @@ Dùng:
   python3 scripts/audit-releases.py --platform ios  # một nền tảng
   python3 scripts/audit-releases.py --json          # máy đọc
 
+Health-watch định kỳ (PUBLISHER_PROCESS §7 mục 5) — chạy nền, ghi log JSONL, gọi alert khi LỆCH:
+  python3 scripts/audit-releases.py --interval 21600 \
+      --log ~/.vpnflow-release-audit.jsonl \
+      --alert-cmd 'cat | scripts/notify/flowvpn-notify --from mac --to all --topic "Release LỆCH"'
+  # JSON kết quả được đưa vào stdin của --alert-cmd; env AUDIT_EXIT/AUDIT_VERDICT/AUDIT_BASE kèm theo.
+
 Mã thoát: 0 = mọi kênh khớp · 1 = có kênh LỆCH (phải cập nhật link + thông báo khách) · 2 = có
 kênh KHÔNG KIỂM ĐƯỢC trên máy này (macOS cần chạy trên máy Mac, APK cần aapt2).
 """
@@ -27,7 +33,10 @@ import argparse
 import importlib.util
 import json
 import os
+import subprocess
 import sys
+import time
+from datetime import datetime, timezone
 
 # Nạp lại chính bộ đọc artifact của cổng chặn (tên file có gạch ngang nên phải import bằng spec).
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -51,10 +60,15 @@ def read_internal(platform: str, version: str) -> tuple:
         url = f"{cpv.BASE}" + cpv.WINDOWS_DL.format(name=f"VPNFlow-Setup-{version}.exe")
     else:
         url = f"{cpv.BASE}" + cpv.DOWNLOAD_ROUTES[platform]
-    target = os.path.join(cpv.tempfile.gettempdir(), "audit-" + os.path.basename(url.split("?")[0]))
+    # Giữ ĐUÔI theo nền tảng (cpv.ARTIFACT_SUFFIX): `stapler validate` phân loại file theo đuôi,
+    # nên DMG lưu không đuôi bị từ chối và audit báo LỆCH OAN cho macOS (đã gặp thật 22/09/2026).
+    target = os.path.join(
+        cpv.tempfile.gettempdir(),
+        f"audit-{platform}{cpv.ARTIFACT_SUFFIX.get(platform, '')}",
+    )
     try:
         request = cpv.urllib.request.Request(url, headers={"User-Agent": cpv.UA})
-        with cpv.urllib.request.urlopen(request, timeout=900) as response, open(target, "wb") as handle:
+        with cpv.open_url(request, timeout=900) as response, open(target, "wb") as handle:
             cpv.shutil.copyfileobj(response, handle, length=1024 * 1024)
     except Exception as exc:  # noqa: BLE001 — audit không được chết vì 1 kênh
         return None, f"tải lỗi: {exc}"
@@ -63,13 +77,8 @@ def read_internal(platform: str, version: str) -> tuple:
     return info, info.get("error")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Audit các kênh phát hành")
-    parser.add_argument("--platform", choices=[p for p, _ in PLATFORMS] + ["android-legacy"])
-    parser.add_argument("--no-download", action="store_true", help="chỉ xem mốc + size")
-    parser.add_argument("--json", action="store_true")
-    args = parser.parse_args()
-
+def run_once(args) -> tuple[int, list]:
+    """Chạy một vòng audit. Trả (mã thoát, các dòng kết quả)."""
     rows = []
     for platform, label in PLATFORMS:
         if args.platform and args.platform != platform:
@@ -131,16 +140,80 @@ def main() -> int:
 
     if any(r["verdict"] == "LỆCH" for r in rows):
         print("\n⛔ CÓ KÊNH LỆCH — cập nhật link tải + set lại mốc + thông báo khách (PUBLISHER_PROCESS §1c/§5).")
-        return 1
+        return 1, rows
     if any(r["verdict"] in ("KHÔNG KIỂM ĐƯỢC", "CHƯA ĐỐI CHIẾU") for r in rows):
         print(
             "\n⚠️  CHƯA ĐỐI CHIẾU HẾT — có kênh chưa đọc được version bên trong "
             "(chạy lại KHÔNG kèm --no-download, trên máy đủ công cụ: macOS cho DMG, Android SDK cho APK). "
             "Không kết luận là đạt."
         )
-        return 2
+        return 2, rows
     print("\n✅ Mọi kênh đang phục vụ đúng bản latest (đã đọc version bên trong từng artifact).")
-    return 0
+    return 0, rows
+
+
+def record(code: int, rows: list, args) -> None:
+    """Ghi log JSONL + gọi alert khi có kênh LỆCH — dùng cho health-watch định kỳ."""
+    if args.log:
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(args.log)), exist_ok=True)
+            with open(args.log, "a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {"at": datetime.now(timezone.utc).isoformat(), "exit": code, "base": cpv.BASE, "rows": rows},
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+        except OSError as exc:
+            print(f"⚠ không ghi được log {args.log}: {exc}", file=sys.stderr)
+
+    if code == 1 and args.alert_cmd:
+        payload = json.dumps(rows, ensure_ascii=False)
+        try:
+            subprocess.run(
+                args.alert_cmd,
+                shell=True,
+                input=payload,
+                text=True,
+                env={**os.environ, "AUDIT_EXIT": str(code), "AUDIT_VERDICT": "LECH", "AUDIT_BASE": cpv.BASE},
+            )
+        except OSError as exc:
+            print(f"⚠ alert-cmd lỗi: {exc}", file=sys.stderr)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Audit các kênh phát hành")
+    parser.add_argument("--platform", choices=[p for p, _ in PLATFORMS])
+    parser.add_argument("--no-download", action="store_true", help="chỉ xem mốc + size")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=0,
+        help="chạy lặp mỗi N giây (0 = một lần) — dùng cho health-watch định kỳ",
+    )
+    parser.add_argument(
+        "--log",
+        default=os.environ.get("AUDIT_LOG", ""),
+        help="ghi mỗi lần chạy 1 dòng JSON vào file này (mặc định env AUDIT_LOG)",
+    )
+    parser.add_argument(
+        "--alert-cmd",
+        default=os.environ.get("AUDIT_ALERT_CMD", ""),
+        help="lệnh gọi khi có kênh LỆCH; JSON kết quả đưa vào stdin (mặc định env AUDIT_ALERT_CMD)",
+    )
+    args = parser.parse_args()
+
+    if args.interval and args.interval > 0:
+        while True:
+            code, rows = run_once(args)
+            record(code, rows, args)
+            time.sleep(args.interval)
+
+    code, rows = run_once(args)
+    record(code, rows, args)
+    return code
 
 
 if __name__ == "__main__":

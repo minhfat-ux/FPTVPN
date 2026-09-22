@@ -52,6 +52,25 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
+# CA của Python cài từ python.org (macOS) KHÔNG nạp chứng chỉ hệ thống ⇒ mọi request HTTPS chết với
+# CERTIFICATE_VERIFY_FAILED; audit báo "KHÔNG KIỂM ĐƯỢC" cả 5 kênh (đã gặp thật 22/09/2026 trên máy Mac).
+# Dùng certifi khi có; máy không có thì giữ mặc định (không được làm hỏng cổng chặn).
+try:
+    import ssl as _ssl
+
+    import certifi as _certifi
+
+    SSL_CONTEXT = _ssl.create_default_context(cafile=_certifi.where())
+except Exception:  # noqa: BLE001 — thiếu certifi không phải lỗi cứng
+    SSL_CONTEXT = None
+
+
+def open_url(request, timeout: int = 25):
+    """`urllib.request.urlopen` với ngữ cảnh CA đúng (certifi khi có) — xem chú thích `SSL_CONTEXT`."""
+    if SSL_CONTEXT is None:
+        return urllib.request.urlopen(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout, context=SSL_CONTEXT)
+
 # Route tải file đang phát + endpoint mốc phiên bản (xem docs/PUBLISHER_PROCESS.md §3, §4).
 BASE = os.environ.get("FLOWVPN_BASE_URL", "https://meetflowai.site").rstrip("/")
 # Cloudflare trả 403 cho User-Agent mặc định của urllib (đã gặp thật) ⇒ phải khai UA thật.
@@ -65,6 +84,17 @@ DOWNLOAD_ROUTES = {
 }
 # Windows phát qua /dl/<tên file>, không phải route cố định.
 WINDOWS_DL = "/dl/{name}"
+# Đuôi file theo nền tảng — PHẢI giữ khi tải artifact về máy: `stapler` phân loại file theo ĐUÔI,
+# nên DMG lưu không đuôi bị từ chối "Stapler is incapable of working with Document files" ⇒ audit
+# báo "DMG chưa staple" OAN (đã gặp thật 22/09/2026, trong khi `xcrun stapler validate <tên>.dmg`
+# trả "The validate action worked!"). Bài học: không tin kết luận khi chính công cụ không đọc được file.
+ARTIFACT_SUFFIX = {
+    "ios": ".ipa",
+    "macos": ".dmg",
+    "android": ".apk",
+    "android-legacy": ".apk",
+    "windows": ".exe",
+}
 
 
 class Result:
@@ -98,7 +128,7 @@ class Result:
 def http_json(url: str, timeout: int = 20):
     request = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with open_url(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8", "replace"))
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError) as exc:
         return {"__error__": str(exc)}
@@ -107,7 +137,7 @@ def http_json(url: str, timeout: int = 20):
 def http_head(url: str, timeout: int = 25) -> dict:
     request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": UA})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with open_url(request, timeout=timeout) as response:
             return {
                 "status": response.status,
                 "length": int(response.headers.get("Content-Length") or 0),
@@ -117,8 +147,15 @@ def http_head(url: str, timeout: int = 25) -> dict:
 
 
 def marker_latest(platform: str) -> tuple[str | None, str | None]:
-    """Trả (latest_version, lỗi)."""
-    payload = http_json(f"{BASE}/v1/app-version?platform={platform}")
+    """Trả (latest_version, lỗi).
+
+    `android-legacy` KHÔNG phải kênh riêng ở `/v1/app-version`: server chỉ nhận
+    `android|ios|macos|windows`, giá trị lạ rơi vào payload **iOS** (xem `app-version.js`).
+    APK legacy dùng CHUNG mốc với Android modern ⇒ phải hỏi `platform=android`, nếu không
+    audit sẽ đối chiếu APK legacy với mốc iOS (đúng khi hai số tình cờ bằng nhau, sai khi lệch).
+    """
+    query = "android" if platform == "android-legacy" else platform
+    payload = http_json(f"{BASE}/v1/app-version?platform={query}")
     if "__error__" in payload:
         return None, payload["__error__"]
     return str(payload.get("latest_version") or ""), None
@@ -201,9 +238,30 @@ def version_ios(path: str) -> dict:
         return out
 
 
+def _find_aapt2() -> str | None:
+    """Tìm aapt2/aapt: ưu tiên PATH, rồi tới SDK mặc định của Android Studio trên macOS.
+
+    Android Studio KHÔNG thêm `build-tools/` vào PATH, nên máy Mac "đủ công cụ" vẫn báo thiếu
+    aapt2 nếu chỉ dựa vào `which` (đã gặp thật 22/09/2026). Tìm giúp để audit không bỏ sót kênh Android.
+    """
+    found = shutil.which("aapt2") or shutil.which("aapt")
+    if found:
+        return found
+    if sys.platform == "darwin":
+        import glob
+
+        candidates = sorted(
+            glob.glob(os.path.expanduser("~/Library/Android/sdk/build-tools/*/aapt2")),
+            reverse=True,
+        )
+        if candidates:
+            return candidates[0]
+    return None
+
+
 def version_android(path: str) -> dict:
     """APK: aapt2 dump badging (công cụ chuẩn của luật §2)."""
-    aapt2 = shutil.which("aapt2") or shutil.which("aapt")
+    aapt2 = _find_aapt2()
     if not aapt2:
         return {"error": "không có aapt2/aapt trong PATH (cần Android SDK build-tools)"}
     tool = os.path.basename(aapt2)
@@ -357,13 +415,18 @@ def download_for_post(platform: str, version: str, path: str | None) -> tuple[st
         url = f"{BASE}" + WINDOWS_DL.format(name=f"VPNFlow-Setup-{version}.exe")
     else:
         url = f"{BASE}" + DOWNLOAD_ROUTES[platform]
-    target = os.path.join(tempfile.gettempdir(), os.path.basename(url.split("?")[0]) or "artifact.bin")
+    # Giữ ĐUÔI theo nền tảng (xem ARTIFACT_SUFFIX): thiếu .dmg thì `stapler validate` từ chối
+    # ⇒ mode post báo macOS LỆCH oan dù DMG đã staple thật.
+    target = os.path.join(
+        tempfile.gettempdir(),
+        f"publish-post-{platform}{ARTIFACT_SUFFIX.get(platform, '')}",
+    )
     # PHẢI gửi kèm UA thật: `urlretrieve` mặc định dùng `Python-urllib/...` nên Cloudflare trả 403
     # (đã gặp thật 22/09: `--mode post` không tải được DMG, trong khi `http_json`/`http_head` thì được
     # vì đã set UA). Tải theo luồng để không nạp cả file vào RAM.
     request = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
-        with urllib.request.urlopen(request, timeout=120) as response, open(target, "wb") as handle:
+        with open_url(request, timeout=120) as response, open(target, "wb") as handle:
             shutil.copyfileobj(response, handle)
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
         return None, f"tải {url} lỗi: {exc}"

@@ -178,6 +178,7 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 | Ngày | Nền tảng | Version/build | Ghi chú |
 |---|---|---|---|
 | 2026-09-22 | Windows | **1.4.2** | Sửa **metadata version** (bản 1.4.1 phát ra có `FileVersion 1.0.0.0` dù installer tên 1.4.1) + `Settings → About` hiện số hiệu và đối chiếu mốc server. Setup 52.794.169 B · sha256 `60ea6f31…86c6` · `/buy` trỏ `?v=60ea6f31` · mốc `latest_version=1.4.2` · **cổng chặn `scripts/check-publish-version.py` chạy cả 2 chế độ: pre ĐẠT, post ĐẠT** (đọc version trong file ĐANG PHÁT = 1.4.2) |
+| 2026-09-22 | **AUDIT toàn kênh** | — | Mac chạy `scripts/audit-releases.py` (đọc version **BÊN TRONG** từng artifact; tự dùng certifi + tự tìm `aapt2` trong Android SDK). **Windows 1.4.2** file 52.794.169 B sha256 `60ea6f31…86c6` — khớp bản Windows harness đã phát; Mac không đọc được `VersionInfo` `.exe` nên kênh Windows là "không kiểm được trên máy này", **không phải lệch** · **iOS LỆCH** 1.4.0/16 · 8.135.823 B · sha256 `37dcb9a7…b653` — profile **thiếu** nhóm keychain `G6XW3RN6LJ.com.privatevpn.shared` (khách nhập code không vào được; xem §7 mục 5 + `IOS_INSTALL_TROUBLESHOOTING.md` §0a) · **macOS KHỚP** 1.4.0/14 · 21.458.057 B · sha256 `f1b802da…a65c` — `stapler validate` + `spctl` + `codesign --deep --strict` đều ĐẠT · **Android modern KHỚP** 1.4.0/20 · 96.536.145 B · `dee9f823…4ff3` · **Android legacy KHỚP** 1.4.0/20 · 96.536.152 B · `4cbe474e…a902`. Hai lỗi công cụ phát hiện & sửa cùng lúc: (a) audit lưu DMG **không đuôi** ⇒ `stapler` từ chối "Document files" ⇒ báo LỆCH **oan** cho macOS; (b) `?platform=android-legacy` trả payload iOS ⇒ phải hỏi `platform=android`. |
 | 2026-09-20 | iOS | 1.4.0 (16) | **Ký lại Ad Hoc cho 8 UDID** (`get-task-allow=false` ⇒ khách KHÔNG cần Developer Mode) · IPA đang phát 8.135.823 B · manifest `bundle-version` 16 |
 | 2026-09-19 | iOS | 1.4.0 (15) | IPA 5.049.845 B · sha256 `b6bf9a04…0677` · đã upload + set mốc |
 | 2026-09-19 | Android | 1.4.0 (20) | file đang phát trên node-2: modern 96.536.145 B (`/root/flowvpn-apk/VPNFlow-latest.apk`, 19/09 22:25 — sau fix timeout `a41bc6e`+`2c34cfb`) · legacy 96.536.152 B |
@@ -198,13 +199,34 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 5. **AUDIT toàn kênh (chủ dự án yêu cầu 22/09/2026)** — mỗi nền tảng phải đang phục vụ ĐÚNG bản latest;
    kênh nào lệch thì **cập nhật lại link tải + set mốc + thông báo khách**:
    ```bash
-   python3 scripts/audit-releases.py            # tải TỪNG artifact thật rồi đọc version BÊN TRONG
+   python3 scripts/audit-releases.py                 # tải TỪNG artifact thật rồi đọc version BÊN TRONG
    python3 scripts/audit-releases.py --no-download   # chỉ mốc + size (nhanh, KHÔNG kết luận đạt)
    ```
    Mã thoát: `0` mọi kênh khớp · `1` có kênh LỆCH (phải xử lý) · `2` có kênh chưa đối chiếu được
-   (macOS cần chạy trên máy Mac, APK cần `aapt2`). Lần chạy đầu (22/09): Windows **khớp 1.4.2**;
-   iOS **LỆCH** — phát đúng 1.4.0 nhưng profile thiếu nhóm keychain `.shared` nên khách không đăng
-   nhập được ⇒ phải sửa + ký lại + thông báo khách.
+   (macOS cần máy Mac, APK cần `aapt2`, `.exe` cần Windows).
+
+   **Kết quả audit trên máy Mac 22/09/2026** (bảng đầy đủ ở §6): Windows **khớp** (Mac xác nhận
+   size + sha256; không đọc được `VersionInfo` `.exe` nên vẫn cần Windows harness xác nhận số hiệu),
+   Android modern + legacy **khớp**, macOS **khớp** (staple + spctl + codesign đều đạt — lần báo
+   "DMG chưa staple" trước đó là **dương tính giả** vì công cụ lưu DMG thiếu đuôi; đã sửa),
+   iOS **LỆCH**: profile thiếu nhóm keychain `G6XW3RN6LJ.com.privatevpn.shared`.
+
+   **Việc còn lại (chặn ngoài tầm publisher):** bản iOS phải **bật Keychain Sharing trên Apple
+   Developer portal rồi ký lại** — việc làm **tay**, API không làm được (xem
+   `IOS_INSTALL_TROUBLESHOOTING.md` §0a; theo dõi ở `T-20260922-03`/`T-20260922-04`). Chỉ sau khi
+   qua cổng `check-publish-version.py --platform ios` và test iPhone thật (§2c) mới phát bản mới và
+   gửi thông báo khách bản cũ không đăng nhập được. **Không** phát lại bản iOS hiện tại, **không**
+   gửi email quảng cáo bản chưa sửa.
+
+   **Health-watch định kỳ (luật 8)** — chạy nền, ghi log JSONL, alert Telegram khi có kênh lệch;
+   Mac chạy bằng `launchd`/`cron` (máy Mac đủ công cụ), Windows harness verify riêng kênh `.exe`:
+   ```bash
+   python3 scripts/audit-releases.py --interval 21600 \
+       --log ~/.vpnflow-release-audit.jsonl \
+       --alert-cmd 'scripts/release-audit-alert.sh'
+   ```
+   `--alert-cmd` nhận JSON kết quả qua stdin + env `AUDIT_EXIT`/`AUDIT_VERDICT`/`AUDIT_BASE`; script
+   `scripts/release-audit-alert.sh` in ra và gửi Telegram qua `flowvpn-notify` (mặc định qua node-2).
 
 ## 8. Lỗi đã từng xảy ra (đọc để không lặp)
 - Link trên `/buy` trỏ sai host (`api.` ⇒ 401). Link tải phải là `t1.` hoặc `meetflowai.site`.
@@ -222,3 +244,17 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 - **Tên file/mốc không phải version thật (21/09)**: bản Windows cài trên máy ghi `FileVersion = 1.0.0`
   trong khi installer tên `VPNFlow-Setup-1.4.1.exe` (ghi nhận trong `scripts/check-publish-version.py`)
   ⇒ **luôn đọc version từ BÊN TRONG artifact**, không tin tên file lẫn mốc `latest_version`.
+- **Không tin kết luận khi công cụ không ĐỌC ĐƯỢC file (22/09)**: `audit-releases.py` lưu DMG về máy
+  dưới tên **không đuôi**; `xcrun stapler validate` phân loại file theo đuôi nên trả *"Stapler is
+  incapable of working with Document files"* ⇒ audit báo macOS **LỆCH oan**, trong khi
+  `xcrun stapler validate <file>.dmg` trả *"The validate action worked!"*. Artifact tải về phải
+  **giữ đuôi** theo nền tảng (`ARTIFACT_SUFFIX`), và khi cổng báo lỗi phải kiểm nó có đọc được file không.
+- **`/v1/app-version?platform=android-legacy` trả payload iOS (22/09)**: server chỉ nhận
+  `android|ios|macos|windows`, giá trị lạ rơi vào nhánh iOS ⇒ audit sẽ đối chiếu APK legacy với mốc
+  **iOS** (đúng khi hai số tình cờ bằng nhau). APK legacy dùng chung mốc Android nên phải hỏi
+  `platform=android` (đã sửa trong `marker_latest` của `check-publish-version.py`).
+- **Python trên macOS không có CA hệ thống (22/09)**: Python cài từ python.org không nạp chứng chỉ
+  hệ thống ⇒ mọi request HTTPS `CERTIFICATE_VERIFY_FAILED`, audit báo "KHÔNG KIỂM ĐƯỢC" cả 5 kênh.
+  `check-publish-version.py` nay dùng `certifi` khi có (không cần `SSL_CERT_FILE` thủ công).
+- **Android Studio không thêm `aapt2` vào PATH (22/09)**: máy Mac báo thiếu aapt2 dù SDK đã cài; cổng
+  nay tự tìm `~/Library/Android/sdk/build-tools/*/aapt2`.
