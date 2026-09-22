@@ -121,6 +121,10 @@ APK cần `aapt2`, IPA cần giải nén + plist) — cố ý, để không bi�
 2. **Audit DMG macOS mới (22/09 11:56)** trên máy Mac: đọc version trong file + so mốc; xác định ai thay, vì sao.
 3. **Nối cổng chặn**: `check-publish-version.py` + `audit-releases.py` đọc `release/releases.jsonl` (đang là việc
    của phiên khác — phải claim + phối hợp trước khi sửa).
-4. **Chuẩn hoá release notes**: docs đang tham chiếu `release/<platform>/RELEASE_NOTES_<ver>.md` nhưng repo
-   **không có file nào** (chỉ có `docs/RELEASE_NOTES_1.2.4.md`) ⇒ chốt đường dẫn mới và bắt buộc tồn tại trước khi phát hành.
+4. ~~**Chuẩn hoá release notes**: docs đang tham chiếu `release/<platform>/RELEASE_NOTES_<ver>.md` nhưng repo
+   **không có file nào** (chỉ có `docs/RELEASE_NOTES_1.2.4.md`) ⇒ chốt đường dẫn mới và bắt buộc tồn tại trước khi phát hành.~~
+   **ĐÃ CHỐT 22/09/2026 (Windows 1.4.3):** đường dẫn là **`docs/RELEASE_NOTES_<version>.md`** — KHÔNG dùng
+   `release/<platform>/…` vì **`release/` bị `.gitignore`** (chỉ dành cho artifact build; chỉ mình
+   `release/releases.jsonl` được force-track). Release notes **phải được track** thì mới là bằng chứng.
+   Ví dụ đầu tiên: `docs/RELEASE_NOTES_1.4.3.md`.
 5. Thêm 2 dòng trỏ về tài liệu này trong `PUBLISHER_PROCESS.md` (§1 bước 6b/6c và §4).
