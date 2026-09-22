@@ -54,6 +54,17 @@ Số khai băng thông chỉ còn là tham số phụ (giữ để không tự b
 ### 4.1 `TransportLadder` — MỚI, thuần logic, unit-test được
 File mới `iOS/PrivateVPNPacketTunnel/TransportLadder.swift` (thêm vào **cả 2 target** trong `project.yml`).
 - Thứ tự bậc (theo §2c của yêu cầu): **QUIC/UDP trực tiếp → TCP relay trực tiếp → WS relay của node khác**.
+  ✅ **Chốt 22/09 (chủ dự án): "được phép nâng cấp sang node tốt hơn"** ⇒ **node khác là một bậc hợp lệ**
+  trong thang, không chỉ là phương án khi node hiện tại chết.
+  Chốt chặn bắt buộc khi lên bậc "node khác":
+  1. chỉ lên khi **kênh dò (§4.4) chứng minh** node đó nhanh hơn ≥1,25× ở **2 lần liên tiếp** — không
+     nhảy theo cảm tính;
+  2. **tôn trọng node khách đã chọn** (`store.selectedNodeID`): node khách chọn là **ưu tiên**; chỉ rời
+     khi node đó không còn đường nào chạy được, hoặc khi node khác nhanh hơn hẳn theo (1); khi node khách
+     chọn sống lại và ngang bằng ⇒ **quay về**;
+  3. vẫn trong trần **3 lần ramp/phiên** và **1 kênh dò** cùng lúc;
+  4. handoff trong suốt (tunnel giữ nguyên, khựng ≤1–3 s); **ghi log + hiện dòng phụ trong app** vì
+     **IP thoát đã đổi** (web/ngân hàng có thể hỏi lại đăng nhập) — dòng phụ, không chặn, không đổi UI.
 - Mỗi bậc sinh ra một `HysteriaTransport.Options` khác nhau (host/port/transport) — dùng lại đúng struct
   đang có (`HysteriaPacketTunnelProvider.swift:135` `currentOptions`).
 - Hàm thuần: `nextPath(after:)`, `remember(good:)`, `restore()`, `reset()` — test bằng `swiftc` harness
@@ -69,6 +80,10 @@ Việc còn lại: **đo** khựng bằng mốc `fromGo/toGo` trước–sau han
 mục tiêu ≤1–3 s. Nếu vượt ⇒ rollback về bậc cũ (giữ STABLE).
 
 ### 4.4 `ProbeChannel` — MỚI (A6, việc lớn nhất)
+- **Dò cái gì**: bậc đường kế tiếp **trong cùng node** (QUIC/UDP → TCP relay → WS relay) **và** — ✅ chủ
+  dự án cho phép 22/09 — **node khác** (khi node hiện tại đã hết bậc hoặc khi nghi node khác nhanh hơn).
+  Với node khác, kênh dò phải dùng **đúng khoá/config của node đó** (`VPNManager.swift:140-142`) và vẫn
+  chỉ ramp khi đạt ngưỡng ≥1,25× ×2 lần (chốt chặn ở §4.1).
 - Mở transport **thứ hai** trên socket/cổng riêng, **có `protect()`** (iOS) — không dùng chung fd với phiên chính.
 - Chạy **burst 2–3 s hoặc 1–3 MB**, đo goodput thật rồi **đóng ngay**.
 - Chỉ chạy khi: phiên rảnh ≥5 s, không ở chế độ tiết kiệm pin, chưa có kênh dò nào đang chạy (trần 1).
@@ -158,19 +173,19 @@ done
    `min(8 Mbps, mạng gốc × biên an toàn)`; nếu mạng gốc < 8 thì STABLE ở mức đạt được và ghi log
    `target capped by raw=<x> Mbps`. Số khai **không được vượt** mạng gốc (khai cao hơn chỉ làm Brutal
    flood ⇒ mất gói), và cũng **không** khai thấp hơn nhiều (tự bóp). Chi tiết: §4.7.
-3. **Có được nâng cấp sang node KHÁC không** (A6 nêu "WS relay của node khác") — ⏳ *chờ chốt; đã giải thích cho chủ dự án 22/09.*
+3. **Có được nâng cấp sang node KHÁC không** (A6 nêu "WS relay của node khác") — ✅ **CHỐT 22/09/2026
+   (chủ dự án): "được phép nâng cấp sang node tốt hơn."**
+   ⇒ Node khác là **một bậc hợp lệ** của thang nâng cấp (không chỉ dùng khi node hiện tại chết), với 4
+   chốt chặn ở §4.1: chỉ lên khi **kênh dò chứng minh ≥1,25× ×2 lần**, **ưu tiên node khách đã chọn**
+   (sống lại thì quay về), trong trần 3 ramp/phiên, handoff trong suốt + **báo dòng phụ vì IP thoát đổi**.
    **Node = máy chủ thoát** (node-1 `103.173.155.50`, node-2 `165.101.114.162`); khách chọn trong
    Settings (`VPNManager.swift:138-150`) và **IP thoát = IP của node đó**.
-   - *Nâng cấp ĐƯỜNG* (QUIC/UDP → TCP relay → WS relay): **giữ nguyên node, IP thoát KHÔNG đổi** — đây
-     là phần chính của kế hoạch, khách gần như không thấy gì.
+   - *Nâng cấp ĐƯỜNG* (QUIC/UDP → TCP relay → WS relay): **giữ nguyên node, IP thoát KHÔNG đổi** — khách
+     gần như không thấy gì.
    - *Nâng cấp NODE* (node-1 → node-2): **ĐỔI IP thoát** ⇒ web/ngân hàng/streaming có thể bắt đăng nhập
      lại, captcha, đổi vùng; phải bắt tay lại với khoá/config **của node khác** (đã có bug thật khi
      dùng chung URL relay cho mọi node — `VPNManager.swift:140-142`); hạ tầng có thể tính phiên/quota
      theo node.
-   Ba lựa chọn: **(A)** không bao giờ đổi node giữa phiên (node chết ⇒ HOLD, khách tự đổi node);
-   **(B)** chỉ nhảy node khi node hiện tại **CHẾT HẲN** (không phải chỉ chậm) — ưu tiên giữ node, node
-   sống lại thì quay về node khách đã chọn; **(C)** nhảy cả khi chỉ chậm (đổi IP liên tục) — **không
-   đề xuất**. *Đề xuất của Windows harness: **(B)**.*
 
 ## 8. Phụ thuộc & rủi ro
 
