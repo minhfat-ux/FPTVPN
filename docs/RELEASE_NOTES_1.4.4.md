@@ -49,10 +49,17 @@ Giống **hoàn toàn** 1.4.3 (chỉ khác hằng số version + chuỗi commit)
 | Mục | Kết quả |
 |---|---|
 | `dotnet test` (Core) | **202 pass / 0 fail** |
-| Cổng chặn trước khi phát | **ĐẠT** (version trong artifact 1.4.4; mốc tiến từ 1.4.3) |
-| Cổng chặn sau khi phát | **ĐẠT** (đọc version **bên trong** file đang phát) |
-| Commit nhúng trong exe | `ProductVersion = 1.4.4+<commit build>` — **khớp** sổ + tag |
-| Tải trọn qua CDN | size + sha256 khớp nguồn |
+| Không đổi chức năng | `git diff 64e07c7..8466b18 -- windows` **chỉ** khác `PrivateVPNWindows.App.csproj` (dòng `<Version>`) + `installer/build.ps1` — **không file `.cs` nào đổi** |
+| Cổng chặn trong `build.ps1` | 3b `FileVersion = 1.4.4` (khớp) · **3c `ProductVersion = 1.4.4+8466b18…` (khớp commit build)** |
+| Cổng chặn trước khi phát | **ĐẠT** (version trong artifact 1.4.4; mốc tiến 1.4.3 → 1.4.4) |
+| Cổng chặn sau khi phát | **ĐẠT** (đọc version **bên trong** file đang phát = 1.4.4; route tải 200 · 52.792.515 byte) |
+| Tải trọn qua CDN | `https://meetflowai.site/dl/VPNFlow-Setup-1.4.4.exe?v=d9956056` → **52.792.515 B**, sha256 khớp nguồn (132,7 s) |
+| Sổ + tag | `release/releases.jsonl` (internal_version 1.4.4, commit `8466b18`) · tag **`windows-v1.4.4` → `8466b18`** |
+
+### Số phát hành
+- File: `VPNFlow-Setup-1.4.4.exe` · **52.792.515 B** · sha256 `d99560569bdc6107b97636f8bac1ca4903b5cea8737589656ff6f6a8a58ae1be`
+- Link khách: `https://meetflowai.site/dl/VPNFlow-Setup-1.4.4.exe?v=d9956056` · mốc `latest_version=1.4.4`
+- Mtime trên node-2: `2026-09-22 17:09:51`
 
 ## Còn thiếu bằng chứng (không chặn phát hành)
 
