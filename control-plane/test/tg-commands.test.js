@@ -5,7 +5,9 @@ import {
   READ_ONLY_COMMANDS,
   RESTARTABLE_SERVICES,
   TASK_STATUSES,
+  VIBE_TARGETS,
   buildChatPrompt,
+  buildVibeBody,
   chatHelpText,
   chatPreamble,
   chunkMessage,
@@ -13,10 +15,13 @@ import {
   formatDuration,
   helpText,
   isAllowedChat,
+  isVibecodeCommand,
   needsConfirmation,
+  normalizeVibeTarget,
   parseCallback,
   parseChatArgs,
   parseCommand,
+  parseVibecodeArgs,
   reportTasks,
   telegramCallTimeoutMs,
   trimChatHistory,
@@ -335,4 +340,105 @@ test("nút Xác nhận của /approve mang đúng id task (không phải nội d
   const parsed = parseCommand("/approve G1758440000");
   const cb = parseCallback(`ok:${parsed.name}:${parsed.args.join(",")}`);
   assert.deepEqual(cb, { action: "confirm", name: "approve", args: ["G1758440000"] });
+});
+
+// ---------------------------------------------------------- /vibecode (giao việc cho máy)
+
+test("/vibecode là lệnh ĐỔI TRẠNG THÁI (giao việc cho máy khác phải xác nhận)", () => {
+  for (const name of ["vibecode", "mac", "win"]) {
+    assert.ok(MUTATING_COMMANDS.includes(name), `${name} phải nằm trong MUTATING_COMMANDS`);
+    assert.ok(!READ_ONLY_COMMANDS.includes(name), `${name} không được coi là lệnh đọc`);
+  }
+  assert.equal(needsConfirmation(parseCommand("/vibecode mac sua loi iOS")), true);
+  assert.equal(needsConfirmation(parseCommand("/mac sua loi iOS")), true);
+});
+
+test("parseVibecodeArgs: /vibecode <máy> <việc>", () => {
+  assert.deepEqual(
+    parseVibecodeArgs(["mac", "sửa", "lỗi", "mất", "mạng"]),
+    { kind: "task", target: "mac", text: "sửa lỗi mất mạng" },
+  );
+  assert.deepEqual(
+    parseVibecodeArgs(["WINDOWS", "build", "lại"]),
+    { kind: "task", target: "win", text: "build lại" },
+  );
+});
+
+test("parseVibecodeArgs: lệnh tắt /mac, /win suy ra máy từ tên lệnh", () => {
+  assert.deepEqual(parseVibecodeArgs(["build", "lại", "1.4.4"], "mac"), { kind: "task", target: "mac", text: "build lại 1.4.4" });
+  assert.deepEqual(parseVibecodeArgs(["kiểm", "tra", "route"], "win"), { kind: "task", target: "win", text: "kiểm tra route" });
+});
+
+test("parseVibecodeArgs: thiếu máy / thiếu việc / rỗng thì báo lỗi rõ, KHÔNG giao nhầm", () => {
+  const noMachine = parseVibecodeArgs(["sửa", "lỗi", "iOS"]);
+  assert.equal(noMachine.kind, "error");
+  assert.match(noMachine.message, /Không rõ máy nào/);
+
+  const noText = parseVibecodeArgs(["mac"]);
+  assert.equal(noText.kind, "error");
+  assert.match(noText.message, /Thiếu nội dung việc/);
+
+  assert.deepEqual(parseVibecodeArgs([]), { kind: "help" });
+});
+
+test("parseVibecodeArgs: việc chứa chữ giống tên máy vẫn giữ nguyên nội dung", () => {
+  // Chỉ chữ ĐẦU TIÊN mới là tên máy; "win" trong câu không được cắt đi.
+  assert.deepEqual(
+    parseVibecodeArgs(["mac", "so", "sánh", "win", "và", "mac"]),
+    { kind: "task", target: "mac", text: "so sánh win và mac" },
+  );
+  // Lệnh tắt: chữ đầu là nội dung việc, không phải tên máy.
+  assert.deepEqual(parseVibecodeArgs(["win", "là", "gì"], "mac"), { kind: "task", target: "mac", text: "win là gì" });
+});
+
+test("normalizeVibeTarget: nhận tên máy + bí danh, từ chối tên lạ", () => {
+  assert.equal(normalizeVibeTarget("Mac"), "mac");
+  assert.equal(normalizeVibeTarget("macos"), "mac");
+  assert.equal(normalizeVibeTarget("win"), "win");
+  assert.equal(normalizeVibeTarget("windows"), "win");
+  assert.equal(normalizeVibeTarget("@server"), "server");
+  assert.equal(normalizeVibeTarget("linux"), "");
+  assert.equal(normalizeVibeTarget(""), "");
+  // Mọi giá trị trả về phải là đích thật của hệ giao việc.
+  for (const value of Object.values(VIBE_TARGETS)) {
+    assert.ok(["mac", "win", "server"].includes(value), `đích lạ: ${value}`);
+  }
+});
+
+test("nút Xác nhận của /vibecode là okvibe (nội dung việc quá dài cho callback_data)", () => {
+  const parsed = parseCommand("/vibecode mac " + "x".repeat(200));
+  const prompt = confirmationPrompt(parsed);
+  const callback = parseCallback("okvibe");
+  assert.deepEqual(callback, { action: "confirm", name: "vibecode", args: [] });
+  // Nội dung việc KHÔNG được nhét vào callback_data (Telegram giới hạn 64 byte).
+  const data = prompt.buttons.flat().map((b) => b.callback_data);
+  assert.deepEqual(data, ["okvibe", "cancel"]);
+  assert.ok(data.every((d) => Buffer.byteLength(d, "utf8") <= 64));
+  // Prompt phải nói RÕ máy nhận + việc, vì gõ nhầm máy là việc đi sai chỗ.
+  assert.match(prompt.text, /Giao cho: Mac/);
+  assert.match(prompt.text, /x{10}/);
+});
+
+test("isVibecodeCommand phân biệt được với /task", () => {
+  assert.equal(isVibecodeCommand("vibecode"), true);
+  assert.equal(isVibecodeCommand("mac"), true);
+  assert.equal(isVibecodeCommand("win"), true);
+  assert.equal(isVibecodeCommand("task"), false);
+  assert.equal(isVibecodeCommand("restart"), false);
+});
+
+test("buildVibeBody ghi rõ việc đến từ chủ dự án + đòi ack/bằng chứng", () => {
+  const body = buildVibeBody("sửa lỗi mất mạng iOS", { at: new Date("2026-09-22T10:00:00Z") });
+  assert.match(body, /chủ dự án giao TRỰC TIẾP qua Telegram/);
+  assert.match(body, /2026-09-22T10:00:00\.000Z/);
+  assert.match(body, /sửa lỗi mất mạng iOS/);
+  assert.match(body, /bằng chứng/);
+  assert.match(body, /báo NGAY/);
+});
+
+test("helpText có nhắc /vibecode + /mac + /win", () => {
+  const help = helpText();
+  for (const needle of ["/vibecode mac", "/vibecode win", "/mac <việc>", "/win <việc>"]) {
+    assert.ok(help.includes(needle), `help thiếu "${needle}"`);
+  }
 });

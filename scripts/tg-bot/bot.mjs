@@ -17,8 +17,9 @@
  *   node bot.mjs --simulate "/ping" --send     # gửi thật vào chat (để kiểm tra đường gửi)
  */
 import { execFile } from "node:child_process";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import https from "node:https";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -33,6 +34,17 @@ const AGENT_ENABLED = ENV.AGENT_ENABLED !== "0";
 const AGENT_CMD = ENV.AGENT_CMD ?? "dsh";
 const AGENT_ARGS = (ENV.AGENT_ARGS ?? "--profile headless").split(" ").filter(Boolean);
 const AGENT_WORKDIR = ENV.AGENT_WORKDIR ?? "/root/flowvpn-agent";
+/**
+ * Bản sao repo SỔ GIAO VIỆC (nhánh `flowgpt`) trên máy chạy bot — có thì `/vibecode` tạo việc trong
+ * sổ (nguồn sự thật, watcher của máy đích thức theo sổ này); không có thì chỉ gửi qua bus.
+ * Để trống vẫn chạy: bot nói rõ "bỏ qua sổ" chứ không báo khống là đã giao.
+ */
+const LEDGER_DIR = (ENV.LEDGER_DIR ?? "").trim();
+/**
+ * Đang chạy `--simulate` (thử từ CLI, không nhận tin Telegram): `/vibecode` KHÔNG được gửi thật,
+ * nếu không thì một lệnh thử cũng đẩy việc thật sang máy khác.
+ */
+const SIMULATE = process.argv.includes("--simulate");
 const AGENT_TIMEOUT_MS = Number(ENV.AGENT_TIMEOUT_MS || 900_000);
 const CHAT_TIMEOUT_MS = Number(ENV.CHAT_TIMEOUT_MS || 600_000);
 const POLL_TIMEOUT_S = Number(ENV.POLL_TIMEOUT_S || 25);
@@ -413,6 +425,106 @@ async function cmdTask(chatId, args) {
   return `⏳ Đã nhận việc #${task.id}:\n${prompt}\nEm chạy nền và báo khi xong — gõ /reporttasks để xem trạng thái.`;
 }
 
+/** Chạy một lệnh con và trả stdout, KHÔNG ném lỗi (để bot báo được lý do cho chủ dự án). */
+async function runQuiet(file, args, opts = {}) {
+  try {
+    const { stdout, stderr } = await execFileAsync(file, args, {
+      timeout: 60_000,
+      maxBuffer: 4 * 1024 * 1024,
+      ...opts,
+    });
+    return { ok: true, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") };
+  } catch (err) {
+    return { ok: false, stdout: String(err.stdout ?? ""), stderr: String(err.stderr ?? err.message ?? "") };
+  }
+}
+
+/**
+ * /vibecode <máy> <việc> (viết tắt /mac, /win) — giao việc TRỰC TIẾP cho một máy.
+ *
+ * Vì sao KHÔNG chạy agent tại server như /task: mã nguồn, thiết bị và dữ liệu nằm trên máy đích
+ * (Mac giữ iPhone/Xcode, Windows giữ control-plane). Việc phải đi vào ĐÚNG hệ giao việc của máy đó:
+ *   1) agent-bus — kênh liên máy, có alert Telegram cho bên nhận;
+ *   2) sổ `ops/tasks` (repo nhánh flowgpt) — nguồn sự thật, watcher của máy đích thức theo sổ này.
+ * Cả hai đều best-effort, nhưng bot PHẢI nói thật đường nào chạy được — không báo khống "đã giao".
+ */
+async function cmdVibecode(chatId, args, implicitTarget = "") {
+  const parsed = cmd.parseVibecodeArgs(args, implicitTarget);
+  if (parsed.kind === "help") {
+    return [
+      "🖥️ Giao việc cho một máy:",
+      "/vibecode mac <việc> — máy Mac (macOS + iOS)",
+      "/vibecode win <việc> — máy Windows",
+      "/vibecode server <việc> — agent trên server",
+      "Viết tắt: /mac <việc> · /win <việc>",
+    ].join("\n");
+  }
+  if (parsed.kind === "error") return parsed.message;
+
+  // Chế độ thử (--simulate --confirm): chỉ in ra sẽ làm gì, KHÔNG đẩy việc thật sang máy khác.
+  if (SIMULATE) {
+    const busPath = path.join(AGENT_WORKDIR, "scripts/notify/agent-bus.mjs");
+    const ledgerPath = LEDGER_DIR ? path.join(LEDGER_DIR, "ops/task.mjs") : "";
+    const label = cmd.VIBE_TARGET_LABELS[parsed.target] ?? parsed.target;
+    return [
+      `[thu] se giao cho ${label}: ${parsed.text}`,
+      `[thu] bus: ${existsSync(busPath) ? `node agent-bus.mjs push --to ${parsed.target} --kind task` : "(khong thay agent-bus.mjs)"}`,
+      `[thu] so : ${ledgerPath && existsSync(ledgerPath) ? `node ops/task.mjs new --to ${parsed.target} + send --push` : `(bo qua - LEDGER_DIR="${LEDGER_DIR}")`}`,
+    ].join("\n");
+  }
+
+  const target = parsed.target;
+  const label = cmd.VIBE_TARGET_LABELS[target] ?? target;
+  const title = `Chủ dự án giao việc qua Telegram: ${parsed.text.slice(0, 80)}`;
+  const body = cmd.buildVibeBody(parsed.text);
+  const lines = [`📨 Đã giao cho ${label}:`, parsed.text, ""];
+
+  // 1) agent-bus (kênh liên máy + alert Telegram)
+  const bus = path.join(AGENT_WORKDIR, "scripts/notify/agent-bus.mjs");
+  let busOk = false;
+  if (existsSync(bus)) {
+    const res = await runQuiet(process.execPath, [bus, "push", "--to", target, "--kind", "task", "--title", title, "--body", body, "--ref", "TG-VIBECODE"], { cwd: AGENT_WORKDIR });
+    const out = `${res.stdout}\n${res.stderr}`.trim();
+    if (res.ok) {
+      busOk = true;
+      const ref = (res.stdout.match(/#\d+/) ?? [])[0];
+      lines.push(`• bus: đã gửi${ref ? ` (${ref})` : ""}`);
+    } else {
+      lines.push(`• bus: LỖI — ${out.split("\n").slice(-2).join(" ").slice(0, 200)}`);
+    }
+  } else {
+    lines.push(`• bus: không thấy ${bus}`);
+  }
+
+  // 2) sổ giao việc — chỉ khi máy chạy bot có bản sao repo sổ
+  let ledgerOk = false;
+  const ledger = LEDGER_DIR ? path.join(LEDGER_DIR, "ops/task.mjs") : "";
+  if (ledger && existsSync(ledger)) {
+    const pull = await runQuiet("git", ["-C", LEDGER_DIR, "pull", "--rebase", "--autostash"]);
+    if (!pull.ok) lines.push(`• sổ: git pull lỗi (vẫn thử tạo việc) — ${pull.stderr.split("\n")[0].slice(0, 140)}`);
+    const created = await runQuiet(process.execPath, ["ops/task.mjs", "new", "--title", title, "--to", target, "--detail", parsed.text, "--verify", "Báo lại bằng chứng đã chạy (lệnh + kết quả thật); vướng thì báo NGAY, ghi rõ vướng ở đâu."], { cwd: LEDGER_DIR, env: { ...ENV, AGENT_NAME: "OWNER" } });
+    const id = (created.stdout.match(/T-\d{8}-\d+/) ?? [])[0];
+    if (created.ok && id) {
+      const sent = await runQuiet(process.execPath, ["ops/task.mjs", "send", id, "--push"], { cwd: LEDGER_DIR, env: { ...ENV, AGENT_NAME: "OWNER" } });
+      ledgerOk = sent.ok;
+      lines.push(`• sổ: ${id}${sent.ok ? " (đã giao)" : " — gửi LỖI, cần đẩy tay"}`);
+    } else {
+      const lastLine = `${created.stdout}${created.stderr}`.split("\n").filter(Boolean).slice(-1)[0] ?? "";
+      lines.push(`• sổ: LỖI tạo việc — ${lastLine.slice(0, 160)}`);
+    }
+  } else {
+    lines.push("• sổ: bỏ qua (chưa cấu hình LEDGER_DIR trên máy này)");
+  }
+
+  audit({ chat: chatId, command: "vibecode", args: `${target}: ${parsed.text.slice(0, 120)}`, ok: busOk || ledgerOk });
+  if (!busOk && !ledgerOk) {
+    lines.push("", "⛔ KHÔNG giao được bằng đường nào — anh kiểm token bus / LEDGER_DIR giúp em.");
+  } else {
+    lines.push("", "Máy nhận sẽ ack rồi làm; xong báo kèm bằng chứng.");
+  }
+  return lines.join("\n");
+}
+
 /** Thực thi một việc agent ở nền rồi cập nhật sổ và gửi kết quả về chat đã giao việc. */
 async function runAgentTask(task) {
   try {
@@ -576,6 +688,9 @@ async function handleCommand(parsed, chatId, { force = false, dryRun = false } =
     case "approve": return cmdApprove(chatId, parsed.args);
     case "reject": return cmdReject(parsed.args);
     case "task": return cmdTask(chatId, parsed.args);
+    case "vibecode": case "mac": case "win":
+      // /mac và /win là viết tắt: máy nhận suy ra từ chính tên lệnh.
+      return cmdVibecode(chatId, parsed.args, parsed.name === "vibecode" ? "" : parsed.name);
     case "chat": return cmdChat(chatId, parsed.args);
     default:
       return `❓ Không hiểu lệnh "${parsed.unknown ?? ""}". Gõ /help để xem danh sách.`;
@@ -606,7 +721,11 @@ async function onMessage(message) {
         await send(chatId, "❓ Dùng: /task <việc cần làm>");
         return;
       }
-      pendingTasks.set(chatId, { text: taskText, at: Date.now() });
+      pendingTasks.set(chatId, { command: "task", text: taskText, at: Date.now() });
+    }
+    if (cmd.isVibecodeCommand(parsed.name)) {
+      // Nội dung việc thường dài hơn 64 byte của callback_data ⇒ lưu lại, nút chỉ mang "okvibe".
+      pendingTasks.set(chatId, { command: parsed.name, text: parsed.args.join(" "), at: Date.now() });
     }
     const prompt = cmd.confirmationPrompt(parsed);
     await send(chatId, prompt.text, { reply_markup: { inline_keyboard: prompt.buttons } });
@@ -630,14 +749,15 @@ async function onCallback(query) {
     return;
   }
   let parsed = { name: parsedCb.name, args: parsedCb.args, mutating: true };
-  if (parsedCb.name === "task") {
+  if (parsedCb.name === "task" || cmd.isVibecodeCommand(parsedCb.name)) {
     const pending = pendingTasks.get(chatId);
     pendingTasks.delete(chatId);
     if (!pending || Date.now() - pending.at > PENDING_TTL_MS) {
       await send(chatId, "⌛ Việc này đã hết hạn xác nhận — gửi lại /task <việc cần làm> giúp em.");
       return;
     }
-    parsed = { name: "task", args: pending.text.split(" "), mutating: true };
+    // `command` giữ đúng lệnh gốc: /mac, /win hay /vibecode (mỗi lệnh suy ra máy nhận khác nhau).
+    parsed = { name: pending.command ?? "task", args: pending.text.split(" "), mutating: true };
   }
   audit({ chat: chatId, command: parsed.name, args: parsed.args, confirmed: true });
   const reply = await handleCommand(parsed, chatId, { force: true }).catch((err) => `❌ Lỗi: ${err.message}`);
