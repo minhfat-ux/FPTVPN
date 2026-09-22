@@ -128,6 +128,10 @@ targets:
       # Quyết định watchdog sống-còn suốt phiên — thuần logic, tách để unit test
       # (xem iOS/PrivateVPNTests/LivenessWatchdogTests.swift).
       - path: iOS/PrivateVPNPacketTunnel/LivenessWatchdog.swift
+      # Thang nâng cấp ĐƯỜNG + NODE (thay cho việc nâng số khai Brutal) — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
+      # Đo goodput thật bằng cửa sổ trượt 12 s / mẫu 1 s — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
@@ -185,6 +189,9 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/RelayDiagnostics.swift
       # Quyết định watchdog sống-còn suốt phiên: thuần logic nên test được không cần extension.
       - path: iOS/PrivateVPNPacketTunnel/LivenessWatchdog.swift
+      # Thang nâng cấp đường/node + đồng hồ goodput: cùng lý do (thuần logic, test không cần extension).
+      - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
+      - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
     dependencies:
       - target: PrivateVPN
     settings:
@@ -316,6 +323,10 @@ targets:
       # Quyết định watchdog sống-còn suốt phiên — thuần logic, tách để unit test
       # (xem iOS/PrivateVPNTests/LivenessWatchdogTests.swift).
       - path: iOS/PrivateVPNPacketTunnel/LivenessWatchdog.swift
+      # Thang nâng cấp ĐƯỜNG + NODE (thay cho việc nâng số khai Brutal) — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
+      # Đo goodput thật bằng cửa sổ trượt 12 s / mẫu 1 s — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift

@@ -144,3 +144,23 @@ done
   đề xuất đợt này là **1.5.0** (iOS `CURRENT_PROJECT_VERSION` 18, macOS 16) — *chờ chủ dự án chốt số*.
   Sau khi build: cổng chặn → test iPhone thật (`PUBLISHER_PROCESS.md` §2c) → sổ `release-record append`
   → tag → email do publisher gửi.
+
+## 9. Trạng thái thi công (cập nhật 22/09/2026, T-20260922-10)
+
+Phần làm được NGAY (không phụ thuộc 3 câu hỏi §7) — nhánh `mac/toc-do-p0`, đã hợp vào `main`:
+
+| # | Việc | Trạng thái | Bằng chứng |
+|---|---|---|---|
+| P0-1 | Merge `mac/parity-1.4.1` (watchdog + tự dựng lại) + chỉnh ngưỡng A5 | ✅ | merge commit `ab04047`; ngưỡng: nhịp 15 s, im ≥**15 s** (trước 60 s) **VÀ** bất đối xứng ⇒ kết luận ở nhịp kế tiếp; tự dựng lại tối đa 3 lần (2/5/10 s) rồi `teardownAndCancel` + `TUNNEL_NO_TRAFFIC` |
+| P0-2 | `TransportLadder` + `GoodputMeter` (thuần logic) | ✅ | `iOS/PrivateVPNPacketTunnel/{TransportLadder,GoodputMeter}.swift`; test `iOS/PrivateVPNTests/{TransportLadder,GoodputMeter}Tests.swift`; harness `bash scripts/ios-pure-logic-tests/run.sh` → **39/39 PASS** |
+| P1-1a | State/message lệch UI | ✅ đã sửa | Sau khi tự dựng lại transport THÀNH CÔNG, extension không xoá state/message "đang dựng lại" ⇒ app giữ "Connected" + "Reconnecting…". Nay `setStatus(state: "up", code: nil, message: nil)`; state tạm đổi `reconnecting` → `rebuilding` cho khớp hợp đồng `TunnelStatusReport` |
+| P1-1b | 16 KB page size | ✅ ĐẠT, không cần build lại | Nhị phân iOS cuối (`PrivateVPNPacketTunnel`, arm64) có mọi `LC_SEGMENT_64` (`__TEXT`/`__DATA_CONST`/`__DATA`/`__LINKEDIT`) `vmaddr`+`fileoff` là bội số `0x4000` = 16 KB. Static archive (`libwg-go.a`, `Hysteria` framework) là object tái định vị, align nhỏ (≤ 2^5) — trang do bước link cuối quyết định nên không phải build lại gomobile/Go |
+
+**Chưa làm (đang chờ §7):** P0-3 máy trạng thái START/RAMP/STABLE/PROBE/DEGRADED, P0-4 kênh dò,
+P1-2 giảm dựng lại vì ramp. Ba câu hỏi §7 **chưa được trả lời** ⇒ không tự quyết.
+
+**Lỗ hổng tài liệu phát hiện khi thi công:** `docs/YEU_CAU_TOC_DO_ON_DINH.md` và `docs/VERSIONING.md`
+được kế hoạch này trích dẫn là "đầu vào bắt buộc đọc trước" nhưng **không tồn tại trong repo**
+(đã `git log --all -- '*YEU_CAU_TOC_DO*'`/`'*VERSIONING*'` = rỗng). Cần bổ sung để các mốc A1–A6 và
+luật tăng version có nguồn thật, tránh thi công dựa vào bản tóm tắt.
+

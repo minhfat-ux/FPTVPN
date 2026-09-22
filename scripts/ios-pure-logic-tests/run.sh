@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Chạy harness swiftc cho ba file thuần logic (T-20260922-10, P0-1/P0-2).
+# Không cần Xcode project/ký — chỉ cần toolchain Swift của macOS.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+SRC="$ROOT/iOS/PrivateVPNPacketTunnel"
+OUT="$(mktemp -d)"
+trap 'rm -rf "$OUT"' EXIT
+
+echo "swiftc: $(swiftc --version 2>&1 | head -1)"
+swiftc -O \
+  "$SRC/LivenessWatchdog.swift" \
+  "$SRC/TransportLadder.swift" \
+  "$SRC/GoodputMeter.swift" \
+  "$ROOT/scripts/ios-pure-logic-tests/main.swift" \
+  -o "$OUT/pure-tests"
+"$OUT/pure-tests"

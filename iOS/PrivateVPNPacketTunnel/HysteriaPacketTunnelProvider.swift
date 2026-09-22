@@ -64,11 +64,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
     /// Nhịp kiểm tra sống-còn. Cùng nhịp 15s của `RelayHealthWatchdog` bản Windows.
     private static let livenessInterval: TimeInterval = 15
-    /// Chiều VỀ (`fromGo`) đứng yên ngần này thì mới coi là "im" — đủ dài để không nhầm với
-    /// một khoảng lặng bình thường khi người dùng không duyệt web.
-    private static let livenessSilenceLimit: TimeInterval = 60
-    /// Số nhịp liên tiếp "im VÀ máy vẫn gửi gói vào tunnel" để kết luận đường hỏng.
-    private static let livenessStrikesToRebuild = 3
+    /// Chiều VỀ (`fromGo`) đứng yên ngần này thì coi là "im" — theo tiêu chí A5 (phát hiện
+    /// ≤15 s). Ngắn hơn bản Windows 1.4.1 (60 s) để không bỏ sót ca "Connected mà không có mạng".
+    private static let livenessSilenceLimit: TimeInterval = 15
+    /// Chốt theo A5: "im ≥15 s VÀ bất đối xứng" đã đủ kết luận ⇒ 1 nhịp, KHÔNG chờ 3 nhịp như
+    /// bản Windows (60 s × 3 = 180 s mới phát hiện, vượt xa mốc ≤15 s của yêu cầu).
+    private static let livenessStrikesToRebuild = 1
     /// Trần số lần TỰ DỰNG LẠI transport trước khi chịu thua và gỡ tunnel (giống Windows).
     private static let livenessRebuildMax = 3
     /// Nhịp chờ trước mỗi lượt dựng lại — Windows dùng đúng 2s/5s/10s.
@@ -1185,7 +1186,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// đã lên; huỷ trong `cancelScheduledWork` (cả `stopTunnel` lẫn `teardownAndCancel`).
     ///
     /// Nhịp 15s: đọc bộ đếm gói thật rồi giao `LivenessWatchdog` quyết định. Chỉ tự dựng lại khi
-    /// chiều VỀ im ≥60s VÀ máy VẪN gửi gói vào tunnel (bất đối xứng) đủ 3 nhịp — người dùng ngồi
+    /// chiều VỀ im ≥15s (A5) VÀ máy VẪN gửi gói vào tunnel (bất đối xứng) — người dùng ngồi
     /// yên không bị cắt oan (bài học từ `RelayHealthWatchdog` của Windows).
     private func startLivenessWatchdog() {
         let timer = DispatchSource.makeTimerSource(queue: queue)
@@ -1287,7 +1288,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                 + "\(Self.livenessRebuildMax) lần) thay vì gỡ tunnel"
         )
         setStatus(
-            state: "reconnecting",
+            state: "rebuilding",
             code: nil,
             message: "Đường hysteria2 dừng (\(reason)). Đang tự dựng lại…"
         )
@@ -1372,9 +1373,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             livenessRebuildAttempts = 0
             flowLock.unlock()
             releaseTransportRebuild(owner: "liveness")
+            // P1-1: transport đã lên lại ⇒ XOÁ state/message "đang dựng lại" của lần hỏng trước.
+            // Không xoá thì app giữ "Connected" + "Reconnecting…" mãi (đúng lỗi Android từng bị).
+            setStatus(state: "up", code: nil, message: nil)
             RelayDiagnostics.shared.log(
                 "tự phục hồi: ĐÃ dựng lại transport (lần \(attempt)) — tunnel giữ nguyên, "
-                    + "tiếp tục giám sát"
+                    + "tiếp tục giám sát; đã xoá state/message tạm"
             )
             return
         }

@@ -15,6 +15,11 @@ import Foundation
 ///
 /// Chống báo oan (bài học Windows): người dùng ngồi yên thì `toGo` cũng đứng yên ⇒ KHÔNG kết
 /// luận, KHÔNG cắt VPN. Chỉ khi đồng thời "chiều về im" VÀ "máy vẫn gửi" mới tính là hỏng.
+///
+/// Ngưỡng mặc định bám tiêu chí **A5** (`docs/YEU_CAU_TOC_DO_ON_DINH.md`): cửa sổ im **15 s**
+/// và **1 nhịp** là đủ kết luận (`strikesToRebuild = 1`) ⇒ kết luận ngay ở nhịp 15 s kế tiếp.
+/// Bản Windows 1.4.1 dùng 60 s × 3 nhịp (180 s) — quá chậm so với mốc A5; `strikesToRebuild` giữ
+/// lại để harness test được cả hai chế độ.
 struct LivenessWatchdog {
 
     /// Kết quả một nhịp kiểm tra.
@@ -46,8 +51,8 @@ struct LivenessWatchdog {
     init(
         now: Date,
         interval: TimeInterval = 15,
-        silenceLimit: TimeInterval = 60,
-        strikesToRebuild: Int = 3
+        silenceLimit: TimeInterval = 15,
+        strikesToRebuild: Int = 1
     ) {
         self.interval = max(1, interval)
         self.silenceLimit = max(1, silenceLimit)
