@@ -142,6 +142,31 @@ pha **HOLD** (§3): giữ nguyên đường đã chọn + tunnel UP + ping đị
 | P1-2 | Giảm dựng lại transport vì ramp: từ 5 → **0** (giữ số khai cũ), chỉ dựng lại khi handoff/đường chết | Mac | log `rebuild reason=…` ≤1 lần/30 phút |
 | P1-3 | Viết script đo chung (§5 yêu cầu) cho iOS/macOS | Windows (làm được) | script + output 1 phiên |
 
+## 5b. THỨ TỰ ƯU TIÊN: **iOS TRƯỚC** (chủ dự án chốt 22/09/2026)
+> Nguyên văn: *"làm cho iOS trước nhé!"* — iOS và macOS dùng chung source
+> (`project.yml:215-225,308-316`) nên code viết một lần, nhưng **build + test + phát hành iOS trước**,
+> macOS làm sau khi iOS đã đạt trên máy thật.
+
+### Giai đoạn 1 — iOS (làm ngay)
+| Bước | Việc | Điều kiện xong |
+|---|---|---|
+| 0 | **Điều kiện tiên quyết (đang chặn):** bật **Keychain Sharing** cho App ID ở Apple Developer portal (việc làm tay — ASC API trả 409) rồi sinh lại profile + ký lại IPA | cổng `check-publish-version.py --platform ios` **ĐẠT** (không còn "Nhóm keychain THIẾU trong profile") và **đăng nhập được** trên iPhone |
+| 1 | P0-1 merge watchdog + ngưỡng A5 15 s/15 s; P0-2 `TransportLadder` + `GoodputMeter` | unit test harness PASS |
+| 2 | P0-3 máy trạng thái (START/RAMP/STABLE/PROBE/DEGRADED/**HOLD**) + §4.7 `RawLinkProbe` | log thiết bị có `raw:`, `stable at <X> Mbps`, `hold:` |
+| 3 | P0-4 **kênh dò** (§4.4) — trên iOS dùng `protect()` (API có sẵn, đúng chỗ nhất để làm trước) | log `probe: …`, 2 lần ≥1,25× |
+| 4 | P1-1 rà state/message + 16 KB; P1-2 giảm dựng lại transport vì ramp về 0 | ảnh UI + `otool` |
+| 5 | **Đo theo §6 trên iPhone thật**: ≥8 Mbps duy trì 10 phút, 0 lần rời Connected, ≤1 rebuild/30 phút | script + log app |
+| 6 | Phát hành iOS: bump `project.yml` (**đề xuất 1.5.0, build 18**), build + ký + cổng + **§2c đủ 7 mục** + sổ `release-record` + tag + email (publisher) | bảng §2c đầy đủ |
+
+### Giai đoạn 2 — macOS (sau khi iOS xong)
+Phần **phải làm riêng cho macOS** (không dùng chung được với iOS):
+1. **`protect()` KHÔNG có trên macOS** ⇒ `ProbeChannel` + `RawLinkProbe` phải dùng cách vòng tunnel khác
+   (bind theo interface vật lý / route riêng) — phải thiết kế + test riêng, **không** copy nguyên của iOS.
+2. Bật ramp giữa phiên (việc P1b đã làm trên nhánh `mac/parity-1.4.1`) — nay đổi mục tiêu theo kế hoạch này.
+3. **DMG: staple + notarize** (đang chờ Mac) rồi test trên **máy Mac khác** (tải → cài → double-click mở).
+4. Đo theo §6 trên Mac thật + phát macOS (đề xuất 1.5.0, build 16).
+**Điều kiện chuyển giai đoạn:** iOS đã phát hành và đạt A1–A6 trên máy thật.
+
 ## 6. Nghiệm thu (dùng CHUNG cách đo của yêu cầu §5)
 
 ```
