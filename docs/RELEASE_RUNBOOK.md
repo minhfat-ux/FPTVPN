@@ -146,7 +146,19 @@ python3 scripts/audit-releases.py --no-download   # chỉ mốc + size (nhanh, K
 python3 scripts/audit-releases.py --platform ios  # một nền tảng
 ```
 Mã thoát: `0` mọi kênh khớp · `1` có kênh **LỆCH** (phải xử lý) · `2` có kênh chưa đối chiếu được
-(macOS cần máy Mac, APK cần `aapt2`). Kết quả audit dán vào nhật ký §6.
+(macOS cần máy Mac, APK cần `aapt2`, `.exe` cần Windows — Mac đọc được size/sha256 nhưng không đọc
+được `VersionInfo`). Kết quả audit dán vào nhật ký §6.
+
+**Chạy định kỳ (health-watch, luật 8)** — Mac giữ `launchd`/`cron`, ghi log JSONL, gọi alert Telegram
+khi có kênh lệch. Audit tải ~230 MB mỗi vòng nên đặt nhịp thưa (6h):
+```bash
+python3 scripts/audit-releases.py --interval 21600 \
+    --log ~/.vpnflow-release-audit.jsonl \
+    --alert-cmd 'scripts/release-audit-alert.sh'
+```
+`--alert-cmd` nhận JSON kết quả qua stdin + env `AUDIT_EXIT`/`AUDIT_VERDICT`/`AUDIT_BASE`.
+⚠️ Mac đọc version `.exe` **không được** (cần Windows) ⇒ trên Mac kênh Windows luôn là
+"không kiểm được", **không phải lệch**; Windows harness phải verify riêng số hiệu `.exe`.
 
 ## 8. Rollback (khi bản mới lỗi)
 1. Đổi `VPNFlow-latest.ipa` (hoặc APK/DMG) về file backup **cùng tên** ⇒ link tải cũ hoạt động lại ngay.
