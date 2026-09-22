@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap tren Windows: (1) commit 152e524 co tren origin/main (8 file); (2) iOS: python3 scripts/check-publish-version.py --platform ios --mode post --version 1.4.0 --build 16 -> exit 0, doc TU TRONG IPA ra 1.4.0/build 16, route 8.135.823 B; (3) test am: --version 1.4.1 --build 17 -> exit 1 + 'DUNG publish' => cong chan THAT, khong phai luon-DAT; (4) DMG dang phat 21.617.309 B, sha256 9d05f271232b75ddbae281059ff48355d5162032cb2a86114fafc130bfd54597 khop y nguyen bang chung MAC; (5) 2 loi macOS kiem chung doc lap: .app/Contents/Info.plist (gia lap hdiutil: cong doc ra 1.4.0/14, logic cu khong thay plist) + UA that (khong UA -> Cloudflare 403, co UA -> HTTP 200); (6) source: iOS/mac SettingsView + Android SettingsScreen hien version+build+moc latest_version va 'KHAC ban dang cai', LKey du 5 thu tieng; PUBLISHER_PROCESS.md 1c/1d/5b bat buoc; python3 -m py_compile OK. KHONG kiem duoc tren Windows (thieu hdiutil/Java/Android SDK/swiftc): chay that --mode post cho DMG va build APK - da ghi ro, khong doi ket luan vi artifact macOS da doi chieu sha256 + unit test nhanh doc plist iOS. Ghi chu nho (khong chan): khi version lech, cong in them dong 'Extension LECH so' voi chi tiet giong het app/ext du chung bang nhau — chi xay ra cung luc voi loi that.",
+ "actor": "win",
+ "at": "2026-09-22T03:42:02.372Z"
+}
