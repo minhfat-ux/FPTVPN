@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T09:01:13.128Z",
+ "note": "connector VPS: done từ mac — T-20260922-10 · iOS/macOS: ke hoach dev toc do & on dinh (YEU_CAU_TOC_DO) - lam P0-1/P0-2/P1-1 ngay",
+ "via": "dsh --profile headless \"{prompt}\""
+}
