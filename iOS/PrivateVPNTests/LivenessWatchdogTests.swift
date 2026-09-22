@@ -126,4 +126,44 @@ final class LivenessWatchdogTests: XCTestCase {
         XCTAssertEqual(dog.silenceLimit, 15)
         XCTAssertEqual(dog.strikesToRebuild, 1)
     }
+
+    // MARK: - Pha HOLD (chốt 22/09/2026: hết đường thì giữ đường + ping tiếp, không teardown)
+
+    /// Vào HOLD rồi im mãi: mỗi nhịp chỉ là một lần ping, KHÔNG bao giờ trả `.rebuild`.
+    func testHoldNeverRebuildsAndCountsPings() {
+        var dog = makeA5Watchdog()
+        dog.beginHold(now: t0, fromGo: 1_000, toGo: 500)
+        XCTAssertEqual(dog.holdPings, 0)
+
+        XCTAssertEqual(dog.holdTick(now: t0.addingTimeInterval(15), fromGo: 1_000, toGo: 800), .waiting(1))
+        XCTAssertEqual(dog.holdTick(now: t0.addingTimeInterval(30), fromGo: 1_000, toGo: 1_100), .waiting(2))
+        XCTAssertEqual(dog.strikes, 0, "HOLD không đếm strike, không có đường teardown")
+        XCTAssertEqual(dog.holdPings, 2)
+    }
+
+    /// Không đọc được bộ đếm trong HOLD: vẫn tính là một lần ping, không kết luận hỏng.
+    func testHoldWithUnavailableCountersStillPings() {
+        var dog = makeA5Watchdog()
+        dog.beginHold(now: t0, fromGo: 0, toGo: 0)
+        XCTAssertEqual(dog.holdTick(now: t0.addingTimeInterval(15), fromGo: nil, toGo: nil), .waiting(1))
+        XCTAssertEqual(dog.holdPings, 1)
+    }
+
+    /// Có byte chiều VỀ ⇒ mạng về (thoát HOLD), dù cửa sổ im đã quá hạn.
+    func testHoldNetworkBackOnReturnGrowth() {
+        var dog = makeA5Watchdog()
+        dog.beginHold(now: t0, fromGo: 1_000, toGo: 500)
+        _ = dog.holdTick(now: t0.addingTimeInterval(300), fromGo: 1_000, toGo: 700)
+        XCTAssertEqual(dog.holdTick(now: t0.addingTimeInterval(600), fromGo: 1_400, toGo: 900), .networkBack)
+    }
+
+    /// Thoát HOLD bằng cách dựng lại được transport ⇒ xoá đếm ping.
+    func testResetAfterRebuildClearsHoldPings() {
+        var dog = makeA5Watchdog()
+        dog.beginHold(now: t0, fromGo: 10, toGo: 10)
+        _ = dog.holdTick(now: t0.addingTimeInterval(15), fromGo: 10, toGo: 20)
+        XCTAssertEqual(dog.holdPings, 1)
+        dog.resetAfterRebuild(now: t0.addingTimeInterval(16), fromGo: 0, toGo: 0)
+        XCTAssertEqual(dog.holdPings, 0)
+    }
 }

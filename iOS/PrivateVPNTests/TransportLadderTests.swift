@@ -3,7 +3,8 @@ import XCTest
 /// Tests cho `TransportLadder` — thang nâng cấp ĐƯỜNG + NODE (yêu cầu §2c, A1/A3/A4).
 ///
 /// Thuần logic, không I/O. Bám các luật: một chiều (không hạ bậc), nhớ bậc đã đạt (A3), trần số
-/// lần nâng trong phiên (A4), và câu hỏi mở §7.3 (đổi node khác) là một CỜ tắt mặc định.
+/// lần nâng trong phiên (A4), và chốt 22/09/2026 — đổi node khác là bậc HỢP LỆ nhưng chỉ lên khi
+/// kênh dò chứng minh (≥1,25× ×2).
 final class TransportLadderTests: XCTestCase {
 
     private let n1 = TransportLadderNode(
@@ -37,19 +38,20 @@ final class TransportLadderTests: XCTestCase {
         )
     }
 
-    /// Thang mặc định: QUIC → TCP; KHÔNG có node khác khi cờ §7.3 còn tắt.
-    func testCanonicalRungsExcludeOtherNodeByDefault() {
+    /// Thang mặc định: QUIC → TCP → WS node khác (chốt 22/09: node khác là bậc hợp lệ).
+    func testCanonicalRungsIncludeOtherNodeByDefault() {
         let rungs = TransportLadder.canonicalRungs(primary: n1, others: [n2])
-        XCTAssertEqual(rungs.map(\.kind), [.quicDirect, .tcpRelay])
-        XCTAssertEqual(rungs.map(\.nodeID), ["vn1hy", "vn1hy"])
+        XCTAssertEqual(rungs.map(\.kind), [.quicDirect, .tcpRelay, .wsRelayOtherNode])
+        XCTAssertEqual(rungs.map(\.nodeID), ["vn1hy", "vn1hy", "vn2hy"])
     }
 
-    /// Khi chủ dự án cho phép đổi node: thêm bậc WS relay của node khác, đúng thứ tự cuối thang.
-    func testCanonicalRungsIncludeOtherNodeWhenAllowed() {
-        let options = TransportLadderOptions(allowsOtherNodeRungs: true)
-        let rungs = TransportLadder.canonicalRungs(primary: n1, others: [n2], options: options)
-        XCTAssertEqual(rungs.map(\.kind), [.quicDirect, .tcpRelay, .wsRelayOtherNode])
-        XCTAssertEqual(rungs.last?.nodeID, "vn2hy")
+    /// Bậc node khác bị CHẶN cho tới khi kênh dò chứng minh (chốt chặn §4.1(1)).
+    func testOtherNodeRungRequiresProbeProof() {
+        var ladder = TransportLadder(rungs: [quic, tcp, wsOther])
+        XCTAssertEqual(ladder.nextPath(after: quic), tcp)
+        XCTAssertNil(ladder.nextPath(after: tcp), "chưa có chứng minh ⇒ không nhảy node khác")
+        ladder.markProven(nodeID: "vn2hy")
+        XCTAssertEqual(ladder.nextPath(after: tcp), wsOther)
     }
 
     /// Nâng bậc là MỘT CHIỀU: quic → tcp, hết thang thì nil (giữ STABLE ở mức thấp nhất).
@@ -65,9 +67,9 @@ final class TransportLadderTests: XCTestCase {
     /// Trần số lần nâng bậc trong phiên (A4).
     func testRampUpsAreCapped() {
         var options = TransportLadderOptions()
-        options.allowsOtherNodeRungs = true
         options.maxRampUps = 2
         var ladder = TransportLadder(rungs: [quic, tcp, wsOther], options: options)
+        ladder.markProven(nodeID: "vn2hy")
         XCTAssertEqual(ladder.nextPath(after: quic), tcp)
         XCTAssertEqual(ladder.nextPath(after: tcp), wsOther)
         XCTAssertNil(ladder.nextPath(after: wsOther))
@@ -116,5 +118,52 @@ final class TransportLadderTests: XCTestCase {
         XCTAssertEqual(quic.label, "quic-direct@vn1hy")
         XCTAssertEqual(tcp.label, "tcp-relay@vn1hy")
         XCTAssertEqual(wsOther.label, "ws-relay-node-khac@vn2hy")
+    }
+
+    // MARK: - NodeUpgradePolicy (chốt 22/09: cho phép nâng node, kèm chốt chặn)
+
+    /// Chỉ lên bậc node khác khi kênh dò chứng minh ≥1,25× ở 2 lần LIÊN TIẾP.
+    func testUpgradeRequiresTwoConsecutiveProvenProbes() {
+        var policy = NodeUpgradePolicy(priorityNodeID: "vn1hy")
+        XCTAssertEqual(
+            policy.recordProbe(candidateNodeID: "vn2hy", speedVsCurrent: 1.4, currentNodeID: "vn1hy"),
+            .stay
+        )
+        XCTAssertEqual(
+            policy.recordProbe(candidateNodeID: "vn2hy", speedVsCurrent: 1.3, currentNodeID: "vn1hy"),
+            .upgrade(nodeID: "vn2hy")
+        )
+    }
+
+    /// Dưới ngưỡng (hoặc đứt chuỗi) thì không đổi node.
+    func testBelowThresholdOrBrokenStreakStays() {
+        var policy = NodeUpgradePolicy()
+        _ = policy.recordProbe(candidateNodeID: "vn2hy", speedVsCurrent: 1.4, currentNodeID: "vn1hy")
+        XCTAssertEqual(
+            policy.recordProbe(candidateNodeID: "vn2hy", speedVsCurrent: 1.1, currentNodeID: "vn1hy"),
+            .stay
+        )
+        XCTAssertEqual(
+            policy.recordProbe(candidateNodeID: "vn3hy", speedVsCurrent: 1.3, currentNodeID: "vn1hy"),
+            .stay
+        )
+    }
+
+    /// Node khách đã chọn sống lại và ngang bằng ⇒ quay về ngay (chốt chặn §4.1(2)).
+    func testReturnToPriorityWhenAliveAndParity() {
+        var policy = NodeUpgradePolicy(priorityNodeID: "vn1hy")
+        XCTAssertEqual(
+            policy.recordProbe(candidateNodeID: "vn1hy", speedVsCurrent: 1.0, currentNodeID: "vn2hy"),
+            .returnToPriority(nodeID: "vn1hy")
+        )
+    }
+
+    /// Dò chính node đang chạy không làm gì.
+    func testProbingCurrentNodeStays() {
+        var policy = NodeUpgradePolicy(priorityNodeID: "vn1hy")
+        XCTAssertEqual(
+            policy.recordProbe(candidateNodeID: "vn2hy", speedVsCurrent: 2.0, currentNodeID: "vn2hy"),
+            .stay
+        )
     }
 }

@@ -20,6 +20,9 @@ import Foundation
 /// và **1 nhịp** là đủ kết luận (`strikesToRebuild = 1`) ⇒ kết luận ngay ở nhịp 15 s kế tiếp.
 /// Bản Windows 1.4.1 dùng 60 s × 3 nhịp (180 s) — quá chậm so với mốc A5; `strikesToRebuild` giữ
 /// lại để harness test được cả hai chế độ.
+///
+/// Hết trần tự dựng lại thì KHÔNG teardown (chốt 22/09/2026): chuyển sang pha **HOLD** — giữ
+/// nguyên đường đã chọn, tunnel vẫn UP, `holdTick` ping lại mỗi nhịp cho tới khi có byte chiều về.
 struct LivenessWatchdog {
 
     /// Kết quả một nhịp kiểm tra.
@@ -35,6 +38,15 @@ struct LivenessWatchdog {
         case rebuild
     }
 
+    /// Kết quả một nhịp ở pha **HOLD** — chủ dự án chốt 22/09/2026: *"hết mọi đường thì dùng
+    /// đường đã chọn và chờ ping tiếp thôi"* ⇒ KHÔNG `closeTun()`/teardown vì lý do tốc độ.
+    enum HoldVerdict: Equatable {
+        /// Chưa thấy mạng về — đã ping thêm 1 lần (giá trị 1-based).
+        case waiting(Int)
+        /// Chiều VỀ có byte mới ⇒ mạng đã về, quay lại STABLE.
+        case networkBack
+    }
+
     let interval: TimeInterval
     let silenceLimit: TimeInterval
     let strikesToRebuild: Int
@@ -47,6 +59,8 @@ struct LivenessWatchdog {
     private(set) var lastReturnAt: Date
     /// Số nhịp liên tiếp "im VÀ bất đối xứng" hiện tại.
     private(set) var strikes = 0
+    /// Số lần đã ping trong pha HOLD hiện tại (0 = chưa ping lần nào).
+    private(set) var holdPings = 0
 
     init(
         now: Date,
@@ -87,6 +101,32 @@ struct LivenessWatchdog {
     /// Reset trạng thái sau khi dựng lại transport thành công (transport mới, bộ đếm mới).
     mutating func resetAfterRebuild(now: Date, fromGo: Int, toGo: Int) {
         noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+        holdPings = 0
+    }
+
+    // MARK: - Pha HOLD (chốt 22/09/2026: không teardown vì lý do tốc độ)
+
+    /// Vào pha HOLD: giữ nguyên đường đã chọn, đặt lại mốc để lần có byte chiều VỀ đầu tiên
+    /// được nhận đúng là "mạng về". Không bao giờ trả `.rebuild` sau đây.
+    mutating func beginHold(now: Date, fromGo: Int, toGo: Int) {
+        noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+        holdPings = 0
+    }
+
+    /// Một nhịp HOLD. `fromGo`/`toGo` `nil` = không đọc được bộ đếm ⇒ vẫn tính là một lần ping
+    /// (chờ mạng về), KHÔNG kết luận hỏng, KHÔNG teardown.
+    mutating func holdTick(now: Date, fromGo: Int?, toGo: Int?) -> HoldVerdict {
+        guard let fromGo, let toGo else {
+            holdPings += 1
+            return .waiting(holdPings)
+        }
+        // Chiều VỀ có byte mới ⇒ mạng đã về (kể cả cửa sổ im đã quá hạn).
+        if fromGo > lastFromGo {
+            noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+            return .networkBack
+        }
+        holdPings += 1
+        return .waiting(holdPings)
     }
 
     private mutating func noteReturn(at now: Date, fromGo: Int, toGo: Int) {

@@ -119,6 +119,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private var livenessRebuildAttempts = 0
     /// Phiên đã dừng: mọi callback `asyncAfter` còn treo phải tự bỏ.
     private var livenessCancelled = false
+    /// Pha HOLD (chủ dự án chốt 22/09/2026): hết mọi đường thì GIỮ đường đã chọn + tunnel vẫn
+    /// `Connected` + ping lại mỗi nhịp chờ mạng về — KHÔNG `closeTun()`/teardown.
+    private var livenessHold = false
+    /// Lý do vào HOLD — chỉ dùng để ghi log.
+    private var livenessHoldReason = ""
 
     // MARK: Khai băng thông động cho Brutal CC (xem `HysteriaBandwidthControl`)
 
@@ -577,6 +582,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         return livenessRecovering
     }
 
+    /// Đang ở pha HOLD (giữ đường đã chọn, chờ mạng về) — cấm mọi lần dựng lại vì lý do tốc độ
+    /// và cấm teardown (chốt 22/09/2026).
+    private var isLivenessHolding: Bool {
+        flowLock.lock(); defer { flowLock.unlock() }
+        return livenessHold
+    }
+
     /// Giành quyền dựng lại transport (chỉ một đường giữ tại một thời điểm). Trả `false` nếu
     /// đường khác đang giữ.
     private func acquireTransportRebuild(owner: String) -> Bool {
@@ -625,6 +637,9 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         guard BandwidthControl.allowsTransportRebuild else { return false }
         guard let bandwidth, bandwidth.pendingChange else { return false }
         guard isBandwidthRampPending else { return false }
+        // Đang HOLD (hết đường): KHÔNG dựng lại vì lý do tốc độ — giữ nguyên đường đã chọn
+        // (chốt 22/09/2026).
+        guard !isLivenessHolding else { return false }
         // Tự phục hồi sống-còn đang dựng lại transport: để nó làm xong, đừng tranh fd.
         guard !isLivenessRecovering else { return false }
         // HẠ số khai mà tunnel KHÔNG BAO GIỜ rảnh (đang flood) ⇒ buộc áp sau `pendingForceAfter`
@@ -737,12 +752,10 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                 try startTransportRetrying(options: fallback)
             } catch {
                 RelayDiagnostics.shared.log(
-                    "bw: KHÔNG dựng lại được transport (\(error)) — gỡ tunnel để máy có mạng lại"
+                    "bw: KHÔNG dựng lại được transport (\(error)) — chuyển HOLD, GIỮ tunnel "
+                        + "(chốt 22/09/2026: không teardown vì lý do tốc độ)"
                 )
-                teardownAndCancel(
-                    code: Self.codeNoTraffic,
-                    message: "Không dựng lại được đường hysteria2 sau khi đổi số khai băng thông."
-                )
+                enterLivenessHold(reason: "ramp băng thông không dựng lại được transport")
             }
             return false
         }
@@ -1153,6 +1166,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// là lỗi nặng nhất; thà ngắt tunnel kèm lỗi rõ còn hơn để máy ở trạng thái Connected
     /// mà không có mạng.
     private func selfRescue(reason: String) {
+        // Đang HOLD: chốt 22/09/2026 cấm teardown — giữ đường đã chọn và chờ mạng về, không
+        // để supervisor tự gỡ tunnel mà HOLD đang giữ.
+        if isLivenessHolding {
+            RelayDiagnostics.shared.log(
+                "giám sát: BỎ QUA tự gỡ vì đang HOLD (giữ đường đã chọn, chờ mạng về) — \(reason)"
+            )
+            return
+        }
         flowLock.lock()
         let alreadyStopped = supervisorStopped
         supervisorStopped = true
@@ -1208,6 +1229,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         livenessRecovering = false
         livenessRebuildAttempts = 0
         livenessCancelled = false
+        livenessHold = false
+        livenessHoldReason = ""
         flowLock.unlock()
         timer.resume()
         RelayDiagnostics.shared.log(
@@ -1224,6 +1247,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         livenessTimer = nil
         livenessCancelled = true
         livenessRecovering = false
+        livenessHold = false
+        livenessHoldReason = ""
         liveness = nil
         flowLock.unlock()
         // Nhả quyền dựng lại nếu chuỗi phục hồi còn treo (idempotent, chỉ nhả đúng chủ).
@@ -1243,6 +1268,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             return
         }
         guard !recovering else { return }
+        // Pha HOLD: KHÔNG dựng lại ngay, KHÔNG bao giờ teardown — giữ đường đã chọn rồi ping
+        // lại mỗi nhịp cho tới khi mạng về (chốt 22/09/2026).
+        if isLivenessHolding {
+            holdStep()
+            return
+        }
         // KHÔNG đọc bộ đếm trong lúc giữ `flowLock`: `trafficCounters` tự lấy khoá này.
         let counters = trafficCounters
         let rampInFlight = isBandwidthRebuildInFlight
@@ -1388,7 +1419,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         scheduleTransportRecoveryAttempt(expected: expected, reason: reason)
     }
 
-    /// Kết thúc chuỗi phục hồi: thành công thì thôi; chịu thua thì gỡ tunnel để máy có mạng lại.
+    /// Kết thúc chuỗi phục hồi: thành công thì thôi; chịu thua thì vào **HOLD** (chốt
+    /// 22/09/2026) — GIỮ đường đã chọn + tunnel vẫn `Connected` + ping tiếp, KHÔNG teardown.
     private func finishTransportRecovery(gaveUp: Bool, reason: String) {
         flowLock.lock()
         livenessRecovering = false
@@ -1396,20 +1428,103 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         flowLock.unlock()
         releaseTransportRebuild(owner: "liveness")
         guard gaveUp else { return }
+        enterLivenessHold(reason: reason)
+    }
+
+    // MARK: - Pha HOLD (chốt 22/09/2026: hết đường thì giữ đường đã chọn + ping tiếp)
+
+    /// Vào HOLD: giữ nguyên đường đã chọn (đường đang chạy), tunnel vẫn UP, KHÔNG gỡ network
+    /// settings, KHÔNG `cancelTunnelWithError`. UI vẫn `Connected` — mã `TUNNEL_NO_TRAFFIC`
+    /// chỉ còn để hiển thị/log, không dùng để hạ tunnel.
+    private func enterLivenessHold(reason: String) {
+        flowLock.lock()
+        let already = livenessHold
+        livenessHold = true
+        livenessHoldReason = reason
+        flowLock.unlock()
+        guard !already else { return }
+        // Đặt mốc từ bộ đếm hiện tại để lần có byte chiều VỀ đầu tiên là "mạng về".
+        let counters = trafficCounters
+        flowLock.lock()
+        if var dog = liveness {
+            dog.beginHold(
+                now: Date(),
+                fromGo: counters?.fromGo ?? dog.lastFromGo,
+                toGo: counters?.toGo ?? dog.baselineToGo
+            )
+            liveness = dog
+        }
+        flowLock.unlock()
+        // KHÔNG đổi trạng thái VPN (vẫn Connected) để không rò rỉ ra nhà mạng.
+        setStatus(state: "up", code: nil, message: nil)
         RelayDiagnostics.shared.log(
-            "tự phục hồi: hết \(Self.livenessRebuildMax) lượt mà chưa lên — gỡ tunnel, trả mạng về "
-                + "đường trực tiếp (\(reason))"
+            "hold: giu \(currentPathLabel()), ping lai moi \(Int(Self.livenessInterval))s (lan 0) — "
+                + "hết \(Self.livenessRebuildMax) lượt dựng lại (\(reason)); KHÔNG gỡ tunnel, chờ mạng về"
         )
-        setStatus(
-            state: "no_traffic",
-            code: Self.codeNoTraffic,
-            message: "Đã thử tự dựng lại \(Self.livenessRebuildMax) lần nhưng chưa được."
+    }
+
+    /// Một nhịp HOLD: ping lại đường đã chọn (không đổi bậc, không teardown). Chiều VỀ có byte
+    /// mới HOẶC dựng lại được transport ⇒ mạng về ⇒ quay lại STABLE mức cũ rồi chạy lại PROBE.
+    private func holdStep() {
+        let counters = trafficCounters
+        let rampInFlight = isBandwidthRebuildInFlight
+        flowLock.lock()
+        var pingNo = liveness?.holdPings ?? 0
+        var networkBack = false
+        if var dog = liveness {
+            switch dog.holdTick(now: Date(), fromGo: counters?.fromGo, toGo: counters?.toGo) {
+            case .waiting(let count): pingNo = count
+            case .networkBack: networkBack = true
+            }
+            liveness = dog
+        }
+        let reason = livenessHoldReason
+        flowLock.unlock()
+
+        if networkBack {
+            finishLivenessHold(reason: reason, evidence: "thấy byte chiều về")
+            return
+        }
+
+        RelayDiagnostics.shared.log(
+            "hold: giu \(currentPathLabel()), ping lai moi \(Int(Self.livenessInterval))s (lan \(pingNo)) — \(reason)"
         )
-        teardownAndCancel(
-            code: Self.codeNoTraffic,
-            message: "Không tự dựng lại được đường hysteria2 sau \(Self.livenessRebuildMax) lần "
-                + "(\(reason))."
+        // Đang ramp băng thông giữ fd: nhường nhịp này, không tranh.
+        guard !rampInFlight else { return }
+        guard acquireTransportRebuild(owner: "liveness") else { return }
+        let rebuilt = rebuildTransportForLiveness()
+        releaseTransportRebuild(owner: "liveness")
+        if rebuilt {
+            finishLivenessHold(reason: reason, evidence: "dựng lại được transport trên đường đã chọn")
+        }
+    }
+
+    /// Thoát HOLD khi mạng đã về. KHÔNG đổi trạng thái UI khỏi `Connected`.
+    private func finishLivenessHold(reason: String, evidence: String) {
+        let counters = trafficCounters
+        flowLock.lock()
+        let pings = liveness?.holdPings ?? 0
+        livenessHold = false
+        livenessHoldReason = ""
+        if var dog = liveness {
+            dog.resetAfterRebuild(
+                now: Date(),
+                fromGo: counters?.fromGo ?? dog.lastFromGo,
+                toGo: counters?.toGo ?? dog.baselineToGo
+            )
+            liveness = dog
+        }
+        flowLock.unlock()
+        setStatus(state: "up", code: nil, message: nil)
+        RelayDiagnostics.shared.log(
+            "hold: mạng về sau \(pings) lần ping (\(evidence)) — về STABLE mức cũ rồi chạy lại PROBE (\(reason))"
         )
+    }
+
+    /// Nhãn đường đã chọn để ghi log HOLD (host:port của transport đang giữ).
+    private func currentPathLabel() -> String {
+        guard let options = currentOptions else { return "đường-đã-chọn" }
+        return "\(options.serverHost):\(options.serverPort)"
     }
 
     /// Dừng transport hiện tại rồi dựng lại y nguyên `currentOptions` (giữ fd + cầu). Khác đường

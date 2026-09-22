@@ -65,8 +65,14 @@ struct TransportLadderNode: Equatable, Sendable {
 struct TransportLadderOptions: Equatable, Sendable {
     /// Trần số lần nâng bậc trong MỘT phiên (yêu cầu A4: ≤1 lần dựng lại/30 phút; trần ramp 3).
     var maxRampUps: Int = 3
-    /// Cho phép dùng bậc WS relay của node KHÁC. Mặc định TẮT cho tới khi chủ dự án chốt.
-    var allowsOtherNodeRungs: Bool = false
+    /// Cho phép dùng bậc WS relay của node KHÁC. Chủ dự án chốt 22/09/2026: **CÓ** — node khác là
+    /// một bậc HỢP LỆ của thang (không chỉ dùng khi node hiện tại chết).
+    var allowsOtherNodeRungs: Bool = true
+    /// Chốt chặn §4.1(1): bậc node khác chỉ được lên khi KÊNH DÒ chứng minh node đó nhanh hơn
+    /// ≥1,25× ở 2 lần liên tiếp — mặc định BẬT để không nhảy node theo cảm tính.
+    var requiresProbeProofForOtherNode: Bool = true
+    /// Node khách đã chọn (ưu tiên, §4.1(2)) — để so sánh/quay về.
+    var priorityNodeID: String?
 
     static let `default` = TransportLadderOptions()
 }
@@ -95,6 +101,8 @@ struct TransportLadder {
     private(set) var rampUps = 0
     /// Bậc tốt nhất đã đạt, nhớ để phiên sau bắt đầu từ đó (A3).
     private(set) var rememberedIndex: Int?
+    /// Node đã được kênh dò chứng minh đủ lợi (≥1,25× ×2) — điều kiện mở bậc node khác.
+    private(set) var provenNodes: Set<String> = []
 
     init(rungs: [TransportPath], options: TransportLadderOptions = .default) {
         // Giữ thứ tự người gọi đưa, nhưng luôn xếp theo thứ tự bậc chuẩn (quic → tcp → ws) để
@@ -149,6 +157,12 @@ struct TransportLadder {
         guard let idx = rungs.firstIndex(of: path) else { return }
         rememberedIndex = idx
         tried.insert(idx)
+        if path.kind == .wsRelayOtherNode { provenNodes.insert(path.nodeID) }
+    }
+
+    /// Đánh dấu node đã được kênh dò chứng minh lợi (≥1,25× ×2) ⇒ mở bậc node khác (§4.1(1)).
+    mutating func markProven(nodeID: String) {
+        provenNodes.insert(nodeID)
     }
 
     /// Quay về bậc đã nhớ (đầu phiên hoặc sau khi DEGRADED phục hồi).
@@ -216,15 +230,96 @@ struct TransportLadder {
     private func nextUntriedIndex(after index: Int) -> Int? {
         var candidate = index + 1
         while candidate < rungs.count {
-            if !tried.contains(candidate) { return candidate }
+            if !tried.contains(candidate), canUseRung(rungs[candidate]) { return candidate }
             candidate += 1
         }
         return nil
     }
 
+    /// Bậc node khác chỉ dùng được khi kênh dò đã chứng minh (§4.1(1)); bậc cùng node luôn dùng được.
+    private func canUseRung(_ path: TransportPath) -> Bool {
+        guard options.requiresProbeProofForOtherNode else { return true }
+        guard path.kind == .wsRelayOtherNode else { return true }
+        return provenNodes.contains(path.nodeID)
+    }
+
     private static func deduped(_ rungs: [TransportPath]) -> [TransportPath] {
         var seen = Set<TransportPath>()
         return rungs.filter { seen.insert($0).inserted }
+    }
+}
+
+/// Chốt chặn khi nâng cấp sang NODE khác — chủ dự án chốt 22/09/2026 ("được phép nâng cấp sang
+/// node tốt hơn", kèm 4 chốt chặn ở §4.1 của `docs/DEV_PLAN_IOS_MACOS_TOC_DO.md`).
+///
+/// Thuần logic, KHÔNG I/O: nhận kết quả từng lần dò (`goodput node ứng viên / goodput phiên
+/// chính`) và quyết định `stay` / `upgrade` / `returnToPriority`. Việc mở transport để dò nằm ở
+/// `ProbeChannel`; kết quả đủ điều kiện thì gọi `TransportLadder.markProven(nodeID:)`.
+struct NodeUpgradePolicy: Equatable {
+
+    enum Decision: Equatable {
+        /// Giữ nguyên node đang chạy.
+        case stay
+        /// Lên bậc node khác — đã đủ `consecutiveProbesRequired` lần liên tiếp nhanh hơn ≥ ngưỡng.
+        case upgrade(nodeID: String)
+        /// Node khách đã chọn sống lại và ngang bằng ⇒ quay về node đó (§4.1(2)).
+        case returnToPriority(nodeID: String)
+    }
+
+    /// Ngưỡng lợi bắt buộc: node khác phải nhanh hơn ≥ ngần này lần (mặc định 1,25×).
+    let gainThreshold: Double
+    /// Số lần dò LIÊN TIẾP phải đạt ngưỡng mới được đổi node (mặc định 2).
+    let consecutiveProbesRequired: Int
+    /// Node khách đã chọn — ưu tiên; sống lại và ngang bằng ⇒ quay về.
+    let priorityNodeID: String?
+    /// Mức coi là "ngang bằng" khi xét quay về node ưu tiên (1,0 = không chậm hơn phiên chính).
+    let priorityParityFloor: Double
+
+    /// Số lần LIÊN TIẾP đã đạt ngưỡng, đếm riêng theo từng node ứng viên.
+    private var streaks: [String: Int] = [:]
+
+    init(
+        gainThreshold: Double = 1.25,
+        consecutiveProbesRequired: Int = 2,
+        priorityNodeID: String? = nil,
+        priorityParityFloor: Double = 1.0
+    ) {
+        self.gainThreshold = max(1.0, gainThreshold)
+        self.consecutiveProbesRequired = max(1, consecutiveProbesRequired)
+        self.priorityNodeID = priorityNodeID
+        self.priorityParityFloor = priorityParityFloor
+    }
+
+    /// Ghi một lần dò. `currentNodeID` = node phiên chính đang chạy; `candidateNodeID` = node vừa
+    /// dò; `speedVsCurrent` = goodput dò / goodput phiên chính (≤0 = không đo được ⇒ coi như không lợi).
+    mutating func recordProbe(
+        candidateNodeID: String,
+        speedVsCurrent: Double,
+        currentNodeID: String?
+    ) -> Decision {
+        guard candidateNodeID != currentNodeID else {
+            streaks[candidateNodeID] = nil
+            return .stay
+        }
+        // (2) Node khách chọn sống lại và ngang bằng ⇒ quay về, không cần đủ 2 lần.
+        if let priorityNodeID, candidateNodeID == priorityNodeID,
+           speedVsCurrent >= priorityParityFloor {
+            streaks[candidateNodeID] = nil
+            return .returnToPriority(nodeID: candidateNodeID)
+        }
+        // (1) Chỉ lên bậc node khác khi đạt ≥ ngưỡng ở 2 lần LIÊN TIẾP.
+        if speedVsCurrent >= gainThreshold {
+            let next = (streaks[candidateNodeID] ?? 0) + 1
+            if next >= consecutiveProbesRequired {
+                streaks[candidateNodeID] = nil
+                return .upgrade(nodeID: candidateNodeID)
+            }
+            streaks[candidateNodeID] = next
+            return .stay
+        }
+        // Không đạt ngưỡng (hoặc đo được chậm hơn) ⇒ đứt chuỗi liên tiếp.
+        streaks[candidateNodeID] = nil
+        return .stay
     }
 }
 

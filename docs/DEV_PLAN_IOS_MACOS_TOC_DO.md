@@ -225,3 +225,16 @@ done
   đề xuất đợt này là **1.5.0** (iOS `CURRENT_PROJECT_VERSION` 18, macOS 16) — *chờ chủ dự án chốt số*.
   Sau khi build: cổng chặn → test iPhone thật (`PUBLISHER_PROCESS.md` §2c) → sổ `release-record append`
   → tag → email do publisher gửi.
+
+## 9. Trạng thái thi công (cập nhật 22/09/2026, T-20260922-10 — sau khi chốt cả 3 câu hỏi)
+
+| # | Việc | Trạng thái | Bằng chứng |
+|---|---|---|---|
+| P0-1 + chốt Q1 | Hết trần 3 lần dựng lại ⇒ KHÔNG `teardownAndCancel` nữa mà chuyển pha **HOLD**: giữ đường đã chọn, tunnel vẫn `Connected`, ping lại mỗi nhịp ≤15 s; mạng về ⇒ STABLE mức cũ + PROBE lại | ✅ | `LivenessWatchdog.beginHold/holdTick/resetAfterRebuild`; `HysteriaPacketTunnelProvider.enterLivenessHold/holdStep/finishLivenessHold` + nhánh HOLD trong `livenessStep`; `selfRescue` bỏ qua khi HOLD; đường ramp thất bại cũng vào HOLD. Log đúng `hold: giu <path>, ping lai moi <t>s (lan <n>)` |
+| P0-2 + chốt Q3 | `TransportLadder`: node khác là bậc HỢP LỆ (`allowsOtherNodeRungs = true`) nhưng bị cổng chứng minh kênh dò chặn; `NodeUpgradePolicy` giữ chốt chặn ≥1,25× ×2 và ưu tiên node khách chọn (sống lại + ngang bằng ⇒ quay về) | ✅ | `TransportLadder.markProven/canUseRung` + `NodeUpgradePolicy` |
+| Test | Bằng chứng chạy thật | ✅ | `bash scripts/ios-pure-logic-tests/run.sh` → **54/54 PASS** (trước 39/39); `swiftc -frontend -parse iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift` → exit 0 |
+| P0-3, P0-4, §4.7 | Máy trạng thái START/RAMP/STABLE/PROBE/DEGRADED + kênh dò mạng thật (`ProbeChannel`) + đo mạng gốc (`RawLinkProbe`) | ⏳ chưa làm | Việc lớn; làm tiếp theo đúng các chốt ở §4.1/§4.4/§4.7. `NodeUpgradePolicy` là phần logic đã sẵn sàng cho kênh dò |
+
+**Lỗ hổng tài liệu vẫn còn:** `docs/YEU_CAU_TOC_DO_ON_DINH.md` và `docs/VERSIONING.md` (nguồn A1–A6 +
+luật version) vẫn **không tồn tại trong repo**; cần bổ sung để thi công P0-3/P0-4 dựa trên nguồn thật.
+
