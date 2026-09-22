@@ -91,7 +91,10 @@ Write-Host "    commit build: $Commit (cây windows/ sạch)" -ForegroundColor G
 $versionArgs = @(
   "/p:Version=$Version",
   "/p:FileVersion=$Version",
-  "/p:InformationalVersion=$Version+$Commit",
+  # InformationalVersion: CHỈ đặt <version> — SDK tự nối thêm "+<SourceRevisionId>"
+  # (đã kiểm ở 1.4.3: đặt `1.4.3` ⇒ exe khai `1.4.3+7ae07f0…`). Đặt kèm commit ở đây sẽ bị LẶP
+  # thành `<v>+<sha>.<sha>` — cổng chặn 3c đã bắt được đúng lỗi này ở lần build đầu của 1.4.4.
+  "/p:InformationalVersion=$Version",
   "/p:SourceRevisionId=$Commit"
 )
 
