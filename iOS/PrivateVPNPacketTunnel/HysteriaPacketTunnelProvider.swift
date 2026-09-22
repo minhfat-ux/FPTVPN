@@ -175,8 +175,6 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Dải IP TQ đã nhớ, đưa thêm vào `excludedRoutes` của utun. Mặc định rỗng: nạp ở nền SAU
     /// khi tunnel lên (`startChinaBypass`) để không nằm trên đường connect.
     private var chinaExcludedRoutes: [NEIPv4Route] = []
-    /// Dải IPv6 TQ (cn6.txt): TQ đi thẳng, IPv6 còn lại vào tunnel để CHẶN (server không có IPv6).
-    private var chinaExcludedRoutesV6: [NEIPv6Route] = []
 
     // MARK: - Vòng đời
 
@@ -361,46 +359,33 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let session = currentSession
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
-            let cached4 = ChinaRouteBypass.excludedRoutes(from: ChinaRouteBypass.cached())
-            let cached6 = ChinaRouteBypass.excludedRoutesV6(from: ChinaRouteBypass.cachedIPv6())
+            let cached = ChinaRouteBypass.excludedRoutes(from: ChinaRouteBypass.cached())
             self.queue.async {
                 guard session == self.currentSession else { return }
-                self.applyChinaRoutes(cached4, cached6)
+                self.applyChinaRoutes(cached)
             }
             ChinaRouteBypass.refresh { [weak self] cidrs in
                 guard let self else { return }
                 let fresh = ChinaRouteBypass.excludedRoutes(from: cidrs)
                 self.queue.async {
                     guard session == self.currentSession else { return }
-                    self.applyChinaRoutes(fresh, self.chinaExcludedRoutesV6)
-                }
-            }
-            ChinaRouteBypass.refreshIPv6 { [weak self] cidrs in
-                guard let self else { return }
-                let fresh = ChinaRouteBypass.excludedRoutesV6(from: cidrs)
-                self.queue.async {
-                    guard session == self.currentSession else { return }
-                    self.applyChinaRoutes(self.chinaExcludedRoutes, fresh)
+                    self.applyChinaRoutes(fresh)
                 }
             }
         }
         #endif
     }
 
-    /// Áp danh sách dải IP TQ (IPv4 + IPv6) vào settings đang chạy (chạy trên `queue`).
-    /// Rỗng/không đổi ⇒ thôi. Một danh sách đổi thì áp lại cả hai (settings là một khối).
-    private func applyChinaRoutes(_ routes4: [NEIPv4Route], _ routes6: [NEIPv6Route]) {
+    /// Áp danh sách dải IP TQ (IPv4) vào settings đang chạy (chạy trên `queue`).
+    /// Rỗng/không đổi ⇒ thôi.
+    private func applyChinaRoutes(_ routes: [NEIPv4Route]) {
         #if os(iOS)
+        guard !routes.isEmpty, routes.count != chinaExcludedRoutes.count else { return }
+        chinaExcludedRoutes = routes
         guard let options = currentOptions else { return }
-        let changed = (!routes4.isEmpty && routes4.count != chinaExcludedRoutes.count)
-            || (!routes6.isEmpty && routes6.count != chinaExcludedRoutesV6.count)
-        guard changed else { return }
-        if !routes4.isEmpty { chinaExcludedRoutes = routes4 }
-        if !routes6.isEmpty { chinaExcludedRoutesV6 = routes6 }
         let applied = applySettings(networkSettings(options: options))
         RelayDiagnostics.shared.log(
-            "china: A7 nạp \(chinaExcludedRoutes.count) dải IPv4 + \(chinaExcludedRoutesV6.count) dải IPv6 TQ"
-                + " vào excludedRoutes (áp lại settings=\(applied))"
+            "china: A7 nạp \(routes.count) dải IP TQ vào excludedRoutes (áp lại settings=\(applied))"
         )
         #endif
     }
@@ -892,20 +877,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         #endif
         settings.ipv4Settings = ipv4
 
-        #if os(iOS)
-        // A7 IPv6 (chủ dự án chốt 22/09 — WIN `92f60c9`): server KHÔNG có IPv6 nên KHÔNG thể đưa
-        // `::/0` "vào tunnel rồi đi ra" (sẽ đen hết IPv6). Thiết kế đúng: **IPv6 TQ đi THẲNG, IPv6
-        // còn lại CHẶN**. Đặt `::/0` vào `includedRoutes` (gói IPv6 lạ vào tunnel; core không có
-        // IPv6 ⇒ bị chặn, KHÔNG rò IP thật) + dải TQ trong `excludedRoutes` (đi thẳng). Trước đây
-        // provider không có `ipv6Settings` ⇒ MỌI IPv6 đi thẳng, rò IP thật.
-        let ipv6 = NEIPv6Settings(
-            addresses: [HysteriaDefaults.tunIPv6Address],
-            networkPrefixLengths: [NSNumber(value: HysteriaDefaults.tunIPv6PrefixLength)]
-        )
-        ipv6.includedRoutes = [NEIPv6Route.default()]
-        ipv6.excludedRoutes = chinaExcludedRoutesV6
-        settings.ipv6Settings = ipv6
-        #endif
+        // A7 IPv6 — ĐÃ BỎ (chủ dự án chốt 22/09; `docs/DEV_PLAN_IOS_MACOS_TOC_DO.md` §5b bước 1c).
+        // Bản `18f8c82` đặt `ipv6Settings.includedRoutes = [::/0]` để "IPv6 TQ đi thẳng, IPv6 còn
+        // lại CHẶN". Nhưng relay `api.meetflowai.site` CÓ bản ghi AAAA ⇒ iOS ưu tiên IPv6 ⇒ gói tới
+        // relay bị hút vào tunnel mà server không có IPv6 ⇒ ĐEN ⇒ "mất mạng khi connect" trên iPhone
+        // thật. Bỏ `ipv6Settings` (IPv6 đi thẳng như trước, KHÔNG chặn kết nối). Việc bịt rò IPv6 —
+        // nếu còn cần — phải loại trừ ĐÚNG địa chỉ relay/endpoint (kiểu WireGuard
+        // `endpointExcludedRoutes`), KHÔNG dùng `::/0`; đó là việc riêng, chưa thuộc lượt này.
 
         settings.dnsSettings = NEDNSSettings(servers: HysteriaDefaults.dnsServers)
         return settings
