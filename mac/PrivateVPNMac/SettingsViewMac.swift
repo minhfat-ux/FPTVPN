@@ -15,6 +15,10 @@ struct SettingsViewMac: View {
     @State private var devices: [CoordinatorDevice] = []
     @State private var isLoadingDevices = false
     @State private var devicesMessage: String?
+    // About: mốc phiên bản trên server để đối chiếu bản đang cài (khác = publish chưa đúng).
+    @State private var latestVersion: String?
+    @State private var latestVersionUnavailable = false
+    @State private var didLoadServerVersion = false
 
     var body: some View {
         Form {
@@ -66,6 +70,8 @@ struct SettingsViewMac: View {
                     Label(languageStore.t(.termsOfUse), systemImage: "doc.text")
                 }
             }
+
+            aboutSection
         }
         .formStyle(.grouped)
         .tint(VPNThemeMac.accent)
@@ -89,6 +95,9 @@ struct SettingsViewMac: View {
         }
         .task {
             await loadDevices()
+        }
+        .task {
+            await loadServerVersion()
         }
         .onAppear {
             syncBackendSubscription()
@@ -322,6 +331,56 @@ struct SettingsViewMac: View {
             devicesMessage = nil
         } catch {
             devicesMessage = error.localizedDescription
+        }
+    }
+
+    /// Mục About: số hiệu bản ĐANG CÀI (đọc từ bundle, không tin tên file) + mốc
+    /// `latest_version` trên server. Hai số khác nhau ⇒ hiện rõ "KHÁC bản đang cài" để biết
+    /// ngay lần publish vừa rồi có phát đúng bản macOS không (yêu cầu chủ dự án 22/09/2026).
+    private var aboutSection: some View {
+        Section(languageStore.t(.about)) {
+            LabeledContent(languageStore.t(.version)) {
+                Text(buildLabel)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let latest = latestVersion {
+                Text(latestLine(latest))
+                    .font(.footnote)
+                    .foregroundStyle(latest == AppVersionService.currentVersion ? Color.secondary : Color.orange)
+            } else if latestVersionUnavailable {
+                Text(languageStore.t(.latestUnavailable))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var buildLabel: String {
+        let build = AppVersionService.currentBuild
+        return build.isEmpty ? AppVersionService.currentVersion
+            : "\(AppVersionService.currentVersion) (build \(build))"
+    }
+
+    private func latestLine(_ latest: String) -> String {
+        let base = "\(languageStore.t(.latestOnServer)): \(latest)"
+        return latest == AppVersionService.currentVersion
+            ? base
+            : "\(base) — \(languageStore.t(.latestDifferent))"
+    }
+
+    /// Đọc mốc phiên bản trên server một lần khi mở Settings. Lỗi mạng thì ghi rõ
+    /// "(không đọc được)" chứ không im lặng.
+    @MainActor
+    private func loadServerVersion() async {
+        guard !didLoadServerVersion else { return }
+        didLoadServerVersion = true
+        do {
+            let info = try await AppVersionService.fetch(from: URL(string: vpnManager.coordinatorURL))
+            latestVersion = info.latest_version
+            latestVersionUnavailable = false
+        } catch {
+            latestVersionUnavailable = true
         }
     }
 

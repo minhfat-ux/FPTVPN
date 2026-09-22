@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.privatevpn.app.BuildConfig
 import com.privatevpn.app.Config
 import com.privatevpn.app.VPNFlowApp
 import com.privatevpn.app.api.ControlAPIClient
@@ -73,6 +75,17 @@ fun SettingsScreen(
     var devicesMessage by remember { mutableStateOf<String?>(null) }
     var accountMessage by remember { mutableStateOf<String?>(null) }
     var subscriptionMessage by remember { mutableStateOf<String?>(null) }
+    var latestVersion by remember { mutableStateOf<String?>(null) }
+    var versionLookupFailed by remember { mutableStateOf(false) }
+
+    // Mốc phiên bản trên server — đối chiếu với bản đang cài (khác = publish chưa đúng).
+    LaunchedEffect(Unit) {
+        try {
+            latestVersion = ControlAPIClient().fetchAppVersion().latestVersion
+        } catch (e: Exception) {
+            versionLookupFailed = true
+        }
+    }
 
     fun loadDevices() {
         if (!auth.isSignedIn) return
@@ -248,6 +261,45 @@ fun SettingsScreen(
             ActionRow(text = lang.t(LKey.termsOfUse)) {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Config.TERMS_URL))
                 ContextCompat.startActivity(context, intent, null)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // About — số hiệu bản ĐANG CÀI (BuildConfig, không tin tên file) + mốc trên server.
+        // Hai số khác nhau ⇒ hiện rõ "KHÁC bản đang cài" để biết lần publish vừa rồi có đúng không.
+        val installed = BuildConfig.VERSION_NAME
+        val latest = latestVersion
+        SectionTitle(lang.t(LKey.about))
+        CardContainer {
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Text(lang.t(LKey.version), color = VPNTheme.SecondaryLabel, fontSize = 14.sp)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "$installed (build ${BuildConfig.VERSION_CODE})",
+                    color = VPNTheme.Label,
+                    fontSize = 14.sp,
+                )
+            }
+            when {
+                latest != null -> {
+                    val differs = latest != installed
+                    Text(
+                        "${lang.t(LKey.latestOnServer)}: $latest" +
+                            if (differs) " — ${lang.t(LKey.latestDifferent)}" else "",
+                        fontSize = 12.sp,
+                        color = if (differs) VPNTheme.Red else VPNTheme.SecondaryLabel,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                versionLookupFailed -> {
+                    Text(
+                        lang.t(LKey.latestUnavailable),
+                        fontSize = 12.sp,
+                        color = VPNTheme.SecondaryLabel,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
         }
     }

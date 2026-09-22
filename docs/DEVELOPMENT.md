@@ -108,6 +108,28 @@ cd android
 ./gradlew -p . -Pandroid.buildDir=$HOME/.vpnflow-build :app:bundleRelease     # AAB cho Google Play
 ```
 
+**Toolchain trên harness Windows (dựng 22/09/2026, đã build thật + verify APK):** JDK 17 =
+`C:\Users\Minhn\jdk17\jdk-17.0.20.1+1` (Temurin, đã set `JAVA_HOME` + `PATH` ở scope User),
+Android SDK = `C:\Users\Minhn\Android\sdk` (đã có platform `android-36`, build-tools `36.0.0`,
+cmdline-tools `latest`; `android/local.properties` trỏ đúng đường dẫn này), Gradle wrapper 8.11.1
+đã cache sẵn. Lưu ý: `JAVA_HOME` chỉ có ở terminal MỚI — phiên đang chạy phải gán `$env:JAVA_HOME`
+thủ công.
+
+```powershell
+$env:JAVA_HOME = "C:\Users\Minhn\jdk17\jdk-17.0.20.1+1"
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+cd android
+.\gradlew.bat :app:compileModernDebugKotlin :app:compileLegacyDebugKotlin   # kiểm compile nhanh
+.\gradlew.bat :app:assembleModernDebug :app:assembleLegacyDebug             # APK debug (2 flavor)
+```
+
+- `android.buildDir` trong `gradle.properties` (`$HOME/.vpnflow-build`) **được AGP tôn trọng trên
+  Windows** ⇒ output nằm ở `C:\Users\Minhn\.vpnflow-build`, không phải `android/app/build`.
+- Máy Windows **không có keystore release** ⇒ chỉ build được bản `debug`; bản phát hành vẫn phải
+  build trên máy Mac. Bản debug tự đổi `applicationId` thành `com.privatevpn.app.dev` (cài song song).
+- `compile*DebugKotlin` hay trả `FROM-CACHE` nên **không chứng minh được code mới biên dịch**; muốn
+  bằng chứng thật phải thêm `--rerun-tasks --no-build-cache`.
+
 **Hai branch phát hành:**
 | Branch | Kênh | Khác biệt |
 |---|---|---|

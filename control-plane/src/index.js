@@ -31,6 +31,7 @@ import { AuthStore, setPlanLabelResolver } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { createBwPolicyProvider } from "./bw-policy.js";
 import { registerClientTelemetry } from "./client-telemetry.js";
+import { registerRouteReport } from "./route-report.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { PlanStore } from "./plan-store.js";
 import {
@@ -265,6 +266,13 @@ registerClientTelemetry(app, {
   dbPath: process.env.CLIENT_TELEMETRY_DB ?? path.join(DATA_DIR, "client-telemetry.db"),
   env: process.env,
 });
+
+// Server quyết định đường tốt nhất (yêu cầu §2f + tiêu chí A9, 22/09/2026): app gửi số đo lên,
+// server trả `recommended`; app CHỈ đổi khi có đề xuất (không có thì app tự chọn — server là kênh
+// tối ưu, KHÔNG phải cổng chặn). Đăng ký TRƯỚC cổng AUTH_TOKEN như telemetry vì app không có token
+// admin; tự xác thực bằng credential thiết bị (cùng cơ chế /v1/peers/heartbeat) và tự lo nhịp 5 phút.
+// Bản app chưa gọi endpoint này vẫn chạy y như cũ ⇒ deploy an toàn.
+registerRouteReport(app, { store, env: process.env });
 
 // Chẩn đoán luồng thu UDID: ghi lại MỌI request vào endpoint callback/hồ sơ — kể cả request
 // không parse được. Không có log này thì "khách cài hồ sơ mà server không thấy gì" là bó tay.

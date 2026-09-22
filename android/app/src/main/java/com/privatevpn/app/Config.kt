@@ -156,6 +156,23 @@ object Config {
      * BandwidthMemory.PROBE_BYTES nên `bytes` ở đây chỉ là mức trần phía server.
      */
     const val BW_PROBE_URL = "https://speed.cloudflare.com/__down?bytes=4000000"
+
+    /**
+     * Mục tiêu đo RTT/mất gói CỦA ĐƯỜNG TUNNEL (vòng ramp hỏi mỗi 5s, xem
+     * `HysteriaVpnService.tunnelRttMs`): TCP connect rồi đọc 1 byte.
+     *
+     * Vì sao cần mục tiêu DỰ PHÒNG: đo trên máy thật 21–22/09/2026 (Z Fold5, Wi-Fi công ty) cho thấy
+     * `1.1.1.1:80` **fail 58/437 lần (13%)** trong khi traffic thật vẫn chảy 12–35 Mbps. Với
+     * `BandwidthPolicy.RAMP_LOSS_PCT = 2` và cửa sổ 10 lần, **một** lần fail đã là 10% ⇒ hạ số khai
+     * ngay (log ghi `loss=10% rtt=0ms`) ⇒ 50 lần `loss-backoff` trong 11,7 giờ, phần lớn là BÁO OAN.
+     * Nên khi mục tiêu chính fail thì thử tiếp hạ tầng của CHÍNH MÌNH (Cloudflare) — đây mới là thứ
+     * tunnel đang phụ thuộc; chỉ khi CẢ HAI fail mới coi là một lần mất gói.
+     */
+    const val RTT_PROBE_HOST = "1.1.1.1"
+    const val RTT_PROBE_PORT = 80
+    const val RTT_PROBE_FALLBACK_HOST = "api.meetflowai.site"
+    const val RTT_PROBE_FALLBACK_PORT = 443
+
     /**
      * Brutal CC cho đường WS relay (khi IP node bị chặn). Đường này đi qua 2 chặng —
      * hạ tầng dùng chung (Tailscale Funnel/Cloudflare) rồi mới tới node — nên khai

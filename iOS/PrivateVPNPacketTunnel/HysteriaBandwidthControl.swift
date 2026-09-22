@@ -72,18 +72,13 @@ enum BandwidthControl {
     static let busyBytesPerSecond = 2_000
     /// Cho phép DỰNG LẠI transport giữa phiên để áp số khai mới.
     ///
-    /// Chỉ bật trên iOS: số khai được Go đọc MỘT LẦN trong `MobileConnect`, còn fd chở gói thì
-    /// KHÔNG đổi khi dựng lại — trên iOS fd đó là đầu của cặp socketpair do extension tự tạo
-    /// (`HysteriaTransport.resolveTunnelFD`), cầu `TunnelBridge` vẫn chạy nguyên nên dựng lại
-    /// transport chỉ là mở relay + QUIC mới trên CÙNG fd. Trên macOS fd cũng là cặp socketpair
-    /// cùng cơ chế, nhưng đường dựng lại giữa phiên chưa đo thực địa nên vẫn tắt; ở macOS số
-    /// khai vẫn được kẹp theo mạng/bộ nhớ và ramp chỉ để dành cho lần kết nối sau.
+    /// Bật cho CẢ iOS và macOS (parity 1.4.1): số khai được Go đọc MỘT LẦN trong `MobileConnect`,
+    /// còn fd chở gói thì KHÔNG đổi khi dựng lại — fd đó là đầu của cặp socketpair do extension
+    /// tự tạo (`HysteriaTransport.resolveTunnelFD`) trên CẢ HAI nền tảng, cầu `TunnelBridge` vẫn
+    /// chạy nguyên nên dựng lại transport chỉ là mở relay + QUIC mới trên CÙNG fd. Trước đây
+    /// macOS tắt đường này nên số đo trong phiên chỉ được áp ở lần kết nối sau.
     static var allowsTransportRebuild: Bool {
-        #if os(iOS)
-        return true
-        #else
-        return false
-        #endif
+        true
     }
 
     /// Trần cứng của mọi số khai (chặn số rác từ bộ đếm hỏng / file bộ nhớ sửa tay).

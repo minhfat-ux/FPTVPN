@@ -1,0 +1,3 @@
+# Danh sach IP TQ (A7) duoc may khach tai ve va parse theo tung dong tren ca
+# Windows/iOS/macOS/Android => bat buoc giu LF, khong de git doi thanh CRLF.
+docs/routes/*.txt text eol=lf

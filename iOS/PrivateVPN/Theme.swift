@@ -175,6 +175,7 @@ enum AppTextKey: String {
     case disconnected, connecting, connected, disconnecting, failed
     case disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
+    case about, version, latestOnServer, latestDifferent, latestUnavailable
 }
 
 @MainActor
@@ -235,6 +236,7 @@ final class AppLanguageStore: ObservableObject {
             .freeTrialTitle: "🎁 You're on the free 1-day trial", .freeTrialBody: "%d hours of trial left. Buy a plan to keep using the VPN after it ends.",
             .choosePlan: "Choose Plan", .restorePurchases: "Refresh Purchase Status", .support: "Support",
             .contactSupport: "Contact Support", .privacyPolicy: "Privacy Policy", .termsOfUse: "Terms of Use",
+            .about: "About", .version: "Version", .latestOnServer: "Latest on server", .latestDifferent: "DIFFERENT from installed build", .latestUnavailable: "(unavailable)",
             .upgrade: "Upgrade", .preparingPermission: "Preparing VPN permission…", .vpnStartFailure: "VPN could not start. Please try again.",
             .diagnostics: "Diagnostics", .state: "State", .location: "Location", .message: "Message",
             .notConfigured: "Not configured - tap to open Configuration", .secureExitNode: "Secure exit node",
@@ -264,6 +266,7 @@ final class AppLanguageStore: ObservableObject {
             .freeTrialTitle: "🎁 Bạn đang dùng bản dùng thử 1 ngày miễn phí", .freeTrialBody: "Còn %d giờ dùng thử. Mua gói để tiếp tục dùng VPN sau khi hết hạn.",
             .choosePlan: "Chọn gói", .restorePurchases: "Làm mới trạng thái gói", .support: "Hỗ trợ",
             .contactSupport: "Liên hệ hỗ trợ", .privacyPolicy: "Chính sách quyền riêng tư", .termsOfUse: "Điều khoản sử dụng",
+            .about: "Giới thiệu", .version: "Phiên bản", .latestOnServer: "Bản mới nhất trên server", .latestDifferent: "KHÁC bản đang cài", .latestUnavailable: "(không đọc được)",
             .upgrade: "Nâng cấp", .preparingPermission: "Đang chờ cấp quyền VPN…", .vpnStartFailure: "Không thể khởi động VPN. Vui lòng thử lại.",
             .diagnostics: "Chẩn đoán", .state: "Trạng thái", .location: "Vị trí", .message: "Thông báo",
             .notConfigured: "Chưa cấu hình - chạm để mở Cấu hình", .secureExitNode: "Exit node bảo mật",
@@ -293,6 +296,7 @@ final class AppLanguageStore: ObservableObject {
             .freeTrialTitle: "🎁 您正在使用 1 天免费试用版", .freeTrialBody: "试用还剩 %d 小时。购买套餐以在到期后继续使用 VPN。",
             .choosePlan: "选择套餐", .restorePurchases: "刷新订阅状态", .support: "支持",
             .contactSupport: "联系支持", .privacyPolicy: "隐私政策", .termsOfUse: "使用条款",
+            .about: "关于", .version: "版本", .latestOnServer: "服务器最新版本", .latestDifferent: "与已安装版本不同", .latestUnavailable: "(无法读取)",
             .upgrade: "升级", .preparingPermission: "正在等待 VPN 权限…", .vpnStartFailure: "VPN 无法启动。请重试。",
             .diagnostics: "诊断", .state: "状态", .location: "位置", .message: "消息",
             .notConfigured: "尚未配置 - 点击打开设置", .secureExitNode: "安全出口节点", .vietnam: "越南",
@@ -321,6 +325,7 @@ final class AppLanguageStore: ObservableObject {
             .freeTrialTitle: "🎁 1日間の無料トライアルを利用中です", .freeTrialBody: "トライアルは残り %d 時間です。終了後も VPN を使い続けるにはプランをご購入ください。",
             .choosePlan: "プランを選択", .restorePurchases: "購入状態を更新", .support: "サポート",
             .contactSupport: "サポートに連絡", .privacyPolicy: "プライバシーポリシー", .termsOfUse: "利用規約",
+            .about: "情報", .version: "バージョン", .latestOnServer: "サーバーの最新版", .latestDifferent: "インストール済みと異なります", .latestUnavailable: "(取得できません)",
             .upgrade: "アップグレード", .preparingPermission: "VPN の許可を待機中…", .vpnStartFailure: "VPN を開始できませんでした。もう一度お試しください。",
             .diagnostics: "診断", .state: "状態", .location: "場所", .message: "メッセージ",
             .notConfigured: "未設定 - タップして設定を開く", .secureExitNode: "安全な出口ノード", .vietnam: "ベトナム",
@@ -349,6 +354,7 @@ final class AppLanguageStore: ObservableObject {
             .freeTrialTitle: "🎁 1일 무료 체험판을 사용 중입니다", .freeTrialBody: "체험판이 %d시간 남았습니다. 종료 후에도 VPN을 계속 사용하려면 플랜을 구매하세요.",
             .choosePlan: "플랜 선택", .restorePurchases: "구매 상태 새로 고침", .support: "지원",
             .contactSupport: "지원 문의", .privacyPolicy: "개인정보 처리방침", .termsOfUse: "이용약관",
+            .about: "정보", .version: "버전", .latestOnServer: "서버 최신 버전", .latestDifferent: "설치된 버전과 다름", .latestUnavailable: "(읽을 수 없음)",
             .upgrade: "업그레이드", .preparingPermission: "VPN 권한을 기다리는 중…", .vpnStartFailure: "VPN을 시작할 수 없습니다. 다시 시도해 주세요.",
             .diagnostics: "진단", .state: "상태", .location: "위치", .message: "메시지",
             .notConfigured: "설정되지 않음 - 탭하여 설정 열기", .secureExitNode: "보안 출구 노드", .vietnam: "베트남",

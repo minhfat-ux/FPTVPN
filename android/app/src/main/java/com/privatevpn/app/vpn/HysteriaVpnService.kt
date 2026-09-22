@@ -976,6 +976,7 @@ class HysteriaVpnService : VpnService() {
             var lastRttAt = 0L
             var rttLast = 0
             var rttBaseline = 0
+            var consecutiveFails = 0
             val loss = ArrayDeque<Boolean>()
             var lastChangeAt = 0L
             var lastSampleLogAt = 0L
@@ -1037,6 +1038,9 @@ class HysteriaVpnService : VpnService() {
                     rttLast = tunnelRttMs()
                     loss.addLast(rttLast <= 0)
                     while (loss.size > LOSS_WINDOW) loss.removeFirst()
+                    // Đếm RIÊNG số lần fail LIÊN TIẾP: một lần fail lẻ (1.1.1.1 bị chặn thoáng qua)
+                    // không được coi là mất gói — xem LOSS_CONSECUTIVE_FAILS.
+                    if (rttLast <= 0) consecutiveFails++ else consecutiveFails = 0
                     if (rttLast > 0) {
                         rttBaseline = if (rttBaseline == 0) rttLast else (rttBaseline * 3 + rttLast) / 4
                     }
@@ -1065,8 +1069,17 @@ class HysteriaVpnService : VpnService() {
                 }
 
                 if (now - lastChangeAt < RAMP_COOLDOWN_MS) continue
-                val lossBad = lossPct >= BandwidthPolicy.RAMP_LOSS_PCT &&
-                    (loss.lastOrNull() == true || fails >= 2)
+                // Mất gói THẬT phải hội đủ 3 điều (đo trên máy 21–22/09/2026: trước đây chỉ cần 1 lần
+                // probe fail là đã hạ số — `lossPct` 10% ≥ ngưỡng 2% — nên có 50 lần `loss-backoff`
+                // trong 11,7 giờ trong khi traffic vẫn chảy 12–35 Mbps):
+                //   1) ≥ LOSS_CONSECUTIVE_FAILS lần KHÔNG thấy phản hồi LIÊN TIẾP,
+                //   2) tỉ lệ fail trong cửa sổ ≥ RAMP_LOSS_PCT,
+                //   3) goodput đã TỤT THẬT (dưới 1/4 số đang khai) — còn đang chảy thì "mất gói" chỉ
+                //      là phép đo hỏng, không phải đường hỏng.
+                val goodputCollapsed = sustained < maxOf(BandwidthPolicy.FLOOR_DOWN_KBPS, declared / 4)
+                val lossBad = consecutiveFails >= LOSS_CONSECUTIVE_FAILS &&
+                    lossPct >= BandwidthPolicy.RAMP_LOSS_PCT &&
+                    goodputCollapsed
                 val rttBad = BandwidthPolicy.shouldRampDown(0, rttLast, rttBaseline)
                 val bad = lossBad || rttBad
                 if (bad) {
@@ -1153,16 +1166,21 @@ class HysteriaVpnService : VpnService() {
         if (newDownKbps > old) bandwidth?.rememberBest(bwKey, newDownKbps)
         DiagnosticsLog.log(
             "bw: ramp net=$bwDisplay observed=$observedKbps old=$old new=$newDownKbps " +
-                "reason=$reason apply=${if (idle) "idle-now" else "deferred-next-connect"} " +
+                "reason=$reason apply=deferred-next-connect " +
                 "loss=${lossPct}% rtt=${rttMs}ms",
         )
+        // KHÔNG dựng lại client giữa phiên (bỏ hẳn nhánh `if (idle) Mobile.stop()` cũ).
+        //
+        // Vì sao (đo trên máy 21–22/09/2026, 11,7 giờ): có **33 lần** log ghi `apply=idle-now` ⇒ 33 lần
+        // dựng lại QUIC giữa phiên, mỗi lần là một lần "đứt rồi nối lại" mà khách thấy — trong khi lợi
+        // ích của việc đổi số khai giữa phiên gần như bằng 0 (server đã bật `ignoreClientBandwidth`;
+        // đo thực tế: khai 3,8 Mbps vẫn tải được 35 Mbps, tức số khai KHÔNG bóp chiều tải xuống).
+        // Số mới vẫn được ghi nhớ (`rememberBest`) và áp ở lần kết nối/đổi mạng kế tiếp.
         if (idle) {
-            android.util.Log.e(
+            android.util.Log.i(
                 "VPNFLOW_DEBUG",
-                "hysteria: ramp -> rebuild client down $old -> $newDownKbps kbps (tunnel idle)",
+                "hysteria: ramp down $old -> $newDownKbps kbps — HOÃN áp dụng (không dựng lại giữa phiên)",
             )
-            // serve() trả về -> runTunnel() dựng lại transport với số khai mới.
-            runCatching { Mobile.stop() }
         }
     }
 
@@ -1177,13 +1195,23 @@ class HysteriaVpnService : VpnService() {
      * @return ms, hoặc 0 nếu fail/timeout (được tính là một lần mất gói).
      */
     private fun tunnelRttMs(): Int {
+        // Hai mục tiêu: 1.1.1.1:80 (nhanh, quốc tế) rồi hạ tầng của CHÍNH MÌNH (api.meetflowai.site:443
+        // — đúng cái tunnel đang phụ thuộc). Đo thật 21–22/09: chỉ riêng 1.1.1.1 thì fail 13% số lần
+        // trong khi traffic vẫn chảy ⇒ tính là mất gói oan và hạ số khai liên tục.
+        val r = probeTcpOnce(Config.RTT_PROBE_HOST, Config.RTT_PROBE_PORT)
+        if (r > 0) return r
+        return probeTcpOnce(Config.RTT_PROBE_FALLBACK_HOST, Config.RTT_PROBE_FALLBACK_PORT)
+    }
+
+    /** Một lần TCP connect + đọc 1 byte qua tunnel. 0 = fail/timeout (một lần "không thấy phản hồi"). */
+    private fun probeTcpOnce(host: String, port: Int): Int {
         val started = System.currentTimeMillis()
         return try {
             java.net.Socket().use { s ->
-                s.connect(java.net.InetSocketAddress("1.1.1.1", 80), RTT_PROBE_TIMEOUT_MS)
+                s.connect(java.net.InetSocketAddress(host, port), RTT_PROBE_TIMEOUT_MS)
                 s.soTimeout = RTT_PROBE_TIMEOUT_MS
                 s.getOutputStream().apply {
-                    write("GET / HTTP/1.0\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n".toByteArray())
+                    write("GET / HTTP/1.0\r\nHost: $host\r\nConnection: close\r\n\r\n".toByteArray())
                     flush()
                 }
                 val n = s.getInputStream().read(ByteArray(16))
@@ -1482,6 +1510,13 @@ class HysteriaVpnService : VpnService() {
         const val RTT_PROBE_TIMEOUT_MS = 3_000
         /** Cửa sổ đếm mất gói (số lần hỏi gần nhất). */
         const val LOSS_WINDOW = 10
+
+    /**
+     * Số lần KHÔNG thấy phản hồi LIÊN TIẾP mới được coi là mất gói.
+     * Vì sao 3: đo trên máy thật 21–22/09/2026, probe `1.1.1.1:80` fail 58/437 lần (13%) trong khi
+     * traffic vẫn chảy bình thường — một lần fail lẻ không nói lên điều gì về đường truyền.
+     */
+    const val LOSS_CONSECUTIVE_FAILS = 3
         /** Không đổi số khai dày hơn ngần này: mỗi lần đổi là một QUIC mới. */
         const val RAMP_COOLDOWN_MS = 15_000L
         /** Warn when the tunnel claims to be up but nothing came back for this long. */

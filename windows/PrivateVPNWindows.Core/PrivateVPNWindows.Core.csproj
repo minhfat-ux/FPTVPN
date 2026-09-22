@@ -8,4 +8,9 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Test chạy THẬT đoạn dò gateway qua PowerShell để bắt lỗi trích dẫn (xem RunPowerShellAsync). -->
+    <InternalsVisibleTo Include="PrivateVPNWindows.Core.Tests" />
+  </ItemGroup>
+
 </Project>

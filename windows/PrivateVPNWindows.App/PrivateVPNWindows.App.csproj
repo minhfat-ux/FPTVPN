@@ -7,6 +7,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <!-- Số hiệu PHẢI nằm trong metadata file .exe, không chỉ ở tên bộ cài: trước 22/09/2026
+         build.ps1 giải version SAU bước publish nên app tự khai 1.0.0 dù installer tên 1.4.1 —
+         không cách nào biết bản đã cài là bản nào (cổng scripts/check-publish-version.py bắt được).
+         build.ps1 đọc <Version> ở đây và truyền /p:Version cho dotnet publish; Settings → About
+         hiện đúng số này. -->
+    <Version>1.4.3</Version>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Chỉ nhúng manifest (yêu cầu quyền admin) khi build/publish cho Windows. -->

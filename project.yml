@@ -125,12 +125,28 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
       # Khai băng thông động cho Brutal CC (đo → nhớ theo mạng → ramp): xem chú thích đầu file.
       - path: iOS/PrivateVPNPacketTunnel/HysteriaBandwidthControl.swift
+      # Quyết định watchdog sống-còn suốt phiên — thuần logic, tách để unit test
+      # (xem iOS/PrivateVPNTests/LivenessWatchdogTests.swift).
+      - path: iOS/PrivateVPNPacketTunnel/LivenessWatchdog.swift
+      # Thang nâng cấp ĐƯỜNG + NODE (thay cho việc nâng số khai Brutal) — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
+      # Đo goodput thật bằng cửa sổ trượt 12 s / mẫu 1 s — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
+      # A7: dải IP TQ đi thẳng (excludedRoutes) — thuần logic parse + tải nền, không chặn connect.
+      - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
+      # A9: client POST /v1/route-report (hợp đồng server 50ccf55) — thuần logic + gọi mạng.
+      - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayDiagnostics.swift
       # Hằng số transport hysteria2 dùng chung với app (xem HysteriaDefaults).
       - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
+      # A7 — bản bundle dự phòng danh sách IP TQ (trùng file production; xem ChinaRouteBypass).
+      - path: docs/routes/cn.txt
+        buildPhase: resources
+      - path: docs/routes/cn6.txt
+        buildPhase: resources
       # KHÔNG kèm WireGuardConfig.swift/KeychainStore.swift/ControlAPIClient.swift: cả ba
       # `import WireGuardKit`, mà target này cố ý không có WireGuardKit (xem trên).
       # KHÔNG kèm NodeHealthReporter.swift: gọi ControlAPIHosts (ControlAPIClient.swift) và
@@ -180,6 +196,19 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayDiagnostics.swift
+      # Quyết định watchdog sống-còn suốt phiên: thuần logic nên test được không cần extension.
+      - path: iOS/PrivateVPNPacketTunnel/LivenessWatchdog.swift
+      # Thang nâng cấp đường/node + đồng hồ goodput: cùng lý do (thuần logic, test không cần extension).
+      - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
+      - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
+      # A7/A9: chia đường theo IP TQ + client route-report — thuần logic, test không cần extension.
+      - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
+      - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
+      # A7: bản bundle dự phòng (test `ChinaRouteBypassTests` đọc qua Bundle).
+      - path: docs/routes/cn.txt
+        buildPhase: resources
+      - path: docs/routes/cn6.txt
+        buildPhase: resources
     dependencies:
       - target: PrivateVPN
     settings:
@@ -308,12 +337,28 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
       - path: iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
       - path: iOS/PrivateVPNPacketTunnel/HysteriaBandwidthControl.swift
+      # Quyết định watchdog sống-còn suốt phiên — thuần logic, tách để unit test
+      # (xem iOS/PrivateVPNTests/LivenessWatchdogTests.swift).
+      - path: iOS/PrivateVPNPacketTunnel/LivenessWatchdog.swift
+      # Thang nâng cấp ĐƯỜNG + NODE (thay cho việc nâng số khai Brutal) — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
+      # Đo goodput thật bằng cửa sổ trượt 12 s / mẫu 1 s — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
+      # A7: dải IP TQ đi thẳng (excludedRoutes) — thuần logic parse + tải nền, không chặn connect.
+      - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
+      # A9: client POST /v1/route-report (hợp đồng server 50ccf55) — thuần logic + gọi mạng.
+      - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayDiagnostics.swift
       # Hằng số transport dùng chung với app (xem HysteriaDefaults).
       - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
+      # A7 — bản bundle dự phòng danh sách IP TQ (trùng file production; xem ChinaRouteBypass).
+      - path: docs/routes/cn.txt
+        buildPhase: resources
+      - path: docs/routes/cn6.txt
+        buildPhase: resources
       # KHÔNG kèm NodeHealthReporter.swift: nó gọi ControlAPIHosts
       # (ControlAPIClient.swift) và kéo theo nguyên một tầng mạng không cần cho tunnel.
     info:

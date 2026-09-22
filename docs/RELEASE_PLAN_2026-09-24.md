@@ -23,8 +23,13 @@ Android **đã có sẵn** hai thứ tương ứng nên KHÔNG cần làm gấp:
 
 ### 2.1 Watchdog "tunnel đứng" (parity với iOS/macOS/Windows)
 Hiện Android chỉ rebuild khi **đổi mạng**; chưa có cơ chế phát hiện *tunnel còn sống nhưng không
-chở gói* (khách báo "connected mà không có mạng"). iOS/macOS đã có (`PacketTunnelProvider.probeTraffic`
-+ `rebuildFromLiveness`, trần `maxLivenessRebuilds`), Windows 1.4.1 vừa có.
+chở gói* (khách báo "connected mà không có mạng"). **SỬA LẠI 21/09/2026 — iOS/macOS cũng CHƯA CÓ:**
+`probeTraffic` / `rebuildFromLiveness` / `maxLivenessRebuilds` nằm ở
+`iOS/PrivateVPNPacketTunnel/PacketTunnelProvider.swift` nhưng file đó **không thuộc target nào**
+(`project.yml:124-137` liệt kê tường minh source của extension và không có nó; comment `:121-123` ghi
+rõ), extension thật là `HysteriaPacketTunnelProvider` và chỉ có supervisor **15 giây đầu phiên** rồi
+**tự gỡ** tunnel chứ không dựng lại. Windows 1.4.1 mới thực sự có. Phân tích đầy đủ + việc cần làm:
+[`MAC_IOS_PARITY_1.4.1.md`](MAC_IOS_PARITY_1.4.1.md).
 - Dấu hiệu đã có sẵn để dùng: `diag/DiagnosticsLog.kt` → `relayLastRxAt` (mốc nhận gói cuối).
 - Thiết kế đề xuất (theo đúng bài học Windows: **tránh báo oan**): chỉ kết luận khi **đồng thời**
   (a) không có byte/gói mới trong ≥ 60 s, **VÀ** (b) phép thử chủ động qua chính tunnel thất bại

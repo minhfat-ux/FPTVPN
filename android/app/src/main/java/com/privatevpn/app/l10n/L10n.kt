@@ -67,7 +67,8 @@ enum class LKey {
     devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices,
     deviceLimitTitle, deviceLimitBody, deviceLimitLogout,
     signInRequiredShort, updateRequiredShort, deleteAccountDoneShort, invalidEmailShort,
-    notNowShort
+    notNowShort,
+    about, version, latestOnServer, latestDifferent, latestUnavailable,
 }
 
 object L10n {
@@ -100,6 +101,7 @@ object L10n {
             LKey.protectionUnlocked to "VPN protection is unlocked", LKey.choosePlanToStart to "Choose a plan to start protection",
             LKey.choosePlan to "Choose Plan", LKey.restorePurchases to "Refresh Purchase Status", LKey.support to "Support",
             LKey.contactSupport to "Contact Support", LKey.privacyPolicy to "Privacy Policy",
+            LKey.about to "About", LKey.version to "Version", LKey.latestOnServer to "Latest on server", LKey.latestDifferent to "DIFFERENT from installed build", LKey.latestUnavailable to "(unavailable)",
             LKey.upgrade to "Upgrade", LKey.preparingPermission to "Preparing VPN permission…", LKey.vpnStartFailure to "VPN could not start. Please try again.",
             LKey.diagnostics to "Diagnostics", LKey.state to "State", LKey.location to "Location", LKey.message to "Message",
             LKey.notConfigured to "Not configured - tap to open Configuration", LKey.secureExitNode to "Secure exit node",
@@ -131,6 +133,7 @@ object L10n {
             LKey.protectionUnlocked to "Bảo vệ VPN đã được mở khóa", LKey.choosePlanToStart to "Chọn gói để bắt đầu bảo vệ",
             LKey.choosePlan to "Chọn gói", LKey.restorePurchases to "Làm mới trạng thái gói", LKey.support to "Hỗ trợ",
             LKey.contactSupport to "Liên hệ hỗ trợ", LKey.privacyPolicy to "Chính sách quyền riêng tư",
+            LKey.about to "Giới thiệu", LKey.version to "Phiên bản", LKey.latestOnServer to "Bản mới nhất trên server", LKey.latestDifferent to "KHÁC bản đang cài", LKey.latestUnavailable to "(không đọc được)",
             LKey.upgrade to "Nâng cấp", LKey.preparingPermission to "Đang chờ cấp quyền VPN…", LKey.vpnStartFailure to "Không thể khởi động VPN. Vui lòng thử lại.",
             LKey.diagnostics to "Chẩn đoán", LKey.state to "Trạng thái", LKey.location to "Vị trí", LKey.message to "Thông báo",
             LKey.notConfigured to "Chưa cấu hình - chạm để mở Cấu hình", LKey.secureExitNode to "Exit node bảo mật",
@@ -162,6 +165,7 @@ object L10n {
             LKey.protectionUnlocked to "VPN 保护已解锁", LKey.choosePlanToStart to "选择套餐以开始保护",
             LKey.choosePlan to "选择套餐", LKey.restorePurchases to "刷新订阅状态", LKey.support to "支持",
             LKey.contactSupport to "联系支持", LKey.privacyPolicy to "隐私政策",
+            LKey.about to "关于", LKey.version to "版本", LKey.latestOnServer to "服务器最新版本", LKey.latestDifferent to "与已安装版本不同", LKey.latestUnavailable to "(无法读取)",
             LKey.upgrade to "升级", LKey.preparingPermission to "正在等待 VPN 权限…", LKey.vpnStartFailure to "VPN 无法启动。请重试。",
             LKey.diagnostics to "诊断", LKey.state to "状态", LKey.location to "位置", LKey.message to "消息",
             LKey.notConfigured to "尚未配置 - 点击打开设置", LKey.secureExitNode to "安全出口节点", LKey.vietnam to "越南",
@@ -192,6 +196,7 @@ object L10n {
             LKey.protectionUnlocked to "VPN 保護が有効です", LKey.choosePlanToStart to "保護を開始するにはプランを選択",
             LKey.choosePlan to "プランを選択", LKey.restorePurchases to "購入状態を更新", LKey.support to "サポート",
             LKey.contactSupport to "サポートに連絡", LKey.privacyPolicy to "プライバシーポリシー",
+            LKey.about to "情報", LKey.version to "バージョン", LKey.latestOnServer to "サーバーの最新版", LKey.latestDifferent to "インストール済みと異なります", LKey.latestUnavailable to "(取得できません)",
             LKey.upgrade to "アップグレード", LKey.preparingPermission to "VPN の許可を待機中…", LKey.vpnStartFailure to "VPN を開始できませんでした。もう一度お試しください。",
             LKey.diagnostics to "診断", LKey.state to "状態", LKey.location to "場所", LKey.message to "メッセージ",
             LKey.notConfigured to "未設定 - タップして設定を開く", LKey.secureExitNode to "安全な出口ノード", LKey.vietnam to "ベトナム",
@@ -222,6 +227,7 @@ object L10n {
             LKey.protectionUnlocked to "VPN 보호가 활성화되었습니다", LKey.choosePlanToStart to "보호를 시작하려면 플랜을 선택하세요",
             LKey.choosePlan to "플랜 선택", LKey.restorePurchases to "구매 상태 새로 고침", LKey.support to "지원",
             LKey.contactSupport to "지원 문의", LKey.privacyPolicy to "개인정보 처리방침",
+            LKey.about to "정보", LKey.version to "버전", LKey.latestOnServer to "서버 최신 버전", LKey.latestDifferent to "설치된 버전과 다름", LKey.latestUnavailable to "(읽을 수 없음)",
             LKey.upgrade to "업그레이드", LKey.preparingPermission to "VPN 권한을 기다리는 중…", LKey.vpnStartFailure to "VPN을 시작할 수 없습니다. 다시 시도해 주세요.",
             LKey.diagnostics to "진단", LKey.state to "상태", LKey.location to "위치", LKey.message to "메시지",
             LKey.notConfigured to "설정되지 않음 - 탭하여 설정 열기", LKey.secureExitNode to "보안 출구 노드", LKey.vietnam to "베트남",

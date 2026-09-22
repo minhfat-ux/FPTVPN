@@ -144,6 +144,128 @@ public class ChinaBypassTests
         Assert.Equal(System.Net.Sockets.AddressFamily.InterNetwork, parsed!.AddressFamily);
     }
 
+    // MARK: - IPv6 (cn6.txt)
+
+    [Fact]
+    public void ParseIpv6Cidrs_bo_qua_dong_trong_comment_va_gia_tri_sai()
+    {
+        const string text = """
+            # danh sach APNIC (IPv6)
+            2001:250::/30
+
+            ; comment kieu khac
+            2001:254::/31   # chu thich cuoi dong
+            khong-phai-cidr
+            2001:db8::/129
+            1.0.1.0/24
+            """;
+
+        var cidrs = ChinaBypass.ParseIpv6Cidrs(text);
+
+        Assert.Equal(new[] { "2001:250::/30", "2001:254::/31" }, cidrs);
+    }
+
+    [Fact]
+    public void ParseIpv6Cidrs_bo_trung_va_chuan_hoa_ve_dia_chi_mang()
+    {
+        // 2001:250::1/30 phải chuẩn hoá về 2001:250::/30 để trùng với dòng đã có.
+        var cidrs = ChinaBypass.ParseIpv6Cidrs("2001:250::1/30\n2001:250::/30\n2001:254::5/31\n");
+
+        Assert.Equal(new[] { "2001:250::/30", "2001:254::/31" }, cidrs);
+    }
+
+    [Theory]
+    [InlineData("2001:250::/30", true, "2001:250::/30")]
+    [InlineData("240e::/20", true, "240e::/20")]
+    [InlineData("::/0", true, "::/0")]
+    [InlineData("2001:250::/129", false, "")]
+    [InlineData("2001:250::", false, "")]
+    [InlineData("1.0.1.0/24", false, "")]
+    [InlineData("khong-phai/32", false, "")]
+    [InlineData("", false, "")]
+    public void IsValidIpv6Cidr_dung_hop_dong(string input, bool expected, string normalized)
+    {
+        var ok = ChinaBypass.IsValidIpv6Cidr(input, out var got);
+
+        Assert.Equal(expected, ok);
+        Assert.Equal(normalized, got);
+    }
+
+    [Theory]
+    [InlineData("fe80::1/64", "fe80::/64")]       // prefix 64: bit cuối của octet 7 phải giữ, phần sau xoá
+    [InlineData("::/64", "::/64")]
+    [InlineData("2001:250:abcd:1234:5678::/32", "2001:250::/32")]
+    [InlineData("2001:250:abcd:1234:5678::/56", "2001:250:abcd:1200::/56")]
+    public void IsValidIpv6Cidr_chuan_hoa_dung_tung_bit(string input, string expected)
+    {
+        Assert.True(ChinaBypass.IsValidIpv6Cidr(input, out var got));
+        Assert.Equal(expected, got);
+    }
+
+    [Fact]
+    public void Danh_sach_IPv6_that_tren_CDN_parse_duoc()
+    {
+        // Bản sao thu nhỏ của /dl/routes/cn6.txt (định dạng thật đang phục vụ production).
+        var text = string.Join('\n', Enumerable.Range(0, 200).Select(i => $"240e:{i:x}::/32")) + "\n";
+
+        var cidrs = ChinaBypass.ParseIpv6Cidrs(text);
+
+        Assert.Equal(200, cidrs.Count);
+        Assert.All(cidrs, c => Assert.True(ChinaBypass.IsValidIpv6Cidr(c, out _)));
+    }
+
+    [Fact]
+    public async Task LoadIpv6Async_dung_cache_khi_con_han_va_khong_goi_mang()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cnbypass6-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var cache = Path.Combine(dir, "cn6.txt");
+        await File.WriteAllTextAsync(cache, "2001:250::/30\n");
+
+        var handler = new NeverCalledHandler();
+        var http = new HttpClient(handler);
+
+        var result = await ChinaBypass.LoadIpv6Async(http, cache, TimeSpan.FromDays(7));
+
+        Assert.Equal(new[] { "2001:250::/30" }, result);
+        Assert.False(handler.Called);
+        Directory.Delete(dir, true);
+    }
+
+    [Fact]
+    public async Task LoadIpv6Async_loi_mang_thi_dung_cache_cu_thay_vi_tra_rong()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cnbypass6-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var cache = Path.Combine(dir, "cn6.txt");
+        await File.WriteAllTextAsync(cache, "2001:254::/31\n");
+        File.SetLastWriteTimeUtc(cache, DateTime.UtcNow.AddDays(-30));   // cache hết hạn
+
+        var handler = new AlwaysFailHandler();
+        var http = new HttpClient(handler);
+
+        var result = await ChinaBypass.LoadIpv6Async(http, cache, TimeSpan.FromDays(7));
+
+        Assert.Equal(new[] { "2001:254::/31" }, result);
+        Assert.True(handler.Called);
+        Directory.Delete(dir, true);
+    }
+
+    [Fact]
+    public void Danh_sach_IPv6_dung_url_rieng_khong_lan_voi_IPv4()
+    {
+        Assert.Equal("https://meetflowai.site/dl/routes/cn.txt", ChinaBypass.DefaultListUrl);
+        Assert.Equal("https://meetflowai.site/dl/routes/cn6.txt", ChinaBypass.DefaultListUrlV6);
+    }
+
+    [Fact]
+    public void ParseCidrs_khong_nhan_dong_IPv6_va_nguoc_lai()
+    {
+        // Hai bộ parser phải TÁCH BẠCH: trộn lẫn sẽ thêm route IPv6 vào bảng IPv4 (vô nghĩa, netsh lỗi).
+        Assert.Empty(ChinaBypass.ParseCidrs("2001:250::/30\n240e::/20\n"));
+        Assert.Empty(ChinaBypass.ParseIpv6Cidrs("1.0.1.0/24\n223.255.252.0/22\n"));
+    }
+
     private sealed class NeverCalledHandler : HttpMessageHandler
     {
         public bool Called { get; private set; }

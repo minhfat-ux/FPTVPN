@@ -62,7 +62,9 @@ __pycache__/
 *.pyc
 
 # Built release artifacts (APKs / archives) — regenerate with gradle/xcodebuild
-release/
+release/*
+# …nhưng SỔ ĐĂNG KÝ PHÁT HÀNH là dữ liệu (không sinh lại được) ⇒ phải được track
+!release/releases.jsonl
 android/app/libs/hysteria-sources.jar
 
 # Windows client (C#/.NET + Avalonia) — không commit build output
