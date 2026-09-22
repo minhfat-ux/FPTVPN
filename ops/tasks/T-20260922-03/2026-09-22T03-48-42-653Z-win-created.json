@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-03",
+  "title": "iOS: test tren iPhone that truoc khi publish 1.4.1 (§2c) + publisher lo email 1.4.2",
+  "from": "win",
+  "to": "mac",
+  "detail": "Chu du an chot 22/09: (1) publisher (Mac) lo CA publish LAN email thong bao - harness Windows chi phat hanh ban Windows roi ban giao so lieu, KHONG tu gui email; (2) iOS PHAI test lai tren iPhone THAT truoc khi publish (Simulator khong tinh). Da ghi luat: docs/PUBLISHER_PROCESS.md §2c (bang 7 muc: thiet bi that + model/iOS version, dung sha256 dinh phat, luong co ban >=10 phut, doi Wi-Fi<->4G, ngat VPN khong mat mang, watchdog 0 bao oan + tu dung lai, UI Settings->About hien version) va §5 (ai gui email). VIEC: (a) build iOS 1.4.1 xong thi test tren iPhone that theo §2c, dan bang chung (anh + log + model + iOS version) vao claim/manifest; thieu muc nao thi DUNG, khong phat, khong email. (b) Windows 1.4.2 DA PHAT xong boi harness Windows (Setup 52.794.169 B, sha256 60ea6f31..., /buy tro ?v=60ea6f31, moc latest_version=1.4.2, cong chan pre+post DAT) - publisher lo buoc email 1.4.2 neu chu du an muon (goi y: gui thu toi ALERT_EMAIL truoc).",
+  "verify": null,
+  "due": null,
+  "createdAt": "2026-09-22T03:48:42.653Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T03:48:42.653Z"
+}
