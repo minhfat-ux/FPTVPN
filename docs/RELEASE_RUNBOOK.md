@@ -10,7 +10,16 @@
 | Android (modern) | 1.3.9 | — | `/root/flowvpn-apk/…` (route `/v1/downloads/android`) | harness/other |
 | Android (legacy) | — | — | route `/v1/downloads/android-legacy` | — |
 | Windows | — | — | `/var/www/flowvpn/dl/VPNFlow-Setup-*.exe` (link `/buy` tự cập nhật — commit `2dd0376`) | harness Windows |
-| macOS (DMG) | 1.3.3 | 13 | `/root/flowvpn-mac/VPNFlow-mac.dmg` | Mac build |
+| macOS (DMG) | 1.4.0 | 14 | `/root/flowvpn-mac/VPNFlow-mac.dmg` | Mac build (Developer ID + notarize, **chưa staple**) |
+
+> **Chốt 22/09/2026 — đọc thẳng artifact đang phát** (không tin tên file/tài liệu):
+> `GET /v1/downloads/mac` (cả `meetflowai.site` lẫn `api.meetflowai.site`) trả DMG **21.617.309 B**,
+> sha256 `9d05f271232b75ddbae281059ff48355d5162032cb2a86114fafc130bfd54597`, `last-modified`
+> 20/09 15:56 GMT. `Info.plist` trong **app và extension** = **1.4.0 / build 14**;
+> ký `Developer ID Application: Minh Nguyen (G6XW3RN6LJ)`; `spctl` = **Notarized Developer ID**
+> nhưng `xcrun stapler validate` = **CHƯA staple** ticket (máy offline lần đầu có thể vẫn bị cảnh báo).
+> Ba tài liệu trước mâu thuẫn (RUNBOOK/PUBLISHER ghi 1.3.3/13, RELEASE_ARTIFACTS ghi 23.961.684 /
+> 23.972.080 B) — bản đang phát thật là 1.4.0/14 nêu trên.
 
 ## 1. Hợp đồng bàn giao từ bên build (template)
 ```

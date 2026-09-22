@@ -158,8 +158,7 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 | 2026-09-18 | Windows | Setup 1.0.7 | do harness Windows phát hành; link `/buy` có `?v=<hash>` |
 | 2026-09-18 | iOS | 1.3.3 (14) | bản trước, đã được thay bằng 1.4.0 |
 | 2026-09-18 | Android | 1.3.9 | trước 1.4.0 |
-| 2026-09-20 | macOS | 1.3.3 (13) | **Ký Developer ID + notarize + staple** (DMG 21.617.309 B) → khách mở không cảnh báo · email 3 ngôn ngữ gửi 17/17 khách |
-| 2026-09-22 | macOS | 1.4.0 (14) | **Đo lại bằng cổng chặn §5b**: DMG đang phát (21.617.309 B · sha256 `9d05f271…`) đọc từ trong file ra `CFBundleShortVersionString=1.4.0`, `CFBundleVersion=14` → **khớp** mốc `latest_mac_version=1.4.0`; đính chính mục 1d |
+| 2026-09-20 | macOS | **1.4.0 (14)** | **Ký Developer ID + notarize** (DMG 21.617.309 B) → khách mở không cảnh báo · email 3 ngôn ngữ gửi 17/17 khách. ⚠️ **Sửa 22/09/2026 (đọc thẳng artifact): bản ghi cũ ghi "1.3.3 (13) + staple" là SAI** — `Info.plist` trong app + extension đang phát là 1.4.0/14, và `stapler validate` báo **CHƯA staple** (tuy `spctl` vẫn `Notarized Developer ID`). |
 
 | 2026-09-21 | dev | guard + link | **Thống nhất mọi link khách tải về `t1.meetflowai.site`** (env `PUBLIC_SITE_URL`+`API_HOSTS`, `ios_ipa_url`/`android_apk_url(_legacy)`/`windows_installer_url`) · thêm `flowvpn-guard` (email tự động cho khách mới bị tắc + task chờ approve trên Telegram: `/guard`, `/approve`, `/reject`) |
 
