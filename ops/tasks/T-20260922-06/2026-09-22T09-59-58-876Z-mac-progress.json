@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "HOI QUY A7 IPv6 (bus #175) da sua: 18f8c82 dat ipv6Settings includedRoutes=[::/0] => relay api.meetflowai.site co AAAA bi hut vao tunnel khong co IPv6 => iPhone mat mang khi connect. Da revert toan bo dinh tuyen IPv6 cua A7 o commit 479a6d7 (origin/main); giu A7 IPv4 (excludedRoutes cn.txt). Bang chung: bash scripts/ios-pure-logic-tests/run.sh -> 94/94 PASS; swiftc -parse provider -> OK. CON LAI: build lai IPA tu main @479a6d7 + cai len iPhone that (devicectl hien 'unavailable' - may chua ket noi) roi test §2c (nhap code + ket noi khong mat mang).",
+ "actor": "mac",
+ "at": "2026-09-22T09:59:58.880Z"
+}
