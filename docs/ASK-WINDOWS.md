@@ -27,7 +27,9 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `T-20260922-09` | sent | Cap nhat process (server): route phat file + moc version + audit link  | `AGENT_NAME=SERVER node ops/task.mjs ack T-20260922-09 --push` |
 | `T-20260922-10` | verified | iOS/macOS: ke hoach dev toc do & on dinh (YEU_CAU_TOC_DO) - lam P0-1/P | `-` |
 | `T-20260922-11` | verified | Sua release-record.mjs: tagExists() vo trong git worktree + khong cat  | `-` |
-| `T-20260922-12` | sent | GAP toi nay: cai ban moi len macOS + iPhone de chu du an test mang kha | `AGENT_NAME=MAC node ops/task.mjs ack T-20260922-12 --push` |
+| `T-20260922-12` | in_progress | GAP toi nay: cai ban moi len macOS + iPhone de chu du an test mang kha | `node ops/task.mjs done T-20260922-12 --evidence "commit=…, cmd=…, kết quả=…" --push` |
+| `T-20260922-13` | sent | GAP: khach cai macOS xong KHONG CHAY DUOC - kiem chung file DANG PHAT  | `AGENT_NAME=MAC node ops/task.mjs ack T-20260922-13 --push` |
+| `VIBECODE-E2E` | done | TEST /vibecode: gui that tu server Linux (owner -> WIN qua connector V | `chờ bên giao nghiệm thu` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->
