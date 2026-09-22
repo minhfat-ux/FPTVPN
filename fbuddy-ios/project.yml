@@ -1,0 +1,76 @@
+# XcodeGen spec cho app fBuddy iOS. Theo đúng convention của repo (xem `../project.yml`
+# của VPNFlow): XcodeGen + `info.properties` + `scheme` khai trong target.
+#
+# Đây là PROJECT RIÊNG, bundle id riêng (`site.meetflowai.fbuddy`), KHÔNG liên quan tới
+# `com.privatevpn.app` (VPNFlow). Sinh project:
+#
+#     cd fbuddy-ios && xcodegen generate
+#
+# rồi mở `fbuddy-ios/FBuddy.xcodeproj`.
+
+name: FBuddy
+options:
+  bundleIdPrefix: site.meetflowai
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    CODE_SIGN_STYLE: Automatic
+    # Cùng team với VPNFlow (chủ dự án). Đổi nếu tài khoản Apple của fBuddy là team khác.
+    DEVELOPMENT_TEAM: G6XW3RN6LJ
+targets:
+  FBuddy:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
+        CFBundleDisplayName: fBuddy
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        # Chỉ HTTPS tới fbuddy.meetflowai.site (+ StoreKit của Apple). Không có mã hoá
+        # riêng ngoài chuẩn TLS => miễn khai báo export compliance (xem APPSTORE_CHECKLIST).
+        ITSAppUsesNonExemptEncryption: false
+        # Voice input chạy trong WKWebView (Web Speech API của web fBuddy) nên app phải
+        # có usage string, nếu không iOS kill app ngay khi web xin quyền micro.
+        NSMicrophoneUsageDescription: fBuddy dùng micro để bạn nói thay vì gõ tin nhắn.
+        NSSpeechRecognitionUsageDescription: fBuddy dùng micro để nhận diện giọng nói thành chữ.
+        NSCameraUsageDescription: fBuddy dùng camera khi bạn muốn gửi ảnh cho trợ lý.
+        NSPhotoLibraryUsageDescription: fBuddy cần truy cập ảnh khi bạn muốn gửi ảnh cho trợ lý.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: site.meetflowai.fbuddy
+        PRODUCT_NAME: FBuddy
+        PRODUCT_MODULE_NAME: FBuddy
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ENABLE_PREVIEWS: YES
+        # Mọi dependency đều là framework hệ thống (SwiftUI/WebKit/StoreKit) — không SPM,
+        # không CocoaPods, để `xcodegen generate` + build là chạy được ngay.
+        SWIFT_EMIT_LOC_STRINGS: YES
+    scheme:
+      # Không có test target ở skeleton này (brief chỉ yêu cầu build được cho simulator).
+      gatherCoverageData: false
