@@ -23,6 +23,7 @@
 param(
   [string]$Configuration = "Release",
   [string]$Version = "",
+  [string]$Commit = "",
   [switch]$FrameworkDependent,
   [switch]$SkipPublish
 )
@@ -67,7 +68,32 @@ if (-not $Version) {
   }
 }
 Step "Version: $Version"
-$versionArgs = @("/p:Version=$Version", "/p:FileVersion=$Version", "/p:InformationalVersion=$Version")
+
+# 1c) COMMIT BUILD: phải xác định được, cây nguồn phải SẠCH, và commit được NHÚNG TƯỜNG MINH.
+#     Vì sao (lỗi thật 22/09/2026): bản 1.4.3 được build từ cây làm việc đang ở HEAD cũ (7ae07f0)
+#     nên app khai `ProductVersion = 1.4.3+7ae07f0…` trong khi sổ phát hành + tag ghi commit build
+#     `64e07c7` ⇒ lệch đúng cái mốc trả lời "bản khách đang chạy build từ mã nguồn nào".
+#     Từ đây: (a) DỪNG nếu `windows/` còn thay đổi chưa commit, (b) nhúng commit tường minh qua
+#     /p:SourceRevisionId + /p:InformationalVersion, (c) kiểm lại số nhúng trong exe ở bước 3b.
+if (-not $Commit) {
+  $head = (& git -C $repoRoot rev-parse HEAD 2>$null)
+  if ($LASTEXITCODE -eq 0 -and $head) { $Commit = $head.Trim() }
+}
+if (-not $Commit) {
+  throw "Không xác định được commit build. Chạy trong repo git hoặc truyền -Commit <sha>."
+}
+$dirty = (& git -C $repoRoot status --porcelain -- windows 2>$null)
+if ($LASTEXITCODE -eq 0 -and $dirty) {
+  throw "Cây nguồn còn thay đổi CHƯA COMMIT trong windows/ ⇒ DỪNG (commit trước rồi build lại):`n$dirty"
+}
+Write-Host "    commit build: $Commit (cây windows/ sạch)" -ForegroundColor Green
+
+$versionArgs = @(
+  "/p:Version=$Version",
+  "/p:FileVersion=$Version",
+  "/p:InformationalVersion=$Version+$Commit",
+  "/p:SourceRevisionId=$Commit"
+)
 
 # 2) publish
 if (-not $SkipPublish) {
@@ -99,6 +125,15 @@ if ($normalized -ne $Version) {
   throw "App exe mang version '$builtVersion' nhưng định phát '$Version' — DỪNG (kiểm -SkipPublish: bản publish cũ chưa được dựng lại kèm /p:Version)."
 }
 Write-Host "    app exe FileVersion = $builtVersion (khớp $Version)" -ForegroundColor Green
+
+# 3c) CỔNG CHẶN: commit nhúng trong exe PHẢI đúng commit build (xem 1c). Cổng này bắt được cả
+#     trường hợp ai đó build trong cây có HEAD khác commit định ghi sổ.
+$builtInfo = (Get-Item (Join-Path $publishDir $appExe)).VersionInfo.ProductVersion
+$expectedInfo = "$Version+$Commit"
+if ($builtInfo -ne $expectedInfo) {
+  throw "App exe khai ProductVersion '$builtInfo' nhưng phải là '$expectedInfo' — DỪNG (commit nhúng KHÔNG khớp commit build)."
+}
+Write-Host "    app exe ProductVersion = $builtInfo (khớp commit build)" -ForegroundColor Green
 
 # 5) tìm Inno Setup 6
 Step "Tìm Inno Setup 6 (ISCC.exe)"
