@@ -97,8 +97,16 @@ $ git diff --stat origin/main                    -> (trống, khớp GitHub)
 
 ## 5. Điểm chưa chắc / việc còn lại
 
-1. **Chưa build được Android tại máy này** (không có `java`, không có `ANDROID_HOME`/SDK) ⇒ diff
-   Kotlin **chưa qua compile**. Cần build trên Mac/CI trước khi publish. Đây là blocker verify duy nhất.
+1. ✅ **ĐÃ BUILD ĐƯỢC ANDROID TRÊN MÁY WINDOWS NÀY (22/09, sau khi cài JDK 17)** — blocker cũ đã hết.
+   Đã cài Temurin JDK 17.0.20.1+1 + set `JAVA_HOME`/`PATH` (scope User); SDK Android đã có sẵn
+   (`C:\Users\Minhn\Android\sdk`, platform `android-36`, build-tools `36.0.0`). Bằng chứng thật:
+   `compileModernDebugKotlin` + `compileLegacyDebugKotlin` chạy với `--rerun-tasks --no-build-cache`
+   → **BUILD SUCCESSFUL** (1m54s, không `e:`/`error:`); `assembleModernDebug` + `assembleLegacyDebug`
+   → **BUILD SUCCESSFUL**; APK `app-modern-debug.apk` 108,2 MB đọc bằng aapt2:
+   `package: name='com.privatevpn.app.dev' versionCode='21' versionName='1.4.1-dev' … minSdkVersion:'26'`.
+   Class đã biên dịch chứa đúng hằng số mới (`LOSS_CONSECUTIVE_FAILS`, `probeTcpOnce`,
+   `RTT_PROBE_FALLBACK_HOST`). ⇒ **3 file Kotlin của `0ac7d4c` đã qua compile thật.**
+   Còn lại: chỉ **bản release** mới cần máy Mac (keystore ngoài repo) — không phải blocker verify code.
 2. **Android đã lên 1.4.1 nhưng chưa publish** ⇒ cần chạy cổng chặn trước khi upload:
    `python3 scripts/check-publish-version.py --platform android --file <apk> --version 1.4.1`
    (không đạt thì DỪNG) rồi mới set mốc version.
