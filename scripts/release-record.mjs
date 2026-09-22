@@ -110,8 +110,12 @@ function pad(text, width) {
   return value.length >= width ? value.slice(0, width) : value + " ".repeat(width - value.length);
 }
 
-function tagExists(tag) {
-  if (fs.existsSync(path.join(REPO, ".git", "refs", "tags", tag))) return true;
+/** Chạy git trong repo và trả stdout đã trim (ném lỗi nếu git trả mã khác 0). */
+function git(args) {
+  return execFileSync("git", args, { cwd: REPO, encoding: "utf8" }).trim();
+}
+
+function tagExists(tag) {  if (fs.existsSync(path.join(REPO, ".git", "refs", "tags", tag))) return true;
   const packed = path.join(REPO, ".git", "packed-refs");
   try {
     return fs.readFileSync(packed, "utf8").split(/\r?\n/).some((l) => l.endsWith(`refs/tags/${tag}`));
@@ -297,7 +301,19 @@ function cmdTag() {
         `   node scripts/release-record.mjs append --platform ${platform} --version ${version} --commit <sha> --origin backfill --status published ...`, 1);
   }
   const tag = `${platform}-v${version}`;
-  if (tagExists(tag)) die(`tag ${tag} da ton tai — khong tao lai (tag la moc bat bien)`, 1);
+  const commit = row.commit;
+  if (tagExists(tag)) {
+    const existing = git(["rev-list", "-n1", tag]);
+    if (existing === commit) {
+      console.log(`tag ${tag} da ton tai va dang tro dung commit ${commit.slice(0, 12)}… — khong lam gi.`);
+      return;
+    }
+    die(
+      `⛔ tag ${tag} da ton tai nhung tro ${existing.slice(0, 12)}… trong khi so ghi commit build ` +
+      `${commit.slice(0, 12)}… — KHONG tao lai tag (moc bat bien). Sua bang dong so moi hoac version moi.`,
+      1,
+    );
+  }
   const message = [
     `${platform} ${version}${row.build ? ` (build ${row.build})` : ""}`,
     `sha256: ${row.sha256}`,
@@ -307,9 +323,15 @@ function cmdTag() {
     `verify: ${row.verified_by ?? "chua ghi"}${row.evidence ? ` · ${row.evidence}` : ""}`,
     `ghi so: ${row.at} boi ${row.recorded_by}`,
   ].join("\n");
-  // Phải truyền row.commit: nếu chỉ `git tag -a <tag> -m <message>` thì tag neo vào HEAD (commit publish),
-  // sai với luật §2 docs/VERSIONING.md ("tag trỏ commit dùng để build, không trỏ commit publish").
-  execFileSync("git", ["tag", "-a", "-m", message, tag, row.commit], { cwd: REPO, stdio: ["ignore", "inherit", "inherit"] });
+  // PHẢI truyền commit tường minh: `git tag -a <tag> -m <msg>` (khong co commit) se neo vao HEAD
+  // cua cay lam viec — ma cay lam viec thuong DANG SAU origin/main, nen tag tro sai commit trong khi
+  // message van ghi dung commit build (loi that 22/09/2026 voi windows-v1.4.3: message ghi 64e07c7
+  // nhung tag tro 7ae07f0). Tag la moc "ban khach chay build tu ma nguon nao" ⇒ sai la mat tac dung.
+  execFileSync("git", ["tag", "-a", tag, commit, "-m", message], { cwd: REPO, stdio: ["ignore", "inherit", "inherit"] });
+  const anchored = git(["rev-list", "-n1", tag]);
+  if (anchored !== commit) {
+    die(`⛔ tag ${tag} vua tao nhung tro ${anchored} — KHONG khop commit build ${commit}.`, 1);
+  }
   appendRow({
     at: new Date().toISOString(),
     platform,
