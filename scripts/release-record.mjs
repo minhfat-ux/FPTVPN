@@ -16,10 +16,11 @@
  *   node scripts/release-record.mjs tag --platform ios [--version 1.4.1]
  *
  * Ma thoat: 0 = DAT · 1 = CO LOI CUNG (dung phat hanh) · 2 = sai cach dung / thieu tham so.
- * Khong dung dependency ngoai; khong goi child_process de DOC (sandbox Windows chan pipe) — chi goi
- * `git tag` voi stdio inherit khi tao tag.
+ * Khong dung dependency ngoai. Moi lenh git can DOC stdout deu ghi ra FILE TAM (khong dung pipe —
+ * sandbox cua harness Windows chan `spawn` co pipe: EPERM); `git tag` dung stdio inherit khi tao tag.
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -110,15 +111,42 @@ function pad(text, width) {
   return value.length >= width ? value.slice(0, width) : value + " ".repeat(width - value.length);
 }
 
-/** Chạy git trong repo và trả stdout đã trim (ném lỗi nếu git trả mã khác 0). */
-function git(args) {
-  return execFileSync("git", args, { cwd: REPO, encoding: "utf8" }).trim();
+/**
+ * Chay git va tra stdout da trim — qua FILE TAM, khong qua pipe.
+ * Vi sao khong dung `execFileSync(..., { encoding })`: sandbox cua harness Windows chan `spawn` co pipe
+ * (EPERM: khong mo duoc named pipe) ⇒ moi cach doc stdout qua pipe deu nem EPERM. Ghi stdout ra file tam
+ * roi doc lai khong dung pipe, va van HOI GIT nen dung cho ca clone thuong lan worktree lien ket.
+ */
+function gitOut(args) {
+  const tmp = path.join(
+    os.tmpdir(),
+    `release-record-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`,
+  );
+  const fd = fs.openSync(tmp, "w");
+  try {
+    execFileSync("git", args, { cwd: REPO, stdio: ["ignore", fd, "inherit"] });
+    return fs.readFileSync(tmp, "utf8").trim();
+  } finally {
+    fs.closeSync(fd);
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      /* file tam khong xoa duoc cung khong anh huong ket qua */
+    }
+  }
 }
 
-function tagExists(tag) {  if (fs.existsSync(path.join(REPO, ".git", "refs", "tags", tag))) return true;
-  const packed = path.join(REPO, ".git", "packed-refs");
+/**
+ * Tag da ton tai chua — hoi thang `git`, KHONG doc `<repo>/.git/refs/tags` bang fs.
+ * Trong worktree lien ket, `<repo>/.git` la FILE (`gitdir: …`) chu khong phai thu muc, nen cach doc fs
+ * luon tra false ⇒ nhanh "tag da ton tai va tro dung thi bo qua" thanh dead code, tool roi vao
+ * `git tag -a` va nem loi khong bat (loi that 22/09/2026). `rev-parse --verify --quiet` dung cho ca
+ * clone thuong lan worktree vi no hoi git chu khong tu doan duong dan.
+ */
+function tagExists(tag) {
   try {
-    return fs.readFileSync(packed, "utf8").split(/\r?\n/).some((l) => l.endsWith(`refs/tags/${tag}`));
+    gitOut(["rev-parse", "--verify", "--quiet", `refs/tags/${tag}`]);
+    return true;
   } catch {
     return false;
   }
@@ -131,10 +159,13 @@ function cmdList() {
   const platform = flag("platform");
   const only = platform ? [platform] : PLATFORMS;
   if (platform && !PLATFORMS.includes(platform)) die(`platform khong hop le: ${platform}`, 2);
+  // Noi cot TAG theo tag dai nhat dang in: `android-legacy-v1.4.0` (21 ky tu) tung bi pad() cat thanh
+  // "android-legacy-v1." va dinh lien cot sau ⇒ doc sai tag.
+  const tagWidth = Math.max(18, ...only.map((p) => (tagOf(rows, p) || "-").length + 2));
   console.log(`So phat hanh: ${path.relative(REPO, LEDGER)} — ${rows.length} dong`);
   console.log(
     pad("NEN TANG", 16) + pad("VERSION", 10) + pad("BUILD", 7) + pad("MOC", 10) +
-    pad("SIZE", 12) + pad("SHA256", 14) + pad("MTIME", 20) + pad("TAG", 18) + "TRONG FILE",
+    pad("SIZE", 12) + pad("SHA256", 14) + pad("MTIME", 20) + pad("TAG", tagWidth) + "TRONG FILE",
   );
   for (const p of only) {
     const row = latestState(rows, p);
@@ -146,7 +177,7 @@ function cmdList() {
     console.log(
       pad(p, 16) + pad(row.version, 10) + pad(row.build ?? "-", 7) + pad(row.marker_latest ?? "-", 10) +
       pad(row.size ?? "-", 12) + pad(String(row.sha256 ?? "").slice(0, 12), 14) +
-      pad(row.artifact_mtime ?? "-", 20) + pad(tagOf(rows, p) || "-", 18) + internal,
+      pad(row.artifact_mtime ?? "-", 20) + pad(tagOf(rows, p) || "-", tagWidth) + internal,
     );
   }
   if (has("all")) {
@@ -303,7 +334,7 @@ function cmdTag() {
   const tag = `${platform}-v${version}`;
   const commit = row.commit;
   if (tagExists(tag)) {
-    const existing = git(["rev-list", "-n1", tag]);
+    const existing = gitOut(["rev-list", "-n1", tag]);
     if (existing === commit) {
       console.log(`tag ${tag} da ton tai va dang tro dung commit ${commit.slice(0, 12)}… — khong lam gi.`);
       return;
@@ -328,7 +359,7 @@ function cmdTag() {
   // message van ghi dung commit build (loi that 22/09/2026 voi windows-v1.4.3: message ghi 64e07c7
   // nhung tag tro 7ae07f0). Tag la moc "ban khach chay build tu ma nguon nao" ⇒ sai la mat tac dung.
   execFileSync("git", ["tag", "-a", tag, commit, "-m", message], { cwd: REPO, stdio: ["ignore", "inherit", "inherit"] });
-  const anchored = git(["rev-list", "-n1", tag]);
+  const anchored = gitOut(["rev-list", "-n1", tag]);
   if (anchored !== commit) {
     die(`⛔ tag ${tag} vua tao nhung tro ${anchored} — KHONG khop commit build ${commit}.`, 1);
   }
