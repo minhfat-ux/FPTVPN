@@ -149,9 +149,13 @@ Mã thoát: `0` mọi kênh khớp · `1` có kênh **LỆCH** (phải xử lý)
 (macOS cần máy Mac, APK cần `aapt2`, `.exe` cần Windows — Mac đọc được size/sha256 nhưng không đọc
 được `VersionInfo`). Kết quả audit dán vào nhật ký §6.
 
-**Chạy định kỳ (health-watch, luật 8)** — Mac giữ `launchd`/`cron`, ghi log JSONL, gọi alert Telegram
+**Chạy định kỳ (health-watch, luật 8)** — cài 1 lần bằng launchd, ghi log JSONL, gọi alert Telegram
 khi có kênh lệch. Audit tải ~230 MB mỗi vòng nên đặt nhịp thưa (6h):
 ```bash
+scripts/install-release-audit-watch.sh            # launchd StartInterval 21600s
+INTERVAL=3600 scripts/install-release-audit-watch.sh   # đổi nhịp
+scripts/install-release-audit-watch.sh --dry-run  # chỉ in plist
+# hoặc không dùng launchd:
 python3 scripts/audit-releases.py --interval 21600 \
     --log ~/.vpnflow-release-audit.jsonl \
     --alert-cmd 'scripts/release-audit-alert.sh'

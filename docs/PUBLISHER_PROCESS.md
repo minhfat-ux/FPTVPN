@@ -218,15 +218,19 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
    gửi thông báo khách bản cũ không đăng nhập được. **Không** phát lại bản iOS hiện tại, **không**
    gửi email quảng cáo bản chưa sửa.
 
-   **Health-watch định kỳ (luật 8)** — chạy nền, ghi log JSONL, alert Telegram khi có kênh lệch;
-   Mac chạy bằng `launchd`/`cron` (máy Mac đủ công cụ), Windows harness verify riêng kênh `.exe`:
+   **Health-watch định kỳ (luật 8)** — cài 1 lần, chạy 6h/lần, ghi log JSONL, alert Telegram khi có
+   kênh lệch (máy Mac đủ công cụ; Windows harness verify riêng kênh `.exe`):
    ```bash
-   python3 scripts/audit-releases.py --interval 21600 \
-       --log ~/.vpnflow-release-audit.jsonl \
-       --alert-cmd 'scripts/release-audit-alert.sh'
+   scripts/install-release-audit-watch.sh            # launchd StartInterval 21600s (6h)
+   INTERVAL=3600 scripts/install-release-audit-watch.sh   # đổi nhịp
+   scripts/install-release-audit-watch.sh --dry-run  # chỉ in plist, không ghi gì
    ```
+   Không muốn dùng launchd thì chạy trực tiếp:
+   `python3 scripts/audit-releases.py --interval 21600 --log ~/.vpnflow-release-audit.jsonl
+   --alert-cmd 'scripts/release-audit-alert.sh'`.
    `--alert-cmd` nhận JSON kết quả qua stdin + env `AUDIT_EXIT`/`AUDIT_VERDICT`/`AUDIT_BASE`; script
-   `scripts/release-audit-alert.sh` in ra và gửi Telegram qua `flowvpn-notify` (mặc định qua node-2).
+   `scripts/release-audit-alert.sh` in ra và gửi Telegram qua `flowvpn-notify` (mặc định qua node-2,
+   khoá `~/.ssh/fpt_vpn_node` — khoá SSH mặc định của Mac bị node-2 từ chối).
 
 ## 8. Lỗi đã từng xảy ra (đọc để không lặp)
 - Link trên `/buy` trỏ sai host (`api.` ⇒ 401). Link tải phải là `t1.` hoặc `meetflowai.site`.
