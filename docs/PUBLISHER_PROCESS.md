@@ -76,6 +76,22 @@
 khác nhau cho **cùng một version** ⇒ chỉ lấy bản có xác nhận test **mới hơn**; còn mơ hồ ⇒ **dừng**, hỏi
 chủ dự án/orchestrator — publisher không tự phán.
 
+### 2c. iOS: BẮT BUỘC test trên iPhone THẬT trước khi publish (chủ dự án chốt 22/09/2026)
+Simulator/máy ảo **không tính** (tunnel, NetworkExtension, khoá keychain, watchdog chỉ đúng trên máy thật).
+Điều kiện #3 ở §2b với iOS được cụ thể hoá thành:
+
+| Mục | Yêu cầu | Bằng chứng |
+|---|---|---|
+| Thiết bị | iPhone **thật**, ghi rõ model + phiên bản iOS | ảnh `Settings → General → About` |
+| Đúng bản | cài từ IPA **đúng sha256** định phát (không phải build khác cùng version) | ảnh `Settings → About` trong app hiện đúng version/build |
+| Luồng cơ bản | đăng nhập → kết nối → xác nhận IP thoát → dùng thật **≥10 phút** (duyệt web/app) | ảnh + log chẩn đoán |
+| Đổi mạng | chuyển **Wi-Fi ↔ 4G** giữa phiên: ghi lại hành vi (tự phục hồi hay phải bấm Connect lại) | log + mô tả |
+| Ngắt VPN | ngắt ⇒ máy **không mất mạng** (route về đường trực tiếp) | ảnh + kết quả `curl`/duyệt web |
+| Watchdog (bản 1.4.1+) | log chứng minh **0 lần kết luận oan**; chủ động chặn/kill đường relay ⇒ app **tự dựng lại** trong bao lâu | log có mốc thời gian |
+| UI version | `Settings → About` hiện số hiệu + đối chiếu mốc server | ảnh màn hình |
+
+**Thiếu bất kỳ mục nào ⇒ DỪNG: không phát hành, không gửi email.** Bằng chứng dán vào claim + nhật ký §6.
+
 ## 3. Đích trên node-2 (route nào đọc file nào)
 
 > **Ngoại lệ KHÔNG được đổi host: relay WS.** Mọi link khách bấm đều dùng `t1.meetflowai.site`, nhưng
@@ -101,6 +117,8 @@ Luôn kiểm bằng host vào được từ TQ: `https://t1.meetflowai.site/...`
 `ipa_build` phải khớp `CFBundleVersion` trong IPA — lệch là manifest OTA sai.
 
 ## 5. Email thông báo cho user
+- **Ai gửi (chủ dự án chốt 22/09/2026): PUBLISHER lo cả publish lẫn email.** Harness Windows chỉ
+  phát hành **bản Windows** (§3) rồi bàn giao số liệu; **không tự gửi email** cho khách.
 - Kênh: Resend, gửi từ `support@meetflowai.site` (env `RESEND_API_KEY` trong drop-in của control-plane).
 - Danh sách người nhận: user trong `auth.json` (script tự đọc).
 - **Nội dung phải có**: tên nền tảng + version, 2–4 tính năng ĐÃ XONG (lấy từ release notes), link tải (`t1.meetflowai.site`), câu hỗ trợ `support@meetflowai.site`.
