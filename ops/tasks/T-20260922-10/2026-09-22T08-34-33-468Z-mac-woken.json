@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-22T08:34:33.468Z",
+ "note": "connector VPS: task từ win — A9-SERVER XONG: hop dong /v1/route-report (50ccf55) + PHAT HIEN A7 can chot co che",
+ "via": "dsh --profile headless \"{prompt}\""
+}
