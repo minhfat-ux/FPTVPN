@@ -145,6 +145,17 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private let rebuildLock = NSLock()
     /// Mốc đã ghi bộ nhớ lần trước (để chốt đỉnh đo được ngay cả khi tunnel bị đứt).
     private var measuredPeakDownKbps = 0
+    /// A10 §2g — số byte live của lần lấy mẫu trước, để tính tốc độ ↓/↑ mỗi 1s (kiểu Ookla).
+    private var liveSampleBaseline: BandwidthControl.ByteSample?
+    private var liveSampleAt = Date.distantPast
+    private var liveDownKbps = 0
+    private var liveUpKbps = 0
+    /// A10 §2g — ảnh chụp số hiển thị Diagnostics, cập nhật ở nhịp 1s sẵn có và đọc trong
+    /// `handleAppMessage`. Bảo vệ bằng `bandwidthLock` (ghi ở `bandwidthQueue`, đọc ở queue NE).
+    private var liveDiagSnapshot: RampStatus.Display?
+    /// A10 §2g — mốc ghi log `bw: sample observed=…` (10s/lần) để đối chiếu số trên màn hình
+    /// với log chẩn đoán mà không làm ngập file log.
+    private var lastDiagLogAt = Date.distantPast
     /// Nhịp lấy mẫu byte: 1s (yêu cầu "đo trong ≤3 giây" ⇒ mẫu thứ 2–3 đã có số nếu có traffic).
     private static let bandwidthSampleInterval: TimeInterval = 1
     /// Trần số lần dựng lại transport vì ramp trong MỘT phiên (ramp là tối ưu, không được
@@ -258,7 +269,34 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         if let code = statusCode { report["code"] = code }
         if let message = statusMessage { report["message"] = message }
         flowLock.unlock()
+        // A10 §2g — số live của thẻ Diagnostics (nhịp 1s sẵn có). Trường nào `nil` thì KHÔNG
+        // gửi, để app hiện `—` thay vì `0` gây hiểu nhầm "mạng chết".
+        bandwidthLock.lock()
+        let diag = liveDiagSnapshot
+        bandwidthLock.unlock()
+        if let diag {
+            report["serving"] = diag.serving
+            report["atMax"] = diag.atMax
+            if let value = diag.downKbps { report["downKbps"] = value }
+            if let value = diag.upKbps { report["upKbps"] = value }
+            if let value = diag.observedKbps { report["observedKbps"] = value }
+            if let value = diag.declaredDownKbps { report["declaredDownKbps"] = value }
+            if let value = diag.declaredUpKbps { report["declaredUpKbps"] = value }
+            if let value = diag.targetDownKbps { report["targetDownKbps"] = value }
+            if let value = diag.morePercent { report["morePercent"] = value }
+            if let value = diag.stableKbps { report["stableKbps"] = value }
+        }
+        // "Đường đang dùng": node lấy từ chính relay URL đang chạy (`/relay/vn2hy` → `vn2hy`).
+        if let node = Self.nodeLabel(from: currentOptions?.relayURL) { report["node"] = node }
         completionHandler?(try? JSONSerialization.data(withJSONObject: report))
+    }
+
+    /// Nhãn node đọc từ relay URL của transport đang chạy (`/relay/vn2hy` → `vn2hy`).
+    /// Dùng cho dòng "Đường đang dùng" của Diagnostics A10.
+    private static func nodeLabel(from relayURL: URL?) -> String? {
+        guard let relayURL else { return nil }
+        let last = relayURL.lastPathComponent
+        return last.isEmpty ? nil : last
     }
 
     // MARK: - Dựng tunnel
@@ -464,6 +502,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         bandwidthRampAttempts = 0
         measuredPeakDownKbps = 0
         activeBandwidthReason = nil
+        liveSampleBaseline = nil
+        liveSampleAt = .distantPast
+        liveDownKbps = 0
+        liveUpKbps = 0
+        lastDiagLogAt = .distantPast
+        bandwidthLock.lock()
+        liveDiagSnapshot = nil
+        bandwidthLock.unlock()
         let monitor = NWPathMonitor()
         // PHẢI `start` rồi CHỜ bản cập nhật ĐẦU TIÊN rồi mới đọc `currentPath`.
         //
@@ -527,6 +573,20 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         guard let bytes = bandwidthBytes else { return }
         let counters = trafficCounters
         let now = Date()
+        // A10 §2g — tốc độ ↓/↑ LIVE: delta byte RX/TX của lần lấy mẫu trước, đúng nhịp 1s sẵn
+        // có (KHÔNG thêm phép đo, không thêm pin). Bộ đếm tụt (dựng lại transport/interface)
+        // ⇒ bỏ mẫu này thay vì in số âm.
+        let liveDt = now.timeIntervalSince(liveSampleAt)
+        if let previous = liveSampleBaseline, liveDt >= 0.5, liveDt <= 5 {
+            let deltaIn = bytes.inbound - previous.inbound
+            let deltaOut = bytes.outbound - previous.outbound
+            if deltaIn >= 0, deltaOut >= 0 {
+                liveDownKbps = Int(Double(deltaIn) * 8 / 1_000 / liveDt)
+                liveUpKbps = Int(Double(deltaOut) * 8 / 1_000 / liveDt)
+            }
+        }
+        liveSampleBaseline = bytes
+        liveSampleAt = now
         let decision = bandwidth.sample(
             bytes: bytes,
             packetsIn: counters?.fromGo ?? 0,
@@ -553,6 +613,27 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             bandwidthLock.unlock()
             applyBandwidthRampIfIdle(
                 reason: bandwidth.pendingReason?.label ?? BandwidthControl.Reason.probe.label
+            )
+        }
+        // A10 §2g — chốt ảnh chụp số hiển thị Diagnostics cho `handleAppMessage` đọc.
+        // `serving == false` (tunnel chưa chở byte nào) ⇒ mọi số là `—`, không hiện `0`.
+        let display = bandwidth.diagnostics(
+            liveDownKbps: liveDownKbps,
+            liveUpKbps: liveUpKbps,
+            serving: bytes.inbound + bytes.outbound > 0,
+            probeNoGain: false
+        )
+        bandwidthLock.lock()
+        liveDiagSnapshot = display
+        bandwidthLock.unlock()
+        // A10 §2g — log đối chiếu (10s/lần): CÙNG nguồn số với dòng "Đo được (đường ramp)"
+        // trên màn hình, để nghiệm thu bằng grep `bw: sample observed=`.
+        if display.serving, now.timeIntervalSince(lastDiagLogAt) >= 10 {
+            lastDiagLogAt = now
+            RelayDiagnostics.shared.log(
+                "bw: sample observed=\(display.observedKbps ?? 0) down=\(display.downKbps ?? 0) "
+                    + "up=\(display.upKbps ?? 0) declared=\(display.declaredDownKbps ?? 0)/"
+                    + "\(display.declaredUpKbps ?? 0) atMax=\(display.atMax)"
             )
         }
     }

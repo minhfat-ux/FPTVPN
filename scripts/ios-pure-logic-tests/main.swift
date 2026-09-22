@@ -438,6 +438,138 @@ do {
     check(ChinaRouteBypass.normalizedIPv6CIDR("1.2.3.4/24") == nil, "IPv4 không lọt vào parse IPv6")
 }
 
+// MARK: - RampStatus A11 (§2h): khai báo an toàn trước, ramp sau
+
+print("RampStatus A11 — khai bao an toan truoc: do x0,8; loss cao <= 4/1 Mbps; cam ramp khi loss cao")
+
+do {
+    // Có số đo ⇒ khai = đo được × 0,8 (nghiệm thu: down ≤ 0,8 × goodput).
+    let measured = RampStatus.safeDeclaration(
+        measuredDownKbps: 10_000, rememberedDownKbps: 0,
+        staticDownKbps: 100_000, staticUpKbps: 30_000, highLoss: false
+    )
+    checkEqual(measured.downKbps, 8_000, "đo 10 Mbps ⇒ khai 8 Mbps (=0,8×)")
+    checkEqual(measured.reason, "measured", "lý do = measured")
+    check(measured.downKbps * 100 <= 10_000 * 80, "down KHÔNG vượt 0,8 × số đo")
+
+    // Chưa có số đo nhưng có số nhớ ⇒ min(nấc tĩnh, nhớ × 0,6).
+    let remembered = RampStatus.safeDeclaration(
+        measuredDownKbps: 0, rememberedDownKbps: 20_000,
+        staticDownKbps: 100_000, staticUpKbps: 30_000, highLoss: false
+    )
+    checkEqual(remembered.downKbps, 12_000, "nhớ 20 Mbps ⇒ min(100, 12) = 12 Mbps")
+    checkEqual(remembered.upKbps, 3_600, "chiều lên theo tỉ lệ nấc tĩnh 30/100")
+
+    // Không có cả số đo lẫn số nhớ ⇒ nấc tĩnh (đường lùi an toàn, không chặn kết nối).
+    let staticFallback = RampStatus.safeDeclaration(
+        measuredDownKbps: 0, rememberedDownKbps: 0,
+        staticDownKbps: 100_000, staticUpKbps: 30_000, highLoss: false
+    )
+    checkEqual(staticFallback.downKbps, 100_000, "không có gì ⇒ nấc tĩnh")
+    checkEqual(staticFallback.reason, "static", "lý do = static")
+
+    // Loss cao ⇒ BỎ best cũ, khởi điểm ≤ 4 Mbps down / 1 Mbps up.
+    let lossy = RampStatus.safeDeclaration(
+        measuredDownKbps: 20_000, rememberedDownKbps: 80_000,
+        staticDownKbps: 100_000, staticUpKbps: 30_000, highLoss: true
+    )
+    checkEqual(lossy.downKbps, 4_000, "loss cao ⇒ down ≤ 4 Mbps dù đo 20 Mbps")
+    checkEqual(lossy.upKbps, 1_000, "loss cao ⇒ up ≤ 1 Mbps")
+    checkEqual(lossy.reason, "high-loss", "lý do = high-loss")
+    check(lossy.highLoss, "cờ highLoss bật")
+
+    // Cấm ramp khi loss cao; cần ≥2 lần chứng minh liên tiếp.
+    check(RampStatus.canRampUp(lossPercent: 0, consecutiveProofs: 2), "loss thấp + 2 lần ⇒ được ramp")
+    check(!RampStatus.canRampUp(lossPercent: 0, consecutiveProofs: 1), "mới 1 lần ⇒ CHƯA ramp")
+    check(!RampStatus.canRampUp(lossPercent: 30, consecutiveProofs: 9), "loss ≥30% ⇒ CẤM ramp dù goodput cao")
+    check(!RampStatus.canRampUp(lossPercent: 5, consecutiveProofs: 9), "loss 5% chỉ ở mức biên ⇒ cấm")
+    check(RampStatus.requiresDownRamp(lossPercent: 30), "loss ≥30% ⇒ phải hạ khai")
+    check(!RampStatus.requiresDownRamp(lossPercent: 29.9), "dưới 30% ⇒ chưa buộc hạ")
+    checkEqual(RampStatus.downRampForceSeconds, 15, "hạ khai buộc áp trong ≤15 s (§2h luật 3)")
+    checkEqual(RampStatus.declareRatioPct, 80, "tỉ lệ khai = 80% số đo")
+}
+
+// MARK: - RampStatus A10 (§2g): số live trên thẻ Diagnostics
+
+print("RampStatus A10 — dinh dang Mbps/kbps/— + % con len duoc + da toi da")
+
+do {
+    checkEqual(RampStatus.formatRate(nil), "—", "chưa có số ⇒ — (KHÔNG hiện 0)")
+    checkEqual(RampStatus.formatRate(0), "—", "0 ⇒ — (tunnel chưa phục vụ)")
+    checkEqual(RampStatus.formatRate(500), "500 kbps", "dưới 1 Mbps ⇒ kbps")
+    checkEqual(RampStatus.formatRate(999), "999 kbps", "sát 1 Mbps vẫn kbps")
+    checkEqual(RampStatus.formatRate(1_000), "1.0 Mbps", "1 Mbps ⇒ 1 chữ số thập phân")
+    checkEqual(RampStatus.formatRate(8_450), "8.4 Mbps", "8,45 Mbps làm tròn 1 chữ số")
+    checkEqual(RampStatus.formatRate(100_000), "100.0 Mbps", "100 Mbps")
+
+    // Mục tiêu = min(đo × hệ số ramp, trần).
+    checkEqual(
+        RampStatus.nextTargetKbps(observedKbps: 6_000, ceilingKbps: nil, rampFactor: 1.25),
+        7_500, "mục tiêu = 6 Mbps × 1,25 = 7,5 Mbps"
+    )
+    checkEqual(
+        RampStatus.nextTargetKbps(observedKbps: 6_000, ceilingKbps: 7_000, rampFactor: 1.25),
+        7_000, "mục tiêu bị kẹp trần 7 Mbps"
+    )
+    // % còn lên được = (mục tiêu / khai báo − 1) × 100.
+    checkEqual(
+        RampStatus.morePercent(observedKbps: 6_000, declaredDownKbps: 4_800, ceilingKbps: nil),
+        56, "+56% (7500/4800 − 1)"
+    )
+    checkEqual(
+        RampStatus.morePercent(observedKbps: 6_000, declaredDownKbps: 9_000, ceilingKbps: nil),
+        nil, "mục tiêu thấp hơn khai báo ⇒ không hứa headroom (—), không '+0%'"
+    )
+    check(RampStatus.isAtMax(observedKbps: 9_500, ceilingKbps: 10_000, probeNoGain: false),
+          "đo ≥95% trần ⇒ Đã tối đa")
+    check(!RampStatus.isAtMax(observedKbps: 9_000, ceilingKbps: 10_000, probeNoGain: false),
+          "đo 90% trần ⇒ chưa tối đa")
+    check(RampStatus.isAtMax(observedKbps: 1_000, ceilingKbps: nil, probeNoGain: true),
+          "kênh dò kết luận no gain ⇒ Đã tối đa dù đo thấp")
+
+    // Tunnel chưa phục vụ ⇒ xoá hết số (UI hiện —).
+    let idle = RampStatus.display(
+        serving: false, downKbps: 12_000, upKbps: 3_000, observedKbps: 6_000,
+        declaredDownKbps: 4_800, declaredUpKbps: 1_440, ceilingKbps: 7_000,
+        stableKbps: 4_800, probeNoGain: false
+    )
+    checkEqual(idle.downKbps, nil, "chưa phục vụ ⇒ down —")
+    checkEqual(idle.observedKbps, nil, "chưa phục vụ ⇒ đo được —")
+    checkEqual(idle.declaredDownKbps, nil, "chưa phục vụ ⇒ khai báo —")
+    checkEqual(idle.morePercent, nil, "chưa phục vụ ⇒ % —")
+
+    // Đang phục vụ: giữ số + % còn lên được.
+    let live = RampStatus.display(
+        serving: true, downKbps: 12_000, upKbps: 3_000, observedKbps: 6_000,
+        declaredDownKbps: 4_800, declaredUpKbps: 1_440, ceilingKbps: 7_000,
+        stableKbps: nil, probeNoGain: false
+    )
+    checkEqual(live.downKbps, 12_000, "đang phục vụ ⇒ giữ số down live")
+    checkEqual(live.observedKbps, 6_000, "giữ số đo được")
+    checkEqual(live.morePercent, 46, "mục tiêu 7 Mbps (kẹp trần) / khai 4,8 ⇒ +46%")
+    check(live.atMax == false, "chưa tối đa")
+    checkEqual(live.stableKbps, nil, "chưa STABLE ⇒ mức khoá —")
+
+    let maxed = RampStatus.display(
+        serving: true, downKbps: 9_600, upKbps: 2_880, observedKbps: 9_500,
+        declaredDownKbps: 7_600, declaredUpKbps: 2_280, ceilingKbps: 10_000,
+        stableKbps: 7_600, probeNoGain: false
+    )
+    check(maxed.atMax, "đo 95% trần ⇒ atMax")
+    checkEqual(maxed.morePercent, nil, "atMax ⇒ không hiện % (chỉ hiện 'Đã tối đa')")
+
+    // Kênh dò kết luận `no gain` ⇒ "Đã tối đa" dù chưa biết trần (đúng đường của provider:
+    // `diagnostics()` truyền ceiling = nil cho tới khi có A8/probe).
+    let noGain = RampStatus.display(
+        serving: true, downKbps: 6_000, upKbps: 1_800, observedKbps: 5_800,
+        declaredDownKbps: 5_000, declaredUpKbps: 1_500, ceilingKbps: nil,
+        stableKbps: 5_000, probeNoGain: true
+    )
+    check(noGain.atMax, "probe no gain ⇒ atMax dù trần chưa biết")
+    checkEqual(noGain.morePercent, nil, "no gain ⇒ không hiện % còn lên được")
+    checkEqual(noGain.stableKbps, 5_000, "no gain ⇒ vẫn hiện mức đã khoá (stable)")
+}
+
 print("")
 print("KẾT QUẢ: \(checks - failures)/\(checks) PASS, \(failures) FAIL")
 exit(failures == 0 ? 0 : 1)

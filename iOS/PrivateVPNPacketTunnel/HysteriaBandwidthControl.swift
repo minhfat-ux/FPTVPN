@@ -41,7 +41,8 @@ enum BandwidthControl {
     static let fallbackDownKbps = HysteriaDefaults.downKbps
 
     /// Mức tăng mỗi bậc ramp: ×1,25 khi thấy ĐỈNH vượt số khai ≥15%.
-    static let rampFactor = 1.25
+    /// Một nguồn sự thật với thẻ Diagnostics A10 (`RampStatus.rampFactor`).
+    static let rampFactor = RampStatus.rampFactor
     /// Mức tăng khi số khai bị chặn trần rõ ràng (dùng hết ≥90% số khai trong ≥10s):
     /// mạnh hơn một bậc để đỡ mất nhiều vòng ramp (mỗi vòng phải chờ tunnel rảnh).
     static let rampFactorSaturated = 1.5
@@ -67,7 +68,7 @@ enum BandwidthControl {
     /// transport và tunnel nghẽn cho tới khi chết (đúng ca iPad 19/09/2026: đo 0,5 Mbps mà
     /// `declared up=30000 down=100000`). HẠ số khai là việc CHỮA nên được phép đứt stream đang
     /// mở; TĂNG thì vẫn chỉ áp ở ranh giới rảnh.
-    static let pendingForceAfter: TimeInterval = 5
+    static let pendingForceAfter: TimeInterval = RampStatus.downRampForceSeconds
     /// Một mẫu chỉ tính là "đang chở dữ liệu" khi vượt ngần này (dưới ngưỡng ⇒ coi như rảnh).
     static let busyBytesPerSecond = 2_000
     /// Cho phép DỰNG LẠI transport giữa phiên để áp số khai mới.
@@ -97,9 +98,10 @@ enum BandwidthControl {
     /// chục kbps; dưới mức này thì khai 0 cũng không khác gì.
     static let floorDownKbps = 1_000
     static let floorUpKbps = 500
-    /// Tỉ lệ của số đo được đem đi khai: ≈85%. Chừa ~15% cho chặng tunnel/relay và cho việc
-    /// Brutal pace sát trần (khai đúng bằng goodput đo được là khai vào vùng đã bão hoà).
-    static let declareRatioPct = 85
+    /// Tỉ lệ của số đo được đem đi khai: **80%** (A11 §2h luật 1: "có số đo thật ⇒ khai =
+    /// đo được × 0,8"). Trước đây 85%; hạ về 80 để khởi điểm không bao giờ vống, đúng
+    /// nghiệm thu A11 (`down ≤ 0,8 × goodput`). Chừa ~20% cho chặng tunnel/relay.
+    static let declareRatioPct = RampStatus.declareRatioPct
     /// Dải điều chỉnh theo tỉ lệ `pct = số đo × 100 / số khai đã nhớ` (giống Android):
     ///   ≥150% ⇒ đo VƯỢT XA số khai ⇒ số khai là nút cổ chai ⇒ nhảy lên 85% số đo;
     ///   95–150% ⇒ đo chạm trần số khai ⇒ còn dư ⇒ dò lên 15%;
@@ -470,6 +472,14 @@ extension BandwidthControl {
         private var underrunSince: Date?
         /// Số giây liên tục đang mất gói.
         private var lossSeconds: TimeInterval = 0
+        /// Số mẫu LIÊN TIẾP chứng minh goodput đủ nhanh VÀ loss thấp (A11 §2h luật 2: chỉ ramp
+        /// lên khi loss thấp và goodput chứng minh 2 lần liên tiếp). Mẫu xấu ⇒ đếm lại từ 0.
+        private var rampProofs = 0
+        /// A10 §2g — "mức đã khoá (stable)": số khai đang được chứng minh bền (loss thấp VÀ
+        /// goodput đạt ≥95% số khai) liên tục ≥`rampMinObserved`. Đây là MỐC HIỂN THỊ; việc KHOÁ
+        /// thật (cấm dựng lại vì tốc độ) thuộc máy trạng thái STABLE ở bước sau (DEV_PLAN §3).
+        private(set) var stableDownKbps: Int?
+        private var stableSince: Date?
         private var lastSavedPeakUp = 0
         private var lastSavedPeakDown = 0
         private var rampEvents: Int
@@ -494,33 +504,27 @@ extension BandwidthControl {
             // xem `trustedMeasuredDownKbps`). Đây là chỗ chặn bộ nhớ nhiễm: có bản ghi mà
             // KHÔNG có đỉnh đo thì coi như chưa có bộ nhớ.
             let measured = base.map(BandwidthControl.trustedMeasuredDownKbps) ?? 0
-            // KHÔNG có số đo ⇒ đúng nấc tĩnh cũ (không làm mạng nào chậm hơn trước).
-            var up = BandwidthControl.fallbackUpKbps
-            var down = BandwidthControl.fallbackDownKbps
-            // `profile` (không phải `probe`): số khai đang chạy là NẤC TĨNH. Log phải phân biệt
-            // được "khai tĩnh vì chưa đo" với "đã đo và khai theo số đo" — nếu không thì không
-            // có cách nào nghiệm thu được lỗi "kẹp lên nấc tĩnh" từ log.
-            var reason = BandwidthControl.Reason.profile
-            if measured > 0 {
-                // CÓ số đo ⇒ số khai là f(số đo) (≈85%), không bao giờ kéo lên nấc tĩnh.
-                let chosen = BandwidthControl.clampedDeclaration(
-                    downKbps: BandwidthControl.downKbpsFromMeasurement(
-                        measuredDownKbps: measured,
-                        rememberedDeclaredKbps: base?.lastDownKbps ?? 0
-                    ),
-                    measuredDownKbps: measured
-                )
-                up = chosen.upKbps
-                down = chosen.downKbps
-                reason = chosen.clamped ? .clamp : .memory
+            // A11 (§2h luật 1) — KHAI BÁO AN TOÀN TRƯỚC: đo được ⇒ ×0,8; chưa đo ⇒
+            // min(nấc tĩnh, nhớ ×0,6); loss cao ⇒ bỏ `best` cũ, khởi điểm ≤ 4/1 Mbps.
+            // Hàm thuần `RampStatus.safeDeclaration` là nguồn duy nhất của luật này.
+            let declaration = RampStatus.safeDeclaration(
+                measuredDownKbps: measured,
+                rememberedDownKbps: base?.lastDownKbps ?? 0,
+                staticDownKbps: BandwidthControl.fallbackDownKbps,
+                staticUpKbps: BandwidthControl.fallbackUpKbps,
+                highLoss: base?.lossBackoffSeen ?? false
+            )
+            let reason: Reason
+            switch declaration.reason {
+            // `memory`: số khai là f(số đo đã nhớ), không bao giờ kéo lên nấc tĩnh.
+            case "measured", "memory": reason = .memory
+            // `high-loss`: bản ghi từng mất gói ⇒ khởi động thận trọng (kẹp 4/1 Mbps).
+            case "high-loss": reason = .lossBackoff
+            // `static`: mạng chưa từng có số đo ⇒ đúng nấc tĩnh (đường lùi an toàn).
+            default: reason = .profile
             }
-            // Mạng từng mất gói: khởi động thận trọng hơn một bậc để không lặp lại cảnh bóp.
-            if self.lossSeen {
-                up = max(BandwidthControl.minKbps, Int(Double(up) * BandwidthControl.lossBackoff))
-                down = max(BandwidthControl.minKbps, Int(Double(down) * BandwidthControl.lossBackoff))
-            }
-            self.upKbps = BandwidthControl.clamp(up)
-            self.downKbps = BandwidthControl.clamp(down)
+            self.upKbps = BandwidthControl.clamp(declaration.upKbps)
+            self.downKbps = BandwidthControl.clamp(declaration.downKbps)
             // Bộ nhớ đã đạt mức nào thì coi như vòng ramp trước đã dùng: lần này vẫn phải
             // QUAN SÁT đủ lâu mới tăng tiếp, trừ khi "bootstrap" của phiên đầu (xem `sample`).
             self.rampEvents = base?.rampEvents ?? 0
@@ -530,6 +534,31 @@ extension BandwidthControl {
         /// Số khai lúc này (đọc thuần, không side effect).
         var plan: Plan {
             Plan(upKbps: upKbps, downKbps: downKbps, reason: planReason)
+        }
+
+        /// A10 §2g — dựng số hiển thị cho thẻ Diagnostics từ trạng thái phiên + số byte live do
+        /// provider đo mỗi 1s. `serving == false` (tunnel chưa có byte) ⇒ mọi số `—`, không `0`.
+        func diagnostics(
+            liveDownKbps: Int?,
+            liveUpKbps: Int?,
+            serving: Bool,
+            probeNoGain: Bool
+        ) -> RampStatus.Display {
+            // Trần sức mạng THẬT chưa có ở bước này (A8 `RawLinkProbe` + kênh dò §2c là bước
+            // sau) — trần của engine (`peak × 1,5`) chỉ để CHẶN ramp, không phải sức mạng thật
+            // nên không dùng làm mốc "đã tối đa". Vì vậy truyền `nil`: mục tiêu = đo được × hệ
+            // số ramp, và "Đã tối đa" chỉ bật khi kênh dò kết luận `no gain` (`probeNoGain`).
+            return RampStatus.display(
+                serving: serving,
+                downKbps: liveDownKbps,
+                upKbps: liveUpKbps,
+                observedKbps: everMeasured ? lastAverageDownKbps : nil,
+                declaredDownKbps: downKbps,
+                declaredUpKbps: upKbps,
+                ceilingKbps: nil,
+                stableKbps: stableDownKbps,
+                probeNoGain: probeNoGain
+            )
         }
 
         /// Thay đổi đang chờ đã quá hạn "chờ tunnel rảnh" chưa — provider được phép BUỘC dựng
@@ -625,6 +654,22 @@ extension BandwidthControl {
             // Ghi đỉnh vào bộ nhớ (dùng được cả khi tunnel bị đứt giữa phiên).
             persistPeaksIfNeeded()
 
+            // A10 §2g — mốc "đã khoá (stable)": số khai đang được chứng minh bền (loss thấp +
+            // đo đạt ≥95% số khai) liên tục. Loss quay lại ⇒ bỏ mốc (số phải tụt đúng lúc).
+            let stableNow = lossSeconds <= 0
+                && averageIn >= BandwidthControl.minMeasuredKbps
+                && Double(averageIn) >= Double(downKbps) * RampStatus.atMaxCeilingRatio
+            if stableNow {
+                if stableSince == nil { stableSince = now }
+                if let since = stableSince,
+                   now.timeIntervalSince(since) >= BandwidthControl.rampMinObserved {
+                    stableDownKbps = downKbps
+                }
+            } else {
+                stableSince = nil
+                stableDownKbps = nil
+            }
+
             // (a) HẠ: dấu hiệu mất gói/rớt rõ ràng — phải đủ dài mới hạ.
             if lossSeconds >= BandwidthControl.lossBackoffMinObserved {
                 lossSeconds = 0
@@ -712,6 +757,16 @@ extension BandwidthControl {
             // Chưa ramp lần nào trong phiên ⇒ số khai còn là số mặc định/đã nhớ, chưa từng được
             // chứng minh với mạng này: cho phép ramp ngay khi thấy đường nhanh hơn số khai.
             let bootstrap = rampEvents == 0
+            // A11 §2h luật 2: đếm số mẫu LIÊN TIẾP chứng minh goodput đủ nhanh VÀ loss thấp.
+            // Mẫu xấu (hoặc đang có dấu hiệu mất gói) ⇒ xoá chuỗi, phải chứng minh lại từ đầu.
+            let goodputProof = averageIn >= BandwidthControl.minTrustedMeasuredKbps
+                || (saturatedSpan >= BandwidthControl.rampMinObserved
+                    && averageIn >= BandwidthControl.minMeasuredKbps)
+            if goodputProof, lossSeconds <= 0 {
+                rampProofs += 1
+            } else {
+                rampProofs = 0
+            }
             // Đủ tin để TĂNG: đo được ≥5 Mbps (bằng chứng đường nhanh), HOẶC số đo đã CHẠM số
             // khai đang dùng LIÊN TỤC ≥10s — lúc đó tăng theo TỈ LỆ là an toàn kể cả khi số khai
             // nhỏ (số khai nhỏ đến từ chính lần kẹp theo số đo trước đó, không phải đường chậm;
@@ -723,6 +778,20 @@ extension BandwidthControl {
                 && averageIn >= BandwidthControl.minMeasuredKbps
             guard trustedFast || touchingDeclared else { return nil }
             guard touchingDeclared || peakOverDeclared || (bootstrap && trustedFast) else { return nil }
+            // A11 §2h luật 2 — CẤM ramp lên khi loss cao dù goodput trông cao; và chỉ ramp khi
+            // goodput đã chứng minh LIÊN TIẾP (§2h: 2 lần). LossBackoff ở trên đã xử lý việc hạ.
+            guard RampStatus.canRampUp(
+                lossPercent: lossSeconds > 0 ? 100 : 0,
+                consecutiveProofs: rampProofs
+            ) else {
+                if lossSeconds > 0, goodputProof {
+                    RelayDiagnostics.shared.log(
+                        "bw: ramp bị chặn vì loss cao (§2h luật 2) — đo \(averageIn) kbps, "
+                            + "declared down=\(downKbps)"
+                    )
+                }
+                return nil
+            }
             guard !pendingChange else { return nil }
             let oldUp = upKbps
             let oldDown = downKbps
@@ -800,6 +869,8 @@ extension BandwidthControl {
             pendingSince = nil
             pendingIsDecrease = false
             saturatedSince = nil
+            stableSince = nil
+            stableDownKbps = nil
             // Đo lại từ mốc mới sau khi dựng lại transport (số khai mới ⇒ tốc độ thật có thể
             // cao hơn). Cố ý KHÔNG xoá `everMeasured`: trần suy từ đỉnh cũ vẫn còn giá trị làm
             // mốc an toàn, còn đỉnh mới sẽ tự nâng trần lên khi đo được số cao hơn.

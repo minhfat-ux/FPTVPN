@@ -21,6 +21,8 @@ targets:
     platform: iOS
     sources:
       - iOS/PrivateVPN
+      # A10 §2g — định dạng số live của thẻ Diagnostics (thuần logic, dùng chung với extension).
+      - path: iOS/PrivateVPNPacketTunnel/RampStatus.swift
     info:
       path: iOS/PrivateVPN/Info.plist
       properties:
@@ -136,6 +138,8 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
       # A9: client POST /v1/route-report (hợp đồng server 50ccf55) — thuần logic + gọi mạng.
       - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
+      # A10/A11 §2g/§2h: số live của Diagnostics + luật khai báo an toàn — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/RampStatus.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
@@ -204,6 +208,8 @@ targets:
       # A7/A9: chia đường theo IP TQ + client route-report — thuần logic, test không cần extension.
       - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
       - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
+      # A10/A11: số live + luật khai báo an toàn — thuần logic, test không cần extension.
+      - path: iOS/PrivateVPNPacketTunnel/RampStatus.swift
       # A7: bản bundle dự phòng (test `ChinaRouteBypassTests` đọc qua Bundle).
       - path: docs/routes/cn.txt
         buildPhase: resources
@@ -252,6 +258,8 @@ targets:
       # Hằng số transport hysteria2 (cổng, relay dự phòng, MTU, Brutal kbps) — app dùng
       # để dựng providerConfiguration["hysteria"] cho extension macOS.
       - path: iOS/PrivateVPN/Services/HysteriaDefaults.swift
+      # A10 §2g — định dạng số live của thẻ Diagnostics (thuần logic, dùng chung với extension).
+      - path: iOS/PrivateVPNPacketTunnel/RampStatus.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac
@@ -348,6 +356,8 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
       # A9: client POST /v1/route-report (hợp đồng server 50ccf55) — thuần logic + gọi mạng.
       - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
+      # A10/A11 §2g/§2h: số live của Diagnostics + luật khai báo an toàn — thuần logic.
+      - path: iOS/PrivateVPNPacketTunnel/RampStatus.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift

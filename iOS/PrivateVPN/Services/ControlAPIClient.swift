@@ -119,6 +119,29 @@ struct TunnelStatusReport: Codable, Equatable {
     var txBytes: Int
     /// Transport đang dùng: "relay" (TCP) | "ws-relay" (WebSocket) | "direct" (UDP).
     var transport: String
+    /// A10 §2g — số live của thẻ Diagnostics (extension lấy mẫu mỗi 1s). Trường nào thiếu ⇒
+    /// UI hiện `—`, KHÔNG hiện `0` (§2g luật 1).
+    /// Tốc độ ↓ tức thời (delta byte RX của TUN mỗi 1s).
+    var downKbps: Int?
+    /// Tốc độ ↑ tức thời (delta byte TX của TUN mỗi 1s).
+    var upKbps: Int?
+    /// Số ĐO ĐƯỢC của đường ramp (trung bình trượt goodput, cùng nguồn log `bw: sample observed=`).
+    var observedKbps: Int?
+    /// Số KHAI BÁO hiện tại (Brutal CC) hai chiều.
+    var declaredDownKbps: Int?
+    var declaredUpKbps: Int?
+    /// Mục tiêu kế tiếp = min(đo được × hệ số ramp, trần sức mạng).
+    var targetDownKbps: Int?
+    /// % khai báo còn lên được; nil khi đã tối đa hoặc chưa có số.
+    var morePercent: Int?
+    /// Đã tối đa ở thời điểm này (đo được ≥95% trần, hoặc kênh dò kết luận `no gain`).
+    var atMax: Bool?
+    /// Mức đã khoá (stable) — nil khi chưa vào STABLE.
+    var stableKbps: Int?
+    /// Node đang dùng (đọc từ relay URL), cho dòng "Đường đang dùng".
+    var node: String?
+    /// Tunnel đã chở byte nào chưa; false ⇒ mọi số phải là `—`.
+    var serving: Bool?
 }
 
 /// Dọn trạng thái cũ còn sót lại từ các bản trước để lần Connect đầu tiên sau khi cập
