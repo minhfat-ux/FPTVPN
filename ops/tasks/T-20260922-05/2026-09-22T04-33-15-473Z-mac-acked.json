@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận P0: staple DMG + staple app trong DMG, verify spctl/codesign, test máy Mac khác, phát lại + sha256 mới",
+ "actor": "mac",
+ "at": "2026-09-22T04:33:15.475Z"
+}
