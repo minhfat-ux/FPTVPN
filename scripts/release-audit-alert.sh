@@ -8,6 +8,7 @@
 # Cấu hình:
 #   VPNFLOW_ALERT_SSH   đích SSH có `flowvpn-notify` (mặc định root@165.101.114.162 — node-2).
 #                       Đặt rỗng để chỉ in ra màn hình (dùng khi thử).
+#   VPNFLOW_ALERT_SSH_KEY  khoá SSH (mặc định ~/.ssh/fpt_vpn_node — khoá mặc định của Mac hay bị từ chối).
 # Ví dụ:
 #   python3 scripts/audit-releases.py --interval 21600 --log ~/.vpnflow-release-audit.jsonl \
 #       --alert-cmd 'scripts/release-audit-alert.sh'
@@ -45,10 +46,13 @@ Xem docs/PUBLISHER_PROCESS.md §6/§7 — cập nhật link + set mốc + thông
 echo "$MSG"
 
 SSH_TARGET="${VPNFLOW_ALERT_SSH-root@165.101.114.162}"
+SSH_KEY="${VPNFLOW_ALERT_SSH_KEY:-$HOME/.ssh/fpt_vpn_node}"
 if command -v flowvpn-notify >/dev/null 2>&1; then
   flowvpn-notify --ping "$MSG" || echo "⚠ flowvpn-notify lỗi (bỏ qua)" >&2
 elif [ -n "$SSH_TARGET" ]; then
-  printf '%s' "$MSG" | ssh -o BatchMode=yes -o ConnectTimeout=8 "$SSH_TARGET" 'flowvpn-notify --ping "$(cat)"' \
+  SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=8)
+  [ -f "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
+  printf '%s' "$MSG" | ssh "${SSH_OPTS[@]}" "$SSH_TARGET" 'flowvpn-notify --ping "$(cat)"' \
     || echo "⚠ gửi Telegram qua ${SSH_TARGET} lỗi (bỏ qua)" >&2
 else
   echo "⚠ VPNFLOW_ALERT_SSH rỗng — chỉ in ra màn hình, KHÔNG gửi Telegram" >&2
