@@ -374,7 +374,17 @@ def main() -> int:
         result.unknown_("Mốc latest_version", "server không trả latest_version")
     else:
         relation = compare(args.version, latest)
-        if relation > 0:
+        if args.mode == "post":
+            # Sau upload: mốc PHẢI bằng bản vừa phát. Nhỏ hơn = quên PATCH (đúng ca 1.0.7:
+            # buy page 1.0.7 nhưng latest_version kẹt 1.0.5 nên app không được báo có bản mới).
+            if relation == 0:
+                result.ok("Mốc phiên bản", f"đã bằng bản vừa phát ({latest})")
+            elif relation > 0:
+                result.fail("Mốc phiên bản CHƯA cập nhật",
+                            f"mốc đang {latest} < bản vừa phát {args.version} — PATCH /v1/admin/<platform>-version")
+            else:
+                result.warn("Mốc phiên bản", f"mốc {latest} > bản vừa kiểm {args.version}")
+        elif relation > 0:
             result.ok("Mốc phiên bản", f"đang {latest} → phát {args.version} (tiến)")
         elif relation == 0:
             if args.allow_same:
