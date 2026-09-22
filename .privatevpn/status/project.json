@@ -18,18 +18,18 @@
   "gates_verified": 2,
   "open_bugs": {
     "critical": 0,
-    "high": 0,
-    "medium": 0,
+    "high": 1,
+    "medium": 1,
     "low": 0
   },
   "blockers": [
-    "iOS App Store Archive, Validate, Upload, build processing, and review are not yet verified (iPhone E2E đã PASS).",
+    "iOS phát hành bằng Ad Hoc OTA, KHÔNG qua App Store/TestFlight (bỏ kênh App Store 14/09/2026; as-built docs/ARCHITECTURE.md §B6). Hệ quả còn lại: khách iOS 16+ phải bật Developer Mode một lần; phương án App Store unlisted mới ở mức phân tích, chủ dự án chưa quyết (docs/APP_STORE_UNLISTED_ANALYSIS.md).",
     "macOS connect cần NE provisioning profile (0 profiles; owner tạo trên Apple Developer Portal).",
     "Admin endpoints fail-closed (503) until AUTH_TOKEN is set on the VPS.",
-    "LEGACY_MODE=1 must stay until the authenticated app is released (then set 0).",
+    "LEGACY_MODE=1 vẫn đang bật ở production ⇒ POST /v1/tokens cấp join token KHÔNG cần auth (BUG-20260823-001). Gỡ được sau khi phát hành bản Windows dùng enrollment token + Bearer — lộ trình docs/adr/0005-legacy-mode-fail-closed.md (đang PROPOSED, chờ chủ dự án trả lời 4 câu hỏi).",
     "Subscription source production chưa có: server không verify StoreKit receipt; /v1/enrollment-tokens 403 cho user trả tiền thật (hiện chỉ test-grant)."
   ],
   "last_verified": "2026-08-23",
-  "next_verification": "iOS publish archive/validate/upload; macOS NetworkExtension E2E exit-IP; subscription production source (receipt verify) sau khi App Store duyệt products",
-  "updated": "2026-08-23"
+  "next_verification": "macOS NetworkExtension E2E exit-IP; bản Windows dùng enrollment token + Bearer rồi đặt LEGACY_MODE=0 (ADR-0005 P2→P3); subscription production source (server verify receipt, hiện chỉ test-grant); Android CPU sau khi có máy thật",
+  "updated": "2026-09-22"
 }

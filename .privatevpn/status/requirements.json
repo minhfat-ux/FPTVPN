@@ -7,7 +7,7 @@
       "state": "APPROVED",
       "impl": "IMPLEMENTED",
       "gate": "GATE_4",
-      "evidence": "control-plane/src/auth-store.js + /v1/auth/email/start|verify + /v1/enrollment-tokens + admin users; SMTP mailer (docs/MAILER_RESEND.md, SPF+DMARC verified); iOS/PrivateVPN/LoginView.swift + AuthSessionStore.swift; mac equivalent; production full flow verified 2026-08-23 (OTP email real -> session 30d -> enrollment -> register 201); subscription source still pending App Store product review"
+      "evidence": "control-plane/src/auth-store.js + /v1/auth/email/start|verify + /v1/enrollment-tokens + admin users; SMTP mailer (docs/MAILER_RESEND.md, SPF+DMARC verified); iOS/PrivateVPN/LoginView.swift + AuthSessionStore.swift; mac equivalent; production full flow verified 2026-08-23 (OTP email real -> session 30d -> enrollment -> register 201); subscription source still pending App Store product review; LƯU Ý 2026-09-22: production VẪN bật LEGACY_MODE=1 nên /v1/tokens (không auth) song song còn mở — BUG-20260823-001, docs/adr/0005-legacy-mode-fail-closed.md"
     },
     {
       "id": "FR-DEVICE-001",
@@ -199,5 +199,5 @@
       "gate": "GATE_0"
     }
   ],
-  "updated": "2026-08-23"
+  "updated": "2026-09-22"
 }
