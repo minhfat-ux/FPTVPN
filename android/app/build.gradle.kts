@@ -41,8 +41,8 @@ android {
         applicationId = "com.privatevpn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.4.0"
+        versionCode = 21
+        versionName = "1.4.1"
     }
 
     /**
@@ -96,6 +96,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Bản debug cài SONG SONG với bản phát hành (khác applicationId) — nhờ vậy test trên máy
+            // thật mà KHÔNG phải gỡ app khách đang dùng (mất đăng nhập) và không cần keystore release
+            // (keystore nằm ngoài repo, trên máy Mac). Bản phát hành không bị ảnh hưởng gì.
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
