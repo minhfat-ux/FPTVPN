@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "Kiểm tra máy Mac xong (owner bus #203). cmd=sw_vers; pmset -g; df -h; pgrep -fl; xcrun devicectl list devices; plutil; git. KQ: macOS 26.5.2 (25F84) arm64 RAM8GB AC100%; harness OK: dsh web pid10671 + watcher pid10681 poll20s da bat bus#203 + selfdefense pid22528; bus health ok count199 latest204. Build toi nay XONG: iOS IPA FlowVPN.ipa 1.4.1/18 sha256 07bfd10c489b3b49305adf1e... @.worktrees/hotel-ipa/build/ios-adhoc-export/ipa/; macOS VPNFlow.app 1.4.1/15 46MB @.worktrees/hotel-test/build/mac-dd/Build/Products/Release/. CANH BAO: dia /Data dung 200GB/228GB chi con 2.7GB (99%); devicectl thay iPhone 14 Pro Max + iPad nhung state=unavailable (chua cam cap). Git: nhanh flowgpt local phan ky ahead33/behind81 nen push truc tiep bi tu choi, phai dung worktree du phong. Bao cao da gui chu du an qua connector bus #212 (to=owner).",
+ "actor": "mac",
+ "at": "2026-09-22T11:14:50.768Z"
+}
