@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "BUILD XONG 2 NEN, CHUA CAI DUOC vi 2 chan ngoai pham vi: (1) sandbox workspace-write khong cho ghi /Applications (ditto -> Operation not permitted; xin danger-full-access bi tu choi 'no approval channel'); (2) iPhone 'Minh's iphone' 33987D6F-5424-58C7-9CFC-7A0B1F60C717 devicectl=unavailable -> error 1011, CHUA CAM CAP. ARTIFACT SAN: macOS VPNFlow.app 1.4.1/15 (46MB) .worktrees/hotel-test/build/mac-dd/Build/Products/Release/VPNFlow.app; IPA Ad Hoc 1.4.1/18 (8115652 B, sha256 0cb3ed72492dbf053cf655eb88766c2df937ed38203b30bccbdf976a3c4121f5) .worktrees/hotel-test/build/VPNFlow-1.4.1-18-adhoc.ipa. Cong chan iOS DAT (keychain .shared tuong minh app+appex, profile 8 UDID gom may test). Build tu branch mac/hotel-test @4d6b4f6 tren origin/main 72a4d63, co du 479a6d7 + c5d7564; them 9253e0a (keychain resign) + ae74e09 (bump 1.4.1/18 + macOS 15) + 4d6b4f6 (sua 2 loi compile cua main: macOS AppTextKey thieu about/version/latestOnServer + #Preview boc #if DEBUG). Hysteria dung ban build hom nay (3 slice).",
+ "actor": "mac",
+ "at": "2026-09-22T11:15:16.385Z"
+}
