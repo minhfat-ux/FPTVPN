@@ -8,6 +8,12 @@ enum AppVersionService {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
 
+    /// Build/bundle number đang cài (`CFBundleVersion`) — hiện cạnh version ở mục About để
+    /// biết chắc máy đang chạy đúng bản đã publish, không đoán theo tên file cài.
+    static var currentBuild: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+    }
+
     static func fetch(from baseURL: URL?) async throws -> AppVersionInfo {
         guard let baseURL else {
             throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")

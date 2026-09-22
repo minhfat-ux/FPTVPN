@@ -182,14 +182,23 @@ def version_macos(path: str) -> dict:
         if attach.returncode != 0:
             return {"error": f"hdiutil attach lỗi: {(attach.stderr or attach.stdout).strip()[:200]}"}
         for root, _dirs, files in os.walk(mount):
-            if root.endswith(".app") and "Info.plist" in files:
-                with open(os.path.join(root, "Info.plist"), "rb") as handle:
+            if not root.endswith(".app"):
+                continue
+            # Bundle macOS đặt plist ở Contents/Info.plist; bundle kiểu iOS đặt ngay .app/Info.plist.
+            # Trước 22/09 chỉ tìm .app/Info.plist nên cổng macOS LUÔN báo "không thấy" trên DMG thật.
+            candidates = [
+                os.path.join(root, "Contents", "Info.plist"),
+                os.path.join(root, "Info.plist"),
+            ]
+            info_path = next((p for p in candidates if os.path.isfile(p)), None)
+            if info_path:
+                with open(info_path, "rb") as handle:
                     info = plistlib.load(handle)
                 return {
                     "version": info.get("CFBundleShortVersionString"),
                     "build": str(info.get("CFBundleVersion") or ""),
                 }
-        return {"error": "không thấy .app/Info.plist trong DMG"}
+        return {"error": "không thấy .app/Contents/Info.plist (hoặc .app/Info.plist) trong DMG"}
     finally:
         subprocess.run(["hdiutil", "detach", mount, "-quiet"], capture_output=True, text=True)
         shutil.rmtree(mount, ignore_errors=True)
@@ -263,9 +272,14 @@ def download_for_post(platform: str, version: str, path: str | None) -> tuple[st
     else:
         url = f"{BASE}" + DOWNLOAD_ROUTES[platform]
     target = os.path.join(tempfile.gettempdir(), os.path.basename(url.split("?")[0]) or "artifact.bin")
+    # PHẢI gửi kèm UA thật: `urlretrieve` mặc định dùng `Python-urllib/...` nên Cloudflare trả 403
+    # (đã gặp thật 22/09: `--mode post` không tải được DMG, trong khi `http_json`/`http_head` thì được
+    # vì đã set UA). Tải theo luồng để không nạp cả file vào RAM.
+    request = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
-        urllib.request.urlretrieve(url, target)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+        with urllib.request.urlopen(request, timeout=120) as response, open(target, "wb") as handle:
+            shutil.copyfileobj(response, handle)
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
         return None, f"tải {url} lỗi: {exc}"
     return target, ""
 

@@ -36,6 +36,13 @@
 - **macOS**: route `/v1/downloads/mac` phát DMG **21.617.309 B** (bản **1.3.3 build 13** theo nhật ký §6)
   trong khi mốc `latest_mac_version` quảng bá **1.4.0**, và `minimum_mac_version = 0.0.0` nên không ai
   được nhắc cập nhật ⇒ khách tải "1.4.0" nhưng nhận 1.3.3. Tin tên file / tin mốc là **không thấy**.
+  - **ĐÍNH CHÍNH 22/09/2026 (Mac chạy cổng §5b, đọc TỪ TRONG DMG)**: file đang phát
+    (21.617.309 B · sha256 `9d05f271232b75ddbae281059ff48355d5162032cb2a86114fafc130bfd54597`,
+    giống nhau trên `meetflowai.site` và `t1.meetflowai.site`) chứa **1.4.0 / build 14**
+    (`com.privatevpn.mac`), **không** phải 1.3.3/13 như suy từ size + nhật ký §6 ⇒ mốc
+    `latest_mac_version=1.4.0` **đang khớp** bản phát. Bài học rộng hơn: đừng tin cả size/nhật ký,
+    luôn đọc version từ trong artifact (đúng tinh thần cổng 1c/5b). Cổng macOS cũng đã sửa để đọc
+    `VPNFlow.app/Contents/Info.plist` (trước chỉ tìm `.app/Info.plist` nên luôn báo "không thấy").
 - **Windows**: bộ cài tên `VPNFlow-Setup-1.4.1.exe` nhưng app bên trong khai `FileVersion = 1.0.0.0`
   (`windows/installer/build.ps1` giải version **sau** bước `dotnet publish` nên không truyền
   `/p:Version`) ⇒ không cách nào biết bản đã cài là bản nào. Đã sửa thứ tự + thêm cổng ngay trong
@@ -121,6 +128,7 @@ python3 scripts/send-reinstall-guide.py --all-stuck --test   # gửi thử tới
 | 2026-09-18 | iOS | 1.3.3 (14) | bản trước, đã được thay bằng 1.4.0 |
 | 2026-09-18 | Android | 1.3.9 | trước 1.4.0 |
 | 2026-09-20 | macOS | 1.3.3 (13) | **Ký Developer ID + notarize + staple** (DMG 21.617.309 B) → khách mở không cảnh báo · email 3 ngôn ngữ gửi 17/17 khách |
+| 2026-09-22 | macOS | 1.4.0 (14) | **Đo lại bằng cổng chặn §5b**: DMG đang phát (21.617.309 B · sha256 `9d05f271…`) đọc từ trong file ra `CFBundleShortVersionString=1.4.0`, `CFBundleVersion=14` → **khớp** mốc `latest_mac_version=1.4.0`; đính chính mục 1d |
 
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
