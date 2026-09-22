@@ -132,6 +132,10 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
       # Đo goodput thật bằng cửa sổ trượt 12 s / mẫu 1 s — thuần logic.
       - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
+      # A7: dải IP TQ đi thẳng (excludedRoutes) — thuần logic parse + tải nền, không chặn connect.
+      - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
+      # A9: client POST /v1/route-report (hợp đồng server 50ccf55) — thuần logic + gọi mạng.
+      - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
@@ -192,6 +196,9 @@ targets:
       # Thang nâng cấp đường/node + đồng hồ goodput: cùng lý do (thuần logic, test không cần extension).
       - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
       - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
+      # A7/A9: chia đường theo IP TQ + client route-report — thuần logic, test không cần extension.
+      - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
+      - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
     dependencies:
       - target: PrivateVPN
     settings:
@@ -327,6 +334,10 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/TransportLadder.swift
       # Đo goodput thật bằng cửa sổ trượt 12 s / mẫu 1 s — thuần logic.
       - path: iOS/PrivateVPNPacketTunnel/GoodputMeter.swift
+      # A7: dải IP TQ đi thẳng (excludedRoutes) — thuần logic parse + tải nền, không chặn connect.
+      - path: iOS/PrivateVPNPacketTunnel/ChinaRouteBypass.swift
+      # A9: client POST /v1/route-report (hợp đồng server 50ccf55) — thuần logic + gọi mạng.
+      - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift

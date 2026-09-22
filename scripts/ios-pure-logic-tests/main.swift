@@ -26,6 +26,24 @@ func checkEqual<T: Equatable>(_ lhs: T, _ rhs: T, _ message: String) {
     check(lhs == rhs, "\(message) (got \(lhs), want \(rhs))")
 }
 
+/// Khoá server TỪ CHỐI trong body `/v1/route-report` (luật riêng tư §2f.3).
+let forbiddenRouteKeys: Set<String> = [
+    "ssid", "bssid", "ip", "ip_address", "email", "phone", "password", "token",
+    "carrier_raw", "hostname", "url", "payload", "content",
+]
+
+func containsForbiddenKey(_ value: Any) -> Bool {
+    if let dict = value as? [String: Any] {
+        for (key, child) in dict {
+            if forbiddenRouteKeys.contains(key.lowercased()) { return true }
+            if containsForbiddenKey(child) { return true }
+        }
+    } else if let array = value as? [Any] {
+        return array.contains { containsForbiddenKey($0) }
+    }
+    return false
+}
+
 let t0 = Date(timeIntervalSince1970: 1_000_000)
 
 // MARK: - LivenessWatchdog (A5)
@@ -273,6 +291,136 @@ do {
     _ = busy.addSample(now: t0.addingTimeInterval(8), fromGoBytes: 20_000, toGoBytes: 0)
     check(!busy.isBusy, "hết tải ⇒ không bận")
     check(busy.isIdle(for: 5, now: t0.addingTimeInterval(8)), "im 7s ⇒ rảnh ≥5s (điều kiện mở kênh dò)")
+}
+
+// MARK: - RouteReporter (A9, hợp đồng /v1/route-report)
+
+print("RouteReporter — A9: gửi số đo lên server, chỉ đổi khi server bảo")
+
+do {
+    let hash = RouteReporter.identityHash("wifi|Unicom|router-1")
+    checkEqual(hash.count, 64, "identity_hash là sha256 hex 64 ký tự")
+    check(hash.allSatisfy { $0.isHexDigit }, "identity_hash toàn hex")
+    check(RouteReporter.identityHash("a") != RouteReporter.identityHash("b"), "định danh khác ⇒ băm khác")
+    checkEqual(RouteReporter.identityHash("x"), RouteReporter.identityHash("x"), "băm ổn định")
+
+    let report = RouteReporter.Report(
+        platform: "ios",
+        appVersion: "1.5.0",
+        deviceId: "dev-1",
+        credential: "cred-1",
+        network: .init(type: .wifi, identityHash: hash, rawKbps: 21_300),
+        current: .init(
+            transport: .ws, node: "node-2", port: 8443,
+            goodputKbps: 6_400, stableKbps: 6_400, rttMs: 1_800, reconnects: 2
+        ),
+        candidates: [
+            .init(transport: .tcp, port: 8443, node: nil, connectMs: 120, rttMs: nil, result: "ok"),
+            .init(transport: .udp, port: 8443, node: nil, connectMs: -1, rttMs: nil, result: "fail"),
+            .init(transport: .ws, port: nil, node: "node-1", connectMs: nil, rttMs: 1_500, result: nil),
+        ]
+    )
+    let body = RouteReporter.body(report)
+    checkEqual(body["platform"] as? String, "ios", "platform")
+    checkEqual(body["app_version"] as? String, "1.5.0", "app_version")
+    checkEqual(body["device_id"] as? String, "dev-1", "device_id")
+    checkEqual(body["credential"] as? String, "cred-1", "credential")
+    let network = body["network"] as? [String: Any]
+    checkEqual(network?["identity_hash"] as? String, hash, "network gửi BĂM, không phải giá trị thô")
+    checkEqual(network?["raw_kbps"] as? Double, 21_300, "raw_kbps")
+    let currentBody = body["current"] as? [String: Any]
+    checkEqual(currentBody?["transport"] as? String, "ws", "current.transport")
+    checkEqual(currentBody?["goodput_kbps"] as? Double, 6_400, "current.goodput_kbps")
+    checkEqual((body["candidates"] as? [[String: Any]])?.count, 3, "candidates đủ 3")
+    check(!containsForbiddenKey(body), "body KHÔNG chứa khoá định danh thô (server từ chối)")
+
+    let many = RouteReporter.Report(
+        platform: "ios", appVersion: "1", deviceId: "d", credential: "c",
+        network: .init(type: .cell, identityHash: hash, rawKbps: 0),
+        current: .init(
+            transport: .udp, node: nil, port: nil,
+            goodputKbps: 0, stableKbps: nil, rttMs: nil, reconnects: 0
+        ),
+        candidates: Array(
+            repeating: RouteReporter.Candidate(
+                transport: .tcp, port: 1, node: nil, connectMs: nil, rttMs: nil, result: nil
+            ),
+            count: 9
+        )
+    )
+    checkEqual((RouteReporter.body(many)["candidates"] as? [[String: Any]])?.count, 6, "cắt candidates còn 6")
+
+    let okData = Data(
+        #"{"recommended":{"transport":"tcp","port":8443,"node":"node-1","reason":"ws la nút thắt"},"ttl_s":1800}"#.utf8
+    )
+    let decoded = RouteReporter.decode(okData)
+    checkEqual(decoded?.recommended?.transport, .tcp, "decode transport")
+    checkEqual(decoded?.recommended?.port, 8443, "decode port")
+    checkEqual(decoded?.ttlS, 1_800, "decode ttl")
+    check(RouteReporter.decode(Data(#"{"recommended":null,"ttl_s":1800}"#.utf8))?.recommended == nil,
+          "recommended:null ⇒ giữ nguyên")
+    check(RouteReporter.decode(Data("not json".utf8)) == nil, "response hỏng ⇒ nil")
+
+    let received = t0
+    check(
+        RouteReporter.shouldApply(decoded, current: report.current, receivedAt: received, now: received.addingTimeInterval(10)),
+        "khác đường + ttl còn hạn ⇒ ĐỔI"
+    )
+    let samePath = RouteReporter.Current(
+        transport: .tcp, node: "node-1", port: 8443,
+        goodputKbps: 1, stableKbps: nil, rttMs: nil, reconnects: 0
+    )
+    check(
+        !RouteReporter.shouldApply(decoded, current: samePath, receivedAt: received, now: received.addingTimeInterval(10)),
+        "trùng đường đang dùng ⇒ KHÔNG đổi"
+    )
+    check(
+        !RouteReporter.shouldApply(decoded, current: report.current, receivedAt: received, now: received.addingTimeInterval(1_801)),
+        "ttl hết hạn ⇒ KHÔNG đổi"
+    )
+    check(
+        !RouteReporter.shouldApply(nil, current: report.current, receivedAt: received, now: received),
+        "server không trả lời ⇒ app tự quyết"
+    )
+
+    var pacer = RouteReporter.Pacer()
+    let now = Date(timeIntervalSince1970: 2_000_000)
+    check(pacer.shouldSend(deviceId: "d", now: now), "lần đầu gửi")
+    pacer.markSent(deviceId: "d", now: now)
+    check(!pacer.shouldSend(deviceId: "d", now: now.addingTimeInterval(299)), "chưa đủ 5 phút ⇒ không gửi")
+    check(pacer.shouldSend(deviceId: "d", now: now.addingTimeInterval(300)), "đủ 5 phút ⇒ gửi")
+    check(pacer.shouldSend(deviceId: "other", now: now.addingTimeInterval(1)), "thiết bị khác có nhịp riêng")
+}
+
+// MARK: - ChinaRouteBypass (A7, dải IP TQ đi thẳng)
+
+print("ChinaRouteBypass — A7: dải IP TQ đi thẳng, không qua tunnel")
+
+do {
+    let sample = """
+    # comment
+    1.0.1.0/24
+    1.0.1.5/24        # chuẩn hoá về .0
+    1.0.2.0/23
+
+    0.0.0.0/0
+    not-a-cidr
+    1.0.8.0/33
+    1.0.8.0/21
+    """
+    let parsed = ChinaRouteBypass.parse(sample)
+    checkEqual(parsed, ["1.0.1.0/24", "1.0.2.0/23", "1.0.8.0/21"], "bỏ comment/trùng/prefix 0/sai, chuẩn hoá")
+    checkEqual(ChinaRouteBypass.prefixMask(24), "255.255.255.0", "mask /24")
+    checkEqual(ChinaRouteBypass.prefixMask(8), "255.0.0.0", "mask /8")
+    checkEqual(ChinaRouteBypass.prefixMask(32), "255.255.255.255", "mask /32")
+    checkEqual(ChinaRouteBypass.normalizedCIDR("192.168.1.7/24"), "192.168.1.0/24", "chuẩn hoá địa chỉ")
+    check(ChinaRouteBypass.normalizedCIDR("300.1.1.1/24") == nil, "octet > 255 ⇒ nil")
+    let capped = ChinaRouteBypass.parse(
+        (1...10).map { "10.0.\($0).0/24" }.joined(separator: "\n"),
+        limit: 3
+    )
+    checkEqual(capped.count, 3, "tôn trọng trần số dải")
+    checkEqual(ChinaRouteBypass.uint32ToIPv4(ChinaRouteBypass.ipv4ToUInt32("1.2.3.4")!), "1.2.3.4", "round-trip IPv4")
 }
 
 print("")

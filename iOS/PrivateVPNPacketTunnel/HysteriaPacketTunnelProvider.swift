@@ -170,6 +170,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Cấu hình transport của phiên — cần giữ lại để dựng lại y nguyên khi chỉ đổi số khai.
     private var currentOptions: HysteriaTransport.Options?
 
+    // MARK: - A7: dải IP Trung Quốc đi thẳng (xem `ChinaRouteBypass`)
+
+    /// Dải IP TQ đã nhớ, đưa thêm vào `excludedRoutes` của utun. Mặc định rỗng: nạp ở nền SAU
+    /// khi tunnel lên (`startChinaBypass`) để không nằm trên đường connect.
+    private var chinaExcludedRoutes: [NEIPv4Route] = []
+
     // MARK: - Vòng đời
 
     override func startTunnel(
@@ -339,6 +345,48 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         startTrafficSupervisor()
         startBandwidthSampling()
         startLivenessWatchdog()
+        startChinaBypass()
+    }
+
+    /// A7 — nạp dải IP Trung Quốc ở LUỒNG NỀN rồi áp lại `excludedRoutes`.
+    ///
+    /// Chỉ chạy SAU khi tunnel đã lên (`bringUp` gọi sau `completeStart`), không bao giờ nằm
+    /// trên đường connect: bài học Windows 1.0.4 "connecting mãi" khi thêm 5.494 route đồng bộ
+    /// trong lúc kết nối (`.privatevpn/reports/2026-09-18-windows-1.0.5-handoff.md` §1).
+    /// Bước 1 dùng bản đã NHỚ (không cần mạng); bước 2 tải bản mới; chỉ áp lại khi số dải đổi.
+    private func startChinaBypass() {
+        #if os(iOS)
+        let session = currentSession
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let cached = ChinaRouteBypass.excludedRoutes(from: ChinaRouteBypass.cached())
+            self.queue.async {
+                guard session == self.currentSession else { return }
+                self.applyChinaRoutes(cached)
+            }
+            ChinaRouteBypass.refresh { [weak self] cidrs in
+                guard let self else { return }
+                let fresh = ChinaRouteBypass.excludedRoutes(from: cidrs)
+                self.queue.async {
+                    guard session == self.currentSession else { return }
+                    self.applyChinaRoutes(fresh)
+                }
+            }
+        }
+        #endif
+    }
+
+    /// Áp danh sách dải IP TQ vào settings đang chạy (chạy trên `queue`). Rỗng/không đổi ⇒ thôi.
+    private func applyChinaRoutes(_ routes: [NEIPv4Route]) {
+        #if os(iOS)
+        guard !routes.isEmpty, routes.count != chinaExcludedRoutes.count else { return }
+        chinaExcludedRoutes = routes
+        guard let options = currentOptions else { return }
+        let applied = applySettings(networkSettings(options: options))
+        RelayDiagnostics.shared.log(
+            "china: A7 nạp \(routes.count) dải IP TQ vào excludedRoutes (áp lại settings=\(applied))"
+        )
+        #endif
     }
 
     /// Dựng transport hysteria2 với fd utun ĐANG dùng của NetworkExtension.
@@ -816,12 +864,15 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         // router/máy in trong nhà mất kết nối. Giống bản iOS trước đây
         // (`PacketTunnelProvider.startHysteriaSession`). macOS cố ý KHÔNG đặt danh sách này:
         // ở đó đã đo excludedRoutes làm lệch route của NE (xem chú thích ở `ipv4.includedRoutes`).
-        ipv4.excludedRoutes = [
+        var excluded: [NEIPv4Route] = [
             NEIPv4Route(destinationAddress: "10.0.0.0", subnetMask: "255.0.0.0"),
             NEIPv4Route(destinationAddress: "172.16.0.0", subnetMask: "255.240.0.0"),
             NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),
         ]
+        // A7 — app TQ đi đường riêng: dải IP TQ (đã nạp ở nền) đi thẳng, không qua tunnel.
+        excluded.append(contentsOf: chinaExcludedRoutes)
+        ipv4.excludedRoutes = excluded
         #endif
         settings.ipv4Settings = ipv4
         settings.dnsSettings = NEDNSSettings(servers: HysteriaDefaults.dnsServers)
