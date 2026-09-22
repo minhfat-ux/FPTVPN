@@ -307,7 +307,9 @@ function cmdTag() {
     `verify: ${row.verified_by ?? "chua ghi"}${row.evidence ? ` · ${row.evidence}` : ""}`,
     `ghi so: ${row.at} boi ${row.recorded_by}`,
   ].join("\n");
-  execFileSync("git", ["tag", "-a", tag, "-m", message], { cwd: REPO, stdio: ["ignore", "inherit", "inherit"] });
+  // Phải truyền row.commit: nếu chỉ `git tag -a <tag> -m <message>` thì tag neo vào HEAD (commit publish),
+  // sai với luật §2 docs/VERSIONING.md ("tag trỏ commit dùng để build, không trỏ commit publish").
+  execFileSync("git", ["tag", "-a", "-m", message, tag, row.commit], { cwd: REPO, stdio: ["ignore", "inherit", "inherit"] });
   appendRow({
     at: new Date().toISOString(),
     platform,
