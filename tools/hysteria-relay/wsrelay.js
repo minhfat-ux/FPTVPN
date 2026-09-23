@@ -93,7 +93,8 @@ wss.on('connection', (ws, req) => {
   // tăng đều — trong khi `relay-cf-vn2hy`/`vn2wg` (WS_UDP_HOST=127.0.0.1) chạy tốt
   // (`udpErr=0`, đã chuyển GB). Hệ quả với khách: bắt tay WS xong nhưng gói không tới
   // hysteria ⇒ relay đóng `1011` ⇒ client rơi sang relay khác, đường node-1 không bao giờ dùng được.
-  const upstreamIsLoopback = UDP_HOST === '127.0.0.1' || UDP_HOST === '::1' || UDP_HOST === 'localhost';
+  // Socket là `udp4`, nên chỉ `127.0.0.1`/`localhost` là upstream loopback hợp lệ.
+  const upstreamIsLoopback = UDP_HOST === '127.0.0.1' || UDP_HOST === 'localhost';
   udp.bind(0, upstreamIsLoopback ? '127.0.0.1' : '0.0.0.0', () => {
     log(`#${id} MỞ từ ${ip} local_udp=${udp.address().port} -> ${UDP_HOST}:${UDP_PORT}`);
   });
