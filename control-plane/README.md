@@ -34,6 +34,7 @@ and provisions the peer on the WireGuard node (Tailscale-style).
 | `FROM_EMAIL` | `FlowVPN <no-reply@meetflowai.site>` | sender address used for OTP emails |
 | `NODE_ENV` | `development` | `production` gates real SMTP sends and removes `debug_code` from `/v1/auth/email/start` responses; in dev the OTP code is returned as `debug_code` and no email is sent |
 | `LEGACY_MODE` | `1` | **Temporary App Store review compat.** `1` keeps the pre-auth flow working: `POST /v1/tokens` issues one-time join tokens (30-min, single-use) and `/v1/peers/register` accepts unauthenticated register with a join token. Set `0` after the authenticated app build (email login + enrollment tokens) is released to fail closed (410/401). Server logs a warning while `1`. |
+| `DEVICE_LIMIT_EXEMPT_EMAILS` | (empty) | Comma-separated emails exempt from the per-account device cap (`MAX_DEVICES_PER_USER`, same comma/trim/lowercase parsing as `DEBUG_CODE_EMAILS`). An exempt account is never rejected with `device_limit_reached` in `/v1/devices/claim` or `/v1/peers/register`, and each exemption is logged. Unset ⇒ nobody is exempt. |
 
 ## Endpoints
 
