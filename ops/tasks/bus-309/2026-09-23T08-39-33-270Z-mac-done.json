@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=1824db4 (origin/main): docs/RELEASE_NOTES_1.4.5.md + scripts/send-windows-1.4.5-announcement.py + evidence/2026-09-23-windows-1.4.5-announcement.log; cmd='ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162 python3 /root/send-windows-1.4.5-announcement.py' -> 1/1 thanh cong 0 loi; nguoi nhan = 1 khach Windows camvinh@gmail.com (loc platform=windows/win32 + co subscription; bo qua chu du an minhnb2@fpt.com va 2 thiet bi khong gan user); Resend id 01a0cd67-7996-76cf-ae6f-46416c6ec04f, --verify -> delivered; test ALERT_EMAIL minhnb2@me.com OK truoc khi gui; artifact sha256 d6db58cb4427ee36cb6ca2db34c004df5b3f8f3aed898424fba72538631167a2 (52.789.954 B) khop o CA 2 docroot; link /dl HTTP 200 content-length 52789954; /buy 200; tag windows-v1.4.5 -> db6cf1c; email KHONG hua het canh bao Windows (ban chua ky) - co muc 'Luu y' noi thang bo cai chua ky + xin khach bao lai neu bi chan",
+ "actor": "mac",
+ "at": "2026-09-23T08:39:33.273Z"
+}
