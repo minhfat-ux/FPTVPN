@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { IPPool } from "./ip-pool.js";
 import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
-import { deviceLimitDecision } from "./device-limit.js";
+import { deviceLimitDecision, isDeviceLimitExempt, parseExemptEmails } from "./device-limit.js";
 import { applyDeviceReplace } from "./device-replace.js";
 import { createGeoLookup, isPublicIp } from "./geoip.js";
 import { versionPayloadFor, wantsLegacyApk, iosInstallManifest } from "./app-version.js";
@@ -160,6 +160,10 @@ const AUTH_DEV_GRANT_SUBSCRIPTION = process.env.AUTH_DEV_GRANT_SUBSCRIPTION === 
 //   (so /v1/enrollment-tokens stops returning 403 for the test account).
 const DEBUG_CODE_EMAILS = parseEmailList(process.env.DEBUG_CODE_EMAILS);
 const GRANT_SUB_EMAILS = parseEmailList(process.env.GRANT_SUB_EMAILS);
+// Accounts exempt from the per-account device cap (owner/dev accounts). Same
+// comma/trim/lowercase parsing as the two lists above; unlike them this one is
+// meant to work in production too. Unset/empty => nobody is exempt.
+const DEVICE_LIMIT_EXEMPT_EMAILS = parseExemptEmails(process.env.DEVICE_LIMIT_EXEMPT_EMAILS);
 // DEV_LOGIN_CODE: pin the email login code for the DEBUG_CODE_EMAILS accounts
 // (e.g. the App Review demo account `review@meetflowai.site`). App Review cannot
 // read email, so the reviewer needs a code that is always the same — it is
@@ -4919,6 +4923,7 @@ app.post("/v1/peers/register", async (req, res) => {
         body: req.body,
         userId: enrollment.userId,
         apiShape: "v1",
+        userEmail: auth.user.email,
       });
       await touchDeviceClientIp(result.body?.peer_id ?? result.body?.device?.id ?? null, req);
       return res.status(result.status).json(result.body);
@@ -5041,7 +5046,9 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
     // already over the limit (e.g. devices added before this rule) must log out
     // the old ones before it can connect again.
     const isMine = Boolean(existing && existing.active !== false);
-    const { blocked } = deviceLimitDecision({ activeCount: mine.length, isOwnDevice: isMine, max: MAX_DEVICES_PER_USER });
+    const exempt = isDeviceLimitExempt(req.userAuth.user.email, DEVICE_LIMIT_EXEMPT_EMAILS);
+    if (exempt) console.log(`device limit: user=${req.userAuth.user.email} được MIỄN (env)`);
+    const { blocked } = deviceLimitDecision({ activeCount: mine.length, isOwnDevice: isMine, max: MAX_DEVICES_PER_USER, exempt });
     if (blocked) {
       console.log(`device limit: user=${userId} has ${mine.length} active devices (this device known=${isMine}), claim rejected`);
       return res.status(403).json({
@@ -5278,7 +5285,7 @@ async function selectExitNode(id) {
 // freed immediately, which is how a user "logs out" an old phone/tablet/PC.
 const MAX_DEVICES_PER_USER = Number(process.env.MAX_DEVICES_PER_USER || 3);
 
-async function registerDeviceWithPayload({ body, userId, apiShape }) {
+async function registerDeviceWithPayload({ body, userId, apiShape, userEmail }) {
   const publicKey = body?.wireguard_public_key ?? body?.publicKey;
   const deviceName = body?.name ?? body?.deviceName;
   const platform = body?.platform;
@@ -5320,7 +5327,9 @@ async function registerDeviceWithPayload({ body, userId, apiShape }) {
   if (userId) {
     const ownedActive = device && device.userId === userId && device.active !== false;
     const mine = (await store.devicesByUserId(userId)).filter((d) => d.active !== false);
-    const { blocked, code } = deviceLimitDecision({ activeCount: mine.length, isOwnDevice: ownedActive, max: MAX_DEVICES_PER_USER });
+    const exempt = isDeviceLimitExempt(userEmail, DEVICE_LIMIT_EXEMPT_EMAILS);
+    if (exempt) console.log(`device limit: user=${userEmail} được MIỄN (env)`);
+    const { blocked, code } = deviceLimitDecision({ activeCount: mine.length, isOwnDevice: ownedActive, max: MAX_DEVICES_PER_USER, exempt });
     if (blocked) {
       const error = new Error(
         `You can use VPNFlow on up to ${MAX_DEVICES_PER_USER} devices. Log out the devices below to continue.`,

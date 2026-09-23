@@ -22,6 +22,8 @@
 #   GRANT_SUB_EMAILS  (optional) comma-separated emails that get a test
 #                     subscription on verify (so the App Review account has
 #                     full premium access)
+#   DEVICE_LIMIT_EXEMPT_EMAILS (optional) comma-separated emails exempt from the
+#                     per-account device cap (owner/dev accounts)
 set -euo pipefail
 
 WG_INTERFACE="${WG_INTERFACE:-wg0}"
@@ -135,6 +137,7 @@ Environment=TLS_CERT_FILE=${TLS_CERT_FILE:-}
 Environment=TLS_KEY_FILE=${TLS_KEY_FILE:-}
 Environment=DEBUG_CODE_EMAILS=${DEBUG_CODE_EMAILS:-}
 Environment=GRANT_SUB_EMAILS=${GRANT_SUB_EMAILS:-}
+Environment=DEVICE_LIMIT_EXEMPT_EMAILS=${DEVICE_LIMIT_EXEMPT_EMAILS:-}
 
 [Install]
 WantedBy=multi-user.target
@@ -157,4 +160,5 @@ echo "AUTH_TOKEN          : (set)"
 echo "Admin allowed IPs   : ${ADMIN_ALLOWED_IPS:-127.0.0.1,::1 only}"
 echo "Debug-code emails   : ${DEBUG_CODE_EMAILS:-(none)}"
 echo "Grant-sub emails    : ${GRANT_SUB_EMAILS:-(none)}"
+echo "Device-limit exempt : ${DEVICE_LIMIT_EXEMPT_EMAILS:-(none)}"
 echo "In the iOS app set: endpoint=${PUBLIC_IP}:${WG_LISTEN_PORT}, peer public key=<server pubkey above>, control plane URL=<https coordinator URL>"
