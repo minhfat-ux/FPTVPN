@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=8d683a3 (origin/main): docs/RELEASE_NOTES_1.4.6.md + scripts/send-windows-1.4.6-announcement.py + evidence/2026-09-23-windows-1.4.6-announcement.log; cmd='ssh node-2 python3 /root/send-windows-1.4.6-announcement.py' -> gui thu ALERT_EMAIL OK truoc; gui that 1/1 nguoi nhan (camvinh@gmail.com), 0 loi, delivered 1/1; Resend id 01a0cdd2-5912-70c2-b828-fe049789bf73; script tren node-2 sha256 f96464bb... TRUNG blob origin/main; artifact sha256 1a504534...0796 (52.792.253 B) khop ca 2 docroot + /dl ?v=1a504534 HTTP 200 clen=52792253; /buy 200 co link; tag windows-v1.4.6 -> 9f9b8bd; email KHONG hua het canh bao Windows (ban chua ky)",
+ "actor": "mac",
+ "at": "2026-09-23T10:34:10.474Z"
+}
