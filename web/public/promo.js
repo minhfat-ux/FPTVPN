@@ -116,6 +116,14 @@
   /** Danh mục dựng sẵn — chỉ dùng khi `/api/apps` không trả được gì. */
   var FALLBACK_APPS = [
     {
+      id: "fbuddy",
+      name: "fBuddy",
+      tag: "AI",
+      icon: "/app-icons/fbuddy.png",
+      pitch: "Trợ lý AI đa năng: hỏi đáp, viết, dịch, tóm tắt, làm Word/Excel/PowerPoint và phân tích dữ liệu.",
+      links: { app: "https://fbuddy.meetflowai.site" },
+    },
+    {
       id: "vpnflow",
       name: "VPNFlow",
       tag: "VPN",
@@ -130,6 +138,22 @@
       icon: ICON_MEETFLOW,
       pitch: "Dịch hội thoại thời gian thực và ghi biên bản cuộc họp. Có bản Windows (overlay), macOS/iPhone/iPad trên App Store và Android.",
       links: LINKS.meetflow,
+    },
+    {
+      id: "supermom",
+      name: "SuperMom AI",
+      tag: "Học tập",
+      icon: "/app-icons/supermom.png",
+      pitch: "Trợ lý học tập cho cha mẹ Việt có con lớp 1–9: chụp ảnh bài toán, giải từng bước, kiểm tra bài con đã làm.",
+      links: { ios: "https://apps.apple.com/vn/app/supermom-ai/id6768231353" },
+    },
+    {
+      id: "harness",
+      name: "FlowTech Harness",
+      tag: "Agent",
+      icon: "/app-icons/harness.png",
+      pitch: "Bộ harness agent của FlowTech: chạy trợ lý trên máy của anh và mở nó từ xa.",
+      links: { guide: "https://api.meetflowai.site/guide" },
     },
   ];
 
@@ -271,8 +295,10 @@
     icon.loading = "lazy";
     icon.decoding = "async";
     icon.addEventListener("error", function () {
-      // Ảnh lỗi thì để nền gradient của .fg-prod__icon làm icon, không vỡ layout.
-      icon.style.visibility = "hidden";
+      // Ảnh lỗi ⇒ hiện CHỮ CÁI ĐẦU trên nền gradient của `.fg-prod__icon`, KHÔNG để trống
+      // (chủ dự án gặp cảnh "thẻ tệp có nhưng icon mất" — thà có chữ cái còn hơn khoảng trắng).
+      var letter = el("div", "fg-prod__icon fg-prod__icon--letter", (options.name || "?").trim().charAt(0).toUpperCase());
+      icon.replaceWith(letter);
     });
     top.appendChild(icon);
 

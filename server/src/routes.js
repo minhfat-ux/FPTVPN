@@ -737,10 +737,15 @@ export function createApiRouter() {
       vpnflow: { icon: "shield", accent: "#34d399", file: "vpnflow" },
       harness: { icon: "terminal", accent: "#f59e0b", file: "harness" },
       supermom: { icon: "graduation", accent: "#f472b6", file: "supermom" },
+      // fBuddy cũng là một sản phẩm trong hệ sinh thái (trang FlowTech liệt kê đủ 5) — chủ dự án
+      // 21/09/2026: "cần update trang đó đủ các products của flowtech như trên trang meetflowai.site".
+      fbuddy: { icon: "sparkles", accent: "#33c773", file: "fbuddy" },
     };
-    const items = PUBLISHED_APPS.filter((app) => !app.isSelf).map((app) => ({
+    const items = PUBLISHED_APPS.map((app) => ({
       id: app.id,
       name: app.name,
+      /** true = app của chính trợ lý đang trả lời (popup ghi rõ "app bạn đang dùng"). */
+      isSelf: Boolean(app.isSelf),
       kind: (app.kind ?? "").split("—")[0].trim(),
       summary: app.summary ?? "",
       icon: LOOK[app.id]?.icon ?? "sparkles",

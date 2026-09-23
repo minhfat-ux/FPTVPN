@@ -190,6 +190,15 @@
   gap: 11px;
 }
 
+.fg-prod__icon--letter {
+  display: grid;
+  place-items: center;
+  color: #06202a;
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1;
+}
+
 .fg-prod__icon {
   width: 54px;
   height: 54px;
