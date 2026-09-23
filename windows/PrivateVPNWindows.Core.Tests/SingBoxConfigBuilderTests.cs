@@ -215,6 +215,116 @@ public class SingBoxConfigBuilderTests
     }
 
     [Fact]
+    public void BuildSingBoxConfig_nhung_dai_IP_Trung_Quoc_di_thang()
+    {
+        // Lỗi khách báo 22/09/2026: bật VPN thì app TQ hỏng. Nguyên nhân là đường relay chỉ có rule
+        // theo tên miền nên phần lớn app TQ (tên miền .com) đi hết qua tunnel.
+        var cidrs = new[] { "1.0.1.0/24", "223.255.252.0/22", "2001:250::/30" };
+        var json = SingBoxConfigBuilder.BuildSingBoxConfig(
+            SocksPort, "/tmp/sing-box.log", ClashPort, chinaCidrs: cidrs);
+
+        using var doc = JsonDocument.Parse(json);
+        var rules = doc.RootElement.GetProperty("route").GetProperty("rules");
+        var order = rules.EnumerateArray().ToList();
+
+        var ipRule = order.Single(r => r.TryGetProperty("ip_cidr", out _));
+        Assert.Equal(SingBoxConfigBuilder.DirectOutboundTag, ipRule.GetProperty("outbound").GetString());
+        Assert.Equal(
+            cidrs,
+            ipRule.GetProperty("ip_cidr").EnumerateArray().Select(e => e.GetString()).ToArray());
+
+        // Thứ tự QUAN TRỌNG: LAN → dải TQ → hijack DNS. Đảo thứ tự là rule TQ bị rule DNS/hijack che.
+        var indexPrivate = order.FindIndex(r => r.TryGetProperty("ip_is_private", out _));
+        var indexIp = order.FindIndex(r => r.TryGetProperty("ip_cidr", out _));
+        var indexDns = order.FindIndex(r => r.TryGetProperty("protocol", out var p) && p.GetString() == "dns");
+        Assert.True(indexPrivate < indexIp, "rule LAN phải đứng trước rule dải TQ");
+        Assert.True(indexIp < indexDns, "rule dải TQ phải đứng trước rule hijack DNS");
+
+        // Đường ra cuối vẫn là relay: bypass chỉ đổi đường cho dải TQ, không đổi mặc định.
+        Assert.Equal(SingBoxConfigBuilder.RelayOutboundTag, doc.RootElement.GetProperty("route").GetProperty("final").GetString());
+    }
+
+    [Fact]
+    public void BuildSingBoxConfig_khong_co_danh_sach_thi_khong_sinh_bypass()
+    {
+        var json = SingBoxConfigBuilder.BuildSingBoxConfig(SocksPort, "/tmp/sing-box.log", ClashPort);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        // Không có danh sách (mất mạng, chưa cache) ⇒ KHÔNG rule ip_cidr, KHÔNG DNS nội địa,
+        // KHÔNG default_domain_resolver. Bypass là tính năng phụ: lỗi mạng không được biến thành
+        // cấu hình khác đi, càng không được chặn kết nối.
+        Assert.DoesNotContain(
+            root.GetProperty("route").GetProperty("rules").EnumerateArray(),
+            r => r.TryGetProperty("ip_cidr", out _));
+        Assert.Single(root.GetProperty("dns").GetProperty("servers").EnumerateArray());
+        Assert.Empty(root.GetProperty("dns").GetProperty("rules").EnumerateArray());
+        Assert.False(root.GetProperty("route").TryGetProperty("default_domain_resolver", out _));
+    }
+
+    [Fact]
+    public void BuildSingBoxConfig_co_dns_noi_dia_va_default_domain_resolver()
+    {
+        var json = SingBoxConfigBuilder.BuildSingBoxConfig(
+            SocksPort, "/tmp/sing-box.log", ClashPort, chinaCidrs: new[] { "1.0.1.0/24" });
+
+        using var doc = JsonDocument.Parse(json);
+        var dns = doc.RootElement.GetProperty("dns");
+
+        var cnServer = dns.GetProperty("servers").EnumerateArray()
+            .Single(s => s.GetProperty("tag").GetString() == SingBoxConfigBuilder.ChinaDnsServerTag);
+        Assert.Equal(SingBoxConfigBuilder.ChinaDomesticDnsServer, cnServer.GetProperty("server").GetString());
+
+        var dnsRule = dns.GetProperty("rules").EnumerateArray()
+            .Single(r => r.TryGetProperty("server", out var s)
+                         && s.GetString() == SingBoxConfigBuilder.ChinaDnsServerTag);
+        var suffixes = dnsRule.GetProperty("domain_suffix").EnumerateArray()
+            .Select(e => e.GetString()).ToList();
+        Assert.Contains("alipay.com", suffixes);
+        // Cố ý KHÔNG đưa ".cn" vào rule DNS: nhóm đó đã đi thẳng theo tên miền nên không cần, và
+        // như vậy resolver nội địa có trục trặc cũng không tạo hồi quy cho thứ đang chạy tốt.
+        Assert.DoesNotContain("cn", suffixes);
+
+        // BẮT BUỘC: thiếu trường này thì sing-box 1.14 FATAL ngay khi khởi động
+        // ("missing `route.default_domain_resolver` … removed in sing-box 1.14.0").
+        Assert.Equal(
+            SingBoxConfigBuilder.DnsServerTag,
+            doc.RootElement.GetProperty("route").GetProperty("default_domain_resolver").GetString());
+    }
+
+    [Fact]
+    public void ChinaServiceDomainSuffixes_phu_het_ten_mien_app_TQ_da_do()
+    {
+        // 33 tên miền dưới đây là kết quả ĐO ngày 22/09/2026 (khách báo "bật VPN không bypass được app
+        // Trung Quốc"): đối chiếu danh sách cũ thì chỉ 3 khớp. Test này chặn lỗ hổng quay lại — ai
+        // thêm/bớt tên miền mà để rơi mất nhóm này là fail ngay.
+        var measured = new[]
+        {
+            "alipay.com", "taobao.com", "tmall.com", "alicdn.com", "baidu.com", "jd.com",
+            "meituan.com", "dianping.com", "amap.com", "didiglobal.com", "bilibili.com",
+            "douyin.com", "iqiyi.com", "youku.com", "weibo.com", "zhihu.com", "xiaohongshu.com",
+            "kuaishou.com", "163.com", "unionpay.com", "ccb.com", "abchina.com", "cmbchina.com",
+            "bankcomm.com", "psbc.com", "sf-express.com", "ele.me", "pinduoduo.com", "suning.com",
+            "cainiao.com", "qunar.com", "ctrip.com", "wps.com",
+        };
+
+        var direct = SingBoxConfigBuilder.ChinaDirectDomainSuffixes
+            .Concat(SingBoxConfigBuilder.ChinaServiceDomainSuffixes)
+            .ToArray();
+
+        var unmatched = measured.Where(d => !MatchesAny(direct, d)).ToArray();
+        Assert.True(
+            unmatched.Length == 0,
+            "tên miền app TQ vẫn đi qua VPN: " + string.Join(", ", unmatched));
+    }
+
+    /// <summary>Luật khớp domain_suffix của sing-box: bằng hệt, hoặc kết thúc bằng ".&lt;suffix&gt;".</summary>
+    private static bool MatchesAny(IEnumerable<string> suffixes, string domain)
+        => suffixes.Any(s => domain.Equals(s, StringComparison.OrdinalIgnoreCase)
+                             || domain.EndsWith("." + s, StringComparison.OrdinalIgnoreCase));
+
+    [Fact]
     public void HysteriaRelayDefaults_khop_gia_tri_dang_dung()
     {
         // Relay mặc định = exit node-2 (đo nhanh hơn node-1); dự phòng = node-1.

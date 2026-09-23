@@ -137,6 +137,53 @@ Windows harness build + phát hành; số hiệu phải nằm trong metadata `.e
 (luật 6). Link `/buy` tự cập nhật khi họ phát hành. Publisher Mac **verify** link trên `/buy` trỏ
 đúng file mới + size/hash khớp; **không** tự build Windows, **không** gửi email thay họ (luật 7).
 
+### 6b. Ký số bộ cài (NFR-WIN-002) - BẮT BUỘC trước khi phát hành
+
+Vì sao: máy khách bật **Smart App Control** CHẶN file chưa ký. Đo thật 23/09/2026 trên máy harness
+Windows: bộ cài chưa ký bị chặn ngay khi chạy, khách bấm Yes ở UAC vẫn không cài được -
+`os error 4551`, event `CodeIntegrity` 3033/3077/3118, policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`.
+Đây cũng là lý do SmartScreen cảnh báo "Windows protected your PC".
+
+**Chứng chỉ (việc của chủ dự án - Q2 trong `docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md`):**
+repo **chưa có** chứng chỉ code-signing nào. Cần một trong hai:
+- **OV/EV code signing** mua từ CA (DigiCert / Sectigo / SSL.com...): ký bằng token hoặc HSM, cert
+  nằm trong certificate store của máy build.
+- **Azure Trusted Signing** (rẻ hơn, không cần token): dùng `signtool` với `/dlib` + metadata file,
+  khi đó truyền `-SigntoolPath` và tự cấu hình theo tài liệu Microsoft.
+
+**KHÔNG được hard-code chứng chỉ/mật khẩu vào repo.** Cấu hình qua biến môi trường (hoặc tham số):
+
+| Biến | Ý nghĩa |
+|---|---|
+| `VPNFLOW_SIGN_CERT_THUMBPRINT` | thumbprint cert trong store. **KHUYẾN NGHỊ**: không có mật khẩu ở đâu cả |
+| `VPNFLOW_SIGN_PFX_PATH` + `VPNFLOW_SIGN_PFX_PASSWORD` | nếu dùng file `.pfx` (mật khẩu không bao giờ được in ra log) |
+| `VPNFLOW_SIGN_TIMESTAMP_URL` | mặc định `http://timestamp.digicert.com` |
+| `VPNFLOW_SIGNTOOL` | đường dẫn `signtool.exe`; để trống thì tự dò |
+
+`signtool` lấy được **không cần cài cả Windows SDK** (đã kiểm chứng 23/09/2026): gói NuGet
+`Microsoft.Windows.SDK.BuildTools` chứa `bin/<ver>/x64/signtool.exe`. `build.ps1` tự dò
+`%LOCALAPPDATA%\VPNFlowTools\signtool\signtool.exe`, rồi tới Windows Kits, rồi PATH.
+
+**Build có ký:**
+```powershell
+$env:VPNFLOW_SIGN_CERT_THUMBPRINT = "<thumbprint>"
+powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -RequireSigning
+```
+`build.ps1` sẽ: ký `PrivateVPNWindows.App.exe` + `PrivateVPNWindows.*.dll` + `flowvpnrelay.exe` trong bộ
+publish, rồi ký **cả Setup lẫn uninstaller** (`VPNFlow.iss` chỉ bật `SignTool` + `SignedUninstaller` khi
+có `/DSignedBuild`), rồi **cổng chặn cuối**: mọi file phát hành phải có chữ ký VÀ `signtool verify /pa` ĐẠT.
+
+Không cấu hình gì thì vẫn build được nhưng in CẢNH BÁO TO (bản chưa ký sẽ bị SAC/SmartScreen chặn).
+`-RequireSigning` biến cảnh báo đó thành lỗi cứng - đường phát hành nên dùng. `-AllowUntrustedSignature`
+chỉ để THỬ dây ký bằng cert tự ký, **KHÔNG** dùng để phát hành.
+
+**Bằng chứng phải có khi phát hành** (NFR-WIN-002): output `signtool verify /pa` + `Get-AuthenticodeSignature`
+của **cả** `VPNFlow-Setup-*.exe` **và** `PrivateVPNWindows.App.exe`, cho thấy `Status = Valid` và có timestamp.
+
+**Không ký lại binary bên thứ ba** (`sing-box.exe`, `wireguard-go.exe`, `wintun.dll`): ký đè lên chữ ký
+của người khác là việc không được phép làm. Ghi nhận: `sing-box.exe` từng bị SAC chặn (19/09/2026, 16 lần);
+đo 23/09/2026 thì `sing-box version` chạy bình thường, tức Microsoft đã cho qua.
+
 ## 7. Audit toàn kênh (định kỳ — luật 8)
 Mỗi nền tảng phải đang phục vụ **đúng bản latest**. Kênh lệch ⇒ (a) cập nhật lại link tải + set mốc,
 (b) **thông báo khách**, rồi ghi nhật ký §6.

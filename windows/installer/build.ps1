@@ -25,7 +25,35 @@ param(
   [string]$Version = "",
   [string]$Commit = "",
   [switch]$FrameworkDependent,
-  [switch]$SkipPublish
+  [switch]$SkipPublish,
+
+  # ---------------------------------------------------------------------------
+  # KÝ SỐ (NFR-WIN-002) - xem docs/RELEASE_RUNBOOK.md §6.
+  #
+  # Vì sao cần: máy khách bật Smart App Control CHẶN file chưa ký (os error 4551). Đo thật
+  # 23/09/2026 trên máy harness: bộ cài chưa ký bị chặn ngay khi chạy (event CodeIntegrity
+  # 3033/3077/3118, Policy {0283ac0f-fff1-49ae-ada1-8a933130cad6}) - khách bấm Yes ở UAC cũng
+  # không cài được.
+  #
+  # KHÔNG hard-code chứng chỉ/mật khẩu trong file này. Cấu hình qua tham số hoặc biến môi trường:
+  #   -SignCertThumbprint / VPNFLOW_SIGN_CERT_THUMBPRINT  cert trong store (KHUYẾN NGHỊ: không mật khẩu)
+  #   -SignPfxPath        / VPNFLOW_SIGN_PFX_PATH         hoặc file .pfx
+  #   -SignPfxPassword    / VPNFLOW_SIGN_PFX_PASSWORD     mật khẩu .pfx (KHÔNG bao giờ in ra log)
+  #   -SignTimestampUrl   / VPNFLOW_SIGN_TIMESTAMP_URL    mặc định http://timestamp.digicert.com
+  #   -SigntoolPath       / VPNFLOW_SIGNTOOL              để trống thì tự dò
+  #
+  # Không cấu hình gì => vẫn build được nhưng IN CẢNH BÁO TO (bản chưa ký sẽ bị SAC/SmartScreen chặn).
+  # Dùng -RequireSigning để biến cảnh báo đó thành lỗi cứng (đường phát hành nên dùng).
+  # ---------------------------------------------------------------------------
+  [string]$SignCertThumbprint = $env:VPNFLOW_SIGN_CERT_THUMBPRINT,
+  [string]$SignPfxPath = $env:VPNFLOW_SIGN_PFX_PATH,
+  [string]$SignPfxPassword = $env:VPNFLOW_SIGN_PFX_PASSWORD,
+  [string]$SignTimestampUrl = $env:VPNFLOW_SIGN_TIMESTAMP_URL,
+  [string]$SigntoolPath = $env:VPNFLOW_SIGNTOOL,
+  [switch]$RequireSigning,
+
+  # CHỈ để thử dây ký bằng cert tự ký (chuỗi tin cậy không dựng được). KHÔNG dùng để phát hành.
+  [switch]$AllowUntrustedSignature
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,6 +69,72 @@ $issFile      = Join-Path $installerDir "VPNFlow.iss"
 $appExe       = "PrivateVPNWindows.App.exe"
 
 function Step($m) { Write-Host "==> $m" -ForegroundColor Cyan }
+
+# --- Ký số: hàm dùng chung (khối tham số ở đầu file, tài liệu ở RELEASE_RUNBOOK §6) ---------
+
+function Resolve-SigntoolPath {
+  if ($SigntoolPath) {
+    if (-not (Test-Path $SigntoolPath)) { throw "Không thấy signtool.exe tại -SigntoolPath: $SigntoolPath" }
+    return (Resolve-Path $SigntoolPath).Path
+  }
+
+  # Bản cài cục bộ, KHÔNG cần cả Windows SDK: gói NuGet Microsoft.Windows.SDK.BuildTools.
+  $local = Join-Path $env:LOCALAPPDATA "VPNFlowTools\signtool\signtool.exe"
+  if (Test-Path $local) { return $local }
+
+  $sdk = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+         Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+  if ($sdk) { return $sdk.FullName }
+
+  $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+
+  return $null
+}
+
+function Get-SignBaseArguments {
+  # Tham số cho `signtool sign`, KHÔNG gồm tên file cần ký.
+  $arguments = @("sign")
+  if ($SignCertThumbprint) {
+    # Cert trong store: không có mật khẩu ở đâu cả (đường an toàn nhất, dùng được cả token EV).
+    $arguments += @("/sha1", $SignCertThumbprint)
+  } elseif ($SignPfxPath) {
+    if (-not (Test-Path $SignPfxPath)) { throw "Không thấy file .pfx: $SignPfxPath" }
+    $arguments += @("/f", (Resolve-Path $SignPfxPath).Path)
+    if ($SignPfxPassword) { $arguments += @("/p", $SignPfxPassword) }
+  } else {
+    throw "Thiếu chứng chỉ ký: truyền -SignCertThumbprint hoặc -SignPfxPath."
+  }
+
+  # SHA-256 cho cả digest lẫn timestamp (SHA-1 đã bị Windows coi là yếu).
+  $arguments += @("/fd", "sha256")
+  if ($SignTimestampUrl) { $arguments += @("/tr", $SignTimestampUrl, "/td", "sha256") }
+  return $arguments
+}
+
+function Invoke-SignFile([string]$signtool, [string[]]$baseArguments, [string]$file) {
+  # KHÔNG in $baseArguments: có thể chứa mật khẩu .pfx.
+  & $signtool @($baseArguments + @($file)) | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "signtool sign thất bại cho $(Split-Path -Leaf $file) (exit $LASTEXITCODE)" }
+}
+
+function New-SignWrapper([string]$signtool, [string[]]$baseArguments, [string]$path) {
+  # Inno Setup gọi công cụ ký qua SignTool=<tên>: sinh 1 file .cmd thay vì nhúng cả dòng lệnh
+  # vào /S của ISCC (PowerShell 5.1 làm hỏng dấu nháy lồng khi truyền cho exe native).
+  # Mật khẩu .pfx KHÔNG ghi vào file này: thay bằng %VPNFLOW_SIGN_PFX_PASSWORD% đọc từ môi trường.
+  $quoted = $baseArguments | ForEach-Object {
+    if ($SignPfxPassword -and $_ -eq $SignPfxPassword) { "%VPNFLOW_SIGN_PFX_PASSWORD%" }
+    elseif ($_ -match '\s') { '"' + $_ + '"' }
+    else { $_ }
+  }
+  $lines = @(
+    "@echo off",
+    "`"$signtool`" $($quoted -join ' ') `"%~1`"",
+    "exit /b %ERRORLEVEL%"
+  )
+  Set-Content -LiteralPath $path -Value $lines -Encoding ASCII
+  return $path
+}
 
 # 1) binary tunnel bắt buộc: 2 file cho tunnel WireGuard userspace, 2 file cho đường
 # "hysteria2 bọc trong WebSocket" (flowvpnrelay = hysteria2-over-WS + SOCKS5, sing-box = TUN).
@@ -138,6 +232,55 @@ if ($builtInfo -ne $expectedInfo) {
 }
 Write-Host "    app exe ProductVersion = $builtInfo (khớp commit build)" -ForegroundColor Green
 
+# 3d) KÝ SỐ binary CỦA MÌNH trong bộ publish - làm TRƯỚC khi đóng gói để file BÊN TRONG bộ cài
+#     cũng đã ký. Chỉ ký file của mình: KHÔNG ký lại binary bên thứ ba (sing-box, wireguard-go,
+#     wintun.dll) - ký đè lên chữ ký của người khác là việc không được phép làm.
+if (-not $SignTimestampUrl) { $SignTimestampUrl = "http://timestamp.digicert.com" }
+$signConfigured = [bool]($SignCertThumbprint -or $SignPfxPath)
+$signWrapper = $null
+$signtool = $null
+
+if ($signConfigured) {
+  Step "Ký số binary của mình trong bộ publish"
+  $signtool = Resolve-SigntoolPath
+  if (-not $signtool) {
+    throw "Đã cấu hình ký số nhưng không tìm thấy signtool.exe. Cài Windows SDK, hoặc lấy gói NuGet Microsoft.Windows.SDK.BuildTools rồi trỏ -SigntoolPath."
+  }
+  Write-Host "    signtool: $signtool" -ForegroundColor Green
+
+  if ($SignPfxPassword) { $env:VPNFLOW_SIGN_PFX_PASSWORD = $SignPfxPassword }   # cho wrapper .cmd đọc
+  $signBaseArguments = Get-SignBaseArguments
+
+  foreach ($pattern in @("PrivateVPNWindows.App.exe", "PrivateVPNWindows.*.dll", "flowvpnrelay.exe")) {
+    foreach ($file in @(Get-ChildItem -Path $publishDir -Filter $pattern -File)) {
+      Invoke-SignFile $signtool $signBaseArguments $file.FullName
+      Write-Host ("    ký {0}" -f $file.Name)
+    }
+  }
+
+  # Wrapper cho Inno Setup (ký cả Setup lẫn uninstaller).
+  $wrapperPath = Join-Path ([System.IO.Path]::GetTempPath()) ("vpnflow-sign-" + $PID + ".cmd")
+  $signWrapper = New-SignWrapper $signtool $signBaseArguments $wrapperPath
+  if ($signWrapper -match '\s') {
+    # ISCC nhận công cụ ký qua /S<name>=<command>: đường dẫn có dấu cách sẽ bị cắt sai.
+    try {
+      $fso = New-Object -ComObject Scripting.FileSystemObject
+      $signWrapper = $fso.GetFile($signWrapper).ShortPath
+    } catch { }
+  }
+  if ($signWrapper -match '\s') {
+    throw "Đường dẫn wrapper ký số có dấu cách ($signWrapper) - ISCC /S không xử lý được. Đổi TEMP sang đường dẫn không dấu cách."
+  }
+  Write-Host "    wrapper ký cho Inno: $signWrapper"
+} else {
+  Write-Host ""
+  Write-Host "    CẢNH BÁO: build KHÔNG ký số." -ForegroundColor Yellow
+  Write-Host "    Bộ cài chưa ký bị Smart App Control CHẶN trên máy khách (os error 4551) và bị SmartScreen cảnh báo." -ForegroundColor Yellow
+  Write-Host "    Cấu hình: -SignCertThumbprint <sha1> hoặc -SignPfxPath <file.pfx>. Xem docs/RELEASE_RUNBOOK.md muc 6." -ForegroundColor Yellow
+  Write-Host ""
+  if ($RequireSigning) { throw "Yêu cầu -RequireSigning nhưng chưa cấu hình chứng chỉ ký số. DỪNG." }
+}
+
 # 5) tìm Inno Setup 6
 Step "Tìm Inno Setup 6 (ISCC.exe)"
 $candidates = @(
@@ -158,12 +301,47 @@ Write-Host "    $iscc"
 # 6) build installer
 Step "ISCC: tạo bộ cài"
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out-Null }
-& $iscc "/DAppVersion=$Version" "/DSourceDir=$publishDir" $issFile
+$isccArguments = @("/DAppVersion=$Version", "/DSourceDir=$publishDir")
+if ($signConfigured) {
+  # VPNFlow.iss chỉ bật SignTool/SignedUninstaller khi có /DSignedBuild (xem #ifdef trong file).
+  # BẮT BUỘC phải có `$f` trong chuỗi: Inno thay `$f` bằng đường dẫn file cần ký, thiếu là ISCC
+  # báo "Unable to run Sign Tool: $f sequence is missing" (đã gặp thật 23/09/2026).
+  $isccArguments += @("/DSignedBuild", ('/Ssigntool=' + $signWrapper + ' $f'))
+}
+$isccArguments += $issFile
+& $iscc @isccArguments
 if ($LASTEXITCODE -ne 0) { throw "ISCC thất bại (exit $LASTEXITCODE)" }
 
 $setup = Get-ChildItem $outDir -Filter "VPNFlow-Setup-*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $setup) { throw "Không thấy file cài trong $outDir" }
+
+# 6b) CỔNG CHẶN: đã cấu hình ký số thì file phát hành PHẢI thật sự có chữ ký tin cậy
+#     (NFR-WIN-002: `signtool verify /pa` VÀ Get-AuthenticodeSignature = Valid, có timestamp).
+if ($signConfigured) {
+  Step "Xác minh chữ ký số (NFR-WIN-002)"
+  foreach ($file in @((Join-Path $publishDir $appExe), $setup.FullName)) {
+    $signature = Get-AuthenticodeSignature -LiteralPath $file
+    if (-not $signature.SignerCertificate) { throw "$(Split-Path -Leaf $file) KHÔNG có chữ ký số - DỪNG." }
+    $stamped = if ($signature.TimeStamperCertificate) { "có timestamp" } else { "KHÔNG có timestamp" }
+    & $signtool verify /pa $file | Out-Null
+    $trusted = ($LASTEXITCODE -eq 0)
+    Write-Host ("    {0}: {1} | {2}" -f (Split-Path -Leaf $file), $signature.Status, $stamped)
+    Write-Host ("      ký bởi: {0}" -f $signature.SignerCertificate.Subject)
+    if (-not $trusted) {
+      if ($AllowUntrustedSignature) {
+        Write-Host "      CẢNH BÁO: signtool verify /pa KHÔNG ĐẠT (chuỗi tin cậy) - chỉ chấp nhận khi THỬ dây ký." -ForegroundColor Yellow
+      } else {
+        throw "signtool verify /pa KHÔNG ĐẠT cho $(Split-Path -Leaf $file) - DỪNG (NFR-WIN-002 đòi chữ ký tin cậy)."
+      }
+    }
+  }
+}
+
+if ($signWrapper) { Remove-Item -LiteralPath $signWrapper -Force -ErrorAction SilentlyContinue }
+
 $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
 Step ("XONG: {0} ({1:N1} MB)" -f $setup.FullName, ($setup.Length / 1MB))
 Write-Host ("    sha256: {0}" -f $hash)
+if ($signConfigured) { Write-Host "    chữ ký số: ĐÃ KÝ và xác minh (NFR-WIN-002)" -ForegroundColor Green }
+else { Write-Host "    chữ ký số: CHƯA KÝ (xem cảnh báo ở bước 3d)" -ForegroundColor Yellow }
 Write-Host "    Gửi khách file này: bấm 1 lần là cài xong (app yêu cầu quyền admin để dựng tunnel)."

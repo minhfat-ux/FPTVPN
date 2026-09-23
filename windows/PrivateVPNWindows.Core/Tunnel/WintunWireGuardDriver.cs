@@ -721,12 +721,12 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
             await File.WriteAllLinesAsync(activePath, cidrs, cancellationToken).ConfigureAwait(false);
 
             // Một tiến trình PowerShell duy nhất cho cả danh sách (5.5k dải) — gọi netsh từng dòng sẽ mất
-            // vài phút; vòng lặp New-NetRoute trong cùng tiến trình nhanh hơn nhiều.
-            var script =
-                $"$ErrorActionPreference='SilentlyContinue'; $n=0; " +
-                $"foreach ($c in Get-Content '{activePath}') {{ " +
-                $"New-NetRoute -DestinationPrefix $c -InterfaceAlias '{interfaceName}' -NextHop '{gateway}' -PolicyStore ActiveStore | Out-Null; $n++ }}; " +
-                "$n";
+            // vài phút. Script đếm theo KẾT QUẢ THẬT, xem ChinaBypass.BuildRouteLoopScript.
+            var script = ChinaBypass.BuildRouteLoopScript(
+                ChinaBypass.AddRouteVerb,
+                activePath,
+                interfaceName,
+                $"-NextHop '{gateway}' -PolicyStore ActiveStore ");
 
             var (exitCode, stdout, stderr) = await RunPowerShellAsync(script, cancellationToken).ConfigureAwait(false);
 
@@ -736,12 +736,25 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
                 return;
             }
 
+            if (!ChinaBypass.TryParseRouteResult(stdout, out var added, out var attempted))
+            {
+                _log.Warn($"china-bypass: không đọc được kết quả thêm route IPv4 — bypass coi như KHÔNG chạy (output: {stdout.Trim()})");
+                return;
+            }
+
+            if (added == 0)
+            {
+                // Trước đây ca này bị báo nhầm là thành công ("đã thêm 5494 route") vì $n++ vô điều kiện.
+                _log.Warn($"china-bypass: KHÔNG thêm được route IPv4 nào (0/{attempted}) — bypass không có tác dụng.");
+                return;
+            }
+
             lock (_lock)
             {
                 _chinaBypassRoutes = (interfaceName, gateway, activePath);
             }
 
-            _log.Info($"china-bypass: đã thêm {stdout.Trim()} route đi thẳng qua {gateway} ({interfaceName})");
+            _log.Info($"china-bypass: đã thêm {added}/{attempted} route đi thẳng qua {gateway} ({interfaceName})");
         }
         catch (Exception ex)
         {
@@ -789,11 +802,11 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
 
             await File.WriteAllLinesAsync(activePath, cidrs, cancellationToken).ConfigureAwait(false);
 
-            var script =
-                $"$ErrorActionPreference='SilentlyContinue'; $n=0; " +
-                $"foreach ($c in Get-Content '{activePath}') {{ " +
-                $"New-NetRoute -DestinationPrefix $c -InterfaceAlias '{v6.Interface}' {Ipv6NextHopArgument(v6.Gateway)}-PolicyStore ActiveStore | Out-Null; $n++ }}; " +
-                "$n";
+            var script = ChinaBypass.BuildRouteLoopScript(
+                ChinaBypass.AddRouteVerb,
+                activePath,
+                v6.Interface,
+                Ipv6NextHopArgument(v6.Gateway) + "-PolicyStore ActiveStore ");
 
             var (exitCode, stdout, stderr) = await RunPowerShellAsync(script, cancellationToken).ConfigureAwait(false);
 
@@ -803,12 +816,24 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
                 return;
             }
 
+            if (!ChinaBypass.TryParseRouteResult(stdout, out var added, out var attempted))
+            {
+                _log.Warn($"china-bypass: không đọc được kết quả thêm route IPv6 — bypass coi như KHÔNG chạy (output: {stdout.Trim()})");
+                return;
+            }
+
+            if (added == 0)
+            {
+                _log.Warn($"china-bypass: KHÔNG thêm được route IPv6 nào (0/{attempted}) — bypass IPv6 không có tác dụng.");
+                return;
+            }
+
             lock (_lock)
             {
                 _chinaBypassRoutesV6 = (v6.Interface, v6.Gateway, activePath);
             }
 
-            _log.Info($"china-bypass: đã thêm {stdout.Trim()} route IPv6 đi thẳng qua {v6.Gateway} ({v6.Interface})");
+            _log.Info($"china-bypass: đã thêm {added}/{attempted} route IPv6 đi thẳng qua {v6.Gateway} ({v6.Interface})");
         }
         catch (Exception ex)
         {
@@ -918,15 +943,16 @@ public sealed class WintunWireGuardDriver : IWireGuardDriver, IDisposable
         // IPv4 luôn kèm -NextHop; IPv6 on-link (gateway '::') thì thêm không kèm nên xoá cũng không kèm.
         var nextHopArgument = isIpv6 ? Ipv6NextHopArgument(gateway) : $"-NextHop '{gateway}' ";
 
-        var script =
-            "$ErrorActionPreference='SilentlyContinue'; $n=0; " +
-            $"foreach ($c in Get-Content '{activePath}') {{ " +
-            $"Remove-NetRoute -DestinationPrefix $c -InterfaceAlias '{interfaceName}' {nextHopArgument}-Confirm:$false | Out-Null; $n++ }}; " +
-            "$n";
+        var script = ChinaBypass.BuildRouteLoopScript(
+            ChinaBypass.RemoveRouteVerb,
+            activePath,
+            interfaceName,
+            nextHopArgument);
 
         var (exitCode, stdout, _) = await RunPowerShellAsync(script, cancellationToken).ConfigureAwait(false);
 
-        _log.Info($"china-bypass: đã xoá route bypass {(isIpv6 ? "IPv6" : "IPv4")} (exit {exitCode}, {stdout.Trim()} dòng)");
+        ChinaBypass.TryParseRouteResult(stdout, out var removed, out var attempted);
+        _log.Info($"china-bypass: đã xoá {removed}/{attempted} route bypass {(isIpv6 ? "IPv6" : "IPv4")} (exit {exitCode})");
     }
 
     /// <summary>IP endpoint IPv4 của peer đầu tiên; null nếu thiếu hoặc không phân giải được.</summary>

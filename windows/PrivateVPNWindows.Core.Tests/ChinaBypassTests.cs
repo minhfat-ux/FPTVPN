@@ -266,6 +266,109 @@ public class ChinaBypassTests
         Assert.Empty(ChinaBypass.ParseIpv6Cidrs("1.0.1.0/24\n223.255.252.0/22\n"));
     }
 
+    // MARK: - Nạp gộp cho đường relay (sing-box nhận cả danh sách trong 1 file cấu hình)
+
+    [Fact]
+    public async Task LoadAllAsync_gop_ca_IPv4_lan_IPv6_va_ghi_cache_dung_ten_file()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cnbypass-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+
+        var handler = new MapHandler(new Dictionary<string, string>
+        {
+            [ChinaBypass.DefaultListUrl] = "1.0.1.0/24\n223.255.252.0/22\n",
+            [ChinaBypass.DefaultListUrlV6] = "2001:250::/30\n",
+        });
+        var http = new HttpClient(handler);
+
+        var all = await ChinaBypass.LoadAllAsync(http, dir, TimeSpan.FromDays(7));
+
+        // Thứ tự: IPv4 trước, IPv6 sau (ổn định để cấu hình sinh ra không đổi giữa các lần chạy).
+        Assert.Equal(new[] { "1.0.1.0/24", "223.255.252.0/22", "2001:250::/30" }, all);
+
+        // Cache phải nằm ĐÚNG tên file mà driver WireGuard đang dùng, nếu không hai đường
+        // (WireGuard và relay) sẽ tải mạng 2 lần và không chia sẻ được cache.
+        Assert.True(File.Exists(Path.Combine(dir, ChinaBypass.CacheFileNameV4)));
+        Assert.True(File.Exists(Path.Combine(dir, ChinaBypass.CacheFileNameV6)));
+        Directory.Delete(dir, true);
+    }
+
+    [Fact]
+    public async Task LoadAllAsync_tra_rong_khi_khong_co_mang_va_khong_co_cache()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cnbypass-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+
+        var http = new HttpClient(new AlwaysFailHandler());
+        var all = await ChinaBypass.LoadAllAsync(http, dir, TimeSpan.FromDays(7));
+
+        // Rỗng ⇒ tầng gọi KHÔNG sinh rule bypass nhưng vẫn phải dựng được tunnel (bypass là phụ).
+        Assert.Empty(all);
+        Directory.Delete(dir, true);
+    }
+
+    // MARK: - Script đếm theo KẾT QUẢ THẬT (ca khách báo 22/09/2026: log xanh mà bypass không chạy)
+
+    [Fact]
+    public void BuildRouteLoopScript_dem_theo_ket_qua_chu_khong_dem_so_lan_thu()
+    {
+        var script = ChinaBypass.BuildRouteLoopScript(
+            ChinaBypass.AddRouteVerb,
+            @"C:\work\routes-cn.txt",
+            "Ethernet",
+            "-NextHop '192.168.1.1' -PolicyStore ActiveStore ");
+
+        Assert.Contains(ChinaBypass.AddRouteVerb, script);
+        // Bắt buộc: lỗi phải ném ra để catch đếm được, nếu không lại đếm nhầm như bản cũ.
+        Assert.Contains("-ErrorAction Stop", script);
+        Assert.Contains("$fail++", script);
+        Assert.Contains(@"C:\work\routes-cn.txt", script);
+        Assert.Contains("Ethernet", script);
+        Assert.Contains("-NextHop '192.168.1.1'", script);
+        // Kết quả in ra phải là cặp ok/tổng để tầng gọi biết bypass có thật sự chạy hay không.
+        Assert.Contains(@"""$ok/$($ok+$fail)""", script);
+        // Không được còn dấu vết của cách đếm cũ ($n++ vô điều kiện).
+        Assert.DoesNotContain("$n++", script);
+    }
+
+    [Fact]
+    public void BuildRouteLoopScript_xoa_route_phai_kem_confirm_false()
+    {
+        // Thiếu -Confirm:$false thì Remove-NetRoute hỏi lại và tiến trình PowerShell treo tới hết giờ.
+        var script = ChinaBypass.BuildRouteLoopScript(
+            ChinaBypass.RemoveRouteVerb,
+            "/tmp/routes-cn.txt",
+            "Ethernet",
+            "-NextHop '192.168.1.1' ");
+
+        Assert.Contains(ChinaBypass.RemoveRouteVerb, script);
+        Assert.Contains("-Confirm:$false", script);
+        Assert.DoesNotContain(ChinaBypass.AddRouteVerb, script);
+    }
+
+    [Theory]
+    [InlineData("0/5494", 0, 5494)]
+    [InlineData("5494/5494", 5494, 5494)]
+    [InlineData(" 12/20 \n", 12, 20)]
+    public void TryParseRouteResult_doc_dung_cap_ok_tong(string output, int ok, int total)
+    {
+        Assert.True(ChinaBypass.TryParseRouteResult(output, out var succeeded, out var attempted));
+        Assert.Equal(ok, succeeded);
+        Assert.Equal(total, attempted);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("5494")]
+    [InlineData("abc/def")]
+    public void TryParseRouteResult_tra_false_khi_output_khong_dung_dang(string? output)
+    {
+        // Trả false ⇒ tầng gọi log cảnh báo "bypass coi như KHÔNG chạy", thay vì tin nhầm là thành công.
+        Assert.False(ChinaBypass.TryParseRouteResult(output, out _, out _));
+    }
+
     private sealed class NeverCalledHandler : HttpMessageHandler
     {
         public bool Called { get; private set; }
@@ -285,6 +388,28 @@ public class ChinaBypassTests
         {
             Called = true;
             throw new HttpRequestException("mất mạng");
+        }
+    }
+
+    /// <summary>Trả nội dung khác nhau theo từng URL — dùng để kiểm cn.txt và cn6.txt tách bạch.</summary>
+    private sealed class MapHandler : HttpMessageHandler
+    {
+        private readonly Dictionary<string, string> _byUrl;
+
+        public MapHandler(Dictionary<string, string> byUrl) => _byUrl = byUrl;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri!.ToString();
+            if (!_byUrl.TryGetValue(url, out var body))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body),
+            });
         }
     }
 }
