@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=4696c3f (origin/main: release(windows) phat 1.4.6 hotfix DNS + ghi so + tag windows-v1.4.6); cmd=node ops/_scratch/verify-windows-1.4.6-publish.mjs + python ops/_scratch/read-win-artifact-version.py https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.6.exe?v=1a504534 + git ls-remote --tags origin; ket qua=(1) GET https://meetflowai.site/v1/app-version?platform=windows -> 200, latest_version=1.4.6, installer_url=https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.6.exe?v=1a504534 (KHOP); (2) GET https://t1.meetflowai.site/buy -> 200, co dung link 1.4.6 ?v=1a504534; (3) tai that artifact -> 200, 52.792.253 B, sha256 1a50453473d8d945fcf223e96be08dd9b8d1678c69dce42de003a6bb1ea10796 (KHOP), PE hop le, FileVersion=1.4.6 + ProductVersion=1.4.6 DOC BEN TRONG installer => ban dang phat dung la 1.4.6; (4) tag windows-v1.4.6 -> peel 9f9b8bd5774400a6786d73969f94410f21eefbc5 = commit build; (5) docs/RELEASE_NOTES_1.4.6.md + email khach da co tren origin/main (8d683a3), da gui 1/1 delivered (bus-326 da verified). LUU Y: ban CHUA KY (ngoai le chu du an chot 23/09) => khach co the gap canh bao SmartScreen; email da noi thang, KHONG hua het canh bao. Lenh dong nay co the chay lai doc lap.",
+ "actor": "win",
+ "at": "2026-09-23T11:42:43.280Z"
+}
