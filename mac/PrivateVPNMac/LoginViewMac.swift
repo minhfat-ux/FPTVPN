@@ -223,6 +223,11 @@ struct LoginViewMac: View {
                 authStore.save(session)
                 if authStore.isSignedIn {
                     dismiss()
+                } else {
+                    // KHÔNG nuốt lỗi: server có thể đã cấp session (verify thành công) mà app không
+                    // lưu nổi vào Keychain. Bản cũ bỏ qua `lastError` nên sheet đứng im, khách chỉ
+                    // thấy "bấm Đăng nhập mà không có gì xảy ra" — không có dấu vết để chẩn đoán.
+                    message = .error(authStore.lastError ?? languageStore.t(.signInRequired))
                 }
             } catch {
                 message = .error(error.localizedDescription)
