@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan viec (bus #348). Da do lai: (a) WIN chay Windows - khong co Xcode/macOS nen KHONG build/ky duoc IPA iOS; (b) tren node-2 khong con khoa ky iOS (khong co /root/flowvpn-sign/dist.p12) nen cung khong ky lai duoc; (c) presence connector luc 12:11Z cho thay watcher cua Mac VAN poll (12 giay truoc) - Mac chua ngu o goc nhin connector. Dang bao Mac + bao chu du an dung su that.",
+ "actor": "win",
+ "at": "2026-09-23T12:12:14.734Z"
+}

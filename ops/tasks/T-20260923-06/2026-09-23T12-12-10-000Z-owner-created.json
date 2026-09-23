@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260923-06",
+  "title": "TG /vibecode: mac bị sleep -> cho phép Windows build + publish iOS 1.4.3 lên App Store và trang buy, báo Mac publisher là WIN take over và hủy task của Mac",
+  "from": "owner",
+  "to": "win",
+  "detail": "Việc chủ dự án giao TRỰC TIẾP qua Telegram (/vibecode).\nGiao lúc: 2026-09-23T12:08:01.333Z\n\nmac bị sleep rồi, nên cho phép windows build và publish bản ios 1.4.3 lên appstore và trang buy, báo cho mac publisher là win sẽ take over và hủy task của Mac publisher\n\nNGUON: tin bus #348 luc 2026-09-23T12:08:01.880Z, from=\"owner\", kind=\"task\", ref=\"TG-VIBECODE\".\nLIEN QUAN: T-20260923-02 (buy), T-20260923-03 (App Store Connect), T-20260923-05 (đã giao Mac build+ky IPA).",
+  "verify": "node ops/_scratch/asc-status.mjs (tren node-2) -> build iOS moi nhat cua app 6804150049 co preReleaseVersion = 1.4.3 va processingState = VALID; curl -s https://t1.meetflowai.site/v1/app-version?platform=ios -> latest_version = 1.4.3; curl -s https://t1.meetflowai.site/install/ios/manifest.plist -> bundle-version = 20; tai https://t1.meetflowai.site/v1/downloads/ios roi doc Info.plist BEN TRONG IPA -> CFBundleShortVersionString=1.4.3, CFBundleVersion=20",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-23T12:12:10.000Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-23T12:12:10.000Z",
+ "transcribedBy": "win",
+ "busId": 348,
+ "busAt": "2026-09-23T12:08:01.880Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #348 (owner → win). Owner tưởng Mac đã sleep nên cho WIN take over; WIN đã đo lại presence: watcher Mac vẫn poll connector (12s trước lúc 12:11Z)."
+}
