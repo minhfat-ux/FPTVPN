@@ -216,10 +216,18 @@ def _hysteria_credentials(info: dict, plistlib_module=None) -> dict:
 
 
 def _check_hysteria_credentials(result, internal: dict) -> None:
-    """Cổng chặn: credential hysteria2 phải có trong app (và extension), khớp env build nếu có.
+    """Cổng chặn: credential hysteria2 phải có trong APP; extension chỉ WARN.
+
+    Vì sao extension chỉ WARN (đính chính 23/09/2026 sau khi kiểm bản 18): thiết kế iOS là
+    **app** đọc `HysteriaPassword`/`HysteriaObfs` từ Info.plist của app rồi truyền cho extension
+    qua `providerConfiguration["hysteria"]` — extension đọc ở đó, KHÔNG đọc Info.plist của chính nó
+    (xem `iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift:2153`,
+    `iOS/PrivateVPN/Services/HysteriaDefaults.swift:11`). Vì vậy "extension thiếu key" là ĐÚNG
+    thiết kế, không phải lỗi. Ca thật 22/09 là **app** thiếu credential (build tay) ⇒ vẫn FAIL cứng.
 
     KHÔNG bao giờ in giá trị credential — chỉ in độ dài + khớp/khác.
     """
+    app_has = bool(internal.get("hysteria_password"))
     for label, has_key, len_key in (
         ("app", "hysteria_password", "hysteria_password_len"),
         ("extension", "ext_hysteria_password", "ext_hysteria_password_len"),
@@ -228,6 +236,12 @@ def _check_hysteria_credentials(result, internal: dict) -> None:
             continue  # artifact không có phần này (vd macOS không có .appex)
         if internal.get(has_key):
             result.ok(f"Credential hysteria2 ({label})", f"có · {internal.get(len_key, 0)} ký tự")
+        elif label == "extension" and app_has:
+            result.warn(
+                "Credential hysteria2 (extension)",
+                "extension không có trong Info.plist — ĐÚNG thiết kế iOS: app truyền qua "
+                "providerConfiguration (HysteriaPacketTunnelProvider.swift:2153). Chỉ cần app có credential.",
+            )
         else:
             result.fail(
                 f"Credential hysteria2 THIẾU ({label})",
@@ -300,14 +314,26 @@ def version_ios(path: str) -> dict:
         for name in names:
             if name.endswith("embedded.mobileprovision"):
                 data = archive.read(name)
+                # Regex cũ (`G6XW3RN6LJ\.[A-Za-z0-9._-]+`) KHÔNG khớp được dấu `*`, nên profile
+                # cấp theo wildcard (`G6XW3RN6LJ.*`) bị coi là "thiếu nhóm" ⇒ báo HỎNG oan cho
+                # đúng trạng thái ĐÃ SỬA của sự cố 22/09 (bug phát hiện 23/09 khi kiểm bản 18).
+                if re.search(rb"G6XW3RN6LJ\.\*", data):
+                    profile_groups.add("G6XW3RN6LJ.*")
                 profile_groups.update(
                     match.decode() for match in re.findall(rb"G6XW3RN6LJ\.[A-Za-z0-9._-]+", data)
                 )
         # `com.apple.token` là nhóm hệ thống, không tính là nhóm chia sẻ của app.
         app_groups = sorted(g for g in signature_groups if not g.startswith("com.apple.") and "*" not in g)
+
+        def _covered(group: str) -> bool:
+            """Profile wildcard `TEAMID.*` bao MỌI nhóm cùng tiền tố (Apple cấp theo profile)."""
+            if group in profile_groups:
+                return True
+            return any(g.endswith("*") and group.startswith(g[:-1]) for g in profile_groups)
+
         out["keychain_signature"] = app_groups
         out["keychain_profile"] = sorted(profile_groups)
-        out["keychain_missing"] = [g for g in app_groups if g not in profile_groups]
+        out["keychain_missing"] = [g for g in app_groups if not _covered(g)]
         return out
 
 
