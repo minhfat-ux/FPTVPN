@@ -101,9 +101,28 @@ STORE_FILE=$HOME/keystores/vpnflow-release.jks STORE_PASSWORD=… KEY_ALIAS=vpnf
   Đạt khi: `sampler nguồn byte = TrafficStats theo UID (đường trực tiếp)` lúc `tunnel: UP (hy-udp…)`;
   `observed=` cùng bậc speedtest (không còn ~5 kbps); `declared` leo theo mạng thay vì kẹt 1.000 kbps.
 
+## 5.1 Đã đẩy APK release lên node-2 staging — 23/09/2026 (bus #291 CHỐT)
+
+Chủ dự án chốt: **Windows chạy §6** (đã thấy máy `SM-F9460` qua wireless adb) ⇒ **Mac KHÔNG** thử
+adb/pair. Việc của Mac là đẩy 2 APK release lên node-2 để Windows kéo về, chạy lại cổng chặn độc lập
+rồi cài + chạy §6.
+
+| File trên node-2 (`/root/flowvpn-apk/staging/`) | Bytes | sha256 **do chính node-2 `sha256sum`** |
+|---|---|---|
+| `app-modern-release-1.4.3.apk` | 74.731.689 | `9563366995704d9c49c2087b6357e6c9655426cbdee909cecfb0f46515064ce5` |
+| `app-legacy-release-1.4.3.apk` | 74.748.051 | `fdb88e3febdbab4a243d92d3b743327298d04c9e6e8b7f2fe79b121dd6a5ede9` |
+
+- Cả hai **khớp đúng sha256** của bản build trên Mac (§1); quyền `644`; thư mục `755`.
+- Cách làm: chia mỗi APK thành 15 part 5 MB, `scp` song song 8 luồng, **so sha256 từng part** rồi mới
+  `cat` ghép lại trên node-2 (30/30 part khớp trước khi ghép) — tránh đứt kết nối làm hỏng file.
+- **KHÔNG publish, KHÔNG đổi mốc/version** — chỉ staging để kiểm độc lập.
+
 ## 6. Việc chưa xong
 
-1. **Test máy thật (§6) chưa chạy** — thiếu thiết bị. Đây là mục duy nhất trong 9 yêu cầu của bus-282 chưa có bằng chứng.
+1. **Test máy thật (§6)** — Mac **không có thiết bị** (`adb devices` rỗng). Theo CHỐT bus #291, mục này
+   **chuyển cho Windows** chạy trên `SM-F9460` (wireless adb); APK release đã staging sẵn ở node-2 (§5.1)
+   để Windows kéo về cài và dán log `bw: sample observed/declared`. Đây là mục duy nhất trong 9 yêu cầu
+   của bus-282 còn chờ bằng chứng §6.
 2. **Chỉ ký v2 + v3, không có v1** dù `build.gradle.kts` bật `enableV1Signing = true`. minSdk 24 nên v2 là đủ
    để cài trên Android 7+; nếu publisher cần v1 cho đường sideload cũ thì phải ký lại/điều tra tiếp.
 3. **Chưa được kiểm chứng độc lập trên thiết bị**: hành vi Diagnostics v29 (TrafficStats theo UID) mới chỉ
