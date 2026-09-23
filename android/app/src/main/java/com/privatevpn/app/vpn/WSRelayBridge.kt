@@ -8,7 +8,10 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import okhttp3.Call
+import okhttp3.EventListener
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -69,10 +72,34 @@ class WSRelayBridge(
 
     private val client = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
+        // Trần connect 4s thay vì mặc định 10s: api.meetflowai.site nằm sau Cloudflare và
+        // có IP anycast connect KHÔNG nổi từ mạng di động TQ (đo 22/09/2026:
+        // `failed to connect to api.meetflowai.site/172.67.175.138 (port 443) ... after
+        // 10000ms`). Với trần 10s, một IP chết là mất trắng 10s của lượt dựng lại — mà
+        // lượt dựng lại chỉ chờ WS mở tối đa 8s (WS_OPEN_WAIT_MS) nên nó bỏ luôn cầu vừa
+        // mở được ở IP thứ hai. 4s đủ cho IP sống (đo: IP chạy được mở trong ~2,5s).
+        .connectTimeout(4, TimeUnit.SECONDS)
         // Cầu WS là đường THOÁT khi IP node bị chặn, nên không được phụ thuộc DNS hệ thống:
         // khi tunnel đang UP mà transport chết, DNS bị hút vào tunnel và lỗi
         // "Unable to resolve host fcnvpn.tail303be3.ts.net" (diagnostics 14/09).
         .dns(com.privatevpn.app.api.PinnedDns)
+        // IP nào connect được thì nhớ để lượt sau thử nó trước (xem PinnedDns).
+        // Chữ ký override phải khớp CHÍNH XÁC OkHttp 4.12: `proxy` KHÔNG nullable
+        // (bytecode có Intrinsics.checkNotNullParameter cho proxy, không có cho protocol),
+        // còn `Call.request` là HÀM nên phải gọi `request()`.
+        .eventListener(object : EventListener() {
+            override fun connectEnd(
+                call: Call,
+                inetSocketAddress: InetSocketAddress,
+                proxy: java.net.Proxy,
+                protocol: Protocol?,
+            ) {
+                com.privatevpn.app.api.PinnedDns.noteWorkingAddress(
+                    call.request().url.host,
+                    inetSocketAddress.address,
+                )
+            }
+        })
         // Socket được protect NGAY khi tạo, trước khi connect → đi thẳng ra mạng nền,
         // không qua tunnel của chính mình.
         .socketFactory(object : javax.net.SocketFactory() {

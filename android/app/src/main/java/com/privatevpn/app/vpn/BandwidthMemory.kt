@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.TrafficStats
 import android.net.wifi.WifiManager
+import android.os.Process
 import android.telephony.TelephonyManager
 import com.privatevpn.app.Config
 import com.privatevpn.app.diag.DiagnosticsLog
@@ -247,6 +249,41 @@ class BandwidthMemory(context: Context) {
      * @return tổng byte rx, hoặc -1 nếu chưa đọc được (chưa có TUN / không đọc được file).
      */
     fun tunRxBytes(): Long = readTunCounters()?.first ?: -1L
+
+    /** Byte TX cua TUN — dung cho dong 'toc do tai len' tren man hinh. */
+    fun tunTxBytes(): Long = readTunCounters()?.second ?: -1L
+
+    /**
+     * Byte mà TIẾN TRÌNH NÀY đã nhận trên MỌI socket của nó (API công khai của Android).
+     *
+     * Vì sao cần — đo trên máy thật 22/09/2026: SELinux chặn app đọc `/proc/net/dev`
+     * ("app không đọc được /proc/net/dev"), nên vòng ramp lùi về bộ đếm của cầu WS. Nhưng
+     * bộ đếm đó CHỈ nhúc nhích khi đường đang chạy qua cầu WS; transport trực tiếp
+     * (hy-udp/hy-tcp) làm nó đứng yên ⇒ Diagnostics báo `observed=5kbps` trong khi cùng
+     * phiên `probe ... -> 4463kbps qua tunnel` (sai ~900 lần), và vòng ramp vì thế tưởng
+     * mạng chết nên kẹt khai báo ở sàn 1.000 kbps.
+     *
+     * TrafficStats theo UID là nguồn LUÔN đọc được và phủ MỌI transport, vì cả socket
+     * trực tiếp lẫn socket của cầu WS đều thuộc UID của app. Đếm ở mức "trên dây" (đã mã
+     * hoá + đóng khung) nên nhích cao hơn payload thật vài %; traffic của app đi đường
+     * riêng (CN bypass) không thuộc UID này nên không bị tính vào.
+     *
+     * Đổi lại: traffic KHÔNG qua tunnel của chính app (đo mạng trước khi nối, gọi API điều
+     * khiển) cũng nằm trong số này ⇒ đúng mấy giây đó con số hơi cao. Vì vậy chỉ dùng nguồn
+     * này khi `/proc/net/dev` không đọc được, và mỗi 15s log ghi kèm `src=` để biết đang đo
+     * bằng nguồn nào.
+     *
+     * @return tổng byte từ lúc khởi động máy, hoặc -1 nếu máy không hỗ trợ.
+     */
+    fun uidRxBytes(): Long = trafficStat { TrafficStats.getUidRxBytes(Process.myUid()) }
+
+    /** Byte TX theo UID — dùng cho dòng "tốc độ tải lên" trên màn hình. */
+    fun uidTxBytes(): Long = trafficStat { TrafficStats.getUidTxBytes(Process.myUid()) }
+
+    private fun trafficStat(read: () -> Long): Long =
+        runCatching { read() }.getOrDefault(-1L).let {
+            if (it == TrafficStats.UNSUPPORTED.toLong()) -1L else it
+        }
 
     /** @return (rxBytes, txBytes) của interface TUN, null nếu chưa có. */
     private fun readTunCounters(): Pair<Long, Long>? {

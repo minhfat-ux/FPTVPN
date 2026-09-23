@@ -293,3 +293,32 @@ done
 **Tiêu chí nghiệm thu A11:** sau khi kết nối ≤ 30 s, số khai `down` **không vượt quá 0,8 × goodput đo được**;
 không có trường hợp loss ≥ 30% mà app vẫn khai > 2× goodput thực; khi loss cao kéo dài thì app **hạ khai
 trong ≤ 15 s** (một lần dựng lại khi rảnh) chứ không chờ connect sau; và **không ramp lên** khi loss ≥ ngưỡng.
+## 3b. CÔNG THỨC ĐÃ CHỨNG MINH TRÊN ANDROID v25 (22/09/2026) — iOS/macOS làm theo
+
+**Kết quả đo thật (data China Unicom, 18:36–18:37):** app tự chọn **đường trực tiếp**, tự đo **8.387 kbps**
+sau 5 s và chốt khai **7.128 kbps (≈0,85 × số đo)**; tải 4 lượt × 10 MB liên tục:
+**11,4 / 11,7 / 10,5 / 9,8 Mbps — 4/4 lượt thành công, vượt ngưỡng Full HD (8 Mbps)**.
+Trước đó (cùng máy, cùng mạng) các ô xấu chỉ **0,16–0,74 Mbps** vì app bám đường nhớ sẵn và khai 13,1 Mbps.
+
+**Bốn thay đổi tạo ra kết quả đó (Android `HysteriaVpnService`):**
+1. **Chọn đường bằng SỐ ĐO ở mỗi lượt kết nối** — probe TCP tới **node ĐANG DÙNG** (`runHost`), KHÔNG
+   hardcode node khác (lỗi cũ: probe nhắm node-1 nên luôn báo "trực tiếp không mở được" ⇒ luôn chọn WS
+   dù đường trực tiếp đang cho 16,9 Mbps).
+2. **Khai = 0,85 × số đo**, và **bỏ số `best` nhớ sẵn khi đường đang loss cao** (§2h).
+3. **Đổi đường MỘT CHIỀU** — gỡ hoàn tác; không "sang rồi về" (§2c/§2h luật 4).
+4. **Dò cả hai chiều** nhưng chỉ sang khi đường kia **≥ 1,25×** ở **2 lần liên tiếp**, và chỉ khi phiên rảnh.
+
+**Việc iOS/macOS cần rà (đối chiếu code hai bên):**
+| Hạng mục | iOS hiện có | Cần bổ sung |
+|---|---|---|
+| Khai theo số đo | **Có** (`HysteriaBandwidthControl.downKbpsFromMeasurement` = 85%, `minTrustedMeasuredKbps`) | Bỏ `best` cũ khi loss cao; hạ khai áp **ngay khi rảnh** |
+| Chọn đường theo số đo | **Chưa thấy** cơ chế probe-so-sánh-2-đường trước khi vào | Thêm: probe TCP tới node đang dùng + thời gian mở WS → chọn đường tốt hơn |
+| Đổi đường một chiều | `applyBandwidthRampIfIdle` + `rebuildTransportForBandwidth` | Bảo đảm **không hoàn tác**, chỉ đổi khi dò chứng minh ≥ 1,25× (2 lần) |
+| App TQ đi đường riêng | **Chưa có** (`NEAppRule` không dùng được cho VPN tự cài) | Chia theo **đích đến**: `geosite:cn` + `geoip:cn → direct` bằng core sing-box/libbox (§2d) |
+| Hiện số live | **Chưa có** | Thẻ Diagnostics: down/up, đo được, khai báo, loss%, RTT, đường đang dùng, % còn ramp / "Đã tối đa" (§2g) |
+
+**Quan trọng — phần server đã xong, iOS/macOS hưởng ngay không cần build lại client:**
+`wsrelay` trên node-1/node-2 **đã được vá + deploy 22/09** (log mọi kết nối + `/healthz` + pong hai chiều
++ bắt lỗi UDP + backpressure + bỏ timer 10 phút). Bằng chứng: **cầu sống 64 phút** (trước 3,7–6,3 phút),
+`pingsOut = pongsIn = 19`, `dropped=0`, `udpErrors=0`. Vì iOS/macOS dùng **cùng cầu WS/Cloudflare**, độ
+chập do relay chết sẽ giảm cho cả hai nền tảng ngay tối nay.
