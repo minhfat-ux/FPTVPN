@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "NGUYEN NHAN: DMG DANG PHAT (/root/flowvpn-mac/VPNFlow-mac.dmg, mtime 22/09 11:56) co HysteriaPassword/HysteriaObfs RONG trong Info.plist cua CA app LAN appex (plutil: \"\" ca hai) => extension khong co credential, khong connect duoc. Credential that trong Config.kt KHOP node-2 (sha256 khop, khong in gia tri); script dev-hysteria-build-env.sh thieu +x nen $(...) nuot 'Permission denied' => build ra rong. Framework Hysteria-macos xac nhan build tu tag app/v2.12.2 (vcs.revision=619a6f85 = dung commit cua tag). Dang build lai 1.4.1/18 voi credential + appex co credential, ky Developer ID/notarize/staple.",
+ "actor": "mac",
+ "at": "2026-09-23T03:01:13.152Z"
+}
