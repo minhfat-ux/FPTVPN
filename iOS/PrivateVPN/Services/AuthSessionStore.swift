@@ -73,15 +73,15 @@ final class AuthSessionStore: ObservableObject {
     }
 
     private static func baseQuery() -> [String: Any] {
-        var query: [String: Any] = [
+        // Không set `kSecAttrAccessGroup`: phiên đăng nhập nằm trong keychain RIÊNG của app.
+        // Nhóm keychain dùng chung không bao giờ được profile Ad Hoc cấp ⇒ SecItemAdd trả
+        // errSecMissingEntitlement (-34018) ⇒ đăng nhập xong app vẫn coi như chưa đăng nhập
+        // (sự cố 22/09/2026). Xem thêm `KeychainStore.baseQuery`.
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        #if os(iOS)
-        query[kSecAttrAccessGroup as String] = KeychainStore.accessGroup
-        #endif
-        return query
     }
 
     enum AuthSessionError: LocalizedError {

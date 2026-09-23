@@ -36,7 +36,11 @@ Hệ quả cần biết khi phát qua Diawi:
 - Bundle id `com.privatevpn.app` + extension `com.privatevpn.app.packet-tunnel`, version `1.2.3 (2)`
   khớp giữa `project.yml`, `Info.plist` và chữ ký IPA đã export.
 - Entitlements có thật **trong chữ ký**: Network Extension `packet-tunnel-provider` (app + appex),
-  keychain sharing `G6XW3RN6LJ.com.privatevpn.shared`, `applinks:meetflowai.site`.
+  `applinks:meetflowai.site`.
+  → **ĐÍNH CHÍNH 23/09/2026:** dòng cũ ghi thêm "keychain sharing `G6XW3RN6LJ.com.privatevpn.shared`".
+  Bản iOS từ **1.4.2/19 KHÔNG còn** nhóm keychain dùng chung (profile Ad Hoc không cấp ⇒ `-34018`
+  ⇒ khách kẹt màn đăng nhập). Nhóm này **chỉ còn ở 2 target macOS**; xem
+  `IOS_INSTALL_TROUBLESHOOTING.md` §0a.
 - `ITSAppUsesNonExemptEncryption = false` (iOS + macOS).
 - Bản App Store **không còn** chuỗi `meetflowai.site/buy` trong binary đã export (0 hit).
   → **MOOT từ 14/09/2026**: không còn bản App Store nào để export; mọi bản iOS giờ đều chứa

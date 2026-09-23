@@ -13,7 +13,7 @@
 |---|---|---|
 | 1 | **Cổng chặn version TRƯỚC upload** — đọc version TỪ TRONG artifact, không tin tên file/size/nhật ký | §2 bước 5 |
 | 2 | **Chạy lại cổng ở `--mode post` SAU upload** — đọc version file ĐANG PHÁT, đối chiếu mốc | §2 bước 9 |
-| 3 | **iOS: nhóm keychain phải có trong CẢ code signature LẪN provisioning profile** (profile thiếu nhóm, hoặc chỉ wildcard `…*` ⇒ `SecItemAdd` trả `-34018` ⇒ khách không đăng nhập được) | §2 bước 3 |
+| 3 | **iOS: app + extension KHÔNG được khai nhóm keychain dùng chung** (đường A, từ 1.4.2/19 — extension iOS hysteria-only, không đọc keychain). Bản ≤ build 18 khai nhóm dùng chung mà profile Ad Hoc không cấp ⇒ `SecItemAdd` trả `-34018` ⇒ khách không đăng nhập được | §2 bước 3 |
 | 4 | **iOS: test trên iPhone THẬT** theo bảng 7 mục §2c (Simulator/máy ảo KHÔNG tính) | §2 bước 2 |
 | 5 | **macOS: DMG phải STAPLE**; `stapler validate` + `spctl` + `codesign --deep --strict` đều phải đạt. `spctl` một mình **KHÔNG đủ** | §4 |
 | 6 | **Windows: số hiệu nằm trong metadata .exe + UI hiện version** để đối chiếu mốc server | Windows harness phát hành; Mac chỉ **verify** link |
@@ -78,14 +78,14 @@ Android <version> (versionCode <n>) — APK
    Kiểm nội dung IPA (**đọc từ trong file**, không tin tên file):
    `unzip -q <ipa> -d /tmp/ipachk && PlistBuddy -c 'Print :CFBundleShortVersionString' /tmp/ipachk/Payload/*.app/Info.plist`
    → đúng `<version>`/`<build>`; `ls Payload/*.app/PlugIns/` phải có `PrivateVPNPacketTunnel.appex`.
-   **Keychain group phải có trong CẢ HAI nguồn** (luật 3):
+   **Keychain group: app + appex phải VẮNG nhóm dùng chung** (luật 3 — từ 1.4.2/19 bản iOS dùng
+   keychain riêng của app; extension iOS là hysteria-only, không đọc keychain):
    ```bash
    codesign -d --entitlements - /tmp/ipachk/Payload/*.app | grep -A2 keychain-access-groups
-   security cms -D -i /tmp/ipachk/Payload/*.app/embedded.mobileprovision | plutil -p - | grep -A3 keychain-access-groups
    ```
-   Binary khai `G6XW3RN6LJ.com.privatevpn.shared` **và** profile phải cấp **đúng nhóm cụ thể đó**
-   (profile thiếu nhóm hoặc chỉ wildcard `…*` ⇒ PASS nhầm ⇒ khách kẹt đăng nhập — ca thật 22/09/2026).
-   Chỉ soi code signature là **KHÔNG đủ**.
+   **Không được** thấy `com.privatevpn.shared`. Còn nhóm đó = build sai (hoặc script ký lại tiêm vào)
+   ⇒ `SecItemAdd` trả `-34018` ⇒ khách kẹt màn đăng nhập (ca thật 22/09/2026).
+   ⚠️ **macOS thì ngược lại**: 2 target macOS VẪN có nhóm này để chia sẻ khoá WireGuard — đừng "dọn" ở macOS.
 4. **Backup bản đang phát** trên node-2: `cp VPNFlow-latest.ipa VPNFlow-<ver-cũ>-<date>.ipa`.
 5. **CỔNG CHẶN VERSION (bắt buộc, tự động — không đạt thì DỪNG)**:
    `python3 scripts/check-publish-version.py --platform ios --file <ipa> --version <ver> --build <n>`
@@ -221,7 +221,9 @@ python3 scripts/audit-releases.py --interval 21600 \
   trong ghi `FileVersion = 1.0.0` ⇒ **luôn đọc version từ BÊN TRONG artifact** (cổng 1c/5b).
 - **Phát hành bản không phải latest đã test (20/09)**: route `/v1/downloads/mac` phục vụ DMG 1.3.3
   trong khi bản đã test là 1.4.0 ⇒ khách tải nhầm bản cũ 5 ngày (nay là bước 1b/§2b bắt buộc).
-- **iOS ký lại mất nhóm keychain** ⇒ app kẹt màn hình đăng nhập (nay cổng kiểm cả signature lẫn profile).
+- **iOS ký lại tiêm lại nhóm keychain dùng chung** ⇒ app kẹt màn hình đăng nhập (`errSecMissingEntitlement
+  -34018`). Khối tiêm đã bỏ khỏi `scripts/sign-server/resign-ipa.sh`; `scripts/publish-ios.sh` nay
+  assert IPA **không còn** nhóm đó (macOS vẫn giữ — xem luật 3).
 - **macOS `spctl` báo Notarized nhưng DMG chưa staple** ⇒ khách "không thể mở" (nay staple là bắt buộc).
 - **Sai host trong link**: `/buy` từng trỏ `api.meetflowai.site/dl/...` ⇒ 401. Link tải phải là host
   **`t1.meetflowai.site`** hoặc `meetflowai.site` (`/dl/...`), không phải `api.`.
@@ -237,7 +239,7 @@ shasum -a 256 <file>                     (khớp hash bên build)
 version/build đọc từ trong file          (không tin tên file)
 cổng chặn: pre exit 0  +  post exit 0    (check-publish-version.py)
 [macOS] stapler validate + spctl + codesign --deep --strict đều đạt
-[iOS]   keychain group có trong cả code signature lẫn provisioning profile
+[iOS]   KHÔNG còn nhóm keychain dùng chung trong app + appex (macOS thì VẪN có)
 [iOS]   bảng 7 mục §2c trên iPhone THẬT (ảnh + log)
 curl -sI <link phát hành> → 200 + size
 PATCH version → response JSON thật
