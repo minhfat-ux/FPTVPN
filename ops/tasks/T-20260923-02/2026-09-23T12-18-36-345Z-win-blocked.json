@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Do lai luc 12:16Z. KET QUA CHECK: buy van 1.4.2/build 19 (app_config latest_ios_version=1.4.2, ios_ipa_build=19; manifest bundle-version=19; /install/ios 'Version 1.4.2'). VUONG o UPDATE - WIN KHONG build/ky duoc IPA iOS: (1) WIN chay Windows, khong co Xcode/macOS; (2) node-2 KHONG con khoa ky /root/flowvpn-sign/dist.p12 + .pass, khong file nao chua 'PRIVATE KEY' => khong ky lai duoc; (3) khong ton tai IPA 1.4.3 o dau WIN voi toi: find / -iname '*.ipa' tren node-2 chi co <=1.4.2/19, khong nhanh/tag nao khai MARKETING_VERSION=1.4.3 (main + mac/ios-mtu-1300 deu 1.4.2; mac/ios-mtu-1300 co CURRENT_PROJECT_VERSION=20 nhung appex van 1.4.2/19). => Bên giao can go vuong: (a) Mac day IPA 1.4.3/20 vao node-2:/root/flowvpn-ipa/incoming/ (WIN publish ngay trong vai phut), HOAC (b) chot cho WIN chay Xcode Cloud (da cau hinh ciProduct FlowVPN) - nhung do la BAN MOI build lai, khong phai ban da test, va can chot 3 diem: credential HYST_PASSWORD/HYST_OBFS cho cloud, kenh Ad Hoc vs TestFlight, va §2c test may that. Chi tiet: docs/TG-VIBECODE-IOS-BUY-1.4.3.md + docs/TG-VIBECODE-IOS-NO-MAC-BUILD-PATH.md.",
+ "actor": "win",
+ "at": "2026-09-23T12:18:36.346Z"
+}
