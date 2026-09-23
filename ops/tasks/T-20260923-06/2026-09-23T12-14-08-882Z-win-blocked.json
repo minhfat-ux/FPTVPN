@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "WIN khong build/ky duoc iOS (Windows, khong Xcode/macOS) va node-2 da mat khoa ky (/root/flowvpn-sign/dist.p12 khong ton tai) => khong tao duoc IPA 1.4.3; khong co artifact 1.4.3 o node-1/node-2/repo. Presence connector 12:11Z: mac van poll (12s truoc) => Mac chua sleep. Da gui owner bus #352 (neu ro gioi han + xin chot giu Mac lam build) va Mac bus #353 (de nghi ack T-20260923-05, tang MARKETING_VERSION len 1.4.3 roi build+ky, scp IPA vao node-2:/root/flowvpn-ipa/incoming/). Cho IPA tu Mac de WIN phat len buy.",
+ "actor": "win",
+ "at": "2026-09-23T12:14:08.882Z"
+}
