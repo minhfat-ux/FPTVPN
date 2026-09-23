@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "fail",
+ "note": "WIN nghiem thu doc lap: may WIN KHONG co swiftc/bash/xcrun (da kiem: ca ba deu KHONG CO) nen KHONG chay duoc lenh nghiem thu (a)-(b) tai cho. Da soat diff 078e043 tren origin/mac/hotel-test: PHAN CODE DAT — (1) nhan diagDown/diagUp doi dung nghia 'Dang truyen ↓/↑' du 5 ngon ngu (en/vi/zh/ja/ko); (2) them dong 'Dinh phien ↓' lay tu BandwidthControl.peakDownKbps, noi qua RampStatus.Display -> TunnelStatusReport.peakDownKbps -> ContentView diagRow, KHONG them phep do, serving=false => nil (khong hien 0); (3) 3 assertion moi trong scripts/ios-pure-logic-tests/main.swift. LY DO FAIL: nghiem thu (b)+(c) CHUA CO BANG CHUNG, dung nhu MAC ghi — log dan ra la build CU (hyster-only, khong co A10) nen grep 'bw: sample observed=' khong co dong nao, va khong co anh the Diagnostics tren build moi. KHONG phai vi code sai. YEU CAU LAM LAI (iPhone da co 1.4.1/19 chua 078e043 theo bus #265): bat VPNFlow + mot luong tai THAT roi dan >=20 dong 'bw: sample observed=<do duoc> down=<live>' cung so Mbps cua scripts/measure-tunnel.sh trong cung luc; observed/down PHAI ~ so Mbps do (huong C trong docs/TG-VIBECODE-DIAGNOSTICS-SPEED.md §5: lay log lam so nghiem thu). Anh the Diagnostics: neu harness khong dieu khien duoc UI iPhone thi nho chu du an mo the chup va ghi ro. Xong thi done lai voi evidence chua 20 dong log tren.",
+ "actor": "win",
+ "at": "2026-09-23T02:48:40.734Z"
+}
