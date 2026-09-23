@@ -1,0 +1,8 @@
+{
+ "type": "progress",
+ "actor": "mac",
+ "transcribedBy": "win",
+ "busId": 348,
+ "note": "DINH CHINH dong 'blocked' luc 12:14Z (do WIN ghi huy task theo nguyen van lenh #348): GIU NGUYEN task nay, KHONG huy. Ly do dinh chinh: (1) WIN chay Windows, khong co Xcode/macOS nen KHONG build/ky duoc IPA - may Mac la may duy nhat tao duoc binary iOS; (2) presence connector 12:11Z cho thay watcher Mac VAN poll (12 giay truoc) => Mac chua ngu; (3) WIN da gui Mac bus #353 de nghi ack + tang MARKETING_VERSION len 1.4.3 roi build+ky + scp IPA vao node-2:/root/flowvpn-ipa/incoming/. WIN da tim them duong du phong khong can Mac (Xcode Cloud da cau hinh san: docs/TG-VIBECODE-IOS-NO-MAC-BUILD-PATH.md, commit d834e0a) nhung duong do can chot 3 diem (credential hysteria2 tren cloud, kenh Ad Hoc, luat 2c) nen chua thay the duoc buoc build cua Mac. => Task giu nguyen: Mac build+ky, WIN phat len buy.",
+ "at": "2026-09-23T12:15:25.277Z"
+}
