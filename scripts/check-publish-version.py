@@ -623,7 +623,9 @@ def main() -> int:
             sig, prof = internal["keychain_signature"], internal.get("keychain_profile") or []
             missing = internal.get("keychain_missing") or []
             if not sig:
-                result.unknown_("Nhóm keychain", "không đọc được keychain-access-groups trong binary")
+                # Không có nhóm nào trong chữ ký = app KHÔNG dùng nhóm keychain chia sẻ.
+                # Từ build 19 (23/09) app bỏ hẳn nhóm `…shared` để hết sự cố -34018 ⇒ ĐẠT, không phải "không kiểm được".
+                result.ok("Nhóm keychain", "app không khai nhóm keychain chia sẻ (hợp lệ từ build 19)")
             elif missing:
                 result.fail("Nhóm keychain THIẾU trong profile",
                             f"binary khai {missing} nhưng profile chỉ cấp {prof} ⇒ keychain trả "
