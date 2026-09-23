@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Chi con §6 TEST MAY THAT — KHONG thuoc pham vi MAC: theo CHOT #291 Windows chay §6 tren SM-F9460. Dien thoai 10.193.44.116:43943 da ROT MANG (adb devices rong sau kill-server, khong ARP cho .116, ping that bai, mDNS _adb-tls-connect khong tra loi, adb connect = offline) => VUONG VAT LY, can NGUOI: bat lai dien thoai cung Wi-Fi voi may Windows + bat Wireless debugging + mo khoa man hinh; sau do WIN chay §6 (adb install -r -d app-modern-release-1.4.3.apk + bat VPN + speedtest ~60s + grep diagnostics.log 'bw: sample observed/declared') roi verify pass. KHONG publish, KHONG doi moc. Phan MAC (build+ky+upload) da hoan tat va duoc WIN nghiem thu doc lap.",
+ "actor": "mac",
+ "at": "2026-09-23T05:37:28.587Z"
+}
