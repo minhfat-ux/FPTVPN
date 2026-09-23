@@ -110,6 +110,17 @@ NE. Vì vậy chỉ dùng khi `excludedRoutes` chứng minh là không dùng đ�
 | LAN vẫn dùng được | ping/`smb` tới `192.168.x`, máy in/NAS |
 | Không mất mạng khi connect | `netstat -rn` có default qua `utun`; không có lưu lượng lọt `en0` |
 
+**Đo tốc độ/độ ổn định: dùng script CHUNG, không tự nghĩ cách đo.** Yêu cầu §5 chốt "dùng chung một
+cách đo" và `scripts/measure-tunnel.sh` đã có sẵn (chạy được trên macOS; trên iPhone phải lấy số ở thẻ
+**Diagnostics**). Phải chạy **cả hai** lượt trong cùng buổi, cùng mạng:
+
+```bash
+bash scripts/measure-tunnel.sh --label baseline   # VPN TẮT — trần nhà mạng
+bash scripts/measure-tunnel.sh --label tunnel     # VPN BẬT — qua tunnel
+```
+
+Không có số `baseline` thì **không kết luận được** "VPN làm chậm hay nhà mạng vốn đã chậm".
+
 ## 6. Rủi ro
 
 1. **5.494 route**: `setTunnelNetworkSettings` có thể tốn thời gian và gây khựng vài giây mỗi lần áp
