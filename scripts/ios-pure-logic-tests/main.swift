@@ -106,6 +106,53 @@ do {
     )
 }
 
+// MARK: - LivenessWatchdog H2 (24/09/2026): toGoOffered = toGo + toGoDropped
+
+print("LivenessWatchdog H2 — toGo dong bang + toGoDropped tang ⇒ PHAI rebuild, khong .idle")
+do {
+    // Số lấy từ phiên hỏng thật (relay.log): toGo đóng băng ở 2387, toGoDropped 13→4285.
+    var h2 = LivenessWatchdog(now: t0)
+    checkEqual(
+        h2.tick(
+            now: t0.addingTimeInterval(15), fromGo: 2_387, toGo: 2_387,
+            toGoDropped: 13, rampInFlight: false
+        ),
+        .alive,
+        "nhịp đầu có byte chiều VỀ ⇒ sống, chốt mốc máy-vẫn-gửi = 2387+13"
+    )
+    checkEqual(
+        h2.tick(
+            now: t0.addingTimeInterval(30), fromGo: 2_387, toGo: 2_387,
+            toGoDropped: 4_285, rampInFlight: false
+        ),
+        .rebuild,
+        "toGo ĐÓNG BĂNG mà toGoDropped 13→4285 ⇒ máy VẪN gửi ⇒ rebuild (KHÔNG .idle)"
+    )
+
+    // Chống báo oan: gói cầu bỏ cũng đứng yên (người dùng ngồi yên) ⇒ KHÔNG kết luận.
+    var quiet = LivenessWatchdog(now: t0)
+    _ = quiet.tick(
+        now: t0.addingTimeInterval(15), fromGo: 500, toGo: 500, toGoDropped: 10, rampInFlight: false
+    )
+    checkEqual(
+        quiet.tick(
+            now: t0.addingTimeInterval(30), fromGo: 500, toGo: 500,
+            toGoDropped: 10, rampInFlight: false
+        ),
+        .idle,
+        "cả toGo lẫn toGoDropped đứng yên ⇒ người dùng ngồi yên ⇒ idle (không gỡ oan)"
+    )
+    checkEqual(quiet.strikes, 0, "đối xứng ⇒ không tăng strike")
+
+    // `toGoDropped` mặc định 0 ⇒ hành vi cũ giữ nguyên (dùng cho nguồn không đếm được gói bỏ).
+    var legacy = LivenessWatchdog(now: t0)
+    checkEqual(
+        legacy.tick(now: t0.addingTimeInterval(15), fromGo: 0, toGo: 500, rampInFlight: false),
+        .rebuild,
+        "không truyền toGoDropped: toGo 0→500 vẫn đủ kết luận như trước"
+    )
+}
+
 // MARK: - LivenessWatchdog pha HOLD (chốt 22/09/2026: không closeTun)
 
 print("LivenessWatchdog — HOLD: giu duong da chon + ping tiep, KHONG bao gio rebuild/teardown")

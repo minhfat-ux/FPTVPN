@@ -120,30 +120,19 @@ struct ContentView: View {
                 Text(languageStore.t(.updateRequiredDetail))
             }
         }
-        // Device cap hit: show the real reason + let the user log out an old
-        // device instead of a vague "Coordinator rejected this device".
-        .confirmationDialog(
-            vpnManager.deviceLimitMessage ?? "Device limit reached",
+        // Device cap hit: mở NGAY màn hình "Thiết bị của tôi" bằng danh sách server trả kèm lỗi
+        // 403 `device_limit_reached`, để khách tự đăng xuất máy khác thay vì chỉ thấy lỗi thô.
+        .sheet(
             isPresented: Binding(
                 get: { vpnManager.deviceLimitMessage != nil },
                 set: { if !$0 { vpnManager.dismissDeviceLimit() } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
-            ForEach(vpnManager.deviceLimitDevices) { device in
-                Button(deviceLimitLabel(device)) {
-                    Task {
-                        await vpnManager.logOutDeviceAndRetry(
-                            deviceId: device.id,
-                            store: configStore,
-                            authStore: authStore
-                        )
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) { vpnManager.dismissDeviceLimit() }
-        } message: {
-            Text("Choose a device to log out, then VPNFlow will connect again.")
+            DeviceLimitSheet()
+                .environmentObject(vpnManager)
+                .environmentObject(configStore)
+                .environmentObject(authStore)
+                .environmentObject(languageStore)
         }
         .onAppear {
             if !authStore.isSignedIn {
@@ -207,13 +196,8 @@ struct ContentView: View {
         }
     }
 
-    private func deviceLimitLabel(_ device: CoordinatorDevice) -> String {
-        let name = device.name?.isEmpty == false ? device.name! : device.device_id
-        let platform = device.platform?.isEmpty == false ? " · \(device.platform!)" : ""
-        return "\(name)\(platform)"
-    }
-
     private func syncBackendPremium() {
+
         let status = authStore.session?.user.subscription_status
         subscriptionStore.backendSubscriptionStatus = status
         subscriptionStore.backendPremium = status?.is_active ?? false
@@ -799,6 +783,183 @@ struct ContentView: View {
                 result.unicodeScalars.append(flag)
             }
         }
+    }
+}
+
+/// Màn hình "Thiết bị của tôi" mở khi Connect bị chặn vì hết hạn mức thiết bị
+/// (403 `device_limit_reached`).
+///
+/// Vì sao là màn hình chứ không phải hộp thoại: danh sách server trả kèm lỗi chỉ có tên + nền
+/// tảng, khách cần thấy ngày tạo và biết máy nào là "Thiết bị này" mới dám chọn đăng xuất. Nút
+/// đăng xuất gọi `DELETE /v1/devices/:id` qua `VPNManager.logOutDeviceAndRetry` rồi Connect lại.
+private struct DeviceLimitSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var vpnManager: VPNManager
+    @EnvironmentObject private var configStore: VPNConfigStore
+    @EnvironmentObject private var authStore: AuthSessionStore
+    @EnvironmentObject private var languageStore: AppLanguageStore
+    /// Thiết bị đang gọi DELETE (khoá các nút còn lại để không bấm hai lần).
+    @State private var pendingDeviceId: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                VPNTheme.backgroundGradient
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        noticeCard
+
+                        if vpnManager.deviceLimitDevices.isEmpty {
+                            Text(languageStore.t(.noDevices))
+                                .font(.footnote)
+                                .foregroundStyle(VPNTheme.secondaryLabel)
+                        } else {
+                            ForEach(vpnManager.deviceLimitDevices) { device in
+                                deviceCard(device)
+                            }
+                        }
+
+                        retryButton
+                    }
+                    .padding(20)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .navigationTitle(languageStore.t(.deviceLimitTitle))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(languageStore.t(.close)) { dismiss() }
+                }
+            }
+        }
+        .tint(VPNTheme.accent)
+    }
+
+    /// Thông báo tiếng Việt dễ hiểu + nguyên văn thông báo của server (để khách báo lại khi cần
+    /// hỗ trợ, thay vì chỉ hiện lỗi thô).
+    private var noticeCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(languageStore.t(.deviceLimitTitle), systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+
+            Text(languageStore.t(.deviceLimitBody))
+                .font(.subheadline)
+                .foregroundStyle(VPNTheme.label)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let message = vpnManager.deviceLimitMessage, !message.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(VPNTheme.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(VPNTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
+        )
+    }
+
+    private func deviceCard(_ device: CoordinatorDevice) -> some View {
+        let isCurrent = isCurrentDevice(device)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(deviceLabel(device))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(VPNTheme.label)
+                if isCurrent {
+                    Text(languageStore.t(.thisDevice))
+                        .font(.caption2)
+                        .foregroundStyle(VPNTheme.secondaryLabel)
+                }
+            }
+
+            Text(deviceDetail(device))
+                .font(.caption)
+                .foregroundStyle(VPNTheme.secondaryLabel)
+
+            // KHÔNG cho tự thu hồi chính máy đang dùng: server sẽ chặn ở lần register kế tiếp.
+            if !isCurrent {
+                Button(role: .destructive) {
+                    Task { await logOut(device) }
+                } label: {
+                    if pendingDeviceId == device.id {
+                        ProgressView()
+                            .tint(VPNTheme.accent)
+                    } else {
+                        Label(languageStore.t(.logOutDevice), systemImage: "rectangle.portrait.and.arrow.right")
+                            .font(.footnote.bold())
+                    }
+                }
+                .disabled(pendingDeviceId != nil)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(VPNTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(VPNTheme.cardStroke, lineWidth: 1)
+        )
+    }
+
+    /// Nút dự phòng khi server không kèm danh sách thiết bị (hoặc khách vừa đăng xuất xong mà
+    /// vẫn muốn thử lại).
+    private var retryButton: some View {
+        Button {
+            dismiss()
+            Task { await vpnManager.connect(store: configStore, authStore: authStore) }
+        } label: {
+            Label(languageStore.t(.connectAgain), systemImage: "arrow.clockwise")
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(VPNTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(pendingDeviceId != nil)
+    }
+
+    private func logOut(_ device: CoordinatorDevice) async {
+        pendingDeviceId = device.id
+        defer { pendingDeviceId = nil }
+        await vpnManager.logOutDeviceAndRetry(
+            deviceId: device.id,
+            store: configStore,
+            authStore: authStore
+        )
+    }
+
+    /// Máy đang chạy app này: so khoá công khai đã đăng ký (Keychain) với `public_key` server trả.
+    private func isCurrentDevice(_ device: CoordinatorDevice) -> Bool {
+        guard let current = vpnManager.devicePublicKey, !current.isEmpty else { return false }
+        return device.public_key == current
+    }
+
+    private func deviceLabel(_ device: CoordinatorDevice) -> String {
+        let name = device.name?.isEmpty == false ? device.name! : device.device_id
+        return name
+    }
+
+    private func deviceDetail(_ device: CoordinatorDevice) -> String {
+        var parts: [String] = []
+        if let platform = device.platform, !platform.isEmpty { parts.append(platform) }
+        if let ip = device.assigned_ip, !ip.isEmpty { parts.append(ip) }
+        if let created = device.created_at, let date = ISO8601DateFormatter().date(from: created) {
+            parts.append(date.formatted(date: .abbreviated, time: .shortened))
+        }
+        return parts.joined(separator: " · ")
     }
 }
 

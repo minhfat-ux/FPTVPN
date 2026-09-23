@@ -60,14 +60,16 @@ enum BandwidthControl {
     static let lossBackoffMinObserved: TimeInterval = 5
     /// Tunnel rảnh ngần này mới được dựng lại transport để áp số khai mới.
     static let idleBeforeChange: TimeInterval = 2
-    /// Trần thời gian một thay đổi HẠ số khai được CHỜ tunnel rảnh; quá hạn ⇒ buộc dựng lại
-    /// transport dù đang chở traffic.
+    /// Trần thời gian một thay đổi HẠ số khai được CHỜ tunnel rảnh.
     ///
     /// Vì sao phải có trần: đường bị flood thì **không bao giờ rảnh** — máy vẫn đang cố tải,
-    /// gói vẫn vào tunnel nên "chờ rảnh" thành "chờ mãi", số khai 30/100 Mbps nằm lại trong
-    /// transport và tunnel nghẽn cho tới khi chết (đúng ca iPad 19/09/2026: đo 0,5 Mbps mà
-    /// `declared up=30000 down=100000`). HẠ số khai là việc CHỮA nên được phép đứt stream đang
-    /// mở; TĂNG thì vẫn chỉ áp ở ranh giới rảnh.
+    /// gói vẫn vào tunnel nên "chờ rảnh" thành "chờ mãi". HẠ số khai là việc CHỮA; TĂNG thì chỉ
+    /// áp ở ranh giới rảnh.
+    ///
+    /// H1 (24/09/2026): hết hạn này **KHÔNG còn** cho phép dựng lại transport giữa lúc đang chở
+    /// traffic — đo thật cho thấy làm vậy thì tầng Go ngừng đọc fd và cầu bỏ 100% gói. Provider
+    /// chỉ dùng `pendingForceExpired` để GHI LOG "đã chờ quá hạn, vẫn chờ ranh giới rảnh"
+    /// (xem `applyBandwidthRampIfIdle`); số mới áp ở ranh giới rảnh hoặc ở phiên sau.
     static let pendingForceAfter: TimeInterval = RampStatus.downRampForceSeconds
     /// Một mẫu chỉ tính là "đang chở dữ liệu" khi vượt ngần này (dưới ngưỡng ⇒ coi như rảnh).
     static let busyBytesPerSecond = 2_000
@@ -561,8 +563,11 @@ extension BandwidthControl {
             )
         }
 
-        /// Thay đổi đang chờ đã quá hạn "chờ tunnel rảnh" chưa — provider được phép BUỘC dựng
-        /// lại transport để áp (xem `BandwidthControl.pendingForceAfter`).
+        /// Thay đổi HẠ số khai đang chờ đã quá hạn "chờ tunnel rảnh" chưa.
+        ///
+        /// H1 (24/09/2026): provider chỉ dùng cờ này để GHI LOG (đã chờ quá hạn, vẫn chờ ranh
+        /// giới rảnh) — KHÔNG còn dùng để buộc dựng lại transport khi đang chở traffic, vì đo
+        /// thật cho thấy làm vậy thì tầng Go ngừng đọc fd và cầu bỏ 100% gói.
         func pendingForceExpired(_ now: Date) -> Bool {
             guard pendingChange, pendingIsDecrease, let pendingSince else { return false }
             return now.timeIntervalSince(pendingSince) >= BandwidthControl.pendingForceAfter
