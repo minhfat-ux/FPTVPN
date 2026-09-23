@@ -48,10 +48,29 @@
       ],
       "next_steps": "Do 3 kich ban (VPN tat / bat-khong dung / bat+speedtest) bang top -H + dumpsys cpuinfo; roi lam A+B+C (MTU, gian nhip probe, log buffer) theo docs/ANDROID_CPU_TODO.md",
       "doc": "docs/ANDROID_CPU_TODO.md",
-      "blocked_by": "JDK 17 tren Mac hong (chua build lai APK duoc); can 1 may Android that de do"
+      "blocked_by": "Đã hết blocker JDK: harness Windows build được APK (JDK Temurin 17 + SDK 36; compile 2 flavor + assemble OK ngày 23/09). Còn thiếu DUY NHẤT: số đo 3 kịch bản trên máy thật - thiết bị SM-F9460 từng thấy qua wireless adb nhưng đã ngắt kết nối giữa phiên",
+      "progress_2026_09_23": "MTU 1500->1300 + 2 resolver DNS đã làm và ĐÃ PHÁT cho khách (38a3e6f nằm trong Android 1.4.3/29 rồi 1.4.4/32). Phần còn lại (giãn nhịp probe 15s, log buffer, nhận biết màn hình tắt) CHƯA làm. Backlog đầy đủ: docs/ANDROID_CHINA_ROM_TASKS.md (T-AND-01..20)"
+    },
+    {
+      "id": "BUG-APPVERSION-PLATFORM-001",
+      "title": "/v1/app-version?platform=android-legacy (và mọi giá trị lạ) rơi về payload kênh Windows",
+      "area": "control-plane",
+      "severity": "medium",
+      "reported": "2026-09-23",
+      "status": "open",
+      "impact": "Công cụ audit / cổng chặn hỏi platform=android-legacy sẽ đọc SAI kênh (nhận version + installer_url của Windows) — đúng loại lỗi từng gây 'audit báo lệch oan' cho macOS. Khách KHÔNG bị ảnh hưởng vì route tải APK legacy vẫn đúng.",
+      "evidence": [
+        "GET https://api.meetflowai.site/v1/app-version?platform=android-legacy -> {\"platform\":\"windows\",\"latest_version\":\"1.4.6\",\"installer_url\":\".../VPNFlow-Setup-1.4.6.exe\"} (đo 3 lần liên tiếp 23/09/2026, harness Windows)",
+        "GET ...?platform=bogus-xyz -> cũng trả payload windows => mọi giá trị không khớp đều mặc định về Windows",
+        "control-plane/src/app-version.js:37,44 - chỉ nhận ios|android|windows|win, không có nhánh android-legacy",
+        "Đối chiếu: route tải APK legacy VẪN ĐÚNG - HEAD https://t1.meetflowai.site/v1/downloads/android-legacy -> HTTP 200, 74.748.054 B (khớp sổ 1.4.4/32)"
+      ],
+      "next_steps": "Thêm nhánh phân biệt android-legacy ở control-plane/src/app-version.js (hoặc tách field riêng thay vì dùng chung ?platform) + test. Lưu ý control-plane/src/index.js là VÙNG BẢO VỆ của owner windows (AGENTS.md §6b) nên harness Windows tự làm + commit trước khi deploy.",
+      "workaround": "Kênh modern dùng ?platform=android; kênh legacy đọc trực tiếp route /v1/downloads/android-legacy",
+      "doc": "docs/PUBLISHER_PROCESS.md §0.1"
     }
   ],
   "regressions": [],
   "resolved": [],
-  "updated": "2026-09-22"
+  "updated": "2026-09-23"
 }

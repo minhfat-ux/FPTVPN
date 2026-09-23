@@ -40,6 +40,31 @@
 
 | 12 | **Phân chia publisher theo kênh** (chốt 23/09/2026): **Mac → iOS + macOS**; **Windows harness → Windows + Android**. Mỗi bên tự chạy cổng §1c/§5b + ghi sổ cho kênh của mình; **không publish kênh không thuộc phần mình**. Email thông báo khách do publisher của kênh đó gửi | §0 (đầu tài liệu) | mọi publisher |
 
+| 12 | **Phân chia publisher theo kênh** (chốt 23/09/2026): **Mac → iOS + macOS**; **Windows harness → Windows + Android**. Mỗi bên tự chạy cổng §1c/§5b + ghi sổ cho kênh của mình; **không publish kênh không thuộc phần mình**. Email thông báo khách do publisher của kênh đó gửi | §0 (đầu tài liệu) | mọi publisher |
+
+### 0.1 TRẠNG THÁI 4 KÊNH — đo trực tiếp 23/09/2026 (harness Windows)
+
+> Đo bằng `GET https://api.meetflowai.site/v1/app-version?platform=<p>` + `release/releases.jsonl`, **không** lấy từ nhật ký.
+
+| Kênh | Đang phát | `min` | Sổ | Nhật ký §6 | Ghi chú |
+|---|---|---|---|---|---|
+| **windows** | **1.4.6** (`VPNFlow-Setup-1.4.6.exe?v=1a504534` · 52.792.253 B · sha `1a504534…`) | 1.0.0 | ✅ | ✅ | phát **chưa ký** theo ngoại lệ luật 11 |
+| **android** | **1.4.4** (code 32 · modern 74.731.674 B · sha `145053e9…`) | 1.2.6 | ✅ | ✅ (bổ sung 23/09) | — |
+| **android-legacy** | **1.4.4** (code 32 · 74.748.054 B · sha `b9a03e77…`) | 1.0.0 | ✅ | ✅ | xem ⚠️ **BUG-APPVERSION-PLATFORM-001** dưới |
+| **ios** | **1.4.2 (19)** (IPA 8.152.677 B · sha `eba2e856…`) | 1.3.3 | ⚠️ sổ mới có 1.4.1 (18) | ✅ | cần bổ sung dòng sổ 1.4.2 (Mac) |
+| **macos** | **1.4.0** | 0.0.0 | ✅ | ⚠️ chặn TestFlight/macOS trong ngày | — |
+
+> ⚠️ **BUG-APPVERSION-PLATFORM-001 (phát hiện 23/09/2026, CHƯA SỬA):**
+> `GET /v1/app-version?platform=android-legacy` **không trả payload Android legacy** mà **rơi về kênh Windows** —
+> đo 3 lần liên tiếp đều ra `{"platform":"windows","latest_version":"1.4.6","installer_url":"…/VPNFlow-Setup-1.4.6.exe"}`.
+> **Mọi giá trị `platform` lạ cũng rơi về Windows** (thử `bogus-xyz` → cũng `windows`), vì
+> `control-plane/src/app-version.js` chỉ nhận `ios|android|windows|win` và mặc định Windows khi không khớp.
+> **Ảnh hưởng:** công cụ audit / cổng chặn hỏi `platform=android-legacy` sẽ **so sai kênh** — đúng loại lỗi
+> "audit báo lệch oan" từng gặp ở macOS. **Khách KHÔNG bị ảnh hưởng**: route tải APK legacy vẫn đúng
+> (`HEAD /v1/downloads/android-legacy` → HTTP 200 · 74.748.054 B khớp sổ). Né hiện tại: kênh modern hỏi
+> `platform=android`, kênh legacy đọc thẳng route `/v1/downloads/android-legacy`.
+
+
 **Công cụ dùng chung cho mọi bên:**
 ```bash
 python3 scripts/check-publish-version.py --platform <ios|macos|android|windows> \
@@ -197,23 +222,26 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 ## 6. Nhật ký phát hành (cập nhật mỗi lần)
 | Ngày | Nền tảng | Version/build | Ghi chú |
 |---|---|---|---|
+| 2026-09-23 | Windows | **1.4.6** | **HOTFIX DNS khách Trung Quốc**: `hijack-dns` lên đầu + bỏ `detour` sai trên resolver nội địa (sing-box 1.14 FATAL) + sửa **thứ tự rule `sniff` phải TRƯỚC `hijack-dns`**. 3 commit `f59f9bd`/`4b6b96c`/`5ebc64f`, đã verify trên máy thật mạng TQ (`HANDOFF_WINDOWS_1.4.6_DNS_HOTFIX_2026-09-23.md`). Setup **52.792.253 B** · sha256 `1a504534…0796` · `/buy` trỏ `?v=1a504534` · mốc `latest_version=1.4.6` · đã ghi sổ + tag `windows-v1.4.6`. Phát **CHƯA KÝ** theo ngoại lệ luật 11 (xem ghi chú §0). ⚠️ **chưa có release notes `1.4.6`** |
+| 2026-09-23 | iOS | **1.4.2 (19)** | **Trang buy**: IPA ad-hoc 8.152.677 B · sha256 `eba2e856…ea31b` · mốc `latest_ios_version=1.4.2` + `ipa_build=19` (minimum giữ 1.3.3) · manifest `bundle-version 19` · tải thật qua t1 khớp sha. Gồm `7c98e53` (tự đăng xuất thiết bị khác) + `820b9d2`/`ff08f5b` (watchdog) + bỏ nhóm keychain dùng chung. **Email**: 6/6 khách iOS `delivered` (kèm thông báo đăng nhập lại 1 lần) · §2c: chủ dự án xác nhận "iOS verified and Passed". Sự cố khi phát: SSH key mất quyền + quoting lệnh claim ⇒ upload đứt, file đang phát bị cụt 2,85 MB — đã đẩy lại bản đầy đủ, verify sha256 rồi mới set mốc; tool đã sửa thành **upload nguyên tử** (file tạm + verify + mv). **TestFlight build 19: chờ bản export app-store-connect** |
+| 2026-09-23 | iOS | 1.4.1 (18) — TestFlight | Nộp **Beta App Review** cho tester ngoài: build vào nhóm `External Test`, "What to Test" 3 ngôn ngữ (en-GB/vi/zh-Hans), state `WAITING_FOR_REVIEW` (nộp 11:08 VN, submission id = build id `14c65fa9-…`) |
+| 2026-09-23 | iOS | 1.4.1 (18) — thông báo | Gửi email 3 ngôn ngữ cho khách **đang dùng iOS** (script `scripts/send-ios-1.4.1-announcement.py`): **6/6 delivered** (04:09 UTC). Nội dung chỉ nêu tính năng có trong build 18 (watchdog tự phục hồi, tự dựng lại, sửa mất mạng IPv6, đường TQ đi thẳng, Settings hiện version). Release notes: `release/ios/RELEASE_NOTES_1.4.1.md` |
+| 2026-09-23 | iOS | 1.4.1 (18) | **Trang buy**: IPA ad-hoc mới `/root/flowvpn-ipa/VPNFlow-latest.ipa` 8.119.092 B · sha256 `89a17e4d…ba73` · mốc `latest_ios_version=1.4.1` + `ipa_build=18` (minimum giữ 1.3.3) · backup bản cũ `VPNFlow-latest.bak-1.4.0-b16-20260923-105752.ipa`. **App Store Connect/TestFlight**: build 18 đã `VALID`, internal `IN_BETA_TESTING`; external `READY_FOR_BETA_SUBMISSION`. Profile ad-hoc 8 UDID **không đổi** so với bản 16; `get-task-allow=False` ⇒ khách không cần Developer Mode |
+| 2026-09-23 | Android | **1.4.4** (32) | Nối tiếp 1.4.3/29: **v30** (số khai không tự bóp khi tải adaptive) · **v31** (không tin "bắt tay TCP" khi chọn đường) · **v32** (phép đo mạng trước khi khai không còn bị ngân sách 2,5 s ăn hết) + bump `versionName`. modern **74.731.674 B** · sha256 `145053e9…` · legacy **74.748.054 B** · sha256 `b9a03e77…` · mốc `1.4.4` · đã ghi sổ + tag `android-v1.4.4`. Release notes `docs/RELEASE_NOTES_android_1.4.4.md` |
+| 2026-09-23 | Android | ~~**1.4.3**~~ (29) | Bản **đã bị thay bởi 1.4.4** trong cùng ngày. modern 74.731.689 B · sha256 `95633669…`; legacy 74.748.051 B · sha256 `fdb88e3f…`. Gồm **AAR hysteria dựng lại căn trang 16 KB** (vào `main` bằng merge `e81a210` — `main` trước đó vẫn dùng AAR `LOAD align 0x1000`) + MTU TUN **1500 → 1300** và **2 resolver DNS** (bản vá `38a3e6f`) |
 | 2026-09-22 | Windows | **1.4.4** | 🔒 **LOCKED** (vẫn giữ máy test) — **KHÔNG đổi chức năng so với 1.4.3**, chỉ **khớp lại mốc commit build**. Lý do: bản 1.4.3 build từ cây làm việc ở HEAD cũ nên app khai `ProductVersion = 1.4.3+7ae07f0…` trong khi sổ/tag ghi `64e07c7` ⇒ lệch mốc "khách chạy build từ mã nguồn nào"; **không phát lại cùng số 1.4.3 với hash khác** vì luật artifact bất biến (`docs/VERSIONING.md` §3.3). Nay `ProductVersion = 1.4.4+8466b18…` **khớp** sổ + tag. Bằng chứng không đổi chức năng: `git diff 64e07c7..8466b18 -- windows` **chỉ** khác `csproj` (dòng `<Version>`) + `build.ps1`, **không file `.cs` nào đổi**. Setup **52.792.515 B** · sha256 `d9956056…ae1be` · `/buy` trỏ `?v=d9956056` · mốc `latest_version=1.4.4` · **cổng chặn: pre ĐẠT, post ĐẠT** · `dotnet test` 202/202 · release notes `docs/RELEASE_NOTES_1.4.4.md`. **Sửa gốc chống tái diễn** (`build.ps1`): DỪNG nếu `windows/` còn thay đổi chưa commit + nhúng commit tường minh (`SourceRevisionId`) + **cổng 3c** đọc lại `ProductVersion` phải bằng `<version>+<commit>` — cổng này bắt được ngay 1 lỗi thật ở lần build đầu (`<v>+<sha>.<sha>`) |
 | 2026-09-22 | Windows | ~~**1.4.3**~~ | ⚠️ **ĐÃ BỊ THAY bởi 1.4.4** (cùng nội dung, khác mốc commit). **A7 IPv6** (dải TQ đi thẳng, IPv6 còn lại vẫn chặn — server không có IPv6) + **sửa lỗi nghiêm trọng**: script PowerShell dò gateway chứa dấu `"` bị mất khi truyền `-Command` ⇒ `TryGetPhysicalGatewayAsync` luôn `null` ⇒ máy có **Clash/Mihomo/Tailscale** thêm route loại trừ endpoint qua chính adapter ảo ⇒ **vòng lặp, tunnel không lên** (lỗi im lặng). Sửa bằng `-EncodedCommand`. Setup 52.791.547 B · sha256 `fdd6f73a…ee7c1`. ⚠️ **`ProductVersion` ghi SAI commit (`7ae07f0`)** — xem dòng 1.4.4. **IPv6 đã BỎ QUA** theo chốt của chủ dự án 22/09 |
 | 2026-09-22 | Windows | **1.4.2** | Sửa **metadata version** (bản 1.4.1 phát ra có `FileVersion 1.0.0.0` dù installer tên 1.4.1) + `Settings → About` hiện số hiệu và đối chiếu mốc server. Setup 52.794.169 B · sha256 `60ea6f31…86c6` · `/buy` trỏ `?v=60ea6f31` · mốc `latest_version=1.4.2` · **cổng chặn `scripts/check-publish-version.py` chạy cả 2 chế độ: pre ĐẠT, post ĐẠT** (đọc version trong file ĐANG PHÁT = 1.4.2) |
+| 2026-09-22 | macOS | 1.4.0 (14) | **Đo lại bằng cổng chặn §5b**: DMG đang phát (21.617.309 B · sha256 `9d05f271…`) đọc từ trong file ra `CFBundleShortVersionString=1.4.0`, `CFBundleVersion=14` → **khớp** mốc `latest_mac_version=1.4.0`; đính chính mục 1d |
+| 2026-09-21 | dev | guard + link | **Thống nhất mọi link khách tải về `t1.meetflowai.site`** (env `PUBLIC_SITE_URL`+`API_HOSTS`, `ios_ipa_url`/`android_apk_url(_legacy)`/`windows_installer_url`) · thêm `flowvpn-guard` (email tự động cho khách mới bị tắc + task chờ approve trên Telegram: `/guard`, `/approve`, `/reject`) |
 | 2026-09-20 | iOS | 1.4.0 (16) | **Ký lại Ad Hoc cho 8 UDID** (`get-task-allow=false` ⇒ khách KHÔNG cần Developer Mode) · IPA đang phát 8.135.823 B · manifest `bundle-version` 16 |
+| 2026-09-20 | macOS | 1.3.3 (13) | **Ký Developer ID + notarize + staple** (DMG 21.617.309 B) → khách mở không cảnh báo · email 3 ngôn ngữ gửi 17/17 khách |
 | 2026-09-19 | iOS | 1.4.0 (15) | IPA 5.049.845 B · sha256 `b6bf9a04…0677` · đã upload + set mốc |
 | 2026-09-19 | Android | 1.4.0 (20) | file đang phát trên node-2: modern 96.536.145 B (`/root/flowvpn-apk/VPNFlow-latest.apk`, 19/09 22:25 — sau fix timeout `a41bc6e`+`2c34cfb`) · legacy 96.536.152 B |
 | 2026-09-19 | Android | 1.4.0 (20) | modern 96.519.741 B `a780a773…56e8` · legacy 96.536.114 B `e36b4fcb…bc46` · đã upload + set mốc |
 | 2026-09-18 | Windows | Setup 1.0.7 | do harness Windows phát hành; link `/buy` có `?v=<hash>` |
 | 2026-09-18 | iOS | 1.3.3 (14) | bản trước, đã được thay bằng 1.4.0 |
 | 2026-09-18 | Android | 1.3.9 | trước 1.4.0 |
-| 2026-09-20 | macOS | 1.3.3 (13) | **Ký Developer ID + notarize + staple** (DMG 21.617.309 B) → khách mở không cảnh báo · email 3 ngôn ngữ gửi 17/17 khách |
-| 2026-09-22 | macOS | 1.4.0 (14) | **Đo lại bằng cổng chặn §5b**: DMG đang phát (21.617.309 B · sha256 `9d05f271…`) đọc từ trong file ra `CFBundleShortVersionString=1.4.0`, `CFBundleVersion=14` → **khớp** mốc `latest_mac_version=1.4.0`; đính chính mục 1d |
-
-| 2026-09-21 | dev | guard + link | **Thống nhất mọi link khách tải về `t1.meetflowai.site`** (env `PUBLIC_SITE_URL`+`API_HOSTS`, `ios_ipa_url`/`android_apk_url(_legacy)`/`windows_installer_url`) · thêm `flowvpn-guard` (email tự động cho khách mới bị tắc + task chờ approve trên Telegram: `/guard`, `/approve`, `/reject`) |
-
-| 2026-09-23 | iOS | 1.4.1 (18) | **Trang buy**: IPA ad-hoc mới `/root/flowvpn-ipa/VPNFlow-latest.ipa` 8.119.092 B · sha256 `89a17e4d…ba73` · mốc `latest_ios_version=1.4.1` + `ipa_build=18` (minimum giữ 1.3.3) · backup bản cũ `VPNFlow-latest.bak-1.4.0-b16-20260923-105752.ipa`. **App Store Connect/TestFlight**: build 18 đã `VALID`, internal `IN_BETA_TESTING`; external `READY_FOR_BETA_SUBMISSION`. Profile ad-hoc 8 UDID **không đổi** so với bản 16; `get-task-allow=False` ⇒ khách không cần Developer Mode |
-
 ### 6b. iOS có HAI kênh — đừng lẫn
 - **Trang buy / khách cài trực tiếp**: IPA **ad-hoc** (`/root/flowvpn-ipa/VPNFlow-latest.ipa`, route `/v1/downloads/ios`),
   mốc `latest_ios_version` + `ipa_build`. Bản này chỉ cài được trên máy có UDID trong profile.
@@ -224,10 +252,7 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
   `externalBuildState=READY_FOR_BETA_SUBMISSION` là còn phải nộp Beta App Review mới tới tester ngoài.
 - **Không dùng IPA ad-hoc để nộp TestFlight** và ngược lại (profile app-store có 0 UDID nên cài trực tiếp sẽ fail).
 
-| 2026-09-23 | iOS | 1.4.1 (18) — thông báo | Gửi email 3 ngôn ngữ cho khách **đang dùng iOS** (script `scripts/send-ios-1.4.1-announcement.py`): **6/6 delivered** (04:09 UTC). Nội dung chỉ nêu tính năng có trong build 18 (watchdog tự phục hồi, tự dựng lại, sửa mất mạng IPv6, đường TQ đi thẳng, Settings hiện version). Release notes: `release/ios/RELEASE_NOTES_1.4.1.md` |
-| 2026-09-23 | iOS | 1.4.1 (18) — TestFlight | Nộp **Beta App Review** cho tester ngoài: build vào nhóm `External Test`, "What to Test" 3 ngôn ngữ (en-GB/vi/zh-Hans), state `WAITING_FOR_REVIEW` (nộp 11:08 VN, submission id = build id `14c65fa9-…`) |
 
-| 2026-09-23 | iOS | **1.4.2 (19)** | **Trang buy**: IPA ad-hoc 8.152.677 B · sha256 `eba2e856…ea31b` · mốc `latest_ios_version=1.4.2` + `ipa_build=19` (minimum giữ 1.3.3) · manifest `bundle-version 19` · tải thật qua t1 khớp sha. Gồm `7c98e53` (tự đăng xuất thiết bị khác) + `820b9d2`/`ff08f5b` (watchdog) + bỏ nhóm keychain dùng chung. **Email**: 6/6 khách iOS `delivered` (kèm thông báo đăng nhập lại 1 lần) · §2c: chủ dự án xác nhận "iOS verified and Passed". Sự cố khi phát: SSH key mất quyền + quoting lệnh claim ⇒ upload đứt, file đang phát bị cụt 2,85 MB — đã đẩy lại bản đầy đủ, verify sha256 rồi mới set mốc; tool đã sửa thành **upload nguyên tử** (file tạm + verify + mv). **TestFlight build 19: chờ bản export app-store-connect** |
 
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
