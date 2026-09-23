@@ -37,7 +37,7 @@ Get-ChildItem Cert:\CurrentUser\My |
 
 # 3) build CÓ KÝ + cổng chặn cứng
 $env:VPNFLOW_SIGN_CERT_THUMBPRINT = "<thumbprint>"
-powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -Version <so-hieu> -RequireSigning
+powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -Version 1.4.5 -RequireSigning
 
 # 4) lấy bằng chứng (bắt buộc, xem §4)
 $setup = Get-ChildItem windows\installer\out\VPNFlow-Setup-<so-hieu>.exe
@@ -173,6 +173,7 @@ SHA256 hoặc sai chữ ký, và **không credential trong log**.
 | 14 | Config thật app sinh (đối chiếu bản 1.4.3) | `sing-box.json`: **1.647 B → 225.022 B**; `ip_cidr = 7509 dải -> direct`; `dns: remote=1.1.1.1, cn=223.5.5.5`; `default_domain_resolver = remote` |
 | 15 | **Nhánh tải CDN chạy thật** | 7509 = 5494 (`cn.txt`) + 2015 (`cn6.txt`) — khớp đúng 2 danh sách đang phát ⇒ app tải từ CDN, không phải cache |
 | 16 | Bản cài trên máy test đúng là bản build này | `PrivateVPNWindows.App.exe`: `ProductVersion = 1.4.5-localtest+38a3e6f`, `sha256 = f25ed913...a3b9e40` — khớp byte-for-byte |
+| 17 | **Đường build phát hành chạy TRỌN** (`build.ps1 -Version 1.4.5`, chưa ký, 23/09/2026) | exit **0**. Cổng 1c (cây `windows/` sạch) **qua** lần đầu; `commit build = db6cf1c...`; cổng 3b `FileVersion = 1.4.5` khớp; cổng 3c `ProductVersion = 1.4.5+db6cf1c...` khớp commit; ISCC tạo `VPNFlow-Setup-1.4.5.exe` (50,3 MB, sha256 `d6db58cb...`); cảnh báo **CHƯA KÝ** in đúng. Artifact chưa ký đã **chuyển khỏi `out/`** để không bị phát nhầm |
 
 ---
 
@@ -201,7 +202,7 @@ ghi ca `sing-box.exe` với `DefenderMadeCloudCall = false` là lúc bị chặn
 |---|---|
 | Ký bằng chứng chỉ **THẬT** (`Status = Valid`) | Máy chưa có chứng chỉ (chủ dự án đã chốt sẽ nạp) |
 | Đo **định lượng** "byte tunnel không tăng khi chỉ dùng app TQ" | Chủ dự án xác nhận ĐẠT bằng tay; agent không đo được số byte |
-| `build.ps1` chạy trọn **có ký** | Chưa có cert ⇒ chưa chạy được nhánh ký đầy đủ (đã kiểm từng mảnh: signtool, wrapper, ISCC `/S` + `SignedUninstaller`) |
+| `build.ps1` chạy trọn **NHÁNH KÝ** (bằng cert thật) | Chưa có cert. Nhưng **đường build KHÔNG ký đã chạy trọn lần đầu** (EVID-17), và từng mảnh của nhánh ký đã kiểm riêng (EVID-09/10) |
 | Cổng chặn `scripts/check-publish-version.py` kiểm **chữ ký** | Script này **không** bị sửa trong việc này (WIP của người khác). Xem §9 câu hỏi 3 |
 
 ---
@@ -221,8 +222,10 @@ ghi ca `sing-box.exe` với `DefenderMadeCloudCall = false` là lúc bị chặn
 
 ## 9. Câu hỏi mở
 
-1. **Số hiệu** cho bản Windows phát hành kế tiếp là gì? Bản test đang gắn `1.4.5-localtest` và
-   **không được** dùng làm số phát hành.
+1. ~~Số hiệu phát hành?~~ **ĐÃ CHỐT 23/09/2026: `1.4.5`** (chủ dự án). Bản test `1.4.5-localtest`
+   **KHÔNG PHẢI** bản phát hành; bản phát hành sẽ là `VPNFlow-Setup-1.4.5.exe` **đã ký**.
+   Lưu ý: `build.ps1` mặc định lấy `<Version>` trong csproj = `1.4.4` (đã phát rồi, không dùng lại được
+   theo `VERSIONING.md` §3.3) ⇒ **bắt buộc truyền `-Version 1.4.5`**.
 2. **Loại chứng chỉ** sẽ nạp vào máy này: OV/EV (token/HSM) hay `.pfx`? Ảnh hưởng tới cách nạp và cách
    truyền tham số cho `build.ps1`.
 3. Có bổ sung **bước kiểm chữ ký** vào `scripts/check-publish-version.py` (cổng pre/post) không? Hiện cổng
@@ -236,7 +239,7 @@ ghi ca `sing-box.exe` với `DefenderMadeCloudCall = false` là lúc bị chặn
 1. Chủ dự án **nạp chứng chỉ** vào máy Windows này (xem §0.2.B).
 2. Worker **ký + lấy bằng chứng** `Status = Valid` cho Setup **và** app exe, rồi cập nhật handoff này với
    EVID mới. (Nếu cần chứng chỉ, worker chỉ nhận qua biến môi trường, **không** qua file trong repo.)
-3. Chủ dự án chốt **số hiệu** phát hành (§9.1).
+3. ~~Chủ dự án chốt **số hiệu** phát hành (§9.1).~~ **ĐÃ CHỐT: `1.4.5`** (§9.1).
 4. Publisher: khi có bản mới, chạy pre-gate + **4 hạng mục chữ ký ở §4**, rồi post-gate, rồi mới email khách.
 
 **Lưu ý về luật:** việc này do **worker** làm, **chủ dự án chỉ đạo trực tiếp** cho commit/push (khác mặc định
