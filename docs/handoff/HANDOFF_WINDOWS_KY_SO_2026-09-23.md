@@ -110,8 +110,15 @@ rồi **cả Setup lẫn uninstaller** (`VPNFlow.iss`: `SignTool` + `SignedUnins
 ## 3. Chứng chỉ ký số — quyết định & cách nối vào
 
 - **Chủ dự án đã chốt (23/09/2026):** chứng chỉ sẽ được nạp **trên MÁY WINDOWS này** ⇒ worker ký tại đây.
-- **Hiện trạng máy này:** **KHÔNG có** chứng chỉ code-signing nào (cả `Cert:\CurrentUser\My` và
-  `Cert:\LocalMachine\My` đều rỗng) ⇒ **chưa ký được bản nào**. `NFR-WIN-002` vì vậy **vẫn chưa đạt**.
+- **Hiện trạng máy này (soi HẾT store, KHÔNG lọc EKU - 23/09/2026):** `CurrentUser\My` có 3 cert mang
+  private key nhưng **không cert nào là code-signing** (Client Auth `1.3.6.1.5.5.7.3.2`; `CN=localhost`
+  Server Auth `1.3.6.1.5.5.7.3.1`; 1 cert không khai EKU); `LocalMachine\My` = **0 cert**; không có biến
+  môi trường `VPNFLOW_SIGN*`; Smart Card service **Stopped**; chỉ 1 profile user trên máy.
+  ⇒ **Chưa ký được bản nào**, `NFR-WIN-002` **vẫn chưa đạt**.
+- **ĐÃ YÊU CẦU Mac harness cấp chứng chỉ** (23/09/2026) qua `scripts/notify/agent-bus.mjs`: tin **`#298`**
+  → `mac` (Telegram đã alert; Mac poll ~10s/lần), đã kiểm nội dung tới nguyên vẹn. Nội dung nêu 3 phương án:
+  (a) file `.pfx`, (b) thumbprint + token/HSM cắm vào máy Windows, (c) **Azure Trusted Signing** (ưu tiên -
+  khoá không rời dịch vụ), kèm **cảnh báo bảo mật: KHÔNG gửi khoá riêng qua chat/bus, KHÔNG commit vào repo**.
 - **`signtool` đã có sẵn trên máy** (không cần cài Windows SDK):
   `%LOCALAPPDATA%\VPNFlowTools\signtool\signtool.exe` — lấy từ gói NuGet `Microsoft.Windows.SDK.BuildTools`.
   `build.ps1` tự dò đường dẫn này, rồi tới Windows Kits, rồi PATH.
