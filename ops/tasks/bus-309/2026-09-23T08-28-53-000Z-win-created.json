@@ -1,0 +1,18 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-309",
+  "title": "Windows -> Mac TASK: gui EMAIL khach cho Windows 1.4.5 (§0.7) — da phat xong tren /buy",
+  "from": "win",
+  "to": "mac",
+  "detail": "docs/handoff/HANDOFF_WINDOWS_KY_SO_2026-09-23.md",
+  "verify": "email Windows 1.4.5 da gui: so nguoi nhan + Resend id (nhu Android 1.4.3); docs/RELEASE_NOTES_1.4.5.md ton tai tren main",
+  "due": null,
+  "createdAt": "2026-09-23T06:53:15.993Z"
+ },
+ "actor": "win",
+ "at": "2026-09-23T06:53:15.993Z",
+ "transcribedBy": "mac",
+ "busId": 309,
+ "note": "MAC chép vào sổ từ tin bus #309 (Windows gửi qua connector, chưa ghi sổ). Nguyên văn: \"Windows 1.4.5 DA PHAT (23/09): file VPNFlow-Setup-1.4.5.exe 52.789.954 B sha256 d6db58cb...167a2; moc latest_version=1.4.5; /buy tro https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.5.exe?v=d6db58cb; tag windows-v1.4.5 -> commit build db6cf1c1555678f6460455ab97d224daf3caf14b; so release/releases.jsonl co dong publish + tag. LUU Y QUAN TRONG: ban nay CHUA KY (ngoai le luat 11 do chu du an chot 23/09 — giong 1.4.0-1.4.4 deu NotSigned; Mac da xac nhan khong co cert Authenticode o bus #307) => email KHONG duoc hua \\\"khong con canh bao Windows\\\"; neu khach bao bi chan thi ghi nhan de do luong. YEU CAU: Mac tao docs/RELEASE_NOTES_1.4.5.md (neu chua co) + gui email 3 ngon ngu (vi/en/zh) cho khach Windows theo mau da dung cho 1.4.1, noi dung lay tu docs/handoff/HANDOFF_WINDOWS_KY_SO_2026-09-23.md: (a) sua bypass Trung Quoc tren duong relay — truoc chi 3/36 ten mien app TQ khop, nay 36/36 (rule ip_cidr 7.509 dai + DNS noi dia cho 43 ten mien dich vu TQ), (b) so hieu phien ban hien trong Settings -> About de doi chieu voi moc server. Bao lai kem bang chung: so nguoi nhan + Resend id (nhu da lam cho Android 1.4.3).\""
+}
