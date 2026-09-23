@@ -20,18 +20,35 @@ SSH="ssh -i $KEY -o ConnectTimeout=10"
 remote() { $SSH "$JUMP" "$SSH $VPS '$1'"; }
 
 IPA="${1:-}"; VERSION="${2:-}"; BUILD="${3:-}"
-DRY=0; CLAIM=1
-for a in "${@:4}"; do
-  case "$a" in
-    --dry-run) DRY=1 ;;
-    --no-claim) CLAIM=0 ;;
-    *) echo "tham so la: $a" >&2; exit 2 ;;
+DRY=0; CLAIM=1; DEVICE_TEST=""
+shift $(( $# < 3 ? $# : 3 ))
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY=1; shift ;;
+    --no-claim) CLAIM=0; shift ;;
+    --device-test) DEVICE_TEST="${2:-}"; shift 2 ;;
+    *) echo "tham so la: $1" >&2; exit 2 ;;
   esac
 done
-[ -f "$IPA" ] && [ -n "$VERSION" ] && [ -n "$BUILD" ] || { sed -n '2,12p' "$0"; exit 2; }
+[ -f "$IPA" ] && [ -n "$VERSION" ] && [ -n "$BUILD" ] || { sed -n '2,14p' "$0"; exit 2; }
 
 fail() { echo "DỪNG: $*" >&2; exit 1; }
 step() { echo; echo "== $* =="; }
+
+# ---------- 1c) CỔNG CHẶN VERSION (BẮT BUỘC — §0 luật 1, không đạt thì DỪNG) ----------
+step "1c) Cổng chặn version (check-publish-version.py, TRƯỚC khi upload)"
+python3 "$REPO/scripts/check-publish-version.py" --platform ios --file "$IPA" --version "$VERSION" --build "$BUILD"
+GATE=$?
+if [ "$GATE" = "2" ]; then fail "cổng chặn KHÔNG KIỂM ĐƯỢC (thiếu công cụ) — không được đoán"; fi
+if [ "$GATE" != "0" ]; then fail "cổng chặn version KHÔNG ĐẠT — sửa artifact rồi chạy lại (xem output trên)"; fi
+
+# ---------- 1d) §2c: bắt buộc có bằng chứng test iPhone THẬT ----------
+step "1d) §2c — bằng chứng test iPhone thật"
+if [ -z "$DEVICE_TEST" ] || [ ! -f "$DEVICE_TEST" ]; then
+  fail "thiếu --device-test <file bằng chứng>. §2c (chủ dự án chốt 22/09) yêu cầu 7 mục: model+iOS, đúng bản/sha, luồng cơ bản ≥10 phút, đổi Wi-Fi↔4G, ngắt VPN không mất mạng, watchdog 0 lần oan + tự dựng lại, Settings hiện version. Thiếu ⇒ DỪNG, không phát hành, không gửi email."
+fi
+echo "   bằng chứng §2c: $DEVICE_TEST"
+grep -qiE "iphone|ipad" "$DEVICE_TEST" || fail "file bằng chứng không nhắc tới iPhone/iPad thật — Simulator KHÔNG tính"
 
 # ---------- 1) VERIFY từ trong file ----------
 step "1) Verify IPA: $IPA"
@@ -123,9 +140,26 @@ for u in /install/ios /buy; do
   echo "   $u -> HTTP $C"; [ "$C" = "200" ] || fail "$u không 200"
 done
 
+# ---------- 7b) cổng chặn SAU upload (§1c bước 5b) ----------
+step "7b) Cổng chặn hậu-upload (đọc version trong file ĐANG PHÁT)"
+python3 "$REPO/scripts/check-publish-version.py" --platform ios --mode post --version "$VERSION" --build "$BUILD" \
+  || fail "cổng hậu-upload KHÔNG ĐẠT — file đang phát chưa đúng bản/mốc"
+
+# ---------- 7c) ghi sổ phát hành (§VERSIONING) ----------
+step "7c) Ghi sổ release/releases.jsonl"
+node "$REPO/scripts/release-record.mjs" append --platform ios --version "$VERSION" --build "$BUILD" \
+  --sha256 "$SHA" --size "$SIZE" --channel /v1/downloads/ios \
+  --marker-latest "$VERSION" --marker-build "$BUILD" \
+  --internal-version "$VERSION" --internal-build "$BUILD" \
+  --artifact /root/flowvpn-ipa/VPNFlow-latest.ipa \
+  --evidence "release/ios/RELEASE_NOTES_$VERSION.md" --origin publish --recorded-by mac \
+  --verified-by "publish-ios.sh: cổng 1c/5b ĐẠT + tải thật sha256 khớp + bằng chứng §2c: $DEVICE_TEST" \
+  --notes "phát hành $VERSION ($BUILD) qua publish-ios.sh" || fail "ghi sổ lỗi"
+
 # ---------- 8) xong ----------
 step "8) Xong"
 echo "   IPA $VERSION ($BUILD) đang phát · sha256 $SHA · ${SIZE} bytes"
 [ "$CLAIM" = "1" ] && remote "flowvpn-coord release --owner mac --area release-ios" | tail -1
-echo "   Nhớ: (a) nộp TestFlight bản app-store-connect: node scripts/asc-beta.mjs submit <build> --whatsnew <json>"
+echo "   Nhớ: (a) TAG (sau khi có commit build): node scripts/release-record.mjs tag --platform ios --version $VERSION"
+echo "         (b) nộp TestFlight bản app-store-connect: node scripts/asc-beta.mjs submit <build> --whatsnew <json>"
 echo "         (b) ghi nhật ký docs/PUBLISHER_PROCESS.md §6 rồi commit."
