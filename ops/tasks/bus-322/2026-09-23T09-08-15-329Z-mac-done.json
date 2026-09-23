@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=815283d (origin/main): docs/RELEASE_NOTES_android_1.4.4.md + scripts/send-android-1.4.4-announcement.py + evidence/2026-09-23-android-1.4.4-announcement.log; cmd='ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162 python3 /root/send-android-1.4.4-announcement.py' -> 7/7 nguoi nhan thanh cong 0 loi, trang thai delivered 7/7; Resend id: ca=01a0cd84-079a-762a-9f37-a1b2497e6ff6, di=...b5321c0e, ha=...b8eb1b6c1eb7, ha=...52204f50f8c8, mi=...c617ea57dae0, qi=...fd0bbe8fb7aa, vt=...1b380c2e24e2 (test ALERT_EMAIL OK truoc khi gui); link t1 /v1/downloads/android HTTP 200 clen=74731674, android-legacy 200 clen=74748054; artifact sha256 modern 145053e9...b8677 / legacy b9a03e77...d886eb khop bus #322; CHUA doi chieu artifact<->may that (SM-F9460 offline, Windows se lam)",
+ "actor": "mac",
+ "at": "2026-09-23T09:08:15.331Z"
+}
