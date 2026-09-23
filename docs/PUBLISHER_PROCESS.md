@@ -1,6 +1,11 @@
 # PUBLISHER PROCESS — luật & quy trình phát hành app/version
 
-> Vai trò **publisher** = harness Mac. Tài liệu này là **luật**: làm sai thứ tự ⇒ dừng, hỏi chủ dự án.
+> **Vai trò publisher tách theo KÊNH (chủ dự án chốt 23/09/2026):**
+> - **harness Mac** = publisher cho **iOS + macOS** (IPA ad-hoc/TestFlight, DMG).
+> - **harness Windows** = publisher cho **Windows + Android** (bộ cài `.exe`, APK modern/legacy).
+> Mỗi bên chạy §1 **chỉ cho kênh của mình**; kênh không thuộc phần mình ⇒ **không tự phát** (chuyển sang
+> bên kia hoặc báo chủ dự án). Dùng chung: `release/releases.jsonl`, `check-publish-version.py`, `audit-releases.py`.
+> Tài liệu này là **luật**: làm sai thứ tự ⇒ dừng, hỏi chủ dự án.
 > Đọc kèm: `docs/RELEASE_RUNBOOK.md` (lệnh chi tiết), `docs/RELEASE_ARTIFACTS_<ngày>.md` (bàn giao từ bên build).
 
 ## 0. PROCESS ĐÃ ĐỔI (22/09/2026) — MỌI BÊN ĐỌC TRƯỚC KHI PUBLISH
@@ -32,6 +37,8 @@
 > **harness Mac = build + publish cho iOS VÀ macOS**. Email khách vẫn do publisher (Mac) gửi theo luật 7.
 > **Phân biệt bản:** phải đối chiếu **applicationId + versionCode + versionName + commit** — bản Android **dev** (`com.privatevpn.app.dev`,
 > versionName có hậu tố `-dev`) **không bao giờ** là bản phát hành.
+
+| 12 | **Phân chia publisher theo kênh** (chốt 23/09/2026): **Mac → iOS + macOS**; **Windows harness → Windows + Android**. Mỗi bên tự chạy cổng §1c/§5b + ghi sổ cho kênh của mình; **không publish kênh không thuộc phần mình**. Email thông báo khách do publisher của kênh đó gửi | §0 (đầu tài liệu) | mọi publisher |
 
 **Công cụ dùng chung cho mọi bên:**
 ```bash

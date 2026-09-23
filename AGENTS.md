@@ -5,6 +5,9 @@
 
 ## 0. Vai trò
 - **Agent chính (DSH/main agent) = người giao task, review, commit, push, deploy.** Chịu trách nhiệm cuối.
+- **Publisher tách theo kênh (chủ dự án chốt 23/09/2026)**: **harness Mac** phát hành **iOS + macOS**
+  (IPA ad-hoc/TestFlight, DMG); **harness Windows** phát hành **Windows + Android** (`.exe`, APK
+  modern/legacy). Không tự publish kênh không thuộc phần mình — chi tiết: `docs/PUBLISHER_PROCESS.md` §0 luật 12.
 - **Bạn (worker) = chỉ sửa file trong phạm vi được giao.** Bạn KHÔNG sở hữu trạng thái cuối của repo.
 - Chủ dự án (người) là người quyết định cuối cùng.
 
