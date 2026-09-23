@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-23T08:39:36.894Z",
+ "note": "connector VPS: done từ mac — bus-309 · Windows -> Mac TASK: gui EMAIL khach cho Windows 1.4.5 (§0.7) — da phat xong tren /buy",
+ "via": "dsh --profile headless \"{prompt}\""
+}

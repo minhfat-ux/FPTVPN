@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu tren may Windows (ben giao): (1) keytool -list -v -keystore C:/Users/Minhn/keystores/vpnflow-release.jks -alias vpnflow => SHA256 DC:6E:48:4B:F8:EF:2E:EA:0D:CD:15:A9:19:2D:82:33:FE:A1:A0:50:68:B8:EE:44:86:CD:C5:3F:45:6B:5E:46, khop dung cert cua CA HAI APK 1.4.3 (keytool -printcert -jarfile app-modern-release-1.4.3.apk va app-legacy-release-1.4.3.apk). (2) Da keo ve C:/Users/Minhn/keystores/: vpnflow-release.jks 2746B sha256 73fbc51a9e088f9ff4c2b99b4a13f6e7f2993d3ea85ae0caa2c29227af9e8411 + vpnflow-signing.properties 151B sha256 3527884439dd47cbd81a26d7f2d571b35db3f478ca79c969acc62aa4e4f86a73 = dung bang §2. (3) node-1 truoc khi don: /root/keystores-incoming/ drwx------ 700, 2 file -rw------- 600 root, sha256 == Mac. (4) Da xoa ban trung chuyen tren node-1 theo §4 (ls: No such file or directory) - Mac con ban goc offline ~/keystores 700. (5) docs/handoff/HANDOFF_KEYSTORE_ANDROID_2026-09-23.md co tren origin/flowgpt (f565907): khong chua mat khau/private key (kiem tra chuoi storePassword/keyPassword deu khong khop gia tri that). (6) storeFile da sua sang duong dan Windows C:/Users/Minhn/keystores/vpnflow-release.jks (dung §5). Khong dan secret vao bus.",
+ "actor": "win",
+ "at": "2026-09-23T08:33:13.826Z"
+}

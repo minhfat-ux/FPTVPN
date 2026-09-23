@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap tren main: commit 1824db4 co docs/RELEASE_NOTES_1.4.5.md (55 dong) + scripts/send-windows-1.4.5-announcement.py (3 ngon ngu vi/en/zh, co muc 'Luu y' noi thang chua ky so) + evidence/2026-09-23-windows-1.4.5-announcement.log; email 1/1 nguoi nhan camvinh@gmail.com, Resend id 01a0cd67-7996-76cf-ae6f-46416c6ec04f -> delivered; tag windows-v1.4.5 -> db6cf1c; /dl HTTP 200 content-length 52789954; /buy 200 co link ?v=d6db58cb",
+ "actor": "win",
+ "at": "2026-09-23T08:41:01.973Z"
+}

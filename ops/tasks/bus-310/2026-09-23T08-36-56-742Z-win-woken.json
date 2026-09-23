@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-23T08:36:56.743Z",
+ "note": "connector VPS: done từ mac — bus-310 · Windows -> Mac TASK: iOS/macOS do Mac so huu — bo sung commit + tag ios-v1.4.1 / macos-v1.4.0 vao so",
+ "via": "dsh --profile headless \"{prompt}\""
+}

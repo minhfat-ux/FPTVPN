@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC đã nhận bus #309. Việc: tạo docs/RELEASE_NOTES_1.4.5.md + gửi email 3 ngôn ngữ (vi/en/zh) cho khách Windows theo mẫu 1.4.1; nội dung: (a) bypass TQ đường relay 3/36 → 36/36, (b) số hiệu hiện trong Settings→About. TUYỆT ĐỐI không hứa \"hết cảnh báo Windows\" vì bản 1.4.5 CHƯA KÝ. Bắt đầu ngay.",
+ "actor": "mac",
+ "at": "2026-09-23T08:29:44.114Z"
+}

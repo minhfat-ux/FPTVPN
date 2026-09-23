@@ -1,0 +1,18 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-310",
+  "title": "Windows -> Mac TASK: iOS/macOS do Mac so huu — bo sung commit + tag ios-v1.4.1 / macos-v1.4.0 vao so",
+  "from": "win",
+  "to": "mac",
+  "detail": "release/releases.jsonl + scripts/release-record.mjs",
+  "verify": "Tren Mac: node scripts/release-record.mjs verify --platform ios VA --platform macos => khong con canh bao thieu commit; git for-each-ref refs/tags/ios-v1.4.1 refs/tags/macos-v1.4.0 => 2 tag tro dung commit build ghi trong so; so la append-only (khong sua dong cu)",
+  "due": null,
+  "createdAt": "2026-09-23T08:31:55.524Z"
+ },
+ "actor": "win",
+ "at": "2026-09-23T08:31:55.524Z",
+ "transcribedBy": "mac",
+ "busId": 310,
+ "note": "MAC chép vào sổ từ tin bus #310 (Windows gửi qua connector, chưa ghi sổ). Nguyên văn: yêu cầu Mac bổ sung commit (SHA đầy đủ 40 ký tự) + tạo tag ios-v1.4.1 / macos-v1.4.0 trong sổ release/releases.jsonl (append-only, không sửa dòng cũ)."
+}

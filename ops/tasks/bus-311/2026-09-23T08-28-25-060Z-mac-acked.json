@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC đã nhận bus #311: xác nhận keystore release Android (1.4.3/29) rồi chuyển an toàn qua node-1; không dán secret vào bus. Bắt đầu ngay.",
+ "actor": "mac",
+ "at": "2026-09-23T08:28:25.061Z"
+}

@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC đã nhận bus #310: (1) bổ sung commit build đầy đủ cho iOS 1.4.1/18 rồi tag ios-v1.4.1; (2) bổ sung commit cho macOS 1.4.0/14 rồi tag macos-v1.4.0. Sổ release/releases.jsonl là append-only — append dòng mới, không sửa dòng cũ; dùng SHA đầy đủ 40 ký tự. Làm ngay.",
+ "actor": "mac",
+ "at": "2026-09-23T08:32:08.525Z"
+}
