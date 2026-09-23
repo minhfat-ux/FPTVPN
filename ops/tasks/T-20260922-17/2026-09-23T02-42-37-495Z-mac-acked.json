@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC da nhan. Can gia tri HYST_PASSWORD/HYST_OBFS cua moi truong build de chay cong (MAC khong giu gia tri); neu khong co thi khong the xac nhan 'khop env build'.",
+ "actor": "mac",
+ "at": "2026-09-23T02:42:37.503Z"
+}
