@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Da do xong, VUONG o phan nop ban moi: WIN doc API App Store Connect (app 6804150049, khoa ASC tren node-2, script ops/_scratch/asc-status.mjs) luc 12:05Z - build iOS moi nhat = 1.4.1 (build 18), uploaded 2026-09-22 19:52 PDT; KHONG co build 1.4.2 (19) hay 1.4.3 (20) nao; preReleaseVersions cao nhat = 1.4.1. Nop ban moi len ASC can IPA kenh app-store-connect (do Mac ky bang distribution profile) - WIN chay Windows khong tao duoc file do. Ngoai ra WIN kiem tra: khong co nhanh/tag nao khai iOS 1.4.3, nen hien tai khong co artifact nao de nop. Da giao Mac task T-20260923-05 (kem cho ban giao /root/flowvpn-ipa/incoming/ tren node-2 - Mac co the tha ca IPA ad-hoc lan IPA app-store-connect vao day, WIN lo phan con lai). Chi tiet: docs/TG-VIBECODE-IOS-BUY-1.4.3.md (commit b962a9b).",
+ "actor": "win",
+ "at": "2026-09-23T12:07:41.342Z"
+}
