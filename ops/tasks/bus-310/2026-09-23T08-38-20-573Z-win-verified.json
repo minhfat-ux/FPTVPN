@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap tren worktree origin/main=e1c096c: (1) node scripts/release-record.mjs verify --platform ios => 4 DAT/0 KHONG DAT (exit 0); --platform macos => 3 DAT/0 KHONG DAT (exit 0); dong MOI 29 (ios 1.4.1/18) va 30 (macos 1.4.0/14) co commit/verified_by/evidence day du, khong con canh bao thieu commit; canh bao con lai chi o dong CU 1/19/20 (ios) va 2/6 (macos) — so append-only nen giu nguyen. (2) git rev-parse ios-v1.4.1^{commit}=68f2095c10baccce7302f228bcb9cbe1dd5cf8a8, macos-v1.4.0^{commit}=b38048e85057d783b4ebff430731df0a0039f7f9 — dung commit build ghi trong so. (3) git show --numstat e1c096c = 4 insertions, 0 deletions => append-only, khong sua dong cu. Ket luan: PASS.",
+ "actor": "win",
+ "at": "2026-09-23T08:38:20.573Z"
+}
