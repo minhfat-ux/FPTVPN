@@ -74,3 +74,19 @@ APK dev (legacy): 113.422.841 byte (cùng phiên build)
 - Bản dev `com.privatevpn.app.dev` versionCode 32 **đang cài trên máy chủ dự án** để đối chiếu hành vi;
   nó **không phải** bản phát hành.
 - Nguồn sự thật của bản khóa: commit `eeae7ef` trên `origin/main`.
+
+## 6. GHI NHẬN MỞ KHÓA — 23/09/2026 (theo luật §5)
+
+Chủ dự án yêu cầu trực tiếp trong phiên (DSH main agent, owner `windows`):
+
+1. **Phân vai build + publish:** **harness Windows = Windows VÀ Android**; harness Mac = iOS + macOS.
+   Đã ghi vào `docs/PUBLISHER_PROCESS.md` §0 (luật 7 + ghi chú PHÂN VAI) và `docs/VERSIONING.md` §3 (chủ sở hữu version Android) — commit `a34756b`.
+2. **Cho phép mở khóa ĐÚNG 1 DÒNG** để phát được bản khóa v32: `android/app/build.gradle.kts`
+   `versionName "1.4.3"` → **`"1.4.4"`** (giữ nguyên `versionCode = 32`, `applicationId = com.privatevpn.app`).
+   - **Vì sao bắt buộc:** versionName `1.4.3` đã thuộc artifact đang phát (`versionCode 29`, sha256 `9563366…4ce5`).
+     Ghi sổ cùng `(android, 1.4.3)` với sha256 khác sẽ bị cổng sổ **từ chối** (artifact bất biến — `docs/VERSIONING.md` §3.3).
+   - **Không đổi hành vi**: chỉ đổi nhãn phiên bản; toàn bộ code v29/v30/v31/v32 giữ nguyên.
+   - **Commit build để phát:** `eeae7ef` (code v32) + commit bump versionName này.
+3. **Keystore release:** đã hỏi Mac chuyển qua node-1 (`/root/keystores-incoming/`, 700/600) — bus **#311**;
+   yêu cầu cert phải là `dc6e484b…5e46` (đúng cert đã ký bản 1.4.3/29 đang phát).
+4. **Sau khi phát:** đóng mục này lại; Android **vẫn khóa** cho tới yêu cầu mới của chủ dự án.
