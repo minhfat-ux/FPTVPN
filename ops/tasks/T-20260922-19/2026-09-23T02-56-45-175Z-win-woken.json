@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-23T02:56:45.175Z",
+ "note": "connector VPS: blocked từ mac — T-20260922-19 · A10: dong 'toc do tai xuong' tren the Diagnostics la dong ho BI DONG — sua nhan + them 'Dinh phien' (nguon: chu du an bus #232)",
+ "via": "dsh --profile headless \"{prompt}\""
+}
