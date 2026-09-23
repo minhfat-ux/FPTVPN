@@ -50,27 +50,33 @@
       "doc": "docs/ANDROID_CPU_TODO.md",
       "blocked_by": "Đã hết blocker JDK: harness Windows build được APK (JDK Temurin 17 + SDK 36; compile 2 flavor + assemble OK ngày 23/09). Còn thiếu DUY NHẤT: số đo 3 kịch bản trên máy thật - thiết bị SM-F9460 từng thấy qua wireless adb nhưng đã ngắt kết nối giữa phiên",
       "progress_2026_09_23": "MTU 1500->1300 + 2 resolver DNS đã làm và ĐÃ PHÁT cho khách (38a3e6f nằm trong Android 1.4.3/29 rồi 1.4.4/32). Phần còn lại (giãn nhịp probe 15s, log buffer, nhận biết màn hình tắt) CHƯA làm. Backlog đầy đủ: docs/ANDROID_CHINA_ROM_TASKS.md (T-AND-01..20)"
-    },
+    }
+  ],
+  "regressions": [],
+  "resolved": [
     {
       "id": "BUG-APPVERSION-PLATFORM-001",
       "title": "/v1/app-version?platform=android-legacy (và mọi giá trị lạ) rơi về payload kênh Windows",
       "area": "control-plane",
       "severity": "medium",
       "reported": "2026-09-23",
-      "status": "open",
+      "status": "resolved",
       "impact": "Công cụ audit / cổng chặn hỏi platform=android-legacy sẽ đọc SAI kênh (nhận version + installer_url của Windows) — đúng loại lỗi từng gây 'audit báo lệch oan' cho macOS. Khách KHÔNG bị ảnh hưởng vì route tải APK legacy vẫn đúng.",
       "evidence": [
         "GET https://api.meetflowai.site/v1/app-version?platform=android-legacy -> {\"platform\":\"windows\",\"latest_version\":\"1.4.6\",\"installer_url\":\".../VPNFlow-Setup-1.4.6.exe\"} (đo 3 lần liên tiếp 23/09/2026, harness Windows)",
         "GET ...?platform=bogus-xyz -> cũng trả payload windows => mọi giá trị không khớp đều mặc định về Windows",
         "control-plane/src/app-version.js:37,44 - chỉ nhận ios|android|windows|win, không có nhánh android-legacy",
-        "Đối chiếu: route tải APK legacy VẪN ĐÚNG - HEAD https://t1.meetflowai.site/v1/downloads/android-legacy -> HTTP 200, 74.748.054 B (khớp sổ 1.4.4/32)"
+        "Đối chiếu: route tải APK legacy VẪN ĐÚNG - HEAD https://t1.meetflowai.site/v1/downloads/android-legacy -> HTTP 200, 74.748.054 B (khớp sổ 1.4.4/32)",
+        "SAU FIX (do lai 23/09/2026 qua api.meetflowai.site): ?platform=android-legacy -> 200 {platform:android-legacy, latest_version:1.4.4}; ?platform=android7 (alias) -> 200 android-legacy; ?platform=bogus-xyz -> 400 {error:unknown_platform, supported:[...]}; khong gui ?platform + UA CFNetwork/okhttp/Windows NT -> ios/android/windows nhu cu; cac kenh khac khong doi: android 1.4.4, windows 1.4.6, ios 1.4.2, macos 1.4.0"
       ],
       "next_steps": "Thêm nhánh phân biệt android-legacy ở control-plane/src/app-version.js (hoặc tách field riêng thay vì dùng chung ?platform) + test. Lưu ý control-plane/src/index.js là VÙNG BẢO VỆ của owner windows (AGENTS.md §6b) nên harness Windows tự làm + commit trước khi deploy.",
       "workaround": "Kênh modern dùng ?platform=android; kênh legacy đọc trực tiếp route /v1/downloads/android-legacy",
-      "doc": "docs/PUBLISHER_PROCESS.md §0.1"
+      "doc": "docs/PUBLISHER_PROCESS.md §0.1",
+      "resolved": "2026-09-23",
+      "fix": "control-plane/src/app-version.js: them androidLegacyVersionPayload + KNOWN_PLATFORMS + normalizePlatform/isKnownPlatform + UnknownPlatformError; control-plane/src/index.js: route /v1/app-version bat UnknownPlatformError -> HTTP 400 {error:unknown_platform,supported}. Commit 58c5537 (da rebase len origin/main).",
+      "test": "control-plane/test/app-version.test.js -> tests 25 / pass 25 / fail 0 (them 4 test: kenh legacy dung, alias android7, platform la nem UnknownPlatformError, route co guard 400)",
+      "deployed": "node-2: stage = ban LIVE + 2 file da va, chay scripts/server-agent/deploy-control-plane.sh --files app-version.js,index.js -> node --check OK, health OK, exit 0. Backup rollback: /root/flowvpn-cp/src-backup-20260923-104708"
     }
   ],
-  "regressions": [],
-  "resolved": [],
   "updated": "2026-09-23"
 }

@@ -54,15 +54,19 @@
 | **ios** | **1.4.2 (19)** (IPA 8.152.677 B · sha `eba2e856…`) | 1.3.3 | ⚠️ sổ mới có 1.4.1 (18) | ✅ | cần bổ sung dòng sổ 1.4.2 (Mac) |
 | **macos** | **1.4.0** | 0.0.0 | ✅ | ⚠️ chặn TestFlight/macOS trong ngày | — |
 
-> ⚠️ **BUG-APPVERSION-PLATFORM-001 (phát hiện 23/09/2026, CHƯA SỬA):**
-> `GET /v1/app-version?platform=android-legacy` **không trả payload Android legacy** mà **rơi về kênh Windows** —
-> đo 3 lần liên tiếp đều ra `{"platform":"windows","latest_version":"1.4.6","installer_url":"…/VPNFlow-Setup-1.4.6.exe"}`.
-> **Mọi giá trị `platform` lạ cũng rơi về Windows** (thử `bogus-xyz` → cũng `windows`), vì
-> `control-plane/src/app-version.js` chỉ nhận `ios|android|windows|win` và mặc định Windows khi không khớp.
-> **Ảnh hưởng:** công cụ audit / cổng chặn hỏi `platform=android-legacy` sẽ **so sai kênh** — đúng loại lỗi
-> "audit báo lệch oan" từng gặp ở macOS. **Khách KHÔNG bị ảnh hưởng**: route tải APK legacy vẫn đúng
-> (`HEAD /v1/downloads/android-legacy` → HTTP 200 · 74.748.054 B khớp sổ). Né hiện tại: kênh modern hỏi
-> `platform=android`, kênh legacy đọc thẳng route `/v1/downloads/android-legacy`.
+> ✅ **BUG-APPVERSION-PLATFORM-001 — ĐÃ SỬA + ĐÃ DEPLOY 23/09/2026 (harness Windows, owner `windows`):**
+> Trước: `GET /v1/app-version?platform=android-legacy` **không trả payload legacy** mà rơi về kênh mặc định
+> (Mac đo ra `windows`; Windows đo lại ra `ios` — mặc định đã đổi mà không ai biết), và **mọi giá trị lạ**
+> (`bogus-xyz`) cũng vậy ⇒ công cụ audit/cổng chặn hỏi kênh legacy **so sai kênh** mà không có tín hiệu lỗi.
+> **Sửa:** `control-plane/src/app-version.js` thêm `androidLegacyVersionPayload()` + `KNOWN_PLATFORMS` +
+> `UnknownPlatformError`; `control-plane/src/index.js` bắt lỗi đó ⇒ **HTTP 400 `unknown_platform`**.
+> Không gửi `?platform` (bản app cũ) vẫn chọn kênh theo User-Agent như trước.
+> **Bằng chứng:** `node --test control-plane/test/app-version.test.js` → **25/25 pass**; deploy qua
+> `scripts/server-agent/deploy-control-plane.sh` (health OK, backup `/root/flowvpn-cp/src-backup-20260923-104708`);
+> đo lại sau deploy: `?platform=android-legacy` → 200 `{platform:android-legacy, latest_version:1.4.4}`,
+> `?platform=bogus-xyz` → **400** `unknown_platform`, các kênh khác không đổi (android 1.4.4 · windows 1.4.6 ·
+> ios 1.4.2 · macos 1.4.0). Chi tiết: `docs/handoff/FIX_APPVERSION_PLATFORM_2026-09-23.md`,
+> `.privatevpn/status/bugs.json` → `resolved`.
 
 
 **Công cụ dùng chung cho mọi bên:**
