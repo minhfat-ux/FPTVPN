@@ -148,6 +148,12 @@ rồi **cả Setup lẫn uninstaller** (`VPNFlow.iss`: `SignTool` + `SignedUnins
 **Nếu hạng mục 2/3/4 không đạt ⇒ KHÔNG phát hành.** Lý do ở §5/§6: khách bật Smart App Control sẽ không
 cài được, và **kết quả là may rủi** (xem §6).
 
+**Lưu ý về cổng tự động (luật 11, commit `67adced`):** `scripts/check-publish-version.py` kiểm chữ ký bằng
+cách đọc **bảng Certificate PE** (data directory #4) — tức chỉ xác nhận **CÓ** chữ ký nhúng, **không** xác
+nhận chuỗi tin cậy. Vì vậy **cổng tự động một mình KHÔNG đủ**: bắt buộc làm thêm hạng mục 2/3/4 ở bảng trên
+(`signtool verify /pa` + `Get-AuthenticodeSignature` = `Valid` + có timestamp). Đã kiểm chứng cả hai chiều
+(chưa ký ⇒ `exit 1`; đã ký ⇒ `exit 0`) — EVID-18.
+
 `NFR-WIN-002` (`docs/spec/WINDOWS_CLIENT_REQUIREMENTS.md:81`) cũng đòi: updater **từ chối** artifact sai
 SHA256 hoặc sai chữ ký, và **không credential trong log**.
 
@@ -174,6 +180,7 @@ SHA256 hoặc sai chữ ký, và **không credential trong log**.
 | 15 | **Nhánh tải CDN chạy thật** | 7509 = 5494 (`cn.txt`) + 2015 (`cn6.txt`) — khớp đúng 2 danh sách đang phát ⇒ app tải từ CDN, không phải cache |
 | 16 | Bản cài trên máy test đúng là bản build này | `PrivateVPNWindows.App.exe`: `ProductVersion = 1.4.5-localtest+38a3e6f`, `sha256 = f25ed913...a3b9e40` — khớp byte-for-byte |
 | 17 | **Đường build phát hành chạy TRỌN** (`build.ps1 -Version 1.4.5`, chưa ký, 23/09/2026) | exit **0**. Cổng 1c (cây `windows/` sạch) **qua** lần đầu; `commit build = db6cf1c...`; cổng 3b `FileVersion = 1.4.5` khớp; cổng 3c `ProductVersion = 1.4.5+db6cf1c...` khớp commit; ISCC tạo `VPNFlow-Setup-1.4.5.exe` (50,3 MB, sha256 `d6db58cb...`); cảnh báo **CHƯA KÝ** in đúng. Artifact chưa ký đã **chuyển khỏi `out/`** để không bị phát nhầm |
+| 18 | **Tích hợp với cổng luật 11** (`check-publish-version.py`, commit `67adced`), kiểm cả 2 chiều | **chưa ký ⇒ `exit 1`** (`KHÔNG ĐẠT: Chữ ký số (installer) THIẾU ... Luật 11/NFR-WIN-002: CHƯA ký thì KHÔNG publish`); **đã ký ⇒ `exit 0`** (`ĐẠT: Chữ ký số (installer) có bảng chữ ký Authenticode (7432 byte)` + `ĐẠT: Chữ ký số (app-exe)`). Cổng cũng đọc đúng version trong artifact (`1.4.5`) và mốc `đang 1.4.4 → phát 1.4.5 (tiến)` |
 
 ---
 
