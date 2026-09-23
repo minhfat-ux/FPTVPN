@@ -15,7 +15,15 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JUMP="root@103.173.155.50"
 VPS="root@165.101.114.162"
-KEY="$HOME/.ssh/fpt_tunnel"
+# Key SSH: máy này có thể đổi/ mất quyền file key — ưu tiên biến SSH_KEY, rồi dsh_tunnel (đang dùng
+# cho tunnel 13080), rồi fpt_tunnel. Sự cố 23/09: fpt_tunnel mất quyền => upload đứt giữa dòng.
+SSH_KEY="${SSH_KEY:-}"
+if [ -z "$SSH_KEY" ]; then
+  for cand in "$HOME/.ssh/dsh_tunnel" "$HOME/.ssh/fpt_tunnel"; do
+    [ -r "$cand" ] && { SSH_KEY="$cand"; break; }
+  done
+fi
+KEY="${SSH_KEY:?khong tim thay SSH key (dat SSH_KEY=...)}"
 SSH="ssh -i $KEY -o ConnectTimeout=10"
 remote() { $SSH "$JUMP" "$SSH $VPS '$1'"; }
 
@@ -102,7 +110,7 @@ fi
 # ---------- 2) claim ----------
 if [ "$CLAIM" = "1" ]; then
   step "2) Claim vùng release-ios"
-  remote "flowvpn-coord claim --owner mac --area release-ios --files /root/flowvpn-ipa/VPNFlow-latest.ipa --note 'publish-ios.sh: IPA $VERSION/$BUILD'" | tail -1
+  remote "flowvpn-coord claim --owner mac --area release-ios --files /root/flowvpn-ipa/VPNFlow-latest.ipa --note publish-ios-$VERSION-$BUILD" | tail -1
 fi
 
 # ---------- 3+4) backup + upload + verify ----------
@@ -111,12 +119,16 @@ TS="$(date +%Y%m%d-%H%M%S)"
 OLDV="$(remote "python3 - <<'P'\nimport zipfile,plistlib,io\nz=zipfile.ZipFile('/root/flowvpn-ipa/VPNFlow-latest.ipa')\nn=[x for x in z.namelist() if x.endswith('.app/Info.plist')][0]\nd=plistlib.loads(z.read(n))\nprint(d.get('CFBundleShortVersionString'),d.get('CFBundleVersion'))\nP" 2>/dev/null | tail -1)"
 echo "   bản đang phát: ${OLDV:-?}"
 remote "cp -p /root/flowvpn-ipa/VPNFlow-latest.ipa /root/flowvpn-ipa/VPNFlow-latest.bak-${OLDV// /-b}-$TS.ipa" || fail "backup lỗi"
-$SSH "$JUMP" "$SSH $VPS 'cat > /root/flowvpn-ipa/VPNFlow-latest.ipa && chmod 600 /root/flowvpn-ipa/VPNFlow-latest.ipa'" < "$IPA" || fail "upload lỗi"
-REMOTE_SHA="$(remote "sha256sum /root/flowvpn-ipa/VPNFlow-latest.ipa | cut -d' ' -f1")"
-REMOTE_SIZE="$(remote "stat -c %s /root/flowvpn-ipa/VPNFlow-latest.ipa")"
-echo "   server: sha256=$REMOTE_SHA size=$REMOTE_SIZE"
-[ "$REMOTE_SHA" = "$SHA" ] || fail "sha256 trên server KHÁC bản local"
-[ "$REMOTE_SIZE" = "$SIZE" ] || fail "size trên server KHÁC bản local"
+# Tải lên file TẠM rồi mới thay file đang phát: nếu ssh đứt giữa dòng (ca thật 23/09: key mất quyền
+# ⇒ khách tải được file CỤT 2,85 MB) thì route vẫn phục vụ bản cũ nguyên vẹn, không bao giờ cụt.
+$SSH "$JUMP" "$SSH $VPS 'cat > /root/flowvpn-ipa/VPNFlow-latest.ipa.new && chmod 600 /root/flowvpn-ipa/VPNFlow-latest.ipa.new'" < "$IPA" || fail "upload lỗi"
+REMOTE_SHA="$(remote "sha256sum /root/flowvpn-ipa/VPNFlow-latest.ipa.new | cut -d' ' -f1")"
+REMOTE_SIZE="$(remote "stat -c %s /root/flowvpn-ipa/VPNFlow-latest.ipa.new")"
+echo "   server (tạm): sha256=$REMOTE_SHA size=$REMOTE_SIZE"
+[ "$REMOTE_SHA" = "$SHA" ] || fail "sha256 trên server KHÁC bản local (file tạm giữ nguyên, bản đang phát chưa đổi)"
+[ "$REMOTE_SIZE" = "$SIZE" ] || fail "size trên server KHÁC bản local (file tạm giữ nguyên)"
+remote "mv /root/flowvpn-ipa/VPNFlow-latest.ipa.new /root/flowvpn-ipa/VPNFlow-latest.ipa" || fail "mv vào chỗ đang phát lỗi"
+echo "   đã thay file đang phát (nguyên tử)"
 
 # ---------- 6) mốc version ----------
 step "6) Set mốc latest_ios_version=$VERSION ipa_build=$BUILD"
