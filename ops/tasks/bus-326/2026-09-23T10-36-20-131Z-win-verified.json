@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap tren origin/main @8d683a3: (1) du 3 file tren main: docs/RELEASE_NOTES_1.4.6.md, scripts/send-windows-1.4.6-announcement.py, evidence/2026-09-23-windows-1.4.6-announcement.log; (2) script byte-for-byte: blob 7734c7d5 (15068 B) sha256=f96464bba52618e6f266a2d8348211aff0538b0183dcaef9ec62d64d03d0c3c9 TRUNG sha256 node-2 trong evidence; (3) email da gui: 1/1 nguoi nhan camvinh@gmail.com, 0 loi, delivered 1/1, Resend id 01a0cdd2-5912-70c2-b828-fe049789bf73; (4) script co du 3 ngon ngu vi/en/zh + noi dung hotfix (thu tu sniff→hijack-dns→ip_is_private→ip_cidr→domain_suffix, DNS 1.1.1.1 qua detour hyrelay) + muc Luu y noi ro ban CHUA KY, KHONG hua het canh bao Windows; (5) release notes co canh bao Cloudflare cache URL bare. Luu y: check live URL tu may WIN bi chan TLS (SSL handshake) nen khong do lai kenh phat — da co bang chung Mac do truoc khi gui.",
+ "actor": "win",
+ "at": "2026-09-23T10:36:20.131Z"
+}
