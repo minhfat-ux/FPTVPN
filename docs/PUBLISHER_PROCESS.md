@@ -224,6 +224,15 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
    iOS **LỆCH** — phát đúng 1.4.0 nhưng profile thiếu nhóm keychain `.shared` nên khách không đăng
    nhập được ⇒ phải sửa + ký lại + thông báo khách.
 
+5. **ĐANG CHỜ (23/09)**: bản iOS kế tiếp (**> build 18**) gồm 2 fix đã commit nhưng *chưa* nằm trong
+   build 18 — `7c98e53` (tự đăng xuất khỏi thiết bị khác) và `820b9d2` (watchdog không còn mù, đếm
+   datagram khi dùng lại transport). Chủ dự án chốt: **chờ session Mac build xong rồi mới publish**.
+   Khi có bản mới, làm đủ 3 kênh: trang buy (IPA ad-hoc + mốc `latest_ios_version`/`ipa_build`) →
+   TestFlight (Beta App Review + "What to Test" 3 ngôn ngữ) → email khách iOS
+   (`scripts/send-ios-1.4.1-announcement.py` là mẫu, đổi nội dung theo release notes mới).
+   ⚠️ Trước khi publish phải verify từ trong IPA: version/build, `get-task-allow=false`, keychain group
+   `G6XW3RN6LJ.com.privatevpn.shared`, có `PrivateVPNPacketTunnel.appex`, sha256 khớp handover.
+
 ## 8. Lỗi đã từng xảy ra (đọc để không lặp)
 - Link trên `/buy` trỏ sai host (`api.` ⇒ 401). Link tải phải là `t1.` hoặc `meetflowai.site`.
 - PATCH mốc version thất bại **im lặng** (curl exit 0 dù 401) ⇒ phải đọc JSON trả về.
