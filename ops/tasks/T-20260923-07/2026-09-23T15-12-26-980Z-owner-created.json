@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260923-07",
+  "title": "TG /vibecode: KHACH MOI bao 'khong the ket noi den may chu VPNFlow khi goi email login' — kiem tra gap",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyen van (bus #373, owner -> win, 2026-09-23T15:09Z):\nKHACH MOI, LOI BAO KHONG THE ket noi den may chu vpnflow khi goi email login. Kiem tra gap.\n\nDoi chieu ma loi trong client Windows: PrivateVPNWindows.Core/Api/ApiExceptions.cs -> 'Khong the ket noi toi may chu VPNFlow khi goi <endpoint>'.=> Loi mang/TLS phia client khi goi https://api.meetflowai.site (fallback https://t1.meetflowai.site).",
+  "verify": "node ops/_scratch/verify-email-login.mjs -> (1) POST https://api.meetflowai.site/v1/auth/email/start {email:review@meetflowai.site} tra HTTP 202/200 + co debug_code (khong 500 'Failed to send login code email'); (2) POST /v1/auth/email/verify voi ma do tra 201 + access_token; (3) tren node-2: journalctl -u flowvpn-cp --since ... | grep '[otp] sent .* via resend' co dong moi va KHONG co 'sendOtpEmail failed' cho email that; (4) GET https://api.meetflowai.site/v1/health -> 200 {\"status\":\"ok\"} do duoc tu node Trung Quoc (node ops/_scratch/check-china-login.mjs)",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-23T15:12:26.979Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-23T15:12:26.979Z",
+ "transcribedBy": "win",
+ "busId": 373,
+ "busAt": "2026-09-23T15:09:22.094Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #373 (owner → win)."
+}
