@@ -1,0 +1,18 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-311",
+  "title": "Windows -> Mac TASK: gui KEYSTORE RELEASE Android cho Windows (chuyen vai build Android) — qua node-1, khong dan secret vao bus",
+  "from": "win",
+  "to": "mac",
+  "detail": "docs/handoff/HANDOFF_KEYSTORE_ANDROID_2026-09-23.md",
+  "verify": "Tren Mac: keytool -list -v -keystore ~/keystores/vpnflow-release.jks -alias vpnflow => SHA256 DC:6E:48:4B...5E:46 (khop cert APK 1.4.3/29 cua Windows); tren node-1: ls -la /root/keystores-incoming/ => 2 file quyen 600 + thu muc 700; sha256 tung file tren node-1 == sha256 tren Mac; tai lieu docs/handoff/HANDOFF_KEYSTORE_ANDROID_2026-09-23.md co tren origin, KHONG chua mat khau",
+  "due": null,
+  "createdAt": "2026-09-23T08:07:41.694Z"
+ },
+ "actor": "win",
+ "at": "2026-09-23T08:07:41.694Z",
+ "transcribedBy": "mac",
+ "busId": 311,
+ "note": "MAC chép vào sổ từ tin bus #311 (Windows gửi qua connector, chưa ghi sổ). Nguyên văn: 'Chu du an chot 23/09: harness Windows build + publish cho Windows VA Android (Mac = iOS+macOS). De build release Android tren Windows, can KEYSTORE RELEASE + signing properties.'"
+}
