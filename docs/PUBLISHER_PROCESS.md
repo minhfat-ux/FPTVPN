@@ -16,7 +16,7 @@
 | 4 | **iOS: test trên iPhone THẬT** (Simulator không tính) theo bảng 7 mục §2c trước khi phát | §2c | bên build iOS (Mac) |
 | 5 | **macOS: DMG phải STAPLE**; `stapler validate` + `spctl` + `codesign --deep --strict` đều phải đạt. `spctl` một mình **KHÔNG đủ** (máy build báo Notarized dù chưa staple) | `MACOS_SIGN_NOTARIZE.md` §4a | bên ký macOS (Mac) |
 | 6 | **Windows: số hiệu phải nằm trong metadata .exe** (`<Version>` trong csproj + `/p:Version` khi publish) và **UI hiện version** để đối chiếu mốc server | `windows/installer/build.ps1` bước 3b, Settings → About | Windows harness |
-| 7 | **PUBLISHER lo CẢ publish LẪN email.** Windows harness chỉ phát hành bản Windows rồi bàn giao số liệu — **không tự gửi email khách** | §5 | publisher |
+| 7 | **PUBLISHER lo CẢ publish LẪN email.** **Phân vai build + publish (chốt 23/09/2026): harness Windows làm Windows **và Android**; harness Mac làm iOS + macOS.** Windows harness **không tự gửi email khách** — email do publisher (Mac) gửi | §5 | publisher |
 | 8 | **Audit toàn kênh định kỳ**: kênh nào chưa phải latest ⇒ cập nhật lại link tải + set mốc + **thông báo khách** | §7 mục 5 (`scripts/audit-releases.py`) | publisher |
 | 9 | Chỉ phát **bản mới nhất đã được test** — publisher không tự chọn bản | §2b | publisher |
 | 10 | **ĐỌC HẾT HANDOFF TRƯỚC KHI LÀM** (thêm 22/09 sau ca *báo trùng việc đã xong*): trước khi claim / kiểm / publish phải chạy `ls -t docs/handoff/` → **đọc file mới nhất**, rồi đối chiếu `release/releases.jsonl` + `git tag -l`; việc đã xong ⇒ **không báo lại, không phát lại** (phát trùng cùng version khác hash = cấm) | §0 luật này · `docs/VERSIONING.md` §3.3 | **mọi agent** — nhất là publisher khi nhận lệnh "check & publish" |
@@ -26,6 +26,12 @@
 > `NotSigned`). Lý do: máy có SAC bật vẫn cài được, kênh Windows mới có 3 thiết bị, và **Mac xác nhận không có chứng chỉ Authenticode** (bus #307:
 > `docs/handoff/HANDOFF_MAC_CERT_WINDOWS_2026-09-23.md`). Ngoại lệ **có ghi sổ** (`release/releases.jsonl`, dòng `windows 1.4.5`), cổng pre ghi rõ mục chữ ký
 > `KHÔNG ĐẠT` và post `ĐẠT`. **Ngoại lệ hết hiệu lực ngay khi có chứng chỉ** — từ bản kế tiếp phải ký theo luật này.
+
+> **PHÂN VAI build + publish — chốt 23/09/2026 (chủ dự án):** **harness Windows (owner `windows`) = build + publish cho
+> Windows VÀ Android** (Android: build release từ commit khoá, ký bằng keystore release ngoài repo — `~/keystores/vpnflow-signing.properties`);
+> **harness Mac = build + publish cho iOS VÀ macOS**. Email khách vẫn do publisher (Mac) gửi theo luật 7.
+> **Phân biệt bản:** phải đối chiếu **applicationId + versionCode + versionName + commit** — bản Android **dev** (`com.privatevpn.app.dev`,
+> versionName có hậu tố `-dev`) **không bao giờ** là bản phát hành.
 
 **Công cụ dùng chung cho mọi bên:**
 ```bash
