@@ -40,25 +40,38 @@ console.log('thoi diem      src nguon                      kbps tu raw   observe
 for (let i = 1; i < show.length; i++) {
   const a = show[i - 1];
   const b = show[i];
+  // ĐỔI NGUỒN byte (1/2/3) là đổi thang đo: hiệu hai bộ đếm khác thang là số rác
+  // (từng in ra cả Gbps âm). Bỏ qua, chỉ ghi chú — app cũng tự reset mẫu ở chỗ này.
+  const switched = a.src !== b.src;
   const dt = b.t - a.t;
-  const kbps = dt > 0 ? Math.round(((b.raw - a.raw) * 8) / dt) : -1;
+  const kbps = switched || dt <= 0 ? null : Math.round(((b.raw - a.raw) * 8) / dt);
   console.log(
     `${String(Math.floor(b.t / 3600000)).padStart(2, '0')}:${String(Math.floor((b.t % 3600000) / 60000)).padStart(2, '0')}:${String(Math.floor((b.t % 60000) / 1000)).padStart(2, '0')}  ` +
-      `${String(b.src).padEnd(3)} ${(srcName[b.src] ?? '?').padEnd(28)} ${String(kbps).padStart(10)} ${String(b.observed).padStart(10)} ${String(b.declared).padStart(10)}  (net=${b.net})`,
+      `${String(b.src).padEnd(3)} ${(srcName[b.src] ?? '?').padEnd(28)} ` +
+      `${(kbps === null ? (switched ? '  (doi nguon)' : '            -') : String(kbps)).padStart(12)} ` +
+      `${String(b.observed).padStart(10)} ${String(b.declared).padStart(10)}  (net=${b.net})`,
   );
 }
 
-// observed = trung binh truot 12 mau 1s => so sanh voi trung binh 12 kbps tu raw
-const last12 = [];
+// So sanh chi mang tinh THAM KHAO: `observed` cua app la trung binh 12 mau 1 GIAY, con script
+// chi thay cac dong log cach nhau ~15 GIAY — voi tai kieu cum/nghi thi hai cua so lech nhau
+// rat xa du cung mot nguon so. Vi vay in TRUNG VI cua hai ben thay vi mot ti le "lech %".
+const mine = [];
 for (let i = Math.max(1, show.length - 12); i < show.length; i++) {
+  if (show[i].src !== show[i - 1].src) continue;
   const dt = show[i].t - show[i - 1].t;
-  if (dt > 0) last12.push(((show[i].raw - show[i - 1].raw) * 8) / dt);
+  if (dt > 0) mine.push(((show[i].raw - show[i - 1].raw) * 8) / dt);
 }
-if (last12.length) {
-  const avg = Math.round(last12.reduce((s, v) => s + v, 0) / last12.length);
-  const obs = show[show.length - 1].observed;
+const obs = show.slice(-12).map((r) => r.observed);
+const median = (arr) => {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((x, y) => x - y);
+  return s[Math.floor(s.length / 2)];
+};
+if (mine.length) {
   console.log(
-    `\nTrung binh ${last12.length} mau tu raw = ${avg} kbps | observed cua app = ${obs} kbps | lech = ${obs ? Math.round((Math.abs(avg - obs) * 100) / obs) : 0}%`,
+    `\nTham khao (2 cua so KHAC nhau: app = 12 mau 1s, script = giua 2 dong log):\n` +
+      `  trung vi kbps tu raw = ${Math.round(median(mine))} | trung vi observed cua app = ${Math.round(median(obs))}`,
   );
 }
 const srcs = [...new Set(rows.slice(-tailN).map((r) => r.src))];

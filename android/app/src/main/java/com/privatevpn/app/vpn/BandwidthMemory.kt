@@ -548,6 +548,27 @@ object BandwidthPolicy {
     const val UNDERRUN_PCT = 50
 
     /**
+     * Một mẫu 1 giây được coi là ĐANG CHỞ DỮ LIỆU (kbps) — dưới mức này là giây nghỉ.
+     *
+     * Vì sao cần khái niệm này: video/ứng dụng adaptive tải TỪNG CỤM rồi nghỉ để đầy buffer
+     * (đo trên máy thật 23/09/2026 khi xem Netflix: các giây xen kẽ 2.000 kbps và 5–20 kbps).
+     * Trung bình 12 giây tính cả giây nghỉ vì thế thấp hơn hẳn sức mạng thật ⇒ nếu lấy số đó
+     * làm căn cứ thì app tự hạ số khai trong lúc người dùng đang xem (đo được: 4.018 → 2.812
+     * kbps ngay giữa phiên Netflix) ⇒ Brutal pace thấp ⇒ video tụt chất lượng ⇒ càng ít nhu
+     * cầu ⇒ lại càng hạ. Vòng lặp ngược đó chính là lỗi mà hằng số này dùng để chặn.
+     */
+    const val ACTIVE_SAMPLE_KBPS = 200
+
+    /**
+     * Số mẫu HOẠT ĐỘNG tối thiểu trong cửa sổ để coi là "đường ĐANG được đẩy hết sức".
+     *
+     * Chỉ khi cửa sổ đủ mẫu hoạt động thì một con số trung bình thấp mới là bằng chứng ĐƯỜNG
+     * YẾU; còn nếu phần lớn mẫu là giây nghỉ thì số thấp là do NHU CẦU thấp — hạ số khai vì
+     * lý do đó là tự bóp đường của mình (xem [ACTIVE_SAMPLE_KBPS]).
+     */
+    const val UNDERRUN_MIN_BUSY_SAMPLES = 8
+
+    /**
      * Đỉnh bền vững = trung bình trượt của [count] mẫu 1 giây gần nhất (kbps).
      * Hàm THUẦN để test được trên JVM (vòng lấy mẫu nằm trong service).
      */
@@ -557,6 +578,27 @@ object BandwidthPolicy {
         var sum = 0L
         for (i in 0 until n) sum += samples[i]
         return (sum / n).toInt()
+    }
+
+    /**
+     * Đỉnh bền vững CHỈ tính các mẫu ĐANG CHỞ DỮ LIỆU (≥ [ACTIVE_SAMPLE_KBPS]) — tức "khi
+     * thật sự truyền thì được bao nhiêu", bỏ qua các giây nghỉ của tải kiểu adaptive.
+     *
+     * @return (trung bình kbps của các mẫu hoạt động, số mẫu hoạt động); (0, 0) nếu cửa sổ
+     *   không có mẫu hoạt động nào (lúc đó phải quay về [sustainedKbps]).
+     */
+    fun activeSustainedKbps(samples: IntArray, count: Int): Pair<Int, Int> {
+        val n = minOf(count, samples.size)
+        if (n <= 0) return 0 to 0
+        var sum = 0L
+        var busy = 0
+        for (i in 0 until n) {
+            if (samples[i] >= ACTIVE_SAMPLE_KBPS) {
+                sum += samples[i]
+                busy++
+            }
+        }
+        return if (busy == 0) 0 to 0 else (sum / busy).toInt() to busy
     }
 
     /** Quan sát bền vững vượt trần đang khai ≥ [RAMP_TRIGGER_PCT]% ⇒ đường còn dư thật. */
@@ -570,9 +612,19 @@ object BandwidthPolicy {
         return rttMs >= maxOf(rttBaselineMs.toLong() * RTT_SPIKE_X, RTT_SPIKE_MIN_MS.toLong())
     }
 
-    /** Quan sát tụt hẳn so với trần đang khai (lưới an toàn, xem [UNDERRUN_PCT]). */
-    fun shouldRampDownUnderrun(sustainedKbps: Int, declaredKbps: Int): Boolean =
-        declaredKbps > 0 && sustainedKbps > 0 &&
+    /**
+     * Quan sát tụt hẳn so với trần đang khai (lưới an toàn, xem [UNDERRUN_PCT]).
+     *
+     * @param busySamples số mẫu HOẠT ĐỘNG trong cửa sổ. Mặc định [Int.MAX_VALUE] là hành vi
+     *   cũ (không xét độ "đang đẩy hết sức"), dùng cho các chỗ gọi cũ/test cũ; vòng lấy mẫu
+     *   trong service truyền số thật để không hạ số khai khi nhu cầu đang thấp.
+     */
+    fun shouldRampDownUnderrun(
+        sustainedKbps: Int,
+        declaredKbps: Int,
+        busySamples: Int = Int.MAX_VALUE,
+    ): Boolean =
+        busySamples >= UNDERRUN_MIN_BUSY_SAMPLES && declaredKbps > 0 && sustainedKbps > 0 &&
             sustainedKbps.toLong() * 100 < declaredKbps.toLong() * UNDERRUN_PCT
 
     /** Bước TĂNG trần, kẹp bởi [ceilingKbps] (sức mạng vật lý) và không xuống dưới [floorKbps]. */

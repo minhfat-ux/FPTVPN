@@ -1168,7 +1168,15 @@ class HysteriaVpnService : VpnService() {
                 val ceiling = if (bwPhysicalCeilKbps > 0) bwPhysicalCeilKbps else declared
                 val floor = BandwidthPolicy.FLOOR_DOWN_KBPS
                 val sustained = BandwidthPolicy.sustainedKbps(samples, count)
-                updateRampState(sustained, now)
+                // Số dùng để QUYẾT ĐỊNH (khác số trung bình để tham chiếu): khi cửa sổ có ĐỦ mẫu
+                // đang chở dữ liệu thì lấy trung bình CÁC MẪU HOẠT ĐỘNG, bỏ các giây nghỉ. Tải
+                // kiểu adaptive (Netflix tải từng cụm rồi nghỉ) xen kẽ cụm/nghỉ nên trung bình
+                // 12s tính cả giây nghỉ thấp hơn hẳn sức mạng thật — lấy nó làm căn cứ là app tự
+                // hạ số khai giữa lúc người dùng đang xem (xem BandwidthPolicy.ACTIVE_SAMPLE_KBPS).
+                val (activeAvg, busyCount) = BandwidthPolicy.activeSustainedKbps(samples, count)
+                val sustainedForDecision =
+                    if (busyCount >= BandwidthPolicy.UNDERRUN_MIN_BUSY_SAMPLES) activeAvg else sustained
+                updateRampState(sustainedForDecision, now)
                 // DAY SO LIEU LIVE LEN UI (the Diagnostics, §2g) - 1 lan/giay, khong them phep do.
                 runCatching {
                     // TX lấy ĐÚNG thang đo với RX đang dùng (xem khối chọn nguồn byte ở trên).
@@ -1187,12 +1195,13 @@ class HysteriaVpnService : VpnService() {
                     val ceilKbps = if (bwPhysicalCeilKbps > 0) bwPhysicalCeilKbps else declared
                     val headroomPct = when {
                         stableKbps == 0 || declared <= 0 -> -1
-                        sustained >= ceilKbps * 95 / 100 -> 0
-                        else -> ((minOf(sustained * 115 / 100, ceilKbps) * 100 / declared) - 100).coerceAtLeast(0)
+                        sustainedForDecision >= ceilKbps * 95 / 100 -> 0
+                        else -> ((minOf(sustainedForDecision * 115 / 100, ceilKbps) * 100 / declared) - 100)
+                            .coerceAtLeast(0)
                     }
                     val path = if (onWsRelay) "Cau WS" else "Truc tiep"
                     (application as? VPNFlowApp)?.vpnManager?.onSpeed(
-                        downKbps = kbps, upKbps = upKbps, measuredKbps = sustained,
+                        downKbps = kbps, upKbps = upKbps, measuredKbps = sustainedForDecision,
                         declaredKbps = declared, headroomPct = headroomPct, path = path,
                     )
                 }
@@ -1208,8 +1217,9 @@ class HysteriaVpnService : VpnService() {
                 if (sustained > 0 && now - lastSampleLogAt >= SAMPLE_LOG_INTERVAL_MS) {
                     lastSampleLogAt = now
                     DiagnosticsLog.log(
-                        "bw: sample net=$bwDisplay observed=$sustained declared=$declared " +
-                            "rtt=${rttLast}ms loss=${lossPct}% ceil=$ceiling src=$byteSrc raw=$rx",
+                        "bw: sample net=$bwDisplay observed=$sustained active=$activeAvg/$busyCount " +
+                            "declared=$declared rtt=${rttLast}ms loss=${lossPct}% ceil=$ceiling " +
+                            "src=$byteSrc raw=$rx",
                     )
                 }
 
@@ -1221,7 +1231,7 @@ class HysteriaVpnService : VpnService() {
                 //   2) tỉ lệ fail trong cửa sổ ≥ RAMP_LOSS_PCT,
                 //   3) goodput đã TỤT THẬT (dưới 1/4 số đang khai) — còn đang chảy thì "mất gói" chỉ
                 //      là phép đo hỏng, không phải đường hỏng.
-                val goodputCollapsed = sustained < maxOf(BandwidthPolicy.FLOOR_DOWN_KBPS, declared / 4)
+                val goodputCollapsed = sustainedForDecision < maxOf(BandwidthPolicy.FLOOR_DOWN_KBPS, declared / 4)
                 val lossBad = consecutiveFails >= LOSS_CONSECUTIVE_FAILS &&
                     lossPct >= BandwidthPolicy.RAMP_LOSS_PCT &&
                     goodputCollapsed
@@ -1246,16 +1256,17 @@ class HysteriaVpnService : VpnService() {
                     }
                     continue
                 }
-                // CHỈ xét "tụt sâu" khi ĐANG có traffic thật: lúc tunnel rảnh thì trung bình
-                // trượt đương nhiên thấp, hạ trần vì lý do đó là sai (và sẽ hạ oan mỗi lần
-                // người dùng ngừng tải).
-                val busy = idleRun == 0
-                if (busy && BandwidthPolicy.shouldRampDownUnderrun(sustained, declared)) {
+                // CHỈ xét "tụt sâu" khi cửa sổ ĐỦ mẫu hoạt động (busyCount): nếu phần lớn mẫu là
+                // giây nghỉ thì số trung bình thấp là do NHU CẦU thấp (tải kiểu adaptive), không
+                // phải đường yếu — hạ số khai vì lý do đó là tự bóp đường của mình. Trước đây chỗ
+                // này chỉ đòi `idleRun == 0` (mẫu CUỐI cùng đang bận) nên với tải xen kẽ cụm/nghỉ
+                // vẫn hạ oan: đo 23/09/2026 giữa phiên Netflix, 4.018 → 2.812 kbps.
+                if (BandwidthPolicy.shouldRampDownUnderrun(sustainedForDecision, declared, busyCount)) {
                     if (underSince == 0L) underSince = now
                 } else {
                     underSince = 0L
                 }
-                if (BandwidthPolicy.shouldRampUp(sustained, declared)) {
+                if (BandwidthPolicy.shouldRampUp(sustainedForDecision, declared)) {
                     if (overSince == 0L) overSince = now
                 } else {
                     overSince = 0L
@@ -1264,7 +1275,7 @@ class HysteriaVpnService : VpnService() {
                     val newDown = BandwidthPolicy.rampDown(declared, ceiling, floor)
                     if (newDown < declared) {
                         applyRampDecision(
-                            newDown, "underrun-backoff", sustained,
+                            newDown, "underrun-backoff", sustainedForDecision,
                             idleRun >= SAMPLER_IDLE_SAMPLES, lossPct, rttLast,
                         )
                         lastChangeAt = now
@@ -1276,7 +1287,7 @@ class HysteriaVpnService : VpnService() {
                     val newDown = BandwidthPolicy.rampUp(declared, ceiling, floor)
                     if (newDown > declared) {
                         applyRampDecision(
-                            newDown, "idle-reconnect", sustained,
+                            newDown, "idle-reconnect", sustainedForDecision,
                             idleRun >= SAMPLER_IDLE_SAMPLES, lossPct, rttLast,
                         )
                         lastChangeAt = now

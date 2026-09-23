@@ -306,6 +306,74 @@ class BandwidthPolicyTest {
     }
 
     @Test
+    fun `dinh ben vung cua mau HOAT DONG bo qua cac giay nghi`() {
+        // Dang tai kieu adaptive (Netflix): 4 giay tai 8 Mbps xen ke 8 giay nghi.
+        val samples = intArrayOf(8_000, 5, 8_000, 8, 8_000, 12, 8_000, 20, 0, 0, 0, 0)
+        // Trung binh thuong bi cac giay nghi keo xuong con ~2,67 Mbps...
+        assertEquals(2_670, BandwidthPolicy.sustainedKbps(samples, 12))
+        // ...con trung binh cua cac mau HOAT DONG dung bang toc do that khi dang tai.
+        val (active, busy) = BandwidthPolicy.activeSustainedKbps(samples, 12)
+        assertEquals(8_000, active)
+        assertEquals(4, busy)
+    }
+
+    @Test
+    fun `khong co mau hoat dong thi tra ve 0 va 0 mau`() {
+        val (active, busy) = BandwidthPolicy.activeSustainedKbps(intArrayOf(5, 20, 100, 0), 4)
+        assertEquals(0, active)
+        assertEquals(0, busy)
+        assertEquals(0, BandwidthPolicy.activeSustainedKbps(intArrayOf(9_000), 0).first)
+    }
+
+    @Test
+    fun `khong ha so khai khi nhu cau thap du mau trung binh tut sau`() {
+        // Ca Netflix do tren may that 23/09/2026: declared 4.018 kbps, cac giay xen ke
+        // 2.000 kbps va 5-20 kbps => trung binh ~500-800 kbps. Chi 3/12 mau hoat dong
+        // => KHONG du bang chung de ket luan duong yeu, phai giu nguyen so khai.
+        assertFalse(
+            BandwidthPolicy.shouldRampDownUnderrun(
+                sustainedKbps = 600, declaredKbps = 4_018, busySamples = 3,
+            ),
+        )
+        // Duong YEU THAT: nguoi dung keo lien tuc ma chi duoc ~600 kbps (12/12 mau hoat dong).
+        assertTrue(
+            BandwidthPolicy.shouldRampDownUnderrun(
+                sustainedKbps = 600, declaredKbps = 4_018, busySamples = 12,
+            ),
+        )
+        // Khong truyen gi ca (0 mau hoat dong) cung khong ket luan duoc gi.
+        assertFalse(
+            BandwidthPolicy.shouldRampDownUnderrun(
+                sustainedKbps = 5, declaredKbps = 4_018, busySamples = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `mau hoat dong nua voi thi van chua du nguong ket luan`() {
+        // 7 mau hoat dong < UNDERRUN_MIN_BUSY_SAMPLES (8): chua coi la "day het suc".
+        assertFalse(
+            BandwidthPolicy.shouldRampDownUnderrun(
+                sustainedKbps = 1_000, declaredKbps = 10_000,
+                busySamples = BandwidthPolicy.UNDERRUN_MIN_BUSY_SAMPLES - 1,
+            ),
+        )
+        assertTrue(
+            BandwidthPolicy.shouldRampDownUnderrun(
+                sustainedKbps = 1_000, declaredKbps = 10_000,
+                busySamples = BandwidthPolicy.UNDERRUN_MIN_BUSY_SAMPLES,
+            ),
+        )
+    }
+
+    @Test
+    fun `goi cu khong truyen so mau hoat dong thi giu nguyen hanh vi cu`() {
+        assertTrue(BandwidthPolicy.shouldRampDownUnderrun(sustainedKbps = 4_000, declaredKbps = 10_000))
+        assertFalse(BandwidthPolicy.shouldRampDownUnderrun(sustainedKbps = 0, declaredKbps = 10_000))
+        assertFalse(BandwidthPolicy.shouldRampDownUnderrun(sustainedKbps = 4_000, declaredKbps = 0))
+    }
+
+    @Test
     fun `co dinh da dat thi khoi dong luon o muc do, khong can ramp lai`() {
         // Chua co so do probe nao, chi co dinh 25 Mbps da chung minh tren mang nay.
         // ceiling = 389,7 Mbps = WiFi 866 Mbps * 0,45 (RSSI tot) — tran suc mang vat ly.
