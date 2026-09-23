@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan viec (bus #338): kiem ban tren App Store Connect. Da doc API appstoreconnect (app 6804150049) tu node-2: build iOS moi nhat = 1.4.1 (18), uploaded 2026-09-22; KHONG co build 1.4.2 hay 1.4.3 nao. Dang doi ben build iOS.",
+ "actor": "win",
+ "at": "2026-09-23T12:01:48.369Z"
+}
