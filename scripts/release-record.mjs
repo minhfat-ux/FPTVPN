@@ -102,7 +102,10 @@ function latestState(rows, platform) {
 }
 
 function tagOf(rows, platform) {
-  const withTag = rows.filter((r) => r.platform === platform && r.tag);
+  // Chi lay tag cua DUNG version dang phat — neu lay "dong cuoi co tag" thi ban 1.4.3 se hien tag cua 1.4.0.
+  const current = latestState(rows, platform);
+  const want = current ? current.version : null;
+  const withTag = rows.filter((r) => r.platform === platform && r.tag && (!want || r.version === want));
   return withTag.length ? withTag[withTag.length - 1].tag : "";
 }
 
