@@ -636,6 +636,10 @@ struct ContentView: View {
             if let statusMessage = vpnManager.statusMessage {
                 diagRow(title: languageStore.t(.message), value: statusMessage, valueColor: VPNTheme.secondaryLabel)
             }
+            // A10 §2g — số live 1s của đường đang chạy (KHÔNG thêm thẻ mới, dùng thẻ Diagnostics
+            // có sẵn). Tunnel chưa phục vụ ⇒ `—`, không hiện `0`.
+            Divider().overlay(VPNTheme.cardStroke)
+            liveDiagnosticsRows
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -657,6 +661,86 @@ struct ContentView: View {
                 .font(.subheadline.monospaced())
                 .foregroundStyle(valueColor)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+
+    // MARK: - A10 §2g: số live của đường đang chạy
+
+    /// Các dòng bắt buộc của §2g. Nguồn số: extension lấy mẫu mỗi 1s (`TunnelStatusReport`),
+    /// app chỉ đọc lại — KHÔNG đo thêm, không thêm pin.
+    @ViewBuilder
+    private var liveDiagnosticsRows: some View {
+        let report = vpnManager.liveDiagnostics
+        diagRow(
+            title: languageStore.t(.diagDown),
+            value: RampStatus.formatRate(report?.downKbps),
+            valueColor: VPNTheme.label
+        )
+        diagRow(
+            title: languageStore.t(.diagUp),
+            value: RampStatus.formatRate(report?.upKbps),
+            valueColor: VPNTheme.label
+        )
+        diagRow(
+            title: languageStore.t(.diagObserved),
+            value: RampStatus.formatRate(report?.observedKbps),
+            valueColor: VPNTheme.secondaryLabel
+        )
+        diagRow(
+            title: languageStore.t(.diagDeclared),
+            value: declaredText(report),
+            valueColor: VPNTheme.secondaryLabel
+        )
+        diagRow(
+            title: languageStore.t(.diagMore),
+            value: moreText(report),
+            valueColor: report?.atMax == true ? VPNTheme.label : VPNTheme.secondaryLabel
+        )
+        if report?.atMax == true {
+            diagRow(
+                title: languageStore.t(.diagAtMax),
+                value: "✓",
+                valueColor: VPNTheme.label
+            )
+        }
+        diagRow(
+            title: languageStore.t(.diagPath),
+            value: pathText(report),
+            valueColor: VPNTheme.secondaryLabel
+        )
+        diagRow(
+            title: languageStore.t(.diagStable),
+            value: RampStatus.formatRate(report?.stableKbps),
+            valueColor: VPNTheme.secondaryLabel
+        )
+    }
+
+    /// "Khai báo hiện tại" — số Brutal CC đang khai, hai chiều (↓/↑).
+    private func declaredText(_ report: TunnelStatusReport?) -> String {
+        guard let report else { return "—" }
+        let down = RampStatus.formatRate(report.declaredDownKbps)
+        let up = RampStatus.formatRate(report.declaredUpKbps)
+        guard down != "—" || up != "—" else { return "—" }
+        return "↓ \(down) / ↑ \(up)"
+    }
+
+    /// "Khai báo còn lên được" = `+X%`; đã tối đa ⇒ nói thẳng "Đã tối đa ở thời điểm này".
+    private func moreText(_ report: TunnelStatusReport?) -> String {
+        guard let report, report.serving == true else { return "—" }
+        if report.atMax == true { return languageStore.t(.diagAtMax) }
+        if let more = report.morePercent { return "+\(more)%" }
+        return "—"
+    }
+
+    /// "Đường đang dùng" = transport + node.
+    private func pathText(_ report: TunnelStatusReport?) -> String {
+        guard let report else { return "—" }
+        let node = report.node.map { " · \($0)" } ?? ""
+        switch report.transport {
+        case "ws-relay": return "Cầu WS\(node)"
+        case "relay": return "TCP relay\(node)"
+        case "direct": return "Trực tiếp QUIC\(node)"
+        default: return "\(report.transport)\(node)"
         }
     }
 

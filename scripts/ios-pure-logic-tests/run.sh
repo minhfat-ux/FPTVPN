@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chạy harness swiftc cho các file thuần logic (T-20260922-10, P0-1/P0-2 + A7/A9).
+# Chạy harness swiftc cho các file thuần logic (T-20260922-10, P0-1/P0-2 + A7/A9/A10/A11).
 # Không cần Xcode project/ký — chỉ cần toolchain Swift của macOS.
 set -euo pipefail
 
@@ -15,6 +15,7 @@ swiftc -O \
   "$SRC/GoodputMeter.swift" \
   "$SRC/ChinaRouteBypass.swift" \
   "$SRC/RouteReporter.swift" \
+  "$SRC/RampStatus.swift" \
   "$ROOT/scripts/ios-pure-logic-tests/main.swift" \
   -o "$OUT/pure-tests"
 "$OUT/pure-tests"

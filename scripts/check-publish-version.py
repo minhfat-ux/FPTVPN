@@ -183,6 +183,76 @@ def _keychain_groups(blob: str) -> list:
     return re.findall(r"<string>([^<]*)</string>", match.group(1))
 
 
+def _prefix_keys(values: dict, prefix: str) -> dict:
+    return {f"{prefix}{k}": v for k, v in values.items()}
+
+
+def _hysteria_credentials(info: dict, plistlib_module=None) -> dict:
+    """Đọc credential hysteria2 nhúng trong Info.plist — KHÔNG trả về giá trị, chỉ trạng thái.
+
+    Vì sao cần: credential hysteria2 **nhúng lúc build** (`HYST_PASSWORD`/`HYST_OBFS`, xem
+    docs/MACOS_SIGN_NOTARIZE.md §2 và project.yml) chứ không nằm trong repo. Build tay mà thiếu
+    biến ⇒ app cài được, mở được, nhưng **không kết nối được**, và lỗi hiện ra rất khó đoán
+    (22/09/2026: bản macOS build mới báo "Invalid user" trong message của app — trong khi server
+    từ chối credential đúng nghĩa lại trả `authentication error, HTTP status code: 404`).
+    Cổng chặn này bắt đúng lúc PHÁT HÀNH, thay vì để khách phát hiện.
+
+    Trả về: cờ CÓ/KHÔNG + độ dài (để đối chiếu mà không lộ secret) + kết quả so với env build
+    (`HYST_PASSWORD`/`HYST_OBFS`) nếu môi trường có đặt.
+    """
+    password = str(info.get("HysteriaPassword") or "")
+    obfs = str(info.get("HysteriaObfs") or "")
+    expected_password = (os.environ.get("HYST_PASSWORD") or "").strip()
+    expected_obfs = (os.environ.get("HYST_OBFS") or "").strip()
+    return {
+        "hysteria_password": bool(password),
+        "hysteria_password_len": len(password),
+        "hysteria_obfs": bool(obfs),
+        "hysteria_obfs_len": len(obfs),
+        # None = môi trường không đặt ⇒ không kết luận; True/False = khớp/khác env build.
+        "hysteria_password_env_match": (password == expected_password) if expected_password else None,
+        "hysteria_obfs_env_match": (obfs == expected_obfs) if expected_obfs else None,
+    }
+
+
+def _check_hysteria_credentials(result, internal: dict) -> None:
+    """Cổng chặn: credential hysteria2 phải có trong app (và extension), khớp env build nếu có.
+
+    KHÔNG bao giờ in giá trị credential — chỉ in độ dài + khớp/khác.
+    """
+    for label, has_key, len_key in (
+        ("app", "hysteria_password", "hysteria_password_len"),
+        ("extension", "ext_hysteria_password", "ext_hysteria_password_len"),
+    ):
+        if has_key not in internal:
+            continue  # artifact không có phần này (vd macOS không có .appex)
+        if internal.get(has_key):
+            result.ok(f"Credential hysteria2 ({label})", f"có · {internal.get(len_key, 0)} ký tự")
+        else:
+            result.fail(
+                f"Credential hysteria2 THIẾU ({label})",
+                "Info.plist không có HysteriaPassword ⇒ app cài được nhưng KHÔNG kết nối được. "
+                "Build lại kèm HYST_PASSWORD/HYST_OBFS (docs/MACOS_SIGN_NOTARIZE.md §2).",
+            )
+
+    if internal.get("hysteria_obfs") is False:
+        result.warn("Credential obfs", "không có HysteriaObfs — chỉ đúng nếu server tắt obfs")
+
+    for label, match_key in (
+        ("HysteriaPassword", "hysteria_password_env_match"),
+        ("HysteriaObfs", "hysteria_obfs_env_match"),
+    ):
+        match = internal.get(match_key)
+        if match is True:
+            result.ok(f"{label} khớp env build", "trùng giá trị biến môi trường lúc build")
+        elif match is False:
+            result.fail(
+                f"{label} KHÁC env build",
+                "credential nhúng trong artifact không trùng biến môi trường hiện tại "
+                "(không in giá trị) — build đã dùng credential CŨ/khác ⇒ khách sẽ không kết nối được.",
+            )
+
+
 def version_ios(path: str) -> dict:
     """IPA: version + extension + NHÓM KEYCHAIN (code signature vs provisioning profile).
 
@@ -205,6 +275,7 @@ def version_ios(path: str) -> dict:
             "build": str(info.get("CFBundleVersion") or ""),
             "extension": any(n.endswith(".appex/Info.plist") for n in names),
         }
+        out.update(_hysteria_credentials(info, plistlib))
         # Extension phải cùng số với app (PUBLISHER_PROCESS §2).
         ext_info = [n for n in names if re.fullmatch(r"Payload/[^/]+\.app/PlugIns/[^/]+\.appex/Info\.plist", n)]
         if ext_info:
@@ -212,6 +283,8 @@ def version_ios(path: str) -> dict:
                 ext = plistlib.load(handle)
             out["ext_version"] = ext.get("CFBundleShortVersionString")
             out["ext_build"] = str(ext.get("CFBundleVersion") or "")
+            # Credential hysteria2 phải có ở CẢ app lẫn extension: extension mới là chỗ dựng tunnel.
+            out.update(_prefix_keys(_hysteria_credentials(ext, plistlib), "ext_"))
 
         # Nhóm keychain: lấy từ code signature của app + extension, và từ 2 provisioning profile.
         signature_groups = set()
@@ -341,6 +414,17 @@ def version_macos(path: str) -> dict:
                     "version": info.get("CFBundleShortVersionString"),
                     "build": str(info.get("CFBundleVersion") or ""),
                 })
+                out.update(_hysteria_credentials(info, plistlib))
+                # Credential cũng phải có trong .appex (extension là chỗ dựng tunnel), nếu có extension.
+                for sub in os.listdir(os.path.join(root, "Contents", "PlugIns")) if os.path.isdir(
+                    os.path.join(root, "Contents", "PlugIns")
+                ) else []:
+                    appex_info = os.path.join(root, "Contents", "PlugIns", sub, "Contents", "Info.plist")
+                    if os.path.isfile(appex_info):
+                        with open(appex_info, "rb") as handle:
+                            appex = plistlib.load(handle)
+                        out.update(_prefix_keys(_hysteria_credentials(appex, plistlib), "ext_"))
+                        break
                 return out
         return {"error": "không thấy .app/Contents/Info.plist (hoặc .app/Info.plist) trong DMG"}
     finally:
@@ -500,6 +584,11 @@ def main() -> int:
             result.fail("Thiếu extension", "IPA không có .appex (PUBLISHER_PROCESS §2)")
         if internal.get("product"):
             result.ok("ProductVersion", str(internal["product"]))
+
+        # iOS/macOS: credential hysteria2 nhúng lúc build PHẢI có (cả app lẫn extension).
+        # Thiếu ⇒ app cài được nhưng KHÔNG kết nối được (ca thật 22/09/2026, bản macOS build tay).
+        if "hysteria_password" in internal:
+            _check_hysteria_credentials(result, internal)
 
         # iOS: nhóm keychain phải có trong CẢ code signature LẪN provisioning profile.
         # Thiếu ở profile ⇒ SecItemAdd trả -34018 ⇒ không lưu được phiên ⇒ "nhập code xong

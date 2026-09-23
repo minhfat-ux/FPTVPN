@@ -148,6 +148,17 @@ object Config {
     const val MOBILE_DOWN_KBPS = 12000
 
     /**
+     * Resolver cấp cho `tun0` — PHẢI có ≥2 để chịu được mất gói.
+     *
+     * Vì sao (đo trên máy thật 22/09/2026, xem `docs/TUNNEL_MTU_DNS_BUGREPORT.md` §4.2): chỉ cấp
+     * `1.1.1.1` thì mọi truy vấn DNS đi qua đúng một đường UDP đang rớt gói; DNS fail ngẫu nhiên
+     * theo host ⇒ app bên thứ ba (Firebase Auth của MeetFlow AI) mất token và chết hẳn. Hệ điều
+     * hành tự chuyển sang resolver kế tiếp khi resolver đầu không trả lời, nên chỉ cần khai thêm.
+     * 8.8.8.8 là của Google (khác nhà cung cấp với Cloudflare) ⇒ hai đường hỏng độc lập.
+     */
+    val HY_DNS_SERVERS = listOf("1.1.1.1", "8.8.8.8")
+
+    /**
      * URL đo goodput qua tunnel cho cơ chế khai băng thông ĐỘNG (xem BandwidthMemory).
      *
      * Cùng endpoint mà phép đo ngoài thiết bị đang dùng (curl `speed.cloudflare.com/__down`):

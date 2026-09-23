@@ -15,7 +15,21 @@ export const READ_ONLY_COMMANDS = ["help", "status", "nodes", "devices", "orders
 // /task chạy agent trên server (quyền ngang root) nên cũng phải xác nhận trước khi chạy.
 // /approve + /reject ĐỔI TRẠNG THÁI task do flowvpn-guard tạo: chỉ sau khi chủ dự án approve thì
 // agent phụ trách mới được phép sửa/publish (xem scripts/guard/guard.py + flowvpn-coord task).
-export const MUTATING_COMMANDS = ["report", "mirror", "restart", "task", "deploy", "alerts_off", "alerts_on", "approve", "reject"];
+// /vibecode (+ tắt /mac, /win) GIAO VIỆC CHO MÁY KHÁC nên cũng phải xác nhận: gõ nhầm tên máy là
+// việc đi sai chỗ. Đích nhận việc xem VIBE_TARGETS.
+export const MUTATING_COMMANDS = ["report", "mirror", "restart", "task", "deploy", "alerts_off", "alerts_on", "approve", "reject", "vibecode", "mac", "win"];
+
+/**
+ * Máy nhận việc qua `/vibecode`. Khoá là tên gõ trên Telegram, giá trị là tên máy trong hệ
+ * giao việc (`scripts/notify/agent-bus.mjs --to`, `ops/task.mjs --to`).
+ */
+export const VIBE_TARGETS = {
+  mac: "mac",
+  macos: "mac",
+  win: "win",
+  windows: "win",
+  server: "server",
+};
 
 /** Nhãn trạng thái của một việc agent (dùng cho /reporttasks). */
 export const TASK_STATUSES = {
@@ -74,9 +88,26 @@ export function needsConfirmation(parsed, { force = false } = {}) {
 
 /** Nội dung xác nhận + nhãn nút (inline keyboard). */
 export function confirmationPrompt(parsed) {
+  // /vibecode: hiện RÕ máy nhận + việc, vì gõ nhầm tên máy là việc đi sai chỗ.
+  if (isVibecodeCommand(parsed.name)) {
+    const implicit = parsed.name === "mac" || parsed.name === "win" ? parsed.name : "";
+    const vibecode = parseVibecodeArgs(parsed.args, implicit);
+    const detail =
+      vibecode.kind === "task"
+        ? `\nGiao cho: ${VIBE_TARGET_LABELS[vibecode.target] ?? vibecode.target}\nViệc: ${vibecode.text.slice(0, 300)}`
+        : ` ${parsed.args.join(" ")}`;
+    return {
+      text: `⚠️ Giao việc cho máy khác?${detail}\nBấm Xác nhận để gửi, hoặc Huỷ.`,
+      buttons: [
+        [{ text: "✅ Xác nhận", callback_data: "okvibe" }],
+        [{ text: "🚫 Huỷ", callback_data: "cancel" }],
+      ],
+    };
+  }
+
   const detail = parsed.args.length ? ` ${parsed.args.join(" ")}` : "";
-  // Telegram giới hạn callback_data 64 byte nên KHÔNG nhét nội dung việc vào nút: với /task
-  // chỉ gửi "oktask", bot tra lại nội dung đã lưu (xem pendingTasks trong bot.mjs).
+  // Telegram giới hạn callback_data 64 byte nên KHÔNG nhét nội dung việc vào nút: với /task chỉ gửi
+  // "oktask", bot tra lại nội dung đã lưu (xem pendingTasks trong bot.mjs).
   const callback = parsed.name === "task" ? "oktask" : `ok:${parsed.name}:${parsed.args.join(",")}`;
   const preview = parsed.name === "task" ? `\nViệc: ${parsed.args.join(" ").slice(0, 300)}` : "";
   return {
@@ -89,15 +120,97 @@ export function confirmationPrompt(parsed) {
   };
 }
 
+/** Lệnh này có phải dạng giao việc cho một máy (/vibecode, /mac, /win)? */
+export function isVibecodeCommand(name) {
+  return name === "vibecode" || name === "mac" || name === "win";
+}
+
 /** Đọc callback_data của nút xác nhận. */
 export function parseCallback(data) {
   const raw = String(data ?? "");
   if (raw === "cancel") return { action: "cancel" };
   // /task: nội dung việc dài hơn 64 byte nên nút chỉ mang "oktask"; bot tra lại nội dung đã lưu.
   if (raw === "oktask") return { action: "confirm", name: "task", args: [] };
+  // /vibecode (và /mac, /win): cùng lý do — nội dung việc + tên máy lưu ở pendingTasks.
+  if (raw === "okvibe") return { action: "confirm", name: "vibecode", args: [] };
   const m = raw.match(/^ok:([a-z_]+)(?::(.*))?$/);
   if (!m) return { action: "unknown" };
   return { action: "confirm", name: m[1], args: m[2] ? m[2].split(",").filter(Boolean) : [] };
+}
+
+/**
+ * Phân tích tham số của `/vibecode` và hai lệnh tắt `/mac`, `/win`.
+ *
+ * Vì sao có lệnh này: chủ dự án muốn giao việc cho một máy cụ thể ngay từ Telegram
+ * (*"anh cần thêm lệnh có thể giao task trực tiếp cho Mac/Win trên telegram. Ví dụ: /vibecode Mac"*).
+ * Việc đi qua hệ giao việc hiện có (bus + sổ `ops/tasks`) chứ không chạy agent tại server — vì
+ * mã nguồn/dữ liệu nằm trên máy đích.
+ *
+ * @param {string[]} args - tham số sau tên lệnh
+ * @param {string} [implicitTarget] - đích suy ra từ chính tên lệnh (`/mac` ⇒ "mac")
+ * @returns {{kind: "help"} | {kind: "error", message: string} | {kind: "task", target: string, text: string}}
+ */
+export function parseVibecodeArgs(args, implicitTarget = "") {
+  const parts = (Array.isArray(args) ? args : []).map((x) => String(x)).filter((x) => x.length > 0);
+  if (!parts.length) return { kind: "help" };
+
+  const implicit = normalizeVibeTarget(implicitTarget);
+  let target = implicit;
+  let body = parts;
+
+  if (!target) {
+    // Không suy ra được từ tên lệnh ⇒ chữ ĐẦU TIÊN phải là tên máy.
+    const named = normalizeVibeTarget(parts[0]);
+    if (!named) {
+      return {
+        kind: "error",
+        message:
+          `❓ Không rõ máy nào nhận việc: "${parts[0]}".\n` +
+          `Dùng: /vibecode <${Object.keys(VIBE_TARGETS).join("|")}> <việc cần làm>\n` +
+          "hoặc viết tắt: /mac <việc> · /win <việc>",
+      };
+    }
+    target = named;
+    body = parts.slice(1);
+  }
+
+  const text = body.join(" ").trim();
+  if (!text) {
+    return {
+      kind: "error",
+      message: `❓ Thiếu nội dung việc. Dùng: /vibecode ${target} <việc cần làm>`,
+    };
+  }
+  return { kind: "task", target, text };
+}
+
+/** Chuẩn hoá tên máy gõ trên Telegram → tên máy trong hệ giao việc; "" nếu không nhận ra. */
+export function normalizeVibeTarget(word) {
+  const key = String(word ?? "").trim().toLowerCase().replace(/^@/, "");
+  return VIBE_TARGETS[key] ?? "";
+}
+
+/** Tên hiển thị của máy nhận việc (để bot trả lời cho dễ đọc). */
+export const VIBE_TARGET_LABELS = {
+  mac: "Mac (macOS + iOS)",
+  win: "Windows",
+  server: "server",
+};
+
+/**
+ * Nội dung gửi kèm cho máy nhận việc. Việc đến từ chủ dự án qua Telegram nên ghi rõ nguồn —
+ * máy nhận cần biết đây là yêu cầu trực tiếp, không phải suy đoán của agent khác.
+ */
+export function buildVibeBody(text, { at = new Date() } = {}) {
+  return [
+    "Việc chủ dự án giao TRỰC TIẾP qua Telegram (/vibecode).",
+    `Giao lúc: ${at.toISOString()}`,
+    "",
+    String(text ?? "").trim(),
+    "",
+    "Nhận xong: ack trong sổ giao việc rồi làm. Xong thì báo lại kèm bằng chứng (lệnh đã chạy + kết quả thật).",
+    "Nếu vướng thì báo NGAY, ghi rõ vướng ở đâu — đừng im lặng.",
+  ].join("\n");
 }
 
 /**
@@ -314,6 +427,13 @@ export function helpText() {
     "",
     "🧠 Việc tự do — agent chạy trên server:",
     "/task <việc cần làm> — ví dụ: /task kiểm tra vì sao node-2 nhiều peer mà ít online",
+    "",
+    "🖥️ Giao việc cho MÁY KHÁC (phải bấm Xác nhận) — việc đi vào hệ giao việc của máy đó:",
+    "/vibecode mac <việc> — giao cho máy Mac (macOS + iOS)",
+    "/vibecode win <việc> — giao cho máy Windows",
+    "/vibecode server <việc> — giao cho agent trên server",
+    "/mac <việc> · /win <việc> — viết tắt của /vibecode",
+    "  Ví dụ: /mac sửa lỗi mất mạng khi connect VPN trên iOS rồi cài lên iPhone để test",
     "",
     "✅ Duyệt việc guard đề xuất (phải bấm Xác nhận):",
     "/approve <id> — cho phép agent phụ trách sửa + publish bản mới",

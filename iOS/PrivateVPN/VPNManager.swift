@@ -36,6 +36,9 @@ final class VPNManager: ObservableObject {
     @Published private(set) var state: VPNState = .disconnected
     @Published private(set) var lastError: String?
     @Published private(set) var statusMessage: String?
+    /// A10 §2g — số live của thẻ Diagnostics, cập nhật mỗi 1s từ extension khi tunnel chạy
+    /// (nhịp lấy mẫu sẵn có, không thêm phép đo). `nil` khi chưa kết nối ⇒ UI hiện `—`.
+    @Published private(set) var liveDiagnostics: TunnelStatusReport?
     @Published private(set) var devicePublicKey: String?
     /// Set when the coordinator rejects the connection because the account is at
     /// its device cap — the UI lists these devices so the user can log one out.
@@ -94,12 +97,14 @@ final class VPNManager: ObservableObject {
         guard let connection = manager?.connection else {
             state = .disconnected
             statusMessage = nil
+            liveDiagnostics = nil
             return
         }
         state = VPNState(networkStatus: connection.status)
         switch connection.status {
         case .connected, .disconnected:
             statusMessage = nil
+            if connection.status == .disconnected { liveDiagnostics = nil }
         case .invalid:
             statusMessage = "VPN profile is not ready. Reinstall the VPN profile and try again."
         default:
@@ -185,6 +190,7 @@ final class VPNManager: ObservableObject {
     func disconnect() {
         stopProviderDiagnosticsPolling()
         manager?.connection.stopVPNTunnel()
+        liveDiagnostics = nil
         refreshStatus()
     }
 
@@ -239,7 +245,9 @@ final class VPNManager: ObservableObject {
         guard providerProbeTask == nil else { return }
         providerProbeTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
+                // A10 §2g: nhịp 1s ĐÚNG bằng nhịp lấy mẫu byte sẵn có của extension — không
+                // thêm phép đo, không thêm pin; chỉ đọc lại ảnh chụp mà extension đã có.
+                try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
                 await self.probeProviderDiagnostics()
             }
@@ -268,7 +276,11 @@ final class VPNManager: ObservableObject {
                 continuation.resume(returning: nil)
             }
         }
-        guard !Task.isCancelled, let report, let code = report.code else { return }
+        guard !Task.isCancelled, let report else { return }
+        // A10 §2g — cập nhật số live cho thẻ Diagnostics ở MỌI nhịp (kể cả phiên bình thường).
+        // Không che trạng thái thật: cầu WS chập thì extension trả số thấp/`—` đúng lúc.
+        liveDiagnostics = report
+        guard let code = report.code else { return }
         guard code == TunnelDiagnosticCode.noTraffic || code == TunnelDiagnosticCode.startFailed else {
             return
         }

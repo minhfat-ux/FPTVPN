@@ -74,6 +74,37 @@ Vì sao cần: `spctl` trên **máy build** vẫn báo `Notarized Developer ID` 
 đối chiếu online), nên rất dễ tưởng đã xong — trong khi máy khách (nhất là khi mạng yếu/không mạng)
 **không có vé** để đối chiếu ⇒ Gatekeeper chặn: *"không thể mở"*. Đúng ca 22/09/2026.
 
+### 4b. LUẬT: KHÔNG BAO GIỜ bắt khách chạy lệnh (chủ dự án chốt 22/09/2026)
+
+> Nguyên văn: *"đừng có bắt khách chạy lệnh gì cả, tập trung fix trên package của mình thôi"*.
+
+**Cấm** đưa cho khách bất kỳ bước nào thuộc loại:
+- `xattr -dr com.apple.quarantine …`, `spctl`, `codesign`, Terminal nói chung;
+- "chuột phải → Open", "System Settings → Privacy & Security → Open Anyway";
+- tải "bản đặc biệt"/bản vá tay.
+
+**Khách chỉ làm 2 việc**: tải file rồi **bấm đôi**. Mọi thứ khác là **lỗi gói của mình** — phải sửa
+trong gói, không đẩy sang khách.
+
+Hệ quả bắt buộc:
+1. **Cổng §4a phải ĐẠT trên CHÍNH FILE ĐANG PHÁT** trước khi gửi link cho khách — ĐẠT trên file vừa
+   build ở máy là **chưa đủ** (lý do ở §4a). Ghi mốc "đã kiểm §4a trên file đang phát" (ngày + sha256)
+   vào `release/releases.jsonl`.
+2. Cổng **chưa ĐẠT ⇒ chưa phát hành, chưa gửi khách**. Đã lỡ phát hành thì **thay file ngay**, không
+   kèm hướng dẫn vòng.
+3. Khách đã nhận bản lỗi ⇒ xử lý bằng **phát hành bản đã staple** + báo khách **tải lại**; tuyệt đối
+   không hướng dẫn khách vượt Gatekeeper.
+4. Lỗi kiểu này **phải tìm ra trước khi khách báo**: cài lịch kiểm định kỳ **trên máy Mac**
+   (`scripts/install-release-audit-watch.sh` → launchd `site.meetflowai.release-audit-watch`,
+   mặc định 6 giờ/lần; nó tải file đang phát của **mọi kênh** rồi đọc version + kiểm DMG, alert Telegram
+   khi lệch). **Server không làm được việc này** — không có `hdiutil`/`stapler`/`spctl`, chạy từ Windows
+   cũng chỉ ra `KHÔNG KIỂM ĐƯỢC`. Đã kiểm 22/09/2026: trên node-2 **chưa** có timer/cron nào ⇒ lỗi này
+   không ai bắt được trước khách.
+
+**Vì sao có luật**: khách không phải kỹ thuật — mỗi dòng lệnh là một chỗ để bỏ cuộc; và nếu khách phải
+vượt Gatekeeper bằng tay thì app đang phụ thuộc thao tác thủ công, cài lại/đổi máy là hỏng lại.
+Sửa ở gói là sửa một lần cho mọi khách.
+
 ## 5. Phát hành
 ```bash
 cp backup: mv /root/flowvpn-mac/VPNFlow-mac.dmg /root/flowvpn-mac/VPNFlow-mac-unsigned-<date>.dmg
