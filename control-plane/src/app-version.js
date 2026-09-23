@@ -68,6 +68,49 @@ export function wantsLegacyApk(userAgent) {
   return LEGACY_UA.test(String(userAgent ?? ""));
 }
 
+/**
+ * Các giá trị `?platform=` được hỗ trợ (kể cả alias).
+ *
+ * Vì sao phải có danh sách này: `versionPayloadFor()` trước đây coi mọi giá trị KHÔNG khớp là
+ * "không phải Windows/macOS/Android" ⇒ **rơi về payload iOS**. Hệ quả thật
+ * (BUG-APPVERSION-PLATFORM-001, 23/09/2026): `?platform=android-legacy` trả payload iOS, và
+ * mọi giá trị rác (`bogus-xyz`) cũng vậy — công cụ audit/cổng chặn hỏi kênh legacy **so nhầm
+ * kênh** mà không có tín hiệu lỗi nào. Nay: platform lạ ⇒ lỗi rõ ràng, không đoán.
+ */
+export const KNOWN_PLATFORMS = [
+  "ios",
+  "android",
+  "android-legacy",
+  "android7",
+  "macos",
+  "mac",
+  "darwin",
+  "osx",
+  "windows",
+  "win",
+  "win32",
+];
+
+/** Chuẩn hoá giá trị `?platform=` (trim + lowercase). */
+export function normalizePlatform(platform) {
+  return String(platform ?? "").trim().toLowerCase();
+}
+
+export function isKnownPlatform(platform) {
+  return KNOWN_PLATFORMS.includes(normalizePlatform(platform));
+}
+
+/** Lỗi khi client/công cụ hỏi một `platform` không tồn tại (route trả HTTP 400). */
+export class UnknownPlatformError extends Error {
+  constructor(platform) {
+    super(`platform không được hỗ trợ: "${String(platform ?? "")}"`);
+    this.name = "UnknownPlatformError";
+    this.code = "UNKNOWN_PLATFORM";
+    this.platform = String(platform ?? "");
+    this.supported = [...KNOWN_PLATFORMS];
+  }
+}
+
 /** Kênh iOS/macOS — nay cũng phát bằng file IPA của mình, KHÔNG còn App Store.
  *
  * Trước 14/09/2026 iOS trả `store_url` = `app_store_url` (link App Store). Chủ dự án đã bỏ
@@ -159,12 +202,40 @@ export function androidVersionPayload(read, { baseUrl = "" } = {}) {
   };
 }
 
+/**
+ * Kênh Android **legacy** (APK minSdk 24 cho Android 7.0/7.1 + Fire OS) khi công cụ/audit hỏi
+ * thẳng `?platform=android-legacy`.
+ *
+ * Vì sao trả payload riêng thay vì để rơi về kênh khác: server chỉ có MỘT mốc phiên bản Android
+ * (`android_latest_version`) nên hai biến thể luôn cùng số — nhưng người gọi phải nhận đúng
+ * tên kênh và đúng link legacy, nếu không thì mọi phép so sánh "kênh legacy có phải bản mới
+ * nhất không" đều so với kênh khác (đúng lỗi BUG-APPVERSION-PLATFORM-001).
+ */
+export function androidLegacyVersionPayload(read, { baseUrl = "" } = {}) {
+  const site = String(baseUrl ?? "").replace(/\/$/, "");
+  const apkUrlLegacy = read("android_apk_url_legacy") || `${site}/v1/downloads/android-legacy`;
+  return {
+    platform: "android-legacy",
+    minimum_version: read("android_minimum_version") ?? "0.0.0",
+    latest_version: read("android_latest_version") ?? "0.0.0",
+    apk_url: apkUrlLegacy,
+    apk_url_legacy: apkUrlLegacy,
+    store_url: apkUrlLegacy,
+  };
+}
+
 /** Payload trả cho client, chọn theo kênh của chính client đó. */
 export function versionPayloadFor(req, { read, baseUrl = "" } = {}) {
   const userAgent = typeof req?.get === "function"
     ? req.get("user-agent")
     : req?.headers?.["user-agent"];
-  const platform = req?.query?.platform;
+  const platform = normalizePlatform(req?.query?.platform);
+  // `?platform=` có mặt mà không nhận ra ⇒ DỪNG bằng lỗi rõ ràng. Trước đây rơi im lặng về iOS.
+  if (platform && !isKnownPlatform(platform)) throw new UnknownPlatformError(req?.query?.platform);
+  // Kênh legacy phải xử lý TRƯỚC các nhánh UA: giá trị này không phải client nào cả.
+  if (platform === "android-legacy" || platform === "android7") {
+    return androidLegacyVersionPayload(read, { baseUrl });
+  }
   if (isWindowsClient({ platform, userAgent })) {
     return windowsVersionPayload(read, { baseUrl });
   }

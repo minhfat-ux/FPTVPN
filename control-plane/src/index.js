@@ -16,7 +16,7 @@ import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision, isDeviceLimitExempt, parseExemptEmails } from "./device-limit.js";
 import { applyDeviceReplace } from "./device-replace.js";
 import { createGeoLookup, isPublicIp } from "./geoip.js";
-import { versionPayloadFor, wantsLegacyApk, iosInstallManifest } from "./app-version.js";
+import { versionPayloadFor, wantsLegacyApk, iosInstallManifest, UnknownPlatformError } from "./app-version.js";
 import {
   amountCovers,
   extractOrderRef,
@@ -4399,8 +4399,18 @@ app.get("/v1/admin/nodes/:id/health", requireAdminAuth, async (req, res) => {
 // App version (force-update): public for the apps, admin GET/PATCH to manage.
 // iOS (App Store) và Android (APK sideload) là hai kênh riêng — handler chọn kênh
 // theo `?platform=` rồi tới User-Agent, xem `app-version.js`.
+// `?platform=` lạ ⇒ 400 (KHÔNG đoán kênh): trước 23/09/2026 giá trị không khớp rơi im lặng về
+// payload iOS khiến công cụ audit so nhầm kênh (BUG-APPVERSION-PLATFORM-001).
 app.get("/v1/app-version", (req, res) => {
-  res.json(versionPayloadFor(req, { read: (key) => appConfig.get(key), baseUrl: siteBaseUrl() }));
+  try {
+    res.json(versionPayloadFor(req, { read: (key) => appConfig.get(key), baseUrl: siteBaseUrl() }));
+  } catch (error) {
+    if (error instanceof UnknownPlatformError) {
+      res.status(400).json({ error: "unknown_platform", platform: error.platform, supported: error.supported });
+      return;
+    }
+    throw error;
+  }
 });
 
 /** Kênh phát hành Android (APK sideload) — admin xem/sửa ngưỡng ép cập nhật. */
