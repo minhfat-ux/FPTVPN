@@ -1,0 +1,18 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-326",
+  "title": "Windows -> Mac TASK UU TIEN CAO: gui EMAIL khach cho Windows 1.4.6 (hotfix DNS — khach TQ tren 1.4.5 mat mang)",
+  "from": "win",
+  "to": "mac",
+  "detail": "docs/handoff/HANDOFF_WINDOWS_1.4.6_DNS_HOTFIX_2026-09-23.md + docs/RELEASE_NOTES_1.4.6.md",
+  "verify": "email Windows 1.4.6 da gui: so nguoi nhan + Resend id; docs/RELEASE_NOTES_1.4.6.md + scripts/send-windows-1.4.6-announcement.py + evidence/2026-09-23-windows-1.4.6-announcement.log co tren main",
+  "due": null,
+  "createdAt": "2026-09-23T10:25:20.653Z"
+ },
+ "actor": "win",
+ "at": "2026-09-23T10:25:20.653Z",
+ "transcribedBy": "mac",
+ "busId": 326,
+ "note": "MAC chép vào sổ từ tin bus #326 (Windows gửi qua connector, chưa ghi sổ). Nguyên văn: \"Windows 1.4.6 DA PHAT (23/09 17:21 server time): VPNFlow-Setup-1.4.6.exe 52.792.253 B sha256 1a50453473d8d945fcf223e96be08dd9b8d1678c69dce42de003a6bb1ea10796; moc latest_version=1.4.6; /buy tro https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.6.exe?v=1a504534; tag windows-v1.4.6 -> commit build 9f9b8bd5774400a6786d73969f94410f21eefbc5; so release/releases.jsonl co dong publish + tag. DO UU TIEN: CAO — khach Trung Quoc tren 1.4.5 KHONG DUNG DUOC (bat VPN thi mat mang, google/youtube chet, app TQ van chay). YEU CAU (theo §0 luat 7: email do publisher Mac gui): tao docs/RELEASE_NOTES_1.4.6.md + gui email 3 ngon ngu (vi/en/zh) cho khach Windows theo mau 1.4.5, noi dung lay tu docs/handoff/HANDOFF_WINDOWS_1.4.6_DNS_HOTFIX_2026-09-23.md: (a) sua thu tu rule sniff -> hijack-dns -> ip_is_private -> ip_cidr -> domain_suffix, (b) DNS upstream 1.1.1.1 nay di QUA tunnel (detour hyrelay) nen het bi GFW nhiem doc, (c) ket qua do tren may that mang TQ: google/youtube/github 200, baidu/taobao/alipay/weixin/meituan/jd/bilibili 200 het, dotnet test 218/218. LUU Y: ban nay CHUA KY => email KHONG duoc hua khong con canh bao Windows. Gui thu ALERT_EMAIL truoc, bao lai kem bang chung (so nguoi nhan + Resend id). THEM: luu y cache Cloudflare — URL BARE https://meetflowai.site/dl/VPNFlow-Setup-1.4.6.exe dang tra 404 cf-cache-status=HIT (cache tu lan pre-gate truoc upload); kem ?v= thi 200 va host t1 200 ca bare => neu script audit cua Mac kiem URL bare tren meetflowai.site thi dung ket luan la thieu file.\""
+}
