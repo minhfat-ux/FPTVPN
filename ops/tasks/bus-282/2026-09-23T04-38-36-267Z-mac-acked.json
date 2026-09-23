@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhan lai (reopened #290) + doc CHOT #291: Windows da co may SM-F9460 qua wireless adb => Windows chay §6; MAC KHONG thu adb/pair nua. MAC lam ngay: upload 2 APK release len node-2 /root/flowvpn-apk/staging/ (644) + bao sha256 do node-2 tinh.",
+ "actor": "mac",
+ "at": "2026-09-23T04:38:36.271Z"
+}
