@@ -126,6 +126,7 @@ enum AppTextKey: String {
     case disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle
     case startVPNHint, stopVPNHint
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
+    case about, version, latestOnServer, latestDifferent, latestUnavailable
 }
 
 @MainActor
@@ -185,7 +186,9 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "Choose a plan to start protection", .choosePlan: "Choose Plan",
             .trialBannerTitle: "🎁 You're on a free 1-day trial", .trialBannerSubtitle: "%@ hours of trial left. Buy a plan to keep using the VPN after it ends.",
             .restorePurchases: "Refresh Purchase Status", .support: "Support", .contactSupport: "Contact Support",
-            .privacyPolicy: "Privacy Policy", .termsOfUse: "Terms of Use", .upgrade: "Upgrade",
+            .privacyPolicy: "Privacy Policy", .termsOfUse: "Terms of Use",
+            .about: "About", .version: "Version", .latestOnServer: "Latest on server", .latestDifferent: "DIFFERENT from installed build", .latestUnavailable: "(unavailable)",
+            .upgrade: "Upgrade",
             .preparingPermission: "Preparing VPN permission…", .vpnStartFailure: "VPN could not start. Please try again.", .paywallTitle: "VPNFlow Premium",
             .paywallSubtitle: "Unlock private, encrypted internet protection.", .benefitTunnel: "Secure VPN tunnel",
             .benefitWifi: "Protection on public Wi-Fi", .benefitFast: "Fast one-click connection",
@@ -217,7 +220,9 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "Chọn gói để bắt đầu bảo vệ", .choosePlan: "Chọn gói",
             .trialBannerTitle: "🎁 Bạn đang dùng bản dùng thử 1 ngày miễn phí", .trialBannerSubtitle: "Còn %@ giờ dùng thử. Mua gói để tiếp tục dùng VPN sau khi hết hạn.",
             .restorePurchases: "Làm mới trạng thái gói", .support: "Hỗ trợ", .contactSupport: "Liên hệ hỗ trợ",
-            .privacyPolicy: "Chính sách quyền riêng tư", .termsOfUse: "Điều khoản sử dụng", .upgrade: "Nâng cấp",
+            .privacyPolicy: "Chính sách quyền riêng tư", .termsOfUse: "Điều khoản sử dụng",
+            .about: "Giới thiệu", .version: "Phiên bản", .latestOnServer: "Bản mới nhất trên máy chủ", .latestDifferent: "KHÁC bản đang cài", .latestUnavailable: "(không đọc được)",
+            .upgrade: "Nâng cấp",
             .preparingPermission: "Đang chờ cấp quyền VPN…", .vpnStartFailure: "Không thể khởi động VPN. Vui lòng thử lại.", .paywallTitle: "VPNFlow Premium",
             .paywallSubtitle: "Mở khóa bảo vệ internet riêng tư và mã hóa.", .benefitTunnel: "VPN tunnel bảo mật",
             .benefitWifi: "Bảo vệ khi dùng Wi-Fi công cộng", .benefitFast: "Kết nối nhanh một click",
@@ -249,7 +254,9 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "选择套餐以开始保护", .choosePlan: "选择套餐",
             .trialBannerTitle: "🎁 您正在使用 1 天免费试用", .trialBannerSubtitle: "试用还剩 %@ 小时。购买套餐以便试用结束后继续使用 VPN。",
             .restorePurchases: "刷新订阅状态", .support: "支持", .contactSupport: "联系支持",
-            .privacyPolicy: "隐私政策", .termsOfUse: "使用条款", .upgrade: "升级",
+            .privacyPolicy: "隐私政策", .termsOfUse: "使用条款",
+            .about: "关于", .version: "版本", .latestOnServer: "服务器最新版本", .latestDifferent: "与已安装版本不同", .latestUnavailable: "(无法读取)",
+            .upgrade: "升级",
             .preparingPermission: "正在等待 VPN 权限…", .vpnStartFailure: "VPN 无法启动。请重试。", .paywallTitle: "VPNFlow Premium",
             .paywallSubtitle: "解锁私密、加密的互联网保护。", .benefitTunnel: "安全 VPN 隧道",
             .benefitWifi: "公共 Wi-Fi 保护", .benefitFast: "一键快速连接",
@@ -281,7 +288,9 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "保護を開始するにはプランを選択", .choosePlan: "プランを選択",
             .trialBannerTitle: "🎁 1日間の無料トライアルを利用中です", .trialBannerSubtitle: "トライアルは残り %@ 時間です。終了後も VPN を使い続けるにはプランをご購入ください。",
             .restorePurchases: "購入状態を更新", .support: "サポート", .contactSupport: "サポートに連絡",
-            .privacyPolicy: "プライバシーポリシー", .termsOfUse: "利用規約", .upgrade: "アップグレード",
+            .privacyPolicy: "プライバシーポリシー", .termsOfUse: "利用規約",
+            .about: "情報", .version: "バージョン", .latestOnServer: "サーバーの最新版", .latestDifferent: "インストール済みと異なります", .latestUnavailable: "(取得できません)",
+            .upgrade: "アップグレード",
             .preparingPermission: "VPN の許可を待機中…", .vpnStartFailure: "VPN を開始できませんでした。もう一度お試しください。", .paywallTitle: "VPNFlow Premium",
             .paywallSubtitle: "プライベートで暗号化されたインターネット保護を解除します。", .benefitTunnel: "安全な VPN トンネル",
             .benefitWifi: "公共 Wi-Fi での保護", .benefitFast: "ワンクリックで高速接続",
@@ -313,7 +322,9 @@ final class AppLanguageStore: ObservableObject {
             .choosePlanToStart: "보호를 시작하려면 플랜을 선택하세요", .choosePlan: "플랜 선택",
             .trialBannerTitle: "🎁 무료 1일 체험판을 사용 중입니다", .trialBannerSubtitle: "체험판이 %@시간 남았습니다. 종료 후에도 VPN을 계속 사용하려면 플랜을 구매하세요.",
             .restorePurchases: "구매 상태 새로 고침", .support: "지원", .contactSupport: "지원 문의",
-            .privacyPolicy: "개인정보 처리방침", .termsOfUse: "이용약관", .upgrade: "업그레이드",
+            .privacyPolicy: "개인정보 처리방침", .termsOfUse: "이용약관",
+            .about: "정보", .version: "버전", .latestOnServer: "서버 최신 버전", .latestDifferent: "설치된 버전과 다름", .latestUnavailable: "(읽을 수 없음)",
+            .upgrade: "업그레이드",
             .preparingPermission: "VPN 권한을 기다리는 중…", .vpnStartFailure: "VPN을 시작할 수 없습니다. 다시 시도해 주세요.", .paywallTitle: "VPNFlow Premium",
             .paywallSubtitle: "비공개 암호화 인터넷 보호를 잠금 해제하세요.", .benefitTunnel: "보안 VPN 터널",
             .benefitWifi: "공용 Wi-Fi 보호", .benefitFast: "빠른 원클릭 연결",
