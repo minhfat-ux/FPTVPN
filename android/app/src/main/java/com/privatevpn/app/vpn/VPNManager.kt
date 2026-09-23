@@ -46,7 +46,30 @@ class VPNManager(
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
     private val _statusMessage = MutableStateFlow<String?>(null)
+    // --- So lieu mang live cho the Diagnostics (yeu cau 22/09/2026, §2g) ---
+    private val _speedDownKbps = MutableStateFlow(-1)
+    private val _speedUpKbps = MutableStateFlow(-1)
+    private val _rampMeasuredKbps = MutableStateFlow(-1)
+    private val _rampDeclaredKbps = MutableStateFlow(-1)
+    private val _rampHeadroomPct = MutableStateFlow(-1)
+    private val _pathLabel = MutableStateFlow("")
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+    val speedDownKbps: StateFlow<Int> = _speedDownKbps.asStateFlow()
+    val speedUpKbps: StateFlow<Int> = _speedUpKbps.asStateFlow()
+    val rampMeasuredKbps: StateFlow<Int> = _rampMeasuredKbps.asStateFlow()
+    val rampDeclaredKbps: StateFlow<Int> = _rampDeclaredKbps.asStateFlow()
+    val rampHeadroomPct: StateFlow<Int> = _rampHeadroomPct.asStateFlow()
+    val pathLabel: StateFlow<String> = _pathLabel.asStateFlow()
+
+    /** Cap nhat so lieu live tu HysteriaVpnService (moi 1 giay, tu vong lay mau). */
+    fun onSpeed(downKbps: Int, upKbps: Int, measuredKbps: Int, declaredKbps: Int, headroomPct: Int, path: String) {
+        _speedDownKbps.value = downKbps
+        _speedUpKbps.value = upKbps
+        _rampMeasuredKbps.value = measuredKbps
+        _rampDeclaredKbps.value = declaredKbps
+        _rampHeadroomPct.value = headroomPct
+        _pathLabel.value = path
+    }
 
     private val _devicePublicKey = MutableStateFlow<String?>(null)
     val devicePublicKey: StateFlow<String?> = _devicePublicKey.asStateFlow()
@@ -314,6 +337,11 @@ class VPNManager(
         if (_state.value != VPNState.DISCONNECTING) {
             _state.value = VPNState.CONNECTED
             _lastError.value = null
+            // Xoá "Reconnecting…" còn sót của lượt trước (1.4.2). Không xoá thì thẻ chẩn đoán
+            // đứng ở "State: Connected" kèm dòng "Message: Reconnecting…" mãi — vì
+            // MainScreen.DiagnosticsCard in message bất cứ khi nào nó khác null, không theo
+            // state. Khách nhìn tưởng app vẫn đang nối lại dù tunnel đã chạy.
+            _statusMessage.value = null
         }
     }
 

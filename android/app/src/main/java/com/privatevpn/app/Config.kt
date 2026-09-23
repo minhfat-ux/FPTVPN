@@ -89,6 +89,22 @@ object Config {
      * ghim IP chỉ thêm đường vào, không thể bị dùng để chuyển hướng traffic. Cập nhật
      * danh sách khi IP của hạ tầng đổi.
      */
+    /**
+     * BƯỚC ĐO MẠNG THỰC TẾ **TRƯỚC** RỒI MỚI KHAI (yêu cầu chủ dự án 22/09/2026 — iOS đã cập nhật).
+     *
+     * Số khai băng thông cho Brutal CC phải sát băng thông THẬT; nấc tĩnh chỉ là đoán, và đo SAU
+     * khi tunnel lên thì lần đầu trên mạng mới vẫn khai theo nấc đoán. Vì vậy trước khi mở client
+     * Go, app tải một mẩu nhỏ qua socket đã `protect()` (đi thẳng ra mạng nền) để LẤY SỐ.
+     * Xem `vpn/NetworkPreMeasure.kt`.
+     */
+    /** Nguồn đo CHÍNH: CDN của shop — đo trên máy thật 22/09 cho thấy tải được từ data TQ. */
+    const val PREMEASURE_URL_PRIMARY = "https://meetflowai.site/v1/downloads/android"
+    const val PREMEASURE_URL = "https://speed.cloudflare.com/__down?bytes=1500000"
+    const val PREMEASURE_MAX_BYTES = 1_500_000
+    /** Dưới ngần này byte thì coi như phép đo hỏng, không dùng (tránh lấy số từ trang lỗi). */
+    const val PREMEASURE_MIN_BYTES = 200_000
+    const val PREMEASURE_BUDGET_MS = 2_500
+    const val PREMEASURE_CONNECT_TIMEOUT_MS = 2_000
     val PINNED_HOST_ADDRESSES: Map<String, List<String>> = mapOf(
         // KHONG ghim IP cho api.meetflowai.site nua (18/09/2026): API_FALLBACK_ADDRESSES dang la
         // IP cua 2 node, ma tren data di dong Trung Quoc IP node bi chan ⇒ moi lan ket noi phai
@@ -148,6 +164,16 @@ object Config {
     const val MOBILE_DOWN_KBPS = 12000
 
     /**
+     * URL đo goodput qua tunnel cho cơ chế khai băng thông ĐỘNG (xem BandwidthMemory).
+     *
+     * Cùng endpoint mà phép đo ngoài thiết bị đang dùng (curl `speed.cloudflare.com/__down`):
+     * Cloudflare anycast nên vào được ngay cả khi IP node bị chặn, và nó trả ĐÚNG số byte
+     * yêu cầu nên phép đo ngắn (<=3s) là đủ để suy ra băng thông. App còn tự cắt theo
+     * BandwidthMemory.PROBE_BYTES nên `bytes` ở đây chỉ là mức trần phía server.
+     */
+    const val BW_PROBE_URL = "https://speed.cloudflare.com/__down?bytes=4000000"
+
+    /**
      * Resolver cấp cho `tun0` — PHẢI có ≥2 để chịu được mất gói.
      *
      * Vì sao (đo trên máy thật 22/09/2026, xem `docs/TUNNEL_MTU_DNS_BUGREPORT.md` §4.2): chỉ cấp
@@ -157,16 +183,6 @@ object Config {
      * 8.8.8.8 là của Google (khác nhà cung cấp với Cloudflare) ⇒ hai đường hỏng độc lập.
      */
     val HY_DNS_SERVERS = listOf("1.1.1.1", "8.8.8.8")
-
-    /**
-     * URL đo goodput qua tunnel cho cơ chế khai băng thông ĐỘNG (xem BandwidthMemory).
-     *
-     * Cùng endpoint mà phép đo ngoài thiết bị đang dùng (curl `speed.cloudflare.com/__down`):
-     * Cloudflare anycast nên vào được ngay cả khi IP node bị chặn, và nó trả ĐÚNG số byte
-     * yêu cầu nên phép đo ngắn (<=3s) là đủ để suy ra băng thông. App còn tự cắt theo
-     * BandwidthMemory.PROBE_BYTES nên `bytes` ở đây chỉ là mức trần phía server.
-     */
-    const val BW_PROBE_URL = "https://speed.cloudflare.com/__down?bytes=4000000"
 
     /**
      * Mục tiêu đo RTT/mất gói CỦA ĐƯỜNG TUNNEL (vòng ramp hỏi mỗi 5s, xem

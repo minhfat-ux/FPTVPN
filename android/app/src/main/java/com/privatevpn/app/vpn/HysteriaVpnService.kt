@@ -121,6 +121,39 @@ class HysteriaVpnService : VpnService() {
      * (Android 10+ hạn chế /proc/net cho app thường). Xem startBandwidthSampler.
      */
     @Volatile private var wsBridgeStats: WSRelayBridge? = null
+    /**
+     * Pha RAMP/STABLE + KÊNH DÒ RIÊNG (yêu cầu chủ dự án 22/09/2026 —
+     * `docs/YEU_CAU_TOC_DO_ON_DINH.md` §2b/§2c): tốc độ leo dần tới mốc Full HD rồi KHOÁ lại;
+     * sau đó vẫn chạy một kênh riêng dò xem còn lên được nữa không — không lên được thì giữ nguyên.
+     */
+    private var rampProbeThread: Thread? = null
+    /** Mức goodput đã KHOÁ (kbps); 0 = chưa vào STABLE. */
+    @Volatile private var stableKbps = 0
+    /** Số lần đã nâng cấp đường trong phiên này (trần MAX_RAMPS_PER_SESSION). */
+    @Volatile private var rampsDone = 0
+    private var stableSince = 0L
+    /** Mốc có traffic THẬT gần nhất — kênh dò chỉ chạy khi phiên rảnh. */
+    @Volatile private var lastBusyAt = 0L
+    /** RTT đo được gần nhất qua tunnel (ms) — dùng làm mốc so sánh cho kênh dò. */
+    @Volatile private var lastRttMs = 0
+    /** Byte TX lan truoc (dong 'toc do tai len' tren man hinh). */
+    private var lastTxBytes = -1L
+    private var probeWins = 0
+    private var probeIntervalMs = PROBE_FIRST_INTERVAL_MS
+    @Volatile private var nextProbeAt = 0L
+    /** Đường đã bị kênh dò kết luận là không hơn — không dò lại trong phiên. */
+    private val probeRejected = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    /** Đường đang chạy có phải cầu WS không (đặt lại ở đầu mỗi lượt oneConnectPass). */
+    @Volatile private var onWsRelay = false
+    /** Transport trước lần nâng cấp gần nhất + hạn chót để phát hiện "nâng cấp mà không lên được". */
+    private var revertTo: String? = null
+    private var revertDeadline = 0L
+    private var revertMisses = 0
+    /** So do TUOI cua mang nen (kbps) + mang da do - buoc "do truoc roi moi khai". */
+    @Volatile private var preMeasureKbps = 0
+    private var preMeasuredKey: String? = null
+    /** Thoi gian mo cau WS lan cuoi (ms) - de CHON DUONG THEO SO DO, khong bam duong cu. */
+    @Volatile private var lastWsOpenMs = 0
 
     /**
      * Token của lượt thử đang chạy. Timer trần thời gian của lượt cũ thấy token đổi
@@ -160,6 +193,9 @@ class HysteriaVpnService : VpnService() {
         }
         startProbeLoop()
         startBandwidthSampler()
+        startRampProbeLoop()
+        // Danh sách app TQ KHÔNG đi VPN: cập nhật ở luồng nền, không chặn đường connect.
+        runCatching { CnAppBypass.refresh(this) }
         DiagnosticsLog.log("service: onStartCommand startId=$startId")
         // Hysteria server host comes from the selected exit node; Config is the fallback.
         runHost = intent?.getStringExtra(EXTRA_HOST)?.takeIf { it.isNotBlank() } ?: DEFAULT_HOST
@@ -220,7 +256,7 @@ class HysteriaVpnService : VpnService() {
                     2 -> { // transport dropped or was rebuilt for a network change
                         everUp = true
                         failedPasses = 0
-                          preferWsFirst = false
+                          preferWsFirst = onWsRelay   // cau WS vua chet: dung thu lai duong truc tiep (da biet la khong vao duoc)
                         backoffMs = RETRY_BACKOFF_START_MS
                         reportReconnecting()
                         // Give the Go client a moment to release its socket/fd before
@@ -371,6 +407,21 @@ class HysteriaVpnService : VpnService() {
         // vốn đọc meteredNow ở wsRelayAttempt): mỗi lượt thử đều có thể mở client Go
         // với số mới nhất, không phụ thuộc lượt trước đã kịp cập nhật hay chưa.
         refreshMeteredState("pass start")
+        // Mỗi lượt mới bắt đầu ở đường TRỰC TIẾP; chỉ khi lượt này thực sự rơi vào cầu WS
+        // (wsRelayAttempt) mới bật cờ — kênh dò dựa vào cờ này để biết đang đi đường nào.
+        onWsRelay = false
+        // CHON DUONG THEO SO DO (1.4.3): do duong TRUC TIEP (TCP connect, toi da 1,2s) roi moi xep
+        // thu tu - KHONG bam duong nho san. Do tren may that 22/09/2026: app ket o duong cu 0,74
+        // Mbps trong khi duong kia do duoc 23,7 Mbps, chi vi no la "last good transport".
+        val directMs = runCatching { probeTcpRelayMs() }.getOrDefault(-1)
+        val directFast = directMs in 1..PATH_DIRECT_FAST_MS
+        DiagnosticsLog.log(
+            "chon-duong: truc-tiep=" + (if (directMs < 1) "khong-mo-duoc" else "${directMs}ms") +
+                " cau-WS=" + (if (lastWsOpenMs < 1) "chua-biet" else "${lastWsOpenMs}ms") +
+                " -> uu tien " + (if (directFast) "TRUC TIEP" else "CAU WS"),
+        )
+        preferWsFirst = !directFast
+        if (directFast) rememberTransport("tcp:${Config.HY_TCP_RELAY_PORTS[0]}")
         val preferred = lastGoodTransport()?.takeIf { !preferWsFirst || it == "ws" }
         // preferWsFirst=true nghia la luot truoc da chet het: uu tien cu (vi du tcp:8443
         // tu phien Wi-Fi truoc) chi lam cham them ~1,2s moi luot. Bo qua no.
@@ -398,7 +449,7 @@ class HysteriaVpnService : VpnService() {
         }
         // Một cổng UDP trực tiếp: đây là đường nhanh nhất khi không bị chặn.
         if (triedDirect != "udp:${HY_PORTS[0]}") {
-            val primaryUdp = udpAttempt(HY_PORTS[0])
+            val primaryUdp = 0 // 1.4.3: UDP truc tiep chuyen xuong CUOI oneConnectPass (xem duoi)
             if (primaryUdp != 0) return primaryUdp
         }
         // Đường duy nhất còn sống khi IP node bị chặn — đi qua hạ tầng dùng chung.
@@ -408,6 +459,14 @@ class HysteriaVpnService : VpnService() {
         }
         // WS cũng không mở được: thử nốt các cổng UDP trực tiếp còn lại (mạng chặn UDP
         // không đều, hoặc Funnel/Cloudflare tạm lỗi).
+        // 1.4.3 (do tren may that 22/09/2026): UDP truc tiep xuong CUOI. Mang doanh nghiep
+        // (Wi-Fi cong ty) MO UDP nhung NUOT du lieu => tunnel "UP" ma 0 byte; cau WS di qua
+        // Cloudflare nen qua duoc firewall doanh nghiep. Doi lai: o mang UDP nhanh thi lan ket
+        // noi dau cham hon ~2-8s (se bu bang cach cham diem bang phep thu tai nho o v28).
+        if (triedDirect != "udp:${HY_PORTS[0]}") {
+            val delayedUdp = udpAttempt(HY_PORTS[0])
+            if (delayedUdp != 0) return delayedUdp
+        }
         for (port in HY_PORTS.drop(1)) {
             if (triedDirect == "udp:$port") continue
             val outcome = udpAttempt(port)
@@ -462,6 +521,7 @@ class HysteriaVpnService : VpnService() {
         wsBridgeStats = bridge
         DiagnosticsLog.log("ws-relay: thử transport qua Cloudflare (local port ${bridge.localPort})")
         // Đợi WS mở (tối đa ~6s) để lần connect đầu không bị mất gói.
+        val wsOpenStarted = System.currentTimeMillis()
         val deadline = System.currentTimeMillis() + WS_OPEN_WAIT_MS
         while (!bridge.connected && System.currentTimeMillis() < deadline && !stopping) {
             Thread.sleep(200)
@@ -471,10 +531,12 @@ class HysteriaVpnService : VpnService() {
             bridge.stop()
             return 0
         }
+        lastWsOpenMs = (System.currentTimeMillis() - wsOpenStarted).toInt()
         val previousHost = runHost
         val previousUp = attemptUpKbps
         val previousDown = attemptDownKbps
         runHost = "127.0.0.1"
+        onWsRelay = true
         // Đường này đi qua 2 chặng (hạ tầng dùng chung + node) nên brutal phải khai
         // thấp hơn đường trực tiếp, nếu không server pace theo số khai và tự gây nghẽn.
         attemptUpKbps = if (meteredNow) MOBILE_UP_KBPS else HY_RELAY_UP_KBPS
@@ -693,6 +755,9 @@ class HysteriaVpnService : VpnService() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             builder.setMetered(false)
         }
+        // App Trung Quốc (WeChat, Alipay, Meituan, Didi, Taobao…) phải đi ĐƯỜNG RIÊNG, không qua
+        // VPN — nếu đi full-tunnel thì server TQ thấy IP nước ngoài và cắt phiên (yêu cầu 22/09/2026).
+        runCatching { CnAppBypass.applyTo(builder, this) }
         val tun = builder.establish() ?: throw IllegalStateException("establish failed")
         DiagnosticsLog.log(
             "vpn: establish ok tun=${tun.fd} underlying=" + runCatching { underlyingSummary() }.getOrDefault("?"),
@@ -715,6 +780,26 @@ class HysteriaVpnService : VpnService() {
     private fun closeTun() {
         runCatching { tun?.close() }
         tun = null
+    }
+
+    /**
+     * DO MANG THUC TE TRUOC ROI MOI KHAI - chi do MOT lan cho moi mang trong moi phien, nen khong
+     * lam cham cac lan dung lai sau do (doi mang thi do lai). Tra ve kbps, 0 = khong do duoc.
+     */
+    private fun freshPreMeasure(profileKey: String): Int {
+        if (preMeasuredKey == profileKey) return preMeasureKbps
+        preMeasuredKey = profileKey
+        val started = System.currentTimeMillis()
+        preMeasureKbps = NetworkPreMeasure.measure { sock ->
+            runCatching { protect(sock) }.getOrDefault(false)
+        }
+        if (preMeasureKbps > 0) {
+            DiagnosticsLog.log(
+                "bw: DO MANG THUC TE truoc khi khai net=$profileKey = ${preMeasureKbps}kbps " +
+                    "(mat ${System.currentTimeMillis() - started}ms) - dung so nay lam so khai",
+            )
+        }
+        return preMeasureKbps
     }
 
     /**
@@ -746,7 +831,10 @@ class HysteriaVpnService : VpnService() {
         // Đổi mạng: số ramp của mạng CŨ không còn nghĩa gì (mỗi mạng có đỉnh riêng).
         val keyChanged = profile.key != bwKey
         if (keyChanged) sessionRampDownKbps = 0
-        val measured = memory.rememberedMeasuredKbps(profile.key)
+        // DO MANG THUC TE TRUOC ROI MOI KHAI (yeu cau 22/09/2026, iOS da cap nhat): so do TUOI
+        // tren chinh mang nay thang bo nho - bo nho co the la cua mang/phien cu.
+        val fresh = freshPreMeasure(profile.key)
+        val measured = if (fresh > 0) fresh else memory.rememberedMeasuredKbps(profile.key)
         val best = memory.bestKbps(profile.key)
         val decision = BandwidthPolicy.decide(
             rememberedMeasuredKbps = measured,
@@ -984,7 +1072,11 @@ class HysteriaVpnService : VpnService() {
             val loss = ArrayDeque<Boolean>()
             var lastChangeAt = 0L
             var lastSampleLogAt = 0L
-            var useProc: Boolean? = null
+            // Nguồn byte của cả phiên: 0 = chưa chọn, 1 = /proc/net/dev (payload thật),
+            // 2 = TrafficStats theo UID (đường trực tiếp), 3 = bộ đếm cầu WS (đang qua cầu).
+            // srcOnWs = đường lúc chọn nguồn, để phát hiện đổi đường mà chọn lại.
+            var byteSrc = 0
+            var srcOnWs = false
             while (!stopping) {
                 try {
                     Thread.sleep(SAMPLE_INTERVAL_MS)
@@ -1004,21 +1096,41 @@ class HysteriaVpnService : VpnService() {
                 }
                 val memory = bandwidth ?: continue
                 val now = System.currentTimeMillis()
-                // Nguồn byte: ưu tiên /proc/net/dev (thấy MỌI transport, kể cả UDP/TCP trực
-                // tiếp), nếu bị chặn đọc thì lùi về bộ đếm của cầu WS. Chọn MỘT nguồn cho cả
-                // phiên và ghi log — trộn hai thang đo khác nhau vào cùng một phép trừ là sai.
-                if (useProc == null) {
-                    useProc = memory.tunRxBytes() >= 0
+                // Nguồn byte — chọn MỘT nguồn và giữ nguyên chừng nào đường còn nguyên (trộn
+                // hai thang đo khác nhau vào cùng một phép trừ là sai):
+                //   1) /proc/net/dev: payload thật người dùng nhận, đúng cho MỌI transport;
+                //   2) đang qua cầu WS: bộ đếm của cầu là số khít nhất (đúng frame của tunnel,
+                //      không dính đếm trùng socket loopback 127.0.0.1 mà hysteria mở tới cầu);
+                //   3) đường trực tiếp: TrafficStats theo UID — chỉ có một socket tunnel nên khít.
+                // Đo trên máy 22/09/2026: giữ nguồn "cầu WS" trong khi transport là hy-udp
+                // trực tiếp ⇒ bộ đếm đứng yên, app báo observed=5kbps dù tunnel chở 4463kbps.
+                // Vì vậy ĐỔI ĐƯỜNG là phải chọn lại nguồn.
+                if (byteSrc != 0 && srcOnWs != onWsRelay) {
+                    byteSrc = 0
+                    lastRx = -1L
+                }
+                if (byteSrc == 0) {
+                    byteSrc = when {
+                        memory.tunRxBytes() >= 0 -> 1
+                        onWsRelay && (wsBridgeStats?.rxBytes() ?: -1L) >= 0 -> 3
+                        memory.uidRxBytes() >= 0 -> 2
+                        else -> 0
+                    }
+                    if (byteSrc == 0) continue
+                    srcOnWs = onWsRelay
                     DiagnosticsLog.log(
-                        "bw: sampler nguồn byte = " +
-                            if (useProc == true) {
-                                "/proc/net/dev (tun)"
-                            } else {
-                                "cầu WS (app không đọc được /proc/net/dev)"
-                            },
+                        "bw: sampler nguồn byte = " + when (byteSrc) {
+                            1 -> "/proc/net/dev (tun, payload)"
+                            2 -> "TrafficStats theo UID (đường trực tiếp)"
+                            else -> "cầu WS (đang qua cầu)"
+                        },
                     )
                 }
-                val rx = if (useProc == true) memory.tunRxBytes() else (wsBridgeStats?.rxBytes() ?: -1L)
+                val rx = when (byteSrc) {
+                    1 -> memory.tunRxBytes()
+                    2 -> memory.uidRxBytes()
+                    else -> wsBridgeStats?.rxBytes() ?: -1L
+                }
                 if (rx < 0) continue
                 if (lastRx < 0 || rx < lastRx) {
                     // Mẫu đầu tiên, hoặc bộ đếm bị reset (TUN mới) — bỏ qua, không tính bừa.
@@ -1034,12 +1146,13 @@ class HysteriaVpnService : VpnService() {
                 samples[idx] = kbps
                 idx = (idx + 1) % samples.size
                 if (count < samples.size) count++
-                if (kbps < SAMPLER_IDLE_KBPS) idleRun++ else idleRun = 0
+                if (kbps < SAMPLER_IDLE_KBPS) idleRun++ else { idleRun = 0; lastBusyAt = now }
 
                 // RTT + mất gói của transport (hỏi nhẹ qua tunnel, 5s/lần).
                 if (now - lastRttAt >= RTT_PROBE_INTERVAL_MS) {
                     lastRttAt = now
                     rttLast = tunnelRttMs()
+                    lastRttMs = rttLast
                     loss.addLast(rttLast <= 0)
                     while (loss.size > LOSS_WINDOW) loss.removeFirst()
                     // Đếm RIÊNG số lần fail LIÊN TIẾP: một lần fail lẻ (1.1.1.1 bị chặn thoáng qua)
@@ -1055,6 +1168,34 @@ class HysteriaVpnService : VpnService() {
                 val ceiling = if (bwPhysicalCeilKbps > 0) bwPhysicalCeilKbps else declared
                 val floor = BandwidthPolicy.FLOOR_DOWN_KBPS
                 val sustained = BandwidthPolicy.sustainedKbps(samples, count)
+                updateRampState(sustained, now)
+                // DAY SO LIEU LIVE LEN UI (the Diagnostics, §2g) - 1 lan/giay, khong them phep do.
+                runCatching {
+                    // TX lấy ĐÚNG thang đo với RX đang dùng (xem khối chọn nguồn byte ở trên).
+                    val txNow = when (byteSrc) {
+                        2 -> memory.uidTxBytes()
+                        3 -> wsBridgeStats?.txBytes() ?: -1L
+                        else -> memory.tunTxBytes()
+                    }
+                    val upKbps = if (lastTxBytes >= 0 && txNow >= lastTxBytes) {
+                        (((txNow - lastTxBytes) * 8) / elapsedMs).toInt()
+                    } else {
+                        0
+                    }
+                    lastTxBytes = txNow
+                    val declared = bwDownKbps
+                    val ceilKbps = if (bwPhysicalCeilKbps > 0) bwPhysicalCeilKbps else declared
+                    val headroomPct = when {
+                        stableKbps == 0 || declared <= 0 -> -1
+                        sustained >= ceilKbps * 95 / 100 -> 0
+                        else -> ((minOf(sustained * 115 / 100, ceilKbps) * 100 / declared) - 100).coerceAtLeast(0)
+                    }
+                    val path = if (onWsRelay) "Cau WS" else "Truc tiep"
+                    (application as? VPNFlowApp)?.vpnManager?.onSpeed(
+                        downKbps = kbps, upKbps = upKbps, measuredKbps = sustained,
+                        declaredKbps = declared, headroomPct = headroomPct, path = path,
+                    )
+                }
 
                 // Mất gói: đếm trên cửa sổ LOSS_WINDOW lần hỏi gần nhất, nhưng chỉ kết luận
                 // khi lần hỏi MỚI NHẤT đã hỏng hoặc mất gói đã lan rộng (≥2 lần) — một lần
@@ -1068,7 +1209,7 @@ class HysteriaVpnService : VpnService() {
                     lastSampleLogAt = now
                     DiagnosticsLog.log(
                         "bw: sample net=$bwDisplay observed=$sustained declared=$declared " +
-                            "rtt=${rttLast}ms loss=${lossPct}% ceil=$ceiling",
+                            "rtt=${rttLast}ms loss=${lossPct}% ceil=$ceiling src=$byteSrc raw=$rx",
                     )
                 }
 
@@ -1282,6 +1423,7 @@ class HysteriaVpnService : VpnService() {
         networkMonitor = null
         probeThread = null
         bwSampler = null
+        rampProbeThread = null
         sessionRampDownKbps = 0
         closeTun()
         runCatching { stopForeground(Service.STOP_FOREGROUND_REMOVE) }
@@ -1340,6 +1482,24 @@ class HysteriaVpnService : VpnService() {
                     deadProbes = 0
                 } else {
                     deadProbes++
+                    // Một lần hỏng LẺ vẫn xảy ra thường xuyên khi tunnel còn chạy (13/120 lần
+                    // đo trên máy 22/09/2026) nên chưa đủ để kết luận. Nhưng cầu WS chết thì
+                    // probe đã hỏng TRƯỚC khi OkHttp kịp báo pong timeout 20s (đo cùng ngày:
+                    // hỏng 12:11:32 mà tới 12:11:50 mới dựng lại), trong khi vòng probe cách
+                    // nhau 15s cộng thời gian đo nên chờ đủ vòng thứ hai là mất thêm 15-30s
+                    // không có mạng. Vì vậy hỏi lại NGAY: hỏng cả hai lần mới dựng lại.
+                    if (deadProbes < DEAD_PROBE_LIMIT) {
+                        try {
+                            Thread.sleep(DEAD_PROBE_CONFIRM_DELAY_MS)
+                        } catch (_: InterruptedException) {
+                            return@Thread
+                        }
+                        if (probeThroughTunnel(fast = true) || !DiagnosticsLog.tunnelUp) {
+                            deadProbes = 0
+                        } else {
+                            deadProbes++
+                        }
+                    }
                     if (deadProbes >= DEAD_PROBE_LIMIT) {
                         DiagnosticsLog.warn(
                             "probe#$tick tunnel UP nhưng $deadProbes lần liên tiếp không có gói nào qua " +
@@ -1354,6 +1514,156 @@ class HysteriaVpnService : VpnService() {
             }
         }.apply { isDaemon = true; name = "vpn-diagnostics-probe" }.also { it.start() }
     }
+
+    /**
+     * Pha STABLE + cửa sổ HOÀN TÁC sau khi nâng cấp đường (yêu cầu chủ dự án 22/09/2026).
+     * Gọi từ vòng lấy mẫu (1s/lần) với trung bình trượt 12s.
+     */
+    private fun updateRampState(sustained: Int, now: Long) {
+        // 1) Chạm mốc Full HD và GIỮ được ⇒ KHOÁ mức này (STABLE).
+        if (sustained >= FULLHD_KBPS) {
+            if (stableSince == 0L) stableSince = now
+            if (stableKbps == 0 && now - stableSince >= STABLE_HOLD_MS) {
+                stableKbps = sustained
+                DiagnosticsLog.log(
+                    "ramp: STABLE at ${sustained}kbps (giữ >= ${FULLHD_KBPS}kbps trong " +
+                        "${STABLE_HOLD_MS / 1000}s) - mức này được KHOÁ, chỉ nâng cấp qua kênh dò riêng",
+                )
+            }
+        } else {
+            stableSince = 0L
+        }
+        // 2) Nâng cấp đường mà KHÔNG lên được ⇒ quay lại đường cũ ĐÚNG MỘT LẦN rồi thôi.
+        val back = revertTo
+        if (back == null) return
+        if (now > revertDeadline) {
+            revertTo = null
+            revertMisses = 0
+            return
+        }
+        if (stableKbps > 0 && sustained < stableKbps * 8 / 10) {
+            revertMisses++
+            if (revertMisses >= REVERT_MISSES_NEEDED) {
+                DiagnosticsLog.warn(
+                    "ramp: đường mới KHÔNG lên được (${sustained}kbps < ${stableKbps}kbps) " +
+                        "-> quay lại đường cũ $back (giữ mức stable; không dò lại đường này)",
+                )
+                probeRejected.add(currentPathKind())
+                revertTo = null
+                revertMisses = 0
+                probeIntervalMs = PROBE_MAX_INTERVAL_MS
+                nextProbeAt = now + probeIntervalMs
+                rememberTransport(back)
+                runCatching { Mobile.stop() }
+            }
+        } else {
+            revertMisses = 0
+        }
+    }
+
+    /**
+     * KÊNH DÒ RIÊNG (pha PROBE) — chỉ chạy sau khi đã STABLE. Yêu cầu chủ dự án 22/09/2026:
+     * "khi đã vào trạng thái stable, có 1 kênh riêng để thử ramp lên được nữa hay không, nếu
+     * không lên được thì keep lại stable, nếu ramp được tiếp thì mới ramp".
+     *
+     * Vì sao đo bằng ĐỘ TRỄ chứ không bằng một client hysteria thứ hai: wrapper Go chỉ giữ MỘT
+     * client (`Mobile.Connect()` đóng client cũ) nên mở client thứ hai là GIẾT phiên đang chạy.
+     * Kênh dò ở đây là kết nối RIÊNG (socket đã protect, KHÔNG qua tunnel) tới đúng đường sẽ
+     * dùng. Đo 22/09/2026: đường WS 1,5-3,7 s còn đường trực tiếp 0,15-0,58 s, nên độ trễ phân
+     * biệt được hai đường (còn số khai băng thông thì server bỏ qua — xem docs §3.1).
+     */
+    private fun startRampProbeLoop() {
+        if (rampProbeThread != null) return
+        rampProbeThread = Thread {
+            while (!stopping) {
+                try {
+                    Thread.sleep(PROBE_TICK_MS)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                if (stopping) return@Thread
+                if (!DiagnosticsLog.tunnelUp || stableKbps == 0) continue
+                if (rampsDone >= MAX_RAMPS_PER_SESSION) continue
+                // Do CA HAI duong: chi sang khi duong kia duoc chung minh tot hon >= 1,25x.
+                if (probeRejected.contains("direct")) continue
+                if (lastBusyAt > 0 && System.currentTimeMillis() - lastBusyAt < PROBE_IDLE_MS) continue
+                if (System.currentTimeMillis() < nextProbeAt) continue
+                try {
+                    probeDirectPath()
+                } catch (e: Exception) {
+                    DiagnosticsLog.warn("ramp: kênh dò lỗi: ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+        }.apply { isDaemon = true; name = "hy-ramp-probe" }.also { it.start() }
+    }
+
+    /** Một lần dò: đo độ trễ đường TRỰC TIẾP rồi so với đường WS đang chạy. */
+    private fun probeDirectPath() {
+        val now = System.currentTimeMillis()
+        val wsMs = if (lastRttMs > 0) lastRttMs else PROBE_WS_FALLBACK_MS
+        val directMs = probeTcpRelayMs()
+        nextProbeAt = now + probeIntervalMs
+        val gainNeeded = (wsMs / PROBE_GAIN_FACTOR).toInt()
+        if (directMs < 1 || directMs > gainNeeded) {
+            // Không có lãi ⇒ GIỮ NGUYÊN mức stable, giãn nhịp dò (tiết kiệm pin/data).
+            probeWins = 0
+            probeIntervalMs = (probeIntervalMs * 2).coerceAtMost(PROBE_MAX_INTERVAL_MS)
+            DiagnosticsLog.log(
+                "ramp: kênh dò KHÔNG có lãi (trực tiếp " +
+                    (if (directMs < 1) "không mở được" else "${directMs}ms") +
+                    " vs WS ${wsMs}ms, cần <= ${gainNeeded}ms) -> keep stable, nhịp dò kế tiếp " +
+                    "${probeIntervalMs / 1000}s",
+            )
+            return
+        }
+        probeWins++
+        DiagnosticsLog.log(
+            "ramp: kênh dò thấy đường TRỰC TIẾP tốt hơn (${directMs}ms vs WS ${wsMs}ms) - " +
+                "lần thắng ${probeWins}/${PROBE_WINS_NEEDED}",
+        )
+        if (probeWins < PROBE_WINS_NEEDED) return
+        // Đủ bằng chứng ⇒ MỚI nâng cấp. Interface VPN giữ nguyên (máy không đổi mạng).
+        probeWins = 0
+        rampsDone++
+        probeIntervalMs = PROBE_FIRST_INTERVAL_MS
+        // 22/09/2026: KHONG hoan tac - doi duong mot chieu, khong "sang roi ve".
+        revertDeadline = now + REVERT_WINDOW_MS
+        revertMisses = 0
+        rememberTransport("tcp:${Config.HY_TCP_RELAY_PORTS[0]}")
+        DiagnosticsLog.warn(
+            "ramp: NÂNG CẤP đường WS -> trực tiếp (lần ${rampsDone}/${MAX_RAMPS_PER_SESSION}), " +
+                "giữ nguyên interface VPN; nếu không lên được sẽ tự quay lại",
+        )
+        // serve() trả về -> runTunnel() dựng lại, ưu tiên đúng transport vừa nhớ.
+        runCatching { Mobile.stop() }
+    }
+
+    /** Đo độ trễ mở TCP tới relay trực tiếp của node (socket đã protect, KHÔNG qua tunnel). */
+    private fun probeTcpRelayMs(): Int {
+        val started = System.currentTimeMillis()
+        return try {
+            val socket = java.net.Socket()
+            try {
+                runCatching { protect(socket) }
+                socket.connect(
+                    java.net.InetSocketAddress(if (runHost.isNotBlank()) runHost else Config.HY_TCP_RELAY_HOST, Config.HY_TCP_RELAY_PORTS[0]),
+                    PROBE_CONNECT_TIMEOUT_MS,
+                )
+                (System.currentTimeMillis() - started).toInt()
+            } finally {
+                runCatching { socket.close() }
+            }
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    /** Transport đang chạy, dạng "ws" / "tcp:8443" — để nhớ và hoàn tác. */
+    private fun currentTransportPref(): String =
+        if (onWsRelay) "ws" else (lastGoodTransport() ?: "ws")
+
+    /** "direct" khi đang đi đường trực tiếp, "ws" khi đang qua cầu WS. */
+    private fun currentPathKind(): String = if (onWsRelay) "ws" else "direct"
 
     /** Cheap TCP reachability check of the relay through the current network. */
     private fun probeRelayReachable() {
@@ -1390,13 +1700,13 @@ class HysteriaVpnService : VpnService() {
      *   cả hai đều không trả lời: một trong hai có thể bị chặn riêng và như vậy không
      *   có nghĩa tunnel hỏng. Đây là tín hiệu cho watchdog ở startProbeLoop().
      */
-    private fun probeThroughTunnel(): Boolean {
+    private fun probeThroughTunnel(fast: Boolean = false): Boolean {
         val started = System.currentTimeMillis()
         var httpOk = false
         val http = try {
             java.net.Socket().use { s ->
-                s.connect(java.net.InetSocketAddress("1.1.1.1", 80), 4000)
-                s.soTimeout = 6000
+                s.connect(java.net.InetSocketAddress("1.1.1.1", 80), if (fast) 1500 else 4000)
+                s.soTimeout = if (fast) 2000 else 6000
                 s.getOutputStream().apply {
                     write("GET / HTTP/1.0\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n".toByteArray())
                     flush()
@@ -1417,7 +1727,7 @@ class HysteriaVpnService : VpnService() {
             "probe: THROUGH TUNNEL http 1.1.1.1:80 $http in ${System.currentTimeMillis() - started}ms",
         )
         val dnsStart = System.currentTimeMillis()
-        val dns = dnsThroughTunnel("example.com")
+        val dns = dnsThroughTunnel("example.com", fast)
         // dnsThroughTunnel trả "answers=<n> <record>" hoặc "FAIL ...": chỉ tính là
         // thông khi có bản ghi trả về thật.
         val dnsAnswers = dns.substringAfter("answers=", "").substringBefore(' ').toIntOrNull() ?: 0
@@ -1429,9 +1739,9 @@ class HysteriaVpnService : VpnService() {
     }
 
     /** Sends a real A query through the tunnel and reports the answer. */
-    private fun dnsThroughTunnel(host: String): String = try {
+    private fun dnsThroughTunnel(host: String, fast: Boolean = false): String = try {
         java.net.DatagramSocket().use { ds ->
-            ds.soTimeout = 4000
+            ds.soTimeout = if (fast) 1500 else 4000
             val query = buildDnsQuery(host)
             ds.send(
                 java.net.DatagramPacket(
@@ -1542,6 +1852,32 @@ class HysteriaVpnService : VpnService() {
          * probeThroughTunnel().
          */
         const val DEAD_PROBE_LIMIT = 2
+        /**
+         * Chờ trước khi hỏi lại để XÁC NHẬN tunnel đã chết thật (xem startProbeLoop):
+         * đủ ngắn để phát hiện sớm hơn hẳn vòng probe 15s, đủ dài để không bắn hai câu
+         * hỏi dồn vào cùng một cú nghẽn tức thời của mạng di động.
+         */
+        const val DEAD_PROBE_CONFIRM_DELAY_MS = 1_500L
+        /** Duong truc tiep mo trong ngan nay (ms) thi coi la nhanh hon cau WS. */
+        const val PATH_DIRECT_FAST_MS = 400
+        /** Mốc Full HD: >= 8 Mbps mới coi là đủ xem 1080p — yêu cầu chủ dự án 22/09/2026. */
+        const val FULLHD_KBPS = 8_000
+        /** Giữ >= mốc liên tục ngần này thì KHOÁ mức đó (STABLE). */
+        const val STABLE_HOLD_MS = 10_000L
+        /** Nhịp thức của kênh dò; nhịp dò thật giãn dần 5 phút -> 30 phút khi không có lãi. */
+        const val PROBE_TICK_MS = 20_000L
+        const val PROBE_FIRST_INTERVAL_MS = 300_000L
+        const val PROBE_MAX_INTERVAL_MS = 1_800_000L
+        /** Chỉ dò khi phiên RẢNH ngần này — không cướp băng thông của người dùng. */
+        const val PROBE_IDLE_MS = 5_000L
+        /** Kênh dò phải tốt hơn ngần này lần mới đáng đổi đường, và phải thắng LIÊN TIẾP. */
+        const val PROBE_GAIN_FACTOR = 2.0
+        const val PROBE_WINS_NEEDED = 2
+        const val PROBE_CONNECT_TIMEOUT_MS = 1_200
+        const val PROBE_WS_FALLBACK_MS = 1_500
+        const val MAX_RAMPS_PER_SESSION = 3
+        const val REVERT_WINDOW_MS = 120_000L
+        const val REVERT_MISSES_NEEDED = 10
         /**
          * Trần thời gian bắt tay của MỘT đường trực tiếp. Đường trực tiếp khi thông thì
          * lên trong <1s; quá ngần này nghĩa là cổng/IP đó không tới được.

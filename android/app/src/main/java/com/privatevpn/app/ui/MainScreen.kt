@@ -79,6 +79,12 @@ fun MainScreen(
     val selectedId by vpn.selectedNodeID.collectAsState()
     val usingFallback by vpn.usingFallbackNodes.collectAsState()
     val statusMessage by vpn.statusMessage.collectAsState()
+    val speedDown by vpn.speedDownKbps.collectAsState()
+    val speedUp by vpn.speedUpKbps.collectAsState()
+    val rampMeasured by vpn.rampMeasuredKbps.collectAsState()
+    val rampDeclared by vpn.rampDeclaredKbps.collectAsState()
+    val rampHeadroom by vpn.rampHeadroomPct.collectAsState()
+    val pathLabel by vpn.pathLabel.collectAsState()
     val isSubscribed by rememberIsSubscribed(sub)
     val isOnFreeTrial by sub.isOnFreeTrial.collectAsState()
     val trialHoursLeft by sub.trialHoursLeft.collectAsState()
@@ -158,7 +164,17 @@ fun MainScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        DiagnosticsCard(app = app, state = state, statusMessage = statusMessage)
+        DiagnosticsCard(
+            app = app,
+            state = state,
+            statusMessage = statusMessage,
+            speedDownKbps = speedDown,
+            speedUpKbps = speedUp,
+            rampMeasuredKbps = rampMeasured,
+            rampDeclaredKbps = rampDeclared,
+            rampHeadroomPct = rampHeadroom,
+            pathLabel = pathLabel,
+        )
 
         Spacer(Modifier.height(16.dp))
 
@@ -450,6 +466,12 @@ private fun DiagnosticsCard(
     app: VPNFlowApp,
     state: VPNState,
     statusMessage: String?,
+    speedDownKbps: Int,
+    speedUpKbps: Int,
+    rampMeasuredKbps: Int,
+    rampDeclaredKbps: Int,
+    rampHeadroomPct: Int,
+    pathLabel: String,
 ) {
     val lang = app.languageStore
     val vpn = app.vpnManager
@@ -461,11 +483,35 @@ private fun DiagnosticsCard(
         )
         Spacer(Modifier.height(10.dp))
         DiagRow(lang.t(LKey.state), lang.stateLabel(state), stateColor(state))
+        if (state == VPNState.CONNECTED) {
+            DiagRow(lang.t(LKey.speedDown), kbpsLabel(speedDownKbps), VPNTheme.SecondaryLabel)
+            DiagRow(lang.t(LKey.speedUp), kbpsLabel(speedUpKbps), VPNTheme.SecondaryLabel)
+            DiagRow(lang.t(LKey.rampMeasured), kbpsLabel(rampMeasuredKbps), VPNTheme.SecondaryLabel)
+            DiagRow(lang.t(LKey.rampDeclared), kbpsLabel(rampDeclaredKbps), VPNTheme.SecondaryLabel)
+            DiagRow(
+                lang.t(LKey.rampHeadroom),
+                when {
+                    rampHeadroomPct < 0 -> "—"
+                    rampHeadroomPct == 0 -> lang.t(LKey.rampMaxed)
+                    else -> "+$rampHeadroomPct%"
+                },
+                VPNTheme.SecondaryLabel,
+            )
+            DiagRow(lang.t(LKey.pathUsed), pathLabel.ifBlank { "—" }, VPNTheme.SecondaryLabel)
+        }
         DiagRow(lang.t(LKey.location), nodeDisplay(vpn.selectedNode), VPNTheme.SecondaryLabel)
         statusMessage?.let {
             DiagRow(lang.t(LKey.message), it, VPNTheme.SecondaryLabel)
         }
     }
+}
+
+/** kbps -> "6,4 Mbps"; -1/0 khi tunnel chưa phục vụ thì hiện "—" (không hiện 0 gây hiểu nhầm). */
+private fun kbpsLabel(kbps: Int): String = when {
+    kbps < 0 -> "—"
+    kbps == 0 -> "0 kbps"
+    kbps < 1000 -> "$kbps kbps"
+    else -> String.format("%.1f Mbps", kbps / 1000.0).replace('.', ',')
 }
 
 private fun nodeDisplay(node: com.privatevpn.app.api.ExitNode?): String =
