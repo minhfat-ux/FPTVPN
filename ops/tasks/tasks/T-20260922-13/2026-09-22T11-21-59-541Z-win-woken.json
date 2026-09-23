@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T11:21:59.541Z",
+ "note": "connector VPS: done từ mac — T-20260922-13 · GAP: khach cai macOS xong KHONG CHAY DUOC - kiem chung file DANG PHAT bang cong §4a + tim nguyen nhan",
+ "via": "dsh --profile headless \"{prompt}\""
+}

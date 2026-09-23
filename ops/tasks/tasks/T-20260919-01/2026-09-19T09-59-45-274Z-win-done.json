@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=2d78511 (bo nghe SSE agent-listen.mjs) + docs/AGENT-BUS.md §9; verify: 'node ops/agent-listen.mjs --once --dry-run' -> 'da noi kenh day' exit 0; connector /health subscribers.win=1 (bo nghe pid 10824 dang giu ket noi); watcher poll cu da tat (khong con tien trinh agent-watch.mjs, .watch-win.pid trong); tu-chay: Startup\\AgentListen.vbs bat, AgentWatch.vbs.disabled",
+ "actor": "win",
+ "at": "2026-09-19T09:59:45.274Z"
+}

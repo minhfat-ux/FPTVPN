@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=b38048e (docs(macos): staple app+appex trong DMG) · cmd=hdiutil convert VPNFlow-mac.dmg -format UDRW => xcrun stapler staple VPNFlow.app + PrivateVPNMacPacketTunnel.appex => hdiutil convert -format UDZO => codesign --force --timestamp --sign \"Developer ID Application: Minh Nguyen (G6XW3RN6LJ)\" => xcrun notarytool submit (keyId 8GW3662G64) --wait => Accepted 77a9ee05-8b4a-4885-80ff-293eddf838b3 => xcrun stapler staple VPNFlow-mac.dmg · kết quả=artifact phát 21458057 B sha256 f1b802dac4647c76a18a1d622a4dd0c499328515577f91bd45aaeffe6b8fa65c · stapler validate DMG+app+appex đều \"worked\" · spctl -a -t open --context context:primary-signature -vv => accepted/Notarized Developer ID · codesign --verify --deep --strict --verbose=2 app => valid on disk (1.4.0/build 14) · curl -sI https://t1.meetflowai.site/v1/downloads/mac => 200 content-length 21458057, tải về sha256 khớp · check-publish-version.py --platform macos --mode post => ĐẠT exit 0 · LƯU Ý: DMG cũ thực ra ĐÃ staple, lỗi thật là app+appex bên trong chưa có vé; CHƯA test được trên Mac thứ hai (không có máy thứ hai trong LAN/tailnet, harness chặn GUI open lỗi 163) nên kiểm bằng staple validate + spctl + clean-room quarantine",
+ "actor": "mac",
+ "at": "2026-09-22T04:59:22.259Z"
+}

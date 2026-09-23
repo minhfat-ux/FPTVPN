@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=152e524 (tren origin/main; goc c539353 sau rebase). cmd1: python3 scripts/check-publish-version.py --platform macos --mode post --version 1.3.3 --build 13 -> exit 1; doc TU TRONG DMG ra 1.4.0/build 14 (KHONG phai 1.3.3/13 nhu brief), route 21.617.309 B, sha256 9d05f271..., marker latest_mac_version=1.4.0 KHOP ban dang phat. cmd2: --platform ios --mode post --version 1.4.0 --build 16 -> exit 0, 1.4.0/16 khop, 8.135.823 B. cmd3: --platform android --mode post --version 1.4.0 --build 20 -> exit 0, 1.4.0/20 khop, 96.536.145 B. cmd4: swiftc -parse 4 file Swift OK; python3 -m py_compile OK. Da sua 2 loi that cua cong macOS: doc Info.plist o .app/Contents/Info.plist + tai --mode post bang User-Agent (urlretrieve bi Cloudflare 403). UI: iOS/macOS About hien Phien ban+build+moc latest_version, khac thi hien KHAC ban dang cai; Android hien BuildConfig.VERSION_NAME+versionCode+moc. LUU Y: Android Kotlin chua build duoc tren may Mac (khong co Java Runtime) — moi verify bang doc code.",
+ "actor": "mac",
+ "at": "2026-09-22T03:36:52.289Z"
+}

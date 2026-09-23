@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhan viec: sua nhan diagDown/diagUp + them dong 'Dinh phien ↓' tu BandwidthControl.peakDownKbps; verify so tren the khop luong tai that.",
+ "actor": "mac",
+ "at": "2026-09-23T02:34:33.665Z"
+}

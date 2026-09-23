@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "Va 2 loi ha tang do phien duoc danh thuc phat hien: (1) prompt danh thuc bi cmd.exe cat con 1 dong (_work/wake-compare.mjs: duong cu 1 dong/38 ky tu; qua ops/wake-launch.mjs 10 dong/299 ky tu); (2) git capture trong sandbox chet EPERM => them ops/lib/capture.mjs (hung stdout/stderr bang fd tep) + push du phong bang token gh trong task.mjs. Commit: 0161a80 + commit nay.",
+ "actor": "win",
+ "at": "2026-09-19T10:04:43.794Z"
+}

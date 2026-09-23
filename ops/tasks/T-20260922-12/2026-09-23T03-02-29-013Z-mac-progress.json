@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "MAC lam lai lan 2. macOS XONG phan bang chung About: build 1.4.1/16 tai build/mac-dd, codesign --verify --deep --strict PASS; da MO duoc About trong app va chup anh 'VPNFlow Version 1.4.1 (16)' (shots/mac-about.png sha256=c1875328328cc...); mo tu build path thay vi /Applications, app tu ket noi thanh cong: 'Connected' + Diagnostics State=Connected Location=Hanoi, Vietnam (shots/mac-connected.png sha256=f8f228...). Commit build=7df5449 (co du 479a6d7 + c5d7564 + 078e043). iPhone: da cai san 1.4.1/19 (devicectl xac nhan) nhung may dang KHOA. Con 2 vuong vat ly: ghi /Applications + iPhone khoa.",
+ "actor": "mac",
+ "at": "2026-09-23T03:02:29.014Z"
+}

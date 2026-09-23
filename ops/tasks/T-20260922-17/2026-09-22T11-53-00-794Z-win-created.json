@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-17",
+  "title": "TRUOC KHI PUBLISH macOS 1.4.1: chay CONG CREDENTIAL moi (bat buoc) + dan output",
+  "from": "win",
+  "to": "mac",
+  "detail": "WIN vua them cong chan credential hysteria2 vao scripts/check-publish-version.py (commit 0b83518, da push origin/main) dung cho --platform ios|macos. Cong doc HysteriaPassword/HysteriaObfs trong Info.plist cua APP VA cua .APPEX: thieu => KHONG DAT + DUNG publish; neu moi truong co HYST_PASSWORD/HYST_OBFS thi so luon voi gia tri nhung trong artifact, KHAC => KHONG DAT (bat ca ca build nhung credential CU). KHONG BAO GIO in gia tri (chi in co/khong + do dai + khop/khac). LY DO: credential hysteria2 nhung LUC BUILD, khong nam trong repo; build tay thieu bien => app cai duoc mo duoc nhung KHONG ket noi duoc (ca that 22/09: ban macOS build moi bao 'Invalid user'). BANG CHUNG WIN: chay flowvpnrelay.exe voi credential SAI => 'authentication error, HTTP status code: 404'; credential DUNG => 'da noi 165.101.114.162:8443 qua wsrelay trong 4.873s' + BENCH HTTP 200. VIEC: chay cong kem gia tri that cua moi truong build truoc khi publish: HYST_PASSWORD=<gia tri that> HYST_OBFS=<gia tri that> python3 scripts/check-publish-version.py --platform macos --file <VPNFlow-mac.dmg> --version 1.4.1 --mode post (va lam tuong tu cho IPA iOS voi --platform ios --build 18).",
+  "verify": "Dan nguyen output cua cong: phai thay dong 'Credential hysteria2 (app)' va '(extension)' DAT, va 'HysteriaPassword khop env build' DAT. Neu co dong KHONG DAT thi KHONG duoc publish, phai build lai kem bien.",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T11:53:00.794Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T11:53:00.794Z"
+}

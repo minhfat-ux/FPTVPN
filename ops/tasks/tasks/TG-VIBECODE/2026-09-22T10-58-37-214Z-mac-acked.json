@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC đã nhận yêu cầu 'kiểm tra máy Mac rồi báo lại' từ owner (bus #203). Bắt đầu kiểm tra tổng thể.",
+ "actor": "mac",
+ "at": "2026-09-22T10:58:37.215Z"
+}

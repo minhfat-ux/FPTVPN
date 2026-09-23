@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260921-01",
+  "title": "Nâng DSH harness lên 0.1.5-rc.1 + cài plugin AgentTeams (để session nhắn được cho nhau)",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/TASK-dsh-agent-teams-upgrade.md",
+  "verify": "dsh --version ra 0.1.5-rc.1; dsh plugin --profile <profile> list có @nanmicoder/dsh-agent-teams@0.1.20; một session liệt kê đủ 14 tool agent_teams_* (không phải NONE)",
+  "due": null,
+  "createdAt": "2026-09-21T06:39:23.234Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-21T06:39:23.242Z"
+}

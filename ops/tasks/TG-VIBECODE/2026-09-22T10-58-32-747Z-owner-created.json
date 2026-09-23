@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "TG-VIBECODE",
+  "title": "Chủ dự án giao việc qua Telegram: kiểm tra máy Mac rồi báo lại",
+  "from": "owner",
+  "to": "mac",
+  "detail": "Việc chủ dự án giao TRỰC TIẾP qua Telegram (/vibecode).\nGiao lúc: 2026-09-22T10:54:52.004Z\n\nkiểm tra máy Mac rồi báo lại\n\nNGUON: tin bus #203 luc 2026-09-22T10:54:52.348Z, from=\"owner\", kind=\"task\", ref=\"TG-VIBECODE\".",
+  "verify": null,
+  "due": null,
+  "createdAt": "2026-09-22T10:58:32.747Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-22T10:58:32.747Z",
+ "transcribedBy": "mac",
+ "busId": 203,
+ "busAt": "2026-09-22T10:54:52.348Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #203 (owner -> mac); tin không có trong sổ git."
+}

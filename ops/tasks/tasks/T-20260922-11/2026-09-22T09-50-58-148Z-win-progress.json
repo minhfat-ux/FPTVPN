@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "WIN re-check doc lap tren origin/main @494c0ad (worktree _work/bus169, cay sach): (a) 'tag --platform windows' -> in dung 'tag windows-v1.4.3 da ton tai va dang tro dung commit 64e07c7c6fa9... - khong lam gi.' exit 0, khong fatal/stack; (b) 'list' -> cot TAG in day du 'android-legacy-v1.4.0' + '1.4.0/20'; (c) 'verify' -> 12 DAT/21 CANH BAO/0 KHONG DAT exit 0. Don them: tag local windows-v1.4.3 tren may WIN bi ghi de boi tag rac 'test mismatch' -> 7dd0115 (origin dung 64e07c7); da xoa local va fetch lai dung tu origin. Luu y: ack truoc do cua WIN ghi 'chua commit' la sai thoi diem - commit 494c0ad da co tren origin/main.",
+ "actor": "win",
+ "at": "2026-09-22T09:50:58.148Z"
+}

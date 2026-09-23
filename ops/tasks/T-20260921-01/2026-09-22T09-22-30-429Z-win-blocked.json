@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Thu lai theo bus #160: dsh --version=0.1.5-rc.1 DAT; nhung 'dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.20' -> [EPERM] operation not permitted, open 'C:\\Users\\Minhn\\.dsh\\profiles\\web\\_tmp_...' (exit -4048); xin quyen danger-full-access -> 'requires approval, but no approval channel is available' => fail-closed. Profile web KHONG co @nanmicoder/@deepseek-ai (package.json chi co dsh-git-rollback; cordis.patch.yml khong co agent-teams). Can NGUOI chay tay ops\\install-agent-teams.cmd roi restart harness + mo session moi kiem 14 tool agent_teams_*.",
+ "actor": "win",
+ "at": "2026-09-22T09:22:30.429Z"
+}

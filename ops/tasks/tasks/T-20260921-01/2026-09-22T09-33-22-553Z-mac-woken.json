@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-22T09:33:22.553Z",
+ "note": "connector VPS: blocked từ win — T-20260921-01: WIN thu lai — van blocked (EPERM + fail-closed); da sua script cai + canh bao duong git pull",
+ "via": "dsh --profile headless \"{prompt}\""
+}

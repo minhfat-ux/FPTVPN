@@ -8,13 +8,28 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 
 | id | trạng thái | việc | lệnh tiếp theo |
 |---|---|---|---|
+| `REQ-A10-A11` | verified | YEU CAU MOI A10/A11 + §2g/§2h — map vao iOS (uu tien) · Windows LOCK | `-` |
 | `T-20260918-01` | verified | Viết lại 22 mục nhập từ nguồn ngoài (14 chuyên gia VN/ĐNA + 8 kỹ năng  | `-` |
 | `T-20260918-02` | verified | Thêm 18 skill/expert GIÁO DỤC vào fBuddy (trẻ em, ngoại ngữ, luyện thi | `-` |
 | `T-20260918-03` | verified | Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24 | `-` |
 | `T-20260919-01` | verified | Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE): bỏ poll 20 giây, hết bã | `-` |
 | `T-20260919-02` | verified | WIN: clone repo fbuddy mới (minhfat-ux/fbuddy) + join sổ task + ack 3  | `-` |
 | `T-20260919-03` | verified | Deploy bản phân loại/giá chợ lên node-2 (Mac bị chặn SSH) | `-` |
-| `T-20260921-01` | sent | Nâng DSH harness lên 0.1.5-rc.1 + cài plugin AgentTeams (để session nh | `AGENT_NAME=WIN node ops/task.mjs ack T-20260921-01 --push` |
+| `T-20260921-01` | blocked | Nâng DSH harness lên 0.1.5-rc.1 + cài plugin AgentTeams (để session nh | `bên giao cần gỡ vướng` |
+| `T-20260922-01` | in_progress | macOS/iOS: port watchdog suot phien + tu dung lai (parity Windows 1.4. | `node ops/task.mjs done T-20260922-01 --evidence "commit=…, cmd=…, kết quả=…" --push` |
+| `T-20260922-02` | verified | iOS/macOS/Android: hien version trong Settings + dung cong chan versio | `-` |
+| `T-20260922-03` | blocked | iOS: test tren iPhone that truoc khi publish 1.4.1 (§2c) + publisher l | `bên giao cần gỡ vướng` |
+| `T-20260922-04` | blocked | iOS KHAN: nhap code xong khong vao duoc app - profile thieu keychain g | `bên giao cần gỡ vướng` |
+| `T-20260922-05` | verified | macOS KHAN: DMG chua staple => khach cai xong bao 'khong the mo' - sta | `-` |
+| `T-20260922-06` | in_progress | iOS: deploy lai ban latest len iPhone de test lai (sau khi sua keychai | `node ops/task.mjs done T-20260922-06 --evidence "commit=…, cmd=…, kết quả=…" --push` |
+| `T-20260922-07` | verified | Publisher: audit toan bo kenh release; kenh nao chua phai latest thi u | `-` |
+| `T-20260922-08` | verified | Cap nhat process: ap dung muc §0 PUBLISHER_PROCESS (9 luat moi) truoc  | `-` |
+| `T-20260922-09` | sent | Cap nhat process (server): route phat file + moc version + audit link  | `AGENT_NAME=SERVER node ops/task.mjs ack T-20260922-09 --push` |
+| `T-20260922-10` | verified | iOS/macOS: ke hoach dev toc do & on dinh (YEU_CAU_TOC_DO) - lam P0-1/P | `-` |
+| `T-20260922-11` | verified | Sua release-record.mjs: tagExists() vo trong git worktree + khong cat  | `-` |
+| `T-20260922-12` | in_progress | GAP toi nay: cai ban moi len macOS + iPhone de chu du an test mang kha | `node ops/task.mjs done T-20260922-12 --evidence "commit=…, cmd=…, kết quả=…" --push` |
+| `TG-VIBECODE` | acked | Chủ dự án giao việc qua Telegram: kiểm tra máy Mac rồi báo lại | `node ops/task.mjs progress TG-VIBECODE --note "…" --push` |
+| `VIBECODE-E2E` | done | TEST /vibecode: gui that tu server Linux (owner -> WIN qua connector V | `chờ bên giao nghiệm thu` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 
 <!-- AUTO-TASKS:END -->

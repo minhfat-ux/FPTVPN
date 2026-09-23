@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-08",
+  "title": "Cap nhat process: ap dung muc §0 PUBLISHER_PROCESS (9 luat moi) truoc moi lan phat hanh",
+  "from": "win",
+  "to": "mac",
+  "detail": "Chu du an yeu cau bao publisher cac ben cap nhat lai process. Da them muc §0 vao docs/PUBLISHER_PROCESS.md (commit 85f7bdf, nhanh main): bang 9 luat moi sinh ra tu 3 su co that ngay 22/09, kem cot AI PHAI LAM. Phan cua Mac/publisher: (1) cong chan version bat buoc truoc upload + chay lai --mode post sau upload; (3) iOS: nhom keychain phai co trong CA code signature LAN provisioning profile (profile thieu hoac chi co wildcard => khach khong dang nhap duoc); (4) iOS: test tren iPhone THAT theo bang 7 muc §2c truoc khi phat; (5) macOS: DMG phai STAPLE + stapler validate/spctl/codesign deu dat (spctl mot minh KHONG du); (7) publisher lo CA publish LAN email, Windows harness chi phat hanh ban Windows; (8) audit toan kenh dinh ky bang scripts/audit-releases.py, kenh nao chua phai latest thi cap nhat link + set moc + thong bao khach; (9) chi phat ban moi nhat da test. Doc §0 truoc khi lam bat ky viec phat hanh nao.",
+  "verify": null,
+  "due": null,
+  "createdAt": "2026-09-22T07:25:48.183Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T07:25:48.183Z"
+}

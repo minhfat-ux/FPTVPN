@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "E2E PASS (server Linux -> connector -> WIN). bus=#197 from=owner at 2026-09-22T10:48:14.186Z ref=VIBECODE-E2E (doc nguyen van). cmd=node ops/tmp-vibecode-check.mjs -> HEALTH 200 {ok:true,count:195,latest:199,subscribers:{win:1}} + BUS197 JSON. cmd=read ops/tasks/.watch-win.json -> lastWake[VIBECODE-E2E]=2026-09-22T10:48:20.831Z (6,6 giay sau tin) va seenBus chua 197. Listener: ops/tasks/.listen-win.pid=18648, tien trinh node 18648 dang song (tu 21/09 11:06). So git: ops/tasks/VIBECODE-E2E/2026-09-22T10-51-12-608Z-server-created.json + ...-win-acked.json da tren origin/flowgpt (commit b6f55f9). Ket luan: tin THAT tu server Linux da toi WIN va danh thuc harness => /vibecode gui duoc.",
+ "actor": "win",
+ "at": "2026-09-22T10:52:17.329Z"
+}

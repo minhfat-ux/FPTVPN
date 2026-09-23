@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "RETRY-PUSH: artifact 21458057 B sha256 f1b802dac4647c76a18a1d622a4dd0c499328515577f91bd45aaeffe6b8fa65c · stapler validate DMG+app+appex worked · spctl accepted/Notarized Developer ID · codesign valid on disk (1.4.0/14) · route 200 content-length 21458057 sha256 khớp · check-publish-version.py macos --mode post ĐẠT · DMG cũ đã staple, lỗi thật là app+appex chưa có vé",
+ "actor": "mac",
+ "at": "2026-09-22T05:00:01.812Z"
+}

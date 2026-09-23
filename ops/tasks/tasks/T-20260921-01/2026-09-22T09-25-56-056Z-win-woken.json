@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T09:25:56.057Z",
+ "note": "bên giao vừa ghi chú vào việc của tôi",
+ "via": "dsh --profile headless \"{prompt}\""
+}

@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-20",
+  "title": "TG /vibecode: kiểm tra các link trang buy — có thể bị lỗi/không truy cập được từ Trung Quốc",
+  "from": "owner",
+  "to": "win",
+  "detail": "Việc chủ dự án giao TRỰC TIẾP qua Telegram (/vibecode).\nGiao lúc: 2026-09-22T16:29:06.764Z\n\nkiểm tra các link trang buy, đang có thể bị lỗi không access được từ Trung Quốc. Kiểm tra ngay và báo cáo lại ngay\n\nNGUON: tin bus #238 luc 2026-09-22T16:29:07.148Z, from=\"owner\", kind=\"task\", ref=\"TG-VIBECODE\".",
+  "verify": null,
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T16:31:00.000Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-22T16:31:00.000Z",
+ "transcribedBy": "win",
+ "busId": 238,
+ "busAt": "2026-09-22T16:29:07.148Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #238 (owner → win); tin không có trong sổ git. Task TG-VIBECODE (ref) là sổ cũ owner→mac đã done nên mở mã mới cho lượt giao này."
+}

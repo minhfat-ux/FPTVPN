@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhan lam lai: iPhone da cam cap (available) + da tim ra nguyen nhan build thieu credential. Build lai kem HYST_PASSWORD/HYST_OBFS roi cai /Applications + devicectl.",
+ "actor": "mac",
+ "at": "2026-09-23T02:37:19.813Z"
+}

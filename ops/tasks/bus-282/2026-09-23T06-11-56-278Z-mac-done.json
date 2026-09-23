@@ -1,0 +1,8 @@
+{
+ "type": "done",
+ "actor": "mac",
+ "transcribedBy": "win",
+ "busId": null,
+ "note": "WIN ghi ho (KHONG phai tin bus cua MAC): muc §6 TEST MAY THAT — theo CHOT #291 do WIN chay vi MAC khong co thiet bi. MAC da xong phan build+ky+upload (done 05:11) va da bao blocked (#297) dung ly do. WIN da go vuong: dien thoai SM-F9460 len mang luc ~13:53, WIN tu do mDNS ra endpoint moi 10.193.44.103:45973, cai app 1.4.3 (v29) va chay §6 tu 13:53 den 14:11. Su kien done nay danh dau phan §6 da hoan tat (nguon: WIN truc tiep, khong co tin bus — busId=null).",
+ "at": "2026-09-23T06:11:56.278Z"
+}

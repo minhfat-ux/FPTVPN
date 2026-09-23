@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T16:29:09.510Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: kiểm tra các link trang buy, đang có thể bị lỗi không access được từ Trung Quốc.",
+ "via": "dsh --profile headless \"{prompt}\""
+}

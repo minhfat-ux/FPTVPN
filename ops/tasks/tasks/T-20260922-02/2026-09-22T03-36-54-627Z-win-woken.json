@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T03:36:54.627Z",
+ "note": "connector VPS: done từ mac — T-20260922-02 · iOS/macOS/Android: hien version trong Settings + dung cong chan version khi publish",
+ "via": "dsh --profile headless \"{prompt}\""
+}

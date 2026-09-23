@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=36556b1 (branch mac/android-1.4.3, handoff §5.1); cmd=chia 2 APK 15 part/5MB -> scp song song 8 luong -> so sha256 tung part -> cat ghep tren node-2 (30/30 part khop) -> sha256sum tren node-2; ket qua=node-2 /root/flowvpn-apk/staging/: app-modern-release-1.4.3.apk 74731689B sha256 9563366995704d9c49c2087b6357e6c9655426cbdee909cecfb0f46515064ce5 + app-legacy-release-1.4.3.apk 74748051B sha256 fdb88e3febdbab4a243d92d3b743327298d04c9e6e8b7f2fe79b121dd6a5ede9 (ca 2 khop Mac, quyen 644); §6 theo CHOT #291 chuyen Windows chay tren SM-F9460 (Mac khong co thiet bi); KHONG publish/doi moc",
+ "actor": "mac",
+ "at": "2026-09-23T05:11:37.227Z"
+}

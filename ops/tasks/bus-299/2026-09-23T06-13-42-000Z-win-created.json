@@ -1,0 +1,18 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-299",
+  "title": "Windows -> Mac TASK: gui EMAIL khach cho Android 1.4.3 (§0.7)",
+  "from": "win",
+  "to": "mac",
+  "detail": "docs/handoff/PUBLISH_PLAN_WINDOWS_ANDROID_2026-09-23.md",
+  "verify": "email Android 1.4.3 da gui: so nguoi nhan + Resend id/delivered; docs/RELEASE_NOTES_android_1.4.3.md ton tai",
+  "due": null,
+  "createdAt": "2026-09-23T06:08:39.186Z"
+ },
+ "actor": "win",
+ "at": "2026-09-23T06:08:39.186Z",
+ "transcribedBy": "mac",
+ "busId": 299,
+ "note": "MAC chép vào sổ từ tin bus #299 (Windows gửi qua connector, chưa ghi sổ). Nguyên văn: 'Mac gui EMAIL thong bao Android 1.4.3 cho khach'."
+}

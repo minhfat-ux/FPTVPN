@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "SANDBOX CHAN GHI NGOAI WORKSPACE: mkdir ~/.local/state/vpnflow-release-audit => 'Operation not permitted'; touch ~/Library/LaunchAgents/site.meetflowai.release-audit-watch.plist => 'Operation not permitted'. Escalation danger-full-access bi tu choi (khong co kenh approval). Trung khop ghi chu da co o T-20260922-07 (2026-09-22): 'cai launchd can quyen ghi ~/Library/LaunchAgents - sandbox phien nay chan, chu du an chay 1 lan'. Script CO san tren nhanh main (worktree /Users/minhnguyen/FlowGPT/.worktrees/audit-main, HEAD ff12f6c, sach); --dry-run OK: label site.meetflowai.release-audit-watch, StartInterval 21600s, RunAtLoad, python3 3.13.14, log ~/.local/state/vpnflow-release-audit/audit.jsonl, alert scripts/release-audit-alert.sh, PID/log stdout+stderr trong cung STATE_DIR. LENH CHU DU AN CHAY 1 LAN: cd /Users/minhnguyen/FlowGPT/.worktrees/audit-main && bash scripts/install-release-audit-watch.sh . Nghiem thu sau khi chay: launchctl print gui/\\501/site.meetflowai.release-audit-watch (Luu y: 'launchctl list' trong harness tra rong/exit 1 nen dung 'print'); log o ~/.local/state/vpnflow-release-audit/audit.jsonl + watch.err.log.",
+ "actor": "mac",
+ "at": "2026-09-23T02:36:21.254Z"
+}

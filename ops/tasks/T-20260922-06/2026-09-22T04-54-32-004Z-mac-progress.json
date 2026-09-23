@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "GOC RE KHONG PHAI PROFILE. Do tren iPhone that (14 Pro Max/iOS 26.7, cung profile Ad Hoc wildcard, app chan doan rieng): chu ky [G6XW3RN6LJ.com.privatevpn.shared] -> SecItemAdd status=0; chu ky [G6XW3RN6LJ.*] -> status=-34018. Vay iOS chi cho dung nhom CO TEN TUONG MINH trong CHU KY, profile wildcard la DU => KHONG can portal, KHONG doi code. Da ky lai IPA 1.4.1/17 (app+appex = .shared tuong minh), SHA256=e6dfe38741ea96ab07c729b40e1b413b2d2526bf80e7a79eb755e8b922bc39aa (8.742.734 B). Cong chan DAT (them check_ios_keychain: chan dung ban cu wildcard, cho qua ban moi). Da cai len iPhone: Version 1.4.1 / Bundle 17. Commit 955760a (branch mac/ios-1.4.1-device-test) + docs/handoff/IOS_KEYCHAIN_ROOTCAUSE_2026-09-22.md. CON LAI: §2c can nguoi that nhap code (email da mua) + anh Settings->About.",
+ "actor": "mac",
+ "at": "2026-09-22T04:54:32.007Z"
+}

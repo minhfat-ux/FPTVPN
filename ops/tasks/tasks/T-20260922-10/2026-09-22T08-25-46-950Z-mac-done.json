@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=95059cd (origin/main, rebase tren a68674b): pha HOLD theo CHOT #135 + chot chan node khac theo CHOT #136. cmd='bash scripts/ios-pure-logic-tests/run.sh' -> 54/54 PASS (truoc 39/39); 'swiftc -frontend -parse iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift' -> exit 0. Khong con teardown/closeTun vi ly do toc do: het 3 lan dung lai -> enterLivenessHold (giu duong da chon, tunnel Connected, ping lai moi 15s, log 'hold: giu <path>, ping lai moi <t>s (lan <n>)'); selfRescue bo qua khi HOLD; TransportLadder+NodeUpgradePolicy giu chot chan >=1,25x x2 + uu tien node khach chon.",
+ "actor": "mac",
+ "at": "2026-09-22T08:25:46.952Z"
+}

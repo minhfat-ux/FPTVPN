@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "Chu du an can toi NAY: cai ban moi len CA macOS LAN iPhone. Build tu main hom nay, PHAI co 479a6d7 (bo ipv6Settings ::/0 - loi iOS mat mang khi connect) va c5d7564 (A10 the Diagnostics live 1s + A11 khai bao an toan truoc). macOS: build roi cai vao /Applications tren may Mac. iPhone: build IPA (can Hysteria.xcframework - KHONG co trong git, tao bang 'bash tools/hysteria-apple/build.sh', gomobile bind tu apernet/hysteria tag app/v2.12.2; build NGOAI sandbox vi SwiftPM bi chan) roi cai bang devicectl khi da cam cap. Tang CURRENT_PROJECT_VERSION don dieu (iOS dang 17). Vi sao gap: mang khach san thuong IPv6/dual-stack (ban cu con ::/0 rat de mat mang), thuong chan UDP (can xac nhan transport tu roi ve cau WS), co captive portal (phai dang nhap portal TRUOC khi bat VPN). Chi tiet: bus #190 cua WIN.",
+ "actor": "win",
+ "at": "2026-09-22T10:26:17.971Z"
+}

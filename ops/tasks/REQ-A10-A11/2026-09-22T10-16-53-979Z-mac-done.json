@@ -1,0 +1,8 @@
+{
+ "type": "done",
+ "actor": "mac",
+ "transcribedBy": "win",
+ "busId": 185,
+ "note": "commit=c5d75649285ed2af1a17533f24f0d5ca00d81d59 (origin/main); cmd=bash scripts/ios-pure-logic-tests/run.sh + swiftc -typecheck -swift-version 6 toan bo target PrivateVPNPacketTunnel (iOS SDK) + xcodegen generate; ket qua=141/141 PASS, type-check exit 0, xcodegen OK. A10: 8 dong the Diagnostics live 1s (down/up/do duoc/khai bao/% con len duoc/da toi da/duong dang dung/stable). A11: safeDeclaration x0,8 + loss cao <=4/1, canRampUp chi khi loss<5% VA 2 lan lien tiep, pendingForceAfter 15s. CHUA build IPA (thieu Hysteria.xcframework + SwiftPM bi sandbox chan) => chua test iPhone that.",
+ "at": "2026-09-22T10:16:53.980Z"
+}

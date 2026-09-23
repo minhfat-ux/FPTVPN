@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-16",
+  "title": "Cai lich kiem dinh ky tren may Mac (launchd) de tu bat loi staple/lech moc truoc khach",
+  "from": "win",
+  "to": "mac",
+  "detail": "WIN da kiem: tren node-2 KHONG co timer/cron kiem dinh ky nao => loi staple 22/09 khong ai bat duoc truoc khach. Script co san nhung la launchd macOS (server/Windows khong doc duoc DMG): scripts/install-release-audit-watch.sh (mac dinh 6 gio/lan, tai file DANG PHAT cua moi kenh, doc version + kiem DMG, alert Telegram khi lech). VIEC: cd <checkout nhanh main tren Mac> && bash scripts/install-release-audit-watch.sh ; kiem launchctl list | grep release-audit ; bao log o ~/.local/state/vpnflow-release-audit/.",
+  "verify": "Bao: da cai, launchctl list thay job, va 1 vong chay dau tien (log JSONL) ket qua ra sao.",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T11:47:42.913Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T11:47:42.914Z"
+}

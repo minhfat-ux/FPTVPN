@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "deploy=Mac tu scp (commit ec50cac), WIN nghiem thu doc lap, KHONG ghi de. cmd=ssh root@165.101.114.162 'cd /opt/fbuddy && node ops/hub-taxonomy-apply.mjs' -> 'Se ap: 0 muc - khong co gi thay doi' (idempotent). Hash 5 file tren node-2 == origin/flowgpt: db.js 410d47c5, routes.js db5439a0, hub.js 1e066dc1, hub-taxonomy.json 50f16318, hub-taxonomy-apply.mjs d3637599. DB /var/lib/fbuddy/fbuddy.db: 50 muc, kind expert=33/skill=17, origin own=7/clone=43, gia>0 = 0. API GET /api/admin/hub HTTP 200, kinds/kindLabels + origins/originLabels day du; nhom Giao duc 22 muc = 16 expert (tab Chuyen gia: family-education-ma 'Co van giao duc gia dinh', ai-teacher-kids 'Giao vien AI cho tre em', ket-prep-team, study-planner...) + 6 skill. Bundle cong khai index-Dp5c0Agb.js (HTTP 200, 1490143 bytes) chua UI 'Gia & phan loai cho ky nang'/'Minh tu lam'/'Clone ve'. routes.js con route /desktop/activate. /api/health ok. Ket luan: PASS.",
+ "actor": "win",
+ "at": "2026-09-21T02:40:16.306Z"
+}

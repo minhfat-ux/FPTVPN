@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-14",
+  "title": "macOS GAP: fix loi 'Invalid user' tren ban build moi + phat hanh 1.4.1/18 dung chuan (staple + §4a)",
+  "from": "win",
+  "to": "mac",
+  "detail": "Chu du an: ban Mac build MOI HOM NAY bao 'Invalid user' trong message cua app (tuc report.message tu EXTENSION) va khong connect duoc. Ban DANG PHAT (1.4.0/14) thi DA DAT cong §4a (staple DMG+app+appex, Gatekeeper accepted) => khach bi Gatekeeper la do tai ban CU. BANG CHUNG WIN DO DUOC (dung kiem lai): (1) hysteria node-1+node-2 hom nay 0 lan auth that bai, khach van connected; (2) chay windows/assets/flowvpnrelay.exe voi credential SAI => loi la 'authentication error, HTTP status code: 404' (KHONG phai 'invalid user'); (3) cung binary voi credential DUNG (config that cua app Windows) => 'da noi 165.101.114.162:8443 qua wsrelay trong 4.873s' + BENCH HTTP 200 => server chap nhan credential dung; (4) control-plane/auth-store/wsrelay KHONG co chuoi 'Invalid user'; chuoi nay chi xuat hien ben trong binary Go. VIEC PHAI LAM: (a) TEST DOI CHUNG tren cung may+cung mang: ban DANG PHAT 1.4.0/14 co connect duoc khong? Neu ban phat OK ma ban moi KHONG => loi trong ban build moi; (b) doc HysteriaPassword/HysteriaObfs trong CA app Info.plist VA .appex Info.plist cua ban moi, bao CO/KHONG + KHOP/KHAC voi /etc/hysteria-server.yaml tren node-2 (KHONG in gia tri); (c) xac nhan Hysteria-macos.xcframework build tu dung tag app/v2.12.2; (d) log stream cua extension khi loi, dan nguyen dong + transport dang dung; (e) strings cac binary trong app de tim file nao chua chuoi do; (f) thu ca 2 transport (udp-direct va cau WS).",
+  "verify": "Bao lai: ket qua phep thu doi chung (ban phat vs ban moi, cung may+cung mang); ket qua KHOP/KHAC cua credential trong app+appex; tag framework; dong log that co 'Invalid user' + transport; ket luan nguyen nhan. Sau khi sua: build lai 1.4.1 build 18 (cung moc iOS), staple DMG + .app + .appex, chay §4a TREN CHINH FILE DANG PHAT, roi moi phat hanh vao /root/flowvpn-mac/VPNFlow-mac.dmg va bao ngay cho chu du an. Ghi so: node scripts/release-record.mjs append --platform macos ... + tag --platform macos.",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T11:47:25.243Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T11:47:25.243Z"
+}

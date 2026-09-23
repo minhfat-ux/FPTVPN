@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "Audit xong tren Mac: Windows khong kiem duoc VersionInfo (size+sha256 khop 1.4.2); iOS LECH keychain thieu .shared (cho portal, T-20260922-04); macOS/Android modern+legacy KHOP. Da sua 2 loi cong cu (DMG thieu duoi => staple LECH oan; android-legacy hoi sai moc) + them health-watch dinh ky. Commit 00f0e3b.",
+ "actor": "mac",
+ "at": "2026-09-22T08:16:43.835Z"
+}

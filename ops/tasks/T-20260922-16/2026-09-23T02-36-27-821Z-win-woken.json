@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-23T02:36:27.821Z",
+ "note": "connector VPS: blocked từ mac — T-20260922-16 · Cai lich kiem dinh ky tren may Mac (launchd) de tu bat loi staple/lech moc truoc khach",
+ "via": "dsh --profile headless \"{prompt}\""
+}

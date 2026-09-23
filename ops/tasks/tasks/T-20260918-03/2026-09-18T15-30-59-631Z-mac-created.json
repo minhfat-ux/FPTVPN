@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260918-03",
+  "title": "Tắt chế độ sleep/hibernate trên máy Windows để harness+watcher chạy 24/7",
+  "from": "mac",
+  "to": "win",
+  "detail": "ops/disable-sleep.ps1",
+  "verify": "powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE -> 0",
+  "due": "2026-09-19",
+  "createdAt": "2026-09-18T15:30:59.623Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-18T15:30:59.631Z"
+}

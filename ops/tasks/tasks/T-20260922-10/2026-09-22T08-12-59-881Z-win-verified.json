@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap tren origin/main: (1) commit ab04047 (merge parity) + 7149cf9 (A5+P0-2+P1-1) CO THAT tren origin/main; (2) file iOS/PrivateVPNPacketTunnel/{LivenessWatchdog,TransportLadder,GoodputMeter}.swift + test iOS/PrivateVPNTests/{...}Tests.swift + scripts/ios-pure-logic-tests/{run.sh,main.swift} CO THAT; (3) project.yml wire ca 3 target (iOS app, packet-tunnel, macOS) dung; (4) nguong A5 dung: interval=15, silenceLimit=15, strikesToRebuild=1, tran 3 lan 2/5/10s roi teardownAndCancel+TUNNEL_NO_TRAFFIC; (5) P1-1a dung: setStatus(state:up, code:nil, message:nil) sau khi dung lai thanh cong + state tam 'rebuilding'; (6) TransportLadder dung thu tu quic-direct -> tcp-relay -> ws-relay-node-khac, mot chieu, maxRampUps=3, bac node khac sau co allowsOtherNodeRungs (mac dinh TAT) => khong tu quyet cau hoi mo 7.3; (7) GoodputMeter cua so 12s/mau 1s + isIdle cho kenh do A6. GIOI HAN: may WIN khong co toolchain Swift (khong co swiftc/otool) nen KHONG chay lai duoc 'bash scripts/ios-pure-logic-tests/run.sh' (Mac bao 39/39 PASS) va otool -l; chap nhan bang chung do Mac ghi, phan con lai da kiem bang git. XAC NHAN lo hong: docs/YEU_CAU_TOC_DO_ON_DINH.md va docs/VERSIONING.md KHONG ton tai trong bat ky nhanh nao (git log --all --diff-filter=A rong) => win phai bo sung nguon yeu cau that truoc khi lam P0-3/P0-4. Ket luan: PASS cho pham vi P0-1/P0-2/P1-1.",
+ "actor": "win",
+ "at": "2026-09-22T08:12:59.881Z"
+}

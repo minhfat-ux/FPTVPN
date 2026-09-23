@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "node ops/verify-rewrite.mjs --baseline /root/hub-baseline.json tren node-2 => 22/22 PASS, 0 FAIL (2026-09-18T23:00Z); noi dung ap qua API 127.0.0.1:7790 bang ops/rewrite-apply.mjs; nguon ops/rewrite-content.json (22 slug, vi/en/zh); trung trigram 0-8%% (nguong 35%%)",
+ "actor": "win",
+ "at": "2026-09-18T15:01:50.442Z"
+}

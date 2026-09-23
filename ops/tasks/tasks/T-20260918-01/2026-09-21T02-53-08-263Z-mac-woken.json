@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-21T02:53:08.263Z",
+ "note": "connector VPS: status từ win — WIN da vao connector: ack + progress T-20260918-01",
+ "via": "dsh --profile headless \"{prompt}\""
+}

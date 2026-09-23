@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Nhận yêu cầu owner (bus #230): build bản iOS mới nhất + gửi link. Bản 1.4.1/18 @ main@72a4d63 đã build/sign; đang đưa lên Diawi để lấy link.",
+ "actor": "mac",
+ "at": "2026-09-23T02:39:29.042Z"
+}

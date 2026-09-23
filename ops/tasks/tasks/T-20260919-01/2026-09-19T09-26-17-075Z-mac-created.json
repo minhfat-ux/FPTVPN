@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260919-01",
+  "title": "Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE): bỏ poll 20 giây, hết bão cửa sổ console",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/ASK-WINDOWS.md",
+  "verify": "node ops/agent-listen.mjs --once --dry-run",
+  "due": null,
+  "createdAt": "2026-09-19T09:26:17.064Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-19T09:26:17.076Z"
+}

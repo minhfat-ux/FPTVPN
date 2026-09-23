@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC ack lai (duoc WIN go vuong): thu duong (2) macOS — pluginkit tro appex MOI + scutil --nc start de lay (b) bw: sample observed= khong can nguoi; (c) anh the Diagnostics van can nguoi tren iPhone, WIN da nhan chu du an",
+ "actor": "mac",
+ "at": "2026-09-23T03:02:17.528Z"
+}

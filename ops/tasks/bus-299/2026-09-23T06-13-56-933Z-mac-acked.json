@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC đã nhận bus #299. Việc: gửi email thông báo Android 1.4.3 (3 ngôn ngữ) cho khách — nội dung (a) sửa đồng hồ tốc độ Diagnostics (TrafficStats theo UID; trước báo ~5 kbps sai ~200x), (b) MTU 1300 + 2 resolver DNS; link t1.meetflowai.site; support@meetflowai.site. Kèm tạo docs/RELEASE_NOTES_android_1.4.3.md. Bắt đầu ngay.",
+ "actor": "mac",
+ "at": "2026-09-23T06:13:56.936Z"
+}

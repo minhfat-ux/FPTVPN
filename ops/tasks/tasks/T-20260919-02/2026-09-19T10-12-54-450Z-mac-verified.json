@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Đã chạy đúng lệnh trong sổ: cd /Volumes/BIWIN/fbuddy && node ops/verify-win-joined.mjs → 5/5 PASS (3 task đều có win-acked, có RAG KAE-003 verified_by: WIN, sổ trên origin/main 14 file). WIN push được bằng git trực tiếp (RULE-DELEGATE-FB-017).",
+ "actor": "mac",
+ "at": "2026-09-19T10:12:54.451Z"
+}

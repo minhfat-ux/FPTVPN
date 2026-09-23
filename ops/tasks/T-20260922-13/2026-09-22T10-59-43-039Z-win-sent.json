@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "Chu du an bao: 'dang co khach cai xong khong chay duoc' (ban macOS). So lieu WIN do duoc tu ngoai: file dang phat la https://meetflowai.site/v1/downloads/mac - 21.458.057 B - sha256 f1b802dac4647c76a18a1d622a4dd0c499328515577f91bd45aaeffe6b8fa65c - last-modified 2026-09-22 04:56:02 GMT - cf-cache-status DYNAMIC (KHONG bi cache, khach luon nhan file hien tai). Tren node-2 con dau vet thu staple: VPNFlow-mac.appnotstapled-20260920.dmg (21.617.309) va VPNFlow-mac.appstaple-only-20260922.dmg (21.449.855, 11:48) roi VPNFlow-mac.dmg hien tai (11:56). Cong chan docs/MACOS_SIGN_NOTARIZE.md §4a (4 muc: stapler validate tren DMG + tren .app ben trong + spctl + codesign --deep --strict) CHI chay duoc tren macOS => WIN khong ket luan duoc. NGHI PHAM KHAC can loai tru ngay: project.yml dat MACOSX_DEPLOYMENT_TARGET 14.0 va LSMinimumSystemVersion 14.0 => khach dung macOS 13 tro xuong thi app KHONG chay duoc du ky dung (day la kha nang rat cao).",
+ "actor": "win",
+ "at": "2026-09-22T10:59:43.039Z"
+}

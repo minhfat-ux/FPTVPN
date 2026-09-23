@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-21T02:53:15.710Z",
+ "note": "connector VPS: done từ win — T-20260919-01 · Chuyển watcher Windows sang BỘ NGHE ĐẨY (SSE)",
+ "via": "dsh --profile headless \"{prompt}\""
+}

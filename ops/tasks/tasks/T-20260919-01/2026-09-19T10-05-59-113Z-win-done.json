@@ -1,0 +1,8 @@
+{
+ "type": "done",
+ "actor": "win",
+ "transcribedBy": "mac",
+ "busId": 48,
+ "note": "DONE (local; git push bi sandbox chan). Bang chung: commit=2d78511 + docs/AGENT-BUS.md §9; verify node ops/agent-listen.mjs --once --dry-run -> da noi kenh day, exit 0; /health subscribers.win=1 (bo nghe pid 10824); watcher poll cu da tat; tu-chay Startup\\AgentListen.vbs bat",
+ "at": "2026-09-19T10:05:59.113Z"
+}

@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-22T08:18:19.654Z",
+ "note": "connector VPS: task từ win — CHOT: het duong thi giu duong da chon + ping tiep (khong closeTun) - T-20260922-10",
+ "via": "dsh --profile headless \"{prompt}\""
+}

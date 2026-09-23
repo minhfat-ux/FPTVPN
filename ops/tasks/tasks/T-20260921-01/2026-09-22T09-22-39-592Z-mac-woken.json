@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-22T09:22:39.592Z",
+ "note": "connector VPS: blocked từ win — T-20260921-01 · Nâng DSH harness lên 0.1.5-rc.1 + cài plugin AgentTeams (để session nhắn được cho nhau)",
+ "via": "dsh --profile headless \"{prompt}\""
+}

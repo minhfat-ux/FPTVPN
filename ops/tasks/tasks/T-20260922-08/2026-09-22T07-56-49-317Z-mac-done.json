@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=1e46c9d (nhanh main) docs(release): runbook publisher ap dung §0 (9 luat moi 22/09) · cmd=git show --stat 1e46c9d + git push origin HEAD:main (85f7bdf..1e46c9d) · ket qua=docs/RELEASE_RUNBOOK.md 184 dong (+144/-45): §0 doi chieu 9 luat -> tung buoc; iOS buoc 1b (chi phat ban moi nhat da test §2b) + buoc 2 (iPhone THAT, bang 7 muc §2c) + buoc 3 (keychain CA code signature LAN provisioning profile) + buoc 5/9 (cong chan version pre + --mode post); macOS DMG phai STAPLE + stapler validate/spctl/codesign; Android cong chan ca modern+legacy + post; publisher lo ca publish LAN email, Windows harness chi phat hanh ban Windows; §7 audit toan kenh scripts/audit-releases.py. Grep xac nhan 9/9 luat co tren origin/main. LUU Y: flowvpn-coord check khong chay duoc trong phien (EPERM local /var/lib/flowvpn-coord), file khong thuoc vung bao ve. Doi chieu do luong iPhone that T-20260922-06 (chu ky phai co nhom cu the .shared): runbook giu muc 'ca profile' theo §0, WIN reconcile khi nghiem thu.",
+ "actor": "mac",
+ "at": "2026-09-22T07:56:49.320Z"
+}

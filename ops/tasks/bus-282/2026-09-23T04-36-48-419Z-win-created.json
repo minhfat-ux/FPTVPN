@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-282",
+  "title": "Android 1.4.3 (v29) release: build + ky + nghiem thu truoc publish",
+  "from": "win",
+  "to": "mac",
+  "detail": "docs/handoff/BUILD_ANDROID_1.4.3_2026-09-23.md",
+  "verify": "python3 scripts/check-publish-version.py --platform android --file <modern.apk> --version 1.4.3 --build 29 (va android-legacy) => exit 0; + test MAY THAT §6 theo HANDOFF_V29_DIAG_2026-09-23.md (adb install -r -d, grep diagnostics.log: bw sample observed/declared)",
+  "due": null,
+  "createdAt": "2026-09-23T04:36:48.417Z"
+ },
+ "actor": "win",
+ "at": "2026-09-23T04:36:48.419Z"
+}

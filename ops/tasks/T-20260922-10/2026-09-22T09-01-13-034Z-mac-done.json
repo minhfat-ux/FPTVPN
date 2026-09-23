@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=18f8c82 (origin/main, 36cba83..18f8c82); cmd=bash scripts/ios-pure-logic-tests/run.sh; ket qua=94/94 PASS (+4 check IPv6, truoc 90/90). A7 bundle: ChinaRouteBypass.cached()/cachedIPv6() lui ve ban bundle docs/routes/cn.txt + cn6.txt (project.yml chep vao bundle extension iOS + macOS + test target) => lan dau/mang yeu/DNS chan ma tai that bai thi A7 van co tac dung. A7 IPv6: truoc day provider chi dat ipv4Settings => MOI IPv6 di thang (ro IP that); nay dat ipv6Settings (includedRoutes=::/0, excludedRoutes=cn6.txt 2015 prefix) => IPv6 TQ di THANG, IPv6 con lai vao tunnel va bi CHAN (server khong co IPv6 - WIN 92f60c9). Parse IPv6 thuan logic loai ::/0. swiftc -parse cac file doi OK; NEIPv6Route.default() typecheck that. GIOI HAN: chua test tren iPhone that (T-20260922-04); macOS chua bat excludedRoutes (route lech, HysteriaPacketTunnelProvider.swift:817).",
+ "actor": "mac",
+ "at": "2026-09-22T09:01:13.034Z"
+}

@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-11",
+  "title": "Sua release-record.mjs: tagExists() vo trong git worktree + khong cat cot TAG (list)",
+  "from": "mac",
+  "to": "win",
+  "detail": "bus #170 (MAC bao loi) + bus #171 (WIN bao da sua). Nghiem thu doc lap tren origin/main @8f44ccf: ca 2 cho VAN CON loi.",
+  "verify": "trong worktree @ origin/main: (a) 'node scripts/release-record.mjs tag --platform windows' phai in 'da ton tai va dang tro dung commit 64e07c7... — khong lam gi.' exit 0, KHONG fatal/uncaught; (b) 'node scripts/release-record.mjs list' khong cat cot TAG — phai thay day du 'android-legacy-v1.4.0' + '1.4.0/20'",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T09:46:25.935Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-22T09:46:25.935Z"
+}

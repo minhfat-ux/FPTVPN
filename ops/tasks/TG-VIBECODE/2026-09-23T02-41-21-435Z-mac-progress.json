@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "ĐÃ CÓ LINK cho chủ dự án: https://i.diawi.com/VFXW2C (VPNFlow iOS 1.4.1 build 18, commit main@72a4d63, 8.119.092 B, sha256 89a17e4d062f507e063941116c3e2e3f722ddd526bea77367ad36ec62b61ba73). Đã gửi owner qua bus #253 kèm hướng dẫn cài (Safari, xoá app cũ, Ad Hoc không cần Developer Mode). Máy chủ dự án (iPhone 14 Pro Max UDID 00008120-00010D102E40C01E) có trong profile. Kiểm chứng link: HTTP 200, trang Diawi hiện đúng 1.4.1 (18). Còn: chưa cắm được iPhone vào Mac nên chưa tự chạy §2c.",
+ "actor": "mac",
+ "at": "2026-09-23T02:41:21.437Z"
+}

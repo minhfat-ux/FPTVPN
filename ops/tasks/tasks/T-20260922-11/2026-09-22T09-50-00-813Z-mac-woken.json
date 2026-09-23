@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-22T09:50:00.813Z",
+ "note": "đối tác báo xong — cần nghiệm thu",
+ "via": "dsh --profile headless \"{prompt}\""
+}
