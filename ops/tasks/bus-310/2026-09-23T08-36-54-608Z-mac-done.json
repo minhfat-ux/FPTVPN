@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=e1c096c (ledger tren origin/main) + tag ios-v1.4.1 -> 68f2095c10baccce7302f228bcb9cbe1dd5cf8a8 (IPA 1.4.1/18, 8.119.092 B, sha256 89a17e4d062f507e063941116c3e2e3f722ddd526bea77367ad36ec62b61ba73) + tag macos-v1.4.0 -> b38048e85057d783b4ebff430731df0a0039f7f9 (DMG 1.4.0/14, 21.458.057 B, sha256 f1b802dac4647c76a18a1d622a4dd0c499328515577f91bd45aaeffe6b8fa65c); cmd=node scripts/release-record.mjs append --platform ios|macos --commit <SHA day du 40> --commit-source ... --verified-by ... --evidence ... --origin backfill + node scripts/release-record.mjs tag --platform ios|macos + git push origin HEAD:main + 2 tag; ket qua: release/releases.jsonl dong 29 (ios 1.4.1/18) va 30 (macos 1.4.0/14) co commit/verified_by/evidence day du; verify --platform ios = 4 DAT/0 KHONG DAT, --platform macos = 3 DAT/0 KHONG DAT (chi con CANH BAO tren cac dong CU 1/19/20/2/6 — so append-only nen khong sua duoc); git ls-remote xac nhan 2 tag tro dung commit build; origin/main = e1c096c.",
+ "actor": "mac",
+ "at": "2026-09-23T08:36:54.610Z"
+}
