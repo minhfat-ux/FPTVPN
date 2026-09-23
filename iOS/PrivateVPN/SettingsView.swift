@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var devices: [CoordinatorDevice] = []
     @State private var isLoadingDevices = false
     @State private var devicesMessage: String?
+    /// Thiết bị khác đang chờ khách xác nhận đăng xuất (nil = không hỏi gì).
+    @State private var deviceToLogOut: CoordinatorDevice?
     // About: mốc phiên bản trên server để đối chiếu bản đang cài (khác = publish chưa đúng).
     @State private var latestVersion: String?
     @State private var latestVersionUnavailable = false
@@ -35,6 +37,23 @@ struct SettingsView: View {
         .navigationTitle(languageStore.t(.configuration))
         .refreshable {
             await loadDevices()
+        }
+        // Xác nhận trước khi đăng xuất máy khác — thu hồi là không thể hoàn tác từ trong app.
+        .confirmationDialog(
+            languageStore.t(.logOutDevice),
+            isPresented: Binding(
+                get: { deviceToLogOut != nil },
+                set: { if !$0 { deviceToLogOut = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: deviceToLogOut
+        ) { device in
+            Button(languageStore.t(.logOutDevice), role: .destructive) {
+                Task { await logOutDevice(device) }
+            }
+            Button(languageStore.t(.cancel), role: .cancel) {}
+        } message: { _ in
+            Text(languageStore.t(.logOutDeviceConfirm))
         }
         .sheet(isPresented: $showingPaywall, onDismiss: {
             // Đóng paywall = thời điểm khách vừa có thể đã trả tiền trên trang web trong
@@ -170,23 +189,32 @@ struct SettingsView: View {
     }
 
     private func deviceRow(_ device: CoordinatorDevice) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(device.name ?? device.device_id)
-                        .font(.subheadline.weight(.medium))
-                    if isCurrentDevice(device) {
-                        Text(languageStore.t(.thisDevice))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(device.name ?? device.device_id)
+                    .font(.subheadline.weight(.medium))
+                if isCurrentDevice(device) {
+                    Text(languageStore.t(.thisDevice))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                Text(deviceDetail(device))
-                    .font(.caption)
-                    .foregroundStyle(device.isActive ? VPNTheme.accent : .secondary)
             }
-            Spacer()
+            Text(deviceDetail(device))
+                .font(.caption)
+                .foregroundStyle(device.isActive ? VPNTheme.accent : .secondary)
+
+            // Chỉ thiết bị KHÁC đang hoạt động mới đăng xuất được: thu hồi chính máy đang dùng là
+            // tự khoá mình khỏi tài khoản (server chặn ở lần register kế tiếp).
+            if device.isActive && !isCurrentDevice(device) {
+                Button(role: .destructive) {
+                    deviceToLogOut = device
+                } label: {
+                    Label(languageStore.t(.logOutDevice), systemImage: "rectangle.portrait.and.arrow.right")
+                        .font(.footnote)
+                }
+            }
         }
+        .padding(.vertical, 2)
     }
 
     private func isCurrentDevice(_ device: CoordinatorDevice) -> Bool {
@@ -223,6 +251,32 @@ struct SettingsView: View {
             }
             devices = try await ControlAPIClient(baseURL: baseURL, joinToken: "").fetchMyDevices(accessToken: token)
             devicesMessage = nil
+        } catch {
+            devicesMessage = error.localizedDescription
+        }
+    }
+
+    /// Đăng xuất một thiết bị KHÁC của chính tài khoản (`DELETE /v1/devices/:id`), rồi đọc lại
+    /// danh sách để máy vừa thu hồi biến khỏi mục "Thiết bị". Đây là đường khách tự xử lý khi hết
+    /// hạn mức thiết bị (403 `device_limit_reached`) mà không phải nhờ admin.
+    @MainActor
+    private func logOutDevice(_ device: CoordinatorDevice) async {
+        deviceToLogOut = nil
+        do {
+            guard let baseURL = configStore.controlPlaneBaseURL else {
+                throw ControlAPIClient.ClientError.server("Coordinator URL is not configured.")
+            }
+            guard let token = authStore.accessToken else {
+                throw ControlAPIClient.ClientError.missingSession
+            }
+            try await ControlAPIClient(baseURL: baseURL, joinToken: "")
+                .revokeDevice(id: device.id, accessToken: token)
+            devices = try await ControlAPIClient(baseURL: baseURL, joinToken: "")
+                .fetchMyDevices(accessToken: token)
+            devicesMessage = languageStore.t(.deviceLoggedOut)
+            // Nếu màn hình hết hạn mức đang mở (Connect vừa bị chặn) thì đóng nó: danh sách vừa
+            // đổi nên lần Connect kế tiếp có slot.
+            vpnManager.dismissDeviceLimit()
         } catch {
             devicesMessage = error.localizedDescription
         }

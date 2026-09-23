@@ -177,6 +177,9 @@ enum AppTextKey: String {
     case disconnected, connecting, connected, disconnecting, failed
     case disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
+    // Hết hạn mức thiết bị (403 device_limit_reached): lời mời đăng xuất máy khác ngay trong app.
+    case deviceLimitTitle, deviceLimitBody, logOutDevice, logOutDeviceConfirm, deviceLoggedOut, connectAgain
+    case close
     case about, version, latestOnServer, latestDifferent, latestUnavailable
 }
 
@@ -256,7 +259,8 @@ final class AppLanguageStore: ObservableObject {
             .connectedSubtitle: "Your traffic is protected", .disconnectingSubtitle: "Stopping VPN tunnel",
             .failedSubtitle: "VPN needs attention",
             .select: "Select", .serverLocation: "Server", .loadingLocations: "Loading servers…", .noServerAvailable: "No server available", .refreshLocations: "Refresh servers", .usingSavedServers: "Showing saved servers — coordinator unreachable. Tap to refresh.",
-            .devices: "Devices", .revoke: "Revoke", .revokeDeviceConfirm: "Revoke this device? It will no longer be able to connect.", .thisDevice: "This device", .deviceRevoked: "Device revoked.", .noDevices: "No devices registered.", .active: "Active", .revoked: "Revoked", .loadingDevices: "Loading devices…"
+            .devices: "Devices", .revoke: "Revoke", .revokeDeviceConfirm: "Revoke this device? It will no longer be able to connect.", .thisDevice: "This device", .deviceRevoked: "Device revoked.", .noDevices: "No devices registered.", .active: "Active", .revoked: "Revoked", .loadingDevices: "Loading devices…",
+            .deviceLimitTitle: "Device limit reached", .deviceLimitBody: "Your account has already used all its devices. Choose a device you no longer use to log it out.", .logOutDevice: "Log out this device", .logOutDeviceConfirm: "Log out this device? It will no longer be able to connect.", .deviceLoggedOut: "Device logged out.", .connectAgain: "Connect again", .close: "Close"
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam",
@@ -290,7 +294,8 @@ final class AppLanguageStore: ObservableObject {
             .connectedSubtitle: "Lưu lượng của bạn đang được bảo vệ", .disconnectingSubtitle: "Đang dừng VPN tunnel",
             .failedSubtitle: "VPN cần được kiểm tra",
             .select: "Chọn", .serverLocation: "Máy chủ", .loadingLocations: "Đang tải máy chủ…", .noServerAvailable: "Chưa có máy chủ khả dụng", .refreshLocations: "Tải lại máy chủ", .usingSavedServers: "Đang hiển thị máy chủ đã lưu — không kết nối được máy chủ điều phối. Chạm để tải lại.",
-            .devices: "Thiết bị", .revoke: "Thu hồi", .revokeDeviceConfirm: "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", .thisDevice: "Thiết bị này", .deviceRevoked: "Đã thu hồi thiết bị.", .noDevices: "Chưa có thiết bị nào được đăng ký.", .active: "Hoạt động", .revoked: "Đã thu hồi", .loadingDevices: "Đang tải thiết bị…"
+            .devices: "Thiết bị", .revoke: "Thu hồi", .revokeDeviceConfirm: "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", .thisDevice: "Thiết bị này", .deviceRevoked: "Đã thu hồi thiết bị.", .noDevices: "Chưa có thiết bị nào được đăng ký.", .active: "Hoạt động", .revoked: "Đã thu hồi", .loadingDevices: "Đang tải thiết bị…",
+            .deviceLimitTitle: "Đã dùng đủ số thiết bị", .deviceLimitBody: "Tài khoản đã dùng đủ số thiết bị. Chọn thiết bị không dùng nữa để đăng xuất.", .logOutDevice: "Đăng xuất khỏi thiết bị này", .logOutDeviceConfirm: "Đăng xuất thiết bị này? Thiết bị đó sẽ không kết nối được nữa.", .deviceLoggedOut: "Đã đăng xuất thiết bị.", .connectAgain: "Kết nối lại", .close: "Đóng"
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络",
@@ -322,7 +327,8 @@ final class AppLanguageStore: ObservableObject {
             .connectedSubtitle: "你的流量正在受到保护", .disconnectingSubtitle: "正在停止 VPN 隧道",
             .failedSubtitle: "VPN 需要检查",
             .select: "选择", .serverLocation: "服务器", .loadingLocations: "正在加载服务器…", .noServerAvailable: "暂无可用服务器", .refreshLocations: "刷新服务器", .usingSavedServers: "正在显示已保存的服务器 — 无法连接协调服务器。点击重试。",
-            .devices: "设备", .revoke: "撤销", .revokeDeviceConfirm: "撤销此设备？该设备将无法再连接。", .thisDevice: "当前设备", .deviceRevoked: "设备已撤销。", .noDevices: "尚未注册任何设备。", .active: "活跃", .revoked: "已撤销", .loadingDevices: "正在加载设备…"
+            .devices: "设备", .revoke: "撤销", .revokeDeviceConfirm: "撤销此设备？该设备将无法再连接。", .thisDevice: "当前设备", .deviceRevoked: "设备已撤销。", .noDevices: "尚未注册任何设备。", .active: "活跃", .revoked: "已撤销", .loadingDevices: "正在加载设备…",
+            .deviceLimitTitle: "设备数量已达上限", .deviceLimitBody: "账户已达到设备上限。请选择不再使用的设备退出登录。", .logOutDevice: "退出此设备", .logOutDeviceConfirm: "退出此设备？该设备将无法再连接。", .deviceLoggedOut: "设备已退出登录。", .connectAgain: "重新连接", .close: "关闭"
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信",
@@ -354,7 +360,8 @@ final class AppLanguageStore: ObservableObject {
             .connectedSubtitle: "通信は保護されています", .disconnectingSubtitle: "VPN トンネルを停止中",
             .failedSubtitle: "VPN の確認が必要です",
             .select: "選択", .serverLocation: "サーバー", .loadingLocations: "サーバーを読み込み中…", .noServerAvailable: "利用可能なサーバーがありません", .refreshLocations: "サーバーを更新", .usingSavedServers: "保存済みサーバーを表示中 — コーディネーターに接続できません。再試行するにはタップ。",
-            .devices: "デバイス", .revoke: "取り消す", .revokeDeviceConfirm: "このデバイスを取り消しますか？このデバイスは接続できなくなります。", .thisDevice: "このデバイス", .deviceRevoked: "デバイスを取り消しました。", .noDevices: "登録されたデバイスがありません。", .active: "アクティブ", .revoked: "取り消し済み", .loadingDevices: "デバイスを読み込み中…"
+            .devices: "デバイス", .revoke: "取り消す", .revokeDeviceConfirm: "このデバイスを取り消しますか？このデバイスは接続できなくなります。", .thisDevice: "このデバイス", .deviceRevoked: "デバイスを取り消しました。", .noDevices: "登録されたデバイスがありません。", .active: "アクティブ", .revoked: "取り消し済み", .loadingDevices: "デバイスを読み込み中…",
+            .deviceLimitTitle: "デバイス上限に達しました", .deviceLimitBody: "アカウントのデバイス上限に達しました。使わなくなったデバイスを選んでログアウトしてください。", .logOutDevice: "このデバイスをログアウト", .logOutDeviceConfirm: "このデバイスをログアウトしますか？接続できなくなります。", .deviceLoggedOut: "デバイスをログアウトしました。", .connectAgain: "再接続", .close: "閉じる"
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷",
@@ -386,7 +393,8 @@ final class AppLanguageStore: ObservableObject {
             .connectedSubtitle: "트래픽이 보호되고 있습니다", .disconnectingSubtitle: "VPN 터널을 중지하는 중",
             .failedSubtitle: "VPN 확인이 필요합니다",
             .select: "선택", .serverLocation: "서버", .loadingLocations: "서버를 불러오는 중…", .noServerAvailable: "사용 가능한 서버 없음", .refreshLocations: "서버 새로고침", .usingSavedServers: "저장된 서버 표시 중 — 코디네이터에 연결할 수 없습니다. 다시 시도하려면 탭하세요.",
-            .devices: "기기", .revoke: "해지", .revokeDeviceConfirm: "이 기기를 해지하시겠습니까? 이 기기는 더 이상 연결할 수 없습니다.", .thisDevice: "현재 기기", .deviceRevoked: "기기가 해지되었습니다.", .noDevices: "등록된 기기가 없습니다.", .active: "활성", .revoked: "해지됨", .loadingDevices: "기기를 불러오는 중…"
+            .devices: "기기", .revoke: "해지", .revokeDeviceConfirm: "이 기기를 해지하시겠습니까? 이 기기는 더 이상 연결할 수 없습니다.", .thisDevice: "현재 기기", .deviceRevoked: "기기가 해지되었습니다.", .noDevices: "등록된 기기가 없습니다.", .active: "활성", .revoked: "해지됨", .loadingDevices: "기기를 불러오는 중…",
+            .deviceLimitTitle: "기기 한도에 도달했습니다", .deviceLimitBody: "계정의 기기 한도에 도달했습니다. 더 이상 사용하지 않는 기기를 선택해 로그아웃하세요.", .logOutDevice: "이 기기 로그아웃", .logOutDeviceConfirm: "이 기기를 로그아웃하시겠습니까? 더 이상 연결할 수 없습니다.", .deviceLoggedOut: "기기를 로그아웃했습니다.", .connectAgain: "다시 연결", .close: "닫기"
         ],
     ]
 }
