@@ -211,7 +211,14 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
 2. Đưa **release notes** lên web (hiện chỉ nằm trong repo `release/<platform>/RELEASE_NOTES_<ver>.md`).
-3. Tự động hoá: 1 script `publish-ios.sh <ipa> <ver> <build>` + `publish-android.sh <apk-modern> <apk-legacy> <ver>` chạy đủ 10 bước §1 và in bằng chứng.
+3. Tự động hoá:
+   - ~~`publish-ios.sh`~~ **ĐÃ XONG 23/09**: `scripts/publish-ios.sh <ipa> <version> <build> [--dry-run]`
+     chạy đủ §1 — verify TỪ TRONG IPA (version/build/bundle/appex/profile ad-hoc + `get-task-allow=false`
+     + keychain group) → claim → backup bản cũ → upload → verify sha256/size trên server → PATCH mốc
+     (đọc JSON trả về) → verify app-version + manifest + tải thật + `/install/ios` + `/buy` → release claim.
+   - **TestFlight**: `scripts/asc-beta.mjs status | submit <build> [--group "External Test"] [--whatsnew <json>] [--wait]`
+     (gán nhóm external + "What to Test" nhiều ngôn ngữ + nộp Beta App Review, đọc trạng thái từ API).
+   - Còn lại: `publish-android.sh` (APK modern+legacy, các bước tương tự).
 4. Kiểm tra định kỳ: link phát hành còn 200 + size khớp (đưa vào `health-watch`).
 5. **AUDIT toàn kênh (chủ dự án yêu cầu 22/09/2026)** — mỗi nền tảng phải đang phục vụ ĐÚNG bản latest;
    kênh nào lệch thì **cập nhật lại link tải + set mốc + thông báo khách**:
