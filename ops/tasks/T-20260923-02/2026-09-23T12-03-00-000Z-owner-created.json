@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260923-02",
+  "title": "TG /vibecode: iOS trên trang buy chưa phải bản đã test pass (buy = 1.4.2, bản test pass = 1.4.3 build 20)",
+  "from": "owner",
+  "to": "win",
+  "detail": "Việc chủ dự án giao TRỰC TIẾP qua Telegram (/vibecode).\nGiao lúc: 2026-09-23T11:49:10.894Z\n\ncheck bản ios trên buy đang không đúng bản đã test pass. Bản trên link buy đang là 1.4.2 còn bản test pass đang là 1.4.3(build 20). Nếu Mac publisher chưa update thì win update package mới nhất trên trang buy.\n\nNGUON: tin bus #337 luc 2026-09-23T11:49:11.289Z, from=\"owner\", kind=\"task\", ref=\"TG-VIBECODE\".",
+  "verify": "GET https://t1.meetflowai.site/v1/app-version?platform=ios -> latest_version = 1.4.3; GET https://t1.meetflowai.site/install/ios/manifest.plist -> bundle-version = 20; /install/ios hien \"Version 1.4.3\"; tai https://t1.meetflowai.site/v1/downloads/ios roi doc Info.plist BEN TRONG IPA -> CFBundleShortVersionString=1.4.3, CFBundleVersion=20",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-23T12:03:00.000Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-23T12:03:00.000Z",
+ "transcribedBy": "win",
+ "busId": 337,
+ "busAt": "2026-09-23T11:49:11.289Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #337 (owner → win). Task TG-VIBECODE cũ (owner→mac, bus #203) đã done nên mở mã mới cho lượt giao này (cùng cách đã làm với T-20260923-01)."
+}

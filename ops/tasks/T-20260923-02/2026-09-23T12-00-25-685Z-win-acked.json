@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan viec (bus #337): kiem tra ban iOS tren trang buy. Da do truc tiep: buy/install-ios dang phat 1.4.2 build 19; ban test pass 1.4.3/20 khong co tren server/node-1/trong repo. Dang xac minh not truoc khi ket luan.",
+ "actor": "win",
+ "at": "2026-09-23T12:00:25.686Z"
+}

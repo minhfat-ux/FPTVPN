@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260923-03",
+  "title": "TG /vibecode: bản publish lên App Store Connect chưa phải 1.4.3",
+  "from": "owner",
+  "to": "win",
+  "detail": "Việc chủ dự án giao TRỰC TIẾP qua Telegram (/vibecode).\nGiao lúc: 2026-09-23T11:51:50.838Z\n\nbản publish lên appstore connect cũng đang không phải bản 1.4.3\n\nNGUON: tin bus #338 luc 2026-09-23T11:51:51.733Z, from=\"owner\", kind=\"task\", ref=\"TG-VIBECODE\".",
+  "verify": "node ops/_scratch/asc-status.mjs (chay tren node-2, doc API appstoreconnect): build iOS moi nhat cua app 6804150049 co preReleaseVersion = 1.4.3 va processingState = VALID; hoac App Store Connect -> VPNFlow -> TestFlight hien 1.4.3",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-23T12:03:30.000Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-23T12:03:30.000Z",
+ "transcribedBy": "win",
+ "busId": 338,
+ "busAt": "2026-09-23T11:51:51.733Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #338 (owner → win). Cùng lượt giao với T-20260923-02 (bus #337) — owner tách làm 2 tin: kênh buy (ad-hoc IPA) và kênh App Store Connect (IPA app-store-connect)."
+}
