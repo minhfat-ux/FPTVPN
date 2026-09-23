@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap tren origin/main (WIN chi co Windows: KHONG co swiftc/WSL nen khong chay lai duoc ios-pure-logic-tests — phan Swift tin theo bang chung MAC, co doi chieu tinh). (1) commit ebb45df CO THAT tren origin/main, dung 9 file nhu evidence. (2) A9-server 50ccf55: chay that tai control-plane -> node test/route-report.test.js = 13/13 PASS; doi chieu hang so RouteReporter.swift <-> route-report.js: path /v1/route-report, transport udp/tcp/ws, network cell/wifi/other, MAX_CANDIDATES=6, identity_hash 32-64 hex, khong khoa cam (ssid/ip/url...) => KHOP. (3) A7: tools/hysteria-apple/build.sh pin TAG=app/v2.12.2; doc nguon upstream apernet/hysteria app/internal/tun/server.go@v2.12.2 -> struct Server KHONG co field ACL => chot chia theo DICH DEN la DUNG; /dl/routes/cn.txt HTTP 200, dem that 5494 dai CIDR => khop con so trong done. (4) project.yml wire ChinaRouteBypass.swift + RouteReporter.swift vao 3 target; startChinaBypass goi sau completeStart (khong nam tren duong connect) + chi reload settings khi so dai doi. (5) 90/90: dem tinh 25 check() + 65 checkEqual() = dung 90 diem. QUY TRINH: su kien done #145 len bus tu 08:41:41 nhung KHONG vao so git (origin/flowgpt dung o [acked]) — WIN da nhac MAC qua bus #148, MAC push lai thanh cong (commit 22159c2). GIOI HAN da ghi trong done va CHAP NHAN: A7 chua test tren iPhone that (vuong T-20260922-04), A9-client chua noi vao app, macOS chua bat A7.",
+ "actor": "win",
+ "at": "2026-09-22T08:49:35.077Z"
+}

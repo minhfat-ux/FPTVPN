@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "content=ops/rewrite-content.json (22/22 lint PASS tại máy Windows); apply=node ops/rewrite-apply.mjs --file win-content.json --apply trên node-2 (/opt/fbuddy API 127.0.0.1:7790); verify=node ops/verify-rewrite.mjs trên node-2 → 22/22 PASS, 0 FAIL (độ trùng trigram 0-7%)",
+ "actor": "win",
+ "at": "2026-09-18T15:04:50.187Z"
+}

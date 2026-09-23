@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "da nhan CHOT: het duong thi GIU duong da chon + ping tiep (KHONG closeTun); ap dung cho P0-1 (watchdog A5 -> HOLD) + duong ramp",
+ "actor": "mac",
+ "at": "2026-09-22T08:20:58.476Z"
+}

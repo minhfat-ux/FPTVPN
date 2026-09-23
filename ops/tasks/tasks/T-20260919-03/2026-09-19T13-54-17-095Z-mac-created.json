@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260919-03",
+  "title": "Deploy bản phân loại/giá chợ lên node-2 (Mac bị chặn SSH)",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/ASK-WINDOWS.md",
+  "verify": "ssh root@165.101.114.162 \"cd /opt/fbuddy && node ops/hub-taxonomy-apply.mjs\"",
+  "due": null,
+  "createdAt": "2026-09-19T13:54:17.072Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-19T13:54:17.095Z"
+}

@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "da nhan #143: A9-server xong (50ccf55) -> Mac lam A9-client (POST /v1/route-report) + xac nhan core A7 truoc khi chon co che geosite:cn/geoip:cn",
+ "actor": "mac",
+ "at": "2026-09-22T08:35:45.648Z"
+}

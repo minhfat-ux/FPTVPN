@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd=node ops/verify-rewrite.mjs --baseline /root/hub-baseline.json tren node-2 => 22/22 PASS 0 FAIL; ap dung bang ops/rewrite-apply.mjs --apply qua API 127.0.0.1:7790; nguon ops/rewrite-content.json (22 slug vi/en/zh, vi 3219-5814 ky tu, overlap trigram 0-9% < 35%); price_vnd=0; xac nhan lai sau su kien progress 15:02:59",
+ "actor": "win",
+ "at": "2026-09-18T15:05:26.463Z"
+}

@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "P0 (watchdog suot phien + tu dung lai) cua T-01 da duoc merge vao main qua T-20260922-10: commit ab04047 (merge mac/parity-1.4.1) + 7149cf9 (chinh nguong A5: im 15s/1 nhip). Phan con lai cua T-01 (P1 bo tran khai 30/100, P1b da co trong parity, P2 bump version sau test thiet bi, P3 chot so hieu DMG) van dang mo. Nhanh mac/parity-1.4.1 van con nguyen.",
+ "actor": "mac",
+ "at": "2026-09-22T08:12:20.008Z"
+}

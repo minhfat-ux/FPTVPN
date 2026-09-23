@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=01c24eb (origin/flowgpt); nghiem thu: node ops/verify-rewrite.mjs --slugs '<21 slug>' -> 21/21 PASS, 0 FAIL; nhap cho: node ops/education-import.mjs --apply -> 21 tao moi, 0 loi; DB /var/lib/fbuddy/fbuddy.db: tong 50 muc, nhom Giao duc 22, trong do 21/21 price_vnd=0 + co i18n en+zh + state=published + instructions >=400 ky tu; artifact ops/rewrite-education.json (224008 B) + ops/rewrite-education-parts/batch-a..e.json",
+ "actor": "win",
+ "at": "2026-09-19T09:12:36.620Z"
+}

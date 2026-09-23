@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Thu lai 22/09 09:33: van [EPERM] ghi C:\\Users\\Minhn\\.dsh\\profiles\\web\\_tmp_... khi chay ops\\install-agent-teams.cmd; xin danger-full-access -> no approval channel => fail-closed. package.json profile web xac nhan thieu @nanmicoder/dsh-agent-teams. Da sua script cai: thuan ASCII (het loi M is not recognized), tu chua, kiem that bang package.json, that bai exit 1. CAN NGUOI chay tay: dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.20. CANH BAO: git pull origin flowgpt trong cay WIN conflict docs/ASK-WINDOWS.md + untracked ops/install-agent-teams.cmd. Chi tiet bus #167.",
+ "actor": "win",
+ "at": "2026-09-22T09:33:19.055Z"
+}

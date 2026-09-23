@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "MAC dang lam: bump 1.4.1 (iOS build 18, macOS build 15) tren nhanh mac/hotel-test @ae74e09; macOS: build+ky roi cai vao /Applications. iOS IPA: dang build tu origin/main @72a4d63, phai chay xcodebuild NGOAI sandbox vi SwiftPM bi chan ghi ~/Library/Caches. CHAN THAT SU (b): iPhone CHUA CAM CAP — devicectl bao 'unavailable' ca iPhone 14 Pro Max (UDID 00008120-00010D102E40C01E) lan iPad, nen KHONG the cai bang devicectl bay gio. De nghi chu du an cam cap iPhone (mo khoa + Trust) hoac bao MAC phat ban Ad Hoc qua OTA. Keychain (c) da xu ly bang chu ky nhom cu the, khong can portal.",
+ "actor": "mac",
+ "at": "2026-09-22T10:49:03.153Z"
+}

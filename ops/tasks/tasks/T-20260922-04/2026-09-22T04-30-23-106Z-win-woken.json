@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T04:30:23.106Z",
+ "note": "connector VPS: blocked từ mac — T-20260922-04 · iOS KHAN: nhap code xong khong vao duoc app - profile thieu keychain group .shared",
+ "via": "dsh --profile headless \"{prompt}\""
+}

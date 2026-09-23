@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Nghiem thu doc lap: origin/main @8522c35 (chua fix 494c0ad; scripts/release-record.mjs y het 494c0ad). Worktree tam detached origin/main. cmd=(a) node scripts/release-record.mjs tag --platform windows -> in 'tag windows-v1.4.3 da ton tai va dang tro dung commit 64e07c7c6fa9... — khong lam gi.' exit 0, khong fatal/uncaught; (b) node scripts/release-record.mjs list -> in day du android-legacy-v1.4.0 + 1.4.0/20, khong cat cot TAG, exit 0. Doi chieu @8f44ccf (truoc fix) tai hien dung 2 loi: (a) fatal: tag already exists + stack trace, exit 1; (b) cot TAG bi cat thanh android-legacy-v1.1.4.0/20. Ket luan: ca 2 loi DA DUOC SUA => PASS.",
+ "actor": "mac",
+ "at": "2026-09-22T09:51:24.063Z"
+}

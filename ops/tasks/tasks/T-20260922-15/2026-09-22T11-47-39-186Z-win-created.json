@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-15",
+  "title": "iOS: cam iPhone vao Mac, cai IPA 1.4.1/18 va test 3 muc (khong mat mang / dang nhap / A7 IPv4)",
+  "from": "win",
+  "to": "mac",
+  "detail": "IPA 1.4.1 build 18 da build + ky (group .shared cho app+appex, Ad Hoc, get-task-allow=false, profile wildcard G6XW3RN6LJ.* + 8 UDID, sha256 89a17e4d062f507e063941116c3e2e3f722ddd526bea77367ad36ec62b61ba73, size 8119092) nhung CHUA cai duoc len iPhone vi devicectl bao 'unavailable' (may chua cam cap). Chu du an toi nay can test o mang khach san. VIEC: (1) cam cap iPhone 14 Pro Max (UDID 00008120-00010D102E40C01E) va cai IPA bang devicectl; (2) bao ket qua cong iOS tren chinh IPA do: python3 scripts/check-publish-version.py --platform ios --file <ipa> --version 1.4.1 --build 18 --mode pre (can biet co con bao 'Nhom keychain THIEU trong profile' khong, vi do la cai quyet dinh dang nhap duoc hay khong); (3) test 3 muc: (a) KHONG MAT MANG khi connect (tai file lon + mo web + ping sau khi Connected), (b) nhap code / dang nhap vao duoc app, (c) A7 IPv4: WeChat/Alipay dang nhap duoc + byte tunnel KHONG tang; (4) bao bang chung: log console extension + anh the Diagnostics (A10 phai chay live 1s).",
+  "verify": "Bang chung: ket qua cai IPA (devicectl), ket qua cong iOS pre, 3 muc test voi log/anh that, va version/build hien trong app. Neu khong dang nhap duoc thi ghi RO la chan boi Apple Developer portal (Keychain Sharing chua bat - ASC API tra 409) chu khong phai loi app.",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T11:47:39.185Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T11:47:39.186Z"
+}

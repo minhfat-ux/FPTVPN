@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "TestFlight (#237): upload altool lần 1 THẤT BẠI — Apple ITMS-90206/90205/90049/90056/90057/90035: appex chứa Frameworks/Hysteria.framework (file .a) + Info.plist rỗng. NGUYÊN NHÂN GỐC: Hysteria.xcframework là STATIC archive ('file' → 'current ar archive'; otool app/appex KHÔNG link động) nhưng project.yml để embed: true. ĐÃ SỬA: project.yml embed: false cho cả iOS (PrivateVPNPacketTunnel) và macOS; xcodegen lại + rebuild archive + export app-store-connect, rồi upload lại. Sẽ báo kết quả.",
+ "actor": "mac",
+ "at": "2026-09-23T02:48:12.864Z"
+}

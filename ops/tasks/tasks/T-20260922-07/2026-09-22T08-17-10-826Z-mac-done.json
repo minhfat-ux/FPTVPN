@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=00f0e3b (+96a72ec, fa3a79f) nhanh main; cmd=python3 scripts/audit-releases.py --json (exit 1) + --platform macos (exit 0) + test --log/--alert-cmd; ket qua: Windows KHONG KIEM DUOC tren Mac (VersionInfo .exe can Windows; doi chieu size 52.794.169 B + sha256 60ea6f31...86c6 khop ban 1.4.2 Windows da phat) | iOS LECH: 1.4.0/16, 8.135.823 B, sha256 37dcb9a7..., profile thieu keychain G6XW3RN6LJ.com.privatevpn.shared => KHONG phat lai, KHONG gui email; cho portal (T-20260922-04) | macOS KHOP: 1.4.0/14, 21.458.057 B, sha256 f1b802da..., stapler+spctl+codesign DAT | Android modern+legacy KHOP: 1.4.0/20, 96.536.145/96.536.152 B. Da sua 2 loi cong cu: (a) audit luu DMG khong duoi => stapler tu choi => bao macOS LECH OAN (nay giu ARTIFACT_SUFFIX), (b) marker android-legacy tra payload iOS (nay hoi platform=android); them certifi + tu tim aapt2; them health-watch dinh ky --interval/--log/--alert-cmd + scripts/release-audit-alert.sh + scripts/install-release-audit-watch.sh (cai launchd can quyen ghi ~/Library/LaunchAgents — sandbox phien nay chan, chu du an chay 1 lan). Nhat ky §6 + RELEASE_RUNBOOK §7 da cap nhat.",
+ "actor": "mac",
+ "at": "2026-09-22T08:17:10.827Z"
+}

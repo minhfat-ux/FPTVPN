@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap tren origin/main (e2d1d91, chua 95059cd + a68674b): (1) commit 95059cd CO THAT va la ancestor cua origin/main; (2) CHOT #135 (het duong thi giu duong da chon + ping tiep) DA VAO CODE: finishTransportRecovery(gaveUp) -> enterLivenessHold, selfRescue() return ngay khi isLivenessHolding, enterLivenessHold KHONG go network settings/khong cancelTunnelWithError, teardownAndCancel chi con trong selfRescue (het duong teardown vi ly do toc do); (3) CHOT #136 DA VAO CODE o NodeUpgradePolicy: gainThreshold=1.25, consecutiveProbesRequired=2, priorityNodeID quay ve khi >= priorityParityFloor (1.0), allowsOtherNodeRungs mac dinh BAT; (4) harness thuan logic ~55 lenh check (LivenessWatchdogTests 14 + TransportLadderTests 13 + GoodputMeterTests 9); (5) file yeu cau goc docs/YEU_CAU_TOC_DO_ON_DINH.md da duoc commit (e2d1d91, co A7/A8/A9) => lo hong neu o lan verify 08:12 da dong. GIOI HAN: may WIN khong co toolchain Swift (khong swiftc/otool) nen KHONG chay lai duoc bash scripts/ios-pure-logic-tests/run.sh (Mac bao 54/54 PASS, truoc 39/39) - chap nhan bang chung Mac ghi, phan con lai da kiem bang git. PASS cho pham vi P0-1/P0-2/P1-1 + 2 chot 22/09.",
+ "actor": "win",
+ "at": "2026-09-22T08:27:12.851Z"
+}

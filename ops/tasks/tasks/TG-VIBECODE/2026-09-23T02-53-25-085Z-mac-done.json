@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=68f2095 (nhanh mac/ios-testflight-embed-fix, da push). (1) LINK iOS cho chu du an: https://i.diawi.com/VFXW2C — VPNFlow iOS 1.4.1 build 18, commit main@72a4d63, 8.119.092 B, sha256 89a17e4d062f507e063941116c3e2e3f722ddd526bea77367ad36ec62b61ba73; cmd: scp len node-2 + sha256sum KHOP, node /root/diawi-upload.mjs -> job MHTsROr9FpC8tVeNgCS00yOom3BmDfGcVo1ypNRinF, curl -L https://i.diawi.com/VFXW2C -> HTTP 200 hien 'VPNFlow iOS 1.4.1 (18)'; da gui owner bus #253. (2) TESTFLIGHT (#237): export app-store-connect IPA 1.4.1/18 -> altool --upload-app 'UPLOAD SUCCEEDED with no errors', Delivery UUID 14c65fa9-4083-445c-abf7-e891f857359a, 11.473.244 B, sha256 c4e90da9...; da sua goc loi dong goi: Hysteria.xcframework la static archive nhung project.yml embed:true => appex chua Frameworks/Hysteria.framework => Apple tu choi ITMS-90206/90205/90049/90056/90057/90035; sua thanh embed:false + xcodegen + archive + export lai (appex khong con Frameworks/). (3) BAO CAO task da gui owner+server bus #261/#262 + cap nhat #271/#272. CON LAI: App Store Connect can chu du an chon nhom tester TestFlight; §2c test may that do phien Mac dang cam iPhone.",
+ "actor": "mac",
+ "at": "2026-09-23T02:53:25.089Z"
+}

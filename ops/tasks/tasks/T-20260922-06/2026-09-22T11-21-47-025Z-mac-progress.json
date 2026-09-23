@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "DA BUILD LAI IPA tu main@72a4d63 (co 479a6d7 bo ipv6 ::/0 + c5d7564 A10/A11). Go chan that: sandbox workspace-write chan Go build cache ~/Library/Caches/go-build khien gobind bao sai 'no exported names'; fix GOCACHE trong workspace + CFFIXED_USER_HOME + tat manifest sandbox + OTHER_SWIFT_FLAGS=-disable-sandbox. Hysteria.xcframework ios sha 9304759e + macos sha 2fbf7daf, 3456 symbol gVisor/slice, verify.sh EXIT 0. IPA 1.4.1 build 18 (app+ext khop), Ad Hoc, get-task-allow=false, profile wildcard G6XW3RN6LJ.* + 8 UDID (co ca 9B001C+BB801E), ky group tuong minh .shared app+appex; codesign --deep --strict OK; sha256=89a17e4d062f507e063941116c3e2e3f722ddd526bea77367ad36ec62b61ba73 size=8119092. CON LAI: iPhone 'unavailable' (chua cam) => chua cai devicectl + chua test 3 muc. Cong main bao thieu keychain trong profile = FALSE NEGATIVE (main thieu fix 955760a).",
+ "actor": "mac",
+ "at": "2026-09-22T11:21:47.025Z"
+}

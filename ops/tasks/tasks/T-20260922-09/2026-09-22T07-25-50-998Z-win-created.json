@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-09",
+  "title": "Cap nhat process (server): route phat file + moc version + audit link theo §0 PUBLISHER_PROCESS",
+  "from": "win",
+  "to": "server",
+  "detail": "Chu du an yeu cau bao publisher cac ben cap nhat lai process. Da them muc §0 vao docs/PUBLISHER_PROCESS.md (commit 85f7bdf, nhanh main). Phan lien quan may chu/node-2: (1) moc version tren control-plane (/v1/admin/<platform>-version) la NGUON DOI CHIEU cua cong chan - chi PATCH sau khi cong dat, va phai doc JSON tra ve (bai hoc 'PATCH that bai im lang, curl van exit 0'); (2) route phai phuc vu dung file latest: /v1/downloads/{ios,mac,android,android-legacy}, /dl/VPNFlow-Setup-latest.exe, /install/{ios,mac} va manifest OTA - khi publisher phat ban moi thi kiem lai size + sha256 tai dich va tren CDN; (3) giu nguyen host relay wss://api.meetflowai.site/relay/* (doi host la toan bo khach mat mang); (4) khi duoc yeu cau, chay/phoi hop audit: python3 scripts/audit-releases.py (doc version BEN TRONG artifact dang phat) va bao ket qua; (5) khong tu y phat hanh thay publisher.",
+  "verify": null,
+  "due": null,
+  "createdAt": "2026-09-22T07:25:50.998Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T07:25:50.998Z"
+}

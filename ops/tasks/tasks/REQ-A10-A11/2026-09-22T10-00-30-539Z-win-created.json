@@ -1,0 +1,17 @@
+{
+ "type": "created",
+ "task": {
+  "id": "REQ-A10-A11",
+  "title": "YEU CAU MOI A10/A11 + §2g/§2h — map vao iOS (uu tien) · Windows LOCK",
+  "from": "win",
+  "to": "mac",
+  "detail": "Nguon: bus #181 (WIN chuyen tu chu du an). Ban goc: docs/YEU_CAU_TOC_DO_ON_DINH.md §2g (A10: so live tren the Diagnostics) + §2h (A11: khai bao an toan truoc, ramp sau); ban do thi cong: docs/DEV_PLAN_IOS_MACOS_TOC_DO.md §5b buoc 1e (A10) / 1f (A11). Windows LOCK o 1.4.3 (bus #176) nen dot nay CHI lam iOS.",
+  "verify": "Tren origin/main: (1) toan bo target extension iOS type-check sach bang swiftc -typecheck -swift-version 6 (iOS SDK); (2) bash scripts/ios-pure-logic-tests/run.sh -> 138/138 PASS; (3) code co du 8 dong bat buoc cua §2g o the Diagnostics (down/up/do duoc/khai bao/% con len duoc/da toi da/duong dang dung/muc stable) va A11 safeDeclaration + canRampUp duoc goi THAT trong HysteriaBandwidthControl.",
+  "due": "2026-09-23",
+  "createdAt": "2026-09-22T10:00:30.539Z"
+ },
+ "actor": "win",
+ "transcribedBy": "mac",
+ "busId": 181,
+ "at": "2026-09-22T10:00:30.539Z"
+}

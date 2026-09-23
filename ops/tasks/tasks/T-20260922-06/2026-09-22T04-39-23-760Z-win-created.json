@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260922-06",
+  "title": "iOS: deploy lai ban latest len iPhone de test lai (sau khi sua keychain group .shared)",
+  "from": "win",
+  "to": "mac",
+  "detail": "Chu du an yeu cau: deploy lai ban iOS latest len iPhone de test lai. BOI CANH: khach bao 'nhap code xong khong vao duoc app'; nguyen nhan la profile Ad Hoc thieu keychain group G6XW3RN6LJ.com.privatevpn.shared (binary khai .shared nhung profile chi cap ...com.privatevpn.app va ...app.packet-tunnel) => SecItemAdd tra -34018 => AuthSessionStore.save() khong luu duoc phien => ket o man dang nhap. Ban 1.4.1/17 dang cai tren iPhone test (UDID 00008120-00010D102E40C01E, iPhone 14 Pro Max iPhone15,3, iOS 26.7) VI THE CUNG KHONG DANG NHAP DUOC - cai lai nguyen ban do thi van ket. CAN LAM DUNG THU TU: (1) Apple Developer portal -> Identifiers -> App ID com.privatevpn.app VA com.privatevpn.app.packet-tunnel: bat Keychain Sharing voi nhom G6XW3RN6LJ.com.privatevpn.shared; sinh lai profile Ad Hoc (du UDID may test) + development. (2) Ky lai IPA bang profile MOI (scripts/ios-resign-ipa.sh). (3) CHAY CONG CHAN, phai DAT truoc khi cai: python3 scripts/check-publish-version.py --platform ios --file <ipa> --version 1.4.1 --build 17 (neu con bao 'Nhom keychain THIEU trong profile' thi CHUA duoc cai). (4) Deploy len iPhone test (devicectl install hoac OTA), xac nhan tu may: Version 1.4.1 / Bundle 17. (5) Test §2c: dang nhap email da mua -> nhan code -> nhap code => PHAI vao duoc app; roi ket noi, dung that >=10 phut, doi Wi-Fi<->4G, ngat VPN khong mat mang, watchdog 0 bao oan, anh Settings -> About. (6) Bao lai: sha256 IPA moi + output cong chan + ket qua dang nhap + anh. Neu portal khong cho tao nhom .shared thi bao NGAY de chot phuong an 2: doi KeychainStore.accessGroup sang nhom profile that su cap (phai CUNG nhom o ca app lan extension) -> sua code + build lai.",
+  "verify": null,
+  "due": null,
+  "createdAt": "2026-09-22T04:39:23.759Z"
+ },
+ "actor": "win",
+ "at": "2026-09-22T04:39:23.760Z"
+}

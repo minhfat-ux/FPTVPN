@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap (worktree origin/main@00f0e3b): python scripts/audit-releases.py --json (exit 1) => Windows KHOP (moc 1.4.2 = version doc BEN TRONG .exe, size 52.794.169 B + sha256 60ea6f31...86c6 khop ban da phat); iOS LECH dung nhu bao cao (marker 1.4.0/16, tai artifact 8.135.823 B, profile thieu keychain G6XW3RN6LJ.com.privatevpn.shared) => tai hien duoc, khong phai bao dong; macOS + Android modern/legacy 'KHONG KIEM DUOC' tren Windows (thieu hdiutil/stapler/spctl + aapt2) - dung nhu thiet ke, khong phai LECH; Mac da chay va KHOP. Da kiem 2 loi cong cu co that trong code: ARTIFACT_SUFFIX giu duoi .dmg (het LECH oan staple) + marker android-legacy hoi platform=android. 3 commit 00f0e3b/96a72ec/fa3a79f deu o origin/main. PASS cho phan audit + cong cu + health-watch. TON CO Y THUC: kenh iOS VAN phuc vu ban loi - chua cap nhat lai link/manifest OTA va chua thong bao khach (dung la khong thong bao khi chua co ban va, tranh chi khach tai lai ban van loi); phai lam ngay sau khi portal bat Keychain Sharing - dang theo doi o T-20260922-04 / T-20260922-03.",
+ "actor": "win",
+ "at": "2026-09-22T08:24:59.950Z"
+}

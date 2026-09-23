@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "DA BUILD LAI IPA tu main@72a4d63 (co 479a6d7 bo ipv6 ::/0 + c5d7564 A10/A11). Build trong sandbox workspace-write: go chan that la sandbox chan Go build cache ~/Library/Caches/go-build (gobind bao sai 'no exported names'), fix bang GOCACHE trong workspace; them CFFIXED_USER_HOME + tat manifest sandbox + OTHER_SWIFT_FLAGS=-disable-sandbox. Hysteria.xcframework (ios-arm64+sim, sha 9304759e) + Hysteria-macos.xcframework (sha 2fbf7daf), 3456 symbol gVisor/slice, verify.sh EXIT 0. IPA 1.4.1 build 18 (app+ext khop), Ad Hoc, get-task-allow=false, profile cap wildcard G6XW3RN6LJ.* + 8 UDID (co ca 9B001C+BB801E), ky group tuong minh .shared cho app+appex; codesign --deep --strict OK; sha256=89a17e4d062f507e063941116c3e2e3f722ddd526bea77367ad36ec62b61ba73, size=8119092. CON LAI: iPhone 14 Pro Max dang 'unavailable' (chua cam cap) => CHUA cai devicectl duoc, CHUA test duoc 3 muc. Luu y: cong check-publish-version.py tren main bao 'Nhom keychain THIEU trong profile' la FALSE NEGATIVE (main thieu fix 955760a; profile nhung thuc te cap wildcard, T-20260922-06 da do tren iPhone that: chu ky group tuong minh + profile wildcard => status=0).",
+ "actor": "mac",
+ "at": "2026-09-22T11:20:58.605Z"
+}

@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC ack lai (bi tra): WIN verify fail vi thieu bang chung (b)+(c). Se lam: cai build 078e043 len iPhone that (co A10), bat VPNFlow + luong tai that, thu >=20 dong 'bw: sample observed=' + so measure-tunnel.sh, chup the Diagnostics.",
+ "actor": "mac",
+ "at": "2026-09-23T02:49:44.718Z"
+}

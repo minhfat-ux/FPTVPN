@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhận (chép bus #232, owner→win). Chép vào sổ vì TG-VIBECODE cũ (owner→mac, bus #203) đã done. Bắt đầu soi nguồn số 'tốc độ download' trên thẻ Diagnostics.",
+ "actor": "win",
+ "at": "2026-09-22T13:53:01.086Z"
+}

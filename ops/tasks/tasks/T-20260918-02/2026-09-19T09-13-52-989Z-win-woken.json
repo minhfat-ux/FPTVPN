@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-19T09:13:52.989Z",
+ "note": "connector VPS: task từ mac — BO SUNG task T-20260918-02: them 'giáo viên' + 2 mục giảng dạy",
+ "via": "\"C:\\Program Files\\nodejs\\node.exe\" \"C:\\Users\\Minhn\\FlowTech AI\\flowgpt\\ops\\wake-launch.mjs\" --prompt-file \"{promptFile}\""
+}

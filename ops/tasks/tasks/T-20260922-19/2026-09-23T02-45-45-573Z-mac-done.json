@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=078e043ea1e4e5bdf8eb3f313f6b160558d1571f (branch mac/hotel-test, da push origin/mac/hotel-test). cmd1: bash scripts/ios-pure-logic-tests/run.sh -> 144/144 PASS, 0 FAIL (+3 assertion moi cho peak: 'chua phuc vu => dinh —', 'giu dinh phien', 'dinh 0 => —'). cmd2: xcodebuild -scheme PrivateVPN -configuration Release -sdk iphonesimulator -> BUILD SUCCEEDED. cmd3 (GIỚI HẠN): xcrun devicectl device copy from ... Documents/relay.log (iPhone) -> log that su co 'bw: net=... measured=... best=4336' (kbps) trong phien co 8.103.178 B Go->packetFlow => chuoi do byte CHAY DUNG (khong kich hoat GIOI HAN), khong co bug don vi. LUU Y: may iPhone dang o build cu (hyster-only, KHONG co A10) nen log chua co dong 'bw: sample observed='; anh chup the Diagnostics A10 tren iPhone can ban cai MOI (T-20260922-15 dang build/install) vi harness khong dieu khien duoc UI iPhone. Dong 'Dinh phien ↓' tren the = report.peakDownKbps = bandwidth.peakDownKbps = truong 'best=' trong log -> khop so that cua luong tai. Huong B (nut 'Do toc do') CHUA lam vi chu du an chua chon huong B (report §5 'cho chu du an chot huong').",
+ "actor": "mac",
+ "at": "2026-09-23T02:45:45.577Z"
+}

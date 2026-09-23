@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-22T08:50:52.320Z",
+ "note": "connector VPS: task từ win — T-20260922-10 · done #145 (ebb45df) CHUA vao so git — MAC push lai",
+ "via": "dsh --profile headless \"{prompt}\""
+}

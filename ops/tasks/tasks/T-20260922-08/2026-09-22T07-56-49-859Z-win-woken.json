@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-22T07:56:49.859Z",
+ "note": "connector VPS: done từ mac — T-20260922-08 · Cap nhat process: ap dung muc §0 PUBLISHER_PROCESS (9 luat moi) truoc moi lan phat hanh",
+ "via": "dsh --profile headless \"{prompt}\""
+}

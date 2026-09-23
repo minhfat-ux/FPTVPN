@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "CAP NHAT (dinh chinh): phan 'clone' DA XONG — mot phien song song da clone fbuddy VAO TRONG workspace: flowgpt/fbuddy (clone ra ngoai workspace bi tu choi that). Da co: 3 su kien win-acked cho T-20260919-01/02/03 trong fbuddy/ops/tasks; .env.bus; RAG entry .privatefbuddy/knowledge/AGENT_ENGINEERING/KAE-003-win-da-tham-gia.md (verified_by: WIN); commit cuc bo 5bc5b73 tren nhanh main. VUONG DUY NHAT: push fbuddy len origin/main bi sandbox chan — credential helper 'manager' phai chay qua sh.exe => 'couldn't create signal pipe, Win32 error 5', SSH cung chet cung ly do; nen 'node ops/verify-win-joined.mjs' (doc tu origin/main) bao 0/3. Nguoi chay NGOAI sandbox: cd '<repo>\\\\fbuddy' ; git push origin main ; node ops\\\\verify-win-joined.mjs (phai 3/3). Chua cai duoc autostart bo nghe cho repo fbuddy (Startup/Scheduled Task nam ngoai workspace => bi tu choi).",
+ "actor": "win",
+ "at": "2026-09-19T10:04:23.650Z"
+}

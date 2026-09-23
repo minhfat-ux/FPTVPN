@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Nghiem thu doc lap: commit 1e46c9d va 85f7bdf deu la ancestor cua origin/main; docs/RELEASE_RUNBOOK.md 184 dong, bang muc 0 co du 9/9 luat + 3 lenh cong cu dung chung. Doi chieu noi dung: luat 1/2 (cong chan pre + --mode post, ma thoat 0/1/2), luat 3+4 (iOS buoc 2 test iPhone THAT bang 7 muc, buoc 3 keychain ca code signature lan profile), luat 5 (macOS staple: stapler validate + spctl + codesign --deep --strict), luat 6 (Windows metadata .exe + Settings About, Windows harness phat hanh), luat 7 (publisher lo ca publish lan email), luat 8 (§7 audit-releases.py + thong bao khach), luat 9 (buoc 1b xac nhan ban moi nhat da test). LECH CAN CHOT (khong phai loi cua Mac): §0 luat 3 ghi profile PHAI cap nhom cu the, nhung do luong that T-20260922-06 (bus #113) cho thay profile Ad Hoc wildcard la DU, chi code signature can nhom cu the (.shared); runbook chep dung §0 nen de nghi chu du an chot lai wording §0 truoc lan phat hanh ke tiep.",
+ "actor": "win",
+ "at": "2026-09-22T07:57:57.295Z"
+}
