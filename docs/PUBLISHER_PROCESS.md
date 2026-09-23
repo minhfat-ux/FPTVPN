@@ -193,6 +193,18 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
 
 | 2026-09-21 | dev | guard + link | **Thống nhất mọi link khách tải về `t1.meetflowai.site`** (env `PUBLIC_SITE_URL`+`API_HOSTS`, `ios_ipa_url`/`android_apk_url(_legacy)`/`windows_installer_url`) · thêm `flowvpn-guard` (email tự động cho khách mới bị tắc + task chờ approve trên Telegram: `/guard`, `/approve`, `/reject`) |
 
+| 2026-09-23 | iOS | 1.4.1 (18) | **Trang buy**: IPA ad-hoc mới `/root/flowvpn-ipa/VPNFlow-latest.ipa` 8.119.092 B · sha256 `89a17e4d…ba73` · mốc `latest_ios_version=1.4.1` + `ipa_build=18` (minimum giữ 1.3.3) · backup bản cũ `VPNFlow-latest.bak-1.4.0-b16-20260923-105752.ipa`. **App Store Connect/TestFlight**: build 18 đã `VALID`, internal `IN_BETA_TESTING`; external `READY_FOR_BETA_SUBMISSION`. Profile ad-hoc 8 UDID **không đổi** so với bản 16; `get-task-allow=False` ⇒ khách không cần Developer Mode |
+
+### 6b. iOS có HAI kênh — đừng lẫn
+- **Trang buy / khách cài trực tiếp**: IPA **ad-hoc** (`/root/flowvpn-ipa/VPNFlow-latest.ipa`, route `/v1/downloads/ios`),
+  mốc `latest_ios_version` + `ipa_build`. Bản này chỉ cài được trên máy có UDID trong profile.
+- **TestFlight / App Store Connect**: build **app-store-connect** (export `scripts/archive-appstore.sh ios direct`),
+  app id `6804150049` (bundle `com.privatevpn.app`), key `~/.appstoreconnect/private_keys/AuthKey_8GW3662G64.p8`
+  (issuer `7a64d085-c03d-4b10-9b96-ff8e00c42e79`). Kiểm tra bằng API: `GET /v1/builds?filter[app]=…`
+  → `processingState=VALID`; `buildBetaDetail.internalBuildState=IN_BETA_TESTING` là tester nội bộ dùng được,
+  `externalBuildState=READY_FOR_BETA_SUBMISSION` là còn phải nộp Beta App Review mới tới tester ngoài.
+- **Không dùng IPA ad-hoc để nộp TestFlight** và ngược lại (profile app-store có 0 UDID nên cài trực tiếp sẽ fail).
+
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
 2. Đưa **release notes** lên web (hiện chỉ nằm trong repo `release/<platform>/RELEASE_NOTES_<ver>.md`).
