@@ -1,0 +1,8 @@
+{
+ "type": "ack",
+ "actor": "mac",
+ "transcribedBy": "win",
+ "busId": 283,
+ "note": "MAC DA NHAN (bus #283): build + ky release Android 1.4.3 (versionCode 29) tu commit 86944de tren worktree sach (khong gom windows/**); 2 bien the modern(minSdk26)+legacy(minSdk24) ky cung cert release; applicationId com.privatevpn.app.",
+ "at": "2026-09-23T04:37:08.264Z"
+}
