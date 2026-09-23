@@ -151,6 +151,25 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private var livenessPrevFromGo = 0
     private var livenessPrevToGo = 0
     private var livenessPrevToGoDropped = 0
+    /// Nhịp watchdog gần nhất + số nhịp đã chạy — "đồng hồ chết" độc lập đọc hai số này.
+    private var livenessLastTickAt = Date()
+    private var livenessTicks = 0
+    /// Đồng hồ CHẾT, chạy trên HÀNG ĐỢI RIÊNG.
+    ///
+    /// Vì sao phải có: mọi đường thoát của `livenessStep` đều IM LẶNG — `cancelled` gọi
+    /// `cancelLivenessWatchdog()` (không log), `recovering` `return` (không log), `.idle` `return`
+    /// (không log). Nên khi vòng lặp ngừng chạy thì không còn dấu vết nào và **không ai tự cứu**.
+    /// Đúng ca đo trên iPhone 23/09/2026: sau lần ramp dựng lại transport lúc 12:18:38, watchdog
+    /// im lặng 14 phút dù `toGo` đóng băng + `toGoDropped` leo (đủ điều kiện `.rebuild`).
+    private var watchdogGuardTimer: DispatchSourceTimer?
+    private let watchdogGuardQueue = DispatchQueue(label: "com.privatevpn.app.tunnel.watchdog-guard")
+    /// Giới hạn tần suất log khi nhịp watchdog bị bỏ qua vì đang trong chuỗi tự dựng lại.
+    private var lastLivenessSkipLogAt = Date.distantPast
+
+    /// Nhịp tim: 1 dòng mỗi ngần này nhịp (4 × 15 s = 60 s) để `.idle` không còn vô hình.
+    private static let livenessHeartbeatEveryTicks = 4
+    /// Quá hạn này mà không có nhịp nào ⇒ coi như vòng lặp đã ngừng: log + bật lại.
+    private static let livenessStallLimit: TimeInterval = 45
 
     // MARK: Khai băng thông động cho Brutal CC (xem `HysteriaBandwidthControl`)
 
@@ -991,6 +1010,10 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                 + "\(Self.seconds(Date().timeIntervalSince(started)))s, tunnel đang rảnh)"
         )
         logDeclaration(key: bandwidth.key, event: "ramp đã áp")
+        // Transport vừa bị THAY: watchdog cũ đang giữ mốc của đường cũ. Bật lại để mốc đúng đường
+        // mới, và để chắc chắn nó còn sống — ca đo 23/09/2026: sau đúng lần ramp này watchdog im
+        // lặng 14 phút dù `toGo` đóng băng + `toGoDropped` leo.
+        restartLivenessAfterTransportSwap(reason: "ramp băng thông")
         return true
     }
 
@@ -1547,8 +1570,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         livenessPrevFromGo = 0
         livenessPrevToGo = 0
         livenessPrevToGoDropped = 0
+        livenessLastTickAt = Date()
+        livenessTicks = 0
         flowLock.unlock()
         timer.resume()
+        startWatchdogGuard()
         RelayDiagnostics.shared.log(
             "giám sát sống-còn: bật SUỐT phiên — nhịp \(Int(Self.livenessInterval))s; chiều về im "
                 + "\(Int(Self.livenessSilenceLimit))s VÀ máy vẫn gửi gói (đếm cả gói cầu phải bỏ) "
@@ -1562,6 +1588,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         flowLock.lock()
         let timer = livenessTimer
         livenessTimer = nil
+        let guardTimer = watchdogGuardTimer
+        watchdogGuardTimer = nil
         livenessCancelled = true
         livenessRecovering = false
         livenessHold = false
@@ -1571,6 +1599,56 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         // Nhả quyền dựng lại nếu chuỗi phục hồi còn treo (idempotent, chỉ nhả đúng chủ).
         releaseTransportRebuild(owner: "liveness")
         timer?.cancel()
+        guardTimer?.cancel()
+    }
+
+    /// Đồng hồ CHẾT chạy trên hàng đợi RIÊNG: thấy nhịp watchdog im quá `livenessStallLimit` (hoặc
+    /// timer không còn) thì ghi log thật rõ rồi **bật lại** watchdog với mốc mới.
+    ///
+    /// Nhờ chạy ở hàng đợi khác, nó vẫn báo được cả khi hàng đợi của nhịp watchdog bị chặn — đúng
+    /// loại sự cố không thể chẩn đoán được từ log trước đây.
+    private func startWatchdogGuard() {
+        watchdogGuardTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: watchdogGuardQueue)
+        timer.schedule(deadline: .now() + Self.livenessInterval, repeating: Self.livenessInterval)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.flowLock.lock()
+            let last = self.livenessLastTickAt
+            let cancelled = self.livenessCancelled
+            let session = self.session
+            let timerMissing = self.livenessTimer == nil
+            self.flowLock.unlock()
+            guard !cancelled else { return }
+            let stalledFor = Date().timeIntervalSince(last)
+            guard timerMissing || stalledFor >= Self.livenessStallLimit else { return }
+            RelayDiagnostics.shared.log(
+                "giám sát sống-còn: watchdog NGỪNG chạy (\(Int(stalledFor))s không có nhịp, "
+                    + "timerMissing=\(timerMissing)) — bật lại, phiên \(session)"
+            )
+            self.startLivenessWatchdog()
+        }
+        watchdogGuardTimer = timer
+        timer.resume()
+    }
+
+    /// Transport vừa bị THAY (ramp băng thông / tự phục hồi / HOLD) ⇒ mọi mốc của watchdog cũ trỏ
+    /// vào đường cũ. Bật lại watchdog với trạng thái mới, và đây cũng là lưới an toàn cho ca đo
+    /// được 23/09/2026 (sau lần ramp dựng lại transport, watchdog im lặng 14 phút).
+    private func restartLivenessAfterTransportSwap(reason: String) {
+        RelayDiagnostics.shared.log(
+            "giám sát sống-còn: transport vừa thay (\(reason)) — bật lại watchdog với mốc mới"
+        )
+        startLivenessWatchdog()
+    }
+
+    private func verdictLabel(_ verdict: LivenessWatchdog.Verdict) -> String {
+        switch verdict {
+        case .idle: return "idle"
+        case .alive: return "alive"
+        case .strike(let count): return "strike \(count)"
+        case .rebuild: return "rebuild"
+        }
     }
 
     /// Một nhịp: đọc bộ đếm, hỏi `LivenessWatchdog`, thi hành quyết định.
@@ -1579,12 +1657,26 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let expected = livenessSession
         let cancelled = livenessCancelled
         let recovering = livenessRecovering
+        livenessLastTickAt = Date()
+        livenessTicks += 1
+        let ticks = livenessTicks
         flowLock.unlock()
         guard !cancelled, expected == currentSession else {
             cancelLivenessWatchdog()
             return
         }
-        guard !recovering else { return }
+        guard !recovering else {
+            // Trước đây nhánh này `return` IM LẶNG: chuỗi tự dựng lại mà treo thì watchdog tắt
+            // tiếng vĩnh viễn và log không có lấy một dòng.
+            if Date().timeIntervalSince(lastLivenessSkipLogAt) >= 30 {
+                lastLivenessSkipLogAt = Date()
+                RelayDiagnostics.shared.log(
+                    "giám sát sống-còn: BỎ QUA nhịp \(ticks) — đang trong chuỗi tự dựng lại, "
+                        + "phiên \(currentSession)"
+                )
+            }
+            return
+        }
         // Pha HOLD: KHÔNG dựng lại ngay, KHÔNG bao giờ teardown — giữ đường đã chọn rồi ping
         // lại mỗi nhịp cho tới khi mạng về (chốt 22/09/2026).
         if isLivenessHolding {
@@ -1631,6 +1723,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
         switch verdict {
         case .idle, .alive:
+            // Nhịp tim ~60 s: `.idle`/`.alive` trước đây KHÔNG ghi gì nên "watchdog ngừng chạy" là
+            // trạng thái vô hình. Có dòng này thì log luôn trả lời được: watchdog còn sống không,
+            // và nó đang nghĩ gì (kèm nguồn số + delta).
+            if ticks % Self.livenessHeartbeatEveryTicks == 0 {
+                RelayDiagnostics.shared.log(
+                    "giám sát sống-còn: nhịp \(ticks) — \(verdictLabel(verdict)); \(deltaNote)"
+                )
+            }
             return
         case .strike(let count):
             RelayDiagnostics.shared.log(
@@ -1676,7 +1776,16 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             livenessRebuildAttempts = 0
         }
         flowLock.unlock()
-        guard !already, !cancelled else { return }
+        guard !already, !cancelled else {
+            if already {
+                // Trước đây nhánh này im lặng: nếu chuỗi trước treo thì watchdog không bao giờ
+                // được bật lại mà log cũng không có dấu vết.
+                RelayDiagnostics.shared.log(
+                    "tự phục hồi: BỎ QUA vì chuỗi tự dựng lại trước chưa kết thúc (\(reason))"
+                )
+            }
+            return
+        }
         guard acquireTransportRebuild(owner: "liveness") else {
             // Đường ramp băng thông đang dựng lại transport: nhường nó (số khai mới rồi sẽ lên).
             flowLock.lock()
