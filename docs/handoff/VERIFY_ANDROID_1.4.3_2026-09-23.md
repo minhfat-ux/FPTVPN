@@ -109,9 +109,83 @@ adb shell "grep -E 'sampler nguồn byte|bw: sample|chon-duong|tunnel: UP' /sdca
 Đạt khi: `sampler nguồn byte = TrafficStats theo UID (đường trực tiếp)` khi `tunnel: UP (hy-udp…)`;
 `observed=` cùng bậc speedtest (không còn ~5 kbps); `declared` leo theo mạng thay vì kẹt 1.000 kbps.
 
+## 6b. Dò LẠI lúc 13:45–13:56 — điện thoại ĐÃ về Wi-Fi, nhưng cổng adb CHƯA mở
+
+Lần §6 ở trên kết luận "điện thoại rời mạng". Dò lại kỹ hơn thì **điện thoại có ở trên Wi-Fi**,
+chỉ có cổng wireless-debugging là không mở — và **lần trước đã dò thiếu vì mDNS đi nhầm card mạng**:
+
+- mDNS (truy vấn PTR/SRV thẳng) trả: `ENDPOINT 10.193.44.103:36793 adb-RFCX110TCWA-tHrUW3._adb-tls-connect._tcp.local`,
+  gói trả lời **từ chính 10.193.44.103** với `A Android-4.local = 10.193.44.103` và
+  `SRV … -> Android-4.local:36793`.
+- Nhưng TCP tới `10.193.44.103:36793` bị **TỪ CHỐI** (`ECONNREFUSED`) — kể cả khi ép card nguồn
+  `10.193.44.107`; quét đủ dải 1–65535 chỉ thấy mở `51692` và `64660`; `adb connect` cả hai đều
+  `failed to connect` ⇒ **không phải cổng adb**. `adb devices` chỉ còn dòng cũ `10.193.44.116:43943 offline`.
+- Suy ra: bản ghi mDNS của Android **còn sót** trong khi adbd không còn nghe cổng đó (Wireless
+  debugging đã tắt/đổi cổng). ⇒ Cần người **TẮT rồi BẬT lại Wireless debugging** (hoặc cắm USB).
+
+**Vì sao lần trước kết luận sai "điện thoại tắt" (ghi để không lặp lại):** máy Windows này có card
+`tun0` `172.19.0.1` với default route **metric 0**, nên multicast `224.0.0.0/4` bị đẩy sang loopback
+(`route print`: `224.0.0.0  240.0.0.0  On-link  127.0.0.1`) ⇒ gói mDNS LAN **không bao giờ tới**.
+Phải chỉ định card: `sock.setMulticastInterface("10.193.44.107")` + `addMembership(GROUP, "10.193.44.107")`.
+Sau khi sửa, thấy điện thoại ngay lập tức.
+
+**Công cụ đã dựng để §6 chạy được bằng một lệnh:**
+
+| File | Việc |
+|---|---|
+| `ops/lib/mdns-adb.mjs` | dò endpoint adb qua mDNS (tự chọn đúng card mạng) — `adb mdns services` trên Windows trả rỗng |
+| `ops/verify-android-section6.ps1` | `-WaitForDevice -Install` (chờ + cài đè + mở app) và `-Collect` (thu log mới + đối chiếu tiêu chí §6) |
+| `_work/bus282-verify/section6-*.log` | bằng chứng từng lần chạy, có mốc thời gian |
+
+Đã hú người qua Telegram: `message_id 1081` (13:44) và `1082` (13:52, kèm hướng dẫn chính xác),
+và mở vòng chờ nền 50 phút (`-WaitForDevice -Install`) để tự cài ngay khi cổng adb mở lại.
+
+## 6c. KẾT QUẢ §6 — ĐÃ CHẠY TRÊN MÁY THẬT (13:53–14:11 cùng ngày)
+
+Thiết bị: Samsung **SM-F9460** (Galaxy Z Fold5), Android 16 (`BP4A.251205.006.F9460ZCS9GZH5`),
+adb wireless `10.193.44.103:45973` (endpoint do mDNS tự dò; cổng `36793` cũ đã chết).
+
+**Cài đặt** (APK modern release, sha256 `9563366…4ce5`, 74.731.689 byte):
+`adb install -r -d` → `Success`; `dumpsys package`: `versionCode=29 versionName=1.4.3`
+minSdk=26 targetSdk=36; log mở đầu `=== diagnostics session start (app 1.4.3) ===`.
+
+**Tunnel thật + thoát ra node thật:** `tunnel: UP (hy-tcp:8443)`, `vpn: establish ok tun=130`.
+`curl https://www.cloudflare.com/cdn-cgi/trace` **từ chính điện thoại** trả `ip=165.101.114.162`
+(đúng node VN) ⇒ lưu lượng thật sự đi qua tunnel, không phải đoán theo tên route.
+
+| Tiêu chí §6 (HANDOFF_V29_DIAG §6) | Kết quả | Bằng chứng trong `diagnostics.log` |
+|---|---|---|
+| Nguồn byte = `TrafficStats theo UID` khi đường trực tiếp | **ĐẠT** | `bw: sampler nguồn byte = TrafficStats theo UID (đường trực tiếp)` (13:54:43 và 14:00:03) |
+| `observed` không còn ~5 kbps; cùng bậc số đo độc lập | **ĐẠT** | 13:57:07 `observed=2508` kbps, cửa sổ đó `curl` độc lập đo **2.555 kbps** (lệch **1,8 %**) |
+| `declared` leo theo mạng, không kẹt sàn 1.000 kbps | **ĐẠT** | 4200 → 2940 (`underrun-backoff`) → 3675 → 4593 → 3215 |
+| `observed` về ~0 khi rảnh | **ĐẠT** | lúc rảnh `observed=4…22` kbps, khớp Δ`raw`/Δt của bộ đếm |
+
+Số đo độc lập trên máy thật (không lấy số hiển thị trên màn hình):
+`curl` qua tunnel không giới hạn → 14.370.304 byte / 45,000 s = **2.555 kbps**.
+
+**Ghi chú trung thực — đọc để không hiểu sai số:**
+
+1. **Speedtest trong Chrome KHÔNG dùng được làm mốc lần này.** Trang `speed.cloudflare.com`
+   đứng ở bước *“Measuring Latency · 20 packets”* suốt 13:57–14:10 (RTT tunnel 750 ms, jitter 670 ms);
+   số “Download 328/611 kbps” là số cũ đóng băng, còn bộ đếm của app trong cùng khoảng chỉ nhích
+   ~4–28 kbps ⇒ lưu lượng gần như không chảy. Vì vậy mốc đối chiếu là `curl` chạy trên chính máy thật.
+2. Khi **ghìm tốc độ consumer** (`curl --limit-rate`), bộ đếm theo UID của app tăng **nhiều hơn**
+   payload của curl (≈15,5 MB/45 s so với 2,3 MB): nguồn `src=2` đếm mức *trên dây* của socket
+   tunnel (gồm truyền lại/đệm khi consumer đọc chậm trên đường RTT cao). **Không phải lỗi cũ**
+   (lỗi cũ là báo 5 kbps trong khi tunnel chở 4.463 kbps — tức *thấp* giả tạo); nhưng khi so với
+   goodput của **một luồng đơn** thì `observed` có thể cao hơn.
+3. Tunnel lần này chạy `hy-tcp:8443` (không phải `hy-udp`) với RTT 0,6–2,5 s, và **tự dựng lại
+   1 lần lúc 13:59:59** giữa lúc đo ⇒ mẫu ngay sau mốc đó không dùng để đối chiếu.
+4. Bằng chứng thô để tự soát: `_work/bus282-verify/` (`diag-*.log`, `shot-*.png`, `section6-*.log`).
+
+**⇒ §6 ĐẠT.** Việc bus-282 đủ điều kiện `verify --result pass` (KHÔNG publish, KHÔNG đổi mốc —
+publish vẫn là quyết định riêng của chủ dự án).
+
 ## 7. Kết luận
 
-- **Cổng chặn + toàn bộ kiểm tĩnh: ĐẠT**, đã kiểm **độc lập từ Windows** (không cần Mac).
+- **Cổng chặn + toàn bộ kiểm tĩnh: ĐẠT**, đã kiểm **độc lập từ Windows** (không cần Mac);
+  chạy lại lúc 13:59 cùng ngày, cả `android` và `android-legacy` đều `exit 0`.
 - **Đính chính**: artifact **có v1** (handoff ghi thiếu).
-- **Còn thiếu duy nhất §6** → `verify bus-282 --result fail` (giữ việc mở), KHÔNG publish,
-  KHÔNG đổi mốc.
+- **§6 test máy thật: ĐẠT** (mục 6c) — chạy trên SM-F9460, tunnel thật, `observed` khớp số đo độc lập
+  trong 1,8 %, `declared` leo theo mạng, hết cảnh 5 kbps.
+- **KHÔNG publish, KHÔNG đổi mốc** — publish vẫn là quyết định riêng của chủ dự án.
