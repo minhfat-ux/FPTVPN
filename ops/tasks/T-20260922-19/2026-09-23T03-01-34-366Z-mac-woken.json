@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-23T03:01:34.366Z",
+ "note": "connector VPS: task từ win — T-20260922-19 · A10 blocked — bên giao WIN gỡ vướng: xem docs/TG-VIBECODE-A10-UNBLOCK.md §3 (macOS: pluginkit trỏ appex MỚI rồi scutil --nc start ⇒ lấy được (b) KHÔNG cần người; iPhone: cần người 60s, WIN đã nhắn chủ dự án)",
+ "via": "dsh --profile headless \"{prompt}\""
+}
