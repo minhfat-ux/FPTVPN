@@ -92,7 +92,13 @@ email: số người nhận + mã gửi
 5. `docs/VERSIONING.md` §2 ví dụ tag còn `android-v1.4.1`, `windows-v1.4.2` — cập nhật theo thực tế (`windows-v1.4.4`, sắp `android-v1.4.3`).
 6. iOS/macOS: cùng lớp lỗi "đếm byte chỉ một transport" có thể còn (handoff §8) — ngoài phạm vi 2 nền tảng này.
 
-## 7. Cần chủ dự án chốt trước khi em package/publish
-1. **Windows**: (A) để nguyên 1.4.4, hay (B) chờ session `windows-app` commit rồi làm **1.4.5** gồm bypass TQ?
-2. **Android**: xác nhận **Mac build + ký release** (em không có keystore release trên máy Windows) và có/không căn 16 KB page trong đợt này.
-3. **Email**: Android 1.4.3 (có thay đổi chức năng) — gửi; Windows 1.4.5 nếu có — gửi hay gộp 1 email?
+## 7. CHỐT CỦA CHỦ DỰ ÁN — 23/09/2026
+1. **Windows**: chọn nhánh **B** — **CHỜ** session `windows-app` commit **và test xong**, rồi mới làm **1.4.5** (gồm bypass TQ đường relay).
+2. **Android**: **OK** — Mac build + ký release (2 APK modern/legacy, cùng cert) + căn 16 KB page. Việc đã giao qua agent-bus **#282**.
+3. **Email**: **GỬI GỘP 1 EMAIL** cho cả Windows 1.4.5 + Android 1.4.3, **sau khi cả hai đã lên kênh** — không gửi lẻ từng nền tảng.
+
+**⇒ Nhịp publish đã chốt:** chờ Windows test xong ⇒ publish **một thể** (Windows + Android trong cùng một đợt):
+cổng chặn pre → backup → upload → verify link → cổng chặn post → set mốc → ghi sổ + tag (cả 2 nền tảng) → **1 email gộp** → xác nhận `/buy` + `/install/*`.
+
+**Điều kiện "test xong" của Windows** (theo §2b điều kiện #3): có bằng chứng **ai · ngày · máy · kết quả thật**
+(`dotnet test` + chạy thật watchdog/bypass TQ trên máy Windows) — thiếu bằng chứng thì **chưa publish**.
