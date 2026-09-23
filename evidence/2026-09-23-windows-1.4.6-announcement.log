@@ -1,0 +1,79 @@
+# EVIDENCE — Email thông báo Windows 1.4.6 (hotfix DNS) cho khách (bus-326)
+
+- Ngày: 23/09/2026 (UTC). Người thực hiện: **harness MAC** (publisher), theo yêu cầu `bus-326` của Windows.
+- Nguồn nội dung: `docs/RELEASE_NOTES_1.4.6.md` + `docs/handoff/HANDOFF_WINDOWS_1.4.6_DNS_HOTFIX_2026-09-23.md`.
+- Script gửi: `scripts/send-windows-1.4.6-announcement.py` (3 ngôn ngữ vi/en/zh, host `t1.meetflowai.site`,
+  hỗ trợ `support@meetflowai.site`). Chạy trên node-2, lấy `RESEND_API_KEY` từ drop-in systemd.
+- ⚠️ Bản 1.4.6 **CHƯA KÝ SỐ** ⇒ email **KHÔNG** hứa "hết cảnh báo Windows"; có mục **"Lưu ý"** nói thẳng
+  bộ cài chưa ký và xin khách trả lời nếu bị Windows chặn (để đo lường).
+
+## 0. Chọn người nhận (chỉ khách ĐANG DÙNG Windows)
+
+Lọc theo `devices.json` **platform = windows/win32** + có `userId` gắn user + user có email + có subscription,
+bỏ qua danh sách chủ dự án/test (giống hệt cách đã dùng cho Windows 1.4.5 tại `bus-309`).
+
+```
+khach Windows (platform=windows/win32):
+   - BO QUA win32    (khong co email)       ly do: thiet bi khong gan user
+   - BO QUA windows  mi***@fpt.com          ly do: trong danh sach bo qua (chu du an/test)
+   - BO QUA windows  (khong co email)       ly do: thiet bi khong gan user
+nguoi nhan Windows: ['ca***@gmail.com']
+```
+
+- **Tổng thiết bị Windows/win32 trên hệ thống: 3** (1 orphan `win32`, 2 `windows`).
+- **Người nhận hợp lệ: 1** (`camvinh@gmail.com`).
+- Bỏ qua: `minhnb2@fpt.com` (chủ dự án — có trong danh sách bỏ qua của mọi email khách) và 2 thiết bị
+  không gắn user.
+
+## 1. Kiểm kênh tải TRƯỚC khi gửi
+
+```
+https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.6.exe?v=1a504534 -> HTTP/2 200, content-length 52792253
+https://t1.meetflowai.site/buy                                   -> HTTP 200 (có link ?v=1a504534)
+```
+
+**Cache Cloudflare (đúng như bus-326 cảnh báo):** URL **bare** trên `meetflowai.site` từng trả
+`404 cf-cache-status=HIT`; tại thời điểm gửi, kiểm lại thì **bare trên cả `meetflowai.site` và
+`t1.meetflowai.site` đều 200** (`content-length: 52792253`). `/buy` luôn dùng `?v=` nên khách không bị ảnh hưởng.
+
+## 2. Đối chiếu artifact đang phát (node-2 tự băm, cả 2 docroot)
+
+```
+1a50453473d8d945fcf223e96be08dd9b8d1678c69dce42de003a6bb1ea10796  /var/www/flowvpn/dl/VPNFlow-Setup-1.4.6.exe  (52.792.253 B)
+1a50453473d8d945fcf223e96be08dd9b8d1678c69dce42de003a6bb1ea10796  /var/www/dl/VPNFlow-Setup-1.4.6.exe          (52.792.253 B)
+```
+
+Khớp đúng `release/releases.jsonl` (dòng publish windows 1.4.6) và tag `windows-v1.4.6` →
+`9f9b8bd5774400a6786d73969f94410f21eefbc5` (annotated tag `104ab65`, peeled `9f9b8bd`).
+
+## 3. Kết quả gửi
+
+- Gửi thử tới `ALERT_EMAIL` (=`minhnb2@me.com`) trước khi gửi khách: **OK**.
+- Gửi thật: **1/1 người nhận, 0 lỗi**. Resend id lưu tại
+  `/root/flowvpn-cp/data/.announce-windows-1.4.6-ids.json`:
+
+```json
+{
+ "camvinh@gmail.com": "01a0cdd2-5912-70c2-b828-fe049789bf73"
+}
+```
+
+- Truy vấn trạng thái giao (Resend `last_event`) — **có `User-Agent`** theo đúng đề nghị của WIN
+  ở nghiệm thu `bus-299`, nên không còn lỗi 403 Cloudflare 1010 giả:
+
+```
+   ca***@gmail.com  01a0cdd2-5912-70c2-b828-fe049789bf73  ->  delivered
+trang thai: {'delivered': 1}
+```
+
+- Tiêu đề: `VPNFlow 1.4.6 cho Windows — sửa lỗi mất mạng / Google-YouTube (hotfix DNS) / ...`
+  · From: `VPNFlow <support@meetflowai.site>`.
+
+## 4. Script gửi — trùng khớp byte-for-byte với blob đã commit
+
+```
+f96464bba52618e6f266a2d8348211aff0538b0183dcaef9ec62d64d03d0c3c9  /root/send-windows-1.4.6-announcement.py
+```
+
+(sha256 trên node-2 phải trùng blob `scripts/send-windows-1.4.6-announcement.py` trên `origin/main`;
+WIN nghiệm thu lại bằng cách so byte-for-byte.)
