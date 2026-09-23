@@ -23,6 +23,14 @@ final class WSRelayClient: @unchecked Sendable {
     /// WireGuard datagrams held while the WebSocket is down. Bounded so an outage can
     /// never grow the extension's memory; WireGuard re-sends its handshake every 5s.
     private static let sendBufferLimit = 256
+    /// H3 (24/09/2026) — trần số datagram ĐỆM trong lúc chưa có link (WS đang dựng lại).
+    /// Vì sao phải đệm thay vì vứt: gói QUIC Initial của transport MỚI rơi đúng vào lúc link
+    /// chưa mở; vứt nó thì QUIC không bắt tay được (`udpFrames` còn 0,25/s, `droppedNoLink=6`
+    /// trong log thật) — transport mới coi như chết dù WS vẫn mở.
+    /// 512 gói × ≤1500 B ≈ 750 KB: đủ trùm vài giây dựng lại link, vẫn có trần cứng.
+    private static let pendingLinkLimit = 512
+    /// Trần THỜI GIAN đệm: gói nằm quá lâu thì thả (QUIC tự gửi lại) để bộ đệm không giữ rác.
+    private static let pendingLinkTTL: TimeInterval = 30
     /// Keepalive interval, mirroring the Android bridge's 20s ping interval. A
     /// half-open socket still reports itself as open, and the ping is what notices.
     private static let pingInterval: TimeInterval = 20
@@ -70,6 +78,12 @@ final class WSRelayClient: @unchecked Sendable {
     private var receivedFrames = 0
     private var receivedBytes = 0
     private var droppedNoLink = 0
+    /// H3 — datagram đến lúc CHƯA có link, đang được đệm chờ link mở (mốc thời gian để TTL).
+    private var pendingWhileLinkDown: [(at: Date, data: Data)] = []
+    /// Tổng số gói đã đệm / đã thả vì quá trần — in ra `countersSummary()` để đọc lại được.
+    private var bufferedWhileLinkDown = 0
+    private var droppedPending = 0
+    private var pendingLogAt = Date.distantPast
     /// Đã báo "link đứt" cho lượt thử này chưa (mỗi lượt báo đúng một lần).
     private var linkLossNotified = false
 
@@ -142,7 +156,13 @@ final class WSRelayClient: @unchecked Sendable {
         let currentLink = link
         link = nil
         open = false
+        // H3 — bộ đệm chờ link thuộc phiên này: xoá để không giữ gói của phiên cũ.
+        let pendingCount = pendingWhileLinkDown.count
+        pendingWhileLinkDown.removeAll()
         lock.unlock()
+        if pendingCount > 0 {
+            note("bỏ \(pendingCount) gói còn đệm khi dừng phiên")
+        }
 
         datagramContinuation.finish()
         sendTask?.cancel()
@@ -165,9 +185,13 @@ final class WSRelayClient: @unchecked Sendable {
             for await datagram in stream {
                 guard let self, self.isRunning else { return }
                 guard let link = self.currentLink(), link.isOpen else {
-                    self.noteDropped()
+                    // H3 (24/09/2026): link chưa mở ⇒ ĐỆM, không vứt. Trước đây gói bắt tay
+                    // của transport vừa dựng lại bị bỏ ở đây ⇒ QUIC mới không bao giờ lên.
+                    self.holdWhileLinkDown(datagram)
                     continue
                 }
+                // Link đã mở lại: xả gói đệm TRƯỚC gói vừa đọc (thứ tự bắt tay được giữ).
+                self.flushWhileLinkDown(into: link)
                 // Không await từng gói: chờ từng gói làm tốc độ tụt còn ~1 gói/RTT
                 // (đo thật: 200–320 kbps). URLSessionWebSocketTask tự xếp hàng, nên ta
                 // chỉ cần chặn khi hàng đợi quá dài (tương đương UDP drop khi nghẽn).
@@ -186,6 +210,67 @@ final class WSRelayClient: @unchecked Sendable {
                     self.sendInflight.withLock { $0 -= 1 }
                     if error == nil { self.noteSent(datagram.count) } else { self.noteDropped() }
                 }
+            }
+        }
+    }
+
+    // MARK: - H3: đệm datagram trong lúc chưa có link
+
+    /// Giữ một datagram đến lúc link CHƯA mở, có trần cả số gói lẫn thời gian.
+    ///
+    /// Vì sao đệm chứ không vứt: transport dựng lại (ramp/liveness) đúng lúc Go gửi lại QUIC
+    /// Initial; vứt gói đó thì transport mới không bắt tay được (log thật 24/09/2026:
+    /// `droppedNoLink=6`, `udpFrames` 0,25/s). Khi quá trần thì thả gói CŨ NHẤT (FIFO) — QUIC
+    /// tự gửi lại Initial theo PTO nên gói mới ở đuôi bộ đệm là gói còn giá trị.
+    private func holdWhileLinkDown(_ datagram: Data) {
+        let now = Date()
+        lock.lock()
+        var evictedByTTL = 0
+        while let first = pendingWhileLinkDown.first,
+              now.timeIntervalSince(first.at) > WSRelayClient.pendingLinkTTL {
+            pendingWhileLinkDown.removeFirst()
+            evictedByTTL += 1
+        }
+        var evictedByLimit = 0
+        pendingWhileLinkDown.append((at: now, data: datagram))
+        while pendingWhileLinkDown.count > WSRelayClient.pendingLinkLimit {
+            pendingWhileLinkDown.removeFirst()
+            evictedByLimit += 1
+        }
+        droppedPending += evictedByTTL + evictedByLimit
+        droppedNoLink += evictedByTTL + evictedByLimit
+        bufferedWhileLinkDown += 1
+        let pending = pendingWhileLinkDown.count
+        let buffered = bufferedWhileLinkDown
+        let dropped = droppedPending
+        let shouldLog = now.timeIntervalSince(pendingLogAt) >= WSRelayClient.frameLogInterval
+        if shouldLog { pendingLogAt = now }
+        lock.unlock()
+        if shouldLog {
+            note(
+                "chưa có link — ĐỆM \(pending) gói chờ link mở (tổng đệm \(buffered), "
+                    + "đã thả \(dropped): TTL \(Int(WSRelayClient.pendingLinkTTL))s/trần "
+                    + "\(WSRelayClient.pendingLinkLimit) gói)"
+            )
+        }
+    }
+
+    /// Link vừa mở lại: gửi hết gói đã đệm (theo đúng thứ tự nhận) rồi mới tới gói mới.
+    private func flushWhileLinkDown(into link: RelayLink) {
+        lock.lock()
+        let held = pendingWhileLinkDown
+        pendingWhileLinkDown.removeAll()
+        let buffered = bufferedWhileLinkDown
+        let dropped = droppedPending
+        lock.unlock()
+        guard !held.isEmpty else { return }
+        note("link đã mở lại — XẢ \(held.count) gói đã đệm (tổng đệm \(buffered), đã thả \(dropped))")
+        for item in held {
+            sendInflight.withLock { $0 += 1 }
+            link.sendQueued(item.data) { [weak self] error in
+                guard let self else { return }
+                self.sendInflight.withLock { $0 -= 1 }
+                if error == nil { self.noteSent(item.data.count) } else { self.noteDropped() }
             }
         }
     }
@@ -372,7 +457,7 @@ final class WSRelayClient: @unchecked Sendable {
     func countersSummary() -> String {
         lock.lock()
         defer { lock.unlock() }
-        return "udpFrames=\(sentFrames) udpBytes=\(sentBytes) framesFromRelay=\(receivedFrames) bytesFromRelay=\(receivedBytes) droppedNoLink=\(droppedNoLink) wsOpen=\(open)"
+        return "udpFrames=\(sentFrames) udpBytes=\(sentBytes) framesFromRelay=\(receivedFrames) bytesFromRelay=\(receivedBytes) droppedNoLink=\(droppedNoLink) pendingLink=\(pendingWhileLinkDown.count) bufferedLink=\(bufferedWhileLinkDown) pendingDropped=\(droppedPending) wsOpen=\(open)"
     }
 
     private func noteSent(_ bytes: Int) {

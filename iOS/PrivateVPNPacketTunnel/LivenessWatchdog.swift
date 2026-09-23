@@ -10,8 +10,9 @@ import Foundation
 /// **KHÔNG** đi qua tunnel của nó (NetworkExtension giữ nó ở đường vật lý — đo thật 19/09/2026,
 /// xem chú thích `startTrafficSupervisor` trong `HysteriaPacketTunnelProvider`), nên một probe
 /// "qua tunnel" từ trong extension là vô nghĩa. Dấu hiệu hỏng đọc được từ gói THẬT của máy:
-/// máy **vẫn gửi** gói vào tunnel (`toGo` tăng) mà **không có gói nào trả về** (`fromGo` đứng
-/// yên) trong `silenceLimit` giây ⇒ đường hỏng (đúng dấu hiệu TCP blackhole).
+/// máy **vẫn gửi** gói vào tunnel (`toGoOffered = toGo + toGoDropped` tăng — xem `tick`) mà
+/// **không có gói nào trả về** (`fromGo` đứng yên) trong `silenceLimit` giây ⇒ đường hỏng
+/// (đúng dấu hiệu TCP blackhole).
 ///
 /// Chống báo oan (bài học Windows): người dùng ngồi yên thì `toGo` cũng đứng yên ⇒ KHÔNG kết
 /// luận, KHÔNG cắt VPN. Chỉ khi đồng thời "chiều về im" VÀ "máy vẫn gửi" mới tính là hỏng.
@@ -53,8 +54,11 @@ struct LivenessWatchdog {
 
     /// Byte chiều VỀ lần đọc trước (`fromGo`).
     private(set) var lastFromGo = 0
-    /// Mốc `toGo` tại lần cuối tunnel còn sống — dùng để biết máy CÓ gửi gì trong lúc im không.
+    /// Mốc "máy vẫn gửi" tại lần cuối tunnel còn sống — GIỮ `toGoOffered`, không phải `toGo`
+    /// (xem `tick`): `toGo` chỉ đếm gói ghi THÀNH CÔNG nên đứng yên đúng lúc cầu nghẽn.
     private(set) var baselineToGo = 0
+    /// Mốc `toGoOffered` của nhịp trước — dùng để ghi log DELTA khi ra quyết định.
+    private(set) var lastToGoOffered = 0
     /// Lần cuối thấy byte chiều về tăng.
     private(set) var lastReturnAt: Date
     /// Số nhịp liên tiếp "im VÀ bất đối xứng" hiện tại.
@@ -77,30 +81,49 @@ struct LivenessWatchdog {
     /// Một nhịp. `fromGo`/`toGo` là bộ đếm luỹ kế đã đi qua tunnel; `nil` = không đọc được nguồn
     /// nào (không đủ bằng chứng ⇒ `.idle`). `rampInFlight` = đang dựng lại transport để ramp
     /// băng thông ⇒ coi như đường còn tốt, không được đụng vào.
-    mutating func tick(now: Date, fromGo: Int?, toGo: Int?, rampInFlight: Bool) -> Verdict {
+    ///
+    /// `toGoDropped` (bộ đếm cầu `packetFlow↔fd`) là phần **BẮT BUỘC** của tín hiệu "máy vẫn
+    /// gửi": `toGo` chỉ đếm gói `write()` THÀNH CÔNG vào fd của Go. Khi tầng Go ngừng đọc fd
+    /// (đúng ca ramp dựng lại transport giữa lúc đang chở traffic, 24/09/2026) thì `write` trả
+    /// lỗi ⇒ `toGo` ĐÓNG BĂNG trong khi `toGoDropped` leo liên tục (đo thật: `toGo` đứng ở
+    /// 2387/5783, `toGoDropped` 13→4285 và 6→5109). Chỉ nhìn `toGo` thì watchdog tưởng "người
+    /// dùng ngồi yên" và trả `.idle` MÃI MÃI — đúng lỗi "Connected nhưng mất mạng hoàn toàn"
+    /// (0 dòng tự gỡ trong cả 2/2 phiên). Vì vậy tín hiệu vào đây là
+    /// `toGoOffered = toGo + toGoDropped`.
+    mutating func tick(
+        now: Date,
+        fromGo: Int?,
+        toGo: Int?,
+        toGoDropped: Int = 0,
+        rampInFlight: Bool
+    ) -> Verdict {
         guard let fromGo, let toGo else { return .idle }
+        // Số âm chỉ xảy ra khi bộ đếm bị thay nguồn: kẹp về 0 để không làm mốc sai.
+        let offered = toGo + max(0, toGoDropped)
+        lastToGoOffered = offered
         if rampInFlight {
-            noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+            noteReturn(at: now, fromGo: fromGo, toGoOffered: offered)
             return .idle
         }
         // (1) Chiều về có byte mới ⇒ tunnel sống thật.
         if fromGo > lastFromGo {
-            noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+            noteReturn(at: now, fromGo: fromGo, toGoOffered: offered)
             return .alive
         }
         // (2) Chiều về đứng yên: chưa đủ dài thì chỉ là im bình thường.
         guard now.timeIntervalSince(lastReturnAt) >= silenceLimit else { return .idle }
-        // (3) Máy có GỬI gì vào tunnel trong lúc im không? Không ⇒ người dùng ngồi yên,
-        // chưa đủ bằng chứng để kết luận (giữ nguyên baseline, không tăng strike).
-        guard toGo > baselineToGo else { return .idle }
+        // (3) Máy có GỬI gì vào tunnel trong lúc im không? `toGoOffered` (kể cả gói cầu phải
+        // bỏ) mới là "máy vẫn gửi"; không tăng ⇒ người dùng ngồi yên, chưa đủ bằng chứng để
+        // kết luận (giữ nguyên baseline, không tăng strike).
+        guard offered > baselineToGo else { return .idle }
         // (4) Im VÀ bất đối xứng ⇒ đường hỏng.
         strikes += 1
         return strikes >= strikesToRebuild ? .rebuild : .strike(strikes)
     }
 
     /// Reset trạng thái sau khi dựng lại transport thành công (transport mới, bộ đếm mới).
-    mutating func resetAfterRebuild(now: Date, fromGo: Int, toGo: Int) {
-        noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+    mutating func resetAfterRebuild(now: Date, fromGo: Int, toGo: Int, toGoDropped: Int = 0) {
+        noteReturn(at: now, fromGo: fromGo, toGoOffered: toGo + max(0, toGoDropped))
         holdPings = 0
     }
 
@@ -108,30 +131,37 @@ struct LivenessWatchdog {
 
     /// Vào pha HOLD: giữ nguyên đường đã chọn, đặt lại mốc để lần có byte chiều VỀ đầu tiên
     /// được nhận đúng là "mạng về". Không bao giờ trả `.rebuild` sau đây.
-    mutating func beginHold(now: Date, fromGo: Int, toGo: Int) {
-        noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+    mutating func beginHold(now: Date, fromGo: Int, toGo: Int, toGoDropped: Int = 0) {
+        noteReturn(at: now, fromGo: fromGo, toGoOffered: toGo + max(0, toGoDropped))
         holdPings = 0
     }
 
     /// Một nhịp HOLD. `fromGo`/`toGo` `nil` = không đọc được bộ đếm ⇒ vẫn tính là một lần ping
-    /// (chờ mạng về), KHÔNG kết luận hỏng, KHÔNG teardown.
-    mutating func holdTick(now: Date, fromGo: Int?, toGo: Int?) -> HoldVerdict {
+    /// (chờ mạng về), KHÔNG kết luận hỏng, KHÔNG teardown. `toGoDropped` giữ cho mốc
+    /// `baselineToGo` luôn là `toGoOffered` (xem `tick`) sau khi thoát HOLD.
+    mutating func holdTick(
+        now: Date,
+        fromGo: Int?,
+        toGo: Int?,
+        toGoDropped: Int = 0
+    ) -> HoldVerdict {
         guard let fromGo, let toGo else {
             holdPings += 1
             return .waiting(holdPings)
         }
         // Chiều VỀ có byte mới ⇒ mạng đã về (kể cả cửa sổ im đã quá hạn).
         if fromGo > lastFromGo {
-            noteReturn(at: now, fromGo: fromGo, toGo: toGo)
+            noteReturn(at: now, fromGo: fromGo, toGoOffered: toGo + max(0, toGoDropped))
             return .networkBack
         }
         holdPings += 1
         return .waiting(holdPings)
     }
 
-    private mutating func noteReturn(at now: Date, fromGo: Int, toGo: Int) {
+    /// `toGoOffered` = `toGo + toGoDropped`: mốc "máy vẫn gửi" thật (xem `tick`).
+    private mutating func noteReturn(at now: Date, fromGo: Int, toGoOffered: Int) {
         lastFromGo = fromGo
-        baselineToGo = toGo
+        baselineToGo = toGoOffered
         lastReturnAt = now
         strikes = 0
     }
