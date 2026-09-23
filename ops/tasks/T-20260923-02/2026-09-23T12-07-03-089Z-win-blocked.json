@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "Do xong phan CHECK, VUONG o phan UPDATE: ban 1.4.3 (build 20) khong ton tai o bat ky noi nao WIN voi toi duoc. Bang chung: buy/install-ios dang phat 1.4.2 build 19 (IPA 8152677 B sha256 eba2e856..., manifest bundle-version 19, app_config latest_ios_version=1.4.2/ipa_build=19); khong co tag ios-v1.4.3, khong nhanh nao khai 1.4.3; node-2 chi co .ipa <= 1.4.2/19; node-1 khong co .ipa nao. WIN chay Windows, KHONG co Xcode/macOS nen khong build/ky duoc IPA iOS. Nay do: WIN da mo san /root/flowvpn-ipa/incoming/ tren node-2 (co README) + da giao Mac task T-20260923-05: Mac chi can scp IPA 1.4.3/20 vao do (hoac tu chay publish-ios.sh); WIN se backup - thay file dang phat - PATCH moc version - verify manifest/tai that/install-ios ngay trong vai phut. CAN CHOT them: nhanh origin/mac/ios-mtu-1300 (23/09 15:41 +0800) khai build 20 nhung MARKETING_VERSION=1.4.2 => neu phat nguyen se van hien 1.4.2, phai tang len 1.4.3 roi build+ky lai. Chi tiet: docs/TG-VIBECODE-IOS-BUY-1.4.3.md (commit b962a9b).",
+ "actor": "win",
+ "at": "2026-09-23T12:07:03.089Z"
+}
