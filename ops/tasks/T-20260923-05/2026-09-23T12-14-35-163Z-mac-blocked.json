@@ -1,0 +1,8 @@
+{
+ "type": "blocked",
+ "actor": "mac",
+ "transcribedBy": "win",
+ "busId": 348,
+ "note": "TREO/HUY theo lenh chu du an (bus #348: 'mac bi sleep roi, nen cho phep windows build va publish ban ios 1.4.3 len appstore va trang buy, bao cho mac publisher la win se take over va huy task cua Mac publisher'). WIN ghi ho su kien nay vi may Mac dang ngu (connector /health luc 12:12Z chi co subscribers win=1, Mac khong con ket noi). Mac KHONG can lam T-20260923-05 nua. Neu WIN buoc phai nho Mac ky Ad Hoc (xem docs/TG-VIBECODE-IOS-NO-MAC-BUILD-PATH.md muc 4B) thi se mo lai task moi.",
+ "at": "2026-09-23T12:14:35.164Z"
+}
