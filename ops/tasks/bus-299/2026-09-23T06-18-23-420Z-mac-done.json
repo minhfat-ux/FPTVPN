@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=63725e8 (origin/main): docs/RELEASE_NOTES_android_1.4.3.md + scripts/send-android-1.4.3-announcement.py + evidence/2026-09-23-android-1.4.3-announcement.log; cmd='ssh node-2 python3 send-android-1.4.3-announcement.py' -> 7/7 thanh cong 0 loi; Resend id: ca=01a0cce8-9464-730d-bcba-f3c97cd9d1c8, di=...3323b, ha=...30503, ha=...c317, mi=...c994, qi=...f5e, vt=...feb (test ALERT_EMAIL OK truoc khi gui); link t1 /v1/downloads/android HTTP 200 clen=74731689, android-legacy 200 clen=74748051; artifact sha256 modern 9563366...64ce5 / legacy fdb88e3...ede9 khop bus-300; delivered khong truy van duoc: GET /emails/{id} tra 403 (khoa Resend chi gui)",
+ "actor": "mac",
+ "at": "2026-09-23T06:18:23.422Z"
+}
