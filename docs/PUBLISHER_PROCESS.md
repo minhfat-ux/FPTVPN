@@ -205,6 +205,9 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
   `externalBuildState=READY_FOR_BETA_SUBMISSION` là còn phải nộp Beta App Review mới tới tester ngoài.
 - **Không dùng IPA ad-hoc để nộp TestFlight** và ngược lại (profile app-store có 0 UDID nên cài trực tiếp sẽ fail).
 
+| 2026-09-23 | iOS | 1.4.1 (18) — thông báo | Gửi email 3 ngôn ngữ cho khách **đang dùng iOS** (script `scripts/send-ios-1.4.1-announcement.py`): **6/6 delivered** (04:09 UTC). Nội dung chỉ nêu tính năng có trong build 18 (watchdog tự phục hồi, tự dựng lại, sửa mất mạng IPv6, đường TQ đi thẳng, Settings hiện version). Release notes: `release/ios/RELEASE_NOTES_1.4.1.md` |
+| 2026-09-23 | iOS | 1.4.1 (18) — TestFlight | Nộp **Beta App Review** cho tester ngoài: build vào nhóm `External Test`, "What to Test" 3 ngôn ngữ (en-GB/vi/zh-Hans), state `WAITING_FOR_REVIEW` (nộp 11:08 VN, submission id = build id `14c65fa9-…`) |
+
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
 2. Đưa **release notes** lên web (hiện chỉ nằm trong repo `release/<platform>/RELEASE_NOTES_<ver>.md`).
