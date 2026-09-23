@@ -1,6 +1,12 @@
 # PUBLISHER PROCESS — luật & quy trình phát hành app/version
 
-> Vai trò **publisher** = harness Mac. Tài liệu này là **luật**: làm sai thứ tự ⇒ dừng, hỏi chủ dự án.
+> **Vai trò publisher tách theo KÊNH (chủ dự án chốt 23/09/2026):**
+> - **harness Mac** = publisher cho **iOS + macOS** (IPA ad-hoc/TestFlight, DMG).
+> - **harness Windows** = publisher cho **Windows + Android** (bộ cài `.exe`, APK modern/legacy).
+> Mỗi bên chạy các bước §1 **chỉ cho kênh của mình**; kênh không thuộc phần mình ⇒ **không tự phát**
+> (chuyển sang bên kia hoặc báo chủ dự án). Dùng chung: `release/releases.jsonl`, `check-publish-version.py`,
+> `audit-releases.py`.
+> Tài liệu này là **luật**: làm sai thứ tự ⇒ dừng, hỏi chủ dự án.
 > Đọc kèm: `docs/RELEASE_RUNBOOK.md` (lệnh chi tiết), `docs/RELEASE_ARTIFACTS_<ngày>.md` (bàn giao từ bên build).
 
 ## 0. PROCESS ĐÃ ĐỔI (22/09/2026) — MỌI BÊN ĐỌC TRƯỚC KHI PUBLISH
@@ -20,6 +26,14 @@
 | 8 | **Audit toàn kênh định kỳ**: kênh nào chưa phải latest ⇒ cập nhật lại link tải + set mốc + **thông báo khách** | §7 mục 5 (`scripts/audit-releases.py`) | publisher |
 | 9 | Chỉ phát **bản mới nhất đã được test** — publisher không tự chọn bản | §2b | publisher |
 | 10 | **ĐỌC HẾT HANDOFF TRƯỚC KHI LÀM** (thêm 22/09 sau ca *báo trùng việc đã xong*): trước khi claim / kiểm / publish phải chạy `ls -t docs/handoff/` → **đọc file mới nhất**, rồi đối chiếu `release/releases.jsonl` + `git tag -l`; việc đã xong ⇒ **không báo lại, không phát lại** (phát trùng cùng version khác hash = cấm) | §0 luật này · `docs/VERSIONING.md` §3.3 | **mọi agent** — nhất là publisher khi nhận lệnh "check & publish" |
+| 11 | **Windows: bộ cài PHẢI được KÝ SỐ trước khi publish** (NFR-WIN-002). Máy khách bật Smart App Control **chặn bộ cài chưa ký** (`os error 4551`, event `CodeIntegrity` 3077/3033/3118) ⇒ khách tải từ `/buy` vẫn **không cài được**. Bằng chứng bắt buộc thêm khi publish: `signtool verify /pa` **và** `Get-AuthenticodeSignature` cho **cả** `VPNFlow-Setup-*.exe` **và** `PrivateVPNWindows.App.exe` (`Status = Valid` + có timestamp). **Chưa có chứng chỉ ⇒ KHÔNG publish bản Windows** | `RELEASE_RUNBOOK.md` §6b · `docs/handoff/HANDOFF_WINDOWS_KY_SO_2026-09-23.md` §0.2–3, §5, §10.4 | Windows harness (build + ký) + publisher (chạy/đối chiếu bằng chứng) |
+
+> **Ngoại lệ luật 11 — chốt 23/09/2026 (chủ dự án):** bản **`1.4.5` đã được phát CHƯA KÝ** (sha256 `d6db58cb…167a2`), đúng như mọi bản Windows trước đó (1.4.0→1.4.4 đều
+> `NotSigned`). Lý do: máy có SAC bật vẫn cài được, kênh Windows mới có 3 thiết bị, và **Mac xác nhận không có chứng chỉ Authenticode** (bus #307:
+> `docs/handoff/HANDOFF_MAC_CERT_WINDOWS_2026-09-23.md`). Ngoại lệ **có ghi sổ** (`release/releases.jsonl`, dòng `windows 1.4.5`), cổng pre ghi rõ mục chữ ký
+> `KHÔNG ĐẠT` và post `ĐẠT`. **Ngoại lệ hết hiệu lực ngay khi có chứng chỉ** — từ bản kế tiếp phải ký theo luật này.
+
+| 12 | **Phân chia publisher theo kênh** (chốt 23/09/2026): **Mac → iOS + macOS**; **Windows harness → Windows + Android**. Bên nào cũng phải tự chạy cổng §1c/§5b + ghi sổ cho kênh của mình; **không publish kênh không thuộc phần mình**. Email thông báo khách do publisher của kênh đó gửi | §0 (đầu tài liệu) | mọi publisher |
 
 **Công cụ dùng chung cho mọi bên:**
 ```bash
