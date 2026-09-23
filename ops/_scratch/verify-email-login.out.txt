@@ -1,0 +1,25 @@
+== Do duong dang nhap email (email=review@meetflowai.site) ==
+
+[health] GET https://api.meetflowai.site/v1/health
+  -> HTTP 200 (3597 ms)
+  body: {"status":"ok"}
+
+[email/start] POST https://api.meetflowai.site/v1/auth/email/start
+  -> HTTP 202 (1987 ms)
+  body: {"ok":true,"debug_code":"246810"}
+
+  debug_code: 246810
+
+[email/verify] POST https://api.meetflowai.site/v1/auth/email/verify
+  -> HTTP 201 (399 ms)
+  body: {"access_token":"PVPN-AUTH-fee4dc8c-57c0-401e-b05b-418939d06b75","token_type":"Bearer","expires_at":"2026-10-23T15:23:22.956Z","user":{"id":"a5632edb-ed01-4395-9689-2f4481404088","email":"review@meetflowai.site","apple_user_id":null,"revoked_at":null,"subscription_status":{"is_active":true,"product_id":"test.premium","expires_at":"2027-09-23T15:23:22.962Z","is_trial":false,"trial_hours_left":null,
+
+[fallback t1 health] GET https://t1.meetflowai.site/v1/health
+  -> LOI TypeError: fetch failed (10228 ms) | cause: Connect Timeout Error (attempted addresses: 104.21.83.112:443, timeout: 10000ms)
+
+[fallback t1 email/start] POST https://t1.meetflowai.site/v1/auth/email/start
+  -> HTTP 202 (1996 ms)
+  body: {"ok":true,"debug_code":"246810"}
+
+== KET LUAN: PASS ==
+  health=200 start=202 verify=201 fallback_health=0 fallback_start=202
