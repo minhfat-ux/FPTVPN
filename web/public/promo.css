@@ -61,29 +61,26 @@
   border-radius: 22px;
   padding: 22px;
   color: #eaf2ff;
+  /*
+   * VIỀN GRADIENT bằng kỹ thuật border-box — KHÔNG dùng pseudo-element.
+   *
+   * Khung này có `overflow: auto` (nội dung dài thì cuộn). Bản trước vẽ viền bằng
+   * `.fg-promo::before { position: absolute; inset: 0 }` ⇒ khi cuộn, viền BỊ CUỘN ĐI THEO nội dung
+   * nên nhìn như viền vỡ/mất một đoạn (chủ dự án báo 23/09/2026). Nền của chính phần tử thì KHÔNG
+   * cuộn, nên đặt viền vào `border-box` là hết lỗi — và cũng không cần mask-composite (Safari cũ
+   * từng vẽ sai mask này).
+   */
+  border: 1px solid transparent;
   background:
-    radial-gradient(130% 120% at 0% 0%, #14406c 0%, #0a1f3b 55%, #071628 100%);
+    radial-gradient(130% 120% at 0% 0%, #14406c 0%, #0a1f3b 55%, #071628 100%) padding-box,
+    linear-gradient(135deg, rgba(51, 199, 115, 0.85), rgba(34, 211, 238, 0.85) 46%, rgba(124, 58, 237, 0.85)) border-box;
   box-shadow:
     0 30px 80px -20px rgba(0, 0, 0, 0.8),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset;
   animation: fg-promo-rise 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Viền gradient + quầng sáng thương hiệu */
-.fg-promo::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  opacity: 0.85;
-  pointer-events: none;
-}
+/* Viền gradient nay nằm ở `background … border-box` phía trên (không cuộn theo nội dung). */
 
 .fg-promo::after {
   content: "";
