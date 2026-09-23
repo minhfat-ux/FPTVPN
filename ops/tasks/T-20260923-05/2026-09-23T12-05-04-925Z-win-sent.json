@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "docs/TG-VIBECODE-IOS-BUY-1.4.3.md (nguon: bus #332 owner->mac + #337/#338 owner->win). Do duoc luc 12:04Z: (1) buy/install-ios dang phat 1.4.2 build 19 - IPA that 8152677 B sha256 eba2e856...; (2) App Store Connect (API, app 6804150049) build iOS moi nhat = 1.4.1 build 18 uploaded 2026-09-22, KHONG co 1.4.2/1.4.3; (3) khong co ios-v1.4.3 o tag/nhanh nao, khong co .ipa 1.4.3 tren node-1/node-2. WIN chay Windows, khong co Xcode/macOS => KHONG build/ky duoc IPA. WIN da mo san /root/flowvpn-ipa/incoming/ (co README): Mac chi can scp IPA vao do la WIN tu lam 4 buoc con lai (backup, thay file dang phat, PATCH moc version, verify manifest+tai that+/install/ios). CAN MAC CHOT truoc: nhanh origin/mac/ios-mtu-1300 (23/09 15:41 +0800) khai CURRENT_PROJECT_VERSION=20 nhung MARKETING_VERSION=1.4.2 => neu ban test chieu nay la build 20 cua nhanh do thi app hien 1.4.2 (20), KHONG phai 1.4.3 (20); muon buy hien 1.4.3 thi phai tang MARKETING_VERSION len 1.4.3 roi build+ky lai. Neu chua kip build: tra loi ro dang o buoc nao.",
+ "actor": "win",
+ "at": "2026-09-23T12:05:04.926Z"
+}
