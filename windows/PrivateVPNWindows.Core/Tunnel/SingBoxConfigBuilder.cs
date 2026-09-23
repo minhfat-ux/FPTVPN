@@ -281,6 +281,17 @@ public static class SingBoxConfigBuilder
                 ["type"] = "udp",
                 ["tag"] = DnsServerTag,
                 ["server"] = dnsServer,
+                // ĐI QUA TUNNEL - sự cố production 23/09/2026 (khách TQ không vào được Google/YouTube).
+                //
+                // Vì sao BẮT BUỘC có `detour`: DNS server KHÔNG có `detour` thì sing-box tự dial
+                // THẲNG ra ngoài, không qua tunnel ⇒ ở Trung Quốc truy vấn bị GFW nhiễm độc. Bằng
+                // chứng đo trên máy harness (mạng TQ, bản 1.4.5) trong sing-box.log:
+                //   exchanged A www.youtube.com -> 69.171.235.22   (IP của FACEBOOK, không phải YouTube)
+                //   exchanged A www.google.com  -> 69.171.235.22
+                //   exchanged AAAA www.google.com -> 2001::1       (địa chỉ rác kinh điển của GFW)
+                //   KHÔNG có dòng nào cho thấy DNS đi qua outbound/socks[hyrelay]
+                // Đặt `detour: hyrelay` thì truy vấn được gửi qua relay (exit Việt Nam) ⇒ trả lời THẬT.
+                ["detour"] = RelayOutboundTag,
             },
         };
 
@@ -291,6 +302,10 @@ public static class SingBoxConfigBuilder
                 ["type"] = "udp",
                 ["tag"] = ChinaDnsServerTag,
                 ["server"] = ChinaDomesticDnsServer,
+                // Resolver nội địa phải đi THẲNG: tên miền nội địa TQ không bị nhiễm độc, và đi
+                // thẳng thì nhanh hơn + không tốn băng thông tunnel. Ghi tường minh để hành vi
+                // không phụ thuộc mặc định của sing-box.
+                ["detour"] = DirectOutboundTag,
             });
         }
 
@@ -331,6 +346,23 @@ public static class SingBoxConfigBuilder
     {
         var rules = new JsonArray
         {
+            // BẮT BUỘC ĐỨNG ĐẦU TIÊN - sự cố production 23/09/2026 (bản 1.4.5 làm khách mất mạng
+            // và không vào được Google/YouTube).
+            //
+            // Vì sao: khách ở Trung Quốc khai resolver DNS là IP Trung Quốc (DNS nhà mạng, modem,
+            // 114.114.114.114, 202.96.128.68...). Nếu rule `ip_cidr` (dải TQ -> direct) đứng TRƯỚC
+            // thì truy vấn DNS tới các IP đó bị khớp `outbound: direct` => đi THẲNG ra ngoài,
+            // KHÔNG bị hijack. Đo thật trên máy harness (mạng TQ, bản 1.4.5):
+            //   nslookup google.com 114.114.114.114  -> TIMEOUT
+            //   nslookup google.com 202.96.128.68    -> TIMEOUT
+            //   nslookup google.com 8.8.8.8          -> trả lời thật (vì 8.8.8.8 KHÔNG thuộc cn.txt)
+            // Hệ quả: phân giải tên miền hỏng/nhiễm độc => máy như MẤT MẠNG, Google/YouTube chết,
+            // trong khi site TQ vẫn chạy (đúng triệu chứng khách báo).
+            //
+            // Đứng đầu thì MỌI truy vấn DNS vào TUN đều được sing-box tự phân giải: qua `remote`
+            // (1.1.1.1, TRONG tunnel) cho tên miền thường, hoặc `cn` (223.5.5.5, đi thẳng) cho nhóm
+            // tên miền dịch vụ TQ - xem BuildDnsRules.
+            new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
             new JsonObject { ["action"] = "sniff" },
             // LAN + dải nội bộ KHÔNG đi vào tunnel (mất truy cập máy in/NAS nếu đi).
             new JsonObject { ["ip_is_private"] = true, ["outbound"] = DirectOutboundTag },
@@ -355,7 +387,6 @@ public static class SingBoxConfigBuilder
             ["outbound"] = DirectOutboundTag,
         });
 
-        rules.Add(new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" });
         return rules;
     }
 

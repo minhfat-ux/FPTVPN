@@ -233,12 +233,19 @@ public class SingBoxConfigBuilderTests
             cidrs,
             ipRule.GetProperty("ip_cidr").EnumerateArray().Select(e => e.GetString()).ToArray());
 
-        // Thứ tự QUAN TRỌNG: LAN → dải TQ → hijack DNS. Đảo thứ tự là rule TQ bị rule DNS/hijack che.
+        // Thứ tự QUAN TRỌNG - sự cố production 23/09/2026 (1.4.5 làm khách TQ MẤT MẠNG và không vào
+        // được Google/YouTube): hijack-dns PHẢI đứng ĐẦU TIÊN. Nếu bất kỳ rule nào khớp theo IP
+        // (ip_is_private, ip_cidr) đứng trước, truy vấn DNS tới resolver của khách (IP TQ, hoặc IP
+        // nội bộ 10.x/192.168.x) bị đẩy `outbound: direct` => DNS đi thẳng ra resolver TQ =>
+        // nhiễm độc/không phân giải => mất mạng. Bằng chứng: sing-box.log phiên hỏng ghi
+        // "inbound packet connection to 10.193.111.16:53 -> outbound/direct[direct]".
+        var indexDns = order.FindIndex(r => r.TryGetProperty("protocol", out var p) && p.GetString() == "dns");
         var indexPrivate = order.FindIndex(r => r.TryGetProperty("ip_is_private", out _));
         var indexIp = order.FindIndex(r => r.TryGetProperty("ip_cidr", out _));
-        var indexDns = order.FindIndex(r => r.TryGetProperty("protocol", out var p) && p.GetString() == "dns");
+        Assert.Equal(0, indexDns);
+        Assert.True(indexDns < indexPrivate, "hijack-dns phải đứng TRƯỚC rule ip_is_private");
+        Assert.True(indexDns < indexIp, "hijack-dns phải đứng TRƯỚC rule dải TQ (ip_cidr)");
         Assert.True(indexPrivate < indexIp, "rule LAN phải đứng trước rule dải TQ");
-        Assert.True(indexIp < indexDns, "rule dải TQ phải đứng trước rule hijack DNS");
 
         // Đường ra cuối vẫn là relay: bypass chỉ đổi đường cho dải TQ, không đổi mặc định.
         Assert.Equal(SingBoxConfigBuilder.RelayOutboundTag, doc.RootElement.GetProperty("route").GetProperty("final").GetString());
@@ -291,6 +298,14 @@ public class SingBoxConfigBuilderTests
         Assert.Equal(
             SingBoxConfigBuilder.DnsServerTag,
             doc.RootElement.GetProperty("route").GetProperty("default_domain_resolver").GetString());
+
+        // `detour` của DNS upstream - sự cố production 23/09/2026: DNS server KHÔNG có `detour` thì
+        // sing-box dial THẲNG ra ngoài ⇒ ở TQ bị GFW nhiễm độc (đo thật: www.youtube.com trả về
+        // 69.171.235.22 = IP Facebook, AAAA google.com trả 2001::1). Bắt buộc đi qua relay.
+        var remoteServer = dns.GetProperty("servers").EnumerateArray()
+            .Single(s => s.GetProperty("tag").GetString() == SingBoxConfigBuilder.DnsServerTag);
+        Assert.Equal(SingBoxConfigBuilder.RelayOutboundTag, remoteServer.GetProperty("detour").GetString());
+        Assert.Equal(SingBoxConfigBuilder.DirectOutboundTag, cnServer.GetProperty("detour").GetString());
     }
 
     [Fact]
