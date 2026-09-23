@@ -85,8 +85,8 @@ targets:
         # Bản 1.4.0 (build 15) sửa lỗi mất mạng sau khi bật VPN một lúc + ổn định relay Cloudflare.
         # Build 16 (20/09/2026): extension iOS chuyển sang HYSTERIA-ONLY (port từ macOS) nên
         # cần số build mới để phân biệt với bản 15 đã phát.
-        CURRENT_PROJECT_VERSION: "16"
-        MARKETING_VERSION: "1.4.0"
+        CURRENT_PROJECT_VERSION: "18"
+        MARKETING_VERSION: "1.4.1"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -96,6 +96,15 @@ targets:
         script: |
           set -e
           export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          # Script phase KHÔNG thừa hưởng env của xcodebuild: tự chốt Go cache/proxy.
+          # - GOMODCACHE: module wireguard đã có sẵn trong cache của user.
+          # - goproxy.cn đứng trước vì proxy.golang.org TLS handshake timeout ở mạng này.
+          REAL_HOME="$(dscl . -read /Users/$USER NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+          [ -n "$REAL_HOME" ] || REAL_HOME="$HOME"
+          export GOMODCACHE="${GOMODCACHE:-$REAL_HOME/go/pkg/mod}"
+          export GOPROXY="${GOPROXY:-https://goproxy.cn,https://proxy.golang.org,direct}"
+          export GOFLAGS="${GOFLAGS:--mod=mod}"
+          export GOCACHE="${GOCACHE:-${DERIVED_FILE_DIR}/gocache}"
           WGK="${SRCROOT}/Vendor/WireGuardKit/Sources/WireGuardKitGo"
           mkdir -p "${DERIVED_FILE_DIR}/wg" "${DERIVED_FILE_DIR}/wg-tmp"
           make -C "$WGK" \
@@ -160,8 +169,8 @@ targets:
       properties:
         CFBundleDisplayName: VPNFlow Tunnel
         # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
-        CFBundleShortVersionString: "1.4.0"
-        CFBundleVersion: "16"
+        CFBundleShortVersionString: "1.4.1"
+        CFBundleVersion: "18"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
@@ -177,17 +186,18 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "16"
+        MARKETING_VERSION: "1.4.1"
+        CURRENT_PROJECT_VERSION: "18"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
       # Framework hysteria2 cho iOS (module `Hysteria`, hàm C MobileConnect/MobileServe/
       # MobileStop), bản STACK=gvisor — dựng bằng tools/hysteria-apple/build.sh. Là static
-      # archive ⇒ chỉ cần link; `embed` để artifact khớp bản phát hành.
+      # archive ⇒ chỉ cần LINK, KHÔNG embed. `embed: true` làm appex chứa
+      # Frameworks/Hysteria.framework (file .a) ⇒ App Store từ chối ITMS-90206/90205/90049/
+      # 90056/90057/90035; ad-hoc không kiểm nên vẫn cài được (ca thật 23/09/2026).
       - framework: iOS/Frameworks/Hysteria.xcframework
-        embed: true
-        codeSign: true
+        embed: false
 
   PrivateVPNTests:
     type: bundle.unit-test
@@ -231,6 +241,15 @@ targets:
         script: |
           set -e
           export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          # Script phase KHÔNG thừa hưởng env của xcodebuild: tự chốt Go cache/proxy.
+          # - GOMODCACHE: module wireguard đã có sẵn trong cache của user.
+          # - goproxy.cn đứng trước vì proxy.golang.org TLS handshake timeout ở mạng này.
+          REAL_HOME="$(dscl . -read /Users/$USER NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+          [ -n "$REAL_HOME" ] || REAL_HOME="$HOME"
+          export GOMODCACHE="${GOMODCACHE:-$REAL_HOME/go/pkg/mod}"
+          export GOPROXY="${GOPROXY:-https://goproxy.cn,https://proxy.golang.org,direct}"
+          export GOFLAGS="${GOFLAGS:--mod=mod}"
+          export GOCACHE="${GOCACHE:-${DERIVED_FILE_DIR}/gocache}"
           WGK="${SRCROOT}/Vendor/WireGuardKit/Sources/WireGuardKitGo"
           mkdir -p "${DERIVED_FILE_DIR}/wg" "${DERIVED_FILE_DIR}/wg-tmp"
           make -C "$WGK" \
@@ -266,8 +285,8 @@ targets:
         PRODUCT_NAME: VPNFlow
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "14"
+        MARKETING_VERSION: "1.4.1"
+        CURRENT_PROJECT_VERSION: "15"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -279,6 +298,15 @@ targets:
         script: |
           set -e
           export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          # Script phase KHÔNG thừa hưởng env của xcodebuild: tự chốt Go cache/proxy.
+          # - GOMODCACHE: module wireguard đã có sẵn trong cache của user.
+          # - goproxy.cn đứng trước vì proxy.golang.org TLS handshake timeout ở mạng này.
+          REAL_HOME="$(dscl . -read /Users/$USER NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+          [ -n "$REAL_HOME" ] || REAL_HOME="$HOME"
+          export GOMODCACHE="${GOMODCACHE:-$REAL_HOME/go/pkg/mod}"
+          export GOPROXY="${GOPROXY:-https://goproxy.cn,https://proxy.golang.org,direct}"
+          export GOFLAGS="${GOFLAGS:--mod=mod}"
+          export GOCACHE="${GOCACHE:-${DERIVED_FILE_DIR}/gocache}"
           WGK="${SRCROOT}/Vendor/WireGuardKit/Sources/WireGuardKitGo"
           mkdir -p "${DERIVED_FILE_DIR}/wg" "${DERIVED_FILE_DIR}/wg-tmp"
           make -C "$WGK" \
@@ -396,15 +424,13 @@ targets:
         PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "14"
+        MARKETING_VERSION: "1.4.1"
+        CURRENT_PROJECT_VERSION: "15"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).
     dependencies:
       # Framework hysteria2 cho macOS (module `Hysteria`, hàm C MobileConnect/MobileServe/
-      # MobileStop). Là static archive ⇒ chỉ cần link; `embed` để bản chạy tại chỗ có đủ
-      # artifact như khi phát hành.
+      # MobileStop). Là static archive ⇒ chỉ LINK, KHÔNG embed (cùng lý do target iOS).
       - framework: iOS/Frameworks/Hysteria-macos.xcframework
-        embed: true
-        codeSign: true
+        embed: false
