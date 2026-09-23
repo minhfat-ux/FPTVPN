@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-23T11:35:56.248Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: đã publish xong bản cho windows hot fix chưa?",
+ "via": "dsh --profile headless \"{prompt}\""
+}
