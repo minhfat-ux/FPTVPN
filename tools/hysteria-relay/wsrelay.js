@@ -85,7 +85,16 @@ wss.on('connection', (ws, req) => {
     framesOut++; bytesOut += buf.length; stats.framesOut++; stats.bytesOut += buf.length;
     ws.send(buf);
   });
-  udp.bind(0, '127.0.0.1', () => {
+  // Bind vào LOOPBACK chỉ đúng khi upstream cũng ở loopback.
+  //
+  // Linux trả `EINVAL` cho `send()` khi socket bind `127.0.0.1` mà đích là một host REMOTE.
+  // Đo thật 23/09/2026 trên node-2: `relay-cf-vn1hy` (WS_UDP_HOST=103.173.155.50:8443) và
+  // `relay-cf-vn1wg` (:443) chết 100% — `UDP SEND ERROR send EINVAL`, `out=0f/0B`, `udpErr`
+  // tăng đều — trong khi `relay-cf-vn2hy`/`vn2wg` (WS_UDP_HOST=127.0.0.1) chạy tốt
+  // (`udpErr=0`, đã chuyển GB). Hệ quả với khách: bắt tay WS xong nhưng gói không tới
+  // hysteria ⇒ relay đóng `1011` ⇒ client rơi sang relay khác, đường node-1 không bao giờ dùng được.
+  const upstreamIsLoopback = UDP_HOST === '127.0.0.1' || UDP_HOST === '::1' || UDP_HOST === 'localhost';
+  udp.bind(0, upstreamIsLoopback ? '127.0.0.1' : '0.0.0.0', () => {
     log(`#${id} MỞ từ ${ip} local_udp=${udp.address().port} -> ${UDP_HOST}:${UDP_PORT}`);
   });
 
