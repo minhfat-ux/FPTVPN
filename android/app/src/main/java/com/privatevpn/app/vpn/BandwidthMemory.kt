@@ -533,6 +533,21 @@ object BandwidthPolicy {
     const val RAMP_UP_PCT = 125
     const val RAMP_DOWN_PCT = 70
 
+    /**
+     * Độ trễ NHỎ NHẤT còn hợp lý cho một `connect()` TCP từ Trung Quốc tới node ở nước ngoài.
+     *
+     * Vì sao cần: đo trên máy thật 23/09/2026 (Unicom 5G), `connect()` tới node trả về
+     * **2–4 ms** — bất khả thi vật lý (RTT thật Trung Quốc→Việt Nam 40–100 ms) vì nhà mạng/GFW
+     * **tự trả lời bắt tay TCP** trong khi không có byte nào đi qua. Vòng chọn đường vì thế
+     * tưởng đường trực tiếp nhanh gấp ~500 lần cầu WS (1802 ms), chọn nó, rồi dựng lại liên tục
+     * vì "tunnel UP nhưng không có gói nào qua" ⇒ khách trên 5G chỉ còn 13–109 kbps dù mạng nền
+     * đo được 6 Mbps. Bắt tay nhanh hơn ngưỡng này ⇒ coi như KHÔNG mở được.
+     */
+    const val PATH_MIN_PLAUSIBLE_MS = 25
+
+    /** Độ trễ đo được có ĐÁNG TIN không (xem [PATH_MIN_PLAUSIBLE_MS]); ≤ 0 = đo hỏng. */
+    fun plausibleDirectMs(ms: Int): Boolean = ms >= PATH_MIN_PLAUSIBLE_MS
+
     /** Mất gói (%) vượt ngần này ⇒ giảm trần (giảm thì an toàn hơn tăng nên ưu tiên ngay). */
     const val RAMP_LOSS_PCT = 2
 

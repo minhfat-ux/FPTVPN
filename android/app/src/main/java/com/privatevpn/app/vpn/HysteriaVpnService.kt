@@ -167,8 +167,20 @@ class HysteriaVpnService : VpnService() {
      */
     @Volatile private var attemptTimedOut = false
 
-    /** Số lần probe liên tiếp thấy tunnel UP mà không có gói nào qua được. */
+    /**
+     * Số lần probe liên tiếp thấy tunnel UP mà không có gói nào qua được.
+     */
     @Volatile private var deadProbes = 0
+
+    /**
+     * Đường "trực tiếp" đã CHỨNG MINH là không chở được gói nào trên mạng hiện tại (bắt tay TCP
+     * giả của nhà mạng/GFW — xem [BandwidthPolicy.PATH_MIN_PLAUSIBLE_MS]).
+     *
+     * Giữ cho tới khi ĐỔI MẠNG: cùng một mạng thì phép đo lại vẫn trả về vài ms "đẹp" và app lại
+     * chọn đúng cái đường chết (đo trên Unicom 5G 23/09/2026: dựng lại–chết–dựng lại liên tục,
+     * trong khi cầu WS sống và mạng nền 6 Mbps).
+     */
+    @Volatile private var directSuspect = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Foreground immediately: on metered networks (China mobile data) Android
@@ -414,9 +426,12 @@ class HysteriaVpnService : VpnService() {
         // thu tu - KHONG bam duong nho san. Do tren may that 22/09/2026: app ket o duong cu 0,74
         // Mbps trong khi duong kia do duoc 23,7 Mbps, chi vi no la "last good transport".
         val directMs = runCatching { probeTcpRelayMs() }.getOrDefault(-1)
-        val directFast = directMs in 1..PATH_DIRECT_FAST_MS
+        // Cùng một mạng mà đường trực tiếp ĐÃ chứng minh không chở được gói nào thì đừng tin
+        // phép đo lại (bắt tay giả vẫn trả vài ms "đẹp") — chọn cầu WS luôn, xem directSuspect.
+        val directFast = !directSuspect && directMs in 1..PATH_DIRECT_FAST_MS
         DiagnosticsLog.log(
             "chon-duong: truc-tiep=" + (if (directMs < 1) "khong-mo-duoc" else "${directMs}ms") +
+                (if (directSuspect) " [nghi-bat-tay-gia]" else "") +
                 " cau-WS=" + (if (lastWsOpenMs < 1) "chua-biet" else "${lastWsOpenMs}ms") +
                 " -> uu tien " + (if (directFast) "TRUC TIEP" else "CAU WS"),
         )
@@ -830,7 +845,14 @@ class HysteriaVpnService : VpnService() {
         val profile = memory.profileOf(net, label)
         // Đổi mạng: số ramp của mạng CŨ không còn nghĩa gì (mỗi mạng có đỉnh riêng).
         val keyChanged = profile.key != bwKey
-        if (keyChanged) sessionRampDownKbps = 0
+        if (keyChanged) {
+            sessionRampDownKbps = 0
+            // Đổi mạng là đổi đường: kết luận "bắt tay giả" của mạng CŨ không còn nghĩa gì.
+            if (directSuspect) {
+                DiagnosticsLog.log("chon-duong: đổi mạng -> bỏ kết luận nghi bắt tay giả của mạng cũ")
+            }
+            directSuspect = false
+        }
         // DO MANG THUC TE TRUOC ROI MOI KHAI (yeu cau 22/09/2026, iOS da cap nhat): so do TUOI
         // tren chinh mang nay thang bo nho - bo nho co the la cua mang/phien cu.
         val fresh = freshPreMeasure(profile.key)
@@ -1512,9 +1534,14 @@ class HysteriaVpnService : VpnService() {
                         }
                     }
                     if (deadProbes >= DEAD_PROBE_LIMIT) {
+                        // Đường TRỰC TIẾP "UP" mà không có gói nào qua = đúng dấu hiệu bắt tay giả
+                        // (xem BandwidthPolicy.PATH_MIN_PLAUSIBLE_MS). Ghi nhớ để lượt dựng lại
+                        // KHÔNG chọn lại nó chỉ vì phép đo connect trả vài ms "đẹp".
+                        if (!onWsRelay) directSuspect = true
                         DiagnosticsLog.warn(
                             "probe#$tick tunnel UP nhưng $deadProbes lần liên tiếp không có gói nào qua " +
-                                "-> dừng client để dựng lại transport",
+                                "-> dừng client để dựng lại transport" +
+                                (if (!onWsRelay) " (đường trực tiếp: đánh dấu NGHI BẮT TAY GIẢ)" else ""),
                         )
                         deadProbes = 0
                         // serve() trả về -> runTunnel() nhận outcome 2 và dựng lại
@@ -1660,7 +1687,19 @@ class HysteriaVpnService : VpnService() {
                     java.net.InetSocketAddress(if (runHost.isNotBlank()) runHost else Config.HY_TCP_RELAY_HOST, Config.HY_TCP_RELAY_PORTS[0]),
                     PROBE_CONNECT_TIMEOUT_MS,
                 )
-                (System.currentTimeMillis() - started).toInt()
+                val ms = (System.currentTimeMillis() - started).toInt()
+                if (!BandwidthPolicy.plausibleDirectMs(ms)) {
+                    // Bắt tay TCP trả về nhanh bất khả thi (đo 23/09/2026 trên Unicom 5G: 2–4 ms
+                    // tới node Việt Nam, RTT thật phải 40–100 ms) ⇒ nhà mạng/GFW tự trả lời bắt
+                    // tay mà KHÔNG chuyển byte nào. Báo "không mở được" thay vì trả số đẹp.
+                    DiagnosticsLog.warn(
+                        "chon-duong: connect tới node chỉ ${ms}ms (< ${BandwidthPolicy.PATH_MIN_PLAUSIBLE_MS}ms) " +
+                            "-> nghi bắt tay giả, coi như KHÔNG mở được",
+                    )
+                    -1
+                } else {
+                    ms
+                }
             } finally {
                 runCatching { socket.close() }
             }

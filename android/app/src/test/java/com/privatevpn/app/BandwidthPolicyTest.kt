@@ -374,6 +374,24 @@ class BandwidthPolicyTest {
     }
 
     @Test
+    fun `bat tay TCP nhanh bat kha thi thi coi nhu khong mo duoc`() {
+        // Do tren Unicom 5G 23/09/2026: connect toi node Viet Nam tra ve 2-4 ms trong khi RTT
+        // that phai 40-100 ms => nha mang/GFW tu tra loi bat tay, khong co byte nao di qua.
+        assertFalse("2 ms la bat tay gia", BandwidthPolicy.plausibleDirectMs(2))
+        assertFalse("4 ms la bat tay gia", BandwidthPolicy.plausibleDirectMs(4))
+        assertFalse(
+            "duoi nguong vat ly deu khong tin",
+            BandwidthPolicy.plausibleDirectMs(BandwidthPolicy.PATH_MIN_PLAUSIBLE_MS - 1),
+        )
+        // Do that tren Wi-Fi cung may: 108/114/141 ms => dang tin.
+        assertTrue(BandwidthPolicy.plausibleDirectMs(114))
+        assertTrue(BandwidthPolicy.plausibleDirectMs(BandwidthPolicy.PATH_MIN_PLAUSIBLE_MS))
+        // ≤ 0 la do hong, khong phai "nhanh".
+        assertFalse(BandwidthPolicy.plausibleDirectMs(0))
+        assertFalse(BandwidthPolicy.plausibleDirectMs(-1))
+    }
+
+    @Test
     fun `co dinh da dat thi khoi dong luon o muc do, khong can ramp lai`() {
         // Chua co so do probe nao, chi co dinh 25 Mbps da chung minh tren mang nay.
         // ceiling = 389,7 Mbps = WiFi 866 Mbps * 0,45 (RSSI tot) — tran suc mang vat ly.
