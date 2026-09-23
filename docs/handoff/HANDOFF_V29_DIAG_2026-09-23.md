@@ -106,10 +106,34 @@ adb shell "grep -E 'sampler nguồn byte|bw: sample|chon-duong|tunnel: UP' /sdca
   thường vì window 12 s gồm cả lúc rảnh), **không còn cảnh 5 kbps**;
 - `declared` leo lên theo mạng thay vì kẹt ở 1.000 kbps.
 
+## 6b. NGHIỆM THU TRÊN MÁY THẬT — ĐÃ ĐẠT (23/09/2026, Z Fold5)
+
+Bản cài trên máy đã được đối chiếu byte-for-byte: `pm path` → `base.apk` có sha256
+**`59BE5313…`** = đúng APK của commit `86944de` (không phải bản cũ còn sót).
+
+1. **Nguồn byte đúng**: `12:41:52 bw: sampler nguồn byte = TrafficStats theo UID (đường trực tiếp)`
+   — đường đang chạy là `hy-tcp:8443` (trực tiếp), trước đây chỗ này ghi "cầu WS" và sinh số rác.
+2. **Phép tính đúng**: tự tính lại kbps từ chênh lệch `raw` giữa hai mẫu
+   (`(raw2-raw1)*8/dt`) rồi so với `observed` (trung bình trượt 12 mẫu) — khớp trong sai số làm tròn
+   (ví dụ 12:49:09: raw 1103 vs observed 1103; 12:50:01: raw 1937 vs observed 1972).
+   Công cụ: `tools/check-sampler-math.mjs`.
+3. **Có tải thật thì số BIẾT NHẢY** — đo song song hai đồng hồ độc lập:
+   - `curl` trên máy tải qua chính tunnel: `size=13753216B time=120.002s speed=114608B/s`
+     ⇒ **917 kbps** (Wi-Fi văn phòng đang rất tệ: RTT qua tunnel 1,2–2,3 s).
+   - App Diagnostics cùng lúc: `observed` 168 → 671 → 985 → 1103 → 1265 → 1972 kbps
+     (raw tính lại 325 → 671 → 1027 → 1232 → 1937) ⇒ **cùng bậc với 917 kbps**.
+   - Trước bản vá, đúng khoảng này app báo **5 kbps** (sai ~200 lần).
+4. **Lúc máy RẢNH thì 3–10 kbps là ĐÚNG** (chỉ còn keepalive) — không phải lỗi. Đây chính là chỗ
+   dễ kết luận nhầm: số nhỏ chỉ là lỗi khi ĐANG có traffic.
+5. **Vòng ramp nay phản ứng đúng** trên đường trực tiếp: `bw: ramp … observed=435 old=6938 new=4856
+   reason=underrun-backoff apply=deferred-next-connect` — mạng thật chỉ ~1 Mbps nên hạ số khai
+   (6.938 → 4.856 → 3.399 → 2.379) và **hoãn áp dụng tới lần kết nối sau** (không dựng lại giữa phiên).
+
+
 ## 7. Việc còn lại (không nằm trong bản này)
 
-1. **Chưa test được trên máy**: điện thoại chưa cắm USB (adb `no devices/emulators found`) —
-   mọi kết luận ở §2 là từ log cũ trên máy, §5 mới là kiểm chứng trên APK.
+1. ~~**Chưa test được trên máy**~~ → **đã nghiệm thu đạt trên máy thật 23/09, xem §6b** (nguồn
+   byte đúng, phép tính khớp, số biết nhảy khi có tải, ramp phản ứng đúng).
 2. Mac: căn 16 KB page (`libbwg.so`, `libbgojni.so`, `libandroidx.graphics.path.so`) + keystore.
 3. `docs/RELEASE_PLAN_2026-09-24.md` §2.3 còn ghi 21/1.4.1 → cập nhật 29/1.4.3.
 4. Kênh đo tốc độ riêng trong app (nút "Đo qua VPN" trong Diagnostics) để so trực tiếp với
