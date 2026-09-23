@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Gửi email thông báo iOS 1.4.1 (build 19) cho khách ĐANG DÙNG iOS.
+"""Gửi email thông báo iOS 1.4.2 (build 19) cho khách ĐANG DÙNG iOS.
 
 Bản 19 BỎ nhóm keychain chia sẻ (hết lỗi -34018 "nhập code xong không vào được app") nhưng
 khách phải ĐĂNG NHẬP LẠI một lần — nội dung lấy từ `docs/NOTICE_IOS_RELOGIN.md`.
+
+⚠️ Đây là bản **BUỘC CẬP NHẬT** (`minimum_version = 1.4.2` trên control-plane): app bản cũ hiện
+màn hình yêu cầu cập nhật và KHÔNG dùng được cho tới khi cập nhật xong ⇒ email phải nêu rõ việc này
++ hướng dẫn mở Safari trên chính máy đó vào https://t1.meetflowai.site/install/ios.
 
 Chạy trên node-2:
   send-ios-b19-announcement.py --test              # chỉ gửi tới ALERT_EMAIL
@@ -39,13 +43,17 @@ if not api_key:
 
 IOS = "https://t1.meetflowai.site/install/ios"
 FROM = "VPNFlow <support@meetflowai.site>"
-SUBJECT = "VPNFlow iOS 1.4.1 (bản mới) — cần đăng nhập lại 1 lần / please sign in again once / 请重新登录一次"
+SUBJECT = "VPNFlow iOS 1.4.2 (bản mới) — cần đăng nhập lại 1 lần / please sign in again once / 请重新登录一次"
 
 VI = f"""
-  <h2 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.1 cho iPhone/iPad — đã có bản mới</h2>
+  <h2 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.2 cho iPhone/iPad — đã có bản mới</h2>
   <p>Kính gửi Quý khách,</p>
-  <p>Bản <b>1.4.1</b> cho iPhone/iPad đã phát hành. Bản này sửa lỗi khiến một số khách
+  <p>Bản <b>1.4.2</b> cho iPhone/iPad đã phát hành. Bản này sửa lỗi khiến một số khách
      <b>nhập mã xong vẫn đứng ở màn đăng nhập</b>.</p>
+  <p style="background:#fff4e5;border-left:4px solid #d97706;padding:10px 12px;margin:12px 0">
+     <b>⚠️ Đây là bản BẮT BUỘC CẬP NHẬT.</b> App bản cũ sẽ hiện <b>màn hình yêu cầu cập nhật</b> và
+     <b>không dùng được</b> cho tới khi cập nhật xong. Anh/chị mở <b>Safari trên chính máy đó</b> vào
+     <a href="{IOS}">{IOS}</a> — nếu máy chưa đăng ký thì bấm <b>Đăng ký thiết bị</b> trước — rồi cài đè.</p>
   <p style="background:#eefaf3;border-left:4px solid #0d7a4a;padding:10px 12px;margin:12px 0">
      <b>Anh/chị chỉ cần làm 1 việc:</b> mở app và <b>ĐĂNG NHẬP LẠI một lần</b> bằng email + mã OTP.<br>
      <b>Không mất dữ liệu</b> — hội thoại, credit và gói dịch vụ vẫn nguyên; chỉ phiên đăng nhập cũ cần làm mới.<br>
@@ -67,14 +75,20 @@ VI = f"""
      <a href="{IOS}">{IOS}</a> → nếu máy chưa đăng ký thì bấm <b>Đăng ký thiết bị</b> rồi
      <b>Cài đặt → Cài hồ sơ đã tải → Cài</b> → bấm <b>Cài đặt VPNFlow</b>.
      <b>Bản của shop không cần bật Developer Mode</b>; sau khi cài, vào app kiểm tra
-     <b>Cài đặt</b> thấy <b>1.4.1</b> là đúng.</p>
+     <b>Cài đặt</b> thấy <b>1.4.2</b> là đúng. Nếu app vẫn hiện <b>màn hình yêu cầu cập nhật</b>,
+     anh/chị tải lại trang trên bằng <b>Safari của chính máy đó</b> rồi cài lại.</p>
   <p>Có gì vướng, Quý khách trả lời email này là chúng tôi hỗ trợ ngay —
      <a href="mailto:support@meetflowai.site">support@meetflowai.site</a>.</p>"""
 
 EN = f"""
   <hr style="border:none;border-top:1px solid #e3e8ee;margin:20px 0">
-  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.1 for iPhone/iPad — new build available</h3>
+  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.2 for iPhone/iPad — new build available</h3>
   <p>Dear customer,</p>
+  <p style="background:#fff4e5;border-left:4px solid #d97706;padding:10px 12px;margin:12px 0">
+     <b>⚠️ This is a MANDATORY update.</b> Older builds will show an <b>update-required screen</b> and
+     <b>cannot be used</b> until the update is installed. Please open <b>Safari on that device</b> at
+     <a href="{IOS}">{IOS}</a> — if the device is not registered yet, tap <b>Register device</b> first —
+     and install the new build.</p>
   <p><b>One action needed:</b> open the app and <b>sign in again once</b> with your email + OTP code.
      <b>No data is lost</b> — conversations, credit and your plan stay as they are; only the old login
      session must be renewed. If the app says “device limit reached”, open <b>Settings → Devices</b>,
@@ -92,13 +106,17 @@ EN = f"""
   <p><b>How to update</b> (open in <b>Safari on that device</b>): <a href="{IOS}">{IOS}</a> →
      if the device is not registered yet, tap <b>Register device</b>, then
      <b>Settings → Profile Downloaded → Install</b>, then tap <b>Install VPNFlow</b>.
-     <b>Our build does not require Developer Mode.</b></p>
+     <b>Our build does not require Developer Mode.</b> After installing, open the app and check
+     <b>Settings</b> shows <b>1.4.2</b>.</p>
   <p>Reply to this email any time — <a href="mailto:support@meetflowai.site">support@meetflowai.site</a>.</p>"""
 
 ZH = f"""
   <hr style="border:none;border-top:1px solid #e3e8ee;margin:20px 0">
-  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.1（iPhone/iPad）——新版本已发布</h3>
+  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.2（iPhone/iPad）——新版本已发布</h3>
   <p>尊敬的客户：</p>
+  <p style="background:#fff4e5;border-left:4px solid #d97706;padding:10px 12px;margin:12px 0">
+     <b>⚠️ 本版本为强制更新。</b>旧版本将显示<b>要求更新</b>页面，更新完成前<b>无法使用</b>。
+     请在<b>该设备的 Safari</b> 中打开 <a href="{IOS}">{IOS}</a>（若设备尚未注册，请先点<b>注册设备</b>），然后安装新版本。</p>
   <p><b>只需一步：</b>打开应用，用邮箱 + 验证码 <b>重新登录一次</b>。<b>数据不会丢失</b>——
      会话、额度与套餐保持不变，只是旧的登录会话需要更新。若提示“设备数已满”，
      请进入 <b>设置 → 设备</b>，登出旧设备后再次点连接。</p>
@@ -112,7 +130,8 @@ ZH = f"""
   </ul>
   <p><b>更新方法</b>（在该设备的 <b>Safari</b> 中打开）：<a href="{IOS}">{IOS}</a> →
      若设备尚未注册，请点 <b>注册设备</b>，然后 <b>设置 → 已下载描述文件 → 安装</b>，
-     再点 <b>安装 VPNFlow</b>。<b>本店版本不需要开发者模式。</b></p>
+     再点 <b>安装 VPNFlow</b>。<b>本店版本不需要开发者模式。</b>安装后打开应用，进入 <b>设置</b> 看到
+     <b>1.4.2</b> 即为正确版本。</p>
   <p>如有问题请直接回复本邮件 — <a href="mailto:support@meetflowai.site">support@meetflowai.site</a>。</p>"""
 
 HTML = ('<div style="font-family:-apple-system,\'Segoe UI\',Roboto,Arial,sans-serif;line-height:1.6;'

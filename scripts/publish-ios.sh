@@ -4,7 +4,7 @@
 # Dùng:
 #   scripts/publish-ios.sh <ipa> <version> <build> [--dry-run] [--no-claim]
 # Ví dụ:
-#   scripts/publish-ios.sh build/ios-adhoc-export/ipa/FlowVPN.ipa 1.4.1 19
+#   scripts/publish-ios.sh build/ios-adhoc-export/ipa/FlowVPN.ipa 1.4.2 19
 #
 # Vì sao có: lần 1.4.1/18 (23/09/2026) phải làm tay 6 bước qua ssh; gom lại để không sót bước
 # (đặc biệt: verify TỪ TRONG IPA + backup bản cũ + đọc JSON trả về của PATCH, không tin exit code).
@@ -81,7 +81,10 @@ i = out.find("<?xml")
 ent = plistlib.loads(out[i:out.rfind("</plist>") + 8].encode()) if i >= 0 else {}
 groups = ent.get("keychain-access-groups") or []
 print(f"   keychain-access-groups={groups}")
-assert "G6XW3RN6LJ.com.privatevpn.shared" in groups, "thiếu keychain group (app sẽ kẹt đăng nhập)"
+# Bản iOS mới KHÔNG dùng nhóm keychain dùng chung (profile Ad Hoc không cấp ⇒ -34018 ⇒ kẹt
+# màn đăng nhập). Còn nhóm này trong signature = build sai, hoặc script ký lại tiêm nhóm vào.
+shared = [g for g in groups if "com.privatevpn.shared" in g]
+assert not shared, f"app còn khai nhóm keychain dùng chung {shared} — bản iOS mới không dùng"
 PY
 
 if [ "$DRY" = "1" ]; then

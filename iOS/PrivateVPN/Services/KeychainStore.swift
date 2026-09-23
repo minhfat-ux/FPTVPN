@@ -63,7 +63,6 @@ struct SecurityKeychainBackend: KeychainBackend {
             kSecAttrService as String: KeychainStore.service,
             kSecAttrAccount as String: account,
         ]
-        query[kSecAttrAccessGroup as String] = KeychainStore.accessGroup
         #if os(macOS)
         // macOS có HAI keychain: legacy (file-based) và data-protection (iOS-style). Keychain legacy
         // BỎ QUA `kSecAttrAccessGroup` — item chỉ được ACL cho app tạo ra nó, nên extension
@@ -71,7 +70,11 @@ struct SecurityKeychainBackend: KeychainBackend {
         // Chỉ định keychain data-protection thì access group mới có hiệu lực ⇒ app + extension
         // chia sẻ được khoá WireGuard. iOS mặc định đã là data-protection nên không cần cờ này.
         query[kSecUseDataProtectionKeychain as String] = true
+        query[kSecAttrAccessGroup as String] = KeychainStore.accessGroup
         #endif
+        // iOS KHÔNG set `kSecAttrAccessGroup`: app chỉ ghi vào keychain RIÊNG của nó. Nhóm dùng
+        // chung không bao giờ được profile Ad Hoc cấp ⇒ SecItemAdd trả errSecMissingEntitlement
+        // (-34018) ⇒ phiên đăng nhập không lưu được, khách kẹt ở màn đăng nhập (sự cố 22/09/2026).
         return query
     }
 }
@@ -103,7 +106,11 @@ final class KeychainStore {
 
     /// Keychain service shared by the WireGuard keypair and the device identity.
     static let service = "com.privatevpn.app.keys"
+    #if os(macOS)
+    /// Nhóm keychain dùng chung app↔extension của **macOS** — bản macOS đang chạy giữ nguyên.
+    /// iOS KHÔNG dùng hằng số này (xem `baseQuery`): iOS chỉ ghi keychain riêng của app.
     static let accessGroup = "G6XW3RN6LJ.com.privatevpn.shared"
+    #endif
     private static let privateKeyAccount = "wireguard.private-key"
     private static let publicKeyAccount = "wireguard.public-key"
 

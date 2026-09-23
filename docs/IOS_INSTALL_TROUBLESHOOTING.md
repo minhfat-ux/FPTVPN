@@ -1,55 +1,48 @@
 # iOS — XỬ LÝ SỰ CỐ CÀI ĐẶT (Ad Hoc) & câu hỏi Developer Mode
 
-## 0a. ⛔ SỰ CỐ ĐANG MỞ (22/09/2026): nhập code xong KHÔNG VÀO ĐƯỢC APP
-**Triệu chứng khách báo:** cài được, mở được, nhập email → nhận code → nhập code → **vẫn đứng ở
-màn đăng nhập**, không vào app.
+## 0a. ✅ SỰ CỐ ĐÃ ĐÓNG (23/09/2026): nhập code xong KHÔNG VÀO ĐƯỢC APP
+**Triệu chứng khách báo (bản ≤ build 18):** cài được, mở được, nhập email → nhận code → nhập code →
+**vẫn đứng ở màn đăng nhập**, không vào app.
 
-**Nguyên nhân gốc (đo trên chính IPA đang phát, 1.4.0 build 16, 8.135.823 B):**
-| Nguồn | `keychain-access-groups` |
-|---|---|
-| Code signature của app + extension | `G6XW3RN6LJ.com.privatevpn.shared` (+ `com.apple.token`) |
-| `embedded.mobileprovision` của **app** | **chỉ** `G6XW3RN6LJ.com.privatevpn.app` |
-| `embedded.mobileprovision` của **extension** | **chỉ** `G6XW3RN6LJ.com.privatevpn.app.packet-tunnel` |
-
-App hardcode `KeychainStore.accessGroup = "G6XW3RN6LJ.com.privatevpn.shared"`
-(`iOS/PrivateVPN/Services/KeychainStore.swift:106`) và **iOS cấp nhóm theo PROVISIONING PROFILE**.
-Profile không có nhóm đó ⇒ `SecItemAdd` trả `errSecMissingEntitlement (-34018)` ⇒
-`AuthSessionStore.save()` (`AuthSessionStore.swift:27-36`) **nuốt lỗi và không set `session`** ⇒
+**Nguyên nhân gốc:** app + extension khai `keychain-access-groups` = nhóm dùng chung
+`G6XW3RN6LJ.com.privatevpn.shared`, nhưng **profile Ad Hoc chưa bao giờ cấp nhóm đó** (chỉ có
+wildcard `G6XW3RN6LJ.*`). iOS cấp nhóm keychain theo **PROVISIONING PROFILE** ⇒ `SecItemAdd` trả
+`errSecMissingEntitlement (-34018)`; `AuthSessionStore.save()` **nuốt lỗi và không set `session`** ⇒
 `isSignedIn == false` ⇒ app đứng nguyên ở màn đăng nhập. (Cùng lỗi này cũng làm khoá WireGuard
 không lưu được ⇒ tunnel không dựng được.)
 
-**Vì sao lọt:** lệnh verify cũ chỉ soi **code signature**, mà signature thì **có** nhóm `.shared`
-⇒ PASS trong khi profile thiếu. Nay `scripts/check-publish-version.py --platform ios` kiểm **cả hai**
-và **chặn** (đã chạy thử trên chính IPA lỗi: `KHÔNG ĐẠT — Nhóm keychain THIẾU trong profile`).
+**Cách sửa đã chọn — ĐƯỜNG (A): BỎ HẲN nhóm keychain dùng chung trên iOS** (chủ dự án duyệt):
+extension iOS là **hysteria-only** và **không có dòng code keychain nào** ⇒ không có gì để chia sẻ,
+nên bỏ hẳn thay vì đi bật capability trên portal. Thay đổi trong bản **1.4.2 / build 19**:
+1. `project.yml`: bỏ `keychain-access-groups` ở **2 target iOS** (`PrivateVPN`, `PrivateVPNPacketTunnel`).
+   **2 target macOS GIỮ NGUYÊN** — bản macOS đang chạy vẫn chia sẻ khoá WireGuard qua nhóm này.
+2. `iOS/PrivateVPN/Services/KeychainStore.swift` (file **dùng chung** iOS + macOS):
+   `kSecAttrAccessGroup` và hằng `accessGroup` nay nằm trong `#if os(macOS)` ⇒ macOS không đổi hành
+   vi, iOS chỉ ghi keychain **riêng của app**.
+3. `iOS/PrivateVPN/Services/AuthSessionStore.swift`: bỏ nhánh `#if os(iOS)` set `kSecAttrAccessGroup`.
+4. `scripts/sign-server/resign-ipa.sh`: bỏ khối **tự tiêm lại** nhóm khi ký lại — nếu còn, mọi lần
+   ký trên node-1 sẽ làm lỗi `-34018` quay lại dù binary đã sạch.
+5. `scripts/publish-ios.sh`: assert **đảo chiều** — nay chặn nếu IPA *còn* nhóm dùng chung.
 
-**Cách sửa (làm ở Apple Developer portal, máy Mac):**
+> ⛔ **KHÔNG bật Keychain Sharing trên portal cho App ID iOS.** App Store Connect API không làm được
+> (`POST /v1/bundleIdCapabilities` trả **409 `KEYCHAIN_SHARING is not a valid value`**, thử 22/09/2026)
+> và bản iOS mới **không cần** capability đó. Mọi hướng dẫn "bật Keychain Sharing" trước đây trong
+> tài liệu này đã **hết hiệu lực**.
 
-> ⛔ **BẮT BUỘC LÀM TAY — API KHÔNG LÀM ĐƯỢC** (Mac đã thử 22/09/2026): App Store Connect API
-> `POST /v1/bundleIdCapabilities` trả **409 `KEYCHAIN_SHARING is not a valid value`** (enum chỉ có
-> ICLOUD, APP_GROUPS, NETWORK_EXTENSIONS…). Nghĩa là **không thể thêm nhóm keychain bằng script**:
-> phải có **người có quyền Developer portal** bật tay. Đây chính là việc đang chặn việc deploy lại
-> bản iOS lên iPhone để test.
+> **Vì sao trước đây lọt:** lệnh verify cũ chỉ soi **code signature** — mà signature thì **có** nhóm
+> dùng chung ⇒ PASS trong khi profile thiếu. Nay cổng `scripts/check-publish-version.py --platform ios`
+> chặn theo hướng ngược lại: **còn** nhóm dùng chung trong app/appex là **KHÔNG ĐẠT**.
 
-1. Certificates, Identifiers & Profiles → **Identifiers** → App ID `com.privatevpn.app` →
-   bật **Keychain Sharing** → thêm nhóm `G6XW3RN6LJ.com.privatevpn.shared`.
-2. Làm y hệt cho App ID `com.privatevpn.app.packet-tunnel` (app và extension PHẢI cùng nhóm thì
-   mới chia sẻ được khoá WireGuard).
-3. Sinh **lại profile** (Ad Hoc cho đủ UDID + development) ⇒ profile mới phải chứa nhóm `.shared`.
-4. Ký lại IPA (`scripts/ios-resign-ipa.sh`) rồi **verify bằng cổng**:
-   `python3 scripts/check-publish-version.py --platform ios --file <ipa> --version 1.4.1 --build 17`
-5. Test trên **iPhone thật** (mục §2c của `PUBLISHER_PROCESS.md`) trước khi phát.
+> **Khách phải làm gì:** bản mới **cần đăng nhập lại một lần** (email + mã OTP). Không mất hội thoại,
+> credit hay gói dịch vụ. Nội dung gửi khách: `docs/NOTICE_IOS_RELOGIN.md`.
 
-> Nếu portal **không cho** tạo nhóm `com.privatevpn.shared` (ví dụ App ID đã có nhóm khác), thì
-> phương án hai là đổi `KeychainStore.accessGroup` sang nhóm **profile thật sự cấp** — nhưng phải
-> cùng nhóm ở **cả app lẫn extension**, nếu không tunnel sẽ không đọc được khoá.
-
-> **Phát hiện kèm (Mac đo độc lập, 22/09/2026)** — phải sửa luôn khi ký lại, nếu không sẽ lặp lại:
+> **Phát hiện kèm (Mac đo độc lập, 22/09/2026)** — vẫn phải đúng khi ký lại:
 > 1. Trong IPA 1.4.0/16, **`.appex` bị ký bằng entitlements CỦA APP**:
 >    `application-identifier = G6XW3RN6LJ.com.privatevpn.app` trong khi profile của extension là
->    `…com.privatevpn.app.packet-tunnel`. Ký lại phải dùng **đúng profile cho từng target**.
-> 2. Profile đang phát chỉ có nhóm **wildcard** `G6XW3RN6LJ.*`, **không** có nhóm cụ thể `.shared`
->    ⇒ đừng dựa vào wildcard; nhóm chia sẻ phải là nhóm **cụ thể** và xuất hiện trong **profile của
->    cả app lẫn extension**. Cổng chặn đã siết để bắt cả hai điểm (bản Mac: commit `d8086ee`).
+>    `…com.privatevpn.app.packet-tunnel`. Ký lại phải dùng **đúng profile cho từng target** —
+>    `scripts/sign-server/resign-ipa.sh` ký appex bằng `ext.mobileprovision` **trước**, rồi mới ký app.
+> 2. Không được **tiêm lại** nhóm keychain khi ký (xem mục 4 phía trên): entitlements phải giữ
+>    **đúng như profile cấp**.
 
 
 > Nguồn sự thật: chính IPA đang phát. Kiểm bằng:
@@ -66,6 +59,9 @@ và **chặn** (đã chạy thử trên chính IPA lỗi: `KHÔNG ĐẠT — Nh�
 2. Chờ shop ký (thường vài phút) → quay lại trang, bấm **Cài đặt VPNFlow**.
 3. Nếu iOS báo *“Untrusted Developer”* hoặc app mở ra rồi tắt ngay: **Settings → General → VPN & Device Management → (tên nhà phát triển) → Trust** → mở lại app.
 4. Mở app → đăng nhập email đã mua → **Allow** khi iOS hỏi cấu hình VPN → **Connect**.
+5. **Nâng cấp từ bản ≤ build 18:** lần đầu mở bản mới phải **đăng nhập lại một lần** (email + mã OTP)
+   — đây là chủ ý của bản 1.4.2/19 (bỏ nhóm keychain dùng chung nên phiên cũ không đọc lại được).
+   Không mất hội thoại/credit/gói dịch vụ. Nội dung gửi khách: `docs/NOTICE_IOS_RELOGIN.md`.
 
 ## 2. Developer Mode: khi nào cần, khi nào KHÔNG
 | Tình huống | Có cần Developer Mode? | Xử lý |
