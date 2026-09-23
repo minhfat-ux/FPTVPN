@@ -66,9 +66,10 @@ Cả hai đều có bản sao trong `.tmp/` (đã gitignore). `windows/installer
 
 | Hạng mục | Giá trị |
 |---|---|
-| `HEAD` | `f1c996f` (Merge `origin/main`) |
-| `origin/main` | `f1c996f` — **local == origin, không có commit nào chưa push** |
-| Commit của việc này | **`4c7da63`** `fix(windows): bypass Trung Quoc cho duong relay + ky so bo cai (NFR-WIN-002)` — **đã ở `origin/main`** |
+| `HEAD` / `origin/main` | `ab81db0` — **đồng bộ, không có commit nào chưa push** (số liệu chụp 23/09/2026; repo còn tiếp tục chạy nên hãy `git log` để lấy mốc hiện tại) |
+| Commit **code** của việc này | **`4c7da63`** `fix(windows): bypass Trung Quoc cho duong relay + ky so bo cai (NFR-WIN-002)` — đã ở `origin/main` |
+| Commit **handoff này** | **`81eb8f9`** `docs(publisher): handoff day du cho kenh Windows - ky so + bypass TQ` — đã ở `origin/main` |
+| **Luật 11** (do agent khác ban hành, bổ trợ) | **`7e15074`** `docs(publisher): luat 11 — bo cai Windows PHAI duoc KY SO truoc khi publish (NFR-WIN-002)` — đã ở `origin/main`. Luật 11 là **ràng buộc**, handoff này là **bản chi tiết + bằng chứng + cách verify** đi kèm |
 | Working tree | **sạch** |
 | Bảng việc chung | chỉ `[mac] ios` đang được giữ; claim `windows-app` của worker **đã release** |
 | Kênh Windows đang phát | **1.4.4** (không đổi bởi việc này) |
@@ -238,6 +239,5 @@ ghi ca `sing-box.exe` với `DefenderMadeCloudCall = false` là lúc bị chặn
 3. Chủ dự án chốt **số hiệu** phát hành (§9.1).
 4. Publisher: khi có bản mới, chạy pre-gate + **4 hạng mục chữ ký ở §4**, rồi post-gate, rồi mới email khách.
 
-**Lưu ý về luật:** việc này do **worker** làm, **chủ dự án chỉ đạo trực tiếp** cho commit (khác mặc định
-`AGENTS.md` §1 là agent chính commit). Worker đã **không push**; bản trên `origin/main` là do agent chính
-đồng bộ (`f1c996f`).
+**Lưu ý về luật:** việc này do **worker** làm, **chủ dự án chỉ đạo trực tiếp** cho commit/push (khác mặc định
+`AGENTS.md` §1 là agent chính commit/push). Mốc đồng bộ lúc chụp số liệu: `ab81db0`.
