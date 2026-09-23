@@ -141,8 +141,12 @@ for extra in d.get("keychain-access-groups") or []:
     if isinstance(extra, str) and extra.startswith("com.apple.") and extra not in groups:
         groups.append(extra)
 d["keychain-access-groups"] = groups
+# Profile Ad Hoc khai get-task-allow=False; chữ ký cũ (Apple Development) để True
+# ⇒ installd từ chối "A valid provisioning profile for this executable was not found".
+# Bắt buộc hạ về False cho khớp profile.
+d["get-task-allow"] = False
 open(path, "wb").write(plistlib.dumps(d))
-print(f"     keychain-access-groups -> {groups}")
+print(f"     keychain-access-groups -> {groups} · get-task-allow -> False")
 PY
 }
 codesign -d --entitlements :- "$APP" > "$OUT_DIR/app.entitlements" 2>/dev/null || true

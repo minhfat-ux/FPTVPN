@@ -85,7 +85,7 @@ targets:
         # Bản 1.4.0 (build 15) sửa lỗi mất mạng sau khi bật VPN một lúc + ổn định relay Cloudflare.
         # Build 16 (20/09/2026): extension iOS chuyển sang HYSTERIA-ONLY (port từ macOS) nên
         # cần số build mới để phân biệt với bản 15 đã phát.
-        CURRENT_PROJECT_VERSION: "18"
+        CURRENT_PROJECT_VERSION: "19"
         MARKETING_VERSION: "1.4.1"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
@@ -161,7 +161,7 @@ targets:
         CFBundleDisplayName: VPNFlow Tunnel
         # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
         CFBundleShortVersionString: "1.4.1"
-        CFBundleVersion: "18"
+        CFBundleVersion: "19"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
@@ -178,7 +178,7 @@ targets:
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
         MARKETING_VERSION: "1.4.1"
-        CURRENT_PROJECT_VERSION: "18"
+        CURRENT_PROJECT_VERSION: "19"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
@@ -267,7 +267,7 @@ targets:
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         MARKETING_VERSION: "1.4.1"
-        CURRENT_PROJECT_VERSION: "15"
+        CURRENT_PROJECT_VERSION: "16"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -397,7 +397,7 @@ targets:
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         MARKETING_VERSION: "1.4.1"
-        CURRENT_PROJECT_VERSION: "15"
+        CURRENT_PROJECT_VERSION: "16"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).
