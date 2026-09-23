@@ -1,5 +1,14 @@
 # Handoff — Windows: bypass Trung Quốc + ký số bộ cài (bản ĐẦY ĐỦ cho PUBLISHER)
 
+> ⚠️ **SỐ LIỆU ĐÃ CŨ (cập nhật 23/09/2026):** tài liệu chụp lúc `HEAD/origin/main = ab81db0`.
+> Từ đó **1.4.5 ĐÃ ĐƯỢC PHÁT** (theo ngoại lệ chữ ký do chủ dự án chốt) ⇒ câu "kênh Windows vẫn đang
+> phát **1.4.4**" ở §0.1 **không còn đúng**. Trạng thái thật hiện tại:
+> `/v1/app-version?platform=windows` → `latest_version=1.4.5`,
+> `VPNFlow-Setup-1.4.5.exe?v=d6db58cb`; sổ có `publish v1.4.5` + tag `windows-v1.4.5`.
+> **`NFR-WIN-002` (buộc ký số) vẫn CHƯA đạt** — bản 1.4.5 phát ra là ngoại lệ, và máy Windows harness
+> hiện **không có cert ký số** (`Cert:\CurrentUser\My` + `Cert:\LocalMachine\My` với `-CodeSigningCert`
+> đều rỗng). Phần hướng dẫn nạp cert ở §3 vì vậy **vẫn còn nguyên giá trị**.
+
 - **Agent:** worker (owner `windows`)
 - **Task ID:** TASK-20260923-WIN-SIGN
 - **Date:** 2026-09-23
@@ -66,7 +75,7 @@ Cả hai đều có bản sao trong `.tmp/` (đã gitignore). `windows/installer
 
 | Hạng mục | Giá trị |
 |---|---|
-| `HEAD` / `origin/main` | `ab81db0` — **đồng bộ, không có commit nào chưa push** (số liệu chụp 23/09/2026; repo còn tiếp tục chạy nên hãy `git log` để lấy mốc hiện tại) |
+| `HEAD` / `origin/main` | `ab81db0` — **đồng bộ, không có commit nào chưa push** *(số liệu chụp 23/09/2026; **số này đã cũ** — repo đi tiếp rất nhanh, hãy `git log` để lấy mốc hiện tại)* |
 | Commit **code** của việc này | **`4c7da63`** `fix(windows): bypass Trung Quoc cho duong relay + ky so bo cai (NFR-WIN-002)` — đã ở `origin/main` |
 | Commit **handoff này** | **`81eb8f9`** `docs(publisher): handoff day du cho kenh Windows - ky so + bypass TQ` — đã ở `origin/main` |
 | **Luật 11** (do agent khác ban hành, bổ trợ) | **`7e15074`** `docs(publisher): luat 11 — bo cai Windows PHAI duoc KY SO truoc khi publish (NFR-WIN-002)` — đã ở `origin/main`. Luật 11 là **ràng buộc**, handoff này là **bản chi tiết + bằng chứng + cách verify** đi kèm |

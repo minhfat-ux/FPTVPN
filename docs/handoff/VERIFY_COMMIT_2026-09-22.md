@@ -128,3 +128,27 @@ $ git diff --stat origin/main                    -> (trống, khớp GitHub)
 6. Việc của tôi đã nằm trên GitHub: `0ac7d4c` (Android) + `6d58919` (báo cáo này). Các commit publisher
    doc/relay mà tôi định ghi thêm thì **agent khác đã ghi trước** (`660d9c2`, `5add22f`), nên tôi bỏ
    commit trùng, không tạo nhiễu lịch sử.
+
+## 6. Cập nhật 23/09/2026 — đính chính & trạng thái hiện tại
+
+Tài liệu viết lúc `main = 660d9c2`. Cập nhật lại những chỗ đã sai/đã cũ:
+
+| Viết ở trên | Thực tế 23/09/2026 |
+|---|---|
+| §6 dòng đầu: `main = 660d9c2` | `main = e81a210` (đi tiếp rất nhiều commit: iOS 1.4.2, luật 11 cổng ký số, Windows 1.4.5, Android v29, AAR 16KB) |
+| §5.2 "Android 1.4.1 chưa publish" | **đã phát tới 1.4.3 (code29) rồi 1.4.4 (code32)** — `/v1/app-version?platform=android` → `latest_version=1.4.4`; sổ có dòng tương ứng (xem `release/releases.jsonl`) |
+| §5.1 "3 file Kotlin của `0ac7d4c` đã qua compile thật" | **vẫn đúng**, và sau đó đã build tiếp: `38a3e6f` (MTU 1300 + 2 resolver) và `86944de` (v29 Diagnostics) cũng đã compile + assemble thành công |
+| §5.5 cảnh báo "tiến trình NGOÀI ghi đè file" | **vẫn ĐÚNG và đã tái diễn nhiều lần** trong các phiên sau: ghi đè `check-publish-version.py`, csproj, `PUBLISHER_PROCESS.md`, `IOS_INSTALL_TROUBLESHOOTING.md` bằng **nội dung cũ hơn**. Quy tắc ở §5.5 vì vậy vẫn phải tuân thủ nguyên |
+
+**Một đính chính quan trọng về phán đoán của tôi lúc đó:** §4 (khuyến nghị khôi phục 14 file) là đúng,
+nhưng kết luận "cây làm việc lùi so với GitHub" chỉ đúng **một nửa**. Sau này kiểm lại: 20 commit mà tôi
+tưởng local đi sau thì **nội dung của chúng đã nằm trong cây làm việc** (do cơ chế sync ghi ra thành file
+chưa commit) — không phải thiếu code, mà là **trạng thái git bị bóp méo**. Hệ quả cần nhớ:
+
+- `git status` / `git diff` ở máy này **không đáng tin làm bằng chứng duy nhất**; phải đối chiếu
+  `git hash-object <file>` với `git rev-parse origin/main:<file>` mới biết file là bản cũ hay việc mới.
+- 2 commit local "chưa push" (`e7ab923`, `7ae07f0`) hoá ra là **bản cũ của cơ chế versioning đã có trên
+  GitHub** (sổ phát hành 5 dòng so với 18 dòng trên main) ⇒ đã bỏ, **không mất nội dung nào**.
+- Việc cần làm trước mọi lần commit ở máy này: `git diff --stat origin/main` + so blob; thấy file lạ bị
+  sửa thì `git checkout -- <file>`, fetch/rebase rồi mới commit.
+
