@@ -302,10 +302,11 @@ public static class SingBoxConfigBuilder
                 ["type"] = "udp",
                 ["tag"] = ChinaDnsServerTag,
                 ["server"] = ChinaDomesticDnsServer,
-                // Resolver nội địa phải đi THẲNG: tên miền nội địa TQ không bị nhiễm độc, và đi
-                // thẳng thì nhanh hơn + không tốn băng thông tunnel. Ghi tường minh để hành vi
-                // không phụ thuộc mặc định của sing-box.
-                ["detour"] = DirectOutboundTag,
+                // KHÔNG đặt "detour":"direct" ở đây - sing-box 1.14.1 FATAL ngay khi chạy:
+                //   "start service: start dns/udp[cn]: detour to an empty direct outbound makes no sense"
+                // (cổng `sing-box check` KHÔNG bắt được lỗi này, chỉ khi `run` mới lộ - đã kiểm chứng
+                // 23/09/2026 bằng cách chạy thật với mixed inbound). Bỏ trống detour thì resolver này
+                // được dial thẳng - đúng ý muốn: tên miền nội địa TQ không bị nhiễm độc.
             });
         }
 

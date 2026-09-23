@@ -305,7 +305,9 @@ public class SingBoxConfigBuilderTests
         var remoteServer = dns.GetProperty("servers").EnumerateArray()
             .Single(s => s.GetProperty("tag").GetString() == SingBoxConfigBuilder.DnsServerTag);
         Assert.Equal(SingBoxConfigBuilder.RelayOutboundTag, remoteServer.GetProperty("detour").GetString());
-        Assert.Equal(SingBoxConfigBuilder.DirectOutboundTag, cnServer.GetProperty("detour").GetString());
+        // Server nội địa KHÔNG được có `detour`: sing-box 1.14.1 FATAL khi chạy
+        // ("detour to an empty direct outbound makes no sense") - đã kiểm chứng bằng cách chạy thật.
+        Assert.False(cnServer.TryGetProperty("detour", out _), "server 'cn' không được đặt detour");
     }
 
     [Fact]
