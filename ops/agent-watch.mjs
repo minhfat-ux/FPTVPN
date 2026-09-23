@@ -28,6 +28,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawn as childProcessSpawn } from "node:child_process";
+// Luật đánh thức nằm ở module thuần để test được: `ops/wake-policy.test.mjs`. Xem chú thích trong
+// đó về lỗi "tự đánh thức vì chính mình vừa báo blocked".
+import { wakeReason as decideWakeReason } from "./lib/wake-policy.mjs";
 
 // .trim() là bắt buộc: trên Windows, `set AGENT_NAME=WIN && node …` biến giá trị thành "WIN "
 // (dấu cách trước &&), làm hỏng tên agent trong presence và tên file sự kiện (đã gặp thật).
@@ -268,21 +271,9 @@ function sameSubject(busTitle, task) {
   return bus.slice(0, length) === local.slice(0, length);
 }
 
-/** Việc này có cần ĐÁNH THỨC tôi không? Trả về lý do hoặc null. */
+/** Việc này có cần ĐÁNH THỨC tôi không? Trả về lý do hoặc null. Luật nằm ở `ops/lib/wake-policy.mjs`. */
 function wakeReason(entry) {
-  const to = String(entry.task.to ?? "").toLowerCase();
-  const from = String(entry.task.from ?? "").toLowerCase();
-  const last = entry.last;
-  const mine = to === SELF.toLowerCase();
-  const theirs = from === SELF.toLowerCase();
-  if (!last) return null;
-  if (mine && last.type === "sent") return "có việc mới được giao";
-  if (mine && last.type === "verified" && last.result === "fail") return "bị trả lại, phải làm lại";
-  if (mine && last.type === "blocked") return "bên giao vừa ghi chú vào việc của tôi";
-  // Bên giao chỉ bị đánh thức khi thật sự cần hành động — không réo mỗi lần đối tác `ack`/`progress`.
-  if (theirs && last.type === "done") return "đối tác báo xong — cần nghiệm thu";
-  if (theirs && last.type === "blocked") return "đối tác đang vướng, cần gỡ";
-  return null;
+  return decideWakeReason(entry, SELF);
 }
 
 function buildPrompt(entry, reason) {

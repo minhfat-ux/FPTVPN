@@ -194,3 +194,24 @@ Không thể gọi VÀO máy Windows từ bên ngoài:
 Kết luận: chỉ tiến trình **chạy trên chính máy Windows** mới nhận được việc. Nếu watcher không chạy,
 `node ops/task.mjs list` cảnh báo thẳng: `⚠ giao N phút, CHƯA thấy đánh thức/ack` — không còn im lặng
 giả tạo.
+
+### 7.4 KHÔNG tự đánh thức vì chính mình vừa báo `blocked` (lỗi thật 23/09/2026)
+
+Luật đánh thức cũ (`ops/agent-watch.mjs`) là `nếu việc là CỦA TÔI và sự kiện cuối là blocked` ⇒
+đánh thức tôi. Nó **không phân biệt ai ghi** sự kiện `blocked`, nên mỗi lần bên nhận báo vướng
+(bóng đã ở sân bên giao), watcher lại tự đánh thức chính nó sau mỗi `WAKE_COOLDOWN` ⇒ **vòng lặp
+bất tận**, mỗi vòng mở một phiên harness không có gì mới để làm.
+
+Bằng chứng đo được: `T-20260923-03` có `blocked` của WIN lúc 12:07/12:20/12:36Z thì sinh đúng
+`woken` lúc 12:16/12:27/12:37Z — xen kẽ nhau, không có sự kiện nào của bên giao ở giữa.
+
+Luật nay (tách ra `ops/lib/wake-policy.mjs` để test được, test ở `ops/wake-policy.test.mjs`):
+
+| Việc của tôi, sự kiện cuối | Ai ghi | Có đánh thức tôi? |
+|---|---|---|
+| `blocked` | **tôi** | **KHÔNG** (bóng ở sân bên giao) |
+| `blocked` | bên giao | CÓ — "bên giao vừa ghi chú vào việc của tôi" |
+| `blocked` (file cũ, không có `actor`) | ? | CÓ (giữ hành vi cũ) |
+
+Chạy lại test: `node ops/wake-policy.test.mjs` (7/7 pass). Kiểm trên sổ thật:
+`node ops/_scratch/wake-check-live.mjs T-20260923-03 WIN`.
