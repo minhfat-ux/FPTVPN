@@ -215,6 +215,29 @@ def _hysteria_credentials(info: dict, plistlib_module=None) -> dict:
     }
 
 
+
+def pe_signature_info(path: str) -> tuple[bool, int]:
+    """Đọc PE: có bảng Certificate (Authenticode) nhúng không? (luật 11 / NFR-WIN-002)
+
+    Trả (có_chữ_ký, kích_thước_bảng). Không cần `signtool`: chỉ đọc data directory #4 của PE.
+    Dùng để cổng chặn KHÔNG cho publish bộ cài Windows chưa ký — máy khách bật Smart App Control
+    sẽ chặn (`os error 4551`), tức khách tải từ /buy vẫn không cài được (ca thật 23/09/2026).
+    """
+    import struct
+    with open(path, "rb") as fh:
+        head = fh.read(0x400)
+    if head[:2] != b"MZ":
+        return False, -1
+    e_lfanew = struct.unpack_from("<I", head, 0x3C)[0]
+    if head[e_lfanew:e_lfanew + 4] != b"PE\0\0":
+        return False, -1
+    opt = e_lfanew + 24
+    magic = struct.unpack_from("<H", head, opt)[0]
+    dd = opt + (96 if magic == 0x10B else 112)
+    _, cert_size = struct.unpack_from("<II", head, dd + 4 * 8)
+    return cert_size > 0, cert_size
+
+
 def _check_hysteria_credentials(result, internal: dict) -> None:
     """Cổng chặn: credential hysteria2 phải có trong APP; extension chỉ WARN.
 
@@ -721,6 +744,30 @@ def main() -> int:
                 result.warn("Mốc phiên bản", f"đang {latest} — phát lại CÙNG số, khách sẽ không thấy 'có bản mới'")
         else:
             result.fail("Phát hành LÙI", f"mốc đang {latest} > định phát {args.version}")
+
+    # ---- 2c. LUẬT 11 (NFR-WIN-002): bộ cài Windows PHẢI có chữ ký số (Authenticode)
+    # Máy khách bật Smart App Control chặn bộ cài chưa ký (`os error 4551`) ⇒ tải từ /buy vẫn
+    # không cài được (ca thật 23/09/2026: 1.4.4 đang phát KHÔNG ký — kiểm bằng bảng Certificate PE).
+    if args.platform == "windows":
+        targets = [("installer", args.file), ("app-exe", getattr(args, "app_exe", None))]
+        for label, target in targets:
+            if not target:
+                if label == "app-exe":
+                    result.warn("Chữ ký số (app .exe)", "chưa truyền --app-exe ⇒ chưa kiểm được app chính")
+                continue
+            if not os.path.isfile(target):
+                result.warn(f"Chữ ký số ({label})", f"không thấy file {target}")
+                continue
+            signed, size = pe_signature_info(target)
+            if size < 0:
+                result.warn(f"Chữ ký số ({label})", f"{target} không phải PE")
+            elif signed:
+                result.ok(f"Chữ ký số ({label})", f"có bảng chữ ký Authenticode ({size} byte)")
+            else:
+                result.fail(f"Chữ ký số ({label}) THIẾU",
+                            f"{target} không có chữ ký số ⇒ máy khách bật Smart App Control sẽ chặn "
+                            f"(os error 4551). Luật 11/NFR-WIN-002: CHƯA ký thì KHÔNG publish. "
+                            f"Ký bằng signtool + timestamp, rồi kiểm lại signtool verify /pa và Get-AuthenticodeSignature.")
 
     # ---- 3. file đang phát trên route tải (cảnh báo sớm nếu chưa upload / phát nhầm)
     if args.platform == "windows":
