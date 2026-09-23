@@ -535,12 +535,33 @@ def download_for_post(platform: str, version: str, path: str | None) -> tuple[st
     # (đã gặp thật 22/09: `--mode post` không tải được DMG, trong khi `http_json`/`http_head` thì được
     # vì đã set UA). Tải theo luồng để không nạp cả file vào RAM.
     request = urllib.request.Request(url, headers={"User-Agent": UA})
-    try:
-        with open_url(request, timeout=120) as response, open(target, "wb") as handle:
-            shutil.copyfileobj(response, handle)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
-        return None, f"tải {url} lỗi: {exc}"
-    return target, ""
+    # Tải + KIỂM ĐỘ DÀI, thử lại 1 lần. Vì sao: 23/09/2026 `audit-releases.py` báo oan
+    # "Android (APK modern) KHÔNG KIỂM ĐƯỢC — aapt2: Invalid file" chỉ vì file 96 MB tải cụt
+    # (copyfileobj hết hạn 120s), trong khi file đang phát hoàn toàn hợp lệ. Thiếu bước kiểm này
+    # thì cổng/audit biến lỗi mạng thành "artifact lỗi" — sai hướng điều tra.
+    last_err = ""
+    for attempt in (1, 2):
+        try:
+            with open_url(request, timeout=120) as response, open(target, "wb") as handle:
+                expected = int(response.headers.get("Content-Length") or 0)
+                shutil.copyfileobj(response, handle)
+            got = os.path.getsize(target)
+            if expected and got != expected:
+                last_err = f"tải {url} thiếu: {got}/{expected} byte"
+                os.path.exists(target) and os.unlink(target)
+                continue
+            # Magic bytes: APK/IPA là zip — sai magic nghĩa là file tải về không phải artifact
+            # (bị chặn/cache trả HTML), phải báo rõ chứ không để công cụ sau phán "file lỗi".
+            if platform in ("android", "android-legacy", "ios"):
+                with open(target, "rb") as head:
+                    if head.read(2) != b"PK":
+                        last_err = f"tải {url}: nội dung không phải zip (thiếu magic PK)"
+                        os.unlink(target)
+                        continue
+            return target, ""
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+            last_err = f"tải {url} lỗi: {exc}"
+    return None, last_err
 
 
 def main() -> int:
