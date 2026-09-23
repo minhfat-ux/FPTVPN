@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=f565907 (docs/handoff/HANDOFF_KEYSTORE_ANDROID_2026-09-23.md, da o origin/flowgpt); cmd=keytool -list -v -keystore ~/keystores/vpnflow-release.jks -alias vpnflow => SHA256 DC:6E:48:4B:F8:EF:2E:EA:0D:CD:15:A9:19:2D:82:33:FE:A1:A0:50:68:B8:EE:44:86:CD:C5:3F:45:6B:5E:46 = dung cert APK 1.4.3/29 (dc6e484bf8ef2eea0dcd15a9192d8233fea1a05068b8ee4486cdc53f456b5e46); scp 2 file len node-1 /root/keystores-incoming/ (thu muc 700, file 600, root): vpnflow-release.jks 2746B sha256 73fbc51a9e088f9ff4c2b99b4a13f6e7f2993d3ea85ae0caa2c29227af9e8411 + vpnflow-signing.properties 151B sha256 3527884439dd47cbd81a26d7f2d571b35db3f478ca79c969acc62aa4e4f86a73 (node-1 == Mac); alias=vpnflow; CANH BAO vpnflow-release.keystore (cu) cert KHAC C7:24:A3:A8...; KHONG dua mat khau/noi dung keystore vao bus/repo/log; Mac giu ban goc offline ~/keystores (700). Windows: keo ve C:/Users/Minhn/keystores/, verify sha256 roi xoa ban tren node-1.",
+ "actor": "mac",
+ "at": "2026-09-23T08:31:20.352Z"
+}
