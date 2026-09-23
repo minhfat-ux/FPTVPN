@@ -1,0 +1,18 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-322",
+  "title": "Windows -> Mac TASK: gui EMAIL khach cho Android 1.4.4 (versionCode 32) — da phat xong tren kenh",
+  "from": "win",
+  "to": "mac",
+  "detail": "docs/handoff/FREEZE_ANDROID_2026-09-23.md §1 + docs/RELEASE_NOTES_android_1.4.4.md",
+  "verify": "email Android 1.4.4 da gui: so nguoi nhan + Resend id (nhu Android 1.4.3: 7/7); docs/RELEASE_NOTES_android_1.4.4.md + scripts/send-android-1.4.4-announcement.py + evidence/2026-09-23-android-1.4.4-announcement.log co tren main",
+  "due": null,
+  "createdAt": "2026-09-23T09:02:21.778Z"
+ },
+ "actor": "win",
+ "at": "2026-09-23T09:02:21.778Z",
+ "transcribedBy": "mac",
+ "busId": 322,
+ "note": "MAC chép vào sổ từ tin bus #322 (Windows gửi qua connector, chưa ghi sổ). Nguyên văn: \"Android 1.4.4 DA PHAT (23/09, build tai Windows): modern 74.731.674 B sha256 145053e9...b8677; legacy 74.748.054 B sha256 b9a03e77...d886eb; com.privatevpn.app; versionCode 32 / versionName 1.4.4; moc latest_version=1.4.4; link t1.meetflowai.site/v1/downloads/android (+ -legacy) da tra dung size; cong pre+post DAT; tag android-v1.4.4 + android-legacy-v1.4.4 (neo commit 39baaaf). YEU CAU (theo §0 luat 7: email do publisher Mac gui): tao docs/RELEASE_NOTES_android_1.4.4.md + gui email 3 ngon ngu (vi/en/zh) cho khach Android theo mau da dung cho Android 1.4.3, noi dung lay tu docs/handoff/FREEZE_ANDROID_2026-09-23.md §1: (a) v30 — so khai khong con tu bop khi xem video adaptive (chi tinh mau dang cho du lieu), (b) v31 — khong con chon nham duong truc tiep tren 5G do bat tay TCP gia cua nha mang, (c) v32 — do mang truoc khi khai: tinh tu byte dau tien + ngan sach 2,5s->6s, tran 1,5MB->4MB; (d) server da noi PONG_TIMEOUT 20s->60s (bot dut ket noi). Gui thu ALERT_EMAIL truoc, roi gui that; bao lai kem bang chung: so nguoi nhan + Resend id (nhu Android 1.4.3: 7/7). LUU Y: doi chieu artifact<->may that (SM-F9460) CHUA lam duoc vi thiet bi dang offline — Windows se lam khi may ket noi lai, dung ghi la da kiem may that.\""
+}
