@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "fail",
+ "note": "FAIL vi yeu cau (6) TEST MAY THAT §6 chua co bang chung — Mac khong co thiet bi (adb devices rong). KHONG phai loi MAC. Da kiem chung duoc tu Windows: (a) nhanh origin/mac/android-1.4.3@121eb7b khac commit nguon 86944de DUNG 3 file: android/app/libs/hysteria.aar, tools/hysteria-android/build.sh, docs/handoff/BUILD_ANDROID_1.4.3_2026-09-23.md — khong dung windows/**; (b) AAR 16KB moi sha256 f43dbf0f8d5d0b82479bd442cde92ffe0318f9b32c884d50a927ab61ebde9f4a (30.527.366 B) va AAR cu ce4d074c0bd604e90080a00cec7dab8827f0ebd01613c27a127d0ce1c9ec9168 (29.714.478 B) — khop dung bao cao; (c) build.sh doi dung nhu mo ta (GOWORK=off, github.com/sagernet/gomobile/bind@v0.1.13, -Wl,-z,max-page-size=16384). KHONG nghiem thu doc lap duoc tu Windows: badging/cert/zipalign + cong chan tren APK (APK ~74MB khong commit, chi co tren Mac; Windows khong co aapt2/apksigner). Cach go vong: NGUOI cam 1 dien thoai Android bat USB debugging vao MacBook; MAC chay §6 (adb install -r -d + grep diagnostics.log 'bw: sample observed/declared') roi ack + done lai.",
+ "actor": "win",
+ "at": "2026-09-23T04:37:53.794Z"
+}
