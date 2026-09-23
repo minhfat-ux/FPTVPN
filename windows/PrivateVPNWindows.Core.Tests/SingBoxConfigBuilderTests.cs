@@ -234,15 +234,20 @@ public class SingBoxConfigBuilderTests
             ipRule.GetProperty("ip_cidr").EnumerateArray().Select(e => e.GetString()).ToArray());
 
         // Thứ tự QUAN TRỌNG - sự cố production 23/09/2026 (1.4.5 làm khách TQ MẤT MẠNG và không vào
-        // được Google/YouTube): hijack-dns PHẢI đứng ĐẦU TIÊN. Nếu bất kỳ rule nào khớp theo IP
-        // (ip_is_private, ip_cidr) đứng trước, truy vấn DNS tới resolver của khách (IP TQ, hoặc IP
-        // nội bộ 10.x/192.168.x) bị đẩy `outbound: direct` => DNS đi thẳng ra resolver TQ =>
-        // nhiễm độc/không phân giải => mất mạng. Bằng chứng: sing-box.log phiên hỏng ghi
-        // "inbound packet connection to 10.193.111.16:53 -> outbound/direct[direct]".
+        // được Google/YouTube). Hai điều kiện, thiếu một là hỏng:
+        //   (a) `sniff` phải đứng TRƯỚC `hijack-dns` - matcher `protocol` chỉ khớp SAU khi sniff.
+        //       Đo thật: đặt hijack-dns trước sniff thì log vẫn ghi
+        //       "inbound packet connection to 10.193.111.16:53 -> outbound/direct[direct]".
+        //   (b) `hijack-dns` phải đứng TRƯỚC mọi rule khớp theo IP (ip_is_private, ip_cidr), nếu
+        //       không DNS tới resolver IP TQ / IP nội bộ của khách bị đẩy đi thẳng => GFW nhiễm độc
+        //       (đo thật: www.youtube.com -> 69.171.235.22 = IP Facebook, AAAA google.com -> 2001::1).
+        var indexSniff = order.FindIndex(r => r.TryGetProperty("action", out var a) && a.GetString() == "sniff");
         var indexDns = order.FindIndex(r => r.TryGetProperty("protocol", out var p) && p.GetString() == "dns");
         var indexPrivate = order.FindIndex(r => r.TryGetProperty("ip_is_private", out _));
         var indexIp = order.FindIndex(r => r.TryGetProperty("ip_cidr", out _));
-        Assert.Equal(0, indexDns);
+        Assert.Equal(0, indexSniff);
+        Assert.Equal(1, indexDns);
+        Assert.True(indexSniff < indexDns, "sniff phải đứng TRƯỚC hijack-dns (nếu không rule không khớp)");
         Assert.True(indexDns < indexPrivate, "hijack-dns phải đứng TRƯỚC rule ip_is_private");
         Assert.True(indexDns < indexIp, "hijack-dns phải đứng TRƯỚC rule dải TQ (ip_cidr)");
         Assert.True(indexPrivate < indexIp, "rule LAN phải đứng trước rule dải TQ");

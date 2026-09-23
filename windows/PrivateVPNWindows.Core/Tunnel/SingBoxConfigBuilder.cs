@@ -347,24 +347,25 @@ public static class SingBoxConfigBuilder
     {
         var rules = new JsonArray
         {
-            // BẮT BUỘC ĐỨNG ĐẦU TIÊN - sự cố production 23/09/2026 (bản 1.4.5 làm khách mất mạng
-            // và không vào được Google/YouTube).
+            // THỨ TỰ BẮT BUỘC - sự cố production 23/09/2026 (bản 1.4.5 làm khách TQ mất mạng và
+            // không vào được Google/YouTube):
             //
-            // Vì sao: khách ở Trung Quốc khai resolver DNS là IP Trung Quốc (DNS nhà mạng, modem,
-            // 114.114.114.114, 202.96.128.68...). Nếu rule `ip_cidr` (dải TQ -> direct) đứng TRƯỚC
-            // thì truy vấn DNS tới các IP đó bị khớp `outbound: direct` => đi THẲNG ra ngoài,
-            // KHÔNG bị hijack. Đo thật trên máy harness (mạng TQ, bản 1.4.5):
-            //   nslookup google.com 114.114.114.114  -> TIMEOUT
-            //   nslookup google.com 202.96.128.68    -> TIMEOUT
-            //   nslookup google.com 8.8.8.8          -> trả lời thật (vì 8.8.8.8 KHÔNG thuộc cn.txt)
-            // Hệ quả: phân giải tên miền hỏng/nhiễm độc => máy như MẤT MẠNG, Google/YouTube chết,
-            // trong khi site TQ vẫn chạy (đúng triệu chứng khách báo).
+            //  1. `sniff` PHẢI đứng TRƯỚC `hijack-dns`, vì matcher `protocol` chỉ khớp SAU khi sniff.
+            //     Bằng chứng (đo trên máy harness, mạng TQ): khi đặt hijack-dns ở vị trí 1 (trước
+            //     sniff), sing-box.log VẪN ghi
+            //       "inbound packet connection to 10.193.111.16:53 -> outbound/direct[direct]"
+            //     tức rule hijack-dns KHÔNG khớp, DNS của khách vẫn đi thẳng ra resolver TQ.
+            //  2. `hijack-dns` PHẢI đứng TRƯỚC mọi rule khớp theo IP (`ip_is_private`, `ip_cidr`).
+            //     Khách ở TQ khai resolver là IP TQ / IP nội bộ (10.x, 192.168.x); nếu rule IP đứng
+            //     trước thì `outbound: direct` thắng => DNS đi thẳng => GFW nhiễm độc:
+            //       exchanged A www.youtube.com -> 69.171.235.22 (IP Facebook)
+            //       exchanged AAAA www.google.com -> 2001::1
             //
-            // Đứng đầu thì MỌI truy vấn DNS vào TUN đều được sing-box tự phân giải: qua `remote`
-            // (1.1.1.1, TRONG tunnel) cho tên miền thường, hoặc `cn` (223.5.5.5, đi thẳng) cho nhóm
-            // tên miền dịch vụ TQ - xem BuildDnsRules.
-            new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
+            // Đủ hai điều kiện trên thì MỌI truy vấn DNS vào TUN được sing-box tự phân giải: qua
+            // `remote` (1.1.1.1, TRONG tunnel) cho tên miền thường, hoặc `cn` (223.5.5.5) cho nhóm
+            // tên miền dịch vụ TQ - xem BuildDnsRules/BuildDnsServers.
             new JsonObject { ["action"] = "sniff" },
+            new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
             // LAN + dải nội bộ KHÔNG đi vào tunnel (mất truy cập máy in/NAS nếu đi).
             new JsonObject { ["ip_is_private"] = true, ["outbound"] = DirectOutboundTag },
         };
