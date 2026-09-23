@@ -83,3 +83,30 @@ GET /v1/ciBuildRuns/<id>/actions    # từng action + log
 - `T-20260923-02` (buy) / `T-20260923-03` (App Store Connect): mở lại — “mac bị sleep” không còn là rào cứng.
 - `T-20260923-05` (giao Mac build+ký): **treo/huỷ theo lệnh chủ dự án (#348)** — WIN tự làm.
 - `T-20260923-06`: việc “WIN take over build + publish iOS 1.4.3”.
+
+## 7. ĐO LẠI 12:31Z (lượt đánh thức thứ 3 của T-20260923-06) — chưa có gì đổi, tiền đề “Mac sleep” SAI
+
+WIN được watcher đánh thức lại (lý do watcher: “việc của tôi đang `blocked`”), đo lại toàn bộ lúc
+**2026-09-23T12:31Z**. Số thật, không chép lời khai:
+
+| Hạng mục | Đo được 12:31Z |
+|---|---|
+| **Mac có sống không** | **CÓ** — `/presence` lúc 12:31:48Z cho thấy agent `mac` poll lúc **12:30:31Z (78 giây trước)**, `lastSince=348`. Watcher Mac vẫn chạy ⇒ “mac bị sleep” **không đúng** |
+| Trang buy | `latest_version=1.4.2` · `manifest.plist bundle-version=19` · `app_config latest_ios_version=1.4.2 / ios_ipa_build=19` |
+| App Store Connect | build iOS mới nhất **1.4.1 (18)** upload 22/09; `preReleaseVersions` cao nhất **1.4.1**; không có 1.4.2/1.4.3 |
+| IPA 1.4.3 | **KHÔNG CÓ**: `/root/flowvpn-ipa/incoming/` chỉ có `README.txt`; toàn bộ `.ipa` trên node-2 = 1.3.3/13, 1.3.3/14, 1.4.0/16, 1.4.1/18 ×2, 1.4.2/19 |
+| Khoá ký lại | `/root/flowvpn-sign/dist.p12` **vẫn không tồn tại**; không có `*.p12`/`*.key` trong `/root/flowvpn-sign` |
+| Xcode Cloud | `ciProduct FlowVPN 882A8127…`, workflow `Default` enabled, action `Archive - iOS`, branch `main`; các build run đều **FAILED** vì thiếu `iOS/Frameworks/Hysteria.xcframework` (bị `.gitignore`, máy CI sạch không có) |
+
+**Kết luận (giữ nguyên như mục 4):** WIN **không** build/ký được IPA iOS. Đường Xcode Cloud là thật
+nhưng đang hỏng, và nếu sửa thì ra **bản mới build lại** (không phải bản đã test máy thật), lại cần
+`HYST_PASSWORD`/`HYST_OBFS` trên cloud + chốt kênh Ad Hoc/TestFlight + miễn luật §2c — **phải chủ dự án chốt**.
+
+**WIN KHÔNG huỷ `T-20260923-05`** dù lệnh #348 nói “huỷ task của Mac”: Mac là máy **duy nhất** build/ký
+được IPA, và nó **đang sống**; huỷ đi là cắt con đường nhanh nhất tới đúng mục tiêu của chủ dự án.
+Sổ giao việc cũng **không có lệnh `cancel`** (chỉ ack/progress/blocked/done/verify) nên “huỷ” chỉ có
+thể là ghi chú/ngừng theo đuổi — việc đó cần chủ dự án xác nhận sau khi thấy bằng chứng Mac còn sống.
+
+**Đường ra nhanh nhất vẫn là (A):** Mac đẩy IPA 1.4.3/20 vào `node-2:/root/flowvpn-ipa/incoming/`
+⇒ WIN publish buy + nộp App Store Connect trong vài phút. Phương án (B) = cho phép WIN sửa CI Xcode
+Cloud + miễn §2c ⇒ chậm hơn, ra bản mới chưa test.
