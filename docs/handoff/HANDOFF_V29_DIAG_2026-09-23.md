@@ -62,13 +62,34 @@ vào kết quả** ⇒ **xoá mất 54 dòng** ở `HysteriaVpnService.kt` + 5 d
 
 ```
 APK : C:\Users\Minhn\.vpnflow-build-142\app\outputs\apk\modern\debug\app-modern-debug.apk
-size: 113.422.837 bytes
-sha256: A536BCA792C3D7ED392ACC3437E12B1A1B34F31C4B0D60BEF81EC6D36708E452
+size: 113.451.055 bytes
+sha256: 59BE53134AE6DEC6B09356CFA6268FD369692530972E7A114C9C7F0670E709B9
 package: com.privatevpn.app.dev  versionCode=29  versionName=1.4.3-dev
 ```
 
 Đã soi trong `classes3.dex` của chính APK này: có `uidRxBytes`, `uidTxBytes`,
 `TrafficStats theo UID`, `srcOnWs`, `ramp: STABLE at` ⇒ đúng bản đã vá (không phải APK cũ còn sót).
+
+**Lưu ý thứ tự build:** bản APK `A536BCA7…` (11:19) là bản *trước* khi port fix MTU/DNS của
+commit `38a3e6f`; bản `59BE5313…` (11:58) mới là bản **khớp với source đã commit** (`86944de`).
+
+## 5b. Đã port lại fix của máy khác để KHÔNG revert
+
+Bản copy ngoài repo được tách trước commit `38a3e6f` (`fix(android): ha MTU tun0 1500->1300 +
+cap 2 resolver DNS`), nên chép đè nguyên file sẽ **revert** commit đó. Trước khi chép, đã port
+nguyên văn vào bản copy rồi mới commit:
+
+| Việc port | Nội dung |
+|---|---|
+| `Config.kt` | `val HY_DNS_SERVERS = listOf("1.1.1.1", "8.8.8.8")` + KDoc lý do ≥2 resolver |
+| `HysteriaVpnService.kt` | `for (dns in Config.HY_DNS_SERVERS) builder.addDnsServer(dns)` thay `addDnsServer("1.1.1.1")` |
+| `HysteriaVpnService.kt` | `HY_MTU = 1500` → `1300` + KDoc path-MTU |
+
+Đã kiểm tra thêm: `L10n.kt` trong bản copy **đã có** các key mới (`about`, `version`,
+`latestOnServer`, …) của commit `152e524` và `build.gradle.kts` vẫn giữ `applicationIdSuffix =
+".dev"` ⇒ không revert commit nào khác. `git diff origin/main` cho 8 file `windows/**` còn lại của
+việc 1.4.4 **không bị đụng tới**.
+
 
 ## 6. Cách nghiệm thu trên máy (khi có adb)
 
