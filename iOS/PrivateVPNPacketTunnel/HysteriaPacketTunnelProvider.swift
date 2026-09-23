@@ -280,6 +280,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             if let value = diag.downKbps { report["downKbps"] = value }
             if let value = diag.upKbps { report["upKbps"] = value }
             if let value = diag.observedKbps { report["observedKbps"] = value }
+            if let value = diag.peakDownKbps { report["peakDownKbps"] = value }
             if let value = diag.declaredDownKbps { report["declaredDownKbps"] = value }
             if let value = diag.declaredUpKbps { report["declaredUpKbps"] = value }
             if let value = diag.targetDownKbps { report["targetDownKbps"] = value }

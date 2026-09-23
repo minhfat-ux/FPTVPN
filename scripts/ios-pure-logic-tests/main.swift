@@ -531,10 +531,11 @@ do {
     let idle = RampStatus.display(
         serving: false, downKbps: 12_000, upKbps: 3_000, observedKbps: 6_000,
         declaredDownKbps: 4_800, declaredUpKbps: 1_440, ceilingKbps: 7_000,
-        stableKbps: 4_800, probeNoGain: false
+        stableKbps: 4_800, probeNoGain: false, peakDownKbps: 9_000
     )
     checkEqual(idle.downKbps, nil, "chưa phục vụ ⇒ down —")
     checkEqual(idle.observedKbps, nil, "chưa phục vụ ⇒ đo được —")
+    checkEqual(idle.peakDownKbps, nil, "chưa phục vụ ⇒ đỉnh phiên —")
     checkEqual(idle.declaredDownKbps, nil, "chưa phục vụ ⇒ khai báo —")
     checkEqual(idle.morePercent, nil, "chưa phục vụ ⇒ % —")
 
@@ -542,13 +543,22 @@ do {
     let live = RampStatus.display(
         serving: true, downKbps: 12_000, upKbps: 3_000, observedKbps: 6_000,
         declaredDownKbps: 4_800, declaredUpKbps: 1_440, ceilingKbps: 7_000,
-        stableKbps: nil, probeNoGain: false
+        stableKbps: nil, probeNoGain: false, peakDownKbps: 12_500
     )
     checkEqual(live.downKbps, 12_000, "đang phục vụ ⇒ giữ số down live")
     checkEqual(live.observedKbps, 6_000, "giữ số đo được")
+    checkEqual(live.peakDownKbps, 12_500, "giữ đỉnh phiên (số nói lên sức đường đã đạt)")
     checkEqual(live.morePercent, 46, "mục tiêu 7 Mbps (kẹp trần) / khai 4,8 ⇒ +46%")
     check(live.atMax == false, "chưa tối đa")
     checkEqual(live.stableKbps, nil, "chưa STABLE ⇒ mức khoá —")
+
+    // Chưa có đỉnh (0/nil) ⇒ UI hiện —, không hiện 0.
+    let noPeak = RampStatus.display(
+        serving: true, downKbps: 900, upKbps: 120, observedKbps: 800,
+        declaredDownKbps: 4_800, declaredUpKbps: 1_440, ceilingKbps: nil,
+        stableKbps: nil, probeNoGain: false, peakDownKbps: 0
+    )
+    checkEqual(noPeak.peakDownKbps, nil, "đỉnh 0 ⇒ — (KHÔNG hiện 0)")
 
     let maxed = RampStatus.display(
         serving: true, downKbps: 9_600, upKbps: 2_880, observedKbps: 9_500,

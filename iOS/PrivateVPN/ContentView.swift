@@ -681,6 +681,14 @@ struct ContentView: View {
             value: RampStatus.formatRate(report?.upKbps),
             valueColor: VPNTheme.label
         )
+        // A10 §2g — "Đỉnh phiên": đỉnh của trung bình trượt goodput trong CẢ phiên
+        // (`BandwidthControl.peakDownKbps`). Đây là con số nói lên sức đường đã đạt, KHÔNG tụt
+        // về "—" khi khách mở thẻ lúc tunnel rảnh (khác hai dòng "Đang truyền" ở trên).
+        diagRow(
+            title: languageStore.t(.diagPeakDown),
+            value: RampStatus.formatRate(report?.peakDownKbps),
+            valueColor: VPNTheme.label
+        )
         diagRow(
             title: languageStore.t(.diagObserved),
             value: RampStatus.formatRate(report?.observedKbps),

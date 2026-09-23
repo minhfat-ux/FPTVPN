@@ -127,6 +127,9 @@ struct TunnelStatusReport: Codable, Equatable {
     var upKbps: Int?
     /// Số ĐO ĐƯỢC của đường ramp (trung bình trượt goodput, cùng nguồn log `bw: sample observed=`).
     var observedKbps: Int?
+    /// A10 §2g — ĐỈNH của trung bình trượt goodput trong cả phiên (`BandwidthControl.peakDownKbps`).
+    /// Dòng "Đỉnh phiên ↓": luôn có số nói lên sức đường đã đạt, không tụt khi tunnel rảnh.
+    var peakDownKbps: Int?
     /// Số KHAI BÁO hiện tại (Brutal CC) hai chiều.
     var declaredDownKbps: Int?
     var declaredUpKbps: Int?

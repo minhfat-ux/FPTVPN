@@ -148,6 +148,9 @@ enum RampStatus {
         var downKbps: Int?
         var upKbps: Int?
         var observedKbps: Int?
+        /// A10 §2g — ĐỈNH phiên (đỉnh của trung bình trượt goodput chiều xuống). Luôn có số nói
+        /// lên sức đường đã đạt, không tụt về `—` khi khách mở thẻ lúc tunnel rảnh.
+        var peakDownKbps: Int?
         var declaredDownKbps: Int?
         var declaredUpKbps: Int?
         var targetDownKbps: Int?
@@ -170,11 +173,14 @@ enum RampStatus {
         declaredUpKbps: Int?,
         ceilingKbps: Int?,
         stableKbps: Int?,
-        probeNoGain: Bool
+        probeNoGain: Bool,
+        /// Đỉnh phiên (đã có sẵn trong `BandwidthControl.peakDownKbps`; KHÔNG thêm phép đo).
+        /// Có mặc định để không phá các call site cũ; `serving == false` ⇒ bị xoá như mọi số khác.
+        peakDownKbps: Int? = nil
     ) -> Display {
         guard serving else {
             return Display(
-                downKbps: nil, upKbps: nil, observedKbps: nil,
+                downKbps: nil, upKbps: nil, observedKbps: nil, peakDownKbps: nil,
                 declaredDownKbps: nil, declaredUpKbps: nil, targetDownKbps: nil,
                 morePercent: nil, atMax: false, stableKbps: nil, serving: false
             )
@@ -193,6 +199,7 @@ enum RampStatus {
             downKbps: downKbps,
             upKbps: upKbps,
             observedKbps: observed,
+            peakDownKbps: (peakDownKbps ?? 0) > 0 ? peakDownKbps : nil,
             declaredDownKbps: declaredDownKbps,
             declaredUpKbps: declaredUpKbps,
             targetDownKbps: target,

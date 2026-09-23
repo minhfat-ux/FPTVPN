@@ -557,7 +557,9 @@ extension BandwidthControl {
                 declaredUpKbps: upKbps,
                 ceilingKbps: nil,
                 stableKbps: stableDownKbps,
-                probeNoGain: probeNoGain
+                probeNoGain: probeNoGain,
+                // A10 §2g — đỉnh phiên: số đã có sẵn trong engine, không thêm phép đo.
+                peakDownKbps: peakDownKbps > 0 ? peakDownKbps : nil
             )
         }
 

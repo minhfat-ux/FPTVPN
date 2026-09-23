@@ -169,7 +169,7 @@ enum AppTextKey: String {
     case support, contactSupport, privacyPolicy, termsOfUse, upgrade
     case preparingPermission, vpnStartFailure, diagnostics, state, location, message, notConfigured
     // A10 §2g — các dòng số live của thẻ Diagnostics.
-    case diagDown, diagUp, diagObserved, diagDeclared, diagMore, diagAtMax, diagPath, diagStable
+    case diagDown, diagUp, diagPeakDown, diagObserved, diagDeclared, diagMore, diagAtMax, diagPath, diagStable
     case secureExitNode, vietnam, startVPNHint, stopVPNHint
     case serverLocation, select, loadingLocations, noServerAvailable, refreshLocations, usingSavedServers
     case paywallTitle, paywallSubtitle, benefitTunnel, benefitWifi, benefitFast
@@ -241,7 +241,7 @@ final class AppLanguageStore: ObservableObject {
             .about: "About", .version: "Version", .latestOnServer: "Latest on server", .latestDifferent: "DIFFERENT from installed build", .latestUnavailable: "(unavailable)",
             .upgrade: "Upgrade", .preparingPermission: "Preparing VPN permission…", .vpnStartFailure: "VPN could not start. Please try again.",
             .diagnostics: "Diagnostics", .state: "State", .location: "Location", .message: "Message",
-            .diagDown: "Download ↓", .diagUp: "Upload ↑", .diagObserved: "Measured (ramp path)",
+            .diagDown: "Transferring ↓", .diagUp: "Transferring ↑", .diagPeakDown: "Session peak ↓", .diagObserved: "Measured (ramp path)",
             .diagDeclared: "Currently declared", .diagMore: "Declared headroom",
             .diagAtMax: "Maxed out at this time", .diagPath: "Active path",
             .diagStable: "Locked level (stable)",
@@ -275,7 +275,8 @@ final class AppLanguageStore: ObservableObject {
             .about: "Giới thiệu", .version: "Phiên bản", .latestOnServer: "Bản mới nhất trên server", .latestDifferent: "KHÁC bản đang cài", .latestUnavailable: "(không đọc được)",
             .upgrade: "Nâng cấp", .preparingPermission: "Đang chờ cấp quyền VPN…", .vpnStartFailure: "Không thể khởi động VPN. Vui lòng thử lại.",
             .diagnostics: "Chẩn đoán", .state: "Trạng thái", .location: "Vị trí", .message: "Thông báo",
-            .diagDown: "Tốc độ tải xuống ↓", .diagUp: "Tốc độ tải lên ↑",
+            .diagDown: "Đang truyền ↓", .diagUp: "Đang truyền ↑",
+            .diagPeakDown: "Đỉnh phiên ↓",
             .diagObserved: "Đo được (đường ramp)", .diagDeclared: "Khai báo hiện tại",
             .diagMore: "Khai báo còn lên được", .diagAtMax: "Đã tối đa ở thời điểm này",
             .diagPath: "Đường đang dùng", .diagStable: "Mức đã khoá (stable)",
@@ -309,7 +310,7 @@ final class AppLanguageStore: ObservableObject {
             .about: "关于", .version: "版本", .latestOnServer: "服务器最新版本", .latestDifferent: "与已安装版本不同", .latestUnavailable: "(无法读取)",
             .upgrade: "升级", .preparingPermission: "正在等待 VPN 权限…", .vpnStartFailure: "VPN 无法启动。请重试。",
             .diagnostics: "诊断", .state: "状态", .location: "位置", .message: "消息",
-            .diagDown: "下载速度 ↓", .diagUp: "上传速度 ↑", .diagObserved: "实测（爬升路径）",
+            .diagDown: "正在传输 ↓", .diagUp: "正在传输 ↑", .diagPeakDown: "会话峰值 ↓", .diagObserved: "实测（爬升路径）",
             .diagDeclared: "当前声明值", .diagMore: "声明还可提升", .diagAtMax: "当前已达上限",
             .diagPath: "当前路径", .diagStable: "已锁定水平（稳定）",
             .notConfigured: "尚未配置 - 点击打开设置", .secureExitNode: "安全出口节点", .vietnam: "越南",
@@ -341,7 +342,7 @@ final class AppLanguageStore: ObservableObject {
             .about: "情報", .version: "バージョン", .latestOnServer: "サーバーの最新版", .latestDifferent: "インストール済みと異なります", .latestUnavailable: "(取得できません)",
             .upgrade: "アップグレード", .preparingPermission: "VPN の許可を待機中…", .vpnStartFailure: "VPN を開始できませんでした。もう一度お試しください。",
             .diagnostics: "診断", .state: "状態", .location: "場所", .message: "メッセージ",
-            .diagDown: "ダウンロード ↓", .diagUp: "アップロード ↑", .diagObserved: "実測（ランプ経路）",
+            .diagDown: "転送中 ↓", .diagUp: "転送中 ↑", .diagPeakDown: "セッション最大 ↓", .diagObserved: "実測（ランプ経路）",
             .diagDeclared: "現在の申告値", .diagMore: "申告の残り伸びしろ", .diagAtMax: "現時点で最大",
             .diagPath: "使用中の経路", .diagStable: "固定レベル（安定）",
             .notConfigured: "未設定 - タップして設定を開く", .secureExitNode: "安全な出口ノード", .vietnam: "ベトナム",
@@ -373,7 +374,7 @@ final class AppLanguageStore: ObservableObject {
             .about: "정보", .version: "버전", .latestOnServer: "서버 최신 버전", .latestDifferent: "설치된 버전과 다름", .latestUnavailable: "(읽을 수 없음)",
             .upgrade: "업그레이드", .preparingPermission: "VPN 권한을 기다리는 중…", .vpnStartFailure: "VPN을 시작할 수 없습니다. 다시 시도해 주세요.",
             .diagnostics: "진단", .state: "상태", .location: "위치", .message: "메시지",
-            .diagDown: "다운로드 ↓", .diagUp: "업로드 ↑", .diagObserved: "실측(램프 경로)",
+            .diagDown: "전송 중 ↓", .diagUp: "전송 중 ↑", .diagPeakDown: "세션 최고 ↓", .diagObserved: "실측(램프 경로)",
             .diagDeclared: "현재 선언값", .diagMore: "선언 여유분", .diagAtMax: "현재 최대치",
             .diagPath: "사용 중인 경로", .diagStable: "고정 수준(안정)",
             .notConfigured: "설정되지 않음 - 탭하여 설정 열기", .secureExitNode: "보안 출구 노드", .vietnam: "베트남",
