@@ -85,7 +85,7 @@ targets:
         # Bản 1.4.0 (build 15) sửa lỗi mất mạng sau khi bật VPN một lúc + ổn định relay Cloudflare.
         # Build 16 (20/09/2026): extension iOS chuyển sang HYSTERIA-ONLY (port từ macOS) nên
         # cần số build mới để phân biệt với bản 15 đã phát.
-        CURRENT_PROJECT_VERSION: "16"
+        CURRENT_PROJECT_VERSION: "17"
         MARKETING_VERSION: "1.4.0"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
@@ -161,7 +161,7 @@ targets:
         CFBundleDisplayName: VPNFlow Tunnel
         # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
         CFBundleShortVersionString: "1.4.0"
-        CFBundleVersion: "16"
+        CFBundleVersion: "17"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
@@ -178,7 +178,7 @@ targets:
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
         MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "16"
+        CURRENT_PROJECT_VERSION: "17"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:

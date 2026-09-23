@@ -205,10 +205,20 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
   `externalBuildState=READY_FOR_BETA_SUBMISSION` là còn phải nộp Beta App Review mới tới tester ngoài.
 - **Không dùng IPA ad-hoc để nộp TestFlight** và ngược lại (profile app-store có 0 UDID nên cài trực tiếp sẽ fail).
 
+| 2026-09-23 | iOS | 1.4.1 (18) — thông báo | Gửi email 3 ngôn ngữ cho khách **đang dùng iOS** (script `scripts/send-ios-1.4.1-announcement.py`): **6/6 delivered** (04:09 UTC). Nội dung chỉ nêu tính năng có trong build 18 (watchdog tự phục hồi, tự dựng lại, sửa mất mạng IPv6, đường TQ đi thẳng, Settings hiện version). Release notes: `release/ios/RELEASE_NOTES_1.4.1.md` |
+| 2026-09-23 | iOS | 1.4.1 (18) — TestFlight | Nộp **Beta App Review** cho tester ngoài: build vào nhóm `External Test`, "What to Test" 3 ngôn ngữ (en-GB/vi/zh-Hans), state `WAITING_FOR_REVIEW` (nộp 11:08 VN, submission id = build id `14c65fa9-…`) |
+
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
 2. Đưa **release notes** lên web (hiện chỉ nằm trong repo `release/<platform>/RELEASE_NOTES_<ver>.md`).
-3. Tự động hoá: 1 script `publish-ios.sh <ipa> <ver> <build>` + `publish-android.sh <apk-modern> <apk-legacy> <ver>` chạy đủ 10 bước §1 và in bằng chứng.
+3. Tự động hoá:
+   - ~~`publish-ios.sh`~~ **ĐÃ XONG 23/09**: `scripts/publish-ios.sh <ipa> <version> <build> [--dry-run]`
+     chạy đủ §1 — verify TỪ TRONG IPA (version/build/bundle/appex/profile ad-hoc + `get-task-allow=false`
+     + keychain group) → claim → backup bản cũ → upload → verify sha256/size trên server → PATCH mốc
+     (đọc JSON trả về) → verify app-version + manifest + tải thật + `/install/ios` + `/buy` → release claim.
+   - **TestFlight**: `scripts/asc-beta.mjs status | submit <build> [--group "External Test"] [--whatsnew <json>] [--wait]`
+     (gán nhóm external + "What to Test" nhiều ngôn ngữ + nộp Beta App Review, đọc trạng thái từ API).
+   - Còn lại: `publish-android.sh` (APK modern+legacy, các bước tương tự).
 4. Kiểm tra định kỳ: link phát hành còn 200 + size khớp (đưa vào `health-watch`).
 5. **AUDIT toàn kênh (chủ dự án yêu cầu 22/09/2026)** — mỗi nền tảng phải đang phục vụ ĐÚNG bản latest;
    kênh nào lệch thì **cập nhật lại link tải + set mốc + thông báo khách**:
@@ -220,6 +230,15 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
    (macOS cần chạy trên máy Mac, APK cần `aapt2`). Lần chạy đầu (22/09): Windows **khớp 1.4.2**;
    iOS **LỆCH** — phát đúng 1.4.0 nhưng profile thiếu nhóm keychain `.shared` nên khách không đăng
    nhập được ⇒ phải sửa + ký lại + thông báo khách.
+
+5. **ĐANG CHỜ (23/09)**: bản iOS kế tiếp (**> build 18**) gồm 2 fix đã commit nhưng *chưa* nằm trong
+   build 18 — `7c98e53` (tự đăng xuất khỏi thiết bị khác) và `820b9d2` (watchdog không còn mù, đếm
+   datagram khi dùng lại transport). Chủ dự án chốt: **chờ session Mac build xong rồi mới publish**.
+   Khi có bản mới, làm đủ 3 kênh: trang buy (IPA ad-hoc + mốc `latest_ios_version`/`ipa_build`) →
+   TestFlight (Beta App Review + "What to Test" 3 ngôn ngữ) → email khách iOS
+   (`scripts/send-ios-1.4.1-announcement.py` là mẫu, đổi nội dung theo release notes mới).
+   ⚠️ Trước khi publish phải verify từ trong IPA: version/build, `get-task-allow=false`, keychain group
+   `G6XW3RN6LJ.com.privatevpn.shared`, có `PrivateVPNPacketTunnel.appex`, sha256 khớp handover.
 
 ## 8. Lỗi đã từng xảy ra (đọc để không lặp)
 - Link trên `/buy` trỏ sai host (`api.` ⇒ 401). Link tải phải là `t1.` hoặc `meetflowai.site`.

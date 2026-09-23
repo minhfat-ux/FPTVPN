@@ -24,7 +24,10 @@ DOCROOT_IP="${DOCROOT_IP:-/var/www/dl}"   # kênh tải theo IP (khách TQ/VN v�
 # (Từng để thiếu "/dl" ⇒ file vào /var/www/flowvpn/<file>, Caddy trả 404 dù script báo OK.)
 DOCROOT_CDN="${DOCROOT_CDN:-/var/www/flowvpn/dl}"
 IP_HOST="${IP_HOST:-165.101.114.162}"
-CDN_HOST="${CDN_HOST:-meetflowai.site}"   # domain chính (Caddy phục vụ /dl/*)
+# Host chuẩn cho MỌI link khách tải: t1.meetflowai.site (chủ dự án chốt 21/09/2026 —
+# meetflowai.site bị chặn theo SNI ở Trung Quốc). Đổi mặc định ở ĐÂY, đừng set tay từng lần,
+# nếu không `windows_installer_url` lại trỏ host cũ và `check-public-surface.py` báo HỎNG.
+CDN_HOST="${CDN_HOST:-t1.meetflowai.site}"   # domain Caddy phục vụ /dl/* (cùng block với meetflowai.site)
 
 # Tên file công khai: giữ đúng tên nhưng luôn có 1 bản "latest" cho link cố định.
 BASE="$(basename "$FILE")"
