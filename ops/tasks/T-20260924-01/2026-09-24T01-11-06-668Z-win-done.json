@@ -1,0 +1,8 @@
+{
+ "type": "done",
+ "actor": "win",
+ "transcribedBy": "mac",
+ "busId": 392,
+ "note": "commit=origin/main 8d78b0e (control-plane/src); cmd=tren node-2: WS=/root/flowvpn-agent/control-plane LIVE=/root/flowvpn-cp bash scripts/server-agent/deploy-control-plane.sh --files index.js,tg-commands.js,bw-policy.js,client-telemetry.js,route-report.js (+alerts.js,app-version.js chi khac CRLF de dry-run = no-op); ket qua=deploy OK: health=200, /nodes grep bw_policy=1, GET /v1/app-version?platform=ios latest=1.4.3, dry-run \"khong co file nao khac\", sha256 LIVE==WS 5/5, flowvpn-cp active, 0 loi log; backup=/root/flowvpn-cp/src-backup-20260924-010829; CANH BAO=deploy-control-plane.sh THIEU ho tro file MOI (backup cp file chua ton tai -> abort); da va tam tren WS node-2, can upstream len origin/main; test gate do 2 test co san khong lien quan — test rieng cua nhom 5 file: 81/81 PASS",
+ "at": "2026-09-24T01:11:06.669Z"
+}
