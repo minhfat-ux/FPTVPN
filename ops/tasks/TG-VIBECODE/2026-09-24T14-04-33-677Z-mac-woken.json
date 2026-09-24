@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-24T14:04:33.677Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: bản ios mới không ổn định. Tự disconnect, mất mạng. Thông số trên Dianogtics đan",
+ "via": "dsh --profile headless \"{prompt}\""
+}
