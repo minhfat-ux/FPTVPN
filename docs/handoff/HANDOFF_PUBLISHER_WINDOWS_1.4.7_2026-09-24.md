@@ -7,6 +7,30 @@
 
 ---
 
+## ✅ ĐÃ XONG 24/09/2026 (publisher harness Windows cập nhật)
+
+| Hạng mục §5 | Kết quả thật |
+|---|---|
+| Artifact | `windows/installer/out/VPNFlow-Setup-1.4.7.exe` · **52.789.147 B** · sha256 `7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4` |
+| Mốc build | build commit **`9330355ddbf4ad23253c28f15bcc10c0476b59c5`** (HEAD, cây `windows/` sạch) · app `.exe` `ProductVersion = 1.4.7+9330355…` (cổng 3c ĐẠT) |
+| `dotnet test` | **Passed: 219 · Failed: 0** (chạy lại trên chính commit này, 24/09) |
+| Cổng `pre` | ĐẠT: version 1.4.7 · ProductVersion · app exe FileVersion · mốc `1.4.6 → 1.4.7` (tiến). **2 mục chữ ký `KHÔNG ĐẠT`** ⇒ exit 1, đúng dự kiến — **chủ dự án đã duyệt ngoại lệ riêng cho 1.4.7** (xem §0 `PUBLISHER_PROCESS.md`) |
+| Upload + cổng `post` | sha256 khớp ở **cả hai docroot** (`/var/www/dl`, `/var/www/flowvpn/dl`) + tải lại qua CDN khớp sha256 · **post ĐẠT (exit 0)**: đọc từ file đang phát = 1.4.7, mốc khớp, route HTTP 200 · 52.789.147 B |
+| `/buy` + mốc | `/buy` trỏ `https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.7.exe?v=73660031` · `latest_version=1.4.7` (kênh ios/android/macos **không đổi**) |
+| Sổ + tag | `release/releases.jsonl` +2 dòng (publish + tag) · tag **`windows-v1.4.7`** → `9330355` |
+| Backup bản cũ | `VPNFlow-Setup-latest.bak-1a504534-20260924-091713.exe` (cả hai docroot); bản `VPNFlow-Setup-1.4.6.exe` vẫn còn nguyên |
+| Chữ ký | `Get-AuthenticodeSignature`: **`NotSigned`** cho **cả** Setup và app `.exe`; `Cert:\CurrentUser\My` + `LocalMachine\My -CodeSigningCert` **rỗng** ⇒ **NGOẠI LỆ có ghi sổ** |
+
+**⚠️ ĐÍNH CHÍNH hash trong handoff này:** mục "Trạng thái" ở trên ghi commit `f1ddc41` — đó là **commit trùng không nằm
+trên `origin/main`** (cùng patch-id `8bf01180cc7a2a4296d86164563c71a4b06a326e` với **`778cffc`**, chỉ `778cffc` được push).
+Mốc thật đã ghi sổ + tag là build commit `9330355ddbf4ad23253c28f15bcc10c0476b59c5`.
+
+**Email khách:** theo luật 7 + §5 (`PUBLISHER_PROCESS.md`) **harness Windows không tự gửi email khách** — đã bàn giao
+số liệu (version 1.4.7 · link `?v=73660031` · sha256 · 3 gạch đầu dòng từ release notes) cho publisher Mac qua bus
++ sổ giao việc. **Không được hứa "hết cảnh báo Windows"** (bản vẫn `NotSigned`).
+
+---
+
 ## 0. TL;DR — 3 việc phải làm
 
 | # | Việc | Trạng thái chặn |

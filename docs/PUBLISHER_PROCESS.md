@@ -32,6 +32,15 @@
 > `docs/handoff/HANDOFF_MAC_CERT_WINDOWS_2026-09-23.md`). Ngoại lệ **có ghi sổ** (`release/releases.jsonl`, dòng `windows 1.4.5`), cổng pre ghi rõ mục chữ ký
 > `KHÔNG ĐẠT` và post `ĐẠT`. **Ngoại lệ hết hiệu lực ngay khi có chứng chỉ** — từ bản kế tiếp phải ký theo luật này.
 
+> **Ngoại lệ luật 11 — BỔ SUNG cho `1.4.7`, chốt 24/09/2026 (chủ dự án duyệt lại):** vì ghi chú trên đã tuyên bố
+> ngoại lệ **hết hiệu lực từ bản kế tiếp**, publisher **hỏi lại chủ dự án** trước khi phát (**không** tự áp ngoại lệ cũ);
+> chủ dự án chốt ***"Cấp ngoại lệ cho 1.4.7"*** — bản vá **retry API 3 vòng** cho khách Trung Quốc đang bị lỗi
+> `device claim`. `1.4.7` phát **CHƯA KÝ**: sha256 `73660031…bfe4`, `Get-AuthenticodeSignature` = **`NotSigned`**
+> cho **cả** `VPNFlow-Setup-1.4.7.exe` **lẫn** `PrivateVPNWindows.App.exe`; máy harness **không có** chứng chỉ
+> CodeSigning (`Cert:\CurrentUser\My` + `Cert:\LocalMachine\My -CodeSigningCert` đều rỗng).
+> **Ngoại lệ này CHỈ áp cho `1.4.7`** — bản kế tiếp phải hỏi lại chủ dự án (hoặc có cert thì **phải ký**).
+> Nhật ký đầy đủ: `docs/handoff/HANDOFF_PUBLISHER_WINDOWS_1.4.7_2026-09-24.md`.
+
 > **PHÂN VAI build + publish — chốt 23/09/2026 (chủ dự án):** **harness Windows (owner `windows`) = build + publish cho
 > Windows VÀ Android** (Android: build release từ commit khoá, ký bằng keystore release ngoài repo — `~/keystores/vpnflow-signing.properties`);
 > **harness Mac = build + publish cho iOS VÀ macOS**. Email khách vẫn do publisher (Mac) gửi theo luật 7.
@@ -48,7 +57,7 @@
 
 | Kênh | Đang phát | `min` | Sổ | Nhật ký §6 | Ghi chú |
 |---|---|---|---|---|---|
-| **windows** | **1.4.6** (`VPNFlow-Setup-1.4.6.exe?v=1a504534` · 52.792.253 B · sha `1a504534…`) | 1.0.0 | ✅ | ✅ | phát **chưa ký** theo ngoại lệ luật 11 |
+| **windows** | **1.4.7** (`VPNFlow-Setup-1.4.7.exe?v=73660031` · 52.789.147 B · sha `73660031…bfe4`) | 1.0.0 | ✅ | ✅ (24/09) | **retry API 3 vòng** cho khách TQ · phát **chưa ký** theo ngoại lệ luật 11 **duyệt riêng cho 1.4.7** |
 | **android** | **1.4.4** (code 32 · modern 74.731.674 B · sha `145053e9…`) | 1.2.6 | ✅ | ✅ (bổ sung 23/09) | — |
 | **android-legacy** | **1.4.4** (code 32 · 74.748.054 B · sha `b9a03e77…`) | 1.0.0 | ✅ | ✅ | xem ⚠️ **BUG-APPVERSION-PLATFORM-001** dưới |
 | **ios** | **1.4.2 (19)** (IPA 8.152.677 B · sha `eba2e856…`) | 1.3.3 | ⚠️ sổ mới có 1.4.1 (18) | ✅ | cần bổ sung dòng sổ 1.4.2 (Mac) |
@@ -244,6 +253,7 @@ Nguồn nội dung: `release/ios/RELEASE_NOTES_<version>.md` + `git log` của b
 ## 6. Nhật ký phát hành (cập nhật mỗi lần)
 | Ngày | Nền tảng | Version/build | Ghi chú |
 |---|---|---|---|
+| 2026-09-24 | Windows | **1.4.7** | **Vá lỗi khách Trung Quốc "Không thể kết nối tới máy chủ VPNFlow khi gọi device claim"** (lỗi **trước khi** dựng tunnel): `api.meetflowai.site` từ mạng TQ chập chờn ~20 %/lần mà app chỉ thử mỗi host **1 lần** ⇒ thêm **3 vòng thử lại**, chờ 500 ms, **chỉ** retry lỗi transport (4xx/5xx trả về ngay, không lặp side-effect POST). Code commit `778cffc` (⚠️ handoff/release notes ghi `f1ddc41` = **commit trùng không nằm trên `origin/main`**, cùng patch-id). Build commit `9330355` (HEAD, cây `windows/` sạch) · `app exe ProductVersion = 1.4.7+9330355…` · Setup **52.789.147 B** · sha256 `7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4` · `/buy` trỏ `?v=73660031` · mốc `latest_version=1.4.7` · **cổng: pre ĐẠT mọi mục version (exit 1 CHỈ vì 2 mục chữ ký), post ĐẠT exit 0** · `dotnet test` **219/219** · sha256 khớp ở **cả hai docroot** + tải qua CDN · đã ghi sổ + tag `windows-v1.4.7`. Phát **CHƯA KÝ** theo **ngoại lệ duyệt riêng** (chủ dự án chốt 24/09, xem §0). Nhật ký: `HANDOFF_PUBLISHER_WINDOWS_1.4.7_2026-09-24.md` |
 | 2026-09-23 | Windows | **1.4.6** | **HOTFIX DNS khách Trung Quốc**: `hijack-dns` lên đầu + bỏ `detour` sai trên resolver nội địa (sing-box 1.14 FATAL) + sửa **thứ tự rule `sniff` phải TRƯỚC `hijack-dns`**. 3 commit `f59f9bd`/`4b6b96c`/`5ebc64f`, đã verify trên máy thật mạng TQ (`HANDOFF_WINDOWS_1.4.6_DNS_HOTFIX_2026-09-23.md`). Setup **52.792.253 B** · sha256 `1a504534…0796` · `/buy` trỏ `?v=1a504534` · mốc `latest_version=1.4.6` · đã ghi sổ + tag `windows-v1.4.6`. Phát **CHƯA KÝ** theo ngoại lệ luật 11 (xem ghi chú §0). ⚠️ **chưa có release notes `1.4.6`** |
 | 2026-09-23 | iOS | **1.4.2 (19)** | **Trang buy**: IPA ad-hoc 8.152.677 B · sha256 `eba2e856…ea31b` · mốc `latest_ios_version=1.4.2` + `ipa_build=19` (minimum giữ 1.3.3) · manifest `bundle-version 19` · tải thật qua t1 khớp sha. Gồm `7c98e53` (tự đăng xuất thiết bị khác) + `820b9d2`/`ff08f5b` (watchdog) + bỏ nhóm keychain dùng chung. **Email**: 6/6 khách iOS `delivered` (kèm thông báo đăng nhập lại 1 lần) · §2c: chủ dự án xác nhận "iOS verified and Passed". Sự cố khi phát: SSH key mất quyền + quoting lệnh claim ⇒ upload đứt, file đang phát bị cụt 2,85 MB — đã đẩy lại bản đầy đủ, verify sha256 rồi mới set mốc; tool đã sửa thành **upload nguyên tử** (file tạm + verify + mv). **TestFlight build 19: chờ bản export app-store-connect** |
 | 2026-09-23 | iOS | 1.4.1 (18) — TestFlight | Nộp **Beta App Review** cho tester ngoài: build vào nhóm `External Test`, "What to Test" 3 ngôn ngữ (en-GB/vi/zh-Hans), state `WAITING_FOR_REVIEW` (nộp 11:08 VN, submission id = build id `14c65fa9-…`) |

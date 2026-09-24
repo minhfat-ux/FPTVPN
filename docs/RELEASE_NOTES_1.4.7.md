@@ -2,8 +2,14 @@
 
 > Nền tảng: **windows** · Build: harness Windows · Quy trình: `docs/PUBLISHER_PROCESS.md`
 > Nguồn version duy nhất: `windows/PrivateVPNWindows.App/PrivateVPNWindows.App.csproj` (`<Version>`)
-> Sổ phát hành: `release/releases.jsonl` · Trạng thái: **CHỜ PUBLISHER build + phát**
-> Commit code của bản vá: **`f1ddc41`** (`fix(windows): thu lai API 3 vong khi loi transport`)
+> Sổ phát hành: `release/releases.jsonl` · Trạng thái: ✅ **ĐÃ PHÁT 24/09/2026** (harness Windows, owner `windows`)
+> Commit code của bản vá: **`778cffc`** (`fix(windows): thu lai API 3 vong khi loi transport`)
+> ⚠️ **ĐÍNH CHÍNH:** bản đầu của tài liệu này ghi commit `f1ddc41` — đó là **commit trùng KHÔNG nằm trên `origin/main`**
+> (cùng patch-id `8bf01180…` với `778cffc`, chỉ `778cffc` được push). Mốc build thật của artifact: **`9330355`** (HEAD lúc build).
+
+> **Đã phát:** Setup `VPNFlow-Setup-1.4.7.exe` · **52.789.147 B** · sha256 `7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4`
+> · `/buy` → `?v=73660031` · mốc `latest_version=1.4.7` · tag `windows-v1.4.7` → `9330355` · cổng **pre ĐẠT** (chỉ 2 mục chữ ký `KHÔNG ĐẠT`
+> theo ngoại lệ) + **post ĐẠT** · `dotnet test` 219/219. Vẫn `NotSigned` — ngoại lệ luật 11 **duyệt riêng cho 1.4.7**.
 
 > ⚠️ **BẢN NÀY CHƯA KÝ SỐ — dự kiến vẫn `NotSigned`.** Luật 11 (`NFR-WIN-002`) yêu cầu bộ cài Windows
 > **phải được ký** trước khi publish; máy harness Windows hiện **không có chứng chỉ Authenticode**
