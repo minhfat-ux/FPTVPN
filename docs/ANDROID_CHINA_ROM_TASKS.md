@@ -1,6 +1,13 @@
 # Android — ROM Trung Quốc / AOSP không GMS: task backlog (audit → sửa)
 
-> **Trạng thái: CHƯA SỬA CODE APP.** Đây là log task đã chốt thứ tự ưu tiên, chờ thi hành.
+> **Trạng thái: DORMANT — KHÔNG THI HÀNH.** Android đang **FREEZE** (`docs/handoff/FREEZE_ANDROID_2026-09-23.md`
+> §5): *"tạm khoá bản Android lại… không sửa Android thêm cho tới khi có yêu cầu mới của chủ dự án"*.
+> §7 (24/09/2026) chủ dự án xác nhận *"bản android hiện tại trên devices đang khá stable rồi"* ⇒ 2 row
+> `origin=verify` (android + android-legacy) đã ghi vào `release/releases.jsonl`, mục treo đối chiếu
+> artifact ↔ máy thật đã đóng.
+> **Chưa có issue nào từ Android trên thực tế:** guard task = rỗng, `client-telemetry.db` = 0 bản ghi,
+> `adb devices` rỗng. Vì vậy tài liệu này là **backlog để sẵn**: chỉ dùng khi có bằng chứng thật (guard task /
+> khách gửi `diagnostics.log` / chủ dự án gặp trên máy) **và** chủ dự án mở khoá.
 > Người làm: Android dev (harness Windows). Người nghiệm thu: chủ dự án, trên **máy thật**.
 >
 > - **Nguồn:** audit tĩnh (đọc code, không build) toàn bộ `android/` — 37 file `.kt`, `AndroidManifest.xml`
@@ -11,6 +18,12 @@
 > - **Claim của tài liệu này:** `[windows] android-china-rom`.
 > - **Tài liệu liên quan:** `docs/ANDROID_METERED_BACKGROUND_DATA.md` (đã fix FGS ở 1.2.4),
 >   `docs/ANDROID_CPU_TODO.md` (CPU/pin — xem mục 6 để không làm trùng).
+>
+> ⚠️ **REVISION CỦA AUDIT — ĐỌC TRƯỚC KHI DÙNG `file:line`:** audit chạy trên **cây làm việc tại máy Windows**,
+> cây này báo `versionCode = 29` / `versionName = "1.4.3"` và `Config.PREMEASURE_BUDGET_MS = 2_500` /
+> `PREMEASURE_MAX_BYTES = 1_500_000`. Bản đang khoá/phát hành là **`eeae7ef` (code 32)**, trong đó v30–v32 đã đổi
+> ngân sách đo **2.500 → 6.000 ms** và trần **1,5 → 4 MB** (FREEZE §1). ⇒ Cây audit **cũ hơn bản khoá**: mọi số
+> dòng và khẳng định dưới đây **phải soi lại trên `eeae7ef`** trước khi sửa theo.
 
 ---
 
@@ -35,10 +48,11 @@ Checklist audit ban đầu được viết cho app **có** GMS. App này thì kh
 
 | # | Blocker | Bằng chứng / việc cần làm |
 |---|---|---|
-| B1 | **Máy Windows này không build được**: không có JDK, không có Android Studio (`java` không tồn tại; không tìm thấy `jbr`/`Android Studio`). SDK thì có (`C:\Users\Minhn\Android\sdk`, platform android-36, build-tools 35/36) và gradle cache có sẵn | Cài **JDK 17** rồi `./gradlew :app:testModernDebugUnitTest` + `:app:assembleModernDebug` để có APK cài máy thật. Không có bước này thì **mọi task đều không có bằng chứng build**. |
-| B2 | **Bản debug sẽ bị màn ép cập nhật chặn cứng** ngay khi server đặt `android_minimum_version = 1.4.3`: `versionName` debug là `1.4.3-dev`, mà `AppVersionService.isVersion` cắt `"3-dev"` thành `0` (`AppVersionService.kt:38-48`) ⇒ `[1,4] < [1,4,3]` = **true** | **`T-AND-01` phải xong trước khi test máy thật**, nếu không sẽ không vào được app để test bất cứ thứ gì. |
-| B3 | Đang có claim `[windows] release` = **PUBLISH Android 1.4.3 (code 29)** | Các fix trong tài liệu này đi vào **1.4.4 (versionCode 30)**, không nhét vào 1.4.3 đang phát hành. |
-| B4 | Máy test | Cần tối thiểu: **1 máy ROM TQ** (Xiaomi/HyperOS hoặc Samsung CN) + **1 máy AOSP gần sạch** (để chứng minh không cần GMS). Flavor `legacy` (Fire OS/Android 7) chỉ test khi có máy. |
+| B0 | **Android đang FREEZE** (`docs/handoff/FREEZE_ANDROID_2026-09-23.md` §5) | **Không thi hành task nào trong tài liệu này** khi chưa có yêu cầu mới của chủ dự án. Mở khoá theo §5/§6 (ghi vào handoff) rồi mới sửa. |
+| B1 | ~~Máy Windows không build được vì thiếu JDK~~ — **ĐÍNH CHÍNH 24/09/2026: SAI.** | Bằng chứng thật (FREEZE §2): `gradlew :app:testModernDebugUnitTest :app:assembleModernDebug` → **BUILD SUCCESSFUL**, `tests=57 failures=0`, APK dev có sha256. Harness Windows build bình thường. Bản trước của tài liệu kết luận chỉ từ việc `java` không có trên PATH ⇒ **rút lại**, không dùng làm lý do. |
+| B2 | **Bản debug có thể bị màn ép cập nhật chặn cứng** khi server đặt `android_minimum_version` bằng bản đang phát: `versionName` debug có hậu tố `-dev`, mà `AppVersionService.isVersion` cắt component không parse được thành `0` (`AppVersionService.kt:38-48`) ⇒ `[1,4] < [1,4,3]`. *(Số dòng phải soi lại trên `eeae7ef`.)* | Nếu được mở khoá và phải test máy thật: làm `T-AND-01` trước, nếu không sẽ không vào được app để test. |
+| B3 | Bản phát hành hiện tại: **android + android-legacy 1.4.4 (code 32)**, commit khoá `eeae7ef` — **đã phát hành và đã verify** (2 row `origin=verify`, 24/09) | Fix mới (nếu có) sẽ là bản **1.4.5 (code 33)+**, và chỉ sau khi mở khoá; **không** sửa thẳng lên artifact đang phát. |
+| B4 | **Không có nguồn số liệu hiện trường**: `client-telemetry.db` = 0 bản ghi (app Android không gửi telemetry), `adb devices` rỗng | Muốn có bằng chứng định lượng phải: cắm lại máy (adb), hoặc bật gửi telemetry, hoặc khách gửi `diagnostics.log`. Máy test tối thiểu khi mở khoá: **1 máy ROM TQ** (Xiaomi/HyperOS hoặc Samsung CN) + **1 máy AOSP gần sạch**; flavor `legacy` chỉ test khi có máy. |
 
 ---
 
@@ -490,7 +504,7 @@ Flavor `legacy` (minSdk 24, Fire OS/Android 7) test riêng nếu có máy.
 |---|---|---|---|---|---|
 | — | — | — | — | — | — |
 
-**Câu hỏi cần chủ dự án chốt trước khi làm P2:**
+**Câu hỏi cần chủ dự án chốt trước khi làm P2** (chỉ cần trả lời khi chủ dự án **mở khoá Android** — hiện đang FREEZE):
 
 1. `T-AND-02`: chấp nhận thêm `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (Play soi kỹ) hay chỉ dùng
    `ACTION_APPLICATION_DETAILS_SETTINGS` + hướng dẫn tay?
@@ -512,9 +526,14 @@ Flavor `legacy` (minSdk 24, Fire OS/Android 7) test riêng nếu có máy.
 
 ## 7. Ghi chú về độ tin cậy của audit
 
-- Audit là **phân tích tĩnh, KHÔNG build, KHÔNG chạy** (máy Windows thiếu JDK — xem blocker B1). Mọi kết luận
-  về hành vi runtime (ANR, mức kill của MIUI/EMUI/ColorOS) dựa trên code + tài liệu AOSP, **chưa đo trên máy TQ**.
+- Audit là **phân tích tĩnh, KHÔNG build, KHÔNG chạy** — không phải vì thiếu JDK (đã đính chính ở B1) mà vì
+  đây là task review. Mọi kết luận về hành vi runtime (ANR, mức kill của MIUI/EMUI/ColorOS) dựa trên code +
+  tài liệu AOSP, **chưa đo trên máy TQ**.
+- ⚠️ **Revision:** audit chạy trên cây làm việc tại máy Windows (`versionCode = 29`), **cũ hơn bản khoá
+  `eeae7ef` (code 32)** — xem cảnh báo ở đầu tài liệu. Số dòng/khẳng định phải soi lại trên `eeae7ef`
+  trước khi sửa theo.
 - Các điểm **cần verify on-device** đã được đánh dấu riêng: `T-AND-17` (intent-filter), `T-AND-09` (ANR),
   `T-AND-04` (một số ROM trả `RESULT_CANCELED` dù đã cho phép).
-- Nguồn sự thật là **code trong repo** (`AGENTS.md` §2). Tài liệu `docs/ANDROID_CPU_TODO.md` và
-  `docs/ANDROID_METERED_BACKGROUND_DATA.md` đã có chỗ lệch so với code hiện tại — khi làm task, **theo code**.
+- Nguồn sự thật là **code trong repo** (`AGENTS.md` §2) — nhưng phải là code ở **đúng commit khoá `eeae7ef`**,
+  không phải cây làm việc hiện tại (đang ở v29). Tài liệu `docs/ANDROID_CPU_TODO.md` và
+  `docs/ANDROID_METERED_BACKGROUND_DATA.md` cũng đã có chỗ lệch — khi làm task, **theo code ở commit khoá**.
