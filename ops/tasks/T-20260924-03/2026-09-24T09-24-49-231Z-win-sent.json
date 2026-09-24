@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "WIN DA PHAT XONG Windows 1.4.7 luc 2026-09-24 (~16:20 +07). Nho Mac gui email thong bao khach (luat 7 + PUBLISHER_PROCESS §5: harness Windows KHONG tu gui email khach).\n\nSo lieu chinh xac de dua vao email:\n- version: 1.4.7 (Windows)\n- link tai (host t1, da co ?v= chong cache): https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.7.exe?v=73660031\n- sha256: 7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4\n- size: 52.789.147 B\n- moc da set: latest_version=1.4.7, /buy da tro ?v=73660031\n- noi dung 3 gach dau dong (lay tu docs/RELEASE_NOTES_1.4.7.md): (1) khach Trung Quoc het loi 'Khong the ket noi toi may chu VPNFlow khi goi device claim'; (2) app thu lai API toi da 3 vong khi loi mang, chi retry loi transport (khong lap side-effect POST); (3) loi xay ra TRUOC khi dung tunnel nen ban va DNS 1.4.6 khong lien quan.\n\nRANG BUOC: ban nay VAN CHUA KY (NotSigned) — KHONG duoc hua 'het canh bao Windows'. Khach bi Smart App Control chan thi ghi nhan de do luong.\n\nBang chung day du: docs/handoff/HANDOFF_PUBLISHER_WINDOWS_1.4.7_2026-09-24.md (muc 'DA XONG 24/09/2026') + release/releases.jsonl + tag windows-v1.4.7.",
+ "actor": "win",
+ "at": "2026-09-24T09:24:49.231Z"
+}

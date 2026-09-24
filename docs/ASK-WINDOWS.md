@@ -28,9 +28,36 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `T-20260922-10` | verified | iOS/macOS: ke hoach dev toc do & on dinh (YEU_CAU_TOC_DO) - lam P0-1/P | `-` |
 | `T-20260922-11` | verified | Sua release-record.mjs: tagExists() vo trong git worktree + khong cat  | `-` |
 | `T-20260922-12` | in_progress | GAP toi nay: cai ban moi len macOS + iPhone de chu du an test mang kha | `node ops/task.mjs done T-20260922-12 --evidence "commit=…, cmd=…, kết quả=…" --push` |
-| `TG-VIBECODE` | acked | Chủ dự án giao việc qua Telegram: kiểm tra máy Mac rồi báo lại | `node ops/task.mjs progress TG-VIBECODE --note "…" --push` |
+| `T-20260922-13` | verified | GAP: khach cai macOS xong KHONG CHAY DUOC - kiem chung file DANG PHAT  | `-` |
+| `T-20260922-14` | in_progress | macOS GAP: fix loi 'Invalid user' tren ban build moi + phat hanh 1.4.1 | `node ops/task.mjs done T-20260922-14 --evidence "commit=…, cmd=…, kết quả=…" --push` |
+| `T-20260922-15` | acked | iOS: cam iPhone vao Mac, cai IPA 1.4.1/18 va test 3 muc (khong mat man | `node ops/task.mjs progress T-20260922-15 --note "…" --push` |
+| `T-20260922-16` | blocked | Cai lich kiem dinh ky tren may Mac (launchd) de tu bat loi staple/lech | `bên giao cần gỡ vướng` |
+| `T-20260922-17` | acked | TRUOC KHI PUBLISH macOS 1.4.1: chay CONG CREDENTIAL moi (bat buoc) + d | `node ops/task.mjs progress T-20260922-17 --note "…" --push` |
+| `T-20260922-18` | done | TG /vibecode: tốc độ download trong Diagnostics chưa đúng — đo ra rất  | `chờ bên giao nghiệm thu` |
+| `T-20260922-19` | acked | A10: dong 'toc do tai xuong' tren the Diagnostics la dong ho BI DONG — | `node ops/task.mjs progress T-20260922-19 --note "…" --push` |
+| `T-20260922-20` | done | TG /vibecode: kiểm tra các link trang buy — có thể bị lỗi/không truy c | `chờ bên giao nghiệm thu` |
+| `T-20260923-01` | done | TG /vibecode: đã publish xong bản Windows hot fix (1.4.6 — DNS) chưa? | `chờ bên giao nghiệm thu` |
+| `T-20260923-02` | done | TG /vibecode: iOS trên trang buy chưa phải bản đã test pass (buy = 1.4 | `chờ bên giao nghiệm thu` |
+| `T-20260923-03` | done | TG /vibecode: bản publish lên App Store Connect chưa phải 1.4.3 | `chờ bên giao nghiệm thu` |
+| `T-20260923-04` | done | TG /vibecode: báo cáo (owner hỏi tiến độ ngay trong lúc 2 việc iOS đan | `chờ bên giao nghiệm thu` |
+| `T-20260923-05` | verified | iOS 1.4.3/20: Mac build+ky IPA (ban da test pass) va day vao /root/flo | `-` |
+| `T-20260923-06` | done | TG /vibecode: mac bị sleep -> cho phép Windows build + publish iOS 1.4 | `chờ bên giao nghiệm thu` |
+| `T-20260923-07` | done | TG /vibecode: KHACH MOI bao 'khong the ket noi den may chu VPNFlow khi | `chờ bên giao nghiệm thu` |
+| `T-20260924-01` | verified | Mac->Win CHOT dong bo control-plane: huong REPO(origin/main) -> LIVE;  | `-` |
+| `T-20260924-02` | verified | iOS 1.4.3 ASC: fix embed Hysteria.framework + entitlement hotspot-prov | `-` |
+| `T-20260924-03` | sent | Mac gui email khach Windows 1.4.7 (retry API khach TQ) — WIN da phat x | `AGENT_NAME=MAC node ops/task.mjs ack T-20260924-03 --push` |
+| `TG-VIBECODE` | done | Chủ dự án giao việc qua Telegram: kiểm tra máy Mac rồi báo lại | `chờ bên giao nghiệm thu` |
 | `VIBECODE-E2E` | done | TEST /vibecode: gui that tu server Linux (owner -> WIN qua connector V | `chờ bên giao nghiệm thu` |
+| `bus-282` | verified | Android 1.4.3 (v29) release: build + ky + nghiem thu truoc publish | `-` |
+| `bus-299` | verified | Windows -> Mac TASK: gui EMAIL khach cho Android 1.4.3 (§0.7) | `-` |
+| `bus-305` | verified | Windows -> Mac CÂU HỎI: Mac co CHUNG CHI KY SO WINDOWS khong? (Windows | `-` |
+| `bus-309` | verified | Windows -> Mac TASK: gui EMAIL khach cho Windows 1.4.5 (§0.7) — da pha | `-` |
+| `bus-310` | verified | Windows -> Mac TASK: iOS/macOS do Mac so huu — bo sung commit + tag io | `-` |
+| `bus-311` | verified | Windows -> Mac TASK: gui KEYSTORE RELEASE Android cho Windows (chuyen  | `-` |
+| `bus-322` | verified | Windows -> Mac TASK: gui EMAIL khach cho Android 1.4.4 (versionCode 32 | `-` |
+| `bus-326` | verified | Windows -> Mac TASK UU TIEN CAO: gui EMAIL khach cho Windows 1.4.6 (ho | `-` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
+| `tasks` | unknown |  | `-` |
 
 <!-- AUTO-TASKS:END -->
 
