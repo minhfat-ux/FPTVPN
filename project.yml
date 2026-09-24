@@ -92,8 +92,8 @@ targets:
         # không cấp ⇒ -34018, khách kẹt màn đăng nhập) + gộp 7c98e53 (đăng xuất thiết bị khác)
         # và 820b9d2 (watchdog). Kênh đang phát 1.4.1/build 18 ⇒ PHẢI tăng CHUỖI version (app chỉ
         # nhắc cập nhật khi CFBundleShortVersionString tăng); control-plane đặt minimum_version=1.4.2.
-        CURRENT_PROJECT_VERSION: "19"
-        MARKETING_VERSION: "1.4.2"
+        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.3"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -167,8 +167,10 @@ targets:
       properties:
         CFBundleDisplayName: VPNFlow Tunnel
         # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
-        CFBundleShortVersionString: "1.4.2"
-        CFBundleVersion: "19"
+        # Trỏ thẳng vào build setting: trước đây ghi literal nên mỗi lần bump version là
+        # xcodegen sinh Info.plist lệch số với app ⇒ bị từ chối lúc cài/nộp (sự cố 23/09/2026).
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
@@ -184,8 +186,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.2"
-        CURRENT_PROJECT_VERSION: "19"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
@@ -273,8 +275,8 @@ targets:
         PRODUCT_NAME: VPNFlow
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "14"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -403,8 +405,8 @@ targets:
         PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "14"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).

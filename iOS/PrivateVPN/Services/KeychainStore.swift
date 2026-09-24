@@ -29,7 +29,27 @@ struct SecurityKeychainBackend: KeychainBackend {
         attributes[kSecValueData as String] = data
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
-        let status = SecItemAdd(attributes as CFDictionary, nil)
+        var status = SecItemAdd(attributes as CFDictionary, nil)
+        if status != errSecSuccess {
+            // macOS có 2 kho (legacy + data-protection) và item cũ có thể được ghi bằng access group
+            // khác ⇒ `SecItemDelete` theo query đầy đủ ở trên KHÔNG khớp, rồi `SecItemAdd` đụng chỉ
+            // mục duy nhất và trả `CSSMERR_DL_INVALID_UNIQUE_INDEX_DATA` (-2147413719) ⇒ khoá WireGuard
+            // không lưu được ⇒ đăng nhập xong app vẫn coi như chưa có thiết bị (đo trên máy thật
+            // 23/09/2026: `securityd ... caught CssmError during add`). Xoá "rộng" (không group, thử
+            // cả 2 kho) rồi thêm lại.
+            var relaxed: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: KeychainStore.service,
+                kSecAttrAccount as String: account,
+            ]
+            var relaxedDataProtection = relaxed
+            #if os(macOS)
+            relaxedDataProtection[kSecUseDataProtectionKeychain as String] = true
+            #endif
+            SecItemDelete(relaxed as CFDictionary)
+            SecItemDelete(relaxedDataProtection as CFDictionary)
+            status = SecItemAdd(attributes as CFDictionary, nil)
+        }
         guard status == errSecSuccess else {
             throw KeychainStore.KeychainError.unexpectedStatus(status)
         }

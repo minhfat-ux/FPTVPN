@@ -346,6 +346,56 @@ final class HysteriaTransport: @unchecked Sendable {
         return nil
     }
 
+    // Đọc bộ đếm interface theo TÊN — dùng cho CẢ HAI nền tảng (không phụ thuộc fd utun).
+    // Trước đây nằm trong khối `#if os(iOS)` nên macOS thiếu hàm ⇒ build đứt.
+    /// `NET_RT_IFLIST2` = 6 và `RTM_IFINFO2` = 0x12 nằm trong `<net/route.h>`, header này
+    /// KHÔNG có trong SDK iPhoneOS ⇒ khai lại tại chỗ, đúng cách đã khai `SYSPROTO_CONTROL`.
+    private static let netRtIflist2: Int32 = 6
+    private static let rtmIfinfo2: UInt8 = 0x12
+
+    /// Tổng byte (vào + ra) của interface VẬT LÝ (mặc định `en0`), hoặc `nil` nếu không đọc được.
+    ///
+    /// Dùng để phân biệt **"máy đang rảnh"** với **"tunnel chết"**: khi VPN bật, lưu lượng của
+    /// máy đi vào tunnel trước, nên nếu máy thật sự đang tải thì interface vật lý PHẢI nhích.
+    /// Máy không tải mà tunnel 0 gói ⇒ bình thường, KHÔNG được kết luận tunnel hỏng.
+    static func physicalInterfaceBytes(ifname: String = "en0") -> Int? {
+        guard let counters = interfacePacketCounters(ifname: ifname) else { return nil }
+        return counters.inBytes + counters.outBytes
+    }
+
+    /// Đọc `if_msghdr2` của ĐÚNG interface `ifname` từ `sysctl(NET_RT_IFLIST2)`.
+    private static func interfacePacketCounters(
+        ifname: String
+    ) -> (in: Int, out: Int, inBytes: Int, outBytes: Int)? {
+        let index = if_nametoindex(ifname)
+        guard index != 0 else { return nil }
+        var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, netRtIflist2, 0]
+        var length = 0
+        guard sysctl(&mib, 6, nil, &length, nil, 0) == 0, length > 0 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: length)
+        let status = buffer.withUnsafeMutableBytes { pointer in
+            sysctl(&mib, 6, pointer.baseAddress, &length, nil, 0)
+        }
+        guard status == 0, length <= buffer.count else { return nil }
+        var offset = 0
+        while offset + MemoryLayout<if_msghdr2>.size <= length {
+            let header = buffer.withUnsafeBytes { pointer in
+                pointer.loadUnaligned(fromByteOffset: offset, as: if_msghdr2.self)
+            }
+            let messageLength = Int(header.ifm_msglen)
+            guard messageLength > 0, offset + messageLength <= length else { break }
+            if header.ifm_type == rtmIfinfo2, header.ifm_index == index {
+                return (
+                    in: Int(header.ifm_data.ifi_ipackets),
+                    out: Int(header.ifm_data.ifi_opackets),
+                    inBytes: Int(header.ifm_data.ifi_ibytes),
+                    outBytes: Int(header.ifm_data.ifi_obytes)
+                )
+            }
+            offset += messageLength
+        }
+        return nil
+    }
     #if os(iOS)
     /// fd utun mà NetworkExtension công bố qua KVC `socket` trên iOS — nay chỉ là ĐƯỜNG LÙI.
     ///
@@ -459,44 +509,6 @@ final class HysteriaTransport: @unchecked Sendable {
         var ifname: String
     }
 
-    /// `NET_RT_IFLIST2` = 6 và `RTM_IFINFO2` = 0x12 nằm trong `<net/route.h>`, header này
-    /// KHÔNG có trong SDK iPhoneOS ⇒ khai lại tại chỗ, đúng cách đã khai `SYSPROTO_CONTROL`.
-    private static let netRtIflist2: Int32 = 6
-    private static let rtmIfinfo2: UInt8 = 0x12
-
-    /// Đọc `if_msghdr2` của ĐÚNG interface `ifname` từ `sysctl(NET_RT_IFLIST2)`.
-    private static func interfacePacketCounters(
-        ifname: String
-    ) -> (in: Int, out: Int, inBytes: Int, outBytes: Int)? {
-        let index = if_nametoindex(ifname)
-        guard index != 0 else { return nil }
-        var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, netRtIflist2, 0]
-        var length = 0
-        guard sysctl(&mib, 6, nil, &length, nil, 0) == 0, length > 0 else { return nil }
-        var buffer = [UInt8](repeating: 0, count: length)
-        let status = buffer.withUnsafeMutableBytes { pointer in
-            sysctl(&mib, 6, pointer.baseAddress, &length, nil, 0)
-        }
-        guard status == 0, length <= buffer.count else { return nil }
-        var offset = 0
-        while offset + MemoryLayout<if_msghdr2>.size <= length {
-            let header = buffer.withUnsafeBytes { pointer in
-                pointer.loadUnaligned(fromByteOffset: offset, as: if_msghdr2.self)
-            }
-            let messageLength = Int(header.ifm_msglen)
-            guard messageLength > 0, offset + messageLength <= length else { break }
-            if header.ifm_type == rtmIfinfo2, header.ifm_index == index {
-                return (
-                    in: Int(header.ifm_data.ifi_ipackets),
-                    out: Int(header.ifm_data.ifi_opackets),
-                    inBytes: Int(header.ifm_data.ifi_ibytes),
-                    outBytes: Int(header.ifm_data.ifi_obytes)
-                )
-            }
-            offset += messageLength
-        }
-        return nil
-    }
     #endif
 
     #if os(macOS)
@@ -857,7 +869,9 @@ final class TunnelBridge: @unchecked Sendable {
     }
 
     private let flow: NEPacketTunnelFlow
-    private let hostFd: Int32
+    /// Đầu fd phía Go. **ĐỔI ĐƯỢC giữa phiên** (xem `retarget`) — vì vậy MỌI chỗ dùng phải
+    /// đọc qua `currentHostFd` dưới `lock`, không được giữ bản sao.
+    private var hostFd: Int32
     private let log: Logger
     private let lock = NSLock()
     private let tickQueue = DispatchQueue(label: "com.privatevpn.mac.tunnel-bridge.tick")
@@ -891,12 +905,43 @@ final class TunnelBridge: @unchecked Sendable {
         running = true
         lock.unlock()
         // Không chặn callback của NetworkExtension khi Go chậm: ghi không được thì bỏ gói và đếm.
-        _ = fcntl(hostFd, F_SETFL, O_NONBLOCK)
-        let host = hostFd
+        let host = currentHostFd()
+        _ = fcntl(host, F_SETFL, O_NONBLOCK)
         log.log(level: .default, "bridge: bắt đầu (hostFd \(host, privacy: .public))")
         readOutbound()
         startInboundPump()
         startHeartbeat()
+    }
+
+    /// Đầu fd phía Go hiện tại (đọc dưới `lock`).
+    private func currentHostFd() -> Int32 {
+        lock.lock(); defer { lock.unlock() }
+        return hostFd
+    }
+
+    /// Đổi đầu fd phía Go sang cặp socketpair MỚI mà **KHÔNG dừng cầu**.
+    ///
+    /// VÌ SAO PHẢI CÓ (lỗi thật 24/09/2026, mất mạng 6 phút): `NEPacketTunnelFlow.readPackets`
+    /// chỉ cho **MỘT** lời gọi chờ tại một thời điểm. Cách cũ `stop()` rồi tạo cầu mới để lại lời
+    /// gọi `readPackets` đang chờ của cầu cũ; khi nó trả về thì cầu cũ đã `running == false` nên
+    /// không gọi lại, còn lời gọi của cầu mới đã bị mất ⇒ vòng đọc `packetFlow` của cầu mới
+    /// **không bao giờ chạy** (`packetFlow→Go 0 gói/0 B` mãi mãi) ⇒ máy mất Internet.
+    ///
+    /// `retarget` chỉ đổi `hostFd`; `pumpLoop`/`forwardToGo` đọc fd mỗi lần nên tự chuyển sang fd
+    /// mới trong ≤250 ms (nhịp `poll`). Đầu fd CŨ được đóng SAU khi vòng bơm đã chuyển (0,5 s) để
+    /// không đóng nhầm fd đang được poll.
+    func retarget(hostFd newFd: Int32) {
+        lock.lock()
+        let old = hostFd
+        hostFd = newFd
+        lock.unlock()
+        _ = fcntl(newFd, F_SETFL, O_NONBLOCK)
+        guard old != newFd else { return }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
+            close(old)
+        }
+        log.log(level: .default, "bridge: retarget hostFd \(old, privacy: .public) → \(newFd, privacy: .public)")
+        RelayDiagnostics.shared.log("bridge: retarget hostFd \(old) -> \(newFd) (KHÔNG dừng cầu)")
     }
 
     func stop() {
@@ -908,8 +953,9 @@ final class TunnelBridge: @unchecked Sendable {
         heartbeat?.cancel()
         heartbeat = nil
         // Đóng đầu của mình ⇒ Go thấy `read` trả 0 và `serve()` kết thúc.
-        shutdown(hostFd, SHUT_RDWR)
-        close(hostFd)
+        let fd = currentHostFd()
+        shutdown(fd, SHUT_RDWR)
+        close(fd)
         RelayDiagnostics.shared.log("bridge: đã dừng (\(describeCounters()))")
     }
 
@@ -938,7 +984,7 @@ final class TunnelBridge: @unchecked Sendable {
                 dst.advanced(by: 4).copyMemory(from: src, byteCount: packet.count)
             }
         }
-        let written = framed.withUnsafeBytes { write(hostFd, $0.baseAddress, framed.count) }
+        let written = framed.withUnsafeBytes { write(currentHostFd(), $0.baseAddress, framed.count) }
         let summary = Self.summarize(packet)
         lock.lock()
         if written == framed.count {
@@ -972,10 +1018,13 @@ final class TunnelBridge: @unchecked Sendable {
     private func pumpLoop() {
         var buffer = [UInt8](repeating: 0, count: 2048)
         while isRunning {
-            var descriptor = pollfd(fd: hostFd, events: Int16(POLLIN), revents: 0)
+            // Đọc fd MỖI vòng: `retarget` có thể vừa đổi đầu fd phía Go (vòng lặp này KHÔNG
+            // được dừng — xem chú thích `retarget`).
+            let fd = currentHostFd()
+            var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
             let ready = poll(&descriptor, 1, 250)
             if ready <= 0 { continue }
-            let count = buffer.withUnsafeMutableBytes { read(hostFd, $0.baseAddress, 2048) }
+            let count = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, 2048) }
             if count <= 0 {
                 if count == 0 || (errno != EAGAIN && errno != EINTR) {
                     RelayDiagnostics.shared.log("bridge: Go đóng fd (read=\(count) errno=\(errno))")

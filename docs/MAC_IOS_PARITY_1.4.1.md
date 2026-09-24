@@ -78,12 +78,25 @@ Sửa **`iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift`** (một
   giữ nguyên nhưng bảo đảm phép đo luôn thắng nấc tĩnh. **Phải đo trên máy thật** (RAW vs VPN, ≥2 lần
   mỗi bên) trước — không sửa mù.
 
-### P1b — macOS: bật lại ramp băng thông giữa phiên (đang tắt cứng)
-Trên macOS, số khai đo được **chỉ áp ở lần kết nối sau** vì đường dựng lại transport bị chặn:
-`HysteriaBandwidthControl.swift:81-87` (`allowsTransportRebuild` chỉ `true` khi `#if os(iOS)`) và
-`HysteriaPacketTunnelProvider.swift:714-719` (`rebuildTransportForBandwidth` trả `nil` trên macOS).
-Trong khi nhánh iOS `:663-713` đã có sẵn và fd của macOS cũng là socketpair qua `TunnelBridge`
-(`:270-278`). ⇒ mở cho macOS để đo–ramp có tác dụng ngay trong phiên.
+### P1b — macOS: bật lại ramp băng thông giữa phiên (đang tắt cứng) — ❌ ĐÃ BỊ THAY THẾ 24/09/2026
+> **KHÔNG LÀM NỮA.** Mục này đi ngược kết luận ngày 24/09/2026 (đo trên máy thật iOS): dựng lại
+> transport giữa phiên **vì số khai** làm cầu `packetFlow↔fd` bỏ 100% gói — `toGo`/`fromGo` đóng
+> băng, chỉ `bỏ` tăng (log thật: `12:18:38 bw: ramp đã áp sau khi dựng lại transport` rồi
+> `toGo 7949` đứng yên trong khi `bỏ` 167→811; cùng kiểu ở `11:40`: `toGo 7641`/`fromGo 7649` đứng
+> yên, `bỏ` 100→148). Nguyên nhân: fd giao cho Go bị sing-tun đóng khi `serve()` kết thúc
+> (`tools/hysteria-android/mobile.go`), mà đường dựng lại cũ tái dùng đúng fd đó.
+> ⇒ `HysteriaBandwidthControl.allowsTransportRebuild = false` cho **cả iOS lẫn macOS**; số khai
+> chốt theo **`apply=deferred-next-connect`** đúng như Android 1.4.3. Ngoại lệ duy nhất được dựng
+> lại transport giữa phiên là tunnel HỎNG THẬT (watchdog H2), và khi đó phải lấy **cặp socketpair
+> mới + cầu mới** (`HysteriaPacketTunnelProvider.installTunnelFD`).
+>
+> ---
+> *Nội dung cũ (giữ để truy vết, KHÔNG thi công):* trên macOS, số khai đo được **chỉ áp ở lần kết
+> nối sau** vì đường dựng lại transport bị chặn:
+> `HysteriaBandwidthControl.swift:81-87` (`allowsTransportRebuild` chỉ `true` khi `#if os(iOS)`) và
+> `HysteriaPacketTunnelProvider.swift:714-719` (`rebuildTransportForBandwidth` trả `nil` trên macOS).
+> Trong khi nhánh iOS `:663-713` đã có sẵn và fd của macOS cũng là socketpair qua `TunnelBridge`
+> (`:270-278`). ⇒ mở cho macOS để đo–ramp có tác dụng ngay trong phiên.
 
 ### P2 — bump số hiệu khi build (chưa bump trong repo, cố ý)
 Chỉ bump **sau khi** P0 xong và đã test thiết bị, để không phát hành số 1.4.1 mà thiếu tính năng:

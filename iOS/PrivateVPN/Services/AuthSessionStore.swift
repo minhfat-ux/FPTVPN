@@ -62,7 +62,24 @@ final class AuthSessionStore: ObservableObject {
         var attributes = query
         attributes[kSecValueData as String] = data
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let status = SecItemAdd(attributes as CFDictionary, nil)
+        var status = SecItemAdd(attributes as CFDictionary, nil)
+        if status != errSecSuccess {
+            // Cùng lý do như `KeychainStore.save`: trên macOS item cũ có thể nằm ở kho legacy hoặc
+            // được ghi bằng access group khác ⇒ query đầy đủ không khớp khi xoá, rồi add đụng chỉ mục
+            // duy nhất (`CSSMERR_DL_INVALID_UNIQUE_INDEX_DATA`) ⇒ phiên đăng nhập không lưu được.
+            let relaxed: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+            ]
+            var relaxedDataProtection = relaxed
+            #if os(macOS)
+            relaxedDataProtection[kSecUseDataProtectionKeychain as String] = true
+            #endif
+            SecItemDelete(relaxed as CFDictionary)
+            SecItemDelete(relaxedDataProtection as CFDictionary)
+            status = SecItemAdd(attributes as CFDictionary, nil)
+        }
         guard status == errSecSuccess else {
             throw AuthSessionError.keychainStatus(status)
         }

@@ -123,6 +123,15 @@ enum AppTextKey: String {
     case serverLocation, loadingLocations, noServerAvailable, refreshLocations
     case usingSavedServers
     case configuration, done, diagnostics, state, location, message, notConfigured, vietnam
+    /// A10 §2g — 8 dòng số live của thẻ Diagnostics (bê nguyên tên khoá + chuỗi của iOS,
+    /// xem `iOS/PrivateVPN/Theme.swift`) để hai nền tảng nhìn giống nhau.
+    case diagDown, diagUp, diagObserved, diagDeclared, diagMore, diagAtMax, diagPath, diagStable
+    /// §2h luật 5 — loss%/RTT. macOS KHÔNG có nguồn loss/RTT của QUIC (framework chỉ mở
+    /// `MobileConnect/MobileServe/MobileStop`) ⇒ hai dòng này luôn hiện `—`; nhãn ghi rõ "(QUIC)"
+    /// để không ai đọc nhầm là số đo thật.
+    case diagLoss, diagRTT
+    /// Cảnh báo "extension đang chạy là bản cũ" — %@ = version/build + đường dẫn, %@ = bản của app.
+    case extensionStale
     case disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle
     case startVPNHint, stopVPNHint
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
@@ -202,6 +211,12 @@ final class AppLanguageStore: ObservableObject {
             .usingSavedServers: "Offline mode — using saved servers",
             .devices: "Devices", .revoke: "Revoke", .revokeDeviceConfirm: "Revoke this device? It will no longer be able to connect.", .thisDevice: "This device", .deviceRevoked: "Device revoked.", .noDevices: "No devices registered.", .active: "Active", .revoked: "Revoked", .loadingDevices: "Loading devices…",
             .configuration: "Configuration", .done: "Done", .diagnostics: "Diagnostics", .state: "State", .location: "Location", .message: "Message",
+            .diagDown: "Download ↓", .diagUp: "Upload ↑", .diagObserved: "Measured (ramp path)",
+            .diagDeclared: "Currently declared", .diagMore: "Declared headroom",
+            .diagAtMax: "Maxed out at this time", .diagPath: "Active path",
+            .diagStable: "Locked level (stable)",
+            .diagLoss: "Packet loss (QUIC)", .diagRTT: "RTT (QUIC)",
+            .extensionStale: "⚠️ Running extension is an older build (%@) while the app is %@ — remove the old VPNFlow copy and reopen the app.",
             .notConfigured: "Not configured - tap to open Configuration", .vietnam: "Vietnam",
             .disconnectedSubtitle: "Your VPN tunnel is off", .connectingSubtitle: "Starting secure VPN tunnel",
             .connectedSubtitle: "Your traffic is protected", .disconnectingSubtitle: "Stopping VPN tunnel",
@@ -236,6 +251,12 @@ final class AppLanguageStore: ObservableObject {
             .usingSavedServers: "Chế độ offline — đang dùng máy chủ đã lưu",
             .devices: "Thiết bị", .revoke: "Thu hồi", .revokeDeviceConfirm: "Thu hồi thiết bị này? Thiết bị sẽ không thể kết nối được nữa.", .thisDevice: "Thiết bị này", .deviceRevoked: "Đã thu hồi thiết bị.", .noDevices: "Chưa có thiết bị nào được đăng ký.", .active: "Hoạt động", .revoked: "Đã thu hồi", .loadingDevices: "Đang tải thiết bị…",
             .configuration: "Cấu hình", .done: "Xong", .diagnostics: "Chẩn đoán", .state: "Trạng thái", .location: "Vị trí", .message: "Thông báo",
+            .diagDown: "Tốc độ tải xuống ↓", .diagUp: "Tốc độ tải lên ↑",
+            .diagObserved: "Đo được (đường ramp)", .diagDeclared: "Khai báo hiện tại",
+            .diagMore: "Khai báo còn lên được", .diagAtMax: "Đã tối đa ở thời điểm này",
+            .diagPath: "Đường đang dùng", .diagStable: "Mức đã khoá (stable)",
+            .diagLoss: "Mất gói (QUIC)", .diagRTT: "RTT (QUIC)",
+            .extensionStale: "⚠️ Extension đang chạy là bản cũ (%@) trong khi app là %@ — gỡ bản VPNFlow cũ rồi mở lại app.",
             .notConfigured: "Chưa cấu hình - chạm để mở Cấu hình", .vietnam: "Việt Nam",
             .disconnectedSubtitle: "VPN tunnel đang tắt", .connectingSubtitle: "Đang khởi động VPN tunnel bảo mật",
             .connectedSubtitle: "Lưu lượng của bạn đang được bảo vệ", .disconnectingSubtitle: "Đang dừng VPN tunnel",
@@ -270,6 +291,11 @@ final class AppLanguageStore: ObservableObject {
             .usingSavedServers: "离线模式 — 正在使用已保存的服务器",
             .devices: "设备", .revoke: "撤销", .revokeDeviceConfirm: "撤销此设备？该设备将无法再连接。", .thisDevice: "当前设备", .deviceRevoked: "设备已撤销。", .noDevices: "尚未注册任何设备。", .active: "活跃", .revoked: "已撤销", .loadingDevices: "正在加载设备…",
             .configuration: "设置", .done: "完成", .diagnostics: "诊断", .state: "状态", .location: "位置", .message: "消息",
+            .diagDown: "下载速度 ↓", .diagUp: "上传速度 ↑", .diagObserved: "实测（爬升路径）",
+            .diagDeclared: "当前声明值", .diagMore: "声明还可提升", .diagAtMax: "当前已达上限",
+            .diagPath: "当前路径", .diagStable: "已锁定水平（稳定）",
+            .diagLoss: "丢包（QUIC）", .diagRTT: "RTT（QUIC）",
+            .extensionStale: "⚠️ 正在运行的扩展是旧版本（%@），而应用是 %@ — 请删除旧的 VPNFlow 并重新打开应用。",
             .notConfigured: "尚未配置 - 点击打开设置", .vietnam: "越南",
             .disconnectedSubtitle: "VPN 隧道已关闭", .connectingSubtitle: "正在启动安全 VPN 隧道",
             .connectedSubtitle: "你的流量正在受到保护", .disconnectingSubtitle: "正在停止 VPN 隧道",
@@ -304,6 +330,11 @@ final class AppLanguageStore: ObservableObject {
             .usingSavedServers: "オフラインモード — 保存済みサーバーを使用中",
             .devices: "デバイス", .revoke: "取り消す", .revokeDeviceConfirm: "このデバイスを取り消しますか？このデバイスは接続できなくなります。", .thisDevice: "このデバイス", .deviceRevoked: "デバイスを取り消しました。", .noDevices: "登録されたデバイスがありません。", .active: "アクティブ", .revoked: "取り消し済み", .loadingDevices: "デバイスを読み込み中…",
             .configuration: "設定", .done: "完了", .diagnostics: "診断", .state: "状態", .location: "場所", .message: "メッセージ",
+            .diagDown: "ダウンロード ↓", .diagUp: "アップロード ↑", .diagObserved: "実測（ランプ経路）",
+            .diagDeclared: "現在の申告値", .diagMore: "申告の残り伸びしろ", .diagAtMax: "現時点で最大",
+            .diagPath: "使用中の経路", .diagStable: "固定レベル（安定）",
+            .diagLoss: "パケット損失（QUIC）", .diagRTT: "RTT（QUIC）",
+            .extensionStale: "⚠️ 実行中の拡張機能は古いビルド（%@）ですが、アプリは %@ です — 古い VPNFlow を削除してアプリを開き直してください。",
             .notConfigured: "未設定 - タップして設定を開く", .vietnam: "ベトナム",
             .disconnectedSubtitle: "VPN トンネルはオフです", .connectingSubtitle: "安全な VPN トンネルを開始中",
             .connectedSubtitle: "通信は保護されています", .disconnectingSubtitle: "VPN トンネルを停止中",
@@ -338,6 +369,11 @@ final class AppLanguageStore: ObservableObject {
             .usingSavedServers: "오프라인 모드 — 저장된 서버 사용 중",
             .devices: "기기", .revoke: "해지", .revokeDeviceConfirm: "이 기기를 해지하시겠습니까? 이 기기는 더 이상 연결할 수 없습니다.", .thisDevice: "현재 기기", .deviceRevoked: "기기가 해지되었습니다.", .noDevices: "등록된 기기가 없습니다.", .active: "활성", .revoked: "해지됨", .loadingDevices: "기기를 불러오는 중…",
             .configuration: "설정", .done: "완료", .diagnostics: "진단", .state: "상태", .location: "위치", .message: "메시지",
+            .diagDown: "다운로드 ↓", .diagUp: "업로드 ↑", .diagObserved: "실측(램프 경로)",
+            .diagDeclared: "현재 선언값", .diagMore: "선언 여유분", .diagAtMax: "현재 최대치",
+            .diagPath: "사용 중인 경로", .diagStable: "고정 수준(안정)",
+            .diagLoss: "패킷 손실(QUIC)", .diagRTT: "RTT(QUIC)",
+            .extensionStale: "⚠️ 실행 중인 확장이 이전 빌드(%@)인데 앱은 %@ 입니다 — 이전 VPNFlow를 삭제하고 앱을 다시 여세요.",
             .notConfigured: "설정되지 않음 - 탭하여 설정 열기", .vietnam: "베트남",
             .disconnectedSubtitle: "VPN 터널이 꺼져 있습니다", .connectingSubtitle: "보안 VPN 터널을 시작하는 중",
             .connectedSubtitle: "트래픽이 보호되고 있습니다", .disconnectingSubtitle: "VPN 터널을 중지하는 중",

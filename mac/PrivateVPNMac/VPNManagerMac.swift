@@ -35,6 +35,13 @@ final class VPNManagerMac: ObservableObject {
     @Published private(set) var state: String = "Disconnected"
     @Published private(set) var overlayIP: String?
     @Published var lastError: String?
+    /// A10 §2g — số live của thẻ Diagnostics, cập nhật mỗi 2 s từ extension (nhịp poll sẵn có,
+    /// KHÔNG thêm phép đo/pin). `nil` khi chưa kết nối ⇒ UI hiện `—`. Bê nguyên cách iOS làm
+    /// (`iOS/PrivateVPN/VPNManager.swift:41`): extension lấy mẫu 1 s, app chỉ đọc lại.
+    @Published private(set) var liveDiagnostics: TunnelStatusReport?
+    /// CẢNH BÁO khi extension đang chạy KHÁC bản appex nằm trong app này (hệ thống dùng lại bản
+    /// cũ ở đường dẫn khác — khách cài bản mới mà vẫn dính lỗi cũ). Chỉ CẢNH BÁO, không tự gỡ.
+    @Published private(set) var extensionStaleWarning: String?
     /// Base URL control-plane đang dùng: host chính, hoặc host dự phòng đã được xác nhận
     /// sống (sticky) — xem `ControlAPIHosts`. UI dùng giá trị này để dựng link web.
     @Published var coordinatorURL: String = ControlAPIHosts.currentBaseURL.absoluteString
@@ -139,12 +146,15 @@ final class VPNManagerMac: ObservableObject {
             if state != "Connecting…" && state != "Disconnecting…" {
                 state = "Disconnected"
             }
+            // A10 §2g — không còn phiên ⇒ xoá số live để UI hiện `—` (không hiện số cũ).
+            liveDiagnostics = nil
             stopProviderDiagnosticsPolling()
             return
         }
         state = stateString(for: connection.status)
         if connection.status == .disconnected {
             overlayIP = nil
+            liveDiagnostics = nil
         }
         // Heartbeat chỉ dừng khi tunnel ĐÃ từng lên rồi mới tắt. Trong lúc `connect()` chuẩn bị
         // profile, NE báo `.disconnected` vài nhịp — nếu dừng theo trạng thái ngay thì heartbeat
@@ -191,6 +201,61 @@ final class VPNManagerMac: ObservableObject {
         providerProbeTask = nil
     }
 
+    /// So danh tính extension ĐANG CHẠY với appex nằm trong app này.
+    ///
+    /// Vì sao: macOS phân giải extension theo LaunchServices, nên đã cài `/Applications/VPNFlow.app`
+    /// mới mà hệ thống vẫn launch appex ở một bản VPNFlow.app cũ (đường dẫn khác) — khách tưởng đã
+    /// cập nhật nhưng vẫn chạy code cũ. Ở đây chỉ CẢNH BÁO (không tự gỡ cấu hình VPN của khách).
+    private func checkExtensionIdentity(_ report: TunnelStatusReport) {
+        let running = "\(report.extensionVersion ?? "?")/\(report.extensionBuild ?? "?")"
+        let path = report.extensionPath ?? "?"
+        let mtime = report.extensionMTime ?? "?"
+        guard let appex = Bundle.main.builtInPlugInsURL?
+            .appendingPathComponent("PrivateVPNMacPacketTunnel.appex"),
+              let info = Bundle(url: appex)?.infoDictionary else {
+            extensionStaleWarning = nil
+            return
+        }
+        let appVersion = "\(info["CFBundleShortVersionString"] as? String ?? "?")/"
+            + "\(info["CFBundleVersion"] as? String ?? "?")"
+        var appMTime = "?"
+        let binary = appex.appendingPathComponent("Contents/MacOS/PrivateVPNMacPacketTunnel")
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: binary.path),
+           let modified = attributes[.modificationDate] as? Date {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            appMTime = formatter.string(from: modified)
+        }
+        let runningIdentity = ExtensionIdentityPolicy.Identity(
+            version: report.extensionVersion, build: report.extensionBuild, mTime: report.extensionMTime
+        )
+        let localIdentity = ExtensionIdentityPolicy.Identity(
+            version: info["CFBundleShortVersionString"] as? String,
+            build: info["CFBundleVersion"] as? String,
+            mTime: appMTime
+        )
+        let stale = ExtensionIdentityPolicy.isStale(running: runningIdentity, local: localIdentity)
+        // Ghi vào FILE chẩn đoán của APP (không chỉ os_log) để grep được bất cứ lúc nào — kể cả
+        // khi KHỚP. Đây là bằng chứng cho ca "macOS dùng lại appex cũ dù đã cài bản mới".
+        let verdict = stale ? "CU" : "KHOP"
+        let line = "extension: dang-chay=\(runningIdentity.label) mtime=\(mtime) path=\(path) "
+            + "| cua-app=\(appVersion) mtime=\(appMTime) => \(verdict)\n"
+        let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("extension-identity.log")
+        if let file, let data = line.data(using: .utf8) {
+            if let handle = try? FileHandle(forWritingTo: file) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+            } else {
+                try? data.write(to: file)
+            }
+        }
+        log.info("extension đang chạy: \(running, privacy: .public) mtime \(mtime, privacy: .public) path \(path, privacy: .public) — app kèm: \(appVersion, privacy: .public) mtime \(appMTime, privacy: .public) => \(verdict, privacy: .public)")
+        extensionStaleWarning = stale ? "\(runningIdentity.label) · \(path)" : nil
+    }
+
     private func probeProviderDiagnostics() async {
         guard let session = manager?.connection as? NETunnelProviderSession else { return }
         let report: TunnelStatusReport? = await withCheckedContinuation { continuation in
@@ -207,7 +272,13 @@ final class VPNManagerMac: ObservableObject {
                 continuation.resume(returning: nil)
             }
         }
-        guard let report, let code = report.code else {
+        guard let report else { return }
+        // A10 §2g — cập nhật số live cho thẻ Diagnostics ở MỌI nhịp (phiên bình thường cũng có),
+        // y như iOS (`iOS/PrivateVPN/VPNManager.swift:282`). Không che trạng thái thật: cầu WS
+        // chập thì extension trả số thấp/`—` đúng lúc.
+        liveDiagnostics = report
+        checkExtensionIdentity(report)
+        guard let code = report.code else {
             // Extension đã xoá mã (ví dụ đường UDP trực tiếp có traffic): gỡ cảnh báo cấu
             // hình cũ để không hiện lỗi giả cho phiên đang chạy.
             if relayConfigWarningShown {
@@ -553,6 +624,8 @@ final class VPNManagerMac: ObservableObject {
         state = "Disconnecting…"
         stopHeartbeat()
         manager?.connection.stopVPNTunnel()
+        // A10 §2g — xoá số live ngay (UI hiện `—`), y như iOS `disconnect()`.
+        liveDiagnostics = nil
         refreshStatus()
     }
 
