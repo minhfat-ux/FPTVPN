@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nop lai ASC OK: IPA /root/flowvpn-ipa/incoming/VPNFlow-1.4.3-b21-asc.ipa sha256=539139a5f2be41bae1bf3239fc8b922b2545b237898a0c914b01617cd17c0e5a size=11549508; doc trong IPA: app+appex=1.4.3/21; Frameworks/Hysteria.framework/Versions/A/Hysteria=0 (node-2 khong co unzip -> dem bang python zipfile; chi con Signatures/Hysteria.xcframework-ios.signature); preflight profile=iOS Team Store com.privatevpn.app provisionedDevices=false getTaskAllow=false betaReportsActive=true => DU DIEU KIEN; cmd: node /root/asc-upload-build.mjs --apply --ipa <ipa> --expect-version 1.4.3 --expect-build 21 --wait 900 => buildUploadId=6f8c78df-3d90-4ec1-a27a-18b94a6fa8a6 buildUploadFileId=571fd059-ba21-4545-88b0-e90e0997f7c4 buildUpload.state=COMPLETE errors=0; GET /v1/builds filter[app]=6804150049 sort=-uploadedDate include=preReleaseVersion => build 21 processingState=VALID preReleaseVersion=1.4.3 uploaded=2026-09-23T18:22:47-07:00; preReleaseVersions nay co 1.4.3. LUU Y 2c: ban ASC la binary moi (embed:false) nen test iPhone that truoc khi moi tester ngoai.",
+ "actor": "win",
+ "at": "2026-09-24T01:24:36.423Z"
+}

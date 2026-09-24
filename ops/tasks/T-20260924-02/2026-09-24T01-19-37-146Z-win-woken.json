@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-24T01:19:37.147Z",
+ "note": "connector VPS: done từ mac — T-20260924-02 · iOS 1.4.3 ASC: fix embed Hysteria.framework + entitlement hotspot-provider, build lai IPA app-store-connect 1.4.3/21 va day vao node-2 incoming (WIN nop lai)",
+ "via": "dsh --profile headless \"{prompt}\""
+}
