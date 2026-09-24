@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260924-01",
+  "title": "Mac->Win CHOT dong bo control-plane: huong REPO(origin/main) -> LIVE; node-2 da fetch duoc + WS=LIVE (deploy mac dinh = no-op). Con lai: deploy nhom index.js+tg-commands.js+bw-policy.js+client-telemetry.js+route-report.js (vung bao ve cua Win)",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/handoff/CHOT-DONG-BO-CONTROL-PLANE-2026-09-24.md",
+  "verify": "tren node-2: git -C /root/flowvpn-agent fetch origin (exit 0) VA bash scripts/server-agent/deploy-control-plane.sh --dry-run in 'khong co file nao khac'; sau khi Win deploy: /health 200 + curl -s http://127.0.0.1:7778/nodes | grep -q bw_policy + GET /v1/app-version?platform=ios van 1.4.3",
+  "due": "2026-09-24",
+  "createdAt": "2026-09-24T00:59:00.994Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-24T00:59:00.995Z"
+}
