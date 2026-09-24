@@ -69,6 +69,8 @@
 > `.privatevpn/status/bugs.json` → `resolved`.
 
 
+| 13 | **TestFlight: mỗi build PHẢI có "What to Test" đầy đủ** (chốt 24/09/2026): (a) **Đã thay đổi gì trong bản này** (tóm tắt release notes: tính năng/fix, kèm commit hash nếu có) và (b) **Cần test gì** (checklist theo bước: hành động → kỳ vọng → ca biên: mất mạng, đổi Wi-Fi⇄4G, ngủ/thức, giới hạn thiết bị…). Viết đủ **3 ngôn ngữ** (en-GB/vi/zh-Hans) và **cập nhật theo TỪNG version** (không dùng lại nội dung cũ). Thiếu 1 trong 2 phần ⇒ KHÔNG nộp review | §0 luật này · §5d | publisher |
+
 **Công cụ dùng chung cho mọi bên:**
 ```bash
 python3 scripts/check-publish-version.py --platform <ios|macos|android|windows> \
@@ -228,6 +230,16 @@ nhất (Monthly 30 ngày), theo yêu cầu chủ dự án *"nới cửa số ra,
 Trước đó khách **trả tiền** đăng ký >72h mà chưa từng cài bị xếp `too_old` ⇒ **không bao giờ** được nhắc.
 Đã gửi hướng dẫn cho 3 khách đó, Resend xác nhận **3/3 `delivered`** — nhật ký + cách rollback:
 `docs/handoff/GUARD_NOI_CUA_SO_2026-09-24.md`.
+
+
+## 5d. TestFlight — "What to Test" bắt buộc (chốt 24/09/2026)
+Mỗi lần nộp build, field `whatsNew` (`betaBuildLocalizations`) của **từng locale** phải có đủ 2 phần:
+
+1. **Đã thay đổi gì trong bản này** — liệt kê ngắn: tính năng/sửa lỗi (kèm commit hash), phạm vi ảnh hưởng.
+2. **Cần test gì** — checklist theo bước: hành động → kỳ vọng → ca biên (mất mạng giữa phiên, đổi Wi-Fi⇄4G, ngủ/thức máy, đổi tài khoản, giới hạn số thiết bị, tải/cài lại).
+
+Quy trình: soạn `release/ios/whatsnew-<version>.json` (3 locale) → `node scripts/asc-beta.mjs submit <build> --whatsnew <file>` → kiểm lại bằng `node scripts/asc-beta.mjs status`.
+Nguồn nội dung: `release/ios/RELEASE_NOTES_<version>.md` + `git log` của bản đó — **không bịa**, không quảng cáo mục chưa xong.
 
 ## 6. Nhật ký phát hành (cập nhật mỗi lần)
 | Ngày | Nền tảng | Version/build | Ghi chú |
