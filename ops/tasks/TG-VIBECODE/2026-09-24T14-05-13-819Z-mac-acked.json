@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Nhận việc owner (bus #408, TG /vibecode 24/09 13:25Z): ban iOS moi khong on dinh (tu disconnect, mat mang) + thong so Diagnostics khac Android. Se doc cach ramp cua Android roi fix iOS.",
+ "actor": "mac",
+ "at": "2026-09-24T14:05:13.819Z"
+}
