@@ -223,6 +223,12 @@ hướng dẫn theo đúng nền tảng + phiên bản đang phát; ≥3 khách 
 alert Telegram, **chờ chủ dự án `/approve` mới được sửa**; khi bản mới publish → tự đóng task và mời
 lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi tiết: `PROTOCOL.md` §9.
 
+**Cửa sổ theo dõi — chốt 24/09/2026:** `GUARD_NEW_WINDOW_H` **72 → 720 giờ (30 ngày)**, khớp gói ngắn
+nhất (Monthly 30 ngày), theo yêu cầu chủ dự án *"nới cửa số ra, và cũng guide luôn cho 3 khách kia"*.
+Trước đó khách **trả tiền** đăng ký >72h mà chưa từng cài bị xếp `too_old` ⇒ **không bao giờ** được nhắc.
+Đã gửi hướng dẫn cho 3 khách đó, Resend xác nhận **3/3 `delivered`** — nhật ký + cách rollback:
+`docs/handoff/GUARD_NOI_CUA_SO_2026-09-24.md`.
+
 ## 6. Nhật ký phát hành (cập nhật mỗi lần)
 | Ngày | Nền tảng | Version/build | Ghi chú |
 |---|---|---|---|
