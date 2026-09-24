@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd=ssh node-2 (165.101.114.162): cd /root/flowvpn-ipa && AUTH_TOKEN=... node publish-ios-buy.mjs --apply --ipa incoming/VPNFlow-1.4.3-b20.ipa --expect-version 1.4.3 --expect-build 20; ketqua=7/7 cong PASS: app_config latest_version=1.4.3 ipa_build=20, /v1/app-version latest_version=1.4.3, manifest bundle-version=20, /install/ios 'Version 1.4.3', tai that /v1/downloads/ios = IPA ad-hoc 1.4.3/20 size=8175010 sha256=b2432247407e6e46fee80da4d444adc4a4c0092fa22b7e851cc0df79e9282bc1; da backup ban cu 1.4.2/19. Do lai tu Internet tren Mac: https://t1.meetflowai.site/v1/app-version?platform=ios -> latest_version 1.4.3.",
+ "actor": "mac",
+ "at": "2026-09-24T00:54:45.443Z"
+}
