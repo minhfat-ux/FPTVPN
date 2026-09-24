@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=3f54f1db6bf4e00bb0b2c8a3705deb8e2ef74bb4 (script+evidence, push main + mac/windows-1.4.7-email); cmd=ssh qua node-1 -> node-2: python3 /root/send-windows-1.4.7-announcement.py; ket qua=nguoi nhan 1 (camvinh@gmail.com), delivered 1/1 (Resend last_event=delivered, id 01a0d2c0-0b31-772e-b4d6-cbe8dde322cf); 3 gach dau dong dung version 1.4.7; link ?v=73660031 sha256 7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4 khop tren node-2; ban NotSigned nen KHONG hua het canh bao Windows; evidence=evidence/2026-09-24-windows-1.4.7-announcement.log",
+ "actor": "mac",
+ "at": "2026-09-24T09:30:54.034Z"
+}
