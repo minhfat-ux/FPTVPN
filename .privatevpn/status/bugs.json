@@ -76,7 +76,31 @@
       "fix": "control-plane/src/app-version.js: them androidLegacyVersionPayload + KNOWN_PLATFORMS + normalizePlatform/isKnownPlatform + UnknownPlatformError; control-plane/src/index.js: route /v1/app-version bat UnknownPlatformError -> HTTP 400 {error:unknown_platform,supported}. Commit 58c5537 (da rebase len origin/main).",
       "test": "control-plane/test/app-version.test.js -> tests 25 / pass 25 / fail 0 (them 4 test: kenh legacy dung, alias android7, platform la nem UnknownPlatformError, route co guard 400)",
       "deployed": "node-2: stage = ban LIVE + 2 file da va, chay scripts/server-agent/deploy-control-plane.sh --files app-version.js,index.js -> node --check OK, health OK, exit 0. Backup rollback: /root/flowvpn-cp/src-backup-20260923-104708"
+    },
+    {
+      "id": "BUG-DEPLOY-CRASHLOOP-001",
+      "title": "deploy-control-plane.sh: --files không kéo theo module mới + không thêm được file mới ⇒ live crash-loop ERR_MODULE_NOT_FOUND",
+      "area": "control-plane/infra",
+      "severity": "high",
+      "reported": "2026-09-24",
+      "status": "resolved",
+      "impact": "23/09 10:20 (+07): index.js mới import ./bw-policy.js nhưng chính file đó không được copy lên live ⇒ flowvpn-cp restart FAIL 12 lần liên tiếp trong ~41s (10:20:08→10:20:49), API không phục vụ được khách. Không phải OOM (RAM 480/961 MB). Rủi ro lặp lại với MỌI lần thêm module .js mới. Phát hiện khi điều tra task khách #373, nhưng KHÔNG phải nguyên nhân của #373 (xem doc §6).",
+      "evidence": [
+        "journalctl -u flowvpn-cp: 'Scheduled restart job, restart counter is at 1..12' từ 10:20:08 đến 10:20:46 ngày 23/09",
+        "node[224797]: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/root/flowvpn-cp/src/bw-policy.js' imported from /root/flowvpn-cp/src/index.js",
+        "10:20:48 Stopped + Started (copy file thiếu vào rồi start tay) -> 10:20:49 'listening on :7778' = hết sự cố",
+        "Không có backup dir nào quanh 10:20 (chỉ có 20260923-104708 + 20260924-010829) ⇒ lần đó KHÔNG chạy qua deploy-control-plane.sh (script luôn tạo backup) mà copy tay",
+        "Đồ thị module LIVE lúc kiểm (BFS từ index.js): 44 file trong thư mục, 38 reachable từ index.js, thiếu: không",
+        "Sau vá, đo lại 24/09: --dry-run -> 'không có file src/*.js nào khác bản đang chạy' exit 0; WS==LIVE 42 file .js"
+      ],
+      "next_steps": "Thêm hook pre-commit/CI kiểm đồ thị module cho control-plane/src để bắt trước khi lên server; luôn deploy bằng script, không copy tay.",
+      "workaround": "Nếu buộc copy tay: phải kéo theo MỌI module mới mà file vừa copy import.",
+      "doc": "docs/handoff/DEPLOY_GUARD_MODULE_GRAPH_2026-09-24.md",
+      "resolved": "2026-09-24",
+      "fix": "scripts/server-agent/deploy-control-plane.sh: them ham modgraph 2 che do — closure (keo theo moi module noi bo duoc import, de quy; bao loi khi workspace thieu module; bao loi khi --files go sai ten) va check (kiem do thi module cua ban LIVE sau copy tinh tu entrypoint $ENTRY) — chay TRUOC khi copy (§1b) va TRUOC khi restart (§3b); file MOI theo doi rieng trong added[] va rollback XOA thay vi cp -a fail lam abort ca deploy; log them gio may (backup dir ten UTC, journal +07).",
+      "test": "Fixture dung lai dung kich ban 23/09 -> PASS=7 FAIL=0: T0 logic cu chi chon 1 file (tai hien lo hong); T1 closure keo dung 2 file (bw-policy.js + index.js); T2 workspace thieu module -> exit 1; T3 --files go sai ten -> exit 1; T4 happy path them file moi + health 200 -> exit 0, backup chi chua file cu; T5 health hong -> rollback tra index.js cu + XOA bw-policy.js + restart service; T6 check-mode bat import thieu -> exit 1",
+      "deployed": "node-2: /root/flowvpn-agent/scripts/server-agent/deploy-control-plane.sh sha256 ba44e2a46e1e6c4fe4e6215ed518548f5c8725c37311f4e01dfe7c52a7c4132d (khop local), bash -n OK, --dry-run exit 0"
     }
   ],
-  "updated": "2026-09-23"
+  "updated": "2026-09-24"
 }
