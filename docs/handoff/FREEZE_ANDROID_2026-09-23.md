@@ -90,3 +90,24 @@ Chủ dự án yêu cầu trực tiếp trong phiên (DSH main agent, owner `win
 3. **Keystore release:** đã hỏi Mac chuyển qua node-1 (`/root/keystores-incoming/`, 700/600) — bus **#311**;
    yêu cầu cert phải là `dc6e484b…5e46` (đúng cert đã ký bản 1.4.3/29 đang phát).
 4. **Sau khi phát:** đóng mục này lại; Android **vẫn khóa** cho tới yêu cầu mới của chủ dự án.
+
+## 7. XÁC NHẬN CỦA CHỦ DỰ ÁN — BẢN ĐANG PHÁT ỔN ĐỊNH TRÊN THIẾT BỊ (24/09/2026)
+
+Chủ dự án nói trực tiếp trong phiên (DSH main agent, owner `windows`):
+
+> *"bản android hiện tại trên devices đang khá stable rồi."*
+
+**Ý nghĩa với publisher:**
+1. **Đóng mục treo "đối chiếu artifact ↔ máy thật"** của bản `android 1.4.4/32` (mục này nằm trong
+   `verified_by`/`notes` của row publish và trong `docs/handoff/FIX_APPVERSION_PLATFORM_2026-09-23.md` §6.3).
+   Trước đó mục này treo vì thiết bị SM-F9460 rớt kết nối adb liên tục — nay **chủ dự án xác nhận trực tiếp**
+   là bằng chứng thay thế (luật §2b: bản phát hành phải là bản đã được test + verify với người có thẩm quyền).
+2. Đã ghi **2 row `origin=verify`** vào sổ (`release/releases.jsonl`): `android 1.4.4` và
+   `android-legacy 1.4.4`, cùng sha256 với row publish, kèm nguyên văn xác nhận.
+3. **Không có số liệu hiện trường để đối chiếu thêm:** `client-telemetry.db` trên node-2 hiện **0 bản ghi**
+   (app Android chưa gửi telemetry), `adb devices` **rỗng** (thiết bị vẫn offline). Bằng chứng định lượng
+   vẫn là §2 (Z Fold5, 23/09) — nếu sau này cần số liệu thiết bị thật thì phải bật gửi telemetry hoặc
+   cắm lại máy.
+4. **Android VẪN KHÓA** theo §5: muốn sửa tiếp (vd phần CPU còn lại của `BUG-ANDROID-CPU-001`: giãn nhịp
+   probe 15 s, log buffer, nhận biết màn hình tắt) vẫn phải có **yêu cầu mới của chủ dự án**.
+

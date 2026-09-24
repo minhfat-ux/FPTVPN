@@ -84,5 +84,9 @@ systemctl restart flowvpn-cp && sleep 2 && curl -s -o /dev/null -w '%{http_code}
    production đang là hai bản khác nhau, rủi ro cho mọi lần deploy tiếp theo.
 2. **Sửa quyền git trên node-2** để `deploy-control-plane.sh` dùng lại được đúng workspace (hoặc chuyển sang
    quy trình stage-từ-LIVE như lần này và ghi vào runbook).
-3. **Android 1.4.4 — đối chiếu artifact ↔ máy thật** vẫn treo: điện thoại SM-F9460 offline; khi kết nối lại
-   phải cài đúng APK `145053e9…` (sha256) và đọc log `bw: sample`/`chon-duong`, rồi bổ sung vào sổ.
+3. ~~**Android 1.4.4 — đối chiếu artifact ↔ máy thật** vẫn treo: điện thoại SM-F9460 offline; khi kết nối lại
+   phải cài đúng APK `145053e9…` (sha256) và đọc log `bw: sample`/`chon-duong`, rồi bổ sung vào sổ.~~
+   ✅ **ĐÓNG 24/09/2026** — chủ dự án xác nhận trực tiếp: *"bản android hiện tại trên devices đang khá stable rồi"*.
+   Đã ghi 2 row `origin=verify` (`android 1.4.4`, `android-legacy 1.4.4`) vào sổ; chi tiết ở
+   `docs/handoff/FREEZE_ANDROID_2026-09-23.md` §7. Không cần đo lại qua adb.
+
