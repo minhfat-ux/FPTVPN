@@ -92,8 +92,15 @@ targets:
         # không cấp ⇒ -34018, khách kẹt màn đăng nhập) + gộp 7c98e53 (đăng xuất thiết bị khác)
         # và 820b9d2 (watchdog). Kênh đang phát 1.4.1/build 18 ⇒ PHẢI tăng CHUỖI version (app chỉ
         # nhắc cập nhật khi CFBundleShortVersionString tăng); control-plane đặt minimum_version=1.4.2.
-        CURRENT_PROJECT_VERSION: "20"
-        MARKETING_VERSION: "1.4.2"
+        # 1.4.3 / build 20 (24/09/2026): nền = mac/ios-mtu-1300 (fix MTU 1500→1300 + 2 DNS resolver,
+        # bản đã test máy thật 23/09); CHỈ tăng MARKETING_VERSION 1.4.2 → 1.4.3 để trang buy hiện
+        # đúng số chủ dự án yêu cầu, mã nguồn không đổi so với bản đã test.
+        # 1.4.3 / build 21 (24/09/2026): bản App Store Connect — build 20 bị Apple trả
+        # ITMS-90171 (appex chứa Frameworks/Hysteria.framework) + ITMS-90046 (entitlement
+        # hotspot-provider). Build 21 = cùng mã nguồn 1.4.3 đã test, chỉ sửa cấu trúc bundle
+        # (bỏ embed Hysteria — static archive) + số build mới. Xem docs/TG-VIBECODE-IOS-ASC-143-FIX.md.
+        CURRENT_PROJECT_VERSION: "21"
+        MARKETING_VERSION: "1.4.3"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -167,8 +174,8 @@ targets:
       properties:
         CFBundleDisplayName: VPNFlow Tunnel
         # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
-        CFBundleShortVersionString: "1.4.2"
-        CFBundleVersion: "19"
+        CFBundleShortVersionString: "1.4.3"
+        CFBundleVersion: "21"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
@@ -184,17 +191,18 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.2"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "21"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
       # Framework hysteria2 cho iOS (module `Hysteria`, hàm C MobileConnect/MobileServe/
       # MobileStop), bản STACK=gvisor — dựng bằng tools/hysteria-apple/build.sh. Là static
-      # archive ⇒ chỉ cần link; `embed` để artifact khớp bản phát hành.
+      # archive (`file` → "current ar archive") ⇒ CHỈ LINK, KHÔNG embed. `embed: true` làm
+      # appex chứa Frameworks/Hysteria.framework/Versions/A/Hysteria ⇒ Apple từ chối
+      # ITMS-90171 (ca thật 24/09/2026, build 20; đã từng sửa cho 1.4.1/18 ở commit 68f2095).
       - framework: iOS/Frameworks/Hysteria.xcframework
-        embed: true
-        codeSign: true
+        embed: false
 
   PrivateVPNTests:
     type: bundle.unit-test
