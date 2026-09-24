@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "NGHIEM THU PASS (WIN la ben giao). Chay dung cau lenh trong --verify: (1) tren node-2 ls -la /root/flowvpn-ipa/incoming/*.ipa -> co VPNFlow-1.4.3-b20.ipa 8175010B sha256 b2432247... va VPNFlow-1.4.3-b20-asc.ipa 8184849B sha256 881e2639...; doc version BEN TRONG bang python zipfile+plistlib: ca 2 file app+appex deu 1.4.3/20. (2) kenh buy da phat 1.4.3/20 (MAC tu chay /root/flowvpn-ipa/publish-ios-buy.mjs --apply luc 2026-09-24T00:53Z, 7/7 cong PASS). Kiem doc lap tu ngoai: GET /v1/app-version?platform=ios -> latest_version=1.4.3; manifest.plist -> bundle-version=20; /install/ios -> 'Version 1.4.3'; tai that /v1/downloads/ios -> 8175010B sha256 b2432247..., Info.plist BEN TRONG = 1.4.3/20. Phan App Store Connect tach sang T-20260923-03/-06.",
+ "actor": "win",
+ "at": "2026-09-24T01:00:29.384Z"
+}

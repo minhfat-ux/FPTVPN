@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-24T00:52:05.442Z",
+ "note": "connector VPS: done từ mac — T-20260923-05 · iOS 1.4.3/20: Mac build+ky IPA (ban da test pass) va day vao /root/flowvpn-ipa/incoming/ (hoac tu chay publish-ios.sh) - WIN lo phan phat len buy + App Store Connect",
+ "via": "dsh --profile headless \"{prompt}\""
+}
