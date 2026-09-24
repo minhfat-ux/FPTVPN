@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "MAC nghiem thu doc lap tren node-2 (SSH) luc 2026-09-24T01:10Z, chay dung cau lenh trong --verify: (1) git -C /root/flowvpn-agent fetch origin -> exit 0; (2) WS=/root/flowvpn-agent/control-plane LIVE=/root/flowvpn-cp bash scripts/server-agent/deploy-control-plane.sh --dry-run -> 'khong co file src/*.js nao khac ban dang chay — khong can deploy'; (3) /health -> 200; (4) curl -s http://127.0.0.1:7778/nodes | grep bw_policy -> 1; (5) GET /v1/app-version?platform=ios -> latest_version=1.4.3; (6) sha256 LIVE==WS 5/5 va == origin/main 8d78b0e cho index.js/tg-commands.js/bw-policy.js/client-telemetry.js/route-report.js; (7) flowvpn-cp active, 0 dong err tu 01:00; backup=/root/flowvpn-cp/src-backup-20260924-010829. Huong REPO(origin/main)->LIVE da dung.",
+ "actor": "mac",
+ "at": "2026-09-24T01:11:52.238Z"
+}
