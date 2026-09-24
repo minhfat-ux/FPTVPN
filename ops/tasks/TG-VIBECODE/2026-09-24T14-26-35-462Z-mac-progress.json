@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "bus #408 (iOS khong on dinh / tu disconnect / Diagnostics khac Android). DA LAM: (1) nhanh mac/ios-diag-ramp-408 tren origin = origin/main + cherry-pick 6fa8b1a (MTU 1500->1300 + 2 DNS) — main dang thieu trong khi IPA dang phat 1.4.4/21 da co; (2) build lai: ARCHIVE SUCCEEDED, IPA ad-hoc 1.4.3/20 sha256 afc5a92e27a8b0a4b41b4ac4eb9d33603b0192a828cc1e7d4f59b79b8b26792e, appex co 8.8.8.8; cong version 7/8 (muc 'phat hanh lui' chan vi marker iOS=1.4.4), logic test 289/289 PASS; (3) chan doan tu relay.log may that 1.4.5/22: watchdog TU DUNG LAI moi 15s roi 'QUYET DINH TU GO tunnel sau 49.5s' (go network settings) => dung 'tu disconnect, mat mang'; bo dem chieu ve ket 5004 lam watchdog mu, Diagnostics live=0 du co traffic (khac Android v29 dung TrafficStats). CON LAI (can chu du an quyet): so version kenh iOS (marker 1.4.4 > repo 1.4.3 nen khong the phat lui); sua watchdog vao HOLD + doi nguon byte phu moi transport. Chi tiet: docs/handoff/HANDOFF_IOS_DISCONNECT_2026-09-24.md. Luu y: co >=2 phien harness chay song song tren may Mac.",
+ "actor": "mac",
+ "at": "2026-09-24T14:26:35.465Z"
+}
