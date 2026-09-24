@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd=tren node-2: node /root/asc-upload-build.mjs --status; curl -s https://t1.meetflowai.site/v1/app-version?platform=ios; curl -s https://t1.meetflowai.site/install/ios/manifest.plist; curl -sL https://t1.meetflowai.site/v1/downloads/ios roi python3 zipfile doc Info.plist trong IPA; ketqua=ASC app 6804150049: build 21 preReleaseVersion=1.4.3 processingState=VALID (buildUpload state=COMPLETE errors=0, buildUploadId=6f8c78df-3d90-4ec1-a27a-18b94a6fa8a6); buy: latest_version=1.4.3; manifest bundle-version=20; IPA tai ve 8175010 B sha256=b2432247407e6e46fee80da4d444adc4a4c0092fa22b7e851cc0df79e9282bc1, Info.plist app+appex=1.4.3/20. Ca 2 kenh (App Store Connect + buy) da dung 1.4.3.",
+ "actor": "win",
+ "at": "2026-09-24T01:26:37.241Z"
+}
