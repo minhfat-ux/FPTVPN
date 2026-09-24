@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=chua-commit (code 1.4.3/20 dang o cay lam viec rel143; se commit sau), cmd=scp Mac->node-1->node-2 + python zipfile doc version, ketqua=DA GIAO 2 IPA vao /root/flowvpn-ipa/incoming/ tren node-2 (fcnvps2) luc 2026-09-24T00:51Z: VPNFlow-1.4.3-b20.ipa size=8175010 sha256=b2432247407e6e46fee80da4d444adc4a4c0092fa22b7e851cc0df79e9282bc1 (ad-hoc, khop GO-143) + VPNFlow-1.4.3-b20-asc.ipa size=8184849 sha256=881e2639d29d0cf7f16b5aff7dc73ac542df350a363bcef74510908baadfd238 (App Store Connect). Doc version BEN TRONG ca 2 file tren node-2: app+appex deu 1.4.3/20. Live buy van 1.4.2/19 - WIN chay /root/flowvpn-ipa/publish-ios-buy.mjs --apply --ipa /root/flowvpn-ipa/incoming/VPNFlow-1.4.3-b20.ipa --expect-version 1.4.3 --expect-build 20",
+ "actor": "mac",
+ "at": "2026-09-24T00:51:54.231Z"
+}
