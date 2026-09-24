@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=34460a5 (origin/mac/ios-1.4.3-21; nen origin/mac/ios-mtu-1300), cmd=bash build/asc-143-21.sh (xcodegen -> xcodebuild archive SUCCEEDED -> exportArchive app-store-connect SUCCEEDED) + bash build/verify-asc-143-21.sh, ketqua=IPA ASC 1.4.3/21 size=11549508 sha256=539139a5f2be41bae1bf3239fc8b922b2545b237898a0c914b01617cd17c0e5a; doc version BEN TRONG IPA tren node-2: app+appex=1.4.3/21; python zipfile 'Frameworks/Hysteria.framework/Versions/A/Hysteria'=0 (ban b20-asc cu=1); tren Mac codesign -d --entitlements :- ca app+appex: hotspot-provider=0, packet-tunnel-provider CO; profile='iOS Team Store Provisioning Profile: com.privatevpn.app' udid=0 get-task-allow=false; da day /root/flowvpn-ipa/incoming/VPNFlow-1.4.3-b21-asc.ipa (sha256+size khop local qua jump 103.173.155.50); LUU Y §2c: ban ASC la binary MOI (embed:false) nen nen test lai iPhone that truoc khi phat; WIN nop lai: node ops/asc-upload-build.mjs --apply --ipa /root/flowvpn-ipa/incoming/VPNFlow-1.4.3-b21-asc.ipa --expect-version 1.4.3 --expect-build 21 --wait 900",
+ "actor": "mac",
+ "at": "2026-09-24T01:19:26.778Z"
+}
