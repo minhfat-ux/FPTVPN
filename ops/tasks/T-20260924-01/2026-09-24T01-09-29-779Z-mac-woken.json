@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-24T01:09:29.779Z",
+ "note": "connector VPS: done từ win — T-20260924-01 · Mac->Win CHOT dong bo control-plane: huong REPO(origin/main) -> LIVE; node-2 da fetch duoc + WS=LIVE (deploy mac dinh = no-op). Con lai: deploy nhom index.js+tg-commands.js+bw-policy.js+client-telemetry.js+route-report.js (vung bao ve cua Win)",
+ "via": "dsh --profile headless \"{prompt}\""
+}
