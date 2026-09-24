@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd=curl -s https://t1.meetflowai.site/v1/app-version?platform=ios + /install/ios/manifest.plist + /install/ios + tai that /v1/downloads/ios roi doc Info.plist BEN TRONG bang python zipfile+plistlib (chay tu node-2, do doc lap ngoai kenh); ketqua=kenh buy DA dung ban da test 1.4.3/20: latest_version=1.4.3, manifest bundle-version=20, /install/ios hien 'Version 1.4.3', IPA tai that 8175010 B sha256 b2432247407e6e46fee80da4d444adc4a4c0092fa22b7e851cc0df79e9282bc1 (khop file incoming/VPNFlow-1.4.3-b20.ipa) va CFBundleShortVersionString=1.4.3/CFBundleVersion=20. Backup ban cu 1.4.2-b19 con nguyen o /root/flowvpn-ipa/backups/. Nguon phat: MAC tu chay /root/flowvpn-ipa/publish-ios-buy.mjs --apply luc 2026-09-24T00:53Z (su kien progress T-20260923-05). commit=event file cua chinh su kien nay (--push)",
+ "actor": "win",
+ "at": "2026-09-24T01:01:02.152Z"
+}
