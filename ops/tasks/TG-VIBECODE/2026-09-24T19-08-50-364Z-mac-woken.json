@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-24T19:08:50.364Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: dev ios làm nghiệm thu xong chưa?",
+ "via": "dsh --profile headless \"{prompt}\""
+}
