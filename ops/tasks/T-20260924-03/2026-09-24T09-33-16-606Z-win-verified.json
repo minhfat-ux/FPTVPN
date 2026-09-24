@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap: nguoi nhan 1/1 (camvinh@gmail.com); Resend last_event=delivered (id 01a0d2c0-0b31-772e-b4d6-cbe8dde322cf) — hoi lai TRUC TIEP tu node-2 bang chinh script --verify; 3 gach dau dong dung version 1.4.7 (khach TQ het loi device claim / retry API toi da 3 vong chi loi transport, khong lap side-effect POST / loi xay ra TRUOC tunnel nen ban va DNS 1.4.6 khong lien quan); co muc chua ky so, KHONG hua het canh bao Windows; link https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.7.exe?v=73660031 tai tu node-1: http 200, 52789147 B, sha256 7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4 khop, /buy co ?v=73660031; script tren node-2 sha256 8692beae0c080c6c98ce4ba78ed94a99c1066fcaafa5484fefafe925d87c758d trung blob commit 3f54f1db6bf4e00bb0b2c8a3705deb8e2ef74bb4 (13761 B) => PASS",
+ "actor": "win",
+ "at": "2026-09-24T09:33:16.607Z"
+}
