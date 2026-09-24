@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "T-06 chua the dong: nghiem thu doi ASC co build 1.4.3 processingState=VALID. KENH BUY DA XONG (1.4.3/20, T-20260923-02 da done, kiem doc lap tu ngoai OK). KENH ASC: WIN da chung minh duong nop tu Windows/Linux la THAT - nop thanh cong bang API REST buildUploads (asset COMPLETE, buildUpload 414c4ea0-a754-47fe-9c45-23190fa02cd0) - nhung Apple VALIDATE FAILED: ITMS-90171 (IPA nhung Frameworks/Hysteria.framework/Versions/A/Hysteria) + ITMS-90046 (entitlement 'hotspot-provider' khong ho tro iOS, o ca app va appex). => Khong phai viec 'Windows khong lam duoc' nua; la LOI BUILD can Mac sua: embed:false cho Hysteria iOS + entitlements iOS chi packet-tunnel-provider, build lai 1.4.3/21 + export app-store-connect, day vao node-2 incoming; WIN nop lai trong vai phut. Chi tiet: docs/TG-VIBECODE-IOS-ASC-143-FIX.md + su kien blocked cua T-20260923-03 (cung luot).",
+ "actor": "win",
+ "at": "2026-09-24T01:08:14.706Z"
+}
