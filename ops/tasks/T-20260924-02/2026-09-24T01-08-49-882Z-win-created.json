@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260924-02",
+  "title": "iOS 1.4.3 ASC: fix embed Hysteria.framework + entitlement hotspot-provider, build lai IPA app-store-connect 1.4.3/21 va day vao node-2 incoming (WIN nop lai)",
+  "from": "win",
+  "to": "mac",
+  "detail": "docs/TG-VIBECODE-IOS-ASC-143-FIX.md",
+  "verify": "tren node-2: python3 doc version BEN TRONG IPA -> app+appex = 1.4.3/21; unzip -l <ipa> | grep -c 'Frameworks/Hysteria.framework/Versions/A/Hysteria' = 0; tren Mac codesign -d --entitlements :- <app> khong con 'hotspot-provider'; va WIN nop lai bang node ops/asc-upload-build.mjs --apply --ipa <ipa> --expect-version 1.4.3 --expect-build 21 --wait 900 -> buildUpload state COMPLETE + GET /v1/builds build moi nhat preReleaseVersion 1.4.3 processingState VALID",
+  "due": "2026-09-24",
+  "createdAt": "2026-09-24T01:08:49.881Z"
+ },
+ "actor": "win",
+ "at": "2026-09-24T01:08:49.882Z"
+}
