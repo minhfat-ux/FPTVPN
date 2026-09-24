@@ -1,0 +1,78 @@
+# EVIDENCE — Email thông báo Windows 1.4.7 (retry API cho khách Trung Quốc) cho khách (T-20260924-03)
+
+- Ngày: 24/09/2026 (UTC). Người thực hiện: **harness MAC** (publisher), theo yêu cầu `T-20260924-03` của Windows
+  (WIN đã phát xong 1.4.7, không tự gửi email khách — luật 7 + `PUBLISHER_PROCESS.md` §5).
+- Nguồn nội dung: `docs/RELEASE_NOTES_1.4.7.md` + `docs/handoff/HANDOFF_PUBLISHER_WINDOWS_1.4.7_2026-09-24.md`.
+- Script gửi: `scripts/send-windows-1.4.7-announcement.py` (3 ngôn ngữ vi/en/zh, host `t1.meetflowai.site`,
+  hỗ trợ `support@meetflowai.site`). Chạy trên node-2, lấy `RESEND_API_KEY` từ drop-in systemd.
+- ⚠️ Bản 1.4.7 **CHƯA KÝ SỐ** (`NotSigned`) ⇒ email **KHÔNG** hứa "hết cảnh báo Windows"; mục **"Lưu ý"**
+  nói thẳng bộ cài chưa ký và xin khách bị **Smart App Control** chặn trả lời kèm thông báo (để đo lường).
+
+## 0. Kiểm kênh tải + artifact TRƯỚC khi gửi
+
+```
+https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.7.exe?v=73660031 -> HTTP/2 200, content-length 52789147
+https://t1.meetflowai.site/buy                                   -> có link ?v=73660031
+```
+
+`sha256sum` trên node-2 (đọc TỪ FILE ĐANG PHÁT, cả hai docroot):
+
+```
+7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4  /var/www/flowvpn/dl/VPNFlow-Setup-1.4.7.exe  (52.789.147 B)
+7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4  /var/www/dl/VPNFlow-Setup-1.4.7.exe          (52.789.147 B)
+```
+
+Khớp đúng `release/releases.jsonl` (dòng publish windows 1.4.7) + tag `windows-v1.4.7` → `9330355`
+(build commit `9330355ddbf4ad23253c28f15bcc10c0476b59c5`).
+
+## 1. Chọn người nhận (chỉ khách ĐANG DÙNG Windows)
+
+Lọc theo `devices.json` **platform = windows/win32** + có `userId` gắn user + user có email + có
+subscription, bỏ qua danh sách chủ dự án/test (giống hệt cách đã dùng cho Windows 1.4.5/1.4.6).
+
+```
+khach Windows (platform=windows/win32):
+   - BO QUA win32    (khong co email)       ly do: thiet bi khong gan user
+   - BO QUA windows  mi***@fpt.com          ly do: trong danh sach bo qua (chu du an/test)
+   - BO QUA windows  (khong co email)       ly do: thiet bi khong gan user
+nguoi nhan Windows: ['ca***@gmail.com']
+```
+
+- **Tổng thiết bị Windows/win32 trên hệ thống: 3** (1 orphan `win32`, 2 `windows`).
+- **Người nhận hợp lệ: 1** (`camvinh@gmail.com`) — giống hệt lần 1.4.6.
+- Bỏ qua: `minhnb2@fpt.com` (chủ dự án) và 2 thiết bị không gắn user.
+
+## 2. Kết quả gửi
+
+- Gửi thử tới `ALERT_EMAIL` (=`minhnb2@me.com`) trước khi gửi khách: **OK**.
+- Gửi thật lúc **2026-09-24T09:29:55Z**: **1/1 người nhận, 0 lỗi**. Resend id lưu tại
+  `/root/flowvpn-cp/data/.announce-windows-1.4.7-ids.json`:
+
+```json
+{
+ "camvinh@gmail.com": "01a0d2c0-0b31-772e-b4d6-cbe8dde322cf"
+}
+```
+
+- Truy vấn trạng thái giao (Resend `last_event`) — có `User-Agent` (không lỗi 403 Cloudflare 1010 giả):
+
+```
+   ca***@gmail.com  01a0d2c0-0b31-772e-b4d6-cbe8dde322cf  ->  delivered
+trang thai: {'delivered': 1}
+```
+
+- Tiêu đề: `VPNFlow 1.4.7 cho Windows — sửa lỗi kết nối cho khách Trung Quốc / ...`
+  · From: `VPNFlow <support@meetflowai.site>`.
+- **3 gạch đầu dòng** trong email (đúng version 1.4.7, lấy từ `RELEASE_NOTES_1.4.7.md`):
+  1. Khách Trung Quốc hết lỗi *"Không thể kết nối tới máy chủ VPNFlow khi gọi device claim"*.
+  2. App thử lại API **tối đa 3 vòng** khi lỗi mạng, **chỉ retry lỗi transport** (không lặp side-effect POST).
+  3. Lỗi xảy ra **TRƯỚC khi dựng tunnel** nên bản vá DNS 1.4.6 **không liên quan**.
+
+## 3. Script gửi — trùng khớp byte-for-byte
+
+```
+8692beae0c080c6c98ce4ba78ed94a99c1066fcaafa5484fefafe925d87c758d  /root/send-windows-1.4.7-announcement.py
+```
+
+(sha256 trên node-2 trùng blob `scripts/send-windows-1.4.7-announcement.py`; WIN nghiệm thu lại bằng cách
+so byte-for-byte.)
