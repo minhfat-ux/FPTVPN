@@ -290,6 +290,10 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
    ⚠️ Trước khi publish phải verify từ trong IPA: version/build, `get-task-allow=false`, keychain group
    `G6XW3RN6LJ.com.privatevpn.shared`, có `PrivateVPNPacketTunnel.appex`, sha256 khớp handover.
 
+7. **macOS 1.4.3/20 — CHẶN ở khâu ký framework (23/09 tối)**: DMG đã Developer ID + notarize Accepted + staple (23.287.317 B, sha256 `04f249f8…`) nhưng cổng `codesign --verify --deep --strict` KHÔNG ĐẠT: `Hysteria.framework: code has no resources but signature indicates they must be present` ⇒ lỗi **đóng gói/ký framework** (symlink `Versions/Current` + `Hysteria`/`Resources` đã có; plist rỗng `{}` đã vá). Cần bên build sửa cách đóng gói/ký `Hysteria.framework`, hoặc static link (đụng `project.yml` ⇒ handoff). **Chưa phát macOS**; live vẫn 1.4.0.
+8. **iOS TestFlight build mới — TODO**: export app-store-connect 1.4.3/20 build được nhưng Apple chặn **90171** (cùng họ framework). Đã sửa **90360** (plist `{}`) + **90206** (framework trong appex → chuyển sang app). Sau khi upload được: `node scripts/asc-beta.mjs submit <build> --whatsnew release/ios/whatsnew-next.json`. External testers **14/14 email khách** đã xong; yêu cầu chủ dự án: TestFlight phải trùng version với bản website.
+9. **Sổ phát hành**: dòng `ios 1.4.2 (19)` trong `release/releases.jsonl` chưa commit (hook chặn bởi claim `[windows] release`) — claim nhả là commit.
+
 ## 8. Lỗi đã từng xảy ra (đọc để không lặp)
 - Link trên `/buy` trỏ sai host (`api.` ⇒ 401). Link tải phải là `t1.` hoặc `meetflowai.site`.
 - PATCH mốc version thất bại **im lặng** (curl exit 0 dù 401) ⇒ phải đọc JSON trả về.
