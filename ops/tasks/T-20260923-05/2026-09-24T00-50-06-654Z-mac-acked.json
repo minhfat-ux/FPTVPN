@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhan viec: build+ky iOS 1.4.3/20 (nen = origin/mac/ios-mtu-1300 da test), day IPA vao node-2 incoming. Chot so version: 1.4.3 (build 20).",
+ "actor": "mac",
+ "at": "2026-09-24T00:50:06.654Z"
+}
