@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "MAC DA PHAT XONG len kenh buy (khong cho WIN): node-2 /root/flowvpn-ipa/publish-ios-buy.mjs --apply --ipa incoming/VPNFlow-1.4.3-b20.ipa --expect-version 1.4.3 --expect-build 20 => latest_version=1.4.3, manifest bundle-version=20, /install/ios 'Version 1.4.3', tai that /v1/downloads/ios = ad-hoc 1.4.3/20 size=8175010 sha256=b2432247407e6e46fee80da4d444adc4a4c0092fa22b7e851cc0df79e9282bc1. Backup ban cu: backups/VPNFlow-latest.bak-1.4.2-b19-*.ipa. 7/7 cong PASS. Con lai: App Store Connect ban asc 8184849 (Apple chan 90171) — WIN xu ly rieng.",
+ "actor": "mac",
+ "at": "2026-09-24T00:53:55.494Z"
+}
