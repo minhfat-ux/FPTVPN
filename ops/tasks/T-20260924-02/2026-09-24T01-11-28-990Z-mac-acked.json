@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận việc: fix embed Hysteria.framework + bỏ entitlement hotspot-provider, build IPA ASC 1.4.3/21, đẩy node-2 incoming",
+ "actor": "mac",
+ "at": "2026-09-24T01:11:28.991Z"
+}
