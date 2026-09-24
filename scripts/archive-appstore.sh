@@ -28,6 +28,22 @@ case "$TARGET" in
   mac) SCHEME="PrivateVPNMac"; PLATFORM="macOS"; DEST="generic/platform=macOS" ;;
   *) echo "usage: $0 [ios|mac] [direct|diawi|adhoc]" >&2; exit 2 ;;
 esac
+
+# `iOS/Frameworks/` bị `.gitignore` (framework 90 MB + 59 MB) ⇒ cây mới/CI KHÔNG có sẵn và
+# build sẽ chết ở "There is no XCFramework found at …". Đã gặp thật 23/09/2026 ở CẢ hai nền
+# tảng khi dựng cây phát hành sạch — báo lỗi sớm và chỉ rõ cách khắc phục thay vì để Xcode
+# báo khó hiểu.
+case "$TARGET" in
+  ios) FW="iOS/Frameworks/Hysteria.xcframework" ;;
+  mac) FW="iOS/Frameworks/Hysteria-macos.xcframework" ;;
+esac
+if [ ! -d "$FW" ]; then
+  echo "LỖI: thiếu $FW" >&2
+  echo "     Thư mục iOS/Frameworks/ bị .gitignore nên cây/CI mới không có sẵn framework." >&2
+  echo "     Copy từ cây đang build được (Hysteria.xcframework ~90 MB cho iOS," >&2
+  echo "     Hysteria-macos.xcframework ~59 MB cho macOS) rồi chạy lại lệnh này." >&2
+  exit 1
+fi
 case "$MODE" in
   direct|diawi|adhoc) ;;
   appstore)

@@ -13,7 +13,7 @@ không lưu được ⇒ tunnel không dựng được.)
 
 **Cách sửa đã chọn — ĐƯỜNG (A): BỎ HẲN nhóm keychain dùng chung trên iOS** (chủ dự án duyệt):
 extension iOS là **hysteria-only** và **không có dòng code keychain nào** ⇒ không có gì để chia sẻ,
-nên bỏ hẳn thay vì đi bật capability trên portal. Thay đổi trong bản **1.4.2 / build 19**:
+nên bỏ hẳn thay vì đi bật capability trên portal. Thay đổi trong bản **1.4.3 / build 20**:
 1. `project.yml`: bỏ `keychain-access-groups` ở **2 target iOS** (`PrivateVPN`, `PrivateVPNPacketTunnel`).
    **2 target macOS GIỮ NGUYÊN** — bản macOS đang chạy vẫn chia sẻ khoá WireGuard qua nhóm này.
 2. `iOS/PrivateVPN/Services/KeychainStore.swift` (file **dùng chung** iOS + macOS):
@@ -60,7 +60,7 @@ nên bỏ hẳn thay vì đi bật capability trên portal. Thay đổi trong b�
 3. Nếu iOS báo *“Untrusted Developer”* hoặc app mở ra rồi tắt ngay: **Settings → General → VPN & Device Management → (tên nhà phát triển) → Trust** → mở lại app.
 4. Mở app → đăng nhập email đã mua → **Allow** khi iOS hỏi cấu hình VPN → **Connect**.
 5. **Nâng cấp từ bản ≤ build 18:** lần đầu mở bản mới phải **đăng nhập lại một lần** (email + mã OTP)
-   — đây là chủ ý của bản 1.4.2/19 (bỏ nhóm keychain dùng chung nên phiên cũ không đọc lại được).
+   — đây là chủ ý của bản 1.4.3/20 (bỏ nhóm keychain dùng chung nên phiên cũ không đọc lại được).
    Không mất hội thoại/credit/gói dịch vụ. Nội dung gửi khách: `docs/NOTICE_IOS_RELOGIN.md`.
 
 ## 2. Developer Mode: khi nào cần, khi nào KHÔNG

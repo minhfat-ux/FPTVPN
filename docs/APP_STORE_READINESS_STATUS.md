@@ -38,7 +38,7 @@ Hệ quả cần biết khi phát qua Diawi:
 - Entitlements có thật **trong chữ ký**: Network Extension `packet-tunnel-provider` (app + appex),
   `applinks:meetflowai.site`.
   → **ĐÍNH CHÍNH 23/09/2026:** dòng cũ ghi thêm "keychain sharing `G6XW3RN6LJ.com.privatevpn.shared`".
-  Bản iOS từ **1.4.2/19 KHÔNG còn** nhóm keychain dùng chung (profile Ad Hoc không cấp ⇒ `-34018`
+  Bản iOS từ **1.4.3/20 KHÔNG còn** nhóm keychain dùng chung (profile Ad Hoc không cấp ⇒ `-34018`
   ⇒ khách kẹt màn đăng nhập). Nhóm này **chỉ còn ở 2 target macOS**; xem
   `IOS_INSTALL_TROUBLESHOOTING.md` §0a.
 - `ITSAppUsesNonExemptEncryption = false` (iOS + macOS).

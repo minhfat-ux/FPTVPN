@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Gửi email thông báo iOS 1.4.2 (build 19) cho khách ĐANG DÙNG iOS.
+"""Gửi email thông báo iOS 1.4.3 (build 20) cho khách ĐANG DÙNG iOS.
 
 Bản 19 BỎ nhóm keychain chia sẻ (hết lỗi -34018 "nhập code xong không vào được app") nhưng
 khách phải ĐĂNG NHẬP LẠI một lần — nội dung lấy từ `docs/NOTICE_IOS_RELOGIN.md`.
 
-⚠️ Đây là bản **BUỘC CẬP NHẬT** (`minimum_version = 1.4.2` trên control-plane): app bản cũ hiện
+⚠️ Đây là bản **BUỘC CẬP NHẬT** (`minimum_version = 1.4.3` trên control-plane): app bản cũ hiện
 màn hình yêu cầu cập nhật và KHÔNG dùng được cho tới khi cập nhật xong ⇒ email phải nêu rõ việc này
 + hướng dẫn mở Safari trên chính máy đó vào https://t1.meetflowai.site/install/ios.
 
@@ -23,6 +23,9 @@ import json, os, sys, time, urllib.error, urllib.request
 args = sys.argv[1:]
 TEST = "--test" in args
 LIST = "--recipients" in args
+# `--all`: gửi cho TOÀN BỘ khách có email trong hệ thống (không lọc theo thiết bị iOS).
+# Chủ dự án chốt 23/09/2026: thông báo cập nhật **iOS + macOS** phải tới **mọi** user.
+ALL = "--all" in args
 
 conf = "/etc/systemd/system/flowvpn-cp.service.d"
 env = {}
@@ -42,13 +45,17 @@ if not api_key:
     raise SystemExit("KHONG co RESEND_API_KEY")
 
 IOS = "https://t1.meetflowai.site/install/ios"
+MACPAGE = "https://t1.meetflowai.site/install/mac"
+BUY = "https://t1.meetflowai.site/buy"
+VERSION = "1.4.3"
 FROM = "VPNFlow <support@meetflowai.site>"
-SUBJECT = "VPNFlow iOS 1.4.2 (bản mới) — cần đăng nhập lại 1 lần / please sign in again once / 请重新登录一次"
+SUBJECT = ("VPNFlow 1.4.3 cho iPhone/iPad và Mac — cần đăng nhập lại 1 lần / "
+           "iOS + macOS update, sign in again once / iOS 与 macOS 更新，请重新登录一次")
 
 VI = f"""
-  <h2 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.2 cho iPhone/iPad — đã có bản mới</h2>
+  <h2 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.3 cho iPhone/iPad — đã có bản mới</h2>
   <p>Kính gửi Quý khách,</p>
-  <p>Bản <b>1.4.2</b> cho iPhone/iPad đã phát hành. Bản này sửa lỗi khiến một số khách
+  <p>Bản <b>1.4.3</b> cho iPhone/iPad đã phát hành. Bản này sửa lỗi khiến một số khách
      <b>nhập mã xong vẫn đứng ở màn đăng nhập</b>.</p>
   <p style="background:#fff4e5;border-left:4px solid #d97706;padding:10px 12px;margin:12px 0">
      <b>⚠️ Đây là bản BẮT BUỘC CẬP NHẬT.</b> App bản cũ sẽ hiện <b>màn hình yêu cầu cập nhật</b> và
@@ -75,14 +82,14 @@ VI = f"""
      <a href="{IOS}">{IOS}</a> → nếu máy chưa đăng ký thì bấm <b>Đăng ký thiết bị</b> rồi
      <b>Cài đặt → Cài hồ sơ đã tải → Cài</b> → bấm <b>Cài đặt VPNFlow</b>.
      <b>Bản của shop không cần bật Developer Mode</b>; sau khi cài, vào app kiểm tra
-     <b>Cài đặt</b> thấy <b>1.4.2</b> là đúng. Nếu app vẫn hiện <b>màn hình yêu cầu cập nhật</b>,
+     <b>Cài đặt</b> thấy <b>1.4.3</b> là đúng. Nếu app vẫn hiện <b>màn hình yêu cầu cập nhật</b>,
      anh/chị tải lại trang trên bằng <b>Safari của chính máy đó</b> rồi cài lại.</p>
   <p>Có gì vướng, Quý khách trả lời email này là chúng tôi hỗ trợ ngay —
      <a href="mailto:support@meetflowai.site">support@meetflowai.site</a>.</p>"""
 
 EN = f"""
   <hr style="border:none;border-top:1px solid #e3e8ee;margin:20px 0">
-  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.2 for iPhone/iPad — new build available</h3>
+  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.3 for iPhone/iPad — new build available</h3>
   <p>Dear customer,</p>
   <p style="background:#fff4e5;border-left:4px solid #d97706;padding:10px 12px;margin:12px 0">
      <b>⚠️ This is a MANDATORY update.</b> Older builds will show an <b>update-required screen</b> and
@@ -107,12 +114,12 @@ EN = f"""
      if the device is not registered yet, tap <b>Register device</b>, then
      <b>Settings → Profile Downloaded → Install</b>, then tap <b>Install VPNFlow</b>.
      <b>Our build does not require Developer Mode.</b> After installing, open the app and check
-     <b>Settings</b> shows <b>1.4.2</b>.</p>
+     <b>Settings</b> shows <b>1.4.3</b>.</p>
   <p>Reply to this email any time — <a href="mailto:support@meetflowai.site">support@meetflowai.site</a>.</p>"""
 
 ZH = f"""
   <hr style="border:none;border-top:1px solid #e3e8ee;margin:20px 0">
-  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.2（iPhone/iPad）——新版本已发布</h3>
+  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow 1.4.3（iPhone/iPad）——新版本已发布</h3>
   <p>尊敬的客户：</p>
   <p style="background:#fff4e5;border-left:4px solid #d97706;padding:10px 12px;margin:12px 0">
      <b>⚠️ 本版本为强制更新。</b>旧版本将显示<b>要求更新</b>页面，更新完成前<b>无法使用</b>。
@@ -131,11 +138,29 @@ ZH = f"""
   <p><b>更新方法</b>（在该设备的 <b>Safari</b> 中打开）：<a href="{IOS}">{IOS}</a> →
      若设备尚未注册，请点 <b>注册设备</b>，然后 <b>设置 → 已下载描述文件 → 安装</b>，
      再点 <b>安装 VPNFlow</b>。<b>本店版本不需要开发者模式。</b>安装后打开应用，进入 <b>设置</b> 看到
-     <b>1.4.2</b> 即为正确版本。</p>
+     <b>1.4.3</b> 即为正确版本。</p>
   <p>如有问题请直接回复本邮件 — <a href="mailto:support@meetflowai.site">support@meetflowai.site</a>。</p>"""
 
+MAC = f"""
+  <hr style="border:none;border-top:1px solid #e3e8ee;margin:20px 0">
+  <h3 style="color:#0d7a4a;margin:0 0 10px">VPNFlow {VERSION} cho <b>Mac</b> — đã Apple ký &amp; notarize</h3>
+  <p>Bản mới cho macOS đã phát hành và <b>đã được Apple ký + notarize</b> nên <b>không còn cảnh báo</b>
+     “Apple không thể xác minh…”. Quý khách chỉ cần <b>tải về rồi bấm đôi</b> — không phải chạy lệnh gì.</p>
+  <p><b>Tải cho Mac:</b> <a href="{MACPAGE}">{MACPAGE}</a> (hoặc trang mua <a href="{BUY}">{BUY}</a>).
+     Sau khi cài, mở app vào <b>Cài đặt</b> thấy <b>{VERSION}</b> là đúng.</p>
+  <h3 style="color:#0d7a4a;margin:16px 0 10px">VPNFlow {VERSION} for <b>Mac</b> — Apple-signed &amp; notarized</h3>
+  <p>The new macOS build is released and is <b>signed and notarized by Apple</b>, so the
+     “Apple cannot verify…” warning is gone. Just <b>download and double-click</b> — no commands to run.</p>
+  <p><b>Download for Mac:</b> <a href="{MACPAGE}">{MACPAGE}</a>. After installing, open the app and check
+     <b>Settings</b> shows <b>{VERSION}</b>.</p>
+  <h3 style="color:#0d7a4a;margin:16px 0 10px">VPNFlow {VERSION}（<b>Mac</b> 版）——已由 Apple 签名并公证</h3>
+  <p>macOS 新版本已发布，并已 <b>由 Apple 签名 + 公证</b>，“无法验证 Apple…” 的提示已消失。
+     只需 <b>下载后双击</b>，无需执行任何命令。</p>
+  <p><b>Mac 下载：</b><a href="{MACPAGE}">{MACPAGE}</a>。安装后打开应用，在 <b>设置</b> 中看到
+     <b>{VERSION}</b> 即为正确版本。</p>"""
+
 HTML = ('<div style="font-family:-apple-system,\'Segoe UI\',Roboto,Arial,sans-serif;line-height:1.6;'
-        'color:#12202f;max-width:640px">' + VI + EN + ZH + '</div>')
+        'color:#12202f;max-width:640px">' + VI + EN + ZH + MAC + '</div>')
 
 
 def send(to, subject, html):
@@ -170,21 +195,27 @@ skip = {"test@example.com", "review@meetflowai.site", "support@meetflowai.site",
         "no-reply@meetflowai.site", "minhnb2@me.com", "minhnb2@fpt.com", "minhnb2@hotmail.com"}
 
 targets = []
-for d in devices:
-    uid = str(d.get("userId") or "")
-    if str(d.get("platform")) != "ios" or uid not in emails:
-        continue
-    e = emails[uid]
-    if not e or e in skip or e in targets:
-        continue
-    if not exp.get(uid):
-        continue
-    targets.append(e)
+if ALL:
+    # Không lọc theo thiết bị/gói: mọi user có email hợp lệ đều nhận (trừ danh sách `skip`).
+    for uid, e in emails.items():
+        if e and e not in skip:
+            targets.append(e)
+else:
+    for d in devices:
+        uid = str(d.get("userId") or "")
+        if str(d.get("platform")) != "ios" or uid not in emails:
+            continue
+        e = emails[uid]
+        if not e or e in skip or e in targets:
+            continue
+        if not exp.get(uid):
+            continue
+        targets.append(e)
 if "--email" in args:
     targets = [args[args.index("--email") + 1].lower()]
-targets.sort()
+targets = sorted(set(targets))
 
-print("nguoi nhan iOS:", targets or "(khong co)")
+print("nguoi nhan " + ("TOAN BO" if ALL else "iOS") + ":", targets or "(khong co)")
 if LIST:
     raise SystemExit(0)
 if alert:
