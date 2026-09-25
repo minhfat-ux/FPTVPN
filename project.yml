@@ -221,8 +221,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.5"
-        CURRENT_PROJECT_VERSION: "44"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
@@ -311,8 +311,8 @@ targets:
         PRODUCT_NAME: VPNFlow
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.5"
-        CURRENT_PROJECT_VERSION: "44"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -441,8 +441,8 @@ targets:
         PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.5"
-        CURRENT_PROJECT_VERSION: "44"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).

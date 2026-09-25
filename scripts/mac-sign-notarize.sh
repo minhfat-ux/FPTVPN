@@ -18,6 +18,7 @@
 #
 # KHÔNG chứa secret: chỉ đọc đường dẫn khoá từ môi trường/mặc định.
 set -euo pipefail
+trap 'echo "LỖI: script dừng ở dòng $LINENO (exit $?)" >&2' ERR
 
 APP_SRC="${1:?usage: $0 <VPNFlow.app> <version-tag> [--dmg]}"
 VER="${2:?thiếu version-tag, vd 1.4.3-20}"
@@ -56,15 +57,21 @@ ent_for "$APPEX" "$PROFILES/appex.ent.plist" "$BASE/appex.ent.plist"
 ent_for "$APP"   "$PROFILES/app.ent.plist"   "$BASE/app.ent.plist"
 
 echo "== 3. ký framework con TRƯỚC (bỏ bước này notarize sẽ Invalid)"
-find "$APPEX/Contents/Frameworks" -maxdepth 3 -name "*.framework" -type d 2>/dev/null | while read -r fw; do
-  bin="$fw/Versions/A/$(basename "$fw" .framework)"
-  [ -f "$bin" ] || bin="$fw/$(basename "$fw" .framework)"
-  [ -f "$bin" ] && codesign --force --options runtime --timestamp --sign "$ID" "$bin"
-  codesign --force --options runtime --timestamp --sign "$ID" "$fw"
-done
-find "$APPEX/Contents/Frameworks" -maxdepth 2 -name "*.dylib" -type f 2>/dev/null | while read -r d; do
-  codesign --force --options runtime --timestamp --sign "$ID" "$d"
-done
+# Có bản build KHÔNG nhúng framework nào (Hysteria link tĩnh) ⇒ thư mục Frameworks không tồn tại;
+# `find` trên thư mục thiếu sẽ trả exit 1 và `set -e`/`pipefail` giết script ngay (đã gặp thật 25/09/2026).
+if [ -d "$APPEX/Contents/Frameworks" ]; then
+  find "$APPEX/Contents/Frameworks" -maxdepth 3 -name "*.framework" -type d | while read -r fw; do
+    bin="$fw/Versions/A/$(basename "$fw" .framework)"
+    [ -f "$bin" ] || bin="$fw/$(basename "$fw" .framework)"
+    if [ -f "$bin" ]; then codesign --force --options runtime --timestamp --sign "$ID" "$bin"; fi
+    codesign --force --options runtime --timestamp --sign "$ID" "$fw"
+  done
+  find "$APPEX/Contents/Frameworks" -maxdepth 2 -name "*.dylib" -type f | while read -r d; do
+    codesign --force --options runtime --timestamp --sign "$ID" "$d"
+  done
+else
+  echo "   (không có Contents/Frameworks — bản này link tĩnh, bỏ qua bước ký framework)"
+fi
 
 echo "== 4. ký extension rồi tới app"
 codesign --force --options runtime --timestamp --sign "$ID" --entitlements "$BASE/appex.ent.plist" "$APPEX"
