@@ -451,3 +451,103 @@ enum RawLinePolicy {
         deltaOffered > 0 && deltaFromGo == 0
     }
 }
+
+/// Luật **FAILOVER ĐƯỜNG** khi tunnel `Connected` nhưng chiều VỀ đứt một chiều (25/09/2026).
+///
+/// VÌ SAO PHẢI CÓ (ca thật trên máy Mac, 25/09/2026 19:33→19:43, relay `vn1hy`): máy VẪN gửi gói
+/// đều vào tunnel (`packetFlow→Go` leo 3477→3501 SYN) trong khi `Go→packetFlow` **ĐÓNG BĂNG** ở
+/// 360729 gói / 125.639.055 B và `SYN-ACK về` đứng ở 2239 ⇒ hỏng MỘT CHIỀU. App đã tự dựng lại
+/// transport **3 lần liên tiếp trên CÙNG một relay** (`vn1hy`) mà KHÔNG hề đổi đường.
+///
+/// Vì sao luật cũ (`transportCarriedTraffic` + `recoveryAttemptsWithoutTraffic`) không bắt được:
+/// cờ đó được đặt theo DELTA BYTE chiều về, nhưng mỗi lần dựng lại xong watchdog được bật lại và
+/// **đặt mốc byte về 0** (`startLivenessWatchdog`: `livenessPrevFromGoBytes = 0`). Nhịp đầu tiên
+/// sau dựng lại vì thế tính "delta" = cả đời bộ đếm cầu (125 MB) ⇒ tưởng đường CÓ chở ⇒ xoá bộ
+/// đếm vô ích mỗi lần ⇒ không bao giờ đủ ngưỡng ⇒ bám mãi một relay.
+///
+/// Luật mới đo ĐÚNG thứ cần đo: mở một CỬA SỔ đánh giá ngay sau mỗi lần dựng lại rồi so số gói
+/// CHIỀU VỀ (`fromGo`, luỹ kế của cầu) ở ĐẦU cửa sổ với số ở CUỐI cửa sổ. KHÔNG quan tâm máy gửi
+/// ra bao nhiêu — gửi ra được KHÔNG chứng minh chiều về còn sống.
+///
+/// Hàm THUẦN (không Bundle/UI/đồng hồ thật) — case harness ở `scripts/ios-pure-logic-tests/main.swift`.
+struct RelayFailoverWatch {
+
+    /// Kết quả một nhịp của cửa sổ đánh giá.
+    enum Verdict: Equatable {
+        /// Cửa sổ chưa mở hoặc chưa hết: chưa kết luận được gì.
+        case waiting
+        /// Cửa sổ vừa đóng và CÓ gói chiều VỀ (`delta` gói) ⇒ lần dựng lại này HIỆU QUẢ, xoá chuỗi vô ích.
+        case carried(Int)
+        /// Cửa sổ vừa đóng với **0 gói VỀ** — giá trị 1-based = số lần vô ích LIÊN TIẾP.
+        case fruitless(Int)
+        /// Đủ `fruitlessToAdvance` lần vô ích liên tiếp ⇒ đổi sang ứng viên đường kế tiếp.
+        case advanceRelay(Int)
+        /// Đủ ngưỡng nhưng đã hết ứng viên (`maxAdvances` lần đổi trong phiên) ⇒ GIỮ tunnel của
+        /// khách, nhịp sau thử lại — KHÔNG xoay vòng vô hạn, KHÔNG gỡ tunnel.
+        case exhausted(Int)
+    }
+
+    /// Độ dài cửa sổ đánh giá — dùng lại nhịp watchdog sẵn có (15 s).
+    let windowS: TimeInterval
+    /// Số cửa sổ "0 gói VỀ" LIÊN TIẾP trước khi đổi đường.
+    let fruitlessToAdvance: Int
+    /// Trần số lần đổi đường mỗi phiên (chống xoay vòng vô hạn) — phải khớp `maxNodeFailovers`.
+    let maxAdvances: Int
+
+    /// Đầu cửa sổ hiện tại (`nil` = không có cửa sổ nào đang mở).
+    private(set) var windowStartAt: Date?
+    /// Mốc `fromGo` tại ĐẦU cửa sổ — chỉ dùng để so DELTA, không bao giờ so với 0.
+    private(set) var windowStartFromGo = 0
+    /// Số cửa sổ "0 gói VỀ" liên tiếp đã đóng.
+    private(set) var fruitlessWindows = 0
+    /// Số lần đã đổi đường trong phiên.
+    private(set) var advances = 0
+
+    init(windowS: TimeInterval = 15, fruitlessToAdvance: Int = 2, maxAdvances: Int = 3) {
+        self.windowS = max(1, windowS)
+        self.fruitlessToAdvance = max(1, fruitlessToAdvance)
+        self.maxAdvances = max(0, maxAdvances)
+    }
+
+    /// Mở cửa sổ đánh giá NGAY SAU khi transport được dựng lại xong. `fromGo` là số gói chiều về
+    /// (luỹ kế của cầu) tại thời điểm đó — mốc để đo DELTA, không phải "đã có gói về".
+    mutating func beginWindow(now: Date, fromGo: Int) {
+        windowStartAt = now
+        windowStartFromGo = fromGo
+    }
+
+    /// Một nhịp (provider bơm `now`/`fromGo` vào — hàm thuần, test được).
+    mutating func tick(now: Date, fromGo: Int) -> Verdict {
+        guard let start = windowStartAt else { return .waiting }
+        // `fromGo` TỤT = nguồn đếm vừa đổi giữa cửa sổ (cầu mới đếm lại từ 0) ⇒ KHÔNG đo được gì:
+        // đặt lại mốc và không kết luận (đây chính là cái bẫy đã làm luật cũ reset oan).
+        guard fromGo >= windowStartFromGo else {
+            beginWindow(now: now, fromGo: fromGo)
+            return .waiting
+        }
+        if fromGo > windowStartFromGo {
+            let delta = fromGo - windowStartFromGo
+            windowStartAt = nil
+            fruitlessWindows = 0
+            return .carried(delta)
+        }
+        // Delta = 0 mà chưa hết cửa sổ: còn chờ (gói về có thể tới muộn trong cửa sổ).
+        guard now.timeIntervalSince(start) >= windowS else { return .waiting }
+        windowStartAt = nil
+        fruitlessWindows += 1
+        guard fruitlessWindows >= fruitlessToAdvance else { return .fruitless(fruitlessWindows) }
+        guard advances < maxAdvances else { return .exhausted(fruitlessWindows) }
+        return .advanceRelay(fruitlessWindows)
+    }
+
+    /// Provider ĐÃ đổi đường thật (currentOptions sang ứng viên kế tiếp) ⇒ đóng chuỗi vô ích.
+    mutating func noteAdvanced() {
+        fruitlessWindows = 0
+        advances += 1
+    }
+
+    /// Hết ứng viên: giữ nguyên tunnel của khách, để nhịp sau thử lại từ đầu.
+    mutating func noteExhausted() {
+        fruitlessWindows = 0
+    }
+}

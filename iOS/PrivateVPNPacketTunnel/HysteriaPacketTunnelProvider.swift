@@ -165,18 +165,22 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Số lượt dựng lại đã dùng của chuỗi phục hồi hiện tại.
     private var livenessRebuildAttempts = 0
 
-    // MARK: - Chuyển node khi node đang chọn chết ở tầng dữ liệu (25/09/2026)
+    // MARK: - Chuyển đường khi relay/node chết CHIỀU VỀ (25/09/2026)
 
-    /// Số lần một chuỗi tự phục hồi bắt đầu mà KỂ TỪ lần dựng lại trước vẫn chưa có gói nào về
-    /// (`transportCarriedTraffic == false`). Đủ ngưỡng ⇒ đổi node.
-    private var recoveryAttemptsWithoutTraffic = 0
-    /// Đã có gói CHIỀU VỀ kể từ lần dựng lại transport gần nhất chưa.
-    private var transportCarriedTraffic = false
-    /// Số lần đổi node trong phiên này (chặn xoay vòng vô hạn).
+    /// Bộ đếm FAILOVER ĐƯỜNG: sau mỗi lần dựng lại mở cửa sổ `livenessInterval` (15 s) và đo
+    /// DELTA số gói CHIỀU VỀ; 2 cửa sổ liên tiếp 0 gói về ⇒ đổi ứng viên (xem `RelayFailoverWatch`).
+    ///
+    /// Thay hẳn luật cũ (`transportCarriedTraffic` + `recoveryAttemptsWithoutTraffic`): luật cũ đo
+    /// delta byte so với mốc bị đặt lại 0 sau MỖI lần dựng lại (`startLivenessWatchdog`) nên nhịp
+    /// đầu tiên luôn thấy "có chở" (125 MB của cả phiên) ⇒ xoá bộ đếm vô ích ⇒ bám mãi `vn1hy`.
+    /// Mặc định 15 s / 2 lần / 3 lần (khớp hằng số bên dưới, harness `ios-pure-logic-tests` khẳng định);
+    /// đầu mỗi phiên được DỰNG LẠI theo đúng hằng số của provider trong `startTrafficSupervisor`.
+    private var relayFailover = RelayFailoverWatch()
+    /// Số lần đổi đường trong phiên này (chặn xoay vòng vô hạn).
     private var nodeFailovers = 0
-    /// Số lần dựng lại "không có gói về" liên tiếp trước khi đổi node.
+    /// Số lần dựng lại "0 gói VỀ" liên tiếp trước khi đổi đường.
     private static let failoverAfterFruitlessRecoveries = 2
-    /// Trần đổi node mỗi phiên.
+    /// Trần đổi đường mỗi phiên.
     private static let maxNodeFailovers = 3
 
     // MARK: - Luật GOODPUT: node "sống" nhưng chở ≈0 byte (25/09/2026)
@@ -2255,6 +2259,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         supervisorStallStrikes = 0
         trafficConfirmed = false
         probeInFlight = false
+        // Trần đổi đường là TRẦN MỖI PHIÊN: phiên mới phải được đổi đường lại từ đầu, nếu không thì
+        // sau 3 lần của phiên trước, phiên sau hết quyền đổi dù đường mới hỏng.
+        nodeFailovers = 0
+        relayFailover = RelayFailoverWatch(
+            windowS: Self.livenessInterval,
+            fruitlessToAdvance: Self.failoverAfterFruitlessRecoveries,
+            maxAdvances: Self.maxNodeFailovers
+        )
         firstPacketLogged = false
         firstReturnPacketLogged = false
         firstTCPHandshakeLogged = false
@@ -2974,6 +2986,9 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         }
         // KHÔNG đọc bộ đếm trong lúc giữ `flowLock`: `trafficCounters` tự lấy khoá này.
         let counters = trafficCounters
+        // FAILOVER ĐƯỜNG: đo CHIỀU VỀ trong cửa sổ 15 s mở sau mỗi lần dựng lại transport. Gọi ở
+        // ĐÂY vì đang KHÔNG giữ `flowLock` (hàm này tự lấy khoá, và `advanceRelayCandidate` cũng lấy).
+        relayFailoverStep(now: Date(), fromGo: counters?.fromGo)
         let rampInFlight = isBandwidthRebuildInFlight
         // DELTA so với nhịp trước — chỉ để ghi log; quyết định vẫn nằm trong `LivenessWatchdog`.
         // Bộ đếm tụt (dựng lại cầu/nguồn khác) ⇒ kẹp 0, không in số âm.
@@ -2994,12 +3009,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             (counters?.toGoBytes ?? livenessPrevToGoBytes) - livenessPrevToGoBytes
         )
         if let counters { livenessPrevToGoBytes = counters.toGoBytes }
-        // Có BYTE thật về ⇒ transport (hoặc node vừa đổi) THẬT SỰ chở được dữ liệu ⇒ đặt lại bộ đếm
-        // "dựng lại mà không có gói về" để KHÔNG đổi node oan. Đo bằng BYTE chứ không bằng "có gói":
-        // node nhỏ giọt vài gói vẫn tính là KHÔNG chở — đúng ca node 1 ngày 25/09 (7–16 KB/phút ⇒
-        // watchdog cũ báo `alive` nên không có strike nào, không dựng lại, không đổi node).
+        // Có BYTE thật về ⇒ đường còn chở dữ liệu. Đo bằng BYTE chứ không bằng "có gói": node nhỏ
+        // giọt vài gói vẫn tính là KHÔNG chở — đúng ca node 1 ngày 25/09 (7–16 KB/phút ⇒ watchdog
+        // cũ báo `alive` nên không có strike nào, không dựng lại, không đổi node).
+        // (Đếm FAILOVER không còn dùng delta byte ở đây nữa — xem `relayFailoverStep`: delta byte so
+        // với mốc bị đặt lại 0 sau mỗi lần dựng lại, nên nó luôn báo "có chở" một cách giả.)
         if deltaFromGoBytes >= Self.goodputMinBytes {
-            transportCarriedTraffic = true
             lowGoodputStrikes = 0
         } else if hasServedThisSession, deltaToGo >= Self.goodputMinOfferedPackets,
                   deltaToGoBytes < Self.goodputMaxUpBytes {
@@ -3113,20 +3128,18 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         beginTransportRecovery(reason: "transport chết: \(reason)")
     }
 
-    /// Bắt đầu chuỗi tự dựng lại transport có trần (3 lần, chờ 2/5/10s). Không chồng lên chuỗi
-    /// khác và không tranh fd với đường ramp băng thông (độc quyền theo `transportRebuildOwner`).
     /// Chuyển `currentOptions` sang relay/node KẾ TIẾP trong danh sách dự phòng (`relayURLCandidates`)
-    /// rồi xoay vòng node cũ xuống cuối. Gọi từ đường tự phục hồi TRƯỚC khi dựng lại transport, nên
-    /// `rebuildTransportForLiveness` sẽ dựng trên node mới.
+    /// rồi xoay vòng node cũ xuống cuối. Gọi từ `relayFailoverStep` (sau khi cửa sổ đánh giá 15 s
+    /// chứng minh 2 lần dựng lại liên tiếp vẫn 0 gói VỀ) — lần dựng lại KẾ TIẾP sẽ chạy trên node mới.
     ///
-    /// Vì sao cần: node có thể chết ở tầng dữ liệu (relay WS vẫn mở được, nhưng node không trả gói
-    /// nào) — khi đó dựng lại CÙNG node là vô ích. Đo thật 25/09/2026: iPad ghim `vn1hy` dựng lại 10
-    /// lần trong một phiên mà vẫn 0 byte về, trong khi iPhone ở `vn2hy` chạy tốt cùng lúc.
+    /// Vì sao cần: node có thể chết ở CHIỀU VỀ (relay WS vẫn mở được, handshake ok, nhưng không trả
+    /// gói nào) — khi đó dựng lại CÙNG node là vô ích. Đo thật 25/09/2026: máy Mac ghim `vn1hy`, dựng
+    /// lại transport 3 lần liên tiếp vẫn 0 gói về trong khi đó bật lại cùng máy với `vn2hy` là chạy.
     private func advanceRelayCandidate(reason: String) {
         guard nodeFailovers < Self.maxNodeFailovers else {
             RelayDiagnostics.shared.log(
-                "đổi node: đã đổi đủ \(Self.maxNodeFailovers) lần trong phiên — giữ node hiện tại "
-                    + "(\(reason))"
+                "hết ứng viên đường: đã đổi đủ \(Self.maxNodeFailovers) lần trong phiên — GIỮ đường "
+                    + "hiện tại (\(reason))"
             )
             return
         }
@@ -3134,13 +3147,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let options = currentOptions
         flowLock.unlock()
         guard let options else {
-            RelayDiagnostics.shared.log("đổi node: chưa có currentOptions — không đổi được (\(reason))")
+            RelayDiagnostics.shared.log("đổi đường: chưa có currentOptions — không đổi được (\(reason))")
             return
         }
         guard !options.relayURLCandidates.isEmpty else {
             RelayDiagnostics.shared.log(
-                "đổi node: cấu hình không có node dự phòng (relayURLCandidates rỗng) — không đổi "
-                    + "được (\(reason))"
+                "hết ứng viên đường: cấu hình không có đường dự phòng (relayURLCandidates rỗng) — "
+                    + "GIỮ đường hiện tại (\(reason))"
             )
             return
         }
@@ -3165,11 +3178,56 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         currentOptions = switched
         flowLock.unlock()
         nodeFailovers += 1
-        recoveryAttemptsWithoutTraffic = 0
         RelayDiagnostics.shared.log(
-            "đổi node: \(old) ⇒ \(next.lastPathComponent) — \(reason); lần \(nodeFailovers)/"
-                + "\(Self.maxNodeFailovers) trong phiên (còn \(rest.count) node dự phòng)"
+            "đã đổi đường: \(old) → \(next.lastPathComponent) — \(reason); lần \(nodeFailovers)/"
+                + "\(Self.maxNodeFailovers) trong phiên (còn \(rest.count) đường dự phòng)"
         )
+    }
+
+    /// Một nhịp cho luật FAILOVER ĐƯỜNG (xem `RelayFailoverWatch`): đo DELTA số gói CHIỀU VỀ trong
+    /// cửa sổ 15 s mở ngay sau mỗi lần dựng lại transport. 0 gói về 2 lần liên tiếp ⇒ đổi ứng viên.
+    ///
+    /// ⚠️ CHỈ gọi khi ĐANG KHÔNG giữ `flowLock` (hàm này tự lấy khoá; `advanceRelayCandidate` cũng
+    /// lấy khoá ⇒ gọi lồng sẽ tự khoá chết, xem AGENTS.md §7c).
+    private func relayFailoverStep(now: Date, fromGo: Int?) {
+        // Không đọc được bộ đếm ⇒ không đo được gì, giữ nguyên cửa sổ cho nhịp sau.
+        guard let fromGo else { return }
+        flowLock.lock()
+        let verdict = relayFailover.tick(now: now, fromGo: fromGo)
+        // Đóng chuỗi vô ích (đổi thành công) / hết ứng viên ngay TRONG vùng khoá, chỉ ghi log + hành
+        // động ở ngoài — để không gọi hàm lấy khoá trong lúc đang giữ khoá.
+        switch verdict {
+        case .advanceRelay: relayFailover.noteAdvanced()
+        case .exhausted: relayFailover.noteExhausted()
+        case .waiting, .carried, .fruitless: break
+        }
+        let series = relayFailover.fruitlessWindows
+        flowLock.unlock()
+
+        switch verdict {
+        case .waiting:
+            return
+        case .carried(let delta):
+            RelayDiagnostics.shared.log(
+                "tự phục hồi: cửa sổ \(Int(Self.livenessInterval))s có \(delta) gói VỀ ⇒ lần dựng lại "
+                    + "vừa rồi HIỆU QUẢ — xoá bộ đếm vô ích (0/\(Self.failoverAfterFruitlessRecoveries))"
+            )
+        case .fruitless(let count):
+            RelayDiagnostics.shared.log(
+                "tự phục hồi: \(count) lần dựng lại vẫn 0 gói VỀ trong cửa sổ "
+                    + "\(Int(Self.livenessInterval))s — chưa đủ \(Self.failoverAfterFruitlessRecoveries) "
+                    + "lần nên chưa đổi đường (\(series)/\(Self.failoverAfterFruitlessRecoveries))"
+            )
+        case .advanceRelay(let count):
+            RelayDiagnostics.shared.log("tự phục hồi: \(count) lần dựng lại vẫn 0 gói VỀ ⇒ đổi đường")
+            advanceRelayCandidate(reason: "\(count) lần dựng lại transport mà vẫn 0 gói VỀ")
+        case .exhausted(let count):
+            RelayDiagnostics.shared.log(
+                "tự phục hồi: \(count) lần dựng lại vẫn 0 gói VỀ nhưng hết ứng viên đường "
+                    + "(đã đổi đủ \(Self.maxNodeFailovers) lần trong phiên) — GIỮ tunnel của khách, "
+                    + "nhịp sau thử lại, KHÔNG xoay vòng vô hạn"
+            )
+        }
     }
 
     private func beginTransportRecovery(reason: String) {
@@ -3203,21 +3261,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         }
         // Trần thời gian cho cả chuỗi do LƯỚI AN TOÀN (luồng OS riêng) thi hành — xem `wedgeGuardLoop`.
         wedgeRecoveryBegin()
-        // ĐỔI NODE (25/09/2026): node đang chọn có thể CHẾT ở tầng DỮ LIỆU trong khi WS relay vẫn
-        // bắt tay được (ca thật: iPad ghim `vn1hy` — relay "handshake ok" nhưng **0 gói về** suốt 43
-        // phút; iPhone ở node khác chạy tốt). Dựng lại CÙNG một node chết là vô ích (đã đo: 10 lần
-        // dựng lại liên tiếp vẫn 0 byte) ⇒ sau N lần không có gói về thì đổi sang node kế tiếp.
-        if transportCarriedTraffic {
-            recoveryAttemptsWithoutTraffic = 0
-        } else {
-            recoveryAttemptsWithoutTraffic += 1
-        }
-        transportCarriedTraffic = false
-        if recoveryAttemptsWithoutTraffic >= Self.failoverAfterFruitlessRecoveries {
-            advanceRelayCandidate(
-                reason: "\(recoveryAttemptsWithoutTraffic) lần dựng lại transport mà vẫn 0 gói về"
-            )
-        }
+        // ĐỔI ĐƯỜNG (25/09/2026): relay/node đang chọn có thể CHẾT Ở CHIỀU VỀ trong khi WS relay vẫn
+        // bắt tay được (ca thật: `vn1hy` — handshake ok nhưng `Go→packetFlow` đóng băng 125 MB, cả
+        // `SYN-ACK về` đứng im; đổi sang relay khác là mạng chạy lại ngay). Việc quyết định đổi đường
+        // KHÔNG nằm ở đây nữa mà ở `relayFailoverStep` (đo DELTA chiều về trong cửa sổ sau mỗi lần
+        // dựng lại) — luật cũ ở đây bị reset oan mỗi lần nên không bao giờ đổi.
         RelayDiagnostics.shared.log(
             "tự phục hồi: \(reason) — thử dựng lại tối đa \(Self.livenessRebuildMax) lần "
                 + "(chờ 2/5/10s), phiên \(currentSession)"
@@ -3295,6 +3343,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             }
             livenessRecovering = false
             livenessRebuildAttempts = 0
+            // MỞ CỬA SỔ đánh giá FAILOVER cho lần dựng lại VỪA XONG: `fromGo` đọc ngay bây giờ là mốc
+            // gốc, 15 s sau mà vẫn đúng số đó ⇒ lần dựng lại này VÔ ÍCH (không có gói nào VỀ). Không
+            // đo được bộ đếm (nil) thì thôi, để nhịp sau.
+            if let counters {
+                relayFailover.beginWindow(now: Date(), fromGo: counters.fromGo)
+            }
             flowLock.unlock()
             releaseTransportRebuild(owner: "liveness")
             // P1-1: transport đã lên lại ⇒ XOÁ state/message "đang dựng lại" của lần hỏng trước.

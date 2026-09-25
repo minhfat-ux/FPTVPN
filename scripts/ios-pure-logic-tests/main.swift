@@ -1539,6 +1539,96 @@ do {
     checkEqual(id(nil, nil, nil).label, "?/?", "thiếu trường ⇒ nhãn ?/?")
 }
 
+print("RelayFailoverWatch — failover duong khi chieu VE chet mot chieu (ca that 25/09/2026, relay vn1hy)")
+
+do {
+    typealias W = RelayFailoverWatch
+
+    // Mặc định phải khớp hằng số của provider: cửa sổ 15 s, 2 lần vô ích, trần 3 lần đổi/phiên.
+    let defaults = W()
+    checkEqual(defaults.windowS, 15, "cửa sổ đánh giá 15 s (dùng lại nhịp watchdog)")
+    checkEqual(defaults.fruitlessToAdvance, 2, "2 lần dựng lại vô ích liên tiếp ⇒ đổi đường")
+    checkEqual(defaults.maxAdvances, 3, "trần đổi đường mỗi phiên = 3 (khớp maxNodeFailovers)")
+
+    // (1) Rebuild mà delta `fromGo` = 0 trong CẢ cửa sổ ⇒ lần dựng lại đó VÔ ÍCH.
+    var a = W()
+    a.beginWindow(now: t0, fromGo: 360_729)
+    checkEqual(a.tick(now: t0.addingTimeInterval(14), fromGo: 360_729), .waiting,
+               "14 s: chưa hết cửa sổ ⇒ chưa kết luận")
+    checkEqual(a.tick(now: t0.addingTimeInterval(15), fromGo: 360_729), .fruitless(1),
+               "hết cửa sổ mà 0 gói VỀ ⇒ lần dựng lại VÔ ÍCH (1/2)")
+    checkEqual(a.fruitlessWindows, 1, "đếm được 1 cửa sổ vô ích")
+
+    // Cao điểm THẬT: máy vẫn GỬI RA đều (toGo leo) mà chiều về 0 ⇒ vẫn phải là vô ích,
+    // KHÔNG được coi là "transport có chở gói".
+    var sent = W()
+    sent.beginWindow(now: t0, fromGo: 0)
+    checkEqual(sent.tick(now: t0.addingTimeInterval(15), fromGo: 0), .fruitless(1),
+               "máy gửi ra 398 gói/nhịp nhưng 0 gói VỀ ⇒ vẫn VÔ ÍCH (không tính gói gửi ra)")
+
+    // (2) 2 lần vô ích liên tiếp ⇒ GỌI ĐỔI ỨNG VIÊN (không thử lại cùng relay lần 3).
+    var b = W()
+    b.beginWindow(now: t0, fromGo: 100)
+    checkEqual(b.tick(now: t0.addingTimeInterval(15), fromGo: 100), .fruitless(1),
+               "cửa sổ vô ích thứ 1")
+    b.beginWindow(now: t0.addingTimeInterval(30), fromGo: 100)
+    checkEqual(b.tick(now: t0.addingTimeInterval(45), fromGo: 100), .advanceRelay(2),
+               "2 lần vô ích liên tiếp ⇒ ĐỔI ĐƯỜNG")
+    b.noteAdvanced()
+    checkEqual(b.advances, 1, "đã ghi nhận 1 lần đổi đường")
+    checkEqual(b.fruitlessWindows, 0, "đổi đường xong ⇒ xoá chuỗi vô ích")
+
+    // (3) Có gói chiều VỀ ⇒ lần dựng lại HIỆU QUẢ ⇒ reset bộ đếm (không đổi đường oan).
+    var c = W()
+    c.beginWindow(now: t0, fromGo: 500)
+    checkEqual(c.tick(now: t0.addingTimeInterval(15), fromGo: 640), .carried(140),
+               "có 140 gói VỀ trong cửa sổ ⇒ HIỆU QUẢ")
+    checkEqual(c.fruitlessWindows, 0, "có gói về ⇒ xoá bộ đếm vô ích")
+    // Sau khi reset, phải tích lại đủ 2 cửa sổ vô ích mới đổi đường (không đổi sớm).
+    c.beginWindow(now: t0.addingTimeInterval(30), fromGo: 640)
+    checkEqual(c.tick(now: t0.addingTimeInterval(45), fromGo: 640), .fruitless(1),
+               "cửa sổ vô ích mới chỉ tính là 1/2")
+    // Bộ đếm TỤT giữa cửa sổ (nguồn số đổi) ⇒ KHÔNG đo được, KHÔNG kết luận vô ích.
+    var regressed = W()
+    regressed.beginWindow(now: t0, fromGo: 125_639_055)
+    checkEqual(regressed.tick(now: t0.addingTimeInterval(15), fromGo: 12), .waiting,
+               "bộ đếm tụt (cầu mới đếm lại từ 0) ⇒ đặt lại mốc, KHÔNG kết luận vô ích")
+    checkEqual(regressed.fruitlessWindows, 0, "không cộng oan cửa sổ vô ích")
+
+    // (4) Hết ứng viên ⇒ KHÔNG xoay vòng vô hạn: đủ ngưỡng nhưng đã chạm trần ⇒ .exhausted.
+    var d = W(maxAdvances: 3)
+    for n in 1...3 {
+        d.beginWindow(now: t0, fromGo: 0)
+        checkEqual(d.tick(now: t0.addingTimeInterval(15), fromGo: 0), .fruitless(1),
+                   "lần \(n): cửa sổ vô ích 1/2 ⇒ chưa đổi đường")
+        d.beginWindow(now: t0.addingTimeInterval(30), fromGo: 0)
+        checkEqual(d.tick(now: t0.addingTimeInterval(45), fromGo: 0), .advanceRelay(2),
+                   "lần \(n): đủ 2 cửa sổ vô ích liên tiếp ⇒ đổi đường")
+        d.noteAdvanced()
+    }
+    checkEqual(d.advances, 3, "đã dùng hết 3 lần đổi đường của phiên")
+    d.beginWindow(now: t0, fromGo: 0)
+    checkEqual(d.tick(now: t0.addingTimeInterval(15), fromGo: 0), .fruitless(1),
+               "hết trần nhưng mới 1 cửa sổ vô ích ⇒ chưa kết luận")
+    d.beginWindow(now: t0, fromGo: 0)
+    checkEqual(d.tick(now: t0.addingTimeInterval(15), fromGo: 0), .exhausted(2),
+               "hết ứng viên đường ⇒ GIỮ tunnel, KHÔNG xoay vòng vô hạn")
+    d.noteExhausted()
+    checkEqual(d.advances, 3, "hết ứng viên ⇒ KHÔNG tăng số lần đổi (không bao giờ vượt trần)")
+    checkEqual(d.fruitlessWindows, 0, "hết ứng viên ⇒ mở lại chuỗi để nhịp sau thử tiếp")
+
+    // (5) DIỄN LẠI ĐÚNG ca thật 25/09/2026 (`vn1hy`, `Go→packetFlow` đóng băng ở 360729 gói):
+    //     các lần dựng lại ở 19:42:25 / 19:42:58 / 19:43:31 — phải ĐỔI ĐƯỜNG ngay sau lần thứ 2,
+    //     nghĩa là lần dựng lại thứ 3 chạy trên đường MỚI (không thử lại `vn1hy` lần thứ 3).
+    var real = W()
+    real.beginWindow(now: t0, fromGo: 360_729)                            // 19:42:25 dựng lại lần 1
+    checkEqual(real.tick(now: t0.addingTimeInterval(15), fromGo: 360_729), .fruitless(1),
+               "19:42:40 — cửa sổ 1: vẫn 360729 gói VỀ ⇒ vô ích 1/2")
+    real.beginWindow(now: t0.addingTimeInterval(33), fromGo: 360_729)     // 19:42:58 dựng lại lần 2
+    checkEqual(real.tick(now: t0.addingTimeInterval(48), fromGo: 360_729), .advanceRelay(2),
+               "19:43:13 — cửa sổ 2 vẫn 0 gói VỀ ⇒ ĐỔI ĐƯỜNG (lần dựng lại 3 sẽ ở đường mới)")
+}
+
 print("")
 print("KẾT QUẢ: \(checks - failures)/\(checks) PASS, \(failures) FAIL")
 exit(failures == 0 ? 0 : 1)
