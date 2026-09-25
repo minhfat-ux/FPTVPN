@@ -39,7 +39,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private static let codeNoTraffic = "TUNNEL_NO_TRAFFIC"
 
     /// Trần thời gian cho TOÀN BỘ lần start (áp settings + dựng relay + bắt tay QUIC).
-    private static let startTimeout: TimeInterval = 20
+    ///
+    /// 26/09/2026 — **20 → 35 s**. Vì sao phải nới CÙNG LÚC với `HysteriaTransport.relayOpenGrace`
+    /// (6 → 10 s) và danh sách 4 cửa vào (`HysteriaDefaults.relayURLCandidates`): ngân sách này phải
+    /// đủ chỗ cho các lượt thử nối tiếp, nếu không thì lần start bị cắt NGANG giữa danh sách và khách
+    /// vẫn thấy `TUNNEL_START_FAILED` y như cũ. 4 cửa × 10 s = 40 s là trần lý thuyết; thực tế cửa
+    /// đầu thường mở trong 0,5–2 s, chỉ khi cửa đó hỏng mới đi tiếp.
+    private static let startTimeout: TimeInterval = 35
 
     // MARK: Ngưỡng tự cứu (không bao giờ để "Connected mà mất mạng")
 
@@ -170,6 +176,333 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private static let livenessHeartbeatEveryTicks = 4
     /// Quá hạn này mà không có nhịp nào ⇒ coi như vòng lặp đã ngừng: log + bật lại.
     private static let livenessStallLimit: TimeInterval = 45
+
+    // MARK: - Lưới an toàn chống ĐÔNG CỨNG cả tiến trình (25/09/2026)
+
+    /// Khoá RIÊNG của lưới an toàn — luồng canh **không bao giờ** lấy `flowLock`/`bandwidthLock`/
+    /// `rebuildLock`, nên dù các đường kia kẹt cứng nó vẫn chạy và vẫn hạ được tunnel.
+    ///
+    /// Vì sao bắt buộc phải có: ca thật 25/09/2026 (iPad build 35) — sau dòng
+    /// `tự phục hồi: lần 1 — chờ 2s rồi dựng lại`, tiến trình **đông cứng 43 phút**: extension
+    /// VẪN SỐNG (PID còn, màn hình không khoá) nhưng **mọi** nhịp câm (cầu 5 s, relay 15 s,
+    /// watchdog 15 s, diagnostics 1 s) ⇒ không còn ai tự phục hồi, khách thấy
+    /// **"Connected mà không có internet"** cho tới khi khởi động lại máy.
+    /// Mọi cơ chế canh cũ (kể cả `watchdogGuardQueue.asyncAfter`) đều nằm trên **hàng đợi**, mà
+    /// hàng đợi thì chết theo khoá bị giữ — nên phải canh bằng một **luồng OS riêng**.
+    private let wedgeLock = NSLock()
+    /// Nhịp "tiến trình còn chạy" — cập nhật bởi MỌI nhịp định kỳ (chỉ vài nano-giây, khoá riêng).
+    private var wedgeLastBeatAt = Date()
+    /// `!= nil` khi đang trong một chuỗi dựng lại transport (mốc bắt đầu).
+    private var wedgeRecoveryStartedAt: Date?
+    /// Tunnel đang PHẢI chạy (bật ở `startTunnel`, tắt ở `stopTunnel`/teardown).
+    private var wedgeTunnelActive = false
+    private var wedgeGuardRunning = false
+    private var wedgeTeardownDone = false
+    /// Không nhịp nào trong ngần này giây ⇒ coi như đông cứng.
+    ///
+    /// 180 s (không phải 75 s) vì **iOS gộp/hoãn timer khi máy để yên**: đo thật trên iPad
+    /// 25/09/2026 — `watchdog NGỪNG chạy (45s/46s/53s không có nhịp)` lặp lại trong lúc máy khoá.
+    /// Ngưỡng quá nhỏ ⇒ lưới an toàn hạ tunnel OAN khi khách để máy yên (không có gì để cứu).
+    /// Luật bắt đúng ca đông cứng 43 phút sáng nay là luật DƯỚI ĐÂY (`wedgeRecoveryLimit` = 30 s),
+    /// không phải luật này.
+    private static let wedgeStallLimit: TimeInterval = 180
+    /// Một chuỗi dựng lại transport chạy quá ngần này giây ⇒ coi như kẹt (bình thường ≤ 10 s).
+    private static let wedgeRecoveryLimit: TimeInterval = 30
+    /// Nhịp quét của luồng canh.
+    private static let wedgeSweepInterval: TimeInterval = 5
+    /// Mã lỗi trả cho iOS khi phải hạ tunnel vì đông cứng (khác `TUNNEL_START_FAILED`).
+    private static let codeWedgeTeardown = "TUNNEL_WEDGED"
+    /// Bộ nhớ vượt ngưỡng an toàn (BUG-IOS-JETSAM-001).
+    private static let codeMemoryLimit = "TUNNEL_MEMORY_LIMIT"
+
+    /// Ghi nhận "còn sống" — gọi từ mọi nhịp định kỳ.
+    private func wedgeBeat() {
+        wedgeLock.lock()
+        wedgeLastBeatAt = Date()
+        wedgeLock.unlock()
+    }
+
+    /// Tunnel bắt đầu/kết thúc "phải chạy" — chặn lưới an toàn bắn khi tunnel đang tắt hợp lệ.
+    private func wedgeSetTunnelActive(_ active: Bool) {
+        wedgeLock.lock()
+        wedgeTunnelActive = active
+        wedgeTeardownDone = false
+        wedgeLastBeatAt = Date()
+        if !active { wedgeRecoveryStartedAt = nil }
+        wedgeLock.unlock()
+    }
+
+    private func wedgeRecoveryBegin() {
+        wedgeLock.lock()
+        wedgeRecoveryStartedAt = Date()
+        wedgeLock.unlock()
+    }
+
+    private func wedgeRecoveryEnd() {
+        wedgeLock.lock()
+        wedgeRecoveryStartedAt = nil
+        wedgeLastBeatAt = Date()
+        wedgeLock.unlock()
+    }
+
+    // MARK: - Đo TÀI NGUYÊN mỗi 60 s (25/09/2026: "chạy ~30 phút rồi bắt đầu bị" + có JetsamEvent)
+
+    private var resourceTimer: DispatchSourceTimer?
+    private var resourcePrevToGo = 0
+    private var resourcePrevFromGo = 0
+    private var resourcePrevRelaySent = 0
+    private var resourcePrevRelayRecv = 0
+    private var resourceFootprintHistory: [(Date, Double)] = []
+
+    /// Một dòng tài nguyên: bộ nhớ (footprint/resident), số fd, bộ đệm cầu + relay.
+    /// Vì sao cần: ca thật — phiên chạy tốt ~30 phút rồi extension bị iOS giết (`JetsamEvent`
+    /// 25/09 19:09:42). Không có đường cong tài nguyên thì không biết thứ gì phình (bộ nhớ, fd rò
+    /// mỗi lần dựng lại transport, hay bộ đệm relay) ⇒ chỉ đoán.
+    private func startResourceTicker() {
+        resourceTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: diagQueue)
+        timer.schedule(deadline: .now() + 60, repeating: 60)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let snapshot = self.resourceSnapshot()
+            RelayDiagnostics.shared.log("tài nguyên: \(snapshot)")
+            // DỌN TÀI NGUYÊN TẠI CHỖ: iOS giết extension theo `per-process-limit` (~51 MB,
+            // `JetsamEvent` 25/09 19:09:42) ⇒ khi footprint vượt ngưỡng thì xả cache NGAY,
+            // không đợi tới lúc bị giết. Đo trước/sau để biết có hiệu quả hay không.
+            let footprint = self.resourceFootprintMB()
+            // BẮT TỐC ĐỘ LEO: đo thật 25/09 — Netflix làm footprint leo **~1 MB/phút** (37,9 → 44,5 MB
+            // trong 8 phút) và phiên chết ở 44,5 MB *trước khi* chạm ngưỡng 45 ⇒ chỉ ngưỡng tĩnh là
+            // không đủ. Giữ 6 mốc (≈6 phút); leo ≥ 6 MB trong 5 phút ⇒ hạ tunnel sạch như van.
+            #if os(iOS)
+            self.resourceFootprintHistory.append((Date(), footprint))
+            if self.resourceFootprintHistory.count > 6 { self.resourceFootprintHistory.removeFirst() }
+            var growthTrigger: Double = 0
+            if let oldest = self.resourceFootprintHistory.first {
+                let minutes = Date().timeIntervalSince(oldest.0) / 60
+                if minutes >= 4.5, footprint - oldest.1 >= Self.memoryGrowthTriggerMB {
+                    growthTrigger = footprint - oldest.1
+                }
+            }
+            #else
+            // macOS: KHÔNG bắt tốc độ leo. Ngưỡng hạ tunnel của macOS là 200/400 MB (footprint
+            // thật 58–148 MB) — thêm ngưỡng leo ở đây sẽ hạ tunnel macOS liên tục.
+            var growthTrigger: Double = 0
+            #endif
+            // VAN AN TOÀN BỘ NHỚ (đo thật 25/09/2026: phiên Netflix leo tới 48,8 MB rồi bị iOS giết
+            // `per-process-limit` ≈ 51 MB — BUG-IOS-JETSAM-001; dọn URLCache đo được 0 MB hiệu quả)
+            // ⇒ tự HẠ TUNNEL SẠCH ở 45 MB để iOS trả mạng, thay vì bị giết đột ngột giữa lúc khách dùng.
+            if footprint >= Self.memoryTeardownThresholdMB || growthTrigger > 0 {
+                RelayDiagnostics.shared.logSync(String(
+                    format: "van an toàn bộ nhớ: footprint %.1fMB (ngưỡng %.0fMB, leo %.1fMB/5phút) "
+                        + "⇒ HẠ tunnel SẠCH (trả mạng ngay) rồi thoát extension, thay vì để iOS jetsam giết đột ngột",
+                    footprint, Self.memoryTeardownThresholdMB, growthTrigger
+                ))
+                self.setStatus(
+                    state: "failed", code: Self.codeMemoryLimit,
+                    message: "Tunnel dùng quá nhiều bộ nhớ — đã hạ để trả mạng lại, hãy Connect lại."
+                )
+                setTunnelNetworkSettings(nil) { _ in }
+                cancelTunnelWithError(NSError(
+                    domain: "com.privatevpn.app.tunnel", code: 2_020,
+                    userInfo: [NSLocalizedDescriptionKey:
+                        "Bộ nhớ vượt ngưỡng an toàn — đã hạ tunnel để trả mạng lại."]))
+                Thread.sleep(forTimeInterval: 3)
+                exit(0)
+            }
+            // (Đã BỎ khối "dọn tài nguyên" cũ: đo thật 25/09 — 8 lần chạy, đều giảm **0 MB**
+            //  ⇒ URLCache/cửa sổ đo KHÔNG phải chỗ giữ bộ nhớ. Giữ log sạch để chỉ còn một dòng van.)
+        }
+        resourceTimer = timer
+        timer.resume()
+    }
+
+    /// Ngưỡng bắt đầu dọn (MB). iOS giết extension ở `per-process-limit` ≈ 51 MB (JetsamEvent
+    /// 25/09/2026 19:09:42: `rpages=3202`) ⇒ dọn ở 32 MB là còn biên an toàn.
+    ///
+    /// ⚠️ macOS **KHÔNG có jetsam** (trần per-process của iOS ≈51 MB là chuyện của iOS). Áp nguyên
+    /// ngưỡng 32/45 MB của iOS lên macOS làm extension **TỰ HẠ TUNNEL** khi footprint vượt 45 MB ⇒
+    /// khách thấy "VPN tự tắt/chập chờn" (đo thật trên máy Mac 25/09/2026: 23:17 `footprint=148.0MB`
+    /// và 23:42 `footprint=58.8MB` đều ghi `van an toàn bộ nhớ ⇒ HẠ tunnel SẠCH`). Vì vậy ngưỡng
+    /// macOS để cao hơn hẳn: chỉ dọn, gần như không bao giờ phải hạ tunnel.
+    #if os(iOS)
+    private static let memoryCleanupThresholdMB: Double = 32
+
+    /// Ngưỡng HẠ TUNNEL SẠCH (MB): dưới trần jetsam ~51 MB. Đo thật: mẫu tải nhẹ chỉ 13–14 MB còn
+    /// Netflix leo ~1 MB/phút ⇒ 40 MB là mức bắn sớm mà không bắn oan.
+    private static let memoryTeardownThresholdMB: Double = 40
+    /// Bắt theo TỐC ĐỘ LEO: tăng ≥ ngần này MB trong ~5 phút ⇒ hạ sớm (ca Netflix).
+    private static let memoryGrowthTriggerMB: Double = 6
+    #else
+    private static let memoryCleanupThresholdMB: Double = 200
+    private static let memoryTeardownThresholdMB: Double = 400
+    #endif
+
+    private func resourceFootprintMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &info) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), rebound, &count)
+            }
+        }
+        return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
+    }
+
+    private func openFileDescriptorCount() -> Int {
+        (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? -1
+    }
+
+    private func resourceSnapshot() -> String {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &info) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), rebound, &count)
+            }
+        }
+        let footprint = kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
+        let resident = kr == KERN_SUCCESS ? Double(info.resident_size) / 1_048_576 : -1
+        // PHÂN RÃ bộ nhớ (BUG-IOS-JETSAM-001): cùng một lời gọi `task_info` đã có sẵn các trường
+        // này, chỉ là trước đây không in ra. `compressed` lớn ⇒ phần phình là trang ĐÃ NÉN (VM
+        // compressor, thu hồi được); `internal` lớn ⇒ cấp phát ẩn danh thật (heap Go hoặc malloc
+        // của Swift/ObjC). Đây là số ĐỌC SẴN CÓ, không thêm đồng hồ — nhưng là thứ phân biệt được
+        // "rò ở tầng Swift" với "rò ở tầng Go" ngay từ lần đo sau.
+        let internalMB = kr == KERN_SUCCESS ? Double(info.internal) / 1_048_576 : -1
+        let compressedMB = kr == KERN_SUCCESS ? Double(info.compressed) / 1_048_576 : -1
+        let externalMB = kr == KERN_SUCCESS ? Double(info.external) / 1_048_576 : -1
+        let fds = (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? -1
+        let c = trafficCounters
+        // MỘT lần gọi: `currentTransport()` lấy `flowLock` mỗi lần, gọi 3 lần là 3 lần lấy khoá
+        // trong cùng một nhịp (không sai, nhưng thừa và làm khó đọc).
+        let transport = currentTransport()
+        let relay = transport?.relayFrameCounts
+        let relayOpen = transport?.relayIsConnected ?? false
+        let relayQueue = transport?.relayQueue
+        let bridgeQueue = bridgeQueueSnapshot
+        let dToGo = (c?.toGo ?? 0) - resourcePrevToGo
+        let dFromGo = (c?.fromGo ?? 0) - resourcePrevFromGo
+        let dRelaySent = (relay?.sent ?? 0) - resourcePrevRelaySent
+        let dRelayRecv = (relay?.received ?? 0) - resourcePrevRelayRecv
+        if let c { resourcePrevToGo = c.toGo; resourcePrevFromGo = c.fromGo }
+        if let relay { resourcePrevRelaySent = relay.sent; resourcePrevRelayRecv = relay.received }
+        return String(
+            format: "footprint=%.1fMB resident=%.1fMB fds=%d | cầu vào %d/ra %d (bỏ %d) | relay gửi %d nhận %d mở=%@ | Δ1phút vào+%d ra+%d relay+%d/+%d | TCP SYN %d RST về %d"
+                + " | hàng đợi: relay chờ %d gói/%d B (trần %d/%d; đã nạp %d, chờ %d, bỏ %d) đệm-link %d/%d bỏ %d | udp nhận %d lấy %d thả≥%d socket %dB | cầu chờ-đọc %dB (Go→ %d, bỏ %d, EAGAIN %d) | nhớ internal=%.1f compressed=%.1f external=%.1f",
+            footprint, resident, fds,
+            c?.toGo ?? -1, c?.fromGo ?? -1, c?.toGoDropped ?? -1,
+            relay?.sent ?? -1, relay?.received ?? -1, relayOpen ? "yes" : "no",
+            dToGo, dFromGo, dRelaySent, dRelayRecv,
+            c?.tcpSynToGo ?? -1, c?.tcpRstFromGo ?? -1,
+            relayQueue?.inflightPackets ?? -1, relayQueue?.inflightBytes ?? -1,
+            relayQueue?.maxPackets ?? -1, relayQueue?.maxBytes ?? -1,
+            relayQueue?.admitted ?? -1, relayQueue?.waits ?? -1, relayQueue?.sendDropped ?? -1,
+            relayQueue?.pendingLink ?? -1, relayQueue?.pendingLinkAppended ?? -1,
+            relayQueue?.pendingLinkDropped ?? -1,
+            relayQueue?.listenerDatagrams ?? -1, relayQueue?.streamPopped ?? -1,
+            relayQueue?.streamDropped ?? -1, relayQueue?.listenerSocketPendingBytes ?? -1,
+            bridgeQueue?.pendingFromGoBytes ?? -1, bridgeQueue?.fromGo ?? -1,
+            bridgeQueue?.toGoDropped ?? -1, bridgeQueue?.toGoEAGAIN ?? -1,
+            internalMB, compressedMB, externalMB
+        )
+    }
+
+    /// Bật luồng canh (idempotent). Luồng chỉ `Thread.sleep` + đọc 2 mốc ⇒ không thể bị đói
+    /// như Swift concurrency thread-pool, và không thể chết theo một khoá app.
+    private func startWedgeGuard() {
+        wedgeLock.lock()
+        let already = wedgeGuardRunning
+        wedgeGuardRunning = true
+        wedgeLock.unlock()
+        guard !already else { return }
+        let thread = Thread { [weak self] in self?.wedgeGuardLoop() }
+        thread.name = "com.privatevpn.app.tunnel.wedge-guard"
+        thread.stackSize = 256 * 1024
+        thread.start()
+        RelayDiagnostics.shared.log(
+            "lưới an toàn: luồng canh đông-cứng BẬT — mọi nhịp câm >\(Int(Self.wedgeStallLimit))s, "
+                + "hoặc một chuỗi dựng lại >\(Int(Self.wedgeRecoveryLimit))s ⇒ HẠ tunnel để iOS trả "
+                + "mạng lại (thay vì treo 'Connected' vô hạn)"
+        )
+    }
+
+    private func wedgeGuardLoop() {
+        while true {
+            Thread.sleep(forTimeInterval: Self.wedgeSweepInterval)
+            let now = Date()
+            wedgeLock.lock()
+            let running = wedgeGuardRunning
+            let active = wedgeTunnelActive
+            let done = wedgeTeardownDone
+            let beat = wedgeLastBeatAt
+            let recoveryStart = wedgeRecoveryStartedAt
+            wedgeLock.unlock()
+            guard running else { return }
+            guard active, !done else { continue }
+            if let recoveryStart {
+                let stuck = now.timeIntervalSince(recoveryStart)
+                // HAI điều kiện, không phải một:
+                //  (1) chuỗi dựng lại quá trần, VÀ
+                //  (2) **mọi nhịp cũng đã câm ≥15 s** — tức tiến trình THẬT SỰ đông cứng.
+                // Vì sao cần (2): lần bắn oan 12:02 ngày 25/09/2026 — dựng lại đã thành công nhưng
+                // cờ "đang dựng lại" còn treo, các nhịp VẪN ĐẬP; chỉ nhìn (1) là hạ tunnel oan.
+                // Ca đông cứng thật (43 phút sáng 25/09) thì cả hai đều đúng.
+                let silentNow = now.timeIntervalSince(beat)
+                if stuck >= Self.wedgeRecoveryLimit, silentNow >= 15 {
+                    hardTeardownForWedge(
+                        reason: "một chuỗi tự dựng lại transport kẹt \(Int(stuck))s "
+                            + "(trần \(Int(Self.wedgeRecoveryLimit))s) và mọi nhịp câm "
+                            + "\(Int(silentNow))s"
+                    )
+                    continue
+                }
+            }
+            let silent = now.timeIntervalSince(beat)
+            if silent >= Self.wedgeStallLimit {
+                hardTeardownForWedge(
+                    reason: "mọi nhịp của tunnel câm \(Int(silent))s "
+                        + "(trần \(Int(Self.wedgeStallLimit))s) — tiến trình còn sống nhưng đông cứng"
+                )
+            }
+        }
+    }
+
+    /// Hạ tunnel bằng ĐÚNG những lời gọi KHÔNG lấy khoá app (đường kia có thể đang giữ khoá):
+    /// `RelayDiagnostics.log` (hàng đợi riêng) + `setTunnelNetworkSettings(nil)` (async) +
+    /// `cancelTunnelWithError` (async). Sau đó `exit(0)`: iOS dựng lại extension theo yêu cầu,
+    /// còn mạng của khách được trả lại NGAY thay vì treo "Connected" vô hạn.
+    ///
+    /// Cố ý KHÔNG gọi `teardownAndCancel`/`cancelScheduledWork`: hai hàm đó lấy `flowLock` — đúng
+    /// thứ có thể đang bị giữ trong ca đông cứng.
+    private func hardTeardownForWedge(reason: String) {
+        wedgeLock.lock()
+        let already = wedgeTeardownDone
+        wedgeTeardownDone = true
+        wedgeTunnelActive = false
+        wedgeLock.unlock()
+        guard !already else { return }
+        RelayDiagnostics.shared.log(
+            "lưới an toàn: ĐÔNG CỨNG — \(reason) ⇒ HẠ tunnel rồi thoát extension để iOS dựng lại "
+                + "(mạng của khách được trả lại ngay)"
+        )
+        setStatus(state: "failed", code: Self.codeWedgeTeardown, message: reason)
+        setTunnelNetworkSettings(nil) { _ in }
+        cancelTunnelWithError(
+            NSError(
+                domain: "com.privatevpn.app.tunnel",
+                code: 2_014,
+                userInfo: [NSLocalizedDescriptionKey:
+                    "Tunnel đông cứng (\(reason)) — đã hạ để trả mạng lại, hãy bấm Connect lại."]
+            )
+        )
+        Thread.sleep(forTimeInterval: 5)
+        RelayDiagnostics.shared.log("lưới an toàn: thoát extension sau khi đã hạ tunnel")
+        Thread.sleep(forTimeInterval: 1)
+        exit(0)
+    }
 
     // MARK: Khai băng thông động cho Brutal CC (xem `HysteriaBandwidthControl`)
 
@@ -442,6 +775,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         currentOptions = options
         RelayDiagnostics.shared.log(
             "hysteria: áp network settings (utun \(HysteriaDefaults.tunIPv4Address)/\(HysteriaDefaults.tunIPv4SubnetMask), mtu \(options.mtu), dns \(HysteriaDefaults.dnsServers.joined(separator: ",")))"
+                + " · IPv6=OFF (chỉ IPv4; xem vì sao ở `networkSettings`)"
         )
         guard applySettings(networkSettings(options: options)) else {
             failStart(
@@ -1377,13 +1711,21 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         ipv4.excludedRoutes = excluded
         settings.ipv4Settings = ipv4
 
-        // A7 IPv6 — ĐÃ BỎ (chủ dự án chốt 22/09; `docs/DEV_PLAN_IOS_MACOS_TOC_DO.md` §5b bước 1c).
-        // Bản `18f8c82` đặt `ipv6Settings.includedRoutes = [::/0]` để "IPv6 TQ đi thẳng, IPv6 còn
-        // lại CHẶN". Nhưng relay `api.meetflowai.site` CÓ bản ghi AAAA ⇒ iOS ưu tiên IPv6 ⇒ gói tới
-        // relay bị hút vào tunnel mà server không có IPv6 ⇒ ĐEN ⇒ "mất mạng khi connect" trên iPhone
-        // thật. Bỏ `ipv6Settings` (IPv6 đi thẳng như trước, KHÔNG chặn kết nối). Việc bịt rò IPv6 —
-        // nếu còn cần — phải loại trừ ĐÚNG địa chỉ relay/endpoint (kiểu WireGuard
-        // `endpointExcludedRoutes`), KHÔNG dùng `::/0`; đó là việc riêng, chưa thuộc lượt này.
+        // A7 IPv6 — ĐÃ GỠ LẦN 2 (26/09/2026). ĐỌC KỸ TRƯỚC KHI THỬ LẦN 3.
+        //
+        // Lần 1 (`18f8c82`, 22/09): `includedRoutes = [::/0]` không loại trừ relay ⇒ "mất mạng khi
+        // connect" (relay có AAAA, bị hút vào tunnel, server không có IPv6).
+        //
+        // Lần 2 (26/09, ngay trước comment này): đã loại trừ ĐÚNG dải IPv6 Cloudflare + dải TQ +
+        // link-local, và **chứng minh bằng DNS sống** rằng mọi AAAA của relay đều nằm trong dải loại
+        // trừ. Vẫn HỎNG trên máy thật: iPad trên Wi-Fi có IPv6 bị **bóp mạng rất nặng** (không xem
+        // nổi Netflix), iPhone trên 5G IPv6 **không kết nối được**. Suy ra: kéo `::/0` vào tunnel
+        // trong khi core KHÔNG có IPv6 thì mọi đích IPv6 của khách bị BỎ (không phải "chặn nhanh" mà
+        // là treo/timeout) ⇒ hỏng nặng hơn cả việc rò. Việc "loại trừ đúng relay" là điều kiện CẦN,
+        // không phải điều kiện ĐỦ.
+        //
+        // ⇒ Muốn bịt rò IPv6 cho thật thì phải làm ở tầng CÓ IPv6 (server NAT66 / DNS không trả AAAA),
+        // KHÔNG phải bằng cách kéo `::/0` vào một tunnel chỉ có IPv4. Không thử lại cách cũ.
 
         settings.dnsSettings = NEDNSSettings(servers: HysteriaDefaults.dnsServers)
         return settings
@@ -2656,6 +2998,19 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let current = bridge
         flowLock.unlock()
         return current?.snapshot
+    }
+
+    /// HÀNG ĐỢI của cầu `packetFlow↔fd` (byte đang chờ bơm về máy + gói bị bỏ vì fd cho Go đầy).
+    ///
+    /// Vì sao tách khỏi `bridgeCounters`: đây là số liệu CHẨN ĐOÁN rò bộ nhớ (BUG-IOS-JETSAM-001),
+    /// không phải nguồn quyết định của watchdog. Lấy con trỏ cầu dưới `flowLock` rồi **NHẢ KHOÁ
+    /// MỚI HỎI CẦU** — tuyệt đối không gọi hàm lấy khoá trong lúc đang giữ `flowLock`
+    /// (AGENTS.md §7c: `flowLock` không tái nhập ⇒ tự khoá chết cả phiên).
+    private var bridgeQueueSnapshot: TunnelBridge.QueueSnapshot? {
+        flowLock.lock()
+        let current = bridge
+        flowLock.unlock()
+        return current?.queueSnapshot
     }
 
     /// Bộ đếm gói THẬT đã đi qua tunnel, chuẩn hoá cho cả hai nền tảng.

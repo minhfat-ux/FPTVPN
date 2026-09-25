@@ -483,6 +483,114 @@ do {
     checkEqual(ChinaRouteBypass.normalizedIPv6CIDR("::1/128"), "::1/128", "IPv6 ::1/128")
     check(ChinaRouteBypass.normalizedIPv6CIDR("2400:cb00::/129") == nil, "prefix IPv6 > 128 ⇒ nil")
     check(ChinaRouteBypass.normalizedIPv6CIDR("1.2.3.4/24") == nil, "IPv4 không lọt vào parse IPv6")
+
+    // A7 bước 2 (macOS, 25/09/2026): gộp `cn.txt` + `tencent-meeting.txt` — thuần logic.
+    checkEqual(
+        ChinaRouteBypass.merge(["1.0.1.0/24", "1.0.2.0/23"], ["1.0.2.0/23", "43.129.0.0/16"]),
+        ["1.0.1.0/24", "1.0.2.0/23", "43.129.0.0/16"],
+        "merge: giữ thứ tự, bỏ trùng giữa hai danh sách"
+    )
+    checkEqual(ChinaRouteBypass.merge(["1.0.1.0/24"], ["1.0.2.0/24"], limit: 1).count, 1,
+               "merge: trần áp SAU khi gộp (không vượt maxRoutes)")
+    check(ChinaRouteBypass.merge([], []).isEmpty, "merge: hai danh sách rỗng ⇒ rỗng")
+
+    // 26/09/2026 — VÁ RÒ IPv6 TRÊN 5G (chủ dự án xác nhận 5G là IPv6).
+    //
+    // Thuộc tính phải giữ: `ipv6Settings.includedRoutes = [::/0]` khiến MỌI IPv6 vào tunnel, nên
+    // dải của RELAY bắt buộc phải nằm trong `excludedRoutes` — thiếu là kết nối của extension tới
+    // relay bị hút vào tunnel rồi ĐEN ⇒ tái diễn đúng sự cố "mất mạng khi connect" của bản
+    // `18f8c82` (22/09/2026). Test này chốt lại điều đó để không ai gỡ mất danh sách.
+    check(!HysteriaDefaults.relayIPv6ExcludedCIDRs.isEmpty,
+          "vá IPv6: danh sách loại trừ relay KHÔNG được rỗng")
+    check(HysteriaDefaults.relayIPv6ExcludedCIDRs.contains("2606:4700::/32"),
+          "vá IPv6: phải có 2606:4700::/32 — dải Cloudflare mà relay api.meetflowai.site trỏ vào")
+    checkEqual(
+        ChinaRouteBypass.excludedRoutesV6(from: HysteriaDefaults.relayIPv6ExcludedCIDRs).count,
+        HysteriaDefaults.relayIPv6ExcludedCIDRs.count,
+        "vá IPv6: MỌI dải loại trừ parse được thành NEIPv6Route (không dòng hỏng)"
+    )
+    // Tách nhỏ thay vì viết closure trong `check`: compiler báo "unable to type-check in
+    // reasonable time" với biểu thức gộp (đã gặp thật 26/09/2026).
+    let relayV6Routes = ChinaRouteBypass.excludedRoutesV6(from: HysteriaDefaults.relayIPv6ExcludedCIDRs)
+    var cloudflareV6RouteFound = false
+    for route in relayV6Routes {
+        if route.destinationAddress == "2606:4700::"
+            && route.destinationNetworkPrefixLength.intValue == 32 {
+            cloudflareV6RouteFound = true
+            break
+        }
+    }
+    check(cloudflareV6RouteFound,
+          "vá IPv6: route 2606:4700::/32 phải có mặt ⇒ relay đi THẲNG, không bị hút vào tunnel")
+    // Bất biến phía Go: utun CÓ IPv6 nhưng Go vẫn nhận rỗng ⇒ `Inet6Address = nil` ⇒ gói IPv6 vào
+    // tunnel bị BỎ (app lùi về IPv4) thay vì bị chuyển tiếp tới server không có IPv6.
+    checkEqual(HysteriaDefaults.tunIPv6CIDR, "", "vá IPv6: Go vẫn nhận rỗng (Inet6Address = nil)")
+    check(ChinaRouteBypass.isValidIPv6(HysteriaDefaults.tunIPv6Address),
+          "vá IPv6: địa chỉ utun IPv6 phải hợp lệ")
+
+    // Cờ RÚT LUI của A7 macOS (tắt được để quay về bước 1 — 4 dải LAN).
+    check(ChinaRouteBypass.bypassEnabled(compiledDefault: true, override: nil),
+          "cờ rút lui: không ghi đè ⇒ theo mặc định biên dịch (BẬT)")
+    check(!ChinaRouteBypass.bypassEnabled(compiledDefault: true, override: false),
+          "cờ rút lui: ghi đè false ⇒ TẮT (về bước 1)")
+    check(ChinaRouteBypass.bypassEnabled(compiledDefault: false, override: true),
+          "cờ rút lui: ghi đè true thắng mặc định biên dịch")
+
+    // FILE THẬT phải bao đúng các IP Tencent Meeting đã resolve 25/09/2026 — chúng KHÔNG có
+    // trong `cn.txt` (đã kiểm bằng `ipaddress`), nên thiếu file này là A7 vô hiệu với app họp.
+    let tencentPath = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("docs/routes/tencent-meeting.txt")
+    let tencentText = (try? String(contentsOf: tencentPath, encoding: .utf8)) ?? ""
+    let tencent = ChinaRouteBypass.parse(tencentText)
+    check(!tencent.isEmpty, "đọc được docs/routes/tencent-meeting.txt ⇒ \(tencent.count) dải")
+    for required in [
+        "129.226.0.0/16", "43.129.0.0/16", "43.175.0.0/16", "43.128.0.0/16", "43.174.0.0/16",
+        "43.157.0.0/16", "42.187.185.0/24", "42.187.186.0/24", "1.13.136.0/24", "1.13.137.0/24",
+        "110.40.160.0/24", "110.40.161.0/24", "106.55.204.0/24", "106.55.205.0/24",
+        "139.186.243.0/24",
+    ] {
+        check(tencent.contains(required), "tencent-meeting.txt có \(required)")
+    }
+    for ip in ["43.129.255.19", "129.226.103.131", "43.175.44.35"] {
+        check(tencent.contains { cidr in
+            let parts = cidr.split(separator: "/", maxSplits: 1)
+            guard parts.count == 2, let prefix = Int(parts[1]),
+                  let maskText = ChinaRouteBypass.prefixMask(prefix),
+                  let mask = ChinaRouteBypass.ipv4ToUInt32(maskText),
+                  let network = ChinaRouteBypass.ipv4ToUInt32(String(parts[0])),
+                  let target = ChinaRouteBypass.ipv4ToUInt32(ip) else { return false }
+            return (target & mask) == (network & mask)
+        }, "IP thật \(ip) nằm trong tencent-meeting.txt")
+    }
+    checkEqual(ChinaRouteBypass.merge(tencent, tencent).count, tencent.count,
+               "gộp danh sách với chính nó ⇒ không nhân đôi dải")
+
+    // macOS dùng ĐÚNG bộ tài nguyên như iOS (chủ dự án chốt 25/09/2026): cn.txt + Tencent Meeting.
+    // Chốt bằng số thật lấy từ chính file production, không phải mẫu tự nghĩ.
+    let cnPath = tencentPath.deletingLastPathComponent().appendingPathComponent("cn.txt")
+    let cnList = ChinaRouteBypass.parse((try? String(contentsOf: cnPath, encoding: .utf8)) ?? "")
+    check(cnList.count > 5000, "cn.txt production đọc được ⇒ \(cnList.count) dải (> 5.000)")
+    let phased = ChinaRouteBypass.platformRoutes(cn: cnList, tencent: tencent)
+    checkEqual(phased.count, cnList.count + tencent.count,
+               "danh sách nạp = cn.txt + Tencent Meeting (\(cnList.count) + \(tencent.count))")
+    check(phased.contains("119.28.0.0/15"), "có dải của cn.txt (119.28.0.0/15)")
+    checkEqual(Array(phased.prefix(2)), Array(cnList.prefix(2)), "cn.txt đứng trước, giữ nguyên thứ tự")
+    checkEqual(Array(phased.suffix(2)), Array(tencent.suffix(2)), "Tencent Meeting nối ở cuối")
+    check(ChinaRouteBypass.sourceLabel.contains("cn.txt")
+            && ChinaRouteBypass.sourceLabel.contains("tencent-meeting.txt"),
+          "nhãn log nêu đủ nguồn: \(ChinaRouteBypass.sourceLabel)")
+    for ip in ["43.129.255.19", "129.226.103.131", "43.175.44.35"] {
+        check(phased.contains { cidr in
+            let parts = cidr.split(separator: "/", maxSplits: 1)
+            guard parts.count == 2, let prefix = Int(parts[1]),
+                  let maskText = ChinaRouteBypass.prefixMask(prefix),
+                  let mask = ChinaRouteBypass.ipv4ToUInt32(maskText),
+                  let network = ChinaRouteBypass.ipv4ToUInt32(String(parts[0])),
+                  let target = ChinaRouteBypass.ipv4ToUInt32(ip) else { return false }
+            return (target & mask) == (network & mask)
+        }, "IP meeting \(ip) đi THẲNG trong bản nạp")
+    }
 }
 
 // MARK: - RampStatus A11 (§2h): khai báo an toàn trước, ramp sau
@@ -1120,6 +1228,215 @@ do {
     check(!P.isStale(running: local, local: nil), "app không đọc được appex của mình ⇒ KHÔNG cảnh báo oan")
     checkEqual(id("1.4.3", "20", "x").label, "1.4.3/20", "nhãn gộp version/build")
     checkEqual(id(nil, nil, nil).label, "?/?", "thiếu trường ⇒ nhãn ?/?")
+}
+
+print("RelayFailoverWatch — failover duong khi chieu VE chet mot chieu (ca that 25/09/2026, relay vn1hy)")
+
+do {
+    typealias W = RelayFailoverWatch
+
+    // Mặc định phải khớp hằng số của provider: cửa sổ 15 s, 2 lần vô ích, trần 3 lần đổi/phiên.
+    let defaults = W()
+    checkEqual(defaults.windowS, 15, "cửa sổ đánh giá 15 s (dùng lại nhịp watchdog)")
+    checkEqual(defaults.fruitlessToAdvance, 2, "2 lần dựng lại vô ích liên tiếp ⇒ đổi đường")
+    checkEqual(defaults.maxAdvances, 3, "trần đổi đường mỗi phiên = 3 (khớp maxNodeFailovers)")
+
+    // (1) Rebuild mà delta `fromGo` = 0 trong CẢ cửa sổ ⇒ lần dựng lại đó VÔ ÍCH.
+    var a = W()
+    a.beginWindow(now: t0, fromGo: 360_729)
+    checkEqual(a.tick(now: t0.addingTimeInterval(14), fromGo: 360_729), .waiting,
+               "14 s: chưa hết cửa sổ ⇒ chưa kết luận")
+    checkEqual(a.tick(now: t0.addingTimeInterval(15), fromGo: 360_729), .fruitless(1),
+               "hết cửa sổ mà 0 gói VỀ ⇒ lần dựng lại VÔ ÍCH (1/2)")
+    checkEqual(a.fruitlessWindows, 1, "đếm được 1 cửa sổ vô ích")
+
+    // Cao điểm THẬT: máy vẫn GỬI RA đều (toGo leo) mà chiều về 0 ⇒ vẫn phải là vô ích,
+    // KHÔNG được coi là "transport có chở gói".
+    var sent = W()
+    sent.beginWindow(now: t0, fromGo: 0)
+    checkEqual(sent.tick(now: t0.addingTimeInterval(15), fromGo: 0), .fruitless(1),
+               "máy gửi ra 398 gói/nhịp nhưng 0 gói VỀ ⇒ vẫn VÔ ÍCH (không tính gói gửi ra)")
+
+    // (2) 2 lần vô ích liên tiếp ⇒ GỌI ĐỔI ỨNG VIÊN (không thử lại cùng relay lần 3).
+    var b = W()
+    b.beginWindow(now: t0, fromGo: 100)
+    checkEqual(b.tick(now: t0.addingTimeInterval(15), fromGo: 100), .fruitless(1),
+               "cửa sổ vô ích thứ 1")
+    b.beginWindow(now: t0.addingTimeInterval(30), fromGo: 100)
+    checkEqual(b.tick(now: t0.addingTimeInterval(45), fromGo: 100), .advanceRelay(2),
+               "2 lần vô ích liên tiếp ⇒ ĐỔI ĐƯỜNG")
+    b.noteAdvanced()
+    checkEqual(b.advances, 1, "đã ghi nhận 1 lần đổi đường")
+    checkEqual(b.fruitlessWindows, 0, "đổi đường xong ⇒ xoá chuỗi vô ích")
+
+    // (3) Có gói chiều VỀ ⇒ lần dựng lại HIỆU QUẢ ⇒ reset bộ đếm (không đổi đường oan).
+    var c = W()
+    c.beginWindow(now: t0, fromGo: 500)
+    checkEqual(c.tick(now: t0.addingTimeInterval(15), fromGo: 640), .carried(140),
+               "có 140 gói VỀ trong cửa sổ ⇒ HIỆU QUẢ")
+    checkEqual(c.fruitlessWindows, 0, "có gói về ⇒ xoá bộ đếm vô ích")
+    // Sau khi reset, phải tích lại đủ 2 cửa sổ vô ích mới đổi đường (không đổi sớm).
+    c.beginWindow(now: t0.addingTimeInterval(30), fromGo: 640)
+    checkEqual(c.tick(now: t0.addingTimeInterval(45), fromGo: 640), .fruitless(1),
+               "cửa sổ vô ích mới chỉ tính là 1/2")
+    // Bộ đếm TỤT giữa cửa sổ (nguồn số đổi) ⇒ KHÔNG đo được, KHÔNG kết luận vô ích.
+    var regressed = W()
+    regressed.beginWindow(now: t0, fromGo: 125_639_055)
+    checkEqual(regressed.tick(now: t0.addingTimeInterval(15), fromGo: 12), .waiting,
+               "bộ đếm tụt (cầu mới đếm lại từ 0) ⇒ đặt lại mốc, KHÔNG kết luận vô ích")
+    checkEqual(regressed.fruitlessWindows, 0, "không cộng oan cửa sổ vô ích")
+
+    // (4) Hết ứng viên ⇒ KHÔNG xoay vòng vô hạn: đủ ngưỡng nhưng đã chạm trần ⇒ .exhausted.
+    var d = W(maxAdvances: 3)
+    for n in 1...3 {
+        d.beginWindow(now: t0, fromGo: 0)
+        checkEqual(d.tick(now: t0.addingTimeInterval(15), fromGo: 0), .fruitless(1),
+                   "lần \(n): cửa sổ vô ích 1/2 ⇒ chưa đổi đường")
+        d.beginWindow(now: t0.addingTimeInterval(30), fromGo: 0)
+        checkEqual(d.tick(now: t0.addingTimeInterval(45), fromGo: 0), .advanceRelay(2),
+                   "lần \(n): đủ 2 cửa sổ vô ích liên tiếp ⇒ đổi đường")
+        d.noteAdvanced()
+    }
+    checkEqual(d.advances, 3, "đã dùng hết 3 lần đổi đường của phiên")
+    d.beginWindow(now: t0, fromGo: 0)
+    checkEqual(d.tick(now: t0.addingTimeInterval(15), fromGo: 0), .fruitless(1),
+               "hết trần nhưng mới 1 cửa sổ vô ích ⇒ chưa kết luận")
+    d.beginWindow(now: t0, fromGo: 0)
+    checkEqual(d.tick(now: t0.addingTimeInterval(15), fromGo: 0), .exhausted(2),
+               "hết ứng viên đường ⇒ GIỮ tunnel, KHÔNG xoay vòng vô hạn")
+    d.noteExhausted()
+    checkEqual(d.advances, 3, "hết ứng viên ⇒ KHÔNG tăng số lần đổi (không bao giờ vượt trần)")
+    checkEqual(d.fruitlessWindows, 0, "hết ứng viên ⇒ mở lại chuỗi để nhịp sau thử tiếp")
+
+    // (5) DIỄN LẠI ĐÚNG ca thật 25/09/2026 (`vn1hy`, `Go→packetFlow` đóng băng ở 360729 gói):
+    //     các lần dựng lại ở 19:42:25 / 19:42:58 / 19:43:31 — phải ĐỔI ĐƯỜNG ngay sau lần thứ 2,
+    //     nghĩa là lần dựng lại thứ 3 chạy trên đường MỚI (không thử lại `vn1hy` lần thứ 3).
+    var real = W()
+    real.beginWindow(now: t0, fromGo: 360_729)                            // 19:42:25 dựng lại lần 1
+    checkEqual(real.tick(now: t0.addingTimeInterval(15), fromGo: 360_729), .fruitless(1),
+               "19:42:40 — cửa sổ 1: vẫn 360729 gói VỀ ⇒ vô ích 1/2")
+    real.beginWindow(now: t0.addingTimeInterval(33), fromGo: 360_729)     // 19:42:58 dựng lại lần 2
+    checkEqual(real.tick(now: t0.addingTimeInterval(48), fromGo: 360_729), .advanceRelay(2),
+               "19:43:13 — cửa sổ 2 vẫn 0 gói VỀ ⇒ ĐỔI ĐƯỜNG (lần dựng lại 3 sẽ ở đường mới)")
+}
+
+// MARK: - BUG-IOS-JETSAM-001: TRẦN CỨNG cho hàng đợi đường dữ liệu (26/09/2026)
+//
+// Vì sao phải test bằng số: extension iOS bị iOS giết ở trần per-process ≈51 MB
+// (`JetsamEvent` 25/09/2026, `rpages=3202`). Số đo máy thật cho thấy bộ nhớ leo THEO LƯU LƯỢNG
+// (iPad Netflix 17,9 → 49,4 MB trong 6 phút ≈ 0,65 B mỗi byte qua relay) nên mọi hàng đợi trên
+// đường dữ liệu PHẢI có trần cứng và KHÔNG được phình — đây là bất biến, không phải "mục tiêu".
+
+print("Hàng đợi đường dữ liệu — trần cứng + chính sách khi ĐẦY (BUG-IOS-JETSAM-001)")
+do {
+    let P = RampStatus.DataPathQueuePolicy.self
+    checkEqual(P.linkMaxPackets, 512, "trần GÓI của hàng đợi gửi = 512 (bản cũ 4096)")
+    checkEqual(P.linkMaxBytes, 512 * 1024, "trần BYTE của hàng đợi gửi = 512 KB")
+    checkEqual(P.overflow(count: 10, maxCount: 512), 0, "còn chỗ ⇒ không thả gói nào")
+    checkEqual(P.overflow(count: 600, maxCount: 512), 88, "vượt trần ⇒ thả đúng phần vượt")
+    checkEqual(P.overflow(count: 3, maxCount: 0), 2, "trần 0 bị kẹp về 1 (không có hàng đợi vô trần)")
+
+    // (1) Hàng đợi GỬI: nạp KHÔNG có completion ⇒ phải dừng ở ĐÚNG trần, không phình.
+    var budget = RampStatus.SendBudget(maxPackets: 512, maxBytes: 512 * 1024)
+    var accepted = 0
+    var waits = 0
+    var overPackets = false
+    var overBytes = false
+    for _ in 0..<100_000 {
+        switch budget.admit(packetBytes: 1_000) {
+        case .accept: accepted += 1
+        case .backpressure: waits += 1
+        case .drop: break
+        }
+        if budget.packets > budget.maxPackets { overPackets = true }
+        if budget.bytes > budget.maxBytes { overBytes = true }
+    }
+    check(!overPackets && !overBytes, "nạp 100.000 gói mà KHÔNG gửi xong ⇒ KHÔNG bao giờ vượt trần")
+    checkEqual(accepted, 512, "chỉ nhận đúng 512 gói (trần GÓI), phần còn lại bị CHẶN")
+    checkEqual(budget.packets, 512, "hàng đợi đứng ở trần, KHÔNG phình theo lưu lượng")
+    checkEqual(budget.bytes, 512_000, "byte đang chờ = số gói × kích thước gói")
+    checkEqual(waits, 100_000 - 512, "mọi gói sau khi đầy đều bị CHẶN (đếm được), không bơm tiếp")
+    checkEqual(budget.accepted, 512, "bộ đếm `accepted` khớp số gói đã nhận")
+    check(budget.isFull, "hàng đợi báo ĐẦY")
+
+    // (2) Gửi xong thì nhả chỗ ⇒ nạp lại được (không kẹt cứng, không âm).
+    budget.release(packetBytes: 1_000)
+    checkEqual(budget.packets, 511, "một gói gửi xong ⇒ nhả đúng một chỗ")
+    checkEqual(budget.admit(packetBytes: 1_000), .accept, "có chỗ trống ⇒ nhận gói kế tiếp")
+    for _ in 0..<10_000 { budget.release(packetBytes: 1_000) }
+    checkEqual(budget.packets, 0, "release dư ⇒ kẹp ở 0 (bộ đếm âm là trần vô hiệu)")
+    checkEqual(budget.bytes, 0, "byte cũng kẹp ở 0")
+
+    // (3) Trần BYTE phải chặn trước trần GÓI khi gói to (gói bị gộp).
+    var byteBound = RampStatus.SendBudget(maxPackets: 512, maxBytes: 20_000)
+    var n = 0
+    while byteBound.admit(packetBytes: 1_500) == .accept { n += 1 }
+    checkEqual(n, 13, "trần BYTE chặn ở 13 gói × 1.500 B (19.500 B ≤ 20.000 B)")
+    checkEqual(byteBound.bytes, 19_500, "tổng byte đang chờ ≤ trần BYTE")
+    checkEqual(byteBound.waits, 1, "lần bị chặn đầu tiên đã được đếm")
+
+    // (4) Gói TO HƠN CẢ TRẦN ⇒ thả CÓ ĐẾM, không chờ vô hạn (không bao giờ lọt trần).
+    var oversized = RampStatus.SendBudget(maxPackets: 512, maxBytes: 20_000)
+    checkEqual(oversized.admit(packetBytes: 20_001), .drop, "gói > trần byte ⇒ THẢ")
+    checkEqual(oversized.dropped, 1, "đã đếm gói bị thả")
+    checkEqual(oversized.packets, 0, "gói bị thả KHÔNG chiếm chỗ")
+
+    // (5) Diễn lại ca thật: máy bơm nhanh hơn đường truyền (Netflix). Đo đỉnh của cả gói lẫn byte.
+    var real = RampStatus.SendBudget()
+    var peakPackets = 0
+    var peakBytes = 0
+    var admitted = 0
+    for step in 0..<200_000 {
+        if real.admit(packetBytes: 1_450) == .accept {
+            admitted += 1
+            if step % 3 == 0 { real.release(packetBytes: 1_450) }   // completion về chậm hơn nhịp bơm 3×
+        }
+        peakPackets = max(peakPackets, real.packets)
+        peakBytes = max(peakBytes, real.bytes)
+    }
+    check(peakPackets <= RampStatus.DataPathQueuePolicy.linkMaxPackets, "đỉnh gói ≤ trần")
+    check(peakBytes <= RampStatus.DataPathQueuePolicy.linkMaxBytes, "đỉnh byte ≤ trần")
+    check(admitted > 0, "vẫn nạp được gói (trần không chặn oan lúc đường còn chỗ)")
+    check(real.dropped == 0, "backpressure KHÔNG vứt gói (vứt gói làm handshake/keepalive hỏng)")
+    check(real.waits > 0, "đã phải CHỜ (backpressure) chứ không bơm vô hạn")
+    real.reset()
+    checkEqual(real.packets, 0, "reset ⇒ hàng đợi rỗng")
+    checkEqual(real.waits, 0, "reset ⇒ xoá cả bộ đếm")
+
+    // (6) Đệm lúc link chưa mở: trần 512 gói, quá trần thả CŨ NHẤT, không bao giờ phình.
+    var buffer = RampStatus.BoundedBuffer<(at: Int, bytes: Int)>(maxCount: P.linkDownMaxPackets)
+    var dropEvents = 0
+    var overCap = false
+    for i in 0..<5_000 {
+        dropEvents += buffer.append((at: i, bytes: 1_400))
+        if buffer.count > P.linkDownMaxPackets { overCap = true }
+    }
+    check(!overCap, "đệm link không bao giờ vượt trần")
+    checkEqual(buffer.count, 512, "đệm đứng ở trần")
+    checkEqual(buffer.appended, 5_000, "đã đếm đủ số gói đến")
+    checkEqual(buffer.dropped, 5_000 - 512, "mọi gói vượt trần đều ĐƯỢC ĐẾM (không mất im lặng)")
+    checkEqual(dropEvents, 5_000 - 512, "số lần thả trả về cho bên gọi khớp bộ đếm")
+    checkEqual(buffer.items.first?.at, 5_000 - 512, "gói CŨ NHẤT bị thả trước (FIFO)")
+
+    // (7) TTL: gói nằm quá lâu bị thả và CÓ ĐẾM.
+    let droppedByTTL = buffer.dropOldest()
+    checkEqual(droppedByTTL?.at, 4_488, "dropOldest trả đúng gói cũ nhất")
+    checkEqual(buffer.dropped, 5_000 - 512 + 1, "thả vì TTL cũng được đếm")
+
+    // (8) Xả đệm khi link mở lại: lấy ra theo ĐÚNG thứ tự, phần chưa xả được đặt lại ĐẦU hàng đợi.
+    let held = buffer.drain()
+    checkEqual(held.count, 511, "drain lấy hết phần còn lại")
+    check(buffer.isEmpty, "drain ⇒ hàng đợi rỗng")
+    let rest = Array(held.prefix(300))
+    checkEqual(buffer.requeueFront(rest), 0, "đặt lại 300 gói vào hàng đợi còn chỗ ⇒ không thả")
+    checkEqual(buffer.count, 300, "hàng đợi giữ đúng 300 gói chưa xả")
+    checkEqual(buffer.items.first?.at, 4_489, "gói CŨ NHẤT vẫn đứng đầu (giữ thứ tự bắt tay)")
+    checkEqual(buffer.items.last?.at, 4_788, "gói MỚI NHẤT vẫn đứng cuối")
+    checkEqual(buffer.requeueFront(Array(held.suffix(400))), 188,
+               "đặt lại 400 gói khi chỉ còn 212 chỗ ⇒ thả ĐÚNG phần vượt trần và có đếm")
+    checkEqual(buffer.count, 512, "sau khi đặt lại vẫn đứng ở trần")
+    buffer.removeAll()
+    checkEqual(buffer.count, 0, "removeAll ⇒ rỗng (kết thúc phiên không giữ gói phiên cũ)")
 }
 
 print("")

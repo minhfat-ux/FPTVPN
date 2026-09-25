@@ -189,12 +189,58 @@ final class VPNManager: ObservableObject {
 
     func disconnect() {
         stopProviderDiagnosticsPolling()
-        manager?.connection.stopVPNTunnel()
-        liveDiagnostics = nil
-        refreshStatus()
+        // 26/09/2026 — TẮT on-demand TRƯỚC khi dừng. Nếu để `isOnDemandEnabled = true`,
+        // `stopVPNTunnel()` chỉ là một lần rớt và iOS dựng lại tunnel ngay ⇒ khách bấm
+        // Disconnect mà VPN vẫn lên (lỗi kinh điển khi bật on-demand).
+        //
+        // CHỈ đường NGƯỜI DÙNG BẤM mới tắt on-demand. Đường van bộ nhớ / `noTraffic` KHÔNG tắt
+        // — đó đúng là ca cần hệ thống tự nối lại (xem `refreshStatus`).
+        Task { @MainActor in
+            if let manager, manager.isOnDemandEnabled {
+                manager.isOnDemandEnabled = false
+                manager.onDemandRules = []
+                try? await manager.saveToPreferences()
+            }
+            manager?.connection.stopVPNTunnel()
+            liveDiagnostics = nil
+            refreshStatus()
+        }
     }
 
     // MARK: - Dọn phiên cũ trước mỗi lần Connect
+
+    /// Đường THOÁT APP (`applicationWillTerminate`) — KHÁC `disconnect()` (đường UI).
+    ///
+    /// Vì sao phải có bản riêng: `disconnect()` chạy trong `Task { @MainActor }`, mà
+    /// `applicationWillTerminate` trả về là hệ thống giết tiến trình ngay ⇒ **Task đó không bao
+    /// giờ chạy**. Chủ dự án chốt 26/09/2026: **tắt app = thoát VPN**, nên profile phải được ghi
+    /// `isOnDemandEnabled = false` TRƯỚC khi tiến trình chết; ở đây chặn chờ
+    /// `saveToPreferences` xong (tối đa 2 s) rồi mới dừng tunnel.
+    ///
+    /// ⚠️ `Task.detached` (KHÔNG phải `Task {}`): `Task {}` trong ngữ cảnh `@MainActor` thừa
+    /// hưởng main actor — mà main actor đang bị `wait()` chặn ⇒ **tự khoá chết** (cùng lớp lỗi
+    /// `flowLock` ở AGENTS.md §7c). `nonisolated(unsafe)` là cách dùng sẵn có trong file này
+    /// (`sharedForTerminate`).
+    func shutdownForTermination() {
+        AppDiagnostics.shared.log("Terminate: tắt on-demand (đồng bộ) rồi stopVPNTunnel")
+        guard let manager else { return }
+        if manager.isOnDemandEnabled {
+            nonisolated(unsafe) let target = manager
+            manager.isOnDemandEnabled = false
+            manager.onDemandRules = []
+            let finished = DispatchSemaphore(value: 0)
+            Task.detached {
+                try? await target.saveToPreferences()
+                finished.signal()
+            }
+            if finished.wait(timeout: .now() + 2) == .timedOut {
+                // Hết 2 s: vẫn dừng tunnel, nhưng ghi rõ để lần sau đọc log biết là chưa ghi xong.
+                AppDiagnostics.shared.log("Terminate: saveToPreferences quá 2 s — vẫn dừng tunnel")
+            }
+        }
+        manager.connection.stopVPNTunnel()
+        liveDiagnostics = nil
+    }
 
     /// Bảo đảm phiên VPN CŨ đã dừng hẳn và nạp lại profile từ preferences trước khi Connect.
     ///
@@ -664,6 +710,24 @@ final class VPNManager: ObservableObject {
         manager.protocolConfiguration = protocolConfig
         manager.localizedDescription = Self.profileName
         manager.isEnabled = true
+        // 26/09/2026 — BẬT ON-DEMAND: đây là gốc của nửa sau triệu chứng
+        // "tự ngắt rồi KHÔNG tự nối lại được".
+        //
+        // Vì sao BẮT BUỘC: mọi cơ chế tự nối lại hiện có (`WSRelayClient` backoff,
+        // `TransportLadder`, watchdog `selfRescue`) đều sống BÊN TRONG tiến trình extension.
+        // Khi iOS giết extension vì trần bộ nhớ per-process (`JetsamEvent`, rpages=3202 ≈ 51 MB
+        // — BUG-IOS-JETSAM-001), hoặc khi van an toàn bộ nhớ gọi `cancelTunnelWithError`, cả
+        // tiến trình chết ⇒ không còn ai nối lại: trước bản vá này profile chỉ có
+        // `isEnabled = true`, KHÔNG có `isOnDemandEnabled`/`onDemandRules` (đã rà toàn bộ `iOS/`),
+        // nên khách phải tự mở app bấm Connect. On-demand là cơ chế DUY NHẤT của iOS dựng lại
+        // extension mà không cần app chạy.
+        //
+        // `NEOnDemandRuleConnect()` không kèm điều kiện giao diện ⇒ luôn kết nối lại khi tunnel
+        // rớt (kể cả sau khi máy khởi động lại). KHÁC hẳn `NEOnDemandRuleConnect` có
+        // `interfaceTypeMatch`: bản này cố ý áp cho mọi loại mạng vì khách Trung Quốc đổi
+        // Wi-Fi/di động liên tục và đường dữ liệu là relay qua Cloudflare.
+        manager.isOnDemandEnabled = true
+        manager.onDemandRules = [NEOnDemandRuleConnect()]
         try await manager.saveToPreferences()
         try await manager.loadFromPreferences()
         self.manager = manager
