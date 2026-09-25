@@ -117,6 +117,13 @@ bash scripts/ios-verify-ipa.sh build/ios-adhoc-export/ipa/FlowVPN.ipa --version 
 - ❌ **`swiftc -parse` KHÔNG đủ** (chỉ kiểm cú pháp: build 33 `-parse` PASS mà archive vẫn FAIL vì thiếu hàm).
   Phải `swiftc -typecheck` (kèm shim `NWPath`) cho các file đã sửa.
 - ❌ **Không build trong lúc một agent đang sửa file** (build 33 lần 1 fail đúng vì lý do này).
+- ❌ **Không build khi ổ đĩa gần đầy.** Volume repo là exFAT dùng chung; ca thật 25/09/2026:
+  `/Volumes/BIWIN` đầy **100% (466G/466G, còn 232Mi)** ⇒ `sed: No space left on device`, build chết
+  giữa đường (`build/` 59G + `.privatevpn/tmp` 11G, phần lớn là cache `dd-*`/`DerivedData` mỗi lần build).
+  Trước khi build: `bash scripts/clean-build-cache.sh --dry-run` xem sẽ dọn gì, rồi
+  `MIN_FREE_GB=10 bash scripts/clean-build-cache.sh` (chỉ dọn khi trống < 10 GB; `KEEP=2` giữ 2 bản
+  mới nhất mỗi loại). Script **không bao giờ** xoá source/docs/.git/release/`build/ios-adhoc-export/ipa`
+  hay `build/*.md` (bằng chứng §2c).
 
 ### 7c. Bất biến trong code
 - ❌ KHÔNG bật `allowsTransportRebuild` cho đường tự-áp số khai **trong phiên** (build 29: tunnel tự ngắt
