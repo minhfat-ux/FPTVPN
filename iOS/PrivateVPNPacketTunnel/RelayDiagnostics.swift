@@ -38,17 +38,49 @@ final class RelayDiagnostics: @unchecked Sendable {
         }
     }
 
+    /// Ghi ĐỒNG BỘ (chờ ghi xong mới trả về) — chỉ dùng cho những dòng PHẢI có mặt dù tiến trình
+    /// bị kết thúc ngay sau đó (ví dụ `stopTunnel`: 25/09/2026 nhiều phiên kết thúc mà log KHÔNG có
+    /// dòng `stopTunnel`, nên không phân biệt được app/iOS/người dùng dừng).
+    func logSync(_ message: String) {
+        let line = "\(formatter.string(from: Date())) \(message)\n"
+        queue.sync { [weak self] in
+            guard let self, let url = self.fileURL, let data = line.data(using: .utf8) else { return }
+            self.trimIfNeeded(url)
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+            } else {
+                try? data.write(to: url, options: .atomic)
+            }
+        }
+    }
+
+    /// Cắt bớt file khi vượt trần: giữ `keepBytes` CUỐI (bằng chứng gần nhất) rồi ghi lại.
+    ///
+    /// Vì sao KHÔNG xoá cả file (bản cũ `removeItem`): xoá là mất sạch bằng chứng của phiên đang
+    /// chạy — đúng lúc cần nhất; còn để phình mãi thì đầy bộ nhớ thiết bị. Cắt-bớt là cơ chế dọn
+    /// tài nguyên tại chỗ: file luôn ≤ trần, và luôn giữ phần mới nhất.
+    private func trimIfNeeded(_ url: URL) {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? Int, size > self.maxBytes else { return }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return }
+        defer { try? handle.close() }
+        let keep = self.maxBytes / 2
+        try? handle.seek(toOffset: UInt64(max(0, size - keep)))
+        guard let tail = try? handle.readToEnd() else { return }
+        // Cắt tới dòng hoàn chỉnh đầu tiên để không giữ lại dòng cụt.
+        if let nl = tail.firstIndex(of: 0x0A) {
+            let clean = tail[(nl + 1)...]
+            try? clean.write(to: url, options: .atomic)
+        }
+    }
+
     func log(_ message: String) {
         let line = "\(formatter.string(from: Date())) \(message)\n"
         queue.async { [weak self] in
-            guard let self, let url = self.fileURL else { return }
-            guard let data = line.data(using: .utf8) else { return }
-            let manager = FileManager.default
-            if let attributes = try? manager.attributesOfItem(atPath: url.path),
-               let size = attributes[.size] as? Int,
-               size > self.maxBytes {
-                try? manager.removeItem(at: url)
-            }
+            guard let self, let url = self.fileURL, let data = line.data(using: .utf8) else { return }
+            self.trimIfNeeded(url)
             if let handle = try? FileHandle(forWritingTo: url) {
                 defer { try? handle.close() }
                 _ = try? handle.seekToEnd()

@@ -92,6 +92,7 @@ final class VPNManager: ObservableObject {
     }
 
     func refreshStatus() {
+        AppDiagnostics.shared.log("NE status=\(manager?.connection.status.rawValue ?? -1)")
         // Extension đã báo "Connected nhưng không có mạng": giữ nguyên trạng thái Failed kèm
         // thông báo, đừng để NEVPNStatus kéo về "Disconnected" và xoá mất lý do (giống macOS).
         if diagnosticHandled {

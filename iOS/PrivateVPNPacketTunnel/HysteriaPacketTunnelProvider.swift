@@ -631,7 +631,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         with reason: NEProviderStopReason,
         completionHandler: @escaping () -> Void
     ) {
-        RelayDiagnostics.shared.log("stopTunnel: reason=\(reason.rawValue)")
+        // ĐỒNG BỘ: dòng này phải tồn tại dù iOS kết thúc tiến trình ngay sau đó.
+        RelayDiagnostics.shared.logSync("stopTunnel: reason=\(reason.rawValue)")
         log.log(level: .default, "stopTunnel: reason \(reason.rawValue)")
         // Tắt lưới an toàn TRƯỚC mọi lời gọi lấy khoá: đây là lần dừng HỢP LỆ, không phải đông cứng.
         wedgeSetTunnelActive(false)
@@ -3413,7 +3414,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         setTunnelNetworkSettings(nil) { [weak self] _ in
             guard let self else { return }
             RelayDiagnostics.shared.log(
-                "giám sát: ĐÃ gỡ network settings (\\(code)) — mạng của máy quay lại đường cũ, báo lỗi cho hệ thống"
+                "giám sát: ĐÃ gỡ network settings (\(code)) — mạng của máy quay lại đường cũ, báo lỗi cho hệ thống"
             )
             self.cancelTunnelWithError(self.error(code: code, message: message))
         }
