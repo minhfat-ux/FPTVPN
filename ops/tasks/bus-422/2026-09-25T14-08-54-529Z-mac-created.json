@@ -1,0 +1,18 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-422",
+  "title": "BUG iOS — 3 lỗi: đọc ở đâu, sửa gì, nghiệm thu thế nào",
+  "from": "mac",
+  "to": "mac",
+  "detail": ".privatevpn/status/bugs.json (open: BUG-IOS-JETSAM-001, BUG-IOS-ONEWAY-001, BUG-IOS-LOGLEAK-001) + docs/handoff/HANDOFF_IOS_LOG_GATE_2026-09-25.md + AGENTS.md §7d",
+  "verify": "xcrun devicectl device copy from --device <id> --domain-type appDataContainer --domain-identifier com.privatevpn.app.packet-tunnel --source Documents --destination <dir> ; xcrun devicectl device copy from --device <id> --domain-type systemCrashLogs --source . --destination <dir>/crash ; python3 scripts/ios-log-acceptance.py <dir>/relay.log --crash-dir <dir>/crash",
+  "due": null,
+  "createdAt": "2026-09-25T14:08:54.529Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-25T14:08:54.529Z",
+ "transcribedBy": "mac",
+ "busId": 422,
+ "note": "MAC chép vào sổ từ tin bus #422 (mac→mac), chưa có thư mục task. Nguyên văn:\nBUG NẰM Ở ĐÂU (nguồn sự thật, đừng đoán):\n1) .privatevpn/status/bugs.json — 3 mục MỚI, mỗi mục có 'evidence' (số đo thật + tên file log) và 'next_steps':\n   - BUG-IOS-JETSAM-001 (high): iOS giết extension vì trần bộ nhớ per-process. JetsamEvent-2026-09-25-190942.ips: reason=per-process-limit, rpages=3202 (~51 MB), fds=50. iPhone còn 2 ca cùng loại (24/09 rpages=3200, 21/09 rpages=3202).\n   - BUG-IOS-ONEWAY-001 (high): chiều VỀ đứt một chiều, app dựng lại transport 3 lần trên CÙNG relay vn1hy (Mac 25/09 19:42:02-19:43:44: 17 khoảng 5 s, máy gửi 1277 gói, Go->packetFlow đứng ở 360729 gói/125.639.055 B).\n   - BUG-IOS-LOGLEAK-001 (low): HysteriaPacketTunnelProvider.swift:3515 thừa 1 dấu \\ => log in nguyên văn (\\(code)).\n2) docs/handoff/HANDOFF_IOS_LOG_GATE_2026-09-25.md (origin/main 23db738): bảng bug + cách chạy cổng mới + việc bàn giao theo thứ tự + exit criteria.\n3) AGENTS.md §7d (cây local): tóm tắt 3 lỗi + cổng đã siết.\n\nSỬA THEO THỨ TỰ:\n(a) commit RelayFailoverWatch (đang ở working tree) + case harness ios-pure-logic-tests >=389/389 PASS;\n(b) HysteriaPacketTunnelProvider.swift:3515: (\\(code)) -> (\\(code));\n(c) build LẠI: bản 45 đang cài trên iPad KHÔNG in dòng 'tài nguyên:'/'footprint' nào dù phiên chạy 244 s => nghi build trước khi thêm startResourceTicker; phải build lại rồi chạy phiên >=30 phút mới có đường cong bộ nhớ (nghi rò fd/bộ đệm theo mỗi lần dựng lại transport).\n\nNGHIỆM THU (bắt buộc, exit 1 = KHÔNG ĐẠT):\nxcrun devicectl device copy from --device <id> --domain-type appDataContainer --domain-identifier com.privatevpn.app.packet-tunnel --source Documents --destination <dir>\nxcrun devicectl device copy from --device <id> --domain-type systemCrashLogs --source . --destination <dir>/crash\npython3 scripts/ios-log-acceptance.py <dir>/relay.log --crash-dir <dir>/crash\n\nPUBLISH iOS ĐANG DỪNG (chủ dự án chốt) cho tới khi 3 bug trên đóng."
+}

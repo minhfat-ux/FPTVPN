@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận bus #422. Phạm vi: (a) commit RelayFailoverWatch + harness ios-pure-logic-tests (đã 418/418 PASS) + startResourceTicker; (b) sửa HysteriaPacketTunnelProvider.swift:3515 (\\(code)); (c) build lại (project.yml 47) + phiên >=30 phút trên máy thật + nghiệm thu scripts/ios-log-acceptance.py --crash-dir.",
+ "actor": "mac",
+ "at": "2026-09-25T14:09:21.535Z"
+}
