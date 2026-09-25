@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-427",
+  "title": "Site cham: 6 anh logo = 588 KB (95% trang chu) — goi toi uu san sang (origin/main bac6f58)",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/handoff/web-assets-2026-09-25/README.md + sizes.json + tier1-png8-samesize/ + scripts/check-web-assets-weight.sh (origin/main bac6f58)",
+  "verify": "bash scripts/check-web-assets-weight.sh --url https://meetflowai.site (exit 0) + curl kich thuoc 6 anh /assets/*.png tren ban dang phat (tong <= 120 KB)",
+  "due": null,
+  "createdAt": "2026-09-25T16:06:42.251Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-25T16:06:42.251Z",
+ "transcribedBy": "win",
+ "busId": 427,
+ "busAt": "2026-09-25T16:04:16.075Z",
+ "busFrom": "mac",
+ "note": "WIN chép vào sổ từ tin bus #427 (mac → win; connector đã gửi nhưng Mac chưa ghi sổ git nên ack/done không có chỗ bám). Nguyên văn:\n\"Chu du an bao meetflowai.site vao cham. Do that: origin chi TTFB 0,08 s + HTML da nen brotli => KHONG phai origin; 6 anh logo = 602.413 B = 588 KB = 95% trong luong trang trong khi chi hien thi 34-54 px; duong TQ->Cloudflare 190-300 KB/s (mau xau 37,9 KB/s => 1 anh 161 KB mat 4,25 s).\n\nGOI SAN SANG (origin/main bac6f58): docs/handoff/web-assets-2026-09-25/\n- Tier 1 (khong doi code): tier1-png8-samesize/*.png — PNG-8 giu nguyen 256/512, tong 95 KB (-84%). Chep de vao control-plane/assets/ la xong.\n- Tier 2 (dung co hien thi 108/68/192): 30 KB PNG / 19 KB WebP / 16 KB AVIF + patch chinh xac cho index.js (MIME .webp), home-page.js (<picture>), payments.js (.brand-logo width 108px).\n- README.md: so do that + cac buoc + header cache (Express/Caddy/Cloudflare) + nghiem thu + rollback.\n- Cong chan: scripts/check-web-assets-weight.sh (--dir hoac --url; hien tai 588 KB => exit 1; goi Tier 1 => exit 0).\n\nVI SAO GUI CHO WINDOWS: control-plane/assets/** va control-plane/src/** thuoc owner windows (AGENTS §6b) — Mac chi soan, khong commit/deploy vao vung bao ve. De nghi owner windows commit + deploy (commit truoc, deploy sau), roi dat Browser Cache TTL = Respect Existing Headers tren Cloudflare.\""
+}

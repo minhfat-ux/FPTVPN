@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN da nhan (bus #427). Viec thuoc vung bao ve cua windows: control-plane/assets/** (AGENTS §6b). Lam Tier 1: chep 6 PNG-8 toi uu de len control-plane/assets/ (95 KB thay vi 588 KB), chay cong chan, commit tren main, deploy node-2, roi nghiem thu bang --url.",
+ "actor": "win",
+ "at": "2026-09-25T16:06:51.757Z"
+}
