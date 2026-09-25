@@ -1,0 +1,68 @@
+[
+ {
+  "name": "vpnflow-logo.png",
+  "orig": 81646,
+  "t1": 11659,
+  "t1_sha": "7a9da049ad92553fd0eef1b0b139be42e6dc7db6644350d62f2506d8e034e70c",
+  "t2": 4271,
+  "webp": 2716,
+  "avif": 2078,
+  "webp_sha": "3e007cb01fea8e9555f9acfc1674968fafc2cc7072a2fbc84d79890590ef3ac5",
+  "t2px": "108x108"
+ },
+ {
+  "name": "meetflow-logo.png",
+  "orig": 102807,
+  "t1": 17357,
+  "t1_sha": "a086bc681a3016d57f46f9fff180e800541877c4fd3c964e62f58b69ae037af4",
+  "t2": 5280,
+  "webp": 2480,
+  "avif": 1959,
+  "webp_sha": "4a613ec3ac2625d065f360f6241c7eb7650baaa3d7a18d7ccd1e6da832a747c1",
+  "t2px": "108x108"
+ },
+ {
+  "name": "fbuddy-logo.png",
+  "orig": 135591,
+  "t1": 16333,
+  "t1_sha": "126d2b2c91adb88583d1819e0c591e540607367e06599beb579994b7229550b3",
+  "t2": 4820,
+  "webp": 2284,
+  "avif": 1936,
+  "webp_sha": "bce42e425a7c3db21aa01a3eea23d37a8f5f6fc98a4f0c1b38e11034c2cc6fd5",
+  "t2px": "108x108"
+ },
+ {
+  "name": "supermom-logo.png",
+  "orig": 160963,
+  "t1": 28326,
+  "t1_sha": "d4fb123a3e15f7605ed055a221b888b045cb711c578c5f304887d5b714ccde6e",
+  "t2": 8556,
+  "webp": 4738,
+  "avif": 3403,
+  "webp_sha": "556099345cf41597f6256203c8aed8075b4cec8b0fefe82501d65d4837f597ec",
+  "t2px": "108x108"
+ },
+ {
+  "name": "flowtech-mark.png",
+  "orig": 34851,
+  "t1": 8248,
+  "t1_sha": "dd6921239ce24bc5d79b786192b3e495eedad71cf2e371ee694e2038d8823f88",
+  "t2": 2541,
+  "webp": 2050,
+  "avif": 1995,
+  "webp_sha": "68c77bc0f2a9077d795d170fe6d643c0bd76030e72d5ccd5c238e215227b30d7",
+  "t2px": "68x68"
+ },
+ {
+  "name": "flowtech-icon.png",
+  "orig": 86555,
+  "t1": 15335,
+  "t1_sha": "f72bb3e8571e5425c00edaafd022366c9f71534a2275a4cebb4130797b49c5a9",
+  "t2": 4928,
+  "webp": 5542,
+  "avif": 3396,
+  "webp_sha": "c91a5a7460ae7dbd0a3b31a2a7e8f7596cfad1963539cd06b50d9847a81e0f0e",
+  "t2px": "192x192"
+ }
+]
