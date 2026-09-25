@@ -300,8 +300,24 @@ enum BandwidthControl {
     ///
     /// Cố ý chạy được cả khi `path` là nil: khi app chưa cấp quyền hay đang chuyển mạng, ta
     /// vẫn phải có một khoá để đọc bộ nhớ và ghi số đo.
+    /// Interface của CHÍNH tunnel (utun/ipsec/ppp/tap) **không phải mạng nền**.
+    ///
+    /// Đo thật 25/09/2026 (iPad build 43):
+    ///   `bw: net đổi giữa phiên wifi|ssid:ICONLABHOTEL -> other|if:utun20 — ĐỔI MẠNG THẬT`
+    ///   → `bw: đổi mạng ⇒ dựng lại transport` → mất gói → `TUNNEL_NO_TRAFFIC` → **tự gỡ tunnel**
+    ///   (khách thấy "tự ngắt"), trong khi mạng nền KHÔNG hề đổi: `utun20` là utun của chính VPN này.
+    /// `NWPathMonitor` có lúc trả interface utun của tunnel lên đầu danh sách nên phải lọc.
+    static func isTunnelInterface(_ name: String) -> Bool {
+        let n = name.lowercased()
+        return n.hasPrefix("utun") || n.hasPrefix("ipsec")
+            || n.hasPrefix("ppp") || n.hasPrefix("tap") || n.hasPrefix("tun")
+    }
+
     static func currentNetworkIdentity(path: NWPath?) -> NetworkIdentity {
-        let interface = path?.availableInterfaces.first
+        // Chỉ mạng NỀN mới được coi là "mạng"; interface của tunnel bị loại.
+        // Không còn interface nền ⇒ `name = "unknown"` ⇒ khoá `other|if:unknown`, và
+        // `RampStatus.NetworkChangePolicy.isPlaceholderKey` đã chặn không coi đó là mạng mới.
+        let interface = (path?.availableInterfaces ?? []).first { !isTunnelInterface($0.name) }
         let name = interface?.name ?? "unknown"
         var kind = "other"
         if let type = interface?.type {
@@ -1280,7 +1296,10 @@ extension BandwidthControl {
         /// đường nền vừa đổi).
         @discardableResult
         func refreshNetworkIdentityIfNeeded(path: NWPath?, force: Bool, now: Date = Date()) -> Bool {
-            let interfaceNow = path?.availableInterfaces.first?.name
+            // Cùng bộ lọc với `currentNetworkIdentity`: interface của CHÍNH tunnel không tính là
+            // "đổi interface" (nếu không, utun xuất hiện là bị coi là đổi mạng — ca thật 19:08 25/09).
+            let interfaceNow = (path?.availableInterfaces ?? [])
+                .first { !BandwidthControl.isTunnelInterface($0.name) }?.name
             let interfaceChanged = interfaceNow != nil && interfaceNow != lastPathInterface
             guard force || interfaceChanged || now.timeIntervalSince(identityCheckedAt) >= Self.identityRefresh
             else { return false }
