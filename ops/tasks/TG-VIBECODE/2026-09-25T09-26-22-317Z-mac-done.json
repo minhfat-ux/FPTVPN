@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "bus #415-418 (gửi owner) = BÁO CÁO iOS; CHƯA nghiệm thu xong. cmd+ket qua: curl api.meetflowai.site/v1/app-version?platform=ios -> latest=1.4.4, file 8.162.432B; git show origin/main:project.yml -> 1.4.3/20; nhanh mac/ios-diag-ramp-408=f03f1ce da push, CHUA gop main; xcrun devicectl device info apps -> iPhone VPNFlow 1.4.5/42; bash scripts/ios-pure-logic-tests/run.sh -> 289/289 PASS; check-publish-version.py -> 7/8 (chan 'phat hanh lui' vi marker 1.4.4>1.4.3). CON LAI: loi watchdog tu GO tunnel (selfRescue, stallTeardownDeadline=45s) CHUA sua; What-to-Test 1.4.5 chua co code; can owner chot so version. Chi tiet: docs/handoff/HANDOFF_IOS_DISCONNECT_2026-09-24.md",
+ "actor": "mac",
+ "at": "2026-09-25T09:26:22.319Z"
+}
