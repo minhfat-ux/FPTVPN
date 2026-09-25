@@ -207,6 +207,7 @@ final class VPNManager: ObservableObject {
     }
 
     func disconnect() {
+        AppDiagnostics.shared.log("Disconnect: app gọi stopVPNTunnel() (người dùng bấm)")
         stopProviderDiagnosticsPolling()
         manager?.connection.stopVPNTunnel()
         liveDiagnostics = nil
@@ -229,6 +230,7 @@ final class VPNManager: ObservableObject {
         if let connection = manager?.connection, connection.status != .disconnected,
            connection.status != .invalid {
             log.info("connect: phiên cũ còn \(connection.status.rawValue) — dừng trước khi Connect lại")
+            AppDiagnostics.shared.log("Connect: dừng phiên CŨ (status=\(connection.status.rawValue)) trước khi nối lại")
             connection.stopVPNTunnel()
             let deadline = Date().addingTimeInterval(Self.sessionStopTimeout)
             while Date() < deadline {
