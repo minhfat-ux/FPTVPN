@@ -17,7 +17,9 @@ hiện bằng mắt.
 | 1 | `checkPersistence` | `~/Library/LaunchAgents`, `/Library/LaunchAgents`, `/Library/LaunchDaemons` | LaunchAgent/Daemon mới hoặc vừa sửa — **đúng vector của vụ 24/08** |
 | 2 | `checkProcesses` | `ps -Ao pid=,ppid=,uid=,command=` | tiến trình chạy binary từ Desktop/Downloads/Documents/tmp, hoặc tên khớp IOC |
 | 3 | `checkTcc` | `TCC.db`, **dự phòng `log show`** | quyền nhạy cảm vừa được yêu cầu/cấp (Accessibility, Screen Recording, Full Disk Access, App Data, …) |
-| 4 | IOC | `iocs.json` | label, domain, mẫu tên, sha256 của vụ 24/08 |
+| 4 | `checkStartup` | shell rc, `crontab -l`, login items | dropper cài vào `.zshrc`/`.zprofile`, cron lạ, login item mới |
+| 5 | `checkHold` | `~/.local/state/mac-selfdefense/hold.json` | **cách ly bị phá** — kiểm tra lại định kỳ và siết lại |
+| 6 | IOC | `iocs.json` | label, domain, mẫu tên, sha256 của vụ 24/08 |
 
 ## 2. Tín hiệu CỨNG vs MỀM — quyết định thiết kế quan trọng nhất
 
@@ -36,6 +38,23 @@ file thực thi**, không soi tham số. Có test hồi quy cho đúng ca này
 (`test/detect.test.js` → *"KHÔNG gắn cờ khi chuỗi IOC chỉ nằm trong THAM SỐ"*).
 
 Thêm một chốt an toàn: `ancestorPids()` — daemon không bao giờ kill tổ tiên của chính nó.
+
+### Vì sao có `checkHold` — cách ly một lần là chưa đủ
+
+Ngày **23/09/2026**, sau khi máy reboot, iCloud đồng bộ ngược vào Desktop và **trả lại exec bit**
+cho `SystemUpdater.app/Contents/MacOS/App` (4.6MB Mach-O nằm local, mode `-rwxr-x--x`). Tức là
+containment đã bị hoàn tác mà không có gì báo.
+
+Nên `hold.json` ghi lại danh sách phải giữ, và `checkHold` kiểm tra lại mỗi `hold.everyMs`
+(mặc định 5 phút): còn exec bit / còn `.app` chưa đổi tên / mất xattr ⇒ **siết lại + báo động**.
+
+```bash
+node selfdefense.mjs hold --list          # xem đang giữ gì
+node selfdefense.mjs hold ~/Desktop/xyz   # thêm vào danh sách giữ
+```
+
+Lưu ý: đây là biện pháp **đối phó triệu chứng**. Gốc rễ là file vẫn nằm trong vùng sync iCloud —
+muốn dứt điểm thì phải xoá khỏi iCloud.
 
 ## 3. Chế độ
 
@@ -77,6 +96,8 @@ Hai LaunchAgent được tạo:
   "watchDirs": ["~/Library/LaunchAgents", "/Library/LaunchAgents", "/Library/LaunchDaemons"],
   "allow": { "pathPrefixes": ["/System/", "/usr/", "/opt/homebrew/", "..."], "labels": ["com.apple."] },
   "tcc": { "enabled": true, "sensitiveOnly": true, "source": "auto", "everyMs": 60000 },
+  "hold": { "everyMs": 300000 },
+  "startup": { "enabled": true, "everyMs": 60000, "checkCrontab": true, "checkLoginItems": true },
   "notify": { "transport": "auto", "relayHost": null, "relayKey": null },
   "protectSelf": true
 }
@@ -136,6 +157,12 @@ truy cập đầu), rồi đối chiếu kích thước trước khi xoá bản 
 
 Hệ quả cần nhớ: **cách ly file trên Desktop không có nghĩa là file đã rời khỏi máy** — nó có
 thể đang nằm trên iCloud và đồng bộ sang các thiết bị khác.
+
+## 8c. Quy tắc "chỉ tin code, không tin comment"
+
+Mọi mẫu dropper/IOC được khớp trên phần **không phải comment**. Đã trả giá hai lần: một lần
+khớp trên tham số tiến trình, một lần khớp trên dòng `# curl … | bash` trong ghi chú. Cả hai
+đều dẫn tới báo động giả — và ở chế độ enforce thì lần đầu sẽ **kill phiên agent đang xử lý sự cố**.
 
 ## 9. Giới hạn đã biết
 

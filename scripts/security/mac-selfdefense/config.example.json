@@ -47,5 +47,25 @@
     "relayHost": null,
     "relayKey": null
   },
-  "_notify_doc": "auto = thu direct api.telegram.org truoc, that bai thi relay qua SSH toi relayHost bang relayKey."
+  "_notify_doc": "auto = thu direct api.telegram.org truoc, that bai thi relay qua SSH toi relayHost bang relayKey.",
+  "hold": {
+    "everyMs": 300000
+  },
+  "startup": {
+    "enabled": true,
+    "everyMs": 60000,
+    "checkCrontab": true,
+    "checkLoginItems": true,
+    "paths": [
+      "~/.zshrc",
+      "~/.zprofile",
+      "~/.zshenv",
+      "~/.bashrc",
+      "~/.bash_profile",
+      "~/.profile",
+      "~/.config/fish/config.fish"
+    ]
+  },
+  "_hold_doc": "hold.json (trong state dir) liet ke cac duong dan phai GIU cach ly; daemon kiem tra lai moi hold.everyMs.",
+  "_startup_doc": "Theo doi shell rc + crontab + login items. KHONG tu sua file cau hinh shell."
 }

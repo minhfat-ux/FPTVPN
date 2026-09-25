@@ -255,3 +255,54 @@ export function bootout(label, { uid = process.getuid?.() ?? 501, run = execFile
     return false;
   }
 }
+
+/** Đọc giá trị xattr cách ly của 1 đường dẫn; null nếu không có/không đọc được. */
+export function readQuarantineXattr(target, { run = execFileSync } = {}) {
+  try {
+    return (
+      run("/usr/bin/xattr", ["-p", "com.apple.quarantine", target], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim() || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Các file còn bit thực thi trong 1 cây. */
+export function findExecutables(root) {
+  return walkFiles(root).filter((f) => {
+    try {
+      return (fs.lstatSync(f).mode & 0o111) !== 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** Các bundle .app (chưa bị đổi tên .DISABLED) trong 1 cây, tối đa `maxDepth`. */
+export function findAppBundles(root, { maxDepth = 4 } = {}) {
+  const out = [];
+  const walk = (dir, depth) => {
+    if (depth > maxDepth) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const full = path.join(dir, e.name);
+      if (e.name.endsWith(".app")) out.push(full);
+      else walk(full, depth + 1);
+    }
+  };
+  try {
+    if (fs.statSync(root).isDirectory()) walk(root, 0);
+  } catch {
+    /* không đọc được */
+  }
+  return out;
+}

@@ -39,17 +39,22 @@ import {
 import {
   bootout,
   defaultVault,
+  findAppBundles,
+  findExecutables,
   hashTree,
   incidentDir,
   killProcess,
   moveToVault,
   neutralize,
+  readQuarantineXattr,
   writeManifest,
 } from "./lib/quarantine.mjs";
 import {
   DEFAULT_ALLOW_PREFIXES,
+  DEFAULT_STARTUP_PATHS,
   DEFAULT_SUSPICIOUS_PREFIXES,
   ancestorPids,
+  classifyStartupText,
   classifyPersistence,
   classifyProcess,
   diffSnapshot,
@@ -58,6 +63,8 @@ import {
   isSuspiciousPath,
   listProcesses,
   matchesIocs,
+  readCrontab,
+  readLoginItems,
   readTccFromLog,
   readTccRows,
   SENSITIVE_TCC_SERVICES,
@@ -79,6 +86,10 @@ const DEDUP_FILE = path.join(STATE_DIR, "dedup.json");
 // Snapshot bền trên đĩa: nếu chỉ giữ trong RAM thì mỗi lần daemon restart lại coi
 // baseline là "sạch", và mã độc đáp xuống trong lúc daemon tắt sẽ được bỏ qua.
 const SNAPSHOT_FILE = path.join(STATE_DIR, "snapshot.json");
+// Danh sách cách ly phải được GIỮ NGUYÊN. iCloud đã từng khôi phục exec bit sau reboot
+// (gặp thật 23/09/2026), nên cách ly một lần là chưa đủ.
+const HOLD_FILE = path.join(STATE_DIR, "hold.json");
+const STARTUP_SNAP_FILE = path.join(STATE_DIR, "startup-snapshot.json");
 const LOG_MAX_BYTES = 5 * 1024 * 1024;
 
 export const DEFAULT_CONFIG = {
@@ -93,6 +104,10 @@ export const DEFAULT_CONFIG = {
   // transport: "auto" = thử trực tiếp api.telegram.org, thất bại thì relay qua SSH tới VPS.
   // Máy Mac này KHÔNG tới được Telegram trực tiếp (đo 22/09/2026) nên thực tế sẽ dùng relay.
   notify: { transport: "auto", relayHost: null, relayKey: null },
+  // Kiểm tra lại các đường dẫn đang bị cách ly (chống iCloud hoàn tác).
+  hold: { everyMs: 300000 },
+  // Bề mặt khởi động ngoài launchd: shell rc, crontab, login items.
+  startup: { enabled: true, everyMs: 60000, checkCrontab: true, checkLoginItems: true, paths: DEFAULT_STARTUP_PATHS },
   protectSelf: true,
 };
 
@@ -109,6 +124,8 @@ export function loadConfig(file = CONFIG_FILE) {
     allow: { ...DEFAULT_CONFIG.allow, ...(user.allow ?? {}) },
     tcc: { ...DEFAULT_CONFIG.tcc, ...(user.tcc ?? {}) },
     notify: { ...DEFAULT_CONFIG.notify, ...(user.notify ?? {}) },
+    hold: { ...DEFAULT_CONFIG.hold, ...(user.hold ?? {}) },
+    startup: { ...DEFAULT_CONFIG.startup, ...(user.startup ?? {}) },
   };
   // Cho ph00e9p ghi 011100e8 b1eb1ng bi1ebfn m00f4i tr01b01eddng 2014 d00f9ng khi ch1ea1y th1eed m00e0 kh00f4ng mu1ed1n s1eeda file c1ea5u h00ecnh.
   if (process.env.SELFDEFENSE_MODE) merged.mode = process.env.SELFDEFENSE_MODE;
@@ -152,6 +169,11 @@ export class SelfDefense {
     this.incidents = [];
     this.lastTccSeen = Math.floor(Date.now() / 1000);
     this.lastTccAt = 0;
+    this.lastHoldAt = 0;
+    this.lastStartupAt = 0;
+    this.startupSnap = this.loadStartupSnap();
+    this.cronLogged = false;
+    this.loginLogged = false;
     this.tccDbDenied = false;
     this.seenTccMsgIds = new Set();
     this.tccVia = null;
@@ -364,6 +386,206 @@ export class SelfDefense {
     return acted;
   }
 
+  loadStartupSnap() {
+    try {
+      return JSON.parse(fs.readFileSync(STARTUP_SNAP_FILE, "utf8"));
+    } catch {
+      return {};
+    }
+  }
+
+  saveStartupSnap() {
+    try {
+      fs.writeFileSync(STARTUP_SNAP_FILE, JSON.stringify(this.startupSnap, null, 2));
+    } catch {
+      /* không chặn */
+    }
+  }
+
+  loadHold() {
+    try {
+      const raw = JSON.parse(fs.readFileSync(HOLD_FILE, "utf8"));
+      return (raw.paths ?? []).filter((e) => e?.path && e.enforce !== false);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Watcher 5 — GIỮ NGUYÊN cách ly.
+   *
+   * Cách ly một lần là chưa đủ. Ngày 23/09/2026, sau khi máy reboot, iCloud đã đồng bộ ngược
+   * và trả lại exec bit cho `SystemUpdater.app/Contents/MacOS/App` trên Desktop. Vòng này
+   * kiểm tra định kỳ rồi siết lại, và báo động để biết containment đang bị phá.
+   */
+  async checkHold() {
+    const everyMs = this.cfg.hold?.everyMs ?? 300000;
+    if (Date.now() - this.lastHoldAt < everyMs) return [];
+    this.lastHoldAt = Date.now();
+
+    const acted = [];
+    for (const entry of this.loadHold()) {
+      if (!fs.existsSync(entry.path)) continue;
+      const execs = findExecutables(entry.path);
+      const apps = findAppBundles(entry.path);
+      const xattr = readQuarantineXattr(entry.path);
+      if (!execs.length && !apps.length && xattr) continue;
+
+      const reasons = [];
+      if (execs.length) reasons.push(`exec bit quay lại trên ${execs.length} file (${execs.slice(0, 3).join(", ")})`);
+      if (apps.length) reasons.push(`bundle .app chưa vô hiệu: ${apps.slice(0, 3).join(", ")}`);
+      if (!xattr) reasons.push("xattr cách ly đã mất");
+
+      const n = neutralize(entry.path);
+      const record = {
+        ts: nowIso(),
+        kind: "hold-reassert",
+        target: entry.path,
+        severity: "hard",
+        mode: this.cfg.mode,
+        reasons,
+        actions: [`neutralize chmod=${n.chmod} xattr=${n.xattr} renamed=${n.renamed.length}`],
+      };
+      record.alert = await this.alert(
+        `🔒 MAC-SELFDEFENSE — SIẾT LẠI CÁCH LY\nMáy: ${os.hostname()}\n` +
+          `Đích: ${entry.path}\nLý do: ${reasons.join(" | ")}\n` +
+          `Hành động: gỡ exec bit + gắn lại xattr` +
+          (n.renamed.length ? ` + đổi tên ${n.renamed.length} bundle` : "") +
+          `\n\nLưu ý: iCloud đang đồng bộ ngược vào Desktop — nên xoá hẳn khỏi iCloud.`,
+        { key: keyOf(`hold:${entry.path}`) },
+      );
+      try {
+        fs.appendFileSync(path.join(STATE_DIR, "incidents.jsonl"), `${JSON.stringify(record)}\n`);
+      } catch {
+        /* bỏ qua */
+      }
+      this.incidents.push(record);
+      this.log({ level: "warn", event: "act", ...record });
+      acted.push(record);
+    }
+    return acted;
+  }
+
+  /**
+   * Watcher 4 — bề mặt khởi động ngoài launchd: shell rc, crontab, login items.
+   *
+   * Với file cấu hình shell thì KHÔNG tự sửa: vá sai `.zshrc` là phá luôn terminal của chủ
+   * dự án. Tín hiệu cứng ở đây ⇒ báo động mức cao để người xử lý.
+   */
+  async checkStartup() {
+    if (!this.cfg.startup?.enabled) return [];
+    const everyMs = this.cfg.startup?.everyMs ?? 60000;
+    if (Date.now() - this.lastStartupAt < everyMs) return [];
+    this.lastStartupAt = Date.now();
+
+    const changed = [];
+
+    for (const raw of this.cfg.startup.paths ?? DEFAULT_STARTUP_PATHS) {
+      const p = expandHome(raw);
+      let text;
+      try {
+        text = fs.readFileSync(p, "utf8");
+      } catch {
+        continue;
+      }
+      const key = `rc:${p}`;
+      const h = keyOf(text);
+      const prev = this.startupSnap[key];
+      this.startupSnap[key] = h;
+      if (prev === h) continue;
+      const { severity, reasons } = classifyStartupText(p, text, this.cfg, this.iocs);
+      if (!severity) {
+        this.log({ level: "info", event: "startup-changed", label: p });
+        continue;
+      }
+      changed.push({ label: p, kind: "startup-rc", severity, reasons, text });
+    }
+
+    if (this.cfg.startup?.checkCrontab !== false) {
+      const c = readCrontab();
+      if (c.ok) {
+        const h = keyOf(c.text);
+        const prev = this.startupSnap["cron:user"];
+        this.startupSnap["cron:user"] = h;
+        if (prev !== h) {
+          const { severity, reasons } = classifyStartupText("crontab", c.text, this.cfg, this.iocs);
+          // crontab hiếm khi đổi vì lý do hợp lệ ⇒ luôn báo, kể cả không khớp mẫu nào.
+          changed.push({
+            label: "crontab (user)",
+            kind: "crontab",
+            severity: severity ?? "medium",
+            reasons: reasons.length ? reasons : ["nội dung crontab vừa thay đổi"],
+            text: c.text,
+          });
+        }
+      } else if (!this.cronLogged) {
+        this.log({ level: "warn", event: "crontab-unreadable", error: redact(c.error, this.creds) });
+        this.cronLogged = true;
+      }
+    }
+
+    if (this.cfg.startup?.checkLoginItems !== false) {
+      const li = readLoginItems();
+      if (li.ok) {
+        const text = li.items.join("\n");
+        const h = keyOf(text);
+        const prev = this.startupSnap["login-items"];
+        this.startupSnap["login-items"] = h;
+        if (prev !== h) {
+          const { severity, reasons } = classifyStartupText("login items", text, this.cfg, this.iocs);
+          changed.push({
+            label: "login items",
+            kind: "login-items",
+            severity: severity ?? "medium",
+            reasons: reasons.length ? reasons : [`danh sách đổi: ${li.items.join(", ") || "(trống)"}`],
+            text,
+          });
+        }
+      } else if (!this.loginLogged) {
+        this.log({ level: "info", event: "login-items-unreadable", error: redact(li.error, this.creds) });
+        this.loginLogged = true;
+      }
+    }
+
+    this.saveStartupSnap();
+
+    const acted = [];
+    for (const c of changed) {
+      const hard = c.severity === "hard";
+      const msg =
+        `${hard ? "🚨" : "⚠️"} MAC-SELFDEFENSE — BỀ MẶT KHỞI ĐỘNG THAY ĐỔI\n` +
+        `Máy: ${os.hostname()}\nVị trí: ${c.label}\nLý do: ${c.reasons.join(" | ")}\n` +
+        (hard
+          ? "\nĐây là tín hiệu CỨNG — cần kiểm tra tay; cơ chế KHÔNG tự sửa file cấu hình shell.\n"
+          : "\n") +
+        `\n--- nội dung ---\n${c.text.split("\n").slice(0, 10).join("\n")}`;
+
+      if (hard) {
+        const record = {
+          ts: nowIso(),
+          kind: c.kind,
+          target: c.label,
+          severity: "hard",
+          mode: this.cfg.mode,
+          reasons: c.reasons,
+          actions: ["báo động (không tự sửa file cấu hình shell)"],
+        };
+        record.alert = await this.alert(msg, { key: keyOf(`${c.kind}:${c.label}:${c.reasons.join()}`) });
+        try {
+          fs.appendFileSync(path.join(STATE_DIR, "incidents.jsonl"), `${JSON.stringify(record)}\n`);
+        } catch {
+          /* bỏ qua */
+        }
+        this.incidents.push(record);
+        this.log({ level: "warn", event: "act", ...record });
+        acted.push(record);
+      } else {
+        await this.alert(msg);
+      }
+    }
+    return acted;
+  }
+
   /**
    * Watcher 3 — quyền nhạy cảm vừa được yêu cầu/cấp.
    *
@@ -477,8 +699,10 @@ export class SelfDefense {
     this.tickCount += 1;
     const acted = [];
     acted.push(...(await this.checkPersistence()));
+    acted.push(...(await this.checkStartup()));
     acted.push(...(await this.checkProcesses()));
     acted.push(...(await this.checkTcc()));
+    acted.push(...(await this.checkHold()));
     this.heartbeat({ incidents: this.incidents.length });
     return acted;
   }
@@ -550,6 +774,8 @@ function usage() {
       "  once                chạy 1 vòng rồi thoát",
       "  status              in cấu hình + heartbeat + số sự cố",
       "  lock <path>         khoá + cách ly thủ công một đường dẫn",
+      "  hold <path>         thêm vào danh sách cách ly phải GIỮ NGUYÊN",
+      "  hold --list         xem danh sách đang giữ",
       "  test-alert          gửi thử 1 tin Telegram",
       "  watchdog            báo động nếu daemon đã chết",
       "",
@@ -614,6 +840,36 @@ async function main() {
         reasons: ["khoá thủ công theo yêu cầu chủ dự án"],
       });
       process.stdout.write(`${JSON.stringify(rec, null, 2)}\n`);
+      return;
+    }
+    case "hold": {
+      const arg = rest[0];
+      if (!arg || arg === "--list") {
+        process.stdout.write(`${JSON.stringify(sd.loadHold(), null, 2)}\n`);
+        return;
+      }
+      const target = path.resolve(expandHome(arg));
+      let raw = { paths: [] };
+      try {
+        raw = JSON.parse(fs.readFileSync(HOLD_FILE, "utf8"));
+      } catch {
+        /* file mới */
+      }
+      raw.paths = raw.paths ?? [];
+      if (raw.paths.some((e) => e.path === target)) {
+        process.stdout.write(`đã có trong danh sách giữ: ${target}\n`);
+        return;
+      }
+      raw.paths.push({
+        path: target,
+        reason: "thêm tay bằng lệnh hold",
+        since: nowIso(),
+        enforce: true,
+      });
+      fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(HOLD_FILE, JSON.stringify(raw, null, 2));
+      const n = neutralize(target);
+      process.stdout.write(`đã giữ ${target} (neutralize chmod=${n.chmod} xattr=${n.xattr} renamed=${n.renamed.length})\n`);
       return;
     }
     case "test-alert": {
