@@ -475,6 +475,20 @@ struct ContentViewMac: View {
             if let lastError = vpnManager.lastError, !lastError.isEmpty {
                 diagRow(title: languageStore.t(.message), value: lastError, valueColor: VPNThemeMac.secondaryLabel)
             }
+            // A10 §2g — số live của đường đang chạy (KHÔNG thêm thẻ mới, dùng thẻ Diagnostics có
+            // sẵn). Tunnel chưa phục vụ ⇒ `—`, không hiện `0` (§2g luật 1).
+            if let stale = vpnManager.extensionStaleWarning {
+                // Cảnh báo rõ: hệ thống đang chạy extension KHÁC bản với app này (macOS phân giải
+                // theo LaunchServices nên có thể dùng lại appex của một bản VPNFlow cũ).
+                let appBuild = "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")/"
+                    + "\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")"
+                Text(String(format: languageStore.t(.extensionStale), stale, appBuild))
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Divider().overlay(VPNThemeMac.cardStroke)
+            liveDiagnosticsRows
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -496,6 +510,103 @@ struct ContentViewMac: View {
                 .font(.subheadline.monospaced())
                 .foregroundStyle(valueColor)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+
+    // MARK: - A10 §2g: số live của đường đang chạy
+
+    /// Các dòng bắt buộc của §2g — **bê nguyên thứ tự + cách hiển thị của iOS**
+    /// (`iOS/PrivateVPN/ContentView.swift` `liveDiagnosticsRows`) để hai nền tảng nhìn giống nhau.
+    ///
+    /// Nguồn số: extension lấy mẫu mỗi 1 s, app đọc lại qua `sendProviderMessage`
+    /// (`VPNManagerMac.probeProviderDiagnostics`, nhịp 2 s) — KHÔNG đo thêm, không thêm pin.
+    @ViewBuilder
+    private var liveDiagnosticsRows: some View {
+        let report = vpnManager.liveDiagnostics
+        diagRow(
+            title: languageStore.t(.diagDown),
+            value: RampStatus.formatRate(report?.downKbps),
+            valueColor: VPNThemeMac.label
+        )
+        diagRow(
+            title: languageStore.t(.diagUp),
+            value: RampStatus.formatRate(report?.upKbps),
+            valueColor: VPNThemeMac.label
+        )
+        diagRow(
+            title: languageStore.t(.diagObserved),
+            value: RampStatus.formatRate(report?.observedKbps),
+            valueColor: VPNThemeMac.secondaryLabel
+        )
+        diagRow(
+            title: languageStore.t(.diagDeclared),
+            value: declaredText(report),
+            valueColor: VPNThemeMac.secondaryLabel
+        )
+        diagRow(
+            title: languageStore.t(.diagMore),
+            value: moreText(report),
+            valueColor: report?.atMax == true ? VPNThemeMac.label : VPNThemeMac.secondaryLabel
+        )
+        if report?.atMax == true {
+            diagRow(
+                title: languageStore.t(.diagAtMax),
+                value: "✓",
+                valueColor: VPNThemeMac.label
+            )
+        }
+        diagRow(
+            title: languageStore.t(.diagPath),
+            value: pathText(report),
+            valueColor: VPNThemeMac.secondaryLabel
+        )
+        diagRow(
+            title: languageStore.t(.diagStable),
+            value: RampStatus.formatRate(report?.stableKbps),
+            valueColor: VPNThemeMac.secondaryLabel
+        )
+        // §2h luật 5 — loss% + RTT. macOS KHÔNG có nguồn số này: framework hysteria chỉ mở
+        // `MobileConnect/MobileServe/MobileStop` (không có API loss/RTT của QUIC), và socket của
+        // extension không đi qua tunnel nên không probe được như Android ⇒ hiện `—`, KHÔNG bịa.
+        // Nhãn ghi "(QUIC)" để nói rõ đang thiếu dữ liệu gì.
+        diagRow(
+            title: languageStore.t(.diagLoss),
+            value: "—",
+            valueColor: VPNThemeMac.secondaryLabel
+        )
+        diagRow(
+            title: languageStore.t(.diagRTT),
+            value: "—",
+            valueColor: VPNThemeMac.secondaryLabel
+        )
+    }
+
+    /// "Khai báo hiện tại" — số Brutal CC đang khai, hai chiều (↓/↑).
+    private func declaredText(_ report: TunnelStatusReport?) -> String {
+        guard let report else { return "—" }
+        let down = RampStatus.formatRate(report.declaredDownKbps)
+        let up = RampStatus.formatRate(report.declaredUpKbps)
+        guard down != "—" || up != "—" else { return "—" }
+        return "↓ \(down) / ↑ \(up)"
+    }
+
+    /// "Khai báo còn lên được" = `+X%`; đã tối đa ⇒ nói thẳng "Đã tối đa ở thời điểm này".
+    private func moreText(_ report: TunnelStatusReport?) -> String {
+        guard let report, report.serving == true else { return "—" }
+        if report.atMax == true { return languageStore.t(.diagAtMax) }
+        if let more = report.morePercent { return "+\(more)%" }
+        return "—"
+    }
+
+    /// "Đường đang dùng" = transport + node.
+    private func pathText(_ report: TunnelStatusReport?) -> String {
+        guard let report else { return "—" }
+        let node = report.node.map { " · \($0)" } ?? ""
+        switch report.transport {
+        case "ws-relay": return "Cầu WS\(node)"
+        case "relay": return "TCP relay\(node)"
+        case "direct": return "Trực tiếp QUIC\(node)"
+        default: return "\(report.transport)\(node)"
         }
     }
 
