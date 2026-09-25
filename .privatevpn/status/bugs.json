@@ -102,9 +102,27 @@
       ],
       "next_steps": "Sửa 1 ký tự trong chuỗi Swift: (\\\\(code)) → (\\(code))",
       "blocked_by": "File thuộc session Mac đang sửa (working tree có thay đổi chưa commit) — không sửa chồng"
+    },
+    {
+      "id": "BUG-IOS-FAILOVER-EXHAUSTED-001",
+      "title": "Hết ứng viên đường (đủ 3 lần đổi/phiên) mà chiều về vẫn chết ⇒ app GIỮ tunnel hỏng ~7 phút rồi mới tự gỡ",
+      "area": "ios + macos (lõi tunnel chung)",
+      "severity": "high",
+      "reported": "2026-09-26",
+      "status": "open",
+      "impact": "Sau khi RelayFailoverWatch dùng hết trần 3 lần đổi đường/phiên, nếu đường mới VẪN chết chiều về thì app không còn cách đổi nữa và giữ nguyên tunnel hỏng: khách thấy 'Connected mà không có mạng' suốt ~7 phút cho tới khi lưới an toàn tự gỡ; khách không được báo gì.",
+      "evidence": [
+        "iPad, phiên 26/09 01:20:29→01:50:16 (1787 s), bản CÓ RelayFailoverWatch: cổng chấm 66 khoảng 5 s liên tiếp máy gửi 3079 gói mà Go→packetFlow đứng ở 2375 gói",
+        "01:44:28.481 và 01:47:20.329: 'tự phục hồi: 2 lần dựng lại vẫn 0 gói VỀ nhưng hết ứng viên đường (đã đổi đủ 3 lần trong phiên) — GIỮ tunnel của khách, nhịp sau thử lại, KHÔNG xoay vòng vô hạn'",
+        "sau đó vẫn dựng lại vô ích 4 lần nữa (01:44:57, 01:46:44, 01:47:35, 01:48:54) — không lần nào đổi được đường",
+        "01:50:16.765 'QUYẾT ĐỊNH TỰ GỠ tunnel sau 145.1s — không tiến triển 144s (strike 3/2)' + wsOpen=false",
+        "cổng còn bắt: WATCHDOG CÂM (0 nhịp tim trong 146 s cuối) + 'PHIÊN DỪNG GIỮA LÚC DỰNG LẠI TRANSPORT' (nghi đông cứng ở lần dựng lại cuối)"
+      ],
+      "next_steps": "Chờ chủ dự án chốt hành vi khi hết ứng viên: (a) teardown SỚM + báo khách (trả mạng lại ngay, lần Connect sau tự nạp lại 3 lượt); (b) cooldown rồi nạp lại trần (vd sau 5–10 phút 0 gói về); (c) nạp lại trần khi ĐỔI MẠNG thật; (d) tăng trần/xoay vòng có kiểm soát. Kèm: tìm nguyên nhân watchdog câm ở đoạn cuối chuỗi phục hồi",
+      "blocked_by": "Chờ chủ dự án chốt hành vi (a–d); session Mac bị sandbox chặn ghi vào /Volumes/BIWIN nên chưa sửa/commit được"
     }
   ],
   "regressions": [],
   "resolved": [],
-  "updated": "2026-09-25"
+  "updated": "2026-09-26"
 }
