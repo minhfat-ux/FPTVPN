@@ -58,6 +58,15 @@ final class WSRelayClient: @unchecked Sendable {
     /// `wireguard-go/device/peer.go:128`). Mốc "link đứt lúc t=+Ns" chỉ link mới biết.
     var onLinkLost: (@Sendable (String) -> Void)?
 
+    /// Gọi khi link WebSocket **MỞ LẠI sau khi đã đứt** (lần mở ĐẦU của phiên KHÔNG tính).
+    ///
+    /// Vì sao cần callback riêng: WS chỉ đứt rồi mở lại khi ĐƯỜNG NỀN đổi (hoặc mạng chập chờn)
+    /// — đây là bằng chứng TỨC THỜI mạnh nhất mà tầng trên có, trong khi nhịp lấy mẫu băng thông
+    /// có thể đã ngừng vì `bandwidthBytes == nil`. Sự cố thật 02:21 iPhone 1.4.5/34: chỉ 2 mẫu
+    /// `bw: sample` rồi im suốt 3 phút, link WS đứt 02:21:37 rồi mở lại 02:21:39, **không** có
+    /// dòng `bw: net đổi giữa phiên` nào ⇒ không dựng lại transport ⇒ tốc độ còn 0–550 kbps.
+    var onLinkReopened: (@Sendable () -> Void)?
+
     /// Guards every field below: the async loops and the link callbacks all touch them.
     private let lock = NSLock()
     private var running = false
@@ -384,6 +393,21 @@ final class WSRelayClient: @unchecked Sendable {
         if self.link === link { open = true; openedInThisAttempt = true }
         lock.unlock()
         note("handshake ok — connected to \(url.absoluteString)")
+        notifyLinkReopened()
+    }
+
+    /// Báo tầng trên khi link MỞ LẠI sau khi đã đứt.
+    ///
+    /// Điều kiện `linkLossNotified`: lần mở ĐẦU của phiên không phải "mở lại" (lúc đó chưa có
+    /// gì đứt) nên không báo — tránh một lần đánh giá/dựng lại vô ích ngay sau khi khách nối.
+    /// Sau lần đứt đầu tiên thì mọi lần mở đều báo; tầng trên tự chặn bằng cooldown + lọc
+    /// "đổi mạng giả" (`RampStatus.NetworkChangePolicy`).
+    private func notifyLinkReopened() {
+        lock.lock()
+        guard linkLossNotified else { lock.unlock(); return }
+        let callback = onLinkReopened
+        lock.unlock()
+        callback?()
     }
 
     private func noteLinkClosed(_ link: RelayLink, reason: String) {
