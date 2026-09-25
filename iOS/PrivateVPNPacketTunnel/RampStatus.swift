@@ -570,6 +570,462 @@ enum RampStatus {
         /// tắt tự-áp cho hết phiên còn hơn để khách mất mạng vì một lần "tối ưu".
         static func shouldRollback(progressed: Bool) -> Bool { !progressed }
     }
+
+    // MARK: - 25/09/2026 — NẤC TĨNH THEO LOẠI MẠNG, ĐO TRỪ BẮT TAY, KHỞI ĐIỂM THẬN TRỌNG
+
+    /// Nấc tĩnh theo LOẠI MẠNG đang dùng — đúng cách Android chọn
+    /// (`HysteriaVpnService.refreshMeteredState`: `val staticUp = if (metered) MOBILE_UP_KBPS else HY_UP_KBPS`).
+    ///
+    /// Vì sao iOS phải có: trước 25/09/2026 iOS truyền 30/100 Mbps cho **mọi** mạng, nên máy nằm
+    /// trên 4G vẫn khai số Wi-Fi. Server bật `ignoreClientBandwidth` ⇒ số khai **không** bóp chiều
+    /// tải xuống, nó chỉ điều tiết chiều LÊN của client ⇒ khai vống chiều lên là hàng đợi phình và
+    /// mất gói (ca thật: iOS khai `up=13374` suy từ `down × 30%`).
+    enum NetworkTier {
+        /// Wi-Fi / đường không tính lưu lượng — Android `Config.HY_UP_KBPS`/`HY_DOWN_KBPS`,
+        /// đúng `HysteriaDefaults` (một nguồn sự thật với app).
+        static let wifiUpKbps = 30_000
+        static let wifiDownKbps = 100_000
+        /// Mạng DI ĐỘNG — Android `Config.MOBILE_UP_KBPS`/`MOBILE_DOWN_KBPS`.
+        static let mobileUpKbps = 8_000
+        static let mobileDownKbps = 12_000
+
+        /// `cell` (đúng nhãn Android dùng: `label.contains("cell")`) ⇒ nấc metered; `wired`/`other`
+        /// ⇒ nấc Wi-Fi (không phải mạng di động, và đây cũng là nấc cũ nên không regress).
+        static func upKbps(kind: String) -> Int { kind == "cell" ? mobileUpKbps : wifiUpKbps }
+        static func downKbps(kind: String) -> Int { kind == "cell" ? mobileDownKbps : wifiDownKbps }
+
+        /// Chiều LÊN suy từ chiều XUỐNG theo tỉ lệ nấc tĩnh **của loại mạng đang dùng**, kẹp
+        /// `[floorUpKbps, nấc tĩnh chiều lên]` — bản iOS của Android
+        /// `HysteriaVpnService.ratioUpFrom` (`if (meteredNow) MOBILE_UP_KBPS else HY_UP_KBPS`).
+        ///
+        /// Vì sao cần: các bước ramp trong phiên trước đây luôn dùng 30/100 của Wi-Fi, nên máy
+        /// nằm trên 4G có thể bị khai chiều lên 12+ Mbps trong khi nấc di động là 8 Mbps.
+        static func upKbps(forDownKbps down: Int, kind: String) -> Int {
+            let ratioUp = upKbps(kind: kind)
+            let ratioDown = max(downKbps(kind: kind), 1)
+            let scaled = down * ratioUp / ratioDown
+            return min(max(scaled, BandwidthPolicy.floorUpKbps),
+                       max(ratioUp, BandwidthPolicy.floorUpKbps))
+        }
+    }
+
+    /// Luật chọn số của phép đo TRƯỚC khi khai (A8 §2e) — hàm THUẦN, có test.
+    ///
+    /// Chủ dự án chốt 25/09/2026 sau log THẬT trên iPad (mạng Wi-Fi khách sạn):
+    ///   `bw: DO MANG THUC TE … = 5409kbps (mat 2218ms)` trong khi phần ĐỌC thật (sau bắt tay)
+    ///   là `38272kbps (313ms)` — lệch **7×**. Con số 5409 là "1,5 MB chia cho CẢ lúc đang bắt tay
+    ///   DNS/TCP/TLS", không phải goodput; khai theo nó là Brutal tự pace chậm gấp 7 lần.
+    ///
+    /// Luật nay (**ĐO GOODPUT TRỪ BẮT TAY**; sửa 25/09/2026 theo review của agent chính):
+    ///   1. bắt tay ≥ `useReadWindowHandshakeMs` (200 ms) ⇒ **LUÔN dùng số của PHẦN ĐỌC** (đã trừ
+    ///      bắt tay), **kể cả khi bắt tay chiếm 86% tổng thời gian** — bắt tay là CHI PHÍ ĐỘ TRỄ
+    ///      CỐ ĐỊNH, không phải bằng chứng về băng thông ⇒ không được vứt goodput của phần đọc;
+    ///   2. **CHỈ bỏ mẫu khi chính PHẦN ĐỌC không đủ dày để tin**: thời gian đọc < `minReadMs`
+    ///      (200 ms — cửa sổ quá ngắn, bị chi phối bởi jitter lập lịch + burst đầu) **HOẶC** dữ
+    ///      liệu đọc được < `minReadBytes` (200 KB — quá ít byte để gọi là một phép đo băng thông).
+    ///      Bỏ mẫu ⇒ coi như đo hỏng: thử nguồn kế tiếp, hết nguồn ⇒ 0 ⇒ lùi về bộ nhớ / khởi điểm
+    ///      thận trọng của `StartupDeclaration`;
+    ///   3. bắt tay dưới ngưỡng (1) ⇒ giữ nguyên cách tính kiểu Android (chênh lệch khi đó < 10%,
+    ///      dưới mức nhiễu của phép đo 2,5 s nên không cần đổi).
+    enum PreMeasurePolicy {
+
+        /// Bắt tay từ mức này trở lên mới đáng kể (≥ 10% ngân sách đo 2,5 s) ⇒ chuyển sang số của
+        /// phần đọc; dưới mức này giữ nguyên cách tính cũ cho khỏi lệch log với Android vô ích.
+        static let useReadWindowHandshakeMs = 200
+        /// Cửa sổ đọc tối thiểu để tin được con số goodput.
+        ///
+        /// Vì sao 200 ms: dưới mức đó cửa sổ bị chi phối bởi jitter lập lịch callback (~10–20 ms)
+        /// và pha burst/slow-start của TCP ⇒ `byte × 8 / giây` không còn là throughput đo được.
+        /// Hệ quả đã biết: đường RẤT nhanh (đọc hết 1,5 MB trong <200 ms, tức >~60 Mbps) sẽ bị coi
+        /// là mỏng ⇒ phiên đó lùi về bộ nhớ/khởi điểm thận trọng rồi để vòng ramp chứng minh; hạ
+        /// hằng số này là cách DUY NHẤT để nhận cả cửa sổ burst (xem báo cáo bàn giao).
+        static let minReadMs = 200
+        /// Dữ liệu tối thiểu của phần đọc. Trùng `Config.PREMEASURE_MIN_BYTES`/`preMeasureMinBytes`
+        /// = 200 KB của Android (một phép đo băng thông cần tối thiểu chừng này byte).
+        static let minReadBytes = 200_000
+
+        /// Số nào được đem đi KHAI, hoặc bỏ mẫu vì phần đọc quá mỏng.
+        enum Choice: Equatable {
+            /// Số của PHẦN ĐỌC (đã trừ bắt tay) — số ĐEM ĐI KHAI.
+            case readWindow(Int)
+            /// Số kiểu Android (tính cả bắt tay) — bắt tay không đáng kể nên vẫn là số ĐEM ĐI KHAI.
+            case wholeRequest(Int)
+            /// BỎ mẫu; chuỗi là lý do để in log (`vì sao`).
+            case reject(String)
+        }
+
+        /// `readBytes` = số byte **thân** tải về trong cửa sổ đọc (`URLSession` chỉ giao body sau
+        /// khi có header nên toàn bộ số này nằm trong cửa sổ đọc).
+        static func choose(
+            kbpsWithHandshake: Int,
+            kbpsWithoutHandshake: Int,
+            readBytes: Int,
+            totalMs: Int,
+            readMs: Int
+        ) -> Choice {
+            let handshakeMs = max(totalMs - readMs, 0)
+            guard handshakeMs >= useReadWindowHandshakeMs else {
+                return .wholeRequest(kbpsWithHandshake)
+            }
+            if readMs < minReadMs {
+                return .reject(
+                    "phần đọc quá mỏng: \(readMs)ms < \(minReadMs)ms "
+                        + "(cửa sổ ngắn bị chi phối bởi jitter/burst)"
+                )
+            }
+            if readBytes < minReadBytes {
+                return .reject(
+                    "phần đọc quá ít dữ liệu: \(readBytes)B < \(minReadBytes)B"
+                )
+            }
+            return .readWindow(kbpsWithoutHandshake)
+        }
+    }
+
+    /// Chốt số khai KHỞI ĐIỂM của một phiên iOS (A8 §2e) — hàm THUẦN, có test.
+    ///
+    /// Vì sao KHÔNG nhét luật này vào `BandwidthPolicy.decide`: `decide` là bản port **1-1** từ
+    /// Android và có test đối chiếu từng case (`BandwidthPolicyTest.kt`) — sửa nó là phá parity.
+    /// Mọi thứ RIÊNG của iOS nằm ở đây, đúng chỗ gọi `SessionState.init`.
+    ///
+    /// Chủ dự án chốt 25/09/2026:
+    ///   1. **SỐ ĐO TƯƠI THẮNG BỘ NHỚ**: có `preMeasure` > 0 ⇒ khai = 85% × số đo, kẹp trần theo
+    ///      loại mạng + sàn; KHÔNG để số nhớ kéo lên — kể cả khi số đo rơi vào dải 95–150% mà
+    ///      `decide` vốn giữ nguyên số nhớ ⇒ mạng mới thừa hưởng số của mạng cũ;
+    ///   2. **ĐO HỎNG ⇒ bộ nhớ**, nhưng (a) kẹp trần theo NẤC TĨNH của loại mạng đang dùng
+    ///      (`NetworkTier` ⇒ không bao giờ khai số Wi-Fi lên 4G) và (b) kẹp `best` (đỉnh mọi thời
+    ///      đại của khoá mạng) ≤ 1,5 × số đo đã nhớ — không để một đỉnh cũ kéo số khai vượt xa
+    ///      phép đo gần nhất;
+    ///   3. **MẠNG MỚI + ĐO HỎNG ⇒ khởi điểm THẬN TRỌNG** ở nấc metered 8/12 Mbps (không mở ra ở
+    ///      100 Mbps), rồi để vòng ramp leo lên ở các phiên sau;
+    ///   4. **CHIỀU LÊN** không bao giờ vượt nấc tĩnh của loại mạng, và khi có số đo chiều lên thì
+    ///      còn bị kẹp `≤ 85% × số đo lên` (hiện iOS chưa đo được chiều lên ⇒ chỗ gọi truyền 0).
+    ///      Cùng luật đó áp cho CÁC BƯỚC RAMP trong phiên qua
+    ///      `NetworkTier.upKbps(forDownKbps:kind:)` (`commitRampPlan`/`noteRawLine`).
+    enum StartupDeclaration {
+
+        /// Lý do khi khởi điểm ở nấc thận trọng cho mạng mới (in thẳng ra log `reason=`).
+        static let reasonCautious = "cautious-new-network"
+
+        /// Số nhớ (`best`) chỉ được vượt số đo đã nhớ ngần này % — tức kẹp `số nhớ ≤ 1,5 × số đo`.
+        static let memoryCapPctOfMeasured = 150
+
+        struct Result: Equatable {
+            var upKbps: Int
+            var downKbps: Int
+            /// `profile` | `memory` | `clamp` | `cautious-new-network` (trùng chuỗi Android khi có).
+            var reason: String
+            /// Trần XUỐNG hiệu lực đã dùng (kbps) — in log `ceil=`.
+            var ceilingDownKbps: Int
+            /// Nấc tĩnh của loại mạng đang dùng (kbps) — in log để kiểm chứng nhánh `cell`.
+            var tierUpKbps: Int
+            var tierDownKbps: Int
+        }
+
+        static func decide(
+            freshMeasuredDownKbps: Int,
+            freshMeasuredUpKbps: Int = 0,
+            hadMemory: Bool,
+            rememberedMeasuredKbps: Int = 0,
+            rememberedDeclaredKbps: Int = 0,
+            rememberedPreviousMeasuredKbps: Int = 0,
+            rememberedBestKbps: Int = 0,
+            networkKind: String,
+            ceilingDownKbps: Int = 0
+        ) -> Result {
+            let tierUp = NetworkTier.upKbps(kind: networkKind)
+            let tierDown = NetworkTier.downKbps(kind: networkKind)
+            var reason = BandwidthPolicy.reasonProfile
+            var down = tierDown
+            var up = tierUp
+            if freshMeasuredDownKbps > 0 {
+                // (1) SỐ ĐO TƯƠI THẮNG: số khai là f(số đo), KHÔNG phải f(bộ nhớ).
+                down = freshMeasuredDownKbps * RampStatus.declareRatioPct / 100
+                up = down * tierUp / max(tierDown, 1)
+                reason = BandwidthPolicy.reasonMemory
+            } else if hadMemory {
+                // (2) Đo hỏng ⇒ bộ nhớ. `best` bị kẹp ≤1,5× số đo đã nhớ NGAY TRƯỚC khi vào
+                // `decide` — nhờ vậy `decide` vẫn là bản port 1-1 nguyên vẹn (có test).
+                var best = rememberedBestKbps
+                if rememberedMeasuredKbps > 0 {
+                    best = min(best, rememberedMeasuredKbps * memoryCapPctOfMeasured / 100)
+                }
+                let decision = BandwidthPolicy.decide(
+                    rememberedMeasuredKbps: rememberedMeasuredKbps,
+                    rememberedDeclaredKbps: rememberedDeclaredKbps,
+                    staticUpKbps: tierUp,
+                    staticDownKbps: tierDown,
+                    ceilingDownKbps: ceilingDownKbps,
+                    previousMeasuredKbps: rememberedPreviousMeasuredKbps,
+                    bestKbps: best
+                )
+                down = decision.downKbps
+                up = decision.upKbps
+                reason = decision.reason
+            } else {
+                // (3) Mạng mới + đo hỏng ⇒ nấc metered 8/12 của Android.
+                down = min(tierDown, NetworkTier.mobileDownKbps)
+                up = min(tierUp, NetworkTier.mobileUpKbps)
+                reason = reasonCautious
+            }
+            // (4) Kẹp trần theo NẤC TĨNH của loại mạng + sàn nhỏ dùng chung. Trần vật lý vẫn được
+            // tôn trọng khi có (iOS hiện không đọc được link speed ⇒ chỗ gọi truyền 0).
+            var clamped = false
+            let physical = ceilingDownKbps > 0 ? ceilingDownKbps : BandwidthPolicy.hardCeilKbps
+            let ceilDown = min(physical, tierDown)
+            if down > ceilDown { down = ceilDown; clamped = true }
+            if down < BandwidthPolicy.floorDownKbps, BandwidthPolicy.floorDownKbps <= ceilDown {
+                down = BandwidthPolicy.floorDownKbps
+                clamped = true
+            }
+            var ceilUp = tierUp
+            if freshMeasuredUpKbps > 0 {
+                ceilUp = min(ceilUp, freshMeasuredUpKbps * RampStatus.declareRatioPct / 100)
+            }
+            if up > ceilUp { up = ceilUp; clamped = true }
+            if up < BandwidthPolicy.floorUpKbps, BandwidthPolicy.floorUpKbps <= ceilUp {
+                up = BandwidthPolicy.floorUpKbps
+                clamped = true
+            }
+            if clamped { reason = BandwidthPolicy.reasonClamp }
+            return Result(
+                upKbps: up,
+                downKbps: down,
+                reason: reason,
+                ceilingDownKbps: ceilDown,
+                tierUpKbps: tierUp,
+                tierDownKbps: tierDown
+            )
+        }
+    }
+
+    // MARK: - 25/09/2026 — ĐỔI MẠNG GIỮA PHIÊN ⇒ dựng lại transport NGAY (parity Android)
+
+    /// Luật quyết định của đường "ĐỔI MẠNG ⇒ dựng lại transport NGAY", parity Android
+    /// (`HysteriaVpnService`: `NetworkMonitor` bật `rebuildRequested`, vòng chạy đọc cờ rồi
+    /// `rebuild: transport torn down ($how) -> reconnecting on the new network`).
+    ///
+    /// Vì sao phải là đường RIÊNG (không dùng `BandwidthControl.allowsTransportRebuild`): đường
+    /// "tự-áp số khai trong phiên" đang TẮT có chủ đích — bật nó ở build 29 làm tunnel tự ngắt rồi
+    /// KHÔNG nối lại được trên máy thật. Đổi mạng là sự kiện KHÁC: đường cũ đã chết nên buộc phải
+    /// nối lại trên đường mới.
+    ///
+    /// Hàm THUẦN (không I/O) để harness test được: xem `scripts/ios-pure-logic-tests/main.swift`.
+    enum NetworkChangePolicy {
+
+        /// Hai lần dựng lại vì đổi mạng phải cách nhau ít nhất ngần này.
+        ///
+        /// Vì sao 10 s: mỗi lần dựng lại là một lần khách thấy khựng + một cầu mới, nên khoá mạng
+        /// NHẤP NHÁY (A→B→A khi sóng yếu / Wi-Fi chập chờn) không được biến thành vòng lặp dựng
+        /// lại. 10 s đủ để một lần nối lại hoàn tất (đo thật: stall ~1 s + kiểm ≤3 s).
+        static let cooldownS: TimeInterval = 10
+
+        /// Khoá mạng của danh tính CHƯA BIẾT (`NetworkIdentity(kind:"other", interface:"unknown")`).
+        ///
+        /// Vì sao phải nhận ra: lúc mở phiên, nếu chưa có interface nào thì danh tính là
+        /// `other|if:unknown` (xem `prepareBandwidthSession`); khi mạng thật hiện ra, khoá đổi sang
+        /// `wifi|if:en0` — đó KHÔNG phải "đổi mạng" mà là danh tính vừa rõ, dựng lại transport chỉ
+        /// tạo khựng vô ích ngay sau khi khách vừa kết nối.
+        static func isPlaceholderKey(_ key: String) -> Bool { key.hasSuffix("|if:unknown") }
+
+        /// Đổi mạng THẬT hay chỉ là khoá cũ được viết cụ thể hơn?
+        ///
+        /// Trả `false` khi (a) khoá cũ là danh tính CHƯA BIẾT, hoặc (b) khoá cũ VẪN nằm trong
+        /// `lookupKeys` của danh tính mới — nghĩa là bản ghi bộ nhớ cũ vẫn được tìm thấy cho mạng
+        /// mới. Ca thật của (b): `wifi|if:en0` → `wifi|router:<MAC>` khi bảng ARP có bản ghi
+        /// router muộn ⇒ CÙNG một mạng, chỉ đổi mức cụ thể của khoá.
+        ///
+        /// **CÙNG hàm này** được provider dùng để quyết định có dựng lại transport hay không
+        /// (`HysteriaPacketTunnelProvider.networkChangeStep`) VÀ `SessionState.sample` dùng để quyết
+        /// định có xoá đỉnh/số đo của mạng cũ hay không (`resetMeasurementForNewNetwork`) — hai nơi
+        /// không bao giờ được lệch nhau.
+        static func isRealChange(previousKey: String, newLookupKeys: [String]) -> Bool {
+            if isPlaceholderKey(previousKey) { return false }
+            return !newLookupKeys.contains(previousKey)
+        }
+
+        /// Được dựng lại NGAY ở nhịp này chưa: có yêu cầu đang chờ, KHÔNG có đường khác đang giữ
+        /// quyền dựng lại (`busy`), và đã qua `cooldownS`.
+        static func canRebuildNow(
+            pending: Bool,
+            sinceLastRebuild: TimeInterval?,
+            busy: Bool
+        ) -> Bool {
+            guard pending, !busy else { return false }
+            if let sinceLastRebuild, sinceLastRebuild < cooldownS { return false }
+            return true
+        }
+    }
+
+    // MARK: - 26/09/2026 — TRẦN CỨNG cho MỌI hàng đợi trên ĐƯỜNG DỮ LIỆU (BUG-IOS-JETSAM-001)
+
+    /// Luật THUẦN: trần cứng + chính sách khi ĐẦY của hàng đợi đường dữ liệu.
+    ///
+    /// Vì sao phải có trần theo **BYTE**, không chỉ theo GÓI: extension iOS bị iOS giết ở trần
+    /// per-process ≈ 51 MB (`JetsamEvent` 25/09/2026 19:09:42, `rpages=3202`). Trần cũ của hàng
+    /// đợi gửi relay là **4096 gói** (`WSRelayClient.maxSendInflight`) ≈ 6 MB payload, nhưng mỗi
+    /// message còn mang theo object + completion + buffer của URLSession ⇒ một hàng đợi đã chiếm
+    /// vài chục MB, quá nửa trần jetsam. Trần theo byte là con số ĐO ĐƯỢC và không phụ thuộc MTU.
+    ///
+    /// Số đo máy thật 25–26/09/2026 (`.ips` + dòng `tài nguyên:`): bộ nhớ leo **theo LƯU LƯỢNG**
+    /// (iPad Netflix: +35,5 MB cho 54,3 MB nhận từ relay ⇒ ~0,65 B mỗi byte; `pendingLink=0` suốt
+    /// phiên; iPhone tải nhẹ 13–14 MB phẳng 12 phút) — nên mọi cấu trúc theo gói/byte phải có trần.
+    enum DataPathQueuePolicy {
+
+        /// Trần SỐ GÓI đang chờ gửi của link WebSocket (pipelined qua `URLSession`).
+        ///
+        /// 512 gói ≈ 384 KB payload ở MTU 1500 — đủ sâu để không tự chặn băng thông (đo thật
+        /// 25/09: phải bỏ cách `await` từng gói vì chỉ đạt 200–320 kbps), nhưng KHÔNG bao giờ là
+        /// hàng đợi vài chục MB như trần 4096 cũ.
+        static let linkMaxPackets = 512
+        /// Trần BYTE của cùng hàng đợi — chặn cả trường hợp gói bị gộp (coalesced) to bất thường.
+        static let linkMaxBytes = 512 * 1024
+        /// Trần SỐ GÓI đệm khi link chưa mở (giữ nguyên như bản cũ: gói QUIC Initial của transport
+        /// mới rơi đúng lúc link đang dựng lại).
+        static let linkDownMaxPackets = 512
+        /// Trần THỜI GIAN đệm: gói nằm quá lâu thì thả (QUIC tự gửi lại, xem PTO).
+        static let linkDownMaxAgeS: TimeInterval = 30
+
+        /// Kết luận khi xin một chỗ trong hàng đợi gửi.
+        enum Admission: Equatable {
+            /// Đã tính vào trần — bên gọi PHẢI gọi `release` khi gửi xong.
+            case accept
+            /// ĐẦY: KHÔNG được bơm tiếp (chờ có kiểm soát) — đã đếm vào `waits`.
+            case backpressure
+            /// Gói không bao giờ lọt trần ⇒ thả CÓ ĐẾM (đã đếm vào `dropped`).
+            case drop
+        }
+
+        /// Số phần tử VƯỢT trần của một hàng đợi FIFO (dùng cho trần số gói đệm).
+        static func overflow(count: Int, maxCount: Int) -> Int {
+            max(0, count - max(1, maxCount))
+        }
+    }
+
+    /// Trần cứng + bộ đếm cho hàng đợi GỬI của link relay. THUẦN LOGIC (không I/O, không khoá)
+    /// nên harness `scripts/ios-pure-logic-tests` test được ĐÚNG chính sách mà `WSRelayClient`
+    /// dùng — không phải bản sao.
+    struct SendBudget: Equatable {
+        let maxPackets: Int
+        let maxBytes: Int
+        /// Số gói ĐANG chờ gửi xong (đã tính vào trần).
+        private(set) var packets = 0
+        /// Số byte ĐANG chờ gửi xong (đã tính vào trần).
+        private(set) var bytes = 0
+        private(set) var accepted = 0
+        /// Số lần hàng đợi ĐẦY ⇒ bên gọi phải CHỜ một gói gửi xong rồi mới nạp tiếp.
+        private(set) var waits = 0
+        private(set) var dropped = 0
+
+        init(
+            maxPackets: Int = DataPathQueuePolicy.linkMaxPackets,
+            maxBytes: Int = DataPathQueuePolicy.linkMaxBytes
+        ) {
+            self.maxPackets = max(1, maxPackets)
+            self.maxBytes = max(1, maxBytes)
+        }
+
+        var isFull: Bool { packets >= maxPackets || bytes >= maxBytes }
+
+        var summary: String { "\(packets)/\(maxPackets) gói \(bytes)/\(maxBytes) B" }
+
+        /// Xin một chỗ cho gói `packetBytes` (xem `Admission`).
+        ///
+        /// Trần là TRẦN CỨNG: kiểm cả `bytes + packetBytes` trước khi nhận, nên bất biến
+        /// `bytes <= maxBytes` và `packets <= maxPackets` luôn đúng (không "vượt một gói").
+        mutating func admit(packetBytes: Int) -> DataPathQueuePolicy.Admission {
+            if packetBytes > maxBytes {
+                dropped += 1
+                return .drop
+            }
+            if packets >= maxPackets || bytes + packetBytes > maxBytes {
+                waits += 1
+                return .backpressure
+            }
+            packets += 1
+            bytes += packetBytes
+            accepted += 1
+            return .accept
+        }
+
+        /// Gói đã gửi xong (hoặc đã bỏ) ⇒ trả chỗ. Kẹp ở 0: completion của URLSession có thể trả
+        /// về SAU khi phiên dừng, bộ đếm âm sẽ làm trần vô hiệu.
+        mutating func release(packetBytes: Int) {
+            packets = max(0, packets - 1)
+            bytes = max(0, bytes - packetBytes)
+        }
+
+        mutating func reset() {
+            packets = 0
+            bytes = 0
+            accepted = 0
+            waits = 0
+            dropped = 0
+        }
+    }
+
+    /// Hàng đợi ĐỆM có TRẦN CỨNG (FIFO, quá trần thì thả CŨ NHẤT) — dùng cho gói đến lúc link
+    /// chưa mở. THUẦN LOGIC.
+    ///
+    /// Vì sao thả cũ nhất mà vẫn phải đệm: gói QUIC Initial của transport MỚI rơi đúng lúc link
+    /// chưa mở; vứt nó thì transport mới không bắt tay được (log thật 24/09: `droppedNoLink=6`,
+    /// `udpFrames` 0,25/s). Gói mới ở ĐUÔI bộ đệm là gói còn giá trị, QUIC tự gửi lại gói cũ.
+    struct BoundedBuffer<Element> {
+        let maxCount: Int
+        private(set) var items: [Element] = []
+        private(set) var appended = 0
+        /// Tổng số phần tử đã bị thả (quá trần HOẶC bị `dropOldest` vì hết TTL).
+        private(set) var dropped = 0
+
+        init(maxCount: Int) { self.maxCount = max(1, maxCount) }
+
+        var count: Int { items.count }
+        var isEmpty: Bool { items.isEmpty }
+
+        /// Thêm một phần tử; trả về số phần tử bị thả vì QUÁ TRẦN (0 khi còn chỗ).
+        @discardableResult
+        mutating func append(_ element: Element) -> Int {
+            appended += 1
+            items.append(element)
+            let over = DataPathQueuePolicy.overflow(count: items.count, maxCount: maxCount)
+            if over > 0 {
+                items.removeFirst(over)
+                dropped += over
+            }
+            return over
+        }
+
+        /// Bỏ phần tử CŨ NHẤT (hết TTL). Trả `nil` khi rỗng; có tính vào `dropped`.
+        @discardableResult
+        mutating func dropOldest() -> Element? {
+            guard !items.isEmpty else { return nil }
+            dropped += 1
+            return items.removeFirst()
+        }
+
+        /// Lấy hết ra để xử lý (hàng đợi rỗng sau lời gọi).
+        mutating func drain() -> [Element] {
+            let out = items
+            items.removeAll()
+            return out
+        }
+
+        /// Đặt lại phần CHƯA xử lý được lên ĐẦU hàng đợi (giữ nguyên thứ tự đến), vẫn tôn trọng
+        /// trần — dùng khi hàng đợi GỬI đã đầy nên chưa xả hết được gói đệm.
+        @discardableResult
+        mutating func requeueFront(_ elements: [Element]) -> Int {
+            guard !elements.isEmpty else { return 0 }
+            items.insert(contentsOf: elements, at: 0)
+            let over = DataPathQueuePolicy.overflow(count: items.count, maxCount: maxCount)
+            if over > 0 {
+                items.removeFirst(over)
+                dropped += over
+            }
+            return over
+        }
+
+        mutating func removeAll() { items.removeAll() }
+    }
 }
 
 // MARK: - Danh tính extension (chống macOS dùng lại appex cũ)

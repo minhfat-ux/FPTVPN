@@ -28,17 +28,15 @@ final class WSRelayClient: @unchecked Sendable {
     /// chưa mở; vứt nó thì QUIC không bắt tay được (`udpFrames` còn 0,25/s, `droppedNoLink=6`
     /// trong log thật) — transport mới coi như chết dù WS vẫn mở.
     /// 512 gói × ≤1500 B ≈ 750 KB: đủ trùm vài giây dựng lại link, vẫn có trần cứng.
-    private static let pendingLinkLimit = 512
+    /// Nguồn sự thật của hai trần này là `RampStatus.DataPathQueuePolicy` (luật THUẦN, có test
+    /// ở `scripts/ios-pure-logic-tests`) — KHÔNG khai lại giá trị ở đây.
+    private static let pendingLinkLimit = RampStatus.DataPathQueuePolicy.linkDownMaxPackets
     /// Trần THỜI GIAN đệm: gói nằm quá lâu thì thả (QUIC tự gửi lại) để bộ đệm không giữ rác.
-    private static let pendingLinkTTL: TimeInterval = 30
+    private static let pendingLinkTTL = RampStatus.DataPathQueuePolicy.linkDownMaxAgeS
     /// Keepalive interval, mirroring the Android bridge's 20s ping interval. A
     /// half-open socket still reports itself as open, and the ping is what notices.
     private static let pingInterval: TimeInterval = 20
     private static let minBackoff: TimeInterval = 1
-    /// Trần số gói chờ trong hàng đợi WS (vượt thì bỏ gói như UDP).
-    /// Trần gói chờ trong hàng đợi WS. 512 gói ≈ 600KB in-flight ⇒ với RTT ~100ms qua
-    /// Cloudflare chỉ đạt ~6 MB/s lý thuyết. Nâng lên 4096 để không tự chặn băng thông.
-    private static let maxSendInflight = 4096
     private static let maxBackoff: TimeInterval = 15
     /// Nhịp log số frame trong 20 giây đầu (mỗi 5s một lần) để chẩn đoán được đường WS.
     private static let frameLogInterval: TimeInterval = 5
@@ -68,8 +66,12 @@ final class WSRelayClient: @unchecked Sendable {
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
     /// Số gói WS đang nằm trong hàng đợi của URLSession (không chờ từng gói).
+    ///
+    /// BUG-IOS-JETSAM-001: bản cũ đếm GÓI với trần **4096** (≈6 MB payload, cộng object +
+    /// completion + buffer của URLSession ⇒ vài chục MB — quá nửa trần jetsam ~51 MB của iOS).
+    /// Nay trần là **số gói + số byte** và lấy từ `RampStatus.SendBudget` (luật thuần, có test).
     /// Dùng OSAllocatedUnfairLock vì NSLock không được gọi trong ngữ cảnh async (Swift 6).
-    private let sendInflight = OSAllocatedUnfairLock(initialState: 0)
+    private let sendBudget = OSAllocatedUnfairLock(initialState: RampStatus.SendBudget())
     private var heartbeatTask: Task<Void, Never>?
     private var frameLogTask: Task<Void, Never>?
 
@@ -79,10 +81,18 @@ final class WSRelayClient: @unchecked Sendable {
     private var receivedBytes = 0
     private var droppedNoLink = 0
     /// H3 — datagram đến lúc CHƯA có link, đang được đệm chờ link mở (mốc thời gian để TTL).
-    private var pendingWhileLinkDown: [(at: Date, data: Data)] = []
-    /// Tổng số gói đã đệm / đã thả vì quá trần — in ra `countersSummary()` để đọc lại được.
-    private var bufferedWhileLinkDown = 0
-    private var droppedPending = 0
+    /// Trần cứng + số gói đã thả nằm trong `RampStatus.BoundedBuffer` (trần theo GÓI, thả CŨ NHẤT).
+    private var pendingWhileLinkDown = RampStatus.BoundedBuffer<(at: Date, data: Data)>(
+        maxCount: WSRelayClient.pendingLinkLimit
+    )
+    /// Datagram nhận từ socket UDP cục bộ (Go → relay) và số đã lấy RA khỏi `AsyncStream`.
+    ///
+    /// Vì sao đếm hai số này: `AsyncStream` với `.bufferingNewest` giữ TỐI ĐA `sendBufferLimit`
+    /// phần tử và **thả gói cũ nhất KHÔNG có API báo** — không đếm thì hàng đợi này là chỗ duy
+    /// nhất trên đường dữ liệu phình/vứt mà log không thấy. Hiệu số (trừ sức chứa của stream)
+    /// là số gói đã bị thả im lặng.
+    private var listenerDatagrams = 0
+    private var streamPopped = 0
     private var pendingLogAt = Date.distantPast
     /// Đã báo "link đứt" cho lượt thử này chưa (mỗi lượt báo đúng một lần).
     private var linkLossNotified = false
@@ -130,7 +140,13 @@ final class WSRelayClient: @unchecked Sendable {
     ///   the same for the whole lifetime of this client, WebSocket reconnects included.
     func start() throws -> UInt16 {
         let localPort = try listener.start { [weak self] datagram in
-            self?.datagramContinuation.yield(datagram)
+            guard let self else { return }
+            // Đếm TRƯỚC khi `yield` (xem `listenerDatagrams`). `noteListenerDatagram` tự nhả khoá
+            // trước khi trả về, nên `yield` bên dưới chạy khi KHÔNG giữ khoá: `yield` có thể đánh
+            // thức ngay task gửi trên CÙNG luồng ⇒ `lock.lock()` lồng nhau ⇒ NSLock không tái nhập
+            // ⇒ chết cứng cả phiên (AGENTS.md §7c).
+            self.noteListenerDatagram()
+            self.datagramContinuation.yield(datagram)
         }
 
         lock.lock()
@@ -160,6 +176,9 @@ final class WSRelayClient: @unchecked Sendable {
         let pendingCount = pendingWhileLinkDown.count
         pendingWhileLinkDown.removeAll()
         lock.unlock()
+        // Trần hàng đợi gửi cũng thuộc phiên này: completion của URLSession có thể trả về muộn,
+        // để nguyên thì bộ đếm của phiên cũ trừ vào phiên mới.
+        sendBudget.withLock { $0.reset() }
         if pendingCount > 0 {
             note("bỏ \(pendingCount) gói còn đệm khi dừng phiên")
         }
@@ -184,31 +203,47 @@ final class WSRelayClient: @unchecked Sendable {
             guard let stream = self?.datagrams else { return }
             for await datagram in stream {
                 guard let self, self.isRunning else { return }
+                self.noteStreamPopped()
                 guard let link = self.currentLink(), link.isOpen else {
                     // H3 (24/09/2026): link chưa mở ⇒ ĐỆM, không vứt. Trước đây gói bắt tay
                     // của transport vừa dựng lại bị bỏ ở đây ⇒ QUIC mới không bao giờ lên.
-                    self.holdWhileLinkDown(datagram)
+                    //
+                    // `autoreleasepool`: luồng của Swift concurrency KHÔNG có pool tự động, mà
+                    // `URLSession` là Objective-C ⇒ object tự động nhả của MỖI gói nằm lại vĩnh
+                    // viễn nếu không có pool. Đây đúng dạng rò "theo LƯU LƯỢNG, không theo thời
+                    // gian" của BUG-IOS-JETSAM-001.
+                    autoreleasepool { self.holdWhileLinkDown(datagram) }
                     continue
                 }
                 // Link đã mở lại: xả gói đệm TRƯỚC gói vừa đọc (thứ tự bắt tay được giữ).
-                self.flushWhileLinkDown(into: link)
+                autoreleasepool { self.flushWhileLinkDown(into: link) }
                 // Không await từng gói: chờ từng gói làm tốc độ tụt còn ~1 gói/RTT
-                // (đo thật: 200–320 kbps). URLSessionWebSocketTask tự xếp hàng, nên ta
-                // chỉ cần chặn khi hàng đợi quá dài (tương đương UDP drop khi nghẽn).
-                let inflight = self.sendInflight.withLock { $0 }
-                if inflight >= WSRelayClient.maxSendInflight {
+                // (đo thật: 200–320 kbps). URLSessionWebSocketTask tự xếp hàng, nên ta chỉ cần
+                // chặn khi hàng đợi quá dài — nhưng TRẦN phải là trần CỨNG theo gói VÀ byte
+                // (`RampStatus.SendBudget`), không phải "khi nào nhớ thì kiểm".
+                switch self.sendBudget.withLock({ $0.admit(packetBytes: datagram.count) }) {
+                case .accept:
+                    autoreleasepool {
+                        link.sendQueued(datagram) { [weak self] error in
+                            guard let self else { return }
+                            self.sendBudget.withLock { $0.release(packetBytes: datagram.count) }
+                            if error == nil { self.noteSent(datagram.count) } else { self.noteDropped() }
+                        }
+                    }
+                case .backpressure:
                     // Hàng đợi đầy: CHỜ một gói gửi xong rồi mới đọc gói tiếp (backpressure),
                     // TUYỆT ĐỐI không vứt gói. Vứt gói ở đây làm WireGuard mất gói liên tục
                     // ⇒ handshake/keepalive hỏng dần ⇒ "càng chạy càng chậm" (đo trên iPad).
-                    do { try await link.send(datagram); self.noteSent(datagram.count) }
-                    catch { self.noteDropped() }
-                    continue
-                }
-                self.sendInflight.withLock { $0 += 1 }
-                link.sendQueued(datagram) { [weak self] error in
-                    guard let self else { return }
-                    self.sendInflight.withLock { $0 -= 1 }
-                    if error == nil { self.noteSent(datagram.count) } else { self.noteDropped() }
+                    // Lần bị chặn đã được `SendBudget` đếm (`waits`) nên log thấy được ngay.
+                    do {
+                        try await link.send(datagram)
+                        self.noteSent(datagram.count)
+                    } catch {
+                        self.noteDropped()
+                    }
+                case .drop:
+                    // Gói to hơn CẢ trần byte: chờ cũng không bao giờ lọt ⇒ thả CÓ ĐẾM.
+                    self.noteDropped()
                 }
             }
         }
@@ -225,24 +260,21 @@ final class WSRelayClient: @unchecked Sendable {
     private func holdWhileLinkDown(_ datagram: Data) {
         let now = Date()
         lock.lock()
+        let droppedBefore = pendingWhileLinkDown.dropped
         var evictedByTTL = 0
-        while let first = pendingWhileLinkDown.first,
+        while let first = pendingWhileLinkDown.items.first,
               now.timeIntervalSince(first.at) > WSRelayClient.pendingLinkTTL {
-            pendingWhileLinkDown.removeFirst()
+            pendingWhileLinkDown.dropOldest()
             evictedByTTL += 1
         }
-        var evictedByLimit = 0
-        pendingWhileLinkDown.append((at: now, data: datagram))
-        while pendingWhileLinkDown.count > WSRelayClient.pendingLinkLimit {
-            pendingWhileLinkDown.removeFirst()
-            evictedByLimit += 1
-        }
-        droppedPending += evictedByTTL + evictedByLimit
-        droppedNoLink += evictedByTTL + evictedByLimit
-        bufferedWhileLinkDown += 1
+        let evictedByLimit = pendingWhileLinkDown.append((at: now, data: datagram))
+        // Mọi gói bị thả (TTL hoặc quá trần) đều vào `droppedNoLink` — thả mà im lặng là
+        // đúng thứ đã làm log 25/09/2026 không nhìn ra hàng đợi nào phình.
+        let evicted = pendingWhileLinkDown.dropped - droppedBefore
+        droppedNoLink += evicted
         let pending = pendingWhileLinkDown.count
-        let buffered = bufferedWhileLinkDown
-        let dropped = droppedPending
+        let buffered = pendingWhileLinkDown.appended
+        let dropped = pendingWhileLinkDown.dropped
         let shouldLog = now.timeIntervalSince(pendingLogAt) >= WSRelayClient.frameLogInterval
         if shouldLog { pendingLogAt = now }
         lock.unlock()
@@ -250,28 +282,57 @@ final class WSRelayClient: @unchecked Sendable {
             note(
                 "chưa có link — ĐỆM \(pending) gói chờ link mở (tổng đệm \(buffered), "
                     + "đã thả \(dropped): TTL \(Int(WSRelayClient.pendingLinkTTL))s/trần "
-                    + "\(WSRelayClient.pendingLinkLimit) gói)"
+                    + "\(WSRelayClient.pendingLinkLimit) gói"
+                    + (evictedByLimit > 0 ? "; vừa thả \(evictedByLimit) gói vì quá trần" : "")
+                    + ")"
             )
         }
     }
 
     /// Link vừa mở lại: gửi hết gói đã đệm (theo đúng thứ tự nhận) rồi mới tới gói mới.
+    ///
+    /// **Tôn trọng TRẦN của hàng đợi gửi**: phần chưa nạp được (hàng đợi đầy) được ĐẶT LẠI lên
+    /// đầu bộ đệm và xả ở nhịp sau — bản cũ nạp thẳng `sendInflight += 1` cho TẤT CẢ 512 gói,
+    /// tức là xả đệm đi VÒNG QUA trần (đúng lúc hàng đợi đang đầy nhất).
     private func flushWhileLinkDown(into link: RelayLink) {
         lock.lock()
-        let held = pendingWhileLinkDown
-        pendingWhileLinkDown.removeAll()
-        let buffered = bufferedWhileLinkDown
-        let dropped = droppedPending
+        let held = pendingWhileLinkDown.drain()
+        let buffered = pendingWhileLinkDown.appended
+        let dropped = pendingWhileLinkDown.dropped
         lock.unlock()
         guard !held.isEmpty else { return }
-        note("link đã mở lại — XẢ \(held.count) gói đã đệm (tổng đệm \(buffered), đã thả \(dropped))")
+        var sent = 0
+        var rest: [(at: Date, data: Data)] = []
         for item in held {
-            sendInflight.withLock { $0 += 1 }
-            link.sendQueued(item.data) { [weak self] error in
-                guard let self else { return }
-                self.sendInflight.withLock { $0 -= 1 }
-                if error == nil { self.noteSent(item.data.count) } else { self.noteDropped() }
+            switch sendBudget.withLock({ $0.admit(packetBytes: item.data.count) }) {
+            case .accept:
+                sent += 1
+                autoreleasepool {
+                    link.sendQueued(item.data) { [weak self] error in
+                        guard let self else { return }
+                        self.sendBudget.withLock { $0.release(packetBytes: item.data.count) }
+                        if error == nil { self.noteSent(item.data.count) } else { self.noteDropped() }
+                    }
+                }
+            case .backpressure:
+                rest.append(item)
+            case .drop:
+                noteDropped()
             }
+        }
+        if !rest.isEmpty {
+            lock.lock()
+            let evicted = pendingWhileLinkDown.requeueFront(rest)
+            if evicted > 0 { droppedNoLink += evicted }
+            let kept = pendingWhileLinkDown.count
+            lock.unlock()
+            note(
+                "xả đệm: hàng đợi gửi đã chạm trần — giữ lại \(kept) gói đệm cho nhịp sau"
+                    + (evicted > 0 ? " (thả \(evicted) gói cũ nhất)" : "")
+            )
+        }
+        if sent > 0 {
+            note("link đã mở lại — XẢ \(sent)/\(held.count) gói đã đệm (tổng đệm \(buffered), đã thả \(dropped))")
         }
     }
 
@@ -308,7 +369,11 @@ final class WSRelayClient: @unchecked Sendable {
 
         do {
             while isRunning {
-                handle(try await link.receive())
+                let message = try await link.receive()
+                // `autoreleasepool` cho MỖI frame: luồng của Swift concurrency không có pool tự
+                // động mà đường này đi qua `URLSession` (Objective-C) ⇒ object tự động nhả của
+                // mỗi frame nằm lại vĩnh viễn nếu không có pool (rò theo LƯU LƯỢNG).
+                autoreleasepool { handle(message) }
             }
         } catch {
             if isRunning {
@@ -453,17 +518,97 @@ final class WSRelayClient: @unchecked Sendable {
         return (sentFrames, receivedFrames)
     }
 
+    /// Trần + số ĐANG CHỜ của MỌI hàng đợi trên đường relay của phiên này.
+    ///
+    /// Vì sao có: số đo máy thật 25–26/09/2026 cho thấy bộ nhớ của extension leo **theo LƯU
+    /// LƯỢNG** (iPad Netflix: 17,9 → 49,4 MB trong 6 phút, ~0,65 B cho mỗi byte qua relay) —
+    /// nhưng log cũ chỉ có bộ đếm frame, KHÔNG có số của hàng đợi nào, nên không chỉ được chỗ
+    /// phình. Provider in struct này vào dòng `tài nguyên:` (60 s), KHÔNG thêm đồng hồ nào.
+    struct QueueSnapshot: Sendable {
+        /// Số gói/byte đang chờ URLSession gửi xong (đã tính vào trần).
+        var inflightPackets = 0
+        var inflightBytes = 0
+        /// Trần cứng đang áp (`RampStatus.DataPathQueuePolicy`).
+        var maxPackets = 0
+        var maxBytes = 0
+        var admitted = 0
+        /// Số lần hàng đợi ĐẦY ⇒ phải chờ (backpressure có kiểm soát).
+        var waits = 0
+        /// Số gói bị THẢ vì không bao giờ lọt trần.
+        var sendDropped = 0
+        /// Gói đang đệm vì link chưa mở, tổng số đã đệm và tổng số đã thả.
+        var pendingLink = 0
+        var pendingLinkAppended = 0
+        var pendingLinkDropped = 0
+        var listenerDatagrams = 0
+        var streamPopped = 0
+        /// Byte đang nằm trong socket UDP cục bộ chờ vòng đọc (`FIONREAD`) — hàng đợi giữa Go
+        /// và vòng gửi WebSocket. `-1` = không đọc được.
+        var listenerSocketPendingBytes = 0
+        /// Số gói bị `AsyncStream` (`.bufferingNewest`) thả IM LẶNG — TÍNH RA, không phải đếm
+        /// trực tiếp (stream không có API báo drop): tổng nhận − tổng lấy ra − sức chứa stream.
+        var streamDropped: Int {
+            max(0, listenerDatagrams - streamPopped - WSRelayClient.sendBufferLimit)
+        }
+    }
+
+    /// Ảnh chụp hàng đợi để in ra dòng `tài nguyên:` — chỉ ĐỌC, không đổi trạng thái.
+    ///
+    /// Cố ý KHÔNG gọi `listener.pendingBytes` trong lúc đang giữ `lock`: hai khoá khác nhau,
+    /// lồng nhau là mầm của ca "giữ khoá tới hết phiên" (AGENTS.md §7c).
+    var queueSnapshot: QueueSnapshot {
+        lock.lock()
+        let budget = sendBudget.withLock { $0 }
+        var snapshot = QueueSnapshot()
+        snapshot.inflightPackets = budget.packets
+        snapshot.inflightBytes = budget.bytes
+        snapshot.maxPackets = budget.maxPackets
+        snapshot.maxBytes = budget.maxBytes
+        snapshot.admitted = budget.accepted
+        snapshot.waits = budget.waits
+        snapshot.sendDropped = budget.dropped
+        snapshot.pendingLink = pendingWhileLinkDown.count
+        snapshot.pendingLinkAppended = pendingWhileLinkDown.appended
+        snapshot.pendingLinkDropped = pendingWhileLinkDown.dropped
+        snapshot.listenerDatagrams = listenerDatagrams
+        snapshot.streamPopped = streamPopped
+        lock.unlock()
+        snapshot.listenerSocketPendingBytes = listener.pendingBytes
+        return snapshot
+    }
+
     /// Counters useful to spot which direction of the bridge went quiet.
+    ///
+    /// Tên trường cũ (`pendingLink`/`bufferedLink`/`pendingDropped`) được GIỮ NGUYÊN để log cũ
+    /// còn grep được; phần `sendQueue`/`sendWaits`/`sendDropped`/`udpIn`/`udpPopped` là mới.
     func countersSummary() -> String {
         lock.lock()
         defer { lock.unlock() }
-        return "udpFrames=\(sentFrames) udpBytes=\(sentBytes) framesFromRelay=\(receivedFrames) bytesFromRelay=\(receivedBytes) droppedNoLink=\(droppedNoLink) pendingLink=\(pendingWhileLinkDown.count) bufferedLink=\(bufferedWhileLinkDown) pendingDropped=\(droppedPending) wsOpen=\(open)"
+        let budget = sendBudget.withLock { $0 }
+        return "udpFrames=\(sentFrames) udpBytes=\(sentBytes) framesFromRelay=\(receivedFrames) bytesFromRelay=\(receivedBytes) droppedNoLink=\(droppedNoLink) pendingLink=\(pendingWhileLinkDown.count) bufferedLink=\(pendingWhileLinkDown.appended) pendingDropped=\(pendingWhileLinkDown.dropped) wsOpen=\(open) sendQueue=\(budget.summary) sendWaits=\(budget.waits) sendDropped=\(budget.dropped) udpIn=\(listenerDatagrams) udpPopped=\(streamPopped)"
     }
 
     private func noteSent(_ bytes: Int) {
         lock.lock()
         sentFrames += 1
         sentBytes += bytes
+        lock.unlock()
+    }
+
+    /// Đếm một datagram nhận từ socket UDP cục bộ (Go → relay). Xem `listenerDatagrams`.
+    private func noteListenerDatagram() {
+        lock.lock()
+        listenerDatagrams += 1
+        lock.unlock()
+    }
+
+    /// Đếm một datagram đã lấy RA khỏi `AsyncStream`. Xem `listenerDatagrams`.
+    ///
+    /// Tách thành hàm (không phải `lock.lock()` thẳng trong thân `Task`): `NSLock.lock()` bị đánh
+    /// dấu `noasync` nên gọi thẳng trong ngữ cảnh async là cảnh báo (lỗi ở Swift 6).
+    private func noteStreamPopped() {
+        lock.lock()
+        streamPopped += 1
         lock.unlock()
     }
 
