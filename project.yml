@@ -221,8 +221,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.3"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.5"
+        CURRENT_PROJECT_VERSION: "44"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
