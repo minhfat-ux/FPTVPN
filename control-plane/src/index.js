@@ -785,7 +785,13 @@ app.get("/assets/:file", async (req, res) => {
     const assetName = fileAlias[req.params.file] ?? req.params.file;
     const file = path.join(process.env.ASSETS_DIR || path.join(__dirname, "..", "assets"), assetName);
     if (!fs.existsSync(file)) return res.status(404).send("Not found");
-    res.type(type).sendFile(file);
+    // Logo rất ít khi đổi ⇒ cho trình duyệt giữ 7 ngày (trước đây origin không set header nên
+    // Cloudflare áp mặc định 4 h ⇒ khách quay lại vẫn tải lại cả bộ ảnh). Giá trị này LỚN HƠN
+    // Browser Cache TTL của Cloudflare nên Cloudflare giữ nguyên (chỉ đè khi origin nhỏ hơn).
+    res
+      .type(type)
+      .set("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400")
+      .sendFile(file);
   } catch {
     res.status(500).send("Internal error");
   }
