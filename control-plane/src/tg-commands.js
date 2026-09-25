@@ -11,7 +11,9 @@
  *    trừ khi gọi kèm `force` (dùng cho chính chủ shop đã bấm Xác nhận).
  */
 
-export const READ_ONLY_COMMANDS = ["help", "status", "nodes", "devices", "orders", "ios", "alerts", "log", "ping", "build", "chat", "reporttasks", "tasks", "guard"];
+// /wakeup chỉ gửi 1 gói Magic Packet Wake-on-LAN: không đổi trạng thái nào trên server, mà
+// công dụng của nó là "đánh thức NGAY" — bắt bấm Xác nhận sẽ làm mất đúng công dụng đó.
+export const READ_ONLY_COMMANDS = ["help", "status", "nodes", "devices", "orders", "ios", "alerts", "log", "ping", "build", "chat", "reporttasks", "tasks", "guard", "wakeup"];
 // /task chạy agent trên server (quyền ngang root) nên cũng phải xác nhận trước khi chạy.
 // /approve + /reject ĐỔI TRẠNG THÁI task do flowvpn-guard tạo: chỉ sau khi chủ dự án approve thì
 // agent phụ trách mới được phép sửa/publish (xem scripts/guard/guard.py + flowvpn-coord task).
@@ -435,10 +437,53 @@ export function helpText() {
     "/mac <việc> · /win <việc> — viết tắt của /vibecode",
     "  Ví dụ: /mac sửa lỗi mất mạng khi connect VPN trên iOS rồi cài lên iPhone để test",
     "",
+    "😴 Trạng thái máy Mac + đánh thức (chạy ngay, không đổi trạng thái):",
+    "/wakeup — Mac đang THỨC hay đang NGỦ, kèm nguồn điện và trạng thái khoá ngủ",
+    "  Máy đang ngủ thì gửi kèm Magic Packet; cách đó CHỈ chạy khi router của mạng đó",
+    "  forward cổng UDP 9 (mạng công ty thường không cho) và Mac đang cắm sạc",
+    "",
     "✅ Duyệt việc guard đề xuất (phải bấm Xác nhận):",
     "/approve <id> — cho phép agent phụ trách sửa + publish bản mới",
     "/reject <id> <lý do> — không sửa (guard ghi lý do vào task)",
     "",
     "Anh nhắn /help để xem lại danh sách này.",
   ].join("\n");
+}
+
+// -------------------------------------------------------------------------- nhịp tim máy Mac
+
+/** Nhịp tim cũ hơn mức này thì coi như máy đã ngủ (poller chạy mỗi 60s). */
+export const MAC_ALIVE_STALE_MS = 180_000;
+
+/**
+ * Diễn giải "nhịp tim" mà poller trên Mac ghi lên node-2 sau mỗi vòng poll (~60s).
+ *
+ * Vì sao cần: Mac ngủ thì không tiến trình nào chạy được, và trên mạng công ty KHÔNG có cách
+ * nào đánh thức nó từ VPS (không có quyền forward cổng ở router). Nên thay vì hứa "sẽ đánh
+ * thức được", bot nói thẳng máy đang thức hay đang ngủ — người gửi biết việc có được xử lý
+ * ngay hay phải chờ mở nắp.
+ *
+ * @param {{epoch?: number, ac?: boolean, nosleep?: boolean, host?: string}|null} beat
+ * @returns {string} một dòng trạng thái
+ */
+export function isMacAlive(beat, nowMs = Date.now(), { staleMs = MAC_ALIVE_STALE_MS } = {}) {
+  const epoch = Number(beat?.epoch);
+  if (!Number.isFinite(epoch) || epoch <= 0) return false;
+  return nowMs - epoch * 1000 <= staleMs;
+}
+
+export function describeMacAlive(beat, nowMs = Date.now(), { staleMs = MAC_ALIVE_STALE_MS } = {}) {
+  if (!beat || !Number.isFinite(Number(beat.epoch)) || Number(beat.epoch) <= 0) {
+    return "❔ Chưa từng nhận nhịp tim từ Mac — poller có thể chưa chạy lần nào.";
+  }
+
+  const ageMs = Math.max(0, nowMs - Number(beat.epoch) * 1000);
+  const age = ageMs < 90_000 ? `${Math.floor(ageMs / 1000)}s` : `${Math.floor(ageMs / 60_000)} phút`;
+  const power = beat.ac ? "đang cắm sạc" : "đang dùng pin";
+  const sleepKey = beat.nosleep ? "đã khoá không ngủ" : "chưa khoá ngủ";
+
+  if (ageMs <= staleMs) {
+    return `🟢 Mac ĐANG THỨC — nhịp tim cách ${age}, ${power}, ${sleepKey}. Việc sẽ được nhận trong ~60s.`;
+  }
+  return `🔴 Mac ĐANG NGỦ — nhịp tim cuối cách ${age}, ${power}, ${sleepKey}. Việc vẫn nằm nguyên trên node-2 và sẽ về đủ khi Mac thức.`;
 }

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  MAC_ALIVE_STALE_MS,
   MUTATING_COMMANDS,
   READ_ONLY_COMMANDS,
   RESTARTABLE_SERVICES,
@@ -12,6 +13,8 @@ import {
   chatPreamble,
   chunkMessage,
   confirmationPrompt,
+  describeMacAlive,
+  isMacAlive,
   formatDuration,
   helpText,
   isAllowedChat,
@@ -441,4 +444,82 @@ test("helpText có nhắc /vibecode + /mac + /win", () => {
   for (const needle of ["/vibecode mac", "/vibecode win", "/mac <việc>", "/win <việc>"]) {
     assert.ok(help.includes(needle), `help thiếu "${needle}"`);
   }
+});
+
+test("/wakeup là lệnh đọc: chạy ngay, không bắt bấm Xác nhận, và có trong /help", () => {
+  // Đánh thức máy là việc gấp — thêm một bước bấm Xác nhận là làm mất đúng công dụng.
+  // Nhưng nó vẫn KHÔNG được nằm trong MUTATING_COMMANDS vì không đổi trạng thái nào.
+  const parsed = parseCommand("/wakeup");
+  assert.equal(parsed.name, "wakeup");
+  assert.equal(parsed.mutating, false);
+  assert.equal(needsConfirmation(parsed), false);
+  assert.ok(READ_ONLY_COMMANDS.includes("wakeup"));
+  assert.ok(!MUTATING_COMMANDS.includes("wakeup"));
+  assert.match(helpText(), /\/wakeup/);
+});
+
+test("mọi lệnh trong READ_ONLY/MUTATING đều parse được (không lệnh nào bị bỏ quên)", () => {
+  for (const name of [...READ_ONLY_COMMANDS, ...MUTATING_COMMANDS]) {
+    assert.equal(parseCommand(`/${name}`).name, name, `parseCommand("/${name}")`);
+  }
+});
+
+test("describeMacAlive: nhịp tim mới ⇒ Mac đang thức, kèm nguồn điện + trạng thái khoá ngủ", () => {
+  const now = 1_800_000_000_000;
+  const beat = { epoch: now / 1000 - 30, ac: true, nosleep: true, host: "macbook-air-2" };
+  const out = describeMacAlive(beat, now);
+  assert.match(out, /ĐANG THỨC/);
+  assert.match(out, /30s/);
+  assert.match(out, /cắm sạc/);
+  assert.match(out, /đã khoá không ngủ/);
+});
+
+test("describeMacAlive: nhịp tim cũ ⇒ Mac đang ngủ, và nói rõ việc không mất", () => {
+  const now = 1_800_000_000_000;
+  const beat = { epoch: now / 1000 - 600, ac: false, nosleep: false };
+  const out = describeMacAlive(beat, now);
+  assert.match(out, /ĐANG NGỦ/);
+  assert.match(out, /10 phút/);
+  assert.match(out, /pin/);
+  assert.match(out, /node-2/);
+});
+
+test("describeMacAlive: đúng ngưỡng staleMs thì vẫn coi là thức (biên)", () => {
+  const now = 1_800_000_000_000;
+  const atEdge = { epoch: now / 1000 - MAC_ALIVE_STALE_MS / 1000 };
+  assert.match(describeMacAlive(atEdge, now), /ĐANG THỨC/);
+  const overEdge = { epoch: now / 1000 - MAC_ALIVE_STALE_MS / 1000 - 1 };
+  assert.match(describeMacAlive(overEdge, now), /ĐANG NGỦ/);
+});
+
+test("describeMacAlive: thiếu/ hỏng nhịp tim ⇒ nói chưa từng nhận, không đoán bừa", () => {
+  for (const bad of [null, undefined, {}, { epoch: 0 }, { epoch: "abc" }]) {
+    assert.match(describeMacAlive(bad), /Chưa từng nhận nhịp tim/);
+  }
+});
+
+test("describeMacAlive: nhịp tim ở tương lai (lệch giờ) không tạo số âm", () => {
+  const now = 1_800_000_000_000;
+  const out = describeMacAlive({ epoch: now / 1000 + 120, ac: true, nosleep: true }, now);
+  assert.match(out, /ĐANG THỨC/);
+  assert.ok(!out.includes("-"), "không được hiện tuổi âm");
+});
+
+test("isMacAlive: dùng chung ngưỡng với describeMacAlive (không lệch logic)", () => {
+  const now = 1_800_000_000_000;
+  const fresh = { epoch: now / 1000 - 10 };
+  const stale = { epoch: now / 1000 - MAC_ALIVE_STALE_MS / 1000 - 1 };
+  assert.equal(isMacAlive(fresh, now), true);
+  assert.equal(isMacAlive(stale, now), false);
+  assert.equal(isMacAlive(null, now), false);
+  assert.match(describeMacAlive(fresh, now), /ĐANG THỨC/);
+  assert.match(describeMacAlive(stale, now), /ĐANG NGỦ/);
+});
+
+test("help mô tả /wakeup là lệnh TRẠNG THÁI trước, đánh thức sau (đúng thực tế mạng công ty)", () => {
+  const help = helpText();
+  assert.match(help, /Trạng thái máy Mac/);
+  assert.match(help, /đang THỨC hay đang NGỦ/);
+  // Phải nói rõ giới hạn, không để hiểu là luôn đánh thức được.
+  assert.match(help, /forward cổng UDP 9/);
 });

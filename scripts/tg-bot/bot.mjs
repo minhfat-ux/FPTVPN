@@ -376,6 +376,61 @@ async function cmdBuild() {
   return `✅ Build/test control plane trên server:\n${summary || "(không đọc được summary)"}`;
 }
 
+/**
+ * /wakeup [mac] — gửi Magic Packet Wake-on-LAN để đánh thức máy Mac đang ngủ.
+ *
+ * Vì sao cần: máy ngủ thì KHÔNG tiến trình nào chạy được, kể cả poller notify. Việc gửi tới
+ * không mất (nằm bền trên node-2), nhưng Mac chỉ nhận được khi thức — lệnh này rút thời gian
+ * chờ từ "khi nào anh mở nắp" xuống còn vài giây.
+ *
+ * Điều kiện để có tác dụng (xem scripts/notify/README.md):
+ *   · Mac đang CẮM SẠC — `pmset womp` chỉ bật ở nguồn AC; dùng pin phải `sudo pmset -b womp 1`
+ *   · router nhà forward cổng UDP 9 vào địa chỉ broadcast của LAN
+ *   · WOL_MAC / WOL_HOST khai báo trong /etc/flowvpn-tg-bot.env
+ */
+async function cmdWakeup(args) {
+  const lines = [];
+
+  // 1) Trạng thái THẬT của Mac — đọc "nhịp tim" mà poller ghi lên node-2 mỗi vòng (~60s).
+  //    Không đoán: không có nhịp tim thì nói thẳng là chưa từng nhận.
+  const aliveFile = ENV.WOL_ALIVE_FILE || "/var/lib/flowvpn-coord/inbox/mac/.alive.json";
+  let beat = null;
+  try {
+    beat = JSON.parse(readFileSync(aliveFile, "utf8"));
+  } catch { /* chưa có nhịp tim nào */ }
+  lines.push(cmd.describeMacAlive(beat));
+
+  // 2) Máy đang thức thì không cần đánh thức — nói rõ để không tạo cảm giác "đã gửi mà không thấy gì".
+  if (cmd.isMacAlive(beat)) {
+    lines.push("→ Máy đang thức nên không cần đánh thức. Việc sẽ được nhận trong ~60s.");
+    return lines.join("\n");
+  }
+
+  // 3) Máy đang ngủ: thử Magic Packet. Trên mạng công ty (không có quyền forward cổng ở router)
+  //    gói tin sẽ không tới được — phải nói thẳng, không báo "đã gửi" rồi để hiểu nhầm là xong.
+  const macs = String(args[0] ?? "").trim() || ENV.WOL_MAC || "";
+  if (!macs) {
+    lines.push("→ Chưa khai báo WOL_MAC nên không gửi được Magic Packet (ở trên chỉ là trạng thái).");
+    return lines.join("\n");
+  }
+  const host = ENV.WOL_HOST || "255.255.255.255";
+  const port = ENV.WOL_PORT || "9";
+  const bin = ENV.WOL_BIN || "/usr/local/bin/wol-mac.sh";
+  try {
+    const out = await sh(bin, [macs, host, port], 15_000);
+    lines.push(
+      `📡 Đã gửi Magic Packet tới ${host}:${port}`,
+      out,
+      "",
+      `Cách này CHỈ hiệu lực khi router của mạng đó forward cổng UDP ${port} vào LAN.`,
+      "Mạng công ty thường không cho — khi đó Mac chỉ nhận việc lúc thức dậy, việc không mất.",
+    );
+  } catch (err) {
+    lines.push(`❌ Gửi Magic Packet lỗi: ${err.message}`);
+  }
+  return lines.join("\n");
+}
+
 /** Deploy thay đổi trong workspace lên bản đang chạy (script có test + rollback). */
 async function cmdDeploy() {
   const script = `${AGENT_WORKDIR}/scripts/server-agent/deploy-control-plane.sh`;
@@ -683,6 +738,7 @@ async function handleCommand(parsed, chatId, { force = false, dryRun = false } =
     case "mirror": return cmdMirror();
     case "restart": return cmdRestart(parsed.args);
     case "build": return cmdBuild();
+    case "wakeup": return cmdWakeup(parsed.args);
     case "deploy": return cmdDeploy();
     case "guard": return cmdGuard();
     case "approve": return cmdApprove(chatId, parsed.args);
