@@ -28,6 +28,39 @@ case "$TARGET" in
   mac) SCHEME="PrivateVPNMac"; PLATFORM="macOS"; DEST="generic/platform=macOS" ;;
   *) echo "usage: $0 [ios|mac] [direct|diawi|adhoc]" >&2; exit 2 ;;
 esac
+
+# ── CỔNG CREDENTIAL (BẮT BUỘC — chủ dự án chốt 25/09/2026) ───────────────────────────────
+# Vì sao có cổng này: build 33/24-25/09/2026 dựng IPA mà QUÊN `eval "$(bash scripts/dev-hysteria-build-env.sh)"`
+# ⇒ `Info.plist` của app có `HysteriaPassword`/`HysteriaObfs` **RỖNG** ⇒ extension báo
+#   `startTunnel thất bại (TUNNEL_START_FAILED): providerConfiguration thiếu khoá "hysteria"`
+# ⇒ khách bấm Connect là **"bật lên tắt ngay"**. Chặn NGAY tại đây để không bao giờ build ra IPA hỏng.
+if [ -z "${HYST_PASSWORD:-}" ] || [ -z "${HYST_OBFS:-}" ]; then
+  cat >&2 <<'MSG'
+⛔ THIẾU CREDENTIAL HYSTERIA2 — DỪNG BUILD (không dựng IPA rỗng credential).
+   Chạy đúng cách:
+     eval "$(bash scripts/dev-hysteria-build-env.sh)"
+     bash scripts/archive-appstore.sh ios adhoc
+   Sau khi export, PHẢI chạy cổng kiểm IPA trước khi cài/phát hành:
+     bash scripts/ios-verify-ipa.sh build/ios-adhoc-export/ipa/FlowVPN.ipa
+MSG
+  exit 3
+fi
+
+# `iOS/Frameworks/` bị `.gitignore` (framework 90 MB + 59 MB) ⇒ cây mới/CI KHÔNG có sẵn và
+# build sẽ chết ở "There is no XCFramework found at …". Đã gặp thật 23/09/2026 ở CẢ hai nền
+# tảng khi dựng cây phát hành sạch — báo lỗi sớm và chỉ rõ cách khắc phục thay vì để Xcode
+# báo khó hiểu.
+case "$TARGET" in
+  ios) FW="iOS/Frameworks/Hysteria.xcframework" ;;
+  mac) FW="iOS/Frameworks/Hysteria-macos.xcframework" ;;
+esac
+if [ ! -d "$FW" ]; then
+  echo "LỖI: thiếu $FW" >&2
+  echo "     Thư mục iOS/Frameworks/ bị .gitignore nên cây/CI mới không có sẵn framework." >&2
+  echo "     Copy từ cây đang build được (Hysteria.xcframework ~90 MB cho iOS," >&2
+  echo "     Hysteria-macos.xcframework ~59 MB cho macOS) rồi chạy lại lệnh này." >&2
+  exit 1
+fi
 case "$MODE" in
   direct|diawi|adhoc) ;;
   appstore)
