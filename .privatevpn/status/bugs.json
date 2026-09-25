@@ -49,9 +49,62 @@
       "next_steps": "Do 3 kich ban (VPN tat / bat-khong dung / bat+speedtest) bang top -H + dumpsys cpuinfo; roi lam A+B+C (MTU, gian nhip probe, log buffer) theo docs/ANDROID_CPU_TODO.md",
       "doc": "docs/ANDROID_CPU_TODO.md",
       "blocked_by": "JDK 17 tren Mac hong (chua build lai APK duoc); can 1 may Android that de do"
+    },
+    {
+      "id": "BUG-IOS-JETSAM-001",
+      "title": "iOS GIẾT extension giữa phiên vì chạm trần bộ nhớ per-process (Jetsam) — khách đang dùng thì mất mạng",
+      "area": "ios",
+      "severity": "high",
+      "reported": "2026-09-25",
+      "status": "open",
+      "impact": "Extension bị iOS kill giữa phiên (chỉ có JetsamEvent, không có crash report) ⇒ khách mất mạng giữa lúc đang dùng hoặc phải bật lại. Log KHÔNG có dòng `stopTunnel` nên trước đây không phân biệt được ai dừng. Lặp lại nhiều ngày trên nhiều máy ⇒ không phải ca đơn lẻ.",
+      "evidence": [
+        "JetsamEvent-2026-09-25-190942.ips (iPad 5BA3126D-…): process PrivateVPNPacketTunnel — reason=per-process-limit, rpages=3202 (≈51 MB với page 16 KB), fds=50, pid 3327",
+        "iPhone 33987D6F-…: JetsamEvent-2026-09-24-211438.ips rpages=3200 và JetsamEvent-2026-09-21-204944.ips rpages=3202 — cùng loại per-process-limit",
+        "Phiên iPad 19:01:51→19:08:41: nhịp tim sống-còn 19:03:00 (nhịp 4) · 19:04:04 (8) · 19:06:05 (12) rồi CÂM hẳn sau lần dựng lại transport 19:06:41 (cổng mới bắt: 0 nhịp tim trong 120 s) ⇒ nghi rò tài nguyên theo mỗi lần dựng lại",
+        "Log phiên bị giết kết thúc ở 19:08:41 mà KHÔNG có dòng `stopTunnel` nào (working tree đã vá bằng `logSync`)",
+        "scripts/ios-log-acceptance.py --crash-dir gắn Jetsam vào ĐÚNG phiên (iPad: 2/7 phiên KHÔNG ĐẠT)"
+      ],
+      "next_steps": "Build ≥45 (đã có startResourceTicker: footprint/resident/fds mỗi 60 s) rồi chạy phiên ≥30 phút lấy đường cong; kiểm fd rò mỗi lần dựng lại transport; thêm ngưỡng cảnh báo sớm (footprint > 30 MB ⇒ log + tự ngắt an toàn TRƯỚC khi bị hệ thống giết)",
+      "blocked_by": "Build 45 đang cài trên iPad KHÔNG in dòng `tài nguyên:` nào ⇒ phải build lại (binary 20:05:28 nghi trước khi thêm ticker) mới đo được"
+    },
+    {
+      "id": "BUG-IOS-ONEWAY-001",
+      "title": "Tunnel \"Connected\" nhưng CHIỀU VỀ đứt một chiều — app dựng lại transport trên CÙNG relay, không đổi đường",
+      "area": "ios + macos (lõi tunnel chung)",
+      "severity": "high",
+      "reported": "2026-09-25",
+      "status": "open",
+      "impact": "Khách thấy \"Connected mà không có mạng\": máy vẫn gửi gói vào tunnel, relay WS vẫn mở, watchdog vẫn báo sống, nhưng chiều về không có gói nào. App dựng lại transport 3 lần trên CÙNG một relay rồi bỏ cuộc ⇒ khách phải tự tắt/bật VPN.",
+      "evidence": [
+        "Log Mac 25/09/2026 19:42:02→19:43:44, relay vn1hy: 17 khoảng 5 s liên tiếp máy gửi 1277 gói mà Go→packetFlow KHÔNG tăng một gói (đứng ở 360729 gói/125.639.055 B)",
+        "cùng phiên: \"tự phục hồi: tunnel sống nhưng không chở gói [chiều về im ≥15s trong khi máy vẫn gửi 296 gói vào tunnel] (delta 15s: vào 119 gói (bỏ 0), ra 0 gói)\"",
+        "cả 3 lần dựng lại đều trên wss://api.meetflowai.site/relay/vn1hy (19:42:25, 19:42:58, 19:43:31); người dùng tự dừng lúc 19:43:44",
+        "gốc luật cũ: startLivenessWatchdog đặt mốc byte chiều về = 0 sau MỖI lần dựng lại ⇒ nhịp đầu tính delta = cả đời bộ đếm (125 MB) ⇒ tưởng đường CÓ chở ⇒ xoá bộ đếm ⇒ không bao giờ đủ ngưỡng đổi node",
+        "cùng relay vn1hy lúc 20:13 lại chạy tốt (\"XÁC NHẬN tunnel có mạng thật sau 5.0s\") ⇒ đứt một chiều là trạng thái TẠM THỜI phía relay/node ⇒ càng phải failover",
+        "cổng scripts/ios-log-acceptance.py bắt được: \"CHIỀU VỀ ĐÓNG BĂNG (một chiều) … 17 khoảng\""
+      ],
+      "next_steps": "Commit RelayFailoverWatch (cửa sổ 15 s, 2 cửa sổ 0 gói về ⇒ đổi đường, trần 3 lần/phiên) + case harness trong ios-pure-logic-tests; build lại rồi chứng minh trên máy thật: cắm relay hỏng ⇒ log PHẢI có `đã đổi đường: vn1hy → …` và chiều về trở lại",
+      "blocked_by": "Fix đang nằm ở working tree CHƯA commit; chưa có build nào chứng minh failover chạy thật"
+    },
+    {
+      "id": "BUG-IOS-LOGLEAK-001",
+      "title": "Log tunnel lộ nguyên văn `\\(code)` — thiếu dấu \\ trong chuỗi Swift",
+      "area": "ios + macos (lõi tunnel chung)",
+      "severity": "low",
+      "reported": "2026-09-25",
+      "status": "open",
+      "impact": "Dòng log CUỐI trước khi tunnel bị gỡ in ra `(\\(code))` thay vì mã lỗi ⇒ mất thông tin chẩn đoán đúng lúc cần nhất.",
+      "evidence": [
+        "iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift:3515 — \"giám sát: ĐÃ gỡ network settings (\\\\(code)) …\"",
+        "relay.log iPad 09-25 19:08:41.544 in nguyên văn: \"giám sát: ĐÃ gỡ network settings (\\(code)) — mạng của máy quay lại đường cũ, báo lỗi cho hệ thống\"",
+        "cổng mới bắt: \"NỘI SUY CHUỖI LỘ RA LOG\""
+      ],
+      "next_steps": "Sửa 1 ký tự trong chuỗi Swift: (\\\\(code)) → (\\(code))",
+      "blocked_by": "File thuộc session Mac đang sửa (working tree có thay đổi chưa commit) — không sửa chồng"
     }
   ],
   "regressions": [],
   "resolved": [],
-  "updated": "2026-09-22"
+  "updated": "2026-09-25"
 }

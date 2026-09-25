@@ -102,6 +102,21 @@ xcrun devicectl device copy from --device <id> --domain-type appDataContainer \
 | 5 | Đổi mạng giữa phiên | `bw: net đổi giữa phiên …` | tự dựng lại transport, mạng chạy lại ≤~6 s, **không** tự gỡ tunnel |
 | 6 | Đo trừ bắt tay | `phần đọc 281–1784ms sau bắt tay 120–1014ms` | hết sai 7× (5.409 → 38.272/50.102 kbps) |
 
+### G1. Điều kiện ĐẠT của cổng log — bổ sung 25/09/2026 (ba lỗi đã LỌT cổng cũ)
+
+```bash
+xcrun devicectl device copy from --device <id> --domain-type systemCrashLogs \
+  --source . --destination <dir>/crash
+python3 scripts/ios-log-acceptance.py <dir>/relay.log --crash-dir <dir>/crash   # exit 1 = KHÔNG ĐẠT
+```
+
+| Tiêu chí mới | Dấu hiệu trong log | Ca thật |
+|---|---|---|
+| **Chiều về ĐÓNG BĂNG một chiều** | ≥3 khoảng `bridge:` (mỗi khoảng 5 s) liên tiếp máy gửi ≥20 gói mà `Go→packetFlow` KHÔNG tăng gói nào | Mac 25/09 19:42–19:43, relay `vn1hy`: 17 khoảng, máy gửi 1277 gói, chiều về đứng ở 360729 gói/125.639.055 B ⇒ app dựng lại transport **3 lần trên CÙNG relay** |
+| **Jetsam/crash của extension** | `JetsamEvent-*.ips` có `PrivateVPNPacketTunnel` (`reason=per-process-limit`) hoặc `PrivateVPNPacketTunnel-*.ips` rơi vào khoảng phiên nào | iPad 25/09 19:09:42: `rpages=3202` ≈ 51 MB ⇒ iOS giết extension, log **không** có `stopTunnel`; iPhone còn ca `rpages=3200` (24/09) |
+| **Phiên đầu file** | phần trước mốc `build: version=` đầu tiên vẫn được chấm (nhãn build `?`) | ca một chiều ở trên nằm đúng phần đầu file — cổng cũ **bỏ qua nguyên ca** |
+| **Nội suy chuỗi lộ ra log** | dòng chứa `\(tên_biến)` nguyên văn | `HysteriaPacketTunnelProvider.swift:3515` thiếu dấu `\` ⇒ in ra `(\(code))` thay vì mã lỗi |
+
 ## H. Bẫy đã sập thật (đọc để không lặp lại)
 
 | Bẫy | Triệu chứng | Chốt chặn |
@@ -114,3 +129,7 @@ xcrun devicectl device copy from --device <id> --domain-type appDataContainer \
 | **Thiếu env credential khi build** | IPA rỗng `HysteriaPassword` ⇒ `TUNNEL_START_FAILED` ⇒ **"bật lên tắt ngay"** (build 33) | cổng `archive-appstore.sh` + `ios-verify-ipa.sh` |
 | `swiftc -parse` PASS nhưng thiếu hàm | Archive FAIL sau 15 phút build | phải `-typecheck`; không build lúc agent đang sửa |
 | **Giữ `flowLock` rồi gọi hàm có `flowLock.lock()`** (`NSLock` không tái nhập) | Từ build 25→34 (26 phiên máy thật): mỗi phiên đúng **2 dòng `bw: sample`** (+5 s, +15 s) rồi im, **0 nhịp tim**, thẻ Diagnostics đứng im, không ramp, không dò được đổi mạng — mà cầu vẫn chở gói và vẫn in nhịp 5 s nên log trông "bình thường" | §7c + `scripts/ios-log-acceptance.py` (đếm theo phiên); trong vùng khoá đọc thẳng `transport`/`bridge` |
+| **Chiều về đứt MỘT CHIỀU mà không đổi đường** | WS mở, handshake xong, watchdog có nhịp, máy vẫn gửi gói — nhưng `Go→packetFlow` đứng yên tuyệt đối (Mac 25/09 19:42–19:43, relay `vn1hy`: 17 khoảng, 1277 gói gửi, chiều về đứng ở 360729 gói) | `RelayFailoverWatch` (cửa sổ 15 s, 2 cửa sổ 0 gói về ⇒ đổi đường) + cổng log `--crash-dir`/một-chiều |
+| **Extension chạm trần bộ nhớ per-process** | `JetsamEvent-*.ips`: `PrivateVPNPacketTunnel` `reason=per-process-limit`, `rpages=3202` ≈ 51 MB (iPad 25/09 19:09:42) — phiên kết thúc mà **không** có `stopTunnel` | ticker tài nguyên 60 s (footprint/resident/fds) + cổng log đọc crash report bắt buộc |
+| **Chuỗi Swift thiếu dấu `\`** | log in nguyên văn `(\(code))` thay vì mã lỗi (HysteriaPacketTunnelProvider.swift:3515, iPad 25/09 19:08:41) | cổng log bắt "NỘI SUY CHUỖI LỘ RA LOG" |
+

@@ -34,6 +34,7 @@
 > `KHÔNG ĐẠT` và post `ĐẠT`. **Ngoại lệ hết hiệu lực ngay khi có chứng chỉ** — từ bản kế tiếp phải ký theo luật này.
 
 | 12 | **Phân chia publisher theo kênh** (chốt 23/09/2026): **Mac → iOS + macOS**; **Windows harness → Windows + Android**. Bên nào cũng phải tự chạy cổng §1c/§5b + ghi sổ cho kênh của mình; **không publish kênh không thuộc phần mình**. Email thông báo khách do publisher của kênh đó gửi | §0 (đầu tài liệu) | mọi publisher |
+| 13 | **Cổng LOG MÁY THẬT phải chạy kèm `--crash-dir`** (25/09/2026, sau ba lỗi LỌT cổng cũ): phiên chứa `JetsamEvent`/`PrivateVPNPacketTunnel-*.ips` (iOS giết extension vì `per-process-limit`, `rpages=3202` ≈ 51 MB) ⇒ KHÔNG ĐẠT; thêm tiêu chí **CHIỀU VỀ ĐÓNG BĂNG một chiều** (Mac relay `vn1hy` 19:42–19:43: máy gửi 1277 gói mà `Go→packetFlow` đứng ở 360729 gói) và **phiên đầu file** (trước mốc `build:` đầu tiên). **Còn bug mức `high` chưa đóng trên bản định phát ⇒ KHÔNG publish** | AGENTS.md §7d · `scripts/ios-log-acceptance.py` · `.privatevpn/status/bugs.json` | bên build iOS/macOS + publisher |
 
 **Công cụ dùng chung cho mọi bên:**
 ```bash
