@@ -275,6 +275,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private static let wedgeSweepInterval: TimeInterval = 5
     /// Mã lỗi trả cho iOS khi phải hạ tunnel vì đông cứng (khác `TUNNEL_START_FAILED`).
     private static let codeWedgeTeardown = "TUNNEL_WEDGED"
+    /// Bộ nhớ vượt ngưỡng an toàn (BUG-IOS-JETSAM-001).
+    private static let codeMemoryLimit = "TUNNEL_MEMORY_LIMIT"
 
     /// Ghi nhận "còn sống" — gọi từ mọi nhịp định kỳ.
     private func wedgeBeat() {
@@ -304,6 +306,140 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         wedgeRecoveryStartedAt = nil
         wedgeLastBeatAt = Date()
         wedgeLock.unlock()
+    }
+
+    // MARK: - Đo TÀI NGUYÊN mỗi 60 s (25/09/2026: "chạy ~30 phút rồi bắt đầu bị" + có JetsamEvent)
+
+    private var resourceTimer: DispatchSourceTimer?
+    private var resourcePrevToGo = 0
+    private var resourcePrevFromGo = 0
+    private var resourcePrevRelaySent = 0
+    private var resourcePrevRelayRecv = 0
+    private var resourceFootprintHistory: [(Date, Double)] = []
+
+    /// Một dòng tài nguyên: bộ nhớ (footprint/resident), số fd, bộ đệm cầu + relay.
+    /// Vì sao cần: ca thật — phiên chạy tốt ~30 phút rồi extension bị iOS giết (`JetsamEvent`
+    /// 25/09 19:09:42). Không có đường cong tài nguyên thì không biết thứ gì phình (bộ nhớ, fd rò
+    /// mỗi lần dựng lại transport, hay bộ đệm relay) ⇒ chỉ đoán.
+    private func startResourceTicker() {
+        resourceTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: diagQueue)
+        timer.schedule(deadline: .now() + 60, repeating: 60)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let snapshot = self.resourceSnapshot()
+            RelayDiagnostics.shared.log("tài nguyên: \(snapshot)")
+            // DỌN TÀI NGUYÊN TẠI CHỖ: iOS giết extension theo `per-process-limit` (~51 MB,
+            // `JetsamEvent` 25/09 19:09:42) ⇒ khi footprint vượt ngưỡng thì xả cache NGAY,
+            // không đợi tới lúc bị giết. Đo trước/sau để biết có hiệu quả hay không.
+            let footprint = self.resourceFootprintMB()
+            // BẮT TỐC ĐỘ LEO: đo thật 25/09 — Netflix làm footprint leo **~1 MB/phút** (37,9 → 44,5 MB
+            // trong 8 phút) và phiên chết ở 44,5 MB *trước khi* chạm ngưỡng 45 ⇒ chỉ ngưỡng tĩnh là
+            // không đủ. Giữ 6 mốc (≈6 phút); leo ≥ 6 MB trong 5 phút ⇒ hạ tunnel sạch như van.
+            self.resourceFootprintHistory.append((Date(), footprint))
+            if self.resourceFootprintHistory.count > 6 { self.resourceFootprintHistory.removeFirst() }
+            var growthTrigger: Double = 0
+            if let oldest = self.resourceFootprintHistory.first {
+                let minutes = Date().timeIntervalSince(oldest.0) / 60
+                if minutes >= 4.5, footprint - oldest.1 >= Self.memoryGrowthTriggerMB {
+                    growthTrigger = footprint - oldest.1
+                }
+            }
+            // VAN AN TOÀN BỘ NHỚ (đo thật 25/09/2026: phiên Netflix leo tới 48,8 MB rồi bị iOS giết
+            // `per-process-limit` ≈ 51 MB — BUG-IOS-JETSAM-001; dọn URLCache đo được 0 MB hiệu quả)
+            // ⇒ tự HẠ TUNNEL SẠCH ở 45 MB để iOS trả mạng, thay vì bị giết đột ngột giữa lúc khách dùng.
+            if footprint >= Self.memoryTeardownThresholdMB || growthTrigger > 0 {
+                RelayDiagnostics.shared.logSync(String(
+                    format: "van an toàn bộ nhớ: footprint %.1fMB (ngưỡng %.0fMB, leo %.1fMB/5phút) "
+                        + "⇒ HẠ tunnel SẠCH (trả mạng ngay) rồi thoát extension, thay vì để iOS jetsam giết đột ngột",
+                    footprint, Self.memoryTeardownThresholdMB, growthTrigger
+                ))
+                self.setStatus(
+                    state: "failed", code: Self.codeMemoryLimit,
+                    message: "Tunnel dùng quá nhiều bộ nhớ — đã hạ để trả mạng lại, hãy Connect lại."
+                )
+                setTunnelNetworkSettings(nil) { _ in }
+                cancelTunnelWithError(NSError(
+                    domain: "com.privatevpn.app.tunnel", code: 2_020,
+                    userInfo: [NSLocalizedDescriptionKey:
+                        "Bộ nhớ vượt ngưỡng an toàn — đã hạ tunnel để trả mạng lại."]))
+                Thread.sleep(forTimeInterval: 3)
+                exit(0)
+            }
+            // (Đã BỎ khối "dọn tài nguyên" cũ: đo thật 25/09 — 8 lần chạy, đều giảm **0 MB**
+            //  ⇒ URLCache/cửa sổ đo KHÔNG phải chỗ giữ bộ nhớ. Giữ log sạch để chỉ còn một dòng van.)
+        }
+        resourceTimer = timer
+        timer.resume()
+    }
+
+    /// Ngưỡng bắt đầu dọn (MB). iOS giết extension ở `per-process-limit` ≈ 51 MB (JetsamEvent
+    /// 25/09/2026 19:09:42: `rpages=3202`) ⇒ dọn ở 32 MB là còn biên an toàn.
+    ///
+    /// ⚠️ macOS **KHÔNG có jetsam** (trần per-process của iOS ≈51 MB là chuyện của iOS). Áp nguyên
+    /// ngưỡng 32/45 MB của iOS lên macOS làm extension **TỰ HẠ TUNNEL** khi footprint vượt 45 MB ⇒
+    /// khách thấy "VPN tự tắt/chập chờn" (đo thật trên máy Mac 25/09/2026: 23:17 `footprint=148.0MB`
+    /// và 23:42 `footprint=58.8MB` đều ghi `van an toàn bộ nhớ ⇒ HẠ tunnel SẠCH`). Vì vậy ngưỡng
+    /// macOS để cao hơn hẳn: chỉ dọn, gần như không bao giờ phải hạ tunnel.
+    #if os(iOS)
+    private static let memoryCleanupThresholdMB: Double = 32
+
+    /// Ngưỡng HẠ TUNNEL SẠCH (MB): dưới trần jetsam ~51 MB. Đo thật: mẫu tải nhẹ chỉ 13–14 MB còn
+    /// Netflix leo ~1 MB/phút ⇒ 40 MB là mức bắn sớm mà không bắn oan.
+    private static let memoryTeardownThresholdMB: Double = 40
+    /// Bắt theo TỐC ĐỘ LEO: tăng ≥ ngần này MB trong ~5 phút ⇒ hạ sớm (ca Netflix).
+    private static let memoryGrowthTriggerMB: Double = 6
+    #else
+    private static let memoryCleanupThresholdMB: Double = 200
+    private static let memoryTeardownThresholdMB: Double = 400
+    #endif
+
+    private func resourceFootprintMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &info) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), rebound, &count)
+            }
+        }
+        return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
+    }
+
+    private func openFileDescriptorCount() -> Int {
+        (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? -1
+    }
+
+    private func resourceSnapshot() -> String {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &info) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), rebound, &count)
+            }
+        }
+        let footprint = kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
+        let resident = kr == KERN_SUCCESS ? Double(info.resident_size) / 1_048_576 : -1
+        let fds = (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? -1
+        let c = trafficCounters
+        let relay = currentTransport()?.relayFrameCounts
+        let relayOpen = currentTransport()?.relayIsConnected ?? false
+        let dToGo = (c?.toGo ?? 0) - resourcePrevToGo
+        let dFromGo = (c?.fromGo ?? 0) - resourcePrevFromGo
+        let dRelaySent = (relay?.sent ?? 0) - resourcePrevRelaySent
+        let dRelayRecv = (relay?.received ?? 0) - resourcePrevRelayRecv
+        if let c { resourcePrevToGo = c.toGo; resourcePrevFromGo = c.fromGo }
+        if let relay { resourcePrevRelaySent = relay.sent; resourcePrevRelayRecv = relay.received }
+        return String(
+            format: "footprint=%.1fMB resident=%.1fMB fds=%d | cầu vào %d/ra %d (bỏ %d) | relay gửi %d nhận %d mở=%@ | Δ1phút vào+%d ra+%d relay+%d/+%d",
+            footprint, resident, fds,
+            c?.toGo ?? -1, c?.fromGo ?? -1, c?.toGoDropped ?? -1,
+            relay?.sent ?? -1, relay?.received ?? -1, relayOpen ? "yes" : "no",
+            dToGo, dFromGo, dRelaySent, dRelayRecv
+        )
     }
 
     /// Bật luồng canh (idempotent). Luồng chỉ `Thread.sleep` + đọc 2 mốc ⇒ không thể bị đói
@@ -806,6 +942,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         // Lưới an toàn chống đông cứng: luồng OS riêng, bật ngay khi tunnel đã lên.
         wedgeSetTunnelActive(true)
         startWedgeGuard()
+        startResourceTicker()
         startChinaBypass()
     }
 
