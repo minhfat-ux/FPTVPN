@@ -142,6 +142,12 @@ struct TunnelStatusReport: Codable, Equatable {
     var node: String?
     /// Tunnel đã chở byte nào chưa; false ⇒ mọi số phải là `—`.
     var serving: Bool?
+    /// DANH TÍNH CỦA CHÍNH EXTENSION đang chạy (chống ca "macOS dùng lại appex cũ dù đã cài bản
+    /// mới"): version/build, đường dẫn appex, và mtime của chính binary.
+    var extensionVersion: String?
+    var extensionBuild: String?
+    var extensionPath: String?
+    var extensionMTime: String?
 }
 
 /// Dọn trạng thái cũ còn sót lại từ các bản trước để lần Connect đầu tiên sau khi cập
