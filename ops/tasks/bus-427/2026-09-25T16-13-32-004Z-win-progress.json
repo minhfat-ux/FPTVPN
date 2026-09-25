@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "BO SUNG sau 'done' (phien WIN thu 2 — tin bus #428 trung #427). Anh: commit e640a7a (6 PNG-8) da deploy /root/flowvpn-cp/assets 23:08 (phien WIN 1). Cache: commit ce48fca — route /assets/:file nay set Cache-Control 'public, max-age=604800, stale-while-revalidate=86400' (truoc do origin khong set => Cloudflare ap mac dinh 4h); deploy bang scripts/server-agent/deploy-control-plane.sh --files index.js: backup=/root/flowvpn-cp/src-backup-20260925-161238, health OK, 0 dong loi journal. Do ban dang phat: 6 anh = 97.258 B = 94 KB (truoc 602.413 B = 588 KB, -84%), moi anh cc=max-age=604800 + cf-cache-status=HIT; bash scripts/check-web-assets-weight.sh --dir /root/flowvpn-cp/assets => exit 0; --url https://meetflowai.site => exit 0; / 200 (34.735 B br), /buy 200, /ai/buy 200, /health loopback 200. PHAT HIEN: bo test control-plane dang do san 4/431 (3 test trang buy + mmdb GeoIP drift 'CA'!='US') — chay tren src Y NGUYEN LIVE cung fail y het => khong do thay doi nay.",
+ "actor": "win",
+ "at": "2026-09-25T16:13:32.004Z"
+}
