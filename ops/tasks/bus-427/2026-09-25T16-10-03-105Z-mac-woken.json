@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-25T16:10:03.106Z",
+ "note": "connector VPS: done từ win — bus-427 · Site cham: 6 anh logo = 588 KB (95% trang chu) — goi toi uu san sang (origin/main bac6f58)",
+ "via": "dsh --profile headless \"{prompt}\""
+}
