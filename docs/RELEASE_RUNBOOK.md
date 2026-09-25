@@ -13,7 +13,7 @@
 |---|---|---|
 | 1 | **Cổng chặn version TRƯỚC upload** — đọc version TỪ TRONG artifact, không tin tên file/size/nhật ký | §2 bước 5 |
 | 2 | **Chạy lại cổng ở `--mode post` SAU upload** — đọc version file ĐANG PHÁT, đối chiếu mốc | §2 bước 9 |
-| 3 | **iOS: app + extension KHÔNG được khai nhóm keychain dùng chung** (đường A, từ 1.4.2/19 — extension iOS hysteria-only, không đọc keychain). Bản ≤ build 18 khai nhóm dùng chung mà profile Ad Hoc không cấp ⇒ `SecItemAdd` trả `-34018` ⇒ khách không đăng nhập được | §2 bước 3 |
+| 3 | **iOS: app + extension KHÔNG được khai nhóm keychain dùng chung** (đường A, từ 1.4.3/20 — extension iOS hysteria-only, không đọc keychain). Bản ≤ build 18 khai nhóm dùng chung mà profile Ad Hoc không cấp ⇒ `SecItemAdd` trả `-34018` ⇒ khách không đăng nhập được | §2 bước 3 |
 | 4 | **iOS: test trên iPhone THẬT** theo bảng 7 mục §2c (Simulator/máy ảo KHÔNG tính) | §2 bước 2 |
 | 5 | **macOS: DMG phải STAPLE**; `stapler validate` + `spctl` + `codesign --deep --strict` đều phải đạt. `spctl` một mình **KHÔNG đủ** | §4 |
 | 6 | **Windows: số hiệu nằm trong metadata .exe + UI hiện version** để đối chiếu mốc server | Windows harness phát hành; Mac chỉ **verify** link |
@@ -67,6 +67,13 @@ Android <version> (versionCode <n>) — APK
 ```
 
 ## 3. Quy trình iOS (có cổng chặn + test máy thật)
+
+> ⚠️ **Trước khi build (mọi nền tảng):** `iOS/Frameworks/` bị `.gitignore` nên **cây mới/CI không có**
+> `Hysteria.xcframework` (iOS, ~90 MB) và `Hysteria-macos.xcframework` (macOS, ~59 MB) ⇒ Xcode chết ở
+> `There is no XCFramework found at …`. Đã gặp thật **23/09/2026** khi dựng cây phát hành sạch cho **cả**
+> iOS lẫn macOS. Phải copy 2 thư mục đó từ cây đang build được; `scripts/archive-appstore.sh` nay
+> **chặn sớm và báo rõ** nếu thiếu (thay vì để Xcode báo khó hiểu).
+
 1. **Claim** vùng phát hành (luật §6 AGENTS.md):
    `ssh root@165.101.114.162 flowvpn-coord claim --owner mac --area release --files /root/flowvpn-ipa/ --note "phat hanh iOS <ver>"`
 1b. **XÁC NHẬN ĐÚNG BẢN MỚI NHẤT ĐÃ TEST** (`PUBLISHER_PROCESS.md` §2b): đối chiếu manifest
@@ -78,7 +85,7 @@ Android <version> (versionCode <n>) — APK
    Kiểm nội dung IPA (**đọc từ trong file**, không tin tên file):
    `unzip -q <ipa> -d /tmp/ipachk && PlistBuddy -c 'Print :CFBundleShortVersionString' /tmp/ipachk/Payload/*.app/Info.plist`
    → đúng `<version>`/`<build>`; `ls Payload/*.app/PlugIns/` phải có `PrivateVPNPacketTunnel.appex`.
-   **Keychain group: app + appex phải VẮNG nhóm dùng chung** (luật 3 — từ 1.4.2/19 bản iOS dùng
+   **Keychain group: app + appex phải VẮNG nhóm dùng chung** (luật 3 — từ 1.4.3/20 bản iOS dùng
    keychain riêng của app; extension iOS là hysteria-only, không đọc keychain):
    ```bash
    codesign -d --entitlements - /tmp/ipachk/Payload/*.app | grep -A2 keychain-access-groups
