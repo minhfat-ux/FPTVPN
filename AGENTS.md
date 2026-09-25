@@ -150,9 +150,23 @@ bash scripts/ios-verify-ipa.sh build/ios-adhoc-export/ipa/FlowVPN.ipa --version 
 ```bash
 xcrun devicectl device copy from --device <id> --domain-type appDataContainer \
   --domain-identifier com.privatevpn.app.packet-tunnel --source Documents --destination <dir>
-python3 scripts/ios-log-acceptance.py <dir>/relay.log     # exit 1 = có phiên KHÔNG ĐẠT
+xcrun devicectl device copy from --device <id> --domain-type systemCrashLogs \
+  --source . --destination <dir>/crash          # BẮT BUỘC từ 25/09/2026
+python3 scripts/ios-log-acceptance.py <dir>/relay.log --crash-dir <dir>/crash
+                                                # exit 1 = có phiên KHÔNG ĐẠT
 ```
 Cổng `ios-log-acceptance.py` đếm theo TỪNG phiên: nhịp lấy mẫu còn sống tới hết phiên, nhịp tim
 watchdog, số lần đổi mạng/dựng lại/link mở lại/tự gỡ, gói bỏ. Đã chứng minh hai chiều: build 24
 (nhịp lấy mẫu 36 mẫu/477 s, 4 nhịp tim) ⇒ ĐẠT; build 25→34 (2 mẫu rồi im, 0 nhịp tim) ⇒ **KHÔNG ĐẠT**.
 Bảng 6 ca + tiêu chí đạt nằm ở tài liệu đầu mục này. "Chắc là chạy" KHÔNG tính là nghiệm thu.
+
+**Ba lỗi đã LỌT cổng cũ ngày 25/09/2026 — cổng đã được siết (đừng gỡ các tiêu chí này):**
+1. **CHIỀU VỀ ĐÓNG BĂNG một chiều** (Mac 19:42–19:43, relay `vn1hy`: 17 khoảng 5 s máy gửi 1277 gói
+   mà `Go→packetFlow` không tăng một gói) — 3 khoảng liên tiếp như vậy ⇒ KHÔNG ĐẠT. WS mở +
+   handshake xong + watchdog có nhịp **không** chứng minh đường còn chở chiều về.
+2. **Jetsam/crash của extension**: phiên nào chứa mốc `JetsamEvent`/`PrivateVPNPacketTunnel-*.ips`
+   thì phiên đó KHÔNG ĐẠT (ca thật: `reason=per-process-limit`, `rpages=3202` ≈ 51 MB, extension bị
+   iOS giết mà log **không** có dòng `stopTunnel`). Thiếu `--crash-dir` = nghiệm thu **thiếu**.
+3. **Phiên đầu file** (trước mốc `build: version=` đầu tiên) vẫn được chấm với nhãn build `?` — ca
+   một chiều ở (1) nằm đúng trong phần đầu file, cổng cũ bỏ qua nguyên ca.
+

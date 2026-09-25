@@ -190,6 +190,9 @@ targets:
         buildPhase: resources
       - path: docs/routes/cn6.txt
         buildPhase: resources
+      # A7 — danh sách IP Tencent Meeting (HK/Tencent Cloud toàn cầu) đi thẳng, xem ChinaRouteBypass.
+      - path: docs/routes/tencent-meeting.txt
+        buildPhase: resources
       # KHÔNG kèm WireGuardConfig.swift/KeychainStore.swift/ControlAPIClient.swift: cả ba
       # `import WireGuardKit`, mà target này cố ý không có WireGuardKit (xem trên).
       # KHÔNG kèm NodeHealthReporter.swift: gọi ControlAPIHosts (ControlAPIClient.swift) và
@@ -259,6 +262,9 @@ targets:
       - path: docs/routes/cn.txt
         buildPhase: resources
       - path: docs/routes/cn6.txt
+        buildPhase: resources
+      # A7: danh sách Tencent Meeting đi thẳng (xem ChinaRouteBypass).
+      - path: docs/routes/tencent-meeting.txt
         buildPhase: resources
     dependencies:
       - target: PrivateVPN
@@ -413,6 +419,9 @@ targets:
       - path: docs/routes/cn.txt
         buildPhase: resources
       - path: docs/routes/cn6.txt
+        buildPhase: resources
+      # A7 — danh sách IP Tencent Meeting (HK/Tencent Cloud toàn cầu) đi thẳng, xem ChinaRouteBypass.
+      - path: docs/routes/tencent-meeting.txt
         buildPhase: resources
       # KHÔNG kèm NodeHealthReporter.swift: nó gọi ControlAPIHosts
       # (ControlAPIClient.swift) và kéo theo nguyên một tầng mạng không cần cho tunnel.

@@ -950,23 +950,41 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         startChinaBypass()
     }
 
-    /// A7 — nạp dải IP Trung Quốc ở LUỒNG NỀN rồi áp lại `excludedRoutes`.
+    /// A7 — nạp dải IP đi thẳng ở LUỒNG NỀN rồi áp lại `excludedRoutes`.
     ///
     /// Chỉ chạy SAU khi tunnel đã lên (`bringUp` gọi sau `completeStart`), không bao giờ nằm
     /// trên đường connect: bài học Windows 1.0.4 "connecting mãi" khi thêm 5.494 route đồng bộ
     /// trong lúc kết nối (`.privatevpn/reports/2026-09-18-windows-1.0.5-handoff.md` §1).
     /// Bước 1 dùng bản đã NHỚ (không cần mạng); bước 2 tải bản mới; chỉ áp lại khi số dải đổi.
+    ///
+    /// **macOS (chủ dự án chốt 25/09/2026)**: trước đây cả hàm này bị `#if os(iOS)` loại nên Mac
+    /// KHÔNG hề chia đường ⇒ mọi gói đi qua tunnel, kể cả Tencent Meeting (edge ở Hồng Kông) ⇒
+    /// đúng triệu chứng *"bật VPN lên là cuộc họp chậm/chết"*: khi `excludedRoutes` đổi, NE cài lại
+    /// bảng route và luồng UDP media đang chạy bị hút vào tunnel.
+    /// Nay macOS nạp **đúng bộ như iOS/Android**: `cn.txt` + `tencent-meeting.txt`
+    /// (`ChinaRouteBypass.platformCached`) — rút lui bằng cờ `A7.macBypass.enabled`.
+    /// KHÔNG đụng `includedRoutes` (bài học 19/09: đổi đồng thời hai biến thì không tách được
+    /// nguyên nhân). Bước 1 (4 dải LAN) đã làm xong trước lượt này.
     private func startChinaBypass() {
-        #if os(iOS)
+        #if os(macOS)
+        // CỜ RÚT LUI: `false` ⇒ Mac về đúng trạng thái cũ (chỉ 4 dải LAN).
+        guard ChinaRouteBypass.macBypassEnabled() else {
+            RelayDiagnostics.shared.log(
+                "china: A7 macOS TẮT bằng cờ \(ChinaRouteBypass.macBypassEnabledKey) ⇒ chỉ còn 4 dải LAN (bước 1)"
+            )
+            return
+        }
+        #endif
         let session = currentSession
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
-            let cached = ChinaRouteBypass.excludedRoutes(from: ChinaRouteBypass.cached())
+            // Bộ danh sách của nền tảng này (macOS = iOS = cn.txt + Tencent).
+            let cached = ChinaRouteBypass.excludedRoutes(from: ChinaRouteBypass.platformCached())
             self.queue.async {
                 guard session == self.currentSession else { return }
                 self.applyChinaRoutes(cached)
             }
-            ChinaRouteBypass.refresh { [weak self] cidrs in
+            ChinaRouteBypass.platformRefresh { [weak self] cidrs in
                 guard let self else { return }
                 let fresh = ChinaRouteBypass.excludedRoutes(from: cidrs)
                 self.queue.async {
@@ -975,21 +993,19 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                 }
             }
         }
-        #endif
     }
 
-    /// Áp danh sách dải IP TQ (IPv4) vào settings đang chạy (chạy trên `queue`).
-    /// Rỗng/không đổi ⇒ thôi.
+    /// Áp danh sách dải IP đi thẳng (IPv4) vào settings đang chạy (chạy trên `queue`).
+    /// Rỗng/không đổi ⇒ thôi. Log ghi rõ NỀN TẢNG + NGUỒN để đối chiếu khi đo trên máy thật.
     private func applyChinaRoutes(_ routes: [NEIPv4Route]) {
-        #if os(iOS)
         guard !routes.isEmpty, routes.count != chinaExcludedRoutes.count else { return }
         chinaExcludedRoutes = routes
         guard let options = currentOptions else { return }
         let applied = applySettings(networkSettings(options: options))
         RelayDiagnostics.shared.log(
-            "china: A7 nạp \(routes.count) dải IP TQ vào excludedRoutes (áp lại settings=\(applied))"
+            "china: A7 nạp \(routes.count) dải IP TQ vào excludedRoutes"
+                + " [\(ChinaRouteBypass.sourceLabel)] (áp lại settings=\(applied))"
         )
-        #endif
     }
 
     /// Dựng transport hysteria2 với fd utun ĐANG dùng của NetworkExtension.
@@ -2193,11 +2209,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),
         ]
-        #if os(iOS)
-        // A7 — app TQ đi đường riêng: dải IP TQ (đã nạp ở nền) đi thẳng, không qua tunnel.
-        // CHỈ iOS ở bước này: macOS phải qua bước 1 (đo 4 dải LAN) rồi mới sang bước 2.
+        // A7 — chia đường theo ĐÍCH ĐẾN: dải IP đã nạp ở nền (CẢ HAI nền tảng:
+        // cn.txt + tencent-meeting.txt — macOS mở 25/09/2026, xem `startChinaBypass`) đi thẳng,
+        // không qua tunnel. Lúc connect mảng này còn RỖNG (nạp sau khi tunnel lên) nên KHÔNG nằm
+        // trên đường connect.
         excluded.append(contentsOf: chinaExcludedRoutes)
-        #endif
         ipv4.excludedRoutes = excluded
         settings.ipv4Settings = ipv4
 

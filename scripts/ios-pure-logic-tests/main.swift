@@ -598,6 +598,80 @@ do {
     checkEqual(ChinaRouteBypass.normalizedIPv6CIDR("::1/128"), "::1/128", "IPv6 ::1/128")
     check(ChinaRouteBypass.normalizedIPv6CIDR("2400:cb00::/129") == nil, "prefix IPv6 > 128 ⇒ nil")
     check(ChinaRouteBypass.normalizedIPv6CIDR("1.2.3.4/24") == nil, "IPv4 không lọt vào parse IPv6")
+
+    // A7 bước 2 (macOS, 25/09/2026): gộp `cn.txt` + `tencent-meeting.txt` — thuần logic.
+    checkEqual(
+        ChinaRouteBypass.merge(["1.0.1.0/24", "1.0.2.0/23"], ["1.0.2.0/23", "43.129.0.0/16"]),
+        ["1.0.1.0/24", "1.0.2.0/23", "43.129.0.0/16"],
+        "merge: giữ thứ tự, bỏ trùng giữa hai danh sách"
+    )
+    checkEqual(ChinaRouteBypass.merge(["1.0.1.0/24"], ["1.0.2.0/24"], limit: 1).count, 1,
+               "merge: trần áp SAU khi gộp (không vượt maxRoutes)")
+    check(ChinaRouteBypass.merge([], []).isEmpty, "merge: hai danh sách rỗng ⇒ rỗng")
+
+    // Cờ RÚT LUI của A7 macOS (tắt được để quay về bước 1 — 4 dải LAN).
+    check(ChinaRouteBypass.bypassEnabled(compiledDefault: true, override: nil),
+          "cờ rút lui: không ghi đè ⇒ theo mặc định biên dịch (BẬT)")
+    check(!ChinaRouteBypass.bypassEnabled(compiledDefault: true, override: false),
+          "cờ rút lui: ghi đè false ⇒ TẮT (về bước 1)")
+    check(ChinaRouteBypass.bypassEnabled(compiledDefault: false, override: true),
+          "cờ rút lui: ghi đè true thắng mặc định biên dịch")
+
+    // FILE THẬT phải bao đúng các IP Tencent Meeting đã resolve 25/09/2026 — chúng KHÔNG có
+    // trong `cn.txt` (đã kiểm bằng `ipaddress`), nên thiếu file này là A7 vô hiệu với app họp.
+    let tencentPath = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("docs/routes/tencent-meeting.txt")
+    let tencentText = (try? String(contentsOf: tencentPath, encoding: .utf8)) ?? ""
+    let tencent = ChinaRouteBypass.parse(tencentText)
+    check(!tencent.isEmpty, "đọc được docs/routes/tencent-meeting.txt ⇒ \(tencent.count) dải")
+    for required in [
+        "129.226.0.0/16", "43.129.0.0/16", "43.175.0.0/16", "43.128.0.0/16", "43.174.0.0/16",
+        "43.157.0.0/16", "42.187.185.0/24", "42.187.186.0/24", "1.13.136.0/24", "1.13.137.0/24",
+        "110.40.160.0/24", "110.40.161.0/24", "106.55.204.0/24", "106.55.205.0/24",
+        "139.186.243.0/24",
+    ] {
+        check(tencent.contains(required), "tencent-meeting.txt có \(required)")
+    }
+    for ip in ["43.129.255.19", "129.226.103.131", "43.175.44.35"] {
+        check(tencent.contains { cidr in
+            let parts = cidr.split(separator: "/", maxSplits: 1)
+            guard parts.count == 2, let prefix = Int(parts[1]),
+                  let maskText = ChinaRouteBypass.prefixMask(prefix),
+                  let mask = ChinaRouteBypass.ipv4ToUInt32(maskText),
+                  let network = ChinaRouteBypass.ipv4ToUInt32(String(parts[0])),
+                  let target = ChinaRouteBypass.ipv4ToUInt32(ip) else { return false }
+            return (target & mask) == (network & mask)
+        }, "IP thật \(ip) nằm trong tencent-meeting.txt")
+    }
+    checkEqual(ChinaRouteBypass.merge(tencent, tencent).count, tencent.count,
+               "gộp danh sách với chính nó ⇒ không nhân đôi dải")
+
+    // macOS dùng ĐÚNG bộ tài nguyên như iOS (chủ dự án chốt 25/09/2026): cn.txt + Tencent Meeting.
+    // Chốt bằng số thật lấy từ chính file production, không phải mẫu tự nghĩ.
+    let cnPath = tencentPath.deletingLastPathComponent().appendingPathComponent("cn.txt")
+    let cnList = ChinaRouteBypass.parse((try? String(contentsOf: cnPath, encoding: .utf8)) ?? "")
+    check(cnList.count > 5000, "cn.txt production đọc được ⇒ \(cnList.count) dải (> 5.000)")
+    let phased = ChinaRouteBypass.platformRoutes(cn: cnList, tencent: tencent)
+    checkEqual(phased.count, cnList.count + tencent.count,
+               "danh sách nạp = cn.txt + Tencent Meeting (\(cnList.count) + \(tencent.count))")
+    check(phased.contains("119.28.0.0/15"), "có dải của cn.txt (119.28.0.0/15)")
+    checkEqual(Array(phased.prefix(2)), Array(cnList.prefix(2)), "cn.txt đứng trước, giữ nguyên thứ tự")
+    checkEqual(Array(phased.suffix(2)), Array(tencent.suffix(2)), "Tencent Meeting nối ở cuối")
+    check(ChinaRouteBypass.sourceLabel.contains("cn.txt")
+            && ChinaRouteBypass.sourceLabel.contains("tencent-meeting.txt"),
+          "nhãn log nêu đủ nguồn: \(ChinaRouteBypass.sourceLabel)")
+    for ip in ["43.129.255.19", "129.226.103.131", "43.175.44.35"] {
+        check(phased.contains { cidr in
+            let parts = cidr.split(separator: "/", maxSplits: 1)
+            guard parts.count == 2, let prefix = Int(parts[1]),
+                  let maskText = ChinaRouteBypass.prefixMask(prefix),
+                  let mask = ChinaRouteBypass.ipv4ToUInt32(maskText),
+                  let network = ChinaRouteBypass.ipv4ToUInt32(String(parts[0])),
+                  let target = ChinaRouteBypass.ipv4ToUInt32(ip) else { return false }
+            return (target & mask) == (network & mask)
+        }, "IP meeting \(ip) đi THẲNG trong bản nạp")
+    }
 }
 
 // MARK: - RampStatus A11 (§2h): khai báo an toàn trước, ramp sau

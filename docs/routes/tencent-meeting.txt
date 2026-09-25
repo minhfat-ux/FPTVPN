@@ -1,0 +1,51 @@
+# Tencent Meeting (腾讯会议 / WeMeet) — dải IP ĐI THẲNG, KHÔNG qua VPN (A7 macOS/iOS).
+#
+# NGUỒN (không suy đoán):
+#   1. Danh sách chính thức "会议室连接器" của Tencent Cloud (cập nhật 2024-12), các dải /24:
+#      42.187.185.0/24, 42.187.186.0/24, 1.13.136.0/24, 1.13.137.0/24, 110.40.160.0/24,
+#      110.40.161.0/24, 106.55.204.0/24, 106.55.205.0/24, 139.186.243.0/24,
+#      129.226.104.0/24, 129.226.105.0/24, 43.157.73.0/24
+#   2. Dải BAO các IP thật đã resolve từ máy này khi VPN TẮT (25/09/2026):
+#      meeting.tencent.com → 129.226.103.131, 43.129.255.19 ; wemeet.qq.com → 43.175.44.35
+#      ⇒ cần 129.226.0.0/16, 43.129.0.0/16, 43.175.0.0/16
+#   3. Thêm dải Tencent Cloud/HK mà edge họp dùng: 43.128.0.0/16, 43.174.0.0/16, 43.157.0.0/16
+#
+# VÌ SAO PHẢI CÓ FILE NÀY: 4 IP ở (2) KHÔNG nằm trong `cn.txt` (đã kiểm bằng `ipaddress` trên
+# 5.494 dải của APNIC — Tencent Meeting đặt edge ở Hồng Kông/Tencent Cloud TOÀN CẦU, không phải
+# dải APNIC của TQ). Bật A7 mà thiếu file này thì app họp VẪN đi qua tunnel ⇒ chậm/giật.
+#
+# ⚠️ HỆ QUẢ PHẢI BIẾT: các dải `/16` là Tencent Cloud **toàn cầu** (không riêng TQ). Đưa vào
+# `excludedRoutes` nghĩa là MỌI traffic tới chúng đi THẲNG ra đường vật lý — KHÔNG qua VPN, nên
+# IP thật của máy lộ với các đích đó. Đây là chủ ý cho app họp (đúng yêu cầu chủ dự án), đánh đổi
+# lấy độ trễ: nếu không muốn lộ, phải bỏ các dòng /16 và chỉ giữ /24 (khi đó 3 IP ở (2) lại đi
+# qua tunnel như cũ).
+#
+# Định dạng: CIDR mỗi dòng; `#` là comment; dòng trống bỏ qua (xem `ChinaRouteBypass.parse`).
+# Danh sách này KHÔNG chứa cổng: `excludedRoutes` của NetworkExtension chia đường theo ĐÍCH ĐẾN
+# (IP), không theo cổng. Cổng chính thức của Tencent Meeting để tham chiếu khi kiểm tường lửa:
+# TCP/UDP 5060, TCP 5061, UDP 1719, TCP 1720, media 20000-23000.
+
+# --- (2) dải bao IP thật đã resolve ---
+129.226.0.0/16
+43.129.0.0/16
+43.175.0.0/16
+
+# --- (3) Tencent Cloud/HK dùng cho edge họp ---
+43.128.0.0/16
+43.174.0.0/16
+43.157.0.0/16
+
+# --- (1) danh sách chính thức của Tencent (giữ nguyên cả các /24 đã nằm trong /16 ở trên:
+#         rẻ, và nếu sau này bỏ /16 thì vẫn còn đường đi thẳng đúng theo tài liệu) ---
+42.187.185.0/24
+42.187.186.0/24
+1.13.136.0/24
+1.13.137.0/24
+110.40.160.0/24
+110.40.161.0/24
+106.55.204.0/24
+106.55.205.0/24
+139.186.243.0/24
+129.226.104.0/24
+129.226.105.0/24
+43.157.73.0/24
