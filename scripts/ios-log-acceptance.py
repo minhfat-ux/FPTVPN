@@ -21,7 +21,9 @@ Dùng:  python3 scripts/ios-log-acceptance.py <relay.log> [--min-seconds 90]
 `--crash-dir`: thư mục crash report của máy thật (lấy bằng
 `xcrun devicectl device copy from --domain-type systemCrashLogs`). Có cờ này thì phiên nào bị
 Jetsam/crash của `PrivateVPNPacketTunnel` rơi vào khoảng thời gian của nó sẽ là KHÔNG ĐẠT.
-Exit 0 = mọi phiên ĐẠT; exit 1 = có phiên KHÔNG ĐẠT (in rõ lý do).
+Exit 0 = mọi phiên ĐẠT; exit 1 = có phiên KHÔNG ĐẠT; exit 2 = KHÔNG KIỂM ĐƯỢC (thiếu log chi
+tiết — xem `RelayDiagnostics` "công tắc log": từ build 53 log chi tiết MẶC ĐỊNH TẮT, phải bật
+(`Documents/tunnel-log-on` hoặc `providerConfiguration["logVerbose"]`) trước khi nghiệm thu).
 """
 import datetime
 import json
@@ -120,9 +122,22 @@ def judge(seg, min_seconds=SESSION_MIN_S):
     if rate and dur > 5:
         kbps = (rate[-1] - rate[0]) * 8 / 1000 / dur
 
+    # CÔNG TẮC LOG (build ≥53): `RelayDiagnostics` mặc định TẮT log chi tiết và chỉ ghi các dòng
+    # thuộc danh sách "luôn ghi" (`tài nguyên:`, `giám sát:`, `ĐÃ dựng lại transport`…). Khi đó
+    # KHÔNG có `bw: sample`, KHÔNG có `bridge:` và KHÔNG có nhịp tim ⇒ **không chấm được** phiên:
+    # thiếu dòng không có nghĩa là nhịp chết (ca thật 26/09/2026: cổng cũ báo oan 5/7 phiên).
+    detail_off = (
+        not samples
+        and not beats
+        and "bridge: packetFlow" not in "\n".join(seg)
+        and any("tài nguyên:" in l or "giám sát:" in l for l in seg)
+    )
+
     problems = []
     if dur < min_seconds:
         return build, t0, dur, ["(phiên quá ngắn, bỏ qua)"], {}
+    if detail_off:
+        return build, t0, dur, ["(log chi tiết TẮT — KHÔNG KIỂM ĐƯỢC)"], {}
     if fails:
         problems.append("KHỞI ĐỘNG HỎNG: " + fails[0][20:110])
     if not samples:
@@ -313,18 +328,26 @@ def main():
         (attached[owner] if owner is not None else outside).append((when, info, name))
 
     bad = 0
+    unverifiable = 0
     for k, seg in enumerate(segs):
         build, t0, dur, problems, st = judge(seg, min_seconds)
         head = f"build {build:>3s} · {t0.strftime('%m-%d %H:%M:%S')} · {round(dur):4d}s"
         skipped = problems == ["(phiên quá ngắn, bỏ qua)"]
+        notverified = problems == ["(log chi tiết TẮT — KHÔNG KIỂM ĐƯỢC)"]
         for when, info, name in attached[k]:
-            if skipped:
+            if skipped or notverified:
                 problems = []
                 skipped = False
+                notverified = False
             stamp = when.strftime("%m-%d %H:%M:%S") if when else "?"
             problems.append(f"{info} — {name} (lúc {stamp})")
         if skipped:
             print(f"  {head} · bỏ qua")
+            continue
+        if notverified:
+            unverifiable += 1
+            print(f"  ⚠️  {head} · KHÔNG KIỂM ĐƯỢC (log chi tiết TẮT)")
+            print("       - bật log chi tiết rồi đo lại; xem hướng dẫn ở cuối")
             continue
         if problems:
             bad += 1
@@ -359,6 +382,19 @@ def main():
     if bad:
         print(f"KẾT LUẬN: KHÔNG ĐẠT — {bad}/{len(segs)} phiên có lỗi ở trên")
         return 1
+    if unverifiable:
+        print(
+            f"KẾT LUẬN: KHÔNG KIỂM ĐƯỢC — {unverifiable}/{len(segs)} phiên không có log chi tiết\n"
+            "  Bật log chi tiết rồi đo lại:\n"
+            "    printf '' > /tmp/tunnel-log-on\n"
+            "    xcrun devicectl device copy to --device <id> --domain-type appDataContainer \\\n"
+            "      --domain-identifier com.privatevpn.app.packet-tunnel \\\n"
+            "      --source /tmp/tunnel-log-on --destination Documents\n"
+            "  (hoặc app truyền providerConfiguration[\"logVerbose\"] = true khi Connect)\n"
+            "  KHÔNG được coi là ĐẠT: phiên thiếu dòng thì không chấm được nhịp lấy mẫu, nhịp tim,"
+            " chiều về một chiều hay gói bỏ."
+        )
+        return 2
     print(f"KẾT LUẬN: ĐẠT — {len(segs)}/{len(segs)} phiên sạch")
     return 0
 

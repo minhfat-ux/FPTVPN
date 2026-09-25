@@ -92,8 +92,31 @@ targets:
         # không cấp ⇒ -34018, khách kẹt màn đăng nhập) + gộp 7c98e53 (đăng xuất thiết bị khác)
         # và 820b9d2 (watchdog). Kênh đang phát 1.4.1/build 18 ⇒ PHẢI tăng CHUỖI version (app chỉ
         # nhắc cập nhật khi CFBundleShortVersionString tăng); control-plane đặt minimum_version=1.4.2.
-        CURRENT_PROJECT_VERSION: "20"
-        MARKETING_VERSION: "1.4.3"
+        # 1.4.4 / build 21 (24/09/2026): sửa HIỂN THỊ thẻ Diagnostics — số down/up "live" lấy trung
+        # bình 3 mẫu (trước đây 1 mẫu nên nhảy loạn so với Ookla) và "Khai báo hiện tại" in số ĐANG
+        # áp dụng thay vì số kế hoạch; thêm cờ `serving` giữ nguyên sau khi đổi transport nên thẻ
+        # không còn trắng số. Chỉ đụng đường hiển thị, không đổi ramp/transport/watchdog/MTU/DNS.
+        # Kênh đang phát 1.4.3/build 20 (sha256 b2432247…) — tăng số theo luật artifact bất biến
+        # (docs/VERSIONING.md §3.3: cùng version mà khác hash là cấm).
+        # 1.4.5 / build 22 (24/09/2026 tối): bản vá ỔN ĐỊNH theo **android parity** —
+        # (a) TẮT tự-áp số khai giữa phiên (`BandwidthControl.allowsTransportRebuild = false`):
+        #     không còn 7 lần "transport vừa thay (ramp băng thông)" mỗi phiên (log máy thật 24/09);
+        #     số mới vẫn được GHI NHỚ theo mạng và áp ở lần kết nối/đổi mạng kế tiếp;
+        # (b) watchdog "không tiến triển": 10s → **45s + 2 strike liên tiếp**, ngưỡng tự GỠ tunnel
+        #     45s → **120s** (bản 1.4.4 tự dựng lại/gỡ khi tunnel chỉ RẢNH ⇒ khách thấy "tự ngắt").
+        # Build 23 (24/09/2026 tối — đợt 2, android parity cho phần RAMP + SỐ LIỆU):
+        #   • `livenessStrikesToRebuild` 1 → **2** (Android `DEAD_PROBE_LIMIT = 2`);
+        #   • cổng HẠ số khai nhận thêm điều kiện `busy = idleRun == 0` của Android ⇒ hết kẹt cứng
+        #     "khai vống + đang tải ⇒ không hạ được, cũng không lên được";
+        #   • thẻ Diagnostics: "% còn lên" dùng hệ số **1,15** (Android `:1191`), "Mức đã khoá" theo
+        #     mốc **≥8 Mbps giữ 10s** (Android `FULLHD_KBPS`).
+        # Build 24 (24/09/2026 khuya — ca thật "Connected mà KHÔNG có mạng" 32 phút trên iPhone):
+        #   luật `alive` của watchdog sống-còn chỉ cần **1 gói về** nên một dòng nhỏ giọt
+        #   (~10 gói/15 s trong khi máy gửi 180 gói/15 s, relay đứng im >30 s) vẫn bị coi là "sống"
+        #   ⇒ khách phải tự tắt VPN. Thêm luật **SYN gửi mà KHÔNG có SYN-ACK nào về** (≥15 s) —
+        #   đúng bằng chứng app đã dùng ở đầu phiên, và miễn nhiễm ca khách đang UPLOAD.
+        CURRENT_PROJECT_VERSION: "54"
+        MARKETING_VERSION: "1.4.6"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -186,8 +209,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.3"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.6"
+        CURRENT_PROJECT_VERSION: "54"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
@@ -275,8 +298,8 @@ targets:
         PRODUCT_NAME: VPNFlow
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.3"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.6"
+        CURRENT_PROJECT_VERSION: "21"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -405,8 +428,8 @@ targets:
         PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.3"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.6"
+        CURRENT_PROJECT_VERSION: "21"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).
