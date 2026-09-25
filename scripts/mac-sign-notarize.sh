@@ -88,11 +88,34 @@ xcrun stapler validate "$APP"
 if [ "$DO_DMG" = "1" ]; then
   echo "== 6. DMG"
   DMGSTAGE="$BASE/dmgstage-$VER"; DMG="$BASE/VPNFlow-mac-$VER.dmg"; HYBRID="$BASE/VPNFlow-mac-$VER.hybrid.dmg"
-  rm -rf "$DMGSTAGE" "$DMG" "$HYBRID"; mkdir -p "$DMGSTAGE"
+  MOUNT="$BASE/mnt-$VER"
+  rm -rf "$DMGSTAGE" "$DMG" "$HYBRID" "$MOUNT"; mkdir -p "$DMGSTAGE"
   ditto "$APP" "$DMGSTAGE/VPNFlow.app"; ln -s /Applications "$DMGSTAGE/Applications"
-  # makehybrid: `hdiutil create -srcfolder` bị chặn trong sandbox của harness (đã gặp thật).
-  hdiutil makehybrid -hfs -hfs-volume-name VPNFlow -o "$HYBRID" "$DMGSTAGE"
-  hdiutil convert "$HYBRID" -format UDZO -o "$DMG"; rm -f "$HYBRID"
+  # HFS/makehybrid nhét `com.apple.FinderInfo` vào app bên trong ⇒ `codesign --verify --deep --strict`
+  # báo "resource fork, Finder information, or similar detritus not allowed" ⇒ DMG KHÔNG được phát
+  # (đã gặp thật 23/09 và 25/09/2026). Luật: dựng bằng `-fs APFS` + xoá sạch xattr trước khi đóng gói.
+  xattr -cr "$DMGSTAGE" 2>/dev/null || true
+  if ! hdiutil create -fs APFS -volname VPNFlow -srcfolder "$DMGSTAGE" -format UDZO -ov "$DMG" 2>"$BASE/dmg-create-$VER.log"; then
+    echo "   hdiutil create APFS KHÔNG chạy được → thử makehybrid (xem $BASE/dmg-create-$VER.log)" >&2
+    hdiutil makehybrid -hfs -hfs-volume-name VPNFlow -o "$HYBRID" "$DMGSTAGE"
+    hdiutil convert "$HYBRID" -format UDZO -o "$DMG"; rm -f "$HYBRID"
+  fi
+  rm -rf "$DMGSTAGE"
+  echo "== 6b. CỔNG SỚM: mở DMG, kiểm codesign + rác xattr của app BÊN TRONG (chặn trước khi tốn lượt notarize)"
+  mkdir -p "$MOUNT"
+  hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT" >/dev/null
+  if ! codesign --verify --deep --strict --verbose=2 "$MOUNT/VPNFlow.app" 2>&1 | tail -2; then
+    hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+    echo "LỖI: app trong DMG KHÔNG đạt codesign --verify --deep --strict ⇒ DỪNG (chưa notarize)." >&2
+    exit 1
+  fi
+  if xattr -lr "$MOUNT/VPNFlow.app" 2>/dev/null | grep -qiE "com\.apple\.(FinderInfo|ResourceFork)"; then
+    hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+    echo "LỖI: app trong DMG còn FinderInfo/ResourceFork (detritus) ⇒ Gatekeeper từ chối. DỪNG." >&2
+    exit 1
+  fi
+  hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+  echo "   DMG sạch: codesign --deep --strict ĐẠT, không còn FinderInfo/ResourceFork"
   echo "== 7. ký DMG (SAU staple app, TRƯỚC submit)"
   codesign --force --timestamp --sign "$ID" "$DMG"
   echo "== 8. notarize DMG + staple + verify"
