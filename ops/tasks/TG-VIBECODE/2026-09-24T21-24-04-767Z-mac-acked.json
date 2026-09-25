@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận câu hỏi owner (bus #411 'dev ios làm nghiệm thu xong chưa?' + #412 'báo cáo việc iOS đến đâu'). Đang đối chiếu trạng thái thật của nhánh dev iOS (repo PrivateVPN) + cổng nghiệm thu log máy thật, báo ngay kèm bằng chứng.",
+ "actor": "mac",
+ "at": "2026-09-24T21:24:04.769Z"
+}
