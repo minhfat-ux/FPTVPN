@@ -59,6 +59,9 @@ final class VPNManager: ObservableObject {
     private var providerProbeTask: Task<Void, Never>?
     /// Đã xử lý chẩn đoán cho lần Connect này (tránh lặp lại thông báo/hạ tunnel nhiều lần).
     private var diagnosticHandled = false
+    /// Đã báo `noTraffic` một lần cho phiên này chưa — để KHÔNG ghi log/xoá cache mỗi giây
+    /// (app poll extension 1 s/lần) nhưng vẫn giữ `diagnosticHandled = false` cho `startFailed` sau.
+    private var noTrafficReported = false
 
     /// Static ref cho AppDelegate (applicationWillTerminate -> disconnect).
     nonisolated(unsafe) static weak var sharedForTerminate: VPNManager?
@@ -180,6 +183,8 @@ final class VPNManager: ObservableObject {
             deviceLimitMessage = nil
             deviceLimitDevices = []
             diagnosticHandled = false
+            noTrafficReported = false
+            AppDiagnostics.shared.log("Connect: đã gọi startVPNTunnel() node=\(store.selectedNodeID ?? "-")")
             startProviderDiagnosticsPolling()
         } catch let error as ControlAPIClient.ClientError {
             if case .deviceLimit(let message, let devices) = error {
@@ -301,8 +306,33 @@ final class VPNManager: ObservableObject {
         // A10 §2g — cập nhật số live cho thẻ Diagnostics ở MỌI nhịp (kể cả phiên bình thường).
         // Không che trạng thái thật: cầu WS chập thì extension trả số thấp/`—` đúng lúc.
         liveDiagnostics = report
+        if let c = report.code {
+            AppDiagnostics.shared.log("extension báo mã=\(c) state=\(report.state) rx=\(report.rxBytes) tx=\(report.txBytes)")
+        }
         guard let code = report.code else { return }
         guard code == TunnelDiagnosticCode.noTraffic || code == TunnelDiagnosticCode.startFailed else {
+            return
+        }
+        // `noTraffic` KHÔNG đủ để APP hạ tunnel (25/09/2026).
+        //
+        // Vì sao: extension có watchdog + dựng lại transport + **tự đổi node** để tự cứu; nó báo
+        // `noTraffic` như một TRẠNG THÁI ("tunnel đang không chở gói"), không phải lệnh giết.
+        // Trước đây app nhận mã là `stopVPNTunnel()` + `state = .failed` ⇒ khách thấy **"tự ngắt
+        // liên tục"**: đo thật 25/09/2026 trên iPhone+iPad, mỗi phiên chỉ sống 1–2 phút rồi bị app
+        // hạ, dù extension vừa đổi node và đang chở lại vài Mbps. Khi extension thật sự hết đường,
+        // `selfRescue` đã tự `teardownAndCancel` ⇒ hệ thống báo `.disconnected` và UI hiện đúng,
+        // không cần app hạ lần nữa.
+        //
+        // `startFailed` thì VẪN hạ: đó là lỗi khởi động thật (không có tunnel nào để giữ).
+        guard code == TunnelDiagnosticCode.startFailed else {
+            if !noTrafficReported {
+                noTrafficReported = true
+                log.error("provider diagnostics: noTraffic — để EXTENSION tự phục hồi, app KHÔNG hạ tunnel; session=\(report.session) rx=\(report.rxBytes) tx=\(report.txBytes)")
+                // Cấu hình của phiên hỏng KHÔNG được tái sử dụng cho lần Connect sau.
+                TunnelConfigCache.clear()
+                ExitNodeCache.clear()
+            }
+            if let message = report.message { statusMessage = message }
             return
         }
         diagnosticHandled = true
