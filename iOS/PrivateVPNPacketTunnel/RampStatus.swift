@@ -863,6 +863,176 @@ enum RampStatus {
             return true
         }
     }
+
+    // MARK: - 26/09/2026 — TRẦN CỨNG cho MỌI hàng đợi trên ĐƯỜNG DỮ LIỆU (BUG-IOS-JETSAM-001)
+
+    /// Luật THUẦN: trần cứng + chính sách khi ĐẦY của hàng đợi đường dữ liệu.
+    ///
+    /// Vì sao phải có trần theo **BYTE**, không chỉ theo GÓI: extension iOS bị iOS giết ở trần
+    /// per-process ≈ 51 MB (`JetsamEvent` 25/09/2026 19:09:42, `rpages=3202`). Trần cũ của hàng
+    /// đợi gửi relay là **4096 gói** (`WSRelayClient.maxSendInflight`) ≈ 6 MB payload, nhưng mỗi
+    /// message còn mang theo object + completion + buffer của URLSession ⇒ một hàng đợi đã chiếm
+    /// vài chục MB, quá nửa trần jetsam. Trần theo byte là con số ĐO ĐƯỢC và không phụ thuộc MTU.
+    ///
+    /// Số đo máy thật 25–26/09/2026 (`.ips` + dòng `tài nguyên:`): bộ nhớ leo **theo LƯU LƯỢNG**
+    /// (iPad Netflix: +35,5 MB cho 54,3 MB nhận từ relay ⇒ ~0,65 B mỗi byte; `pendingLink=0` suốt
+    /// phiên; iPhone tải nhẹ 13–14 MB phẳng 12 phút) — nên mọi cấu trúc theo gói/byte phải có trần.
+    enum DataPathQueuePolicy {
+
+        /// Trần SỐ GÓI đang chờ gửi của link WebSocket (pipelined qua `URLSession`).
+        ///
+        /// 512 gói ≈ 384 KB payload ở MTU 1500 — đủ sâu để không tự chặn băng thông (đo thật
+        /// 25/09: phải bỏ cách `await` từng gói vì chỉ đạt 200–320 kbps), nhưng KHÔNG bao giờ là
+        /// hàng đợi vài chục MB như trần 4096 cũ.
+        static let linkMaxPackets = 512
+        /// Trần BYTE của cùng hàng đợi — chặn cả trường hợp gói bị gộp (coalesced) to bất thường.
+        static let linkMaxBytes = 512 * 1024
+        /// Trần SỐ GÓI đệm khi link chưa mở (giữ nguyên như bản cũ: gói QUIC Initial của transport
+        /// mới rơi đúng lúc link đang dựng lại).
+        static let linkDownMaxPackets = 512
+        /// Trần THỜI GIAN đệm: gói nằm quá lâu thì thả (QUIC tự gửi lại, xem PTO).
+        static let linkDownMaxAgeS: TimeInterval = 30
+
+        /// Kết luận khi xin một chỗ trong hàng đợi gửi.
+        enum Admission: Equatable {
+            /// Đã tính vào trần — bên gọi PHẢI gọi `release` khi gửi xong.
+            case accept
+            /// ĐẦY: KHÔNG được bơm tiếp (chờ có kiểm soát) — đã đếm vào `waits`.
+            case backpressure
+            /// Gói không bao giờ lọt trần ⇒ thả CÓ ĐẾM (đã đếm vào `dropped`).
+            case drop
+        }
+
+        /// Số phần tử VƯỢT trần của một hàng đợi FIFO (dùng cho trần số gói đệm).
+        static func overflow(count: Int, maxCount: Int) -> Int {
+            max(0, count - max(1, maxCount))
+        }
+    }
+
+    /// Trần cứng + bộ đếm cho hàng đợi GỬI của link relay. THUẦN LOGIC (không I/O, không khoá)
+    /// nên harness `scripts/ios-pure-logic-tests` test được ĐÚNG chính sách mà `WSRelayClient`
+    /// dùng — không phải bản sao.
+    struct SendBudget: Equatable {
+        let maxPackets: Int
+        let maxBytes: Int
+        /// Số gói ĐANG chờ gửi xong (đã tính vào trần).
+        private(set) var packets = 0
+        /// Số byte ĐANG chờ gửi xong (đã tính vào trần).
+        private(set) var bytes = 0
+        private(set) var accepted = 0
+        /// Số lần hàng đợi ĐẦY ⇒ bên gọi phải CHỜ một gói gửi xong rồi mới nạp tiếp.
+        private(set) var waits = 0
+        private(set) var dropped = 0
+
+        init(
+            maxPackets: Int = DataPathQueuePolicy.linkMaxPackets,
+            maxBytes: Int = DataPathQueuePolicy.linkMaxBytes
+        ) {
+            self.maxPackets = max(1, maxPackets)
+            self.maxBytes = max(1, maxBytes)
+        }
+
+        var isFull: Bool { packets >= maxPackets || bytes >= maxBytes }
+
+        var summary: String { "\(packets)/\(maxPackets) gói \(bytes)/\(maxBytes) B" }
+
+        /// Xin một chỗ cho gói `packetBytes` (xem `Admission`).
+        ///
+        /// Trần là TRẦN CỨNG: kiểm cả `bytes + packetBytes` trước khi nhận, nên bất biến
+        /// `bytes <= maxBytes` và `packets <= maxPackets` luôn đúng (không "vượt một gói").
+        mutating func admit(packetBytes: Int) -> DataPathQueuePolicy.Admission {
+            if packetBytes > maxBytes {
+                dropped += 1
+                return .drop
+            }
+            if packets >= maxPackets || bytes + packetBytes > maxBytes {
+                waits += 1
+                return .backpressure
+            }
+            packets += 1
+            bytes += packetBytes
+            accepted += 1
+            return .accept
+        }
+
+        /// Gói đã gửi xong (hoặc đã bỏ) ⇒ trả chỗ. Kẹp ở 0: completion của URLSession có thể trả
+        /// về SAU khi phiên dừng, bộ đếm âm sẽ làm trần vô hiệu.
+        mutating func release(packetBytes: Int) {
+            packets = max(0, packets - 1)
+            bytes = max(0, bytes - packetBytes)
+        }
+
+        mutating func reset() {
+            packets = 0
+            bytes = 0
+            accepted = 0
+            waits = 0
+            dropped = 0
+        }
+    }
+
+    /// Hàng đợi ĐỆM có TRẦN CỨNG (FIFO, quá trần thì thả CŨ NHẤT) — dùng cho gói đến lúc link
+    /// chưa mở. THUẦN LOGIC.
+    ///
+    /// Vì sao thả cũ nhất mà vẫn phải đệm: gói QUIC Initial của transport MỚI rơi đúng lúc link
+    /// chưa mở; vứt nó thì transport mới không bắt tay được (log thật 24/09: `droppedNoLink=6`,
+    /// `udpFrames` 0,25/s). Gói mới ở ĐUÔI bộ đệm là gói còn giá trị, QUIC tự gửi lại gói cũ.
+    struct BoundedBuffer<Element> {
+        let maxCount: Int
+        private(set) var items: [Element] = []
+        private(set) var appended = 0
+        /// Tổng số phần tử đã bị thả (quá trần HOẶC bị `dropOldest` vì hết TTL).
+        private(set) var dropped = 0
+
+        init(maxCount: Int) { self.maxCount = max(1, maxCount) }
+
+        var count: Int { items.count }
+        var isEmpty: Bool { items.isEmpty }
+
+        /// Thêm một phần tử; trả về số phần tử bị thả vì QUÁ TRẦN (0 khi còn chỗ).
+        @discardableResult
+        mutating func append(_ element: Element) -> Int {
+            appended += 1
+            items.append(element)
+            let over = DataPathQueuePolicy.overflow(count: items.count, maxCount: maxCount)
+            if over > 0 {
+                items.removeFirst(over)
+                dropped += over
+            }
+            return over
+        }
+
+        /// Bỏ phần tử CŨ NHẤT (hết TTL). Trả `nil` khi rỗng; có tính vào `dropped`.
+        @discardableResult
+        mutating func dropOldest() -> Element? {
+            guard !items.isEmpty else { return nil }
+            dropped += 1
+            return items.removeFirst()
+        }
+
+        /// Lấy hết ra để xử lý (hàng đợi rỗng sau lời gọi).
+        mutating func drain() -> [Element] {
+            let out = items
+            items.removeAll()
+            return out
+        }
+
+        /// Đặt lại phần CHƯA xử lý được lên ĐẦU hàng đợi (giữ nguyên thứ tự đến), vẫn tôn trọng
+        /// trần — dùng khi hàng đợi GỬI đã đầy nên chưa xả hết được gói đệm.
+        @discardableResult
+        mutating func requeueFront(_ elements: [Element]) -> Int {
+            guard !elements.isEmpty else { return 0 }
+            items.insert(contentsOf: elements, at: 0)
+            let over = DataPathQueuePolicy.overflow(count: items.count, maxCount: maxCount)
+            if over > 0 {
+                items.removeFirst(over)
+                dropped += over
+            }
+            return over
+        }
+
+        mutating func removeAll() { items.removeAll() }
+    }
 }
 
 // MARK: - Danh tính extension (chống macOS dùng lại appex cũ)

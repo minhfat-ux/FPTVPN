@@ -61,6 +61,24 @@ final class RelayUDPListener: @unchecked Sendable {
         return port
     }
 
+    /// Số byte ĐANG nằm trong socket chờ vòng đọc lấy ra (`SO_NREAD`) — CHỈ ĐỌC.
+    ///
+    /// Vì sao cần: đây là hàng đợi duy nhất giữa Go và vòng gửi WebSocket. Nếu nó phình thì
+    /// đường relay đang tắc; nếu nó 0 mà bộ nhớ vẫn leo thì chỗ phình ở nơi khác — nhìn log là
+    /// biết ngay, không phải đoán. `-1` = không đọc được (fd đã đóng).
+    /// Vì sao `SO_NREAD` mà không phải `FIONREAD`: `FIONREAD` là macro `_IOR(...)` nên Swift
+    /// KHÔNG import được (đã kiểm bằng `swiftc -typecheck`).
+    var pendingBytes: Int {
+        lock.lock()
+        let udp = fd
+        lock.unlock()
+        guard udp >= 0 else { return -1 }
+        var available: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        guard getsockopt(udp, SOL_SOCKET, SO_NREAD, &available, &length) == 0 else { return -1 }
+        return Int(available)
+    }
+
     /// Bind listener vào 127.0.0.1 rồi bắt đầu đọc datagram.
     ///
     /// Khi bind lỗi, log RÕ errno và thử lại bằng một socket mới — cổng 0 để kernel cấp
@@ -228,7 +246,12 @@ final class RelayUDPListener: @unchecked Sendable {
                 peerAddress = sender
                 let handler = onDatagram
                 lock.unlock()
-                handler?(Data(buffer[0..<received]))
+                // `autoreleasepool` cho MỖI datagram: luồng đọc này do `Thread { }` tạo nên
+                // KHÔNG có pool tự động. `Data`/`[UInt8]` thuần Swift thì không cần, nhưng
+                // handler đi lên `AsyncStream` → URLSession (Objective-C) ⇒ object tự động nhả
+                // của mỗi gói phải được nhả ngay tại đây, không thì nằm lại tới hết tiến trình
+                // (rò theo LƯU LƯỢNG — BUG-IOS-JETSAM-001).
+                autoreleasepool { handler?(Data(buffer[0..<received])) }
                 continue
             }
             if received < 0 {
