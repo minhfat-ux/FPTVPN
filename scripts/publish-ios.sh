@@ -13,8 +13,10 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-JUMP="root@103.173.155.50"
-VPS="root@165.101.114.162"
+# Đường vào node-1: mặc định IP công khai; mạng TQ chập chờn thì đặt
+#   PUBLISH_JUMP=root@100.76.147.111   (node-1 qua Tailscale — ổn định hơn, đo 26/09/2026)
+JUMP="${PUBLISH_JUMP:-root@103.173.155.50}"
+VPS="${PUBLISH_VPS:-root@165.101.114.162}"
 # Key SSH: máy này có thể đổi/ mất quyền file key — ưu tiên biến SSH_KEY, rồi dsh_tunnel (đang dùng
 # cho tunnel 13080), rồi fpt_tunnel. Sự cố 23/09: fpt_tunnel mất quyền => upload đứt giữa dòng.
 SSH_KEY="${SSH_KEY:-}"
@@ -25,7 +27,10 @@ if [ -z "$SSH_KEY" ]; then
 fi
 KEY="${SSH_KEY:?khong tim thay SSH key (dat SSH_KEY=...)}"
 SSH="ssh -i $KEY -o ConnectTimeout=10"
-remote() { $SSH "$JUMP" "$SSH $VPS '$1'"; }
+# Đẩy lệnh sang node-2 qua node-1 bằng STDIN (`ssh … bash -s`) thay vì bọc trong nháy đơn:
+# cách cũ làm vỡ mọi lệnh có nháy đơn bên trong — ca thật 26/09/2026 (`sha256sum … | cut -d' ' -f1`
+# bị cắt thành `cut -d -f1`) ⇒ đọc sha256 rỗng ⇒ cổng chặn DỪNG OAN giữa lúc phát.
+remote() { printf '%s\n' "$1" | $SSH "$JUMP" "$SSH $VPS bash -s"; }
 
 IPA="${1:-}"; VERSION="${2:-}"; BUILD="${3:-}"
 DRY=0; CLAIM=1; DEVICE_TEST=""

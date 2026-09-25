@@ -301,7 +301,17 @@ function cmdAppend() {
     const cmp = compare(row.version, prev.version);
     if (cmp < 0) die(`⛔ PHAT HANH LUI: ${platform} dang o ${prev.version} (dong ${prev.__line}), dinh ghi ${row.version}`, 1);
     if (cmp === 0 && prev.sha256 && row.sha256 && prev.sha256 !== row.sha256) {
-      die(`⛔ ARTIFACT KHONG BAT BIEN: ${platform} ${row.version} da co sha256 ${prev.sha256.slice(0, 12)}… — hash moi ${row.sha256.slice(0, 12)}… ⇒ phat hanh version MOI`, 1);
+      // NGOAI LE CO GHI SO (chi khi duoc chot): cung version nhung khac sha256 ⇒ pham artifact bat bien
+      // (docs/VERSIONING.md §3.3). Ca that 26/09/2026: chu du an chot phat 1.4.6/build 54 de khach TQ
+      // nhan ngay ban chong "bam Connect la fail" tren 5G, thay cho 1.4.6/build 50.
+      // Dung: --allow-rehash --reason "<chot cua ai, ngay nao>" (ly do duoc ghi vao chinh dong so).
+      if (!has("allow-rehash")) {
+        die(`⛔ ARTIFACT KHONG BAT BIEN: ${platform} ${row.version} da co sha256 ${prev.sha256.slice(0, 12)}… — hash moi ${row.sha256.slice(0, 12)}… ⇒ phat hanh version MOI (hoac dung --allow-rehash --reason "…" neu chu du an da chot ngoai le)`, 1);
+      }
+      const reason = flag("reason");
+      if (!reason) die("--allow-rehash bat buoc phai kem --reason \"<chot cua ai, ngay nao>\"", 2);
+      console.error(`⚠️  NGOAI LE artifact bat bien: ${platform} ${row.version} · ${prev.sha256.slice(0, 12)}… → ${row.sha256.slice(0, 12)}… · ly do: ${reason}`);
+      row.notes = `[NGOAI LE artifact bat bien — ${reason}] ${row.notes ?? ""}`.trim();
     }
   }
 
