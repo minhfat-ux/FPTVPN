@@ -39,7 +39,13 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     private static let codeNoTraffic = "TUNNEL_NO_TRAFFIC"
 
     /// Trần thời gian cho TOÀN BỘ lần start (áp settings + dựng relay + bắt tay QUIC).
-    private static let startTimeout: TimeInterval = 20
+    ///
+    /// 26/09/2026 — **20 → 35 s**. Vì sao phải nới CÙNG LÚC với `HysteriaTransport.relayOpenGrace`
+    /// (6 → 10 s) và danh sách 4 cửa vào (`HysteriaDefaults.relayURLCandidates`): ngân sách này phải
+    /// đủ chỗ cho các lượt thử nối tiếp, nếu không thì lần start bị cắt NGANG giữa danh sách và khách
+    /// vẫn thấy `TUNNEL_START_FAILED` y như cũ. 4 cửa × 10 s = 40 s là trần lý thuyết; thực tế cửa
+    /// đầu thường mở trong 0,5–2 s, chỉ khi cửa đó hỏng mới đi tiếp.
+    private static let startTimeout: TimeInterval = 35
 
     // MARK: Ngưỡng tự cứu (không bao giờ để "Connected mà mất mạng")
 
@@ -340,6 +346,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             // BẮT TỐC ĐỘ LEO: đo thật 25/09 — Netflix làm footprint leo **~1 MB/phút** (37,9 → 44,5 MB
             // trong 8 phút) và phiên chết ở 44,5 MB *trước khi* chạm ngưỡng 45 ⇒ chỉ ngưỡng tĩnh là
             // không đủ. Giữ 6 mốc (≈6 phút); leo ≥ 6 MB trong 5 phút ⇒ hạ tunnel sạch như van.
+            #if os(iOS)
             self.resourceFootprintHistory.append((Date(), footprint))
             if self.resourceFootprintHistory.count > 6 { self.resourceFootprintHistory.removeFirst() }
             var growthTrigger: Double = 0
@@ -349,6 +356,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                     growthTrigger = footprint - oldest.1
                 }
             }
+            #else
+            // macOS: KHÔNG bắt tốc độ leo. Ngưỡng hạ tunnel của macOS là 200/400 MB (footprint
+            // thật 58–148 MB) — thêm ngưỡng leo ở đây sẽ hạ tunnel macOS liên tục.
+            var growthTrigger: Double = 0
+            #endif
             // VAN AN TOÀN BỘ NHỚ (đo thật 25/09/2026: phiên Netflix leo tới 48,8 MB rồi bị iOS giết
             // `per-process-limit` ≈ 51 MB — BUG-IOS-JETSAM-001; dọn URLCache đo được 0 MB hiệu quả)
             // ⇒ tự HẠ TUNNEL SẠCH ở 45 MB để iOS trả mạng, thay vì bị giết đột ngột giữa lúc khách dùng.
@@ -427,10 +439,23 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         }
         let footprint = kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
         let resident = kr == KERN_SUCCESS ? Double(info.resident_size) / 1_048_576 : -1
+        // PHÂN RÃ bộ nhớ (BUG-IOS-JETSAM-001): cùng một lời gọi `task_info` đã có sẵn các trường
+        // này, chỉ là trước đây không in ra. `compressed` lớn ⇒ phần phình là trang ĐÃ NÉN (VM
+        // compressor, thu hồi được); `internal` lớn ⇒ cấp phát ẩn danh thật (heap Go hoặc malloc
+        // của Swift/ObjC). Đây là số ĐỌC SẴN CÓ, không thêm đồng hồ — nhưng là thứ phân biệt được
+        // "rò ở tầng Swift" với "rò ở tầng Go" ngay từ lần đo sau.
+        let internalMB = kr == KERN_SUCCESS ? Double(info.internal) / 1_048_576 : -1
+        let compressedMB = kr == KERN_SUCCESS ? Double(info.compressed) / 1_048_576 : -1
+        let externalMB = kr == KERN_SUCCESS ? Double(info.external) / 1_048_576 : -1
         let fds = (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? -1
         let c = trafficCounters
-        let relay = currentTransport()?.relayFrameCounts
-        let relayOpen = currentTransport()?.relayIsConnected ?? false
+        // MỘT lần gọi: `currentTransport()` lấy `flowLock` mỗi lần, gọi 3 lần là 3 lần lấy khoá
+        // trong cùng một nhịp (không sai, nhưng thừa và làm khó đọc).
+        let transport = currentTransport()
+        let relay = transport?.relayFrameCounts
+        let relayOpen = transport?.relayIsConnected ?? false
+        let relayQueue = transport?.relayQueue
+        let bridgeQueue = bridgeQueueSnapshot
         let dToGo = (c?.toGo ?? 0) - resourcePrevToGo
         let dFromGo = (c?.fromGo ?? 0) - resourcePrevFromGo
         let dRelaySent = (relay?.sent ?? 0) - resourcePrevRelaySent
@@ -438,11 +463,23 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         if let c { resourcePrevToGo = c.toGo; resourcePrevFromGo = c.fromGo }
         if let relay { resourcePrevRelaySent = relay.sent; resourcePrevRelayRecv = relay.received }
         return String(
-            format: "footprint=%.1fMB resident=%.1fMB fds=%d | cầu vào %d/ra %d (bỏ %d) | relay gửi %d nhận %d mở=%@ | Δ1phút vào+%d ra+%d relay+%d/+%d",
+            format: "footprint=%.1fMB resident=%.1fMB fds=%d | cầu vào %d/ra %d (bỏ %d) | relay gửi %d nhận %d mở=%@ | Δ1phút vào+%d ra+%d relay+%d/+%d | TCP SYN %d RST về %d"
+                + " | hàng đợi: relay chờ %d gói/%d B (trần %d/%d; đã nạp %d, chờ %d, bỏ %d) đệm-link %d/%d bỏ %d | udp nhận %d lấy %d thả≥%d socket %dB | cầu chờ-đọc %dB (Go→ %d, bỏ %d, EAGAIN %d) | nhớ internal=%.1f compressed=%.1f external=%.1f",
             footprint, resident, fds,
             c?.toGo ?? -1, c?.fromGo ?? -1, c?.toGoDropped ?? -1,
             relay?.sent ?? -1, relay?.received ?? -1, relayOpen ? "yes" : "no",
-            dToGo, dFromGo, dRelaySent, dRelayRecv
+            dToGo, dFromGo, dRelaySent, dRelayRecv,
+            c?.tcpSynToGo ?? -1, c?.tcpRstFromGo ?? -1,
+            relayQueue?.inflightPackets ?? -1, relayQueue?.inflightBytes ?? -1,
+            relayQueue?.maxPackets ?? -1, relayQueue?.maxBytes ?? -1,
+            relayQueue?.admitted ?? -1, relayQueue?.waits ?? -1, relayQueue?.sendDropped ?? -1,
+            relayQueue?.pendingLink ?? -1, relayQueue?.pendingLinkAppended ?? -1,
+            relayQueue?.pendingLinkDropped ?? -1,
+            relayQueue?.listenerDatagrams ?? -1, relayQueue?.streamPopped ?? -1,
+            relayQueue?.streamDropped ?? -1, relayQueue?.listenerSocketPendingBytes ?? -1,
+            bridgeQueue?.pendingFromGoBytes ?? -1, bridgeQueue?.fromGo ?? -1,
+            bridgeQueue?.toGoDropped ?? -1, bridgeQueue?.toGoEAGAIN ?? -1,
+            internalMB, compressedMB, externalMB
         )
     }
 
@@ -876,6 +913,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         currentOptions = options
         RelayDiagnostics.shared.log(
             "hysteria: áp network settings (utun \(HysteriaDefaults.tunIPv4Address)/\(HysteriaDefaults.tunIPv4SubnetMask), mtu \(options.mtu), dns \(HysteriaDefaults.dnsServers.joined(separator: ",")))"
+                + " · IPv6=OFF (chỉ IPv4; xem vì sao ở `networkSettings`)"
         )
         guard applySettings(networkSettings(options: options)) else {
             failStart(
@@ -2217,13 +2255,21 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         ipv4.excludedRoutes = excluded
         settings.ipv4Settings = ipv4
 
-        // A7 IPv6 — ĐÃ BỎ (chủ dự án chốt 22/09; `docs/DEV_PLAN_IOS_MACOS_TOC_DO.md` §5b bước 1c).
-        // Bản `18f8c82` đặt `ipv6Settings.includedRoutes = [::/0]` để "IPv6 TQ đi thẳng, IPv6 còn
-        // lại CHẶN". Nhưng relay `api.meetflowai.site` CÓ bản ghi AAAA ⇒ iOS ưu tiên IPv6 ⇒ gói tới
-        // relay bị hút vào tunnel mà server không có IPv6 ⇒ ĐEN ⇒ "mất mạng khi connect" trên iPhone
-        // thật. Bỏ `ipv6Settings` (IPv6 đi thẳng như trước, KHÔNG chặn kết nối). Việc bịt rò IPv6 —
-        // nếu còn cần — phải loại trừ ĐÚNG địa chỉ relay/endpoint (kiểu WireGuard
-        // `endpointExcludedRoutes`), KHÔNG dùng `::/0`; đó là việc riêng, chưa thuộc lượt này.
+        // A7 IPv6 — ĐÃ GỠ LẦN 2 (26/09/2026). ĐỌC KỸ TRƯỚC KHI THỬ LẦN 3.
+        //
+        // Lần 1 (`18f8c82`, 22/09): `includedRoutes = [::/0]` không loại trừ relay ⇒ "mất mạng khi
+        // connect" (relay có AAAA, bị hút vào tunnel, server không có IPv6).
+        //
+        // Lần 2 (26/09, ngay trước comment này): đã loại trừ ĐÚNG dải IPv6 Cloudflare + dải TQ +
+        // link-local, và **chứng minh bằng DNS sống** rằng mọi AAAA của relay đều nằm trong dải loại
+        // trừ. Vẫn HỎNG trên máy thật: iPad trên Wi-Fi có IPv6 bị **bóp mạng rất nặng** (không xem
+        // nổi Netflix), iPhone trên 5G IPv6 **không kết nối được**. Suy ra: kéo `::/0` vào tunnel
+        // trong khi core KHÔNG có IPv6 thì mọi đích IPv6 của khách bị BỎ (không phải "chặn nhanh" mà
+        // là treo/timeout) ⇒ hỏng nặng hơn cả việc rò. Việc "loại trừ đúng relay" là điều kiện CẦN,
+        // không phải điều kiện ĐỦ.
+        //
+        // ⇒ Muốn bịt rò IPv6 cho thật thì phải làm ở tầng CÓ IPv6 (server NAT66 / DNS không trả AAAA),
+        // KHÔNG phải bằng cách kéo `::/0` vào một tunnel chỉ có IPv4. Không thử lại cách cũ.
 
         settings.dnsSettings = NEDNSSettings(servers: HysteriaDefaults.dnsServers)
         return settings
@@ -3744,6 +3790,19 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         let current = bridge
         flowLock.unlock()
         return current?.snapshot
+    }
+
+    /// HÀNG ĐỢI của cầu `packetFlow↔fd` (byte đang chờ bơm về máy + gói bị bỏ vì fd cho Go đầy).
+    ///
+    /// Vì sao tách khỏi `bridgeCounters`: đây là số liệu CHẨN ĐOÁN rò bộ nhớ (BUG-IOS-JETSAM-001),
+    /// không phải nguồn quyết định của watchdog. Lấy con trỏ cầu dưới `flowLock` rồi **NHẢ KHOÁ
+    /// MỚI HỎI CẦU** — tuyệt đối không gọi hàm lấy khoá trong lúc đang giữ `flowLock`
+    /// (AGENTS.md §7c: `flowLock` không tái nhập ⇒ tự khoá chết cả phiên).
+    private var bridgeQueueSnapshot: TunnelBridge.QueueSnapshot? {
+        flowLock.lock()
+        let current = bridge
+        flowLock.unlock()
+        return current?.queueSnapshot
     }
 
     /// Bộ đếm gói THẬT đã đi qua tunnel, chuẩn hoá cho cả hai nền tảng.

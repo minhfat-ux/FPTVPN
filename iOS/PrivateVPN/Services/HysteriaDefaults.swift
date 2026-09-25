@@ -21,10 +21,22 @@ enum HysteriaDefaults {
     /// Cổng UDP hysteria của node (KHÔNG phải cổng relay).
     static let serverPort: UInt16 = 8443
 
-    /// Relay WebSocket của node-2 — đo 19/09 nhanh hơn node-1 khi đi qua Cloudflare.
+    /// Relay WebSocket dự phòng, thử LẦN LƯỢT khi cửa trước không mở được.
+    ///
+    /// 26/09/2026 — thêm **CỬA VÀO THỨ HAI** (`t1.meetflowai.site`). Vì sao: log máy thật iPhone
+    /// trên 5G có `WS không mở được trong 6s` ⇒ `TUNNEL_START_FAILED`, mà lần ngay sau đó lại mở
+    /// được ⇒ hỏng **theo HOSTNAME**, không theo node. Trước bản này cả 2 candidate đều nằm trên
+    /// `api.meetflowai.site` nên "thử relay kế tiếp" **chỉ đổi node, không đổi cửa vào** ⇒ không
+    /// cứu được gì khi chính hostname đó chậm/bị chặn.
+    ///
+    /// Thứ tự cố ý: cửa chính trước (nhanh hơn khi tốt), rồi mới sang cửa hai.
     static let relayURLCandidates: [String] = [
         "wss://api.meetflowai.site/relay/vn2hy",
-        "wss://api.meetflowai.site/relay/vn1hy"
+        "wss://api.meetflowai.site/relay/vn1hy",
+        // Cửa vào THỨ HAI — cùng Cloudflare nhưng KHÁC hostname ⇒ thoát được ca chặn/chậm theo tên.
+        // `t1` nằm chung site block Caddy với apex trên node-2 nên phục vụ được `/relay/*`.
+        "wss://t1.meetflowai.site/relay/vn1hy",
+        "wss://t1.meetflowai.site/relay/vn2hy"
     ]
 
     /// MTU của utun — hạ **1500 → 1300** theo `docs/TUNNEL_MTU_DNS_BUGREPORT.md` §4.1
@@ -50,9 +62,37 @@ enum HysteriaDefaults {
     static let tunIPv4CIDR = "100.100.100.101/30"
     static let tunIPv6Address = "2001::ffff:ffff:ffff:fff1"
     static let tunIPv6PrefixLength = 126
-    /// Địa chỉ IPv6 đưa cho `MobileServe`. Để RỖNG như Android (`HY_TUN_IPV6 = ""`):
-    /// tunnel của sản phẩm chỉ áp IPv4 settings, đưa IPv6 vào đây là lệch với utun thật.
+    /// Địa chỉ IPv6 đưa cho Go (`MobileServe`).
+    ///
+    /// 26/09/2026 — GIỮ RỖNG **có chủ đích**, nhưng lý do đã ĐỔI so với trước: trước đây utun
+    /// không có IPv6 nên đưa vào là lệch. Nay utun **CÓ** IPv6 (`ipv6Settings` được áp trong
+    /// `networkSettings`, xem `HysteriaPacketTunnelProvider`), nhưng Go vẫn nhận rỗng để
+    /// `Inet6Address = nil` — **đúng thứ ta cần**: gói IPv6 vào tunnel sẽ bị tầng Go BỎ, nên app
+    /// lùi về IPv4 trong ~250 ms thay vì rò ra đường vật lý.
+    /// (Đọc `tools/hysteria-android/mobile.go:243-251`: rỗng ⇒ bỏ qua, KHÔNG lỗi.)
     static let tunIPv6CIDR = ""
+
+    /// Dải IPv6 của Cloudflare — nguồn CHÍNH THỨC <https://www.cloudflare.com/ips-v6/>, lấy 26/09/2026.
+    ///
+    /// VÌ SAO PHẢI LOẠI TRỪ KHỎI TUNNEL: relay của sản phẩm nằm sau Cloudflare
+    /// (`relayURLCandidates` = `api.meetflowai.site`), và host đó **CÓ bản ghi AAAA** ⇒ iOS ưu
+    /// tiên IPv6. Nếu `ipv6Settings.includedRoutes = [::/0]` mà KHÔNG chừa dải này thì kết nối WS
+    /// của extension tới relay bị hút vào tunnel — mà tunnel/core KHÔNG có IPv6 ⇒ ĐEN ⇒ đúng sự
+    /// cố "mất mạng khi connect" của bản `18f8c82` (22/09/2026, `DEV_PLAN_IOS_MACOS_TOC_DO.md`
+    /// §5b bước 1c).
+    ///
+    /// Dùng DẢI của Cloudflare (cố định, công khai) chứ KHÔNG dùng IP lẻ: IP Cloudflare đổi theo
+    /// phiên, còn dải thì không. Đây là "endpointExcludedRoutes" mà ghi chú cũ trong provider
+    /// nhắc tới, làm ở mức dải cho bền.
+    static let relayIPv6ExcludedCIDRs = [
+        "2400:cb00::/32",
+        "2606:4700::/32",
+        "2803:f800::/32",
+        "2405:b500::/32",
+        "2405:8100::/32",
+        "2a06:98c0::/29",
+        "2c0f:f248::/32"
+    ]
 
     /// Brutal CC: khai SÁT băng thông thật của mạng đang dùng. Khai cao hơn thật
     /// làm Brutal tự bóp nghẽn (đo được: khai 300/1000 Mbps ⇒ 1,3 Mbps).

@@ -94,9 +94,15 @@ final class HysteriaTransport: @unchecked Sendable {
     /// (`mobile.go:162`) và hysteria xác thực bằng password.
     private static let quicDialHost = "127.0.0.1"
 
-    /// Chờ WS mở trước khi cho QUIC bắt tay. Relay qua Cloudflare mở trong ~0,5–2s; hết
-    /// hạn thì coi như relay này chết và thử relay kế tiếp (đừng để QUIC retry mù).
-    private static let relayOpenGrace: TimeInterval = 6
+    /// Chờ WS mở trước khi cho QUIC bắt tay. Hết hạn thì coi như cửa này chết và thử cửa kế tiếp
+    /// (đừng để QUIC retry mù).
+    ///
+    /// 26/09/2026 — **6 → 10 s**. Vì sao: đo trên chính mạng của khách (China Mobile) một lượt mở WS
+    /// tới Cloudflare mất tới **4,2 s** chỉ riêng bước TCP connect, và log máy thật iPhone trên 5G có
+    /// `WS không mở được trong 6s` ⇒ `TUNNEL_START_FAILED` dù lần ngay sau mở được. 6 s quá sát với
+    /// đường di động Trung Quốc. Ngân sách cả phiên (`HysteriaPacketTunnelProvider.startTimeout`) đã
+    /// được nới tương ứng để đủ chỗ thử hết danh sách cửa vào.
+    private static let relayOpenGrace: TimeInterval = 10
 
     private let log: Logger
     private let lock = NSLock()
@@ -135,6 +141,19 @@ final class HysteriaTransport: @unchecked Sendable {
         let client = relay
         lock.unlock()
         return client?.isConnected ?? false
+    }
+
+    /// Trần + số ĐANG CHỜ của hàng đợi relay WS (nil khi chưa có relay).
+    ///
+    /// Provider in số này vào dòng `tài nguyên:` — không có nó thì lần sau vẫn chỉ ĐOÁN được
+    /// hàng đợi nào phình (số đo 25–26/09/2026: bộ nhớ leo theo lưu lượng, `pendingLink=0`).
+    /// Đọc `relay` dưới `lock` rồi **NHẢ KHOÁ MỚI HỎI CLIENT**: giữ hai khoá cùng lúc là mầm
+    /// của ca "giữ khoá tới hết phiên" (AGENTS.md §7c).
+    var relayQueue: WSRelayClient.QueueSnapshot? {
+        lock.lock()
+        let client = relay
+        lock.unlock()
+        return client?.queueSnapshot
     }
 
     /// Dựng relay + bắt tay hysteria. Trả về sau khi QUIC đã bắt tay xong (hàm này
@@ -850,6 +869,14 @@ final class TunnelBridge: @unchecked Sendable {
         var toGo = 0
         var toGoBytes = 0
         var toGoDropped = 0
+        /// Gói bị bỏ vì fd cho Go ĐẦY (`write` trả `EAGAIN`/`EWOULDBLOCK` = errno 35 trên Darwin).
+        ///
+        /// Vì sao tách khỏi `toGoDropped`: log thật 25/09/2026 có `write=… errno=35`. Đây là
+        /// **nghẽn cầu** (Go chưa đọc kịp), KHÁC hẳn fd chết (`EBADF`/`EPIPE` = cầu hỏng và
+        /// phải dựng lại). Gộp hai thứ vào một bộ đếm là mất khả năng chẩn đoán.
+        /// Bất biến: gói `EAGAIN` bị BỎ NGAY, **không** đưa lại hàng đợi (không có cấu trúc nào
+        /// phình theo lưu lượng ở đây — đúng yêu cầu chống rò của BUG-IOS-JETSAM-001).
+        var toGoEAGAIN = 0
         var fromGo = 0
         var fromGoBytes = 0
         var fromGoBad = 0
@@ -906,6 +933,46 @@ final class TunnelBridge: @unchecked Sendable {
     var snapshot: Counters {
         lock.lock(); defer { lock.unlock() }
         return counters
+    }
+
+    /// Ảnh chụp HÀNG ĐỢI của cầu để in vào dòng `tài nguyên:` (60 s) — CHỈ ĐỌC.
+    ///
+    /// Vì sao cần: số đo máy thật 25–26/09/2026 cho thấy bộ nhớ extension leo THEO LƯU LƯỢNG.
+    /// Cầu `packetFlow↔fd` là chỗ duy nhất chở mọi gói của tunnel, nên phải nhìn được nó có
+    /// đang giữ gói hay không. `pendingFromGoBytes` là số byte ĐANG nằm trong fd chờ bơm về
+    /// `packetFlow` — đo bằng `FIONREAD`, KHÔNG thêm đồng hồ và không đổi trạng thái.
+    struct QueueSnapshot: Sendable {
+        var toGo = 0
+        var toGoDropped = 0
+        /// Gói bỏ vì fd đầy (`EAGAIN`) — nghẽn cầu, không phải cầu hỏng.
+        var toGoEAGAIN = 0
+        var fromGo = 0
+        /// Byte đang chờ đọc trên fd (gói Go đã ghi mà cầu chưa bơm đi), `-1` = không đọc được.
+        var pendingFromGoBytes = 0
+    }
+
+    var queueSnapshot: QueueSnapshot {
+        let copy = snapshot                      // lấy counters dưới `lock`, rồi NHẢ khoá
+        var queue = QueueSnapshot()
+        queue.toGo = copy.toGo
+        queue.toGoDropped = copy.toGoDropped
+        queue.toGoEAGAIN = copy.toGoEAGAIN
+        queue.fromGo = copy.fromGo
+        queue.pendingFromGoBytes = Self.pendingBytes(fd: currentHostFd())
+        return queue
+    }
+
+    /// Số byte ĐANG chờ đọc trên fd (`SO_NREAD`). Chỉ đọc; `-1` khi không đọc được.
+    ///
+    /// Vì sao `SO_NREAD` mà không phải `FIONREAD`: macro `FIONREAD` của Darwin là `_IOR(...)`
+    /// nên Swift **KHÔNG** import được (`macro 'FIONREAD' unavailable: structure not supported`
+    /// — đã kiểm bằng `swiftc -typecheck`). `SO_NREAD` là hằng số nguyên nên dùng được thẳng.
+    private static func pendingBytes(fd: Int32) -> Int {
+        guard fd >= 0 else { return -1 }
+        var available: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        guard getsockopt(fd, SOL_SOCKET, SO_NREAD, &available, &length) == 0 else { return -1 }
+        return Int(available)
     }
 
     func start() {
@@ -977,8 +1044,13 @@ final class TunnelBridge: @unchecked Sendable {
         guard isRunning else { return }
         flow.readPackets { [weak self] packets, _ in
             guard let self, self.isRunning else { return }
-            for packet in packets {
-                self.forwardToGo(packet)
+            // `autoreleasepool` cho MỖI LÔ: callback này của `NEPacketTunnelFlow` (Objective-C)
+            // trả về mảng `[Data]`; mọi object tự động nhả sinh ra trong lô phải được nhả ngay,
+            // nếu không chúng nằm lại vĩnh viễn trên luồng của framework (rò theo LƯU LƯỢNG).
+            autoreleasepool {
+                for packet in packets {
+                    self.forwardToGo(packet)
+                }
             }
             self.readOutbound()
         }
@@ -986,35 +1058,51 @@ final class TunnelBridge: @unchecked Sendable {
 
     private func forwardToGo(_ packet: Data) {
         guard !packet.isEmpty else { return }
-        var framed = [UInt8](repeating: 0, count: packet.count + 4)
-        // Họ địa chỉ lấy từ chính gói IP (không tin tham số của packetFlow: gói lạ vẫn phải
-        // đi đúng nhánh IPv4/IPv6).
-        framed[3] = (packet[packet.startIndex] >> 4) == 6 ? Self.afInet6 : Self.afInet
-        framed.withUnsafeMutableBytes { destination in
-            packet.withUnsafeBytes { source in
-                guard let dst = destination.baseAddress, let src = source.baseAddress else { return }
-                dst.advanced(by: 4).copyMemory(from: src, byteCount: packet.count)
+        // `autoreleasepool` cho MỖI gói — ĐÂY LÀ CHỖ SỬA GỐC của BUG-IOS-JETSAM-001.
+        //
+        // Vì sao: hàm này chạy trên callback của `NEPacketTunnelFlow` (Objective-C) và mọi lời
+        // gọi đi qua API đó đều tạo object **tự động nhả** (mảng `[Data]`, `NSNumber`, buffer
+        // nội bộ của NetworkExtension). Luồng của framework/`Thread` tự tạo KHÔNG có pool tự
+        // động ⇒ object tự động nhả của MỖI gói nằm lại **vĩnh viễn** ("autoreleased with no
+        // pool in place - just leaking"). Đúng dấu vết đo được: bộ nhớ leo theo LƯU LƯỢNG/gói
+        // (~0,65 B mỗi byte qua relay; iPad Netflix 17,9 → 49,4 MB trong 6 phút), phẳng khi tải
+        // nhẹ, KHÔNG được trả lại sau khi dựng lại transport (cầu chỉ retarget, không dựng lại).
+        autoreleasepool {
+            var framed = [UInt8](repeating: 0, count: packet.count + 4)
+            // Họ địa chỉ lấy từ chính gói IP (không tin tham số của packetFlow: gói lạ vẫn phải
+            // đi đúng nhánh IPv4/IPv6).
+            framed[3] = (packet[packet.startIndex] >> 4) == 6 ? Self.afInet6 : Self.afInet
+            framed.withUnsafeMutableBytes { destination in
+                packet.withUnsafeBytes { source in
+                    guard let dst = destination.baseAddress, let src = source.baseAddress else { return }
+                    dst.advanced(by: 4).copyMemory(from: src, byteCount: packet.count)
+                }
             }
-        }
-        let written = framed.withUnsafeBytes { write(currentHostFd(), $0.baseAddress, framed.count) }
-        let summary = Self.summarize(packet)
-        lock.lock()
-        if written == framed.count {
-            counters.toGo += 1
-            counters.toGoBytes += written
-            Self.count(summary, toGo: true, counters: &counters)
-        } else {
-            counters.toGoDropped += 1
-        }
-        let seen = counters.toGo + counters.toGoDropped
-        let tcpSeen = counters.toGoTCP
-        let tcpFromTun = counters.toGoTCPFromTun
-        lock.unlock()
-        if seen <= 3 || (summary.proto == 6 && tcpSeen <= 10) || summary.touchesTunSubnet
-            || (summary.fromTunAddress && summary.proto == 6 && tcpFromTun <= 20) {
-            RelayDiagnostics.shared.log(
-                "bridge: packetFlow→Go #\(seen) (AF=\(framed[3]), write=\(written) errno=\(errno)) \(describe(packet))"
-            )
+            let written = framed.withUnsafeBytes { write(currentHostFd(), $0.baseAddress, framed.count) }
+            // Đọc `errno` NGAY sau lời gọi (mọi lời gọi khác có thể ghi đè).
+            let writeErrno = errno
+            let summary = Self.summarize(packet)
+            lock.lock()
+            if written == framed.count {
+                counters.toGo += 1
+                counters.toGoBytes += written
+                Self.count(summary, toGo: true, counters: &counters)
+            } else {
+                counters.toGoDropped += 1
+                if writeErrno == EAGAIN || writeErrno == EWOULDBLOCK {
+                    counters.toGoEAGAIN += 1
+                }
+            }
+            let seen = counters.toGo + counters.toGoDropped
+            let tcpSeen = counters.toGoTCP
+            let tcpFromTun = counters.toGoTCPFromTun
+            lock.unlock()
+            if seen <= 3 || (summary.proto == 6 && tcpSeen <= 10) || summary.touchesTunSubnet
+                || (summary.fromTunAddress && summary.proto == 6 && tcpFromTun <= 20) {
+                RelayDiagnostics.shared.log(
+                    "bridge: packetFlow→Go #\(seen) (AF=\(framed[3]), write=\(written) errno=\(writeErrno)) \(describe(packet))"
+                )
+            }
         }
     }
 
@@ -1048,27 +1136,36 @@ final class TunnelBridge: @unchecked Sendable {
                 lock.lock(); counters.fromGoBad += 1; lock.unlock()
                 continue
             }
-            let af = Int32(buffer[3])
-            let payload = Data(buffer[4..<count])
-            let summary = Self.summarize(payload)
-            Self.checkChecksum(payload, summary: summary, counters: &counters)
-            flow.writePackets([payload], withProtocols: [NSNumber(value: af)])
-            lock.lock()
-            counters.fromGo += 1
-            counters.fromGoBytes += count - 4
-            Self.count(summary, toGo: false, counters: &counters)
-            let seen = counters.fromGo
-            let tcpSeen = counters.fromGoTCP
-            lock.unlock()
-            if seen <= 3 || (summary.proto == 6 && tcpSeen <= 10)
-                || summary.touchesTunSubnet || summary.fromTunAddress {
-                var extra = ""
-                if summary.proto == 6, tcpSeen <= 2 {
-                    extra = " hex: " + payload.prefix(48).map { String(format: "%02x", $0) }.joined(separator: " ")
+            // `autoreleasepool` cho MỖI gói — chỗ sửa GỐC thứ hai của BUG-IOS-JETSAM-001.
+            //
+            // Vì sao: `flow.writePackets([payload], withProtocols: [NSNumber])` là API
+            // Objective-C. Luồng này do `Thread { }` tạo nên **KHÔNG có pool tự động**; object
+            // tự động nhả của mỗi gói (mảng, NSNumber, buffer nội bộ của NetworkExtension) sẽ
+            // nằm lại tới hết tiến trình ⇒ bộ nhớ leo theo LƯU LƯỢNG đúng như đo được, và
+            // KHÔNG được trả lại khi dựng lại transport (vòng lặp + `packetFlow` không đổi).
+            autoreleasepool {
+                let af = Int32(buffer[3])
+                let payload = Data(buffer[4..<count])
+                let summary = Self.summarize(payload)
+                Self.checkChecksum(payload, summary: summary, counters: &counters)
+                flow.writePackets([payload], withProtocols: [NSNumber(value: af)])
+                lock.lock()
+                counters.fromGo += 1
+                counters.fromGoBytes += count - 4
+                Self.count(summary, toGo: false, counters: &counters)
+                let seen = counters.fromGo
+                let tcpSeen = counters.fromGoTCP
+                lock.unlock()
+                if seen <= 3 || (summary.proto == 6 && tcpSeen <= 10)
+                    || summary.touchesTunSubnet || summary.fromTunAddress {
+                    var extra = ""
+                    if summary.proto == 6, tcpSeen <= 2 {
+                        extra = " hex: " + payload.prefix(48).map { String(format: "%02x", $0) }.joined(separator: " ")
+                    }
+                    RelayDiagnostics.shared.log(
+                        "bridge: Go→packetFlow #\(seen) (AF=\(af)) \(describe(payload))\(extra)"
+                    )
                 }
-                RelayDiagnostics.shared.log(
-                    "bridge: Go→packetFlow #\(seen) (AF=\(af)) \(describe(payload))\(extra)"
-                )
             }
         }
     }
@@ -1126,10 +1223,13 @@ final class TunnelBridge: @unchecked Sendable {
 
     private func describeCounters() -> String {
         let snapshot = self.snapshot
+        let pending = Self.pendingBytes(fd: currentHostFd())
         return "packetFlow→Go \(snapshot.toGo) gói/\(snapshot.toGoBytes) B (bỏ \(snapshot.toGoDropped); "
+            + "EAGAIN \(snapshot.toGoEAGAIN) = fd cho Go đầy; "
             + "TCP \(snapshot.toGoTCP), UDP \(snapshot.toGoUDP), ICMP \(snapshot.toGoICMP), subnet \(snapshot.toGoSubnet)), "
             + "Go→packetFlow \(snapshot.fromGo) gói/\(snapshot.fromGoBytes) B (gói hỏng \(snapshot.fromGoBad), checksum sai \(snapshot.fromGoBadChecksum) [TCP \(snapshot.fromGoBadTCPChecksum)]; "
             + "TCP \(snapshot.fromGoTCP), UDP \(snapshot.fromGoUDP), ICMP \(snapshot.fromGoICMP), subnet \(snapshot.fromGoSubnet)); "
+            + "chờ bơm \(pending) B; "
             + "TCP sức khoẻ: SYN vào \(snapshot.tcpSynToGo), SYN-ACK về \(snapshot.tcpSynAckFromGo), RST về \(snapshot.tcpRstFromGo))"
     }
 

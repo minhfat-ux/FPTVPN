@@ -609,6 +609,40 @@ do {
                "merge: trần áp SAU khi gộp (không vượt maxRoutes)")
     check(ChinaRouteBypass.merge([], []).isEmpty, "merge: hai danh sách rỗng ⇒ rỗng")
 
+    // 26/09/2026 — VÁ RÒ IPv6 TRÊN 5G (chủ dự án xác nhận 5G là IPv6).
+    //
+    // Thuộc tính phải giữ: `ipv6Settings.includedRoutes = [::/0]` khiến MỌI IPv6 vào tunnel, nên
+    // dải của RELAY bắt buộc phải nằm trong `excludedRoutes` — thiếu là kết nối của extension tới
+    // relay bị hút vào tunnel rồi ĐEN ⇒ tái diễn đúng sự cố "mất mạng khi connect" của bản
+    // `18f8c82` (22/09/2026). Test này chốt lại điều đó để không ai gỡ mất danh sách.
+    check(!HysteriaDefaults.relayIPv6ExcludedCIDRs.isEmpty,
+          "vá IPv6: danh sách loại trừ relay KHÔNG được rỗng")
+    check(HysteriaDefaults.relayIPv6ExcludedCIDRs.contains("2606:4700::/32"),
+          "vá IPv6: phải có 2606:4700::/32 — dải Cloudflare mà relay api.meetflowai.site trỏ vào")
+    checkEqual(
+        ChinaRouteBypass.excludedRoutesV6(from: HysteriaDefaults.relayIPv6ExcludedCIDRs).count,
+        HysteriaDefaults.relayIPv6ExcludedCIDRs.count,
+        "vá IPv6: MỌI dải loại trừ parse được thành NEIPv6Route (không dòng hỏng)"
+    )
+    // Tách nhỏ thay vì viết closure trong `check`: compiler báo "unable to type-check in
+    // reasonable time" với biểu thức gộp (đã gặp thật 26/09/2026).
+    let relayV6Routes = ChinaRouteBypass.excludedRoutesV6(from: HysteriaDefaults.relayIPv6ExcludedCIDRs)
+    var cloudflareV6RouteFound = false
+    for route in relayV6Routes {
+        if route.destinationAddress == "2606:4700::"
+            && route.destinationNetworkPrefixLength.intValue == 32 {
+            cloudflareV6RouteFound = true
+            break
+        }
+    }
+    check(cloudflareV6RouteFound,
+          "vá IPv6: route 2606:4700::/32 phải có mặt ⇒ relay đi THẲNG, không bị hút vào tunnel")
+    // Bất biến phía Go: utun CÓ IPv6 nhưng Go vẫn nhận rỗng ⇒ `Inet6Address = nil` ⇒ gói IPv6 vào
+    // tunnel bị BỎ (app lùi về IPv4) thay vì bị chuyển tiếp tới server không có IPv6.
+    checkEqual(HysteriaDefaults.tunIPv6CIDR, "", "vá IPv6: Go vẫn nhận rỗng (Inet6Address = nil)")
+    check(ChinaRouteBypass.isValidIPv6(HysteriaDefaults.tunIPv6Address),
+          "vá IPv6: địa chỉ utun IPv6 phải hợp lệ")
+
     // Cờ RÚT LUI của A7 macOS (tắt được để quay về bước 1 — 4 dải LAN).
     check(ChinaRouteBypass.bypassEnabled(compiledDefault: true, override: nil),
           "cờ rút lui: không ghi đè ⇒ theo mặc định biên dịch (BẬT)")
@@ -1701,6 +1735,125 @@ do {
     real.beginWindow(now: t0.addingTimeInterval(33), fromGo: 360_729)     // 19:42:58 dựng lại lần 2
     checkEqual(real.tick(now: t0.addingTimeInterval(48), fromGo: 360_729), .advanceRelay(2),
                "19:43:13 — cửa sổ 2 vẫn 0 gói VỀ ⇒ ĐỔI ĐƯỜNG (lần dựng lại 3 sẽ ở đường mới)")
+}
+
+// MARK: - BUG-IOS-JETSAM-001: TRẦN CỨNG cho hàng đợi đường dữ liệu (26/09/2026)
+//
+// Vì sao phải test bằng số: extension iOS bị iOS giết ở trần per-process ≈51 MB
+// (`JetsamEvent` 25/09/2026, `rpages=3202`). Số đo máy thật cho thấy bộ nhớ leo THEO LƯU LƯỢNG
+// (iPad Netflix 17,9 → 49,4 MB trong 6 phút ≈ 0,65 B mỗi byte qua relay) nên mọi hàng đợi trên
+// đường dữ liệu PHẢI có trần cứng và KHÔNG được phình — đây là bất biến, không phải "mục tiêu".
+
+print("Hàng đợi đường dữ liệu — trần cứng + chính sách khi ĐẦY (BUG-IOS-JETSAM-001)")
+do {
+    let P = RampStatus.DataPathQueuePolicy.self
+    checkEqual(P.linkMaxPackets, 512, "trần GÓI của hàng đợi gửi = 512 (bản cũ 4096)")
+    checkEqual(P.linkMaxBytes, 512 * 1024, "trần BYTE của hàng đợi gửi = 512 KB")
+    checkEqual(P.overflow(count: 10, maxCount: 512), 0, "còn chỗ ⇒ không thả gói nào")
+    checkEqual(P.overflow(count: 600, maxCount: 512), 88, "vượt trần ⇒ thả đúng phần vượt")
+    checkEqual(P.overflow(count: 3, maxCount: 0), 2, "trần 0 bị kẹp về 1 (không có hàng đợi vô trần)")
+
+    // (1) Hàng đợi GỬI: nạp KHÔNG có completion ⇒ phải dừng ở ĐÚNG trần, không phình.
+    var budget = RampStatus.SendBudget(maxPackets: 512, maxBytes: 512 * 1024)
+    var accepted = 0
+    var waits = 0
+    var overPackets = false
+    var overBytes = false
+    for _ in 0..<100_000 {
+        switch budget.admit(packetBytes: 1_000) {
+        case .accept: accepted += 1
+        case .backpressure: waits += 1
+        case .drop: break
+        }
+        if budget.packets > budget.maxPackets { overPackets = true }
+        if budget.bytes > budget.maxBytes { overBytes = true }
+    }
+    check(!overPackets && !overBytes, "nạp 100.000 gói mà KHÔNG gửi xong ⇒ KHÔNG bao giờ vượt trần")
+    checkEqual(accepted, 512, "chỉ nhận đúng 512 gói (trần GÓI), phần còn lại bị CHẶN")
+    checkEqual(budget.packets, 512, "hàng đợi đứng ở trần, KHÔNG phình theo lưu lượng")
+    checkEqual(budget.bytes, 512_000, "byte đang chờ = số gói × kích thước gói")
+    checkEqual(waits, 100_000 - 512, "mọi gói sau khi đầy đều bị CHẶN (đếm được), không bơm tiếp")
+    checkEqual(budget.accepted, 512, "bộ đếm `accepted` khớp số gói đã nhận")
+    check(budget.isFull, "hàng đợi báo ĐẦY")
+
+    // (2) Gửi xong thì nhả chỗ ⇒ nạp lại được (không kẹt cứng, không âm).
+    budget.release(packetBytes: 1_000)
+    checkEqual(budget.packets, 511, "một gói gửi xong ⇒ nhả đúng một chỗ")
+    checkEqual(budget.admit(packetBytes: 1_000), .accept, "có chỗ trống ⇒ nhận gói kế tiếp")
+    for _ in 0..<10_000 { budget.release(packetBytes: 1_000) }
+    checkEqual(budget.packets, 0, "release dư ⇒ kẹp ở 0 (bộ đếm âm là trần vô hiệu)")
+    checkEqual(budget.bytes, 0, "byte cũng kẹp ở 0")
+
+    // (3) Trần BYTE phải chặn trước trần GÓI khi gói to (gói bị gộp).
+    var byteBound = RampStatus.SendBudget(maxPackets: 512, maxBytes: 20_000)
+    var n = 0
+    while byteBound.admit(packetBytes: 1_500) == .accept { n += 1 }
+    checkEqual(n, 13, "trần BYTE chặn ở 13 gói × 1.500 B (19.500 B ≤ 20.000 B)")
+    checkEqual(byteBound.bytes, 19_500, "tổng byte đang chờ ≤ trần BYTE")
+    checkEqual(byteBound.waits, 1, "lần bị chặn đầu tiên đã được đếm")
+
+    // (4) Gói TO HƠN CẢ TRẦN ⇒ thả CÓ ĐẾM, không chờ vô hạn (không bao giờ lọt trần).
+    var oversized = RampStatus.SendBudget(maxPackets: 512, maxBytes: 20_000)
+    checkEqual(oversized.admit(packetBytes: 20_001), .drop, "gói > trần byte ⇒ THẢ")
+    checkEqual(oversized.dropped, 1, "đã đếm gói bị thả")
+    checkEqual(oversized.packets, 0, "gói bị thả KHÔNG chiếm chỗ")
+
+    // (5) Diễn lại ca thật: máy bơm nhanh hơn đường truyền (Netflix). Đo đỉnh của cả gói lẫn byte.
+    var real = RampStatus.SendBudget()
+    var peakPackets = 0
+    var peakBytes = 0
+    var admitted = 0
+    for step in 0..<200_000 {
+        if real.admit(packetBytes: 1_450) == .accept {
+            admitted += 1
+            if step % 3 == 0 { real.release(packetBytes: 1_450) }   // completion về chậm hơn nhịp bơm 3×
+        }
+        peakPackets = max(peakPackets, real.packets)
+        peakBytes = max(peakBytes, real.bytes)
+    }
+    check(peakPackets <= RampStatus.DataPathQueuePolicy.linkMaxPackets, "đỉnh gói ≤ trần")
+    check(peakBytes <= RampStatus.DataPathQueuePolicy.linkMaxBytes, "đỉnh byte ≤ trần")
+    check(admitted > 0, "vẫn nạp được gói (trần không chặn oan lúc đường còn chỗ)")
+    check(real.dropped == 0, "backpressure KHÔNG vứt gói (vứt gói làm handshake/keepalive hỏng)")
+    check(real.waits > 0, "đã phải CHỜ (backpressure) chứ không bơm vô hạn")
+    real.reset()
+    checkEqual(real.packets, 0, "reset ⇒ hàng đợi rỗng")
+    checkEqual(real.waits, 0, "reset ⇒ xoá cả bộ đếm")
+
+    // (6) Đệm lúc link chưa mở: trần 512 gói, quá trần thả CŨ NHẤT, không bao giờ phình.
+    var buffer = RampStatus.BoundedBuffer<(at: Int, bytes: Int)>(maxCount: P.linkDownMaxPackets)
+    var dropEvents = 0
+    var overCap = false
+    for i in 0..<5_000 {
+        dropEvents += buffer.append((at: i, bytes: 1_400))
+        if buffer.count > P.linkDownMaxPackets { overCap = true }
+    }
+    check(!overCap, "đệm link không bao giờ vượt trần")
+    checkEqual(buffer.count, 512, "đệm đứng ở trần")
+    checkEqual(buffer.appended, 5_000, "đã đếm đủ số gói đến")
+    checkEqual(buffer.dropped, 5_000 - 512, "mọi gói vượt trần đều ĐƯỢC ĐẾM (không mất im lặng)")
+    checkEqual(dropEvents, 5_000 - 512, "số lần thả trả về cho bên gọi khớp bộ đếm")
+    checkEqual(buffer.items.first?.at, 5_000 - 512, "gói CŨ NHẤT bị thả trước (FIFO)")
+
+    // (7) TTL: gói nằm quá lâu bị thả và CÓ ĐẾM.
+    let droppedByTTL = buffer.dropOldest()
+    checkEqual(droppedByTTL?.at, 4_488, "dropOldest trả đúng gói cũ nhất")
+    checkEqual(buffer.dropped, 5_000 - 512 + 1, "thả vì TTL cũng được đếm")
+
+    // (8) Xả đệm khi link mở lại: lấy ra theo ĐÚNG thứ tự, phần chưa xả được đặt lại ĐẦU hàng đợi.
+    let held = buffer.drain()
+    checkEqual(held.count, 511, "drain lấy hết phần còn lại")
+    check(buffer.isEmpty, "drain ⇒ hàng đợi rỗng")
+    let rest = Array(held.prefix(300))
+    checkEqual(buffer.requeueFront(rest), 0, "đặt lại 300 gói vào hàng đợi còn chỗ ⇒ không thả")
+    checkEqual(buffer.count, 300, "hàng đợi giữ đúng 300 gói chưa xả")
+    checkEqual(buffer.items.first?.at, 4_489, "gói CŨ NHẤT vẫn đứng đầu (giữ thứ tự bắt tay)")
+    checkEqual(buffer.items.last?.at, 4_788, "gói MỚI NHẤT vẫn đứng cuối")
+    checkEqual(buffer.requeueFront(Array(held.suffix(400))), 188,
+               "đặt lại 400 gói khi chỉ còn 212 chỗ ⇒ thả ĐÚNG phần vượt trần và có đếm")
+    checkEqual(buffer.count, 512, "sau khi đặt lại vẫn đứng ở trần")
+    buffer.removeAll()
+    checkEqual(buffer.count, 0, "removeAll ⇒ rỗng (kết thúc phiên không giữ gói phiên cũ)")
 }
 
 print("")

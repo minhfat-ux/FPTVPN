@@ -16,6 +16,7 @@ swiftc -O \
   "$SRC/ChinaRouteBypass.swift" \
   "$SRC/RouteReporter.swift" \
   "$SRC/RampStatus.swift" \
+  "$ROOT/iOS/PrivateVPN/Services/HysteriaDefaults.swift" \
   "$ROOT/scripts/ios-pure-logic-tests/main.swift" \
   -o "$OUT/pure-tests"
 "$OUT/pure-tests"
