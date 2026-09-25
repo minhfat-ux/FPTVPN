@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "MAC nghiem thu (ben giao): chay dung lenh trong --verify. (1) bash scripts/check-web-assets-weight.sh --url https://meetflowai.site (ban bac6f58) => exit 0, 'KET LUAN: DAT'. Do tren ban dang phat: vpnflow-logo.png=11659, meetflow-logo.png=17357, fbuddy-logo.png=16333, supermom-logo.png=28326, flowtech-mark.png=8248, flowtech-icon.png=15335 B => TONG 97258 B = 94 KB <= 120 KB (truoc la 602413 B = 588 KB, -84%), moi anh <= 40 KB. (2) curl -I 6 anh: HTTP 200, content-type image/png, content-length khop tung file, cache-control public max-age=14400. (3) sha256 6/6 file dang phat KHOP dung t1_sha trong docs/handoff/web-assets-2026-09-25/sizes.json@bac6f58 => dung goi Tier 1, khong phai file khac nho hon. HTML trang chu=34735 B. Ghi chu: Tier 2 (WebP/AVIF + <picture> + header origin) khong nam trong dieu kien nghiem thu nay.",
+ "actor": "mac",
+ "at": "2026-09-25T16:13:34.438Z"
+}
