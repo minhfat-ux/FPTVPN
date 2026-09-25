@@ -124,7 +124,7 @@ targets:
         #   (~10 gói/15 s trong khi máy gửi 180 gói/15 s, relay đứng im >30 s) vẫn bị coi là "sống"
         #   ⇒ khách phải tự tắt VPN. Thêm luật **SYN gửi mà KHÔNG có SYN-ACK nào về** (≥15 s) —
         #   đúng bằng chứng app đã dùng ở đầu phiên, và miễn nhiễm ca khách đang UPLOAD.
-        CURRENT_PROJECT_VERSION: "42"
+        CURRENT_PROJECT_VERSION: "43"
         MARKETING_VERSION: "1.4.5"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
@@ -222,7 +222,7 @@ targets:
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
         MARKETING_VERSION: "1.4.5"
-        CURRENT_PROJECT_VERSION: "42"
+        CURRENT_PROJECT_VERSION: "43"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
@@ -311,8 +311,8 @@ targets:
         PRODUCT_NAME: VPNFlow
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "14"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -441,8 +441,8 @@ targets:
         PRODUCT_NAME: PrivateVPNMacPacketTunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "14"
+        MARKETING_VERSION: "1.4.3"
+        CURRENT_PROJECT_VERSION: "20"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).
@@ -451,5 +451,5 @@ targets:
       # MobileStop). Là static archive ⇒ chỉ cần link; `embed` để bản chạy tại chỗ có đủ
       # artifact như khi phát hành.
       - framework: iOS/Frameworks/Hysteria-macos.xcframework
-        embed: true
-        codeSign: true
+        # Static archive ⇒ chỉ link, KHÔNG embed (xem chú thích ở target iOS).
+        embed: false
