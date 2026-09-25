@@ -37,6 +37,8 @@
 	<string>$(HYST_PASSWORD)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Dùng để đọc tên Wi‑Fi đang kết nối, giúp khai báo và ramp băng thông chính xác cho từng mạng. / Used to read the current Wi-Fi name so tunnel bandwidth is declared and ramped correctly per network.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

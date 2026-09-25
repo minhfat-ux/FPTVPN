@@ -41,6 +41,9 @@ targets:
         HysteriaPassword: $(HYST_PASSWORD)
         HysteriaObfs: $(HYST_OBFS)
         UILaunchScreen: {}
+        # iOS chỉ trả SSID khi app có quyền vị trí (Apple yêu cầu cho `NEHotspotNetwork.fetchCurrent`).
+        NSLocationWhenInUseUsageDescription: "Dùng để đọc tên Wi‑Fi đang kết nối, giúp khai báo và ramp băng thông chính xác cho từng mạng. / Used to read the current Wi-Fi name so tunnel bandwidth is declared and ramped correctly per network."
+        # (README riêng cho extension không cần: quyền do APP xin, extension chỉ đọc.)
         CFBundleURLTypes:
           - CFBundleURLName: com.privatevpn.app
             CFBundleURLSchemes:
@@ -61,6 +64,12 @@ targets:
       properties:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
+        # 25/09/2026 — ĐỌC SSID/BSSID của WiFi để khoá bộ nhớ băng thông theo TỪNG mạng
+        # (`NetworkIdentity.preferredKey` = `wifi|ssid:<SSID>`), tránh khai số của WiFi này sang
+        # WiFi khác. Cần kèm: capability "Access WiFi Information" cho App ID trên App Store
+        # Connect + quyền vị trí của app (`NSLocationWhenInUseUsageDescription`). Thiếu entitlement
+        # ⇒ `NEHotspotNetwork.fetchCurrent` trả nil và code tự lùi về `wifi|router:<MAC>`/`wifi|if:en0`.
+        com.apple.developer.networking.wifi-info: true
         # iOS KHÔNG khai nhóm keychain dùng chung: bản iOS chỉ ghi keychain RIÊNG của app, và
         # extension iOS là hysteria-only (không đọc keychain) nên không có gì để chia sẻ.
         # Nhóm dùng chung không bao giờ được profile Ad Hoc cấp ⇒ SecItemAdd trả
@@ -92,8 +101,31 @@ targets:
         # không cấp ⇒ -34018, khách kẹt màn đăng nhập) + gộp 7c98e53 (đăng xuất thiết bị khác)
         # và 820b9d2 (watchdog). Kênh đang phát 1.4.1/build 18 ⇒ PHẢI tăng CHUỖI version (app chỉ
         # nhắc cập nhật khi CFBundleShortVersionString tăng); control-plane đặt minimum_version=1.4.2.
-        CURRENT_PROJECT_VERSION: "20"
-        MARKETING_VERSION: "1.4.2"
+        # 1.4.4 / build 21 (24/09/2026): sửa HIỂN THỊ thẻ Diagnostics — số down/up "live" lấy trung
+        # bình 3 mẫu (trước đây 1 mẫu nên nhảy loạn so với Ookla) và "Khai báo hiện tại" in số ĐANG
+        # áp dụng thay vì số kế hoạch; thêm cờ `serving` giữ nguyên sau khi đổi transport nên thẻ
+        # không còn trắng số. Chỉ đụng đường hiển thị, không đổi ramp/transport/watchdog/MTU/DNS.
+        # Kênh đang phát 1.4.3/build 20 (sha256 b2432247…) — tăng số theo luật artifact bất biến
+        # (docs/VERSIONING.md §3.3: cùng version mà khác hash là cấm).
+        # 1.4.5 / build 22 (24/09/2026 tối): bản vá ỔN ĐỊNH theo **android parity** —
+        # (a) TẮT tự-áp số khai giữa phiên (`BandwidthControl.allowsTransportRebuild = false`):
+        #     không còn 7 lần "transport vừa thay (ramp băng thông)" mỗi phiên (log máy thật 24/09);
+        #     số mới vẫn được GHI NHỚ theo mạng và áp ở lần kết nối/đổi mạng kế tiếp;
+        # (b) watchdog "không tiến triển": 10s → **45s + 2 strike liên tiếp**, ngưỡng tự GỠ tunnel
+        #     45s → **120s** (bản 1.4.4 tự dựng lại/gỡ khi tunnel chỉ RẢNH ⇒ khách thấy "tự ngắt").
+        # Build 23 (24/09/2026 tối — đợt 2, android parity cho phần RAMP + SỐ LIỆU):
+        #   • `livenessStrikesToRebuild` 1 → **2** (Android `DEAD_PROBE_LIMIT = 2`);
+        #   • cổng HẠ số khai nhận thêm điều kiện `busy = idleRun == 0` của Android ⇒ hết kẹt cứng
+        #     "khai vống + đang tải ⇒ không hạ được, cũng không lên được";
+        #   • thẻ Diagnostics: "% còn lên" dùng hệ số **1,15** (Android `:1191`), "Mức đã khoá" theo
+        #     mốc **≥8 Mbps giữ 10s** (Android `FULLHD_KBPS`).
+        # Build 24 (24/09/2026 khuya — ca thật "Connected mà KHÔNG có mạng" 32 phút trên iPhone):
+        #   luật `alive` của watchdog sống-còn chỉ cần **1 gói về** nên một dòng nhỏ giọt
+        #   (~10 gói/15 s trong khi máy gửi 180 gói/15 s, relay đứng im >30 s) vẫn bị coi là "sống"
+        #   ⇒ khách phải tự tắt VPN. Thêm luật **SYN gửi mà KHÔNG có SYN-ACK nào về** (≥15 s) —
+        #   đúng bằng chứng app đã dùng ở đầu phiên, và miễn nhiễm ca khách đang UPLOAD.
+        CURRENT_PROJECT_VERSION: "42"
+        MARKETING_VERSION: "1.4.5"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -167,8 +199,10 @@ targets:
       properties:
         CFBundleDisplayName: VPNFlow Tunnel
         # Extension PHẢI cùng phiên bản với app chứa nó, nếu lệch thì lúc cài/nộp bị từ chối.
-        CFBundleShortVersionString: "1.4.2"
-        CFBundleVersion: "19"
+        # Trỏ thẳng vào build setting: trước đây ghi literal nên mỗi lần bump version là
+        # xcodegen sinh Info.plist lệch số với app ⇒ bị từ chối lúc cài/nộp (sự cố 23/09/2026).
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
@@ -177,6 +211,9 @@ targets:
       properties:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
+        # Cùng lý do như app: chính EXTENSION gọi `NEHotspotNetwork.fetchCurrent`
+        # (`HysteriaBandwidthControl.currentWiFiNetwork`) nên entitlement phải có ở đây.
+        com.apple.developer.networking.wifi-info: true
         # Không có nhóm keychain dùng chung: extension iOS chỉ chạy hysteria2 và KHÔNG đọc
         # keychain (xem project.yml:154 — KeychainStore.swift cố ý không nằm trong target này).
     settings:
@@ -184,8 +221,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.2"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.5"
+        CURRENT_PROJECT_VERSION: "42"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
@@ -193,8 +230,9 @@ targets:
       # MobileStop), bản STACK=gvisor — dựng bằng tools/hysteria-apple/build.sh. Là static
       # archive ⇒ chỉ cần link; `embed` để artifact khớp bản phát hành.
       - framework: iOS/Frameworks/Hysteria.xcframework
-        embed: true
-        codeSign: true
+        # Là STATIC archive (`ar`), KHÔNG phải framework động ⇒ chỉ link, KHÔNG embed:
+        # embed:true làm Apple chặn 90171 (iOS) và lỗi ký "code has no resources" (macOS).
+        embed: false
 
   PrivateVPNTests:
     type: bundle.unit-test

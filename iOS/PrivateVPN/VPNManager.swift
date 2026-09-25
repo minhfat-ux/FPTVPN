@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import NetworkExtension
 import os
@@ -112,7 +113,25 @@ final class VPNManager: ObservableObject {
         }
     }
 
+    /// 25/09/2026 — iOS CHỈ trả SSID/BSSID khi APP có quyền vị trí
+    /// (`NEHotspotNetwork.fetchCurrent`; entitlement `…networking.wifi-info` đã khai trong
+    /// `project.yml`). Nhờ nó mà khoá bộ nhớ băng thông là **theo từng WiFi**
+    /// (`wifi|ssid:<SSID>`) thay vì chung một bucket `wifi|if:en0` — tránh khai số của mạng này
+    /// sang mạng khác (ca "SSID mới", "WiFi khác băng thông").
+    ///
+    /// Xin MỘT lần, ngay trước khi kết nối để prompt có ngữ cảnh. Khách từ chối ⇒ mọi thứ vẫn
+    /// chạy bình thường, chỉ là khoá lùi về `wifi|router:<MAC>` rồi `wifi|if:en0`.
+    private let wifiInfoLocationManager = CLLocationManager()
+
+    private func requestWiFiInfoPermissionIfNeeded() {
+        guard CLLocationManager.locationServicesEnabled() else { return }
+        guard wifiInfoLocationManager.authorizationStatus == .notDetermined else { return }
+        wifiInfoLocationManager.requestWhenInUseAuthorization()
+    }
+
     func connect(store: VPNConfigStore, authStore: AuthSessionStore) async {
+        // Quyền vị trí ⇒ đọc được SSID ⇒ bộ nhớ băng thông tách theo từng mạng (xem chú thích trên).
+        requestWiFiInfoPermissionIfNeeded()
         // Báo "đang kết nối" NGAY, TRƯỚC mọi lời gọi mạng — giống Android
         // (VPNManager.kt: `_state.value = VPNState.CONNECTING` rồi mới `claimDevice`).
         //
