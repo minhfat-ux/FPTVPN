@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "CHẶN MÔI TRƯỜNG (không phải code): repo iOS thật + toàn bộ việc (a)(b)(c) nằm ở /Volumes/BIWIN/SourcesCode/PrivateVPN — NGOÀI workspace của phiên (/Users/minhnguyen/FlowGPT). Mọi thao tác ghi vào /Volumes/BIWIN (sửa file, git commit, build) bị sandbox workspace-write chặn ('Operation not permitted'); xin nâng quyền danger-full-access bị từ chối vì 'no approval channel is available'. ĐÃ LÀM ĐƯỢC (chỉ đọc, có bằng chứng): (1) 3 bug đúng như mô tả trong .privatevpn/status/bugs.json (JETSAM-001/ONEWAY-001/LOGLEAK-001, đều open); (2) RelayFailoverWatch + case harness đang ở working tree: bash scripts/ios-pure-logic-tests/run.sh -> 418/418 PASS (>=389); (3) python3 scripts/ios-lint-locks.py -> ĐẠT; (4) fix (b) đúng 1 ký tự tại dòng làm việc 3554 (HEAD 3515): '\\\\(code)' -> '\\\\(code)'; (5) tái hiện cổng nghiệm thu trên log 25/09 20:05: iPad KHÔNG ĐẠT 1/8 phiên (build 43: WATCHDOG CÂM + NỘI SUY CHUỖI LỘ RA LOG '(\\\\(code))'), iPhone ĐẠT 6/6. CẦN ĐỂ GỠ: cấp quyền ghi /Volumes/BIWIN cho phiên (hoặc chạy phiên với workspace=/Volumes/BIWIN/SourcesCode/PrivateVPN) rồi giao lại phần (a) commit + (b) sửa + (c) build/đo >=30 phút.",
+ "actor": "mac",
+ "at": "2026-09-25T14:13:27.026Z"
+}
