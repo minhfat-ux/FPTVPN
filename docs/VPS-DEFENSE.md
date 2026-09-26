@@ -135,3 +135,28 @@ mỗi 2 phút sẽ có hàng trăm tin rác. Cách xử lý:
 - `/tmp/up-server.py` (pid 3648387, từ 18/09): helper nhận APK từ Windows, chỉ nghe `127.0.0.1:8099`, ghi vào
   `/root/apk-upload`. Đã có trong baseline nên chỉ ghi nhận LOW; **nên chuyển vào `/opt/fbuddy/ops/` và chạy
   bằng systemd** thay vì để trong `/tmp`.
+
+## 9. SSH chỉ qua VPNFlow (yêu cầu chủ dự án 26/09)
+
+Hai cách, **ưu tiên cách 2** (đã trả giá bằng sự cố mất SSH ngày 26/09 — xem
+`docs/INCIDENT-2026-09-26-ssh-lock.md`):
+
+1. ~~Lọc theo nguồn bằng nft~~ (`vpnflow-ssh-lock.sh`): chỉ `accept` cổng 22 từ danh sách nguồn.
+   **Không khuyến khích** — phải đoán đúng nguồn thật; đoán sai là tự khoá mình (đã xảy ra).
+2. **Thu hẹp listener** (`ops/vpnflow-ssh-only.sh`): khai báo `ListenStream` cho `ssh.socket`
+   (Ubuntu 24.04 sshd chạy socket-activation nên `ListenAddress` trong sshd_config **không** có tác dụng):
+
+   ```bash
+   bash ops/vpnflow-ssh-only.sh plan     # xem trước địa chỉ sẽ nghe (không đổi gì)
+   bash ops/vpnflow-ssh-only.sh apply    # chỉ nghe 22 trên địa chỉ VPN + loopback
+   bash ops/vpnflow-ssh-only.sh check    # xác nhận không còn 0.0.0.0:22
+   bash ops/vpnflow-ssh-only.sh rollback # quay lại như cũ
+   ```
+
+   Sau khi áp: vào node bằng `ssh root@10.77.0.1` (node-1) rồi từ node-1 sang node-2 (dải 10.78.0.1),
+   đúng tinh thần "chỉ khi dùng VPNFlow". Không có listener trên `eth0` ⇒ Internet không thể bắt tay TCP.
+
+**Guard canh việc này** (bộ luật `ssh-exposure`, chạy mỗi 2 phút):
+`ssh-exposure-public` (cổng 22 nghe trên mọi địa chỉ — HIGH, hạ LOW nếu đang có bảng nft khoá),
+`ssh-password-auth` (đăng nhập bằng mật khẩu — HIGH), `ssh-permit-root` (root đăng nhập trực tiếp — MEDIUM).
+Dùng `sshd -T` (cấu hình hiệu lực) nên không báo nhầm khi drop-in ghi đè.

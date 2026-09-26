@@ -222,6 +222,34 @@ export function scanOutbound(ssText, { normal = NORMAL_OUTBOUND_PORTS } = {}) {
   return out;
 }
 
+/**
+ * SSH có đang mở ra Internet không? Chủ dự án yêu cầu SSH CHỈ qua VPNFlow.
+ * Dùng `sshd -T` (cấu hình HIỆU LỰC) chứ không đọc file, để không báo nhầm khi drop-in ghi đè.
+ */
+export function scanSshExposure({ ssText = "", sshdEffectiveText = "", nftLocked = false } = {}) {
+  const out = [];
+  const open = parseSockets(ssText).filter((s) => s.local.port === 22 && s.exposed);
+  if (open.length) {
+    out.push(finding(
+      "ssh-exposure-public", nftLocked ? "low" : "high",
+      "SSH (cổng 22) đang nghe trên MỌI địa chỉ",
+      nftLocked
+        ? "Đang có bảng nft vpnflow_ssh chặn theo nguồn nên Internet vẫn không vào được — nhưng nên chuyển sang chỉ nghe trên địa chỉ VPN: ops/vpnflow-ssh-only.sh apply"
+        : "Internet có thể bắt tay TCP vào cổng 22 (đúng thứ chủ dự án muốn chặn). Cách an toàn: ops/vpnflow-ssh-only.sh apply (chỉ nghe trên địa chỉ VPNFlow).",
+      open.map((s) => s.line).join(" "),
+    ));
+  }
+  if (/^\s*passwordauthentication\s+yes\s*$/im.test(sshdEffectiveText)) {
+    out.push(finding("ssh-password-auth", "high", "SSH đang cho đăng nhập bằng MẬT KHẨU",
+      "Chủ dự án yêu cầu chỉ dùng khoá: đặt PasswordAuthentication no.", "passwordauthentication yes"));
+  }
+  if (/^\s*permitrootlogin\s+yes\s*$/im.test(sshdEffectiveText)) {
+    out.push(finding("ssh-permit-root", "medium", "SSH cho root đăng nhập trực tiếp (PermitRootLogin yes)",
+      "Nên đặt prohibit-password để chỉ vào được bằng khoá.", "permitrootlogin yes"));
+  }
+  return out;
+}
+
 /** Hash tệp trọng yếu đổi ngoài deploy. */
 export function diffHashes(baseline = {}, current = {}) {
   const out = [];
@@ -331,6 +359,9 @@ function gather() {
   const sshLog = run("bash", ["-lc", "journalctl -u ssh -u sshd --since '-30 min' --no-pager 2>/dev/null | tail -400"]);
   const files = run("bash", ["-lc", FIND_RECENT_FILES], { timeout: 45000 });
   const last = run("bash", ["-lc", "last -a -i -n 40 2>/dev/null || true"]);
+  // Cấu hình SSH HIỆU LỰC (đã tính cả drop-in) + bảng nft khoá SSH có đang bật không.
+  const sshdT = run("sshd", ["-T"], { timeout: 15000 });
+  const nftLock = run("nft", ["list", "table", "inet", "vpnflow_ssh"], { timeout: 10000 });
   return {
     ps: { ok: ps.ok, text: ps.out },
     ss: { ok: ss.ok, text: ss.out },
@@ -338,6 +369,8 @@ function gather() {
     sshLog: { ok: sshLog.ok, text: sshLog.out },
     files: { ok: files.ok, text: files.out },
     last: { ok: last.ok, text: last.out },
+    sshd: { ok: sshdT.ok, text: sshdT.out },
+    sshLocked: nftLock.ok,
     hashes: collectHashes(),
     persistence: collectPersistence(),
   };
@@ -456,6 +489,7 @@ function checkNode(baseline) {
     ...(s.est.ok ? scanOutbound(s.est.text) : []),
     ...(s.sshLog.ok ? scanSshBruteForce(s.sshLog.text) : []),
     ...(s.files.ok ? scanSuspiciousFiles(s.files.text) : []),
+    ...(s.ss.ok ? scanSshExposure({ ssText: s.ss.text, sshdEffectiveText: s.sshd.text, nftLocked: s.sshLocked }) : []),
     ...(baseline
       ? [
           ...diffHashes(base.hashes ?? {}, s.hashes),
@@ -609,6 +643,11 @@ function selfTest() {
     finding("listen-1", "low", "Cổng 1 đang MỞ (udp, ra ngoài)", 'Cổng UDP tạm do "hysteria" (đã có trong baseline) mở — chỉ ghi nhận.', "l"),
     finding("listen-2", "low", "Cổng 2 đang MỞ (udp, ra ngoài)", 'Cổng UDP tạm do "hysteria" (đã có trong baseline) mở — chỉ ghi nhận.', "l"),
   ]).join("\n").includes("2 cổng UDP tạm"));
+  check("SSH nghe 0.0.0.0:22 mà chưa khoá ⇒ HIGH", scanSshExposure({ ssText: 'LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))', sshdEffectiveText: "passwordauthentication no" }).some((f) => f.id === "ssh-exposure-public" && f.severity === "high"));
+  check("SSH nghe 0.0.0.0:22 nhưng ĐÃ có nft khoá ⇒ hạ LOW", scanSshExposure({ ssText: 'LISTEN 0 128 0.0.0.0:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication no", nftLocked: true }).every((f) => f.severity === "low"));
+  check("SSH chỉ nghe địa chỉ VPN ⇒ không báo", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication no\npermitrootlogin prohibit-password" }).length === 0);
+  check("SSH cho đăng nhập bằng mật khẩu ⇒ HIGH", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication yes" }).some((f) => f.id === "ssh-password-auth" && f.severity === "high"));
+  check("root đăng nhập trực tiếp ⇒ MEDIUM", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "permitrootlogin yes" }).some((f) => f.id === "ssh-permit-root" && f.severity === "medium"));
   check("chống trùng phát hiện", dedupe([finding("x", "high", "t", "d", "e"), finding("x", "high", "t", "d", "e")]).length === 1);
   check("tin cảnh báo có tiêu đề + hướng xử lý", /VPS GUARD/.test(formatAlert([finding("x", "high", "Thử", "Chi tiết")])) && /VPS-DEFENSE/.test(formatAlert([finding("x", "high", "Thử", "Chi tiết")])));
 
