@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC xác nhận: đã đọc bus #501, đã xác minh nguyên nhân gốc trong code và bản vá trong cây PrivateVPN. Bắt tay commit + build 58 + nghiệm thu §7d.",
+ "actor": "mac",
+ "at": "2026-09-26T16:28:27.528Z"
+}
