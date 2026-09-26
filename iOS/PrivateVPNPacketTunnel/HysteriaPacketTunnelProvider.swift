@@ -260,6 +260,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Đúng ca đo trên iPhone 23/09/2026: sau lần ramp dựng lại transport lúc 12:18:38, watchdog
     /// im lặng 14 phút dù `toGo` đóng băng + `toGoDropped` leo (đủ điều kiện `.rebuild`).
     private var watchdogGuardTimer: DispatchSourceTimer?
+    /// Đếm nhịp của **lưới an toàn** (chỉ đọc/ghi trên `watchdogGuardQueue`).
+    ///
+    /// Vì sao cần: lưới an toàn chỉ ghi log KHI nó phát hiện watchdog câm. Nếu chính nó cũng chết thì log
+    /// **im lặng hoàn toàn**, và người chấm không phân biệt được "watchdog câm" với "cả hai đều câm".
+    /// Ca thật 26/09/2026 (build 57, phiên 14:00:22): watchdog 0 nhịp trong 131 s **và** lưới an toàn
+    /// không một dòng ⇒ không có dấu vết nào để biết hàng đợi nào chết. Nay lưới an toàn tự khai nhịp
+    /// mỗi 4 vòng (60 s) — tốn 1 dòng/phút, cùng mức với dòng `tài nguyên:` sẵn có.
+    private var watchdogGuardTicks = 0
     private let watchdogGuardQueue = DispatchQueue(label: "com.privatevpn.app.tunnel.watchdog-guard")
     /// (24/09/2026 khuya) Hàng đợi RIÊNG cho **nhịp** watchdog sống-còn.
     ///
@@ -2310,6 +2318,15 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             NEIPv4Route(destinationAddress: "172.16.0.0", subnetMask: "255.240.0.0"),
             NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),
+            // `100.64.0.0/10` (RFC 6598, dải CGNAT) — ĐƯỜNG QUẢN TRỊ/CỨU HỘ, không phải traffic khách.
+            // Vì sao phải loại trừ: Tailscale cấp địa chỉ trong dải này; nếu tunnel hút cả dải thì gói tới
+            // nút Tailscale đi VÀO tunnel, mà đầu bên kia KHÔNG có đường tới `100.76.147.111` ⇒ đen ⇒
+            // mất luôn đường cứu hộ khi tunnel hỏng. Ca thật 26/09/2026: `route -n get 100.76.147.111`
+            // trả `utun7`, SSH tới cả node-1 lẫn node-2 đều `Connection timed out during banner exchange`,
+            // agent mất đường vào server để cứu hộ (§7e.2 dựa vào chính đường Tailscale này).
+            // An toàn với khách: RFC 6598 KHÔNG phải không gian địa chỉ công cộng — không dịch vụ Internet
+            // nào nằm trong dải này, nên loại trừ không mở đường cho traffic thật đi vòng qua tunnel.
+            NEIPv4Route(destinationAddress: "100.64.0.0", subnetMask: "255.192.0.0"),
         ]
         // A7 — chia đường theo ĐÍCH ĐẾN: dải IP đã nạp ở nền (CẢ HAI nền tảng:
         // cn.txt + tencent-meeting.txt — macOS mở 25/09/2026, xem `startChinaBypass`) đi thẳng,
@@ -2968,6 +2985,16 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             repeating: Self.livenessInterval
         )
         timer.setEventHandler { [weak self] in self?.livenessStep() }
+        // `resume()` PHẢI đứng TRƯỚC khi công bố timer vào `livenessTimer`, không được để sau như bản cũ.
+        // Vì sao: nguồn `DispatchSourceTimer` mới tạo ở trạng thái TREO; nếu một lượt gọi CHỒNG (hàm này
+        // có 4 đường gọi, trong đó `livenessStep` dòng ~3151 gọi lại chính nó) chạy `livenessTimer?.cancel()`
+        // trước khi lượt trước kịp `resume()` thì timer đó bị huỷ khi còn treo ⇒ **không bao giờ chạy**,
+        // và vì nó đã nằm trong `livenessTimer` nên không ai bật lại nữa ⇒ watchdog câm tới hết phiên.
+        // Ca thật 26/09/2026 (build 57, phiên 14:00:22): sau `TỰ DỰNG LẠI transport` lúc 14:18:53, watchdog
+        // tự khai "bật lại với mốc mới" lúc 14:19:02 rồi **0 nhịp trong 131 s**; cả lưới an toàn
+        // `startWatchdogGuard()` cũng câm ⇒ đúng dấu hiệu timer treo, không phải khoá chết.
+        // Chạy trước khi công bố là an toàn: nhịp đầu cách 15 s, mọi trạng thái đã gán xong từ lâu.
+        timer.resume()
         flowLock.lock()
         livenessTimer?.cancel()
         livenessTimer = timer
@@ -3002,11 +3029,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             repeating: Self.relayReachabilityInterval
         )
         reachTimer.setEventHandler { [weak self] in self?.relayReachabilityStep(now: Date()) }
+        // Cùng lý do như `timer` ở trên: chạy TRƯỚC khi công bố, tránh bị lượt gọi chồng `cancel()`
+        // lúc còn treo ⇒ đồng hồ kiểm LINK RELAY chết im (mất luôn khả năng đổi cửa khi relay không mở được).
+        reachTimer.resume()
         relayReachabilityTimer?.cancel()
         relayReachabilityTimer = reachTimer
         flowLock.unlock()
-        timer.resume()
-        reachTimer.resume()
         startWatchdogGuard()
         RelayDiagnostics.shared.log(
             "giám sát sống-còn: bật SUỐT phiên — nhịp \(Int(Self.livenessInterval))s; chiều về im "
@@ -3045,6 +3073,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// loại sự cố không thể chẩn đoán được từ log trước đây.
     private func startWatchdogGuard() {
         watchdogGuardTimer?.cancel()
+        watchdogGuardTicks = 0
         let timer = DispatchSource.makeTimerSource(queue: watchdogGuardQueue)
         timer.schedule(deadline: .now() + Self.livenessInterval, repeating: Self.livenessInterval)
         timer.setEventHandler { [weak self] in
@@ -3057,15 +3086,30 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             self.flowLock.unlock()
             guard !cancelled else { return }
             let stalledFor = Date().timeIntervalSince(last)
-            guard timerMissing || stalledFor >= Self.livenessStallLimit else { return }
-            RelayDiagnostics.shared.log(
-                "giám sát sống-còn: watchdog NGỪNG chạy (\(Int(stalledFor))s không có nhịp, "
-                    + "timerMissing=\(timerMissing)) — bật lại, phiên \(session)"
-            )
-            self.startLivenessWatchdog()
+            if timerMissing || stalledFor >= Self.livenessStallLimit {
+                RelayDiagnostics.shared.log(
+                    "giám sát sống-còn: watchdog NGỪNG chạy (\(Int(stalledFor))s không có nhịp, "
+                        + "timerMissing=\(timerMissing)) — bật lại, phiên \(session)"
+                )
+                self.startLivenessWatchdog()
+                return
+            }
+            // Đường BÌNH THƯỜNG: lưới an toàn tự khai nhịp mỗi 4 vòng (60 s) để **phân biệt được**
+            // "watchdog câm" với "cả watchdog lẫn lưới an toàn đều câm". Không có dòng này thì ca
+            // 26/09/2026 không để lại dấu vết nào (xem chú thích `watchdogGuardTicks`).
+            self.watchdogGuardTicks += 1
+            if self.watchdogGuardTicks % 4 == 0 {
+                RelayDiagnostics.shared.log(
+                    "giám sát sống-còn: lưới an toàn nhịp \(self.watchdogGuardTicks) — watchdog KHOẺ "
+                        + "(nhịp cuối cách \(Int(stalledFor))s), phiên \(session)"
+                )
+            }
         }
-        watchdogGuardTimer = timer
+        // Cùng lý do như `timer`/`reachTimer` trong `startLivenessWatchdog`: chạy TRƯỚC khi công bố.
+        // Lưới an toàn này là thứ CUỐI CÙNG bắt được watchdog câm — nếu chính nó bị treo thì không còn
+        // gì phát hiện nữa (ca thật 26/09/2026: watchdog câm 131 s mà lưới an toàn cũng không lên tiếng).
         timer.resume()
+        watchdogGuardTimer = timer
     }
 
     /// Transport vừa bị THAY (ramp băng thông / tự phục hồi / HOLD) ⇒ mọi mốc của watchdog cũ trỏ
