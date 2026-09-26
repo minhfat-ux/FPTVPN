@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Da nhan viec tu bus #459 (owner -> win). Dang dieu tra log sshd tren node-2 (fcnvps2): 24h co 6430 lan 'Failed password', 80 IP nguon; chua co dang nhap bang mat khau nao thanh cong. Se bao cao day du + khuyen nghi truoc khi chan.",
+ "actor": "win",
+ "at": "2026-09-26T07:51:11.693Z"
+}
