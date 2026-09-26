@@ -221,6 +221,13 @@ export const settings: Dict = {
   "settings.users.colCreatedAt": "Ngày tạo",
   "settings.users.colActions": "Thao tác",
   "settings.users.selfBadge": "Bạn",
+
+  /* Trạng thái xác thực email (khách tự đăng ký phải xác thực mới active; admin thêm tay thì active ngay). */
+  "settings.users.pendingBadge": "Chưa xác thực email",
+  "settings.users.activateButton": "Kích hoạt",
+  "settings.users.activateTitleFor": "Kích hoạt tay tài khoản {email}",
+  "settings.users.activated": "Đã kích hoạt tài khoản {email}",
+  "settings.users.activateFailed": "Không kích hoạt được, thử lại sau",
   "settings.users.grantTitleFor": "Cấp credit cho {email}",
   "settings.users.grantButton": "Cấp credit",
   "settings.users.deleteTitleFor": "Xoá {email}",
@@ -232,6 +239,8 @@ export const settings: Dict = {
   "settings.users.fieldEmail": "Email",
   "settings.users.emailPlaceholder": "nguoidung@congty.vn",
   "settings.users.fieldPassword": "Mật khẩu",
+  "settings.users.createActiveHint":
+    "Tài khoản do quản trị viên thêm tay được KÍCH HOẠT NGAY (không phải chờ email). Khách tự đăng ký ở ngoài thì vẫn phải xác thực email.",
   "settings.users.passwordHint": "Tối thiểu 8 ký tự.",
   "settings.users.fieldName": "Tên hiển thị (tuỳ chọn)",
   "settings.users.namePlaceholder": "Nguyễn Văn A",

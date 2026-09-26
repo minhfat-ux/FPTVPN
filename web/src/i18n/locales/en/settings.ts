@@ -221,6 +221,13 @@ export const settings: Dict = {
   "settings.users.colCreatedAt": "Created",
   "settings.users.colActions": "Actions",
   "settings.users.selfBadge": "You",
+
+  /* Email verification state (self-registered users must verify; admin-added ones are active at once). */
+  "settings.users.pendingBadge": "Email not verified",
+  "settings.users.activateButton": "Activate",
+  "settings.users.activateTitleFor": "Activate {email} manually",
+  "settings.users.activated": "Activated {email}",
+  "settings.users.activateFailed": "Could not activate, please try again",
   "settings.users.grantTitleFor": "Grant credits to {email}",
   "settings.users.grantButton": "Grant credits",
   "settings.users.deleteTitleFor": "Delete {email}",
@@ -232,6 +239,8 @@ export const settings: Dict = {
   "settings.users.fieldEmail": "Email",
   "settings.users.emailPlaceholder": "user@company.com",
   "settings.users.fieldPassword": "Password",
+  "settings.users.createActiveHint":
+    "Accounts added here by an admin are ACTIVE IMMEDIATELY (no email step). Users who sign up themselves still have to verify their email.",
   "settings.users.passwordHint": "At least 8 characters.",
   "settings.users.fieldName": "Display name (optional)",
   "settings.users.namePlaceholder": "Jane Doe",

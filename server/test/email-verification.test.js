@@ -132,15 +132,28 @@ test("đăng nhập không mật khẩu cũng kích hoạt tài khoản (đã ch
   assert.equal(login.user.emailVerified, true, "nhận được mã ⇒ coi như đã xác thực email");
 });
 
-test("admin kích hoạt tay được (khi email không tới hộp thư khách)", async () => {
+test("admin THÊM TAY trên control panel ⇒ tài khoản active NGAY", async () => {
+  const email = "khach-admin-them@fbuddy.test";
+  const created = await api("POST", "/admin/users", { email, password: "matkhau12345", name: "Khách admin thêm" }, admin.token);
+  assert.equal(created.user.emailVerified, true, "admin đã xác nhận người này ⇒ không bắt chờ email");
+
+  // Đăng nhập được ngay, không cần mã kích hoạt.
+  const login = await api("POST", "/auth/login", { email, password: "matkhau12345" });
+  assert.ok(login.token, "tài khoản do admin thêm phải đăng nhập được ngay");
+  assert.equal(login.user.emailVerified, true);
+});
+
+test("khách TỰ đăng ký thì vẫn phải xác thực; admin kích hoạt tay khi email không tới", async () => {
   const email = "khach-ket@fbuddy.test";
-  const created = await api("POST", "/admin/users", { email, password: "matkhau12345", name: "Kẹt" }, admin.token);
-  assert.equal(created.user.emailVerified, false);
+  const registered = await api("POST", "/auth/register", { email, password: "matkhau12345", name: "Kẹt" });
+  assert.equal(registered.pendingVerification, true);
+  assert.equal(registered.user.emailVerified, false);
 
   const blocked = await apiRaw("POST", "/auth/login", { email, password: "matkhau12345" });
-  assert.equal(blocked.status, 403);
+  assert.equal(blocked.status, 403, "khách tự đăng ký thì vẫn bị chặn tới khi xác thực");
 
-  const activated = await api("POST", `/admin/users/${created.user.id}/verify-email`, {}, admin.token);
+  // Admin kích hoạt tay (khách không nhận được mail).
+  const activated = await api("POST", `/admin/users/${registered.user.id}/verify-email`, {}, admin.token);
   assert.equal(activated.user.emailVerified, true);
 
   const login = await api("POST", "/auth/login", { email, password: "matkhau12345" });

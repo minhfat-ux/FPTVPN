@@ -433,6 +433,9 @@ export const api = {
 
   createUser: (body: { email: string; password: string; name?: string; role?: string }) =>
     request<{ user: User }>("POST", "/admin/users", body),
+  /** Kích hoạt tay một tài khoản khách (khi email xác thực không tới được hộp thư). */
+  verifyUserEmail: (id: string) =>
+    request<{ user: User }>("POST", `/admin/users/${id}/verify-email`, {}),
   deleteUser: (id: string) => request<{ ok: boolean }>("DELETE", `/admin/users/${id}`),
   adminStats: () =>
     request<Record<string, number>>("GET", "/admin/stats"),

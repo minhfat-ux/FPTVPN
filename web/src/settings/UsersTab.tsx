@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Coins, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Coins, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api/client";
 import { requestCreditsRefresh } from "../state/credits";
 import { useAuth, useToast } from "../state/store";
@@ -56,6 +56,17 @@ export function UsersTab() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** Kích hoạt tay tài khoản khách chưa xác thực email (admin đã xác nhận người này). */
+  const activate = async (item: AdminUser) => {
+    try {
+      await api.verifyUserEmail(item.id);
+      push(t("settings.users.activated", { email: item.email }), "success");
+      await load();
+    } catch (err) {
+      push(err instanceof ApiError ? err.message : t("settings.users.activateFailed"), "error");
+    }
+  };
 
   const remove = async () => {
     if (!removing) return;
@@ -209,6 +220,9 @@ export function UsersTab() {
                       <span className={`badge ${item.role === "admin" ? "badge-accent" : ""}`}>
                         {item.role === "admin" ? t("common.admin") : t("common.user")}
                       </span>
+                      {item.emailVerified === false && (
+                        <span className="badge badge-warn badge-inline">{t("settings.users.pendingBadge")}</span>
+                      )}
                     </td>
                     <td>{n(item.conversationCount)}</td>
                     <td className="nowrap bold" title={t("settings.users.burnedTitle", {
@@ -233,6 +247,16 @@ export function UsersTab() {
                         >
                           <Coins size={14} /> {t("settings.users.grantButton")}
                         </button>
+                        {item.emailVerified === false && (
+                          <button
+                            className="btn btn-sm nowrap"
+                            type="button"
+                            onClick={() => activate(item)}
+                            title={t("settings.users.activateTitleFor", { email: item.email })}
+                          >
+                            <ShieldCheck size={14} /> {t("settings.users.activateButton")}
+                          </button>
+                        )}
                         {!self && (
                           <button
                             className="btn btn-sm btn-danger nowrap"
@@ -279,6 +303,7 @@ export function UsersTab() {
             placeholder={t("settings.users.emailPlaceholder")}
           />
         </Field>
+        <div className="hint mb-3">{t("settings.users.createActiveHint")}</div>
         <Field label={t("settings.users.fieldPassword")} hint={t("settings.users.passwordHint")}>
           <input
             className="input"

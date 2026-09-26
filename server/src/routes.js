@@ -12,6 +12,7 @@ import {
   templateKind,
 } from "./templates.js";
 import { all, audit, count, DEFAULT_APP_SETTINGS, getById, remove } from "./db.js";
+import { nowIso } from "./util.js";
 import {
   authenticate,
   changePassword,
@@ -1865,9 +1866,10 @@ export function createApiRouter() {
         password: req.body?.password,
         name: req.body?.name ?? null,
         role: req.body?.role === "admin" ? "admin" : "user",
-        // Tài khoản tạo hộ khách cũng phải xác thực email; admin có thể kích hoạt tay
-        // bằng POST /admin/users/:id/verify-email nếu khách không nhận được mail.
-        emailVerifiedAt: null,
+        // Chủ dự án 2026-09-26: admin THÊM TAY trên control panel thì tài khoản active NGAY
+        // (admin đã xác nhận người này, không bắt khách chờ email). Tài khoản khách TỰ đăng ký
+        // ở ngoài thì vẫn phải xác thực email mới active.
+        emailVerifiedAt: nowIso(),
       });
       audit(req.user.id, "admin.user.create", user.id, { email: user.email });
       res.status(201).json({ user: publicUser(user) });

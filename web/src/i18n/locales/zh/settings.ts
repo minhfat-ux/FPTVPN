@@ -211,6 +211,13 @@ export const settings: Dict = {
   "settings.users.colCreatedAt": "创建日期",
   "settings.users.colActions": "操作",
   "settings.users.selfBadge": "您",
+
+  /* 邮箱验证状态（自行注册的用户需验证；管理员手动添加的用户立即生效）。 */
+  "settings.users.pendingBadge": "邮箱未验证",
+  "settings.users.activateButton": "激活",
+  "settings.users.activateTitleFor": "手动激活 {email}",
+  "settings.users.activated": "已激活 {email}",
+  "settings.users.activateFailed": "激活失败，请稍后重试",
   "settings.users.grantTitleFor": "为 {email} 发放 credit",
   "settings.users.grantButton": "发放 credit",
   "settings.users.deleteTitleFor": "删除 {email}",
@@ -221,6 +228,8 @@ export const settings: Dict = {
   "settings.users.fieldEmail": "邮箱",
   "settings.users.emailPlaceholder": "user@company.com",
   "settings.users.fieldPassword": "密码",
+  "settings.users.createActiveHint":
+    "管理员手动添加的账号立即生效（无需邮件验证）。用户自行注册仍需验证邮箱。",
   "settings.users.passwordHint": "至少 8 个字符。",
   "settings.users.fieldName": "显示名称（可选）",
   "settings.users.namePlaceholder": "张三",

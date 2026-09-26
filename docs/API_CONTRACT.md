@@ -371,6 +371,9 @@ Cài đặt voice nằm trong `app_settings`: `voiceSttProviderId`, `voiceSttMod
 
 ### Xác thực email mới active (2026-09-26)
 
+- Admin thêm tay trên control panel (`POST /api/admin/users`) ⇒ tài khoản **active NGAY**
+  (admin đã xác nhận người này, không bắt chờ email). Vẫn có `POST /api/admin/users/:id/verify-email`
+  để kích hoạt tay tài khoản khách TỰ đăng ký khi email không tới hộp thư.
 - Người dùng mới (`/api/auth/register`) tạo ở trạng thái **chưa xác thực**: không mở phiên, không
   dùng được app. Server gửi mã 6 số + link kích hoạt; `/api/auth/verify-email` (hoặc link
   `/?verifyEmail=…&token=…`) kích hoạt rồi mở phiên luôn.
