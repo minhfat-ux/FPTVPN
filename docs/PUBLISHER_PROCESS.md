@@ -32,52 +32,9 @@
 > `docs/handoff/HANDOFF_MAC_CERT_WINDOWS_2026-09-23.md`). Ngoại lệ **có ghi sổ** (`release/releases.jsonl`, dòng `windows 1.4.5`), cổng pre ghi rõ mục chữ ký
 > `KHÔNG ĐẠT` và post `ĐẠT`. **Ngoại lệ hết hiệu lực ngay khi có chứng chỉ** — từ bản kế tiếp phải ký theo luật này.
 
-> **Ngoại lệ luật 11 — BỔ SUNG cho `1.4.7`, chốt 24/09/2026 (chủ dự án duyệt lại):** vì ghi chú trên đã tuyên bố
-> ngoại lệ **hết hiệu lực từ bản kế tiếp**, publisher **hỏi lại chủ dự án** trước khi phát (**không** tự áp ngoại lệ cũ);
-> chủ dự án chốt ***"Cấp ngoại lệ cho 1.4.7"*** — bản vá **retry API 3 vòng** cho khách Trung Quốc đang bị lỗi
-> `device claim`. `1.4.7` phát **CHƯA KÝ**: sha256 `73660031…bfe4`, `Get-AuthenticodeSignature` = **`NotSigned`**
-> cho **cả** `VPNFlow-Setup-1.4.7.exe` **lẫn** `PrivateVPNWindows.App.exe`; máy harness **không có** chứng chỉ
-> CodeSigning (`Cert:\CurrentUser\My` + `Cert:\LocalMachine\My -CodeSigningCert` đều rỗng).
-> **Ngoại lệ này CHỈ áp cho `1.4.7`** — bản kế tiếp phải hỏi lại chủ dự án (hoặc có cert thì **phải ký**).
-> Nhật ký đầy đủ: `docs/handoff/HANDOFF_PUBLISHER_WINDOWS_1.4.7_2026-09-24.md`.
-
-> **PHÂN VAI build + publish — chốt 23/09/2026 (chủ dự án):** **harness Windows (owner `windows`) = build + publish cho
-> Windows VÀ Android** (Android: build release từ commit khoá, ký bằng keystore release ngoài repo — `~/keystores/vpnflow-signing.properties`);
-> **harness Mac = build + publish cho iOS VÀ macOS**. Email khách vẫn do publisher (Mac) gửi theo luật 7.
-> **Phân biệt bản:** phải đối chiếu **applicationId + versionCode + versionName + commit** — bản Android **dev** (`com.privatevpn.app.dev`,
-> versionName có hậu tố `-dev`) **không bao giờ** là bản phát hành.
-
-| 12 | **Phân chia publisher theo kênh** (chốt 23/09/2026): **Mac → iOS + macOS**; **Windows harness → Windows + Android**. Mỗi bên tự chạy cổng §1c/§5b + ghi sổ cho kênh của mình; **không publish kênh không thuộc phần mình**. Email thông báo khách do publisher của kênh đó gửi | §0 (đầu tài liệu) | mọi publisher |
-| 13 | **Cổng LOG MÁY THẬT phải chạy kèm `--crash-dir`** (25/09/2026, sau ba lỗi LỌT cổng cũ): phiên chứa `JetsamEvent`/`PrivateVPNPacketTunnel-*.ips` (iOS giết extension vì `per-process-limit`, `rpages=3202` ≈ 51 MB) ⇒ KHÔNG ĐẠT; thêm tiêu chí **CHIỀU VỀ ĐÓNG BĂNG một chiều** (máy Mac relay `vn1hy` 25/09 19:42–19:43: gửi 1277 gói mà `Go→packetFlow` đứng ở 360729 gói) và **phiên đầu file** (trước mốc `build:` đầu tiên). **Còn bug mức `high` chưa đóng trên bản định phát ⇒ KHÔNG publish** | AGENTS.md §7d · `scripts/ios-log-acceptance.py` · `.privatevpn/status/bugs.json` | bên build iOS/macOS + publisher |
-
-### 0.1 TRẠNG THÁI 4 KÊNH — đo trực tiếp 23/09/2026 (harness Windows)
-
-> Đo bằng `GET https://api.meetflowai.site/v1/app-version?platform=<p>` + `release/releases.jsonl`, **không** lấy từ nhật ký.
-
-| Kênh | Đang phát | `min` | Sổ | Nhật ký §6 | Ghi chú |
-|---|---|---|---|---|---|
-| **windows** | **1.4.7** (`VPNFlow-Setup-1.4.7.exe?v=73660031` · 52.789.147 B · sha `73660031…bfe4`) | 1.0.0 | ✅ | ✅ (24/09) | **retry API 3 vòng** cho khách TQ · phát **chưa ký** theo ngoại lệ luật 11 **duyệt riêng cho 1.4.7** |
-| **android** | **1.4.4** (code 32 · modern 74.731.674 B · sha `145053e9…`) | 1.2.6 | ✅ | ✅ (bổ sung 23/09) | — |
-| **android-legacy** | **1.4.4** (code 32 · 74.748.054 B · sha `b9a03e77…`) | 1.0.0 | ✅ | ✅ | xem ⚠️ **BUG-APPVERSION-PLATFORM-001** dưới |
-| **ios** | **1.4.2 (19)** (IPA 8.152.677 B · sha `eba2e856…`) | 1.3.3 | ⚠️ sổ mới có 1.4.1 (18) | ✅ | cần bổ sung dòng sổ 1.4.2 (Mac) |
-| **macos** | **1.4.0** | 0.0.0 | ✅ | ⚠️ chặn TestFlight/macOS trong ngày | — |
-
-> ✅ **BUG-APPVERSION-PLATFORM-001 — ĐÃ SỬA + ĐÃ DEPLOY 23/09/2026 (harness Windows, owner `windows`):**
-> Trước: `GET /v1/app-version?platform=android-legacy` **không trả payload legacy** mà rơi về kênh mặc định
-> (Mac đo ra `windows`; Windows đo lại ra `ios` — mặc định đã đổi mà không ai biết), và **mọi giá trị lạ**
-> (`bogus-xyz`) cũng vậy ⇒ công cụ audit/cổng chặn hỏi kênh legacy **so sai kênh** mà không có tín hiệu lỗi.
-> **Sửa:** `control-plane/src/app-version.js` thêm `androidLegacyVersionPayload()` + `KNOWN_PLATFORMS` +
-> `UnknownPlatformError`; `control-plane/src/index.js` bắt lỗi đó ⇒ **HTTP 400 `unknown_platform`**.
-> Không gửi `?platform` (bản app cũ) vẫn chọn kênh theo User-Agent như trước.
-> **Bằng chứng:** `node --test control-plane/test/app-version.test.js` → **25/25 pass**; deploy qua
-> `scripts/server-agent/deploy-control-plane.sh` (health OK, backup `/root/flowvpn-cp/src-backup-20260923-104708`);
-> đo lại sau deploy: `?platform=android-legacy` → 200 `{platform:android-legacy, latest_version:1.4.4}`,
-> `?platform=bogus-xyz` → **400** `unknown_platform`, các kênh khác không đổi (android 1.4.4 · windows 1.4.6 ·
-> ios 1.4.2 · macos 1.4.0). Chi tiết: `docs/handoff/FIX_APPVERSION_PLATFORM_2026-09-23.md`,
-> `.privatevpn/status/bugs.json` → `resolved`.
-
-
-| 13 | **TestFlight: mỗi build PHẢI có "What to Test" đầy đủ** (chốt 24/09/2026): (a) **Đã thay đổi gì trong bản này** (tóm tắt release notes: tính năng/fix, kèm commit hash nếu có) và (b) **Cần test gì** (checklist theo bước: hành động → kỳ vọng → ca biên: mất mạng, đổi Wi-Fi⇄4G, ngủ/thức, giới hạn thiết bị…). Viết đủ **3 ngôn ngữ** (en-GB/vi/zh-Hans) và **cập nhật theo TỪNG version** (không dùng lại nội dung cũ). Thiếu 1 trong 2 phần ⇒ KHÔNG nộp review | §0 luật này · §5d | publisher |
+| 12 | **Phân chia publisher theo kênh** (chốt 23/09/2026): **Mac → iOS + macOS**; **Windows harness → Windows + Android**. Bên nào cũng phải tự chạy cổng §1c/§5b + ghi sổ cho kênh của mình; **không publish kênh không thuộc phần mình**. Email thông báo khách do publisher của kênh đó gửi | §0 (đầu tài liệu) | mọi publisher |
+| 13 | **Cổng LOG MÁY THẬT phải chạy kèm `--crash-dir`** (25/09/2026, sau ba lỗi LỌT cổng cũ): phiên chứa `JetsamEvent`/`PrivateVPNPacketTunnel-*.ips` (iOS giết extension vì `per-process-limit`, `rpages=3202` ≈ 51 MB) ⇒ KHÔNG ĐẠT; thêm tiêu chí **CHIỀU VỀ ĐÓNG BĂNG một chiều** (Mac relay `vn1hy` 19:42–19:43: máy gửi 1277 gói mà `Go→packetFlow` đứng ở 360729 gói) và **phiên đầu file** (trước mốc `build:` đầu tiên). **Còn bug mức `high` chưa đóng trên bản định phát ⇒ KHÔNG publish** | AGENTS.md §7d · `scripts/ios-log-acceptance.py` · `.privatevpn/status/bugs.json` | bên build iOS/macOS + publisher |
+| 14 | **EMAIL GỬI RIÊNG TỪNG NỀN TẢNG** (chủ dự án chốt 26/09/2026: *"iOS và macOS gửi riêng nhé"*): khách **iOS** nhận thư iOS (`send-ios-<version>-announcement.py`, lọc `devices.json` `platform=ios` + gói còn hạn), khách **macOS** nhận thư macOS (`send-mac-announcement.py`, lọc `platform=macos`). **Không** gộp hai kênh vào một thư; **không** dùng `--all` cho thư của một kênh (trừ khi chủ dự án yêu cầu riêng cho lần đó). Luôn `--recipients` + `--test` trước khi gửi thật, rồi ghi `đã gửi/tổng` vào §6 | §0 luật 7 · §6 nhật ký | publisher |
 
 **Công cụ dùng chung cho mọi bên:**
 ```bash
@@ -286,7 +243,7 @@ Nguồn nội dung: `release/ios/RELEASE_NOTES_<version>.md` + `git log` của b
 
 
 | 2026-09-26 | iOS + macOS | **1.4.6** (iOS build 50 · macOS build 21) | **CHỐT CỦA CHỦ DỰ ÁN (26/09) — ghi lại để publisher không bị luật chặn:** (a) **§0 luật 13 — CHẤP NHẬN PHÁT dù còn bug mức `high` đang mở**: `BUG-IOS-JETSAM-001` (gốc rò bộ nhớ **chưa** tìm ra; bản này là **van giảm đau** 40 MB + tự hạ tunnel SẠCH để hệ điều hành trả mạng thay vì bị giết giữa lúc khách đang xem), `BUG-IOS-ONEWAY-001` (đã có bản vá tự đổi node khi node chở ≈0), `BUG-20260823-001` (phía server, `/v1/tokens` LEGACY_MODE); (b) **§2b#3 — CHẤP NHẬN "ĐƯỜNG B" cho macOS**: bằng chứng chức năng lấy từ bản **dev-signed cùng cây mã nguồn** (3 ca ở `docs/handoff/HANDOFF_PUBLISHER_MACOS_1.4.6_2026-09-26.md` §6), **phát trước — test ngay sau khi cài OTA**, không buộc test đúng sha256 của DMG trước khi phát (tiền lệ 1.4.4/21); (c) **§4 — ĐƯỢC PHÉP ép cập nhật**: `minimum_version=1.4.6` (iOS) + `minimum_mac_version=1.4.6`, **chỉ set SAU khi `latest_*` đã trỏ đúng bản đang phát**; (d) **số version**: iOS **1.4.6/50** — `1.4.5/44` **đã phát** 25/09 (`sha 7eae9f1472e4`, tag `ios-v1.4.5`), **không phát lại** (VERSIONING §3.3); macOS **1.4.6/21** (kênh đang phát 1.4.0/14). **Chặn cứng đã gỡ:** `scripts/mac-sign-notarize.sh` nay dựng DMG bằng `hdiutil create -fs APFS` + `xattr -cr` và có **cổng sớm 6b** (mở DMG ⇒ `codesign --verify --deep --strict` + quét `FinderInfo`/`ResourceFork` ⇒ **DỪNG trước khi notarize**; ca thật 23/09 và 25/09 phát hiện detritus chỉ sau khi đã tốn 2 lượt notarize). Manifest loạt này: `docs/RELEASE_ARTIFACTS_2026-09-26.md` |
-| 2026-09-26 | iOS | **1.4.6 (54) — THAY bản 50** | **KẾT QUẢ (đã phát xong 26/09 04:0x +07):** IPA **8.207.840 B** · sha256 **`363fd7a8…`** lên `/root/flowvpn-ipa/VPNFlow-latest.ipa` (backup `VPNFlow-latest.bak-1.4.6-b50-*.ipa`) · mốc **`latest_ios_version=1.4.6` + `ipa_build=54`** (PATCH đọc JSON xác nhận) · tải thật qua `t1` khớp sha · cổng post **ĐẠT** · tag **`ios-v1.4.6`** · TestFlight: build 54 đã upload (`UPLOAD SUCCEEDED`, delivery `d8faabea-6dd3-473b-a3a8-75f5738a75dc`), What-to-Test 3 ngôn ngữ `release/ios/whatsnew-1.4.6.json`. **NGOẠI LỆ có ghi sổ của chủ dự án (chốt trong phiên 26/09 lúc ~03:45):** cho phép phát **cùng số version 1.4.6 nhưng KHÁC sha256** để khách TQ nhận ngay bản chống *"bấm Connect là fail"* trên 5G — nội dung: `relayOpenGrace` 6 → **10 s**, thêm **cửa vào thứ hai `t1.meetflowai.site`**, ngân sách phiên 20 → **35 s**, gỡ `ipv6Settings` (lần 2). Ngoại lệ **có ý thức** với `docs/VERSIONING.md` §3.3 — bản 50 **giữ nguyên dòng sổ riêng**, bản 54 ghi dòng mới bằng `release-record.mjs append --allow-rehash --reason "…"` (cờ này mới thêm: mặc định vẫn CHẶN, chỉ mở khi kèm lý do và lý do được ghi thẳng vào dòng sổ). §2c: `build/ios-146-device-test-54.md` — mục 1/2/4/6/7 ĐẠT, **mục 3 chỉ một phần** (phiên iPad 63 s), **mục 5 chưa test lại cho 54**; từ build 53 log chi tiết **mặc định TẮT** nên cổng chấm log bỏ qua phiên thiếu dòng (đã bật `Documents/tunnel-log-on` trên cả 2 máy lúc 03:35). **Chưa gửi email riêng cho khách iOS** — chờ chủ dự án chốt nội dung. |
+| 2026-09-26 | iOS | **1.4.6 (54) — THAY bản 50** | **KẾT QUẢ (đã phát xong 26/09 04:0x +07):** IPA **8.207.840 B** · sha256 **`363fd7a8…`** lên `/root/flowvpn-ipa/VPNFlow-latest.ipa` (backup `VPNFlow-latest.bak-1.4.6-b50-*.ipa`) · mốc **`latest_ios_version=1.4.6` + `ipa_build=54`** (PATCH đọc JSON xác nhận) · tải thật qua `t1` khớp sha · cổng post **ĐẠT** · tag **`ios-v1.4.6`** · TestFlight: build 54 đã upload (`UPLOAD SUCCEEDED`, delivery `d8faabea-6dd3-473b-a3a8-75f5738a75dc`), What-to-Test 3 ngôn ngữ `release/ios/whatsnew-1.4.6.json`. **NGOẠI LỆ có ghi sổ của chủ dự án (chốt trong phiên 26/09 lúc ~03:45):** cho phép phát **cùng số version 1.4.6 nhưng KHÁC sha256** để khách TQ nhận ngay bản chống *"bấm Connect là fail"* trên 5G — nội dung: `relayOpenGrace` 6 → **10 s**, thêm **cửa vào thứ hai `t1.meetflowai.site`**, ngân sách phiên 20 → **35 s**, gỡ `ipv6Settings` (lần 2). Ngoại lệ **có ý thức** với `docs/VERSIONING.md` §3.3 — bản 50 **giữ nguyên dòng sổ riêng**, bản 54 ghi dòng mới bằng `release-record.mjs append --allow-rehash --reason "…"` (cờ này mới thêm: mặc định vẫn CHẶN, chỉ mở khi kèm lý do và lý do được ghi thẳng vào dòng sổ). §2c: `build/ios-146-device-test-54.md` — mục 1/2/4/6/7 ĐẠT, **mục 3 chỉ một phần** (phiên iPad 63 s), **mục 5 chưa test lại cho 54**; từ build 53 log chi tiết **mặc định TẮT** nên cổng chấm log bỏ qua phiên thiếu dòng (đã bật `Documents/tunnel-log-on` trên cả 2 máy lúc 03:35). **EMAIL (gửi riêng kênh iOS theo luật 14, 26/09 03:2x UTC):** `send-ios-1.4.6-announcement.py` → danh sách 6 khách iOS có gói còn hạn (`--recipients`), `--test` OK, gửi thật **6/6 thành công · 0 lỗi**. Nội dung 3 ngôn ngữ: chỉ nêu thứ đo được (chờ mở relay 6→10 s · cửa vào thứ hai `t1` · ngân sách phiên 20→35 s · tự đổi đường khi chiều về chết · van bộ nhớ hạ tunnel SẠCH) và **nói thẳng gốc rò bộ nhớ CHƯA tìm ra**; ghi rõ bản này **không bắt buộc** cập nhật (`minimum_version` giữ 1.3.3 vì profile ad-hoc chỉ 10 UDID). File: `scripts/send-ios-1.4.6-announcement.py`. |
 
 
 
