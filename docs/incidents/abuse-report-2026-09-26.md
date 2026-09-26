@@ -27,3 +27,22 @@
 
 ## Biện pháp phía chúng tôi (đã áp)
 Chặn dải/IP nguồn ở tầng INPUT, giới hạn SSH (chỉ khoá, không mật khẩu), `MaxStartups` chống ngập, autoban tự động **>20 lần thất bại/60 phút ⇒ 24h, tái phạm 3 lần ⇒ vĩnh viễn** (whitelist Cloudflare + node nội bộ).
+
+## ĐÃ GỬI — 26/09/2026 ~18:47 (+07), từ node-2 qua Resend
+
+```
+$ python3 /root/send-abuse-report-2026-09-26.py
+OK  abuse@gcn.bg -> 200
+OK  abuse@bearshield.top -> 200
+OK  dmzhostabuse@gmail.com -> 200
+OK  olatunji8221@gmail.com -> 200
+KẾT QUẢ: 4/4 gửi thành công
+```
+- Script: `scripts/send-abuse-report-2026-09-26.py` (chạy trên node-2; đọc `RESEND_API_KEY` từ drop-in control-plane).
+  Đã chạy `--test` (tới `minhnb2@me.com`, HTTP 200) rồi mới gửi thật.
+- ⚠️ **Bẫy kỹ thuật đã gặp:** `urllib` mặc định (UA `Python-urllib/3.x`) bị Cloudflare chặn ⇒ `403 error code: 1010`.
+  Bắt buộc set `User-Agent: VPNFlow-Mailer/1.0` + `Accept: application/json` (giống các script gửi khách).
+- Nội dung thư: tiếng Anh, nêu dải/IP của CHÍNH nhà đó, số lần thất bại, mẫu tấn công, đối chứng **không phải Tor exit**,
+  biện pháp phía ta đã áp, và 3 yêu cầu (điều tra / cách ly / phản hồi ticket tới `support@meetflowai.site`).
+- Các dải còn lại **chưa có đầu mối abuse**: tra RDAP cho `77.239.124.174` (AS198364), `103.10.227.74` (AS17665),
+  `45.148.10.141` (AS48090), `193.47.62.69` (AS216014) **không trả email abuse** ⇒ cần tra tiếp bằng whois/trang chủ ASN.
