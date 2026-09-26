@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "SANDBOX CHAN GHI /Volumes/BIWIN: phien nay chi cho ghi trong /Users/minhnguyen/FlowGPT. Bang chung: 'git add/commit' => .git/index.lock Operation not permitted; 'touch /Volumes/BIWIN/SourcesCode/PrivateVPN/.dsh-write-probe' => Operation not permitted. Escalation danger-full-access bi TU CHOI vi khong co kenh approval. He qua: (a) KHONG commit duoc ban va vao cay FPTVPN; (b) KHONG bump project.yml 57->58; (c) build cung chan: xcodebuild archive (da tro derivedDataPath + SPM cache + HOME vao /tmp, CURRENT_PROJECT_VERSION=58) van bi SwiftPM ghi ~/Library/Caches/org.swift.swiftpm/manifests/ManifestLoading/wireguardkit.dia => Operation not permitted (exit 74). DA LAM DUOC (trong workspace): xac nhan nguyen nhan goc (resume() sau cong bo => race cancel timer treo); luu diff ban va docs/evidence/bus-501-ios-watchdog.patch; typecheck extension 0 loi; ios-pure-logic-tests 667/667 PASS; keo log iPhone that va chay §7d (build 57: 2/3 phien dat, phien build ? loi WS link). Bao cao + lenh chay tay: docs/evidence/bus-501-watchdog-root-cause-and-status.md muc 4. Cho: cap quyen ghi /Volumes/BIWIN cho phien MAC (hoac nguoi chay tay) de commit + build 58 + nghiem thu.",
+ "actor": "mac",
+ "at": "2026-09-26T16:43:37.308Z"
+}
