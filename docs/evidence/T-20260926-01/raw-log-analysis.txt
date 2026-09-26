@@ -1,0 +1,86 @@
+### UTC
+Sat Sep 26 07:55:04 AM UTC 2026
+### failed 24h
+6710
+### distinct IPs 24h
+81
+### distinct IPs whole log
+140
+### top 20 IP
+   1098 109.160.32.32
+   1098 109.160.32.107
+    500 77.239.124.174
+    495 49.254.38.138
+    441 176.53.159.198
+    425 176.53.159.197
+    392 103.10.227.74
+    165 45.148.10.141
+    140 193.47.62.69
+    130 45.148.10.152
+    125 62.60.130.242
+    120 45.148.10.151
+    105 62.60.130.201
+     93 76.90.193.3
+     75 45.148.10.157
+     75 2.57.121.112
+     60 62.60.130.253
+     54 193.46.255.86
+     40 2.57.122.53
+     39 2.57.122.168
+### top users 24h
+   3803 root
+   2879 invalid
+    137 admin
+    111 ubuntu
+     92 user
+     56 deploy
+     52 test
+     35 user1
+     30 postgres
+     27 ftpuser
+     22 claude
+     21 oracle
+     21 debian
+     20 minecraft
+     19 dev
+     18 git
+     17 testuser
+     17 guest
+     15 developer
+     15 admin1
+### accepted by IP (whole log)
+  35491 103.173.155.50
+    282 165.101.114.162
+    115 63.140.14.154
+     79 223.118.50.125
+### accepted password count
+0
+### intersection attacker/accepted
+attacker=140 accepted=4
+(het)
+### btmp lines
+124506
+### authorized_keys
+256 SHA256:ayM4RWERD8XnScssYWh9DdhE+PCtgWRHvhFYcAWU2a8 fpt-vpn-node (ED25519)
+256 SHA256:yFPoJFLgi+72r86W6dWHfKeK0jfinTzltTSAE4kkTn0 root@fcnvpn (ED25519)
+256 SHA256:s7Ac2wixSTuUZBJCMCuHVg80h0MkZ6ZDkfY9PX2DKMo no comment (ED25519)
+256 SHA256:2k2/bIriJJFUDSJuxfyRAP6l6i28TO/5DiC7XXMB6ic fpt-tunnel (ED25519)
+256 SHA256:eReS/LmH0b28aMS61vNQIbbWADv0JEBvbLupw0BiFOM windows-harness@flowtech (ED25519)
+256 SHA256:EHS/okspairrP++XPYWJlBXuY/bPjPZRaNo2/ByHvxg dsh-windows-fptvpn (ED25519)
+### sshd -T
+port 22
+maxauthtries 6
+permitrootlogin yes
+pubkeyauthentication yes
+passwordauthentication yes
+kbdinteractiveauthentication no
+### fail2ban + ufw
+fail2ban: NONE
+Status: inactive
+### guard findings summary
+high: 2
+low: 166
+medium: 1
+HIGH: Brute-force SSH từ 103.10.227.74 — 39 lần đăng nhập sai trong cửa sổ log. Nên chặn IP này hoặc đổi cổng/khoá.
+HIGH: Brute-force SSH từ 76.90.193.3 — 55 lần đăng nhập sai trong cửa sổ log. Nên chặn IP này hoặc đổi cổng/khoá.
+

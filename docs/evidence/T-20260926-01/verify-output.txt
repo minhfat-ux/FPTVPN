@@ -1,0 +1,27 @@
+NGHIỆM THU T-20260926-01 — brute-force SSH trên root@165.101.114.162
+báo cáo: docs\INCIDENT-2026-09-26-SSH-BRUTEFORCE.md
+
+Quy mô 24h   : 6699 lần "Failed password" từ 81 IP khác nhau
+Top 5 IP     :
+               1098 109.160.32.32
+               1098 109.160.32.107
+               500 77.239.124.174
+               495 49.254.38.138
+               450 176.53.159.198
+sshd hiện tại:
+               port 22
+               maxauthtries 6
+               permitrootlogin yes
+               passwordauthentication yes
+               kbdinteractiveauthentication no
+Còn nợ (quyết định của chủ dự án):
+               fail2ban: CHUA CO
+               ufw: inactive
+
+✅ PASS  Chưa từng có đăng nhập bằng MẬT KHẨU thành công
+         Accepted password = 0
+✅ PASS  Không IP tấn công nào từng đăng nhập thành công (giao hai tập = rỗng)
+         attacker=140 accepted=4 · giao = (rỗng)
+
+✅ NGHIỆM THU PASS — 2 kết luận an ninh của báo cáo vẫn đúng trên node-2: chưa bị chiếm;
+   vấn đề còn lại là cấu hình phơi mở (mật khẩu/fail2ban/ufw) — chờ chủ dự án chốt §7.
