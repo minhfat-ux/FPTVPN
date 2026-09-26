@@ -40,12 +40,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
     /// Trần thời gian cho TOÀN BỘ lần start (áp settings + dựng relay + bắt tay QUIC).
     ///
-    /// 26/09/2026 — **20 → 35 s**. Vì sao phải nới CÙNG LÚC với `HysteriaTransport.relayOpenGrace`
-    /// (6 → 10 s) và danh sách 4 cửa vào (`HysteriaDefaults.relayURLCandidates`): ngân sách này phải
-    /// đủ chỗ cho các lượt thử nối tiếp, nếu không thì lần start bị cắt NGANG giữa danh sách và khách
-    /// vẫn thấy `TUNNEL_START_FAILED` y như cũ. 4 cửa × 10 s = 40 s là trần lý thuyết; thực tế cửa
-    /// đầu thường mở trong 0,5–2 s, chỉ khi cửa đó hỏng mới đi tiếp.
-    private static let startTimeout: TimeInterval = 35
+    /// **Tính từ hằng số ở `HysteriaDefaults`** (`relayOpenGrace × số cửa + margin`) — xem finding F4
+    /// của `HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md`: bản trước viết cứng 35 s trong khi có
+    /// 4 cửa × 10 s = 40 s ⇒ provider cắt ngang trước khi thử hết cửa. Nay thêm/bớt cửa thì ngân
+    /// sách **tự** đúng theo.
+    private static var startTimeout: TimeInterval { HysteriaDefaults.sessionStartBudget }
 
     // MARK: Ngưỡng tự cứu (không bao giờ để "Connected mà mất mạng")
 
@@ -182,12 +181,43 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Mặc định 15 s / 2 lần / 3 lần (khớp hằng số bên dưới, harness `ios-pure-logic-tests` khẳng định);
     /// đầu mỗi phiên được DỰNG LẠI theo đúng hằng số của provider trong `startTrafficSupervisor`.
     private var relayFailover = RelayFailoverWatch()
-    /// Số lần đổi đường trong phiên này (chặn xoay vòng vô hạn).
+    /// Số lần đổi đường trong phiên này (chỉ để log/chẩn đoán).
     private var nodeFailovers = 0
     /// Số lần dựng lại "0 gói VỀ" liên tiếp trước khi đổi đường.
     private static let failoverAfterFruitlessRecoveries = 2
-    /// Trần đổi đường mỗi phiên.
+    /// Trần đổi đường cho đường "dựng lại được mà 0 gói VỀ" (luật `RelayFailoverWatch`) — khớp
+    /// `maxAdvances` của nó. Đường "relay KHÔNG kết nối được" (`RelayUnreachableWatch`) KHÔNG dùng
+    /// trần này: hết ứng viên thì QUAY VÒNG và giữ tunnel (yêu cầu 26/09/2026), không bỏ mặc khách.
     private static let maxNodeFailovers = 3
+
+    // MARK: - Chuyển đường khi relay KHÔNG KẾT NỐI ĐƯỢC (26/09/2026)
+
+    /// Bộ đếm FAILOVER "relay không mở nổi link": quá `relayUnreachableLimit` giây mà link WS vẫn
+    /// không mở ⇒ đổi cửa/node kế tiếp; nhịp sau vẫn hỏng thì lại đổi (quay vòng), GIỮ tunnel.
+    ///
+    /// Vì sao phải có (ca thật 26/09/2026 — xem chú thích `RelayUnreachableWatch`): luật cũ
+    /// (`relayFailover`) chỉ mở cửa sổ SAU KHI dựng lại THÀNH CÔNG, nên khi relay chết hẳn (WS
+    /// connect fail) thì **không cửa sổ nào được mở** và client bám mãi một relay cho tới khi tunnel
+    /// bị gỡ. Đầu mỗi phiên được dựng lại trong `startTrafficSupervisor` theo đúng hằng số dưới đây.
+    private var relayUnreachable = RelayUnreachableWatch()
+    /// Nhịp kiểm tra link relay (giây) — đọc `transport?.relayIsConnected`, KHÔNG chặn.
+    ///
+    /// 2 s (không phải 15 s như nhịp watchdog): mốc nghiệm thu 26/09/2026 là "chặn relay → đổi
+    /// đường/node → handshake ok → có gói về" trong **< 30 s**, mà ngưỡng đã là 20 s ⇒ phần "chờ
+    /// nhịp tiếp theo" phải nhỏ. Phép đọc chỉ là một boolean + một lần lấy `flowLock` trong tích tắc.
+    private static let relayReachabilityInterval: TimeInterval = 2
+    /// Ngưỡng "relay hiện tại KHÔNG kết nối được" (giây).
+    ///
+    /// 20 s: đủ dài để không đổi đường vì một cú rớt WS thoáng qua, đủ ngắn để mốc nghiệm thu
+    /// ("chặn relay → đổi đường/node → handshake ok → có gói về" trong **< 30 s**) giữ được.
+    private static let relayUnreachableLimit: TimeInterval = 20
+    /// Mốc bắt đầu CHUỖI xoay vòng cửa vì relay không kết nối được (`nil` = không có chuỗi nào).
+    private var relayFailoverChainStartAt: Date?
+    /// Trần HOÃN tự gỡ tunnel trong lúc còn xoay vòng cửa relay: quá ngần này mà vẫn không cửa nào
+    /// sống thì để cơ chế cũ trả mạng về cho máy (app macOS sẽ tự nối lại — xem `VPNManagerMac`).
+    private static let relayFailoverKeepTunnelLimit: TimeInterval = 180
+    /// Đồng hồ kiểm tra link relay (chạy trên `livenessQueue`, cạnh nhịp watchdog).
+    private var relayReachabilityTimer: DispatchSourceTimer?
 
     // MARK: - Luật GOODPUT: node "sống" nhưng chở ≈0 byte (25/09/2026)
 
@@ -464,7 +494,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         if let relay { resourcePrevRelaySent = relay.sent; resourcePrevRelayRecv = relay.received }
         return String(
             format: "footprint=%.1fMB resident=%.1fMB fds=%d | cầu vào %d/ra %d (bỏ %d) | relay gửi %d nhận %d mở=%@ | Δ1phút vào+%d ra+%d relay+%d/+%d | TCP SYN %d RST về %d"
-                + " | hàng đợi: relay chờ %d gói/%d B (trần %d/%d; đã nạp %d, chờ %d, bỏ %d) đệm-link %d/%d bỏ %d | udp nhận %d lấy %d thả≥%d socket %dB | cầu chờ-đọc %dB (Go→ %d, bỏ %d, EAGAIN %d) | nhớ internal=%.1f compressed=%.1f external=%.1f",
+                + " | hàng đợi: relay chờ %d gói/%d B (trần %d/%d; đã nạp %d, chờ %d, bỏ %d) đệm-link %d/%d bỏ %d | udp nhận %d lấy %d thả≥%d socket %dB | cầu chờ-đọc %dB (Go→ %d, bỏ %d, EAGAIN %d, IPv6-chặn %d) | nhớ internal=%.1f compressed=%.1f external=%.1f",
             footprint, resident, fds,
             c?.toGo ?? -1, c?.fromGo ?? -1, c?.toGoDropped ?? -1,
             relay?.sent ?? -1, relay?.received ?? -1, relayOpen ? "yes" : "no",
@@ -479,6 +509,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             relayQueue?.streamDropped ?? -1, relayQueue?.listenerSocketPendingBytes ?? -1,
             bridgeQueue?.pendingFromGoBytes ?? -1, bridgeQueue?.fromGo ?? -1,
             bridgeQueue?.toGoDropped ?? -1, bridgeQueue?.toGoEAGAIN ?? -1,
+            bridgeQueue?.toGoIPv6Blocked ?? -1,
             internalMB, compressedMB, externalMB
         )
     }
@@ -896,6 +927,16 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         }
         // "Đường đang dùng": node lấy từ chính relay URL đang chạy (`/relay/v2hy` → `v2hy`).
         if let node = Self.nodeLabel(from: currentOptions?.relayURL) { report["node"] = node }
+        // 26/09/2026 — đuôi log chẩn đoán để APP lưu hộ ra app group container (xem
+        // `TunnelStatusReport.logTail`). CHỈ macOS: system extension chạy **root** nên app group
+        // container của nó là `/var/root/…` và sandbox CHẶN ghi vào container của user (đo thật
+        // 26/09/2026) ⇒ không có đường này thì người dùng không mở được file log.
+        // Bọc `#if os(macOS)` để iOS KHÔNG đổi hành vi (không tốn thêm byte nào qua kênh này).
+        #if os(macOS)
+        if let tail = RelayDiagnostics.shared.recentLogTail(maxBytes: 8 * 1024) {
+            report["logTail"] = tail
+        }
+        #endif
         completionHandler?(try? JSONSerialization.data(withJSONObject: report))
     }
 
@@ -913,7 +954,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         currentOptions = options
         RelayDiagnostics.shared.log(
             "hysteria: áp network settings (utun \(HysteriaDefaults.tunIPv4Address)/\(HysteriaDefaults.tunIPv4SubnetMask), mtu \(options.mtu), dns \(HysteriaDefaults.dnsServers.joined(separator: ",")))"
-                + " · IPv6=OFF (chỉ IPv4; xem vì sao ở `networkSettings`)"
+                + " · IPv6 utun=\(HysteriaDefaults.tunIPv6Address)/\(HysteriaDefaults.tunIPv6PrefixLength)"
+                + " included=[::/0]"
+                + " excluded=\(1 + HysteriaDefaults.relayIPv6ExcludedCIDRs.count + ChinaRouteBypass.cachedIPv6().count)"
+                + " (link-local=1 cloudflare=\(HysteriaDefaults.relayIPv6ExcludedCIDRs.count)"
+                + " tq=\(ChinaRouteBypass.cachedIPv6().count))"
+                + " — P2: gói IPv6 vào tunnel sẽ bị CHẶN ở cầu + trả ICMPv6 unreachable"
         )
         guard applySettings(networkSettings(options: options)) else {
             failStart(
@@ -1070,6 +1116,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             // (ramp đổi mạng hoặc tự phục hồi đã thay nó ra) — bỏ qua, y như nhánh `onDead` dưới.
             guard self.currentTransport() === hysteria else { return }
             self.noteRelayLinkReopened()
+        }
+        // Mốc link ĐỨT: mở cửa sổ "relay không kết nối được" NGAY (26/09/2026) — xem `noteRelayLinkLost`.
+        hysteria.onRelayLinkLost = { [weak self] in
+            guard let self else { return }
+            guard self.currentTransport() === hysteria else { return }
+            self.noteRelayLinkLost()
         }
         flowLock.lock()
         transport = hysteria
@@ -2206,8 +2258,20 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
                 flowLock.lock()
                 let half = transport
                 transport = nil
+                // (26/09/2026) Cửa relay vừa ĐỔI trong lúc lượt này đang thử (`advanceRelayCandidate`
+                // chạy khi relay hiện tại không kết nối được): dừng NGAY, đừng thử lại cửa CŨ 4 lượt
+                // (mỗi lượt tốn tới 2 cửa × 10 s) — lúc đó lệnh đổi đường vừa bắn sẽ bị vô hiệu và mốc
+                // "có gói về lại" trượt ra ngoài 30 s. Lượt kế tiếp chạy trên cửa MỚI.
+                let switched = currentOptions?.relayURL != options.relayURL
                 flowLock.unlock()
                 half?.stop()
+                if switched {
+                    RelayDiagnostics.shared.log(
+                        "tự phục hồi: cửa relay đã đổi trong lúc dựng lại ⇒ DỪNG thử lại cửa cũ, "
+                            + "nhường cho lượt sau trên đường mới"
+                    )
+                    throw error
+                }
                 if attempt < Self.rampTransportRetries - 1 {
                     Thread.sleep(forTimeInterval: Self.rampTransportRetryDelay)
                 }
@@ -2255,21 +2319,41 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         ipv4.excludedRoutes = excluded
         settings.ipv4Settings = ipv4
 
-        // A7 IPv6 — ĐÃ GỠ LẦN 2 (26/09/2026). ĐỌC KỸ TRƯỚC KHI THỬ LẦN 3.
+        // A7 IPv6 — P2 (26/09/2026). ĐỌC KỸ 3 LẦN TRƯỚC KHI SỬA.
         //
-        // Lần 1 (`18f8c82`, 22/09): `includedRoutes = [::/0]` không loại trừ relay ⇒ "mất mạng khi
-        // connect" (relay có AAAA, bị hút vào tunnel, server không có IPv6).
+        // Lần 1 (`18f8c82`, 22/09): `includedRoutes = [::/0]` KHÔNG loại trừ relay ⇒ "mất mạng khi
+        //   connect" (relay có AAAA, bị hút vào tunnel, server không có IPv6).
+        // Lần 2 (26/09): loại trừ ĐÚNG dải IPv6 Cloudflare + TQ + link-local, và đã chứng minh bằng
+        //   DNS sống rằng mọi AAAA của relay nằm trong dải loại trừ — VẪN HỎNG: gói IPv6 vào tunnel
+        //   rồi cầu ghi vào fd của Go, Go trả `errno=2` ⇒ gói BIẾN MẤT IM LẶNG ⇒ app treo/timeout
+        //   (iPad "siêu chậm, không xem nổi Netflix").
+        // ⇒ Chỉ loại trừ relay là điều kiện CẦN, không ĐỦ. Thiếu mảnh còn lại: **phải TRẢ LỖI**.
         //
-        // Lần 2 (26/09, ngay trước comment này): đã loại trừ ĐÚNG dải IPv6 Cloudflare + dải TQ +
-        // link-local, và **chứng minh bằng DNS sống** rằng mọi AAAA của relay đều nằm trong dải loại
-        // trừ. Vẫn HỎNG trên máy thật: iPad trên Wi-Fi có IPv6 bị **bóp mạng rất nặng** (không xem
-        // nổi Netflix), iPhone trên 5G IPv6 **không kết nối được**. Suy ra: kéo `::/0` vào tunnel
-        // trong khi core KHÔNG có IPv6 thì mọi đích IPv6 của khách bị BỎ (không phải "chặn nhanh" mà
-        // là treo/timeout) ⇒ hỏng nặng hơn cả việc rò. Việc "loại trừ đúng relay" là điều kiện CẦN,
-        // không phải điều kiện ĐỦ.
-        //
-        // ⇒ Muốn bịt rò IPv6 cho thật thì phải làm ở tầng CÓ IPv6 (server NAT66 / DNS không trả AAAA),
-        // KHÔNG phải bằng cách kéo `::/0` vào một tunnel chỉ có IPv4. Không thử lại cách cũ.
+        // Lần 3 (P2, bản này) — mô phỏng đúng hành vi Android (nền tảng Android **chặn theo family
+        // mặc định**, app nhận lỗi NGAY rồi lùi IPv4; iOS không có cơ chế đó):
+        //   (a) vẫn kéo `::/0` vào tunnel ⇒ KHÔNG rò IPv6 ra đường vật lý;
+        //   (b) loại trừ dải Cloudflare (relay) + dải TQ (`cn6.txt`) + link-local ⇒ đường tới relay
+        //       và IPv6 TQ đi thẳng, không bị hút vào tunnel (bẫy của lần 1);
+        //   (c) **mảnh quyết định**: `TunnelBridge.forwardToGo` CHẶN gói IPv6 và trả
+        //       `ICMPv6 Destination Unreachable` cho app (`IPv6Reject`) ⇒ app lùi IPv4 **tức thì**
+        //       thay vì treo — xem `HysteriaTransport.rejectIPv6`.
+        //   Bộ đếm `toGoIPv6Blocked` là BẰNG CHỨNG nghiệm thu: log phải thấy nó tăng, không im lặng.
+        let ipv6 = NEIPv6Settings(
+            addresses: [HysteriaDefaults.tunIPv6Address],
+            networkPrefixLengths: [NSNumber(value: HysteriaDefaults.tunIPv6PrefixLength)]
+        )
+        ipv6.includedRoutes = [NEIPv6Route.default()]
+        var excluded6: [NEIPv6Route] = [
+            NEIPv6Route(destinationAddress: "fe80::", networkPrefixLength: NSNumber(value: 10)),
+        ]
+        excluded6.append(
+            contentsOf: ChinaRouteBypass.excludedRoutesV6(from: HysteriaDefaults.relayIPv6ExcludedCIDRs)
+        )
+        // Cùng nguồn đệm với danh sách IPv4 (`applyChinaRoutes` áp lại settings sau khi refresh nền
+        // ⇒ lần dựng settings kế tiếp đọc được bản mới). Rỗng lúc connect là bình thường.
+        excluded6.append(contentsOf: ChinaRouteBypass.excludedRoutesV6(from: ChinaRouteBypass.cachedIPv6()))
+        ipv6.excludedRoutes = excluded6
+        settings.ipv6Settings = ipv6
 
         settings.dnsSettings = NEDNSSettings(servers: HysteriaDefaults.dnsServers)
         return settings
@@ -2828,6 +2912,19 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             )
             return
         }
+        // (26/09/2026) Relay KHÔNG KẾT NỐI ĐƯỢC và đang xoay vòng cửa/node ⇒ HOÃN tự gỡ: khách phải
+        // được giữ ở trạng thái Connected trong lúc client thử đường còn sống, KHÔNG bị bỏ mặc ở
+        // `Disconnected` (đúng ca 26/09: tunnel rơi Disconnected rồi nằm đó ~18 phút). Có TRẦN thời
+        // gian (`relayFailoverKeepTunnelLimit`): hết trần mà vẫn không cửa nào sống thì thả cho cơ
+        // chế cũ trả mạng về máy, app sẽ tự nối lại.
+        if relayFailoverCycling() {
+            RelayDiagnostics.shared.log(
+                "giám sát: HOÃN tự gỡ tunnel — relay hiện tại KHÔNG kết nối được và đang thử cửa/node "
+                    + "kế tiếp (giữ tunnel cho khách; trần hoãn "
+                    + "\(Int(Self.relayFailoverKeepTunnelLimit))s) — \(reason)"
+            )
+            return
+        }
         flowLock.lock()
         let alreadyStopped = supervisorStopped
         supervisorStopped = true
@@ -2894,8 +2991,22 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         lowGoodputStrikes = 0
         livenessLastTickAt = Date()
         livenessTicks = 0
+        // (26/09/2026) Đồng hồ kiểm tra LINK RELAY: transport vừa được dựng (đầu phiên hoặc sau khi
+        // thay transport) ⇒ mở lại cửa sổ "relay không kết nối được" từ đầu, cho cửa mới đủ
+        // `relayUnreachableLimit` giây để mở WS (không đổi đường oan ngay sau khi vừa đổi).
+        relayUnreachable = RelayUnreachableWatch(limit: Self.relayUnreachableLimit)
+        relayFailoverChainStartAt = nil
+        let reachTimer = DispatchSource.makeTimerSource(queue: livenessQueue)
+        reachTimer.schedule(
+            deadline: .now() + Self.relayReachabilityInterval,
+            repeating: Self.relayReachabilityInterval
+        )
+        reachTimer.setEventHandler { [weak self] in self?.relayReachabilityStep(now: Date()) }
+        relayReachabilityTimer?.cancel()
+        relayReachabilityTimer = reachTimer
         flowLock.unlock()
         timer.resume()
+        reachTimer.resume()
         startWatchdogGuard()
         RelayDiagnostics.shared.log(
             "giám sát sống-còn: bật SUỐT phiên — nhịp \(Int(Self.livenessInterval))s; chiều về im "
@@ -2912,6 +3023,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         livenessTimer = nil
         let guardTimer = watchdogGuardTimer
         watchdogGuardTimer = nil
+        let reachTimer = relayReachabilityTimer
+        relayReachabilityTimer = nil
         livenessCancelled = true
         livenessRecovering = false
         livenessHold = false
@@ -2922,6 +3035,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         releaseTransportRebuild(owner: "liveness")
         timer?.cancel()
         guardTimer?.cancel()
+        reachTimer?.cancel()
     }
 
     /// Đồng hồ CHẾT chạy trên hàng đợi RIÊNG: thấy nhịp watchdog im quá `livenessStallLimit` (hoặc
@@ -3190,21 +3304,19 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         beginTransportRecovery(reason: "transport chết: \(reason)")
     }
 
-    /// Chuyển `currentOptions` sang relay/node KẾ TIẾP trong danh sách dự phòng (`relayURLCandidates`)
-    /// rồi xoay vòng node cũ xuống cuối. Gọi từ `relayFailoverStep` (sau khi cửa sổ đánh giá 15 s
-    /// chứng minh 2 lần dựng lại liên tiếp vẫn 0 gói VỀ) — lần dựng lại KẾ TIẾP sẽ chạy trên node mới.
+    /// Chuyển `currentOptions` sang relay/node KẾ TIẾP trong danh sách dự phòng (`relayCandidates`)
+    /// rồi xoay vòng cửa cũ xuống cuối. Gọi từ `relayFailoverStep` (sau khi cửa sổ đánh giá 15 s
+    /// chứng minh 2 lần dựng lại liên tiếp vẫn 0 gói VỀ) và từ `relayReachabilityStep` (relay hiện tại
+    /// KHÔNG mở nổi link) — lần dựng lại KẾ TIẾP sẽ chạy trên đường mới.
     ///
     /// Vì sao cần: node có thể chết ở CHIỀU VỀ (relay WS vẫn mở được, handshake ok, nhưng không trả
-    /// gói nào) — khi đó dựng lại CÙNG node là vô ích. Đo thật 25/09/2026: máy Mac ghim `vn1hy`, dựng
-    /// lại transport 3 lần liên tiếp vẫn 0 gói về trong khi đó bật lại cùng máy với `vn2hy` là chạy.
+    /// gói nào) HOẶC chết hẳn (WS không mở nổi — ca 26/09/2026). Cả hai đều không cứu được bằng cách
+    /// dựng lại trên CÙNG một relay.
+    ///
+    /// KHÔNG có trần số lần: hết ứng viên thì **quay vòng** (yêu cầu 26/09/2026 — "hết ứng viên thì
+    /// quay vòng và giữ tunnel, không bỏ mặc khách ở Disconnected"). Đổi cửa đi KÈM đổi `serverHost`
+    /// của chính node đó (không bao giờ ghép lệch node — finding F3).
     private func advanceRelayCandidate(reason: String) {
-        guard nodeFailovers < Self.maxNodeFailovers else {
-            RelayDiagnostics.shared.log(
-                "hết ứng viên đường: đã đổi đủ \(Self.maxNodeFailovers) lần trong phiên — GIỮ đường "
-                    + "hiện tại (\(reason))"
-            )
-            return
-        }
         flowLock.lock()
         let options = currentOptions
         flowLock.unlock()
@@ -3212,21 +3324,29 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             RelayDiagnostics.shared.log("đổi đường: chưa có currentOptions — không đổi được (\(reason))")
             return
         }
-        guard !options.relayURLCandidates.isEmpty else {
+        guard !options.relayCandidates.isEmpty else {
             RelayDiagnostics.shared.log(
-                "hết ứng viên đường: cấu hình không có đường dự phòng (relayURLCandidates rỗng) — "
+                "hết ứng viên đường: cấu hình không có đường dự phòng (relayCandidates rỗng) — "
                     + "GIỮ đường hiện tại (\(reason))"
             )
             return
         }
         let old = options.relayURL.lastPathComponent
-        var rest = options.relayURLCandidates
+        var rest = options.relayCandidates
         let next = rest.removeFirst()
+        guard let nextURL = URL(string: next.relayURL) else {
+            RelayDiagnostics.shared.log("đổi đường: cửa kế tiếp không phải URL hợp lệ (\(next.relayURL)) — bỏ qua (\(reason))")
+            return
+        }
+        // Xoay vòng: cửa VỪA BỎ xuống CUỐI (kèm ĐÚNG host của nó) để lần sau còn quay lại được.
+        rest.append(HysteriaDefaults.RelayCandidate(
+            relayURL: options.relayURL.absoluteString,
+            serverHost: options.serverHost
+        ))
         let switched = HysteriaTransport.Options(
-            relayURL: next,
-            // Xoay vòng: node vừa bỏ xuống CUỐI để lần sau còn quay lại được.
-            relayURLCandidates: rest + [options.relayURL],
-            serverHost: options.serverHost,
+            relayURL: nextURL,
+            relayCandidates: rest,
+            serverHost: next.serverHost,
             serverPort: options.serverPort,
             password: options.password,
             obfs: options.obfs,
@@ -3240,10 +3360,74 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         currentOptions = switched
         flowLock.unlock()
         nodeFailovers += 1
+        // Dòng log NGHIỆM THU của 26/09/2026 — grep được đúng chuỗi "đã đổi node/đường: <cũ> → <mới>".
         RelayDiagnostics.shared.log(
-            "đã đổi đường: \(old) → \(next.lastPathComponent) — \(reason); lần \(nodeFailovers)/"
-                + "\(Self.maxNodeFailovers) trong phiên (còn \(rest.count) đường dự phòng)"
+            "đã đổi node/đường: \(old) → \(nextURL.lastPathComponent) "
+                + "(server \(options.serverHost) → \(next.serverHost)) — \(reason); "
+                + "lần \(nodeFailovers) trong phiên (còn \(rest.count) cửa dự phòng)"
         )
+    }
+
+    /// Một nhịp cho luật FAILOVER "relay KHÔNG KẾT NỐI ĐƯỢC" (xem `RelayUnreachableWatch`): link WS
+    /// của relay hiện tại không mở được quá `relayUnreachableLimit` giây ⇒ đổi cửa/node kế tiếp rồi
+    /// dựng lại transport NGAY trên cửa mới.
+    ///
+    /// ⚠️ CHỈ gọi khi ĐANG KHÔNG giữ `flowLock` (hàm này tự lấy khoá; `advanceRelayCandidate` và
+    /// `beginTransportRecovery` cũng lấy khoá ⇒ gọi lồng sẽ tự khoá chết, xem AGENTS.md §7c).
+    private func relayReachabilityStep(now: Date) {
+        // `relayIsConnected` = WS ĐANG mở. Đọc qua `currentTransport()` (tự lấy `flowLock`) ở đây vì
+        // ta KHÔNG giữ khoá — nhịp này chạy trên `livenessQueue` như `livenessStep`.
+        let linked = currentTransport()?.relayIsConnected ?? false
+        flowLock.lock()
+        let verdict: RelayUnreachableWatch.Verdict
+        if linked {
+            relayUnreachable.noteLinkUp()
+            relayFailoverChainStartAt = nil
+            verdict = .waiting
+        } else {
+            if relayFailoverChainStartAt == nil { relayFailoverChainStartAt = now }
+            verdict = relayUnreachable.noteLinkDown(now: now)
+        }
+        let advances = relayUnreachable.advances
+        flowLock.unlock()
+
+        switch verdict {
+        case .waiting:
+            return
+        case .advance(let elapsed):
+            RelayDiagnostics.shared.log(
+                "đổi đường: relay hiện tại KHÔNG kết nối được \(Int(elapsed))s (ngưỡng "
+                    + "\(Int(Self.relayUnreachableLimit))s) ⇒ thử cửa/node kế tiếp; "
+                    + "lần đổi thứ \(advances) vì relay không mở nổi link"
+            )
+            advanceRelayCandidate(reason: "relay không kết nối được \(Int(elapsed))s")
+            // Dựng lại NGAY trên cửa mới (không chờ backoff của chuỗi phục hồi): chuỗi nào đang chạy
+            // thì `beginTransportRecovery` tự bỏ qua, và lượt kế tiếp của nó dùng `currentOptions` mới.
+            beginTransportRecovery(reason: "relay không kết nối được — thử đường mới")
+        }
+    }
+
+    /// Mốc CHÍNH XÁC lúc link WS của relay đứt (link tự báo — xem `WSRelayClient.onLinkLost`).
+    ///
+    /// Vì sao cần mốc này chứ không chờ nhịp kiểm tra: ngưỡng đổi đường là 20 s, nên nếu cửa sổ chỉ
+    /// bắt đầu ở nhịp 2 s kế tiếp thì mốc "có gói về lại" có thể trượt ra ngoài 30 s của nghiệm thu.
+    /// Ở đây chỉ MỞ cửa sổ (nếu chưa mở); việc kết luận vẫn do `relayReachabilityStep` làm.
+    private func noteRelayLinkLost() {
+        flowLock.lock()
+        if relayUnreachable.downSince == nil {
+            _ = relayUnreachable.noteLinkDown(now: Date())
+        }
+        flowLock.unlock()
+    }
+
+    /// Có đang trong chuỗi xoay vòng cửa vì relay không kết nối được không (để HOÃN tự gỡ tunnel).
+    ///
+    /// ⚠️ TỰ lấy `flowLock` — gọi khi đang giữ khoá là tự khoá chết (AGENTS §7c).
+    private func relayFailoverCycling() -> Bool {
+        flowLock.lock()
+        defer { flowLock.unlock() }
+        guard relayUnreachable.isUnreachable, let started = relayFailoverChainStartAt else { return false }
+        return Date().timeIntervalSince(started) < Self.relayFailoverKeepTunnelLimit
     }
 
     /// Một nhịp cho luật FAILOVER ĐƯỜNG (xem `RelayFailoverWatch`): đo DELTA số gói CHIỀU VỀ trong
@@ -3411,6 +3595,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             if let counters {
                 relayFailover.beginWindow(now: Date(), fromGo: counters.fromGo)
             }
+            // Transport MỚI ⇒ mở lại cửa sổ "relay không kết nối được" từ đầu (nhịp kiểm tra link sẽ
+            // tự xác nhận link của cửa mới; không reset thì cửa sổ cũ có thể vừa chạm ngưỡng và đổi
+            // đường OAN ngay sau khi vừa dựng lại xong).
+            relayUnreachable = RelayUnreachableWatch(limit: Self.relayUnreachableLimit)
+            relayFailoverChainStartAt = nil
             flowLock.unlock()
             releaseTransportRebuild(owner: "liveness")
             // P1-1: transport đã lên lại ⇒ XOÁ state/message "đang dựng lại" của lần hỏng trước.
@@ -3920,20 +4109,37 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
             return .failure(ConfigFailure("thiếu \"password\" trong cấu hình hysteria2 (xem HysteriaPassword trong Info.plist của app)"))
         }
 
-        // Relay: ưu tiên "relayURL" của app, rồi tới danh sách dự phòng; không có cả hai
-        // thì lùi về hằng số dùng chung (HysteriaDefaults) — node-2 trước, node-1 sau.
-        var candidates: [URL] = []
+        // Relay: dùng "relayURL" của app. Cửa DỰ PHÒNG đến từ HAI khoá, theo thứ tự THỬ:
+        //   1. `relayNodeCandidates` (26/09/2026) — cửa của **node khác** trong danh sách node app
+        //      ĐÃ TẢI, mỗi cửa đi KÈM `serverHost` của chính node đó. Đây là đường sống khi relay của
+        //      node đang chọn KHÔNG kết nối được (ca thật 26/09). Finding F3 vẫn được giữ: cửa nào
+        //      cũng mang host của node nó, KHÔNG bao giờ ghép `serverHost` node này với relay node khác.
+        //   2. `relayURLCandidates` (cũ) — cửa cùng node đổi hostname (`api` ↔ `t1`), dùng lại
+        //      `serverHost` hiện tại vì vẫn là CÙNG một node.
+        var candidates: [HysteriaDefaults.RelayCandidate] = []
+        if let list = dict["relayNodeCandidates"] as? [[String: Any]] {
+            for entry in list {
+                guard let relay = entry["relayURL"] as? String, !relay.isEmpty,
+                      let host = entry["serverHost"] as? String, !host.isEmpty else { continue }
+                guard !candidates.contains(where: { $0.relayURL == relay }) else { continue }
+                candidates.append(HysteriaDefaults.RelayCandidate(relayURL: relay, serverHost: host))
+            }
+        }
         if let list = dict["relayURLCandidates"] as? [String] {
-            candidates = list.compactMap { URL(string: $0) }
+            for relay in list where !candidates.contains(where: { $0.relayURL == relay }) {
+                candidates.append(HysteriaDefaults.RelayCandidate(relayURL: relay, serverHost: serverHost))
+            }
         }
         if candidates.isEmpty {
-            candidates = HysteriaDefaults.relayURLCandidates.compactMap { URL(string: $0) }
+            candidates = HysteriaDefaults
+                .sameNodeRelayAlternates(for: dict["relayURL"] as? String ?? "")
+                .map { HysteriaDefaults.RelayCandidate(relayURL: $0, serverHost: serverHost) }
         }
         let relayURL: URL
         if let string = dict["relayURL"] as? String, let url = URL(string: string) {
             relayURL = url
-        } else if let first = candidates.first {
-            relayURL = first
+        } else if let first = candidates.first, let url = URL(string: first.relayURL) {
+            relayURL = url
             candidates.removeFirst()
         } else {
             return .failure(ConfigFailure("thiếu \"relayURL\" và cũng không có relay dự phòng nào"))
@@ -3960,7 +4166,8 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
         return .success(HysteriaTransport.Options(
             relayURL: relayOverride ?? relayURL,
-            relayURLCandidates: relayOverride == nil ? candidates : [],
+            // Ghi đè CHẨN ĐOÁN ⇒ chỉ một cửa (người đo ép tay đúng cửa cần đo).
+            relayCandidates: relayOverride == nil ? candidates : [],
             serverHost: serverHost,
             serverPort: port,
             password: password,

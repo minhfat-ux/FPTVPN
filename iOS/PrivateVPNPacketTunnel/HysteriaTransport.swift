@@ -46,9 +46,14 @@ final class HysteriaTransport: @unchecked Sendable {
     struct Options: Sendable {
         /// Relay WebSocket của ĐÚNG node đang chọn (`/relay/vn2hy` hoặc `/relay/vn1hy`).
         var relayURL: URL
-        /// Relay dự phòng, thử LẦN LƯỢT khi relay đầu không dựng nổi (WS không mở được).
-        /// Rỗng = chỉ dùng `relayURL`.
-        var relayURLCandidates: [URL] = []
+        /// Cửa DỰ PHÒNG theo THỨ TỰ THỬ, mỗi cửa kèm **danh tính node** của nó
+        /// (`HysteriaDefaults.RelayCandidate`). Rỗng = chỉ dùng `relayURL`.
+        ///
+        /// Thử LẦN LƯỢT khi cửa trước không dựng nổi (WS không mở được). Từ 26/09/2026 danh sách
+        /// này có thể chứa relay của **node KHÁC** (kèm `serverHost` của chính node đó) — ca thật:
+        /// relay của node đang chọn bị chặn hẳn thì phải sang node còn sống, không thử lại mãi cùng
+        /// một relay.
+        var relayCandidates: [HysteriaDefaults.RelayCandidate] = []
         /// Danh tính QUIC = host của server hysteria (SNI + khoá TLS). Có thể là IP node.
         var serverHost: String
         /// Cổng UDP hysteria của node (mặc định 8443). KHÔNG phải cổng relay.
@@ -97,12 +102,10 @@ final class HysteriaTransport: @unchecked Sendable {
     /// Chờ WS mở trước khi cho QUIC bắt tay. Hết hạn thì coi như cửa này chết và thử cửa kế tiếp
     /// (đừng để QUIC retry mù).
     ///
-    /// 26/09/2026 — **6 → 10 s**. Vì sao: đo trên chính mạng của khách (China Mobile) một lượt mở WS
-    /// tới Cloudflare mất tới **4,2 s** chỉ riêng bước TCP connect, và log máy thật iPhone trên 5G có
-    /// `WS không mở được trong 6s` ⇒ `TUNNEL_START_FAILED` dù lần ngay sau mở được. 6 s quá sát với
-    /// đường di động Trung Quốc. Ngân sách cả phiên (`HysteriaPacketTunnelProvider.startTimeout`) đã
-    /// được nới tương ứng để đủ chỗ thử hết danh sách cửa vào.
-    private static let relayOpenGrace: TimeInterval = 10
+    /// 26/09/2026 (finding F4 của bản review): hằng số này **chuyển sang `HysteriaDefaults`** —
+    /// app, extension và harness test phải dùng CHUNG một nguồn, nếu không thì ngân sách phiên
+    /// (`HysteriaDefaults.sessionStartBudget`) lại lệch với số cửa như lần 35 s < 4 × 10 s.
+    private static var relayOpenGrace: TimeInterval { HysteriaDefaults.relayOpenGrace }
 
     private let log: Logger
     private let lock = NSLock()
@@ -114,6 +117,9 @@ final class HysteriaTransport: @unchecked Sendable {
     /// Gọi khi link WS của relay MỞ LẠI sau khi đứt — provider dùng để đánh giá ĐỔI MẠNG NGAY
     /// (`HysteriaPacketTunnelProvider.noteRelayLinkReopened`). Đặt TRƯỚC `start(...)`.
     var onRelayLinkReopened: (@Sendable () -> Void)?
+    /// Gọi khi link WS của relay ĐỨT (link tự báo). Provider dùng làm MỐC CHÍNH XÁC để mở cửa sổ
+    /// "relay không kết nối được" (`HysteriaPacketTunnelProvider.noteRelayLinkLost`). Đặt TRƯỚC `start(...)`.
+    var onRelayLinkLost: (@Sendable () -> Void)?
 
     init(log: Logger) {
         self.log = log
@@ -178,7 +184,8 @@ final class HysteriaTransport: @unchecked Sendable {
 
         let candidates = relayCandidates(for: options)
         var lastError: Error = TransportError.relayNotStarted("không có relay URL nào để thử")
-        for relayURL in candidates {
+        for candidate in candidates {
+            guard let relayURL = URL(string: candidate.relayURL) else { continue }
             do {
                 try attempt(relayURL: relayURL, options: options, tunnelFd: tunnelFd)
                 return
@@ -192,11 +199,18 @@ final class HysteriaTransport: @unchecked Sendable {
         throw lastError
     }
 
-    /// `relayURL` trước, rồi tới các candidate còn lại (bỏ trùng, giữ thứ tự).
-    private func relayCandidates(for options: Options) -> [URL] {
-        var ordered: [URL] = [options.relayURL]
-        for candidate in options.relayURLCandidates
-        where !ordered.contains(where: { $0.absoluteString == candidate.absoluteString }) {
+    /// Cửa chính (`relayURL` + `serverHost` của nó) trước, rồi tới các ứng viên còn lại (bỏ trùng,
+    /// giữ thứ tự). Cửa nào cũng đi KÈM danh tính node của chính nó — không bao giờ ghép `serverHost`
+    /// của node này với relay của node khác (finding F3).
+    private func relayCandidates(for options: Options) -> [HysteriaDefaults.RelayCandidate] {
+        var ordered: [HysteriaDefaults.RelayCandidate] = [
+            HysteriaDefaults.RelayCandidate(
+                relayURL: options.relayURL.absoluteString,
+                serverHost: options.serverHost
+            )
+        ]
+        for candidate in options.relayCandidates
+        where !ordered.contains(where: { $0.relayURL == candidate.relayURL }) {
             ordered.append(candidate)
         }
         return ordered
@@ -211,6 +225,15 @@ final class HysteriaTransport: @unchecked Sendable {
             guard let self else { return }
             self.lock.lock()
             let handler = self.onRelayLinkReopened
+            self.lock.unlock()
+            handler?()
+        }
+        // Mốc CHÍNH XÁC lúc link ĐỨT (26/09/2026) — provider dùng để mở cửa sổ "relay không kết nối
+        // được" ngay, không chờ nhịp kiểm tra (xem `noteRelayLinkLost`).
+        client.onLinkLost = { [weak self] _ in
+            guard let self else { return }
+            self.lock.lock()
+            let handler = self.onRelayLinkLost
             self.lock.unlock()
             handler?()
         }
@@ -877,6 +900,14 @@ final class TunnelBridge: @unchecked Sendable {
         /// Bất biến: gói `EAGAIN` bị BỎ NGAY, **không** đưa lại hàng đợi (không có cấu trúc nào
         /// phình theo lưu lượng ở đây — đúng yêu cầu chống rò của BUG-IOS-JETSAM-001).
         var toGoEAGAIN = 0
+        /// Gói **IPv6** bị CHẶN ở cầu (P2, 26/09/2026) — core chỉ có IPv4 nên gói IPv6 KHÔNG được
+        /// đưa cho Go (Go trả `errno=2` ⇒ gói biến mất im lặng ⇒ app treo). Cầu trả
+        /// `ICMPv6 Destination Unreachable` cho app để nó lùi về IPv4 NGAY (xem `IPv6Reject`).
+        ///
+        /// Bộ đếm này là **BẰNG CHỨNG NGHIỆM THU**: log phải thấy nó TĂNG khi máy thử IPv6, chứ
+        /// không được im lặng — im lặng chính là thứ làm hai lần sửa trước (22/09 và 26/09) không
+        /// chẩn đoán được.
+        var toGoIPv6Blocked = 0
         var fromGo = 0
         var fromGoBytes = 0
         var fromGoBad = 0
@@ -912,9 +943,24 @@ final class TunnelBridge: @unchecked Sendable {
     /// đọc qua `currentHostFd` dưới `lock`, không được giữ bản sao.
     private var hostFd: Int32
     private let log: Logger
+    /// Logger RIÊNG cho đường chặn IPv6 (`category: "ipv6-reject"`) — chủ dự án yêu cầu
+    /// 26/09/2026 đọc được bằng:
+    ///
+    ///     log show --predicate 'process == "com.privatevpn.mac.packet-tunnel"' --last 5m
+    ///
+    /// Vì sao PHẢI có: `RelayDiagnostics` chỉ ghi RA FILE, còn file cũ nằm trong container của
+    /// root nên app/người dùng không mở được ⇒ không ai biết `rejectIPv6` có chạy hay không.
+    private static let ipv6Log = Logger(
+        subsystem: "com.privatevpn.app.packet-tunnel",
+        category: "ipv6-reject"
+    )
     private let lock = NSLock()
     private let tickQueue = DispatchQueue(label: "com.privatevpn.mac.tunnel-bridge.tick")
     private var counters = Counters()
+    /// Cho phép gói IPv6 đi tiếp vào Go (ĐÃ TẮT đường chặn P2). Chỉ đọc/ghi trong `lock`; làm mới
+    /// 5 s/lần ở `start()` và nhịp tim nên KHÔNG syscall và KHÔNG lấy khoá của `RelayDiagnostics`
+    /// trên đường gói (xem `refreshIPv6Policy`).
+    private var ipv6Allowed = false
     private var running = false
     private var sampled = 0
     private var heartbeat: DispatchSourceTimer?
@@ -946,6 +992,8 @@ final class TunnelBridge: @unchecked Sendable {
         var toGoDropped = 0
         /// Gói bỏ vì fd đầy (`EAGAIN`) — nghẽn cầu, không phải cầu hỏng.
         var toGoEAGAIN = 0
+        /// Gói IPv6 bị chặn ở cầu + đã trả ICMPv6 unreachable (P2) — xem `Counters.toGoIPv6Blocked`.
+        var toGoIPv6Blocked = 0
         var fromGo = 0
         /// Byte đang chờ đọc trên fd (gói Go đã ghi mà cầu chưa bơm đi), `-1` = không đọc được.
         var pendingFromGoBytes = 0
@@ -957,6 +1005,7 @@ final class TunnelBridge: @unchecked Sendable {
         queue.toGo = copy.toGo
         queue.toGoDropped = copy.toGoDropped
         queue.toGoEAGAIN = copy.toGoEAGAIN
+        queue.toGoIPv6Blocked = copy.toGoIPv6Blocked
         queue.fromGo = copy.fromGo
         queue.pendingFromGoBytes = Self.pendingBytes(fd: currentHostFd())
         return queue
@@ -986,16 +1035,36 @@ final class TunnelBridge: @unchecked Sendable {
         // Không chặn callback của NetworkExtension khi Go chậm: ghi không được thì bỏ gói và đếm.
         let host = currentHostFd()
         _ = fcntl(host, F_SETFL, O_NONBLOCK)
+        refreshIPv6Policy()
         log.log(level: .default, "bridge: bắt đầu (hostFd \(host, privacy: .public))")
         readOutbound()
         startInboundPump()
         startHeartbeat()
     }
 
+    /// Làm mới quyết định "có chặn IPv6 không" (5 s/lần). Gọi từ `start()` và nhịp tim — KHÔNG gọi
+    /// trên đường gói: `RelayDiagnostics.isIPv6Allowed` dùng `queue.sync` nên tuyệt đối không được
+    /// lồng vào đường xử lý mỗi gói (bài học khoá lồng nhau, AGENTS.md §7c).
+    ///
+    /// Hai công tắc (xem `HysteriaDefaults.blockIPv6`): hằng số build-time (mặc định BẬT chặn) và
+    /// file cờ chẩn đoán `<app group>/ipv6-allow` (tắt chặn không cần build lại).
+    private func refreshIPv6Policy() {
+        let allowed = !HysteriaDefaults.blockIPv6 || RelayDiagnostics.shared.isIPv6Allowed
+        lock.lock()
+        ipv6Allowed = allowed
+        lock.unlock()
+    }
+
     /// Đầu fd phía Go hiện tại (đọc dưới `lock`).
     private func currentHostFd() -> Int32 {
         lock.lock(); defer { lock.unlock() }
         return hostFd
+    }
+
+    /// Có đang CHẶN IPv6 không (đọc dưới `lock`, giá trị làm mới 5 s/lần — xem `refreshIPv6Policy`).
+    private var isIPv6Blocked: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !ipv6Allowed
     }
 
     /// Đổi đầu fd phía Go sang cặp socketpair MỚI mà **KHÔNG dừng cầu**.
@@ -1068,6 +1137,20 @@ final class TunnelBridge: @unchecked Sendable {
         // (~0,65 B mỗi byte qua relay; iPad Netflix 17,9 → 49,4 MB trong 6 phút), phẳng khi tải
         // nhẹ, KHÔNG được trả lại sau khi dựng lại transport (cầu chỉ retarget, không dựng lại).
         autoreleasepool {
+            // P2 (26/09/2026) — core/exit node CHỈ có IPv4. Gói IPv6 **KHÔNG** được đưa cho Go:
+            // `write` vào fd của Go trả `errno=2` (ENOENT) ⇒ gói biến mất IM LẶNG ⇒ app tưởng đường
+            // còn sống và chờ/timeout (đúng ca "iPad siêu chậm, không xem được Netflix" 26/09).
+            // Trả `ICMPv6 Destination Unreachable` để app lùi về IPv4 NGAY — mô phỏng đúng hành vi
+            // "chặn theo family" mà nền tảng Android có sẵn (xem `IPv6Reject`).
+            //
+            // Công tắc: `HysteriaDefaults.blockIPv6` (build-time) HOẶC file `<app group>/ipv6-allow`
+            // (lúc chạy) tắt được đường chặn khi node có IPv6 egress thật — xem `refreshIPv6Policy`.
+            if (packet[packet.startIndex] >> 4) == 6 {
+                if self.isIPv6Blocked {
+                    self.rejectIPv6(packet)
+                    return
+                }
+            }
             var framed = [UInt8](repeating: 0, count: packet.count + 4)
             // Họ địa chỉ lấy từ chính gói IP (không tin tham số của packetFlow: gói lạ vẫn phải
             // đi đúng nhánh IPv4/IPv6).
@@ -1106,8 +1189,59 @@ final class TunnelBridge: @unchecked Sendable {
         }
     }
 
-    // MARK: - Go -> packetFlow
+    /// P2 (26/09/2026) — chặn gói IPv6 tại cầu và trả lỗi **tức thì** cho app.
+    ///
+    /// VÌ SAO PHẢI TRẢ LỖI chứ không chỉ bỏ gói: bỏ im lặng thì TCP của app cứ retry SYN theo
+    /// backoff (tới ~75 s) và app IPv6-heavy (Netflix) treo — đúng ca đã gây "siêu chậm" ngày
+    /// 26/09. `ICMPv6 Destination Unreachable` khiến `connect()` trả lỗi ngay ⇒ Happy Eyeballs lùi
+    /// IPv4 lập tức. Đây chính là hành vi mà Android có sẵn ở tầng nền tảng
+    /// ("Block address families by default in VpnService").
+    ///
+    /// MÃ LỖI PHẢI LÀ 4 (port unreachable), KHÔNG phải 0 (no route): XNU chỉ bỏ `connect()` ngay
+    /// với `PRC_UNREACH_PORT`; code 0/3 vào `PRC_UNREACH_NET` nên TCP chỉ ghi `t_softerror` rồi vẫn
+    /// retransmit SYN — đo thật trên bản 1.4.7/22: `curl -6` treo **4,0 s** (5 SYN vào/5 ICMPv6 ra).
+    /// Toàn bộ dẫn chứng nằm ở `IPv6Reject.codePortUnreachable`.
+    ///
+    /// KHÔNG trả lời ICMPv6 lỗi (type < 128) và KHÔNG trả lời gói multicast — xem `IPv6Reject`.
+    private func rejectIPv6(_ packet: Data) {
+        let bytes = [UInt8](packet)
+        let outcome = IPv6Reject.destinationUnreachable(ipv6Packet: bytes)
+        switch outcome {
+        case .unreachable(let reply):
+            // Gửi TRƯỚC khi lấy khoá: `writePackets` là lời gọi của NetworkExtension, không được
+            // giữ `lock` qua nó (bài học khoá lồng nhau — AGENTS.md §7c).
+            flow.writePackets([Data(reply)], withProtocols: [NSNumber(value: Self.afInet6)])
+            lock.lock()
+            counters.toGoIPv6Blocked += 1
+            counters.toGoDropped += 1
+            let blocked = counters.toGoIPv6Blocked
+            lock.unlock()
+            if blocked <= 5 || blocked % 200 == 0 {
+                RelayDiagnostics.shared.log(
+                    "bridge: IPv6 BỊ CHẶN #\(blocked) — đã trả ICMPv6 unreachable cho app"
+                        + " (core chỉ có IPv4; app lùi về IPv4 ngay)"
+                )
+            }
+            // Unified log (`log show --predicate 'process == "com.privatevpn.mac.packet-tunnel"'`):
+            // đây là BẰNG CHỨNG duy nhất đọc được khi file log nằm trong container của root.
+            // Ghi 20 gói đầu rồi 1/100 để dòng log LUÔN tăng theo số gói mà không ngập log khi có
+            // luồng IPv6 lớn (bộ đếm `toGoIPv6Blocked` vẫn đếm đủ mọi gói).
+            if blocked <= 20 || blocked % 100 == 0 {
+                Self.ipv6Log.notice(
+                    "ipv6-reject #\(blocked) len=\(reply.count) code=\(IPv6Reject.codePortUnreachable)"
+                )
+            }
+        case .ignoreICMPv6:
+            lock.lock()
+            counters.toGoIPv6Blocked += 1
+            counters.toGoDropped += 1
+            lock.unlock()
+        case .notIPv6:
+            break
+        }
+    }
 
+    // MARK: - Go -> packetFlow
     private func startInboundPump() {
         let thread = Thread { [weak self] in self?.pumpLoop() }
         thread.name = "tunnel-bridge-in"
@@ -1215,6 +1349,9 @@ final class TunnelBridge: @unchecked Sendable {
         timer.schedule(deadline: .now() + 5, repeating: 5)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
+            // Làm mới công tắc chặn IPv6 ở đây (5 s/lần) để cờ `ipv6-allow` có hiệu lực mà đường
+            // gói không phải syscall/lấy khoá của `RelayDiagnostics` cho từng gói.
+            self.refreshIPv6Policy()
             RelayDiagnostics.shared.log("bridge: \(self.describeCounters())")
         }
         timer.resume()

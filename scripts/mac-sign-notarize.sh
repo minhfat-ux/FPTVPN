@@ -36,14 +36,16 @@ KEY="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$KEYID.p8}"
 security find-identity -v -p codesigning | grep -qF "$ID" || { echo "LỖI: không có identity '$ID'" >&2; exit 1; }
 
 STAGE="$BASE/stage-$VER"; APP="$STAGE/VPNFlow.app"
-APPEX="$APP/Contents/PlugIns/PrivateVPNMacPacketTunnel.appex"
+# Provider macOS nay là **system extension** (Apple bắt tên gói TRÙNG bundle identifier):
+# Contents/Library/SystemExtensions/<bundle-id>.systemextension — KHÔNG còn appex trong Contents/PlugIns.
+SYSEXT="$APP/Contents/Library/SystemExtensions/com.privatevpn.mac.packet-tunnel.systemextension"
 mkdir -p "$BASE"
 echo "== 1. stage: $APP"
 rm -rf "$STAGE"; mkdir -p "$STAGE"; ditto "$APP_SRC" "$APP"
 
 echo "== 2. nhúng provisioning profile (Developer ID)"
 [ -f "$PROFILES/app.provisionprofile" ]   && cp "$PROFILES/app.provisionprofile"   "$APP/Contents/embedded.provisionprofile"
-[ -f "$PROFILES/appex.provisionprofile" ] && cp "$PROFILES/appex.provisionprofile" "$APPEX/Contents/embedded.provisionprofile"
+[ -f "$PROFILES/appex.provisionprofile" ] && cp "$PROFILES/appex.provisionprofile" "$SYSEXT/Contents/embedded.provisionprofile"
 
 # Entitlements: ưu tiên file cấp sẵn; nếu không có thì lấy từ chữ ký hiện tại và BỎ get-task-allow
 # (cờ dev-only làm notarize fail).
@@ -53,30 +55,39 @@ ent_for() { # $1=target  $2=file cấp sẵn  $3=file ra
     /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$3" 2>/dev/null || true
   fi
 }
-ent_for "$APPEX" "$PROFILES/appex.ent.plist" "$BASE/appex.ent.plist"
+ent_for "$SYSEXT" "$PROFILES/appex.ent.plist" "$BASE/appex.ent.plist"
 ent_for "$APP"   "$PROFILES/app.ent.plist"   "$BASE/app.ent.plist"
 
 echo "== 3. ký framework con TRƯỚC (bỏ bước này notarize sẽ Invalid)"
 # Có bản build KHÔNG nhúng framework nào (Hysteria link tĩnh) ⇒ thư mục Frameworks không tồn tại;
 # `find` trên thư mục thiếu sẽ trả exit 1 và `set -e`/`pipefail` giết script ngay (đã gặp thật 25/09/2026).
-if [ -d "$APPEX/Contents/Frameworks" ]; then
-  find "$APPEX/Contents/Frameworks" -maxdepth 3 -name "*.framework" -type d | while read -r fw; do
+if [ -d "$SYSEXT/Contents/Frameworks" ]; then
+  find "$SYSEXT/Contents/Frameworks" -maxdepth 3 -name "*.framework" -type d | while read -r fw; do
     bin="$fw/Versions/A/$(basename "$fw" .framework)"
     [ -f "$bin" ] || bin="$fw/$(basename "$fw" .framework)"
     if [ -f "$bin" ]; then codesign --force --options runtime --timestamp --sign "$ID" "$bin"; fi
     codesign --force --options runtime --timestamp --sign "$ID" "$fw"
   done
-  find "$APPEX/Contents/Frameworks" -maxdepth 2 -name "*.dylib" -type f | while read -r d; do
+  find "$SYSEXT/Contents/Frameworks" -maxdepth 2 -name "*.dylib" -type f | while read -r d; do
     codesign --force --options runtime --timestamp --sign "$ID" "$d"
   done
 else
   echo "   (không có Contents/Frameworks — bản này link tĩnh, bỏ qua bước ký framework)"
 fi
 
-echo "== 4. ký extension rồi tới app"
-codesign --force --options runtime --timestamp --sign "$ID" --entitlements "$BASE/appex.ent.plist" "$APPEX"
+echo "== 4. ký system extension rồi tới app (inside-out)"
+codesign --force --options runtime --timestamp --sign "$ID" --entitlements "$BASE/appex.ent.plist" "$SYSEXT"
 codesign --force --options runtime --timestamp --sign "$ID" --entitlements "$BASE/app.ent.plist"   "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tail -2
+
+echo "== 4b. CỔNG: profile nhúng PHẢI cấp đủ quyền (không đạt ⇒ app KHÔNG mở được, AMFI -413)"
+# Ca thật 26/09/2026: bản Developer ID 1.4.6/21 ký + notarize + staple + `spctl accepted` mà macOS vẫn báo
+# "The application \"VPNFlow\" can't be opened." vì profile Developer ID thiếu `packet-tunnel-provider`
+# (chỉ có các giá trị `*-systemextension`). Cổng này bắt đúng lỗi đó TRƯỚC khi tốn lượt notarize.
+python3 "$(dirname "$0")/mac-check-profile-entitlements.py" "$SYSEXT" "$APP" || {
+  echo "LỖI: profile không cấp đủ quyền ⇒ DỪNG, không notarize/không phát hành bản này." >&2
+  exit 1
+}
 
 echo "== 5. notarize APP (zip) + staple"
 ZIP="$BASE/VPNFlow-app-$VER.zip"; rm -f "$ZIP"
@@ -95,9 +106,9 @@ if [ "$DO_DMG" = "1" ]; then
   # báo "resource fork, Finder information, or similar detritus not allowed" ⇒ DMG KHÔNG được phát
   # (đã gặp thật 23/09 và 25/09/2026). Luật: dựng bằng `-fs APFS` + xoá sạch xattr trước khi đóng gói.
   xattr -cr "$DMGSTAGE" 2>/dev/null || true
-  if ! hdiutil create -fs APFS -volname VPNFlow -srcfolder "$DMGSTAGE" -format UDZO -ov "$DMG" 2>"$BASE/dmg-create-$VER.log"; then
+  if ! hdiutil create -fs APFS -volname "VPNFlow-$VER" -srcfolder "$DMGSTAGE" -format UDZO -ov "$DMG" 2>"$BASE/dmg-create-$VER.log"; then
     echo "   hdiutil create APFS KHÔNG chạy được → thử makehybrid (xem $BASE/dmg-create-$VER.log)" >&2
-    hdiutil makehybrid -hfs -hfs-volume-name VPNFlow -o "$HYBRID" "$DMGSTAGE"
+    hdiutil makehybrid -hfs -hfs-volume-name "VPNFlow-$VER" -o "$HYBRID" "$DMGSTAGE"
     hdiutil convert "$HYBRID" -format UDZO -o "$DMG"; rm -f "$HYBRID"
   fi
   rm -rf "$DMGSTAGE"

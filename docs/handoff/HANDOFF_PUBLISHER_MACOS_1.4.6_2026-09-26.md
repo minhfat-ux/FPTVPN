@@ -1,3 +1,10 @@
+> 🚨 **CẬP NHẬT 26/09/2026 (đọc trước mọi mục dưới):** bản macOS **1.4.6/21 ĐÃ ĐƯỢC PHÁT nhưng KHÔNG MỞ ĐƯỢC**
+> (`amfid … Code=-413 "No matching profile found"` · thiếu `packet-tunnel-provider` trong profile Developer ID).
+> Bản cũ `1.4.0/14` **cũng** dính. Kênh macOS **đang chặn phát**; `minimum_mac_version` đã hạ về `0.0.0`;
+> đã gửi email đính chính 21/21 khách. Chi tiết + việc phải làm: `docs/PUBLISHER_PROCESS.md` §7 mục 10 ·
+> `docs/MACOS_SIGN_NOTARIZE.md` §1/§2(d)/§4a. **Số kế tiếp phải > 1.4.6 (đề xuất 1.4.7/22)** và **bắt buộc
+> mở thử app thật** trước khi phát. Mục §1/§2 dưới đây (1.4.6/21) chỉ còn giá trị lịch sử.
+
 # BÀN GIAO → **PUBLISHER** (kênh macOS) — loạt 1.4.6, 26/09/2026
 
 > Người soạn: harness Mac (main agent). Quy trình bắt buộc: `docs/PUBLISHER_PROCESS.md` §0/§1/§2b/§4

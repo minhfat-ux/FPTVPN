@@ -81,6 +81,14 @@ SWIFT
 xcrun --sdk iphoneos swiftc -emit-module -module-name WireGuardKit -target "$TRIPLE" -sdk "$SDK" \
   "$WORK/WireGuardKit.swift" -emit-module-path "$WORK/WireGuardKit.swiftmodule" 2>/dev/null
 
+# --- Stub WireGuardKit cho macOS (target PrivateVPNMac cũng import nó) -------------------
+MAC_SDK="$(xcrun --sdk macosx --show-sdk-path)"
+MAC_TRIPLE="arm64-apple-macos14.0"
+mkdir -p "$WORK/mac"
+cp "$WORK/WireGuardKit.swift" "$WORK/mac/"
+xcrun --sdk macosx swiftc -emit-module -module-name WireGuardKit -target "$MAC_TRIPLE" -sdk "$MAC_SDK" \
+  "$WORK/mac/WireGuardKit.swift" -emit-module-path "$WORK/mac/WireGuardKit.swiftmodule" 2>/dev/null
+
 # --- Danh sách nguồn: GIỮ KHỚP `project.yml` ------------------------------------------
 # (project.yml là nguồn sự thật; sửa target thì cập nhật ở đây.)
 E="iOS/PrivateVPNPacketTunnel"
@@ -88,7 +96,7 @@ EXT_SOURCES=(
   "$E/HysteriaPacketTunnelProvider.swift" "$E/HysteriaTransport.swift"
   "$E/HysteriaBandwidthControl.swift" "$E/LivenessWatchdog.swift"
   "$E/TransportLadder.swift" "$E/GoodputMeter.swift" "$E/ChinaRouteBypass.swift"
-  "$E/RouteReporter.swift" "$E/RampStatus.swift" "$E/WSRelayClient.swift"
+  "$E/RouteReporter.swift" "$E/RampStatus.swift" "$E/IPv6Reject.swift" "$E/WSRelayClient.swift"
   "$E/RelayLink.swift" "$E/RelayUDPListener.swift" "$E/RelayDiagnostics.swift"
   "iOS/PrivateVPN/Services/HysteriaDefaults.swift"
 )
@@ -113,7 +121,31 @@ run() { # $1 = nhãn, $2.. = file
   fi
 }
 
+run_mac() { # target macOS: PrivateVPNMac + 6 file dùng chung (theo project.yml)
+  local out n files=()
+  while IFS= read -r f; do files+=("$f"); done < <(find mac/PrivateVPNMac -name '*.swift' ! -name '._*' | sort)
+  files+=("iOS/PrivateVPN/Services/ControlAPIClient.swift"
+          "iOS/PrivateVPN/Services/WireGuardConfig.swift"
+          "iOS/PrivateVPN/Services/AppVersionService.swift"
+          "iOS/PrivateVPN/Services/KeychainStore.swift"
+          "iOS/PrivateVPN/Services/HysteriaDefaults.swift"
+          "$E/RampStatus.swift")
+  out="$(cd "$ROOT" && xcrun --sdk macosx swiftc -typecheck -target "$MAC_TRIPLE" -sdk "$MAC_SDK" \
+        -I "$WORK/mac" "$WORK/nwshim.swift" "${files[@]}" 2>&1)"
+  n="$(printf '%s\n' "$out" | grep -c 'error:')"
+  if [ "$n" = "0" ]; then
+    echo "✅ macOS (shim WireGuardKit): 0 lỗi"
+  else
+    echo "❌ macOS: $n lỗi"
+    printf '%s\n' "$out" | grep 'error:' | head -20
+    FAIL=1
+  fi
+}
+
 [ "$TARGET" = "all" ] || [ "$TARGET" = "extension" ] && run "extension" "$WORK/nwshim.swift" "${EXT_SOURCES[@]}"
 [ "$TARGET" = "all" ] || [ "$TARGET" = "app" ] && run "app (shim WireGuardKit)" -I "$WORK" "$WORK/nwshim.swift" "${APP_SOURCES[@]}"
+# macOS: bản review 26/09 đánh giá parity macOS là rủi ro CAO NHẤT, mà trước đây cổng này chỉ phủ iOS
+# ⇒ sửa macOS không có gì kiểm. Thêm target này để lỗ hổng đó không lặp lại.
+[ "$TARGET" = "all" ] || [ "$TARGET" = "macos" ] && run_mac
 
 exit $FAIL

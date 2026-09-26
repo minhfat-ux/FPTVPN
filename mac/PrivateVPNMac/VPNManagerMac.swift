@@ -1,5 +1,6 @@
 import Foundation
 import NetworkExtension
+import SystemExtensions
 import os
 import WireGuardKit
 
@@ -14,6 +15,31 @@ final class VPNManagerMac: ObservableObject {
 
     /// Tên profile VPN của bản này (đổi từ "FlowVPN" sang "VPNFlow" cho khớp tên app).
     private static let currentProfileName = "VPNFlow"
+
+    /// App group chia sẻ app ↔ system extension (xem `project.yml` — `com.apple.security.application-groups`
+    /// khai ở CẢ HAI target macOS).
+    private static let sharedAppGroupIdentifier = "G6XW3RN6LJ.com.privatevpn.shared"
+
+    /// Hàng đợi ghi `relay.log` (log chẩn đoán do extension gửi sang) — ngoài main actor.
+    private let diagnosticsLogQueue = DispatchQueue(
+        label: "com.privatevpn.mac.diagnostics-log", qos: .utility
+    )
+
+    /// Ghi đuôi log chẩn đoán của extension vào app group container
+    /// (`~/Library/Group Containers/G6XW3RN6LJ.com.privatevpn.shared/relay.log`) để **người dùng
+    /// đọc được** — xem vì sao phải là APP ghi ở `probeProviderDiagnostics`.
+    ///
+    /// Ghi ĐÈ cả file (không nối): `tail` là ảnh chụp phần mới nhất nên file luôn ≤ trần và không
+    /// phình theo thời gian — giữ đúng tinh thần cap dung lượng của `RelayDiagnostics`.
+    private func saveDiagnosticsLog(_ tail: String) {
+        guard let base = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: Self.sharedAppGroupIdentifier
+        ) else { return }
+        let url = base.appendingPathComponent("relay.log")
+        diagnosticsLogQueue.async {
+            try? Data(tail.utf8).write(to: url, options: .atomic)
+        }
+    }
 
     /// So khớp profile do app này quản lý: chấp nhận cả tên mới "VPNFlow" lẫn tên cũ
     /// "FlowVPN"/"FPT PrivateVPN" để máy đã cài từ bản trước vẫn nhận diện được và dọn
@@ -42,6 +68,23 @@ final class VPNManagerMac: ObservableObject {
     /// CẢNH BÁO khi extension đang chạy KHÁC bản appex nằm trong app này (hệ thống dùng lại bản
     /// cũ ở đường dẫn khác — khách cài bản mới mà vẫn dính lỗi cũ). Chỉ CẢNH BÁO, không tự gỡ.
     @Published private(set) var extensionStaleWarning: String?
+    /// Xung đột mạng phát hiện được (app VPN/proxy khác đang tranh chấp) — RỖNG = hệ thống sạch.
+    /// Xem `NetworkConflictDetector` (logic thuần) + `NetworkConflictProbe` (đọc máy thật).
+    /// Thẻ Diagnostics luôn hiện đủ danh sách này (kể cả mức Info).
+    @Published private(set) var networkConflicts: [NetworkConflict] = []
+    /// Băng-rôn mức Warning ĐANG hiện (nil = không hiện). Chỉ đặt khi tình trạng ĐỔI so với lần nhắc
+    /// trước (chữ ký lưu `UserDefaults`) hoặc khi khách bấm Connect ⇒ mở lại app mà tình trạng y nguyên
+    /// thì KHÔNG nhắc lại (yêu cầu chủ dự án 26/09/2026). Mức Info không bao giờ lên băng-rôn.
+    @Published private(set) var visibleWarningConflict: NetworkConflict?
+    /// Xung đột mức Blocking của lần bấm Connect vừa rồi: UI hiện hộp thoại NÊU TÊN app đang tranh
+    /// chấp và hướng dẫn tắt đi rồi bấm Connect lại. Khác `lastError`: đây không phải lỗi tunnel.
+    @Published var blockingConflict: NetworkConflict?
+    /// Chữ ký tình trạng đã nhắc lần trước (persist) — dùng để chỉ nhắc khi mức/tình trạng ĐỔI.
+    private static let conflictNotifiedSignatureKey = "flowvpn.conflict.notifiedSignature"
+    /// Những chữ ký khách đã bấm "Không nhắc lại" (persist) — im lặng với ĐÚNG tình trạng đó.
+    private static let conflictMutedSignaturesKey = "flowvpn.conflict.mutedSignatures"
+    /// Khách đã xem cảnh báo và chọn "Vẫn kết nối" ⇒ bỏ qua cổng chặn ĐÚNG MỘT LẦN.
+    private var allowConnectDespiteConflict = false
     /// Base URL control-plane đang dùng: host chính, hoặc host dự phòng đã được xác nhận
     /// sống (sticky) — xem `ControlAPIHosts`. UI dùng giá trị này để dựng link web.
     @Published var coordinatorURL: String = ControlAPIHosts.currentBaseURL.absoluteString
@@ -59,6 +102,16 @@ final class VPNManagerMac: ObservableObject {
 
     private var manager: NETunnelProviderManager?
     private var statusPollTask: Task<Void, Never>?
+    /// Provider macOS là **system extension** nằm ở `Contents/Library/SystemExtensions/` (không còn
+    /// appex trong `Contents/PlugIns`): profile Developer ID chỉ cấp `packet-tunnel-provider-systemextension`,
+    /// nên appex plugin không qua được tầng NetworkExtension. Hệ thống chỉ dựng tunnel SAU khi
+    /// extension được kích hoạt (lần đầu khách phải tự bấm Allow trong System Settings).
+    private var systemExtensionReady = false
+    /// Lần kích hoạt đang chạy (nhiều đường vào tunnel có thể gọi cùng lúc) — dùng lại thay vì
+    /// gửi trùng request.
+    private var systemExtensionActivation: Task<Void, Error>?
+    /// Giữ delegate sống tới khi request kết thúc.
+    nonisolated(unsafe) private var systemExtensionDelegate: PacketTunnelSystemExtensionDelegate?
     /// Heartbeat định kỳ giữ máy ở trạng thái "đang kết nối" trên dashboard.
     ///
     /// Vì sao cần: từ bản hysteria2, control plane KHÔNG còn thấy handshake WireGuard nên
@@ -74,9 +127,32 @@ final class VPNManagerMac: ObservableObject {
     /// Đã xử lý mã chẩn đoán cho lần Connect hiện tại chưa — chặn việc vừa hạ tunnel vừa
     /// poll lại ngay khi NEVPNStatus còn kịp báo Connected.
     private var diagnosticHandled = false
+    /// Đã báo `TUNNEL_NO_TRAFFIC` một lần cho phiên này chưa — để KHÔNG ghi log/xoá cảnh báo mỗi giây
+    /// (app poll extension 1 s/lần) mà vẫn để extension tự cứu. Mirror iOS `noTrafficReported`.
+    ///
+    /// F1 (`HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md`): `noTraffic` KHÔNG được hạ tunnel.
+    private var noTrafficReported = false
     /// Đang hiện cảnh báo RELAY_URL_MISSING (lỗi cấu hình, KHÔNG hạ tunnel) để xoá đúng
     /// lúc khi extension báo đường trực tiếp đã có traffic.
     private var relayConfigWarningShown = false
+    /// Khách ĐANG MUỐN tunnel chạy: bật ở `connect()`, tắt ở `disconnect()` (và khi app thoát).
+    ///
+    /// Vì sao PHẢI phân biệt bằng CỜ Ý ĐỊNH (26/09/2026): ca thật — extension tự gỡ tunnel
+    /// (`TUNNEL_NO_TRAFFIC`) lúc 15:01:40 rồi máy nằm **Disconnected ~18 phút**, không ai nối lại;
+    /// chỉ khi khách tự đổi node và bấm Connect thì tunnel mới lên. Có cờ này thì app phân biệt được
+    /// "tunnel rớt" (phải tự nối lại) với "khách bấm Disconnect" (KHÔNG được nối lại).
+    private var userWantsConnected = false
+    /// Đang trong chuỗi TỰ NỐI LẠI (chờ backoff hoặc đang thử dựng lại). UI hiện "Connecting…" chứ
+    /// KHÔNG để khách thấy "Disconnected" im lặng giữa các lần thử.
+    private var autoReconnecting = false
+    /// Task của lần chờ backoff hiện tại.
+    private var reconnectTask: Task<Void, Never>?
+    /// Số lần đã thử tự nối lại LIÊN TIẾP (về 0 khi Connected).
+    private var reconnectAttempt = 0
+    /// Backoff của chuỗi tự nối lại (giây): 2 → 4 → 8 → 16 → 30 → 60, giữ 60 cho các lần sau.
+    private static let reconnectBackoff: [TimeInterval] = [2, 4, 8, 16, 30, 60]
+    /// Dấu nhận biết thông báo do chuỗi tự nối lại đặt (để chỉ xoá ĐÚNG thông báo đó khi nối lại xong).
+    private static let reconnectMessagePrefix = "Mất kết nối tới VPN"
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
     nonisolated(unsafe) private var hostObserver: NSObjectProtocol?
 
@@ -115,6 +191,10 @@ final class VPNManagerMac: ObservableObject {
         Task {
             await loadManagerFromPreferences()
             await refreshNodes()
+            // Dò app VPN/mạng khác đang tranh chấp NGAY khi mở app để thẻ Diagnostics + băng-rôn có dữ
+            // liệu trước khi khách bấm Connect. KHÔNG đo DNS ở đây khi tunnel chưa Connected (luật
+            // `NetworkConflictDNSProbePolicy`) — phép đo DNS sẽ chạy ở cạnh "vừa Connected".
+            await refreshNetworkConflicts(probeDNS: true)
             // Lưu sẵn providerConfiguration (kèm hysteria2) ngay khi app khởi động: nhờ vậy
             // `scutil --nc start "VPNFlow"` từ terminal cũng dựng đúng provider.
             await refreshSavedConfiguration()
@@ -131,6 +211,7 @@ final class VPNManagerMac: ObservableObject {
         }
         statusPollTask?.cancel()
         providerProbeTask?.cancel()
+        reconnectTask?.cancel()
     }
 
     private func refreshStatus() {
@@ -151,6 +232,20 @@ final class VPNManagerMac: ObservableObject {
             stopProviderDiagnosticsPolling()
             return
         }
+        // (26/09/2026) Đang TỰ NỐI LẠI: giữa hai lần thử, NetworkExtension báo `.disconnected` vài
+        // nhịp — đừng để nó kéo UI về "Disconnected" (khách tưởng VPN đã tắt hẳn, đúng ca thật
+        // "nằm Disconnected 18 phút"). Hiện "Connecting…" cho tới khi nối lại được hoặc khách bấm Stop.
+        if autoReconnecting, connection.status == .disconnected || connection.status == .invalid {
+            state = "Connecting…"
+            overlayIP = nil
+            liveDiagnostics = nil
+            stopProviderDiagnosticsPolling()
+            if tunnelWasConnected {
+                tunnelWasConnected = false
+                stopHeartbeat()
+            }
+            return
+        }
         state = stateString(for: connection.status)
         if connection.status == .disconnected {
             overlayIP = nil
@@ -161,11 +256,30 @@ final class VPNManagerMac: ObservableObject {
         // chết ngay sau khi vừa khởi động (đo thật 20/09/2026: "bắt đầu" rồi "dừng" sau 19 ms).
         switch connection.status {
         case .connected:
+            // CẠNH LÊN (chỉ một lần cho mỗi phiên): đây mới là lúc được phép ĐO DNS — tunnel của mình
+            // đã Connected nên DNS do tunnel áp (1.1.1.1/8.8.8.8) mới là thứ app thật sự dùng. Đo
+            // trước đó chỉ sinh cảnh báo oan (ca thật 26/09/2026 15:39/15:41). `refreshStatus` chạy
+            // mỗi 1 s nên phải gate bằng `tunnelWasConnected` để không đo lại liên tục.
+            let justConnected = !tunnelWasConnected
             tunnelWasConnected = true
+            if justConnected {
+                Task { await refreshNetworkConflicts(probeDNS: true) }
+            }
+            noteAutoReconnectSucceeded()
         case .disconnected, .invalid:
             if tunnelWasConnected {
                 tunnelWasConnected = false
                 stopHeartbeat()
+                // Tunnel vừa tắt: mọi số đo DNS cũ (đo lúc Connected) hết giá trị ⇒ cập nhật lại để
+                // cảnh báo DNS biến mất thay vì đứng lại trên UI.
+                Task { await refreshNetworkConflicts(probeDNS: false) }
+            }
+            // Tunnel ĐÃ TỪNG lên rồi mới tắt, mà khách KHÔNG bấm Disconnect ⇒ session bị rớt:
+            // tự nối lại CÓ BACKOFF (không để khách nằm "Disconnected" im lặng — ca thật 26/09/2026).
+            // Cố ý gate bằng `tunnelWasConnected`: lúc `connect()` đang chuẩn bị profile, NE báo
+            // `.disconnected` vài nhịp (xem chú thích heartbeat ở trên) — nối lại ở đó là vô nghĩa.
+            if userWantsConnected {
+                scheduleAutoReconnect(reason: "session dropped")
             }
         default:
             break
@@ -178,6 +292,83 @@ final class VPNManagerMac: ObservableObject {
         default:
             stopProviderDiagnosticsPolling()
         }
+    }
+
+    // MARK: - TỰ NỐI LẠI khi session rớt (26/09/2026)
+
+    /// Một lượt rớt session mà khách vẫn muốn VPN chạy ⇒ hẹn nối lại với backoff.
+    ///
+    /// VÌ SAO (ca thật 26/09/2026): extension tự gỡ tunnel lúc 15:01:40 (`TUNNEL_NO_TRAFFIC`), sau đó
+    /// máy nằm **Disconnected ~18 phút** — không có ai nối lại, chỉ khi khách tự đổi node và bấm
+    /// Connect thì tunnel mới lên. Mọi cơ chế tự phục hồi cũ đều sống BÊN TRONG tiến trình extension,
+    /// nên khi cả session bị gỡ thì không còn ai cứu ⇒ phải có vòng nối lại ở phía APP.
+    ///
+    /// KHÔNG bật `allowsTransportRebuild` cho đường tự-áp số khai trong phiên (AGENTS §7c) — đây là
+    /// vòng nối lại SESSION ở phía app, hoàn toàn khác đường đó.
+    private func scheduleAutoReconnect(reason: String) {
+        guard userWantsConnected, !autoReconnecting else { return }
+        autoReconnecting = true
+        attemptAutoReconnect(attempt: 1, reason: reason)
+    }
+
+    private func attemptAutoReconnect(attempt: Int, reason: String) {
+        guard userWantsConnected else {
+            autoReconnecting = false
+            return
+        }
+        reconnectAttempt = attempt
+        let wait = Self.reconnectBackoff[min(attempt - 1, Self.reconnectBackoff.count - 1)]
+        // KHÁCH THẤY "đang kết nối", KHÔNG thấy "Disconnected" im lặng; nội dung thật nằm ở
+        // `lastError` (thẻ Diagnostics hiện nguyên câu).
+        state = "Connecting…"
+        lastError = "\(Self.reconnectMessagePrefix) — đang tự nối lại lần \(attempt) "
+            + "(chờ \(Int(wait))s, lý do: \(reason))."
+        log.notice("tự nối lại lần \(attempt) (lý do: \(reason, privacy: .public)) — chờ \(Int(wait))s")
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard let self, !Task.isCancelled, self.userWantsConnected else { return }
+            await self.performAutoReconnect(attempt: attempt, reason: reason)
+        }
+    }
+
+    private func performAutoReconnect(attempt: Int, reason: String) async {
+        guard userWantsConnected else {
+            autoReconnecting = false
+            return
+        }
+        do {
+            if manager == nil { await loadManagerFromPreferences() }
+            guard let manager else { throw MacError.savedConfigurationMissing }
+            // CHỈ `startVPNTunnel` lại trên profile ĐÃ LƯU (init/connect đã ghi cấu hình hysteria của
+            // node đang chọn). Cố ý KHÔNG gọi `refreshSavedConfiguration()`/đường kích hoạt system
+            // extension ở đây: nó có thể bật hộp thoại của hệ thống giữa lúc khách đang dùng máy.
+            try manager.connection.startVPNTunnel()
+            log.notice("tự nối lại lần \(attempt): đã yêu cầu dựng lại tunnel (lý do: \(reason, privacy: .public))")
+        } catch {
+            log.error("tự nối lại lần \(attempt) THẤT BẠI: \(error.localizedDescription, privacy: .public)")
+            attemptAutoReconnect(attempt: attempt + 1, reason: "lần \(attempt) thất bại")
+        }
+    }
+
+    /// Tunnel `Connected` lại ⇒ đóng chuỗi tự nối lại và xoá ĐÚNG thông báo của nó.
+    private func noteAutoReconnectSucceeded() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        guard autoReconnecting else { return }
+        autoReconnecting = false
+        reconnectAttempt = 0
+        if lastError?.hasPrefix(Self.reconnectMessagePrefix) == true { lastError = nil }
+        log.notice("tự nối lại: THÀNH CÔNG — tunnel đã Connected lại")
+    }
+
+    /// Khách chủ động ĐỔI Ý (bấm Disconnect / thoát app) ⇒ huỷ mọi lần nối lại đang chờ.
+    private func cancelAutoReconnect() {
+        userWantsConnected = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        autoReconnecting = false
+        reconnectAttempt = 0
     }
 
     // MARK: - Provider diagnostics ("Connected nhưng không có mạng")
@@ -201,25 +392,29 @@ final class VPNManagerMac: ObservableObject {
         providerProbeTask = nil
     }
 
-    /// So danh tính extension ĐANG CHẠY với appex nằm trong app này.
+    /// So danh tính extension ĐANG CHẠY với bản system extension nằm trong app này.
     ///
     /// Vì sao: macOS phân giải extension theo LaunchServices, nên đã cài `/Applications/VPNFlow.app`
-    /// mới mà hệ thống vẫn launch appex ở một bản VPNFlow.app cũ (đường dẫn khác) — khách tưởng đã
-    /// cập nhật nhưng vẫn chạy code cũ. Ở đây chỉ CẢNH BÁO (không tự gỡ cấu hình VPN của khách).
+    /// mới mà hệ thống vẫn launch bản extension ở một VPNFlow.app cũ (đường dẫn khác) — khách tưởng
+    /// đã cập nhật nhưng vẫn chạy code cũ. Ở đây chỉ CẢNH BÁO (không tự gỡ cấu hình VPN của khách).
     private func checkExtensionIdentity(_ report: TunnelStatusReport) {
         let running = "\(report.extensionVersion ?? "?")/\(report.extensionBuild ?? "?")"
         let path = report.extensionPath ?? "?"
         let mtime = report.extensionMTime ?? "?"
-        guard let appex = Bundle.main.builtInPlugInsURL?
-            .appendingPathComponent("PrivateVPNMacPacketTunnel.appex"),
-              let info = Bundle(url: appex)?.infoDictionary else {
+        // Provider macOS nay nằm ở Contents/Library/SystemExtensions/<bundle-id>.systemextension
+        // (Apple bắt tên gói trùng bundle identifier), không còn appex trong Contents/PlugIns.
+        let systemExtension = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Library/SystemExtensions")
+            .appendingPathComponent("\(Self.providerBundleIdentifier).systemextension")
+        guard let info = Bundle(url: systemExtension)?.infoDictionary else {
             extensionStaleWarning = nil
             return
         }
         let appVersion = "\(info["CFBundleShortVersionString"] as? String ?? "?")/"
             + "\(info["CFBundleVersion"] as? String ?? "?")"
         var appMTime = "?"
-        let binary = appex.appendingPathComponent("Contents/MacOS/PrivateVPNMacPacketTunnel")
+        let executable = info["CFBundleExecutable"] as? String ?? Self.providerBundleIdentifier
+        let binary = systemExtension.appendingPathComponent("Contents/MacOS/\(executable)")
         if let attributes = try? FileManager.default.attributesOfItem(atPath: binary.path),
            let modified = attributes[.modificationDate] as? Date {
             let formatter = DateFormatter()
@@ -278,6 +473,13 @@ final class VPNManagerMac: ObservableObject {
         // chập thì extension trả số thấp/`—` đúng lúc.
         liveDiagnostics = report
         checkExtensionIdentity(report)
+        // 26/09/2026 — lưu đuôi log chẩn đoán của extension ra app group container. **Tiện cho HỖ
+        // TRỢ**, KHÔNG phải bản sửa "thẻ Diagnostics trống": thẻ lấy số live qua CHÍNH kênh này
+        // (`sendProviderMessage`), không đọc file. Vì sao phải để APP ghi: extension macOS là system
+        // extension chạy **root**; app group container là theo từng user nên container của nó là
+        // `/var/root/…` và sandbox của nó CHẶN ghi vào container của user (đo thật 26/09/2026:
+        // `probes[user:… write=false]`). Xem `TunnelStatusReport.logTail`.
+        if let tail = report.logTail { saveDiagnosticsLog(tail) }
         guard let code = report.code else {
             // Extension đã xoá mã (ví dụ đường UDP trực tiếp có traffic): gỡ cảnh báo cấu
             // hình cũ để không hiện lỗi giả cho phiên đang chạy.
@@ -300,15 +502,35 @@ final class VPNManagerMac: ObservableObject {
             return
         }
         log.error("provider diagnostics: code=\(code, privacy: .public) session=\(report.session) rx=\(report.rxBytes) tx=\(report.txBytes) transport=\(report.transport, privacy: .public)")
-        lastError = report.message ?? "Tunnel không có dữ liệu (mã \(code)). Vui lòng thử lại."
-        // Tunnel đã chết nhưng hệ thống vẫn báo Connected: hạ nó xuống để khách không bị
-        // treo ở trạng thái giả. Thông báo ở `lastError` vẫn giữ nguyên sau khi Disconnect.
+
+        // F1 (`HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md`, mức High) — `noTraffic` KHÁC `startFailed`.
+        //
+        // MIRROR iOS (`iOS/PrivateVPN/VPNManager.swift:363`): `noTraffic` là **TRẠNG THÁI** ("tunnel đang
+        // không chở gói"), KHÔNG phải lệnh giết. Extension có watchdog + dựng lại transport + tự đổi
+        // node để tự cứu; khi hết đường thì `selfRescue` tự `teardownAndCancel` ⇒ hệ thống báo
+        // `.disconnected` và UI hiện đúng — app không cần hạ lần nữa.
+        //
+        // Trước bản này macOS hạ tunnel cho CẢ HAI mã ⇒ khách thấy **"tự ngắt"** đúng lúc extension
+        // đang tự cứu (lệch hẳn với iOS đã sửa 25/09).
+        //
+        // Cache: CHỈ xoá khi `startFailed` (trả lời câu hỏi mở #3 của review) — xoá cache trong cửa sổ
+        // no-traffic có thể làm mất cấu hình mà extension đang dùng để tự cứu.
+        if code == TunnelDiagnosticCode.noTraffic {
+            if !noTrafficReported {
+                noTrafficReported = true
+                lastError = report.message ?? "Tunnel tạm thời không có dữ liệu — đang tự phục hồi."
+                log.error("provider diagnostics: noTraffic — KHÔNG hạ tunnel (để extension tự cứu)")
+            }
+            return
+        }
+
+        // `startFailed`: lỗi khởi động THẬT, không có tunnel nào để giữ ⇒ hạ để không blackhole toàn
+        // bộ traffic (route 0.0.0.0/0 qua utun mà không có mạng chính là bug khách báo).
+        // `diagnosticHandled` giữ trạng thái Failed + thông báo cho tới lần Connect kế tiếp.
+        lastError = report.message ?? "Tunnel không khởi động được (mã \(code)). Vui lòng thử lại."
         diagnosticHandled = true
         stopProviderDiagnosticsPolling()
         refreshStatus()
-        // Tunnel đã chết: hạ nó xuống để không blackhole toàn bộ traffic (route 0.0.0.0/0
-        // qua utun mà không có mạng chính là bug khách báo). `diagnosticHandled` giữ
-        // trạng thái Failed + thông báo cho tới lần Connect kế tiếp.
         manager?.connection.stopVPNTunnel()
     }
 
@@ -354,13 +576,135 @@ final class VPNManagerMac: ObservableObject {
         return URL(string: withScheme)
     }
 
+    // MARK: - Xung đột mạng (app VPN/proxy khác đang tranh chấp)
+
+    /// Dò app VPN/mạng khác đang tranh chấp rồi GHI LOG + cập nhật UI (băng-rôn + thẻ Diagnostics).
+    ///
+    /// `probeDNS: true` mới gửi truy vấn DNS ra ngoài để biết resolver nào không trả lời (ca thật
+    /// `202.96.134.133` timeout làm DNS treo 5 s) — và CHỈ khi tunnel của mình đang Connected
+    /// (`NetworkConflictDNSProbePolicy`): đo lúc tunnel tắt là chính nguồn cảnh báo DNS oan.
+    /// Đường Connect cố ý truyền `false` để KHÔNG làm chậm việc kết nối.
+    ///
+    /// `nudge: true` (chỉ khi khách BẤM CONNECT) cho phép hiện lại băng-rôn/hộp thoại dù tình trạng
+    /// chưa đổi — đúng luật "chỉ hiện khi mức đổi HOẶC khi bấm Connect". Tình trạng đã bấm "Không nhắc
+    /// lại" thì im lặng tuyệt đối.
+    func refreshNetworkConflicts(probeDNS: Bool = true, nudge: Bool = false) async {
+        let conflicts = await NetworkConflictProbe.detect(
+            ownOverlayIP: overlayIP,
+            tunnelConnected: state == "Connected",
+            probeDNS: probeDNS
+        )
+        networkConflicts = conflicts
+        updateConflictNotice(conflicts, nudge: nudge)
+        guard !conflicts.isEmpty else {
+            log.info("conflict: không phát hiện phần mềm mạng nào tranh chấp")
+            return
+        }
+        // Dòng log theo đúng định dạng support cần grep:
+        // `conflict: Blocking — Tailscale (Connected) · system proxy 127.0.0.1:7890`
+        log.warning("conflict: \(NetworkConflictDetector.summary(for: conflicts), privacy: .public)")
+        for conflict in conflicts {
+            log.warning("conflict [\(conflict.severity.label, privacy: .public)] \(conflict.title, privacy: .public) — \(conflict.facts.joined(separator: " · "), privacy: .public)")
+        }
+    }
+
+    /// Quyết định có hiện băng-rôn mức Warning hay không (mức Info im lặng, mức Blocking đã có hộp
+    /// thoại riêng khi bấm Connect).
+    ///
+    /// Luật chủ dự án chốt 26/09/2026 — "băng-rôn/hộp thoại không được làm phiền":
+    /// - chỉ hiện khi tình trạng ĐỔI (chữ ký khác lần nhắc trước, lưu `UserDefaults`) hoặc `nudge`;
+    /// - khách đã bấm "Không nhắc lại" cho ĐÚNG chữ ký đó ⇒ không bao giờ hiện lại;
+    /// - mở lại app mà tình trạng y nguyên ⇒ không hiện (nhờ chữ ký đã lưu).
+    private func updateConflictNotice(_ conflicts: [NetworkConflict], nudge: Bool) {
+        guard let warning = conflicts.first(where: { $0.severity == .warning }) else {
+            visibleWarningConflict = nil
+            return
+        }
+        let signature = NetworkConflictDetector.signature(for: conflicts)
+        let defaults = UserDefaults.standard
+        let muted = Set(defaults.stringArray(forKey: Self.conflictMutedSignaturesKey) ?? [])
+        guard !muted.contains(signature) else {
+            visibleWarningConflict = nil
+            return
+        }
+        let alreadyNotified = defaults.string(forKey: Self.conflictNotifiedSignatureKey) == signature
+        guard nudge || !alreadyNotified else { return }
+        visibleWarningConflict = warning
+        defaults.set(signature, forKey: Self.conflictNotifiedSignatureKey)
+    }
+
+    /// Tình trạng xung đột hiện tại đã được khách bấm "Không nhắc lại" chưa.
+    private func isCurrentConflictMuted() -> Bool {
+        let signature = NetworkConflictDetector.signature(for: networkConflicts)
+        guard !signature.isEmpty else { return false }
+        let muted = Set(UserDefaults.standard.stringArray(forKey: Self.conflictMutedSignaturesKey) ?? [])
+        return muted.contains(signature)
+    }
+
+    /// Khách bấm "Không nhắc lại": lưu CHỮ KÝ tình trạng hiện tại vào `UserDefaults` ⇒ từ nay đúng tình
+    /// trạng đó thì im lặng (không băng-rôn, không hộp thoại, không chặn Connect), kể cả sau khi mở lại
+    /// app. Tình trạng KHÁC (app khác, dấu hiệu khác) vẫn được nhắc bình thường.
+    func muteCurrentConflict() {
+        let signature = NetworkConflictDetector.signature(for: networkConflicts)
+        guard !signature.isEmpty else {
+            blockingConflict = nil
+            visibleWarningConflict = nil
+            return
+        }
+        var muted = Set(UserDefaults.standard.stringArray(forKey: Self.conflictMutedSignaturesKey) ?? [])
+        muted.insert(signature)
+        UserDefaults.standard.set(Array(muted).sorted(), forKey: Self.conflictMutedSignaturesKey)
+        blockingConflict = nil
+        visibleWarningConflict = nil
+        log.notice("conflict: khách chọn KHÔNG NHẮC LẠI cho tình trạng hiện tại")
+    }
+
+    /// Khách đã xem hộp thoại cảnh báo và chọn "Vẫn kết nối" ⇒ thử kết nối dù có xung đột Blocking.
+    func connectDespiteConflict(authStore: AuthSessionStore) async {
+        allowConnectDespiteConflict = true
+        blockingConflict = nil
+        await connect(authStore: authStore)
+    }
+
+    /// Đóng hộp thoại cảnh báo mà không kết nối (mặc định: khách phải tắt app kia rồi bấm Connect lại).
+    func dismissBlockingConflict() {
+        blockingConflict = nil
+    }
+
     func connect(authStore: AuthSessionStore) async {
         guard state != "Connecting…", state != "Disconnecting…" else { return }
+
+        // Cổng chặn TRƯỚC khi dựng tunnel. Vì sao: khi Clash/Mihomo/Tailscale… đang giữ default
+        // route hoặc cắm DNS, tunnel của VPNFlow chắc chắn hỏng (khách chỉ thấy "connecting mãi"
+        // hoặc "Connected mà không có mạng") và request tới api.meetflowai.site có thể hỏng luôn
+        // phần đăng nhập. Dò NHANH (không đo DNS) rồi hiện hộp thoại NÊU TÊN app cho khách tắt đi,
+        // thay vì để khách tự đoán. Khách vẫn có đường "Vẫn kết nối" nếu chủ động muốn thử.
+        //
+        // `nudge: true`: khách VỪA bấm Connect nên được phép nhắc lại (kể cả tình trạng chưa đổi) —
+        // trừ khi họ đã bấm "Không nhắc lại" cho đúng tình trạng đó.
+        await refreshNetworkConflicts(probeDNS: false, nudge: true)
+        if !allowConnectDespiteConflict,
+           let blocking = networkConflicts.first(where: { $0.severity == .blocking }),
+           !isCurrentConflictMuted() {
+            log.error("conflict: CHẶN kết nối — \(NetworkConflictDetector.summary(for: self.networkConflicts), privacy: .public)")
+            blockingConflict = blocking
+            return
+        }
+        allowConnectDespiteConflict = false
+
         state = "Connecting…"
         lastError = nil
         // Lần Connect mới: cho phép poll lại chẩn đoán của extension.
         diagnosticHandled = false
+        noTrafficReported = false
         relayConfigWarningShown = false
+        // Khách ĐANG MUỐN VPN chạy (mọi lần rớt session sau đây đều được tự nối lại) và mọi chuỗi
+        // tự nối lại cũ (nếu có) phải bị huỷ — lần này là Connect do khách bấm.
+        userWantsConnected = true
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        autoReconnecting = false
+        reconnectAttempt = 0
 
         let privateKey = WireGuardKeychain.loadOrCreatePrivateKey()
 
@@ -370,6 +714,9 @@ final class VPNManagerMac: ObservableObject {
         // không có mạng. Chỉ dùng cache khi control plane KHÔNG tới được (nhánh
         // `.transport` bên dưới) — đó là lý do rõ ràng để giữ lại.
         do {
+            // Provider macOS là system extension ⇒ phải kích hoạt XONG mới được lưu/đựng tunnel.
+            // Lỗi ở đây (ví dụ khách chưa bấm Allow) được dịch thành câu hướng dẫn cụ thể.
+            try await activatePacketTunnelSystemExtension()
             guard let baseURL = normalizedURL(coordinatorURL) else {
                 throw MacError.invalidURL(coordinatorURL)
             }
@@ -526,7 +873,9 @@ final class VPNManagerMac: ObservableObject {
             config,
             nodeId: node.id,
             wsRelayURL: node.relayURL,
-            hysteriaNode: node
+            hysteriaNode: node,
+            // Danh sách node app ĐÃ TẢI — nguồn ứng viên ĐỔI NODE cho extension (26/09/2026).
+            hysteriaNodes: exitNodes
         )
         guard let manager else {
             throw MacError.savedConfigurationMissing
@@ -621,6 +970,8 @@ final class VPNManagerMac: ObservableObject {
     }
 
     func disconnect() {
+        // Khách CHỦ ĐỘNG tắt: huỷ mọi chuỗi tự nối lại (không được "tự bật lại" sau khi khách tắt).
+        cancelAutoReconnect()
         state = "Disconnecting…"
         stopHeartbeat()
         manager?.connection.stopVPNTunnel()
@@ -659,6 +1010,66 @@ final class VPNManagerMac: ObservableObject {
         heartbeatTask = nil
     }
 
+    // MARK: - System extension (provider macOS)
+
+    /// Kích hoạt packet-tunnel provider dưới dạng **system extension** rồi mới cho phép lưu/đựng tunnel.
+    ///
+    /// Vì sao BẮT BUỘC: profile Developer ID (`MAC_APP_DIRECT`) chỉ cấp bộ quyền `*-systemextension`.
+    /// Appex plugin khai `packet-tunnel-provider` bị AMFI chặn (`Code=-413 "No matching profile
+    /// found"` ⇒ macOS không mở nổi app), còn khi khai `packet-tunnel-provider-systemextension` thì
+    /// NetworkExtension từ chối appex plugin (`pkd: could not create extension point record … -10814`,
+    /// tunnel đứng ở `Disconnected`). Đường chạy được là system extension + kích hoạt tường minh.
+    ///
+    /// Lần đầu, macOS bắt chủ máy tự bật extension trong System Settings → Privacy & Security;
+    /// trường hợp đó trả lỗi `needsUserApproval` kèm câu hướng dẫn cụ thể cho khách.
+    func activatePacketTunnelSystemExtension() async throws {
+        if systemExtensionReady { return }
+        if let running = systemExtensionActivation {
+            try await running.value
+            return
+        }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try await self.submitSystemExtensionActivationRequest()
+            self.systemExtensionReady = true
+            self.systemExtensionDelegate = nil
+            self.log.notice("system extension: đã kích hoạt \(Self.providerBundleIdentifier, privacy: .public)")
+        }
+        systemExtensionActivation = task
+        do {
+            try await task.value
+            systemExtensionActivation = nil
+        } catch {
+            systemExtensionActivation = nil
+            throw error
+        }
+    }
+
+    private func submitSystemExtensionActivationRequest() async throws {
+        log.notice("system extension: gửi yêu cầu kích hoạt \(Self.providerBundleIdentifier, privacy: .public)")
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let delegate = PacketTunnelSystemExtensionDelegate(
+                extensionIdentifier: Self.providerBundleIdentifier,
+                appBundlePath: Bundle.main.bundlePath
+            ) { result in
+                continuation.resume(with: result)
+            }
+            systemExtensionDelegate = delegate
+            let request = OSSystemExtensionRequest.activationRequest(
+                forExtensionWithIdentifier: Self.providerBundleIdentifier,
+                queue: .main
+            )
+            request.delegate = delegate
+            OSSystemExtensionManager.shared.submitRequest(request)
+            // Lưới an toàn: hệ thống luôn gọi lại (needsUserApproval / completed / failed), nhưng nếu
+            // không có callback nào thì tự bỏ cuộc sau 2 phút thay vì treo "Connecting…" mãi.
+            Task { @MainActor [weak delegate] in
+                try? await Task.sleep(for: .seconds(120))
+                delegate?.timeOut()
+            }
+        }
+    }
+
     // MARK: - Config
 
     private static func buildConfig(privateKeyBase64: String, overlayIP: String, exitEndpoint: String, exitPublicKey: String) -> WireGuardConfig {
@@ -683,11 +1094,28 @@ final class VPNManagerMac: ObservableObject {
         _ config: WireGuardConfig,
         nodeId: String? = nil,
         wsRelayURL: String? = nil,
-        hysteriaNode: ExitNode? = nil
+        hysteriaNode: ExitNode? = nil,
+        hysteriaNodes: [ExitNode] = []
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
-        let managedProfiles = existing.filter { profile in
+        var managedProfiles = existing.filter { profile in
             Self.isManagedProfile(profile.localizedDescription)
+        }
+
+        // Di trú appex plugin → system extension (một lần cho mỗi máy): profile VPN do bản cũ tạo
+        // gắn với appex đã bị gỡ khỏi app, nên NetworkExtension không phân giải được provider nữa
+        // (bundle id không đổi, nhưng hệ thống còn cache đường dẫn appex cũ). Dựng lại cấu hình đã
+        // lưu cho sạch — chỉ xoá profile VPN của chính app này, không đụng dữ liệu nào khác.
+        let migrationKey = "systemExtensionProfileMigrationDone"
+        if !UserDefaults.standard.bool(forKey: migrationKey) {
+            if !managedProfiles.isEmpty {
+                log.info("configuration: di trú appex → system extension — dựng lại \(managedProfiles.count, privacy: .public) profile VPN đã lưu")
+            }
+            for staleProfile in managedProfiles {
+                try? await staleProfile.removeFromPreferences()
+            }
+            managedProfiles = []
+            UserDefaults.standard.set(true, forKey: migrationKey)
         }
 
         // DÙNG LẠI profile đang có thay vì xoá hết rồi tạo mới mỗi lần connect. Trước đây
@@ -729,7 +1157,7 @@ final class VPNManagerMac: ObservableObject {
         // project.yml). Thiếu credential thì KHÔNG thêm khoá "hysteria" và phải nói rõ cho
         // người dùng: extension không có nó sẽ báo TUNNEL_START_FAILED, còn im lặng thì
         // khách chỉ thấy "Connected" mà không có mạng.
-        if let hysteria = Self.hysteriaConfiguration(node: hysteriaNode) {
+        if let hysteria = Self.hysteriaConfiguration(node: hysteriaNode, nodes: hysteriaNodes) {
             providerConfiguration["hysteria"] = hysteria
             let relay = hysteria["relayURL"] as? String ?? "?"
             let host = hysteria["serverHost"] as? String ?? "?"
@@ -758,7 +1186,7 @@ final class VPNManagerMac: ObservableObject {
     ///
     /// Trả nil khi thiếu credential hoặc không xác định được host: gọi ở đây phải nói rõ
     /// cho người dùng, KHÔNG được lặng lẽ bỏ qua.
-    private static func hysteriaConfiguration(node: ExitNode?) -> [String: Any]? {
+    private static func hysteriaConfiguration(node: ExitNode?, nodes: [ExitNode] = []) -> [String: Any]? {
         guard let password = Bundle.main.object(forInfoDictionaryKey: "HysteriaPassword") as? String,
               !password.isEmpty,
               let obfs = Bundle.main.object(forInfoDictionaryKey: "HysteriaObfs") as? String,
@@ -768,15 +1196,39 @@ final class VPNManagerMac: ObservableObject {
         let host = node.map { Self.host(fromEndpoint: $0.endpoint) } ?? ""
         guard !host.isEmpty else { return nil }
 
-        // Relay: ưu tiên `hy_relay_url` của ĐÚNG node đang chọn (control plane đã cấp), rồi
-        // tới danh sách dùng chung. Relay WireGuard (`wg_relay_url`) KHÔNG dùng được ở đây:
-        // một relay chỉ hạ cánh ở một cổng UDP, gửi QUIC vào cổng WireGuard là im lặng.
-        let relay = node?.hysteriaRelayURL
+        // Relay: dùng `hy_relay_url` của ĐÚNG node đang chọn (control plane cấp). Finding F3 của
+        // `HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md` vẫn giữ: KHÔNG ghép `serverHost` của node này
+        // với relay của node khác.
+        //
+        // 26/09/2026 — BỔ SUNG ứng viên ĐỔI ĐƯỜNG của **node KHÁC**, lấy từ chính danh sách node app
+        // ĐÃ TẢI (`GET /v1/nodes` → `hy_relay_url` từng node). Vì sao cần: ca thật 26/09 — relay
+        // `relay-cf-vn2hy` của node đang chọn bị chặn, log extension có 24 lần `relay/vn2hy` và **0
+        // lần `relay/vn1hy`**, tunnel `Disconnected` rồi nằm đó. Mỗi cửa đi KÈM `serverHost` của CHÍNH
+        // node nó nên không bao giờ ghép lệch node (F3); thứ tự node-khác-trước do
+        // `HysteriaDefaults.failoverRelayCandidates` quyết định (hostname khác của cùng node chỉ là
+        // cửa thứ hai vì nó trỏ vào CÙNG một dịch vụ relay).
+        let relay = node?.hysteriaRelayURL ?? ""
+        let failover = HysteriaDefaults.failoverRelayCandidates(
+            currentRelay: relay,
+            currentHost: host,
+            nodes: nodes.map { entry in
+                (
+                    nodeID: entry.id,
+                    relay: entry.hysteriaRelayURL ?? "",
+                    host: Self.host(fromEndpoint: entry.endpoint)
+                )
+            }
+        )
         return [
             "serverHost": host,
             "serverPort": Int(HysteriaDefaults.serverPort),
-            "relayURL": relay ?? HysteriaDefaults.relayURLCandidates.first ?? "",
-            "relayURLCandidates": HysteriaDefaults.relayURLCandidates,
+            "relayURL": relay,
+            // Cửa dự phòng cùng node: đổi hostname (`api` ↔ `t1`), GIỮ NGUYÊN path ⇒ không đổi node.
+            "relayURLCandidates": HysteriaDefaults.sameNodeRelayAlternates(for: relay),
+            // Cửa dự phòng ĐỔI NODE (mỗi cửa kèm host của chính node đó).
+            "relayNodeCandidates": failover.map {
+                ["relayURL": $0.relayURL, "serverHost": $0.serverHost]
+            },
             "password": password,
             "obfs": obfs,
             "upKbps": HysteriaDefaults.upKbps,
@@ -802,6 +1254,15 @@ final class VPNManagerMac: ObservableObject {
     /// TUNNEL_START_FAILED dù mọi thứ khác đúng. Hàm này chạy lúc app khởi động
     /// (`VPNManagerMac.init`), nên chỉ cần mở app một lần.
     func refreshSavedConfiguration() async {
+        // Chưa kích hoạt được system extension thì profile VPN có lưu cũng không dựng nổi tunnel —
+        // dừng ở đây và nói rõ cho khách (thay vì để Connect chết ở tầng NetworkExtension).
+        do {
+            try await activatePacketTunnelSystemExtension()
+        } catch {
+            lastError = error.localizedDescription
+            log.error("system extension: chưa kích hoạt được, không lưu profile VPN: \(error.localizedDescription, privacy: .public)")
+            return
+        }
         if manager == nil {
             await loadManagerFromPreferences()
         }
@@ -828,7 +1289,8 @@ final class VPNManagerMac: ObservableObject {
                 config,
                 nodeId: node.id,
                 wsRelayURL: node.relayURL,
-                hysteriaNode: node
+                hysteriaNode: node,
+                hysteriaNodes: exitNodes
             )
             log.info("configuration: đã lưu profile \(Self.currentProfileName, privacy: .public) kèm hysteria2 (node \(node.id, privacy: .public))")
         } catch {
@@ -927,5 +1389,138 @@ final class VPNManagerMac: ObservableObject {
                 return "Could not reach the coordinator and no saved tunnel is available yet. Connect once on a working network, then this network will work offline."
             }
         }
+    }
+}
+
+/// Lỗi kích hoạt system extension, dịch sang câu tiếng Việt mà khách hiểu và làm được ngay.
+private enum SystemExtensionActivationError: LocalizedError {
+    case needsUserApproval
+    case willCompleteAfterReboot
+    case canceled
+    case missingEntitlement
+    case notFound(String)
+    case parentBundleLocation(String)
+    case codeSignature(String)
+    case validationFailed(String)
+    case forbiddenBySystemPolicy(String)
+    case superseded
+    case timedOut
+    case other(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .needsUserApproval:
+            return "VPNFlow cần bạn cho phép tiện ích mở rộng hệ thống: mở System Settings → Privacy & Security → bật VPNFlow (mục System Extensions/Network), rồi bấm Connect lại."
+        case .willCompleteAfterReboot:
+            return "Đã cài tiện ích mở rộng hệ thống của VPNFlow. Hãy KHỞI ĐỘNG LẠI MÁY rồi bấm Connect."
+        case .canceled:
+            return "Bạn đã huỷ cài tiện ích mở rộng hệ thống của VPNFlow. Bấm Connect để thử lại."
+        case .missingEntitlement:
+            return "Bản cài này thiếu quyền cài system extension (profile ký chưa cấp `com.apple.developer.system-extension.install`). Cần bản phát hành mới."
+        case .notFound(let id):
+            return "Không thấy tiện ích mở rộng hệ thống “\(id)” trong ứng dụng. Bản cài có thể thiếu tệp .systemextension — hãy tải lại bản mới."
+        case .parentBundleLocation(let path):
+            return "macOS chỉ cho cài tiện ích mở rộng khi VPNFlow nằm trong thư mục Applications (hiện tại: \(path)). Hãy kéo VPNFlow vào Applications rồi mở lại."
+        case .codeSignature(let reason):
+            return "Chữ ký của tiện ích mở rộng hệ thống không hợp lệ, macOS từ chối cài (\(reason)). Hãy tải lại bản phát hành chính thức."
+        case .validationFailed(let reason):
+            return "macOS không xác thực được tiện ích mở rộng hệ thống (\(reason)). Hãy tải lại bản phát hành chính thức."
+        case .forbiddenBySystemPolicy(let reason):
+            return "Chính sách hệ thống của máy chặn tiện ích mở rộng VPNFlow (\(reason)). Kiểm tra cấu hình MDM/System Settings."
+        case .superseded:
+            return "Yêu cầu cài tiện ích mở rộng hệ thống bị thay thế bởi một yêu cầu mới hơn. Bấm Connect để thử lại."
+        case .timedOut:
+            return "macOS không phản hồi yêu cầu cài tiện ích mở rộng hệ thống. Mở System Settings → Privacy & Security để kiểm tra VPNFlow, rồi bấm Connect lại."
+        case .other(let reason):
+            return "Không cài được tiện ích mở rộng hệ thống của VPNFlow (\(reason))."
+        }
+    }
+}
+
+/// Cầu `OSSystemExtensionRequest` → async/await. Mọi callback được giao trên cùng một hàng đợi
+/// (`.main`), nên chỉ cần một cờ `finished` để bảo đảm continuation chỉ được resume đúng một lần.
+private final class PacketTunnelSystemExtensionDelegate: NSObject, OSSystemExtensionRequestDelegate, @unchecked Sendable {
+    private let extensionIdentifier: String
+    private let appBundlePath: String
+    private let completion: (Result<Void, Error>) -> Void
+    private var finished = false
+
+    init(extensionIdentifier: String, appBundlePath: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        self.extensionIdentifier = extensionIdentifier
+        self.appBundlePath = appBundlePath
+        self.completion = completion
+    }
+
+    private func finish(_ result: Result<Void, Error>) {
+        guard !finished else { return }
+        finished = true
+        completion(result)
+    }
+
+    /// Hệ thống không gọi lại callback nào (người dùng để hộp thoại treo) ⇒ tự bỏ cuộc để UI không kẹt
+    /// ở "Connecting…". Cố ý chạy trên main actor: callback của request cũng ở main nên cờ `finished`
+    /// không bị tranh chấp.
+    @MainActor
+    func timeOut() {
+        finish(.failure(SystemExtensionActivationError.timedOut))
+    }
+
+    private func translate(_ error: Error) -> Error {
+        let ns = error as NSError
+        guard ns.domain == OSSystemExtensionErrorDomain,
+              let code = OSSystemExtensionError.Code(rawValue: ns.code) else {
+            return SystemExtensionActivationError.other(ns.localizedDescription)
+        }
+        switch code {
+        case .missingEntitlement:
+            return SystemExtensionActivationError.missingEntitlement
+        case .extensionNotFound:
+            return SystemExtensionActivationError.notFound(extensionIdentifier)
+        case .unsupportedParentBundleLocation:
+            return SystemExtensionActivationError.parentBundleLocation(appBundlePath)
+        case .codeSignatureInvalid:
+            return SystemExtensionActivationError.codeSignature(ns.localizedDescription)
+        case .validationFailed:
+            return SystemExtensionActivationError.validationFailed(ns.localizedDescription)
+        case .forbiddenBySystemPolicy:
+            return SystemExtensionActivationError.forbiddenBySystemPolicy(ns.localizedDescription)
+        case .requestCanceled:
+            return SystemExtensionActivationError.canceled
+        case .requestSuperseded:
+            return SystemExtensionActivationError.superseded
+        default:
+            return SystemExtensionActivationError.other(ns.localizedDescription)
+        }
+    }
+
+    /// Bản trong app LUÔN thay bản đang cài: khách vừa cập nhật app thì extension phải chạy đúng
+    /// code của bản đó (bản cũ hơn giữ lại sẽ tái hiện đúng lỗi "chạy code cũ" đã gặp).
+    func request(
+        _ request: OSSystemExtensionRequest,
+        actionForReplacingExtension existing: OSSystemExtensionProperties,
+        withExtension ext: OSSystemExtensionProperties
+    ) -> OSSystemExtensionRequest.ReplacementAction {
+        .replace
+    }
+
+    /// Người dùng phải tự bật extension trong System Settings. Đây KHÔNG phải lỗi hệ thống —
+    /// báo ngay cho khách biết phải làm gì (lần Connect sau, khi đã bật, sẽ chạy tiếp).
+    func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
+        finish(.failure(SystemExtensionActivationError.needsUserApproval))
+    }
+
+    func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
+        switch result {
+        case .completed:
+            finish(.success(()))
+        case .willCompleteAfterReboot:
+            finish(.failure(SystemExtensionActivationError.willCompleteAfterReboot))
+        @unknown default:
+            finish(.success(()))
+        }
+    }
+
+    func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
+        finish(.failure(translate(error)))
     }
 }

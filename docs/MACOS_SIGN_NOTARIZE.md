@@ -20,27 +20,70 @@ Profile Developer ID cho macOS **không cần UDID**. Tạo bằng script JS (No
 - Tạo: `POST /v1/profiles` với `attributes.profileType = **MAC_APP_DIRECT**`
   ⚠️ **KHÔNG** dùng `MAC_APP_DEVELOPER_ID` — API trả 409 *“not a valid value”* (đã mất thời gian vì lỗi này).
 - `attributes.profileContent` (base64) → ghi ra `<bundle>.provisionprofile`.
-Script tham chiếu: `/tmp/asc-profiles.mjs` (tạo lại nhanh: JWT + 3 request trên).
+Script tham chiếu: `scripts/asc-mac-devid-profiles.mjs` (JWT + 3 request trên, tự in quyền của profile vừa tạo).
+
+> ⛔ **BẮT BUỘC — bản ký Developer ID phải dùng SYSTEM EXTENSION, không dùng appex plugin.**
+> Profile Developer ID (`MAC_APP_DIRECT`) **về bản chất** chỉ cấp bộ `*-systemextension`
+> (`packet-tunnel-provider-systemextension`, `app-proxy-provider-systemextension`, …). Giá trị appex
+> `packet-tunnel-provider` **chỉ có ở profile không phải Developer ID** (Mac App Store / Mac Team
+> Provisioning) ⇒ kênh DMG **không thể** dùng appex, và **portal/API không đổi được bộ giá trị đó**
+> (`'NETWORK_EXTENSIONS' is not a valid value for settings/0/key`; đã thử cả App ID khác và
+> `platform=UNIVERSAL`).
+>
+> Vì vậy từ 26/09/2026 gói macOS phát cho khách có:
+> `VPNFlow.app/Contents/Library/SystemExtensions/com.privatevpn.mac.packet-tunnel.systemextension`
+> (KHÔNG còn `Contents/PlugIns/…appex`), quyền `packet-tunnel-provider-systemextension` ở **cả** app
+> và extension, `CFBundlePackageType = SYSX`, **bỏ** `NSExtension`, thêm dict `NetworkExtension`
+> (`NEMachServiceName` + `NEProviderClasses`) + `NSSystemExtensionUsageDescription` (Apple: thiếu khoá
+> này ⇒ **lỗi ngay lúc activation**), và app gọi `OSSystemExtensionRequest.activationRequest` trước khi
+> dựng tunnel. Sau khi ký, cổng §2(d) kiểm đúng cặp quyền `/ profile`.
+>
+> **Bằng chứng hai chiều đo trên máy thật 26/09/2026** (bản app cũ copy sang `/tmp`, ký lại rồi chạy):
+> | Chữ ký app khai | Kết quả chạy |
+> |---|---|
+> | `packet-tunnel-provider` | `Killed: 9` — `amfid … Code=-413` · `taskgated-helper: Unsatisfied entitlements: com.apple.developer.networking.networkextension` |
+> | `packet-tunnel-provider-systemextension` | **chạy được** (`ALIVE` sau 4 s) ⇒ app mở bình thường |
+>
+> ### 1b. `com.apple.developer.system-extension.install` — CHƯA cấp, ĐỪNG khai thêm
+> Apple ghi khoá `com.apple.developer.system-extension.install` là quyền để app **activate/deactivate
+> system extension** (“Add this entitlement for all system extension types”). **Profile Developer ID
+> hiện tại KHÔNG cấp khoá này** và nó là quyền hạn chế ⇒ khai thêm vào chữ ký là app **chết ngay**:
+> đo thật 26/09/2026 (cùng phép thử ở bảng trên, chỉ thêm khoá này):
+> ```
+> taskgated-helper: com.privatevpn.mac: Unsatisfied entitlements: com.apple.developer.system-extension.install
+> taskgated-helper: Disallowing: com.privatevpn.mac   →   Killed: 9
+> ```
+> Nên **không** đưa khoá này vào `app.ent.plist` cho tới khi profile cấp được nó. Nếu lần chạy thật
+> `OSSystemExtensionRequest` trả `OSSystemExtensionError` **`missingEntitlement`**: bật capability
+> **System Extension** cho 2 App ID mac (`com.privatevpn.mac`, `com.privatevpn.mac.packet-tunnel`) trên
+> portal → chạy lại `node scripts/asc-mac-devid-profiles.mjs` (kiểm profile **có**
+> `com.apple.developer.system-extension.install`) → **rồi mới** thêm
+> `<key>com.apple.developer.system-extension.install</key><true/>` vào `app.ent.plist` và ký lại.
 
 ## 2. Ký (inside-out, KHÔNG dùng export của Xcode để tránh “Cloud signing permission error”)
 ```bash
 ID="Developer ID Application: Minh Nguyen (G6XW3RN6LJ)"
-APP=…/VPNFlow.app; APPEX="$APP/Contents/PlugIns/PrivateVPNMacPacketTunnel.appex"
+APP=…/VPNFlow.app
+SYSEXT="$APP/Contents/Library/SystemExtensions/com.privatevpn.mac.packet-tunnel.systemextension"
 
-# (a) nhúng profile vào app + extension
+# (a) nhúng profile vào app + system extension (Apple bắt tên gói TRÙNG bundle identifier)
 cp com.privatevpn.mac.provisionprofile                "$APP/Contents/embedded.provisionprofile"
-cp com.privatevpn.mac.packet-tunnel.provisionprofile  "$APPEX/Contents/embedded.provisionprofile"
+cp com.privatevpn.mac.packet-tunnel.provisionprofile  "$SYSEXT/Contents/embedded.provisionprofile"
 
 # (b) KÝ FRAMEWORK CON TRƯỚC (nếu bỏ bước này, notarize sẽ Invalid)
-codesign --force --options runtime --timestamp --sign "$ID" "$APPEX/Contents/Frameworks/Hysteria.framework/Versions/A/Hysteria"
-codesign --force --options runtime --timestamp --sign "$ID" "$APPEX/Contents/Frameworks/Hysteria.framework"
+codesign --force --options runtime --timestamp --sign "$ID" "$SYSEXT/Contents/Frameworks/Hysteria.framework/Versions/A/Hysteria"
+codesign --force --options runtime --timestamp --sign "$ID" "$SYSEXT/Contents/Frameworks/Hysteria.framework"
 
-# (c) rồi mới tới extension và app (giữ nguyên quyền bằng entitlements hiện có)
-codesign -d --entitlements :- "$APPEX" > /tmp/ext.ent ; codesign -d --entitlements :- "$APP" > /tmp/app.ent
-codesign --force --options runtime --timestamp --sign "$ID" --entitlements /tmp/ext.ent "$APPEX"
+# (c) rồi mới tới system extension và app (giữ nguyên quyền bằng entitlements hiện có)
+codesign -d --entitlements :- "$SYSEXT" > /tmp/ext.ent ; codesign -d --entitlements :- "$APP" > /tmp/app.ent
+codesign --force --options runtime --timestamp --sign "$ID" --entitlements /tmp/ext.ent "$SYSEXT"
 codesign --force --options runtime --timestamp --sign "$ID" --entitlements /tmp/app.ent "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"      # phải "valid on disk"
 spctl -a -vv "$APP"    # trước notarize sẽ là: rejected / source=Unnotarized Developer ID  ← ĐÚNG, không phải lỗi
+
+# (d) CỔNG BẮT BUỘC: profile nhúng phải cấp ĐỦ quyền mà binary yêu cầu
+python3 scripts/mac-check-profile-entitlements.py "$SYSEXT" "$APP"    # exit 1 = DỪNG, không notarize
+# `scripts/mac-sign-notarize.sh` tự chạy cổng này ở bước 4b (đường dẫn system extension đã cập nhật).
 ```
 
 ## 3. DMG
@@ -73,6 +116,18 @@ và `codesign --verify --deep --strict`. Trên máy không phải macOS nó báo
 Vì sao cần: `spctl` trên **máy build** vẫn báo `Notarized Developer ID` dù DMG **chưa staple** (macOS
 đối chiếu online), nên rất dễ tưởng đã xong — trong khi máy khách (nhất là khi mạng yếu/không mạng)
 **không có vé** để đối chiếu ⇒ Gatekeeper chặn: *"không thể mở"*. Đúng ca 22/09/2026.
+
+⚠️ **Cổng §4a KHÔNG bắt được lỗi quyền/profile** — ca 26/09/2026: `stapler validate` DMG + `stapler
+validate` app + `spctl accepted / Notarized Developer ID` + `codesign --verify --deep --strict` **đều ĐẠT**
+trên bản **không mở được**. Vì vậy trước khi phát hành còn **2 việc bắt buộc**:
+1. cổng quyền Ở §2(d) / `scripts/mac-check-profile-entitlements.py` (bắt cặp quyền
+   `packet-tunnel-provider-systemextension` của system extension khớp profile);
+2. **mở thử app trên máy Mac thật**:
+   ```bash
+   open -a /Applications/VPNFlow.app; sleep 4
+   ps -axo pid,command | grep "VPNFlow.app/Contents/MacOS" | grep -v grep   # KHÔNG có dòng nào = app chết ⇒ DỪNG
+   log show --last 2m --predicate 'eventMessage CONTAINS "VPNFlow"' | grep -iE "amfi|unsatisfied|not allow"  # phải TRỐNG
+   ```
 
 ### 4b. LUẬT: KHÔNG BAO GIỜ bắt khách chạy lệnh (chủ dự án chốt 22/09/2026)
 
@@ -112,11 +167,32 @@ scp/ssh cat > /root/flowvpn-mac/VPNFlow-mac.dmg
 curl -sI https://t1.meetflowai.site/v1/downloads/mac     # 200 + content-length khớp
 ```
 
+## 5b. CÀI LẠI ĐỂ THỬ: **PHẢI đổi `CURRENT_PROJECT_VERSION`** (đo thật 26/09/2026)
+System extension **KHÔNG** được nạp lại khi nội dung app đổi mà **số version giữ nguyên**:
+macOS đã chép gói vào `/Library/SystemExtensions/<UUID>/` lúc kích hoạt, nên cài lại cùng
+`1.4.7/23` (khác nội dung) thì tiến trình vẫn chạy **ảnh cũ** — đo thật: PID và binary không đổi
+sau khi `ditto` bản mới vào `/Applications` + mở lại app + `scutil --nc start`.
+
+```bash
+# 1) bump CURRENT_PROJECT_VERSION cho CẢ HAI target macOS trong project.yml (app + system extension,
+#    hai số PHẢI trùng nhau), iOS KHÔNG đụng tới.
+# 2) build → scripts/mac-sign-notarize.sh <app> 1.4.7-<N> --dmg → cài vào /Applications
+# 3) mở app (app gửi OSSystemExtensionRequest.activationRequest) rồi kiểm:
+systemextensionsctl list          # phải thấy đúng bản MỚI ở trạng thái [activated enabled]
+ps -Ao pid,lstart,comm | grep packet-tunnel   # PID/giờ khởi động PHẢI mới
+```
+Cùng Team ID + cùng bundle id ⇒ **không cần duyệt lại** (đã kiểm 22→23→24→25: bản cũ chuyển
+`[terminated waiting to uninstall on reboot]`, không hiện hộp thoại xin quyền). Đây cũng là luật
+artifact bất biến của `docs/VERSIONING.md` §3.3: cùng số version mà khác hash là **cấm** phát.
+
 ## 6. Lỗi đã gặp & cách xử
 | Lỗi | Nguyên nhân | Xử |
 |---|---|---|
 | `exportArchive Cloud signing permission error` / `No profiles for 'com.privatevpn.mac'` | ASC key **không đủ quyền** tạo profile Developer ID qua Xcode cloud signing | Tạo profile bằng **API** (§1) rồi **ký tay** (§2) |
 | `MAC_APP_DEVELOPER_ID is not a valid value` | sai enum | dùng **`MAC_APP_DIRECT`** |
-| notarize **Invalid**: *“…/Hysteria.framework/…/Hysteria: binary is not signed with a valid Developer ID certificate / no secure timestamp”* | framework Go nhúng chưa ký | ký framework **trước** appex/app (§2b) |
+| notarize **Invalid**: *“…/Hysteria.framework/…/Hysteria: binary is not signed with a valid Developer ID certificate / no secure timestamp”* | framework Go nhúng chưa ký | ký framework **trước** system extension/app (§2b) |
 | TestFlight: *90171 Invalid bundle structure … standalone executables* | App Store **cấm** binary rời trong framework (luật khác macOS) | phải **bỏ/đóng gói lại** framework cho bản App Store (chưa xong — xem manifest “Việc chưa xong”) |
 | Khách vẫn thấy cảnh báo dù đã notarize | DMG chưa ký hoặc staple sai thứ tự | làm đúng §3–§4 rồi `spctl` kiểm lại |
+| **`The application "VPNFlow" can't be opened.`** (hộp thoại trống, không nêu lý do) | `amfid … Code=-413 "No matching profile found"`: app/appex khai quyền **không có trong profile Developer ID**. Hai biến thể: (i) khai `packet-tunnel-provider` (giá trị appex) — profile chỉ có bộ `*-systemextension`; (ii) khai thêm `com.apple.developer.system-extension.install` — profile cũng không cấp. Ký + notarize + staple + spctl **vẫn ĐẠT** nên cổng cũ không thấy | dùng **system extension** + `packet-tunnel-provider-systemextension` (§1) và **không** khai `system-extension.install` khi profile chưa cấp (§1b) → ký lại + notarize; cổng `scripts/mac-check-profile-entitlements.py` (§2d) + mở thử app (§4a) |
+| DMG mở ra thấy **2 volume `VPNFlow` / `VPNFlow 1`**, Finder báo *"the item \"VPNFlow\" is in use"*, phải force quit mới cập nhật được | tên volume DMG cố định `VPNFlow` ⇒ mount nhiều bản thì trùng tên; và Finder **không thay được app đang chạy** | `mac-sign-notarize.sh` nay đặt tên volume theo version (`VPNFlow-<ver>`); trước khi cài: thoát app **và ngắt VPN** (appex đang chạy vẫn giữ bundle), đẩy hết volume cũ ra (`hdiutil detach`) |
+| `NEMachServiceName` trong Info.plist của system extension ra **thiếu tiền tố team** (`com.privatevpn.mac.packet-tunnel` thay vì `G6XW3RN6LJ.…`) | build Release bằng `CODE_SIGNING_ALLOWED=NO` (rồi ký lại sau) nên `$(TeamIdentifierPrefix)` không được định nghĩa ⇒ `builtin-infoPlistUtility -expandbuildsettings` thay bằng chuỗi rỗng. Khai `TEAM_IDENTIFIER_PREFIX` (HOA) **không** có tác dụng — phải khai **đúng tên biến** | `project.yml` target `PrivateVPNMacPacketTunnel` đặt `TeamIdentifierPrefix: G6XW3RN6LJ.`; kiểm lại sau build: `plutil -extract NetworkExtension.NEMachServiceName raw -o - "<…>.systemextension/Contents/Info.plist"` phải ra `G6XW3RN6LJ.com.privatevpn.mac.packet-tunnel` |

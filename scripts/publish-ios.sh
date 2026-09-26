@@ -2,9 +2,11 @@
 # publish-ios.sh — phát hành 1 IPA ad-hoc lên trang buy (đủ 10 bước PUBLISHER_PROCESS §1, in bằng chứng).
 #
 # Dùng:
-#   scripts/publish-ios.sh <ipa> <version> <build> [--dry-run] [--no-claim]
+#   scripts/publish-ios.sh <ipa> <version> <build> --device-test <file> [--dry-run] [--no-claim]
+#                          [--allow-rehash --reason "<chốt của ai, ngày nào>"] [--notes "<nội dung>"]
+#                          [--evidence <file ghi vào sổ; mặc định = file --device-test>]
 # Ví dụ:
-#   scripts/publish-ios.sh build/ios-adhoc-export/ipa/FlowVPN.ipa 1.4.2 19
+#   scripts/publish-ios.sh build/ios-adhoc-export/ipa/FlowVPN.ipa 1.4.2 19 --device-test build/ios-142-device-test.md
 #
 # Vì sao có: lần 1.4.1/18 (23/09/2026) phải làm tay 6 bước qua ssh; gom lại để không sót bước
 # (đặc biệt: verify TỪ TRONG IPA + backup bản cũ + đọc JSON trả về của PATCH, không tin exit code).
@@ -33,13 +35,22 @@ SSH="ssh -i $KEY -o ConnectTimeout=10"
 remote() { printf '%s\n' "$1" | $SSH "$JUMP" "$SSH $VPS bash -s"; }
 
 IPA="${1:-}"; VERSION="${2:-}"; BUILD="${3:-}"
-DRY=0; CLAIM=1; DEVICE_TEST=""
+DRY=0; CLAIM=1; DEVICE_TEST=""; ALLOW_REHASH=0; REASON=""; NOTES=""; EVIDENCE=""
 shift $(( $# < 3 ? $# : 3 ))
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1; shift ;;
     --no-claim) CLAIM=0; shift ;;
     --device-test) DEVICE_TEST="${2:-}"; shift 2 ;;
+    # Đường dẫn bằng chứng ghi vào sổ. Mặc định = chính file --device-test (luôn TỒN TẠI và đã bị
+    # cổng 1d kiểm). Trước đây hardcode `release/ios/RELEASE_NOTES_<version>.md` — ca thật 26/09/2026:
+    # file đó KHÔNG tồn tại cho 1.4.6 ⇒ dòng sổ trỏ vào đường dẫn chết, không ai mở lại được bằng chứng.
+    --evidence) EVIDENCE="${2:-}"; shift 2 ;;
+    # Ngoại lệ artifact bất biến (docs/VERSIONING.md §3.3): cùng version nhưng KHÁC sha256. Mặc định
+    # vẫn CHẶN; chỉ mở khi chủ dự án đã chốt, và lý do được ghi thẳng vào dòng sổ (xem release-record.mjs).
+    --allow-rehash) ALLOW_REHASH=1; shift ;;
+    --reason) REASON="${2:-}"; shift 2 ;;
+    --notes) NOTES="${2:-}"; shift 2 ;;
     *) echo "tham so la: $1" >&2; exit 2 ;;
   esac
 done
@@ -100,6 +111,32 @@ shared = [g for g in groups if "com.privatevpn.shared" in g]
 assert not shared, f"app còn khai nhóm keychain dùng chung {shared} — bản iOS mới không dùng"
 PY
 
+# ---------- 1e) CỔNG SỔ PHÁT HÀNH (BẮT BUỘC — chạy TRƯỚC khi upload) ----------
+# Vì sao có bước này: ghi sổ (7c) nằm SAU khi đã thay file đang phát (4) và PATCH mốc (6). Nếu sổ
+# từ chối dòng thì script chết GIỮA ĐƯỜNG — kênh đã đổi sang bản mới mà sổ không có dòng nào, và
+# người phát hành thấy "thất bại" trong khi khách đã nhận bản mới. Ca thật 26/09/2026: kênh iOS
+# đang ở 1.4.6 với HAI sha256 (build 50 + 54); định phát 1.4.6/build 57 ⇒ bước 7c sẽ `die` vì
+# artifact bất biến (docs/VERSIONING.md §3.3) nếu không truyền --allow-rehash --reason.
+# Thử --dry-run ở đây để DỪNG TRƯỚC khi động vào production.
+step "1e) Cổng sổ phát hành (release-record --dry-run, TRƯỚC khi upload)"
+[ -n "$NOTES" ] || NOTES="phát hành $VERSION ($BUILD) qua publish-ios.sh"
+[ -n "$EVIDENCE" ] || EVIDENCE="$DEVICE_TEST"
+[ -f "$EVIDENCE" ] || fail "file bằng chứng ghi vào sổ không tồn tại: $EVIDENCE"
+RECORD_ARGS=(append --platform ios --version "$VERSION" --build "$BUILD" \
+  --sha256 "$SHA" --size "$SIZE" --channel /v1/downloads/ios \
+  --marker-latest "$VERSION" --marker-build "$BUILD" \
+  --internal-version "$VERSION" --internal-build "$BUILD" \
+  --artifact /root/flowvpn-ipa/VPNFlow-latest.ipa \
+  --evidence "$EVIDENCE" --origin publish --recorded-by mac \
+  --verified-by "publish-ios.sh: cổng 1c/1e/5b ĐẠT + tải thật sha256 khớp + bằng chứng §2c: $DEVICE_TEST" \
+  --notes "$NOTES")
+if [ "$ALLOW_REHASH" = "1" ]; then
+  [ -n "$REASON" ] || fail "--allow-rehash bắt buộc phải kèm --reason \"<chốt của ai, ngày nào>\""
+  RECORD_ARGS+=(--allow-rehash --reason "$REASON")
+fi
+node "$REPO/scripts/release-record.mjs" "${RECORD_ARGS[@]}" --dry-run \
+  || fail "sổ phát hành sẽ TỪ CHỐI dòng này — sửa tham số TRƯỚC khi upload (chưa động vào production)"
+
 if [ "$DRY" = "1" ]; then
   step "DRY-RUN: các bước sẽ làm"
   echo "   2) claim release-ios trên board"
@@ -121,8 +158,17 @@ fi
 # ---------- 3+4) backup + upload + verify ----------
 step "3-5) Backup bản cũ, upload bản mới, verify trên server"
 TS="$(date +%Y%m%d-%H%M%S)"
-OLDV="$(remote "python3 - <<'P'\nimport zipfile,plistlib,io\nz=zipfile.ZipFile('/root/flowvpn-ipa/VPNFlow-latest.ipa')\nn=[x for x in z.namelist() if x.endswith('.app/Info.plist')][0]\nd=plistlib.loads(z.read(n))\nprint(d.get('CFBundleShortVersionString'),d.get('CFBundleVersion'))\nP" 2>/dev/null | tail -1)"
-echo "   bản đang phát: ${OLDV:-?}"
+# Đọc version bản ĐANG PHÁT để đặt tên bản sao lưu. Viết bằng `python3 -c` MỘT DÒNG, KHÔNG dùng heredoc:
+# `remote()` nhận chuỗi trong nháy kép, mà `"...\n..."` trong bash KHÔNG biến `\n` thành xuống dòng —
+# heredoc tới server dưới dạng MỘT dòng có ký tự `\` `n` thật ⇒ python lỗi cú pháp ⇒ OLDV rỗng ⇒ bản sao
+# lưu bị đặt tên `VPNFlow-latest.bak--<ts>.ipa` (mất phần version). Ca thật 26/09/2026 khi phát 1.4.6/57.
+# Cũng BỎ `2>/dev/null`: nuốt lỗi chính là thứ làm sự cố này im lặng suốt.
+OLDV="$(remote "python3 -c 'import zipfile,plistlib;z=zipfile.ZipFile(\"/root/flowvpn-ipa/VPNFlow-latest.ipa\");n=[x for x in z.namelist() if x.endswith(\".app/Info.plist\")][0];d=plistlib.loads(z.read(n));print(d.get(\"CFBundleShortVersionString\",\"?\"),d.get(\"CFBundleVersion\",\"?\"))'" | tail -1)"
+if [ -z "$OLDV" ]; then
+  echo "   ⚠️  KHÔNG đọc được version bản đang phát — tên bản sao lưu sẽ thiếu version (NỘI DUNG sao lưu vẫn đúng, đã cp -p nguyên file)."
+  OLDV="unknown"
+fi
+echo "   bản đang phát: $OLDV"
 remote "cp -p /root/flowvpn-ipa/VPNFlow-latest.ipa /root/flowvpn-ipa/VPNFlow-latest.bak-${OLDV// /-b}-$TS.ipa" || fail "backup lỗi"
 # Tải lên file TẠM rồi mới thay file đang phát: nếu ssh đứt giữa dòng (ca thật 23/09: key mất quyền
 # ⇒ khách tải được file CỤT 2,85 MB) thì route vẫn phục vụ bản cũ nguyên vẹn, không bao giờ cụt.
@@ -167,14 +213,7 @@ python3 "$REPO/scripts/check-publish-version.py" --platform ios --mode post --ve
 
 # ---------- 7c) ghi sổ phát hành (§VERSIONING) ----------
 step "7c) Ghi sổ release/releases.jsonl"
-node "$REPO/scripts/release-record.mjs" append --platform ios --version "$VERSION" --build "$BUILD" \
-  --sha256 "$SHA" --size "$SIZE" --channel /v1/downloads/ios \
-  --marker-latest "$VERSION" --marker-build "$BUILD" \
-  --internal-version "$VERSION" --internal-build "$BUILD" \
-  --artifact /root/flowvpn-ipa/VPNFlow-latest.ipa \
-  --evidence "release/ios/RELEASE_NOTES_$VERSION.md" --origin publish --recorded-by mac \
-  --verified-by "publish-ios.sh: cổng 1c/5b ĐẠT + tải thật sha256 khớp + bằng chứng §2c: $DEVICE_TEST" \
-  --notes "phát hành $VERSION ($BUILD) qua publish-ios.sh" || fail "ghi sổ lỗi"
+node "$REPO/scripts/release-record.mjs" "${RECORD_ARGS[@]}" || fail "ghi sổ lỗi"
 
 # ---------- 8) xong ----------
 step "8) Xong"

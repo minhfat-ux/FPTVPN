@@ -184,3 +184,56 @@ tự phục hồi: ĐÃ dựng lại transport (lần 1) — tunnel giữ nguyê
    **đường client→t1 chưa có bằng chứng máy thật**.
 2. Mẫu còn nhỏ (2 + 1 lần start). Ca hỏng trước đây là **chập chờn**, nên chưa đủ để nói "hết 100%".
 3. **Rò IPv6 vẫn còn** (bản 54 cố ý IPv4-only) — xem §7.3.
+
+---
+
+## 9. P2 — BỊT RÒ IPv6 (bản 55, chủ dự án duyệt 26/09/2026)
+
+Bản 54 **đúng code Android** (IPv4-only) nhưng còn **rò IPv6** trên mạng có IPv6. P2 bịt rò theo
+đúng **hành vi** Android, không lặp lại 2 lần hỏng trước.
+
+### 9.1 Vì sao 2 lần trước hỏng, và mảnh còn thiếu
+
+| Lần | Cách làm | Kết quả |
+|---|---|---|
+| 1 (22/09) | `::/0` **không** loại trừ relay | "mất mạng khi connect" (relay có AAAA bị hút vào tunnel) |
+| 2 (26/09) | `::/0` **có** loại trừ đúng dải relay | Vẫn hỏng: gói IPv6 vào tunnel rồi cầu ghi vào fd của Go, Go trả `errno=2` ⇒ **gói biến mất IM LẶNG** ⇒ app treo (iPad "siêu chậm, không xem nổi Netflix") |
+
+⇒ Loại trừ đúng là điều kiện **CẦN, không ĐỦ**. Thiếu mảnh: **phải TRẢ LỖI cho app**.
+Android không dính cả 2 vì nền tảng nó **chặn theo family mặc định** (app nhận lỗi NGAY) — iOS không có.
+
+### 9.2 Đã làm
+
+| File | Thay đổi |
+|---|---|
+| `iOS/PrivateVPNPacketTunnel/IPv6Reject.swift` | **MỚI** — logic THUẦN dựng `ICMPv6 Destination Unreachable (type 1, code 0)` + checksum theo RFC 4443 (pseudo-header). Không trả lời cho chính ICMPv6 (sai RFC, dễ thành vòng) |
+| `HysteriaTransport.swift` | `TunnelBridge.forwardToGo`: gói IPv6 **KHÔNG** đưa cho Go nữa — gọi `rejectIPv6` ⇒ gửi ICMPv6 unreachable về `packetFlow` ⇒ app lùi IPv4 **tức thì**. Thêm bộ đếm `toGoIPv6Blocked` + log `bridge: IPv6 BỊ CHẶN #N` |
+| `HysteriaPacketTunnelProvider.swift` | Bật lại `ipv6Settings`: `::/0` + loại trừ dải Cloudflare (relay) + `cn6.txt` (TQ) + link-local |
+| `project.yml` | Thêm `IPv6Reject.swift` vào **2** target extension (iOS + macOS); build 54 → **55** |
+| `scripts/ios-typecheck.sh`, `ios-pure-logic-tests/{run.sh,main.swift}` | Nạp file mới; **+12 test** (gồm **tự kiểm checksum**) |
+
+### 9.3 Bằng chứng cổng
+
+```text
+bash scripts/ios-typecheck.sh        -> extension 0 lỗi · app 0 lỗi
+bash scripts/ios-pure-logic-tests    -> 517/517 PASS, 0 FAIL   (trước P2: 505)
+python3 scripts/ios-lint-locks.py    -> ĐẠT
+bash scripts/ios-verify-ipa.sh ... --version 1.4.6 --build 55
+                                     -> ✅ ĐẠT — được phép cài/phát hành (8/8 mục)
+devicectl install                    -> "App installed" trên CẢ iPhone và iPad
+```
+
+### 9.4 Tiêu chí nghiệm thu P2 (máy thật, mạng CÓ IPv6)
+
+1. **Hết rò**: trên 5G, `curl -6 ifconfig.co` **KHÔNG** trả IP nhà mạng (trả IP exit node hoặc lỗi).
+2. **Không treo (quan trọng nhất)**: duyệt web + **Netflix ≥10 phút** bình thường; `bw: sample observed`
+   **tăng** khi tải.
+3. **Log phải chứng minh**: có dòng `bridge: IPv6 BỊ CHẶN #1, #2, …` (bộ đếm TĂNG) và **KHÔNG** còn
+   `packetFlow→Go (AF=30 … errno=2)`.
+4. `ios-log-acceptance.py <relay.log> --crash-dir <crash>` exit 0.
+
+### 9.5 Rủi ro còn lại của P2
+
+- Nếu một dịch vụ **chỉ có IPv6** (IPv6-only) thì nó sẽ **không dùng được** qua VPN — nhưng đó là
+  đánh đổi có ý thức (giống Android), và **không rò** nữa.
+- Nhánh dự phòng relay `t1.meetflowai.site` **vẫn chưa được chạy thật** trên client (§8).

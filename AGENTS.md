@@ -170,3 +170,38 @@ Bảng 6 ca + tiêu chí đạt nằm ở tài liệu đầu mục này. "Chắc
 3. **Phiên đầu file** (trước mốc `build: version=` đầu tiên) vẫn được chấm với nhãn build `?` — ca
    một chiều ở (1) nằm đúng trong phần đầu file, cổng cũ bỏ qua nguyên ca.
 
+
+### 7e. Thao tác production & debug — LUẬT AN TOÀN (thêm 26/09/2026, sau sự cố thật)
+
+> Ca thật: agent chặn `relay-cf-vn2hy` trên node-2 để test failover **nhưng chính SSH đang đi qua tunnel đó**
+> ⇒ lệnh "mở lại" không bao giờ chạy, relay nằm chết ~25 phút, **không có watchdog nào tự khôi phục**,
+> và client (macOS) không failover sang `vn1hy` nên khách mất mạng. Ba lỗi chồng nhau — luật dưới đây chặn cả ba.
+
+1. **Trước khi dừng/chặn BẤT KỲ dịch vụ nào trên đường khách đi** (`relay-cf-*`, `wsrelay-*`, `wgrelay-*`,
+   caddy, `flowvpn-cp`, guard): phải có **lệnh tự hồi chạy TÁCH khỏi phiên hiện tại** được đặt TRƯỚC đó, ví dụ
+   ```bash
+   ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162 \
+     'nohup sh -c "sleep 40; systemctl start relay-cf-vn2hy" >/dev/null 2>&1 & echo scheduled'
+   ```
+   Không có dòng `scheduled` ⇒ **không được** dừng dịch vụ.
+2. **Không bao giờ thao tác lên chính đường mà phiên điều khiển của mình đang dùng.** Máy Mac vào internet
+   **qua tunnel**, nên SSH tới node-2 cũng đi qua tunnel ⇒ tắt relay = tự cắt đường cứu hộ. Muốn test phải
+   dùng **node/relay KHÁC** với relay đang chở phiên, hoặc đường ngoài tunnel (Tailscale `100.76.147.111` → node-1 → node-2).
+3. **Sau mọi thao tác: kiểm lại trạng thái thật, không tin lệnh đã chạy** — dịch vụ `active` **và** mọi relay
+   phải trả `HTTP 426` (WebSocket sẵn sàng):
+   ```bash
+   for r in vn1hy vn2hy vn1wg vn2wg; do curl -s -o /dev/null -w "$r=%{http_code} " https://api.meetflowai.site/relay/$r; done
+   ```
+   Kết quả mong đợi: cả bốn `=426`. Xong phải kiểm tunnel trên máy khách vẫn `Connected`.
+4. **Bí mật không được vào argv**: `xcodebuild … HYST_PASSWORD=…` khiến credential hiện trong `ps` cho mọi
+   tiến trình cùng máy đọc được (phát hiện 26/09/2026). Dùng `export HYST_PASSWORD=…` rồi gọi `xcodebuild` không kèm
+   tham số; và **kiểm build đang chạy bằng `pgrep -f xcodebuild >/dev/null`, KHÔNG dùng `pgrep -fl`** (in cả argv).
+5. **Watchdog phía server ĐÃ CÓ (26/09/2026)** — `flowvpn-health-watch` (systemd timer 45 s + cron dự phòng `*/2`)
+   trên node-2: kiểm 8 unit đường khách + 4 relay phải trả `426`, tự `start`/`restart` (không bao giờ `stop`),
+   chống rung 60 s/unit, gửi **Telegram cho mọi harness/agent** (2 tin: PHÁT HIỆN + KẾT QUẢ, ESCALATE nếu
+   không tự khôi phục được) và lưu bản vào `/var/lib/flowvpn-coord/inbox/{mac,windows,server}/`.
+   Đã kiểm chứng: dừng `relay-cf-vn2wg` → phát hiện sau **41 s** → tự `start` lại → 2 tin Telegram
+   (`message_id` 1656/1657) → `flowvpn-safe-status` 8/8 unit `active+enabled`, 4 relay `=426`.
+   **Dùng `flowvpn-safe-stop <unit> [giây]`** (tự đặt auto-restore tách phiên và **từ chối** nếu unit đang chở
+   phiên điều khiển — exit 3) và `flowvpn-safe-status` sau mỗi lần test. Chi tiết + đường cứu hộ khi tunnel chết:
+   `docs/SERVER_RECOVERY_RUNBOOK.md`. Luật (1)+(2) ở trên vẫn bắt buộc dù đã có watchdog.

@@ -14,9 +14,11 @@ swiftc -O \
   "$SRC/TransportLadder.swift" \
   "$SRC/GoodputMeter.swift" \
   "$SRC/ChinaRouteBypass.swift" \
+  "$SRC/IPv6Reject.swift" \
   "$SRC/RouteReporter.swift" \
   "$SRC/RampStatus.swift" \
   "$ROOT/iOS/PrivateVPN/Services/HysteriaDefaults.swift" \
+  "$ROOT/mac/PrivateVPNMac/NetworkConflictDetector.swift" \
   "$ROOT/scripts/ios-pure-logic-tests/main.swift" \
   -o "$OUT/pure-tests"
 "$OUT/pure-tests"

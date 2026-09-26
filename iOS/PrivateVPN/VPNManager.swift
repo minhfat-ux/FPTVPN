@@ -176,6 +176,11 @@ final class VPNManager: ObservableObject {
                 // chung cho mọi node (xem `hysteriaConfiguration`).
                 hysteriaNode: store.availableNodes.first { $0.id == store.selectedNodeID }
                     ?? store.availableNodes.first,
+                // 26/09/2026 — danh sách node app ĐÃ TẢI: nguồn ứng viên ĐỔI NODE cho extension khi
+                // relay của node đang chọn KHÔNG kết nối được (ca thật macOS 26/09; iOS dùng chung
+                // tầng tunnel nên phải có cùng đường). Mỗi cửa đi kèm host của chính node đó ⇒ không
+                // bao giờ ghép lệch node (finding F3).
+                hysteriaNodes: store.availableNodes,
             )
             // State đã là .connecting từ đầu hàm; giữ nguyên tới khi tunnel lên.
             try manager?.connection.startVPNTunnel()
@@ -711,7 +716,8 @@ final class VPNManager: ObservableObject {
         _ config: WireGuardConfig,
         nodeId: String?,
         wsRelayURL: String? = nil,
-        hysteriaNode: ExitNode? = nil
+        hysteriaNode: ExitNode? = nil,
+        hysteriaNodes: [ExitNode] = []
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let matching = existing.filter { Self.isOwnProfile($0.localizedDescription) }
@@ -746,7 +752,8 @@ final class VPNManager: ObservableObject {
         // "Connected" mà không có mạng.
         if let hysteria = Self.hysteriaConfiguration(
             node: hysteriaNode,
-            endpoint: tunnelConfig.peers.first?.endpoint
+            endpoint: tunnelConfig.peers.first?.endpoint,
+            nodes: hysteriaNodes
         ) {
             providerConfiguration["hysteria"] = hysteria
             let relay = hysteria["relayURL"] as? String ?? "?"
@@ -793,7 +800,11 @@ final class VPNManager: ObservableObject {
     ///
     /// Trả nil khi thiếu credential hoặc không xác định được host: gọi ở đây phải nói rõ cho
     /// người dùng, KHÔNG được lặng lẽ bỏ qua.
-    private static func hysteriaConfiguration(node: ExitNode?, endpoint: String?) -> [String: Any]? {
+    private static func hysteriaConfiguration(
+        node: ExitNode?,
+        endpoint: String?,
+        nodes: [ExitNode] = []
+    ) -> [String: Any]? {
         guard let password = Bundle.main.object(forInfoDictionaryKey: "HysteriaPassword") as? String,
               !password.isEmpty,
               let obfs = Bundle.main.object(forInfoDictionaryKey: "HysteriaObfs") as? String,
@@ -805,16 +816,39 @@ final class VPNManager: ObservableObject {
         let host = Self.host(fromEndpoint: endpoint ?? node?.endpoint ?? "")
         guard !host.isEmpty else { return nil }
 
-        // Relay của ĐÚNG node đang dial, rồi tới relay mặc định (node-2). Relay WireGuard
-        // (`wg_relay_url`) KHÔNG dùng được ở đây: một relay chỉ hạ cánh ở một cổng UDP, gửi
-        // QUIC vào cổng WireGuard là im lặng.
-        let relay = (node?.endpoint == endpoint ? node?.hysteriaRelayURL : nil)
-            ?? HysteriaDefaults.relayURLCandidates.first ?? ""
+        // Relay của ĐÚNG node đang dial — finding F3 của `HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md`:
+        // KHÔNG mượn relay của node khác nữa. Một relay chỉ hạ cánh ở một node; ghép `serverHost` của
+        // node A với relay của node B là QUIC đi sai chỗ mà **không báo lỗi**. Node không khai relay
+        // ⇒ để rỗng ⇒ extension đi **UDP trực tiếp** (có nhánh xử lý + mã `relayURLMissing`).
+        // Relay WireGuard (`wg_relay_url`) KHÔNG dùng được ở đây: gửi QUIC vào cổng WireGuard là im lặng.
+        let relay = (node?.endpoint == endpoint ? node?.hysteriaRelayURL : nil) ?? ""
+        // 26/09/2026 — ứng viên ĐỔI ĐƯỜNG gồm relay của **node khác** (từ chính danh sách node app
+        // ĐÃ TẢI: control plane trả `hy_relay_url` cho TỪNG node) rồi mới tới cửa cùng node đổi
+        // hostname. Vì sao: relay của node đang chọn có thể KHÔNG kết nối được (ca thật 26/09/2026 —
+        // 24 lần `relay/vn2hy`, 0 lần `relay/vn1hy`, tunnel nằm `Disconnected`), mà `api.`/`t1.` chỉ
+        // là hai cửa vào CÙNG một dịch vụ relay. Mỗi cửa đi kèm host của CHÍNH node nó ⇒ giữ đúng
+        // finding F3 (không ghép `serverHost` node này với relay node khác).
+        let failover = HysteriaDefaults.failoverRelayCandidates(
+            currentRelay: relay,
+            currentHost: host,
+            nodes: nodes.map { entry in
+                (
+                    nodeID: entry.id,
+                    relay: entry.hysteriaRelayURL ?? "",
+                    host: Self.host(fromEndpoint: entry.endpoint)
+                )
+            }
+        )
         return [
             "serverHost": host,
             "serverPort": Int(HysteriaDefaults.serverPort),
             "relayURL": relay,
-            "relayURLCandidates": HysteriaDefaults.relayURLCandidates,
+            // Cửa dự phòng CHỈ của node này: đổi hostname (`api` ↔ `t1`), GIỮ NGUYÊN path ⇒ không đổi node.
+            "relayURLCandidates": HysteriaDefaults.sameNodeRelayAlternates(for: relay),
+            // Cửa dự phòng ĐỔI NODE (mỗi cửa kèm host của chính node đó).
+            "relayNodeCandidates": failover.map {
+                ["relayURL": $0.relayURL, "serverHost": $0.serverHost]
+            },
             "password": password,
             "obfs": obfs,
             "upKbps": HysteriaDefaults.upKbps,

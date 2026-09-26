@@ -643,6 +643,123 @@ do {
     check(ChinaRouteBypass.isValidIPv6(HysteriaDefaults.tunIPv6Address),
           "vá IPv6: địa chỉ utun IPv6 phải hợp lệ")
 
+    // P2 — IPv6 không chở được thì trả ICMPv6 "Destination Unreachable" NGAY (Android parity),
+    // thay vì để gói IPv6 biến mất im lặng (app treo) hoặc đi thẳng ra ngoài (rò).
+    //
+    // 26/09/2026 — MÃ LỖI PHẢI LÀ 4, không phải 0. Bằng chứng (đo thật bản macOS 1.4.7/22 +
+    // mã nguồn XNU): `icmp6_input` xếp code 0/3 vào `PRC_UNREACH_NET`, và `tcp_notify` chỉ ghi
+    // `tp->t_softerror` cho nhóm đó ⇒ TCP **vẫn retransmit SYN** tới `t_rxtshift > 3` ⇒ `curl -6`
+    // treo **4,0 s** (5 SYN vào tunnel). Chỉ code 4 = `PRC_UNREACH_PORT` mới vào
+    // `tcp_drop_syn_sent` (`net.inet.tcp.icmp_may_rst=1`) ⇒ `connect()` trả ECONNREFUSED NGAY.
+    var v6 = [UInt8](repeating: 0, count: 48)
+    v6[0] = 0x60; v6[6] = 6; v6[7] = 64
+    for i in 0..<16 { v6[8 + i] = 0x20 }
+    for i in 0..<16 { v6[24 + i] = 0x30 }
+    switch IPv6Reject.destinationUnreachable(ipv6Packet: v6) {
+    case .unreachable(let reply):
+        checkEqual(reply.count, 40 + 8 + 48, "P2: độ dài = IPv6(40) + ICMPv6(8) + gói gốc(48)")
+        checkEqual(reply[0] >> 4, 6, "P2: version = 6")
+        checkEqual(Int(reply[6]), Int(IPv6Reject.nextHeaderICMPv6), "P2: next header = 58 (ICMPv6)")
+        checkEqual(reply[40], 1, "P2: ICMPv6 type 1 (Destination Unreachable)")
+        checkEqual(Int(reply[41]), Int(IPv6Reject.codePortUnreachable),
+                   "P2: MẶC ĐỊNH code 4 (port unreachable) — code 0 làm TCP treo 4 s rồi mới bỏ")
+        checkEqual(Int(reply[7]), Int(IPv6Reject.hopLimit), "P2: hop limit hợp lý")
+        checkEqual(Int(reply[4]) << 8 | Int(reply[5]), 8 + 48,
+                   "P2: payload length = ICMPv6(8) + gói gốc(48)")
+        checkEqual(Array(reply[24..<40]), Array(v6[8..<24]), "P2: đích = nguồn gói gốc (trả về đúng máy)")
+        checkEqual(Array(reply[48..<(48 + 48)]), v6, "P2: phần trích dẫn = nguyên gói gốc")
+        // Checksum phải TỰ KIỂM: zero ô checksum rồi tính lại phải ra đúng giá trị đã ghi.
+        var zeroed = Array(reply[40...])
+        let stored = UInt16(reply[42]) << 8 | UInt16(reply[43])
+        zeroed[2] = 0; zeroed[3] = 0
+        checkEqual(
+            IPv6Reject.icmpv6Checksum(source: Array(reply[8..<24]), destination: Array(reply[24..<40]),
+                                     message: zeroed),
+            stored,
+            "P2: checksum ICMPv6 khớp (tự kiểm lại)"
+        )
+    case .notIPv6, .ignoreICMPv6:
+        check(false, "P2: gói IPv6 TCP phải dựng được ICMPv6 unreachable")
+    }
+    // Code 0 vẫn phải dựng ĐÚNG (giữ để tham chiếu/dự phòng) — kiểm cả checksum để không ai
+    // "sửa" hàm mà bỏ qua byte code (checksum phủ cả byte code).
+    if case .unreachable(let noRoute) = IPv6Reject.destinationUnreachable(
+        ipv6Packet: v6, code: IPv6Reject.codeNoRoute
+    ) {
+        checkEqual(noRoute[41], 0, "P2: truyền code 0 ⇒ code 0 trong gói")
+        var zeroed = Array(noRoute[40...])
+        let stored = UInt16(noRoute[42]) << 8 | UInt16(noRoute[43])
+        zeroed[2] = 0; zeroed[3] = 0
+        checkEqual(
+            IPv6Reject.icmpv6Checksum(source: Array(noRoute[8..<24]),
+                                     destination: Array(noRoute[24..<40]), message: zeroed),
+            stored,
+            "P2: checksum cũng đúng khi code = 0"
+        )
+    } else {
+        check(false, "P2: code 0 phải dựng được")
+    }
+    var v4 = [UInt8](repeating: 0, count: 48); v4[0] = 0x45
+    check(IPv6Reject.destinationUnreachable(ipv6Packet: v4) == .notIPv6, "P2: IPv4 ⇒ notIPv6")
+    check(IPv6Reject.destinationUnreachable(ipv6Packet: [UInt8](repeating: 0, count: 20)) == .notIPv6,
+          "P2: gói cụt ⇒ notIPv6")
+    // ICMPv6 LỖI (type < 128; ở đây byte type = 0) ⇒ BỎ IM LẶNG: trả lỗi cho lỗi là sai RFC 4443
+    // §2.4(e) và có thể thành vòng.
+    var icmp6 = v6; icmp6[6] = IPv6Reject.nextHeaderICMPv6
+    check(IPv6Reject.destinationUnreachable(ipv6Packet: icmp6) == .ignoreICMPv6,
+          "P2: ICMPv6 lỗi (type < 128) ⇒ BỎ IM LẶNG (không trả lỗi cho lỗi)")
+    // `ping6` (Echo Request, type 128) thì PHẢI trả lỗi: im lặng ⇒ ping6 chờ hết thời gian chờ
+    // (đo thật: `ping6 -c1` mất 11,0 s). Echo Request là THÔNG TIN nên trả lỗi là hợp lệ.
+    var echo = v6; echo[6] = IPv6Reject.nextHeaderICMPv6
+    echo[IPv6Reject.ipv6HeaderLength] = IPv6Reject.typeEchoRequest
+    if case .unreachable(let echoUnreachable) = IPv6Reject.destinationUnreachable(ipv6Packet: echo) {
+        checkEqual(Int(echoUnreachable[41]), Int(IPv6Reject.codePortUnreachable),
+                   "P2: Echo Request ⇒ trả ICMPv6 unreachable code 4 (để ping6 báo lỗi, không treo)")
+    } else {
+        check(false, "P2: Echo Request phải được trả lỗi (không được bỏ im lặng)")
+    }
+    var other6 = echo; other6[IPv6Reject.ipv6HeaderLength] = 129   // Echo Reply
+    check(IPv6Reject.destinationUnreachable(ipv6Packet: other6) == .ignoreICMPv6,
+          "P2: ICMPv6 thông tin khác (Echo Reply 129) ⇒ bỏ im lặng")
+    // Đích MULTICAST (`ff00::/8`) ⇒ KHÔNG bao giờ trả lỗi (RFC 4443 §2.4(c)). Trên macOS route
+    // `ff00::/8` của utun có thật nên MLD/ND của chính tunnel đi vào cầu — thiếu chốt này là
+    // tunnel tự trả lỗi cho gói điều khiển của chính nó.
+    var multicast = v6; multicast[24] = 0xFF; multicast[25] = 0x02
+    check(IPv6Reject.destinationUnreachable(ipv6Packet: multicast) == .ignoreICMPv6,
+          "P2: đích multicast ⇒ bỏ im lặng (không trả lỗi cho MLD/ND)")
+    check(HysteriaDefaults.blockIPv6,
+          "P2: mặc định PHẢI BẬT chặn IPv6 (hạ tầng chỉ có IPv4) — đổi phải có lý do + báo cáo")
+    var big = [UInt8](repeating: 0, count: 4000); big[0] = 0x60; big[6] = 6
+    if case .unreachable(let r) = IPv6Reject.destinationUnreachable(ipv6Packet: big) {
+        checkEqual(r.count, 40 + 8 + IPv6Reject.maxQuotedBytes, "P2: gói lớn ⇒ trích tối đa 1232 byte")
+    } else {
+        check(false, "P2: gói lớn phải dựng được")
+    }
+
+    // F3 (`HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md`) — cửa relay dự phòng KHÔNG được đổi node:
+    // đổi hostname, GIỮ NGUYÊN path (path chứa mã node). Mượn relay node khác = QUIC sai đích im lặng.
+    let vn1Relay = "wss://api.meetflowai.site/relay/vn1hy"
+    let alternates = HysteriaDefaults.sameNodeRelayAlternates(for: vn1Relay)
+    checkEqual(alternates.first ?? "", "wss://t1.meetflowai.site/relay/vn1hy",
+               "F3: chỉ đổi host api→t1, giữ path /relay/vn1hy")
+    check(alternates.allSatisfy { $0.hasSuffix("/relay/vn1hy") },
+          "F3: KHÔNG cửa nào nhảy sang node khác")
+    checkEqual(HysteriaDefaults.sameNodeRelayAlternates(for: "").count, 0,
+               "F3: node không khai relay ⇒ KHÔNG mượn cửa của node khác")
+    checkEqual(HysteriaDefaults.sameNodeRelayAlternates(for: "wss://la.example/relay/vn9hy").count, 0,
+               "F3: host lạ ⇒ không đoán (thà một cửa còn hơn một cửa sai node)")
+    checkEqual(HysteriaDefaults.sameNodeRelayAlternates(for: "wss://t1.meetflowai.site/relay/vn2hy").first ?? "",
+               "wss://api.meetflowai.site/relay/vn2hy", "F3: chiều ngược t1 → api")
+
+    // F4 — ngân sách phiên PHẢI đủ cho MỌI cửa (bản 26/09 viết cứng 35 s < 4 × 10 s = 40 s).
+    let budget = HysteriaDefaults.sessionStartBudget
+    let neededForAllDoors = HysteriaDefaults.relayOpenGrace * Double(HysteriaDefaults.maxRelayDoorsPerNode)
+    check(budget > neededForAllDoors,
+          "F4: sessionStartBudget \(budget)s phải LỚN HƠN \(neededForAllDoors)s (số cửa tối đa × grace)")
+    checkEqual(HysteriaDefaults.sameNodeRelayAlternates(for: vn1Relay).count,
+               HysteriaDefaults.maxRelayDoorsPerNode - 1,
+               "F4: số cửa mỗi node khớp maxRelayDoorsPerNode (dự phòng = max - 1)")
+
     // Cờ RÚT LUI của A7 macOS (tắt được để quay về bước 1 — 4 dải LAN).
     check(ChinaRouteBypass.bypassEnabled(compiledDefault: true, override: nil),
           "cờ rút lui: không ghi đè ⇒ theo mặc định biên dịch (BẬT)")
@@ -1737,6 +1854,113 @@ do {
                "19:43:13 — cửa sổ 2 vẫn 0 gói VỀ ⇒ ĐỔI ĐƯỜNG (lần dựng lại 3 sẽ ở đường mới)")
 }
 
+print("RelayUnreachableWatch + ung vien doi NODE — relay KHONG KET NOI DUOC (ca that 26/09/2026, relay vn2hy)")
+
+do {
+    typealias W = RelayUnreachableWatch
+
+    // Ngưỡng mặc định phải nằm trong khoảng 20–30 s mà brief 26/09/2026 yêu cầu, và khớp hằng số
+    // của provider (`relayUnreachableLimit`).
+    checkEqual(W.defaultLimit, 20, "ngưỡng mặc định 20 s (trong khoảng 20–30 s của yêu cầu)")
+    check(W().limit == 20, "mặc định của instance = 20 s")
+
+    // (1) Link MỚI đứt: chưa đủ ngưỡng ⇒ KHÔNG đổi đường (một cú rớt WS thoáng qua không được tính).
+    var a = W(limit: 20)
+    checkEqual(a.noteLinkDown(now: t0), .waiting, "nhịp đầu tiên: mở cửa sổ, chưa đổi đường")
+    checkEqual(a.noteLinkDown(now: t0.addingTimeInterval(5)), .waiting, "+5 s: chưa đủ 20 s")
+    checkEqual(a.noteLinkDown(now: t0.addingTimeInterval(19.9)), .waiting, "+19,9 s: vẫn chưa đủ")
+    check(a.isUnreachable, "đang trong chuỗi 'không kết nối được'")
+
+    // (2) Đủ ngưỡng ⇒ ĐỔI cửa/node kế tiếp (đây là thứ luật 25/09 KHÔNG làm được vì không có cửa sổ).
+    checkEqual(a.noteLinkDown(now: t0.addingTimeInterval(20)), .advance(20),
+               "+20 s: ĐỔI ứng viên đường (đúng mốc nghiệm thu)")
+    checkEqual(a.advances, 1, "đếm 1 lần đổi vì relay không mở nổi link")
+
+    // (3) Cửa MỚI cũng không mở được ⇒ phải chờ ĐỦ ngưỡng cho CHÍNH NÓ rồi mới đổi tiếp (quay vòng),
+    //     KHÔNG xoay vòng dồn dập (mỗi lần đổi là một lần dựng lại transport).
+    checkEqual(a.noteLinkDown(now: t0.addingTimeInterval(25)), .waiting,
+               "cửa mới +5 s ⇒ chưa đổi (cửa sổ mới bắt đầu từ lúc đổi)")
+    checkEqual(a.noteLinkDown(now: t0.addingTimeInterval(40)), .advance(20),
+               "cửa mới +20 s vẫn hỏng ⇒ đổi tiếp (quay vòng, KHÔNG bỏ mặc khách)")
+    checkEqual(a.advances, 2, "đã đổi 2 cửa — KHÔNG có trần cứng nào chặn việc quay vòng")
+
+    // (4) Link mở lại ⇒ xoá chuỗi kẹt: cửa sổ kế tiếp phải đếm lại từ đầu (không đổi đường oan).
+    var b = W(limit: 20)
+    _ = b.noteLinkDown(now: t0)
+    b.noteLinkUp()
+    check(!b.isUnreachable, "link mở lại ⇒ không còn ở trạng thái 'không kết nối được'")
+    checkEqual(b.noteLinkDown(now: t0.addingTimeInterval(19)), .waiting,
+               "đếm lại từ đầu: +19 s vẫn chưa đủ ngưỡng")
+    checkEqual(b.noteLinkDown(now: t0.addingTimeInterval(39)), .advance(20),
+               "+39 s ⇒ đủ 20 s của cửa sổ MỚI ⇒ đổi đường")
+
+    // (5) DIỄN LẠI ĐÚNG ca thật 26/09/2026: chặn `relay-cf-vn2hy` lúc 14:59:07, nhịp kiểm tra 5 s,
+    //     ngưỡng 20 s ⇒ tới ~14:59:27 (20 s) client đã có lệnh ĐỔI NODE (mốc nghiệm thu < 30 s), chứ
+    //     KHÔNG bám `vn2hy` 24 lần rồi rơi vào Disconnected như bản 1.4.7/25.
+    var real = W(limit: 20)
+    checkEqual(real.noteLinkDown(now: t0), .waiting, "14:59:12 — link vn2hy vừa đứt")
+    checkEqual(real.noteLinkDown(now: t0.addingTimeInterval(5)), .waiting, "14:59:17 — +5 s")
+    checkEqual(real.noteLinkDown(now: t0.addingTimeInterval(10)), .waiting, "14:59:22 — +10 s")
+    checkEqual(real.noteLinkDown(now: t0.addingTimeInterval(15)), .waiting, "14:59:27 — +15 s")
+    checkEqual(real.noteLinkDown(now: t0.addingTimeInterval(20)), .advance(20),
+               "14:59:32 — +20 s: ĐỔI NODE (vn2hy → vn1hy), KHÔNG còn bám một relay")
+    checkEqual(real.advances, 1, "1 lần đổi đường trong ca thật này")
+
+    // ỨNG VIÊN ĐỔI NODE: thứ tự + danh tính node (finding F3 vẫn giữ — không ghép lệch node).
+    let vn2 = "wss://api.meetflowai.site/relay/vn2hy"
+    let vn1 = "wss://api.meetflowai.site/relay/vn1hy"
+    let nodes: [(nodeID: String, relay: String, host: String)] = [
+        (nodeID: "vietnam-2", relay: vn2, host: "165.101.114.162"),
+        (nodeID: "node-1", relay: vn1, host: "103.173.155.50"),
+    ]
+    let list = HysteriaDefaults.failoverRelayCandidates(
+        currentRelay: vn2, currentHost: "165.101.114.162", nodes: nodes
+    )
+    checkEqual(list.count, 2, "vn2hy ⇒ 1 cửa node khác (vn1hy) + 1 cửa đổi hostname cùng node")
+    checkEqual(list.first?.relayURL ?? "", vn1,
+               "NODE KHÁC phải đứng TRƯỚC (dịch vụ relay chết thì api/t1 cùng chết)")
+    checkEqual(list.first?.serverHost ?? "", "103.173.155.50",
+               "F3: cửa vn1hy đi kèm host node-1 (KHÔNG ghép host node-2 với relay node-1)")
+    checkEqual(list.last?.relayURL ?? "", "wss://t1.meetflowai.site/relay/vn2hy",
+               "cửa cùng node (đổi hostname, GIỮ path) đứng SAU")
+    checkEqual(list.last?.serverHost ?? "", "165.101.114.162",
+               "cửa cùng node giữ nguyên host của node đang chọn")
+    check(list.allSatisfy { candidate in
+        // Không cửa nào được ghép lệch: relay chứa mã node nào thì host phải là của node đó.
+        (candidate.relayURL.contains("vn1hy") && candidate.serverHost == "103.173.155.50")
+            || (candidate.relayURL.contains("vn2hy") && candidate.serverHost == "165.101.114.162")
+    }, "F3: mọi cửa đều khớp node (relay ↔ serverHost)")
+
+    // Node đang chọn KHÔNG khai relay ⇒ KHÔNG mượn relay node khác (đi UDP trực tiếp, có nhánh riêng).
+    checkEqual(
+        HysteriaDefaults.failoverRelayCandidates(currentRelay: "", currentHost: "1.2.3.4", nodes: nodes).count,
+        0, "F3: node không khai relay ⇒ không mượn cửa của node khác"
+    )
+    // Node khác thiếu `hy_relay_url` ⇒ bỏ qua cửa đó, không tạo cửa rác.
+    let partial = HysteriaDefaults.failoverRelayCandidates(
+        currentRelay: vn2, currentHost: "165.101.114.162",
+        nodes: [(nodeID: "x", relay: "", host: "9.9.9.9"), (nodeID: "node-1", relay: vn1, host: "103.173.155.50")]
+    )
+    checkEqual(partial.first?.relayURL ?? "", vn1, "node không khai relay ⇒ bỏ qua, lấy node kế")
+
+    // Danh sách node dài: trần `maxRelayFailoverNodes` giữ ngân sách start không phình vô hạn.
+    var many: [(nodeID: String, relay: String, host: String)] = []
+    for n in 1...9 {
+        many.append((nodeID: "n\(n)", relay: "wss://api.meetflowai.site/relay/vn\(n)hy", host: "10.0.0.\(n)"))
+    }
+    let capped = HysteriaDefaults.failoverRelayCandidates(
+        currentRelay: vn2, currentHost: "165.101.114.162", nodes: many
+    )
+    checkEqual(capped.count, HysteriaDefaults.maxRelayFailoverNodes + 1,
+               "trần cửa node khác = maxRelayFailoverNodes (cộng cửa đổi hostname cùng node)")
+
+    // F4 (ngân sách start PHẢI đủ cho MỌI cửa, kể cả cửa node khác mới thêm 26/09/2026).
+    check(HysteriaDefaults.sessionStartBudget
+            > HysteriaDefaults.relayOpenGrace * Double(HysteriaDefaults.maxRelayDoorsTotal),
+          "F4: budget \(HysteriaDefaults.sessionStartBudget)s > \(HysteriaDefaults.relayOpenGrace)s × "
+            + "\(HysteriaDefaults.maxRelayDoorsTotal) cửa")
+}
+
 // MARK: - BUG-IOS-JETSAM-001: TRẦN CỨNG cho hàng đợi đường dữ liệu (26/09/2026)
 //
 // Vì sao phải test bằng số: extension iOS bị iOS giết ở trần per-process ≈51 MB
@@ -1854,6 +2078,410 @@ do {
     checkEqual(buffer.count, 512, "sau khi đặt lại vẫn đứng ở trần")
     buffer.removeAll()
     checkEqual(buffer.count, 0, "removeAll ⇒ rỗng (kết thúc phiên không giữ gói phiên cũ)")
+}
+
+// MARK: - NetworkConflictDetector (macOS) — app VPN/mạng khác tranh chấp
+
+// Bám đúng bộ ca của bản Windows (`windows/PrivateVPNWindows.Core.Tests/NetworkConflictDetectorTests.cs`)
+// + các ca riêng của macOS (utun giữ default route, proxy hệ thống, DNS nhà mạng không tới được,
+// MagicDNS của Tailscale). Số liệu dùng ở đây là số THẬT lấy từ máy chủ dự án 26/09/2026.
+print("NetworkConflictDetector (macOS) — app VPN/mạng khác tranh chấp")
+do {
+    func makeInputs(
+        vpns: [SystemVPNConfiguration] = [],
+        processes: [String] = [],
+        proxyEnabled: Bool = false,
+        proxyServer: String? = nil,
+        interfaces: [NetworkInterfaceInfo] = [],
+        dns: DNSResolverInfo = .empty
+    ) -> NetworkConflictInputs {
+        NetworkConflictInputs(
+            vpnConfigurations: vpns,
+            runningProcessNames: processes,
+            systemProxyEnabled: proxyEnabled,
+            systemProxyServer: proxyServer,
+            interfaces: interfaces,
+            dns: dns
+        )
+    }
+
+    func iface(
+        _ name: String,
+        detail: String = "",
+        tunnel: Bool = false,
+        own: Bool = false,
+        v4: Bool = false,
+        v6: Bool = false,
+        gateway: String? = nil,
+        address: Bool = false
+    ) -> NetworkInterfaceInfo {
+        NetworkInterfaceInfo(
+            name: name,
+            detail: detail,
+            isTunnelType: tunnel,
+            isOwn: own,
+            hasDefaultRouteV4: v4,
+            hasDefaultRouteV6: v6,
+            gatewayV4: gateway,
+            hasAssignedAddress: address
+        )
+    }
+
+    // (1) Interface nào là tunnel của app KHÁC (bám luật + danh sách của bản Windows).
+    check(NetworkConflictDetector.isForeignTunnelInterface(name: "utun4", isTunnelType: true),
+          "utun4 ⇒ interface tunnel của app khác")
+    check(!NetworkConflictDetector.isForeignTunnelInterface(name: "en0", isTunnelType: false),
+          "en0 (vật lý) KHÔNG phải tunnel của app khác")
+    check(!NetworkConflictDetector.isForeignTunnelInterface(name: "utun7", isTunnelType: true, isOwn: true),
+          "utun của CHÍNH VPNFlow (isOwn) ⇒ bỏ qua")
+    check(!NetworkConflictDetector.isForeignTunnelInterface(name: "VPNFlow", isTunnelType: true),
+          "interface mang tên VPNFlow ⇒ bỏ qua")
+    check(!NetworkConflictDetector.isForeignTunnelInterface(name: "PrivateVPN Tunnel", isTunnelType: true),
+          "interface mang tên PrivateVPN ⇒ bỏ qua")
+    check(NetworkConflictDetector.isForeignTunnelInterface(name: "", detail: "Clash Verge TUN", isTunnelType: false),
+          "mô tả chứa Clash Verge ⇒ tunnel của app khác")
+
+    // (2) Tiến trình: ca THẬT trên máy này (Tailscale.app + ovpnagent của OpenVPN Connect).
+    check(NetworkConflictDetector.isKnownProxyProcess("Tailscale"), "Tailscale ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("IPNExtension"), "IPNExtension (extension nền của Tailscale) ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("io.tailscale.ipn.macos.network-extension"),
+          "bundle id Tailscale ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("ovpnagent"), "ovpnagent (OpenVPN Connect) ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("/Applications/Clash Verge.app"),
+          "đường dẫn .app có khoảng trắng ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("sing-box.exe"), "sing-box.exe ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("Hysteria.exe"), "Hysteria.exe ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("verge-mihomo"), "verge-mihomo ⇒ nhận ra")
+    check(NetworkConflictDetector.isKnownProxyProcess("v2rayN.EXE"), "v2rayN.EXE ⇒ nhận ra")
+    check(!NetworkConflictDetector.isKnownProxyProcess("Google Chrome"), "Chrome ⇒ KHÔNG phải proxy")
+    check(!NetworkConflictDetector.isKnownProxyProcess("Safari"), "Safari ⇒ KHÔNG phải proxy")
+    check(!NetworkConflictDetector.isKnownProxyProcess("VPNFlow"), "chính VPNFlow ⇒ KHÔNG báo")
+    check(!NetworkConflictDetector.isKnownProxyProcess("com.privatevpn.mac"), "bundle của chính mình ⇒ KHÔNG báo")
+    check(!NetworkConflictDetector.isKnownProxyProcess("com.privatevpn.mac.packet-tunnel"),
+          "provider của chính mình ⇒ KHÔNG báo")
+    check(!NetworkConflictDetector.isKnownProxyProcess(nil), "nil ⇒ KHÔNG báo")
+    check(!NetworkConflictDetector.isKnownProxyProcess(""), "rỗng ⇒ KHÔNG báo")
+    checkEqual(NetworkConflictDetector.displayName(for: "IPNExtension"), "Tailscale",
+               "tên tiến trình nội bộ ⇒ tên khách hiểu được")
+    checkEqual(NetworkConflictDetector.displayName(for: "/Applications/Clash Verge.app"), "Clash Verge",
+               "đường dẫn app ⇒ tên sản phẩm")
+    checkEqual(NetworkConflictDetector.displayName(for: "ovpnagent"), "OpenVPN Connect",
+               "ovpnagent ⇒ OpenVPN Connect")
+
+    // (3) Hệ thống SẠCH: tunnel của chính mình giữ default route + DNS của mình ⇒ không cảnh báo.
+    let cleanDNS = DNSResolverInfo(
+        servers: ["1.1.1.1", "8.8.8.8"],
+        tunnelServers: ["1.1.1.1", "8.8.8.8"],
+        unreachableServers: [],
+        searchDomains: [],
+        isTunnelActive: true
+    )
+    let clean = makeInputs(
+        vpns: [SystemVPNConfiguration(
+            localizedDescription: "VPNFlow",
+            providerBundleIdentifier: "com.privatevpn.mac.packet-tunnel",
+            isConnected: true
+        )],
+        processes: ["Finder", "Google Chrome", "VPNFlow"],
+        interfaces: [
+            iface("en0"),
+            iface("utun7", tunnel: true, own: true, v4: true, v6: true, gateway: "100.100.100.101"),
+        ],
+        dns: cleanDNS
+    )
+    check(NetworkConflictDetector.analyze(clean).isEmpty,
+          "hệ thống sạch (tunnel của mình giữ route + DNS của mình) ⇒ KHÔNG cảnh báo")
+
+    // (4) Tunnel KHÁC giữ default route IPv4 ⇒ Blocking, nêu đúng tên interface.
+    let foreignV4 = makeInputs(
+        interfaces: [
+            iface("en0", v4: true, gateway: "192.168.1.1"),
+            iface("utun9", tunnel: true, v4: true, gateway: "198.18.0.1"),
+        ]
+    )
+    let v4Conflicts = NetworkConflictDetector.analyze(foreignV4)
+    checkEqual(v4Conflicts.count, 1, "chỉ một cảnh báo cho default route của tunnel khác")
+    checkEqual(v4Conflicts.first?.severity, .blocking, "tunnel khác giữ default route ⇒ Blocking")
+    checkEqual(v4Conflicts.first?.kind, .foreignDefaultRoute, "đúng loại xung đột")
+    check(v4Conflicts.first?.detail.contains("utun9") == true, "detail nêu tên interface utun9")
+    check(v4Conflicts.first?.facts.contains("utun9 (default route IPv4, gateway 198.18.0.1)") == true,
+          "facts nêu interface + family + gateway")
+    check(NetworkConflictDetector.worst(v4Conflicts)?.severity == .blocking, "worst() trả mức nặng nhất")
+
+    // (5) Chỉ default route IPv6 qua utun khác ⇒ vẫn Blocking (macOS có đường mặc định v6 riêng).
+    let foreignV6 = makeInputs(interfaces: [iface("utun5", tunnel: true, v6: true)])
+    let v6Conflicts = NetworkConflictDetector.analyze(foreignV6)
+    checkEqual(v6Conflicts.count, 1, "một cảnh báo cho default route IPv6")
+    checkEqual(v6Conflicts.first?.severity, .blocking, "default v6 qua utun khác ⇒ Blocking")
+    check(v6Conflicts.first?.facts.contains("utun5 (default route IPv6)") == true,
+          "facts ghi rõ family IPv6")
+    check(NetworkConflictDetector.analyze(makeInputs(interfaces: [iface("utun0", tunnel: true)])).isEmpty,
+          "utun khác KHÔNG giữ default route ⇒ không báo (tránh báo oan utun hệ thống)")
+
+    // (6) Proxy hệ thống đang bật ⇒ Blocking kèm địa chỉ proxy (Clash/Surge hay bật 127.0.0.1:7890).
+    let proxyConflicts = NetworkConflictDetector.analyze(
+        makeInputs(proxyEnabled: true, proxyServer: "127.0.0.1:7890")
+    )
+    checkEqual(proxyConflicts.count, 1, "một cảnh báo proxy hệ thống")
+    checkEqual(proxyConflicts.first?.severity, .blocking, "proxy hệ thống ⇒ Blocking (chặn đăng nhập/OTP)")
+    checkEqual(proxyConflicts.first?.kind, .systemProxyEnabled, "đúng loại xung đột proxy")
+    check(proxyConflicts.first?.detail.contains("127.0.0.1:7890") == true, "detail nêu địa chỉ proxy")
+    check(proxyConflicts.first?.facts == ["system proxy 127.0.0.1:7890"], "facts nêu địa chỉ proxy")
+
+    // (7) Chỉ có tiến trình app VPN chạy nền (Tailscale lúc đó `Disconnected`) ⇒ **Info, im lặng**.
+    //
+    // ĐỔI MỨC 26/09/2026 theo yêu cầu chủ dự án: ca thật log 15:39/15:41 chỉ có TIẾN TRÌNH chạy nền
+    // (Tailscale + `ovpnagent` của OpenVPN Connect), chưa chiếm route, chưa bật proxy — trước đây bị
+    // xếp Warning nên app hiện băng-rôn "tắt app kia đi" trong khi VPN đang chạy tốt. Mức mới: Info
+    // (chỉ ghi log + thẻ Diagnostics, KHÔNG băng-rôn/hộp thoại).
+    let processOnly = NetworkConflictDetector.analyze(
+        makeInputs(processes: ["google chrome", "IPNExtension", "ovpnagent", "Finder"])
+    )
+    checkEqual(processOnly.count, 1, "chỉ một cảnh báo cho tiến trình (gom nhiều app vào một dòng)")
+    checkEqual(processOnly.first?.severity, .info, "chỉ tiến trình chạy nền ⇒ Info (im lặng, chỉ ghi log)")
+    checkEqual(processOnly.first?.kind, .proxyProcessRunning, "đúng loại xung đột tiến trình")
+    checkEqual(processOnly.first?.facts, ["Tailscale", "OpenVPN Connect"],
+               "facts nêu TÊN APP khách hiểu, bỏ qua Chrome/Finder")
+
+    // (8) Đã có Blocking ⇒ tiến trình vẫn là Info (mức Info là mức duy nhất cho ca chỉ-có-tiến-trình).
+    let both = NetworkConflictDetector.analyze(
+        makeInputs(processes: ["clash-verge"], interfaces: [iface("utun9", tunnel: true, v4: true)])
+    )
+    checkEqual(both.count, 2, "hai cảnh báo: tunnel khác + tiến trình")
+    checkEqual(both.map(\.severity), [.blocking, .info], "Blocking đứng trước, tiến trình hạ xuống Info")
+    checkEqual(NetworkConflictDetector.worst(both)?.kind, .foreignDefaultRoute, "worst() = Blocking của route")
+
+    // (9) VPN khác đang Connected ⇒ Blocking, nêu tên cấu hình VPN.
+    let foreignVPN = NetworkConflictDetector.analyze(
+        makeInputs(vpns: [
+            SystemVPNConfiguration(
+                localizedDescription: "Tailscale",
+                providerBundleIdentifier: "io.tailscale.ipn.macos.network-extension",
+                isConnected: true
+            ),
+            SystemVPNConfiguration(
+                localizedDescription: "Vietnam-WireGuard",
+                providerBundleIdentifier: "com.wireguard.macos.network-extension",
+                isConnected: false
+            ),
+        ])
+    )
+    checkEqual(foreignVPN.count, 1, "chỉ tính VPN đang Connected (bỏ VPN đang tắt)")
+    checkEqual(foreignVPN.first?.severity, .blocking, "VPN khác Connected ⇒ Blocking")
+    checkEqual(foreignVPN.first?.kind, .foreignVPNConnected, "đúng loại xung đột VPN khác")
+    checkEqual(foreignVPN.first?.facts, ["Tailscale (Connected)"], "facts nêu tên VPN khác + trạng thái")
+    check(NetworkConflictDetector.analyze(
+        makeInputs(vpns: [SystemVPNConfiguration(
+            localizedDescription: "VPNFlow",
+            providerBundleIdentifier: "com.privatevpn.mac.packet-tunnel",
+            isConnected: true
+        )])
+    ).isEmpty, "VPN của CHÍNH VPNFlow Connected ⇒ KHÔNG báo")
+
+    // (10) Resolver không trả lời — ca thật 26/09/2026: `202.96.134.133` timeout làm DNS treo 5 s.
+    //
+    // HỢP ĐỒNG (luật 26/09/2026): bộ dò chỉ nhận `unreachableServers` ĐÃ ĐO ĐƯỢC — mà
+    // `NetworkConflictDNSProbePolicy` chỉ cho đo khi tunnel của MÌNH Connected. Ca này kiểm đúng phần
+    // thuần logic: có số đo ⇒ Warning, bất kể cờ `isTunnelActive` của ảnh chụp (xem thêm ca (15)).
+    let dnsDead = NetworkConflictDetector.analyze(
+        makeInputs(dns: DNSResolverInfo(
+            servers: ["202.96.134.133", "114.114.114.114"],
+            tunnelServers: ["1.1.1.1", "8.8.8.8"],
+            unreachableServers: ["202.96.134.133"],
+            searchDomains: [],
+            isTunnelActive: false
+        ))
+    )
+    checkEqual(dnsDead.count, 1, "một cảnh báo DNS (resolver chết + resolver lạ, tunnel CHƯA bật)")
+    checkEqual(dnsDead.first?.severity, .warning, "resolver không trả lời ⇒ Warning")
+    checkEqual(dnsDead.first?.kind, .unreachableDNSResolver, "đúng loại xung đột DNS chết")
+    checkEqual(dnsDead.first?.facts, ["DNS 202.96.134.133 (timeout)"], "facts nêu đúng resolver chết")
+
+    // (11) Tunnel đang bật nhưng DNS toàn cục KHÔNG phải DNS của tunnel ⇒ Warning (app khác chen DNS).
+    let dnsHijack = NetworkConflictDetector.analyze(
+        makeInputs(dns: DNSResolverInfo(
+            servers: ["202.96.134.133", "114.114.114.114"],
+            tunnelServers: ["1.1.1.1", "8.8.8.8"],
+            unreachableServers: [],
+            searchDomains: [],
+            isTunnelActive: true
+        ))
+    )
+    checkEqual(dnsHijack.count, 1, "một cảnh báo DNS bị chen khi tunnel đang bật")
+    checkEqual(dnsHijack.first?.kind, .foreignDNSResolver, "đúng loại xung đột DNS bị chen")
+    check(NetworkConflictDetector.analyze(
+        makeInputs(dns: DNSResolverInfo(
+            servers: ["202.96.134.133", "114.114.114.114"],
+            tunnelServers: ["1.1.1.1", "8.8.8.8"],
+            unreachableServers: [],
+            searchDomains: [],
+            isTunnelActive: false
+        ))
+    ).isEmpty, "tunnel CHƯA bật ⇒ resolver của mạng nền KHÔNG bị coi là xung đột (tránh báo oan DNS scoped của en0)")
+
+    // (12) MagicDNS của Tailscale đang cắm search domain ⇒ Warning (ca thật: Safari không vào được web).
+    let magicDNS = NetworkConflictDetector.analyze(
+        makeInputs(dns: DNSResolverInfo(
+            servers: ["1.1.1.1"],
+            tunnelServers: ["1.1.1.1"],
+            unreachableServers: [],
+            searchDomains: ["tail303be3.ts.net"],
+            isTunnelActive: false
+        ))
+    )
+    checkEqual(magicDNS.count, 1, "một cảnh báo cho search domain của app VPN khác")
+    checkEqual(magicDNS.first?.severity, .warning, "MagicDNS của app khác ⇒ Warning")
+    checkEqual(magicDNS.first?.kind, .foreignDNSSearchDomain, "đúng loại xung đột search domain")
+    checkEqual(magicDNS.first?.facts, ["tail303be3.ts.net"], "facts nêu đúng miền bị cắm")
+    check(NetworkConflictDetector.analyze(
+        makeInputs(dns: DNSResolverInfo(
+            servers: ["1.1.1.1"],
+            tunnelServers: ["1.1.1.1"],
+            unreachableServers: [],
+            searchDomains: ["corp.example.com", "lan"],
+            isTunnelActive: true
+        ))
+    ).isEmpty, "miền nội bộ thường (corp/lan) ⇒ KHÔNG báo")
+
+    // (13) Dòng log cho support: `Blocking — …` + mọi dữ liệu cụ thể, cách nhau bằng ` · `.
+    let summary = NetworkConflictDetector.summary(for: both)
+    checkEqual(summary, "Blocking — utun9 (default route IPv4) · Clash Verge",
+               "dòng log đúng định dạng chủ dự án yêu cầu")
+    checkEqual(NetworkConflictDetector.summary(for: []), "sạch", "hệ thống sạch ⇒ log ghi 'sạch'")
+    checkEqual(NetworkConflictDetector.analyze(.empty).count, 0, "đầu vào rỗng ⇒ không cảnh báo (không crash)")
+
+    // (14) Nhiều mức cùng lúc: Blocking trước, Warning sau, Info cuối (UI luôn thấy việc nặng nhất trước).
+    let mixed = NetworkConflictDetector.analyze(
+        makeInputs(
+            processes: ["mihomo"],
+            proxyEnabled: true,
+            proxyServer: "127.0.0.1:7890",
+            interfaces: [iface("utun9", tunnel: true, v4: true)],
+            dns: DNSResolverInfo(
+                servers: ["1.1.1.1"],
+                tunnelServers: ["1.1.1.1"],
+                unreachableServers: ["1.1.1.1"],
+                searchDomains: [],
+                isTunnelActive: true
+            )
+        )
+    )
+    checkEqual(mixed.map(\.severity), [.blocking, .blocking, .warning, .info],
+               "thứ tự mức: Blocking (route) → Blocking (proxy) → Warning (DNS) → Info (tiến trình)")
+    checkEqual(mixed.count, 4, "bốn xung đột độc lập đều được báo")
+
+    // ---------------------------------------------------------------------------------------------
+    // Các ca THÊM 26/09/2026 — siết cảnh báo "xung đột mạng" cho khỏi kêu oan (log thật 15:39/15:41).
+    // ---------------------------------------------------------------------------------------------
+
+    // (15) LUẬT ĐO DNS: chỉ đo khi tunnel của MÌNH đang Connected, và số đo trong lúc tunnel tắt/đang
+    //      nối KHÔNG được tính (kể cả bản nhớ tạm). Đây chính là nguồn cảnh báo DNS oan: lúc 15:39:38
+    //      và 15:41:24 tunnel đang `Disconnected` mà app vẫn gửi truy vấn ⇒ resolver nào cũng timeout.
+    check(NetworkConflictDNSProbePolicy.shouldMeasure(tunnelConnected: true),
+          "tunnel Connected ⇒ ĐƯỢC phép đo DNS")
+    check(!NetworkConflictDNSProbePolicy.shouldMeasure(tunnelConnected: false),
+          "tunnel chưa Connected ⇒ KHÔNG đo DNS (hết nguồn cảnh báo DNS oan)")
+    check(NetworkConflictDNSProbePolicy.canReuseCache(
+        tunnelConnected: true, measuredWhileConnected: true, age: 10
+    ), "số đo lúc Connected + còn TTL + tunnel vẫn Connected ⇒ dùng lại")
+    check(!NetworkConflictDNSProbePolicy.canReuseCache(
+        tunnelConnected: false, measuredWhileConnected: true, age: 10
+    ), "tunnel vừa tắt ⇒ KHÔNG dùng lại số đo cũ")
+    check(!NetworkConflictDNSProbePolicy.canReuseCache(
+        tunnelConnected: true, measuredWhileConnected: false, age: 10
+    ), "số đo được đo trong lúc tunnel tắt/đang nối ⇒ KHÔNG tính")
+    check(!NetworkConflictDNSProbePolicy.canReuseCache(
+        tunnelConnected: true, measuredWhileConnected: true, age: 301
+    ), "quá TTL 300 s ⇒ phải đo lại")
+    checkEqual(NetworkConflictDNSProbePolicy.cacheTTL, 300, "TTL số đo DNS = 5 phút")
+
+    // (16) Tunnel của app khác đang BẬT (có địa chỉ định tuyến được) nhưng KHÔNG giữ default route ⇒
+    //      Warning (vẫn cho kết nối) — đúng ca "app VPN kia đang Connected nhưng không giữ default route".
+    let foreignTunnelUp = NetworkConflictDetector.analyze(
+        makeInputs(interfaces: [iface("utun6", tunnel: true, address: true)])
+    )
+    checkEqual(foreignTunnelUp.count, 1, "một cảnh báo cho tunnel khác đang bật mà không giữ route")
+    checkEqual(foreignTunnelUp.first?.severity, .warning,
+               "tunnel khác ĐANG BẬT nhưng không giữ default route ⇒ Warning (không chặn)")
+    checkEqual(foreignTunnelUp.first?.kind, .foreignTunnelWithoutDefaultRoute,
+               "đúng loại xung đột tunnel-bật-không-giữ-route")
+    checkEqual(foreignTunnelUp.first?.facts, ["utun6 (đang bật, không giữ default route)"],
+               "facts nêu interface + lý do")
+    // utun RỖNG của hệ thống (chỉ có link-local `fe80::…%utunN`, không địa chỉ định tuyến được) ⇒ KHÔNG báo.
+    check(NetworkConflictDetector.analyze(
+        makeInputs(interfaces: [iface("utun0", tunnel: true), iface("utun1", tunnel: true)])
+    ).isEmpty, "utun rỗng của hệ thống (không địa chỉ) ⇒ KHÔNG báo oan")
+    // Cùng tunnel đó mà GIỮ default route ⇒ đã là Blocking, không phải Warning.
+    checkEqual(NetworkConflictDetector.analyze(
+        makeInputs(interfaces: [iface("utun6", tunnel: true, v4: true, address: true)])
+    ).first?.severity, .blocking, "giữ default route ⇒ Blocking (không hạ xuống Warning)")
+
+    // (17) CHỮ KÝ tình trạng — nền tảng của luật "chỉ nhắc khi mức/tình trạng ĐỔI" và nút "Không nhắc lại".
+    checkEqual(NetworkConflictDetector.signature(for: []), "", "hệ thống sạch ⇒ chữ ký rỗng")
+    checkEqual(
+        NetworkConflictDetector.signature(for: NetworkConflictDetector.analyze(
+            makeInputs(processes: ["clash-verge"], interfaces: [iface("utun9", tunnel: true, v4: true)])
+        )),
+        NetworkConflictDetector.signature(for: NetworkConflictDetector.analyze(
+            makeInputs(processes: ["clash-verge"], interfaces: [iface("utun9", tunnel: true, v4: true)])
+        )),
+        "cùng tình trạng ⇒ CÙNG chữ ký (mở lại app KHÔNG nhắc lại)"
+    )
+    check(NetworkConflictDetector.signature(for: processOnly) != NetworkConflictDetector.signature(for: both),
+          "khác mức/tình trạng ⇒ khác chữ ký (được nhắc lại)")
+    check(NetworkConflictDetector.signature(for: processOnly).hasPrefix("Info|"),
+          "chữ ký ghi rõ mức nặng nhất (Info ⇒ UI im lặng)")
+
+    // (18) Mức Info KHÔNG bao giờ lên băng-rôn/hộp thoại (UI chỉ hiện mức Warning trở lên).
+    checkEqual(NetworkConflictDetector.worst(processOnly)?.severity, .info,
+               "chỉ có tiến trình ⇒ mức nặng nhất là Info")
+    check(processOnly.allSatisfy { $0.severity == .info }, "mọi cảnh báo của ca này đều là Info")
+    check(!processOnly.contains { $0.severity == .warning || $0.severity == .blocking },
+          "không có mức nào gây nhiễu khách")
+
+    // (19) DỮ LIỆU THẬT của máy chủ dự án (26/09/2026, `loadAllFromPreferences` + `Global/IPv4`):
+    //      Tailscale `connected=true` nhưng KHÔNG giữ default route (en0 giữ), DNS toàn cục là DNS nhà
+    //      mạng, tunnel VPNFlow chưa bật ⇒ phải ra Blocking nêu tên Tailscale + Info cho tiến trình,
+    //      và TUYỆT ĐỐI không có cảnh báo DNS (vì chưa Connected nên không đo).
+    let realMachine = makeInputs(
+        vpns: [
+            SystemVPNConfiguration(
+                localizedDescription: "Tailscale",
+                providerBundleIdentifier: "io.tailscale.ipn.macos.network-extension",
+                isConnected: true
+            ),
+            SystemVPNConfiguration(
+                localizedDescription: "VPNFlow",
+                providerBundleIdentifier: "com.privatevpn.mac.packet-tunnel",
+                isConnected: false
+            ),
+            SystemVPNConfiguration(
+                localizedDescription: "Vietnam-WireGuard",
+                providerBundleIdentifier: "com.wireguard.macos.network-extension",
+                isConnected: false
+            ),
+        ],
+        processes: ["IPNExtension", "ovpnagent"],
+        interfaces: [iface("en0", v4: true, gateway: "10.0.3.254"), iface("utun0", tunnel: true)],
+        dns: DNSResolverInfo(
+            servers: ["202.96.134.133", "114.114.114.114"],
+            tunnelServers: ["1.1.1.1", "8.8.8.8"],
+            unreachableServers: [],
+            searchDomains: [],
+            isTunnelActive: false
+        )
+    )
+    let realConflicts = NetworkConflictDetector.analyze(realMachine)
+    checkEqual(realConflicts.map(\.severity), [.blocking, .info],
+               "dữ liệu thật: Tailscale Connected ⇒ Blocking; tiến trình nền ⇒ Info")
+    checkEqual(realConflicts.first?.facts, ["Tailscale (Connected)"],
+               "Blocking nêu ĐÚNG TÊN app đang Connected")
+    check(realConflicts.first?.kind == .foreignVPNConnected, "đúng loại xung đột VPN khác Connected")
+    check(!realConflicts.contains { $0.kind == .unreachableDNSResolver },
+          "tunnel chưa Connected ⇒ KHÔNG có cảnh báo DNS oan")
+    checkEqual(NetworkConflictDetector.summary(for: realConflicts),
+               "Blocking — Tailscale (Connected) · Tailscale · OpenVPN Connect",
+               "dòng log support grep được, đúng dữ liệu máy thật 26/09/2026")
 }
 
 print("")

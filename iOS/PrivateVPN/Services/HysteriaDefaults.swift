@@ -21,23 +21,118 @@ enum HysteriaDefaults {
     /// Cổng UDP hysteria của node (KHÔNG phải cổng relay).
     static let serverPort: UInt16 = 8443
 
-    /// Relay WebSocket dự phòng, thử LẦN LƯỢT khi cửa trước không mở được.
+    /// Trần thời gian chờ MỘT cửa relay mở được WebSocket (giây).
     ///
-    /// 26/09/2026 — thêm **CỬA VÀO THỨ HAI** (`t1.meetflowai.site`). Vì sao: log máy thật iPhone
-    /// trên 5G có `WS không mở được trong 6s` ⇒ `TUNNEL_START_FAILED`, mà lần ngay sau đó lại mở
-    /// được ⇒ hỏng **theo HOSTNAME**, không theo node. Trước bản này cả 2 candidate đều nằm trên
-    /// `api.meetflowai.site` nên "thử relay kế tiếp" **chỉ đổi node, không đổi cửa vào** ⇒ không
-    /// cứu được gì khi chính hostname đó chậm/bị chặn.
+    /// Ở đây (không nằm trong extension) để **app và extension dùng CHUNG một nguồn sự thật**, và để
+    /// harness `ios-pure-logic-tests` kiểm được bất biến "ngân sách phiên đủ cho mọi cửa" (xem
+    /// `startTimeout`). Đo trên mạng khách (China Mobile): một lượt mở WS mất tới **4,2 s** chỉ riêng
+    /// TCP connect; log máy thật iPhone 5G từng có `WS không mở được trong 6s` ⇒ 6 s quá sát.
+    static let relayOpenGrace: TimeInterval = 10
+
+    /// Số cửa vào TỐI ĐA cho MỘT node: cửa chính (`relayURL`) + các cửa thay hostname (xem
+    /// `sameNodeRelayAlternates`). Dùng để tính `startTimeout` ⇒ **không bao giờ lệch lại**.
+    static let maxRelayDoorsPerNode = 2
+
+    /// Số cửa TỐI ĐA lấy từ **node KHÁC** trong danh sách ứng viên đổi đường (xem
+    /// `failoverRelayCandidates`). Vì sao có trần: danh sách ứng viên càng dài thì ngân sách start
+    /// càng lớn (mỗi cửa tối đa `relayOpenGrace` = 10 s), mà danh sách node của control plane hiện
+    /// chỉ có 2 node ⇒ 2 cửa là đủ và giữ lần start đầu không bị kéo dài vô ích.
+    static let maxRelayFailoverNodes = 2
+
+    /// Trần số CỬA relay của CẢ danh sách ứng viên (cửa chính + dự phòng cùng node + node khác).
+    static var maxRelayDoorsTotal: Int { maxRelayDoorsPerNode + maxRelayFailoverNodes }
+
+    /// Trần thời gian cho TOÀN BỘ lần start (áp settings + dựng relay + bắt tay QUIC).
     ///
-    /// Thứ tự cố ý: cửa chính trước (nhanh hơn khi tốt), rồi mới sang cửa hai.
-    static let relayURLCandidates: [String] = [
-        "wss://api.meetflowai.site/relay/vn2hy",
-        "wss://api.meetflowai.site/relay/vn1hy",
-        // Cửa vào THỨ HAI — cùng Cloudflare nhưng KHÁC hostname ⇒ thoát được ca chặn/chậm theo tên.
-        // `t1` nằm chung site block Caddy với apex trên node-2 nên phục vụ được `/relay/*`.
-        "wss://t1.meetflowai.site/relay/vn1hy",
-        "wss://t1.meetflowai.site/relay/vn2hy"
-    ]
+    /// **TÍNH TỪ hằng số, KHÔNG viết số cứng.** Vì sao: bản 26/09 viết cứng 35 s nhưng lại có 4 cửa ×
+    /// 10 s = **40 s** ⇒ provider cắt ngang trước khi thử hết cửa (đúng finding F4 của bản review
+    /// `HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md`). Công thức dưới đây khiến việc thêm/bớt cửa
+    /// **tự** cập nhật ngân sách — kể cả khi thêm cửa của **node khác** (26/09/2026, xem
+    /// `failoverRelayCandidates`).
+    ///
+    /// Tên `sessionStartBudget` (KHÔNG phải `startTimeout`) để không lẫn với `startTimeout = 20` bên
+    /// dưới — hằng đó có nghĩa KHÁC: "bao lâu thì coi như hysteria không lên và rơi về WireGuard".
+    static let sessionStartBudget: TimeInterval =
+        relayOpenGrace * Double(maxRelayDoorsTotal) + 5
+
+    /// Các cửa relay DỰ PHÒNG cho **ĐÚNG node đang chọn** — suy ra từ chính `relayURL` của node.
+    ///
+    /// **BẤT BIẾN chống "sai đích im lặng" (finding F3):** giữ nguyên **PATH**, chỉ đổi **HOSTNAME**.
+    /// Path chứa mã node (`/relay/vn1hy`, `/relay/vn2hy`) nên đổi host **không bao giờ** nhảy sang node
+    /// khác. TUYỆT ĐỐI **không** mượn một danh sách relay toàn cục nhiều node: một relay chỉ hạ cánh ở
+    /// đúng một node, ghép `serverHost` của node A với relay của node B là QUIC đi sai chỗ mà **không
+    /// báo lỗi** — đúng loại lỗi khó chẩn đoán nhất.
+    ///
+    /// Trả `[]` khi node không khai relay ⇒ extension đi **UDP trực tiếp** (có nhánh xử lý riêng),
+    /// KHÔNG mượn relay của node khác.
+    static func sameNodeRelayAlternates(for relayURL: String) -> [String] {
+        guard !relayURL.isEmpty else { return [] }
+        let pairs = [
+            ("wss://api.meetflowai.site/", "wss://t1.meetflowai.site/"),
+            ("wss://t1.meetflowai.site/", "wss://api.meetflowai.site/"),
+        ]
+        for (from, to) in pairs where relayURL.hasPrefix(from) {
+            let swapped = to + relayURL.dropFirst(from.count)
+            guard swapped != relayURL else { return [] }
+            return [swapped]
+        }
+        // Host lạ (chưa từng gặp): KHÔNG đoán — thà một cửa còn hơn một cửa sai node.
+        return []
+    }
+
+    /// Một CỬA relay kèm **DANH TÍNH NODE** của nó.
+    ///
+    /// Vì sao phải đi CẶP (khác `relayURLCandidates: [URL]` cũ chỉ có URL): một relay chỉ hạ cánh ở
+    /// ĐÚNG node ghi trong path (`/relay/vn2hy`). Đổi sang relay của node khác mà vẫn giữ
+    /// `serverHost` của node cũ là ghép lệch node — đúng thứ finding F3 cấm (QUIC sai đích mà KHÔNG
+    /// báo lỗi). Đi cặp thì cửa nào cũng mang host của chính node đó, không thể ghép lệch.
+    struct RelayCandidate: Sendable, Equatable {
+        /// `wss://api.meetflowai.site/relay/vn1hy` — **path** mang mã node.
+        var relayURL: String
+        /// Host hysteria của CHÍNH node đó (`103.173.155.50`), KHÔNG phải host relay.
+        var serverHost: String
+    }
+
+    /// Danh sách ỨNG VIÊN ĐỔI ĐƯỜNG (theo THỨ TỰ THỬ) cho node đang chọn — KHÔNG gồm cửa chính.
+    ///
+    /// VÌ SAO PHẢI CÓ (ca thật 26/09/2026, macOS system extension 1.4.7/25, tunnel đi relay `vn2hy`
+    /// của node `vietnam-2`): relay `relay-cf-vn2hy` bị chặn phía server. Trong ~4 phút log extension
+    /// có **24 lần `relay/vn2hy` và 0 lần `relay/vn1hy`**, `framesFromRelay` = 0, rồi tunnel
+    /// `Disconnected` và NẰM ĐÓ — client không hề thử relay/node khác dù node-1 còn sống. Đường
+    /// failover cũ (`RelayFailoverWatch`) chỉ mở cửa sổ đánh giá SAU KHI dựng lại THÀNH CÔNG, nên ca
+    /// "KHÔNG kết nối được" không bao giờ có cửa sổ nào ⇒ không bao giờ đổi đường.
+    ///
+    /// Thứ tự có chủ đích — **node KHÁC trước, hostname khác của CÙNG node sau**:
+    ///   1. relay của các node khác trong danh sách app ĐÃ TẢI (`GET /v1/nodes` → `hy_relay_url`):
+    ///      đây mới là đường sống khi relay của node đang chọn chết. Hai hostname `api.`/`t1.` chỉ là
+    ///      hai cửa vào CÙNG một dịch vụ relay ⇒ dịch vụ chết thì cả hai đều chết (đúng ca 26/09:
+    ///      thử hostname khác của cùng node là vô ích, phải sang node khác);
+    ///   2. cửa cùng node đổi hostname (`api` ↔ `t1`): cứu ca HOST bị chặn/độc DNS mà node vẫn sống.
+    ///
+    /// Trả `[]` khi `currentRelay` rỗng (node không khai relay ⇒ extension đi **UDP trực tiếp**, có
+    /// nhánh xử lý riêng; KHÔNG mượn relay của node khác vì ghép lệch node là QUIC im lặng).
+    static func failoverRelayCandidates(
+        currentRelay: String,
+        currentHost: String,
+        nodes: [(nodeID: String, relay: String, host: String)]
+    ) -> [RelayCandidate] {
+        guard !currentRelay.isEmpty else { return [] }
+        var out: [RelayCandidate] = []
+        var seen: Set<String> = [currentRelay]
+        for node in nodes {
+            let relay = node.relay.trimmingCharacters(in: .whitespaces)
+            let host = node.host.trimmingCharacters(in: .whitespaces)
+            guard !relay.isEmpty, !host.isEmpty, !seen.contains(relay) else { continue }
+            seen.insert(relay)
+            out.append(RelayCandidate(relayURL: relay, serverHost: host))
+            if out.count >= maxRelayFailoverNodes { break }
+        }
+        for alternate in sameNodeRelayAlternates(for: currentRelay) where !seen.contains(alternate) {
+            seen.insert(alternate)
+            out.append(RelayCandidate(relayURL: alternate, serverHost: currentHost))
+        }
+        return out
+    }
 
     /// MTU của utun — hạ **1500 → 1300** theo `docs/TUNNEL_MTU_DNS_BUGREPORT.md` §4.1
     /// (cùng số với bản vá đã làm cho Android: `HY_MTU` 1500 → 1300).
@@ -71,6 +166,21 @@ enum HysteriaDefaults {
     /// lùi về IPv4 trong ~250 ms thay vì rò ra đường vật lý.
     /// (Đọc `tools/hysteria-android/mobile.go:243-251`: rỗng ⇒ bỏ qua, KHÔNG lỗi.)
     static let tunIPv6CIDR = ""
+
+    /// CÔNG TẮC đường CHẶN IPv6 của P2 (26/09/2026) — `true` = BẬT chặn.
+    ///
+    /// Vì sao mặc định BẬT: node/exit hiện tại **chỉ có IPv4** (node-2 `165.101.114.162` chỉ có
+    /// `fe80::/64`, KHÔNG có default IPv6 route ⇒ `ping6`/`curl -6` trả "Network is unreachable"
+    /// sau 0,018 s). Chở IPv6 qua tunnel là bất khả thi, nên đúng đắn là **trả lỗi tức thì** để app
+    /// lùi IPv4 ngay — mà vẫn kéo `::/0` vào tunnel nên IPv6 KHÔNG rò ra đường vật lý.
+    ///
+    /// ĐỔI SANG `false` khi node có IPv6 egress thật: gói IPv6 được chuyển tiếp bình thường vào Go
+    /// (hết `ICMPv6 Destination Unreachable`). Có HAI cách tắt:
+    ///  1. sửa hằng số này rồi build lại; hoặc
+    ///  2. **cờ chẩn đoán lúc chạy, không cần build lại**: tạo file rỗng `<app group>/ipv6-allow`
+    ///     (xem `RelayDiagnostics.isIPv6Allowed`). Thư mục app group trên macOS:
+    ///     `~/Library/Group Containers/G6XW3RN6LJ.com.privatevpn.shared/`.
+    static let blockIPv6 = true
 
     /// Dải IPv6 của Cloudflare — nguồn CHÍNH THỨC <https://www.cloudflare.com/ips-v6/>, lấy 26/09/2026.
     ///

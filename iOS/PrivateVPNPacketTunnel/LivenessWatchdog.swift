@@ -551,3 +551,78 @@ struct RelayFailoverWatch {
         fruitlessWindows = 0
     }
 }
+
+/// Luật **FAILOVER KHI KHÔNG KẾT NỐI ĐƯỢC relay** (26/09/2026) — anh em với `RelayFailoverWatch`.
+///
+/// VÌ SAO PHẢI CÓ (ca thật 26/09/2026, macOS system extension 1.4.7/25, tunnel đi relay `vn2hy` của
+/// node `vietnam-2`): relay bị chặn phía server (`systemctl stop relay-cf-vn2hy`). Trong ~4 phút, log
+/// extension có **24 lần `relay/vn2hy`, 0 lần `relay/vn1hy`**, `framesFromRelay` = 0, rồi tunnel
+/// `Disconnected` và nằm đó ~18 phút; chỉ khi người dùng đổi `selectedNodeID` sang node-1 thì tunnel
+/// mới lên lại (`relay/vn1hy`).
+///
+/// Vì sao `RelayFailoverWatch` (25/09) KHÔNG bắt được ca này: cửa sổ đánh giá của nó chỉ được MỞ
+/// trong `runTransportRecoveryAttempt`, tức là **SAU KHI** `rebuildTransportForLiveness()` trả `true`.
+/// Khi WS không mở nổi (relay chết hẳn), mọi lần dựng lại đều THẤT BẠI ⇒ **không cửa sổ nào được
+/// mở** ⇒ `tick` mãi trả `.waiting` ⇒ `advanceRelayCandidate` không bao giờ được gọi. Đó là khác
+/// biệt cốt lõi giữa hai ca:
+///   * 25/09 — relay KẾT NỐI ĐƯỢC mà không có gói về  ⇒ có cửa sổ ⇒ luật cũ chạy;
+///   * 26/09 — relay KHÔNG kết nối được (WS connect/handshake fail) ⇒ không cửa sổ nào ⇒ luật cũ câm.
+///
+/// Luật này đo ĐÚNG thứ cần đo: **đã bao lâu kể từ lúc LINK tới relay hiện tại mất/không mở được**.
+/// Quá `limit` ⇒ đổi ứng viên kế tiếp; nhịp sau vẫn hỏng thì lại đổi (quay vòng), GIỮ tunnel — không
+/// bỏ mặc khách ở `Disconnected`. Hàm THUẦN (không I/O) để harness test được toàn bộ luật — xem
+/// `scripts/ios-pure-logic-tests/main.swift`.
+struct RelayUnreachableWatch {
+
+    /// Kết quả một lần bơm trạng thái link.
+    enum Verdict: Equatable {
+        /// Link đang mở, hoặc chưa kẹt đủ ngưỡng ⇒ chưa làm gì.
+        case waiting
+        /// Link KHÔNG kết nối được đủ `limit` giây (giá trị = số giây đã kẹt) ⇒ đổi cửa kế tiếp.
+        case advance(TimeInterval)
+    }
+
+    /// Ngưỡng "relay hiện tại không kết nối được" (giây).
+    ///
+    /// 20 s: đủ dài để KHÔNG đổi đường vì một cú rớt WS thoáng qua (một lượt bắt tay lại của
+    /// Cloudflare/relay chỉ mất vài giây, và nhịp kiểm tra là 5 s), đủ ngắn để khách không phải chờ —
+    /// mốc nghiệm thu 26/09/2026 là "chặn relay → đổi đường/node → handshake ok → có gói về" trong
+    /// **< 30 s**. Nằm trong khoảng 20–30 s mà brief yêu cầu.
+    static let defaultLimit: TimeInterval = 20
+
+    let limit: TimeInterval
+    /// Lúc bắt đầu chuỗi "link không mở được" hiện tại (`nil` = link đang mở/chưa có bằng chứng).
+    private(set) var downSince: Date?
+    /// Số lần đã đổi cửa vì không kết nối được (chỉ để log/chẩn đoán).
+    private(set) var advances = 0
+    /// Mốc lần đổi cửa gần nhất — bằng chứng cho log "đã kẹt bao lâu".
+    private(set) var lastAdvanceAt: Date?
+
+    init(limit: TimeInterval = RelayUnreachableWatch.defaultLimit) {
+        self.limit = max(1, limit)
+    }
+
+    /// Link tới relay hiện tại KHÔNG kết nối được (WS chưa mở / vừa đứt). Gọi đều đặn (nhịp 5 s).
+    mutating func noteLinkDown(now: Date) -> Verdict {
+        guard let since = downSince else {
+            downSince = now
+            return .waiting
+        }
+        let elapsed = now.timeIntervalSince(since)
+        guard elapsed >= limit else { return .waiting }
+        // Mở cửa sổ MỚI cho ứng viên vừa đổi: nếu cửa mới cũng không mở được thì phải chờ đủ
+        // `limit` cho nó, KHÔNG xoay vòng dồn dập (mỗi lần đổi là một lần dựng lại transport).
+        downSince = now
+        advances += 1
+        lastAdvanceAt = now
+        return .advance(elapsed)
+    }
+
+    /// Link tới relay ĐANG mở ⇒ xoá chuỗi kẹt (không đổi đường oan).
+    mutating func noteLinkUp() {
+        downSince = nil
+    }
+
+    /// Relay hiện tại có đang trong chuỗi "không kết nối được" không (dùng để HOÃN tự gỡ tunnel).
+    var isUnreachable: Bool { downSince != nil }
+}
