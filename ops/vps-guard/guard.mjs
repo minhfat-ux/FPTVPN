@@ -255,6 +255,22 @@ export function scanSshExposure({ ssText = "", sshdEffectiveText = "", nftLocked
   return out;
 }
 
+/**
+ * Lớp chặn brute-force (autoban) còn sống không. Khi cổng 22 mở cho mọi nguồn thì đây là lớp
+ * bảo vệ CHÍNH — mất nó mà không ai biết là kịch bản xấu nhất (chủ dự án chốt phương án A 26/09).
+ */
+export function scanProtection({ autobanActive = true, passwordAuth = false } = {}) {
+  if (autobanActive) return [];
+  return [finding(
+    "protection-autoban-down", "high",
+    "Autoban chặn brute-force KHÔNG chạy",
+    passwordAuth
+      ? "Cổng 22 mở + VẪN cho đăng nhập mật khẩu + không có autoban ⇒ brute-force có thể vào được. Bật lại: systemctl enable --now flowvpn-autoban.timer"
+      : "Cổng 22 mở nhưng không còn lớp chặn IP dò (mật khẩu đã tắt nên rủi ro thấp hơn). Bật lại: systemctl enable --now flowvpn-autoban.timer",
+    "flowvpn-autoban.timer inactive",
+  )];
+}
+
 /** Hash tệp trọng yếu đổi ngoài deploy. */
 export function diffHashes(baseline = {}, current = {}) {
   const out = [];
@@ -367,6 +383,7 @@ function gather() {
   // Cấu hình SSH HIỆU LỰC (đã tính cả drop-in) + bảng nft khoá SSH có đang bật không.
   const sshdT = run("sshd", ["-T"], { timeout: 15000 });
   const nftLock = run("nft", ["list", "table", "inet", "vpnflow_ssh"], { timeout: 10000 });
+  const autoban = run("systemctl", ["is-active", "flowvpn-autoban.timer"], { timeout: 10000 });
   return {
     ps: { ok: ps.ok, text: ps.out },
     ss: { ok: ss.ok, text: ss.out },
@@ -376,6 +393,7 @@ function gather() {
     last: { ok: last.ok, text: last.out },
     sshd: { ok: sshdT.ok, text: sshdT.out },
     sshLocked: nftLock.ok,
+    autobanActive: String(autoban.out ?? "").trim() === "active",
     hashes: collectHashes(),
     persistence: collectPersistence(),
   };
@@ -495,6 +513,7 @@ function checkNode(baseline) {
     ...(s.sshLog.ok ? scanSshBruteForce(s.sshLog.text) : []),
     ...(s.files.ok ? scanSuspiciousFiles(s.files.text) : []),
     ...(s.ss.ok ? scanSshExposure({ ssText: s.ss.text, sshdEffectiveText: s.sshd.text, nftLocked: s.sshLocked }) : []),
+    ...scanProtection({ autobanActive: s.autobanActive, passwordAuth: /^\s*passwordauthentication\s+yes\s*$/im.test(s.sshd.text) }),
     ...(baseline
       ? [
           ...diffHashes(base.hashes ?? {}, s.hashes),
@@ -654,6 +673,8 @@ function selfTest() {
   check("SSH chỉ nghe địa chỉ VPN ⇒ không báo", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication no\npermitrootlogin prohibit-password" }).length === 0);
   check("SSH cho đăng nhập bằng mật khẩu ⇒ HIGH", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication yes" }).some((f) => f.id === "ssh-password-auth" && f.severity === "high"));
   check("root đăng nhập trực tiếp ⇒ MEDIUM", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "permitrootlogin yes" }).some((f) => f.id === "ssh-permit-root" && f.severity === "medium"));
+  check("autoban chết ⇒ HIGH", scanProtection({ autobanActive: false, passwordAuth: false }).some((f) => f.id === "protection-autoban-down" && f.severity === "high"));
+  check("autoban sống ⇒ im lặng", scanProtection({ autobanActive: true }).length === 0);
   check("chống trùng phát hiện", dedupe([finding("x", "high", "t", "d", "e"), finding("x", "high", "t", "d", "e")]).length === 1);
   check("tin cảnh báo có tiêu đề + hướng xử lý", /VPS GUARD/.test(formatAlert([finding("x", "high", "Thử", "Chi tiết")])) && /VPS-DEFENSE/.test(formatAlert([finding("x", "high", "Thử", "Chi tiết")])));
 

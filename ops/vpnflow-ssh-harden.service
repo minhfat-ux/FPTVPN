@@ -1,0 +1,12 @@
+[Unit]
+Description=VPNFlow SSH hardening — chỉ dùng khoá (tắt mật khẩu), chạy lại mỗi lần boot
+After=network-online.target ssh.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/vpnflow-ssh-lock.sh harden
+
+[Install]
+WantedBy=multi-user.target
