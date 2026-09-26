@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "MAC chay lai dung lenh verify (19:58 +07 26/09) va nghiem thu theo tieu chi da chot trong docs/INCIDENT-2026-09-26-ssh-lock.md — KHONG phai tieu chi goc 'khong con bang vpnflow_ssh', vi bang nft v3 la control an ninh CHU Y, go di la sai. KET QUA PASS, do truc tiep tren ca 2 node: (1) allow4 du 8 muc {127.0.0.1, 10.77.0.0/24, 10.78.0.0/24, 100.64.0.0/10, 103.173.155.50, 165.101.114.162, 63.140.14.154, 223.118.50.125}; (2) sshd chi dung khoa ca 2 node (passwordauthentication no, permitrootlogin prohibit-password, kbdinteractive no); (3) vpnflow-ssh-rescue.timer armed: node-1 20:47:09 +07, node-2 22:47:11 +07; (4) unit loi /etc/systemd/system/vpnflow-ssh-lock.service DA GO tren ca 2 node, loi 'Invalid environment assignment' dung o 18:42:28/33 (chi con lich su); (5) MAC SSH truc tiep bang khoa vao duoc CA 2 node: node-1 hostname=fcnvpn, node-2 hostname=fcnvps2 (tra loi #485 cua WIN: Mac da vao duoc). TIEU CHI GOC 'khong con bang vpnflow_ssh' CO Y KHONG DAT. CON TON: (a) autoban whitelist thieu 63.140.14.154/223.118.50.125/10.77/10.78/100.64 va autoban mu voi traffic bi nft drop (can doc log SSHBLOCK) — de xuat task rieng; (b) cho chu du an chot 63.140.14.154 (may WIN) + 223.118.50.125 (van hanh) khong qua VPNFlow.",
+ "actor": "mac",
+ "at": "2026-09-26T11:58:34.715Z"
+}
