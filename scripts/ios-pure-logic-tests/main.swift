@@ -2522,6 +2522,32 @@ do {
           "dòng log khi tunnel mình đang chạy KHÔNG còn mức Blocking")
 }
 
+// (12) Chủ dự án chốt 26/09/2026: "thử đường 3 (UDP thẳng), nếu bị chặn thì phải fallback về Cloudflare".
+//      Thứ tự cửa phải khoá được bằng test — sai thứ tự là mất fallback.
+let directFirstOrder = HysteriaDefaults.orderedCandidates(
+    primaryRelayURL: "wss://api.meetflowai.site/relay/vn2hy",
+    serverHost: "165.101.114.162",
+    alternates: [
+        HysteriaDefaults.RelayCandidate(relayURL: "wss://t1.meetflowai.site/relay/vn2hy", serverHost: "165.101.114.162"),
+        HysteriaDefaults.RelayCandidate(relayURL: "wss://api.meetflowai.site/relay/vn2hy", serverHost: "165.101.114.162"),
+    ]
+)
+checkEqual(directFirstOrder.first?.relayURL, "", "đường thẳng (UDP, không Cloudflare) đứng ĐẦU khi directFirst")
+checkEqual(directFirstOrder.first?.serverHost, "165.101.114.162", "đường thẳng đi kèm ĐÚNG node")
+checkEqual(directFirstOrder.map(\.relayURL),
+           ["", "wss://api.meetflowai.site/relay/vn2hy", "wss://t1.meetflowai.site/relay/vn2hy"],
+           "sau đường thẳng là các cửa Cloudflare — bỏ trùng, giữ thứ tự")
+checkEqual(directFirstOrder.count, 3, "không nhân bản cửa trùng")
+let cloudflareFirstOrder = HysteriaDefaults.orderedCandidates(
+    primaryRelayURL: "wss://api.meetflowai.site/relay/vn2hy",
+    serverHost: "165.101.114.162",
+    alternates: [],
+    directFirst: false
+)
+checkEqual(cloudflareFirstOrder.map(\.relayURL),
+           ["wss://api.meetflowai.site/relay/vn2hy", ""],
+           "directFirst=false ⇒ Cloudflare trước, đường thẳng làm cửa CUỐI")
+
 print("")
 print("KẾT QUẢ: \(checks - failures)/\(checks) PASS, \(failures) FAIL")
 exit(failures == 0 ? 0 : 1)
