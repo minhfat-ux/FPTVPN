@@ -247,6 +247,10 @@ Nguồn nội dung: `release/ios/RELEASE_NOTES_<version>.md` + `git log` của b
 
 
 
+| 2026-09-26 | iOS | **1.4.6 (57) — THAY bản 54** | **KẾT QUẢ (đã phát xong 26/09 06:35 UTC / 13:35 +07):** IPA ad-hoc **8.210.605 B** · sha256 **`a4fec707…442a30`** → `/root/flowvpn-ipa/VPNFlow-latest.ipa` (backup bản 54 giữ nguyên: `VPNFlow-latest.bak--20260926-143507.ipa`, sha256 `363fd7a8…`, 8.207.840 B) · **cổng pre (1c/1d/1e) ĐẠT** + cảnh báo *"phát lại CÙNG số 1.4.6 — khách sẽ không thấy 'có bản mới'"*; verify TỪ TRONG IPA: app **và** appex đều `1.4.6/57`, profile Ad Hoc **10 UDID**, `get-task-allow=False`, **không** nhóm keychain dùng chung · mốc **`latest_ios_version=1.4.6` + `ipa_build=57`** (PATCH đọc JSON xác nhận: `{"latest_version":"1.4.6","ipa_build":"57"}`) · **tải thật qua `t1`**: `size=8210605 sha256=a4fec7077e5ca65a08ff0fdd619d8c6c629814b3d493124dfb9116c8eb442a30` **khớp** bản phát · `/install/ios` **HTTP 200** · `/buy` **HTTP 200** · **cổng post (7b) ĐẠT** (đọc version trong file ĐANG PHÁT = `1.4.6/57`) · **ghi sổ** `release/releases.jsonl` (append, `origin=publish`, `recorded_by=mac`) · **KHÔNG tạo tag mới** (`ios-v1.4.6` vẫn trỏ commit cũ — tạo lại là tag trùng) · **KHÔNG làm TestFlight** (build 57 chưa có bản app-store-connect; kênh TestFlight đang chờ 54 — việc riêng). **NGOẠI LỆ artifact bất biến (`docs/VERSIONING.md` §3.3) — CÓ GHI SỔ:** kênh đang ở `1.4.6` với HAI sha256 (build 50 `73b0c145…`, build 54 `363fd7a8…`); phát build 57 là **sha256 thứ ba cho cùng version**; chủ dự án **chốt trong phiên 26/09/2026** cho phép phát, lý do ghi thẳng vào dòng sổ qua `--allow-rehash --reason "Chủ dự án chốt 26/09/2026: phát build 57 (chặn IPv6 chủ động P2 + F3/F4) cho khách cài mới; test 5G ngay sau khi cài OTA"`. Nội dung: **P2 chặn IPv6 chủ động** (trả `ICMPv6 Destination Unreachable` mã 4 = port unreachable ⇒ app lùi IPv4 **ngay**; trước đây gói rơi im lặng ⇒ app treo chờ) + **F3** cửa dự phòng giữ nguyên PATH chỉ đổi HOSTNAME (cùng node, không nhảy node) + **F4** `sessionStartBudget = relayOpenGrace 10 × maxRelayDoorsPerNode 2 + 5` = **25 s** (bỏ số cứng 35 s sai). **§2c: CHƯA chạy trước khi phát** — `xcrun devicectl list devices` **rỗng** (0 thiết bị), chủ dự án chốt **Đường B: phát trước, test 5G NGAY SAU khi cài OTA** (tiền lệ 1.4.4/21, 1.4.6/54); chỉ **1/7 mục đạt bằng cổng tự động** (mục 2), **6/7 mục máy thật còn trống** — đây là **ngoại lệ có ý thức**, **KHÔNG** phải "§2c đã đạt" (`build/ios-146-device-test-57.md`). **BUG MỨC `high` CÒN MỞ (luật 13):** `BUG-IOS-JETSAM-001` (gốc rò bộ nhớ **chưa** tìm ra) · `BUG-IOS-ONEWAY-001` · `BUG-20260823-001` — ba bug này **nằm trong ngoại lệ 26/09 đã ghi sổ**; **`BUG-IOS-FAILOVER-EXHAUSTED-001`** (hết 3 ứng viên đường mà chiều về vẫn chết ⇒ giữ tunnel hỏng ~7 phút, khách không được báo) **CHƯA từng được cấp ngoại lệ riêng** — bản này chỉ được phát do **chốt "phát trước" của chủ dự án trong phiên 26/09/2026**, ghi **đích danh** tại đây, **không** gộp vào ngoại lệ cũ. **EMAIL (luật 14 — gửi RIÊNG kênh iOS):** script MỚI `scripts/send-ios-1.4.6-57-announcement.py` (**KHÔNG** dùng lại bản build 54 vì bản đó nói sai *"ngân sách 35 s"* và **không** nhắc P2 IPv6) → `--recipients` 6 khách iOS có gói còn hạn → `--test` OK (`minhnb2@me.com`) → gửi thật **6/6 thành công · 0 lỗi**; nội dung 3 ngôn ngữ chỉ nêu thứ đo được (P2 IPv6 trả `ICMPv6 unreachable` ⇒ lùi IPv4 ngay · F3 cùng node · F4 ngân sách tính theo số cửa · van bộ nhớ hạ tunnel SẠCH), **nói thẳng gốc rò bộ nhớ CHƯA tìm ra**, và **có câu bắt buộc hướng dẫn cài lại** `https://t1.meetflowai.site/install/ios` (khách 1.4.6/54 **không** thấy "có bản mới" vì `AppVersionService` so **chuỗi version**; so theo build là F2, chưa làm) + nói rõ đây là **bản vá thay bản 1.4.6 phát sáng nay** |
+
+| 2026-09-26 | macOS | **1.4.7 (28) — THAY bản 1.4.6/21 (BẢN LỖI: app KHÔNG MỞ ĐƯỢC)** | **KẾT QUẢ (đã phát xong 26/09 09:2x UTC / 16:2x +07):** DMG **23.798.393 B** · sha256 **`d8364650…b3d2346`** → `/root/flowvpn-mac/VPNFlow-mac.dmg` (backup bản lỗi: `VPNFlow-mac.bak-1.4.6-b21-broken-20260926-152638.dmg`) · **cổng quyền `scripts/mac-check-profile-entitlements.py` = OK 6/6 quyền** (đây là cổng DUY NHẤT bắt được lỗi 1.4.6 — `notarize`+`staple`+`spctl accepted` đều ĐẠT mà app vẫn không mở) · **cổng 1c pre ĐẠT** (version trong DMG `1.4.7/28`, staple validate OK, `spctl source=Notarized Developer ID`, `codesign --deep --strict` valid) · **mở thử app THẬT**: tiến trình chạy, log **KHÔNG** có `amfi`/`unsatisfied`/`not allow` · `systemextensionsctl list` → `com.privatevpn.mac.packet-tunnel (1.4.7/28) [activated enabled]` · upload **nguyên tử** + verify sha256/size trên server khớp · **tải thật qua `t1` khớp sha256** · **cổng post ĐẠT** · mốc **`latest_mac_version=1.4.7` rồi `minimum_mac_version=1.4.7`** (API macOS: min 1.4.7 · latest 1.4.7) · **ghi sổ** `release/releases.jsonl` (`origin=publish`, `recorded_by=mac`) + **tag `macos-v1.4.7`** · **EMAIL (gửi riêng kênh macOS, luật 14):** `send-mac-1.4.7-announcement.py --all` → **21/21 thành công, 0 lỗi** (đúng nhóm 21 khách đã nhận email đính chính 26/09), 3 ngôn ngữ, nói rõ **lần đầu bấm Connect macOS sẽ hỏi cài “system extension” ⇒ bấm Allow**. **Nguyên nhân gốc bản 1.4.6:** profile Developer ID của Apple chỉ cấp bộ `*-systemextension`, **không** cấp `packet-tunnel-provider` cho appex plugin ⇒ AMFI `Code=-413 "No matching profile found"` ⇒ *“The application VPNFlow can't be opened”*. **Fix:** tunnel macOS chuyển sang **System Extension** (`Contents/Library/SystemExtensions/…`, không còn `Contents/PlugIns/*.appex`) + IPv6 fail-fast (ICMPv6 code 4, lùi IPv4 0,21–0,30 s) + failover khi relay chết hẳn (~26 s) + tự nối lại session + bộ nhớ macOS 200/400 MB + A7/Tencent đi thẳng + cảnh báo xung đột mạng + log hỗ trợ trong Group Container. ⚠️ **GIẪM NHAU khi phát:** session Team Leaders chạy lại `mac-sign-notarize.sh … 1.4.7-28 --dmg` (run2) **ghi đè cùng đường dẫn** trong lúc em upload ⇒ em phát hiện qua sha đổi 3 lần, **DỪNG**, chốt theo bản cuối của họ (`d8364650…`), gửi bus **#468** yêu cầu ngừng ghi đè (em đang giữ claim `release-macos`), rồi mới upload lại đúng file. **CÒN NỢ:** (1) chưa test cài MỚI hoàn toàn trên máy sạch (bước khách bấm Allow cho system extension) — cần 1 máy/user mới; (2) biên failover 26 s so với mục tiêu <30 s (cân nhắc hạ ngưỡng 20→15 s ở build 29) |
+
 ## 7. Việc tồn của publisher
 1. ~~Template email iOS/Android~~ **ĐÃ XONG 20/09**: `scripts/send-release-announcement.py` (iOS+Android 1.4.0, 3 ngôn ngữ) và `scripts/send-mac-announcement.py` (bản macOS đã ký+notarize, 3 ngôn ngữ, cờ `--all` để gửi toàn bộ khách). Cả hai có bước gửi thử tới ALERT_EMAIL trước khi gửi thật.
 2. Đưa **release notes** lên web (hiện chỉ nằm trong repo `release/<platform>/RELEASE_NOTES_<ver>.md`).
@@ -283,6 +287,46 @@ Nguồn nội dung: `release/ios/RELEASE_NOTES_<version>.md` + `git log` của b
 8. **iOS TestFlight build mới — TODO**: export app-store-connect 1.4.3/20 build được nhưng Apple chặn **90171** (cùng họ framework). Đã sửa **90360** (plist `{}`) + **90206** (framework trong appex → chuyển sang app). Sau khi upload được: `node scripts/asc-beta.mjs submit <build> --whatsnew release/ios/whatsnew-next.json`. External testers **14/14 email khách** đã xong; yêu cầu chủ dự án: TestFlight phải trùng version với bản website.
 9. **Sổ phát hành**: dòng `ios 1.4.2 (19)` trong `release/releases.jsonl` chưa commit (hook chặn bởi claim `[windows] release`) — claim nhả là commit.
 
+10. **macOS — KÊNH ĐANG PHỤC VỤ BẢN KHÔNG MỞ ĐƯỢC (26/09/2026): CHẶN PHÁT cho tới khi hết.** Bản
+    `1.4.6/21` (và bản cũ `1.4.0/14` phát 22/09 — **cũng dính y hệt**) đã ký Developer ID + notarize
+    **Accepted** + staple + `spctl accepted` + `codesign --deep --strict` **valid**, nhưng mở app báo
+    **“The application \"VPNFlow\" can't be opened.”** — log máy thật:
+    `amfid: … Code=-413 "No matching profile found"` · `Unsatisfied Entitlements: com.apple.developer.networking.networkextension`
+    · `AMFI: Code has restricted entitlements…` · `ASP: Security policy would not allow process`.
+    Nguyên nhân: profile Developer ID của `com.privatevpn.mac` / `com.privatevpn.mac.packet-tunnel` **chỉ cấp bộ
+    `*-systemextension`**, thiếu **`packet-tunnel-provider`** (giá trị cho appex plugin) trong khi app/appex khai
+    đúng giá trị đó. **Tạo lại profile bằng API không giải quyết** (đã thử: App ID thật, App ID mới tinh,
+    `platform=UNIVERSAL` lẫn `MAC_OS` — vẫn ra bộ `-systemextension`; API báo
+    `'NETWORK_EXTENSIONS' is not a valid value for settings/0/key`) ⇒ phải bật **Packet Tunnel** cho
+    *Network Extensions* trên **portal** cho 2 App ID mac. Bản dev-signed chạy được vì dùng *Mac Team
+    Provisioning Profile* (có `packet-tunnel-provider`) — vì mọi lần thử trước đây đều trên bản dev-signed
+    nên lỗi không lộ ra.
+    ⚠️ **Kết luận “phải bật Packet Tunnel trên portal” ở trên là SAI** — portal/API **không** đổi được bộ
+    giá trị mà profile Developer ID cấp; đường sửa thật là đoạn ngay dưới.
+    **ĐƯỜNG SỬA ĐÚNG (26/09/2026 — đã kiểm chứng lại bằng thực nghiệm, KHÔNG phải portal):** profile
+    Developer ID (`MAC_APP_DIRECT`) **về bản chất** chỉ cấp bộ `*-systemextension`; giá trị appex
+    `packet-tunnel-provider` chỉ có ở profile **không phải Developer ID** (Mac App Store / Mac Team
+    Provisioning) — nên kênh DMG **không thể** dùng appex plugin, và bật capability trên portal cũng
+    không đổi được bộ giá trị đó. Kênh DMG phải đóng gói provider thành **System Extension** thật:
+    `VPNFlow.app/Contents/Library/SystemExtensions/com.privatevpn.mac.packet-tunnel.systemextension`,
+    quyền `packet-tunnel-provider-systemextension`, `CFBundlePackageType=SYSX`, **bỏ** `NSExtension`,
+    thêm `NetworkExtension` (`NEMachServiceName` + `NEProviderClasses`), thêm
+    `NSSystemExtensionUsageDescription`, và app gọi `OSSystemExtensionRequest.activationRequest`
+    **trước khi** tạo/đựng tunnel. Chi tiết + cổng kiểm: `docs/MACOS_SIGN_NOTARIZE.md` §1/§2/§4a.
+    *Còn phải kiểm chứng trên máy thật:* macOS còn đòi quyền **`com.apple.developer.system-extension.install`**
+    ở phía **app** để kích hoạt system extension; profile Developer ID hiện tại **không** cấp quyền đó
+    (đo thật: khai thêm quyền này ⇒ AMFI `Code=-413` giết app ngay, xem `docs/MACOS_SIGN_NOTARIZE.md` §1b).
+    Nếu lần chạy thật trả `OSSystemExtensionError` `missingEntitlement` thì phải bật capability
+    **System Extension** cho 2 App ID mac rồi tạo lại profile, rồi thêm quyền vào `app.ent.plist`.
+    **Chặn thiệt hại đã làm 26/09/2026 (chủ dự án chốt):** `minimum_mac_version` hạ về **`0.0.0`** (sửa trực tiếp
+    `app_config` trên node-2 — **không có route admin cho mốc macOS**; DB backup `app-config.db.bak-20260926-114526`;
+    API công khai trả `minimum_version=0.0.0 · latest_version=1.4.6`) và gửi **email đính chính tới 21/21 khách**
+    (`scripts/send-mac-correction-2026-09-26.py --all`, 3 ngôn ngữ: nói thẳng đang lỗi, **không** khuyên tải lại,
+    không hứa ngày). Cổng mới: `scripts/mac-sign-notarize.sh` **bước 4b** +
+    `scripts/mac-check-profile-entitlements.py` (chứng minh hai chiều: bản lỗi ⇒ exit 1 nêu đúng
+    `packet-tunnel-provider`; bản dev-signed chạy được ⇒ exit 0) + `docs/MACOS_SIGN_NOTARIZE.md` §1/§2(d)/§4a/§6
+    (cổng §4a **không** bắt được lỗi này; **bắt buộc mở thử app thật** trước khi phát). Số kế tiếp phải **> 1.4.6**.
+
 ## 8. Lỗi đã từng xảy ra (đọc để không lặp)
 - Link trên `/buy` trỏ sai host (`api.` ⇒ 401). Link tải phải là `t1.` hoặc `meetflowai.site`.
 - PATCH mốc version thất bại **im lặng** (curl exit 0 dù 401) ⇒ phải đọc JSON trả về.
@@ -299,3 +343,5 @@ Nguồn nội dung: `release/ios/RELEASE_NOTES_<version>.md` + `git log` của b
 - **Tên file/mốc không phải version thật (21/09)**: bản Windows cài trên máy ghi `FileVersion = 1.0.0`
   trong khi installer tên `VPNFlow-Setup-1.4.1.exe` (ghi nhận trong `scripts/check-publish-version.py`)
   ⇒ **luôn đọc version từ BÊN TRONG artifact**, không tin tên file lẫn mốc `latest_version`.
+- **Tự cắt đường SSH khi test hạ tầng (26/09)**: `systemctl stop relay-cf-vn2hy` làm relay chết 20 phút 34 giây
+  vì chính phiên SSH đi qua tunnel đó; khôi phục/watchdog/đường cứu hộ: `docs/SERVER_RECOVERY_RUNBOOK.md`.
