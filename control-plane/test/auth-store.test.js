@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, access } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { AuthStore } from "../src/auth-store.js";
@@ -236,6 +236,52 @@ test("mã đăng nhập có khoảng trắng / xuống dòng vẫn vào được
       assert.equal(session.user.email, email);
       assert.match(session.access_token, /^PVPN-AUTH-/);
     }
+  } finally {
+    await cleanup();
+  }
+});
+
+// ── Bảo vệ kho dữ liệu khách (vá 26/09/2026, sau sự cố "Enrollment token is invalid or expired") ──
+//
+// Bản CŨ: `_load()` có `catch { return emptyData(); }` — nuốt MỌI lỗi đọc rồi coi kho là RỖNG.
+// Hệ quả: một lần JSON cụt (ghi dở / hết đĩa / sai quyền) ⇒ mọi hàm thấy rỗng ⇒ `_save()` ghi lại
+// đúng cái rỗng đó ⇒ XOÁ SẠCH người dùng + gói + token. Hai test dưới khoá chặt hành vi mới.
+
+test("corrupt auth.json THROWS and is left untouched (no silent wipe of customer data)", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    const user = await createSubscribedUser(store, "corrupt@example.com");
+    const good = await readFile(store.filePath, "utf8");
+    const truncated = good.slice(0, Math.floor(good.length / 2));
+    await writeFile(store.filePath, truncated, "utf8");
+
+    await assert.rejects(
+      () => store.markRenewalReminded(user.user.id, 3),
+      SyntaxError,
+      "phải NÉM lỗi cú pháp thay vì coi kho là rỗng"
+    );
+
+    const after = await readFile(store.filePath, "utf8");
+    assert.equal(
+      after,
+      truncated,
+      "file hỏng phải được GIỮ NGUYÊN — không bị ghi đè bằng dữ liệu rỗng"
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("save is atomic: no .tmp left behind, file stays valid JSON", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    const user = await createSubscribedUser(store, "atomic@example.com");
+    await store.markRenewalReminded(user.user.id, 3);
+
+    await assert.rejects(() => access(`${store.filePath}.tmp`), /ENOENT/);
+    const raw = await readFile(store.filePath, "utf8");
+    assert.doesNotThrow(() => JSON.parse(raw));
+    assert.match(raw, /renewalReminders/);
   } finally {
     await cleanup();
   }

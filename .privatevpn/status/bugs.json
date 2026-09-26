@@ -1,6 +1,24 @@
 {
   "open": [
     {
+      "id": "BUG-IOS-WATCHDOG-SILENT-001",
+      "title": "Sau khi TỰ DỰNG LẠI transport, nhịp sống-còn CÂM tới hết phiên (timer bị cancel khi còn treo)",
+      "area": "ios + macos (lõi tunnel chung)",
+      "severity": "high",
+      "reported": "2026-09-27",
+      "status": "open",
+      "impact": "Sau một lần tự dựng lại transport, watchdog không đánh nhịp nữa ⇒ mất khả năng tự phục hồi cho phần còn lại của phiên (không phát hiện được chiều về chết/đổi mạng), khách có thể ngồi trong trạng thái 'Connected mà không có mạng' tới khi tự tắt. Cổng nghiệm thu §7d đánh KHÔNG ĐẠT đúng như vậy.",
+      "evidence": [
+        "iOS 1.4.6/57, iPhone 14 Pro Max (`33987D6F-…`), phiên 26/09 14:00:22 (1250 s): sau `tự phục hồi: ĐÃ dựng lại transport` lúc 14:19:02.528 và dòng 'giám sát sống-còn: transport vừa thay … bật lại watchdog với mốc mới' thì **0 dòng `giám sát sống-còn: nhịp` trong 131 s** còn lại (đến `stopTunnel: reason=1` lúc 14:21:13)",
+        "Cùng lúc đó `bw: sample` vẫn chạy tới 14:21:03 và `ws-relay: heartbeat` vẫn in ⇒ KHÔNG phải khoá toàn cục (`flowLock` rảnh) — chỉ nhịp sống-còn chết",
+        "Báo cáo đầy đủ: `.privatevpn/reports/2026-09-26-ios-57-postota-acceptance-FAILED.md` (cổng `scripts/ios-log-acceptance.py` exit 1; 1/4 phiên lỗi)",
+        "NGUYÊN NHÂN GỐC (đọc code): `startLivenessWatchdog()` tạo `DispatchSourceTimer` (ở trạng thái TREO), nhưng bản ở HEAD gọi `timer.resume()` **SAU** khi đã công bố vào `livenessTimer`; hàm này có 4 đường gọi (một đường là `livenessStep` gọi lại chính nó) ⇒ lượt gọi chồng chạy `livenessTimer?.cancel()` khi timer mới còn treo ⇒ timer bị huỷ lúc chưa resume ⇒ **không bao giờ chạy** và không ai bật lại",
+        "BẢN VÁ ĐÃ CÓ trong cây làm việc (chưa commit): dời `timer.resume()` + `reachTimer.resume()` lên TRƯỚC phần công bố, kèm chú thích dẫn đúng ca 26/09 14:00:22; `git diff HEAD` cho thấy `+timer.resume()` trước `flowLock.lock()` và `-timer.resume()` sau `flowLock.unlock()`"
+      ],
+      "next_steps": "Commit bản vá + build bản mới (58) rồi chạy lại nghiệm thu §7d trên máy thật (cần ít nhất 1 phiên CÓ tự dựng lại transport, và kiểm đúng dấu hiệu: sau rebuild phải thấy `giám sát sống-còn: nhịp` tiếp tục). Cân nhắc thêm cổng: `ios-log-acceptance.py` đã bắt được ca này (WATCHDOG CÂM) nên giữ nguyên tiêu chí.",
+      "blocked_by": "Bản vá nằm ở cây làm việc của session iOS, CHƯA commit; kênh iOS đang phát 1.4.6/57 (có lỗi này) và TestFlight build 57 cũng đang ở WAITING_FOR_BETA_REVIEW"
+    },
+    {
       "id": "BUG-20260823-001",
       "title": "Production /v1/tokens mở không cần auth (LEGACY_MODE=1) — bypass paywall + bypass revoke",
       "area": "control-plane",
