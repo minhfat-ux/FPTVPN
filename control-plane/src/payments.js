@@ -410,6 +410,13 @@ const TEXTS = {
     androidLegacyLabel: "Fire TV / older device",
     androidLegacySub: "APK for Android 7.0 and 7.1 — Fire TV Stick 4K, older phones and TVs",
     emailLabel: "Your VPNFlow account email",
+    leadTitle: "Enter your email to get the right build for this device",
+    leadBtn: "Continue",
+    leadErr: "Invalid email.",
+    leadSending: "Checking…",
+    leadKnown: "This email already has an account — Premium will be enabled for it after payment.",
+    leadOther: "Choose another platform",
+    leadFor: "Recommended for your device:",
     planLabel: "Choose a plan",
     methodLabel: "Payment method",
     bankName: "VN Bank", bankScan: "Scan TPBank QR",
@@ -491,6 +498,13 @@ const TEXTS = {
     androidLegacyLabel: "Fire TV / máy cũ",
     androidLegacySub: "APK cho Android 7.0 và 7.1 — Fire TV Stick 4K, điện thoại và TV đời cũ",
     emailLabel: "Email tài khoản VPNFlow",
+    leadTitle: "Nhập email để nhận bản cài đúng cho thiết bị của bạn",
+    leadBtn: "Tiếp tục",
+    leadErr: "Email không hợp lệ.",
+    leadSending: "Đang kiểm tra…",
+    leadKnown: "Email này đã có tài khoản — Premium sẽ được bật cho email này sau khi thanh toán.",
+    leadOther: "Chọn nền tảng khác",
+    leadFor: "Bản phù hợp với thiết bị của bạn:",
     planLabel: "Chọn gói",
     methodLabel: "Phương thức thanh toán",
     bankName: "Ngân hàng VN", bankScan: "Quét QR TPBank",
@@ -572,6 +586,13 @@ const TEXTS = {
     androidLegacyLabel: "Fire TV / 旧设备",
     androidLegacySub: "适用于 Android 7.0 与 7.1 的 APK — Fire TV Stick 4K、旧款手机与电视",
     emailLabel: "您的 VPNFlow 账户邮箱",
+    leadTitle: "请输入邮箱以获取适合本设备的安装包",
+    leadBtn: "继续",
+    leadErr: "邮箱格式不正确。",
+    leadSending: "正在检查…",
+    leadKnown: "该邮箱已有账号 — 支付后将为其开通 Premium。",
+    leadOther: "选择其他平台",
+    leadFor: "适合您设备的安装包：",
     planLabel: "选择套餐",
     methodLabel: "支付方式",
     bankName: "越南银行", bankScan: "扫描 TPBank 二维码",
@@ -653,6 +674,13 @@ const TEXTS = {
     androidLegacyLabel: "Fire TV / 旧端末",
     androidLegacySub: "Android 7.0 / 7.1 用 APK — Fire TV Stick 4K、旧型スマホ・テレビ",
     emailLabel: "VPNFlowアカウントのメール",
+    leadTitle: "このデバイスに合ったインストーラーを受け取るにはメールアドレスを入力してください",
+    leadBtn: "続ける",
+    leadErr: "メールアドレスの形式が正しくありません。",
+    leadSending: "確認中…",
+    leadKnown: "このメールには既にアカウントがあります — お支払い後に Premium が有効になります。",
+    leadOther: "別のプラットフォームを選ぶ",
+    leadFor: "お使いのデバイスに推奨：",
     planLabel: "プランを選択",
     methodLabel: "支払い方法",
     bankName: "ベトナムの銀行", bankScan: "TPBank QRをスキャン",
@@ -734,6 +762,13 @@ const TEXTS = {
     androidLegacyLabel: "Fire TV / 구형 기기",
     androidLegacySub: "Android 7.0 / 7.1용 APK — Fire TV Stick 4K, 구형 휴대폰·TV",
     emailLabel: "VPNFlow 계정 이메일",
+    leadTitle: "이 기기에 맞는 설치 파일을 받으려면 이메일을 입력하세요",
+    leadBtn: "계속",
+    leadErr: "이메일 형식이 올바르지 않습니다.",
+    leadSending: "확인 중…",
+    leadKnown: "이 이메일에는 이미 계정이 있습니다 — 결제 후 Premium이 활성화됩니다.",
+    leadOther: "다른 플랫폼 선택",
+    leadFor: "기기에 권장:",
     planLabel: "요금제 선택",
     methodLabel: "결제 수단",
     bankName: "베트남 은행", bankScan: "TPBank QR 스캔",
@@ -1184,8 +1219,131 @@ export function planNameFor(lang, product, planId) {
   return t.planNames?.[planId] || plan.badge || plan.label || planId;
 }
 
+/**
+ * Nhận diện nền tảng của khách từ User-Agent để trang /buy hiện ĐÚNG bản cài.
+ *
+ * Chủ dự án chốt 26/09/2026: khách phải nhập email trước, rồi mới thấy bản tải; bản
+ * hiện ra phải là bản của chính thiết bị đang mở trang. Không nhận ra (bot, UA lạ,
+ * iPadOS giả Mac…) thì trả "unknown" ⇒ trang hiện đủ danh sách cho khách tự chọn.
+ *
+ * Thứ tự kiểm quan trọng: Android trước Linux/Mac, iOS trước Mac (iPad UA có "Mac OS X").
+ *
+ * @param {string} ua  giá trị header User-Agent
+ * @returns {"ios"|"macos"|"android"|"windows"|"unknown"}
+ */
+export function detectBuyPlatform(ua) {
+  const s = String(ua || "");
+  if (/iPhone|iPod|iPad/i.test(s)) return "ios";
+  if (/Android/i.test(s)) return "android";
+  if (/Windows NT|Windows Phone|Win64|Win32|Windows/i.test(s)) return "windows";
+  if (/Macintosh|Mac OS X/i.test(s)) return "macos";
+  return "unknown";
+}
+
+/**
+ * Khối "Tải app" của trang buy (tách khỏi buyPageHTML để endpoint /v1/buy/lead trả về
+ * ĐÚNG khối này sau khi khách nhập email — trang chưa có email tuyệt đối không được
+ * chứa link tải nào, xem docs/handoff/HANDOFF_BUY_EMAIL_GATE_2026-09-26.md).
+ *
+ * `platform` khi đã nhận diện được thì chỉ hiện bản của máy đó + nút "chọn nền tảng
+ * khác"; khi "unknown" thì hiện đủ danh sách như trước.
+ */
+export function downloadsSectionHTML({ baseUrl, lang = "vi", product = "vpn", links = {}, platform = "unknown" }) {
+  lang = pickBuyLang(lang);
+  product = productConfig(product);
+  const t = TEXTS[lang];
+  const androidUrl = links.android || `${baseUrl}${product === "ai" ? "/v1/ai/downloads/android" : "/v1/downloads/android"}`;
+  const androidLegacyUrl = links.androidLegacy || null;
+  const iosUrl = links.ios || null;
+  const iosAdhocUrl = links.iosAdhoc || `${baseUrl}/install/ios`;
+  const macUrl = links.mac || null;
+  const macAdhocUrl = product === "vpn" ? (links.macAdhoc || `${baseUrl}/install/mac`) : (links.macAdhoc || null);
+  const windowsUrl = product === "vpn" ? (links.windows || `${baseUrl}/dl/VPNFlow-Setup-latest.exe`) : null;
+  if (!(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl || macAdhocUrl || windowsUrl)) return "";
+  const known = platform !== "unknown";
+  // Nền tảng không phải của máy khách ⇒ ẩn (CSS .plat-hidden), nút "chọn nền tảng khác" mở lại.
+  const hidden = (plat) => (known && platform !== plat ? ' class="plat-hidden"' : "");
+  return `<div class="dl-section">
+      <div class="dl-title">${known ? t.leadFor : t.dlTitle}</div>
+      <div class="dl-sub">${known ? "" : t.dlSub}</div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+        ${iosUrl ? `<a href="${iosUrl}"${hidden("ios")} target="_blank" rel="noopener" title="${t.iosTop}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.iosTop}</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.iosBadge}</text>
+          </svg>
+        </a>` : ""}
+        ${!iosUrl && iosAdhocUrl ? `<a href="${iosAdhocUrl}"${hidden("ios")} target="_blank" rel="noopener" title="${t.iosTop}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.iosTop}</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.iosBadge}</text>
+          </svg>
+        </a>` : ""}
+        ${macUrl ? `<a href="${macUrl}"${hidden("macos")} target="_blank" rel="noopener" title="Download on the Mac App Store">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">Download on the</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Mac App Store</text>
+          </svg>
+        </a>` : macAdhocUrl ? `<a href="${macAdhocUrl}"${hidden("macos")} target="_blank" rel="noopener" title="${t.macTop}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(14 7) scale(0.078)"><path fill="#fff" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></g>
+            <text x="45" y="23" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" fill="#fff" opacity="0.9">${t.macTop}</text>
+            <text x="45" y="37" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.macBadge}</text>
+          </svg>
+        </a>` : ""}
+        ${androidUrl ? `<a href="${androidUrl}"${hidden("android")} target="_blank" rel="noopener" title="${t.androidTitle}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(12 12) scale(0.058)">
+              <path fill="#EA4335" d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1z"/>
+              <path fill="#FBBC04" d="M47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l256.6-256L47 0z"/>
+              <path fill="#4285F4" d="M425.2 225.6l-58.9-34.1-65.7 64.5 65.7 64.5 60.1-34.1c18-14.3 18-46.5-1.2-60.8z"/>
+              <path fill="#34A853" d="M104.6 499l280.8-161.2-60.1-60.1L104.6 499z"/>
+            </g>
+            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.androidTop}</text>
+            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.androidBadge}</text>
+          </svg>
+        </a>` : ""}
+        ${windowsUrl ? `<a href="${windowsUrl}"${hidden("windows")} target="_blank" rel="noopener" title="${t.windowsTop}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d"/>
+            <g transform="translate(13 14)">
+              <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022"/>
+              <rect x="12" y="0" width="10.5" height="10.5" fill="#7FBA00"/>
+              <rect x="0" y="12" width="10.5" height="10.5" fill="#00A4EF"/>
+              <rect x="12" y="12" width="10.5" height="10.5" fill="#FFB900"/>
+            </g>
+            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.windowsTop}</text>
+            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">${t.windowsBadge}</text>
+          </svg>
+        </a>` : ""}
+        ${androidLegacyUrl ? `<a href="${androidLegacyUrl}"${hidden("android")} target="_blank" rel="noopener" title="${t.androidLegacySub}">
+          <svg width="150" height="48" viewBox="0 0 170 54" xmlns="http://www.w3.org/2000/svg">
+            <rect width="170" height="54" rx="8" fill="#0b0b0d" stroke="rgba(255,255,255,.18)"/>
+            <g transform="translate(12 12) scale(0.058)">
+              <path fill="#34A853" d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1z"/>
+              <path fill="#FBBC04" d="M47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l256.6-256L47 0z"/>
+              <path fill="#4285F4" d="M425.2 225.6l-58.9-34.1-65.7 64.5 65.7 64.5 60.1-34.1c18-14.3 18-46.5-1.2-60.8z"/>
+              <path fill="#EA4335" d="M104.6 499l280.8-161.2-60.1-60.1L104.6 499z"/>
+            </g>
+            <text x="45" y="20" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" fill="#fff" opacity="0.9">${t.androidLegacyLabel}</text>
+            <text x="45" y="34" font-family="-apple-system,'Segoe UI',Roboto,sans-serif" font-size="15" font-weight="600" fill="#fff">Android 7.0+</text>
+          </svg>
+        </a>` : ""}
+      </div>
+      ${known ? `<div style="text-align:center; margin-top:12px;"><a href="#" id="dlOtherBtn" class="guidelnk">${t.leadOther}</a></div>` : ""}
+    </div>`;
+}
+
 /** Buy page HTML — dark theme, email + plan + method picker. */
-export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "", inApp = false }) {
+export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefillEmail = "", prefillPlan = "", methods, cny = null, usd = null, cur = "", inApp = false, ua = "", emailVerified = true }) {
   lang = pickBuyLang(lang);
   product = productConfig(product);
   const base = TEXTS[lang];
@@ -1233,7 +1391,12 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   const guideUrl = `${baseUrl}${product === "ai" ? "/ai/guide" : "/guide"}?lang=${lang}`;
   // Mở TRONG app (paywall): khách đã có app rồi ⇒ chỉ để lại ĐĂNG KÝ TÀI KHOẢN + THANH TOÁN,
   // bỏ hết khối tải/cài app và hướng dẫn cài (vô nghĩa và làm rối).
-  const showDownloads = anyDownload && !inApp;
+  const showDownloads = anyDownload && !inApp && emailVerified;
+  // Bước email bắt buộc (chủ dự án chốt 26/09/2026): chưa có email hợp lệ thì trang
+  // KHÔNG được chứa link tải nào và form thanh toán còn ẩn — xem
+  // docs/handoff/HANDOFF_BUY_EMAIL_GATE_2026-09-26.md. Bản trong app (paywall) không gate
+  // vì khách đã có app rồi, chỉ cần thanh toán.
+  const showLeadGate = !inApp && !emailVerified;
   // WeChat Pay / Alipay are priced in CNY (the customer types the amount by
   // hand), and the headline price follows the visitor: dong for Vietnamese,
   // yuan for Chinese pages, dollars for everyone else. `?cur=` overrides.
@@ -1400,6 +1563,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     .dl-sub { text-align: center; color: rgba(255,255,255,.5); font-size: 12px; margin-bottom: 14px; }
     .dl-section a { text-decoration: none; display: inline-block; transition: transform .1s; }
     .dl-section a:hover { transform: scale(1.04); }
+    /* Nút tải của nền tảng KHÁC bị ẩn khi đã nhận diện được thiết bị (xem
+       downloadsSectionHTML); nút "chọn nền tảng khác" gỡ class này để hiện lại. */
+    .plat-hidden { display: none !important; }
 
     .modal-overlay {
       position: fixed; inset: 0; z-index: 100;
@@ -1709,6 +1875,15 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     <div class="sub">${t.sub}</div>
     ${safeEmail && t.renewPrefill ? `<div class="prefill">🔁 ${t.renewPrefill}</div>` : ""}
 
+    ${showLeadGate ? `<div class="dl-section" id="leadGate">
+      <div class="dl-title">${t.leadTitle}</div>
+      <label>${t.emailLabel}</label>
+      <input type="email" id="leadEmail" placeholder="you@example.com" value="${safeEmail}">
+      <button type="button" id="leadBtn">${t.leadBtn}</button>
+      <div class="status" id="leadStatus"></div>
+    </div>` : ""}
+    <div id="dlHost"></div>
+
     ${showDownloads ? `<div class="dl-section">
       <div class="dl-title">${t.dlTitle}</div>
       <div class="dl-sub">${t.dlSub}</div>
@@ -1787,7 +1962,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       </div>
     </div>` : ""}
 
-    <form id="buyForm">
+    <form id="buyForm"${showLeadGate ? ' style="display:none"' : ""}>
       <label>${t.emailLabel}</label>
       <input type="email" id="email" placeholder="you@example.com" required value="${safeEmail}">
 
@@ -1824,19 +1999,19 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       <div class="noteextra">📱 ${t.deviceNote}</div>
     </form>
 
-    ${iosAdhocSteps ? `<div class="howto adhoc">
+    ${emailVerified && iosAdhocSteps ? `<div class="howto adhoc">
       <div class="howto-title">📲 ${t.adhocTitle}</div>
       <ol class="howto-steps">${iosAdhocSteps.map((step) => `<li>${step}</li>`).join("")}</ol>
       <a class="guidelnk" href="${iosAdhocStepsUrl}" target="_blank" rel="noopener">${iosAdhocStepsUrl}</a>
     </div>` : ""}
 
-    ${macAdhocSteps ? `<div class="howto adhoc">
+    ${emailVerified && macAdhocSteps ? `<div class="howto adhoc">
       <div class="howto-title">💻 ${t.macAdhocTitle}</div>
       <ol class="howto-steps">${macAdhocSteps.map((step) => `<li>${step}</li>`).join("")}</ol>
       <a class="guidelnk" href="${macAdhocStepsUrl}" target="_blank" rel="noopener">${macAdhocStepsUrl}</a>
     </div>` : ""}
 
-    ${inApp ? `<div class="inapp-note">${t.inAppNote}</div>` : `<div class="howto">
+    ${inApp ? `<div class="inapp-note">${t.inAppNote}</div>` : emailVerified ? `<div class="howto">
       <div class="howto-title">📱 ${t.howToTitle}</div>
       <div class="howto-row"><span class="plat">iOS</span><span>${iosLine}</span></div>
       <div class="howto-row"><span class="plat">Android</span><span>${t.androidLine}</span></div>
@@ -1845,7 +2020,7 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
         ${howToSteps.map((step) => `<li>${step}</li>`).join("")}
       </ol>
       <a class="guidelnk" href="${guideUrl}" target="_blank" rel="noopener">${t.guideLink}</a>
-    </div>`}
+    </div>` : ""}
 
     <div class="footer">
       <a href="${meta.privacyUrl}" target="_blank" rel="noopener">${t.privacyLabel}</a>
@@ -1942,6 +2117,65 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
     applyCnyMode();
     const qrSaveBtn = document.getElementById("qrSaveBtn");
     const qrSaveHint = document.getElementById("qrSaveHint");
+
+    // ---- Bước 1: EMAIL TRƯỚC, rồi mới hiện bản tải đúng thiết bị --------------
+    // Trang chưa có email KHÔNG chứa link tải nào; khối tải do server trả về sau khi
+    // POST /v1/buy/lead (server nhận diện thiết bị từ User-Agent của chính request đó).
+    const leadBtn = document.getElementById("leadBtn");
+    if (leadBtn) {
+      const leadEmail = document.getElementById("leadEmail");
+      const leadStatus = document.getElementById("leadStatus");
+      const setLeadError = (msg) => { leadStatus.className = "status err"; leadStatus.textContent = msg || T.leadErr; };
+      const revealDownloads = (email, data) => {
+        const host = document.getElementById("dlHost");
+        if (host && data && data.downloads) {
+          host.innerHTML = data.downloads;
+          const other = document.getElementById("dlOtherBtn");
+          if (other) other.onclick = (ev) => {
+            ev.preventDefault();
+            document.querySelectorAll("#dlHost .plat-hidden").forEach((el) => el.classList.remove("plat-hidden"));
+            other.style.display = "none";
+          };
+        }
+        const form = document.getElementById("buyForm");
+        if (form) form.style.display = "";
+        const emailField = document.getElementById("email");
+        if (emailField) { emailField.value = email; emailField.readOnly = true; }
+        const gate = document.getElementById("leadGate");
+        if (gate) gate.style.display = "none";
+        if (data && data.known) { statusEl.className = "status"; statusEl.textContent = T.leadKnown; }
+      };
+      const submitLead = async () => {
+        const email = (leadEmail.value || "").trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          setLeadError(T.leadErr);
+          leadEmail.focus();
+          return;
+        }
+        if (leadBtn.disabled) return;
+        leadBtn.disabled = true;
+        leadStatus.className = "status";
+        leadStatus.textContent = T.leadSending;
+        try {
+          const res = await fetch(base + "/v1/buy/lead", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, lang }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.error || !data.ok) { setLeadError(data.error || T.leadErr); return; }
+          revealDownloads(email, data);
+        } catch (e) {
+          setLeadError(T.errNoConn);
+        } finally {
+          leadBtn.disabled = false;
+        }
+      };
+      leadBtn.onclick = submitLead;
+      leadEmail.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") { ev.preventDefault(); submitLead(); }
+      });
+    }
     function showQr() { qrModal.classList.add("show"); }
     function hideQr() {
       qrModal.classList.remove("show");
