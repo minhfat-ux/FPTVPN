@@ -120,6 +120,23 @@ ssh root@165.101.114.162                   # node-1 → node-2 (kết nối VPS�
   `/root/.ssh/id_node1`).
 - Đây là đường **không phụ thuộc relay khách** ⇒ là đường cứu hộ đúng khi đã tự cắt tunnel.
 
+> ⚠️ **26/09/2026 19:00–19:05 (+07) — đường §4.1 cũng hỏng trong đợt brute-force.** Khi Tailscale đã bật
+> (Mac `100.109.31.16`, node-1 `fcnvpn` = `100.76.147.111`, path qua DERP `sin`, `ping` 90 ms):
+> ```
+> $ tailscale ping 100.76.147.111        → pong via DERP(sin) 90 ms   (đường tailnet SỐNG)
+> $ nc -v -z 100.76.147.111 80           → succeeded                 (Caddy sống)
+> $ nc -v -z 100.76.147.111 443          → succeeded
+> $ nc -v -z 100.76.147.111 22           → Operation timed out       ← cổng 22 KHÔNG mở qua tailnet
+> $ curl http://100.76.147.111/          → 308                       (node-1 sống, chỉ SSH chết)
+> ```
+> Đường công khai (`103.173.155.50:22`, `165.101.114.162:22`, nguồn ra = IP node-1 qua tunnel) lúc này
+> **timeout ngay ở bước bắt tay TCP** (4/4 lần, cách nhau 3–15 s) — dấu hiệu hàng đợi SYN/sshd của cả hai
+> node bị đợt quét làm ngập, không phải lỗi cấu hình phía mình.
+> ⇒ Khi cổng 22 ngập, **cả §4.1 lẫn §4.3 đều không vào được**: phải dùng **§4.2 console nhà cung cấp**,
+> hoặc chờ cửa sổ (script chờ cửa sổ: `.privatevpn/tmp/breakglass.sh`).
+> Việc bền vững cần làm khi vào được: chặn cổng 22 về **whitelist** ở tầng firewall (cả hai node) +
+> `MaxStartups` cao hơn, để đợt quét không chiếm hết slot trước khi tới sshd.
+
 ### 4.2. Console nhà cung cấp (VPS console / VNC)
 
 Vào thẳng console của node-2 qua trang quản trị nhà cung cấp. Không phụ thuộc SSH, không phụ thuộc
