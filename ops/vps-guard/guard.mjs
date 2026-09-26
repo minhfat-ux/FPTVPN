@@ -277,12 +277,17 @@ export function scanSshBruteForce(logText, { threshold = 30 } = {}) {
     const m = /Failed password[^\n]*from\s+(\d+\.\d+\.\d+\.\d+)/.exec(line) || /Invalid user \S+ from (\d+\.\d+\.\d+\.\d+)/.exec(line);
     if (m) counts.set(m[1], (counts.get(m[1]) ?? 0) + 1);
   }
-  const out = [];
-  for (const [ip, count] of counts) {
-    if (count < threshold) continue;
-    out.push(finding(`ssh-brute-${sha256(ip)}`, "high", `Brute-force SSH từ ${ip}`, `${count} lần đăng nhập sai trong cửa sổ log. Nên chặn IP này hoặc đổi cổng/khoá.`, `${ip}: ${count} lần`));
-  }
-  return out;
+  const offenders = [...counts.entries()].filter(([, count]) => count >= threshold).sort((a, b) => b[1] - a[1]);
+  if (!offenders.length) return [];
+  const total = offenders.reduce((n, [, count]) => n + count, 0);
+  const top = offenders.slice(0, 5).map(([ip, count]) => `${ip} ×${count}`).join(" · ");
+  // MỘT phát hiện gộp cho cả đợt brute-force (trước đây mỗi IP một tin ⇒ Telegram bị spam).
+  return [finding(
+    "ssh-brute-wave", "high",
+    `Brute-force SSH: ${offenders.length} IP vượt ngưỡng (tổng ${total} lần sai)`,
+    `Top: ${top}. Chưa có lần đăng nhập nào thành công bằng mật khẩu — nên chặn IP hoặc chỉ cho SSH qua VPNFlow.`,
+    top,
+  )];
 }
 
 export function scanSuspiciousFiles(listText) {
@@ -424,8 +429,16 @@ async function sendTelegram(text) {
 async function sendBus(text) {
   const { busUrl, busToken } = alertCreds();
   if (!busUrl || !busToken) { log("!! thiếu AGENT_BUS_URL/TOKEN — không báo được cho harness"); return false; }
+  // HỢP ĐỒNG CỦA BUS: `title` + `body` (KHÔNG phải `text` — gửi sai khoá thì harness nhận tin RỖNG).
+  const title = String(text).split("\n")[1] ?? "fBuddy VPS GUARD";
   const res = await postWithFallback(`${busUrl}/push`, {
-    body: JSON.stringify({ from: "vps-guard", to: "all", kind: "alert", text: text.slice(0, 900) }),
+    body: JSON.stringify({
+      from: "vps-guard",
+      to: "all",
+      kind: "alert",
+      title: `[VPS GUARD] ${title}`.slice(0, 300),
+      body: String(text).slice(0, 4000),
+    }),
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${busToken}` },
   });
   if (!res.ok) log(`!! agent-bus lỗi: ${res.error ?? res.text ?? `HTTP ${res.status}`}`);
@@ -579,7 +592,12 @@ function selfTest() {
   check("cổng lạ ra ngoài bị báo", scanListeners('tcp LISTEN 0 128 0.0.0.0:8081 0.0.0.0:* users:(("x",pid=8,fd=1))').some((f) => f.id === "listen-8081" && f.severity === "medium"));
   check("kết nối ra lấy ĐÚNG cột peer (4444)", scanOutbound("tcp ESTAB 0 0 10.0.0.1:55555 37.1.2.3:4444").some((f) => f.id === "out-4444"));
   check("không nhầm cổng local thành peer", scanOutbound("tcp ESTAB 0 0 10.0.0.1:4444 1.1.1.1:443").length === 0);
-  check("brute-force SSH bị báo", scanSshBruteForce(Array.from({ length: 40 }, () => "Failed password for root from 9.9.9.9 port 22 ssh2").join("\n")).some((f) => f.id.startsWith("ssh-brute")));
+  check("brute-force SSH bị báo (gộp 1 tin)", scanSshBruteForce(Array.from({ length: 40 }, () => "Failed password for root from 9.9.9.9 port 22 ssh2").join("\n")).some((f) => f.id === "ssh-brute-wave"));
+  check("brute-force nhiều IP chỉ ra 1 phát hiện", scanSshBruteForce([
+    ...Array.from({ length: 35 }, () => "Failed password for root from 9.9.9.9 port 22 ssh2"),
+    ...Array.from({ length: 31 }, () => "Failed password for root from 8.8.8.8 port 22 ssh2"),
+  ].join("\n")).length === 1);
+  check("dưới ngưỡng thì không báo", scanSshBruteForce(Array.from({ length: 5 }, () => "Failed password for root from 9.9.9.9 port 22 ssh2").join("\n")).length === 0);
   check("webshell bị báo", scanSuspiciousFiles("/var/www/html/x.php").some((f) => f.id.startsWith("file-webshell")));
   check("malware /tmp/kwork bị báo", scanSuspiciousFiles("/tmp/kwork").some((f) => f.id.startsWith("file-malware")));
   check("binary trong /tmp bị báo", scanSuspiciousFiles("/tmp/.x/payload.elf").some((f) => f.id.startsWith("file-exec-tmp")));
