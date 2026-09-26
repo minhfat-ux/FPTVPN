@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-435",
+  "title": "BUY UX: bat buoc email truoc khi tai (owner chot) — WIN lam control-plane + nghiem thu",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/handoff/HANDOFF_BUY_EMAIL_GATE_2026-09-26.md",
+  "verify": "Handoff §5 (docs/handoff/HANDOFF_BUY_EMAIL_GATE_2026-09-26.md): (1) curl -s https://t1.meetflowai.site/buy | grep -c 'downloads/ios|downloads/mac|VPNFlow-Setup' => 0; (2) POST /v1/buy/lead email hop le => {ok:true,known}; (3) lead sai => 4xx va KHONG ghi data/leads.json; (4) /v1/downloads/mac, /v1/downloads/ios, /install/ios/manifest.plist => 200; (5) node --test control-plane/test/ pass; deploy scripts/server-agent/deploy-control-plane.sh --files payments.js,index.js; kem anh chup 3 may",
+  "due": "2026-09-27",
+  "createdAt": "2026-09-26T03:38:35.528Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-26T03:38:35.528Z"
+}
