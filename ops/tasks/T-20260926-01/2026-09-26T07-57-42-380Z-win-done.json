@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=f459c08 (docs/INCIDENT-2026-09-26-SSH-BRUTEFORCE.md + ops/verify-ssh-bruteforce.mjs + docs/evidence/T-20260926-01/); cmd=ssh root@165.101.114.162 \"journalctl -u ssh --since -24h -o cat | grep -c Failed password\" va \"node ops/verify-ssh-bruteforce.mjs\"; ket qua THAT: (1) Accepted password = 0 tren toan bo log sshd (~44h) va btmp 124.506 dong -> CHUA TUNG co dang nhap bang mat khau thanh cong; (2) 140 IP dang nhap sai giao 4 IP dang nhap dung = RONG; 4 IP do deu la cua minh (103.173.155.50 node-1, 165.101.114.162 chinh no, 63.140.14.154 may WIN, 223.118.50.125 nguoi van hanh), tat ca publickey, 6/6 khoa trong authorized_keys dung chu, khong khoa la; (3) 24h: 6.710 lan sai tu 81 IP, nhieu nhat 109.160.32.32 va 109.160.32.107 (NL, AS197170 TechTies) moi IP 1098 lan, nhom ASN: TechTies NL 2196 + ZORNTECH PL 875 + TECHOFF NL 548 + CIPHER LT 290 + UNMANAGED RO 259; (4) node-2 van PermitRootLogin=yes + PasswordAuthentication=yes, khong fail2ban, ufw inactive -> KHONG tu chan/sua gi, da neu 4 lua chon cho owner chot (uu tien: chuyen sang chi dung khoa). Nghiem thu: node ops/verify-ssh-bruteforce.mjs (PASS 2/2).",
+ "actor": "win",
+ "at": "2026-09-26T07:57:42.381Z"
+}
