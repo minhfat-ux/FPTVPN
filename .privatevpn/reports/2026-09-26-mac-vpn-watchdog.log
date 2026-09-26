@@ -1,0 +1,31 @@
+22:01:37 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:14:48 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:20:16 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:20:55 RƠI (lần liên tiếp 1) state=Disconnected egress=120.234.32.53
+22:23:47 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:25:49 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:27:51 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:34:45 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:35:22 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:38:15 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:38:36 RƠI (lần liên tiếp 2) state=Connected egress=none
+22:38:36 -> đã bật lại (lần 1)
+22:40:15 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:40:36 RƠI (lần liên tiếp 2) state=Connected egress=none
+22:40:36 -> đã bật lại (lần 2)
+22:41:22 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:41:44 RƠI (lần liên tiếp 2) state=Connected egress=none
+22:41:44 -> đã bật lại (lần 3)
+22:42:30 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:44:09 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:44:30 RƠI (lần liên tiếp 2) state=Connected egress=none
+22:44:30 -> đã bật lại (lần 4)
+22:45:50 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:46:28 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:46:49 RƠI (lần liên tiếp 2) state=Connected egress=none
+22:46:49 -> đã bật lại (lần 5)
+22:50:30 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:50:51 RƠI (lần liên tiếp 2) state=Connected egress=none
+22:50:51 -> đã bật lại (lần 6)
+22:52:35 RƠI (lần liên tiếp 1) state=Connected egress=none
+22:54:56 watchdog kết thúc, đã bật lại 6 lần
