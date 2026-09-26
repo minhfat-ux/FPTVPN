@@ -2147,7 +2147,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
       };
       const submitLead = async () => {
         const email = (leadEmail.value || "").trim();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        // Backslash phải nhân đôi: đoạn này nằm trong template literal của buyPageHTML,
+        // nên chuỗi escape (backslash + s) sẽ bị nuốt khi render ra HTML (lỗi 26/09/2026).
+        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
           setLeadError(T.leadErr);
           leadEmail.focus();
           return;

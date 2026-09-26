@@ -59,3 +59,22 @@ test("bước email có đủ chữ ở cả 5 ngôn ngữ (không rơi vào und
     assert.ok(!/undefined/.test(html.slice(html.indexOf('id="leadGate"'), html.indexOf('id="leadGate"') + 900)), `${lang}: có khoá i18n bị undefined`);
   }
 });
+
+// Lỗi thật 26/09/2026 (Mac verify fail bus-435): regex nằm trong template literal của
+// buyPageHTML nên escape bị nuốt khi render => HTML phát ra có "[^s@]" và CHẶN NHẦM mọi
+// email hợp lệ chứa chữ "s" (user@example.com, test@gmail.com...). Test này chạy thật
+// biểu thức lấy từ chính HTML đang phát, không chỉ so khớp chuỗi.
+test("regex email phía client phải còn escape sau khi render (chống tái phát bus-435)", () => {
+  const html = buyPageHTML({ baseUrl: BASE, lang: "vi", product: "vpn", links: LINKS, methods: ["bankqr"], emailVerified: false });
+  assert.ok(!html.includes("[^s@]"), "regex bị mất backslash: '[^s@]' xuất hiện trong HTML đang phát");
+  const idx = html.indexOf(".test(email)");
+  assert.ok(idx > 0, "không tìm thấy chỗ kiểm email phía client");
+  const lit = html.slice(html.lastIndexOf("if (!", idx) + 5, idx).trim();
+  assert.ok(lit.startsWith("/") && lit.endsWith("/"), "regex email không hợp lệ trong HTML: " + lit);
+  const re = new RegExp(lit.slice(1, -1));
+  assert.equal(re.test("user@example.com"), true, "email hợp lệ có chữ s bị chặn nhầm");
+  assert.equal(re.test("test@gmail.com"), true, "email hợp lệ bị chặn nhầm");
+  assert.equal(re.test("john@sub.domain.co"), true, "email nhiều dấu chấm bị chặn nhầm");
+  assert.equal(re.test("khong-phai-email"), false, "email sai định dạng phải bị chặn");
+  assert.equal(re.test("a b@example.com"), false, "email có khoảng trắng phải bị chặn");
+});
