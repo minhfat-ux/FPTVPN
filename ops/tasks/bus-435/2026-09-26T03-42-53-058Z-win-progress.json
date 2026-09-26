@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "WIN dang lam: da doc handoff (sha flowgpt 58b41a92), dang sua control-plane/src/payments.js + index.js (buoc email + POST /v1/buy/lead + leads.json + i18n). Chung minh: bus #435/#436 la BAN TRUNG -> chi lam 1 viec, se done bus-435.",
+ "actor": "win",
+ "at": "2026-09-26T03:42:53.058Z"
+}
