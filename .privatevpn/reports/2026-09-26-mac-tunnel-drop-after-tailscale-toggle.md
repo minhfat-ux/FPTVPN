@@ -39,3 +39,16 @@ Mục đích đo: tìm đường vào server khi SSH công khai bị ngập. Tai
   (`ExitNodeStatus = 100.76.147.111 Online`) ⇒ egress `103.173.155.50` hiện nay là **qua Tailscale**, không phải VPNFlow.
 - Hệ quả cho kỳ khách test: máy còn app VPN khác (Tailscale/WireGuard) thì tunnel VPNFlow có thể rơi mà **khách không biết** —
   cần cảnh báo UI + tự dựng lại (đúng `BUG-MACOS-SESSION-DROP-001`).
+
+## Cách né đã đo được (19:34–19:36) — thứ tự thao tác
+
+Làm **ngược** thứ tự so với các lần rơi trước thì tunnel **không rơi**:
+
+1. Bật **VPNFlow trước** (`scutil --nc start "VPNFlow"`) → `Connected`, egress `103.173.155.50`.
+2. **Sau đó** mới tắt app VPN khác: `osascript -e 'quit app "Tailscale"'` rồi `scutil --nc stop "Tailscale"`.
+3. Kiểm lại 5 mẫu × 6 s: VPNFlow **vẫn `Connected`**, `default -> utun8` (mtu 1300, `100.100.100.101` = tunnel VPNFlow),
+   lưu lượng vẫn chở (`cầu vào 6063/5343` → `10552/8890` trong 60 s).
+
+⇒ Ba lần rơi trước đều xảy ra khi **Tailscale đang là đường mặc định rồi mới bật/tắt VPNFlow**; còn khi VPNFlow
+giữ đường mặc định trước thì việc tắt Tailscale **không** làm rơi. Vẫn cần sửa gốc (tự phát hiện + tự dựng lại),
+nhưng đây là cách né dùng được cho kỳ khách test.
