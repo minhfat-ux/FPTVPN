@@ -88,9 +88,54 @@ enum HysteriaDefaults {
     /// báo lỗi). Đi cặp thì cửa nào cũng mang host của chính node đó, không thể ghép lệch.
     struct RelayCandidate: Sendable, Equatable {
         /// `wss://api.meetflowai.site/relay/vn1hy` — **path** mang mã node.
+        ///
+        /// **RỖNG = ĐI THẲNG**: QUIC đi trực tiếp tới `serverHost:serverPort` (UDP), KHÔNG qua
+        /// Cloudflare/WebSocket — xem `directCandidate(serverHost:)`.
         var relayURL: String
         /// Host hysteria của CHÍNH node đó (`103.173.155.50`), KHÔNG phải host relay.
         var serverHost: String
+    }
+
+    /// Ứng viên ĐI THẲNG: QUIC tới `serverHost:serverPort` (UDP 8443), không qua Cloudflare.
+    ///
+    /// Chủ dự án chốt 26/09/2026: *"Thử đường 3, nếu bị chặn thì phải fallback về đường cloudflare"*.
+    /// Mọi cửa hiện tại đều qua Cloudflare và bị bóp còn ~2–6 Mbps trong khi tuyến nhà đo được
+    /// ~103 Mbps; đường thẳng không qua Cloudflare nên có thể nhanh hơn hẳn.
+    ///
+    /// **Đo thật 26/09/2026 trên mạng chủ dự án (China Mobile): đường thẳng BỊ CHẶN** — ba cổng
+    /// `8443`/`28443`/`54443` trên cả hai node đều `FATAL failed to initialize client: connect error:
+    /// timeout: no recent network activity` (client hysteria2 thật, tunnel đã ngắt), tuyến nhà vẫn
+    /// 12,6 MB/s ⇒ chặn ở tầng mạng, không phải lỗi cấu hình. Vì vậy **bắt buộc** có fallback Cloudflare.
+    static func directCandidate(serverHost: String) -> RelayCandidate {
+        RelayCandidate(relayURL: "", serverHost: serverHost)
+    }
+
+    /// Thử ĐI THẲNG trước (`true`) hay để nó làm ứng viên cuối (`false`).
+    ///
+    /// Mặc định `true` theo chốt của chủ dự án. Trên mạng CHẶN UDP, mỗi lượt thử đường thẳng tốn hết
+    /// `relayOpenGrace` giây trước khi rơi về Cloudflare (đo thật ~5–7 s) — đổi hằng này thành `false`
+    /// nếu ưu tiên vào mạng nhanh hơn là dùng đường thẳng.
+    static let directFirst = true
+
+    /// Thứ tự THỬ cửa cho node đang chọn — hàm THUẦN để harness khoá được thứ tự.
+    ///
+    /// Gồm: (1) cửa chính (relay của node đang dùng), (2) các cửa Cloudflare thay thế của CÙNG node
+    /// (bỏ trùng, giữ thứ tự), (3) ứng viên ĐI THẲNG — đặt trước hay sau tuỳ `directFirst`.
+    /// Không bao giờ ghép `serverHost` của node này với relay của node khác (finding F3).
+    static func orderedCandidates(
+        primaryRelayURL: String,
+        serverHost: String,
+        alternates: [RelayCandidate],
+        directFirst: Bool = HysteriaDefaults.directFirst
+    ) -> [RelayCandidate] {
+        var ws: [RelayCandidate] = [RelayCandidate(relayURL: primaryRelayURL, serverHost: serverHost)]
+        for candidate in alternates where !candidate.relayURL.isEmpty {
+            if !ws.contains(where: { $0.relayURL == candidate.relayURL }) {
+                ws.append(RelayCandidate(relayURL: candidate.relayURL, serverHost: candidate.serverHost))
+            }
+        }
+        let direct = directCandidate(serverHost: serverHost)
+        return directFirst ? [direct] + ws : ws + [direct]
     }
 
     /// Danh sách ỨNG VIÊN ĐỔI ĐƯỜNG (theo THỨ TỰ THỬ) cho node đang chọn — KHÔNG gồm cửa chính.

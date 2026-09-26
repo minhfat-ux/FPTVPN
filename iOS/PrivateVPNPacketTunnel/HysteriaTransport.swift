@@ -185,35 +185,78 @@ final class HysteriaTransport: @unchecked Sendable {
         let candidates = relayCandidates(for: options)
         var lastError: Error = TransportError.relayNotStarted("không có relay URL nào để thử")
         for candidate in candidates {
-            guard let relayURL = URL(string: candidate.relayURL) else { continue }
+            // `relayURL` RỖNG = ứng viên ĐI THẲNG (UDP/QUIC tới node, không qua Cloudflare).
+            let label = candidate.relayURL.isEmpty
+                ? "đi thẳng \(candidate.serverHost):\(HysteriaDefaults.serverPort)"
+                : candidate.relayURL
             do {
-                try attempt(relayURL: relayURL, options: options, tunnelFd: tunnelFd)
+                if candidate.relayURL.isEmpty {
+                    try attemptDirect(options: options)
+                } else if let relayURL = URL(string: candidate.relayURL) {
+                    try attempt(relayURL: relayURL, options: options, tunnelFd: tunnelFd)
+                } else {
+                    continue
+                }
                 return
             } catch {
                 lastError = error
-                log.error("hysteria: relay \(relayURL.absoluteString, privacy: .public) hỏng: \(error.localizedDescription, privacy: .public)")
-                RelayDiagnostics.shared.log("hysteria: relay \(relayURL.absoluteString) hỏng (\(error)) — thử relay kế tiếp")
+                log.error("hysteria: cửa \(label, privacy: .public) hỏng: \(error.localizedDescription, privacy: .public)")
+                RelayDiagnostics.shared.log("hysteria: cửa \(label) hỏng (\(error)) — thử cửa kế tiếp")
                 discardAttempt()
             }
         }
         throw lastError
     }
 
+    /// Lượt thử ĐI THẲNG: QUIC tới `serverHost:serverPort` (UDP), KHÔNG có WebSocket/Cloudflare.
+    ///
+    /// Chủ dự án chốt 26/09/2026 (*"thử đường 3, nếu bị chặn thì phải fallback về Cloudflare"*). Đo
+    /// thật trên mạng chủ dự án: đường thẳng bị chặn hoàn toàn (client hysteria2 báo `connect error:
+    /// timeout: no recent network activity` ở cả 8443/28443/54443) ⇒ lượt này hỏng nhanh rồi vòng lặp
+    /// rơi ngay về cửa Cloudflare kế tiếp; ở mạng KHÔNG chặn UDP thì đây là đường nhanh nhất vì không
+    /// phải đi qua Cloudflare.
+    private func attemptDirect(options: Options) throws {
+        #if canImport(Hysteria)
+        var connectError: NSError?
+        let connected = MobileConnect(
+            options.serverHost,
+            Int(HysteriaDefaults.serverPort),
+            options.password,
+            options.obfs,
+            0,
+            false,
+            Int(options.upKbps),
+            Int(options.downKbps),
+            &connectError
+        )
+        guard connected else {
+            throw TransportError.connectFailed(
+                connectError?.localizedDescription
+                    ?? "đường thẳng \(options.serverHost):\(HysteriaDefaults.serverPort) không lên được"
+            )
+        }
+        log.log("hysteria: ĐI THẲNG (không Cloudflare) — server \(options.serverHost, privacy: .public):\(HysteriaDefaults.serverPort), up=\(options.upKbps) kbps, down=\(options.downKbps) kbps)")
+        lock.lock()
+        running = true
+        lock.unlock()
+        #else
+        throw TransportError.relayNotStarted("bản build thiếu hysteria")
+        #endif
+    }
+
     /// Cửa chính (`relayURL` + `serverHost` của nó) trước, rồi tới các ứng viên còn lại (bỏ trùng,
     /// giữ thứ tự). Cửa nào cũng đi KÈM danh tính node của chính nó — không bao giờ ghép `serverHost`
     /// của node này với relay của node khác (finding F3).
+    ///
+    /// 26/09/2026 — thứ tự do `HysteriaDefaults.orderedCandidates` quyết (hàm THUẦN, có test): chủ dự
+    /// án chốt *"thử đường 3 (UDP thẳng), nếu bị chặn thì fallback về Cloudflare"* ⇒ mặc định đường
+    /// thẳng đứng trước, các cửa Cloudflare ngay sau làm fallback.
     private func relayCandidates(for options: Options) -> [HysteriaDefaults.RelayCandidate] {
-        var ordered: [HysteriaDefaults.RelayCandidate] = [
-            HysteriaDefaults.RelayCandidate(
-                relayURL: options.relayURL.absoluteString,
-                serverHost: options.serverHost
-            )
-        ]
-        for candidate in options.relayCandidates
-        where !ordered.contains(where: { $0.relayURL == candidate.relayURL }) {
-            ordered.append(candidate)
-        }
-        return ordered
+        HysteriaDefaults.orderedCandidates(
+            primaryRelayURL: options.relayURL.absoluteString,
+            serverHost: options.serverHost,
+            alternates: options.relayCandidates
+        )
     }
 
     /// Một lượt thử: mở relay → chờ WS mở → cho Go nói QUIC tới cổng UDP nội bộ → serve.
