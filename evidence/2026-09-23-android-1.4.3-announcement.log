@@ -1,0 +1,57 @@
+# EVIDENCE — Email thông báo Android 1.4.3 (versionCode 29)
+
+- Ngày: 23/09/2026 (UTC). Người thực hiện: **harness MAC** (publisher), theo yêu cầu `bus-299` của Windows.
+- Nguồn nội dung: `docs/RELEASE_NOTES_android_1.4.3.md` (tạo trong cùng đợt).
+- Script gửi: `scripts/send-android-1.4.3-announcement.py` (3 ngôn ngữ vi/en/zh, host `t1.meetflowai.site`,
+  hỗ trợ `support@meetflowai.site`). Chạy trên node-2, lấy `RESEND_API_KEY` từ drop-in systemd.
+
+## 1. Kiểm kênh tải trước khi gửi (curl HEAD)
+
+```
+https://t1.meetflowai.site/v1/downloads/android        -> HTTP/2 200, content-length 74731689
+https://t1.meetflowai.site/v1/downloads/android-legacy -> HTTP/2 200, content-length 74748051
+https://t1.meetflowai.site/buy                         -> HTTP/2 200
+```
+
+## 2. Đối chiếu artifact đang phát (sha256 do node-2 tự băm)
+
+```
+9563366995704d9c49c2087b6357e6c9655426cbdee909cecfb0f46515064ce5  /root/flowvpn-apk/VPNFlow-latest.apk   (74.731.689 B)
+fdb88e3febdbab4a243d92d3b743327298d04c9e6e8b7f2fe79b121dd6a5ede9  /root/flowvpn-apk/VPNFlow-android7.apk (74.748.051 B)
+```
+Khớp đúng artifact Mac build (`docs/handoff/BUILD_ANDROID_1.4.3_2026-09-23.md` §1) và bản Windows băm lại
+độc lập (`bus-300`).
+
+## 3. Kết quả gửi (log thật, địa chỉ đã che)
+
+```
+nguoi nhan Android: ['ca***@gmail.com', 'di***@gmail.com', 'ha***@gmail.com', 'ha***@gmail.com', 'mi***@gmail.com', 'qi***@gmail.com', 'vt***@gmail.com']
+   test toi minhnb2@me.com: OK
+   OK  ca***@gmail.com  id=01a0cce8-9464-730d-bcba-f3c97cd9d1c8
+   OK  di***@gmail.com  id=01a0cce8-993f-755e-bf36-841e1013323b
+   OK  ha***@gmail.com  id=01a0cce8-a036-74ee-af31-c475de230503
+   OK  ha***@gmail.com  id=01a0cce8-a755-70ca-91e5-ca2c3b3cc317
+   OK  mi***@gmail.com  id=01a0cce8-ac6d-745e-bb04-12977aecc994
+   OK  qi***@gmail.com  id=01a0cce8-b15a-72fa-a6cf-4ac000f96f5e
+   OK  vt***@gmail.com  id=01a0cce8-b63d-73b9-b9f7-c60be66aefeb
+ket qua: 7/7 thanh cong, 0 loi
+ma Resend da luu: /root/flowvpn-cp/data/.announce-android-1.4.3-ids.json
+```
+
+- **Số người nhận: 7/7 gửi thành công (0 lỗi)** — Resend trả `id` cho từng thư (bằng chứng đã nhận).
+- **`delivered` không truy vấn được qua khoá này**: `GET /emails/{id}` trả **403 Forbidden** (khoá Resend
+  là khoá gửi, không có quyền đọc). Muốn `delivered/bounced` phải xem dashboard Resend hoặc bật webhook.
+  Đây là hạn chế của khoá, không phải lỗi gửi.
+- Đã gửi **thử tới `ALERT_EMAIL` (=minhnb2@me.com) trước** khi gửi khách; thư thử OK.
+
+## 4. Lệnh tái lập
+
+```bash
+# liệt kê người nhận
+ssh -i ~/.ssh/fpt_tunnel -J root@103.173.155.50 root@165.101.114.162 \
+  'python3 - --recipients' < scripts/send-android-1.4.3-announcement.py
+# gửi thử (chỉ ALERT_EMAIL)
+ssh ... 'python3 - --test' < scripts/send-android-1.4.3-announcement.py
+# gửi thật
+ssh ... 'python3 -' < scripts/send-android-1.4.3-announcement.py
+```

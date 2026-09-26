@@ -1,35 +1,35 @@
 ﻿<#
 .SYNOPSIS
-  Kiá»ƒm tra CÃ” Láº¬P Ä‘Æ°á»ng "hysteria2 bá»c trong WebSocket + sing-box" trÃªn mÃ¡y Windows, TRÆ¯á»šC khi
-  má»Ÿ app: tá»± dá»±ng 2 file cáº¥u hÃ¬nh, cháº¡y flowvpnrelay.exe + sing-box.exe, chá» READY, Ä‘o bÄƒng thÃ´ng
-  qua SOCKS5 báº±ng curl.exe, rá»“i Dá»ŒN Sáº CH cáº£ hai tiáº¿n trÃ¬nh vÃ  route/TUN cÃ²n sÃ³t.
+  Kiểm tra CÔ LẬP đường "hysteria2 bọc trong WebSocket + sing-box" trên máy Windows, TRƯỚC khi
+  mở app: tự dựng 2 file cấu hình, chạy flowvpnrelay.exe + sing-box.exe, chờ READY, đo băng thông
+  qua SOCKS5 bằng curl.exe, rồi DỌN SẠCH cả hai tiến trình và route/TUN còn sót.
 
 .DESCRIPTION
-  VÃ¬ sao cáº§n script riÃªng: khi app bÃ¡o "khÃ´ng káº¿t ná»‘i Ä‘Æ°á»£c", khÃ´ng phÃ¢n biá»‡t Ä‘Æ°á»£c lá»—i á»Ÿ
-  relay (WS/Cloudflare), á»Ÿ hysteria (auth/obfs), hay á»Ÿ sing-box (TUN/route). Script nÃ y cháº¡y
-  Ä‘Ãºng hai binary mÃ  app sáº½ cháº¡y, vá»›i Ä‘Ãºng cáº¥u hÃ¬nh mÃ 
-  windows/PrivateVPNWindows.Core/Tunnel/SingBoxConfigBuilder.cs sinh ra â€” nÃªn káº¿t quáº£ á»Ÿ Ä‘Ã¢y
-  lÃ  káº¿t luáº­n vá» chÃ­nh Ä‘Æ°á»ng Ä‘Ã³, khÃ´ng pháº£i má»™t thá»© tÆ°Æ¡ng tá»±.
+  Vì sao cần script riêng: khi app báo "không kết nối được", không phân biệt được lỗi ở
+  relay (WS/Cloudflare), ở hysteria (auth/obfs), hay ở sing-box (TUN/route). Script này chạy
+  đúng hai binary mà app sẽ chạy, với đúng cấu hình mà
+  windows/PrivateVPNWindows.Core/Tunnel/SingBoxConfigBuilder.cs sinh ra — nên kết quả ở đây
+  là kết luận về chính đường đó, không phải một thứ tương tự.
 
-  Cáº¥u hÃ¬nh dÆ°á»›i Ä‘Ã¢y CHÃ‰P theo SingBoxConfigBuilder (cÃ¹ng khoÃ¡, cÃ¹ng giÃ¡ trá»‹ máº·c Ä‘á»‹nh). Náº¿u sá»­a
-  builder thÃ¬ sá»­a cáº£ Ä‘Ã¢y â€” hai chá»— pháº£i khá»›p.
+  Cấu hình dưới đây CHÉP theo SingBoxConfigBuilder (cùng khoá, cùng giá trị mặc định). Nếu sửa
+  builder thì sửa cả đây — hai chỗ phải khớp.
 
-  Script KHÃ”NG cáº§n quyá»n admin Ä‘á»ƒ cháº¡y `sing-box check`, nhÆ°ng Cáº¦N admin Ä‘á»ƒ dá»±ng TUN/route.
+  Script KHÔNG cần quyền admin để chạy `sing-box check`, nhưng CẦN admin để dựng TUN/route.
 
 .PARAMETER Password
-  HY_PASSWORD cá»§a hysteria (báº¯t buá»™c). KHÃ”NG hard-code trong file nÃ y: láº¥y tá»«
-  android/app/src/main/java/com/privatevpn/app/Config.kt (háº±ng HY_PASSWORD) â€” file Ä‘Ã³ Ä‘Ã£ ghi rÃµ
-  giÃ¡ trá»‹ nÃ y náº±m trong APK phÃ¡t hÃ nh nÃªn coi nhÆ° cÃ´ng khai. Báº£n Windows dÃ¹ng cÃ¹ng giÃ¡ trá»‹ á»Ÿ
+  HY_PASSWORD của hysteria (bắt buộc). KHÔNG hard-code trong file này: lấy từ
+  android/app/src/main/java/com/privatevpn/app/Config.kt (hằng HY_PASSWORD) — file đó đã ghi rõ
+  giá trị này nằm trong APK phát hành nên coi như công khai. Bản Windows dùng cùng giá trị ở
   windows/PrivateVPNWindows.Core/Tunnel/HysteriaRelayDefaults.cs.
 
 .PARAMETER Obfs
-  HY_OBFS cá»§a hysteria (báº¯t buá»™c). Láº¥y cÃ¹ng chá»— vá»›i -Password.
+  HY_OBFS của hysteria (bắt buộc). Lấy cùng chỗ với -Password.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File windows\installer\verify-relay.ps1 -Password <HY_PASSWORD> -Obfs <HY_OBFS>
 
 .EXAMPLE
-  # Kiá»ƒm tra bá»™ publish thay vÃ¬ windows\assets (Ä‘Ãºng thá»© khÃ¡ch sáº½ cháº¡y):
+  # Kiểm tra bộ publish thay vì windows\assets (đúng thứ khách sẽ chạy):
   powershell -ExecutionPolicy Bypass -File windows\installer\verify-relay.ps1 `
     -AssetsDir windows\installer\publish -Password <HY_PASSWORD> -Obfs <HY_OBFS>
 #>
@@ -37,14 +37,15 @@
 param(
   [string]$AssetsDir = "",
 
-  # Äá»‹a chá»‰ node (danh tÃ­nh QUIC khi Ä‘i qua relay). Máº·c Ä‘á»‹nh = node-2.
+  # Địa chỉ node (danh tính QUIC khi đi qua relay). Mặc định = node-2.
   [string]$Server = "165.101.114.162:8443",
 
-  # Relay WebSocket. Máº·c Ä‘á»‹nh = /relay/vn2hy (exit node-2, Ä‘o nhanh hÆ¡n node-1).
+  # Relay WebSocket. Mặc định = /relay/vn2hy (exit node-2, đo nhanh hơn node-1).
   [string]$RelayUrl = "wss://api.meetflowai.site/relay/vn2hy",
 
-  [Parameter(Mandatory = $true)][string]$Password,
-  [Parameter(Mandatory = $true)][string]$Obfs,
+  # Khong bat buoc o che do -ConfigOnly (chi kiem cau hinh, khong dung credential).
+  [string]$Password = "",
+  [string]$Obfs = "",
 
   [int]$ReadyTimeoutSec = 15,
   [long]$SpeedBytes = 50000000,
@@ -52,13 +53,21 @@ param(
   [int]$DownKbps = 0,
   [int]$SettleSeconds = 3,
 
-  # Giá»¯ láº¡i thÆ° má»¥c táº¡m (cáº¥u hÃ¬nh + log) Ä‘á»ƒ cháº©n Ä‘oÃ¡n khi lá»—i.
-  [switch]$KeepFiles
+  # Giữ lại thư mục tạm (cấu hình + log) để chẩn đoán khi lỗi.
+  [switch]$KeepFiles,
+
+  # Chi sinh cau hinh + chay `sing-box check` roi thoat: KHONG dung TUN/route nen KHONG can quyen
+  # Administrator va KHONG can -Password/-Obfs. Dung de kiem cau hinh ngay tren may khong phai admin.
+  [switch]$ConfigOnly,
+
+  # Dung file CIDR co san thay vi tai CDN (vi du docs\routes\cn-cidrs.txt - da gop ca IPv4 + IPv6).
+  # Can khi may khong ra duoc CDN. Bo trong thi tai nhu app.
+  [string[]]$LocalCidrs = @()
 )
 
 $ErrorActionPreference = "Stop"
 
-# Äá»‹a chá»‰ TUN mÃ  SingBoxConfigBuilder dÃ¹ng (dÃ¹ng Ä‘á»ƒ nháº­n diá»‡n route cÃ²n sÃ³t).
+# Địa chỉ TUN mà SingBoxConfigBuilder dùng (dùng để nhận diện route còn sót).
 $TunAddressPrefix = "172.19.0."
 $TunAdapterName = "sing-box"
 
@@ -80,8 +89,8 @@ function Record([string]$name, $code) {
   Write-Host ("    exit code {0} = {1}" -f $name, $code) -ForegroundColor $color
 }
 
-# Ghi file KHÃ”NG BOM: `Set-Content -Encoding UTF8` cá»§a Windows PowerShell 5.1 thÃªm BOM, mÃ 
-# json.Unmarshal cá»§a Go (dÃ¹ng bá»Ÿi cáº£ flowvpnrelay.exe láº«n sing-box.exe) tá»« chá»‘i BOM.
+# Ghi file KHÔNG BOM: `Set-Content -Encoding UTF8` của Windows PowerShell 5.1 thêm BOM, mà
+# json.Unmarshal của Go (dùng bởi cả flowvpnrelay.exe lẫn sing-box.exe) từ chối BOM.
 function Write-JsonFile([string]$path, [string]$content) {
   $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
   [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
@@ -93,7 +102,7 @@ function Test-IsAdmin {
   return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Äá»c file log mÃ  tiáº¿n trÃ¬nh khÃ¡c Ä‘ang ghi (Get-Content máº·c Ä‘á»‹nh sáº½ bá»‹ tá»« chá»‘i chia sáº»).
+# Đọc file log mà tiến trình khác đang ghi (Get-Content mặc định sẽ bị từ chối chia sẻ).
 function Read-SharedText([string]$path) {
   if (-not (Test-Path -LiteralPath $path)) { return "" }
   try {
@@ -109,7 +118,7 @@ function Read-SharedText([string]$path) {
   }
 }
 
-# Cáº¥p cá»•ng TCP trá»‘ng: má»Ÿ Ä‘á»“ng thá»i má»i listener rá»“i má»›i Ä‘Ã³ng, Ä‘á»ƒ hai cá»•ng khÃ´ng trÃ¹ng nhau.
+# Cấp cổng TCP trống: mở đồng thời mọi listener rồi mới đóng, để hai cổng không trùng nhau.
 function Get-FreePorts([int]$count) {
   $ports = @()
   $listeners = New-Object System.Collections.ArrayList
@@ -137,25 +146,25 @@ function Wait-ForMarker([System.Diagnostics.Process]$process, [string]$logPath, 
   return $false
 }
 
-# Giá»¯ Ä‘Ãºng thá»© tá»± dá»n cá»§a app: sing-box TRÆ¯á»šC (Ä‘á»ƒ nÃ³ gá»¡ TUN/route) rá»“i má»›i tá»›i flowvpnrelay.
+# Giữ đúng thứ tự dọn của app: sing-box TRƯỚC (để nó gỡ TUN/route) rồi mới tới flowvpnrelay.
 function Stop-Child([System.Diagnostics.Process]$process, [string]$name) {
   if ($null -eq $process) { return }
   try {
     if (-not $process.HasExited) {
       Stop-Process -Id $process.Id -Force -ErrorAction Stop
-      Note "Ä‘Ã£ kill $name (pid $($process.Id))"
+      Note "đã kill $name (pid $($process.Id))"
     } else {
-      Note "$name Ä‘Ã£ thoÃ¡t trÆ°á»›c Ä‘Ã³ (exit code $($process.ExitCode))"
+      Note "$name đã thoát trước đó (exit code $($process.ExitCode))"
     }
   } catch {
-    Note "kill $name lá»—i (bá» qua): $($_.Exception.Message)"
+    Note "kill $name lỗi (bỏ qua): $($_.Exception.Message)"
   } finally {
     try { $process.WaitForExit(5000) } catch { }
     $process.Dispose()
   }
 }
 
-# Route/TUN cÃ²n sÃ³t sau khi sing-box bá»‹ kill cá»©ng â€” dá»n Ä‘á»ƒ mÃ¡y khÃ´ng trá» ra ngoÃ i qua Ä‘Æ°á»ng cháº¿t.
+# Route/TUN còn sót sau khi sing-box bị kill cứng — dọn để máy không trỏ ra ngoài qua đường chết.
 function Remove-RelayLeftovers {
   $removed = 0
   try {
@@ -166,37 +175,44 @@ function Remove-RelayLeftovers {
         Remove-NetRoute -DestinationPrefix $route.DestinationPrefix -NextHop $route.NextHop `
           -InterfaceIndex $route.InterfaceIndex -Confirm:$false -ErrorAction Stop
         $removed++
-        Note "Ä‘Ã£ xoÃ¡ route sÃ³t: $($route.DestinationPrefix) -> $($route.NextHop)"
+        Note "đã xoá route sót: $($route.DestinationPrefix) -> $($route.NextHop)"
       } catch {
-        Note "xoÃ¡ route $($route.DestinationPrefix) lá»—i: $($_.Exception.Message)"
+        Note "xoá route $($route.DestinationPrefix) lỗi: $($_.Exception.Message)"
       }
     }
   } catch {
-    Note "khÃ´ng Ä‘á»c Ä‘Æ°á»£c báº£ng route: $($_.Exception.Message)"
+    Note "không đọc được bảng route: $($_.Exception.Message)"
   }
 
   try {
     $adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$TunAdapterName*" })
     foreach ($adapter in $adapters) {
-      Note "Cáº¢NH BÃO: adapter TUN cÃ²n láº¡i '$($adapter.Name)' ($($adapter.Status)) â€” má»Ÿ Network Connections Ä‘á»ƒ gá»¡ náº¿u cáº§n."
+      Note "CẢNH BÁO: adapter TUN còn lại '$($adapter.Name)' ($($adapter.Status)) — mở Network Connections để gỡ nếu cần."
     }
   } catch { }
 
   return $removed
 }
 
-# --- dá»n dáº¹p luÃ´n cháº¡y, ká»ƒ cáº£ khi lá»—i giá»¯a chá»«ng -----------------------------
+# --- dọn dẹp luôn chạy, kể cả khi lỗi giữa chừng -----------------------------
 $relayProcess = $null
 $singBoxProcess = $null
 $workDir = $null
 
 try {
-  # 0) mÃ´i trÆ°á»ng
-  Step "Kiá»ƒm tra mÃ´i trÆ°á»ng"
-  if (-not (Test-IsAdmin)) {
-    throw "Script cáº§n cháº¡y vá»›i quyá»n Administrator (sing-box pháº£i táº¡o TUN + sá»­a báº£ng route)."
+  # 0) môi trường
+  Step "Kiểm tra môi trường"
+  if (-not $ConfigOnly -and -not (Test-IsAdmin)) {
+    throw "Script cần chạy với quyền Administrator (sing-box phải tạo TUN + sửa bảng route)."
   }
-  Note "PowerShell $($PSVersionTable.PSVersion), admin: OK"
+  if (-not $ConfigOnly -and ([string]::IsNullOrWhiteSpace($Password) -or [string]::IsNullOrWhiteSpace($Obfs))) {
+    throw "Thieu -Password/-Obfs (bat buoc khi dung tunnel that). Dung -ConfigOnly neu chi muon kiem cau hinh."
+  }
+  if ($ConfigOnly) {
+    Note "che do -ConfigOnly: chi sinh cau hinh + sing-box check, KHONG dung TUN/route nen khong can admin."
+  } else {
+    Note "PowerShell $($PSVersionTable.PSVersion), admin: OK"
+  }
 
   if ([string]::IsNullOrWhiteSpace($AssetsDir)) {
     $AssetsDir = Join-Path (Split-Path -Parent $PSScriptRoot) "assets"
@@ -206,22 +222,22 @@ try {
   $singBoxExe = Join-Path $AssetsDir "sing-box.exe"
   foreach ($exe in @($relayExe, $singBoxExe)) {
     if (-not (Test-Path -LiteralPath $exe)) {
-      throw "Thiáº¿u $exe â€” cháº¡y: bash windows\assets\fetch-assets.sh (hoáº·c trá» -AssetsDir vÃ o thÆ° má»¥c publish)."
+      throw "Thiếu $exe — chạy: bash windows\assets\fetch-assets.sh (hoặc trỏ -AssetsDir vào thư mục publish)."
     }
     $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLower()
     Note ("{0}  {1} bytes  sha256={2}" -f (Split-Path -Leaf $exe), (Get-Item -LiteralPath $exe).Length, $hash)
   }
 
-  Step "sing-box.exe version (pháº£i lÃ  1.14.1)"
+  Step "sing-box.exe version (phải là 1.14.1)"
   $sbVersion = (& $singBoxExe version 2>&1 | Out-String).Trim()
   Record "sing-box version" $LASTEXITCODE
   Note $sbVersion
   if ($sbVersion -notmatch "1\.14\.1") {
-    Write-Host "    Cáº¢NH BÃO: phiÃªn báº£n khÃ´ng khá»›p 1.14.1 trong THIRD_PARTY.md." -ForegroundColor Yellow
+    Write-Host "    CẢNH BÁO: phiên bản không khớp 1.14.1 trong THIRD_PARTY.md." -ForegroundColor Yellow
   }
 
-  # 1) cáº¥u hÃ¬nh táº¡m (mirror SingBoxConfigBuilder)
-  Step "Dá»±ng 2 file cáº¥u hÃ¬nh táº¡m"
+  # 1) cấu hình tạm (mirror SingBoxConfigBuilder)
+  Step "Dựng 2 file cấu hình tạm"
   $ports = Get-FreePorts 2
   $socksPort = $ports[0]
   $clashPort = $ports[1]
@@ -265,11 +281,69 @@ try {
   $relayJson = $relayJson.Replace("__SOCKSPORT__", "$socksPort")
   Write-JsonFile $relayCfg $relayJson
 
+  # Danh sach dai IP + ten mien Trung Quoc di THANG: CHEP tu SingBoxConfigBuilder.cs
+  # (ChinaServiceDomainSuffixes + ChinaDirectDomainSuffixes). Sua builder thi SUA CA DAY.
+  # Vi sao phai co: ban cu thieu ca rule ip_cidr lan rule domain_suffix => script bao "DAT" trong khi
+  # app TQ van di qua tunnel (dung ca khach bao 22/09/2026: "bat VPN khong bypass duoc app Trung Quoc").
+  $chinaDirectDomains = @('weixin.qq.com', 'wechat.com', 'weixinbridge.com', 'servicewechat.com',
+    'qpic.cn', 'gtimg.com', 'gtimg.cn', 'qlogo.cn', 'tencent.com', 'tencent-cloud.com',
+    'myqcloud.com', 'qq.com', 'qcloud.com', 'cn')
+  $chinaServiceDomains = @('alipay.com', 'alipayobjects.com', 'unionpay.com', 'ccb.com', 'abchina.com',
+    'cmbchina.com', 'bankcomm.com', 'psbc.com', 'taobao.com', 'tmall.com', 'alicdn.com', 'alibaba.com',
+    'alibabacloud.com', '1688.com', 'jd.com', 'pinduoduo.com', 'yangkeduo.com', 'suning.com',
+    'cainiao.com', 'sf-express.com', 'baidu.com', 'bdstatic.com', 'meituan.com', 'dianping.com',
+    'ele.me', 'didiglobal.com', 'amap.com', 'autonavi.com', 'bilibili.com', 'hdslb.com', 'douyin.com',
+    'bytedance.com', 'ixigua.com', 'kuaishou.com', 'iqiyi.com', 'youku.com', 'weibo.com', 'zhihu.com',
+    'xiaohongshu.com', '163.com', 'qunar.com', 'ctrip.com', 'wps.com')
+
+  # CUNG nguon du lieu ma ChinaBypass.LoadAllAsync dung (cn.txt + cn6.txt).
+  $chinaCidrs = @()
+  if ($LocalCidrs.Count -gt 0) {
+    foreach ($file in $LocalCidrs) {
+      $path = (Resolve-Path -LiteralPath $file).Path
+      Note "dung danh sach CIDR cuc bo: $path"
+      $chinaCidrs += @(Get-Content -LiteralPath $path | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#') -and $_ -match '/' })
+    }
+  } else {
+    foreach ($url in @('https://meetflowai.site/dl/routes/cn.txt', 'https://meetflowai.site/dl/routes/cn6.txt')) {
+      try {
+        $text = (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30).Content
+        $chinaCidrs += @($text -split "`n" | ForEach-Object { $_.Trim() } |
+          Where-Object { $_ -and -not $_.StartsWith('#') -and $_ -match '/' })
+      } catch {
+        Note "khong tai duoc $url : $($_.Exception.Message)"
+      }
+    }
+  }
+  $chinaCidrs = @($chinaCidrs | Select-Object -Unique)
+
+  if ($chinaCidrs.Count -eq 0) {
+    Note "CANH BAO: khong co danh sach CIDR Trung Quoc - script chay KHONG kem bypass (giong app khi mat mang)."
+    $ipCidrRule = ''
+    $dnsCnServer = ''
+    $dnsRules = ''
+    $defaultResolver = ''
+  } else {
+    Note "danh sach CIDR Trung Quoc: $($chinaCidrs.Count) dai (cn.txt + cn6.txt)"
+    $ipCidrRule = ",`n      { ""ip_cidr"": [" +
+      (($chinaCidrs | ForEach-Object { '"' + $_ + '"' }) -join ', ') + "], ""outbound"": ""direct"" }"
+    $dnsCnServer = ",`n      { ""type"": ""udp"", ""tag"": ""cn"", ""server"": ""223.5.5.5"" }"
+    $dnsRules = "`n      { ""domain_suffix"": [" +
+      (($chinaServiceDomains | ForEach-Object { '"' + $_ + '"' }) -join ', ') + "], ""server"": ""cn"" }`n    "
+    # BAT BUOC khi co dns.rules/DNS server thu hai: thieu truong nay sing-box 1.14 FATAL ngay.
+    $defaultResolver = ",`n    ""default_domain_resolver"": ""remote"""
+  }
+
+  $domainSuffixList = (@($chinaDirectDomains + $chinaServiceDomains) |
+    ForEach-Object { '"' + $_ + '"' }) -join ', '
+
   $singBoxJson = @'
 {
   "log": { "level": "info", "output": "__LOG__", "timestamp": true },
   "dns": {
-    "servers": [ { "type": "udp", "tag": "remote", "server": "1.1.1.1" } ],
+    "servers": [ { "type": "udp", "tag": "remote", "server": "1.1.1.1" }__DNSCN__ ],
+    "rules": [__DNSRULES__],
     "final": "remote"
   },
   "inbounds": [
@@ -285,54 +359,65 @@ try {
   "route": {
     "rules": [
       { "action": "sniff" },
-      { "ip_is_private": true, "outbound": "direct" },
+      { "ip_is_private": true, "outbound": "direct" }__IPCIDR__,
+      { "domain_suffix": [__DOMAINS__], "outbound": "direct" },
       { "protocol": "dns", "action": "hijack-dns" }
     ],
     "final": "hyrelay",
-    "auto_detect_interface": true
+    "auto_detect_interface": true__RESOLVER__
   },
   "experimental": { "clash_api": { "external_controller": "127.0.0.1:__CLASHPORT__" } }
 }
 '@
   $singBoxJson = $singBoxJson.Replace("__LOG__", $singBoxAppLog.Replace("\", "\\"))
+  $singBoxJson = $singBoxJson.Replace("__DNSCN__", $dnsCnServer)
+  $singBoxJson = $singBoxJson.Replace("__DNSRULES__", $dnsRules)
+  $singBoxJson = $singBoxJson.Replace("__IPCIDR__", $ipCidrRule)
+  $singBoxJson = $singBoxJson.Replace("__DOMAINS__", $domainSuffixList)
+  $singBoxJson = $singBoxJson.Replace("__RESOLVER__", $defaultResolver)
   $singBoxJson = $singBoxJson.Replace("__SOCKSPORT__", "$socksPort")
   $singBoxJson = $singBoxJson.Replace("__CLASHPORT__", "$clashPort")
   Write-JsonFile $singBoxCfg $singBoxJson
 
-  Note "thÆ° má»¥c táº¡m: $workDir"
-  Note "flowvpnrelay.json -> socks5 127.0.0.1:$socksPort Â· sing-box.json -> clash 127.0.0.1:$clashPort"
+  Note "thư mục tạm: $workDir"
+  Note "flowvpnrelay.json -> socks5 127.0.0.1:$socksPort · sing-box.json -> clash 127.0.0.1:$clashPort"
 
-  # 2) sing-box check (khÃ´ng cáº§n quyá»n, kiá»ƒm cáº¥u hÃ¬nh trÆ°á»›c khi dá»±ng TUN)
-  Step "sing-box check -c sing-box.json (báº¯t lá»—i cáº¥u hÃ¬nh trÆ°á»›c khi dá»±ng TUN)"
+  # 2) sing-box check (không cần quyền, kiểm cấu hình trước khi dựng TUN)
+  Step "sing-box check -c sing-box.json (bắt lỗi cấu hình trước khi dựng TUN)"
   $checkOutput = (& $singBoxExe check -c $singBoxCfg 2>&1 | Out-String).Trim()
   Record "sing-box check" $LASTEXITCODE
   if ($checkOutput) { Note $checkOutput }
-  if ($LASTEXITCODE -ne 0) { throw "sing-box check tháº¥t báº¡i â€” cáº¥u hÃ¬nh sai, dá»«ng trÆ°á»›c khi dá»±ng TUN." }
+  if ($LASTEXITCODE -ne 0) { throw "sing-box check thất bại — cấu hình sai, dừng trước khi dựng TUN." }
+
+  if ($ConfigOnly) {
+    Note "cau hinh HOP LE (sing-box check DAT): $singBoxCfg (them -KeepFiles neu muon giu lai)"
+    return
+  }
 
   # 3) flowvpnrelay.exe
-  Step "Cháº¡y flowvpnrelay.exe -c flowvpnrelay.json"
+  Step "Chạy flowvpnrelay.exe -c flowvpnrelay.json"
   $relayProcess = Start-Process -FilePath $relayExe `
     -ArgumentList ("-c `"{0}`"" -f $relayCfg) `
     -WorkingDirectory $AssetsDir -NoNewWindow -PassThru `
     -RedirectStandardOutput $relayOutLog -RedirectStandardError $relayErrLog
   Note "pid $($relayProcess.Id)"
 
-  Step "Chá» dÃ²ng READY (tá»‘i Ä‘a $ReadyTimeoutSec s)"
+  Step "Chờ dòng READY (tối đa $ReadyTimeoutSec s)"
   $ready = Wait-ForMarker $relayProcess $relayErrLog $ReadyTimeoutSec "READY "
   if (-not $ready) {
     Note "--- relay stderr ---"
     Note (Read-SharedText $relayErrLog)
     if ($relayProcess.HasExited) {
       Record "flowvpnrelay exit" $relayProcess.ExitCode
-      throw "flowvpnrelay.exe thoÃ¡t trÆ°á»›c khi bÃ¡o READY (exit code $($relayProcess.ExitCode))."
+      throw "flowvpnrelay.exe thoát trước khi báo READY (exit code $($relayProcess.ExitCode))."
     }
-    throw "flowvpnrelay.exe khÃ´ng bÃ¡o READY trong $ReadyTimeoutSec s."
+    throw "flowvpnrelay.exe không báo READY trong $ReadyTimeoutSec s."
   }
   Record "flowvpnrelay READY" 0
   Note ("stderr: " + ((Read-SharedText $relayErrLog) -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | Out-String).Trim())
 
-  # 4) sing-box (chá»‰ sau READY: nÃ³ báº­t auto_route ngay khi khá»Ÿi Ä‘á»™ng)
-  Step "Cháº¡y sing-box.exe run -c sing-box.json"
+  # 4) sing-box (chỉ sau READY: nó bật auto_route ngay khi khởi động)
+  Step "Chạy sing-box.exe run -c sing-box.json"
   $singBoxProcess = Start-Process -FilePath $singBoxExe `
     -ArgumentList ("run -c `"{0}`"" -f $singBoxCfg) `
     -WorkingDirectory $workDir -NoNewWindow -PassThru `
@@ -344,13 +429,74 @@ try {
     Note "--- sing-box stderr ---"
     Note (Read-SharedText $sbErrLog)
     Record "sing-box exit" $singBoxProcess.ExitCode
-    throw "sing-box.exe thoÃ¡t ngay sau khi cháº¡y (exit code $($singBoxProcess.ExitCode))."
+    throw "sing-box.exe thoát ngay sau khi chạy (exit code $($singBoxProcess.ExitCode))."
   }
   Record "sing-box running" 0
 
-  # 5) Ä‘o bÄƒng thÃ´ng qua SOCKS5 ÄÃšNG cá»•ng cá»§a relay (khÃ´ng Ä‘i qua TUN: Ä‘Ã¢y lÃ  phÃ©p Ä‘o
-  #    "relay + hysteria cÃ³ chá»Ÿ Ä‘Æ°á»£c dá»¯ liá»‡u khÃ´ng", tÃ¡ch khá»i pháº§n TUN/route).
-  Step "Äo bÄƒng thÃ´ng qua SOCKS5 báº±ng curl.exe"
+  # 4b) KIEM BYPASS TRUNG QUOC — phep kiem QUYET DINH cho loi khach bao 22/09/2026:
+  #     "bat VPN khong bypass duoc app Trung Quoc".
+  #
+  #     Vi sao KHONG the ket luan bang bang route cua Windows: auto_route day TAT CA traffic vao TUN,
+  #     con quyet dinh "di thang hay qua node VN" nam BEN TRONG sing-box. Vi vay hoi thang clash_api:
+  #     ket noi toi dia chi/dai Trung Quoc phai mang outbound "direct", ket noi khac phai mang "hyrelay".
+  #     Neu ca hai deu "hyrelay" => bypass khong chay => app TQ se thay IP nuoc ngoai va cat ket noi.
+  if ($chinaCidrs.Count -gt 0) {
+    Step "Kiem bypass Trung Quoc qua clash_api (TQ -> direct, con lai -> hyrelay)"
+    $probes = @(
+      @{ Key = "223.5.5.5";       Kind = "ip";     Ip = "223.5.5.5";       Url = "https://223.5.5.5/";        Label = "dai TQ theo IP (AliDNS)"; Expect = "direct" },
+      @{ Key = "114.114.114.114"; Kind = "ip";     Ip = "114.114.114.114"; Url = "http://114.114.114.114/";   Label = "dai TQ theo IP (114DNS)"; Expect = "direct" },
+      @{ Key = "www.baidu.com";   Kind = "domain"; Ip = $null;             Url = "https://www.baidu.com/";    Label = "ten mien TQ (baidu)";      Expect = "direct" },
+      @{ Key = "1.1.1.1";         Kind = "ip";     Ip = "1.1.1.1";         Url = "https://1.1.1.1/";          Label = "ngoai TQ (Cloudflare)";    Expect = "hyrelay" }
+    )
+
+    $bypassOk = $true
+    foreach ($probe in $probes) {
+      # curl chay NEN: ket noi toi dia chi TQ co the bi treo/chan, nhung trong luc dang thu thi
+      # clash_api da ghi nhan => dung de doc outbound da chon. Ket thuc som bang Kill.
+      $proc = Start-Process -FilePath "curl.exe" -PassThru -WindowStyle Hidden `
+        -ArgumentList @("-s", "-o", "NUL", "-k", "--max-time", "12", $probe.Url)
+      $chains = $null
+      for ($i = 0; $i -lt 30 -and -not $chains; $i++) {
+        Start-Sleep -Milliseconds 300
+        try {
+          $conns = (Invoke-RestMethod -Uri "http://127.0.0.1:$clashPort/connections" -TimeoutSec 5).connections
+        } catch {
+          $conns = $null
+        }
+        if (-not $conns) { continue }
+        if ($probe.Kind -eq "ip") {
+          $hit = $conns | Where-Object { $_.metadata.destinationIP -eq $probe.Ip } | Select-Object -First 1
+        } else {
+          $hit = $conns | Where-Object {
+            $_.metadata.host -like "*baidu.com*" -or $_.metadata.sniffHost -like "*baidu.com*"
+          } | Select-Object -First 1
+        }
+        if ($hit) { $chains = ($hit.chains -join "/") }
+      }
+      if ($proc -and -not $proc.HasExited) { try { $proc.Kill() } catch { } }
+
+      if ($chains -and $chains -like "*$($probe.Expect)*") {
+        Note ("{0,-30} -> {1} [DAT, mong doi {2}]" -f $probe.Label, $chains, $probe.Expect)
+      } else {
+        $shown = if ($chains) { $chains } else { "khong bat duoc ket noi" }
+        Note ("{0,-30} -> {1} [KHONG DAT, mong doi {2}]" -f $probe.Label, $shown, $probe.Expect)
+        $bypassOk = $false
+      }
+    }
+
+    Record "bypass TQ" $(if ($bypassOk) { 0 } else { 1 })
+    if ($bypassOk) {
+      Write-Host "==> BYPASS TRUNG QUOC: DAT - app TQ di thang, khong qua node VN." -ForegroundColor Green
+    } else {
+      Write-Host "==> BYPASS TRUNG QUOC: KHONG DAT - xem tung dong o tren." -ForegroundColor Yellow
+    }
+  } else {
+    Note "bo qua kiem bypass TQ: khong co danh sach CIDR (chay lai voi -LocalCidrs <file>)."
+  }
+
+  # 5) đo băng thông qua SOCKS5 ĐÚNG cổng của relay (không đi qua TUN: đây là phép đo
+  #    "relay + hysteria có chở được dữ liệu không", tách khỏi phần TUN/route).
+  Step "Đo băng thông qua SOCKS5 bằng curl.exe"
   $speedUrl = "https://speed.cloudflare.com/__down?bytes=$SpeedBytes"
   $curlArgs = @("--socks5-hostname", "127.0.0.1:$socksPort", "-o", "NUL", "-s", "--max-time", "120",
                 "-w", "%{speed_download}", $speedUrl)
@@ -360,39 +506,39 @@ try {
 
   $bytesPerSec = 0.0
   if ([double]::TryParse($curlOut, [ref]$bytesPerSec)) {
-    Note ("tá»‘c Ä‘á»™ táº£i: {0:N2} MB/s ({1:N1} Mbps) cho {2:N0} bytes yÃªu cáº§u" -f `
+    Note ("tốc độ tải: {0:N2} MB/s ({1:N1} Mbps) cho {2:N0} bytes yêu cầu" -f `
       ($bytesPerSec / 1MB), ($bytesPerSec * 8 / 1MB), $SpeedBytes)
   } else {
-    Note "curl khÃ´ng tráº£ vá» sá»‘ Ä‘o (output: $curlOut)"
+    Note "curl không trả về số đo (output: $curlOut)"
   }
 
-  # 6) tá»•ng káº¿t
-  Step "Tá»•ng káº¿t exit code tá»«ng bÆ°á»›c"
+  # 6) tổng kết
+  Step "Tổng kết exit code từng bước"
   foreach ($key in $exitCodes.Keys) { Note ("{0} = {1}" -f $key, $exitCodes[$key]) }
   $ok = ($exitCodes["sing-box version"] -eq 0) -and ($exitCodes["sing-box check"] -eq 0) -and
         ($exitCodes["curl"] -eq 0) -and ($relayProcess -and -not $relayProcess.HasExited)
   if ($ok) {
-    Write-Host "==> Káº¾T LUáº¬N: Ä‘Æ°á»ng hysteria2-over-WS + sing-box CHáº Y ÄÆ¯á»¢C trÃªn mÃ¡y nÃ y." -ForegroundColor Green
+    Write-Host "==> KẾT LUẬN: đường hysteria2-over-WS + sing-box CHẠY ĐƯỢC trên máy này." -ForegroundColor Green
   } else {
-    Write-Host "==> Káº¾T LUáº¬N: Ä‘Æ°á»ng relay cÃ³ bÆ°á»›c tháº¥t báº¡i â€” xem exit code á»Ÿ trÃªn." -ForegroundColor Yellow
+    Write-Host "==> KẾT LUẬN: đường relay có bước thất bại — xem exit code ở trên." -ForegroundColor Yellow
   }
 } catch {
-  Write-Host "==> Lá»–I: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "==> LỖI: $($_.Exception.Message)" -ForegroundColor Red
   $script:failed = $true
 } finally {
-  Step "Dá»n dáº¹p: kill sing-box TRÆ¯á»šC (gá»¡ TUN/route) rá»“i tá»›i flowvpnrelay"
+  Step "Dọn dẹp: kill sing-box TRƯỚC (gỡ TUN/route) rồi tới flowvpnrelay"
   Stop-Child $singBoxProcess "sing-box.exe"
   Stop-Child $relayProcess "flowvpnrelay.exe"
 
   $removed = Remove-RelayLeftovers
-  Note "route/TUN Ä‘Ã£ dá»n: $removed route"
+  Note "route/TUN đã dọn: $removed route"
 
   if ($workDir -and (Test-Path -LiteralPath $workDir)) {
     if ($KeepFiles) {
-      Note "giá»¯ thÆ° má»¥c táº¡m (-KeepFiles): $workDir"
+      Note "giữ thư mục tạm (-KeepFiles): $workDir"
     } else {
       Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue
-      Note "Ä‘Ã£ xoÃ¡ thÆ° má»¥c táº¡m"
+      Note "đã xoá thư mục tạm"
     }
   }
 

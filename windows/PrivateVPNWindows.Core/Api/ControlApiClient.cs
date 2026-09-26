@@ -539,7 +539,7 @@ public sealed class ControlApiClient : IDisposable
     /// sáº½ láº·p side-effect cá»§a POST. TÆ°Æ¡ng á»©ng `ControlAPIHosts.sendWithFallback` â€”
     /// ControlAPIClient.swift:282-302.
     /// </summary>
-    private async Task<HttpResponseMessage> SendWithFallbackAsync(
+    private async Task<HttpResponseMessage> SendWithFallbackOnceAsync(
         Func<Uri, HttpRequestMessage> requestFactory,
         string endpoint,
         CancellationToken cancellationToken)
@@ -618,6 +618,49 @@ public sealed class ControlApiClient : IDisposable
             Encoding.UTF8,
             "application/json");
         return request;
+    }
+
+    /// <summary>
+    /// Số VÒNG thử cho một request API. Mỗi vòng đã tự thử hết danh sách host.
+    ///
+    /// Vì sao cần (sự cố khách Trung Quốc 23/09/2026 - "Không thể kết nối tới máy chủ VPNFlow khi
+    /// gọi device claim"): đo trên mạng TQ, TCP tới IP Cloudflare của api/t1.meetflowai.site
+    /// CHẬP CHỜN - 5 lần gọi liên tiếp có 1 lần timeout ~21s, 4 lần còn lại HTTP 200 trong ~1,4s.
+    /// Bản cũ chỉ thử mỗi host ĐÚNG MỘT LẦN rồi ném ApiTransportException, nên khách trúng lần
+    /// chập chờn là không kết nối được - dù chỉ cần bấm Connect lại là được. Thử lại vài vòng hạ
+    /// xác suất hỏng từ ~20% xuống dưới 1%.
+    /// </summary>
+    private const int TransportRetryRounds = 3;
+
+    /// <summary>Chờ giữa hai vòng (ngắn: mục tiêu là đổi "số phận" lần kết nối, không phải backoff dài).</summary>
+    private static readonly TimeSpan TransportRetryDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Gọi <see cref="SendWithFallbackOnceAsync"/> tối đa <see cref="TransportRetryRounds"/> vòng.
+    ///
+    /// CHỈ thử lại khi lỗi TRANSPORT (không có phản hồi: timeout, DNS, mất route). Host trả HTTP
+    /// 4xx/5xx là "có phản hồi" nên <see cref="SendWithFallbackOnceAsync"/> đã trả về ngay, không
+    /// lặp side-effect của POST. Trường hợp xấu nhất (mạng chết hẳn) tốn thêm
+    /// <c>(TransportRetryRounds - 1) x (số host x 6s)</c> trước khi báo lỗi.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendWithFallbackAsync(
+        Func<Uri, HttpRequestMessage> requestFactory,
+        string endpoint,
+        CancellationToken cancellationToken)
+    {
+        for (var round = 1; ; round++)
+        {
+            try
+            {
+                return await SendWithFallbackOnceAsync(requestFactory, endpoint, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (ApiTransportException) when (round < TransportRetryRounds
+                                                && !cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(TransportRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     private static bool IsTransportFailure(Exception exception, CancellationToken cancellationToken)

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using PrivateVPNWindows.Core.Tunnel;
 
 namespace VpnFlow.Core.Tunnel;
 
@@ -151,12 +152,22 @@ public sealed class HysteriaRelayTunnel : IDisposable
         RelayUrlInUse = relayUrl;
 
         Directory.CreateDirectory(_workingDirectory);
+
+        // Bypass Trung Quốc: danh sách dải IP TQ đi THẲNG, không vào tunnel. Thiếu nó thì app TQ
+        // (WeChat/Alipay/Taobao…) thấy IP nước ngoài và cắt kết nối — đúng lỗi khách báo 22/09/2026.
+        // Best-effort: không lấy được danh sách thì vẫn dựng tunnel với rule theo tên miền, KHÔNG chặn kết nối.
+        var chinaCidrs = await TryLoadChinaBypassCidrsAsync(cancellationToken).ConfigureAwait(false);
+
         File.WriteAllText(
             RelayConfigPath,
             SingBoxConfigBuilder.BuildRelayConfig(server, relayUrl, RelaySocksPort));
         File.WriteAllText(
             SingBoxConfigPath,
-            SingBoxConfigBuilder.BuildSingBoxConfig(RelaySocksPort, SingBoxLogPath, ClashApiPort));
+            SingBoxConfigBuilder.BuildSingBoxConfig(
+                RelaySocksPort,
+                SingBoxLogPath,
+                ClashApiPort,
+                chinaCidrs: chinaCidrs));
 
         _log.Info(
             $"relay: đã ghi cấu hình ({RelayConfigPath}) — server={server} relay={relayUrl} " +
@@ -177,6 +188,38 @@ public sealed class HysteriaRelayTunnel : IDisposable
         SetState(HysteriaRelayState.Running);
         _log.Info(
             $"relay: đường hysteria2-over-WS đã lên — relay={relayUrl} (socks=127.0.0.1:{RelaySocksPort})");
+    }
+
+    /// <summary>
+    /// Nạp danh sách dải IP Trung Quốc (<c>cn.txt</c> + <c>cn6.txt</c>) để nhúng vào cấu hình sing-box.
+    ///
+    /// Trả null khi không lấy được gì: khi đó cấu hình KHÔNG có rule <c>ip_cidr</c>, tunnel vẫn lên
+    /// bình thường với phần rule theo tên miền. Bypass là tính năng phụ — tuyệt đối không được phép
+    /// biến lỗi mạng thành lỗi kết nối (bài học "connecting mãi" của 1.0.4).
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> TryLoadChinaBypassCidrsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            var cidrs = await ChinaBypass
+                .LoadAllAsync(http, _workingDirectory, ChinaBypass.DefaultCacheTtl, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (cidrs.Count == 0)
+            {
+                _log.Warn("china-bypass (relay): không có danh sách CIDR Trung Quốc — tunnel lên KHÔNG kèm bypass.");
+                return null;
+            }
+
+            _log.Info($"china-bypass (relay): nhúng {cidrs.Count} dải CIDR Trung Quốc đi thẳng vào cấu hình sing-box");
+            return cidrs;
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"china-bypass (relay): bỏ qua do lỗi — {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>

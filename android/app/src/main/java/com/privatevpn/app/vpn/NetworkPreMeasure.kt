@@ -67,6 +67,10 @@ object NetworkPreMeasure {
             .build()
 
         var bytes = 0L
+        // Tốc độ tính TỪ BYTE ĐẦU TIÊN, không tính thời gian bắt tay TLS + TTFB: trên mạng di
+        // động TQ (RTT 300-700 ms) phần "mở kết nối" chiếm gần hết ngân sách 2,5 s cũ, nên app
+        // đo ra 559 kbps trong khi cùng domain tải 20 MB cho 19 Mbps ⇒ kẹt số khai ở sàn.
+        var firstByteAt = 0L
         client.newCall(request).execute().use { response ->
             val body = response.body ?: return 0
             val buf = ByteArray(16 * 1024)
@@ -79,19 +83,27 @@ object NetworkPreMeasure {
                         break
                     }
                     if (n <= 0) break
+                    if (firstByteAt == 0L) firstByteAt = System.currentTimeMillis()
                     bytes += n
                     if (bytes >= Config.PREMEASURE_MAX_BYTES) break
                 }
             }
         }
-        val ms = (System.currentTimeMillis() - started).coerceAtLeast(1)
+        val now = System.currentTimeMillis()
+        val setupMs = if (firstByteAt > 0) firstByteAt - started else 0L
+        val transferMs = if (firstByteAt > 0) now - firstByteAt else now - started
         if (bytes < Config.PREMEASURE_MIN_BYTES) {
             DiagnosticsLog.log(
-                "bw: do mang thuc te CHUA DU du lieu tu $url (${bytes}B trong ${ms}ms)",
+                "bw: do mang thuc te CHUA DU du lieu tu $url (${bytes}B, setup=${setupMs}ms, tai=${transferMs}ms)",
             )
             return 0
         }
+        val ms = transferMs.coerceAtLeast(1)
         // bytes/ms == kbps (bits trên mili-giây), không cần chia 1000.
-        return ((bytes * 8) / ms).toInt()
+        val kbps = ((bytes * 8) / ms).toInt()
+        DiagnosticsLog.log(
+            "bw: do mang thuc te tu $url = ${kbps}kbps (setup=${setupMs}ms, tai=${transferMs}ms, ${bytes}B)",
+        )
+        return kbps
     }
 }

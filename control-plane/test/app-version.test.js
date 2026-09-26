@@ -2,11 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
+  androidLegacyVersionPayload,
   androidVersionPayload,
   iosVersionPayload,
   isAndroidClient,
+  isKnownPlatform,
   isMacClient,
   isWindowsClient,
+  UnknownPlatformError,
   versionPayloadFor,
   wantsLegacyApk,
 } from "../src/app-version.js";
@@ -272,4 +275,64 @@ test("macOS không giành kênh của Windows/Android khi có ?platform rõ ràn
     versionPayloadFor(req({ platform: "android" }), { read: reader({}), baseUrl: "" }).platform,
     "android",
   );
+});
+
+// --- Kênh android-legacy + platform lạ ---------------------------------------
+// Vì sao có nhóm test này: `?platform=android-legacy` từng KHÔNG có nhánh riêng nên rơi về
+// payload iOS, và mọi giá trị rác cũng rơi về kênh mặc định ⇒ công cụ audit/cổng chặn so nhầm
+// kênh mà không báo lỗi (BUG-APPVERSION-PLATFORM-001, phát hiện 23/09/2026).
+
+test("platform=android-legacy trả ĐÚNG kênh legacy (không rơi về ios/windows)", () => {
+  const payload = versionPayloadFor(req({ platform: "android-legacy" }), {
+    read: reader({ android_latest_version: "1.4.4", android_minimum_version: "1.2.6" }),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(payload.platform, "android-legacy");
+  assert.equal(payload.latest_version, "1.4.4", "dùng chung mốc với kênh android");
+  assert.equal(payload.minimum_version, "1.2.6");
+  assert.equal(payload.apk_url, "https://meetflowai.site/v1/downloads/android-legacy");
+  assert.equal(payload.apk_url_legacy, payload.apk_url);
+  assert.equal(payload.store_url, payload.apk_url);
+  // Không được lẫn trường của kênh khác (đúng lỗi cũ: trả payload iOS).
+  assert.equal(payload.ipa_url, undefined);
+  assert.equal(payload.installer_url, undefined);
+  // alias `android7` cũng vào đúng kênh legacy
+  const alias = versionPayloadFor(req({ platform: "android7" }), { read: reader({ android_latest_version: "1.4.4" }), baseUrl: "" });
+  assert.equal(alias.platform, "android-legacy");
+});
+
+test("payload legacy: link cấu hình được ưu tiên; thiếu cấu hình vẫn có đường lùi", () => {
+  const custom = androidLegacyVersionPayload(reader({ android_apk_url_legacy: "https://cdn.example.com/a7.apk" }), {
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(custom.apk_url, "https://cdn.example.com/a7.apk");
+  const fallback = androidLegacyVersionPayload(reader({}), { baseUrl: "https://meetflowai.site/" });
+  assert.equal(fallback.apk_url, "https://meetflowai.site/v1/downloads/android-legacy");
+  assert.equal(fallback.latest_version, "0.0.0", "thiếu cấu hình ⇒ mặc định an toàn, không crash");
+});
+
+test("platform lạ ⇒ LỖI rõ ràng, KHÔNG đoán kênh (BUG-APPVERSION-PLATFORM-001)", () => {
+  assert.equal(isKnownPlatform("android-legacy"), true);
+  assert.equal(isKnownPlatform("windows"), true);
+  assert.equal(isKnownPlatform("bogus-xyz"), false);
+  assert.equal(isKnownPlatform(""), false);
+  assert.throws(
+    () => versionPayloadFor(req({ platform: "bogus-xyz" }), { read: reader({}), baseUrl: "" }),
+    (error) => error instanceof UnknownPlatformError && error.code === "UNKNOWN_PLATFORM" && error.platform === "bogus-xyz",
+  );
+  // Không gửi `?platform` (bản app cũ) vẫn phải chạy như trước — đường lùi theo UA giữ nguyên.
+  assert.equal(
+    versionPayloadFor(req({ userAgent: "PrivateVPN/1.4.0 CFNetwork/1494.0.7 Darwin/23.4.0" }), { read: reader({}), baseUrl: "" }).platform,
+    "ios",
+  );
+});
+
+test("route /v1/app-version trả 400 cho platform lạ (không im lặng rơi về kênh khác)", () => {
+  const indexSrc = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+  const start = indexSrc.indexOf('app.get("/v1/app-version"');
+  assert.notEqual(start, -1, "phải tìm thấy route /v1/app-version");
+  const block = indexSrc.slice(start, start + 900);
+  assert.ok(block.includes("UnknownPlatformError"), "route phải bắt UnknownPlatformError");
+  assert.ok(block.includes("unknown_platform"), "route phải trả error=unknown_platform");
+  assert.ok(block.includes("400"), "route phải trả HTTP 400");
 });

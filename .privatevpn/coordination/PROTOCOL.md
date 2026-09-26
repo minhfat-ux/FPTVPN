@@ -160,6 +160,9 @@ Các đường dẫn sau là **vùng bảo vệ**, chỉ owner `windows` đượ
    - `never_installed`: có tài khoản + gói nhưng chưa có device nào ⇒ app chưa từng chạy.
    - `never_connected`: đã đăng ký device nhưng `lastSeenAt` rỗng ⇒ chưa từng lên mạng.
    Khách đã từng kết nối thì KHÔNG bao giờ bị gửi (chống spam).
+   **Cửa sổ theo dõi:** `GUARD_NEW_WINDOW_H` = **720 giờ (30 ngày)** từ 24/09/2026 (trước là 72) — khớp
+   gói ngắn nhất (Monthly 30 ngày) để khách TRẢ TIỀN mà chưa từng cài vẫn được nhắc (chủ dự án duyệt;
+   `docs/handoff/GUARD_NOI_CUA_SO_2026-09-24.md`).
 2. Tự gửi email hướng dẫn theo **đúng nền tảng + phiên bản đang phát** (đọc `app_config.db`),
    tối đa 3 lần/khách/giai đoạn, cách nhau 48h, không gửi trong giờ yên tĩnh (23h–7h VN).
 3. Khi **≥3 khách mới cùng nền tảng** bị tắc trong 24h ⇒ tạo TASK `pending_approval` +

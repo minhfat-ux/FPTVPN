@@ -58,7 +58,7 @@ Ba lần liên tiếp "nhìn bề ngoài không thấy sai" — vì có **3 th�
 |---|---|---|---|
 | iOS | `project.yml` (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`) | harness Mac | `build` **tăng đơn điệu**, kể cả khi version không đổi |
 | macOS | `project.yml` (`MARKETING_VERSION`) + `mac/**/Info.plist` | harness Mac | như iOS |
-| Android | `android/app/build.gradle.kts` (`versionName`, `versionCode`) | harness Mac | `versionCode` **+1 đơn điệu** mỗi lần phát (kể cả phát lại) |
+| Android | `android/app/build.gradle.kts` (`versionName`, `versionCode`) | **harness Windows** (build + ký release; chốt 23/09/2026) | `versionCode` **+1 đơn điệu** mỗi lần phát (kể cả phát lại) |
 | Windows | `windows/PrivateVPNWindows.App/PrivateVPNWindows.App.csproj` `<Version>` | harness Windows | `.iss` và `build.ps1` **lấy từ csproj**, không tự khai |
 
 **Luật chung:**

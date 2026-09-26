@@ -27,6 +27,12 @@ public static class ChinaBypass
     /// <summary>TTL cache mặc định: 7 ngày (danh sách APNIC đổi rất chậm).</summary>
     public static readonly TimeSpan DefaultCacheTtl = TimeSpan.FromDays(7);
 
+    /// <summary>Tên file cache IPv4 trong thư mục làm việc (dùng chung với driver WireGuard).</summary>
+    public const string CacheFileNameV4 = "routes-cn.txt";
+
+    /// <summary>Tên file cache IPv6 trong thư mục làm việc (dùng chung với driver WireGuard).</summary>
+    public const string CacheFileNameV6 = "routes-cn6.txt";
+
     /// <summary>
     /// Đọc danh sách CIDR IPv4: bỏ dòng trống/comment, chỉ nhận IPv4 hợp lệ, bỏ trùng, giữ thứ tự xuất hiện.
     /// </summary>
@@ -177,6 +183,62 @@ public static class ChinaBypass
             "nexthop=" + gateway, "store=active",
         };
 
+    /// <summary>Cmdlet PowerShell dùng để THÊM route trong <see cref="BuildRouteLoopScript"/>.</summary>
+    public const string AddRouteVerb = "New-NetRoute";
+
+    /// <summary>Cmdlet PowerShell dùng để XOÁ route trong <see cref="BuildRouteLoopScript"/>.</summary>
+    public const string RemoveRouteVerb = "Remove-NetRoute";
+
+    /// <summary>
+    /// Script PowerShell thêm/xoá route cho cả danh sách CIDR trong MỘT tiến trình (gọi netsh từng
+    /// dòng với 5.5k dải mất vài phút), in ra <c>"&lt;số-thành-công&gt;/&lt;tổng&gt;"</c>.
+    ///
+    /// Vì sao phải đếm theo KẾT QUẢ: bản cũ đặt <c>$ErrorActionPreference='SilentlyContinue'</c> rồi
+    /// <c>$n++</c> VÔ ĐIỀU KIỆN, nên log luôn báo "đã thêm 5494 route" kể cả khi mọi lệnh đều thất bại
+    /// — đúng ca khách báo "bật VPN không bypass được app Trung Quốc" mà log vẫn xanh. Ở đây mỗi dòng
+    /// được bọc <c>try/catch</c> với <c>-ErrorAction Stop</c> để lỗi không bị nuốt.
+    /// </summary>
+    /// <param name="verb"><see cref="AddRouteVerb"/> hoặc <see cref="RemoveRouteVerb"/>.</param>
+    /// <param name="activePath">File chứa danh sách CIDR, mỗi dòng một dải.</param>
+    /// <param name="interfaceName">InterfaceAlias của NIC vật lý.</param>
+    /// <param name="extraArguments">
+    /// Đuôi tham số riêng của từng ca, giữ NGUYÊN như bản cũ để route thêm và xoá khớp nhau:
+    /// <c>-NextHop '192.168.1.1' -PolicyStore ActiveStore </c> (IPv4), <c>-PolicyStore ActiveStore </c>
+    /// (IPv6 on-link), hoặc <c>-NextHop '…' </c>/rỗng khi xoá.
+    /// </param>
+    public static string BuildRouteLoopScript(
+        string verb,
+        string activePath,
+        string interfaceName,
+        string extraArguments)
+    {
+        // Xoá route bắt buộc phải có -Confirm:$false, nếu không PowerShell sẽ hỏi lại và treo.
+        var confirmArgument = verb == RemoveRouteVerb ? "-Confirm:$false " : string.Empty;
+
+        return "$ErrorActionPreference='SilentlyContinue'; $ok=0; $fail=0; " +
+               "foreach ($c in Get-Content '" + activePath + "') { " +
+               "try { " + verb + " -DestinationPrefix $c -InterfaceAlias '" + interfaceName + "' " +
+               extraArguments + confirmArgument + "-ErrorAction Stop | Out-Null; $ok++ } " +
+               "catch { $fail++ } }; " +
+               "\"$ok/$($ok+$fail)\"";
+    }
+
+    /// <summary>Đọc kết quả <c>"ok/tổng"</c> do <see cref="BuildRouteLoopScript"/> in ra.</summary>
+    public static bool TryParseRouteResult(string? output, out int succeeded, out int total)
+    {
+        succeeded = 0;
+        total = 0;
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return false;
+        }
+
+        var parts = output.Trim().Split('/');
+        return parts.Length == 2
+               && int.TryParse(parts[0], out succeeded)
+               && int.TryParse(parts[1], out total);
+    }
+
     /// <summary>
     /// Lấy danh sách IPv4: cache còn hạn → dùng cache; hết hạn/lỗi mạng → thử tải, lỗi thì dùng cache cũ.
     /// Trả về rỗng khi không có gì dùng được (khi đó KHÔNG thêm route nào — tunnel giữ nguyên như cũ).
@@ -195,6 +257,30 @@ public static class ChinaBypass
         TimeSpan ttl,
         CancellationToken cancellationToken = default)
         => LoadListAsync(http, DefaultListUrlV6, cachePath, ttl, ParseIpv6Cidrs, cancellationToken);
+
+    /// <summary>
+    /// Nạp CẢ HAI danh sách (IPv4 <c>cn.txt</c> + IPv6 <c>cn6.txt</c>) thành một mảng.
+    ///
+    /// Vì sao cần hàm riêng: đường WireGuard thêm route từng dải qua <c>New-NetRoute</c>, còn đường
+    /// relay (hysteria2-over-WS) đưa thẳng danh sách vào file cấu hình sing-box nên phải gộp sẵn.
+    /// Một phần lỗi mạng không kéo phần kia chết theo — mỗi hàm con đã tự rơi về cache cũ.
+    /// </summary>
+    public static async Task<List<string>> LoadAllAsync(
+        HttpClient http,
+        string workDir,
+        TimeSpan ttl,
+        CancellationToken cancellationToken = default)
+    {
+        var v4 = await LoadAsync(http, Path.Combine(workDir, CacheFileNameV4), ttl, cancellationToken)
+            .ConfigureAwait(false);
+        var v6 = await LoadIpv6Async(http, Path.Combine(workDir, CacheFileNameV6), ttl, cancellationToken)
+            .ConfigureAwait(false);
+
+        var all = new List<string>(v4.Count + v6.Count);
+        all.AddRange(v4);
+        all.AddRange(v6);
+        return all;
+    }
 
     private static async Task<List<string>> LoadListAsync(
         HttpClient http,

@@ -100,10 +100,22 @@ object Config {
     /** Nguồn đo CHÍNH: CDN của shop — đo trên máy thật 22/09 cho thấy tải được từ data TQ. */
     const val PREMEASURE_URL_PRIMARY = "https://meetflowai.site/v1/downloads/android"
     const val PREMEASURE_URL = "https://speed.cloudflare.com/__down?bytes=1500000"
-    const val PREMEASURE_MAX_BYTES = 1_500_000
+
+    /**
+     * Trần dữ liệu và ngân sách thời gian của phép đo trước khi khai.
+     *
+     * Nâng 23/09/2026 (1,5 MB / 2.500 ms → 4 MB / 6.000 ms): trên **5G Unicom** app đo ra
+     * **559 kbps** rồi kẹt số khai ở sàn 1.000 kbps, trong khi CÙNG domain đó tải 20 MB cho
+     * **19 Mbps**. Lý do: RTT ở mạng di động TQ 300–700 ms nên 2,5 s chỉ đủ cho bắt tay TLS +
+     * slow start ⇒ đo được toàn "chi phí mở kết nối" chứ không phải tốc độ. Nay phép đo tính
+     * tốc độ **từ byte ĐẦU TIÊN** (xem `NetworkPreMeasure`) và có đủ thời gian để slow start bung.
+     * Đo 1 lần cho mỗi mạng (cache theo profile) nên chi phí data vẫn nhỏ.
+     */
+    const val PREMEASURE_MAX_BYTES = 4_000_000
+
     /** Dưới ngần này byte thì coi như phép đo hỏng, không dùng (tránh lấy số từ trang lỗi). */
     const val PREMEASURE_MIN_BYTES = 200_000
-    const val PREMEASURE_BUDGET_MS = 2_500
+    const val PREMEASURE_BUDGET_MS = 6_000
     const val PREMEASURE_CONNECT_TIMEOUT_MS = 2_000
     val PINNED_HOST_ADDRESSES: Map<String, List<String>> = mapOf(
         // KHONG ghim IP cho api.meetflowai.site nua (18/09/2026): API_FALLBACK_ADDRESSES dang la

@@ -1,0 +1,82 @@
+# EVIDENCE — Email thông báo Windows 1.4.5 cho khách (bus-309)
+
+- Ngày: 23/09/2026 (UTC). Người thực hiện: **harness MAC** (publisher), theo yêu cầu `bus-309` của Windows.
+- Nguồn nội dung: `docs/RELEASE_NOTES_1.4.5.md` (tạo trong cùng đợt).
+- Script gửi: `scripts/send-windows-1.4.5-announcement.py` (3 ngôn ngữ vi/en/zh, host `t1.meetflowai.site`,
+  hỗ trợ `support@meetflowai.site`). Chạy trên node-2, lấy `RESEND_API_KEY` từ drop-in systemd.
+- ⚠️ Bản 1.4.5 **CHƯA KÝ SỐ** ⇒ email **KHÔNG** hứa "hết cảnh báo Windows"; có mục **"Lưu ý"** nói thẳng
+  bộ cài chưa ký và xin khách trả lời nếu bị Windows chặn (để đo lường).
+
+## 0. Chọn người nhận (chỉ khách ĐANG DÙNG Windows)
+
+Lọc theo `devices.json` **platform = windows/win32** + có `userId` gắn user + user có email + có subscription,
+bỏ qua danh sách chủ dự án/test (giống hệt cách đã dùng cho Android 1.4.3 tại `bus-299`).
+
+```
+khach Windows (platform=windows/win32):
+   - BO QUA win32    (khong co email)       ly do: thiet bi khong gan user
+   - BO QUA windows  mi***@fpt.com          ly do: trong danh sach bo qua (chu du an/test)
+   - BO QUA windows  (khong co email)       ly do: thiet bi khong gan user
+nguoi nhan Windows: ['ca***@gmail.com']
+```
+
+- **Tổng thiết bị Windows/win32 trên hệ thống: 3** (1 orphan `win32`, 2 `windows`).
+- **Người nhận hợp lệ: 1** (`camvinh@gmail.com`, subscription còn hạn tới 2026-10-11).
+- Bỏ qua: `minhnb2@fpt.com` (chủ dự án — có trong danh sách bỏ qua của mọi email khách) và 2 thiết bị
+  không gắn user.
+
+## 1. Kiểm kênh tải TRƯỚC khi gửi
+
+```
+https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.5.exe?v=d6db58cb -> HTTP/2 200, content-length 52789954
+https://t1.meetflowai.site/buy                                   -> HTTP 200 (có link ?v=d6db58cb)
+```
+
+## 2. Đối chiếu artifact đang phát (node-2 tự băm, cả 2 docroot)
+
+```
+d6db58cb4427ee36cb6ca2db34c004df5b3f8f3aed898424fba72538631167a2  /var/www/flowvpn/dl/VPNFlow-Setup-1.4.5.exe  (52.789.954 B)
+d6db58cb4427ee36cb6ca2db34c004df5b3f8f3aed898424fba72538631167a2  /var/www/dl/VPNFlow-Setup-1.4.5.exe          (52.789.954 B)
+```
+
+Khớp đúng `release/releases.jsonl` (dòng publish windows 1.4.5) và tag `windows-v1.4.5` → `db6cf1c1555678f6460455ab97d224daf3caf14b`.
+
+## 3. Kết quả gửi
+
+- Gửi thử tới `ALERT_EMAIL` (=`minhnb2@me.com`) trước khi gửi khách: **OK**.
+- Gửi thật: **1/1 người nhận, 0 lỗi**. Resend id lưu tại
+  `/root/flowvpn-cp/data/.announce-windows-1.4.5-ids.json`:
+
+```json
+{
+ "camvinh@gmail.com": "01a0cd67-7996-76cf-ae6f-46416c6ec04f"
+}
+```
+
+- Truy vấn trạng thái giao (`--verify`, Resend `last_event`) — **có `User-Agent`** theo đúng đề nghị của WIN
+  ở nghiệm thu `bus-299`, nên không còn lỗi 403 Cloudflare 1010 giả:
+
+```
+   ca***@gmail.com  01a0cd67-7996-76cf-ae6f-46416c6ec04f  ->  delivered
+```
+
+- Ghi chú trung thực: stdout của lần **gửi thật** không kịp ghi ra file log cục bộ (kết nối SSH treo luồng
+  sau khi script chạy xong); bằng chứng thay thế là **file ids đã lưu trên node-2** + `--verify` trả
+  `delivered` (chạy lại thành công sau đó). 1 người nhận = 1 Resend id = 1 `delivered`.
+
+## 4. Lệnh tái lập
+
+```bash
+SSHK=~/.ssh/fpt_vpn_node
+# (a) chỉ liệt kê người nhận
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-windows-1.4.5-announcement.py --recipients'
+# (b) gửi thử (chỉ ALERT_EMAIL)
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-windows-1.4.5-announcement.py --test'
+# (c) gửi thật
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-windows-1.4.5-announcement.py'
+# (d) hỏi lại trạng thái đã gửi
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-windows-1.4.5-announcement.py --verify'
+```
+
+Nguồn sự thật về bản phát hành: `release/releases.jsonl` (dòng publish + tag windows 1.4.5),
+`docs/handoff/HANDOFF_WINDOWS_KY_SO_2026-09-23.md` (EVID-17: đường build phát hành chạy trọn, commit `db6cf1c`).

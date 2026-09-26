@@ -18,6 +18,9 @@ OUT="$REPO_ROOT/android/app/libs/hysteria.aar"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export PATH="$PATH:/opt/homebrew/bin:$HOME/go/bin:$ANDROID_HOME/platform-tools"
+# hysteria có `go.work` (app/core/extras). gomobile bind chạy trong workspace mode sẽ từ chối
+# `-mod=mod`; app/go.mod đã có replace trỏ ../core, ../extras nên tắt workspace là đủ và ổn định.
+export GOWORK=off
 
 if [ ! -d "$SRC" ]; then
   echo "==> cloning hysteria ($TAG) into $SRC"
@@ -32,8 +35,15 @@ mkdir -p "$SRC/app/mobile"
 cp "$HERE/mobile.go" "$SRC/app/mobile/mobile.go"
 
 echo "==> gomobile bind"
-(cd "$SRC/app" && go get -tool golang.org/x/mobile/cmd/gobind >/dev/null 2>&1 || true)
-(cd "$SRC/app" && gomobile bind -target=android -androidapi=26 -o "$OUT" ./mobile)
+# gomobile trên máy này là bản fork `github.com/sagernet/gomobile` (hysteria dùng), nên package
+# `bind` của nó phải có trong module thì gomobile bind mới sinh + biên dịch được (bản upstream
+# `golang.org/x/mobile` báo "no Go package in github.com/sagernet/gomobile/bind").
+(cd "$SRC/app" && go get github.com/sagernet/gomobile/bind@v0.1.13 >/dev/null 2>&1 || true)
+# Android 15+ trên thiết bị trang 16 KB đòi LOAD segment của .so phải p_align >= 16384; mặc định
+# linker chỉ căn 4096 nên libgojni.so bị Android 16 cảnh báo. Ép max-page-size=16384 (vô hại với
+# ABI 32-bit). Xem docs/YEU_CAU_TOC_DO_ON_DINH.md §4.5.
+(cd "$SRC/app" && gomobile bind -target=android -androidapi=26 \
+  -ldflags="-extldflags=-Wl,-z,max-page-size=16384" -o "$OUT" ./mobile)
 
 echo "==> done: $OUT"
 ls -la "$OUT"

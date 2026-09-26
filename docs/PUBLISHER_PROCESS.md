@@ -337,3 +337,30 @@ lại khách bị ảnh hưởng. Chính sách: `/etc/flowvpn-guard.env`. Chi ti
   ⇒ **luôn đọc version từ BÊN TRONG artifact**, không tin tên file lẫn mốc `latest_version`.
 - **Tự cắt đường SSH khi test hạ tầng (26/09)**: `systemctl stop relay-cf-vn2hy` làm relay chết 20 phút 34 giây
   vì chính phiên SSH đi qua tunnel đó; khôi phục/watchdog/đường cứu hộ: `docs/SERVER_RECOVERY_RUNBOOK.md`.
+
+## 6b. Dòng bổ sung giữ lại từ nhánh `origin/main` khi hợp nhất (26/09/2026)
+
+> Giữ nguyên nội dung của nhánh kia để không mất dấu vết; KHÔNG thay các luật/mục ở trên.
+
+> Mỗi bên chạy §1 **chỉ cho kênh của mình**; kênh không thuộc phần mình ⇒ **không tự phát** (chuyển sang
+> bên kia hoặc báo chủ dự án). Dùng chung: `release/releases.jsonl`, `check-publish-version.py`, `audit-releases.py`.
+| 7 | **PUBLISHER lo CẢ publish LẪN email.** **Phân vai build + publish (chốt 23/09/2026): harness Windows làm Windows **và Android**; harness Mac làm iOS + macOS.** Windows harness **không tự gửi email khách** — email do publisher (Mac) gửi | §5 | publisher |
+> **Ngoại lệ luật 11 — chốt 23/09/2026 (chủ dự án):** các bản **`1.4.5`** (sha256 `d6db58cb…167a2`) và **`1.4.6`** (sha256 `1a504534…0796`, hotfix DNS cho khách TQ) **đã được phát CHƯA KÝ**, đúng như mọi bản Windows trước đó (1.4.0→1.4.4 đều
+**Cửa sổ theo dõi — chốt 24/09/2026:** `GUARD_NEW_WINDOW_H` **72 → 720 giờ (30 ngày)**, khớp gói ngắn
+nhất (Monthly 30 ngày), theo yêu cầu chủ dự án *"nới cửa số ra, và cũng guide luôn cho 3 khách kia"*.
+Trước đó khách **trả tiền** đăng ký >72h mà chưa từng cài bị xếp `too_old` ⇒ **không bao giờ** được nhắc.
+Đã gửi hướng dẫn cho 3 khách đó, Resend xác nhận **3/3 `delivered`** — nhật ký + cách rollback:
+`docs/handoff/GUARD_NOI_CUA_SO_2026-09-24.md`.
+## 5d. TestFlight — "What to Test" bắt buộc (chốt 24/09/2026)
+Mỗi lần nộp build, field `whatsNew` (`betaBuildLocalizations`) của **từng locale** phải có đủ 2 phần:
+1. **Đã thay đổi gì trong bản này** — liệt kê ngắn: tính năng/sửa lỗi (kèm commit hash), phạm vi ảnh hưởng.
+2. **Cần test gì** — checklist theo bước: hành động → kỳ vọng → ca biên (mất mạng giữa phiên, đổi Wi-Fi⇄4G, ngủ/thức máy, đổi tài khoản, giới hạn số thiết bị, tải/cài lại).
+Quy trình: soạn `release/ios/whatsnew-<version>.json` (3 locale) → `node scripts/asc-beta.mjs submit <build> --whatsnew <file>` → kiểm lại bằng `node scripts/asc-beta.mjs status`.
+Nguồn nội dung: `release/ios/RELEASE_NOTES_<version>.md` + `git log` của bản đó — **không bịa**, không quảng cáo mục chưa xong.
+| 2026-09-24 | Windows | **1.4.7** | **Vá lỗi khách Trung Quốc "Không thể kết nối tới máy chủ VPNFlow khi gọi device claim"** (lỗi **trước khi** dựng tunnel): `api.meetflowai.site` từ mạng TQ chập chờn ~20 %/lần mà app chỉ thử mỗi host **1 lần** ⇒ thêm **3 vòng thử lại**, chờ 500 ms, **chỉ** retry lỗi transport (4xx/5xx trả về ngay, không lặp side-effect POST). Code commit `778cffc` (⚠️ handoff/release notes ghi `f1ddc41` = **commit trùng không nằm trên `origin/main`**, cùng patch-id). Build commit `9330355` (HEAD, cây `windows/` sạch) · `app exe ProductVersion = 1.4.7+9330355…` · Setup **52.789.147 B** · sha256 `7366003185fcc2fef1d2b838a4108a93b7f6ffbd15b577ab3a4cc29d96b5bfe4` · `/buy` trỏ `?v=73660031` · mốc `latest_version=1.4.7` · **cổng: pre ĐẠT mọi mục version (exit 1 CHỈ vì 2 mục chữ ký), post ĐẠT exit 0** · `dotnet test` **219/219** · sha256 khớp ở **cả hai docroot** + tải qua CDN · đã ghi sổ + tag `windows-v1.4.7`. Phát **CHƯA KÝ** theo **ngoại lệ duyệt riêng** (chủ dự án chốt 24/09, xem §0). Nhật ký: `HANDOFF_PUBLISHER_WINDOWS_1.4.7_2026-09-24.md` |
+| 2026-09-23 | Windows | **1.4.6** | **HOTFIX DNS khách Trung Quốc**: `hijack-dns` lên đầu + bỏ `detour` sai trên resolver nội địa (sing-box 1.14 FATAL) + sửa **thứ tự rule `sniff` phải TRƯỚC `hijack-dns`**. 3 commit `f59f9bd`/`4b6b96c`/`5ebc64f`, đã verify trên máy thật mạng TQ (`HANDOFF_WINDOWS_1.4.6_DNS_HOTFIX_2026-09-23.md`). Setup **52.792.253 B** · sha256 `1a504534…0796` · `/buy` trỏ `?v=1a504534` · mốc `latest_version=1.4.6` · đã ghi sổ + tag `windows-v1.4.6`. Phát **CHƯA KÝ** theo ngoại lệ luật 11 (xem ghi chú §0). ⚠️ **chưa có release notes `1.4.6`** |
+| 2026-09-23 | Android | **1.4.4** (32) | Nối tiếp 1.4.3/29: **v30** (số khai không tự bóp khi tải adaptive) · **v31** (không tin "bắt tay TCP" khi chọn đường) · **v32** (phép đo mạng trước khi khai không còn bị ngân sách 2,5 s ăn hết) + bump `versionName`. modern **74.731.674 B** · sha256 `145053e9…` · legacy **74.748.054 B** · sha256 `b9a03e77…` · mốc `1.4.4` · đã ghi sổ + tag `android-v1.4.4`. Release notes `docs/RELEASE_NOTES_android_1.4.4.md` |
+| 2026-09-23 | Android | ~~**1.4.3**~~ (29) | Bản **đã bị thay bởi 1.4.4** trong cùng ngày. modern 74.731.689 B · sha256 `95633669…`; legacy 74.748.051 B · sha256 `fdb88e3f…`. Gồm **AAR hysteria dựng lại căn trang 16 KB** (vào `main` bằng merge `e81a210` — `main` trước đó vẫn dùng AAR `LOAD align 0x1000`) + MTU TUN **1500 → 1300** và **2 resolver DNS** (bản vá `38a3e6f`) |
+7. **macOS 1.4.3/20 — CHẶN ở khâu ký framework (23/09 tối)**: DMG đã Developer ID + notarize Accepted + staple (23.287.317 B, sha256 `04f249f8…`) nhưng cổng `codesign --verify --deep --strict` KHÔNG ĐẠT: `Hysteria.framework: code has no resources but signature indicates they must be present` ⇒ lỗi **đóng gói/ký framework** (symlink `Versions/Current` + `Hysteria`/`Resources` đã có; plist rỗng `{}` đã vá). Cần bên build sửa cách đóng gói/ký `Hysteria.framework`, hoặc static link (đụng `project.yml` ⇒ handoff). **Chưa phát macOS**; live vẫn 1.4.0.
+8. **iOS TestFlight build mới — TODO**: export app-store-connect 1.4.3/20 build được nhưng Apple chặn **90171** (cùng họ framework). Đã sửa **90360** (plist `{}`) + **90206** (framework trong appex → chuyển sang app). Sau khi upload được: `node scripts/asc-beta.mjs submit <build> --whatsnew release/ios/whatsnew-next.json`. External testers **14/14 email khách** đã xong; yêu cầu chủ dự án: TestFlight phải trùng version với bản website.
+9. **Sổ phát hành**: dòng `ios 1.4.2 (19)` trong `release/releases.jsonl` chưa commit (hook chặn bởi claim `[windows] release`) — claim nhả là commit.

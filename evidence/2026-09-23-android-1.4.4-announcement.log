@@ -1,0 +1,86 @@
+# EVIDENCE — Email thông báo Android 1.4.4 (versionCode 32)
+
+- Ngày: 23/09/2026 (UTC). Người thực hiện: **harness MAC** (publisher), theo yêu cầu `bus-322` của Windows.
+- Nguồn nội dung: `docs/handoff/FREEZE_ANDROID_2026-09-23.md` §1 (v30/v31/v32 + server `PONG_TIMEOUT`)
+  → `docs/RELEASE_NOTES_android_1.4.4.md` (tạo trong cùng đợt).
+- Script gửi: `scripts/send-android-1.4.4-announcement.py` (3 ngôn ngữ vi/en/zh, host `t1.meetflowai.site`,
+  hỗ trợ `support@meetflowai.site`). Chạy trên node-2, lấy `RESEND_API_KEY` từ drop-in systemd —
+  **cùng mẫu/kênh đã dùng cho Android 1.4.3 tại `bus-299`**.
+
+## 0. Chọn người nhận (chỉ khách ĐANG DÙNG Android)
+
+Lọc theo `devices.json` (`platform == "android"`) + gắn `userId` có user + có email + có subscription,
+bỏ qua danh sách chủ dự án/test (giống hệt cách đã dùng cho Android 1.4.3 tại `bus-299`).
+
+```
+nguoi nhan Android: ['ca***@gmail.com', 'di***@gmail.com', 'ha***@gmail.com', 'ha***@gmail.com', 'mi***@gmail.com', 'qi***@gmail.com', 'vt***@gmail.com']
+```
+
+Đúng **7 người nhận**, khớp danh sách của bản 1.4.3 (bus-299) — không thêm/bớt.
+
+## 1. Kiểm kênh tải trước khi gửi (curl HEAD, Mac chạy độc lập trên node-2)
+
+```
+https://t1.meetflowai.site/v1/downloads/android        -> HTTP/2 200, content-length 74731674
+https://t1.meetflowai.site/v1/downloads/android-legacy -> HTTP/2 200, content-length 74748054
+```
+
+## 2. Đối chiếu artifact đang phát (sha256 do node-2 tự băm)
+
+```
+145053e918f75aed98f81d4d61c5b827206ea27318be13d629024fea9bfb8677  /root/flowvpn-apk/VPNFlow-latest.apk   (74.731.674 B)
+b9a03e775d28a506b3d285b286036d56c7d958b3dde859a36b13709cc7d886eb  /root/flowvpn-apk/VPNFlow-android7.apk (74.748.054 B)
+```
+
+Khớp đúng hash Windows công bố ở bus #322 (`145053e9…b8677` / `b9a03e77…d886eb`) và size trên kênh tải.
+Tag `android-v1.4.4` / `android-legacy-v1.4.4` neo commit `39baaaf` (kiểm trên `origin`).
+
+## 3. Kết quả gửi
+
+- Gửi thử tới `ALERT_EMAIL` (=`minhnb2@me.com`) trước khi gửi khách: **OK**.
+- Gửi thật: **7/7 người nhận, 0 lỗi**. Resend id lưu tại
+  `/root/flowvpn-cp/data/.announce-android-1.4.4-ids.json`; log gửi `/root/android-1.4.4-send.log`:
+
+```
+   OK  ca***@gmail.com  id=01a0cd84-079a-762a-9f37-a1b2497e6ff6
+   OK  di***@gmail.com  id=01a0cd84-0c51-755b-88bf-f351b5321c0e
+   OK  ha***@gmail.com  id=01a0cd84-10cc-775d-81c0-b8eb1b6c1eb7
+   OK  ha***@gmail.com  id=01a0cd84-155a-7559-a230-52204f50f8c8
+   OK  mi***@gmail.com  id=01a0cd84-19c9-7737-8458-c617ea57dae0
+   OK  qi***@gmail.com  id=01a0cd84-1e2d-77bd-bce6-fd0bbe8fb7aa
+   OK  vt***@gmail.com  id=01a0cd84-2297-7494-bb3f-1b380c2e24e2
+ket qua: 7/7 thanh cong, 0 loi
+trang thai: {'delivered': 7}
+```
+
+- Truy vấn trạng thái giao (Resend `last_event`): **7/7 `delivered`** — có gửi `User-Agent` theo đúng
+  đề nghị của WIN ở nghiệm thu `bus-299` nên không còn lỗi 403 Cloudflare 1010 giả.
+
+## 4. Chưa làm — ghi nhận trung thực
+
+- **Đối chiếu artifact ↔ máy thật (SM-F9460) CHƯA làm được** vì thiết bị đang offline (đúng như Windows
+  cảnh báo ở bus #322). Windows sẽ làm khi máy kết nối lại. Bản này **không** ghi nhận là đã kiểm trên
+  máy thật.
+- Phần `claim` phối hợp (`flowvpn-coord`) không chạy được từ Mac: tool gọi `mkdir /var/lib/flowvpn-coord/claims`
+  ở máy cục bộ ⇒ `EPERM`. Đây là 2 **file mới, tên riêng theo phiên bản**, không đụng file ai đang giữ.
+
+## 5. Lệnh tái lập
+
+```bash
+SSHK=~/.ssh/fpt_vpn_node
+# (a) chỉ liệt kê người nhận
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-android-1.4.4-announcement.py --recipients'
+# (b) gửi thử (chỉ ALERT_EMAIL)
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-android-1.4.4-announcement.py --test'
+# (c) gửi thật (ghi cả log trên node-2)
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-android-1.4.4-announcement.py 2>&1 | tee /root/android-1.4.4-send.log'
+# (d) hỏi lại trạng thái đã gửi
+ssh -i $SSHK root@165.101.114.162 'python3 /root/send-android-1.4.4-announcement.py --verify'
+```
+
+## 6. Nguồn sự thật về bản phát hành
+
+- `docs/handoff/FREEZE_ANDROID_2026-09-23.md` §1 (bản khóa v32: commit `8f949f8`, `48498b7`, `eeae7ef`;
+  server relay nới `PONG_TIMEOUT_MS 20 s → 60 s`).
+- Tag `android-v1.4.4` + `android-legacy-v1.4.4` → commit `39baaaf` (`git ls-remote --tags origin`).
+- Tin bus #322 (Windows) — đã chép vào sổ `ops/tasks/bus-322/`.

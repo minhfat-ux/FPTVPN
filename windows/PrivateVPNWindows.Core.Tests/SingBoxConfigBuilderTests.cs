@@ -215,6 +215,138 @@ public class SingBoxConfigBuilderTests
     }
 
     [Fact]
+    public void BuildSingBoxConfig_nhung_dai_IP_Trung_Quoc_di_thang()
+    {
+        // Lỗi khách báo 22/09/2026: bật VPN thì app TQ hỏng. Nguyên nhân là đường relay chỉ có rule
+        // theo tên miền nên phần lớn app TQ (tên miền .com) đi hết qua tunnel.
+        var cidrs = new[] { "1.0.1.0/24", "223.255.252.0/22", "2001:250::/30" };
+        var json = SingBoxConfigBuilder.BuildSingBoxConfig(
+            SocksPort, "/tmp/sing-box.log", ClashPort, chinaCidrs: cidrs);
+
+        using var doc = JsonDocument.Parse(json);
+        var rules = doc.RootElement.GetProperty("route").GetProperty("rules");
+        var order = rules.EnumerateArray().ToList();
+
+        var ipRule = order.Single(r => r.TryGetProperty("ip_cidr", out _));
+        Assert.Equal(SingBoxConfigBuilder.DirectOutboundTag, ipRule.GetProperty("outbound").GetString());
+        Assert.Equal(
+            cidrs,
+            ipRule.GetProperty("ip_cidr").EnumerateArray().Select(e => e.GetString()).ToArray());
+
+        // Thứ tự QUAN TRỌNG - sự cố production 23/09/2026 (1.4.5 làm khách TQ MẤT MẠNG và không vào
+        // được Google/YouTube). Hai điều kiện, thiếu một là hỏng:
+        //   (a) `sniff` phải đứng TRƯỚC `hijack-dns` - matcher `protocol` chỉ khớp SAU khi sniff.
+        //       Đo thật: đặt hijack-dns trước sniff thì log vẫn ghi
+        //       "inbound packet connection to 10.193.111.16:53 -> outbound/direct[direct]".
+        //   (b) `hijack-dns` phải đứng TRƯỚC mọi rule khớp theo IP (ip_is_private, ip_cidr), nếu
+        //       không DNS tới resolver IP TQ / IP nội bộ của khách bị đẩy đi thẳng => GFW nhiễm độc
+        //       (đo thật: www.youtube.com -> 69.171.235.22 = IP Facebook, AAAA google.com -> 2001::1).
+        var indexSniff = order.FindIndex(r => r.TryGetProperty("action", out var a) && a.GetString() == "sniff");
+        var indexDns = order.FindIndex(r => r.TryGetProperty("protocol", out var p) && p.GetString() == "dns");
+        var indexPrivate = order.FindIndex(r => r.TryGetProperty("ip_is_private", out _));
+        var indexIp = order.FindIndex(r => r.TryGetProperty("ip_cidr", out _));
+        Assert.Equal(0, indexSniff);
+        Assert.Equal(1, indexDns);
+        Assert.True(indexSniff < indexDns, "sniff phải đứng TRƯỚC hijack-dns (nếu không rule không khớp)");
+        Assert.True(indexDns < indexPrivate, "hijack-dns phải đứng TRƯỚC rule ip_is_private");
+        Assert.True(indexDns < indexIp, "hijack-dns phải đứng TRƯỚC rule dải TQ (ip_cidr)");
+        Assert.True(indexPrivate < indexIp, "rule LAN phải đứng trước rule dải TQ");
+
+        // Đường ra cuối vẫn là relay: bypass chỉ đổi đường cho dải TQ, không đổi mặc định.
+        Assert.Equal(SingBoxConfigBuilder.RelayOutboundTag, doc.RootElement.GetProperty("route").GetProperty("final").GetString());
+    }
+
+    [Fact]
+    public void BuildSingBoxConfig_khong_co_danh_sach_thi_khong_sinh_bypass()
+    {
+        var json = SingBoxConfigBuilder.BuildSingBoxConfig(SocksPort, "/tmp/sing-box.log", ClashPort);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        // Không có danh sách (mất mạng, chưa cache) ⇒ KHÔNG rule ip_cidr, KHÔNG DNS nội địa,
+        // KHÔNG default_domain_resolver. Bypass là tính năng phụ: lỗi mạng không được biến thành
+        // cấu hình khác đi, càng không được chặn kết nối.
+        Assert.DoesNotContain(
+            root.GetProperty("route").GetProperty("rules").EnumerateArray(),
+            r => r.TryGetProperty("ip_cidr", out _));
+        Assert.Single(root.GetProperty("dns").GetProperty("servers").EnumerateArray());
+        Assert.Empty(root.GetProperty("dns").GetProperty("rules").EnumerateArray());
+        Assert.False(root.GetProperty("route").TryGetProperty("default_domain_resolver", out _));
+    }
+
+    [Fact]
+    public void BuildSingBoxConfig_co_dns_noi_dia_va_default_domain_resolver()
+    {
+        var json = SingBoxConfigBuilder.BuildSingBoxConfig(
+            SocksPort, "/tmp/sing-box.log", ClashPort, chinaCidrs: new[] { "1.0.1.0/24" });
+
+        using var doc = JsonDocument.Parse(json);
+        var dns = doc.RootElement.GetProperty("dns");
+
+        var cnServer = dns.GetProperty("servers").EnumerateArray()
+            .Single(s => s.GetProperty("tag").GetString() == SingBoxConfigBuilder.ChinaDnsServerTag);
+        Assert.Equal(SingBoxConfigBuilder.ChinaDomesticDnsServer, cnServer.GetProperty("server").GetString());
+
+        var dnsRule = dns.GetProperty("rules").EnumerateArray()
+            .Single(r => r.TryGetProperty("server", out var s)
+                         && s.GetString() == SingBoxConfigBuilder.ChinaDnsServerTag);
+        var suffixes = dnsRule.GetProperty("domain_suffix").EnumerateArray()
+            .Select(e => e.GetString()).ToList();
+        Assert.Contains("alipay.com", suffixes);
+        // Cố ý KHÔNG đưa ".cn" vào rule DNS: nhóm đó đã đi thẳng theo tên miền nên không cần, và
+        // như vậy resolver nội địa có trục trặc cũng không tạo hồi quy cho thứ đang chạy tốt.
+        Assert.DoesNotContain("cn", suffixes);
+
+        // BẮT BUỘC: thiếu trường này thì sing-box 1.14 FATAL ngay khi khởi động
+        // ("missing `route.default_domain_resolver` … removed in sing-box 1.14.0").
+        Assert.Equal(
+            SingBoxConfigBuilder.DnsServerTag,
+            doc.RootElement.GetProperty("route").GetProperty("default_domain_resolver").GetString());
+
+        // `detour` của DNS upstream - sự cố production 23/09/2026: DNS server KHÔNG có `detour` thì
+        // sing-box dial THẲNG ra ngoài ⇒ ở TQ bị GFW nhiễm độc (đo thật: www.youtube.com trả về
+        // 69.171.235.22 = IP Facebook, AAAA google.com trả 2001::1). Bắt buộc đi qua relay.
+        var remoteServer = dns.GetProperty("servers").EnumerateArray()
+            .Single(s => s.GetProperty("tag").GetString() == SingBoxConfigBuilder.DnsServerTag);
+        Assert.Equal(SingBoxConfigBuilder.RelayOutboundTag, remoteServer.GetProperty("detour").GetString());
+        // Server nội địa KHÔNG được có `detour`: sing-box 1.14.1 FATAL khi chạy
+        // ("detour to an empty direct outbound makes no sense") - đã kiểm chứng bằng cách chạy thật.
+        Assert.False(cnServer.TryGetProperty("detour", out _), "server 'cn' không được đặt detour");
+    }
+
+    [Fact]
+    public void ChinaServiceDomainSuffixes_phu_het_ten_mien_app_TQ_da_do()
+    {
+        // 33 tên miền dưới đây là kết quả ĐO ngày 22/09/2026 (khách báo "bật VPN không bypass được app
+        // Trung Quốc"): đối chiếu danh sách cũ thì chỉ 3 khớp. Test này chặn lỗ hổng quay lại — ai
+        // thêm/bớt tên miền mà để rơi mất nhóm này là fail ngay.
+        var measured = new[]
+        {
+            "alipay.com", "taobao.com", "tmall.com", "alicdn.com", "baidu.com", "jd.com",
+            "meituan.com", "dianping.com", "amap.com", "didiglobal.com", "bilibili.com",
+            "douyin.com", "iqiyi.com", "youku.com", "weibo.com", "zhihu.com", "xiaohongshu.com",
+            "kuaishou.com", "163.com", "unionpay.com", "ccb.com", "abchina.com", "cmbchina.com",
+            "bankcomm.com", "psbc.com", "sf-express.com", "ele.me", "pinduoduo.com", "suning.com",
+            "cainiao.com", "qunar.com", "ctrip.com", "wps.com",
+        };
+
+        var direct = SingBoxConfigBuilder.ChinaDirectDomainSuffixes
+            .Concat(SingBoxConfigBuilder.ChinaServiceDomainSuffixes)
+            .ToArray();
+
+        var unmatched = measured.Where(d => !MatchesAny(direct, d)).ToArray();
+        Assert.True(
+            unmatched.Length == 0,
+            "tên miền app TQ vẫn đi qua VPN: " + string.Join(", ", unmatched));
+    }
+
+    /// <summary>Luật khớp domain_suffix của sing-box: bằng hệt, hoặc kết thúc bằng ".&lt;suffix&gt;".</summary>
+    private static bool MatchesAny(IEnumerable<string> suffixes, string domain)
+        => suffixes.Any(s => domain.Equals(s, StringComparison.OrdinalIgnoreCase)
+                             || domain.EndsWith("." + s, StringComparison.OrdinalIgnoreCase));
+
+    [Fact]
     public void HysteriaRelayDefaults_khop_gia_tri_dang_dung()
     {
         // Relay mặc định = exit node-2 (đo nhanh hơn node-1); dự phòng = node-1.

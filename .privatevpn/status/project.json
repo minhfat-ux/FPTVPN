@@ -19,7 +19,7 @@
   "open_bugs": {
     "critical": 0,
     "high": 1,
-    "medium": 1,
+    "medium": 2,
     "low": 0
   },
   "blockers": [
@@ -31,5 +31,15 @@
   ],
   "last_verified": "2026-08-23",
   "next_verification": "macOS NetworkExtension E2E exit-IP; bản Windows dùng enrollment token + Bearer rồi đặt LEGACY_MODE=0 (ADR-0005 P2→P3); subscription production source (server verify receipt, hiện chỉ test-grant); Android CPU sau khi có máy thật",
-  "updated": "2026-09-22"
+  "updated": "2026-09-23",
+  "shipped_2026_09_23": {
+    "note": "Đo trực tiếp /v1/app-version + release/releases.jsonl ngày 23/09/2026 (harness Windows); KHÔNG lấy từ nhật ký.",
+    "windows": "1.4.6 hotfix DNS khách TQ (52.792.253 B, sha 1a504534…) — phát CHƯA KÝ theo ngoại lệ luật 11",
+    "android": "1.4.4 (code 32) — đã ghi sổ + tag",
+    "android-legacy": "1.4.4 (code 32) — route tải đúng; ⚠️ ?platform=android-legacy trả sai kênh (BUG-APPVERSION-PLATFORM-001)",
+    "ios": "1.4.2 (19) — sổ mới ghi tới 1.4.1 (18)",
+    "macos": "1.4.0",
+    "publisher_split": "harness Windows build+publish Windows & Android; harness Mac build+publish iOS & macOS (chốt 23/09 — docs/PUBLISHER_PROCESS.md §0 luật 12)"
+  },
+  "verified_2026_09_23": "harness Windows: build Android OK (JDK Temurin 17 + SDK 36 — compile 2 flavor + assemble APK debug/release); 4 kênh phát hành đã đối chiếu /v1/app-version với release/releases.jsonl; phát hiện BUG-APPVERSION-PLATFORM-001"
 }

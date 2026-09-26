@@ -63,6 +63,16 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExeName}
+; --- KÝ SỐ (NFR-WIN-002) -----------------------------------------------------
+; Chỉ bật khi build.ps1 truyền /DSignedBuild kèm /Ssigntool=<wrapper .cmd>; khi đó:
+;   - SignTool     : ký chính file Setup
+;   - SignedUninstaller: ký luôn uninstaller (không ký thì lúc GỠ cài, SAC/SmartScreen lại chặn)
+; Cố ý KHÔNG đặt mặc định: bật mà không có chứng chỉ thì ISCC báo lỗi "Sign Tool not found".
+; Build tay (ISCC trực tiếp) muốn ký thì thêm: /DSignedBuild /Ssigntool=<wrapper>
+#ifdef SignedBuild
+SignTool=signtool
+SignedUninstaller=yes
+#endif
 OutputDir=out
 OutputBaseFilename=VPNFlow-Setup-{#AppVersion}
 SetupIconFile=..\assets\vpnflow.ico

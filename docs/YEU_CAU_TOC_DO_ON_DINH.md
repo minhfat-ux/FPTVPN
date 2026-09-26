@@ -322,3 +322,131 @@ Trước đó (cùng máy, cùng mạng) các ô xấu chỉ **0,16–0,74 Mbps*
 + bắt lỗi UDP + backpressure + bỏ timer 10 phút). Bằng chứng: **cầu sống 64 phút** (trước 3,7–6,3 phút),
 `pingsOut = pongsIn = 19`, `dropped=0`, `udpErrors=0`. Vì iOS/macOS dùng **cùng cầu WS/Cloudflare**, độ
 chập do relay chết sẽ giảm cho cả hai nền tảng ngay tối nay.
+
+---
+
+## 2i. BA LỖI ĐÃ SỬA TRÊN ANDROID 23/09/2026 (v29 / v30 / v31) — **iOS/macOS PHẢI ÁP CÙNG**
+
+Bối cảnh: chủ dự án báo (1) *"thông số trong Diagnostics không đúng với tốc độ đo từ speed Cloudflare"*,
+(2) *"đang xem Netflix thì số khai tự tụt"*, (3) *"5G rất chậm"*. Cả ba đã tìm ra nguyên nhân gốc bằng
+số đo trên máy thật, sửa trên Android; **iOS/macOS cùng thiết kế nên phải áp cùng** — nếu không, hai nền
+tảng sẽ hành xử khác nhau trên cùng một mạng, đúng thứ §2b cấm.
+
+### 2i.1 — B1: Bộ đếm byte để đo tốc độ **phải phủ MỌI transport** (nếu không, số hiện ra là rác)
+
+**Triệu chứng:** Diagnostics báo **5 kbps** trong khi tunnel đang chở **4.463 kbps** — sai ~900 lần;
+vòng ramp đọc chính con số rác đó nên tưởng mạng chết và kẹt số khai ở sàn 1.000 kbps.
+
+**Bằng chứng (log máy thật Z Fold5, 22/09/2026):**
+```
+bw: sampler nguồn byte = cầu WS (app không đọc được /proc/net/dev)   ← nguồn SAI
+tunnel: UP (hy-udp:50121)                                            ← transport TRỰC TIẾP
+bw: sample net=中国联通 observed=5 declared=1000
+bw: probe 1719546B/3082ms -> 4463kbps qua tunnel                     ← cùng lúc, chở thật 4.463 kbps
+```
+
+**Nguyên nhân:** bộ đếm dùng bộ đếm của **một transport** (bộ đếm của cầu WS). Khi đường chạy trực tiếp
+(UDP/TCP tới node) thì bộ đếm đó **đứng yên** ⇒ số đo là rác.
+
+**YÊU CẦU cho iOS/macOS:**
+1. Nguồn byte phải là **số byte mà TIẾN TRÌNH nhận/gửi** (mọi socket của app — phủ cả đường trực tiếp lẫn
+   cầu WS), hoặc bộ đếm interface TUN nếu đọc được payload thật. **Không** dùng bộ đếm của riêng
+   proxy/cầu WS.
+2. Chọn **một** nguồn cho mỗi phiên và **ghi log nguồn đang dùng**; khi **đổi đường** phải **chọn lại nguồn
+   và reset mẫu** (trộn hai thang đo vào một phép trừ là số rác).
+3. Ghi chú rõ trong code: nguồn theo UID đếm ở mức "trên dây" (đã mã hoá/đóng khung) nên nhích cao hơn
+   payload vài %, và có tính traffic **không** qua tunnel của chính app (đo mạng trước khi nối).
+
+**Nghiệm thu:** trong lúc **đang tải** (10 MB qua tunnel), số hiện trên màn hình phải **cùng bậc** với
+`curl` đo song song (lệch ≤ ~20–30%). Lúc máy **rảnh** thì 3–10 kbps là **đúng** (chỉ còn keepalive) —
+chỉ kết luận lỗi khi đang có traffic mà số vẫn nhỏ.
+
+### 2i.2 — B2: **KHÔNG hạ số khai vì NHU CẦU thấp** — chỉ hạ vì ĐƯỜNG yếu
+
+**Triệu chứng:** đang xem Netflix, số khai **tự tụt 4.018 → 2.812 kbps** giữa phiên. Vì Brutal CC pace
+theo số khai ⇒ video tụt chất lượng ⇒ nhu cầu càng ít ⇒ trung bình càng thấp ⇒ lại tụt tiếp (vòng lặp ngược).
+
+**Bằng chứng (log 23/09):** video adaptive tải **từng cụm rồi nghỉ** —
+`1.911 → 7 → 1.795 → 5 → 1.094 → 768 → 431 → 2.006 → 17 kbps` — trong khi cửa sổ quyết định lấy
+**trung bình 12 giây tính cả giây nghỉ**, nên kết luận sai "đường yếu":
+```
+bw: ramp observed=4034 old=3215 new=4018 reason=idle-reconnect
+bw: ramp observed=591  old=4018 new=2812 reason=underrun-backoff  loss=10%   ← hạ oan
+```
+
+**YÊU CẦU cho iOS/macOS:**
+1. Khi quyết định số khai, **chỉ tính các mẫu ĐANG CHỞ DỮ LIỆU** (Android dùng ngưỡng 200 kbps/mẫu 1 s);
+   bỏ qua các giây nghỉ. Khi cửa sổ **không đủ** mẫu hoạt động thì quay về trung bình thường (để lúc mạng
+   yếu thật vẫn phát hiện được).
+2. **Hạ số khai chỉ khi hội đủ:** cửa sổ có **≥ 8/12 mẫu hoạt động** (tức đường ĐANG bị đẩy hết sức)
+   **và** tốc độ tụt dưới **50%** số đang khai. Nhu cầu thấp **không** phải bằng chứng để hạ.
+3. Giữ nguyên mọi luật cũ: hạ ngay khi mất gói/RTT vọt; đổi số khai **một chiều**, áp ở ranh giới an toàn
+   (§2c/§2h).
+
+**Nghiệm thu:** xem video 10 phút liên tục ⇒ **không** có lần hạ số khai nào trong lúc tốc độ lúc tải cụm
+vẫn ≥ số đang khai; ngược lại, khi bóp băng thông thật (hoặc mạng yếu) thì phải thấy số khai hạ.
+
+### 2i.3 — B3: **KHÔNG tin bắt tay TCP** khi chọn đường — có **bắt tay GIẢ**
+
+**Triệu chứng:** trên Unicom **5G**, tunnel chỉ **13–109 kbps** dù mạng nền đo được **6,08 Mbps**; app
+dựng lại – chết – dựng lại liên tục; trong khi trên Wi-Fi (đường trực tiếp thật) cùng máy chở **5,2 Mbps**.
+
+**Bằng chứng (23/09/2026, VPN TẮT để đo raw):**
+
+| Đích | `connect()` TCP | Ghi chú |
+|---|---|---|
+| node-2 `165.101.114.162:8443` | **2–4 ms** | *bất khả thi vật lý* — RTT thật TQ→VN phải 40–100 ms |
+| node-1 `103.173.155.50:8443` | **2,7 ms** | cũng giả |
+| `api.meetflowai.site:443` (Cloudflare) | 250–780 ms | **thật** ⇒ đường Cloudflare sống |
+| Tốc độ raw 5G (Cloudflare `__down`) | **6,08 Mbps** | mạng nền tốt |
+
+App vì thế tưởng đường trực tiếp nhanh gấp ~500 lần cầu WS và **chọn đúng đường không chở được gói nào**:
+```
+14:56:49 chon-duong: truc-tiep=4ms cau-WS=chua-biet -> uu tien TRUC TIEP
+14:56:59 bw: sampler nguồn byte = cầu WS (đang qua cầu)        ← direct chết, phải rơi về cầu
+14:57:21 probe#6 tunnel UP nhưng 2 lần liên tiếp không có gói nào qua -> dừng client để dựng lại
+14:57:02 observed=13 kbps  loss=30%   rtt=2662ms
+14:57:39 observed=22 kbps  loss=80%
+```
+
+**YÊU CẦU cho iOS/macOS:**
+1. `connect()` tới node ở nước ngoài trả về **< 25 ms** ⇒ **bất khả thi** ⇒ coi như **KHÔNG mở được**
+   (bắt tay giả của nhà mạng/GFW), **không** được ưu tiên đường trực tiếp và phải ghi log cảnh báo.
+2. **Ghi nhớ "đường trực tiếp đã chết trên mạng này"** (bắt tay giả **hoặc** tunnel UP mà không có gói nào
+   qua) và **giữ cho tới khi ĐỔI MẠNG** ⇒ những lượt dựng lại sau **ưu tiên cầu WS**, không chọn lại đường
+   trực tiếp chỉ vì phép đo lại trả vài ms "đẹp".
+3. Lưới an toàn "tunnel UP nhưng không có gói nào qua ⇒ dựng lại transport" phải **đặt cờ ở mục 2** khi
+   đường đang dùng là đường trực tiếp.
+
+**Nghiệm thu:** trên mạng có bắt tay giả, log phải có dòng "nghi bắt tay giả" + ưu tiên cầu WS, và
+tốc độ phải lên lại ≥ 1 Mbps (thay vì 13–109 kbps).
+
+### 3c. SỐ ĐO LÀM CHUẨN ĐỐI CHIẾU — dùng CHUNG để so giữa các nền tảng (23/09/2026)
+
+| Phép đo | Số (Z Fold5) |
+|---|---|
+| Raw 5G không VPN → Cloudflare `__down` | **6,08 Mbps** (18.993.152 B / 25,0 s) |
+| Raw 5G không VPN → CDN shop `meetflowai.site/dl/routes/cn.txt` | 0,2 Mbps (85.375 B / 3,3 s) — **đừng dùng làm nguồn đo chuẩn** |
+| Qua tunnel trên **Wi-Fi** (đường trực tiếp `hy-tcp:8443`, probe 114 ms) | **5.247–5.311 kbps**, loss 0%, Netflix chạy tốt |
+| Qua tunnel trên **5G** (bắt tay giả ⇒ rơi về cầu WS) | **13–109 kbps**, loss 30–80%, rtt 0–2.662 ms |
+| `curl` qua tunnel (đo đối chứng, dùng trong test) | 13.753.216 B / 120 s = **917 kbps** |
+
+**Cách đo dùng chung (mọi nền tảng phải cho kết quả cùng bậc):**
+```bash
+# 1) đo RAW (VPN TẮT)
+curl -s -o /dev/null -w 'raw: %{speed_download}B/s size=%{size_download} t=%{time_total}s\n' \
+  --max-time 25 'https://speed.cloudflare.com/__down?bytes=20000000'
+# 2) đo QUA TUNNEL (VPN BẬT) — traffic của shell/curl cũng đi trong tunnel
+curl -s -o /dev/null -w 'tunnel: %{speed_download}B/s size=%{size_download} t=%{time_total}s\n' \
+  --max-time 25 'https://speed.cloudflare.com/__down?bytes=20000000'
+# 3) kiểm bắt tay giả: so connect tới node với connect tới Cloudflare
+curl -s -o /dev/null -w 'node:  tcp=%{time_connect}s\n' --connect-timeout 6 http://165.101.114.162:8443/
+curl -s -o /dev/null -w 'cloud: tcp=%{time_connect}s\n' --connect-timeout 8 https://api.meetflowai.site/
+```
+
+**Phần server đã xong (23/09) — iOS/macOS hưởng ngay, không cần build lại:**
+`wsrelay` đã được deploy bản mới (`sha256 acee1382…`): sửa lỗi bind UDP vào loopback khi upstream là host
+**remote** (trước đó `relay-cf-vn1hy`/`vn1wg` chết 100%: `udp send: send EINVAL 103.173.155.50:8443`,
+`out=0B`, `udpErrors=129`). Sau khi deploy: 4/4 unit `active`, `udpErrors=0`, và kiểm chứng thật bằng một
+phiên WS: `#1 MỞ … #1 ĐÓNG sau 3.1s | in=3f/15B out=0f/0B | client-close 1005` — 3 frame đã gửi được tới
+upstream remote, `lastError=null`.

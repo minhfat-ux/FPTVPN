@@ -118,6 +118,32 @@ public class ControlApiClientTests
     }
 
     /// <summary>
+    /// Vòng thử lại: thử mỗi host ĐÚNG MỘT LẦN là chưa đủ — mạng Trung Quốc tới Cloudflare chập
+    /// chờn (đo 23/09/2026: 5 lần gọi liên tiếp có 1 lần timeout ~21s, 4 lần còn lại HTTP 200 trong
+    /// ~1,4s). Handler dưới đây hỏng 4 lần đầu (2 host x 2 vòng) rồi mới trả lời, nên test CHỈ pass
+    /// khi có vòng thử lại thứ 3 — đúng ca khách báo "Không thể kết nối tới máy chủ VPNFlow khi gọi
+    /// device claim".
+    /// </summary>
+    [Fact]
+    public async Task FetchNodes_RetriesAgain_WhenEveryHostFailsOnce()
+    {
+        var attempts = 0;
+        var client = Client(
+            _ =>
+            {
+                attempts++;
+                if (attempts <= 4) throw new HttpRequestException("blocked");
+                return Json(HttpStatusCode.OK, NodesJson);
+            },
+            "https://t1.meetflowai.site");   // 2 host ⇒ 4 lần thử đầu là hết vòng 1 và vòng 2
+
+        var nodes = await client.FetchNodesAsync();
+
+        Assert.Single(nodes);
+        Assert.Equal(5, attempts);
+    }
+
+    /// <summary>
     /// 401/403 là server ĐÃ TRẢ LỜI (lỗi xác thực), không phải route bị chặn: không được
     /// chuyển host (đổi host vô ích, còn lặp side-effect của POST).
     /// </summary>

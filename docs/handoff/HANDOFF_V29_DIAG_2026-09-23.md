@@ -106,16 +106,100 @@ adb shell "grep -E 'sampler nguồn byte|bw: sample|chon-duong|tunnel: UP' /sdca
   thường vì window 12 s gồm cả lúc rảnh), **không còn cảnh 5 kbps**;
 - `declared` leo lên theo mạng thay vì kẹt ở 1.000 kbps.
 
-## 7. Việc còn lại (không nằm trong bản này)
+## 6b. NGHIỆM THU TRÊN MÁY THẬT — ĐÃ ĐẠT (23/09/2026, Z Fold5)
 
-1. **Chưa test được trên máy**: điện thoại chưa cắm USB (adb `no devices/emulators found`) —
-   mọi kết luận ở §2 là từ log cũ trên máy, §5 mới là kiểm chứng trên APK.
+Bản cài trên máy đã được đối chiếu byte-for-byte: `pm path` → `base.apk` có sha256
+**`59BE5313…`** = đúng APK của commit `86944de` (không phải bản cũ còn sót).
+
+1. **Nguồn byte đúng**: `12:41:52 bw: sampler nguồn byte = TrafficStats theo UID (đường trực tiếp)`
+   — đường đang chạy là `hy-tcp:8443` (trực tiếp), trước đây chỗ này ghi "cầu WS" và sinh số rác.
+2. **Phép tính đúng**: tự tính lại kbps từ chênh lệch `raw` giữa hai mẫu
+   (`(raw2-raw1)*8/dt`) rồi so với `observed` (trung bình trượt 12 mẫu) — khớp trong sai số làm tròn
+   (ví dụ 12:49:09: raw 1103 vs observed 1103; 12:50:01: raw 1937 vs observed 1972).
+   Công cụ: `tools/check-sampler-math.mjs`.
+3. **Có tải thật thì số BIẾT NHẢY** — đo song song hai đồng hồ độc lập:
+   - `curl` trên máy tải qua chính tunnel: `size=13753216B time=120.002s speed=114608B/s`
+     ⇒ **917 kbps** (Wi-Fi văn phòng đang rất tệ: RTT qua tunnel 1,2–2,3 s).
+   - App Diagnostics cùng lúc: `observed` 168 → 671 → 985 → 1103 → 1265 → 1972 kbps
+     (raw tính lại 325 → 671 → 1027 → 1232 → 1937) ⇒ **cùng bậc với 917 kbps**.
+   - Trước bản vá, đúng khoảng này app báo **5 kbps** (sai ~200 lần).
+4. **Lúc máy RẢNH thì 3–10 kbps là ĐÚNG** (chỉ còn keepalive) — không phải lỗi. Đây chính là chỗ
+   dễ kết luận nhầm: số nhỏ chỉ là lỗi khi ĐANG có traffic.
+5. **Vòng ramp nay phản ứng đúng** trên đường trực tiếp: `bw: ramp … observed=435 old=6938 new=4856
+   reason=underrun-backoff apply=deferred-next-connect` — mạng thật chỉ ~1 Mbps nên hạ số khai
+   (6.938 → 4.856 → 3.399 → 2.379) và **hoãn áp dụng tới lần kết nối sau** (không dựng lại giữa phiên).
+
+
+## 7. KẾ HOẠCH TEST TỐI NAY (mạng NHANH — data di động) — chủ dự án chốt 23/09
+
+Vì sao cần: Wi-Fi văn phòng hôm nay chỉ ~0,9 Mbps (RTT qua tunnel 1,2–2,8 s) nên **chưa kiểm được
+các ngưỡng cần băng thông** (A1 ≥8 Mbps, A3 khoá mức, A6 kênh dò riêng). Chủ dự án sẽ test lại trên
+mạng nhanh (Unicom — đã đo 16–21 Mbps) tối 23/09.
+
+### 7.1 Lệnh lấy bằng chứng (một lần, không phải nhớ gì)
+
+```powershell
+$adb='C:\Users\Minhn\Android\sdk\platform-tools\adb.exe'
+# adb vào qua Wi-Fi (không cần cáp); nếu IP đổi thì: adb mdns services
+$S='10.193.44.116:43943'
+
+# 1) kéo log về
+& $adb -s $S pull /sdcard/Android/data/com.privatevpn.app.dev/files/diagnostics.log C:\Users\Minhn\FPTVPN\.tmp\diag-toi-nay.log
+
+# 2) dấu vết quyết định
+& $adb -s $S shell "grep -E 'sampler nguồn byte|chon-duong|tunnel: UP' /sdcard/Android/data/com.privatevpn.app.dev/files/diagnostics.log | tail -6"
+
+# 3) số đo + tự tính lại từ bộ đếm thô
+node C:\Users\Minhn\vpnflow-android-142\tools\check-sampler-math.mjs C:\Users\Minhn\FPTVPN\.tmp\diag-toi-nay.log 30
+
+# 4) ramp/STABLE/kênh dò
+& $adb -s $S shell "grep -E 'bw: ramp|ramp: STABLE|ramp: kênh dò|ramp: NÂNG' /sdcard/Android/data/com.privatevpn.app.dev/files/diagnostics.log | tail -12"
+
+# 5) tạo tải thật để đối chứng (traffic của shell cũng đi qua tunnel)
+& $adb -s $S shell "curl -s -o /dev/null -w 'size=%{size_download}B time=%{time_total}s speed=%{speed_download}B/s\n' --max-time 60 'https://speed.cloudflare.com/__down?bytes=20000000'"
+```
+
+### 7.2 Cần đạt / cần ghi lại
+
+| # | Kiểm gì | Đạt khi |
+|---|---|---|
+| 1 | Nguồn byte | `TrafficStats theo UID (đường trực tiếp)` khi `hy-tcp/hy-udp`, `cầu WS (đang qua cầu)` khi qua cầu |
+| 2 | Số khớp | `observed` (TB 12 s trong Diagnostics) **cùng bậc** với số Cloudflare/curl (lệch ≤ ~20–30%) |
+| 3 | A1 | `observed` ≥ 8.000 kbps giữ ≥ 10 phút |
+| 4 | A3 | thấy dòng `ramp: STABLE at …` rồi mức đó **không tụt** khi mạng còn tốt |
+| 5 | A4 | ≤ 1 lần dựng lại transport / 30 phút (không có chuỗi `tunnel: UP` dày) |
+| 6 | A6 | sau STABLE có `ramp: kênh dò …` chạy nền (không cướp băng thông) |
+| 7 | A7 | app TQ (WeChat/Taobao…) vẫn vào bình thường + log `cn-bypass: 67 app TQ đi ĐƯỜNG RIÊNG` |
+| 8 | A11 | `declared` ≤ 0,8 × số đo thật (log `bw: net=… measured=… declared=…`) |
+
+### 7.3 Điểm phải chú ý khi đọc số (tránh kết luận nhầm)
+
+- **Rảnh = 3–10 kbps là đúng**; chỉ kết luận lỗi khi ĐANG có traffic mà số vẫn nhỏ.
+- So **`observed` (trung bình 12 s)**, đừng so dòng "Tốc độ tải xuống" (tức thời 1 s, nhảy loạn).
+- **Watch item**: khi đường bị bão hoà, phép dò RTT qua tunnel có thể timeout và bị tính `loss=10%`
+  (đã thấy 2 lần hôm nay). Ghi lại nếu thấy `bw: ramp … reason=loss-backoff` **trong lúc `observed`
+  còn cao** ⇒ đó là hạ số oan, cần chỉnh ngưỡng (kèm `observed`, `rtt`, `loss`).
+- Nếu test ở mạng có IPv6 hoặc đổi Wi-Fi ⇄ 4G: ghi lại dòng `net=` (khoá mạng) để biết số khai đang
+  theo bộ nhớ của mạng nào.
+
+### 7.4 Mẫu báo cáo nhanh (gửi 1 dòng là đủ)
+
+```
+mạng=<wifi-gw-… / 中国联通>  path=<Trực tiếp/Cầu WS>  Cloudflare=<down>/<up> Mbps
+observed(kbps)=…  declared(kbps)=…  STABLE=<có/không>  rebuild/30min=…  loss-backoff oan=<có/không>
+```
+
+
+## 8. Việc còn lại (không nằm trong bản này)
+
+1. ~~**Chưa test được trên máy**~~ → **đã nghiệm thu đạt trên máy thật 23/09, xem §6b** (nguồn
+   byte đúng, phép tính khớp, số biết nhảy khi có tải, ramp phản ứng đúng).
 2. Mac: căn 16 KB page (`libbwg.so`, `libbgojni.so`, `libandroidx.graphics.path.so`) + keystore.
 3. `docs/RELEASE_PLAN_2026-09-24.md` §2.3 còn ghi 21/1.4.1 → cập nhật 29/1.4.3.
 4. Kênh đo tốc độ riêng trong app (nút "Đo qua VPN" trong Diagnostics) để so trực tiếp với
    speedtest — hiện người dùng phải so bằng mắt giữa 2 ứng dụng.
 
-## 8. Bài học cho iOS/macOS
+## 9. Bài học cho iOS/macOS
 
 Quy tắc: **bộ đếm byte phải phủ MỌI transport của tunnel**. Nếu bên iOS/macOS đang đọc bộ đếm
 của *một* transport (ví dụ chỉ cầu WS/proxy) thì đổi đường là con số sai y hệt. Nguồn đúng:
