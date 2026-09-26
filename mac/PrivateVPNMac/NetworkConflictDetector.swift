@@ -195,10 +195,18 @@ enum NetworkConflictDetector {
 
     /// Tên tiến trình của các phần mềm proxy/VPN phổ biến — so khớp CHÍNH XÁC sau khi chuẩn hoá
     /// (`/đường/dẫn/Clash Verge.app` → `clash-verge`).
+    ///
+    /// ⚠️ **KHÔNG đưa HELPER/AGENT chạy-nền vào danh sách này** (26/09/2026): `ovpnagent` của
+    /// OpenVPN Connect là daemon root **chạy vĩnh viễn ngay khi cài app**, kể cả khi KHÔNG kết nối
+    /// server nào — đo trên máy chủ dự án: PID 584/585, 0,0% CPU, 32 KB RSS, **không giữ route mặc
+    /// định, không chèn DNS, không mở cổng**. Đưa nó vào đây làm app báo "phát hiện OpenVPN Connect"
+    /// trong khi chẳng có tranh chấp nào ⇒ chủ dự án thấy phiền. Tranh chấp **THẬT** của OpenVPN vẫn
+    /// bị bắt bằng tín hiệu tunnel/route (`foreignDefaultRoute` / `foreignTunnelWithoutDefaultRoute`),
+    /// nên bỏ helper không mất khả năng phát hiện. Giữ `openvpn` = tiến trình daemon thật của bản CLI.
     static let knownProxyProcesses = [
         "clash", "clashx", "clashx-pro", "clash-verge", "clash-verge-service", "clash-meta",
         "verge-mihomo", "mihomo", "v2ray", "v2rayn", "v2rayx", "xray", "sing-box", "singbox",
-        "netch", "nekoray", "nekobox", "qv2ray", "openvpn", "ovpnagent", "wireguard", "wireguard-go",
+        "netch", "nekoray", "nekobox", "qv2ray", "openvpn", "wireguard", "wireguard-go",
         "tunnelblick", "shadowsocks", "shadowsocksx", "ss-local", "trojan", "hysteria",
         "tailscale", "tailscaled", "ipnextension", "zerotier-one", "zerotier",
         "proxifier", "sstap", "surge", "surge-3", "surge-4", "surge-5", "mullvad", "mullvad-vpn",
@@ -209,12 +217,16 @@ enum NetworkConflictDetector {
 
     /// Dấu hiệu ĐẶC TRƯNG — khớp cả khi tên tiến trình có tiền tố/hậu tố
     /// (`io.tailscale.ipn.macsys.network-extension`, `Clash Verge Helper`).
+    ///
+    /// ⚠️ Bỏ `openvpn`/`ovpnagent` (26/09/2026) vì đường dẫn
+    /// `/Library/Frameworks/OpenVPNConnect.framework/.../ovpnagent` khớp cả hai ⇒ báo oan "OpenVPN
+    /// Connect" chỉ vì app đã cài. Xem chú thích `knownProxyProcesses`.
     static let distinctiveProxyMarkers = [
         "clash", "mihomo", "sing-box", "singbox", "v2ray", "xray", "nekoray", "nekobox",
-        "wireguard", "openvpn", "tunnelblick", "shadowsocks", "proxifier", "sstap", "tailscale",
+        "wireguard", "tunnelblick", "shadowsocks", "proxifier", "sstap", "tailscale",
         "ipnextension", "zerotier", "hysteria", "anyconnect", "openconnect", "globalprotect",
         "forticlient", "mullvad", "nordvpn", "expressvpn", "protonvpn", "windscribe", "surge",
-        "quantumult", "hiddify", "tun2socks", "cloudflared", "ovpnagent",
+        "quantumult", "hiddify", "tun2socks", "cloudflared",
     ]
 
     /// Dấu hiệu search domain của app VPN khác cắm vào hệ thống (Tailscale MagicDNS `*.ts.net`…).
@@ -242,6 +254,42 @@ enum NetworkConflictDetector {
     ]
 
     /// Interface này có phải của phần mềm KHÁC (không phải VPNFlow) không.
+    /// Khi tunnel CỦA CHÍNH VPNFlow đang Connected: hạ mức các xung đột kiểu "app/đường khác đang
+    /// tranh default route" xuống `info`.
+    ///
+    /// Ca thật 26/09/2026 21:52:23 trên máy chủ dự án: tunnel vừa lên, bộ dò đọc default route rồi báo
+    /// `conflict [Blocking] … utun8 (default route IPv4, gateway 100.100.100.101) · utun8 (default route
+    /// IPv6)` — mà `100.100.100.101` CHÍNH LÀ địa chỉ utun của VPNFlow. Khách nhận hộp thoại doạ
+    /// "Hãy TẮT VPN kia rồi bấm Kết nối lại" trong khi chẳng có VPN nào khác ⇒ hoang mang, bấm loạn,
+    /// tunnel bị ngắt rồi traffic đi thẳng ra ngoài (bị rule chặn).
+    ///
+    /// Chốt an toàn: **tunnel của mình đang chạy là bằng chứng mạnh nhất rằng đường mặc định không phải
+    /// của app khác**, nên trong trạng thái đó không bao giờ được doạ khách ở mức `blocking`. Vẫn giữ
+    /// lại thông tin (mức `info`) để chẩn đoán về sau, và vẫn báo `blocking` cho các loại khác
+    /// (proxy hệ thống, DNS hỏng…) khi tunnel CHƯA lên.
+    static func demoteOwnTunnelFalsePositives(
+        _ conflicts: [NetworkConflict],
+        tunnelConnected: Bool
+    ) -> [NetworkConflict] {
+        guard tunnelConnected else { return conflicts }
+        return conflicts.map { conflict in
+            switch conflict.kind {
+            case .foreignDefaultRoute, .foreignVPNConnected, .foreignTunnelWithoutDefaultRoute:
+                guard conflict.severity > .info else { return conflict }
+                return NetworkConflict(
+                    severity: .info,
+                    kind: conflict.kind,
+                    title: conflict.title,
+                    detail: conflict.detail,
+                    advice: conflict.advice,
+                    facts: conflict.facts
+                )
+            default:
+                return conflict
+            }
+        }
+    }
+
     static func isForeignTunnelInterface(
         name: String,
         detail: String = "",

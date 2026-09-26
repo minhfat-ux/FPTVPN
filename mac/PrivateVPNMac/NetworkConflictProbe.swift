@@ -280,18 +280,30 @@ enum NetworkConflictProbe {
         }
 
         return addresses.keys.sorted().map { name in
-            let own = isOwnInterface(
+            let hasV4 = routeV4?.interface == name
+            let hasV6 = routeV6?.interface == name
+            // Nhận diện "interface của CHÍNH mình" bằng HAI đường, không chỉ địa chỉ:
+            //
+            // Ca thật 26/09/2026 21:52:23 trên máy chủ dự án — tunnel vừa Connected thì bộ dò gán
+            // `conflict [Blocking] … utun8 (default route IPv4, gateway 100.100.100.101) · utun8
+            // (default route IPv6)`, trong khi `100.100.100.101` CHÍNH LÀ địa chỉ utun của VPNFlow
+            // (`HysteriaDefaults.tunIPv4Address`). Địa chỉ utun chưa kịp hiện trong `getifaddrs` ngay
+            // sau `setTunnelNetworkSettings`, nhưng default route thì đã có ⇒ nhận nhầm thành "VPN
+            // khác đang giữ đường mặc định" ⇒ hộp thoại doạ khách "hãy TẮT VPN kia".
+            // Vì vậy: gateway của default route trùng địa chỉ tunnel mình ⇒ chắc chắn là của mình.
+            let ownByAddress = isOwnInterface(
                 addresses: addresses[name] ?? [],
                 ownOverlayIP: ownOverlayIP
             )
-            let hasV4 = routeV4?.interface == name
+            let ownByGateway = (hasV4 && isOwnTunnelAddress(routeV4?.router, ownOverlayIP: ownOverlayIP))
+                || (hasV6 && isOwnTunnelAddress(routeV6?.router, ownOverlayIP: ownOverlayIP))
             return NetworkInterfaceInfo(
                 name: name,
                 detail: "",
                 isTunnelType: tunnelPrefixes.contains { name.lowercased().hasPrefix($0) },
-                isOwn: own,
+                isOwn: ownByAddress || ownByGateway,
                 hasDefaultRouteV4: hasV4,
-                hasDefaultRouteV6: routeV6?.interface == name,
+                hasDefaultRouteV6: hasV6,
                 gatewayV4: hasV4 ? routeV4?.router : nil,
                 hasAssignedAddress: hasRoutableAddress(addresses[name] ?? [])
             )
@@ -320,16 +332,22 @@ enum NetworkConflictProbe {
         addresses: Set<String>,
         ownOverlayIP: String?
     ) -> Bool {
+        addresses.contains { isOwnTunnelAddress($0, ownOverlayIP: ownOverlayIP) }
+    }
+
+    /// Chuỗi địa chỉ này có phải tunnel/overlay của CHÍNH VPNFlow không.
+    ///
+    /// Dùng chung cho hai đường nhận diện: địa chỉ trên interface (`getifaddrs`) và **gateway của
+    /// default route** (xem chú thích ở `networkInterfaces` — ca Blocking oan 26/09/2026).
+    private static func isOwnTunnelAddress(_ address: String?, ownOverlayIP: String?) -> Bool {
+        guard let address else { return false }
+        let bare = address.split(separator: "%").first.map(String.init) ?? address
         let ownAddresses = Set(
             [HysteriaDefaults.tunIPv4Address, HysteriaDefaults.tunIPv6Address]
                 + [ownOverlayIP].compactMap { $0 }
         )
-        for address in addresses {
-            let bare = address.split(separator: "%").first.map(String.init) ?? address
-            if ownAddresses.contains(bare) { return true }
-            if bare.hasPrefix("10.77.") { return true }
-        }
-        return false
+        if ownAddresses.contains(bare) { return true }
+        return bare.hasPrefix("10.77.")
     }
 
     private static func numericAddress(_ address: UnsafeMutablePointer<sockaddr>) -> String? {

@@ -589,10 +589,18 @@ final class VPNManagerMac: ObservableObject {
     /// chưa đổi — đúng luật "chỉ hiện khi mức đổi HOẶC khi bấm Connect". Tình trạng đã bấm "Không nhắc
     /// lại" thì im lặng tuyệt đối.
     func refreshNetworkConflicts(probeDNS: Bool = true, nudge: Bool = false) async {
-        let conflicts = await NetworkConflictProbe.detect(
+        let rawConflicts = await NetworkConflictProbe.detect(
             ownOverlayIP: overlayIP,
             tunnelConnected: state == "Connected",
             probeDNS: probeDNS
+        )
+        // (26/09/2026) Tunnel của CHÍNH mình đang Connected ⇒ không được doạ khách ở mức Blocking vì
+        // "VPN khác đang giữ đường mặc định": đường mặc định đó là của mình. Ca thật trên máy chủ dự án:
+        // `conflict [Blocking] … utun8 (default route IPv4, gateway 100.100.100.101)` — `100.100.100.101`
+        // chính là địa chỉ utun VPNFlow ⇒ khách tưởng phải tắt app khác, bấm loạn, tunnel bị ngắt.
+        let conflicts = NetworkConflictDetector.demoteOwnTunnelFalsePositives(
+            rawConflicts,
+            tunnelConnected: state == "Connected"
         )
         networkConflicts = conflicts
         updateConflictNotice(conflicts, nudge: nudge)

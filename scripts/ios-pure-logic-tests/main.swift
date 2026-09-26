@@ -2146,7 +2146,11 @@ do {
     check(NetworkConflictDetector.isKnownProxyProcess("IPNExtension"), "IPNExtension (extension nền của Tailscale) ⇒ nhận ra")
     check(NetworkConflictDetector.isKnownProxyProcess("io.tailscale.ipn.macos.network-extension"),
           "bundle id Tailscale ⇒ nhận ra")
-    check(NetworkConflictDetector.isKnownProxyProcess("ovpnagent"), "ovpnagent (OpenVPN Connect) ⇒ nhận ra")
+    // (26/09/2026) `ovpnagent` là HELPER chạy NỀN của OpenVPN Connect: cài app là chạy, KHÔNG cần
+    // kết nối server nào (đo máy thật: 0,0% CPU, 32 KB RSS, không route, không DNS, không cổng).
+    // ⇒ KHÔNG tính là "phần mềm proxy đang chạy"; tranh chấp THẬT vẫn bắt qua tunnel/route.
+    check(!NetworkConflictDetector.isKnownProxyProcess("ovpnagent"),
+          "ovpnagent (helper nền OpenVPN Connect) ⇒ KHÔNG tính là đang chạy")
     check(NetworkConflictDetector.isKnownProxyProcess("/Applications/Clash Verge.app"),
           "đường dẫn .app có khoảng trắng ⇒ nhận ra")
     check(NetworkConflictDetector.isKnownProxyProcess("sing-box.exe"), "sing-box.exe ⇒ nhận ra")
@@ -2240,7 +2244,7 @@ do {
     checkEqual(processOnly.count, 1, "chỉ một cảnh báo cho tiến trình (gom nhiều app vào một dòng)")
     checkEqual(processOnly.first?.severity, .info, "chỉ tiến trình chạy nền ⇒ Info (im lặng, chỉ ghi log)")
     checkEqual(processOnly.first?.kind, .proxyProcessRunning, "đúng loại xung đột tiến trình")
-    checkEqual(processOnly.first?.facts, ["Tailscale", "OpenVPN Connect"],
+    checkEqual(processOnly.first?.facts, ["Tailscale"],
                "facts nêu TÊN APP khách hiểu, bỏ qua Chrome/Finder")
 
     // (8) Đã có Blocking ⇒ tiến trình vẫn là Info (mức Info là mức duy nhất cho ca chỉ-có-tiến-trình).
@@ -2480,8 +2484,42 @@ do {
     check(!realConflicts.contains { $0.kind == .unreachableDNSResolver },
           "tunnel chưa Connected ⇒ KHÔNG có cảnh báo DNS oan")
     checkEqual(NetworkConflictDetector.summary(for: realConflicts),
-               "Blocking — Tailscale (Connected) · Tailscale · OpenVPN Connect",
+               "Blocking — Tailscale (Connected) · Tailscale",
                "dòng log support grep được, đúng dữ liệu máy thật 26/09/2026")
+
+    // (11) Chốt an toàn 26/09/2026 — tunnel của CHÍNH MÌNH đang Connected thì KHÔNG được doạ khách ở
+    //      mức Blocking vì "VPN/đường khác đang tranh default route". Ca thật trên máy chủ dự án:
+    //      `conflict [Blocking] … utun8 (default route IPv4, gateway 100.100.100.101)` — mà
+    //      `100.100.100.101` chính là địa chỉ utun VPNFlow ⇒ khách tưởng phải tắt app khác, bấm loạn,
+    //      tunnel bị ngắt rồi traffic đi thẳng ra ngoài (bị rule chặn).
+    func conflict(
+        _ kind: NetworkConflictKind,
+        severity: NetworkConflictSeverity,
+        facts: [String] = []
+    ) -> NetworkConflict {
+        NetworkConflict(severity: severity, kind: kind, title: "t", detail: "d", advice: "a", facts: facts)
+    }
+    let ownTunnelFalsePositives = [
+        conflict(.foreignDefaultRoute, severity: .blocking,
+                 facts: ["utun8 (default route IPv4, gateway 100.100.100.101)", "utun8 (default route IPv6)"]),
+        conflict(.foreignVPNConnected, severity: .blocking, facts: ["Tailscale (Connected)"]),
+        conflict(.proxyProcessRunning, severity: .info, facts: ["Tailscale"]),
+        conflict(.unreachableDNSResolver, severity: .warning, facts: ["DNS 1.1.1.1 (timeout)"]),
+    ]
+    let demoted = NetworkConflictDetector.demoteOwnTunnelFalsePositives(
+        ownTunnelFalsePositives, tunnelConnected: true)
+    checkEqual(demoted.map(\.severity), [.info, .info, .info, .warning],
+               "tunnel mình Connected ⇒ hạ route/VPN-khác xuống Info, KHÔNG đụng loại khác")
+    checkEqual(demoted.first?.kind, .foreignDefaultRoute, "vẫn giữ loại xung đột để chẩn đoán về sau")
+    checkEqual(demoted.first?.facts,
+               ["utun8 (default route IPv4, gateway 100.100.100.101)", "utun8 (default route IPv6)"],
+               "giữ nguyên facts (interface + gateway) để support grep")
+    checkEqual(NetworkConflictDetector.demoteOwnTunnelFalsePositives(
+        ownTunnelFalsePositives, tunnelConnected: false).map(\.severity),
+        [.blocking, .blocking, .info, .warning],
+        "tunnel CHƯA lên ⇒ giữ nguyên mức Blocking như cũ")
+    check(!NetworkConflictDetector.summary(for: demoted).contains("Blocking"),
+          "dòng log khi tunnel mình đang chạy KHÔNG còn mức Blocking")
 }
 
 print("")
