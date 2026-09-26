@@ -1,0 +1,272 @@
+diff --git a/iOS/PrivateVPN/Services/HysteriaDefaults.swift b/iOS/PrivateVPN/Services/HysteriaDefaults.swift
+index fcfa278..171a73d 100644
+--- a/iOS/PrivateVPN/Services/HysteriaDefaults.swift
++++ b/iOS/PrivateVPN/Services/HysteriaDefaults.swift
+@@ -88,11 +88,56 @@ enum HysteriaDefaults {
+     /// báo lỗi). Đi cặp thì cửa nào cũng mang host của chính node đó, không thể ghép lệch.
+     struct RelayCandidate: Sendable, Equatable {
+         /// `wss://api.meetflowai.site/relay/vn1hy` — **path** mang mã node.
++        ///
++        /// **RỖNG = ĐI THẲNG**: QUIC đi trực tiếp tới `serverHost:serverPort` (UDP), KHÔNG qua
++        /// Cloudflare/WebSocket — xem `directCandidate(serverHost:)`.
+         var relayURL: String
+         /// Host hysteria của CHÍNH node đó (`103.173.155.50`), KHÔNG phải host relay.
+         var serverHost: String
+     }
+ 
++    /// Ứng viên ĐI THẲNG: QUIC tới `serverHost:serverPort` (UDP 8443), không qua Cloudflare.
++    ///
++    /// Chủ dự án chốt 26/09/2026: *"Thử đường 3, nếu bị chặn thì phải fallback về đường cloudflare"*.
++    /// Mọi cửa hiện tại đều qua Cloudflare và bị bóp còn ~2–6 Mbps trong khi tuyến nhà đo được
++    /// ~103 Mbps; đường thẳng không qua Cloudflare nên có thể nhanh hơn hẳn.
++    ///
++    /// **Đo thật 26/09/2026 trên mạng chủ dự án (China Mobile): đường thẳng BỊ CHẶN** — ba cổng
++    /// `8443`/`28443`/`54443` trên cả hai node đều `FATAL failed to initialize client: connect error:
++    /// timeout: no recent network activity` (client hysteria2 thật, tunnel đã ngắt), tuyến nhà vẫn
++    /// 12,6 MB/s ⇒ chặn ở tầng mạng, không phải lỗi cấu hình. Vì vậy **bắt buộc** có fallback Cloudflare.
++    static func directCandidate(serverHost: String) -> RelayCandidate {
++        RelayCandidate(relayURL: "", serverHost: serverHost)
++    }
++
++    /// Thử ĐI THẲNG trước (`true`) hay để nó làm ứng viên cuối (`false`).
++    ///
++    /// Mặc định `true` theo chốt của chủ dự án. Trên mạng CHẶN UDP, mỗi lượt thử đường thẳng tốn hết
++    /// `relayOpenGrace` giây trước khi rơi về Cloudflare (đo thật ~5–7 s) — đổi hằng này thành `false`
++    /// nếu ưu tiên vào mạng nhanh hơn là dùng đường thẳng.
++    static let directFirst = true
++
++    /// Thứ tự THỬ cửa cho node đang chọn — hàm THUẦN để harness khoá được thứ tự.
++    ///
++    /// Gồm: (1) cửa chính (relay của node đang dùng), (2) các cửa Cloudflare thay thế của CÙNG node
++    /// (bỏ trùng, giữ thứ tự), (3) ứng viên ĐI THẲNG — đặt trước hay sau tuỳ `directFirst`.
++    /// Không bao giờ ghép `serverHost` của node này với relay của node khác (finding F3).
++    static func orderedCandidates(
++        primaryRelayURL: String,
++        serverHost: String,
++        alternates: [RelayCandidate],
++        directFirst: Bool = HysteriaDefaults.directFirst
++    ) -> [RelayCandidate] {
++        var ws: [RelayCandidate] = [RelayCandidate(relayURL: primaryRelayURL, serverHost: serverHost)]
++        for candidate in alternates where !candidate.relayURL.isEmpty {
++            if !ws.contains(where: { $0.relayURL == candidate.relayURL }) {
++                ws.append(RelayCandidate(relayURL: candidate.relayURL, serverHost: candidate.serverHost))
++            }
++        }
++        let direct = directCandidate(serverHost: serverHost)
++        return directFirst ? [direct] + ws : ws + [direct]
++    }
++
+     /// Danh sách ỨNG VIÊN ĐỔI ĐƯỜNG (theo THỨ TỰ THỬ) cho node đang chọn — KHÔNG gồm cửa chính.
+     ///
+     /// VÌ SAO PHẢI CÓ (ca thật 26/09/2026, macOS system extension 1.4.7/25, tunnel đi relay `vn2hy`
+diff --git a/iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift b/iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
+index a68cc93..25c858f 100644
+--- a/iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
++++ b/iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
+@@ -260,6 +260,14 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
+     /// Đúng ca đo trên iPhone 23/09/2026: sau lần ramp dựng lại transport lúc 12:18:38, watchdog
+     /// im lặng 14 phút dù `toGo` đóng băng + `toGoDropped` leo (đủ điều kiện `.rebuild`).
+     private var watchdogGuardTimer: DispatchSourceTimer?
++    /// Đếm nhịp của **lưới an toàn** (chỉ đọc/ghi trên `watchdogGuardQueue`).
++    ///
++    /// Vì sao cần: lưới an toàn chỉ ghi log KHI nó phát hiện watchdog câm. Nếu chính nó cũng chết thì log
++    /// **im lặng hoàn toàn**, và người chấm không phân biệt được "watchdog câm" với "cả hai đều câm".
++    /// Ca thật 26/09/2026 (build 57, phiên 14:00:22): watchdog 0 nhịp trong 131 s **và** lưới an toàn
++    /// không một dòng ⇒ không có dấu vết nào để biết hàng đợi nào chết. Nay lưới an toàn tự khai nhịp
++    /// mỗi 4 vòng (60 s) — tốn 1 dòng/phút, cùng mức với dòng `tài nguyên:` sẵn có.
++    private var watchdogGuardTicks = 0
+     private let watchdogGuardQueue = DispatchQueue(label: "com.privatevpn.app.tunnel.watchdog-guard")
+     /// (24/09/2026 khuya) Hàng đợi RIÊNG cho **nhịp** watchdog sống-còn.
+     ///
+@@ -2310,6 +2318,15 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
+             NEIPv4Route(destinationAddress: "172.16.0.0", subnetMask: "255.240.0.0"),
+             NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
+             NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),
++            // `100.64.0.0/10` (RFC 6598, dải CGNAT) — ĐƯỜNG QUẢN TRỊ/CỨU HỘ, không phải traffic khách.
++            // Vì sao phải loại trừ: Tailscale cấp địa chỉ trong dải này; nếu tunnel hút cả dải thì gói tới
++            // nút Tailscale đi VÀO tunnel, mà đầu bên kia KHÔNG có đường tới `100.76.147.111` ⇒ đen ⇒
++            // mất luôn đường cứu hộ khi tunnel hỏng. Ca thật 26/09/2026: `route -n get 100.76.147.111`
++            // trả `utun7`, SSH tới cả node-1 lẫn node-2 đều `Connection timed out during banner exchange`,
++            // agent mất đường vào server để cứu hộ (§7e.2 dựa vào chính đường Tailscale này).
++            // An toàn với khách: RFC 6598 KHÔNG phải không gian địa chỉ công cộng — không dịch vụ Internet
++            // nào nằm trong dải này, nên loại trừ không mở đường cho traffic thật đi vòng qua tunnel.
++            NEIPv4Route(destinationAddress: "100.64.0.0", subnetMask: "255.192.0.0"),
+         ]
+         // A7 — chia đường theo ĐÍCH ĐẾN: dải IP đã nạp ở nền (CẢ HAI nền tảng:
+         // cn.txt + tencent-meeting.txt — macOS mở 25/09/2026, xem `startChinaBypass`) đi thẳng,
+@@ -2968,6 +2985,16 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
+             repeating: Self.livenessInterval
+         )
+         timer.setEventHandler { [weak self] in self?.livenessStep() }
++        // `resume()` PHẢI đứng TRƯỚC khi công bố timer vào `livenessTimer`, không được để sau như bản cũ.
++        // Vì sao: nguồn `DispatchSourceTimer` mới tạo ở trạng thái TREO; nếu một lượt gọi CHỒNG (hàm này
++        // có 4 đường gọi, trong đó `livenessStep` dòng ~3151 gọi lại chính nó) chạy `livenessTimer?.cancel()`
++        // trước khi lượt trước kịp `resume()` thì timer đó bị huỷ khi còn treo ⇒ **không bao giờ chạy**,
++        // và vì nó đã nằm trong `livenessTimer` nên không ai bật lại nữa ⇒ watchdog câm tới hết phiên.
++        // Ca thật 26/09/2026 (build 57, phiên 14:00:22): sau `TỰ DỰNG LẠI transport` lúc 14:18:53, watchdog
++        // tự khai "bật lại với mốc mới" lúc 14:19:02 rồi **0 nhịp trong 131 s**; cả lưới an toàn
++        // `startWatchdogGuard()` cũng câm ⇒ đúng dấu hiệu timer treo, không phải khoá chết.
++        // Chạy trước khi công bố là an toàn: nhịp đầu cách 15 s, mọi trạng thái đã gán xong từ lâu.
++        timer.resume()
+         flowLock.lock()
+         livenessTimer?.cancel()
+         livenessTimer = timer
+@@ -3002,11 +3029,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
+             repeating: Self.relayReachabilityInterval
+         )
+         reachTimer.setEventHandler { [weak self] in self?.relayReachabilityStep(now: Date()) }
++        // Cùng lý do như `timer` ở trên: chạy TRƯỚC khi công bố, tránh bị lượt gọi chồng `cancel()`
++        // lúc còn treo ⇒ đồng hồ kiểm LINK RELAY chết im (mất luôn khả năng đổi cửa khi relay không mở được).
++        reachTimer.resume()
+         relayReachabilityTimer?.cancel()
+         relayReachabilityTimer = reachTimer
+         flowLock.unlock()
+-        timer.resume()
+-        reachTimer.resume()
+         startWatchdogGuard()
+         RelayDiagnostics.shared.log(
+             "giám sát sống-còn: bật SUỐT phiên — nhịp \(Int(Self.livenessInterval))s; chiều về im "
+@@ -3045,6 +3073,7 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
+     /// loại sự cố không thể chẩn đoán được từ log trước đây.
+     private func startWatchdogGuard() {
+         watchdogGuardTimer?.cancel()
++        watchdogGuardTicks = 0
+         let timer = DispatchSource.makeTimerSource(queue: watchdogGuardQueue)
+         timer.schedule(deadline: .now() + Self.livenessInterval, repeating: Self.livenessInterval)
+         timer.setEventHandler { [weak self] in
+@@ -3057,15 +3086,30 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
+             self.flowLock.unlock()
+             guard !cancelled else { return }
+             let stalledFor = Date().timeIntervalSince(last)
+-            guard timerMissing || stalledFor >= Self.livenessStallLimit else { return }
+-            RelayDiagnostics.shared.log(
+-                "giám sát sống-còn: watchdog NGỪNG chạy (\(Int(stalledFor))s không có nhịp, "
+-                    + "timerMissing=\(timerMissing)) — bật lại, phiên \(session)"
+-            )
+-            self.startLivenessWatchdog()
++            if timerMissing || stalledFor >= Self.livenessStallLimit {
++                RelayDiagnostics.shared.log(
++                    "giám sát sống-còn: watchdog NGỪNG chạy (\(Int(stalledFor))s không có nhịp, "
++                        + "timerMissing=\(timerMissing)) — bật lại, phiên \(session)"
++                )
++                self.startLivenessWatchdog()
++                return
++            }
++            // Đường BÌNH THƯỜNG: lưới an toàn tự khai nhịp mỗi 4 vòng (60 s) để **phân biệt được**
++            // "watchdog câm" với "cả watchdog lẫn lưới an toàn đều câm". Không có dòng này thì ca
++            // 26/09/2026 không để lại dấu vết nào (xem chú thích `watchdogGuardTicks`).
++            self.watchdogGuardTicks += 1
++            if self.watchdogGuardTicks % 4 == 0 {
++                RelayDiagnostics.shared.log(
++                    "giám sát sống-còn: lưới an toàn nhịp \(self.watchdogGuardTicks) — watchdog KHOẺ "
++                        + "(nhịp cuối cách \(Int(stalledFor))s), phiên \(session)"
++                )
++            }
+         }
+-        watchdogGuardTimer = timer
++        // Cùng lý do như `timer`/`reachTimer` trong `startLivenessWatchdog`: chạy TRƯỚC khi công bố.
++        // Lưới an toàn này là thứ CUỐI CÙNG bắt được watchdog câm — nếu chính nó bị treo thì không còn
++        // gì phát hiện nữa (ca thật 26/09/2026: watchdog câm 131 s mà lưới an toàn cũng không lên tiếng).
+         timer.resume()
++        watchdogGuardTimer = timer
+     }
+ 
+     /// Transport vừa bị THAY (ramp băng thông / tự phục hồi / HOLD) ⇒ mọi mốc của watchdog cũ trỏ
+diff --git a/iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift b/iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
+index b9bf738..f2097e6 100644
+--- a/iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
++++ b/iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
+@@ -185,35 +185,78 @@ final class HysteriaTransport: @unchecked Sendable {
+         let candidates = relayCandidates(for: options)
+         var lastError: Error = TransportError.relayNotStarted("không có relay URL nào để thử")
+         for candidate in candidates {
+-            guard let relayURL = URL(string: candidate.relayURL) else { continue }
++            // `relayURL` RỖNG = ứng viên ĐI THẲNG (UDP/QUIC tới node, không qua Cloudflare).
++            let label = candidate.relayURL.isEmpty
++                ? "đi thẳng \(candidate.serverHost):\(HysteriaDefaults.serverPort)"
++                : candidate.relayURL
+             do {
+-                try attempt(relayURL: relayURL, options: options, tunnelFd: tunnelFd)
++                if candidate.relayURL.isEmpty {
++                    try attemptDirect(options: options)
++                } else if let relayURL = URL(string: candidate.relayURL) {
++                    try attempt(relayURL: relayURL, options: options, tunnelFd: tunnelFd)
++                } else {
++                    continue
++                }
+                 return
+             } catch {
+                 lastError = error
+-                log.error("hysteria: relay \(relayURL.absoluteString, privacy: .public) hỏng: \(error.localizedDescription, privacy: .public)")
+-                RelayDiagnostics.shared.log("hysteria: relay \(relayURL.absoluteString) hỏng (\(error)) — thử relay kế tiếp")
++                log.error("hysteria: cửa \(label, privacy: .public) hỏng: \(error.localizedDescription, privacy: .public)")
++                RelayDiagnostics.shared.log("hysteria: cửa \(label) hỏng (\(error)) — thử cửa kế tiếp")
+                 discardAttempt()
+             }
+         }
+         throw lastError
+     }
+ 
++    /// Lượt thử ĐI THẲNG: QUIC tới `serverHost:serverPort` (UDP), KHÔNG có WebSocket/Cloudflare.
++    ///
++    /// Chủ dự án chốt 26/09/2026 (*"thử đường 3, nếu bị chặn thì phải fallback về Cloudflare"*). Đo
++    /// thật trên mạng chủ dự án: đường thẳng bị chặn hoàn toàn (client hysteria2 báo `connect error:
++    /// timeout: no recent network activity` ở cả 8443/28443/54443) ⇒ lượt này hỏng nhanh rồi vòng lặp
++    /// rơi ngay về cửa Cloudflare kế tiếp; ở mạng KHÔNG chặn UDP thì đây là đường nhanh nhất vì không
++    /// phải đi qua Cloudflare.
++    private func attemptDirect(options: Options) throws {
++        #if canImport(Hysteria)
++        var connectError: NSError?
++        let connected = MobileConnect(
++            options.serverHost,
++            Int(HysteriaDefaults.serverPort),
++            options.password,
++            options.obfs,
++            0,
++            false,
++            Int(options.upKbps),
++            Int(options.downKbps),
++            &connectError
++        )
++        guard connected else {
++            throw TransportError.connectFailed(
++                connectError?.localizedDescription
++                    ?? "đường thẳng \(options.serverHost):\(HysteriaDefaults.serverPort) không lên được"
++            )
++        }
++        log.log("hysteria: ĐI THẲNG (không Cloudflare) — server \(options.serverHost, privacy: .public):\(HysteriaDefaults.serverPort), up=\(options.upKbps) kbps, down=\(options.downKbps) kbps)")
++        lock.lock()
++        running = true
++        lock.unlock()
++        #else
++        throw TransportError.relayNotStarted("bản build thiếu hysteria")
++        #endif
++    }
++
+     /// Cửa chính (`relayURL` + `serverHost` của nó) trước, rồi tới các ứng viên còn lại (bỏ trùng,
+     /// giữ thứ tự). Cửa nào cũng đi KÈM danh tính node của chính nó — không bao giờ ghép `serverHost`
+     /// của node này với relay của node khác (finding F3).
++    ///
++    /// 26/09/2026 — thứ tự do `HysteriaDefaults.orderedCandidates` quyết (hàm THUẦN, có test): chủ dự
++    /// án chốt *"thử đường 3 (UDP thẳng), nếu bị chặn thì fallback về Cloudflare"* ⇒ mặc định đường
++    /// thẳng đứng trước, các cửa Cloudflare ngay sau làm fallback.
+     private func relayCandidates(for options: Options) -> [HysteriaDefaults.RelayCandidate] {
+-        var ordered: [HysteriaDefaults.RelayCandidate] = [
+-            HysteriaDefaults.RelayCandidate(
+-                relayURL: options.relayURL.absoluteString,
+-                serverHost: options.serverHost
+-            )
+-        ]
+-        for candidate in options.relayCandidates
+-        where !ordered.contains(where: { $0.relayURL == candidate.relayURL }) {
+-            ordered.append(candidate)
+-        }
+-        return ordered
++        HysteriaDefaults.orderedCandidates(
++            primaryRelayURL: options.relayURL.absoluteString,
++            serverHost: options.serverHost,
++            alternates: options.relayCandidates
++        )
+     }
+ 
+     /// Một lượt thử: mở relay → chờ WS mở → cho Go nói QUIC tới cổng UDP nội bộ → serve.
