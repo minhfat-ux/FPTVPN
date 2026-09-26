@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-26T16:43:51.002Z",
+ "note": "connector VPS: blocked từ mac — bus-501 · XÁC NHẬN + NGUYÊN NHÂN GỐC: watchdog câm sau dựng lại ở build 57 — commit bản vá + build 58 + nghiệm thu §7d",
+ "via": "dsh --profile headless \"{prompt}\""
+}
