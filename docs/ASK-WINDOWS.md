@@ -56,12 +56,6 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `bus-311` | verified | Windows -> Mac TASK: gui KEYSTORE RELEASE Android cho Windows (chuyen  | `-` |
 | `bus-322` | verified | Windows -> Mac TASK: gui EMAIL khach cho Android 1.4.4 (versionCode 32 | `-` |
 | `bus-326` | verified | Windows -> Mac TASK UU TIEN CAO: gui EMAIL khach cho Windows 1.4.6 (ho | `-` |
-<<<<<<< ours
-=======
-| `bus-422` | in_progress | BUG iOS — 3 lỗi: đọc ở đâu, sửa gì, nghiệm thu thế nào | `node ops/task.mjs done bus-422 --evidence "commit=…, cmd=…, kết quả=…" --push` |
-| `bus-427` | verified | Site cham: 6 anh logo = 588 KB (95% trang chu) — goi toi uu san sang ( | `-` |
-| `bus-435` | done | BUY UX: bat buoc email truoc khi tai (owner chot) — WIN lam control-pl | `chờ bên giao nghiệm thu` |
->>>>>>> theirs
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
 | `tasks` | unknown |  | `-` |
 
