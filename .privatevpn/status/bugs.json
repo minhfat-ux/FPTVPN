@@ -134,7 +134,8 @@
         "19:01:41 app tự nối lại được (`default=utun7,en0`, relay 426)",
         "19:06:47 TẮT Tailscale ⇒ `default=en0`; 19:06:53–19:07:02 phiên mới lên và có mạng thật (`XÁC NHẬN tunnel có mạng thật sau 5.0s — TCP handshake hoàn tất 28 lần`)",
         "19:07:1x–19:08:52: `ifconfig` không còn `utun7`/`utun8`; `netstat -rn` không còn `0/1`,`128.0/1`; `scutil --nc list` → `VPNFlow (Disconnected)`; egress `120.234.32.53` (ISP TQ) ⇒ KHÔNG qua VPN",
-        "19:09:00 `scutil --nc start \"VPNFlow\"` ⇒ Connected, egress `103.173.155.50`, `cầu vào 5704/ra 5683` trong 1 phút"
+        "19:09:00 `scutil --nc start \"VPNFlow\"` ⇒ Connected, egress `103.173.155.50`, `cầu vào 5704/ra 5683` trong 1 phút",
+        "LẦN 3 (cùng ngày, sau khi nối lại bằng tay): phiên 19:09:00 → `relay.log` DỪNG ở 19:18:17 (`tài nguyên` chẵn lẻ giữa số thật và `cầu vào -1/ra -1 … mở=no`), KHÔNG có dòng `stopTunnel`; 19:30 kiểm lại: tiến trình extension KHÔNG còn, `scutil --nc status VPNFlow` = `Disconnected`, app vẫn chạy (PID 98559) và KHÔNG tự nối lại. Lúc này Tailscale đã bật lại (utun8 = 100.109.31.16) và ĐANG dùng exit node node-1 (`ExitNodeStatus = 100.76.147.111 Online`) ⇒ egress 103.173.155.50 là qua Tailscale, KHÔNG phải qua VPNFlow."
       ],
       "next_steps": "(1) phiên tunnel tự phát hiện mất interface/route và dựng lại; (2) app theo dõi `NEVPNStatus`, nếu `Disconnected` mà ý định người dùng vẫn là 'muốn kết nối' thì tự `startVPNTunnel` (backoff 2→60 s đã có); (3) không để app VPN khác (Tailscale/WireGuard) toggling làm mất route của mình; (4) cân nhắc cảnh báo trên UI khi egress không còn là tunnel",
       "blocked_by": "Chờ build 29 — chủ dự án chốt 26/09/2026: KHÓA kênh macOS ở 1.4.7/28 để khách test trước, không phát bản mới nên chưa sửa/phát"

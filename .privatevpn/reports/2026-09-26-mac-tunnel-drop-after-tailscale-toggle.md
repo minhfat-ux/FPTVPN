@@ -28,3 +28,14 @@ Mục đích đo: tìm đường vào server khi SSH công khai bị ngập. Tai
    (Tailscale/WireGuard) toggling làm mất route của mình.
 3. Bằng chứng log tươi sau lần nối lại có dòng `cầu vào -1/ra -1 … mở=no` xen giữa lúc `Connected` (cầu chưa gắn)
    — cần soi thêm ở build sau.
+
+## Lần 3 — rơi tiếp lúc 19:18, vẫn KHÔNG tự nối lại (kiểm 19:30)
+
+- Phiên nối lại bằng tay lúc **19:09:00** chạy tới **19:18:17** thì `relay.log` **dừng hẳn**, **không** có dòng `stopTunnel`.
+  Trước khi dừng, dòng `tài nguyên` **chẵn lẻ** giữa số thật và `cầu vào -1/ra -1 … mở=no` (cầu đọc ra nil).
+- 19:30 kiểm lại: **không còn tiến trình extension**, `scutil --nc status VPNFlow` = `Disconnected`,
+  app vẫn chạy (`/Applications/VPNFlow.app/Contents/MacOS/VPNFlow`, PID 98559) và **không tự nối lại**.
+- Lúc này **Tailscale đã bật lại** (`utun8` = `100.109.31.16` của Mac) và **đang dùng exit node node-1**
+  (`ExitNodeStatus = 100.76.147.111 Online`) ⇒ egress `103.173.155.50` hiện nay là **qua Tailscale**, không phải VPNFlow.
+- Hệ quả cho kỳ khách test: máy còn app VPN khác (Tailscale/WireGuard) thì tunnel VPNFlow có thể rơi mà **khách không biết** —
+  cần cảnh báo UI + tự dựng lại (đúng `BUG-MACOS-SESSION-DROP-001`).
