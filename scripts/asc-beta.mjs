@@ -120,11 +120,41 @@ async function cmdSubmit(number) {
   }
 }
 
+async function cmdCancel(number) {
+  if (!number) throw new Error("thiếu <buildNumber>: node scripts/asc-beta.mjs cancel 54");
+  const build = await findBuild(number);
+  if (!build) throw new Error(`không thấy build ${number} trên App Store Connect`);
+  const subs = await api(`/v1/betaAppReviewSubmissions?filter[build]=${build.id}`);
+  const sub = subs.json?.data?.[0];
+  if (!sub) {
+    console.log(`build ${number}: không có submission nào đang mở (không cần huỷ).`);
+    return;
+  }
+  console.log(`build ${number}: submission ${sub.id} · state=${sub.attributes?.betaReviewState}`);
+  const del = await api(`/v1/betaAppReviewSubmissions/${sub.id}`, "DELETE");
+  console.log(`  RÚT KHỎI REVIEW: ${del.status}`, del.status === 204 ? "OK" : JSON.stringify(del.json).slice(0, 200));
+  if (del.status !== 204) throw new Error("rút submission thất bại — đọc JSON ở trên");
+}
+
+async function cmdExpire(number) {
+  if (!number) throw new Error("thiếu <buildNumber>: node scripts/asc-beta.mjs expire 54");
+  const build = await findBuild(number);
+  if (!build) throw new Error(`không thấy build ${number} trên App Store Connect`);
+  console.log(`build ${number}: id=${build.id} expired=${build.attributes?.expired}`);
+  const r = await api(`/v1/builds/${build.id}`, "PATCH", {
+    data: { type: "builds", id: build.id, attributes: { expired: true } },
+  });
+  console.log(`  EXPIRE: ${r.status}`, r.status < 300 ? "OK" : JSON.stringify(r.json).slice(0, 300));
+  if (r.status >= 300) throw new Error("expire thất bại — đọc JSON ở trên");
+}
+
 try {
   if (cmd === "status") await cmdStatus();
   else if (cmd === "submit") await cmdSubmit(args[1]);
+  else if (cmd === "cancel") await cmdCancel(args[1]);
+  else if (cmd === "expire") await cmdExpire(args[1]);
   else {
-    console.log("dùng: node scripts/asc-beta.mjs status | submit <buildNumber> [--group <tên>] [--whatsnew <file.json>] [--wait]");
+    console.log("dùng: node scripts/asc-beta.mjs status | submit <buildNumber> [--group <tên>] [--whatsnew <file.json>] [--wait] | cancel <buildNumber> | expire <buildNumber>");
     process.exit(2);
   }
 } catch (err) {
