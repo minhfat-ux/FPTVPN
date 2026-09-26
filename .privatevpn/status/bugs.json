@@ -120,6 +120,24 @@
       ],
       "next_steps": "Chờ chủ dự án chốt hành vi khi hết ứng viên: (a) teardown SỚM + báo khách (trả mạng lại ngay, lần Connect sau tự nạp lại 3 lượt); (b) cooldown rồi nạp lại trần (vd sau 5–10 phút 0 gói về); (c) nạp lại trần khi ĐỔI MẠNG thật; (d) tăng trần/xoay vòng có kiểm soát. Kèm: tìm nguyên nhân watchdog câm ở đoạn cuối chuỗi phục hồi",
       "blocked_by": "Chờ chủ dự án chốt hành vi (a–d); session Mac bị sandbox chặn ghi vào /Volumes/BIWIN nên chưa sửa/commit được"
+    },
+    {
+      "id": "BUG-MACOS-SESSION-DROP-001",
+      "title": "macOS: đổi interface VPN khác (Tailscale) làm tunnel rơi, app KHÔNG tự nối lại — traffic đi thẳng ISP trong khi extension vẫn chạy",
+      "area": "macos (app + system extension 1.4.7/28)",
+      "severity": "high",
+      "reported": "2026-09-26",
+      "status": "open",
+      "impact": "Bật rồi tắt Tailscale ⇒ tunnel VPNFlow rơi 2 lần. Lần 2: `scutil --nc list` báo `VPNFlow (Disconnected)`, mất utun + route `0/1`/`128.0/1`, nhưng tiến trình extension VẪN chạy và app KHÔNG tự `startVPNTunnel` ⇒ toàn bộ traffic đi thẳng ra ISP (egress đổi từ IP node `103.173.155.50` sang IP nhà mạng `120.234.32.53`) mà khách không được báo gì. Khớp phàn nàn 'bản Mac cứ chập chờn'.",
+      "evidence": [
+        "19:00:40 (+08) BẬT Tailscale ⇒ monitor: `relay vn1hy=000 vn2hy=000 | default=en0` (stop=2)",
+        "19:01:41 app tự nối lại được (`default=utun7,en0`, relay 426)",
+        "19:06:47 TẮT Tailscale ⇒ `default=en0`; 19:06:53–19:07:02 phiên mới lên và có mạng thật (`XÁC NHẬN tunnel có mạng thật sau 5.0s — TCP handshake hoàn tất 28 lần`)",
+        "19:07:1x–19:08:52: `ifconfig` không còn `utun7`/`utun8`; `netstat -rn` không còn `0/1`,`128.0/1`; `scutil --nc list` → `VPNFlow (Disconnected)`; egress `120.234.32.53` (ISP TQ) ⇒ KHÔNG qua VPN",
+        "19:09:00 `scutil --nc start \"VPNFlow\"` ⇒ Connected, egress `103.173.155.50`, `cầu vào 5704/ra 5683` trong 1 phút"
+      ],
+      "next_steps": "(1) phiên tunnel tự phát hiện mất interface/route và dựng lại; (2) app theo dõi `NEVPNStatus`, nếu `Disconnected` mà ý định người dùng vẫn là 'muốn kết nối' thì tự `startVPNTunnel` (backoff 2→60 s đã có); (3) không để app VPN khác (Tailscale/WireGuard) toggling làm mất route của mình; (4) cân nhắc cảnh báo trên UI khi egress không còn là tunnel",
+      "blocked_by": "Chờ build 29 — chủ dự án chốt 26/09/2026: KHÓA kênh macOS ở 1.4.7/28 để khách test trước, không phát bản mới nên chưa sửa/phát"
     }
   ],
   "regressions": [],
