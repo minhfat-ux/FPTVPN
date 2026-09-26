@@ -138,8 +138,25 @@ mỗi 2 phút sẽ có hàng trăm tin rác. Cách xử lý:
 
 ## 9. SSH chỉ qua VPNFlow (yêu cầu chủ dự án 26/09)
 
-Hai cách, **ưu tiên cách 2** (đã trả giá bằng sự cố mất SSH ngày 26/09 — xem
-`docs/INCIDENT-2026-09-26-ssh-lock.md`):
+Hai cách (đã trả giá bằng sự cố mất SSH ngày 26/09 — xem `docs/INCIDENT-2026-09-26-ssh-lock.md`):
+
+> **Đo trước, chặn sau — và luôn bật timer cứu hộ.** Nguồn thật của máy Mac ở cả 2 node là
+> `103.173.155.50` (đường ra của VPNFlow), đã đo bằng bảng đếm `sshprobe` chứ không đoán.
+> Air Mac **không** tới được các địa chỉ VPN nội bộ (`10.77.0.1`, `10.78.0.1`) ⇒ với môi trường này
+> chỉ có cách 1 dùng được; cách 2 dành cho node mà máy vận hành nối được địa chỉ VPN.
+>
+> ```bash
+> bash ops/vpnflow-ssh-lock.sh probe                      # chỉ đếm + ghi log, KHÔNG chặn
+> bash ops/vpnflow-ssh-lock.sh sources                    # đọc log ⇒ nguồn đã thấy
+> bash ops/vpnflow-ssh-lock.sh apply --source 103.173.155.50   # tự bật timer cứu hộ 6h
+> bash ops/vpnflow-ssh-lock.sh status                     # xem khoá + đếm gói + timer
+> bash ops/vpnflow-ssh-lock.sh cancel-rescue              # CHỈ sau khi đã vào được từ đường 2
+> bash ops/vpnflow-ssh-lock.sh rollback                   # mở lại như trước
+> ```
+>
+> Danh sách "người nhà" đang cho phép (theo bằng chứng, không đoán): loopback · dải VPNFlow 10.77/10.78 ·
+> Tailscale 100.64/10 · `103.173.155.50` (node-1/VPNFlow exit) · `165.101.114.162` (node-2) ·
+> `63.140.14.154` (máy WIN) · `223.118.50.125` (người vận hành).
 
 1. ~~Lọc theo nguồn bằng nft~~ (`vpnflow-ssh-lock.sh`): chỉ `accept` cổng 22 từ danh sách nguồn.
    **Không khuyến khích** — phải đoán đúng nguồn thật; đoán sai là tự khoá mình (đã xảy ra).

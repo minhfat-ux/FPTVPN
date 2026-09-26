@@ -234,8 +234,8 @@ export function scanSshExposure({ ssText = "", sshdEffectiveText = "", nftLocked
       "ssh-exposure-public", nftLocked ? "low" : "high",
       "SSH (cổng 22) đang nghe trên MỌI địa chỉ",
       nftLocked
-        ? "Đang có bảng nft vpnflow_ssh chặn theo nguồn nên Internet vẫn không vào được — nhưng nên chuyển sang chỉ nghe trên địa chỉ VPN: ops/vpnflow-ssh-only.sh apply"
-        : "Internet có thể bắt tay TCP vào cổng 22 (đúng thứ chủ dự án muốn chặn). Cách an toàn: ops/vpnflow-ssh-only.sh apply (chỉ nghe trên địa chỉ VPNFlow).",
+        ? "Đang có bảng nft vpnflow_ssh chặn theo nguồn nên Internet vẫn không vào được. Muốn siết đúng cách: ĐO nguồn rồi chạy ops/vpnflow-ssh-lock.sh apply --source <IP đo được>"
+        : "Internet có thể bắt tay TCP vào cổng 22 (đúng thứ chủ dự án muốn chặn). Cách làm an toàn: (1) đo nguồn bằng ops/vpnflow-ssh-lock.sh probe, (2) ops/vpnflow-ssh-lock.sh apply --source <IP đo được> (có timer cứu hộ tự mở lại).",
       open.map((s) => s.line).join(" "),
     ));
   }
