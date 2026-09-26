@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-501",
+  "title": "XÁC NHẬN + NGUYÊN NHÂN GỐC: watchdog câm sau dựng lại ở build 57 — commit bản vá + build 58 + nghiệm thu §7d",
+  "from": "mac",
+  "to": "mac",
+  "detail": ".privatevpn/status/bugs.json (BUG-IOS-WATCHDOG-SILENT-001) + .privatevpn/reports/2026-09-26-ios-57-postota-acceptance-FAILED.md + AGENTS.md §7d. Bản vá: iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift — timer.resume()/reachTimer.resume() dời lên TRƯỚC khi công bố vào livenessTimer/relayReachabilityTimer (chống lượt gọi chồng cancel() timer còn treo).",
+  "verify": "xcrun devicectl device copy from --device 33987D6F-5424-58C7-9CFC-7A0B1F60C717 --domain-type appDataContainer --domain-identifier com.privatevpn.app.packet-tunnel --source Documents --destination <dir> ; xcrun devicectl device copy from --device 33987D6F-5424-58C7-9CFC-7A0B1F60C717 --domain-type systemCrashLogs --source . --destination <dir>/crash ; python3 scripts/ios-log-acceptance.py <dir>/relay.log --crash-dir <dir>/crash",
+  "due": null,
+  "createdAt": "2026-09-26T16:27:59.206Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-26T16:27:59.206Z"
+}
