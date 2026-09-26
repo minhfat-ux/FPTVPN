@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd=ssh root@103.173.155.50 '/usr/local/sbin/vpnflow-ssh-lock.sh rollback' + ssh root@165.101.114.162 '/usr/local/sbin/vpnflow-ssh-lock.sh rollback' (thuc thi qua relay VPNFlow vn1hy/vn2hy: flowvpnrelay.exe -> SOCKS5 -> ssh 127.0.0.1:22, vi nft chan moi nguon ngoai loopback); ket qua=nft table inet vpnflow_ssh DA XOA tren CA 2 node; sshd giu key-only (passwordauthentication no, permitrootlogin prohibit-password, kbdinteractive no) + sshd -t OK + reload OK; ssh TRUC TIEP tu IP cong khai cua WIN vao ca 2 node OK (node-1 hostname=fcnvpn 103.173.155.50, node-2 hostname=fcnvps2 165.101.114.162); thu mat khau -> 'Permission denied (publickey)'; NGUYEN NHAN=nft allow4 chi co 127.0.0.1 thay vi day du 127.0.0.1+10.77.0.0/24+... nhu unit vpnflow-ssh-lock.service khai bao; CANH BAO=unit van ENABLED nen reboot se ap lai khoa (Mac lai mat SSH)",
+ "actor": "win",
+ "at": "2026-09-26T11:42:45.854Z"
+}
