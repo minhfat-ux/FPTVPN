@@ -1,0 +1,19 @@
+{
+  "_doc": "Khóa kênh phát hành: chủ dự án cho khách test một bản thì KHÔNG phát bản mới cùng kênh. Cổng scripts/check-publish-version.py đọc file này và CHẶN (exit 3) khi định phát bản khác bản đang khóa. Mở khóa = sửa file này (có chủ đích, ghi lý do) hoặc thêm --allow-locked \"<lý do>\".",
+  "updated": "2026-09-26",
+  "locks": [
+    {
+      "platform": "macos",
+      "version": "1.4.7",
+      "build": "28",
+      "sha256": "d83646503476f73bfca2e6a5b06b641f1cbdca534127368e353703174b3d2346",
+      "size": 23798393,
+      "channel": "/v1/downloads/mac",
+      "locked_at": "2026-09-26",
+      "locked_by": "chủ dự án (chốt trong phiên 26/09/2026)",
+      "reason": "Chủ dự án: 'bản macOS tạm thời dùng OK rồi, nên anh nghĩ để khách test đã. Lock bản MacOS lại ở build 28'",
+      "unlock_condition": "Hết kỳ khách test và chủ dự án cho phép; mọi sửa đổi (gồm BUG-MACOS-SESSION-DROP-001) dồn vào build 29",
+      "scope": "Không build/ký/upload DMG macOS mới; không đổi latest_mac_version/minimum_mac_version khỏi 1.4.7"
+    }
+  ]
+}
