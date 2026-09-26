@@ -372,6 +372,11 @@ const ADDED_COLUMNS = [
   { table: "user_memories", column: "status", definition: "TEXT NOT NULL DEFAULT 'unverified'" },
   { table: "user_memories", column: "evidence", definition: "TEXT" },
   { table: "user_memories", column: "verified_at", definition: "TEXT" },
+  // Xác thực email: tài khoản mới chỉ được coi là "active" sau khi xác thực hộp thư.
+  // Tài khoản CÓ TRƯỚC khi thêm cột được grandfather = đã xác thực (xem backfill bên dưới),
+  // nếu không thì vừa deploy xong là toàn bộ người dùng hiện tại bị khoá ngoài.
+  { table: "users", column: "email_verified", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "users", column: "email_verified_at", definition: "TEXT" },
 ];
 
 /**
@@ -424,6 +429,23 @@ function backfillMemoryStatus() {
   }
 }
 
+/**
+ * Người dùng đã tồn tại TRƯỚC khi có cột `email_verified` được coi là đã xác thực: họ đã dùng
+ * app bình thường, không có lý do gì khoá họ lại. Chỉ chạy đúng một lần, lúc cột vừa được thêm.
+ */
+function backfillGrandfatherEmailVerified() {
+  try {
+    const info = db
+      .prepare("UPDATE users SET email_verified = 1, email_verified_at = COALESCE(email_verified_at, created_at, ?)")
+      .run(nowIso());
+    if (info.changes) {
+      console.log(`[fbuddy] đã đánh dấu ${info.changes} tài khoản cũ là ĐÃ xác thực email (grandfather)`);
+    }
+  } catch (err) {
+    console.error("[fbuddy] bỏ qua đánh dấu xác thực email cho tài khoản cũ:", err?.message ?? err);
+  }
+}
+
 function migrate() {
   for (const entry of ADDED_COLUMNS) {
     const existing = new Set(db.prepare(`PRAGMA table_info(${entry.table})`).all().map((row) => row.name));
@@ -432,7 +454,11 @@ function migrate() {
     console.log(`[fbuddy] đã thêm cột ${entry.table}.${entry.column}`);
     if (entry.table === "hub_skills" && entry.column === "price_vnd") backfillHubPriceVnd();
     if (entry.table === "hub_skills" && entry.column === "kind") backfillHubKind();
-    if (entry.table === "user_memories" && entry.column === "status") backfillMemoryStatus();
+    // LƯU Ý THỨ TỰ: backfill chỉ được chạy khi MỌI cột nó dùng đã tồn tại. `email_verified_at`
+    // được thêm SAU `email_verified`, nên móc vào cột thứ hai — móc vào cột đầu thì câu UPDATE
+    // sẽ lỗi "no such column" và bị nuốt im lặng (tài khoản cũ ở lại chưa xác thực ⇒ khoá sạch user).
+    if (entry.table === "user_memories" && entry.column === "verified_at") backfillMemoryStatus();
+    if (entry.table === "users" && entry.column === "email_verified_at") backfillGrandfatherEmailVerified();
   }
   fixLegacySystemPromptCompany();
   COLUMN_CACHE.clear();
@@ -636,6 +662,15 @@ export const DEFAULT_APP_SETTINGS = {
   autoCreateUserOnLogin: true,
   /** With no mailer configured, show the code on screen so the app is usable. */
   showLoginCodeWhenNoMailer: true,
+  /**
+   * Bắt buộc xác thực email trước khi tài khoản được kích hoạt: chưa xác thực thì không mở được
+   * phiên, không dùng được app. Tài khoản cũ được grandfather = đã xác thực.
+   * Lưu ý: nếu CHƯA cấu hình mailer (Resend) thì không thể xác thực được, nên tài khoản mới
+   * vẫn được kích hoạt ngay — nếu không thì chính anh cũng không vào được.
+   */
+  requireEmailVerification: true,
+  /** Hiệu lực của mã xác thực email (phút). */
+  emailVerificationTtlMin: 30,
   /** Sender identity for login mail. */
   mailerFrom: "no-reply@meetflowai.site",
   mailerFromName: "fBuddy",

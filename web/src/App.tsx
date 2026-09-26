@@ -69,8 +69,23 @@ export function App() {
   // silently kept the old account).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const linkEmail = params.get("email");
     const linkToken = params.get("token");
+    // Link KÍCH HOẠT trong email xác thực (?verifyEmail=…&token=…): xác thực rồi vào app luôn.
+    const linkVerifyEmail = params.get("verifyEmail");
+    if (linkVerifyEmail && linkToken) {
+      window.history.replaceState({}, "", window.location.pathname);
+      api
+        .verifyEmail(linkVerifyEmail, linkToken)
+        .then(async (session) => {
+          await completeLogin(session);
+          push(t("auth.verify.success"), "success");
+        })
+        .catch((err) => {
+          push(err instanceof ApiError ? err.message : t("auth.verify.wrong"), "error");
+        });
+      return;
+    }
+    const linkEmail = params.get("email");
     if (!linkEmail || !linkToken) return;
     window.history.replaceState({}, "", window.location.pathname);
     api

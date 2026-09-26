@@ -8,6 +8,9 @@ export interface User {
   name: string | null;
   role: Role;
   isAdmin: boolean;
+  /** Đã xác thực email chưa. Tài khoản chưa xác thực KHÔNG active (không dùng được app). */
+  emailVerified?: boolean;
+  emailVerifiedAt?: string | null;
   createdAt: string;
 }
 

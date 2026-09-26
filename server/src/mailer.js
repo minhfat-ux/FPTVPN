@@ -122,6 +122,47 @@ export async function sendLoginCode({ settings, to, code, link, ttlMin }) {
   return result;
 }
 
+/**
+ * Email KÍCH HOẠT TÀI KHOẢN (xác thực email). Khác email đăng nhập ở lời văn: người nhận vừa
+ * đăng ký, nên câu chữ phải nói rõ "xác thực để kích hoạt", không phải "đăng nhập".
+ */
+export async function sendVerificationCode({ settings, to, code, link, ttlMin, name = null }) {
+  const subject = `${code} là mã xác thực email fBuddy`;
+  const hello = name ? `${String(name).slice(0, 60)}, ` : "";
+  const codeBlock = `
+    <div style="margin:22px 0 8px;padding:16px;border-radius:12px;background:#123052;text-align:center">
+      <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px">Mã xác thực email</div>
+      <div style="font-family:Consolas,Menlo,monospace;font-size:34px;font-weight:700;letter-spacing:.28em;color:${BRAND_GREEN}">${code}</div>
+    </div>
+    <div style="font-size:13px;color:rgba(255,255,255,.6)">Mã có hiệu lực trong ${ttlMin} phút và chỉ dùng được một lần.</div>`;
+  const linkBlock = link
+    ? `<div style="margin-top:20px">
+         <a href="${link}" style="display:inline-block;background:${BRAND_GREEN};color:${BRAND_NAVY};font-weight:700;text-decoration:none;padding:12px 20px;border-radius:10px">Kích hoạt tài khoản</a>
+         <div style="font-size:12px;color:rgba(255,255,255,.45);margin-top:10px;word-break:break-all">Hoặc mở liên kết: ${link}</div>
+       </div>`
+    : "";
+  const html = layout({
+    title: "Kích hoạt tài khoản fBuddy",
+    intro: `${hello}tài khoản fBuddy của bạn chưa được kích hoạt. Nhập mã dưới đây (hoặc bấm nút) để xác thực email — sau đó tài khoản mới dùng được. Nếu không phải bạn đăng ký, hãy bỏ qua email này.`,
+    codeBlock,
+    linkBlock,
+    footer: "Email gửi tự động từ fBuddy (FlowTech · MeetFlow AI). Không trả lời email này.",
+  });
+  const text = `Mã xác thực email fBuddy: ${code}\nHiệu lực ${ttlMin} phút.${link ? `\nHoặc mở: ${link}` : ""}`;
+  return sendViaResend({ settings, to, subject, html, text }).catch((err) => ({
+    sent: false,
+    reason: "network_error",
+    detail: err?.message ?? String(err),
+  }));
+}
+
+/** Liên kết kích hoạt tài khoản trong email xác thực (mở trên web là tự xác thực). */
+export function verifyLink({ publicUrl, email, token }) {
+  const base = String(publicUrl ?? "").replace(/\/+$/, "");
+  const query = new URLSearchParams({ verifyEmail: email, token });
+  return `${base}/?${query.toString()}`;
+}
+
 export async function sendTestEmail({ settings, to }) {
   const code = String(crypto.randomInt(100000, 1000000));
   const html = layout({

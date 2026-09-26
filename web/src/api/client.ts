@@ -24,11 +24,41 @@ const BASE = "/api";
 export class ApiError extends Error {
   code: string;
   status: number;
-  constructor(message: string, code = "internal_error", status = 500) {
+  /** Chi tiết máy đọc được từ server — ví dụ email + tình trạng gửi mã khi tài khoản chưa xác thực. */
+  details: Record<string, any> | undefined;
+  constructor(message: string, code = "internal_error", status = 500, details: Record<string, any> | undefined = undefined) {
     super(message);
     this.code = code;
     this.status = status;
+    this.details = details;
   }
+}
+
+/** Kết quả /auth/register: có `token` khi được kích hoạt ngay, `pendingVerification` khi phải xác thực email. */
+export interface RegisterResult {
+  user: User;
+  token?: string;
+  pendingVerification?: boolean;
+  email?: string;
+  emailVerificationRequired?: boolean;
+  /** true khi máy chưa cấu hình mailer nên tài khoản được kích hoạt luôn. */
+  activatedWithoutVerification?: boolean;
+  delivered?: boolean;
+  expiresInMin?: number;
+  mailerConfigured?: boolean;
+  message?: string;
+  devCode?: string;
+  devLink?: string;
+}
+
+export interface VerificationSent {
+  ok?: boolean;
+  delivered: boolean;
+  expiresInMin?: number;
+  mailerConfigured?: boolean;
+  message?: string;
+  devCode?: string;
+  devLink?: string;
 }
 
 export function getToken(): string | null {
@@ -74,6 +104,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       error.message ?? `Lỗi ${response.status}`,
       error.code ?? "internal_error",
       response.status,
+      error.details,
     );
   }
   return json as T;
@@ -86,9 +117,21 @@ export const api = {
 
   // ---- auth
   register: (body: { email: string; password: string; name?: string }) =>
-    request<{ user: User; token: string }>("POST", "/auth/register", body),
+    request<RegisterResult>("POST", "/auth/register", body),
   login: (body: { email: string; password: string }) =>
     request<{ user: User; token: string }>("POST", "/auth/login", body),
+  /**
+   * Bước 2 của đăng ký: nhập mã trong email để KÍCH HOẠT tài khoản. Thành công thì server mở
+   * luôn phiên cho thiết bị này (trả `token`), nên người dùng không phải đăng nhập lại.
+   */
+  verifyEmail: (email: string, code: string) =>
+    request<{ user: User; token: string; emailVerified: boolean }>("POST", "/auth/verify-email", {
+      email,
+      code,
+    }),
+  /** Gửi lại mã kích hoạt (luôn trả lời giống nhau để không dò được email đã đăng ký). */
+  resendVerification: (email: string) =>
+    request<VerificationSent>("POST", "/auth/resend-verification", { email }),
   /** Passwordless login step 1 — emails a one-time code (and a magic link). */
   requestLoginToken: (email: string) =>
     request<{

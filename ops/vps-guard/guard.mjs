@@ -31,6 +31,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import https from "node:https";
 import { fileURLToPath } from "node:url";
 
 const ARGS = process.argv.slice(2);
@@ -378,31 +379,57 @@ export function formatAlert(findings, host = os.hostname()) {
   ].join("\n");
 }
 
+/** POST HTTPS thủ công: ép IPv4 trước (có node chỉ có IPv6 "chết" khiến fetch() fail), rồi thử lại mặc định. */
+function httpPost(url, { body = "", headers = {}, timeout = 15000, family = 4 } = {}) {
+  return new Promise((resolve) => {
+    let u;
+    try { u = new URL(url); } catch { return resolve({ ok: false, error: "URL sai" }); }
+    const req = https.request({
+      hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, method: "POST",
+      headers: Object.assign({}, headers, { "Content-Length": Buffer.byteLength(body) }),
+      ...(family ? { family } : {}), timeout,
+    }, (res) => {
+      let data = "";
+      res.on("data", (c) => { data += c; });
+      res.on("end", () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, text: data.slice(0, 400) }));
+    });
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", (e) => resolve({ ok: false, error: e?.message ?? String(e) }));
+    req.end(body);
+  });
+}
+
+async function postWithFallback(url, opts) {
+  const first = await httpPost(url, opts);
+  if (first.ok || first.status) return first;            // có phản hồi HTTP ⇒ không cần thử lại
+  const second = await httpPost(url, Object.assign({}, opts, { family: 0 }));
+  return second.ok || second.status ? second : (second.error === "timeout" ? second : first);
+}
+
 async function sendTelegram(text) {
   const { token, chat } = alertCreds();
   if (!token || !chat) { log("!! thiếu token/chat Telegram — không gửi được cảnh báo"); return false; }
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      body: new URLSearchParams({ chat_id: chat, text: text.slice(0, 3900), disable_web_page_preview: "true" }),
-    });
-    const json = await res.json().catch(() => null);
-    if (!json?.ok) log(`!! Telegram trả lỗi: ${JSON.stringify(json?.description ?? {})}`);
-    return Boolean(json?.ok);
-  } catch (error) { log(`!! gửi Telegram lỗi: ${error?.message ?? error}`); return false; }
+  const body = new URLSearchParams({ chat_id: chat, text: text.slice(0, 3900), disable_web_page_preview: "true" }).toString();
+  const res = await postWithFallback(`https://api.telegram.org/bot${token}/sendMessage`, {
+    body, headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  let json = null;
+  try { json = JSON.parse(res.text); } catch { /* không phải JSON */ }
+  const ok = res.ok && json?.ok !== false;
+  if (!ok) log(`!! Telegram lỗi: ${res.error ?? res.text ?? `HTTP ${res.status}`}`);
+  return Boolean(ok);
 }
 
+/** Báo cho các HARNESS khác qua agent-bus (cùng kênh Mac↔Windows dùng). */
 async function sendBus(text) {
   const { busUrl, busToken } = alertCreds();
   if (!busUrl || !busToken) { log("!! thiếu AGENT_BUS_URL/TOKEN — không báo được cho harness"); return false; }
-  try {
-    const res = await fetch(`${busUrl}/push`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${busToken}` },
-      body: JSON.stringify({ from: "vps-guard", to: "all", kind: "alert", text: text.slice(0, 900) }),
-    });
-    return res.ok;
-  } catch (error) { log(`!! gửi agent-bus lỗi: ${error?.message ?? error}`); return false; }
+  const res = await postWithFallback(`${busUrl}/push`, {
+    body: JSON.stringify({ from: "vps-guard", to: "all", kind: "alert", text: text.slice(0, 900) }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${busToken}` },
+  });
+  if (!res.ok) log(`!! agent-bus lỗi: ${res.error ?? res.text ?? `HTTP ${res.status}`}`);
+  return Boolean(res.ok);
 }
 
 // ------------------------------------------------------------------ điều phối

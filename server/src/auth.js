@@ -3,7 +3,7 @@ import { count, getById, insert, one, update, all, remove } from "./db.js";
 import { hashPassword, verifyPassword, signToken, verifyToken } from "./crypto.js";
 import { config } from "./config.js";
 import { grantSignupCredits } from "./credits.js";
-import { sendLoginCode, loginLink, mailerStatus } from "./mailer.js";
+import { sendLoginCode, loginLink, mailerStatus, sendVerificationCode, verifyLink } from "./mailer.js";
 import {
   SESSION_TTL_SEC,
   createSession,
@@ -25,6 +25,9 @@ export function publicUser(row) {
     isAdmin: row.role === "admin",
     /** Ngôn ngữ người dùng chọn (vi/en/zh) — dùng cho cả giao diện lẫn chỉ dẫn kỹ năng. */
     locale: row.locale ?? null,
+    /** Đã xác thực email chưa (tài khoản cũ được grandfather = true). */
+    emailVerified: Number(row.email_verified ?? 0) === 1,
+    emailVerifiedAt: row.email_verified_at ?? null,
     createdAt: row.created_at,
   };
 }
@@ -55,7 +58,12 @@ export function validateEmail(email) {
 }
 
 /** The very first account becomes the admin — there is no bootstrap CLI. */
-export function createUser({ email, password, name = null, role = null }) {
+/**
+ * Tạo tài khoản. `emailVerifiedAt` mặc định = BÂY GIỜ vì đây là primitive nội bộ (seed, test,
+ * tạo hộ): gọi tới đây nghĩa là phía gọi đã chấp nhận tài khoản này. Hai con đường dành cho
+ * KHÁCH (đăng ký công khai, admin tạo hộ khách) truyền `emailVerifiedAt: null` để buộc xác thực.
+ */
+export function createUser({ email, password, name = null, role = null, emailVerifiedAt = nowIso() }) {
   const normalized = validateEmail(email);
   const secret = validatePassword(password);
   if (findUserByEmail(normalized)) throw badRequest("Email này đã được đăng ký");
@@ -65,10 +73,41 @@ export function createUser({ email, password, name = null, role = null }) {
     name: name ? String(name).slice(0, 120) : null,
     password_hash: hashPassword(secret),
     role: role ?? (isFirst ? "admin" : "user"),
+    email_verified: emailVerifiedAt ? 1 : 0,
+    email_verified_at: emailVerifiedAt ?? null,
   });
   // Optional welcome credit (app_settings.signupCredits, 0 by default).
   grantSignupCredits(row.id);
   return row;
+}
+
+/** Tài khoản đã xác thực email chưa? Tài khoản có trước tính năng này được grandfather = rồi. */
+export function isEmailVerified(row) {
+  return Number(row?.email_verified ?? 0) === 1;
+}
+
+/**
+ * Chính sách "bắt buộc xác thực email" do tầng route gắn vào (auth.js cố ý KHÔNG import
+ * settings.js để tránh vòng import). Mặc định BẬT — nếu ai đó quên gắn thì nghiêng về phía an toàn.
+ */
+let emailVerificationPolicy = () => true;
+export function setEmailVerificationPolicy(fn) {
+  if (typeof fn === "function") emailVerificationPolicy = fn;
+}
+export function emailVerificationRequired() {
+  try {
+    return emailVerificationPolicy() !== false;
+  } catch {
+    return true;
+  }
+}
+
+/** Đánh dấu tài khoản đã xác thực email (idempotent, giữ mốc thời gian đầu tiên). */
+export function markEmailVerified(userId, at = nowIso()) {
+  const row = getById("users", userId);
+  if (!row) return null;
+  if (isEmailVerified(row)) return row;
+  return update("users", userId, { email_verified: 1, email_verified_at: row.email_verified_at ?? at });
 }
 
 export function authenticate({ email, password }) {
@@ -154,6 +193,14 @@ export function currentUser(req) {
 export function requireAuth(req, _res, next) {
   const row = currentUser(req);
   if (!row) return next(unauthorized());
+  // Chưa xác thực email = tài khoản CHƯA active: chỉ mở được các route /auth (xác thực, gửi lại mã).
+  if (!isEmailVerified(row) && emailVerificationRequired()) {
+    return next(
+      new ApiError(403, "email_not_verified", "Tài khoản chưa xác thực email. Mở hộp thư để lấy mã xác thực.", {
+        email: row.email,
+      }),
+    );
+  }
   req.user = row;
   return next();
 }
@@ -175,9 +222,9 @@ export const tokenVerifyLimiter = new RateLimiter({ limit: 10, windowMs: 10 * 60
 const MAX_ATTEMPTS = 5;
 
 /** Peppered with the server secret so a leaked row cannot be brute-forced offline. */
-function hashToken(value, email) {
+function hashToken(value, email, purpose = "login") {
   return crypto
-    .createHmac("sha256", `login:${config.secret}`)
+    .createHmac("sha256", `${purpose}:${config.secret}`)
     .update(`${normalizeEmail(email)}:${String(value)}`)
     .digest("hex");
 }
@@ -224,6 +271,8 @@ export async function requestLoginToken({ email, ip = null, userAgent = null, se
       email: normalized,
       password: crypto.randomBytes(24).toString("base64url"),
       name: null,
+      // Chỉ active sau khi nhập đúng mã trong email (verifyLoginToken đánh dấu đã xác thực).
+      emailVerifiedAt: null,
     });
   }
 
@@ -273,24 +322,31 @@ export async function requestLoginToken({ email, ip = null, userAgent = null, se
   return payload;
 }
 
-/** Redeems a code or a magic-link token; single use, 5 wrong tries kills it. */
-export function verifyLoginToken({ email, token }) {
+/**
+ * Redeems a one-time code (or magic-link token) của một `purpose`; dùng một lần, sai 5 lần là khoá.
+ * Dùng chung cho đăng nhập bằng email và xác thực email để hai luồng không lệch luật nhau.
+ */
+function redeemEmailToken({ email, value, purpose }) {
   const normalized = validateEmail(email);
-  const value = String(token ?? "").trim();
-  if (!value) throw badRequest("Thiếu mã đăng nhập");
+  const code = String(value ?? "").trim();
+  if (!code) throw badRequest(purpose === "verify_email" ? "Thiếu mã xác thực email" : "Thiếu mã đăng nhập");
 
   const gate = tokenVerifyLimiter.check(normalized);
   if (!gate.ok) throw new ApiError(429, "rate_limited", "Thử quá nhiều lần. Vui lòng chờ rồi thử lại.");
 
-  const rows = all("email_tokens", "email = ? AND consumed_at IS NULL", [normalized], {
+  const rows = all("email_tokens", "email = ? AND purpose = ? AND consumed_at IS NULL", [normalized, purpose], {
     order: "created_at DESC",
     limit: 5,
   });
   if (!rows.length) {
-    throw unauthorized("Mã không đúng hoặc đã được sử dụng. Hãy yêu cầu mã mới.");
+    throw unauthorized(
+      purpose === "verify_email"
+        ? "Mã xác thực không đúng hoặc đã được dùng. Hãy bấm gửi lại mã."
+        : "Mã không đúng hoặc đã được sử dụng. Hãy yêu cầu mã mới.",
+    );
   }
 
-  const hashed = hashToken(value, normalized);
+  const hashed = hashToken(code, normalized, purpose);
   const row = rows.find((entry) => entry.token_hash === hashed || entry.link_hash === hashed);
   if (!row) {
     const latest = rows[0];
@@ -309,13 +365,89 @@ export function verifyLoginToken({ email, token }) {
     throw unauthorized("Mã đã hết hạn. Hãy yêu cầu mã mới.");
   }
 
-  const user = findUserByEmail(normalized);
-  if (!user) throw unauthorized("Không tìm thấy tài khoản cho email này");
-
   update("email_tokens", row.id, { consumed_at: nowIso() });
   // Any other pending codes for this email are void once one is used.
-  for (const other of all("email_tokens", "email = ? AND consumed_at IS NULL", [normalized])) {
+  for (const other of all("email_tokens", "email = ? AND purpose = ? AND consumed_at IS NULL", [normalized, purpose])) {
     update("email_tokens", other.id, { consumed_at: nowIso() });
   }
+  const user = findUserByEmail(normalized);
+  if (!user) throw unauthorized("Không tìm thấy tài khoản cho email này");
   return user;
+}
+
+/**
+ * Đăng nhập không mật khẩu: nhận mã (hoặc link) trong email. Nhận được mã tức là đã chứng minh
+ * sở hữu hộp thư ⇒ tài khoản được coi là ĐÃ xác thực email luôn.
+ */
+export function verifyLoginToken({ email, token }) {
+  const user = redeemEmailToken({ email, value: token, purpose: "login" });
+  return markEmailVerified(user.id) ?? user;
+}
+
+/** Xác thực email: dùng mã gửi tới hộp thư sau khi đăng ký (hoặc khi đăng nhập mà chưa xác thực). */
+export function verifyEmailCode({ email, code }) {
+  const user = redeemEmailToken({ email, value: code, purpose: "verify_email" });
+  return markEmailVerified(user.id) ?? user;
+}
+
+/**
+ * Gửi (hoặc gửi lại) mã KÍCH HOẠT TÀI KHOẢN cho tài khoản chưa xác thực email.
+ * Cùng hình dạng kết quả với `requestLoginToken` để giao diện dùng lại màn "kiểm tra hộp thư".
+ */
+export async function requestEmailVerification({ user, settings, ip = null, userAgent = null }) {
+  const normalized = validateEmail(user?.email);
+  const gate = tokenRequestLimiter.check(normalized);
+  if (!gate.ok) {
+    throw new ApiError(429, "rate_limited", "Đã gửi quá nhiều mã cho email này. Vui lòng chờ vài phút rồi thử lại.");
+  }
+
+  purgeOldTokens(normalized);
+  // Mã mới thay thế mọi mã còn treo, để email cũ không dùng được nữa.
+  for (const pending of all("email_tokens", "email = ? AND consumed_at IS NULL", [normalized])) {
+    update("email_tokens", pending.id, { consumed_at: nowIso() });
+  }
+
+  const code = randomCode();
+  const linkToken = crypto.randomBytes(24).toString("base64url");
+  const ttlMin = Math.min(Math.max(Number(settings.emailVerificationTtlMin) || 30, 5), 120);
+  const expiresAt = new Date(Date.now() + ttlMin * 60 * 1000).toISOString();
+
+  insert("email_tokens", {
+    email: normalized,
+    token_hash: hashToken(code, normalized, "verify_email"),
+    link_hash: hashToken(linkToken, normalized, "verify_email"),
+    purpose: "verify_email",
+    expires_at: expiresAt,
+    ip,
+    user_agent: userAgent ? String(userAgent).slice(0, 200) : null,
+  });
+
+  const link = verifyLink({ publicUrl: config.publicUrl, email: normalized, token: linkToken });
+  const delivery = await sendVerificationCode({
+    settings,
+    to: normalized,
+    code,
+    link,
+    ttlMin,
+    name: user?.name ?? null,
+  });
+  const status = mailerStatus(settings);
+
+  const payload = {
+    ok: true,
+    delivered: Boolean(delivery.sent),
+    expiresInMin: ttlMin,
+    mailerConfigured: status.configured,
+  };
+  if (!delivery.sent) {
+    payload.message = status.configured
+      ? `Không gửi được email: ${delivery.detail ?? delivery.reason}`
+      : "Chưa cấu hình email (Resend) — mã hiển thị ngay trên màn hình để anh kích hoạt.";
+    // Cùng lối thoát như đăng nhập: máy chưa có mailer thì hiện mã để còn vào được.
+    if (settings.showLoginCodeWhenNoMailer) {
+      payload.devCode = code;
+      payload.devLink = link;
+    }
+  }
+  return payload;
 }

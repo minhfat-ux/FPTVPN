@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, getToken, setToken } from "../api/client";
+import { api, ApiError, getToken, setToken, RegisterResult} from "../api/client";
 import { useI18n } from "../i18n";
 import type { Conversation, Meta, ModelOption, SkillDescriptor, User } from "../types";
 
@@ -37,7 +37,11 @@ interface AuthContextValue {
   lastConversationId: string | null;
   setLastConversationId: (id: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name?: string) => Promise<void>;
+  /**
+   * Đăng ký tài khoản. Trả về kết quả thô: khi tài khoản phải XÁC THỰC EMAIL thì server không
+   * trả token (kết quả có `pendingVerification`) và người gọi phải mở bước nhập mã kích hoạt.
+   */
+  register: (email: string, password: string, name?: string) => Promise<RegisterResult>;
   /** Adopts the session returned by any login flow (email token, SSO later). */
   completeLogin: (session: { user: User; token: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -213,9 +217,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(
     async (email: string, password: string, name?: string) => {
       const result = await api.register({ email, password, name });
+      // Chưa xác thực email ⇒ chưa có token ⇒ KHÔNG mở phiên; màn đăng ký tự chuyển sang bước xác thực.
+      if (!result.token) return result;
       setToken(result.token);
       setUser(result.user);
       await refreshMeta();
+      return result;
     },
     [refreshMeta],
   );

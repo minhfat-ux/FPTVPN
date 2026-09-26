@@ -48,4 +48,30 @@ export const auth: Dict = {
   "auth.login.codeWrong": "验证码不正确，请重试",
   "auth.login.failed": "无法登录",
   "auth.login.success": "登录成功",
+
+  /* 注册新账号（必须验证邮箱后账号才生效）。 */
+  "auth.register.open": "还没有账号？立即注册",
+  "auth.register.back": "返回登录",
+  "auth.register.title": "注册账号",
+  "auth.register.hint": "填写邮箱和密码。fBuddy 会发送验证码——验证通过后账号才能使用。",
+  "auth.register.nameLabel": "显示名称（可选）",
+  "auth.register.namePlaceholder": "Minh",
+  "auth.register.passwordHint": "密码至少 8 个字符。",
+  "auth.register.submit": "注册",
+  "auth.register.busy": "正在创建账号…",
+  "auth.register.failed": "注册失败，请稍后重试",
+
+  /* 邮箱验证 = 激活账号。 */
+  "auth.verify.title": "激活账号",
+  "auth.verify.hint": "6 位验证码已发送至 {email}。请输入以激活账号。",
+  "auth.verify.label": "邮箱验证码",
+  "auth.verify.submit": "激活账号",
+  "auth.verify.busy": "正在激活…",
+  "auth.verify.resend": "重新发送验证码",
+  "auth.verify.resent": "验证码已重新发送至 {email}。",
+  "auth.verify.sent": "验证码已发送至 {email}，{minutes} 分钟内有效。",
+  "auth.verify.devTitle": "激活码（未配置邮件服务）",
+  "auth.verify.required": "账号尚未验证邮箱。请输入收件箱中的验证码以激活。",
+  "auth.verify.wrong": "验证码不正确，请重试",
+  "auth.verify.success": "账号已激活",
 };

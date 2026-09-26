@@ -19,12 +19,17 @@ import {
   createUser,
   currentUser,
   findUserByEmail,
+  isEmailVerified,
+  markEmailVerified,
   publicUser,
+  requestEmailVerification,
   requestLoginToken,
   requireAdmin,
   requireAuth,
+  setEmailVerificationPolicy,
   startSession,
   updateProfile,
+  verifyEmailCode,
   verifyLoginToken,
   authLimiter,
 } from "./auth.js";
@@ -204,6 +209,10 @@ function rawBodyOf(req) {
 }
 
 export function createApiRouter() {
+  // Tài khoản chưa xác thực email KHÔNG được coi là active (không mở được phiên/không dùng được app).
+  // Gắn ở đây để auth.js không phải import settings.js (tránh vòng import).
+  setEmailVerificationPolicy(() => readAppSettings().requireEmailVerification !== false);
+
   const router = express.Router();
 
   // ------------------------------------------------------------- meta/health
@@ -372,11 +381,43 @@ export function createApiRouter() {
         email: req.body?.email,
         password: req.body?.password,
         name: req.body?.name ?? null,
+        // Đăng ký công khai: tài khoản CHƯA active cho tới khi xác thực email.
+        emailVerifiedAt: null,
       });
       audit(user.id, "auth.register", null, { email: user.email });
-      const { token } = startSession({ user, ip: clientKey(req), userAgent: req.headers["user-agent"] });
-      setAuthCookie(res, token);
-      res.status(201).json({ user: publicUser(user), token });
+
+      const status = mailerStatus(settings);
+      const enforce = settings.requireEmailVerification !== false;
+      // Chưa cấu hình mailer (Resend) ⇒ không thể xác thực ⇒ kích hoạt ngay, nếu không thì
+      // chính người dựng máy cũng không vào được. Có mailer thì BẮT BUỘC xác thực.
+      if (!enforce || !status.configured) {
+        const activated = markEmailVerified(user.id) ?? user;
+        const { token } = startSession({ user: activated, ip: clientKey(req), userAgent: req.headers["user-agent"] });
+        setAuthCookie(res, token);
+        res.status(201).json({
+          user: publicUser(activated),
+          token,
+          emailVerificationRequired: false,
+          activatedWithoutVerification: enforce && !status.configured,
+        });
+        return;
+      }
+
+      const sent = await requestEmailVerification({
+        user,
+        settings,
+        ip: clientKey(req),
+        userAgent: req.headers["user-agent"],
+      });
+      audit(user.id, "auth.register_pending_verification", null, { delivered: sent.delivered });
+      // KHÔNG mở phiên: tài khoản chỉ active sau khi xác thực email.
+      res.status(201).json({
+        pendingVerification: true,
+        email: user.email,
+        user: publicUser(user),
+        emailVerificationRequired: true,
+        ...sent,
+      });
     }),
   );
 
@@ -394,12 +435,74 @@ export function createApiRouter() {
         );
       }
       const user = authenticate({ email: req.body?.email, password: req.body?.password });
+      // Chưa xác thực email ⇒ chưa active. Gửi lại mã kích hoạt rồi báo cho client mở màn xác thực.
+      if (!isEmailVerified(user) && settings.requireEmailVerification !== false) {
+        let sent = { ok: true, delivered: false, mailerConfigured: mailerStatus(settings).configured };
+        try {
+          sent = await requestEmailVerification({
+            user,
+            settings,
+            ip: clientKey(req),
+            userAgent: req.headers["user-agent"],
+          });
+        } catch (err) {
+          // Hết hạn mức gửi mã không được che mất sự thật "tài khoản chưa xác thực".
+          if (!(err instanceof ApiError) || err.code !== "rate_limited") throw err;
+          sent.message = err.message;
+        }
+        audit(user.id, "auth.login_blocked_unverified", null, { delivered: sent.delivered });
+        throw new ApiError(
+          403,
+          "email_not_verified",
+          "Tài khoản chưa xác thực email. fBuddy vừa gửi lại mã kích hoạt — mở hộp thư để lấy mã.",
+          { email: user.email, ...sent },
+        );
+      }
       // A new device gets its own session — signing in here never logs the
       // other devices out (that is the whole point of `auth_sessions`).
       const { session, token } = startSession({ user, ip: clientKey(req), userAgent: req.headers["user-agent"] });
       setAuthCookie(res, token);
       audit(user.id, "auth.login", session.id, { label: session.label, ip: session.ip });
       res.json({ user: publicUser(user), token });
+    }),
+  );
+
+  /**
+   * Bước 2 của đăng ký: nhập mã trong email để KÍCH HOẠT tài khoản. Thành công thì mở luôn
+   * phiên cho thiết bị này (không bắt đăng nhập lại).
+   */
+  router.post(
+    "/auth/verify-email",
+    asyncHandler(async (req, res) => {
+      const gate = authLimiter.check(clientKey(req));
+      if (!gate.ok) throw rateLimited();
+      const user = verifyEmailCode({ email: req.body?.email, code: req.body?.code ?? req.body?.token });
+      const { token } = startSession({ user, ip: clientKey(req), userAgent: req.headers["user-agent"] });
+      setAuthCookie(res, token);
+      audit(user.id, "auth.email_verified", null, { email: user.email });
+      res.json({ user: publicUser(user), token, emailVerified: true });
+    }),
+  );
+
+  /** Gửi lại mã kích hoạt. Luôn trả lời giống nhau để không dò được email nào đã đăng ký. */
+  router.post(
+    "/auth/resend-verification",
+    asyncHandler(async (req, res) => {
+      const settings = readAppSettings();
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      const user = email ? findUserByEmail(email) : null;
+      if (!user || isEmailVerified(user) || settings.requireEmailVerification === false) {
+        res.json({ ok: true, delivered: false });
+        return;
+      }
+      const sent = await requestEmailVerification({
+        user,
+        settings,
+        ip: clientKey(req),
+        userAgent: req.headers["user-agent"],
+      });
+      audit(user.id, "auth.resend_verification", null, { delivered: sent.delivered });
+      res.json({ ok: true, ...sent });
     }),
   );
 
@@ -1762,11 +1865,23 @@ export function createApiRouter() {
         password: req.body?.password,
         name: req.body?.name ?? null,
         role: req.body?.role === "admin" ? "admin" : "user",
+        // Tài khoản tạo hộ khách cũng phải xác thực email; admin có thể kích hoạt tay
+        // bằng POST /admin/users/:id/verify-email nếu khách không nhận được mail.
+        emailVerifiedAt: null,
       });
       audit(req.user.id, "admin.user.create", user.id, { email: user.email });
       res.status(201).json({ user: publicUser(user) });
     }),
   );
+
+  /** Kích hoạt tay một tài khoản (khi email xác thực không tới được hộp thư của khách). */
+  router.post("/admin/users/:id/verify-email", requireAdmin, (req, res) => {
+    const row = getById("users", req.params.id);
+    if (!row) throw notFound("Không tìm thấy người dùng");
+    const updated = markEmailVerified(row.id);
+    audit(req.user.id, "admin.user.verify_email", row.id, { email: row.email });
+    res.json({ user: publicUser(updated) });
+  });
 
   router.delete(
     "/admin/users/:id",

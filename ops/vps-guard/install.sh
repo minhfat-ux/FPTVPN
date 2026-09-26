@@ -35,6 +35,8 @@ Nice=5
 IOSchedulingClass=best-effort
 IOSchedulingPriority=6
 TimeoutStartSec=300
+# guard thoát mã 2 khi có phát hiện >= HIGH (để script bắt sự kiện) — systemd vẫn coi là chạy xong
+SuccessExitStatus=2
 # Giới hạn để guard không bao giờ làm nghẽn node
 CPUQuota=40%
 MemoryMax=256M

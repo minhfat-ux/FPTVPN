@@ -23,8 +23,11 @@
 
 | Method | Path | Body | Trả về |
 |---|---|---|---|
-| POST | `/api/auth/register` | `{ email, password, name? }` | `{ user, token }` |
-| POST | `/api/auth/login` | `{ email, password }` | `{ user, token }` |
+| POST | `/api/auth/register` | `{ email, password, name? }` | `{ user, token }` — **hoặc** `{ pendingVerification: true, email, delivered, expiresInMin, devCode? }` khi tài khoản phải xác thực email (KHÔNG mở phiên) |
+| POST | `/api/auth/login` | `{ email, password }` | `{ user, token }` — 403 `email_not_verified` (kèm `details.email`, `details.delivered`) nếu chưa xác thực email |
+| POST | `/api/auth/verify-email` | `{ email, code }` | `{ user, token, emailVerified: true }` — kích hoạt tài khoản, mở phiên luôn |
+| POST | `/api/auth/resend-verification` | `{ email }` | `{ ok, delivered, expiresInMin?, devCode? }` — luôn trả lời giống nhau (không dò email) |
+| POST | `/api/admin/users/:id/verify-email` | — | `{ user }` — admin kích hoạt tay khi khách không nhận được mail |
 | POST | `/api/auth/logout` | – | `{ ok: true }` |
 | GET | `/api/auth/me` | – | `{ user }` |
 | PATCH | `/api/auth/me` | `{ name?, password?, currentPassword? }` | `{ user }` |
@@ -32,6 +35,7 @@
 `user`:
 ```json
 { "id": "u_…", "email": "a@b.com", "name": "Anh", "role": "admin",
+  "emailVerified": true, "emailVerifiedAt": "2026-01-01T00:00:00.000Z",
   "createdAt": "2026-01-01T00:00:00.000Z", "isAdmin": true }
 ```
 Mật khẩu tối thiểu 8 ký tự. Sai mật khẩu/không tồn tại → `401 invalid_credentials`
@@ -364,3 +368,16 @@ Cài đặt voice nằm trong `app_settings`: `voiceSttProviderId`, `voiceSttMod
 - Rate limit: 60 request/phút/user cho `/api/chat/stream`, 20/phút cho `/api/auth/*` (theo IP).
 - Tệp lưu ngoài webroot; tải qua endpoint có kiểm tra chủ sở hữu.
 - CORS: chỉ cho phép `FBUDDY_PUBLIC_URL` + `http://localhost:5173` (dev).
+
+### Xác thực email mới active (2026-09-26)
+
+- Người dùng mới (`/api/auth/register`) tạo ở trạng thái **chưa xác thực**: không mở phiên, không
+  dùng được app. Server gửi mã 6 số + link kích hoạt; `/api/auth/verify-email` (hoặc link
+  `/?verifyEmail=…&token=…`) kích hoạt rồi mở phiên luôn.
+- Chưa cấu hình mailer (Resend) ⇒ tài khoản được kích hoạt ngay (nếu không thì không ai vào được);
+  phản hồi có `activatedWithoutVerification: true`.
+- Đăng nhập không mật khẩu (`/api/auth/request-token` → `/api/auth/verify-token`): nhận được mã tức
+  là đã chứng minh sở hữu hộp thư ⇒ kích hoạt luôn.
+- Tài khoản CÓ TRƯỚC tính năng được **grandfather = đã xác thực** khi nâng cấp (không khoá ai).
+- Công tắc: Cài đặt → `requireEmailVerification` (mặc định bật), `emailVerificationTtlMin` (30 phút).
+- Mọi route cần đăng nhập trả 403 `email_not_verified` nếu tài khoản chưa xác thực.
