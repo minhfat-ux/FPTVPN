@@ -48,3 +48,34 @@ Cần xác minh bằng cách **ghi log source IP ngay trên node** (bảng nft t
 - `nft list table inet vpnflow_ssh` = không còn (đã rollback) hoặc được thay bằng phương án `ListenAddress`.
 - sshd: `PasswordAuthentication no` (cả 2 node), `PermitRootLogin prohibit-password`.
 - Guard vẫn chạy 2 phút/lượt và sẽ báo nếu cổng 22 mở lại ra Internet (bộ luật `ssh-exposure` — sẽ bổ sung).
+
+---
+
+## KẾT LUẬN CUỐI (26/09, sau khi vào lại được)
+
+**Nguyên nhân gốc:** app VPNFlow trên Mac chập ⇒ traffic SSH **đi thẳng** (không qua tunnel), nguồn tại node
+không còn là `103.173.155.50` ⇒ bị rule "chỉ cho SSH từ mạng VPNFlow" chặn. **Rule chạy ĐÚNG thiết kế.**
+Lỗi của em là **huỷ timer cứu hộ quá sớm** (sau 1 lần thử mỗi node), không phải bản thân ý tưởng.
+
+**Đo được (không đoán):** nguồn thật của Mac ở cả 2 node = `103.173.155.50` — 408/429 gói (node-1) và
+274/281 gói (node-2) trong 5 phút, đọc từ bảng đếm `sshprobe`. Các nguồn hợp lệ khác trong 24h:
+`165.101.114.162` (node-2 → node-1, 1.988 lần), `63.140.14.154` (**máy WIN**), `223.118.50.125` (**người vận hành**),
+`100.109.31.16` (Mac qua Tailscale), `100.76.147.111` (node-1 qua Tailscale).
+
+**Đang chạy (bản v3, `ops/vpnflow-ssh-lock.sh`):**
+- nft `inet vpnflow_ssh` (priority -10): accept cổng 22 từ `127.0.0.1`, `10.77.0.0/24`, `10.78.0.0/24`, `100.64.0.0/10`,
+  `103.173.155.50`, `165.101.114.162`, `63.140.14.154`, `223.118.50.125`; còn lại **drop** + log `SSHBLOCK` (10/phút).
+- sshd cả 2 node: `PasswordAuthentication no`, `PermitRootLogin prohibit-password` (chỉ dùng khoá).
+- Timer cứu hộ tự mở lại: node-1 **120 phút**, node-2 **240 phút** ⇒ chỉ huỷ sau khi chủ dự án xác nhận.
+- Không còn unit `vpnflow-ssh-lock.service` (đã gỡ) nên reboot không tự áp lại bản v1 hỏng.
+
+**Bằng chứng sau khi áp:** phiên SSH mới từ Mac vào được cả 2 node; đường Tailscale (`ssh root@100.76.147.111`) vào được node-1;
+trong 2 phút chỉ có IP bot bị chặn (`49.254.38.138`, `176.101.194.65`), **không có IP người nhà nào bị chặn**;
+`Failed password` = 0 cả 2 node.
+
+**Phối hợp:** harness WIN đang chạy song song một giải pháp riêng (`flowvpn-autoban.service`/`.timer`, script trong `/tmp`,
+gửi abuse report). Guard sẽ báo các mục đó là "cơ chế MỚI" cho tới khi chốt baseline (`guard.mjs --baseline`) — đó là
+phát hiện ĐÚNG, không phải sự cố. Nếu autoban cần thấy kẻ tấn công, dùng log `SSHBLOCK` mà rule này đã ghi.
+
+**Còn chờ chủ dự án quyết:** `63.140.14.154` (máy WIN) và `223.118.50.125` (vận hành, HK) hiện **không** đi qua VPNFlow.
+Theo yêu cầu "chỉ VPNFlow" thì phải chặn; em đang để cho phép để không làm gãy việc của harness WIN.
