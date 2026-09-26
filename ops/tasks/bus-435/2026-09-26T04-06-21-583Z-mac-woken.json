@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-26T04:06:21.583Z",
+ "note": "connector VPS: done từ win — bus-435 · BUY UX: bat buoc email truoc khi tai (owner chot) — WIN lam control-plane + nghiem thu",
+ "via": "dsh --profile headless \"{prompt}\""
+}
