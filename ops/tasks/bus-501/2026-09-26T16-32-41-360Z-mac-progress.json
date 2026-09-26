@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "NGUYÊN NHÂN GỐC ĐÃ XÁC NHẬN: startLivenessWatchdog() o HEAD goi timer.resume()/reachTimer.resume() SAU khi cong bo vao livenessTimer; ham co 4 duong goi (livenessStep goi lai chinh no) => luot chong chay livenessTimer?.cancel() khi timer moi con TREO => timer bi cancel luc chua resume => cam het phien. BAN VA CO trong cay /Volumes/BIWIN/SourcesCode/PrivateVPN (3 file iOS, git diff HEAD, CHUA commit) — da luu diff vao docs/evidence/bus-501-ios-watchdog.patch. Cac cong chay duoc: ios-typecheck extension 0 loi; ios-pure-logic-tests 667/667 PASS; keo log iPhone that + chay ios-log-acceptance.py (build 57). CHAN CUNG: sandbox chi cho ghi trong /Users/minhnguyen/FlowGPT => KHONG the commit vao cay FPTVPN, khong bump project.yml; escalation danger-full-access bi tu choi (khong co kenh approval). Bao cao day du: docs/evidence/bus-501-watchdog-root-cause-and-status.md",
+ "actor": "mac",
+ "at": "2026-09-26T16:32:41.362Z"
+}
