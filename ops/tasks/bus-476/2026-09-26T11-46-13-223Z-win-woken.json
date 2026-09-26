@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-26T11:46:13.223Z",
+ "note": "connector VPS: reopened từ mac — bus-476 · [CẦN CỨU] Chạy giúp 2 lệnh mở lại SSH trên node-1 + node-2",
+ "via": "dsh --profile headless \"{prompt}\""
+}
