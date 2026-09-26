@@ -14,7 +14,8 @@
 #   vpnflow-ssh-lock.sh status                   # trạng thái + đếm gói theo nguồn
 #   vpnflow-ssh-lock.sh survivre <phút>          # chỉ bật timer cứu hộ
 #   vpnflow-ssh-lock.sh cancel-rescue            # huỷ timer cứu hộ (sau khi đã kiểm tra kỹ)
-#   vpnflow-ssh-lock.sh rollback                 # mở lại SSH như trước
+#   vpnflow-ssh-lock.sh unblock                  # gỡ chặn, GIỮ sshd chỉ dùng khoá (timer cứu hộ gọi cái này)
+#   vpnflow-ssh-lock.sh rollback                 # trả về nguyên trạng (gỡ cả siết sshd)
 set -euo pipefail
 TABLE=vpnflow_ssh
 PROBE=sshprobe
@@ -47,13 +48,26 @@ survivre() {
   local minutes="${1:-$RESCUE_MIN}"
   systemctl stop vpnflow-ssh-rescue.timer >/dev/null 2>&1 || true
   systemd-run --on-active="${minutes}min" --unit=vpnflow-ssh-rescue \
-    --description="Tự mở lại SSH nếu bị khoá nhầm" "$SELF" rollback >/dev/null
+    --description="Tự mở lại SSH nếu bị khoá nhầm" "$SELF" unblock >/dev/null
   echo "timer cứu hộ: ${minutes} phút ($(systemctl is-active vpnflow-ssh-rescue.timer))"
 }
 
 cancel_rescue() {
   systemctl stop vpnflow-ssh-rescue.timer >/dev/null 2>&1 || true
   echo "đã huỷ timer cứu hộ — CHỈ làm khi đã vào được từ đường thứ hai"
+}
+
+# Chỉ siết sshd (khoá-only), KHÔNG đụng firewall — dùng khi không muốn chặn cứng theo nguồn.
+harden() {
+  mkdir -p /etc/ssh/sshd_config.d
+  cat > "$DROPIN" <<'CONF'
+# VPNFlow 2026-09-26 — SSH chỉ dùng KHOÁ, không mật khẩu.
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+CONF
+  sshd -t && { systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1 || true; }
+  echo "HARDEN: $(sshd -T 2>/dev/null | grep -E '^(passwordauthentication|permitrootlogin)' | tr '\n' ' ')"
 }
 
 apply() {
@@ -109,6 +123,13 @@ status() {
   echo "-- sshd --"; sshd -T 2>/dev/null | grep -E "^(passwordauthentication|permitrootlogin)" | sed 's/^/  /'
 }
 
+# Gỡ CHẶN nhưng GIỮ siết sshd (chỉ dùng khoá) — đây là thứ timer cứu hộ phải gọi:
+# xoá drop-in sẽ bật lại PasswordAuthentication như cũ, không cần thiết để lấy lại quyền vào.
+unblock() {
+  nft delete table inet $TABLE 2>/dev/null || true
+  echo "UNBLOCK: đã gỡ bảng nft $TABLE (SSH mở lại), vẫn giữ sshd chỉ dùng khoá"
+}
+
 rollback() {
   nft delete table inet $TABLE 2>/dev/null || true
   rm -f "$DROPIN"
@@ -123,6 +144,8 @@ case "${1:-status}" in
   status) status ;;
   survivre) shift; survivre "$@" ;;
   cancel-rescue) cancel_rescue ;;
+  harden) harden ;;
+  unblock) unblock ;;
   rollback) rollback ;;
-  *) echo "dùng: probe | sources | apply --source <ip> | status | survivre <phút> | cancel-rescue | rollback"; exit 2 ;;
+  *) echo "dùng: harden | probe | sources | apply --source <ip> | status | survivre <phút> | cancel-rescue | unblock | rollback"; exit 2 ;;
 esac

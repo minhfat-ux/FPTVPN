@@ -228,18 +228,23 @@ export function scanOutbound(ssText, { normal = NORMAL_OUTBOUND_PORTS } = {}) {
  */
 export function scanSshExposure({ ssText = "", sshdEffectiveText = "", nftLocked = false } = {}) {
   const out = [];
+  const passwordAuth = /^\s*passwordauthentication\s+yes\s*$/im.test(sshdEffectiveText);
   const open = parseSockets(ssText).filter((s) => s.local.port === 22 && s.exposed);
   if (open.length) {
+    // Chính sách đang chốt với chủ dự án (26/09): mở cổng 22 nhưng CHỈ dùng khoá + autoban IP tấn công.
+    // Vì vậy "mở cho mọi nguồn" chỉ là LOW khi đã tắt mật khẩu; HỞ vì CÓ mật khẩu mới là HIGH.
     out.push(finding(
-      "ssh-exposure-public", nftLocked ? "low" : "high",
+      "ssh-exposure-public", nftLocked || !passwordAuth ? "low" : "high",
       "SSH (cổng 22) đang nghe trên MỌI địa chỉ",
       nftLocked
         ? "Đang có bảng nft vpnflow_ssh chặn theo nguồn nên Internet vẫn không vào được. Muốn siết đúng cách: ĐO nguồn rồi chạy ops/vpnflow-ssh-lock.sh apply --source <IP đo được>"
-        : "Internet có thể bắt tay TCP vào cổng 22 (đúng thứ chủ dự án muốn chặn). Cách làm an toàn: (1) đo nguồn bằng ops/vpnflow-ssh-lock.sh probe, (2) ops/vpnflow-ssh-lock.sh apply --source <IP đo được> (có timer cứu hộ tự mở lại).",
+        : passwordAuth
+          ? "Cổng 22 mở cho mọi nguồn VÀ đang cho đăng nhập bằng mật khẩu — đây là tổ hợp nguy hiểm nhất (brute-force có thể vào được). Tắt mật khẩu: ops/vpnflow-ssh-lock.sh harden."
+          : "Cổng 22 mở cho mọi nguồn nhưng CHỈ dùng khoá (mật khẩu đã tắt) — đúng chính sách hiện tại; cần autoban để chặn IP dò. Nếu muốn chỉ-VPNFlow: ops/vpnflow-ssh-lock.sh probe → apply --source <IP đo được>.",
       open.map((s) => s.line).join(" "),
     ));
   }
-  if (/^\s*passwordauthentication\s+yes\s*$/im.test(sshdEffectiveText)) {
+  if (passwordAuth) {
     out.push(finding("ssh-password-auth", "high", "SSH đang cho đăng nhập bằng MẬT KHẨU",
       "Chủ dự án yêu cầu chỉ dùng khoá: đặt PasswordAuthentication no.", "passwordauthentication yes"));
   }
@@ -643,7 +648,8 @@ function selfTest() {
     finding("listen-1", "low", "Cổng 1 đang MỞ (udp, ra ngoài)", 'Cổng UDP tạm do "hysteria" (đã có trong baseline) mở — chỉ ghi nhận.', "l"),
     finding("listen-2", "low", "Cổng 2 đang MỞ (udp, ra ngoài)", 'Cổng UDP tạm do "hysteria" (đã có trong baseline) mở — chỉ ghi nhận.', "l"),
   ]).join("\n").includes("2 cổng UDP tạm"));
-  check("SSH nghe 0.0.0.0:22 mà chưa khoá ⇒ HIGH", scanSshExposure({ ssText: 'LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))', sshdEffectiveText: "passwordauthentication no" }).some((f) => f.id === "ssh-exposure-public" && f.severity === "high"));
+  check("SSH mở + CÓ mật khẩu ⇒ HIGH", scanSshExposure({ ssText: 'LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))', sshdEffectiveText: "passwordauthentication yes" }).some((f) => f.id === "ssh-exposure-public" && f.severity === "high"));
+  check("SSH mở nhưng CHỈ khoá ⇒ LOW (chính sách hiện tại)", scanSshExposure({ ssText: 'LISTEN 0 128 0.0.0.0:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication no" }).every((f) => f.severity === "low"));
   check("SSH nghe 0.0.0.0:22 nhưng ĐÃ có nft khoá ⇒ hạ LOW", scanSshExposure({ ssText: 'LISTEN 0 128 0.0.0.0:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication no", nftLocked: true }).every((f) => f.severity === "low"));
   check("SSH chỉ nghe địa chỉ VPN ⇒ không báo", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication no\npermitrootlogin prohibit-password" }).length === 0);
   check("SSH cho đăng nhập bằng mật khẩu ⇒ HIGH", scanSshExposure({ ssText: 'LISTEN 0 128 10.77.0.1:22 0.0.0.0:*', sshdEffectiveText: "passwordauthentication yes" }).some((f) => f.id === "ssh-password-auth" && f.severity === "high"));
