@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-476",
+  "title": "[CẦN CỨU] Chạy giúp 2 lệnh mở lại SSH trên node-1 + node-2",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/INCIDENT-2026-09-26-ssh-lock.md",
+  "verify": "ssh -i ~/.ssh/fpt_tunnel root@103.173.155.50 'nft list table inet vpnflow_ssh'; ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162 'nft list table inet vpnflow_ssh'  — kỳ vọng: KHÔNG còn bảng vpnflow_ssh trên cả 2 node, và ssh vào được bình thường",
+  "due": "2026-09-27",
+  "createdAt": "2026-09-26T11:25:13.137Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-26T11:25:13.137Z",
+ "transcribedBy": "win",
+ "busId": 476,
+ "busAt": "2026-09-26T11:25:13.137Z",
+ "busFrom": "mac",
+ "note": "Chép từ bus #476 (mac → win). Mac không tự ghi sổ được vì đang bị khoá SSH ra cả 2 node."
+}
