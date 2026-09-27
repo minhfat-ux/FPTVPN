@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=94c0f63 (origin/flowgpt: docs/TG-VIBECODE-SITE-BG-COLOR.md + ops/_scratch/probe-site-bg.mjs + site-home.html); cmd=node ops/_scratch/probe-site-bg.mjs; ket qua=(1) https://meetflowai.site/ = HTTP 200, 34471 byte, KHONG co file CSS ngoai - 1 khoi <style> 16493 byte; (2) NEN TRANG KHONG PHAI MOT MAU PHANG ma la 3 lop: radial-gradient(900px 520px at 6% -10%, rgba(51,199,115,0.2), transparent 70%) + radial-gradient(780px 500px at 98% 2%, rgba(34,211,238,0.15), transparent 70%) + var(--sig-surface); (3) --sig-surface = radial-gradient(130% 120% at 0% 0%, #14406c 0%, #0a1f3b 55%, #071628 100%) => mau day #071628 (cung la <meta name=theme-color>), navy sang #14406c, giua #0a1f3b; (4) background-attachment: fixed; body dung shorthand background voi toan gradient nen background-color tinh toan = transparent (khong co mau phang chong lung); (5) doi chieu cheo ma nguon _work/web-assets-main/control-plane/src/home-page.js dong 1111 (theme-color #071628), 1143 (--sig-surface), 1164 (body) - khop byte; (6) TRA LOI OWNER: ma mau nen = #071628.",
+ "actor": "win",
+ "at": "2026-09-27T18:16:30.270Z"
+}
