@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-27T18:13:25.255Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: gửi cho anh mã màu của background page meetflowAI.site",
+ "via": "dsh --profile headless \"{prompt}\""
+}
