@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260927-02",
+  "title": "TG /vibecode: gui ma mau background trang meetflowai.site",
+  "from": "owner",
+  "to": "win",
+  "detail": "docs/TG-VIBECODE-SITE-BG-COLOR.md",
+  "verify": "node ops/_scratch/probe-site-bg.mjs   # phai in ra --sig-surface (#14406c/#0a1f3b/#071628) + theme-color #071628",
+  "due": "2026-09-28",
+  "createdAt": "2026-09-27T18:15:57.620Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-27T18:15:57.620Z",
+ "transcribedBy": "win",
+ "busId": 519,
+ "busAt": "2026-09-27T18:13:23.506Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #519 (owner → win). Task TG-VIBECODE cũ (owner→mac, đã done) chỉ là sổ ref — bot Telegram luôn gán ref TG-VIBECODE; mở mã mới cho lượt giao này (cùng cách T-20260922-18/20, T-20260923-01..07, T-20260926-01, T-20260927-01)."
+}
