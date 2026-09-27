@@ -6,7 +6,7 @@
   "from": "owner",
   "to": "win",
   "detail": "docs/TG-VIBECODE-ANDROID-PLAY-PUBLISH.md",
-  "verify": "curl -s -o /dev/null -w \\",
+  "verify": "curl -s -o /dev/null -w '%{http_code}' https://play.google.com/store/apps/details?id=com.meetflow.translator   # cần 200",
   "due": "2026-09-29",
   "createdAt": "2026-09-27T17:11:10.154Z"
  },
