@@ -6,13 +6,45 @@ import { useAuth, useToast } from "../state/store";
 
 type Step = "email" | "code" | "register" | "verify";
 
+/**
+ * Lỗi kinh điển: người dùng sang tab/hộp thư khác lấy mã rồi quay lại (hoặc lỡ tay F5) là mất
+ * bước nhập mã, bị đẩy về ô email. Giữ trạng thái trong `sessionStorage` (sống qua reload/tab
+ * switch, chết khi đóng tab — đúng mức cần thiết, không lưu mã ở nơi lâu dài).
+ */
+const PENDING_KEY = "fbuddy.login.pending";
+
+type Pending = { step: "code" | "verify"; email: string; at: number; info?: string | null; devCode?: string | null };
+
+function readPending(): Pending | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Pending;
+    if (!parsed?.email) return null;
+    if (Date.now() - (parsed.at ?? 0) > 15 * 60 * 1000) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function savePending(value: Pending | null) {
+  try {
+    if (value) sessionStorage.setItem(PENDING_KEY, JSON.stringify(value));
+    else sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* chế độ riêng tư có thể chặn sessionStorage — bỏ qua, chỉ mất tiện ích */
+  }
+}
+
 export function LoginPage() {
   const { t } = useI18n();
   const { completeLogin, login, meta } = useAuth();
   const { push } = useToast();
 
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  const pending = useRef(readPending()).current;
+  const [step, setStep] = useState<Step>(pending?.step ?? "email");
+  const [email, setEmail] = useState(pending?.email ?? "");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [usePassword, setUsePassword] = useState(false);
@@ -21,9 +53,12 @@ export function LoginPage() {
   const [regPassword, setRegPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [devCode, setDevCode] = useState<string | null>(null);
-  const [resendIn, setResendIn] = useState(0);
+  const [info, setInfo] = useState<string | null>(pending?.info ?? null);
+  const [devCode, setDevCode] = useState<string | null>(pending?.devCode ?? null);
+  // Đồng hồ "gửi lại mã" chạy tiếp theo thời điểm đã gửi, không đếm lại từ đầu sau khi quay lại.
+  const [resendIn, setResendIn] = useState(() =>
+    pending ? Math.max(0, 60 - Math.floor((Date.now() - pending.at) / 1000)) : 0,
+  );
   const codeRef = useRef<HTMLInputElement>(null);
 
   const passwordEnabled = meta?.authMethods?.password ?? true;
@@ -53,14 +88,14 @@ export function LoginPage() {
       setStep("code");
       setCode("");
       setResendIn(60);
-      if (result.devCode) {
-        setDevCode(result.devCode);
-        setInfo(t("auth.login.devCodeInfo"));
-      } else if (result.delivered) {
-        setInfo(t("auth.login.sent", { email: normalisedEmail, minutes: result.expiresInMin }));
-      } else {
-        setInfo(result.message ?? t("auth.login.sendFallback"));
-      }
+      const nextInfo = result.devCode
+        ? t("auth.login.devCodeInfo")
+        : result.delivered
+          ? t("auth.login.sent", { email: normalisedEmail, minutes: result.expiresInMin })
+          : (result.message ?? t("auth.login.sendFallback"));
+      setDevCode(result.devCode ?? null);
+      setInfo(nextInfo);
+      savePending({ step: "code", email: normalisedEmail, at: Date.now(), info: nextInfo, devCode: result.devCode ?? null });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("auth.login.sendFailed"));
     } finally {
@@ -81,6 +116,7 @@ export function LoginPage() {
     setError(null);
     try {
       const session = await api.verifyLoginToken(normalisedEmail, value);
+      savePending(null);
       await completeLogin(session);
       push(t("auth.login.success"), "success");
     } catch (err) {
@@ -106,8 +142,11 @@ export function LoginPage() {
         setStep("verify");
         setCode("");
         setResendIn(60);
-        setDevCode((err.details?.devCode as string | undefined) ?? null);
-        setInfo((err.details?.message as string | undefined) ?? t("auth.verify.required"));
+        const verifyInfo = (err.details?.message as string | undefined) ?? t("auth.verify.required");
+        const verifyDev = (err.details?.devCode as string | undefined) ?? null;
+        setDevCode(verifyDev);
+        setInfo(verifyInfo);
+        savePending({ step: "verify", email: normalisedEmail, at: Date.now(), info: verifyInfo, devCode: verifyDev });
         return;
       }
       setError(err instanceof ApiError ? err.message : t("auth.login.failed"));
@@ -149,11 +188,11 @@ export function LoginPage() {
         setStep("verify");
         setCode("");
         setResendIn(60);
+        const regInfo =
+          result.message ?? t("auth.verify.sent", { email: normalisedEmail, minutes: result.expiresInMin ?? 30 });
         setDevCode(result.devCode ?? null);
-        setInfo(
-          result.message ??
-            t("auth.verify.sent", { email: normalisedEmail, minutes: result.expiresInMin ?? 30 }),
-        );
+        setInfo(regInfo);
+        savePending({ step: "verify", email: normalisedEmail, at: Date.now(), info: regInfo, devCode: result.devCode ?? null });
         return;
       }
       await completeLogin({ user: result.user, token: String(result.token) });
@@ -177,6 +216,7 @@ export function LoginPage() {
     setError(null);
     try {
       const session = await api.verifyEmail(normalisedEmail, value);
+      savePending(null);
       await completeLogin(session);
       push(t("auth.verify.success"), "success");
     } catch (err) {
@@ -293,7 +333,7 @@ export function LoginPage() {
 
           {!usePassword && step === "code" && (
             <form onSubmit={submitCode}>
-              <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => setStep("email")}>
+              <button className="btn btn-ghost btn-sm mb-2" type="button" onClick={() => { savePending(null); setStep("email"); }}>
                 <ArrowLeft size={14} /> {t("auth.login.changeEmail")}
               </button>
               <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{t("auth.login.codeTitle")}</h1>
@@ -364,6 +404,7 @@ export function LoginPage() {
                 className="btn btn-ghost btn-sm mb-2"
                 type="button"
                 onClick={() => {
+                  savePending(null);
                   setStep("email");
                   setError(null);
                 }}
@@ -434,6 +475,7 @@ export function LoginPage() {
                 className="btn btn-ghost btn-sm mb-2"
                 type="button"
                 onClick={() => {
+                  savePending(null);
                   setStep("email");
                   setError(null);
                 }}
