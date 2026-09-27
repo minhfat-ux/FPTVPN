@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "BUOC 0 that bai: KHONG co credential Play tren WIN (env+registry+file: khong co; node-2 cung khong) nen check --package com.privatevpn.app dung o 'khong thay credential' (exit=1); them nua app com.privatevpn.app tra HTTP 404 tren Play. Can chu du an: (A) dan 9 email trong Play Console UI (API khong quan duoc email le), hoac (B) cap service-account JSON quyen 'Edit app'+'Manage testing tracks' vao C:\\Users\\Minhn\\.vpnflow-play\\play-admin.json. Bang chung: docs/handoff/HANDOFF_PLAY_TESTERS_VPNFLOW_2026-09-28.md (commit f37f03a) + ops/tasks/bus-516.",
+ "actor": "win",
+ "at": "2026-09-27T18:10:15.714Z"
+}
