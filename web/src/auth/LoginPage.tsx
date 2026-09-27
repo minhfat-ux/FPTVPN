@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, KeyRound, Languages, Loader2, Mail, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
 import { api, ApiError } from "../api/client";
-import { useI18n } from "../i18n";
+import { LocaleSwitcher, useI18n } from "../i18n";
 import { useAuth, useToast } from "../state/store";
 
 type Step = "email" | "code" | "register" | "verify";
@@ -574,6 +574,11 @@ export function LoginPage() {
           )}
 
           <div className="divider" />
+
+          {/* Chọn ngôn ngữ NGAY trên trang đăng nhập (trước đây chỉ có sau khi đã đăng nhập). */}
+          <div className="row gap-2" style={{ justifyContent: "center", paddingBottom: 8 }}>
+            <LocaleSwitcher compact />
+          </div>
 
           <div className="stack">
             <div className="tiny faint">{t("auth.login.comingSoon")}</div>
