@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN da nhan: chay BƯỚC 0 -> KHONG co credential Play tren may WIN (va node-2 cung khong); app com.privatevpn.app 404 tren Play. Dang ghi bang chung + bao blocked.",
+ "actor": "win",
+ "at": "2026-09-27T18:09:32.851Z"
+}

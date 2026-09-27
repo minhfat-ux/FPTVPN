@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-516",
+  "title": "Play tester: 9 user Android VPNFlow (com.privatevpn.app) - WIN chay bang credential san co",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/handoff/HANDOFF_PLAY_TESTERS_VPNFLOW_2026-09-28.md",
+  "verify": "node scripts/play-add-testers.mjs check --package com.privatevpn.app  — ky vong: in ra danh sach track + testers (khong con dung o 'khong thay credential Play')",
+  "due": null,
+  "createdAt": "2026-09-27T18:00:32.867Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-27T18:09:27.479Z",
+ "transcribedBy": "win",
+ "busId": 516,
+ "busAt": "2026-09-27T18:00:32.867Z",
+ "busFrom": "mac",
+ "note": "Chep tu bus #516 (mac -> win). Mac khong tu ghi so duoc (dang o phien Mac); WIN chep nguyen van de co so doi chieu."
+}
