@@ -186,7 +186,11 @@ const templateUpload = multer({
 /** Ngôn ngữ trình duyệt muốn nhận (`?lang=en|zh` hoặc header `x-lang`). */
 function requestLang(req) {
   const raw = String(req.query?.lang ?? req.get?.("x-lang") ?? "").trim().toLowerCase();
-  return HUB_LANGS.includes(raw) ? raw : "vi";
+  if (HUB_LANGS.includes(raw)) return raw;
+  // Khách chưa gửi ?lang/x-lang ⇒ dùng ngôn ngữ đã lưu của tài khoản (PATCH /auth/me { locale }).
+  // Nhờ vậy chợ kỹ năng tự đúng ngôn ngữ trên MỌI client, không phải sửa từng app.
+  const saved = String(req.user?.locale ?? "").trim().toLowerCase();
+  return HUB_LANGS.includes(saved) ? saved : "vi";
 }
 
 function clientKey(req) {
