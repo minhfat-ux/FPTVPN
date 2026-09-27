@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/assets/flowtech-icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/flowtech-mark.png">
+  <meta name="theme-color" content="#071628">
+  <title>FlowTech — VPNFlow VPN and MeetFlow AI</title>
+  <meta name="description" content="FlowTech is building an AI ecosystem for connectivity, education and the small utilities that fill a working day — so each person gets more done. Products: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy, SuperMom AI.">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://t1.meetflowai.site/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="FlowTech">
+  <meta property="og:title" content="FlowTech — VPNFlow VPN and MeetFlow AI">
+  <meta property="og:description" content="FlowTech is building an AI ecosystem for connectivity, education and the small utilities that fill a working day — so each person gets more done. Products: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy, SuperMom AI.">
+  <meta property="og:url" content="https://t1.meetflowai.site/">
+  <meta name="twitter:card" content="summary">
+  <style>
+    /* ======================================================================
+       FLOWTECH SIGNATURE THEME
+       Đồng bộ trang này với popup hệ sinh thái (web/public/promo.css) và app
+       FlowGpt (web/src/styles.css) để cả hệ sinh thái nhìn như một sản phẩm.
+       Hợp đồng thiết kế: docs/THEME.md trong repo flowgpt.
+       Ba dấu hiệu nhận biết:
+         1. nền navy radial-gradient có chiều sâu + 2 quầng sáng mint/cyan
+         2. card có viền gradient 1px (mask) + hào quang khi hover
+         3. nút chính gradient 33c773 -> 22d3ee kèm hào quang
+       ====================================================================== */
+    :root {
+      color-scheme: dark;
+      --accent: #33c773;
+      --accent-2: #22d3ee;
+      --accent-3: #7c3aed;
+      --accent-mint: #7fe6c0;
+      --ink: #05202a;
+      --line: rgba(255, 255, 255, 0.1);
+      --sig-gradient: linear-gradient(135deg, #33c773, #22d3ee);
+      --sig-ring: linear-gradient(135deg, #33c773, #22d3ee 46%, #7c3aed);
+      --sig-surface: radial-gradient(130% 120% at 0% 0%, #14406c 0%, #0a1f3b 55%, #071628 100%);
+      --sig-card-bg: linear-gradient(150deg, rgba(51, 199, 115, 0.1), rgba(34, 211, 238, 0.035) 45%, transparent 72%),
+        linear-gradient(#0d1b30, #0d1b30);
+      --sig-radius: 22px;
+      --sig-radius-inner: 16px;
+      --sig-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-height: 100vh;
+      font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #eaf2ff;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      /* Nền có chiều sâu: 2 quầng sáng thương hiệu đè lên navy radial của popup. */
+      background:
+        radial-gradient(900px 520px at 6% -10%, rgba(51, 199, 115, 0.2), transparent 70%),
+        radial-gradient(780px 500px at 98% 2%, rgba(34, 211, 238, 0.15), transparent 70%),
+        var(--sig-surface);
+      background-attachment: fixed;
+    }
+    a { color: #7fd3ff; }
+    h1, h2, h3 { line-height: 1.25; }
+    .wrap { width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 20px; }
+
+    .hdr {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(7, 22, 40, 0.72);
+      -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      backdrop-filter: blur(16px) saturate(1.2);
+      border-bottom: 1px solid rgba(127, 230, 192, 0.14);
+    }
+    .hdr-in { display: flex; align-items: center; gap: 14px; padding: 12px 20px; max-width: 1060px; margin: 0 auto; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; }
+    .brand .mark { border-radius: 10px; display: block; filter: drop-shadow(0 6px 14px rgba(34, 211, 238, 0.28)); }
+    .brand-text { display: flex; flex-direction: column; }
+    .brand-name { font-weight: 800; font-size: 18px; letter-spacing: 0.2px; }
+    .brand-tag { font-size: 11.5px; color: rgba(234, 242, 255, 0.55); }
+    .hdr-nav { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+    .hdr-nav a.navlink { color: rgba(234, 242, 255, 0.72); text-decoration: none; font-size: 13.5px; transition: color 0.16s ease; }
+    .hdr-nav a.navlink:hover { color: #fff; }
+    .who { font-size: 12.5px; color: rgba(234, 242, 255, 0.6); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .langmenu { position: relative; }
+    .langmenu > summary {
+      list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 999px; font-size: 12.5px; color: rgba(234, 242, 255, 0.78);
+      background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+      transition: border-color 0.16s ease, color 0.16s ease;
+    }
+    .langmenu > summary::-webkit-details-marker { display: none; }
+    .langmenu[open] > summary, .langmenu > summary:hover { color: #fff; border-color: rgba(127, 230, 192, 0.45); }
+    .langlist {
+      position: absolute; right: 0; top: calc(100% + 8px); min-width: 168px; padding: 6px;
+      background: linear-gradient(#0d1b30, #0d1b30); border: 1px solid rgba(127, 230, 192, 0.18);
+      border-radius: 14px; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85); display: grid; gap: 2px;
+      animation: sig-rise 0.28s var(--sig-ease) backwards;
+    }
+    .langlist a { padding: 8px 10px; border-radius: 9px; font-size: 13px; text-decoration: none; color: rgba(234, 242, 255, 0.78); }
+    .langlist a:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+    .langlist a.on { color: var(--ink); background: var(--sig-gradient); font-weight: 700; }
+
+    /* --- nút: bản chính dùng gradient thương hiệu + hào quang ---------------- */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 20px; border-radius: 12px; font-size: 14px; font-weight: 700;
+      text-decoration: none; border: 1px solid transparent; cursor: pointer; background: none; font-family: inherit;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+    }
+    .btn-primary { background: var(--sig-gradient); color: var(--ink); box-shadow: 0 10px 24px -12px rgba(34, 211, 238, 0.7); }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 14px 30px -12px rgba(51, 199, 115, 0.8); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-ghost { border-color: rgba(255, 255, 255, 0.14); color: rgba(234, 242, 255, 0.86); background: rgba(255, 255, 255, 0.06); }
+    .btn-ghost:hover { border-color: rgba(51, 199, 115, 0.55); color: #fff; background: rgba(255, 255, 255, 0.1); }
+
+    .hero { padding: 60px 0 34px; }
+    .kicker {
+      display: inline-block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700;
+      color: var(--accent-mint);
+      border: 1px solid rgba(127, 230, 192, 0.28);
+      background: linear-gradient(135deg, rgba(51, 199, 115, 0.16), rgba(34, 211, 238, 0.08));
+      padding: 5px 12px; border-radius: 999px; margin-bottom: 16px;
+    }
+    .hero h1 { font-size: clamp(28px, 4.4vw, 42px); font-weight: 800; letter-spacing: -0.02em; max-width: 820px; }
+    .hero .lede { margin-top: 14px; color: rgba(234, 242, 255, 0.7); font-size: 16px; max-width: 700px; }
+    .cta-row { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 12px; }
+    .trust { list-style: none; margin-top: 34px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+    .trust li {
+      padding: 13px 15px 13px 36px; position: relative; font-size: 13px; color: rgba(234, 242, 255, 0.82);
+      border: 1px solid transparent; border-radius: var(--sig-radius-inner);
+    }
+    .trust li::before { content: "✓"; position: absolute; left: 13px; top: 13px; color: var(--accent-mint); font-weight: 800; z-index: 1; }
+
+    .section { padding: 40px 0; border-top: 1px solid rgba(127, 230, 192, 0.13); }
+    .section h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
+    .section .sub { margin-top: 8px; color: rgba(234, 242, 255, 0.64); font-size: 14px; max-width: 720px; }
+    .section .note { margin-top: 14px; font-size: 12.5px; color: rgba(234, 242, 255, 0.55); }
+
+    /* --- card: nền navy + viền gradient 1px + hào quang khi hover ----------- */
+    .cards { list-style: none; margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .card {
+      display: flex; flex-direction: column; gap: 10px; padding: 20px;
+      border: 1px solid transparent; border-radius: var(--sig-radius);
+    }
+    .card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .card-head h3 { font-size: 18px; font-weight: 800; }
+    .tag {
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--ink); background: var(--sig-gradient); border: 1px solid transparent;
+      padding: 3px 9px; border-radius: 999px;
+    }
+    .card-desc { color: rgba(234, 242, 255, 0.72); font-size: 13.5px; }
+    .bullets { list-style: none; display: grid; gap: 7px; margin: 4px 0 6px; }
+    .bullets li { position: relative; padding-left: 16px; font-size: 13px; color: rgba(234, 242, 255, 0.78); }
+    .bullets li::before { content: "•"; position: absolute; left: 4px; color: var(--accent-mint); }
+    .card .btn { margin-top: auto; text-align: center; }
+    /* Ô logo app — cùng tỉ lệ với .fg-prod__icon của popup quảng cáo. */
+    .prod-top { display: flex; align-items: center; gap: 12px; }
+    .prod-logo {
+      width: 54px; height: 54px; flex: none; border-radius: 14px; object-fit: cover;
+      background: linear-gradient(135deg, rgba(51, 199, 115, 0.35), rgba(34, 211, 238, 0.28));
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    }
+    .prod-id { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+    .prod-id h3 { font-size: 17px; font-weight: 700; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    .chip {
+      font-size: 11.5px; text-decoration: none; color: rgba(234, 242, 255, 0.8);
+      background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+      transition: border-color 0.16s ease, color 0.16s ease;
+    }
+    .chip:hover { border-color: rgba(51, 199, 115, 0.55); color: #fff; }
+
+    .plans { list-style: none; margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+    .plan {
+      padding: 18px; display: flex; flex-direction: column; gap: 6px;
+      border: 1px solid transparent; border-radius: var(--sig-radius);
+    }
+    .plan-name { font-weight: 700; font-size: 15px; }
+    .plan-price { font-size: 26px; font-weight: 800; color: var(--accent-mint); letter-spacing: -0.01em; }
+    .plan-period { font-size: 12.5px; color: rgba(234, 242, 255, 0.55); }
+    .plan-cta { margin-top: 10px; text-align: center; }
+
+    .faq { margin-top: 18px; display: grid; gap: 10px; }
+    .faq-item { padding: 13px 15px; border: 1px solid transparent; border-radius: var(--sig-radius-inner); }
+    .faq-item summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+    .faq-item summary:hover { color: var(--accent-mint); }
+    .faq-item p { margin-top: 8px; font-size: 13px; color: rgba(234, 242, 255, 0.74); }
+
+    .reviews { list-style: none; margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .review { padding: 16px; border: 1px solid transparent; border-radius: var(--sig-radius-inner); }
+    .stars { color: #ffd166; letter-spacing: 2px; font-size: 14px; }
+    .review-text { margin-top: 8px; font-size: 13.5px; color: rgba(234, 242, 255, 0.82); }
+    .review-name { margin-top: 8px; font-size: 12.5px; color: rgba(234, 242, 255, 0.55); }
+
+    /* Viền gradient 1px cho mọi khối nổi (mask 2 lớp, không cần thêm phần tử).
+       .trust li dùng ::after vì ::before đã là dấu ✓. */
+    .card, .plan, .review, .faq-item, .trust li, .promo-box {
+      position: relative;
+      background-image: var(--sig-card-bg);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset, 0 18px 40px -30px rgba(0, 0, 0, 0.9);
+      animation: sig-rise 0.36s var(--sig-ease) backwards;
+      transition: transform 0.22s ease, box-shadow 0.22s ease;
+    }
+    .card::before, .plan::before, .review::before, .faq-item::before, .promo-box::before,
+    .trust li::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: var(--sig-ring);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask-composite: exclude;
+      opacity: 0.72;
+      pointer-events: none;
+    }
+    .card:hover, .plan:hover, .review:hover, .trust li:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 22px 50px -28px rgba(34, 211, 238, 0.55);
+    }
+
+    .footer { padding: 30px 0 44px; border-top: 1px solid rgba(127, 230, 192, 0.13); margin-top: 30px; }
+    .footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 20px; }
+    .footer h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent-mint); margin-bottom: 10px; font-weight: 700; }
+    .footer ul { list-style: none; display: grid; gap: 7px; }
+    .footer a { color: rgba(234, 242, 255, 0.74); text-decoration: none; font-size: 13px; }
+    .footer a:hover { color: var(--accent-mint); text-decoration: underline; }
+    .footer .contact { font-size: 13px; color: rgba(234, 242, 255, 0.64); }
+    .footer .rights {
+      margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 12px; color: rgba(234, 242, 255, 0.44);
+    }
+
+    /* --- popup: đúng bản signature của popup hệ sinh thái ------------------- */
+    .promo {
+      position: fixed; inset: 0; z-index: 90; display: flex;
+      align-items: center; justify-content: center; padding: 18px;
+      overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+      background: rgba(3, 10, 20, 0.62);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+      backdrop-filter: blur(8px) saturate(1.15);
+      animation: sig-fade 0.28s ease-out both;
+    }
+    .promo[hidden] { display: none; }
+    .promo-box {
+      width: 100%; max-width: 440px; margin: auto 0; padding: 24px;
+      border: 1px solid transparent; border-radius: var(--sig-radius);
+      background-image: var(--sig-surface);
+      box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+      animation: sig-rise 0.36s var(--sig-ease) backwards;
+    }
+    .promo-box h2 { font-size: clamp(19px, 3.3vw, 24px); font-weight: 700; letter-spacing: -0.01em; }
+    .promo-box p { margin-top: 10px; font-size: 13.5px; color: rgba(234, 242, 255, 0.74); }
+    .promo-ctas { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .promo-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .promo-x {
+      position: absolute; top: 12px; right: 12px; width: 38px; height: 38px; display: grid; place-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 999px; background: rgba(255, 255, 255, 0.1);
+      color: #dce8fb; cursor: pointer; font-size: 20px; line-height: 1; font-family: inherit; z-index: 1;
+      transition: transform 0.22s ease, background 0.22s ease, color 0.22s ease;
+    }
+    .promo-x:hover { background: rgba(255, 255, 255, 0.16); color: #fff; transform: rotate(90deg); }
+    .promo-never {
+      border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: rgba(234, 242, 255, 0.74);
+      border-radius: 11px; padding: 8px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+      transition: color 0.16s ease, border-color 0.16s ease;
+    }
+    .promo-never:hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+
+    @keyframes sig-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes sig-rise {
+      from { opacity: 0; transform: translateY(16px) scale(0.97); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @media (max-width: 760px) {
+      .hdr-in { flex-wrap: wrap; gap: 10px; }
+      .hdr-nav { width: 100%; margin-left: 0; justify-content: space-between; }
+      .hdr-nav a.navlink { display: none; }
+      .hero { padding: 36px 0 24px; }
+      .hero h1 { font-size: 27px; }
+      .hero .lede { font-size: 15px; }
+      .cards, .plans, .reviews, .trust, .footer-grid { grid-template-columns: 1fr; }
+      .cta-row .btn, .promo-ctas .btn { flex: 1 1 100%; text-align: center; }
+      .promo { padding: 0; align-items: flex-end; }
+      .promo-box { max-width: none; width: 100%; border-radius: var(--sig-radius) var(--sig-radius) 0 0; }
+      .langlist { right: auto; left: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .promo, .promo-box, .promo-x, .btn, .chip, .faq-item, .card, .plan, .review, .trust li, .langlist {
+        transition: none !important; animation: none !important;
+      }
+      .card:hover, .plan:hover, .review:hover, .trust li:hover { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hdr">
+    <div class="hdr-in">
+      <a class="brand" href="./">
+        <img class="mark" src="/assets/flowtech-mark.png" width="34" height="34" alt="" decoding="async">
+        <span class="brand-text">
+          <span class="brand-name">FlowTech</span>
+          <span class="brand-tag">AI Ecosystem</span>
+        </span>
+      </a>
+      <div class="hdr-nav" role="navigation" aria-label="Main navigation">
+        <a class="navlink" href="#products">Products</a>
+        <a class="navlink" href="#faq">FAQ</a>
+        
+        <details class="langmenu" id="langMenu">
+        <summary aria-label="Choose language" title="Choose language">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 6h-2.6a15.6 15.6 0 0 0-1.3-3.4A8 8 0 0 1 18.9 8zM12 4.2c.7 1 1.3 2.3 1.7 3.8h-3.4C10.7 6.5 11.3 5.2 12 4.2zM4.3 14A8 8 0 0 1 4 12c0-.7.1-1.4.3-2h3a19 19 0 0 0 0 4h-3zm.8 2h2.6c.3 1.2.8 2.4 1.3 3.4A8 8 0 0 1 5.1 16zm2.6-8H5.1a8 8 0 0 1 3.9-3.4C8.5 5.6 8 6.8 7.7 8zM12 19.8c-.7-1-1.3-2.3-1.7-3.8h3.4c-.4 1.5-1 2.8-1.7 3.8zM14.1 14H9.9a17 17 0 0 1 0-4h4.2a17 17 0 0 1 0 4zm1 5.4c.5-1 1-2.2 1.3-3.4h2.6a8 8 0 0 1-3.9 3.4zm1.6-5.4a19 19 0 0 0 0-4h3c.2.6.3 1.3.3 2s-.1 1.4-.3 2h-3z"/></svg>
+          <span class="langcur">English</span>
+        </summary>
+        <nav class="langlist">
+          <a class="lang on" href="?lang=en" hreflang="en" aria-current="true">English</a>
+          <a class="lang" href="?lang=vi" hreflang="vi">Tiếng Việt</a>
+          <a class="lang" href="?lang=zh" hreflang="zh">中文</a>
+          <a class="lang" href="?lang=ja" hreflang="ja">日本語</a>
+          <a class="lang" href="?lang=ko" hreflang="ko">한국어</a>
+        </nav>
+      </details>
+        <a class="btn btn-primary" href="https://t1.meetflowai.site/buy">Buy now</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero" aria-labelledby="heroTitle">
+      <span class="kicker">The FlowTech ecosystem</span>
+      <h1 id="heroTitle">An AI ecosystem for connectivity, learning and everyday work</h1>
+      <p class="lede">Our mission is to bring AI into networking, education and the small tools that fill a working day — so every person gets more done with less friction. The two of us build it together, one product at a time: VPNFlow, MeetFlow AI, FlowTech Harness, fBuddy and SuperMom AI.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://t1.meetflowai.site/buy">Buy VPNFlow</a>
+        <a class="btn btn-ghost" href="https://t1.meetflowai.site/ai/buy">Use MeetFlow AI</a>
+      </div>
+      <ul class="trust" aria-label="What we actually offer">
+        <li>Bank QR payment (VietQR) — scan, the amount is pre-filled, the transfer note carries your order code</li>
+        <li>Invoice and activation confirmations sent by email</li>
+        <li>Apps for iOS (IPA), Android (APK), macOS (.dmg) and Windows (one-click installer)</li>
+        <li>One account on up to 3 active devices, switch devices any time</li>
+        <li>Public pages in 5 languages: Vietnamese, English, Chinese, Japanese, Korean</li>
+      </ul>
+    </section>
+
+    <section class="section" id="products" aria-labelledby="productsTitle">
+      <h2 id="productsTitle">Products</h2>
+      <p class="sub">Five parts of the same ecosystem — buy only what you need.</p>
+      <ul class="cards">
+        <li class="card prod">
+        <div class="prod-top">
+          <img class="prod-logo" src="/assets/vpnflow-logo.png" alt="" width="54" height="54" loading="lazy" decoding="async">
+          <div class="prod-id">
+            <h3>VPNFlow</h3>
+            <span class="tag">Private VPN</span>
+          </div>
+        </div>
+        <p class="card-desc">A WireGuard-based VPN that ties your subscription to your email account.</p>
+        <ul class="bullets">
+          <li>Sign in with an email one-time code — no password to remember</li>
+          <li>Install on iOS (IPA), Android (APK), macOS (.dmg) and Windows</li>
+          <li>Plans are one-time purchases: no auto-renewal, we email you before expiry</li>
+        </ul>
+        <div class="chips" aria-label="Download the app"><a class="chip" href="https://t1.meetflowai.site/install/ios" rel="noopener">iOS (IPA)</a><a class="chip" href="https://t1.meetflowai.site/v1/downloads/android" rel="noopener">Android (APK)</a><a class="chip" href="https://t1.meetflowai.site/v1/downloads/android-legacy" rel="noopener">Android 7.x (APK)</a><a class="chip" href="https://t1.meetflowai.site/dl/VPNFlow-Setup-1.4.7.exe?v=73660031" rel="noopener">Windows 10/11</a></div>
+        <a class="btn btn-primary" href="https://t1.meetflowai.site/buy">Buy VPNFlow</a>
+      </li>
+        <li class="card prod">
+        <div class="prod-top">
+          <img class="prod-logo" src="/assets/meetflow-logo.png" alt="" width="54" height="54" loading="lazy" decoding="async">
+          <div class="prod-id">
+            <h3>MeetFlow AI</h3>
+            <span class="tag">AI assistant</span>
+          </div>
+        </div>
+        <p class="card-desc">AI translation and meeting minutes for your calls and recordings.</p>
+        <ul class="bullets">
+          <li>Pro unlocks after checkout — the app verifies the email you bought with</li>
+          <li>Android APK and iOS build available</li>
+          <li>30-day pass, monthly and yearly plans, all one-time on the web</li>
+        </ul>
+        <div class="chips" aria-label="Download the app"><a class="chip" href="https://apps.apple.com/app/id6765590042" rel="noopener">App Store</a><a class="chip" href="https://apps.apple.com/app/id6765590042" rel="noopener">App Store (macOS)</a><a class="chip" href="https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip" rel="noopener">Windows overlay</a><a class="chip" href="https://api.meetflowai.site/v1/ai/downloads/android" rel="noopener">Android (APK)</a></div>
+        <a class="btn btn-primary" href="https://t1.meetflowai.site/ai/buy">Use MeetFlow AI</a>
+      </li>
+        <li class="card prod">
+        <div class="prod-top">
+          <img class="prod-logo" src="/assets/flowtech-icon.png" alt="" width="54" height="54" loading="lazy" decoding="async">
+          <div class="prod-id">
+            <h3>FlowTech Harness</h3>
+            <span class="tag">Agent toolkit</span>
+          </div>
+        </div>
+        <p class="card-desc">Our packaged agent harness: run the assistant on your own machine, reach it from anywhere.</p>
+        <ul class="bullets">
+          <li>One-command installer for macOS plus a Windows installer in the same package</li>
+          <li>Optional VPS part: HTTPS domain with a login gate in front of your machine</li>
+          <li>Source and install scripts are kept in the project repository</li>
+        </ul>
+        
+        <a class="btn btn-primary" href="https://t1.meetflowai.site/support">Install guide</a>
+      </li>
+        <li class="card prod">
+        <div class="prod-top">
+          <img class="prod-logo" src="/assets/fbuddy-logo.png" alt="" width="54" height="54" loading="lazy" decoding="async">
+          <div class="prod-id">
+            <h3>fBuddy</h3>
+            <span class="tag">AI chat app</span>
+          </div>
+        </div>
+        <p class="card-desc">The friendly AI assistant app: ask, write, translate and summarise — on the web or on your phone.</p>
+        <ul class="bullets">
+          <li>Chat by voice, in Vietnamese, English, Chinese, Japanese and Korean</li>
+          <li>Translation, writing and meeting summaries in one app</li>
+          <li>Opens in the browser — install it as an app on iOS and Android</li>
+        </ul>
+        
+        <a class="btn btn-primary" href="https://fbuddy.meetflowai.site/">Open fBuddy</a>
+      </li>
+        <li class="card prod">
+        <div class="prod-top">
+          <img class="prod-logo" src="/assets/supermom-logo.png" alt="" width="54" height="54" loading="lazy" decoding="async">
+          <div class="prod-id">
+            <h3>SuperMom AI</h3>
+            <span class="tag">AI study helper</span>
+          </div>
+        </div>
+        <p class="card-desc">An AI study companion for Vietnamese parents with children in grades 1–9: photograph a maths problem and get a step-by-step solution written so the parent understands it, not just the child.</p>
+        <ul class="bullets">
+          <li>Snap a maths problem for a step-by-step solution, and check a finished worksheet for mistakes</li>
+          <li>English solver, a daily challenge, study notes with reminders, and an AI chat for parents</li>
+          <li>On the App Store for iPhone and iPad — a Vietnamese interface written for parents</li>
+        </ul>
+        
+        <a class="btn btn-primary" href="https://apps.apple.com/app/id6768231353">Download on the App Store</a>
+      </li>
+      </ul>
+    </section>
+
+
+    <section class="section" id="faq" aria-labelledby="faqTitle">
+      <h2 id="faqTitle">Frequently asked</h2>
+      <div class="faq">
+        
+        <details class="faq-item">
+          <summary>How do I pay with a bank QR?</summary>
+          <p>Open the buy page, enter your account email, pick a plan and scan the QR with your banking app. The amount is already filled in and the transfer note carries the order code — transfer the exact amount and keep the note unchanged so the payment is matched.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How long until my plan is activated?</summary>
+          <p>We match the incoming transfer, activate the plan for the email you bought with and email you the invoice. It usually takes a few minutes; if nothing arrives after 10 minutes, email support with your order code.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How many devices can one account use?</summary>
+          <p>Up to 3 active devices per account. To move to a new device, sign out of an old one first.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does the plan renew automatically?</summary>
+          <p>No. Bank QR payment is a one-time purchase that covers the plan's days; you will get a reminder email before it expires.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What about refunds and support?</summary>
+          <p>Email <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="3d4e484d4d524f497d505858495b51524a5c54134e544958">[email&#160;protected]</a> with the order code and the email you bought with. Refund requests are handled under our terms of service — we do not promise automatic refunds.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How do I install the app?</summary>
+          <p>iOS: open /install/ios in Safari on the device itself and register it (UDID) so a signed build can be produced. Android: download the APK on the buy page and allow installs from unknown sources. macOS: download the .dmg. Windows: run the installer (it asks for admin rights to create the tunnel).</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does a web purchase work on both iOS and Android?</summary>
+          <p>Yes. The plan is tied to your email account, so signing in with the same email works on every supported device.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Do I have to pay again on a new device?</summary>
+          <p>No. Sign in with the same email on the new device; if the account already has 3 active devices, remove an old one first.</p>
+        </details>
+      </div>
+    </section>
+
+    
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div>
+          <h4>Products</h4>
+          <ul>
+            <li><a href="https://t1.meetflowai.site/buy">Buy VPNFlow</a></li>
+            <li><a href="https://t1.meetflowai.site/ai/buy">Buy MeetFlow AI</a></li>
+            <li><a href="https://t1.meetflowai.site/guide">Activation guide</a></li>
+            <li><a href="https://t1.meetflowai.site/install/ios">Install on iPhone / iPad</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Help &amp; legal</h4>
+          <ul>
+            <li><a href="https://t1.meetflowai.site/support">Support</a></li>
+            <li><a href="https://t1.meetflowai.site/privacy">Privacy policy</a></li>
+            <li><a href="https://t1.meetflowai.site/terms">Terms of service</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="8dfef8fdfde2fff9cde0e8e8f9ebe1e2faece4a3fee4f9e8">[email&#160;protected]</a></h4>
+          <p class="contact">Need help? Email <a href="/cdn-cgi/l/email-protection#6e1d1b1e1e011c1a2e030b0b1a080201190f07401d071a0b"><span class="__cf_email__" data-cfemail="1f6c6a6f6f706d6b5f727a7a6b797370687e76316c766b7a">[email&#160;protected]</span></a></p>
+        </div>
+      </div>
+      <p class="rights">© 2026 FlowTech. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <div class="promo" id="promo" role="dialog" aria-modal="true" aria-labelledby="promoTitle" hidden>
+    <div class="promo-box">
+      <button type="button" class="promo-x" id="promoClose" aria-label="Close">&times;</button>
+      <h2 id="promoTitle">One more thing while you are here</h2>
+      <p>VPNFlow keeps the connection private, MeetFlow AI takes the notes. Both activate with your email right after payment.</p>
+      <div class="promo-ctas">
+        <a class="btn btn-primary" href="https://t1.meetflowai.site/buy">Buy VPNFlow</a>
+        <a class="btn btn-ghost" href="https://t1.meetflowai.site/ai/buy">Try MeetFlow AI</a>
+      </div>
+      <div class="promo-actions">
+        <button type="button" class="promo-never" id="promoNever">Do not show again</button>
+      </div>
+    </div>
+  </div>
+
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+    (function () {
+      // Menu ngôn ngữ: <details> đã dùng được bằng bàn phím; chỉ thêm đóng khi bấm ra ngoài / Esc.
+      var langMenu = document.getElementById("langMenu");
+      if (langMenu) {
+        document.addEventListener("click", function (e) {
+          if (!langMenu.contains(e.target)) langMenu.removeAttribute("open");
+        });
+        langMenu.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            langMenu.removeAttribute("open");
+            var s = langMenu.querySelector("summary");
+            if (s && s.focus) s.focus();
+          }
+        });
+      }
+
+      // Popup quảng cáo chéo: hiện sau ~1.5s, 1 lần mỗi phiên, và tôn trọng lựa chọn
+      // "không hiện lại" (localStorage). Nội dung chính của trang KHÔNG nằm trong popup.
+      var PROMO_NEVER_KEY = "flowtech_promo_never";
+      var PROMO_SESSION_KEY = "flowtech_promo_seen";
+      var popup = document.getElementById("promo");
+      if (!popup) return;
+
+      function readFlag(store, key) {
+        try { return store.getItem(key) === "1"; } catch (e) { return true; }
+      }
+      function writeFlag(store, key) {
+        try { store.setItem(key, "1"); } catch (e) { /* chế độ riêng tư: bỏ qua */ }
+      }
+
+      var lastFocus = null;
+      function closePopup(remember) {
+        if (popup.hidden) return;
+        popup.hidden = true;
+        if (remember === "never") writeFlag(window.localStorage, PROMO_NEVER_KEY);
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+      }
+      function openPopup() {
+        lastFocus = document.activeElement;
+        popup.hidden = false;
+        var b = document.getElementById("promoClose");
+        if (b && b.focus) b.focus();
+      }
+
+      var btnClose = document.getElementById("promoClose");
+      if (btnClose) btnClose.addEventListener("click", function () { closePopup(); });
+      var btnNever = document.getElementById("promoNever");
+      if (btnNever) btnNever.addEventListener("click", function () { closePopup("never"); });
+      popup.addEventListener("click", function (e) { if (e.target === popup) closePopup(); });
+      document.addEventListener("keydown", function (e) {
+        if (!popup.hidden && (e.key === "Escape" || e.key === "Esc")) closePopup();
+      });
+
+      if (!readFlag(window.localStorage, PROMO_NEVER_KEY) && !readFlag(window.sessionStorage, PROMO_SESSION_KEY)) {
+        window.setTimeout(function () {
+          if (!popup.hidden) return;
+          writeFlag(window.sessionStorage, PROMO_SESSION_KEY);
+          openPopup();
+        }, 1500);
+      }
+    })();
+  </script>
+</body>
+</html>
