@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- MẪU tham chiếu — bản sao của plist THẬT trên máy này (do `bash scripts/harness-patches-install.sh`
+     sinh ra và nạp lại). Lớp dự phòng TUẦN cho bộ tự-vá harness: Chủ nhật 10:00 dọn ~/.dsh (phiên cũ
+     hơn 30 ngày, thư mục sessions.* cũ, file .*tmp cũ) rồi gọi harness-ensure-patches.sh.
+     Phải trỏ vào BẢN Ổ TRONG (~/.local/share/harness-patches/housekeeping/harness-dsh.sh) vì launchd
+     bị TCC chặn đọc ổ ngoài chứa repo (BIWIN): bản cũ chết ngay với
+     `/bin/bash: .../harness-dsh.sh: Operation not permitted` (last exit code = 126, runs = 0).
+     Script chạy bằng /bin/bash (macOS bash 3.2) nên harness-dsh.sh KHÔNG được dùng `mapfile` (bash 4+).
+     Sửa file này KHÔNG đổi plist thật: nguồn sinh plist là harness-patches-install.sh. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>site.meetflowai.dsh-housekeeping</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/minhnguyen/.local/share/harness-patches/housekeeping/harness-dsh.sh</string>
+    <string>--days</string><string>30</string>
+    <string>--apply</string>
+  </array>
+  <!-- Chủ nhật 10:00 hằng tuần; máy ngủ thì chạy bù khi thức (StartCalendarInterval + RunAtLoad=false). -->
+  <key>StartCalendarInterval</key>
+  <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>/tmp/dsh-housekeeping.log</string>
+  <key>StandardErrorPath</key><string>/tmp/dsh-housekeeping.err</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>

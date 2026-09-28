@@ -152,14 +152,22 @@ bash scripts/harness-patches-install.sh         # cài bản chạy nền vào �
 - **Vì sao bản cài nằm ở `~/.local/share/harness-patches`**: launchd bị TCC chặn đọc ổ ngoài
   (`/Volumes/BIWIN`) — agent trỏ thẳng vào repo sẽ chết im lặng (`Operation not permitted`). Sau khi
   sửa script/patch trong repo phải chạy lại `harness-patches-install.sh` để đồng bộ bản ổ trong.
-- ⚠️ **Việc còn lại (chưa xử)**: lớp dự phòng tuần `site.meetflowai.dsh-housekeeping` trỏ
-  `/Volumes/BIWIN/SourcesCode/PrivateVPN/scripts/housekeeping/harness-dsh.sh` ⇒ **chết vì TCC**
-  (đã kiểm chứng bằng một LaunchAgent tạm: `head: …/harness-dsh.sh: Operation not permitted`, trong
-  khi cùng lúc đọc được bản trên ổ trong; `launchctl print` cho `runs = 0`). Cách xử: copy
-  `scripts/housekeeping/harness-dsh.sh` sang ổ trong (hoặc trỏ plist vào bản trong `$HOME`) rồi
-  `launchctl bootout gui/501/site.meetflowai.dsh-housekeeping && launchctl bootstrap gui/501 <plist>`.
-  Thuộc phạm vi agent chính (ngoài t4: `scripts/housekeeping/**` out of scope; plist housekeeping
-  không nằm trong inScope).
+- **Lớp dự phòng TUẦN `site.meetflowai.dsh-housekeeping` (đã sửa 28/09/2026)**: Chủ nhật 10:00, chạy
+  `--days 30 --apply` để dọn `~/.dsh` (phiên cũ hơn 30 ngày, `sessions.*` cũ, file `.*tmp`) rồi gọi
+  `harness-ensure-patches.sh`. Nó **chết vì 2 lỗi chồng nhau** nên `runs = 0` suốt từ 20/09:
+  1. **TCC**: plist trỏ `/Volumes/BIWIN/.../scripts/housekeeping/harness-dsh.sh` — launchd không đọc
+     được ổ ngoài (`/bin/bash: …/harness-dsh.sh: Operation not permitted`, `last exit code = 126`).
+  2. **bash 3.2**: plist gọi `/bin/bash` (macOS 3.2, KHÔNG có `mapfile`) mà script dùng `mapfile` ⇒
+     kể cả sửa TCC vẫn chết (`mapfile: command not found`, exit 127). Script đã đổi sang vòng lặp
+     `while IFS= read -r` (chạy được cả bash 3.2 lẫn 5).
+  Cách cài/cập nhật (1 lệnh): `bash scripts/harness-patches-install.sh` — script này
+  **nguồn sự thật** cho cả 2 LaunchAgent: nó copy `scripts/housekeeping/harness-dsh.sh` →
+  `~/.local/share/harness-patches/housekeeping/harness-dsh.sh` (đặt ở đó để dòng `$(dirname $0)/..`
+  của script trỏ đúng `harness-ensure-patches.sh` bản ổ trong), **so sha256 hai bản và DỪNG nếu lệch**,
+  rồi sinh + `unload/load` cả 2 plist trỏ vào bản ổ trong. KHÔNG copy tay: bản trong `$HOME` là bản
+  sao, sửa repo rồi chạy lại installer.
+  Template tham chiếu trong repo: `.dhs-setup/fpt-harness-package/mac/site.meetflowai.*.plist`
+  (bản sao của plist thật ngoài phần comment).
 - **Icon harness = hình Culi** (`patches/culi-icon.png` 512×512) cho `favicon.png`, `favicon.svg`
   (SVG nhúng PNG) và `brand-mark.png` (icon trong sidebar); logo FlowTech có chữ vẫn dùng cho
   hero/login (`brand-logo.png`).

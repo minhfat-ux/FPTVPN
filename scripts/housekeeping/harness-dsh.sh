@@ -32,7 +32,10 @@ echo "== DSH housekeeping (days=$DAYS apply=$APPLY) =="
 BEFORE=$(du -sk "$DSH_HOME" 2>/dev/null | awk '{print $1}')
 
 # 1) Phiên cũ: xoá cả thư mục phiên (mỗi phiên là 1 thư mục chứa session.jsonl.zstd).
-mapfile -t OLD_SESSIONS < <(find "$DSH_HOME/sessions" -name "session.jsonl.zstd" -mtime "+$DAYS" -print 2>/dev/null)
+#    KHÔNG dùng `mapfile`: LaunchAgent chạy `/bin/bash` = bash 3.2 (macOS) không có mapfile ⇒ lớp dự
+#    phòng tuần chết thêm lần nữa dù đã sửa TCC (`mapfile: command not found`, exit 127).
+OLD_SESSIONS=()
+while IFS= read -r f; do OLD_SESSIONS+=("$f"); done < <(find "$DSH_HOME/sessions" -name "session.jsonl.zstd" -mtime "+$DAYS" -print 2>/dev/null)
 SESS_BYTES=0
 for f in "${OLD_SESSIONS[@]:-}"; do
   [ -n "$f" ] || continue
@@ -48,7 +51,8 @@ if [ "$APPLY" = "1" ]; then
 fi
 
 # 2) Thư mục sao lưu sessions.* của đợt sửa lỗi (chỉ những cái cũ).
-mapfile -t OLD_BACKUPS < <(find "$DSH_HOME" -maxdepth 1 -type d -name "sessions.*" -mtime "+$DAYS" -print 2>/dev/null)
+OLD_BACKUPS=()
+while IFS= read -r d; do OLD_BACKUPS+=("$d"); done < <(find "$DSH_HOME" -maxdepth 1 -type d -name "sessions.*" -mtime "+$DAYS" -print 2>/dev/null)
 BK_BYTES=0
 for d in "${OLD_BACKUPS[@]:-}"; do
   [ -n "$d" ] || continue
@@ -64,7 +68,8 @@ if [ "$APPLY" = "1" ]; then
 fi
 
 # 3) File tạm trong storages (ghi dở, cũ hơn 1 ngày).
-mapfile -t OLD_TMP < <(find "$DSH_HOME/storages" -maxdepth 1 -name ".*tmp" -mtime +1 -print 2>/dev/null)
+OLD_TMP=()
+while IFS= read -r f; do OLD_TMP+=("$f"); done < <(find "$DSH_HOME/storages" -maxdepth 1 -name ".*tmp" -mtime +1 -print 2>/dev/null)
 echo "  • file tạm storages: ${#OLD_TMP[@]} file"
 if [ "$APPLY" = "1" ]; then
   for f in "${OLD_TMP[@]:-}"; do
