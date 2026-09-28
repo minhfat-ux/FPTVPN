@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "Tra loi truc tiep 2 tin cua owner (bus #542 + #544) - do lai THAT ca 2 link truoc khi tra loi: (1) FPT Play cho TV: https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-ottbox.xapk (ban da cai tren TV, 90.167.841 B) + ban gop 1 file .../FPTPlay-TV-7.34.13-universal.apk (65.367.336 B) - chi tiet + bang chung o T-20260928-01 / docs/TG-VIBECODE-FPT-PLAY-TV-APK.md; (2) VPNFlow ban TV cho KHACH: https://meetflowai.site/dl/VPNFlow-tv-latest.apk va https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk (host khach TQ), da co chip 'Android TV (APK)' tren trang chu 5 ngon ngu (viec T-20260928-02). CMD do lai: curl -sI https://meetflowai.site/dl/VPNFlow-tv-latest.apk => HTTP/2 200, content-length 113423049, content-type application/vnd.android.package-archive; node fetch https://meetflowai.site/ => 200, 34581 byte, co chuoi 'Android TV (APK)' + href t1.meetflowai.site/dl/VPNFlow-tv-latest.apk. KQ: tra loi owner qua bus (kind=report) voi day du 2 nhom link + cach cai.",
+ "actor": "win",
+ "at": "2026-09-28T15:20:58.029Z"
+}
