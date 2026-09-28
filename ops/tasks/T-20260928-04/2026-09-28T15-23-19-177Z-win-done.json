@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "Da tra loi owner bang tin bus #549 (kind=report, to=owner, 28/09 15:22Z) - gom ca #530/#542/#544/#545. NOI DUNG: (1) FPT Play ban da cai: https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-ottbox.xapk (90.167.841 B, sha256 ac57bde7..., net.fptplay.ottbox 7.34.13/4394, 32-bit armeabi-v7a; cach cai adb install-multiple / SAI / APKPure); (2) ban gop 1 file: https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-universal.apk (65.367.336 B, sha256 71d0447f..., ky lai CN=FPT Play TV Sideload, chua test TV, TV co ban goc phai go truoc); (3) VPNFlow ban TV cho khach: https://meetflowai.site/dl/VPNFlow-tv-latest.apk va https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk (113.423.049 B, co chip 'Android TV (APK)' tren trang chu). CANH BAO DA NEU RO: FPT Play la app cua FPT (khong phai san pham cua minh) => phat cho khach la phat tan app ban quyen, rui ro khieu nai/go khoi ten mien minh; de xuat cho khach tai tu nguon chinh thuc (CH Play / fptplay.vn) va moi lam trang huong dan thay vi host file. CMD kiem chung: ssh node-2 sha256sum /var/www/flowvpn/dl/tv/*  + curl tai THAT qua URL cong khai (HTTP 200, dung content-length, bam lai khop); node fetch https://meetflowai.site/ thay chuoi 'Android TV (APK)'. Tai lieu: docs/TG-VIBECODE-FPT-PLAY-TV-APK.md (commit 1c8ea7c).",
+ "actor": "win",
+ "at": "2026-09-28T15:23:19.177Z"
+}
