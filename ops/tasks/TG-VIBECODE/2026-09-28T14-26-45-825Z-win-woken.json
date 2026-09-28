@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-28T14:26:45.826Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: publish bản cài đã work trên tv xiaomi lên website",
+ "via": "dsh --profile headless \"{prompt}\""
+}
