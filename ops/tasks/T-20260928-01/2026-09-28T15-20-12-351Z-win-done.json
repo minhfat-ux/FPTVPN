@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=1c8ea7c (origin/flowgpt: docs/TG-VIBECODE-FPT-PLAY-TV-APK.md + ops/_scratch/tv-upload.mjs). LINK PHAT: (1) https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-ottbox.xapk = BAN DA CAI LEN TV (XAPK nguyen ban; net.fptplay.ottbox 7.34.13/4394; 90.167.841 B; sha256 ac57bde7996fb946511591341e3dd43ba883a3ba7ba1cc58a499b6a4b2f6129c - khop byte voi file goc tren may WIN); (2) https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-universal.apk = ban GOP 1 file (65.367.336 B; sha256 71d0447f776a64e933fc113ec7d972c11650693c0e14fac2a3ce31e541e8413c; ky lai CN=FPT Play TV Sideload; CHUA test tren TV, TV da co ban goc phai go truoc). CMD: node ops/_scratch/tv-upload.mjs <file> <remote> 1 6 (chia 1MB, 6 scp SONG SONG + resume; do that: 1 ket noi ~31 KB/s, 6 ket noi ~200 KB/s => 90MB ~6 phut) -> sha256sum tren node-2 -> curl tai THAT qua URL cong khai tu node-2. KQ: ca 2 URL HTTP 200 + content-length khop + tai lai bam sha256 KHOP; file o /var/www/flowvpn/dl/tv/ (caddy:caddy 644). Luu y da phat hien: /dl/* tro root /var/www/flowvpn (khong phai /var/www/dl).",
+ "actor": "win",
+ "at": "2026-09-28T15:20:12.352Z"
+}
