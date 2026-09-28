@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-28T15:10:10.908Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: đã cho link cài fpt play và vpnflow cho xiaomi lên chưa?",
+ "via": "dsh --profile headless \"{prompt}\""
+}
