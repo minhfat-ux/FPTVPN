@@ -5006,6 +5006,26 @@ app.post("/v1/admin/users/:id/subscription", requireAdminAuth, async (req, res) 
   }
 });
 
+// Reset hạn mức = ĐẶT LẠI (hôm nay + days), KHÔNG cộng dồn — chủ dự án chốt 27/09/2026.
+// Dùng authStore.resetSubscription (khác grantSubscription ở chỗ không cộng hạn cũ).
+app.post("/v1/admin/users/:id/reset-quota", requireAdminAuth, async (req, res) => {
+  try {
+    const rawDays = req.body?.days;
+    const days = rawDays === null ? null : Number(rawDays ?? 30);
+    const user = await authStore.resetSubscription(req.params.id, {
+      productId: String(req.body?.productId ?? "admin.reset").slice(0, 60),
+      days,
+    });
+    console.log(
+      `admin users: reset quota ${req.params.id} -> ` +
+        `${days == null || days <= 0 ? "lifetime" : `${days}d`}`,
+    );
+    res.json({ user });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
 app.post("/v1/admin/users/:id/revoke", requireAdminAuth, async (req, res) => {
   try {
     const user = await authStore.revokeUser(req.params.id);
