@@ -184,5 +184,25 @@ bash scripts/harness-patches-install.sh         # cài bản chạy nền vào �
   (nơi không còn trường này) ⇒ tiêu đề tab + màn hình boot vẫn mang brand DeepSeek/HARNESS dù vòng tự
   vá in "OK". Nếu vẫn thấy WARN `khong khop` trong log: DSH đổi cấu trúc bundle — kiểm bằng
   `bash scripts/harness-ensure-patches.sh --check` (phải exit 1) rồi cập nhật regex.
+- **WARN chỉ dành cho trạng thái thứ ba** (audit 28/09/2026, O1): mỗi mục brand có 3 trạng thái —
+  *GỐC* (đi vá, in `PATCHED`) · *ĐÃ VÁ* (im lặng `OK (already applied)`) · *KHÁC CẢ HAI* (giá trị lạ ⇒
+  `WARN` rõ, kèm giá trị đọc được). Trước đây bản đã vá vẫn in WARN giả (`khong thay 'const productTitle
+  = "DeepSeek Harness";'`, `khong tim thay block mark cua brand plugin`, `khong thay slot mark cua hero`)
+  ⇒ người đọc quen bỏ qua WARN, đúng lớp lỗi "vá mà không ai biết". Nay trên bản đã vá chỉ còn **đúng 1
+  WARN thật**: `khong thay cot grid cua headline (khong co ca ban goc lan ban da va)` — chuỗi CSS
+  `grid-template-columns:34px auto auto` không tồn tại trong DSH `0.1.5-rc.1` (kiểm cả file gốc
+  `.fpt.bak` lẫn file hiện tại), tức mục đó **không áp dụng được** cho bản này; WARN này là tín hiệu
+  để cập nhật script khi DSH đổi cấu trúc, KHÔNG được xoá thành im lặng.
+- ⚠️ **Cảnh báo fail-closed của `boot_ok()` — đọc trước khi nâng cấp DSH (O2)**: `--check` coi màn hình
+  boot là ĐẠT chỉ khi bundle `dist/assets/index-*.js` **không còn** `wordmark=…"HARNESS"` **và** có ảnh
+  boot `/favicon.png` do patch gắn. Nếu một bản DSH tương lai **bỏ hẳn** wordmark "HARNESS" (hoặc dựng
+  màn hình boot theo cách khác) thì không còn gì để vá ⇒ `--check` **đỏ vĩnh viễn** dù theme/brand vẫn
+  đúng. Đây là **chủ ý**: ồn còn hơn im lặng (đúng lớp lỗi 21/09/2026) — **KHÔNG được nới cổng thành
+  im lặng**. Cách xử khi gặp: (1) xác nhận DSH đổi cấu trúc thật —
+  `grep -c 'HARNESS' <bundle>` = 0 và log patch có `WARN khong khop: boot wordmark …`;
+  (2) cập nhật `BOOT_WORDMARK_RE` + marker trong `.dhs-setup/fpt-harness-package/patches/apply-fpt-patches.py`
+  và `apply-flowtech-brand.py` **và** `BOOT_MARKER` trong `scripts/harness-ensure-patches.sh` cho khớp
+  cấu trúc mới; (3) nếu DSH thật sự không còn wordmark, thay marker cổng bằng thứ **tương đương còn
+  kiểm được** (vẫn phải xác minh được thật), tuyệt đối không bỏ kiểm.
 - Sau khi vá: khởi động lại `dsh web` rồi **Cmd+Shift+R**; nếu icon trên tab vẫn cũ, đóng/mở lại tab
   (Chrome cache favicon rất dai).

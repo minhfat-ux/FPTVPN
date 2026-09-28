@@ -82,26 +82,49 @@ def patch_regex(path, pattern, replacement, label, marker=None):
     log("  PATCHED: %s" % label)
     return True
 
+TITLE_RE = re.compile(r'const productTitle = "([^"]*)";')
+# Giá trị của `productTitle` cho thấy mục này ĐÃ VÁ: bản FPT này hoặc brand cuối (do
+# apply-flowtech-brand.py ghi). Gặp các giá trị này ⇒ im lặng "OK (already applied)", KHÔNG WARN.
+TITLE_APPLIED = ("FPT China Harness", "HarnessFlow")
+
 def patch_product_title(NM, old, new):
     """Tiêu đề tab runtime: DSH 0.1.5+ đọc `productTitle` trong dsh-client-ui-layout (bản cũ ở
-    dsh-client-ui-renderer) -> vá mọi package đang chứa nó.
+    dsh-client-ui-renderer). Ba trạng thái cho từng file:
 
-    Bản cũ chỉ vá renderer (không còn `productTitle` ở đó) nên no-op im lặng. Không thấy ở đâu ⇒ WARN.
+      GỐC   `const productTitle = <old>;`         -> vá thành <new>
+      ĐÃ VÁ `= <new>` hoặc = tên brand cuối        -> im lặng "OK (already applied)"
+      KHÁC  = giá trị lạ, hoặc không thấy dòng nào -> WARN rõ (KHÔNG nới thành im lặng)
+
+    Bản cũ chỉ nhận diện đúng chuỗi gốc nên trên bản ĐÃ vá (giá trị = brand cuối) vẫn in WARN giả
+    "khong thay ...DeepSeek Harness..." — đúng loại nhiễu làm người đọc quen bỏ qua WARN.
     """
     hit = []
+    problems = []
+    m_old = TITLE_RE.search(old)          # `old` truyền vào là CẢ dòng; so sánh theo GIÁ TRỊ
+    old_val = m_old.group(1) if m_old else old
     for pkg in ("dsh-client-ui-layout", "dsh-client-ui-renderer"):
         p = os.path.join(NM, pkg, "lib", "client.js")
         if not os.path.isfile(p):
             continue
         s = open(p, encoding="utf-8").read()
-        if new in s:
-            log("  OK (already applied): productTitle %s" % pkg)
+        m = TITLE_RE.search(s)
+        if not m:
+            continue
+        cur = m.group(1)
+        if cur == new or cur in TITLE_APPLIED:
+            log("  OK (already applied): productTitle %s = %r" % (pkg, cur))
             hit.append(pkg)
-        elif old in s:
+        elif cur == old_val:
             if patch_file(p, old, new):
                 hit.append(pkg)
-    if not hit:
-        log("  WARN: khong thay %r trong dsh-client-ui-layout/renderer — tieu de tab co the van la ban goc" % old)
+            else:
+                problems.append("%s (giá trị %r nhưng vá không thành công)" % (pkg, cur))
+        else:
+            problems.append("%s (giá trị lạ %r)" % (pkg, cur))
+    if not hit and not problems:
+        problems.append("khong thay `const productTitle = ...` trong dsh-client-ui-layout/renderer")
+    for pr in problems:
+        log("  WARN: productTitle — %s; tieu de tab co the sai brand" % pr)
     return bool(hit)
 
 def write_file(path, content):
