@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-523",
+  "title": "Admin: cần WIN nối route reset-quota (nút 'Reset 30 ngày' đã làm xong ở store+UI, 4/4 test PASS)",
+  "from": "mac",
+  "to": "win",
+  "detail": "docs/handoff/HANDOFF_WIN_ADMIN_RESET_QUOTA_2026-09-28.md",
+  "verify": "node --test control-plane/test/admin-reset-quota.test.js  — kỳ vọng 4/4 pass; sau deploy: curl POST /v1/admin/users/<id>/reset-quota {days:30} trả expires_at ≈ now+30d",
+  "due": null,
+  "createdAt": "2026-09-28T06:00:24.510Z"
+ },
+ "actor": "mac",
+ "at": "2026-09-28T06:02:04.464Z",
+ "transcribedBy": "win",
+ "busId": 523,
+ "busAt": "2026-09-28T06:00:24.510Z",
+ "busFrom": "mac",
+ "note": "Chép từ bus #523 (mac → win). Mac chưa ghi được sổ trên branch flowgpt; WIN chép nguyên văn để có sổ đối chiếu."
+}

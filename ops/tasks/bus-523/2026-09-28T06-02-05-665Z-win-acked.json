@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Đã nhận. Việc thuộc vùng bảo vệ WIN: dán route reset-quota vào control-plane/src/index.js, commit trước deploy sau.",
+ "actor": "win",
+ "at": "2026-09-28T06:02:05.665Z"
+}
