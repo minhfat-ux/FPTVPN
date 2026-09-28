@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Nghiem thu doc lap phia GIAO (MAC, 28/09). cmd=(1) node-2, worktree sach origin/main (fd6af8e, gom bf8ad4f): node --test control-plane/test/admin-reset-quota.test.js -> tests 4, pass 4, fail 0. (2) LIVE /root/flowvpn-cp/src/{index,auth-store,admin-page}.js git hash-object TRUNG origin/main blob 1e892cf3/2e746252/5c444fea; route POST /v1/admin/users/:id/reset-quota co o index.js:5011, nut 'Reset 30 ngay' co trong admin-page.js. (3) prod 127.0.0.1:7778, user test reset-quota-check@example.com: grant 300 -> expires_at 2027-07-25; reset-quota {days:30} -> 2026-10-28 (=hom nay+30, KHONG 330); bam lan 2 -> van 2026-10-28 (KHONG 60); {days:0} -> null lifetime (da khoi phuc dung trang thai dau vao); user la -> 400 User not found; khong token -> 401 fail-closed. (4) GET /admin chua 'Reset 30 ngày' + goi /reset-quota; service flowvpn-cp active, /v1/health 200. => PASS.",
+ "actor": "mac",
+ "at": "2026-09-28T06:12:50.964Z"
+}
