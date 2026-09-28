@@ -80,6 +80,54 @@ def sub_all(path, pairs, label):
     return write_text(path, out, label)
 
 
+def patch_regex(path, pattern, replacement, label, marker=None):
+    """Vá bằng regex (bền với tên hàm đã minify).
+
+    marker: chuỗi cho thấy bản vá đã áp từ trước -> OK, không vá lại.
+    Không khớp và không có marker: WARN rõ ràng, KHÔNG im lặng bỏ qua (bản cũ hardcode
+    `Jt(Gt.wordmark,...)` nên sau khi DSH minify lại là no-op im lặng).
+    """
+    if not os.path.isfile(path):
+        log("  MISSING: %s" % path)
+        return False
+    s = open(path, encoding="utf-8").read()
+    if marker and marker in s:
+        log("  OK (already applied): %s" % label)
+        return False
+    m = re.search(pattern, s)
+    if not m:
+        log("  WARN khong khop: %s — pattern: %s (ban DSH khac? xem %s)" % (label, pattern, path))
+        return False
+    out = s[:m.start()] + m.expand(replacement) + s[m.end():]
+    return write_text(path, out, label)
+
+
+def patch_product_title(NM, new_name):
+    """Tiêu đề tab runtime: DSH 0.1.5+ đọc `productTitle` trong dsh-client-ui-layout (bản cũ ở
+    dsh-client-ui-renderer) -> đổi brand ở mọi package đang chứa nó. Không thấy ở đâu ⇒ WARN."""
+    olds = ("FPT China Harness", "DeepSeek Harness", "FlowTech Harness")
+    new_line = 'const productTitle = "%s";' % new_name
+    hit = []
+    for pkg in ("dsh-client-ui-layout", "dsh-client-ui-renderer"):
+        p = os.path.join(NM, pkg, "lib", "client.js")
+        if not os.path.isfile(p):
+            continue
+        s = open(p, encoding="utf-8").read()
+        if new_line in s:
+            log("  OK (already applied): productTitle %s" % pkg)
+            hit.append(pkg)
+            continue
+        out = s
+        for old in olds:
+            out = out.replace('const productTitle = "%s";' % old, new_line)
+        if out != s:
+            write_text(p, out, "productTitle %s" % pkg)
+            hit.append(pkg)
+    if not hit:
+        log("  WARN: khong thay `const productTitle = ...` trong dsh-client-ui-layout/renderer — tieu de tab co the van la ban goc")
+    return bool(hit)
+
+
 def write_bytes(path, content, label):
     if os.path.isfile(path) and open(path, "rb").read() == content:
         log("  OK (already applied): %s" % label)
@@ -153,13 +201,18 @@ PROVIDER_PAIRS = [
     ("DeepSeek \u641c\u7d22\u63d0\u4f9b\u65b9\u3002", "FlowTech \u641c\u7d22\u63d0\u4f9b\u65b9\u3002"),
 ]
 
-BOOT_WORDMARK_FPT = (
-    'this.wordmark=Jt(Gt.wordmark),this.wordmark.appendChild(function(){const e=document.createElement("img");'
-    'e.src="/favicon.png";e.alt="FPT China Harness";e.style.width="80px";e.style.height="80px";'
-    'e.style.objectFit="contain";e.style.display="block";e.style.margin="0 auto";return e}())'
-)
-BOOT_WORDMARK_NEW = BOOT_WORDMARK_FPT.replace('alt="FPT China Harness"', 'alt="%s"' % BRAND_NAME)
-BOOT_WORDMARK_NEW = BOOT_WORDMARK_NEW  # dùng chung cho cả 2 trạng thái đầu vào
+BOOT_WORDMARK_RE = r'this\.wordmark=(\w+)\((\w+)\.wordmark,"HARNESS"\)'
+BOOT_WORDMARK_MARKER = ('wordmark.appendChild(function(){const e=document.createElement("img");'
+                        'e.src="/favicon.png"')
+
+
+def boot_wordmark_repl(alt):
+    """Giữ nguyên tên hàm/variable minify của bundle hiện tại (\1, \2) — KHÔNG hardcode như bản cũ."""
+    return (r'this.wordmark=\1(\2.wordmark),this.wordmark.appendChild(function(){'
+            r'const e=document.createElement("img");e.src="/favicon.png";'
+            r'e.alt="%s";e.style.width="80px";e.style.height="80px";'
+            r'e.style.objectFit="contain";e.style.display="block";e.style.margin="0 auto";'
+            r'return e}())' % alt)
 
 
 def main():
@@ -210,12 +263,9 @@ def main():
     if os.path.isfile(mark_png):
         write_bytes(os.path.join(DIST, "brand-mark.png"), open(mark_png, "rb").read(), "dist/brand-mark.png")
 
-    # 2) renderer product title
-    sub_all(os.path.join(NM, "dsh-client-ui-renderer", "lib", "client.js"),
-            [('const productTitle = "FPT China Harness";', 'const productTitle = "%s";' % BRAND_NAME),
-             ('const productTitle = "DeepSeek Harness";', 'const productTitle = "%s";' % BRAND_NAME),
-             ('const productTitle = "FlowTech Harness";', 'const productTitle = "%s";' % BRAND_NAME)],
-            "renderer productTitle")
+    # 2) product title: tiêu đề tab runtime — DSH 0.1.5+ dựng `document.title` từ
+    #    `const productTitle = "..."` trong dsh-client-ui-layout (bản cũ: dsh-client-ui-renderer)
+    patch_product_title(NM, BRAND_NAME)
 
     # 3) settings: announcement text + search provider description
     sub_all(os.path.join(NM, "dsh-client-ui-settings-models", "lib", "client.js"),
@@ -320,11 +370,15 @@ def main():
 
     # 6) boot/loading wordmark in the hashed main bundle
     for bundle in glob.glob(os.path.join(DIST, "assets", "index-*.js")):
+        label = "boot wordmark %s" % os.path.basename(bundle)
+        # ảnh boot do apply-fpt-patches.py gắn (alt="FPT China Harness") -> đổi alt sang brand hiện tại
         sub_all(bundle,
                 [('alt="FPT China Harness"', 'alt="%s"' % BRAND_NAME),
-                 ('alt="FlowTech Harness"', 'alt="%s"' % BRAND_NAME),
-                 ('this.wordmark=Jt(Gt.wordmark,"HARNESS")', BOOT_WORDMARK_NEW)],
-                "boot wordmark %s" % os.path.basename(bundle))
+                 ('alt="FlowTech Harness"', 'alt="%s"' % BRAND_NAME)],
+                label)
+        # chưa vá (hoặc vá bằng bản cũ hardcode tên minify): vá bằng regex bền minify
+        patch_regex(bundle, BOOT_WORDMARK_RE, boot_wordmark_repl(BRAND_NAME),
+                    label + " (HARNESS -> anh Culi)", BOOT_WORDMARK_MARKER)
 
     log("Done. Restart DSH (Ctrl+C, then run `dsh web` again) and hard-refresh the browser.")
 

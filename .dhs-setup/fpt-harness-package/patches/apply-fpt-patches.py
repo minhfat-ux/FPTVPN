@@ -58,6 +58,52 @@ def patch_file(path, old, new, expect=None):
     log("  PATCHED: %s" % path)
     return True
 
+def patch_regex(path, pattern, replacement, label, marker=None):
+    """Như patch_file nhưng khớp bằng regex (bền với tên hàm đã minify).
+
+    marker: chuỗi cho thấy bản vá đã áp từ trước -> coi là OK, không vá lại.
+    Không khớp và không có marker: WARN rõ ràng, KHÔNG im lặng bỏ qua (đúng lỗi đã khiến màn hình
+    boot vẫn hiện "HARNESS" sau nâng cấp DSH vì bản cũ hardcode tên hàm minify).
+    """
+    if not os.path.isfile(path):
+        log("  MISSING: %s" % path)
+        return False
+    s = open(path, encoding="utf-8").read()
+    if marker and marker in s:
+        log("  OK (already applied): %s" % label)
+        return False
+    m = re.search(pattern, s)
+    if not m:
+        log("  WARN khong khop: %s — pattern: %s (ban DSH khac? xem %s)" % (label, pattern, path))
+        return False
+    if not os.path.exists(path + ".fpt.bak"):
+        shutil.copy2(path, path + ".fpt.bak")
+    open(path, "w", encoding="utf-8").write(s[:m.start()] + m.expand(replacement) + s[m.end():])
+    log("  PATCHED: %s" % label)
+    return True
+
+def patch_product_title(NM, old, new):
+    """Tiêu đề tab runtime: DSH 0.1.5+ đọc `productTitle` trong dsh-client-ui-layout (bản cũ ở
+    dsh-client-ui-renderer) -> vá mọi package đang chứa nó.
+
+    Bản cũ chỉ vá renderer (không còn `productTitle` ở đó) nên no-op im lặng. Không thấy ở đâu ⇒ WARN.
+    """
+    hit = []
+    for pkg in ("dsh-client-ui-layout", "dsh-client-ui-renderer"):
+        p = os.path.join(NM, pkg, "lib", "client.js")
+        if not os.path.isfile(p):
+            continue
+        s = open(p, encoding="utf-8").read()
+        if new in s:
+            log("  OK (already applied): productTitle %s" % pkg)
+            hit.append(pkg)
+        elif old in s:
+            if patch_file(p, old, new):
+                hit.append(pkg)
+    if not hit:
+        log("  WARN: khong thay %r trong dsh-client-ui-layout/renderer — tieu de tab co the van la ban goc" % old)
+    return bool(hit)
+
 def write_file(path, content):
     is_bytes = isinstance(content, bytes)
     try:
@@ -176,6 +222,21 @@ NEW_CRUMBS = """\t\tfunction displayCrumbs(listing, homeLabel) {
 \t\t\treturn listing.crumbs;
 \t\t}"""
 
+# -- boot wordmark (bundle đã minify) ------------------------------------
+# Bundle 0.1.5-rc.1: `this.wordmark=ot(rt.wordmark,"HARNESS")`. Tên hàm/variable minify đổi theo
+# từng bản build ⇒ khớp bằng regex và giữ lại đúng tên cũ (\1, \2 trong replacement).
+BOOT_WORDMARK_RE = r'this\.wordmark=(\w+)\((\w+)\.wordmark,"HARNESS"\)'
+BOOT_WORDMARK_MARKER = ('wordmark.appendChild(function(){const e=document.createElement("img");'
+                        'e.src="/favicon.png"')
+
+
+def boot_wordmark_repl(alt):
+    return (r'this.wordmark=\1(\2.wordmark),this.wordmark.appendChild(function(){'
+            r'const e=document.createElement("img");e.src="/favicon.png";'
+            r'e.alt="%s";e.style.width="80px";e.style.height="80px";'
+            r'e.style.objectFit="contain";e.style.display="block";e.style.margin="0 auto";'
+            r'return e}())' % alt)
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
@@ -215,9 +276,11 @@ def main():
     patch_file(os.path.join(DIST, "manifest.webmanifest"),
                '"type": "image/svg+xml"', '"type": "image/png"')
 
-    # 2) renderer product title
-    patch_file(os.path.join(NM, "dsh-client-ui-renderer", "lib", "client.js"),
-               'const productTitle = "DeepSeek Harness";', 'const productTitle = "FPT China Harness";')
+    # 2) product title: tiêu đề tab runtime. DSH 0.1.5+ dựng `document.title` từ
+    #    `const productTitle = "DeepSeek Harness";` trong **dsh-client-ui-layout** (không phải
+    #    dsh-client-ui-renderer như bản cũ) -> vá mọi package có nó, WARN nếu không thấy ở đâu.
+    patch_product_title(NM, 'const productTitle = "DeepSeek Harness";',
+                        'const productTitle = "FPT China Harness";')
 
     # 3) settings-models announcement (4 occurrences)
     p = os.path.join(NM, "dsh-client-ui-settings-models", "lib", "client.js")
@@ -278,12 +341,14 @@ def main():
     patch_file(os.path.join(NM, "dsh-client-ui-directory-picker-browse", "lib", "client.js"),
                OLD_CRUMBS, NEW_CRUMBS)
 
-    # 7b) boot/loading screen: replace the "HARNESS" wordmark with the Culi logo
-    # (the shell lives in the hashed main bundle dist/assets/index-*.js)
+    # 7b) boot/loading screen: thay chữ "HARNESS" bằng logo Culi
+    # (shell nằm trong bundle hash dist/assets/index-*.js)
+    # Bản cũ tìm literal `this.wordmark=Jt(Gt.wordmark,"HARNESS")`; bundle 0.1.5-rc.1 đã minify
+    # thành `this.wordmark=ot(rt.wordmark,"HARNESS")` nên không khớp và bỏ qua im lặng ⇒ màn hình
+    # boot vẫn hiện "HARNESS". Dùng regex + giữ nguyên tên hàm minify qua backref.
     for bundle in glob.glob(os.path.join(DIST, "assets", "index-*.js")):
-        patch_file(bundle,
-                   'this.wordmark=Jt(Gt.wordmark,"HARNESS")',
-                   'this.wordmark=Jt(Gt.wordmark),this.wordmark.appendChild(function(){const e=document.createElement("img");e.src="/favicon.png";e.alt="FPT China Harness";e.style.width="80px";e.style.height="80px";e.style.objectFit="contain";e.style.display="block";e.style.margin="0 auto";return e}())')
+        patch_regex(bundle, BOOT_WORDMARK_RE, boot_wordmark_repl("FPT China Harness"),
+                    "boot wordmark %s" % os.path.basename(bundle), BOOT_WORDMARK_MARKER)
 
     # 7c) rename the "Ungrouped" bucket label to "MeetFlowAI"
     ws = os.path.join(NM, "dsh-client-ui-workspace", "lib", "client.js")

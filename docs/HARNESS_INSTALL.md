@@ -137,16 +137,44 @@ Bộ tự vá (idempotent, tự backup `.fpt.bak`):
 
 ```bash
 bash scripts/harness-ensure-patches.sh          # kiểm tra + vá ngay (--check = chỉ kiểm, --notify = báo Telegram)
+bash scripts/harness-ensure-patches.sh --verify-install   # so sha256 repo ↔ bản cài trong $HOME (phải 10/10)
 bash scripts/harness-patches-install.sh         # cài bản chạy nền vào ổ trong + bật LaunchAgent
 ```
 
-- LaunchAgent `site.meetflowai.harness-patches` chạy **mỗi 15 phút** (`StartInterval=900`), tự vá lại
-  và nhắn Telegram khi vừa vá.
+- LaunchAgent `site.meetflowai.harness-patches` có **`WatchPaths`** trỏ vào `package.json` + thư mục
+  `dist` của DSH (và thư mục `node_modules/@deepseek-ai`) ⇒ **vá ngay khi DSH bị đổi/nâng cấp lúc máy
+  thức**. `StartInterval=900` (15 phút) chỉ còn là lớp dự phòng: launchd **gộp nhịp khi máy ngủ**
+  (audit 26/09/2026: 257 lần sleep, `runs` chỉ 8 từ 21/09), nên đừng tin "mỗi 15 phút".
+  WatchPaths chỉ ghi path đang tồn tại lúc cài (launchd từ chối nạp job có path không tồn tại).
+- Tự kiểm lệch repo ↔ bản cài: `--verify-install` so **sha256 từng file** (script + `patches/*`);
+  in `N/N` và exit ≠ 0 nếu thiếu/khác. Sửa patch trong repo mà quên `harness-patches-install.sh` ⇒
+  cổng này báo ngay (bản ổ trong vẫn là bản CŨ ⇒ LaunchAgent vá bằng code cũ).
 - **Vì sao bản cài nằm ở `~/.local/share/harness-patches`**: launchd bị TCC chặn đọc ổ ngoài
   (`/Volumes/BIWIN`) — agent trỏ thẳng vào repo sẽ chết im lặng (`Operation not permitted`). Sau khi
   sửa script/patch trong repo phải chạy lại `harness-patches-install.sh` để đồng bộ bản ổ trong.
+- ⚠️ **Việc còn lại (chưa xử)**: lớp dự phòng tuần `site.meetflowai.dsh-housekeeping` trỏ
+  `/Volumes/BIWIN/SourcesCode/PrivateVPN/scripts/housekeeping/harness-dsh.sh` ⇒ **chết vì TCC**
+  (đã kiểm chứng bằng một LaunchAgent tạm: `head: …/harness-dsh.sh: Operation not permitted`, trong
+  khi cùng lúc đọc được bản trên ổ trong; `launchctl print` cho `runs = 0`). Cách xử: copy
+  `scripts/housekeeping/harness-dsh.sh` sang ổ trong (hoặc trỏ plist vào bản trong `$HOME`) rồi
+  `launchctl bootout gui/501/site.meetflowai.dsh-housekeeping && launchctl bootstrap gui/501 <plist>`.
+  Thuộc phạm vi agent chính (ngoài t4: `scripts/housekeeping/**` out of scope; plist housekeeping
+  không nằm trong inScope).
 - **Icon harness = hình Culi** (`patches/culi-icon.png` 512×512) cho `favicon.png`, `favicon.svg`
   (SVG nhúng PNG) và `brand-mark.png` (icon trong sidebar); logo FlowTech có chữ vẫn dùng cho
   hero/login (`brand-logo.png`).
+- **Cổng `--check` là FAIL-CLOSED** (audit 26/09/2026): không thấy `DSH_ROOT`, thiếu asset icon trong
+  `PATCH_DIR`, hay không xác minh được một marker nào ⇒ tính là **THIẾU** (exit ≠ 0), **không bao giờ**
+  in "OK" khi chưa kiểm chứng thật (bản cũ trả `return 0` khi thiếu `DSH_ROOT`/thiếu asset nên báo OK giả).
+  `--check` kiểm: title HTML, brand-official mark, theme `#33C773`, sidebar logo 72px, icon Culi
+  (**giải base64 trong `favicon.svg` rồi so sha256 với `culi-icon.png`**, không chỉ grep chuỗi "culi"),
+  **tiêu đề tab runtime** (`const productTitle = "HarnessFlow";` ở `dsh-client-ui-layout`) và
+  **wordmark màn hình boot** (bundle `dist/assets/index-*.js` không còn `"HARNESS"` + có ảnh boot Culi).
+- **Patch brand khớp bằng regex bền với tên hàm đã minify** và **WARN rõ ràng khi không khớp** (không
+  no-op im lặng): bản cũ hardcode `this.wordmark=Jt(Gt.wordmark,"HARNESS")` nên bundle 0.1.5-rc.1
+  (`ot(rt.wordmark,"HARNESS")`) không khớp, và bản cũ vá `productTitle` ở `dsh-client-ui-renderer`
+  (nơi không còn trường này) ⇒ tiêu đề tab + màn hình boot vẫn mang brand DeepSeek/HARNESS dù vòng tự
+  vá in "OK". Nếu vẫn thấy WARN `khong khop` trong log: DSH đổi cấu trúc bundle — kiểm bằng
+  `bash scripts/harness-ensure-patches.sh --check` (phải exit 1) rồi cập nhật regex.
 - Sau khi vá: khởi động lại `dsh web` rồi **Cmd+Shift+R**; nếu icon trên tab vẫn cũ, đóng/mở lại tab
   (Chrome cache favicon rất dai).
