@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bản RIÊNG cho Android TV (Xiaomi/Redmi TV — đo trên MiTV-ASTP0, Android 9).
+  Chủ dự án yêu cầu tách riêng để KHÔNG ảnh hưởng bản điện thoại đã stable (23/09/2026).
+
+  Khác biệt so với bản điện thoại:
+   - Không yêu cầu màn hình cảm ứng (TV chỉ có điều khiển từ xa) — thiếu khai báo này Google Play
+     coi là app điện thoại và một số TV ẩn khỏi launcher.
+   - Thêm LEANBACK_LAUNCHER để app hiện trên launcher của Android TV (Xiaomi PatchWall vẫn hiện cả
+     LAUNCHER thường, nên giữ nguyên intent-filter ở manifest chính).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+
+    <application>
+        <activity
+            android:name="com.privatevpn.app.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.VPNFlow">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

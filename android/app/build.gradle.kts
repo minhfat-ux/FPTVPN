@@ -41,7 +41,7 @@ android {
         applicationId = "com.privatevpn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 34
+        versionCode = 35
         versionName = "1.4.3"
     }
 
@@ -72,10 +72,28 @@ android {
         create("modern") {
             dimension = "androidLevel"
             minSdk = 26
+            buildConfigField("boolean", "TV_FLAVOR", "false")
         }
         create("legacy") {
             dimension = "androidLevel"
             minSdk = 24
+            buildConfigField("boolean", "TV_FLAVOR", "false")
+        }
+        /**
+         * Bản RIÊNG cho **Android TV** (Xiaomi/Redmi TV, đo trên MiTV-ASTP0 Android 9).
+         *
+         * Vì sao tách riêng: chủ dự án yêu cầu *"build riêng một nhánh cho Xiaomi TV, đừng ảnh hưởng
+         * nhánh cũ đã stable"* (23/09/2026). Bản này cài SONG SONG (`com.privatevpn.app.tv`, thêm
+         * `.dev` cho build debug) nên mọi thay đổi/thử nghiệm cho TV không chạm tới APK khách đang dùng.
+         * Khác biệt so với `modern`: khai báo thêm LEANBACK_LAUNCHER + bỏ yêu cầu màn hình cảm ứng
+         * (xem `src/tv/AndroidManifest.xml`), và code có thể rẽ nhánh theo `BuildConfig.TV_FLAVOR`.
+         */
+        create("tv") {
+            dimension = "androidLevel"
+            minSdk = 26
+            applicationIdSuffix = ".tv"
+            versionNameSuffix = "-tv"
+            buildConfigField("boolean", "TV_FLAVOR", "true")
         }
     }
 

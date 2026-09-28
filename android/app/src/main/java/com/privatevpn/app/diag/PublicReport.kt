@@ -48,18 +48,35 @@ object PublicReport {
     }
 
     /**
-     * Ghi [text] vào Downloads/[FILE_NAME] (ghi đè bản cũ).
+     * Ghi [text] vào Downloads/[FILE_NAME] (ghi đè bản cũ) **và** vào thư mục ngoài của app
+     * (`Android/data/<pkg>/files/vpnflow-report.txt`).
      *
-     * @return đường dẫn hiển thị nếu ghi được, null nếu không (mọi lỗi đều bị nuốt: đây chỉ là
+     * Ghi HAI chỗ vì mỗi đời Android cho lấy một kiểu: TV Xiaomi đang chạy **Android 9** thì thư mục
+     * `Android/data` vẫn mở với app quản lý file (từ Android 11 mới bị chặn), còn máy mới thì chỉ lấy
+     * được qua Downloads. Thà thừa một bản còn hơn không có bằng chứng nào.
+     *
+     * @return mô tả nơi đã ghi được, null nếu không ghi được chỗ nào (mọi lỗi đều bị nuốt: đây chỉ là
      *   đường lấy bằng chứng, không được làm hỏng việc chính của app).
      */
-    fun write(context: Context, text: String): String? = runCatching {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            writeViaMediaStore(context, text)
-        } else {
-            writeLegacy(text)
+    fun write(context: Context, text: String): String? {
+        val done = mutableListOf<String>()
+        // (1) Thư mục ngoài của app — không cần quyền trên MỌI đời Android.
+        runCatching {
+            val dir = context.getExternalFilesDir(null) ?: context.filesDir
+            File(dir, FILE_NAME).writeText(text)
+            done += dir.absolutePath
         }
-    }.getOrNull()
+        // (2) Downloads công khai — cách lấy tiện nhất khi app quản lý file bị chặn xem Android/data.
+        runCatching {
+            val where = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                writeViaMediaStore(context, text)
+            } else {
+                writeLegacy(text)
+            }
+            if (where != null) done += where
+        }
+        return done.joinToString(" | ").ifEmpty { null }
+    }
 
     private fun writeViaMediaStore(context: Context, text: String): String? {
         val resolver = context.contentResolver
