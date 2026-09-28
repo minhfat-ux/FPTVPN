@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260928-03",
+  "title": "TG /vibecode: xac nhan link cai ban TV (FPT Play + VPNFlow) + link down cho khach",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguon: bus #542 (owner, 28/09 15:10Z: 'da cho link cai fpt play va vpnflow cho xiaomi len chua?') + #544 (owner, 15:16Z: 'link down cho khach ban tv la the nao?'). Tra loi: (1) FPT Play cho TV = https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-ottbox.xapk (ban da cai, 90.167.841 B, sha256 ac57bde7...) + ban gop 1 file https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-universal.apk (T-20260928-01); (2) VPNFlow ban TV cho khach = https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk, da co chip 'Android TV (APK)' tren trang chu (T-20260928-02, da do doc lap: HTTP 200, content-length 113.423.049).",
+  "verify": "curl -sI https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-ottbox.xapk; curl -sI https://meetflowai.site/dl/VPNFlow-tv-latest.apk; curl -s https://meetflowai.site/ | grep -c 'Android TV (APK)'",
+  "due": "2026-09-28",
+  "createdAt": "2026-09-28T15:24:00.000Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-28T15:24:00.000Z",
+ "transcribedBy": "win",
+ "busId": 544,
+ "busAt": "2026-09-28T15:16:58.129Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #542 + #544 (owner → win). #542 là nhắc lại việc đã có trong sổ (T-20260928-01 FPT Play + T-20260928-02 VPNFlow TV); #544 hỏi link down cho KHÁCH bản TV. Gộp 2 tin vào 1 mã vì cùng một câu trả lời (link cài TV), tránh mở nhiều mã cho cùng nội dung."
+}
