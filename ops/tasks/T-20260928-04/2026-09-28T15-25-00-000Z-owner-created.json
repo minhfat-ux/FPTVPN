@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260928-04",
+  "title": "TG /vibecode: gui link down ban cai FPT Play de cho khach tu download",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguon: bus #545 (owner, 28/09 15:19Z: 'gui cho anh link down ban cai fpt play de anh cho khach tu download nhe'). DA TRA LOI bang tin bus #549 (kind=report, to=owner): link .xapk (ban da cai, 90.167.841 B) + link universal (65.367.336 B) + link VPNFlow TV cho khach; kem CANH BAO: FPT Play la app cua FPT, phat lai cho khach la phat tan app ban quyen (khac VPNFlow cua minh) => de xuat cho khach tai tu nguon chinh thuc (CH Play / fptplay.vn) va moi lam trang huong dan thay vi host file.",
+  "verify": "curl -sI https://meetflowai.site/dl/tv/FPTPlay-TV-7.34.13-ottbox.xapk => 200 + content-length 90167841; tin bus #549 co trong hang doi owner",
+  "due": "2026-09-28",
+  "createdAt": "2026-09-28T15:25:00.000Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-28T15:25:00.000Z",
+ "transcribedBy": "win",
+ "busId": 545,
+ "busAt": "2026-09-28T15:19:00.000Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #545 (owner → win). Cùng chủ đề link TV với T-20260928-01/03 nhưng khác đích dùng (cho KHÁCH tải), nên mở mã riêng để ghi rõ đã trả lời + đã nêu rủi ro bản quyền."
+}
