@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260928-01",
+  "title": "TG /vibecode: cho link tai APK FPT Play (net.fptplay.ottbox) da cai len cac TV",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguon: bus #529 ('nhan task chua?') + #530 ('cho anh link tai ban apk cua fpt play da cai len cac tv'). File da cai tren TV: downloads/fptplay-tv-latest.apk = XAPK net.fptplay.ottbox versionName 7.34.13 versionCode 4394, 90.167.841 B, sha256 ac57bde7996fb946511591341e3dd43ba883a3ba7ba1cc58a499b6a4b2f6129c. Viec: phat link tai cong khai + bao owner.",
+  "verify": "curl -sI https://meetflowai.site/dl/... tra 200 + content-length khop; tai lai va so sha256",
+  "due": "2026-09-28",
+  "createdAt": "2026-09-28T14:24:38.301Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-28T14:24:38.301Z",
+ "transcribedBy": "win",
+ "busId": 530,
+ "busAt": "2026-09-28T14:15:32.995Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #529 + #530 (owner → win). Task TG-VIBECODE cũ (owner→mac, đã done) chỉ là ref của bot Telegram — KHÔNG phải việc của WIN nên task.mjs chặn ack (sai bên); mở mã mới cho lượt giao này (cùng cách T-20260922-18/20, T-20260923-01..07, T-20260926-01, T-20260927-01/02)."
+}
