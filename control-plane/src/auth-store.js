@@ -346,6 +346,39 @@ export class AuthStore {
     return publicUser(user, activeSubscriptionFor(data, userId));
   }
 
+  /**
+   * RESET hạn mức (khác `grantSubscription` ở chỗ KHÔNG cộng dồn).
+   *
+   * Vì sao cần hàm riêng: `grantSubscription` cộng vào hạn cũ còn hiệu lực (khách còn 300 ngày,
+   * cấp 30 ngày ⇒ thành 330) — đúng cho việc BÁN thêm, nhưng SAI khi admin muốn "đưa hạn mức của
+   * khách về 30 ngày" (yêu cầu chủ dự án 27/09/2026). Ở đây hạn mới = **hôm nay + days**,
+   * bỏ hẳn hạn cũ ⇒ idempotent: bấm 2 lần vẫn là 30 ngày, không thành 60.
+   * `days` null hoặc <= 0 = vĩnh viễn (giữ đúng quy ước của `grantSubscription`).
+   */
+  async resetSubscription(userId, { productId = "admin.reset", days = 30 } = {}) {
+    const data = await this._load();
+    const user = data.users.find((entry) => entry.id === userId);
+    if (!user) throw badRequest("User not found");
+    const lifetime = days == null || Number(days) <= 0;
+    const expiresAt = lifetime
+      ? null
+      : new Date(Date.now() + Number(days) * 24 * 60 * 60 * 1000).toISOString();
+    // Bỏ mọi subscription cũ của user rồi ghi 1 dòng mới: nguồn sự thật duy nhất, không để lại
+    // dòng cũ còn hạn (nếu không `activeSubscriptionFor` có thể trả về hạn dài cũ).
+    data.subscriptions = data.subscriptions.filter((entry) => entry.userId !== userId);
+    data.subscriptions.push({
+      id: crypto.randomUUID(),
+      userId,
+      productId,
+      expiresAt,
+      revokedAt: null,
+      createdAt: new Date().toISOString(),
+      resetAt: new Date().toISOString(),
+    });
+    await this._save(data);
+    return publicUser(user, activeSubscriptionFor(data, userId));
+  }
+
   async deleteUser(userId) {
     const data = await this._load();
     data.users = data.users.filter((entry) => entry.id !== userId);
