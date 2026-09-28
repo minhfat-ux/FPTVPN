@@ -174,10 +174,22 @@ bash scripts/harness-patches-install.sh         # cài bản chạy nền vào �
 - **Cổng `--check` là FAIL-CLOSED** (audit 26/09/2026): không thấy `DSH_ROOT`, thiếu asset icon trong
   `PATCH_DIR`, hay không xác minh được một marker nào ⇒ tính là **THIẾU** (exit ≠ 0), **không bao giờ**
   in "OK" khi chưa kiểm chứng thật (bản cũ trả `return 0` khi thiếu `DSH_ROOT`/thiếu asset nên báo OK giả).
-  `--check` kiểm: title HTML, brand-official mark, theme `#33C773`, sidebar logo 72px, icon Culi
+  `--check` kiểm: title HTML, brand-official mark, theme `#33C773`, **sidebar logo WIDE 72px** (neo theo
+  ngữ cảnh `brandMark`/`brandIdentity` — xem mục G1 bên dưới), icon Culi
   (**giải base64 trong `favicon.svg` rồi so sha256 với `culi-icon.png`**, không chỉ grep chuỗi "culi"),
   **tiêu đề tab runtime** (`const productTitle = "HarnessFlow";` ở `dsh-client-ui-layout`) và
   **wordmark màn hình boot** (bundle `dist/assets/index-*.js` không còn `"HARNESS"` + có ảnh boot Culi).
+- **G1 — `sidebar.brand.mark` có HAI occurrence, chỉ được vá/kiểm occurrence WIDE** (audit t10): trong
+  `dsh-client-ui-sidebar/lib/client.js` có hai `renderSlot("sidebar.brand.mark", { size: N })` **cùng
+  tên** — **WIDE** trong khối `brandIdentity`/`brandMark` (logo sidebar rộng, phải **72px**) và **RAIL**
+  thu gọn trong khối `railMark` cạnh `!wide &&` (icon rail, phải **giữ 24px**). Bản cũ khớp bằng chuỗi +
+  `re.sub(count=1)` nên (a) occurrence WIDE đổi tên/biến mất ⇒ vá nhầm RAIL thành 72 mà cổng
+  `grep 'sidebar.brand.mark", { size: 72 }'` vẫn xanh (logo rộng vẫn 24px), và (b) DSH có rail=72/wide=24
+  ⇒ script in `OK (already applied)` rồi bỏ qua WIDE. Nay cả script patch lẫn cổng **neo theo ngữ cảnh**
+  (`brandMark`+`brandIdentity` cho WIDE, loại trừ `railMark`) chứ không theo thứ tự trong file: chỉ vá
+  WIDE, không đụng RAIL; không thấy WIDE ⇒ `WARN` nói rõ + `--check` exit 1. `--check` chỉ ĐẠT khi
+  WIDE = 72px, và nếu WIDE chưa đạt mà RAIL đang là 72px thì thông báo nêu rõ
+  `occurrence RAIL (railMark) = 72px — phải giữ 24px (bị vá nhầm?)` để biết phải sửa bên nào.
 - **Patch brand khớp bằng regex bền với tên hàm đã minify** và **WARN rõ ràng khi không khớp** (không
   no-op im lặng): bản cũ hardcode `this.wordmark=Jt(Gt.wordmark,"HARNESS")` nên bundle 0.1.5-rc.1
   (`ot(rt.wordmark,"HARNESS")`) không khớp, và bản cũ vá `productTitle` ở `dsh-client-ui-renderer`

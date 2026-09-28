@@ -208,6 +208,47 @@ if [ "$VERIFY_INSTALL" = "1" ]; then
   verify_install && exit 0 || exit 1
 fi
 
+# ---------- G1: sidebar mark — chỉ tính occurrence WIDE (ngữ cảnh brandMark/brandIdentity) ----------
+# Vì sao (audit t9/t10): `renderSlot("sidebar.brand.mark", { size: N })` có HAI occurrence — WIDE
+# (logo sidebar rộng, phải 72px) và RAIL thu gọn (railMark, cạnh `!wide &&`, phải giữ 24px). Cổng cũ
+# chỉ `grep 'sidebar.brand.mark", { size: 72 }'` nên ĐẠT giả khi occurrence RAIL bị vá nhầm thành 72
+# trong lúc occurrence WIDE vẫn 24 (>hoặc đã đổi tên). Neo theo ngữ cảnh, không theo thứ tự file.
+SIDEBAR_WHY=""
+
+sidebar_ok() {
+  SIDEBAR_WHY=""
+  if [ ! -f "$SIDEBAR" ]; then SIDEBAR_WHY="thiếu $SIDEBAR"; return 1; fi
+  local why
+  why=$(python3 - "$SIDEBAR" <<'PYEOF'
+import re, sys
+SLOT = re.compile(r'renderSlot\("sidebar\.brand\.mark", \{ size: (\d+) \}')
+WIDE_CTX, RAIL_CTX, WINDOW = ("brandMark", "brandIdentity"), ("railMark",), 600
+s = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+wide = rail = None
+for m in SLOT.finditer(s):
+    ctx = s[max(0, m.start() - WINDOW):m.start()]
+    if any(k in ctx for k in RAIL_CTX):
+        if rail is None:
+            rail = int(m.group(1))
+    elif all(k in ctx for k in WIDE_CTX):
+        if wide is None:
+            wide = int(m.group(1))
+note = ""
+if rail is not None:
+    note = "; occurrence RAIL (railMark) = %dpx — phải giữ 24px%s" % (
+        rail, " (bị vá nhầm?)" if rail == 72 else "")
+if wide is None:
+    print("khong thay occurrence WIDE (brandMark/brandIdentity) cua sidebar.brand.mark" + note)
+    sys.exit(1)
+if wide != 72:
+    print("occurrence WIDE = %dpx (cần 72)" % wide + note)
+    sys.exit(1)
+sys.exit(0)
+PYEOF
+) || { SIDEBAR_WHY="${why:-không xác minh được}"; return 1; }
+  return 0
+}
+
 # ---------- kiểm tra dấu vết patch ----------
 missing() {
   # DSH_ROOT không tồn tại = KHÔNG xác minh được ⇒ trả 1. Bản cũ `return 0` ở đây chính là "OK giả"
@@ -219,7 +260,7 @@ missing() {
   grep -q "HarnessFlow" "$DIST/index.html" 2>/dev/null || miss+=("title HarnessFlow")
   grep -q "brand-mark.png" "$BRAND" 2>/dev/null || miss+=("brand-official mark")
   grep -qi "33c773" "$THEME" 2>/dev/null || miss+=("theme #33C773")
-  grep -q 'sidebar.brand.mark", { size: 72 }' "$SIDEBAR" 2>/dev/null || miss+=("sidebar logo 72px")
+  sidebar_ok || miss+=("sidebar logo WIDE 72px (${SIDEBAR_WHY:-không xác minh được})")
   culi_ok || miss+=("icon Culi (${CULI_WHY:-không xác minh được})")
   # Tiêu đề tab runtime (DSH 0.1.5+): layout, không phải renderer (xem audit t1 F2)
   grep -q 'const productTitle = "HarnessFlow";' "$NM/dsh-client-ui-layout/lib/client.js" 2>/dev/null \

@@ -170,6 +170,27 @@ NAME_RE = re.compile(
 # của DSH 0.1.5+). Gặp các dấu vết này ⇒ im lặng, KHÔNG WARN (bản cũ vẫn in WARN giả ở đây).
 MARK_APPLIED_MARKERS = ("FLOWTECH_LOGO_DATA_URI", "FLOWTECH_MARK_DATA_URI", 'src: "/brand-mark.png"')
 
+# ---- G1: hai occurrence `sidebar.brand.mark` (WIDE ở brandMark/brandIdentity, RAIL ở railMark) ----
+SIDEBAR_SLOT_RE = re.compile(r'renderSlot\("sidebar\.brand\.mark", \{ size: (\d+) \}')
+SIDEBAR_WIDE_CTX = ("brandMark", "brandIdentity")   # ngữ cảnh của occurrence WIDE (logo rộng)
+SIDEBAR_RAIL_CTX = ("railMark",)                    # ngữ cảnh của occurrence RAIL (icon thu gọn)
+SIDEBAR_CTX_WINDOW = 600                            # số ký tự ngữ cảnh ngay TRƯỚC occurrence
+
+
+def sidebar_wide_slot(t):
+    """Trả match của occurrence WIDE (khối brandMark/brandIdentity), hoặc None.
+
+    Neo theo ngữ cảnh nên KHÔNG phụ thuộc thứ tự trong file; occurrence nào nằm trong ngữ cảnh
+    railMark (icon thu gọn) bị loại — đó là occurrence KHÔNG được đụng tới.
+    """
+    for m in SIDEBAR_SLOT_RE.finditer(t):
+        ctx = t[max(0, m.start() - SIDEBAR_CTX_WINDOW):m.start()]
+        if any(k in ctx for k in SIDEBAR_RAIL_CTX):
+            continue
+        if all(k in ctx for k in SIDEBAR_WIDE_CTX):
+            return m
+    return None
+
 
 def mark_block(logo_uri, icon_uri):
     """Logo ĐẦY ĐỦ (symbol + chữ) cho mọi chỗ hiển thị; chỗ rất nhỏ (<=32px, ví dụ
@@ -330,16 +351,21 @@ def main():
     if os.path.isfile(sb):
         t = open(sb, encoding="utf-8").read()
         changed = False
-        if 'renderSlot("sidebar.brand.mark", { size: %d }' % SIDEBAR_MARK_SIZE in t:
-            log("  OK (already applied): sidebar mark %dpx" % SIDEBAR_MARK_SIZE)
+        # G1 (t9): `renderSlot("sidebar.brand.mark", { size: N })` có HAI occurrence cùng tên —
+        #   WIDE  ở khối brandIdentity/brandMark (logo sidebar rộng, phải 72px)
+        #   RAIL  ở khối railMark, cạnh `!wide &&` (icon thu gọn, PHẢI giữ 24px)
+        # Vì vậy phải nhận diện occurrence WIDE bằng NGỮ CẢNH, không dùng `re.sub(count=1)` (thứ tự file)
+        # và không hardcode ngưỡng: bản cũ vá nhầm RAIL khi occurrence WIDE đổi tên/biến mất ⇒ cổng
+        # `grep 'sidebar.brand.mark", { size: 72 }'` vẫn xanh dù logo rộng còn 24px ("OK giả").
+        wide = sidebar_wide_slot(t)
+        if wide is None:
+            log("  WARN: khong thay occurrence WIDE cua sidebar.brand.mark (khong co brandMark/brandIdentity)"
+                " — ban DSH khac? KHONG va bua occurrence RAIL")
+        elif wide.group(1) == str(SIDEBAR_MARK_SIZE):
+            log("  OK (already applied): sidebar mark WIDE %dpx" % SIDEBAR_MARK_SIZE)
         else:
-            t2 = re.sub(r'renderSlot\("sidebar\.brand\.mark", \{ size: \d+ \}',
-                        'renderSlot("sidebar.brand.mark", { size: %d }' % SIDEBAR_MARK_SIZE, t, count=1)
-            if t2 == t:
-                log("  WARN: khong thay slot mark cua sidebar (ban DSH khac?)")
-            else:
-                changed = True
-            t = t2
+            t = t[:wide.start()] + 'renderSlot("sidebar.brand.mark", { size: %d }' % SIDEBAR_MARK_SIZE + t[wide.end():]
+            changed = True
         if "gap:8px;min-width:0;height:%dpx" % SIDEBAR_ROW_HEIGHT in t:
             log("  OK (already applied): sidebar brandIdentity height")
         else:
