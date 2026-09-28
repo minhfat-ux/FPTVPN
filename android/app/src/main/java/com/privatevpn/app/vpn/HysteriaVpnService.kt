@@ -307,6 +307,17 @@ class HysteriaVpnService : VpnService() {
                     }
                 }
             }
+        } catch (t: Throwable) {
+            // KHÔNG để một lỗi bất ngờ giết cả tiến trình: khách báo 23/09/2026 "cài lên TV Xiaomi
+            // Redmi, bật VPN lên là thoát app". Trước đây vòng này chỉ có try/finally nên mọi
+            // exception thoát ra khỏi vòng (ví dụ API chỉ có/khác trên Android TV) là crash app.
+            // Nay: ghi vết, báo lỗi lên UI, giữ app sống để người dùng thử lại / gửi log cho mình.
+            DiagnosticsLog.warn(
+                "tunnel: lỗi không mong đợi trong vòng kết nối -> giữ app sống: " +
+                    "${t.javaClass.name}: ${t.message}\n${t.stackTraceToString().take(4_000)}",
+            )
+            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: tunnel loop crashed: ${t.message}", t)
+            reportExit("tunnel error: ${t.javaClass.simpleName}: ${t.message}".take(200))
         } finally {
             closeTun()
         }
@@ -773,7 +784,14 @@ class HysteriaVpnService : VpnService() {
         // App Trung Quốc (WeChat, Alipay, Meituan, Didi, Taobao…) phải đi ĐƯỜNG RIÊNG, không qua
         // VPN — nếu đi full-tunnel thì server TQ thấy IP nước ngoài và cắt phiên (yêu cầu 22/09/2026).
         runCatching { CnAppBypass.applyTo(builder, this) }
-        val tun = builder.establish() ?: throw IllegalStateException("establish failed")
+        val tun = builder.establish()
+        if (tun == null) {
+            // Android TV / box có thể TỪ CHỐI cấp TUN (VPN chưa được chấp thuận ở màn hình TV, hoặc
+            // thiết bị không cho app dựng VPN). Ghi rõ để đọc log là biết ngay, rồi ném ra cho lớp
+            // trên xử như "lượt này hỏng" — KHÔNG để nó thành crash (xem catch trong runTunnel).
+            DiagnosticsLog.warn("vpn: establish() trả về NULL (VPN bị từ chối/chưa được cấp?) -> không có TUN")
+            throw IllegalStateException("establish failed (null tun)")
+        }
         DiagnosticsLog.log(
             "vpn: establish ok tun=${tun.fd} underlying=" + runCatching { underlyingSummary() }.getOrDefault("?"),
         )
