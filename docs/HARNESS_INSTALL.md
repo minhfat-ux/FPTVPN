@@ -137,16 +137,100 @@ Bộ tự vá (idempotent, tự backup `.fpt.bak`):
 
 ```bash
 bash scripts/harness-ensure-patches.sh          # kiểm tra + vá ngay (--check = chỉ kiểm, --notify = báo Telegram)
+bash scripts/harness-ensure-patches.sh --verify-install   # so sha256 repo ↔ bản cài trong $HOME (phải 10/10)
 bash scripts/harness-patches-install.sh         # cài bản chạy nền vào ổ trong + bật LaunchAgent
 ```
 
-- LaunchAgent `site.meetflowai.harness-patches` chạy **mỗi 15 phút** (`StartInterval=900`), tự vá lại
-  và nhắn Telegram khi vừa vá.
+- LaunchAgent `site.meetflowai.harness-patches` có **`WatchPaths`** trỏ vào `package.json` + thư mục
+  `dist` của DSH (và thư mục `node_modules/@deepseek-ai`) ⇒ **vá ngay khi DSH bị đổi/nâng cấp lúc máy
+  thức**. `StartInterval=900` (15 phút) chỉ còn là lớp dự phòng: launchd **gộp nhịp khi máy ngủ**
+  (audit 26/09/2026: 257 lần sleep, `runs` chỉ 8 từ 21/09), nên đừng tin "mỗi 15 phút".
+  WatchPaths chỉ ghi path đang tồn tại lúc cài (launchd từ chối nạp job có path không tồn tại).
+- Tự kiểm lệch repo ↔ bản cài: `--verify-install` so **sha256 từng file** (script + `patches/*`);
+  in `N/N` và exit ≠ 0 nếu thiếu/khác. Sửa patch trong repo mà quên `harness-patches-install.sh` ⇒
+  cổng này báo ngay (bản ổ trong vẫn là bản CŨ ⇒ LaunchAgent vá bằng code cũ).
 - **Vì sao bản cài nằm ở `~/.local/share/harness-patches`**: launchd bị TCC chặn đọc ổ ngoài
   (`/Volumes/BIWIN`) — agent trỏ thẳng vào repo sẽ chết im lặng (`Operation not permitted`). Sau khi
   sửa script/patch trong repo phải chạy lại `harness-patches-install.sh` để đồng bộ bản ổ trong.
+- **Lớp dự phòng TUẦN `site.meetflowai.dsh-housekeeping` (đã sửa 28/09/2026)**: Chủ nhật 10:00, chạy
+  `--days 30 --apply` để dọn `~/.dsh` (phiên cũ hơn 30 ngày, `sessions.*` cũ, file `.*tmp`) rồi gọi
+  `harness-ensure-patches.sh`. Nó **chết vì 2 lỗi chồng nhau** nên `runs = 0` suốt từ 20/09:
+  1. **TCC**: plist trỏ `/Volumes/BIWIN/.../scripts/housekeeping/harness-dsh.sh` — launchd không đọc
+     được ổ ngoài (`/bin/bash: …/harness-dsh.sh: Operation not permitted`, `last exit code = 126`).
+  2. **bash 3.2**: plist gọi `/bin/bash` (macOS 3.2, KHÔNG có `mapfile`) mà script dùng `mapfile` ⇒
+     kể cả sửa TCC vẫn chết (`mapfile: command not found`, exit 127). Script đã đổi sang vòng lặp
+     `while IFS= read -r` (chạy được cả bash 3.2 lẫn 5).
+  Cách cài/cập nhật (1 lệnh): `bash scripts/harness-patches-install.sh` — script này
+  **nguồn sự thật** cho cả 2 LaunchAgent: nó copy `scripts/housekeeping/harness-dsh.sh` →
+  `~/.local/share/harness-patches/housekeeping/harness-dsh.sh` (đặt ở đó để dòng `$(dirname $0)/..`
+  của script trỏ đúng `harness-ensure-patches.sh` bản ổ trong), **so sha256 hai bản và DỪNG nếu lệch**,
+  rồi sinh + `unload/load` cả 2 plist trỏ vào bản ổ trong. KHÔNG copy tay: bản trong `$HOME` là bản
+  sao, sửa repo rồi chạy lại installer.
+  Template tham chiếu trong repo: `.dhs-setup/fpt-harness-package/mac/site.meetflowai.*.plist`
+  (bản sao của plist thật ngoài phần comment).
 - **Icon harness = hình Culi** (`patches/culi-icon.png` 512×512) cho `favicon.png`, `favicon.svg`
   (SVG nhúng PNG) và `brand-mark.png` (icon trong sidebar); logo FlowTech có chữ vẫn dùng cho
   hero/login (`brand-logo.png`).
+- **Cổng `--check` là FAIL-CLOSED** (audit 26/09/2026): không thấy `DSH_ROOT`, thiếu asset icon trong
+  `PATCH_DIR`, hay không xác minh được một marker nào ⇒ tính là **THIẾU** (exit ≠ 0), **không bao giờ**
+  in "OK" khi chưa kiểm chứng thật (bản cũ trả `return 0` khi thiếu `DSH_ROOT`/thiếu asset nên báo OK giả).
+  `--check` kiểm: title HTML, brand-official mark, theme `#33C773`, **sidebar logo WIDE 72px** (neo theo
+  ngữ cảnh `brandMark`/`brandIdentity` — xem mục G1 bên dưới), icon Culi
+  (**giải base64 trong `favicon.svg` rồi so sha256 với `culi-icon.png`**, không chỉ grep chuỗi "culi"),
+  **tiêu đề tab runtime** (`const productTitle = "HarnessFlow";` ở `dsh-client-ui-layout`) và
+  **wordmark màn hình boot** (bundle `dist/assets/index-*.js` không còn `"HARNESS"` + có ảnh boot Culi).
+- **G1 — `sidebar.brand.mark` có HAI occurrence, chỉ được vá/kiểm occurrence WIDE** (audit t10): trong
+  `dsh-client-ui-sidebar/lib/client.js` có hai `renderSlot("sidebar.brand.mark", { size: N })` **cùng
+  tên** — **WIDE** trong khối `brandIdentity`/`brandMark` (logo sidebar rộng, phải **72px**) và **RAIL**
+  thu gọn trong khối `railMark` cạnh `!wide &&` (icon rail, phải **giữ 24px**). Bản cũ khớp bằng chuỗi +
+  `re.sub(count=1)` nên (a) occurrence WIDE đổi tên/biến mất ⇒ vá nhầm RAIL thành 72 mà cổng
+  `grep 'sidebar.brand.mark", { size: 72 }'` vẫn xanh (logo rộng vẫn 24px), và (b) DSH có rail=72/wide=24
+  ⇒ script in `OK (already applied)` rồi bỏ qua WIDE. Nay cả script patch lẫn cổng **neo theo ngữ cảnh**
+  (`brandMark`+`brandIdentity` cho WIDE, loại trừ `railMark`) chứ không theo thứ tự trong file: chỉ vá
+  WIDE, không đụng RAIL; không thấy WIDE ⇒ `WARN` nói rõ + `--check` exit 1. `--check` chỉ ĐẠT khi
+  WIDE = 72px, và nếu WIDE chưa đạt mà RAIL đang là 72px thì thông báo nêu rõ
+  `occurrence RAIL (railMark) = 72px — phải giữ 24px (bị vá nhầm?)` để biết phải sửa bên nào.
+- **G1 — ngưỡng neo là 600 ký tự** (O1, audit t11): `sidebar_wide_slot()` (trong
+  `.dhs-setup/fpt-harness-package/patches/apply-flowtech-brand.py`, hằng `SIDEBAR_CTX_WINDOW = 600`) và
+  `sidebar_ok()` (trong `scripts/harness-ensure-patches.sh`, biến `WINDOW = 600` trong heredoc) nhận diện
+  occurrence WIDE bằng ngữ cảnh trong **600 ký tự ngay TRƯỚC** occurrence: cần thấy `brandMark` **và**
+  `brandIdentity`, đồng thời loại trừ occurrence có `railMark`. Trên DSH `0.1.5-rc.1`, biên thật đo được
+  là **183** ký tự ngược tới `brandIdentity` (và 30 tới `brandMark`) cho WIDE, **61** ký tự ngược tới
+  `railMark` cho RAIL ⇒ còn dư địa so với 600. Nếu một bản DSH tương lai đẩy mốc neo xa hơn 600 ký tự thì
+  hàm trả `None` ⇒ patch script in `WARN` và `--check` **exit 1** (fail-closed, KHÔNG im lặng). Cách xử:
+  tăng ngưỡng ở **CẢ 2 chỗ** (hằng `SIDEBAR_CTX_WINDOW` và biến `WINDOW`), đo lại biên thật trên bản DSH
+  mới, rồi kiểm `bash scripts/harness-ensure-patches.sh --check` trên bản cài thật.
+- **G1 — cổng chỉ ĐÒI WIDE = 72, KHÔNG bắt RAIL = 24** (O2, audit t11): RAIL chỉ được nhắc trong thông
+  báo khi WIDE chưa đạt mà RAIL = 72px (`… (bị vá nhầm?)`). Hệ quả **có chủ ý**: nếu RAIL từng bị vá nhầm
+  thành 72 thì sau khi WIDE đủ 72, `--check` vẫn **ĐẠT** và RAIL **không tự về 24** — giá trị RAIL là của
+  DSH, không phải của bản vá, nên script **không đụng RAIL**. Người debug đọc log cần biết điều này;
+  **KHÔNG** "sửa" bằng cách thêm điều kiện bắt RAIL = 24 (sẽ đỏ giả khi DSH đổi thiết kế rail). Muốn trả
+  RAIL về đúng giá trị gốc của DSH thì lấy lại riêng occurrence đó từ `<file>.fpt.bak`.
+- **Patch brand khớp bằng regex bền với tên hàm đã minify** và **WARN rõ ràng khi không khớp** (không
+  no-op im lặng): bản cũ hardcode `this.wordmark=Jt(Gt.wordmark,"HARNESS")` nên bundle 0.1.5-rc.1
+  (`ot(rt.wordmark,"HARNESS")`) không khớp, và bản cũ vá `productTitle` ở `dsh-client-ui-renderer`
+  (nơi không còn trường này) ⇒ tiêu đề tab + màn hình boot vẫn mang brand DeepSeek/HARNESS dù vòng tự
+  vá in "OK". Nếu vẫn thấy WARN `khong khop` trong log: DSH đổi cấu trúc bundle — kiểm bằng
+  `bash scripts/harness-ensure-patches.sh --check` (phải exit 1) rồi cập nhật regex.
+- **WARN chỉ dành cho trạng thái thứ ba** (audit 28/09/2026, O1): mỗi mục brand có 3 trạng thái —
+  *GỐC* (đi vá, in `PATCHED`) · *ĐÃ VÁ* (im lặng `OK (already applied)`) · *KHÁC CẢ HAI* (giá trị lạ ⇒
+  `WARN` rõ, kèm giá trị đọc được). Trước đây bản đã vá vẫn in WARN giả (`khong thay 'const productTitle
+  = "DeepSeek Harness";'`, `khong tim thay block mark cua brand plugin`, `khong thay slot mark cua hero`)
+  ⇒ người đọc quen bỏ qua WARN, đúng lớp lỗi "vá mà không ai biết". Nay trên bản đã vá chỉ còn **đúng 1
+  WARN thật**: `khong thay cot grid cua headline (khong co ca ban goc lan ban da va)` — chuỗi CSS
+  `grid-template-columns:34px auto auto` không tồn tại trong DSH `0.1.5-rc.1` (kiểm cả file gốc
+  `.fpt.bak` lẫn file hiện tại), tức mục đó **không áp dụng được** cho bản này; WARN này là tín hiệu
+  để cập nhật script khi DSH đổi cấu trúc, KHÔNG được xoá thành im lặng.
+- ⚠️ **Cảnh báo fail-closed của `boot_ok()` — đọc trước khi nâng cấp DSH (O2)**: `--check` coi màn hình
+  boot là ĐẠT chỉ khi bundle `dist/assets/index-*.js` **không còn** `wordmark=…"HARNESS"` **và** có ảnh
+  boot `/favicon.png` do patch gắn. Nếu một bản DSH tương lai **bỏ hẳn** wordmark "HARNESS" (hoặc dựng
+  màn hình boot theo cách khác) thì không còn gì để vá ⇒ `--check` **đỏ vĩnh viễn** dù theme/brand vẫn
+  đúng. Đây là **chủ ý**: ồn còn hơn im lặng (đúng lớp lỗi 21/09/2026) — **KHÔNG được nới cổng thành
+  im lặng**. Cách xử khi gặp: (1) xác nhận DSH đổi cấu trúc thật —
+  `grep -c 'HARNESS' <bundle>` = 0 và log patch có `WARN khong khop: boot wordmark …`;
+  (2) cập nhật `BOOT_WORDMARK_RE` + marker trong `.dhs-setup/fpt-harness-package/patches/apply-fpt-patches.py`
+  và `apply-flowtech-brand.py` **và** `BOOT_MARKER` trong `scripts/harness-ensure-patches.sh` cho khớp
+  cấu trúc mới; (3) nếu DSH thật sự không còn wordmark, thay marker cổng bằng thứ **tương đương còn
+  kiểm được** (vẫn phải xác minh được thật), tuyệt đối không bỏ kiểm.
 - Sau khi vá: khởi động lại `dsh web` rồi **Cmd+Shift+R**; nếu icon trên tab vẫn cũ, đóng/mở lại tab
   (Chrome cache favicon rất dai).

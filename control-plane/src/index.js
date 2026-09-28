@@ -89,6 +89,8 @@ import { AppleCredentialStore, registerDeviceWithApple, listAppleDevices } from 
 import { supportPageHTML } from "./support-page.js";
 import {
   buyPageHTML,
+  downloadsSectionHTML,
+  detectBuyPlatform,
   AI_PLANS,
   DEFAULT_PLANS,
   applyPlans,
@@ -130,6 +132,9 @@ const ADMIN_ALLOWED_IPS = parseAllowedIPs(process.env.ADMIN_ALLOWED_IPS ?? "");
 const DATA_FILE = process.env.DATA_FILE ?? path.join(__dirname, "..", "data", "devices.json");
 const AUTH_FILE = process.env.AUTH_FILE ?? path.join(__dirname, "..", "data", "auth.json");
 const DATA_DIR = path.dirname(AUTH_FILE);
+// Lead trang /buy (email khách để lại TRƯỚC khi tải): append-only JSON Lines, mỗi dòng
+// {at,email,platform,ua,ip} — ip là hash 12 ký tự, KHÔNG ghi IP thô (handoff 26/09/2026).
+const LEADS_FILE = process.env.LEADS_FILE ?? path.join(DATA_DIR, "leads.json");
 /** Nhật ký webhook SePay (JSON lines) — SePay khuyến nghị lưu payload gốc để đối soát/audit. */
 const SEPAY_LOG_FILE = process.env.SEPAY_LOG_FILE ?? path.join(DATA_DIR, "sepay-webhooks.log");
 const APP_CONFIG_DB = process.env.APP_CONFIG_DB ?? path.join(__dirname, "..", "data", "app-config.db");
@@ -307,7 +312,7 @@ app.use((req, res, next) => {
   // mặt tiền phải mở cho khách, KHÔNG được đòi token admin.
   if (req.path === "/" || req.path === "/home" || req.path === "/index.html") return next();
   // Public payment flow: buy page + create order + PayOS webhook.
-  if (req.path === "/buy" || req.path.startsWith("/buy/") || req.path.startsWith("/v1/payments/")) return next();
+  if (req.path === "/buy" || req.path.startsWith("/buy/") || req.path.startsWith("/v1/payments/") || req.path === "/v1/buy/lead") return next();
   // Public MeetFlow AI purchase flow (buy page, create/status/qr/confirm,
   // entitlement lookup used by the apps).
   if (req.path === "/ai/buy" || req.path.startsWith("/ai/buy/") || req.path.startsWith("/v1/ai/")) return next();
@@ -736,8 +741,96 @@ app.get(["/buy", "/buy/"], async (req, res) => {
       cur: String(req.query?.cur ?? "").slice(0, 8),
       // Mở từ TRONG app (paywall) ⇒ chỉ hiện đăng ký tài khoản + thanh toán, bỏ khối tải app.
       inApp: isInAppRequest(req),
+      // Chủ dự án chốt 26/09/2026: trang /buy phải BẮT BUỘC nhập email trước rồi mới
+      // hiện bản tải theo thiết bị. Trang chưa có email vì thế KHÔNG chứa link tải nào;
+      // khối tải do POST /v1/buy/lead trả về (kèm nhận diện UA) rồi JS chèn vào #dlHost.
+      emailVerified: false,
     }),
   );
+});
+
+// ---- Lead trang /buy: BẮT BUỘC email trước, rồi mới cho tải ----------------
+// Chủ dự án chốt 26/09/2026 (docs/handoff/HANDOFF_BUY_EMAIL_GATE_2026-09-26.md):
+// mức đăng ký CHỈ email (không OTP/mật khẩu), chặn ở TRANG; giữ nguyên /v1/downloads/*,
+// /install/ios/manifest.plist và /v1/app-version để khách đang dùng không bị ảnh hưởng.
+const BUY_LEAD_MAX_PER_MIN = 5;
+const BUY_LEAD_MIN_GAP_MS = 1000;
+const buyLeadHits = new Map();
+
+/** Chặn spam rất nhẹ: ≤ 5 lead/phút/IP và ≤ 1 lead/giây/IP. true = bị chặn. */
+function buyLeadLimited(ip) {
+  const now = Date.now();
+  const key = String(ip || "unknown");
+  const fresh = (buyLeadHits.get(key) || []).filter((t) => now - t < 60_000);
+  if (fresh.length >= BUY_LEAD_MAX_PER_MIN) {
+    buyLeadHits.set(key, fresh);
+    return true;
+  }
+  if (fresh.length && now - fresh[fresh.length - 1] < BUY_LEAD_MIN_GAP_MS) {
+    buyLeadHits.set(key, fresh);
+    return true;
+  }
+  fresh.push(now);
+  buyLeadHits.set(key, fresh);
+  // Dọn IP rác để map không phình vô hạn (chỉ giữ các IP còn hoạt động trong 60s).
+  if (buyLeadHits.size > 2000) {
+    for (const [k, v] of buyLeadHits) {
+      if (!v.some((t) => now - t < 60_000)) buyLeadHits.delete(k);
+      if (buyLeadHits.size <= 1000) break;
+    }
+  }
+  return false;
+}
+
+app.post("/v1/buy/lead", async (req, res) => {
+  try {
+    // Kiểm định dạng TRƯỚC khi rate-limit/ghi file: lead sai không được ghi gì cả.
+    const email = String(req.body?.email ?? "").trim().toLowerCase().slice(0, 160);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ ok: false, code: "invalid_email", error: "Email không hợp lệ." });
+    }
+    const ip = clientIPAddress(req);
+    if (buyLeadLimited(ip)) {
+      return res.status(429).json({ ok: false, code: "rate_limited", error: "Quá nhiều yêu cầu. Vui lòng thử lại sau." });
+    }
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 120);
+    const askedPlatform = String(req.body?.platform ?? "").trim().toLowerCase();
+    const allowedPlatforms = new Set(["ios", "macos", "android", "windows", "unknown"]);
+    const platform = allowedPlatforms.has(askedPlatform) ? askedPlatform : detectBuyPlatform(ua);
+    // known = email đã có tài khoản (khách cũ) ⇒ đi thẳng bước 2, premium bật sau khi trả tiền.
+    let known = false;
+    try {
+      const users = await authStore.listUsers();
+      known = users.some((u) => String(u.email ?? "").trim().toLowerCase() === email);
+    } catch (err) {
+      console.error("buy/lead: đọc danh sách tài khoản lỗi (vẫn ghi lead):", err?.message ?? err);
+    }
+    // Append-only JSON Lines. IP chỉ lưu hash 12 ký tự — KHÔNG ghi IP thô.
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      const row = {
+        at: new Date().toISOString(),
+        email,
+        platform,
+        ua,
+        ip: crypto.createHash("sha256").update(String(ip || "")).digest("hex").slice(0, 12),
+      };
+      fs.appendFileSync(LEADS_FILE, JSON.stringify(row) + "\n", "utf8");
+    } catch (err) {
+      console.error("buy/lead: ghi leads.json lỗi:", err?.message ?? err);
+    }
+    const downloads = downloadsSectionHTML({
+      baseUrl: publicBaseUrl(),
+      lang: buyLang(req),
+      product: "vpn",
+      links: storeLinks("vpn"),
+      platform: detectBuyPlatform(ua),
+    });
+    return res.json({ ok: true, known, platform, downloads });
+  } catch (err) {
+    console.error("POST /v1/buy/lead failed:", err);
+    return res.status(500).json({ ok: false, code: "internal", error: "Internal error" });
+  }
 });
 
 app.get(["/buy/success", "/buy/success/"], (req, res) => {
@@ -785,7 +878,13 @@ app.get("/assets/:file", async (req, res) => {
     const assetName = fileAlias[req.params.file] ?? req.params.file;
     const file = path.join(process.env.ASSETS_DIR || path.join(__dirname, "..", "assets"), assetName);
     if (!fs.existsSync(file)) return res.status(404).send("Not found");
-    res.type(type).sendFile(file);
+    // Logo rất ít khi đổi ⇒ cho trình duyệt giữ 7 ngày (trước đây origin không set header nên
+    // Cloudflare áp mặc định 4 h ⇒ khách quay lại vẫn tải lại cả bộ ảnh). Giá trị này LỚN HƠN
+    // Browser Cache TTL của Cloudflare nên Cloudflare giữ nguyên (chỉ đè khi origin nhỏ hơn).
+    res
+      .type(type)
+      .set("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400")
+      .sendFile(file);
   } catch {
     res.status(500).send("Internal error");
   }
@@ -4901,6 +5000,26 @@ app.post("/v1/admin/users", requireAdminAuth, async (req, res) => {
 app.post("/v1/admin/users/:id/subscription", requireAdminAuth, async (req, res) => {
   try {
     const user = await authStore.grantSubscription(req.params.id, req.body ?? {});
+    res.json({ user });
+  } catch (err) {
+    res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });
+  }
+});
+
+// Reset hạn mức = ĐẶT LẠI (hôm nay + days), KHÔNG cộng dồn — chủ dự án chốt 27/09/2026.
+// Dùng authStore.resetSubscription (khác grantSubscription ở chỗ không cộng hạn cũ).
+app.post("/v1/admin/users/:id/reset-quota", requireAdminAuth, async (req, res) => {
+  try {
+    const rawDays = req.body?.days;
+    const days = rawDays === null ? null : Number(rawDays ?? 30);
+    const user = await authStore.resetSubscription(req.params.id, {
+      productId: String(req.body?.productId ?? "admin.reset").slice(0, 60),
+      days,
+    });
+    console.log(
+      `admin users: reset quota ${req.params.id} -> ` +
+        `${days == null || days <= 0 ? "lifetime" : `${days}d`}`,
+    );
     res.json({ user });
   } catch (err) {
     res.status(err.statusCode ?? 500).json({ error: err.statusCode ? err.message : "Internal error" });

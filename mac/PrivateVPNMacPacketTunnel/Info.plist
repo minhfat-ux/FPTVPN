@@ -15,17 +15,24 @@
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
-	<string>XPC!</string>
+	<string>SYSX</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>NSExtension</key>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NetworkExtension</key>
 	<dict>
-		<key>NSExtensionPointIdentifier</key>
-		<string>com.apple.networkextension.packet-tunnel</string>
-		<key>NSExtensionPrincipalClass</key>
-		<string>$(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider</string>
+		<key>NEMachServiceName</key>
+		<string>$(TeamIdentifierPrefix)com.privatevpn.shared.tunnel</string>
+		<key>NEProviderClasses</key>
+		<dict>
+			<key>com.apple.networkextension.packet-tunnel</key>
+			<string>$(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider</string>
+		</dict>
 	</dict>
+	<key>NSSystemExtensionUsageDescription</key>
+	<string>VPNFlow cần cài tiện ích mở rộng hệ thống để dựng đường hầm VPN trên máy này.</string>
 </dict>
 </plist>

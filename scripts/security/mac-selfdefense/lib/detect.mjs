@@ -360,3 +360,70 @@ export function readTccFromLog({ lastSeconds = 70, run = execFileSync } = {}) {
     return { ok: false, error: String(err?.stderr ?? err?.message ?? err).slice(0, 300), rows: [] };
   }
 }
+
+/** File cấu hình shell — chạy mỗi lần mở terminal, là chỗ malware hay cài persistence. */
+export const DEFAULT_STARTUP_PATHS = [
+  "~/.zshrc",
+  "~/.zprofile",
+  "~/.zshenv",
+  "~/.bashrc",
+  "~/.bash_profile",
+  "~/.profile",
+  "~/.config/fish/config.fish",
+];
+
+/**
+ * Phân loại nội dung một "bề mặt khởi động" (rc file, dòng crontab, login item).
+ * Cứng = mẫu dropper hoặc khớp IOC. Mềm = trỏ vào vùng không nên thực thi.
+ */
+export function classifyStartupText(label, text, cfg, iocs) {
+  const body = String(text ?? "");
+  // Bỏ dòng comment TRƯỚC khi khớp mẫu: comment không thực thi được, mà tài liệu/ghi chú
+  // hay nhắc tới `curl ... | bash` (đã gặp thật: chính báo cáo về mã độc bị gắn cờ).
+  const code = body
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("#"))
+    .join("\n");
+  const reasons = [];
+
+  reasons.push(...matchesIocs(`${label}\n${code}`, iocs).map((h) => `IOC ${h}`));
+  reasons.push(...matchesDropperPattern(code));
+  if (reasons.length) return { severity: "hard", reasons };
+
+  for (const rawLine of code.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    for (const m of line.matchAll(/["'=(:\s](\/[^\s"'`);|&]+)/g)) {
+      if (isSuspiciousPath(m[1], cfg)) reasons.push(`trỏ vào vùng đáng ngờ: ${m[1]}`);
+    }
+    for (const m of line.matchAll(/["'=(:\s](~\/[^\s"'`);|&]+)/g)) {
+      if (isSuspiciousPath(m[1], cfg)) reasons.push(`trỏ vào vùng đáng ngờ: ${m[1]}`);
+    }
+  }
+  return { severity: reasons.length ? "medium" : null, reasons: [...new Set(reasons)] };
+}
+
+/** Đọc crontab của user hiện tại. Không có crontab thì trả chuỗi rỗng. */
+export function readCrontab({ run = execFileSync } = {}) {
+  try {
+    return { ok: true, text: run("/usr/bin/crontab", ["-l"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) };
+  } catch (err) {
+    const stderr = String(err?.stderr ?? "");
+    if (/no crontab/i.test(stderr)) return { ok: true, text: "" };
+    return { ok: false, error: stderr.slice(0, 200) || String(err?.message ?? err).slice(0, 200), text: "" };
+  }
+}
+
+/** Đọc danh sách login item (cần quyền Automation với System Events). */
+export function readLoginItems({ run = execFileSync } = {}) {
+  try {
+    const out = run(
+      "/usr/bin/osascript",
+      ["-e", 'tell application "System Events" to get the name of every login item'],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 },
+    );
+    return { ok: true, items: String(out).split(",").map((s) => s.trim()).filter(Boolean) };
+  } catch (err) {
+    return { ok: false, error: String(err?.stderr ?? err?.message ?? err).slice(0, 200), items: [] };
+  }
+}

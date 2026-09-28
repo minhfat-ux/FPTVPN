@@ -80,6 +80,69 @@ def sub_all(path, pairs, label):
     return write_text(path, out, label)
 
 
+def patch_regex(path, pattern, replacement, label, marker=None):
+    """Vá bằng regex (bền với tên hàm đã minify).
+
+    marker: chuỗi cho thấy bản vá đã áp từ trước -> OK, không vá lại.
+    Không khớp và không có marker: WARN rõ ràng, KHÔNG im lặng bỏ qua (bản cũ hardcode
+    `Jt(Gt.wordmark,...)` nên sau khi DSH minify lại là no-op im lặng).
+    """
+    if not os.path.isfile(path):
+        log("  MISSING: %s" % path)
+        return False
+    s = open(path, encoding="utf-8").read()
+    if marker and marker in s:
+        log("  OK (already applied): %s" % label)
+        return False
+    m = re.search(pattern, s)
+    if not m:
+        log("  WARN khong khop: %s — pattern: %s (ban DSH khac? xem %s)" % (label, pattern, path))
+        return False
+    out = s[:m.start()] + m.expand(replacement) + s[m.end():]
+    return write_text(path, out, label)
+
+
+TITLE_RE = re.compile(r'const productTitle = "([^"]*)";')
+# Giá trị này là trạng thái GỐC (đi vá); giá trị khác cả gốc lẫn brand ⇒ trạng thái lạ ⇒ WARN.
+TITLE_OLD_NAMES = ("FPT China Harness", "DeepSeek Harness", "FlowTech Harness")
+
+
+def patch_product_title(NM, new_name):
+    """Tiêu đề tab runtime: DSH 0.1.5+ đọc `productTitle` trong dsh-client-ui-layout (bản cũ ở
+    dsh-client-ui-renderer). Ba trạng thái cho từng file:
+
+      GỐC   = một trong TITLE_OLD_NAMES      -> vá thành <new_name>
+      ĐÃ VÁ = <new_name>                     -> im lặng "OK (already applied)"
+      KHÁC  = giá trị lạ / không thấy dòng nào -> WARN rõ (KHÔNG nới thành im lặng)
+    """
+    hit = []
+    problems = []
+    for pkg in ("dsh-client-ui-layout", "dsh-client-ui-renderer"):
+        p = os.path.join(NM, pkg, "lib", "client.js")
+        if not os.path.isfile(p):
+            continue
+        s = open(p, encoding="utf-8").read()
+        m = TITLE_RE.search(s)
+        if not m:
+            continue
+        cur = m.group(1)
+        if cur == new_name:
+            log("  OK (already applied): productTitle %s = %r" % (pkg, cur))
+            hit.append(pkg)
+        elif cur in TITLE_OLD_NAMES:
+            write_text(p, s.replace('const productTitle = "%s";' % cur,
+                                    'const productTitle = "%s";' % new_name),
+                       "productTitle %s" % pkg)
+            hit.append(pkg)
+        else:
+            problems.append("%s (giá trị lạ %r)" % (pkg, cur))
+    if not hit and not problems:
+        problems.append("khong thay `const productTitle = ...` trong dsh-client-ui-layout/renderer")
+    for pr in problems:
+        log("  WARN: productTitle — %s; tieu de tab co the sai brand" % pr)
+    return bool(hit)
+
+
 def write_bytes(path, content, label):
     if os.path.isfile(path) and open(path, "rb").read() == content:
         log("  OK (already applied): %s" % label)
@@ -102,6 +165,31 @@ NAME_RE = re.compile(
     r"\t\t/\*\*(?:(?!\*/)[\s\S])*?\*/\n"
     r"\t\tfunction OfficialBrandName\(\) \{[\s\S]*?\n\t\t\}\n"
 )
+
+# Dấu vết cho thấy MARK của brand plugin ĐÃ VÁ (2 kiểu: block data-URI, hoặc <img src="/brand-mark.png">
+# của DSH 0.1.5+). Gặp các dấu vết này ⇒ im lặng, KHÔNG WARN (bản cũ vẫn in WARN giả ở đây).
+MARK_APPLIED_MARKERS = ("FLOWTECH_LOGO_DATA_URI", "FLOWTECH_MARK_DATA_URI", 'src: "/brand-mark.png"')
+
+# ---- G1: hai occurrence `sidebar.brand.mark` (WIDE ở brandMark/brandIdentity, RAIL ở railMark) ----
+SIDEBAR_SLOT_RE = re.compile(r'renderSlot\("sidebar\.brand\.mark", \{ size: (\d+) \}')
+SIDEBAR_WIDE_CTX = ("brandMark", "brandIdentity")   # ngữ cảnh của occurrence WIDE (logo rộng)
+SIDEBAR_RAIL_CTX = ("railMark",)                    # ngữ cảnh của occurrence RAIL (icon thu gọn)
+SIDEBAR_CTX_WINDOW = 600                            # số ký tự ngữ cảnh ngay TRƯỚC occurrence
+
+
+def sidebar_wide_slot(t):
+    """Trả match của occurrence WIDE (khối brandMark/brandIdentity), hoặc None.
+
+    Neo theo ngữ cảnh nên KHÔNG phụ thuộc thứ tự trong file; occurrence nào nằm trong ngữ cảnh
+    railMark (icon thu gọn) bị loại — đó là occurrence KHÔNG được đụng tới.
+    """
+    for m in SIDEBAR_SLOT_RE.finditer(t):
+        ctx = t[max(0, m.start() - SIDEBAR_CTX_WINDOW):m.start()]
+        if any(k in ctx for k in SIDEBAR_RAIL_CTX):
+            continue
+        if all(k in ctx for k in SIDEBAR_WIDE_CTX):
+            return m
+    return None
 
 
 def mark_block(logo_uri, icon_uri):
@@ -153,13 +241,18 @@ PROVIDER_PAIRS = [
     ("DeepSeek \u641c\u7d22\u63d0\u4f9b\u65b9\u3002", "FlowTech \u641c\u7d22\u63d0\u4f9b\u65b9\u3002"),
 ]
 
-BOOT_WORDMARK_FPT = (
-    'this.wordmark=Jt(Gt.wordmark),this.wordmark.appendChild(function(){const e=document.createElement("img");'
-    'e.src="/favicon.png";e.alt="FPT China Harness";e.style.width="80px";e.style.height="80px";'
-    'e.style.objectFit="contain";e.style.display="block";e.style.margin="0 auto";return e}())'
-)
-BOOT_WORDMARK_NEW = BOOT_WORDMARK_FPT.replace('alt="FPT China Harness"', 'alt="%s"' % BRAND_NAME)
-BOOT_WORDMARK_NEW = BOOT_WORDMARK_NEW  # dùng chung cho cả 2 trạng thái đầu vào
+BOOT_WORDMARK_RE = r'this\.wordmark=(\w+)\((\w+)\.wordmark,"HARNESS"\)'
+BOOT_WORDMARK_MARKER = ('wordmark.appendChild(function(){const e=document.createElement("img");'
+                        'e.src="/favicon.png"')
+
+
+def boot_wordmark_repl(alt):
+    """Giữ nguyên tên hàm/variable minify của bundle hiện tại (\1, \2) — KHÔNG hardcode như bản cũ."""
+    return (r'this.wordmark=\1(\2.wordmark),this.wordmark.appendChild(function(){'
+            r'const e=document.createElement("img");e.src="/favicon.png";'
+            r'e.alt="%s";e.style.width="80px";e.style.height="80px";'
+            r'e.style.objectFit="contain";e.style.display="block";e.style.margin="0 auto";'
+            r'return e}())' % alt)
 
 
 def main():
@@ -210,12 +303,9 @@ def main():
     if os.path.isfile(mark_png):
         write_bytes(os.path.join(DIST, "brand-mark.png"), open(mark_png, "rb").read(), "dist/brand-mark.png")
 
-    # 2) renderer product title
-    sub_all(os.path.join(NM, "dsh-client-ui-renderer", "lib", "client.js"),
-            [('const productTitle = "FPT China Harness";', 'const productTitle = "%s";' % BRAND_NAME),
-             ('const productTitle = "DeepSeek Harness";', 'const productTitle = "%s";' % BRAND_NAME),
-             ('const productTitle = "FlowTech Harness";', 'const productTitle = "%s";' % BRAND_NAME)],
-            "renderer productTitle")
+    # 2) product title: tiêu đề tab runtime — DSH 0.1.5+ dựng `document.title` từ
+    #    `const productTitle = "..."` trong dsh-client-ui-layout (bản cũ: dsh-client-ui-renderer)
+    patch_product_title(NM, BRAND_NAME)
 
     # 3) settings: announcement text + search provider description
     sub_all(os.path.join(NM, "dsh-client-ui-settings-models", "lib", "client.js"),
@@ -236,6 +326,9 @@ def main():
             icon_uri = "data:image/png;base64," + base64.b64encode(open(icon_png, "rb").read()).decode()
             if MARK_RE.search(s):
                 s = MARK_RE.sub(lambda _m: mark_block(logo_uri, icon_uri), s, count=1)
+            elif any(mk in s for mk in MARK_APPLIED_MARKERS):
+                # Trạng thái ĐÃ VÁ (bản data-URI hoặc <img src="/brand-mark.png">) -> im lặng.
+                log("  OK (already applied): mark brand plugin")
             else:
                 # DSH 0.1.5+ render mark bằng component FishLogo (không nhúng base64) ->
                 # đổi sang <img src="/brand-mark.png">, asset ghi ở bước 6 bên dưới.
@@ -258,16 +351,21 @@ def main():
     if os.path.isfile(sb):
         t = open(sb, encoding="utf-8").read()
         changed = False
-        if 'renderSlot("sidebar.brand.mark", { size: %d }' % SIDEBAR_MARK_SIZE in t:
-            log("  OK (already applied): sidebar mark %dpx" % SIDEBAR_MARK_SIZE)
+        # G1 (t9): `renderSlot("sidebar.brand.mark", { size: N })` có HAI occurrence cùng tên —
+        #   WIDE  ở khối brandIdentity/brandMark (logo sidebar rộng, phải 72px)
+        #   RAIL  ở khối railMark, cạnh `!wide &&` (icon thu gọn, PHẢI giữ 24px)
+        # Vì vậy phải nhận diện occurrence WIDE bằng NGỮ CẢNH, không dùng `re.sub(count=1)` (thứ tự file)
+        # và không hardcode ngưỡng: bản cũ vá nhầm RAIL khi occurrence WIDE đổi tên/biến mất ⇒ cổng
+        # `grep 'sidebar.brand.mark", { size: 72 }'` vẫn xanh dù logo rộng còn 24px ("OK giả").
+        wide = sidebar_wide_slot(t)
+        if wide is None:
+            log("  WARN: khong thay occurrence WIDE cua sidebar.brand.mark (khong co brandMark/brandIdentity)"
+                " — ban DSH khac? KHONG va bua occurrence RAIL")
+        elif wide.group(1) == str(SIDEBAR_MARK_SIZE):
+            log("  OK (already applied): sidebar mark WIDE %dpx" % SIDEBAR_MARK_SIZE)
         else:
-            t2 = re.sub(r'renderSlot\("sidebar\.brand\.mark", \{ size: \d+ \}',
-                        'renderSlot("sidebar.brand.mark", { size: %d }' % SIDEBAR_MARK_SIZE, t, count=1)
-            if t2 == t:
-                log("  WARN: khong thay slot mark cua sidebar (ban DSH khac?)")
-            else:
-                changed = True
-            t = t2
+            t = t[:wide.start()] + 'renderSlot("sidebar.brand.mark", { size: %d }' % SIDEBAR_MARK_SIZE + t[wide.end():]
+            changed = True
         if "gap:8px;min-width:0;height:%dpx" % SIDEBAR_ROW_HEIGHT in t:
             log("  OK (already applied): sidebar brandIdentity height")
         else:
@@ -304,27 +402,38 @@ def main():
     hv = os.path.join(NM, "dsh-client-ui-conversation", "lib", "client.js")
     if os.path.isfile(hv):
         t = open(hv, encoding="utf-8").read()
-        hero_done = re.search(r'conversation\.hero\.brand\.mark", \{\s*\n\s*size: %d,' % HERO_MARK_SIZE, t)
-        if hero_done and "grid-template-columns:auto auto auto" in t:
-            log("  OK (already applied): hero logo size")
+        # Ba trạng thái riêng cho TỪNG mục (không gộp điều kiện: bản cũ đòi cả size lẫn grid CSS nên
+        # trên bản đã vá vẫn in WARN giả "khong thay slot mark cua hero").
+        hero_re = r'renderSlot\("conversation\.hero\.brand\.mark", \{\s*\n\s*size: (\d+),'
+        m = re.search(hero_re, t)
+        if m and m.group(1) == str(HERO_MARK_SIZE):
+            log("  OK (already applied): hero logo size %dpx" % HERO_MARK_SIZE)
+        elif m:
+            t = t[:m.start(1)] + str(HERO_MARK_SIZE) + t[m.end(1):]
+            write_text(hv, t, "hero logo size %dpx" % HERO_MARK_SIZE)
         else:
-            t2 = re.sub(r'(renderSlot\("conversation\.hero\.brand\.mark", \{\s*\n\s*size: )\d+,',
-                        r'\g<1>%d,' % HERO_MARK_SIZE, t, count=1)
-            if t2 == t:
-                log("  WARN: khong thay slot mark cua hero (ban DSH khac?)")
-            t = t2
-            t2 = t.replace("grid-template-columns:34px auto auto", "grid-template-columns:auto auto auto", 1)
-            if t2 == t:
-                log("  WARN: khong thay cot grid cua headline (ban DSH khac?)")
-            write_text(hv, t2, "hero logo size %dpx" % HERO_MARK_SIZE)
+            log("  WARN: khong thay slot mark cua hero (ban DSH khac?)")
+        # grid CSS của headline: chỉ có 2 dạng biết trước; không thấy CẢ HAI ⇒ cấu trúc khác ⇒ WARN rõ.
+        if "grid-template-columns:auto auto auto" in t:
+            log("  OK (already applied): cot grid headline")
+        elif "grid-template-columns:34px auto auto" in t:
+            write_text(hv, t.replace("grid-template-columns:34px auto auto",
+                                     "grid-template-columns:auto auto auto", 1),
+                       "cot grid headline")
+        else:
+            log("  WARN: khong thay cot grid cua headline (khong co ca ban goc lan ban da va) — ban DSH khac?")
 
     # 6) boot/loading wordmark in the hashed main bundle
     for bundle in glob.glob(os.path.join(DIST, "assets", "index-*.js")):
+        label = "boot wordmark %s" % os.path.basename(bundle)
+        # ảnh boot do apply-fpt-patches.py gắn (alt="FPT China Harness") -> đổi alt sang brand hiện tại
         sub_all(bundle,
                 [('alt="FPT China Harness"', 'alt="%s"' % BRAND_NAME),
-                 ('alt="FlowTech Harness"', 'alt="%s"' % BRAND_NAME),
-                 ('this.wordmark=Jt(Gt.wordmark,"HARNESS")', BOOT_WORDMARK_NEW)],
-                "boot wordmark %s" % os.path.basename(bundle))
+                 ('alt="FlowTech Harness"', 'alt="%s"' % BRAND_NAME)],
+                label)
+        # chưa vá (hoặc vá bằng bản cũ hardcode tên minify): vá bằng regex bền minify
+        patch_regex(bundle, BOOT_WORDMARK_RE, boot_wordmark_repl(BRAND_NAME),
+                    label + " (HARNESS -> anh Culi)", BOOT_WORDMARK_MARKER)
 
     log("Done. Restart DSH (Ctrl+C, then run `dsh web` again) and hard-refresh the browser.")
 

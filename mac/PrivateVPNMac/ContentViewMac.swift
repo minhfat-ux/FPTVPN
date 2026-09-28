@@ -32,6 +32,8 @@ struct ContentViewMac: View {
 
                     locationCard
 
+                    networkConflictBanner
+
                     if vpnManager.state.vpnIsTransitioning {
                         transitioningBanner
                     }
@@ -111,6 +113,30 @@ struct ContentViewMac: View {
                 .environmentObject(vpnManager)
                 .environmentObject(authStore)
                 .environmentObject(languageStore)
+        }
+        // Xung đột mạng mức Blocking: hộp thoại nêu TÊN app VPN/mạng đang tranh chấp + hướng dẫn tắt
+        // đi rồi bấm Kết nối lại (khách vẫn có đường "Vẫn kết nối" nếu chủ động muốn thử).
+        .alert(
+            vpnManager.blockingConflict?.localizedTitle(languageStore.language)
+                ?? languageStore.t(.conflictBlockingTitle),
+            isPresented: Binding(
+                get: { vpnManager.blockingConflict != nil },
+                set: { if !$0 { vpnManager.dismissBlockingConflict() } }
+            ),
+            presenting: vpnManager.blockingConflict
+        ) { _ in
+            Button(languageStore.t(.conflictConnectAnyway)) {
+                Task { await vpnManager.connectDespiteConflict(authStore: authStore) }
+            }
+            // "Không nhắc lại": lưu tình trạng vào UserDefaults ⇒ không hiện lại hộp thoại/băng-rôn cho
+            // ĐÚNG tình trạng này nữa (kể cả sau khi mở lại app), và lần Connect sau không bị chặn.
+            Button(languageStore.t(.conflictDontRemind)) { vpnManager.muteCurrentConflict() }
+            Button(languageStore.t(.cancel), role: .cancel) { vpnManager.dismissBlockingConflict() }
+        } message: { conflict in
+            Text(
+                conflict.localizedDetail(languageStore.language)
+                    + "\n\n" + conflict.localizedAdvice(languageStore.language)
+            )
         }
         .onAppear {
             if !authStore.isSignedIn {
@@ -378,8 +404,48 @@ struct ContentViewMac: View {
         .disabled(busy)
     }
 
-    // MARK: - Transitioning banner
+    // MARK: - Xung đột mạng (app VPN/mạng khác đang tranh chấp)
 
+    /// Cảnh báo NHẸ (mức Warning — tunnel app khác đang bật mà không giữ đường mặc định, DNS không trả
+    /// lời trong lúc tunnel Connected, MagicDNS…): VẪN cho kết nối, chỉ nêu tên app/dấu hiệu. Mức
+    /// **Info im lặng** (chỉ thẻ Diagnostics), mức Blocking đã có hộp thoại riêng ở `VPNManagerMac`.
+    ///
+    /// Băng-rôn chỉ được đặt khi tình trạng ĐỔI hoặc khi khách bấm Connect (`visibleWarningConflict`) —
+    /// không hiện lại mỗi lần mở app, và có nút "Không nhắc lại" (lưu `UserDefaults`).
+    @ViewBuilder
+    private var networkConflictBanner: some View {
+        if let warning = vpnManager.visibleWarningConflict {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(warning.localizedTitle(languageStore.language), systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
+                Text(warning.localizedDetail(languageStore.language))
+                    .font(.footnote)
+                    .foregroundStyle(VPNThemeMac.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(warning.localizedAdvice(languageStore.language))
+                    .font(.footnote)
+                    .foregroundStyle(VPNThemeMac.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(languageStore.t(.conflictDontRemind)) {
+                    vpnManager.muteCurrentConflict()
+                }
+                .buttonStyle(.plain)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(VPNThemeMac.accent)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.orange.opacity(0.45), lineWidth: 1)
+            )
+        }
+    }
+
+    // MARK: - Transitioning banner
     private var transitioningBanner: some View {
         HStack(spacing: 10) {
             ProgressView()
@@ -488,6 +554,8 @@ struct ContentViewMac: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider().overlay(VPNThemeMac.cardStroke)
+            networkConflictDiagnosticsRows
+            Divider().overlay(VPNThemeMac.cardStroke)
             liveDiagnosticsRows
         }
         .padding(16)
@@ -510,6 +578,55 @@ struct ContentViewMac: View {
                 .font(.subheadline.monospaced())
                 .foregroundStyle(valueColor)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+
+    // MARK: - Xung đột mạng trong thẻ Diagnostics
+
+    /// Mục "Xung đột mạng" của thẻ Diagnostics — khách/support thấy ngay app nào đang tranh chấp,
+    /// kèm dấu hiệu cụ thể (interface tunnel đang giữ default route, proxy, DNS…).
+    ///
+    /// Nhãn mức (`Blocking`/`Warning`/`Info`) giữ tiếng Anh có chủ ý: đó là từ khoá support grep
+    /// trong log, không phải câu chữ cho khách.
+    private var networkConflictDiagnosticsRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(languageStore.t(.conflictDiagnostics))
+                .font(.subheadline)
+                .foregroundStyle(VPNThemeMac.secondaryLabel)
+
+            if vpnManager.networkConflicts.isEmpty {
+                Text(languageStore.t(.conflictNone))
+                    .font(.footnote)
+                    .foregroundStyle(VPNThemeMac.success)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ForEach(vpnManager.networkConflicts) { conflict in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(conflict.severity.label)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(conflictSeverityColor(conflict.severity))
+                            Text(conflict.localizedTitle(languageStore.language))
+                                .font(.footnote)
+                                .foregroundStyle(VPNThemeMac.label)
+                        }
+                        Text(conflict.localizedDetail(languageStore.language))
+                            .font(.caption)
+                            .foregroundStyle(VPNThemeMac.secondaryLabel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func conflictSeverityColor(_ severity: NetworkConflictSeverity) -> Color {
+        switch severity {
+        case .blocking: return .red
+        case .warning: return .orange
+        case .info: return VPNThemeMac.tertiaryLabel
         }
     }
 

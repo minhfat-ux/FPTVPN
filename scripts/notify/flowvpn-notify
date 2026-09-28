@@ -69,7 +69,22 @@ TS="$(date -u +%Y%m%dT%H%M%SZ)"
 SLUG="$(printf '%s' "$TOPIC" | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9-')"
 OUT="$INBOX/$TS-$FROM-${SLUG:0:40}.md"
 
-if [ -n "$FILE" ]; then cp -f "$FILE" "$OUT"; else cat > "$OUT"; fi
+if [ -n "$FILE" ]; then
+  [ -s "$FILE" ] || { echo "loi: file nguon rong hoac khong ton tai: $FILE" >&2; exit 2; }
+  cp -f "$FILE" "$OUT"
+else
+  cat > "$OUT"
+fi
+
+# KHÔNG bao giờ phát đi thông báo RỖNG. Đã gặp thật ngày 24/09/2026: một tin 0 byte vẫn được
+# ghi vào inbox/mac và vẫn ping Telegram, làm poller bên nhận tải về rồi đánh thức agent
+# chỉ để đọc đúng file trống. Hủy và báo lỗi để bên gửi biết ngay, thay vì im lặng.
+if [ ! -s "$OUT" ]; then
+  rm -f "$OUT"
+  echo "loi: noi dung rong — da huy (khong ghi inbox, khong ping Telegram)" >&2
+  exit 2
+fi
+
 chmod 644 "$OUT"
 echo "==> da luu: $OUT ($(wc -c < "$OUT") byte)"
 echo "$OUT"

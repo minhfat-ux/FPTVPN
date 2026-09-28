@@ -65,6 +65,36 @@ struct LivenessWatchdog {
     private(set) var strikes = 0
     /// Số lần đã ping trong pha HOLD hiện tại (0 = chưa ping lần nào).
     private(set) var holdPings = 0
+    /// (24/09/2026 tối) Mốc SYN / SYN-ACK của nhịp trước — cho luật **"SYN gửi mà không có
+    /// SYN-ACK nào về"** (xem `tick`).
+    private(set) var lastSynToGo = 0
+    private(set) var lastSynAckFromGo = 0
+    /// Lúc BẮT ĐẦU chuỗi "có SYN mới mà không SYN-ACK nào về" (`nil` = không có chuỗi nào).
+    private(set) var unansweredSynSince: Date?
+    /// Bằng chứng của lần kết luận HỎNG gần nhất — để log nói rõ VÌ SAO, không chỉ "im lặng".
+    private(set) var lastStallEvidence: String?
+    /// (Android parity 24/09/2026) `udpFrames` (frame client gửi LÊN relay) của nhịp trước.
+    private(set) var lastRelayFramesSent: Int?
+    /// Lúc bắt đầu chuỗi "máy đẩy gói vào cầu mà client KHÔNG gửi gì lên relay".
+    private(set) var relayStuckSince: Date?
+    /// Mốc `toGoOffered` của NHỊP TRƯỚC cho luật relay — cố ý tách khỏi `baselineToGo`.
+    ///
+    /// Vì sao phải tách (lỗi thật 24/09/2026 23:21, máy đang ở đúng trạng thái hỏng): `baselineToGo`
+    /// được `noteReturn` làm mới MỖI KHI có một gói về — kể cả gói nhỏ giọt — nên hiệu số
+    /// `offered - baselineToGo` luôn nhỏ và luật relay KHÔNG BAO GIỜ khởi động được, dù
+    /// `udpFrames` đã đóng băng >60 s. Mốc dưới đây chỉ nhích một lần mỗi nhịp (15 s) nên đo đúng
+    /// "máy đã đẩy bao nhiêu gói trong nhịp vừa rồi".
+    private var relayCheckBaselineOffered: Int?
+
+    /// Số gói tối thiểu máy phải đẩy vào cầu trong một nhịp mới đủ tư cách kết luận về relay
+    /// (dưới ngưỡng này là máy rảnh — im lặng là bình thường, xem chú thích `WSRelayClient`).
+    static let relayStuckMinOfferedFrames = 20
+    /// Máy vẫn đẩy gói vào cầu mà `udpFrames` đứng yên ngần này ⇒ tầng Go/hysteria không đẩy gói
+    /// lên relay nữa. Android xử đúng ca này bằng `probeThroughTunnel()` hỏng 2 lần rồi
+    /// `Mobile.stop()` cho `runTunnel()` dựng lại transport — iOS KHÔNG probe được như vậy vì
+    /// traffic của extension không đi qua tunnel của chính nó (log thật: `probe NGOÀI tunnel OK`),
+    /// nên dùng bất biến cục bộ này: **máy → cầu có gói, cầu → relay không có frame**.
+    static let relayStuckLimit: TimeInterval = 20
 
     init(
         now: Date,
@@ -95,6 +125,10 @@ struct LivenessWatchdog {
         fromGo: Int?,
         toGo: Int?,
         toGoDropped: Int = 0,
+        synToGo: Int = 0,
+        synAckFromGo: Int = 0,
+        countsTCPHandshake: Bool = false,
+        relayFramesSent: Int? = nil,
         rampInFlight: Bool
     ) -> Verdict {
         guard let fromGo, let toGo else { return .idle }
@@ -103,11 +137,80 @@ struct LivenessWatchdog {
         lastToGoOffered = offered
         if rampInFlight {
             noteReturn(at: now, fromGo: fromGo, toGoOffered: offered)
+            lastSynToGo = synToGo
+            lastSynAckFromGo = synAckFromGo
+            lastRelayFramesSent = relayFramesSent
             return .idle
         }
-        // (1) Chiều về có byte mới ⇒ tunnel sống thật.
+        // (0) ANDROID PARITY — "máy đẩy gói vào cầu, nhưng client KHÔNG gửi gì lên relay".
+        //
+        // Ca thật 24/09/2026 22:23→22:56 (khách "Connected mà không có mạng", phải tự tắt VPN):
+        // `packetFlow→Go` +180 gói/15 s trong khi `ws-relay: heartbeat udpFrames=23094` ĐÓNG BĂNG
+        // >30 s ⇒ tầng Go/hysteria thôi đẩy gói lên relay, còn bridge cục bộ vẫn nhỏ giọt ⇒ luật
+        // "có gói về" cũ trả `.alive` mãi. Bất biến này đo được TỪ TRONG extension và không thể
+        // "may mắn đúng" khi máy đang thật sự gửi.
+        if let relayFramesSent {
+            let relayFed = relayFramesSent != lastRelayFramesSent
+            // Hiệu số theo NHỊP (không dùng `baselineToGo` — xem chú thích `relayCheckBaselineOffered`).
+            let windowOffered = offered - (relayCheckBaselineOffered ?? offered)
+            relayCheckBaselineOffered = offered
+            if relayFed {
+                relayStuckSince = nil
+            } else if windowOffered >= Self.relayStuckMinOfferedFrames {
+                if relayStuckSince == nil { relayStuckSince = now }
+                if let since = relayStuckSince,
+                   now.timeIntervalSince(since) >= Self.relayStuckLimit {
+                    lastStallEvidence = "máy đẩy \(windowOffered) gói vào cầu trong nhịp vừa rồi mà relay "
+                        + "KHÔNG nhận thêm frame nào (udpFrames đứng ở \(relayFramesSent)) trong "
+                        + "≥\(Int(Self.relayStuckLimit))s"
+                    strikes += 1
+                    lastRelayFramesSent = relayFramesSent
+                    lastReturnAt = now
+                    return strikes >= strikesToRebuild ? .rebuild : .strike(strikes)
+                }
+                // Đang trong cửa sổ "kẹt": gói nhỏ giọt về KHÔNG được coi là mạng sống, và KHÔNG
+                // được reset mốc/strike (nếu không thì timer không bao giờ đủ 20 s).
+                lastFromGo = fromGo
+                lastRelayFramesSent = relayFramesSent
+                return .idle
+            }
+            lastRelayFramesSent = relayFramesSent
+        }
+        // (1) Chiều về có byte mới ⇒ tunnel sống thật — NHƯNG "một gói về" KHÔNG đủ.
+        //
+        // Ca thật 24/09/2026 (iPhone, 22:23:42→22:56:00, khách phải tự tắt VPN): máy gửi **180
+        // gói/15 s** mà chỉ nhận **10 gói** (dòng nhỏ giọt ~1,5 gói/s), relay đứng im
+        // (`ws-relay: heartbeat` giữ nguyên `framesFromRelay/bytesFromRelay` >30 s) — vì vẫn có
+        // gói về nên luật cũ trả `.alive` suốt 32 phút ⇒ khách ở đúng trạng thái
+        // **"Connected mà không có mạng"**.
+        //
+        // Bằng chứng HỎNG mạnh nhất (và chính app đã dùng ở đầu phiên — xem
+        // `startTrafficSupervisor`): **có SYN gửi vào tunnel mà KHÔNG có SYN-ACK nào về** ⇒ chặng
+        // về đứt. Miễn nhiễm ca khách đang UPLOAD: bắt tay của luồng upload đã xong từ trước nên
+        // không sinh SYN mới; nếu có mở luồng mới thì SYN-ACK phải về ngay khi đường còn tốt.
+        if countsTCPHandshake, synToGo > lastSynToGo, synAckFromGo <= lastSynAckFromGo {
+            if unansweredSynSince == nil { unansweredSynSince = now }
+            if let since = unansweredSynSince, now.timeIntervalSince(since) >= silenceLimit {
+                lastStallEvidence = "SYN vào \(synToGo) gói mà KHÔNG có SYN-ACK nào về "
+                    + "(tổng SYN-ACK \(synAckFromGo)), trong khi chiều về chỉ nhỏ giọt "
+                    + "\(fromGo - lastFromGo) gói"
+                strikes += 1
+                lastSynToGo = synToGo
+                lastSynAckFromGo = synAckFromGo
+                // Đẩy mốc "chiều về" để KHÔNG cộng dồn thêm strike từ luật im lặng ở nhịp sau.
+                lastReturnAt = now
+                return strikes >= strikesToRebuild ? .rebuild : .strike(strikes)
+            }
+            // Chưa đủ `silenceLimit` kể từ SYN đầu tiên: chưa kết luận, và KHÔNG reset strike
+            // (dòng nhỏ giọt không phải là "mạng sống").
+            lastFromGo = fromGo
+            return .idle
+        }
         if fromGo > lastFromGo {
             noteReturn(at: now, fromGo: fromGo, toGoOffered: offered)
+            lastSynToGo = synToGo
+            lastSynAckFromGo = synAckFromGo
+            unansweredSynSince = nil
             return .alive
         }
         // (2) Chiều về đứng yên: chưa đủ dài thì chỉ là im bình thường.
@@ -117,6 +220,8 @@ struct LivenessWatchdog {
         // kết luận (giữ nguyên baseline, không tăng strike).
         guard offered > baselineToGo else { return .idle }
         // (4) Im VÀ bất đối xứng ⇒ đường hỏng.
+        lastStallEvidence = "chiều về im ≥\(Int(silenceLimit))s trong khi máy vẫn gửi "
+            + "\(offered - baselineToGo) gói vào tunnel"
         strikes += 1
         return strikes >= strikesToRebuild ? .rebuild : .strike(strikes)
     }
@@ -124,6 +229,14 @@ struct LivenessWatchdog {
     /// Reset trạng thái sau khi dựng lại transport thành công (transport mới, bộ đếm mới).
     mutating func resetAfterRebuild(now: Date, fromGo: Int, toGo: Int, toGoDropped: Int = 0) {
         noteReturn(at: now, fromGo: fromGo, toGoOffered: toGo + max(0, toGoDropped))
+        // Cầu mới ⇒ bộ đếm SYN/SYN-ACK đếm lại từ 0; giữ mốc cũ sẽ làm luật SYN không bao giờ chạy.
+        lastSynToGo = 0
+        lastSynAckFromGo = 0
+        unansweredSynSince = nil
+        // Transport mới ⇒ relay/cầu mới, bộ đếm frame đếm lại từ đầu.
+        lastRelayFramesSent = nil
+        relayStuckSince = nil
+        relayCheckBaselineOffered = nil
         holdPings = 0
     }
 
@@ -337,4 +450,179 @@ enum RawLinePolicy {
     static func asymmetryEvidence(deltaOffered: Int, deltaFromGo: Int) -> Bool {
         deltaOffered > 0 && deltaFromGo == 0
     }
+}
+
+/// Luật **FAILOVER ĐƯỜNG** khi tunnel `Connected` nhưng chiều VỀ đứt một chiều (25/09/2026).
+///
+/// VÌ SAO PHẢI CÓ (ca thật trên máy Mac, 25/09/2026 19:33→19:43, relay `vn1hy`): máy VẪN gửi gói
+/// đều vào tunnel (`packetFlow→Go` leo 3477→3501 SYN) trong khi `Go→packetFlow` **ĐÓNG BĂNG** ở
+/// 360729 gói / 125.639.055 B và `SYN-ACK về` đứng ở 2239 ⇒ hỏng MỘT CHIỀU. App đã tự dựng lại
+/// transport **3 lần liên tiếp trên CÙNG một relay** (`vn1hy`) mà KHÔNG hề đổi đường.
+///
+/// Vì sao luật cũ (`transportCarriedTraffic` + `recoveryAttemptsWithoutTraffic`) không bắt được:
+/// cờ đó được đặt theo DELTA BYTE chiều về, nhưng mỗi lần dựng lại xong watchdog được bật lại và
+/// **đặt mốc byte về 0** (`startLivenessWatchdog`: `livenessPrevFromGoBytes = 0`). Nhịp đầu tiên
+/// sau dựng lại vì thế tính "delta" = cả đời bộ đếm cầu (125 MB) ⇒ tưởng đường CÓ chở ⇒ xoá bộ
+/// đếm vô ích mỗi lần ⇒ không bao giờ đủ ngưỡng ⇒ bám mãi một relay.
+///
+/// Luật mới đo ĐÚNG thứ cần đo: mở một CỬA SỔ đánh giá ngay sau mỗi lần dựng lại rồi so số gói
+/// CHIỀU VỀ (`fromGo`, luỹ kế của cầu) ở ĐẦU cửa sổ với số ở CUỐI cửa sổ. KHÔNG quan tâm máy gửi
+/// ra bao nhiêu — gửi ra được KHÔNG chứng minh chiều về còn sống.
+///
+/// Hàm THUẦN (không Bundle/UI/đồng hồ thật) — case harness ở `scripts/ios-pure-logic-tests/main.swift`.
+struct RelayFailoverWatch {
+
+    /// Kết quả một nhịp của cửa sổ đánh giá.
+    enum Verdict: Equatable {
+        /// Cửa sổ chưa mở hoặc chưa hết: chưa kết luận được gì.
+        case waiting
+        /// Cửa sổ vừa đóng và CÓ gói chiều VỀ (`delta` gói) ⇒ lần dựng lại này HIỆU QUẢ, xoá chuỗi vô ích.
+        case carried(Int)
+        /// Cửa sổ vừa đóng với **0 gói VỀ** — giá trị 1-based = số lần vô ích LIÊN TIẾP.
+        case fruitless(Int)
+        /// Đủ `fruitlessToAdvance` lần vô ích liên tiếp ⇒ đổi sang ứng viên đường kế tiếp.
+        case advanceRelay(Int)
+        /// Đủ ngưỡng nhưng đã hết ứng viên (`maxAdvances` lần đổi trong phiên) ⇒ GIỮ tunnel của
+        /// khách, nhịp sau thử lại — KHÔNG xoay vòng vô hạn, KHÔNG gỡ tunnel.
+        case exhausted(Int)
+    }
+
+    /// Độ dài cửa sổ đánh giá — dùng lại nhịp watchdog sẵn có (15 s).
+    let windowS: TimeInterval
+    /// Số cửa sổ "0 gói VỀ" LIÊN TIẾP trước khi đổi đường.
+    let fruitlessToAdvance: Int
+    /// Trần số lần đổi đường mỗi phiên (chống xoay vòng vô hạn) — phải khớp `maxNodeFailovers`.
+    let maxAdvances: Int
+
+    /// Đầu cửa sổ hiện tại (`nil` = không có cửa sổ nào đang mở).
+    private(set) var windowStartAt: Date?
+    /// Mốc `fromGo` tại ĐẦU cửa sổ — chỉ dùng để so DELTA, không bao giờ so với 0.
+    private(set) var windowStartFromGo = 0
+    /// Số cửa sổ "0 gói VỀ" liên tiếp đã đóng.
+    private(set) var fruitlessWindows = 0
+    /// Số lần đã đổi đường trong phiên.
+    private(set) var advances = 0
+
+    init(windowS: TimeInterval = 15, fruitlessToAdvance: Int = 2, maxAdvances: Int = 3) {
+        self.windowS = max(1, windowS)
+        self.fruitlessToAdvance = max(1, fruitlessToAdvance)
+        self.maxAdvances = max(0, maxAdvances)
+    }
+
+    /// Mở cửa sổ đánh giá NGAY SAU khi transport được dựng lại xong. `fromGo` là số gói chiều về
+    /// (luỹ kế của cầu) tại thời điểm đó — mốc để đo DELTA, không phải "đã có gói về".
+    mutating func beginWindow(now: Date, fromGo: Int) {
+        windowStartAt = now
+        windowStartFromGo = fromGo
+    }
+
+    /// Một nhịp (provider bơm `now`/`fromGo` vào — hàm thuần, test được).
+    mutating func tick(now: Date, fromGo: Int) -> Verdict {
+        guard let start = windowStartAt else { return .waiting }
+        // `fromGo` TỤT = nguồn đếm vừa đổi giữa cửa sổ (cầu mới đếm lại từ 0) ⇒ KHÔNG đo được gì:
+        // đặt lại mốc và không kết luận (đây chính là cái bẫy đã làm luật cũ reset oan).
+        guard fromGo >= windowStartFromGo else {
+            beginWindow(now: now, fromGo: fromGo)
+            return .waiting
+        }
+        if fromGo > windowStartFromGo {
+            let delta = fromGo - windowStartFromGo
+            windowStartAt = nil
+            fruitlessWindows = 0
+            return .carried(delta)
+        }
+        // Delta = 0 mà chưa hết cửa sổ: còn chờ (gói về có thể tới muộn trong cửa sổ).
+        guard now.timeIntervalSince(start) >= windowS else { return .waiting }
+        windowStartAt = nil
+        fruitlessWindows += 1
+        guard fruitlessWindows >= fruitlessToAdvance else { return .fruitless(fruitlessWindows) }
+        guard advances < maxAdvances else { return .exhausted(fruitlessWindows) }
+        return .advanceRelay(fruitlessWindows)
+    }
+
+    /// Provider ĐÃ đổi đường thật (currentOptions sang ứng viên kế tiếp) ⇒ đóng chuỗi vô ích.
+    mutating func noteAdvanced() {
+        fruitlessWindows = 0
+        advances += 1
+    }
+
+    /// Hết ứng viên: giữ nguyên tunnel của khách, để nhịp sau thử lại từ đầu.
+    mutating func noteExhausted() {
+        fruitlessWindows = 0
+    }
+}
+
+/// Luật **FAILOVER KHI KHÔNG KẾT NỐI ĐƯỢC relay** (26/09/2026) — anh em với `RelayFailoverWatch`.
+///
+/// VÌ SAO PHẢI CÓ (ca thật 26/09/2026, macOS system extension 1.4.7/25, tunnel đi relay `vn2hy` của
+/// node `vietnam-2`): relay bị chặn phía server (`systemctl stop relay-cf-vn2hy`). Trong ~4 phút, log
+/// extension có **24 lần `relay/vn2hy`, 0 lần `relay/vn1hy`**, `framesFromRelay` = 0, rồi tunnel
+/// `Disconnected` và nằm đó ~18 phút; chỉ khi người dùng đổi `selectedNodeID` sang node-1 thì tunnel
+/// mới lên lại (`relay/vn1hy`).
+///
+/// Vì sao `RelayFailoverWatch` (25/09) KHÔNG bắt được ca này: cửa sổ đánh giá của nó chỉ được MỞ
+/// trong `runTransportRecoveryAttempt`, tức là **SAU KHI** `rebuildTransportForLiveness()` trả `true`.
+/// Khi WS không mở nổi (relay chết hẳn), mọi lần dựng lại đều THẤT BẠI ⇒ **không cửa sổ nào được
+/// mở** ⇒ `tick` mãi trả `.waiting` ⇒ `advanceRelayCandidate` không bao giờ được gọi. Đó là khác
+/// biệt cốt lõi giữa hai ca:
+///   * 25/09 — relay KẾT NỐI ĐƯỢC mà không có gói về  ⇒ có cửa sổ ⇒ luật cũ chạy;
+///   * 26/09 — relay KHÔNG kết nối được (WS connect/handshake fail) ⇒ không cửa sổ nào ⇒ luật cũ câm.
+///
+/// Luật này đo ĐÚNG thứ cần đo: **đã bao lâu kể từ lúc LINK tới relay hiện tại mất/không mở được**.
+/// Quá `limit` ⇒ đổi ứng viên kế tiếp; nhịp sau vẫn hỏng thì lại đổi (quay vòng), GIỮ tunnel — không
+/// bỏ mặc khách ở `Disconnected`. Hàm THUẦN (không I/O) để harness test được toàn bộ luật — xem
+/// `scripts/ios-pure-logic-tests/main.swift`.
+struct RelayUnreachableWatch {
+
+    /// Kết quả một lần bơm trạng thái link.
+    enum Verdict: Equatable {
+        /// Link đang mở, hoặc chưa kẹt đủ ngưỡng ⇒ chưa làm gì.
+        case waiting
+        /// Link KHÔNG kết nối được đủ `limit` giây (giá trị = số giây đã kẹt) ⇒ đổi cửa kế tiếp.
+        case advance(TimeInterval)
+    }
+
+    /// Ngưỡng "relay hiện tại không kết nối được" (giây).
+    ///
+    /// 20 s: đủ dài để KHÔNG đổi đường vì một cú rớt WS thoáng qua (một lượt bắt tay lại của
+    /// Cloudflare/relay chỉ mất vài giây, và nhịp kiểm tra là 5 s), đủ ngắn để khách không phải chờ —
+    /// mốc nghiệm thu 26/09/2026 là "chặn relay → đổi đường/node → handshake ok → có gói về" trong
+    /// **< 30 s**. Nằm trong khoảng 20–30 s mà brief yêu cầu.
+    static let defaultLimit: TimeInterval = 20
+
+    let limit: TimeInterval
+    /// Lúc bắt đầu chuỗi "link không mở được" hiện tại (`nil` = link đang mở/chưa có bằng chứng).
+    private(set) var downSince: Date?
+    /// Số lần đã đổi cửa vì không kết nối được (chỉ để log/chẩn đoán).
+    private(set) var advances = 0
+    /// Mốc lần đổi cửa gần nhất — bằng chứng cho log "đã kẹt bao lâu".
+    private(set) var lastAdvanceAt: Date?
+
+    init(limit: TimeInterval = RelayUnreachableWatch.defaultLimit) {
+        self.limit = max(1, limit)
+    }
+
+    /// Link tới relay hiện tại KHÔNG kết nối được (WS chưa mở / vừa đứt). Gọi đều đặn (nhịp 5 s).
+    mutating func noteLinkDown(now: Date) -> Verdict {
+        guard let since = downSince else {
+            downSince = now
+            return .waiting
+        }
+        let elapsed = now.timeIntervalSince(since)
+        guard elapsed >= limit else { return .waiting }
+        // Mở cửa sổ MỚI cho ứng viên vừa đổi: nếu cửa mới cũng không mở được thì phải chờ đủ
+        // `limit` cho nó, KHÔNG xoay vòng dồn dập (mỗi lần đổi là một lần dựng lại transport).
+        downSince = now
+        advances += 1
+        lastAdvanceAt = now
+        return .advance(elapsed)
+    }
+
+    /// Link tới relay ĐANG mở ⇒ xoá chuỗi kẹt (không đổi đường oan).
+    mutating func noteLinkUp() {
+        downSince = nil
+    }
+
+    /// Relay hiện tại có đang trong chuỗi "không kết nối được" không (dùng để HOÃN tự gỡ tunnel).
+    var isUnreachable: Bool { downSince != nil }
 }

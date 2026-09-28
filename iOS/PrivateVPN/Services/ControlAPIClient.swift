@@ -148,6 +148,19 @@ struct TunnelStatusReport: Codable, Equatable {
     var extensionBuild: String?
     var extensionPath: String?
     var extensionMTime: String?
+    /// 26/09/2026 — ĐUÔI log chẩn đoán của extension (`RelayDiagnostics`) để **app lưu hộ** ra
+    /// app group container (`~/Library/Group Containers/G6XW3RN6LJ.com.privatevpn.shared/relay.log`).
+    ///
+    /// VÌ SAO PHẢI ĐI VÒNG QUA APP (đo thật 26/09/2026, đừng "tối ưu" thành extension tự ghi):
+    /// app group container trên macOS là **theo từng user**, KHÔNG phải một thư mục dùng chung.
+    /// System extension chạy **root** nên `containerURL` của nó trả `/var/root/…`, và sandbox của
+    /// nó **CHẶN GHI** vào container của user — log extension tự khai:
+    /// `relay.log: primary=/private/var/root/… mirror=- probes[user:/Users/<u> exists=true write=false
+    /// | container exists=true write=true]`. App (user) mới ghi được vào container của mình, nên
+    /// extension gửi đuôi log qua chính kênh `sendProviderMessage` app đã hỏi mỗi 2 s.
+    ///
+    /// CHỈ macOS gửi trường này (extension bọc `#if os(macOS)`) ⇒ hành vi iOS không đổi.
+    var logTail: String?
 }
 
 /// Dọn trạng thái cũ còn sót lại từ các bản trước để lần Connect đầu tiên sau khi cập

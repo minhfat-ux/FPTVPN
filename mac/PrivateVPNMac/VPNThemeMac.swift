@@ -136,6 +136,13 @@ enum AppTextKey: String {
     case startVPNHint, stopVPNHint
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
     case about, version, latestOnServer, latestDifferent, latestUnavailable
+    /// Xung đột mạng — app VPN/proxy khác đang tranh chấp (xem `NetworkConflictDetector`).
+    /// `…Detail` có `%@` = danh sách dấu hiệu cụ thể (tên app, interface, proxy, DNS…).
+    case conflictDiagnostics, conflictNone, conflictConnectAnyway
+    case conflictDontRemind
+    case conflictBlockingTitle, conflictBlockingDetail, conflictBlockingAdvice
+    case conflictWarningTitle, conflictWarningDetail, conflictWarningAdvice
+    case conflictInfoTitle, conflictInfoDetail, conflictInfoAdvice
 }
 
 @MainActor
@@ -221,7 +228,18 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "Your VPN tunnel is off", .connectingSubtitle: "Starting secure VPN tunnel",
             .connectedSubtitle: "Your traffic is protected", .disconnectingSubtitle: "Stopping VPN tunnel",
             .failedSubtitle: "VPN needs attention",
-            .startVPNHint: "Starts the VPN tunnel to the selected location", .stopVPNHint: "Stops the VPN tunnel"
+            .startVPNHint: "Starts the VPN tunnel to the selected location", .stopVPNHint: "Stops the VPN tunnel",
+            .conflictDiagnostics: "Network conflicts", .conflictNone: "No other VPN/network app detected",
+            .conflictConnectAnyway: "Connect anyway", .conflictDontRemind: "Don't remind me again",
+            .conflictBlockingTitle: "Another VPN/network app is conflicting",
+            .conflictBlockingDetail: "Detected: %@. Another app is holding the default route or DNS, so VPNFlow cannot connect (or connects without internet).",
+            .conflictBlockingAdvice: "Quit the other VPN/network apps (Clash Verge, ClashX, Mihomo, sing-box, Tailscale, WireGuard, OpenVPN…) and tap Connect again.",
+            .conflictWarningTitle: "Another VPN/network app is running in the background",
+            .conflictWarningDetail: "Detected: %@. It can make the connection unstable or break name resolution.",
+            .conflictWarningAdvice: "If VPNFlow is slow or unstable, quit those apps and tap Connect again.",
+            .conflictInfoTitle: "More network information",
+            .conflictInfoDetail: "Detected: %@.",
+            .conflictInfoAdvice: "Already reported at a higher level — follow that advice."
         ],
         .vietnamese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "Internet riêng tư, mã hóa từ Việt Nam", .updateRequired: "Cần cập nhật", .updateRequiredDetail: "Cần phiên bản mới của VPNFlow để tiếp tục. Vui lòng tải bản mới tại meetflowai.site/buy.", .update: "Cập nhật", .deleteAccount: "Xóa tài khoản", .deleteAccountConfirm: "Thao tác này sẽ xóa vĩnh viễn tài khoản và toàn bộ dữ liệu của bạn. Không thể hoàn tác.", .deleteAccountDone: "Đã xóa tài khoản.", .cancel: "Hủy",
@@ -261,7 +279,18 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN tunnel đang tắt", .connectingSubtitle: "Đang khởi động VPN tunnel bảo mật",
             .connectedSubtitle: "Lưu lượng của bạn đang được bảo vệ", .disconnectingSubtitle: "Đang dừng VPN tunnel",
             .failedSubtitle: "VPN cần được kiểm tra",
-            .startVPNHint: "Bắt đầu VPN tunnel tới vị trí đã chọn", .stopVPNHint: "Dừng VPN tunnel"
+            .startVPNHint: "Bắt đầu VPN tunnel tới vị trí đã chọn", .stopVPNHint: "Dừng VPN tunnel",
+            .conflictDiagnostics: "Xung đột mạng", .conflictNone: "Không phát hiện ứng dụng VPN/mạng nào khác",
+            .conflictConnectAnyway: "Vẫn kết nối", .conflictDontRemind: "Không nhắc lại",
+            .conflictBlockingTitle: "Ứng dụng VPN/mạng khác đang tranh chấp",
+            .conflictBlockingDetail: "Phát hiện: %@. Ứng dụng khác đang giữ đường mạng mặc định hoặc DNS nên VPNFlow không kết nối được (hoặc kết nối mà không có mạng).",
+            .conflictBlockingAdvice: "Hãy tắt/thoát hẳn các ứng dụng VPN/mạng khác (Clash Verge, ClashX, Mihomo, sing-box, Tailscale, WireGuard, OpenVPN…) rồi bấm Kết nối lại.",
+            .conflictWarningTitle: "Có ứng dụng VPN/mạng khác đang chạy nền",
+            .conflictWarningDetail: "Phát hiện: %@. Chúng có thể làm kết nối chập chờn hoặc làm hỏng phân giải tên miền.",
+            .conflictWarningAdvice: "Nếu VPNFlow kết nối chậm hoặc chập chờn, hãy tắt/thoát các ứng dụng đó rồi bấm Kết nối lại.",
+            .conflictInfoTitle: "Thông tin thêm về mạng",
+            .conflictInfoDetail: "Phát hiện: %@.",
+            .conflictInfoAdvice: "Đã cảnh báo ở mức nặng hơn — xử lý theo hướng dẫn đó là đủ."
         ],
         .chinese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "来自越南的私密加密网络", .updateRequired: "需要更新", .updateRequiredDetail: "需要新版 VPNFlow 才能继续。请前往 meetflowai.site/buy 下载最新版本。", .update: "更新", .deleteAccount: "删除账户", .deleteAccountConfirm: "此操作将永久删除您的账户和所有数据，且无法撤销。", .deleteAccountDone: "账户已删除。", .cancel: "取消",
@@ -300,7 +329,18 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN 隧道已关闭", .connectingSubtitle: "正在启动安全 VPN 隧道",
             .connectedSubtitle: "你的流量正在受到保护", .disconnectingSubtitle: "正在停止 VPN 隧道",
             .failedSubtitle: "VPN 需要检查",
-            .startVPNHint: "连接到所选位置的 VPN 隧道", .stopVPNHint: "停止 VPN 隧道"
+            .startVPNHint: "连接到所选位置的 VPN 隧道", .stopVPNHint: "停止 VPN 隧道",
+            .conflictDiagnostics: "网络冲突", .conflictNone: "未检测到其他 VPN/网络应用",
+            .conflictConnectAnyway: "仍然连接", .conflictDontRemind: "不再提醒",
+            .conflictBlockingTitle: "其他 VPN/网络应用正在冲突",
+            .conflictBlockingDetail: "检测到：%@。其他应用正在占用默认路由或 DNS，因此 VPNFlow 无法连接（或连接后无法上网）。",
+            .conflictBlockingAdvice: "请退出其他 VPN/网络应用（Clash Verge、ClashX、Mihomo、sing-box、Tailscale、WireGuard、OpenVPN 等），然后重新点击连接。",
+            .conflictWarningTitle: "有其他 VPN/网络应用在后台运行",
+            .conflictWarningDetail: "检测到：%@。它们可能导致连接不稳定或域名解析失败。",
+            .conflictWarningAdvice: "如果 VPNFlow 连接缓慢或不稳定，请退出这些应用后重新点击连接。",
+            .conflictInfoTitle: "更多网络信息",
+            .conflictInfoDetail: "检测到：%@。",
+            .conflictInfoAdvice: "已在更高等级提示 — 按该提示处理即可。"
         ],
         .japanese: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "ベトナム経由のプライベートな暗号化通信", .updateRequired: "アップデートが必要です", .updateRequiredDetail: "VPNFlow の新しいバージョンが必要です。最新版は meetflowai.site/buy からダウンロードしてください。", .update: "アップデート", .deleteAccount: "アカウントを削除", .deleteAccountConfirm: "これによりアカウントとすべてのデータが完全に削除されます。元に戻せません。", .deleteAccountDone: "アカウントを削除しました。", .cancel: "キャンセル",
@@ -339,7 +379,18 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN トンネルはオフです", .connectingSubtitle: "安全な VPN トンネルを開始中",
             .connectedSubtitle: "通信は保護されています", .disconnectingSubtitle: "VPN トンネルを停止中",
             .failedSubtitle: "VPN の確認が必要です",
-            .startVPNHint: "選択した場所への VPN トンネルを開始します", .stopVPNHint: "VPN トンネルを停止します"
+            .startVPNHint: "選択した場所への VPN トンネルを開始します", .stopVPNHint: "VPN トンネルを停止します",
+            .conflictDiagnostics: "ネットワーク競合", .conflictNone: "他の VPN/ネットワークアプリは見つかりません",
+            .conflictConnectAnyway: "そのまま接続", .conflictDontRemind: "今後表示しない",
+            .conflictBlockingTitle: "他の VPN/ネットワークアプリが競合しています",
+            .conflictBlockingDetail: "検出：%@。他のアプリが既定ルートまたは DNS を握っているため、VPNFlow は接続できません（接続できても通信できないことがあります）。",
+            .conflictBlockingAdvice: "他の VPN/ネットワークアプリ（Clash Verge、ClashX、Mihomo、sing-box、Tailscale、WireGuard、OpenVPN など）を終了してから、もう一度接続してください。",
+            .conflictWarningTitle: "他の VPN/ネットワークアプリがバックグラウンドで動作中",
+            .conflictWarningDetail: "検出：%@。接続が不安定になったり名前解決が失敗することがあります。",
+            .conflictWarningAdvice: "VPNFlow の接続が遅い/不安定な場合は、それらのアプリを終了して再接続してください。",
+            .conflictInfoTitle: "ネットワークの追加情報",
+            .conflictInfoDetail: "検出：%@。",
+            .conflictInfoAdvice: "より高いレベルで警告済みです — その案内に従ってください。"
         ],
         .korean: [
             .systemLanguage: "System Setting", .language: "Language", .appSubtitle: "베트남을 통한 비공개 암호화 인터넷", .updateRequired: "업데이트 필요", .updateRequiredDetail: "계속하려면 새 VPNFlow 버전이 필요합니다. 최신 버전을 meetflowai.site/buy에서 다운로드하세요.", .update: "업데이트", .deleteAccount: "계정 삭제", .deleteAccountConfirm: "계정과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.", .deleteAccountDone: "계정이 삭제되었습니다.", .cancel: "취소",
@@ -378,9 +429,68 @@ final class AppLanguageStore: ObservableObject {
             .disconnectedSubtitle: "VPN 터널이 꺼져 있습니다", .connectingSubtitle: "보안 VPN 터널을 시작하는 중",
             .connectedSubtitle: "트래픽이 보호되고 있습니다", .disconnectingSubtitle: "VPN 터널을 중지하는 중",
             .failedSubtitle: "VPN 확인이 필요합니다",
-            .startVPNHint: "선택한 위치로 VPN 터널을 시작합니다", .stopVPNHint: "VPN 터널을 중지합니다"
+            .startVPNHint: "선택한 위치로 VPN 터널을 시작합니다", .stopVPNHint: "VPN 터널을 중지합니다",
+            .conflictDiagnostics: "네트워크 충돌", .conflictNone: "다른 VPN/네트워크 앱이 없습니다",
+            .conflictConnectAnyway: "그래도 연결", .conflictDontRemind: "다시 알리지 않음",
+            .conflictBlockingTitle: "다른 VPN/네트워크 앱이 충돌하고 있습니다",
+            .conflictBlockingDetail: "감지됨: %@. 다른 앱이 기본 경로 또는 DNS를 점유하고 있어 VPNFlow가 연결되지 않습니다(연결되어도 인터넷이 안 될 수 있습니다).",
+            .conflictBlockingAdvice: "다른 VPN/네트워크 앱(Clash Verge, ClashX, Mihomo, sing-box, Tailscale, WireGuard, OpenVPN 등)을 종료한 뒤 다시 연결하세요.",
+            .conflictWarningTitle: "다른 VPN/네트워크 앱이 백그라운드에서 실행 중입니다",
+            .conflictWarningDetail: "감지됨: %@. 연결이 불안정해지거나 이름 해석이 실패할 수 있습니다.",
+            .conflictWarningAdvice: "VPNFlow 연결이 느리거나 불안정하면 해당 앱을 종료하고 다시 연결하세요.",
+            .conflictInfoTitle: "추가 네트워크 정보",
+            .conflictInfoDetail: "감지됨: %@.",
+            .conflictInfoAdvice: "더 높은 단계에서 이미 경고했습니다 — 그 안내를 따르세요."
         ],
     ]
+}
+
+/// Câu chữ ĐA NGÔN NGỮ cho cảnh báo xung đột mạng.
+///
+/// Vì sao không dùng thẳng `title/detail/advice` (tiếng Việt) của `NetworkConflictDetector`:
+/// detector là logic thuần, không phụ thuộc UI/ngôn ngữ, và câu tiếng Việt của nó là thứ ghi vào
+/// log cho support; UI còn phải phục vụ 5 ngôn ngữ nên ghép câu theo MỨC + danh sách dấu hiệu
+/// (`facts` — tên app, interface, proxy, DNS… đều trung tính ngôn ngữ).
+extension NetworkConflict {
+    func localizedTitle(_ language: AppLanguage) -> String {
+        AppLanguageStore.text(titleKey, language: language)
+    }
+
+    /// `"…%@…"` + danh sách dấu hiệu, ví dụ `Phát hiện: Tailscale · system proxy 127.0.0.1:7890.`
+    func localizedDetail(_ language: AppLanguage) -> String {
+        String(
+            format: AppLanguageStore.text(detailKey, language: language),
+            facts.isEmpty ? "—" : facts.joined(separator: " · ")
+        )
+    }
+
+    func localizedAdvice(_ language: AppLanguage) -> String {
+        AppLanguageStore.text(adviceKey, language: language)
+    }
+
+    private var titleKey: AppTextKey {
+        switch severity {
+        case .blocking: return .conflictBlockingTitle
+        case .warning: return .conflictWarningTitle
+        case .info: return .conflictInfoTitle
+        }
+    }
+
+    private var detailKey: AppTextKey {
+        switch severity {
+        case .blocking: return .conflictBlockingDetail
+        case .warning: return .conflictWarningDetail
+        case .info: return .conflictInfoDetail
+        }
+    }
+
+    private var adviceKey: AppTextKey {
+        switch severity {
+        case .blocking: return .conflictBlockingAdvice
+        case .warning: return .conflictWarningAdvice
+        case .info: return .conflictInfoAdvice
+        }
+    }
 }
 
 extension String {

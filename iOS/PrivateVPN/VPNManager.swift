@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import NetworkExtension
 import os
@@ -58,6 +59,9 @@ final class VPNManager: ObservableObject {
     private var providerProbeTask: Task<Void, Never>?
     /// Đã xử lý chẩn đoán cho lần Connect này (tránh lặp lại thông báo/hạ tunnel nhiều lần).
     private var diagnosticHandled = false
+    /// Đã báo `noTraffic` một lần cho phiên này chưa — để KHÔNG ghi log/xoá cache mỗi giây
+    /// (app poll extension 1 s/lần) nhưng vẫn giữ `diagnosticHandled = false` cho `startFailed` sau.
+    private var noTrafficReported = false
 
     /// Static ref cho AppDelegate (applicationWillTerminate -> disconnect).
     nonisolated(unsafe) static weak var sharedForTerminate: VPNManager?
@@ -88,6 +92,7 @@ final class VPNManager: ObservableObject {
     }
 
     func refreshStatus() {
+        AppDiagnostics.shared.log("NE status=\(manager?.connection.status.rawValue ?? -1)")
         // Extension đã báo "Connected nhưng không có mạng": giữ nguyên trạng thái Failed kèm
         // thông báo, đừng để NEVPNStatus kéo về "Disconnected" và xoá mất lý do (giống macOS).
         if diagnosticHandled {
@@ -112,7 +117,25 @@ final class VPNManager: ObservableObject {
         }
     }
 
+    /// 25/09/2026 — iOS CHỈ trả SSID/BSSID khi APP có quyền vị trí
+    /// (`NEHotspotNetwork.fetchCurrent`; entitlement `…networking.wifi-info` đã khai trong
+    /// `project.yml`). Nhờ nó mà khoá bộ nhớ băng thông là **theo từng WiFi**
+    /// (`wifi|ssid:<SSID>`) thay vì chung một bucket `wifi|if:en0` — tránh khai số của mạng này
+    /// sang mạng khác (ca "SSID mới", "WiFi khác băng thông").
+    ///
+    /// Xin MỘT lần, ngay trước khi kết nối để prompt có ngữ cảnh. Khách từ chối ⇒ mọi thứ vẫn
+    /// chạy bình thường, chỉ là khoá lùi về `wifi|router:<MAC>` rồi `wifi|if:en0`.
+    private let wifiInfoLocationManager = CLLocationManager()
+
+    private func requestWiFiInfoPermissionIfNeeded() {
+        guard CLLocationManager.locationServicesEnabled() else { return }
+        guard wifiInfoLocationManager.authorizationStatus == .notDetermined else { return }
+        wifiInfoLocationManager.requestWhenInUseAuthorization()
+    }
+
     func connect(store: VPNConfigStore, authStore: AuthSessionStore) async {
+        // Quyền vị trí ⇒ đọc được SSID ⇒ bộ nhớ băng thông tách theo từng mạng (xem chú thích trên).
+        requestWiFiInfoPermissionIfNeeded()
         // Báo "đang kết nối" NGAY, TRƯỚC mọi lời gọi mạng — giống Android
         // (VPNManager.kt: `_state.value = VPNState.CONNECTING` rồi mới `claimDevice`).
         //
@@ -153,6 +176,11 @@ final class VPNManager: ObservableObject {
                 // chung cho mọi node (xem `hysteriaConfiguration`).
                 hysteriaNode: store.availableNodes.first { $0.id == store.selectedNodeID }
                     ?? store.availableNodes.first,
+                // 26/09/2026 — danh sách node app ĐÃ TẢI: nguồn ứng viên ĐỔI NODE cho extension khi
+                // relay của node đang chọn KHÔNG kết nối được (ca thật macOS 26/09; iOS dùng chung
+                // tầng tunnel nên phải có cùng đường). Mỗi cửa đi kèm host của chính node đó ⇒ không
+                // bao giờ ghép lệch node (finding F3).
+                hysteriaNodes: store.availableNodes,
             )
             // State đã là .connecting từ đầu hàm; giữ nguyên tới khi tunnel lên.
             try manager?.connection.startVPNTunnel()
@@ -161,6 +189,8 @@ final class VPNManager: ObservableObject {
             deviceLimitMessage = nil
             deviceLimitDevices = []
             diagnosticHandled = false
+            noTrafficReported = false
+            AppDiagnostics.shared.log("Connect: đã gọi startVPNTunnel() node=\(store.selectedNodeID ?? "-")")
             startProviderDiagnosticsPolling()
         } catch let error as ControlAPIClient.ClientError {
             if case .deviceLimit(let message, let devices) = error {
@@ -188,13 +218,60 @@ final class VPNManager: ObservableObject {
     }
 
     func disconnect() {
+        AppDiagnostics.shared.log("Disconnect: app gọi stopVPNTunnel() (người dùng bấm)")
         stopProviderDiagnosticsPolling()
-        manager?.connection.stopVPNTunnel()
-        liveDiagnostics = nil
-        refreshStatus()
+        // 26/09/2026 — TẮT on-demand TRƯỚC khi dừng. Nếu để `isOnDemandEnabled = true`,
+        // `stopVPNTunnel()` chỉ là một lần rớt và iOS dựng lại tunnel ngay ⇒ khách bấm
+        // Disconnect mà VPN vẫn lên (lỗi kinh điển khi bật on-demand).
+        //
+        // CHỈ đường NGƯỜI DÙNG BẤM mới tắt on-demand. Đường van bộ nhớ / `noTraffic` KHÔNG tắt
+        // — đó đúng là ca cần hệ thống tự nối lại (xem `refreshStatus`).
+        Task { @MainActor in
+            if let manager, manager.isOnDemandEnabled {
+                manager.isOnDemandEnabled = false
+                manager.onDemandRules = []
+                try? await manager.saveToPreferences()
+            }
+            manager?.connection.stopVPNTunnel()
+            liveDiagnostics = nil
+            refreshStatus()
+        }
     }
 
     // MARK: - Dọn phiên cũ trước mỗi lần Connect
+
+    /// Đường THOÁT APP (`applicationWillTerminate`) — KHÁC `disconnect()` (đường UI).
+    ///
+    /// Vì sao phải có bản riêng: `disconnect()` chạy trong `Task { @MainActor }`, mà
+    /// `applicationWillTerminate` trả về là hệ thống giết tiến trình ngay ⇒ **Task đó không bao
+    /// giờ chạy**. Chủ dự án chốt 26/09/2026: **tắt app = thoát VPN**, nên profile phải được ghi
+    /// `isOnDemandEnabled = false` TRƯỚC khi tiến trình chết; ở đây chặn chờ
+    /// `saveToPreferences` xong (tối đa 2 s) rồi mới dừng tunnel.
+    ///
+    /// ⚠️ `Task.detached` (KHÔNG phải `Task {}`): `Task {}` trong ngữ cảnh `@MainActor` thừa
+    /// hưởng main actor — mà main actor đang bị `wait()` chặn ⇒ **tự khoá chết** (cùng lớp lỗi
+    /// `flowLock` ở AGENTS.md §7c). `nonisolated(unsafe)` là cách dùng sẵn có trong file này
+    /// (`sharedForTerminate`).
+    func shutdownForTermination() {
+        AppDiagnostics.shared.log("Terminate: tắt on-demand (đồng bộ) rồi stopVPNTunnel")
+        guard let manager else { return }
+        if manager.isOnDemandEnabled {
+            nonisolated(unsafe) let target = manager
+            manager.isOnDemandEnabled = false
+            manager.onDemandRules = []
+            let finished = DispatchSemaphore(value: 0)
+            Task.detached {
+                try? await target.saveToPreferences()
+                finished.signal()
+            }
+            if finished.wait(timeout: .now() + 2) == .timedOut {
+                // Hết 2 s: vẫn dừng tunnel, nhưng ghi rõ để lần sau đọc log biết là chưa ghi xong.
+                AppDiagnostics.shared.log("Terminate: saveToPreferences quá 2 s — vẫn dừng tunnel")
+            }
+        }
+        manager.connection.stopVPNTunnel()
+        liveDiagnostics = nil
+    }
 
     /// Bảo đảm phiên VPN CŨ đã dừng hẳn và nạp lại profile từ preferences trước khi Connect.
     ///
@@ -210,6 +287,7 @@ final class VPNManager: ObservableObject {
         if let connection = manager?.connection, connection.status != .disconnected,
            connection.status != .invalid {
             log.info("connect: phiên cũ còn \(connection.status.rawValue) — dừng trước khi Connect lại")
+            AppDiagnostics.shared.log("Connect: dừng phiên CŨ (status=\(connection.status.rawValue)) trước khi nối lại")
             connection.stopVPNTunnel()
             let deadline = Date().addingTimeInterval(Self.sessionStopTimeout)
             while Date() < deadline {
@@ -280,8 +358,33 @@ final class VPNManager: ObservableObject {
         // A10 §2g — cập nhật số live cho thẻ Diagnostics ở MỌI nhịp (kể cả phiên bình thường).
         // Không che trạng thái thật: cầu WS chập thì extension trả số thấp/`—` đúng lúc.
         liveDiagnostics = report
+        if let c = report.code {
+            AppDiagnostics.shared.log("extension báo mã=\(c) state=\(report.state) rx=\(report.rxBytes) tx=\(report.txBytes)")
+        }
         guard let code = report.code else { return }
         guard code == TunnelDiagnosticCode.noTraffic || code == TunnelDiagnosticCode.startFailed else {
+            return
+        }
+        // `noTraffic` KHÔNG đủ để APP hạ tunnel (25/09/2026).
+        //
+        // Vì sao: extension có watchdog + dựng lại transport + **tự đổi node** để tự cứu; nó báo
+        // `noTraffic` như một TRẠNG THÁI ("tunnel đang không chở gói"), không phải lệnh giết.
+        // Trước đây app nhận mã là `stopVPNTunnel()` + `state = .failed` ⇒ khách thấy **"tự ngắt
+        // liên tục"**: đo thật 25/09/2026 trên iPhone+iPad, mỗi phiên chỉ sống 1–2 phút rồi bị app
+        // hạ, dù extension vừa đổi node và đang chở lại vài Mbps. Khi extension thật sự hết đường,
+        // `selfRescue` đã tự `teardownAndCancel` ⇒ hệ thống báo `.disconnected` và UI hiện đúng,
+        // không cần app hạ lần nữa.
+        //
+        // `startFailed` thì VẪN hạ: đó là lỗi khởi động thật (không có tunnel nào để giữ).
+        guard code == TunnelDiagnosticCode.startFailed else {
+            if !noTrafficReported {
+                noTrafficReported = true
+                log.error("provider diagnostics: noTraffic — để EXTENSION tự phục hồi, app KHÔNG hạ tunnel; session=\(report.session) rx=\(report.rxBytes) tx=\(report.txBytes)")
+                // Cấu hình của phiên hỏng KHÔNG được tái sử dụng cho lần Connect sau.
+                TunnelConfigCache.clear()
+                ExitNodeCache.clear()
+            }
+            if let message = report.message { statusMessage = message }
             return
         }
         diagnosticHandled = true
@@ -613,7 +716,8 @@ final class VPNManager: ObservableObject {
         _ config: WireGuardConfig,
         nodeId: String?,
         wsRelayURL: String? = nil,
-        hysteriaNode: ExitNode? = nil
+        hysteriaNode: ExitNode? = nil,
+        hysteriaNodes: [ExitNode] = []
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
         let matching = existing.filter { Self.isOwnProfile($0.localizedDescription) }
@@ -648,7 +752,8 @@ final class VPNManager: ObservableObject {
         // "Connected" mà không có mạng.
         if let hysteria = Self.hysteriaConfiguration(
             node: hysteriaNode,
-            endpoint: tunnelConfig.peers.first?.endpoint
+            endpoint: tunnelConfig.peers.first?.endpoint,
+            nodes: hysteriaNodes
         ) {
             providerConfiguration["hysteria"] = hysteria
             let relay = hysteria["relayURL"] as? String ?? "?"
@@ -664,6 +769,24 @@ final class VPNManager: ObservableObject {
         manager.protocolConfiguration = protocolConfig
         manager.localizedDescription = Self.profileName
         manager.isEnabled = true
+        // 26/09/2026 — BẬT ON-DEMAND: đây là gốc của nửa sau triệu chứng
+        // "tự ngắt rồi KHÔNG tự nối lại được".
+        //
+        // Vì sao BẮT BUỘC: mọi cơ chế tự nối lại hiện có (`WSRelayClient` backoff,
+        // `TransportLadder`, watchdog `selfRescue`) đều sống BÊN TRONG tiến trình extension.
+        // Khi iOS giết extension vì trần bộ nhớ per-process (`JetsamEvent`, rpages=3202 ≈ 51 MB
+        // — BUG-IOS-JETSAM-001), hoặc khi van an toàn bộ nhớ gọi `cancelTunnelWithError`, cả
+        // tiến trình chết ⇒ không còn ai nối lại: trước bản vá này profile chỉ có
+        // `isEnabled = true`, KHÔNG có `isOnDemandEnabled`/`onDemandRules` (đã rà toàn bộ `iOS/`),
+        // nên khách phải tự mở app bấm Connect. On-demand là cơ chế DUY NHẤT của iOS dựng lại
+        // extension mà không cần app chạy.
+        //
+        // `NEOnDemandRuleConnect()` không kèm điều kiện giao diện ⇒ luôn kết nối lại khi tunnel
+        // rớt (kể cả sau khi máy khởi động lại). KHÁC hẳn `NEOnDemandRuleConnect` có
+        // `interfaceTypeMatch`: bản này cố ý áp cho mọi loại mạng vì khách Trung Quốc đổi
+        // Wi-Fi/di động liên tục và đường dữ liệu là relay qua Cloudflare.
+        manager.isOnDemandEnabled = true
+        manager.onDemandRules = [NEOnDemandRuleConnect()]
         try await manager.saveToPreferences()
         try await manager.loadFromPreferences()
         self.manager = manager
@@ -677,7 +800,11 @@ final class VPNManager: ObservableObject {
     ///
     /// Trả nil khi thiếu credential hoặc không xác định được host: gọi ở đây phải nói rõ cho
     /// người dùng, KHÔNG được lặng lẽ bỏ qua.
-    private static func hysteriaConfiguration(node: ExitNode?, endpoint: String?) -> [String: Any]? {
+    private static func hysteriaConfiguration(
+        node: ExitNode?,
+        endpoint: String?,
+        nodes: [ExitNode] = []
+    ) -> [String: Any]? {
         guard let password = Bundle.main.object(forInfoDictionaryKey: "HysteriaPassword") as? String,
               !password.isEmpty,
               let obfs = Bundle.main.object(forInfoDictionaryKey: "HysteriaObfs") as? String,
@@ -689,16 +816,39 @@ final class VPNManager: ObservableObject {
         let host = Self.host(fromEndpoint: endpoint ?? node?.endpoint ?? "")
         guard !host.isEmpty else { return nil }
 
-        // Relay của ĐÚNG node đang dial, rồi tới relay mặc định (node-2). Relay WireGuard
-        // (`wg_relay_url`) KHÔNG dùng được ở đây: một relay chỉ hạ cánh ở một cổng UDP, gửi
-        // QUIC vào cổng WireGuard là im lặng.
-        let relay = (node?.endpoint == endpoint ? node?.hysteriaRelayURL : nil)
-            ?? HysteriaDefaults.relayURLCandidates.first ?? ""
+        // Relay của ĐÚNG node đang dial — finding F3 của `HANDOFF_IOS_MACOS_ARCH_REVIEW_2026-09-26.md`:
+        // KHÔNG mượn relay của node khác nữa. Một relay chỉ hạ cánh ở một node; ghép `serverHost` của
+        // node A với relay của node B là QUIC đi sai chỗ mà **không báo lỗi**. Node không khai relay
+        // ⇒ để rỗng ⇒ extension đi **UDP trực tiếp** (có nhánh xử lý + mã `relayURLMissing`).
+        // Relay WireGuard (`wg_relay_url`) KHÔNG dùng được ở đây: gửi QUIC vào cổng WireGuard là im lặng.
+        let relay = (node?.endpoint == endpoint ? node?.hysteriaRelayURL : nil) ?? ""
+        // 26/09/2026 — ứng viên ĐỔI ĐƯỜNG gồm relay của **node khác** (từ chính danh sách node app
+        // ĐÃ TẢI: control plane trả `hy_relay_url` cho TỪNG node) rồi mới tới cửa cùng node đổi
+        // hostname. Vì sao: relay của node đang chọn có thể KHÔNG kết nối được (ca thật 26/09/2026 —
+        // 24 lần `relay/vn2hy`, 0 lần `relay/vn1hy`, tunnel nằm `Disconnected`), mà `api.`/`t1.` chỉ
+        // là hai cửa vào CÙNG một dịch vụ relay. Mỗi cửa đi kèm host của CHÍNH node nó ⇒ giữ đúng
+        // finding F3 (không ghép `serverHost` node này với relay node khác).
+        let failover = HysteriaDefaults.failoverRelayCandidates(
+            currentRelay: relay,
+            currentHost: host,
+            nodes: nodes.map { entry in
+                (
+                    nodeID: entry.id,
+                    relay: entry.hysteriaRelayURL ?? "",
+                    host: Self.host(fromEndpoint: entry.endpoint)
+                )
+            }
+        )
         return [
             "serverHost": host,
             "serverPort": Int(HysteriaDefaults.serverPort),
             "relayURL": relay,
-            "relayURLCandidates": HysteriaDefaults.relayURLCandidates,
+            // Cửa dự phòng CHỈ của node này: đổi hostname (`api` ↔ `t1`), GIỮ NGUYÊN path ⇒ không đổi node.
+            "relayURLCandidates": HysteriaDefaults.sameNodeRelayAlternates(for: relay),
+            // Cửa dự phòng ĐỔI NODE (mỗi cửa kèm host của chính node đó).
+            "relayNodeCandidates": failover.map {
+                ["relayURL": $0.relayURL, "serverHost": $0.serverHost]
+            },
             "password": password,
             "obfs": obfs,
             "upKbps": HysteriaDefaults.upKbps,

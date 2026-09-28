@@ -47,6 +47,20 @@ extension RelayLink {
 /// Link tự sở hữu `URLSession` + delegate, nên `cancel()` là điểm duy nhất nhả chúng.
 final class URLSessionRelayLink: NSObject, RelayLink, URLSessionWebSocketDelegate, @unchecked Sendable {
 
+    /// Chốt "chỉ resume một lần" cho continuation (xem `ping()`): URLSession có thể gọi handler
+    /// của `sendPing` lần thứ hai khi task bị huỷ, và resume lần hai làm Swift trap
+    /// (`SWIFT TASK CONTINUATION MISUSE`) ⇒ **crash cả extension**.
+    final class ResumeOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var used = false
+        func take() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if used { return false }
+            used = true
+            return true
+        }
+    }
+
     enum LinkError: Error, CustomStringConvertible {
         case notConnected
 
@@ -122,8 +136,21 @@ final class URLSessionRelayLink: NSObject, RelayLink, URLSessionWebSocketDelegat
 
     func ping() async throws {
         guard let task = currentTask() else { throw LinkError.notConnected }
+        // Chốt "chỉ resume MỘT lần".
+        //
+        // Bằng chứng thật 25/09/2026 — crash log `PrivateVPNPacketTunnel-2026-09-25-103810.ips`:
+        //   EXC_BREAKPOINT / SIGTRAP
+        //     libswiftCore._assertionFailure
+        //     libswift_Concurrency.CheckedContinuation.resume(throwing:)
+        //     PrivateVPNPacketTunnel +297568
+        // ⇒ `sendPing` gọi handler lần THỨ HAI (URLSession huỷ task trong lúc ping đang bay —
+        // `startPingLoop` gọi `link.cancel()` ngay sau một lỗi ping, và mỗi lần dựng lại transport
+        // là một link + ping loop mới) ⇒ resume lần hai ⇒ Swift trap ⇒ **extension chết giữa phiên**
+        // ⇒ iOS báo Disconnected ⇒ khách thấy "tự ngắt" (phiên đó có 20 lần dựng lại).
+        let once = ResumeOnce()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             task.sendPing { error in
+                guard once.take() else { return }
                 if let error {
                     continuation.resume(throwing: error)
                 } else {

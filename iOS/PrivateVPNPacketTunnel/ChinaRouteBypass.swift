@@ -30,11 +30,49 @@ import NetworkExtension
 enum ChinaRouteBypass {
     static let listURL = URL(string: "https://meetflowai.site/dl/routes/cn.txt")!
     static let list6URL = URL(string: "https://meetflowai.site/dl/routes/cn6.txt")!
+    /// Danh sách IP **Tencent Meeting** (`docs/routes/tencent-meeting.txt`). Vì sao phải có file
+    /// riêng: edge của Tencent Meeting nằm ở **Hồng Kông/Tencent Cloud toàn cầu**, KHÔNG thuộc
+    /// dải APNIC của TQ nên `cn.txt` KHÔNG chứa (kiểm 25/09/2026 bằng `ipaddress`:
+    /// `43.129.255.19`, `129.226.103.131`, `43.175.44.35` đều trượt khỏi 5.494 dải của `cn.txt`).
+    /// Thiếu nó thì dù A7 bật, Tencent Meeting vẫn đi qua tunnel ⇒ chậm/giật khi bật VPN.
+    static let tencentURL = URL(string: "https://meetflowai.site/dl/routes/tencent-meeting.txt")!
     /// Trần số dải nhận: file APNIC hiện ~5.500 IPv4 / ~2.000 IPv6; trần để một file hỏng không
     /// nhét hàng trăm nghìn route vào NetworkExtension.
     static let maxRoutes = 8000
     private static let cacheKey = "A7.cnRouteList.v1"
     private static let cache6Key = "A7.cn6RouteList.v1"
+    private static let tencentCacheKey = "A7.tencentMeetingList.v1"
+
+    // MARK: - Cờ RÚT LUI (rollback switch) cho A7 trên macOS
+
+    /// CỜ RÚT LUI cho A7 trên macOS — mặc định BẬT (chủ dự án chốt 25/09/2026).
+    ///
+    /// Trên macOS, A7 = **`cn.txt` (5.494 dải APNIC/TQ) + `tencent-meeting.txt`**, ĐÚNG bộ tài
+    /// nguyên như iOS/Android (xem `platformRoutes`). Đổi hằng này thành `false` rồi build lại ⇒
+    /// macOS trở về đúng trạng thái trước lượt này (**chỉ 4 dải LAN**). iOS **không** bị ảnh hưởng
+    /// (provider chỉ đọc cờ trong nhánh `os(macOS)`). Ngoài ra đọc được `UserDefaults` khoá
+    /// `A7.macBypass.enabled` để tắt **không cần build lại** khi đang đo trên máy thật:
+    /// `defaults write com.privatevpn.mac.packet-tunnel A7.macBypass.enabled -bool false` rồi
+    /// tắt/bật lại VPN.
+    ///
+    /// **NGƯỠNG RÚT LUI (chốt 25/09/2026 — `docs/A7_MACOS_SOLUTION.md` §3 bước 2)**: sau khi bật,
+    /// nếu **connect chậm hơn > 3 s** so với lúc TẮT cờ, **hoặc** `netstat -rn -f inet` thiếu dải
+    /// TQ/Tencent ⇒ **tắt cờ** (`A7.macBypass.enabled=false`, hoặc `macBypassEnabledByDefault=false`
+    /// rồi build lại) và quay về 4 dải LAN. Đừng phát hành khi connect chậm hơn ngưỡng đó.
+    static let macBypassEnabledByDefault = true
+    static let macBypassEnabledKey = "A7.macBypass.enabled"
+
+    /// Quyết định THUẦN (unit test được): giá trị ghi đè thắng mặc định biên dịch.
+    static func bypassEnabled(compiledDefault: Bool, override: Bool?) -> Bool {
+        override ?? compiledDefault
+    }
+
+    /// Trạng thái thật của cờ rút lui. `object(forKey:)` (không phải `bool(forKey:)`) vì khoá
+    /// KHÔNG tồn tại phải phân biệt được với "đã ghi false".
+    static func macBypassEnabled(defaults: UserDefaults = .standard) -> Bool {
+        let override = defaults.object(forKey: macBypassEnabledKey) as? Bool
+        return bypassEnabled(compiledDefault: macBypassEnabledByDefault, override: override)
+    }
 
     // MARK: - IPv4: thuần logic (unit test được, không cần NetworkExtension)
 
@@ -48,6 +86,18 @@ enum ChinaRouteBypass {
                 .trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
             guard let cidr = normalizedCIDR(line), seen.insert(cidr).inserted else { continue }
+            out.append(cidr)
+            if out.count >= limit { break }
+        }
+        return out
+    }
+
+    /// Gộp hai danh sách CIDR **đã `parse`** (giữ thứ tự, bỏ trùng, tôn trọng trần). THUẦN LOGIC:
+    /// dùng để nối `cn.txt` với `tencent-meeting.txt` (A7 đầy đủ) mà không đụng gì tới mạng.
+    static func merge(_ first: [String], _ second: [String], limit: Int = maxRoutes) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for cidr in first + second where seen.insert(cidr).inserted {
             out.append(cidr)
             if out.count >= limit { break }
         }
@@ -187,6 +237,108 @@ enum ChinaRouteBypass {
 
     static func store(_ cidrs: [String], defaults: UserDefaults = .standard) {
         defaults.set(cidrs.joined(separator: "\n"), forKey: cacheKey)
+    }
+
+    // MARK: - Tencent Meeting (danh sách phụ, cùng bundle + cùng bộ nhớ đệm như `cn.txt`)
+
+    /// Danh sách IPv4 Tencent Meeting đã nhớ; CHƯA có thì lùi về **bản bundle**
+    /// (`docs/routes/tencent-meeting.txt`, chép vào bundle lúc build — xem `project.yml`).
+    /// Cùng lý do với `cn.txt`: lần đầu chạy/mạng yếu/DNS bị chặn mà tải list hỏng thì app họp
+    /// lại đi qua tunnel đúng lúc khách cần nhất; bản bundle là ảnh chụp đã kiểm, không cần mạng.
+    static func cachedTencent(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> [String] {
+        if let text = defaults.string(forKey: tencentCacheKey) {
+            let parsed = parse(text)
+            if !parsed.isEmpty { return parsed }
+        }
+        return bundledTencent(bundle: bundle)
+    }
+
+    static func bundledTencent(bundle: Bundle = .main) -> [String] {
+        guard let url = bundle.url(forResource: "tencent-meeting", withExtension: "txt"),
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return parse(text)
+    }
+
+    static func storeTencent(_ cidrs: [String], defaults: UserDefaults = .standard) {
+        defaults.set(cidrs.joined(separator: "\n"), forKey: tencentCacheKey)
+    }
+
+    /// **Bản A7 ĐẦY ĐỦ** (`cn.txt` + `tencent-meeting.txt`) — dùng cho CẢ iOS và macOS.
+    static func cachedAll(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> [String] {
+        platformRoutes(
+            cn: cached(defaults: defaults, bundle: bundle),
+            tencent: cachedTencent(defaults: defaults, bundle: bundle)
+        )
+    }
+
+    // MARK: - Danh sách theo NỀN TẢNG
+
+    /// Danh sách CIDR A7 theo nền tảng — **THUẦN LOGIC** (nhận sẵn hai phần đã `parse`, nên test
+    /// được mà không cần bundle).
+    ///
+    /// **Chủ dự án chốt 25/09/2026: macOS dùng ĐÚNG bộ tài nguyên như iOS/Android** —
+    /// `cn.txt` (5.494 dải APNIC/TQ) **+** `tencent-meeting.txt` (Tencent Cloud/HK). Một lượt
+    /// trước đó trong cùng ngày có đề xuất chỉ nạp riêng Tencent cho Mac (để blast radius nhỏ);
+    /// **chủ dự án đã bác** và yêu cầu áp luôn danh sách TQ.
+    ///
+    /// Vì sao vẫn giữ họ hàm `platform*` thay vì gọi thẳng `cachedAll`: đây là **một chỗ duy nhất**
+    /// quyết định "nền tảng nào nạp danh sách nào" — nếu phải rút lui MỘT PHẦN (ví dụ Mac tạm chỉ
+    /// còn Tencent) thì sửa đúng hàm này, không phải đụng provider. Còn rút lui TOÀN BỘ thì dùng
+    /// cờ `macBypassEnabled` ở trên.
+    ///
+    /// KHÔNG áp `cn6.txt`: giống iOS hiện tại, A7 IPv6 **đã bỏ** (relay có AAAA ⇒ `::/0` làm mất
+    /// mạng, xem `networkSettings`) — bản bundle `cn6.txt` vẫn nằm trong app nhưng không nạp.
+    static func platformRoutes(cn: [String], tencent: [String]) -> [String] {
+        merge(cn, tencent)
+    }
+
+    /// Nhãn NGUỒN cho log `china: A7 nạp N dải …` — để đọc `relay.log` là biết ngay bản đang chạy
+    /// đã nạp danh sách nào (đối chiếu khi đo trên máy thật).
+    static var sourceLabel: String {
+        #if os(macOS)
+        return "macOS: cn.txt + tencent-meeting.txt (giống iOS)"
+        #else
+        return "iOS: cn.txt + tencent-meeting.txt"
+        #endif
+    }
+
+    /// Bản theo nền tảng, có bộ nhớ đệm + fallback bundle như `cn.txt`.
+    static func platformCached(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> [String] {
+        cachedAll(defaults: defaults, bundle: bundle)
+    }
+
+    /// Tải danh sách Tencent Meeting ở LUỒNG NỀN (best-effort như `refresh`).
+    static func refreshTencent(
+        session: URLSession = .shared,
+        completion: @escaping @Sendable ([String]) -> Void
+    ) {
+        fetch(tencentURL, session: session, parse: { parse($0) }, store: { storeTencent($0) }, completion: completion)
+    }
+
+    /// Tải ở LUỒNG NỀN rồi gọi `completion` với bản đúng cho NỀN TẢNG đang chạy.
+    /// Hiện cả hai nền tảng dùng cùng một bộ (`cn.txt` + Tencent) — giữ hàm này làm điểm chèn nếu
+    /// sau này phải tách lại.
+    static func platformRefresh(
+        session: URLSession = .shared,
+        completion: @escaping @Sendable ([String]) -> Void
+    ) {
+        refreshAll(session: session, completion: completion)
+    }
+
+    /// Tải CẢ HAI danh sách ở LUỒNG NỀN rồi gọi `completion` với bản GỘP (mỗi danh sách về thì
+    /// gọi một lần; provider chỉ `applySettings` lại khi SỐ DẢI đổi nên lần gọi thừa không gây
+    /// khựng). Best-effort: file chưa có trên server (404) thì im lặng, bản bundle vẫn dùng được.
+    /// TUYỆT ĐỐI không gọi trên đường connect.
+    static func refreshAll(
+        session: URLSession = .shared,
+        completion: @escaping @Sendable ([String]) -> Void
+    ) {
+        fetch(listURL, session: session, parse: { parse($0) }, store: { store($0) }) { cn in
+            completion(merge(cn, cachedTencent()))
+        }
+        refreshTencent(session: session) { tencent in
+            completion(merge(cached(), tencent))
+        }
     }
 
     static func cachedIPv6(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> [String] {

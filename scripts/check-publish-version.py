@@ -587,6 +587,37 @@ def download_for_post(platform: str, version: str, path: str | None) -> tuple[st
     return None, last_err
 
 
+LOCK_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         ".privatevpn", "status", "release-lock.json")
+
+
+def channel_lock(platform: str, version: str, build: str | None) -> dict | None:
+    """Trả về mục khóa của `platform` trong `.privatevpn/status/release-lock.json` (None nếu không khóa).
+
+    Khóa kênh để chủ dự án cho khách test một bản mà không bị phát đè bản mới. Chỉ khóa theo
+    KÊNH: định phát ĐÚNG bản đang khóa (cùng version + cùng build) thì vẫn cho qua, vì đó là
+    kiểm lại chính artifact đang phát, không phải phát bản mới.
+    """
+    try:
+        with open(LOCK_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except Exception as exc:  # file hỏng ⇒ chặn (an toàn hơn là lặng lẽ cho phát)
+        return {"platform": platform, "version": "?", "build": "?",
+                "reason": f"không đọc được {LOCK_FILE}: {exc}"}
+    for lock in data.get("locks") or []:
+        if str(lock.get("platform")) != platform:
+            continue
+        locked_version = norm(str(lock.get("version") or ""))
+        locked_build = str(lock.get("build") or "")
+        same = (not locked_version or locked_version == norm(version)) and \
+               (not locked_build or not build or locked_build == str(build))
+        if not same:
+            return lock
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cổng chặn version trước/sau khi publish")
     parser.add_argument("--platform", required=True,
@@ -600,7 +631,25 @@ def main() -> int:
     parser.add_argument("--internal-version", help="dùng khi không đọc được version trong artifact")
     parser.add_argument("--allow-same", action="store_true",
                         help="cho phép phát lại ĐÚNG version đang là mốc (mặc định: cảnh báo)")
+    parser.add_argument("--allow-locked", metavar="LY_DO",
+                        help="ghi đè khóa kênh trong .privatevpn/status/release-lock.json (BẮT BUỘC kèm lý do)")
     args = parser.parse_args()
+
+    # ---- 0. KHÓA KÊNH (.privatevpn/status/release-lock.json) — chặn phát bản mới khi chủ dự án đang cho khách test
+    lock = channel_lock(args.platform, args.version, args.build)
+    if lock:
+        if args.allow_locked and args.allow_locked.strip():
+            print(f"⚠️  KÊNH {args.platform} ĐANG KHÓA nhưng có --allow-locked: {args.allow_locked.strip()}")
+        else:
+            print(f"⛔ KÊNH {args.platform} ĐANG BỊ KHÓA — không phát bản khác bản đang khóa.", file=sys.stderr)
+            print(f"   Đang khóa : {lock.get('version')} (build {lock.get('build')})"
+                  f" · sha256 {str(lock.get('sha256') or '')[:16]}…", file=sys.stderr)
+            print(f"   Định phát : {args.version}" + (f" (build {args.build})" if args.build else ""),
+                  file=sys.stderr)
+            print(f"   Lý do     : {lock.get('reason')}", file=sys.stderr)
+            print(f"   Mở khóa   : sửa {os.path.relpath(LOCK_FILE)} (chủ dự án cho phép)"
+                  f" hoặc thêm --allow-locked \"<lý do>\"", file=sys.stderr)
+            return 3
 
     result = Result()
     print(f"== Cổng chặn version · platform={args.platform} · mode={args.mode} · định phát {args.version}"

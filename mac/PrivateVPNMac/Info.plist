@@ -32,5 +32,7 @@
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>NSSystemExtensionUsageDescription</key>
+	<string>VPNFlow cần cài tiện ích mở rộng hệ thống để dựng đường hầm VPN trên máy này.</string>
 </dict>
 </plist>

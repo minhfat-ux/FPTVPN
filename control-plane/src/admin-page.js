@@ -1657,6 +1657,49 @@ export function adminPageHTML() {
         sep.className = "act-sep";
         actions.appendChild(sep);
 
+        // Reset hạn mức = ĐẶT LẠI hạn mới (hôm nay + 30 ngày), KHÔNG cộng dồn như nút "30 ngày".
+        // Chủ dự án yêu cầu 27/09/2026. Hỏi xác nhận kèm hạn cũ → hạn mới vì thao tác này có thể
+        // THU NGẮN quyền của khách (khách còn 300 ngày cũng về 30).
+        const resetGroup = document.createElement("div");
+        resetGroup.className = "act-group";
+        const resetLabel = document.createElement("span");
+        resetLabel.className = "act-label";
+        resetLabel.textContent = "Reset";
+        resetGroup.appendChild(resetLabel);
+
+        const reset = document.createElement("button");
+        reset.className = "secondary";
+        reset.textContent = "Reset 30 ngày";
+        reset.title = "Đặt hạn mới = hôm nay + 30 ngày (KHÔNG cộng dồn; thời gian còn dư sẽ mất)";
+        reset.disabled = !!user.revoked_at;
+        reset.onclick = async () => {
+          const oldTxt = user.expiry_status === "lifetime"
+            ? "vĩnh viễn"
+            : (user.expires_at ? new Date(user.expires_at).toLocaleDateString() : "chưa có hạn");
+          const newTxt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString();
+          const ok = confirm(
+            "Reset hạn mức của " + (user.email || user.id) + "?\\n\\n" +
+            "Hạn cũ: " + oldTxt + "\\n" +
+            "Hạn mới: " + newTxt + "  (hôm nay + 30 ngày)\\n\\n" +
+            "LƯU Ý: đây là ĐẶT LẠI, không cộng dồn — nếu khách còn nhiều hơn 30 ngày thì phần dư sẽ mất."
+          );
+          if (!ok) return;
+          reset.disabled = true;
+          try {
+            await request("/v1/admin/users/" + encodeURIComponent(user.id) + "/reset-quota", {
+              method: "POST",
+              body: JSON.stringify({ days: 30 }),
+            });
+            setStatus("Đã reset hạn mức 30 ngày cho " + (user.email || user.id) + ".");
+            await loadUsers();
+          } catch (error) {
+            setStatus(error.message, true);
+            reset.disabled = false;
+          }
+        };
+        resetGroup.appendChild(reset);
+        actions.appendChild(resetGroup);
+
         const revokeGroup = document.createElement("div");
         revokeGroup.className = "act-group";
         const revoke = document.createElement("button");

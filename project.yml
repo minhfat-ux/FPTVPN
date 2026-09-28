@@ -41,6 +41,9 @@ targets:
         HysteriaPassword: $(HYST_PASSWORD)
         HysteriaObfs: $(HYST_OBFS)
         UILaunchScreen: {}
+        # iOS chỉ trả SSID khi app có quyền vị trí (Apple yêu cầu cho `NEHotspotNetwork.fetchCurrent`).
+        NSLocationWhenInUseUsageDescription: "Dùng để đọc tên Wi‑Fi đang kết nối, giúp khai báo và ramp băng thông chính xác cho từng mạng. / Used to read the current Wi-Fi name so tunnel bandwidth is declared and ramped correctly per network."
+        # (README riêng cho extension không cần: quyền do APP xin, extension chỉ đọc.)
         CFBundleURLTypes:
           - CFBundleURLName: com.privatevpn.app
             CFBundleURLSchemes:
@@ -61,6 +64,12 @@ targets:
       properties:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
+        # 25/09/2026 — ĐỌC SSID/BSSID của WiFi để khoá bộ nhớ băng thông theo TỪNG mạng
+        # (`NetworkIdentity.preferredKey` = `wifi|ssid:<SSID>`), tránh khai số của WiFi này sang
+        # WiFi khác. Cần kèm: capability "Access WiFi Information" cho App ID trên App Store
+        # Connect + quyền vị trí của app (`NSLocationWhenInUseUsageDescription`). Thiếu entitlement
+        # ⇒ `NEHotspotNetwork.fetchCurrent` trả nil và code tự lùi về `wifi|router:<MAC>`/`wifi|if:en0`.
+        com.apple.developer.networking.wifi-info: true
         # iOS KHÔNG khai nhóm keychain dùng chung: bản iOS chỉ ghi keychain RIÊNG của app, và
         # extension iOS là hysteria-only (không đọc keychain) nên không có gì để chia sẻ.
         # Nhóm dùng chung không bao giờ được profile Ad Hoc cấp ⇒ SecItemAdd trả
@@ -92,8 +101,31 @@ targets:
         # không cấp ⇒ -34018, khách kẹt màn đăng nhập) + gộp 7c98e53 (đăng xuất thiết bị khác)
         # và 820b9d2 (watchdog). Kênh đang phát 1.4.1/build 18 ⇒ PHẢI tăng CHUỖI version (app chỉ
         # nhắc cập nhật khi CFBundleShortVersionString tăng); control-plane đặt minimum_version=1.4.2.
-        CURRENT_PROJECT_VERSION: "20"
-        MARKETING_VERSION: "1.4.3"
+        # 1.4.4 / build 21 (24/09/2026): sửa HIỂN THỊ thẻ Diagnostics — số down/up "live" lấy trung
+        # bình 3 mẫu (trước đây 1 mẫu nên nhảy loạn so với Ookla) và "Khai báo hiện tại" in số ĐANG
+        # áp dụng thay vì số kế hoạch; thêm cờ `serving` giữ nguyên sau khi đổi transport nên thẻ
+        # không còn trắng số. Chỉ đụng đường hiển thị, không đổi ramp/transport/watchdog/MTU/DNS.
+        # Kênh đang phát 1.4.3/build 20 (sha256 b2432247…) — tăng số theo luật artifact bất biến
+        # (docs/VERSIONING.md §3.3: cùng version mà khác hash là cấm).
+        # 1.4.5 / build 22 (24/09/2026 tối): bản vá ỔN ĐỊNH theo **android parity** —
+        # (a) TẮT tự-áp số khai giữa phiên (`BandwidthControl.allowsTransportRebuild = false`):
+        #     không còn 7 lần "transport vừa thay (ramp băng thông)" mỗi phiên (log máy thật 24/09);
+        #     số mới vẫn được GHI NHỚ theo mạng và áp ở lần kết nối/đổi mạng kế tiếp;
+        # (b) watchdog "không tiến triển": 10s → **45s + 2 strike liên tiếp**, ngưỡng tự GỠ tunnel
+        #     45s → **120s** (bản 1.4.4 tự dựng lại/gỡ khi tunnel chỉ RẢNH ⇒ khách thấy "tự ngắt").
+        # Build 23 (24/09/2026 tối — đợt 2, android parity cho phần RAMP + SỐ LIỆU):
+        #   • `livenessStrikesToRebuild` 1 → **2** (Android `DEAD_PROBE_LIMIT = 2`);
+        #   • cổng HẠ số khai nhận thêm điều kiện `busy = idleRun == 0` của Android ⇒ hết kẹt cứng
+        #     "khai vống + đang tải ⇒ không hạ được, cũng không lên được";
+        #   • thẻ Diagnostics: "% còn lên" dùng hệ số **1,15** (Android `:1191`), "Mức đã khoá" theo
+        #     mốc **≥8 Mbps giữ 10s** (Android `FULLHD_KBPS`).
+        # Build 24 (24/09/2026 khuya — ca thật "Connected mà KHÔNG có mạng" 32 phút trên iPhone):
+        #   luật `alive` của watchdog sống-còn chỉ cần **1 gói về** nên một dòng nhỏ giọt
+        #   (~10 gói/15 s trong khi máy gửi 180 gói/15 s, relay đứng im >30 s) vẫn bị coi là "sống"
+        #   ⇒ khách phải tự tắt VPN. Thêm luật **SYN gửi mà KHÔNG có SYN-ACK nào về** (≥15 s) —
+        #   đúng bằng chứng app đã dùng ở đầu phiên, và miễn nhiễm ca khách đang UPLOAD.
+        CURRENT_PROJECT_VERSION: "57"
+        MARKETING_VERSION: "1.4.6"
         ENABLE_PREVIEWS: YES
         LIBRARY_SEARCH_PATHS:
           - "$(DERIVED_FILE_DIR)/wg"
@@ -147,6 +179,7 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
       # A10/A11 §2g/§2h: số live của Diagnostics + luật khai báo an toàn — thuần logic.
       - path: iOS/PrivateVPNPacketTunnel/RampStatus.swift
+      - path: iOS/PrivateVPNPacketTunnel/IPv6Reject.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
@@ -157,6 +190,9 @@ targets:
       - path: docs/routes/cn.txt
         buildPhase: resources
       - path: docs/routes/cn6.txt
+        buildPhase: resources
+      # A7 — danh sách IP Tencent Meeting (HK/Tencent Cloud toàn cầu) đi thẳng, xem ChinaRouteBypass.
+      - path: docs/routes/tencent-meeting.txt
         buildPhase: resources
       # KHÔNG kèm WireGuardConfig.swift/KeychainStore.swift/ControlAPIClient.swift: cả ba
       # `import WireGuardKit`, mà target này cố ý không có WireGuardKit (xem trên).
@@ -179,6 +215,9 @@ targets:
       properties:
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
+        # Cùng lý do như app: chính EXTENSION gọi `NEHotspotNetwork.fetchCurrent`
+        # (`HysteriaBandwidthControl.currentWiFiNetwork`) nên entitlement phải có ở đây.
+        com.apple.developer.networking.wifi-info: true
         # Không có nhóm keychain dùng chung: extension iOS chỉ chạy hysteria2 và KHÔNG đọc
         # keychain (xem project.yml:154 — KeychainStore.swift cố ý không nằm trong target này).
     settings:
@@ -186,8 +225,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.app.packet-tunnel
         PRODUCT_NAME: PrivateVPNPacketTunnel
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "1.4.3"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.6"
+        CURRENT_PROJECT_VERSION: "57"
         # Không còn LIBRARY_SEARCH_PATHS/preBuildScripts build libwg-go.a: extension không
         # link WireGuard nữa (chỉ app chứa nó mới cần).
     dependencies:
@@ -195,8 +234,9 @@ targets:
       # MobileStop), bản STACK=gvisor — dựng bằng tools/hysteria-apple/build.sh. Là static
       # archive ⇒ chỉ cần link; `embed` để artifact khớp bản phát hành.
       - framework: iOS/Frameworks/Hysteria.xcframework
-        embed: true
-        codeSign: true
+        # Là STATIC archive (`ar`), KHÔNG phải framework động ⇒ chỉ link, KHÔNG embed:
+        # embed:true làm Apple chặn 90171 (iOS) và lỗi ký "code has no resources" (macOS).
+        embed: false
 
   PrivateVPNTests:
     type: bundle.unit-test
@@ -223,6 +263,9 @@ targets:
       - path: docs/routes/cn.txt
         buildPhase: resources
       - path: docs/routes/cn6.txt
+        buildPhase: resources
+      # A7: danh sách Tencent Meeting đi thẳng (xem ChinaRouteBypass).
+      - path: docs/routes/tencent-meeting.txt
         buildPhase: resources
     dependencies:
       - target: PrivateVPN
@@ -275,8 +318,44 @@ targets:
         PRODUCT_NAME: VPNFlow
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.3"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.7"
+        # Build 23 (26/09/2026): sửa "IPv6 treo" trên bản macOS system extension —
+        # (a) `IPv6Reject` trả ICMPv6 Destination Unreachable **code 4** (code 0 làm XNU chỉ ghi
+        #     `t_softerror` nên TCP vẫn retransmit SYN ⇒ `curl -6` treo 4,0 s, đo thật),
+        # (b) log chặn IPv6 ra **unified log** (category `ipv6-reject`),
+        # (c) `RelayDiagnostics` ghi vào app group container để app (user) đọc được.
+        # Build 24 (26/09/2026): cùng bản vá, đổi số vì **macOS chỉ nạp lại system extension khi
+        # ĐỔI VERSION** — cài lại cùng 1.4.7/23 mà khác nội dung thì `/Library/SystemExtensions/`
+        # vẫn chạy ảnh cũ (đo thật: tiến trình giữ nguyên PID/binary cũ), đúng luật artifact bất
+        # biến của `docs/VERSIONING.md` §3.3. Không đổi mã IPv6 giữa 23 và 24.
+        # Build 25 (26/09/2026): đưa log chẩn đoán ra chỗ NGƯỜI DÙNG đọc được. App group container
+        # trên macOS là THEO TỪNG USER ⇒ extension (root) bị sandbox chặn ghi vào container của
+        # user (đo thật: `probes[user:… write=false]`), nên extension gửi đuôi log qua
+        # `sendProviderMessage` (bọc `#if os(macOS)`) và APP ghi hộ ra
+        # `~/Library/Group Containers/G6XW3RN6LJ.com.privatevpn.shared/relay.log`.
+        # Build 26 (26/09/2026): phát hiện + CẢNH BÁO app VPN/mạng khác đang tranh chấp trên macOS
+        # (Clash Verge/ClashX/Mihomo/sing-box/Tailscale/WireGuard/OpenVPN…): `NetworkConflictDetector`
+        # (thuần, test bằng `scripts/ios-pure-logic-tests/run.sh`) + `NetworkConflictProbe` (đọc máy
+        # thật: VPN preferences, tiến trình, proxy hệ thống, default route v4/v6, DNS) + mục "Xung
+        # đột mạng" ở thẻ Diagnostics + hộp thoại/banner đa ngôn ngữ trước khi Connect. Không đụng
+        # đường tunnel/extension (bản vá IPv6 của build 23–25 giữ nguyên).
+        # Build 27 (26/09/2026): sửa lỗi failover khi relay của node đang chọn **KHÔNG KẾT NỐI ĐƯỢC**
+        # (ca thật 26/09: 24 lần `relay/vn2hy`, 0 lần `relay/vn1hy`, tunnel nằm `Disconnected` ~18
+        # phút). Extension: `RelayUnreachableWatch` (ngưỡng 20 s) + cửa dự phòng của **node khác**
+        # (`relayNodeCandidates`, lấy từ danh sách node app đã tải) + quay vòng giữ tunnel; app
+        # macOS: tự nối lại session có backoff. **System extension chỉ nạp lại khi ĐỔI VERSION** nên
+        # phải bump số này (xem `docs/VERSIONING.md` §3.3).
+        # CHỈ macOS: 2 target iOS giữ nguyên CURRENT_PROJECT_VERSION 57 / MARKETING_VERSION 1.4.6.
+        # Build 28 (26/09/2026): SIẾT cảnh báo "xung đột mạng" cho khỏi kêu oan (log thật 15:39:38 và
+        # 15:41:24 — tunnel `Disconnected` mà vẫn đo DNS ⇒ timeout ⇒ cảnh báo vô nghĩa; và tiến trình
+        # nền Tailscale/`ovpnagent` bị xếp Warning nên hiện băng-rôn "tắt app kia đi" trong khi VPN chạy
+        # tốt): (a) CHỈ đo DNS khi tunnel của mình Connected (`NetworkConflictDNSProbePolicy`, bỏ cả bản
+        # cache đo lúc tunnel tắt/đang nối); (b) phân mức lại — Info im lặng cho tiến trình nền, Warning
+        # cho "tunnel app khác đang bật mà không giữ default route"/DNS chết trong lúc Connected/MagicDNS,
+        # Blocking giữ nguyên cho VPN khác Connected · default route bị chiếm · proxy hệ thống;
+        # (c) băng-rôn/hộp thoại chỉ hiện khi tình trạng ĐỔI hoặc khi bấm Connect + nút "Không nhắc lại"
+        # (UserDefaults). Không đụng đường tunnel/extension.
+        CURRENT_PROJECT_VERSION: "28"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -311,6 +390,10 @@ targets:
         # VPNManagerMac đọc lại từ đây rồi đưa vào providerConfiguration["hysteria"].
         HysteriaPassword: $(HYST_PASSWORD)
         HysteriaObfs: $(HYST_OBFS)
+        # BẮT BUỘC để kích hoạt được system extension: Apple ghi rõ khoá này "is required for all
+        # system extensions … Failure to include this key results in an error at activation time"
+        # (Information Property List › NSSystemExtensionUsageDescription).
+        NSSystemExtensionUsageDescription: "VPNFlow cần cài tiện ích mở rộng hệ thống để dựng đường hầm VPN trên máy này."
     entitlements:
       path: mac/PrivateVPNMac/PrivateVPNMac.entitlements
       properties:
@@ -319,8 +402,19 @@ targets:
         # Phải TRÙNG với extension thì khoá WireGuard mới chia sẻ được (xem KeychainStore).
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.privatevpn.shared
+        # BẮT BUỘC cho system extension: `NEMachServiceName` phải bắt đầu bằng một App Group khai ở đây
+        # (NetworkExtensionErrorDomain Code=6 nếu thiếu — đo thật 26/09/2026).
+        com.apple.security.application-groups:
+          - $(AppIdentifierPrefix)com.privatevpn.shared
+        # Bản ký Developer ID (profile MAC_APP_DIRECT) CHỈ cấp bộ `*-systemextension`; khai
+        # `packet-tunnel-provider` (giá trị của appex plugin) ⇒ AMFI -413 "No matching profile
+        # found" ⇒ macOS không mở nổi app (đo thật 26/09/2026).
         com.apple.developer.networking.networkextension:
-          - packet-tunnel-provider
+          - packet-tunnel-provider-systemextension
+        # App là bên gọi OSSystemExtensionRequest ⇒ PHẢI có quyền này, thiếu là macOS trả
+        # `missingEntitlement` lúc kích hoạt. Cấp bằng capability SYSTEM_EXTENSION_INSTALL trên App ID
+        # (bật được qua API: `node scripts/asc-mac-devid-profiles.mjs`, 26/09/2026).
+        com.apple.developer.system-extension.install: true
     postCompileScripts:
       - name: Copy AppIcon
         basedOnDependencyAnalysis: false
@@ -337,8 +431,19 @@ targets:
       testTargets: []
 
   PrivateVPNMacPacketTunnel:
-    type: app-extension
+    # **System Extension** (không phải appex plugin): profile Developer ID của macOS chỉ cấp bộ
+    # quyền `*-systemextension`, mà appex plugin lại cần `packet-tunnel-provider` ⇒ bản ký
+    # Developer ID không chạy được ở tầng NetworkExtension (`pkd: could not create extension point
+    # record … -10814`, tunnel đứng ở `Disconnected`). Đóng gói thành system extension thật thì
+    # quyền `packet-tunnel-provider-systemextension` mới khớp profile.
+    type: system-extension
     platform: macOS
+    # Apple: tên file của gói phải TRÙNG bundle identifier — "a NetworkExtension extension with
+    # bundle identifier com.example.networkextension must use the filename
+    # com.example.networkextension.systemextension" (System Extensions › rules to activate).
+    # Vì vậy sản phẩm là `com.privatevpn.mac.packet-tunnel.systemextension`, KHÔNG phải
+    # `PrivateVPNMacPacketTunnel.systemextension` (tên target chỉ còn là nhãn trong Xcode).
+    productName: com.privatevpn.mac.packet-tunnel
     sources:
       # Extension macOS là HYSTERIA-ONLY: KHÔNG có WireGuardKit, KHÔNG có
       # PacketTunnelProvider.swift/WGRelayClient.swift.
@@ -351,6 +456,9 @@ targets:
       #
       # Danh sách file TƯỜNG MINH (không include cả thư mục) để không bao giờ kéo
       # WireGuard vào lại qua đường include.
+      # System extension là tiến trình thường do hệ thống launch ⇒ phải có điểm vào riêng
+      # gọi `NEProvider.startSystemExtensionMode()` (appex cũ dựa vào NSExtensionPrincipalClass).
+      - path: mac/PrivateVPNMacPacketTunnel/main.swift
       - path: iOS/PrivateVPNPacketTunnel/HysteriaPacketTunnelProvider.swift
       - path: iOS/PrivateVPNPacketTunnel/HysteriaTransport.swift
       - path: iOS/PrivateVPNPacketTunnel/HysteriaBandwidthControl.swift
@@ -367,6 +475,7 @@ targets:
       - path: iOS/PrivateVPNPacketTunnel/RouteReporter.swift
       # A10/A11 §2g/§2h: số live của Diagnostics + luật khai báo an toàn — thuần logic.
       - path: iOS/PrivateVPNPacketTunnel/RampStatus.swift
+      - path: iOS/PrivateVPNPacketTunnel/IPv6Reject.swift
       - path: iOS/PrivateVPNPacketTunnel/WSRelayClient.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayLink.swift
       - path: iOS/PrivateVPNPacketTunnel/RelayUDPListener.swift
@@ -378,17 +487,32 @@ targets:
         buildPhase: resources
       - path: docs/routes/cn6.txt
         buildPhase: resources
+      # A7 — danh sách IP Tencent Meeting (HK/Tencent Cloud toàn cầu) đi thẳng, xem ChinaRouteBypass.
+      - path: docs/routes/tencent-meeting.txt
+        buildPhase: resources
       # KHÔNG kèm NodeHealthReporter.swift: nó gọi ControlAPIHosts
       # (ControlAPIClient.swift) và kéo theo nguyên một tầng mạng không cần cho tunnel.
     info:
       path: mac/PrivateVPNMacPacketTunnel/Info.plist
       properties:
         CFBundleDisplayName: VPNFlow Tunnel
+        # System extension: SYSX (appex cũ là XPC!).
+        CFBundlePackageType: SYSX
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
+        LSMinimumSystemVersion: "14.0"
+        NSSystemExtensionUsageDescription: "VPNFlow cần cài tiện ích mở rộng hệ thống để dựng đường hầm VPN trên máy này."
+        # Bản đồ "extension point → lớp provider" của system extension. Apple:
+        # `NEProvider.startSystemExtensionMode()` "causes your system extension to start handling
+        # requests from the Network Extension session manager daemon to instantiate appropriate
+        # NEProvider subclass instances. The system extension must declare a mapping of Network
+        # Extension extension points to NEProvider subclass instances in its Info.plist"
+        # (NetworkExtension › NEProvider › startSystemExtensionMode()).
+        # KHÔNG còn `NSExtension` — khoá đó chỉ dành cho appex plugin.
+        NetworkExtension:
+          NEMachServiceName: $(TeamIdentifierPrefix)com.privatevpn.shared.tunnel
+          NEProviderClasses:
+            com.apple.networkextension.packet-tunnel: $(PRODUCT_MODULE_NAME).HysteriaPacketTunnelProvider
     entitlements:
       path: mac/PrivateVPNMacPacketTunnel/PrivateVPNMacPacketTunnel.entitlements
       properties:
@@ -397,23 +521,44 @@ targets:
         com.apple.security.network.server: true
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.privatevpn.shared
+        # BẮT BUỘC: `NEMachServiceName` của system extension phải bắt đầu bằng App Group khai ở đây
+        # (NetworkExtensionErrorDomain Code=6 nếu thiếu — đo thật 26/09/2026).
+        com.apple.security.application-groups:
+          - $(AppIdentifierPrefix)com.privatevpn.shared
+        # Giá trị `*-systemextension` (khớp profile Developer ID) thay cho `packet-tunnel-provider`.
         com.apple.developer.networking.networkextension:
-          - packet-tunnel-provider
+          - packet-tunnel-provider-systemextension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatevpn.mac.packet-tunnel
-        PRODUCT_NAME: PrivateVPNMacPacketTunnel
+        # PHẢI trùng bundle identifier (xem `productName` ở đầu target): tên gói system extension
+        # = `$(PRODUCT_NAME).systemextension`. Giữ tên cũ `PrivateVPNMacPacketTunnel` ⇒ gói
+        # `PrivateVPNMacPacketTunnel.systemextension` KHÔNG khớp bundle identifier và macOS từ chối
+        # kích hoạt (System Extensions › "rules to activate").
+        PRODUCT_NAME: com.privatevpn.mac.packet-tunnel
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        MARKETING_VERSION: "1.4.3"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "1.4.7"
+        # Phải TRÙNG số build với app chứa nó (xem chú thích ở target `PrivateVPNMac`).
+        # Build 27 (26/09/2026): failover khi relay KHÔNG KẾT NỐI ĐƯỢC (`RelayUnreachableWatch` +
+        # ứng viên đổi NODE từ danh sách node app đã tải + app macOS tự nối lại session).
+        # Build 28 (26/09/2026): siết cảnh báo xung đột mạng (chỉ đo DNS khi tunnel Connected + phân
+        # mức lại + không nhắc lại khi tình trạng không đổi) — đổi số vì **macOS chỉ nạp lại system
+        # extension khi ĐỔI VERSION** (`docs/VERSIONING.md` §3.3).
+        CURRENT_PROJECT_VERSION: "28"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
+        # `$(TeamIdentifierPrefix)` KHÔNG có sẵn khi máy build không ký (build Release với
+        # CODE_SIGNING_ALLOWED=NO, rồi `mac-sign-notarize.sh` ký lại sau) ⇒ Info.plist ra
+        # `com.privatevpn.mac.packet-tunnel` thiếu tiền tố team. Khai tường minh ĐÚNG TÊN BIẾN
+        # (`builtin-infoPlistUtility -expandbuildsettings` tra đúng tên, không tra biến thể HOA)
+        # để `NEMachServiceName` luôn là `G6XW3RN6LJ.com.privatevpn.mac.packet-tunnel`.
+        TeamIdentifierPrefix: G6XW3RN6LJ.
         # Không còn build libwg-go.a cho target này (WireGuard đã ra khỏi extension macOS).
     dependencies:
       # Framework hysteria2 cho macOS (module `Hysteria`, hàm C MobileConnect/MobileServe/
       # MobileStop). Là static archive ⇒ chỉ cần link; `embed` để bản chạy tại chỗ có đủ
       # artifact như khi phát hành.
       - framework: iOS/Frameworks/Hysteria-macos.xcframework
-        embed: true
-        codeSign: true
+        # Static archive ⇒ chỉ link, KHÔNG embed (xem chú thích ở target iOS).
+        embed: false
