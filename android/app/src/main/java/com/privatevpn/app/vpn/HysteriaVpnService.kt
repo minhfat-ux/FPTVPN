@@ -632,13 +632,27 @@ class HysteriaVpnService : VpnService() {
         }
         // Lần 1 hỏng: nhiều khả năng fd chưa tồn tại. Tạo fd rồi thử lại.
         val bindError = runCatching { sock.bind(java.net.InetSocketAddress(0)) }.exceptionOrNull()
-        val second = runCatching { protect(sock) }
-        val secondOk = second.getOrDefault(false)
+        var second = runCatching { protect(sock) }
+        var secondOk = second.getOrDefault(false)
+        var afterTun = false
+        if (!secondOk) {
+            // TV Xiaomi (MiTV-ASTP0 Android 9 / MiTV-ASSU0 Android 14, đo 23/09/2026): `protect()`
+            // trả **false** cho MỌI socket khi VPN chưa được dựng (chưa có TUN) — trên điện thoại
+            // lần thử thứ hai là true nên lỗi này không lộ. Hệ quả: socket của cầu WS/relay đi XUYÊN
+            // QUA chính tunnel ⇒ chết ngay ⇒ app treo "connecting" vĩnh viễn.
+            // Cách chữa: dựng TUN trước rồi protect lại. Đây là ngoại lệ có kiểm soát cho đúng ca
+            // "protect không dùng được" — lượt kết nối vẫn tiếp tục ngay sau đó nên không treo mạng.
+            afterTun = true
+            runCatching { ensureTun() }
+            second = runCatching { protect(sock) }
+            secondOk = second.getOrDefault(false)
+        }
         fun why(r: Result<Boolean>) = r.exceptionOrNull()?.let { " (${it.javaClass.simpleName}: ${it.message})" } ?: ""
         DiagnosticsLog.log(
             "protect[$tag]: lần 1=false${why(first)}, bind=>" +
                 (if (bindError == null) "ok" else "${bindError.javaClass.simpleName}: ${bindError.message}") +
-                ", lần 2=$secondOk${why(second)}",
+                ", lần 2=$secondOk${why(second)}" +
+                (if (afterTun) " (sau khi dựng TUN)" else ""),
         )
         if (!secondOk) {
             DiagnosticsLog.warn(
