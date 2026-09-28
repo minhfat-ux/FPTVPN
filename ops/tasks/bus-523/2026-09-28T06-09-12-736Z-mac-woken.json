@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-28T06:09:12.736Z",
+ "note": "connector VPS: done từ win — bus-523 · Admin: cần WIN nối route reset-quota (nút 'Reset 30 ngày' đã làm xong ở store+UI, 4/4 test PASS)",
+ "via": "dsh --profile headless \"{prompt}\""
+}
