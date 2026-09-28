@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=bf8ad4f (route POST /v1/admin/users/:id/reset-quota trong control-plane/src/index.js, da push origin/main); deploy bang stage src-only: WS=/root/cp-patch-staging-reset-quota LIVE=/root/flowvpn-cp bash scripts/server-agent/deploy-control-plane.sh --files index.js,auth-store.js -> backup src-backup-20260928-060651 + health 200; --files admin-page.js -> backup src-backup-20260928-060808 + health 200 (handoff chi ghi --files index.js nhung LIVE chua co nut nen PHAI deploy them admin-page.js); LIVE index.js/auth-store.js/admin-page.js khop origin/main; nghiem thu tren prod 127.0.0.1:7778: grant 300 -> days_left=300, reset-quota {days:30} -> 30 (khong 330), bam lan 2 -> 30 (khong 60), days=0 -> lifetime, user la -> 400 User not found; GET /admin co 'Reset 30 ngay' + /reset-quota; local: node control-plane/test/admin-reset-quota.test.js -> 4/4 pass. Ghi chu: home-page.test.js fail 3 case la do fc4d95e bo khoi bang gia khoi home-page.js nhung chua cap nhat test, KHONG thuoc bus-523.",
+ "actor": "win",
+ "at": "2026-09-28T06:08:54.019Z"
+}
