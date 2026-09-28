@@ -644,6 +644,11 @@ function storeLinks(product) {
         android: appConfig.get("android_apk_url") || `${base}/v1/downloads/android`,
         // Android 7.0+ build for Fire TV / older devices (see the route below).
         androidLegacy: appConfig.get("android_apk_url_legacy") || process.env.ANDROID_LEGACY_APK_URL || `${base}/v1/downloads/android-legacy`,
+        // Android TV (Xiaomi/Redmi · Fire TV): gói flavor `tv` (LEANBACK launcher, cài SONG SONG
+        // với bản điện thoại). Khách đã test THẬT trên MiTV Android 14 + Android 9
+        // (docs/handoff/ANDROID_TV_XIAOMI_2026-09-28.md) nên phát ở /dl/ — KHÔNG dùng
+        // route /v1/downloads/android vì đây là gói RIÊNG, không thay bản điện thoại.
+        androidTv: appConfig.get("android_tv_apk_url") || process.env.ANDROID_TV_APK_URL || `${siteBaseUrl()}/dl/VPNFlow-tv-latest.apk`,
         // Bộ cài Windows 1-click (Inno Setup) — sinh bởi windows/installer/build.ps1 rồi
         // upload-windows-release.sh đặt vào /dl/. Link cố định "-latest" để trang /buy
         // không phải sửa mỗi lần ra bản mới.
