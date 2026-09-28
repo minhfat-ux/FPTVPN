@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260928-02",
+  "title": "TG /vibecode: publish bản cài đã work trên TV Xiaomi lên website",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguồn: bus #532 (owner → win, 2026-09-28T14:26:39Z, nguyên văn: 'publish bản cài đã work trên tv xiaomi lên website'). Bản đã được test THẬT trên TV Xiaomi: 'app-tv-debug.apk' flavor tv v36 — package com.privatevpn.app.tv.dev, versionCode 36, versionName 1.4.3-tv-dev, 113.423.049 B, sha256 cc03504ed83d0e4a05962c204d535cdc668a2d3f09c3284ec48da33f586ef821. Khách xác nhận connect được + xem được FPT Play trên MiTV_ASSU0 (Android 14) và MiTV_ASTP0 (Android 9) — bằng chứng: docs/handoff/ANDROID_TV_XIAOMI_2026-09-28.md §3–§4 (bản gốc trong repo FPTVPN, cây main, commit d35c9ce). Hiện bản này chỉ nằm ở link tạm https://meetflowai.site/dl/test/VPNFlow-tv-v36.apk (sha256 trên server đã đối chiếu khớp). Việc: PHÁT HÀNH lên website — (1) đưa file vào /dl/ đường chính thức (VPNFlow-tv-latest.apk + bản ghi số), (2) thêm link tải 'Android TV (APK)' trên trang chủ meetflowai.site (chip trong thẻ VPNFlow, control-plane/src/index.js + home-page.js), deploy node-2, verify tải thật.",
+  "verify": "ssh root@165.101.114.162 \"sha256sum /var/www/flowvpn/dl/VPNFlow-tv-latest.apk\" => cc03504ed83d0e4a05962c204d535cdc668a2d3f09c3284ec48da33f586ef821 + size 113423049; curl -sI https://meetflowai.site/dl/VPNFlow-tv-latest.apk => 200 + content-length 113423049; curl -s https://meetflowai.site/ | grep -c 'VPNFlow-tv-latest.apk' => >= 1 (co chip 'Android TV (APK)')",
+  "due": "2026-09-28",
+  "createdAt": "2026-09-28T14:39:03.722Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-28T14:39:03.722Z",
+ "transcribedBy": "win",
+ "busId": 532,
+ "busAt": "2026-09-28T14:26:39.036Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #532 (owner → win). Task TG-VIBECODE cũ (owner→mac, đã done) chỉ là ref của bot Telegram — KHÔNG phải việc của WIN nên task.mjs chặn ack (sai bên); mở mã mới cho lượt giao này (cùng cách T-20260922-18/20, T-20260923-01..07, T-20260926-01, T-20260927-01/02, T-20260928-01). WIN đọc 'bản cài đã work trên tv xiaomi' = bản flavor TV v36 đã được khách xác nhận chạy tốt trên 2 TV Xiaomi (không phải APK FPT Play — việc đó nằm ở T-20260928-01 / bus #530)."
+}
