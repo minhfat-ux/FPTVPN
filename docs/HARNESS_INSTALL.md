@@ -190,6 +190,22 @@ bash scripts/harness-patches-install.sh         # cài bản chạy nền vào �
   WIDE, không đụng RAIL; không thấy WIDE ⇒ `WARN` nói rõ + `--check` exit 1. `--check` chỉ ĐẠT khi
   WIDE = 72px, và nếu WIDE chưa đạt mà RAIL đang là 72px thì thông báo nêu rõ
   `occurrence RAIL (railMark) = 72px — phải giữ 24px (bị vá nhầm?)` để biết phải sửa bên nào.
+- **G1 — ngưỡng neo là 600 ký tự** (O1, audit t11): `sidebar_wide_slot()` (trong
+  `.dhs-setup/fpt-harness-package/patches/apply-flowtech-brand.py`, hằng `SIDEBAR_CTX_WINDOW = 600`) và
+  `sidebar_ok()` (trong `scripts/harness-ensure-patches.sh`, biến `WINDOW = 600` trong heredoc) nhận diện
+  occurrence WIDE bằng ngữ cảnh trong **600 ký tự ngay TRƯỚC** occurrence: cần thấy `brandMark` **và**
+  `brandIdentity`, đồng thời loại trừ occurrence có `railMark`. Trên DSH `0.1.5-rc.1`, biên thật đo được
+  là **183** ký tự ngược tới `brandIdentity` (và 30 tới `brandMark`) cho WIDE, **61** ký tự ngược tới
+  `railMark` cho RAIL ⇒ còn dư địa so với 600. Nếu một bản DSH tương lai đẩy mốc neo xa hơn 600 ký tự thì
+  hàm trả `None` ⇒ patch script in `WARN` và `--check` **exit 1** (fail-closed, KHÔNG im lặng). Cách xử:
+  tăng ngưỡng ở **CẢ 2 chỗ** (hằng `SIDEBAR_CTX_WINDOW` và biến `WINDOW`), đo lại biên thật trên bản DSH
+  mới, rồi kiểm `bash scripts/harness-ensure-patches.sh --check` trên bản cài thật.
+- **G1 — cổng chỉ ĐÒI WIDE = 72, KHÔNG bắt RAIL = 24** (O2, audit t11): RAIL chỉ được nhắc trong thông
+  báo khi WIDE chưa đạt mà RAIL = 72px (`… (bị vá nhầm?)`). Hệ quả **có chủ ý**: nếu RAIL từng bị vá nhầm
+  thành 72 thì sau khi WIDE đủ 72, `--check` vẫn **ĐẠT** và RAIL **không tự về 24** — giá trị RAIL là của
+  DSH, không phải của bản vá, nên script **không đụng RAIL**. Người debug đọc log cần biết điều này;
+  **KHÔNG** "sửa" bằng cách thêm điều kiện bắt RAIL = 24 (sẽ đỏ giả khi DSH đổi thiết kế rail). Muốn trả
+  RAIL về đúng giá trị gốc của DSH thì lấy lại riêng occurrence đó từ `<file>.fpt.bak`.
 - **Patch brand khớp bằng regex bền với tên hàm đã minify** và **WARN rõ ràng khi không khớp** (không
   no-op im lặng): bản cũ hardcode `this.wordmark=Jt(Gt.wordmark,"HARNESS")` nên bundle 0.1.5-rc.1
   (`ot(rt.wordmark,"HARNESS")`) không khớp, và bản cũ vá `productTitle` ở `dsh-client-ui-renderer`
