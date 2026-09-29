@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=none (khong doi code); file=docs/evidence/2026-09-29-http500-auth-json-torn.md; cmd=curl -X POST http://127.0.0.1:7778/v1/peers/register -> HTTP 500 {\\\"error\\\":\\\"Internal error\\\"} + journalctl flowvpn-cp: 201x SyntaxError Unexpected non-whitespace character after JSON at position 419003 (auth.json torn write, 20:27:03-21:15:30). FIX: backup data/backups/auth.json.torn-20260929-211613 roi cat duoi rach 252B, giu JSON #1 hop le (25 users). ket qua: register -> HTTP 401 Invalid or expired join token; /v1/health & /v1/nodes = 200 (local+public); 4 relay = 426; het SyntaxError. Relay KHONG phai nguyen nhan.",
+ "actor": "mac",
+ "at": "2026-09-29T14:17:56.516Z"
+}
