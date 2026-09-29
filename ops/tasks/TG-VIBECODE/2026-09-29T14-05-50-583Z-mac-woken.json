@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-29T14:05:50.583Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: kiểm tra relay, lỗi http 500",
+ "via": "dsh --profile headless \"{prompt}\""
+}
