@@ -2524,13 +2524,21 @@ do {
 
 // (12) Chủ dự án chốt 26/09/2026: "thử đường 3 (UDP thẳng), nếu bị chặn thì phải fallback về Cloudflare".
 //      Thứ tự cửa phải khoá được bằng test — sai thứ tự là mất fallback.
+let defaultOrder = HysteriaDefaults.orderedCandidates(
+    primaryRelayURL: "wss://api.meetflowai.site/relay/vn2hy",
+    serverHost: "165.101.114.162",
+    alternates: []
+)
+checkEqual(defaultOrder.map(\.relayURL), ["wss://api.meetflowai.site/relay/vn2hy"],
+           "MẶC ĐỊNH: KHÔNG có cửa đi thẳng (sự cố 'already running' 28-29/09/2026 đã khoá lại)")
 let directFirstOrder = HysteriaDefaults.orderedCandidates(
     primaryRelayURL: "wss://api.meetflowai.site/relay/vn2hy",
     serverHost: "165.101.114.162",
     alternates: [
         HysteriaDefaults.RelayCandidate(relayURL: "wss://t1.meetflowai.site/relay/vn2hy", serverHost: "165.101.114.162"),
         HysteriaDefaults.RelayCandidate(relayURL: "wss://api.meetflowai.site/relay/vn2hy", serverHost: "165.101.114.162"),
-    ]
+    ],
+    allowDirect: true
 )
 checkEqual(directFirstOrder.first?.relayURL, "", "đường thẳng (UDP, không Cloudflare) đứng ĐẦU khi directFirst")
 checkEqual(directFirstOrder.first?.serverHost, "165.101.114.162", "đường thẳng đi kèm ĐÚNG node")
@@ -2542,7 +2550,8 @@ let cloudflareFirstOrder = HysteriaDefaults.orderedCandidates(
     primaryRelayURL: "wss://api.meetflowai.site/relay/vn2hy",
     serverHost: "165.101.114.162",
     alternates: [],
-    directFirst: false
+    directFirst: false,
+    allowDirect: true
 )
 checkEqual(cloudflareFirstOrder.map(\.relayURL),
            ["wss://api.meetflowai.site/relay/vn2hy", ""],
