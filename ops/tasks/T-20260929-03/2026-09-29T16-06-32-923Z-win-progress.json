@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "Da tim ra + va + deploy xong: control panel dem 'thiet bi da dang ky' bang so UDID THO cua tai khoan Apple (admin-page.js: (apple.devices||[]).length). So that: so cua shop = 10 UDID (6 shop tu them moi + 4 Apple da co tu truoc); tai khoan Apple = 10 UDID nhung THIEU 1 UDID cua shop (664D325A-... Mac15,13) va THUA 1 may ngoai shop ('MacBook Air (2)'). Da sua: route /v1/admin/ios/apple tra them khoi shop{dang ky, tu them moi, da co tu truoc, dang co tren Apple, thieu} + apple{accountTotal, notShop}; dong Apple + cot Apple + status tab iOS doi chieu danh sach Apple SONG. Kiem chung 19/19 PASS (node ops/_scratch/verify-device-count.mjs --live), health 200, service active, suite khong hoi quy (316/314/2 - dung 2 ca do co san tu truoc). Bang chung: commit 586e224 (so) + 2940973 (ma control-plane tren node-2) + docs/evidence/T-20260929-03/README.md",
+ "actor": "win",
+ "at": "2026-09-29T16:06:32.923Z"
+}
