@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Nhận việc owner (bus #568): kiểm tra relay, lỗi HTTP 500. Bắt đầu chẩn đoán relay/control-plane.",
+ "actor": "mac",
+ "at": "2026-09-29T14:08:04.173Z"
+}
