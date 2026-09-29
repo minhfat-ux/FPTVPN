@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260929-03",
+  "title": "TG /vibecode: control panel dem sai so thiet bi da dang ky (moi chi dem theo udid tho)",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyen van (bus #584, owner -> win, 2026-09-29T15:45:56Z): 'control panel dang dem sai so thiet bi da dang ky roi. Moi chi dem theo udid thoi thi phai'. Can sua cach dem thiet bi da dang ky trong control panel cho dung (khong phai dem udid/ban ghi tho).",
+  "verify": "node ops/_scratch/verify-device-count.mjs --live (tren node-2) in ra so thiet bi that; so control panel hien dung bang so do",
+  "due": "2026-09-29",
+  "createdAt": "2026-09-29T15:49:02.988Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-29T15:49:02.988Z",
+ "transcribedBy": "win",
+ "busId": 584,
+ "busAt": "2026-09-29T15:49:02.988Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #584 (owner → win)."
+}
