@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260929-01",
+  "title": "TG /vibecode: loi Android connect bao loi http 500 la sao? — xac dinh nguyen nhan + tra loi chu du an",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyen van (bus #566, owner -> win, 2026-09-29T13:49:10Z): 'loi Android connect bao loi http 500 la sao?' — chu du an bao app Android khi bam Connect hien loi HTTP 500; can xac dinh do la loi gi, o dau, va tra loi.",
+  "verify": "node ops/verify-android-connect-500.mjs — kiem tra (1) GET /v1/health 200, (2) khong co 500 trong log control-plane/fbuddy quanh thoi diem bao, (3) ket luan co bang chung",
+  "due": "2026-09-29",
+  "createdAt": "2026-09-29T14:04:53.257Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-29T14:04:53.257Z",
+ "transcribedBy": "win",
+ "busId": 566,
+ "busAt": "2026-09-29T13:49:10.729Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #566 (owner → win)."
+}
