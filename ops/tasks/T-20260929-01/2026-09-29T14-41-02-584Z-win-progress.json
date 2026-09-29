@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "WIN nghiem thu doc lap sau khi va (commit 2f4c653): (1) ban va _save DA CHAY THAT — flowvpn-cp khoi dong lai 21:26:38+07, truoc do chi nam tren dia; (2) bai ban dong thoi 3x50 lan ghi: ban CU = 147 ENOENT rename + 2/3 file JSON hong, ban DANG CHAY = 0/0; (3) 20x POST /v1/peers/register (dung duong app Android bam Connect) ban DONG THOI = 20x401, 0x500; /v1/admin/stats /v1/me /v1/servers voi token gia = 401; health 200 ca local lan public; 0 loi auth-store tu luc restart. (4) KHONG MAT DU LIEU: 25 user/108 phien/23 goi (ban 26/09: 22/97/20); 253B bi cat la BAN TRUNG cua 2 muc renewalReminders da co trong ban giu. (5) Da bo sung dung LENH NGHIEM THU ma so yeu cau: node ops/verify-android-connect-500.mjs (7/7 PASS, exit 0) + docs/evidence/T-20260929-01/README.md + ops/verify-auth-save-race.mjs.",
+ "actor": "win",
+ "at": "2026-09-29T14:41:02.584Z"
+}
