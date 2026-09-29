@@ -1,0 +1,114 @@
+commit 29409736c32ce74c2ef8145f38ecd0a6ae91e7b3
+Author: server-agent <agent@server>
+Date:   Tue Sep 29 23:04:29 2026 +0700
+
+    control-plane(admin): dem so thiet bi da dang ky theo UDID cua shop + doi chieu Apple (T-20260929-03 / bus #584)
+
+diff --git a/control-plane/src/admin-page.js b/control-plane/src/admin-page.js
+index 5c444fe..681b669 100644
+--- a/control-plane/src/admin-page.js
++++ b/control-plane/src/admin-page.js
+@@ -1210,7 +1210,9 @@ export function adminPageHTML() {
+ 
+     // Trạng thái phân trang/lọc của hai bảng (dữ liệu đã tải về client).
+     const usersState = { all: [], expiry: {}, page: 1 };
+-    const iosState = { all: [], page: 1 };
++    // appleUdids = tập UDID ĐANG có trên tài khoản Apple (nạp ở loadAscStatus) để cột "Apple"
++    // đối chiếu thực tế thay vì tin cờ đã lưu; null = chưa đọc được (chưa cấu hình/chưa gọi được).
++    const iosState = { all: [], page: 1, appleUdids: null };
+     // Bảng Payments cũng phân trang 10 dòng/trang (adminPaginate tự kẹp trang).
+     const paymentsState = { all: [], page: 1 };
+ 
+@@ -1372,6 +1374,13 @@ export function adminPageHTML() {
+     }
+ 
+     function iosAppleCell(d) {
++      // Có danh sách Apple sống ⇒ nói theo thực tế (một UDID có thể đã bị Apple gỡ/tắt dù cờ
++      // appleRegisteredAt cũ vẫn còn). Chưa có danh sách ⇒ mới rơi về cờ đã lưu.
++      if (iosState.appleUdids) {
++        const udid = String(d.udid || "").toUpperCase();
++        if (iosState.appleUdids.has(udid)) return "✅ có trên Apple";
++        return d.appleRegisteredAt ? "⚠️ KHÔNG thấy trên Apple" : "— chưa lên Apple";
++      }
+       if (d.appleRegisteredAt) return "✅ " + (d.appleAlreadyRegistered ? "đã có trên Apple" : "đã đăng ký");
+       if (d.appleError) return "⚠️ " + escapeHtml(d.appleError);
+       return "—";
+@@ -1385,13 +1394,25 @@ export function adminPageHTML() {
+           ? "App Store Connect API — đã cấu hình (Key " + (c.keyId || "?") + ")"
+           : "App Store Connect API — CHƯA cấu hình";
+         const apple = data.apple || {};
++        const shop = data.shop || {};
++        const appleDevices = apple.devices || [];
++        // Ghi lại tập UDID Apple để cột "Apple" trong bảng iOS đối chiếu đúng thực tế.
++        iosState.appleUdids = new Set(appleDevices.map(function (d) { return String(d.udid || "").toUpperCase(); }));
++        const missing = shop.missingOnApple || [];
++        const notShop = apple.notShop || [];
+         fields.ascBody.textContent = c.configured
+           ? (apple.ok
+-              ? "Kết nối Apple OK · " + (apple.devices || []).length + " thiết bị trên tài khoản."
++              ? "Kết nối Apple OK · shop đã đăng ký " + (shop.registered ?? 0) + " thiết bị (UDID)"
++                + " — " + (shop.addedByShop ?? 0) + " do shop thêm mới, " + (shop.alreadyOnApple ?? 0) + " đã có trên Apple từ trước"
++                + " · đang có trên Apple " + (shop.onApple ?? 0) + "/" + (shop.registered ?? 0)
++                + (missing.length ? " · THIẾU trên Apple: " + missing.join(", ") : "")
++                + " · tài khoản Apple có " + (apple.accountTotal ?? appleDevices.length) + " thiết bị"
++                + (notShop.length ? " (trong đó " + notShop.length + " không phải máy của shop)" : "")
+               : "Chưa gọi được Apple: " + (apple.error || "lỗi không rõ"))
+           : "Nạp Issuer ID + Key ID + file .p8 để server tự thêm UDID lên Apple Developer.";
+         if (fields.ascKeyId && !fields.ascKeyId.value) fields.ascKeyId.value = c.keyId || "";
+         if (fields.ascTeamId && !fields.ascTeamId.value) fields.ascTeamId.value = c.teamId || "";
++        renderIosDevices();   // vẽ lại để cột "Apple" dùng danh sách Apple vừa đọc
+       } catch (error) {
+         fields.ascTitle.textContent = "App Store Connect API — lỗi kiểm tra";
+         fields.ascBody.textContent = error.message;
+@@ -1468,7 +1489,8 @@ export function adminPageHTML() {
+         // Mặc định: UDID đăng ký mới nhất lên trên (client đã có registeredAt).
+         iosState.all = adminSortByTimeDesc(data.devices || [], function (d) { return d.registeredAt; });
+         renderIosDevices();
+-        fields.iosStatus.textContent = "Loaded " + iosState.all.length + " device(s).";
++        // Đếm theo UDID CỦA SHOP (nguồn thật), không phải theo UDID thô của tài khoản Apple.
++        fields.iosStatus.textContent = "Đã đăng ký " + iosState.all.length + " thiết bị (UDID) của shop.";
+         await loadAscStatus();
+       } catch (error) {
+         fields.iosStatus.textContent = error.message;
+diff --git a/control-plane/src/index.js b/control-plane/src/index.js
+index bdb34c5..82525ad 100644
+--- a/control-plane/src/index.js
++++ b/control-plane/src/index.js
+@@ -2798,7 +2798,36 @@ app.get(["/v1/admin/ios/apple", "/admin/ios/apple"], requireAdminAuth, async (_r
+     const status = await appleAsc.status();
+     const token = status.configured ? await appleAsc.token() : null;
+     const list = token ? await listAppleDevices({ token }) : { ok: false, devices: [], error: "Chưa cấu hình API key" };
+-    res.json({ credentials: status, apple: { ok: list.ok, error: list.error ?? null, devices: list.devices ?? [] } });
++    // "Số thiết bị đã đăng ký" của shop KHÔNG phải số UDID thô trên tài khoản Apple: tài khoản
++    // Apple còn chứa máy cá nhân/máy cũ không phải khách, và ngược lại có UDID khách không (còn)
++    // nằm trên Apple (Apple gỡ/tắt). Trước đây dashboard chỉ đếm `apple.devices.length` nên chủ
++    // shop thấy sai. Đối chiếu hai tập ngay tại server để mọi màn hình đọc cùng một con số.
++    const normUdid = (value) => String(value ?? "").trim().toUpperCase();
++    const shopList = await iosDevices.list().catch(() => ({ devices: [] }));
++    const shopDevices = Array.isArray(shopList?.devices) ? shopList.devices : [];
++    const shopUdids = new Set(shopDevices.map((d) => normUdid(d.udid)).filter(Boolean));
++    const appleUdids = new Set((list.devices ?? []).map((d) => normUdid(d.udid)).filter(Boolean));
++    const missingOnApple = [...shopUdids].filter((udid) => !appleUdids.has(udid));
++    const notShop = [...appleUdids].filter((udid) => !shopUdids.has(udid));
++    // `appleAlreadyRegistered` = Apple trả 409 (đã có UDID đó từ trước) ⇒ không phải máy mới của shop.
++    const addedByShop = shopDevices.filter((d) => d.appleRegisteredAt && !d.appleAlreadyRegistered).length;
++    res.json({
++      credentials: status,
++      shop: {
++        registered: shopUdids.size,                                 // thiết bị shop đã đăng ký (nguồn thật)
++        addedByShop,                                                // trong đó shop tự thêm mới lên Apple
++        alreadyOnApple: Math.max(0, shopUdids.size - addedByShop),  // đã có trên Apple từ trước
++        onApple: shopUdids.size - missingOnApple.length,            // đang thấy trên tài khoản Apple
++        missingOnApple,
++      },
++      apple: {
++        ok: list.ok,
++        error: list.error ?? null,
++        devices: list.devices ?? [],
++        accountTotal: appleUdids.size,                              // UDID thô trên tài khoản Apple
++        notShop,                                                    // có trên Apple nhưng không phải máy của shop
++      },
++    });
+   } catch (err) {
+     console.error("ios apple status failed:", err);
+     res.status(500).json({ error: "Internal error" });
