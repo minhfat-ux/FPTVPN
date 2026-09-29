@@ -96,3 +96,25 @@ adb -s 10.193.44.111:5555 shell input tap 600 720
    thì phải có đường lùi "dựng TUN rồi protect lại" (đã thêm ở v36).
 3. **TV hãng ≠ Android chuẩn**: Xiaomi bỏ hộp thoại VPN hoặc không cho D-pad bấm OK; luôn kiểm trên máy
    thật và giữ flavor riêng cho TV.
+
+## 7. Sự việc "TV tự tắt khi mở FPT Play" — **KHÔNG phải do VPN** (điều tra 29/09/2026)
+
+Khách báo: *"bật FPT Play trên TV .110 thì TV tự tắt"*. Đã điều tra và **loại trừ app VPN**:
+
+- Phía server: relay `vn2hy` lúc đó **không có lỗi** (`dropped=0`, `udpErrors=0`, `lastError=null`), phiên
+  của TV chở ~1,07 MB vào / 1,14 MB ra rồi **client tự đóng 1001** — không có gì bất thường.
+- Trước đó **cùng TV, cùng VPN** khách đã xem FPT Play bình thường ("rất đẹp luôn").
+- **Mốc thay đổi**: khách cài **YouTube + Google Play** lên TV (MiTV bản Trung Quốc **không có GMS chính thức**).
+- Triệu chứng sau đó: **mọi app khác chạy bình thường, chỉ FPT Play làm TV tự tắt**.
+- **Kiểm chứng cuối**: **gỡ Google Play + YouTube ra ⇒ FPT Play chạy lại bình thường.**
+
+**Kết luận:** bộ GMS vá tay trên ROM MiTV nội địa làm hỏng đường DRM/HDCP; app có DRM (FPT Play/YouTube)
+làm TV tự tắt. **Không liên quan VPN/VPNFlow.**
+
+**Quy tắc cho hỗ trợ khách (ghi vào cẩm nang):**
+1. Khách báo "TV Xiaomi tự tắt / đen màn khi mở một app video" ⇒ **kiểm tra ngay TV có cài Google Play /
+   YouTube (bộ GMS vá) không** — nếu có, yêu cầu gỡ ra rồi thử lại.
+2. **Không khuyến nghị khách cài GMS lên TV Xiaomi nội địa** nếu muốn xem app DRM ổn định; TV vẫn dùng
+   VPNFlow bình thường (đã kiểm chứng trên `.110` và `.112`, gồm cả FPT Play).
+3. Không cần sửa gì trong app cho ca này; giữ flavor TV như hiện tại.
+
