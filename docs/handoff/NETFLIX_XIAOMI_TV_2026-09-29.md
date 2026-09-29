@@ -66,8 +66,25 @@ app phone trả `This device is not supported by the app.` Bản 9.0.3/10.3.0/13
 4. ⚠️ Flash ROM quốc tế cho TV (MiTV-ASTP0 có bản quốc tế Xiaomi TV P1): rủi ro brick, cần nghiên cứu riêng,
    chưa có bằng chứng bản quốc tế cho đúng mã máy này có Netflix ESN.
 
-## 5. Trạng thái hiện tại trên TV
+## 5. Quyết định & trạng thái cuối (29/09/2026, chủ dự án chốt: gỡ Netflix khỏi TV)
 
-- `com.netflix.ninja` (10.3.0): **còn nguyên** trên cả 3 TV — chạy được nhưng hiện thông báo không tương thích.
-- `com.netflix.mediaclient` (8.143.1): cài trên `.110` để thử — hiện `This device is not supported by the app.`
-- VPNFlow TV v36 + SmartTube vẫn hoạt động bình thường, không liên quan tới lỗi này.
+Chủ dự án chọn **dừng hướng Netflix trên 3 TV Xiaomi** (vì bị chặn ở tầng chứng nhận thiết bị) và xác nhận
+**Netflix trên điện thoại Samsung xem được qua VPNFlow** ⇒ **IP thoát relay VN không bị Netflix chặn**
+(đây là dữ kiện quan trọng cho phương án thiết bị HDMI chứng nhận sau này).
+
+Đã gỡ:
+
+| TV | Hành động | Kết quả |
+|---|---|---|
+| `.111` | `adb uninstall com.netflix.ninja` | `Success`, `pm list packages \| grep -i netflix` ⇒ trống |
+| `.112` | `adb uninstall com.netflix.ninja` | `Success`, còn lại trống |
+| `.110` | kiểm tra trước khi gỡ | **ROM đã tự xoá cả `com.netflix.ninja` và `com.netflix.mediaclient`** (`pm list packages` trống) |
+
+Việc ROM `.110` tự xoá app **xác nhận dòng log ở §2 là thật** (PatchWall `删除不合规应用` = xoá app không hợp quy),
+không chỉ là ẩn khỏi danh sách "Ứng dụng của tôi".
+
+APK Netflix đã **xoá khỏi đường tải công khai** (`/var/www/flowvpn/dl/test/`); bản gốc vẫn giữ cục bộ tại
+`C:\Users\Minhn\vpnflow-android-142\tools\Netflix-TV-10.3.0.apk`, `Netflix-TV-9.0.3.apk`, `Netflix-phone-8.143.1.apk`
+(không publish) — chỉ để tham chiếu, không dùng trên TV nữa.
+
+VPNFlow TV v36 + SmartTube vẫn hoạt động bình thường trên cả 3 TV, không liên quan tới lỗi này.
