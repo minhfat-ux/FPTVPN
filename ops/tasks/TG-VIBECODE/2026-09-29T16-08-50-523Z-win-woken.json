@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-29T16:08:50.523Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: dashboard trên control panel vẫn sai số thiết bị",
+ "via": "dsh --profile headless \"{prompt}\""
+}
