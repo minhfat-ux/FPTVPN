@@ -118,3 +118,37 @@ làm TV tự tắt. **Không liên quan VPN/VPNFlow.**
    VPNFlow bình thường (đã kiểm chứng trên `.110` và `.112`, gồm cả FPT Play).
 3. Không cần sửa gì trong app cho ca này; giữ flavor TV như hiện tại.
 
+## 8. Trạng thái cài đặt app trên 3 TV (29/09/2026)
+
+| TV | Model | Android | HyperOS | VPNFlow (TV) | SmartTube | TV360 | Netflix |
+|---|---|---|---|---|---|---|---|
+| `10.193.44.110` | MiTV-ASSU0 | **14** (SDK 34) | `OS3.0.116.0.USSAATV` (mới nhất của model) | ✅ v36 | ✅ 32.56 | ✅ `com.viettel.tv360.tv` v3.3 | ⏳ chờ APK gốc |
+| `10.193.44.111` | MiTV-ASTP0 | **9** (SDK 28) | `OS2.0.8.0.PSTAATV` | ✅ v36 | ✅ 32.56 | ❌ **không cài được** | ⏳ chờ APK gốc |
+| `10.193.44.112` | MiTV-ASTP0 | **9** (SDK 28) | `OS3.0.101.0.PSTAATV` | ✅ v36 | ✅ 32.56 | ❌ **không cài được** | ⏳ chờ APK gốc |
+
+**Vì sao TV360 không cài được trên `.111`/`.112`** — lỗi lấy trực tiếp từ ADB:
+```
+INSTALL_FAILED_OLDER_SDK: Requires newer sdk version #29 (current version is #28)
+```
+Bản TV360 SmartTV (`com.viettel.tv360.tv` v3.3, nguồn Aptoide, **do Skyworth ký** — bản cài sẵn theo máy
+Skyworth, không phải Viettel ký) yêu cầu **Android 10 (minSdk 29)**, còn 2 TV đó là **Android 9**.
+Trang chính thức `tv360.vn/app` **chỉ trỏ về Google Play**, không phát APK. Cần bản TV360 cũ hơn
+(minSdk ≤ 28) hoặc bản Play 5.6.x — đã nhờ Mac tải (mạng Windows bị chặn APKPure/APKCombo/APKMonk/APKFab).
+
+**Lưu ý về nâng HyperOS:** `.112` đã ở HyperOS **3.0.101** mà vẫn **Android 9** ⇒ nâng `.111` từ 2.0.8 lên
+3.0.x **nhiều khả năng vẫn Android 9** ⇒ TV360 vẫn bị chặn. Muốn Android 14 phải là **model khác**
+(như `.110` là MiTV-ASSU0). Chủ dự án đã thử nâng `.110` nhưng model này **không có bản mới hơn**.
+
+**SmartTube thay YouTube**: đã cài trên cả 3 TV. Nó **không cần Google Play Services** và **không đi
+đường DRM/Widevine** ⇒ dùng tốt mà **không phải cài lại bộ GMS** (thứ đã gây vụ "TV tự tắt" ở §7).
+APK: `SmartTube_stable_32.56_universal.apk` (sha256 `4A35B90940612E048E4E9CB9E10379F7DB1E84F30375994129F10A571EE04CE5`).
+
+**Netflix — chưa cài, và đã chặn 1 bản giả:** bản trên Aptoide có chữ ký `CN=Android, O=Android`
+(khoá AOSP) + nhãn app **"Welcome"** + chỉ 9,4 MB (bản thật ~25 MB) ⇒ **bản đóng gói lại, KHÔNG cài**.
+Cần APK gốc do **`Netflix, Inc.` ký** (`com.netflix.ninja`) — đã nhờ Mac tải; Windows sẽ
+`apksigner verify --print-certs` **trước khi cài** và từ chối nếu signer không phải Netflix.
+Rào cản kỹ thuật đi kèm: Netflix TV cần máy **được Netflix chứng nhận**; 3 TV có Widevine HAL
+(`vendor.drm-widevine-hal-1-1` trên Android 9, `/vendor/lib/libwvaidl.so` trên Android 14) nhưng
+**không đọc được mức L1/L3 bằng shell** ⇒ chỉ khi cài app mới biết có chạy được hay không.
+
+
