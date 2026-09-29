@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "KIEM CHUNG LAI (watcher danh thuc lai goi tin CU #574 luc 15:07Z — KHONG phai viec moi: /pull?agent=win&since=560 cho thay tin cuoi gui WIN van la #574). (1) DO LAI DOC LAP tren node-2: auth.json users=20 revoked=0; GET /v1/admin/users (tiến trinh dang chay 7778) -> 200, count=20, expiry.revoked=0, 0 dong co revokedAt; loc tren tep tam 2 user -> hien 1, khong con revoked; service active, health 200; sha256 ma nguon dang chay khop ban luu tai WIN. => DAT tieu chi nghiem thu, viec van DONE. (2) BIT LO HONG REVERT: /root/flowvpn-agent/control-plane/src (nguon deploy) da troi so voi LIVE tu 26/09 => deploy-control-plane.sh mac dinh se ghi de 4 file va REVERT ban va, trong khi /health van 200 nen KHONG rollback. Da dong bo LIVE->workspace (4 file, backup /root/backups/ws-cp-before-sync-20260929-151500), node --check OK, commit c9fc73f trong repo server-agent, dry-run nay = NO-OP, do lech = 0. (3) Con lai: ban va chua co tren GitHub (nhanh master) — cho chu du an/MAC quyet co dua control-plane len repo khong. Chi tiet: docs/evidence/T-20260929-02/README.md",
+ "actor": "win",
+ "at": "2026-09-29T15:17:01.579Z"
+}
