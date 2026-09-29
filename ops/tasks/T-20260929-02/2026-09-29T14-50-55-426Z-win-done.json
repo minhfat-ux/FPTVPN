@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=554ab27 (doc docs/TG-VIBECODE-PURGE-REVOKED-USERS-2026-09-29.md + ops/_scratch/purge-revoked-users-20260929.mjs). Sua: index.js route GET /v1/admin/users -> authStore.listUsersWithExpiry({excludeRevoked:true}); auth-store.js them options.excludeRevoked + purgeRevokedUsers(). cmd: node --check ca 2 file | systemctl stop flowvpn-cp | node /tmp/purge-revoked.mjs --apply | systemctl start. ket qua: xoa 5 account revoked (test@example.com, support@meetflowai.site, no-reply@meetflowai.site, 2 reset-quota-check) -> users 25 con 20, con revoked 0, auth.json VALID; backup data/backups/auth.json.before-purge-2026-09-29T14-48-10-242Z; health 200, tokens 201, 0 loi auth-store; test bo loc tren tep tam: tong 2 -> hien thi 1, khong co revoked = PASS.",
+ "actor": "win",
+ "at": "2026-09-29T14:50:55.426Z"
+}
