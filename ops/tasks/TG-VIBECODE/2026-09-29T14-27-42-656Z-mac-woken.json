@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-09-29T14:27:42.656Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: giải thích lỹ do lỗi http 500 là vì sao?",
+ "via": "dsh --profile headless \"{prompt}\""
+}
