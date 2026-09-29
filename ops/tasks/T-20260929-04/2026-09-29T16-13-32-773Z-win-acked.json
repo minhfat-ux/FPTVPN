@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan viec owner (bus #591): dashboard control panel van sai so thiet bi. Da xac dinh: the Devices = so BAN GHI dang ky (10), khong phai so MAY that; nguon: app Android sinh khoa/ten moi moi lan cai lai. Bat dau sua control-plane (machine_id + dem so may that) va app Android (gui ANDROID_ID on dinh).",
+ "actor": "win",
+ "at": "2026-09-29T16:13:32.774Z"
+}

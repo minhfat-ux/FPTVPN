@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260929-04",
+  "title": "TG /vibecode: dashboard control panel van sai so thiet bi (so BAN GHI != so MAY)",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyen van chu du an (bus #591, owner -> win, 2026-09-29T16:08:47Z): 'dashboard tren control panel van sai so thiet bi'. Truoc do (#584) da sua dong dem UDID o tab iOS; con the 'Devices' tren Dashboard = totals.devices = realDevices.length = so BAN GHI dang ky trong data/devices.json (10), khong phai so MAY that. Nguyen nhan goc: app Android sinh cap khoa + ten may MOI moi lan cai lai (DeviceIdentity luu trong SecureStore, xoa du lieu/go app la mat) nen moi lan cai lai sinh mot ban ghi moi; tai khoan minhnb2@me.com dang 6 ban ghi (1 macos + 5 android) trong khi chi co 1 may Mac + 1 dien thoai Android. Pham vi: (1) control-plane node-2: them ma may on dinh (machine_id) vao ban ghi thiet bi + dem 'so may that'; (2) app Android (kenh Windows phat hanh): gui machine_id on dinh (Settings.Secure.ANDROID_ID) trong register/claim.",
+  "verify": "node ops/_scratch/verify-device-machines.mjs --live (tren node-2) in ra so MAY that; the Devices tren Dashboard hien dung bang so do; so ban ghi cu van hien ro",
+  "due": "2026-09-30",
+  "createdAt": "2026-09-29T16:13:26.551Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-29T16:13:26.551Z",
+ "transcribedBy": "win",
+ "busId": 591,
+ "busAt": "2026-09-29T16:13:26.551Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #591 (owner → win)."
+}
