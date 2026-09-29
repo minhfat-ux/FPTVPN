@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-29T15:07:06.212Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: xóa các account bị revoke đi, không hiện accounts đã revoke trong list user của ",
+ "via": "dsh --profile headless \"{prompt}\""
+}
