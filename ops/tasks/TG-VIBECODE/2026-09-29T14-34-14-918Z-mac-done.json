@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "file=docs/evidence/2026-09-29-http500-giai-thich-owner.md; telegram=message_id 2080 [MAC → chủ dự án]; cmd=ssh node-2: journalctl -u flowvpn-cp (201 lỗi 20:27:03–21:15:30) + curl POST /v1/peers/register -> HTTP 401 (hết 500), /v1/health -> 200, auth.json PARSE OK users=25, log sau 21:20 = 0 lỗi; ket qua=đã giải thích nguyên nhân HTTP 500 (torn-write race ở auth.json, không phải mạng/relay) cho chủ dự án",
+ "actor": "mac",
+ "at": "2026-09-29T14:34:14.918Z"
+}
