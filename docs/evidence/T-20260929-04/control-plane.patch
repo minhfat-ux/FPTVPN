@@ -1,0 +1,503 @@
+diff --git a/control-plane/src/admin-page.js b/control-plane/src/admin-page.js
+index 681b669..94b1778 100644
+--- a/control-plane/src/admin-page.js
++++ b/control-plane/src/admin-page.js
+@@ -1980,6 +1980,21 @@ export function adminPageHTML() {
+     // ---------------- Dashboard ----------------
+     let statsTimer = null;
+ 
++    /**
++     * Dòng nhỏ dưới thẻ "Devices": nói rõ đang đếm MÁY THẬT, và nếu có bản ghi Android cũ chưa từng
++     * khai mã máy (không thể phân biệt được là một hay nhiều máy) thì nói rõ đã gộp bao nhiêu bản ghi.
++     * Vì sao: bus #591 — chủ dự án thấy thẻ Devices không khớp số máy (mỗi lần cài lại app Android sinh
++     * thêm một bản ghi). Không giấu số bản ghi, chỉ đổi con số chính sang "máy thật".
++     */
++    function devicesSubtitle(t) {
++      const records = Number(t.device_records ?? t.devices ?? 0);
++      const legacy = Number(t.legacy_android_records ?? 0);
++      const parts = ["máy thật (đã bỏ trùng bản ghi cài lại)"];
++      if (records > Number(t.devices ?? 0)) parts.push(records + " bản ghi đăng ký");
++      if (legacy > 1) parts.push(legacy + " bản ghi Android cũ chưa có mã máy");
++      return parts.join(" · ");
++    }
++
+     function statCard(num, label, sub) {
+       const el = document.createElement("div");
+       el.className = "stat-card";
+@@ -2024,8 +2039,9 @@ export function adminPageHTML() {
+           '<div class="head"><span class="email"></span><span class="meta"></span></div>' +
+           '<div class="chips"></div>';
+         card.querySelector(".email").textContent = u.email;
++        const machines = u.machines ?? u.total;
+         card.querySelector(".meta").textContent =
+-          u.total + " device(s), " + u.active + " active";
++          machines + " máy (" + u.total + " bản ghi), " + u.active + " active";
+         card.querySelector(".chips").innerHTML = chips;
+         fields.statsUsers.appendChild(card);
+       }
+@@ -2128,7 +2144,11 @@ export function adminPageHTML() {
+         fields.statsCards.innerHTML = "";
+         const windowMin = t.device_report_window_min ?? 30;
+         fields.statsCards.append(
+-          statCard(t.devices ?? 0, "Devices", "real, owned by users"),
++          statCard(
++            t.devices ?? 0,
++            "Devices",
++            devicesSubtitle(t),
++          ),
+           statCard(t.users ?? 0, "Users", "accounts"),
+           statCard(t.active_devices ?? 0, "Active", "not revoked"),
+           statCard(t.online_devices ?? 0, "Online", "báo cáo < " + windowMin + " phút"),
+diff --git a/control-plane/src/device-machines.js b/control-plane/src/device-machines.js
+new file mode 100644
+index 0000000..d983603
+--- /dev/null
++++ b/control-plane/src/device-machines.js
+@@ -0,0 +1,62 @@
++/**
++ * Đếm "MÁY THẬT" thay vì đếm bản ghi đăng ký (bus #591 / T-20260929-04).
++ *
++ * VÌ SAO CẦN: app Android sinh cặp khoá WireGuard + tên máy MỚI mỗi lần cài lại (khoá lưu trong
++ * SecureStore; xoá dữ liệu/gỡ app là mất), nên server nhận thêm một bản ghi cho CÙNG một chiếc máy.
++ * Dashboard lấy `devices.length` vì thế vừa thừa (mỗi lần cài lại +1) vừa không nói lên "số máy".
++ * Đo thật 29/09/2026: tài khoản minhnb2@me.com có 6 bản ghi (1 macos + 5 android) nhưng chỉ 1 máy Mac
++ * + 1 điện thoại Android.
++ *
++ * Cách đếm — mỗi bản ghi được gán một khoá máy:
++ *  - có `machineId` (client gửi mã máy ổn định; Android = Settings.Secure.ANDROID_ID) ⇒ khoá theo mã đó;
++ *  - không có `machineId`, platform KHÁC android (iOS giữ danh tính trong Keychain, macOS/Windows giữ
++ *    trong tệp riêng — đều sống qua lần cài lại) ⇒ mỗi bản ghi là một máy;
++ *  - không có `machineId`, platform = android ⇒ KHÔNG thể phân biệt các bản ghi cũ (mã máy chưa từng
++ *    được gửi), nên gộp theo (user, platform) và đếm là MỘT máy; số bản ghi bị gộp trả riêng để hiển
++ *    thị minh bạch, không giấu.
++ */
++
++export function normalizeMachineId(value) {
++  const id = String(value ?? "").trim();
++  return id ? id.slice(0, 128) : null;
++}
++
++/** Khoá "máy thật" của một bản ghi. `index` chỉ dùng khi bản ghi thiếu id (không xảy ra trên thực tế). */
++export function machineKey(device, index = 0) {
++  const userId = String(device?.userId ?? "");
++  const platform = String(device?.platform ?? "unknown").toLowerCase();
++  const machineId = normalizeMachineId(device?.machineId);
++  if (machineId) return `${userId}|${platform}|id:${machineId}`;
++  if (platform === "android") return `${userId}|android|legacy`;
++  return `${userId}|${platform}|rec:${device?.id ?? `anon:${index}`}`;
++}
++
++/** Bản ghi cũ của Android: chưa có mã máy nên không thể là căn cứ đếm máy. */
++export function isLegacyAndroidRecord(device) {
++  return !normalizeMachineId(device?.machineId) && String(device?.platform ?? "").toLowerCase() === "android";
++}
++
++/**
++ * @param {Array<object>} devices các bản ghi có `userId` (bản ghi thật của khách)
++ * @returns {{machines:number, records:number, legacy_android_records:number, legacy_android_grouped_away:number}}
++ */
++export function summarizeMachines(devices) {
++  const list = Array.isArray(devices) ? devices : [];
++  const keys = new Set();
++  const legacyUsers = new Set();
++  let legacyAndroid = 0;
++  list.forEach((device, index) => {
++    keys.add(machineKey(device, index));
++    if (isLegacyAndroidRecord(device)) {
++      legacyAndroid += 1;
++      legacyUsers.add(String(device?.userId ?? ""));
++    }
++  });
++  return {
++    machines: keys.size,
++    records: list.length,
++    legacy_android_records: legacyAndroid,
++    // Số bản ghi Android cũ bị gộp bớt khi đếm theo máy (mỗi tài khoản còn đúng 1).
++    legacy_android_grouped_away: legacyAndroid - legacyUsers.size,
++  };
++}
+diff --git a/control-plane/src/device-replace.js b/control-plane/src/device-replace.js
+index d9f6309..7d65807 100644
+--- a/control-plane/src/device-replace.js
++++ b/control-plane/src/device-replace.js
+@@ -13,7 +13,12 @@
+  * - không phải chính khoá đang đăng ký,
+  * - bản ghi còn active (đã thu hồi rồi thì không tính vào hạn mức nữa).
+  * Sai một điều kiện ⇒ KHÔNG làm gì (và lần đăng ký đó vẫn bị chặn như cũ).
++ *
++ * Từ 29/09/2026 (bus #591 / T-20260929-04): client có thể khai `machine_id` (mã máy ổn định, Android =
++ * Settings.Secure.ANDROID_ID) thay cho `replace_device_id`. Khi đó server tự tìm bản ghi CŨ cùng mã máy
++ * ⇒ khách cài lại app không còn bị coi là "thiết bị mới" và dashboard hết đếm thừa.
+  */
++import { normalizeMachineId } from "./device-machines.js";
+ 
+ /** Có được phép thu hồi `target` để nhường slot cho thiết bị mới không? */
+ export function deviceReplaceDecision({ target, userId, platform, publicKey } = {}) {
+@@ -28,7 +33,7 @@ export function deviceReplaceDecision({ target, userId, platform, publicKey } =
+ }
+ 
+ /**
+- * Áp dụng yêu cầu nhường slot (nếu client khai `replace_device_id`).
++ * Áp dụng yêu cầu nhường slot (client khai `replace_device_id`, hoặc `machine_id` cùng máy).
+  *
+  * Trả `{ replaced }`: null khi không làm gì, hoặc `{ device_id, name }` khi đã thu hồi bản ghi cũ.
+  * Caller truyền vào `store` (DeviceStore) và `removePeer` (xoá peer trên exit node) để module này
+@@ -39,17 +44,36 @@ export async function applyDeviceReplace({
+   userId,
+   platform,
+   publicKey,
++  machineId,
+   store,
+   removePeer,
+   log = console,
+ } = {}) {
+   const replaceId = String(body?.replace_device_id ?? "").trim();
+-  if (!replaceId) return { replaced: null };
++  let target = replaceId ? await store.findById(replaceId) : null;
++
++  // Không khai `replace_device_id` nhưng CÓ mã máy: tự tìm bản ghi cũ của chính máy đó. Khách cài lại
++  // app không biết id bản ghi cũ, nên đây là đường duy nhất để không bị coi là thiết bị mới.
++  const wantedMachine = normalizeMachineId(machineId ?? body?.machine_id ?? body?.machineId);
++  if (!target && wantedMachine && userId) {
++    const all = await store.all();
++    target =
++      all.find(
++        (d) =>
++          d.userId === userId &&
++          d.active !== false &&
++          String(d.platform ?? "") === String(platform ?? "") &&
++          normalizeMachineId(d.machineId) === wantedMachine &&
++          d.publicKey !== publicKey,
++      ) ?? null;
++    if (target) log.log?.(`register: cùng mã máy ${wantedMachine} ⇒ thu hồi bản ghi cũ ${target.id} để nhường slot`);
++  }
++
++  if (!target) return { replaced: null };
+ 
+-  const target = await store.findById(replaceId);
+   const decision = deviceReplaceDecision({ target, userId, platform, publicKey });
+   if (!decision.allowed) {
+-    log.log?.(`register: bỏ qua replace_device_id=${replaceId} (${decision.reason})`);
++    log.log?.(`register: bỏ qua nhường slot (${decision.reason})`);
+     return { replaced: null, reason: decision.reason };
+   }
+ 
+diff --git a/control-plane/src/device-store.js b/control-plane/src/device-store.js
+index 462e9c9..97712c1 100644
+--- a/control-plane/src/device-store.js
++++ b/control-plane/src/device-store.js
+@@ -74,7 +74,7 @@ export class DeviceStore {
+    * different account on the same phone must move the record instead of failing
+    * with "Device belongs to another user".
+    */
+-  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId, allowTransfer = false }) {
++  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId, machineId = null, allowTransfer = false }) {
+     const devices = await this._load();
+     const existing = devices.find((d) => d.publicKey === publicKey);
+     let transferred = false;
+@@ -97,6 +97,7 @@ export class DeviceStore {
+       existing.deviceName = deviceName ?? existing.deviceName;
+       existing.platform = platform ?? existing.platform;
+       if (exitNodeId) existing.exitNodeId = exitNodeId;
++      if (machineId) existing.machineId = machineId;
+       existing.userId = userId ?? existing.userId ?? null;
+       existing.active = true;
+       await this._save(devices);
+@@ -110,6 +111,9 @@ export class DeviceStore {
+       userId: userId ?? null,
+       exitNodeId: exitNodeId ?? null,
+       assignedIP,
++      // Mã máy ổn định do client khai (Android = Settings.Secure.ANDROID_ID). Có nó thì cài lại app
++      // KHÔNG sinh thêm một "máy" mới trên dashboard — xem device-machines.js.
++      machineId: machineId ?? null,
+       createdAt: new Date().toISOString(),
+       active: true,
+     };
+diff --git a/control-plane/src/index.js b/control-plane/src/index.js
+index 82525ad..449270e 100644
+--- a/control-plane/src/index.js
++++ b/control-plane/src/index.js
+@@ -15,6 +15,7 @@ import { WireGuardManager } from "./wireguard.js";
+ import { DeviceStore } from "./device-store.js";
+ import { deviceLimitDecision, isDeviceLimitExempt, parseExemptEmails } from "./device-limit.js";
+ import { applyDeviceReplace } from "./device-replace.js";
++import { normalizeMachineId, summarizeMachines } from "./device-machines.js";
+ import { createGeoLookup, isPublicIp } from "./geoip.js";
+ import { versionPayloadFor, wantsLegacyApk, iosInstallManifest, UnknownPlatformError } from "./app-version.js";
+ import {
+@@ -4773,19 +4774,26 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
+ 
+     const byPlatform = {};
+     const byStatus = { active: 0, revoked: 0 };
+-    const byUser = {};        // userId -> { email, total, active, platforms:{} }
++    const byUser = {};        // userId -> { email, total, machines, active, platforms:{} }
++    const byUserDevices = new Map(); // userId -> bản ghi, để đếm "máy thật" theo từng tài khoản
+     for (const d of realDevices) {
+       const plat = d.platform && d.platform !== "unknown" ? d.platform : "other";
+       byPlatform[plat] = (byPlatform[plat] ?? 0) + 1;
+       byStatus[d.active ? "active" : "revoked"] += 1;
+       const uid = d.userId;
+       if (!byUser[uid]) {
+-        byUser[uid] = { email: emailById.get(uid) ?? uid, total: 0, active: 0, platforms: {} };
++        byUser[uid] = { email: emailById.get(uid) ?? uid, total: 0, machines: 0, active: 0, platforms: {} };
++        byUserDevices.set(uid, []);
+       }
+       byUser[uid].total += 1;
+       if (d.active) byUser[uid].active += 1;
+       byUser[uid].platforms[plat] = (byUser[uid].platforms[plat] ?? 0) + 1;
++      byUserDevices.get(uid).push(d);
+     }
++    // "Máy thật" (không phải bản ghi): mỗi lần cài lại app Android sinh một bản ghi mới cho CÙNG một
++    // chiếc máy ⇒ đếm theo mã máy, xem device-machines.js. Số bản ghi vẫn trả về để đối chiếu.
++    const machineStats = summarizeMachines(realDevices);
++    for (const [uid, list] of byUserDevices) byUser[uid].machines = summarizeMachines(list).machines;
+ 
+     // Live peers: pull dump from every exit node (coordinator + remote nodes).
+     // Giữ nguyên peer theo từng node (peersByNode) để dashboard vẽ được chart
+@@ -4915,7 +4923,11 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
+     res.json({
+       generated_at: new Date().toISOString(),
+       totals: {
+-        devices: realDevices.length,
++        // `devices` = số MÁY THẬT (theo mã máy), không phải số bản ghi đăng ký — bus #591.
++        devices: machineStats.machines,
++        device_records: machineStats.records,
++        legacy_android_records: machineStats.legacy_android_records,
++        legacy_android_grouped_away: machineStats.legacy_android_grouped_away,
+         test_devices: testDevices.length,
+         users: users.length,
+         active_devices: byStatus.active,
+@@ -5189,6 +5201,8 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
+     const deviceKey = String(req.body?.device_key ?? "").trim();
+     const name = String(req.body?.name ?? "device").slice(0, 60);
+     const platform = String(req.body?.platform ?? "android").slice(0, 24);
++    // Mã máy ổn định do client khai (Android = Settings.Secure.ANDROID_ID — sống qua lần cài lại).
++    const machineId = normalizeMachineId(req.body?.machine_id ?? req.body?.machineId);
+     if (!deviceKey) return res.status(400).json({ error: "device_key is required" });
+ 
+     const all = await store.all();
+@@ -5200,6 +5214,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
+       userId,
+       platform,
+       publicKey: deviceKey,
++      machineId,
+       store,
+       removePeer: removePeerForDevice,
+       log: console,
+@@ -5233,6 +5248,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
+       if (rec) {
+         rec.deviceName = name || rec.deviceName;
+         rec.platform = platform || rec.platform;
++        if (machineId) rec.machineId = machineId;
+         await store._save(refreshed);
+       }
+       await touchDeviceClientIp(existing.id, req);
+@@ -5247,6 +5263,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
+       assignedIP: assignedIP ?? "0.0.0.0",
+       userId,
+       exitNodeId: null,
++      machineId,
+       // Authenticated claim (session + subscription): adopt a record left behind
+       // by a previous account on this same device.
+       allowTransfer: true,
+@@ -5454,6 +5471,8 @@ async function registerDeviceWithPayload({ body, userId, apiShape, userEmail })
+   const deviceName = body?.name ?? body?.deviceName;
+   const platform = body?.platform;
+   const exitNodeId = body?.exit_node_id ?? body?.exitNodeId ?? body?.node_id;
++  // Mã máy ổn định do client khai (Android = Settings.Secure.ANDROID_ID — sống qua lần cài lại).
++  const machineId = normalizeMachineId(body?.machine_id ?? body?.machineId);
+ 
+   if (!publicKey || typeof publicKey !== "string") {
+     const error = new Error("publicKey is required");
+@@ -5481,6 +5500,7 @@ async function registerDeviceWithPayload({ body, userId, apiShape, userEmail })
+     userId,
+     platform,
+     publicKey,
++    machineId,
+     store,
+     removePeer: removePeerForDevice,
+     log: console,
+@@ -5522,6 +5542,7 @@ async function registerDeviceWithPayload({ body, userId, apiShape, userEmail })
+     platform,
+     userId,
+     exitNodeId: selectedNode.id,
++    machineId,
+     // Authenticated register: adopt a record left behind by a previous account.
+     allowTransfer: Boolean(userId),
+   });
+diff --git a/control-plane/test/device-machines.test.js b/control-plane/test/device-machines.test.js
+new file mode 100644
+index 0000000..0782326
+--- /dev/null
++++ b/control-plane/test/device-machines.test.js
+@@ -0,0 +1,88 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { machineKey, normalizeMachineId, summarizeMachines } from "../src/device-machines.js";
++
++/**
++ * Vì sao nhóm test này quan trọng: đây là con số chủ dự án nhìn trên Dashboard. Đếm sai một lần nữa
++ * (bus #591) là lại phải giải thích. Bộ dữ liệu dưới đây lấy ĐÚNG số đo thật trên node-2 lúc
++ * 23:10 ngày 29/09/2026.
++ */
++
++test("normalizeMachineId: rỗng/không phải chuỗi ⇒ null; cắt tối đa 128 ký tự", () => {
++  assert.equal(normalizeMachineId(undefined), null);
++  assert.equal(normalizeMachineId(""), null);
++  assert.equal(normalizeMachineId("   "), null);
++  assert.equal(normalizeMachineId("  abc  "), "abc");
++  assert.equal(normalizeMachineId("x".repeat(200)).length, 128);
++});
++
++test("mã máy: hai bản ghi cùng (user, platform, machineId) là MỘT máy", () => {
++  const a = { id: "rec-1", userId: "u1", platform: "android", machineId: "ANDROID-ABC" };
++  const b = { id: "rec-2", userId: "u1", platform: "android", machineId: "ANDROID-ABC" };
++  assert.equal(machineKey(a), machineKey(b));
++  assert.equal(summarizeMachines([a, b]).machines, 1);
++  assert.equal(summarizeMachines([a, b]).records, 2);
++});
++
++test("cùng mã máy nhưng KHÁC tài khoản ⇒ hai máy (không gộp người khác vào nhau)", () => {
++  const a = { id: "rec-1", userId: "u1", platform: "android", machineId: "ANDROID-ABC" };
++  const b = { id: "rec-2", userId: "u2", platform: "android", machineId: "ANDROID-ABC" };
++  assert.notEqual(machineKey(a), machineKey(b));
++  assert.equal(summarizeMachines([a, b]).machines, 2);
++});
++
++test("Android CŨ không có mã máy: gộp theo tài khoản và đếm là 1 (không thể phân biệt)", () => {
++  const legacy = [1, 2, 3, 4, 5].map((n) => ({
++    id: `rec-${n}`,
++    userId: "u1",
++    platform: "android",
++    machineId: null,
++    deviceName: `android-${n}`,
++  }));
++  const s = summarizeMachines(legacy);
++  assert.equal(s.machines, 1, "5 bản ghi cài lại của cùng một máy ⇒ 1 máy");
++  assert.equal(s.records, 5);
++  assert.equal(s.legacy_android_records, 5);
++  assert.equal(s.legacy_android_grouped_away, 4);
++});
++
++test("iOS/macOS/Windows giữ danh tính qua cài lại ⇒ mỗi bản ghi là một máy", () => {
++  const devices = [
++    { id: "r1", userId: "u1", platform: "ios", machineId: null },
++    { id: "r2", userId: "u1", platform: "macos", machineId: null },
++    { id: "r3", userId: "u1", platform: "windows", machineId: null },
++  ];
++  const s = summarizeMachines(devices);
++  assert.equal(s.machines, 3);
++  assert.equal(s.legacy_android_records, 0);
++  assert.equal(s.legacy_android_grouped_away, 0);
++});
++
++test("SỐ ĐO THẬT 29/09/2026: 10 bản ghi ⇒ 6 máy", () => {
++  const devices = [
++    { id: "7fef3dfe", userId: "d5ffd512", platform: "ios" },
++    { id: "d89c4f6c", userId: "4230df97", platform: "macos" },
++    { id: "cae3e5b2", userId: "4230df97", platform: "android" },
++    { id: "15b5de2e", userId: "4230df97", platform: "android" },
++    { id: "c89e8e97", userId: "4230df97", platform: "android" },
++    { id: "efa57473", userId: "4230df97", platform: "android" },
++    { id: "30ab745a", userId: "f63d56e3", platform: "windows" },
++    { id: "2990e4ca", userId: "4230df97", platform: "android" },
++    { id: "2fc7af85", userId: "d5ffd512", platform: "android" },
++    { id: "5d6e9d5e", userId: "f3519b0a", platform: "ios" },
++  ];
++  const s = summarizeMachines(devices);
++  assert.equal(s.records, 10, "vẫn đủ 10 bản ghi, không mất dữ liệu");
++  assert.equal(s.machines, 6, "minhnb2@me.com: 1 macos + 1 nhóm android; 3 tài khoản kia mỗi người 1-2 máy");
++  assert.equal(s.legacy_android_records, 6, "6 bản ghi android (5 của minhnb2@me.com + 1 của haitinhvuong)");
++  assert.equal(s.legacy_android_grouped_away, 4, "6 bản ghi android trải 2 tài khoản ⇒ gộp bớt 4");
++});
++
++test("bản ghi Android ĐÃ có mã máy không bị gộp với nhóm legacy", () => {
++  const devices = [
++    { id: "old", userId: "u1", platform: "android" },
++    { id: "new", userId: "u1", platform: "android", machineId: "ANDROID-ABC" },
++  ];
++  const s = summarizeMachines(devices);
++  assert.equal(s.machines, 2, "1 máy đã nhận diện + 1 nhóm bản ghi cũ");
++});
+diff --git a/control-plane/test/device-replace.test.js b/control-plane/test/device-replace.test.js
+index 40bc98f..0e389ee 100755
+--- a/control-plane/test/device-replace.test.js
++++ b/control-plane/test/device-replace.test.js
+@@ -22,6 +22,9 @@ function makeStore(records = []) {
+   const state = { deactivated: [], all: records };
+   return {
+     state,
++    async all() {
++      return records;
++    },
+     async findById(id) {
+       return records.find((r) => r.id === id) ?? null;
+     },
+@@ -97,3 +100,67 @@ test("không hợp lệ thì KHÔNG thu hồi ai (và nói rõ lý do)", async (
+   assert.equal(res.reason, "different_platform");
+   assert.deepEqual(store.state.deactivated, [], "không được thu hồi khi khác platform");
+ });
++
++// ---- mã máy (bus #591 / T-20260929-04) -----------------------------------------------------------
++// Cài lại app Android: cùng MÃ MÁY nhưng khoá mới ⇒ phải nhường slot bản ghi cũ, nếu không khách bị
++// coi là "thiết bị mới" (đầy hạn mức) và dashboard lại đếm thừa.
++
++const OLD_ANDROID = {
++  id: "dev-old-android",
++  userId: "user-1",
++  platform: "android",
++  publicKey: "OLDANDROID=",
++  deviceName: "android-3efd5cae",
++  active: true,
++  machineId: "ANDROID-ABC",
++};
++
++test("khai machine_id trùng bản ghi cũ ⇒ thu hồi bản ghi cũ để nhường slot", async () => {
++  const store = makeStore([OLD_ANDROID]);
++  const removedKeys = [];
++  const res = await applyDeviceReplace({
++    body: { machine_id: "ANDROID-ABC" },
++    userId: "user-1",
++    platform: "android",
++    publicKey: "NEWANDROID=",
++    machineId: "ANDROID-ABC",
++    store,
++    removePeer: async (device) => { removedKeys.push(device.publicKey); },
++    log: { log() {} },
++  });
++  assert.deepEqual(res.replaced, { device_id: "dev-old-android", name: "android-3efd5cae" });
++  assert.deepEqual(removedKeys, ["OLDANDROID="]);
++  assert.deepEqual(store.state.deactivated, ["dev-old-android"]);
++});
++
++test("machine_id lạ thì KHÔNG đụng ai (không có bản ghi cùng mã máy)", async () => {
++  const store = makeStore([OLD_ANDROID]);
++  const res = await applyDeviceReplace({
++    body: { machine_id: "ANDROID-OTHER" },
++    userId: "user-1",
++    platform: "android",
++    publicKey: "NEWANDROID=",
++    machineId: "ANDROID-OTHER",
++    store,
++    removePeer: async () => { throw new Error("không được gọi tới đây"); },
++    log: { log() {} },
++  });
++  assert.equal(res.replaced, null);
++  assert.deepEqual(store.state.deactivated, []);
++});
++
++test("machine_id của tài khoản KHÁC thì không được cướp slot", async () => {
++  const store = makeStore([OLD_ANDROID]);
++  const res = await applyDeviceReplace({
++    body: { machine_id: "ANDROID-ABC" },
++    userId: "user-2",
++    platform: "android",
++    publicKey: "NEWANDROID=",
++    machineId: "ANDROID-ABC",
++    store,
++    removePeer: async () => { throw new Error("không được gọi tới đây"); },
++    log: { log() {} },
++  });
++  assert.equal(res.replaced, null);
++  assert.deepEqual(store.state.deactivated, []);
++});
