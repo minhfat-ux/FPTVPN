@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-29T14:04:09.067Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: báo lỗi http 500 khi connect",
+ "via": "dsh --profile headless \"{prompt}\""
+}
