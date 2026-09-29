@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=f0a2e90 (docs/TG-VIBECODE-ANDROID-CONNECT-500-2026-09-29.md). cmd: ssh root@165.101.114.162 -> journalctl -u flowvpn-cp (thay ENOENT rename auth.json.tmp + JSON position 419003) | curl POST /v1/auth/email/start (500) | va src/auth-store.js _save (tep tam duy nhat + hang doi ghi) | node --check | systemctl restart flowvpn-cp | 25x curl POST /v1/tokens song song | node parse auth.json. ket qua: auth.json hong do 2 request ghi chung auth.json.tmp => /v1/peers/register (Connect) va /v1/auth/email/* tra HTTP 500 tu 13:27Z; sau khi va: auth.json VALID (25 user/108 phien/1146 enrollment), 25 luot POST /v1/tokens dong thoi = 201 het, email/start = 202 + otp sent, peers/register token sai = 401 (khong con 500), 0 loi auth-store trong log tu 21:26:38+07. Backup: auth-store.js.bak-20260929-500fix (1bf1210a), auth.json.bak-20260929-500fix (b4d2a2e2).",
+ "actor": "win",
+ "at": "2026-09-29T14:34:14.194Z"
+}
