@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260930-01",
+  "title": "TG /vibecode: bat VPN tren may Windows + kiem tra do on dinh cua app",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyen van chu du an (bus #600, owner -> win, 2026-09-30T05:32:01Z): 'bat vpn tren may win len, kiem tra do on dinh cua app.' Pham vi: (1) dam bao VPNFlow (PrivateVPNWindows.App) dang bat va tunnel vpnflow (WireGuard 10.77.0.57) len; (2) do do on dinh: mat goi, do tre, DNS, handshake WireGuard, uptime/crash cua app; ghi bang chung len docs/evidence.",
+  "verify": "node ops/verify-win-vpn-stability.mjs",
+  "due": "2026-09-30",
+  "createdAt": "2026-09-30T05:37:10.506Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-30T05:37:10.506Z",
+ "transcribedBy": "win",
+ "busId": 600,
+ "busAt": "2026-09-30T05:32:01Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #600 (owner → win)."
+}
