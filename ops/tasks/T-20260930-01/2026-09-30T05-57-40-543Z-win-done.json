@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=f6ac7a5, file=docs/evidence/T-20260930-01/README.md, cmd=node ops/verify-win-vpn-stability.mjs + ping x60 moi dich + ops/_scratch/T-20260930-01/udp-loss-probe.mjs + ssh root@165.101.114.162, ket qua=VPN DANG BAT (app PrivateVPNWindows.App song ~5,9 ngay; adapter vpnflow 10.77.0.57; egress 165.101.114.162) 5/6 muc PASS; tunnel MAT GOI 10-23% (10.77.0.1 11%, 1.1.1.1 16%, 8.8.8.8 23%), tai 2,89 Mbps; nguyen nhan goc: UDP bi throttle tren duong Wi-Fi/ISP (UDP thuan toi VPS mat 9,5-22,5% trong khi ICMP 0-3% va TCP/SSH sach; VPS 0 drop, UdpRcvbufErrors khong tang trong 60s); app khong crash.",
+ "actor": "win",
+ "at": "2026-09-30T05:57:40.543Z"
+}
