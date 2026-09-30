@@ -284,3 +284,42 @@ Bằng chứng dùng là **`ss -tnp` + IP công cộng**, không dùng watcher �
   phải dựng **`wgrelay` TCP `9444` → UDP `443`** (không phải mở 8443).
 - **Quyết định:** **chưa mở 9444** — đây là *đường lùi* (WG đã có relay CF `vn3wg` chạy tốt). Muốn thêm thì nói,
   khoảng 3 phút (`wgrelay` + `ufw allow 9444/tcp`).
+
+### 9.4 Phán quyết SA (chủ dự án giao quyết) — ĐÃ MỞ `9444`, và lộ ra bất đối xứng lớn hơn ở node-1
+
+**Câu hỏi:** `vietnam-3` có cần relay TCP cho WireGuard (`9444`, TCP → UDP 443) không?
+
+**Đối chiếu toàn fleet (đo 01/10/2026 ~00:48):**
+
+| Node | `8443/tcp` (relay **hysteria**) | `9444/tcp` (relay **WireGuard**) | `9445/tcp` |
+|---|---|---|---|
+| node-1 (chính) | ❌ *(chỉ `tailscaled` trên IP tailnet)* | ✅ `wgrelay.service` | ❌ |
+| relay-server (vietnam-2) | ✅ | ✅ | ✅ |
+| **vietnam-3** | ✅ `hyrelay` | ❌ → **nay ✅** | ❌ |
+
+**Phán quyết: CẦN.** Ba lý do:
+
+1. **2/3 node đã có `9444`** ⇒ đây là **chuẩn fleet**, thiếu là **bất đối xứng** — đúng loại lỗi dự án đã dính
+   nhiều lần (node mới hành xử khác fleet: `ignoreClientBandwidth`; và vụ thiếu WireGuard ⇒ "Connected nhưng
+   mất sạch mạng").
+2. **Thiếu `9444` thì nhịp kế tiếp của client hạ cánh SAI DỊCH.** `iOS WGRelayClient` thử `[9444, 8443]`; trên
+   vietnam-3, `8443/tcp` **là relay hysteria → UDP 8443**, KHÔNG phải relay cho WG ⇒ nhịp thứ hai của client WG
+   sẽ nối vào **sai dịch vụ**. Đúng loại "sai đích im lặng" mà tài liệu coi là nguy hiểm nhất.
+3. Chi phí ~0, thuần thêm, không ảnh hưởng khách.
+
+**Đã triển khai (không restart gì):** `hyrelay@9444` với `HYRELAY_TARGET=127.0.0.1:443`, dùng **chính binary
+`hyrelay`** (`relay.go` ghi rõ *"Same protocol as the original wgrelay.js"*) + `ufw allow 9444/tcp`.
+
+```text
+hyrelay@9444 = active/enabled · LISTEN *:9444 · wg-quick@wg0 vẫn active
+Chứng minh forward: 127.0.0.1.47536 > 127.0.0.1.443: UDP, length 21   (đúng payload 21 B)
+Từ relay-server: nc -z 103.6.235.39 9444 → succeeded
+node-watch lớp 3 nay kiểm 4 unit: hysteria@8443 hyrelay@8443 hyrelay@9444 wg-quick@wg0 (đều active)
+```
+
+**⚠️ Việc LỚN HƠN mà phán quyết này phát hiện — `node-1` KHÔNG có relay hysteria `8443`:**
+`HY_TCP_RELAY_HOST` mặc định = `103.173.155.50`, và app thử `node:8443` như **nhịp TCP trực tiếp đầu tiên**;
+trên **node-1 (node đông khách nhất)** cổng đó **không có gì** (chỉ `tailscaled` trên IP tailnet) ⇒ mọi lần thử
+đường trực tiếp tới node-1 **thất bại im lặng**. Đây là **bất đối xứng lớn hơn** việc thiếu `9444` ở vietnam-3.
+Đề xuất: dựng `hyrelay` TCP `8443` → UDP `8443` trên node-1 (cùng cách đã làm ở vietnam-3).
+**Chưa làm** vì node-1 nằm ngoài phạm vi `claim` của phiên này — cần chủ dự án giao.
