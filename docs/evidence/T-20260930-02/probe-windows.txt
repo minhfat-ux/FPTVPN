@@ -1,0 +1,132 @@
+==== probe: client lon header (node:https maxHeaderSize) ====
+--- gemini.google.com/ ---
+{
+ "host": "gemini.google.com",
+ "ip": "142.251.156.2",
+ "status": 200,
+ "ms": 5582,
+ "headerCount": 25,
+ "headerBytes": 28711,
+ "setCookie": 2,
+ "title": "",
+ "signals": [],
+ "bodyHead": "<!doctype html><html lang=\"vi\" dir=\"ltr\"><head><base href=\"https://gemini.google.com/\"><link rel=\"preconnect\" href=\"//www.gstatic.com\"><meta name=\"referrer\" content=\"origin\"><meta name=\"viewport\" content=\"initial-scale=1,minimum-scale=1,width=device-width,interactive-widget=resizes-content,viewport-"
+}
+--- claude.ai/ ---
+{
+ "host": "claude.ai",
+ "ip": "160.79.104.10",
+ "status": 302,
+ "ms": 2244,
+ "headerCount": 10,
+ "headerBytes": 997,
+ "setCookie": 4,
+ "location": "https://claude.ai/login",
+ "title": "",
+ "signals": [],
+ "bodyHead": ""
+}
+--- claude.ai/login ---
+{
+ "host": "claude.ai",
+ "ip": "160.79.104.10",
+ "status": 200,
+ "ms": 719,
+ "headerCount": 25,
+ "headerBytes": 6653,
+ "setCookie": 5,
+ "title": "Claude",
+ "signals": [
+  "CF_CHALLENGE"
+ ],
+ "bodyHead": "<!doctype html><html data-compile-hints=\"on\" data-compile-hints-match=\"0.387\" data-build-id=\"ab57e9e088\" data-git-hash=\"ab57e9e0884b4a32acb9f6df1e850fba71eeb7fc\" data-build-timestamp=\"1790716250\" data-version=\"1.0.0\" data-env=\"\" data-color-version=\"v2\" data-document-variant=\"full\" data-entry-documen"
+}
+--- generativelanguage.googleapis.com/v1beta/models?key=invalid-probe-key ---
+{
+ "host": "generativelanguage.googleapis.com",
+ "ip": "172.217.119.4",
+ "status": 400,
+ "ms": 919,
+ "headerCount": 11,
+ "headerBytes": 417,
+ "setCookie": 0,
+ "title": "",
+ "signals": [],
+ "bodyHead": "{ \"error\": { \"code\": 400, \"message\": \"API key not valid. Please pass a valid API key.\", \"status\": \"INVALID_ARGUMENT\", \"details\": [ { \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\", \"reason\": \"API_KEY_INVALID\", \"domain\": \"googleapis.com\", \""
+}
+--- aistudio.google.com/ ---
+{
+ "host": "aistudio.google.com",
+ "ip": "142.250.197.46",
+ "status": 302,
+ "ms": 1560,
+ "headerCount": 21,
+ "headerBytes": 4279,
+ "setCookie": 1,
+ "location": "https://aistudio.google.com/welcome",
+ "title": "",
+ "signals": [],
+ "bodyHead": ""
+}
+--- www.google.com/ ---
+{
+ "host": "www.google.com",
+ "ip": "142.251.155.119",
+ "status": 302,
+ "ms": 1288,
+ "headerCount": 17,
+ "headerBytes": 2100,
+ "setCookie": 4,
+ "location": "https://www.google.com.hk/url?sa=p&hl=zh-CN&pref=hkredirect&pval=yes&q=https://www.google.com.hk/&ust=1790752444377698&usg=AOvVaw2EETFPNpoZiNhiYEdSoYEP",
+ "title": "302 Moved",
+ "signals": [],
+ "bodyHead": "<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\"> <TITLE>302 Moved</TITLE></HEAD><BODY> <H1>302 Moved</H1> The document has moved <A HREF=\"https://www.google.com.hk/url?sa=p&amp;hl=zh-CN&amp;pref=hkredirect&amp;pval=yes&amp;q=https://www.google.com.hk/&amp;ust=1790752444"
+}
+--- chatgpt.com/ ---
+{
+ "host": "chatgpt.com",
+ "ip": null,
+ "status": 200,
+ "ms": 10502,
+ "headerCount": 25,
+ "headerBytes": 2393,
+ "setCookie": 5,
+ "title": "ChatGPT: Chat, Work, Create &amp; Code with AI",
+ "signals": [],
+ "bodyHead": "<!DOCTYPE html> <html class=\"xsw4dja xod0edt x1izaiw0 x108lcm5 xzx5cyk x1plq53r x1uh7rj9 xafyuhj x1nktip0 xl8powd x1it3fuk xh8yej3 xuu8av0 xeuugli x1xi7j4u x1bwyw1c xgs08xk xliy32w x1rohswg x1javzw2 xfqjyog x1rob05q xvmahel xlh3980 xfk6m8\" lang=\"vi-VN\" dir=\"ltr\" data-build=\"prod-329d9af90bc80a50b17d"
+}
+
+==== probe: quoc gia Cloudflare nhin thay + ngon ngu gemini ====
+--- claude.ai (Cloudflare) — quoc gia Anthropic thay [claude.ai/cdn-cgi/trace] ---
+  status=200
+  ip=165.101.114.162
+  colo=SIN
+  http=http/1.1
+  loc=VN
+  tls=TLSv1.3
+  warp=off
+  gateway=off
+--- chatgpt.com (Cloudflare) — doi chung [chatgpt.com/cdn-cgi/trace] ---
+  status=200
+  ip=165.101.114.162
+  colo=HKG
+  http=http/1.1
+  loc=VN
+  tls=TLSv1.3
+  warp=off
+  gateway=off
+--- meetflowai.site (Cloudflare) — doi chung [meetflowai.site/cdn-cgi/trace] ---
+  status=200
+  ip=165.101.114.162
+  colo=HKG
+  http=http/1.1
+  loc=VN
+  tls=TLSv1.3
+  warp=off
+  gateway=off
+--- gemini.google.com/ ---
+  status=200 lang=en-US
+  dau hieu chan vung: khong
+
+==== artifact: undici KHONG chiu duoc header cua gemini (fetch) ====
+LOI: fetch failed | cause: UND_ERR_HEADERS_OVERFLOW

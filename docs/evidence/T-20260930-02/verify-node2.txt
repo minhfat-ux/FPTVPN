@@ -1,0 +1,14 @@
+INFO  IP ra Internet = 165.101.114.162
+INFO  (máy Windows bật VPN thì IP này phải là IP VPS; trên VPS thì là chính nó)
+PASS  claude.ai/login trả lời được — status=200 title="Claude" 344ms
+PASS  api.anthropic.com tới được (401 = sai khoá, không phải chặn) — status=401 body={"type":"error","error":{"type":"authentication_error","message":"API key is invalid."},"r
+PASS  gemini.google.com trả lời được — status=200 title="" 1255ms
+PASS  generativelanguage.googleapis.com tới được (400 = sai khoá, không phải chặn) — status=400
+INFO  IP 165.101.114.162: VN Dương Nội · Vietnam Posts and Telecommunications Group · proxy=false hosting=false
+PASS  IP ra Internet KHÔNG bị gắn cờ proxy/hosting — {"country":"Vietnam","countryCode":"VN","city":"Dương Nội","isp":"Vietnam Posts and Telecommunications Group","proxy":false,"hosting":false}
+INFO  Cloudflare (thứ Anthropic nhìn thấy) báo quốc gia: loc=VN
+
+KẾT LUẬN: đường hầm VPN KHÔNG chặn Claude/Gemini (5/5 mục PASS).
+Nếu tất cả PASS mà khách vẫn không dùng được: nguyên nhân nằm ở phía khách (bản app cũ / tài khoản bị chặn / trình duyệt), không phải ở đường hầm.
+
+[exit=0]

@@ -1,0 +1,30 @@
+==== A) curl tren node-2 (fingerprint curl) ====
+host=fcnvps2
+egress=165.101.114.162
+cloudflare_loc=loc=VN
+
+=== claude.ai: UA curl (bot) vs UA trinh duyet ===
+claude.ai/login  UA=curl           403
+claude.ai/login  UA=browser        403
+claude.ai/       UA=browser        403
+claude.ai/       UA=browser +headers 403
+
+=== gemini.google.com ===
+gemini            UA=curl          200
+gemini            UA=browser       200
+aistudio         UA=browser        302
+
+=== API (khong phu thuoc UA) ===
+api.anthropic.com (key sai)        401
+generativelanguage (key sai)       400
+
+=== than API tra ve gi (khong phai chi ma HTTP) ===
+{"type":"error","error":{"type":"authentication_error","message":"API key is invalid."},"request_id":null}
+bash: line 47: $'\r': command not found
+
+==== B) node:https tren node-2 (cung IP, client khac) ====
+claude.ai/login                {"status":200,"server":"cloudflare","title":"Claude","head":"<!doctype html><html data-compile-hints=\"on\" data-compile-hints-match=\"0.387\" data-build-id=\"ab57e9e088\" data-git-hash=\""}
+claude.ai/                     {"status":302,"location":"https://claude.ai/login","server":"cloudflare","head":""}
+gemini.google.com/             {"status":200,"server":"ESF","title":"‎Google Gemini","head":"<!doctype html><html lang=\"vi\" dir=\"ltr\"><head><base href=\"https://gemini.google.com/\"><link rel=\"preconnect\" href=\"//ww"}
+api.anthropic.com (key sai)    {"status":401,"server":"cloudflare","head":"{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"API key is invalid.\"},\"request_id\":null}"}
+generativelanguage (key sai)   {"status":400,"server":"scaffolding on HTTPServer2","head":"{ \"error\": { \"code\": 400, \"message\": \"API key not valid. Please pass a valid API key.\", \"status\": \"INVALID"}
