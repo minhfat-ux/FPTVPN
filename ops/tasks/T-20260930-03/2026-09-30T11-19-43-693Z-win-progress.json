@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "Da bao cao chu du an qua Telegram (message_id 2204, send-telegram.py tren node-2, khop 1316 ky tu). Ket luan: node-1 khong loi, khong tai hien duoc; nguyen nhan la mat goi UDP cua Wi-Fi/ISP + node-1 reboot 26/09.",
+ "actor": "win",
+ "at": "2026-09-30T11:19:43.694Z"
+}
