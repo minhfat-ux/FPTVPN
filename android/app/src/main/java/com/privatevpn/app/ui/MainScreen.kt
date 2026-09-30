@@ -566,17 +566,16 @@ private fun SubscriptionStatusCard(
     onUpgrade: () -> Unit,
 ) {
     val lang = app.languageStore
-    val planName by app.subscriptionStore.activePlanName.collectAsState()
     val planExpiresAt by app.subscriptionStore.planExpiresAt.collectAsState()
     val planDaysLeft by app.subscriptionStore.planDaysLeft.collectAsState()
 
-    // Chưa mua ⇒ mời chọn gói. Đã mua ⇒ "3 Months · Hết hạn 13/12/2026 · Còn 27 ngày"
+    // Chưa mua ⇒ mời chọn gói. Đã mua ⇒ CHỈ hiện HẠN, không hiện tên gói:
+    //   "Hết hạn 13/12/2026" (+ "Còn 27 ngày" nếu ≤30 ngày).
     // (gói vĩnh viễn không có hạn ⇒ nói rõ quyền đang mở).
     val subtitle = if (!isSubscribed) {
         lang.t(LKey.choosePlanToStart)
     } else {
         buildList {
-            planName.takeIf { it.isNotBlank() }?.let { add(it) }
             planExpiresAt?.let { millis ->
                 add(lang.t(LKey.expiresOn).format(formatPlanDate(millis)))
                 planDaysLeft?.takeIf { it <= 30 }?.let { add(lang.t(LKey.daysLeft).format(it)) }
