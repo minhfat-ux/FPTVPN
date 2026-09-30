@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-09-30T06:57:05.092Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: kiểm tra: khách complain không dùng được claude và gemini khi vpn",
+ "via": "dsh --profile headless \"{prompt}\""
+}
