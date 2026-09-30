@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260930-03",
+  "title": "TG /vibecode: check complain node 1 khong on dinh tren ban win",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyen van chu du an (bus #607, owner -> win, 2026-09-30T10:49:45Z): 'check complain node 1 khong on dinh tren ban win'. Pham vi: (1) xac dinh 'node 1' = node vietnam-1 (103.173.155.50 / VPN gateway 10.77.0.1) trong danh sach node cua app Windows; (2) do THAT tu may Windows dang bat VPNFlow: reachability + mat goi/latency toi node-1 vs node-2 (doi chung); (3) kiem tra phia server node-1 (service VPN, wg0, uptime/load/log) de tach nguyen nhan client vs server; (4) ket luan + huong xu ly; ghi bang chung vao docs/evidence.",
+  "verify": "node ops/verify-node1-win.mjs",
+  "due": "2026-09-30",
+  "createdAt": "2026-09-30T10:51:39.439Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-30T10:51:39.439Z",
+ "transcribedBy": "win",
+ "busId": 607,
+ "busAt": "2026-09-30T10:49:45Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #607 (owner → win)."
+}
