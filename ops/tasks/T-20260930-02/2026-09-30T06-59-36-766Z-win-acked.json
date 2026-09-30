@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan bus #604 (owner -> win): khach complain khong dung duoc Claude/Gemini khi bat VPN. Bat dau do that: claude.ai + gemini + API tu may Windows dang bat VPNFlow (egress 165.101.114.162), doi chung khi TAT VPN.",
+ "actor": "win",
+ "at": "2026-09-30T06:59:36.766Z"
+}

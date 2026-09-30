@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20260930-02",
+  "title": "TG /vibecode: khach complain khong dung duoc Claude va Gemini khi bat VPN",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyen van chu du an (bus #604, owner -> win, 2026-09-30T06:57:01Z): 'kiem tra: khach complain khong dung duoc claude va gemini khi vpn'. Pham vi: (1) xac dinh 'khong dung duoc' la claude.ai/gemini.google.com tren trinh duyet hay provider Claude/Gemini trong app; (2) do THAT tu may Windows dang bat VPNFlow (egress 165.101.114.162) va doi chung khi TAT VPN; (3) ket luan nguyen nhan goc + huong xu ly cho khach; ghi bang chung vao docs/evidence.",
+  "verify": "node ops/verify-claude-gemini-vpn.mjs",
+  "due": "2026-09-30",
+  "createdAt": "2026-09-30T06:59:29.964Z"
+ },
+ "actor": "owner",
+ "at": "2026-09-30T06:59:29.964Z",
+ "transcribedBy": "win",
+ "busId": 604,
+ "busAt": "2026-09-30T06:57:01Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #604 (owner → win)."
+}
