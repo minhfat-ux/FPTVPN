@@ -174,3 +174,62 @@ Disconnect→Connect lại 3 lần đều lên. Nếu **không lên được đ�
   và `provision-node.sh` nay đều khẳng định `ignoreClientBandwidth: true` là **BẮT BUỘC** cho mọi node.
 - **Đã commit** (Open Questions #4), chừa `scripts/security/mac-selfdefense/**` của phiên khác:
   `c50c9da` (fix iOS build 59 + ghim kênh 1.4.6/57) · `52f2f54` (bộ công cụ migration) · `e9c1d2e` (docs node + báo cáo này).
+
+---
+
+## Cập nhật vòng goal 1 (30/09/2026 ~21:50) — BẰNG CHỨNG MỚI, mạnh hơn dự kiến
+
+### 1. Node mới ĐÃ chở khách thật từ Trung Quốc (không phải test tổng hợp)
+
+`journalctl -u relay-cf-vn3hy` (giờ UTC; +7 = giờ VN):
+
+| Phiên | Từ IP | Thời lượng | in (khách→node) | out (node→khách) | Đóng |
+|---|---|---|---|---|---|
+| #1 | `63.140.14.154` | 240,9 s | 3.205.381 B | 4.573.341 B | client-close 1000 |
+| #2 | `63.140.14.154` | 31,7 s | 1.102.524 B | 1.666.490 B | 1000 |
+| #3 | `63.140.14.154` | 38,5 s | 470.008 B | 1.965.030 B | 1000 |
+| **#4** | **`120.234.32.53` (TQ)** | 78,3 s | 1.262.416 B | **43.585.848 B** | 1001 |
+| #5 | `120.234.32.53` | 26,1 s | 653 B | 998 B | 1001 |
+| #6 | `120.234.32.53` | đang mở lúc trích log | — | — | — |
+
+```text
+STATS active=1 total=6 in=29021f/6160744B out=43667f/52016930B drop=0 udpErr=0 lastError=-
+```
+
+⇒ Đường CF relay → **node-2 mới** đã chở **43,6 MB** về một khách ở Trung Quốc trong **một phiên 78 s**,
+**`drop=0`, `udpErr=0`**. Phiên **#1 → #2 → #3 liên tiếp từ cùng một IP** là bằng chứng **ngắt → nối lại hoạt động**
+(khớp tiêu chí §7 DoD "chịu được disconnect/reconnect").
+
+### 2. Chặng `relay-cf-vn3hy` → node-2 (chứng minh bằng bắt gói, không chỉ "426")
+
+Trước đó `426` chỉ chứng minh relay **đang nghe**. Nay đã chứng minh nó **thật sự forward sang node-2**:
+bơm 1 WS frame nhị phân 25 B vào `127.0.0.1:7789` → tcpdump bắt đúng gói ra:
+
+```text
+21:44:52.522109 eth0  Out IP 165.101.114.162.20238 > 103.6.235.39.8443: UDP, length 36   (3 gói)
+relay log:  #7 MỞ từ ::ffff:127.0.0.1 local_udp=28104 -> 103.6.235.39:8443
+            #7 ĐÓNG sau 1.5s | in=1f/25B out=0f/0B | lý do: client-close 1006
+```
+`in=1f/25B` khớp **đúng** frame đã bơm ⇒ chặng relay → node-2 hoạt động.
+
+### 3. ĐÍNH CHÍNH một nhận định SAI của chính tôi (để không ai ghi sai vào docs)
+
+Lúc recon tôi từng nói *"docs lệch: `AGENT_NEW_NODE_GUIDE.md` §6.2 nói framing 2 byte nhưng `wsrelay.js` không dùng"*.
+**SAI** — đó là **HAI relay khác nhau**, không phải docs lệch:
+
+| Relay | Đường | Framing |
+|---|---|---|
+| `tools/node-setup/relay.go` (`hyrelay`) | TCP trực tiếp (khách → node) | **2 byte big-endian** — khớp client `mobile.go:65-96` ⇒ **guide §6.2 ĐÚNG** |
+| `/root/wsrelay.js` | WebSocket qua Cloudflare (khách → CF → relay-server → node) | **không** thêm framing: 1 binary WS frame = 1 datagram UDP |
+
+⇒ **Không sửa gì ở §6.2.** (Mục "docs lệch" duy nhất còn hiệu lực là `ignoreClientBandwidth` — đã sửa.)
+
+### 4. Ý nghĩa cho nghiệm thu
+
+- **Đã có**: bằng chứng khách thật ở TQ chở 43,6 MB qua `vn3hy`, không rơi gói, kèm hành vi nối lại.
+- **CHƯA có**: phép nghiệm thu **có kiểm soát của chủ dự án** — chọn node trong app, ngắt/nối 3 lần,
+  và **trình duyệt thật** kiểm `gemini.google.com` / `claude.ai` (bài học handoff §3.1: `curl` không thay được).
+  Chủ dự án đã **chủ động hoãn** phần này ("android chưa cần test đâu").
+- Cảnh báo diễn giải: `63.140.14.154` và `120.234.32.53` **không phải** máy Mac này (egress Mac lúc kiểm =
+  `165.101.114.162` = `vietnam-2`) ⇒ đây là **thiết bị khác**, nhưng tôi **không** khẳng định được đó là ai
+  hay họ đã mở `gemini`/`claude` hay chưa.
