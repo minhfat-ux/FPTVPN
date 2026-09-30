@@ -219,3 +219,46 @@ Tôi từng đọc `curl --interface en0` trả `000` rồi kết luận "đư�
    cũng **không** có TCP 8443 ⇒ hiện `vietnam-3` là node **đầu tiên** có TCP relay hysteria hoạt động.
 3. Peer WG của khách: cần máy khách (macOS/Windows/iOS) **chọn lại Vietnam 3** để `provisionEverywhere`
    cấp peer trên node-2 (mục 5).
+
+---
+
+## 9. Xử lý 3 phát hiện còn treo — harness Mac (30/09/2026 ~23:40)
+
+### 9.1 Rác peer trên `wg0` của relay-server — ✅ XONG
+
+- `wg0` relay-server có **75 peer**, nhưng `wg0.conf` có **0 `[Peer]`** ⇒ toàn bộ là peer thêm lúc chạy bằng
+  `wg set`, **tự mất khi reboot**. Đối chiếu `devices.json`: **63 peer không còn trong `devices.json`**;
+  **11 peer thuộc node KHÁC `vietnam-2`**.
+- Trong 11 đó có **2 peer thuộc device `vietnam-3`** (`ynIHHp4…`=10.77.0.12, `DMhXggy…`=10.77.0.2) — cả hai
+  **chưa từng handshake** trên relay-server và **đã nằm đúng trên node-2** ⇒ đã xoá.
+- Bằng chứng: `wg show wg0 peers` **75 → 73**; node-2 **vẫn giữ đủ 3 peer** (probe + 2 device của khách)
+  ⇒ **khách không bị đụng**.
+- **Còn lại (đề xuất rà riêng, không khẩn cấp):** 3 peer thuộc device `node-1`, 6 peer thuộc device chưa gán
+  node, 63 peer của device đã xoá. Không tự xoá vì peer của device chưa-gán-node **có thể là đường hợp lệ**
+  (node mặc định theo `priority` = `vietnam-2`).
+
+### 9.2 App ramp sang TCP relay trực tiếp — ⚠️ Hạ tầng ĐÃ CHỨNG MINH, còn 1 phiên thiết bị
+
+- **Cơ chế đã chứng minh** (bắt gói tại chỗ trên node-2): gửi 1 frame 22 B qua TCP `127.0.0.1:8443`
+  ⇒ tcpdump bắt `127.0.0.1.57576 > 127.0.0.1.8443: UDP, length 22` ⇒ **hyrelay forward đúng sang hysteria**.
+- **Chưa thiết bị nào ramp:** từ lúc `hyrelay@8443` chạy (23:04) tới nay, `ss` trên node-2 = **0 kết nối
+  TCP 8443** đang mở (ngoài probe của tôi).
+- **Đây là đường CHỈ của Android:** `HY_TCP_RELAY_PORTS = intArrayOf(8443)` (`android/…/Config.kt:161`),
+  host = `runHost` (node đang chọn) hoặc fallback `Config.HY_TCP_RELAY_HOST` (`103.173.155.50`). `iOS/` và
+  `mac/` **không** có mã TCP relay.
+- ⇒ Cần **1 phiên Android** (chủ dự án) để quan sát app có ramp hay không. **Không phải lỗi hạ tầng** —
+  hạ tầng đã sẵn sàng và chạy đúng.
+- 🔎 **Phát hiện phụ (đáng chú ý):** **`node-1` KHÔNG có TCP relay** — `8443/tcp` trên node-1 là `tailscaled`
+  (`100.76.147.111`), không phải `hyrelay`; `9445/tcp` không ai nghe. Vì `HY_TCP_RELAY_HOST` mặc định là
+  `103.173.155.50`, app Android khi **chọn node-1** sẽ thử TCP `103.173.155.50:8443` rồi **thất bại im lặng**.
+  Hiện `vietnam-3` là node **duy nhất** có TCP relay chạy.
+
+### 9.3 `hyrelay@9445` + UDP `28443`/`54443` — ✅ XỬ LÝ: **KHÔNG mở** (quyết định có bằng chứng code)
+
+- `HY_TCP_RELAY_PORTS = intArrayOf(8443)` ⇒ app **chỉ** thử TCP `8443`. `android/` **không** tham chiếu
+  `9445`/`28443`/`54443`; `iOS/` chỉ nhắc trong **comment** (ghi lại direct-UDP các cổng đó đã hỏng từ TQ).
+- Cửa **direct UDP đang TẮT mặc định** (`HysteriaDefaults.enableDirectCandidate = false`, sau sự cố 28–29/09).
+- ⇒ Mở thêm 3 cổng là **tăng bề mặt tấn công mà không ai dùng**. Giữ node-2 đúng bằng thứ app cần:
+  **TCP 8443 + UDP 8443 + UDP 443 (WireGuard)**.
+- Muốn mở để **dự phòng** (ví dụ sau này GFW chặn `8443/tcp`) thì chỉ cần nói — 2 phút; nhưng phải coi là
+  "dự phòng chưa dùng", **không phải "thiếu"**.
