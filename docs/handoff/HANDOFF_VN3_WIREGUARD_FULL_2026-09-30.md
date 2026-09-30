@@ -349,3 +349,50 @@ Nghiệm thu MÁY THẬT (điện thoại, chọn node-1):
 Khách không hồi quy: 6/6 relay = 426 · node-1 hysteria + wgrelay vẫn active
 node-watch lớp 3 nay kiểm 2 node (node-2 mới: 4 unit · node-1: hysteria/hyrelay@8443/wgrelay) — đều active
 ```
+
+---
+
+## 10. ⚠️ `vietnam-3` KHÔNG dùng được cho GEMINI — Google định vị IP là HỒNG KÔNG (01/10/2026)
+
+**Triệu chứng khách báo:** qua `Flow3` (vietnam-3) mở Gemini ⇒ *"Gemini isn't currently supported in your
+country. Stay tuned!"*
+
+### Bằng chứng A/B — CÙNG một điện thoại, CÙNG tài khoản, chỉ đổi node
+
+| Node | Egress đo được | Chrome `gemini.google.com` |
+|---|---|---|
+| **Flow3** = `vietnam-3` (node-2 mới) | `103.6.235.39` | 🔴 *"Gemini isn't currently supported in your country. Stay tuned!"* |
+| **Flow1** = `node-1` | `103.173.155.50` | ✅ **Vào được** — hiện model **"Pro Extended"** + ô **"Ask Gemini"** |
+
+Chạy trên Samsung SM-F9460 (Android 16) qua `adb`, đường `hysteria: UP via TCP relay 8443` (tức **cả 2 node
+đều đi đường TCP relay trực tiếp** — tiện thể xác nhận relay `8443` của node-1 vừa dựng chạy thật).
+
+### Nguyên nhân: **định vị địa lý theo IP**, KHÔNG phải chặn IP
+
+```text
+Google coi IP node-2 (103.6.235.39 · AS152992 Online Data):
+   google.com -> https://www.google.com.hk/url?...&hl=zh-CN&pref=hkredirect&pval=yes   ← HỒNG KÔNG
+Google coi IP node-1 (103.173.155.50 · AS135905 VNPT):
+   google.com -> google.com (KHÔNG redirect)                                          ← VIỆT NAM
+```
+
+**Không bị gắn cờ, không CAPTCHA** (đo cùng lúc): Google Search `200` ~91 KB ở **cả hai** node; `gemini.google.com/app`
+`200` ~847 KB ở **cả hai**; các trang `/faq`, `/advanced`, `one.google.com/about/plans` đều `200` ⇒ chốt chặn
+**chỉ xuất hiện sau khi đăng nhập**, do vùng bị coi là không hỗ trợ.
+
+### Kết luận & việc cần làm
+
+- **Node không hỏng**: hysteria/TCP relay chạy đúng (`Path in use: Trực tiếp`, đo 27,6 Mbps). Chỉ **các dịch vụ
+  phụ thuộc vùng của Google** (Gemini) là không dùng được qua IP này.
+- **Đây đúng loại rủi ro repo đã cảnh báo**: `docs/AGENT_NEW_NODE_GUIDE.md` §2.2 khuyên **tránh AS152992 và dải
+  `103.6.234.0/23`** — `103.6.235.39` nằm trong chính /23 đó.
+- **Việc cần làm (chủ dự án, với nhà cung cấp):** xin **đổi IP/dải** mà Google định vị là **Việt Nam**, lý do nói
+  thẳng: *"Google geolocates 103.6.235.39 as Hong Kong, so Gemini returns 'not available in your country'."*
+  Hoặc chuyển sang dải **AS135905 (VNPT)** như §2.2 khuyên.
+- **Cách test một IP trước khi mua/đổi** (phép thử 1 dòng, đã dùng ở đây):
+  `curl -s -o /dev/null -w '%{redirect_url}' https://www.google.com/` ⇒ **không** được đá sang `google.com.hk`.
+- **Khi có IP mới**, phải cập nhật: `exit_nodes.endpoint` của `vietnam-3` + `WS_UDP_HOST` trong `relay-cf-vn3hy`
+  và `relay-cf-vn3wg` (relay trỏ thẳng IP node). **Không** phải làm lại cert (self-signed + client `insecure`),
+  khách không phải cài lại.
+- **Tạm thời:** khách cần Gemini thì chọn **Flow1/node-1**. Cân nhắc hạ `priority` của `vietnam-3` để khách ít bị
+  rơi vào node này cho tới khi đổi được IP.
