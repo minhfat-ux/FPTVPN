@@ -161,3 +161,16 @@ adb logcat -c && adb logcat -v time | grep --line-buffered VPNFLOW_DEBUG
 
 Tiêu chí đạt (`AGENT_NEW_NODE_GUIDE.md` §7): lên được từ TQ (TCP relay là đủ) · node hiện trong app ·
 Disconnect→Connect lại 3 lần đều lên. Nếu **không lên được đường nào** ⇒ dải IP không đạt, phải xin đổi IP.
+
+---
+
+## Cập nhật sau khi chủ dự án chốt (30/09/2026, cùng phiên)
+
+- **`priority = 150` được GIỮ NGUYÊN** — chủ dự án xác nhận: không đụng dòng khách của `vietnam-2`/`node-1`.
+- **Phase 4 (test từ Trung Quốc) TẠM HOÃN** theo yêu cầu chủ dự án (*"android chưa cần test đâu"*).
+  `vietnam-3` đã ở trạng thái sẵn sàng, nhưng **CHƯA được coi là "xong"** theo `AGENT_NEW_NODE_GUIDE.md` §7
+  vì chưa có phép đo từ vantage Trung Quốc.
+- **Đã sửa docs lệch production** (Open Questions #3): `AGENT_NEW_NODE_GUIDE.md` §1/§6.4, `EXIT_NODE_RUNBOOK.md`
+  và `provision-node.sh` nay đều khẳng định `ignoreClientBandwidth: true` là **BẮT BUỘC** cho mọi node.
+- **Đã commit** (Open Questions #4), chừa `scripts/security/mac-selfdefense/**` của phiên khác:
+  `c50c9da` (fix iOS build 59 + ghim kênh 1.4.6/57) · `52f2f54` (bộ công cụ migration) · `e9c1d2e` (docs node + báo cáo này).
