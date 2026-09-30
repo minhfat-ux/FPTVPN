@@ -28,17 +28,15 @@
       "/Applications/",
       "/opt/homebrew/",
       "/usr/local/",
-      "/opt/local/"
-    ],
-    "labels": [
-      "com.apple.",
-      "site.meetflowai."
+      "/opt/local/",
+      "/Library/Developer/",
+      "/Library/Application Support/Microsoft/"
     ]
   },
   "tcc": {
     "enabled": true,
     "sensitiveOnly": true,
-    "source": "auto",
+    "source": "log",
     "everyMs": 60000
   },
   "protectSelf": true,
@@ -55,7 +53,7 @@
     "enabled": true,
     "everyMs": 60000,
     "checkCrontab": true,
-    "checkLoginItems": true,
+    "checkLoginItems": false,
     "paths": [
       "~/.zshrc",
       "~/.zprofile",
@@ -67,5 +65,11 @@
     ]
   },
   "_hold_doc": "hold.json (trong state dir) liet ke cac duong dan phai GIU cach ly; daemon kiem tra lai moi hold.everyMs.",
-  "_startup_doc": "Theo doi shell rc + crontab + login items. KHONG tu sua file cau hinh shell."
+  "_startup_doc": "Theo doi shell rc + crontab + login items. KHONG tu sua file cau hinh shell.",
+  "trustSignatures": true,
+  "allowedTeamIds": [
+    "UBF8T346G9"
+  ],
+  "_trustSignatures_doc": "Updater/installer hop le hay chay helper tu /tmp — ma vung tam la tin hieu CUNG. Mien tru theo CHU KY SO cua nha phat hanh (khong theo ten file): Microsoft = TeamID UBF8T346G9, Apple = Authority 'Software Signing'. Ma doc tu xung 'Microsoft AutoUpdate' ma khong co chu ky van bi xu ly nhu thuong. Dat trustSignatures=false de tat han mien tru.",
+  "_no_prompt_doc": "tcc.source='log' va checkLoginItems=false la CO Y: doc TCC.db hay goi osascript deu khien macOS hoi quyen cho binary 'node' (ad-hoc, khong Team ID) => hop thoai hien lai lien tuc. Do that 29/09/2026."
 }

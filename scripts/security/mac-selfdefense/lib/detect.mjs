@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 /** Dịch vụ TCC mà mã độc trên macOS gần như luôn nhắm tới. */
 export const SENSITIVE_TCC_SERVICES = new Set([
@@ -45,6 +45,8 @@ export const DEFAULT_ALLOW_PREFIXES = [
   "/Library/Apple/",
   "/Library/Frameworks/",
   "/Applications/",
+  "/Library/Developer/", // Xcode / CoreSimulator (TCC hay bị alert oan vì thiếu dòng này)
+  "/Library/Application Support/Microsoft/", // Microsoft AutoUpdate (MAU2.0) + Teams updater
   "/opt/homebrew/",
   "/usr/local/",
   "/opt/local/",
@@ -213,7 +215,7 @@ export function listProcesses({ run = execFileSync } = {}) {
  * @param {Set<number>} [ancestors] pid của tổ tiên daemon — không bao giờ tự kill.
  * @returns {{severity: 'hard'|null, reasons: string[]}}
  */
-export function classifyProcess(proc, cfg, iocs, selfPid = process.pid, ancestors = new Set()) {
+export function classifyProcess(proc, cfg, iocs, selfPid = process.pid, ancestors = new Set(), opts = {}) {
   const reasons = [];
   if (!proc || proc.pid === selfPid) return { severity: null, reasons };
   if (ancestors.has(proc.pid)) return { severity: null, reasons };
@@ -221,15 +223,35 @@ export function classifyProcess(proc, cfg, iocs, selfPid = process.pid, ancestor
   // argv0 tương đối ("node", "ssh") thì không biết chắc file nào ⇒ bỏ qua.
   if (!proc.argv0 || !proc.argv0.startsWith("/")) return { severity: null, reasons };
 
+  // Khớp IOC xét TRƯỚC mọi miễn trừ — miễn trừ không bao giờ che được dấu hiệu đã biết.
   const iocHits = matchesIocs(proc.argv0, iocs);
-  if (iocHits.length) reasons.push(...iocHits.map((h) => `IOC ${h}`));
+  if (iocHits.length) {
+    return { severity: "hard", reasons: iocHits.map((h) => `IOC ${h}`) };
+  }
 
   if (isSuspiciousPath(proc.argv0, cfg)) {
+    // Updater/installer hợp lệ hay chạy helper từ vùng tạm. Miễn trừ theo CHỮ KÝ (danh tính nhà
+    // phát hành), không theo tên file — xem createTrustChecker().
+    const trust = trustVerdict(cfg, opts, proc.argv0);
+    if (trust.trusted) {
+      return { severity: "allow", reasons: [`vùng tạm nhưng ký hợp lệ (${trust.why}): ${proc.argv0}`] };
+    }
     reasons.push(`binary chạy từ vùng đáng ngờ: ${proc.argv0}`);
   }
 
   if (reasons.length) return { severity: "hard", reasons };
   return { severity: null, reasons };
+}
+
+/**
+ * Lấy kết quả kiểm tra chữ ký: ưu tiên hàm tiêm qua `opts.trust` (dùng cho test), không thì
+ * dùng bộ kiểm tra chung có nhớ kết quả. Tắt hẳn bằng `cfg.trustSignatures = false`.
+ */
+function trustVerdict(cfg, opts, file) {
+  if (cfg?.trustSignatures === false) return { trusted: false, why: null };
+  if (typeof opts.trust === "function") return opts.trust(file);
+  if (!trustVerdict.shared) trustVerdict.shared = createTrustChecker({ allowedTeamIds: cfg?.allowedTeamIds });
+  return trustVerdict.shared(file);
 }
 
 /** Tập pid tổ tiên của tiến trình hiện tại (để không tự kill chính mình). */
@@ -414,7 +436,14 @@ export function readCrontab({ run = execFileSync } = {}) {
   }
 }
 
-/** Đọc danh sách login item (cần quyền Automation với System Events). */
+/**
+ * Đọc danh sách login item.
+ *
+ * ⚠️ CÁI GIÁ: `osascript 'tell application "System Events"'` cần quyền **AppleEvents (Automation)**,
+ * và macOS gán quyền đó cho tiến trình **chịu trách nhiệm** — ở đây là `node`. Nên hộp thoại hiện
+ * chữ "node" (không phải tên công cụ) và hiện lại mỗi lần gọi. Vì vậy `startup.checkLoginItems`
+ * mặc định TẮT. Đo thật 29/09/2026.
+ */
 export function readLoginItems({ run = execFileSync } = {}) {
   try {
     const out = run(
@@ -426,4 +455,85 @@ export function readLoginItems({ run = execFileSync } = {}) {
   } catch (err) {
     return { ok: false, error: String(err?.stderr ?? err?.message ?? err).slice(0, 200), items: [] };
   }
+}
+
+// ------------------------------------------------------------------ miễn trừ theo CHỮ KÝ SỐ
+
+/**
+ * Team ID của nhà cung cấp được phép chạy helper từ vùng tạm.
+ *
+ * Vì sao cần: updater/installer HỢP LỆ hay giải nén rồi chạy helper từ `/tmp` hoặc
+ * `~/Library/Caches` — mà vùng tạm là tín hiệu CỨNG của watcher tiến trình. Không miễn trừ
+ * thì cơ chế sẽ kill giữa lúc Microsoft AutoUpdate / macOS Software Update đang cài ⇒ app
+ * hỏng dở. (Đo thật 24/09/2026: Microsoft AutoUpdate.app ký
+ * `Developer ID Application: Microsoft Corporation (UBF8T346G9)`.)
+ */
+export const DEFAULT_ALLOWED_TEAM_IDS = [
+  "UBF8T346G9", // Microsoft Corporation
+];
+
+/**
+ * Authority của Apple. Apple không dùng Team ID cho binary nền tảng/hệ thống nên phải khớp chuỗi.
+ */
+export const APPLE_AUTHORITY_RE =
+  /^(Software Signing|Apple Mac OS Application Signing|Apple Mac OS Application Signing \(Mac App Store\)|Platform Binary|Apple System|Apple iPhone OS Application Signing)$/;
+
+/**
+ * Đọc chữ ký số của 1 file.
+ *
+ * QUAN TRỌNG: đây là miễn trừ theo *danh tính nhà phát hành*, KHÔNG theo tên file. Mã độc tự
+ * đặt tên "Microsoft AutoUpdate" sẽ không có Team ID của Microsoft ⇒ vẫn bị xử lý như thường.
+ * (Sự cố 24/08/2026 trên chính máy này là một app tự xưng `SystemUpdater.app`.)
+ *
+ * @returns {{ok: boolean, teamId: string|null, authorities: string[], adhoc: boolean}}
+ */
+export function signatureOf(file, { spawn = spawnSync } = {}) {
+  // `codesign -dv` ghi TOÀN BỘ thông tin ra STDERR (stdout rỗng) và trả rc=0. Dùng execFileSync
+  // sẽ chỉ nhận stdout ⇒ authorities luôn rỗng ⇒ mọi binary đều bị coi là không tin cậy.
+  // Đã trả giá đúng lỗi này ngày 24/09/2026. spawnSync cho cả hai luồng, và không ném lỗi.
+  const res = spawn("/usr/bin/codesign", ["-dv", "--verbose=2", file], { encoding: "utf8" });
+  const text = `${res?.stdout ?? ""}${res?.stderr ?? ""}`;
+
+  let teamId = (text.match(/^TeamIdentifier=(.+)$/m) ?? [])[1]?.trim() ?? null;
+  // codesign in literal "not set" cho binary không có Team ID (ad-hoc / binary hệ thống).
+  if (teamId === "not set") teamId = null;
+  const authorities = [...text.matchAll(/^Authority=(.+)$/gm)].map((m) => m[1].trim());
+  // Một số bản codesign không in TeamIdentifier cho bundle; khi đó lấy từ chuỗi Authority.
+  if (!teamId) {
+    const fromAuthority = authorities
+      .map((a) => a.match(/\(([A-Z0-9]{10})\)$/)?.[1])
+      .find(Boolean);
+    if (fromAuthority) teamId = fromAuthority;
+  }
+  return {
+    ok: res?.status === 0,
+    teamId,
+    authorities,
+    adhoc: /^Signature=adhoc$/m.test(text),
+  };
+}
+
+/**
+ * Bộ kiểm tra "nhà phát hành tin cậy", có nhớ kết quả theo đường dẫn.
+ * Chỉ gọi `codesign` khi thật sự cần (đường dẫn bị nghi ngờ) nên chi phí không đáng kể.
+ *
+ * @returns {(file: string) => {trusted: boolean, why: string|null}}
+ */
+export function createTrustChecker({ allowedTeamIds = DEFAULT_ALLOWED_TEAM_IDS, spawn } = {}) {
+  const cache = new Map();
+  return (file) => {
+    if (!file) return { trusted: false, why: null };
+    if (cache.has(file)) return cache.get(file);
+
+    const sig = signatureOf(file, { spawn });
+    let verdict = { trusted: false, why: null };
+    // Chữ ký ad-hoc không có Team ID và không có Authority ⇒ không bao giờ tin cậy.
+    if (sig.teamId && allowedTeamIds.includes(sig.teamId)) {
+      verdict = { trusted: true, why: `TeamID ${sig.teamId}` };
+    } else if (sig.authorities.some((a) => APPLE_AUTHORITY_RE.test(a))) {
+      verdict = { trusted: true, why: `Apple: ${sig.authorities[0]}` };
+    }
+    cache.set(file, verdict);
+    return verdict;
+  };
 }

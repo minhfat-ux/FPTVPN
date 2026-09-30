@@ -4,11 +4,13 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  DEFAULT_ALLOW_PREFIXES,
   SENSITIVE_TCC_SERVICES,
   ancestorPids,
   classifyPersistence,
   classifyProcess,
   classifyStartupText,
+  createTrustChecker,
   diffSnapshot,
   expandHome,
   isAllowlisted,
@@ -19,6 +21,7 @@ import {
   parsePs,
   parseTccLog,
   readCrontab,
+  signatureOf,
 } from "../lib/detect.mjs";
 
 const cfg = {
@@ -272,4 +275,95 @@ test("readCrontab coi 'no crontab' là hợp lệ và trả chuỗi rỗng", () 
   const ok = readCrontab({ run: () => "*/5 * * * * /bin/x\n" });
   assert.equal(ok.ok, true);
   assert.ok(ok.text.includes("*/5"));
+});
+
+// ---------------------------------------- miễn trừ updater theo CHỮ KÝ SỐ (24/09/2026)
+
+test("signatureOf: đọc đúng Authority từ STDERR của codesign (không phải stdout)", () => {
+  // Hồi quy: execFileSync chỉ trả stdout ⇒ authorities rỗng ⇒ không binary nào được tin cậy.
+  const canned = {
+    status: 0,
+    stdout: "",
+    stderr:
+      "Executable=/bin/ls\nCodeDirectory v=20400 flags=0x0(none)\nSignature size=4442\n" +
+      "Authority=Software Signing\nAuthority=Apple Code Signing Certification Authority\n",
+  };
+  const sig = signatureOf("/bin/ls", { spawn: () => canned });
+  assert.equal(sig.ok, true);
+  assert.deepEqual(sig.authorities, ["Software Signing", "Apple Code Signing Certification Authority"]);
+});
+
+test("signatureOf: lấy TeamIdentifier, và lùi về chuỗi Authority khi thiếu", () => {
+  const withTeam = {
+    status: 0, stdout: "",
+    stderr: "Authority=Developer ID Application: Microsoft Corporation (UBF8T346G9)\nTeamIdentifier=UBF8T346G9\n",
+  };
+  assert.equal(signatureOf("/x", { spawn: () => withTeam }).teamId, "UBF8T346G9");
+
+  const noTeamLine = {
+    status: 0, stdout: "",
+    stderr: "Authority=Developer ID Application: Microsoft Corporation (UBF8T346G9)\n",
+  };
+  assert.equal(signatureOf("/x", { spawn: () => noTeamLine }).teamId, "UBF8T346G9", "phải lấy được từ Authority");
+});
+
+test("signatureOf: 'not set' và ad-hoc ⇒ không có Team ID, không tin cậy", () => {
+  const adhoc = { status: 0, stdout: "", stderr: "Signature=adhoc\nTeamIdentifier=not set\n" };
+  const sig = signatureOf("/x", { spawn: () => adhoc });
+  assert.equal(sig.teamId, null);
+  assert.equal(sig.adhoc, true);
+  assert.equal(createTrustChecker({ spawn: () => adhoc })("/x").trusted, false);
+});
+
+test("createTrustChecker: nhận Microsoft theo Team ID, Apple theo Authority, chối ad-hoc", () => {
+  const mk = (stderr) => createTrustChecker({ spawn: () => ({ status: 0, stdout: "", stderr }) });
+  assert.equal(mk("TeamIdentifier=UBF8T346G9\nAuthority=Developer ID Application: Microsoft Corporation (UBF8T346G9)\n")("/a").trusted, true);
+  assert.equal(mk("Authority=Software Signing\n")("/b").trusted, true);
+  assert.equal(mk("Signature=adhoc\nTeamIdentifier=not set\n")("/c").trusted, false);
+  assert.equal(mk("TeamIdentifier=ZZZZZZZZZZ\nAuthority=Developer ID Application: Evil Corp (ZZZZZZZZZZ)\n")("/d").trusted, false);
+});
+
+test("TÍCH HỢP: /bin/ls là binary Apple ký thật ⇒ tin cậy (chỉ chạy trên macOS)", { skip: process.platform !== "darwin" }, () => {
+  const sig = signatureOf("/bin/ls");
+  assert.equal(sig.ok, true);
+  assert.ok(sig.authorities.some((a) => /Software Signing/.test(a)), JSON.stringify(sig.authorities));
+  assert.equal(createTrustChecker()("/bin/ls").trusted, true);
+});
+
+const trustYes = () => ({ trusted: true, why: "TeamID UBF8T346G9" });
+const trustNo = () => ({ trusted: false, why: null });
+
+test("classifyProcess: helper từ /tmp NHƯNG ký bởi Microsoft ⇒ ALLOW (không kill)", () => {
+  const exe = "/tmp/MAU-helper/Microsoft AutoUpdate";
+  const r = classifyProcess({ pid: 5, uid: 0, argv0: exe, command: exe }, cfg, iocs, 1, new Set(), { trust: trustYes });
+  assert.equal(r.severity, "allow");
+  assert.match(r.reasons[0], /TeamID UBF8T346G9/);
+});
+
+test("CHỐNG HỞ: từ /tmp TỰ XƯNG 'Microsoft AutoUpdate' mà không có chữ ký ⇒ vẫn HARD", () => {
+  const exe = "/tmp/Microsoft AutoUpdate";
+  const r = classifyProcess({ pid: 5, uid: 0, argv0: exe, command: exe }, cfg, iocs, 1, new Set(), { trust: trustNo });
+  assert.equal(r.severity, "hard");
+  assert.ok(r.reasons.some((x) => x.includes("vùng đáng ngờ")));
+});
+
+test("CHỐNG HỞ: khớp IOC THẮNG miễn trừ chữ ký", () => {
+  const exe = os.homedir() + "/Desktop/identitydaemonworker/run";
+  const r = classifyProcess({ pid: 5, uid: 0, argv0: exe, command: exe }, cfg, iocs, 1, new Set(), { trust: trustYes });
+  assert.equal(r.severity, "hard", "miễn trừ không được che dấu hiệu IOC");
+  assert.ok(r.reasons.some((x) => x.startsWith("IOC")));
+});
+
+test("cfg.trustSignatures=false ⇒ tắt hẳn miễn trừ (vẫn HARD)", () => {
+  const exe = "/tmp/updater";
+  const off = { ...cfg, trustSignatures: false };
+  const r = classifyProcess({ pid: 5, uid: 0, argv0: exe, command: exe }, off, iocs, 1, new Set(), { trust: trustYes });
+  assert.equal(r.severity, "hard");
+});
+
+test("/Library/Developer (CoreSimulator) đã vào allowlist ⇒ không còn alert oan", () => {
+  const exe = "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl";
+  const cfgAll = { ...cfg, allow: { pathPrefixes: DEFAULT_ALLOW_PREFIXES } };
+  const r = classifyProcess({ pid: 9, uid: 0, argv0: exe, command: exe }, cfgAll, iocs, 1, new Set(), { trust: trustNo });
+  assert.equal(r.severity, null);
 });

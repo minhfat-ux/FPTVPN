@@ -49,6 +49,15 @@ run cp "$SRC/iocs.json" "$DEST/"
 if [ "$DRY" = "1" ]; then echo "  [dry-run] cp $SRC/lib/*.mjs $DEST/lib/"; else cp "$SRC"/lib/*.mjs "$DEST/lib/"; fi
 [ -f "$CONF_DIR/config.json" ] || { echo "  tạo config mặc định"; run cp "$SRC/config.example.json" "$CONF_DIR/config.json"; }
 
+# config.json ĐÈ lên mặc định trong code, nên khi bản mới thêm đường dẫn allowlist mà config trên
+# đĩa vẫn là bản cũ thì các đường đó KHÔNG được áp dụng. Đã gặp thật 25/09/2026: thiếu
+# /Library/Developer/ ⇒ CoreSimulator bắn alert oan suốt ngày. Bổ sung phần còn thiếu, giữ nguyên
+# mọi thứ người dùng đã sửa.
+if [ "$DRY" != "1" ] && [ -f "$CONF_DIR/config.json" ]; then
+  python3 "$SRC/sync-config-allowlist.py" "$SRC/config.example.json" "$CONF_DIR/config.json" \
+    | sed 's/^/  /'
+fi
+
 write_plist() {
   local label="$1" out="$2" args_xml="$3" extra="$4"
   cat > "$out" <<PLIST

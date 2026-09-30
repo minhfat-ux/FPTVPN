@@ -55,6 +55,7 @@ import {
   DEFAULT_SUSPICIOUS_PREFIXES,
   ancestorPids,
   classifyStartupText,
+  createTrustChecker,
   classifyPersistence,
   classifyProcess,
   diffSnapshot,
@@ -98,16 +99,26 @@ export const DEFAULT_CONFIG = {
   vault: null,
   watchDirs: ["~/Library/LaunchAgents", "/Library/LaunchAgents", "/Library/LaunchDaemons"],
   suspiciousPathPrefixes: DEFAULT_SUSPICIOUS_PREFIXES,
-  allow: { pathPrefixes: DEFAULT_ALLOW_PREFIXES, labels: ["com.apple.", "site.meetflowai."] },
+  // `labels` cũ đã bỏ: nó KHÔNG được dùng ở đâu (config chết). Miễn trừ nay dựa trên chữ ký
+  // số của nhà phát hành, mạnh hơn nhiều so với khớp tiền tố tên.
+  allow: { pathPrefixes: DEFAULT_ALLOW_PREFIXES },
   // everyMs tách khỏi pollMs: `log show` khá nặng, không thể chạy mỗi 5 giây.
-  tcc: { enabled: true, sensitiveOnly: true, source: "auto", everyMs: 60000 },
+  // source "log" (KHÔNG phải "auto"): đọc `~/Library/Application Support/com.apple.TCC/TCC.db` là
+  // truy cập DỮ LIỆU CỦA APP KHÁC ⇒ macOS bật hộp thoại "'node' would like to access data from
+  // other apps", mà nó hiện tên BINARY `node` (ad-hoc, không Team ID) chứ không phải tên công cụ.
+  // Đo thật 29/09/2026: `sandboxd` hỏi quyền SystemPolicyAppData cho node khi daemon đọc TCC.db.
+  // `log show` cho cùng tín hiệu mà không đụng dữ liệu được bảo vệ.
+  tcc: { enabled: true, sensitiveOnly: true, source: "log", everyMs: 60000 },
   // transport: "auto" = thử trực tiếp api.telegram.org, thất bại thì relay qua SSH tới VPS.
   // Máy Mac này KHÔNG tới được Telegram trực tiếp (đo 22/09/2026) nên thực tế sẽ dùng relay.
   notify: { transport: "auto", relayHost: null, relayKey: null },
   // Kiểm tra lại các đường dẫn đang bị cách ly (chống iCloud hoàn tác).
   hold: { everyMs: 300000 },
   // Bề mặt khởi động ngoài launchd: shell rc, crontab, login items.
-  startup: { enabled: true, everyMs: 60000, checkCrontab: true, checkLoginItems: true, paths: DEFAULT_STARTUP_PATHS },
+  // checkLoginItems mặc định TẮT: đọc login item phải gọi `osascript 'tell System Events'`, mà
+  // AppleEvents được macOS gán cho tiến trình CHỊU TRÁCH NHIỆM là `node` ⇒ hộp thoại hiện lại mỗi
+  // vòng quét. Bật lên nếu anh chấp nhận hộp thoại đó.
+  startup: { enabled: true, everyMs: 60000, checkCrontab: true, checkLoginItems: false, paths: DEFAULT_STARTUP_PATHS },
   protectSelf: true,
 };
 
@@ -172,6 +183,7 @@ export class SelfDefense {
     this.lastHoldAt = 0;
     this.lastStartupAt = 0;
     this.startupSnap = this.loadStartupSnap();
+    this.trust = createTrustChecker({ allowedTeamIds: cfg.allowedTeamIds });
     this.cronLogged = false;
     this.loginLogged = false;
     this.tccDbDenied = false;
@@ -235,7 +247,15 @@ export class SelfDefense {
       relayHost: this.cfg.notify?.relayHost ?? undefined,
       relayKey: this.cfg.notify?.relayKey ?? undefined,
     });
-    this.log({ level: res.ok ? "info" : "warn", event: "alert", ok: res.ok, error: res.error });
+    // Ghi cả NỘI DUNG (cắt ngắn): trước đây chỉ ghi ok/error nên khi bị "ồn" không thể biết
+    // alert nào đang bắn — đã gặp thật ngày 24/09/2026 với 235 alert mà không truy được nguồn.
+    this.log({
+      level: res.ok ? "info" : "warn",
+      event: "alert",
+      ok: res.ok,
+      error: res.error,
+      text: String(text).split("\n").slice(0, 3).join(" / ").slice(0, 200),
+    });
     return res;
   }
 
@@ -372,7 +392,15 @@ export class SelfDefense {
     const acted = [];
     for (const p of procs) {
       if (p.uid !== process.getuid()) continue; // không kill được tiến trình của user khác
-      const { severity, reasons } = classifyProcess(p, this.cfg, this.iocs, process.pid, ancestors);
+      const { severity, reasons } = classifyProcess(p, this.cfg, this.iocs, process.pid, ancestors, {
+        trust: this.trust,
+      });
+      // "allow" = bị nghi do chạy từ vùng tạm nhưng CHỮ KÝ hợp lệ (updater/installer của
+      // Microsoft/Apple). Không kill, nhưng vẫn ghi log để không phải điểm mù hoàn toàn.
+      if (severity === "allow") {
+        this.log({ level: "info", event: "process-allowed", pid: p.pid, reasons });
+        continue;
+      }
       if (severity !== "hard") continue;
       acted.push(
         await this.act({

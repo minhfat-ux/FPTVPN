@@ -164,6 +164,47 @@ Mọi mẫu dropper/IOC được khớp trên phần **không phải comment**. 
 khớp trên tham số tiến trình, một lần khớp trên dòng `# curl … | bash` trong ghi chú. Cả hai
 đều dẫn tới báo động giả — và ở chế độ enforce thì lần đầu sẽ **kill phiên agent đang xử lý sự cố**.
 
+## 8d. Miễn trừ updater — theo CHỮ KÝ, không theo tên
+
+macOS Software Update và Microsoft AutoUpdate là updater **hợp lệ**, nhưng chúng giải nén rồi chạy
+helper từ `/tmp` / `~/Library/Caches` — mà vùng tạm là tín hiệu **CỨNG** của watcher tiến trình.
+Không miễn trừ thì cơ chế sẽ **kill giữa lúc đang cài** ⇒ app hỏng dở.
+
+Cách miễn trừ **không** dựa vào tên file (làm vậy là mở cửa hậu — sự cố 24/08/2026 trên chính máy
+này là một app tự xưng `SystemUpdater.app`). Nó dựa trên **chữ ký số của nhà phát hành**:
+
+| Nhà phát hành | Nhận diện bằng | Đo thật trên máy |
+|---|---|---|
+| Microsoft | `TeamIdentifier=UBF8T346G9` | `Microsoft AutoUpdate.app` → `Developer ID Application: Microsoft Corporation (UBF8T346G9)` |
+| Apple | `Authority=Software Signing` / `Platform Binary` | `/bin/ls`, `Software Update.app` |
+| Homebrew `node` | `Signature=adhoc`, không Team ID | **KHÔNG tin cậy** |
+
+Ba chốt an toàn:
+1. **Khớp IOC xét TRƯỚC miễn trừ** — không có cửa hậu cho thứ đã biết là xấu.
+2. Binary tự xưng "Microsoft AutoUpdate" mà **không có chữ ký** ⇒ vẫn bị xử lý như thường.
+3. Miễn trừ chỉ trả `severity: "allow"` ⇒ **không kill**, nhưng **vẫn ghi log** `process-allowed`.
+
+Chú ý khi đọc `codesign`: nó ghi **toàn bộ ra STDERR**, stdout rỗng — dùng `execFileSync` sẽ chỉ
+nhận stdout và `authorities` luôn rỗng (đã trả giá đúng lỗi này 24/09/2026). Phải dùng `spawnSync`.
+
+## 8e. Vì sao KHÔNG đọc TCC.db và KHÔNG đọc login item mặc định
+
+Cả hai đều khiến macOS bật hộp thoại xin quyền mang tên **`node`** — rất khó đoán vì đó là tên
+binary (Homebrew node **ad-hoc**, không Team ID), không phải tên công cụ:
+
+| Việc | Hệ quả đo được (29/09/2026) |
+|---|---|
+| Đọc `~/Library/Application Support/com.apple.TCC/TCC.db` | `sandboxd` hỏi quyền `kTCCServiceSystemPolicyAppData` cho node ⇒ hộp thoại *"node would like to access data from other apps"* |
+| `osascript 'tell application "System Events"'` (đọc login item) | quyền `kTCCServiceAppleEvents` bị gán cho **tiến trình chịu trách nhiệm** là node ⇒ hộp thoại hiện lại **mỗi vòng quét** |
+
+Nên mặc định là `tcc.source: "log"` (dùng `log show`, cùng tín hiệu, không đụng dữ liệu được bảo vệ)
+và `startup.checkLoginItems: false`. Muốn bật lại thì phải chấp nhận hộp thoại đó.
+
+Ngoài ra `/Library/Developer/` (Xcode/CoreSimulator) và `/Library/Application Support/Microsoft/`
+đã vào allowlist đường dẫn — trước đó CoreSimulator là **nguồn alert ồn thật** (đo 24/09/2026:
+~10 sự kiện TCC/giờ, tổng 235 alert mà **không truy được vì log không ghi nội dung alert** — đã
+sửa: log nay ghi 3 dòng đầu của mỗi alert).
+
 ## 9. Giới hạn đã biết
 
 - Không cần root và **không dùng EndpointSecurity** (cần entitlement) ⇒ chỉ thấy tiến trình
