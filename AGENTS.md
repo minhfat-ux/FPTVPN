@@ -190,19 +190,19 @@ Bảng 6 ca + tiêu chí đạt nằm ở tài liệu đầu mục này. "Chắc
 3. **Sau mọi thao tác: kiểm lại trạng thái thật, không tin lệnh đã chạy** — dịch vụ `active` **và** mọi relay
    phải trả `HTTP 426` (WebSocket sẵn sàng):
    ```bash
-   for r in vn1hy vn2hy vn1wg vn2wg vn3hy; do curl -s -o /dev/null -w "$r=%{http_code} " https://api.meetflowai.site/relay/$r; done
+   for r in vn1hy vn2hy vn1wg vn2wg vn3hy vn3wg; do curl -s -o /dev/null -w "$r=%{http_code} " https://api.meetflowai.site/relay/$r; done
    ```
-   Kết quả mong đợi: cả năm `=426`. Xong phải kiểm tunnel trên máy khách vẫn `Connected`.
+   Kết quả mong đợi: cả sáu `=426`. Xong phải kiểm tunnel trên máy khách vẫn `Connected`.
 4. **Bí mật không được vào argv**: `xcodebuild … HYST_PASSWORD=…` khiến credential hiện trong `ps` cho mọi
    tiến trình cùng máy đọc được (phát hiện 26/09/2026). Dùng `export HYST_PASSWORD=…` rồi gọi `xcodebuild` không kèm
    tham số; và **kiểm build đang chạy bằng `pgrep -f xcodebuild >/dev/null`, KHÔNG dùng `pgrep -fl`** (in cả argv).
 5. **Watchdog phía server ĐÃ CÓ (26/09/2026)** — `flowvpn-health-watch` (systemd timer 45 s + cron dự phòng `*/2`)
-   trên node-2: kiểm 9 unit đường khách + 5 relay phải trả `426`, tự `start`/`restart` (không bao giờ `stop`),
+   trên relay-server: kiểm 10 unit đường khách + 6 relay phải trả `426`, tự `start`/`restart` (không bao giờ `stop`),
    chống rung 60 s/unit, gửi **Telegram cho mọi harness/agent** (2 tin: PHÁT HIỆN + KẾT QUẢ, ESCALATE nếu
    không tự khôi phục được) và lưu bản vào `/var/lib/flowvpn-coord/inbox/{mac,windows,server}/`.
    Đã kiểm chứng: dừng `relay-cf-vn2wg` → phát hiện sau **41 s** → tự `start` lại → 2 tin Telegram
    (`message_id` 1656/1657) → `flowvpn-safe-status` 8/8 unit `active+enabled`, 4 relay `=426` (số của 26/09/2026; sau khi thêm
-   `relay-cf-vn3hy` ngày 30/09/2026 nay là **9/9 unit + 5 relay**).
+   `relay-cf-vn3hy` ngày 30/09/2026 nay là **10/10 unit + 6 relay**).
    **Dùng `flowvpn-safe-stop <unit> [giây]`** (tự đặt auto-restore tách phiên và **từ chối** nếu unit đang chở
    phiên điều khiển — exit 3) và `flowvpn-safe-status` sau mỗi lần test. Chi tiết + đường cứu hộ khi tunnel chết:
    `docs/SERVER_RECOVERY_RUNBOOK.md`. Luật (1)+(2) ở trên vẫn bắt buộc dù đã có watchdog.

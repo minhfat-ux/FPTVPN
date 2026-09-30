@@ -4,6 +4,33 @@
 > test được từ Trung Quốc và đăng ký được node vào hệ thống — **không cần hỏi lại context**.
 > Tất cả lệnh dưới đây copy-paste được. Repo: `/Volumes/BIWIN/SourcesCode/PrivateVPN`.
 
+> ## ⚠️ BẮT BUỘC ĐỌC TRƯỚC — node mới phải có **CẢ** hysteria2 **VÀ** WireGuard
+>
+> **Sự cố thật 30/09/2026:** node `vietnam-3` (`103.6.235.39`) được dựng **chỉ hysteria2** theo hướng dẫn
+> bên dưới. Kết quả: `public_key` phải để chuỗi giữ `HYSTERIA_ONLY_VN3`, `ws_relay_url`/`wg_relay_url` = NULL.
+> **iOS/macOS/Windows đọc `wg_relay_url ?? ws_relay_url`** (`iOS/PrivateVPN/Services/ControlAPIClient.swift:63`,
+> `mac/PrivateVPNMac/VPNManagerMac.swift:876`) ⇒ client chọn node đó thì **dựng route rồi bắt tay WireGuard vào
+> `endpoint` nơi không có gì** ⇒ **"Connected" nhưng MẤT SẠCH MẠNG**. Trên iOS còn ra mã
+> `RELAY_URL_MISSING` (`ControlAPIClient.swift:98`).
+>
+> ⇒ **Node mới là CHƯA XONG nếu thiếu một trong hai.** Phần hysteria2 ở §3 bên dưới **không đủ**.
+> Quy trình WireGuard đầy đủ + 4 quy tắc vàng: `docs/EXIT_NODE_RUNBOOK.md` (mục
+> "30/09/2026 — WireGuard là BẮT BUỘC"). Tóm tắt 6 việc:
+> 1. `wg0`: `Address = 10.77.0.1/24`, `ListenPort = 443`, NAT `10.77.0.0/24` ra interface WAN thật
+>    (node-2 mới là **`enp3s0`**, không phải `eth0`), `rp_filter=0`, `ip_forward=1`, `ufw allow 443/udp`.
+> 2. `ufw`: `DEFAULT_FORWARD_POLICY="ACCEPT"` — mặc định `"DROP"` + `-P FORWARD DROP` sẽ chặn forward.
+> 3. Thêm **pubkey `id_node1` của coordinator** (`ssh-keygen -y -f /root/.ssh/id_node1`) vào
+>    `authorized_keys` của node mới. **Service dùng `SSH_KEY=/root/.ssh/id_node1`, KHÔNG phải `id_ed25519`.**
+> 4. Relay riêng cho WireGuard (`relay-cf-vn3wg`, `WS_UDP_PORT=443`) + `handle /relay/vn3wg*` trong Caddy
+>    (**cả hai** site block).
+> 5. Đăng ký `exit_nodes`: `public_key` = **key THẬT** (`wg show wg0 public-key`), `ssh_target` = `root@<IP>`,
+>    `ws_relay_url` **và** `wg_relay_url` = relay riêng đó.
+> 6. Đưa relay mới vào `flowvpn-health-watch` + `flowvpn-safe-status` + `flowvpn-safe-stop`.
+>    **Thêm relay mà quên bước này = đường khách mới không được giám sát.**
+>
+> ⚠️ `ssh_target` **rỗng** không phải "vô hại": `wgForNode()` (`control-plane/src/index.js:5366`) rơi về
+> wg **local của coordinator** ⇒ peer của khách bị nhét nhầm vào wg0 của `relay-server`.
+
 Đọc kèm:
 - `docs/EXIT_NODE_IP_GUIDE.md` — chọn dải IP/ASN.
 - `docs/ANDROID_METERED_BACKGROUND_DATA.md` — vì sao app cần foreground service (đừng "sửa" theo hướng cũ).

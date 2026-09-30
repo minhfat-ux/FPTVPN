@@ -1,9 +1,35 @@
 # EXIT NODE RUNBOOK — Thêm exit node mới (1 lần là xong)
 
-> ⚠️ **CẬP NHẬT 2026-09-12 — transport đã đổi.** Từ nay node mới phải chạy **hysteria2 + TCP relay**
-> (không phải WireGuard). Các bước WireGuard bên dưới **chỉ còn dùng cho node legacy / client cũ**.
-> Quy trình đúng cho node mới: **`docs/AGENT_NEW_NODE_GUIDE.md`** + `tools/node-setup/provision-node.sh`
-> (systemd: `hysteria@<port>`, `hyrelay@<port>`), chọn dải IP theo `docs/EXIT_NODE_IP_GUIDE.md`.
+> ⚠️ **CẬP NHẬT 2026-09-12 — transport đã đổi.** Node mới phải chạy **hysteria2 + TCP relay**
+> **BÊN CẠNH WireGuard**. Quy trình hysteria2: **`docs/AGENT_NEW_NODE_GUIDE.md`** +
+> `tools/node-setup/provision-node.sh` (systemd: `hysteria@<port>`, `hyrelay@<port>`), chọn dải IP theo
+> `docs/EXIT_NODE_IP_GUIDE.md`.
+>
+> 🔴 **ĐÍNH CHÍNH 2026-09-30 — "WireGuard chỉ cho node legacy" là SAI.** Sự thật production: cả `node-1`
+> (`103.173.155.50`) lẫn `vietnam-2` (`165.101.114.162`) đều đang chạy `wg0` UDP 443, và
+> **iOS/macOS/Windows đọc `wg_relay_url ?? ws_relay_url`** để chọn đường
+> (`iOS/PrivateVPN/Services/ControlAPIClient.swift:63`, `mac/PrivateVPNMac/VPNManagerMac.swift:876`).
+>
+> ### 30/09/2026 — WireGuard là BẮT BUỘC trên mọi node mới (bài học `vietnam-3`)
+>
+> Node `vietnam-3` (`103.6.235.39`) từng được dựng **chỉ hysteria2** ⇒ `public_key = HYSTERIA_ONLY_VN3`,
+> `ws_relay_url`/`wg_relay_url` = NULL ⇒ client WireGuard chọn node đó **"Connected" nhưng mất sạch mạng**
+> (iOS hiện `RELAY_URL_MISSING`). Node mới **chưa xong** nếu thiếu WireGuard. **4 quy tắc vàng ở §dưới vẫn
+> nguyên hiệu lực**; phần WireGuard ở "BƯỚC 1" **vẫn phải làm**, cộng thêm 3 điều đã học:
+>
+> - Interface WAN của node mới **không phải lúc nào cũng là `eth0`** — `vietnam-3` là **`enp3s0`**.
+>   Đặt sai tên interface trong `PostUp` ⇒ MASQUERADE không khớp ⇒ mất mạng.
+> - `ufw` mặc định `DEFAULT_FORWARD_POLICY="DROP"` + `iptables -P FORWARD DROP` ⇒ phải đổi sang `"ACCEPT"`,
+>   nếu không gói không được forward dù `wg0` đã lên và NAT đã có.
+> - Thêm **pubkey `id_node1` của coordinator** vào `authorized_keys` node mới
+>   (`ssh-keygen -y -f /root/.ssh/id_node1` — không có sẵn file `.pub`). **Service dùng
+>   `SSH_KEY=/root/.ssh/id_node1`, KHÔNG phải `id_ed25519`.** Thiếu key ⇒ `provisionEverywhere` không cấp
+>   được peer; tệ hơn, `ssh_target` rỗng làm `wgForNode()` (`control-plane/src/index.js:5366`) rơi về wg
+>   **local của coordinator** ⇒ peer bị nhét nhầm vào `relay-server`.
+> - Relay riêng cho WireGuard (`relay-cf-<tên>wg`, `WS_UDP_PORT=443`) + `handle` trong **cả hai** site block,
+>   rồi **đưa vào `flowvpn-health-watch` + `flowvpn-safe-status` + `flowvpn-safe-stop`** (thêm relay mà quên
+>   ⇒ đường mới không được giám sát, `flowvpn-safe-stop` sẽ cho dừng mà không cảnh báo).
+
 
 ## 0. Trạng thái node hiện tại (2026-09-12)
 
