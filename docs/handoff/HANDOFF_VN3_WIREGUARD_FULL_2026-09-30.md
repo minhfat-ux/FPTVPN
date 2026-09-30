@@ -396,3 +396,42 @@ Google coi IP node-1 (103.173.155.50 · AS135905 VNPT):
   khách không phải cài lại.
 - **Tạm thời:** khách cần Gemini thì chọn **Flow1/node-1**. Cân nhắc hạ `priority` của `vietnam-3` để khách ít bị
   rơi vào node này cho tới khi đổi được IP.
+
+### 10b. KHÔNG chỉ node mới: **Flow2 (vietnam-2) cũng bị** — và nó là node ƯU TIÊN CAO NHẤT (01/10/2026)
+
+Chủ dự án báo: khách gặp đúng lỗi đó ở **Flow2** sáng nay. Kiểm tra thì đúng:
+
+```text
+Flow2 (165.101.114.162 · AS135905 VNPT): google.com -> google.com.hk/?pref=hkredirect&hl=zh-CN   ← HỒNG KÔNG
+Flow1 (103.173.155.50  · AS135905 VNPT): google.com -> google.com (không redirect)                ← VIỆT NAM
+Flow3 (103.6.235.39    · AS152992)     : google.com -> google.com.hk/...                          ← HỒNG KÔNG
+```
+
+⚠️ Bảng `exit_nodes` trước đó: `vietnam-2 priority=50` (ưu tiên CAO NHẤT) · `node-1=100` · `vietnam-3=150`
+⇒ **đa số khách rơi vào vietnam-2 — đúng node Gemini lỗi**. Đây là lỗi đang ảnh hưởng khách, không phải
+chuyện riêng của node mới.
+
+**Đã xử lý ngay (chủ dự án duyệt 01/10):** dồn khách sang node chạy được —
+`node-1=10` · `vietnam-2=200` · `vietnam-3=300` (PATCH admin API; backup `data/nodes.db.bak-priority-*`).
+`GET /v1/nodes` công khai nay trả **node-1 đứng đầu**.
+
+### 10c. Có sửa được định vị của Google không? — **KHÔNG có kênh công khai**
+
+| Nguồn định vị | Flow2 | Flow3 | Flow1 |
+|---|---|---|---|
+| ipinfo.io | VN (Hanoi) | VN (Hanoi) | VN (Hanoi) |
+| ip-api.com | Vietnam | Vietnam | Vietnam |
+| Cloudflare `loc=` | **VN** | **VN** | **VN** |
+| **Google** | 🔴 **HK** | 🔴 **HK** | ✅ VN |
+
+Mọi DB độc lập đều nói **Việt Nam**; chỉ Google nói Hồng Kông ⇒ **là DB riêng của Google bị sai/cũ cho 2 dải
+này**, không phải vấn đề dữ liệu địa lý chung.
+- ❌ Sửa qua [MaxMind GeoIP correction](https://www.maxmind.com/en/geoip-location-correction) **không giải quyết**
+  (các DB khác đã đúng VN mà Google vẫn HK).
+- ❌ Google không có kênh công khai để sửa định vị cho một IP không thuộc site mình
+  ([thread người dùng](https://support.google.com/websearch/thread/284908825/ip-location-incorrect-when-using-google?hl=en)
+  chỉ dành cho người dùng cuối; Search Console geo-targeting là cho **tên miền**, không cho IP).
+- ✅ **Đường thực tế duy nhất: đổi IP/dải.** Trước khi nhận IP mới, test 1 dòng:
+  `curl -s -o /dev/null -w '%{redirect_url}' https://www.google.com/` ⇒ **phải rỗng** (không được ra `google.com.hk`).
+- Ghi chú: 2 dải bị lỗi có dấu hiệu được cấp phát lại (ip-api mô tả chủ thể khác: *"Dương Nội AI Application
+  Software"*, *"CAS Security Services"*) ⇒ Google có thể còn giữ dữ liệu phân bổ **cũ** (HK) cho các dải này.
