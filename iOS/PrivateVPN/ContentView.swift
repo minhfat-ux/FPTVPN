@@ -422,8 +422,6 @@ struct ContentView: View {
             return languageStore.t(.choosePlanToStart)
         }
         var parts: [String] = []
-        let plan = subscriptionStore.activePlanName
-        if !plan.isEmpty { parts.append(plan) }
         if let expiry = subscriptionStore.planExpiresAt {
             parts.append(String(
                 format: languageStore.t(.expiresOn),
@@ -448,7 +446,8 @@ struct ContentView: View {
                 Text(subscriptionStore.isSubscribed ? languageStore.t(.premiumActive) : languageStore.t(.premiumRequired))
                     .font(.headline)
                     .foregroundStyle(VPNTheme.label)
-                // Đã mua gói ⇒ hiện ĐÚNG gói khách đang dùng + ngày hết hạn + số ngày còn lại
+                // Đã mua gói ⇒ CHỈ hiện HẠN, không hiện tên gói (giống Android):
+                //   "Hết hạn 13/12/2026" (+ "Còn 27 ngày" nếu ≤ 30 ngày).
                 // (nút bên cạnh đổi thành "Gia hạn"). Chưa mua ⇒ mời chọn gói như trước.
                 Text(subscriptionSubtitle)
                     .font(.subheadline)
