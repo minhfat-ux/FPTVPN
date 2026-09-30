@@ -233,3 +233,39 @@ Lúc recon tôi từng nói *"docs lệch: `AGENT_NEW_NODE_GUIDE.md` §6.2 nói 
 - Cảnh báo diễn giải: `63.140.14.154` và `120.234.32.53` **không phải** máy Mac này (egress Mac lúc kiểm =
   `165.101.114.162` = `vietnam-2`) ⇒ đây là **thiết bị khác**, nhưng tôi **không** khẳng định được đó là ai
   hay họ đã mở `gemini`/`claude` hay chưa.
+
+---
+
+## Cập nhật vòng goal 2 (30/09/2026 ~21:55) — ĐÓNG LỖ HỔNG GIÁM SÁT do chính việc thêm relay gây ra
+
+### Phát hiện
+`flowvpn-health-watch` (watchdog đường khách, timer 45 s + cron dự phòng `*/2`) và hai công cụ vận hành
+`flowvpn-safe-status` / `flowvpn-safe-stop` đều **hardcode 4 relay** (`vn1hy/vn2hy/vn1wg/vn2wg`).
+⇒ `relay-cf-vn3hy` — đường **đang chở khách thật** (xem mục trên) — **không được giám sát**: watchdog sẽ
+**không** tự `start` nếu nó chết, và `flowvpn-safe-stop relay-cf-vn3hy` sẽ **cho dừng mà không cảnh báo**
+(vì unit không nằm trong `ALL_RELAYS` ⇒ `IS_RELAY=0` ⇒ không in "rủi ro: relay").
+
+### Đã sửa (trên relay-server; backup `/root/flowvpn-tools-backup-20260930-215023/`)
+| File | Sửa |
+|---|---|
+| `/usr/local/bin/flowvpn-health-watch` | thêm `"relay-cf-vn3hy\|Hysteria\|vietnam-3\|/relay/vn3hy\|7789"` vào `CATALOG` |
+| `/usr/local/bin/flowvpn-safe-status` | thêm dòng `relay-cf-vn3hy`; "cả bốn"→"cả năm"; 4→5 mã relay |
+| `/usr/local/bin/flowvpn-safe-stop` | thêm `NODE_IP_vn3=103.6.235.39`, `NODE3_RELAYS`, `ALL_RELAYS`, nhánh `vn3` cho `detect_control_node` + `PROTECTED` |
+
+### Bằng chứng
+```text
+bash -n cả 3 file   → syntax OK
+flowvpn-safe-status → vn3hy = 426 ✔ · "TÓM TẮT: vn1hy=426 vn2hy=426 vn1wg=426 vn2wg=426 vn3hy=426"
+                    → "KẾT LUẬN: ✔ TẤT CẢ ĐẠT (mọi unit active, cả năm relay = 426)"
+watchdog log 21:51:36 → "RELAY: vn1hy=426 vn2hy=426 vn1wg=426 vn2wg=426 vn3hy=426"
+                      → "OK: mọi dịch vụ đường khách active · … (không gửi Telegram — không có gì để báo)"
+thử âm 1: FLOWVPN_CONTROL_NODE=vn3 flowvpn-safe-stop relay-cf-vn3hy 30 → exit 3 (TỪ CHỐI; "relay được bảo vệ: relay-cf-vn3hy")
+thử âm 2: FLOWVPN_CONTROL_NODE=zzz flowvpn-safe-stop relay-cf-vn3hy 30 → exit 3 (TỪ CHỐI; coi MỌI relay là đường điều khiển)
+sau 2 thử âm → relay-cf-vn3hy VẪN active, vẫn listen :7789 (không dừng gì)
+```
+Hai phép thử âm đi qua **nhánh TỪ CHỐI** trước khi đặt lệnh dừng ⇒ **không** dừng dịch vụ nào.
+
+### Docs repo đã khớp theo (cùng loại việc chủ dự án đã duyệt: sửa docs cho khớp production)
+`AGENTS.md` §7e.3 (vòng `for` + "cả năm") và §7e.5 (**9 unit + 5 relay**); `docs/SERVER_RECOVERY_RUNBOOK.md`
+(bảng §2 thêm dòng `relay-cf-vn3hy`, vòng lệnh, mô tả `flowvpn-safe-status`, bảng rủi ro, checklist).
+Khối nhật ký lịch sử 26/09 **giữ nguyên**, chỉ thêm ghi chú "(số của 26/09/2026; nay là 9/9 unit + 5 relay)".

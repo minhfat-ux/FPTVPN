@@ -10,7 +10,7 @@
    đang chở tunnel = **tự cắt đường cứu hộ**. Đây là gốc của sự cố 26/09/2026.
 2. **Trước khi dừng bất cứ thứ gì**: dùng `flowvpn-safe-stop <unit> <giây>` — nó tự đặt lệnh hồi
    **tách khỏi phiên** và **từ chối** nếu `<unit>` là relay cùng node với đường điều khiển.
-3. **Sau khi test xong**: chạy `flowvpn-safe-status` → **cả bốn relay phải = `426`** và **mọi unit
+3. **Sau khi test xong**: chạy `flowvpn-safe-status` → **cả năm relay phải = `426`** và **mọi unit
    `active`**. Không có bằng chứng này = test chưa kết thúc.
 4. **Khi tunnel chết**: vào node-2 bằng **Tailscale → node-1 → node-2**. Node-2 **không** ở trong
    tailnet (đã đo), nên Tailscale luôn phải nhảy qua node-1 trước. SSH trực tiếp từ VN hay bị chặn.
@@ -46,7 +46,7 @@ Chỉ khôi phục được nhờ **đường vòng**: đổi app sang node-1 �
 
 ### Vì sao `Restart=always` KHÔNG cứu được ca này
 
-Cả bốn relay **đã** có `Restart=always` + `RestartSec=3`. Nhưng `systemctl stop` là **dừng CHỦ Ý**:
+Cả năm relay **đã** có `Restart=always` + `RestartSec=3`. Nhưng `systemctl stop` là **dừng CHỦ Ý**:
 systemd đánh dấu unit là "intentionally stopped" và **không** restart. `Restart=always` chỉ cứu khi
 **tiến trình tự chết** (crash/OOM). Đây là lý do phải có watchdog **kiểm định kỳ từ bên ngoài**.
 
@@ -60,6 +60,7 @@ systemd đánh dấu unit là "intentionally stopped" và **không** restart. `R
 | `relay-cf-vn2hy` | WS relay Cloudflare → hysteria node-2 | vietnam-2 | 7785 | `always`/3s | relay của sự cố 26/09 |
 | `relay-cf-vn1wg` | WS relay Cloudflare → WG node-1 | vietnam-1 | 7786 | `always`/3s | cùng node với đường điều khiển |
 | `relay-cf-vn2wg` | WS relay Cloudflare → WG node-2 (exit Hanoi-2) | vietnam-2 | 7783 | `always`/3s | |
+| `relay-cf-vn3hy` | WS relay Cloudflare → hysteria node-2 **mới** (exit Hanoi-3) | vietnam-3 | 7789 | `always`/3s | thêm 30/09/2026 (xem `docs/handoff/HANDOFF_VN3_NODE_DEPLOY_2026-09-30.md`) |
 | `wgrelay-wg` | WG UDP relay TCP 9444 → UDP 443 | vietnam-2 | 9444 | `always`/3s | |
 | `caddy` | TLS / Cloudflare origin | — | 443 | **`no`** | không tự hồi ⇒ watchdog phải `start` |
 | `flowvpn-cp` | control plane (cổng khách) | — | 7778 | `always`/3s | sửa dữ liệu khách: **không** đụng dữ liệu |
@@ -68,10 +69,10 @@ systemd đánh dấu unit là "intentionally stopped" và **không** restart. `R
 Kiểm mã HTTP qua Cloudflare (mong đợi **426** = WebSocket sẵn sàng):
 
 ```bash
-for r in vn1hy vn2hy vn1wg vn2wg; do
+for r in vn1hy vn2hy vn1wg vn2wg vn3hy; do
   curl -s -o /dev/null -w "$r=%{http_code} " https://api.meetflowai.site/relay/$r
 done
-# mong đợi: vn1hy=426 vn2hy=426 vn1wg=426 vn2wg=426
+# mong đợi: vn1hy=426 vn2hy=426 vn1wg=426 vn2wg=426 vn3hy=426
 ```
 
 ---
@@ -218,7 +219,7 @@ lúc cứu hộ. Chỉ bật lại dịch vụ.
 
 ### 6.2. Nó tự phát hiện gì
 
-1. **Unit đường khách không `active`** (8 unit ở §2).
+1. **Unit đường khách không `active`** (9 unit ở §2).
 2. **Relay không trả `426`** qua Cloudflare — đếm **2 lần liên tiếp** mới hành động (chống rung).
 3. **Chính watchdog chết**: timer không `active`, timer không `enabled` (mất sau reboot), service
    `failed`, và **nhịp tim cũ** (>180 s ⇒ timer không chạy; chỉ nhịp cron kết luận được điều này).
@@ -310,14 +311,14 @@ Hai backstop **độc lập**, cả hai chỉ gọi `systemctl start` (idempoten
 
 ### 7.2. `flowvpn-safe-status`
 
-In trạng thái 8 unit đường khách + 4 mã HTTP relay + trạng thái watchdog + 5 dòng log cuối.
-Exit 0 chỉ khi **mọi unit `active`** và **cả bốn relay = 426**.
+In trạng thái 9 unit đường khách + 5 mã HTTP relay + trạng thái watchdog + 5 dòng log cuối.
+Exit 0 chỉ khi **mọi unit `active`** và **cả năm relay = 426**.
 
 ---
 
 ## 8. Checklist "sau khi test xong phải kiểm gì"
 
-- [ ] `flowvpn-safe-status` → **cả bốn relay = `426`** và **mọi unit `active`**
+- [ ] `flowvpn-safe-status` → **cả năm relay = `426`** và **mọi unit `active`**
 - [ ] `systemctl list-timers flowvpn-health-watch.timer` → `active`/`enabled`, có `NEXT`
 - [ ] Tunnel trên máy khách vẫn **`Connected`** (mở app, xem trạng thái)
 - [ ] Không còn unit transient `restore-*` treo: `systemctl list-units --all | grep restore-`
@@ -333,7 +334,7 @@ Exit 0 chỉ khi **mọi unit `active`** và **cả bốn relay = 426**.
 | Khoảng trống (trước 26/09) | Đã bịt bằng |
 |---|---|
 | Không ai tự `start` lại unit bị dừng chủ ý | `flowvpn-health-watch.timer` (45 s) tự `start` |
-| Không ai phát hiện relay không trả 426 | Watchdog kiểm mã HTTP 4 relay, 2 lần liên tiếp |
+| Không ai phát hiện relay không trả 426 | Watchdog kiểm mã HTTP 5 relay, 2 lần liên tiếp |
 | Không ai báo cho người trực | Telegram (tin phát hiện + tin kết quả) + inbox 3 bên |
 | Lệnh tự hồi đặt sau `stop` / không tách phiên | `flowvpn-safe-stop`: đặt & **xác minh** trước, 2 backstop tách phiên |
 | Dừng nhầm relay đang chở phiên điều khiển | `flowvpn-safe-stop` từ chối (exit 3) theo IP exit của `SSH_CLIENT` |
