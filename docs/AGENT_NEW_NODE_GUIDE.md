@@ -32,7 +32,7 @@
 | node2 | `103.6.234.233` | **AS152992 (Online Data)** | ⚠️ **UDP bị chặn ở mức IP** → chỉ dùng được TCP relay (chậm hơn) | Đang chờ provider đổi IP |
 
 ### Transport (áp dụng cho mọi node)
-- **hysteria2 (QUIC)** — server UDP ports: **8443, 28443, 54443**; obfs **salamander** password `<HY_OBFS_PASSWORD>`; auth password `<HY_AUTH_PASSWORD>`; TLS self-signed `CN=meetflowai.site` (client dùng `insecure`).
+- **hysteria2 (QUIC)** — server UDP ports: **8443, 28443, 54443**; obfs **salamander** password `<HY_OBFS_PASSWORD>`; auth password `<HY_AUTH_PASSWORD>`; TLS self-signed `CN=meetflowai.site` (client dùng `insecure`); `ignoreClientBandwidth: true` (xem §6.4).
 - **TCP relay** — app dial TCP **8443** và **9445**, relay bọc/giải bọc framing **2 byte big-endian length prefix** rồi chuyển sang UDP `127.0.0.1:8443`. Relay viết bằng Go: `tools/node-setup/relay.go` (binary có sẵn: `tools/node-setup/bin/hyrelay-linux-amd64`). *(Node1/node2 cũ còn dùng `wgrelay.js` bản Node — node mới dùng binary Go, không cần Node.js.)*
 - Phía app Android (hysteria mode): `claim` thiết bị → thử lần lượt **[transport đã nhớ]** → **TCP relay** → **UDP**; bật **Brutal CC** (`HY_UP_KBPS=2000`, `HY_DOWN_KBPS=20000`); chạy dưới **foreground service** (`specialUse`).
 
@@ -248,7 +248,11 @@ Muốn node luôn hiện cả khi offline thì thêm entry ở đây rồi build
 1. **File public phải `chown caddy:caddy` + `chmod 644`** nếu đặt trong `/var/www/flowvpn/…` — caddy chạy bằng user `caddy`, file `600` sẽ trả **403** dù caddy config đúng. (Đã gặp với APK/AAB và `support.html`.)
 2. **Relay framing là 2 byte big-endian length prefix**, đúng như app Android gửi. Đổi framing thì phải sửa **cả hai đầu** (client trong `tools/hysteria-android/mobile.go` + server `tools/node-setup/relay.go`), nếu không sẽ treo ở handshake.
 3. **Android 15/16 đã bỏ FGS type `vpn`** → app dùng `foregroundServiceType="specialUse"` + property `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`. Server không liên quan; **đừng** quay lại `startForegroundService` + type `vpn` (không còn tồn tại, aapt2 sẽ từ chối).
-4. **hysteria server KHÔNG đặt `ignoreClientBandwidth: true`** (và không set `bandwidth` phía server) — app đang dùng **Brutal CC** (`upKbps/downKbps`); đặt `true` sẽ tắt Brutal → tốc độ tụt trên mạng loss.
+4. **`ignoreClientBandwidth: true` — BẮT BUỘC, phải giống fleet** (sửa 30/09/2026). Ghi chú cũ ở đây nói
+   NGƯỢC LẠI ("không đặt") và **sai với production**: cả node-1 (`/etc/hysteria/server.yaml`) lẫn
+   relay-server (`/etc/hysteria-server.yaml`) đều đặt `true`, kèm lý do 18/09/2026 — *app cũ khai
+   2/20 Mbps nên Brutal tự bóp băng thông*. Node mới đặt khác sẽ hành xử khác phần còn lại của fleet.
+   (`provision-node.sh` nay sinh config kèm sẵn khoá này.)
 5. **Cert self-signed `CN=meetflowai.site` là bình thường** (client cấu hình `insecure: true`). Đừng "nâng cấp" sang Let's Encrypt rồi đổi CN/đường dẫn mà không cập nhật cả 2 phía.
 6. **SSH key**: node1 dùng `.tmp/flowvpn_support_page_ed25519`; node2 (và VPS mới dạng Online Data) dùng `~/.ssh/fpt_vpn_node`. Nếu cần vào node1 bằng key node2 thì thêm pubkey của `fpt_vpn_node` vào `/root/.ssh/authorized_keys` của node1.
 7. **node1/node2 hiện chạy bằng `setsid nohup`** (không systemd) → mất khi reboot; **node mới dùng systemd**. Đừng copy cách cũ.

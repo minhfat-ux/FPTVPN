@@ -112,8 +112,10 @@ obfs:
 auth:
   type: password
   password: $AUTH_PASS
-# Brutal congestion control is driven by the CLIENT's declared bandwidth; do not
-# set ignoreClientBandwidth here or the app falls back to the standard CC.
+# Ignore the bandwidth the CLIENT declares: the old app declared 2/20 Mbps and
+# throttled itself (2026-09-18). node-1 and relay-server both set this true, so a
+# new node MUST match the fleet's congestion control.
+ignoreClientBandwidth: true
 YAML
   fi
 done

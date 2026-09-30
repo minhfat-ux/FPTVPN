@@ -13,7 +13,9 @@
 | node2 | `103.6.234.233` | AS152992 (Online Data) | như trên | **UDP bị GFW chặn ở mức IP** → chỉ dùng được TCP relay |
 
 - Config hysteria: node1 `/etc/hysteria/server.yaml` (+`server-<port>.yaml`), node2 `/etc/hysteria-server-<port>.yaml`; cert self-signed `/etc/hysteria-cert.pem`.
-- Auth `<HY_AUTH_PASSWORD>`, obfs salamander `<HY_OBFS_PASSWORD>`. **Không** đặt `ignoreClientBandwidth: true` (sẽ mất Brutal CC của client).
+- Auth `<HY_AUTH_PASSWORD>`, obfs salamander `<HY_OBFS_PASSWORD>`. **Đặt `ignoreClientBandwidth: true`** —
+  BẮT BUỘC giống fleet (sửa 30/09/2026; node-1 và relay-server đều đang `true`; lý do 18/09/2026: app cũ khai
+  2/20 Mbps nên Brutal tự bóp).
 - Registry node là **SQLite** `/root/flowvpn-cp/data/nodes.db` (bảng `exit_nodes`) — `nodes.json` chỉ là đường import legacy.
 
 - **Verified:** 2026-08-23 (node 2: 103.6.234.233 — đã làm đủ, có cả bài học từ lỗi)
