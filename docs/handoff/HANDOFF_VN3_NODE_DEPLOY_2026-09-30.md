@@ -269,3 +269,32 @@ Hai phép thử âm đi qua **nhánh TỪ CHỐI** trước khi đặt lệnh d�
 `AGENTS.md` §7e.3 (vòng `for` + "cả năm") và §7e.5 (**9 unit + 5 relay**); `docs/SERVER_RECOVERY_RUNBOOK.md`
 (bảng §2 thêm dòng `relay-cf-vn3hy`, vòng lệnh, mô tả `flowvpn-safe-status`, bảng rủi ro, checklist).
 Khối nhật ký lịch sử 26/09 **giữ nguyên**, chỉ thêm ghi chú "(số của 26/09/2026; nay là 9/9 unit + 5 relay)".
+
+---
+
+## Trạng thái cuối phiên (vòng goal 3, 30/09/2026 ~22:00) — TREO chờ chủ dự án
+
+**Mọi phần dựng được: XONG và đã kiểm chứng lại tươi.** 10/10 cửa relay = `426`
+(`api.` + `t1.` × `vn1hy vn2hy vn1wg vn2wg vn3hy`), `hysteria@8443` trên `103.6.235.39` = `active/enabled`,
+`relay-cf-vn3hy` = `active`, watchdog phủ `vn3hy` (`OK: mọi dịch vụ đường khách active · … vn3hy=426`).
+
+**Bằng chứng Trung Quốc TIẾP TỤC TĂNG** (không phải test tổng hợp) — cùng một relay, sau vài chục phút:
+
+```text
+(vòng 1) total=6  in=6.160.744 B   out=52.016.930 B  drop=0 udpErr=0
+(vòng 3) total=9  in=7.727.717 B   out=72.205.129 B  drop=0 udpErr=0 lastError=-
+```
+
+⇒ Thêm 3 phiên và ~20 MB nữa về khách, vẫn **0 rơi gói / 0 lỗi UDP**.
+
+**Điều kiện TREO (giữ nguyên 3 vòng liên tiếp 1→3):** mục *"nghiệm thu từ Trung Quốc trên máy thật"* —
+cần **thiết bị Android của chủ dự án** (USB debugging bật) để chọn node trong app, ngắt/nối 3 lần và mở
+**trình duyệt thật** kiểm `gemini.google.com` / `claude.ai`. Chủ dự án đã **chủ động hoãn** việc này
+(*"android chưa cần test đâu"*). Agent **không** có vantage TQ và **không** được tự chạy thay.
+
+**Việc khác của chủ dự án (đã xác nhận 30/09/2026):** DNS `meetflowai.io.vn` **chưa trỏ ở CẢ hai nơi**
+(nhà đăng ký `.vn` **và** Cloudflare). Phía Caddy đã sẵn sàng (xem mục "domain mới"); việc còn lại thuần DNS.
+
+**Mở treo bằng một trong hai cách:**
+1. Chủ dự án chạy phép nghiệm thu có kiểm soát (5 phút, hướng dẫn ở mục "Next Recommended Step"), hoặc
+2. Chủ dự án xác nhận dùng **bằng chứng đời thực ở trên** (9 phiên, 72 MB, `drop=0`) thay cho phép đo có kiểm soát.
