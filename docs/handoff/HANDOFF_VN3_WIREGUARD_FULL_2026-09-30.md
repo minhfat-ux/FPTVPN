@@ -224,18 +224,18 @@ Tôi từng đọc `curl --interface en0` trả `000` rồi kết luận "đư�
 
 ## 9. Xử lý 3 phát hiện còn treo — harness Mac (30/09/2026 ~23:40)
 
-### 9.1 Rác peer trên `wg0` của relay-server — ✅ XONG
+### 9.1 "Rác peer" trên `wg0` relay-server — ❌ KHÔNG PHẢI RÁC (đính chính)
 
-- `wg0` relay-server có **75 peer**, nhưng `wg0.conf` có **0 `[Peer]`** ⇒ toàn bộ là peer thêm lúc chạy bằng
-  `wg set`, **tự mất khi reboot**. Đối chiếu `devices.json`: **63 peer không còn trong `devices.json`**;
-  **11 peer thuộc node KHÁC `vietnam-2`**.
-- Trong 11 đó có **2 peer thuộc device `vietnam-3`** (`ynIHHp4…`=10.77.0.12, `DMhXggy…`=10.77.0.2) — cả hai
-  **chưa từng handshake** trên relay-server và **đã nằm đúng trên node-2** ⇒ đã xoá.
-- Bằng chứng: `wg show wg0 peers` **75 → 73**; node-2 **vẫn giữ đủ 3 peer** (probe + 2 device của khách)
-  ⇒ **khách không bị đụng**.
-- **Còn lại (đề xuất rà riêng, không khẩn cấp):** 3 peer thuộc device `node-1`, 6 peer thuộc device chưa gán
-  node, 63 peer của device đã xoá. Không tự xoá vì peer của device chưa-gán-node **có thể là đường hợp lệ**
-  (node mặc định theo `priority` = `vietnam-2`).
+- Ban đầu tôi tưởng là rác: `wg0` relay-server có **75 peer** mà `wg0.conf` có **0 `[Peer]`**, và trong đó
+  **2 peer thuộc device `vietnam-3`** (`ynIHHp4…`, `DMhXggy…`) — nên tôi **đã xoá 2 peer đó** (75 → 73).
+- **Kiểm lại: peer quay về đủ 75.** Tra `control-plane/src/peer-mirror.js`: hàm `provisionEverywhere()`
+  **mirror peer sang MỌI node đang bật** — đó là **THIẾT KẾ**, ghi rõ lý do *"để node nào khách chọn cũng
+  handshake được"* (bài học 15/09: node thiếu SSH key ⇒ peer không được tạo ⇒ khách "Connected" mà mất mạng).
+- ⇒ **2 peer đó KHÔNG phải rác**, chúng hợp lệ và hệ thống tự thêm lại. **Đính chính: việc xoá của tôi là
+  sai hướng** — trạng thái đúng là **75 peer**, không cần dọn gì.
+- **Điểm duy nhất còn thật:** **63 peer của device đã bị xoá khỏi `devices.json`** không được thu hồi.
+  Nhưng `wg0.conf` có **0 `[Peer]`** ⇒ chúng chỉ tồn tại ở runtime và **mất khi reboot**. Muốn sạch lâu dài
+  cần một nhịp **thu hồi (revoke)** cho device đã xoá — việc **thiết kế**, không phải sự cố vận hành.
 
 ### 9.2 App ramp sang TCP relay trực tiếp — ⚠️ Hạ tầng ĐÃ CHỨNG MINH, còn 1 phiên thiết bị
 
