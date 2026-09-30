@@ -1,0 +1,10 @@
+# Rác filesystem / metadata — LUÔN loại bỏ (cả MODE=full)
+# Cú pháp file exclude của rsync. Dòng bắt đầu bằng # là comment.
+._*
+.DS_Store
+.Spotlight-V100/
+.Spotlight-Network/
+.Trashes/
+.fseventsd/
+.TemporaryItems/
+.DocumentRevisions-V100/

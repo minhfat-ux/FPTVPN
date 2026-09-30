@@ -1,0 +1,17 @@
+# Artifact build lại được — chỉ áp dụng ở MODE=code (mặc định).
+# Lý do: exFAT đã làm hỏng symlink/exec bit/hardlink bên trong các thư mục này,
+# và hardlink của pnpm không dùng chung được giữa hai filesystem.
+node_modules/
+.venv/
+venv/
+DerivedData/
+.build/
+Pods/
+.next/
+.turbo/
+.nuxt/
+*.dSYM/
+xcuserdata/
+# Bỏ comment 2 dòng dưới nếu muốn build lại từ đầu (kiểm tra kỹ, có thể chứa deliverable thật):
+# build/
+# dist/
