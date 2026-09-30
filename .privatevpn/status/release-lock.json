@@ -1,19 +1,30 @@
 {
   "_doc": "Khóa kênh phát hành: chủ dự án cho khách test một bản thì KHÔNG phát bản mới cùng kênh. Cổng scripts/check-publish-version.py đọc file này và CHẶN (exit 3) khi định phát bản khác bản đang khóa. Mở khóa = sửa file này (có chủ đích, ghi lý do) hoặc thêm --allow-locked \"<lý do>\".",
-  "updated": "2026-09-26",
+  "updated": "2026-09-30",
   "locks": [
     {
+      "platform": "ios",
+      "version": "1.4.6",
+      "build": "57",
+      "reason": "Chủ dự án 30/09/2026: 'cài lại build 57 trên iPhone, KHÔNG phát hành bản build 58 cho đến khi xong'. Build 58 lỗi state: 1.231 lần 'hysteria connect thất bại: hysteria client already running' ⇒ mọi cửa đều hỏng nhưng network settings VẪN áp (utun 100.100.100.101/30 + DNS 1.1.1.1) ⇒ traffic bị hút vào tunnel rồi chết = KHÁCH MẤT MẠNG HOÀN TOÀN. Bản 58 chỉ nằm trên máy test, khách vẫn nhận 57.",
+      "at": "2026-09-30",
+      "locked_by": "mac"
+    }
+  ],
+  "history": [
+    {
       "platform": "macos",
-      "version": "1.4.7",
-      "build": "28",
-      "sha256": "d83646503476f73bfca2e6a5b06b641f1cbdca534127368e353703174b3d2346",
-      "size": 23798393,
-      "channel": "/v1/downloads/mac",
-      "locked_at": "2026-09-26",
-      "locked_by": "chủ dự án (chốt trong phiên 26/09/2026)",
-      "reason": "Chủ dự án: 'bản macOS tạm thời dùng OK rồi, nên anh nghĩ để khách test đã. Lock bản MacOS lại ở build 28'",
-      "unlock_condition": "Hết kỳ khách test và chủ dự án cho phép; mọi sửa đổi (gồm BUG-MACOS-SESSION-DROP-001) dồn vào build 29",
-      "scope": "Không build/ký/upload DMG macOS mới; không đổi latest_mac_version/minimum_mac_version khỏi 1.4.7"
+      "action": "unlock",
+      "at": "2026-09-29",
+      "reason": "Chủ dự án 29/09/2026: 'giao cho publisher build lại bản mới và publish lên web bản vá mới nhất ngay' — bản vá hết báo Blocking oan; build 30 (cửa đi thẳng) đã bị khoá vì làm mất mạng",
+      "note": "Bản phát mới = build 31 (28 + bản vá Blocking oan). Kênh vẫn 1.4.7."
+    },
+    {
+      "platform": "ios",
+      "action": "lock",
+      "at": "2026-09-30",
+      "reason": "build 58 hỏng state 'hysteria client already running' (1.231 lần) ⇒ tunnel không có transport mà vẫn áp network settings ⇒ mất mạng",
+      "note": "Ghim kênh iOS vào 1.4.6/57 (bản đang phát, chạy tốt). Mở khoá sau khi build 58 sửa xong + nghiệm thu lại."
     }
   ]
 }

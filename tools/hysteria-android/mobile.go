@@ -205,9 +205,16 @@ func Connect(host string, port int, password, obfsPass string, sockFd int, sockT
 
 	mu.Lock()
 	if active != nil {
+		// (vá 30/09/2026) Bản cũ TRẢ LỖI ở đây. Hệ quả: chỉ cần một client cũ còn sót
+		// (xem `Stop()`) là MỌI lần Connect sau đều hỏng ⇒ mọi cửa relay chết ⇒ khách
+		// mất mạng. Nay TỰ DỌN client cũ rồi đi tiếp — biến lỗi vĩnh viễn thành tự cứu.
+		stale := active
+		active = nil
+		activeSrv = nil
 		mu.Unlock()
-		_ = c.Close()
-		return fmt.Errorf("hysteria client already running")
+		_ = stale.Close()
+		fmt.Fprintln(os.Stderr, "Connect: đã dọn client cũ còn sót trước khi nối cửa mới")
+		mu.Lock()
 	}
 	if stopped {
 		mu.Unlock()
@@ -292,12 +299,29 @@ func Serve(fd int, mtu int, tunIpv4, tunIpv6 string) error {
 
 // Stop requests the tunnel to shut down. Safe from any thread; it does not wait
 // for Serve()/Connect() to return.
+//
+// Vì sao phải giải phóng `active` NGAY tại đây (vá 30/09/2026 — lỗi build 58):
+// bản cũ chỉ đặt `stopped` + đóng `stopCh`, còn `active = nil` nằm tận BÊN TRONG
+// đường unwind của `Serve()`. Nếu `Connect()` đã thành công mà `Serve()` không bao
+// giờ chạy hoặc không unwind (phiên bị dừng giữa đường), `active` kẹt VĨNH VIỄN ⇒
+// mọi lần `Connect()` sau đều trả "hysteria client already running" ⇒ MỌI cửa relay
+// đều hỏng, tunnel không có transport — mà network settings đã áp ⇒ khách MẤT MẠNG.
+// Ca thật: iPhone build 58 có 1.231 dòng lỗi này, phiên restart mỗi ~30 giây.
 func Stop() {
 	mu.Lock()
-	defer mu.Unlock()
 	stopped = true
+	stale := active
+	hadServe := stopCh != nil
+	active = nil
+	activeSrv = nil
 	if stopCh != nil {
 		close(stopCh)
 		stopCh = nil
+	}
+	mu.Unlock()
+	// Chỉ tự đóng client khi KHÔNG có `Serve()` nào đang chạy để đóng hộ — tránh
+	// gọi Close() hai lần trên cùng một client (đường `<-ch` của Serve cũng đóng).
+	if stale != nil && !hadServe {
+		_ = stale.Close()
 	}
 }

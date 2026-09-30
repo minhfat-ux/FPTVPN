@@ -110,11 +110,22 @@ enum HysteriaDefaults {
         RelayCandidate(relayURL: "", serverHost: serverHost)
     }
 
-    /// Thử ĐI THẲNG trước (`true`) hay để nó làm ứng viên cuối (`false`).
+    /// Có đưa ứng viên ĐI THẲNG vào danh sách thử không — **MẶC ĐỊNH TẮT**.
     ///
-    /// Mặc định `true` theo chốt của chủ dự án. Trên mạng CHẶN UDP, mỗi lượt thử đường thẳng tốn hết
-    /// `relayOpenGrace` giây trước khi rơi về Cloudflare (đo thật ~5–7 s) — đổi hằng này thành `false`
-    /// nếu ưu tiên vào mạng nhanh hơn là dùng đường thẳng.
+    /// ⚠️ **SỰ CỐ THẬT 28–29/09/2026 (bản dev 30) — MẤT SẠCH MẠNG KHI KHÁCH BẤM CONNECT.**
+    /// Bật cửa đi thẳng lên ĐẦU danh sách làm lượt **dựng lại transport** (đổi node/đổi mạng) gọi
+    /// `MobileConnect` trong lúc client Go của lượt trước CÒN CHẠY ⇒
+    /// `hysteria connect thất bại: hysteria client already running` ⇒ dựng lại thất bại **nhưng tunnel
+    /// vẫn giữ route `0/1`+`128.0/1`** ⇒ toàn bộ traffic bị đen, khách mất mạng hoàn toàn.
+    /// Log thật: `09-29 14:19:13.355 hysteria: cửa đi thẳng 165.101.114.162:8443 hỏng
+    /// (hysteria connect thất bại: hysteria client already running) — thử cửa kế tiếp`.
+    ///
+    /// Chỉ được bật lại (`true`) KHI: (a) `attemptDirect` **dừng hẳn client cũ** trước khi gọi
+    /// `MobileConnect`, (b) đã đo lại trên máy thật cả ca ĐẦU PHIÊN lẫn ca DỰNG LẠI GIỮA PHIÊN.
+    static let enableDirectCandidate = false
+
+    /// Thứ tự: đường thẳng trước (`true`) hay sau cùng (`false`) — chỉ có ý nghĩa khi
+    /// `enableDirectCandidate == true`.
     static let directFirst = true
 
     /// Thứ tự THỬ cửa cho node đang chọn — hàm THUẦN để harness khoá được thứ tự.
@@ -126,7 +137,8 @@ enum HysteriaDefaults {
         primaryRelayURL: String,
         serverHost: String,
         alternates: [RelayCandidate],
-        directFirst: Bool = HysteriaDefaults.directFirst
+        directFirst: Bool = HysteriaDefaults.directFirst,
+        allowDirect: Bool = HysteriaDefaults.enableDirectCandidate
     ) -> [RelayCandidate] {
         var ws: [RelayCandidate] = [RelayCandidate(relayURL: primaryRelayURL, serverHost: serverHost)]
         for candidate in alternates where !candidate.relayURL.isEmpty {
@@ -134,6 +146,7 @@ enum HysteriaDefaults {
                 ws.append(RelayCandidate(relayURL: candidate.relayURL, serverHost: candidate.serverHost))
             }
         }
+        guard allowDirect else { return ws }
         let direct = directCandidate(serverHost: serverHost)
         return directFirst ? [direct] + ws : ws + [direct]
     }

@@ -29,6 +29,25 @@ case "$TARGET" in
   *) echo "usage: $0 [ios|mac] [direct|diawi|adhoc]" >&2; exit 2 ;;
 esac
 
+# ── CỔNG SINH PROJECT (BẮT BUỘC — thêm 30/09/2026) ───────────────────────────────────────
+# Vì sao có cổng này: `project.yml` là NGUỒN SỰ THẬT của số version/build, nhưng script này
+# dựng bằng `PrivateVPN.xcodeproj` ĐÃ SINH SẴN. Ca thật 30/09/2026: đổi
+# `CURRENT_PROJECT_VERSION` 57 → 59 trong `project.yml` rồi chạy script ⇒ IPA vẫn mang số
+# **57** (xcodeproj cũ) và chỉ khác sha256 — tức một bản "57 GIẢ", đúng loại nhầm lẫn đã gây
+# sự cố build 58. Cổng `ios-verify-ipa.sh` bắt được, nhưng phải bắt SỚM HƠN: sinh lại project
+# ngay tại đây. Thiếu `xcodegen` ⇒ DỪNG hẳn, KHÔNG âm thầm dựng bằng project cũ.
+if ! command -v xcodegen >/dev/null 2>&1; then
+  cat >&2 <<'MSG'
+⛔ THIẾU xcodegen — không sinh được project từ project.yml ⇒ DỪNG.
+   Dựng bằng .xcodeproj cũ dễ ra IPA SAI SỐ VERSION (đã xảy ra 30/09/2026: IPA mang số 57
+   trong khi project.yml đã 59 — "bản 57 giả").
+   Cài: brew install xcodegen
+MSG
+  exit 4
+fi
+echo "==> xcodegen generate (áp project.yml → PrivateVPN.xcodeproj)"
+xcodegen generate
+
 # ── CỔNG CREDENTIAL (BẮT BUỘC — chủ dự án chốt 25/09/2026) ───────────────────────────────
 # Vì sao có cổng này: build 33/24-25/09/2026 dựng IPA mà QUÊN `eval "$(bash scripts/dev-hysteria-build-env.sh)"`
 # ⇒ `Info.plist` của app có `HysteriaPassword`/`HysteriaObfs` **RỖNG** ⇒ extension báo
