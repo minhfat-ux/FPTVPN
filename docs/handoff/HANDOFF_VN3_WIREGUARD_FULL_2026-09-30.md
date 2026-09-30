@@ -415,6 +415,12 @@ chuyện riêng của node mới.
 `node-1=10` · `vietnam-2=200` · `vietnam-3=300` (PATCH admin API; backup `data/nodes.db.bak-priority-*`).
 `GET /v1/nodes` công khai nay trả **node-1 đứng đầu**.
 
+**Phạm vi ảnh hưởng — chủ dự án xác nhận 01/10/2026: CHỈ Gemini.** YouTube, Claude, OpenAI và các AI khác
+vẫn **bình thường** qua Flow2/Flow3. Nghĩa là geo sai của Google chỉ chặn **đúng dịch vụ có cổng kiểm tra vùng
+của Google (Gemini)** — không phải chặn internet nói chung, và không phải Google Search/YouTube.
+⇒ Vì chỉ một dịch vụ bị, việc **đổi IP không còn gấp**; ưu tiên đã dồn về node-1 (nơi Gemini chạy) là đủ trong
+lúc chờ nhà cung cấp đổi IP.
+
 ### 10c. Có sửa được định vị của Google không? — **KHÔNG có kênh công khai**
 
 | Nguồn định vị | Flow2 | Flow3 | Flow1 |
