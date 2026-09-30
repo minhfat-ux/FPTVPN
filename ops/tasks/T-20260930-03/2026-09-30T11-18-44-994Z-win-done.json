@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=b0b80ff (origin/flowgpt), file=docs/evidence/T-20260930-03/README.md, cmd=node ops/verify-node1-win.mjs --count 10 (5/5 PASS) + ops/_scratch/T-20260930-03/probe-physical.ps1 (40 mau ep ra card Wi-Fi bang IP_UNICAST_IF), ket qua=node-1 (103.173.155.50) bat tay WireGuard THAT: 10/10 (100%, RTT 139ms) qua duong mac dinh va 39/40 (98%, RTT 113-174ms) tren duong VAT LY tu IP cong khai 63.140.14.154 (node-1 ghi nhan dung endpoint nay); node-2 doi chung 10/10 (RTT 133ms) va 37/40 (92%) => KHONG tai hien duoc 'node 1 khong on dinh'. Server node-1 khoe: uptime 3d23h, load 0.06, wg0 listening 443, ufw inactive, eth0 0 errors/dropped, ra Internet 0% loss. Cong cu do tu dung (ops/lib/wgprobe.mjs) da kiem chung 2 chieu: byte-for-byte voi ban tham chieu Python + kernel WireGuard that tra message type=2. Nguyen nhan goc cua cam giac 'khong on dinh': mat goi UDP cua Wi-Fi/ISP (10-23%, do o T-20260930-01) anh huong MOI node; them nua node-1 reboot 26/09 18:27 va tu do khong khach nao dung WireGuard node-1 (0 byte/4 ngay). Da don sach moi thay doi tam tren node-1/node-2.",
+ "actor": "win",
+ "at": "2026-09-30T11:18:44.994Z"
+}
