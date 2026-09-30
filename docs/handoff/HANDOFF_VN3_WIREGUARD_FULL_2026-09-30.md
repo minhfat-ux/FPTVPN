@@ -237,28 +237,50 @@ Tôi từng đọc `curl --interface en0` trả `000` rồi kết luận "đư�
   Nhưng `wg0.conf` có **0 `[Peer]`** ⇒ chúng chỉ tồn tại ở runtime và **mất khi reboot**. Muốn sạch lâu dài
   cần một nhịp **thu hồi (revoke)** cho device đã xoá — việc **thiết kế**, không phải sự cố vận hành.
 
-### 9.2 App ramp sang TCP relay trực tiếp — ⚠️ Hạ tầng ĐÃ CHỨNG MINH, còn 1 phiên thiết bị
+### 9.2 App ramp sang TCP relay trực tiếp — ✅ ĐÓNG (nghiệm thu thật 01/10/2026 ~00:45)
 
-- **Cơ chế đã chứng minh** (bắt gói tại chỗ trên node-2): gửi 1 frame 22 B qua TCP `127.0.0.1:8443`
-  ⇒ tcpdump bắt `127.0.0.1.57576 > 127.0.0.1.8443: UDP, length 22` ⇒ **hyrelay forward đúng sang hysteria**.
-- **Chưa thiết bị nào ramp:** từ lúc `hyrelay@8443` chạy (23:04) tới nay, `ss` trên node-2 = **0 kết nối
-  TCP 8443** đang mở (ngoài probe của tôi).
-- **Đây là đường CHỈ của Android:** `HY_TCP_RELAY_PORTS = intArrayOf(8443)` (`android/…/Config.kt:161`),
-  host = `runHost` (node đang chọn) hoặc fallback `Config.HY_TCP_RELAY_HOST` (`103.173.155.50`). `iOS/` và
-  `mac/` **không** có mã TCP relay.
-- ⇒ Cần **1 phiên Android** (chủ dự án) để quan sát app có ramp hay không. **Không phải lỗi hạ tầng** —
-  hạ tầng đã sẵn sàng và chạy đúng.
-- 🔎 **Phát hiện phụ (đáng chú ý):** **`node-1` KHÔNG có TCP relay** — `8443/tcp` trên node-1 là `tailscaled`
-  (`100.76.147.111`), không phải `hyrelay`; `9445/tcp` không ai nghe. Vì `HY_TCP_RELAY_HOST` mặc định là
-  `103.173.155.50`, app Android khi **chọn node-1** sẽ thử TCP `103.173.155.50:8443` rồi **thất bại im lặng**.
-  Hiện `vietnam-3` là node **duy nhất** có TCP relay chạy.
+Máy thật: Samsung **SM-F9460** (Galaxy Z Fold5, Android 16), app **`com.privatevpn.app.dev`**, Wi-Fi văn phòng
+TQ (`10.0.3.165`, gw `10.0.3.254`). Node chọn sẵn: **Vietnam 3**. Kết nối qua `adb` wireless.
 
-### 9.3 `hyrelay@9445` + UDP `28443`/`54443` — ✅ XỬ LÝ: **KHÔNG mở** (quyết định có bằng chứng code)
+```text
+00:44:59.430 E/VPNFLOW_DEBUG: hysteria: UP via TCP relay 8443 tun=167
+00:44:59.431 I/VPNFLOW_DIAG : tunnel: UP (hy-tcp:8443)
+00:45:10.340 probe#1 transport=hy-tcp:8443 tunnelUp=true
+00:45:25.727 probe#2 transport=hy-tcp:8443
+00:45:41.125 probe#3 transport=hy-tcp:8443      ← giữ nguyên qua nhiều nhịp
+00:45:10.597 probe: THROUGH TUNNEL http 1.1.1.1:80 ok=HTTP/1.1 301 in 244ms
+00:45:10.717 probe: THROUGH TUNNEL dns 1.1.1.1:53 answers=2 in 118ms
+00:45:02.423 bw: probe 4000000B/1159ms -> 27610kbps qua tunnel
+```
 
-- `HY_TCP_RELAY_PORTS = intArrayOf(8443)` ⇒ app **chỉ** thử TCP `8443`. `android/` **không** tham chiếu
-  `9445`/`28443`/`54443`; `iOS/` chỉ nhắc trong **comment** (ghi lại direct-UDP các cổng đó đã hỏng từ TQ).
-- Cửa **direct UDP đang TẮT mặc định** (`HysteriaDefaults.enableDirectCandidate = false`, sau sự cố 28–29/09).
-- ⇒ Mở thêm 3 cổng là **tăng bề mặt tấn công mà không ai dùng**. Giữ node-2 đúng bằng thứ app cần:
-  **TCP 8443 + UDP 8443 + UDP 443 (WireGuard)**.
-- Muốn mở để **dự phòng** (ví dụ sau này GFW chặn `8443/tcp`) thì chỉ cần nói — 2 phút; nhưng phải coi là
-  "dự phòng chưa dùng", **không phải "thiếu"**.
+ Đối chiếu hạ tầng **cùng lúc**:
+
+```text
+IP công cộng của điện thoại qua tunnel = 103.6.235.39        ← đúng node-2 mới (vietnam-3)
+node-2 : ESTAB [::ffff:103.6.235.39]:8443 [::ffff:120.234.32.53]:48115 users:(("hyrelay",pid=730))
+node-1 : 0 kết nối TCP 8443 (không có TCP relay)
+```
+
+⇒ **Đường TCP relay trực tiếp chạy thật end-to-end**: điện thoại (TQ, qua NAT văn phòng `120.234.32.53`) →
+TCP `103.6.235.39:8443` (**hyrelay**) → hysteria → internet, **egress đúng `103.6.235.39`**, **27,6 Mbps** qua tunnel.
+
+Ghi chú trung thực: watcher tôi tự dựng trên node-2 (`/tmp/tcp8443-watch.log`) báo `tcp8443_est=0` là **SAI** —
+`ss -tn state established` + `awk` của tôi không khớp định dạng; `ss -tnp | grep :8443` mới thấy kết nối.
+Bằng chứng dùng là **`ss -tnp` + IP công cộng**, không dùng watcher đó.
+
+### 9.3 `9445`/`28443`/`54443` → KHÔNG mở; nhưng phát hiện **`9444`** mới là cổng client thật sự thử
+
+- **`9445` / `28443` / `54443`: không mã client nào dùng.** `HY_TCP_RELAY_PORTS = intArrayOf(8443)`;
+  `android/` không nhắc `9445`/`28443`/`54443`; `iOS/` chỉ nhắc trong comment. Direct UDP **tắt mặc định**
+  (`enableDirectCandidate = false`). ⇒ mở thêm là **tăng bề mặt tấn công vô ích**. **Quyết định: không mở.**
+- 🔎 **Nhưng `9444` thì client CÓ thử** — đây là **relay TCP cho WireGuard** (TCP 9444 → UDP 443):
+  `android/…/Config.kt:149 RELAY_PORT = 9444`, `android/…/WGRelay.kt:29`,
+  `iOS/…/WireGuardConfig.swift:125 withRelay(ports: [9444, 8443])`, `iOS/…/WGRelayClient.swift:34 ports = [9444]`.
+  Log máy thật cho thấy app **thật sự probe**: `probe: relay 103.6.235.39:9444 reachable=true in 5ms` (mỗi nhịp).
+- **node-2 mới KHÔNG có `9444`** ⇒ nhánh **WireGuard-qua-TCP-trực-tiếp chưa có** cho `vietnam-3`.
+  (Khách WG vẫn đi được qua relay CF `vn3wg` — đã dựng, `=426`.)
+- ⚠️ **Đừng "mở 8443 cho WG":** trên node-2, **`8443/tcp` đã là `hyrelay` → UDP 8443 (hysteria)**. `iOS` thử
+  `[9444, 8443]` ⇒ nhịp thứ hai sẽ hạ cánh vào **relay hysteria**, **sai đích**. Muốn có relay WG trực tiếp thì
+  phải dựng **`wgrelay` TCP `9444` → UDP `443`** (không phải mở 8443).
+- **Quyết định:** **chưa mở 9444** — đây là *đường lùi* (WG đã có relay CF `vn3wg` chạy tốt). Muốn thêm thì nói,
+  khoảng 3 phút (`wgrelay` + `ufw allow 9444/tcp`).
