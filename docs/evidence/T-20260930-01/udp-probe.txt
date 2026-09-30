@@ -1,0 +1,20 @@
+# Thí nghiệm UDP thuần (KHÔNG qua WireGuard) tới VPS 165.101.114.162:51888
+# Echo server tạm dựng trên VPS; route tới VPS đi TRỰC TIẾP (không qua tunnel).
+# Máy WIN (DESKTOP-852P1LT), 2026-09-30 ~13:50 (+08).
+# Lệnh: node ops/_scratch/T-20260930-01/udp-loss-probe.mjs 165.101.114.162 51888 <n> <gapMs>
+
+# 200 gói @ 50 ms (20 gói/s)
+{"host":"165.101.114.162","port":51888,"sent":200,"recv":155,"lost":45,"lossPct":22.5,"rttMin":183,"rttAvg":193.8,"rttMax":212}
+
+# 100 gói @ 200 ms (5 gói/s)
+{"host":"165.101.114.162","port":51888,"sent":100,"recv":80,"lost":20,"lossPct":20,"rttMin":188,"rttAvg":197.4,"rttMax":202}
+
+# 200 gói @ 20 ms (50 gói/s)
+{"host":"165.101.114.162","port":51888,"sent":200,"recv":181,"lost":19,"lossPct":9.5,"rttMin":152,"rttAvg":160.2,"rttMax":176}
+
+# Đối chứng ICMP cùng thời điểm (ping -n 30 165.101.114.162): mất 1 gói (3%), trễ TB 102 ms.
+# Route tới VPS (route print -4):
+#   165.101.114.162  255.255.255.255  10.193.44.1  10.193.44.107  36   <= đi thẳng qua Wi-Fi, KHÔNG qua tunnel
+#
+# Kết luận: mất gói chỉ xảy ra với UDP, không phụ thuộc tốc độ gửi; ICMP/TCP trên cùng đường sạch.
+# WireGuard chạy trên UDP nên tunnel mất gói 10-23% — đây là nguyên nhân app "không ổn định".

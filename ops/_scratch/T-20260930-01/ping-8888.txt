@@ -1,0 +1,68 @@
+### ping 8.8.8.8 (qua tunnel) x60 @ 2026-09-30T13:41:30.6096802+08:00
+
+Pinging 8.8.8.8 with 32 bytes of data:
+Reply from 8.8.8.8: bytes=32 time=213ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=211ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=214ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=220ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=211ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=221ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=217ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=214ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=212ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=211ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=213ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=205ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=207ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=224ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=214ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=214ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=212ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=207ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=204ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=208ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=204ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=208ms TTL=117
+Request timed out.
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=215ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=216ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=214ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=203ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=203ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=208ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=212ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=215ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=209ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=213ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=202ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=207ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=208ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=211ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=204ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=205ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=201ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=206ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=210ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=208ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=203ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=214ms TTL=117
+Request timed out.
+Reply from 8.8.8.8: bytes=32 time=210ms TTL=117
+Reply from 8.8.8.8: bytes=32 time=216ms TTL=117
+Request timed out.
+
+Ping statistics for 8.8.8.8:
+    Packets: Sent = 60, Received = 46, Lost = 14 (23% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = 201ms, Maximum = 224ms, Average = 210ms
