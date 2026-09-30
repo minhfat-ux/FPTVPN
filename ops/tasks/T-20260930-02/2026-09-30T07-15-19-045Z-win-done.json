@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "file=docs/evidence/T-20260930-02/README.md (+ verify-windows.txt, verify-node2.txt, ua-vs-fingerprint.txt, probe-windows.txt) + ops/verify-claude-gemini-vpn.mjs; cmd=node ops/verify-claude-gemini-vpn.mjs chay o CA HAI vantage: may Windows dang bat VPN (qua tunnel) VA node-2 truc tiep; ket qua=5/5 PASS exit 0 ca hai: claude.ai/login=200 title Claude, api.anthropic.com=401 (toi duoc Anthropic, chi sai khoa; 403 moi la chan), gemini.google.com=200 lang=vi title Google Gemini, generativelanguage=400 API_KEY_INVALID (toi duoc Google), IP 165.101.114.162 = Vietnam/VNPT proxy=false hosting=false, Cloudflare loc=VN, Vietnam CO trong danh sach Anthropic ho tro => KET LUAN: duong ham VPN KHONG chan Claude/Gemini. Nghi pham chinh phia khach: (1) ban app cu 1.4.5 dinh loi DNS da biet (may test dang cai 1.4.5; ban phat hanh Windows/macOS 1.4.7, iOS 1.4.6, Android 1.4.4); (2) client khong phai trinh duyet bi Cloudflare chan theo fingerprint TLS (cung IP: curl=403, node:https=200 tren claude.ai — Gemini khong dinh, curl=200); (3) chan o tang tai khoan. Da tach 2 artifact de khong ket luan oan: undici UND_ERR_HEADERS_OVERFLOW (header gemini 28.657 byte > 16KB) va curl 403. Khong tat/khong doi cau hinh VPN cua chu du an.",
+ "actor": "win",
+ "at": "2026-09-30T07:15:19.046Z"
+}
