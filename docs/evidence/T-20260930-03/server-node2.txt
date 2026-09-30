@@ -1,0 +1,45 @@
+### fcnvps2 — 2026-09-30T18:16:41+07:00
+--- uptime/load ---
+ 18:16:41 up 21 days,  6:15,  6 users,  load average: 0.32, 0.36, 0.44
+0.32 0.36 0.44
+--- wg0 (interface + peer thiet bi Windows) ---
+interface: wg0
+  public key: OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=
+  private key: (hidden)
+  listening port: 443
+
+peer: 57M1tFEiOuTI+DQv34+HbzjwntuFi1Wy1O21Mgue6U4=
+--- peer 57M1tFEi (thiet bi Windows) ---
+peer: 57M1tFEiOuTI+DQv34+HbzjwntuFi1Wy1O21Mgue6U4=
+  endpoint: 63.140.14.154:52216
+  allowed ips: 10.77.0.57/32
+  latest handshake: 32 seconds ago
+  transfer: 2.55 GiB received, 6.69 GiB sent
+--- so peer ---
+75
+--- so peer co ban tay trong 10 phut ---
+1
+--- counters wg0 (rx_packets tx_packets rx_bytes tx_bytes) ---
+12653060
+16598485
+6469995516
+17187415596
+--- firewall ---
+Status: inactive
+--- eth0 errors/dropped ---
+    200012211943 199747985      0       0       0       0 
+    TX:    bytes   packets errors dropped carrier collsns           
+    215460727458 158663453      0       0       0       0 
+    altname enp3s0
+--- dich vu lien quan ---
+fbuddy.service              loaded active running fBuddy — AI chatbox (chat, sửa ảnh
+hysteria.service            loaded active running Hysteria2 server (UDP 8443) cho khach Tr
+librey-tunnel.service       loaded active running LibreY tunnel (node-2 -> node-1:8899) ch
+relay-cf-vn1hy.service      loaded active running WS relay qua Cloudflare: hysteria node-1
+relay-cf-vn1wg.service      loaded active running WS relay qua Cloudflare: WG node-1
+relay-cf-vn2hy.service      loaded active running WS relay qua Cloudflare: hysteria node-2
+relay-cf-vn2wg.service      loaded active running WS relay qua Cloudflare: WG node-2 (exit
+wgrelay-wg.service          loaded active running VPNFlow WG UDP relay (TCP 9444 -> UDP 44
+--- hysteria WARN 1 gio ---
+12
+--- hysteria: top dich loi 1 gio ---

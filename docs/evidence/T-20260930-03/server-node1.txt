@@ -1,0 +1,47 @@
+### fcnvpn — 2026-09-30T18:16:39+07:00
+--- uptime/load ---
+ 18:16:39 up 3 days, 23:49,  3 users,  load average: 0.06, 0.10, 0.12
+0.06 0.10 0.12
+--- wg0 (interface + peer thiet bi Windows) ---
+interface: wg0
+  public key: N0vGtqZ2SARCXkvVUU/KfAZMvfwszkvF/ROLL4DLIQ8=
+  private key: (hidden)
+  listening port: 443
+
+peer: hPuZYfu/lvnaSkGcO61Ks99rqVIdrL/ilOjw3+ip5BQ=
+--- peer 57M1tFEi (thiet bi Windows) ---
+peer: 57M1tFEiOuTI+DQv34+HbzjwntuFi1Wy1O21Mgue6U4=
+  endpoint: 63.140.14.154:60869
+  allowed ips: 10.77.0.57/32
+  transfer: 17.92 KiB received, 11.14 KiB sent
+
+--- so peer ---
+75
+--- so peer co ban tay trong 10 phut ---
+0
+--- counters wg0 (rx_packets tx_packets rx_bytes tx_bytes) ---
+320
+142
+26512
+13424
+--- firewall ---
+Status: inactive
+--- eth0 errors/dropped ---
+    34224537425 32056324      0       0       0       0 
+    TX:   bytes  packets errors dropped carrier collsns           
+    30697942541 33061327      0       0       0       0 
+    altname enp3s0
+--- dich vu lien quan ---
+hysteria.service            loaded active running Hysteria2 server (UDP 8443) cho khach Tr
+meetflow-backend.service    loaded active running MeetFlow AI Backend (Node/Express)
+wgrelay.service             loaded active running WG TCP relay daemon
+wsrelay-hy.service          loaded active running WS relay cho Hysteria (WebSocket -> UDP 
+wsrelay-vn2.service         loaded active running WS relay -> UDP 443 cua node-2 (duong du
+wsrelay-vn2hy.service       loaded active running WS relay -> UDP 443 cua node-2 (duong du
+wsrelay.service             loaded active running WS relay (WebSocket -> UDP) cho đườn
+--- hysteria WARN 1 gio ---
+435
+--- hysteria: top dich loi 1 gio ---
+    228 43.159.94.130:443
+      4 52.123.128.14:443
+      4 40.126.35.64:443

@@ -1,0 +1,4 @@
+vn1hy = HTTP 426
+vn2hy = HTTP 426
+vn1wg = HTTP 426
+vn2wg = HTTP 426

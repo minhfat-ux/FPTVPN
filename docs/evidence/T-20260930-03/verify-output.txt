@@ -1,0 +1,11 @@
+PASS  control plane có node-1 (tên hiển thị "1") — endpoint=103.173.155.50:443
+PASS  node-1: wg0 sống và đang nghe UDP 443 — up 3 days, 23 hours, 48 minutes · load 0.14 0.12 0.13 · 75 peer · bắt tay/10 phút = 0 · firewall: Status: inactive
+PASS  node-2: wg0 sống và đang nghe UDP 443 — up 3 weeks, 6 hours, 14 minutes · load 0.28 0.37 0.44 · 75 peer · bắt tay/10 phút = 1 · firewall: Status: inactive
+INFO  khoá thiết bị: 57M1tFEiOuTI+DQv34+HbzjwntuFi1Wy1O21Mgue6U4= (đọc từ C:\Users\Minhn\AppData\Roaming\VPNFlow\device.json)
+INFO    node-1: 10/10 bắt tay thành công (100%), RTT trung bình 139 ms
+PASS  node-1: bắt tay WireGuard thật từ máy này — 10/10 thành công (100%)
+INFO    node-2: 10/10 bắt tay thành công (100%), RTT trung bình 133 ms
+PASS  node-2: bắt tay WireGuard thật từ máy này — 10/10 thành công (100%)
+
+KẾT LUẬN: 5/5 mục PASS.
+node-1 (máy chủ "1") SỐNG và bắt tay được TỪ CHÍNH MÁY NÀY ⇒ không tái hiện được lỗi "node 1 không ổn định".

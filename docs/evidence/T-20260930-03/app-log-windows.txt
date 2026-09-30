@@ -1,0 +1,61 @@
+### Bang chung tu log cua chinh app VPNFlow tren may Windows (DESKTOP-852P1LT)
+### Lay luc: 2026-09-30T19:16:49.5963943+08:00
+
+--- 1) Phien 2026-09-18 18:33 app chon node-1 (103.173.155.50) va udp-direct THAT BAI ---
+2026-09-18 18:33:02.313 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - UAPI: Created
+2026-09-18 18:33:02.313 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - UAPI: Updating endpoint
+2026-09-18 18:33:02.313 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - UAPI: Updating persistent keepalive interval
+2026-09-18 18:33:02.313 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - UAPI: Removing all allowedips
+2026-09-18 18:33:02.313 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - UAPI: Adding allowedip
+2026-09-18 18:33:02.313 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - Starting
+2026-09-18 18:33:02.314 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - Sending keepalive packet
+2026-09-18 18:33:02.314 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - Sending handshake initiation
+2026-09-18 18:33:02.314 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - Routine: sequential receiver - started
+2026-09-18 18:33:02.314 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:02 peer(N0vGâ€¦LIQ8) - Routine: sequential sender - started
+2026-09-18 18:33:02.362 [INFO ] wireguard-go[stderr]: 2026/09/18 18:33:02 Removed orphaned adapter "vpnflow 1"
+2026-09-18 18:33:03.270 [INFO ] wintun: đã thêm route loại trừ 103.173.155.50/32 qua 10.193.44.1 (Wi-Fi)
+2026-09-18 18:33:04.418 [INFO ] wintun: đã chặn IPv6 (::/1 + 8000::/1 qua tunnel) — tránh rò IP thật qua IPv6
+2026-09-18 18:33:04.418 [INFO ] wintun: tunnel 'vpnflow' đã lên (userspace wireguard-go + wintun, không cần cài WireGuard).
+2026-09-18 18:33:07.572 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:07 peer(N0vGâ€¦LIQ8) - Sending handshake initiation
+2026-09-18 18:33:12.576 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:12 peer(N0vGâ€¦LIQ8) - Sending handshake initiation
+2026-09-18 18:33:17.852 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:17 peer(N0vGâ€¦LIQ8) - Handshake did not complete after 5 seconds, retrying (try 2)
+2026-09-18 18:33:17.852 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:17 peer(N0vGâ€¦LIQ8) - Sending handshake initiation
+2026-09-18 18:33:22.883 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:22 peer(N0vGâ€¦LIQ8) - Handshake did not complete after 5 seconds, retrying (try 2)
+2026-09-18 18:33:22.884 [INFO ] wireguard-go[stdout]: DEBUG: (vpnflow) 2026/09/18 18:33:22 peer(N0vGâ€¦LIQ8) - Sending handshake initiation
+2026-09-18 18:33:24.617 [WARN ] connect: udp-direct không truyền được dữ liệu sau 20s — gỡ tunnel để trả mạng về đường trực tiếp.
+2026-09-18 18:33:25.511 [INFO ] wintun: đã gỡ chặn IPv6.
+
+--- 2) 2026-09-22 12:03 app chon node=node-1, di duong relay hysteria (vn1hy) va LEN duoc ---
+2026-09-22 12:03:55.863 [INFO ] connect: bắt đầu (node=node-1, transport=Auto)
+2026-09-22 12:03:56.259 [INFO ] connect: đã claim bản cài cho tài khoản
+2026-09-22 12:03:56.370 [INFO ] connect: đã xin join token
+2026-09-22 12:03:57.789 [INFO ] connect: register xong (overlay=10.77.0.57)
+2026-09-22 12:03:57.885 [INFO ] relay: đã ghi cấu hình (C:\Users\Minhn\AppData\Roaming\VPNFlow\hysteria-relay\flowvpnrelay.json) — server=103.173.155.50:8443 relay=wss://api.meetflowai.site/relay/vn1hy socks=127.0.0.1:64127 clash=127.0.0.1:64128
+2026-09-22 12:03:59.078 [INFO ] flowvpnrelay.exe[stderr]: [flowvpnrelay] Ä‘Ã£ ná»‘i 103.173.155.50:8443 qua wsrelay trong 1.146s (tx=0 udp=true ech=false)
+2026-09-22 12:03:59.079 [INFO ] flowvpnrelay.exe[stderr]: [flowvpnrelay] READY transport=wsrelay server=103.173.155.50:8443 socks5=127.0.0.1:64127
+2026-09-22 12:03:59.083 [INFO ] relay: đường hysteria2-over-WS đã lên — relay=wss://api.meetflowai.site/relay/vn1hy (socks=127.0.0.1:64127)
+2026-09-22 12:03:59.084 [INFO ] relay-watchdog: đã bật (clash_api=127.0.0.1:64128); không byte mới 60s + thử qua tunnel thất bại 3 lần ⇒ dựng lại đường relay
+2026-09-22 12:03:59.084 [INFO ] connect: tunnel đã lên (overlay=10.77.0.57)
+2026-09-22 12:03:59.084 [INFO ] connect: transport đang dùng: singbox-hy-relay (relay=wss://api.meetflowai.site/relay/vn1hy) — KHÔNG đi qua WireGuard
+2026-09-22 12:28:55.850 [WARN ] wintun: taskkill.exe /F /IM wireguard-go.exe trả exit 128 (bỏ qua): ERROR: The process "wireguard-go.exe" not found.
+
+--- 3) Trang thai hien tai ---
+settings: {
+  "Transport": "Auto",
+  "AutoConnectOnLaunch": false,
+  "SelectedNodeId": "vietnam-2"
+}
+vpnflow.conf:
+[Interface]
+PrivateKey = GKLYZ8xgPZbhhcffWVLCoJ+bFu8Yo6ttRVbMf5QC7UU=
+Address = 10.77.0.57/24
+DNS = 1.1.1.1
+MTU = 1420
+
+[Peer]
+PublicKey = OJPfJLblLP2KCQkPdqI1B7WHJT/U4BlzSxUTwh6vZ2c=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 165.101.114.162:443
+PersistentKeepalive = 25
+so lan 'Handshake did not complete' trong vpnflow.log.1 = 102
+so lan 'Handshake did not complete' trong vpnflow.log   = 45
