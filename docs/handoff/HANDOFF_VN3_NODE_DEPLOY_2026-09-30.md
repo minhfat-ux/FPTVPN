@@ -343,3 +343,32 @@ Backup:               /root/ssh-hardening-backup-20260930-225717/ (sshd_config +
    và khách đi `vn3hy`/`vn3wg` chết im lặng. Đề xuất: thêm probe UDP từ relay-server → `103.6.235.39:8443`
    và `:443`, báo Telegram nếu chết. **(Chưa làm vì phiên Team Leader khác đang sửa cùng file watchdog.)**
 3. `fail2ban` đang dùng mặc định (ban 10 phút/5 lần) — yếu hơn autoban của dự án (20 lần/giờ → 24h, tái phạm → vĩnh viễn).
+
+### Reboot cập nhật kernel node-2 mới (30/09/2026 ~23:05) — XONG, rớt ~100 s
+
+Chủ dự án duyệt reboot (ngân sách rớt mạng tối đa 15 phút).
+
+**Sửa trước khi reboot — một rủi ro thật đã bắt được:** `/etc/sysctl.d/99-dataonline-hardening.conf`
+đặt `net.ipv4.ip_forward = 0`, còn `/etc/sysctl.d/99-wireguard-forward.conf` đặt `= 1`. Hiện `=1` thắng
+(đọc sau), nhưng để **deterministic** đã sửa file hardening thành `= 1` ⇒ **mọi file đồng thuận**.
+Nếu không sửa và thứ tự đọc đổi, **khách WireGuard mất mạng hoàn toàn sau reboot** (không forward được).
+
+**Kiểm tra sống-lại TRƯỚC khi reboot** (đều `enabled`): `hysteria@8443`, `hyrelay@8443`, `wg-quick@wg0`,
+`ufw`, `fail2ban`, `flowvpn-autoban.timer`.
+
+```text
+Sự cố giữa đường: phiên SSH đứt khi dist-upgrade nâng openssh-server (postinst restart sshd).
+  ⇒ apt-get VẪN chạy tiếp (pid 18058), `dpkg --audit` SẠCH ⇒ không hỏng giao dịch.
+Kernel: 6.8.0-139 → 6.8.0-142-generic (đã cài, cần reboot)
+Reboot: systemctl reboot lúc ~23:05 → node lên lại sau ~100 s
+sau reboot:
+  uptime 1 phút · kernel 6.8.0-142-generic
+  hysteria@8443 active · hyrelay@8443 active · wg-quick@wg0 active
+  ufw active · fail2ban active · flowvpn-autoban.timer active
+  ip_forward = 1  · wg0 up · NAT MASQUERADE = 1   ← khách WireGuard vẫn có mạng
+  listener: udp 8443 · tcp 8443 · udp 443
+  sshd vẫn siết: passwordauthentication no · permitrootlogin without-password
+  6/6 relay = 426 · CP {"status":"ok"} · tunnel máy Mac vẫn ổn
+```
+
+Còn lại: 1 gói `thermald` (không phải security) — cập nhật lúc rảnh.
