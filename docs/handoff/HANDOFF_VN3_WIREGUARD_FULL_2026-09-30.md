@@ -415,6 +415,14 @@ chuyện riêng của node mới.
 `node-1=10` · `vietnam-2=200` · `vietnam-3=300` (PATCH admin API; backup `data/nodes.db.bak-priority-*`).
 `GET /v1/nodes` công khai nay trả **node-1 đứng đầu**.
 
+**Mức độ — chủ dự án chốt 01/10/2026: LOW PRIORITY** (chỉ một dịch vụ; không phải sự cố kết nối).
+
+**Đối chiếu lại khi chủ dự án nói "Flow2 đã đổi IP rồi":** `exit_nodes` **vẫn** là
+`vietnam-2 → 165.101.114.162`, và **egress thực tế của chính máy đó cũng là `165.101.114.162`** (khớp nhau);
+test lại từ máy đó vẫn ra `google.com.hk`. ⇒ Nếu nhà cung cấp đã đổi IP thì **bản mới CHƯA được cấu hình vào hệ
+thống**. Khi có IP mới phải cập nhật: `endpoint` của `vietnam-2` **và** `WS_UDP_HOST` trong `relay-cf-vn2hy`
++ `relay-cf-vn2wg` (relay trỏ thẳng IP node), rồi test lại bằng phép thử 1 dòng.
+
 **Phạm vi ảnh hưởng — chủ dự án xác nhận 01/10/2026: CHỈ Gemini.** YouTube, Claude, OpenAI và các AI khác
 vẫn **bình thường** qua Flow2/Flow3. Nghĩa là geo sai của Google chỉ chặn **đúng dịch vụ có cổng kiểm tra vùng
 của Google (Gemini)** — không phải chặn internet nói chung, và không phải Google Search/YouTube.
