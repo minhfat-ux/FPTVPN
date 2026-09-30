@@ -281,23 +281,39 @@ vì timer `enabled` chính là thứ giữ watchdog sống qua reboot.
 ## 6b. `flowvpn-node-watch` — kiểm SỐNG-CÒN của chính các exit node (thêm 30/09/2026)
 
 **Vì sao cần:** `flowvpn-health-watch` (§6) chỉ kiểm **tiến trình relay trên máy này** (có listen +
-trả `426`). Nó **KHÔNG** kiểm `hysteria` bên trong node ⇒ hysteria của node chết thì relay vẫn `426`
-và khách đi đường đó **chết im lặng**. Watchdog này bịt đúng lỗ đó.
+trả `426`). Nó **KHÔNG** kiểm dịch vụ bên trong node ⇒ node chết thì relay vẫn báo `426` và khách
+đi đường đó **chết im lặng**. Watchdog này bịt đúng lỗ đó bằng **3 lớp kiểm độc lập**.
+
+| Lớp | Kiểm gì | Cách kiểm |
+|---|---|---|
+| 1. hysteria | node còn bắt tay + chở được traffic | chạy **hysteria client THẬT** tới `node:8443`, rồi lấy `https://api64.ipify.org` qua SOCKS5 ⇒ **egress phải đúng IP của node** |
+| 2. WireGuard | `wg0` của node-2 mới còn sống | interface `wgprobe` trên relay-server (`10.77.1.250/32`, subnet RIÊNG `10.77.1.0/24`, `Table = off`), keepalive **25 s** tới `103.6.235.39:443` ⇒ đọc `latest-handshakes`, cũ quá **180 s** = chết |
+| 3. dịch vụ node | unit trên node còn `active` | SSH bằng `/root/.ssh/id_ed25519` (đã cấp khoá 30/09/2026) hỏi `systemctl is-active hysteria@8443 hyrelay@8443 wg-quick@wg0` |
 
 | Thành phần | Giá trị |
 |---|---|
 | Script | `/usr/local/bin/flowvpn-node-watch` |
 | Service / Timer | `flowvpn-node-watch.service` / `.timer` (`OnBootSec=180`, `OnUnitActiveSec=300`, **enabled**) |
-| Log | `/var/log/flowvpn-node-watch.log` |
-| Trạng thái | `/var/lib/flowvpn-node-watch/<ip>.fail` (đếm số lần hỏng liên tiếp) |
-| Cách kiểm | chạy **hysteria client THẬT** tới `node:8443` (bắt tay) rồi lấy `https://api64.ipify.org` qua SOCKS5 ⇒ **egress phải đúng IP của node** |
-| Chống rung | hỏng lần 1 = `WARN` (chưa báo); **hỏng 2 lần liên tiếp** mới Telegram `🔴 NODE CHẾT`; sống lại báo `✅ RECOVERED` |
-| Nguyên tắc | **CHỈ ĐỌC + CHỈ BÁO** — không bao giờ `stop`/`restart` dịch vụ |
+| Log / Trạng thái | `/var/log/flowvpn-node-watch.log` · `/var/lib/flowvpn-node-watch/<khoá>.fail` |
+| Chống rung | hỏng lần 1 = `WARN` (im); **2 lần liên tiếp** mới Telegram `🔴 NODE WATCH`; sống lại báo `✅ RECOVERED` |
+| Nguyên tắc | **CHỈ ĐỌC + CHỈ BÁO** — không bao giờ `stop`/`restart` |
 
-Credential đọc từ chính `/etc/hysteria-server.yaml` của relay-server (không in ra, không vào argv).
-Đo thật 30/09/2026: chạy hết **7,8 s**, log `OK: mọi node sống` với `node-1 egress=103.173.155.50`
-và `node-2 mới egress=103.6.235.39`. Phép thử âm (trỏ vào cổng đóng): lần 1 `WARN`, lần 2 `FAIL` +
-nhánh Telegram — state của node thật không bị đụng.
+**⚠️ KHÔNG được xoá `[Peer]` có chú thích "Probe song-con cua relay-server" trong
+`/etc/wireguard/wg0.conf` của node-2 mới** — đó là peer của lớp 2. Nó được gia nhập **runtime**
+(`wg set`, không restart) nên khách không rớt.
+
+Đo thật 30/09/2026 (4,7 s mỗi lần chạy):
+
+```text
+OK node-1 (103.173.155.50:8443)      — bắt tay OK, egress=103.173.155.50
+OK node-2 moi (103.6.235.39:8443)    — bắt tay OK, egress=103.6.235.39
+OK WireGuard probe (wgprobe -> node-2) — handshake 43s trước
+OK Dịch vụ node-2 (root@103.6.235.39)  — hysteria@8443=active hyrelay@8443=active wg-quick@wg0=active
+```
+
+Phép thử âm cho cả 2 lớp mới (interface WG sai + SSH sai): lần 1 `WARN`, lần 2 `FAIL` —
+state của node thật không bị đụng.
+
 ## 7. Guard cho người/agent test
 
 ### 7.1. `flowvpn-safe-stop <unit> [giây=40] [--force]`
