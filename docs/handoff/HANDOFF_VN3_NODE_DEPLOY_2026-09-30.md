@@ -298,3 +298,48 @@ cần **thiết bị Android của chủ dự án** (USB debugging bật) để 
 **Mở treo bằng một trong hai cách:**
 1. Chủ dự án chạy phép nghiệm thu có kiểm soát (5 phút, hướng dẫn ở mục "Next Recommended Step"), hoặc
 2. Chủ dự án xác nhận dùng **bằng chứng đời thực ở trên** (9 phiên, 72 MB, `drop=0`) thay cho phép đo có kiểm soát.
+
+---
+
+## Bảo mật node-2 mới (30/09/2026, chủ dự án yêu cầu) — ĐÃ SIẾT + KIỂM CHỨNG
+
+### Audit: node-2 mới thiếu đúng thứ đã gây sự cố 26/09
+
+| Hạng mục | Trước | Sau | Chuẩn `relay-server` |
+|---|---|---|---|
+| `PasswordAuthentication` | **`yes`** 🔴 | `no` | `no` |
+| `PermitRootLogin` | **`yes`** 🔴 | `prohibit-password` | `without-password` |
+| Mật khẩu `root` | **có** (`passwd -S` = `P`) 🔴 | **khoá** (`L`) | — |
+| `MaxAuthTries` | `6` | `3` | `3` |
+| `MaxStartups` | chưa đặt (`10:30:100`) | `10:30:60` | `10:30:60` |
+| `flowvpn-autoban` (defender dự án) | **không có** 🟠 | timer `active/enabled` | có |
+| Gói security chờ vá | **36** (48 tổng) | **3** (kernel) | — |
+| `fail2ban` | có, jail `sshd` (6 IP đang ban) | giữ nguyên | — |
+| `ufw` | active, deny incoming | giữ nguyên | active |
+
+**Vì sao `PasswordAuthentication` khó sửa:** Ubuntu 24.04 có `Include /etc/ssh/sshd_config.d/*.conf` ở **dòng 12**, và sshd lấy **giá trị ĐẦU TIÊN**. Hai file của nhà cung cấp (`00-dataonline.conf`, `50-cloud-init.conf`) đặt `yes` và **đè** drop-in mới. Cách xử: tạo `000-flowvpn-hardening.conf` **+** sửa cả 2 file nhà cung cấp **+** sửa `sshd_config` dòng 42 ⇒ mọi file **đồng thuận**, đúng dưới mọi thứ tự đọc.
+
+### Bằng chứng kiểm chứng
+
+```text
+sshd -T sau khi reload:
+  passwordauthentication no · permitrootlogin without-password · maxauthtries 3 · maxstartups 10:30:60
+
+Phiên SSH MỚI bằng khoá (không chỉ phiên đang mở):  NEW_SESSION_OK / root / node-2
+Mật khẩu bị TỪ CHỐI:  root@103.6.235.39: Permission denied (publickey).
+Mật khẩu root:        passwd -S root → root L  (locked)
+autoban:              timer=active/enabled · chạy thử exit=0
+Vá gói:               48 → 4 gói (36 → 3 security) · needrestart chế độ "chỉ liệt kê" ⇒ KHÔNG dịch vụ nào bị restart
+Không hồi quy khách:  hysteria@8443 active · hyrelay@8443 active · wg0 listen 443 · 6/6 relay = 426 · watchdog OK
+Backup:               /root/ssh-hardening-backup-20260930-225717/ (sshd_config + sshd_config.d)
+```
+
+### Còn lại (đề xuất, chưa làm)
+
+1. **3 gói kernel** (`linux-image/headers-generic 6.8.0-142`, held vì cần `dist-upgrade`) ⇒ **cần REBOOT**.
+   Reboot sẽ **rớt mọi khách** đang đi `vn3hy`/`vn3wg` ⇒ **chờ chủ dự án chốt thời điểm**.
+2. **Không có giám sát sống-còn cho chính node-2**: `flowvpn-health-watch` chỉ kiểm **tiến trình relay**
+   trên relay-server, **không** kiểm `hysteria`/`wg0` bên trong node-2.⇒ hysteria chết thì relay vẫn `426`
+   và khách đi `vn3hy`/`vn3wg` chết im lặng. Đề xuất: thêm probe UDP từ relay-server → `103.6.235.39:8443`
+   và `:443`, báo Telegram nếu chết. **(Chưa làm vì phiên Team Leader khác đang sửa cùng file watchdog.)**
+3. `fail2ban` đang dùng mặc định (ban 10 phút/5 lần) — yếu hơn autoban của dự án (20 lần/giờ → 24h, tái phạm → vĩnh viễn).
