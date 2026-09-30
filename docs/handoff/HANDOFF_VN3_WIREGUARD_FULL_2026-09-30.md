@@ -323,3 +323,29 @@ trên **node-1 (node đông khách nhất)** cổng đó **không có gì** (ch�
 đường trực tiếp tới node-1 **thất bại im lặng**. Đây là **bất đối xứng lớn hơn** việc thiếu `9444` ở vietnam-3.
 Đề xuất: dựng `hyrelay` TCP `8443` → UDP `8443` trên node-1 (cùng cách đã làm ở vietnam-3).
 **Chưa làm** vì node-1 nằm ngoài phạm vi `claim` của phiên này — cần chủ dự án giao.
+
+### 9.5 node-1 — ĐÃ BỔ SUNG relay hysteria `8443` (chủ dự án giao, 01/10/2026 ~00:52)
+
+**Bất đối xứng đã đóng.** Trước đây `node-1` **không có** listener TCP `8443`, mà `HY_TCP_RELAY_HOST` mặc định
+= `103.173.155.50` và app thử `node:8443` như **nhịp TCP trực tiếp ĐẦU TIÊN** ⇒ mọi nhịp thử tới node-1
+**thất bại im lặng**.
+
+**Đã làm (thuần thêm, không restart gì):**
+- Copy binary `hyrelay` từ node-2 (sha256 `ab328e01…`, **khớp `tools/node-setup/bin/hyrelay-linux-amd64`**).
+- Cài `hyrelay@.service` + drop-in `hyrelay@8443`.
+- ⚠️ **Vấp thật:** bind `:8443` **thất bại** — `tailscaled` trên node-1 đã giữ `100.76.147.111:8443` và
+  `[fd7a:…]:8443` ⇒ `listen tcp :8443: bind: address already in use`. **Sửa:** bind **đúng IP công cộng**
+  `-listen 103.173.155.50:8443` ⇒ `active`. **KHÔNG đụng `tailscaled`** (đó là đường cứu hộ break-glass).
+- `ufw` trên node-1 **inactive**, `iptables -P INPUT ACCEPT` ⇒ **không cần rule**.
+
+```text
+hyrelay@8443 = active/enabled · LISTEN 103.173.155.50:8443 (tailscaled giữ nguyên)
+Chứng minh forward: 127.0.0.1.17242 > 127.0.0.1.8443: UDP, length 22
+Từ relay-server: nc -z 103.173.155.50 8443 → succeeded
+Nghiệm thu MÁY THẬT (điện thoại, chọn node-1):
+    IP công cộng qua tunnel = 103.173.155.50
+    E/VPNFLOW_DEBUG(31013): hysteria: UP via TCP relay 8443 tun=158
+    node-1: ESTAB 103.173.155.50:8443 120.234.32.53:46627 users:(("hyrelay",pid=1284983))
+Khách không hồi quy: 6/6 relay = 426 · node-1 hysteria + wgrelay vẫn active
+node-watch lớp 3 nay kiểm 2 node (node-2 mới: 4 unit · node-1: hysteria/hyrelay@8443/wgrelay) — đều active
+```
