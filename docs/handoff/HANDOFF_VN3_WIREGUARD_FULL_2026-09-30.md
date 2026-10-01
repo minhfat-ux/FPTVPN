@@ -520,3 +520,65 @@ phụ thuộc vùng. ⇒ **Từ 01/10/2026 đây là quyết định CÓ CHỦ �
   thì **giữ nguyên** (không bị đổi khi priority thay đổi) — đây là lý do thao tác này an toàn.
 - **Hệ quả cho mục tiêu "thêm node mới":** muốn khách mới vào thẳng Flow3 chỉ cần hạ `priority` của
   `vietnam-3` xuống thấp nhất — **không cần build/phát hành app**.
+
+## 11. FPT PLAY TRÊN FLOW3 — điều tra 01/10/2026 (**CHƯA tái hiện được lỗi, chưa chốt nguyên nhân**)
+
+**Chủ dự án báo:** node Flow3 (`103.6.235.39`) không vào được FPT Play; nghi IP bị nhận sai là Hong Kong.
+
+### 11a. Số đo thật — **chỉ Google nói HK**
+
+| Nguồn định vị | Flow1 `103.173.155.50` | Flow3 `103.6.235.39` |
+|---|---|---|
+| ipinfo.io | VN (Hanoi) | VN (Hanoi) |
+| ip-api.com | VN · AS135905 · hosting=false | VN · AS152992/BAOVECAS · hosting=false · proxy=false |
+| ipwho.is | VN | VN |
+| ipapi.is | VN | VN (HASAKI VIETNAM SECURITY SERVICES) |
+| iplocation.net | — | Viet Nam |
+| db-ip.com | — | VN |
+| Cloudflare `loc=` | **VN** (`colo=HKG`) | **VN** (`colo=HKG`) |
+| **Google** (`google.com` redirect) | **rỗng ⇒ VN** ✅ | 🔴 **`google.com.hk` ⇒ HK** |
+| `fptplay.vn/` | http=200 · **59049 byte** | http=200 · **59049 byte** (giống hệt) |
+
+⇒ "Bị nhận sai là Hong Kong" **chỉ đúng với DB của Google**; **6 DB độc lập + Cloudflare đều nói VN**.
+⚠️ `colo=HKG` **không phải** định vị quốc gia — **Flow1 cũng `colo=HKG`** mà Google vẫn VN; đừng dùng nó làm bằng chứng.
+⚠️ `ipinfo` trả `timezone=Asia/Bangkok` cho **cả hai** node ⇒ trường này vô dụng để phân biệt.
+
+### 11b. **Chưa tái hiện được lỗi** — không được kết luận vội
+
+Trang chủ `fptplay.vn` trả **giống hệt nhau** (200 / 59049 byte) từ Flow1 và Flow3 ⇒ cổng chặn (nếu có) nằm ở tầng
+**API/DRM**, chưa xác định. 6 đường API đoán (`api.fptplay.net/api/v6.0|v7.3_v2/...`, `fptplay.vn/api/geo`, …) đều **404**.
+⇒ Từ phía server **không chứng minh được** FPT Play chặn vì IP.
+- `docs/EXIT_NODE_IP_GUIDE.md` §36 đã ghi đúng: phải test **bằng account thật** (FPT Play chống VPN/datacenter);
+  §15 (test bằng "trang chủ trả 200") là **test YẾU — nay đã chứng minh không phân biệt được gì**.
+- **Phép thử quyết định còn thiếu:** FPT Play **bằng account thật** trên **Flow1 (đối chứng)** vs **Flow3**, cùng app /
+  cùng account, **chỉ khác node**. Flow1 cũng lỗi ⇒ nguyên nhân **không** phải IP ⇒ đổi IP không giải quyết gì.
+
+### 11c. Dải của Flow3 **vốn đã nằm trong danh sách TRÁNH**
+
+`docs/EXIT_NODE_IP_GUIDE.md` §28–31: **AS152992 (Online Data)** đã bị **chặn UDP từ TQ ở mức IP**, và cảnh báo
+`103.6.235.1` nằm cùng /23 với IP cũ của node-2 ⇒ *"nhiều khả năng dính y hệt"*. **Flow3 = `103.6.235.39` nằm đúng
+trong `103.6.234.0/23`.** ⇒ Muốn đổi thì phải đổi sang **dải NGOÀI `103.6.234.0/23`** (ưu tiên AS135905/VNPT);
+**IP mới trong cùng /23 sẽ dính y nguyên** ⇒ mất tiền vô ích. (Guide §38: test IP thật trước khi nhận.)
+
+### 11d. Đổi IP Flow3 **KHÔNG cần phát hành app** ⇒ làm được trong lúc đóng băng
+
+Đã kiểm trong code: **không chỗ nào** hardcode `103.6.235.39`; `ExitNodeFallback.builtIn`
+(`android/app/src/main/java/com/privatevpn/app/api/Models.kt:52`) chỉ có **node-1 + vietnam-2**.
+Touch-list đo thật trên relay-server **5 chỗ + DB**:
+1. `/etc/systemd/system/relay-cf-vn3hy.service` → `WS_UDP_HOST`
+2. `/etc/systemd/system/relay-cf-vn3wg.service` → `WS_UDP_HOST`
+3. `/usr/local/bin/flowvpn-node-watch` (địa chỉ SSH/health của node-3)
+4. `/usr/local/bin/flowvpn-safe-stop` (danh sách nhận diện đường điều khiển)
+5. `nodes.db`: `exit_nodes.endpoint` **và** `ssh_target` của `vietnam-3`
+6. Nhà cung cấp gán IP mới — **xin gán TĨNH, không DHCP**; node-side không phải đổi cổng
+`Caddyfile` **không** chứa IP node-3 (relay định tuyến theo path `/relay/vn3hy*`) — đã grep xác nhận.
+
+### 11e. Đổi IP Flow2 thì NGƯỢC LẠI — tốn kém **và buộc phát hành app**
+
+- `165.101.114.162` **hardcode trong client**: `android/.../Config.kt:50` (`API_FALLBACK_ADDRESSES`),
+  `android/.../api/Models.kt:63`, `iOS/.../ControlAPIClient.swift:79` ⇒ đổi IP mà không phát hành bản mới là
+  **đường dự phòng khi GFW chặn API trỏ vào IP chết** (đúng ca mà fallback sinh ra để cứu).
+- Flow2 = **relay-server** (Caddy + control-plane + 6 relay + DNS + cp-proxy) ⇒ phải chạy đủ **checklist 9 bước**
+  (`EXIT_NODE_IP_GUIDE.md` §46).
+- Flow2 **đang ở dải TỐT NHẤT** theo chính guide: AS135905 VNPT `165.101.114.0/23` = khuyến nghị #1, và IP này được
+  **cố ý đổi sang** ngày 14/09/2026 để **thoát** AS152992 (`103.6.234.233`). Đổi nữa là **lùi**, không phải tiến.
