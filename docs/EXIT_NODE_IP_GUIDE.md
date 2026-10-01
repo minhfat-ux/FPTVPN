@@ -8,6 +8,32 @@ _Cập nhật: 2026-09-12. Bằng chứng lấy từ đo thật, không phải s
 |---|---|---|---|---|
 | node1 | 103.173.155.50 | **AS135905 (VNPT)** | ✅ UDP 8443 chạy trực tiếp, TCP relay cũng chạy, ổn định nhiều phút trên wifi hotel TQ | Dùng làm chuẩn |
 | node2 | **165.101.114.162** (đổi 14/09/2026, trước là 103.6.234.233) | **AS135905 (VNPT)** — dải `165.101.114.0/23` đã có trong khuyến nghị số 1 | ✅ đổi sang VNPT nên UDP từ TQ nhiều khả năng thông (cần đo lại) | Không còn dính AS152992 |
+| **vietnam-3** | `103.6.235.39` | **AS152992 (Online Data)** — dải `103.6.234.0/23` **nằm trong danh sách TRÁNH** | (dựng 30/09/2026) | 🔴 **Google định vị HK** + 🔴 **FPT Play CHẶN** — xem mục FPT Play bên dưới |
+
+### 🏆 XẾP HẠNG DẢI — chốt bằng đo thật 01/10/2026
+
+| Hạng | Dải | Node đang dùng | Bằng chứng |
+|---|---|---|---|
+| 🥇 **Tốt nhất** | `103.173.154.0/23` (netname `THANHLONG-VN`, **AS135905 VNPT**) | **Flow1** `103.173.155.50` | **Google = VN** (node DUY NHẤT trong fleet); UDP hysteria từ TQ chạy trực tiếp; ổn định nhiều phút trên wifi hotel TQ; dùng làm **chuẩn** từ 12/09 |
+| 🥈 Tốt | `165.101.114.0/23` (**AS135905 VNPT**) | Flow2 `165.101.114.162` | **FPT Play chạy tốt** (account thật, iPad, 01/10); ⚠️ nhưng **Google vẫn định vị HK** |
+| ❌ Tránh | `103.6.234.0/23` / `160.187.0.0/23` (**AS152992**) | Flow3 `103.6.235.39` | **FPT Play CHẶN** + Google HK + tiền sử bị chặn UDP từ TQ ở mức IP |
+
+⚠️ **Cả 3 dải đều đăng ký tại VN** (RDAP: `country=VN`, mnt VNNIC) ⇒ "HK" là **dữ liệu cũ trong DB của dịch vụ**,
+không phải đăng ký. Vì vậy **không suy ra được từ whois** — phải đo bằng chính dịch vụ khách dùng.
+
+### 📋 Đơn đặt mua node mới (theo kết luận 01/10/2026)
+
+Xin **đúng dải/ASN đã chứng minh**, đừng xin "IP Việt Nam" chung chung:
+1. **ASN: AS135905 (VNPT)** — ưu tiên dải `103.173.154.0/23` (dải của Flow1), sau đó `165.101.114.0/23` (Flow2).
+2. **Block tĩnh /29–/28, dedicated, KHÔNG NAT**, được **set rDNS/PTR**.
+3. Hỏi **lịch sử abuse** của IP trước khi nhận.
+4. ❌ **Không nhận** IP trong `103.6.234.0/23` hay `160.187.0.0/23` (AS152992) — dù nhà cung cấp nói "cùng Việt Nam".
+5. Cổng nghiệm thu (đủ cả 4, xem mục FPT Play ở trên): Google redirect **rỗng** · **FPT Play account thật chạy** ·
+   AbuseIPDB + Spamhaus sạch · gán **tĩnh**.
+
+> Lý do phải xin theo **ASN/dải** chứ không phải "một IP VN": §Lưu ý ghi *"cùng AS không đảm bảo cùng hành vi; GFW chặn
+> theo IP//24"*. Nhưng Flow3 là bằng chứng ở tầng dịch vụ: **cả /23 của AS152992 bị FPT Play chặn** ⇒ khi đã có dải tốt
+> thì **bám đúng dải tốt** là rẻ nhất.
 
 Đo bổ sung:
 - Baseline hysteria node2→node1 (VN↔VN, UDP): **11.4 MB/s (~91 Mbps)**, node1 tự tải loopback 137 MB/s, Cloudflare/mirror 12–22 MB/s ⇒ **server không nghẽn**; chậm là do đường truyền TQ + transport.
