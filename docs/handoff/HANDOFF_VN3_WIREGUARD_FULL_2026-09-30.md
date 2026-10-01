@@ -617,3 +617,34 @@ tầng API/DRM/player. **Cổng nghiệm thu thật = mở FPT Play bằng ACCOU
    - **FPT Play bằng account thật** chạy được (đây là cổng quyết định);
    - AbuseIPDB + Spamhaus **sạch**;
    - nhà cung cấp gán **TĨNH (static)**, không DHCP.
+
+### 11g. XÁC MINH BẰNG LOG MÁY iPad (không phải lời kể) — phiên Flow3 là THẬT và có mạng
+
+Kéo log tunnel từ chính iPad của chủ dự án (`xcrun devicectl device copy from --device 5BA3126D-… --domain-type
+appDataContainer --domain-identifier com.privatevpn.app.packet-tunnel --source Documents`). Chuỗi mốc **thật**:
+
+| Mốc (giờ máy) | Dòng log | Ý nghĩa |
+|---|---|---|
+| 19:39:08.833 | `stopTunnel: reason=1` | chủ dự án tắt phiên **Flow2** (đang chạy tốt từ 19:34) |
+| 19:39:14.711 | `startTunnel: bắt đầu phiên 1 (hysteria-only)` | mở phiên mới |
+| 19:39:18.634 | `ws-relay: handshake ok — connected to …/relay/`**`vn3hy`** | **đúng Flow3** (`relay-cf-vn3hy` → `WS_UDP_HOST=103.6.235.39`) |
+| 19:39:23.898 | `giám sát: XÁC NHẬN tunnel có mạng thật sau 5.0s — TCP handshake hoàn tất 7 lần` | **tunnel CHỞ GÓI** — không phải node chết, không phải lỗi transport |
+| 19:40:00.640 | `stopTunnel: reason=1` | rời Flow3 sau **~41 giây** |
+| 19:40:08.735 | `connected to …/relay/`**`vn1hy`** | chuyển sang **Flow1**, ở đó tới 20:02 |
+
+Trong suốt phiên Flow3: `bridge: IPv6 BỊ CHẶN #1…#5 — đã trả ICMPv6 unreachable (core chỉ có IPv4)` và
+counter `IPv6-chặn 44` ⇒ **IPv6 KHÔNG rò ra ngoài** (đúng thiết kế `ChinaRouteBypass`).
+
+**⇒ Hai giả thuyết bị LOẠI bằng log máy:** (a) tunnel/node hỏng (log chứng minh có mạng thật),
+(b) rò IPv6/IP thật ra ngoài tunnel (IPv6 bị chặn, và nếu rò thì Flow2 cũng phải lỗi).
+**Chỉ còn lại: FPT Play từ chối dựa trên IP/dải của node** ⇒ khớp bảng §11f và Google `HK` ở §11a.
+
+### 11h. ⚠️ Chưa phân biệt được: FPT Play chặn theo QUỐC GIA hay theo DANH TIẾNG ASN/datacenter
+
+`docs/EXIT_NODE_IP_GUIDE.md` §36 vốn đã cảnh báo FPT Play **chống VPN/datacenter**. Hiện **chưa có dữ liệu** để nói
+FPT Play chặn `103.6.235.39` vì (a) DB quốc gia của họ ghi HK, hay (b) họ đánh dấu AS152992 / dải "security company"
+là datacenter. **Hệ quả thực dụng — yêu cầu đổi IP phải là đổi ASN:**
+- Đổi **/24 khác trong cùng AS152992** ⇒ nếu nguyên nhân là (b) thì **vẫn chặn** ⇒ mất tiền.
+- Đổi sang **ASN khác, kiểu dải AS135905/VNPT như Flow2** (đã chứng minh FPT Play chạy) ⇒ giải quyết **cả (a) lẫn (b)**.
+⇒ **Yêu cầu nhà cung cấp: IP mới nằm ở ASN/dải KHÁC, không phải một IP khác trong `103.6.234.0/23`.**
+Và **cổng nghiệm thu bắt buộc vẫn là FPT Play bằng account thật** — tra DB địa lý **không** thay được bước này.
