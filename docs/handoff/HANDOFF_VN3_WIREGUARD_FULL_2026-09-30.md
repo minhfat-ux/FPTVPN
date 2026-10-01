@@ -449,3 +449,26 @@ này**, không phải vấn đề dữ liệu địa lý chung.
   `curl -s -o /dev/null -w '%{redirect_url}' https://www.google.com/` ⇒ **phải rỗng** (không được ra `google.com.hk`).
 - Ghi chú: 2 dải bị lỗi có dấu hiệu được cấp phát lại (ip-api mô tả chủ thể khác: *"Dương Nội AI Application
   Software"*, *"CAS Security Services"*) ⇒ Google có thể còn giữ dữ liệu phân bổ **cũ** (HK) cho các dải này.
+
+### 10d. 🔴 ĐÍNH CHÍNH — nguyên nhân THẬT là **COOKIES**, không phải node (chủ dự án xác định 01/10/2026)
+
+**Chủ dự án kết luận: lỗi *"Gemini isn't currently supported in your country"* là do COOKIES**, không phải do IP node.
+⇒ **Kết luận ở §10/§10b của tôi (quy cho node) là SAI HƯỚNG** — ghi lại đây để không ai dùng nó để đổi IP/đổi node.
+
+**Bằng chứng cũ vẫn đúng, nhưng KHÔNG phải thứ chặn Gemini** (giữ lại để tham chiếu):
+- Google **vẫn** định vị `165.101.114.162` (Flow2) và `103.6.235.39` (Flow3) là **Hồng Kông**
+  (`google.com` → `google.com.hk`), còn `103.173.155.50` (Flow1) là Việt Nam — **số đo lặp lại được**.
+- Nhưng cổng kiểm tra vùng của Gemini đọc **cookie** (vùng đã lưu từ phiên trước) ⇒ máy đã có cookie
+  "vùng không hỗ trợ" thì **vẫn lỗi dù đang ở node nào**, và **xoá cookie là vào được** ngay trên cả Flow2/Flow3.
+- Vì vậy phép A/B ở §10 (Flow3 lỗi ↔ Flow1 được) chỉ là **trùng hợp có điều kiện**, **không** chứng minh
+  quan hệ nhân quả node → lỗi. (Bài học: một phép A/B chỉ chắc khi **chỉ đổi đúng một biến** — ở đây cookie
+  không được kiểm soát.)
+
+**Hệ quả / việc cần làm:**
+1. **Việc dồn khách sang node-1 (đổi `priority` 01/10) là KHÔNG cần thiết** cho lỗi này ⇒ **nên trả `priority`
+   về như cũ**: `vietnam-2=50`, `node-1=100`, `vietnam-3=150` (backup: `data/nodes.db.bak-priority-*`).
+2. **Không** cần đổi IP node vì lý do Gemini. (Thông tin Google định vị 2 IP là HK **vẫn đáng ghi** cho các
+   dịch vụ Google khác phụ thuộc vùng — nhưng **chưa quan sát thấy** dịch vụ nào bị; YouTube/Claude/OpenAI
+   đều bình thường.)
+3. Khách gặp lỗi ⇒ hướng dẫn **xoá cookie cho `google.com`** (hoặc dùng cửa sổ ẩn danh) — **không cần đổi node,
+   không cần đổi IP.**
