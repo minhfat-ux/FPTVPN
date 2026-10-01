@@ -465,10 +465,58 @@ này**, không phải vấn đề dữ liệu địa lý chung.
   không được kiểm soát.)
 
 **Hệ quả / việc cần làm:**
-1. **Việc dồn khách sang node-1 (đổi `priority` 01/10) là KHÔNG cần thiết** cho lỗi này ⇒ **nên trả `priority`
-   về như cũ**: `vietnam-2=50`, `node-1=100`, `vietnam-3=150` (backup: `data/nodes.db.bak-priority-*`).
+1. **Việc dồn khách sang node-1 (đổi `priority` 01/10) là KHÔNG cần thiết** cho lỗi này ⇒ em đã đề xuất trả
+   `priority` về như cũ (`vietnam-2=50`, `node-1=100`, `vietnam-3=150`). **Chủ dự án quyết GIỮ NGUYÊN `node-1=10`
+   — xem §10f** (từ nay là quyết định có chủ đích, không phải biện pháp cho Gemini).
 2. **Không** cần đổi IP node vì lý do Gemini. (Thông tin Google định vị 2 IP là HK **vẫn đáng ghi** cho các
    dịch vụ Google khác phụ thuộc vùng — nhưng **chưa quan sát thấy** dịch vụ nào bị; YouTube/Claude/OpenAI
    đều bình thường.)
 3. Khách gặp lỗi ⇒ hướng dẫn **xoá cookie cho `google.com`** (hoặc dùng cửa sổ ẩn danh) — **không cần đổi node,
    không cần đổi IP.**
+
+### 10e. ✅ XÁC NHẬN BẰNG THỰC NGHIỆM CÓ ĐỐI CHỨNG — ẩn danh thì vào được (chủ dự án, 01/10/2026)
+
+**Chủ dự án báo (em chưa tự đo lại): "anh dùng browser ẩn danh thì được"** — cùng máy, cùng node, chỉ khác
+**có / không có cookie của `google.com`**:
+
+| Điều kiện | Cookie `google.com` | Kết quả Gemini |
+|---|---|---|
+| Cửa sổ thường | **có** (giữ vùng "không hỗ trợ" lưu từ phiên trước) | ❌ *"Gemini isn't currently supported in your country"* |
+| Cửa sổ **ẩn danh** | **không** (jar rỗng) | ✅ vào được |
+
+⇒ Đây là phép so sánh **chỉ đổi đúng MỘT biến (cookie) trên cùng một node** ⇒ **nhân quả thuộc về cookie**.
+Ngược lại, phép A/B ở §10 (Flow3 lỗi ↔ Flow1 được) **đổi node nhưng KHÔNG kiểm soát cookie** ⇒ không có giá trị
+nhân quả, đúng như đính chính §10d. **Kết luận §10/§10b (quy cho IP/node) chính thức bị bác bỏ — không dùng nữa.**
+
+**Hệ quả (chốt):**
+1. **Không** đổi IP node, **không** đổi node vì lý do Gemini. Việc Google định vị `165.101.114.162` /
+   `103.6.235.39` là HK **vẫn đúng như số đo**, nhưng **không phải thứ chặn Gemini** — giữ làm ghi chú tham khảo.
+2. Việc dồn `priority` sang node-1 (01/10) là **thừa** ⇒ xem quyết định ở §10f.
+3. **Hỗ trợ khách (1 bước, không cần cấu hình):** xoá cookie của `google.com` (hoặc mở cửa sổ ẩn danh) là vào được
+   — **không** cần đổi node, **không** cần đổi IP, **không** cần cài lại app.
+
+### 10f. CHỐT `priority` — **GIỮ node-1 đứng đầu** (chủ dự án quyết 01/10/2026)
+
+**Hiện trạng đo lại 01/10/2026** (`/root/flowvpn-cp/data/nodes.db`, đọc trực tiếp):
+`node-1 = 10` · `vietnam-2 = 200` · `vietnam-3 = 300` ⇒ `GET /v1/nodes` trả **Flow1 → Flow2 → Flow3**
+(đã kiểm: `curl -s .../v1/nodes` ra đúng thứ tự này). Backup còn nguyên:
+`/root/flowvpn-cp/data/nodes.db.bak-priority-20261001-005043`.
+
+**Đề xuất của em:** trả về gốc `vietnam-2=50 · node-1=100 · vietnam-3=150` (đúng thiết kế 13/09/2026,
+`docs/HANDOVER_2026-09-13_china_ip_block_and_funnel.md:82`) vì lý do dồn khách (lỗi Gemini) đã bị bác bỏ.
+**Chủ dự án chọn: GIỮ NGUYÊN `node-1=10` đứng đầu** ⇒ **không đổi dữ liệu, không cần rollback.**
+
+**Lý do ghi lại (để agent sau KHÔNG "sửa lại cho đúng"):** Google định vị `103.173.155.50` (Flow1) = **VN**,
+còn `165.101.114.162` (Flow2) và `103.6.235.39` (Flow3) = **HK** (§10c, số đo lặp lại được). Gemini thì đã
+chứng minh là do **cookie** (§10e), nhưng giữ Flow1 làm mặc định là **phòng** cho các dịch vụ Google khác còn
+phụ thuộc vùng. ⇒ **Từ 01/10/2026 đây là quyết định CÓ CHỦ ĐÍCH, không còn là "biện pháp cho lỗi Gemini".**
+
+**Tác động kỹ thuật đã xác minh (dùng được về sau):**
+- `priority` là khoá sắp xếp của `GET /v1/nodes`: **health trước** (node vừa fail tụt xuống), rồi `priority`,
+  rồi tên — `control-plane/src/index.js:480`; nguồn: `control-plane/src/node-store.js:111`.
+- Client **tự chọn node ĐẦU TIÊN** khi máy **chưa có lựa chọn lưu sẵn**:
+  `android/.../vpn/VPNManager.kt:135` (`selectNode(nodes.first().id)`) và `:447` (`nodes.first()`).
+  ⇒ `priority` = **node mặc định cho máy mới**, **đổi live được, KHÔNG cần phát hành app**; máy đã chọn node
+  thì **giữ nguyên** (không bị đổi khi priority thay đổi) — đây là lý do thao tác này an toàn.
+- **Hệ quả cho mục tiêu "thêm node mới":** muốn khách mới vào thẳng Flow3 chỉ cần hạ `priority` của
+  `vietnam-3` xuống thấp nhất — **không cần build/phát hành app**.
