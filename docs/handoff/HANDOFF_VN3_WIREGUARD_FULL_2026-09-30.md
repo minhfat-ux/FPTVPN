@@ -582,3 +582,38 @@ Touch-list đo thật trên relay-server **5 chỗ + DB**:
   (`EXIT_NODE_IP_GUIDE.md` §46).
 - Flow2 **đang ở dải TỐT NHẤT** theo chính guide: AS135905 VNPT `165.101.114.0/23` = khuyến nghị #1, và IP này được
   **cố ý đổi sang** ngày 14/09/2026 để **thoát** AS152992 (`103.6.234.233`). Đổi nữa là **lùi**, không phải tiến.
+
+### 11f. ✅ CHỐT BẰNG ĐỐI CHỨNG TRÊN iPad — **nguyên nhân là DẢI IP của Flow3** (chủ dự án, 01/10/2026)
+
+**Chủ dự án đo trên CÙNG một iPad, CÙNG account FPT Play, CÙNG app — chỉ đổi node:**
+
+| Node | IP | FPT Play trên iPad |
+|---|---|---|
+| **Flow2** (`vietnam-2`) | `165.101.114.162` (AS135905 VNPT) | ✅ **chạy tốt** |
+| **Flow3** (`vietnam-3`) | `103.6.235.39` (AS152992) | 🔴 **"không support ở region đó"** |
+
+⇒ Chỉ **một biến** thay đổi (node) ⇒ **nhân quả thuộc về IP/dải của Flow3**. Loại trừ: iPad, account FPT Play, app,
+tài khoản Apple, và **rò IPv6** (nếu rò thì Flow2 cũng lỗi).
+⇒ Mục §11b ("chưa tái hiện được") **nay đã được tái hiện và chốt** — người tái hiện là chủ dự án.
+
+**Đối chiếu độc lập — 2 dịch vụ khác nhau cùng nói dải này ≠ VN:**
+- **Google**: `103.6.235.39` → `google.com.hk` (HK), trong khi Flow1/Flow2 → VN. (§11a)
+- **FPT Play**: chặn hẳn Flow3, cho qua Flow2. (bảng trên)
+⇒ Không phải "chỉ Google sai": **dữ liệu phân bổ CŨ còn sót ở nhiều nơi** cho `103.6.234.0/23`. Đúng dải mà
+`docs/EXIT_NODE_IP_GUIDE.md` §28–31 đã xếp **TRÁNH** (AS152992) — tức **cảnh báo cũ là ĐÚNG**, và việc mua/dựng
+Flow3 trên dải này lẽ ra phải bị chặn bởi bài test trước khi mua (guide §32–38).
+
+**⚠️ Bài học test (quan trọng, đã ghi vào guide):** test *"trang chủ `fptplay.vn` trả 200"* là **KHÔNG ĐỦ** —
+Flow1 và Flow3 trả **giống hệt nhau 200 / 59049 byte**, kể cả khi một node bị FPT Play chặn hẳn. Cổng thật nằm ở
+tầng API/DRM/player. **Cổng nghiệm thu thật = mở FPT Play bằng ACCOUNT THẬT trên thiết bị thật.**
+
+**Hành động (đề xuất của SA):**
+1. **Đổi IP Flow3** sang một IP **NGOÀI `103.6.234.0/23`** (ưu tiên dải kiểu AS135905/VNPT như Flow2). **IP mới
+   trong cùng /23 chắc chắn dính y nguyên** ⇒ phải yêu cầu nhà cung cấp đổi **dải**, không chỉ đổi IP.
+2. **GIỮ NGUYÊN Flow2** — vừa được chứng minh chạy tốt FPT Play; đổi Flow2 là **lùi** + buộc phát hành app (§11e).
+3. Đổi IP Flow3 **không cần phát hành app** và **không phá đóng băng** (§11d — touch-list 5 chỗ + `nodes.db`).
+4. **Cổng nghiệm thu TRƯỚC KHI NHẬN IP mới** (đủ cả 4 mới nhận):
+   - `curl -s -o /dev/null -w '%{redirect_url}' https://www.google.com/` ⇒ **phải RỖNG**;
+   - **FPT Play bằng account thật** chạy được (đây là cổng quyết định);
+   - AbuseIPDB + Spamhaus **sạch**;
+   - nhà cung cấp gán **TĨNH (static)**, không DHCP.

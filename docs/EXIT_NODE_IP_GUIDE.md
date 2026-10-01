@@ -12,7 +12,7 @@ _Cập nhật: 2026-09-12. Bằng chứng lấy từ đo thật, không phải s
 Đo bổ sung:
 - Baseline hysteria node2→node1 (VN↔VN, UDP): **11.4 MB/s (~91 Mbps)**, node1 tự tải loopback 137 MB/s, Cloudflare/mirror 12–22 MB/s ⇒ **server không nghẽn**; chậm là do đường truyền TQ + transport.
 - node1 chỉ có **1 vCPU** ⇒ trần thực tế quanh ~90–100 Mbps/khách ít.
-- FPT Play: `https://fptplay.vn/` trả **HTTP 200** từ cả hai ASN ⇒ không chặn ở mức ASN/dải.
+- ~~FPT Play: `https://fptplay.vn/` trả **HTTP 200** từ cả hai ASN ⇒ không chặn ở mức ASN/dải.~~ 🔴 **SAI — đã bị bác bỏ 01/10/2026, xem §"FPT Play" bên dưới.** Trang chủ trả 200 **không** chứng minh gì: node bị FPT Play chặn hẳn vẫn trả **đúng 59049 byte giống hệt** node chạy được.
 
 ## Khuyến nghị thứ tự ưu tiên
 
@@ -33,9 +33,25 @@ _Cập nhật: 2026-09-12. Bằng chứng lấy từ đo thật, không phải s
 
 1. Mua/test **1 IP trước** (rẻ nhất), dựng node bằng `tools/node-setup/provision-node.sh`
 2. Từ **điện thoại dùng data TQ**: ping + TCP tới IP đó, sau đó **connect hysteria (UDP)** — đây là bài test quyết định
-3. Test **FPT Play** bằng account thật (kiểm tra anti-VPN/datacenter) nếu khách cần xem FPT Play
+3. Test **FPT Play** bằng **account thật trên thiết bị thật** (kiểm tra anti-VPN/datacenter **và** định vị dải). ⚠️ **BẮT BUỘC** nếu node sẽ phục vụ khách xem truyền hình/phim VN — **test trang chủ 200 là KHÔNG ĐỦ** (đã chứng minh 01/10/2026). Cổng rẻ để sàng lọc trước: `curl -s -o /dev/null -w '%{redirect_url}' https://www.google.com/` phải **rỗng**.
 4. Kiểm tra danh tiếng IP trước khi nhận: **AbuseIPDB + Spamhaus** (IP dính blacklist thường bị GFW chặn sớm)
 5. Đạt cả 3 ⇒ mua thêm cùng /23 (nhưng vẫn test lại từng IP vì GFW chặn theo IP//24, không theo AS)
+
+## 🔴 FPT Play — dải `103.6.234.0/23` (AS152992) bị CHẶN (đo thật 01/10/2026)
+
+| Node | IP | Dải / ASN | FPT Play (account thật, cùng iPad) | Google `google.com` |
+|---|---|---|---|---|
+| vietnam-2 | `165.101.114.162` | AS135905 VNPT | ✅ **chạy tốt** | VN |
+| vietnam-3 | `103.6.235.39` | **AS152992** `103.6.234.0/23` | 🔴 **"không support ở region đó"** | 🔴 **HK** (`google.com.hk`) |
+
+- Cùng thiết bị, cùng account, **chỉ đổi node** ⇒ **dải IP của Flow3 là nguyên nhân**, không phải thiết bị/app/tài khoản.
+- Đây **xác nhận** mục "TRÁNH: AS152992" ở §28–31 là **đúng**, và cho thấy hậu quả không chỉ là Google: **dịch vụ VN
+  (FPT Play) cũng chặn**.
+- ❌ **Đừng nhận một IP khác trong cùng `103.6.234.0/23`** — sẽ dính y nguyên. Phải đổi **dải**.
+- ✅ Cổng nghiệm thu trước khi nhận IP mới (đủ cả 4): Google redirect **rỗng** · **FPT Play account thật chạy được** ·
+  AbuseIPDB + Spamhaus sạch · gán **tĩnh (static)**.
+- 💡 **Bài học test:** "trang chủ trả 200" **không** phải bằng chứng (Flow1 và Flow3 trả giống hệt nhau
+  200 / 59049 byte). Cổng thật nằm ở tầng player/API ⇒ **phải mở bằng account thật**.
 
 ## Lưu ý
 
