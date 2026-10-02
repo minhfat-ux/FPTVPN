@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan bus #685: dong goi installer Inno Setup (.exe) tu main 9194a96, upload /var/www/flowvpn/dl/MeetFlowAI-Setup-latest.exe, doi link /ai/buy 5/5 ngon ngu sang .exe. Tuan thu rang buoc bao mat: artifact khong chua key provider.",
+ "actor": "win",
+ "at": "2026-10-02T08:44:02.075Z"
+}

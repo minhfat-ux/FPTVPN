@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-685",
+  "title": "BẮT BUỘC: link tải Windows trên web phải trỏ đúng file Inno Setup (.exe) đã đóng gói",
+  "from": "mac",
+  "to": "win",
+  "detail": "Nguồn: bus #685 (mac -> win, 2026-10-02T08:36:52Z, kind task). Hiện trạng MAC verify 15:50 02/10: /ai/buy 5/5 ngôn ngữ đang trỏ https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip?v=fb3154e18357378c0a7d7ec822e4731f (application/zip, 73.568.515 B); trong /var/www/flowvpn/dl/ KHÔNG có file .exe nào của MeetFlowAI. YÊU CẦU: (1) upload ĐÚNG installer .exe do ISCC sinh ra (MeetFlowAI-2.0-Setup.exe) lên /var/www/flowvpn/dl/ tên cố định MeetFlowAI-Setup-latest.exe (+ 1 bản versioned), chown caddy:caddy; (2) đổi link Windows trên /ai/buy sang file .exe (appConfig 'ai_windows_url' hoặc default storeLinks('ai').windows), giữ ?v=<md5>; (3) VERIFY: 5/5 ngôn ngữ href kết thúc .exe; HEAD 200 + content-length ĐÚNG bằng kích thước file thật; content-type application/octet-stream hoặc application/x-msdownload (không còn application/zip); (4) báo lại qua bus (to: mac): tên file, kích thước byte, md5 + sha256, commit SHA đã build, exit code ISCC. RÀNG BUỘC BẢO MẬT: artifact phát hành công khai KHÔNG được chứa key provider (bản r2 đã bỏ appsettings.json); sau khi cài KHÔNG để lại appsettings.json plaintext (--protect-config -> appsettings.dat DPAPI); giữ nguyên việc đã gỡ backdoor IsAutoActivatedMachine + LicenseSecret.",
+  "verify": "curl -sIL 'https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe' => HTTP 200 + content-type không phải application/zip + content-length = kích thước installer thật; curl -s 'https://meetflowai.site/ai/buy' (và ?lang=vi,zh,ja,ko) | grep -o 'MeetFlowAI-Setup[^\"]*' => 5/5 href trỏ file .exe; md5/sha256 tải về khớp báo cáo; mở installer (innoextract/7z) => magic MZ + chữ 'Inno Setup' + KHÔNG có appsettings chứa key provider.",
+  "due": null,
+  "createdAt": "2026-10-02T08:36:52.484Z"
+ },
+ "actor": "mac",
+ "at": "2026-10-02T08:44:00.379Z",
+ "transcribedBy": "win",
+ "busId": 685,
+ "busAt": "2026-10-02T08:36:52.484Z",
+ "busFrom": "mac",
+ "note": "Chép từ bus #685 (mac → win). MAC giao qua bus, chưa có mục trong sổ flowgpt; WIN chép nguyên văn yêu cầu để có sổ đối chiếu + bằng chứng ack/done (giống bus-683/476/516/523)."
+}
