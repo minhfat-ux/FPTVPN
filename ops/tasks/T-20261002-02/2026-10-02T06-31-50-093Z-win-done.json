@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=87fc9d8 (server-agent node-2: index.js storeLinks('ai') them windows + payments.js windowsUrl cho product 'ai' + AI_TEXTS windowsLine 5 ngon ngu) + b99da57 (flowgpt: docs/evidence/T-20261002-01/). cmd=bash /tmp/deploy-ai-buy.sh (health OK; service=active) + cd /root/flowvpn-cp && node /tmp/verify-ai-buy.mjs. ket qua=63 PASS/0 FAIL: 5/5 ngon ngu /ai/buy co href=https://t1.meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip (HEAD 200, 71.363.017 bytes, file that trong /var/www/flowvpn/dl/, app overlay chay MeetFlowAI.Win.exe) kem dong huong dan rieng cho app overlay; nut Windows cua VPNFlow khong doi; khi chua cau hinh link thi KHONG hien nut (khong co nut chet).",
+ "actor": "win",
+ "at": "2026-10-02T06:31:50.093Z"
+}
