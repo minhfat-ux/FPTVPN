@@ -114,9 +114,10 @@ $report"
   "$LOCK_DAY")
     line "=== NGÀY KHOÁ ($LOCK_DAY) ==="
     report=$(preflight) || report="(không đọc được app-version)"
-    notify "🔒 HÔM NAY (15/10) là ngày KHOÁ tài khoản chưa đăng ký email (MeetFlow AI).
+    notify "🔒 HÔM NAY (15/10) là ngày KHOÁ tài khoản chưa đăng ký email.
 
-Cần xác nhận: luật chặn đã bật ở control-plane và số tài khoản ẩn danh còn lại.
+Mức đã chốt: MỞ APP nhưng KHOÁ PRO (MeetFlow AI) — không chặn hẳn app; VPNFlow: bắt buộc đăng ký + gói Pro còn hiệu lực.
+Cần xác nhận: luật đã bật ở control-plane, số tài khoản ẩn danh còn lại, và 10 thiết bị iOS theo UDID chưa có email.
 Trạng thái server:
 $report"
     ;;

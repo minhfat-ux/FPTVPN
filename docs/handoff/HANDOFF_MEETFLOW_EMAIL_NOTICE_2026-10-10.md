@@ -82,3 +82,33 @@ Kênh duy nhất chạm được họ là **giao diện trong app**.
   **11–14/10** đếm ngược · **15/10** ngày khoá. Script **chỉ đọc + Telegram**, KHÔNG tự publish.
 - Kiểm chứng đã chạy thật: `launchctl kickstart` ⇒ `runs = 1, last exit code = 0`; nhánh chuẩn bị đã
   gửi Telegram thật qua node-2 (`flowvpn-notify --ping`, vì `api.telegram.org` bị chặn từ mạng Mac).
+
+---
+
+## 6. CHỐT CỦA CHỦ DỰ ÁN (02/10/2026) — hai điểm đã quyết
+
+1. **MỞ BĂNG ANDROID** cho đúng phạm vi việc này: thêm thông báo "đăng ký email là bắt buộc"
+   (control-plane field `notice` + hộp thoại trong app). Không mở cho việc khác.
+2. **MỨC KHOÁ từ 15/10 = "mở app, khoá Pro"**: tài khoản chưa đăng ký email **vẫn mở được app**,
+   nhưng **mọi tính năng Pro bị khoá** (coi như chưa có entitlement Pro). KHÔNG chặn hẳn app.
+   ⇒ Control plane: khi user chưa có email ⇒ trả `email_required: true` + **không** cấp quyền Pro
+   (entitlement coi như hết hạn), app hiện thông báo + nút đăng ký. Sau khi đăng ký email, quyền Pro
+   trở lại đúng theo entitlement đã mua.
+
+## 7. BỔ SUNG: chính sách cho **VPNFlow** (chủ dự án chốt cùng phiên)
+
+> *"Các user của VPNFlow là bắt buộc đăng ký và mua gói Pro."*
+
+- **Bắt buộc đăng ký** (tài khoản email) **và** có **gói Pro còn hiệu lực** mới được dùng.
+  Không còn đường dùng chỉ bằng thiết bị/UDID mà không có tài khoản.
+- Trạng thái thật hôm nay (node-2, 02/10): `auth.json` **20 user — 20/20 đã có email**;
+  14 thiết bị (gắn hết vào user có email); **10 thiết bị iOS đăng ký bằng UDID** (không có email).
+- Việc cần làm (WIN, control-plane):
+  1. Thiết bị/UDID **không** gắn tài khoản có email ⇒ chặn cấp quyền (không phát credential/peer) và
+     trả lý do rõ để app hiện "cần đăng ký + mua Pro".
+  2. Tunnel chỉ mở khi subscription còn hiệu lực **và** user có email đã đăng ký.
+  3. Thông báo cho nhóm này: **email được** (20/20 user có email, và lead mua hàng có email).
+     Riêng **10 UDID iOS không có email** ⇒ không mail được, phải nhắc qua app/web lúc mở
+     (màn hình "cần đăng ký") — app iOS/macOS đang **đóng băng**, nên phần này cần chủ dự án
+     mở băng riêng nếu muốn làm trước 15/10.
+- Mốc áp dụng: **15/10/2026** (cùng hạn với MeetFlow AI), trừ khi chủ dự án đổi.
