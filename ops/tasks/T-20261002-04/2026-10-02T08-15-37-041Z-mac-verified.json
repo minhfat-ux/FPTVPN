@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "NGHIEM THU PASS tren ban that: (1) node-2 /var/www/flowvpn/dl/: MeetFlowAI-Overlay-latest-win-x64.zip va -2.0.0-win-x64.zip deu 73.569.240 B, sha256 9dac0181778cfe8cf890293a0243bc89bafcab9e118e4599106f1f742b37e527; tai qua Cloudflare tu Mac ra dung 73.569.240 B, sha256 khop, zip integrity OK. (2) MeetFlowAI.Win.dll: 0 hit utf8+utf16 cho LPP00031920A / MinhNB2 / MeetFlowAI.Win.2026.LocalLicense; appsettings.json co ActivationApiUrl=https://api.meetflowai.site/v1/ai/license. (3) CACHE CLOUDFLARE: link -latest bare van HIT ban cu 71.363.017 B (age ~6262s, max-age 14400); token CF tren node-2 chi co Zone:Read, POST purge_cache tra 10000 Authentication error => KHONG purge duoc bang API. Da xu ly bang URL bat bien: them appConfig ai_windows_url=https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip (hieu luc ngay khong can restart) va sua home-page.js chip Windows overlay sang cung URL versioned (backup src/home-page.js.bak-macwinfix-20261002-151413, node --check OK, restart flowvpn-cp health 200, da chattr +i lai). Kiem lai: /ai/buy (ca ?lang=zh) va trang chu deu tro ban versioned, HEAD 200 content-length 73569240. (4) Ghi chu: home-page.js live dang bi chattr +i (tu 28/09); workspace /root/flowvpn-agent/control-plane/src/home-page.js da sua tuong ung nhung chua commit/push (workspace/master lech origin/main).",
+ "actor": "mac",
+ "at": "2026-10-02T08:15:37.043Z"
+}
