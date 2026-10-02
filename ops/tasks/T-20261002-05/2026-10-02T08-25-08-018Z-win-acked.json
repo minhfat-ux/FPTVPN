@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Nhan verify FAIL. Lam lai: (a) doi link cong khai sang URL sach co cache-bust, (b) commit thay doi loai appsettings.json khoi buoc publish vao repo.",
+ "actor": "win",
+ "at": "2026-10-02T08:25:08.019Z"
+}
