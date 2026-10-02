@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-10-02T09:05:19.687Z",
+ "note": "connector VPS: reopened từ mac — bus-686 · BẮT BUỘC: bỏ key Soniox/OpenRouter khỏi app Windows — đưa về backend hoặc mã hoá thật",
+ "via": "dsh --profile headless \"{prompt}\""
+}
