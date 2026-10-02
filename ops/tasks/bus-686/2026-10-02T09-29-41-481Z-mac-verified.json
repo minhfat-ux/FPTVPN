@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "PASS. Huong (A): bo key khoi client Windows, dua ve backend. Source MeetFlowAI_Win origin/main=99da3f2: grep -RIn 'SonioxApiKey|OpenRouterApiKey|enc:|PortableSecret' (cs+json) => RONG; AppSettings chi con MeetingApiBaseUrl/SonioxModel/ActivationApiUrl; da xoa ProtectedSetting.cs + protect-appsettings.ps1; dotnet build -c Release -p:EnableWindowsTargeting=true => 0 loi (3 warn NU1900). Goi site-linked: overlay-2.0.0.zip?v=a097ab51033e917564035128b2ab75cd = 73565774B md5 a097... 485 entry, 0 appsettings*, 0 dinh danh key (quet ca 485 file ASCII+UTF-16); installer-latest.exe?v=145f80972d615e81e02f68b89f21b27f = 52183737B md5 145f... sha256 6f5d..., Inno 6.7.0, raw strings 0 appsettings/0 key; /ai/buy 6/6 (vi/en/zh/ja/ko) + trang chu deu dung ?v= moi. Backend live api.meetflowai.site/meetflow: /health 200, /tmp-key 201 (key tam 147 ky tu, TTL ~900s), /summary 200 provider=openrouter, /chat 200. TON/DIEU KIEN: (1) URL BARE khong ?v= con Cloudflare cache HIT ban CU con key (overlay md5 fb3154e18357378c0a7d7ec822e4731f / installer 08:49:43) ~4h, khong purge duoc — moi link chinh thuc da cache-bust ?v=; (2) payload installer nen chua mo truc tiep tren macOS (khong innoextract; host WIN bi App Control chan) — bu lai overlay cung publish dir da quet sach tung file; (3) tools/installer/*.iss + appsettings.keyless.json chua commit. CHU DU AN PHAI ROTATE Soniox+OpenRouter key. Evidence MAC: docs/evidence/bus-686/MAC-VERIFY-PASS.md (origin/flowgpt b6c19db).",
+ "actor": "mac",
+ "at": "2026-10-02T09:29:41.483Z"
+}
