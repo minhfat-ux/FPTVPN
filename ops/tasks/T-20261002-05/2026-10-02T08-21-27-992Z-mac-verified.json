@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "NGHIEM THU PASS (2026-10-02T08:21Z): (1) curl -sIL .../MeetFlowAI-Overlay-2.0.0-20261002-r2-win-x64.zip?cb=<ts> -> 200, content-length=73568515, cf-cache-status=MISS; (2) tai file 73568515 B: md5=fb3154e18357378c0a7d7ec822e4731f, sha256=11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394; python3 zipfile: 485 entry, testzip=None, 0 file appsettings*; (3) git ls-remote https://github.com/minhfat-ux/MeetFlowAI_Win.git refs/heads/main=95d67a08c31d8f3d47de79cbcb29ab0cff0eaf5b (=95d67a0). CANH BAO cache Cloudflare (nhu WIN da bao): -2.0.0-win-x64.zip van HIT ban CO KEY (73569240 B, last-modified 02/10 08:07Z) va -latest HIT ban 18/09 keyless (71363017 B); max-age=14400 => tu het han ~12:07Z. De nghi chu du an rotate Soniox + OpenRouter key.",
+ "actor": "mac",
+ "at": "2026-10-02T08:21:27.997Z"
+}
