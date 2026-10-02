@@ -1,0 +1,254 @@
+From 95d67a08c31d8f3d47de79cbcb29ab0cff0eaf5b Mon Sep 17 00:00:00 2001
+From: WIN harness <win@meetflowai.local>
+Date: Fri, 2 Oct 2026 16:02:15 +0800
+Subject: [PATCH] fix(activation): verify license with server, drop dev
+ backdoor + hardcoded secret
+
+- ActivationService: remove AutoActivatedMachineName/UserName bypass and the hardcoded LicenseSecret; validate the stored license with POST {ActivationApiUrl}/verify instead of a local HMAC signature, so a hand-written license.json cannot unlock the app.
+
+- GetMachineId: ignore placeholder OEM/VM WMI UUIDs (all 0 / all F) so one key cannot cover many machines.
+
+- MeetFlowAI.iss: point SourceDir at the new self-contained win-x64 build.
+
+- docs: activation is server-verified; production endpoint is https://api.meetflowai.site/v1/ai/license.
+---
+ MeetFlowAI.Win/Services/ActivationService.cs  | 96 +++++++++----------
+ MeetFlowAI.Win/docs/activation.md             | 15 ++-
+ .../docs/meetflowai-architecture.md           |  9 +-
+ MeetFlowAI.Win/tools/installer/MeetFlowAI.iss |  4 +-
+ 4 files changed, 69 insertions(+), 55 deletions(-)
+
+diff --git a/MeetFlowAI.Win/Services/ActivationService.cs b/MeetFlowAI.Win/Services/ActivationService.cs
+index 539d364..fd63b43 100644
+--- a/MeetFlowAI.Win/Services/ActivationService.cs
++++ b/MeetFlowAI.Win/Services/ActivationService.cs
+@@ -13,9 +13,6 @@ namespace MeetFlowAI.Win.Services;
+ 
+ public sealed class ActivationService : IActivationService
+ {
+-    private const string LicenseSecret = "MeetFlowAI.Win.2026.LocalLicense";
+-    private const string AutoActivatedMachineName = "LPP00031920A";
+-    private const string AutoActivatedUserName = "MinhNB2";
+     private readonly AppSettings _settings;
+     private readonly HttpClient _httpClient = new();
+     private readonly string _licensePath;
+@@ -30,11 +27,6 @@ public sealed class ActivationService : IActivationService
+ 
+     public async Task<ActivationState> GetStateAsync(CancellationToken cancellationToken)
+     {
+-        if (IsAutoActivatedMachine())
+-        {
+-            return new ActivationState(true, "Activated (this machine)");
+-        }
+-
+         var license = await ReadLicenseAsync(cancellationToken).ConfigureAwait(false);
+         if (license is null)
+         {
+@@ -46,7 +38,21 @@ public sealed class ActivationService : IActivationService
+             return new ActivationState(false, "License expired");
+         }
+ 
+-        return new ActivationState(true, GetLocalActivationMessage(license));
++        if (string.IsNullOrWhiteSpace(_settings.ActivationApiUrl))
++        {
++            return new ActivationState(false, "Activation endpoint is not configured");
++        }
++
++        // The activation server decides whether this machine/key is still valid.
++        // No local signing secret is shipped any more, so a hand-crafted
++        // license.json can no longer unlock the app.
++        var state = await PostAsync("verify", license.Key, cancellationToken).ConfigureAwait(false);
++        if (!state.IsActivated)
++        {
++            return state;
++        }
++
++        return new ActivationState(true, GetLocalActivationMessage(license, state), state.Plan, state.ActivatedAt, state.ExpiresAt);
+     }
+ 
+     public async Task<ActivationState> ActivateAsync(string activationKey, CancellationToken cancellationToken)
+@@ -67,8 +73,7 @@ public sealed class ActivationService : IActivationService
+             var key = activationKey.Trim();
+             var machineId = GetMachineId();
+             var activatedAt = state.ActivatedAt ?? DateTimeOffset.UtcNow;
+-            var signature = SignLicense(key, machineId, activatedAt, state.Plan, state.ExpiresAt);
+-            var license = new LocalLicense(key, machineId, activatedAt, state.Plan, state.ExpiresAt, signature);
++            var license = new LocalLicense(key, machineId, activatedAt, state.Plan, state.ExpiresAt);
+             var json = JsonSerializer.Serialize(license, new JsonSerializerOptions { WriteIndented = true });
+             await File.WriteAllTextAsync(_licensePath, json, cancellationToken).ConfigureAwait(false);
+         }
+@@ -123,7 +128,7 @@ public sealed class ActivationService : IActivationService
+                 return null;
+             }
+ 
+-            return IsLicenseSignatureValid(license) ? license : null;
++            return license;
+         }
+         catch
+         {
+@@ -144,7 +149,12 @@ public sealed class ActivationService : IActivationService
+             using var searcher = new ManagementObjectSearcher("SELECT UUID FROM Win32_ComputerSystemProduct");
+             foreach (var item in searcher.Get())
+             {
+-                parts.Add(item["UUID"]?.ToString() ?? string.Empty);
++                var uuid = item["UUID"]?.ToString();
++                if (IsUsableMachineUuid(uuid))
++                {
++                    parts.Add(uuid!);
++                }
++
+                 break;
+             }
+         }
+@@ -157,53 +167,42 @@ public sealed class ActivationService : IActivationService
+         return Convert.ToHexString(hash);
+     }
+ 
+-    private static bool IsAutoActivatedMachine()
++    /// <summary>
++    /// OEM/VM firmware often reports a placeholder UUID (all zeroes / all F's).
++    /// Mixing that into the machine id makes every such PC share one id, which
++    /// would let a single activation key unlock many machines.
++    /// </summary>
++    private static bool IsUsableMachineUuid(string? uuid)
+     {
+-        return string.Equals(Environment.MachineName, AutoActivatedMachineName, StringComparison.OrdinalIgnoreCase) &&
+-            string.Equals(Environment.UserName, AutoActivatedUserName, StringComparison.OrdinalIgnoreCase);
+-    }
+-
+-    private static string SignLicense(
+-        string key,
+-        string machineId,
+-        DateTimeOffset activatedAt,
+-        string plan,
+-        DateTimeOffset? expiresAt)
+-    {
+-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(LicenseSecret));
+-        var payload = $"{key.Trim().ToUpperInvariant()}|{machineId}|{activatedAt.UtcDateTime:O}|{NormalizePlan(plan)}|{expiresAt?.UtcDateTime.ToString("O") ?? string.Empty}";
+-        return Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(payload)));
+-    }
++        if (string.IsNullOrWhiteSpace(uuid))
++        {
++            return false;
++        }
+ 
+-    private static bool IsLicenseSignatureValid(LocalLicense license)
+-    {
+-        if (string.IsNullOrWhiteSpace(license.Key) ||
+-            string.IsNullOrWhiteSpace(license.MachineId) ||
+-            string.IsNullOrWhiteSpace(license.Signature))
++        var normalized = uuid.Trim().Replace("-", string.Empty);
++        if (normalized.Length == 0 || !normalized.All(Uri.IsHexDigit))
+         {
+             return false;
+         }
+ 
+-        var expected = SignLicense(license.Key, license.MachineId, license.ActivatedAt, license.Plan, license.ExpiresAt);
+-        return CryptographicOperations.FixedTimeEquals(
+-            Encoding.UTF8.GetBytes(expected),
+-            Encoding.UTF8.GetBytes(license.Signature.ToUpperInvariant()));
++        return !normalized.All(c => c == '0') && !normalized.All(c => c is 'F' or 'f');
+     }
+ 
+-    private static string NormalizePlan(string? plan)
++    private static string GetLocalActivationMessage(LocalLicense license, ActivationState verified)
+     {
+-        return string.IsNullOrWhiteSpace(plan) ? "lifetime" : plan.Trim().ToLowerInvariant();
+-    }
+-
+-    private static string GetLocalActivationMessage(LocalLicense license)
+-    {
+-        var plan = NormalizePlan(license.Plan);
+-        if (!license.ExpiresAt.HasValue)
++        var plan = NormalizePlan(verified.Plan);
++        var expiresAt = verified.ExpiresAt ?? license.ExpiresAt;
++        if (!expiresAt.HasValue)
+         {
+             return $"Activated ({plan})";
+         }
+ 
+-        return $"Activated ({plan}) until {license.ExpiresAt.Value.LocalDateTime:yyyy-MM-dd}";
++        return $"Activated ({plan}) until {expiresAt.Value.LocalDateTime:yyyy-MM-dd}";
++    }
++
++    private static string NormalizePlan(string? plan)
++    {
++        return string.IsNullOrWhiteSpace(plan) ? "lifetime" : plan.Trim().ToLowerInvariant();
+     }
+ 
+     private sealed record LocalLicense(
+@@ -211,8 +210,7 @@ public sealed class ActivationService : IActivationService
+         string MachineId,
+         DateTimeOffset ActivatedAt,
+         string Plan,
+-        DateTimeOffset? ExpiresAt,
+-        string Signature);
++        DateTimeOffset? ExpiresAt);
+ 
+     private sealed record ActivationResponse(
+         bool Valid,
+diff --git a/MeetFlowAI.Win/docs/activation.md b/MeetFlowAI.Win/docs/activation.md
+index 36ad3c3..69eabc5 100644
+--- a/MeetFlowAI.Win/docs/activation.md
++++ b/MeetFlowAI.Win/docs/activation.md
+@@ -2,7 +2,20 @@
+ 
+ Activation does not require user login. A customer receives one activation key and the app binds that key to the first machine that activates it.
+ 
+-## Firebase Setup
++## Production endpoint (MeetFlow API)
++
++The shipped `ActivationApiUrl` is `https://api.meetflowai.site/v1/ai/license`.
++The control-plane serves `POST /activate` and `POST /verify` with the same
++request/response contract as the Firebase functions and keeps using the
++Firestore `activationKeys` collection, so keys sold before the switch keep
++working.
++
++The app no longer keeps a local signing secret. On startup it reads the stored
++license and asks the server to `verify` the `key` + `machineId` pair; a
++hand-written `license.json` therefore cannot unlock the app. `/verify` is the
++authority for revoked keys, device limits, and expiry.
++
++## Firebase Setup (alternative backend)
+ 
+ 1. Create a Firebase project.
+ 2. Enable Firestore.
+diff --git a/MeetFlowAI.Win/docs/meetflowai-architecture.md b/MeetFlowAI.Win/docs/meetflowai-architecture.md
+index 4b03617..7764cbd 100644
+--- a/MeetFlowAI.Win/docs/meetflowai-architecture.md
++++ b/MeetFlowAI.Win/docs/meetflowai-architecture.md
+@@ -188,9 +188,12 @@ uses JSON-object response mode.
+ ## Activation
+ 
+ Activation is machine-bound without user login. The local license is under
+-`%LOCALAPPDATA%\MeetFlowAI\license.json` and is checked against the machine
+-identifier and expiry. See `docs/activation.md` for Firebase deployment and
+-key generation.
++`%LOCALAPPDATA%\MeetFlowAI\license.json` and only remembers the key, machine
++identifier, plan, and expiry. No signing secret is shipped: on startup the app
++asks the activation server (`POST {ActivationApiUrl}/verify`) whether the
++`key` + `machineId` pair is still valid, and account revocation, device limits,
++and expiry are decided there. A hand-written `license.json` cannot unlock the
++app. See `docs/activation.md` for the endpoint and key generation.
+ 
+ - Activated: hide activation input and show a crown on the logo.
+ - Not activated: show activation-key input.
+diff --git a/MeetFlowAI.Win/tools/installer/MeetFlowAI.iss b/MeetFlowAI.Win/tools/installer/MeetFlowAI.iss
+index 19d5fd4..6d9636c 100644
+--- a/MeetFlowAI.Win/tools/installer/MeetFlowAI.iss
++++ b/MeetFlowAI.Win/tools/installer/MeetFlowAI.iss
+@@ -1,9 +1,9 @@
+-﻿#define MyAppName "MeetFlowAI 2.0"
++#define MyAppName "MeetFlowAI 2.0"
+ #define MyAppVersion "2.0.0"
+ #define MyAppPublisher "FPT Software"
+ #define MyAppExeName "MeetFlowAI.Win.exe"
+ #define MyAppFolder "MeetFlowAI"
+-#define SourceDir "..\..\artifacts\publish\MeetFlowAIInstallerBuild-20260918-182856"
++#define SourceDir "..\..\artifacts\publish\MeetFlowAIInstallerBuild-20261002-155644"
+ #define IconFile "..\..\Resources\AppIcon.ico"
+ #define DesktopDir GetEnv("USERPROFILE") + "\Desktop"
+ 
+-- 
+2.55.0.windows.3
+
