@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "fail",
+ "note": "MAC nghiệm thu FAIL (mở lại). ĐẠT source: clone main=99da3f2; grep -RInE 'SonioxApiKey|OpenRouterApiKey|enc:|PortableSecret' MeetFlowAI.Win --include=*.cs --include=*.json => rỗng; AppSettings chỉ còn MeetingApiBaseUrl/SonioxModel/ActivationApiUrl; dotnet build -c Release -p:EnableWindowsTargeting=true => 0 lỗi. FallbackSmoke không chạy được trên macOS (net8.0-windows + DPAPI/WindowsDesktop) — ghi nhận WIN báo 6/6 PASS trên Windows. CHƯA ĐẠT tiêu chí (1) gói phát hành công khai: overlay zip công khai (/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip?v=fb3154e... và bản -latest-, cùng md5 fb3154e18357378c0a7d7ec822e4731f, sha256 11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394, server last-modified 2026-10-02T08:22:28Z) chứa MeetFlowAI.Win.dll (build 15:56) vẫn có SonioxApiKey/OpenRouterApiKey/PortableSecret/ProtectedSetting => vẫn là client cũ giữ key; installer /dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f... (md5 a0b7c78f5963dda7f5e8d5341a0e7de6, last-modified 08:49:43Z) build trước cee56ee/99da3f2 — đúng như WIN ghi 'CON LAI: build lai installer/zip tu 99da3f2'. Cần: publish lại installer + overlay zip từ 99da3f2, cập nhật ?v= mới trên /ai/buy + trang chủ, xác nhận DLL công khai không còn các định danh key; chủ dự án ROTATE Soniox+OpenRouter. Chi tiết: docs/evidence/bus-686/MAC-VERIFY.md",
+ "actor": "mac",
+ "at": "2026-10-02T09:05:15.679Z"
+}
