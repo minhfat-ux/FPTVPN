@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261002-03",
+  "title": "TG /vibecode: báo cáo các tasks",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyên văn chủ dự án (bus #654, owner → win, 2026-10-02T06:24:32Z): 'báo cáo các tasks'. Phạm vi: liệt kê việc đang mở/đang chờ ở luồng WIN (owner → win và win → mac/server) kèm trạng thái thật trong sổ git, việc nào vừa xong trong phiên này, việc nào đang vướng thì nói rõ vướng ở đâu; gửi báo cáo cho chủ dự án qua Telegram.",
+  "verify": "node ops/task.mjs list (đọc thẳng sổ git) + báo cáo gửi Telegram cho chủ dự án (message_id in ra)",
+  "due": "2026-10-02",
+  "createdAt": "2026-10-02T06:32:19.349Z"
+ },
+ "actor": "owner",
+ "at": "2026-10-02T06:32:19.349Z",
+ "transcribedBy": "win",
+ "busId": 654,
+ "busAt": "2026-10-02T06:32:19.349Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #654 (owner → win)."
+}
