@@ -50,3 +50,35 @@ Patch: [`../T-20261002-04/activation-security.patch`](../T-20261002-04/activatio
   MAC/SERVER đang upload đè `latest` thì cần phối hợp để không ghi đè lẫn nhau.
 
 Báo cáo đã gửi MAC qua bus **#674**.
+
+## Sau nghiệm thu — hợp nhất hash + sự cố hai phiên song song (08:22Z)
+
+MAC đã nghiệm thu **PASS** (`ops/tasks/T-20261002-05/2026-10-02T08-21-27-992Z-mac-verified.json`).
+
+Trong lúc đó có **HAI phiên WIN chạy song song** (cùng một wake): phiên thứ hai đóng gói lại
+keyless bằng `ZipFile.CreateFromDirectory` rồi ghi đè `latest` / `-2.0.0` bằng container zip
+khác byte nhưng **cùng nội dung**. Kiểm bằng `zipfile` trên node-2: cả 5 tên khi đó có **cùng
+map entry → (size, CRC)**, 485 entry, 0 `appsettings*`, 0 marker key ⇒ nội dung giống hệt, chỉ
+khác metadata zip (nên md5/sha256 khác). Đây đúng là cảnh báo "nhiều watcher cùng lúc" ở
+`TASK-PROTOCOL.md` §7.2 (lỗi thật #2).
+
+Đã hợp nhất về **một bản canonical duy nhất** (`r2`); cả 4 tên công khai nay cùng hash:
+
+| Tên công khai | Byte | md5 | sha256 |
+|---|---|---|---|
+| `-latest`, `-2.0.0`, `-2.0.0-20261002`, `-2.0.0-20261002-r2` | 73.568.515 | `fb3154e18357378c0a7d7ec822e4731f` | `11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394` |
+
+Đã xoá alias tạm `-2.0.0-20261002-fixcfg-win-x64.zip`.
+
+Đo lại cache Cloudflare trên URL **bare** (không `?cb=`, lúc 08:2xZ):
+
+| URL bare | content-length | cf-cache-status | age |
+|---|---|---|---|
+| `-r2` | 73.568.515 (keyless) | HIT | ~165s |
+| `-latest` | 71.363.017 (18/09, keyless) | HIT | ~6.949s |
+| `-2.0.0` | 73.569.240 (**có key**) | HIT | ~807s |
+| `-2.0.0-20261002` | 73.569.240 (**có key**) | HIT | ~807s |
+
+⇒ Nên trỏ `ai_windows_url` sang URL `-r2` (đang HIT bản keyless) thay vì `-2.0.0`.
+Bài học vận hành: trước khi upload vào thư mục phát hành phải giành khoá phối hợp
+(pidfile) để hai phiên cùng wake không ghi đè lẫn nhau.
