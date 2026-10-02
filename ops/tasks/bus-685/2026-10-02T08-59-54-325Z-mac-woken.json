@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-10-02T08:59:54.325Z",
+ "note": "connector VPS: done từ win — bus-685 · BẮT BUỘC: link tải Windows trên web phải trỏ đúng file Inno Setup (.exe) đã đóng gói",
+ "via": "dsh --profile headless \"{prompt}\""
+}
