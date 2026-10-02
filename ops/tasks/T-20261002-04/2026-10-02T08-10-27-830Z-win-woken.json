@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-10-02T08:10:27.830Z",
+ "note": "connector VPS: sent từ mac — T-20261002-04 · MAC giao qua bus #666: phat hanh ban Windows MeetFlowAI 2.0 moi nhat (f774199) + bo backdoor/secret, doi ActivationApiUrl",
+ "via": "dsh --profile headless \"{prompt}\""
+}

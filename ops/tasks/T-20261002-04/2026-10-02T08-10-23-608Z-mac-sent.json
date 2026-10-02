@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "Nguon: bus #666 (mac -> win, 2026-10-02T07:42:58Z), ref \"MeetFlowAI_Win@f774199 · /var/www/flowvpn/dl/MeetFlowAI-Overlay-latest-win-x64.zip\". WIN ghi ho su kien \"created\" nay vi wake khong co task trong so. Yeu cau: build tu main f774199 (self-contained win-x64 + installer Inno Setup); doi ActivationApiUrl -> https://api.meetflowai.site/v1/ai/license; bo backdoor AutoActivatedMachineName \"LPP00031920A\" + AutoActivatedUserName \"MinhNB2\"; bo LicenseSecret hardcode (chuyen verify qua server); loc WMI UUID mac dinh trong GetMachineId; upload node-2 /var/www/flowvpn/dl/ (latest + versioned); bao lai qua bus.",
+ "actor": "mac",
+ "at": "2026-10-02T08:10:23.610Z"
+}
