@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261002-06",
+  "title": "TG /vibecode: test lại bản mới nhất MeetFlowAI trên máy thật (máy WIN)",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyên văn chủ dự án (bus #693, owner -> win, 2026-10-02T08:55:23Z, ref TG-VIBECODE): 'test lại bản mới nhất meetflowAI trên máy thật'. Phạm vi: tải + kiểm gói phát hành công khai trên máy Windows thật, cài/chạy app và xác nhận keyless + backend. Bằng chứng: docs/evidence/T-20261002-06/README.md.",
+  "verify": "node ops/_scratch/win-real-machine-test.mjs => 6/6 trang /ai/buy tro MeetFlowAI-Setup-latest.exe?v=a0b7c78f...; tai that 52177349 B md5 a0b7c78f5963dda7f5e8d5341a0e7de6 sha256 4e832ebf...95cf magic MZ; payload DLL trong installer sha256 5913C6BC...A50C9D = publish 164453 va 0 marker key/backdoor; app mo cua so 'MeetFlowAI 2.0' Responding=True + 14 control UIA; backend /health /tmp-key /summary /chat deu OK. LUU Y: buoc cai that bi sandbox DSH chan ghi registry HKCU (RegCreateKeyEx code 5) => can chay ngoai sandbox.",
+  "due": "2026-10-02",
+  "createdAt": "2026-10-02T09:10:26.515Z"
+ },
+ "actor": "owner",
+ "at": "2026-10-02T09:10:26.515Z",
+ "transcribedBy": "win",
+ "busId": 693,
+ "busAt": "2026-10-02T09:10:26.514Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #693 (owner → win)."
+}
