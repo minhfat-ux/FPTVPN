@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=95d67a0 (origin/main minhfat-ux/MeetFlowAI_Win, xac nhan qua GitHub API repos/.../commits/main = 95d67a08c31d8f3d47de79cbcb29ab0cff0eaf5b; base f774199). cmd=robocopy publish dir /XF appsettings.json -> Compress-Archive (bo key provider khoi zip) -> scp node-2 -> install -o caddy -g caddy -m 644 cho ca 3 ten cong khai -> python3 zipfile testzip/namelist. ket qua=MeetFlowAI-Overlay zip keyless 73.568.515 B, 485 entry, 0 appsettings.json, testzip None, md5 fb3154e18357378c0a7d7ec822e4731f, sha256 11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394; them URL moi chua cache https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-20261002-r2-win-x64.zip (cf MISS). Da go installer khoi thu muc cong khai (-> /root/MeetFlowAI-2.0-Setup.exe.quarantine-20261002-151638) va cach ly 3 ban .bak-fixcfg-* co key. CANH BAO cache: -latest dang HIT ban 18/09 (71.363.017 B, khong key) con -2.0.0 va -2.0.0-20261002 dang HIT ban co key (73.569.240) ~4h, khong purge duoc (token Zone:Read). Chu du an can rotate Soniox + OpenRouter key. Chi tiet o bus #674.",
+ "actor": "win",
+ "at": "2026-10-02T08:19:22.376Z"
+}
