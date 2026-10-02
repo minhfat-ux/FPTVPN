@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=minhfat-ux/MeetFlowAI_Win@99da3f2 (cee56ee+99da3f2, pushed origin/main); cmd=git grep 'SonioxApiKey|OpenRouterApiKey|PortableSecret' HEAD -- MeetFlowAI.Win => 0 dong; dotnet build -c Release => 0 loi; FallbackSmoke => 6/6 PASS; node ops/_scratch/bus686-live-probe.mjs => /health 200, /tmp-key 201, /summary 200, /chat 200; ket qua=huong (A): client Windows khong con key provider (AppSettings chi con MeetingApiBaseUrl/SonioxModel/ActivationApiUrl), xoa ProtectedSetting.cs+protect-appsettings.ps1, Soniox lay temp key tu /tmp-key, bien ban qua /summary, chat qua /chat; evidence: docs/evidence/bus-686/README.md; CON LAI: chu du an rotate Soniox+OpenRouter key, va build lai installer/zip tu 99da3f2",
+ "actor": "win",
+ "at": "2026-10-02T08:53:41.520Z"
+}
