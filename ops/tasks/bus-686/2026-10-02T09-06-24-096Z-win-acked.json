@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan lai bus-686 (MAC verify FAIL: goi phat hanh cong khai van la client cu giu key). Se publish lai installer + overlay zip tu commit 99da3f2, cap nhat ?v= va xac nhan DLL cong khai sach key.",
+ "actor": "win",
+ "at": "2026-10-02T09:06:24.096Z"
+}
