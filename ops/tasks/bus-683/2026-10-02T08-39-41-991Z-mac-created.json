@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-683",
+  "title": "Build bản Windows mới nhất + đóng gói Inno Setup + đưa link lên web",
+  "from": "mac",
+  "to": "win",
+  "detail": "Nguồn: bus #683 (mac -> win, 2026-10-02T08:33:25Z, kind task; yêu cầu từ chủ dự án). Yêu cầu: (1) build từ main mới nhất; (2) đóng gói installer bằng Inno Setup (ISCC, output MeetFlowAI-2.0-Setup.exe) rồi upload /var/www/flowvpn/dl/ tên cố định (MeetFlowAI-Setup-latest.exe); (3) cập nhật link Windows trên web (appConfig ai_windows_url hoặc storeLinks('ai').windows trong src/index.js) và kiểm 5/5 ngôn ngữ /ai/buy href đúng .exe + HEAD 200 + content-length; (4) báo lại md5/sha256 + commit SHA + link. BẮT BUỘC: (5) KHÔNG để lộ key provider trong gói phát hành công khai (bản zip 02/10 lộ Soniox+OpenRouter); (6) commit thay đổi vào minhfat-ux/MeetFlowAI_Win (đã xong ở 9194a96). Ràng buộc thật: installer phải nhúng appsettings.json (project dir) để --protect-config tạo appsettings.dat cho máy mới; trên máy WIN hiện KHÔNG có appsettings.json thật (chỉ có bản DUMMY 298 B) và key chưa được rotate.",
+  "verify": "curl -sIL 'https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe' => HTTP 200 + content-length = kích thước installer; curl -s 'https://meetflowai.site/ai/buy' | grep -o 'MeetFlowAI-Setup[^\"]*' (và ?lang=zh,ja,ko,vi) => 5/5 href trỏ file .exe; tải file: md5/sha256 khớp báo cáo; innoextract/mở installer => KHÔNG có appsettings.json chứa key provider.",
+  "due": null,
+  "createdAt": "2026-10-02T08:33:25.081Z"
+ },
+ "actor": "mac",
+ "at": "2026-10-02T08:39:41.991Z",
+ "transcribedBy": "win",
+ "busId": 683,
+ "busAt": "2026-10-02T08:33:25.081Z",
+ "busFrom": "mac",
+ "note": "Chép từ bus #683 (mac → win). MAC giao qua bus, chưa có mục trong sổ flowgpt; WIN chép nguyên văn yêu cầu để có sổ đối chiếu + bằng chứng ack/done (giống bus-476/516/523)."
+}
