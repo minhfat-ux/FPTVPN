@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=9194a96 (origin/main minhfat-ux/MeetFlowAI_Win: csproj CopyToPublishDirectory=Never + MeetFlowAI.iss stage config tu project dir + tools/package-overlay.ps1 + AGENTS/architecture) va 95d67a0; cmd=dotnet publish -c Release -r win-x64 --self-contained (KHI appsettings.json co mat) + tools/package-overlay.ps1 + sqlite3 UPDATE app_config.ai_windows_url + sua home-page.js (live+workspace) + systemctl restart flowvpn-cp; ket qua=(a) /ai/buy, /ai/buy?lang=zh va / deu tro https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip?v=fb3154e18357378c0a7d7ec822e4731f; tai DUNG href = 73568515 B, cf-cache-status MISS, sha256 11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394, 485 entry, 0 appsettings, testzip None. (b) publish that voi appsettings.json co mat => publish output 485 file, 0 appsettings; bin/Release/net8.0-windows/win-x64 van co appsettings.json cho dotnet run; package-overlay.ps1 strip appsettings* va tu choi zip con key. CON TON: rotate Soniox+OpenRouter (chu du an), purge CF cache URL bare, rebuild installer sau khi rotate.",
+ "actor": "win",
+ "at": "2026-10-02T08:31:27.292Z"
+}
