@@ -1,0 +1,9 @@
+Live backend probe chay TU MAY WIN THAT (DESKTOP-852P1LT), 2026-10-02 ~17:2x +08
+cmd: node ops/_scratch/bus686-live-probe.mjs
+
+GET  /health  -> 200 {"ok":true}
+POST /tmp-key -> 201 api_key=<147 chars, prefix snx_...>, expires_at=2026-10-02T09:23:28.042Z
+POST /summary -> 200 provider=openrouter model=qwen/qwen3.6-plus summary=<884 chars>
+POST /chat    -> 200 provider=openrouter answer=<47 chars>
+
+=> Client keyless (huong A) goi duoc backend that tu may that; khong can key provider trong client.

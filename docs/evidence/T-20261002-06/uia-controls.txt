@@ -1,0 +1,19 @@
+UI Automation tren cua so app that (payload dung y nguyen trong installer), 2026-10-02 ~17:2x +08
+
+pid=15116  title='MeetFlowAI 2.0'  MainWindowHandle=18612904  Responding=True  rect=900x640
+
+Buttons (14):
+Start live translation                                   | offscreen=False | enabled=False
+Stop live translation                                    | offscreen=False | enabled=False
+Activate                                                 | offscreen=False | enabled=False
+Generate AI meeting minutes from current transcript      | offscreen=False | enabled=False
+Save transcript                                          | offscreen=False | enabled=False
+Open transcript folder                                   | offscreen=False | enabled=True
+Hide overlay                                             | offscreen=False | enabled=True
+Clear current transcript                                 | offscreen=False | enabled=False
+Generate AI meeting minutes                              | offscreen=False | enabled=True
+Delete transcript                                        | offscreen=False | enabled=True
+
+Ghi chu: anh chup man hinh that (CopyFromScreen) tra ve DESKTOP dang bi lock (khong phai cua so app),
+nen bang chung giao dien la: MainWindowHandle + Responding + cay UIA o tren.
+Anh app-window.png (PrintWindow) chi bat duoc title bar vi WPF ve bang DirectX (client area trang).

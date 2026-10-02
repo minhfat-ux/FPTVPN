@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-02T09:01:48.395Z",
+  "host": "DESKTOP-852P1LT (may WIN that)",
+  "base": "https://meetflowai.site",
+  "pages": [
+    { "url": "https://meetflowai.site/ai/buy", "status": 200, "windowsHrefs": ["https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f5963dda7f5e8d5341a0e7de6"] },
+    { "url": "https://meetflowai.site/ai/buy?lang=vi", "status": 200, "windowsHrefs": ["https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f5963dda7f5e8d5341a0e7de6"] },
+    { "url": "https://meetflowai.site/ai/buy?lang=en", "status": 200, "windowsHrefs": ["https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f5963dda7f5e8d5341a0e7de6"] },
+    { "url": "https://meetflowai.site/ai/buy?lang=zh", "status": 200, "windowsHrefs": ["https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f5963dda7f5e8d5341a0e7de6"] },
+    { "url": "https://meetflowai.site/ai/buy?lang=ja", "status": 200, "windowsHrefs": ["https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f5963dda7f5e8d5341a0e7de6"] },
+    { "url": "https://meetflowai.site/ai/buy?lang=ko", "status": 200, "windowsHrefs": ["https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f5963dda7f5e8d5341a0e7de6"] }
+  ],
+  "download": {
+    "head": {
+      "status": 200,
+      "contentLength": 52177349,
+      "contentType": "application/octet-stream",
+      "lastModified": "Fri, 02 Oct 2026 08:49:43 GMT",
+      "cfCache": "HIT"
+    },
+    "file": {
+      "bytes": 52177349,
+      "md5": "a0b7c78f5963dda7f5e8d5341a0e7de6",
+      "sha256": "4e832ebff9233b617920a51feb336e88659a39bcd38aa875dacad3643fa095cf",
+      "magic": "MZ",
+      "hasInnoString": true
+    }
+  },
+  "motw": "(none: ENOENT - tai bang Node fetch, khong co Mark-of-the-Web)"
+}
