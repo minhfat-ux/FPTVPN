@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan bus #686: chon huong (A) — bo key Soniox/OpenRouter khoi client Windows, di qua backend /tmp-key + /summary. Bat dau sua source MeetFlowAI_Win.",
+ "actor": "win",
+ "at": "2026-10-02T08:43:24.398Z"
+}
