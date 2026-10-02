@@ -82,3 +82,62 @@ khác metadata zip (nên md5/sha256 khác). Đây đúng là cảnh báo "nhiề
 ⇒ Nên trỏ `ai_windows_url` sang URL `-r2` (đang HIT bản keyless) thay vì `-2.0.0`.
 Bài học vận hành: trước khi upload vào thư mục phát hành phải giành khoá phối hợp
 (pidfile) để hai phiên cùng wake không ghi đè lẫn nhau.
+
+## Vòng 2 — sửa theo `verify FAIL` của MAC (08:23Z)
+
+MAC mở lại việc với 2 lý do: (a) link công khai trên `/ai/buy` + trang chủ vẫn là URL
+**bare** `-2.0.0-win-x64.zip`, bị Cloudflare trả **bản CŨ CÓ KEY** (73.569.240 B, 486 entry);
+(b) chưa **commit** cơ chế loại `appsettings.json` — lần trước chỉ là `robocopy /XF` một lần,
+build lại từ `main` sẽ lộ lại.
+
+### (a) Link công khai — đã sửa
+
+- `app-config.db`: `ai_windows_url` → `https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip?v=fb3154e18357378c0a7d7ec822e4731f`
+- `home-page.js` (live `/root/flowvpn-cp/src/home-page.js` **và** workspace
+  `/root/flowvpn-agent/control-plane/src/home-page.js`, dòng 1095): cùng URL `?v=<md5>`.
+- Restart `flowvpn-cp.service` → `active`, `https://api.meetflowai.site/health` = 200.
+- Kiểm chứng sau restart:
+  - `/ai/buy` và `/ai/buy?lang=zh` và `/` đều render href
+    `MeetFlowAI-Overlay-2.0.0-win-x64.zip?v=fb3154e18357378c0a7d7ec822e4731f`.
+  - Tải **đúng href đó**: HTTP 200, `content-length 73568515`, `cf-cache-status MISS`,
+    sha256 `11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394`,
+    485 entry, **0 entry `appsettings*`**, `testzip None`.
+  - Query string nằm trong cache key của Cloudflare (đo: `?v=`/`?cb=` → MISS) nên URL
+    này luôn lấy bản tươi từ origin thay vì HIT bản cũ.
+
+### (b) Commit cơ chế loại `appsettings.json` — commit `9194a96`
+
+`origin/main` của `minhfat-ux/MeetFlowAI_Win` nay = **`9194a96`**
+(`fix(packaging): never ship appsettings.json in published artifacts`):
+
+1. `MeetFlowAI.Win.csproj`: `appsettings.json` có `CopyToPublishDirectory=Never`
+   ⇒ **`dotnet publish` không bao giờ phát file này**, nên zip publish dir kiểu gì cũng sạch.
+   `bin/` vẫn giữ file (CopyToOutputDirectory=PreserveNewest) cho `dotnet run`.
+2. `MeetFlowAI.iss`: stage `appsettings.json` từ **thư mục project**
+   (`{#ConfigFile}` = `..\..\appsettings.json`) thay vì từ publish dir; vẫn
+   `--protect-config` → DPAPI như cũ.
+3. `tools/package-overlay.ps1` (mới): **cách duy nhất** được phép đóng gói overlay zip —
+   strip `appsettings*` rồi tự kiểm tra, **từ chối ghi zip** nếu còn `appsettings*`
+   hoặc còn giá trị `SonioxApiKey`/`OpenRouterApiKey` trong file JSON/config.
+4. `AGENTS.md` + `docs/meetflowai-architecture.md`: ghi luật + yêu cầu `?v=<md5>`.
+
+Kiểm chứng commit này **bằng publish thật** (trong khi `appsettings.json` **có mặt**):
+
+| Kiểm tra | Kết quả |
+|---|---|
+| `dotnet publish -c Release -r win-x64 --self-contained` | exit 0, **485 file** |
+| `appsettings.json` trong publish output | **KHÔNG có** |
+| `bin/Release/net8.0-windows/win-x64/appsettings.json` | có (giữ cho `dotnet run`) |
+| `tools/package-overlay.ps1` trên publish dir | OK — 485 entry, không appsettings* |
+| `tools/package-overlay.ps1` khi nguồn **có** `appsettings.json` | OK — chỉ còn 1 entry, đã strip |
+
+### Còn tồn
+
+- **Rotate `SonioxApiKey` + `OpenRouterApiKey`** (chủ dự án) — key cũ đã lộ qua bản 02/10.
+- Cloudflare vẫn giữ bản **có key** ở cache của URL bare `-2.0.0` /
+  `-2.0.0-20261002` tới khi hết `max-age=14400` (không purge được từ node-2, token
+  chỉ `Zone:Read`). Không còn link công khai nào trỏ tới 2 URL bare đó; nên purge
+  khi có quyền.
+- `MeetFlowAI-2.0-Setup.exe` đang bị cách ly (installer cũng nhúng config). Cần
+  rebuild installer theo commit `9194a96` khi chủ dự án tạo `appsettings.json` mới
+  (đã rotate), hoặc chuyển provider key ra backend (SRS D1/D2).
