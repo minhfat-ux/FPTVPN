@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=87fc9d8 (server-agent tren node-2: control-plane/src/payments.js AI_TEXTS them emailLabel 5 ngon ngu) + b99da57 (flowgpt: docs/evidence/T-20261002-01/README.md + control-plane.patch + ops/_scratch/T-20261002-cp/*). cmd=node /tmp/patch-ai-buy.mjs (backup /root/cp-backup-ai-buy-20261002-062607) + bash /tmp/deploy-ai-buy.sh (backup LIVE /root/flowvpn-cp/src-backup-20261002-062644; health OK; service=active) + cd /root/flowvpn-cp && node /tmp/verify-ai-buy.mjs. ket qua=63 PASS/0 FAIL: /ai/buy o ca 5 ngon ngu nhan o email = Email (en,vi) / 邮箱 (zh) / メールアドレス (ja) / 이메일 (ko), KHONG con 'VPNFlow account email'; trang /buy (VPNFlow) nhan cu giu nguyen + cong nhap email truoc khi tai van con. Test suite truoc=sau: 326 test/324 pass/2 fail (2 ca do CO SAN, khong lien quan: mac-install 4 vs 5 buoc + sendTelegram mojibake); rieng nhom buy 19/19 PASS.",
+ "actor": "win",
+ "at": "2026-10-02T06:31:23.516Z"
+}
