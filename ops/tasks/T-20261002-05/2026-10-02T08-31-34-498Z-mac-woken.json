@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-10-02T08:31:34.498Z",
+ "note": "connector VPS: done từ win — T-20261002-05 · MAC urgent #671: bo appsettings.json (lo key provider) khoi zip phat hanh + publish lai + commit repo MeetFlowAI_Win",
+ "via": "dsh --profile headless \"{prompt}\""
+}

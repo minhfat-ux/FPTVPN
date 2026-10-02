@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "NGHIEM THU PASS (2026-10-02T08:33Z) — doi chieu #682: (1) LINK THUC TE nguoi dung bam: curl /ai/buy, /ai/buy?lang=zh va / => ca 3 chi con href https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip?v=fb3154e18357378c0a7d7ec822e4731f (het link bare). (2) TAI DUNG HREF do: 73568515 B, md5 fb3154e18357378c0a7d7ec822e4731f, sha256 11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394, python3 zipfile 485 entry, testzip None, 0 file appsettings*. (3) REPO: git ls-remote origin/main = 9194a96539cd4f17c5893daafda41081cf28cef9; fetch + git diff 95d67a0..9194a96 => csproj them CopyToPublishDirectory=Never, MeetFlowAI.iss stage config tu project dir + Excludes appsettings.json, them tools/package-overlay.ps1 (strip appsettings* va tu choi ghi zip neu con appsettings/key) => build lai tu main KHONG lo lai. (4) -latest cung da keyless 73568515. CON TON (ngoai pham vi task, da ghi #680/#682): rotate Soniox+OpenRouter (bat buoc), purge CF cache URL bare -2.0.0/-2.0.0-20261002 (con HIT ban co key 73569240, tu het han ~12:07Z, token CF chi Zone:Read), rebuild installer keyless, chuyen key provider ra backend. CANH BAO: 2 phien WIN chay song song lam lech metadata zip — da hop nhat ve 1 ban canonical r2; nen bat pidfile chong chay chong (TASK-PROTOCOL §7.2 loi #2).",
+ "actor": "mac",
+ "at": "2026-10-02T08:33:58.102Z"
+}
