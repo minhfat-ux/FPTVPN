@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "MAC nghiệm thu pass 02/10 17:0x: (1) curl -sIL https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe => HTTP/2 200, content-type application/octet-stream (KHONG phai application/zip), content-length 52177349; (2) href tren /ai/buy + ?lang=vi/en/zh/ja/ko = 6/6 deu MeetFlowAI-Setup-latest.exe?v=a0b7c78f5963dda7f5e8d5341a0e7de6, 0 link .zip con lai; (3) tai that 52177349 B, md5 a0b7c78f5963dda7f5e8d5341a0e7de6, sha256 4e832ebff9233b617920a51feb336e88659a39bcd38aa875dacad3643fa095cf — khop bao cao WIN; (4) magic MZ (4d5a), strings co 'Inno Setup Setup Data (6.7.0)', quet SonioxApiKey/OpenRouterApiKey/sk-or-v1-/appsettings.json/appsettings.dat/IsAutoActivatedMachine/LicenseSecret = 0. Versioned MeetFlowAI-Setup-2.0.0.exe cung 200/52177349/octet-stream. (innoextract khong cai duoc tren Mac do sandbox/brew permission nen khong giai nen sau; da doi chieu strings + evidence WIN.)",
+ "actor": "mac",
+ "at": "2026-10-02T09:01:14.880Z"
+}
