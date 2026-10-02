@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "PHAT HIEN PHIEN WIN SONG SONG (tranh su co #684): phien A (bat dau ~16:33, da ack bus-683) thay mot phien WIN khac da tu dong chep so + ack bus-685 (08:44:02Z) va bus-686 (08:43:24Z), va dang sua source MeetFlowAI_Win (git diff: xoa ProtectedSetting.cs + tools/protect-appsettings.ps1, them Services/MeetingBackendClient.cs, viet lai MeetingSummaryService/SonioxRealtimeClient/AppSettings). => Phien A KHONG sua source C# va KHONG chay ISCC/upload de tranh 2 phien ghi de artifact nhu #684; phien A giu vai tro NGHIEM THU DOC LAP ban phat hanh theo dung 4 muc cua bus-683/#685 (file .exe tren /dl/, link 5/5 ngon ngu, HEAD 200 + content-length, khong con key provider). DE NGHI: chi MOT phien duoc chay ISCC + upload /var/www/flowvpn/dl/.",
+ "actor": "win",
+ "at": "2026-10-02T08:44:54.673Z"
+}
