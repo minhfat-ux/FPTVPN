@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261002-02",
+  "title": "TG /vibecode: /ai/buy MeetFlow AI — bổ sung link tải bản Windows",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyên văn chủ dự án (bus #653, owner → win, 2026-10-02T06:17:56Z): 'bổ sung link download windows version cho meetflowAI trên trang buy của nó ngay.' Nguyên nhân gốc: trong payments.js, windowsUrl bị khoá theo sản phẩm (product === 'vpn' ? links.windows || '/dl/VPNFlow-Setup-latest.exe' : null) và storeLinks('ai') không trả khoá windows ⇒ trang /ai/buy KHÔNG BAO GIỜ có nút Windows, dù bản cài đã có sẵn trên shop: /var/www/flowvpn/dl/MeetFlowAI-Overlay-latest-win-x64.zip (71.363.017 B, overlay .NET tự chứa, chạy MeetFlowAI.Win.exe; trang chủ meetflowai.site đã quảng cáo link này). Phạm vi: (1) control-plane/src/index.js — storeLinks('ai') thêm windows: appConfig('ai_windows_url') → env AI_WINDOWS_URL → siteBaseUrl()/dl/MeetFlowAI-Overlay-latest-win-x64.zip; (2) control-plane/src/payments.js — windowsUrl của product 'ai' lấy links.windows (chỉ hiện khi có link thật, không có nút chết) + AI_TEXTS thêm windowsLine ở 5 ngôn ngữ cho đúng app overlay.",
+  "verify": "scp ops/_scratch/T-20261002-cp/verify-ai-buy.mjs root@165.101.114.162:/tmp/ && ssh root@165.101.114.162 'cd /root/flowvpn-cp && node /tmp/verify-ai-buy.mjs' => 63 PASS / 0 FAIL (mục 1: 5/5 ngôn ngữ có href .../dl/MeetFlowAI-Overlay-latest-win-x64.zip; mục 4: HEAD link = 200, 71363017 bytes)",
+  "due": "2026-10-02",
+  "createdAt": "2026-10-02T06:30:17.383Z"
+ },
+ "actor": "owner",
+ "at": "2026-10-02T06:30:17.383Z",
+ "transcribedBy": "win",
+ "busId": 653,
+ "busAt": "2026-10-02T06:30:17.383Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #653 (owner → win)."
+}

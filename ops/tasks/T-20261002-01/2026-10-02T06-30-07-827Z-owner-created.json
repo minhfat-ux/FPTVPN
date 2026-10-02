@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261002-01",
+  "title": "TG /vibecode: trang /ai/buy MeetFlow AI — nhãn ô email đang là 'VPNFlow account', sửa lại là email",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyên văn chủ dự án (bus #652, owner → win, 2026-10-02T06:16:32Z): 'trang buy meetflowAI, phần nhập email đăng ký, đang để là VPNflow acount, cần sửa lại là email.' Nguyên nhân gốc: buyPageHTML lấy TEXTS[lang] (bộ chữ của VPNFlow) làm nền, AI_TEXTS[lang] THIẾU emailLabel ⇒ trang /ai/buy rơi về nhãn 'Your VPNFlow account email'. Phạm vi: control-plane/src/payments.js — thêm emailLabel cho AI_TEXTS ở cả 5 ngôn ngữ: Email / 邮箱 / メールアドレス / 이메일; KHÔNG đổi nhãn của /buy (VPNFlow).",
+  "verify": "scp ops/_scratch/T-20261002-cp/verify-ai-buy.mjs root@165.101.114.162:/tmp/ && ssh root@165.101.114.162 'cd /root/flowvpn-cp && node /tmp/verify-ai-buy.mjs' => 63 PASS / 0 FAIL (mục 1: nhãn ô email = Email / 邮箱 / メールアドレス / 이메일 ở đủ 5 ngôn ngữ)",
+  "due": "2026-10-02",
+  "createdAt": "2026-10-02T06:30:07.826Z"
+ },
+ "actor": "owner",
+ "at": "2026-10-02T06:30:07.826Z",
+ "transcribedBy": "win",
+ "busId": 652,
+ "busAt": "2026-10-02T06:30:07.826Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #652 (owner → win)."
+}

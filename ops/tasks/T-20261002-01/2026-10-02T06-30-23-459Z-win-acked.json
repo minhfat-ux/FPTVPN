@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhận việc owner (bus #652): nhãn ô email trang /ai/buy phải là 'email', không phải VPNFlow account. Đã tìm ra gốc (AI_TEXTS thiếu emailLabel) và đang sửa.",
+ "actor": "win",
+ "at": "2026-10-02T06:30:23.459Z"
+}
