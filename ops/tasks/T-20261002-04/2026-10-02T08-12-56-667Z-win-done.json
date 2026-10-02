@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=MeetFlowAI_Win@95d67a0 (base MAC yeu cau f774199) + f774199; cmd=dotnet publish -c Release -r win-x64 --self-contained + Inno Setup; ket qua=zip 73569240 B sha256 9dac0181778cfe8cf890293a0243bc89bafcab9e118e4599106f1f742b37e527 da upload node-2 /var/www/flowvpn/dl/ (latest + 2.0.0 versioned) + MeetFlowAI-2.0-Setup.exe; soi MeetFlowAI.Win.dll: sach LPP00031920A/MinhNB2/MeetFlowAI.Win.2026.LocalLicense/LicenseSecret; ActivationApiUrl=https://api.meetflowai.site/v1/ai/license; HTTPS content-length=73569240; bao cao bus#667; da push so lan nay",
+ "actor": "win",
+ "at": "2026-10-02T08:12:56.667Z"
+}
