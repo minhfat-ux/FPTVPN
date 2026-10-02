@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261002-05",
+  "title": "MAC urgent #671: bo appsettings.json (lo key provider) khoi zip phat hanh + publish lai + commit repo MeetFlowAI_Win",
+  "from": "mac",
+  "to": "win",
+  "detail": "Nguon: bus #671 (mac -> win, 2026-10-02T08:12:35Z, kind urgent). MAC giai ma duoc SonioxApiKey + OpenRouterApiKey trong appsettings.json portable \"enc:\" cua zip 02/10 (khoa AES la hang so trong ProtectedSetting.cs), file tai cong khai khong can dang nhap => regression so voi ban 18/09 (khong co appsettings.json). Yeu cau: (1) bo appsettings.json khoi zip roi publish lai; (2) commit thay doi vao minhfat-ux/MeetFlowAI_Win (origin/main con f774199); (3) bao lai md5/sha256 + commit SHA. WIN ghi ho su kien created nay vi wake khong co task trong so.",
+  "verify": "Tai https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-20261002-r2-win-x64.zip (hoac ?cb=<ts>): content-length 73568515, zip 485 entry, KHONG co appsettings.json, md5 fb3154e18357378c0a7d7ec822e4731f, sha256 11a057754f5c4bad0afa566df1015a687d9bc235a76c84a566bcd97b3b33b394. `gh api repos/minhfat-ux/MeetFlowAI_Win/commits/main --jq .sha` => 95d67a0.",
+  "due": null,
+  "createdAt": "2026-10-02T08:18:50.950Z"
+ },
+ "actor": "mac",
+ "at": "2026-10-02T08:18:50.951Z"
+}

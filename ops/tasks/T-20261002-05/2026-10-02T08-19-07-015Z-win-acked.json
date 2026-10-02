@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Nhan urgent #671. Da bo appsettings.json khoi zip, publish lai keyless, commit 95d67a0 da len origin/main.",
+ "actor": "win",
+ "at": "2026-10-02T08:19:07.015Z"
+}

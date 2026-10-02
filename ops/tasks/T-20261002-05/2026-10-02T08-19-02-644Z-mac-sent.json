@@ -1,0 +1,6 @@
+{
+ "type": "sent",
+ "ref": "Nguon: bus #671 (mac -> win, 2026-10-02T08:12:35Z, kind urgent). MAC giai ma duoc SonioxApiKey + OpenRouterApiKey trong appsettings.json portable \"enc:\" cua zip 02/10 (khoa AES la hang so trong ProtectedSetting.cs), file tai cong khai khong can dang nhap => regression so voi ban 18/09 (khong co appsettings.json). Yeu cau: (1) bo appsettings.json khoi zip roi publish lai; (2) commit thay doi vao minhfat-ux/MeetFlowAI_Win (origin/main con f774199); (3) bao lai md5/sha256 + commit SHA. WIN ghi ho su kien created nay vi wake khong co task trong so.",
+ "actor": "mac",
+ "at": "2026-10-02T08:19:02.644Z"
+}
