@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-10-02T06:16:35.656Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: trang buy meetflowAI, phần nhập email đăng ký, đang để là VPNflow acount, cândlf",
+ "via": "dsh --profile headless \"{prompt}\""
+}
