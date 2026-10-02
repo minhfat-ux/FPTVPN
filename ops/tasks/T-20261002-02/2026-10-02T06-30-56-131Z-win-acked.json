@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhận việc owner (bus #653): bổ sung link tải bản Windows cho MeetFlow AI trên trang /ai/buy. Đã tìm ra gốc (windowsUrl khoá theo product) + bản overlay .zip đã có sẵn trên shop.",
+ "actor": "win",
+ "at": "2026-10-02T06:30:56.131Z"
+}
