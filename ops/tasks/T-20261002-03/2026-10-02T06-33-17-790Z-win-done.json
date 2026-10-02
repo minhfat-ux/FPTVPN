@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "cmd=node ops/task.mjs list (doc thang so git) + AGENT_NAME=WIN node ops/_scratch/T-20261002-03/report-owner.mjs. ket qua=da gui bao cao cho chu du an qua Telegram, message_id 2384 (chat minhnb1403): (1) VUA XONG: bus #652 -> T-20261002-01 (nhan o email trang /ai/buy = Email o 5 ngon ngu, verify 63 PASS/0 FAIL) + bus #653 -> T-20261002-02 (nut tai Windows MeetFlowAI Overlay, link that 200 / 71.363.017 B); (2) CHO DOI TAC: T-20260922-09 (win->server) 14.347 phut server chua ack; MAC dang giu T-20260922-01/-06/-12/-14/-15/-17; (3) VUONG: T-20260927-01 (Play Console), bus-516, T-20260921-01; (4) 30 viec owner->win truoc deu done, cho ben giao verify; (5) xin chu du an quyet co mo viec rieng sua 2 test do CO SAN cua control-plane (mac-install 4 buoc + sendTelegram mojibake) de cong deploy chinh thuc chay lai duoc.",
+ "actor": "win",
+ "at": "2026-10-02T06:33:17.790Z"
+}
