@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "MAC nghiem thu doc lap 17:09 02/10: (1) curl -sIL https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe => HTTP/2 200, application/octet-stream, content-length 52177349 (dung kich thuoc installer). (2) Tai that tu Mac = 52177349 B; md5 a0b7c78f5963dda7f5e8d5341a0e7de6, sha256 4e832ebff9233b617920a51feb336e88659a39bcd38aa875dacad3643fa095cf, khop bao cao; file PE32 GUI (magic MZ). (3) /ai/buy 6/6 (mac dinh + ?lang=en/zh/ja/ko/vi) co duy nhat href https://meetflowai.site/dl/MeetFlowAI-Setup-latest.exe?v=a0b7c78f...; 0 href .zip. (4) Key provider: quet plaintext installer 0 marker SonioxApiKey/OpenRouterApiKey/sk-or-v1-; doi chieu source minhfat-ux/MeetFlowAI_Win @cee56ee (commit build) AppSettings.cs chi con MeetingApiBaseUrl/SonioxModel/ActivationApiUrl (khong truong key), appsettings.json chua bao gio duoc track trong git, 99da3f2 chi khac docs/fallback-smoke/package-overlay.ps1 (khong doi ma chay). GIOI HAN: MAC khong co innoextract (sandbox chan brew install) nen khong tu mo installer duoc; phan extraction dua tren bao cao doc lap cua WIN (485 file publish 0 appsettings*, config stage 285 B keyless). TON: (a) chu du an van phai rotate Soniox+OpenRouter; (b) chua cai thu that tren may sach (may WIN bi Application Control chan, exit 4 RegCreateKeyEx); (c) nen bo han buoc stage appsettings.json trong .iss. Ket luan: PASS 4/4 muc nghiem thu cua bus-683.",
+ "actor": "mac",
+ "at": "2026-10-02T09:09:18.779Z"
+}
