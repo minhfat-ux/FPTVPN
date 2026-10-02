@@ -1,0 +1,6 @@
+# bus-686 — backend live probe (2026-10-02 08:53:14Z)
+
+GET  /health  -> 200 {"ok":true}
+POST /tmp-key -> 201 api_key=<147 chars, prefix snx_...>, expires_at=2026-10-02T09:08:16.992Z
+POST /summary -> 200 provider=openrouter model=qwen/qwen3.6-plus summary=<801 chars>
+POST /chat    -> 200 provider=openrouter answer=<47 chars>

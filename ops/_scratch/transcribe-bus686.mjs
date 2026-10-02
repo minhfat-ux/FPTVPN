@@ -1,0 +1,60 @@
+// Chép tin bus #686 (mac → win) vào sổ ops/tasks — cùng cách đã dùng cho bus-476/516/523/683.
+// Dùng: node ops/_scratch/transcribe-bus686.mjs
+import fs from "node:fs";
+import path from "node:path";
+
+const id = "bus-686";
+const busId = 686;
+const busAt = "2026-10-02T08:38:08.273Z";
+const task = {
+  id,
+  title: "BẮT BUỘC: bỏ key Soniox/OpenRouter khỏi app Windows — đưa về backend hoặc mã hoá thật",
+  from: "mac",
+  to: "win",
+  detail:
+    "Nguồn: bus #686 (mac -> win, 2026-10-02T08:38:08Z, kind task; yêu cầu từ chủ dự án). " +
+    "QUYẾT ĐỊNH: KHÔNG được đặt key provider trong setting/cấu hình app Windows. Ưu tiên hướng (A) ĐƯA VỀ BACKEND " +
+    "(client không giữ key nào, đúng D1/D2 của SRS, giống iOS/Android); (B) mã hoá thật ở client KHÔNG an toàn với app desktop. " +
+    "VÌ SAO KHÔNG ĐẠT: ProtectedSetting.cs dùng hằng số PortableSecret nằm trong binary; Mac đã giải mã được SonioxApiKey (147 ký tự) " +
+    "và OpenRouterApiKey (73 ký tự sk-or-v1-) từ appsettings của bản phát hành 02/10 15:07. " +
+    "HƯỚNG (A) — contract đã chạy: base https://api.meetflowai.site/meetflow; POST /tmp-key -> {api_key, expires_at} (TTL ~900s, " +
+    "cache theo uid); POST /summary {format:\"meeting_minutes\", segments:[...], targetLanguage} -> {summary, provider, model}; " +
+    "POST /chat {question, context} -> {answer, provider}; POST /tts -> audio/mpeg; Soniox WS qua relay " +
+    "wss://api.meetflowai.site/soniox/transcribe-websocket hoặc trực tiếp. Xác thực Firebase ID token (ẩn danh) như iOS/Android; " +
+    "backend chấp nhận client ẩn danh khi ALLOW_UNAUTHENTICATED_CLIENTS=true. " +
+    "TIÊU CHÍ NGHIỆM THU: (1) gói phát hành công khai KHÔNG còn key provider nào (không SonioxApiKey/OpenRouterApiKey/OpenAI*, không giá trị 'enc:' cho key); " +
+    "(2) cấu hình client không còn trường key provider (hoặc rỗng); (3) dịch live vẫn chạy: client lấy temp key từ /tmp-key rồi mở WS Soniox (hoặc relay); " +
+    "(4) biên bản họp + AI Assistant vẫn chạy qua /summary và /chat; (5) chủ dự án vẫn phải ROTATE Soniox + OpenRouter key; " +
+    "(6) cập nhật docs trong repo + COMMIT (origin/main trước đó vẫn f774199, nay đã có 9194a96). " +
+    "BÁO LẠI qua bus (to: mac): hướng đã chọn (A hay B), file/dòng đã sửa, commit SHA, cách verify. Không gửi key/secret qua bus.",
+  verify:
+    "clone main MeetFlowAI_Win: grep -RIn 'SonioxApiKey|OpenRouterApiKey|enc:|PortableSecret' MeetFlowAI.Win --include=*.cs --include=*.json => rỗng; " +
+    "dotnet build .\\MeetFlowAI.Win.csproj -c Release => 0 lỗi; " +
+    "dotnet run --project .\\artifacts\\fallback-smoke\\FallbackSmoke.csproj -c Release => PASS (tmp-key + /summary qua backend, DPAPI round-trip, không plaintext key); " +
+    "gói phát hành (zip/installer) không có appsettings*/key provider.",
+  due: null,
+  createdAt: busAt,
+};
+const dir = path.join("ops", "tasks", id);
+if (fs.existsSync(dir)) {
+  console.error(`Task ${id} đã tồn tại.`);
+  process.exit(2);
+}
+const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const event = {
+  type: "created",
+  task,
+  actor: "mac",
+  at: new Date().toISOString(),
+  transcribedBy: "win",
+  busId,
+  busAt,
+  busFrom: "mac",
+  note:
+    "Chép từ bus #686 (mac → win). MAC giao qua bus, chưa có mục trong sổ flowgpt; WIN chép nguyên văn yêu cầu " +
+    "để có sổ đối chiếu + bằng chứng ack/done (giống bus-476/516/523/683).",
+};
+fs.mkdirSync(dir, { recursive: true });
+const file = path.join(dir, `${stamp}-mac-created.json`);
+fs.writeFileSync(file, `${JSON.stringify(event, null, 1)}\n`);
+console.log(file);
