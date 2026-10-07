@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-10-07T09:21:08.937Z",
+ "note": "connector VPS: task từ owner — Chủ dự án giao việc qua Telegram: check lại các version android cho TV, box, đã update latest code chưa? Báo cáo l",
+ "via": "dsh --profile headless \"{prompt}\""
+}
