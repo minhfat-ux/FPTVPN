@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261007-01",
+  "title": "TG /vibecode: check lại các version android cho TV, box — đã update latest code chưa? Báo cáo + giải pháp",
+  "from": "owner",
+  "to": "win",
+  "detail": "Nguyên văn chủ dự án (bus #829, owner -> win, 2026-10-07T09:21:06Z, ref TG-VIBECODE): 'check lại các version android cho TV, box, đã update latest code chưa? Báo cáo lại anh và đưa giải pháp anh review. Cần update latest solution cho các version đó.' Phạm vi: rà các bản Android phát cho TV/box (VPNFlow TV + MeetFlow AI Android), đối chiếu version/artifact đang phát với mã nguồn mới nhất, rồi đề xuất giải pháp cập nhật. Bằng chứng: docs/evidence/T-20261007-01/README.md.",
+  "verify": null,
+  "due": "2026-10-07",
+  "createdAt": "2026-10-07T09:22:59.226Z"
+ },
+ "actor": "owner",
+ "at": "2026-10-07T09:22:59.226Z",
+ "transcribedBy": "win",
+ "busId": 829,
+ "busAt": "2026-10-07T09:21:06.239Z",
+ "busFrom": "owner",
+ "note": "Chép từ bus #829 (owner → win)."
+}
