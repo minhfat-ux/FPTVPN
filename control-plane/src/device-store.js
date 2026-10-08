@@ -74,7 +74,7 @@ export class DeviceStore {
    * different account on the same phone must move the record instead of failing
    * with "Device belongs to another user".
    */
-  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId, allowTransfer = false }) {
+  async upsertByPublicKey({ publicKey, deviceName, assignedIP, platform, userId, exitNodeId, machineId = null, allowTransfer = false }) {
     const devices = await this._load();
     const existing = devices.find((d) => d.publicKey === publicKey);
     let transferred = false;
@@ -97,6 +97,7 @@ export class DeviceStore {
       existing.deviceName = deviceName ?? existing.deviceName;
       existing.platform = platform ?? existing.platform;
       if (exitNodeId) existing.exitNodeId = exitNodeId;
+      if (machineId) existing.machineId = machineId;
       existing.userId = userId ?? existing.userId ?? null;
       existing.active = true;
       await this._save(devices);
@@ -110,6 +111,9 @@ export class DeviceStore {
       userId: userId ?? null,
       exitNodeId: exitNodeId ?? null,
       assignedIP,
+      // Mã máy ổn định do client khai (Android = Settings.Secure.ANDROID_ID). Có nó thì cài lại app
+      // KHÔNG sinh thêm một "máy" mới trên dashboard — xem device-machines.js.
+      machineId: machineId ?? null,
       createdAt: new Date().toISOString(),
       active: true,
     };

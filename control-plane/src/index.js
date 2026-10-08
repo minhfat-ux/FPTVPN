@@ -15,6 +15,7 @@ import { WireGuardManager } from "./wireguard.js";
 import { DeviceStore } from "./device-store.js";
 import { deviceLimitDecision, isDeviceLimitExempt, parseExemptEmails } from "./device-limit.js";
 import { applyDeviceReplace } from "./device-replace.js";
+import { normalizeMachineId, summarizeMachines } from "./device-machines.js";
 import { createGeoLookup, isPublicIp } from "./geoip.js";
 import { versionPayloadFor, wantsLegacyApk, iosInstallManifest, UnknownPlatformError } from "./app-version.js";
 import {
@@ -31,6 +32,14 @@ import { AuthStore, setPlanLabelResolver } from "./auth-store.js";
 import { AppConfigStore } from "./app-config-store.js";
 import { createBwPolicyProvider } from "./bw-policy.js";
 import { registerClientTelemetry } from "./client-telemetry.js";
+import {
+  generateKeys,
+  revokeLicense,
+  licenseStats,
+  licenseConfigStatus,
+  activateLicense,
+  verifyLicense,
+} from "./license-keys.js";
 import { registerRouteReport } from "./route-report.js";
 import { NodeStore, adminNode, publicNode } from "./node-store.js";
 import { PlanStore } from "./plan-store.js";
@@ -403,6 +412,57 @@ app.get(["/admin", "/admin/"], (_req, res) => {
   res.type("html").send(adminPageHTML());
 });
 
+// ---- MeetFlow AI: key kich hoat ban Windows (CHI THEM MOI, khong dung route cu) ----
+// App Windows goi {ActivationApiUrl}/activate voi {key, machineId}.
+// Sinh key chi qua tab admin (Bearer AUTH_TOKEN) - KHONG co endpoint cong khai de sinh.
+app.post("/v1/ai/license/activate", async (req, res) => {
+  try {
+    const result = await activateLicense({ key: req.body?.key, machineId: req.body?.machineId });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    console.error("POST /v1/ai/license/activate failed:", err?.message ?? err);
+    res.status(500).json({ valid: false, message: "Internal error" });
+  }
+});
+
+app.post("/v1/ai/license/verify", async (req, res) => {
+  try {
+    const result = await verifyLicense({ key: req.body?.key, machineId: req.body?.machineId });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    console.error("POST /v1/ai/license/verify failed:", err?.message ?? err);
+    res.status(500).json({ valid: false, message: "Internal error" });
+  }
+});
+
+app.get("/v1/admin/ai/licenses", requireAdminAuth, async (_req, res) => {
+  try {
+    const [stats, config] = await Promise.all([licenseStats(), licenseConfigStatus()]);
+    res.json({ stats, config, plans: { monthly: 30, quarterly: 90, yearly: 365, lifetime: null } });
+  } catch (err) {
+    res.status(500).json({ error: "Internal error", message: err?.message ?? String(err) });
+  }
+});
+
+app.post("/v1/admin/ai/licenses/generate", requireAdminAuth, async (req, res) => {
+  try {
+    const result = await generateKeys({ plan: req.body?.plan, count: req.body?.count });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post("/v1/admin/ai/licenses/revoke", requireAdminAuth, async (req, res) => {
+  try {
+    const ok = await revokeLicense(req.body?.key);
+    if (!ok) return res.status(404).json({ error: "Khong tim thay key" });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err?.message ?? String(err) });
+  }
+});
+
 /**
  * Node health bookkeeping — two independent signals, both needed:
  *
@@ -635,6 +695,9 @@ function storeLinks(product) {
         ios: process.env.APP_STORE_URL_MEETFLOW_AI || null,
         mac: process.env.APP_STORE_URL_MEETFLOW_MAC || null,
         android: appConfig.get("ai_android_apk_url") || `${base}/v1/ai/downloads/android`,
+        // Windows: bản overlay desktop (.zip tự chứa, chạy MeetFlowAI.Win.exe) — phát tĩnh
+        // từ /dl/ của domain chính giống bộ cài VPNFlow. Đổi link bằng appConfig, không cần restart.
+        windows: appConfig.get("ai_windows_url") || process.env.AI_WINDOWS_URL || `${siteBaseUrl()}/dl/MeetFlowAI-Overlay-latest-win-x64.zip`,
       }
     : {
         // Chủ dự án đã bỏ kênh App Store (14/09/2026): bản iOS phát trực tiếp từ server
@@ -2798,7 +2861,36 @@ app.get(["/v1/admin/ios/apple", "/admin/ios/apple"], requireAdminAuth, async (_r
     const status = await appleAsc.status();
     const token = status.configured ? await appleAsc.token() : null;
     const list = token ? await listAppleDevices({ token }) : { ok: false, devices: [], error: "Chưa cấu hình API key" };
-    res.json({ credentials: status, apple: { ok: list.ok, error: list.error ?? null, devices: list.devices ?? [] } });
+    // "Số thiết bị đã đăng ký" của shop KHÔNG phải số UDID thô trên tài khoản Apple: tài khoản
+    // Apple còn chứa máy cá nhân/máy cũ không phải khách, và ngược lại có UDID khách không (còn)
+    // nằm trên Apple (Apple gỡ/tắt). Trước đây dashboard chỉ đếm `apple.devices.length` nên chủ
+    // shop thấy sai. Đối chiếu hai tập ngay tại server để mọi màn hình đọc cùng một con số.
+    const normUdid = (value) => String(value ?? "").trim().toUpperCase();
+    const shopList = await iosDevices.list().catch(() => ({ devices: [] }));
+    const shopDevices = Array.isArray(shopList?.devices) ? shopList.devices : [];
+    const shopUdids = new Set(shopDevices.map((d) => normUdid(d.udid)).filter(Boolean));
+    const appleUdids = new Set((list.devices ?? []).map((d) => normUdid(d.udid)).filter(Boolean));
+    const missingOnApple = [...shopUdids].filter((udid) => !appleUdids.has(udid));
+    const notShop = [...appleUdids].filter((udid) => !shopUdids.has(udid));
+    // `appleAlreadyRegistered` = Apple trả 409 (đã có UDID đó từ trước) ⇒ không phải máy mới của shop.
+    const addedByShop = shopDevices.filter((d) => d.appleRegisteredAt && !d.appleAlreadyRegistered).length;
+    res.json({
+      credentials: status,
+      shop: {
+        registered: shopUdids.size,                                 // thiết bị shop đã đăng ký (nguồn thật)
+        addedByShop,                                                // trong đó shop tự thêm mới lên Apple
+        alreadyOnApple: Math.max(0, shopUdids.size - addedByShop),  // đã có trên Apple từ trước
+        onApple: shopUdids.size - missingOnApple.length,            // đang thấy trên tài khoản Apple
+        missingOnApple,
+      },
+      apple: {
+        ok: list.ok,
+        error: list.error ?? null,
+        devices: list.devices ?? [],
+        accountTotal: appleUdids.size,                              // UDID thô trên tài khoản Apple
+        notShop,                                                    // có trên Apple nhưng không phải máy của shop
+      },
+    });
   } catch (err) {
     console.error("ios apple status failed:", err);
     res.status(500).json({ error: "Internal error" });
@@ -4744,19 +4836,26 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
 
     const byPlatform = {};
     const byStatus = { active: 0, revoked: 0 };
-    const byUser = {};        // userId -> { email, total, active, platforms:{} }
+    const byUser = {};        // userId -> { email, total, machines, active, platforms:{} }
+    const byUserDevices = new Map(); // userId -> bản ghi, để đếm "máy thật" theo từng tài khoản
     for (const d of realDevices) {
       const plat = d.platform && d.platform !== "unknown" ? d.platform : "other";
       byPlatform[plat] = (byPlatform[plat] ?? 0) + 1;
       byStatus[d.active ? "active" : "revoked"] += 1;
       const uid = d.userId;
       if (!byUser[uid]) {
-        byUser[uid] = { email: emailById.get(uid) ?? uid, total: 0, active: 0, platforms: {} };
+        byUser[uid] = { email: emailById.get(uid) ?? uid, total: 0, machines: 0, active: 0, platforms: {} };
+        byUserDevices.set(uid, []);
       }
       byUser[uid].total += 1;
       if (d.active) byUser[uid].active += 1;
       byUser[uid].platforms[plat] = (byUser[uid].platforms[plat] ?? 0) + 1;
+      byUserDevices.get(uid).push(d);
     }
+    // "Máy thật" (không phải bản ghi): mỗi lần cài lại app Android sinh một bản ghi mới cho CÙNG một
+    // chiếc máy ⇒ đếm theo mã máy, xem device-machines.js. Số bản ghi vẫn trả về để đối chiếu.
+    const machineStats = summarizeMachines(realDevices);
+    for (const [uid, list] of byUserDevices) byUser[uid].machines = summarizeMachines(list).machines;
 
     // Live peers: pull dump from every exit node (coordinator + remote nodes).
     // Giữ nguyên peer theo từng node (peersByNode) để dashboard vẽ được chart
@@ -4886,7 +4985,11 @@ app.get(["/v1/admin/stats", "/admin/stats"], requireAdminAuth, async (_req, res)
     res.json({
       generated_at: new Date().toISOString(),
       totals: {
-        devices: realDevices.length,
+        // `devices` = số MÁY THẬT (theo mã máy), không phải số bản ghi đăng ký — bus #591.
+        devices: machineStats.machines,
+        device_records: machineStats.records,
+        legacy_android_records: machineStats.legacy_android_records,
+        legacy_android_grouped_away: machineStats.legacy_android_grouped_away,
         test_devices: testDevices.length,
         users: users.length,
         active_devices: byStatus.active,
@@ -4943,7 +5046,8 @@ app.get("/v1/admin/users", requireAdminAuth, async (_req, res) => {
   try {
     // Use expiry analytics so the admin dashboard can show days-left and
     // highlight customers about to expire / already expired.
-    const users = await authStore.listUsersWithExpiry();
+    // Yêu cầu chủ dự án 29/09/2026: KHÔNG hiện account đã revoke trong list user nữa.
+    const users = await authStore.listUsersWithExpiry({ excludeRevoked: true });
     const now = Date.now();
     const expiryBuckets = {
       active: 0,
@@ -5159,6 +5263,8 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
     const deviceKey = String(req.body?.device_key ?? "").trim();
     const name = String(req.body?.name ?? "device").slice(0, 60);
     const platform = String(req.body?.platform ?? "android").slice(0, 24);
+    // Mã máy ổn định do client khai (Android = Settings.Secure.ANDROID_ID — sống qua lần cài lại).
+    const machineId = normalizeMachineId(req.body?.machine_id ?? req.body?.machineId);
     if (!deviceKey) return res.status(400).json({ error: "device_key is required" });
 
     const all = await store.all();
@@ -5170,6 +5276,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       userId,
       platform,
       publicKey: deviceKey,
+      machineId,
       store,
       removePeer: removePeerForDevice,
       log: console,
@@ -5203,6 +5310,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       if (rec) {
         rec.deviceName = name || rec.deviceName;
         rec.platform = platform || rec.platform;
+        if (machineId) rec.machineId = machineId;
         await store._save(refreshed);
       }
       await touchDeviceClientIp(existing.id, req);
@@ -5217,6 +5325,7 @@ app.post("/v1/devices/claim", requireUserAuth, async (req, res) => {
       assignedIP: assignedIP ?? "0.0.0.0",
       userId,
       exitNodeId: null,
+      machineId,
       // Authenticated claim (session + subscription): adopt a record left behind
       // by a previous account on this same device.
       allowTransfer: true,
@@ -5424,6 +5533,8 @@ async function registerDeviceWithPayload({ body, userId, apiShape, userEmail }) 
   const deviceName = body?.name ?? body?.deviceName;
   const platform = body?.platform;
   const exitNodeId = body?.exit_node_id ?? body?.exitNodeId ?? body?.node_id;
+  // Mã máy ổn định do client khai (Android = Settings.Secure.ANDROID_ID — sống qua lần cài lại).
+  const machineId = normalizeMachineId(body?.machine_id ?? body?.machineId);
 
   if (!publicKey || typeof publicKey !== "string") {
     const error = new Error("publicKey is required");
@@ -5451,6 +5562,7 @@ async function registerDeviceWithPayload({ body, userId, apiShape, userEmail }) 
     userId,
     platform,
     publicKey,
+    machineId,
     store,
     removePeer: removePeerForDevice,
     log: console,
@@ -5492,6 +5604,7 @@ async function registerDeviceWithPayload({ body, userId, apiShape, userEmail }) 
     platform,
     userId,
     exitNodeId: selectedNode.id,
+    machineId,
     // Authenticated register: adopt a record left behind by a previous account.
     allowTransfer: Boolean(userId),
   });

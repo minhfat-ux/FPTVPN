@@ -1091,7 +1091,8 @@ export function homePageHTML({
   const aiDownloads = {
     ios: "https://apps.apple.com/app/id6765590042",
     mac: "https://apps.apple.com/app/id6765590042",
-    windows: "https://meetflowai.site/dl/MeetFlowAI-Overlay-latest-win-x64.zip",
+    // Ban versioned + ?v=<md5> ep Cloudflare MISS (truoc 02/10 bi cache 4h tra ban CU CO KEY) (su co 02/10/2026).
+    windows: "https://meetflowai.site/dl/MeetFlowAI-Overlay-2.0.0-win-x64.zip?v=a097ab51033e917564035128b2ab75cd",
     android: "https://api.meetflowai.site/v1/ai/downloads/android",
   };
   const aiDownloadsBlock = downloadLinksHTML({

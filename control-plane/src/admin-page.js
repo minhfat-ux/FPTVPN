@@ -508,6 +508,7 @@ export function adminPageHTML() {
     <div class="tabs hidden" id="tabsAi" data-area="ai">
       <button class="tab" id="tabAi">MeetFlow AI</button>
       <button class="tab" id="tabAiUsers">AI Users</button>
+      <button class="tab" id="tabAiKeys">License keys</button>
     </div>
     <div class="tabs hidden" id="tabsSystem" data-area="system">
       <button class="tab" id="tabNodes">Nodes</button>
@@ -909,6 +910,46 @@ export function adminPageHTML() {
     </section>
 
     <!-- ===================== DASHBOARD VIEW ===================== -->
+    <section class="card hidden" id="view-ai-keys">
+      <h2>License keys — bản Windows</h2>
+      <p class="status" style="margin-bottom:12px;">
+        Key kích hoạt bản Windows, gắn với từng máy. Key chỉ hiện <b>một lần</b> lúc sinh
+        (hệ thống chỉ lưu hash sha256). Gói: monthly 30 ngày · quarterly 90 ngày · yearly 365 ngày · lifetime vĩnh viễn.
+      </p>
+      <div class="grid">
+        <label>Gói
+          <select id="licPlan">
+            <option value="monthly">Monthly — 30 ngày</option>
+            <option value="quarterly">Quarterly — 90 ngày</option>
+            <option value="yearly">Yearly — 365 ngày</option>
+            <option value="lifetime">Lifetime — vĩnh viễn</option>
+          </select>
+        </label>
+        <label>Số lượng (1..500)
+          <input id="licCount" type="number" min="1" max="500" value="1">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="licGenerate">Sinh key</button>
+        <button id="licStatsBtn">Xem thống kê</button>
+        <button id="licCopy" disabled>Sao chép</button>
+      </div>
+      <div class="status" id="licStatus"></div>
+      <div style="margin-top:14px;">
+        <textarea id="licOut" rows="8" spellcheck="false" placeholder="Key sinh ra hiện ở đây (chỉ một lần) — copy rồi giao cho khách." style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px;"></textarea>
+      </div>
+      <div style="margin-top:18px;">
+        <label>Thu hồi một key
+          <input id="licRevokeKey" type="text" placeholder="MF-XXXX-XXXX-XXXX-XXXX-XXXX" autocomplete="off">
+        </label>
+        <div class="actions"><button id="licRevoke">Thu hồi</button></div>
+      </div>
+      <div style="margin-top:18px;">
+        <h3>Thống kê key</h3>
+        <div id="licStatsBox" class="status">—</div>
+      </div>
+    </section>
+
     <section class="card hidden" id="view-stats">
       <h2>Dashboard</h2>
       <div class="actions">
@@ -1093,6 +1134,8 @@ export function adminPageHTML() {
       aiEntBody: document.getElementById("aiEntBody"),
       tabAiUsers: document.getElementById("tabAiUsers"),
       viewAiUsers: document.getElementById("view-ai-users"),
+      viewAiKeys: document.getElementById("view-ai-keys"),
+      tabAiKeys: document.getElementById("tabAiKeys"),
       aiuCards: document.getElementById("aiuCards"),
       aiuBody: document.getElementById("aiuBody"),
       aiuStatusLine: document.getElementById("aiuStatusLine"),
@@ -1196,6 +1239,7 @@ export function adminPageHTML() {
     const ADMIN_TAB_AREA = {
       stats: "vpn", users: "vpn", ios: "vpn", payments: "vpn", plans: "vpn",
       ai: "ai", aiu: "ai",
+      aikeys: "ai",
       nodes: "system",
     };
     // Tab mặc định khi mở một khu (khu mặc định toàn trang là vpn → VPNFlow).
@@ -1210,7 +1254,9 @@ export function adminPageHTML() {
 
     // Trạng thái phân trang/lọc của hai bảng (dữ liệu đã tải về client).
     const usersState = { all: [], expiry: {}, page: 1 };
-    const iosState = { all: [], page: 1 };
+    // appleUdids = tập UDID ĐANG có trên tài khoản Apple (nạp ở loadAscStatus) để cột "Apple"
+    // đối chiếu thực tế thay vì tin cờ đã lưu; null = chưa đọc được (chưa cấu hình/chưa gọi được).
+    const iosState = { all: [], page: 1, appleUdids: null };
     // Bảng Payments cũng phân trang 10 dòng/trang (adminPaginate tự kẹp trang).
     const paymentsState = { all: [], page: 1 };
 
@@ -1274,6 +1320,8 @@ export function adminPageHTML() {
       if (fields.viewAi) fields.viewAi.classList.toggle("hidden", tab !== "ai");
       if (fields.tabAiUsers) fields.tabAiUsers.classList.toggle("active", tab === "aiu");
       if (fields.viewAiUsers) fields.viewAiUsers.classList.toggle("hidden", tab !== "aiu");
+      if (fields.tabAiKeys) fields.tabAiKeys.classList.toggle("active", tab === "aikeys");
+      if (fields.viewAiKeys) fields.viewAiKeys.classList.toggle("hidden", tab !== "aikeys");
       fields.viewEdit.classList.add("hidden");
       adminSyncArea(tab);
       if (tab === "users" && !fields.usersLoaded) {
@@ -1286,6 +1334,7 @@ export function adminPageHTML() {
       if (tab === "plans") loadPlans();
       if (tab === "ai") loadAi();
       if (tab === "aiu") loadAiUsers();
+      if (tab === "aikeys") licLoad();
     }
 
     /** Đồng bộ nav cấp khu + nhóm tab con với tab đang xem, và nhớ lựa chọn. */
@@ -1372,6 +1421,13 @@ export function adminPageHTML() {
     }
 
     function iosAppleCell(d) {
+      // Có danh sách Apple sống ⇒ nói theo thực tế (một UDID có thể đã bị Apple gỡ/tắt dù cờ
+      // appleRegisteredAt cũ vẫn còn). Chưa có danh sách ⇒ mới rơi về cờ đã lưu.
+      if (iosState.appleUdids) {
+        const udid = String(d.udid || "").toUpperCase();
+        if (iosState.appleUdids.has(udid)) return "✅ có trên Apple";
+        return d.appleRegisteredAt ? "⚠️ KHÔNG thấy trên Apple" : "— chưa lên Apple";
+      }
       if (d.appleRegisteredAt) return "✅ " + (d.appleAlreadyRegistered ? "đã có trên Apple" : "đã đăng ký");
       if (d.appleError) return "⚠️ " + escapeHtml(d.appleError);
       return "—";
@@ -1385,13 +1441,25 @@ export function adminPageHTML() {
           ? "App Store Connect API — đã cấu hình (Key " + (c.keyId || "?") + ")"
           : "App Store Connect API — CHƯA cấu hình";
         const apple = data.apple || {};
+        const shop = data.shop || {};
+        const appleDevices = apple.devices || [];
+        // Ghi lại tập UDID Apple để cột "Apple" trong bảng iOS đối chiếu đúng thực tế.
+        iosState.appleUdids = new Set(appleDevices.map(function (d) { return String(d.udid || "").toUpperCase(); }));
+        const missing = shop.missingOnApple || [];
+        const notShop = apple.notShop || [];
         fields.ascBody.textContent = c.configured
           ? (apple.ok
-              ? "Kết nối Apple OK · " + (apple.devices || []).length + " thiết bị trên tài khoản."
+              ? "Kết nối Apple OK · shop đã đăng ký " + (shop.registered ?? 0) + " thiết bị (UDID)"
+                + " — " + (shop.addedByShop ?? 0) + " do shop thêm mới, " + (shop.alreadyOnApple ?? 0) + " đã có trên Apple từ trước"
+                + " · đang có trên Apple " + (shop.onApple ?? 0) + "/" + (shop.registered ?? 0)
+                + (missing.length ? " · THIẾU trên Apple: " + missing.join(", ") : "")
+                + " · tài khoản Apple có " + (apple.accountTotal ?? appleDevices.length) + " thiết bị"
+                + (notShop.length ? " (trong đó " + notShop.length + " không phải máy của shop)" : "")
               : "Chưa gọi được Apple: " + (apple.error || "lỗi không rõ"))
           : "Nạp Issuer ID + Key ID + file .p8 để server tự thêm UDID lên Apple Developer.";
         if (fields.ascKeyId && !fields.ascKeyId.value) fields.ascKeyId.value = c.keyId || "";
         if (fields.ascTeamId && !fields.ascTeamId.value) fields.ascTeamId.value = c.teamId || "";
+        renderIosDevices();   // vẽ lại để cột "Apple" dùng danh sách Apple vừa đọc
       } catch (error) {
         fields.ascTitle.textContent = "App Store Connect API — lỗi kiểm tra";
         fields.ascBody.textContent = error.message;
@@ -1468,7 +1536,8 @@ export function adminPageHTML() {
         // Mặc định: UDID đăng ký mới nhất lên trên (client đã có registeredAt).
         iosState.all = adminSortByTimeDesc(data.devices || [], function (d) { return d.registeredAt; });
         renderIosDevices();
-        fields.iosStatus.textContent = "Loaded " + iosState.all.length + " device(s).";
+        // Đếm theo UDID CỦA SHOP (nguồn thật), không phải theo UDID thô của tài khoản Apple.
+        fields.iosStatus.textContent = "Đã đăng ký " + iosState.all.length + " thiết bị (UDID) của shop.";
         await loadAscStatus();
       } catch (error) {
         fields.iosStatus.textContent = error.message;
@@ -1777,6 +1846,131 @@ export function adminPageHTML() {
       fields.nodeId.focus();
     }
 
+    // ---- License keys (bản Windows) — TAB TỰ CHỨA ---------------------------
+    // Cố ý KHÔNG dùng request()/apiURL()/authHeaders() của trang: mọi thứ ở đây
+    // độc lập nên không thể ảnh hưởng tới các tab khác.
+    function licApiBase() {
+      var b = String((document.getElementById("baseUrl") || {}).value || "").trim();
+      while (b.length && b.charAt(b.length - 1) === "/") b = b.slice(0, b.length - 1);
+      if (b.indexOf("http://") === 0 && window.location.protocol === "https:") b = "";
+      if (!b) b = window.location.origin;
+      return b;
+    }
+
+    function licFetch(path, method, payload) {
+      var token = String((document.getElementById("token") || {}).value || "").trim();
+      var url = licApiBase() + path;
+      var init = {
+        method: method || "GET",
+        headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      };
+      if (payload) init.body = JSON.stringify(payload);
+      return fetch(url, init).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          if (!res.ok) throw new Error((body && (body.error || body.message)) || ("HTTP " + res.status) + " — " + url);
+          return body;
+        });
+      }, function (err) {
+        throw new Error("Khong goi duoc " + url + " (" + err.message + ")");
+      });
+    }
+
+    function licSetStatus(text) {
+      var el = document.getElementById("licStatus");
+      if (el) el.textContent = text;
+    }
+
+    function licRenderStats(data) {
+      var st = (data && data.stats) || {};
+      var byStatus = st.byStatus || {};
+      var byPlan = st.byPlan || {};
+      var a = Object.keys(byStatus).map(function (k) { return k + ": " + byStatus[k]; }).join(" · ");
+      var b = Object.keys(byPlan).map(function (k) { return k + ": " + byPlan[k]; }).join(" · ");
+      var box = document.getElementById("licStatsBox");
+      if (!box) return;
+      box.textContent = "Tổng " + (st.total || 0) + " key" + (a ? " — " + a : "") + (b ? "  |  theo gói: " + b : "") +
+        (data && data.config && data.config.configured === false ? "  ⚠️ Firestore chưa cấu hình: " + (data.config.error || "") : "");
+    }
+
+    function licLoad() {
+      licSetStatus("Đang tải…");
+      return licFetch("/v1/admin/ai/licenses", "GET").then(function (data) {
+        licRenderStats(data);
+        licSetStatus("");
+      }, function (err) {
+        licSetStatus("LOI: " + err.message);
+      });
+    }
+
+    function licGenerate() {
+      var planEl = document.getElementById("licPlan");
+      var countEl = document.getElementById("licCount");
+      var btn = document.getElementById("licGenerate");
+      var out = document.getElementById("licOut");
+      if (!planEl || !countEl || !btn || !out) return;
+      var count = Number(countEl.value || 0);
+      if (!(count >= 1 && count <= 500)) { licSetStatus("Số lượng phải từ 1 đến 500."); return; }
+      if (btn.getAttribute("data-armed") !== "1") {
+        btn.setAttribute("data-armed", "1");
+        btn.textContent = "Bấm lần nữa để xác nhận";
+        licSetStatus("Sẽ sinh " + count + " key gói " + planEl.value + " — bấm nút thêm một lần. Key chỉ hiện MỘT lần.");
+        return;
+      }
+      btn.setAttribute("data-armed", "0");
+      btn.textContent = "Sinh key";
+      btn.disabled = true;
+      licSetStatus("Đang sinh " + count + " key gói " + planEl.value + "…");
+      licFetch("/v1/admin/ai/licenses/generate", "POST", { plan: planEl.value, count: count }).then(function (data) {
+        var keys = data.keys || [];
+        out.value = keys.join(String.fromCharCode(10));
+        var copyBtn = document.getElementById("licCopy");
+        if (copyBtn) copyBtn.disabled = keys.length === 0;
+        var days = data.durationDays ? data.durationDays + " ngày" : "vĩnh viễn";
+        licSetStatus("Đã sinh " + keys.length + " key gói " + data.plan + " (" + days + "). Copy ở ô dưới rồi giao cho khách — không xem lại được.");
+        btn.disabled = false;
+        try { out.scrollIntoView({ block: "center" }); } catch (ignored) { }
+        licLoad();
+      }, function (err) {
+        licSetStatus("LOI: " + err.message);
+        btn.disabled = false;
+      });
+    }
+
+    function licRevoke() {
+      var input = document.getElementById("licRevokeKey");
+      var btn = document.getElementById("licRevoke");
+      if (!input || !btn) return;
+      var key = String(input.value || "").trim();
+      if (!key) { licSetStatus("Nhập key cần thu hồi."); return; }
+      if (btn.getAttribute("data-armed") !== "1") {
+        btn.setAttribute("data-armed", "1");
+        btn.textContent = "Bấm lần nữa để thu hồi";
+        licSetStatus("Sẽ thu hồi " + key + " — bấm nút thêm một lần.");
+        return;
+      }
+      btn.setAttribute("data-armed", "0");
+      btn.textContent = "Thu hồi";
+      licFetch("/v1/admin/ai/licenses/revoke", "POST", { key: key }).then(function () {
+        licSetStatus("Đã thu hồi " + key);
+        input.value = "";
+        licLoad();
+      }, function (err) {
+        licSetStatus("LOI: " + err.message);
+      });
+    }
+
+    function licCopyKeys() {
+      var out = document.getElementById("licOut");
+      if (!out || !out.value) return;
+      var n = out.value.split(String.fromCharCode(10)).length;
+      var done = function () { licSetStatus("Đã copy " + n + " key."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(done, function () { out.select(); document.execCommand("copy"); done(); });
+      } else {
+        out.select(); document.execCommand("copy"); done();
+      }
+    }
+
     async function request(path, options = {}) {
       const response = await fetch(apiURL(path), {
         ...options,
@@ -1958,6 +2152,21 @@ export function adminPageHTML() {
     // ---------------- Dashboard ----------------
     let statsTimer = null;
 
+    /**
+     * Dòng nhỏ dưới thẻ "Devices": nói rõ đang đếm MÁY THẬT, và nếu có bản ghi Android cũ chưa từng
+     * khai mã máy (không thể phân biệt được là một hay nhiều máy) thì nói rõ đã gộp bao nhiêu bản ghi.
+     * Vì sao: bus #591 — chủ dự án thấy thẻ Devices không khớp số máy (mỗi lần cài lại app Android sinh
+     * thêm một bản ghi). Không giấu số bản ghi, chỉ đổi con số chính sang "máy thật".
+     */
+    function devicesSubtitle(t) {
+      const records = Number(t.device_records ?? t.devices ?? 0);
+      const legacy = Number(t.legacy_android_records ?? 0);
+      const parts = ["máy thật (đã bỏ trùng bản ghi cài lại)"];
+      if (records > Number(t.devices ?? 0)) parts.push(records + " bản ghi đăng ký");
+      if (legacy > 1) parts.push(legacy + " bản ghi Android cũ chưa có mã máy");
+      return parts.join(" · ");
+    }
+
     function statCard(num, label, sub) {
       const el = document.createElement("div");
       el.className = "stat-card";
@@ -2002,8 +2211,9 @@ export function adminPageHTML() {
           '<div class="head"><span class="email"></span><span class="meta"></span></div>' +
           '<div class="chips"></div>';
         card.querySelector(".email").textContent = u.email;
+        const machines = u.machines ?? u.total;
         card.querySelector(".meta").textContent =
-          u.total + " device(s), " + u.active + " active";
+          machines + " máy (" + u.total + " bản ghi), " + u.active + " active";
         card.querySelector(".chips").innerHTML = chips;
         fields.statsUsers.appendChild(card);
       }
@@ -2106,7 +2316,11 @@ export function adminPageHTML() {
         fields.statsCards.innerHTML = "";
         const windowMin = t.device_report_window_min ?? 30;
         fields.statsCards.append(
-          statCard(t.devices ?? 0, "Devices", "real, owned by users"),
+          statCard(
+            t.devices ?? 0,
+            "Devices",
+            devicesSubtitle(t),
+          ),
           statCard(t.users ?? 0, "Users", "accounts"),
           statCard(t.active_devices ?? 0, "Active", "not revoked"),
           statCard(t.online_devices ?? 0, "Online", "báo cáo < " + windowMin + " phút"),
@@ -3352,6 +3566,18 @@ export function adminPageHTML() {
     document.getElementById("tabPlans").onclick = () => showTab("plans");
     document.getElementById("tabAi").onclick = () => showTab("ai");
     document.getElementById("tabAiUsers").onclick = () => showTab("aiu");
+    (function wireLicenseTab() {
+      var t = document.getElementById("tabAiKeys");
+      if (t) t.onclick = function () { showTab("aikeys"); };
+      var g = document.getElementById("licGenerate");
+      if (g) g.onclick = licGenerate;
+      var sBtn = document.getElementById("licStatsBtn");
+      if (sBtn) sBtn.onclick = licLoad;
+      var c = document.getElementById("licCopy");
+      if (c) c.onclick = licCopyKeys;
+      var r = document.getElementById("licRevoke");
+      if (r) r.onclick = licRevoke;
+    })();
     document.getElementById("loadUsers").onclick = loadUsers;
     document.getElementById("loadIos").onclick = loadIosDevices;
 

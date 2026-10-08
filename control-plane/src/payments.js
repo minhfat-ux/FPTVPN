@@ -856,6 +856,8 @@ export const AI_PLANS = {
 
 const AI_TEXTS = {
   en: {
+    emailLabel: "Email",
+    windowsLine: "Windows: download the overlay above, unzip it, run MeetFlowAI.Win.exe, then sign in with the SAME email.",
     dlTitle: "Get the MeetFlow AI app",
     dlSub: "Don't have the app yet? Download it here:",
         iosLineStore: "Available on the App Store — subscribe inside the iOS app with Apple.",
@@ -873,6 +875,8 @@ const AI_TEXTS = {
     planNames: { pass30: "30-Day Pass", monthly: "Monthly", yearly: "Yearly" },
   },
   vi: {
+    emailLabel: "Email",
+    windowsLine: "Windows: tải bản overlay ở trên, giải nén, chạy MeetFlowAI.Win.exe, rồi đăng nhập bằng ĐÚNG email này.",
     dlTitle: "Tải app MeetFlow AI",
     dlSub: "Chưa có app? Tải về tại đây:",
         iosLineStore: "Đã có trên App Store — gói được mua trực tiếp trong app iOS qua Apple.",
@@ -890,6 +894,8 @@ const AI_TEXTS = {
     planNames: { pass30: "Gói 30 ngày", monthly: "Hàng tháng", yearly: "Hàng năm" },
   },
   zh: {
+    emailLabel: "邮箱",
+    windowsLine: "Windows：下载上方的悬浮窗版，解压后运行 MeetFlowAI.Win.exe，然后用同一个邮箱登录。",
     dlTitle: "获取 MeetFlow AI 应用",
     dlSub: "还没有应用？在此下载：",
         iosLineStore: "已在 App Store 上架 — 请在 iOS 应用内通过 Apple 订阅。",
@@ -907,6 +913,8 @@ const AI_TEXTS = {
     planNames: { pass30: "30 天通行证", monthly: "月度", yearly: "年度" },
   },
   ja: {
+    emailLabel: "メールアドレス",
+    windowsLine: "Windows：上のオーバーレイ版をダウンロードして解凍し、MeetFlowAI.Win.exe を実行して、同じメールでサインインしてください。",
     dlTitle: "MeetFlow AI アプリを入手",
     dlSub: "アプリをお持ちでない場合はこちらから：",
         iosLineStore: "App Store で配信中 — iOS アプリ内で Apple 経由でご購入ください。",
@@ -924,6 +932,8 @@ const AI_TEXTS = {
     planNames: { pass30: "30日パス", monthly: "月額", yearly: "年額" },
   },
   ko: {
+    emailLabel: "이메일",
+    windowsLine: "Windows: 위 오버레이 버전을 내려받아 압축을 풀고 MeetFlowAI.Win.exe를 실행한 뒤 같은 이메일로 로그인하세요.",
     dlTitle: "MeetFlow AI 앱 받기",
     dlSub: "아직 앱이 없으신가요? 여기에서 받으세요:",
         iosLineStore: "App Store에서 제공 중 — iOS 앱 안에서 Apple을 통해 구독하세요.",
@@ -1258,7 +1268,9 @@ export function downloadsSectionHTML({ baseUrl, lang = "vi", product = "vpn", li
   const iosAdhocUrl = links.iosAdhoc || `${baseUrl}/install/ios`;
   const macUrl = links.mac || null;
   const macAdhocUrl = product === "vpn" ? (links.macAdhoc || `${baseUrl}/install/mac`) : (links.macAdhoc || null);
-  const windowsUrl = product === "vpn" ? (links.windows || `${baseUrl}/dl/VPNFlow-Setup-latest.exe`) : null;
+  const windowsUrl = product === "vpn"
+    ? (links.windows || `${baseUrl}/dl/VPNFlow-Setup-latest.exe`)
+    : (links.windows || null);
   if (!(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl || macAdhocUrl || windowsUrl)) return "";
   const known = platform !== "unknown";
   // Nền tảng không phải của máy khách ⇒ ẩn (CSS .plat-hidden), nút "chọn nền tảng khác" mở lại.
@@ -1367,7 +1379,9 @@ export function buyPageHTML({ baseUrl, lang, product = "vpn", links = {}, prefil
   const macAdhocUrl = product === "vpn" ? (links.macAdhoc || `${baseUrl}/install/mac`) : (links.macAdhoc || null);
   // Bộ cài Windows 1-click (Inno Setup), phát từ shop. Link cố định "-latest" nên trang
   // /buy không phải sửa mỗi lần ra bản mới; chỉ hiện cho kênh VPNFlow.
-  const windowsUrl = product === "vpn" ? (links.windows || `${baseUrl}/dl/VPNFlow-Setup-latest.exe`) : null;
+  const windowsUrl = product === "vpn"
+    ? (links.windows || `${baseUrl}/dl/VPNFlow-Setup-latest.exe`)
+    : (links.windows || null);
   const anyDownload = Boolean(androidUrl || androidLegacyUrl || iosUrl || iosAdhocUrl || macUrl || macAdhocUrl || windowsUrl);
   // Activation instructions adapt to how iOS is distributed right now.
   // Bản iOS phát bằng IPA từ server mình (không qua App Store), nên chỉ dùng câu

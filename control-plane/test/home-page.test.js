@@ -67,7 +67,7 @@ test("(a2) mã ngôn ngữ lạ ⇒ về vi; esc()/pickHomeLang() đúng hợp �
   assert.equal(esc(null), "");
 });
 
-test("(b) esc() chặn XSS: tên gói / đánh giá / email có <script> đều bị escape", () => {
+test("(b) esc() chặn XSS: đánh giá / email / tên gói có <script> đều không lọt ra HTML", () => {
   const html = page({
     plans: [{ id: "evil", amount: 1000, days: 30, badge: '<script>alert(1)</script>', label: "x" }],
     reviews: [{ name: "<img src=x onerror=alert(2)>", text: "<script>alert(3)</script>", stars: 5 }],
@@ -75,9 +75,12 @@ test("(b) esc() chặn XSS: tên gói / đánh giá / email có <script> đều 
   });
   assert.ok(!html.includes("<script>alert("), "không được để <script> thô trong HTML");
   assert.ok(!html.includes("<img src=x onerror="), "không được để thuộc tính onerror thô");
-  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "tên gói phải được escape trong HTML");
-  assert.ok(html.includes("&lt;script&gt;alert(3)&lt;/script&gt;"), "nội dung đánh giá phải được escape");
   assert.ok(!/<script>\s*alert/.test(html), "không được có script do dữ liệu chèn vào");
+  // Đánh giá LÀ dữ liệu có render ⇒ phải thấy bản đã escape
+  assert.ok(html.includes("&lt;script&gt;alert(3)&lt;/script&gt;"), "nội dung đánh giá phải được escape");
+  assert.ok(html.includes("&lt;img src=x onerror=alert(2)&gt;"), "tên người đánh giá phải được escape");
+  // Gói KHÔNG còn render trên landing page (giá nằm ở /buy) ⇒ badge độc hại không xuất hiện ở đâu
+  assert.ok(!html.includes("alert(1)"), "dữ liệu gói không được lọt vào landing page");
 });
 
 test("(c) không lọt 'undefined' / '[object Object]' khi dữ liệu thiếu field", () => {
@@ -97,17 +100,16 @@ test("(c) không lọt 'undefined' / '[object Object]' khi dữ liệu thiếu f
   }
 });
 
-test("(d) plans rỗng ⇒ KHÔNG render khối bảng giá (không có bảng trống)", () => {
-  const html = page({ plans: [] });
-  assert.equal(section(html, "pricing"), "", "plans rỗng mà vẫn có khối pricing");
-  assert.ok(!html.includes('id="pricing"'), "không được có neo #pricing khi không có bảng giá");
-  // Có gói đang bán ⇒ khối bảng giá xuất hiện, kèm giá và gói retired bị ẩn.
-  const withPlans = page({ plans: PLAN_ROWS });
-  const pricing = section(withPlans, "pricing");
-  assert.ok(pricing.includes('id="pricingTitle"'), "thiếu khối bảng giá khi có gói");
-  assert.ok(pricing.includes("200.000 đ") || pricing.includes("200,000 đ"), "thiếu giá gói monthly");
-  assert.ok(!pricing.includes("Lifetime"), "gói retired không được hiện trong bảng giá");
-  assert.ok(!pricing.includes("1.500.000"), "gói retired không được hiện giá");
+test("(d) bảng giá KHÔNG còn trên landing page (giá nằm ở /buy) — thẻ sản phẩm trỏ đúng nơi mua", () => {
+  // Trang chủ FlowTech chỉ giới thiệu hệ sinh thái; gói/giá do trang /buy đảm nhiệm.
+  const html = page({ plans: PLAN_ROWS });
+  assert.equal(section(html, "pricing"), "", "landing page không còn khối #pricing");
+  assert.ok(!html.includes('id="pricing"'), "không được còn neo #pricing");
+  const products = section(html, "products");
+  assert.ok(products.includes('href="/buy"'), "thẻ VPNFlow phải trỏ /buy");
+  assert.ok(products.includes('href="/ai/buy"'), "thẻ MeetFlow AI phải trỏ /ai/buy");
+  // Dữ liệu gói (nhãn/badge của PlanStore) không được in ra landing page
+  assert.ok(!html.includes("Monthly (200,000 VND"), "landing page không được in nhãn gói");
 });
 
 test("(e) reviews rỗng ⇒ KHÔNG render khối đánh giá; có reviews thật thì mới render", () => {
@@ -166,21 +168,23 @@ test("(h) email hỗ trợ xuất hiện ở footer (và trong FAQ)", () => {
   }
 });
 
-test("(i) bảng giá: gói AI trỏ /ai/buy, gói vĩnh viễn ghi rõ không hết hạn", () => {
+test("(i) link mua trên landing page: VPNFlow → buyUrl, MeetFlow AI → aiBuyUrl (giá ở trang mua)", () => {
   const html = page({
     plans: [
       { id: "monthly", amount: 200000, days: 30, badge: "Monthly" },
       { id: "lifetime", amount: 1500000, days: null, badge: "Lifetime" },
       { id: "pass30", amount: 150000, days: 30, badge: "30-Day Pass", product: "ai" },
     ],
-    buyUrl: "/buy",
-    aiBuyUrl: "/ai/buy",
+    buyUrl: "https://example.test/buy",
+    aiBuyUrl: "https://example.test/ai-buy",
   });
-  const pricing = section(html, "pricing");
-  assert.ok(pricing.includes('href="/ai/buy?plan=pass30"'), "gói AI phải trỏ về aiBuyUrl kèm ?plan=");
-  assert.ok(pricing.includes('href="/buy?plan=monthly"'), "gói VPN phải trỏ về buyUrl kèm ?plan=");
-  assert.ok(pricing.includes("Vĩnh viễn"), "gói days=null phải ghi rõ là vĩnh viễn");
-  assert.ok(pricing.includes("30 ngày"), "gói 30 ngày phải hiện số ngày");
+  const products = section(html, "products");
+  assert.ok(products.includes('href="https://example.test/buy"'), "thẻ VPNFlow phải dùng buyUrl");
+  assert.ok(products.includes('href="https://example.test/ai-buy"'), "thẻ MeetFlow AI phải dùng aiBuyUrl");
+  assert.ok(html.includes('href="https://example.test/buy"'), "CTA/hero phải dùng buyUrl");
+  assert.ok(html.includes('href="https://example.test/ai-buy"'), "CTA MeetFlow AI phải dùng aiBuyUrl");
+  // Không còn khối bảng giá ⇒ không còn chữ "vĩnh viễn / không hết hạn" ở landing page
+  assert.equal(section(html, "pricing"), "", "landing page không còn bảng giá");
 });
 
 test("(j) giới hạn thiết bị lấy từ tham số maxDevices (index.js truyền MAX_DEVICES_PER_USER)", () => {
