@@ -207,7 +207,28 @@
       "fix": "scripts/server-agent/deploy-control-plane.sh: them ham modgraph 2 che do — closure (keo theo moi module noi bo duoc import, de quy; bao loi khi workspace thieu module; bao loi khi --files go sai ten) va check (kiem do thi module cua ban LIVE sau copy tinh tu entrypoint $ENTRY) — chay TRUOC khi copy (§1b) va TRUOC khi restart (§3b); file MOI theo doi rieng trong added[] va rollback XOA thay vi cp -a fail lam abort ca deploy; log them gio may (backup dir ten UTC, journal +07).",
       "test": "Fixture dung lai dung kich ban 23/09 -> PASS=7 FAIL=0: T0 logic cu chi chon 1 file (tai hien lo hong); T1 closure keo dung 2 file (bw-policy.js + index.js); T2 workspace thieu module -> exit 1; T3 --files go sai ten -> exit 1; T4 happy path them file moi + health 200 -> exit 0, backup chi chua file cu; T5 health hong -> rollback tra index.js cu + XOA bw-policy.js + restart service; T6 check-mode bat import thieu -> exit 1",
       "deployed": "node-2: /root/flowvpn-agent/scripts/server-agent/deploy-control-plane.sh sha256 ba44e2a46e1e6c4fe4e6215ed518548f5c8725c37311f4e01dfe7c52a7c4132d (khop local), bash -n OK, --dry-run exit 0"
+    },
+    {
+      "id": "BUG-RENEWAL-WINDOW-001",
+      "title": "Nhắc gia hạn 7/3/1 ngày: mốc 3 ngày và 1 ngày KHÔNG BAO GIỜ được gửi (chọn sai cửa sổ)",
+      "area": "control-plane/billing",
+      "severity": "high",
+      "reported": "2026-10-08",
+      "status": "resolved",
+      "impact": "Khách chỉ nhận ĐÚNG 1 mail nhắc gia hạn (mốc 7 ngày) rồi thôi: mốc 3 ngày và 1 ngày không bao giờ gửi ⇒ mất nhắc cuối trước khi hết hạn (mất doanh thu gia hạn + khách bị ngắt dịch vụ bất ngờ). Có khách còn 2–3 ngày vẫn không có mail nhắc cuối.",
+      "evidence": [
+        "LIVE 08/10/2026: auth.json renewalReminders có 11/11 bản ghi đều windowDays=7; khách còn 2,3 ngày (kimdungtq@vip.163.com) và còn ~3 ngày (congtranquoc@gmail.com) chỉ có mail mốc 7d từ 11/09–03/10",
+        "gốc: auth-store.listUsersDueForRenewalReminder() dùng `windows.find((w) => daysLeft <= w)` trên [7,3,1] ⇒ với daysLeft ≤ 7 LUÔN trả 7, rồi cổng `reminded` (theo đúng windowDays=7) chặn mọi lần gửi sau ⇒ 3d/1d không bao giờ chạy",
+        "ai-access-store.renewalWindow() (kênh MeetFlow AI) viết đúng thứ tự 1→3→7 ⇒ chỉ auth-store bị, không phải lỗi thiết kế chung"
+      ],
+      "next_steps": "Theo dõi 1 khách tới sát hạn để xác nhận mốc 1 ngày cũng chạy; cân nhắc thêm mail 'đã hết hạn' (hiện msLeft<=0 bị bỏ qua hoàn toàn).",
+      "doc": "docs/handoff/RENEWAL_WINDOW_FIX_2026-10-08.md",
+      "resolved": "2026-10-08",
+      "fix": "control-plane/src/auth-store.js: chọn cửa sổ HẸP NHẤT còn áp dụng — `[...windows].reverse().find((w) => daysLeft <= w)` (1 → 3 → 7) + cập nhật docstring. Email gia hạn KHÔNG phải sửa: renderRenewalEmail đã có link nạp tiền (/buy?lang=..&email=.., điền sẵn email+gói) và câu hướng dẫn quét QR chuyển tiền.",
+      "test": "control-plane/test/auth-store.test.js: thêm test 'nhắc gia hạn đi ĐỦ 3 mốc 7 → 3 → 1 ngày' (7d ⇒ [7]; 5d sau khi nhắc 7 ⇒ []; 3d ⇒ [3]; 1d ⇒ [1]; đủ 3 mốc ⇒ []). Trên node-2 (Linux): tests 12 / pass 12 / fail 0. Trên Windows suite có sẵn nhiều test hỏng do môi trường (quyền 0600, sqlite, SSH) — đã đối chiếu bằng worktree nguyên trạng: không có test hỏng MỚI do bản vá này.",
+      "deployed": "node-2 08/10/2026 18:07 (+07): stage=/root/cp-stage-renewal (LIVE + auth-store.js đã vá), deploy-control-plane.sh --files auth-store.js → node --check OK, test 12/12, backup=/root/flowvpn-cp/src-backup-20261008-110739, health OK, LIVE sha256 55b16d4340bb5d09ebe140630d7b953aa437bffa783fc00ccd159f2ca38c270e. Bằng chứng chạy thật: 18:08:41 journal 'renewal-reminder: sent to kimdungtq@vip.163.com (3d left, win 3) sent=true' + Resend id delivered, auth.json ghi win=3d.",
+      "infra_note": "Deploy phải dùng STAGE vì: (a) WS /root/flowvpn-agent/control-plane thiếu license-keys.js so với LIVE ⇒ cổng bước 0 chặn; (b) thư mục test trong WS cũ hơn repo (mac-install.test.js còn assertion '== 4' trong khi repo đã sửa '>= 4'); (c) sau khi đồng bộ test repo lên WS thì suite 415 test còn 6 fail KHÔNG liên quan (home-page/admin-page đã tiến hoá khác repo + mmdb + tg-commands) ⇒ LIVE và repo đang lệch nhau, cần đồng bộ có kiểm soát."
     }
   ],
-  "updated": "2026-09-26"
+  "updated": "2026-10-08"
 }
