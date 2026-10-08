@@ -319,3 +319,28 @@ test("nhắc gia hạn đi ĐỦ 3 mốc 7 → 3 → 1 ngày (BUG-RENEWAL-WINDOW
     await cleanup();
   }
 });
+
+test("nhắc gia hạn: khách VỪA HẾT HẠN nhận đúng 1 thư (windowDays = 0), quá 3 ngày thì thôi", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    const { user } = await createSubscribedUser(store, "expired@example.com");
+    const due = async () =>
+      (await store.listUsersDueForRenewalReminder()).map((d) => ({ win: d.windowDays, days: d.daysLeft }));
+
+    // hết hạn 12 giờ trước ⇒ gửi thư "đã hết hạn" (dùng 0,5 ngày để tránh ceil() nhảy mốc)
+    await store.grantSubscriptionForTest(user.id, "test.premium", -0.5);
+    assert.deepEqual(await due(), [{ win: 0, days: -1 }], "vừa hết hạn ⇒ windowDays=0, daysLeft âm");
+    await store.markRenewalReminded(user.id, 0);
+    assert.deepEqual(await due(), [], "đã gửi 1 lần ⇒ KHÔNG gửi lại");
+
+    // hết hạn đã 5 ngày (quá cửa sổ nhắc) ⇒ không gửi
+    await store.grantSubscriptionForTest(user.id, "test.premium", -5);
+    assert.deepEqual(await due(), [], "hết hạn > 3 ngày ⇒ thôi nhắc");
+
+    // khách gia hạn lại ⇒ quay về luồng nhắc trước hạn bình thường
+    await store.grantSubscriptionForTest(user.id, "test.premium", 3);
+    assert.deepEqual(await due(), [{ win: 3, days: 3 }], "gia hạn lại ⇒ nhắc mốc 3 ngày");
+  } finally {
+    await cleanup();
+  }
+});

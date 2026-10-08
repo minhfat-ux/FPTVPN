@@ -71,6 +71,9 @@ const T = {
     openApp: "🚀 Mở ứng dụng",
     renewSubject: "Gói của bạn sắp hết hạn",
     renewIntro: (d) => `Gói <b>Premium</b> của bạn sẽ hết hạn sau <b>${d} ngày</b>.`,
+    // Gửi MỘT lần ngay sau khi hết hạn (windowDays = 0, xem auth-store.listUsersDueForRenewalReminder).
+    expiredSubject: "Gói của bạn đã hết hạn",
+    expiredIntro: (d) => `Gói <b>Premium</b> của bạn đã hết hạn <b>${d} ngày</b> trước — gia hạn để dùng tiếp ngay.`,
     renewBody: "Bấm nút bên dưới để gia hạn — email và gói của bạn đã được điền sẵn, chỉ cần chọn cách thanh toán rồi quét QR chuyển tiền là xong.",
     renewCta: "🔄 Gia hạn ngay",
     renewalFor: (to) => `Tài khoản: <b>${to}</b>`,
@@ -131,6 +134,8 @@ const T = {
     openApp: "🚀 Open the app",
     renewSubject: "Your plan is about to expire",
     renewIntro: (d) => `Your <b>Premium</b> plan expires in <b>${d} days</b>.`,
+    expiredSubject: "Your plan has expired",
+    expiredIntro: (d) => `Your <b>Premium</b> plan expired <b>${d} day${Number(d) === 1 ? "" : "s"}</b> ago — renew to keep using it.`,
     renewBody: "Tap the button below to renew — your email and plan are already filled in, so you only pick a payment method and scan the QR.",
     renewCta: "🔄 Renew now",
     renewalFor: (to) => `Account: <b>${to}</b>`,
@@ -191,6 +196,8 @@ const T = {
     openApp: "🚀 打开应用",
     renewSubject: "您的套餐即将到期",
     renewIntro: (d) => `您的 <b>Premium</b> 套餐将在 <b>${d} 天</b>后到期。`,
+    expiredSubject: "您的套餐已过期",
+    expiredIntro: (d) => `您的 <b>Premium</b> 套餐已于 <b>${d} 天</b>前过期 — 续费即可继续使用。`,
     renewBody: "点击下方按钮续费 — 您的邮箱和套餐已自动填好，只需选择支付方式并扫码付款即可。",
     renewCta: "🔄 立即续费",
     renewalFor: (to) => `账户：<b>${to}</b>`,
@@ -325,13 +332,22 @@ ${appUrl ? `<p><a href="${appUrl}" style="display:inline-block;background:#33c77
   };
 }
 
-/** Builds the "your plan expires soon" reminder. */
+/**
+ * Builds the "your plan expires soon" reminder — và cả thư "đã hết hạn".
+ *
+ * `daysLeft > 0`: nhắc trước hạn (mốc 7/3/1 ngày).
+ * `daysLeft <= 0`: khách VỪA hết hạn (auth-store gửi 1 lần, windowDays = 0 trong vài ngày đầu)
+ *   ⇒ dùng câu "đã hết hạn N ngày trước" thay vì "sẽ hết hạn sau N ngày", giữ nguyên link + CTA.
+ */
 export function renderRenewalEmail({ lang = "vi", to, daysLeft, expiresAt, buyUrl, brand = "VPNFlow Premium" }) {
   const t = text(lang);
+  const days = Number(daysLeft);
+  const expired = Number.isFinite(days) && days <= 0;
+  const intro = expired ? t.expiredIntro(Math.max(1, Math.abs(Math.trunc(days)))) : t.renewIntro(daysLeft);
   return {
-    subject: `${brand} — ${t.renewSubject}`,
+    subject: `${brand} — ${expired ? t.expiredSubject : t.renewSubject}`,
     html: shell(`<p>${t.greeting}</p>
-<p>${t.renewIntro(daysLeft)}</p>
+<p>${intro}</p>
 <p>${t.renewalFor(to)}<br/>${t.expiresAt(fmtDate(expiresAt, lang))}</p>
 <p>${t.renewBody}</p>
 <p style="color:#666;font-size:12px">${t.renewHint}</p>

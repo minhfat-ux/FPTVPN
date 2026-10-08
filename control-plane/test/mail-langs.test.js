@@ -41,7 +41,37 @@ const BUILDERS = {
     lang, to: "a@b.com", daysLeft: 3, expiresAt: EXPIRES,
     buyUrl: `${SITE}/buy?renew=1&email=a%40b.com&plan=monthly`,
   }),
+  // Khách VỪA hết hạn (daysLeft ≤ 0) — dùng câu "đã hết hạn", phải sạch tiếng Việt ở bản en/zh.
+  "renewal-expired": (lang) => renderRenewalEmail({
+    lang, to: "a@b.com", daysLeft: -2, expiresAt: EXPIRES,
+    buyUrl: `${SITE}/buy?renew=1&email=a%40b.com&plan=monthly`,
+  }),
 };
+
+test("thư 'đã hết hạn': daysLeft ≤ 0 đổi câu chữ, vẫn giữ link nạp tiền + nút gia hạn", () => {
+  const buy = `${SITE}/buy?renew=1&email=a%40b.com&plan=monthly`;
+  const vi = renderRenewalEmail({ lang: "vi", to: "a@b.com", daysLeft: -2, expiresAt: EXPIRES, buyUrl: buy });
+  assert.match(vi.subject, /đã hết hạn/);
+  assert.match(vi.html, /đã hết hạn <b>2 ngày<\/b> trước/);
+  assert.ok(vi.html.includes(buy), "phải có link nạp tiền");
+  assert.ok(vi.html.includes("Gia hạn ngay"), "phải có nút gia hạn");
+
+  const en = renderRenewalEmail({ lang: "en", to: "a@b.com", daysLeft: -1, expiresAt: EXPIRES, buyUrl: buy });
+  assert.match(en.subject, /has expired/);
+  assert.match(en.html, /expired <b>1 day<\/b> ago/);
+
+  const zh = renderRenewalEmail({ lang: "zh", to: "a@b.com", daysLeft: -3, expiresAt: EXPIRES, buyUrl: buy });
+  assert.match(zh.subject, /已过期/);
+
+  // Còn hạn thì KHÔNG đổi hành vi cũ (nhắc trước hạn)
+  const soon = renderRenewalEmail({ lang: "vi", to: "a@b.com", daysLeft: 3, expiresAt: EXPIRES, buyUrl: buy });
+  assert.match(soon.subject, /sắp hết hạn/);
+  assert.match(soon.html, /sẽ hết hạn sau <b>3 ngày<\/b>/);
+
+  // ja/ko rơi về tiếng Anh (pickMailLang) ⇒ vẫn phải là câu "đã hết hạn" bản Anh
+  const ja = renderRenewalEmail({ lang: "ja", to: "a@b.com", daysLeft: -2, expiresAt: EXPIRES, buyUrl: buy });
+  assert.match(ja.subject, /has expired/);
+});
 
 /** Ký tự chỉ có trong tiếng Việt — không xuất hiện trong tiếng Anh/Trung. */
 const VI_DIACRITICS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;

@@ -560,7 +560,12 @@ export class AuthStore {
    * yet been reminded for the window they currently fall into. Windows: [7, 3, 1],
    * chọn cửa sổ HẸP NHẤT còn áp dụng ⇒ khách đi đủ 3 mốc:
    * còn 9 ngày => chưa gửi; còn 7 ngày => mốc 7; còn 5 ngày mà đã nhắc mốc 7 => bỏ qua
-   * (chờ tới mốc 3); còn 3 ngày => mốc 3; còn 1 ngày => mốc 1. Returns records to email.
+   * (chờ tới mốc 3); còn 3 ngày => mốc 3; còn 1 ngày => mốc 1.
+   *
+   * Thêm 08/10/2026: khách VỪA HẾT HẠN cũng được nhắc **một lần** (`windowDays: 0`,
+   * `daysLeft` âm) trong `EXPIRED_REMINDER_DAYS` ngày đầu sau khi hết hạn — trước đây
+   * `msLeft <= 0` bị bỏ qua hoàn toàn nên khách quá hạn không nhận được mail nào.
+   * Returns records to email.
    */
   async listUsersDueForRenewalReminder() {
     const data = await this._load();
@@ -570,9 +575,22 @@ export class AuthStore {
     for (const user of data.users) {
       if (user.revokedAt) continue;
       const sub = activeSubscriptionFor(data, user.id);
-      if (!sub || !sub.expiresAt) continue; // none or lifetime
+      if (sub && !sub.expiresAt) continue; // gói vĩnh viễn — không bao giờ nhắc
+      if (!sub) {
+        // Không còn gói còn hạn: có thể là khách VỪA hết hạn ⇒ gửi 1 thư "đã hết hạn".
+        const expiredSub = latestExpiredSubscriptionFor(data, user.id, now);
+        if (!expiredSub) continue;
+        const daysExpired = Math.ceil((now - Date.parse(expiredSub.expiresAt)) / (24 * 60 * 60 * 1000));
+        if (daysExpired > EXPIRED_REMINDER_DAYS) continue; // hết hạn đã lâu ⇒ thôi nhắc
+        const remindedExpired = (data.renewalReminders ?? []).some(
+          (r) => r.userId === user.id && r.windowDays === 0
+        );
+        if (remindedExpired) continue;
+        out.push({ user, sub: expiredSub, daysLeft: -daysExpired, windowDays: 0 });
+        continue;
+      }
       const msLeft = Date.parse(sub.expiresAt) - now;
-      if (msLeft <= 0) continue; // already expired -> handled elsewhere
+      if (msLeft <= 0) continue; // phòng hờ: activeSubscriptionFor đã loại gói hết hạn
       const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
       // Chọn cửa sổ HẸP NHẤT còn áp dụng (1 → 3 → 7) — KHÔNG phải cửa sổ đầu tiên khớp.
       // Vì sao: `windows.find` trên [7,3,1] luôn trả 7 khi daysLeft ≤ 7, nên sau khi khách đã nhận
@@ -716,6 +734,24 @@ function activeSubscriptionFor(data, userId) {
     (!entry.expiresAt || Date.parse(entry.expiresAt) > now)
   ) ?? null;
 }
+
+/**
+ * Gói gần nhất của khách đã hết hạn (không revoked) — dùng cho thư "đã hết hạn".
+ * `activeSubscriptionFor` chỉ trả gói CÒN hạn nên khách vừa hết hạn sẽ vô hình nếu không có hàm này.
+ */
+function latestExpiredSubscriptionFor(data, userId, now = Date.now()) {
+  let best = null;
+  for (const entry of data.subscriptions) {
+    if (entry.userId !== userId || entry.revokedAt || !entry.expiresAt) continue;
+    const at = Date.parse(entry.expiresAt);
+    if (!Number.isFinite(at) || at > now) continue;
+    if (!best || at > Date.parse(best.expiresAt)) best = entry;
+  }
+  return best;
+}
+
+/** Số ngày đầu sau khi hết hạn còn gửi thư "đã hết hạn" (1 lần duy nhất). */
+export const EXPIRED_REMINDER_DAYS = 3;
 
 function normalizeEmail(email) {
   const normalized = String(email ?? "").trim().toLowerCase();

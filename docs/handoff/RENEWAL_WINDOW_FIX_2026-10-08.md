@@ -98,3 +98,39 @@ Deploy lần này **buộc phải dùng stage** (`stage = LIVE + file đã vá`)
 3. Sau khi đồng bộ test repo lên WS: **415 test, 409 pass, 6 fail** — toàn bộ **không liên quan** bản vá
    (`home-page/admin-page` trên LIVE đã tiến hoá khác repo, `mmdb`, `tg-commands`) ⇒ **LIVE và repo
    đang lệch nhau**; cần một lượt đồng bộ có kiểm soát (REPO → LIVE) rồi mới trả lại cổng test đầy đủ.
+   → **ĐÃ LÀM cùng ngày**: xem `docs/handoff/SYNC_REPO_LIVE_2026-10-08.md` (đồng bộ LIVE → REPO rồi
+   sửa 6 test theo hành vi thật; suite còn **448/448 pass**).
+
+## 7. Bổ sung: thư "ĐÃ HẾT HẠN" (chủ dự án duyệt cùng ngày)
+
+Trước đây `listUsersDueForRenewalReminder()` bỏ qua mọi gói đã hết hạn (`msLeft <= 0 → continue`, chú
+thích cũ ghi "handled elsewhere" nhưng **không có chỗ nào xử lý**) ⇒ khách quá hạn **không nhận mail nào**.
+
+**Đã thêm** (`auth-store.js` + `mailer.js`):
+
+| Thành phần | Nội dung |
+|---|---|
+| `latestExpiredSubscriptionFor(data, userId, now)` | Gói gần nhất KHÔNG revoked đã hết hạn (vì `activeSubscriptionFor` chỉ trả gói còn hạn ⇒ khách vừa hết hạn bị vô hình) |
+| `EXPIRED_REMINDER_DAYS = 3` | Chỉ nhắc trong **3 ngày đầu** sau khi hết hạn (quá cũ ⇒ thôi, tránh dội mail) |
+| `windowDays: 0`, `daysLeft` âm | Ghi vết riêng ⇒ gửi **đúng 1 lần**, không lặp; gia hạn lại thì quay về luồng 7/3/1 |
+| `renderRenewalEmail` | `daysLeft ≤ 0` ⇒ đổi tiêu đề + câu mở ("Gói của bạn **đã hết hạn**" / "Your plan **has expired**" / "您的套餐**已过期**"), **giữ nguyên** link nạp tiền + nút "Gia hạn ngay" |
+
+**Bằng chứng (sau deploy 08/10/2026 18:34 +07, LIVE sha256 auth-store `bced5418…`, mailer `652b75a7…`):**
+
+```
+node --test (Linux, full suite)            -> tests 448 / pass 448 / fail 0
+mo phong store (khong dung du lieu that):
+  het han 12h  -> due=[{win:0, days:-1}]   (CO gui)
+  het han 120h -> due=[]                   (khong gui — qua 3 ngay)
+render 3 ngon ngu: co link nap tien: true | co nut gia han: true
+  [vi] VPNFlow Premium — Gói của bạn đã hết hạn
+       "Gói Premium của bạn đã hết hạn 2 ngày trước — gia hạn để dùng tiếp ngay."
+  [en] VPNFlow Premium — Your plan has expired
+  [zh] VPNFlow Premium — 您的套餐已过期
+mail [TEST] toi chu du an: Resend 200 id=01a11b4b-bd24-73d1-bd1c-babd0f45702d, status=sent,
+  subject "[TEST] VPNFlow Premium — Gói của bạn đã hết hạn"
+```
+
+**Lưu ý vận hành:** hiện **chưa có khách nào vừa hết hạn** trong 3 ngày nên chưa có mail thật nào được
+gửi cho khách; vòng nhắc chạy mỗi 6 giờ sẽ tự gửi khi có khách rơi vào cửa sổ.
+
