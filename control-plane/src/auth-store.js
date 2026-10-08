@@ -556,11 +556,11 @@ export class AuthStore {
   }
 
   /**
-   * Users with an active (non-lifetime) subscription expiring within `maxDays`
-   * that have NOT yet been reminded for the coarser reminder window they fall
-   * into. Reminder windows: [7, 3, 1]. A user due in 9 days => none yet
-   * (only reminded when <=7). Due in 5 days but already reminded at window 7
-   * => skipped. Returns records to email.
+   * Users with an active (non-lifetime) subscription expiring soon that have NOT
+   * yet been reminded for the window they currently fall into. Windows: [7, 3, 1],
+   * chọn cửa sổ HẸP NHẤT còn áp dụng ⇒ khách đi đủ 3 mốc:
+   * còn 9 ngày => chưa gửi; còn 7 ngày => mốc 7; còn 5 ngày mà đã nhắc mốc 7 => bỏ qua
+   * (chờ tới mốc 3); còn 3 ngày => mốc 3; còn 1 ngày => mốc 1. Returns records to email.
    */
   async listUsersDueForRenewalReminder() {
     const data = await this._load();
@@ -574,8 +574,12 @@ export class AuthStore {
       const msLeft = Date.parse(sub.expiresAt) - now;
       if (msLeft <= 0) continue; // already expired -> handled elsewhere
       const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
-      // choose the coarsest window that still applies (7 > 3 > 1)
-      const win = windows.find((w) => daysLeft <= w);
+      // Chọn cửa sổ HẸP NHẤT còn áp dụng (1 → 3 → 7) — KHÔNG phải cửa sổ đầu tiên khớp.
+      // Vì sao: `windows.find` trên [7,3,1] luôn trả 7 khi daysLeft ≤ 7, nên sau khi khách đã nhận
+      // mail mốc 7 ngày thì mốc 3 ngày và 1 ngày KHÔNG BAO GIỜ được gửi (cổng `reminded` chặn theo
+      // đúng windowDays = 7). Ca thật 07/10/2026: 11/11 bản ghi đều `win=7d`; khách còn 2–3 ngày
+      // vẫn không có mail nhắc cuối. Xem BUG-RENEWAL-WINDOW-001.
+      const win = [...windows].reverse().find((w) => daysLeft <= w);
       if (win == null) continue; // >7 days, no reminder yet
       const reminded = (data.renewalReminders ?? []).some(
         (r) => r.userId === user.id && r.windowDays === win

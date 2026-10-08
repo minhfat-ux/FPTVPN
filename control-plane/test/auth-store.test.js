@@ -286,3 +286,36 @@ test("save is atomic: no .tmp left behind, file stays valid JSON", async () => {
     await cleanup();
   }
 });
+
+test("nhắc gia hạn đi ĐỦ 3 mốc 7 → 3 → 1 ngày (BUG-RENEWAL-WINDOW-001)", async () => {
+  const { store, cleanup } = await makeStore();
+  try {
+    const { user } = await createSubscribedUser(store, "renew@example.com");
+    const dueWindows = async () =>
+      (await store.listUsersDueForRenewalReminder()).map((d) => d.windowDays);
+
+    // còn ~7 ngày ⇒ mốc 7
+    await store.grantSubscriptionForTest(user.id, "test.premium", 7);
+    assert.deepEqual(await dueWindows(), [7], "7 ngày ⇒ phải là mốc 7");
+    await store.markRenewalReminded(user.id, 7);
+
+    // còn ~5 ngày: đã nhắc mốc 7 ⇒ chưa tới mốc 3 thì KHÔNG gửi lại
+    await store.grantSubscriptionForTest(user.id, "test.premium", 5);
+    assert.deepEqual(await dueWindows(), [], "5 ngày mà đã nhắc mốc 7 ⇒ bỏ qua");
+
+    // còn ~3 ngày ⇒ mốc 3 (đây là ca bị bỏ sót trước khi sửa)
+    await store.grantSubscriptionForTest(user.id, "test.premium", 3);
+    assert.deepEqual(await dueWindows(), [3], "3 ngày ⇒ phải là mốc 3");
+    await store.markRenewalReminded(user.id, 3);
+
+    // còn ~1 ngày ⇒ mốc 1
+    await store.grantSubscriptionForTest(user.id, "test.premium", 1);
+    assert.deepEqual(await dueWindows(), [1], "1 ngày ⇒ phải là mốc 1");
+    await store.markRenewalReminded(user.id, 1);
+
+    // đã đủ 3 mốc ⇒ không còn gì để gửi
+    assert.deepEqual(await dueWindows(), [], "đủ 3 mốc ⇒ thôi nhắc");
+  } finally {
+    await cleanup();
+  }
+});
