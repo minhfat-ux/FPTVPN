@@ -32,22 +32,22 @@ import Hysteria
 #if canImport(Multitunnel) && !canImport(Hysteria)
 @inline(__always) private func CoreConnect(_ host: String, _ port: Int, _ password: String,
     _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
-    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    _ err: NSErrorPointer) -> Bool {
     MultitunnelConnect(host, port, password, obfs, sockFd, sockTcp, up, down, err)
 }
 @inline(__always) private func CoreServe(_ fd: Int, _ mtu: Int, _ ipv4: String, _ ipv6: String,
-    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    _ err: NSErrorPointer) -> Bool {
     MultitunnelServe(fd, mtu, ipv4, ipv6, err)
 }
 @inline(__always) private func CoreStop() { MultitunnelStop() }
 #else
 @inline(__always) private func CoreConnect(_ host: String, _ port: Int, _ password: String,
     _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
-    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    _ err: NSErrorPointer) -> Bool {
     MobileConnect(host, port, password, obfs, sockFd, sockTcp, up, down, err)
 }
 @inline(__always) private func CoreServe(_ fd: Int, _ mtu: Int, _ ipv4: String, _ ipv6: String,
-    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    _ err: NSErrorPointer) -> Bool {
     MobileServe(fd, mtu, ipv4, ipv6, err)
 }
 @inline(__always) private func CoreStop() { CoreStop() }
