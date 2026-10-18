@@ -174,6 +174,8 @@ enum AppTextKey: String {
     case serverLocation, select, loadingLocations, noServerAvailable, refreshLocations, usingSavedServers
     case paywallTitle, paywallSubtitle, benefitTunnel, benefitWifi, benefitFast
     case privacy, notNow
+    // Hút băng thông (N tunnel) — mục Settings
+    case boostTitle, boostToggle, boostCount, boostNote
     case disconnected, connecting, connected, disconnecting, failed
     case disconnectedSubtitle, connectingSubtitle, connectedSubtitle, disconnectingSubtitle, failedSubtitle
     case devices, revoke, revokeDeviceConfirm, thisDevice, deviceRevoked, noDevices, active, revoked, loadingDevices
@@ -247,7 +249,7 @@ final class AppLanguageStore: ObservableObject {
             .diagDown: "Download ↓", .diagUp: "Upload ↑", .diagObserved: "Measured (ramp path)",
             .diagDeclared: "Currently declared", .diagMore: "Declared headroom",
             .diagAtMax: "Maxed out at this time", .diagPath: "Active path",
-            .diagStable: "Locked level (stable)",
+            .diagStable: "Locked level (stable)", .boostTitle: "Speed boost", .boostToggle: "Pull more bandwidth (N tunnels)", .boostCount: "Tunnels", .boostNote: "Applies on the next connection. Uses several parallel connections to pull more bandwidth on a shared network.",
             .notConfigured: "Not configured - tap to open Configuration", .secureExitNode: "Secure exit node",
             .vietnam: "Vietnam", .startVPNHint: "Starts the VPN tunnel to the selected location",
             .stopVPNHint: "Stops the VPN tunnel", .paywallTitle: "VPNFlow Premium",
@@ -282,7 +284,7 @@ final class AppLanguageStore: ObservableObject {
             .diagDown: "Tốc độ tải xuống ↓", .diagUp: "Tốc độ tải lên ↑",
             .diagObserved: "Đo được (đường ramp)", .diagDeclared: "Khai báo hiện tại",
             .diagMore: "Khai báo còn lên được", .diagAtMax: "Đã tối đa ở thời điểm này",
-            .diagPath: "Đường đang dùng", .diagStable: "Mức đã khoá (stable)",
+            .diagPath: "Đường đang dùng", .diagStable: "Mức đã khoá (stable)", .boostTitle: "Tăng tốc", .boostToggle: "Hút băng thông (N tunnel)", .boostCount: "Số tunnel", .boostNote: "Áp dụng ở lần kết nối sau. Dùng nhiều kết nối song song để lấy thêm băng thông trên mạng dùng chung.",
             .notConfigured: "Chưa cấu hình - chạm để mở Cấu hình", .secureExitNode: "Exit node bảo mật",
             .vietnam: "Việt Nam", .startVPNHint: "Bắt đầu VPN tunnel tới vị trí đã chọn",
             .stopVPNHint: "Dừng VPN tunnel", .paywallTitle: "VPNFlow Premium",
@@ -316,7 +318,7 @@ final class AppLanguageStore: ObservableObject {
             .diagnostics: "诊断", .state: "状态", .location: "位置", .message: "消息",
             .diagDown: "下载速度 ↓", .diagUp: "上传速度 ↑", .diagObserved: "实测（爬升路径）",
             .diagDeclared: "当前声明值", .diagMore: "声明还可提升", .diagAtMax: "当前已达上限",
-            .diagPath: "当前路径", .diagStable: "已锁定水平（稳定）",
+            .diagPath: "当前路径", .diagStable: "已锁定水平（稳定）", .boostTitle: "速度提升", .boostToggle: "提升带宽（N 条隧道）", .boostCount: "隧道数量", .boostNote: "在下次连接时生效。在共享网络上使用多条并行连接以获取更多带宽。",
             .notConfigured: "尚未配置 - 点击打开设置", .secureExitNode: "安全出口节点", .vietnam: "越南",
             .startVPNHint: "连接到所选位置的 VPN 隧道", .stopVPNHint: "停止 VPN 隧道",
             .paywallTitle: "VPNFlow Premium", .paywallSubtitle: "解锁私密、加密的互联网保护。",
@@ -349,7 +351,7 @@ final class AppLanguageStore: ObservableObject {
             .diagnostics: "診断", .state: "状態", .location: "場所", .message: "メッセージ",
             .diagDown: "ダウンロード ↓", .diagUp: "アップロード ↑", .diagObserved: "実測（ランプ経路）",
             .diagDeclared: "現在の申告値", .diagMore: "申告の残り伸びしろ", .diagAtMax: "現時点で最大",
-            .diagPath: "使用中の経路", .diagStable: "固定レベル（安定）",
+            .diagPath: "使用中の経路", .diagStable: "固定レベル（安定）", .boostTitle: "速度ブースト", .boostToggle: "帯域を引き出す（N トンネル）", .boostCount: "トンネル数", .boostNote: "次回の接続時に適用されます。共有ネットワークで複数の並列接続を使い、より多くの帯域を確保します。",
             .notConfigured: "未設定 - タップして設定を開く", .secureExitNode: "安全な出口ノード", .vietnam: "ベトナム",
             .startVPNHint: "選択した場所への VPN トンネルを開始します", .stopVPNHint: "VPN トンネルを停止します",
             .paywallTitle: "VPNFlow Premium", .paywallSubtitle: "プライベートで暗号化されたインターネット保護を解除します。",
@@ -382,7 +384,7 @@ final class AppLanguageStore: ObservableObject {
             .diagnostics: "진단", .state: "상태", .location: "위치", .message: "메시지",
             .diagDown: "다운로드 ↓", .diagUp: "업로드 ↑", .diagObserved: "실측(램프 경로)",
             .diagDeclared: "현재 선언값", .diagMore: "선언 여유분", .diagAtMax: "현재 최대치",
-            .diagPath: "사용 중인 경로", .diagStable: "고정 수준(안정)",
+            .diagPath: "사용 중인 경로", .diagStable: "고정 수준(안정)", .boostTitle: "속도 향상", .boostToggle: "대역폭 끌어오기 (N 터널)", .boostCount: "터널 수", .boostNote: "다음 연결에 적용됩니다. 공유 네트워크에서 여러 병렬 연결을 사용해 더 많은 대역폭을 확보합니다.",
             .notConfigured: "설정되지 않음 - 탭하여 설정 열기", .secureExitNode: "보안 출구 노드", .vietnam: "베트남",
             .startVPNHint: "선택한 위치로 VPN 터널을 시작합니다", .stopVPNHint: "VPN 터널을 중지합니다",
             .paywallTitle: "VPNFlow Premium", .paywallSubtitle: "비공개 암호화 인터넷 보호를 잠금 해제하세요.",

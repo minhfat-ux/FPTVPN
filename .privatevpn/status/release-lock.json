@@ -5,8 +5,8 @@
     {
       "platform": "ios",
       "version": "1.4.7",
-      "build": "79",
-      "reason": "Chủ dự án 20/10/2026: publish bản iOS này. Build 79 = N-tunnel (hút băng thông) có công tắc trong Settings, MẶC ĐỊNH TẮT; kèm các fix: CoreStop đệ quy (68/69), trần dừng 5s + queue riêng, huỷ resourceTimer, không nuốt cú bấm Connect, trần preMeasure 3s, số khai = một-luồng × N.",
+      "build": "80",
+      "reason": "Chủ dự án 20/10/2026: publish bản iOS này. Build 80 = 79 + đa ngôn ngữ cho mục 'Hút băng thông' (en/vi/zh/ja/ko). N-tunnel có công tắc trong Settings, MẶC ĐỊNH TẮT.",
       "at": "2026-09-30",
       "locked_by": "mac"
     }

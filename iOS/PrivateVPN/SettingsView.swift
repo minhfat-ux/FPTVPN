@@ -288,20 +288,20 @@ struct SettingsView: View {
     }
 
     private var tunnelSection: some View {
-        Section("Tăng tốc") {
-            Toggle("Hút băng thông (N tunnel)", isOn: Binding(
+        Section(languageStore.t(.boostTitle)) {
+            Toggle(languageStore.t(.boostToggle), isOn: Binding(
                 get: { multiTunnelCount > 1 },
                 set: { multiTunnelCount = $0 ? 4 : 1 }
             ))
             if multiTunnelCount > 1 {
-                Picker("Số tunnel", selection: $multiTunnelCount) {
+                Picker(languageStore.t(.boostCount), selection: $multiTunnelCount) {
                     Text("2").tag(2)
                     Text("4").tag(4)
                     Text("6").tag(6)
                     Text("8").tag(8)
                 }
             }
-            Text("Áp dụng ở lần kết nối sau. Dùng nhiều kết nối song song để lấy thêm băng thông trên mạng dùng chung.")
+            Text(languageStore.t(.boostNote))
                 .font(.caption)
                 .foregroundStyle(VPNTheme.secondaryLabel)
         }
