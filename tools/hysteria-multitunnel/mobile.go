@@ -1,0 +1,428 @@
+// Package mobile is the gomobile entry point used by the Android app
+// (com.privatevpn.app). It runs the hysteria2 client on a TUN fd handed over by
+// the app's VpnService and, crucially, uses TRANSPORT SOCKETS CREATED IN JAVA so
+// they can be protect()ed from the VPN tunnel (otherwise the tunnel's own
+// packets loop back into the dead tunnel — the classic "connected but no
+// internet" bug).
+// package multitunnel: CỐ Ý khác `mobile` để framework này xuất symbol `Multitunnel*`,
+// KHÔNG trùng `Mobile*` của core production — nhờ vậy có thể link thử mà không đụng core cũ.
+package multitunnel
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+	"net"
+	"net/netip"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/apernet/hysteria/app/v2/internal/tun"
+	"github.com/apernet/hysteria/core/v2/client"
+	"github.com/apernet/hysteria/extras/v2/obfs"
+)
+
+var (
+	mu        sync.Mutex
+	stopCh    chan struct{}
+	active    client.Client
+	activeSrv *tun.Server
+	// slots: các tunnel mở song song (chế độ N tunnel). N=1 ⇒ dùng `active` như cũ.
+	// Khoá là chỉ số slot; `Serve()` gộp chúng bằng `multiClient`.
+	slots   map[int]client.Client
+	stopped bool
+)
+
+// ---------------------------------------------------------------------------
+// transport sockets
+// ---------------------------------------------------------------------------
+
+// salamanderConnFactory dials a direct UDP socket (used only when the caller
+// passes no socket fd, e.g. desktop/testing).
+type salamanderConnFactory struct {
+	psk []byte
+}
+
+func (f *salamanderConnFactory) New(net.Addr) (net.PacketConn, error) {
+	conn, err := net.ListenUDP("udp", nil)
+	if err != nil {
+		return nil, err
+	}
+	wrapped, err := obfs.WrapPacketConnSalamander(conn, f.psk)
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return wrapped, nil
+}
+
+// fixedConnFactory always returns the same pre-made connection (the Java socket).
+type fixedConnFactory struct {
+	pc net.PacketConn
+}
+
+func (f *fixedConnFactory) New(net.Addr) (net.PacketConn, error) {
+	return f.pc, nil
+}
+
+// tcpPacketConn adapts a connected TCP stream (the relay) to net.PacketConn with
+// 16-bit big-endian length framing — the same framing the server-side relay
+// (wgrelay.js) speaks.
+type tcpPacketConn struct {
+	conn   net.Conn
+	mu     sync.Mutex
+	remote net.Addr
+	closed bool
+}
+
+func (p *tcpPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	var hdr [2]byte
+	if _, err := io.ReadFull(p.conn, hdr[:]); err != nil {
+		return 0, nil, err
+	}
+	n := int(binary.BigEndian.Uint16(hdr[:]))
+	if n > len(b) {
+		return 0, nil, fmt.Errorf("frame too large: %d", n)
+	}
+	if _, err := io.ReadFull(p.conn, b[:n]); err != nil {
+		return 0, nil, err
+	}
+	return n, p.remote, nil
+}
+
+func (p *tcpPacketConn) WriteTo(b []byte, _ net.Addr) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return 0, net.ErrClosed
+	}
+	var hdr [2]byte
+	binary.BigEndian.PutUint16(hdr[:], uint16(len(b)))
+	if _, err := p.conn.Write(hdr[:]); err != nil {
+		return 0, err
+	}
+	return p.conn.Write(b)
+}
+
+func (p *tcpPacketConn) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil
+	}
+	p.closed = true
+	return p.conn.Close()
+}
+
+func (p *tcpPacketConn) LocalAddr() net.Addr                { return p.conn.LocalAddr() }
+func (p *tcpPacketConn) SetDeadline(t time.Time) error      { return p.conn.SetDeadline(t) }
+func (p *tcpPacketConn) SetReadDeadline(t time.Time) error  { return p.conn.SetReadDeadline(t) }
+func (p *tcpPacketConn) SetWriteDeadline(t time.Time) error { return p.conn.SetWriteDeadline(t) }
+
+// wrapProvidedSocket turns a Java-created (and VPN-protected) socket fd into a
+// net.PacketConn. net.FileConn/FilePacketConn dup the fd, so the os.File copy is
+// closed right away.
+func wrapProvidedSocket(fd int, isTCP bool, server net.Addr) (net.PacketConn, error) {
+	f := os.NewFile(uintptr(fd), "vpn-sock")
+	if isTCP {
+		c, err := net.FileConn(f)
+		if err != nil {
+			f.Close()
+			return nil, err
+		}
+		_ = f.Close()
+		return &tcpPacketConn{conn: c, remote: server}, nil
+	}
+	pc, err := net.FilePacketConn(f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	_ = f.Close()
+	return pc, nil
+}
+
+// ---------------------------------------------------------------------------
+
+// Connect dials the hysteria2 server over the provided socket. It runs BEFORE
+// the VpnService tunnel is established, so a failing attempt never blackholes
+// the device's own internet.
+//
+//	host      - server IP/hostname (TLS SNI + identity)
+//	port      - server UDP port (identity; the socket is already connected)
+//	password  - hysteria2 auth password
+//	obfsPass  - salamander obfuscation password ("" = none)
+//	sockFd    - Java socket fd (>0) or 0 to let Go open a direct UDP socket
+//	sockTcp   - true when sockFd is a connected TCP socket (relay framing)
+//	upKbps    - upload bandwidth for Brutal CC (0 = use the standard CC)
+//	downKbps  - download bandwidth for Brutal CC (0 = use the standard CC)
+func Connect(host string, port int, password, obfsPass string, sockFd int, sockTcp bool, upKbps, downKbps int) error {
+	serverAddr := &net.UDPAddr{IP: net.ParseIP(host), Port: port}
+	cfg := &client.Config{
+		ServerAddr: serverAddr,
+		Auth:       password,
+		TLSConfig: client.TLSConfig{
+			ServerName:         host,
+			InsecureSkipVerify: true, // self-signed cert for now
+		},
+	}
+
+	// Brutal congestion control: the single biggest win on lossy/high-RTT links
+	// (China mobile). The server honours the client's bandwidth unless it sets
+	// ignoreClientBandwidth.
+	if upKbps > 0 || downKbps > 0 {
+		cfg.BandwidthConfig = client.BandwidthConfig{
+			MaxTx: uint64(upKbps) * 1000 / 8,
+			MaxRx: uint64(downKbps) * 1000 / 8,
+		}
+	}
+
+	if sockFd > 0 {
+		base, err := wrapProvidedSocket(sockFd, sockTcp, serverAddr)
+		if err != nil {
+			return fmt.Errorf("socket fd %d: %w", sockFd, err)
+		}
+		if obfsPass != "" {
+			wrapped, err := obfs.WrapPacketConnSalamander(base, []byte(obfsPass))
+			if err != nil {
+				_ = base.Close()
+				return err
+			}
+			cfg.ConnFactory = &fixedConnFactory{pc: wrapped}
+		} else {
+			cfg.ConnFactory = &fixedConnFactory{pc: base}
+		}
+	} else if obfsPass != "" {
+		cfg.ConnFactory = &salamanderConnFactory{psk: []byte(obfsPass)}
+	}
+
+	c, _, err := client.NewClient(cfg)
+	if err != nil {
+		return fmt.Errorf("new client: %w", err)
+	}
+
+	// Clear any stop flag left by a previous cycle so a Stop() arriving while we
+	// are connecting below is detectable.
+	mu.Lock()
+	stopped = false
+	mu.Unlock()
+
+	mu.Lock()
+	if active != nil {
+		// (vá 30/09/2026) Bản cũ TRẢ LỖI ở đây. Hệ quả: chỉ cần một client cũ còn sót
+		// (xem `Stop()`) là MỌI lần Connect sau đều hỏng ⇒ mọi cửa relay chết ⇒ khách
+		// mất mạng. Nay TỰ DỌN client cũ rồi đi tiếp — biến lỗi vĩnh viễn thành tự cứu.
+		stale := active
+		active = nil
+		activeSrv = nil
+		mu.Unlock()
+		_ = stale.Close()
+		fmt.Fprintln(os.Stderr, "Connect: đã dọn client cũ còn sót trước khi nối cửa mới")
+		mu.Lock()
+	}
+	if stopped {
+		mu.Unlock()
+		_ = c.Close()
+		return fmt.Errorf("stop requested during connect")
+	}
+	active = c
+	mu.Unlock()
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// N tunnel song song (P1 của docs/RESEARCH_SHARED_NETWORK_BANDWIDTH_2026-10-19.md)
+// ---------------------------------------------------------------------------
+//
+// VÌ SAO: trên mạng dùng chung (tòa nhà), đường bị giới hạn theo TỪNG KẾT NỐI —
+// đo thật 19/10/2026: 1 luồng 4–12 Mbps, 8 luồng 72–81 Mbps (lặp 3 lần, cùng kết
+// quả trên cả Cloudflare lẫn relay của mình). App hiện mở ĐÚNG MỘT tunnel nên trần
+// thực tế ~10–12 Mbps, nâng số khai không vượt được.
+//
+// CÁCH LÀM: `tun.Server` chỉ nhận MỘT `client.Client`, và nó gọi `TCP(addr)`/
+// `UDP()` một lần cho MỖI LUỒNG mới. Nên chỉ cần một client BỌC N client: mỗi luồng
+// mới được chia cho một tunnel theo vòng tròn. Các gói của CÙNG một luồng vẫn đi
+// đúng một tunnel ⇒ KHÔNG đảo thứ tự (chia theo gói sẽ làm TCP bên trong sụp).
+//
+// BẤT BIẾN: mọi tunnel phải cùng một exit node (F3) — khác node là IP khách đổi
+// giữa phiên, hỏng đăng nhập/thanh toán.
+type multiClient struct {
+	clients []client.Client
+	next    uint32
+}
+
+func (m *multiClient) pick() client.Client {
+	// round-robin: chia đều các luồng mới; `AddUint32` để nhiều goroutine gọi an toàn.
+	i := atomic.AddUint32(&m.next, 1)
+	return m.clients[int(i)%len(m.clients)]
+}
+
+func (m *multiClient) TCP(addr string) (net.Conn, error) {
+	return m.pick().TCP(addr)
+}
+
+func (m *multiClient) UDP() (client.HyUDPConn, error) {
+	return m.pick().UDP()
+}
+
+func (m *multiClient) Close() error {
+	var first error
+	for _, c := range m.clients {
+		if err := c.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// ConnectSlot mở THÊM một tunnel ở vị trí `slot` (0-based), giữ các tunnel khác.
+// Dùng cho chế độ N tunnel; `Connect()` cũ vẫn nguyên hành vi cho N=1.
+func ConnectSlot(slot int, host string, port int, password, obfsPass string, sockFd int, sockTcp bool, upKbps, downKbps int) error {
+	if err := Connect(host, port, password, obfsPass, sockFd, sockTcp, upKbps, downKbps); err != nil {
+		return err
+	}
+	mu.Lock()
+	c := active
+	active = nil
+	activeSrv = nil
+	if slots == nil {
+		slots = map[int]client.Client{}
+	}
+	old := slots[slot]
+	slots[slot] = c
+	mu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
+	return nil
+}
+
+// slotCount trả số tunnel đang mở.
+func slotCount() int {
+	mu.Lock()
+	defer mu.Unlock()
+	return len(slots)
+}
+
+// Serve starts forwarding the (already connected) client through the Android
+// VpnService TUN fd. It BLOCKS until the tunnel stops (Stop() or an error).
+// Establish the VpnService only AFTER Connect() succeeded.
+func Serve(fd int, mtu int, tunIpv4, tunIpv6 string) error {
+	mu.Lock()
+	c := active
+	// N>1: gộp các tunnel thành MỘT client để `tun.Server` chia luồng cho chúng.
+	// N=1: dùng đúng client cũ ⇒ hành vi y hệt trước đây (không regress).
+	if len(slots) > 1 {
+		list := make([]client.Client, 0, len(slots))
+		for _, v := range slots {
+			list = append(list, v)
+		}
+		c = &multiClient{clients: list}
+	}
+	if c == nil {
+		mu.Unlock()
+		return fmt.Errorf("hysteria not connected")
+	}
+	if mtu == 0 {
+		mtu = 1500
+	}
+	if tunIpv4 == "" {
+		tunIpv4 = "100.100.100.101/30"
+	}
+	prefix4, err := netip.ParsePrefix(tunIpv4)
+	if err != nil {
+		mu.Unlock()
+		return fmt.Errorf("bad ipv4 %q: %w", tunIpv4, err)
+	}
+	var inet6 []netip.Prefix
+	if tunIpv6 != "" {
+		p6, err := netip.ParsePrefix(tunIpv6)
+		if err != nil {
+			mu.Unlock()
+			return fmt.Errorf("bad ipv6 %q: %w", tunIpv6, err)
+		}
+		inet6 = []netip.Prefix{p6}
+	}
+	srv := &tun.Server{
+		HyClient:       c,
+		IfName:         "hy0",
+		MTU:            uint32(mtu),
+		Timeout:        60, // UDP NAT timeout (s); 0 panics sing-tun NewTicker
+		FileDescriptor: fd,
+		Inet4Address:   []netip.Prefix{prefix4},
+		Inet6Address:   inet6,
+	}
+	ch := make(chan struct{})
+	stopCh = ch
+	activeSrv = srv
+	mu.Unlock()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- srv.Serve()
+	}()
+
+	select {
+	case err := <-done:
+		mu.Lock()
+		active = nil
+		activeSrv = nil
+		mu.Unlock()
+		if err != nil {
+			return fmt.Errorf("tun serve: %w", err)
+		}
+		return nil
+	case <-ch:
+		// Stop() called: close the client so Serve() can wind down; the caller
+		// closes the TUN fd afterwards.
+		_ = c.Close()
+		mu.Lock()
+		active = nil
+		activeSrv = nil
+		mu.Unlock()
+		return nil
+	}
+}
+
+// Stop requests the tunnel to shut down. Safe from any thread; it does not wait
+// for Serve()/Connect() to return.
+//
+// Vì sao phải giải phóng `active` NGAY tại đây (vá 30/09/2026 — lỗi build 58):
+// bản cũ chỉ đặt `stopped` + đóng `stopCh`, còn `active = nil` nằm tận BÊN TRONG
+// đường unwind của `Serve()`. Nếu `Connect()` đã thành công mà `Serve()` không bao
+// giờ chạy hoặc không unwind (phiên bị dừng giữa đường), `active` kẹt VĨNH VIỄN ⇒
+// mọi lần `Connect()` sau đều trả "hysteria client already running" ⇒ MỌI cửa relay
+// đều hỏng, tunnel không có transport — mà network settings đã áp ⇒ khách MẤT MẠNG.
+// Ca thật: iPhone build 58 có 1.231 dòng lỗi này, phiên restart mỗi ~30 giây.
+func Stop() {
+	mu.Lock()
+	stopped = true
+	stale := active
+	hadServe := stopCh != nil
+	active = nil
+	activeSrv = nil
+	staleSlots := slots
+	slots = nil
+	if stopCh != nil {
+		close(stopCh)
+		stopCh = nil
+	}
+	mu.Unlock()
+	// Chỉ tự đóng client khi KHÔNG có `Serve()` nào đang chạy để đóng hộ — tránh
+	// gọi Close() hai lần trên cùng một client (đường `<-ch` của Serve cũng đóng).
+	if stale != nil && !hadServe {
+		_ = stale.Close()
+	}
+	// N tunnel: đóng mọi tunnel còn lại (khi Serve đang chạy thì multiClient.Close
+	// phía trên đã đóng hết — gọi Close lần hai trên client đã đóng là vô hại với
+	// hysteria, nhưng vẫn bỏ qua khi hadServe để giữ đúng hành vi cũ).
+	if !hadServe {
+		for _, c := range staleSlots {
+			if c != nil {
+				_ = c.Close()
+			}
+		}
+	}
+}
