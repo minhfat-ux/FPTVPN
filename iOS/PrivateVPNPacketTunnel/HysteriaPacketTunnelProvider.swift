@@ -872,7 +872,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
         // NetworkExtension đợi callback này; gọi hai lần là crash, không gọi là treo tiến
         // trình extension ⇒ có trần 5s phòng khi `setTunnelNetworkSettings(nil)` im lặng.
-        queue.asyncAfter(deadline: .now() + 5) { [weak self] in
+        // FIX 19/10/2026 — trần an toàn phải chạy trên queue RIÊNG. Trước đây nó nằm trên
+        // `queue` chung; khi còn việc khác đang chạy trên queue đó (nhịp giám sát/cầu), callback
+        // bị xếp sau ⇒ iOS không nhận được tín hiệu dừng ⇒ "Disconnecting…" treo. Dùng queue
+        // toàn cục + rút ngắn 5 s → 2 s để không phụ thuộc bất cứ việc nào khác.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) { [weak self] in
             self?.completeStop(completionHandler)
         }
         setTunnelNetworkSettings(nil) { [weak self] _ in
@@ -3968,6 +3972,12 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         bandwidth?.finish()
         cancelSupervisor()
         cancelLivenessWatchdog()
+        // FIX 19/10/2026 — nhịp ghi `tài nguyên:` PHẢI chết cùng stop. Ca thật build 68:
+        // `stopTunnel` lúc 01:50:42 nhưng 01:51:02 (20 s sau) vẫn còn dòng `tài nguyên:`.
+        // Timer này không nằm trong danh sách huỷ cũ ⇒ nó giữ `queue` bận và làm trễ luôn
+        // callback báo dừng ⇒ UI quay mãi ở "Disconnecting…".
+        resourceTimer?.cancel()
+        resourceTimer = nil
         flowLock.lock()
         supervisorStopped = true
         flowLock.unlock()
