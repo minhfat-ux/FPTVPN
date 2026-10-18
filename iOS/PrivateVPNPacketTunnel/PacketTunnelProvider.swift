@@ -128,7 +128,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         connectHasTraffic = false
         sessionLock.unlock()
         resetSessionResources()
-        RelayDiagnostics.shared.log("startTunnel requested (session \(generation))")
+        // N tunnel (hút băng thông) — app truyền qua providerConfiguration (iOS không có App Group).
+        // Đặt TRƯỚC mọi bước dựng transport để `HysteriaTransport` đọc được khi kết nối.
+        HysteriaTransport.requestedTunnelCount =
+            (protocolConfiguration as? NETunnelProviderProtocol)?
+            .providerConfiguration?["multiTunnelCount"] as? Int ?? 1
+        RelayDiagnostics.shared.log(
+            "startTunnel requested (session \(generation), N tunnel = \(HysteriaTransport.requestedTunnelCount))"
+        )
         log.log(level: .default, "startTunnel: begin session \(generation, privacy: .public)")
 
         guard let config = self.configuration,

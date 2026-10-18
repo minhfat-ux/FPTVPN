@@ -1,12 +1,12 @@
 {
   "_doc": "Khóa kênh phát hành: chủ dự án cho khách test một bản thì KHÔNG phát bản mới cùng kênh. Cổng scripts/check-publish-version.py đọc file này và CHẶN (exit 3) khi định phát bản khác bản đang khóa. Mở khóa = sửa file này (có chủ đích, ghi lý do) hoặc thêm --allow-locked \"<lý do>\".",
-  "updated": "2026-10-18",
+  "updated": "2026-10-20",
   "locks": [
     {
       "platform": "ios",
       "version": "1.4.7",
-      "build": "66",
-      "reason": "CHỦ DỰ ÁN CHỐT 18/10/2026: 'ok locked bản này' — khoá kênh iOS ở 1.4.7/66. Bản 66 = sửa nút thắt cầu gói (gộp lô ≤32 gói/lần writePackets) + số khai lấy trung vị nhiều mẫu + đo trên chính domain của mình (api → t1 → Cloudflare cuối, mỗi nguồn 1 mẫu). Verify ĐẠT 8/8, commit 6b827bc. Publisher phát đúng 1.4.7/66 theo docs/handoff/HANDOFF_PUBLISHER_IOS_1.4.7_66_2026-10-18.md.",
+      "build": "79",
+      "reason": "Chủ dự án 20/10/2026: publish bản iOS này. Build 79 = N-tunnel (hút băng thông) có công tắc trong Settings, MẶC ĐỊNH TẮT; kèm các fix: CoreStop đệ quy (68/69), trần dừng 5s + queue riêng, huỷ resourceTimer, không nuốt cú bấm Connect, trần preMeasure 3s, số khai = một-luồng × N.",
       "at": "2026-09-30",
       "locked_by": "mac"
     }

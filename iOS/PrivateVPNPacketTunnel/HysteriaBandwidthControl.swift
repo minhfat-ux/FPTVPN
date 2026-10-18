@@ -1666,6 +1666,21 @@ extension BandwidthControl {
     /// phiên, đổi lại số khai không còn nhảy loạn giữa các phiên trên mạng dao động mạnh.
     static let preMeasureSamples = 3
 
+    /// TRẦN TỔNG của phép đo trước khi khai (giây). Vì sao phải có: `preMeasure` chạy BÊN TRONG
+    /// `startTunnel`, TRƯỚC khi áp network settings — nên toàn bộ thời gian này là "UI đứng ở
+    /// Connecting… mà không có gì chạy". Log máy thật 19/10/2026: `startTunnel 21:48:54` →
+    /// đo xong `21:49:06` = **12 s**. Nay 3 mẫu × 2,5 s nên càng lâu. Trần này đổi lấy phản hồi
+    /// UI tức thì; mẫu thứ 3 không lấy được thì vẫn có trung vị của 1–2 mẫu (hoặc rơi về bộ nhớ).
+    static let preMeasureTotalBudget: TimeInterval = 3.0
+
+    /// Số luồng sẽ chạy song song = số tunnel trong Settings (App Group).
+    /// Đọc qua `object(forKey:)` vì `integer(forKey:)` trả 0 khi key chưa có (bẫy build 74/75).
+    static func declareLanes() -> Int {
+        let stored = UserDefaults(suiteName: "G6XW3RN6LJ.com.privatevpn.shared")?
+            .object(forKey: "multiTunnelCount") as? Int
+        return max(1, min(8, stored ?? 4))
+    }
+
     /// Thứ tự nguồn đo — **đo TRÊN CHÍNH ĐƯỜNG KHÁCH ĐI**, domain của mình trước.
     ///
     /// VÌ SAO ĐỔI LẦN NỮA (18/10/2026, đo thật 3 lần/nguồn từ mạng Trung Quốc):
@@ -1713,7 +1728,13 @@ extension BandwidthControl {
     static func preMeasure(netKey: String, log: ((String) -> Void)? = nil) -> Int {
         var valid: [Int] = []
         var attempts = 0
+        let startedAt = Date()
         search: for urlString in preMeasureURLs {
+            // Hết trần tổng ⇒ dừng ngay, dùng những mẫu đã có (xem `preMeasureTotalBudget`).
+            if Date().timeIntervalSince(startedAt) > Self.preMeasureTotalBudget {
+                log?("bw: hết trần đo \(Int(Self.preMeasureTotalBudget))s — dùng \(valid.count) mẫu đã có")
+                break search
+            }
             guard let url = URL(string: urlString) else { continue }
             // MỖI NGUỒN MỘT MẪU (đa dạng đường), không thử lại cùng một nguồn.
             // Vì sao: 18/10/2026 đo 3 lần/nguồn từ mạng TQ — `api.` 3/3 sống, `t1.` 2/3,
@@ -1767,11 +1788,22 @@ extension BandwidthControl {
             )
             return 0
         }
+        // KHAI THEO NĂNG LỰC TỔNG, KHÔNG PHẢI MỘT LUỒNG (20/10/2026).
+        //
+        // `measureOnce` mở MỘT kết nối TCP. Trên mạng dùng chung (tòa nhà) mỗi kết nối bị giới
+        // hạn riêng — đo thật 19/10/2026: 1 luồng 4–12 Mbps, 8 luồng 72–81 Mbps (lặp 3 lần). Nếu
+        // app mở N tunnel thì năng lực thật là ~N × (một luồng), nhưng số khai lấy từ MỘT luồng
+        // ⇒ Brutal bị khoá ở mức một luồng, mở thêm tunnel cũng vô ích.
+        //
+        // Hệ số dưới đây = số tunnel sẽ mở (Settings). Vì quan hệ gần tuyến tính tới N=8 (đo được),
+        // nhân theo N là xấp xỉ đúng; ramp trong phiên vẫn có quyền hạ nếu khai cao quá.
+        let lanes = max(1, Self.declareLanes())
+        let total = kbps * lanes
         log?(
-            "bw: DO MANG THUC TE truoc khi khai net=\(netKey) = \(kbps)kbps "
-                + "[trung vị của \(valid.count) mẫu: \(valid.sorted())] — dùng số này làm số khai"
+            "bw: DO MANG THUC TE truoc khi khai net=\(netKey) = \(kbps)kbps/luồng × \(lanes) luồng "
+                + "= \(total)kbps [trung vị của \(valid.count) mẫu: \(valid.sorted())] — dùng số NÀY làm số khai"
         )
-        return kbps
+        return total
     }
 
     /// Trung vị của các mẫu hợp lệ (số chẵn ⇒ trung bình 2 số giữa).

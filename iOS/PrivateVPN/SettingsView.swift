@@ -9,6 +9,10 @@ struct SettingsView: View {
     @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @EnvironmentObject private var authStore: AuthSessionStore
     @EnvironmentObject private var languageStore: AppLanguageStore
+    /// Hút băng thông bằng N tunnel song song. 1 = TẮT (hành vi cũ).
+    /// Vì sao dùng @AppStorage: giá trị được `VPNManager` đọc lúc Connect rồi truyền sang
+    /// extension qua `providerConfiguration` (iOS KHÔNG khai App Group ⇒ UserDefaults không chia sẻ).
+    @AppStorage("multiTunnelCount") private var multiTunnelCount = 1
     @State private var showingPaywall = false
     @State private var showingLogin = false
     @State private var showDeleteAccountConfirm = false
@@ -27,6 +31,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             languageSection
+            tunnelSection
             accountSection
             devicesSection
             subscriptionSection
@@ -279,6 +284,26 @@ struct SettingsView: View {
             vpnManager.dismissDeviceLimit()
         } catch {
             devicesMessage = error.localizedDescription
+        }
+    }
+
+    private var tunnelSection: some View {
+        Section("Tăng tốc") {
+            Toggle("Hút băng thông (N tunnel)", isOn: Binding(
+                get: { multiTunnelCount > 1 },
+                set: { multiTunnelCount = $0 ? 4 : 1 }
+            ))
+            if multiTunnelCount > 1 {
+                Picker("Số tunnel", selection: $multiTunnelCount) {
+                    Text("2").tag(2)
+                    Text("4").tag(4)
+                    Text("6").tag(6)
+                    Text("8").tag(8)
+                }
+            }
+            Text("Áp dụng ở lần kết nối sau. Dùng nhiều kết nối song song để lấy thêm băng thông trên mạng dùng chung.")
+                .font(.caption)
+                .foregroundStyle(VPNTheme.secondaryLabel)
         }
     }
 

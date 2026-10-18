@@ -17,7 +17,7 @@ import WireGuardKitC
 #endif
 
 #if canImport(Hysteria) || canImport(Multitunnel)
-#if canImport(Multitunnel) && !canImport(Hysteria)
+#if canImport(Multitunnel)
 import Multitunnel
 #else
 import Hysteria
@@ -29,7 +29,7 @@ import Hysteria
 // Nhờ vậy chỉ link MỘT core mỗi bản — không phình binary gấp đôi.
 // Cờ bật/tắt nằm ở project.yml (`MULTITUNNEL_CORE`), mặc định TẮT.
 // ---------------------------------------------------------------------------
-#if canImport(Multitunnel) && !canImport(Hysteria)
+#if canImport(Multitunnel)
 @inline(__always) private func CoreConnect(_ host: String, _ port: Int, _ password: String,
     _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
     _ err: NSErrorPointer) -> Bool {
@@ -40,6 +40,12 @@ import Hysteria
     MultitunnelServe(fd, mtu, ipv4, ipv6, err)
 }
 @inline(__always) private func CoreStop() { MultitunnelStop() }
+@inline(__always) private func CoreConnectSlot(_ slot: Int, _ host: String, _ port: Int,
+    _ password: String, _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
+    _ err: NSErrorPointer) -> Bool {
+    MultitunnelConnectSlot(slot, host, port, password, obfs, sockFd, sockTcp, up, down, err)
+}
+private let coreSupportsMultiTunnel = true
 #else
 @inline(__always) private func CoreConnect(_ host: String, _ port: Int, _ password: String,
     _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
@@ -51,6 +57,14 @@ import Hysteria
     MobileServe(fd, mtu, ipv4, ipv6, err)
 }
 @inline(__always) private func CoreStop() { MobileStop() }
+/// Core production KHONG co ConnectSlot => tra false de cho goi bo qua (N luon = 1).
+@inline(__always) private func CoreConnectSlot(_ slot: Int, _ host: String, _ port: Int,
+    _ password: String, _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
+    _ err: NSErrorPointer) -> Bool {
+    _ = (slot, host, port, password, obfs, sockFd, sockTcp, up, down, err)
+    return false
+}
+private let coreSupportsMultiTunnel = false
 #endif
 #endif
 
@@ -133,6 +147,28 @@ final class HysteriaTransport: @unchecked Sendable {
     /// (`mobile.go:162`) và hysteria xác thực bằng password.
     private static let quicDialHost = "127.0.0.1"
 
+    /// So tunnel song song, doc tu Settings (App Group). Mac dinh 1 = hanh vi cu.
+    /// Core production khong ho tro => luon kep ve 1 (khong the doi hanh vi ban phat hanh).
+    /// Số tunnel app yêu cầu, do `HysteriaPacketTunnelProvider` đặt từ `providerConfiguration`.
+    /// `nonisolated(unsafe)`: chỉ được GHI một lần trong `startTunnel` (trước khi mở transport)
+    /// và CHỈ ĐỌC sau đó, nên không có tranh chấp thực tế; Swift 6 vẫn cần khai báo rõ.
+    nonisolated(unsafe) static var requestedTunnelCount: Int = 1
+
+    static func configuredTunnelCount() -> Int {
+        // Bản THỬ: chưa có màn Settings nên mặc định 4 KHI core hỗ trợ. Core production
+        // (`coreSupportsMultiTunnel == false`) vẫn luôn ra 1 ⇒ không thể đổi bản phát hành.
+        // CẨN THẬN: `UserDefaults.integer(forKey:)` trả **0** khi key chưa có, KHÔNG phải nil —
+        // nên `?? fallback` không bao giờ chạy và N bị kẹp về 1 (bug build 74/75). Phải đọc
+        // qua `object(forKey:)` để phân biệt "chưa đặt" với "đặt = 0".
+        let raw = requestedTunnelCount
+        let wanted = max(1, min(8, raw))
+        #if canImport(Hysteria) || canImport(Multitunnel)
+        return coreSupportsMultiTunnel ? wanted : 1
+        #else
+        return 1
+        #endif
+    }
+
     /// Chờ WS mở trước khi cho QUIC bắt tay. Hết hạn thì coi như cửa này chết và thử cửa kế tiếp
     /// (đừng để QUIC retry mù).
     ///
@@ -144,6 +180,9 @@ final class HysteriaTransport: @unchecked Sendable {
     private let log: Logger
     private let lock = NSLock()
     private var relay: WSRelayClient?
+    /// Tunnel PHỤ (chế độ N tunnel). Giữ tham chiếu để WS không bị dealloc — mất tham chiếu là
+    /// WS đóng, tunnel phụ chết âm thầm.
+    private var extraRelays: [WSRelayClient] = []
     private var running = false
     private var stopped = false
     private var localPort: UInt16 = 0
@@ -249,6 +288,55 @@ final class HysteriaTransport: @unchecked Sendable {
     /// timeout: no recent network activity` ở cả 8443/28443/54443) ⇒ lượt này hỏng nhanh rồi vòng lặp
     /// rơi ngay về cửa Cloudflare kế tiếp; ở mạng KHÔNG chặn UDP thì đây là đường nhanh nhất vì không
     /// phải đi qua Cloudflare.
+    /// Mở thêm `count` tunnel PHỤ, CÙNG relay URL (cùng exit node).
+    ///
+    /// Best-effort: tunnel phụ lỗi thì bỏ, KHÔNG được làm hỏng tunnel chính — nhờ vậy bật N>1
+    /// không thể biến một phiên đang chạy tốt thành mất mạng.
+    private func addExtraTunnels(count: Int, options: Options, relayURL: URL) {
+        #if canImport(Hysteria) || canImport(Multitunnel)
+        for index in 1...max(1, count) {
+            if isStopped { return }
+            let client = WSRelayClient(url: relayURL, log: log)
+            let port: UInt16
+            do {
+                port = try client.start()
+            } catch {
+                log.log("hysteria: tunnel phụ #\(index) không mở được relay: \(error.localizedDescription, privacy: .public)")
+                client.stop()
+                continue
+            }
+            let deadline = Date().addingTimeInterval(Self.relayOpenGrace)
+            while !client.isConnected && Date() < deadline && !isStopped {
+                Thread.sleep(forTimeInterval: 0.2)
+            }
+            guard client.isConnected, !isStopped else {
+                client.stop()
+                continue
+            }
+            var err: NSError?
+            let ok = CoreConnectSlot(index, Self.quicDialHost, Int(port),
+                                     options.password, options.obfs, 0, false,
+                                     Int(options.upKbps), Int(options.downKbps), &err)
+            if ok {
+                lock.lock(); extraRelays.append(client); lock.unlock()
+                log.log("hysteria: +tunnel #\(index) -> udp \(Self.quicDialHost, privacy: .public):\(port)")
+            } else {
+                log.log("hysteria: tunnel phụ #\(index) ConnectSlot lỗi: \(err?.localizedDescription ?? "false", privacy: .public)")
+                client.stop()
+            }
+        }
+        #endif
+    }
+
+    /// Dừng và xoá mọi tunnel phụ (idempotent).
+    private func stopExtraTunnels() {
+        lock.lock()
+        let list = extraRelays
+        extraRelays.removeAll()
+        lock.unlock()
+        for client in list { client.stop() }
+    }
+
     private func attemptDirect(options: Options) throws {
         #if canImport(Hysteria) || canImport(Multitunnel)
         var connectError: NSError?
@@ -362,6 +450,14 @@ final class HysteriaTransport: @unchecked Sendable {
         }
         log.log("hysteria: đã bắt tay QUIC qua relay (server \(options.serverHost, privacy: .public):\(options.serverPort), up=\(options.upKbps) kbps, down=\(options.downKbps) kbps)")
 
+        // N tunnel — bật từ Settings (App Group, key `multiTunnelCount`). Mở thêm tunnel phụ trên
+        // CÙNG relay URL ⇒ CÙNG exit node (bất biến F3: khác node là IP khách đổi giữa phiên).
+        // `multiClient` bên Go chia LUỒNG cho từng tunnel, nên packetFlow vẫn chỉ một cầu.
+        let wantedTunnels = Self.configuredTunnelCount()
+        if wantedTunnels > 1 {
+            addExtraTunnels(count: wantedTunnels - 1, options: options, relayURL: relayURL)
+        }
+
         lock.lock()
         running = true
         lock.unlock()
@@ -408,6 +504,8 @@ final class HysteriaTransport: @unchecked Sendable {
         localPort = 0
         lock.unlock()
         client?.stop()
+        // Tunnel phụ cũng phải chết theo, nếu không mỗi lượt thử lại để lại N-1 WS còn mở.
+        stopExtraTunnels()
     }
 
     /// Gọi khi Go báo transport chết (WS bị cắt, mạng đổi). Tầng trên quyết định dựng lại.
@@ -438,6 +536,7 @@ final class HysteriaTransport: @unchecked Sendable {
         }
         #endif
         client?.stop()
+        stopExtraTunnels()
         log.log("hysteria: đã dừng")
     }
 

@@ -148,7 +148,21 @@ final class VPNManager: ObservableObject {
         //
         // Mọi nhánh lỗi bên dưới đều đặt lại .failed/.disconnected nên không bị kẹt
         // ở trạng thái đang kết nối.
-        guard !state.isTransitioning else { return }
+        // 20/10/2026 — KHÔNG nuốt cú bấm khi đang chuyển trạng thái.
+        //
+        // Trước đây: `guard !state.isTransitioning else { return }`. Sau khi ngắt, app còn ở
+        // `.disconnecting` tới khi hệ thống báo xong (trần dừng tới 5 s) ⇒ khách bấm Connect
+        // trong khoảng đó bị BỎ QUA âm thầm: UI không đổi gì, phải bấm lại vài lần mới chạy.
+        // Nay: nếu đang `.connecting` thì vẫn bỏ qua (chống bấm đôi), còn nếu đang `.disconnecting`
+        // thì CHỜ nó xong rồi đi tiếp — một cú bấm là đủ.
+        if state.isTransitioning {
+            if state == .connecting { return }
+            let deadline = Date().addingTimeInterval(6)
+            while state.isTransitioning && Date() < deadline {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            if state.isTransitioning { return }
+        }
         state = .connecting
         // TRƯỚC khi cấp cấu hình mới và ghi preferences: dọn phiên CŨ cho sạch.
         // Thiếu bước này, Connect lại trong cùng vòng đời app là "lên mà không có mạng" và
@@ -756,6 +770,11 @@ final class VPNManager: ObservableObject {
             nodes: hysteriaNodes
         ) {
             providerConfiguration["hysteria"] = hysteria
+            // N tunnel (hút băng thông). Truyền qua providerConfiguration vì iOS KHÔNG khai
+            // App Group trong entitlements (cả app lẫn extension) ⇒ UserDefaults không chia sẻ được.
+            // Đọc ở Settings; áp dụng ngay ở lần kết nối này.
+            providerConfiguration["multiTunnelCount"] =
+                UserDefaults.standard.object(forKey: "multiTunnelCount") as? Int ?? 1
             let relay = hysteria["relayURL"] as? String ?? "?"
             let host = hysteria["serverHost"] as? String ?? "?"
             log.info("configuration: hysteria2 -> \(relay, privacy: .public) (server \(host, privacy: .public))")

@@ -314,12 +314,20 @@ func Serve(fd int, mtu int, tunIpv4, tunIpv6 string) error {
 	c := active
 	// N>1: gộp các tunnel thành MỘT client để `tun.Server` chia luồng cho chúng.
 	// N=1: dùng đúng client cũ ⇒ hành vi y hệt trước đây (không regress).
-	if len(slots) > 1 {
-		list := make([]client.Client, 0, len(slots))
+	// LƯU Ý: phải gộp CẢ tunnel CHÍNH (`active`) lẫn các tunnel phụ (`slots`).
+	// Bản đầu chỉ lấy `slots` khi len(slots) > 1 ⇒ với N=4 (1 chính + 3 phụ) thì multiClient
+	// chỉ chứa 3 phụ và **mất tunnel chính**. Đúng phải là 1 + len(slots).
+	if len(slots) > 0 {
+		list := make([]client.Client, 0, len(slots)+1)
+		if c != nil {
+			list = append(list, c)
+		}
 		for _, v := range slots {
 			list = append(list, v)
 		}
-		c = &multiClient{clients: list}
+		if len(list) > 1 {
+			c = &multiClient{clients: list}
+		}
 	}
 	if c == nil {
 		mu.Unlock()

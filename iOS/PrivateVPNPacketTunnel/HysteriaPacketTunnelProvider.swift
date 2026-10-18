@@ -872,11 +872,15 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
         // NetworkExtension đợi callback này; gọi hai lần là crash, không gọi là treo tiến
         // trình extension ⇒ có trần 5s phòng khi `setTunnelNetworkSettings(nil)` im lặng.
-        // FIX 19/10/2026 — trần an toàn phải chạy trên queue RIÊNG. Trước đây nó nằm trên
-        // `queue` chung; khi còn việc khác đang chạy trên queue đó (nhịp giám sát/cầu), callback
-        // bị xếp sau ⇒ iOS không nhận được tín hiệu dừng ⇒ "Disconnecting…" treo. Dùng queue
-        // toàn cục + rút ngắn 5 s → 2 s để không phụ thuộc bất cứ việc nào khác.
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) { [weak self] in
+        // FIX 19/10/2026 — trần an toàn chạy trên queue RIÊNG (trước đây nằm trên `queue` chung;
+        // khi còn việc khác chạy trên queue đó thì callback bị xếp sau ⇒ "Disconnecting…" treo).
+        //
+        // 20/10/2026 — GIỮ 5 s, KHÔNG rút xuống 2 s: bản 70 rút còn 2 s và ngay sau đó xuất hiện
+        // hiện tượng "bấm Connect vài lần mới chạy". Nghi phạm: trần 2 s bắn TRƯỚC khi
+        // `setTunnelNetworkSettings(nil)` hoàn tất ⇒ phiên sau khởi động khi trạng thái mạng của
+        // phiên trước còn dở. Queue riêng đã giải quyết việc bị trễ, nên không cần rút ngắn thời
+        // gian nữa — thà chậm 5 s còn hơn hỏng lần Connect kế tiếp.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 5) { [weak self] in
             self?.completeStop(completionHandler)
         }
         setTunnelNetworkSettings(nil) { [weak self] _ in
