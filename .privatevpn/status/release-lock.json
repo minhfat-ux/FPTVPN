@@ -5,8 +5,8 @@
     {
       "platform": "ios",
       "version": "1.4.7",
-      "build": "65",
-      "reason": "Chủ dự án 18/10/2026 chốt: 'sửa xong bump lên 1.4.7 và handover cho publisher để publish bản mới'. Code = 1.4.6->1.4.7 trên nền build 60-64 (gộp lô cầu gói + preMeasure trung vị + log quyết định khai + hiển thị mức stable).",
+      "build": "66",
+      "reason": "Chủ dự án 18/10/2026: bump 1.4.7 + handover publisher. Build 66 = 65 + đo trên CHÍNH domain của mình (api/t1) thay vì domain bên thứ ba, mỗi nguồn 1 mẫu.",
       "at": "2026-09-30",
       "locked_by": "mac"
     }

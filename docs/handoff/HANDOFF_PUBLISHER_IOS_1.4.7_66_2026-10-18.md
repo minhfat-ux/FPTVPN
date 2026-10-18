@@ -1,7 +1,7 @@
-# BÀN GIAO PUBLISHER — phát hành **iOS 1.4.7 / build 65**
+# BÀN GIAO PUBLISHER — phát hành **iOS 1.4.7 / build 66**
 
 - **Từ:** harness Mac (bên build) · **Đến:** phiên **publisher** (harness Mac — AGENTS.md §0)
-- **Ngày:** 18/10/2026 · **Task:** TASK-20261018-IOS-147-65
+- **Ngày:** 18/10/2026 · **Task:** TASK-20261018-IOS-147-66
 - **Manifest (nguồn số liệu):** `docs/RELEASE_ARTIFACTS_2026-10-18.md`
 - **Quy trình bắt buộc:** `docs/PUBLISHER_PROCESS.md` §1 — **BUILD → HANDOFF → PUBLISH → ANNOUNCE**
 
@@ -12,7 +12,7 @@
 1. ~~COMMIT SOURCE~~ → **ĐÃ COMMIT: `31816f5`** (10 file, +496/−94). Luật AGENTS §6b
    "commit trước, deploy sau" **đã thoả**. Publisher chỉ cần xác nhận `git log -1` ra đúng
    `31816f5` rồi mới upload.
-2. **Xác nhận đúng bản mới nhất đã test (§1b).** Bản để phát là **1.4.7/65**, đọc **từ trong IPA**
+2. **Xác nhận đúng bản mới nhất đã test (§1b).** Bản để phát là **1.4.7/66**, đọc **từ trong IPA**
    (không tin tên file). Nếu thấy bản khác ⇒ **DỪNG**.
 
 ---
@@ -21,10 +21,10 @@
 
 ```
 build/ios-adhoc-export/ipa/FlowVPN.ipa
-  size   : 8.230.023 B
-  sha256 : 44b94981ed13df4b457c24a29c7c4728b97a5b7194db1aaecb81926c4ef6faf7
-  md5    : 4ad16fa125adaea806f98379283ca99c
-  version: 1.4.7 / build 65
+  size   : 8.230.157 B
+  sha256 : 374b399aee92f7819c57d89b7bd3822eb9c497180c1d9b8d5eecac0af267a577
+  md5    : 8dc7b400b0af0eca8e56cffb3409772d
+  version: 1.4.7 / build 66
   ký     : Ad Hoc · 10 UDID · get-task-allow=false · extension cùng số
 ```
 
@@ -32,9 +32,9 @@ build/ios-adhoc-export/ipa/FlowVPN.ipa
 
 ```bash
 shasum -a 256 build/ios-adhoc-export/ipa/FlowVPN.ipa          # phải khớp 44b94981…
-bash scripts/ios-verify-ipa.sh build/ios-adhoc-export/ipa/FlowVPN.ipa --version 1.4.7 --build 65
+bash scripts/ios-verify-ipa.sh build/ios-adhoc-export/ipa/FlowVPN.ipa --version 1.4.7 --build 66
 python3 scripts/check-publish-version.py --platform ios \
-  --file build/ios-adhoc-export/ipa/FlowVPN.ipa --version 1.4.7 --build 65   # exit 0 mới được đi tiếp
+  --file build/ios-adhoc-export/ipa/FlowVPN.ipa --version 1.4.7 --build 66   # exit 0 mới được đi tiếp
 ```
 
 ---
@@ -46,11 +46,11 @@ python3 scripts/check-publish-version.py --platform ios \
 | Upload lên node-2 | `/root/flowvpn-ipa/VPNFlow-latest.ipa` |
 | Route đọc | `GET /v1/downloads/ios` |
 | Verify link | `HTTP 200` + `content-length` **khớp 8.230.023**; thử bằng host `t1.meetflowai.site` |
-| Mốc §4 | `PATCH /v1/admin/app-version` → `latest_version=1.4.7`, `ipa_build=65` |
+| Mốc §4 | `PATCH /v1/admin/app-version` → `latest_version=1.4.7`, `ipa_build=66` |
 | **KHÔNG** đặt | `minimum_version` — chủ dự án chưa chốt buộc cập nhật |
 | Backup trước khi ghi đè | đổi tên bản đang phát trên node-2 kèm ngày (theo §1 bước 3) |
 
-**Khoá phát hành đã mở đúng bản:** `.privatevpn/status/release-lock.json` = `ios 1.4.7 / 65`.
+**Khoá phát hành đã mở đúng bản:** `.privatevpn/status/release-lock.json` = `ios 1.4.7 / 66`.
 Nếu cổng 1c trả **exit 3** ⇒ lock không khớp, **dừng và hỏi lại bên build**, đừng `--allow-locked`.
 
 ---
@@ -69,13 +69,17 @@ Nếu cổng 1c trả **exit 3** ⇒ lock không khớp, **dừng và hỏi lạ
    CDN shop làm dự phòng (đo thật lúc đó: `000`, bắt tay xong không chuyển byte).
 4. **Log quyết định khai/ramp luôn được ghi** (`bw: ` vào `alwaysKeywords`) — trước đây bị bộ lọc
    nuốt, khiến việc chẩn đoán tốc độ phải suy đoán.
-5. **Hiển thị "Mức đã khoá (stable)"** nói rõ ngưỡng (`— (≥ 8.0 Mbps)`) thay vì dấu `—` trơ.
+5. **Đường đo đổi sang CHÍNH domain của mình** (`api.meetflowai.site` → `t1.` → Cloudflare cuối),
+   và **mỗi nguồn chỉ 1 mẫu** thay vì thử lại nguồn đã chết. Đo 3 lần/nguồn từ TQ (18/10/2026):
+   `api.` **3/3 sống**, `t1.` 2/3, `speed.cloudflare.com` **0/3 (chết hẳn)**. Trước đây một nguồn
+   chết làm mỗi lần mở phiên phí ~5 giây mà không có số đo.
+6. **Hiển thị "Mức đã khoá (stable)"** nói rõ ngưỡng (`— (≥ 8.0 Mbps)`) thay vì dấu `—` trơ.
 
 ---
 
 ## 4. ⚠️ KHÔNG được quảng cáo / không được hứa với khách
 
-1. **Chưa nghiệm thu chính thức §7d trên build 65** (chưa chạy `ios-log-acceptance.py` + `--crash-dir`).
+1. **Chưa nghiệm thu chính thức §7d trên build 66** (chưa chạy `ios-log-acceptance.py` + `--crash-dir`).
 2. **Chỉ iPad được cài và dùng thử.** **iPhone chưa cài được** (offline giữa phiên).
 3. **FPT Play**: chạy được trên iPad qua `node-1`; **chưa** kiểm trên `Vietnam 3`.
 4. **Số tốc độ**: mạng TQ tại chỗ dao động **0,6 – 4,7 Mbps** trong chính buổi đo, nên **không** dùng
