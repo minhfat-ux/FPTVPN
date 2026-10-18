@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/hysteria/app/v2/internal/tun"
@@ -26,7 +27,10 @@ var (
 	stopCh    chan struct{}
 	active    client.Client
 	activeSrv *tun.Server
-	stopped   bool
+	// slots: các tunnel mở song song (chế độ N tunnel). N=1 ⇒ dùng `active` như cũ.
+	// Khoá là chỉ số slot; `Serve()` gộp chúng bằng `multiClient`.
+	slots   map[int]client.Client
+	stopped bool
 )
 
 // ---------------------------------------------------------------------------
@@ -226,12 +230,95 @@ func Connect(host string, port int, password, obfsPass string, sockFd int, sockT
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// N tunnel song song (P1 của docs/RESEARCH_SHARED_NETWORK_BANDWIDTH_2026-10-19.md)
+// ---------------------------------------------------------------------------
+//
+// VÌ SAO: trên mạng dùng chung (tòa nhà), đường bị giới hạn theo TỪNG KẾT NỐI —
+// đo thật 19/10/2026: 1 luồng 4–12 Mbps, 8 luồng 72–81 Mbps (lặp 3 lần, cùng kết
+// quả trên cả Cloudflare lẫn relay của mình). App hiện mở ĐÚNG MỘT tunnel nên trần
+// thực tế ~10–12 Mbps, nâng số khai không vượt được.
+//
+// CÁCH LÀM: `tun.Server` chỉ nhận MỘT `client.Client`, và nó gọi `TCP(addr)`/
+// `UDP()` một lần cho MỖI LUỒNG mới. Nên chỉ cần một client BỌC N client: mỗi luồng
+// mới được chia cho một tunnel theo vòng tròn. Các gói của CÙNG một luồng vẫn đi
+// đúng một tunnel ⇒ KHÔNG đảo thứ tự (chia theo gói sẽ làm TCP bên trong sụp).
+//
+// BẤT BIẾN: mọi tunnel phải cùng một exit node (F3) — khác node là IP khách đổi
+// giữa phiên, hỏng đăng nhập/thanh toán.
+type multiClient struct {
+	clients []client.Client
+	next    uint32
+}
+
+func (m *multiClient) pick() client.Client {
+	// round-robin: chia đều các luồng mới; `AddUint32` để nhiều goroutine gọi an toàn.
+	i := atomic.AddUint32(&m.next, 1)
+	return m.clients[int(i)%len(m.clients)]
+}
+
+func (m *multiClient) TCP(addr string) (net.Conn, error) {
+	return m.pick().TCP(addr)
+}
+
+func (m *multiClient) UDP() (client.HyUDPConn, error) {
+	return m.pick().UDP()
+}
+
+func (m *multiClient) Close() error {
+	var first error
+	for _, c := range m.clients {
+		if err := c.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// ConnectSlot mở THÊM một tunnel ở vị trí `slot` (0-based), giữ các tunnel khác.
+// Dùng cho chế độ N tunnel; `Connect()` cũ vẫn nguyên hành vi cho N=1.
+func ConnectSlot(slot int, host string, port int, password, obfsPass string, sockFd int, sockTcp bool, upKbps, downKbps int) error {
+	if err := Connect(host, port, password, obfsPass, sockFd, sockTcp, upKbps, downKbps); err != nil {
+		return err
+	}
+	mu.Lock()
+	c := active
+	active = nil
+	activeSrv = nil
+	if slots == nil {
+		slots = map[int]client.Client{}
+	}
+	old := slots[slot]
+	slots[slot] = c
+	mu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
+	return nil
+}
+
+// slotCount trả số tunnel đang mở.
+func slotCount() int {
+	mu.Lock()
+	defer mu.Unlock()
+	return len(slots)
+}
+
 // Serve starts forwarding the (already connected) client through the Android
 // VpnService TUN fd. It BLOCKS until the tunnel stops (Stop() or an error).
 // Establish the VpnService only AFTER Connect() succeeded.
 func Serve(fd int, mtu int, tunIpv4, tunIpv6 string) error {
 	mu.Lock()
 	c := active
+	// N>1: gộp các tunnel thành MỘT client để `tun.Server` chia luồng cho chúng.
+	// N=1: dùng đúng client cũ ⇒ hành vi y hệt trước đây (không regress).
+	if len(slots) > 1 {
+		list := make([]client.Client, 0, len(slots))
+		for _, v := range slots {
+			list = append(list, v)
+		}
+		c = &multiClient{clients: list}
+	}
 	if c == nil {
 		mu.Unlock()
 		return fmt.Errorf("hysteria not connected")
@@ -314,6 +401,8 @@ func Stop() {
 	hadServe := stopCh != nil
 	active = nil
 	activeSrv = nil
+	staleSlots := slots
+	slots = nil
 	if stopCh != nil {
 		close(stopCh)
 		stopCh = nil
@@ -323,5 +412,15 @@ func Stop() {
 	// gọi Close() hai lần trên cùng một client (đường `<-ch` của Serve cũng đóng).
 	if stale != nil && !hadServe {
 		_ = stale.Close()
+	}
+	// N tunnel: đóng mọi tunnel còn lại (khi Serve đang chạy thì multiClient.Close
+	// phía trên đã đóng hết — gọi Close lần hai trên client đã đóng là vô hại với
+	// hysteria, nhưng vẫn bỏ qua khi hadServe để giữ đúng hành vi cũ).
+	if !hadServe {
+		for _, c := range staleSlots {
+			if c != nil {
+				_ = c.Close()
+			}
+		}
 	}
 }
