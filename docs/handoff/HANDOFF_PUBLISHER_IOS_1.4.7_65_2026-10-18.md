@@ -9,9 +9,9 @@
 
 ## 0. ⛔ VIỆC PHẢI XONG TRƯỚC KHI UPLOAD
 
-1. ~~COMMIT SOURCE~~ → **ĐÃ COMMIT: `5c6e179`** (10 file, +496/−94). Luật AGENTS §6b
+1. ~~COMMIT SOURCE~~ → **ĐÃ COMMIT: `31816f5`** (10 file, +496/−94). Luật AGENTS §6b
    "commit trước, deploy sau" **đã thoả**. Publisher chỉ cần xác nhận `git log -1` ra đúng
-   `5c6e179` rồi mới upload.
+   `31816f5` rồi mới upload.
 2. **Xác nhận đúng bản mới nhất đã test (§1b).** Bản để phát là **1.4.7/65**, đọc **từ trong IPA**
    (không tin tên file). Nếu thấy bản khác ⇒ **DỪNG**.
 

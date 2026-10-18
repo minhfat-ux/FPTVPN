@@ -38,7 +38,7 @@
 
 ## 4. ⚠️ VIỆC CHƯA XONG — KHÔNG ĐƯỢC QUẢNG CÁO MẤY MỤC NÀY
 
-1. ~~CHƯA COMMIT~~ → **ĐÃ COMMIT: `5c6e179`** (10 file, +496/−94). Điều kiện "commit trước,
+1. ~~CHƯA COMMIT~~ → **ĐÃ COMMIT: `31816f5`** (10 file, +496/−94). Điều kiện "commit trước,
    deploy sau" (AGENTS §6b) **đã thoả**; bản phát hành truy vết được về commit này.
 2. **CHỈ iPad đã cài 1.4.7/65.** iPhone (`Minh's iphone`) **offline** giữa phiên
    (`unavailable`, `CoreDeviceError 1011`) nên **chưa cài được** lên iPhone.
