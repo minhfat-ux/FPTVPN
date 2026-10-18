@@ -50,7 +50,7 @@ import Hysteria
     _ err: NSErrorPointer) -> Bool {
     MobileServe(fd, mtu, ipv4, ipv6, err)
 }
-@inline(__always) private func CoreStop() { CoreStop() }
+@inline(__always) private func CoreStop() { MobileStop() }
 #endif
 #endif
 
