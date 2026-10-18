@@ -16,8 +16,42 @@ import os
 import WireGuardKitC
 #endif
 
-#if canImport(Hysteria)
+#if canImport(Hysteria) || canImport(Multitunnel)
+#if canImport(Multitunnel) && !canImport(Hysteria)
+import Multitunnel
+#else
 import Hysteria
+#endif
+
+// ---------------------------------------------------------------------------
+// Cầu nối core: bản PHÁT HÀNH dùng `Mobile*` (Hysteria.xcframework);
+// bản THỬ (N tunnel) link MỘT MÌNH Multitunnel.xcframework nên gọi `Multitunnel*`.
+// Nhờ vậy chỉ link MỘT core mỗi bản — không phình binary gấp đôi.
+// Cờ bật/tắt nằm ở project.yml (`MULTITUNNEL_CORE`), mặc định TẮT.
+// ---------------------------------------------------------------------------
+#if canImport(Multitunnel) && !canImport(Hysteria)
+@inline(__always) private func CoreConnect(_ host: String, _ port: Int, _ password: String,
+    _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
+    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    MultitunnelConnect(host, port, password, obfs, sockFd, sockTcp, up, down, err)
+}
+@inline(__always) private func CoreServe(_ fd: Int, _ mtu: Int, _ ipv4: String, _ ipv6: String,
+    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    MultitunnelServe(fd, mtu, ipv4, ipv6, err)
+}
+@inline(__always) private func CoreStop() { MultitunnelStop() }
+#else
+@inline(__always) private func CoreConnect(_ host: String, _ port: Int, _ password: String,
+    _ obfs: String, _ sockFd: Int, _ sockTcp: Bool, _ up: Int, _ down: Int,
+    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    MobileConnect(host, port, password, obfs, sockFd, sockTcp, up, down, err)
+}
+@inline(__always) private func CoreServe(_ fd: Int, _ mtu: Int, _ ipv4: String, _ ipv6: String,
+    _ err: UnsafeMutablePointer<NSError?>?) -> Bool {
+    MobileServe(fd, mtu, ipv4, ipv6, err)
+}
+@inline(__always) private func CoreStop() { CoreStop() }
+#endif
 #endif
 
 /// Transport hysteria2 cho NetworkExtension của Apple — bản chuyển từ
@@ -216,9 +250,9 @@ final class HysteriaTransport: @unchecked Sendable {
     /// rơi ngay về cửa Cloudflare kế tiếp; ở mạng KHÔNG chặn UDP thì đây là đường nhanh nhất vì không
     /// phải đi qua Cloudflare.
     private func attemptDirect(options: Options) throws {
-        #if canImport(Hysteria)
+        #if canImport(Hysteria) || canImport(Multitunnel)
         var connectError: NSError?
-        let connected = MobileConnect(
+        let connected = CoreConnect(
             options.serverHost,
             Int(HysteriaDefaults.serverPort),
             options.password,
@@ -304,7 +338,7 @@ final class HysteriaTransport: @unchecked Sendable {
             )
         }
 
-        #if canImport(Hysteria)
+        #if canImport(Hysteria) || canImport(Multitunnel)
         // Go nói QUIC tới cổng UDP nội bộ của relay (không phải tới node): gói thật
         // được WSRelayClient chở qua WebSocket. sockFd = 0 nghĩa là Go tự mở socket UDP
         // (xem mobile.go: sockFd > 0 mới dùng socket do app cấp).
@@ -312,7 +346,7 @@ final class HysteriaTransport: @unchecked Sendable {
         // sockTcp, upKbps, downKbps, &error) — xem Mobile.objc.h trong framework.
         // Không import kiểu `throws` nên phải truyền con trỏ NSError ra ngoài.
         var connectError: NSError?
-        let connected = MobileConnect(
+        let connected = CoreConnect(
             Self.quicDialHost,
             Int(port),
             options.password,
@@ -340,7 +374,7 @@ final class HysteriaTransport: @unchecked Sendable {
         let thread = Thread { [weak self] in
             guard let self else { return }
             var serveError: NSError?
-            let ok = MobileServe(Int(tunnelFd), Int(mtu), ipv4, ipv6, &serveError)
+            let ok = CoreServe(Int(tunnelFd), Int(mtu), ipv4, ipv6, &serveError)
             let reason = ok
                 ? "serve() kết thúc"
                 : (serveError?.localizedDescription ?? "MobileServe trả false")
@@ -364,8 +398,8 @@ final class HysteriaTransport: @unchecked Sendable {
 
     /// Dọn một lượt thử đã hỏng để lượt sau còn bind được cổng UDP mới.
     private func discardAttempt() {
-        #if canImport(Hysteria)
-        MobileStop()
+        #if canImport(Hysteria) || canImport(Multitunnel)
+        CoreStop()
         #endif
         lock.lock()
         let client = relay
@@ -397,10 +431,10 @@ final class HysteriaTransport: @unchecked Sendable {
         relay = nil
         lock.unlock()
 
-        #if canImport(Hysteria)
+        #if canImport(Hysteria) || canImport(Multitunnel)
         if wasRunning {
             // stop() của Go giải phóng client + đóng socket; serve() sẽ trả về.
-            MobileStop()
+            CoreStop()
         }
         #endif
         client?.stop()
