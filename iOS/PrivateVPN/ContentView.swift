@@ -693,9 +693,23 @@ struct ContentView: View {
         )
         diagRow(
             title: languageStore.t(.diagStable),
-            value: RampStatus.formatRate(report?.stableKbps),
+            value: stableText(report),
             valueColor: VPNTheme.secondaryLabel
         )
+    }
+
+    /// "Mức đã khoá (stable)" — chỉ có số khi tốc độ ĐO được đạt **≥ FullHD (8 Mbps) giữ ≥10 s**
+    /// (`RampStatus.fullHDKbps` + `rampHoldS`, parity Android `HysteriaVpnService.kt`).
+    ///
+    /// VÌ SAO PHẢI NÓI RÕ NGƯỠNG THAY VÌ ĐỂ `—`: chủ dự án báo "không thấy thông số hiện lên"
+    /// (18/10/2026) trong khi đỉnh phiên đo được **7.064 kbps** — thiếu đúng ~1 Mbps so với ngưỡng
+    /// 8 Mbps. Một dấu `—` trơ không cho biết đó là "chưa đủ mẫu", "chưa tới ngưỡng" hay "lỗi",
+    /// nên rất dễ bị đọc thành hỏng. In kèm ngưỡng để con số tự giải thích.
+    private func stableText(_ report: TunnelStatusReport?) -> String {
+        if let value = report?.stableKbps, value > 0 {
+            return RampStatus.formatRate(value)
+        }
+        return "— (≥ \(RampStatus.formatRate(RampStatus.fullHDKbps)))"
     }
 
     /// "Khai báo hiện tại" — số Brutal CC đang khai, hai chiều (↓/↑).

@@ -319,6 +319,11 @@ final class RelayDiagnostics: @unchecked Sendable {
         "handshake ok", "XÁC NHẬN tunnel", "cầu mới", "watchdog NGỪNG chạy", "ĐỔI NODE", "đổi node",
         // 1 dòng/phút — giữ để nghiệm thu bộ nhớ (footprint/van) mà không cần bật log chi tiết.
         "tài nguyên:",
+        // 30/09/2026 — MỌI quyết định số khai/ramp PHẢI luôn ghi, KHÔNG phụ thuộc công tắc log.
+        // Vì sao: chính bộ lọc này đã nuốt mất toàn bộ dòng `bw:` trên máy thật, khiến một vòng
+        // điều tra ("vì sao không thấy ramp lên") phải suy đoán thay vì đọc số. Số khai là thứ
+        // quyết định tốc độ khách nhận, nên nó thuộc nhóm "bằng chứng không được tắt im lặng".
+        "bw: ",
         // P2 (26/09/2026) — BẰNG CHỨNG CHỐNG RÒ IPv6 phải LUÔN ghi, KHÔNG được phụ thuộc công tắc log.
         // Vì sao: chính công tắc này đã lọc mất dòng chẩn đoán IPv6, làm mất hẳn một vòng điều tra
         // (không biết `ipv6Settings` có được áp hay không, không biết gói IPv6 có vào tunnel hay không).

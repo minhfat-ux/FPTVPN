@@ -1662,12 +1662,26 @@ extension BandwidthControl {
     static let preMeasureBudget: TimeInterval = 2.5
     static let preMeasureConnectTimeout: TimeInterval = 2
 
-    /// Thứ tự nguồn đo GIỐNG Android: CDN của shop trước (đo thật 22/09/2026: Cloudflare bị
-    /// chặn/bóp từ data di động Trung Quốc), rồi mới tới Cloudflare. Bản iOS dùng đúng URL
-    /// kênh iOS (`/v1/downloads/ios`, xem `control-plane/src/app-version.js`).
+    /// Số mẫu lấy trước khi khai (xem `preMeasure`/`median`). 3 mẫu ⇒ thêm tối đa ~5 s lúc mở
+    /// phiên, đổi lại số khai không còn nhảy loạn giữa các phiên trên mạng dao động mạnh.
+    static let preMeasureSamples = 3
+
+    /// Thứ tự nguồn đo: **Cloudflare trước**, CDN của shop làm dự phòng.
+    ///
+    /// VÌ SAO ĐỔI (30/09/2026, đo trên máy thật ở Trung Quốc — Wi-Fi, cùng máy Mac):
+    ///   • `https://meetflowai.site/v1/downloads/ios`  → **000** (bắt tay TCP xong nhưng KHÔNG
+    ///     chuyển byte nào rồi treo tới hết hạn); phí trọn `preMeasureBudget` mỗi phiên MÀ
+    ///     không cho ra số nào ⇒ `measured=0` ⇒ rơi về bộ nhớ, số khai đứng yên.
+    ///   • `https://speed.cloudflare.com/__down`       → **200, 972 KB/s (~7,8 Mbps)**.
+    ///
+    /// Ghi chú lịch sử (giữ để không ai đảo lại mà không có bằng chứng): bản 22/09/2026 đặt CDN
+    /// shop TRƯỚC vì đo thấy Cloudflare "bị chặn/bóp từ data di động Trung Quốc". Hai phép đo
+    /// KHÔNG mâu thuẫn — chúng đo hai đường khác nhau (Wi-Fi vs data di động). Vì vậy vẫn GIỮ
+    /// nguồn kia làm dự phòng, chỉ đổi thứ tự; ai đo lại trên data di động mà thấy Cloudflare
+    /// hỏng thì đảo lại kèm số liệu, đừng đoán.
     static let preMeasureURLs: [String] = [
-        "https://meetflowai.site/v1/downloads/ios",
         "https://speed.cloudflare.com/__down?bytes=1500000",
+        "https://meetflowai.site/v1/downloads/ios",
     ]
 
     /// Tải một mẩu nhỏ qua socket **ĐI THẲNG RA MẠNG NỀN** (KHÔNG qua tunnel) rồi trả kbps.
@@ -1697,56 +1711,83 @@ extension BandwidthControl {
     /// `bw: DO MANG THUC TE truoc khi khai net=… = …kbps (mat …ms) - dung so nay lam so khai`
     /// để vẫn grep chung được với Android.
     static func preMeasure(netKey: String, log: ((String) -> Void)? = nil) -> Int {
-        for urlString in preMeasureURLs {
+        var valid: [Int] = []
+        var attempts = 0
+        search: for urlString in preMeasureURLs {
             guard let url = URL(string: urlString) else { continue }
-            guard let sample = measureOnce(url: url) else {
-                log?("bw: do mang thuc te CHUA DU du lieu tu \(urlString) -> thu nguon ke tiep")
-                continue
-            }
-            let handshakeMs = max(sample.totalMs - sample.readMs, 0)
-            let choice = RampStatus.PreMeasurePolicy.choose(
-                kbpsWithHandshake: sample.kbpsWithHandshake,
-                kbpsWithoutHandshake: sample.kbpsWithoutHandshake,
-                readBytes: sample.bytes,
-                totalMs: sample.totalMs,
-                readMs: sample.readMs
-            )
-            switch choice {
-            case .reject(let why):
-                // Bỏ mẫu = đo hỏng cho nguồn này ⇒ thử nguồn kế tiếp; hết nguồn ⇒ 0 ⇒ chỗ gọi lùi
-                // về bộ nhớ / khởi điểm thận trọng (ĐÚNG ý chủ dự án: không khai theo số đã hỏng).
-                // 25/09/2026: chỉ bỏ vì PHẦN ĐỌC mỏng — bắt tay to KHÔNG còn là lý do bỏ mẫu.
-                log?(
-                    "bw: BO MAU do mang thuc te tu \(urlString) — \(why); "
-                        + "doc \(sample.readMs)ms/\(sample.bytes)B (bat tay \(handshakeMs)ms/"
-                        + "\(sample.totalMs)ms), kieu-android-cu=\(sample.kbpsWithHandshake)kbps "
-                        + "-> thu nguon ke tiep"
+            var rejectsHere = 0
+            while attempts < Self.preMeasureSamples && rejectsHere < 2 {
+                attempts += 1
+                guard let sample = measureOnce(url: url) else {
+                    log?("bw: do mang thuc te CHUA DU du lieu tu \(urlString) -> thu lai/nguon ke tiep")
+                    rejectsHere += 1
+                    continue
+                }
+                let handshakeMs = max(sample.totalMs - sample.readMs, 0)
+                let choice = RampStatus.PreMeasurePolicy.choose(
+                    kbpsWithHandshake: sample.kbpsWithHandshake,
+                    kbpsWithoutHandshake: sample.kbpsWithoutHandshake,
+                    readBytes: sample.bytes,
+                    totalMs: sample.totalMs,
+                    readMs: sample.readMs
                 )
-                continue
-            case .readWindow(let kbps):
-                log?(
-                    "bw: DO MANG THUC TE truoc khi khai net=\(netKey) = \(kbps)kbps "
-                        + "(mat \(sample.totalMs)ms) - dung so nay lam so khai "
-                        + "[tru-bat-tay: phần đọc \(sample.readMs)ms/\(sample.bytes)B sau bắt tay "
-                        + "\(handshakeMs)ms; kieu-android-cu=\(sample.kbpsWithHandshake)kbps; "
-                        + "nguon=\(urlString)]"
-                )
-                return kbps
-            case .wholeRequest(let kbps):
-                log?(
-                    "bw: DO MANG THUC TE truoc khi khai net=\(netKey) = \(kbps)kbps "
-                        + "(mat \(sample.totalMs)ms) - dung so nay lam so khai "
-                        + "[bắt tay \(handshakeMs)ms không đáng kể ⇒ giữ cách tính Android; "
-                        + "không-tính-bắt-tay=\(sample.kbpsWithoutHandshake)kbps; "
-                        + "bytes=\(sample.bytes); nguon=\(urlString)]"
-                )
-                return kbps
+                switch choice {
+                case .reject(let why):
+                    // Bỏ mẫu = đo hỏng cho lần này ⇒ thử lại (tối đa 2 lần/nguồn) rồi đổi nguồn.
+                    // 25/09/2026: chỉ bỏ vì PHẦN ĐỌC mỏng — bắt tay to KHÔNG còn là lý do bỏ mẫu.
+                    log?(
+                        "bw: BO MAU do mang thuc te tu \(urlString) — \(why); "
+                            + "doc \(sample.readMs)ms/\(sample.bytes)B (bat tay \(handshakeMs)ms/"
+                            + "\(sample.totalMs)ms), kieu-android-cu=\(sample.kbpsWithHandshake)kbps"
+                    )
+                    rejectsHere += 1
+                case .readWindow(let kbps):
+                    log?(
+                        "bw: MAU mang thuc te net=\(netKey) = \(kbps)kbps (mat \(sample.totalMs)ms) "
+                            + "[tru-bat-tay: phần đọc \(sample.readMs)ms/\(sample.bytes)B sau bắt tay "
+                            + "\(handshakeMs)ms; kieu-android-cu=\(sample.kbpsWithHandshake)kbps; "
+                            + "nguon=\(urlString)]"
+                    )
+                    valid.append(kbps)
+                    if valid.count >= Self.preMeasureSamples { break search }
+                case .wholeRequest(let kbps):
+                    log?(
+                        "bw: MAU mang thuc te net=\(netKey) = \(kbps)kbps (mat \(sample.totalMs)ms) "
+                            + "[bắt tay \(handshakeMs)ms không đáng kể ⇒ giữ cách tính Android; "
+                            + "không-tính-bắt-tay=\(sample.kbpsWithoutHandshake)kbps; "
+                            + "bytes=\(sample.bytes); nguon=\(urlString)]"
+                    )
+                    valid.append(kbps)
+                    if valid.count >= Self.preMeasureSamples { break search }
+                }
             }
         }
+        // Đã có ≥2 mẫu hợp lệ thì không cần thử nguồn kế tiếp nữa.
+        guard let kbps = Self.median(valid) else {
+            log?(
+                "bw: do mang thuc te KHONG do duoc o ca 2 nguon (net=\(netKey)) -> giu so cu"
+            )
+            return 0
+        }
         log?(
-            "bw: do mang thuc te KHONG do duoc o ca 2 nguon (net=\(netKey)) -> giu so cu"
+            "bw: DO MANG THUC TE truoc khi khai net=\(netKey) = \(kbps)kbps "
+                + "[trung vị của \(valid.count) mẫu: \(valid.sorted())] — dùng số này làm số khai"
         )
-        return 0
+        return kbps
+    }
+
+    /// Trung vị của các mẫu hợp lệ (số chẵn ⇒ trung bình 2 số giữa).
+    ///
+    /// VÌ SAO TRUNG VỊ, KHÔNG PHẢI MẪU ĐẦU: đo trên máy thật ở Trung Quốc (30/09/2026), ba lần
+    /// tải 1,5 MB liên tiếp trong CÙNG một phút cho 27 KB/s → hỏng → 1,57 MB/s (dao động ~50 lần).
+    /// Lấy mẫu đầu thì số khai nhảy loạn giữa các phiên: log cho `preMeasure=2145` rồi phiên sau
+    /// `preMeasure=0` ⇒ khai 1,8 ↔ 3,2 Mbps. Trung vị loại được cả mẫu xui lẫn mẫu hụt.
+    private static func median(_ values: [Int]) -> Int? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        if sorted.count % 2 == 1 { return sorted[mid] }
+        return (sorted[mid - 1] + sorted[mid]) / 2
     }
 
     /// Một nguồn đo. `nil` = hỏng/không đủ dữ liệu.

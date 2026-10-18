@@ -1292,8 +1292,22 @@ final class TunnelBridge: @unchecked Sendable {
         thread.start()
     }
 
+    /// Số datagram tối đa gom vào MỘT lời gọi `flow.writePackets` (xem `pumpLoop`).
+    ///
+    /// 30/09/2026 — TRẦN CŨ LÀ 1 GÓI/LỜI GỌI và đó là nút thắt thật của bản iOS:
+    /// `flow.writePackets` là IPC **đồng bộ** sang NetworkExtension, gọi nó mỗi gói một khớp
+    /// đúng số đo trên máy thật (iPhone 14 Pro Max, TQ → `vn3hy`): **52 gói/s ≈ 46 KB/s
+    /// (0,37 Mbps)**, trong khi CÙNG relay đó Android chở ~620 gói/s (4,5 Mbps) và hạ tầng hai
+    /// đầu đều rảnh (relay `drop=0 udpErr=0`; node-2 tự đo 20–36 Mbps; relay-server 74 Mbps).
+    /// Bằng chứng "không nghẽn, không rơi": `bỏ 40/1351 gói`, `hàng đợi relay chờ 0 gói/0 B`,
+    /// `cầu chờ-đọc 0B`. ⇒ Giới hạn nằm ở SỐ LỜI GỌI IPC, không phải băng thông.
+    private static let inboundBatchMax = 32
+
     private func pumpLoop() {
         var buffer = [UInt8](repeating: 0, count: 2048)
+        // Nhịp đo 5 s để thấy ngay cầu có nhanh lên không (bằng chứng, không suy đoán).
+        var batchedPackets = 0
+        var batchedSince = Date()
         while isRunning {
             // Đọc fd MỖI vòng: `retarget` có thể vừa đổi đầu fd phía Go (vòng lặp này KHÔNG
             // được dừng — xem chú thích `retarget`).
@@ -1301,48 +1315,84 @@ final class TunnelBridge: @unchecked Sendable {
             var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
             let ready = poll(&descriptor, 1, 250)
             if ready <= 0 { continue }
-            let count = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, 2048) }
-            if count <= 0 {
-                if count == 0 || (errno != EAGAIN && errno != EINTR) {
-                    RelayDiagnostics.shared.log("bridge: Go đóng fd (read=\(count) errno=\(errno))")
-                    return
-                }
-                continue
-            }
-            guard count > 4 else {
-                lock.lock(); counters.fromGoBad += 1; lock.unlock()
-                continue
-            }
-            // `autoreleasepool` cho MỖI gói — chỗ sửa GỐC thứ hai của BUG-IOS-JETSAM-001.
+            // `autoreleasepool` cho MỖI LÔ — chỗ sửa GỐC thứ hai của BUG-IOS-JETSAM-001.
             //
-            // Vì sao: `flow.writePackets([payload], withProtocols: [NSNumber])` là API
-            // Objective-C. Luồng này do `Thread { }` tạo nên **KHÔNG có pool tự động**; object
-            // tự động nhả của mỗi gói (mảng, NSNumber, buffer nội bộ của NetworkExtension) sẽ
-            // nằm lại tới hết tiến trình ⇒ bộ nhớ leo theo LƯU LƯỢNG đúng như đo được, và
-            // KHÔNG được trả lại khi dựng lại transport (vòng lặp + `packetFlow` không đổi).
+            // Vì sao: `flow.writePackets(..., withProtocols:)` là API Objective-C. Luồng này do
+            // `Thread { }` tạo nên **KHÔNG có pool tự động**; object tự động nhả (mảng, NSNumber,
+            // buffer nội bộ của NetworkExtension) sẽ nằm lại tới hết tiến trình ⇒ bộ nhớ leo theo
+            // LƯU LƯỢNG. Pool theo LÔ vẫn chặn được điều đó (tối đa `inboundBatchMax` gói mỗi
+            // pool) mà chỉ tốn 1 pool/lô thay vì 1 pool/gói.
+            // Cờ thoát phải nằm NGOÀI `autoreleasepool`: `return` trong closure chỉ thoát closure
+            // rồi quay lại `while isRunning` ⇒ quay vô hạn trên fd đã đóng.
+            var pumpClosed = false
             autoreleasepool {
-                let af = Int32(buffer[3])
-                let payload = Data(buffer[4..<count])
-                let summary = Self.summarize(payload)
-                Self.checkChecksum(payload, summary: summary, counters: &counters)
-                flow.writePackets([payload], withProtocols: [NSNumber(value: af)])
-                lock.lock()
-                counters.fromGo += 1
-                counters.fromGoBytes += count - 4
-                Self.count(summary, toGo: false, counters: &counters)
-                let seen = counters.fromGo
-                let tcpSeen = counters.fromGoTCP
-                lock.unlock()
-                if seen <= 3 || (summary.proto == 6 && tcpSeen <= 10)
-                    || summary.touchesTunSubnet || summary.fromTunAddress {
-                    var extra = ""
-                    if summary.proto == 6, tcpSeen <= 2 {
-                        extra = " hex: " + payload.prefix(48).map { String(format: "%02x", $0) }.joined(separator: " ")
+                var payloads: [Data] = []
+                var protocols: [NSNumber] = []
+                payloads.reserveCapacity(Self.inboundBatchMax)
+                protocols.reserveCapacity(Self.inboundBatchMax)
+                var drained = 0
+                var closed = false
+                while drained < Self.inboundBatchMax {
+                    let count = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, 2048) }
+                    if count <= 0 {
+                        if count == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                            closed = true      // Go đóng fd — ghi nốt lô rồi mới thoát
+                        }
+                        break                  // cả EAGAIN lẫn đóng fd đều dừng vòng đọc cạn
                     }
-                    RelayDiagnostics.shared.log(
-                        "bridge: Go→packetFlow #\(seen) (AF=\(af)) \(describe(payload))\(extra)"
-                    )
+                    drained += 1
+                    guard count > 4 else {
+                        lock.lock(); counters.fromGoBad += 1; lock.unlock()
+                        continue
+                    }
+                    let af = Int32(buffer[3])
+                    let payload = Data(buffer[4..<count])
+                    let summary = Self.summarize(payload)
+                    Self.checkChecksum(payload, summary: summary, counters: &counters)
+                    payloads.append(payload)
+                    protocols.append(NSNumber(value: af))
+                    lock.lock()
+                    counters.fromGo += 1
+                    counters.fromGoBytes += count - 4
+                    Self.count(summary, toGo: false, counters: &counters)
+                    let seen = counters.fromGo
+                    let tcpSeen = counters.fromGoTCP
+                    lock.unlock()
+                    if seen <= 3 || (summary.proto == 6 && tcpSeen <= 10)
+                        || summary.touchesTunSubnet || summary.fromTunAddress {
+                        var extra = ""
+                        if summary.proto == 6, tcpSeen <= 2 {
+                            extra = " hex: " + payload.prefix(48).map { String(format: "%02x", $0) }.joined(separator: " ")
+                        }
+                        RelayDiagnostics.shared.log(
+                            "bridge: Go→packetFlow #\(seen) (AF=\(af)) \(describe(payload))\(extra)"
+                        )
+                    }
                 }
+                if !payloads.isEmpty {
+                    // Ghi NGOÀI mọi khoá (AGENTS.md §7c: không giữ `lock` qua lời gọi NE).
+                    flow.writePackets(payloads, withProtocols: protocols)
+                    batchedPackets += payloads.count
+                }
+                if closed {
+                    RelayDiagnostics.shared.log(
+                        "bridge: Go đóng fd — đã ghi nốt lô \(payloads.count) gói"
+                    )
+                    pumpClosed = true
+                }
+            }
+            if pumpClosed { return }
+            let elapsed = Date().timeIntervalSince(batchedSince)
+            if elapsed >= 5 {
+                lock.lock()
+                let total = counters.fromGo
+                lock.unlock()
+                RelayDiagnostics.shared.log(
+                    "bridge: nhịp vào \(Int(Double(batchedPackets) / elapsed)) gói/s"
+                        + " lô≤\(Self.inboundBatchMax) (tổng \(total) gói)"
+                )
+                batchedPackets = 0
+                batchedSince = Date()
             }
         }
     }

@@ -93,10 +93,31 @@ d = json.load(open('/tmp/adhoc-prof-resp.json'))
 if 'errors' in d:
     print("  ✖", d['errors'][0].get('detail', '')[:160]); raise SystemExit(1)
 a = d['data']['attributes']; content = base64.b64decode(a['profileContent'])
+import glob, re, subprocess
 for dd in [os.path.expanduser('~/Library/Developer/Xcode/UserData/Provisioning Profiles'),
            os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles')]:
     os.makedirs(dd, exist_ok=True)
-    open(os.path.join(dd, a['uuid'] + '.mobileprovision'), 'wb').write(content)
+    # XOÁ bản cục bộ TRÙNG TÊN trước khi cài bản mới.
+    # Vì sao: mỗi lần tạo lại profile, script này cài thêm một file cùng `Name`; exportArchive
+    # chọn profile THEO TÊN nên gặp ≥2 file là báo "Multiple profiles found with the name ..."
+    # và HỎNG export (xảy ra thật 18/10/2026: tích 47 file 'VPNFlow AdHoc Tunnel' + 45 file
+    # 'VPNFlow AdHoc App' từ 23/09). Xoá ngay tại nguồn thì không bao giờ tích lại.
+    new_name = a['uuid'] + '.mobileprovision'
+    for old in glob.glob(os.path.join(dd, '*.mobileprovision')):
+        if os.path.basename(old) == new_name:
+            continue
+        try:
+            out = subprocess.run(['security', 'cms', '-D', '-i', old],
+                                 capture_output=True, text=True, timeout=20).stdout
+        except Exception:
+            continue
+        m = re.search(r'<key>Name</key>\s*<string>([^<]*)</string>', out)
+        if m and m.group(1) == a['name']:
+            try:
+                os.remove(old)
+            except Exception:
+                pass
+    open(os.path.join(dd, new_name), 'wb').write(content)
 print(f"  ✔ {a['name']} ({a['profileType']}, {len(content)} bytes) → đã cài vào máy này")
 PY
 done

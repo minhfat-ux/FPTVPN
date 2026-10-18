@@ -1,12 +1,12 @@
 {
   "_doc": "Khóa kênh phát hành: chủ dự án cho khách test một bản thì KHÔNG phát bản mới cùng kênh. Cổng scripts/check-publish-version.py đọc file này và CHẶN (exit 3) khi định phát bản khác bản đang khóa. Mở khóa = sửa file này (có chủ đích, ghi lý do) hoặc thêm --allow-locked \"<lý do>\".",
-  "updated": "2026-09-30",
+  "updated": "2026-10-18",
   "locks": [
     {
       "platform": "ios",
-      "version": "1.4.6",
-      "build": "57",
-      "reason": "Chủ dự án 30/09/2026: 'cài lại build 57 trên iPhone, KHÔNG phát hành bản build 58 cho đến khi xong'. Build 58 lỗi state: 1.231 lần 'hysteria connect thất bại: hysteria client already running' ⇒ mọi cửa đều hỏng nhưng network settings VẪN áp (utun 100.100.100.101/30 + DNS 1.1.1.1) ⇒ traffic bị hút vào tunnel rồi chết = KHÁCH MẤT MẠNG HOÀN TOÀN. Bản 58 chỉ nằm trên máy test, khách vẫn nhận 57.",
+      "version": "1.4.7",
+      "build": "65",
+      "reason": "Chủ dự án 18/10/2026 chốt: 'sửa xong bump lên 1.4.7 và handover cho publisher để publish bản mới'. Code = 1.4.6->1.4.7 trên nền build 60-64 (gộp lô cầu gói + preMeasure trung vị + log quyết định khai + hiển thị mức stable).",
       "at": "2026-09-30",
       "locked_by": "mac"
     }
