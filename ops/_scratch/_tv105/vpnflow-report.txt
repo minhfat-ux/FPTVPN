@@ -1,0 +1,14 @@
+=== VPNFlow report (Android / TV) ===
+model      = xiaomi MiTV-AFZP0
+device     = moderntimes / product moderntimes
+android    = 14 (sdk 34)
+abi        = armeabi-v7a,armeabi
+ram        = còn 370 MB / tổng 975 MB, lowMemory=false
+isTv       = true, touch=false
+app        = com.privatevpn.app.tv.dev v1.4.3-tv-dev (36)
+time       = 2026-10-20 00:15:56
+
+--- crash lần chạy trước / vừa xảy ra ---
+(không có)
+--- log gần nhất ---
+10-20 00:15:56.477 I === diagnostics session start (app 1.4.3-tv-dev) ===
