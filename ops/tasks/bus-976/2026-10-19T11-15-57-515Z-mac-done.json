@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=463057a (flowgpt: scripts/send-android-1.4.5-announcement.py + docs/handoff/EMAIL_ANDROID_1.4.5_2026-10-19.md); cmd=tren node-2: python3 /root/send-android-1.4.5-announcement.py --recipients (4 khach platform=android), --test (toi ALERT_EMAIL OK), roi gui that + --verify; kết quả=da gui 4/4 thanh cong, 0 loi; Resend last_event 4/4 delivered (id 01a153de-afb0-76f6-97f7-e84b97bcc053, 01a153de-b569-74df-aeaa-25b743d20b00, 01a153de-ba6b-7672-bbb0-94c349cdc8c8, 01a153de-bf16-7906-b30c-06295a9ec2e5; luu /root/flowvpn-cp/data/.announce-android-1.4.5-ids.json). Email co link TV https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk?v=265d46b4 + 3 buoc cai, goi TV song song, KHONG noi bat buoc cap nhat. PHAT HIEN truoc khi gui: /v1/app-version?platform=android tra minimum_version=1.4.5 (trai chot 1.2.6, nguy hiem cho TV) — da PATCH /v1/admin/android-version minimum_version=1.2.6, kiem lai endpoint minimum=1.2.6/latest=1.4.5 OK.",
+ "actor": "mac",
+ "at": "2026-10-19T11:15:57.515Z"
+}
