@@ -1,0 +1,21 @@
+# Build 87 — nhận dạng code + câu hỏi 27eb6e6
+
+## 1. IPA đang phát (tải thật 00:25 +07, 20/10)
+sha256: 0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea
+size: 8243806
+CFBundleVersion: 87
+appex CFBundleVersion: 87
+
+## 2. Code IPA 87 == code đã chạy trong log máy thật (bỏ chữ ký)
+orig (bundle build 87 tại .privatevpn/tmp/ipa87):
+  feefe412a13ece8de50c8fe7792907a90e9ad69b1a52b5c43a0c24fde2117bc3
+pub  (IPA tải thật /v1/downloads/ios):
+  feefe412a13ece8de50c8fe7792907a90e9ad69b1a52b5c43a0c24fde2117bc3
+=> KHỚP: cùng một code build 87 (chỉ khác chữ ký Ad Hoc).
+
+## 3. 27eb6e6 ('N tunnel mặc định 4') có trong build 87?
+commit 27eb6e6: 2026-10-19 15:08:04 +0800
+binary build 87: 2026-10-19 13:56:58 +08
+marker 'extension không trả lời trong' (thêm ở 27eb6e6) trong app build 87: 0 lần
+marker 'extension không trả lời trong' trong appex: 0 lần
+=> KHÔNG: 27eb6e6 commit lúc 15:08, SAU binary 13:56:58. Build 87 KHÔNG có N=4 mặc định / fix thẻ Diagnostics; build 88 mới có. Dòng sổ build 87 đã ghi đúng 'N mặc định 1 (TẮT)'.

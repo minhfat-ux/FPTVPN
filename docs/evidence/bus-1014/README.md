@@ -1,7 +1,8 @@
 # bus-1014 — XUNG ĐỘT: kênh iOS phát build 87, khoá phát hành ghim build 80
 
 **Ngày:** 2026-10-20 (UTC+7) · **Máy:** MAC · **Kênh:** iOS Ad Hoc
-**Trạng thái:** `blocked` — đã trả lời (a) + làm (c); còn (b) **quyền chủ dự án** và §7d **không có iPhone**.
+**Trạng thái:** `done` (bus-1014) — chủ dự án đã chốt **`b3cb14bc`** (tạm giữ 87); correction
+**`6e669f8`**; §7d **CHƯA ĐẠT** (exit 1) và tiếp tục ở **bus-993/990**.
 
 ## 0. TL;DR
 
@@ -9,10 +10,12 @@
    ký lại app bundle build 87 có sẵn (không build lại). Ghi sổ: commit **`722b529`** (FPTVPN `main`),
    tag **`ios-v1.4.7-b87`** → peel `ec0e185`.
 2. **Đã nghiệm thu máy thật cho đúng IPA 87 chưa:** **CHƯA**. Cổng §7d chạy trên log máy thật
-   build 87 trả **exit 1** (1/66 phiên bị cờ `WATCHDOG CÂM`, là **false-positive do log chi tiết TẮT**;
-   code trong IPA = code đã chạy trong log, appex sha `feefe412…`). Chưa có phiên sạch bật
-   `tunnel-log-on` ⇒ **không coi là ĐẠT**.
-3. **Giữ hay lui 87:** **quyền chủ dự án**. MAC **không tự đổi kênh, không sửa `release-lock.json`**.
+   build 87 trả **exit 1** (1/66 phiên bị cờ `WATCHDOG CÂM`; log chi tiết **BẬT** — 294 dòng
+   `bw: sample` — nhưng **0 dòng nhịp tim** vì watchdog liên tục dựng lại transport khi chiều về
+   ~0 kbps). Code trong IPA = code đã chạy trong log (appex bỏ chữ ký: `feefe412…`). Chưa có phiên
+   sạch bật `tunnel-log-on` ⇒ **không coi là ĐẠT**.
+3. **Giữ hay lui 87:** chủ dự án đã chốt **tạm giữ 87 để nghiệm thu** (commit `b3cb14bc`); MAC
+   **không tự đổi kênh, không sửa `release-lock.json`**.
    Đường lui đã kiểm: commit `e996d12` (1.4.7/80, IPA 8.236.378 B, sha `b12681ea…`) còn trong repo;
    nhưng server **không còn file IPA 80** — nếu chủ dự án chọn lui, MAC phải xuất lại rồi mới thay file.
 4. **Đã làm (c):** payload `/v1/app-version?platform=ios` nay trả **`ipa_build`**.
@@ -117,3 +120,31 @@ Hai lần phát cùng `1.4.7` nhưng khác build **không phân biệt được*
 5. (Ngoài phạm vi) App `AppVersionService.isUpdateAvailable` chỉ so `latest_version` ⇒ máy đang
    1.4.7/build 80–81 **không tự thấy nhắc cập nhật** dù payload đã có `ipa_build`. Cần build iOS
    sau so thêm `ipa_build` (không bump version trong lúc khoá).
+
+## 7. Cập nhật 20/10 00:40 +07 — chủ dự án chốt, correction, §7d
+
+- **Chốt của chủ dự án:** commit **`b3cb14bc`** trên `FPTVPN origin/main` (20/10 00:32 +08):
+  *"TẠM GIỮ 87 ĐỂ NGHIỆM THU, SAI THÌ LUI 80"*. `release-lock.json` vẫn neo iOS 1.4.7/**80** +
+  chặn 81..84, thêm `live_exception` build 87 (sha `0a912cc9…`, 8.243.806 B,
+  status `tam_giu_cho_nghiem_thu`). MAC **không** sửa lock — đã xác nhận đúng commit này.
+- **Đã append correction:** `release/releases.jsonl` dòng mới `origin=correction`, commit
+  **`6e669f8`** (FPTVPN main). Dòng build 87 cũ ghi căn cứ *"Chủ dự án 20/10 (bus #993/#998)"* là
+  **SAI**: `#993` (15:13:51Z) là tin **WIN** (xác nhận 81 lỗi + đề nghị phát ≥85 sau khi qua cổng);
+  `#998` (15:21:33Z) là tin chủ dự án "fix ngay" nhưng đến **sau** upload 87 (15:19:02Z) **2 phút
+  31 giây**. Căn cứ đúng là quyết định **`b3cb14bc`**. Không sửa/xoá dòng cũ (append-only).
+- **§7d trên đúng IPA 87 — CHƯA ĐẠT:** chạy `ios-log-acceptance.py` trên log máy thật iPhone
+  (`b88/ext/relay.log`, build 87, 14:10–14:31 +08) → **exit 1**, **1/66 phiên `WATCHDOG CÂM`**.
+  Các phiên 87 còn lại được cổng chấm ĐẠT nhưng đều `nhịp-tim=0` (watchdog liên tục dựng lại
+  transport vì chiều về ~0 kbps), nên **chưa có phiên sạch** theo yêu cầu chủ dự án. Không thấy
+  crash/Jetsam của `PrivateVPNPacketTunnel` trong các `.ips` ngày 19/10. iPhone `33987D6F` hiện
+  `unavailable` (last connection 19/10 07:07Z) nên **không kéo được log mới**. §7d tiếp tục ở
+  **bus-993/990**; nếu vẫn fail thì xuất lại IPA 80 từ `e996d12` theo fallback.
+- **27eb6e6 KHÔNG có trong build 87:** binary 87 lúc **13:56:58**, còn `27eb6e6` commit lúc
+  **15:08:04**; app/appex 87 không có marker `extension không trả lời trong` (thêm ở `27eb6e6`).
+  ⇒ Bản phát 87 **không** có N=4 mặc định / fix thẻ Diagnostics; build 88 mới có. Dòng sổ 87 đã
+  ghi đúng *"N mặc định 1 (TẮT)"*.
+- **Code identity:** appex build 87 gốc và appex trong IPA tải thật, sau `codesign
+  --remove-signature`, cùng sha256 **`feefe412…`** ⇒ log máy thật đúng là code của IPA đang phát
+  (chỉ khác chữ ký Ad Hoc).
+- **Không đổi kênh, không phát thêm.** Bằng chứng thô: `acceptance-build87.txt`,
+  `build87-code-identity.txt`.
