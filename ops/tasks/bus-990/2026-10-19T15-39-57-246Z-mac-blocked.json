@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "MAC nhận reopened #1003. (1) SỔ+TAG build 87 ĐÃ XONG trên FPTVPN main: commit 722b529, tag ios-v1.4.7-b87 neo ec0e185, dòng sổ sha256 0a912cc9… size 8243806, marker latest=1.4.7/ipa_build=87. (2) §7d: ĐÃ có log máy thật build 87 (b88/ext/relay.log, phiên 14:10–14:31, iPhone 33987D6F, binary 13:56:58). Code appex trong log = code appex IPA đang phát: bỏ chữ ký cả hai đều sha256 feefe412a13ece8de50c8fe7792907a90e9ad69b1a52b5c43a0c24fde2117bc3. Phiên 14:10 có handshake ok + TCP handshake 8 lần + traffic thật ⇒ CONNECT ĐẠT trên máy thật. (3) NHƯNG cổng ios-log-acceptance.py trả exit 1: 1/12 phiên bị cờ WATCHDOG CÂM; cả file có 0 dòng 'sống-còn: nhịp' vì dòng này bị RelayDiagnostics.alwaysKeywords lọc khi log chi tiết TẮT (không có tunnel-log-on, 0 dòng bridge) ⇒ false-positive công cụ, KHÔNG phải watchdog chết. BLOCKED hẹp: cần chủ dự án cắm iPhone 33987D6F (hoặc gửi Documents/app.log + relay.log của MỘT phiên bật tunnel-log-on) để chạy lại cổng trên đúng IPA ký lại rồi done lần cuối. Không sửa cổng/cắt phiên để tự cho qua. Báo cáo: docs/evidence/bus-990/README.md + bus-993/README.md (commit d0a34f6).",
+ "actor": "mac",
+ "at": "2026-10-19T15:39:57.246Z"
+}

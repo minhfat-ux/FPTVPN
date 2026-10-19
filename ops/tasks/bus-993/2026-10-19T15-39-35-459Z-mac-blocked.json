@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "BỔ SUNG bằng chứng §7d (docs/evidence/bus-993 commit bf4a945): tìm thấy log máy thật build 87 tại .privatevpn/tmp/b88/{app/app.log,ext/relay.log} — 66 phiên, mọi phiên build 87 ghi binary=2026-10-19 13:56:58 (đúng app bundle đã ký ra IPA đang phát), chạy 14:10–14:31 trên iPhone 33987D6F/SSID FPT Software Project. Chạy scripts/ios-log-acceptance.py .privatevpn/tmp/b88/ext/relay.log --min-seconds 90: 65/66 phiên ĐẠT/bỏ qua; 1 phiên 14:10:22 báo 'WATCHDOG CÂM' nhưng cả file có 0 dòng 'sống-còn: nhịp' + 0 dòng 'watchdog NGỪNG chạy'; dòng nhịp tim chỉ ghi khi bật log chi tiết, còn 'bw: sample' luôn ghi, và script chỉ coi 'log chi tiết TẮT' khi không có sample ⇒ đây là false-positive do công tắc log TẮT, không phải connect hỏng. Chính phiên 14:10 có handshake ok sau ~6s + 'XÁC NHẬN tunnel có mạng thật sau 5.0s — TCP handshake 8 lần' + rawWindowBytes thật. VẪN BLOCKED: chưa cài đúng IPA ký lại lên iPhone (devicectl unavailable, install lỗi 1011) và cần 1 phiên sạch bật tunnel-log-on để cổng §7d trả ĐẠT chính thức. Không sửa cổng, không cắt riêng phiên để tự cho qua.",
+ "actor": "mac",
+ "at": "2026-10-19T15:39:35.459Z"
+}
