@@ -105,3 +105,18 @@ Không sửa cổng và không cắt riêng một phiên để tự cho qua.
   chưa được đánh dấu ngoại lệ); dòng build 87 mới không thêm lỗi mới.
 - Các lệnh/kiểm tra ở trên chạy trên MAC; riêng ghi sổ + tag thực hiện qua clone sạch trong workspace
   (sandbox không cho ghi trực tiếp `/Volumes/BIWIN/SourcesCode/PrivateVPN`) rồi push lên `origin/main`.
+
+### 6b. Bằng chứng code đã test = code đang phát (MAC kiểm 20/10)
+
+- Appex **gốc** build 87: `.privatevpn/tmp/ipa87/Payload/FlowVPN.app/PlugIns/PrivateVPNPacketTunnel.appex/PrivateVPNPacketTunnel`
+  (mtime `2026-10-19 13:56`, đúng `binary=...13:56:58` trong log máy thật).
+- Appex **trong IPA đang phát**: tải thật từ `t1` (`8.243.806 B`, sha256 `0a912cc9…`).
+- Bỏ chữ ký cả hai (`codesign --remove-signature`) rồi băm:
+  **cả hai đều `sha256=feefe412a13ece8de50c8fe7792907a90e9ad69b1a52b5c43a0c24fde2117bc3`**
+  ⇒ **code giống hệt nhau**; khác duy nhất là chữ ký + profile Ad Hoc 13 UDID. Vì vậy log máy thật
+  của build 87 là bằng chứng hợp lệ cho **hành vi** của IPA đang phát.
+- Lọc đúng 12 phiên build 87 (14:10:22 → 14:31:45) rồi chấm lại:
+  `9 ĐẠT · 2 bỏ qua (phiên <20 s) · 1 cờ WATCHDOG CÂM oan` — cùng kết luận 65/66 của cả file.
+- **Kết luận connect:** ĐẠT trên máy thật (handshake ok + traffic thật + TCP handshake 8 lần trong
+  phiên 14:10). **Kết luận §7d hình thức:** vẫn cần một phiên sạch **bật `tunnel-log-on`** để cổng
+  chấm được nhịp tim; hiện log chi tiết TẮT nên tiêu chí đó là "KHÔNG KIỂM ĐƯỢC", không phải "watchdog chết".

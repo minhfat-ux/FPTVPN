@@ -83,9 +83,19 @@ curl -sS -H 'Cache-Control: no-cache' https://t1.meetflowai.site/v1/downloads/io
   ở app/macOS — lỗi môi trường Xcode/sandbox, không phải lỗi code; extension 0 lỗi.
 - `ios-pure-logic-tests/run.sh` → **668/668 PASS, 0 FAIL**; `ios-lint-locks.py` → **ĐẠT**.
 
-## 7. Việc còn lại
+## 7. Cập nhật 20/10 — ghi sổ/tag ĐÃ XONG, §7d còn thiếu log chi tiết
 
-1. Chủ dự án cài lại từ `https://t1.meetflowai.site/install/ios` (Safari) và bấm Connect.
-2. Gửi `Documents/app.log` + `relay.log` để chạy `python3 scripts/ios-log-acceptance.py`.
-3. Nếu ổn: ghi dòng sổ `release/releases.jsonl` cho build 87 + tag `ios-v1.4.7-b87`.
-4. **Không** phát build 88 cho tới khi nghiệm thu N=4 (hoặc đổi mặc định về 1).
+- **Ghi sổ + tag: ĐÃ XONG** trên `minhfat-ux/FPTVPN` main: commit **`722b529`**, tag
+  **`ios-v1.4.7-b87`** → `ec0e185`; dòng sổ build 87 có đủ sha256 `0a912cc9…`, size `8243806`,
+  marker `latest=1.4.7` / `ipa_build=87`. Chi tiết: [`bus-993/README.md`](../bus-993/README.md).
+- **Log máy thật build 87: ĐÃ CÓ** ở `.privatevpn/tmp/b88/ext/relay.log` (phiên 14:10–14:31,
+  iPhone `33987D6F`). Code trong log **giống hệt** code IPA đang phát: bỏ chữ ký cả hai appex đều
+  `sha256=feefe412a13ece8de50c8fe7792907a90e9ad69b1a52b5c43a0c24fde2117bc3`.
+- **Connect: ĐẠT trên máy thật** — `handshake ok`, `TCP handshake hoàn tất 8 lần`, traffic thật.
+- **§7d hình thức: CHƯA ĐẠT** — `python3 scripts/ios-log-acceptance.py` trả exit 1 vì 1/12 phiên
+  build 87 bị cờ `WATCHDOG CÂM`, nhưng **cả file có 0 dòng `sống-còn: nhịp`** (dòng này bị bộ lọc
+  `RelayDiagnostics.alwaysKeywords` nuốt khi log chi tiết TẮT; `bw: sample` thì luôn ghi) ⇒ đây là
+  **lỗ hổng công cụ/công tắc log**, không phải watchdog chết. Không sửa cổng, không cắt phiên để tự cho qua.
+- **Việc còn lại:** chủ dự án cắm iPhone hoặc gửi `Documents/app.log` + `relay.log` của một phiên
+  **bật `tunnel-log-on`**; Mac chạy lại cổng trên phiên sạch rồi `done` lần cuối.
+- **Không** phát build 88 cho tới khi nghiệm thu N=4 (hoặc đổi mặc định về 1).
