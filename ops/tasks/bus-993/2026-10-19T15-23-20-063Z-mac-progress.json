@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "BỔ SUNG (MAC kiểm độc lập, sau done): file 8.327.903 B sha 7e306984 = ĐÚNG code build 80 ký lại, KHÔNG phải cây 81-84 — binary trong IPA KHÔNG có ConnectTrace/connectInFlight (chỉ xuất hiện từ build 84/85), trong khi IPA đang phát build 87 CÓ cả hai. Live: 8.243.806 B sha 0a912cc9, app+appex 1.4.7/87, profile 13 UDID get-task-allow=false, manifest bundle-version=87, ios_ipa_build=87 (app-config.db 15:19:11Z). §7d vẫn thiếu log máy thật (devicectl: iPhone/iPad unavailable). Sổ release/releases.jsonl CHƯA có dòng build 87 — cần append --allow-rehash trước khi nghiệm thu.",
+ "actor": "mac",
+ "at": "2026-10-19T15:23:20.064Z"
+}

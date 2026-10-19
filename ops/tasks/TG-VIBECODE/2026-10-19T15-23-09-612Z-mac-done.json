@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "Trả lời #998 (owner Telegram 15:21Z 'bản 81 không connect, fix ngay'): đã phát iOS 1.4.7/build 87 — IPA 8.243.806 B sha256 0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea, profile 13 UDID (có máy khách), get-task-allow=false, app+appex 1.4.7/87; ipa_build=87, manifest bundle-version=87, tải thật khớp sha, /install/ios + /buy 200. Nguyên nhân build 81: 26c0f37 đặt .connecting trước chốt chống bấm đôi; sửa 37e1148 (85). Vì 81 và 87 cùng version 1.4.7, app không tự báo cập nhật — phải cài lại từ https://t1.meetflowai.site/install/ios. Đã gửi Telegram message_id 3619. Không phát 88 vì N=4 mặc định BẬT. Bằng chứng: docs/evidence/bus-990/README.md + commit 228bb80. Còn §7d log máy thật.",
+ "actor": "mac",
+ "at": "2026-10-19T15:23:09.613Z"
+}
