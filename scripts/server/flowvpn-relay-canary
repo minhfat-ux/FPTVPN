@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# flowvpn-relay-canary — phát hiện relay WS **đứt MỘT CHIỀU** bằng BYTE THẬT rồi tự restart.
+#
+# VÌ SAO PHẢI CÓ FILE NÀY (sự cố thật 19–20/10/2026):
+#   Trong ~30 phút, tunnel của khách nhiều lần rơi vào trạng thái "Connected mà KHÔNG có mạng":
+#     - máy khách gửi gói đều lên (`cầu vào 59`, `lossProxy=100%`) nhưng **0 gói về** (`Go→ 0`);
+#     - đo trực tiếp ngoài tunnel (preMeasure) vẫn 3–5 Mbps ⇒ Internet của máy KHÔNG hỏng;
+#     - 3 relay `active`, đều trả `HTTP 426`, journal sạch ⇒ **watchdog server không thấy gì**.
+#   `flowvpn-health-watch` chỉ kiểm "cổng WS có sẵn sàng (426)"; cổng vẫn sẵn sàng trong khi KHÔNG
+#   một byte nào quay về client. Đó là điểm mù đã để lọt sự cố.
+#
+# CÁCH ĐO — dùng số THẬT của chính relay, không cần đóng vai client:
+#   `/root/wsrelay.js` có endpoint `/healthz` trên CÙNG cổng WS, trả JSON:
+#     bytesIn  = byte NHẬN TỪ client (chiều lên)      framesIn
+#     bytesOut = byte GỬI VỀ client (chiều về)        framesOut
+#     active   = số WS đang mở
+#   Mỗi phút lấy mẫu một lần, so với mẫu trước để có DELTA. Nếu chiều LÊN chạy đều (≥ 32 KB) mà
+#   chiều VỀ < 1% ⇒ relay đang "đứt một chiều" ⇒ restart relay.
+#   Vì sao restart là hành động ĐÚNG: restart đóng WS ngay, client nối lại trong ~1–2 s; nếu không
+#   restart, mỗi client phải tự phát hiện (15–20 s) rồi mới đổi đường — khách mất mạng lâu hơn.
+#
+# LUẬT AN TOÀN (giống flowvpn-health-watch, xem docs/SERVER_RECOVERY_RUNBOOK.md):
+#   - TUYỆT ĐỐI KHÔNG `systemctl stop` / `disable`. Chỉ `restart`.
+#   - Cooldown 300 s cho mỗi unit; phải có 2 MẪU LIÊN TIẾP mới restart (tránh báo oan khi khách
+#     vừa đóng tab hoặc đang tải một chiều).
+#   - Tôn trọng cờ bảo trì `/etc/flowvpn-health-watch.maintenance`: chỉ alert, KHÔNG restart.
+#   - `active = 0` ⇒ không có khách ⇒ KHÔNG xét, KHÔNG restart.
+#   - Bộ đếm TỤT (relay vừa restart) ⇒ bỏ mẫu đó, không kết luận.
+#   - Không in token/secret. Chỉ in `message_id` khi gửi Telegram.
+#
+# DÙNG:
+#   flowvpn-relay-canary                 # chạy đầy đủ (timer gọi mỗi 60 s)
+#   flowvpn-relay-canary --dry-run       # chỉ in kết luận, không restart, không gửi Telegram
+#   flowvpn-relay-canary --report        # in kết luận của MỌI relay (để nghiệm thu)
+#   flowvpn-relay-canary --ignore-cooldown
+#
+# TRIỂN KHAI (đã làm 20/10/2026): copy về /usr/local/bin/flowvpn-relay-canary, rồi
+#   flowvpn-relay-canary.service + .timer (OnUnitActiveSec=60). Xem docs/RELAY_ONE_WAY_MONITORING.md.
+
+set -uo pipefail
+
+VERSION="1.0.0"
+
+STATE_DIR="${FLOWVPN_CANARY_STATE:-/var/lib/flowvpn-relay-canary}"
+LOG_FILE="${FLOWVPN_CANARY_LOG:-/var/log/flowvpn-relay-canary.log}"
+MAINT_FLAG="/etc/flowvpn-health-watch.maintenance"
+TG_ENV="/etc/flowvpn-tg-bot.env"
+INBOX_ROOT="/var/lib/flowvpn-coord/inbox"
+DEFAULT_RELAYS="relay-cf-vn1hy relay-cf-vn2hy relay-cf-vn3hy relay-cf-vn1wg relay-cf-vn2wg relay-cf-vn3wg"
+
+# NGƯỠNG ĐÃ SỬA sau khi đo thật (20/10/2026): lưu lượng streaming rất BẤT ĐỐI XỨNG — client chỉ
+# gửi ACK ~30–60 KB/phút. Đặt ngưỡng 32 KB là suýt bỏ lọt chính ca cần bắt (đo được +32761B ⇒ IDLE).
+# Bản chất "đứt một chiều" là: máy VẪN gửi lên, mà chiều về **đúng bằng 0**. Vì lúc rảnh rỗi QUIC
+# vẫn có keepalive/ACK về, nên `ve == 0` là dấu hiệu rất mạnh — không cần ngưỡng lên cao.
+MIN_UP_BYTES=2048        # ≥2 KB chiều LÊN trong cửa sổ là đủ để xét (không đòi 32 KB)
+DOWNLINK_MIN_PCT=1       # < 1% chiều LÊN ⇒ chỉ GHI LOG cảnh báo (chưa restart)
+RESTART_AFTER=2          # số mẫu MỘT CHIỀU liên tiếp trước khi restart
+COOLDOWN_SEC=300         # 5 phút giữa 2 lần restart cùng unit
+HTTP_TIMEOUT=5
+
+DRY_RUN=0
+IGNORE_COOLDOWN=0
+REPORT=0
+
+log() { printf '%s %s\n' "$(date -Is)" "$*" >>"$LOG_FILE"; }
+say() { printf '  %s\n' "$*"; }
+
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    --ignore-cooldown) IGNORE_COOLDOWN=1 ;;
+    --report) REPORT=1 ;;
+    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    *) echo "tham so la: $arg" >&2; exit 2 ;;
+  esac
+done
+
+mkdir -p "$STATE_DIR" 2>/dev/null
+: >>"$LOG_FILE" 2>/dev/null
+
+# ---- Telegram (đọc token từ env, KHÔNG in ra) ----
+TG_TOKEN=""
+TG_CHAT=""
+env_get() { # $1 file, $2 key
+  [ -f "$1" ] || return 1
+  sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" | tail -1 | tr -d '"'
+}
+tg_init() {
+  TG_TOKEN="$(env_get "$TG_ENV" TELEGRAM_BOT_TOKEN || true)"
+  TG_CHAT="$(env_get "$TG_ENV" TELEGRAM_CHAT_ID || true)"
+  [ -n "$TG_CHAT" ] || TG_CHAT="$(env_get "$TG_ENV" TELEGRAM_ALLOWED_CHATS || true)"
+  TG_CHAT="${TG_CHAT%%,*}"
+}
+tg_send() { # $1 text
+  [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] || return 0
+  local resp
+  resp="$(curl -sS -m 12 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+    -d "chat_id=${TG_CHAT}" --data-urlencode "text=$1" \
+    -d "disable_web_page_preview=true" 2>/dev/null || true)"
+  printf '%s' "$resp" | sed -n 's/.*"message_id":\([0-9]*\).*/\1/p' | head -1
+}
+
+inbox_write() { # $1 title, $2 body
+  local owner day f
+  day="$(date +%F)"
+  for owner in mac windows server; do
+    [ -d "${INBOX_ROOT}/${owner}" ] || continue
+    f="${INBOX_ROOT}/${owner}/${day}-RELAY-ONE-WAY.md"
+    { printf '# %s\n\n%s\n' "$1" "$2"; } >>"$f" 2>/dev/null || true
+  done
+}
+
+restart_cooldown_ok() { # $1 unit
+  local f="${STATE_DIR}/$1.restart"
+  [ -f "$f" ] || return 0
+  local last now
+  last="$(cat "$f" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  [ $((now - last)) -ge "$COOLDOWN_SEC" ]
+}
+
+strike_get() { cat "${STATE_DIR}/$1.strikes" 2>/dev/null || echo 0; }
+strike_set() { printf '%s' "$2" >"${STATE_DIR}/$1.strikes" 2>/dev/null || true; }
+
+# ---- Lấy mẫu: mỗi relay một tệp JSON ----
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+RELAYS="${FLOWVPN_CANARY_UNITS:-$DEFAULT_RELAYS}"
+for unit in $RELAYS; do
+  port="$(systemctl show -p Environment --value "$unit" 2>/dev/null \
+          | tr ' ' '\n' | sed -n 's/^WS_LISTEN_PORT=//p' | head -1)"
+  if [ -z "$port" ]; then
+    printf '%s\n' '{"__missing":"no WS_LISTEN_PORT"}' >"${TMP}/${unit}.json"
+    continue
+  fi
+  curl -s -m "$HTTP_TIMEOUT" "http://127.0.0.1:${port}/healthz" >"${TMP}/${unit}.json" 2>/dev/null \
+    || printf '%s\n' '{"__missing":"healthz khong tra loi"}' >"${TMP}/${unit}.json"
+done
+
+# ---- Đánh giá: so với mẫu trước, in ra TSV ----
+EVAL_BIN="${FLOWVPN_CANARY_EVAL:-/usr/local/bin/flowvpn-relay-canary-eval.py}"
+[ -f "$EVAL_BIN" ] || { log "THIEU bo danh gia $EVAL_BIN — dung"; exit 3; }
+VERDICTS="$(python3 "$EVAL_BIN" "$TMP" "$STATE_DIR" "$MIN_UP_BYTES" "$DOWNLINK_MIN_PCT")"
+
+MAINT=0
+[ -f "$MAINT_FLAG" ] && MAINT=1
+[ "$MAINT" = "1" ] && log "CO BAO TRI ($MAINT_FLAG) — chi canh bao, KHONG restart"
+
+tg_init
+any_alert=0
+
+while IFS=$'\t' read -r unit verdict din dout active detail; do
+  [ -n "${unit:-}" ] || continue
+  if [ "$REPORT" = "1" ]; then
+    printf '%-20s %-8s len=+%-10s ve=+%-10s active=%s  %s\n' \
+      "$unit" "$verdict" "$din" "$dout" "$active" "$detail"
+  fi
+  case "$verdict" in
+    SUSPECT)
+      log "$unit: BAT DOI XUNG (chua restart): len +${din}B ve +${dout}B active=${active} ${detail}"
+      ;;
+    OK|IDLE|SKIP|FIRST)
+      [ "$(strike_get "$unit")" != "0" ] && log "$unit: binh thuong lai ($verdict) — xoa chuoi MOT CHIEU"
+      strike_set "$unit" 0
+      ;;
+    ONE_WAY)
+      s="$(strike_get "$unit")"
+      s=$((s + 1))
+      strike_set "$unit" "$s"
+      line="$unit MOT CHIEU: len +${din}B, ve +${dout}B, active=${active}, ${detail} (lan ${s}/${RESTART_AFTER})"
+      log "$line"
+      say "$line"
+      if [ "$DRY_RUN" = "1" ]; then
+        say "    (dry-run) se restart khi du $RESTART_AFTER lan va het cooldown"
+        continue
+      fi
+      if [ "$MAINT" = "1" ]; then
+        if [ "$any_alert" = "0" ]; then
+          mid="$(tg_send "⚠️ RELAY MOT CHIEU (bao tri — khong restart): $unit — len +${din}B / ve +${dout}B / active=${active}")"
+          log "telegram (bao tri) message_id=${mid:-?}"
+          any_alert=1
+        fi
+        continue
+      fi
+      [ "$s" -ge "$RESTART_AFTER" ] || continue
+      if [ "$IGNORE_COOLDOWN" != "1" ] && ! restart_cooldown_ok "$unit"; then
+        log "$unit: dang trong cooldown ${COOLDOWN_SEC}s — chua restart"
+        continue
+      fi
+      log "$unit: RESTART (relay dut mot chieu)"
+      if systemctl restart "$unit" 2>>"$LOG_FILE"; then
+        date +%s >"${STATE_DIR}/${unit}.restart"
+        strike_set "$unit" 0
+        body="Relay **${unit}** dut MOT CHIEU (chieu len +${din}B, chieu ve +${dout}B, active=${active}).
+He qua: khach Connected ma khong co mang. Da RESTART relay; client tu noi lai trong ~1-2 s.
+Chi tiet: ${LOG_FILE}"
+        mid="$(tg_send "🔧 RELAY MOT CHIEU — da restart ${unit}
+len +${din}B / ve +${dout}B / active=${active} / ${detail}")"
+        log "$unit: restart XONG, telegram message_id=${mid:-?}"
+        inbox_write "RELAY MOT CHIEU — da restart ${unit}" "$body"
+      else
+        log "$unit: restart THAT BAI"
+        tg_send "❌ RELAY MOT CHIEU — restart ${unit} THAT BAI, can nguoi xu ly" >/dev/null
+        inbox_write "RELAY MOT CHIEU — restart THAT BAI ${unit}" "Restart that bai. Xem ${LOG_FILE}"
+      fi
+      ;;
+  esac
+done <<<"$VERDICTS"
+
+# Cắt log theo kích thước (giữ 1 MB cuối) — tránh đầy đĩa.
+if [ -f "$LOG_FILE" ] && [ "$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+  tail -c 1048576 "$LOG_FILE" >"${LOG_FILE}.tmp" 2>/dev/null && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+fi
+
+exit 0
