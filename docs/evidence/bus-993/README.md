@@ -120,3 +120,82 @@ Không sửa cổng và không cắt riêng một phiên để tự cho qua.
 - **Kết luận connect:** ĐẠT trên máy thật (handshake ok + traffic thật + TCP handshake 8 lần trong
   phiên 14:10). **Kết luận §7d hình thức:** vẫn cần một phiên sạch **bật `tunnel-log-on`** để cổng
   chấm được nhịp tim; hiện log chi tiết TẮT nên tiêu chí đó là "KHÔNG KIỂM ĐƯỢC", không phải "watchdog chết".
+
+## 8. Kiểm lại độc lập 19/10/2026 23:47 +08 (sau khi WIN mở lại #1001/#1003)
+
+### 8.1 Kênh phát — tải thật, không dùng file cũ
+
+| Kiểm | Kết quả |
+|---|---|
+| `curl -o /tmp/live-check-ios.ipa https://t1.meetflowai.site/v1/downloads/ios` | HTTP 200 · **8.243.806 B** |
+| `shasum -a 256` | **0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea** |
+| `PlistBuddy CFBundleShortVersionString / CFBundleVersion` (app) | `1.4.7` / **`87`** |
+| (appex `PrivateVPNPacketTunnel.appex`) | `1.4.7` / **`87`** |
+| `manifest.plist` | `bundle-identifier=com.privatevpn.app`, `bundle-version=87` |
+| `codesign --verify --deep --strict` | **ĐẠT** (exit 0) |
+| Entitlements appex | `get-task-allow=false`, `application-identifier=G6XW3RN6LJ.com.privatevpn.app.packet-tunnel` |
+| Profile app + appex | **13 UDID** mỗi profile (`VPNFlow AdHoc App` / `VPNFlow AdHoc Tunnel`) |
+| Appex bỏ chữ ký rồi băm | **`feefe412a13ece8de50c8fe7792907a90e9ad69b1a52b5c43a0c24fde2117bc3`** — trùng hash code appex build 87 đã chạy trong log máy thật ở mục 6b |
+
+⇒ Kênh đang phát **đúng IPA 87 đã sửa**, không còn file build 80 cũ. File 8.327.903 B vẫn đúng là
+bản build 80 ký lại: `shasum` file `.tmp/b80-resign.ipa` = **`7e3069844114f5611459659838c3a35999dc91663a1294d2bca4e1c7045d7d64`**, không phải cây 81–84.
+
+### 8.2 Cổng §7d — tái hiện đúng lỗi công cụ, không phải lỗi connect
+
+```bash
+python3 scripts/ios-log-acceptance.py .tmp/b87-only.log --min-seconds 90
+# exit 1 · KẾT LUẬN: KHÔNG ĐẠT — 1/12 phiên
+# ❌ build 87 · 14:10:22 · 234s · WATCHDOG CÂM: 0 nhịp tim trong 234s
+```
+
+Đếm trên **toàn bộ** log 678 dòng / 12 phiên:
+
+| Dấu hiệu | Số dòng |
+|---|---|
+| `sống-còn: nhịp` (nhịp tim, chỉ ghi khi log chi tiết BẬT) | **0** |
+| `watchdog NGỪNG chạy` | **0** |
+| `bw: sample` (luôn ghi) | **118** |
+| `tài nguyên:` (luôn ghi) | **15** |
+| `bridge: packetFlow` (chỉ ghi khi log chi tiết BẬT) | **0** |
+
+Phiên bị cờ có **22 `bw: sample`** chạy tới `14:14:13`, kết thúc bằng `stopTunnel: reason=1` (người
+dùng bấm tắt), và có traffic thật (`rawWindowBytes` 3.030.770 / 5.441.406 B; `handshake ok`). Vì
+`bw: sample` luôn ghi còn nhịp tim chỉ ghi khi bật log chi tiết, điều kiện `detail_off` hiện tại
+(`not samples`) **không bao giờ đúng** với log này ⇒ cổng đòi nhịp tim rồi báo "watchdog câm" oan.
+Đúng ra phải là **exit 2 = KHÔNG KIỂM ĐƯỢC (log chi tiết TẮT)**, không phải exit 1 = KHÔNG ĐẠT.
+
+**Không sửa cổng, không cắt phiên** trong lần này; chỉ ghi nhận để bên giao quyết định. Muốn §7d
+trả ĐẠT chính thức vẫn cần **một phiên sạch có bật `tunnel-log-on`** trên iPhone thật.
+
+### 8.3 Phát hiện thêm — màn "Có bản mới" KHÔNG nhắc được người đang ở 1.4.7/build 80–81
+
+- `AppVersionService.isUpdateAvailable` (HEAD `main`) chỉ so **`latest_version`**:
+  `isVersion(current, lessThan: info.latest_version)`.
+- `AppVersionInfo` **không có** trường `ipa_build`; payload công khai `iosVersionPayload()` cũng
+  **không trả** `ipa_build` (chỉ manifest OTA dùng `ios_ipa_build`).
+- Hiện `latest_version=1.4.7`, người đang chạy **1.4.7/build 80–81** ⇒ `1.4.7 < 1.4.7` là **false**
+  ⇒ **không hiện nhắc cập nhật**, dù server đã tăng `ipa_build=87`.
+- `https://t1.meetflowai.site/install/ios` và `/buy` đã trỏ IPA 87; ai **tải lại** thì nhận bản sửa.
+  Nhưng khách đang cài 1.4.7/build 81 sẽ **không tự thấy lời nhắc** — cần gửi thẳng link cài, hoặc
+  lần build sau phải tăng `CFBundleShortVersionString` (ví dụ 1.4.8) và/hoặc so thêm `ipa_build`.
+- Đây là **lỗ hổng UX/phiên bản**, không phải lý do để đổi bản phát 87 đang đúng; không tự bump
+  version vì sẽ lệch sổ phát hành và chưa có phiên test mới.
+
+### 8.4 Trạng thái máy thật lúc kiểm lại
+
+`xcrun devicectl list devices` (23:48 +08): iPhone `Minh's iphone` `33987D6F-…` và 2 iPad vẫn
+**`unavailable`**. Không cài/lấy log mới được. Vì vậy **vẫn `blocked`**, không `done`.
+
+### 8.5 Việc còn lại — đúng 1 mục, cần chủ dự án
+
+1. Cắm iPhone `33987D6F` vào Mac (hoặc bật "Connect via network"), mở
+   `https://t1.meetflowai.site/install/ios` bằng Safari và cài lại (bản 87).
+2. Bật log chi tiết **trước khi bấm Connect**: tạo file rỗng `Documents/tunnel-log-on` trong app
+   container (hoặc app truyền `providerConfiguration["logVerbose"] = true`).
+3. Bấm **Connect**, để chạy **≥ 2 phút** (qua mốc 90 s để cổng đòi nhịp tim), rồi ngắt.
+4. Gửi `Documents/app.log` + `Documents/relay.log` (hoặc để Mac kéo bằng `devicectl`).
+5. Mac chạy `python3 scripts/ios-log-acceptance.py <relay.log> --crash-dir <crash>` — **exit 0** mới
+   đạt §7d; sau đó `done` lại bus-990/bus-993 kèm log + kết quả cổng.
+
+Nếu chủ dự án không cắm được máy: gửi `Documents/relay.log` của **một phiên build 87 có bật log chi
+tiết** cũng đủ; không cần thao tác gì trên Mac.
