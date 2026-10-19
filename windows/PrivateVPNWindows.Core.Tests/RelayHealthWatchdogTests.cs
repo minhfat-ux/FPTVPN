@@ -4,12 +4,16 @@ using Xunit;
 namespace PrivateVPNWindows.Core.Tests;
 
 /// <summary>
-/// Kiểm tra watchdog của đường relay (hysteria2-over-WS + sing-box).
+/// Kiểm tra watchdog của đường relay (hysteria2-over-WS).
 ///
 /// Bối cảnh: đường WireGuard có watchdog riêng; đường relay trước đây chỉ phát hiện được khi tiến
 /// trình con chết, còn tunnel "đứng" thì app giữ route full-tunnel vào đường chết mà không báo gì.
-/// Watchdog mới dùng 2 tín hiệu (byte luỹ kế của sing-box + phép thử chủ động qua tunnel) và chỉ kết
-/// luận khi CẢ HAI cùng bất thường — các test dưới đây khoá đúng hành vi đó.
+/// Watchdog dùng phép thử CHỦ ĐỘNG qua tunnel và chỉ kết luận sau nhiều lần thất bại liên tiếp —
+/// các test dưới đây khoá đúng hành vi đó.
+///
+/// Từ 1.4.7 KHÔNG còn nguồn số byte luỹ kế (sing-box bị bỏ), nên bản dùng thật
+/// (<see cref="RelayHealthWatchdog.ForRelayTunnel"/>) truyền <c>-1</c> cho phép đọc lưu lượng; test
+/// <see cref="KhongCoSoLieuLuuLuong_ProbeThanhCongThiKhongBaoDung"/> khoá đúng hình dạng đó.
 /// </summary>
 public class RelayHealthWatchdogTests
 {
@@ -135,5 +139,35 @@ public class RelayHealthWatchdogTests
 
         // Không ném ra ngoài. (Có thể báo đứng hoặc không — điều bắt buộc là watchdog vẫn sống.)
         Assert.True(true);
+    }
+
+    /// <summary>
+    /// Hình dạng THẬT của bản 1.4.7: không còn clash_api nên phép đọc lưu lượng luôn trả -1 (không
+    /// có số liệu). Khi đó watchdog chỉ còn phép thử chủ động — tunnel thông thì KHÔNG được báo đứng,
+    /// nếu không khách để máy rảnh sẽ bị cắt VPN oan.
+    /// </summary>
+    [Fact]
+    public async Task KhongCoSoLieuLuuLuong_ProbeThanhCongThiKhongBaoDung()
+    {
+        var stalls = new List<string>();
+        var probes = 0;
+        using var watchdog = new RelayHealthWatchdog(
+            _ => Task.FromResult(-1L),             // không có clash_api ⇒ luôn "không có số liệu"
+            _ =>
+            {
+                Interlocked.Increment(ref probes);
+                return Task.FromResult(true);      // tunnel vẫn thông
+            },
+            _ => { },
+            reason => stalls.Add(reason),
+            intervalSeconds: 1,
+            noTrafficSeconds: 1,
+            probeFailures: 2);
+
+        watchdog.Start();
+        await Task.Delay(3500);
+
+        Assert.Empty(stalls);
+        Assert.True(probes > 0, "phải thử chủ động để biết tunnel còn thông hay không");
     }
 }

@@ -59,4 +59,27 @@ public class ApplicationControlGuardTests
         ApplicationControlGuard.Reset();
         Assert.False(ApplicationControlGuard.RelayBlocked);
     }
+
+    /// <summary>
+    /// Chốt lại YÊU CẦU TỪ KHÁCH (13/10/2026): app Windows báo "sing-box.exe đang phải có chữ ký"
+    /// làm khách tưởng app hỏng. Từ 1.4.7 không còn binary bên thứ ba nào, nên thông báo cho khách
+    /// KHÔNG được nhắc tên binary bên thứ ba và KHÔNG được nói tới chuyện ký số — chỉ nói app vẫn
+    /// chạy được bằng đường nào.
+    /// </summary>
+    [Fact]
+    public void UserMessage_khong_nhac_binary_ben_thu_ba_va_khong_noi_ve_chu_ky()
+    {
+        ApplicationControlGuard.Reset();
+        ApplicationControlGuard.MarkBlocked(HysteriaRelayDefaults.RelayExeName);
+
+        var message = ApplicationControlGuard.UserMessage();
+
+        Assert.DoesNotContain("sing-box", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("chữ ký", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ký số", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WireGuard", message, StringComparison.Ordinal);
+        Assert.Contains(HysteriaRelayDefaults.RelayExeName, message, StringComparison.Ordinal);
+
+        ApplicationControlGuard.Reset();
+    }
 }

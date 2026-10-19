@@ -83,17 +83,18 @@ public static class SystemConflictProbe
     {
         var conflicts = NetworkConflictDetector.Analyze(Capture()).ToList();
 
-        // Máy khách bật Smart App Control: binary bên thứ ba chưa ký (sing-box.exe) bị Application
-        // Control chặn ⇒ đường hysteria2-over-WebSocket không lên được. Cảnh báo NGAY khi mở app
-        // thay vì để khách bấm Kết nối rồi thấy "connecting" rồi tự rơi về WireGuard mà không hiểu.
-        var singBox = Path.Combine(AppContext.BaseDirectory, HysteriaRelayDefaults.SingBoxExeName);
-        if (ApplicationControlGuard.ProbeBlocked(singBox))
+        // Máy khách bật Smart App Control: binary CHƯA KÝ bị Application Control chặn. Từ 1.4.7 đường
+        // relay chỉ còn MỘT binary của mình (flowvpnrelay.exe, đã có TUN bên trong) nên chỉ cần dò
+        // nó — không còn binary bên thứ ba nào để chặn. Cảnh báo NGAY khi mở app thay vì để khách
+        // bấm Kết nối rồi thấy "connecting" rồi tự rơi về WireGuard mà không hiểu.
+        var relay = Path.Combine(AppContext.BaseDirectory, HysteriaRelayDefaults.RelayExeName);
+        if (ApplicationControlGuard.ProbeBlocked(relay))
         {
             conflicts.Add(new NetworkConflict(
                 NetworkConflictSeverity.Warning,
                 "Windows đang chặn công cụ tunnel (Smart App Control)",
-                "sing-box.exe bị Application Control chặn vì chưa ký số ⇒ đường hysteria2-over-WebSocket " +
-                "không dùng được. App sẽ tự đi đường WireGuard.",
+                $"{HysteriaRelayDefaults.RelayExeName} bị Application Control chặn ⇒ đường " +
+                "hysteria2-over-WebSocket không dùng được. App sẽ tự đi đường WireGuard.",
                 ApplicationControlGuard.UserMessage()));
         }
 

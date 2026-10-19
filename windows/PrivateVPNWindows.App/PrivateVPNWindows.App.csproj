@@ -12,7 +12,7 @@
          không cách nào biết bản đã cài là bản nào (cổng scripts/check-publish-version.py bắt được).
          build.ps1 đọc <Version> ở đây và truyền /p:Version cho dotnet publish; Settings → About
          hiện đúng số này. -->
-    <Version>1.4.4</Version>
+    <Version>1.4.7</Version>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Chỉ nhúng manifest (yêu cầu quyền admin) khi build/publish cho Windows. -->
@@ -49,10 +49,10 @@
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\wintun.dll')" />
     <None Include="..\assets\wireguard-go.exe" Link="wireguard-go.exe"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\wireguard-go.exe')" />
-    <!-- Đường "hysteria2 bọc trong WebSocket": flowvpnrelay.exe (SOCKS5 nội bộ) + sing-box.exe
-         (TUN/định tuyến). HysteriaRelayTunnel tìm chúng cạnh app (AppContext.BaseDirectory). -->
-    <None Include="..\assets\sing-box.exe" Link="sing-box.exe"
-          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\sing-box.exe')" />
+    <!-- Đường "hysteria2 bọc trong WebSocket": CHỈ flowvpnrelay.exe — nó tự lo cả transport lẫn
+         TUN/định tuyến/bypass TQ. sing-box.exe đã bị BỎ ở 1.4.7 vì Smart App Control chặn binary
+         bên thứ ba chưa ký (xem HysteriaRelayDefaults). HysteriaRelayTunnel tìm nó cạnh app
+         (AppContext.BaseDirectory). -->
     <None Include="..\assets\flowvpnrelay.exe" Link="flowvpnrelay.exe"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\assets\flowvpnrelay.exe')" />
   </ItemGroup>

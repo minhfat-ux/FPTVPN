@@ -118,6 +118,13 @@ public static class SingBoxConfigBuilder
     /// <summary>
     /// Cấu hình cho <c>flowvpnrelay.exe -c &lt;file&gt;</c>.
     /// <paramref name="server"/> là <c>&lt;ip-node&gt;:8443</c> — chỉ còn là danh tính khi đi qua relay.
+    ///
+    /// Từ 1.4.7 cấu hình này mang LUÔN khối <c>tun</c>: chính flowvpnrelay.exe dựng TUN +
+    /// auto_route + bypass TQ, không còn tiến trình sing-box thứ hai (xem
+    /// <c>tools/hysteria-relay/tun.go</c> — nguồn sự thật của schema).
+    /// <paramref name="chinaCidrs"/> là các dải IP Trung Quốc đi THẲNG, không vào tunnel; null/rỗng
+    /// ⇒ vẫn dựng TUN full-tunnel nhưng không có bypass (bypass là tính năng phụ, không được phép
+    /// biến lỗi mạng thành lỗi kết nối).
     /// </summary>
     public static string BuildRelayConfig(
         string server,
@@ -128,11 +135,16 @@ public static class SingBoxConfigBuilder
         string? relayHost = null,
         int upKbps = HysteriaRelayDefaults.UpKbps,
         int downKbps = HysteriaRelayDefaults.DownKbps,
-        int dialTimeoutSec = HysteriaRelayDefaults.DialTimeoutSec)
+        int dialTimeoutSec = HysteriaRelayDefaults.DialTimeoutSec,
+        IReadOnlyList<string>? chinaCidrs = null,
+        string tunName = HysteriaRelayDefaults.TunName,
+        string tunAddress = HysteriaRelayDefaults.TunAddress,
+        int tunMtu = HysteriaRelayDefaults.TunMtu)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(server);
         ArgumentException.ThrowIfNullOrWhiteSpace(relayUrl);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(socksPort);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tunName);
 
         var relay = new JsonObject
         {
@@ -151,9 +163,62 @@ public static class SingBoxConfigBuilder
             },
             ["socks5"] = new JsonObject { ["listen"] = $"127.0.0.1:{socksPort}" },
             ["dialTimeoutSec"] = dialTimeoutSec,
+            ["tun"] = BuildTun(chinaCidrs, tunName, tunAddress, tunMtu),
         };
 
         return relay.ToJsonString(WriteOptions);
+    }
+
+    /// <summary>
+    /// Khối <c>tun</c> của flowvpnrelay.exe. <c>route.ipv4</c>/<c>route.ipv6</c> để RỖNG là CỐ Ý:
+    /// hysteria hiểu rỗng = auto_route toàn bộ (0.0.0.0/0), còn <c>…Exclude</c> mới là danh sách
+    /// đi thẳng. Không khai <c>ipv6</c> vì mạng khách phổ biến ở TQ không có IPv6 — hysteria cũng
+    /// tự bỏ IPv6 khi HĐH không hỗ trợ, nhưng khai thừa chỉ tạo thêm đường lỗi.
+    /// </summary>
+    private static JsonObject BuildTun(
+        IReadOnlyList<string>? chinaCidrs,
+        string tunName,
+        string tunAddress,
+        int tunMtu)
+    {
+        var v4Exclude = new JsonArray();
+        var v6Exclude = new JsonArray();
+        foreach (var cidr in chinaCidrs ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(cidr))
+            {
+                continue;
+            }
+
+            // Danh sách nguồn (cn.txt/cn6.txt) trộn cả v4 lẫn v6 trong một file: tách theo dấu ':'
+            // để không nhét dải v6 vào ipv4Exclude (hysteria từ chối và cả tunnel không lên).
+            if (cidr.Contains(':', StringComparison.Ordinal))
+            {
+                v6Exclude.Add(cidr.Trim());
+            }
+            else
+            {
+                v4Exclude.Add(cidr.Trim());
+            }
+        }
+
+        return new JsonObject
+        {
+            ["name"] = tunName,
+            ["mtu"] = tunMtu,
+            ["ipv4"] = tunAddress,
+            ["route"] = new JsonObject
+            {
+                // strict=false: route mặc định chia 0.0.0.0/1 + 128.0.0.0/1 như đường WireGuard,
+                // KHÔNG xoá route mặc định của adapter vật lý (bài học: strict=true làm mất mạng
+                // khi tiến trình chết giữa chừng mà chưa kịp gỡ route).
+                ["strict"] = false,
+                ["ipv4"] = new JsonArray(),
+                ["ipv6"] = new JsonArray(),
+                ["ipv4Exclude"] = v4Exclude,
+                ["ipv6Exclude"] = v6Exclude,
+            },
+        };
     }
 
     /// <summary>

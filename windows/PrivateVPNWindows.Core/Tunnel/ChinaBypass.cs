@@ -262,7 +262,8 @@ public static class ChinaBypass
     /// Nạp CẢ HAI danh sách (IPv4 <c>cn.txt</c> + IPv6 <c>cn6.txt</c>) thành một mảng.
     ///
     /// Vì sao cần hàm riêng: đường WireGuard thêm route từng dải qua <c>New-NetRoute</c>, còn đường
-    /// relay (hysteria2-over-WS) đưa thẳng danh sách vào file cấu hình sing-box nên phải gộp sẵn.
+    /// relay (hysteria2-over-WS) đưa thẳng danh sách vào khối <c>tun.route.*Exclude</c> của
+    /// flowvpnrelay.exe nên phải gộp sẵn.
     /// Một phần lỗi mạng không kéo phần kia chết theo — mỗi hàm con đã tự rơi về cache cũ.
     /// </summary>
     public static async Task<List<string>> LoadAllAsync(

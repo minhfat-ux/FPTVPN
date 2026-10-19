@@ -9,8 +9,17 @@ namespace VpnFlow.Core.Tunnel;
 /// mỗi datagram UDP trong một binary message WebSocket qua <c>/relay/vn*hy</c> là đường duy
 /// nhất còn đi được (giao thức relay phía server: 1 message = 1 datagram).
 ///
-/// Kiến trúc: <c>flowvpnrelay.exe</c> (hysteria2-over-WS, mở SOCKS5 nội bộ có cả UDP) +
-/// <c>sing-box.exe</c> (TUN + định tuyến + DNS, outbound trỏ vào SOCKS5 đó).
+/// Kiến trúc (từ 1.4.7): MỘT tiến trình — <c>flowvpnrelay.exe</c> (hysteria2-over-WS) tự dựng
+/// luôn TUN + auto_route + bypass TQ, không cần <c>sing-box.exe</c> nữa.
+///
+/// Vì sao bỏ sing-box (khách báo 13/10/2026: "sing-box.exe đang phải có chữ ký"): sing-box là
+/// binary bên thứ ba CHƯA KÝ, mà máy khách bật <b>Smart App Control</b> thì WDAC chặn mọi binary
+/// chưa ký/chưa có "uy tín" — đo thật trên máy harness: CodeIntegrity 3033/3077/3118, Win32 4551
+/// ("Application Control policy has blocked"). Ta KHÔNG kiểm soát được chữ ký của binary bên thứ
+/// ba, còn binary của chính mình thì chạy bình thường trên đúng máy đó ⇒ cách triệt để là bỏ hẳn
+/// phụ thuộc đó. Hysteria v2 vốn đã có sẵn client TUN (<c>app/internal/tun</c>, dùng
+/// <c>apernet/sing-tun</c> → <c>wintun.dll</c> mà app đã ship sẵn cho đường WireGuard), nên phần
+/// TUN được đưa vào chính binary của mình — xem <c>tools/hysteria-relay/tun.go</c>.
 /// </summary>
 public static class HysteriaRelayDefaults
 {
@@ -71,8 +80,41 @@ public static class HysteriaRelayDefaults
 
     /// <summary>Tên binary cạnh app (xem windows/assets/THIRD_PARTY.md).</summary>
     public const string RelayExeName = "flowvpnrelay.exe";
-    public const string SingBoxExeName = "sing-box.exe";
+
+    /// <summary>
+    /// Tên adapter TUN do <c>flowvpnrelay.exe</c> tự tạo. Dùng đúng tên này ở cả hai phía:
+    /// Go tạo interface (khối <c>tun</c> trong cấu hình JSON) và C# đặt DNS lên adapter đó.
+    /// </summary>
+    public const string TunName = "flowvpntun";
+
+    /// <summary>
+    /// Address của TUN — lấy ĐÚNG mặc định của hysteria (<c>clientTUN</c> trong app/cmd/client.go,
+    /// <c>100.100.100.101/30</c>) vì đó là cấu hình upstream đã chạy thật trên Windows. Dải này
+    /// nằm trong CGNAT (100.64.0.0/10) nên không đụng LAN khách, cũng không đụng 172.1x mà Docker
+    /// hay dùng.
+    /// </summary>
+    public const string TunAddress = "100.100.100.101/30";
+
+    /// <summary>MTU của TUN (trùng mặc định hysteria; datagram qua QUIC/WS ≤ ~1500 nên lọt).</summary>
+    public const int TunMtu = 1500;
+
+    /// <summary>
+    /// DNS đặt LÊN adapter TUN. Cố ý dùng resolver công cộng, không dùng resolver của mạng khách:
+    /// truy vấn đi trong tunnel (ngoài dải TQ) nên không bị GFW nhiễm độc — đúng lỗi "khách không
+    /// vào được Google/YouTube" của 1.4.6. Vì sao KHÔNG dùng resolver nội địa TQ ở đây: nó nằm
+    /// trong dải TQ nên đi thẳng ra ngoài, mà truy vấn đi thẳng thì GFW lại nhiễm độc.
+    /// </summary>
+    public static IReadOnlyList<string> TunDnsServers { get; } = new[] { "1.1.1.1", "8.8.8.8" };
 
     /// <summary>Dòng flowvpnrelay.exe in ra stderr khi SOCKS5 đã mở — hợp đồng "tunnel đã lên".</summary>
     public const string ReadyMarker = "READY ";
+
+    /// <summary>
+    /// Dòng flowvpnrelay.exe in ra stderr SAU KHI adapter TUN đã tồn tại và được cấu hình. Đây mới
+    /// là mốc "tunnel dùng được": có TUN mới có route full-tunnel.
+    /// </summary>
+    public const string TunReadyMarker = "TUNREADY ";
+
+    /// <summary>Dòng báo TUN không dựng được — app rơi đường khác NGAY, không chờ hết ngân sách.</summary>
+    public const string TunFailMarker = "TUNFAIL ";
 }

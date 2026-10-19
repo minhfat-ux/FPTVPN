@@ -24,6 +24,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +49,7 @@ import com.privatevpn.app.api.CoordinatorDevice
 import com.privatevpn.app.l10n.LKey
 import com.privatevpn.app.l10n.LangChoice
 import com.privatevpn.app.theme.VPNTheme
+import com.privatevpn.app.vpn.HysteriaVpnService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -77,6 +79,24 @@ fun SettingsScreen(
     var subscriptionMessage by remember { mutableStateOf<String?>(null) }
     var latestVersion by remember { mutableStateOf<String?>(null) }
     var versionLookupFailed by remember { mutableStateOf(false) }
+
+    // N tunnel (hút băng thông) — port từ iOS SettingsView.tunnelSection (commit 167ba9d).
+    // 1 = TẮT (mặc định). Lưu vào SharedPreferences của service để VPNManager đọc lúc Connect;
+    // áp dụng từ lần kết nối SAU (giống iOS), không dựng lại tunnel đang chạy.
+    var multiTunnel by remember {
+        mutableStateOf(
+            context.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
+                .getInt(Config.KEY_MULTI_TUNNEL, 1)
+                .coerceIn(1, Config.MULTI_TUNNEL_MAX),
+        )
+    }
+
+    fun setMultiTunnel(count: Int) {
+        val clamped = count.coerceIn(1, Config.MULTI_TUNNEL_MAX)
+        multiTunnel = clamped
+        context.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
+            .edit().putInt(Config.KEY_MULTI_TUNNEL, clamped).apply()
+    }
 
     // Mốc phiên bản trên server — đối chiếu với bản đang cài (khác = publish chưa đúng).
     LaunchedEffect(Unit) {
@@ -137,6 +157,56 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Boost — hút băng thông bằng N tunnel song song (mirror iOS "Tăng tốc").
+        SectionTitle(lang.t(LKey.boost))
+        CardContainer {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(lang.t(LKey.boostNTunnel), color = VPNTheme.Label, fontSize = 15.sp)
+                Spacer(Modifier.weight(1f))
+                Switch(
+                    checked = multiTunnel > 1,
+                    onCheckedChange = { on ->
+                        setMultiTunnel(if (on) Config.MULTI_TUNNEL_DEFAULT_ON else 1)
+                    },
+                )
+            }
+            if (multiTunnel > 1) {
+                Config.MULTI_TUNNEL_CHOICES.forEach { n ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { setMultiTunnel(n) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("${lang.t(LKey.boostCount)}: $n", color = VPNTheme.Label, fontSize = 15.sp)
+                        Spacer(Modifier.weight(1f))
+                        if (multiTunnel == n) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = VPNTheme.Accent,
+                                modifier = Modifier.width(20.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            Text(
+                lang.t(LKey.boostHint),
+                color = VPNTheme.SecondaryLabel,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
         }
 
         Spacer(Modifier.height(12.dp))

@@ -313,6 +313,18 @@ class VPNManager(
                 HysteriaVpnService.EXTRA_HOST_RELAYS,
                 ArrayList(hostRelaysFor(hostList)),
             )
+            // N tunnel (hút băng thông): truyền lựa chọn N của phiên này. Đọc từ
+            // SharedPreferences (khoá RIÊNG của Android, xem Config.KEY_MULTI_TUNNEL) chứ
+            // không dùng khoá chung với iOS. 1 = TẮT (hành vi y hệt bản đang phát).
+            i.putExtra(
+                HysteriaVpnService.EXTRA_MULTI_TUNNEL,
+                app.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
+                    .getInt(
+                        HysteriaVpnService.KEY_MULTI_TUNNEL,
+                        1,
+                    )
+                    .coerceIn(1, HysteriaVpnService.MULTI_TUNNEL_MAX),
+            )
             Log.e("VPNFLOW_DEBUG", "hysteria: connect node=${node?.name ?: "default"} host=$host hosts=$hostList")
             // Plain startService: an active VpnService tunnel keeps the process
             // alive; Android 15+/16 dropped the "vpn" foregroundServiceType so

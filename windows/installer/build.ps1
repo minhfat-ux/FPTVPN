@@ -4,9 +4,9 @@
 
 .DESCRIPTION
   1) kiểm tra binary tunnel đã có trong windows/assets (wintun.dll, wireguard-go.exe,
-     flowvpnrelay.exe, sing-box.exe)
+     flowvpnrelay.exe)
   2) `dotnet publish` bản self-contained win-x64 (khách không cần cài .NET)
-  3) kiểm tra output có đủ exe + 4 binary tunnel
+  3) kiểm tra output có đủ exe + 3 binary tunnel
   4) gọi ISCC.exe để tạo windows\installer\out\VPNFlow-Setup-<version>.exe
 
 .EXAMPLE
@@ -136,11 +136,14 @@ function New-SignWrapper([string]$signtool, [string[]]$baseArguments, [string]$p
   return $path
 }
 
-# 1) binary tunnel bắt buộc: 2 file cho tunnel WireGuard userspace, 2 file cho đường
-# "hysteria2 bọc trong WebSocket" (flowvpnrelay = hysteria2-over-WS + SOCKS5, sing-box = TUN).
+# 1) binary tunnel bắt buộc: 2 file cho tunnel WireGuard userspace + 1 file cho đường
+# "hysteria2 bọc trong WebSocket" — flowvpnrelay = hysteria2-over-WS + SOCKS5 + TUN/auto-route/
+# bypass TQ, MỘT tiến trình duy nhất. Từ 1.4.7 KHÔNG còn sing-box.exe: máy khách bật Smart App
+# Control chặn binary bên thứ ba chưa ký (CodeIntegrity 3033/3077/3118, Win32 4551), xem
+# windows/assets/THIRD_PARTY.md §4.
 # Thiếu bất kỳ file nào thì bộ cài vẫn tạo được nhưng đường tương ứng không chạy — chặn ở đây.
 Step "Kiểm tra binary tunnel trong windows\assets"
-foreach ($f in @("wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe", "sing-box.exe")) {
+foreach ($f in @("wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe")) {
   $p = Join-Path $assetsDir $f
   if (-not (Test-Path $p)) {
     throw "Thiếu windows\assets\$f. Chạy: bash windows/assets/fetch-assets.sh  (rồi chạy lại script này)"
@@ -208,7 +211,7 @@ if (-not $SkipPublish) {
 
 # 3) kiểm tra output
 Step "Kiểm tra output publish"
-foreach ($f in @($appExe, "wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe", "sing-box.exe")) {
+foreach ($f in @($appExe, "wintun.dll", "wireguard-go.exe", "flowvpnrelay.exe")) {
   $p = Join-Path $publishDir $f
   if (-not (Test-Path $p)) { throw "Publish thiếu $f — kiểm tra lại bước publish/asset" }
 }
@@ -233,8 +236,8 @@ if ($builtInfo -ne $expectedInfo) {
 Write-Host "    app exe ProductVersion = $builtInfo (khớp commit build)" -ForegroundColor Green
 
 # 3d) KÝ SỐ binary CỦA MÌNH trong bộ publish - làm TRƯỚC khi đóng gói để file BÊN TRONG bộ cài
-#     cũng đã ký. Chỉ ký file của mình: KHÔNG ký lại binary bên thứ ba (sing-box, wireguard-go,
-#     wintun.dll) - ký đè lên chữ ký của người khác là việc không được phép làm.
+#     cũng đã ký. Chỉ ký file của mình: KHÔNG ký lại binary bên thứ ba (wireguard-go, wintun.dll)
+#     - ký đè lên chữ ký của người khác là việc không được phép làm.
 if (-not $SignTimestampUrl) { $SignTimestampUrl = "http://timestamp.digicert.com" }
 $signConfigured = [bool]($SignCertThumbprint -or $SignPfxPath)
 $signWrapper = $null

@@ -1,27 +1,23 @@
 using System.Net.Http;
-using System.Text.Json;
 
 namespace VpnFlow.Core.Tunnel;
 
 /// <summary>
-/// Watchdog cho đường <b>hysteria2-over-WS + sing-box</b> (đường relay).
+/// Watchdog cho đường <b>hysteria2-over-WS</b> (đường relay).
 ///
 /// Vì sao cần: đường WireGuard đã có watchdog riêng (đọc handshake/rx của wireguard-go). Đường relay
 /// KHÔNG có tunnel WireGuard nên trước đây chỉ phát hiện được khi tiến trình con <b>chết</b>; còn
 /// trường hợp tunnel "đứng" (tiến trình vẫn sống nhưng không truyền được dữ liệu) thì app giữ nguyên
 /// route full-tunnel trỏ vào đường chết ⇒ máy như mất mạng mà không có cảnh báo nào.
 ///
-/// Cách phát hiện — dùng HAI tín hiệu và chỉ kết luận khi CẢ HAI cùng bất thường:
-///  1. Số byte luỹ kế của sing-box (clash_api <c>/connections</c>: downloadTotal + uploadTotal) không
-///     tăng trong <see cref="NoTrafficSeconds"/>.
-///  2. Phép thử CHỦ ĐỘNG qua chính tunnel (GET một URL health của mình) thất bại
-///     <see cref="ProbeFailures"/> lần liên tiếp.
+/// Cách phát hiện (từ 1.4.7): phép thử CHỦ ĐỘNG qua chính tunnel (GET một URL health của mình) thất
+/// bại <see cref="ProbeFailures"/> lần liên tiếp. Trước đây còn một tín hiệu thứ hai — số byte luỹ kế
+/// đọc từ clash_api của sing-box — nhưng sing-box đã bị bỏ (xem <see cref="HysteriaRelayDefaults"/>)
+/// nên không còn nguồn số đó; bù lại, phép thử chủ động vốn đã là tín hiệu QUYẾT ĐỊNH, còn số byte chỉ
+/// để khỏi thử khi khách đang có lưu lượng. Nay ta thử mỗi <see cref="DefaultNoTrafficSeconds"/> giây
+/// khi rảnh — tunnel khoẻ thì phép thử tự qua và bộ đếm được reset, nên không báo oan.
 ///
-/// Tín hiệu (1) một mình KHÔNG đủ: người dùng không duyệt web thì cũng không có byte nào, nên nếu chỉ
-/// dựa vào đó là báo oan và cắt VPN của khách đang để yên. Chỉ khi không có dữ liệu MÀ thử qua tunnel
-/// cũng không xong mới kết luận tunnel đứng.
-///
-/// An toàn: mọi lỗi (mạng, log, JSON) đều bị nuốt và chỉ ghi log — watchdog không bao giờ ném ra ngoài,
+/// An toàn: mọi lỗi (mạng, JSON) đều bị nuốt và chỉ ghi log — watchdog không bao giờ ném ra ngoài,
 /// và <c>onStall</c> chỉ được gọi MỘT lần cho mỗi lần phát hiện.
 /// </summary>
 public sealed class RelayHealthWatchdog : IDisposable
@@ -78,11 +74,11 @@ public sealed class RelayHealthWatchdog : IDisposable
     }
 
     /// <summary>
-    /// Bản dùng thật cho đường relay: đọc số liệu từ clash_api của sing-box và thử qua tunnel bằng
-    /// HTTP tới <paramref name="probeUrl"/> (mặc định <see cref="DefaultProbeUrl"/>).
+    /// Bản dùng thật cho đường relay: thử qua tunnel bằng HTTP tới <paramref name="probeUrl"/>
+    /// (mặc định <see cref="DefaultProbeUrl"/>) và KHÔNG đọc số byte luỹ kế (không còn clash_api sau
+    /// khi bỏ sing-box — xem ghi chú đầu class).
     /// </summary>
-    public static RelayHealthWatchdog ForSingBox(
-        int clashApiPort,
+    public static RelayHealthWatchdog ForRelayTunnel(
         Action<string> log,
         Action<string> onStall,
         string probeUrl = DefaultProbeUrl,
@@ -91,11 +87,8 @@ public sealed class RelayHealthWatchdog : IDisposable
         int noTrafficSeconds = DefaultNoTrafficSeconds,
         int probeFailures = DefaultProbeFailures)
     {
-        var connectionsUri = new Uri($"http://127.0.0.1:{clashApiPort}/connections");
         var probeUri = new Uri(probeUrl);
 
-        // Một HttpClient cho việc đọc số liệu (rất nhẹ, gọi nội bộ trong máy).
-        using var trafficClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         // HttpClient riêng cho phép thử: timeout ngắn, KHÔNG dùng proxy hệ thống (proxy có thể là
         // chính phần mềm đang tranh chấp và làm sai kết quả đo).
         var probeClient = new HttpClient(new SocketsHttpHandler { UseProxy = false })
@@ -104,42 +97,8 @@ public sealed class RelayHealthWatchdog : IDisposable
         };
 
         return new RelayHealthWatchdog(
-            async token =>
-            {
-                try
-                {
-                    using var response = await trafficClient.GetAsync(connectionsUri, token).ConfigureAwait(false);
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        return -1;
-                    }
-
-                    var json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-                    using var document = JsonDocument.Parse(json);
-                    var root = document.RootElement;
-
-                    long total = 0;
-                    var found = false;
-                    if (root.TryGetProperty("downloadTotal", out var down) && down.TryGetInt64(out var d))
-                    {
-                        total += d;
-                        found = true;
-                    }
-
-                    if (root.TryGetProperty("uploadTotal", out var up) && up.TryGetInt64(out var u))
-                    {
-                        total += u;
-                        found = true;
-                    }
-
-                    return found ? total : -1;
-                }
-                catch (Exception)
-                {
-                    // Đọc không được thì coi như "không có số liệu" (-1): tự nó KHÔNG đủ để kết luận.
-                    return -1;
-                }
-            },
+            // -1 = "không có số liệu lưu lượng": TickAsync khi đó chỉ dựa vào phép thử chủ động.
+            _ => Task.FromResult(-1L),
             async token =>
             {
                 try

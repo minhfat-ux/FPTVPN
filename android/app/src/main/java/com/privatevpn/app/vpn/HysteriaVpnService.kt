@@ -121,6 +121,45 @@ class HysteriaVpnService : VpnService() {
      * (Android 10+ hạn chế /proc/net cho app thường). Xem startBandwidthSampler.
      */
     @Volatile private var wsBridgeStats: WSRelayBridge? = null
+
+    /**
+     * Tổng byte RX của **TẤT CẢ** cầu WS đang mở (N tunnel), không chỉ cầu chính.
+     *
+     * Vì sao phải cộng: ở chế độ N tunnel, `multiClient` chia LUỒNG cho N tunnel ⇒ byte nằm rải
+     * trên N cầu. Chỉ đọc cầu chính thì vòng lấy mẫu thấy đúng 1/N lưu lượng ⇒ Diagnostics báo
+     * thấp hơn thực tế N lần và ramp tưởng mạng yếu rồi hạ số khai oan.
+     * `-1` = chưa có cầu nào (nguồn không dùng được, giống quy ước cũ).
+     */
+    private fun wsRxBytes(): Long {
+        val main = wsBridgeStats ?: return -1L
+        var total = main.rxBytes()
+        synchronized(extraBridges) { for (b in extraBridges) total += b.rxBytes() }
+        return total
+    }
+
+    /** Tổng byte TX của mọi cầu WS (đối xứng với [wsRxBytes]). */
+    private fun wsTxBytes(): Long {
+        val main = wsBridgeStats ?: return -1L
+        var total = main.txBytes()
+        synchronized(extraBridges) { for (b in extraBridges) total += b.txBytes() }
+        return total
+    }
+
+    /**
+     * Số tunnel song song người dùng chọn cho phiên này (**1 = TẮT**, hành vi cũ).
+     * Port từ iOS `167ba9d` (20/10/2026), xem `Config.MULTI_TUNNEL_MAX`.
+     *
+     * Đọc ở `onStartCommand` từ extra của Intent; service bị hệ thống dựng lại (START_STICKY)
+     * thì Intent gốc không còn ⇒ đọc lại SharedPreferences để không rơi về 1 giữa phiên.
+     */
+    @Volatile private var multiTunnelCount = 1
+    /**
+     * Các cầu WS **PHỤ** của chế độ N tunnel. Bắt buộc giữ tham chiếu: mất tham chiếu là cầu
+     * bị thu hồi ⇒ tunnel phụ chết âm thầm (bên iOS cũng phải giữ `extraRelays` vì lý do này).
+     */
+    private val extraBridges = java.util.Collections.synchronizedList(mutableListOf<WSRelayBridge>())
+    /** Đã gọi `Mobile.serve()` cho phiên N tunnel chưa — xem onExtraBridgeDead(). */
+    @Volatile private var multiTunnelServing = false
     /**
      * Pha RAMP/STABLE + KÊNH DÒ RIÊNG (yêu cầu chủ dự án 22/09/2026 —
      * `docs/YEU_CAU_TOC_DO_ON_DINH.md` §2b/§2c): tốc độ leo dần tới mốc Full HD rồi KHOÁ lại;
@@ -224,6 +263,19 @@ class HysteriaVpnService : VpnService() {
             ?.mapNotNull { pair -> if (pair.size == 2) pair[0] to pair[1] else null }
             ?.toMap()
             .orEmpty()
+        // N tunnel (hút băng thông). `hasExtra` phải phân biệt "không có extra" với "đặt = 1":
+        // khi Android dựng lại service (START_STICKY) thì Intent gốc không còn và getIntExtra
+        // luôn trả mặc định — đọc SharedPreferences mới giữ đúng lựa chọn của người dùng.
+        multiTunnelCount = MultiTunnelPolicy.clampCount(
+            if (intent?.hasExtra(EXTRA_MULTI_TUNNEL) == true) {
+                intent.getIntExtra(EXTRA_MULTI_TUNNEL, 1)
+            } else {
+                getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MULTI_TUNNEL, 1)
+            },
+        )
+        DiagnosticsLog.log(
+            "n-tunnel: N=$multiTunnelCount" + if (multiTunnelCount > 1) " (hút băng thông BẬT)" else " (tắt)",
+        )
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: onStartCommand startId=$startId host=$runHost")
         Thread {
             try {
@@ -504,8 +556,16 @@ class HysteriaVpnService : VpnService() {
     /**
      * Đường dữ liệu qua WebSocket: Hysteria trỏ vào bridge local, bridge gửi datagram
      * qua WSS tới Cloudflare Tunnel rồi bung ra UDP tới Hysteria server của node.
+     *
+     * N>1 (hút băng thông, port từ iOS 167ba9d): đi đường NHIỀU cầu ở `wsRelayMultiAttempt`.
+     * N=1: đi đúng hàm cũ, không đổi một dòng nào — bất biến nghiệm thu "N=1 phải y hệt bản
+     * đang phát".
      */
-    private fun wsRelayAttempt(): Int {
+    private fun wsRelayAttempt(): Int =
+        if (multiTunnelCount <= 1) wsRelaySingleAttempt() else wsRelayMultiAttempt(multiTunnelCount)
+
+    /** Đường WS MỘT tunnel — nguyên bản của bản đang phát. */
+    private fun wsRelaySingleAttempt(): Int {
         if (stopping) return 1
         // Đường WS cần thời gian mở cầu + bắt tay WG bên trong, dài hơn hẳn đường trực tiếp.
         // Phải ARM NGAY tại đây: nếu để watchdog 4s của lượt trực tiếp trước còn hiệu lực,
@@ -591,6 +651,262 @@ class HysteriaVpnService : VpnService() {
             attemptDownKbps = previousDown
             wsBridgeStats = null
             bridge.stop()
+        }
+    }
+
+    // ───────────────────────── N tunnel (hút băng thông) ─────────────────────────
+    // Port từ iOS `HysteriaTransport.addExtraTunnels` (commit 167ba9d, 20/10/2026) theo
+    // `docs/handoff/HANDOFF_ANDROID_NTUNNEL_WINDOWS_2026-10-20.md`.
+    //
+    // VÌ SAO: mạng dùng chung giới hạn theo TỪNG KẾT NỐI — đo thật 19/10/2026: 1 luồng
+    // 4–12 Mbps, 8 luồng 72–81 Mbps. App chỉ mở MỘT tunnel nên trần ~12 Mbps, khai số cao
+    // hơn cũng không vượt được trần đó.
+    //
+    // CÁCH LÀM: N cầu WS song song tới CÙNG một relay của node hiện tại (F3: cùng exit node),
+    // `Mobile.connect` cho tunnel chính + `Mobile.connectSlot(i)` cho N-1 tunnel phụ, rồi MỘT
+    // `Mobile.serve()`. Core Go bọc chúng thành `multiClient` và chia LUỒNG theo vòng tròn.
+
+    /** Tạo DatagramSocket đã `protect()` (đi thẳng ra mạng nền) cho một cầu WS. */
+    private fun newProtectedRelaySocket(tag: String): java.net.DatagramSocket? {
+        val ds = java.net.DatagramSocket()
+        var protected = runCatching { protect(ds) }.getOrDefault(false)
+        if (!protected) {
+            // TV Xiaomi (đo 23/09/2026): `protect()` trả false cho MỌI socket khi VPN chưa dựng
+            // TUN ⇒ dựng TUN rồi protect lại, cùng cách chữa của protectRelaySocket() (v36).
+            runCatching { ensureTun() }
+            protected = runCatching { protect(ds) }.getOrDefault(false)
+        }
+        DiagnosticsLog.log("ws-relay[$tag]: protect=$protected local=${safeAddr(ds)}")
+        if (!protected) {
+            // Không protect được ⇒ socket bị hút vào chính tunnel và chết ngay khi TUN lên.
+            // Bỏ cầu này thay vì để nó "mở" mà không chở được gì.
+            DiagnosticsLog.warn("ws-relay[$tag]: KHÔNG protect được -> bỏ cầu này")
+            runCatching { ds.close() }
+            return null
+        }
+        return ds
+    }
+
+    /** Đợi cầu WS mở, tối đa `WS_OPEN_WAIT_MS` (giống vòng chờ của đường một tunnel). */
+    private fun awaitBridge(bridge: WSRelayBridge): Boolean {
+        val deadline = System.currentTimeMillis() + WS_OPEN_WAIT_MS
+        while (!bridge.connected && System.currentTimeMillis() < deadline && !stopping) {
+            Thread.sleep(200)
+        }
+        return bridge.connected
+    }
+
+    /** Mở tunnel PHỤ `slot` trên cầu `bridge` (best-effort — lỗi thì bỏ riêng tunnel đó). */
+    private fun connectClientSlot(slot: Int, port: Int, sockFd: Int) {
+        repeat(2) { attempt ->
+            try {
+                Mobile.connectSlot(
+                    slot.toLong(), runHost, port.toLong(), HY_PASSWORD, HY_OBFS_PASSWORD,
+                    sockFd.toLong(), false, attemptUpKbps.toLong(), attemptDownKbps.toLong(),
+                )
+                return
+            } catch (e: Exception) {
+                if (e.message?.contains("already running") == true && attempt == 0) {
+                    DiagnosticsLog.warn(
+                        "client still stopping after transport teardown -> retry slot $slot in ${CLIENT_RESTART_WAIT_MS}ms",
+                    )
+                    runCatching { Mobile.stop() }
+                    Thread.sleep(CLIENT_RESTART_WAIT_MS)
+                } else {
+                    throw e
+                }
+            }
+        }
+    }
+
+    /** Dừng và xoá mọi cầu PHỤ (idempotent) — nếu không mỗi lượt thử lại để lại N-1 WS còn mở. */
+    private fun stopExtraTunnels() {
+        val list = synchronized(extraBridges) { extraBridges.toList().also { extraBridges.clear() } }
+        for (b in list) runCatching { b.stop() }
+    }
+
+    /**
+     * Một cầu PHỤ chết giữa phiên: `multiClient` bên Go vẫn chia luồng vào nó ⇒ một phần
+     * phiên hỏng âm thầm (tải chậm/ngắt quãng) chứ không báo lỗi. Dựng lại cả transport để
+     * có bộ N cầu mới — giống cách đường một tunnel xử lý cầu chính chết.
+     * Trong lúc ĐANG MỞ (chưa serve) thì chỉ ghi log: chưa có gì để dựng lại.
+     */
+    private fun onExtraBridgeDead(label: String, reason: String) {
+        if (stopping) return
+        DiagnosticsLog.warn("n-tunnel: cầu phụ $label chết ($reason)")
+        if (multiTunnelServing) {
+            DiagnosticsLog.warn("n-tunnel: dừng client để dựng lại transport với đủ $multiTunnelCount cầu")
+            runCatching { Mobile.stop() }
+        }
+    }
+
+    /**
+     * Đường WS **N tunnel**: mở N cầu song song tới cùng relay, bắt tay chính + phụ, MỘT serve.
+     *
+     * Trả về như mọi đường khác: 0 = không lên được (thử đường khác), 1 = người dùng dừng,
+     * 2 = transport kết thúc/dựng lại.
+     */
+    private fun wsRelayMultiAttempt(n: Int): Int {
+        if (stopping) return 1
+        val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
+        val relayUrl = relayForNode ?: WS_RELAY_URL
+        if (relayForNode == null) {
+            DiagnosticsLog.warn(
+                "n-tunnel: node $runHost không khai relay URL -> dùng mặc định $relayUrl (đoán)",
+            )
+        }
+        // Ngân sách bắt tay dài hơn đường một cầu: N lần bắt tay QUIC tuần tự.
+        armAttemptBudget(
+            ((WS_OPEN_WAIT_MS + WS_ATTEMPT_UP_BUDGET_MS) * n).coerceAtMost(MULTI_TUNNEL_BUDGET_CAP_MS),
+        )
+        val main = WSRelayBridge(
+            url = relayUrl,
+            protector = { sock -> protectRelaySocket(sock, "ws-relay") },
+            onDead = { reason ->
+                if (!stopping) {
+                    DiagnosticsLog.warn("ws-relay: cầu WS chính chết ($reason) -> dừng client để dựng lại")
+                    runCatching { Mobile.stop() }
+                }
+            },
+        )
+        if (!main.start()) {
+            disarmAttemptBudget()
+            return 0
+        }
+        // Mở các cầu PHỤ NGAY (song song), rồi mới bắt tay tuần tự: mở tuần tự N cầu sẽ cộng dồn
+        // thời gian chờ và ăn hết ngân sách bắt tay.
+        val pending = ArrayList<WSRelayBridge>()
+        for (i in 1 until n) {
+            val b = WSRelayBridge(
+                url = relayUrl,
+                protector = { sock -> protectRelaySocket(sock, "ws-relay#$i") },
+                onDead = { reason -> onExtraBridgeDead("#$i", reason) },
+            )
+            if (b.start()) pending += b else b.stop()
+        }
+        if (!awaitBridge(main)) {
+            DiagnosticsLog.warn("n-tunnel: cầu chính chưa mở được, bỏ qua lượt này")
+            for (b in pending) runCatching { b.stop() }
+            runCatching { main.stop() }
+            disarmAttemptBudget()
+            return 0
+        }
+        lastWsOpenMs = WS_OPEN_WAIT_MS.toInt() // chỉ để log 'chon-duong' thấy cầu WS đã dùng được
+        val previousHost = runHost
+        val previousUp = attemptUpKbps
+        val previousDown = attemptDownKbps
+        runHost = "127.0.0.1"
+        onWsRelay = true
+        attemptUpKbps = if (meteredNow) MOBILE_UP_KBPS else HY_RELAY_UP_KBPS
+        attemptDownKbps = if (meteredNow) MOBILE_DOWN_KBPS else HY_RELAY_DOWN_KBPS
+        if (bwReason != BandwidthPolicy.REASON_PROFILE) {
+            attemptUpKbps = minOf(attemptUpKbps, bwUpKbps)
+            attemptDownKbps = minOf(attemptDownKbps, bwDownKbps)
+        }
+        // SỐ KHAI = NĂNG LỰC TỔNG = (một luồng) × N — đúng handoff §2.4 và iOS `167ba9d`.
+        //
+        // Mốc dùng ở đây là năng lực **MỘT luồng**: `NetworkPreMeasure.measureOnce` mở ĐÚNG MỘT
+        // kết nối (giống `measureOnce` bên iOS), còn nấc tĩnh 30/100 Mbps cũng là số của một luồng.
+        // Mạng dùng chung giới hạn theo TỪNG kết nối nên N tunnel ≈ N × một luồng — đo thật
+        // 19/10/2026: 1 luồng 4–12 Mbps, 8 luồng 72–81 Mbps. Không nhân thì Brutal CC bị khoá ở
+        // mức một luồng ⇒ bật N cũng không nhanh hơn.
+        //
+        // Rủi ro khai vống (ramp giữa phiên đo lưu lượng TỔNG của `tun0` rồi ghi vào bộ nhớ) được
+        // chặn hai lớp: (a) số khai bị `min()` với nấc tĩnh trước khi nhân, (b) server đã bật
+        // `ignoreClientBandwidth` nên Brutal tự ước lượng, số khai không cắt được băng thông thật.
+        // Chốt số khai vào BIẾN CỤC BỘ: `refreshMeteredState()` (chạy khi đổi mạng và trong
+        // `reportUp()`) ghi đè `attemptUpKbps/attemptDownKbps` về số MỘT luồng. Đọc lại field
+        // sau đó là mất phần ×N — đo trên máy thật 19/10/2026: log in `up=2081 down=6938`
+        // (số một luồng) dù N=4. Dùng biến cục bộ và gán lại NGAY trước mỗi lần connect.
+        val declaredUp = MultiTunnelPolicy.declaredKbps(attemptUpKbps, n)
+        val declaredDown = MultiTunnelPolicy.declaredKbps(attemptDownKbps, n)
+        attemptUpKbps = declaredUp
+        attemptDownKbps = declaredDown
+        val socks = ArrayList<java.net.DatagramSocket>()
+        try {
+            var established = 0
+            // (0) tunnel CHÍNH: đi đúng đường `Mobile.connect` như bản một tunnel.
+            val mainSock = newProtectedRelaySocket("main") ?: return 0
+            socks += mainSock
+            val mainFd = try {
+                android.os.ParcelFileDescriptor.fromDatagramSocket(mainSock).detachFd()
+            } catch (e: Exception) {
+                DiagnosticsLog.warn("n-tunnel: không lấy được fd cầu chính: ${e.message}")
+                return 0
+            }
+            attemptUpKbps = declaredUp
+            attemptDownKbps = declaredDown
+            connectClient(main.localPort, mainFd, tcp = false)
+            established++
+            // (1..N-1) tunnel PHỤ: BEST-EFFORT — lỗi thì bỏ riêng tunnel đó, KHÔNG được làm
+            // hỏng tunnel chính (bật N>1 không thể biến phiên đang chạy tốt thành mất mạng).
+            for ((index, bridge) in pending.withIndex()) {
+                val label = "#${index + 1}"
+                if (stopping) return 1
+                if (!awaitBridge(bridge)) {
+                    DiagnosticsLog.warn("n-tunnel: cầu phụ $label chưa mở được -> bỏ")
+                    runCatching { bridge.stop() }
+                    continue
+                }
+                val ds = newProtectedRelaySocket("extra$label")
+                if (ds == null) {
+                    runCatching { bridge.stop() }
+                    continue
+                }
+                val fd = try {
+                    android.os.ParcelFileDescriptor.fromDatagramSocket(ds).detachFd()
+                } catch (e: Exception) {
+                    DiagnosticsLog.warn("n-tunnel: không lấy được fd cầu phụ $label: ${e.message}")
+                    runCatching { ds.close() }
+                    runCatching { bridge.stop() }
+                    continue
+                }
+                try {
+                    attemptUpKbps = declaredUp
+                    attemptDownKbps = declaredDown
+                    connectClientSlot(index + 1, bridge.localPort, fd)
+                } catch (e: Exception) {
+                    DiagnosticsLog.warn("n-tunnel: ConnectSlot $label lỗi: ${e.message} -> bỏ tunnel phụ này")
+                    runCatching { ds.close() }
+                    runCatching { bridge.stop() }
+                    continue
+                }
+                socks += ds
+                extraBridges += bridge
+                established++
+            }
+            wsBridgeStats = main
+            val tunFd = ensureTun().fd.toLong()
+            rememberTransport("ws")
+            DiagnosticsLog.transport = "ws-n$established"
+            DiagnosticsLog.relayConnected = true
+            if (!stopping) reportUp()
+            multiTunnelServing = true
+            DiagnosticsLog.log(
+                "n-tunnel: $established/$n tunnel sẵn sàng " +
+                    "(up=$declaredUp down=$declaredDown kbps, đã ×$n) serve() start",
+            )
+            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UP via ws-n$established tun=$tunFd")
+            Mobile.serve(tunFd, HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
+            return serveOutcome("ws-n$established serve() returned")
+        } catch (e: Exception) {
+            if (e.message?.contains("already running") == true) throw e
+            DiagnosticsLog.warn("n-tunnel: serve lỗi: ${e.message}")
+            return serveOutcome("ws-n serve() threw: ${e.message}")
+        } finally {
+            multiTunnelServing = false
+            runHost = previousHost
+            attemptUpKbps = previousUp
+            attemptDownKbps = previousDown
+            wsBridgeStats = null
+            DiagnosticsLog.relayConnected = false
+            runCatching { main.stop() }
+            // `pending` gồm mọi cầu phụ ĐÃ mở được — kể cả cái chưa kịp vào `extraBridges`
+            // (bỏ giữa đường vì lỗi fd/bắt tay). Bỏ sót là để lại WS mở tới hết tiến trình.
+            for (b in pending) runCatching { b.stop() }
+            stopExtraTunnels()
+            for (ds in socks) runCatching { ds.close() }
+            disarmAttemptBudget()
         }
     }
 
@@ -1166,7 +1482,7 @@ class HysteriaVpnService : VpnService() {
                 if (byteSrc == 0) {
                     byteSrc = when {
                         memory.tunRxBytes() >= 0 -> 1
-                        onWsRelay && (wsBridgeStats?.rxBytes() ?: -1L) >= 0 -> 3
+                        onWsRelay && wsRxBytes() >= 0 -> 3
                         memory.uidRxBytes() >= 0 -> 2
                         else -> 0
                     }
@@ -1183,7 +1499,7 @@ class HysteriaVpnService : VpnService() {
                 val rx = when (byteSrc) {
                     1 -> memory.tunRxBytes()
                     2 -> memory.uidRxBytes()
-                    else -> wsBridgeStats?.rxBytes() ?: -1L
+                    else -> wsRxBytes()
                 }
                 if (rx < 0) continue
                 if (lastRx < 0 || rx < lastRx) {
@@ -1236,7 +1552,7 @@ class HysteriaVpnService : VpnService() {
                     // TX lấy ĐÚNG thang đo với RX đang dùng (xem khối chọn nguồn byte ở trên).
                     val txNow = when (byteSrc) {
                         2 -> memory.uidTxBytes()
-                        3 -> wsBridgeStats?.txBytes() ?: -1L
+                        3 -> wsTxBytes()
                         else -> memory.tunTxBytes()
                     }
                     val upKbps = if (lastTxBytes >= 0 && txNow >= lastTxBytes) {
@@ -1987,6 +2303,13 @@ class HysteriaVpnService : VpnService() {
         const val CHANNEL_ID = "vpn_foreground"
         const val PREFS = "vpnflow_hysteria"
         const val KEY_TRANSPORT = "last_good_transport"
+        /** N tunnel (hút băng thông) — trần + khoá lưu lựa chọn (xem Config.MULTI_TUNNEL_MAX). */
+        const val MULTI_TUNNEL_MAX = com.privatevpn.app.Config.MULTI_TUNNEL_MAX
+        const val KEY_MULTI_TUNNEL = com.privatevpn.app.Config.KEY_MULTI_TUNNEL
+        /** Extra của Intent để VPNManager truyền lựa chọn N cho phiên mới. */
+        const val EXTRA_MULTI_TUNNEL = "hysteria_multi_tunnel_count"
+        /** Trần ngân sách bắt tay của lượt N tunnel (N lần bắt tay QUIC tuần tự). */
+        const val MULTI_TUNNEL_BUDGET_CAP_MS = 90_000L
 
         @Volatile var stopping = false
 

@@ -7,6 +7,16 @@
 # Requirements: Go 1.22+, gomobile (go install golang.org/x/mobile/cmd/gomobile@latest
 # && gomobile init), Android SDK + NDK r25 (r26+ fails: "no usable NDK ...
 # meta/platforms.json"), JAVA_HOME (JDK 17).
+#
+# WINDOWS (harness Windows, làm lại được y hệt — 19/10/2026):
+#   - NDK: tải `android-ndk-r25c-windows.zip` (467.520.926 B) rồi giải nén vào
+#     `$ANDROID_HOME/ndk/25.2.9519653` (gomobile đọc `ANDROID_NDK_HOME`).
+#   - gomobile/gobind: `go install github.com/sagernet/gomobile/cmd/{gomobile,gobind}@v0.1.13`
+#     (GOPROXY=https://goproxy.cn,direct — proxy.golang.org timeout từ mạng này).
+#   - javac mặc định đọc theo windows-1252 ⇒ comment tiếng Việt trong mobile.go bị chép sang
+#     `Mobile.java` làm build đứt với "unmappable character". PHẢI đặt
+#     `JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF-8` (và `_JAVA_OPTIONS` như bản dự phòng).
+#   - `python3` không có sẵn trên Windows: chép `python.exe` thành `python3.exe` cùng thư mục.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
