@@ -184,7 +184,11 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
     /// Số lần đổi đường trong phiên này (chỉ để log/chẩn đoán).
     private var nodeFailovers = 0
     /// Số lần dựng lại "0 gói VỀ" liên tiếp trước khi đổi đường.
-    private static let failoverAfterFruitlessRecoveries = 2
+    ///
+    /// 20/10/2026 — hạ **2 → 1** (yêu cầu chủ dự án). Đo thật trên iPhone: luật cũ đổi đường đúng
+    /// nhưng mất **~75–90 s** mới đổi (2 cửa sổ × 15 s + dựng lại + nhịp watchdog) — quá lâu khi khách
+    /// đang xem phim. Nay: 1 cửa sổ 15 s + thời gian dựng lại ≈ **20 s** là đổi cửa.
+    private static let failoverAfterFruitlessRecoveries = 1
     /// Trần đổi đường cho đường "dựng lại được mà 0 gói VỀ" (luật `RelayFailoverWatch`) — khớp
     /// `maxAdvances` của nó. Đường "relay KHÔNG kết nối được" (`RelayUnreachableWatch`) KHÔNG dùng
     /// trần này: hết ứng viên thì QUAY VÒNG và giữ tunnel (yêu cầu 26/09/2026), không bỏ mặc khách.

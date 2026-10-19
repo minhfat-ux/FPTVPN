@@ -233,7 +233,7 @@ targets:
       # Framework hysteria2 cho iOS (module `Hysteria`, hàm C MobileConnect/MobileServe/
       # MobileStop), bản STACK=gvisor — dựng bằng tools/hysteria-apple/build.sh. Là static
       # archive ⇒ chỉ cần link; `embed` để artifact khớp bản phát hành.
-      - framework: iOS/Frameworks/Hysteria.xcframework
+      - framework: build/frameworks-multitunnel/Multitunnel.xcframework
         # Là STATIC archive (`ar`), KHÔNG phải framework động ⇒ chỉ link, KHÔNG embed:
         # embed:true làm Apple chặn 90171 (iOS) và lỗi ký "code has no resources" (macOS).
         embed: false

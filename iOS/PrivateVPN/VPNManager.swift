@@ -57,6 +57,9 @@ final class VPNManager: ObservableObject {
     /// (`cached.tunnelConfig.v1` / `cached.exitNodes.v1`) ⇒ kẹt mãi, bấm Connect lại vẫn không
     /// có mạng. Đây đúng bug đã gặp trên macOS 15/09 (xem `StaleStateMigration`).
     private var providerProbeTask: Task<Void, Never>?
+    /// Số tunnel mặc định khi khách chưa đặt gì trong Settings (xem `prepareConfiguration`).
+    /// Một nguồn duy nhất cho cả app và màn Settings (`SettingsView` dùng cùng con số này).
+    static let defaultTunnelCount = 4
     /// Đang có lượt `connect()` chạy — cờ THẬT để chặn bấm đôi, KHÔNG suy từ `state`.
     ///
     /// Vì sao phải tách khỏi `state`: `state` là trạng thái hiển thị và từng bị đặt sớm ngay
@@ -66,6 +69,8 @@ final class VPNManager: ObservableObject {
     private var connectInFlight = false
     /// Đã xử lý chẩn đoán cho lần Connect này (tránh lặp lại thông báo/hạ tunnel nhiều lần).
     private var diagnosticHandled = false
+    /// Đã ghi log "extension không trả lời" cho phiên này chưa (tránh poll 1 s/lần làm ngập log).
+    private var diagnosticsNoReply = false
     /// Đã báo `noTraffic` một lần cho phiên này chưa — để KHÔNG ghi log/xoá cache mỗi giây
     /// (app poll extension 1 s/lần) nhưng vẫn giữ `diagnosticHandled = false` cho `startFailed` sau.
     private var noTrafficReported = false
@@ -260,6 +265,7 @@ final class VPNManager: ObservableObject {
             deviceLimitDevices = []
             diagnosticHandled = false
             noTrafficReported = false
+            diagnosticsNoReply = false
             AppDiagnostics.shared.log("Connect: đã gọi startVPNTunnel() node=\(store.selectedNodeID ?? "-")")
             startProviderDiagnosticsPolling()
         } catch let error as ControlAPIClient.ClientError {
@@ -412,22 +418,48 @@ final class VPNManager: ObservableObject {
         providerProbeTask = nil
     }
 
+    /// Bao lâu thì coi như extension KHÔNG trả lời. Ngắn hơn nhịp poll để vòng poll không bị chậm.
+    private static let providerReplyTimeout: TimeInterval = 1.5
+
     private func probeProviderDiagnostics() async {
         guard !diagnosticHandled,
               let session = manager?.connection as? NETunnelProviderSession else { return }
+        // HẠN CHÓT BẮT BUỘC (20/10/2026 — ca thật build 87: thẻ Diagnostics TRỐNG cả phiên).
+        //
+        // Vì sao: `sendProviderMessage` KHÔNG bảo đảm gọi completion khi extension đang bận hoặc
+        // không xử lý được. Dùng `withCheckedContinuation` trần thì continuation **không bao giờ
+        // resume** ⇒ `providerProbeTask` treo VĨNH VIỄN ngay nhịp đầu ⇒ không nhịp nào sau đó chạy ⇒
+        // thẻ trắng, và vì nhánh nil không ghi log nên cũng không có dấu vết nào để truy.
+        // Nay: quá `providerReplyTimeout` thì resume nil + ghi log MỘT lần cho mỗi phiên.
+        let gate = SingleResumeGate()
+        let noReplyAtStart = diagnosticsNoReply
         let report: TunnelStatusReport? = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.providerReplyTimeout) {
+                guard gate.claim() else { return }
+                continuation.resume(returning: nil)
+            }
             do {
                 try session.sendProviderMessage(Data()) { data in
-                    guard let data,
-                          let decoded = try? JSONDecoder().decode(TunnelStatusReport.self, from: data) else {
-                        continuation.resume(returning: nil)
-                        return
+                    guard gate.claim() else { return }
+                    let decoded = data.flatMap {
+                        try? JSONDecoder().decode(TunnelStatusReport.self, from: $0)
                     }
                     continuation.resume(returning: decoded)
                 }
             } catch {
+                guard gate.claim() else { return }
                 continuation.resume(returning: nil)
             }
+        }
+        if report == nil, !noReplyAtStart {
+            // Chỉ ghi MỘT lần mỗi phiên: poll 1 s/lần mà log mỗi nhịp sẽ cuốn mất 256 KB log.
+            diagnosticsNoReply = true
+            AppDiagnostics.shared.log(
+                "Diagnostics: extension không trả lời trong \(Self.providerReplyTimeout)s (thẻ sẽ để —) — ghi 1 lần/phiên"
+            )
+        } else if report != nil, diagnosticsNoReply {
+            diagnosticsNoReply = false
+            AppDiagnostics.shared.log("Diagnostics: extension đã trả lời lại — thẻ có số")
         }
         guard !Task.isCancelled, let report else { return }
         // A10 §2g — cập nhật số live cho thẻ Diagnostics ở MỌI nhịp (kể cả phiên bình thường).
@@ -842,8 +874,15 @@ final class VPNManager: ObservableObject {
             // N tunnel (hút băng thông). Truyền qua providerConfiguration vì iOS KHÔNG khai
             // App Group trong entitlements (cả app lẫn extension) ⇒ UserDefaults không chia sẻ được.
             // Đọc ở Settings; áp dụng ngay ở lần kết nối này.
+            //
+            // 20/10/2026 — MẶC ĐỊNH 4 (trước là 1). Căn cứ đo thật trên iPhone: một tunnel chỉ chở
+            // ~4 Mbps (trần MỘT kết nối của mạng), trong khi lúc xem FPT Play/Netflix máy mở **43 kết
+            // nối/phút**; N=4 chia các kết nối đó ra 4 tunnel nên chất lượng hình cao hơn rõ rệt (chủ
+            // dự án xác nhận trên cả hai dịch vụ). Khách vẫn TẮT được trong Settings.
+            // Core production (không có `ConnectSlot`) tự kẹp N về 1 trong extension ⇒ đặt 4 ở đây
+            // KHÔNG làm đổi hành vi bản không có core mới.
             providerConfiguration["multiTunnelCount"] =
-                UserDefaults.standard.object(forKey: "multiTunnelCount") as? Int ?? 1
+                UserDefaults.standard.object(forKey: "multiTunnelCount") as? Int ?? Self.defaultTunnelCount
             let relay = hysteria["relayURL"] as? String ?? "?"
             let host = hysteria["serverHost"] as? String ?? "?"
             log.info("configuration: hysteria2 -> \(relay, privacy: .public) (server \(host, privacy: .public))")
@@ -1050,5 +1089,24 @@ final class VPNManager: ObservableObject {
         default:
             return "Cannot reach the coordinator."
         }
+    }
+}
+
+/// Cổng "chỉ resume continuation ĐÚNG MỘT lần" cho lời gọi có HẠN CHÓT.
+///
+/// Vì sao cần: `withCheckedContinuation` mà resume hai lần là crash, còn KHÔNG resume lần nào là
+/// treo vĩnh viễn (ca thật 20/10/2026 — thẻ Diagnostics trắng cả phiên). Có hai đường đua nhau
+/// resume: completion của `sendProviderMessage` và đồng hồ hết hạn. Lớp này bảo đảm chỉ một đường
+/// thắng. Khoá nằm trong hàm ĐỒNG BỘ (Swift 6 cấm `lock()/unlock()` trong ngữ cảnh async).
+private final class SingleResumeGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var used = false
+
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if used { return false }
+        used = true
+        return true
     }
 }

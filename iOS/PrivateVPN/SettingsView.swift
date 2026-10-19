@@ -12,7 +12,10 @@ struct SettingsView: View {
     /// Hút băng thông bằng N tunnel song song. 1 = TẮT (hành vi cũ).
     /// Vì sao dùng @AppStorage: giá trị được `VPNManager` đọc lúc Connect rồi truyền sang
     /// extension qua `providerConfiguration` (iOS KHÔNG khai App Group ⇒ UserDefaults không chia sẻ).
-    @AppStorage("multiTunnelCount") private var multiTunnelCount = 1
+    ///
+    /// 20/10/2026 — MẶC ĐỊNH 4 (trước là 1), cùng con số với `VPNManager.defaultTunnelCount`.
+    /// Chỉ áp cho máy CHƯA từng đặt: ai đã tắt (lưu 1) thì giữ nguyên 1.
+    @AppStorage("multiTunnelCount") private var multiTunnelCount = VPNManager.defaultTunnelCount
     @State private var showingPaywall = false
     @State private var showingLogin = false
     @State private var showDeleteAccountConfirm = false

@@ -503,6 +503,11 @@ struct RelayFailoverWatch {
     /// Số lần đã đổi đường trong phiên.
     private(set) var advances = 0
 
+    /// `fruitlessToAdvance` mặc định 2 = **hợp đồng của thuật toán** (giữ nguyên để bộ test hành vi
+    /// 2 cửa sổ còn giá trị hồi quy). 20/10/2026 provider TRUYỀN RÕ **1** cho cấu hình phát hành
+    /// (`HysteriaPacketTunnelProvider.failoverAfterFruitlessRecoveries`): đo thật trên iPhone cho thấy
+    /// 2 cửa sổ làm việc đổi đường mất **~75–90 s**, quá lâu khi khách đang xem phim. Có test riêng
+    /// cho cấu hình 1 cửa sổ.
     init(windowS: TimeInterval = 15, fruitlessToAdvance: Int = 2, maxAdvances: Int = 3) {
         self.windowS = max(1, windowS)
         self.fruitlessToAdvance = max(1, fruitlessToAdvance)

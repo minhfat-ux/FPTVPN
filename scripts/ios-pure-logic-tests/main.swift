@@ -1769,11 +1769,25 @@ print("RelayFailoverWatch — failover duong khi chieu VE chet mot chieu (ca tha
 do {
     typealias W = RelayFailoverWatch
 
-    // Mặc định phải khớp hằng số của provider: cửa sổ 15 s, 2 lần vô ích, trần 3 lần đổi/phiên.
+    // Mặc định của THUẬT TOÁN: cửa sổ 15 s, 2 lần vô ích, trần 3 lần đổi/phiên.
     let defaults = W()
     checkEqual(defaults.windowS, 15, "cửa sổ đánh giá 15 s (dùng lại nhịp watchdog)")
-    checkEqual(defaults.fruitlessToAdvance, 2, "2 lần dựng lại vô ích liên tiếp ⇒ đổi đường")
+    checkEqual(defaults.fruitlessToAdvance, 2, "mặc định 2 lần vô ích liên tiếp ⇒ đổi đường")
     checkEqual(defaults.maxAdvances, 3, "trần đổi đường mỗi phiên = 3 (khớp maxNodeFailovers)")
+
+    // 20/10/2026 — CẤU HÌNH PHÁT HÀNH dùng 1 cửa sổ (provider truyền
+    // `failoverAfterFruitlessRecoveries = 1`). Ca thật build 87: 2 cửa sổ làm việc đổi đường mất
+    // ~75–90 s, quá lâu khi khách đang xem phim. Test dưới khoá đúng hành vi sẽ phát hành.
+    var shipped = W(fruitlessToAdvance: 1)
+    shipped.beginWindow(now: t0, fromGo: 5_000)
+    checkEqual(shipped.tick(now: t0.addingTimeInterval(15), fromGo: 5_000), .advanceRelay(1),
+               "cấu hình phát hành: 1 cửa sổ 15 s không có gói VỀ ⇒ đổi đường NGAY")
+    // `advances` chỉ tăng khi provider GỌI `noteAdvanced()` (sau khi đổi đường THẬT) — `tick` chỉ
+    // báo ý định. Khoá đúng hợp đồng đó thay vì giả định sai.
+    checkEqual(shipped.advances, 0, "tick chỉ BÁO ý định đổi đường, chưa tính là đã đổi")
+    shipped.noteAdvanced()
+    checkEqual(shipped.advances, 1, "noteAdvanced() mới tính 1 lần đổi đường")
+    checkEqual(shipped.fruitlessWindows, 0, "đổi đường xong thì xoá chuỗi vô ích")
 
     // (1) Rebuild mà delta `fromGo` = 0 trong CẢ cửa sổ ⇒ lần dựng lại đó VÔ ÍCH.
     var a = W()
