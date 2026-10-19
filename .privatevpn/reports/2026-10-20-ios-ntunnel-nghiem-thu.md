@@ -121,24 +121,36 @@ mạng toà nhà). Với N=4, chúng trải ra 4 tunnel ⇒ tổng > trần mộ
 nhưng video thực tế KHÔNG phải một luồng.** Phép A/B bằng `fast.com` hỏng vì chính nó chỉ mở ~1 luồng
 (N=4 đo được 1,13 tunnel), ngược hẳn với tải video thật (43 luồng/phút).
 
-## 8. Sự cố phát hiện cùng lúc: tunnel hỏng MỘT CHIỀU qua `vn1hy`, KHÔNG tự đổi relay
+## 8. Sự cố MỘT CHIỀU tạm thời trên đường (14:15–14:25) — và luật failover ĐÃ chạy đúng
 
-Trong lúc kiểm log cho §7, phiên 14:23–14:25 rơi vào trạng thái chết một chiều:
-
+Trong lúc kiểm log cho §7, một số phiên rơi vào trạng thái chết một chiều:
 ```
 bw: sample ... observed=0 ... lossProxy=100% ... rawWindowBytes=0
 tài nguyên: cầu vào 59/ra 0 (bỏ 15) | relay gửi 20 nhận 8 mở=yes | Go→ 0
 giám sát sống-còn: đủ 2 strike — TỰ DỰNG LẠI transport [chiều về im ≥15s ...]
 ```
-- Phía node-1 (đích của `vn1hy`) dịch vụ **vẫn active** và **có nhận** client của mình, nhưng log node
-  ghi: `accepting stream failed: timeout: no recent network activity` ⇒ chiều về không tới được máy.
-- 6 relay đều trả `426` từ phía server, `flowvpn-health-watch` chạy đúng nhịp ⇒ **watchdog server không
-  bắt được** kiểu hỏng này (nó chỉ kiểm "cổng WS sẵn sàng", không kiểm "dữ liệu có về không").
-- **Bug thật:** trong 20 lần `handshake ok` liên tiếp, **20/20 đều là `vn1hy`** — transport dựng lại
-  trên đúng relay hỏng, **không nhảy sang `relayURLCandidates` (`t1.…/relay/vn1hy`) hay
-  `relayNodeCandidates`**. Vì WS handshake vẫn "ok" nên tầng transport không coi relay là hỏng.
 
-**Đề xuất sửa (chưa làm):** sau **≥2 lần dựng lại** mà chiều về vẫn 0 gói trong ≥15 s ⇒ coi relay hiện
-tại là hỏng và **tiến sang cửa kế tiếp** trong danh sách ứng viên (đúng cơ chế `TransportLadder` đã có
-cho node), thay vì dựng lại mãi trên cùng một cửa. Đây là lỗi mức **P1** vì khách sẽ thấy "Connected mà
-không có mạng" và không có cách tự cứu.
+**Kết luận ban đầu của tôi ("transport không đổi relay") là SAI** — đã kiểm lại toàn bộ log và thấy
+luật failover **có chạy, 4 lần**:
+```
+14:15:34  đã đổi node/đường: vn1hy → vn2hy — 2 lần dựng lại transport mà vẫn 0 gói VỀ; lần 1 trong phiên
+14:17:09  đã đổi node/đường: vn2hy → vn3hy — …; lần 2 trong phiên
+14:21:01  đã đổi node/đường: vn1hy → vn2hy — …; lần 1 trong phiên
+14:24:42  đã đổi node/đường: vn1hy → vn2hy — …; lần 1 trong phiên
+```
+⇒ Máy **tự đổi relay/node** sau 2 cửa sổ 15 s không có gói về, đúng thiết kế (`RelayFailoverWatch`).
+
+**Nhưng có hai điều đáng sửa, và một điều đáng chú ý về nguyên nhân:**
+1. **Chậm**: từ lúc hỏng tới lúc đổi đường là **~75–90 s** (2 cửa sổ × 15 s + thời gian dựng lại + nhịp
+   watchdog). Với khách đang xem phim, 75 s "Connected mà không có mạng" là quá lâu ⇒ nên hạ ngưỡng
+   xuống **1 cửa sổ (~20 s)** hoặc cho cửa sổ ngắn hơn khi `lossProxy=100%`.
+2. **Nguyên nhân nhiều khả năng ở ĐƯỜNG LÊN của máy, không phải relay chết**: ba relay khác nhau
+   (`vn1hy`, `vn2hy`, `vn3hy`) liên tiếp đều "0 gói VỀ" trong cùng khoảng 14:15–14:25. Nếu chỉ một
+   relay chết thì đổi là xong; cả ba cùng một chiều ⇒ nghi Wi-Fi/đường lên của toà nhà lúc đó (đúng
+   số đo cũ: mất gói ~20%).
+3. **Hiện tại (14:27) đã hồi phục hoàn toàn**: `lossProxy=0%`, lưu lượng thật **3,04 Mbps** rồi
+   **5,66 Mbps** — mức cao nhất đo được từ trước tới nay qua tunnel. Vậy sự cố là **tạm thời**, và
+   đường không hỏng vĩnh viễn.
+
+Việc còn lại từ §8 (đã hạ mức độ ưu tiên): rút ngắn thời gian phát hiện + đổi đường; cân nhắc chỉ báo
+`lossProxy` vào cửa sổ quyết định.
