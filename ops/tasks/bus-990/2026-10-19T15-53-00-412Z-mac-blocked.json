@@ -1,0 +1,6 @@
+{
+ "type": "blocked",
+ "note": "CÙNG VIỆC bus-993, đã xong phần phát hành; chỉ còn §7d vì không có iPhone. Bản sửa đang phát = 1.4.7/87: tải thật 8.243.806 B, sha256 0a912cc9…, app+appex 87, manifest 87, codesign ĐẠT, appex bỏ ký feefe412… (đúng code đã chạy trong log máy thật 14:10–14:31). File cũ 8.327.903 B sha 7e306984… = build 80 ký lại, không phải cây 81–84. Sổ+tag 722b529/tag ios-v1.4.7-b87; marker latest=1.4.7/ipa_build=87. 27eb6e6 (N=4) KHÔNG phát; build 87 N=1 TẮT. §7d: cổng ios-log-acceptance.py báo oan WATCHDOG CÂM vì log chi tiết TẮT (0 dòng sống-còn: nhịp, 118 bw: sample) — đúng ra là exit 2 KHÔNG KIỂM ĐƯỢC; không sửa cổng/cắt phiên. devicectl 23:48 vẫn unavailable. CẦN: cắm iPhone 33987D6F, bật tunnel-log-on, Connect ≥2 phút, gửi relay.log → cổng exit 0 rồi done. Cảnh báo: app chỉ so latest_version nên máy 1.4.7/build 80–81 KHÔNG tự hiện 'Có bản mới'; phải gửi link /install/ios. Bằng chứng: docs/evidence/bus-993/README.md mục 8, commit 8093521.",
+ "actor": "mac",
+ "at": "2026-10-19T15:53:00.412Z"
+}
