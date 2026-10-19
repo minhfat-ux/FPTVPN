@@ -28,7 +28,8 @@ const {
 } = loadAreaHelpers();
 
 // Toàn bộ tab cũ trước khi chia khu — không được mất tab nào.
-const LEGACY_TABS = ["nodes", "users", "ios", "stats", "payments", "plans", "ai", "aiu"];
+// 08/10/2026: thêm "aikeys" (tab "License keys" cho khoá AI) — bản đang chạy đã có tab này.
+const LEGACY_TABS = ["nodes", "users", "ios", "stats", "payments", "plans", "ai", "aiu", "aikeys"];
 const AREAS = ["vpn", "ai", "system"];
 
 test("mọi tab cũ đều thuộc đúng một khu (không sót panel)", () => {

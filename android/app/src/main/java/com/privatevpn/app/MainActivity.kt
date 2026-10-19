@@ -126,8 +126,19 @@ private fun VPNFlowRoot(app: VPNFlowApp) {
     // Observe pending VpnService consent intent and launch it.
     val consentIntent by app.vpnManager.pendingConsent.collectAsState()
     LaunchedEffect(consentIntent) {
-        consentIntent?.let {
-            vpnConsentLauncher.launch(it)
+        val intent = consentIntent ?: return@LaunchedEffect
+        try {
+            vpnConsentLauncher.launch(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            // TV XIAOMI ĐÃ BỎ `com.android.vpndialogs` — hộp thoại xin quyền VPN của AOSP. Trước đây
+            // `launch()` ném ra ngoài ⇒ **app THOÁT ngay khi bấm Kết nối** (khách báo 23/09/2026; log
+            // lấy từ chính TV: `ActivityNotFoundException ... {com.android.vpndialogs/...ConfirmDialog}`
+            // đúng tại dòng này). Nay ghi log rồi đi tiếp như thể đã đồng ý: ROM nào cấp quyền sẵn thì
+            // tunnel lên được, ROM nào không thì `establish()` trả null và app báo lỗi RÕ RÀNG thay vì tắt.
+            com.privatevpn.app.diag.DiagnosticsLog.warn(
+                "vpn: hệ thống KHÔNG có hộp thoại xin quyền VPN (${e.message}) -> thử kết nối trực tiếp",
+            )
+            app.vpnManager.resumeAfterConsent()
         }
     }
 

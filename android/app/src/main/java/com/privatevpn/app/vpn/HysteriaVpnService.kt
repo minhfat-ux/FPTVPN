@@ -307,6 +307,17 @@ class HysteriaVpnService : VpnService() {
                     }
                 }
             }
+        } catch (t: Throwable) {
+            // KHÔNG để một lỗi bất ngờ giết cả tiến trình: khách báo 23/09/2026 "cài lên TV Xiaomi
+            // Redmi, bật VPN lên là thoát app". Trước đây vòng này chỉ có try/finally nên mọi
+            // exception thoát ra khỏi vòng (ví dụ API chỉ có/khác trên Android TV) là crash app.
+            // Nay: ghi vết, báo lỗi lên UI, giữ app sống để người dùng thử lại / gửi log cho mình.
+            DiagnosticsLog.warn(
+                "tunnel: lỗi không mong đợi trong vòng kết nối -> giữ app sống: " +
+                    "${t.javaClass.name}: ${t.message}\n${t.stackTraceToString().take(4_000)}",
+            )
+            android.util.Log.e("VPNFLOW_DEBUG", "hysteria: tunnel loop crashed: ${t.message}", t)
+            reportExit("tunnel error: ${t.javaClass.simpleName}: ${t.message}".take(200))
         } finally {
             closeTun()
         }
@@ -621,13 +632,27 @@ class HysteriaVpnService : VpnService() {
         }
         // Lần 1 hỏng: nhiều khả năng fd chưa tồn tại. Tạo fd rồi thử lại.
         val bindError = runCatching { sock.bind(java.net.InetSocketAddress(0)) }.exceptionOrNull()
-        val second = runCatching { protect(sock) }
-        val secondOk = second.getOrDefault(false)
+        var second = runCatching { protect(sock) }
+        var secondOk = second.getOrDefault(false)
+        var afterTun = false
+        if (!secondOk) {
+            // TV Xiaomi (MiTV-ASTP0 Android 9 / MiTV-ASSU0 Android 14, đo 23/09/2026): `protect()`
+            // trả **false** cho MỌI socket khi VPN chưa được dựng (chưa có TUN) — trên điện thoại
+            // lần thử thứ hai là true nên lỗi này không lộ. Hệ quả: socket của cầu WS/relay đi XUYÊN
+            // QUA chính tunnel ⇒ chết ngay ⇒ app treo "connecting" vĩnh viễn.
+            // Cách chữa: dựng TUN trước rồi protect lại. Đây là ngoại lệ có kiểm soát cho đúng ca
+            // "protect không dùng được" — lượt kết nối vẫn tiếp tục ngay sau đó nên không treo mạng.
+            afterTun = true
+            runCatching { ensureTun() }
+            second = runCatching { protect(sock) }
+            secondOk = second.getOrDefault(false)
+        }
         fun why(r: Result<Boolean>) = r.exceptionOrNull()?.let { " (${it.javaClass.simpleName}: ${it.message})" } ?: ""
         DiagnosticsLog.log(
             "protect[$tag]: lần 1=false${why(first)}, bind=>" +
                 (if (bindError == null) "ok" else "${bindError.javaClass.simpleName}: ${bindError.message}") +
-                ", lần 2=$secondOk${why(second)}",
+                ", lần 2=$secondOk${why(second)}" +
+                (if (afterTun) " (sau khi dựng TUN)" else ""),
         )
         if (!secondOk) {
             DiagnosticsLog.warn(
@@ -773,7 +798,14 @@ class HysteriaVpnService : VpnService() {
         // App Trung Quốc (WeChat, Alipay, Meituan, Didi, Taobao…) phải đi ĐƯỜNG RIÊNG, không qua
         // VPN — nếu đi full-tunnel thì server TQ thấy IP nước ngoài và cắt phiên (yêu cầu 22/09/2026).
         runCatching { CnAppBypass.applyTo(builder, this) }
-        val tun = builder.establish() ?: throw IllegalStateException("establish failed")
+        val tun = builder.establish()
+        if (tun == null) {
+            // Android TV / box có thể TỪ CHỐI cấp TUN (VPN chưa được chấp thuận ở màn hình TV, hoặc
+            // thiết bị không cho app dựng VPN). Ghi rõ để đọc log là biết ngay, rồi ném ra cho lớp
+            // trên xử như "lượt này hỏng" — KHÔNG để nó thành crash (xem catch trong runTunnel).
+            DiagnosticsLog.warn("vpn: establish() trả về NULL (VPN bị từ chối/chưa được cấp?) -> không có TUN")
+            throw IllegalStateException("establish failed (null tun)")
+        }
         DiagnosticsLog.log(
             "vpn: establish ok tun=${tun.fd} underlying=" + runCatching { underlyingSummary() }.getOrDefault("?"),
         )
