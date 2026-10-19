@@ -91,8 +91,8 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `bus-976` | verified | Gui email Android 1.4.5 (37) + kenh Android TV moi — chu du an chot co | `-` |
 | `bus-981` | verified | HOAN email 1.4.5 -> gui MOT email 1.4.6 (38) kem kenh Android TV | `-` |
 | `bus-982` | verified | HOAN email 1.4.5 -> gui MOT email 1.4.6 (38) kem kenh Android TV | `-` |
-| `bus-990` | reopened | URGENT: iOS khong connect duoc — chu du an bao kiem tra (kenh dang pha | `AGENT_NAME=MAC node ops/task.mjs ack bus-990 --push   # làm lại` |
-| `bus-993` | acked | XAC NHAN tu chu du an: iOS 1.4.7 build 81 LOI KHONG CONNECT — kem 2 ph | `node ops/task.mjs progress bus-993 --note "…" --push` |
+| `bus-990` | acked | URGENT: iOS khong connect duoc — chu du an bao kiem tra (kenh dang pha | `node ops/task.mjs progress bus-990 --note "…" --push` |
+| `bus-993` | blocked | XAC NHAN tu chu du an: iOS 1.4.7 build 81 LOI KHONG CONNECT — kem 2 ph | `bên giao cần gỡ vướng` |
 | `tasks` | unknown |  | `-` |
 
 <!-- AUTO-TASKS:END -->
