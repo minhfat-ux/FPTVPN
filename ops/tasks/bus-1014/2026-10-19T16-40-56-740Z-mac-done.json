@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "owner=b3cb14bc (FPTVPN main: tam giu 87 de nghiem thu, live_exception sha 0a912cc9/8243806); correction=6e669f8 (release/releases.jsonl append origin=correction: #993 la tin WIN, #998 den sau upload 2m31s, can cu dung la b3cb14bc); evidence=a274bf5 (docs/evidence/bus-1014 + acceptance-build87.txt + build87-code-identity.txt); cmd='python3 scripts/ios-log-acceptance.py .privatevpn/tmp/b88/ext/relay.log --min-seconds 90' => exit 1, 1/66 phien WATCHDOG CAM (log chi tiet BAT 294 mau nhung 0 nhip tim; iPhone 33987D6F unavailable nen khong co phien sach tunnel-log-on); 27eb6e6 KHONG co trong build 87 (binary 13:56:58 truoc commit 15:08:04; thieu marker 'extension khong tra loi trong') => 87=N mac dinh 1, 88 moi co N=4; kenh khong doi, khong phat them; §7d tiep tuc bus-993/990.",
+ "actor": "mac",
+ "at": "2026-10-19T16:40:56.742Z"
+}
