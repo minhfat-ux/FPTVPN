@@ -1,9 +1,9 @@
 # iOS N tunnel (hút băng thông) — biên bản nghiệm thu 20/10/2026
 
-**Kết luận một dòng:** N tunnel **CHẠY ĐÚNG kỹ thuật** (4 tunnel mở thật, cùng node), nhưng
-**CHƯA chứng minh được lợi ích** trên mạng hiện tại (+26% đỉnh, không phải 4×) ⇒ **không đưa vào bản
-phát hành**; giữ ở bản thử (build 87). Số đo còn phủ định một giả thuyết quan trọng: video chậm
-**không** phải do trần tunnel.
+**Kết luận một dòng:** N tunnel **CHẠY ĐÚNG kỹ thuật** (4 tunnel mở thật, cùng node). Lợi ích
+**CHƯA được chứng minh** vì phép đo A/B chỉ tạo ~1 luồng (N=4 đạt 1,13 tunnel) ⇒ **chưa chốt được
+lợi ích, cũng chưa phủ định**; muốn chốt phải đo ≥8 luồng song song. Số đo phủ định một giả thuyết
+quan trọng: video chậm **không** phải do trần tunnel (một tunnel đã chở 104% số khai).
 
 **Bản thử:** iOS 1.4.7 **build 87** (link `Multitunnel.xcframework`, IPA md5 `d01a13c6761e0056b6ccfbc13a6d45f6`,
 8.243.608 B). Máy: iPhone `33987D6F` (iPhone 14 Pro Max), Wi-Fi SSID "FPT Software Project".
@@ -48,18 +48,22 @@ bất biến F3 (khác node là IP khách đổi giữa phiên). (Dòng `+tunnel
 
 ## 3. Số đo A/B (cùng trang `fast.com`, cùng mạng, chỉ khác số tunnel)
 
-| Cấu hình | Số khai ↓ (mỗi tunnel) | Đỉnh thật qua tunnel | Trung bình cửa sổ đo |
-|---|---|---|---|
-| **N=1** (14:10:30–14:11:34) | 4663 kbps | **4,35 Mbps** | 1,55 Mbps |
-| **N=4** (14:08:52–14:09:56) | 4221–4663 kbps | **5,48 Mbps** | 1,49 Mbps |
+| Cấu hình | Mẫu đỉnh | Byte/10 s | Tốc độ | Số khai ↓ (mỗi tunnel) | Tỷ lệ |
+|---|---|---|---|---|---|
+| **N=1** (14:10:51) | 5.441.406 B | 4,35 Mbps | 4183 kbps | **104%** của 1 tunnel |
+| **N=4** (14:09:23) | 6.853.578 B | 5,48 Mbps | 4845 kbps | **113%** của 1 tunnel |
 
 Nguồn số: trường `rawWindowBytes` (byte thật qua cầu trong cửa sổ 10 s) của dòng `bw: sample`.
 
-**Đọc ra:**
-- N=4 chỉ hơn N=1 **~26%**, không phải 4×. Với 4 tunnel mỗi tunnel khai ~4,2 Mbps thì trần lý thuyết
-  là ~17 Mbps; thực tế 5,5 Mbps ⇒ các luồng của phép đo **không trải đều** 4 tunnel, hoặc đường không
-  chở nổi 4 luồng QUIC cùng lúc. **Lợi ích của N CHƯA được chứng minh.**
-- **N=1 đạt 4,35/4,66 Mbps = 93% số khai** ⇒ khi có nhiều luồng, MỘT tunnel đã chở gần hết số khai.
+**Đọc ra (đã sửa lại sau khi soi mẫu đỉnh — bản trước đọc sai hướng):**
+- **Một tunnel chở được 104% số khai** ⇒ tunnel đơn KHÔNG bị bóp; số khai 4,2–4,8 Mbps là sát trần thật
+  của MỘT luồng trên đường này.
+- **N=4 mà tổng chỉ bằng 1,13 tunnel** ⇒ gần như toàn bộ tải của phép đo đi qua **MỘT** tunnel, tức
+  `fast.com` chỉ tạo ~1 luồng. Với 2 luồng trở lên, kỳ vọng ~8–9 Mbps.
+  ⇒ **Đây là hạn chế của PHÉP ĐO, không phải bằng chứng N không cộng dồn.** Lợi ích của N vẫn CHƯA
+  được chứng minh, nhưng cũng CHƯA bị phủ định — cần phép đo ≥N luồng song song có kiểm soát.
+- Vì `multiClient` chia luồng theo 5-tuple (bắt buộc, chia theo gói làm đảo thứ tự ⇒ TCP trong sập),
+  N chỉ cộng dồn khi có ≥N kết nối đồng thời. Một video = một luồng ⇒ N không giúp video.
 
 ## 4. Phát hiện quan trọng: video chậm KHÔNG phải do trần tunnel
 
