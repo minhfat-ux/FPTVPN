@@ -123,6 +123,29 @@ class HysteriaVpnService : VpnService() {
     @Volatile private var wsBridgeStats: WSRelayBridge? = null
 
     /**
+     * Tổng byte RX của **TẤT CẢ** cầu WS đang mở (N tunnel), không chỉ cầu chính.
+     *
+     * Vì sao phải cộng: ở chế độ N tunnel, `multiClient` chia LUỒNG cho N tunnel ⇒ byte nằm rải
+     * trên N cầu. Chỉ đọc cầu chính thì vòng lấy mẫu thấy đúng 1/N lưu lượng ⇒ Diagnostics báo
+     * thấp hơn thực tế N lần và ramp tưởng mạng yếu rồi hạ số khai oan.
+     * `-1` = chưa có cầu nào (nguồn không dùng được, giống quy ước cũ).
+     */
+    private fun wsRxBytes(): Long {
+        val main = wsBridgeStats ?: return -1L
+        var total = main.rxBytes()
+        synchronized(extraBridges) { for (b in extraBridges) total += b.rxBytes() }
+        return total
+    }
+
+    /** Tổng byte TX của mọi cầu WS (đối xứng với [wsRxBytes]). */
+    private fun wsTxBytes(): Long {
+        val main = wsBridgeStats ?: return -1L
+        var total = main.txBytes()
+        synchronized(extraBridges) { for (b in extraBridges) total += b.txBytes() }
+        return total
+    }
+
+    /**
      * Số tunnel song song người dùng chọn cho phiên này (**1 = TẮT**, hành vi cũ).
      * Port từ iOS `167ba9d` (20/10/2026), xem `Config.MULTI_TUNNEL_MAX`.
      *
@@ -780,16 +803,25 @@ class HysteriaVpnService : VpnService() {
             attemptUpKbps = minOf(attemptUpKbps, bwUpKbps)
             attemptDownKbps = minOf(attemptDownKbps, bwDownKbps)
         }
-        // SỐ KHAI = NĂNG LỰC TỔNG = (một luồng) × N **khi mốc đang dùng đúng là năng lực MỘT luồng**.
+        // SỐ KHAI = NĂNG LỰC TỔNG = (một luồng) × N — đúng handoff §2.4 và iOS `167ba9d`.
         //
-        // Hai loại mốc, KHÔNG được nhân như nhau:
-        //  - Hồ sơ/nấc tĩnh (`REASON_PROFILE`, chưa có số đo) = 30/100 Mbps của MỘT luồng ⇒ nhân N.
-        //  - Số đo/ramp: vòng lấy mẫu đọc lưu lượng `tun0` = TỔNG của cả N tunnel, nên con số đã là
-        //    năng lực tổng ⇒ nhân N nữa là khai vống N lần (đo thật: server đã bật
-        //    `ignoreClientBandwidth`, Brutal sẽ đẩy đúng theo số vống ⇒ dồn gói ở chặng giữa).
-        val lanes = if (bwReason == BandwidthPolicy.REASON_PROFILE) n else 1
-        attemptUpKbps = MultiTunnelPolicy.declaredKbps(attemptUpKbps, lanes)
-        attemptDownKbps = MultiTunnelPolicy.declaredKbps(attemptDownKbps, lanes)
+        // Mốc dùng ở đây là năng lực **MỘT luồng**: `NetworkPreMeasure.measureOnce` mở ĐÚNG MỘT
+        // kết nối (giống `measureOnce` bên iOS), còn nấc tĩnh 30/100 Mbps cũng là số của một luồng.
+        // Mạng dùng chung giới hạn theo TỪNG kết nối nên N tunnel ≈ N × một luồng — đo thật
+        // 19/10/2026: 1 luồng 4–12 Mbps, 8 luồng 72–81 Mbps. Không nhân thì Brutal CC bị khoá ở
+        // mức một luồng ⇒ bật N cũng không nhanh hơn.
+        //
+        // Rủi ro khai vống (ramp giữa phiên đo lưu lượng TỔNG của `tun0` rồi ghi vào bộ nhớ) được
+        // chặn hai lớp: (a) số khai bị `min()` với nấc tĩnh trước khi nhân, (b) server đã bật
+        // `ignoreClientBandwidth` nên Brutal tự ước lượng, số khai không cắt được băng thông thật.
+        // Chốt số khai vào BIẾN CỤC BỘ: `refreshMeteredState()` (chạy khi đổi mạng và trong
+        // `reportUp()`) ghi đè `attemptUpKbps/attemptDownKbps` về số MỘT luồng. Đọc lại field
+        // sau đó là mất phần ×N — đo trên máy thật 19/10/2026: log in `up=2081 down=6938`
+        // (số một luồng) dù N=4. Dùng biến cục bộ và gán lại NGAY trước mỗi lần connect.
+        val declaredUp = MultiTunnelPolicy.declaredKbps(attemptUpKbps, n)
+        val declaredDown = MultiTunnelPolicy.declaredKbps(attemptDownKbps, n)
+        attemptUpKbps = declaredUp
+        attemptDownKbps = declaredDown
         val socks = ArrayList<java.net.DatagramSocket>()
         try {
             var established = 0
@@ -802,6 +834,8 @@ class HysteriaVpnService : VpnService() {
                 DiagnosticsLog.warn("n-tunnel: không lấy được fd cầu chính: ${e.message}")
                 return 0
             }
+            attemptUpKbps = declaredUp
+            attemptDownKbps = declaredDown
             connectClient(main.localPort, mainFd, tcp = false)
             established++
             // (1..N-1) tunnel PHỤ: BEST-EFFORT — lỗi thì bỏ riêng tunnel đó, KHÔNG được làm
@@ -828,6 +862,8 @@ class HysteriaVpnService : VpnService() {
                     continue
                 }
                 try {
+                    attemptUpKbps = declaredUp
+                    attemptDownKbps = declaredDown
                     connectClientSlot(index + 1, bridge.localPort, fd)
                 } catch (e: Exception) {
                     DiagnosticsLog.warn("n-tunnel: ConnectSlot $label lỗi: ${e.message} -> bỏ tunnel phụ này")
@@ -848,7 +884,7 @@ class HysteriaVpnService : VpnService() {
             multiTunnelServing = true
             DiagnosticsLog.log(
                 "n-tunnel: $established/$n tunnel sẵn sàng " +
-                    "(up=${attemptUpKbps} down=${attemptDownKbps} kbps) serve() start",
+                    "(up=$declaredUp down=$declaredDown kbps, đã ×$n) serve() start",
             )
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: UP via ws-n$established tun=$tunFd")
             Mobile.serve(tunFd, HY_MTU.toLong(), HY_TUN_IPV4, HY_TUN_IPV6)
@@ -1446,7 +1482,7 @@ class HysteriaVpnService : VpnService() {
                 if (byteSrc == 0) {
                     byteSrc = when {
                         memory.tunRxBytes() >= 0 -> 1
-                        onWsRelay && (wsBridgeStats?.rxBytes() ?: -1L) >= 0 -> 3
+                        onWsRelay && wsRxBytes() >= 0 -> 3
                         memory.uidRxBytes() >= 0 -> 2
                         else -> 0
                     }
@@ -1463,7 +1499,7 @@ class HysteriaVpnService : VpnService() {
                 val rx = when (byteSrc) {
                     1 -> memory.tunRxBytes()
                     2 -> memory.uidRxBytes()
-                    else -> wsBridgeStats?.rxBytes() ?: -1L
+                    else -> wsRxBytes()
                 }
                 if (rx < 0) continue
                 if (lastRx < 0 || rx < lastRx) {
@@ -1516,7 +1552,7 @@ class HysteriaVpnService : VpnService() {
                     // TX lấy ĐÚNG thang đo với RX đang dùng (xem khối chọn nguồn byte ở trên).
                     val txNow = when (byteSrc) {
                         2 -> memory.uidTxBytes()
-                        3 -> wsBridgeStats?.txBytes() ?: -1L
+                        3 -> wsTxBytes()
                         else -> memory.tunTxBytes()
                     }
                     val upKbps = if (lastTxBytes >= 0 && txNow >= lastTxBytes) {
