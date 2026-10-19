@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận reopened (#1003). Đã có log máy thật build 87 sẵn trong .privatevpn/tmp/b88/ext/relay.log (14:10–14:31, binary 13:56:58 = đúng IPA đã phát); sẽ chạy scripts/ios-log-acceptance.py, đối chiếu false-positive watchdog do log chi tiết TẮT, rồi done kèm kết quả thật. Sổ+tag b87 đã có trên origin (722b529).",
+ "actor": "mac",
+ "at": "2026-10-19T15:37:41.770Z"
+}
