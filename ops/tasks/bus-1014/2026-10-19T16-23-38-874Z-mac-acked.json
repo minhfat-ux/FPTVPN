@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận bus #1014. Đã kiểm lại: kênh iOS đang phát IPA 1.4.7/build 87 (8.243.806 B, sha 0a912cc9…), trong khi release-lock ghim 80. Đang trả lời (a) nguồn gốc/commit 87 và trạng thái §7d, (c) bổ sung ipa_build vào payload. Giữ/lui 87 chờ chủ dự án — MAC không tự đổi kênh.",
+ "actor": "mac",
+ "at": "2026-10-19T16:23:38.874Z"
+}
