@@ -134,8 +134,12 @@ final class VPNManager: ObservableObject {
     }
 
     func connect(store: VPNConfigStore, authStore: AuthSessionStore) async {
-        // Quyền vị trí ⇒ đọc được SSID ⇒ bộ nhớ băng thông tách theo từng mạng (xem chú thích trên).
-        requestWiFiInfoPermissionIfNeeded()
+        // 20/10/2026 (yêu cầu chủ dự án): nút Connect phải QUAY NGAY khi bấm.
+        // `requestWiFiInfoPermissionIfNeeded()` bật HỘP THOẠI XIN QUYỀN của iOS — trước đây gọi
+        // ở đây (trước khi đặt `.connecting`) nên cú bấm đầu tiên "không có phản ứng gì" cho tới
+        // khi khách trả lời hộp thoại. Nay: đặt trạng thái trước, xin quyền sau (chỉ ảnh hưởng
+        // việc đọc SSID cho bộ nhớ băng thông, không chặn đường kết nối).
+        if state == .disconnected || state == .failed { state = .connecting }
         // Báo "đang kết nối" NGAY, TRƯỚC mọi lời gọi mạng — giống Android
         // (VPNManager.kt: `_state.value = VPNState.CONNECTING` rồi mới `claimDevice`).
         //
@@ -164,6 +168,8 @@ final class VPNManager: ObservableObject {
             if state.isTransitioning { return }
         }
         state = .connecting
+        // Quyền vị trí ⇒ đọc được SSID ⇒ bộ nhớ băng thông tách theo từng mạng.
+        requestWiFiInfoPermissionIfNeeded()
         // TRƯỚC khi cấp cấu hình mới và ghi preferences: dọn phiên CŨ cho sạch.
         // Thiếu bước này, Connect lại trong cùng vòng đời app là "lên mà không có mạng" và
         // chỉ force-quit app mới hết (đo trên iPad 19/09) — xem `prepareForFreshSession`.
