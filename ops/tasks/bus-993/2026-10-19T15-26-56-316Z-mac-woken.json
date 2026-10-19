@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-10-19T15:26:56.316Z",
+ "note": "connector VPS: reopened từ win — bus-993 · XAC NHAN tu chu du an: iOS 1.4.7 build 81 LOI KHONG CONNECT — kem 2 phat hien tren IPA dang phat",
+ "via": "dsh --profile headless \"{prompt}\""
+}
