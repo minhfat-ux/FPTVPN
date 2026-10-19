@@ -11,7 +11,7 @@ namespace PrivateVPNWindows.Core.Tests;
 /// Watchdog dùng phép thử CHỦ ĐỘNG qua tunnel và chỉ kết luận sau nhiều lần thất bại liên tiếp —
 /// các test dưới đây khoá đúng hành vi đó.
 ///
-/// Từ 1.4.7 KHÔNG còn nguồn số byte luỹ kế (sing-box bị bỏ), nên bản dùng thật
+/// Từ 1.4.8 KHÔNG còn nguồn số byte luỹ kế (sing-box bị bỏ), nên bản dùng thật
 /// (<see cref="RelayHealthWatchdog.ForRelayTunnel"/>) truyền <c>-1</c> cho phép đọc lưu lượng; test
 /// <see cref="KhongCoSoLieuLuuLuong_ProbeThanhCongThiKhongBaoDung"/> khoá đúng hình dạng đó.
 /// </summary>
@@ -142,7 +142,7 @@ public class RelayHealthWatchdogTests
     }
 
     /// <summary>
-    /// Hình dạng THẬT của bản 1.4.7: không còn clash_api nên phép đọc lưu lượng luôn trả -1 (không
+    /// Hình dạng THẬT của bản 1.4.8: không còn clash_api nên phép đọc lưu lượng luôn trả -1 (không
     /// có số liệu). Khi đó watchdog chỉ còn phép thử chủ động — tunnel thông thì KHÔNG được báo đứng,
     /// nếu không khách để máy rảnh sẽ bị cắt VPN oan.
     /// </summary>

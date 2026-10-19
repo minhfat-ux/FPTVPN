@@ -106,6 +106,11 @@ public static class SingBoxConfigBuilder
         "iqiyi.com", "youku.com", "weibo.com", "zhihu.com", "xiaohongshu.com", "163.com",
         // Du lịch / văn phòng
         "qunar.com", "ctrip.com", "wps.com",
+        // Đo lại 19/10/2026 (mạng TQ, phân giải qua resolver công cộng): hai nhóm dưới đây trả về
+        // IP CDN NƯỚC NGOÀI (aliyun.com → 47.74.138.66, huawei.com → 184.87.97.63) nên không nằm
+        // trong dải TQ và bị đẩy vào tunnel — bổ sung vào danh sách tên miền đi thẳng.
+        "aliyun.com", "aliyuncs.com",
+        "huawei.com", "huaweicloud.com", "hicloud.com",
     };
 
     // JsonNode.ToJsonString cần TypeInfoResolver (net8.0 từ chối options chỉ có WriteIndented).
@@ -119,7 +124,7 @@ public static class SingBoxConfigBuilder
     /// Cấu hình cho <c>flowvpnrelay.exe -c &lt;file&gt;</c>.
     /// <paramref name="server"/> là <c>&lt;ip-node&gt;:8443</c> — chỉ còn là danh tính khi đi qua relay.
     ///
-    /// Từ 1.4.7 cấu hình này mang LUÔN khối <c>tun</c>: chính flowvpnrelay.exe dựng TUN +
+    /// Từ 1.4.8 cấu hình này mang LUÔN khối <c>tun</c>: chính flowvpnrelay.exe dựng TUN +
     /// auto_route + bypass TQ, không còn tiến trình sing-box thứ hai (xem
     /// <c>tools/hysteria-relay/tun.go</c> — nguồn sự thật của schema).
     /// <paramref name="chinaCidrs"/> là các dải IP Trung Quốc đi THẲNG, không vào tunnel; null/rỗng
@@ -164,9 +169,38 @@ public static class SingBoxConfigBuilder
             ["socks5"] = new JsonObject { ["listen"] = $"127.0.0.1:{socksPort}" },
             ["dialTimeoutSec"] = dialTimeoutSec,
             ["tun"] = BuildTun(chinaCidrs, tunName, tunAddress, tunMtu),
+            ["dns"] = BuildDns(),
         };
 
         return relay.ToJsonString(WriteOptions);
+    }
+
+    /// <summary>
+    /// Khối <c>dns</c>: bộ chia DNS của flowvpnrelay (xem <c>tools/hysteria-relay/dns.go</c>).
+    ///
+    /// App đặt DNS của adapter TUN về đúng địa chỉ TUN, ở đó bộ chia nghe cổng 53. Với mỗi truy vấn
+    /// nó hỏi resolver nội địa TQ trước; chỉ nhận câu trả lời khi MỌI bản ghi A/AAAA nằm trong dải
+    /// TQ (để rule đi-thẳng theo IP khớp được), còn lại mới hỏi resolver công cộng qua tunnel. Nhờ
+    /// vậy tên miền TQ nhận IP TQ (đi thẳng, nhanh) mà google/youtube vẫn ra IP thật.
+    ///
+    /// <c>cnSuffixes</c> chỉ là lối tắt cho nhóm đã biết: khớp tên miền thì hỏi resolver nội địa cho
+    /// MỌI loại bản ghi (kể cả HTTPS/SVCB), đúng như rule <c>domain_suffix</c> của bản 1.4.6.
+    /// </summary>
+    private static JsonObject BuildDns()
+    {
+        var suffixes = new JsonArray();
+        foreach (var suffix in ChinaDirectDomainSuffixes.Concat(ChinaServiceDomainSuffixes))
+        {
+            suffixes.Add(suffix);
+        }
+
+        return new JsonObject
+        {
+            ["listen"] = $"{HysteriaRelayDefaults.TunDnsServer}:{HysteriaRelayDefaults.TunDnsPort}",
+            ["cn"] = $"{HysteriaRelayDefaults.ChinaDnsUpstream}:{HysteriaRelayDefaults.TunDnsPort}",
+            ["remote"] = $"{HysteriaRelayDefaults.RemoteDnsUpstream}:{HysteriaRelayDefaults.TunDnsPort}",
+            ["cnSuffixes"] = suffixes,
+        };
     }
 
     /// <summary>

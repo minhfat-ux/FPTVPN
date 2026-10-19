@@ -138,7 +138,7 @@ function New-SignWrapper([string]$signtool, [string[]]$baseArguments, [string]$p
 
 # 1) binary tunnel bắt buộc: 2 file cho tunnel WireGuard userspace + 1 file cho đường
 # "hysteria2 bọc trong WebSocket" — flowvpnrelay = hysteria2-over-WS + SOCKS5 + TUN/auto-route/
-# bypass TQ, MỘT tiến trình duy nhất. Từ 1.4.7 KHÔNG còn sing-box.exe: máy khách bật Smart App
+# bypass TQ, MỘT tiến trình duy nhất. Từ 1.4.8 KHÔNG còn sing-box.exe: máy khách bật Smart App
 # Control chặn binary bên thứ ba chưa ký (CodeIntegrity 3033/3077/3118, Win32 4551), xem
 # windows/assets/THIRD_PARTY.md §4.
 # Thiếu bất kỳ file nào thì bộ cài vẫn tạo được nhưng đường tương ứng không chạy — chặn ở đây.

@@ -10,7 +10,7 @@ namespace VpnFlow.Core.Tunnel;
 /// trường hợp tunnel "đứng" (tiến trình vẫn sống nhưng không truyền được dữ liệu) thì app giữ nguyên
 /// route full-tunnel trỏ vào đường chết ⇒ máy như mất mạng mà không có cảnh báo nào.
 ///
-/// Cách phát hiện (từ 1.4.7): phép thử CHỦ ĐỘNG qua chính tunnel (GET một URL health của mình) thất
+/// Cách phát hiện (từ 1.4.8): phép thử CHỦ ĐỘNG qua chính tunnel (GET một URL health của mình) thất
 /// bại <see cref="ProbeFailures"/> lần liên tiếp. Trước đây còn một tín hiệu thứ hai — số byte luỹ kế
 /// đọc từ clash_api của sing-box — nhưng sing-box đã bị bỏ (xem <see cref="HysteriaRelayDefaults"/>)
 /// nên không còn nguồn số đó; bù lại, phép thử chủ động vốn đã là tín hiệu QUYẾT ĐỊNH, còn số byte chỉ

@@ -16,7 +16,7 @@ file đã có và in sha256 của cả ba file ở cuối).
 |---|---|---|
 | `wintun.dll` | 427 552 bytes | `e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce` |
 | `wireguard-go.exe` | 3 079 680 bytes | `fd257c7f42284af3d361547940c83bb61f786b8a9ef57e88e49b8a52f39ec2e9` |
-| `flowvpnrelay.exe` | 12 729 856 bytes | `0c51f2bb81dd194a2bbf54fe31a8f1ea928b4ce45c5e1f070e7a2778cd93de2e` |
+| `flowvpnrelay.exe` | 12 788 736 bytes | `ce6fd67c7407979bb8db4dd0acc809ceef77f21b5336076d2053d322ba3c974e` |
 
 ⓘ `flowvpnrelay.exe` là bản build của CHÍNH chúng ta (mã nguồn trong repo:
 `tools/hysteria-relay/`), nên hash sẽ đổi mỗi lần build lại — cập nhật bảng này khi đổi.
@@ -201,7 +201,7 @@ Go dùng để dựng: `go1.23.4 darwin/arm64` (đặt tại `.tools/go`, `go.mo
   dòng `TUNREADY`. Xoá file cũ rồi chạy `bash windows/assets/fetch-assets.sh`.
   (Đã có thật 13/10/2026: asset cũ `cec7469…` build 19/09/2026 **chưa có phần TUN** — khi chạy với
   cấu hình có khối `tun` nó chỉ in `READY … socks5=…`, không tạo adapter `flowvpntun`, không in
-  `TUNFAIL`. Asset hiện tại `0c51f2bb…` đã có `TUNREADY`/`TUNFAIL`/`flowvpntun`.)
+  `TUNFAIL`. Asset hiện tại `ce6fd67c…` đã có `TUNREADY`/`TUNFAIL`/`flowvpntun` và bộ chia DNS `dns.go`.)
 - **Cách dựng:** `TARGETS="windows/amd64" OUT_DIR=<workdir> bash tools/hysteria-relay/build.sh`
   — script clone hysteria tag **`app/v2.12.2`** rồi COPY ba file trên vào checkout
   (`app/flowvpnrelay/main.go`, `app/flowvpnrelay/tun.go`, `app/internal/wsrelay/wsrelay.go`);

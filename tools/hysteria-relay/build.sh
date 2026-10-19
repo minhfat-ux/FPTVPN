@@ -4,10 +4,10 @@
 #   ./build.sh                 # mac arm64 + windows amd64 + linux amd64
 #   TARGETS="darwin/arm64" ./build.sh
 #
-# Không sửa file nào của hysteria: script chỉ COPY thêm ba file vào checkout
-# (app/internal/wsrelay/wsrelay.go, app/flowvpnrelay/main.go, app/flowvpnrelay/tun.go)
-# rồi build — nhờ vậy import được package `internal/...` của chính module đó mà
-# upstream vẫn nguyên bản.
+# Không sửa file nào của hysteria: script chỉ COPY thêm bốn file vào checkout
+# (app/internal/wsrelay/wsrelay.go, app/flowvpnrelay/main.go, app/flowvpnrelay/tun.go,
+# app/flowvpnrelay/dns.go) rồi build — nhờ vậy import được package `internal/...` của
+# chính module đó mà upstream vẫn nguyên bản.
 #
 # Yêu cầu: Go 1.25+, git, mạng (clone hysteria + tải gorilla/websocket lần đầu).
 set -euo pipefail
@@ -33,6 +33,7 @@ mkdir -p "$SRC/app/internal/wsrelay" "$SRC/app/flowvpnrelay"
 cp "$HERE/wsrelay.go" "$SRC/app/internal/wsrelay/wsrelay.go"
 cp "$HERE/runner.go" "$SRC/app/flowvpnrelay/main.go"
 cp "$HERE/tun.go" "$SRC/app/flowvpnrelay/tun.go"
+cp "$HERE/dns.go" "$SRC/app/flowvpnrelay/dns.go"
 
 echo "==> nạp gorilla/websocket (dependency duy nhất thêm vào bản build)"
 (cd "$SRC/app" && go get github.com/gorilla/websocket@v1.5.3 >/dev/null)

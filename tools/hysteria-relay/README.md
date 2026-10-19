@@ -6,7 +6,9 @@ tới `/relay/vn*hy` sau Cloudflare, rồi tự dựng **TUN + auto-route** (kè
 IP Trung Quốc) và mở **SOCKS5 (TCP + UDP)** tại chỗ cho phần còn lại của client.
 
 Từ 1.4.7 (`tun.go`) TUN nằm **trong chính binary này** — không cần `sing-box.exe`
-nữa. Xem §TUN bên dưới để biết vì sao.
+nữa. Xem §TUN bên dưới để biết vì sao. Từ bản có `dns.go`, **bộ chia DNS** cũng nằm
+trong binary này (UDP + TCP): tên miền TQ nhận IP TQ để đi thẳng, tên miền nước ngoài
+nhận câu trả lời sạch qua tunnel — xem §DNS.
 
 ## Vì sao không dùng CLI chính thức của hysteria
 
@@ -23,7 +25,8 @@ IP node bị chặn (đo 19/09: TCP tới 103.173.155.50 / 165.101.114.162 timeo
 | `wsrelay.go` | `net.PacketConn` trên WebSocket: **1 binary message = 1 datagram** (đúng giao thức `/root/wsrelay.js` phía server). Có ping 20s để giữ WS sống. Bản **multipath** (`MultiConn`) mở N WebSocket song song — xem §Multipath. |
 | `runner.go` | Dựng `client.NewClient` với ConnFactory = wsrelay (hoặc UDP trực tiếp), mở SOCKS5 và/hoặc TUN; thêm chế độ `-bench` để đo băng thông qua tunnel mà không cần quyền root/TUN. |
 | `tun.go` | TUN + auto-route + bypass, dùng lại `app/internal/tun` của hysteria (không tự viết tầng TUN). In hai mốc `TUNREADY`/`TUNFAIL` trên stderr — xem §TUN. |
-| `build.sh` | Clone hysteria tag `app/v2.12.2`, **chỉ copy thêm** 3 file trên vào checkout (`app/internal/wsrelay/`, `app/flowvpnrelay/`) rồi build — upstream không bị sửa. |
+| `dns.go` | **Bộ chia DNS** (UDP + TCP) trên địa chỉ của TUN: tên miền TQ → resolver nội địa, còn lại → resolver công cộng qua tunnel — xem §DNS. |
+| `build.sh` | Clone hysteria tag `app/v2.12.2`, **chỉ copy thêm** 4 file trên vào checkout (`app/internal/wsrelay/`, `app/flowvpnrelay/`) rồi build — upstream không bị sửa. |
 
 ## Dùng
 
@@ -58,12 +61,18 @@ TARGETS="windows/amd64" OUT_DIR=/tmp/x ./build.sh
     "statsSec": 5
   },
   "socks5": { "listen": "127.0.0.1:1081" },
-  "dialTimeoutSec": 12
+  "dialTimeoutSec": 12,
+  "dns": {
+    "listen": "100.100.100.101:53",
+    "cn": "223.5.5.5:53",
+    "remote": "1.1.1.1:53",
+    "cnSuffixes": [".cn", "qq.com", "weixin.qq.com"]
+  }
 }
 ```
 
 Không có khoá `tun` ⇒ chỉ mở SOCKS5 như bản cũ (không hồi quy). Có `tun` ⇒ dựng
-thêm TUN full-tunnel — xem §TUN.
+thêm TUN full-tunnel — xem §TUN. Không có khoá `dns` ⇒ không chạy bộ chia DNS — xem §DNS.
 
 ## TUN — full-tunnel trong chính binary này (làm 13/10/2026)
 
@@ -81,8 +90,10 @@ stderr ASCII, mỗi dòng một mốc:
 | Dòng | Nghĩa |
 |---|---|
 | `READY transport=<t> server=<s> socks5=<listen>` | SOCKS5 đã mở (mốc cũ, không đổi). |
-| `TUNREADY if=<tên> mtu=<mtu> route=<yes\|no>` | Interface TUN **đã có thật trong HĐH**; app lấy `if=` để đặt DNS lên đúng adapter đó. |
+| `TUNREADY if=<tên> mtu=<mtu> route=<yes\|no>` | Interface TUN **đã có thật trong HĐH** (và bộ chia DNS, nếu khai, đã bind xong); app lấy `if=` để đặt DNS lên đúng adapter đó. |
 | `TUNFAIL <lý do ascii ngắn>` | Không dựng/cấu hình được TUN ⇒ app rơi đường khác NGAY, không chờ hết ngân sách. |
+| `dns: splitter <listen> cn=<addr> remote=<addr> cnSuffixes=<n> cnRanges=<n>` | Một dòng duy nhất lúc bộ chia DNS lên (ASCII, không log từng truy vấn). |
+| `DNSFAIL <lý do ascii ngắn>` | Không bind được bộ chia DNS ⇒ coi như hỏng đường hầm, vòng ngoài dựng lại. |
 
 Khối `tun` (tuỳ chọn) trong config JSON — schema phẳng, **nguồn sự thật là
 `tools/hysteria-relay/tun.go`** (phía C# sinh ra nó ở
@@ -125,6 +136,66 @@ Ghi chú:
   trả lỗi, vòng ngoài ở `main()` dựng lại chứ không thoát.
 - Log của tầng TUN đi qua zap ở mức **Warn** trở lên và `EventLogger` rỗng: log từng
   kết nối TCP/UDP sẽ đổ hàng nghìn dòng mỗi giây và làm chậm đường gói.
+
+## DNS — bộ chia theo từng truy vấn (làm 19/10/2026)
+
+**Vì sao cần:** TUN đi THẲNG mọi đích trong dải TQ (`tun.route.ipv4Exclude` /
+`ipv6Exclude`) và đẩy phần còn lại vào tunnel. Đặt thẳng `1.1.1.1` làm DNS của adapter TUN
+thì DNS đi trong tunnel (tốt: GFW không nhiễm độc được), nhưng **tên miền TQ nhận IP CDN
+nước ngoài** — đo thật 19/10/2026: `www.baidu.com` → `103.235.47.188` (Baidu HK),
+`www.taobao.com` → `43.109.163.153`; những IP đó **không** nằm trong dải TQ nên lại bị đẩy
+vào tunnel: `https://www.baidu.com` **26.217 ms** so với **116 ms** khi đi thẳng, và
+**15/23 tên miền TQ lớn** bị như vậy. Ngược lại đặt resolver nội địa (`223.5.5.5` /
+`114.114.114.114` / `119.29.29.29`) thì **bị GFW nhiễm độc** (`www.google.com` →
+`185.45.5.35`, `www.youtube.com` → `104.244.42.197`).
+
+Nên `flowvpnrelay` tự quyết **từng truy vấn** (`dns.go`), app chỉ cần đặt DNS của adapter TUN
+về chính địa chỉ TUN:
+
+| Quy tắc | Điều kiện | Đi đâu |
+|---|---|---|
+| 1 | qname khớp `cnSuffixes` (kiểu `domain_suffix`: bằng đúng, hoặc kết thúc bằng `"."+suffix`) | resolver `cn`, trả nguyên câu trả lời cho **mọi** qtype |
+| 2 | qtype **A/AAAA**, không khớp quy tắc 1 | hỏi `cn` trước; **chỉ nhận** khi RCODE=NOERROR, TC=0, answer có ≥1 bản ghi A/AAAA và **MỌI** bản ghi A/AAAA nằm trong dải TQ (đúng bộ dải TUN đang dùng) — ngược lại hỏi `remote` |
+| 3 | mọi qtype khác (HTTPS/SVCB/TXT/MX/…) | resolver `remote` (đi trong tunnel) |
+
+Quy tắc 2 là chỗ ăn tiền: nó cho tên miền TQ đúng **IP CDN TQ** (nên `ip_cidr` đi-thẳng mới
+khớp) mà **không cần danh sách tên miền nào để bảo trì**, còn tên miền toàn cầu vẫn nhận câu
+trả lời sạch qua tunnel.
+
+Khối `dns` (tuỳ chọn) trong config JSON — nguồn sự thật là `dns.go`, phía C# sinh ra nó ở
+`SingBoxConfigBuilder.BuildDns`:
+
+```json
+"dns": {
+  "listen": "100.100.100.101:53",
+  "cn": "223.5.5.5:53",
+  "remote": "1.1.1.1:53",
+  "cnSuffixes": [".cn", "qq.com", "weixin.qq.com"]
+}
+```
+
+| Khoá | Mặc định | Ý nghĩa |
+|---|---|---|
+| `listen` | rỗng ⇒ **không có bộ chia** | Địa chỉ bộ chia nghe (**UDP và TCP** cùng cổng). App trỏ DNS của adapter TUN vào đây — thường là chính địa chỉ TUN `100.100.100.101:53`. |
+| `cn` | `223.5.5.5:53` | Resolver nội địa TQ; nằm trong dải trừ của TUN nên **đi thẳng**. |
+| `remote` | `1.1.1.1:53` | Resolver công cộng; **không** nằm trong dải trừ nên đi vào TUN (qua tunnel). |
+| `cnSuffixes` | `[]` | Nhóm tên miền chắc chắn là TQ. `".cn"` và `"cn"` như nhau. Rỗng ⇒ chỉ dùng quy tắc 2/3 (vẫn đúng, chỉ mất lối tắt cho HTTPS/SVCB). |
+
+Ghi chú:
+
+- **Không binding interface nào**: `cn`/`remote` chỉ là `net.Dial` thường — định tuyến của HĐH
+  đã quyết gói đi thẳng hay vào TUN.
+- Bind **cả UDP và TCP**: client DNS của Windows tự chuyển sang TCP khi câu trả lời có bit TC;
+  thiếu TCP là những tên miền đó không phân giải được.
+- Bộ chia bind **trước** khi in `TUNREADY`, và là **một instance cho cả tiến trình**: đường hầm
+  dựng lại thì DNS vẫn nghe (app đã trỏ DNS vào đó, đóng rồi mở lại chỉ tạo khoảng trống).
+  Nếu `listen` là địa chỉ của chính TUN thì lần bind đầu (trước khi adapter có địa chỉ) sẽ lỗi
+  và được **thử lại mỗi 200 ms** cho tới hết `tunReadyTimeout` chứ không báo lỗi ngay.
+- Không log từng truy vấn (hàng nghìn câu mỗi phút): chỉ một dòng ASCII lúc khởi động.
+- Lỗi upstream ⇒ **SERVFAIL** (giữ ID + question); message không đọc được ⇒ bỏ im lặng.
+  Không bao giờ panic.
+- `-bench` và chế độ chỉ-SOCKS5 (không `tun`, không `dns`) **không đổi**. Khối `dns` mà không
+  có `tun` thì bộ chia vẫn chạy (không có dải TQ để đối chiếu ⇒ mọi câu A/AAAA đi `remote`).
 
 ## Multipath — nhiều WebSocket song song (làm 19/09/2026, **chưa bật ở app nào**)
 
@@ -202,6 +273,6 @@ Ghi chú vận hành:
   khai, khai cao hơn thật sẽ tự bóp nghẽn (đo được: khai 300/1000 Mbps → 1,3 Mbps;
   khai 30/100 → 29,9 Mbps; không khai → tương đương).
 - Node-1 đôi lúc không ra được Cloudflare ⇒ ưu tiên `/relay/vn2hy` (exit node-2).
-- `sing-box` **không còn dùng** ở đường này: TUN/định tuyến/DNS do `tun.go` lo (xem
-  §TUN). `SingBoxConfigBuilder.BuildSingBoxConfig` còn giữ lại cho đường WireGuard và
-  để so sánh khi cần.
+- `sing-box` **không còn dùng** ở đường này: TUN/định tuyến do `tun.go` lo, DNS do
+  `dns.go` lo (xem §TUN, §DNS). `SingBoxConfigBuilder.BuildSingBoxConfig` còn giữ lại cho
+  đường WireGuard và để so sánh khi cần.

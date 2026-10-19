@@ -19,7 +19,7 @@ public enum TransportPreference
     Hysteria,
 
     /// <summary>
-    /// Hysteria2 bọc trong WebSocket; chính flowvpnrelay.exe lo TUN/định tuyến/bypass TQ (từ 1.4.7
+    /// Hysteria2 bọc trong WebSocket; chính flowvpnrelay.exe lo TUN/định tuyến/bypass TQ (từ 1.4.8
     /// không còn sing-box). Đây là đường đi được khi mạng chặn thẳng IP node — xem
     /// <see cref="VpnFlow.Core.Tunnel.HysteriaRelayDefaults"/>.
     /// </summary>

@@ -9,7 +9,7 @@ namespace VpnFlow.Core.Tunnel;
 /// mỗi datagram UDP trong một binary message WebSocket qua <c>/relay/vn*hy</c> là đường duy
 /// nhất còn đi được (giao thức relay phía server: 1 message = 1 datagram).
 ///
-/// Kiến trúc (từ 1.4.7): MỘT tiến trình — <c>flowvpnrelay.exe</c> (hysteria2-over-WS) tự dựng
+/// Kiến trúc (từ 1.4.8): MỘT tiến trình — <c>flowvpnrelay.exe</c> (hysteria2-over-WS) tự dựng
 /// luôn TUN + auto_route + bypass TQ, không cần <c>sing-box.exe</c> nữa.
 ///
 /// Vì sao bỏ sing-box (khách báo 13/10/2026: "sing-box.exe đang phải có chữ ký"): sing-box là
@@ -99,12 +99,31 @@ public static class HysteriaRelayDefaults
     public const int TunMtu = 1500;
 
     /// <summary>
-    /// DNS đặt LÊN adapter TUN. Cố ý dùng resolver công cộng, không dùng resolver của mạng khách:
-    /// truy vấn đi trong tunnel (ngoài dải TQ) nên không bị GFW nhiễm độc — đúng lỗi "khách không
-    /// vào được Google/YouTube" của 1.4.6. Vì sao KHÔNG dùng resolver nội địa TQ ở đây: nó nằm
-    /// trong dải TQ nên đi thẳng ra ngoài, mà truy vấn đi thẳng thì GFW lại nhiễm độc.
+    /// DNS đặt LÊN adapter TUN: chính địa chỉ của TUN, nơi <c>flowvpnrelay.exe</c> mở bộ chia DNS
+    /// (xem <c>tools/hysteria-relay/dns.go</c>).
+    ///
+    /// Vì sao KHÔNG đặt thẳng một resolver công cộng — đo thật 19/10/2026 trên mạng TQ:
+    ///  · đặt <c>1.1.1.1</c> (đi trong tunnel nên không bị nhiễm độc) thì tên miền TQ nhận **IP CDN
+    ///    nước ngoài** (www.baidu.com → 103.235.47.188, www.taobao.com → 43.109.163.153…); các IP
+    ///    đó KHÔNG nằm trong dải TQ nên lại bị đẩy vào tunnel — **15/23 tên miền TQ lớn** bị vậy và
+    ///    <c>https://www.baidu.com</c> mất **26.217 ms** thay vì 116 ms;
+    ///  · đặt resolver nội địa (223.5.5.5 / 114.114.114.114 / 119.29.29.29) thì **bị GFW nhiễm độc**
+    ///    (www.google.com → 185.45.5.35, www.youtube.com → 104.244.42.197) — đúng lỗi của 1.4.6.
+    ///
+    /// Nên bộ chia DNS phía Go tự quyết từng truy vấn: hỏi resolver nội địa trước, chỉ nhận khi MỌI
+    /// bản ghi A/AAAA trả về nằm trong dải TQ (khi đó route đi thẳng mới khớp); còn lại hỏi resolver
+    /// công cộng qua tunnel. Nhờ vậy không cần danh sách tên miền nào để bảo trì.
     /// </summary>
-    public static IReadOnlyList<string> TunDnsServers { get; } = new[] { "1.1.1.1", "8.8.8.8" };
+    public const string TunDnsServer = "100.100.100.101";
+
+    /// <summary>Cổng của bộ chia DNS trong flowvpnrelay (cổng DNS chuẩn).</summary>
+    public const int TunDnsPort = 53;
+
+    /// <summary>Resolver nội địa TQ — bộ chia DNS hỏi TRƯỚC cho bản ghi A/AAAA.</summary>
+    public const string ChinaDnsUpstream = "223.5.5.5";
+
+    /// <summary>Resolver công cộng — đi TRONG tunnel nên không bị GFW nhiễm độc.</summary>
+    public const string RemoteDnsUpstream = "1.1.1.1";
 
     /// <summary>Dòng flowvpnrelay.exe in ra stderr khi SOCKS5 đã mở — hợp đồng "tunnel đã lên".</summary>
     public const string ReadyMarker = "READY ";
@@ -117,4 +136,11 @@ public static class HysteriaRelayDefaults
 
     /// <summary>Dòng báo TUN không dựng được — app rơi đường khác NGAY, không chờ hết ngân sách.</summary>
     public const string TunFailMarker = "TUNFAIL ";
+
+    /// <summary>
+    /// Dòng báo bộ chia DNS không bind được (địa chỉ/cổng bận). Xử lý Y NHƯ <see cref="TunFailMarker"/>:
+    /// TUN lên mà không có DNS thì máy không phân giải được tên, tức là cũng hỏng — phải rơi đường
+    /// khác ngay thay vì chờ hết <c>ReadyTimeoutSeconds</c> rồi mới báo lỗi mơ hồ.
+    /// </summary>
+    public const string DnsFailMarker = "DNSFAIL ";
 }

@@ -1,8 +1,13 @@
-# HANDOFF — Windows 1.4.7: bỏ hẳn `sing-box.exe`, đưa TUN vào chính `flowvpnrelay.exe`
+# HANDOFF — Windows 1.4.8: bỏ hẳn `sing-box.exe`, đưa TUN vào chính `flowvpnrelay.exe`
 
-- **Ngày:** 13/10/2026 · **Máy:** DESKTOP-852P1LT (mạng TQ) · **Commit:** `04a1af8` (đã push `origin/main`)
+- **Ngày:** 13/10/2026 (kiểm máy thật 19/10/2026) · **Máy:** DESKTOP-852P1LT (mạng TQ)
 - **Loại:** fix lỗi khách + bỏ phụ thuộc binary bên thứ ba
 - **Phạm vi:** Windows (app .NET, installer, assets) + `tools/hysteria-relay`
+
+> **Vì sao 1.4.8 mà không phải 1.4.7:** Windows **1.4.7 đã phát 24/09/2026** (bản vá "thử lại API
+> 3 vòng", sha256 `73660031…`, đang là `latest_version` của `/v1/app-version?platform=windows`).
+> Bản này là bản kế tiếp nên mang số **1.4.8** — dùng lại 1.4.7 sẽ làm sai phép so sánh phiên bản
+> và đường tự cập nhật của khách.
 
 ---
 
@@ -86,7 +91,7 @@ thì hỏng là rơi về WireGuard trong vài giây.
 | `windows/.../Tunnel/ApplicationControlGuard.cs` | thông báo cho khách: KHÔNG nhắc binary bên thứ ba, KHÔNG nói "cần ký số" |
 | `windows/.../Services/SystemConflictProbe.cs` | dò `flowvpnrelay.exe` thay vì `sing-box.exe` |
 | `windows/.../Views/SettingsView.axaml` | nhãn "Hysteria2 + sing-box (relay)" → "Hysteria2 over WebSocket (relay)" |
-| `windows/.../PrivateVPNWindows.App.csproj` | bỏ `sing-box.exe`; `Version` 1.4.4 → **1.4.7** |
+| `windows/.../PrivateVPNWindows.App.csproj` | bỏ `sing-box.exe`; `Version` 1.4.4 → **1.4.8** |
 | `windows/installer/build.ps1` | danh sách asset/publish 4 → 3 binary |
 | `windows/installer/VPNFlow.iss` | bỏ cổng `#error` + kiểm thiếu file của `sing-box.exe` |
 | `windows/installer/verify-relay.ps1` | **viết lại**: `-ConfigOnly` (13 phép kiểm tĩnh, không cần admin) + chế độ đầy đủ (chờ `TUNREADY`, kiểm adapter/route/bypass TQ/DNS/egress/HTTP) |
@@ -165,52 +170,89 @@ Passed! - Failed: 0, Passed: 223, Skipped: 0, Total: 223
    vẫn phủ. Nếu khách báo một tên miền TQ cụ thể bị chậm ⇒ đây là chỗ xem đầu tiên.
 6. **Thông báo cho khách** không còn nhắc `sing-box`, không còn nói "cần ký số" (khoá bằng test).
 
-### 5.2 CHƯA nghiệm thu được trên máy này
+### 5.2 Nghiệm thu TUN THẬT (đã chạy có quyền admin, 19/10/2026)
 
-> ⚠️ **Dựng TUN THÀNH CÔNG chưa được chạy thật** — phiên làm việc không có quyền
-> Administrator nên `wintun.CreateAdapter` trả `Access is denied` trước khi có adapter.
-> Vì vậy **chưa** quan sát được: `TUNREADY`, bảng route thật, bypass TQ thật, DNS qua tunnel,
-> HTTP 200 qua tunnel. Cần **một lần chạy có quyền admin**:
+Máy harness, mạng TQ, relay `vn2hy` thật, danh sách bypass đầy đủ **7.509 dải**
+(5.494 IPv4 + 2.015 IPv6). Chạy `.tmp\tun-e2e-b.ps1` dưới UAC:
 
-```powershell
-# (a) nghiệm thu độc lập, không cần mở app — tự dọn sạch sau khi xong
-powershell -NoProfile -ExecutionPolicy Bypass -File .tmp\tun-e2e.ps1     # chỉ có trên máy harness
-# hoặc bản chính thức trong repo:
-powershell -NoProfile -ExecutionPolicy Bypass -File windows\installer\verify-relay.ps1 -Password <HY_PASSWORD> -Obfs <HY_OBFS>
+```
+TUNREADY=True sau 4.1s (TUNFAIL=)
+  [DAT] TUN dung duoc (TUNREADY) chi voi 7509 dai loai tru
+  [DAT] adapter flowvpntun ton tai — status=Up ifIndex=39
+  [DAT] dia chi TUN = 100.100.100.101
+  [DAT] co route tren adapter TUN — so route: 23975
+  [DAT] co route phu nua DUOI 0.0.0.0/1 (38 route)
+  [DAT] 110.242.68.66    di thang (qua Wi-Fi)      [DAT] 8.8.8.8        vao TUN
+  [DAT] 223.5.5.5        di thang (qua Wi-Fi)      [DAT] 1.1.1.1        vao TUN
+  [DAT] 114.114.114.114  di thang (qua Wi-Fi)      [DAT] 142.251.154.4  vao TUN
+  [DAT] 1.0.1.0          di thang (qua Wi-Fi)
+  [DAT] 180.101.50.242   di thang (qua Wi-Fi)
+  [DAT] www.youtube.com -> 142.251.152.4, 142.251.154.4, … (IP that, khong bi nhiem doc)
+  [DAT] exit IP = 165.101.114.162 (dung IP node)
+      https://www.google.com  HTTP 200  1379 ms
+      https://www.baidu.com   HTTP 200  26217 ms   <-- XEM 5.4
+      https://weixin.qq.com   HTTP 200  471 ms
+      https://api.meetflowai.site/v1/health  HTTP 200  658 ms
+  [DAT] adapter flowvpntun da mat sau khi kill (may van co mang)
+KET LUAN: DAT — tat ca phep kiem PASS
 ```
 
-- `TUNREADY if=flowvpntun mtu=1500 route=yes` trong ≤ 30 s
-- `Get-NetRoute` có `0.0.0.0/0` (hoặc `/1`+`/1`) trỏ vào `flowvpntun`, metric 0
-- `Find-NetRoute -RemoteIPAddress 110.242.68.66` **KHÔNG** trả `flowvpntun` (bypass TQ đúng)
-- `Resolve-DnsName www.youtube.com` ra IP Google thật, **không** phải `69.171.235.22`
-- `https://api.ipify.org` = `165.101.114.162`; google + baidu HTTP 200
+⇒ TUN + auto-route + bypass TQ + DNS-qua-tunnel + egress **đều chạy thật**. Đây là bằng chứng
+mà trước đó chưa có.
 
-Nếu `TUNFAIL` xuất hiện: lý do nằm ngay sau marker. Nếu TUN lên mà **không** chở được dữ
-liệu, cổng sức khoẻ ở §2 sẽ tự rơi về WireGuard (khách vẫn có mạng) — khi đó đọc
-`%APPDATA%\VPNFlow\vpnflow.log`.
+### 5.3 Rủi ro / quan sát từ lần chạy thật
 
-### 5.3 Rủi ro đã biết
+1. **23.975 route** trên adapter TUN (do trừ 7.509 dải khỏi `0.0.0.0/0`). Dựng TUN hết **4,1 s**
+   (kể cả 2,5 s bắt tay WS) — chấp nhận được; đường WireGuard cũng thêm ~7.500 route. Đổi lại
+   `Get-NetRoute` liệt kê chậm (~8 s) — chỉ ảnh hưởng chẩn đoán, không ảnh hưởng đường truyền.
+2. **`https://www.baidu.com` 26.217 ms** — xem 5.4: đây là lý do phải thêm bộ chia DNS.
+3. **Thứ tự `Auto`**: đường relay vẫn thử TRƯỚC WireGuard (giữ nguyên hành vi cũ). Trước đây máy
+   bật SAC "may mắn" rơi về WireGuard; nay relay lên được nên mọi máy bật SAC sẽ đi relay. Nếu đo
+   thấy relay chậm hơn UDP trực tiếp đáng kể thì phải đổi thứ tự — quyết định sản phẩm, **chưa đổi**.
+4. Bản phát hành vẫn **CHƯA KÝ** (luật 11) — chưa có chứng chỉ trên máy này; yêu cầu đã gửi harness
+   Mac (agent-bus `#298`). Bản này **không** làm tệ hơn: `sing-box.exe` bị SAC chặn còn
+   `flowvpnrelay.exe` thì không.
+5. `darwin/arm64` cũng build lại nhưng **app macOS dùng bản của Mac harness**.
 
-1. **7.509 dải bị trừ khỏi `0.0.0.0/0`** ⇒ Windows có thể nhận ~7.510 route trên adapter TUN
-   (đường WireGuard đã làm đúng như vậy nên không phải cơ chế mới). Chưa đo thời gian dựng
-   TUN với danh sách đầy đủ trên máy thật.
-2. **Thứ tự `Auto`**: đường relay vẫn thử TRƯỚC WireGuard (giữ nguyên hành vi cũ). Trước đây
-   máy bật SAC "may mắn" rơi về WireGuard; nay relay lên được nên **mọi máy bật SAC sẽ đi
-   relay**. Nếu đo thấy relay chậm hơn UDP trực tiếp đáng kể thì phải đổi thứ tự — đây là
-   quyết định sản phẩm, **chưa đổi** trong bản này.
-3. Bản phát hành vẫn **CHƯA KÝ** (luật 11) — chưa có chứng chỉ trên máy này; yêu cầu đã gửi
-   harness Mac (agent-bus `#298`). Bản này **không** làm tệ hơn: `sing-box.exe` bị SAC chặn,
-   còn `flowvpnrelay.exe` thì không.
-4. `darwin/arm64` cũng đã build lại (`0d364e68…`) nhưng **app macOS dùng bản của Mac harness** —
-   bản Windows không đóng gói binary macOS.
+### 5.4 Bộ chia DNS trong `flowvpnrelay.exe` (thêm trong bản này, CÙNG ngày)
+
+Lần chạy thật ở §5.2 lộ ra một hồi quy so với 1.4.6: bản 1.4.6 dùng **rule theo tên miền** của
+sing-box nên tên miền TQ được phân giải bằng resolver nội địa. Hysteria TUN không có engine rule,
+nên bản đầu của 1.4.8 đặt thẳng `1.1.1.1` lên adapter ⇒ **tên miền TQ nhận IP CDN nước ngoài**,
+không khớp dải TQ ⇒ bị đẩy vào tunnel.
+
+Đo được (mạng TQ, 19/10/2026):
+
+| Tên miền | qua `1.1.1.1` | trong dải TQ? | Hệ quả |
+|---|---|---|---|
+| `www.baidu.com` | `103.235.47.188` (Baidu HK) | ✗ | vào tunnel — **26.217 ms** vs 116 ms đi thẳng |
+| `www.taobao.com` | `43.109.163.153` | ✗ | vào tunnel |
+| `www.qq.com` | `129.226.102.190` | ✗ | vào tunnel |
+
+⇒ **15/23 tên miền TQ lớn** bị vậy (baidu, taobao, jd, qq, alipay, 163, ctrip, meituan,
+xiaohongshu, zhihu, aliyun, huawei, iqiyi, youku, pinduoduo). Đồng thời **không thể** dùng resolver
+nội địa cho tất cả: `223.5.5.5` / `114.114.114.114` / `119.29.29.29` đều trả **kết quả nhiễm độc**
+cho `www.google.com` (`185.45.5.35`) và `www.youtube.com` (`104.244.42.197`).
+
+**Cách xử lý:** `flowvpnrelay.exe` mở bộ chia DNS tại chính địa chỉ TUN; app đặt DNS của adapter TUN
+về địa chỉ đó (`100.100.100.101`). Mỗi truy vấn:
+
+1. nếu qname khớp danh sách `cnSuffixes` (23 mục: Tencent/WeChat + `cn`) → hỏi resolver **nội địa**
+   cho MỌI loại bản ghi;
+2. nếu qtype là A/AAAA → hỏi resolver **nội địa** trước, chỉ nhận khi **mọi** bản ghi A/AAAA trả về
+   nằm trong dải TQ (khi đó route đi-thẳng mới khớp); không đạt thì hỏi resolver **công cộng qua
+   tunnel**;
+3. loại bản ghi khác → resolver công cộng qua tunnel.
+
+Nhờ vậy **không cần danh sách tên miền nào để bảo trì** cho nhóm (2), mà tên miền TQ vẫn nhận IP TQ.
 
 ## 6. Việc của publisher (harness Windows)
 
 1. `dotnet test` phải xanh (223/223) và `verify-relay.ps1 -ConfigOnly` phải ĐẠT trước khi đóng gói.
-2. Đóng gói: `powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -Version 1.4.7 -Commit <sha>`
-   → `windows\installer\out\VPNFlow-Setup-1.4.7.exe`.
+2. Đóng gói: `powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -Version 1.4.8 -Commit <sha>`
+   → `windows\installer\out\VPNFlow-Setup-1.4.8.exe`.
 3. **Luật 11**: bộ cài Windows **phải được ký số** trước khi phát. Chưa có chứng chỉ ⇒ cần
    chủ dự án ghi ngoại lệ như 1.4.5 **hoặc** chờ chứng chỉ.
 4. Sau khi phát: cập nhật `/v1/app-version?platform=windows` và link `/buy` (`?v=<8 ký tự sha256>`),
-   ghi một dòng vào `docs/PUBLISHER_PROCESS.md`, tag `windows-v1.4.7`.
+   ghi một dòng vào `docs/PUBLISHER_PROCESS.md`, tag `windows-v1.4.8`.
 5. Kích thước bộ cài sẽ **nhỏ đi rất nhiều** (bỏ 59 MB `sing-box.exe`, thêm ~2,4 MB relay mới).

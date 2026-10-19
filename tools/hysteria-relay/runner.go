@@ -15,6 +15,10 @@
 // chặn. Khối "tun" là TUỲ CHỌN: không khai thì vẫn chỉ mở SOCKS5 như bản cũ.
 // SOCKS5 vẫn được mở khi có TUN (app còn dùng để chẩn đoán/đo băng thông).
 //
+// Khối "dns" cũng TUỲ CHỌN: có nó thì flowvpnrelay mở luôn bộ chia DNS (dns.go) trên
+// địa chỉ của TUN để tên miền TQ nhận IP CDN TQ (đi thẳng) còn tên miền nước ngoài vẫn
+// nhận câu trả lời sạch qua tunnel — xem đầu dns.go.
+//
 // Bản này được biên dịch bằng tools/hysteria-relay/build.sh: nó được copy vào
 // app/flowvpnrelay/ của checkout hysteria (tag app/v2.12.2) để import được
 // package `internal/...` của chính module đó.
@@ -79,6 +83,9 @@ type config struct {
 	Socks5    socksConfig     `json:"socks5"`
 	// Tun: khối TUỲ CHỌN. nil (không khai) = không dựng TUN, giữ nguyên hành vi cũ.
 	Tun *tunConfig `json:"tun"`
+	// DNS: khối TUỲ CHỌN. nil (không khai) = không chạy bộ chia DNS (dns.go) — đúng
+	// hành vi trước khi có bộ chia.
+	DNS *dnsConfig `json:"dns"`
 	// DialTimeout giây cho một lần dựng transport (WS + QUIC handshake).
 	DialTimeoutSec int `json:"dialTimeoutSec"`
 }
@@ -184,13 +191,21 @@ func serve(cfg *config) error {
 	}
 
 	if cfg.Tun == nil {
+		// Khối "dns" mà KHÔNG có "tun": vẫn chạy bộ chia (chẩn đoán trên máy không có
+		// quyền admin). Không có dải TQ để đối chiếu thì mọi câu A/AAAA rơi về resolver
+		// công cộng — đúng nghĩa "không có gì để so".
+		if cfg.DNS != nil {
+			if err := startDNSRelay(cfg.DNS, nil); err != nil {
+				return failDNS(err)
+			}
+		}
 		return <-socksErr
 	}
 
 	// Chế độ TUN: chạy song song với SOCKS5 (nếu có) và trả về khi cái nào chết
 	// trước. TUN lỗi ⇒ đã có dòng TUNFAIL trong startTUN trước khi trả về đây.
 	tunErr := make(chan error, 1)
-	go func() { tunErr <- startTUN(hy, *cfg.Tun) }()
+	go func() { tunErr <- startTUN(hy, *cfg.Tun, cfg.DNS) }()
 	select {
 	case err := <-tunErr:
 		return err

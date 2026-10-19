@@ -4,7 +4,7 @@
 ; cài .NET, không phải cài WireGuard (bản app đã nhúng wintun.dll + wireguard-go.exe
 ; chạy userspace, xem windows/assets/THIRD_PARTY.md), và cũng không phải cài thêm gì cho
 ; đường "hysteria2 bọc trong WebSocket" (nhúng flowvpnrelay.exe — MỘT binary lo cả
-; hysteria2-over-WS lẫn TUN/định tuyến/bypass TQ; từ 1.4.7 không còn sing-box.exe).
+; hysteria2-over-WS lẫn TUN/định tuyến/bypass TQ; từ 1.4.8 không còn sing-box.exe).
 ;
 ; Build (trên máy Windows):
 ;   powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1

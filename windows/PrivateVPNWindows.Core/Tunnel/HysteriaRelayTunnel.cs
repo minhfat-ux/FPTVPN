@@ -23,7 +23,7 @@ public enum HysteriaRelayState
 ///  2. TUN + auto_route, kèm danh sách dải IP Trung Quốc đi THẲNG (bypass TQ);
 ///  3. SOCKS5 nội bộ (giữ lại cho chẩn đoán/đo băng thông).
 ///
-/// Trước 1.4.7 việc (2) do <c>sing-box.exe</c> làm. Bỏ được nó là mục tiêu của bản này: sing-box là
+/// Trước 1.4.8 việc (2) do <c>sing-box.exe</c> làm. Bỏ được nó là mục tiêu của bản này: sing-box là
 /// binary bên thứ ba CHƯA KÝ nên bị <b>Smart App Control</b> chặn trên máy khách (Win32 4551,
 /// CodeIntegrity 3033/3077/3118) — xem <see cref="HysteriaRelayDefaults"/>.
 ///
@@ -265,31 +265,31 @@ public sealed class HysteriaRelayTunnel : IDisposable
 
     /// <summary>
     /// Đặt DNS lên adapter TUN bằng netsh — cùng lệnh mà đường WireGuard đang dùng
-    /// (<see cref="WireGuardWindowsCommands.SetDns"/>). Không đặt được thì GHI WARN rồi đi tiếp:
-    /// tunnel vẫn chở được theo IP, chỉ mất phần phân giải tên qua tunnel — chặn kết nối ở đây sẽ
-    /// biến một lỗi phụ thành "không vào được mạng".
+    /// (<see cref="WireGuardWindowsCommands.SetDns"/>). Giá trị là chính địa chỉ TUN, nơi bộ chia DNS
+    /// của flowvpnrelay đang nghe (xem <see cref="HysteriaRelayDefaults.TunDnsServer"/>): bộ chia tự
+    /// chọn resolver nội địa hay resolver-qua-tunnel cho TỪNG truy vấn.
+    ///
+    /// Không đặt được thì GHI WARN rồi đi tiếp: tunnel vẫn chở được theo IP, chỉ mất phần phân giải
+    /// tên qua tunnel — chặn kết nối ở đây sẽ biến một lỗi phụ thành "không vào được mạng".
     /// </summary>
     private async Task ApplyTunDnsAsync(string interfaceName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(interfaceName);
 
-        var servers = HysteriaRelayDefaults.TunDnsServers;
-        for (var i = 0; i < servers.Count; i++)
+        var ok = await RunNetshAsync(
+                WireGuardWindowsCommands.SetDns(interfaceName, HysteriaRelayDefaults.TunDnsServer),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!ok)
         {
-            var command = i == 0
-                ? WireGuardWindowsCommands.SetDns(interfaceName, servers[i])
-                : WireGuardWindowsCommands.AddDns(interfaceName, servers[i], i + 1);
-            var ok = await RunNetshAsync(command, cancellationToken).ConfigureAwait(false);
-            if (!ok && i == 0)
-            {
-                _log.Warn(
-                    $"relay: đặt DNS {servers[i]} lên '{interfaceName}' thất bại — " +
-                    "truy vấn tên có thể vẫn đi ra resolver của mạng khách.");
-                return;
-            }
+            _log.Warn(
+                $"relay: đặt DNS {HysteriaRelayDefaults.TunDnsServer} lên '{interfaceName}' thất bại — " +
+                "truy vấn tên có thể vẫn đi ra resolver của mạng khách (tên miền TQ sẽ chậm).");
+            return;
         }
 
-        _log.Info($"relay: đã đặt DNS lên '{interfaceName}': {string.Join(", ", servers)}");
+        _log.Info(
+            $"relay: đã đặt DNS lên '{interfaceName}': {HysteriaRelayDefaults.TunDnsServer} (bộ chia DNS)");
     }
 
     private async Task<bool> RunNetshAsync(WindowsCommand command, CancellationToken cancellationToken)
@@ -427,13 +427,9 @@ public sealed class HysteriaRelayTunnel : IDisposable
                 {
                     ready.TrySetResult(new RelayReady(ParseTunName(line)));
                 }
-                else if (line.Contains(HysteriaRelayDefaults.TunFailMarker, StringComparison.Ordinal))
+                else if (TryReadFailure(line) is { } failure)
                 {
-                    // Lý do thật nằm sau marker — đưa nguyên vào thông báo để log khách đọc được.
-                    var reason = line[(line.IndexOf(HysteriaRelayDefaults.TunFailMarker, StringComparison.Ordinal) +
-                                       HysteriaRelayDefaults.TunFailMarker.Length)..].Trim();
-                    ready.TrySetException(new TunnelTransportException(
-                        $"Không dựng được TUN của {HysteriaRelayDefaults.RelayExeName}: {reason}"));
+                    ready.TrySetException(new TunnelTransportException(failure));
                 }
             }
         }
@@ -447,6 +443,30 @@ public sealed class HysteriaRelayTunnel : IDisposable
             ready.TrySetException(new TunnelTransportException(
                 $"{HysteriaRelayDefaults.RelayExeName} đã thoát trước khi dựng xong TUN."));
         }
+    }
+
+    /// <summary>
+    /// Dòng <c>TUNFAIL</c>/<c>DNSFAIL</c> ⇒ thông báo lỗi cho khách (lý do thật nằm sau marker, đưa
+    /// nguyên vào để log khách đọc được). Null khi dòng không phải mốc lỗi.
+    /// </summary>
+    private static string? TryReadFailure(string line)
+    {
+        foreach (var (marker, what) in new[]
+                 {
+                     (HysteriaRelayDefaults.TunFailMarker, "đường hầm TUN"),
+                     (HysteriaRelayDefaults.DnsFailMarker, "bộ chia DNS"),
+                 })
+        {
+            if (!line.Contains(marker, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var reason = line[(line.IndexOf(marker, StringComparison.Ordinal) + marker.Length)..].Trim();
+            return $"Không dựng được {what} của {HysteriaRelayDefaults.RelayExeName}: {reason}";
+        }
+
+        return null;
     }
 
     /// <summary>Bóc <c>if=&lt;tên&gt;</c> khỏi dòng TUNREADY; thiếu thì dùng tên mặc định.</summary>
