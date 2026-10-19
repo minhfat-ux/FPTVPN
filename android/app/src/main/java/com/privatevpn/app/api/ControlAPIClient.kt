@@ -1,6 +1,5 @@
 package com.privatevpn.app.api
 
-import com.privatevpn.app.BuildConfig
 import com.privatevpn.app.Config
 import com.privatevpn.app.diag.DiagnosticsLog
 import java.io.IOException
@@ -24,16 +23,6 @@ class ControlAPIClient(
     private val fallbackBases: List<String> = ControlPlaneHosts.fallbackApiBases,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
-
-    /**
-     * Kênh phiên bản của CHÍNH gói này — server chọn payload theo kênh.
-     *
-     * Trước build 38 CẢ 3 flavor đều hỏi `platform=android`, nên bản TV đọc mốc + link tải của kênh
-     * **điện thoại**: màn ép cập nhật trên TV mời khách cài APK điện thoại (applicationId khác ⇒ cài
-     * THÊM một app thứ hai) thay vì nâng cấp gói TV. Từ build 38 flavor `tv` hỏi `platform=android-tv`
-     * (server: `control-plane/src/app-version.js`), các flavor còn lại giữ `android` y như cũ.
-     */
-    private val appVersionPlatform: String = if (BuildConfig.TV_FLAVOR) "android-tv" else "android"
 
     /**
      * Thử y nguyên request qua một host dự phòng (Tailscale Funnel — hạ tầng dùng chung,
@@ -245,11 +234,11 @@ class ControlAPIClient(
     /**
      * Fetches the required/latest app version (force-update gate).
      *
-     * Gửi `?platform=<kênh của gói này>` để server trả đúng kênh APK (`apk_url`) — các kênh phát
-     * hành độc lập nhau, và bản TV là gói riêng (xem [appVersionPlatform]).
+     * `?platform=android` để server trả đúng kênh APK (`apk_url`), không lẫn link tải của
+     * kênh iOS — hai kênh phát hành độc lập nhau.
      */
     suspend fun fetchAppVersion(): AppVersionInfo {
-        val request = Request.Builder().url("$baseUrl/v1/app-version?platform=$appVersionPlatform").get().build()
+        val request = Request.Builder().url("$baseUrl/v1/app-version?platform=android").get().build()
         val raw = execute(request, "app version")
         return json.decodeFromString(raw)
     }

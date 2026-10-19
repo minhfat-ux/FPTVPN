@@ -1,14 +1,16 @@
 {
   "_doc": "Khóa kênh phát hành: chủ dự án cho khách test một bản thì KHÔNG phát bản mới cùng kênh. Cổng scripts/check-publish-version.py đọc file này và CHẶN (exit 3) khi định phát bản khác bản đang khóa. Mở khóa = sửa file này (có chủ đích, ghi lý do) hoặc thêm --allow-locked \"<lý do>\".",
-  "updated": "2026-10-20",
+  "updated": "2026-10-19",
   "locks": [
     {
       "platform": "ios",
       "version": "1.4.7",
       "build": "80",
-      "reason": "Chủ dự án 20/10/2026: publish bản iOS này. Build 80 = 79 + đa ngôn ngữ cho mục 'Hút băng thông' (en/vi/zh/ja/ko). N-tunnel có công tắc trong Settings, MẶC ĐỊNH TẮT.",
+      "reason": "CHỐT CỦA CHỦ DỰ ÁN 19/10/2026 (tối): 'chặn iOS ở bản 80, không nâng version bản 81 khi chưa nghiệm thu'. Lý do kỹ thuật: chủ dự án xác nhận bản build 81 KHÔNG CONNECT ĐƯỢC; báo cáo .privatevpn/reports/2026-10-20-ios-connect-quay-tit-khong-len.md kết luận build 81→84 hỏng, build 85 mới sửa (commit 26c0f37 đặt .connecting TRƯỚC chốt chống bấm đôi ⇒ nuốt mọi cú bấm Connect). Kênh iOS GIỮ build 80 cho tới khi có nghiệm thu máy thật cho bản mới.",
       "at": "2026-09-30",
-      "locked_by": "mac"
+      "locked_by": "mac",
+      "pinned_by_owner_at": "2026-10-19",
+      "blocked": ["1.4.7/81", "1.4.7/82", "1.4.7/83", "1.4.7/84"]
     }
   ],
   "history": [
@@ -25,6 +27,13 @@
       "at": "2026-09-30",
       "reason": "build 58 hỏng state 'hysteria client already running' (1.231 lần) ⇒ tunnel không có transport mà vẫn áp network settings ⇒ mất mạng",
       "note": "Ghim kênh iOS vào 1.4.6/57 (bản đang phát, chạy tốt). Mở khoá sau khi build 58 sửa xong + nghiệm thu lại."
+    },
+    {
+      "platform": "ios",
+      "action": "hold",
+      "at": "2026-10-19",
+      "reason": "Chủ dự án: iOS 1.4.7 build 81 lỗi không connect được ⇒ GIỮ kênh ở build 80, KHÔNG nâng lên 81 (và 82-84) khi chưa nghiệm thu.",
+      "note": "Cổng check-publish-version.py nay chặn mọi lần định phát 1.4.7 build khác 80 (exit 3). Muốn phát bản mới: phải có nghiệm thu máy thật (ios-log-acceptance.py ĐẠT) rồi mới sửa/xoá khoá này, kèm lý do. Lưu ý thêm: IPA đang phát trên server (8.327.903 B, sha 7e306984…) KHÔNG khớp dòng sổ build 80 (8.236.378 B, sha b12681ea…) — cần Mac xác nhận nguồn gốc file này."
     }
   ]
 }

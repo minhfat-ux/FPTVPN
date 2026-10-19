@@ -34,19 +34,10 @@ object AppVersionService {
             .firstOrNull { it.isNotBlank() } ?: fallbackUrl
     }
 
-    /**
-     * Numeric component-wise version compare ("1.0.2" < "1.0.10").
-     *
-     * Mỗi khúc chỉ lấy **phần chữ số ở đầu** (`"5-tv"` → `5`, `"10-beta"` → `10`). Vì sao: flavor TV
-     * khai `versionNameSuffix = "-tv"` nên versionName thật là `1.4.6-tv`; cách cũ (`toIntOrNull` rồi
-     * `mapNotNull`) **bỏ mất** khúc đó (`"5-tv"` → null ⇒ `[1, 4]`), làm `1.4.6-tv` bị coi là `1.4` và
-     * nhỏ hơn MỌI bản `1.4.x` ⇒ hễ server nâng `minimum_version` lên `1.4.x` là **mọi app TV kẹt màn
-     * ÉP CẬP NHẬT vĩnh viễn** (ca thật 19/10/2026 — xem
-     * `docs/handoff/PUBLISH_ANDROID_1.4.5_37_2026-10-19.md` §4a).
-     */
+    /** Numeric component-wise version compare ("1.0.2" < "1.0.10"). */
     fun isVersion(a: String, b: String): Boolean {
-        val av = components(a)
-        val bv = components(b)
+        val av = a.split(".").mapNotNull { it.toIntOrNull() }
+        val bv = b.split(".").mapNotNull { it.toIntOrNull() }
         val count = maxOf(av.size, bv.size)
         for (i in 0 until count) {
             val x = if (i < av.size) av[i] else 0
@@ -55,8 +46,4 @@ object AppVersionService {
         }
         return false
     }
-
-    /** Các khúc số của một version: lấy phần chữ số ĐẦU của từng khúc (`"5-tv"` → 5). */
-    private fun components(v: String): List<Int> =
-        v.split(".").map { part -> part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0 }
 }
