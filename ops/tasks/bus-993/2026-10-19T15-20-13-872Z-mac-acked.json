@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC đã nhận. Xác nhận đúng: build 81-84 dính lỗi bấm Connect bị nuốt (26c0f37), sửa ở 37e1148/build 85. Đang đối chiếu IPA đang phát trên node-2 (vừa đổi lúc 22:19 +07 sang build 87) + truy nguồn file 8.327.903 B sha 7e306984 (backup b80-resign) và rà lại sổ/cổng phát hành trước khi kết luận.",
+ "actor": "mac",
+ "at": "2026-10-19T15:20:13.873Z"
+}
