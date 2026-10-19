@@ -114,6 +114,14 @@ test("payload iOS: ios_ipa_url riêng trong cấu hình được ưu tiên", () 
   assert.equal(body.store_url, "https://cdn.example.com/VPNFlow.ipa");
 });
 
+test("payload iOS: trả ipa_build để phân biệt hai lần phát cùng version (bus #1014)", () => {
+  const body = iosVersionPayload(reader({ latest_ios_version: "1.4.7", ios_ipa_build: "87" }));
+  assert.equal(body.latest_version, "1.4.7");
+  assert.equal(body.ipa_build, "87");
+  // Chưa đặt cấu hình ⇒ null, không phải chuỗi rỗng hay undefined.
+  assert.equal(iosVersionPayload(reader({})).ipa_build, null);
+});
+
 test("payload iOS đọc được cả khi header không có get() (request tối giản)", () => {
   const body = versionPayloadFor({ query: { platform: "ios" }, headers: {} }, { read: reader(CONFIG) });
   assert.equal(body.platform, "ios");
@@ -129,6 +137,7 @@ test("thiếu cấu hình ⇒ giá trị mặc định an toàn, không crash", 
     platform: "ios",
     minimum_version: "0.0.0",
     latest_version: "0.0.0",
+    ipa_build: null,
     ipa_url: "/v1/downloads/ios",
     store_url: "/v1/downloads/ios",
     ipa_manifest_url: "/install/ios/manifest.plist",
@@ -138,6 +147,7 @@ test("thiếu cấu hình ⇒ giá trị mặc định an toàn, không crash", 
     platform: "ios",
     minimum_version: "0.0.0",
     latest_version: "0.0.0",
+    ipa_build: null,
     ipa_url: "https://meetflowai.site/v1/downloads/ios",
     store_url: "https://meetflowai.site/v1/downloads/ios",
     ipa_manifest_url: "https://meetflowai.site/install/ios/manifest.plist",

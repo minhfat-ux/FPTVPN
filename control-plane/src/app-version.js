@@ -130,6 +130,11 @@ export function iosVersionPayload(read, { baseUrl = "" } = {}) {
     platform: "ios",
     minimum_version: read("minimum_ios_version") ?? "0.0.0",
     latest_version: read("latest_ios_version") ?? "0.0.0",
+    // Số build (CFBundleVersion) của IPA đang phát. Trước đây chỉ manifest OTA đọc khoá này,
+    // payload công khai thì không ⇒ server không có cách nào (và app không có dữ liệu) phân biệt
+    // hai lần phát cùng `latest_version` nhưng khác build (bus #1014). Trả `null` khi chưa đặt
+    // để client cũ không bị đổi hành vi.
+    ipa_build: read("ios_ipa_build") ?? null,
     ipa_url: ipaUrl,
     store_url: ipaUrl,
     // Cập nhật NGAY TRONG APP: app mở `itms-services://…download-manifest&url=<manifest này>`
