@@ -116,6 +116,13 @@ bash scripts/ios-verify-ipa.sh build/ios-adhoc-export/ipa/FlowVPN.ipa --version 
   nhau trong tầng tunnel — xem §7c; cổng này bắt đúng lỗi đã giết mọi nhịp iOS suốt build 25→34).
 - ❌ **`swiftc -parse` KHÔNG đủ** (chỉ kiểm cú pháp: build 33 `-parse` PASS mà archive vẫn FAIL vì thiếu hàm).
   Phải `swiftc -typecheck` (kèm shim `NWPath`) cho các file đã sửa.
+- ❌ **`-typecheck` ở chế độ Swift 5 cũng KHÔNG đủ.** Từ 20/10/2026 script chạy thêm
+  `-swift-version 6` cho khớp `project.yml` (`SWIFT_VERSION: "6.0"`). Ca thật build 84: cổng cũ
+  **PASS** nhưng archive **FAIL** với `instance method 'unlock' is unavailable from asynchronous
+  contexts` (gọi `NSLock.lock()/unlock()` trong ngữ cảnh async). Đã chứng minh hai chiều bằng một tệp
+  mẫu: chế độ 6 báo 4 lỗi, chế độ 5 báo 0. **Đừng gỡ `-swift-version 6` khỏi script.**
+  Cách viết đúng: mọi thao tác khoá nằm trong hàm **đồng bộ** (ví dụ `snapshot()`), ngữ cảnh async
+  chỉ gọi hàm đó — xem `ConnectTrace` trong `iOS/PrivateVPN/Services/AppDiagnostics.swift`.
 - ❌ **Không build trong lúc một agent đang sửa file** (build 33 lần 1 fail đúng vì lý do này).
 - ❌ **Không build khi ổ đĩa gần đầy.** Volume repo là exFAT dùng chung; ca thật 25/09/2026:
   `/Volumes/BIWIN` đầy **100% (466G/466G, còn 232Mi)** ⇒ `sed: No space left on device`, build chết

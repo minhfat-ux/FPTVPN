@@ -57,6 +57,13 @@ final class VPNManager: ObservableObject {
     /// (`cached.tunnelConfig.v1` / `cached.exitNodes.v1`) ⇒ kẹt mãi, bấm Connect lại vẫn không
     /// có mạng. Đây đúng bug đã gặp trên macOS 15/09 (xem `StaleStateMigration`).
     private var providerProbeTask: Task<Void, Never>?
+    /// Đang có lượt `connect()` chạy — cờ THẬT để chặn bấm đôi, KHÔNG suy từ `state`.
+    ///
+    /// Vì sao phải tách khỏi `state`: `state` là trạng thái hiển thị và từng bị đặt sớm ngay
+    /// trước chốt chống bấm đôi, khiến chốt nhìn thấy chính trạng thái vừa đặt rồi nuốt cú bấm
+    /// ⇒ app kẹt `.connecting` vĩnh viễn (ca thật build 81→84: khách bấm Connect là quay tít).
+    /// Cờ này chỉ đúng khi một lượt `connect()` thực sự đang chạy, và `defer` luôn nhả nó.
+    private var connectInFlight = false
     /// Đã xử lý chẩn đoán cho lần Connect này (tránh lặp lại thông báo/hạ tunnel nhiều lần).
     private var diagnosticHandled = false
     /// Đã báo `noTraffic` một lần cho phiên này chưa — để KHÔNG ghi log/xoá cache mỗi giây
@@ -139,7 +146,58 @@ final class VPNManager: ObservableObject {
         // ở đây (trước khi đặt `.connecting`) nên cú bấm đầu tiên "không có phản ứng gì" cho tới
         // khi khách trả lời hộp thoại. Nay: đặt trạng thái trước, xin quyền sau (chỉ ảnh hưởng
         // việc đọc SSID cho bộ nhớ băng thông, không chặn đường kết nối).
-        if state == .disconnected || state == .failed { state = .connecting }
+        // DẤU VẾT TỪNG BƯỚC (20/10/2026 — ca build 83 quay "Connecting" vô hạn mà `app.log`
+        // câm hoàn toàn và extension không hề ghi `build: version=`): đây là thứ DUY NHẤT nói
+        // được cú bấm treo ở bước nào, kể cả khi main thread bị chặn. Xem `ConnectTrace`.
+        ConnectTrace.shared.begin()
+        ConnectTrace.shared.watch("build-\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")")
+        // 20/10/2026 — BUG ĐÃ GẶP THẬT (build 81→84): TUYỆT ĐỐI không đặt `state = .connecting`
+        // ở đây, TRƯỚC chốt chống bấm đôi bên dưới.
+        //
+        // Vì sao: commit 26c0f37 từng thêm đúng dòng
+        //     `if state == .disconnected || state == .failed { state = .connecting }`
+        // ngay trên chốt `if state.isTransitioning { if state == .connecting { return } }`.
+        // Chốt đó nhìn thấy CHÍNH trạng thái vừa đặt ⇒ **nuốt cú bấm đầu tiên**, app kẹt
+        // `.connecting` VĨNH VIỄN: nút quay mãi, `app.log` không có thêm dòng nào, extension
+        // không hề được khởi động (không có `build: version=`), và mọi cú bấm sau đều bị chốt
+        // chặn. Bằng chứng đo được trên iPhone (build 84):
+        //     `connect⏱ · bỏ qua: state đã .connecting (chống bấm đôi)`
+        //     `connect⏱ TREO 8.7s ở bước: vào connect()`   ← mốc đứng ngay đầu hàm
+        // Khách thấy đúng triệu chứng "bấm Connect là quay tít, không lên".
+        //
+        // Nay chỉ còn ĐÚNG MỘT chỗ đặt `.connecting`: sau chốt, ngay trước
+        // `requestWiFiInfoPermissionIfNeeded()` — vẫn đủ sớm để nút quay NGAY trước hộp thoại
+        // xin quyền (mục đích ban đầu của 26c0f37) mà không tự chặn mình.
+        //
+        // Trước đây: `guard !state.isTransitioning else { return }`. Sau khi ngắt, app còn ở
+        // `.disconnecting` tới khi hệ thống báo xong (trần dừng tới 5 s) ⇒ khách bấm Connect
+        // trong khoảng đó bị BỎ QUA âm thầm: UI không đổi gì, phải bấm lại vài lần mới chạy.
+        // Nay: nếu đang `.connecting` thì vẫn bỏ qua (chống bấm đôi), còn nếu đang `.disconnecting`
+        // thì CHỜ nó xong rồi đi tiếp — một cú bấm là đủ.
+        if connectInFlight {
+            ConnectTrace.shared.finish("bỏ qua: đã có một lượt connect đang chạy")
+            return
+        }
+        if state.isTransitioning {
+            let deadline = Date().addingTimeInterval(6)
+            while state.isTransitioning && Date() < deadline {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            if state.isTransitioning {
+                ConnectTrace.shared.finish("bỏ qua: chờ .disconnecting quá 6s")
+                return
+            }
+        }
+        // Cờ THẬT của "đang có lượt connect chạy" — không suy ra từ `state`.
+        //
+        // Vì sao KHÔNG dùng `state == .connecting` để chặn bấm đôi: `state` là trạng thái
+        // HIỂN THỊ, có thể lệch với sự thật (và chính nó từng bị đặt sớm rồi tự chặn — xem
+        // khối chú thích ngay trên). `defer` bảo đảm cờ luôn được nhả khi hàm `return` hay
+        // `throw`, nên không có đường nào khiến app tự khoá mình ở `.connecting` vĩnh viễn:
+        // bấm lại là đi tiếp.
+        connectInFlight = true
+        defer { connectInFlight = false }
+        state = .connecting
         // Báo "đang kết nối" NGAY, TRƯỚC mọi lời gọi mạng — giống Android
         // (VPNManager.kt: `_state.value = VPNState.CONNECTING` rồi mới `claimDevice`).
         //
@@ -152,35 +210,25 @@ final class VPNManager: ObservableObject {
         //
         // Mọi nhánh lỗi bên dưới đều đặt lại .failed/.disconnected nên không bị kẹt
         // ở trạng thái đang kết nối.
-        // 20/10/2026 — KHÔNG nuốt cú bấm khi đang chuyển trạng thái.
-        //
-        // Trước đây: `guard !state.isTransitioning else { return }`. Sau khi ngắt, app còn ở
-        // `.disconnecting` tới khi hệ thống báo xong (trần dừng tới 5 s) ⇒ khách bấm Connect
-        // trong khoảng đó bị BỎ QUA âm thầm: UI không đổi gì, phải bấm lại vài lần mới chạy.
-        // Nay: nếu đang `.connecting` thì vẫn bỏ qua (chống bấm đôi), còn nếu đang `.disconnecting`
-        // thì CHỜ nó xong rồi đi tiếp — một cú bấm là đủ.
-        if state.isTransitioning {
-            if state == .connecting { return }
-            let deadline = Date().addingTimeInterval(6)
-            while state.isTransitioning && Date() < deadline {
-                try? await Task.sleep(nanoseconds: 200_000_000)
-            }
-            if state.isTransitioning { return }
-        }
-        state = .connecting
+        ConnectTrace.shared.mark("state=.connecting, xin quyền vị trí (đồng bộ, có thể CHẶN main thread)")
         // Quyền vị trí ⇒ đọc được SSID ⇒ bộ nhớ băng thông tách theo từng mạng.
         requestWiFiInfoPermissionIfNeeded()
+        ConnectTrace.shared.mark("đã xong xin quyền vị trí — dọn phiên cũ + nạp lại manager")
         // TRƯỚC khi cấp cấu hình mới và ghi preferences: dọn phiên CŨ cho sạch.
         // Thiếu bước này, Connect lại trong cùng vòng đời app là "lên mà không có mạng" và
         // chỉ force-quit app mới hết (đo trên iPad 19/09) — xem `prepareForFreshSession`.
         await prepareForFreshSession()
+        ConnectTrace.shared.mark("đã nạp manager từ preferences (manager=\(manager != nil)) — cấp cấu hình")
         do {
             let config: WireGuardConfig
             if let baseURL = store.controlPlaneBaseURL {
+                ConnectTrace.shared.note("cấp cấu hình qua control plane \(baseURL.absoluteString)")
                 config = try await provisionViaControlPlane(store: store, authStore: authStore, baseURL: baseURL)
             } else {
+                ConnectTrace.shared.note("không có controlPlaneBaseURL — dựng cấu hình cục bộ")
                 config = try makeConfig(store: store)
             }
+            ConnectTrace.shared.mark("đã có cấu hình (peer=\(config.peers.count)) — ghi preferences")
             try await prepareConfiguration(
                 config,
                 nodeId: store.selectedNodeID,
@@ -203,7 +251,9 @@ final class VPNManager: ObservableObject {
                 hysteriaNodes: store.availableNodes,
             )
             // State đã là .connecting từ đầu hàm; giữ nguyên tới khi tunnel lên.
+            ConnectTrace.shared.mark("đã ghi preferences — gọi startVPNTunnel()")
             try manager?.connection.startVPNTunnel()
+            ConnectTrace.shared.finish("startVPNTunnel() đã trả về OK")
             lastError = nil
             statusMessage = nil
             deviceLimitMessage = nil
@@ -222,12 +272,15 @@ final class VPNManager: ObservableObject {
                 lastError = message
                 statusMessage = message
                 log.error("device limit reached: \(devices.count) active devices")
+                ConnectTrace.shared.finish("DỪNG: chạm hạn mức thiết bị")
                 return
             }
+            ConnectTrace.shared.finish("LỖI control plane: \(error.localizedDescription)")
             state = .failed
             lastError = error.localizedDescription
             statusMessage = Self.userMessage(for: error)
         } catch {
+            ConnectTrace.shared.finish("LỖI: \(error.localizedDescription)")
             state = .failed
             lastError = error.localizedDescription
             statusMessage = Self.userMessage(for: error)
@@ -308,6 +361,7 @@ final class VPNManager: ObservableObject {
            connection.status != .invalid {
             log.info("connect: phiên cũ còn \(connection.status.rawValue) — dừng trước khi Connect lại")
             AppDiagnostics.shared.log("Connect: dừng phiên CŨ (status=\(connection.status.rawValue)) trước khi nối lại")
+            ConnectTrace.shared.mark("dừng phiên CŨ (status=\(connection.status.rawValue)) rồi chờ tối đa 6s")
             connection.stopVPNTunnel()
             let deadline = Date().addingTimeInterval(Self.sessionStopTimeout)
             while Date() < deadline {
@@ -324,6 +378,7 @@ final class VPNManager: ObservableObject {
         }
         // Nạp lại từ preferences: object manager cũ còn gắn với session vừa dừng, ghi
         // preferences trên nó là nguồn của ca "Connect lại không có mạng".
+        ConnectTrace.shared.mark("gọi loadAllFromPreferences()")
         await loadManagerFromPreferences()
     }
 
@@ -478,8 +533,10 @@ final class VPNManager: ObservableObject {
     /// (e.g. hotel captive portal / censored network) falls back to the last
     /// successful tunnel config — the WireGuard peer still exists on wg0.
     private func provisionViaControlPlane(store: VPNConfigStore, authStore: AuthSessionStore, baseURL: URL) async throws -> WireGuardConfig {
+        ConnectTrace.shared.mark("lấy khoá riêng từ Keychain")
         let privateKey = try KeychainStore.obtainOrCreatePrivateKey()
         devicePublicKey = privateKey.publicKey.base64Key
+        ConnectTrace.shared.mark("đã có khoá công khai — gọi control plane")
 
         do {
             return try await provisionFresh(store: store, authStore: authStore, baseURL: baseURL, privateKey: privateKey)
@@ -541,8 +598,10 @@ final class VPNManager: ObservableObject {
         guard let accessToken = authStore.accessToken else {
             throw ControlAPIClient.ClientError.missingSession
         }
+        ConnectTrace.shared.mark("xin enrollment token từ control plane")
         let joinToken = try await bootstrap.fetchEnrollmentToken(accessToken: accessToken)
         store.controlPlaneToken = ""
+        ConnectTrace.shared.mark("đã có enrollment token — đăng ký thiết bị")
 
         var activeKey = privateKey
         var response: CoordinatorRegisterResponse
@@ -614,7 +673,9 @@ final class VPNManager: ObservableObject {
             }
         }
 
+        ConnectTrace.shared.mark("đăng ký thiết bị xong — chọn exit node")
         let exitNode = try await selectedExitNode(store: store, client: bootstrap)
+        ConnectTrace.shared.mark("đã chọn exit node (\(exitNode.id)) — lưu bộ nhớ cấu hình")
         store.usingFallbackNodes = false
         TunnelConfigCache.save(overlayIP: response.overlay_ip, node: exitNode)
 
@@ -740,10 +801,12 @@ final class VPNManager: ObservableObject {
         hysteriaNodes: [ExitNode] = []
     ) async throws {
         let existing = try await NETunnelProviderManager.loadAllFromPreferences()
+        ConnectTrace.shared.note("prepareConfiguration: loadAllFromPreferences OK (\(existing.count) profile)")
         let matching = existing.filter { Self.isOwnProfile($0.localizedDescription) }
         let manager = matching.first ?? NETunnelProviderManager()
 
         for old in matching.dropFirst() {
+            ConnectTrace.shared.note("prepareConfiguration: xoá profile trùng")
             try? await old.removeFromPreferences()
         }
 
@@ -812,9 +875,12 @@ final class VPNManager: ObservableObject {
         // Wi-Fi/di động liên tục và đường dữ liệu là relay qua Cloudflare.
         manager.isOnDemandEnabled = true
         manager.onDemandRules = [NEOnDemandRuleConnect()]
+        ConnectTrace.shared.mark("gọi saveToPreferences()")
         try await manager.saveToPreferences()
+        ConnectTrace.shared.mark("saveToPreferences() xong — đọc lại profile")
         try await manager.loadFromPreferences()
         self.manager = manager
+        ConnectTrace.shared.mark("đã có manager sau loadFromPreferences")
     }
 
     /// Cấu hình cho transport hysteria2 của extension iOS (giống `VPNManagerMac`).
@@ -894,8 +960,10 @@ final class VPNManager: ObservableObject {
         do {
             let existing = try await NETunnelProviderManager.loadAllFromPreferences()
             manager = existing.first { Self.isOwnProfile($0.localizedDescription) }
+            ConnectTrace.shared.note("loadAllFromPreferences OK — \(existing.count) profile, khớp=\(manager != nil)")
             refreshStatus()
         } catch {
+            ConnectTrace.shared.note("loadAllFromPreferences LỖI: \(error.localizedDescription)")
             lastError = error.localizedDescription
             statusMessage = Self.userMessage(for: error)
         }

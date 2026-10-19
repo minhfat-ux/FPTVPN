@@ -1797,13 +1797,18 @@ extension BandwidthControl {
         //
         // Hệ số dưới đây = số tunnel sẽ mở (Settings). Vì quan hệ gần tuyến tính tới N=8 (đo được),
         // nhân theo N là xấp xỉ đúng; ramp trong phiên vẫn có quyền hạ nếu khai cao quá.
-        let lanes = max(1, Self.declareLanes())
-        let total = kbps * lanes
+        // 20/10/2026 — BỎ phép nhân ×N. Bằng chứng từ máy thật build 81:
+        //   `… = 5590kbps/luồng × 4 luồng = 22360kbps` nhưng cả phiên chỉ có **1** `handshake ok`
+        //   ⇒ chỉ 1 tunnel mở; khai 22 Mbps vào đường không chở nổi ⇒ Brutal sập:
+        //   `observed=0` suốt hơn 1 phút ⇒ khách mất mạng dù tunnel "Connected".
+        // Nhân chỉ đúng khi số tunnel THẬT SỰ mở = N, mà điều đó phụ thuộc core được link + relay
+        // mở được. Khi chưa chắc chắn, khai theo ĐÚNG số đo một luồng là an toàn; ramp trong phiên
+        // sẽ tự nâng khi đường chứng minh chở được.
         log?(
-            "bw: DO MANG THUC TE truoc khi khai net=\(netKey) = \(kbps)kbps/luồng × \(lanes) luồng "
-                + "= \(total)kbps [trung vị của \(valid.count) mẫu: \(valid.sorted())] — dùng số NÀY làm số khai"
+            "bw: DO MANG THUC TE truoc khi khai net=\(netKey) = \(kbps)kbps "
+                + "[trung vị của \(valid.count) mẫu: \(valid.sorted())] — dùng số này làm số khai"
         )
-        return total
+        return kbps
     }
 
     /// Trung vị của các mẫu hợp lệ (số chẵn ⇒ trung bình 2 số giữa).

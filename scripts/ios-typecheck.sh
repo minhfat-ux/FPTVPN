@@ -109,7 +109,7 @@ APP_SOURCES+=("$E/RampStatus.swift")
 run() { # $1 = nhãn, $2.. = file
   local label="$1"; shift
   local out
-  out="$(cd "$ROOT" && xcrun --sdk iphoneos swiftc -typecheck -target "$TRIPLE" -sdk "$SDK" "$@" 2>&1)"
+  out="$(cd "$ROOT" && xcrun --sdk iphoneos swiftc -typecheck -swift-version 6 -target "$TRIPLE" -sdk "$SDK" "$@" 2>&1)"
   local n
   n="$(printf '%s\n' "$out" | grep -c 'error:')"
   if [ "$n" = "0" ]; then
@@ -130,7 +130,7 @@ run_mac() { # target macOS: PrivateVPNMac + 6 file dùng chung (theo project.yml
           "iOS/PrivateVPN/Services/KeychainStore.swift"
           "iOS/PrivateVPN/Services/HysteriaDefaults.swift"
           "$E/RampStatus.swift")
-  out="$(cd "$ROOT" && xcrun --sdk macosx swiftc -typecheck -target "$MAC_TRIPLE" -sdk "$MAC_SDK" \
+  out="$(cd "$ROOT" && xcrun --sdk macosx swiftc -typecheck -swift-version 6 -target "$MAC_TRIPLE" -sdk "$MAC_SDK" \
         -I "$WORK/mac" "$WORK/nwshim.swift" "${files[@]}" 2>&1)"
   n="$(printf '%s\n' "$out" | grep -c 'error:')"
   if [ "$n" = "0" ]; then
