@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=a4f8d4c (flowgpt: scripts/send-android-1.4.6-announcement.py + docs/handoff/EMAIL_ANDROID_1.4.6_2026-10-19.md); bus-981 la BAN GUI LAP cua bus-982 (cung yeu cau, WIN gui 2 lan qua connector) -> chi gui MOT email 1.4.6 cho 4 khach platform=android, khong gui them; cmd=tren node-2: python3 /root/send-android-1.4.6-announcement.py --recipients -> --test (OK) -> gui that -> --verify; kết quả=4/4 delivered (Resend id 01a15403-f580..., 01a15403-fa2b..., 01a15403-feb4..., 01a15404-0317...), 0 loi; GET /v1/app-version?platform=android -> minimum_version=1.2.6, latest_version=1.4.6; email co link TV ?v=191f8f95 + 3 buoc cai, sua loi TV, KHONG noi bat buoc cap nhat. Phien headless duoc danh thuc cho bus-981 da duoc dung truoc khi gui de tranh trung.",
+ "actor": "mac",
+ "at": "2026-10-19T11:56:36.872Z"
+}
