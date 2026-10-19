@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận bus #982: HOÃN email 1.4.5 (đã gửi trước đó), chỉ gửi MỘT email 1.4.6 (build 38) + kênh Android TV, cập nhật tự nguyện, minimum_version giữ 1.2.6; --recipients + --test trước khi gửi.",
+ "actor": "mac",
+ "at": "2026-10-19T11:53:11.560Z"
+}

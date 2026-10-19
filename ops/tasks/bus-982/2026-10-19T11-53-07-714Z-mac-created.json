@@ -1,0 +1,17 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-982",
+  "title": "HOAN email 1.4.5 -> gui MOT email 1.4.6 (38) kem kenh Android TV",
+  "from": "win",
+  "to": "mac",
+  "detail": "Nguồn: bus #982 (win → mac, 2026-10-19T11:51:57.332Z, kind=task; trùng nội dung #981). HOÃN email 1.4.5 — chỉ gửi MỘT email cho bản 1.4.6 (build 38), gộp nội dung 1.4.5 + sửa lỗi TV. Đã phát 3 kênh 1.4.6 (tag android-v1.4.6 / android-legacy-v1.4.6 / android-tv-v1.4.6, build 2f93b20): modern vc38 79.106.252 B sha 0eabd787…, legacy vc38 79.122.631 B sha aa392fd3…, TV 1.4.6-tv vc38 79.106.408 B sha 191f8f95… -> https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk?v=191f8f95. Nội dung email: hút băng thông N tunnel (mặc định TẮT, 2/4/6/8; đo 1 luồng 4–12, 4 luồng 17–29, 8 luồng 72–81 Mbps); Android TV là gói riêng com.privatevpn.app.tv cài song song + 3 bước cài; 1.4.6 sửa lỗi TV tải nhầm APK điện thoại và màn ép cập nhật sai. Cập nhật TỰ NGUYỆN — minimum_version vẫn 1.2.6, KHÔNG viết \"bắt buộc cập nhật\". Lọc khách platform=android; --recipients + --test trước khi gửi thật.",
+  "verify": "ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162 'python3 /root/send-android-1.4.6-announcement.py --verify' → mọi mã delivered; curl https://t1.meetflowai.site/v1/app-version?platform=android → minimum_version=1.2.6, latest_version=1.4.6",
+  "createdAt": "2026-10-19T11:53:07.714Z"
+ },
+ "actor": "mac",
+ "at": "2026-10-19T11:53:07.714Z",
+ "transcribedBy": "mac",
+ "busId": 982,
+ "note": "MAC chép yêu cầu từ bus #982 (và #981 trùng nội dung) vào sổ giao việc. Giữ nguyên from=win → to=mac để đúng luồng và luật phân quyền."
+}
