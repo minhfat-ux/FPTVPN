@@ -1,0 +1,6 @@
+{
+ "type": "progress",
+ "note": "Chủ dự án xác nhận build 81 (bus #993). Nguyên nhân gốc: 26c0f37 đặt .connecting trước chốt chống bấm đôi ⇒ nuốt Connect, kẹt .connecting; sửa ở 37e1148 (build 85). Đã phát build 87 (có bản sửa 85, N tunnel mặc định TẮT) thay vì build 88 (27eb6e6 đặt N=4 mặc định BẬT, chưa nghiệm thu). IPA 1.4.7/87, 8.243.806 B, sha256 0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea, profile 13 UDID có máy khách, ipa_build=87; tải thật khớp sha, manifest bundle-version=87. Còn §7d log máy thật (iPhone đang unavailable).",
+ "actor": "mac",
+ "at": "2026-10-19T15:20:03.434Z"
+}
