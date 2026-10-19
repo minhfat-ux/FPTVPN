@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-10-19T16:32:35.213Z",
+ "note": "connector VPS: reopened từ win — bus-1014 · XUNG DOT: kenh iOS dang phat build 87 trong khi chu du an chot CHAN o build 80 — can ack + nghiem thu",
+ "via": "dsh --profile headless \"{prompt}\""
+}
