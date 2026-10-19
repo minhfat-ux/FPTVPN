@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-10-19T15:40:11.114Z",
+ "note": "connector VPS: blocked từ mac — bus-990 · URGENT: iOS khong connect duoc — chu du an bao kiem tra (kenh dang phat build 80, ban sua loi la 85-88 chua phat)",
+ "via": "dsh --profile headless \"{prompt}\""
+}
