@@ -31,9 +31,10 @@ def block(lang):
   <p>Kính gửi Quý khách,</p>
   <p>Chúng tôi vừa phát hành <b>VPNFlow {VERSION}</b> cho cả iPhone/iPad và Android.</p>
   <ul>
-    <li><b>iOS:</b> sửa lỗi “đã kết nối nhưng không có mạng” không tự phục hồi (nay tự kiểm tra sống/chết mỗi 10 giây), sửa lỗi phải <i>thoát hẳn ứng dụng</i> mới kết nối lại được, và tối ưu luồng dữ liệu qua relay.</li>
-    <li><b>Android:</b> sửa việc khai báo băng thông sai khiến tốc độ bị giới hạn (~12 Mbps) trên Wi-Fi — nay khai đúng theo loại mạng, tốc độ tăng rõ rệt.</li>
+    <li><b>Hút băng thông (N tunnel) — mới:</b> trên mạng dùng chung (toà nhà, khách sạn, quán cà phê) nhà mạng thường giới hạn tốc độ <i>theo từng kết nối</i>. Bật mục <b>Settings → Tăng tốc → Hút băng thông</b> (mặc định TẮT) để dùng 2/4/6/8 kết nối song song cùng một máy chủ. Đo thật: 1 luồng 4–12 Mbps, 8 luồng 72–81 Mbps. Mạng nhà riêng bình thường không cần bật.</li>
+    <li><b>Android:</b> sửa số liệu Diagnostics bị thiếu khi chạy nhiều kết nối, và số khai băng thông không còn bị ghi đè khi đổi mạng (Wi-Fi ↔ 4G).</li>
   </ul>
+  <p><b>Bắt buộc cập nhật:</b> bản Android cũ hơn {VERSION} sẽ được nhắc cập nhật để tiếp tục sử dụng.</p>
   <p><b>Cách cập nhật:</b> iOS mở <a href="{IOS}">trang cài đặt</a> bằng Safari trên chính máy đó; Android tải APK tại <a href="{AND}">đây</a> (hoặc vào <a href="{BUY}">trang mua</a>). Cài đè, không cần gỡ bản cũ.</p>
   <p>Cảm ơn Quý khách đã đồng hành cùng VPNFlow. Hỗ trợ: support@meetflowai.site</p>"""
     if lang == 'en':
@@ -43,9 +44,10 @@ def block(lang):
   <p>Dear customer,</p>
   <p>We have released <b>VPNFlow {VERSION}</b> for iPhone/iPad and Android.</p>
   <ul>
-    <li><b>iOS:</b> fixed “connected but no internet” that would not recover on its own (liveness check every 10 seconds), fixed having to force-quit the app before reconnecting, and improved data flow through the relay.</li>
-    <li><b>Android:</b> fixed a wrong bandwidth declaration that capped speed (~12 Mbps) on Wi-Fi — bandwidth is now declared per network type, with a clear speed improvement.</li>
+    <li><b>Bandwidth boost (N tunnels) — new:</b> on shared networks (offices, hotels, cafés) the carrier often limits speed <i>per connection</i>. Turn on <b>Settings → Boost → Bandwidth boost</b> (off by default) to use 2/4/6/8 parallel connections to the same server. Measured: one stream 4–12 Mbps, eight streams 72–81 Mbps. Not needed on a normal home network.</li>
+    <li><b>Android:</b> fixed Diagnostics under-reporting while multiple connections are active, and a bandwidth declaration that could be overwritten when switching networks (Wi-Fi ↔ mobile data).</li>
   </ul>
+  <p><b>Required update:</b> Android builds older than {VERSION} will be asked to update in order to keep using the app.</p>
   <p><b>How to update:</b> on iOS open the <a href="{IOS}">install page</a> in Safari on the same device; on Android download the APK <a href="{AND}">here</a> (or visit the <a href="{BUY}">buy page</a>). Install over the old version — no uninstall needed.</p>
   <p>Thank you for using VPNFlow. Support: support@meetflowai.site</p>"""
     return f"""
@@ -54,9 +56,10 @@ def block(lang):
   <p>尊敬的客户：</p>
   <p>我们已发布 <b>VPNFlow {VERSION}</b>，适用于 iPhone/iPad 与 Android。</p>
   <ul>
-    <li><b>iOS：</b>修复“已连接但没有网络”且无法自动恢复的问题（现在每 10 秒自检连接状态）；修复必须强制退出应用后才能重新连接的问题；优化中继数据传输。</li>
-    <li><b>Android：</b>修复带宽声明错误导致 Wi-Fi 下速度被限制（约 12 Mbps）的问题——现在按网络类型正确声明，速度明显提升。</li>
+    <li><b>带宽提升（N 隧道）— 新增：</b>在共享网络（写字楼、酒店、咖啡厅）中，运营商常按<i>单个连接</i>限速。请在 <b>设置 → 加速 → 带宽提升</b> 中开启（默认关闭），使用 2/4/6/8 条连接到同一服务器。实测：单流 4–12 Mbps，8 流 72–81 Mbps。普通家庭网络无需开启。</li>
+    <li><b>Android：</b>修复多连接时 Diagnostics 数值偏低的问题，以及切换网络（Wi-Fi ↔ 移动数据）时带宽声明被覆盖的问题。</li>
   </ul>
+  <p><b>必须更新：</b>低于 {VERSION} 的 Android 版本将被提示更新后才能继续使用。</p>
   <p><b>更新方法：</b>iOS 请在同一台设备的 Safari 打开<a href="{IOS}">安装页面</a>；Android 在<a href="{AND}">此下载 APK</a>（或访问<a href="{BUY}">购买页面</a>）。直接覆盖安装，无需卸载旧版本。</p>
   <p>感谢您使用 VPNFlow。支持邮箱：support@meetflowai.site</p>"""
 
