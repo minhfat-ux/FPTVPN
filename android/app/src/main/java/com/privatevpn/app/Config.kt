@@ -223,6 +223,30 @@ object Config {
     // la tu bop nghẽn. Server cung da bat ignoreClientBandwidth.
     const val HY_RELAY_UP_KBPS = 30000
     const val HY_RELAY_DOWN_KBPS = 100000
+
+    /**
+     * N tunnel (hút băng thông) — port từ iOS commit `167ba9d`, 20/10/2026.
+     *
+     * Mạng dùng chung (tòa nhà) giới hạn tốc độ theo TỪNG KẾT NỐI: đo thật 19/10/2026 (lặp 3 lần)
+     * 1 luồng **4–12 Mbps**, 4 luồng 17–29, **8 luồng 72–81 Mbps** — xem
+     * `docs/RESEARCH_SHARED_NETWORK_BANDWIDTH_2026-10-19.md`. App chỉ mở MỘT tunnel nên trần thực
+     * tế ~12 Mbps, khai số cao hơn cũng không vượt được.
+     *
+     * N>1 ⇒ mở N cầu WS song song tới CÙNG một relay của node (bất biến F3: cùng exit node, khác
+     * node là IP khách đổi giữa phiên ⇒ hỏng đăng nhập/thanh toán). Core Go bọc N client thành
+     * `multiClient` và chia **LUỒNG** theo vòng tròn, nên gói của một luồng vẫn đi đúng một
+     * tunnel — không đảo thứ tự gói (chia theo gói sẽ làm TCP bên trong sụp).
+     *
+     * `1` = TẮT (mặc định — hành vi y hệt bản đang phát). Trần 8 đúng bằng mốc đã đo.
+     */
+    const val MULTI_TUNNEL_MAX = 8
+    /** Các mức chọn trong Settings (khớp iOS: 2/4/6/8). */
+    val MULTI_TUNNEL_CHOICES = intArrayOf(2, 4, 6, 8)
+    /** Số tunnel đặt sẵn khi người dùng BẬT công tắc (iOS cũng dùng 4). */
+    const val MULTI_TUNNEL_DEFAULT_ON = 4
+    /** Khoá SharedPreferences (bảng `vpnflow_hysteria`) — KHOÁ RIÊNG, không dùng chung với iOS. */
+    const val KEY_MULTI_TUNNEL = "multi_tunnel_count"
+
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)
