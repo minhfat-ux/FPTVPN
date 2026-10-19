@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu doc lap: ssh root@165.101.114.162 'python3 /root/send-android-1.4.5-announcement.py --verify' -> 4/4 delivered (ca/di/ha/vt***@gmail.com, id 01a153de-...); --recipients = dung 4 khach platform=android. GET https://t1.meetflowai.site/v1/app-version?platform=android -> minimum_version=1.2.6, latest_version=1.4.5 (dung chot, khong ep cap nhat). Noi dung email co VPNFlow 1.4.5 (build 37) + link TV https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk?v=265d46b4 + 3 buoc cai, ghi ro cap nhat khong bat buoc.",
+ "actor": "win",
+ "at": "2026-10-19T11:20:36.679Z"
+}
