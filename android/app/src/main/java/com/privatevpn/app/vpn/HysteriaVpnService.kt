@@ -160,6 +160,15 @@ class HysteriaVpnService : VpnService() {
     private val extraBridges = java.util.Collections.synchronizedList(mutableListOf<WSRelayBridge>())
     /** Đã gọi `Mobile.serve()` cho phiên N tunnel chưa — xem onExtraBridgeDead(). */
     @Volatile private var multiTunnelServing = false
+
+    /**
+     * Thiết bị KHÔNG có TUN (kernel `# CONFIG_TUN is not set` — vd MiTV-AFZP0): VpnService không
+     * tạo được interface nên app tự chuyển sang **chế độ SOCKS5 nội bộ** (proxy hệ thống trỏ về
+     * `127.0.0.1:SOCKS_PORT`). Đánh dấu khi `establish()` hỏng ở cả builder đầy đủ lẫn tối giản.
+     */
+    @Volatile private var noTunDevice = false
+    /** Đã đặt proxy hệ thống chưa (để gỡ khi dừng). */
+    @Volatile private var systemProxySet = false
     /**
      * Pha RAMP/STABLE + KÊNH DÒ RIÊNG (yêu cầu chủ dự án 22/09/2026 —
      * `docs/YEU_CAU_TOC_DO_ON_DINH.md` §2b/§2c): tốc độ leo dần tới mốc Full HD rồi KHOÁ lại;
@@ -478,6 +487,9 @@ class HysteriaVpnService : VpnService() {
      * cũ trong <1s vì đường trực tiếp thử trước.
      */
     private fun oneConnectPass(): Int {
+        // Máy đã được xác định KHÔNG có TUN (kernel thiếu CONFIG_TUN): đừng thử đường TUN nữa
+        // (mỗi lượt đều chết ở establish() và app quay vòng vô ích) — đi thẳng chế độ SOCKS5.
+        if (noTunDevice) return proxyAttempt()
         // Chốt số khai băng thông TRƯỚC mọi lượt thử transport (kể cả lượt ws-relay,
         // vốn đọc meteredNow ở wsRelayAttempt): mỗi lượt thử đều có thể mở client Go
         // với số mới nhất, không phụ thuộc lượt trước đã kịp cập nhật hay chưa.
@@ -759,38 +771,43 @@ class HysteriaVpnService : VpnService() {
         armAttemptBudget(
             ((WS_OPEN_WAIT_MS + WS_ATTEMPT_UP_BUDGET_MS) * n).coerceAtMost(MULTI_TUNNEL_BUDGET_CAP_MS),
         )
-        val main = WSRelayBridge(
-            url = relayUrl,
-            protector = { sock -> protectRelaySocket(sock, "ws-relay") },
-            onDead = { reason ->
-                if (!stopping) {
-                    DiagnosticsLog.warn("ws-relay: cầu WS chính chết ($reason) -> dừng client để dựng lại")
-                    runCatching { Mobile.stop() }
-                }
-            },
-        )
-        if (!main.start()) {
-            disarmAttemptBudget()
-            return 0
-        }
-        // Mở các cầu PHỤ NGAY (song song), rồi mới bắt tay tuần tự: mở tuần tự N cầu sẽ cộng dồn
-        // thời gian chờ và ăn hết ngân sách bắt tay.
-        val pending = ArrayList<WSRelayBridge>()
-        for (i in 1 until n) {
+        // N cầu WS mở SONG SONG. Cầu nào mở được TRƯỚC thì làm tunnel CHÍNH.
+        //
+        // Vì sao không đòi đúng cầu số 0: đo trên MiTV-AFZP0 (19/10/2026) — cầu 0 timeout 443
+        // trong khi 3 cầu khác "connected" bình thường, code cũ vứt TOÀN BỘ lượt vì chờ cầu 0
+        // ⇒ TV quay vòng vòng dù đường vẫn sống. Chỉ cần ÍT NHẤT MỘT cầu mở được là đi tiếp.
+        val bridges = ArrayList<WSRelayBridge>(n)
+        for (i in 0 until n) {
+            val tag = if (i == 0) "main" else "ws-relay#$i"
             val b = WSRelayBridge(
                 url = relayUrl,
-                protector = { sock -> protectRelaySocket(sock, "ws-relay#$i") },
-                onDead = { reason -> onExtraBridgeDead("#$i", reason) },
+                protector = { sock -> protectRelaySocket(sock, tag) },
+                onDead = { reason -> onExtraBridgeDead(tag, reason) },
             )
-            if (b.start()) pending += b else b.stop()
+            if (b.start()) bridges += b else b.stop()
         }
-        if (!awaitBridge(main)) {
-            DiagnosticsLog.warn("n-tunnel: cầu chính chưa mở được, bỏ qua lượt này")
-            for (b in pending) runCatching { b.stop() }
-            runCatching { main.stop() }
+        if (bridges.isEmpty()) {
             disarmAttemptBudget()
             return 0
         }
+        val openDeadline = System.currentTimeMillis() + WS_OPEN_WAIT_MS
+        var primary: WSRelayBridge? = null
+        while (System.currentTimeMillis() < openDeadline && !stopping) {
+            primary = bridges.firstOrNull { it.connected }
+            if (primary != null) break
+            Thread.sleep(200)
+        }
+        val main = primary ?: run {
+            DiagnosticsLog.warn("n-tunnel: KHÔNG cầu nào mở được trong ${WS_OPEN_WAIT_MS}ms -> bỏ lượt")
+            for (b in bridges) runCatching { b.stop() }
+            disarmAttemptBudget()
+            return 0
+        }
+        DiagnosticsLog.log(
+            "n-tunnel: cầu chính = #${bridges.indexOf(main)} " +
+                "(${bridges.count { it.connected }}/${bridges.size} cầu đã mở)",
+        )
+        val pending = bridges.filter { it !== main }
         lastWsOpenMs = WS_OPEN_WAIT_MS.toInt() // chỉ để log 'chon-duong' thấy cầu WS đã dùng được
         val previousHost = runHost
         val previousUp = attemptUpKbps
@@ -1098,34 +1115,155 @@ class HysteriaVpnService : VpnService() {
     }
 
     private fun establish(): ParcelFileDescriptor {
-        val builder = Builder()
-        builder.setSession("VPNFlow Hysteria")
-        builder.setMtu(HY_MTU)
-        builder.addAddress(HY_TUN_IPV4_IP, 30)
-        builder.addRoute("0.0.0.0", 0)
-        // ≥2 resolver: resolver đầu không trả lời thì hệ điều hành tự hỏi cái kế tiếp — xem
-        // Config.HY_DNS_SERVERS (một resolver duy nhất làm DNS chết ngẫu nhiên khi đường rớt gói).
-        for (dns in com.privatevpn.app.Config.HY_DNS_SERVERS) {
-            builder.addDnsServer(dns)
+        // Một số ROM Android TV TỪ CHỐI cấu hình VPN "đầy đủ": đo trên MiTV-AFZP0 (19/10/2026)
+        // system_server trả `VpnJni: Cannot allocate TUN: Bad file descriptor` ⇒ `establish()`
+        // ném IllegalStateException("Cannot create interface") và tunnel không bao giờ lên.
+        // Vì vậy: thử cấu hình ĐẦY ĐỦ trước, hỏng thì LÙI về TỐI GIẢN (chỉ session/MTU/địa chỉ/
+        // route) — vẫn là VPN của mình, chỉ mất các tuỳ chọn phụ. Log rõ cái nào thành công để
+        // lần sau đọc là biết ROM nuốt được gì.
+        fun build(minimal: Boolean): ParcelFileDescriptor? {
+            val builder = Builder()
+            builder.setSession("VPNFlow Hysteria")
+            builder.setMtu(HY_MTU)
+            builder.addAddress(HY_TUN_IPV4_IP, 30)
+            builder.addRoute("0.0.0.0", 0)
+            if (!minimal) {
+                // ≥2 resolver: resolver đầu không trả lời thì hệ điều hành tự hỏi cái kế tiếp.
+                for (dns in com.privatevpn.app.Config.HY_DNS_SERVERS) {
+                    builder.addDnsServer(dns)
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    builder.setMetered(false)
+                }
+                // App Trung Quốc (WeChat, Alipay…) đi ĐƯỜNG RIÊNG, không qua VPN.
+                runCatching { CnAppBypass.applyTo(builder, this) }
+            }
+            return builder.establish()
         }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            builder.setMetered(false)
+
+        val full = runCatching { build(false) }
+        val fullError = full.exceptionOrNull()
+        val fullFd = full.getOrNull()
+        if (fullFd != null) {
+            DiagnosticsLog.log(
+                "vpn: establish ok (đầy đủ) tun=${fullFd.fd} underlying=" +
+                    runCatching { underlyingSummary() }.getOrDefault("?"),
+            )
+            return fullFd
         }
-        // App Trung Quốc (WeChat, Alipay, Meituan, Didi, Taobao…) phải đi ĐƯỜNG RIÊNG, không qua
-        // VPN — nếu đi full-tunnel thì server TQ thấy IP nước ngoài và cắt phiên (yêu cầu 22/09/2026).
-        runCatching { CnAppBypass.applyTo(builder, this) }
-        val tun = builder.establish()
-        if (tun == null) {
-            // Android TV / box có thể TỪ CHỐI cấp TUN (VPN chưa được chấp thuận ở màn hình TV, hoặc
-            // thiết bị không cho app dựng VPN). Ghi rõ để đọc log là biết ngay, rồi ném ra cho lớp
-            // trên xử như "lượt này hỏng" — KHÔNG để nó thành crash (xem catch trong runTunnel).
-            DiagnosticsLog.warn("vpn: establish() trả về NULL (VPN bị từ chối/chưa được cấp?) -> không có TUN")
-            throw IllegalStateException("establish failed (null tun)")
-        }
-        DiagnosticsLog.log(
-            "vpn: establish ok tun=${tun.fd} underlying=" + runCatching { underlyingSummary() }.getOrDefault("?"),
+        DiagnosticsLog.warn(
+            "vpn: establish ĐẦY ĐỦ hỏng" +
+                (fullError?.let { " (${it.javaClass.simpleName}: ${it.message})" } ?: " (trả NULL)") +
+                " -> thử cấu hình TỐI GIẢN (bỏ DNS/metered/bypass app TQ)",
         )
-        return tun
+        val minimal = runCatching { build(true) }
+        val minimalFd = minimal.getOrNull()
+        if (minimalFd != null) {
+            DiagnosticsLog.warn(
+                "vpn: establish ok (TỐI GIẢN) tun=${minimalFd.fd} — ROM này không nhận DNS/metered " +
+                    "/danh sách app bypass; VPN vẫn chạy nhưng DNS dùng của hệ thống",
+            )
+            return minimalFd
+        }
+        val minimalError = minimal.exceptionOrNull()
+        DiagnosticsLog.warn(
+            "vpn: establish TỐI GIẢN cũng hỏng" +
+                (minimalError?.let { " (${it.javaClass.simpleName}: ${it.message})" } ?: " (trả NULL)") +
+                " -> không có TUN",
+        )
+        // Kernel thiếu TUN (`# CONFIG_TUN is not set`, thiếu /dev/tun — vd MiTV-AFZP0): KHÔNG app
+        // VPN nào dựng được interface. Đánh dấu để các lượt sau đi chế độ SOCKS5 nội bộ.
+        noTunDevice = true
+        DiagnosticsLog.warn(
+            "vpn: máy KHÔNG có TUN -> chuyển chế độ SOCKS5 nội bộ (proxy hệ thống 127.0.0.1:$SOCKS_PORT)",
+        )
+        throw IllegalStateException(
+            "establish failed: full=" + (fullError?.let { it.javaClass.simpleName + ": " + it.message } ?: "null") +
+                "; minimal=" + (minimalError?.let { it.javaClass.simpleName + ": " + it.message } ?: "null"),
+        )
+    }
+
+    // ───────────── chế độ SOCKS5 cho thiết bị KHÔNG có TUN ─────────────
+
+    /** Đặt/gỡ proxy hệ thống. Cần WRITE_SECURE_SETTINGS (cấp bằng `adb shell pm grant`). */
+    private fun setSystemProxy(on: Boolean): Boolean {
+        val value = if (on) "127.0.0.1:$SOCKS_PORT" else ":0"
+        return runCatching {
+            android.provider.Settings.Global.putString(contentResolver, "http_proxy", value)
+            systemProxySet = on
+            true
+        }.getOrElse {
+            DiagnosticsLog.warn(
+                "proxy: KHÔNG đặt được proxy hệ thống (${it.javaClass.simpleName}: ${it.message}) " +
+                    "— cần 'pm grant $packageName android.permission.WRITE_SECURE_SETTINGS'",
+            )
+            false
+        }
+    }
+
+    /**
+     * Lượt thử ở chế độ SOCKS5: mở cầu WS (không cần TUN), bắt tay hysteria, đặt proxy hệ thống
+     * về `127.0.0.1:SOCKS_PORT` rồi chạy SOCKS5 server trên chính tunnel đó.
+     * Giới hạn: chỉ app tôn trọng proxy hệ thống mới đi qua (FPT Play/SmartTube/trình duyệt có;
+     * Netflix tự mở socket nên không).
+     */
+    private fun proxyAttempt(): Int {
+        if (stopping) return 1
+        val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
+        val relayUrl = relayForNode ?: WS_RELAY_URL
+        armAttemptBudget(WS_OPEN_WAIT_MS + WS_ATTEMPT_UP_BUDGET_MS)
+        val bridge = WSRelayBridge(
+            url = relayUrl,
+            protector = null, // chưa có tunnel nên không cần protect
+            onDead = { reason ->
+                if (!stopping) {
+                    DiagnosticsLog.warn("proxy: cầu WS chết ($reason) -> dừng để dựng lại")
+                    runCatching { Mobile.stop() }
+                }
+            },
+        )
+        if (!bridge.start()) {
+            disarmAttemptBudget()
+            return 0
+        }
+        if (!awaitBridge(bridge)) {
+            DiagnosticsLog.warn("proxy: cầu WS chưa mở được, bỏ lượt")
+            runCatching { bridge.stop() }
+            disarmAttemptBudget()
+            return 0
+        }
+        val ds = java.net.DatagramSocket()
+        val fd = runCatching { android.os.ParcelFileDescriptor.fromDatagramSocket(ds).detachFd() }
+            .getOrElse {
+                runCatching { ds.close() }
+                runCatching { bridge.stop() }
+                disarmAttemptBudget()
+                return 0
+            }
+        val previousHost = runHost
+        runHost = "127.0.0.1"
+        onWsRelay = true
+        try {
+            connectClient(bridge.localPort, fd, tcp = false)
+            DiagnosticsLog.transport = "socks$SOCKS_PORT"
+            val proxied = setSystemProxy(true)
+            if (!stopping) reportUp()
+            DiagnosticsLog.log(
+                "proxy: SOCKS5 sẵn sàng 127.0.0.1:$SOCKS_PORT " +
+                    "(proxy hệ thống=${if (proxied) "đã đặt" else "CHƯA đặt được"})",
+            )
+            Mobile.serveSocks("127.0.0.1:$SOCKS_PORT")
+            return serveOutcome("socks serve() returned")
+        } catch (e: Exception) {
+            DiagnosticsLog.warn("proxy: serveSocks lỗi: ${e.message}")
+            return serveOutcome("socks serve() threw: ${e.message}")
+        } finally {
+            runHost = previousHost
+            if (systemProxySet) setSystemProxy(false)
+            runCatching { bridge.stop() }
+            runCatching { ds.close() }
+            disarmAttemptBudget()
+        }
     }
 
     /**
@@ -2310,6 +2448,8 @@ class HysteriaVpnService : VpnService() {
         const val EXTRA_MULTI_TUNNEL = "hysteria_multi_tunnel_count"
         /** Trần ngân sách bắt tay của lượt N tunnel (N lần bắt tay QUIC tuần tự). */
         const val MULTI_TUNNEL_BUDGET_CAP_MS = 90_000L
+        /** Cong SOCKS5 noi bo cho thiet bi KHONG co TUN (xem proxyAttempt). */
+        const val SOCKS_PORT = 1081
 
         @Volatile var stopping = false
 

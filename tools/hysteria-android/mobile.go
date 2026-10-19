@@ -8,6 +8,7 @@ package mobile
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/apernet/hysteria/app/v2/internal/socks5"
 	"github.com/apernet/hysteria/app/v2/internal/tun"
 	"github.com/apernet/hysteria/core/v2/client"
 	"github.com/apernet/hysteria/extras/v2/obfs"
@@ -441,4 +443,76 @@ func Stop() {
 			}
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// CHẾ ĐỘ SOCKS5 — cho thiết bị KHÔNG có TUN
+// ---------------------------------------------------------------------------
+//
+// Vì sao cần: một số Android TV dùng kernel KHÔNG build TUN (`# CONFIG_TUN is not set`, thiếu
+// /dev/tun) — đo trên MiTV-AFZP0 (Android 14, OS3.0.8.0.UFZAATV): system_server trả
+// `VpnJni: Cannot allocate TUN: Bad file descriptor` ⇒ VpnService không tạo được giao diện ⇒
+// tunnel KHÔNG BAO GIỜ lên, dù app đổi phiên bản nào.
+//
+// Cách chữa: vẫn dùng ĐÚNG tunnel hysteria của mình, chỉ đổi "cửa ra": mở SOCKS5 nội bộ ở
+// 127.0.0.1 rồi trỏ proxy hệ thống của máy vào đó. Không cần TUN, không cần root.
+// (Giới hạn: chỉ app tôn trọng proxy hệ thống mới đi qua — FPT Play/SmartTube/trình duyệt có;
+//  Netflix tự mở socket nên KHÔNG đi qua.)
+
+type noopSocksLogger struct{}
+
+func (noopSocksLogger) TCPRequest(addr net.Addr, reqAddr string)          {}
+func (noopSocksLogger) TCPError(addr net.Addr, reqAddr string, err error) {}
+func (noopSocksLogger) UDPRequest(addr net.Addr)                          {}
+func (noopSocksLogger) UDPError(addr net.Addr, err error)                 {}
+
+// ServeSocks mở SOCKS5 tại `listen` (ví dụ "127.0.0.1:1081") trên các tunnel đã Connect.
+// CHẶN cho tới khi Stop() được gọi (hoặc listener lỗi) — đúng hợp đồng của Serve().
+func ServeSocks(listen string) error {
+	mu.Lock()
+	c := active
+	if len(slots) > 0 {
+		list := make([]client.Client, 0, len(slots)+1)
+		if c != nil {
+			list = append(list, c)
+		}
+		for _, v := range slots {
+			list = append(list, v)
+		}
+		switch len(list) {
+		case 0:
+			// không có gì: để nil-check bên dưới bắt
+		case 1:
+			c = list[0]
+		default:
+			c = &multiClient{clients: list}
+		}
+	}
+	if c == nil {
+		mu.Unlock()
+		return fmt.Errorf("hysteria not connected")
+	}
+	ch := make(chan struct{})
+	stopCh = ch
+	mu.Unlock()
+
+	l, err := net.Listen("tcp", listen)
+	if err != nil {
+		return fmt.Errorf("socks listen %s: %w", listen, err)
+	}
+	srv := &socks5.Server{HyClient: c, EventLogger: noopSocksLogger{}}
+	go func() {
+		<-ch
+		_ = l.Close()
+		_ = c.Close()
+	}()
+	err = srv.Serve(l)
+	mu.Lock()
+	active = nil
+	activeSrv = nil
+	mu.Unlock()
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		return fmt.Errorf("socks serve: %w", err)
+	}
+	return nil
 }
