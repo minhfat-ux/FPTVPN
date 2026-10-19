@@ -77,3 +77,23 @@ adb shell settings get global http_proxy  →  127.0.0.1:1081
 | `android/.../vpn/HysteriaVpnService.kt` | establish 2 bước + cờ `noTunDevice` + `proxyAttempt()` + `setSystemProxy()`, `SOCKS_PORT=1081`, nhánh trong `oneConnectPass()` |
 | `android/app/src/main/AndroidManifest.xml` | + `WRITE_SECURE_SETTINGS` |
 | `android/app/build.gradle.kts` | `versionCode 42` (bản debug TV đã test) |
+
+## 6. Làm cho chế độ SOCKS5 AN TOÀN (bổ sung 20/10, sau khi test thật)
+
+Ba việc phải làm, nếu không sẽ gây sự cố THẬT (đã xảy ra khi test):
+
+1. **Nhớ "máy không có TUN" qua lần khởi động lại**: lưu `no_tun_device` vào SharedPreferences.
+   Không lưu thì mỗi lần service bị kill lại thử TUN trước (~5–10 s) rồi mới sang SOCKS5.
+2. **Gỡ proxy khi transport kết thúc** (và khi `onDestroy`): nếu giữ, lúc app bị kill proxy sẽ trỏ
+   vào **cổng chết** ⇒ **cả TV mất mạng** (đo thật: VPNFlow không tải nổi danh sách server, các app
+   khác cũng lỗi `Failed to connect to /127.0.0.1:1081`).
+3. **Tự dọn proxy cũ ngay khi mở app** (`VPNFlowApp.onCreate`): force-stop **không chạy** `onDestroy`
+   nên proxy còn sót; mở app phải dọn TRƯỚC mọi lời gọi mạng. Đã kiểm:
+   ```
+   connect            → tunnel: UP (socks1081), proxy=127.0.0.1:1081
+   force-stop         → proxy vẫn 127.0.0.1:1081 (kill không chạy onDestroy)
+   mở lại app         → app: đã dọn proxy cũ (127.0.0.1:1081) còn sót từ phiên trước ; proxy=:0
+   ```
+
+Bản đã test trên TV: **v46** (debug `com.privatevpn.app.tv.dev`). Chuỗi bản: v42 (SOCKS5) →
+v43 (nhớ cờ) → v44 (gỡ proxy khi dừng) → v45/v46 (tự dọn lúc mở app).

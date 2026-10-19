@@ -282,6 +282,10 @@ class HysteriaVpnService : VpnService() {
                 getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MULTI_TUNNEL, 1)
             },
         )
+        // Tu chua lanh: neu lan truoc app bi kill khi dang dat proxy, proxy se con tro vao cong chet
+        // => go ngay khi service khoi dong lai.
+        runCatching { setSystemProxy(false) }
+        noTunDevice = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_NO_TUN, false)
         DiagnosticsLog.log(
             "n-tunnel: N=$multiTunnelCount" + if (multiTunnelCount > 1) " (hút băng thông BẬT)" else " (tắt)",
         )
@@ -1174,6 +1178,7 @@ class HysteriaVpnService : VpnService() {
         // Kernel thiếu TUN (`# CONFIG_TUN is not set`, thiếu /dev/tun — vd MiTV-AFZP0): KHÔNG app
         // VPN nào dựng được interface. Đánh dấu để các lượt sau đi chế độ SOCKS5 nội bộ.
         noTunDevice = true
+        runCatching { getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_NO_TUN, true).apply() }
         DiagnosticsLog.warn(
             "vpn: máy KHÔNG có TUN -> chuyển chế độ SOCKS5 nội bộ (proxy hệ thống 127.0.0.1:$SOCKS_PORT)",
         )
@@ -1259,6 +1264,8 @@ class HysteriaVpnService : VpnService() {
             return serveOutcome("socks serve() threw: ${e.message}")
         } finally {
             runHost = previousHost
+            // GO proxy khi transport ket thuc: neu giu lai, luc app bi kill proxy se tro vao cong
+            // CHET => ca TV mat mang. An toan hon la go, vao lai rat nhanh khi noi lai.
             if (systemProxySet) setSystemProxy(false)
             runCatching { bridge.stop() }
             runCatching { ds.close() }
@@ -1937,6 +1944,8 @@ class HysteriaVpnService : VpnService() {
     override fun onDestroy() {
         stopping = true
         DiagnosticsLog.tunnelUp = false
+        // Service dung hẳn: gỡ proxy hệ thống (giữa các lần nối lại thì KHÔNG gỡ).
+        if (systemProxySet) setSystemProxy(false)
         DiagnosticsLog.log("service: onDestroy")
         networkMonitor?.stop()
         networkMonitor = null
@@ -2450,6 +2459,8 @@ class HysteriaVpnService : VpnService() {
         const val MULTI_TUNNEL_BUDGET_CAP_MS = 90_000L
         /** Cong SOCKS5 noi bo cho thiet bi KHONG co TUN (xem proxyAttempt). */
         const val SOCKS_PORT = 1081
+        /** Da xac dinh may KHONG co TUN — luu lai de lan khoi dong sau di thang SOCKS5. */
+        const val KEY_NO_TUN = "no_tun_device"
 
         @Volatile var stopping = false
 
