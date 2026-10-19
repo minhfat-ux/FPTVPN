@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiệm thu PASS bus-1014 (phạm vi XUNG ĐỘT kênh/lock — KHÔNG phải xác nhận §7d của build 87).\n(a) ĐẠT: MAC phát build 87 (upload 19/10 22:19:02 +07; sổ 722b529, tag ios-v1.4.7-b87, ký lại bundle 87 có sẵn) và đã trả lời dứt điểm: CHƯA nghiệm thu máy thật đúng IPA 87 — ios-log-acceptance.py exit 1 (1/66 phiên WATCHDOG CÂM; iPhone 33987D6F unavailable, chưa có phiên sạch tunnel-log-on).\n(b) ĐẠT: chủ dự án đã chốt commit b3cb14bc (origin/main FPTVPN, 20/10 00:32 +08): \"TẠM GIỮ 87 ĐỂ NGHIỆM THU, SAI THÌ LUI 80\"; release-lock.json vẫn neo iOS 1.4.7/build 80 + blocked 81-84, thêm live_exception build 87 (sha 0a912cc9…, 8243806 B; fallback xuất lại IPA 80 từ e996d12). MAC đã append correction 6e669f8 vào release/releases.jsonl: căn cứ cũ \"#993/#998\" là SAI (#993 là tin WIN; #998 sau upload 2m31s), căn cứ đúng là b3cb14bc; xác nhận 27eb6e6 (N=4) KHÔNG có trong 87.\n(c) ĐẠT: WIN tải thật https://t1.meetflowai.site/v1/downloads/ios = HTTP 200, 8.243.806 B, sha256 0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea; manifest bundle-version=87; GET /v1/app-version?platform=ios = latest 1.4.7 + ipa_build 87; cổng check-publish-version.py với build 87 trả exit 3 (khoá vẫn hiệu lực, chỉ có live_exception do chủ dự án).\nKẾT LUẬN: PASS cho việc chốt xung đột. Build 87 VẪN CHƯA ĐƯỢC NGHIỆM THU §7d — tiếp tục ở bus-993/990; nếu §7d fail thì lui 80 theo quyết định b3cb14bc. Không đổi kênh, không phát thêm.",
+ "actor": "win",
+ "at": "2026-10-19T16:42:49.496Z"
+}
