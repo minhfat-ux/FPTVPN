@@ -45,7 +45,28 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `T-20260923-07` | done | TG /vibecode: KHACH MOI bao 'khong the ket noi den may chu VPNFlow khi | `chờ bên giao nghiệm thu` |
 | `T-20260924-01` | verified | Mac->Win CHOT dong bo control-plane: huong REPO(origin/main) -> LIVE;  | `-` |
 | `T-20260924-02` | verified | iOS 1.4.3 ASC: fix embed Hysteria.framework + entitlement hotspot-prov | `-` |
-| `T-20260924-03` | sent | Mac gui email khach Windows 1.4.7 (retry API khach TQ) — WIN da phat x | `AGENT_NAME=MAC node ops/task.mjs ack T-20260924-03 --push` |
+| `T-20260924-03` | verified | Mac gui email khach Windows 1.4.7 (retry API khach TQ) — WIN da phat x | `-` |
+| `T-20260926-01` | done | TG /vibecode: xac dinh nguon IP dang nhap SSH sai nhieu lan tren VPS ( | `chờ bên giao nghiệm thu` |
+| `T-20260927-01` | blocked | TG /vibecode: publish ban MeetFlow AI Android len Google Play (com.mee | `bên giao cần gỡ vướng` |
+| `T-20260927-02` | done | TG /vibecode: gui ma mau background trang meetflowai.site | `chờ bên giao nghiệm thu` |
+| `T-20260928-01` | done | TG /vibecode: cho link tai APK FPT Play (net.fptplay.ottbox) da cai le | `chờ bên giao nghiệm thu` |
+| `T-20260928-02` | done | TG /vibecode: publish bản cài đã work trên TV Xiaomi lên website | `chờ bên giao nghiệm thu` |
+| `T-20260928-03` | created | TG /vibecode: xac nhan link cai ban TV (FPT Play + VPNFlow) + link dow | `chưa giao — chạy task.mjs send` |
+| `T-20260928-04` | created | TG /vibecode: gui link down ban cai FPT Play de cho khach tu download | `chưa giao — chạy task.mjs send` |
+| `T-20260929-01` | done | TG /vibecode: loi Android connect bao loi http 500 la sao? — xac dinh  | `chờ bên giao nghiệm thu` |
+| `T-20260929-02` | done | TG /vibecode: xoa cac account bi revoke + khong hien account revoked t | `chờ bên giao nghiệm thu` |
+| `T-20260929-03` | done | TG /vibecode: control panel dem sai so thiet bi da dang ky (moi chi de | `chờ bên giao nghiệm thu` |
+| `T-20260929-04` | done | TG /vibecode: dashboard control panel van sai so thiet bi (so BAN GHI  | `chờ bên giao nghiệm thu` |
+| `T-20260930-01` | done | TG /vibecode: bat VPN tren may Windows + kiem tra do on dinh cua app | `chờ bên giao nghiệm thu` |
+| `T-20260930-02` | done | TG /vibecode: khach complain khong dung duoc Claude va Gemini khi bat  | `chờ bên giao nghiệm thu` |
+| `T-20260930-03` | done | TG /vibecode: check complain node 1 khong on dinh tren ban win | `chờ bên giao nghiệm thu` |
+| `T-20261002-01` | done | TG /vibecode: trang /ai/buy MeetFlow AI — nhãn ô email đang là 'VPNFlo | `chờ bên giao nghiệm thu` |
+| `T-20261002-02` | done | TG /vibecode: /ai/buy MeetFlow AI — bổ sung link tải bản Windows | `chờ bên giao nghiệm thu` |
+| `T-20261002-03` | done | TG /vibecode: báo cáo các tasks | `chờ bên giao nghiệm thu` |
+| `T-20261002-04` | verified | MAC giao qua bus #666: phat hanh ban Windows MeetFlowAI 2.0 moi nhat ( | `-` |
+| `T-20261002-05` | verified | MAC urgent #671: bo appsettings.json (lo key provider) khoi zip phat h | `-` |
+| `T-20261002-06` | done | TG /vibecode: test lại bản mới nhất MeetFlowAI trên máy thật (máy WIN) | `chờ bên giao nghiệm thu` |
+| `T-20261007-01` | done | TG /vibecode: check lại các version android cho TV, box — đã update la | `chờ bên giao nghiệm thu` |
 | `TG-VIBECODE` | done | Chủ dự án giao việc qua Telegram: kiểm tra máy Mac rồi báo lại | `chờ bên giao nghiệm thu` |
 | `VIBECODE-E2E` | done | TEST /vibecode: gui that tu server Linux (owner -> WIN qua connector V | `chờ bên giao nghiệm thu` |
 | `bus-282` | verified | Android 1.4.3 (v29) release: build + ky + nghiem thu truoc publish | `-` |
@@ -56,7 +77,22 @@ Nguồn xác thực là git: `ops/tasks/<id>/`. Giao thức: [`TASK-PROTOCOL.md`
 | `bus-311` | verified | Windows -> Mac TASK: gui KEYSTORE RELEASE Android cho Windows (chuyen  | `-` |
 | `bus-322` | verified | Windows -> Mac TASK: gui EMAIL khach cho Android 1.4.4 (versionCode 32 | `-` |
 | `bus-326` | verified | Windows -> Mac TASK UU TIEN CAO: gui EMAIL khach cho Windows 1.4.6 (ho | `-` |
+| `bus-422` | in_progress | BUG iOS — 3 lỗi: đọc ở đâu, sửa gì, nghiệm thu thế nào | `node ops/task.mjs done bus-422 --evidence "commit=…, cmd=…, kết quả=…" --push` |
+| `bus-427` | verified | Site cham: 6 anh logo = 588 KB (95% trang chu) — goi toi uu san sang ( | `-` |
+| `bus-435` | verified | BUY UX: bat buoc email truoc khi tai (owner chot) — WIN lam control-pl | `-` |
+| `bus-476` | verified | [CẦN CỨU] Chạy giúp 2 lệnh mở lại SSH trên node-1 + node-2 | `-` |
+| `bus-501` | in_progress | XÁC NHẬN + NGUYÊN NHÂN GỐC: watchdog câm sau dựng lại ở build 57 — com | `node ops/task.mjs done bus-501 --evidence "commit=…, cmd=…, kết quả=…" --push` |
+| `bus-516` | blocked | Play tester: 9 user Android VPNFlow (com.privatevpn.app) - WIN chay ba | `bên giao cần gỡ vướng` |
+| `bus-523` | verified | Admin: cần WIN nối route reset-quota (nút 'Reset 30 ngày' đã làm xong  | `-` |
 | `bus-6` | sent |  | `AGENT_NAME= node ops/task.mjs ack bus-6 --push` |
+| `bus-683` | verified | Build bản Windows mới nhất + đóng gói Inno Setup + đưa link lên web | `-` |
+| `bus-685` | verified | BẮT BUỘC: link tải Windows trên web phải trỏ đúng file Inno Setup (.ex | `-` |
+| `bus-686` | verified | BẮT BUỘC: bỏ key Soniox/OpenRouter khỏi app Windows — đưa về backend h | `-` |
+| `bus-976` | verified | Gui email Android 1.4.5 (37) + kenh Android TV moi — chu du an chot co | `-` |
+| `bus-981` | verified | HOAN email 1.4.5 -> gui MOT email 1.4.6 (38) kem kenh Android TV | `-` |
+| `bus-982` | verified | HOAN email 1.4.5 -> gui MOT email 1.4.6 (38) kem kenh Android TV | `-` |
+| `bus-990` | done | URGENT: iOS khong connect duoc — chu du an bao kiem tra (kenh dang pha | `chờ bên giao nghiệm thu` |
+| `bus-993` | reopened | XAC NHAN tu chu du an: iOS 1.4.7 build 81 LOI KHONG CONNECT — kem 2 ph | `AGENT_NAME=MAC node ops/task.mjs ack bus-993 --push   # làm lại` |
 | `tasks` | unknown |  | `-` |
 
 <!-- AUTO-TASKS:END -->
