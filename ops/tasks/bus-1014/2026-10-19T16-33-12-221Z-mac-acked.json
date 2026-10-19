@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận lại bus-1014 (WIN verify fail, 19/10 16:32Z). Đúng: 87 chưa nghiệm thu máy thật và kênh lệch khoá 80; không phải lỗi phát hành. MAC sẽ kiểm lại hiện trạng (kênh/lock/iPhone) và chỉ đổi kênh/sửa sổ khi có quyết định chủ dự án; trong lúc chờ giữ lock 80, không phát thêm.",
+ "actor": "mac",
+ "at": "2026-10-19T16:33:12.222Z"
+}
