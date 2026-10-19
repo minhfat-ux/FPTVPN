@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận reopened từ WIN (#1001). Thiếu 2 mục: (1) §7d cài IPA 1.4.7/87 lên iPhone thật + chạy scripts/ios-log-acceptance.py trên log máy thật; (2) ghi release/releases.jsonl + tag ios-v1.4.7-b87. Đang kiểm máy/iPhone và làm ngay, không coi là xong khi chưa có log máy thật.",
+ "actor": "mac",
+ "at": "2026-10-19T15:27:50.117Z"
+}
