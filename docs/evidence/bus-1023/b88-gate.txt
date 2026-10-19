@@ -1,0 +1,80 @@
+log: /Volumes/BIWIN/SourcesCode/PrivateVPN/.privatevpn/tmp/b88/ext/relay.log · 2963 dòng · 66 phiên
+
+  build   ? · 10-19 14:09:13 ·   64s · bỏ qua
+  ❌ build  87 · 10-19 14:10:22 ·  234s
+       - WATCHDOG CÂM: 0 nhịp tim trong 234s kể từ mốc bật lại gần nhất (+0s của phiên) ⇒ nhịp sống-còn không chạy (nhịp 15 s, 1 dòng/4 nhịp)
+       mẫu=22 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  ✅ build  87 · 10-19 14:14:30 ·  256s
+       mẫu=24 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=1 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  87 · 10-19 14:18:46 ·   31s · bỏ qua
+  build  87 · 10-19 14:19:17 ·   30s · bỏ qua
+  ✅ build  87 · 10-19 14:19:47 ·  120s
+       mẫu=11 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  87 · 10-19 14:21:52 ·   29s · bỏ qua
+  build  87 · 10-19 14:22:21 ·   36s · bỏ qua
+  build  87 · 10-19 14:22:57 ·   18s · bỏ qua
+  ✅ build  87 · 10-19 14:23:16 ·  108s
+       mẫu=10 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  ✅ build  87 · 10-19 14:25:11 ·  348s
+       mẫu=32 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  87 · 10-19 14:31:05 ·   19s · bỏ qua
+  ✅ build  87 · 10-19 14:31:45 ·   92s
+       mẫu=9 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  88 · 10-19 14:33:25 ·   34s · bỏ qua
+  ✅ build  88 · 10-19 14:33:59 ·  375s
+       mẫu=34 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  88 · 10-19 14:40:15 ·   23s · bỏ qua
+  build  88 · 10-19 14:40:38 ·   24s · bỏ qua
+  build  88 · 10-19 14:41:02 ·   28s · bỏ qua
+  build  88 · 10-19 14:41:30 ·   22s · bỏ qua
+  build  88 · 10-19 14:41:52 ·   23s · bỏ qua
+  build  88 · 10-19 14:42:15 ·   28s · bỏ qua
+  build  88 · 10-19 14:42:43 ·   22s · bỏ qua
+  build  88 · 10-19 14:43:06 ·   27s · bỏ qua
+  build  88 · 10-19 14:43:34 ·   23s · bỏ qua
+  build  88 · 10-19 14:43:57 ·   25s · bỏ qua
+  build  88 · 10-19 14:44:22 ·   28s · bỏ qua
+  build  88 · 10-19 14:44:50 ·   27s · bỏ qua
+  build  88 · 10-19 14:45:17 ·   22s · bỏ qua
+  build  88 · 10-19 14:45:39 ·   28s · bỏ qua
+  build  88 · 10-19 14:46:07 ·   28s · bỏ qua
+  build  88 · 10-19 14:46:36 ·   22s · bỏ qua
+  build  88 · 10-19 14:46:58 ·   23s · bỏ qua
+  ✅ build  88 · 10-19 14:47:21 ·  367s
+       mẫu=34 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  88 · 10-19 14:53:29 ·   23s · bỏ qua
+  build  88 · 10-19 14:53:52 ·   22s · bỏ qua
+  build  88 · 10-19 14:54:14 ·   27s · bỏ qua
+  build  88 · 10-19 14:54:41 ·   22s · bỏ qua
+  build  88 · 10-19 14:55:03 ·   22s · bỏ qua
+  build  88 · 10-19 14:55:25 ·   22s · bỏ qua
+  build  88 · 10-19 14:55:48 ·   27s · bỏ qua
+  build  88 · 10-19 14:56:15 ·   22s · bỏ qua
+  build  88 · 10-19 14:56:37 ·   22s · bỏ qua
+  build  88 · 10-19 14:56:59 ·   27s · bỏ qua
+  build  88 · 10-19 14:57:26 ·   22s · bỏ qua
+  build  88 · 10-19 14:57:49 ·   22s · bỏ qua
+  build  88 · 10-19 14:58:11 ·   27s · bỏ qua
+  build  88 · 10-19 14:58:38 ·   22s · bỏ qua
+  build  88 · 10-19 14:59:00 ·   22s · bỏ qua
+  build  88 · 10-19 14:59:23 ·   32s · bỏ qua
+  build  88 · 10-19 14:59:55 ·   22s · bỏ qua
+  build  88 · 10-19 15:00:17 ·   22s · bỏ qua
+  build  88 · 10-19 15:00:40 ·   23s · bỏ qua
+  build  88 · 10-19 15:01:02 ·   30s · bỏ qua
+  build  88 · 10-19 15:01:33 ·   27s · bỏ qua
+  build  88 · 10-19 15:02:00 ·   22s · bỏ qua
+  build  88 · 10-19 15:02:22 ·   23s · bỏ qua
+  build  88 · 10-19 15:02:46 ·   22s · bỏ qua
+  build  88 · 10-19 15:03:08 ·   28s · bỏ qua
+  build  88 · 10-19 15:03:36 ·   28s · bỏ qua
+  build  88 · 10-19 15:04:04 ·   29s · bỏ qua
+  build  88 · 10-19 15:04:33 ·   33s · bỏ qua
+  build  88 · 10-19 15:05:07 ·   28s · bỏ qua
+  build  88 · 10-19 15:05:35 ·   23s · bỏ qua
+  build  88 · 10-19 15:05:58 ·   23s · bỏ qua
+  build  88 · 10-19 15:06:21 ·   27s · bỏ qua
+  build  88 · 10-19 15:06:49 ·   27s · bỏ qua
+
+KẾT LUẬN: KHÔNG ĐẠT — 1/66 phiên có lỗi ở trên
+b88 EXIT=1

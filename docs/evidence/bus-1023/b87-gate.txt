@@ -1,0 +1,24 @@
+log: /Users/minhnguyen/FlowGPT/.tmp/b87-only.log · 678 dòng · 12 phiên
+
+  ❌ build  87 · 10-19 14:10:22 ·  234s
+       - WATCHDOG CÂM: 0 nhịp tim trong 234s kể từ mốc bật lại gần nhất (+0s của phiên) ⇒ nhịp sống-còn không chạy (nhịp 15 s, 1 dòng/4 nhịp)
+       mẫu=22 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  ✅ build  87 · 10-19 14:14:30 ·  256s
+       mẫu=24 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=1 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  87 · 10-19 14:18:46 ·   31s · bỏ qua
+  build  87 · 10-19 14:19:17 ·   30s · bỏ qua
+  ✅ build  87 · 10-19 14:19:47 ·  120s
+       mẫu=11 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  87 · 10-19 14:21:52 ·   29s · bỏ qua
+  build  87 · 10-19 14:22:21 ·   36s · bỏ qua
+  build  87 · 10-19 14:22:57 ·   18s · bỏ qua
+  ✅ build  87 · 10-19 14:23:16 ·  108s
+       mẫu=10 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  ✅ build  87 · 10-19 14:25:11 ·  348s
+       mẫu=32 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+  build  87 · 10-19 14:31:05 ·   19s · bỏ qua
+  ✅ build  87 · 10-19 14:31:45 ·   92s
+       mẫu=9 · nhịp-tim=0 · đổi-mạng=0 (dựng lại 0) · link-mở-lại=0 · tự-gỡ=0 · bỏ=0/treo=0 · tốc độ tb≈0 kbps
+
+KẾT LUẬN: KHÔNG ĐẠT — 1/12 phiên có lỗi ở trên
+b87 EXIT=1

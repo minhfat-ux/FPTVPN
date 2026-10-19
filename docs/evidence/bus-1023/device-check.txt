@@ -1,0 +1,13 @@
+# device check — 2026-10-19T16:42:53Z
+$ xcrun devicectl list devices --timeout 10
+Name                 Hostname                             Identifier                             State         Model                         
+------------------   ----------------------------------   ------------------------------------   -----------   ------------------------------
+FSZH Nanshan         FSZH-Nanshan.coredevice.local        372AF2D4-0B14-573C-9CB5-E2690753706A   unavailable   iPad (A16) (iPad15,7)         
+Minh Nguyen’s iPad   Minh-Nguyens-iPad.coredevice.local   5BA3126D-4776-5F75-8B10-0A60559ED1CC   unavailable   iPad (A16) (iPad15,7)         
+Minh's iphone        Minhs-iphone.coredevice.local        33987D6F-5424-58C7-9CFC-7A0B1F60C717   unavailable   iPhone 14 Pro Max (iPhone15,3)
+
+$ system_profiler SPUSBDataType | grep -iE 'iphone|ipad|apple mobile'
+(không có thiết bị iOS nào trên USB)
+
+$ xcrun xctrace list devices
+No devices available for the recording
