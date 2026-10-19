@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=228bb80 (flowgpt: ops/tasks/bus-990 + docs/evidence/bus-990); cmd=ios-resign-ipa.sh --src build 87 + ios-verify-ipa (shim openssl) + scp node-2 + PATCH /v1/admin/app-version; kết quả=ĐÃ PHÁT iOS 1.4.7/87: IPA 8.243.806 B sha256 0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea, profile 13 UDID có máy khách 00008101-000A55C01E85001E, get-task-allow=false, app+appex cùng 1.4.7/87; server /root/flowvpn-ipa/VPNFlow-latest.ipa khớp sha (backup bản cũ ...b80-resign-20261019-2319.ipa); ipa_build=87, latest_version=1.4.7, minimum=1.3.3; tải thật từ t1 khớp sha, manifest bundle-version=87, /install/ios + /buy 200; buildSerial=21 pending=0. NGUYÊN NHÂN: chủ dự án xác nhận build 81; 26c0f37 đặt .connecting trước chốt chống bấm đôi ⇒ nuốt Connect, sửa ở 37e1148 (85). KHÔNG phát 88 vì 27eb6e6 đặt N=4 mặc định BẬT chưa nghiệm thu. CÒN: §7d log máy thật (iPhone unavailable).",
+ "actor": "mac",
+ "at": "2026-10-19T15:20:44.681Z"
+}
