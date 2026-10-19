@@ -6,11 +6,20 @@
       "platform": "ios",
       "version": "1.4.7",
       "build": "80",
-      "reason": "CHỐT CỦA CHỦ DỰ ÁN 19/10/2026 (tối): 'chặn iOS ở bản 80, không nâng version bản 81 khi chưa nghiệm thu'. Lý do kỹ thuật: chủ dự án xác nhận bản build 81 KHÔNG CONNECT ĐƯỢC; báo cáo .privatevpn/reports/2026-10-20-ios-connect-quay-tit-khong-len.md kết luận build 81→84 hỏng, build 85 mới sửa (commit 26c0f37 đặt .connecting TRƯỚC chốt chống bấm đôi ⇒ nuốt mọi cú bấm Connect). Kênh iOS GIỮ build 80 cho tới khi có nghiệm thu máy thật cho bản mới.",
+      "reason": "CHỐT CỦA CHỦ DỰ ÁN 19/10/2026 (tối): 'chặn iOS ở bản 80, không nâng version bản 81 khi chưa nghiệm thu' — sau đó chốt tiếp khi biết kênh đang phục vụ build 87: 'TẠM GIỮ 87 ĐỂ NGHIỆM THU, SAI THÌ LUI 80'. Lý do kỹ thuật: chủ dự án xác nhận build 81 KHÔNG CONNECT ĐƯỢC; báo cáo .privatevpn/reports/2026-10-20-ios-connect-quay-tit-khong-len.md kết luận build 81→84 hỏng, build 85 mới sửa (commit 26c0f37 đặt .connecting TRƯỚC chốt chống bấm đôi ⇒ nuốt mọi cú bấm Connect). Khoá neo build 80 (bản chạy tốt) ⇒ cổng CHẶN mọi lần phát 1.4.7 build khác 80 (kể cả 87/88) trừ khi có chủ đích (--allow-locked kèm lý do) hoặc sửa file này.",
       "at": "2026-09-30",
       "locked_by": "mac",
       "pinned_by_owner_at": "2026-10-19",
-      "blocked": ["1.4.7/81", "1.4.7/82", "1.4.7/83", "1.4.7/84"]
+      "blocked": ["1.4.7/81", "1.4.7/82", "1.4.7/83", "1.4.7/84"],
+      "live_exception": {
+        "build": "87",
+        "status": "tam_giu_cho_nghiem_thu",
+        "owner_decision": "Tạm giữ 87 để nghiệm thu, sai thì lui 80",
+        "at": "2026-10-19",
+        "sha256": "0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea",
+        "size": 8243806,
+        "fallback_note": "Nghiệm thu 87 KHÔNG ĐẠT ⇒ lui về build 80, NHƯNG server không còn file build 80 ⇒ Mac phải xuất lại IPA từ commit e996d12 (8.236.378 B, sha b12681ea) rồi mới đẩy về được."
+      }
     }
   ],
   "history": [
