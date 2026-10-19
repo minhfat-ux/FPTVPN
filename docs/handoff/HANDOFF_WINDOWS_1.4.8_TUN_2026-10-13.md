@@ -246,13 +246,64 @@ về địa chỉ đó (`100.100.100.101`). Mỗi truy vấn:
 
 Nhờ vậy **không cần danh sách tên miền nào để bảo trì** cho nhóm (2), mà tên miền TQ vẫn nhận IP TQ.
 
+### 5.5 Bộ chia DNS — đã kiểm tới đâu
+
+**Đã kiểm THẬT** (chạy binary trên cổng loopback `127.0.0.1:53`, `Resolve-DnsName -Server 127.0.0.1`):
+
+```
+[flowvpnrelay] dns: splitter 127.0.0.1:53 cn=223.5.5.5:53 remote=1.1.1.1:53 cnSuffixes=4 cnRanges=0
+www.baidu.com      -> 183.2.172.177
+www.taobao.com     -> 183.3.204.52, 183.3.204.53
+qq.com             -> 123.150.76.218, 113.108.81.189
+www.google.com     -> 142.251.155.119, 142.251.150.119, …        (KHONG phai 31.13.92.37 / 185.45.5.35)
+www.youtube.com    -> 142.251.150.4, 142.251.156.4, …            (KHONG phai 104.244.42.197 / 174.132.167.252)
+```
+Đối chứng hai upstream cho thấy bộ chia **loại** đáp án nhiễm độc (223.5.5.5 trả `31.13.92.37` cho
+google) và **chỉ nhận** đáp án nằm trong `cn.txt`; tách bạch 3 quy tắc đã được chứng minh bằng một
+instance có `remote` chết (MX `qq.com` vẫn NOERROR; TXT ngoài danh sách và google đều SERVFAIL).
+TCP (khung 2 byte) cũng chạy; `DNSFAIL` in đúng khi cổng bận.
+
+**CHƯA kiểm trên máy thật:** cặp "TUN + bộ chia DNS nghe ở `100.100.100.101:53`" (nhánh bind SAU
+khi adapter được gán địa chỉ) và hiệu quả `www.baidu.com` 26.217 ms → ~116 ms. Lần chạy admin cuối
+cùng còn thiếu — lệnh:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\installer\verify-relay.ps1 -Password <HY_PASSWORD> -Obfs <HY_OBFS>
+```
+Kỳ vọng mục 8b: `www.baidu.com` và `www.taobao.com` ra IP TQ **và** `Find-NetRoute` KHÔNG trỏ vào
+`flowvpntun`. (`TUNREADY`/route/bypass/DNS-qua-tunnel đã ĐẠT ở §5.2 với binary trước khi thêm bộ chia.)
+
+### 5.6 Đã sửa trong lần rà cuối
+
+1. `DNSFAIL` nay được app hiểu (`HysteriaRelayDefaults.DnsFailMarker`): TUN lên mà bộ chia DNS không
+   bind được thì app rơi đường khác NGAY thay vì chờ hết `ReadyTimeoutSeconds`.
+2. Bộ chia DNS bị **đóng khi TUN chết**: socket đang bind vào địa chỉ của TUN, địa chỉ đó biến mất
+   khi TUN chết — giữ lại thì vòng sau bộ chia "tưởng" đã sẵn sàng nhưng socket không nhận gói nữa
+   (DNS câm). TUN chết là lúc duy nhất nó bị đóng nên không tạo khoảng trống trong phiên đang chạy.
+3. Quy tắc 1 (tên miền TQ) khi resolver nội địa **không trả lời** thì rơi về resolver công cộng thay
+   vì trả SERVFAIL: chậm còn hơn hỏng (WeChat/thanh toán TQ chết hẳn trong khi mạng vẫn còn).
+
 ## 6. Việc của publisher (harness Windows)
 
-1. `dotnet test` phải xanh (223/223) và `verify-relay.ps1 -ConfigOnly` phải ĐẠT trước khi đóng gói.
+1. `dotnet test` phải xanh (**225/225**) và `verify-relay.ps1 -ConfigOnly` phải ĐẠT (**18/18**).
 2. Đóng gói: `powershell -ExecutionPolicy Bypass -File windows\installer\build.ps1 -Version 1.4.8 -Commit <sha>`
    → `windows\installer\out\VPNFlow-Setup-1.4.8.exe`.
 3. **Luật 11**: bộ cài Windows **phải được ký số** trước khi phát. Chưa có chứng chỉ ⇒ cần
    chủ dự án ghi ngoại lệ như 1.4.5 **hoặc** chờ chứng chỉ.
 4. Sau khi phát: cập nhật `/v1/app-version?platform=windows` và link `/buy` (`?v=<8 ký tự sha256>`),
    ghi một dòng vào `docs/PUBLISHER_PROCESS.md`, tag `windows-v1.4.8`.
-5. Kích thước bộ cài sẽ **nhỏ đi rất nhiều** (bỏ 59 MB `sing-box.exe`, thêm ~2,4 MB relay mới).
+5. Bộ cài **nhỏ đi ~14 MB** (bỏ 59 MB `sing-box.exe`, thêm ~2,4 MB relay mới).
+
+---
+
+## 7. Artifact đã dựng sẵn (chờ chủ dự án test + publisher phát)
+
+| File | Kích thước | sha256 |
+|---|---|---|
+| `windows\installer\out\VPNFlow-Setup-1.4.8.exe` | 38.676.163 B | `18db6ee87deb6c16ad91aed5b8c199f1fed4ef75b7eb2f8c54eb3cc82dcc2f9a` |
+| `VPNFlow-1.4.8-portable-win64.zip` | 52.663.633 B | `144ab00f19061ed178db06375dc89d13067acc81c3b59f80a27cc74b8168bf95` |
+
+Bản sao để chủ dự án cài thử: `C:\Users\Minhn\Desktop\VPNFlow-1.4.8\`.
+Bộ publish **không còn** `sing-box.exe`; lowvpnrelay.exe = 12.788.736 B ·
+`ce6fd67c7407979bb8db4dd0acc809ceef77f21b5336076d2053d322ba3c974e`.
+Bộ cài **chưa ký** (luật 11 vẫn cần ngoại lệ hoặc chứng chỉ).
