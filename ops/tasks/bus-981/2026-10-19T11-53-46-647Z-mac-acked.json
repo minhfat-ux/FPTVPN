@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận bus #981 (WIN gửi lặp #982 cùng nội dung): không gửi email 1.4.5 nữa; soạn MỘT email 1.4.6 (build 38) gồm nội dung 1.4.5 + kênh Android TV + fix nút cập nhật TV; lọc platform=android, --recipients + --test trước khi gửi; minimum_version giữ 1.2.6, không nói bắt buộc.",
+ "actor": "mac",
+ "at": "2026-10-19T11:53:46.648Z"
+}
