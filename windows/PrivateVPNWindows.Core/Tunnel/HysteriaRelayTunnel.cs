@@ -3,41 +3,45 @@ using PrivateVPNWindows.Core.Tunnel;
 
 namespace VpnFlow.Core.Tunnel;
 
-/// <summary>Trạng thái của cặp tiến trình con (flowvpnrelay + sing-box).</summary>
+/// <summary>Trạng thái của tiến trình con flowvpnrelay.</summary>
 public enum HysteriaRelayState
 {
     Stopped,
     Starting,
     Running,
 
-    /// <summary>Một tiến trình con chết bất ngờ khi đang chạy — tầng trên quyết định kết nối lại.</summary>
+    /// <summary>Tiến trình con chết bất ngờ khi đang chạy — tầng trên quyết định kết nối lại.</summary>
     Faulted,
 }
 
 /// <summary>
-/// Bộ điều khiển đường "hysteria2 bọc trong WebSocket" trên Windows: chạy HAI tiến trình con
-/// cạnh app rồi ghép chúng lại thành một tunnel full-TUN.
+/// Bộ điều khiển đường "hysteria2 bọc trong WebSocket" trên Windows: chạy MỘT tiến trình con cạnh
+/// app — <c>flowvpnrelay.exe -c relay.json</c> — và tiến trình đó tự lo cả ba việc:
 ///
-///  1. <c>flowvpnrelay.exe -c relay.json</c> — hysteria2 client có transport WebSocket
-///     (<c>/relay/vn*hy</c> sau Cloudflare). Nó mở SOCKS5 nội bộ ở <c>127.0.0.1:&lt;cổng&gt;</c>
-///     (có cả UDP) và in ra stderr dòng chứa <c>READY </c> khi đã bắt tay xong.
-///  2. <c>sing-box.exe run -c sing-box.json</c> — TUN + auto_route + DNS, outbound trỏ vào
-///     SOCKS5 của bước 1. Chỉ chạy SAU khi thấy READY, vì sing-box bật auto_route ngay khi
-///     khởi động: lên trước mà relay chưa sẵn sàng là cả máy mất mạng.
+///  1. transport hysteria2-over-WebSocket (<c>/relay/vn*hy</c> sau Cloudflare) — đường duy nhất còn
+///     đi được khi mạng chặn thẳng IP node;
+///  2. TUN + auto_route, kèm danh sách dải IP Trung Quốc đi THẲNG (bypass TQ);
+///  3. SOCKS5 nội bộ (giữ lại cho chẩn đoán/đo băng thông).
 ///
-/// Thứ tự dọn có chủ ý, ngược thứ tự dựng: kill sing-box TRƯỚC (để nó gỡ TUN + route) rồi mới
-/// kill relay — làm ngược lại sẽ để lại route full-tunnel trỏ vào đường đã chết.
+/// Trước 1.4.7 việc (2) do <c>sing-box.exe</c> làm. Bỏ được nó là mục tiêu của bản này: sing-box là
+/// binary bên thứ ba CHƯA KÝ nên bị <b>Smart App Control</b> chặn trên máy khách (Win32 4551,
+/// CodeIntegrity 3033/3077/3118) — xem <see cref="HysteriaRelayDefaults"/>.
 ///
-/// KHÔNG tự kết nối lại: tiến trình con chết bất ngờ thì báo qua <see cref="Faulted"/>; việc
-/// thử lại thuộc về <c>VpnConnectionService</c> (vòng lặp vô hạn ở tầng này sẽ che mất lỗi).
+/// Mốc "tunnel đã lên" là dòng <c>TUNREADY</c> trên stderr (adapter TUN đã tồn tại và được cấu
+/// hình), KHÔNG phải dòng <c>READY</c> của SOCKS5: có SOCKS5 mà chưa có TUN thì máy vẫn chưa có
+/// route nào. Ngay sau <c>TUNREADY</c> ta đặt DNS lên chính adapter đó — cùng cách đường WireGuard
+/// vẫn làm (netsh), để truy vấn DNS đi TRONG tunnel thay vì ra resolver của mạng khách.
+///
+/// KHÔNG tự kết nối lại: tiến trình con chết bất ngờ thì báo qua <see cref="Faulted"/>; việc thử lại
+/// thuộc về <c>VpnConnectionService</c> (vòng lặp vô hạn ở tầng này sẽ che mất lỗi).
 /// </summary>
 public sealed class HysteriaRelayTunnel : IDisposable
 {
-    /// <summary>Hạn chờ dòng READY của flowvpnrelay (bắt tay WS + TLS + QUIC qua 2 chặng).</summary>
-    public const int ReadyTimeoutSeconds = 15;
-
-    /// <summary>Thời gian cho sing-box gỡ TUN/route trước khi bị kill cứng.</summary>
-    private const int SingBoxExitGraceMs = 5_000;
+    /// <summary>
+    /// Hạn chờ dòng TUNREADY: bắt tay WS + TLS + QUIC qua 2 chặng (trần 12s ở phía Go) rồi tạo
+    /// adapter TUN (Go chờ tối đa 15s). Cộng lại có biên.
+    /// </summary>
+    public const int ReadyTimeoutSeconds = 30;
 
     private readonly string _assetDirectory;
     private readonly string _workingDirectory;
@@ -45,7 +49,6 @@ public sealed class HysteriaRelayTunnel : IDisposable
     private readonly object _lock = new();
 
     private Process? _relayProcess;
-    private Process? _singBoxProcess;
 
     /// <summary>True khi ta CHỦ ĐỘNG dừng: Exited của tiến trình con không được coi là sự cố.</summary>
     private volatile bool _stopping;
@@ -100,8 +103,8 @@ public sealed class HysteriaRelayTunnel : IDisposable
     /// <summary>Cổng SOCKS5 nội bộ của flowvpnrelay (0 trước khi Start).</summary>
     public int RelaySocksPort { get; private set; }
 
-    /// <summary>Cổng clash_api của sing-box (dùng để chẩn đoán; 0 trước khi Start).</summary>
-    public int ClashApiPort { get; private set; }
+    /// <summary>Tên adapter TUN đang dùng (null trước khi Start xong). Dùng cho chẩn đoán.</summary>
+    public string? TunInterfaceName { get; private set; }
 
     /// <summary>URL relay đang dùng cho phiên hiện tại.</summary>
     public string? RelayUrlInUse { get; private set; }
@@ -111,14 +114,11 @@ public sealed class HysteriaRelayTunnel : IDisposable
     /// <summary>Đường dẫn file cấu hình của phiên hiện tại (để chẩn đoán/verify-relay.ps1 dùng lại).</summary>
     public string RelayConfigPath => Path.Combine(_workingDirectory, "flowvpnrelay.json");
 
-    public string SingBoxConfigPath => Path.Combine(_workingDirectory, "sing-box.json");
-
-    public string SingBoxLogPath => Path.Combine(_workingDirectory, "sing-box.log");
-
     /// <summary>
-    /// Dựng tunnel: cấp cổng trống → ghi 2 file cấu hình → chạy relay và CHỜ READY → chạy sing-box.
-    /// Ném <see cref="TunnelTransportException"/> khi thiếu binary hoặc relay không lên; trong mọi
-    /// trường hợp lỗi, tiến trình con đã chạy đều bị dọn sạch trước khi ném.
+    /// Dựng tunnel: cấp cổng trống → ghi cấu hình (transport + TUN) → chạy relay và CHỜ TUNREADY →
+    /// đặt DNS lên adapter TUN. Ném <see cref="TunnelTransportException"/> khi thiếu binary, khi TUN
+    /// không dựng được (<c>TUNFAIL</c>) hoặc khi hết hạn chờ; trong mọi trường hợp lỗi, tiến trình
+    /// con đã chạy đều bị dọn sạch trước khi ném.
     /// </summary>
     public async Task StartAsync(string server, string relayUrl, CancellationToken cancellationToken = default)
     {
@@ -131,53 +131,48 @@ public sealed class HysteriaRelayTunnel : IDisposable
         SetLastError(null);
 
         var relayExe = Path.Combine(_assetDirectory, HysteriaRelayDefaults.RelayExeName);
-        var singBoxExe = Path.Combine(_assetDirectory, HysteriaRelayDefaults.SingBoxExeName);
         RequireBinary(relayExe);
-        RequireBinary(singBoxExe);
 
-        // Máy khách bật Smart App Control thì sing-box.exe (binary bên thứ ba CHƯA KÝ) bị chặn
-        // ngay lúc khởi chạy. Phát hiện SỚM: không tốn thời gian bắt tay WebSocket rồi mới chết,
-        // và báo đúng nguyên nhân cho người dùng. Kết quả được ghi nhớ nên các lần kết nối sau
-        // thoát ra tức thì (xem ApplicationControlGuard).
-        if (ApplicationControlGuard.ProbeBlocked(singBoxExe))
+        // Máy bật Smart App Control có thể chặn cả binary CHƯA KÝ của mình (đã đo: bản app tự build
+        // bị chặn 6 lần). Phát hiện SỚM để không tốn thời gian bắt tay WebSocket rồi mới chết và báo
+        // đúng nguyên nhân. Kết quả được ghi nhớ nên các lần kết nối sau thoát ra tức thì.
+        if (ApplicationControlGuard.ProbeBlocked(relayExe))
         {
             throw new TunnelTransportException(
-                ApplicationControlGuard.UserMessage(Path.GetFileName(singBoxExe)));
+                ApplicationControlGuard.UserMessage(Path.GetFileName(relayExe)));
         }
 
         // Cổng cấp động: hard-code sẽ đụng khi máy khách đã có tiến trình khác giữ cổng đó.
-        var ports = SingBoxConfigBuilder.AllocateFreePorts(2);
-        RelaySocksPort = ports[0];
-        ClashApiPort = ports[1];
+        RelaySocksPort = SingBoxConfigBuilder.AllocateFreePort();
         RelayUrlInUse = relayUrl;
 
         Directory.CreateDirectory(_workingDirectory);
 
         // Bypass Trung Quốc: danh sách dải IP TQ đi THẲNG, không vào tunnel. Thiếu nó thì app TQ
         // (WeChat/Alipay/Taobao…) thấy IP nước ngoài và cắt kết nối — đúng lỗi khách báo 22/09/2026.
-        // Best-effort: không lấy được danh sách thì vẫn dựng tunnel với rule theo tên miền, KHÔNG chặn kết nối.
+        // Best-effort: không lấy được danh sách thì TUN vẫn lên full-tunnel, KHÔNG chặn kết nối.
         var chinaCidrs = await TryLoadChinaBypassCidrsAsync(cancellationToken).ConfigureAwait(false);
 
         File.WriteAllText(
             RelayConfigPath,
-            SingBoxConfigBuilder.BuildRelayConfig(server, relayUrl, RelaySocksPort));
-        File.WriteAllText(
-            SingBoxConfigPath,
-            SingBoxConfigBuilder.BuildSingBoxConfig(
+            SingBoxConfigBuilder.BuildRelayConfig(
+                server,
+                relayUrl,
                 RelaySocksPort,
-                SingBoxLogPath,
-                ClashApiPort,
                 chinaCidrs: chinaCidrs));
 
         _log.Info(
             $"relay: đã ghi cấu hình ({RelayConfigPath}) — server={server} relay={relayUrl} " +
-            $"socks=127.0.0.1:{RelaySocksPort} clash=127.0.0.1:{ClashApiPort}");
+            $"socks=127.0.0.1:{RelaySocksPort} tun={HysteriaRelayDefaults.TunName} " +
+            $"bypass={(chinaCidrs is { Count: > 0 } ? chinaCidrs.Count + " dải TQ" : "KHÔNG có")}");
 
         SetState(HysteriaRelayState.Starting);
         try
         {
-            await StartRelayAsync(relayExe, RelayConfigPath).ConfigureAwait(false);
-            StartSingBox(singBoxExe, SingBoxConfigPath);
+            TunInterfaceName = await StartRelayAsync(relayExe, RelayConfigPath).ConfigureAwait(false);
+
+            // DNS đặt SAU khi TUN đã tồn tại: chưa có adapter thì netsh không có gì để trỏ vào.
+            await ApplyTunDnsAsync(TunInterfaceName, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -187,15 +182,16 @@ public sealed class HysteriaRelayTunnel : IDisposable
 
         SetState(HysteriaRelayState.Running);
         _log.Info(
-            $"relay: đường hysteria2-over-WS đã lên — relay={relayUrl} (socks=127.0.0.1:{RelaySocksPort})");
+            $"relay: đường hysteria2-over-WS đã lên — relay={relayUrl} " +
+            $"(tun={TunInterfaceName}, socks=127.0.0.1:{RelaySocksPort})");
     }
 
     /// <summary>
-    /// Nạp danh sách dải IP Trung Quốc (<c>cn.txt</c> + <c>cn6.txt</c>) để nhúng vào cấu hình sing-box.
+    /// Nạp danh sách dải IP Trung Quốc (<c>cn.txt</c> + <c>cn6.txt</c>) để nhúng vào cấu hình relay.
     ///
-    /// Trả null khi không lấy được gì: khi đó cấu hình KHÔNG có rule <c>ip_cidr</c>, tunnel vẫn lên
-    /// bình thường với phần rule theo tên miền. Bypass là tính năng phụ — tuyệt đối không được phép
-    /// biến lỗi mạng thành lỗi kết nối (bài học "connecting mãi" của 1.0.4).
+    /// Trả null khi không lấy được gì: khi đó TUN vẫn lên full-tunnel, chỉ mất phần bypass. Bypass là
+    /// tính năng phụ — tuyệt đối không được phép biến lỗi mạng thành lỗi kết nối (bài học "connecting
+    /// mãi" của 1.0.4).
     /// </summary>
     private async Task<IReadOnlyList<string>?> TryLoadChinaBypassCidrsAsync(CancellationToken cancellationToken)
     {
@@ -212,7 +208,7 @@ public sealed class HysteriaRelayTunnel : IDisposable
                 return null;
             }
 
-            _log.Info($"china-bypass (relay): nhúng {cidrs.Count} dải CIDR Trung Quốc đi thẳng vào cấu hình sing-box");
+            _log.Info($"china-bypass (relay): nhúng {cidrs.Count} dải CIDR Trung Quốc đi thẳng vào cấu hình TUN");
             return cidrs;
         }
         catch (Exception ex)
@@ -222,24 +218,25 @@ public sealed class HysteriaRelayTunnel : IDisposable
         }
     }
 
+    /// <summary>Kết quả chờ mốc TUNREADY.</summary>
+    private readonly record struct RelayReady(string InterfaceName);
+
     /// <summary>
-    /// Dừng và dọn sạch. Kill sing-box trước (gỡ TUN/route) rồi mới kill relay. Gọi được nhiều
-    /// lần, không ném khi tiến trình đã chết.
+    /// Dừng và dọn sạch. Gọi được nhiều lần, không ném khi tiến trình đã chết. Kill tiến trình là
+    /// cách gỡ TUN: adapter wintun mất khi tiến trình giữ nó thoát, và Windows tự bỏ route trỏ vào
+    /// adapter đã mất.
     /// </summary>
     public async Task StopAsync()
     {
         _stopping = true;
         try
         {
-            await KillAsync(TakeProcess(singBox: true), HysteriaRelayDefaults.SingBoxExeName, SingBoxExitGraceMs)
-                .ConfigureAwait(false);
-            await KillAsync(TakeProcess(singBox: false), HysteriaRelayDefaults.RelayExeName, 0)
-                .ConfigureAwait(false);
+            await KillAsync(TakeProcess(), HysteriaRelayDefaults.RelayExeName, 5_000).ConfigureAwait(false);
         }
         finally
         {
             RelaySocksPort = 0;
-            ClashApiPort = 0;
+            TunInterfaceName = null;
             RelayUrlInUse = null;
             SetState(HysteriaRelayState.Stopped);
         }
@@ -247,34 +244,130 @@ public sealed class HysteriaRelayTunnel : IDisposable
 
     // MARK: - chạy tiến trình con
 
-    private async Task StartRelayAsync(string relayExe, string configPath)
+    private async Task<string> StartRelayAsync(string relayExe, string configPath)
     {
-        var (process, ready) = Launch(relayExe, $"-c \"{configPath}\"", isSingBox: false);
+        var (_, ready) = Launch(relayExe, $"-c \"{configPath}\"");
 
         var done = await Task.WhenAny(ready.Task, Task.Delay(TimeSpan.FromSeconds(ReadyTimeoutSeconds)))
             .ConfigureAwait(false);
         if (done != ready.Task)
         {
             throw new TunnelTransportException(
-                $"{HysteriaRelayDefaults.RelayExeName} không báo READY trong {ReadyTimeoutSeconds}s " +
-                "(relay WebSocket/Cloudflare không bắt tay được).");
+                $"{HysteriaRelayDefaults.RelayExeName} không báo {HysteriaRelayDefaults.TunReadyMarker.Trim()} " +
+                $"trong {ReadyTimeoutSeconds}s (relay WebSocket/Cloudflare không bắt tay được).");
         }
 
-        if (!ready.Task.Result)
+        // await (không dùng .Result): .Result bọc lỗi thật vào AggregateException và làm thông báo
+        // cho khách biến thành "One or more errors occurred" — mất luôn lý do TUNFAIL.
+        var result = await ready.Task.ConfigureAwait(false);
+        return result.InterfaceName;
+    }
+
+    /// <summary>
+    /// Đặt DNS lên adapter TUN bằng netsh — cùng lệnh mà đường WireGuard đang dùng
+    /// (<see cref="WireGuardWindowsCommands.SetDns"/>). Không đặt được thì GHI WARN rồi đi tiếp:
+    /// tunnel vẫn chở được theo IP, chỉ mất phần phân giải tên qua tunnel — chặn kết nối ở đây sẽ
+    /// biến một lỗi phụ thành "không vào được mạng".
+    /// </summary>
+    private async Task ApplyTunDnsAsync(string interfaceName, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(interfaceName);
+
+        var servers = HysteriaRelayDefaults.TunDnsServers;
+        for (var i = 0; i < servers.Count; i++)
         {
-            throw new TunnelTransportException(
-                $"{HysteriaRelayDefaults.RelayExeName} đã thoát trước khi mở SOCKS5{DescribeExit(process)}.");
+            var command = i == 0
+                ? WireGuardWindowsCommands.SetDns(interfaceName, servers[i])
+                : WireGuardWindowsCommands.AddDns(interfaceName, servers[i], i + 1);
+            var ok = await RunNetshAsync(command, cancellationToken).ConfigureAwait(false);
+            if (!ok && i == 0)
+            {
+                _log.Warn(
+                    $"relay: đặt DNS {servers[i]} lên '{interfaceName}' thất bại — " +
+                    "truy vấn tên có thể vẫn đi ra resolver của mạng khách.");
+                return;
+            }
+        }
+
+        _log.Info($"relay: đã đặt DNS lên '{interfaceName}': {string.Join(", ", servers)}");
+    }
+
+    private async Task<bool> RunNetshAsync(WindowsCommand command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = command.FileName,
+                Arguments = command.Arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+
+            if (process is null)
+            {
+                return false;
+            }
+
+            // Đọc stream SONG SONG với lúc chờ: đọc sau khi WaitForExit có thể treo nếu tiến trình
+            // ghi đầy buffer ống (bài học chung của Process với 2 stream được redirect).
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (Exception)
+                {
+                    // chỉ là dọn tiến trình netsh
+                }
+
+                return false;
+            }
+
+            if (process.ExitCode == 0)
+            {
+                return true;
+            }
+
+            var stderr = await stderrTask.ConfigureAwait(false);
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            _log.Warn(
+                $"relay: netsh exit {process.ExitCode} cho '{command.Arguments}': " +
+                $"{FirstLine(stderr.Length > 0 ? stderr : stdout)}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"relay: chạy netsh lỗi (bỏ qua): {ex.Message}");
+            return false;
         }
     }
 
-    private void StartSingBox(string singBoxExe, string configPath)
-        => Launch(singBoxExe, $"run -c \"{configPath}\"", isSingBox: true);
+    private static string FirstLine(string text)
+    {
+        var trimmed = text.Trim();
+        var index = trimmed.IndexOfAny(new[] { '\r', '\n' });
+        return index < 0 ? trimmed : trimmed[..index];
+    }
 
     /// <summary>
-    /// Chạy một tiến trình con ẩn cửa sổ, drain stdout/stderr vào logger. <c>ready</c> được đặt
-    /// khi stderr thấy dòng READY; đặt false khi stream kết thúc mà chưa thấy (tiến trình chết).
+    /// Chạy tiến trình con ẩn cửa sổ, drain stdout/stderr vào logger. <c>ready</c> được đặt khi stderr
+    /// thấy dòng TUNREADY (kèm tên adapter); đặt exception khi thấy TUNFAIL hoặc khi stream kết thúc
+    /// mà chưa thấy mốc nào (tiến trình chết trước khi tunnel lên).
     /// </summary>
-    private (Process Process, TaskCompletionSource<bool> Ready) Launch(string exe, string arguments, bool isSingBox)
+    private (Process Process, TaskCompletionSource<RelayReady> Ready) Launch(string exe, string arguments)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -309,23 +402,16 @@ public sealed class HysteriaRelayTunnel : IDisposable
 
         lock (_lock)
         {
-            if (isSingBox)
-            {
-                _singBoxProcess = process;
-            }
-            else
-            {
-                _relayProcess = process;
-            }
+            _relayProcess = process;
         }
 
-        var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ready = new TaskCompletionSource<RelayReady>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = Task.Run(() => DrainAsync(process.StandardOutput, $"{name}[stdout]"));
         _ = Task.Run(() => ReadStderrAsync(process.StandardError, $"{name}[stderr]", ready));
         return (process, ready);
     }
 
-    private async Task ReadStderrAsync(StreamReader reader, string tag, TaskCompletionSource<bool> ready)
+    private async Task ReadStderrAsync(StreamReader reader, string tag, TaskCompletionSource<RelayReady> ready)
     {
         try
         {
@@ -337,9 +423,17 @@ public sealed class HysteriaRelayTunnel : IDisposable
                 }
 
                 _log.Info($"{tag}: {line}");
-                if (line.Contains(HysteriaRelayDefaults.ReadyMarker, StringComparison.Ordinal))
+                if (line.Contains(HysteriaRelayDefaults.TunReadyMarker, StringComparison.Ordinal))
                 {
-                    ready.TrySetResult(true);
+                    ready.TrySetResult(new RelayReady(ParseTunName(line)));
+                }
+                else if (line.Contains(HysteriaRelayDefaults.TunFailMarker, StringComparison.Ordinal))
+                {
+                    // Lý do thật nằm sau marker — đưa nguyên vào thông báo để log khách đọc được.
+                    var reason = line[(line.IndexOf(HysteriaRelayDefaults.TunFailMarker, StringComparison.Ordinal) +
+                                       HysteriaRelayDefaults.TunFailMarker.Length)..].Trim();
+                    ready.TrySetException(new TunnelTransportException(
+                        $"Không dựng được TUN của {HysteriaRelayDefaults.RelayExeName}: {reason}"));
                 }
             }
         }
@@ -349,9 +443,24 @@ public sealed class HysteriaRelayTunnel : IDisposable
         }
         finally
         {
-            // Không thấy READY mà stream đã hết = tiến trình chết trước khi tunnel lên.
-            ready.TrySetResult(false);
+            // Không thấy TUNREADY mà stream đã hết = tiến trình chết trước khi tunnel lên.
+            ready.TrySetException(new TunnelTransportException(
+                $"{HysteriaRelayDefaults.RelayExeName} đã thoát trước khi dựng xong TUN."));
         }
+    }
+
+    /// <summary>Bóc <c>if=&lt;tên&gt;</c> khỏi dòng TUNREADY; thiếu thì dùng tên mặc định.</summary>
+    private static string ParseTunName(string line)
+    {
+        foreach (var token in line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token.StartsWith("if=", StringComparison.Ordinal) && token.Length > 3)
+            {
+                return token[3..];
+            }
+        }
+
+        return HysteriaRelayDefaults.TunName;
     }
 
     private async Task DrainAsync(StreamReader reader, string tag)
@@ -373,8 +482,8 @@ public sealed class HysteriaRelayTunnel : IDisposable
     }
 
     /// <summary>
-    /// Một tiến trình con vừa thoát. Ta chủ động dừng thì bỏ qua; chết bất ngờ thì dọn phần còn
-    /// lại NGAY (giữ route trỏ vào đường chết là giữ cảnh mất internet cho cả máy) rồi báo lỗi.
+    /// Tiến trình con vừa thoát. Ta chủ động dừng thì bỏ qua; chết bất ngờ thì báo lỗi NGAY (giữ TUN
+    /// trỏ vào đường chết là giữ cảnh mất internet cho cả máy).
     /// </summary>
     private void OnChildExited(Process process, string name)
     {
@@ -383,15 +492,12 @@ public sealed class HysteriaRelayTunnel : IDisposable
             return;
         }
 
-        // Bật cờ TRƯỚC khi kill tiến trình còn lại: Exited của nó cũng sẽ chạy vào đây.
         _stopping = true;
 
         var message = $"{name} đã thoát bất ngờ{DescribeExit(process)} — tunnel relay không còn hoạt động.";
         _log.Error($"relay: {message}");
 
-        var singBox = TakeProcess(singBox: true);
-        KillSync(singBox, HysteriaRelayDefaults.SingBoxExeName, SingBoxExitGraceMs);
-        KillSync(TakeProcess(singBox: false), HysteriaRelayDefaults.RelayExeName, 0);
+        KillSync(TakeProcess(), HysteriaRelayDefaults.RelayExeName, 0);
 
         SetLastError(message);
         SetState(HysteriaRelayState.Faulted);
@@ -400,28 +506,19 @@ public sealed class HysteriaRelayTunnel : IDisposable
 
     private void OnProcessExit(object? sender, EventArgs e)
     {
-        // App đang thoát: không còn thời gian chờ, nhưng vẫn phải đúng thứ tự sing-box → relay.
+        // App đang thoát: không còn thời gian chờ, kill để HĐH thu hồi adapter TUN.
         _stopping = true;
-        KillSync(TakeProcess(singBox: true), HysteriaRelayDefaults.SingBoxExeName, SingBoxExitGraceMs);
-        KillSync(TakeProcess(singBox: false), HysteriaRelayDefaults.RelayExeName, 0);
+        KillSync(TakeProcess(), HysteriaRelayDefaults.RelayExeName, 0);
     }
 
     // MARK: - dọn tiến trình
 
-    private Process? TakeProcess(bool singBox)
+    private Process? TakeProcess()
     {
         lock (_lock)
         {
-            var process = singBox ? _singBoxProcess : _relayProcess;
-            if (singBox)
-            {
-                _singBoxProcess = null;
-            }
-            else
-            {
-                _relayProcess = null;
-            }
-
+            var process = _relayProcess;
+            _relayProcess = null;
             return process;
         }
     }
@@ -546,7 +643,6 @@ public sealed class HysteriaRelayTunnel : IDisposable
     {
         AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
         _stopping = true;
-        KillSync(TakeProcess(singBox: true), HysteriaRelayDefaults.SingBoxExeName, SingBoxExitGraceMs);
-        KillSync(TakeProcess(singBox: false), HysteriaRelayDefaults.RelayExeName, 0);
+        KillSync(TakeProcess(), HysteriaRelayDefaults.RelayExeName, 0);
     }
 }

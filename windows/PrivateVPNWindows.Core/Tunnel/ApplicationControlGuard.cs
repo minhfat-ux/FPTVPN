@@ -10,16 +10,16 @@ namespace VpnFlow.Core.Tunnel;
 /// policy WDAC <c>VerifiedAndReputableDesktop</c> — policy này đòi signing level 2, nên binary
 /// chưa ký mà Microsoft chưa có "uy tín" sẽ bị chặn khi khởi chạy. Đo thật trên máy test
 /// (19/09): <c>sing-box.exe</c> bị chặn (event CodeIntegrity 3033/3077/3118, status 0xc0e90002,
-/// "did not meet the Enterprise signing level requirements"), trong khi <c>flowvpnrelay.exe</c>
+/// "did not meet the Enterprise signing level requirements") trong khi <c>flowvpnrelay.exe</c>
 /// của mình, <c>wireguard-go.exe</c> và MỌI DLL chưa ký vẫn chạy/nạp bình thường.
 ///
-/// Hệ quả với sản phẩm: đường "hysteria2-over-WS" (cần sing-box dựng TUN) <b>không lên được</b>
-/// trên các máy đó — mà đây lại đúng là đường sống khi mạng chặn IP node. App vẫn có fallback
-/// WireGuard nên khách không mất mạng, nhưng phải BÁO RÕ thay vì im lặng thử lại mỗi lần kết nối
-/// (mỗi lần tốn cả chục giây).
-///
-/// Cách xử lý thật (không cần khách bật/tắt gì): bỏ phụ thuộc binary bên thứ ba — đưa phần TUN
-/// vào chính binary/DLL của mình (xem <c>tools/hysteria-relay</c>), hoặc ký số các binary phát hành.
+/// <b>Đã xử lý triệt để ở 1.4.7 (13/10/2026).</b> Khách phàn nàn app Windows "báo sing-box.exe đang
+/// phải có chữ ký". Vì ta KHÔNG kiểm soát được chữ ký của binary bên thứ ba, cách duy nhất đúng là
+/// BỎ nó: phần TUN + định tuyến + bypass TQ được đưa vào chính <c>flowvpnrelay.exe</c> (hysteria v2
+/// vốn có sẵn client TUN — xem <c>tools/hysteria-relay/tun.go</c>), nên app Windows không còn chạy
+/// binary bên thứ ba nào. Guard này giữ lại làm lưới an toàn cho chính binary của mình (đã đo:
+/// bản <c>PrivateVPNWindows.App.exe</c> tự build cũng từng bị chặn 6 lần) và để báo đúng nguyên nhân
+/// thay vì "không chạy được &lt;tên file&gt;".
 /// </summary>
 public static class ApplicationControlGuard
 {
@@ -131,12 +131,20 @@ public static class ApplicationControlGuard
         }
     }
 
-    /// <summary>Thông báo cho người dùng (tiếng Việt, nói rõ đang chạy đường nào).</summary>
+    /// <summary>
+    /// Thông báo cho người dùng (tiếng Việt, nói rõ đang chạy đường nào).
+    ///
+    /// Cố ý KHÔNG nói tên binary bên thứ ba và KHÔNG nói "cần ký số": khách báo 13/10/2026 đọc câu
+    /// cũ ("sing-box.exe … cần bản binary đã ký số") rồi tưởng app hỏng. Từ 1.4.7 không còn phụ thuộc
+    /// binary bên thứ ba, nên ở đây chỉ còn nói ĐÚNG việc khách cần biết: app vẫn vào mạng được, đi
+    /// đường WireGuard, và cách tự xử nếu muốn dùng đường relay.
+    /// </summary>
     public static string UserMessage(string? binary = null)
     {
-        var name = binary ?? BlockedBinary ?? HysteriaRelayDefaults.SingBoxExeName;
-        return $"Windows đang chặn {name} bằng Application Control (Smart App Control). " +
-               "Đường hysteria2-over-WebSocket không dùng được trên máy này; app sẽ đi đường WireGuard. " +
-               "Muốn dùng đường relay, cần bản binary đã ký số (đang xử lý).";
+        var name = binary ?? BlockedBinary ?? HysteriaRelayDefaults.RelayExeName;
+        return $"Windows (Smart App Control) đang chặn {name}. " +
+               "App vẫn kết nối bình thường bằng đường WireGuard. " +
+               "Nếu muốn dùng đường dự phòng qua WebSocket, hãy tắt Smart App Control trong " +
+               "Windows Security → App & browser control, hoặc liên hệ hỗ trợ.";
     }
 }

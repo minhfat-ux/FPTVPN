@@ -32,7 +32,7 @@
             <ComboBoxItem>WireGuard UDP</ComboBoxItem>
             <ComboBoxItem>WebSocket Relay</ComboBoxItem>
             <ComboBoxItem>Hysteria2 (chưa hỗ trợ)</ComboBoxItem>
-            <ComboBoxItem>Hysteria2 + sing-box (relay)</ComboBoxItem>
+            <ComboBoxItem>Hysteria2 over WebSocket (relay)</ComboBoxItem>
           </ComboBox>
           <TextBlock Name="TransportHintText" Classes="vpnSubtitle" TextWrapping="Wrap"
                      Text="Auto thử đường Hysteria2-over-WebSocket (relay) trước, không lên thì tự rơi về WireGuard." />

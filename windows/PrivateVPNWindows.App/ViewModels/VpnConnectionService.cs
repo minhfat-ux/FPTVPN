@@ -37,16 +37,17 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
     public const string TunnelName = "vpnflow";
 
     /// <summary>
-    /// Id của đường relay mới (hysteria2-over-WS + sing-box) — dùng trong log để luôn nói rõ
-    /// "đang chạy đường nào": người dùng chọn/tự động đều có thể rơi về WireGuard.
+    /// Id của đường relay (hysteria2-over-WS, TUN nằm TRONG flowvpnrelay.exe) — dùng trong log để luôn
+    /// nói rõ "đang chạy đường nào": người dùng chọn/tự động đều có thể rơi về WireGuard.
     /// </summary>
-    public const string SingBoxRelayTransportId = "singbox-hy-relay";
+    public const string RelayTransportId = "hy-ws-relay";
 
     /// <summary>
-    /// Trần thời gian cho đường relay mới trước khi rơi về chuỗi WireGuard hiện có. Đường này đi
-    /// 2 chặng (Cloudflare → node) nên cần rộng hơn UDP trực tiếp.
+    /// Trần thời gian cho đường relay trước khi rơi về chuỗi WireGuard hiện có. Đường này đi 2 chặng
+    /// (Cloudflare → node) rồi mới dựng TUN nên cần rộng hơn UDP trực tiếp; phải LỚN HƠN
+    /// <see cref="HysteriaRelayTunnel.ReadyTimeoutSeconds"/> để tầng dưới còn kịp báo lý do thật.
     /// </summary>
-    private const int RelayTunnelBudgetSeconds = 20;
+    private const int RelayTunnelBudgetSeconds = 35;
 
     private readonly DeviceIdentity _device;
     private readonly AppSettings _settings;
@@ -60,9 +61,9 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
     private HysteriaRelayTunnel? _relayTunnel;
 
     /// <summary>
-    /// Watchdog RIÊNG cho đường relay (đọc byte luỹ kế của sing-box + thử chủ động qua tunnel).
+    /// Watchdog RIÊNG cho đường relay (thử chủ động qua tunnel; không còn số byte của sing-box).
     /// Không liên quan tới watchdog WireGuard ở trên: chỉ chạy khi transport là
-    /// <see cref="SingBoxRelayTransportId"/>.
+    /// <see cref="RelayTransportId"/>.
     /// </summary>
     private RelayHealthWatchdog? _relayWatchdog;
 
@@ -228,13 +229,14 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
 
             var config = BuildConfig(registration.OverlayIp, node);
 
-            // Đường MỚI (hysteria2-over-WS + sing-box TUN) thử trước: đây là đường duy nhất còn
-            // đi được khi mạng chặn thẳng IP node (đo thật: TCP tới IP node timeout, chỉ
-            // api.meetflowai.site:443 đi qua). Không lên trong RelayTunnelBudgetSeconds thì rơi
-            // về NGUYÊN chuỗi WireGuard bên dưới — không xoá/đổi hành vi WireGuard.
+            // Đường MỚI (hysteria2-over-WS, TUN nằm trong chính flowvpnrelay.exe) thử trước: đây là
+            // đường duy nhất còn đi được khi mạng chặn thẳng IP node (đo thật: TCP tới IP node
+            // timeout, chỉ api.meetflowai.site:443 đi qua). Không lên trong
+            // RelayTunnelBudgetSeconds thì rơi về NGUYÊN chuỗi WireGuard bên dưới — không xoá/đổi
+            // hành vi WireGuard.
             if (preference is TransportPreference.SingBoxHysteriaRelay or TransportPreference.Auto)
             {
-                // Máy bật Smart App Control: sing-box.exe bị chặn ⇒ biết chắc đường relay không lên
+                // Binary của mình bị Application Control chặn ⇒ biết chắc đường relay không lên
                 // được, bỏ qua luôn (không tốn ngân sách chờ) và nói rõ lý do trong log.
                 if (ApplicationControlGuard.RelayBlocked)
                 {
@@ -248,19 +250,19 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
                     State = VpnConnectionState.Connected;
                     _log.Info($"connect: tunnel đã lên (overlay={registration.OverlayIp})");
                     _log.Info(
-                        $"connect: transport đang dùng: {SingBoxRelayTransportId} " +
+                        $"connect: transport đang dùng: {RelayTransportId} " +
                         $"(relay={_relayTunnel?.RelayUrlInUse}) — KHÔNG đi qua WireGuard");
 
                     // Không chạy watchdog WireGuard ở đường này: watchdog đọc handshake/rx của
-                    // wireguard-go, mà đường relay không có tunnel WireGuard nào. Sức khoẻ ở đây
-                    // do sự kiện Faulted của 2 tiến trình con báo (xem OnRelayTunnelFaulted).
+                    // wireguard-go, mà đường relay không có tunnel WireGuard nào. Sức khoẻ ở đây do
+                    // sự kiện Faulted của tiến trình con + watchdog relay báo (xem OnRelayTunnelFaulted).
                     return;
                 }
 
                 else
                 {
                     _log.Warn(
-                        $"connect: {SingBoxRelayTransportId} không lên trong {RelayTunnelBudgetSeconds}s " +
+                        $"connect: {RelayTransportId} không lên trong {RelayTunnelBudgetSeconds}s " +
                         "— rơi về chuỗi WireGuard (đường cũ).");
                 }
             }
@@ -332,8 +334,8 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
         StopWatchdog();
         await UninstallQuietlyAsync().ConfigureAwait(false);
 
-        // Ngắt đường relay TRƯỚC khi đóng transport còn lại: sing-box phải được kill trước để
-        // gỡ TUN + route, nếu không máy vẫn trỏ ra ngoài qua một TUN đã chết.
+        // Ngắt đường relay TRƯỚC khi đóng transport còn lại: kill flowvpnrelay để HĐH thu hồi adapter
+        // TUN + route, nếu không máy vẫn trỏ ra ngoài qua một TUN đã chết.
         await StopRelayTunnelAsync().ConfigureAwait(false);
 
         StopTransport();
@@ -376,9 +378,10 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
                 includeRelays: false,
                 log: _log),
 
-            // Đường relay mới KHÔNG phải candidate của TransportSelector: nó tự dựng TUN bằng
-            // sing-box chứ không đưa cổng UDP local cho WireGuard (xem TryStartRelayTunnelAsync).
-            // Tới được đây nghĩa là đường relay đã thất bại, nên đây là chuỗi WireGuard để rơi về.
+            // Đường relay KHÔNG phải candidate của TransportSelector: nó tự dựng TUN bên trong
+            // flowvpnrelay.exe chứ không đưa cổng UDP local cho WireGuard (xem
+            // TryStartRelayTunnelAsync). Tới được đây nghĩa là đường relay đã thất bại, nên đây là
+            // chuỗi WireGuard để rơi về.
             TransportPreference.SingBoxHysteriaRelay => WindowsTransportPlanner.Build(
                 node.WgRelayUrl,
                 node.WsRelayUrl,
@@ -396,10 +399,9 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Thử dựng đường relay mới: <c>flowvpnrelay.exe</c> (hysteria2-over-WS, SOCKS5 nội bộ) +
-    /// <c>sing-box.exe</c> (TUN + auto_route + DNS). Trả false (KHÔNG ném) khi hết
-    /// <see cref="RelayTunnelBudgetSeconds"/> giây hoặc khi đường này không dựng được — người gọi
-    /// quyết định rơi về chuỗi WireGuard.
+    /// Thử dựng đường relay: MỘT tiến trình <c>flowvpnrelay.exe</c> lo cả hysteria2-over-WS và TUN +
+    /// auto_route + DNS. Trả false (KHÔNG ném) khi hết <see cref="RelayTunnelBudgetSeconds"/> giây
+    /// hoặc khi đường này không dựng được — người gọi quyết định rơi về chuỗi WireGuard.
     ///
     /// Chạy được cả trên macOS: thiếu binary cạnh app thì <see cref="HysteriaRelayTunnel.StartAsync"/>
     /// ném lỗi rõ ràng và ta rơi về đường cũ — nhờ vậy vẫn smoke-test được UI ngoài Windows.
@@ -425,6 +427,18 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
                 budget.CancelAfter(remaining);
                 await tunnel.StartAsync(server, relayUrl, budget.Token).ConfigureAwait(false);
 
+                // CỔNG SỨC KHOẺ: TUN dựng xong KHÔNG có nghĩa là nó chở được gói. Đường relay đã
+                // chiếm route 0.0.0.0/0 (metric 0) nên một TUN "sống mà câm" là CẢ MÁY mất mạng cho
+                // tới khi watchdog phát hiện (rảnh 60s + 3 lần thử hỏng ≈ hơn 1 phút). Thử một
+                // request THẬT đi qua tunnel rồi mới nhận đường này — đúng nguyên tắc của
+                // TransportSelector: không nhận một transport chỉ vì nó báo "đang chạy".
+                if (!await RelayCarriesTrafficAsync(budget.Token).ConfigureAwait(false))
+                {
+                    throw new TunnelTransportException(
+                        "TUN đã dựng nhưng chưa chở được dữ liệu (thử qua tunnel thất bại) — " +
+                        "gỡ TUN và rơi về đường WireGuard.");
+                }
+
                 // Gắn handler SAU khi lên: sự cố lúc đang dựng đã có nhánh exception lo, không
                 // được báo lỗi hai lần.
                 tunnel.Faulted += OnRelayTunnelFaulted;
@@ -436,11 +450,38 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
             {
                 tunnel.Faulted -= OnRelayTunnelFaulted;
                 tunnel.Dispose();
-                _log.Warn($"connect: {SingBoxRelayTransportId} qua {relayUrl} thất bại: {ex.Message}");
+                _log.Warn($"connect: {RelayTransportId} qua {relayUrl} thất bại: {ex.Message}");
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Thử một request THẬT đi qua tunnel relay vừa dựng (endpoint health của chính mình, đúng URL
+    /// mà <see cref="RelayHealthWatchdog"/> dùng). Không dùng proxy hệ thống: proxy có thể là chính
+    /// phần mềm đang tranh chấp và làm sai kết quả. Mọi lỗi đều là "chưa chở được dữ liệu".
+    /// </summary>
+    private static async Task<bool> RelayCarriesTrafficAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false })
+            {
+                Timeout = TimeSpan.FromSeconds(8),
+            };
+            using var response = await client
+                .GetAsync(
+                    RelayHealthWatchdog.DefaultProbeUrl,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -477,7 +518,8 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Dừng đường relay (sing-box trước để gỡ TUN/route, rồi mới tới flowvpnrelay). Idempotent.
+    /// Dừng đường relay: kill flowvpnrelay.exe (adapter TUN do nó giữ sẽ bị HĐH thu hồi cùng route).
+    /// Idempotent.
     /// </summary>
     private async Task StopRelayTunnelAsync()
     {
@@ -524,7 +566,7 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
         }
 
         var generation = _sessionGeneration;
-        _log.Error($"connect: {SingBoxRelayTransportId} sự cố — {message}");
+        _log.Error($"connect: {RelayTransportId} sự cố — {message}");
         _ = RecoverRelayAsync(generation, message);
     }
 
@@ -572,7 +614,7 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
                     LastError = null;
                     State = VpnConnectionState.Connected;
                     _log.Info(
-                        $"connect: đã tự dựng lại đường relay (lần {attempt}) — transport={SingBoxRelayTransportId}");
+                        $"connect: đã tự dựng lại đường relay (lần {attempt}) — transport={RelayTransportId}");
                     return;
                 }
             }
@@ -592,7 +634,7 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Bật watchdog cho đường relay. CHỈ gọi khi transport là <see cref="SingBoxRelayTransportId"/>,
+    /// Bật watchdog cho đường relay. CHỈ gọi khi transport là <see cref="RelayTransportId"/>,
     /// nên đường WireGuard (đã có watchdog riêng) không bị ảnh hưởng gì.
     /// </summary>
     private void StartRelayWatchdog(HysteriaRelayTunnel tunnel)
@@ -600,15 +642,14 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
         StopRelayWatchdog();
         try
         {
-            var watchdog = RelayHealthWatchdog.ForSingBox(
-                tunnel.ClashApiPort,
+            var watchdog = RelayHealthWatchdog.ForRelayTunnel(
                 log: message => _log.Info(message),
                 onStall: reason => OnRelayTunnelFaulted(tunnel, reason));
             _relayWatchdog = watchdog;
             watchdog.Start();
             _log.Info(
-                $"relay-watchdog: đã bật (clash_api=127.0.0.1:{tunnel.ClashApiPort}); " +
-                $"không byte mới {RelayHealthWatchdog.DefaultNoTrafficSeconds}s + thử qua tunnel thất bại " +
+                $"relay-watchdog: đã bật (tun={tunnel.TunInterfaceName}); " +
+                $"rảnh {RelayHealthWatchdog.DefaultNoTrafficSeconds}s mà thử qua tunnel thất bại " +
                 $"{RelayHealthWatchdog.DefaultProbeFailures} lần ⇒ dựng lại đường relay");
         }
         catch (Exception ex)
@@ -966,8 +1007,8 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
         _transport?.Dispose();
         _transport = null;
 
-        // Lưới an toàn: mọi đường thoát (kể cả lỗi giữa chừng) phải dọn 2 tiến trình con. Đường
-        // dừng "mềm" (chờ sing-box gỡ route) là StopRelayTunnelAsync, gọi trước ở Disconnect.
+        // Lưới an toàn: mọi đường thoát (kể cả lỗi giữa chừng) phải dọn tiến trình con. Đường
+        // dừng "mềm" là StopRelayTunnelAsync, gọi trước ở Disconnect.
         StopRelayTunnelAsync().GetAwaiter().GetResult();
 
         _cts?.Dispose();

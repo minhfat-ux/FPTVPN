@@ -5,11 +5,18 @@
 // (`/relay/vn*hy`) — đường duy nhất còn đi được khi IP node bị chặn (đo trên mạng
 // hiện tại: TCP tới 103.173.155.50/165.101.114.162 timeout, còn
 // api.meetflowai.site:443 mở). Runner này lấy ConnFactory từ internal/wsrelay nên
-// dùng được đúng relay đó, rồi mở SOCKS5 (TCP+UDP) tại chỗ để phần còn lại của
-// client (sing-box lo TUN/định tuyến, hoặc app tự cắm) dùng lại.
+// dùng được đúng relay đó.
+//
+// TUN nay nằm TRONG CHÍNH binary này (tun.go, dùng lại app/internal/tun của
+// hysteria): trước 1.4.7 app Windows còn ghép thêm sing-box.exe để dựng TUN + định
+// tuyến + DNS, mà sing-box.exe là binary bên thứ ba chưa ký nên bị Smart App Control
+// chặn thẳng (CodeIntegrity 3033/3077/3118, Win32 4551 "Application Control policy
+// has blocked") ⇒ chết cả đường hầm. flowvpnrelay.exe do mình build nên không bị
+// chặn. Khối "tun" là TUỲ CHỌN: không khai thì vẫn chỉ mở SOCKS5 như bản cũ.
+// SOCKS5 vẫn được mở khi có TUN (app còn dùng để chẩn đoán/đo băng thông).
 //
 // Bản này được biên dịch bằng tools/hysteria-relay/build.sh: nó được copy vào
-// app/flowvpnrelay/main.go của checkout hysteria (tag app/v2.12.2) để import được
+// app/flowvpnrelay/ của checkout hysteria (tag app/v2.12.2) để import được
 // package `internal/...` của chính module đó.
 package main
 
@@ -61,15 +68,17 @@ type socksConfig struct {
 }
 
 type config struct {
-	Server   string          `json:"server"`
-	Password string          `json:"password"`
-	Obfs     string          `json:"obfs"`
-	SNI      string          `json:"sni"`
-	Insecure *bool           `json:"insecure"`
-	UpKbps   int             `json:"upKbps"`
-	DownKbps int             `json:"downKbps"`
+	Server    string          `json:"server"`
+	Password  string          `json:"password"`
+	Obfs      string          `json:"obfs"`
+	SNI       string          `json:"sni"`
+	Insecure  *bool           `json:"insecure"`
+	UpKbps    int             `json:"upKbps"`
+	DownKbps  int             `json:"downKbps"`
 	Transport transportConfig `json:"transport"`
-	Socks5   socksConfig     `json:"socks5"`
+	Socks5    socksConfig     `json:"socks5"`
+	// Tun: khối TUỲ CHỌN. nil (không khai) = không dựng TUN, giữ nguyên hành vi cũ.
+	Tun *tunConfig `json:"tun"`
 	// DialTimeout giây cho một lần dựng transport (WS + QUIC handshake).
 	DialTimeoutSec int `json:"dialTimeoutSec"`
 }
@@ -129,13 +138,16 @@ func main() {
 			if err == nil {
 				return
 			}
-			logf("transport chết: %v — dựng lại sau 1s", err)
+			// "đường hầm" chứ không phải "transport": từ khi TUN nằm trong binary này,
+			// lỗi tới đây có thể là transport HOẶC TUN (TUN đã in TUNFAIL trước đó).
+			logf("đường hầm dừng: %v — dựng lại sau 1s", err)
 			time.Sleep(time.Second)
 		}
 	}
 }
 
-// serve dựng hysteria client rồi mở SOCKS5. Trả về khi transport chết.
+// serve dựng hysteria client, rồi mở SOCKS5 (nếu có khai) và TUN (nếu có khối
+// "tun"). Trả về khi MỘT trong hai chết — vòng ngoài ở main() sẽ dựng lại.
 func serve(cfg *config) error {
 	hy, _, err := newClient(cfg)
 	if err != nil {
@@ -146,20 +158,45 @@ func serve(cfg *config) error {
 		go func() { _ = hy.Close() }()
 	}()
 
+	// Có TUN: SOCKS5 chỉ mở khi app KHAI listen (app có thể không cần nữa). Không có
+	// TUN: giữ NGUYÊN hành vi cũ — luôn mở SOCKS5, mặc định 127.0.0.1:1081.
 	listen := cfg.Socks5.Listen
-	if listen == "" {
+	if listen == "" && cfg.Tun == nil {
 		listen = "127.0.0.1:1081"
 	}
-	l, err := net.Listen("tcp", listen)
-	if err != nil {
-		return fmt.Errorf("socks5 listen %s: %w", listen, err)
-	}
-	defer l.Close()
-	// Dòng này là hợp đồng với app gọi nó (.NET/launcher): tunnel ĐÃ lên.
-	logf("READY transport=%s server=%s socks5=%s", cfg.Transport.Type, cfg.Server, listen)
 
-	s := &socks5.Server{HyClient: hy, EventLogger: noopSocksLogger{}}
-	return s.Serve(l)
+	// socksErr chỉ được gán khi CÓ listener. Không có SOCKS5 thì để nil: select trên
+	// nil channel chặn vĩnh viễn — đúng ý "không có gì để chờ ở nhánh này".
+	var socksErr <-chan error
+	if listen != "" {
+		l, err := net.Listen("tcp", listen)
+		if err != nil {
+			return fmt.Errorf("socks5 listen %s: %w", listen, err)
+		}
+		defer l.Close()
+		// Dòng này là hợp đồng với app gọi nó (.NET/launcher): SOCKS5 đã lên.
+		logf("READY transport=%s server=%s socks5=%s", cfg.Transport.Type, cfg.Server, listen)
+
+		s := &socks5.Server{HyClient: hy, EventLogger: noopSocksLogger{}}
+		ch := make(chan error, 1)
+		socksErr = ch
+		go func() { ch <- s.Serve(l) }()
+	}
+
+	if cfg.Tun == nil {
+		return <-socksErr
+	}
+
+	// Chế độ TUN: chạy song song với SOCKS5 (nếu có) và trả về khi cái nào chết
+	// trước. TUN lỗi ⇒ đã có dòng TUNFAIL trong startTUN trước khi trả về đây.
+	tunErr := make(chan error, 1)
+	go func() { tunErr <- startTUN(hy, *cfg.Tun) }()
+	select {
+	case err := <-tunErr:
+		return err
+	case err := <-socksErr:
+		return err
+	}
 }
 
 // newClient trả về client ĐÃ bắt tay xong với server (NewClient tự connect).
@@ -397,8 +434,8 @@ func runBench(cfg *config, benchURL string, limit time.Duration, streams int) er
 				return nil, ctx.Err()
 			}
 		},
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		ForceAttemptHTTP2: false,
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+		ForceAttemptHTTP2:  false,
 		DisableCompression: true,
 	}
 	httpClient := &http.Client{Transport: tr}
@@ -542,10 +579,10 @@ func runBench(cfg *config, benchURL string, limit time.Duration, streams int) er
 
 type noopSocksLogger struct{}
 
-func (noopSocksLogger) TCPRequest(net.Addr, string)             {}
-func (noopSocksLogger) TCPError(net.Addr, string, error)        {}
-func (noopSocksLogger) UDPRequest(net.Addr)                     {}
-func (noopSocksLogger) UDPError(net.Addr, error)                {}
+func (noopSocksLogger) TCPRequest(net.Addr, string)      {}
+func (noopSocksLogger) TCPError(net.Addr, string, error) {}
+func (noopSocksLogger) UDPRequest(net.Addr)              {}
+func (noopSocksLogger) UDPError(net.Addr, error)         {}
 
 var _ = io.Discard
 

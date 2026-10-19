@@ -7,12 +7,15 @@ using VpnFlow.Core.Tunnel;
 namespace VpnFlow.Core.Tests;
 
 /// <summary>
-/// Kiểm tra phần THUẦN của đường "hysteria2 bọc trong WebSocket + sing-box":
-/// cấu hình sinh ra cho hai tiến trình con phải đúng schema mà chúng thật sự đọc
-/// (<c>tools/hysteria-relay/runner.go</c> và sing-box v1.14), và cổng phải được cấp động.
+/// Kiểm tra phần THUẦN của đường "hysteria2 bọc trong WebSocket": cấu hình sinh ra cho
+/// <c>flowvpnrelay.exe</c> phải đúng schema mà tiến trình đó thật sự đọc
+/// (<c>tools/hysteria-relay/runner.go</c> + <c>tun.go</c>), và cổng phải được cấp động.
 ///
-/// Phần KHÔNG kiểm được ở đây (cần máy Windows thật): sing-box có dựng được TUN/route
-/// không, relay có bắt tay được không — xem <c>windows/installer/verify-relay.ps1</c>.
+/// Từ 1.4.7 đường relay CHỈ còn một tiến trình: chính flowvpnrelay.exe dựng TUN + auto_route +
+/// bypass TQ, nên khối <c>tun</c> là phần quan trọng nhất ở đây (thiếu nó thì không có route nào).
+///
+/// Phần KHÔNG kiểm được ở đây (cần máy Windows thật + quyền admin): TUN/route có dựng được không,
+/// relay có bắt tay được không — xem <c>windows/installer/verify-relay.ps1</c>.
 /// </summary>
 public class SingBoxConfigBuilderTests
 {
@@ -145,6 +148,56 @@ public class SingBoxConfigBuilderTests
         Assert.Equal(
             "relay.example.com",
             doc.RootElement.GetProperty("transport").GetProperty("host").GetString());
+    }
+
+    [Fact]
+    public void BuildRelayConfig_nhung_khoi_tun_de_flowvpnrelay_tu_dung_TUN()
+    {
+        // Vì sao test này quan trọng: từ 1.4.7 đường relay KHÔNG còn sing-box, nên nếu khối `tun`
+        // không được sinh ra thì tiến trình chỉ mở SOCKS5 mà không có route nào — app chờ TUNREADY
+        // tới hết ngân sách rồi rơi về WireGuard (khách mất đường sống khi mạng chặn IP node).
+        var json = SingBoxConfigBuilder.BuildRelayConfig(
+            "165.101.114.162:8443",
+            HysteriaRelayDefaults.RelayUrl,
+            SocksPort,
+            chinaCidrs: new[] { "1.0.1.0/24", "2400:3200::/32" });
+
+        using var doc = JsonDocument.Parse(json);
+        var tun = doc.RootElement.GetProperty("tun");
+
+        Assert.Equal(HysteriaRelayDefaults.TunName, tun.GetProperty("name").GetString());
+        Assert.Equal(HysteriaRelayDefaults.TunMtu, tun.GetProperty("mtu").GetInt32());
+        Assert.Equal(HysteriaRelayDefaults.TunAddress, tun.GetProperty("ipv4").GetString());
+
+        var route = tun.GetProperty("route");
+        Assert.False(route.GetProperty("strict").GetBoolean());
+
+        // route.ipv4/ipv6 RỖNG là CỐ Ý: hysteria hiểu rỗng = auto_route toàn bộ (0.0.0.0/0), còn
+        // danh sách đi thẳng nằm ở *Exclude. Đảo hai chỗ này là tunnel chỉ chở dải TQ — đúng lỗi
+        // "bật VPN mà mạng TQ đi qua tunnel".
+        Assert.Empty(route.GetProperty("ipv4").EnumerateArray());
+        Assert.Empty(route.GetProperty("ipv6").EnumerateArray());
+        Assert.Equal(
+            new[] { "1.0.1.0/24" },
+            route.GetProperty("ipv4Exclude").EnumerateArray().Select(e => e.GetString()).ToArray());
+        Assert.Equal(
+            new[] { "2400:3200::/32" },
+            route.GetProperty("ipv6Exclude").EnumerateArray().Select(e => e.GetString()).ToArray());
+    }
+
+    [Fact]
+    public void BuildRelayConfig_khong_co_danh_sach_thi_khong_sinh_bypass()
+    {
+        var json = SingBoxConfigBuilder.BuildRelayConfig(
+            "165.101.114.162:8443",
+            HysteriaRelayDefaults.RelayUrl,
+            SocksPort);
+
+        using var doc = JsonDocument.Parse(json);
+        var route = doc.RootElement.GetProperty("tun").GetProperty("route");
+
+        Assert.Empty(route.GetProperty("ipv4Exclude").EnumerateArray());
+        Assert.Empty(route.GetProperty("ipv6Exclude").EnumerateArray());
     }
 
     [Fact]
