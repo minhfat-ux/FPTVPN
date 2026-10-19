@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=a4f8d4c (flowgpt: scripts/send-android-1.4.6-announcement.py + docs/handoff/EMAIL_ANDROID_1.4.6_2026-10-19.md); cmd=tren node-2: python3 /root/send-android-1.4.6-announcement.py --recipients (4 khach platform=android) -> --test (OK toi ALERT_EMAIL) -> gui that -> --verify; kết quả=4/4 thanh cong, 0 loi, Resend delivered 4/4 (id 01a15403-f580..., 01a15403-fa2b..., 01a15403-feb4..., 01a15404-0317...); xac thuc 3 kenh 1.4.6 tren node-2: modern sha256 0eabd787... 79.106.252B, legacy aa392fd3... 79.122.631B, TV 191f8f95... 79.106.408B; GET /v1/app-version?platform=android -> minimum_version=1.2.6, latest_version=1.4.6; email vi/en/zh co link TV ?v=191f8f95 + 3 buoc cai + muc sua loi TV, KHONG noi bat buoc cap nhat; chi gui MOT email 1.4.6 (phien headless trung bus-981 da dung truoc khi gui).",
+ "actor": "mac",
+ "at": "2026-10-19T11:56:02.683Z"
+}
