@@ -154,6 +154,17 @@ final class HysteriaTransport: @unchecked Sendable {
     /// và CHỈ ĐỌC sau đó, nên không có tranh chấp thực tế; Swift 6 vẫn cần khai báo rõ.
     nonisolated(unsafe) static var requestedTunnelCount: Int = 1
 
+    /// Cờ CHỈ ĐỂ GHI LOG (không dùng cho quyết định): bản build này có core hỗ trợ N tunnel hay
+    /// không. Cần lộ ra vì `coreSupportsMultiTunnel` là `private` ở phạm vi tệp, mà log của
+    /// `HysteriaPacketTunnelProvider` phải phân biệt được "app không xin N" với "core không có N".
+    static var coreSupportsMultiTunnelForLog: Bool {
+        #if canImport(Hysteria) || canImport(Multitunnel)
+        return coreSupportsMultiTunnel
+        #else
+        return false
+        #endif
+    }
+
     static func configuredTunnelCount() -> Int {
         // Bản THỬ: chưa có màn Settings nên mặc định 4 KHI core hỗ trợ. Core production
         // (`coreSupportsMultiTunnel == false`) vẫn luôn ra 1 ⇒ không thể đổi bản phát hành.

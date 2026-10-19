@@ -771,6 +771,15 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
 
     // MARK: - Vòng đời
 
+    /// Số tunnel app yêu cầu cho phiên này, đọc từ `providerConfiguration` (iOS không có App Group
+    /// ⇒ không dùng được `UserDefaults` chung). Thiếu khoá ⇒ 1 = hành vi cũ.
+    private static func requestedTunnelCount(from configuration: NETunnelProviderProtocol?) -> Int {
+        guard let raw = configuration?.providerConfiguration?["multiTunnelCount"] as? Int else {
+            return 1
+        }
+        return max(1, min(8, raw))
+    }
+
     override func startTunnel(
         options: [String: NSObject]?,
         completionHandler: @escaping (Error?) -> Void
@@ -788,6 +797,25 @@ final class HysteriaPacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sen
         setStatus(state: "starting", code: nil, message: nil)
         RelayDiagnostics.shared.log("startTunnel: bắt đầu phiên \(currentSession) (hysteria-only)")
         log.log(level: .default, "startTunnel: begin session \(currentSession)")
+
+        // N tunnel (hút băng thông) — số app truyền qua `providerConfiguration`, vì iOS KHÔNG
+        // khai App Group cho cả app lẫn extension nên `UserDefaults` không chia sẻ được.
+        //
+        // ⚠️ PHẢI đặt Ở ĐÂY, trong provider THẬT này. Trước 20/10/2026 phép đọc này nằm trong
+        // `PacketTunnelProvider.swift` — một file **không có trong target extension** (project.yml
+        // liệt kê tường minh từng file, xem khối `sources` của `PrivateVPNPacketTunnel`). Hệ quả:
+        // `requestedTunnelCount` không bao giờ được ghi ⇒ luôn bằng giá trị khởi tạo 1 ⇒
+        // `configuredTunnelCount()` gập thành hằng 1 khi biên dịch (whole-module + -O) ⇒ **toàn bộ
+        // nhánh N tunnel bị xoá khỏi binary**. Bằng chứng: binary build 86 (có link core
+        // Multitunnel) KHÔNG chứa `MultitunnelConnectSlot` và không chứa chuỗi log `tunnel phụ`.
+        // Đây cũng là lý do thật của ca "build 82 không khởi động extension": N tunnel chưa từng
+        // chạy, không phải vì framework.
+        HysteriaTransport.requestedTunnelCount =
+            Self.requestedTunnelCount(from: protocolConfiguration as? NETunnelProviderProtocol)
+        RelayDiagnostics.shared.log(
+            "startTunnel: N tunnel = \(HysteriaTransport.requestedTunnelCount) (app truyền), "
+                + "core hỗ trợ N = \(HysteriaTransport.coreSupportsMultiTunnelForLog)"
+        )
 
         // Khai băng thông động: nạp bộ nhớ theo MẠNG ĐANG DÙNG trước khi chốt số khai (xem
         // `HysteriaBandwidthControl`). Không có bộ nhớ ⇒ số khai đúng như trước (HysteriaDefaults).
