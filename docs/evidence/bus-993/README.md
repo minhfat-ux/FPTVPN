@@ -63,7 +63,41 @@
 3. Mac chạy: `python3 scripts/ios-log-acceptance.py <relay.log> --crash-dir <crash>` — exit 0 mới đạt.
 4. Sau đó `done` lại bus-993/bus-990 kèm log + kết quả cổng.
 
-## 6. Ghi chú
+## 6. Bổ sung 20/10 — tìm thấy log máy thật build 87 (nhưng cổng §7d chưa PASS)
+
+Sau khi mở lại, MAC tìm thấy log máy thật **đúng build 87** ở:
+
+- `.privatevpn/tmp/b88/app/app.log`
+- `.privatevpn/tmp/b88/ext/relay.log` (472.819 B, 2.963 dòng, 66 phiên, mtime 15:07)
+
+Dấu hiệu nhận dạng: mọi phiên build 87 đều ghi
+`build=87 ... binary=2026-10-19 13:56:58` — đúng timestamp app bundle đã dùng để ký ra IPA đang phát
+(8.243.806 B). Các phiên build 87 chạy 14:10:22 → 14:31:45 trên iPhone `33987D6F`, SSID
+"FPT Software Project".
+
+**Chạy cổng thật:**
+
+```bash
+python3 scripts/ios-log-acceptance.py .privatevpn/tmp/b88/ext/relay.log --min-seconds 90
+# KẾT LUẬN: KHÔNG ĐẠT — 1/66 phiên có lỗi; exit 1
+```
+
+- 65/66 phiên **ĐẠT hoặc bỏ qua** (quá ngắn).
+- 1 phiên ❌ `14:10:22` (234 s): `WATCHDOG CÂM: 0 nhịp tim ...`.
+- **Nhưng cả file có 0 dòng `sống-còn: nhịp` và 0 dòng `watchdog NGỪNG chạy`.** Dòng
+  `sống-còn: nhịp` chỉ được ghi khi bật log chi tiết; `bw: sample` thì luôn ghi
+  (`alwaysKeywords`). Script chỉ coi "log chi tiết TẮT" khi **không có `bw: sample`**, nên ở đây
+  nó chấm oan phiên 14:10 — đây là **lỗ hổng công cụ/công tắc log**, không phải bằng chứng connect
+  hỏng.
+- Chính phiên 14:10 chứng minh connect **chạy**: `ws-relay: handshake ok` sau ~6 s;
+  `giám sát: XÁC NHẬN tunnel có mạng thật sau 5.0s — TCP handshake hoàn tất 8 lần`; có
+  `rawWindowBytes` thật (3.030.770 B; 5.441.406 B; …).
+
+**Kết luận:** connect của build 87 đã được chứng minh trên máy thật; muốn cổng §7d trả **ĐẠT chính
+thức** cần một phiên sạch có bật `tunnel-log-on` (hoặc `providerConfiguration["logVerbose"]=true`).
+Không sửa cổng và không cắt riêng một phiên để tự cho qua.
+
+## 7. Ghi chú
 
 - `release-lock.json` vẫn ghim iOS **build 80** (chủ dự án chốt 20/10) trong khi kênh đã phát 87 để sửa
   lỗi connect. Cần chủ dự án chốt lại khoá (80 hay 87) trước lần phát sau — **không tự sửa khoá**.
