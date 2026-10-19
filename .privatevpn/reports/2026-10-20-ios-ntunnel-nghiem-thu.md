@@ -103,3 +103,42 @@ tăng ~52% so với 1 tunnel. Nếu N được bật mặc định, đây là r�
    Trước khi vá, KHÔNG kết luận gì thêm từ việc "thẻ trắng".
 4. Nếu ưu tiên là video một luồng nhanh hơn: nút thắt nằm ở mất gói/RTT của đường, không phải số khai
    (đã chứng minh N=1 đạt 93% số khai).
+
+## 7. Quan sát thực địa của chủ dự án (20/10/2026): FPT Play TỐT HƠN khi bật N=4
+
+Chủ dự án báo: *"anh thấy từ lúc chạy N4, thì fpt play chất lượng tốt hơn khi xem đấy"*.
+
+**Điều này ĐÚNG và nó sửa một kết luận sai của tôi ở §3.** Tôi đã suy từ "một video = một luồng",
+nhưng log bác bỏ điều đó: trong lúc xem, bộ đếm `TCP SYN` của dòng `tài nguyên:` là **43 kết nối
+mới/phút** (14:12:29 và 14:13:29). Trình phát (FPT Play/YouTube) tải **nhiều segment song song**,
+mỗi segment một kết nối ⇒ có nhiều luồng thật để `multiClient` chia ra N tunnel.
+
+Với N=1, tất cả 43 luồng đó **xếp hàng sau trần ~4 Mbps của MỘT kết nối** (đúng cơ chế per-flow của
+mạng toà nhà). Với N=4, chúng trải ra 4 tunnel ⇒ tổng > trần một luồng ⇒ chất lượng hình cao hơn.
+Đây là lợi ích N **thật** và **đo được** (bằng chứng: số luồng đồng thời), không phải cảm tính.
+
+⇒ Đính chính mục §3/§6: "N không giúp video" là SAI. Đúng phải là: **N không giúp một luồng đơn lẻ,
+nhưng video thực tế KHÔNG phải một luồng.** Phép A/B bằng `fast.com` hỏng vì chính nó chỉ mở ~1 luồng
+(N=4 đo được 1,13 tunnel), ngược hẳn với tải video thật (43 luồng/phút).
+
+## 8. Sự cố phát hiện cùng lúc: tunnel hỏng MỘT CHIỀU qua `vn1hy`, KHÔNG tự đổi relay
+
+Trong lúc kiểm log cho §7, phiên 14:23–14:25 rơi vào trạng thái chết một chiều:
+
+```
+bw: sample ... observed=0 ... lossProxy=100% ... rawWindowBytes=0
+tài nguyên: cầu vào 59/ra 0 (bỏ 15) | relay gửi 20 nhận 8 mở=yes | Go→ 0
+giám sát sống-còn: đủ 2 strike — TỰ DỰNG LẠI transport [chiều về im ≥15s ...]
+```
+- Phía node-1 (đích của `vn1hy`) dịch vụ **vẫn active** và **có nhận** client của mình, nhưng log node
+  ghi: `accepting stream failed: timeout: no recent network activity` ⇒ chiều về không tới được máy.
+- 6 relay đều trả `426` từ phía server, `flowvpn-health-watch` chạy đúng nhịp ⇒ **watchdog server không
+  bắt được** kiểu hỏng này (nó chỉ kiểm "cổng WS sẵn sàng", không kiểm "dữ liệu có về không").
+- **Bug thật:** trong 20 lần `handshake ok` liên tiếp, **20/20 đều là `vn1hy`** — transport dựng lại
+  trên đúng relay hỏng, **không nhảy sang `relayURLCandidates` (`t1.…/relay/vn1hy`) hay
+  `relayNodeCandidates`**. Vì WS handshake vẫn "ok" nên tầng transport không coi relay là hỏng.
+
+**Đề xuất sửa (chưa làm):** sau **≥2 lần dựng lại** mà chiều về vẫn 0 gói trong ≥15 s ⇒ coi relay hiện
+tại là hỏng và **tiến sang cửa kế tiếp** trong danh sách ứng viên (đúng cơ chế `TransportLadder` đã có
+cho node), thay vì dựng lại mãi trên cùng một cửa. Đây là lỗi mức **P1** vì khách sẽ thấy "Connected mà
+không có mạng" và không có cách tự cứu.
