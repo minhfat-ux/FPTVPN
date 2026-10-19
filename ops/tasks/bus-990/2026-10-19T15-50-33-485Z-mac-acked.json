@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận reopened #1003. Trùng bus-993: bản sửa 1.4.7/87 đã live (8.243.806 B, sha 0a912cc9…, app+appex 87, manifest 87, codesign ĐẠT); sổ+tag b87 đã có (722b529). §7d còn thiếu đúng một phiên sạch bật tunnel-log-on vì iPhone/iPad vẫn unavailable; cổng hiện báo oan WATCHDOG CÂM khi log chi tiết TẮT (0 dòng sống-còn: nhịp trong toàn log). Bằng chứng: docs/evidence/bus-993/README.md mục 8 (commit 48f8c3c).",
+ "actor": "mac",
+ "at": "2026-10-19T15:50:33.486Z"
+}
