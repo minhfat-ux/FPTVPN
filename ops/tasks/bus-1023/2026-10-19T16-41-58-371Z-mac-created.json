@@ -1,0 +1,17 @@
+{
+  "type": "created",
+  "task": {
+    "id": "bus-1023",
+    "title": "iOS build 87: chu du an chot TAM GIU de nghiem thu — Mac chay ios-log-acceptance.py tren may that va bao ket qua",
+    "from": "win",
+    "to": "mac",
+    "detail": "QUYET DINH CUA CHU DU AN (19/10 toi, sau khi biet kenh dang phuc vu build 87):\n   \"TAM GIU 87 DE NGHIEM THU, SAI THI LUI 80\"\n=> Da ghi vao .privatevpn/status/release-lock.json (commit b3cb14bc):\n   - khoa ios van neo 1.4.7/build 80 => cong check-publish-version.py CHAN moi lan phat build khac 80\n     (kem ly do), nen KHONG duoc phat 88 hay nang so gi them khi chua nghiem thu.\n   - live_exception: build 87 (sha 0a912cc9d59f..., 8.243.806 B) = tam giu cho nghiem thu.\n\nVIEC MAC PHAI LAM NGAY (nghiem thu DUNG build 87 dang phat):\n1) Lay log may that tren iPhone chay build 87:\n   xcrun devicectl device copy from --device <id> --domain-type appDataContainer \\\n     --domain-identifier com.privatevpn.app.packet-tunnel --source Documents --destination <dir>\n   xcrun devicectl device copy from --device <id> --domain-type systemCrashLogs \\\n     --source . --destination <dir>/crash\n2) python3 scripts/ios-log-acceptance.py <dir>/relay.log --crash-dir <dir>/crash   (exit 0 moi tinh DAT)\n3) Gui ket qua + bang chung: build trong log phai ghi 1.4.7 build 87; phien phai co nhip lay mau + nhip tim\n   watchdog con song toi het phien; khong co Jetsam/crash; co >=1 phien Connected that.\n4) Neu DAT: bao lai de minh cap nhat so/docs (va chu du an mo khoa/doi khoa sang 87).\n   Neu KHONG DAT: Mac phai XUAT LAI IPA build 80 tu commit e996d12 (8.236.378 B sha b12681ea...)\n   va bao minh de dua ve kenh — server hien KHONG con file build 80, chi con backup b66.\n\nCAN CHOT THEM: co dua commit 27eb6e6 (\"N tunnel mac dinh 4\") vao ban phat chinh thuc khong? Build 87\nCO the da chua thay doi nay (build 87 > 85), can Mac xac nhan va ghi vao release notes/email.\n\nLuu y ve can cu dong so build 87: ghi chu trong release/releases.jsonl dan chieu \"bus #993/#998\", trong khi\n#993 la tin MINH gui (xac nhan build 81 loi + de nghi qua du cong), KHONG phai chu du an cho phep phat 87.\nDe nghi Mac sua lai ghi chu cho dung can cu (quyet dinh moi: tam giu 87 de nghiem thu).",
+    "verify": "python3 scripts/ios-log-acceptance.py <dir>/relay.log --crash-dir <dir>/crash phải exit 0; log ghi đúng 1.4.7 build 87; có nhịp lấy mẫu + nhịp tim watchdog tới hết phiên; không Jetsam/crash; có >=1 phiên Connected thật. Nếu KHÔNG ĐẠT thì xuất lại IPA build 80 từ commit e996d12 (8.236.378 B, sha b12681ea...).",
+    "createdAt": "2026-10-19T16:33:28.350Z"
+  },
+  "actor": "mac",
+  "at": "2026-10-19T16:41:58.371408Z",
+  "transcribedBy": "mac",
+  "busId": 1023,
+  "note": "MAC chép yêu cầu từ bus #1023 vào sổ (WIN gửi qua connector, chưa tạo mục ops/tasks/bus-1023). Giữ nguyên from=win → to=mac để đúng luồng/phân quyền."
+}
