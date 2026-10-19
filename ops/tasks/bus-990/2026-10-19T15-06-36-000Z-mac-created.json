@@ -1,0 +1,17 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-990",
+  "title": "URGENT: iOS khong connect duoc — chu du an bao kiem tra (kenh dang phat build 80, ban sua loi la 85-88 chua phat)",
+  "from": "win",
+  "to": "mac",
+  "detail": "Nguồn: bus #990 (win → mac, 2026-10-19T15:03Z, kind=task) + bổ sung bus #991 (kind=status). Chủ dự án báo: \"báo cho Mac kiểm tra, iOS đang không connect được.\" WIN đã kiểm tra phần dùng chung, tất cả bình thường: 6/6 relay trả 426 (WS sẵn sàng), api.meetflowai.site/health 200, /v1/app-version?platform=ios → latest 1.4.7 / minimum 1.3.3, 3 node VN, bw_policy revision 7e2ffef79c2b. Bằng chứng relay (#991): 3 giờ gần nhất relay hoạt động, ví dụ relay-cf-vn2hy total=14047 drop=0 udpErr=0 lastError=-; các phiên mới đóng sau ~5,7-7,2 giây với lý do client-close 1000, lưu lượng nhỏ (ví dụ #14046 in=0f/0B out=0f/0B; #14047 in=20f/10353B out=16f/8222B) → phía client tự đóng, relay không phải điểm nghẽn. Nghi vấn chính: kênh khách đang phát = iOS 1.4.7 build 80 (release/releases.jsonl 18/10 19:03Z, IPA 8.236.378 B, sha256 b12681ea04bc, tag ios-v1.4.7), trong khi HEAD = build 88; các commit sửa lỗi 37e1148 (bấm Connect quay tít — bỏ đặt .connecting trước chốt chống bấm đôi, build 85), 26c0f37, ec0e185, 4d6fe0a, 27eb6e6 (N tunnel mặc định 4 + đổi đường ~20s + sửa thẻ Diagnostics trống, build 87/88) CHƯA phát. Triệu chứng \"không connect được\" khớp lỗi đã sửa ở build 85 nhưng khách vẫn chạy build 80. Rủi ro: 27eb6e6 đổi VPNManager.defaultTunnelCount 1 → 4 (mặc định BẬT), bản 80 không có; nếu phát build mới phải qua đủ cổng §7a/§7b + nghiệm thu log máy thật §7d và chốt lại \"N=4 mặc định\" có đúng là bản phát hay không. Việc Mac cần làm: (a) xác định máy khách đang chạy build nào (Settings/Diagnostics hoặc hỏi chủ dự án); (b) lấy log máy thật bằng xcrun devicectl (appDataContainer com.privatevpn.app.packet-tunnel + systemCrashLogs) rồi chạy python3 scripts/ios-log-acceptance.py <relay.log> --crash-dir <crash> (exit 1 = KHÔNG ĐẠT); (c) xác nhận nguyên nhân build 80 dính lỗi quay tít (fixed 85) hay N tunnel hay relay/exit node; (d) nếu chốt phát: chạy đủ cổng §7a (dev-hysteria-build-env + archive + adhoc-export + ios-verify-ipa) và §7b (pure-logic 389/389 + ios-lint-locks + typecheck -swift-version 6) rồi mới publish IPA + mốc latest_version/ipa_build; (e) ghi rõ trong sổ + tag, báo lại để WIN cập nhật docs/PUBLISHER_PROCESS §6. Chi tiết hạ tầng: docs/handoff/HANDOFF_IOS_LOG_GATE_2026-09-25.md và docs/IOS_TUNNEL_BANDWIDTH_AND_NETWORK_CHANGE.md.",
+  "verify": "Xác nhận được build máy khách đang chạy + có log máy thật chạy qua scripts/ios-log-acceptance.py; nếu publish: IPA build mới qua đủ cổng §7a/§7b, cài lên iPhone thật test kết nối OK, release/releases.jsonl + /v1/app-version?platform=ios trỏ đúng build mới, và báo lại chủ dự án/WIN.",
+  "createdAt": "2026-10-19T15:06:36.000Z"
+ },
+ "actor": "mac",
+ "at": "2026-10-19T15:06:36.000Z",
+ "transcribedBy": "mac",
+ "busId": 990,
+ "note": "MAC chép yêu cầu từ bus #990 vào sổ giao việc (Windows gửi qua connector, chưa tạo mục ops/tasks/bus-990). Giữ nguyên from=win → to=mac để đúng luồng và luật phân quyền. Bus #991 là bổ sung bằng chứng relay cùng việc — đã gộp vào detail."
+}

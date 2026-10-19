@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC đã nhận. Đang xác định build máy khách + lấy log máy thật; đối chiếu build 80 với bản sửa 85-88 trước khi kết luận.",
+ "actor": "mac",
+ "at": "2026-10-19T15:06:51.901Z"
+}
