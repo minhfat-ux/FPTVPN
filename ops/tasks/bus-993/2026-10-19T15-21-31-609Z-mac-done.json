@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "Cùng việc với bus-990: chủ dự án xác nhận build 81 lỗi connect; đã phát iOS 1.4.7/build 87 (IPA 8.243.806 B sha256 0a912cc9d59f83f5a559eb789de7670ea88192a8c8325e36d9966cb5cc8c73ea, profile 13 UDID, ipa_build=87, manifest bundle-version=87, tải thật khớp sha). Nguyên nhân 26c0f37 (.connecting trước chốt chống bấm đôi), sửa 37e1148 (85). Không phát 88 vì N=4 mặc định BẬT chưa nghiệm thu. Bằng chứng đầy đủ: docs/evidence/bus-990/README.md + commit 228bb80. Còn §7d log máy thật (iPhone unavailable).",
+ "actor": "mac",
+ "at": "2026-10-19T15:21:31.610Z"
+}
