@@ -1,0 +1,20 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261019-01",
+  "title": "TV MiTV-AFZP0 (.105) bao loi: bam Connect -> reconnecting -> tat app — kiem tra + nguyen nhan goc",
+  "from": "owner",
+  "to": "win",
+  "detail": "Chu du an bao truc tiep (chat 20/10/2026 ~00:17): con TV hien tai dang loi, bam connect, reconnecting xong tat app. Pham vi: kiem tra thiet bi 192.168.100.105 (MiTV-AFZP0 Android 14), doc log/crash, xac dinh nguyen nhan va trang thai ban cai. Ket qua: kernel TV KHONG co TUN (# CONFIG_TUN is not set) => VpnService khong dung duoc interface => 'Cannot create interface' => reconnecting; sau do app chet vi fdsan double-close tren Android 14. Bang chung: docs/evidence/T-20261020-01/README.md.",
+  "verify": null,
+  "due": "2026-10-20",
+  "createdAt": "2026-10-19T16:24:12.686Z"
+ },
+ "actor": "owner",
+ "at": "2026-10-19T16:24:12.686Z",
+ "transcribedBy": "win",
+ "busId": null,
+ "busAt": "2026-10-19T16:24:12.686Z",
+ "busFrom": "owner",
+ "note": "Chep tu bao cao truc tiep cua chu du an (chat), khong qua bus."
+}

@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "WIN nhan viec: TV MiTV-AFZP0 (.105) connect -> reconnecting -> tat app. Da kiem tra truc tiep qua ADB: kernel thieu TUN + fdsan double-close.",
+ "actor": "win",
+ "at": "2026-10-19T16:24:23.676Z"
+}
