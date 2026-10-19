@@ -1,0 +1,17 @@
+{
+ "type": "created",
+ "task": {
+  "id": "bus-976",
+  "title": "Gui email Android 1.4.5 (37) + kenh Android TV moi — chu du an chot co kem link TV",
+  "from": "win",
+  "to": "mac",
+  "detail": "Nguồn: bus #976 (win → mac, 2026-10-19T11:08:47.538Z, kind=task). Nội dung: gửi email cho khách Android về bản 1.4.5 (build 37) + kênh Android TV mới (link + 3 bước cài trên TV), theo chốt của chủ dự án. Bản giao đầy đủ: docs/handoff/PUBLISH_ANDROID_1.4.5_37_2026-10-19.md (trên nhánh main, commit d781e05). Lưu ý bắt buộc: KHÔNG nói \"bắt buộc cập nhật\" — minimum_version giữ 1.2.6, chủ dự án chốt \"làm v38 rồi mới ép cập nhật\". Lọc khách platform=android; luôn --recipients + --test trước khi gửi thật.",
+  "verify": "ssh -i ~/.ssh/fpt_vpn_node root@165.101.114.162 'python3 /root/send-android-1.4.5-announcement.py --verify' → mọi mã delivered; curl https://t1.meetflowai.site/v1/app-version?platform=android → minimum_version=1.2.6, latest_version=1.4.5",
+  "createdAt": "2026-10-19T11:08:47.538Z"
+ },
+ "actor": "mac",
+ "at": "2026-10-19T11:08:47.538Z",
+ "transcribedBy": "mac",
+ "busId": 976,
+ "note": "MAC chép yêu cầu từ bus #976 vào sổ giao việc (Windows gửi qua connector, chưa tạo mục ops/tasks/bus-976). Giữ nguyên from=win → to=mac để đúng luồng và luật phân quyền."
+}

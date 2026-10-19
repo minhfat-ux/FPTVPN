@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "MAC nhận bus #976: soạn email Android 1.4.5 (37) + kênh Android TV (link + 3 bước), lọc platform=android, --recipients + --test trước khi gửi; không nói bắt buộc cập nhật.",
+ "actor": "mac",
+ "at": "2026-10-19T11:13:53.674Z"
+}
