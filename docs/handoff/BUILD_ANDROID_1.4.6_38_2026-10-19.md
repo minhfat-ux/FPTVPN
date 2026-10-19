@@ -109,7 +109,48 @@ GET /v1/app-version?platform=bogus-xyz        → HTTP 400 (không đoán kênh)
     `minimum_version` thấp hơn (1.2.6) và chỉ ép bằng `android_tv_minimum_version` sau khi TV đã lên v38.
   - `android_tv_minimum_version = 1.4.6-tv` ⇒ chỉ ép TV **đã có v38 trở lên** (v38 trở đi mới đọc mốc này).
 
-## 7. Rollback
+## 7. Nghiệm thu trên TV THẬT (19/10/2026)
+
+TV đang bật trong nhà: **`MiTV-AFZP0` · Android 14 · Xiaomi · armeabi-v7a** (`192.168.100.105:5555`,
+MAC `e8:b8:53:c3:ac:fa`), đang cài gói **release** `com.privatevpn.app.tv`.
+
+```
+dumpsys package com.privatevpn.app.tv → versionCode=38  versionName=1.4.6-tv
+adb install -r app-tv-release.apk     → Success (cài đè, giữ đăng nhập)
+launch → mCurrentFocus = com.privatevpn.app.tv/com.privatevpn.app.MainActivity
+app state (uiautomator dump): "Hanoi, Vietnam · Flow2/Flow3" · "Premium Active" · "Expires Oct 19, 2027"
+diagnostics.log (kéo từ /sdcard/Android/data/com.privatevpn.app.tv/files/):
+    10-19 22:41:25.993 I === diagnostics session start (app 1.4.6-tv) ===
+```
+
+**Chứng minh đã hỏi ĐÚNG kênh** (không cần MITM vì server không bật access log): so chuỗi trong
+`classes.dex` của hai APK build cùng lượt —
+
+| Chuỗi trong dex | APK TV | APK điện thoại |
+|---|---|---|
+| `/v1/app-version?platform=` | **có** | **có** |
+| `android-tv` | **có** | **không** |
+| `platform=android` (nguyên cụm) | **không** | **không** |
+
+⇒ hằng số kênh đã được biên dịch đúng theo flavor (TV = `android-tv`); cộng với
+`ApiFallbackTest` (assert đường dẫn theo `BuildConfig.TV_FLAVOR`, 65/65 × 3 flavor) và
+`GET /v1/app-version?platform=android-tv` trả payload TV thật.
+
+## 8. Mốc ép cập nhật — CHỐT CỦA CHỦ DỰ ÁN
+
+Chủ dự án chốt: **"Ép SAU khi em cập nhật tay TV trong LAN"** ⇒ hiện `minimum_version` **giữ 1.2.6**
+(chưa ép ai). Trình tự đúng khi muốn ép:
+
+1. Cập nhật tay mọi TV còn lại trong LAN lên `1.4.6-tv` (adb `install -r`).
+2. Sau đó mới `PATCH {"minimum_version":"1.4.6","tv_minimum_version":"1.4.6-tv"}`.
+3. Vì bản TV ≤ 1.4.5 hardcode `platform=android`, nếu còn TV ngoài LAN chưa lên v38 thì **đừng** nâng
+   `minimum_version` lên `1.4.x` — chúng sẽ kẹt màn ép cập nhật.
+
+Tình trạng TV trong LAN lúc phát: `.105` (MiTV-AFZP0) = **đã 1.4.6-tv, đã nghiệm thu** · `.115`/`.112`/`.110`
+(LAN `10.193.44.x`) **không tới được** vì máy Windows đã chuyển sang Wi-Fi `KT-617` (`192.168.100.11`) —
+cần về lại LAN `10.193.44.x` mới adb được.
+
+## 9. Rollback
 
 ```bash
 cd /root/flowvpn-apk
