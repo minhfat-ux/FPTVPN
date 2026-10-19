@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   androidLegacyVersionPayload,
+  androidTvVersionPayload,
   androidVersionPayload,
   iosVersionPayload,
   isAndroidClient,
@@ -335,4 +336,72 @@ test("route /v1/app-version trả 400 cho platform lạ (không im lặng rơi v
   assert.ok(block.includes("UnknownPlatformError"), "route phải bắt UnknownPlatformError");
   assert.ok(block.includes("unknown_platform"), "route phải trả error=unknown_platform");
   assert.ok(block.includes("400"), "route phải trả HTTP 400");
+});
+
+// ------------------------------------------------ kênh Android TV (gói flavor `tv`)
+
+test("kênh TV: `?platform=android-tv` trả payload RIÊNG, không rơi về kênh điện thoại", () => {
+  assert.equal(isKnownPlatform("android-tv"), true);
+  assert.equal(isKnownPlatform("androidtv"), true);
+  const body = versionPayloadFor(req({ platform: "android-tv" }), {
+    read: reader(CONFIG),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(body.platform, "android-tv");
+  // Link tải PHẢI là gói TV (cài song song), KHÔNG được là route APK điện thoại — nếu là route
+  // điện thoại thì màn ép cập nhật của TV mời khách cài một app thứ hai.
+  assert.equal(body.apk_url, "https://meetflowai.site/dl/VPNFlow-tv-latest.apk");
+  assert.notEqual(body.apk_url, "https://meetflowai.site/v1/downloads/android");
+  assert.equal(body.store_url, body.apk_url, "store_url rỗng ⇒ nút cập nhật trên TV chết");
+  assert.equal(body.apk_url_legacy, body.apk_url);
+  // Chưa có mốc riêng cho TV ⇒ dùng mốc Android chung, KHÔNG được trả 0.0.0 (app sẽ mời cập nhật mãi)
+  assert.equal(body.latest_version, "1.2.6");
+  assert.equal(body.minimum_version, "1.2.6");
+});
+
+test("kênh TV: alias `androidtv` cho cùng payload", () => {
+  const body = versionPayloadFor(req({ platform: "androidtv" }), { read: reader({}), baseUrl: "" });
+  assert.equal(body.platform, "android-tv");
+  assert.equal(body.apk_url, "/dl/VPNFlow-tv-latest.apk");
+});
+
+test("kênh TV: mốc và link riêng của TV được ưu tiên hơn mốc Android chung", () => {
+  const body = versionPayloadFor(req({ platform: "android-tv" }), {
+    read: reader({
+      android_latest_version: "1.4.5",
+      android_minimum_version: "1.2.6",
+      android_tv_latest_version: "1.4.6-tv",
+      android_tv_minimum_version: "1.4.6-tv",
+      android_tv_apk_url: "https://cdn.example.com/VPNFlow-tv.apk?v=abc12345",
+    }),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(body.latest_version, "1.4.6-tv");
+  assert.equal(body.minimum_version, "1.4.6-tv");
+  assert.equal(body.apk_url, "https://cdn.example.com/VPNFlow-tv.apk?v=abc12345");
+  // Kênh điện thoại KHÔNG bị ảnh hưởng bởi mốc riêng của TV
+  const phone = versionPayloadFor(req({ platform: "android" }), {
+    read: reader({ android_latest_version: "1.4.5", android_minimum_version: "1.2.6", android_tv_latest_version: "1.4.6-tv" }),
+    baseUrl: "https://meetflowai.site",
+  });
+  assert.equal(phone.platform, "android");
+  assert.equal(phone.latest_version, "1.4.5");
+});
+
+test("kênh TV: UA OkHttp (app TV thật) mà KHÔNG có ?platform vẫn là kênh điện thoại (đường lùi cũ)", () => {
+  // Bản TV ≤ 37 hardcode `?platform=android` nên vẫn nhận kênh điện thoại — đây là lý do phải build
+  // v38 cho client TV hỏi đúng kênh; test này khoá lại hành vi đường lùi để không ai "sửa" nhầm.
+  const body = versionPayloadFor(req({ userAgent: "okhttp/4.12.0" }), { read: reader(CONFIG), baseUrl: "" });
+  assert.equal(body.platform, "android");
+});
+
+test("androidTvVersionPayload: chưa cấu hình gì vẫn trả link TV + mốc an toàn (không crash)", () => {
+  assert.deepEqual(androidTvVersionPayload(reader({})), {
+    platform: "android-tv",
+    minimum_version: "0.0.0",
+    latest_version: "0.0.0",
+    apk_url: "/dl/VPNFlow-tv-latest.apk",
+    apk_url_legacy: "/dl/VPNFlow-tv-latest.apk",
+    store_url: "/dl/VPNFlow-tv-latest.apk",
+  });
 });

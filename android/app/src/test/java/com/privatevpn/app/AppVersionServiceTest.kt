@@ -18,6 +18,35 @@ class AppVersionServiceTest {
         assertTrue(AppVersionService.isVersion("1.0", "1.0.1"))
     }
 
+    /**
+     * Hậu tố của flavor TV (`versionNameSuffix = "-tv"`) KHÔNG được làm version tụt xuống.
+     *
+     * Ca thật 19/10/2026: `1.4.5-tv` bị đọc thành `[1, 4]` ⇒ nhỏ hơn `1.4.0`…`1.4.5` ⇒ nếu server
+     * nâng `minimum_version` lên ≥ 1.4 thì mọi TV kẹt màn ÉP CẬP NHẬT vĩnh viễn và tải nhầm APK
+     * điện thoại. Test này khoá lại cả hai chiều.
+     */
+    @Test fun `version co hau to -tv cua flavor TV khong bi tut xuong`() {
+        // Bản TV đang chạy ĐÚNG bằng mốc ⇒ KHÔNG bị ép cập nhật, KHÔNG báo có bản mới
+        assertFalse(AppVersionService.isVersion("1.4.6-tv", "1.4.6"))
+        assertFalse(AppVersionService.isVersion("1.4.6-tv", "1.4.5"))
+        // Bản TV cũ hơn mốc ⇒ vẫn phải bị coi là cũ (không được "tha" hết)
+        assertTrue(AppVersionService.isVersion("1.4.5-tv", "1.4.6"))
+        assertTrue(AppVersionService.isVersion("1.3.3-tv", "1.4.6"))
+        // Hậu tố khác cũng chịu được (phòng khi đổi tên flavor)
+        assertFalse(AppVersionService.isVersion("1.4.6-beta", "1.4.6"))
+        assertTrue(AppVersionService.isVersion("1.4.6-beta", "1.4.7"))
+
+        val tv = com.privatevpn.app.api.AppVersionInfo(
+            platform = "android-tv",
+            minimumVersion = "1.4.6",
+            latestVersion = "1.4.6",
+            storeUrl = "https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk"
+        )
+        assertFalse(AppVersionService.isForcedUpdate(tv, "1.4.6-tv"))
+        assertFalse(AppVersionService.isUpdateAvailable(tv, "1.4.6-tv"))
+        assertTrue(AppVersionService.isForcedUpdate(tv, "1.4.3-tv"))
+    }
+
     @Test fun `forced update below minimum`() {
         val info = com.privatevpn.app.api.AppVersionInfo(
             platform = "android",

@@ -82,6 +82,11 @@ export const KNOWN_PLATFORMS = [
   "android",
   "android-legacy",
   "android7",
+  // Gói flavor `tv` (applicationId `com.privatevpn.app.tv`) — kênh RIÊNG, phát tĩnh ở
+  // `/dl/VPNFlow-tv-latest.apk`. Thiếu nhánh này thì app TV hỏi `?platform=android-tv` sẽ nhận
+  // HTTP 400 (UnknownPlatformError) và MẤT chức năng báo bản mới.
+  "android-tv",
+  "androidtv",
   "macos",
   "mac",
   "darwin",
@@ -224,8 +229,35 @@ export function androidLegacyVersionPayload(read, { baseUrl = "" } = {}) {
   };
 }
 
-/** Payload trả cho client, chọn theo kênh của chính client đó. */
-export function versionPayloadFor(req, { read, baseUrl = "" } = {}) {
+/**
+ * Kênh Android **TV** — gói flavor `tv` (`applicationId = com.privatevpn.app.tv`), phát tĩnh ở
+ * `/dl/VPNFlow-tv-latest.apk` (xem `storeLinks().androidTv` trong `index.js`).
+ *
+ * Vì sao phải là kênh RIÊNG: bản TV cài SONG SONG với bản điện thoại (applicationId khác ⇒ Android
+ * không cài đè). Nếu app TV hỏi `?platform=android` như trước, nó nhận `apk_url` của **điện thoại**;
+ * màn ép cập nhật của TV sẽ mời khách cài một app thứ hai chứ không nâng cấp đúng gói TV.
+ *
+ * Mốc: ưu tiên `android_tv_latest_version` / `android_tv_minimum_version`; chưa cấu hình thì **rơi về
+ * mốc Android chung** để kênh TV không bao giờ trả `0.0.0` (app sẽ mời cập nhật mãi mãi).
+ *
+ * ⚠️ `versionName` của gói TV có hậu tố `-tv` (`1.4.6-tv`). App phải so version chịu được hậu tố
+ * (`AppVersionService.isVersion` lấy phần chữ số đầu mỗi khúc) — nếu không, `1.4.6-tv` bị coi là `1.4`
+ * và mọi TV kẹt màn ÉP CẬP NHẬT vĩnh viễn (ca thật 19/10/2026).
+ */
+export function androidTvVersionPayload(read, { baseUrl = "" } = {}) {
+  const site = String(baseUrl ?? "").replace(/\/$/, "");
+  const apkUrl = read("android_tv_apk_url") || `${site}/dl/VPNFlow-tv-latest.apk`;
+  return {
+    platform: "android-tv",
+    minimum_version: read("android_tv_minimum_version") ?? read("android_minimum_version") ?? "0.0.0",
+    latest_version: read("android_tv_latest_version") ?? read("android_latest_version") ?? "0.0.0",
+    apk_url: apkUrl,
+    apk_url_legacy: apkUrl,
+    store_url: apkUrl,
+  };
+}
+
+/** Payload trả cho client, chọn theo kênh của chính client đó. */export function versionPayloadFor(req, { read, baseUrl = "" } = {}) {
   const userAgent = typeof req?.get === "function"
     ? req.get("user-agent")
     : req?.headers?.["user-agent"];
@@ -235,6 +267,11 @@ export function versionPayloadFor(req, { read, baseUrl = "" } = {}) {
   // Kênh legacy phải xử lý TRƯỚC các nhánh UA: giá trị này không phải client nào cả.
   if (platform === "android-legacy" || platform === "android7") {
     return androidLegacyVersionPayload(read, { baseUrl });
+  }
+  // Kênh TV cũng vậy: `?platform=android-tv` là giá trị TƯỜNG MINH, phải xét trước UA — UA của app TV
+  // vẫn là OkHttp nên nếu để rơi xuống `isAndroidClient` nó sẽ nhận payload điện thoại.
+  if (platform === "android-tv" || platform === "androidtv") {
+    return androidTvVersionPayload(read, { baseUrl });
   }
   if (isWindowsClient({ platform, userAgent })) {
     return windowsVersionPayload(read, { baseUrl });

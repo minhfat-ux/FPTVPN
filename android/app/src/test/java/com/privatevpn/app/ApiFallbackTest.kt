@@ -27,8 +27,15 @@ import org.junit.Test
 class ApiFallbackTest {
 
     private companion object {
-        /** App gọi kèm `platform=android` để server trả đúng kênh APK. */
-        const val APP_VERSION_PATH = "/v1/app-version?platform=android"
+        /**
+         * App gọi kèm `platform=<kênh của gói>` để server trả đúng kênh APK.
+         *
+         * Flavor `tv` từ build 38 hỏi kênh RIÊNG `android-tv`: nếu vẫn hỏi `android` thì màn ép cập
+         * nhật trên TV mời khách cài APK điện thoại (applicationId khác ⇒ cài thêm app thứ hai).
+         * `BuildConfig.TV_FLAVOR` là hằng số theo flavor nên test chạy đúng cho cả 3 flavor.
+         */
+        val APP_VERSION_PATH =
+            if (BuildConfig.TV_FLAVOR) "/v1/app-version?platform=android-tv" else "/v1/app-version?platform=android"
     }
 
     private val servers = mutableListOf<FakeHttpServer>()

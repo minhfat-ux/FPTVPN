@@ -4621,13 +4621,34 @@ app.get("/v1/admin/android-version", requireAdminAuth, (_req, res) => {
   res.json(vpnAndroidVersion());
 });
 
+/**
+ * Kênh Android TV (gói `tv`, `com.privatevpn.app.tv`) — kênh RIÊNG vì bản TV cài song song với bản
+ * điện thoại. Cùng một route PATCH với kênh Android nhưng mang thêm 3 khoá riêng của TV; payload
+ * đọc bằng `/v1/app-version?platform=android-tv` (client TV từ build 38 hỏi đúng kênh này).
+ */
+function vpnAndroidTvVersion() {
+  return versionPayloadFor(
+    { query: { platform: "android-tv" } },
+    { read: (key) => appConfig.get(key), baseUrl: siteBaseUrl() },
+  );
+}
+
+app.get("/v1/admin/android-tv-version", requireAdminAuth, (_req, res) => {
+  res.json(vpnAndroidTvVersion());
+});
+
 app.patch("/v1/admin/android-version", requireAdminAuth, (req, res) => {
-  const { latest_version, minimum_version, apk_url, apk_url_legacy } = req.body ?? {};
+  const { latest_version, minimum_version, apk_url, apk_url_legacy, tv_latest_version, tv_minimum_version, apk_url_tv } = req.body ?? {};
   if (latest_version !== undefined) appConfig.set("android_latest_version", latest_version);
   if (minimum_version !== undefined) appConfig.set("android_minimum_version", minimum_version);
   if (apk_url !== undefined) appConfig.set("android_apk_url", apk_url);
   if (apk_url_legacy !== undefined) appConfig.set("android_apk_url_legacy", apk_url_legacy);
-  res.json(vpnAndroidVersion());
+  // Khoá riêng của kênh TV: bản TV có versionName hậu tố `-tv` nên phải đặt mốc riêng được, không
+  // thì muốn nâng mốc cho điện thoại là kéo theo TV (xem docs/PUBLISHER_PROCESS.md §4).
+  if (tv_latest_version !== undefined) appConfig.set("android_tv_latest_version", tv_latest_version);
+  if (tv_minimum_version !== undefined) appConfig.set("android_tv_minimum_version", tv_minimum_version);
+  if (apk_url_tv !== undefined) appConfig.set("android_tv_apk_url", apk_url_tv);
+  res.json({ ...vpnAndroidVersion(), android_tv: vpnAndroidTvVersion() });
 });
 
 /** Kênh phát hành Windows (bộ cài Inno Setup) — admin xem/sửa ngưỡng ép cập nhật. */
