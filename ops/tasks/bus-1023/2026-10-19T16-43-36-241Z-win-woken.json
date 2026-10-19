@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "win",
+ "at": "2026-10-19T16:43:36.241Z",
+ "note": "connector VPS: blocked từ mac — bus-1023 · iOS build 87: chu du an chot TAM GIU de nghiem thu — Mac chay ios-log-acceptance.py tren may that va bao ket qua",
+ "via": "dsh --profile headless \"{prompt}\""
+}
