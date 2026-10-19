@@ -29,7 +29,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..");
 const LEDGER = process.env.RELEASE_LEDGER || path.join(REPO, "release", "releases.jsonl");
 
-const PLATFORMS = ["ios", "macos", "android", "android-legacy", "windows"];
+const PLATFORMS = ["ios", "macos", "android", "android-legacy", "android-tv", "windows"];
 /** Dong mo ta trang thai dang phat (tag/rollback la dong phu, khong tinh vao kiem tra tien version). */
 const STATE_ORIGINS = new Set(["publish", "backfill"]);
 const CHANNELS = {
@@ -37,6 +37,8 @@ const CHANNELS = {
   macos: "/v1/downloads/mac",
   android: "/v1/downloads/android",
   "android-legacy": "/v1/downloads/android-legacy",
+  // Goi flavor `tv` (com.privatevpn.app.tv) phat TINH o /dl/ — xem PUBLISHER_PROCESS §3.
+  "android-tv": "/dl/VPNFlow-tv-latest.apk",
   windows: "/dl/VPNFlow-Setup-{version}.exe",
 };
 

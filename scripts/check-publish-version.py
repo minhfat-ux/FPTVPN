@@ -26,6 +26,12 @@ Dùng:
   # SAU khi upload: tải file đang phát và đọc version bên trong, đối chiếu mốc
   python3 scripts/check-publish-version.py --platform macos --mode post --version 1.4.1
 
+  # Android TV: gói RIÊNG (com.privatevpn.app.tv, hậu tố versionName "-tv"), phát tĩnh ở
+  # /dl/VPNFlow-tv-latest.apk. Cổng kiểm thêm: đúng gói TV + có LEANBACK launcher + không
+  # phải bản dev, và CHẶN nếu đem gói TV phát vào kênh điện thoại (hoặc ngược lại).
+  python3 scripts/check-publish-version.py --platform android-tv \
+      --file app-tv-release.apk --version 1.4.5-tv --build 37
+
 Mã thoát: 0 = ĐẠT, 1 = KHÔNG ĐẠT (dừng publish), 2 = không kiểm được (thiếu công cụ/file).
 """
 
@@ -79,6 +85,10 @@ DOWNLOAD_ROUTES = {
     "ios": "/v1/downloads/ios",
     "android": "/v1/downloads/android",
     "android-legacy": "/v1/downloads/android-legacy",
+    # Kênh Android TV: gói flavor `tv` (LEANBACK launcher, applicationId `com.privatevpn.app.tv`)
+    # phát TĨNH ở /dl/ giống bộ cài Windows — không phải route cố định của control plane.
+    # Trang chủ và `storeLinks().androidTv` đã trỏ đúng file này (control-plane/src/index.js).
+    "android-tv": "/dl/VPNFlow-tv-latest.apk",
     "macos": "/v1/downloads/mac",
     "windows": "/dl/VPNFlow-Setup-{version}.exe",
 }
@@ -93,6 +103,7 @@ ARTIFACT_SUFFIX = {
     "macos": ".dmg",
     "android": ".apk",
     "android-legacy": ".apk",
+    "android-tv": ".apk",
     "windows": ".exe",
 }
 
@@ -153,8 +164,11 @@ def marker_latest(platform: str) -> tuple[str | None, str | None]:
     `android|ios|macos|windows`, giá trị lạ rơi vào payload **iOS** (xem `app-version.js`).
     APK legacy dùng CHUNG mốc với Android modern ⇒ phải hỏi `platform=android`, nếu không
     audit sẽ đối chiếu APK legacy với mốc iOS (đúng khi hai số tình cờ bằng nhau, sai khi lệch).
+
+    `android-tv` cũng vậy: chưa có mốc riêng nên dùng chung `android_latest_version`
+    (bản TV có versionName hậu tố `-tv`, xem chỗ bỏ hậu tố khi so ở `main`).
     """
-    query = "android" if platform == "android-legacy" else platform
+    query = "android" if platform in ("android-legacy", "android-tv") else platform
     payload = http_json(f"{BASE}/v1/app-version?platform={query}")
     if "__error__" in payload:
         return None, payload["__error__"]
@@ -382,7 +396,13 @@ def _find_aapt2() -> str | None:
 
 
 def version_android(path: str) -> dict:
-    """APK: aapt2 dump badging (công cụ chuẩn của luật §2)."""
+    """APK: aapt2 dump badging (công cụ chuẩn của luật §2).
+
+    Trả thêm `package` và `leanback` để cổng kiểm được **kênh nào với gói nào**: Android TV là
+    gói RIÊNG (`com.privatevpn.app.tv`, có LEANBACK launcher), phát lẫn sang kênh điện thoại là
+    lỗi đã được cảnh báo trong handoff 1.4.5 (khách sẽ cài thêm một app thứ hai, vì
+    applicationId khác nhau nên Android KHÔNG cài đè).
+    """
     aapt2 = _find_aapt2()
     if not aapt2:
         return {"error": "không có aapt2/aapt trong PATH (cần Android SDK build-tools)"}
@@ -393,9 +413,12 @@ def version_android(path: str) -> dict:
         return {"error": f"{tool} lỗi: {(proc.stderr or proc.stdout).strip()[:200]}"}
     name = re.search(r"versionName='([^']*)'", proc.stdout)
     code = re.search(r"versionCode='([^']*)'", proc.stdout)
+    package = re.search(r"package: name='([^']*)'", proc.stdout)
     return {
         "version": name.group(1) if name else None,
         "build": code.group(1) if code else "",
+        "package": package.group(1) if package else None,
+        "leanback": "leanback-launchable-activity" in proc.stdout,
     }
 
 
@@ -512,6 +535,7 @@ READERS = {
     "ios": version_ios,
     "android": version_android,
     "android-legacy": version_android,
+    "android-tv": version_android,
     "macos": version_macos,
     "windows": version_windows,
 }
@@ -575,7 +599,7 @@ def download_for_post(platform: str, version: str, path: str | None) -> tuple[st
                 continue
             # Magic bytes: APK/IPA là zip — sai magic nghĩa là file tải về không phải artifact
             # (bị chặn/cache trả HTML), phải báo rõ chứ không để công cụ sau phán "file lỗi".
-            if platform in ("android", "android-legacy", "ios"):
+            if platform in ("android", "android-legacy", "android-tv", "ios"):
                 with open(target, "rb") as head:
                     if head.read(2) != b"PK":
                         last_err = f"tải {url}: nội dung không phải zip (thiếu magic PK)"
@@ -621,7 +645,7 @@ def channel_lock(platform: str, version: str, build: str | None) -> dict | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cổng chặn version trước/sau khi publish")
     parser.add_argument("--platform", required=True,
-                        choices=["ios", "android", "android-legacy", "macos", "windows"])
+                        choices=["ios", "android", "android-legacy", "android-tv", "macos", "windows"])
     parser.add_argument("--file", help="artifact cần kiểm (mode pre: bắt buộc)")
     parser.add_argument("--app-exe", help="Windows: thêm exe app bên trong để kiểm version")
     parser.add_argument("--version", required=True, help="version ĐỊNH phát hành, vd 1.4.1")
@@ -704,6 +728,42 @@ def main() -> int:
         if internal.get("product"):
             result.ok("ProductVersion", str(internal["product"]))
 
+        # ---- 1b. LUẬT KÊNH Android: TV là gói RIÊNG, không được phát lẫn.
+        # `tv` flavor đặt `applicationIdSuffix = ".tv"` ⇒ applicationId KHÁC bản điện thoại, nên
+        # Android KHÔNG cài đè mà cài THÊM một app thứ hai (khách thấy 2 icon, tưởng bản mới).
+        # Handoff 1.4.5 cảnh báo đúng chuyện này; cổng chặn bằng máy thay vì bằng trí nhớ.
+        if args.platform in ("android", "android-legacy", "android-tv") and internal.get("package"):
+            pkg = str(internal["package"])
+            ver = str(internal.get("version") or "")
+            if args.platform == "android-tv":
+                if pkg == "com.privatevpn.app.tv":
+                    result.ok("Đúng gói TV", pkg)
+                else:
+                    result.fail("SAI gói cho kênh TV",
+                                f"package {pkg} · kênh TV phải là com.privatevpn.app.tv")
+                if ver.endswith("-tv"):
+                    result.ok("Hậu tố -tv", ver)
+                else:
+                    result.fail("Thiếu hậu tố -tv", f"trong file: {ver} · bản TV phải có -tv")
+                if internal.get("leanback"):
+                    result.ok("LEANBACK launcher", "có leanback-launchable-activity (mở được trên TV)")
+                else:
+                    result.fail("Thiếu LEANBACK launcher",
+                                "APK TV phải có leanback-launchable-activity, nếu không remote TV "
+                                "không mở được app từ launcher")
+            else:
+                if pkg == "com.privatevpn.app.tv":
+                    result.fail("SAI gói cho kênh điện thoại",
+                                f"package {pkg} là gói TV — KHÔNG phát vào kênh {args.platform} "
+                                f"(khách sẽ cài thêm app thứ hai)")
+                else:
+                    result.ok("Đúng gói điện thoại", pkg)
+            if "-dev" in ver.lower() or pkg.endswith(".dev"):
+                result.fail("Là bản DEV",
+                            f"{pkg} {ver} — bản .dev chỉ để test trên máy dev, KHÔNG phát cho khách")
+            else:
+                result.ok("Không phải bản dev", f"{pkg} {ver}")
+
         # iOS/macOS: credential hysteria2 nhúng lúc build PHẢI có (cả app lẫn extension).
         # Thiếu ⇒ app cài được nhưng KHÔNG kết nối được (ca thật 22/09/2026, bản macOS build tay).
         if "hysteria_password" in internal:
@@ -773,7 +833,14 @@ def main() -> int:
     elif not latest:
         result.unknown_("Mốc latest_version", "server không trả latest_version")
     else:
-        relation = compare(args.version, latest)
+        # Bản TV mang hậu tố `-tv` trong versionName (`versionNameSuffix = "-tv"` ở build.gradle)
+        # nhưng dùng CHUNG mốc `android_latest_version` với bản điện thoại. `compare("1.4.5-tv",
+        # "1.4.5")` ra -1 vì "5-tv" không phải số ⇒ cổng post sẽ CẢNH BÁO sai "mốc > bản vừa
+        # kiểm". Bỏ hậu tố trước khi so; hậu tố đã được kiểm riêng ở mục "Hậu tố -tv".
+        marker_subject = args.version
+        if args.platform == "android-tv" and marker_subject.endswith("-tv"):
+            marker_subject = marker_subject[: -len("-tv")]
+        relation = compare(marker_subject, latest)
         if args.mode == "post":
             # Sau upload: mốc PHẢI bằng bản vừa phát. Nhỏ hơn = quên PATCH (đúng ca 1.0.7:
             # buy page 1.0.7 nhưng latest_version kẹt 1.0.5 nên app không được báo có bản mới).
