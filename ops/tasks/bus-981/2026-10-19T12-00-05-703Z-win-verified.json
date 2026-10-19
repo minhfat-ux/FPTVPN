@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu tren node-2 (165.101.114.162): --verify -> 4/4 delivered (01a15403-f580/f4a2b/feb4, 01a15404-0317), 0 loi; GET app-version?platform=android -> minimum_version=1.2.6, latest_version=1.4.6; doc HTML that tu Resend cua ca 4 mail: co link https://t1.meetflowai.site/dl/VPNFlow-tv-latest.apk?v=191f8f95, goi rieng com.privatevpn.app.tv + 3 buoc cai, so do 1/4/8 luong (4-12 / 17-29 / 72-81 Mbps), cau 'Không bắt buộc cập nhật' (chi xuat hien dang phu dinh, khong co cau bat buoc); TV APK HTTP 200, 79.106.408 B, last-modified 19/10 11:48. Khong gui trung: chi 4 ma Resend.",
+ "actor": "win",
+ "at": "2026-10-19T12:00:05.705Z"
+}
