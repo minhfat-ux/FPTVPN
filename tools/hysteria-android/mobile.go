@@ -7,13 +7,16 @@
 package mobile
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -514,5 +517,119 @@ func ServeSocks(listen string) error {
 	if err != nil && !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("socks serve: %w", err)
 	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// HTTP CONNECT PROXY — đúng thứ Android dùng khi đặt "proxy hệ thống"
+// ---------------------------------------------------------------------------
+//
+// Vì sao phải có: proxy hệ thống của Android là **HTTP proxy** — app gửi
+// `CONNECT host:443 HTTP/1.1` rồi nói HTTP/HTTPS trong đường hầm đó. Bản SOCKS5 ở trên KHÔNG
+// phục vụ được kiểu này (lỗi thật 20/10: FPT Play báo lỗi kết nối khi đăng nhập). Ở đây mở đúng
+// giao thức HTTP: CONNECT (dùng cho HTTPS) và chuyển tiếp request thường (HTTP).
+
+func handleHTTPProxyConn(c client.Client, conn net.Conn) {
+	defer conn.Close()
+	br := bufio.NewReader(conn)
+	req, err := http.ReadRequest(br)
+	if err != nil {
+		return
+	}
+	host := req.Host
+	if req.Method == http.MethodConnect {
+		if !strings.Contains(host, ":") {
+			host += ":443"
+		}
+		up, err := c.TCP(host)
+		if err != nil {
+			_, _ = conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+			return
+		}
+		defer up.Close()
+		if _, err := conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
+			return
+		}
+		done := make(chan struct{}, 1)
+		go func() {
+			// br có thể còn byte đã đọc sẵn (TLS ClientHello) => phải chuyển tiếp từ br
+			_, _ = io.Copy(up, br)
+			done <- struct{}{}
+		}()
+		_, _ = io.Copy(conn, up)
+		<-done
+		return
+	}
+
+	// HTTP thường: đổi sang origin-form rồi chuyển tiếp
+	if !strings.Contains(host, ":") {
+		host += ":80"
+	}
+	up, err := c.TCP(host)
+	if err != nil {
+		_, _ = conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+		return
+	}
+	defer up.Close()
+	req.RequestURI = ""
+	if req.URL != nil {
+		req.URL.Scheme = ""
+		req.URL.Host = ""
+	}
+	req.Close = true
+	if err := req.Write(up); err != nil {
+		return
+	}
+	_, _ = io.Copy(conn, up)
+}
+
+// ServeHTTPProxy mở HTTP proxy (CONNECT + GET) tại `listen`, CHẶN tới khi Stop().
+func ServeHTTPProxy(listen string) error {
+	mu.Lock()
+	c := active
+	if len(slots) > 0 {
+		list := make([]client.Client, 0, len(slots)+1)
+		if c != nil {
+			list = append(list, c)
+		}
+		for _, v := range slots {
+			list = append(list, v)
+		}
+		switch len(list) {
+		case 0:
+		case 1:
+			c = list[0]
+		default:
+			c = &multiClient{clients: list}
+		}
+	}
+	if c == nil {
+		mu.Unlock()
+		return fmt.Errorf("hysteria not connected")
+	}
+	ch := make(chan struct{})
+	stopCh = ch
+	mu.Unlock()
+
+	l, err := net.Listen("tcp", listen)
+	if err != nil {
+		return fmt.Errorf("http proxy listen %s: %w", listen, err)
+	}
+	go func() {
+		<-ch
+		_ = l.Close()
+		_ = c.Close()
+	}()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			break
+		}
+		go handleHTTPProxyConn(c, conn)
+	}
+	mu.Lock()
+	active = nil
+	activeSrv = nil
+	mu.Unlock()
 	return nil
 }

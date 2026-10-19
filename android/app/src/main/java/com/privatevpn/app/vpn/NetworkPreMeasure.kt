@@ -27,12 +27,24 @@ object NetworkPreMeasure {
 
     /** Trả về kbps đo được, hoặc 0 nếu không đo được (không bao giờ ném ra ngoài). */
     fun measure(protector: ((Socket) -> Boolean)?): Int {
-        for (url in listOf(Config.PREMEASURE_URL_PRIMARY, Config.PREMEASURE_URL)) {
+        // Đo CẢ HAI nguồn rồi lấy số CAO NHẤT (20/10/2026, TV mạng tòa nhà ~40 Mbps): nguồn
+        // "chính" (CDN shop) có thể chậm hơn đường thật rất nhiều — đo thật: CDN shop 7.986 kbps
+        // trong khi chính mạng đó tải được ~40 Mbps — lấy nguồn đầu tiên chạy được là tự bóp số khai.
+        var best = 0
+        var bestSource = ""
+        for (url in listOf(Config.PREMEASURE_URL, Config.PREMEASURE_URL_PRIMARY)) {
             val kbps = runCatching { measureOnce(url, protector) }.getOrDefault(0)
-            if (kbps > 0) return kbps
+            if (kbps > best) {
+                best = kbps
+                bestSource = url
+            }
         }
-        DiagnosticsLog.log("bw: do mang thuc te KHONG do duoc o ca 2 nguon -> giu so cu")
-        return 0
+        if (best <= 0) {
+            DiagnosticsLog.log("bw: do mang thuc te KHONG do duoc o ca 2 nguon -> giu so cu")
+        } else {
+            DiagnosticsLog.log("bw: so do dung de khai = ${best}kbps (nguon nhanh nhat: $bestSource)")
+        }
+        return best
     }
 
     private fun measureOnce(url: String, protector: ((Socket) -> Boolean)?): Int {

@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!--
       Chỉ để ghi BÁO CÁO CHẨN ĐOÁN ra thư mục Downloads công khai trên máy Android ≤ 9 (từ API 29
@@ -72,5 +73,20 @@
             android:name=".vpn.RelayProtectService"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE" />
+
+        <!-- Máy KHÔNG có TUN chạy chế độ proxy hệ thống; Android GIỮ giá trị http_proxy qua lần
+             khởi động lại, nên sau reboot TV sẽ trỏ vào cổng chết và mất internet cho tới khi mở
+             app. Receiver này dọn ngay lúc boot (đo thật 20/10/2026: reboot TV vẫn còn
+             http_proxy=127.0.0.1:1081). -->
+        <receiver
+            android:name=".vpn.ProxyCleanupReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

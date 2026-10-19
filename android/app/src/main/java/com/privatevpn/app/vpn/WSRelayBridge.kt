@@ -63,6 +63,10 @@ class WSRelayBridge(
     @Volatile private var rxTotal = 0L
     @Volatile private var txTotal = 0L
 
+    /** Số datagram bị bỏ vì hàng đợi gửi của OkHttp quá dày (xem vòng bơm UDP). */
+    @Volatile private var droppedFrames = 0L
+    private val MAX_PENDING_BYTES = 512L * 1024L
+
     fun rxBytes(): Long = rxTotal
     fun txBytes(): Long = txTotal
 
@@ -182,7 +186,24 @@ class WSRelayBridge(
                         break
                     }
                     peer.set(InetSocketAddress(packet.address, packet.port))
-                    if (ws?.send(buffer.toByteString(0, packet.length)) == true) {
+                    val socket = ws ?: continue
+                    // CHỐNG "lane chết oan" (đo thật 20/10/2026 trên TV mạng tòa nhà): OkHttp xếp
+                    // dữ liệu gửi đi thành MỘT hàng đợi duy nhất, pong trả lời ping của relay cũng
+                    // nằm trong hàng đó. Khi hàng đợi phình (tải lớn, đường 2 Mbps mà bơm 31 Mbps),
+                    // pong ra trễ > 120 s ⇒ relay cắt: "KHÔNG PONG trong 120000ms ... pong-timeout",
+                    // phía app thấy "ws-relay: failed: Broken pipe" và tunnel sập giữa phiên.
+                    // Vì vậy: hàng đợi quá dày thì BỎ datagram (QUIC tự gửi lại) để pong luôn kịp.
+                    if (socket.queueSize() > MAX_PENDING_BYTES) {
+                        droppedFrames++
+                        if (droppedFrames == 1L || droppedFrames % 2000L == 0L) {
+                            DiagnosticsLog.warn(
+                                "ws-relay: bỏ $droppedFrames datagram (hàng đợi ${socket.queueSize()}B)" +
+                                    " — giữ pong kịp hạn 120s của relay",
+                            )
+                        }
+                        continue
+                    }
+                    if (socket.send(buffer.toByteString(0, packet.length))) {
                         txTotal += packet.length
                     }
                 }

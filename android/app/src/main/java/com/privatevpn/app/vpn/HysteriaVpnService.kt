@@ -319,6 +319,9 @@ class HysteriaVpnService : VpnService() {
     private fun runTunnel() {
         // Clear any stale client state left by a process kill (zombie client).
         runCatching { Mobile.stop() }
+        // Máy đã biết là KHÔNG có TUN (cờ nhớ từ phiên trước): mở proxy nội bộ NGAY, trước cả khi
+        // tunnel lên — nhờ vậy proxy hệ thống luôn có người nghe và TV giữ được internet.
+        if (noTunDevice) enableProxyMode()
         // Never give up on its own: the tunnel is what the user asked for, and on
         // flaky mobile links a pass can fail purely because of a loss burst. We
         // keep retrying with capped exponential backoff until the user stops us.
@@ -357,7 +360,10 @@ class HysteriaVpnService : VpnService() {
                         // A node whose IP is blocked (GFW) never answers on any port, so
                         // after a couple of dead passes move on to the next node instead
                         // of retrying a black hole forever.
-                        if (failedPasses >= NODE_FAILOVER_AFTER_PASSES && hosts.size > 1) {
+                        // KHÔNG đổi nút khi máy không có TUN: chế độ proxy là đường DUY NHẤT ra
+                        // internet, mà IP thoát đã được ghim về VPS1 (xem pinExitHost) — đổi nút
+                        // là đổi vùng nội dung giữa phiên (Netflix/FPT Play).
+                        if (failedPasses >= NODE_FAILOVER_AFTER_PASSES && hosts.size > 1 && !noTunDevice) {
                             val previous = runHost
                             hostIndex = (hostIndex + 1) % hosts.size
                             runHost = hosts[hostIndex]
@@ -491,9 +497,7 @@ class HysteriaVpnService : VpnService() {
      * cũ trong <1s vì đường trực tiếp thử trước.
      */
     private fun oneConnectPass(): Int {
-        // Máy đã được xác định KHÔNG có TUN (kernel thiếu CONFIG_TUN): đừng thử đường TUN nữa
-        // (mỗi lượt đều chết ở establish() và app quay vòng vô ích) — đi thẳng chế độ SOCKS5.
-        if (noTunDevice) return proxyAttempt()
+        // KHONG dat nhanh no-TUN o day: phai chay qua refreshMeteredState de chot SO KHAI theo so do.
         // Chốt số khai băng thông TRƯỚC mọi lượt thử transport (kể cả lượt ws-relay,
         // vốn đọc meteredNow ở wsRelayAttempt): mỗi lượt thử đều có thể mở client Go
         // với số mới nhất, không phụ thuộc lượt trước đã kịp cập nhật hay chưa.
@@ -501,6 +505,10 @@ class HysteriaVpnService : VpnService() {
         // Mỗi lượt mới bắt đầu ở đường TRỰC TIẾP; chỉ khi lượt này thực sự rơi vào cầu WS
         // (wsRelayAttempt) mới bật cờ — kênh dò dựa vào cờ này để biết đang đi đường nào.
         onWsRelay = false
+        // Máy đã xác định KHÔNG có TUN (kernel thiếu CONFIG_TUN): đi thẳng chế độ SOCKS5 — nhưng
+        // SAU refreshMeteredState, nếu không socket sẽ khai số MẶC ĐỊNH 30/100 Mbps (bug thật
+        // 20/10: proxy khai 100 Mbps trên đường 2 Mbps).
+        if (noTunDevice) return proxyAttempt()
         // CHON DUONG THEO SO DO (1.4.3): do duong TRUC TIEP (TCP connect, toi da 1,2s) roi moi xep
         // thu tu - KHONG bam duong nho san. Do tren may that 22/09/2026: app ket o duong cu 0,74
         // Mbps trong khi duong kia do duoc 23,7 Mbps, chi vi no la "last good transport".
@@ -1179,8 +1187,11 @@ class HysteriaVpnService : VpnService() {
         // VPN nào dựng được interface. Đánh dấu để các lượt sau đi chế độ SOCKS5 nội bộ.
         noTunDevice = true
         runCatching { getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_NO_TUN, true).apply() }
+        // Mở proxy nội bộ NGAY: từ giây này trở đi proxy hệ thống trỏ vào 127.0.0.1:$SOCKS_PORT và
+        // luôn có người nghe (chưa có tunnel thì đi thẳng) — không còn cảnh "proxy trỏ cổng chết".
+        enableProxyMode()
         DiagnosticsLog.warn(
-            "vpn: máy KHÔNG có TUN -> chuyển chế độ SOCKS5 nội bộ (proxy hệ thống 127.0.0.1:$SOCKS_PORT)",
+            "vpn: máy KHÔNG có TUN -> chuyển chế độ proxy nội bộ (proxy hệ thống 127.0.0.1:$SOCKS_PORT)",
         )
         throw IllegalStateException(
             "establish failed: full=" + (fullError?.let { it.javaClass.simpleName + ": " + it.message } ?: "null") +
@@ -1207,13 +1218,41 @@ class HysteriaVpnService : VpnService() {
     }
 
     /**
-     * Lượt thử ở chế độ SOCKS5: mở cầu WS (không cần TUN), bắt tay hysteria, đặt proxy hệ thống
-     * về `127.0.0.1:SOCKS_PORT` rồi chạy SOCKS5 server trên chính tunnel đó.
+     * Bật "chế độ proxy" cho máy không có TUN: mở proxy nội bộ thường trực rồi trỏ proxy hệ thống
+     * vào nó. Chỉ đặt proxy SAU KHI cổng đã mở — nếu không thì lại rơi đúng vào lỗi "proxy trỏ cổng
+     * chết" mà [LocalProxy] sinh ra để dẹp.
+     */
+    private fun enableProxyMode() {
+        if (!LocalProxy.ensureStarted(SOCKS_PORT)) return
+        if (!systemProxySet) setSystemProxy(true)
+    }
+
+    /**
+     * Lượt thử ở chế độ proxy (máy KHÔNG có TUN): mở cầu WS, bắt tay hysteria, đặt proxy hệ thống
+     * về `127.0.0.1:SOCKS_PORT` rồi chạy **HTTP proxy (CONNECT)** trên chính tunnel đó.
+     * Vì sao HTTP chứ không phải SOCKS5: proxy hệ thống của Android là HTTP proxy, app gửi
+     * `CONNECT host:443` — bản SOCKS5 không phục vụ được kiểu đó (lỗi thật 20/10: FPT Play báo
+     * lỗi kết nối khi đăng nhập).
      * Giới hạn: chỉ app tôn trọng proxy hệ thống mới đi qua (FPT Play/SmartTube/trình duyệt có;
      * Netflix tự mở socket nên không).
      */
     private fun proxyAttempt(): Int {
         if (stopping) return 1
+        // Ghim nút thoát về VPS1 TRƯỚC khi chọn cầu WS: cầu phải là relay của đúng nút đó.
+        pinExitHost()
+        refreshMeteredState("proxy attempt")
+        // SÀN KHAI BÁO cho máy chạy chế độ proxy (yêu cầu chủ dự án 20/10/2026: mạng tòa nhà
+        // trung bình 30-40 Mbps nên "luôn cho nó khai báo từ 15 Mbps"). Khai thấp làm Brutal CC
+        // bó băng thông ngay từ đầu — đo thật trên TV này: down=3716 kbps dù đường 28,7 MB/s.
+        if (attemptDownKbps < PROXY_FLOOR_DOWN_KBPS || attemptUpKbps < PROXY_FLOOR_UP_KBPS) {
+            DiagnosticsLog.log(
+                "bw: nâng sàn khai báo (up=${attemptUpKbps} down=${attemptDownKbps} kbps)" +
+                    " -> up=${maxOf(attemptUpKbps, PROXY_FLOOR_UP_KBPS)}" +
+                    " down=${maxOf(attemptDownKbps, PROXY_FLOOR_DOWN_KBPS)}",
+            )
+            attemptUpKbps = maxOf(attemptUpKbps, PROXY_FLOOR_UP_KBPS)
+            attemptDownKbps = maxOf(attemptDownKbps, PROXY_FLOOR_DOWN_KBPS)
+        }
         val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
         val relayUrl = relayForNode ?: WS_RELAY_URL
         armAttemptBudget(WS_OPEN_WAIT_MS + WS_ATTEMPT_UP_BUDGET_MS)
@@ -1231,7 +1270,12 @@ class HysteriaVpnService : VpnService() {
             disarmAttemptBudget()
             return 0
         }
+        // Vòng lấy mẫu/ramp phải đo lưu lượng của CẦU WS (đúng lưu lượng tunnel). Trong chế độ
+        // SOCKS không có tun0 nên nếu để trống, nó rơi về TrafficStats của chính app (src=2) và
+        // đo SAI => số khai không leo được (yêu cầu chủ dự án 20/10).
+        wsBridgeStats = bridge
         if (!awaitBridge(bridge)) {
+            wsBridgeStats = null
             DiagnosticsLog.warn("proxy: cầu WS chưa mở được, bỏ lượt")
             runCatching { bridge.stop() }
             disarmAttemptBudget()
@@ -1250,27 +1294,185 @@ class HysteriaVpnService : VpnService() {
         onWsRelay = true
         try {
             connectClient(bridge.localPort, fd, tcp = false)
-            DiagnosticsLog.transport = "socks$SOCKS_PORT"
+            DiagnosticsLog.transport = "http$SOCKS_PORT"
             val proxied = setSystemProxy(true)
             if (!stopping) reportUp()
             DiagnosticsLog.log(
-                "proxy: SOCKS5 sẵn sàng 127.0.0.1:$SOCKS_PORT " +
+                "proxy: HTTP proxy (CONNECT) sẵn sàng 127.0.0.1:$SOCKS_PORT " +
                     "(proxy hệ thống=${if (proxied) "đã đặt" else "CHƯA đặt được"})",
             )
-            Mobile.serveSocks("127.0.0.1:$SOCKS_PORT")
-            return serveOutcome("socks serve() returned")
+            if (proxied) probeExitIp()
+            if (proxied) provisionWidevineOnce()
+            // Core Go giữ cổng RIÊNG (TUNNEL_PORT); 1081 là proxy nội bộ thường trực của app và
+            // được đặt làm proxy hệ thống — xem LocalProxy.
+            Mobile.serveHTTPProxy("127.0.0.1:${LocalProxy.TUNNEL_PORT}")
+            return serveOutcome("http serve() returned")
         } catch (e: Exception) {
-            DiagnosticsLog.warn("proxy: serveSocks lỗi: ${e.message}")
-            return serveOutcome("socks serve() threw: ${e.message}")
+            DiagnosticsLog.warn("proxy: serveHTTPProxy lỗi: ${e.message}")
+            return serveOutcome("http serve() threw: ${e.message}")
         } finally {
             runHost = previousHost
             // GO proxy khi transport ket thuc: neu giu lai, luc app bi kill proxy se tro vao cong
             // CHET => ca TV mat mang. An toan hon la go, vao lai rat nhanh khi noi lai.
             if (systemProxySet) setSystemProxy(false)
+            wsBridgeStats = null
             runCatching { bridge.stop() }
             runCatching { ds.close() }
             disarmAttemptBudget()
         }
+    }
+
+    /**
+     * Ghim nút thoát về **VPS1** (`Config.HY_SERVER`) — yêu cầu chủ dự án 20/10/2026:
+     * "khi chạy trên TV này thì luôn có IP của vps1". Vì máy không có TUN, IP thoát chính là
+     * danh tính của cả phiên (Netflix/FPT Play phân vùng theo IP), đổi nút giữa các lượt là
+     * đổi vùng nội dung. Nút ghim phải có trong danh sách nút app nhận được, nếu không thì
+     * KHÔNG đổi bừa (giữ nút hiện tại + cảnh báo để còn truy).
+     */
+    private fun pinExitHost() {
+        val pinned = com.privatevpn.app.Config.HY_SERVER
+        if (runHost == pinned) return
+        val idx = hosts.indexOf(pinned)
+        if (idx < 0) {
+            DiagnosticsLog.warn("proxy: danh sách nút KHÔNG có VPS1 $pinned -> giữ ${runHost}")
+            return
+        }
+        DiagnosticsLog.log("proxy: ghim nút thoát về VPS1 $pinned (bỏ ${runHost})")
+        hostIndex = idx
+        runHost = pinned
+    }
+
+    /**
+     * Đo **IP thoát thật** của phiên bằng một GET đi QUA proxy nội bộ (tức đi đúng đường hầm).
+     * Đây là bằng chứng trong log, không phải suy đoán; lệch VPS1 thì ghi WARN kèm IP đo được.
+     */
+    private fun probeExitIp() {
+        Thread {
+            // serveHTTPProxy chỉ Listen sau khi hàm này chạy => chờ cổng lên rồi mới đo.
+            runCatching { Thread.sleep(900) }
+            var ip = ""
+            for (url in EXIT_IP_PROBES) {
+                var attempt = 0
+                while (attempt < 3 && ip.isEmpty()) {
+                    ip = runCatching { httpGetViaProxy(url) }.getOrElse { "" }
+                    attempt++
+                    if (ip.isEmpty() && attempt < 3) runCatching { Thread.sleep(600L * attempt) }
+                }
+                if (ip.isNotEmpty()) break
+            }
+            if (ip.isEmpty()) {
+                DiagnosticsLog.warn("proxy: KHÔNG đo được IP thoát (hỏi ${EXIT_IP_PROBES.size} đầu dò đều hỏng)")
+                return@Thread
+            }
+            val want = com.privatevpn.app.Config.HY_SERVER
+            if (ip == want) {
+                DiagnosticsLog.log("proxy: IP thoát = $ip (ĐÚNG VPS1)")
+            } else {
+                DiagnosticsLog.warn("proxy: IP thoát = $ip — KHÁC VPS1 ($want)")
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** GET một URL qua proxy hệ thống vừa đặt; trả "" nếu câu trả lời không phải IPv4. */
+    private fun httpGetViaProxy(url: String): String {
+        val proxy = java.net.Proxy(
+            java.net.Proxy.Type.HTTP,
+            java.net.InetSocketAddress("127.0.0.1", SOCKS_PORT),
+        )
+        val conn = java.net.URL(url).openConnection(proxy) as java.net.HttpURLConnection
+        conn.connectTimeout = 8_000
+        conn.readTimeout = 8_000
+        conn.setRequestProperty("User-Agent", "vpnflow-exit-probe")
+        return try {
+            val body = conn.inputStream.bufferedReader().use { it.readText() }.trim()
+            if (IPV4_ONLY.matches(body)) body else ""
+        } finally {
+            runCatching { conn.disconnect() }
+        }
+    }
+
+    /**
+     * Cấp chứng chỉ **Widevine (provisioning)** MỘT LẦN, đi qua tunnel của mình.
+     *
+     * Vì sao cần (đo thật trên TV `MiTV-AFZP0`, 20/10/2026): Netflix gọi
+     * `WidevineCDMProvisionRequestTask` POST tới `www.googleapis.com` để lấy chứng chỉ Widevine.
+     * Mạng tòa nhà **CHẶN Google** — TCP trực tiếp tới `172.217.117.4:443` và
+     * `www.googleapis.com:443` đều timeout, trong khi `1.1.1.1:80`, `103.173.155.50:443`,
+     * `www.netflix.com:443` mở bình thường. Mà Netflix **KHÔNG đi qua proxy hệ thống** (log lỗi
+     * ghi nguồn `192.168.100.105`, tức kết nối trực tiếp) ⇒ 5 s timeout ⇒ Netflix báo lỗi rồi thoát:
+     *
+     * ```
+     * E ninja-error: java.net.SocketTimeoutException: failed to connect to
+     *   www.googleapis.com/172.217.117.4 (port 443) from /192.168.100.105 (port 58040) after 5000ms
+     *   at …WidevineCDMProvisionRequestTask.postRequest(WidevineCDMProvisionRequestTask.java:92)
+     * ```
+     *
+     * Cấp chứng chỉ qua tunnel một lần là CDM đã có cert ⇒ Netflix không phải gọi Google nữa
+     * (license vẫn đi tới máy chủ Netflix, mà `www.netflix.com` mở được trên mạng này).
+     */
+    private fun provisionWidevineOnce() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_WV_PROVISIONED, false)) return
+        Thread {
+            runCatching { Thread.sleep(1_500) } // để listener proxy kịp lên
+            var drm: android.media.MediaDrm? = null
+            try {
+                drm = android.media.MediaDrm(WIDEVINE_UUID)
+                val req = drm.provisionRequest
+                val target = req.defaultUrl + "&signedRequest=" + String(req.data, Charsets.UTF_8)
+                val head = String(req.data, Charsets.UTF_8).take(24)
+                DiagnosticsLog.log(
+                    "wv: xin chứng chỉ Widevine qua tunnel (yêu cầu ${req.data.size} B, đầu='$head')",
+                )
+                val body = httpPostViaProxy(target)
+                drm.provideProvisionResponse(body)
+                prefs.edit().putBoolean(KEY_WV_PROVISIONED, true).apply()
+                DiagnosticsLog.log("wv: ĐÃ cấp chứng chỉ Widevine (${body.size} B) — Netflix không cần Google nữa")
+            } catch (t: Throwable) {
+                DiagnosticsLog.warn(
+                    "wv: cấp chứng chỉ Widevine HỎNG: ${t.javaClass.simpleName}: ${t.message}",
+                )
+            } finally {
+                runCatching { drm?.close() }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /**
+     * POST CẤP CHỨNG CHỈ đúng như Netflix làm (`WidevineCDMProvisionRequestTask.postRequest`,
+     * đọc từ bytecode APK 10.3.0): **signedRequest nằm trên URL, body RỖNG**, header
+     * `Content-Type: application/json`, `User-Agent: Widevine CDM v1.0`, `Accept: * / *`.
+     * Trả body nhị phân để đưa thẳng vào `MediaDrm.provideProvisionResponse`.
+     *
+     * Đã kiểm chứng giao thức với Google qua tunnel: dạng này Google trả 400 "Invalid Value"
+     * (đọc được yêu cầu, chỉ chê giá trị), còn kiểu gửi nhị phân vào body thì Google trả
+     * 400 "Invalid JSON payload received" — đúng lỗi của bản v53.
+     */
+    private fun httpPostViaProxy(url: String): ByteArray {
+        val proxy = java.net.Proxy(
+            java.net.Proxy.Type.HTTP,
+            java.net.InetSocketAddress("127.0.0.1", SOCKS_PORT),
+        )
+        val conn = java.net.URL(url).openConnection(proxy) as java.net.HttpURLConnection
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 25_000
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.useCaches = false
+        conn.setRequestProperty("Accept", "*/*")
+        conn.setRequestProperty("User-Agent", "Widevine CDM v1.0")
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.outputStream.use { } // body rỗng ⇒ Content-Length: 0
+        val code = conn.responseCode
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        val body = runCatching { stream?.use { it.readBytes() } ?: ByteArray(0) }.getOrDefault(ByteArray(0))
+        if (code !in 200..299) {
+            val text = runCatching { String(body, Charsets.UTF_8) }.getOrDefault("")
+                .replace(Regex("[\\u0000-\\u001f]"), " ")
+                .take(300)
+            throw java.io.IOException("HTTP $code (${body.size} B): $text")
+        }
+        return body
     }
 
     /**
@@ -1776,7 +1978,13 @@ class HysteriaVpnService : VpnService() {
                 // phải đường yếu — hạ số khai vì lý do đó là tự bóp đường của mình. Trước đây chỗ
                 // này chỉ đòi `idleRun == 0` (mẫu CUỐI cùng đang bận) nên với tải xen kẽ cụm/nghỉ
                 // vẫn hạ oan: đo 23/09/2026 giữa phiên Netflix, 4.018 → 2.812 kbps.
-                if (BandwidthPolicy.shouldRampDownUnderrun(sustainedForDecision, declared, busyCount)) {
+                // Ở chế độ proxy (máy KHÔNG có TUN) thì KHÔNG hạ số khai theo "underrun": bộ lấy
+                // mẫu đang đo thông lượng của CẦU WS (2 Mbps đo thật 20/10), không đo đường mạng
+                // (~40 Mbps). Hạ theo số đó là tự bóp số khai về 4-5 Mbps — đúng hiện tượng chủ dự
+                // án báo. Vẫn hạ khi có bằng chứng cứng (mất gói/RTT xấu) ở nhánh phía trên.
+                if (!noTunDevice &&
+                    BandwidthPolicy.shouldRampDownUnderrun(sustainedForDecision, declared, busyCount)
+                ) {
                     if (underSince == 0L) underSince = now
                 } else {
                     underSince = 0L
@@ -1946,6 +2154,8 @@ class HysteriaVpnService : VpnService() {
         DiagnosticsLog.tunnelUp = false
         // Service dung hẳn: gỡ proxy hệ thống (giữa các lần nối lại thì KHÔNG gỡ).
         if (systemProxySet) setSystemProxy(false)
+        // Proxy nội bộ cũng đóng: nếu để mở mà proxy hệ thống đã gỡ thì vô hại, nhưng đóng cho sạch.
+        LocalProxy.stop()
         DiagnosticsLog.log("service: onDestroy")
         networkMonitor?.stop()
         networkMonitor = null
@@ -2457,10 +2667,29 @@ class HysteriaVpnService : VpnService() {
         const val EXTRA_MULTI_TUNNEL = "hysteria_multi_tunnel_count"
         /** Trần ngân sách bắt tay của lượt N tunnel (N lần bắt tay QUIC tuần tự). */
         const val MULTI_TUNNEL_BUDGET_CAP_MS = 90_000L
-        /** Cong SOCKS5 noi bo cho thiet bi KHONG co TUN (xem proxyAttempt). */
+        /** Cong HTTP proxy noi bo cho thiet bi KHONG co TUN (xem proxyAttempt). */
         const val SOCKS_PORT = 1081
-        /** Da xac dinh may KHONG co TUN — luu lai de lan khoi dong sau di thang SOCKS5. */
+        /** Da xac dinh may KHONG co TUN — luu lai de lan khoi dong sau di thang proxy. */
         const val KEY_NO_TUN = "no_tun_device"
+        /** Đã cấp chứng chỉ Widevine qua tunnel chưa (xem provisionWidevineOnce). */
+        const val KEY_WV_PROVISIONED = "widevine_provisioned"
+        /** UUID Widevine của MediaDrm (MediaDrm.WIDEVINE_UUID chỉ có từ API 30). */
+        val WIDEVINE_UUID: java.util.UUID =
+            java.util.UUID.fromString("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed")
+        /** Sàn khai báo băng thông cho máy KHÔNG có TUN (mạng tòa nhà đo được 30-40 Mbps). */
+        const val PROXY_FLOOR_DOWN_KBPS = 15_000
+        const val PROXY_FLOOR_UP_KBPS = 5_000
+        /**
+         * Đầu dò IP thoát (thử lần lượt; chỉ nhận câu trả lời đúng dạng IPv4).
+         * PHẢI là https: targetSdk 36 chặn cleartext trong app (đo thật 20/10: dùng http:// thì
+         * cả 3 đầu dò đều hỏng) — và https còn kiểm luôn đường CONNECT mà FPT Play cần.
+         */
+        val EXIT_IP_PROBES = listOf(
+            "https://api.ipify.org",
+            "https://icanhazip.com",
+            "https://ifconfig.me/ip",
+        )
+        val IPV4_ONLY = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
 
         @Volatile var stopping = false
 

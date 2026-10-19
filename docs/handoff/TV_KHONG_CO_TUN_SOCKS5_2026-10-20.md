@@ -97,3 +97,91 @@ Ba việc phải làm, nếu không sẽ gây sự cố THẬT (đã xảy ra kh
 
 Bản đã test trên TV: **v46** (debug `com.privatevpn.app.tv.dev`). Chuỗi bản: v42 (SOCKS5) →
 v43 (nhớ cờ) → v44 (gỡ proxy khi dừng) → v45/v46 (tự dọn lúc mở app).
+
+---
+
+# Bổ sung 20/10/2026 (chiều) — HTTP proxy, ghim VPS1, Widevine, proxy fail-open
+
+Bản dev đã nghiệm thu trên TV: **v57** (`com.privatevpn.app.tv.dev`, versionCode 57).
+
+## 7. Đổi SOCKS5 → **HTTP proxy (CONNECT)** — FPT Play mới đăng nhập được
+
+Proxy hệ thống của Android là **HTTP proxy**: app gửi `CONNECT host:443`. Bản SOCKS5 vì thế
+làm FPT Play báo lỗi kết nối khi đăng nhập. Core Go thêm `ServeHTTPProxy(listen)` (CONNECT +
+GET thường), app đặt proxy hệ thống về cổng đó.
+
+Bằng chứng (đo từ PC qua `adb forward` vào proxy của TV):
+
+```
+proxy: HTTP proxy (CONNECT) sẵn sàng 127.0.0.1:1081 (proxy hệ thống=đã đặt)
+curl -x http://127.0.0.1:1081 http://api.ipify.org    → 103.173.155.50
+curl -x http://127.0.0.1:1081 https://api.ipify.org   → 103.173.155.50  (200, 2.47 s)
+```
+
+FPT Play: trước = "lỗi kết nối" ở bước đăng nhập; sau = vào trang chủ, đăng nhập và **xem video OK**.
+
+## 8. Ghim IP thoát về VPS1 + số khai báo sát mạng thật
+
+- `pinExitHost()`: luôn dùng `Config.HY_SERVER` = **103.173.155.50**; **tắt đổi nút** khi
+  `noTunDevice` (trước đây failover 2 lượt là nhảy nút ⇒ đổi IP giữa phiên).
+- Số khai: sàn 15 Mbps + **đo mạng bằng mẫu 20 MB** (Cloudflare) và **lấy max 2 nguồn** — mẫu 4 MB
+  của CDN shop chỉ đo ra 7.986 kbps vì chính CDN đó chậm, khiến số khai kẹt 4-5 Mbps.
+
+```
+bw: so do dung de khai = 38286kbps (nguon nhanh nhat: https://speed.cloudflare.com/__down?bytes=20000000)
+bw: net=wifi-gw-192.168.100.1 measured=38286 declared up=8775 down=29250 reason=clamp ctx=proxy attempt
+proxy: IP thoát = 103.173.155.50 (ĐÚNG VPS1)
+```
+
+## 9. Cấp chứng chỉ **Widevine** qua tunnel (cứu mọi app DRM trên mạng chặn Google)
+
+Mạng tòa nhà **chặn toàn bộ IP Google** (đo trực tiếp trên TV): `8.8.8.8:443`,
+`172.217.117.4:443`, `www.googleapis.com:443` đều timeout, trong khi `1.1.1.1:80`,
+`103.173.155.50:443`, `www.netflix.com:443` mở. Hệ quả: Netflix chết ngay ở bước
+`WidevineCDMProvisionRequestTask` (timeout 5 s), và FPT Play không xem được video vì CDM chưa có cert.
+
+Giao thức đúng lấy từ **bytecode APK Netflix** (`WidevineCDMProvisionRequestTask.postRequest`):
+`signedRequest` nằm **trên URL**, body **rỗng**, header `Content-Type: application/json`,
+`User-Agent: Widevine CDM v1.0`; response là nhị phân đưa thẳng vào `provideProvisionResponse`.
+
+```
+wv: xin chứng chỉ Widevine qua tunnel (yêu cầu 1603 B, đầu='CqkIEgTD8F2bGgQIABIAKvgH')
+wv: ĐÃ cấp chứng chỉ Widevine (3844 B) — Netflix không cần Google nữa
+```
+
+⇒ FPT Play xem video được. **Netflix thì không**: sau khi hết lỗi mạng, app báo `-13`
+("không tương thích thiết bị") — chứng nhận Netflix là danh sách **phía server** theo model + ESN
+sinh từ Widevine L1 trong keybox; cài `com.netflix.partner.activation` (đã thử) và bản mobile
+(cũng báo không hỗ trợ) đều không qua được. Firmware cũng không cứu: bootloader tuy `orange`
+(`ro.boot.flash.locked=0`) nhưng kernel **thiếu CONFIG_TUN** và không thể giả ESN.
+
+## 10. Proxy nội bộ **fail-open** + chống lane bị relay cắt
+
+Hai sự cố thật trong ngày:
+
+1. Tunnel chết ⇒ proxy hệ thống vẫn trỏ `127.0.0.1:1081` (cổng chết) ⇒ **cả TV mất mạng**,
+   FPT Play "không load được". Reboot cũng giữ nguyên giá trị này.
+2. Relay cắt lane: `#11062 KHÔNG PONG trong 120000ms -> cắt kết nối ... pong-timeout` ⇒ app thấy
+   `ws-relay: failed: Broken pipe`. Nguyên nhân phía client: dữ liệu gửi đi dồn vào một hàng đợi
+   OkHttp, pong trả lời ping của relay nằm sau hàng đợi đó.
+
+Cách chữa:
+
+- `LocalProxy` (Kotlin): giữ cổng **1081 thường trực** trong tiến trình app; tunnel sống (core Go
+  ở **1082**) thì chuyển tiếp qua tunnel, tunnel tắt thì **đi thẳng** ⇒ proxy không bao giờ trỏ cổng
+  chết, cùng lắm là "không qua VPN" chứ không "mất mạng".
+- `ProxyCleanupReceiver`: dọn `http_proxy` còn sót ngay khi boot (thêm `RECEIVE_BOOT_COMPLETED`).
+- `WSRelayBridge`: hàng đợi gửi > **512 KB** thì bỏ datagram (QUIC tự gửi lại) để pong luôn kịp hạn 120 s.
+
+```
+local-proxy: nghe 127.0.0.1:1081 (fail-open khi tunnel tắt)
+tunnel: UP (http1081)                    ← tunnel đi qua LocalProxy → core Go 1082
+```
+
+## 11. Việc còn treo
+
+- Probe "qua tunnel" vẫn ghi số vào bộ nhớ (`reason=probe ... declared down=2918`) nên lần connect
+  sau có thể bị kéo số khai xuống; cần chặn nhánh này khi `noTunDevice`.
+- Chưa thử **SmartTube** (YouTube = Google ⇒ chỉ xem được khi tunnel sống).
+- Chưa build bản **release** cho kênh TV (v57 mới là bản dev); kênh android-tv vẫn đang giữ
+  `1.4.6-tv` trên server.

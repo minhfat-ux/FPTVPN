@@ -97,9 +97,9 @@ object Config {
      * Go, app tải một mẩu nhỏ qua socket đã `protect()` (đi thẳng ra mạng nền) để LẤY SỐ.
      * Xem `vpn/NetworkPreMeasure.kt`.
      */
-    /** Nguồn đo CHÍNH: CDN của shop — đo trên máy thật 22/09 cho thấy tải được từ data TQ. */
+    /** Nguồn đo: CDN của shop (đo được từ data TQ) + Cloudflare; LẤY SỐ CAO NHẤT. */
     const val PREMEASURE_URL_PRIMARY = "https://meetflowai.site/v1/downloads/android"
-    const val PREMEASURE_URL = "https://speed.cloudflare.com/__down?bytes=1500000"
+    const val PREMEASURE_URL = "https://speed.cloudflare.com/__down?bytes=20000000"
 
     /**
      * Trần dữ liệu và ngân sách thời gian của phép đo trước khi khai.
@@ -110,8 +110,11 @@ object Config {
      * slow start ⇒ đo được toàn "chi phí mở kết nối" chứ không phải tốc độ. Nay phép đo tính
      * tốc độ **từ byte ĐẦU TIÊN** (xem `NetworkPreMeasure`) và có đủ thời gian để slow start bung.
      * Đo 1 lần cho mỗi mạng (cache theo profile) nên chi phí data vẫn nhỏ.
+     * Nâng tiếp 20/10/2026 (4 MB → **20 MB**): đo trên TV `MiTV-AFZP0` (mạng tòa nhà ~40 Mbps)
+     * cho thấy mẫu 4 MB của CDN shop chỉ ra **7.986 kbps** — vì chính CDN đó chậm, không phải
+     * đường chậm — nên số khai bị kẹt 4-5 Mbps. Mẫu 20 MB mới đủ để số khai bám đúng đường.
      */
-    const val PREMEASURE_MAX_BYTES = 4_000_000
+    const val PREMEASURE_MAX_BYTES = 20_000_000
 
     /** Dưới ngần này byte thì coi như phép đo hỏng, không dùng (tránh lấy số từ trang lỗi). */
     const val PREMEASURE_MIN_BYTES = 200_000
