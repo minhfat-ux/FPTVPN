@@ -199,3 +199,20 @@ trả ĐẠT chính thức vẫn cần **một phiên sạch có bật `tunnel-l
 
 Nếu chủ dự án không cắm được máy: gửi `Documents/relay.log` của **một phiên build 87 có bật log chi
 tiết** cũng đủ; không cần thao tác gì trên Mac.
+
+## 9. Kiểm lại 19/10/2026 23:56 +08 và chốt vòng đánh thức
+
+- Kênh phát **không đổi**: `GET https://t1.meetflowai.site/v1/downloads/ios` → HTTP 200,
+  **8.243.806 B**, sha256 **0a912cc9…**, `/v1/app-version?platform=ios` → `latest_version=1.4.7`
+  (marker `ipa_build=87` trong sổ). Vẫn là bản đã sửa, không phải build 80.
+- Máy thật vẫn **không có**: `xcrun devicectl list devices` → iPhone `33987D6F` + 2 iPad đều
+  `unavailable`; `system_profiler SPUSBDataType` không thấy thiết bị iOS nào; `xcrun xctrace list
+  devices` → "No devices available". Vì vậy **§7d vẫn là mục duy nhất còn chặn**, không đổi.
+- Vòng đánh thức vừa rồi (23:52:53 "bên giao vừa ghi chú") là **watcher tự đánh thức chính nó**:
+  sự kiện cuối của bus-993 là `blocked` do `actor=mac` ghi lúc 23:52:16. Luật đúng đã có trong commit
+  `fdd71aa` (`ops/lib/wake-policy.mjs`: chỉ đánh thức khi `blocked` do **bên khác** ghi) + test
+  `ops/wake-policy.test.mjs` 7/7, nhưng các tệp đó **đang bị thiếu trong cây làm việc** nên watcher
+  đang chạy bản cũ. Đã khôi phục đúng các tệp từ HEAD, chạy lại test 7/7 và khởi động lại watcher
+  (pid mới, log 15:56:36Z). Không sửa luật, không tạo sự kiện giả.
+- Không có thay đổi nào trên IPA/kênh phát trong lần kiểm này; không bump version, không đụng
+  `release-lock.json` (vẫn chờ chủ dự án chốt khoá 80/87 như mục 7).
