@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "WIN nghiem thu (trung noi dung bus-981, cung mot lan gui): --verify tren node-2 -> 4/4 delivered, Resend id 01a15403-f580-739b-ac00-78cb5f0d86e4, 01a15403-fa2b-76f0-adf0-1f590d0b6c2f, 01a15403-feb4-79ca-8c76-a3d12c7644bf, 01a15404-0317-713f-90f0-38cfd4f50d2a; app-version android -> minimum_version=1.2.6 / latest_version=1.4.6; HTML that cua ca 4 mail co link TV ?v=191f8f95, com.privatevpn.app.tv cai song song + 3 buoc, so do 1/4/8 luong, cap nhat TU NGUYEN (chi co 'Không bắt buộc cập nhật' dang phu dinh); TV APK 200 / 79.106.408 B. Chi 4 ma Resend -> khong gui trung voi bus-981.",
+ "actor": "win",
+ "at": "2026-10-19T12:00:46.808Z"
+}
