@@ -148,6 +148,7 @@ Simulator/máy ảo **không tính** (tunnel, NetworkExtension, khoá keychain, 
 | iOS (IPA ad-hoc) | `/root/flowvpn-ipa/VPNFlow-latest.ipa` | `GET /v1/downloads/ios` |
 | Android modern | `/root/flowvpn-apk/VPNFlow-latest.apk` | `GET /v1/downloads/android` |
 | Android legacy | `/root/flowvpn-apk/VPNFlow-android7.apk` | `GET /v1/downloads/android-legacy` |
+| Android TV (gói `tv`) | `/var/www/flowvpn/dl/VPNFlow-tv-latest.apk` (+ `/var/www/dl/VPNFlow-tv-latest.apk`) | `GET /dl/VPNFlow-tv-latest.apk` (tĩnh, Caddy) |
 | macOS | `/root/flowvpn-mac/VPNFlow-mac.dmg` | `GET /v1/downloads/mac` |
 | Windows | `/var/www/flowvpn/dl/VPNFlow-Setup-*.exe` | `GET /dl/…` (harness Windows phát hành; publisher chỉ **verify** link trên `/buy`) |
 Luôn kiểm bằng host vào được từ TQ: `https://t1.meetflowai.site/...`. Gặp 404 oan ⇒ thêm `?v=<hash>` (cache Cloudflare).
@@ -158,6 +159,12 @@ Luôn kiểm bằng host vào được từ TQ: `https://t1.meetflowai.site/...`
 | iOS | `PATCH /v1/admin/app-version` | `latest_version`, `ipa_build` |
 | Android | `PATCH /v1/admin/android-version` | `latest_version` |
 | Windows | `PATCH /v1/admin/windows-version` | `latest_version` (script `scripts/send-update-announcement.sh`) |
+**Android TV:** chưa có field mốc riêng — gói `tv` hiện dùng **chung** `android_latest_version`, và bản TV
+khai `versionName = 1.4.5-tv` (`versionNameSuffix = "-tv"`). Vì vậy cổng `check-publish-version.py
+--platform android-tv` **bỏ hậu tố `-tv` trước khi so mốc** (không thì `1.4.5-tv < 1.4.5` ⇒ báo oan
+"mốc > bản vừa kiểm"). Muốn TV tự nhắc cập nhật đúng kênh thì phải build bản mới cho client hỏi
+`?platform=android-tv` — hiện `ControlAPIClient.fetchAppVersion()` **hardcode `platform=android`**
+cho cả 3 flavor, nên bản TV đọc mốc/link của kênh điện thoại.
 **Luật:** chỉ set `latest_version` (+ `ipa_build`). **KHÔNG** đặt `minimum_version` (buộc cập nhật) trừ khi chủ dự án chốt rõ.
 `ipa_build` phải khớp `CFBundleVersion` trong IPA — lệch là manifest OTA sai.
 

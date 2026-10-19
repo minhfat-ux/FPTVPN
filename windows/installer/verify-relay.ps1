@@ -8,12 +8,12 @@
 
 .DESCRIPTION
   Vì sao cần script riêng: khi app báo "không kết nối được", không phân biệt được lỗi ở
-  relay (WS/Cloudflare), ở hysteria (auth/obfs), hay ở TUN/định tuyến/bypass. Từ 1.4.7 cả ba
+  relay (WS/Cloudflare), ở hysteria (auth/obfs), hay ở TUN/định tuyến/bypass. Từ 1.4.8 cả ba
   phần đó nằm trong CÙNG MỘT binary (flowvpnrelay.exe), nên script chạy đúng binary + đúng
   cấu hình mà windows/PrivateVPNWindows.Core/Tunnel/SingBoxConfigBuilder.cs
   (BuildRelayConfig) sinh ra — kết quả ở đây là kết luận về chính đường đó.
 
-  KHÔNG còn sing-box.exe (bỏ từ 1.4.7): máy khách bật Smart App Control chặn binary bên thứ ba
+  KHÔNG còn sing-box.exe (bỏ từ 1.4.8): máy khách bật Smart App Control chặn binary bên thứ ba
   chưa ký (CodeIntegrity 3033/3077/3118, Win32 4551). Xem windows/assets/THIRD_PARTY.md §4.
 
   Cấu hình dưới đây CHÉP theo SingBoxConfigBuilder.BuildRelayConfig/BuildTun (cùng khoá, cùng
@@ -86,7 +86,10 @@ $TunAdapterName = "flowvpntun"                 # HysteriaRelayDefaults.TunName
 $TunAddressCidr = "100.100.100.101/30"         # HysteriaRelayDefaults.TunAddress
 $TunAddress = "100.100.100.101"                # địa chỉ trần (không prefix) để soi Get-NetIPAddress
 $TunMtu = 1500                                 # HysteriaRelayDefaults.TunMtu
-$TunDnsServers = @("1.1.1.1", "8.8.8.8")       # HysteriaRelayDefaults.TunDnsServers
+$TunDnsServer = "100.100.100.101"              # HysteriaRelayDefaults.TunDnsServer (bộ chia DNS của flowvpnrelay)
+$TunDnsPort = 53                               # HysteriaRelayDefaults.TunDnsPort
+$ChinaDnsUpstream = "223.5.5.5"                # HysteriaRelayDefaults.ChinaDnsUpstream
+$RemoteDnsUpstream = "1.1.1.1"                 # HysteriaRelayDefaults.RemoteDnsUpstream
 $TunReadyMarker = "TUNREADY "                  # HysteriaRelayDefaults.TunReadyMarker
 $TunFailMarker = "TUNFAIL "                    # HysteriaRelayDefaults.TunFailMarker
 $ReadyMarker = "READY "                        # HysteriaRelayDefaults.ReadyMarker (SOCKS5 đã mở)
@@ -392,6 +395,16 @@ try {
       "ipv4Exclude": __V4EXCL__,
       "ipv6Exclude": __V6EXCL__
     }
+  },
+  "dns": {
+    "listen": "__TUNADDR_HOST__:__DNSPORT__",
+    "cn": "__CNDNS__:__DNSPORT__",
+    "remote": "__REMOTEDNS__:__DNSPORT__",
+    "cnSuffixes": ["qq.com", "weixin.qq.com", "tencent.com", "baidu.com", "taobao.com",
+                   "tmall.com", "alipay.com", "jd.com", "alibaba.com", "bilibili.com",
+                   "douyin.com", "meituan.com", "163.com", "weibo.com", "zhihu.com",
+                   "xiaohongshu.com", "ctrip.com", "iqiyi.com", "youku.com", "pinduoduo.com",
+                   "aliyun.com", "huawei.com", "cn"]
   }
 }
 '@
@@ -409,6 +422,10 @@ try {
   $relayJson = $relayJson.Replace("__TUNADDR__", $TunAddressCidr)
   $relayJson = $relayJson.Replace("__V4EXCL__", $v4Json)
   $relayJson = $relayJson.Replace("__V6EXCL__", $v6Json)
+  $relayJson = $relayJson.Replace("__TUNADDR_HOST__", $TunAddress)
+  $relayJson = $relayJson.Replace("__DNSPORT__", "$TunDnsPort")
+  $relayJson = $relayJson.Replace("__CNDNS__", $ChinaDnsUpstream)
+  $relayJson = $relayJson.Replace("__REMOTEDNS__", $RemoteDnsUpstream)
   Write-JsonFile $script:relayCfg $relayJson
 
   Note "thư mục tạm: $($script:workDir)"
@@ -463,6 +480,18 @@ try {
 
       $wsOk = ($cfg.transport.type -eq "wsrelay") -and ($cfg.transport.url -eq $RelayUrl)
       Add-Check "transport = wsrelay + đúng relay" $wsOk "type='$($cfg.transport.type)' url='$($cfg.transport.url)'"
+
+      # Khối dns: bộ chia DNS. Thiếu nó thì adapter TUN không có DNS nào ⇒ Windows dùng resolver của
+      # mạng khách ⇒ tên miền TQ bị GFW nhiễm độc (đúng lỗi 1.4.6) hoặc chậm (xem mục 8b).
+      $dns = $cfg.dns
+      Add-Check "có khối dns (bộ chia DNS)" ($null -ne $dns) "bắt buộc: không có dns ⇒ app đặt DNS trỏ vào địa chỉ không có ai nghe"
+      if ($null -ne $dns) {
+        Add-Check "dns.listen = $($TunDnsServer):53" ($dns.listen -eq "$($TunDnsServer):53") "thực tế: '$($dns.listen)'"
+        Add-Check "dns.cn (resolver nội địa) khác rỗng" (-not [string]::IsNullOrWhiteSpace($dns.cn)) "thực tế: '$($dns.cn)'"
+        Add-Check "dns.remote (resolver qua tunnel) khác rỗng" (-not [string]::IsNullOrWhiteSpace($dns.remote)) "thực tế: '$($dns.remote)'"
+        $suf = @($dns.cnSuffixes)
+        Add-Check "dns.cnSuffixes có tên miền TQ" ($suf.Count -gt 0 -and ($suf -contains "qq.com") -and ($suf -contains "cn")) "số mục: $($suf.Count)"
+      }
     }
   }
 
@@ -565,24 +594,23 @@ try {
     Add-Check "route tới IP TQ KHÔNG qua TUN" $false "không có adapter nên KHÔNG kiểm được"
   }
 
-  # 8) DNS đặt LÊN adapter TUN (đúng cơ chế app dùng) rồi phân giải qua tunnel
-  Step "Đặt DNS $($TunDnsServers -join ' + ') lên adapter TUN (netsh, như app) và kiểm DNS"
+  # 8) DNS đặt LÊN adapter TUN (đúng cơ chế app dùng) rồi phân giải qua bộ chia DNS
+  Step "Đặt DNS $TunDnsServer lên adapter TUN (netsh, như app) và kiểm bộ chia DNS"
   if ($tunIfIndex -gt 0) {
-    & netsh.exe interface ipv4 set dnsservers "name=$TunAdapterName" source=static "address=$($TunDnsServers[0])" register=primary validate=no | Out-Null
-    & netsh.exe interface ipv4 add dnsservers "name=$TunAdapterName" "address=$($TunDnsServers[1])" index=2 validate=no | Out-Null
+    & netsh.exe interface ipv4 set dnsservers "name=$TunAdapterName" source=static "address=$TunDnsServer" register=primary validate=no | Out-Null
     $dnsSet = @(Get-DnsClientServerAddress -InterfaceIndex $tunIfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
-    Add-Check "DNS adapter TUN = $($TunDnsServers -join ', ')" (($dnsSet -contains $TunDnsServers[0]) -and ($dnsSet -contains $TunDnsServers[1])) "đang đặt: $($dnsSet -join ', ')"
+    Add-Check "DNS adapter TUN = $TunDnsServer (bộ chia DNS)" ($dnsSet -contains $TunDnsServer) "đang đặt: $($dnsSet -join ', ')"
   } else {
-    Add-Check "DNS adapter TUN = $($TunDnsServers -join ', ')" $false "không có adapter TUN nên KHÔNG đặt/không kiểm được"
+    Add-Check "DNS adapter TUN = $TunDnsServer (bộ chia DNS)" $false "không có adapter TUN nên KHÔNG đặt/không kiểm được"
   }
 
   $youtubeIps = @()
   try {
-    $dns = @(Resolve-DnsName -Name "www.youtube.com" -Server $TunDnsServers[0] -Type A -ErrorAction Stop)
+    $dns = @(Resolve-DnsName -Name "www.youtube.com" -Server $TunDnsServer -Type A -ErrorAction Stop)
     $youtubeIps = @($dns | Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress })
-    Add-Check "DNS qua tunnel ($($TunDnsServers[0])) phân giải www.youtube.com" ($youtubeIps.Count -gt 0) $(if ($youtubeIps.Count -gt 0) { "A: " + ($youtubeIps -join ", ") } else { "không có bản ghi A — truy vấn DNS qua tunnel KHÔNG chạy" })
+    Add-Check "DNS qua tunnel ($TunDnsServer) phân giải www.youtube.com" ($youtubeIps.Count -gt 0) $(if ($youtubeIps.Count -gt 0) { "A: " + ($youtubeIps -join ", ") } else { "không có bản ghi A — truy vấn DNS qua tunnel KHÔNG chạy" })
   } catch {
-    Add-Check "DNS qua tunnel ($($TunDnsServers[0])) phân giải www.youtube.com" $false "Resolve-DnsName lỗi: $($_.Exception.Message) ⇒ DNS trong tunnel KHÔNG chạy"
+    Add-Check "DNS qua tunnel ($TunDnsServer) phân giải www.youtube.com" $false "Resolve-DnsName lỗi: $($_.Exception.Message) ⇒ DNS trong tunnel KHÔNG chạy"
   }
 
   if ($youtubeIps.Count -gt 0) {
@@ -600,6 +628,33 @@ try {
       } catch {
         Add-Check "IP của youtube ($sample) đi QUA TUN" $false "Find-NetRoute lỗi: $($_.Exception.Message)"
       }
+    }
+  }
+
+  # 8b) Bộ chia DNS: tên miền TQ phải nhận IP TQ ⇒ route đi THẲNG, không vào tunnel.
+  # Vì sao phép kiểm này quan trọng nhất của mục DNS: đo thật 19/10/2026, nếu đặt resolver công cộng
+  # thẳng lên adapter thì www.baidu.com trả 103.235.47.188 (Baidu HK, NGOÀI dải TQ) và bị đẩy vào
+  # tunnel — https://www.baidu.com mất 26.217 ms thay vì 116 ms.
+  Step "Bộ chia DNS: tên miền TQ phải nhận IP TQ (route đi thẳng)"
+  foreach ($cnName in @("www.baidu.com", "www.taobao.com")) {
+    try {
+      $a = @(Resolve-DnsName -Name $cnName -Server $TunDnsServer -Type A -ErrorAction Stop |
+               Where-Object { $_.IPAddress } | ForEach-Object { $_.IPAddress })
+      if ($a.Count -eq 0) {
+        Add-Check "$cnName nhận IP TQ (đi thẳng)" $false "không có bản ghi A"
+        continue
+      }
+
+      if ($tunIfIndex -gt 0) {
+        $picked = @(Find-NetRoute -RemoteIPAddress $a[0] -ErrorAction SilentlyContinue) |
+          Where-Object { $_.DestinationPrefix } | Select-Object -First 1
+        $ok = ($null -ne $picked) -and ($picked.InterfaceIndex -ne $tunIfIndex)
+        Add-Check "$cnName → $($a[0]) đi THẲNG (không qua TUN)" $ok $(if ($null -eq $picked) { "Find-NetRoute không trả route" } else { "ifIndex=$($picked.InterfaceIndex) (TUN=$tunIfIndex)" })
+      } else {
+        Add-Check "$cnName → $($a[0]) đi THẲNG (không qua TUN)" $false "không có adapter TUN nên KHÔNG kiểm được"
+      }
+    } catch {
+      Add-Check "$cnName nhận IP TQ (đi thẳng)" $false "Resolve-DnsName lỗi: $($_.Exception.Message)"
     }
   }
 

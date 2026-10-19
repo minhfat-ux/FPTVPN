@@ -92,7 +92,11 @@ type tunRouteConfig struct {
 
 // startTUN dựng TUN rồi CHỈ trả về khi TUN chết — vòng ngoài ở main() sẽ dựng lại
 // (đúng hành vi cũ với transport). Mọi lỗi đều đi kèm một dòng TUNFAIL.
-func startTUN(hy client.Client, tc tunConfig) error {
+//
+// dc != nil ⇒ bộ chia DNS (dns.go) được bind TRƯỚC khi in TUNREADY, để TUNREADY vẫn
+// mang đúng nghĩa "mọi thứ app cần đã sẵn sàng": app đặt DNS của adapter TUN ngay sau
+// dòng đó, nên nếu in sớm hơn thì có khoảng trống DNS ngay sau khi nối.
+func startTUN(hy client.Client, tc tunConfig, dc *dnsConfig) error {
 	srv, name, mtu, err := buildTUN(hy, tc)
 	if err != nil {
 		return failTUN(err)
@@ -106,9 +110,26 @@ func startTUN(hy client.Client, tc tunConfig) error {
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve() }()
 
+	// Dải TQ cho bộ chia DNS là ĐÚNG bộ dải TUN vừa nhận (…Exclude, tức phần đi THẲNG):
+	// nhờ vậy "bản ghi A nằm trong dải TQ" ở dns.go và "route đi thẳng" ở đây không lệch.
+	prefixes := make([]netip.Prefix, 0, len(srv.Inet4RouteExcludeAddress)+len(srv.Inet6RouteExcludeAddress))
+	prefixes = append(prefixes, srv.Inet4RouteExcludeAddress...)
+	prefixes = append(prefixes, srv.Inet6RouteExcludeAddress...)
+
+	// Thử bind bộ chia DNS NGAY: nếu dns.listen là địa chỉ đã có trên máy (loopback,
+	// LAN…) thì nó lên trước cả TUN. Còn nếu listen là địa chỉ CỦA CHÍNH TUN (đúng ca
+	// app C# dùng) thì lúc này HĐH chưa có địa chỉ đó ⇒ bind lỗi, thử lại sau khi
+	// interface xuất hiện (trong vòng dưới).
+	dnsErr := startDNSRelay(dc, prefixes)
+	dnsReady := dnsErr == nil
+
 	// Chờ interface có THẬT trong HĐH rồi mới báo TUNREADY (app cần đúng tên adapter
 	// để đặt DNS lên nó), không đoán bằng sleep.
+	//
+	// Bộ chia DNS phải bind xong mới được in TUNREADY: app đặt DNS của adapter TUN
+	// ngay sau dòng đó, nên TUNREADY phải mang đúng nghĩa "mọi thứ app cần đã sẵn sàng".
 	deadline := time.Now().Add(tunReadyTimeout)
+	ifaceUp := false
 	for {
 		// Kiểm goroutine trước: thiếu quyền admin thì Serve() trả lỗi gần như tức thì,
 		// phải báo TUNFAIL NGAY chứ không bắt app chờ đủ 15s.
@@ -118,12 +139,31 @@ func startTUN(hy client.Client, tc tunConfig) error {
 		default:
 		}
 
-		if _, ierr := net.InterfaceByName(name); ierr == nil {
+		if !ifaceUp {
+			if _, ierr := net.InterfaceByName(name); ierr == nil {
+				ifaceUp = true
+			}
+		}
+		// Interface đã có mà bộ chia DNS chưa bind được (listen = địa chỉ của chính TUN,
+		// mà địa chỉ có thể được gán SAU khi adapter xuất hiện) ⇒ thử lại mỗi vòng, tới
+		// hết hạn mới bỏ. Không báo lỗi ngay ở lần thử đầu: đó là đua bình thường của
+		// lúc dựng adapter, không phải lỗi cấu hình.
+		if ifaceUp && !dnsReady {
+			dnsErr = startDNSRelay(dc, prefixes)
+			dnsReady = dnsErr == nil
+		}
+
+		if ifaceUp && dnsReady {
 			logf("TUNREADY if=%s mtu=%d route=%s", name, mtu, yesNo(srv.AutoRoute))
 			break
 		}
 
 		if time.Now().After(deadline) {
+			if ifaceUp && !dnsReady {
+				// TUN đã lên nhưng DNS không bind được ⇒ app sẽ không có DNS: coi như
+				// hỏng cả đường hầm, in DNSFAIL rồi để vòng ngoài dựng lại.
+				return failDNS(dnsErr)
+			}
 			return failTUN(fmt.Errorf("hết %s mà interface %q chưa xuất hiện", tunReadyTimeout, name))
 		}
 		time.Sleep(tunReadyPoll)
@@ -132,7 +172,15 @@ func startTUN(hy client.Client, tc tunConfig) error {
 	// TUN đã lên: chờ tới khi nó chết rồi trả lỗi để vòng ngoài dựng lại. Chỉ in
 	// TUNFAIL khi TUN ĐANG CHẠY mà chết — lúc này app C# đã coi tunnel là Faulted,
 	// thêm một dòng lý do giúp log khách biết vì sao mất mạng.
-	return failTUN(tunServeStopped(<-done, name))
+	serr := <-done
+
+	// ĐÓNG bộ chia DNS theo TUN: socket đang bind vào địa chỉ CỦA TUN, mà địa chỉ đó
+	// biến mất khi TUN chết. Giữ lại thì vòng sau (TUN dựng lại) bộ chia vẫn "tưởng"
+	// mình đã sẵn sàng, socket không còn nhận gói ⇒ DNS CÂM mà không ai phát hiện.
+	// Đóng ở đây để vòng sau bind lại từ đầu.
+	closeDNSRelay()
+
+	return failTUN(tunServeStopped(serr, name))
 }
 
 // tunServeStopped chuẩn hoá kết quả của Serve(): nil cũng phải thành lỗi, vì trả nil

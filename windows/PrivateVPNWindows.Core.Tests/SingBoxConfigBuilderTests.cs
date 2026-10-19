@@ -11,7 +11,7 @@ namespace VpnFlow.Core.Tests;
 /// <c>flowvpnrelay.exe</c> phải đúng schema mà tiến trình đó thật sự đọc
 /// (<c>tools/hysteria-relay/runner.go</c> + <c>tun.go</c>), và cổng phải được cấp động.
 ///
-/// Từ 1.4.7 đường relay CHỈ còn một tiến trình: chính flowvpnrelay.exe dựng TUN + auto_route +
+/// Từ 1.4.8 đường relay CHỈ còn một tiến trình: chính flowvpnrelay.exe dựng TUN + auto_route +
 /// bypass TQ, nên khối <c>tun</c> là phần quan trọng nhất ở đây (thiếu nó thì không có route nào).
 ///
 /// Phần KHÔNG kiểm được ở đây (cần máy Windows thật + quyền admin): TUN/route có dựng được không,
@@ -153,7 +153,7 @@ public class SingBoxConfigBuilderTests
     [Fact]
     public void BuildRelayConfig_nhung_khoi_tun_de_flowvpnrelay_tu_dung_TUN()
     {
-        // Vì sao test này quan trọng: từ 1.4.7 đường relay KHÔNG còn sing-box, nên nếu khối `tun`
+        // Vì sao test này quan trọng: từ 1.4.8 đường relay KHÔNG còn sing-box, nên nếu khối `tun`
         // không được sinh ra thì tiến trình chỉ mở SOCKS5 mà không có route nào — app chờ TUNREADY
         // tới hết ngân sách rồi rơi về WireGuard (khách mất đường sống khi mạng chặn IP node).
         var json = SingBoxConfigBuilder.BuildRelayConfig(
@@ -183,6 +183,49 @@ public class SingBoxConfigBuilderTests
         Assert.Equal(
             new[] { "2400:3200::/32" },
             route.GetProperty("ipv6Exclude").EnumerateArray().Select(e => e.GetString()).ToArray());
+    }
+
+    [Fact]
+    public void BuildRelayConfig_nhung_khoi_dns_chia_theo_dai_TQ()
+    {
+        // Vì sao quan trọng: app đặt DNS của adapter TUN về địa chỉ TUN, nên khối `dns` phải có
+        // đúng `listen` đó, cùng resolver nội địa và resolver-qua-tunnel. Thiếu khối này thì adapter
+        // không có DNS ⇒ Windows dùng resolver của mạng khách ⇒ tên miền TQ bị GFW nhiễm độc.
+        var json = SingBoxConfigBuilder.BuildRelayConfig(
+            "165.101.114.162:8443",
+            HysteriaRelayDefaults.RelayUrl,
+            SocksPort);
+
+        using var doc = JsonDocument.Parse(json);
+        var dns = doc.RootElement.GetProperty("dns");
+
+        Assert.Equal(
+            $"{HysteriaRelayDefaults.TunDnsServer}:{HysteriaRelayDefaults.TunDnsPort}",
+            dns.GetProperty("listen").GetString());
+        Assert.Equal(
+            $"{HysteriaRelayDefaults.ChinaDnsUpstream}:{HysteriaRelayDefaults.TunDnsPort}",
+            dns.GetProperty("cn").GetString());
+        Assert.Equal(
+            $"{HysteriaRelayDefaults.RemoteDnsUpstream}:{HysteriaRelayDefaults.TunDnsPort}",
+            dns.GetProperty("remote").GetString());
+
+        var suffixes = dns.GetProperty("cnSuffixes").EnumerateArray()
+            .Select(e => e.GetString()!)
+            .ToArray();
+        Assert.Contains("qq.com", suffixes);
+        Assert.Contains("baidu.com", suffixes);
+        Assert.Contains("alipay.com", suffixes);
+        // "cn" (không có dấu chấm) = mọi tên miền .cn, đúng cách hiểu của bộ chia DNS.
+        Assert.Contains("cn", suffixes);
+    }
+
+    [Fact]
+    public void TunDnsServer_tro_dung_dia_chi_cua_TUN()
+    {
+        // Bất biến bắc cầu giữa Go và C#: bộ chia DNS trong flowvpnrelay bind đúng địa chỉ TUN, và
+        // app đặt DNS của adapter về đúng địa chỉ đó. Lệch nhau ⇒ không phân giải được tên gì cả.
+        var host = HysteriaRelayDefaults.TunAddress.Split('/')[0];
+        Assert.Equal(HysteriaRelayDefaults.TunDnsServer, host);
     }
 
     [Fact]

@@ -2,7 +2,7 @@
 
 Mục tiêu: xác nhận bản Windows mới **chạy đúng kiến trúc** (transport hysteria2 qua
 relay WebSocket của Cloudflare, TUN + định tuyến + bypass TQ **nằm trong chính
-`flowvpnrelay.exe`** — từ 1.4.7 KHÔNG còn `sing-box.exe`) và **đo được tốc độ
+`flowvpnrelay.exe`** — từ 1.4.8 KHÔNG còn `sing-box.exe`) và **đo được tốc độ
 thật**, không chỉ "Connected".
 
 ## 0. Chuẩn bị (một lần)

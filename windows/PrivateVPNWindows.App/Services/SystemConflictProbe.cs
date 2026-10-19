@@ -83,7 +83,7 @@ public static class SystemConflictProbe
     {
         var conflicts = NetworkConflictDetector.Analyze(Capture()).ToList();
 
-        // Máy khách bật Smart App Control: binary CHƯA KÝ bị Application Control chặn. Từ 1.4.7 đường
+        // Máy khách bật Smart App Control: binary CHƯA KÝ bị Application Control chặn. Từ 1.4.8 đường
         // relay chỉ còn MỘT binary của mình (flowvpnrelay.exe, đã có TUN bên trong) nên chỉ cần dò
         // nó — không còn binary bên thứ ba nào để chặn. Cảnh báo NGAY khi mở app thay vì để khách
         // bấm Kết nối rồi thấy "connecting" rồi tự rơi về WireGuard mà không hiểu.

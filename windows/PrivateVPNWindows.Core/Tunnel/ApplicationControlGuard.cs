@@ -13,7 +13,7 @@ namespace VpnFlow.Core.Tunnel;
 /// "did not meet the Enterprise signing level requirements") trong khi <c>flowvpnrelay.exe</c>
 /// của mình, <c>wireguard-go.exe</c> và MỌI DLL chưa ký vẫn chạy/nạp bình thường.
 ///
-/// <b>Đã xử lý triệt để ở 1.4.7 (13/10/2026).</b> Khách phàn nàn app Windows "báo sing-box.exe đang
+/// <b>Đã xử lý triệt để ở 1.4.8 (13/10/2026).</b> Khách phàn nàn app Windows "báo sing-box.exe đang
 /// phải có chữ ký". Vì ta KHÔNG kiểm soát được chữ ký của binary bên thứ ba, cách duy nhất đúng là
 /// BỎ nó: phần TUN + định tuyến + bypass TQ được đưa vào chính <c>flowvpnrelay.exe</c> (hysteria v2
 /// vốn có sẵn client TUN — xem <c>tools/hysteria-relay/tun.go</c>), nên app Windows không còn chạy
@@ -135,7 +135,7 @@ public static class ApplicationControlGuard
     /// Thông báo cho người dùng (tiếng Việt, nói rõ đang chạy đường nào).
     ///
     /// Cố ý KHÔNG nói tên binary bên thứ ba và KHÔNG nói "cần ký số": khách báo 13/10/2026 đọc câu
-    /// cũ ("sing-box.exe … cần bản binary đã ký số") rồi tưởng app hỏng. Từ 1.4.7 không còn phụ thuộc
+    /// cũ ("sing-box.exe … cần bản binary đã ký số") rồi tưởng app hỏng. Từ 1.4.8 không còn phụ thuộc
     /// binary bên thứ ba, nên ở đây chỉ còn nói ĐÚNG việc khách cần biết: app vẫn vào mạng được, đi
     /// đường WireGuard, và cách tự xử nếu muốn dùng đường relay.
     /// </summary>
