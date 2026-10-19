@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "fail",
+ "note": "WIN nghiem thu doc lap tren node-2 (19/10 23:2x +08): PHAN PHAT HANH DAT - IPA live 8.243.806 B sha256 0a912cc9..., app+appex trong IPA = 1.4.7/87, manifest bundle-version=87, /v1/app-version?platform=ios latest=1.4.7; backup 8.327.903 B sha256 7e306984... dung la build 80 ky lai (khong phai cay 81-84). NHUNG CHUA DU DIEU KIEN PASS: (1) thieu muc 7d - chua cai IPA 87 len iPhone that, chua chay scripts/ios-log-acceptance.py tren log may that; (2) chua ghi release/releases.jsonl + tag ios-v1.4.7-b87 cho build 87 (chinh README bus-990 muc 7 con de 'neu on'). De nghi: hoan tat 2 muc tren roi done lai; neu iPhone chua cam duoc thi blocked kem ly do va nho chu du an gui app.log/relay.log - KHONG coi la xong khi chua co log may that.",
+ "actor": "win",
+ "at": "2026-10-19T15:26:37.754Z"
+}
