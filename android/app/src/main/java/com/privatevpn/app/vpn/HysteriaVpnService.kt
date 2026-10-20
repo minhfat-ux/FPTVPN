@@ -1239,8 +1239,11 @@ class HysteriaVpnService : VpnService() {
      * chết" mà [LocalProxy] sinh ra để dẹp.
      */
     private fun enableProxyMode() {
-        if (!LocalProxy.ensureStarted(SOCKS_PORT)) return
-        if (!systemProxySet) setSystemProxy(true)
+        // CHỈ mở proxy nội bộ. KHÔNG đặt proxy hệ thống ở đây nữa (sự cố thật 20/10/2026:
+        // boot → dựng service → đặt proxy 1081 → ROM dọn app lúc khởi động → cổng 1081 chết
+        // ⇒ CẢ TV MẤT MẠNG, không mở được app nào để tự chữa). Proxy hệ thống chỉ được đặt SAU
+        // KHI tunnel lên thật (xem proxyAttempt), nên service chết sớm thì TV vẫn còn mạng.
+        LocalProxy.ensureStarted(SOCKS_PORT)
     }
 
     /**

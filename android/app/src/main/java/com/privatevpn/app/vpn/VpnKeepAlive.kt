@@ -25,8 +25,8 @@ import com.privatevpn.app.diag.DiagnosticsLog
  */
 object VpnKeepAlive {
 
-    /** Nhịp tự kiểm: 10 phút. TV cắm điện nên chi phí không đáng kể. */
-    private const val INTERVAL_MS = 10 * 60 * 1000L
+    /** Nhịp tự kiểm: 3 phút. TV cắm điện nên chi phí không đáng kể; hồi nhanh khi bị giết. */
+    private const val INTERVAL_MS = 3 * 60 * 1000L
     private const val ACTION_KEEPALIVE = "com.privatevpn.app.vpn.KEEPALIVE"
     private const val REQ_CODE = 7201
 
@@ -35,6 +35,9 @@ object VpnKeepAlive {
 
     /** Bật service (kèm tự kết nối) nếu chưa chạy; an toàn khi gọi nhiều lần. */
     fun ensureRunning(context: Context) {
+        // DỌN PROXY TRƯỚC khi dựng lại: nếu lần trước service bị kill khi proxy đang trỏ 1081 thì
+        // TV đang mất mạng; service mới sẽ đặt lại proxy sau khi tunnel lên thật.
+        clearSystemProxy(context)
         if (HysteriaVpnService.serviceRunning) {
             schedule(context)
             return
@@ -58,6 +61,17 @@ object VpnKeepAlive {
             DiagnosticsLog.warn("keepalive: KHÔNG dựng lại được service: ${it.javaClass.simpleName}: ${it.message}")
         }
         schedule(context)
+    }
+
+    /** Gỡ proxy hệ thống nếu nó còn trỏ vào proxy nội bộ của app (tránh TV mất mạng). */
+    private fun clearSystemProxy(context: Context) {
+        runCatching {
+            val resolver = context.contentResolver
+            val current = android.provider.Settings.Global.getString(resolver, "http_proxy").orEmpty()
+            if (!current.startsWith("127.0.0.1")) return
+            android.provider.Settings.Global.putString(resolver, "http_proxy", ":0")
+            DiagnosticsLog.log("keepalive: đã dọn proxy hệ thống còn sót ($current)")
+        }
     }
 
     /** Hẹn chuông tự kiểm kế tiếp (ghi đè chuông cũ). */
