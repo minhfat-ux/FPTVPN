@@ -286,6 +286,13 @@ class HysteriaVpnService : VpnService() {
         // => go ngay khi service khoi dong lai.
         runCatching { setSystemProxy(false) }
         noTunDevice = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_NO_TUN, false)
+        // Máy KHÔNG có TUN: mỗi lane WS chỉ chở ~2 Mbps (RTT tới relay ~170 ms) nên N=1 nằm sát
+        // ngưỡng video — đo thật 20/10/2026 trên MiTV-AFZP0: N=1 = 2,2 Mbps ("lúc được lúc không"),
+        // N=4 = 4,1 Mbps (FPT Play tải đủ ảnh, xem được). Vì vậy chế độ proxy LUÔN mở tối thiểu 4
+        // lane, không phụ thuộc người dùng đã bật "Bandwidth boost" hay chưa.
+        if (noTunDevice && multiTunnelCount < PROXY_MIN_TUNNELS) {
+            multiTunnelCount = MultiTunnelPolicy.clampCount(PROXY_MIN_TUNNELS)
+        }
         DiagnosticsLog.log(
             "n-tunnel: N=$multiTunnelCount" + if (multiTunnelCount > 1) " (hút băng thông BẬT)" else " (tắt)",
         )
@@ -2676,6 +2683,8 @@ class HysteriaVpnService : VpnService() {
         /** UUID Widevine của MediaDrm (MediaDrm.WIDEVINE_UUID chỉ có từ API 30). */
         val WIDEVINE_UUID: java.util.UUID =
             java.util.UUID.fromString("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed")
+        /** Số lane tối thiểu khi máy KHÔNG có TUN (xem chỗ đọc `multiTunnelCount`). */
+        const val PROXY_MIN_TUNNELS = 6
         /** Sàn khai báo băng thông cho máy KHÔNG có TUN (mạng tòa nhà đo được 30-40 Mbps). */
         const val PROXY_FLOOR_DOWN_KBPS = 15_000
         const val PROXY_FLOOR_UP_KBPS = 5_000

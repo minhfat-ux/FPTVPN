@@ -185,3 +185,47 @@ tunnel: UP (http1081)                    ← tunnel đi qua LocalProxy → core 
 - Chưa thử **SmartTube** (YouTube = Google ⇒ chỉ xem được khi tunnel sống).
 - Chưa build bản **release** cho kênh TV (v57 mới là bản dev); kênh android-tv vẫn đang giữ
   `1.4.6-tv` trên server.
+
+## 12. Lane bị relay cắt oan (đã sửa trên server) + trần băng thông thật (chiều 20/10)
+
+**Triệu chứng khách thấy:** FPT Play "lúc được lúc không", tunnel báo Connected nhưng ảnh/video
+không tải. Phía app: `ws-relay: failed: Broken pipe` rồi `service: onDestroy` sau 45-77 giây.
+
+**Nguyên nhân (log relay node-2):**
+
+```
+#12266 KHÔNG PONG trong 120000ms -> cắt kết nối
+#12266 ĐÓNG sau 45.0s | in=636f/93300B out=1338f/1585911B | lý do: pong-timeout
+```
+
+Lane đã nhận **636 frame** từ client mà vẫn bị coi là "chết" vì relay chỉ đếm `pong`; trong khi
+`PONG_TIMEOUT_MS` (120000) chỉ dùng để in log — thời gian cắt thật là `PING_INTERVAL_MS` (15 s).
+Client (OkHttp) không kịp pong khi hàng đợi gửi dày ⇒ cắt oan.
+
+**Đã sửa trong /root/wsrelay.js trên node-2** (backup /root/wsrelay.js.bak-*): mọi khung đến
+(`pong` / `ping` / binary) đều tính là còn sống, chỉ cắt khi **im lặng hoàn toàn** quá
+`PONG_TIMEOUT_MS`. Đã `node --check` và restart 6/6 unit; health:
+
+```
+vn1hy=426 vn2hy=426 vn1wg=426 vn2wg=426 vn3hy=426 vn3wg=426
+relay /healthz: connections=44 active=2 bytesOut=50393819 dropped=0 udpErrors=0 pingsOut=268 pongsIn=267
+```
+
+Lưu ý: `relay-cf-vn1hy` mất ~60 s ở trạng thái `deactivating` khi restart (systemd chờ đóng kết
+nối) — lần sau restart unit này phải đặt lệnh khôi phục tách phiên và chấp nhận mất SSH nếu phiên
+điều khiển đang đi qua chính nó.
+
+**Trần băng thông thật của mạng tòa nhà (đo cùng lúc, TV so với PC cùng mạng):**
+
+| Đường | Tốc độ |
+|---|---|
+| TV qua tunnel (N=4) | 506.625 B/s ≈ **4,1 Mbps** |
+| TV qua tunnel (N=8) | 524.033 / 466.801 / 321.297 B/s ≈ **2,6-4,2 Mbps** |
+| PC qua tunnel riêng của PC | 76.183 / 152.953 B/s ≈ **0,6-1,2 Mbps** |
+
+⇒ Tăng lane **không** nâng được trần: nút thắt là đường ra quốc tế của mạng tòa nhà (giờ cao
+điểm), không phải app/relay (relay `drop=0`, `udpErr=0`). Vì vậy `PROXY_MIN_TUNNELS` để **6**
+là đủ (thêm lane chỉ tốn tài nguyên), và FPT Play nên xem mức 720p/HD thấp cho ổn định.
+
+**Đo lại sau khi sửa relay:** lane KHÔNG còn chết (KHÔNG NHẬN ĐƯỢC KHUNG NÀO không xuất hiện),
+tunnel giữ `Connected` liên tục, `IP thoát = 103.173.155.50`.
