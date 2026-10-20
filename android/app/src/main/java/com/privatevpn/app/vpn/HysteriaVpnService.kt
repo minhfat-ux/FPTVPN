@@ -1358,6 +1358,11 @@ class HysteriaVpnService : VpnService() {
      * KHÔNG đổi bừa (giữ nút hiện tại + cảnh báo để còn truy).
      */
     private fun pinExitHost() {
+        // Cửa đo thử (research 20/10/2026): đặt `pin_vps1=false` để app dùng nút người dùng chọn,
+        // nhờ vậy đo được relay/nút khác (Flow2 = vn2hy, Flow3 = vn3hy) mà không phải build bản khác.
+        // Mặc định vẫn GHIM VPS1 như chủ dự án yêu cầu.
+        val pinWanted = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_PIN_VPS1, true)
+        if (!pinWanted) return
         val pinned = com.privatevpn.app.Config.HY_SERVER
         if (runHost == pinned) return
         val idx = hosts.indexOf(pinned)
@@ -2728,6 +2733,9 @@ class HysteriaVpnService : VpnService() {
          * `adb shell run-as com.privatevpn.app.tv.dev ...` hoặc (sau này) công tắc trong Configuration.
          */
         const val KEY_PROXY_ENABLED = "system_proxy_enabled"
+
+        /** Ghim nút thoát về VPS1 (mặc định true). Đặt false để đo relay/nút khác. */
+        const val KEY_PIN_VPS1 = "pin_vps1"
         /**
          * Đầu dò IP thoát (thử lần lượt; chỉ nhận câu trả lời đúng dạng IPv4).
          * PHẢI là https: targetSdk 36 chặn cleartext trong app (đo thật 20/10: dùng http:// thì

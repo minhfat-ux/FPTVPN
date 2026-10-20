@@ -32,7 +32,7 @@ object LocalProxy {
     private const val HEADER_MAX_BYTES = 32 * 1024
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val TUNNEL_PROBE_TIMEOUT_MS = 300
-    private const val TUNNEL_FIRST_BYTE_MS = 5_000
+    private const val TUNNEL_FIRST_BYTE_MS = 20_000
     private const val TUNNEL_PROBE_CACHE_MS = 1_000L
 
     @Volatile private var server: ServerSocket? = null
@@ -186,9 +186,19 @@ object LocalProxy {
             }
             if (n <= 0) {
                 runCatching { upstream.close() }
-                DiagnosticsLog.warn("local-proxy: tunnel không phản hồi ${TUNNEL_FIRST_BYTE_MS}ms -> đi thẳng")
-                tunnelWasUp = false
-                return false
+                // TUYỆT ĐỐI KHÔNG đi thẳng ở đây (sự cố 20/10/2026, lỗi FPT Play RD_002): nếu một
+                // request đi qua IP Việt Nam còn request khác đi thẳng (IP mạng tòa nhà) thì
+                // session/auth của app bị lệch nhau ⇒ nội dung không phát được. Đang có tunnel thì
+                // MỌI request phải đi qua tunnel; chậm thì chờ, hỏng thì trả lỗi cho app còn hơn
+                // trộn hai đường ra.
+                DiagnosticsLog.warn("local-proxy: tunnel chậm >${TUNNEL_FIRST_BYTE_MS}ms -> báo lỗi cho app (KHÔNG đi thẳng)")
+                runCatching {
+                    client.getOutputStream().apply {
+                        write("HTTP/1.1 504 Gateway Timeout\r\n\r\n".toByteArray())
+                        flush()
+                    }
+                }
+                return true
             }
             client.getOutputStream().apply {
                 write(first, 0, n)
