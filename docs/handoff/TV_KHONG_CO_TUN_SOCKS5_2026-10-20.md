@@ -229,3 +229,31 @@ là đủ (thêm lane chỉ tốn tài nguyên), và FPT Play nên xem mức 720
 
 **Đo lại sau khi sửa relay:** lane KHÔNG còn chết (KHÔNG NHẬN ĐƯỢC KHUNG NÀO không xuất hiện),
 tunnel giữ `Connected` liên tục, `IP thoát = 103.173.155.50`.
+
+## 13. TV tự bật VPN khi khởi động + không chết khi màn hình chờ (20/10/2026, v60)
+
+Yêu cầu chủ dự án: "cho TV này tự bật app VPNFlow mỗi khi bật TV, và đừng để app VPN chết kể cả khi
+TV idle". ROM Tàu có bộ dọn ghi thẳng tên app (`PeriodicCleaner: OverTimePackage:com.privatevpn.app.tv.dev`)
+và màn hình chờ đưa app xuống nền ⇒ service chết ⇒ proxy hệ thống trỏ cổng chết ⇒ TV mất mạng.
+
+Hai lớp, cả hai trong `vpn/VpnKeepAlive.kt`:
+
+1. **`ProxyCleanupReceiver`** (BOOT_COMPLETED / LOCKED_BOOT_COMPLETED / MY_PACKAGE_REPLACED): dọn
+   proxy cũ rồi gọi `VpnKeepAlive.ensureRunning()` — service được dựng với `EXTRA_HOST` =
+   `Config.HY_SERVER` (VPS1), relay `wss://api.meetflowai.site/relay/vn1hy`, N =
+   `PROXY_MIN_TUNNELS` (6).
+2. **Chuông 10 phút** (`AlarmManager.setAndAllowWhileIdle`, ELAPSED_REALTIME_WAKEUP): service
+   không chạy thì dựng lại, rồi tự hẹn chuông kế tiếp. Đã kiểm trên TV:
+
+```
+dumpsys alarm → Alarm{… com.privatevpn.app.tv.dev} tag=*walarm*:com.privatevpn.app.vpn.KEEPALIVE
+                type=ELAPSED_WAKEUP whenElapsed=+9m32s
+dumpsys deviceidle whitelist +com.privatevpn.app.tv.dev → Added
+tunnel: UP (http1081) · proxy: IP thoát = 103.173.155.50 (ĐÚNG VPS1)
+```
+
+Chống dựng trùng: `HysteriaVpnService.serviceRunning` (companion) — boot receiver, chuông và app có
+thể cùng gọi, chỉ vòng tunnel đầu tiên chạy; các lần sau trả `START_STICKY` ngay.
+
+**Chưa nghiệm thu:** nhánh `BOOT_COMPLETED` thật (shell không gửi được broadcast bảo vệ này, cần
+reboot TV thật). Đường code giống hệt nhánh chuông ở trên nên chỉ còn chờ lần reboot tới để xác nhận.

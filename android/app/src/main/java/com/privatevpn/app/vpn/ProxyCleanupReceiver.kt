@@ -22,12 +22,14 @@ class ProxyCleanupReceiver : BroadcastReceiver() {
         runCatching {
             val resolver = context.contentResolver
             val current = Settings.Global.getString(resolver, "http_proxy").orEmpty()
-            if (!current.startsWith("127.0.0.1")) return
+            if (!current.startsWith("127.0.0.1")) return@runCatching
             Settings.Global.putString(resolver, "http_proxy", ":0")
             android.util.Log.i(
                 "VPNFLOW_DEBUG",
                 "boot: đã dọn proxy hệ thống còn sót ($current) — tránh mất mạng sau reboot",
             )
         }
+        // Tự bật VPN khi TV khởi động (yêu cầu chủ dự án 20/10/2026 cho TV ở nhà).
+        VpnKeepAlive.ensureRunning(context)
     }
 }

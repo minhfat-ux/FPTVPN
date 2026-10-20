@@ -297,6 +297,15 @@ class HysteriaVpnService : VpnService() {
             "n-tunnel: N=$multiTunnelCount" + if (multiTunnelCount > 1) " (hút băng thông BẬT)" else " (tắt)",
         )
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: onStartCommand startId=$startId host=$runHost")
+        // Giữ VPN sống trên TV: mỗi lần service chạy thì hẹn chuông tự kiểm 10 phút (xem VpnKeepAlive).
+        VpnKeepAlive.schedule(this)
+        // Bị yêu cầu dựng lại khi đang chạy (boot receiver + chuông + app cùng gọi): KHÔNG mở
+        // vòng tunnel thứ hai (hai vòng sẽ tranh cổng proxy và cùng ghi proxy hệ thống).
+        if (serviceRunning) {
+            DiagnosticsLog.log("service: đang chạy rồi, bỏ qua yêu cầu dựng lại (startId=$startId)")
+            return START_STICKY
+        }
+        serviceRunning = true
         Thread {
             try {
                 runTunnel()
@@ -2158,6 +2167,7 @@ class HysteriaVpnService : VpnService() {
 
     override fun onDestroy() {
         stopping = true
+        serviceRunning = false
         DiagnosticsLog.tunnelUp = false
         // Service dung hẳn: gỡ proxy hệ thống (giữa các lần nối lại thì KHÔNG gỡ).
         if (systemProxySet) setSystemProxy(false)
@@ -2699,6 +2709,9 @@ class HysteriaVpnService : VpnService() {
             "https://ifconfig.me/ip",
         )
         val IPV4_ONLY = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+
+        /** Đánh dấu service đang chạy (đọc từ [VpnKeepAlive] để không dựng trùng). */
+        @Volatile var serviceRunning = false
 
         @Volatile var stopping = false
 

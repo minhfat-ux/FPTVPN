@@ -88,5 +88,12 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Chuông tự kiểm 10 phút: nếu service VPN đã bị hệ thống giết thì dựng lại (TV ROM Tàu
+             có PeriodicCleaner kill app khi màn hình chờ). -->
+        <receiver
+            android:name=".vpn.VpnKeepAlive$KeepAliveReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 </manifest>
