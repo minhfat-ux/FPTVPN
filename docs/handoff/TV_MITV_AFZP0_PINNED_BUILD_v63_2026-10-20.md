@@ -75,3 +75,39 @@ proxy: IP thoát = 103.173.155.50 (ĐÚNG VPS1)
   (`com.xiaomi.mitv.tvmanager`) → ứng dụng được bảo vệ/tự khởi động, hoặc Cài đặt → Ứng dụng →
   VPNFlow → cho phép chạy nền. **Không cần root, không cần build thêm.**
 - Chưa nghiệm thu nhánh `BOOT_COMPLETED` thật trên máy này (adb mất sau reboot).
+
+---
+
+## 6. ĐÍNH CHÍNH + KHOÁ CODE ở **v67** (20/10/2026, cuối ngày)
+
+Bản đang pin chuyển từ v63 → **v67**. Lý do: v66 đổi mặc định "tắt proxy hệ thống" là **SAI** — chủ dự án
+chỉ ra đúng: FPT Play là dịch vụ Việt Nam, mạng tòa nhà (Trung Quốc) chặn, nên **chỉ có nội dung khi đi
+qua IP Việt Nam**, tức proxy hệ thống là đường sống duy nhất của mọi app trên máy không TUN. v67 trả
+mặc định về BẬT (`KEY_PROXY_ENABLED = true`), giữ khoá làm cửa thoát tay.
+
+| Trường | Giá trị |
+|---|---|
+| APK lưu trữ | `C:\Users\Minhn\vpnflow-android-142\tools\VPNFlow-tv-PINNED-v67-MiTV-AFZP0.apk` |
+| Kích thước | 97350593 B |
+| SHA-256 | `F831FA6BF3A167C9E21FF4BFCD4C2F836DAAD35A2819F4B2C0A9FDFDA161E099` |
+| versionCode / versionName | **67** / `1.4.5-tv-dev` |
+| Commit nguồn | `99eee3fb` (đính chính proxy BẬT) |
+
+Nghiệm thu trên TV (log thật):
+
+```
+versionCode = 67
+proxy hệ thống = 127.0.0.1:1081        (app tự đặt sau khi tunnel UP)
+proxy: IP thoát = 103.173.155.50 (ĐÚNG VPS1)   ← IP Việt Nam đã thông
+tốc độ qua tunnel lúc đo: 53.541 B/s ≈ 0,43 Mbps
+```
+
+**Kết luận tồn đọng:** IP Việt Nam đã đúng; lỗi "bật video là báo lỗi kết nối" của FPT Play là do
+**băng thông tunnel quá thấp** (0,43 Mbps lúc cao điểm; chiều cùng ngày 2,2-4,1 Mbps; FPT Play cần
+4-6 Mbps), KHÔNG phải do IP hay proxy.
+
+**Hướng research tiếp (chưa làm):**
+1. Đo và chọn relay tốt nhất từ chính TV: `vn1hy` (đang ghim) vs `vn2hy` (upstream loopback, ít
+   hop hơn) vs `vn3hy`; nếu vn2/vn3 nhanh hơn nhiều thì đổi ghim nút (vẫn IP Việt Nam).
+2. Đưa entry relay về gần mạng tòa nhà hơn (HK/SG) rồi mới sang VN.
+3. Đo có kiểm soát: cùng 1 file 8 MB, cùng giờ, ghi lại từng relay ⇒ chọn theo số, không theo cảm giác.
