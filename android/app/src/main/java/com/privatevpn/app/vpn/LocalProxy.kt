@@ -32,6 +32,7 @@ object LocalProxy {
     private const val HEADER_MAX_BYTES = 32 * 1024
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val TUNNEL_PROBE_TIMEOUT_MS = 300
+    private const val TUNNEL_FIRST_BYTE_MS = 5_000
     private const val TUNNEL_PROBE_CACHE_MS = 1_000L
 
     @Volatile private var server: ServerSocket? = null
@@ -107,10 +108,10 @@ object LocalProxy {
             val method = parts[0]
             val target = parts[1]
 
-            if (tunnelAvailable()) {
-                forwardToTunnel(header, input, client)
+            if (tunnelAvailable() && forwardToTunnel(header, input, client)) {
                 return
             }
+            // Tunnel không có phản hồi (đang chết mà cờ còn "up") ⇒ đi thẳng, đừng để app treo.
             if (method.equals("CONNECT", ignoreCase = true)) {
                 val (host, port) = splitHostPort(target, 443)
                 directConnect(client, input, host, port)
@@ -160,17 +161,50 @@ object LocalProxy {
         return tunnelWasUp
     }
 
-    /** Tunnel sống: chuyển nguyên request (kể cả CONNECT) sang proxy của core Go rồi nối hai ống. */
-    private fun forwardToTunnel(header: ByteArray, clientIn: InputStream, client: Socket) {
+    /**
+     * Tunnel sống: chuyển nguyên request (kể cả CONNECT) sang proxy của core Go rồi nối hai ống.
+     * Trả **false** nếu tunnel không có phản hồi trong [TUNNEL_FIRST_BYTE_MS] — khi đó chưa gửi gì
+     * cho client nên bên gọi còn đi thẳng được (sự cố 20/10/2026: cờ "up" còn treo sau khi tunnel
+     * chết ⇒ app treo ở màn hình trắng thay vì fail-open).
+     */
+    private fun forwardToTunnel(header: ByteArray, clientIn: InputStream, client: Socket): Boolean {
         val upstream = Socket()
         try {
             upstream.tcpNoDelay = true
             upstream.connect(InetSocketAddress("127.0.0.1", TUNNEL_PORT), CONNECT_TIMEOUT_MS)
+            upstream.soTimeout = TUNNEL_FIRST_BYTE_MS
             upstream.getOutputStream().apply {
                 write(header)
                 flush()
             }
-            pipe(client, clientIn, upstream)
+            val upIn = upstream.getInputStream()
+            val first = ByteArray(1)
+            val n = try {
+                upIn.read(first)
+            } catch (_: java.net.SocketTimeoutException) {
+                -1
+            }
+            if (n <= 0) {
+                runCatching { upstream.close() }
+                DiagnosticsLog.warn("local-proxy: tunnel không phản hồi ${TUNNEL_FIRST_BYTE_MS}ms -> đi thẳng")
+                tunnelWasUp = false
+                return false
+            }
+            client.getOutputStream().apply {
+                write(first, 0, n)
+                flush()
+            }
+            // Phần còn lại của phản hồi + hai chiều dữ liệu.
+            val upThread = Thread {
+                runCatching { upIn.copyTo(client.getOutputStream(), 16 * 1024) }
+                runCatching { upstream.close() }
+                runCatching { client.close() }
+            }.apply { isDaemon = true; name = "local-proxy-up" }
+            upThread.start()
+            runCatching { clientIn.copyTo(upstream.getOutputStream(), 16 * 1024) }
+            runCatching { upstream.close() }
+            runCatching { client.close() }
+            return true
         } finally {
             runCatching { upstream.close() }
         }
