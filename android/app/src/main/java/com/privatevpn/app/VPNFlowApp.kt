@@ -41,6 +41,16 @@ class VPNFlowApp : Application() {
                 DiagnosticsLog.warn("app: đã dọn proxy cũ ($serviceProxy) còn sót từ phiên trước")
             }
         }
+        // TỰ KẾT NỐI LẠI khi app được đánh thức (app guard / ROM mở lại sau khi bị kill):
+        // người dùng đã bật VPN thì dựng lại service luôn, KHÔNG cần bấm Connect.
+        runCatching {
+            val prefs = getSharedPreferences(com.privatevpn.app.vpn.HysteriaVpnService.PREFS, MODE_PRIVATE)
+            if (prefs.getBoolean("desired_connected", false)) {
+                DiagnosticsLog.log("app: phiên trước đang bật VPN -> tự dựng lại service")
+                com.privatevpn.app.vpn.VpnKeepAlive.ensureRunning(this)
+            }
+        }
+
         val previousCrash = takePreviousCrash()
         if (previousCrash != null) {
             DiagnosticsLog.warn("app: LẦN CHẠY TRƯỚC BỊ THOÁT (crash) ->\n$previousCrash")

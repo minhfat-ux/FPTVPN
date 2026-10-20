@@ -296,6 +296,9 @@ class HysteriaVpnService : VpnService() {
         DiagnosticsLog.log(
             "n-tunnel: N=$multiTunnelCount" + if (multiTunnelCount > 1) " (hút băng thông BẬT)" else " (tắt)",
         )
+        runCatching {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("desired_connected", true).apply()
+        }
         android.util.Log.e("VPNFLOW_DEBUG", "hysteria: onStartCommand startId=$startId host=$runHost")
         // Giữ VPN sống trên TV: mỗi lần service chạy thì hẹn chuông tự kiểm 10 phút (xem VpnKeepAlive).
         VpnKeepAlive.schedule(this)
@@ -2741,6 +2744,10 @@ class HysteriaVpnService : VpnService() {
          */
         fun requestStop(context: android.content.Context) {
             stopping = true
+            runCatching {
+                context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                    .edit().putBoolean("desired_connected", false).apply()
+            }
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: requestStop -> Mobile.stop()")
             runCatching { Mobile.stop() }
             runCatching {
