@@ -26,7 +26,7 @@ import com.privatevpn.app.diag.DiagnosticsLog
 object VpnKeepAlive {
 
     /** Nhịp tự kiểm: 3 phút. TV cắm điện nên chi phí không đáng kể; hồi nhanh khi bị giết. */
-    private const val INTERVAL_MS = 3 * 60 * 1000L
+    private const val INTERVAL_MS = 60 * 1000L
     private const val ACTION_KEEPALIVE = "com.privatevpn.app.vpn.KEEPALIVE"
     private const val REQ_CODE = 7201
 
