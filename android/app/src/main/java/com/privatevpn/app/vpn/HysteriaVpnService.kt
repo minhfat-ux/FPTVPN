@@ -1313,8 +1313,10 @@ class HysteriaVpnService : VpnService() {
         onWsRelay = true
         try {
             connectClient(bridge.localPort, fd, tcp = false)
+            // CHỈ đặt proxy hệ thống khi cổng 1081 thật sự đang lắng nghe (sự cố 20/10/2026:
+            // listener chết mà proxy vẫn trỏ vào ⇒ cả TV mất mạng).
+            val proxied = LocalProxy.isListening() && setSystemProxy(true)
             DiagnosticsLog.transport = "http$SOCKS_PORT"
-            val proxied = setSystemProxy(true)
             if (!stopping) reportUp()
             DiagnosticsLog.log(
                 "proxy: HTTP proxy (CONNECT) sẵn sàng 127.0.0.1:$SOCKS_PORT " +
@@ -2230,6 +2232,17 @@ class HysteriaVpnService : VpnService() {
                 }
                 DiagnosticsLog.log("probe#$tick vpn underlying=${underlyingSummary()}")
                 probeRelayReachable()
+                // Tự chữa cổng proxy nội bộ (máy không có TUN): listener chết thì mở lại ngay ở
+                // nhịp 15 s này. Không có bước này, một lần listener chết là TV mất mạng tới khi
+                // người dùng mở app — đúng sự cố 20/10/2026.
+                if (noTunDevice) {
+                    val wasListening = LocalProxy.isListening()
+                    LocalProxy.ensureStarted(SOCKS_PORT)
+                    if (!wasListening && LocalProxy.isListening() && DiagnosticsLog.tunnelUp) {
+                        DiagnosticsLog.warn("local-proxy: cổng đã chết, vừa mở lại -> đặt lại proxy hệ thống")
+                        setSystemProxy(true)
+                    }
+                }
                 // Watchdog: tunnel "UP" mà gói thật không đi được thì phải dựng lại
                 // transport, không chỉ ghi log. Trước đây chỗ này chỉ warn nên tunnel
                 // nằm chết ở trạng thái connected cho tới khi người dùng tự tắt/bật.

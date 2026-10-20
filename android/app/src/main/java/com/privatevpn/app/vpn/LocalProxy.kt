@@ -43,9 +43,13 @@ object LocalProxy {
 
     /** Mở cổng [port] một lần cho cả tiến trình; gọi nhiều lần vô hại. */
     fun ensureStarted(port: Int): Boolean {
-        if (started) return true
         synchronized(this) {
-            if (started) return true
+            val current = server
+            if (started && current != null && !current.isClosed) return true
+            // Sự cố thật 20/10/2026: listener chết (vòng accept thoát) mà cờ `started` vẫn true
+            // ⇒ không bao giờ mở lại ⇒ proxy hệ thống trỏ cổng chết ⇒ cả TV mất mạng.
+            started = false
+            runCatching { current?.close() }
             val socket = runCatching { ServerSocket(port, 64, java.net.InetAddress.getByName("127.0.0.1")) }
                 .getOrElse {
                     DiagnosticsLog.warn("local-proxy: KHÔNG mở được 127.0.0.1:$port (${it.message})")
@@ -59,13 +63,27 @@ object LocalProxy {
                     val client = try {
                         socket.accept()
                     } catch (_: Exception) {
-                        break
+                        if (!started || socket.isClosed) break
+                        // Lỗi tạm thời (ROM dọn tài nguyên, thiếu fd…): thử lại, KHÔNG thoát vòng.
+                        runCatching { Thread.sleep(200) }
+                        continue
                     }
                     Thread { handle(client) }.apply { isDaemon = true; name = "local-proxy-conn" }.start()
                 }
+                synchronized(this@LocalProxy) {
+                    started = false
+                    server = null
+                }
+                DiagnosticsLog.warn("local-proxy: vòng accept dừng -> nhịp kiểm kế tiếp sẽ mở lại")
             }.apply { isDaemon = true; name = "local-proxy" }.start()
             return true
         }
+    }
+
+    /** Cổng proxy nội bộ có đang thật sự lắng nghe không (dùng trước khi đặt proxy hệ thống). */
+    fun isListening(): Boolean {
+        val current = server
+        return started && current != null && !current.isClosed
     }
 
     fun stop() {
@@ -126,6 +144,10 @@ object LocalProxy {
     }
 
     private fun tunnelAvailable(): Boolean {
+        // Tunnel phải THẬT SỰ đang chở dữ liệu (cờ do service cập nhật) — chỉ kiểm "cổng 1082 có
+        // mở" là không đủ: đo thật 20/10/2026 có lúc 1082 vẫn LISTEN nhưng nhận kết nối rồi đóng
+        // ngay, chuyển tiếp vào đó làm app treo thay vì fail-open.
+        if (!DiagnosticsLog.tunnelUp) return false
         val now = System.currentTimeMillis()
         if (now - tunnelCheckedAt < TUNNEL_PROBE_CACHE_MS) return tunnelWasUp
         tunnelCheckedAt = now
