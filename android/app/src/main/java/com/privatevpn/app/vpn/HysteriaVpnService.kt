@@ -1315,12 +1315,13 @@ class HysteriaVpnService : VpnService() {
             connectClient(bridge.localPort, fd, tcp = false)
             // CHỈ đặt proxy hệ thống khi cổng 1081 thật sự đang lắng nghe (sự cố 20/10/2026:
             // listener chết mà proxy vẫn trỏ vào ⇒ cả TV mất mạng).
-            // MẶC ĐỊNH KHÔNG đưa app qua VPN trên máy này (chủ dự án chốt 20/10/2026): tunnel chỉ
-            // chở 1-4 Mbps trong khi FPT Play cần 4-6 Mbps, còn mạng trực tiếp của TV thì đủ ⇒ đặt
-            // proxy hệ thống chỉ làm app chậm/không load. Bật lại bằng khoá KEY_PROXY_ENABLED khi
-            // thật sự cần IP VPS1 cho app.
+            // Đặt proxy hệ thống khi tunnel đã lên VÀ cổng 1081 thật sự đang nghe.
+            // ĐÍNH CHÍNH 20/10/2026 (chủ dự án chỉ ra): KHÔNG được mặc định tắt proxy — FPT Play là
+            // dịch vụ Việt Nam, mạng tòa nhà (Trung Quốc) chặn nên **chỉ có nội dung khi đi qua IP
+            // Việt Nam**, tức phải qua tunnel. Tắt proxy = FPT Play trắng trang. Khoá
+            // KEY_PROXY_ENABLED giữ lại làm cửa thoát khi cần tắt tay, mặc định BẬT.
             val proxyWanted = getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getBoolean(KEY_PROXY_ENABLED, false)
+                .getBoolean(KEY_PROXY_ENABLED, true)
             val proxied = proxyWanted && LocalProxy.isListening() && setSystemProxy(true)
             DiagnosticsLog.transport = "http$SOCKS_PORT"
             if (!stopping) reportUp()
