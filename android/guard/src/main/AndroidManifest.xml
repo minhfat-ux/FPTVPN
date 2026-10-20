@@ -10,16 +10,7 @@
         android:label="VPNFlow Guard"
         android:supportsRtl="true">
 
-        <activity
-            android:name=".GuardActivity"
-            android:exported="true"
-            android:excludeFromRecents="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>
+
 
         <receiver
             android:name=".GuardReceiver"
@@ -29,6 +20,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.privatevpn.app.guard.TICK" />
             </intent-filter>
         </receiver>
     </application>
