@@ -532,55 +532,84 @@ func ServeSocks(listen string) error {
 func handleHTTPProxyConn(c client.Client, conn net.Conn) {
 	defer conn.Close()
 	br := bufio.NewReader(conn)
-	req, err := http.ReadRequest(br)
-	if err != nil {
-		return
-	}
-	host := req.Host
-	if req.Method == http.MethodConnect {
+	// VÒNG KEEP-ALIVE (vá 20/10/2026): một kết nối proxy phục vụ NHIỀU request liên tiếp.
+	// Trước đây hàm chỉ đọc đúng MỘT request rồi đóng ⇒ app dùng keep-alive (FPT Play: POST
+	// license rồi request kế tiếp trên cùng kết nối) bị đóng giữa chừng ⇒ "sự cố kết nối RD_002".
+	for {
+		req, err := http.ReadRequest(br)
+		if err != nil {
+			return
+		}
+		host := req.Host
+		if host == "" && req.URL != nil {
+			host = req.URL.Host
+		}
+		if req.Method == http.MethodConnect {
+			if !strings.Contains(host, ":") {
+				host += ":443"
+			}
+			up, err := c.TCP(host)
+			if err != nil {
+				_, _ = conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+				return
+			}
+			defer up.Close()
+			if _, err := conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
+				return
+			}
+			done := make(chan struct{}, 1)
+			go func() {
+				// br có thể còn byte đã đọc sẵn (TLS ClientHello) => phải chuyển tiếp từ br
+				_, _ = io.Copy(up, br)
+				done <- struct{}{}
+			}()
+			_, _ = io.Copy(conn, up)
+			<-done
+			return
+		}
+
+		// HTTP thường: đổi sang origin-form rồi chuyển tiếp, GIỮ keep-alive.
 		if !strings.Contains(host, ":") {
-			host += ":443"
+			host += ":80"
 		}
 		up, err := c.TCP(host)
 		if err != nil {
 			_, _ = conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 			return
 		}
-		defer up.Close()
-		if _, err := conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
+		req.Header.Del("Proxy-Connection")
+		req.RequestURI = ""
+		if req.URL != nil {
+			req.URL.Scheme = ""
+			req.URL.Host = ""
+		}
+		// QUAN TRỌNG: không ép req.Close và không io.Copy tới EOF — phải đọc ĐÚNG phần thân
+		// theo Content-Length/chunked của TỪNG response rồi trả về client, nếu không các request
+		// sau trên cùng kết nối sẽ bị nuốt mất.
+		if err := req.Write(up); err != nil {
+			_ = up.Close()
 			return
 		}
-		done := make(chan struct{}, 1)
-		go func() {
-			// br có thể còn byte đã đọc sẵn (TLS ClientHello) => phải chuyển tiếp từ br
-			_, _ = io.Copy(up, br)
-			done <- struct{}{}
-		}()
-		_, _ = io.Copy(conn, up)
-		<-done
-		return
+		upBr := bufio.NewReader(up)
+		resp, err := http.ReadResponse(upBr, req)
+		if err != nil {
+			_ = up.Close()
+			return
+		}
+		closeAfter := resp.Close || req.Close
+		resp.Header.Del("Proxy-Connection")
+		resp.Close = closeAfter
+		if err := resp.Write(conn); err != nil {
+			_ = resp.Body.Close()
+			_ = up.Close()
+			return
+		}
+		_ = resp.Body.Close()
+		_ = up.Close()
+		if closeAfter {
+			return
+		}
 	}
-
-	// HTTP thường: đổi sang origin-form rồi chuyển tiếp
-	if !strings.Contains(host, ":") {
-		host += ":80"
-	}
-	up, err := c.TCP(host)
-	if err != nil {
-		_, _ = conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
-		return
-	}
-	defer up.Close()
-	req.RequestURI = ""
-	if req.URL != nil {
-		req.URL.Scheme = ""
-		req.URL.Host = ""
-	}
-	req.Close = true
-	if err := req.Write(up); err != nil {
-		return
-	}
-	_, _ = io.Copy(conn, up)
 }
 
 // ServeHTTPProxy mở HTTP proxy (CONNECT + GET) tại `listen`, CHẶN tới khi Stop().

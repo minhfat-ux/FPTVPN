@@ -614,7 +614,11 @@ class HysteriaVpnService : VpnService() {
         // Relay phải là của CHÍNH node đang dùng. `runHost` ở đây vẫn là host node
         // (nó chỉ bị đổi thành 127.0.0.1 bên dưới), nên tra theo nó.
         val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
-        val relayUrl = relayForNode ?: WS_RELAY_URL
+        val relayOverride = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(KEY_RELAY_OVERRIDE, null)?.takeIf { it.isNotBlank() }
+        // Cửa đổi relay bằng prefs (research 20/10/2026): cho phép chuyển vn1hy/vn2hy/vn3hy mà
+        // KHÔNG phải build lại app. Rỗng = dùng relay của nút hiện tại như cũ.
+        val relayUrl = relayOverride ?: relayForNode ?: WS_RELAY_URL
         if (relayForNode == null) {
             // Nói rõ là đang ĐOÁN. Đoán sai node thì handshake im lặng hoàn toàn, không
             // có lỗi nào để lần ra — đúng loại lỗi đã làm mất cả buổi trên iPad.
@@ -789,7 +793,11 @@ class HysteriaVpnService : VpnService() {
     private fun wsRelayMultiAttempt(n: Int): Int {
         if (stopping) return 1
         val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
-        val relayUrl = relayForNode ?: WS_RELAY_URL
+        val relayOverride = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(KEY_RELAY_OVERRIDE, null)?.takeIf { it.isNotBlank() }
+        // Cửa đổi relay bằng prefs (research 20/10/2026): cho phép chuyển vn1hy/vn2hy/vn3hy mà
+        // KHÔNG phải build lại app. Rỗng = dùng relay của nút hiện tại như cũ.
+        val relayUrl = relayOverride ?: relayForNode ?: WS_RELAY_URL
         if (relayForNode == null) {
             DiagnosticsLog.warn(
                 "n-tunnel: node $runHost không khai relay URL -> dùng mặc định $relayUrl (đoán)",
@@ -1273,7 +1281,11 @@ class HysteriaVpnService : VpnService() {
             attemptDownKbps = maxOf(attemptDownKbps, PROXY_FLOOR_DOWN_KBPS)
         }
         val relayForNode = hostRelays[runHost]?.takeIf { it.isNotBlank() }
-        val relayUrl = relayForNode ?: WS_RELAY_URL
+        val relayOverride = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(KEY_RELAY_OVERRIDE, null)?.takeIf { it.isNotBlank() }
+        // Cửa đổi relay bằng prefs (research 20/10/2026): cho phép chuyển vn1hy/vn2hy/vn3hy mà
+        // KHÔNG phải build lại app. Rỗng = dùng relay của nút hiện tại như cũ.
+        val relayUrl = relayOverride ?: relayForNode ?: WS_RELAY_URL
         armAttemptBudget(WS_OPEN_WAIT_MS + WS_ATTEMPT_UP_BUDGET_MS)
         val bridge = WSRelayBridge(
             url = relayUrl,
@@ -2689,6 +2701,9 @@ class HysteriaVpnService : VpnService() {
         const val MULTI_TUNNEL_BUDGET_CAP_MS = 90_000L
         /** Cong HTTP proxy noi bo cho thiet bi KHONG co TUN (xem proxyAttempt). */
         const val SOCKS_PORT = 1081
+
+        /** Ghi đè URL relay WS (vd wss://api.meetflowai.site/relay/vn2hy) — rỗng = theo nút. */
+        const val KEY_RELAY_OVERRIDE = "relay_override"
         /** Da xac dinh may KHONG co TUN — luu lai de lan khoi dong sau di thang proxy. */
         const val KEY_NO_TUN = "no_tun_device"
         /** Đã cấp chứng chỉ Widevine qua tunnel chưa (xem provisionWidevineOnce). */
