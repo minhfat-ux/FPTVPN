@@ -1315,7 +1315,13 @@ class HysteriaVpnService : VpnService() {
             connectClient(bridge.localPort, fd, tcp = false)
             // CHỈ đặt proxy hệ thống khi cổng 1081 thật sự đang lắng nghe (sự cố 20/10/2026:
             // listener chết mà proxy vẫn trỏ vào ⇒ cả TV mất mạng).
-            val proxied = LocalProxy.isListening() && setSystemProxy(true)
+            // MẶC ĐỊNH KHÔNG đưa app qua VPN trên máy này (chủ dự án chốt 20/10/2026): tunnel chỉ
+            // chở 1-4 Mbps trong khi FPT Play cần 4-6 Mbps, còn mạng trực tiếp của TV thì đủ ⇒ đặt
+            // proxy hệ thống chỉ làm app chậm/không load. Bật lại bằng khoá KEY_PROXY_ENABLED khi
+            // thật sự cần IP VPS1 cho app.
+            val proxyWanted = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_PROXY_ENABLED, false)
+            val proxied = proxyWanted && LocalProxy.isListening() && setSystemProxy(true)
             DiagnosticsLog.transport = "http$SOCKS_PORT"
             if (!stopping) reportUp()
             DiagnosticsLog.log(
@@ -2714,6 +2720,13 @@ class HysteriaVpnService : VpnService() {
         /** Sàn khai báo băng thông cho máy KHÔNG có TUN (mạng tòa nhà đo được 30-40 Mbps). */
         const val PROXY_FLOOR_DOWN_KBPS = 15_000
         const val PROXY_FLOOR_UP_KBPS = 5_000
+
+        /**
+         * Có đưa MỌI app qua VPN bằng proxy hệ thống hay không. **Mặc định TẮT**: tunnel 1-4 Mbps
+         * không đủ cho FPT Play, mạng trực tiếp của TV thì đủ. Bật khi cần IP VPS1:
+         * `adb shell run-as com.privatevpn.app.tv.dev ...` hoặc (sau này) công tắc trong Configuration.
+         */
+        const val KEY_PROXY_ENABLED = "system_proxy_enabled"
         /**
          * Đầu dò IP thoát (thử lần lượt; chỉ nhận câu trả lời đúng dạng IPv4).
          * PHẢI là https: targetSdk 36 chặn cleartext trong app (đo thật 20/10: dùng http:// thì
