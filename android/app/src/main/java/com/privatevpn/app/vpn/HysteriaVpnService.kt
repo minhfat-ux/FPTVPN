@@ -1313,17 +1313,8 @@ class HysteriaVpnService : VpnService() {
         onWsRelay = true
         try {
             connectClient(bridge.localPort, fd, tcp = false)
-            // CHỈ đặt proxy hệ thống khi cổng 1081 thật sự đang lắng nghe (sự cố 20/10/2026:
-            // listener chết mà proxy vẫn trỏ vào ⇒ cả TV mất mạng).
-            // Đặt proxy hệ thống khi tunnel đã lên VÀ cổng 1081 thật sự đang nghe.
-            // ĐÍNH CHÍNH 20/10/2026 (chủ dự án chỉ ra): KHÔNG được mặc định tắt proxy — FPT Play là
-            // dịch vụ Việt Nam, mạng tòa nhà (Trung Quốc) chặn nên **chỉ có nội dung khi đi qua IP
-            // Việt Nam**, tức phải qua tunnel. Tắt proxy = FPT Play trắng trang. Khoá
-            // KEY_PROXY_ENABLED giữ lại làm cửa thoát khi cần tắt tay, mặc định BẬT.
-            val proxyWanted = getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getBoolean(KEY_PROXY_ENABLED, true)
-            val proxied = proxyWanted && LocalProxy.isListening() && setSystemProxy(true)
             DiagnosticsLog.transport = "http$SOCKS_PORT"
+            val proxied = setSystemProxy(true)
             if (!stopping) reportUp()
             DiagnosticsLog.log(
                 "proxy: HTTP proxy (CONNECT) sẵn sàng 127.0.0.1:$SOCKS_PORT " +
@@ -1358,11 +1349,6 @@ class HysteriaVpnService : VpnService() {
      * KHÔNG đổi bừa (giữ nút hiện tại + cảnh báo để còn truy).
      */
     private fun pinExitHost() {
-        // Cửa đo thử (research 20/10/2026): đặt `pin_vps1=false` để app dùng nút người dùng chọn,
-        // nhờ vậy đo được relay/nút khác (Flow2 = vn2hy, Flow3 = vn3hy) mà không phải build bản khác.
-        // Mặc định vẫn GHIM VPS1 như chủ dự án yêu cầu.
-        val pinWanted = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_PIN_VPS1, true)
-        if (!pinWanted) return
         val pinned = com.privatevpn.app.Config.HY_SERVER
         if (runHost == pinned) return
         val idx = hosts.indexOf(pinned)
@@ -2244,17 +2230,6 @@ class HysteriaVpnService : VpnService() {
                 }
                 DiagnosticsLog.log("probe#$tick vpn underlying=${underlyingSummary()}")
                 probeRelayReachable()
-                // Tự chữa cổng proxy nội bộ (máy không có TUN): listener chết thì mở lại ngay ở
-                // nhịp 15 s này. Không có bước này, một lần listener chết là TV mất mạng tới khi
-                // người dùng mở app — đúng sự cố 20/10/2026.
-                if (noTunDevice) {
-                    val wasListening = LocalProxy.isListening()
-                    LocalProxy.ensureStarted(SOCKS_PORT)
-                    if (!wasListening && LocalProxy.isListening() && DiagnosticsLog.tunnelUp) {
-                        DiagnosticsLog.warn("local-proxy: cổng đã chết, vừa mở lại -> đặt lại proxy hệ thống")
-                        setSystemProxy(true)
-                    }
-                }
                 // Watchdog: tunnel "UP" mà gói thật không đi được thì phải dựng lại
                 // transport, không chỉ ghi log. Trước đây chỗ này chỉ warn nên tunnel
                 // nằm chết ở trạng thái connected cho tới khi người dùng tự tắt/bật.
@@ -2726,16 +2701,6 @@ class HysteriaVpnService : VpnService() {
         /** Sàn khai báo băng thông cho máy KHÔNG có TUN (mạng tòa nhà đo được 30-40 Mbps). */
         const val PROXY_FLOOR_DOWN_KBPS = 15_000
         const val PROXY_FLOOR_UP_KBPS = 5_000
-
-        /**
-         * Có đưa MỌI app qua VPN bằng proxy hệ thống hay không. **Mặc định TẮT**: tunnel 1-4 Mbps
-         * không đủ cho FPT Play, mạng trực tiếp của TV thì đủ. Bật khi cần IP VPS1:
-         * `adb shell run-as com.privatevpn.app.tv.dev ...` hoặc (sau này) công tắc trong Configuration.
-         */
-        const val KEY_PROXY_ENABLED = "system_proxy_enabled"
-
-        /** Ghim nút thoát về VPS1 (mặc định true). Đặt false để đo relay/nút khác. */
-        const val KEY_PIN_VPS1 = "pin_vps1"
         /**
          * Đầu dò IP thoát (thử lần lượt; chỉ nhận câu trả lời đúng dạng IPv4).
          * PHẢI là https: targetSdk 36 chặn cleartext trong app (đo thật 20/10: dùng http:// thì

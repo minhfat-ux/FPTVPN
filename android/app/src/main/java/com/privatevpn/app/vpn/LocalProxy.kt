@@ -32,7 +32,6 @@ object LocalProxy {
     private const val HEADER_MAX_BYTES = 32 * 1024
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val TUNNEL_PROBE_TIMEOUT_MS = 300
-    private const val TUNNEL_FIRST_BYTE_MS = 20_000
     private const val TUNNEL_PROBE_CACHE_MS = 1_000L
 
     @Volatile private var server: ServerSocket? = null
@@ -44,13 +43,9 @@ object LocalProxy {
 
     /** Mở cổng [port] một lần cho cả tiến trình; gọi nhiều lần vô hại. */
     fun ensureStarted(port: Int): Boolean {
+        if (started) return true
         synchronized(this) {
-            val current = server
-            if (started && current != null && !current.isClosed) return true
-            // Sự cố thật 20/10/2026: listener chết (vòng accept thoát) mà cờ `started` vẫn true
-            // ⇒ không bao giờ mở lại ⇒ proxy hệ thống trỏ cổng chết ⇒ cả TV mất mạng.
-            started = false
-            runCatching { current?.close() }
+            if (started) return true
             val socket = runCatching { ServerSocket(port, 64, java.net.InetAddress.getByName("127.0.0.1")) }
                 .getOrElse {
                     DiagnosticsLog.warn("local-proxy: KHÔNG mở được 127.0.0.1:$port (${it.message})")
@@ -64,27 +59,13 @@ object LocalProxy {
                     val client = try {
                         socket.accept()
                     } catch (_: Exception) {
-                        if (!started || socket.isClosed) break
-                        // Lỗi tạm thời (ROM dọn tài nguyên, thiếu fd…): thử lại, KHÔNG thoát vòng.
-                        runCatching { Thread.sleep(200) }
-                        continue
+                        break
                     }
                     Thread { handle(client) }.apply { isDaemon = true; name = "local-proxy-conn" }.start()
                 }
-                synchronized(this@LocalProxy) {
-                    started = false
-                    server = null
-                }
-                DiagnosticsLog.warn("local-proxy: vòng accept dừng -> nhịp kiểm kế tiếp sẽ mở lại")
             }.apply { isDaemon = true; name = "local-proxy" }.start()
             return true
         }
-    }
-
-    /** Cổng proxy nội bộ có đang thật sự lắng nghe không (dùng trước khi đặt proxy hệ thống). */
-    fun isListening(): Boolean {
-        val current = server
-        return started && current != null && !current.isClosed
     }
 
     fun stop() {
@@ -108,10 +89,10 @@ object LocalProxy {
             val method = parts[0]
             val target = parts[1]
 
-            if (tunnelAvailable() && forwardToTunnel(header, input, client)) {
+            if (tunnelAvailable()) {
+                forwardToTunnel(header, input, client)
                 return
             }
-            // Tunnel không có phản hồi (đang chết mà cờ còn "up") ⇒ đi thẳng, đừng để app treo.
             if (method.equals("CONNECT", ignoreCase = true)) {
                 val (host, port) = splitHostPort(target, 443)
                 directConnect(client, input, host, port)
@@ -145,10 +126,6 @@ object LocalProxy {
     }
 
     private fun tunnelAvailable(): Boolean {
-        // Tunnel phải THẬT SỰ đang chở dữ liệu (cờ do service cập nhật) — chỉ kiểm "cổng 1082 có
-        // mở" là không đủ: đo thật 20/10/2026 có lúc 1082 vẫn LISTEN nhưng nhận kết nối rồi đóng
-        // ngay, chuyển tiếp vào đó làm app treo thay vì fail-open.
-        if (!DiagnosticsLog.tunnelUp) return false
         val now = System.currentTimeMillis()
         if (now - tunnelCheckedAt < TUNNEL_PROBE_CACHE_MS) return tunnelWasUp
         tunnelCheckedAt = now
@@ -161,60 +138,17 @@ object LocalProxy {
         return tunnelWasUp
     }
 
-    /**
-     * Tunnel sống: chuyển nguyên request (kể cả CONNECT) sang proxy của core Go rồi nối hai ống.
-     * Trả **false** nếu tunnel không có phản hồi trong [TUNNEL_FIRST_BYTE_MS] — khi đó chưa gửi gì
-     * cho client nên bên gọi còn đi thẳng được (sự cố 20/10/2026: cờ "up" còn treo sau khi tunnel
-     * chết ⇒ app treo ở màn hình trắng thay vì fail-open).
-     */
-    private fun forwardToTunnel(header: ByteArray, clientIn: InputStream, client: Socket): Boolean {
+    /** Tunnel sống: chuyển nguyên request (kể cả CONNECT) sang proxy của core Go rồi nối hai ống. */
+    private fun forwardToTunnel(header: ByteArray, clientIn: InputStream, client: Socket) {
         val upstream = Socket()
         try {
             upstream.tcpNoDelay = true
             upstream.connect(InetSocketAddress("127.0.0.1", TUNNEL_PORT), CONNECT_TIMEOUT_MS)
-            upstream.soTimeout = TUNNEL_FIRST_BYTE_MS
             upstream.getOutputStream().apply {
                 write(header)
                 flush()
             }
-            val upIn = upstream.getInputStream()
-            val first = ByteArray(1)
-            val n = try {
-                upIn.read(first)
-            } catch (_: java.net.SocketTimeoutException) {
-                -1
-            }
-            if (n <= 0) {
-                runCatching { upstream.close() }
-                // TUYỆT ĐỐI KHÔNG đi thẳng ở đây (sự cố 20/10/2026, lỗi FPT Play RD_002): nếu một
-                // request đi qua IP Việt Nam còn request khác đi thẳng (IP mạng tòa nhà) thì
-                // session/auth của app bị lệch nhau ⇒ nội dung không phát được. Đang có tunnel thì
-                // MỌI request phải đi qua tunnel; chậm thì chờ, hỏng thì trả lỗi cho app còn hơn
-                // trộn hai đường ra.
-                DiagnosticsLog.warn("local-proxy: tunnel chậm >${TUNNEL_FIRST_BYTE_MS}ms -> báo lỗi cho app (KHÔNG đi thẳng)")
-                runCatching {
-                    client.getOutputStream().apply {
-                        write("HTTP/1.1 504 Gateway Timeout\r\n\r\n".toByteArray())
-                        flush()
-                    }
-                }
-                return true
-            }
-            client.getOutputStream().apply {
-                write(first, 0, n)
-                flush()
-            }
-            // Phần còn lại của phản hồi + hai chiều dữ liệu.
-            val upThread = Thread {
-                runCatching { upIn.copyTo(client.getOutputStream(), 16 * 1024) }
-                runCatching { upstream.close() }
-                runCatching { client.close() }
-            }.apply { isDaemon = true; name = "local-proxy-up" }
-            upThread.start()
-            runCatching { clientIn.copyTo(upstream.getOutputStream(), 16 * 1024) }
-            runCatching { upstream.close() }
-            runCatching { client.close() }
-            return true
+            pipe(client, clientIn, upstream)
         } finally {
             runCatching { upstream.close() }
         }
