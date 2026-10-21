@@ -18,8 +18,8 @@
 
 param(
     [string]$TunName = "flowvpntun",
-    [string]$Dns1 = "1.1.1.1",
-    [string]$Dns2 = "1.0.0.1",
+    [string]$Dns1 = "",
+    [string]$Dns2 = "",
     [switch]$Remove
 )
 
@@ -44,8 +44,14 @@ if ($Remove) {
     return
 }
 
-Write-Host "[1/4] Dat DNS laptop = $Dns1 , $Dns2 ..." -ForegroundColor Cyan
-Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses @($Dns1, $Dns2)
+if ($Dns1) {
+    Write-Host "[1/4] Dat DNS laptop = $Dns1 , $Dns2 ..." -ForegroundColor Cyan
+    Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses @($Dns1, $Dns2)
+} else {
+    # MAC DINH KHONG doi DNS: do duoc 21/10 la mang toa nha CHAN DNS toi 1.1.1.1 (khong tra loi),
+    # doi sang 1.1.1.1 lam MOI thu het phan giai ten => cau WS "no such host". Giu DNS cua nha.
+    Write-Host "[1/4] Giu nguyen DNS he thong (1.1.1.1 bi mang toa nha chan)" -ForegroundColor Yellow
+}
 $dnsNow = (Get-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -AddressFamily IPv4).ServerAddresses -join ", "
 Write-Host "      DNS Wi-Fi hien tai: $dnsNow"
 
