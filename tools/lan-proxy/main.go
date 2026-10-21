@@ -4,8 +4,9 @@
 // qua đường hầm trên PC là để TV dùng **proxy hệ thống** trỏ vào PC trong LAN.
 //
 // Hai chế độ ra:
-//   -upstream socks5://127.0.0.1:1080  → chuyển tiếp qua SOCKS5 (hysteria qua cầu WS trên PC).
-//   (không đặt -upstream)              → dial thẳng theo routing của máy.
+//
+//	-upstream socks5://127.0.0.1:1080  → chuyển tiếp qua SOCKS5 (hysteria qua cầu WS trên PC).
+//	(không đặt -upstream)              → dial thẳng theo routing của máy.
 //
 // Giao thức: HTTP proxy chuẩn — CONNECT cho HTTPS, GET/POST thường, GIỮ keep-alive (FPT Play dùng
 // nhiều request trên một kết nối; đóng sớm ⇒ RD_002).
@@ -55,26 +56,33 @@ func main() {
 var connSeq int64
 
 // dial ra ngoài: qua SOCKS5 nếu có -upstream, ngược lại dial TCP thường.
-// dial ra ngoài: thử LẦN LƯỢT các upstream (UDP trực tiếp trước, rồi cầu WS), dùng cái
-// thông được đầu tiên; nhớ cái vừa thông để các kết nối sau khỏi thử lại (giảm 0,5-1 s/kết nối).
+//
+// Nhiều upstream (cách nhau dấu phẩy) thì CHIA TẢI round-robin: kết nối thứ i bắt đầu từ
+// upstream i%N, hỏng thì thử tiếp các cái sau. Lý do: mỗi relay WS qua Cloudflare bị cap
+// riêng ~1,4 Mbps (đo 22/10/2026: 1 luồng 1,43 Mbps, 3 luồng CÙNG một relay vẫn 1,4 Mbps
+// tổng), nhưng 3 relay khác nhau song song thì cộng dồn ~3 Mbps. Trước đây dùng lastGood
+// (chỉ failover) nên mọi kết nối dồn vào một relay và không bao giờ vượt được cái cap đó.
 var lastGood atomic.Value // string
+var rrNext uint64
 
 func dial(hostPort string) (net.Conn, error) {
 	if upstream == "" {
 		return net.DialTimeout("tcp", hostPort, 10*time.Second)
 	}
-	list := strings.Split(upstream, ",")
-	var firstErr error
-	if v := lastGood.Load(); v != nil {
-		if c, err := socks5Dial(v.(string), hostPort); err == nil {
-			return c, nil
+	var list []string
+	for _, u := range strings.Split(upstream, ",") {
+		addr := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(u), "socks5://"), "tcp://")
+		if addr != "" {
+			list = append(list, addr)
 		}
 	}
-	for _, u := range list {
-		addr := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(u), "socks5://"), "tcp://")
-		if addr == "" {
-			continue
-		}
+	if len(list) == 0 {
+		return nil, fmt.Errorf("không có upstream nào dùng được")
+	}
+	start := int((atomic.AddUint64(&rrNext, 1) - 1) % uint64(len(list)))
+	var firstErr error
+	for i := 0; i < len(list); i++ {
+		addr := list[(start+i)%len(list)]
 		c, err := socks5Dial(addr, hostPort)
 		if err == nil {
 			lastGood.Store(addr)
@@ -83,9 +91,6 @@ func dial(hostPort string) (net.Conn, error) {
 		if firstErr == nil {
 			firstErr = err
 		}
-	}
-	if firstErr == nil {
-		firstErr = fmt.Errorf("không có upstream nào dùng được")
 	}
 	return nil, firstErr
 }

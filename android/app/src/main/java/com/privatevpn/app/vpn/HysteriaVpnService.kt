@@ -169,6 +169,45 @@ class HysteriaVpnService : VpnService() {
     @Volatile private var noTunDevice = false
     /** Đã đặt proxy hệ thống chưa (để gỡ khi dừng). */
     @Volatile private var systemProxySet = false
+
+    /** AudioTrack câm: giữ app nằm trong nhóm "AudioActiveUids" để ROM không dọn (xem startSilentAudio). */
+    private var silentTrack: android.media.AudioTrack? = null
+
+    /**
+     * Phát một luồng CÂM lặp vô hạn. Vì sao: log của ROM cho thấy bộ dọn chỉ tha app đang HIỂN THỊ
+     * hoặc đang PHÁT ÂM THANH (ilterOutKillablePackages, AudioActiveUids). VPNFlow chạy nền nên
+     * bị Force stopping sau ~5 phút ⇒ VPN tắt, proxy hệ thống trỏ cổng chết ⇒ TV mất mạng.
+     * Giữ audio câm là cách duy nhất còn lại không cần root/whitelist.
+     */
+    private fun startSilentAudio() {
+        if (silentTrack != null) return
+        runCatching {
+            val sampleRate = 8000
+            val silence = ByteArray(sampleRate) // ~1 giây im lặng, PCM 8-bit
+            val track = android.media.AudioTrack(
+                android.media.AudioManager.STREAM_MUSIC,
+                sampleRate,
+                android.media.AudioFormat.CHANNEL_OUT_MONO,
+                android.media.AudioFormat.ENCODING_PCM_8BIT,
+                silence.size,
+                android.media.AudioTrack.MODE_STATIC,
+            )
+            track.write(silence, 0, silence.size)
+            track.setVolume(0f) // im lặng tuyệt đối, không phụ thuộc volume của TV
+            track.setLoopPoints(0, silence.size, -1)
+            track.play()
+            silentTrack = track
+            DiagnosticsLog.log("audio: giữ luồng câm để ROM không dọn app (AudioActiveUids)")
+        }.onFailure {
+            DiagnosticsLog.warn("audio: KHÔNG mở được luồng câm: ${it.javaClass.simpleName}: ${it.message}")
+        }
+    }
+
+    private fun stopSilentAudio() {
+        runCatching { silentTrack?.stop() }
+        runCatching { silentTrack?.release() }
+        silentTrack = null
+    }
     /**
      * Pha RAMP/STABLE + KÊNH DÒ RIÊNG (yêu cầu chủ dự án 22/09/2026 —
      * `docs/YEU_CAU_TOC_DO_ON_DINH.md` §2b/§2c): tốc độ leo dần tới mốc Full HD rồi KHOÁ lại;
@@ -309,6 +348,7 @@ class HysteriaVpnService : VpnService() {
             return START_STICKY
         }
         serviceRunning = true
+        startSilentAudio()
         Thread {
             try {
                 runTunnel()
@@ -1045,7 +1085,7 @@ class HysteriaVpnService : VpnService() {
         val protected = protectRelaySocket(sock, "tcp-relay:$relayPort")
         DiagnosticsLog.outerProtected = if (protected) "protect=ok" else "protect=false"
         val ok = try {
-            sock.connect(java.net.InetSocketAddress(runHost, relayPort), TCP_CONNECT_TIMEOUT_MS)
+            sock.connect(java.net.InetSocketAddress(runHost, relayPort), maxOf(TCP_CONNECT_TIMEOUT_MS, 6_000))
             true
         } catch (e: Exception) {
             android.util.Log.e("VPNFLOW_DEBUG", "hysteria: TCP relay $relayPort connect fail: ${e.message}")
@@ -1228,9 +1268,18 @@ class HysteriaVpnService : VpnService() {
 
     // ───────────── chế độ SOCKS5 cho thiết bị KHÔNG có TUN ─────────────
 
-    /** Đặt/gỡ proxy hệ thống. Cần WRITE_SECURE_SETTINGS (cấp bằng `adb shell pm grant`). */
+    /**
+     * Đặt/gỡ proxy hệ thống. Cần WRITE_SECURE_SETTINGS (cấp bằng `adb shell pm grant`).
+     *
+     * Tôn trọng chế độ tuyến trong Settings ([ProxyDirector]): chế độ `gateway` thì tunnel của app
+     * lên cũng KHÔNG đặt `127.0.0.1:1081` mà giữ gateway LAN — người dùng đã chốt "chỉ gateway".
+     */
     private fun setSystemProxy(on: Boolean): Boolean {
-        val value = if (on) "127.0.0.1:$SOCKS_PORT" else ":0"
+        val value = when {
+            !on -> ":0"
+            ProxyDirector.mode(this) == Config.PROXY_MODE_GATEWAY -> ProxyDirector.gatewayAddress(this)
+            else -> "127.0.0.1:$SOCKS_PORT"
+        }
         return runCatching {
             android.provider.Settings.Global.putString(contentResolver, "http_proxy", value)
             systemProxySet = on
@@ -1289,6 +1338,15 @@ class HysteriaVpnService : VpnService() {
         // Cửa đổi relay bằng prefs (research 20/10/2026): cho phép chuyển vn1hy/vn2hy/vn3hy mà
         // KHÔNG phải build lại app. Rỗng = dùng relay của nút hiện tại như cũ.
         val relayUrl = relayOverride ?: relayForNode ?: WS_RELAY_URL
+        // THỬ ĐƯỜNG TRỰC TIẾP TRƯỚC (21/10/2026): cầu WS chỉ 0,2-0,5 Mbps trong khi TCP 8443
+        // tới node MỞ được từ chính TV và PC cùng mạng qua tunnel riêng được 8,35 Mbps.
+        if (getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_PROXY_TRANSPORT, "") == "tcp") {
+            for (p in HY_TCP_RELAY_PORTS) {
+                val r = proxyTcpRelayAttempt(p)
+                if (r != 0) return r
+            }
+            DiagnosticsLog.warn("proxy: TCP relay trực tiếp hỏng -> rơi về cầu WS")
+        }
         armAttemptBudget(WS_OPEN_WAIT_MS + WS_ATTEMPT_UP_BUDGET_MS)
         val bridge = WSRelayBridge(
             url = relayUrl,
@@ -1363,6 +1421,65 @@ class HysteriaVpnService : VpnService() {
      * đổi vùng nội dung. Nút ghim phải có trong danh sách nút app nhận được, nếu không thì
      * KHÔNG đổi bừa (giữ nút hiện tại + cảnh báo để còn truy).
      */
+    /**
+     * TCP relay TRỰC TIẾP cho chế độ proxy (không TUN): nối thẳng TCP tới node (runHost:8443),
+     * dựng client hysteria trên chính socket đó rồi mở HTTP proxy — KHÔNG qua cầu WS/Cloudflare.
+     * Trả 0 nếu không dựng được để lượt gọi rơi về cầu WS.
+     */
+    private fun proxyTcpRelayAttempt(relayPort: Int): Int {
+        if (stopping) return 1
+        val sock = java.net.Socket()
+        val protected = protectRelaySocket(sock, "proxy-tcp:$relayPort")
+        val ok = try {
+            sock.connect(java.net.InetSocketAddress(runHost, relayPort), maxOf(TCP_CONNECT_TIMEOUT_MS, 6_000))
+            true
+        } catch (e: Exception) {
+            DiagnosticsLog.warn("proxy: TCP relay $relayPort connect fail: ${e.message}")
+            runCatching { sock.close() }
+            false
+        }
+        if (!ok) return 0
+        DiagnosticsLog.outerDetail = "proxy-tcp:$relayPort"
+        DiagnosticsLog.outerLocal = safeAddr(sock)
+        DiagnosticsLog.log("proxy: TCP relay TRỰC TIẾP $runHost:$relayPort protect=$protected")
+        val sockFd = try {
+            android.os.ParcelFileDescriptor.fromSocket(sock).detachFd()
+        } catch (e: Exception) {
+            runCatching { sock.close() }
+            return 0
+        }
+        armAttemptBudget(ATTEMPT_UP_BUDGET_MS)
+        try {
+            connectClient(relayPort, sockFd, tcp = true)
+        } catch (e: Exception) {
+            disarmAttemptBudget()
+            DiagnosticsLog.warn("proxy: TCP relay $relayPort handshake fail: ${e.message}")
+            runCatching { sock.close() }
+            return 0
+        }
+        if (stopping) {
+            disarmAttemptBudget()
+            runCatching { Mobile.stop() }
+            runCatching { sock.close() }
+            return 1
+        }
+        try {
+            onWsRelay = false
+            DiagnosticsLog.transport = "tcp$relayPort"
+            val proxied = setSystemProxy(true)
+            if (!stopping) reportUp()
+            DiagnosticsLog.log("proxy: TCP relay TRỰC TIẾP sẵn sàng (proxy hệ thống=${if (proxied) "đã đặt" else "CHƯA đặt được"})")
+            LocalProxy.ensureStarted(SOCKS_PORT)
+            Mobile.serveHTTPProxy("127.0.0.1:${LocalProxy.TUNNEL_PORT}")
+            return serveOutcome("proxy-tcp serve() returned")
+        } catch (e: Exception) {
+            DiagnosticsLog.warn("proxy: serveHTTPProxy (tcp) lỗi: ${e.message}")
+            return serveOutcome("proxy-tcp serve() threw: ${e.message}")
+        } finally {
+            runCatching { sock.close() }
+            disarmAttemptBudget()
+        }
+    }
     private fun pinExitHost() {
         val pinned = com.privatevpn.app.Config.HY_SERVER
         if (runHost == pinned) return
@@ -2191,6 +2308,7 @@ class HysteriaVpnService : VpnService() {
         if (systemProxySet) setSystemProxy(false)
         // Proxy nội bộ cũng đóng: nếu để mở mà proxy hệ thống đã gỡ thì vô hại, nhưng đóng cho sạch.
         LocalProxy.stop()
+        stopSilentAudio()
         DiagnosticsLog.log("service: onDestroy")
         networkMonitor?.stop()
         networkMonitor = null
@@ -2704,6 +2822,9 @@ class HysteriaVpnService : VpnService() {
         const val MULTI_TUNNEL_BUDGET_CAP_MS = 90_000L
         /** Cong HTTP proxy noi bo cho thiet bi KHONG co TUN (xem proxyAttempt). */
         const val SOCKS_PORT = 1081
+
+        /** Chọn transport cho chế độ proxy: rỗng = cầu WS (mặc định), "tcp" = TCP relay trực tiếp. */
+        const val KEY_PROXY_TRANSPORT = "proxy_transport"
 
         /** Ghi đè URL relay WS (vd wss://api.meetflowai.site/relay/vn2hy) — rỗng = theo nút. */
         const val KEY_RELAY_OVERRIDE = "relay_override"

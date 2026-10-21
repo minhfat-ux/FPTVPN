@@ -98,6 +98,24 @@ fun SettingsScreen(
             .edit().putInt(Config.KEY_MULTI_TUNNEL, clamped).apply()
     }
 
+    // TUYẾN RA của TV (yêu cầu chủ dự án 22/10/2026): TV không có TUN nên proxy hệ thống là "công tắc
+    // tuyến" duy nhất. auto = ưu tiên đường TV (127.0.0.1:1081), chết thì nhảy sang gateway LAN;
+    // tv = chỉ đường TV; gateway = chỉ gateway LAN (dùng máy khác trong nhà làm gateway).
+    // Áp dụng NGAY khi bấm, không đợi nhịp keepalive 60 s.
+    var proxyMode by remember {
+        mutableStateOf(
+            context.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
+                .getString(Config.KEY_PROXY_MODE, Config.PROXY_MODE_AUTO) ?: Config.PROXY_MODE_AUTO,
+        )
+    }
+
+    fun setProxyMode(next: String) {
+        proxyMode = next
+        context.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
+            .edit().putString(Config.KEY_PROXY_MODE, next).apply()
+        com.privatevpn.app.vpn.ProxyDirector.enforce(context)
+    }
+
     // Mốc phiên bản trên server — đối chiếu với bản đang cài (khác = publish chưa đúng).
     LaunchedEffect(Unit) {
         try {
@@ -203,6 +221,50 @@ fun SettingsScreen(
             }
             Text(
                 lang.t(LKey.boostHint),
+                color = VPNTheme.SecondaryLabel,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Đường ra — chọn tuyến cho proxy hệ thống (TV không có TUN nên đây là cách duy nhất).
+        SectionTitle(lang.t(LKey.proxyRoute))
+        CardContainer {
+            listOf(
+                Config.PROXY_MODE_AUTO to LKey.proxyAuto,
+                Config.PROXY_MODE_TV to LKey.proxyTvOnly,
+                Config.PROXY_MODE_GATEWAY to LKey.proxyGatewayOnly,
+            ).forEach { (value, label) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { setProxyMode(value) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(lang.t(label), color = VPNTheme.Label, fontSize = 15.sp)
+                    Spacer(Modifier.weight(1f))
+                    if (proxyMode == value) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = VPNTheme.Accent,
+                            modifier = Modifier.width(20.dp),
+                        )
+                    }
+                }
+            }
+            Text(
+                "${lang.t(LKey.proxyGatewayAddr)}: " +
+                    com.privatevpn.app.vpn.ProxyDirector.gatewayAddress(context),
+                color = VPNTheme.SecondaryLabel,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 2.dp),
+            )
+            Text(
+                lang.t(LKey.proxyHint),
                 color = VPNTheme.SecondaryLabel,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 8.dp),

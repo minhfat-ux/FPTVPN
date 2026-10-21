@@ -27,20 +27,15 @@ class VPNFlowApp : Application() {
     override fun onCreate() {
         super.onCreate()
         DiagnosticsLog.init(this)
-        // TỰ DỌN PROXY CŨ NGAY KHI MỞ APP.
+        // CHỌN TUYẾN RA NGAY KHI MỞ APP (trước đây chỉ "dọn proxy cũ").
         //
         // Trên TV không có TUN app dùng chế độ SOCKS5 và đặt proxy hệ thống về 127.0.0.1:1081.
         // Nếu tiến trình bị kill (force-stop/crash/TV thu hồi) thì proxy đó CÒN LẠI nhưng cổng đã
         // chết ⇒ MỌI app (kể cả VPNFlow) mất mạng, app còn không tải được danh sách server để bấm
-        // Connect. Dọn TRƯỚC mọi lời gọi mạng.
-        runCatching {
-            val serviceProxy = "127.0.0.1:${com.privatevpn.app.vpn.HysteriaVpnService.SOCKS_PORT}"
-            val current = android.provider.Settings.Global.getString(contentResolver, "http_proxy")
-            if (current == serviceProxy) {
-                android.provider.Settings.Global.putString(contentResolver, "http_proxy", ":0")
-                DiagnosticsLog.warn("app: đã dọn proxy cũ ($serviceProxy) còn sót từ phiên trước")
-            }
-        }
+        // Connect. [com.privatevpn.app.vpn.ProxyDirector] kiểm cổng bằng TCP thật rồi chọn theo đúng
+        // chế độ người dùng đặt trong Settings: đường TV → gateway LAN → gỡ hẳn.
+        runCatching { com.privatevpn.app.vpn.ProxyDirector.enforce(this) }
+            .onFailure { DiagnosticsLog.warn("app: không chọn được tuyến ra: ${it.message}") }
         // TỰ KẾT NỐI LẠI khi app được đánh thức (app guard / ROM mở lại sau khi bị kill):
         // người dùng đã bật VPN thì dựng lại service luôn, KHÔNG cần bấm Connect.
         runCatching {

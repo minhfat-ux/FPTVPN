@@ -250,6 +250,25 @@ object Config {
     /** Khoá SharedPreferences (bảng `vpnflow_hysteria`) — KHOÁ RIÊNG, không dùng chung với iOS. */
     const val KEY_MULTI_TUNNEL = "multi_tunnel_count"
 
+    // ───────────── tuyến ra của TV (proxy hệ thống) ─────────────
+    //
+    // TV `MiTV-AFZP0` không có TUN nên cách duy nhất ép traffic đi qua VPN là proxy hệ thống.
+    // Có HAI đường: (1) proxy nội bộ của app `127.0.0.1:1081` ("đường của TV"), (2) gateway LAN
+    // (một máy khác trong nhà chạy proxy chia tải node1/node2 — dự phòng khi đường TV chết).
+    // Chủ dự án 22/10/2026: muốn trong Settings chọn được "tự động nhảy 2 chiều" hoặc chốt 1 trong 2.
+    /** Khoá prefs: `auto` (mặc định) | `tv` | `gateway`. */
+    const val KEY_PROXY_MODE = "proxy_mode"
+    /** Khoá prefs: địa chỉ gateway LAN dạng `host:port`. */
+    const val KEY_PROXY_GATEWAY = "proxy_gateway"
+    /** Tự động: ưu tiên đường TV, 1081 chết thì nhảy sang gateway LAN, cả hai chết thì gỡ proxy. */
+    const val PROXY_MODE_AUTO = "auto"
+    /** Chỉ đường TV; 1081 chết thì gỡ proxy (không nhảy) — để lỗi lộ ra thay vì đi nhầm đường. */
+    const val PROXY_MODE_TV = "tv"
+    /** Chỉ gateway LAN; KHÔNG BAO GIỜ đặt `127.0.0.1:1081`. */
+    const val PROXY_MODE_GATEWAY = "gateway"
+    /** Gateway LAN mặc định = laptop trong nhà chạy `tools/lan-proxy` (chia tải node1+node2). */
+    const val PROXY_GATEWAY_DEFAULT = "192.168.100.11:18081"
+
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)

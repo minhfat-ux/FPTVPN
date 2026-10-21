@@ -35,9 +35,11 @@ object VpnKeepAlive {
 
     /** Bật service (kèm tự kết nối) nếu chưa chạy; an toàn khi gọi nhiều lần. */
     fun ensureRunning(context: Context) {
-        // DỌN PROXY TRƯỚC khi dựng lại: nếu lần trước service bị kill khi proxy đang trỏ 1081 thì
-        // TV đang mất mạng; service mới sẽ đặt lại proxy sau khi tunnel lên thật.
-        clearSystemProxy(context)
+        // CHỌN TUYẾN TRƯỚC khi dựng lại service: nếu lần trước service bị kill khi proxy đang trỏ
+        // 1081 thì TV đang mất mạng. [ProxyDirector] kiểm cổng bằng TCP thật rồi chọn theo chế độ
+        // trong Settings: đường TV (1081) → gateway LAN → gỡ hẳn. Nhờ vậy nhịp này không còn "chỉ
+        // xoá proxy" mà còn TỰ NHẢY sang đường dự phòng khi đường TV chết (yêu cầu chủ dự án 22/10/2026).
+        ProxyDirector.enforce(context)
         if (HysteriaVpnService.serviceRunning) {
             schedule(context)
             return
@@ -63,16 +65,9 @@ object VpnKeepAlive {
         schedule(context)
     }
 
-    /** Gỡ proxy hệ thống nếu nó còn trỏ vào proxy nội bộ của app (tránh TV mất mạng). */
-    private fun clearSystemProxy(context: Context) {
-        runCatching {
-            val resolver = context.contentResolver
-            val current = android.provider.Settings.Global.getString(resolver, "http_proxy").orEmpty()
-            if (!current.startsWith("127.0.0.1")) return
-            android.provider.Settings.Global.putString(resolver, "http_proxy", ":0")
-            DiagnosticsLog.log("keepalive: đã dọn proxy hệ thống còn sót ($current)")
-        }
-    }
+    // Ghi chú: hàm "chỉ dọn proxy 127.0.0.1" cũ đã được thay bằng [ProxyDirector.enforce] — nó vừa
+    // kiểm cổng vừa chọn tuyến theo chế độ (auto/tv/gateway), nên không còn cảnh "xoá proxy rồi để
+    // TV đi thẳng" khi vẫn còn gateway dự phòng sống.
 
     /** Hẹn chuông tự kiểm kế tiếp (ghi đè chuông cũ). */
     fun schedule(context: Context) {
