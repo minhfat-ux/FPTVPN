@@ -1,0 +1,219 @@
+# HANDOFF — Xiaomi TV (MiTV-AFZP0): FPT Play chạy được, dọn RAM, watchdog app, gateway fallback
+
+- **Ngày:** 22/10/2026 · **Người đo:** harness macOS (`192.168.100.5`) qua ADB Wi-Fi
+- **TV:** MiTV-AFZP0 (`moderntimes`), Android 14 / SDK 34, **armeabi-v7a (32-bit)**,
+  Amlogic `txhd2`, **1 GB RAM**, **`CONFIG_TUN is not set`**, không root, **không GMS/Play Store**
+- **Liên quan:** `HANDOFF_WINDOWS_FPT_PLAY_TV_PROXY_2026-10-22.md` (cơ chế proxy mode)
+
+> Mục đích: harness Windows nắm toàn bộ trạng thái + lệnh đã dùng trên TV này, để
+> không phải dò lại và để giữ cho đường gateway `192.168.100.11:18081` tương thích.
+
+---
+
+## 1. Kết quả chính
+
+| Hạng mục | Trạng thái |
+|---|---|
+| FPT Play trên TV | **Phát được** (720p ổn định, có lúc 1080p), qua proxy nội bộ TV |
+| Vì sao trước đó không chạy | IP ra China Mobile AS9808 → FPT chặn vùng |
+| Gateway laptop Windows | **Chạy được cho FPT khi dùng Flow1/Flow2** (Flow3 bị chặn) |
+| App VPNFlow trên TV | Bị Xiaomi TV Manager disable liên tục → đã disable TV Manager |
+| Proxy bị xoá định kỳ | Keepalive VPNFlow xoá `127.0.0.1:1081` vài phút/lần → watchdog app giữ lại |
+| RAM | Đã tắt app rác + gỡ Netflix; ~440 MB available (tổng 1 GB) |
+| Netflix | Research xong; đang thử hướng Kodi + addon (Widevine **L1** có sẵn) |
+
+## 2. FPT Play — cơ chế đang dùng
+
+```
+FPT Play → system proxy 127.0.0.1:1081 (HTTP CONNECT trong app VPNFlow trên TV)
+        → hysteria2/wsrelay → Flow1 Hà Nội 103.173.155.50 → FPT CDN
+```
+
+- App: `com.privatevpn.app.tv.dev` bản `1.4.5-tv-dev` (transport `http1081`, không cần TUN).
+- Bằng chứng logcat: `VPNFLOW_DIAG: tunnel: UP (http1081)` /
+  `proxy: HTTP proxy (CONNECT) sẵn sàng 127.0.0.1:1081 (proxy hệ thống=đã đặt)`.
+- FPT Play `net.fptplay.ottbox` (media3 1.10.1) **tôn trọng system proxy** cho cả API và
+  DRM license; sai proxy → `Firestore ... ECONNREFUSED`, đúng proxy → catalog + video.
+
+### Số đo (22/10/2026)
+
+| Đường | Băng thông | Ghi chú |
+|---|---|---|
+| TV local proxy (VPNFlow) | ~1.0–1.8 Mbps | đủ 720p, thỉnh thoảng 1080p |
+| Mac relay `/relay/vn1hy` (Flow1) | **7.1 Mbps** | CPU khoẻ |
+| Mac relay `/relay/vn2hy` (Flow2) | 3.7 Mbps | |
+| Windows gateway (Flow3) | 0.6–1.5 Mbps + **FPT chặn** | không dùng cho FPT |
+| Windows gateway (Flow2, sau khi đổi) | ~1.6 Mbps | FPT Play load content OK |
+
+Độ phân giải quan sát qua ExoPlayer `videoSize`: 640×360 → 1280×720 → (có lúc) 1920×1080.
+
+## 3. Vấn đề TV & cách xử lý (QUAN TRỌNG)
+
+### 3.1 Xiaomi TV Manager tự disable app
+
+- Triệu chứng: `dumpsys package com.privatevpn.app.tv.dev` → `enabled=3` (disabled-user),
+  app biến mất khỏi launcher; log `ActivityManager: Force stopping ... from pid <khác>`.
+- Xử lý: `adb shell pm disable-user --user 0 com.xiaomi.mitv.tvmanager`
+- Bật lại khi cần cài APK qua USB: `adb shell pm enable com.xiaomi.mitv.tvmanager`
+- Đã disable sẵn từ trước: `com.xiaomi.mi_connect_service`, `com.xiaomi.hyper_connect.tv`
+
+### 3.2 VPNFlow keepalive xoá system proxy
+
+- Log: `VPNFLOW_DIAG: keepalive: đã dọn proxy hệ thống còn sót (127.0.0.1:1081)`
+  (quan sát các mốc 01:52:50, 01:56:21, 01:58:44 — vài phút/lần).
+- Hệ quả: FPT Play báo `RD_002` / `RD_003` "Đã xảy ra sự cố khi kết nối FPT Play".
+- Xử lý: **app watchdog riêng** (mục 4).
+
+### 3.3 Dọn RAM (TV 1 GB)
+
+Đã tắt (`pm disable-user`):
+
+```
+com.cibn.tv                              # CIBN酷喵
+com.ktcp.video                           # 云视听极光
+com.mitv.shoplugin
+com.xiaomi.gamecenter.sdk.service.mibox
+com.xiaomi.mitv.debug
+com.xiaomi.mitv.tvmanager
+```
+
+Đã gỡ cho user 0 (`pm uninstall -k --user 0`, cài lại bằng `pm install-existing`):
+
+```
+com.netflix.ninja
+com.netflix.partner.activation
+```
+
+RAM sau dọn: `MemAvailable ≈ 440 MB` (trước ~450 MB nhưng ít app nền/đánh thức hơn).
+Lưu ý: LMK vẫn có thể dọn process khi TV căng RAM — đó là lý do watchdog cần alarm.
+
+## 4. Watchdog app (`com.tvflow.watchdog`)
+
+APK: `TVFlowWatchdog-1.0.apk` (16 KB) — tách khỏi launcher.
+
+### Logic
+
+1. Health check **HTTP thật** qua proxy (CONNECT `connectivitycheck.gstatic.com:443`
+   → chờ `200`), không chỉ kiểm tra cổng mở.
+2. Thứ tự upstream: `127.0.0.1:1081` (TV) → `192.168.100.11:18081` (Windows) →
+   `192.168.100.5:18081` (Mac).
+3. Không upstream nào sống → fail-open `:0` (giữ Internet trực tiếp).
+4. Chu kỳ 5s; TV proxy hỏng 2 lần liên tiếp mới coi là chết (tránh flap).
+5. Exact alarm **30s** + `BOOT_COMPLETED` để tự bật lại nếu bị hệ thống dọn.
+
+### Cài đặt (cần ADB, 1 lần)
+
+```bash
+adb install -r TVFlowWatchdog-1.0.apk
+adb shell pm grant com.tvflow.watchdog android.permission.WRITE_SECURE_SETTINGS
+adb shell appops set com.tvflow.watchdog SCHEDULE_EXACT_ALARM allow
+adb shell cmd deviceidle whitelist +com.tvflow.watchdog
+adb shell am set-standby-bucket com.tvflow.watchdog 10
+adb shell am set-inactive com.tvflow.watchdog false
+adb shell am start -n com.tvflow.watchdog/.MainActivity
+```
+
+Quyền `WRITE_SECURE_SETTINGS` **chỉ cấp được qua ADB** (không qua UI).
+
+### Đã kiểm chứng
+
+| Test | Kết quả |
+|---|---|
+| Tắt VPNFlow (TV proxy chết) | proxy → `192.168.100.11:18081` trong ~3s |
+| Bật lại VPNFlow | proxy → `127.0.0.1:1081` trong ~5s |
+| `am kill com.tvflow.watchdog` | exact alarm bật lại sau ~50s (`alarm -> restart service`) |
+| Không upstream nào sống | clear proxy sau 4 lần lỗi liên tiếp (~20s) |
+
+## 5. Gateway laptop Windows — yêu cầu tương thích
+
+- Phải bind `0.0.0.0:18081` (không chỉ 127.0.0.1) và firewall cho phép LAN.
+- Phải hỗ trợ **CONNECT** (watchdog health check + FPT HTTPS).
+- Node phải là **Flow1 hoặc Flow2**; **Flow3 `103.6.235.39` (AS152992) bị FPT Play chặn**:
+  - Flow1: `103.173.155.50:8443` + `wss://api.meetflowai.site/relay/vn1hy`
+  - Flow2: `165.101.114.162:8443` + `wss://api.meetflowai.site/relay/vn2hy`
+- Tool cầu nối: `tools/http-socks-bridge` (đã fix bug đọc header SOCKS5 reply
+  `VER REP RSV ATYP` — bản cũ đọc lệch byte nên CONNECT luôn fail).
+- Đo thực tế gateway Windows (Flow2) từ TV: ~1.6 Mbps → đủ 720p.
+
+## 6. Netflix — research & hướng đang thử
+
+### Đo trên TV (APK `DrmProbe`)
+
+```
+widevine_supported=true
+securityLevel=L1        ← đủ khả năng HD (thậm chí 4K)
+vendor=Google
+version=18.0.0
+deviceUniqueId=f04d8217c140572737fb49eb1a8a52b80cc1e8bf5bf85e1a5b2de94f91b704ab
+```
+
+### Vì sao app Netflix fail
+
+- Netflix yêu cầu **chứng nhận thiết bị (ESN)**; Xiaomi TV bản nội địa không có
+  (không bán Netflix tại TQ) → app cài được nhưng báo "thiết bị không tương thích".
+- Không có GMS/Play Store (một số bản Netflix còn đòi Play Services).
+
+### Hướng khả thi
+
+| Hướng | Khả năng | Chất lượng | Ghi chú |
+|---|---|---|---|
+| **Kodi + `plugin.video.netflix`** | đang thử | 1080p (addon cap) | Kodi 21.3 `armeabi-v7a` có sẵn; addon v1.23.5 |
+| Netflix mobile APK | thấp | 480p | UI cảm ứng, thường đòi GMS |
+| Box chứng nhận | chắc chắn | 4K/HDR | Fire TV / Mi Box quốc tế / Apple TV |
+| Laptop → HDMI | chắc chắn | theo laptop | dự phòng |
+
+### Trạng thái Kodi (đang làm)
+
+- Đã cài `kodi-21.3-Omega-armeabi-v7a.apk` (65 MB) lên TV.
+- Kodi chặn ở dialog xin quyền file ("Kodi requires access to your device media…").
+- Đã cấp: `READ/WRITE_EXTERNAL_STORAGE`, `READ_MEDIA_*`,
+  `appops MANAGE_EXTERNAL_STORAGE allow`, `READ_EXTERNAL_STORAGE allow` — **vẫn còn dialog**,
+  cần bấm "continue" đúng toạ độ hoặc cấp qua UI.
+- Addon `plugin.video.netflix-1.23.5+matrix.1.zip` (1.4 MB) đã tải; phụ thuộc:
+  `script.module.addon.signals`, `script.module.inputstreamhelper`,
+  `script.module.pycryptodome`, `script.module.requests`, `script.module.myconnpy`,
+  `xbmc.python 3.0.0` (Kodi 21 có sẵn inputstream.adaptive).
+- Cấu hình proxy cho Kodi: `advancedsettings.xml` → `network.usehttpproxy=true`,
+  `httpproxytype=0` (HTTP), `httpproxyserver=192.168.100.11`, `httpproxyport=18081`.
+- Dữ liệu Kodi: `/sdcard/Android/data/org.xbmc.kodi/files/.kodi/` (userdata/advancedsettings.xml,
+  addons/).
+
+## 7. Bộ cài & artifact
+
+`/Volumes/BIWIN/XiaoMiLauncher/`
+
+| File | Nội dung |
+|---|---|
+| `TVFlowHome-1.2.apk` | Launcher (sắp xếp app A→Z/Z→A/Tự chọn; đã tách watchdog) |
+| `TVFlowWatchdog-1.0.apk` | Watchdog app (mục 4) |
+| `WATCHDOG-README.txt` | Lệnh cấp quyền ADB |
+| `TVFlowHome-XiaomiTV-v1.2-USB.zip` | Gói USB: 2 APK + hướng dẫn + SHA-256 |
+| `USB-Cai-Dat/` | Bản lẻ để chép USB |
+
+Artifact khác (workspace): `bin/flowvpnrelay-darwin-arm64`, `bin/http-socks-bridge`,
+`drmprobe/DrmProbe.apk`, `netflix/kodi-21.3-armeabi-v7a.apk`,
+`netflix/plugin.video.netflix-1.23.5.zip`.
+
+## 8. Checklist tái lập nhanh
+
+```bash
+adb connect <TV>:5555
+# 1) chặn TV Manager disable app
+adb shell pm disable-user --user 0 com.xiaomi.mitv.tvmanager
+# 2) dọn app rác
+for p in com.cibn.tv com.ktcp.video com.mitv.shoplugin \
+         com.xiaomi.gamecenter.sdk.service.mibox com.xiaomi.mitv.debug; do
+  adb shell pm disable-user --user 0 $p
+done
+# 3) cài watchdog + quyền
+adb install -r TVFlowWatchdog-1.0.apk
+adb shell pm grant com.tvflow.watchdog android.permission.WRITE_SECURE_SETTINGS
+adb shell appops set com.tvflow.watchdog SCHEDULE_EXACT_ALARM allow
+adb shell cmd deviceidle whitelist +com.tvflow.watchdog
+adb shell am set-standby-bucket com.tvflow.watchdog 10
+adb shell am start -n com.tvflow.watchdog/.MainActivity
+# 4) kiểm tra
+adb shell settings get global http_proxy        # -> 127.0.0.1:1081
+adb shell dumpsys media_session | grep PlaybackState
+adb logcat -s TVFlowWatchdog VPNFLOW_DIAG
+```
