@@ -162,21 +162,66 @@ deviceUniqueId=f04d8217c140572737fb49eb1a8a52b80cc1e8bf5bf85e1a5b2de94f91b704ab
 | Box chứng nhận | chắc chắn | 4K/HDR | Fire TV / Mi Box quốc tế / Apple TV |
 | Laptop → HDMI | chắc chắn | theo laptop | dự phòng |
 
-### Trạng thái Kodi (đang làm)
+### Trạng thái Kodi (đã cài xong, đang ở bước đăng nhập)
 
-- Đã cài `kodi-21.3-Omega-armeabi-v7a.apk` (65 MB) lên TV.
-- Kodi chặn ở dialog xin quyền file ("Kodi requires access to your device media…").
-- Đã cấp: `READ/WRITE_EXTERNAL_STORAGE`, `READ_MEDIA_*`,
-  `appops MANAGE_EXTERNAL_STORAGE allow`, `READ_EXTERNAL_STORAGE allow` — **vẫn còn dialog**,
-  cần bấm "continue" đúng toạ độ hoặc cấp qua UI.
-- Addon `plugin.video.netflix-1.23.5+matrix.1.zip` (1.4 MB) đã tải; phụ thuộc:
-  `script.module.addon.signals`, `script.module.inputstreamhelper`,
-  `script.module.pycryptodome`, `script.module.requests`, `script.module.myconnpy`,
-  `xbmc.python 3.0.0` (Kodi 21 có sẵn inputstream.adaptive).
-- Cấu hình proxy cho Kodi: `advancedsettings.xml` → `network.usehttpproxy=true`,
-  `httpproxytype=0` (HTTP), `httpproxyserver=192.168.100.11`, `httpproxyport=18081`.
-- Dữ liệu Kodi: `/sdcard/Android/data/org.xbmc.kodi/files/.kodi/` (userdata/advancedsettings.xml,
-  addons/).
+Đã làm và kiểm chứng:
+
+1. **Trỏ data Kodi ra thư mục ghi được** (Kodi không cho adb ghi vào
+   `/sdcard/Android/data/org.xbmc.kodi/...`):
+   ```
+   echo "xbmc.data=/sdcard/kodidata" > /sdcard/xbmc_env.properties
+   ```
+   Kodi log xác nhận: `special://home/ is mapped to: /sdcard/kodidata/.kodi`.
+2. **Proxy cho Kodi** (Kodi không dùng system proxy của Android): đặt
+   `/sdcard/kodidata/.kodi/userdata/advancedsettings.xml`:
+   ```xml
+   <advancedsettings>
+     <network>
+       <usehttpproxy>true</usehttpproxy>
+       <httpproxytype>0</httpproxytype>
+       <httpproxyserver>192.168.100.11</httpproxyserver>
+       <httpproxyport>18081</httpproxyport>
+     </network>
+   </advancedsettings>
+   ```
+   Log xác nhận `Loaded settings file from special://profile/advancedsettings.xml`
+   và in ra đúng proxy.
+3. **Cài addon offline** (Kodi UI không cần dùng): tải zip từ Kodi mirror rồi giải nén
+   vào `/sdcard/kodidata/.kodi/addons/`:
+   - `plugin.video.netflix-1.23.5+matrix.1.zip`
+   - `inputstream.adaptive` bản `android-armv7` (`kodi.binary.instance.inputstream 3.3.0`
+     đã có sẵn trong Kodi)
+   - `script.module.inputstreamhelper 0.8.6`, `script.module.requests 2.31.0`,
+     `script.module.addon.signals 0.0.6+matrix.1`, `script.module.idna 3.10.0`,
+     `script.module.urllib3 2.2.3`, `script.module.certifi 2023.5.7`,
+     `script.module.chardet 5.1.0`, `script.module.myconnpy 8.0.33`
+     (myconnpy lấy từ repo `matrix`, không có trong `omega`)
+   - `script.module.pycryptodome` đã có sẵn trong Kodi 21
+   - requests 2.31 cần `charset_normalizer` (không có addon Kodi) → chép package
+     PyPI `charset_normalizer` vào `script.module.requests/lib/`
+4. **Bật webserver + JSON-RPC** (để điều khiển từ xa, không cần remote):
+   sửa `/sdcard/kodidata/.kodi/userdata/guisettings.xml`:
+   `services.webserver=true`, `services.webserverport=8080`,
+   `services.webserverusername=kodi`, `services.webserverpassword=kodi`.
+   Kiểm chứng: `curl -u kodi:kodi -X POST http://<TV>:8080/jsonrpc ...` trả OK.
+   Dùng được: `Addons.SetAddonEnabled`, `Addons.ExecuteAddon`, `Input.Select`,
+   `Input.SendText`, `XBMC.GetInfoLabels`.
+5. **Kết quả**: addon load OK (`plugin.video.netflix v1.23.5+matrix.1 installed`),
+   khi chạy đã tới `MediaDrm: starting provisioning` (Widevine L1 được dùng),
+   và mở được dialog đăng nhập (`System.CurrentWindow = Yes / No dialog`,
+   `Container.FolderPath = plugin://plugin.video.netflix/`).
+
+### Vấn đề còn lại (cần quyết định)
+
+- Addon log `TypeError: Invalid setting type` tại
+  `settings_monitor.py: getSettingBool('enable_debug')` — có thể do bản
+  `+matrix.1` chạy trên Kodi 21.3. Hướng xử lý: hạ Kodi xuống **20.5 (Nexus)**
+  (addon matrix nhắm Kodi 19/20) hoặc thử bản Kodi 22.
+- Bước đăng nhập cần **tài khoản Netflix** (email/mật khẩu); có thể:
+  - nhập bằng remote trên TV, hoặc
+  - dùng JSON-RPC `Input.SendText` (nếu có credential), hoặc
+  - dùng luồng "login cookie".
+- Chưa test được phát video (cần đăng nhập trước). Kỳ vọng 1080p trên L1.
 
 ## 7. Bộ cài & artifact
 
