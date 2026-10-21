@@ -233,6 +233,14 @@ Kiểm chứng thêm:
 - Nghi nguyên nhân: IP exit là **VPS/datacenter** (Flow1/Flow2/Windows gateway) → Netflix
   không cho đăng nhập/không cấp session hợp lệ, bất kể addon hay browser.
 
+### Trạng thái cuối (22/10/2026)
+
+- **Kodi đã gỡ** khỏi TV (`adb uninstall org.xbmc.kodi`) cùng dữ liệu
+  (`/sdcard/kodidata`, `/sdcard/xbmc_env.properties`) — Netflix bị chặn nên không giữ.
+  Artifact cài đặt vẫn nằm trong workspace `netflix/` nếu cần thử lại khi có IP dân cư.
+- FPT Play: main trên TV (`127.0.0.1:1081`), watchdog app đang chạy.
+- RAM khả dụng sau khi gỡ Kodi: ~445 MB.
+
 ### Khuyến nghị cho Netflix
 
 | Cách | Khả thi | Ghi chú |
