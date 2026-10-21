@@ -80,16 +80,22 @@ func (b *bridge) dialSocks5(addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	if _, err = io.ReadFull(c, buf); err != nil {
+	// Reply theo RFC 1928: VER REP RSV ATYP BND.ADDR BND.PORT
+	hdr := make([]byte, 4)
+	if _, err = io.ReadFull(c, hdr); err != nil {
 		c.Close()
 		return nil, err
 	}
-	if buf[1] != 0 {
+	if hdr[0] != 5 {
 		c.Close()
-		return nil, fmt.Errorf("socks5: connect failed code=%d", buf[1])
+		return nil, fmt.Errorf("socks5: version lạ %d", hdr[0])
+	}
+	if hdr[1] != 0 {
+		c.Close()
+		return nil, fmt.Errorf("socks5: connect failed code=%d", hdr[1])
 	}
 	var skip int
-	switch buf[0] {
+	switch hdr[3] {
 	case 1:
 		skip = 4
 	case 4:
@@ -103,7 +109,7 @@ func (b *bridge) dialSocks5(addr string) (net.Conn, error) {
 		skip = int(l[0])
 	default:
 		c.Close()
-		return nil, fmt.Errorf("socks5: atyp lạ %d", buf[0])
+		return nil, fmt.Errorf("socks5: atyp lạ %d", hdr[3])
 	}
 	if _, err = io.ReadFull(c, make([]byte, skip+2)); err != nil {
 		c.Close()
