@@ -1,18 +1,20 @@
-# setup-gateway-nat.ps1 — biến laptop thành GATEWAY thật cho TV (MiTV-AFZP0 không có TUN).
+# setup-gateway-nat.ps1 - bien laptop thanh GATEWAY that cho TV (MiTV-AFZP0 khong co TUN).
 #
-# PHẢI chạy bằng **Administrator**:
-#   chuột phải PowerShell → "Run as administrator" →
+# PHAI chay bang Administrator:
+#   chuot phai PowerShell -> "Run as administrator" ->
 #   cd C:\Users\Minhn\FPTVPN
 #   powershell -ExecutionPolicy Bypass -File tools\lan-proxy\setup-gateway-nat.ps1
 #
-# Script làm 4 việc:
+# Script lam 4 viec:
 #   1. DNS laptop = 1.1.1.1 / 1.0.0.1
-#   2. Bật IP forwarding (để chuyển gói giữa card hotspot và tun)
-#   3. Bật chia sẻ Internet (ICS hoặc NAT) từ tunnel (flowvpntun) ra card phát Wi-Fi
-#   4. In lại trạng thái để kiểm
+#   2. Bat IP forwarding (chuyen goi giua card hotspot va tun)
+#   3. Bat chia se Internet (NAT hoac ICS) tu tunnel (flowvpntun) ra card phat Wi-Fi
+#   4. In lai trang thai de kiem
 #
-# Yêu cầu trước khi chạy: gateway TUN đã chạy (flowvpnrelay -c pc-gateway-tun.json) để có
-# card "flowvpntun", và Mobile Hotspot đã bật (card "Local Area Connection* X" Up).
+# Yeu cau truoc khi chay: gateway TUN da chay (flowvpnrelay -c pc-gateway-tun.json) de co
+# card "flowvpntun", va Mobile Hotspot da bat (card "Local Area Connection* X" Up).
+#
+# File nay CO TINH viet khong dau (ASCII) de tranh loi encoding cua PowerShell 5.1.
 
 param(
     [string]$TunName = "flowvpntun",
@@ -26,7 +28,7 @@ $ErrorActionPreference = "Stop"
 function Assert-Admin {
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if (-not $isAdmin) {
-        Write-Host "PHẢI chạy bằng Administrator (chuột phải PowerShell -> Run as administrator)." -ForegroundColor Red
+        Write-Host "PHAI chay bang Administrator (chuot phai PowerShell -> Run as administrator)." -ForegroundColor Red
         exit 3
     }
 }
@@ -34,87 +36,90 @@ function Assert-Admin {
 Assert-Admin
 
 if ($Remove) {
-    Write-Host "[1/4] Gỡ NAT/ICS + trả DNS tự động ..." -ForegroundColor Cyan
+    Write-Host "[1/4] Go NAT/ICS + tra DNS tu dong ..." -ForegroundColor Cyan
     try { Get-NetNat -Name "FlowVPN" -ErrorAction Stop | Remove-NetNat -Confirm:$false } catch { }
     net stop SharedAccess 2>$null | Out-Null
     try { Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses -ErrorAction Stop } catch { }
-    Write-Host "Đã gỡ." -ForegroundColor Yellow
+    Write-Host "Da go." -ForegroundColor Yellow
     return
 }
 
-# ── 1. DNS
-Write-Host "[1/4] Đặt DNS laptop = $Dns1 , $Dns2 ..." -ForegroundColor Cyan
-Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses ($Dns1, $Dns2)
-Write-Host ("      DNS Wi-Fi hiện tại: " + ((Get-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -AddressFamily IPv4).ServerAddresses -join ", "))
+Write-Host "[1/4] Dat DNS laptop = $Dns1 , $Dns2 ..." -ForegroundColor Cyan
+Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses @($Dns1, $Dns2)
+$dnsNow = (Get-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -AddressFamily IPv4).ServerAddresses -join ", "
+Write-Host "      DNS Wi-Fi hien tai: $dnsNow"
 
-# ── 2. IP forwarding
-Write-Host "[2/4] Bật IP forwarding ..." -ForegroundColor Cyan
+Write-Host "[2/4] Bat IP forwarding ..." -ForegroundColor Cyan
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name IPEnableRouter -Value 1 -Type DWord
 netsh int ipv4 set global forwarding=enabled | Out-Null
 Write-Host "      IPEnableRouter=1, forwarding=enabled"
 
-# ── 3. Tìm card tunnel + card phát hotspot
-Write-Host "[3/4] Tìm card tunnel và card phát ..." -ForegroundColor Cyan
-$tun = Get-NetAdapter -IncludeHidden | Where-Object { $_.Name -eq $TunName -or $_.InterfaceDescription -match "Wintun" } | Select-Object -First 1
+Write-Host "[3/4] Tim card tunnel va card phat ..." -ForegroundColor Cyan
+$tun = Get-NetAdapter -IncludeHidden | Where-Object { ($_.Name -eq $TunName) -or ($_.InterfaceDescription -match "Wintun") } | Select-Object -First 1
 if (-not $tun) {
-    Write-Host "      KHÔNG thấy card '$TunName' — chạy gateway TUN trước (pc-gateway-tun.json) rồi chạy lại script này." -ForegroundColor Red
+    Write-Host "      KHONG thay card '$TunName' - chay gateway TUN truoc (pc-gateway-tun.json) roi chay lai." -ForegroundColor Red
     exit 4
 }
-$ap = Get-NetAdapter | Where-Object { $_.Name -match "Local Area Connection" -and $_.Status -eq "Up" } | Select-Object -First 1
+$ap = Get-NetAdapter | Where-Object { ($_.Name -match "Local Area Connection") -and ($_.Status -eq "Up") } | Select-Object -First 1
 if (-not $ap) {
-    Write-Host "      KHÔNG thấy card phát Wi-Fi (Mobile Hotspot) — bật Mobile Hotspot trước." -ForegroundColor Red
+    Write-Host "      KHONG thay card phat Wi-Fi (Mobile Hotspot) - bat Mobile Hotspot truoc." -ForegroundColor Red
     exit 5
 }
 Write-Host ("      tunnel = " + $tun.Name + " (" + $tun.InterfaceDescription + ")")
-Write-Host ("      phát   = " + $ap.Name + " (" + $ap.InterfaceDescription + ")")
+Write-Host ("      phat   = " + $ap.Name + " (" + $ap.InterfaceDescription + ")")
 
-# ── 4. NAT: ưu tiên New-NetNat, không có thì dùng ICS (COM)
-Write-Host "[4/4] Bật NAT/ICS ..." -ForegroundColor Cyan
+Write-Host "[4/4] Bat NAT/ICS ..." -ForegroundColor Cyan
 $natOk = $false
 try {
-    if (Get-NetNat -Name "FlowVPN" -ErrorAction SilentlyContinue) { Remove-NetNat -Name "FlowVPN" -Confirm:$false -ErrorAction SilentlyContinue }
+    if (Get-NetNat -Name "FlowVPN" -ErrorAction SilentlyContinue) {
+        Remove-NetNat -Name "FlowVPN" -Confirm:$false -ErrorAction SilentlyContinue
+    }
     $apIp = (Get-NetIPAddress -InterfaceIndex $ap.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1).IPAddress
     if ($apIp) {
         $prefix = ($apIp -replace '\.\d+$', '.0') + "/24"
         New-NetNat -Name "FlowVPN" -InternalIPInterfaceAddressPrefix $prefix -ErrorAction Stop | Out-Null
-        Write-Host ("      New-NetNat OK: " + $prefix + " -> tunnel " + $tun.Name) -ForegroundColor Green
+        Write-Host "      New-NetNat OK: $prefix -> tunnel $($tun.Name)" -ForegroundColor Green
         $natOk = $true
+    } else {
+        Write-Host "      card phat chua co IP IPv4" -ForegroundColor Yellow
     }
 } catch {
-    Write-Host ("      New-NetNat không dùng được (" + $_.Exception.Message + ") -> thử ICS") -ForegroundColor Yellow
+    Write-Host ("      New-NetNat khong dung duoc: " + $_.Exception.Message + " -> thu ICS") -ForegroundColor Yellow
 }
 
 if (-not $natOk) {
     try {
         $mgr = New-Object -ComObject HNetCfg.HNetShare
         $conns = $mgr.EnumEveryConnection
-        $pub = $null; $priv = $null
+        $pubConn = $null
+        $privConn = $null
         foreach ($c in $conns) {
             $props = $mgr.NetConnectionProps($c)
-            if ($props.Name -eq $tun.Name) { $pub = $c }
-            if ($props.Name -eq $ap.Name) { $priv = $c }
+            if ($props.Name -eq $tun.Name) { $pubConn = $c }
+            if ($props.Name -eq $ap.Name) { $privConn = $c }
         }
-        if ($pub -and $priv) {
-            $pubCfg = $mgr.INetSharingConfigurationForINetConnection($pub)
-            $privCfg = $mgr.INetSharingConfigurationForINetConnection($priv)
-            if (-not $pubCfg.SharingEnabled) { $pubCfg.EnableSharing(0) } # 0 = public
-            if (-not $privCfg.SharingEnabled) { $privCfg.EnableSharing(1) } # 1 = private
-            Write-Host "      ICS OK: chia sẻ từ tunnel ra card phát" -ForegroundColor Green
+        if ($pubConn -and $privConn) {
+            $pubCfg = $mgr.INetSharingConfigurationForINetConnection($pubConn)
+            $privCfg = $mgr.INetSharingConfigurationForINetConnection($privConn)
+            if (-not $pubCfg.SharingEnabled) { $pubCfg.EnableSharing(0) }
+            if (-not $privCfg.SharingEnabled) { $privCfg.EnableSharing(1) }
+            Write-Host "      ICS OK: chia se tu tunnel ra card phat" -ForegroundColor Green
             $natOk = $true
         } else {
-            Write-Host "      ICS: không khớp tên card (mở Network Connections để chia sẻ tay: chuột phải card tunnel → Properties → Sharing)" -ForegroundColor Red
+            Write-Host "      ICS: khong khop ten card. Mo Network Connections, chuot phai card tunnel -> Properties -> Sharing -> chon card phat." -ForegroundColor Red
         }
     } catch {
-        Write-Host ("      ICS lỗi: " + $_.Exception.Message) -ForegroundColor Red
+        Write-Host ("      ICS loi: " + $_.Exception.Message) -ForegroundColor Red
     }
 }
 
-# ── Tổng kết
 Write-Host ""
-Write-Host "=== TRẠNG THÁI ===" -ForegroundColor Cyan
+Write-Host "=== TRANG THAI ===" -ForegroundColor Cyan
 Get-NetAdapter | Select-Object Name, Status, InterfaceDescription | Format-Table -AutoSize
-Write-Host ("DNS Wi-Fi : " + ((Get-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -AddressFamily IPv4).ServerAddresses -join ", "))
-Write-Host ("IP thoát laptop: " + (& curl.exe -s --max-time 15 https://api.ipify.org))
+$dnsNow2 = (Get-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -AddressFamily IPv4).ServerAddresses -join ", "
+Write-Host "DNS Wi-Fi : $dnsNow2"
+$exitIp = & curl.exe -s --max-time 15 https://api.ipify.org
+Write-Host "IP thoat laptop: $exitIp"
 Write-Host ""
-Write-Host "Bước cuối trên TV: nối TV vào Wi-Fi do laptop phát (VPNFLOW-TV), rồi BỎ proxy để đi thẳng qua gateway:" -ForegroundColor Yellow
+Write-Host "Buoc cuoi tren TV: noi TV vao Wi-Fi do laptop phat (VPNFLOW-TV), roi BO proxy de di thang qua gateway:" -ForegroundColor Yellow
 Write-Host '  adb shell settings put global http_proxy :0'
