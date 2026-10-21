@@ -124,6 +124,44 @@ Quyền `WRITE_SECURE_SETTINGS` **chỉ cấp được qua ADB** (không qua UI)
 | `am kill com.tvflow.watchdog` | exact alarm bật lại sau ~50s (`alarm -> restart service`) |
 | Không upstream nào sống | clear proxy sau 4 lần lỗi liên tiếp (~20s) |
 
+## 4B. Chọn đường ra trong app VPNFlow (versionCode 80) — đã test
+
+App TV bản mới (`1.4.5-tv-dev`, versionCode 80) có mục **Settings → Exit path** với 3 lựa chọn,
+tự ghi `settings put global http_proxy` (ProxyDirector, kiểm cổng TCP thật 700 ms):
+
+| Chế độ | Kỳ vọng | Đo thực tế 22/10/2026 |
+|---|---|---|
+| `TV tunnel only` | luôn `127.0.0.1:1081` | ✅ `127.0.0.1:1081` |
+| `LAN gateway only` | luôn `192.168.100.11:18081` | ✅ `192.168.100.11:18081` |
+| `Automatic (TV first)` | TV sống → TV; TV chết → gateway | ✅ TV sống → `127.0.0.1:1081` |
+
+**Auto fallback đo được** (chế độ Automatic, force-stop rồi mở lại app):
+
+```
++3s   proxy = 192.168.100.11:18081   (tunnel TV chưa lên → rơi xuống gateway)
++6..18s proxy = :0                   (khoảng trống khi tunnel đang dựng)
++21s  proxy = 127.0.0.1:1081         (tunnel lên → quay về TV, giữ ổn định)
+```
+
+Log xác nhận 2 chiều:
+`tuyến: proxy hệ thống 127.0.0.1:1081 -> 192.168.100.11:18081 (chế độ auto)` và ngược lại
+`192.168.100.11:18081 -> 127.0.0.1:1081 (chế độ auto)`.
+
+FPT Play qua **LAN gateway only**: content load nhanh, chất lượng ổn (chủ dự án xác nhận).
+
+> **Quan trọng:** chỉ nên có MỘT nơi ghi `http_proxy`. App đã có ProxyDirector thì **tắt**
+> app watchdog riêng (`com.tvflow.watchdog`, đã `pm disable-user`) để tránh 2 bên giành nhau
+> (watchdog luôn ưu tiên TV sẽ phá chế độ `gateway`).
+
+## 4C. Launcher TVFlow Home v1.3 — sửa 2 lỗi
+
+- **App cài sau không hiện** (VPNFlow vừa cài không có trong hàng ỨNG DỤNG): nguyên nhân danh
+  sách chỉ dựng lúc `onCreate`. Sửa: `buildAppRow()` + `buildShortcutRow()` được gọi lại trong
+  `onResume()`.
+- **Trùng "Settings"**: hàng ỨNG DỤNG có app Settings của hệ thống, cộng thêm card shortcut
+  "Cài đặt" trùng. Sửa: bỏ shortcut Settings + dedupe theo label (`Set<String>` lowercase).
+  Kết quả: 1 Settings duy nhất, VPNFlow hiện đúng.
+
 ## 5. Gateway laptop Windows — yêu cầu tương thích
 
 - Phải bind `0.0.0.0:18081` (không chỉ 127.0.0.1) và firewall cho phép LAN.
