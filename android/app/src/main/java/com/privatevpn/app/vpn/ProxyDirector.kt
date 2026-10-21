@@ -58,32 +58,54 @@ object ProxyDirector {
     )
 
     /**
-     * Áp dụng lựa chọn hiện tại lên `Settings.Global http_proxy`. Trả về giá trị đã ghi.
+     * Áp dụng lựa chọn hiện tại lên `Settings.Global http_proxy`.
      *
-     * Chỉ ghi khi giá trị thay đổi (tránh rung: mỗi lần ghi setting là một notification cho toàn hệ thống).
+     * BẤT ĐỒNG BỘ có chủ đích: phép dò là `Socket.connect` thật, mà hàm này được gọi từ
+     * `Application.onCreate`, từ `BroadcastReceiver` và từ Compose — toàn **main thread**.
+     * Bản đầu tiên gọi connect ngay trên main thread ⇒ `NetworkOnMainThreadException` ⇒ mọi phép dò
+     * đều "chết" ⇒ app ghi `:0` (sự cố thật 22/10/2026 ngay sau khi cài bản 79: proxy hệ thống
+     * thành `:0` dù gateway LAN vẫn sống). Vì vậy: dò trên luồng riêng, chỉ một lượt chạy tại một thời điểm.
      */
-    fun enforce(context: Context): String {
+    fun enforce(context: Context) {
+        if (!pending.compareAndSet(false, true)) return
+        val app = context.applicationContext
+        runCatching {
+            WORKER.execute {
+                try {
+                    applyNow(app)
+                } finally {
+                    pending.set(false)
+                }
+            }
+        }.onFailure { pending.set(false) }
+    }
+
+    /** Phần thân thật của [enforce] — luôn chạy trên [WORKER] (được phép connect). */
+    private fun applyNow(context: Context) {
         val chosen = decide(context)
         val current = runCatching {
             android.provider.Settings.Global.getString(context.contentResolver, "http_proxy")
         }.getOrNull().orEmpty()
-        if (chosen != current) {
-            val ok = runCatching {
-                android.provider.Settings.Global.putString(context.contentResolver, "http_proxy", chosen)
-                true
-            }.getOrElse {
-                DiagnosticsLog.warn(
-                    "tuyến: KHÔNG ghi được proxy hệ thống (${it.javaClass.simpleName}: ${it.message}) " +
-                        "— cần 'pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS'",
-                )
-                false
-            }
-            if (ok) DiagnosticsLog.log("tuyến: proxy hệ thống $current -> $chosen (chế độ ${mode(context)})")
+        if (chosen == current) return
+        val ok = runCatching {
+            android.provider.Settings.Global.putString(context.contentResolver, "http_proxy", chosen)
+            true
+        }.getOrElse {
+            DiagnosticsLog.warn(
+                "tuyến: KHÔNG ghi được proxy hệ thống (${it.javaClass.simpleName}: ${it.message}) " +
+                    "— cần 'pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS'",
+            )
+            false
         }
-        return chosen
+        if (ok) DiagnosticsLog.log("tuyến: proxy hệ thống $current -> $chosen (chế độ ${mode(context)})")
     }
 
-    /** Giá trị proxy nên dùng ngay lúc này (`:0` = gỡ). */
+    private val WORKER = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "proxy-director").apply { isDaemon = true }
+    }
+    private val pending = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Giá trị proxy nên dùng ngay lúc này (`:0` = gỡ). Chỉ gọi từ luồng nền (có connect). */
     fun decide(context: Context): String {
         val tv = tvProxy()
         val gateway = gatewayAddress(context)
