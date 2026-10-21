@@ -211,17 +211,46 @@ deviceUniqueId=f04d8217c140572737fb49eb1a8a52b80cc1e8bf5bf85e1a5b2de94f91b704ab
    và mở được dialog đăng nhập (`System.CurrentWindow = Yes / No dialog`,
    `Container.FolderPath = plugin://plugin.video.netflix/`).
 
-### Vấn đề còn lại (cần quyết định)
+### Kết quả thử đăng nhập Netflix (22/10/2026) — BỊ CHẶN
 
-- Addon log `TypeError: Invalid setting type` tại
-  `settings_monitor.py: getSettingBool('enable_debug')` — có thể do bản
-  `+matrix.1` chạy trên Kodi 21.3. Hướng xử lý: hạ Kodi xuống **20.5 (Nexus)**
-  (addon matrix nhắm Kodi 19/20) hoặc thử bản Kodi 22.
-- Bước đăng nhập cần **tài khoản Netflix** (email/mật khẩu); có thể:
-  - nhập bằng remote trên TV, hoặc
-  - dùng JSON-RPC `Input.SendText` (nếu có credential), hoặc
-  - dùng luồng "login cookie".
-- Chưa test được phát video (cần đăng nhập trước). Kỳ vọng 1080p trên L1.
+Đã làm đủ các bước:
+
+1. Patch addon để Python `requests` dùng proxy LAN (addon không đọc proxy của Kodi):
+   `resources/lib/services/nfsession/session/base.py` → `self.session.proxies.update({...192.168.100.11:18081})`.
+2. Lấy cookie Netflix bằng Chrome trên Mac (profile `/tmp/nfchrome`, proxy VN) qua CDP.
+3. Sinh `NFAuthentication.Key` + PIN (AES-CBC, PIN lặp 4 lần — đúng thuật toán của
+   `NFAuthenticationKey.py`), đẩy lên `/sdcard/Download/`.
+4. Login addon tự động qua Kodi JSON-RPC: Yes/No → file browser → chọn key → PIN → password.
+
+**Kết quả: thất bại ở bước xác thực mật khẩu**
+`POST https://www.netflix.com/api/shakti/mre/profilehub` → **404 BLOCKED**.
+
+Kiểm chứng thêm:
+- Gọi cùng endpoint từ **chính Chrome đã đăng nhập** (qua CDP `fetch`) → cũng `404 BLOCKED`.
+- Chrome bị Netflix đẩy sang `/vn/LoginHelp` kèm **reCAPTCHA enterprise** ⇒ phiên đăng nhập
+  thực tế **không thành công** (cookie chỉ là phiên ẩn danh; `/browse` trả 200 nhưng là trang
+  login-help).
+- Nghi nguyên nhân: IP exit là **VPS/datacenter** (Flow1/Flow2/Windows gateway) → Netflix
+  không cho đăng nhập/không cấp session hợp lệ, bất kể addon hay browser.
+
+### Khuyến nghị cho Netflix
+
+| Cách | Khả thi | Ghi chú |
+|---|---|---|
+| **Box chứng nhận** (Fire TV Stick 4K / Mi Box S quốc tế / Google TV / Apple TV) | ✅ chắc chắn | Cách chuẩn, 4K/HDR |
+| **Laptop → HDMI** | ✅ ngay | Không cần thiết bị mới |
+| Kodi + addon Netflix | ❌ với IP datacenter | Cần **IP dân cư Việt Nam** để qua reCAPTCHA/login; sau đó mới tạo được AuthKey |
+| App Netflix trên TV | ❌ | Xiaomi TV nội địa không có chứng nhận ESN |
+
+Nếu sau này có line dân cư VN (không phải VPS): đăng nhập netflix.com trong Chrome →
+chạy `/Volumes/BIWIN/IoSApps/FacebookLack/netflix/nf_grab.py` (sinh key + PIN) → login addon
+bằng JSON-RPC (script `/tmp/kodi_login.py`).
+
+### Dọn dẹp bảo mật
+
+- Xoá `NFAuthentication.Key` khỏi TV (`/sdcard/Download/`, `/sdcard/kodidata/.kodi/`) sau khi test.
+- Key chứa cookie phiên Netflix; không commit/lưu lâu.
+- Chrome profile `/tmp/nfchrome` chứa cookie — xoá khi không cần.
 
 ## 7. Bộ cài & artifact
 
