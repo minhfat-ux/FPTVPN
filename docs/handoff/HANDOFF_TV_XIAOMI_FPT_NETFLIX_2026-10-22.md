@@ -162,6 +162,40 @@ FPT Play qua **LAN gateway only**: content load nhanh, chất lượng ổn (ch�
   "Cài đặt" trùng. Sửa: bỏ shortcut Settings + dedupe theo label (`Set<String>` lowercase).
   Kết quả: 1 Settings duy nhất, VPNFlow hiện đúng.
 
+## 4D. Sự cố 23/10: "LAN only" + Windows tắt = TV mất mạng + giới hạn launcher
+
+### Nguyên nhân mất mạng
+
+Hôm trước chọn **Exit path = LAN gateway only**; hôm sau laptop Windows tắt → proxy hệ thống vẫn
+trỏ `192.168.100.11:18081` (chết) ⇒ mọi app mất mạng, không chỉ FPT Play.
+
+**Đã sửa**: đặt lại **Automatic**, tunnel TV lên, proxy về `127.0.0.1:1081`.
+Khuyến nghị: giữ **Automatic**; chỉ dùng "LAN gateway only" khi chắc laptop bật.
+
+### Cầu dao chống kẹt proxy chết (app `com.tvflow.watchdog` viết lại)
+
+Không còn tự chọn đường (để app VPNFlow lo). Chỉ làm một việc: nếu `http_proxy` đang trỏ vào
+địa chỉ **không kết nối được** 3 lần liên tiếp (5 s/lần) thì xoá về `:0` (fail-open).
+
+- Test: đặt proxy chết `192.168.100.99:18081` → sau ~27 s tự xoá về `:0` (log
+  `da xoa proxy chet ... -> :0 (fail-open)`).
+- Sau đó ProxyDirector của app tự đặt lại `127.0.0.1:1081` khi tunnel sống.
+- Cần `WRITE_SECURE_SETTINGS` (đã cấp) + whitelist Doze; exact alarm 30 s restart nếu bị LMK dọn.
+
+### Launcher: KHÔNG thể làm home mặc định (đã thử hết)
+
+| Cách thử | Kết quả |
+|---|---|
+| `cmd package set-home-activity com.tvflow.launcher/.MainActivity` | trả `Success` nhưng **bị Xiaomi bỏ qua** |
+| `pm disable-user com.mitv.tvhome` | HOME rơi vào `com.xiaomi.mitv.settings/.entry.FallbackHome` (priority -1000, isDefault) → **màn hình trống**, không dùng được |
+| `pm disable ... FallbackHome` | `SecurityException` — shell không được đổi component hệ thống |
+
+⇒ Xiaomi hardcode home trong framework; **muốn launcher mình làm mặc định phải root / sửa ROM**.
+Đã khôi phục `pm enable com.mitv.tvhome` (home hiện tại = launcher Xiaomi).
+
+Đã thêm `AutoStartReceiver` (BOOT_COMPLETED → mở TVFlow Home) vào launcher v1.4, kèm appop
+`SYSTEM_ALERT_WINDOW`; **cần test sau reboot** (Xiaomi tắt ADB sau reboot nên chưa test).
+
 ## 5. Gateway laptop Windows — yêu cầu tương thích
 
 - Phải bind `0.0.0.0:18081` (không chỉ 127.0.0.1) và firewall cho phép LAN.
