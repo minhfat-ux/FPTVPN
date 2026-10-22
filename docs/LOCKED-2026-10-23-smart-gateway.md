@@ -21,6 +21,17 @@ Thư mục: `~/Library/Application Support/flowvpn/`
 | `flowvpnrelay` (hysteria relay) | `9f9c8e323ed01ef1287c26b419d653a1b6dce293e087de380a6898afb444acd0` |
 | `http-socks-bridge` | `1a7e086e468c51aa63faa3b6927f8d49278484b5f9d21a452f5467a581a91b31` |
 
+```json
+// config.json — Flow2, mặc định cho FPT + mọi traffic khác
+{"server":"165.101.114.162:8443","socks5":{"listen":"127.0.0.1:1081"},
+ "transport":{"type":"wsrelay","url":"wss://api.meetflowai.site/relay/vn2hy"}}
+
+// config-flow3.json — Flow3, chỉ cho TV360
+{"server":"103.6.235.39:8443","socks5":{"listen":"127.0.0.1:1083"},
+ "transport":{"type":"wsrelay","url":"wss://api.meetflowai.site/relay/vn3hy"}}
+```
+
+
 
 
 LaunchAgent:
