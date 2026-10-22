@@ -1693,6 +1693,17 @@ class HysteriaVpnService : VpnService() {
         val staticDown = if (metered) MOBILE_DOWN_KBPS else HY_DOWN_KBPS
         val memory = bandwidth ?: BandwidthMemory(this).also { bandwidth = it }
         val profile = memory.profileOf(net, label)
+        // Nút Refresh trên UI: xoá mốc đã nhớ của MẠNG NÀY rồi phiên này đo lại + khai báo lại từ đầu
+        // (yêu cầu chủ dự án 22/10/2026). Cờ do VPNManager.restartForRemeasure() cắm vào trước khi
+        // dựng lại tunnel; chỉ nơi đây biết khoá mạng thật nên phải xoá ở đây, không phải ở UI.
+        runCatching {
+            val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+            if (prefs.getBoolean(Config.KEY_REMEASURE_ON_START, false)) {
+                memory.forgetMeasured(profile.key)
+                prefs.edit().remove(Config.KEY_REMEASURE_ON_START).apply()
+                DiagnosticsLog.log("bw: Refresh -> xoá số đo đã nhớ của ${profile.key}, đo lại từ đầu")
+            }
+        }
         // Đổi mạng: số ramp của mạng CŨ không còn nghĩa gì (mỗi mạng có đỉnh riêng).
         val keyChanged = profile.key != bwKey
         if (keyChanged) {

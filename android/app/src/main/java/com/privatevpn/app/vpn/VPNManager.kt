@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.VpnService
 import android.util.Log
 import com.privatevpn.app.Config
+import com.privatevpn.app.diag.DiagnosticsLog
 import com.privatevpn.app.api.ControlAPIClient
 import com.privatevpn.app.api.CoordinatorDevice
 import com.privatevpn.app.api.ExitNode
@@ -18,6 +19,7 @@ import com.wireguard.config.Config as WgConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -136,6 +138,35 @@ class VPNManager(
             if (_selectedNodeID.value == null && nodes.isNotEmpty()) {
                 selectNode(nodes.first().id)
             }
+        }
+    }
+
+    /**
+     * Nút Refresh trên UI: **khởi động lại tunnel để ĐO LẠI + KHAI BÁO LẠI** băng thông.
+     *
+     * Vì sao phải mở phiên mới: số khai được nhớ theo từng mạng (BandwidthMemory) và vòng ramp chỉ
+     * chạy trong một phiên — đang chạy mà "refresh" thì không có phép đo mới nào cả.
+     *
+     * Cắm cờ [Config.KEY_REMEASURE_ON_START] để service xoá mốc đã nhớ ngay khi dựng phiên: chỉ
+     * service mới biết khoá mạng thật (`wifi:<gw>-<dns>` / `cell:...`), VPNManager không giữ khoá đó.
+     */
+    fun restartForRemeasure() {
+        runCatching {
+            app.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
+                .edit().putBoolean(Config.KEY_REMEASURE_ON_START, true).apply()
+        }
+        val active = Config.HYSTERIA_MODE &&
+            (_state.value == VPNState.CONNECTED || _state.value == VPNState.CONNECTING)
+        if (!active) {
+            // Chưa kết nối: cờ đã cắm, lần Connect tới sẽ đo lại từ đầu.
+            DiagnosticsLog.log("refresh: đã đặt đo lại băng thông cho lần kết nối tới")
+            return
+        }
+        scope.launch {
+            DiagnosticsLog.log("refresh: khởi động lại tunnel để đo lại + khai báo lại băng thông")
+            runCatching { HysteriaVpnService.requestStop(app) }
+            delay(1500)
+            runCatching { startHysteriaService() }
         }
     }
 

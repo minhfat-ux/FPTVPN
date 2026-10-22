@@ -215,6 +215,23 @@ class BandwidthMemory(context: Context) {
     }.getOrDefault(Long.MAX_VALUE)
 
     /**
+     * Xoá mốc đã nhớ của MỘT mạng để phiên sau **đo lại từ đầu** thay vì tin số cũ.
+     *
+     * Dùng cho nút Refresh trên UI (yêu cầu chủ dự án 22/10/2026: "bấm refresh thì khởi động lại
+     * tunnel để đo lại và khai báo lại"). Chỉ xoá đúng mạng hiện tại — mạng khác vẫn giữ số đã học.
+     */
+    fun forgetMeasured(key: String) {
+        runCatching {
+            prefs().edit()
+                .remove(kMeasured(key))
+                .remove(kPrevious(key))
+                .remove(kDeclared(key))
+                .remove(kAt(key))
+                .apply()
+        }
+    }
+
+    /**
      * Ghi nhớ số đo mới nhất cho mạng này (`lastGoodKbps`), kèm số khai của CHÍNH lượt đo.
      *
      * Cặp (đo được, số khai) là dữ liệu để lần kết nối sau biết "số khai cũ có phải nút cổ

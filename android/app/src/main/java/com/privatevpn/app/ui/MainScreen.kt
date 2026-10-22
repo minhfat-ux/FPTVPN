@@ -132,7 +132,13 @@ fun MainScreen(
             usingFallback = usingFallback,
             busy = state.isTransitioning,
             onSelect = { vpn.selectNode(it) },
-            onRefresh = { vpn.fetchNodes() },
+            // Refresh = tải lại danh sách node + KHỞI ĐỘNG LẠI TUNNEL để đo lại và khai báo lại
+            // băng thông (yêu cầu chủ dự án 22/10/2026). Đang không kết nối thì chỉ cắm cờ, lần
+            // Connect tới sẽ đo lại từ đầu.
+            onRefresh = {
+                vpn.restartForRemeasure()
+                vpn.fetchNodes()
+            },
         )
 
         Spacer(Modifier.height(16.dp))

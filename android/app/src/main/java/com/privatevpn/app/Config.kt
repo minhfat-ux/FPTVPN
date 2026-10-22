@@ -269,6 +269,12 @@ object Config {
     /** Gateway LAN mặc định = laptop trong nhà chạy `tools/lan-proxy` (chia tải node1+node2). */
     const val PROXY_GATEWAY_DEFAULT = "192.168.100.11:18081"
 
+    /**
+     * Cờ "đo lại băng thông ở phiên kế tiếp" — nút Refresh trên UI cắm cờ này rồi khởi động lại
+     * tunnel (yêu cầu chủ dự án 22/10/2026). Service xoá mốc đã nhớ của mạng hiện tại khi dựng phiên.
+     */
+    const val KEY_REMEASURE_ON_START = "remeasure_on_next_start"
+
     // SECURITY NOTE: hysteria auth/obfs values below ship inside the APK/AAB, so
     // they are effectively public. Treat them as non-secret identifiers; if real
     // secrecy is needed, switch the server to per-user auth (hysteria `userpass`)
