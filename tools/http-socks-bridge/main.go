@@ -18,17 +18,62 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type bridge struct {
 	socks  string
 	dialTO time.Duration
+	routes routeFlag
+}
+
+// routeFlag là danh sách "suffix=socksAddress".
+type routeFlag []route
+
+type route struct {
+	suffix string
+	socks  string
+}
+
+func (f *routeFlag) String() string {
+	out := ""
+	for _, r := range *f {
+		if out != "" {
+			out += ","
+		}
+		out += r.suffix + "=" + r.socks
+	}
+	return out
+}
+
+func (f *routeFlag) Set(v string) error {
+	i := strings.LastIndex(v, "=")
+	if i <= 0 || i == len(v)-1 {
+		return fmt.Errorf("route phải dạng .domain=host:port: %q", v)
+	}
+	*f = append(*f, route{suffix: strings.ToLower(strings.TrimSpace(v[:i])), socks: strings.TrimSpace(v[i+1:])})
+	return nil
+}
+
+// upstream chọn SOCKS5 theo hậu tố tên miền; mặc định là b.socks.
+func (b *bridge) upstream(hostport string) string {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.ToLower(host)
+	for _, r := range b.routes {
+		if strings.HasSuffix(host, r.suffix) || host == strings.TrimPrefix(r.suffix, ".") {
+			return r.socks
+		}
+	}
+	return b.socks
 }
 
 // dialSocks5 mở kết nối TCP tới addr xuyên qua SOCKS5 (RFC 1928, không auth).
-func (b *bridge) dialSocks5(addr string) (net.Conn, error) {
-	c, err := net.DialTimeout("tcp", b.socks, b.dialTO)
+func (b *bridge) dialSocks5(proxySocks, addr string) (net.Conn, error) {
+	c, err := net.DialTimeout("tcp", proxySocks, b.dialTO)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +165,9 @@ func (b *bridge) dialSocks5(addr string) (net.Conn, error) {
 
 func (b *bridge) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
-		up, err := b.dialSocks5(r.Host)
+		upstream := b.upstream(r.Host)
+		log.Printf("CONNECT %s via %s", r.Host, upstream)
+		up, err := b.dialSocks5(upstream, r.Host)
 		if err != nil {
 			log.Printf("CONNECT %s: %v", r.Host, err)
 			http.Error(w, "tunnel failed", http.StatusBadGateway)
@@ -153,7 +200,7 @@ func (b *bridge) handler(w http.ResponseWriter, r *http.Request) {
 	if _, _, err := net.SplitHostPort(host); err != nil {
 		host = net.JoinHostPort(host, "80")
 	}
-	up, err := b.dialSocks5(host)
+	up, err := b.dialSocks5(b.upstream(host), host)
 	if err != nil {
 		log.Printf("HTTP %s: %v", host, err)
 		http.Error(w, "tunnel failed", http.StatusBadGateway)
@@ -183,11 +230,13 @@ func (b *bridge) handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:18081", "địa chỉ HTTP proxy lắng nghe")
-	socks := flag.String("socks", "127.0.0.1:1081", "địa chỉ SOCKS5 của flowvpnrelay")
+	socks := flag.String("socks", "127.0.0.1:1081", "địa chỉ SOCKS5 mặc định của flowvpnrelay")
 	to := flag.Duration("dial-timeout", 10*time.Second, "timeout kết nối SOCKS5")
+	var routes routeFlag
+	flag.Var(&routes, "route", "định tuyến theo hậu tố tên miền, dạng .tv360.vn=127.0.0.1:1083 (lặp lại được)")
 	flag.Parse()
 
-	b := &bridge{socks: *socks, dialTO: *to}
+	b := &bridge{socks: *socks, dialTO: *to, routes: routes}
 	srv := &http.Server{
 		Addr:              *listen,
 		Handler:           http.HandlerFunc(b.handler),

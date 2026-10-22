@@ -228,6 +228,53 @@ Không còn tự chọn đường (để app VPNFlow lo). Chỉ làm một việ
 - **Kết luận**: xếp TV360 vào nhóm app **cần proxy VN** khi đăng nhập (giống FPT Play);
   nên để TV dùng đường proxy sống (Mac/Windows gateway) trước khi mở TV360.
 
+### GIẢI PHÁP 23/10: gateway thông minh chia luồng theo tên miền (FPT vs TV360)
+
+**Vấn đề**: TV360 phát hiện IP datacenter/VPN → kênh truyền hình báo
+`C-310 "Nội dung chỉ cho phép lãnh thổ Việt Nam. Vui lòng tắt VPN"`. Đo thực tế:
+
+| Node | FPT Play | TV360 kênh TV | TV360 phim |
+|---|---|---|---|
+| Flow1 `103.173.155.50` | ✅ | ❌ C-310 | ✅ |
+| Flow2 `165.101.114.162` | ✅ | ❌ C-310 | ✅ |
+| Flow3 `103.6.235.39` | ❌ chặn | ✅ **phát được** | ✅ |
+
+⇒ Mỗi dịch vụ "sợ" một dải IP khác nhau; proxy hệ thống chỉ có MỘT giá trị → cần chia theo
+tên miền.
+
+**Giải pháp đã triển khai** — `tools/http-socks-bridge` thêm cờ `-route`:
+
+```
+http-socks-bridge -listen 0.0.0.0:18081 \
+  -socks 127.0.0.1:1081 \
+  -route .tv360.vn=127.0.0.1:1083
+```
+- Mặc định → SOCKS `1081` (Flow2) cho FPT và mọi thứ khác.
+- Hậu tố `.tv360.vn` → SOCKS `1083` (Flow3) cho TV360.
+- Log từng request: `CONNECT host:443 via 127.0.0.1:1081|1083`.
+
+**Cấu hình Mac (LaunchAgent, chạy thường trực)**:
+- `site.flowvpn.relay` (Flow2, socks 1081) + `site.flowvpn.bridge` (HTTP 18081, route tv360→1083)
+- `site.flowvpn.relay3` (Flow3, socks 1083) + `site.flowvpn.bridge3` (HTTP 18083, tuỳ chọn)
+- `site.flowvpn.health` (5 phút kiểm tra, relay treo → restart)
+
+**Cấu hình app TV** (đọc từ `shared_prefs/vpnflow_hysteria.xml` qua `run-as`):
+```xml
+<string name="proxy_mode">gateway</string>
+<string name="proxy_gateway">192.168.100.5:18081</string>
+```
+
+**Kết quả test (23/10/2026)**:
+- FPT Play: content load + LIVE OK; log bridge: `logs-ott.fbox.fpt.vn`, `guardian.fptplay53.net`,
+  `firestore.googleapis.com` → `via 127.0.0.1:1081` (Flow2).
+- TV360: kênh golf **PLAYING** (state=P), không còn C-310; log bridge: `api.tv360.vn`,
+  `api-v2.tv360.vn`, `ws.tv360.vn`, `fo-hlc.tv360.vn`, `log.tv360.vn` → `via 127.0.0.1:1083` (Flow3).
+
+**Lưu ý**:
+- Chia luồng theo **hậu tố tên miền** nên chỉ cần thêm dòng `-route` khi gặp dịch vụ mới.
+- Ưu điểm: user không phải đổi node thủ công; cả FPT và TV360 cùng chạy qua `192.168.100.5:18081`.
+- Nhược điểm: phụ thuộc Mac bật + LaunchAgent; nếu Mac tắt, guard fail-open `:0`.
+
 ### BUG app (23/10 chiều): auto chọn đường không theo chất lượng
 
 **Hiện tượng**: ở chế độ `Automatic`, app kiểm tra mỗi nguồn bằng "cổng TCP còn mở" rồi
