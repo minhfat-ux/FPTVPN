@@ -181,36 +181,56 @@ object ProxyDirector {
         val aliveNow = candidates.filter { alive(it) }
         if (aliveNow.isEmpty()) return ":0"
 
-        // Chấm điểm: tối đa 1 tuyến chưa có điểm / điểm cũ mỗi lượt (rải đều chi phí).
-        val stale = aliveNow.firstOrNull { scoreOf(it) == null }
-        if (stale != null) probeQuality(context, stale)
+        // Đo: mọi tuyến CHƯA có điểm hoặc điểm đã cũ, tối đa [MAX_PROBES_PER_TICK] tuyến mỗi lượt.
+        // (Bản trước chỉ đo 1 tuyến/lượt VÀ coi điểm quá hạn là "chưa có" ⇒ vài phút sau là rơi về
+        // "tuyến đầu tiên", tức auto thực chất không chọn theo tốc độ — lỗi thật 22/10/2026.)
+        aliveNow.filter { scoreStale(it) }.take(MAX_PROBES_PER_TICK).forEach { probeQuality(context, it) }
 
-        // Chỉ đổi tuyến khi đã có điểm cho TẤT CẢ tuyến sống; nếu chọn ngay lúc mới có 1 điểm thì
-        // vài lượt đầu sẽ nhảy qua nhảy lại (đổi tuyến = đổi đường của phiên đang xem).
-        val allScored = aliveNow.all { scoreOf(it) != null }
-        val best = if (allScored) {
-            aliveNow.maxByOrNull { scoreOf(it) ?: -1 }?.also { picked ->
-                if (picked != aliveNow.first()) {
-                    val detail = aliveNow.joinToString(", ") { "$it=${scoreOf(it) ?: 0}kbps" }
-                    DiagnosticsLog.log("tuyến: chọn $picked (điểm: $detail)")
-                }
+        // Điểm dùng để CHỌN là điểm gần nhất đã biết (kể cả hơi cũ): mạng không đổi chỉ vì đồng hồ
+        // hết hạn. Việc đo lại chỉ để cập nhật.
+        val scored = aliveNow.mapNotNull { addr -> scoreOf(addr)?.let { addr to it } }
+        if (scored.isEmpty()) return aliveNow.first()
+
+        val bestAddr = scored.maxByOrNull { it.second }!!.first
+        val bestScore = scored.maxOf { it.second }
+
+        // Chống nhảy qua nhảy lại: giữ tuyến ĐANG dùng nếu nó còn sống và không kém tuyến tốt nhất
+        // quá 15% (đổi tuyến = đổi đường của phiên đang xem, dễ làm player giật).
+        val current = currentProxy(context)
+        if (current != null && current != bestAddr && aliveNow.contains(current)) {
+            val curScore = scoreOf(current) ?: 0
+            if (curScore > 0 && curScore.toLong() * 100 >= bestScore.toLong() * 85) {
+                DiagnosticsLog.log("tuyến: giữ $current (${curScore}kbps) thay vì $bestAddr (${bestScore}kbps)")
+                return current
             }
-        } else {
-            null
         }
-        return best ?: aliveNow.first()
+        if (bestAddr != current) {
+            val detail = scored.joinToString(", ") { "${it.first}=${it.second}kbps" }
+            DiagnosticsLog.log("tuyến: chọn $bestAddr (điểm: $detail)")
+        }
+        return bestAddr
     }
+
+    /** Proxy hệ thống đang đặt (để biết có nên đổi tuyến hay không). */
+    private fun currentProxy(context: Context): String? = runCatching {
+        android.provider.Settings.Global.getString(context.contentResolver, "http_proxy")
+    }.getOrNull()?.takeIf { it.contains(":") && it != ":0" }
 
     // ───────────── đo "chất lượng" từng tuyến ─────────────
 
     @Volatile private var scores: Map<String, Long> = emptyMap()   // addr -> thời điểm đầu (ms)
     @Volatile private var scoreKbps: Map<String, Int> = emptyMap()  // addr -> kbps
 
-    /** Điểm còn hạn (5 phút) của tuyến; null = chưa có/đã cũ. */
+    /** Điểm gần nhất đã biết của tuyến (không xét hạn); null = chưa từng đo. */
     private fun scoreOf(addr: String): Int? {
-        val at = scores[addr] ?: return null
-        if (android.os.SystemClock.elapsedRealtime() - at > SCORE_TTL_MS) return null
+        scores[addr] ?: return null
         return scoreKbps[addr]
+    }
+
+    /** Điểm đã cũ (quá [SCORE_TTL_MS]) hoặc chưa từng đo ⇒ cần đo lại. */
+    private fun scoreStale(addr: String): Boolean {
+        val at = scores[addr] ?: return true
+        return android.os.SystemClock.elapsedRealtime() - at > SCORE_TTL_MS
     }
 
     /**
@@ -293,8 +313,10 @@ object ProxyDirector {
     private const val PROBE_BYTES = 131_072
     /** Dưới mức này thì không tính điểm (tránh con số ảo từ vài trăm byte header). */
     private const val MIN_SAMPLE_BYTES = 16_384L
-    /** Điểm chỉ có giá trị trong 5 phút — mạng đổi thì đo lại. */
-    private const val SCORE_TTL_MS = 5 * 60 * 1000L
+    /** Điểm chỉ có giá trị trong 3 phút — mạng đổi thì đo lại. */
+    private const val SCORE_TTL_MS = 3 * 60 * 1000L
+    /** Mỗi nhịp 60 s đo tối đa chừng này tuyến (2 × 128 KB ≈ 0,25 MB/phút, đủ nhanh mà không tốn). */
+    private const val MAX_PROBES_PER_TICK = 2
 
     /** TCP connect thật tới host:port (700 ms) — "cổng mở" chứ không phải "setting đang ghi gì". */
     fun alive(hostPort: String, timeoutMs: Int = 700): Boolean {
@@ -314,3 +336,4 @@ object ProxyDirector {
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(HysteriaVpnService.PREFS, Context.MODE_PRIVATE)
 }
+
