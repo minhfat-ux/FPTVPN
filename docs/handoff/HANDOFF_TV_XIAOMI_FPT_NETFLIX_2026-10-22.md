@@ -177,8 +177,14 @@ Khuyến nghị: giữ **Automatic**; chỉ dùng "LAN gateway only" khi chắc 
 Không còn tự chọn đường (để app VPNFlow lo). Chỉ làm một việc: nếu `http_proxy` đang trỏ vào
 địa chỉ **không kết nối được** 3 lần liên tiếp (5 s/lần) thì xoá về `:0` (fail-open).
 
-- Test: đặt proxy chết `192.168.100.99:18081` → sau ~27 s tự xoá về `:0` (log
-  `da xoa proxy chet ... -> :0 (fail-open)`).
+- **Cập nhật 23/10**: khi proxy hiện tại chết, guard **thử gateway LAN trước**
+  (`192.168.100.11:18081`, `192.168.100.5:18081`); gateway nào sống thì đặt proxy sang đó
+  (auto fallback), không còn thì mới `:0`.
+- Test 1: proxy chết `192.168.100.99:18081` → sau ~27 s xoá `:0`.
+- Test 2: **force-stop VPNFlow** (TV proxy chết thật) → proxy nhảy `192.168.100.11:18081`
+  trong ~15 s; mở lại VPNFlow → về `127.0.0.1:1081` trong ~3 s.
+- Guard vẫn có thể bị LMK dọn (TV 1 GB RAM) — exact alarm 30 s tự bật lại; nếu cần chắc hơn
+  thì giữ app VPNFlow chạy (nó cũng tự fallback khi còn sống).
 - Sau đó ProxyDirector của app tự đặt lại `127.0.0.1:1081` khi tunnel sống.
 - Cần `WRITE_SECURE_SETTINGS` (đã cấp) + whitelist Doze; exact alarm 30 s restart nếu bị LMK dọn.
 
