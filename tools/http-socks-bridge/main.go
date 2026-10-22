@@ -149,6 +149,10 @@ func (b *bridge) handler(w http.ResponseWriter, r *http.Request) {
 	if host == "" {
 		host = r.Host
 	}
+	// request proxy kieu http://host/path khong co port -> mac dinh 80
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		host = net.JoinHostPort(host, "80")
+	}
 	up, err := b.dialSocks5(host)
 	if err != nil {
 		log.Printf("HTTP %s: %v", host, err)
