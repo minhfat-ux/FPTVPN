@@ -213,6 +213,21 @@ Không còn tự chọn đường (để app VPNFlow lo). Chỉ làm một việ
 - Muốn TV dùng Mac gateway: tắt gateway Windows (`192.168.100.11:18081`) để app rơi xuống
   gateway thứ 2 (Mac), hoặc chọn khi harness bổ sung lựa chọn riêng.
 
+### TV360 (`com.viettel.tv360.tv`) — cần proxy cho đăng nhập (đo 23/10/2026)
+
+- **Catalog/home**: load được cả khi TV dùng IP Trung Quốc trực tiếp (proxy `:0`) —
+  thấy "Kênh TV", "Phim đề xuất", banner.
+- **Đăng nhập (QR code)**: với proxy `:0` (IP TQ) **QR không hiện**; đổi proxy sang
+  Mac gateway `192.168.100.5:18081` (VN) → **QR load được**. Tức API auth/login cần IP VN
+  (hoặc bị chặn theo đường).
+- Domain app dùng: `tv360.vn`, `api.tv360.vn`, `api2.tv360.vn`, `api-v2.tv360.vn`,
+  `api-auth-box.tv360.vn`, `ws.tv360.vn`, `sdrm.tv360.vn`, `img-zlr1.tv360.vn`,
+  `elofun.tv360.vn`, `vod-zlr2.tv360.vn`.
+  Test root domain trực tiếp từ TQ đều trả 500/404 (bình thường với API root) — chưa phân
+  biệt được bằng root path; kết luận dựa trên hành vi app: login cần proxy.
+- **Kết luận**: xếp TV360 vào nhóm app **cần proxy VN** khi đăng nhập (giống FPT Play);
+  nên để TV dùng đường proxy sống (Mac/Windows gateway) trước khi mở TV360.
+
 ### BUG app (23/10 chiều): auto chọn đường không theo chất lượng
 
 **Hiện tượng**: ở chế độ `Automatic`, app kiểm tra mỗi nguồn bằng "cổng TCP còn mở" rồi
