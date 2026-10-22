@@ -80,6 +80,22 @@ object ProxyDirector {
         }.onFailure { pending.set(false) }
     }
 
+    /**
+     * Bản đồng bộ cho **luồng nền của service** (lúc tunnel lên/chết). Không gọi từ main thread.
+     *
+     * Vì sao cần: sự cố thật 22/10/2026 — cầu WS chết (`ping/pong` timeout) ⇒ service gọi
+     * `setSystemProxy(false)` ⇒ proxy hệ thống thành `:0` **dù gateway LAN vẫn sống**, TV bị đẩy ra
+     * IP Trung Quốc cho tới nhịp keepalive kế tiếp (60 s). Giờ mọi ngã rẽ đều qua đây: tunnel chết
+     * thì `auto` nhảy sang gateway, `tv` mới gỡ hẳn.
+     */
+    fun enforceBlocking(context: Context) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            enforce(context)
+            return
+        }
+        runCatching { applyNow(context.applicationContext) }
+    }
+
     /** Phần thân thật của [enforce] — luôn chạy trên [WORKER] (được phép connect). */
     private fun applyNow(context: Context) {
         val chosen = decide(context)

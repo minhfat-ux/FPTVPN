@@ -321,9 +321,10 @@ class HysteriaVpnService : VpnService() {
                 getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MULTI_TUNNEL, 1)
             },
         )
-        // Tu chua lanh: neu lan truoc app bi kill khi dang dat proxy, proxy se con tro vao cong chet
-        // => go ngay khi service khoi dong lai.
-        runCatching { setSystemProxy(false) }
+        // Tu chua lanh: neu lan truoc app bi kill khi dang dat proxy, proxy se con tro vao cong chet.
+        // KHONG tu y go ve ":0": de ProxyDirector quyet (auto => nhay gateway LAN neu con song;
+        // chi che do "chi duong TV" moi go han). Xem su co 22/10/2026 trong ProxyDirector.enforceBlocking.
+        ProxyDirector.enforceBlocking(this)
         noTunDevice = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_NO_TUN, false)
         // Máy KHÔNG có TUN: mỗi lane WS chỉ chở ~2 Mbps (RTT tới relay ~170 ms) nên N=1 nằm sát
         // ngưỡng video — đo thật 20/10/2026 trên MiTV-AFZP0: N=1 = 2,2 Mbps ("lúc được lúc không"),
@@ -1404,9 +1405,12 @@ class HysteriaVpnService : VpnService() {
             return serveOutcome("http serve() threw: ${e.message}")
         } finally {
             runHost = previousHost
-            // GO proxy khi transport ket thuc: neu giu lai, luc app bi kill proxy se tro vao cong
-            // CHET => ca TV mat mang. An toan hon la go, vao lai rat nhanh khi noi lai.
-            if (systemProxySet) setSystemProxy(false)
+            // Transport ket thuc: KHONG go proxy ve ":0" nua. ProxyDirector quyet theo che do —
+            // auto thi nhay sang gateway LAN (con mang cho TV), "chi duong TV" moi go han.
+            if (systemProxySet) {
+                ProxyDirector.enforceBlocking(this)
+                systemProxySet = false
+            }
             wsBridgeStats = null
             runCatching { bridge.stop() }
             runCatching { ds.close() }
@@ -2304,8 +2308,12 @@ class HysteriaVpnService : VpnService() {
         stopping = true
         serviceRunning = false
         DiagnosticsLog.tunnelUp = false
-        // Service dung hẳn: gỡ proxy hệ thống (giữa các lần nối lại thì KHÔNG gỡ).
-        if (systemProxySet) setSystemProxy(false)
+        // Service dung hẳn: KHONG go proxy ve ":0" nua — ProxyDirector chon theo che do (auto nhay
+        // gateway LAN neu gateway con song, "chi duong TV" moi go). Xem su co 22/10/2026.
+        if (systemProxySet) {
+            ProxyDirector.enforceBlocking(this)
+            systemProxySet = false
+        }
         // Proxy nội bộ cũng đóng: nếu để mở mà proxy hệ thống đã gỡ thì vô hại, nhưng đóng cho sạch.
         LocalProxy.stop()
         stopSilentAudio()
