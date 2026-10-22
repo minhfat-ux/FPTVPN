@@ -198,6 +198,21 @@ Không còn tự chọn đường (để app VPNFlow lo). Chỉ làm một việ
 | FPT Play qua gateway | content load OK (LIVE, kênh gợi ý) ✓ |
 | App tự chết ("Cannot reach VPNFlow service") | proxy chết → guard cứu sang gateway ~15 s ✓ |
 
+### Build 83 (chiều 23/10): Exit path có Windows + Mac, Boost N tunnels
+
+- App `versionCode=83`; Settings hiển thị:
+  - **Boost**: `Tunnels: 2 / 4 / 6 / 8` (áp dụng ở lần kết nối sau).
+  - **Exit path**: Automatic / TV only / LAN gateway only; dòng địa chỉ:
+    `192.168.100.11:18081 → 192.168.100.5:18081` (Windows rồi Mac).
+- Test nhanh: `LAN gateway only` → proxy `192.168.100.11:18081` (chế độ gateway);
+  `Automatic` → về `127.0.0.1:1081`; tunnel TV lên sau ~9 s.
+- Mac gateway đã dựng thường trực bằng LaunchAgent trên Mac (`192.168.100.5:18081`),
+  đo ~4–6 Mbps qua `/relay/vn2hy`; FPT Play load content được khi TV trỏ vào Mac.
+- `Bandwidth boost` 4 tunnels: declared vẫn ramp thấp (~1–2 Mbps) trong vài phút đầu —
+  băng thông thực tế của TV vẫn bị giới hạn bởi CPU armv7; muốn nhanh hơn nên dùng Mac gateway.
+- Muốn TV dùng Mac gateway: tắt gateway Windows (`192.168.100.11:18081`) để app rơi xuống
+  gateway thứ 2 (Mac), hoặc chọn khi harness bổ sung lựa chọn riêng.
+
 ### Launcher: KHÔNG thể làm home mặc định (đã thử hết)
 
 | Cách thử | Kết quả |
