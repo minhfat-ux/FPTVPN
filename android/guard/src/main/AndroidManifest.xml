@@ -4,6 +4,9 @@
     <!-- Cần để gỡ proxy chết (cấp bằng: adb shell pm grant com.privatevpn.app.guard android.permission.WRITE_SECURE_SETTINGS) -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- BẮT BUỘC để dò gateway LAN (192.168.x.x). Thiếu quyền này thì connect() tới IP LAN ném
+         SecurityException, guard luôn tưởng "gateway chết" và gỡ proxy về :0 (lỗi thật 22/10/2026). -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="false"
