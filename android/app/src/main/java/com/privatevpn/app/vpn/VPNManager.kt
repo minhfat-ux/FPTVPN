@@ -142,15 +142,18 @@ class VPNManager(
     }
 
     /**
-     * Nút Refresh trên UI: **khởi động lại tunnel để ĐO LẠI + KHAI BÁO LẠI** băng thông.
+     * Nút Refresh trên UI: **đo lại băng thông + chọn lại tuyến tốt nhất + vào luôn**.
      *
-     * Vì sao phải mở phiên mới: số khai được nhớ theo từng mạng (BandwidthMemory) và vòng ramp chỉ
-     * chạy trong một phiên — đang chạy mà "refresh" thì không có phép đo mới nào cả.
-     *
-     * Cắm cờ [Config.KEY_REMEASURE_ON_START] để service xoá mốc đã nhớ ngay khi dựng phiên: chỉ
-     * service mới biết khoá mạng thật (`wifi:<gw>-<dns>` / `cell:...`), VPNManager không giữ khoá đó.
+     * Ba việc, theo yêu cầu chủ dự án 22/10/2026:
+     *  1. Chấm lại TOÀN BỘ tuyến (đường TV + các gateway) và áp dụng ngay —
+     *     [ProxyDirector.forceRescore]; "tốt nhất" là đo thật, không theo thứ tự cố định.
+     *  2. Khởi động lại tunnel để **đo lại + khai báo lại** băng thông (vòng ramp chỉ chạy trong
+     *     một phiên; số khai được nhớ theo mạng nên phải xoá mốc của mạng hiện tại).
+     *  3. Cắm cờ [Config.KEY_REMEASURE_ON_START] để service xoá mốc đã nhớ ngay khi dựng phiên —
+     *     chỉ service mới biết khoá mạng thật (`wifi:<gw>-<dns>` / `cell:...`).
      */
     fun restartForRemeasure() {
+        ProxyDirector.forceRescore(app)
         runCatching {
             app.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
                 .edit().putBoolean(Config.KEY_REMEASURE_ON_START, true).apply()

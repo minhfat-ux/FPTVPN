@@ -132,23 +132,169 @@ object ProxyDirector {
     }
     private val pending = java.util.concurrent.atomic.AtomicBoolean(false)
 
-    /** Giá trị proxy nên dùng ngay lúc này (`:0` = gỡ). Chỉ gọi từ luồng nền (có connect). */
-    fun decide(context: Context): String {
-        val tv = tvProxy()
-        // Thử LẦN LƯỢT từng gateway trong danh sách (Windows trước, Mac sau): gateway đầu tiên
-        // không sống (ví dụ Mac tắt máy) thì nhảy sang cái kế tiếp thay vì gỡ proxy ngay.
-        fun firstGateway(): String? = gateways(context).firstOrNull { alive(it) }
-        return when (mode(context)) {
-            Config.PROXY_MODE_TV ->
-                if (alive(tv)) tv else ":0"
-            Config.PROXY_MODE_GATEWAY ->
-                firstGateway() ?: ":0"
-            else -> when {
-                alive(tv) -> tv
-                else -> firstGateway() ?: ":0"
+    /**
+     * Nút Refresh trên UI (yêu cầu chủ dự án 22/10/2026: "bấm refresh thì cũng chọn lại đường tốt
+     * nhất mà vào luôn"): xoá điểm cũ, **đo lại TẤT CẢ tuyến đang sống** rồi áp dụng ngay.
+     *
+     * Chạy trên [WORKER] nên không chặn main thread; gọi từ UI là quay về tức thì. Khác với nhịp
+     * 60 s (mỗi lượt chỉ đo 1 tuyến để tiết kiệm băng thông), ở đây đo hết để chọn đúng ngay.
+     */
+    fun forceRescore(context: Context) {
+        val app = context.applicationContext
+        runCatching {
+            WORKER.execute {
+                try {
+                    scores = emptyMap()
+                    scoreKbps = emptyMap()
+                    val candidates = if (mode(app) == Config.PROXY_MODE_GATEWAY) {
+                        gateways(app)
+                    } else {
+                        listOf(tvProxy()) + gateways(app)
+                    }
+                    val aliveNow = candidates.filter { alive(it) }
+                    DiagnosticsLog.log("tuyến: Refresh -> đo lại ${aliveNow.size}/${candidates.size} tuyến sống")
+                    aliveNow.forEach { probeQuality(app, it) }
+                    applyNow(app)
+                } catch (t: Throwable) {
+                    DiagnosticsLog.warn("tuyến: Refresh đo lại lỗi: ${t.javaClass.simpleName}: ${t.message}")
+                }
             }
         }
     }
+
+    /**
+     * Giá trị proxy nên dùng ngay lúc này (`:0` = gỡ). Chỉ gọi từ luồng nền (có connect).
+     *
+     * "Tốt nhất" nghĩa là **đo thật**, không theo thứ tự cố định (yêu cầu chủ dự án 22/10/2026):
+     * mỗi tuyến còn sống được chấm bằng một lần tải nhỏ (128 KB) XUYÊN QUA chính proxy đó, điểm =
+     * kbps; chọn điểm cao nhất. Điểm nhớ 5 phút, mỗi lượt chỉ đo TỐI ĐA MỘT tuyến chưa có điểm
+     * (giới hạn băng thông dùng cho việc đo: tối đa ~7,7 MB/giờ). Chưa có điểm nào thì giữ thứ tự
+     * an toàn: đường TV trước, rồi tới danh sách gateway.
+     */
+    fun decide(context: Context): String {
+        val tv = tvProxy()
+        val gws = gateways(context)
+        val mode = mode(context)
+        if (mode == Config.PROXY_MODE_TV) return if (alive(tv)) tv else ":0"
+
+        val candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
+        val aliveNow = candidates.filter { alive(it) }
+        if (aliveNow.isEmpty()) return ":0"
+
+        // Chấm điểm: tối đa 1 tuyến chưa có điểm / điểm cũ mỗi lượt (rải đều chi phí).
+        val stale = aliveNow.firstOrNull { scoreOf(it) == null }
+        if (stale != null) probeQuality(context, stale)
+
+        // Chỉ đổi tuyến khi đã có điểm cho TẤT CẢ tuyến sống; nếu chọn ngay lúc mới có 1 điểm thì
+        // vài lượt đầu sẽ nhảy qua nhảy lại (đổi tuyến = đổi đường của phiên đang xem).
+        val allScored = aliveNow.all { scoreOf(it) != null }
+        val best = if (allScored) {
+            aliveNow.maxByOrNull { scoreOf(it) ?: -1 }?.also { picked ->
+                if (picked != aliveNow.first()) {
+                    val detail = aliveNow.joinToString(", ") { "$it=${scoreOf(it) ?: 0}kbps" }
+                    DiagnosticsLog.log("tuyến: chọn $picked (điểm: $detail)")
+                }
+            }
+        } else {
+            null
+        }
+        return best ?: aliveNow.first()
+    }
+
+    // ───────────── đo "chất lượng" từng tuyến ─────────────
+
+    @Volatile private var scores: Map<String, Long> = emptyMap()   // addr -> thời điểm đầu (ms)
+    @Volatile private var scoreKbps: Map<String, Int> = emptyMap()  // addr -> kbps
+
+    /** Điểm còn hạn (5 phút) của tuyến; null = chưa có/đã cũ. */
+    private fun scoreOf(addr: String): Int? {
+        val at = scores[addr] ?: return null
+        if (android.os.SystemClock.elapsedRealtime() - at > SCORE_TTL_MS) return null
+        return scoreKbps[addr]
+    }
+
+    /**
+     * Đo chất lượng qua chính proxy [addr] bằng **CONNECT + TLS** rồi tải [PROBE_BYTES] byte.
+     *
+     * Vì sao phải đi TLS chứ không GET http:// trực tiếp: gateway của Mac CHỈ xử lý CONNECT
+     * (HTTP thường trả `502 tunnel failed`), nên cách cũ chấm Mac = 0 điểm một cách oan uổng —
+     * đo thật 22/10/2026. Mọi proxy hệ thống của TV đều phải phục vụ HTTPS, nên đây mới là thước đo
+     * đúng thứ người dùng cần.
+     *
+     * Điểm = kbps (bits/ms). Mẫu < [MIN_SAMPLE_BYTES] coi như không đo được (0) để tránh con số ảo.
+     */
+    private fun probeQuality(context: Context, addr: String) {
+        val idx = addr.lastIndexOf(':')
+        if (idx <= 0) return
+        val host = addr.substring(0, idx).trim()
+        val port = addr.substring(idx + 1).trim().toIntOrNull() ?: return
+        val t0 = android.os.SystemClock.elapsedRealtime()
+        var bytes = 0L
+        var failure: String? = null
+        runCatching {
+            Socket().use { raw ->
+                raw.connect(InetSocketAddress(host, port), 1200)
+                raw.soTimeout = 2500
+                val out = raw.getOutputStream()
+                out.write(
+                    ("CONNECT speed.cloudflare.com:443 HTTP/1.1\r\n" +
+                        "Host: speed.cloudflare.com:443\r\n\r\n").toByteArray(),
+                )
+                out.flush()
+                // Đọc phần đầu reply CONNECT, phải là "HTTP/1.x 200".
+                val head = StringBuilder()
+                val one = ByteArray(1)
+                val input = raw.getInputStream()
+                while (head.length < 512) {
+                    val n = input.read(one)
+                    if (n <= 0) break
+                    head.append(one[0].toInt().toChar())
+                    if (head.endsWith("\r\n\r\n")) break
+                }
+                if (!head.contains(" 200")) throw IllegalStateException("CONNECT: ${head.lineSequence().firstOrNull()}")
+                val tls = (javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory)
+                    .createSocket(raw, "speed.cloudflare.com", 443, true) as javax.net.ssl.SSLSocket
+                tls.soTimeout = 2500
+                tls.startHandshake()
+                tls.getOutputStream().apply {
+                    write(
+                        ("GET /__down?bytes=$PROBE_BYTES HTTP/1.1\r\n" +
+                            "Host: speed.cloudflare.com\r\nConnection: close\r\n\r\n").toByteArray(),
+                    )
+                    flush()
+                }
+                val tin = tls.getInputStream()
+                val buf = ByteArray(16 * 1024)
+                while (bytes < PROBE_BYTES) {
+                    val n = tin.read(buf)
+                    if (n <= 0) break
+                    bytes += n
+                    if (android.os.SystemClock.elapsedRealtime() - t0 > 4000) break
+                }
+                runCatching { tls.close() }
+            }
+        }.onFailure { failure = "${it.javaClass.simpleName}: ${it.message}" }
+        val ms = (android.os.SystemClock.elapsedRealtime() - t0).coerceAtLeast(1)
+        // bits / ms = kbps (1 byte = 8 bit; 1 ms = 1/1000 s).
+        val rawKbps = if (bytes <= 0) 0 else ((bytes * 8L) / ms).toInt()
+        val kbps = if (bytes < MIN_SAMPLE_BYTES) 0 else rawKbps
+        val now = android.os.SystemClock.elapsedRealtime()
+        scores = scores + (addr to now)
+        scoreKbps = scoreKbps + (addr to kbps)
+        if (kbps > 0) {
+            DiagnosticsLog.log("tuyến: đo $addr = ${kbps} kbps (${bytes} B / ${ms} ms)")
+        } else {
+            val why = failure ?: "mẫu nhỏ (${bytes} B / ${ms} ms < $MIN_SAMPLE_BYTES B)"
+            DiagnosticsLog.log("tuyến: đo $addr = 0 kbps · $why")
+        }
+    }
+
+    /** Kích thước mẫu đo: đủ để phân biệt tuyến nhanh/chậm, nhỏ để không ăn băng thông. */
+    private const val PROBE_BYTES = 131_072
+    /** Dưới mức này thì không tính điểm (tránh con số ảo từ vài trăm byte header). */
+    private const val MIN_SAMPLE_BYTES = 16_384L
+    /** Điểm chỉ có giá trị trong 5 phút — mạng đổi thì đo lại. */
+    private const val SCORE_TTL_MS = 5 * 60 * 1000L
 
     /** TCP connect thật tới host:port (700 ms) — "cổng mở" chứ không phải "setting đang ghi gì". */
     fun alive(hostPort: String, timeoutMs: Int = 700): Boolean {
