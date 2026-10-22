@@ -213,6 +213,34 @@ Không còn tự chọn đường (để app VPNFlow lo). Chỉ làm một việ
 - Muốn TV dùng Mac gateway: tắt gateway Windows (`192.168.100.11:18081`) để app rơi xuống
   gateway thứ 2 (Mac), hoặc chọn khi harness bổ sung lựa chọn riêng.
 
+### BUG app (23/10 chiều): auto chọn đường không theo chất lượng
+
+**Hiện tượng**: ở chế độ `Automatic`, app kiểm tra mỗi nguồn bằng "cổng TCP còn mở" rồi
+ưu tiên TV; proxy TV sống nhưng trả **502 Bad Gateway** cho request của FPT (Firestore), nên
+FPT Play không load content — trong khi Mac gateway cùng lúc **nhanh hơn ~16 lần**.
+
+**Số đo cùng thời điểm (23/10/2026 ~11:40)**:
+
+| Nguồn | Đo | Kết quả |
+|---|---|---|
+| TV `127.0.0.1:1081` | FPT Firestore qua proxy | **502 Bad Gateway** (không load content) |
+| Windows `192.168.100.11:18081` | tải 3 MB | **0.33 Mbps** (FPT load không nổi) |
+| Mac `192.168.100.5:18081` | tải 3 MB | **~2.8–5.5 Mbps** |
+| Mac + phát FPT LIVE | rx 40 s | **5.53 Mbps**, video **1920×1080** |
+
+**Đề xuất sửa (cho harness)**:
+1. Không chỉ probe TCP: đo **throughput thật** từng nguồn (tải thử ~200 KB qua proxy,
+   timeout 2–3 s) và xếp hạng.
+2. Bỏ nguồn trả lỗi HTTP kiểu 502/không hoàn tất request (health check phải là request thật,
+   ví dụ `GET https://connectivitycheck.gstatic.com/generate_204` **và** thử một URL FPT).
+3. Chọn nguồn nhanh nhất đang sống; chỉ đổi khi nhanh hơn nguồn hiện tại ≥1.3× (hysteresis
+   chống flap), đo lại mỗi 60 s hoặc khi user bấm **Refresh**.
+4. Thứ tự ưu tiên hiện tại đang cứng TV→Windows→Mac; nên đổi thành theo **điểm đo**,
+   giữ TV làm ưu tiên chỉ khi chất lượng tương đương.
+
+**Trạng thái tạm**: TV đang trỏ Mac gateway (`192.168.100.5:18081`) để xem FPT 1080p;
+app VPNFlow tạm dừng nên không ghi đè. Khi app sửa xong, bật lại và để `Automatic` tự chọn.
+
 ### Launcher: KHÔNG thể làm home mặc định (đã thử hết)
 
 | Cách thử | Kết quả |
