@@ -188,6 +188,16 @@ Không còn tự chọn đường (để app VPNFlow lo). Chỉ làm một việ
 - Sau đó ProxyDirector của app tự đặt lại `127.0.0.1:1081` khi tunnel sống.
 - Cần `WRITE_SECURE_SETTINGS` (đã cấp) + whitelist Doze; exact alarm 30 s restart nếu bị LMK dọn.
 
+### Test build 81 (versionCode 81, 23/10/2026)
+
+| Test | Kết quả |
+|---|---|
+| 3 chế độ Exit path | gateway → `192.168.100.11:18081`, TV → `127.0.0.1:1081`, auto → TV khi tunnel sống ✓ |
+| Force-stop VPNFlow (TV proxy chết) | guard nhảy gateway sau **~15 s** (log `TV proxy chet -> nhay gateway`) ✓ |
+| Mở lại VPNFlow | về `127.0.0.1:1081` sau **~21 s** ✓ |
+| FPT Play qua gateway | content load OK (LIVE, kênh gợi ý) ✓ |
+| App tự chết ("Cannot reach VPNFlow service") | proxy chết → guard cứu sang gateway ~15 s ✓ |
+
 ### Launcher: KHÔNG thể làm home mặc định (đã thử hết)
 
 | Cách thử | Kết quả |
