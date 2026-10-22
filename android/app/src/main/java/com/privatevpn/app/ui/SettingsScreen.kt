@@ -257,8 +257,9 @@ fun SettingsScreen(
                 }
             }
             Text(
+                // Hiện CẢ danh sách: app thử lần lượt (Windows trước, Mac sau) — thấy rõ nó sẽ đi đâu.
                 "${lang.t(LKey.proxyGatewayAddr)}: " +
-                    com.privatevpn.app.vpn.ProxyDirector.gatewayAddress(context),
+                    com.privatevpn.app.vpn.ProxyDirector.gateways(context).joinToString(" → "),
                 color = VPNTheme.SecondaryLabel,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 2.dp),

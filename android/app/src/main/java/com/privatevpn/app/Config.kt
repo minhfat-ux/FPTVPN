@@ -266,8 +266,12 @@ object Config {
     const val PROXY_MODE_TV = "tv"
     /** Chỉ gateway LAN; KHÔNG BAO GIỜ đặt `127.0.0.1:1081`. */
     const val PROXY_MODE_GATEWAY = "gateway"
-    /** Gateway LAN mặc định = laptop trong nhà chạy `tools/lan-proxy` (chia tải node1+node2). */
-    const val PROXY_GATEWAY_DEFAULT = "192.168.100.11:18081"
+    /**
+     * Các gateway LAN dự phòng, **thử lần lượt theo thứ tự** (ngăn cách bằng dấu phẩy).
+     * Thứ nhất: laptop Windows chạy `tools/lan-proxy` (chia tải node1+node2).
+     * Thứ hai: Mac chạy gateway riêng — chỉ dùng khi máy Windows tắt (yêu cầu chủ dự án 22/10/2026).
+     */
+    const val PROXY_GATEWAY_DEFAULT = "192.168.100.11:18081,192.168.100.5:18081"
 
     /**
      * Cờ "đo lại băng thông ở phiên kế tiếp" — nút Refresh trên UI cắm cờ này rồi khởi động lại

@@ -30,10 +30,21 @@ object ProxyDirector {
     private fun tvProxy(): String = "127.0.0.1:${HysteriaVpnService.SOCKS_PORT}"
 
     /** Địa chỉ gateway LAN đang đặt trong prefs (mặc định 192.168.100.11:18081). */
-    fun gatewayAddress(context: Context): String =
-        prefs(context).getString(Config.KEY_PROXY_GATEWAY, null)
+    /**
+     * Danh sách gateway LAN dự phòng, **thử lần lượt theo thứ tự**. Mặc định Windows trước
+     * (`192.168.100.11:18081`) rồi tới Mac (`192.168.100.5:18081`) — yêu cầu chủ dự án 22/10/2026:
+     * "fallback thêm cả cơ chế cho Mac làm gateway". Ai sống thì dùng, cả hai chết mới gỡ proxy.
+     * Đổi được bằng prefs (chuỗi ngăn cách bởi dấu phẩy), không cần build lại.
+     */
+    fun gateways(context: Context): List<String> {
+        val raw = prefs(context).getString(Config.KEY_PROXY_GATEWAY, null)
             ?.takeIf { it.contains(":") && it.isNotBlank() }
             ?: Config.PROXY_GATEWAY_DEFAULT
+        return raw.split(',').map { it.trim() }.filter { it.contains(":") }.distinct()
+    }
+
+    /** Gateway đầu tiên trong danh sách (dùng cho nhãn UI). */
+    fun gatewayAddress(context: Context): String = gateways(context).firstOrNull() ?: Config.PROXY_GATEWAY_DEFAULT
 
     fun mode(context: Context): String =
         prefs(context).getString(Config.KEY_PROXY_MODE, Config.PROXY_MODE_AUTO)
@@ -124,16 +135,17 @@ object ProxyDirector {
     /** Giá trị proxy nên dùng ngay lúc này (`:0` = gỡ). Chỉ gọi từ luồng nền (có connect). */
     fun decide(context: Context): String {
         val tv = tvProxy()
-        val gateway = gatewayAddress(context)
+        // Thử LẦN LƯỢT từng gateway trong danh sách (Windows trước, Mac sau): gateway đầu tiên
+        // không sống (ví dụ Mac tắt máy) thì nhảy sang cái kế tiếp thay vì gỡ proxy ngay.
+        fun firstGateway(): String? = gateways(context).firstOrNull { alive(it) }
         return when (mode(context)) {
             Config.PROXY_MODE_TV ->
                 if (alive(tv)) tv else ":0"
             Config.PROXY_MODE_GATEWAY ->
-                if (alive(gateway)) gateway else ":0"
+                firstGateway() ?: ":0"
             else -> when {
                 alive(tv) -> tv
-                alive(gateway) -> gateway
-                else -> ":0"
+                else -> firstGateway() ?: ":0"
             }
         }
     }

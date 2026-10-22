@@ -34,12 +34,14 @@ public class GuardReceiver extends BroadcastReceiver {
     private static final long INTERVAL_MS = 60L * 1000L;
 
     /**
-     * Gateway LAN dự phòng (laptop trong nhà chạy `tools/lan-proxy`: chia tải node1+node2, IP ra VN).
+     * Gateway LAN dự phòng, **thử lần lượt theo thứ tự** (ngăn cách bằng dấu phẩy):
+     * `192.168.100.11:18081` = laptop Windows chạy `tools/lan-proxy` (chia tải node1+node2),
+     * `192.168.100.5:18081` = Mac chạy gateway riêng (dùng khi máy Windows tắt).
      * Ưu tiên gateway TRƯỚC khi gỡ proxy: khi tunnel của VPNFlow chết, TV vẫn giữ được IP Việt Nam
      * thay vì rơi về mạng thẳng (IP Trung Quốc) — giống cách `ProxyDirector` bên app chính làm.
      * Có thể đổi không cần build lại: app này đọc khoá `gateway` trong prefs riêng của nó.
      */
-    private static final String DEFAULT_GATEWAY = "192.168.100.11:18081";
+    private static final String DEFAULT_GATEWAY = "192.168.100.11:18081,192.168.100.5:18081";
     private static final String PREFS = "vpnflow_guard";
     private static final String KEY_GATEWAY = "gateway";
 
@@ -66,13 +68,20 @@ public class GuardReceiver extends BroadcastReceiver {
                 if (portAlive("127.0.0.1", 1081)) {
                     Log.i(TAG, "proxy " + proxy + " còn sống -> không làm gì");
                 } else {
-                    String gateway = gateway(context);
-                    if (gatewayAlive(gateway)) {
-                        Settings.Global.putString(context.getContentResolver(), "http_proxy", gateway);
-                        Log.w(TAG, "proxy " + proxy + " CHẾT -> chuyển sang gateway LAN " + gateway);
+                    // Thử LẦN LƯỢT các gateway (Windows trước, Mac sau): cái đầu tiên sống thì dùng.
+                    String chosen = null;
+                    for (String gw : gateways(context)) {
+                        if (gatewayAlive(gw)) {
+                            chosen = gw;
+                            break;
+                        }
+                    }
+                    if (chosen != null) {
+                        Settings.Global.putString(context.getContentResolver(), "http_proxy", chosen);
+                        Log.w(TAG, "proxy " + proxy + " CHẾT -> chuyển sang gateway LAN " + chosen);
                     } else {
                         Settings.Global.putString(context.getContentResolver(), "http_proxy", ":0");
-                        Log.w(TAG, "proxy " + proxy + " CHẾT, gateway cũng chết -> đã gỡ proxy (:0)");
+                        Log.w(TAG, "proxy " + proxy + " CHẾT, mọi gateway cũng chết -> đã gỡ proxy (:0)");
                     }
                     wakeVpnApp(context);
                 }
@@ -82,14 +91,22 @@ public class GuardReceiver extends BroadcastReceiver {
         }
     }
 
-    private static String gateway(Context context) {
+    /** Danh sách gateway, thử lần lượt (Windows trước, Mac sau). Prefs riêng, ngăn cách dấu phẩy. */
+    private static java.util.List<String> gateways(Context context) {
+        String raw = null;
         try {
-            String v = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .getString(KEY_GATEWAY, DEFAULT_GATEWAY);
-            if (v != null && v.contains(":")) return v;
         } catch (Throwable ignored) {
         }
-        return DEFAULT_GATEWAY;
+        if (raw == null || !raw.contains(":")) raw = DEFAULT_GATEWAY;
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String part : raw.split(",")) {
+            String v = part.trim();
+            if (v.contains(":") && !out.contains(v)) out.add(v);
+        }
+        if (out.isEmpty()) out.add(DEFAULT_GATEWAY);
+        return out;
     }
 
     private static boolean gatewayAlive(String hostPort) {
