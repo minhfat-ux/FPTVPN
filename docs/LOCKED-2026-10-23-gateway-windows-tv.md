@@ -1,5 +1,9 @@
 # LOCKED — Gateway laptop Windows + app VPNFlow TV (23/10/2026)
 
+> **Tài liệu vận hành đầy đủ** (kiến trúc, lệnh chạy từng script, bằng chứng, runbook sau reboot,
+> bảng commit, việc còn treo): `docs/handoff/HANDOFF_WINDOWS_GATEWAY_TV_2026-10-24.md`
+
+
 > **Chủ dự án chốt 23/10/2026:** "OK tốt rồi thì lock code lại, không update gì nữa, cho đến khi anh
 > finding được gì hơn."
 >
