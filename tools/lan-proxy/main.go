@@ -232,13 +232,12 @@ func dial(hostPort string) (net.Conn, error) {
 		atomic.StoreInt64(&primaryDeadUntil, time.Now().Add(60*time.Second).UnixNano())
 	}
 	if time.Now().UnixNano() < atomic.LoadInt64(&primaryDeadUntil) {
-		// 2) Chia đều round-robin qua các upstream còn lại.
-		if v := current.Load(); v != nil {
-			if c, err := socks5Dial(v.(string), hostPort); err == nil {
-				return c, nil
-			}
-			current = atomic.Value{}
-		}
+		// 2) Chia đều round-robin qua TẤT CẢ upstream còn lại.
+		//
+		// KHÔNG dùng `current` (sticky) ở đây: đã đo 23/10/2026 — vào thẳng 3 node song song được
+		// 1,57 Mbps nhưng qua proxy chỉ 0,31 Mbps, vì mọi kết nối sau đều dính vào node đầu tiên
+		// thành công nên các node còn lại không được dùng. Muốn cộng dồn thì mỗi kết nối phải đi
+		// một node khác nhau.
 		start := int((atomic.AddUint64(&rrNext, 1) - 1) % uint64(len(list)))
 		var firstErr error
 		for i := 0; i < len(list); i++ {
