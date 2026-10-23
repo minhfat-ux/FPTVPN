@@ -71,3 +71,28 @@ sysctl -w net.core.rmem_default=212992 net.core.wmem_default=212992 net.core.opt
 
 Tuning chỉ có nghĩa nếu khách thấy khác. **Cần chủ dự án đo trên máy thật** (Mac/iPad đang chọn **Flow2**):
 tốc độ tải + xem video + độ trễ vài phút. Tiêu chí: không tệ hơn trước, và ít "khựng" hơn khi mạng TQ yếu.
+
+## 6. TẠM DỪNG — 2026-10-23 20:25 (+07), chủ dự án: *"mai làm"*
+
+**Trạng thái lúc dừng (đã kiểm ngay trước khi dừng):**
+
+| Hạng mục | Trạng thái |
+|---|---|
+| 3 thay đổi ở §2 | ✅ đã áp **và sống qua reboot** (`flowvpn-qdisc.service` enabled, `sysctl -p` không lỗi) |
+| 6/6 relay | ✅ `=426` |
+| `flowvpn-cp /v1/health` | ✅ `{"status":"ok"}` |
+| Service đường khách | ✅ `caddy · cp · hysteria · relay-cf-vn2hy/vn2wg/vn3hy/vn3wg · wgrelay-wg · sing-box` đều `active` |
+| UDP rcvbuf errors | ✅ `+0` trong 10 s |
+| Đĩa | 81% (3,7 GB trống) — đủ vài ngày, không gấp |
+| Việc dở dang | **KHÔNG có** — cả 3 thay đổi trọn vẹn, mỗi cái có lệnh rollback riêng (§4) |
+
+**Hàng đợi cho lần sau — theo thứ tự em đề nghị:**
+1. **Chủ dự án đo phía khách trên Flow2** (tiêu chí §5) ⇒ quyết **giữ hay rollback**. Đây là việc chặn mọi việc khác.
+2. **Nâng VPS 2 vCPU + 2 GB RAM** (quyết định chi phí) — đòn bẩy lớn nhất.
+3. **Gộp 7 × `wsrelay.js` → 1 tiến trình** — cần mở đóng băng code.
+4. **`Nice=-5` cho `hysteria` + `relay-cf-*`** — cần làm theo `AGENTS §7e.1`.
+5. **Dọn ~640 MB staging** (`/root/upload-145`, `/root/upload-146`, `/root/apk-upload`) — chờ xác nhận;
+   **xác nhận `sing-box` còn dùng hay không**.
+
+**Việc khác đang mở (không liên quan node-2):** đổi IP Flow3 sang **ASN/dải khác** `103.6.234.0/23`
+(chờ chủ dự án cho biết **nhà cung cấp** để soạn đơn) · runbook đổi IP Flow3 đã có, chưa chạy.
