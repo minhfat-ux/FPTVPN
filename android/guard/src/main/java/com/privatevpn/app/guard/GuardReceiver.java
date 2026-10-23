@@ -41,7 +41,8 @@ public class GuardReceiver extends BroadcastReceiver {
      * thay vì rơi về mạng thẳng (IP Trung Quốc) — giống cách `ProxyDirector` bên app chính làm.
      * Có thể đổi không cần build lại: app này đọc khoá `gateway` trong prefs riêng của nó.
      */
-    private static final String DEFAULT_GATEWAY = "192.168.100.11:18081,192.168.100.5:18081";
+    private static final String DEFAULT_GATEWAY =
+            "192.168.100.6:18081,192.168.100.5:18081,192.168.100.11:18081";
     private static final String PREFS = "vpnflow_guard";
     private static final String KEY_GATEWAY = "gateway";
 
@@ -64,31 +65,55 @@ public class GuardReceiver extends BroadcastReceiver {
         try {
             String proxy = Settings.Global.getString(context.getContentResolver(), "http_proxy");
             if (proxy == null) proxy = "";
-            if (proxy.startsWith("127.0.0.1")) {
-                if (portAlive("127.0.0.1", 1081)) {
-                    Log.i(TAG, "proxy " + proxy + " còn sống -> không làm gì");
-                } else {
-                    // Thử LẦN LƯỢT các gateway (Windows trước, Mac sau): cái đầu tiên sống thì dùng.
-                    String chosen = null;
-                    for (String gw : gateways(context)) {
-                        if (gatewayAlive(gw)) {
-                            chosen = gw;
-                            break;
-                        }
-                    }
-                    if (chosen != null) {
-                        Settings.Global.putString(context.getContentResolver(), "http_proxy", chosen);
-                        Log.w(TAG, "proxy " + proxy + " CHẾT -> chuyển sang gateway LAN " + chosen);
-                    } else {
-                        Settings.Global.putString(context.getContentResolver(), "http_proxy", ":0");
-                        Log.w(TAG, "proxy " + proxy + " CHẾT, mọi gateway cũng chết -> đã gỡ proxy (:0)");
-                    }
-                    wakeVpnApp(context);
-                }
+            boolean isLoopback = proxy.startsWith("127.0.0.1");
+            boolean isGateway = proxy.contains(":") && !proxy.startsWith(":");
+
+            if (isLoopback && portAlive("127.0.0.1", 1081)) {
+                Log.i(TAG, "proxy " + proxy + " còn sống -> không làm gì");
+                return;
             }
+
+            // Chọn gateway SỐNG và TỐT NHẤT (CONNECT trả 200 + thời gian ngắn nhất).
+            String best = bestGateway(context, null);
+            if (best != null) {
+                if (best.equals(proxy)) {
+                    Log.i(TAG, "gateway " + proxy + " còn sống & nhanh nhất -> giữ");
+                } else {
+                    Settings.Global.putString(context.getContentResolver(), "http_proxy", best);
+                    Log.w(TAG, "gateway " + proxy + " -> chọn gateway tốt nhất " + best);
+                }
+                return;
+            }
+
+            // Không gateway nào trả CONNECT 200. Nếu gateway hiện tại vẫn mở cổng TCP thì có thể
+            // tunnel đang bận chốc lát -> GIỮ, tick sau đo lại (không cắt mạng oan bằng :0).
+            if (isGateway && tcpAlive(proxy)) {
+                Log.w(TAG, "gateway " + proxy + " CONNECT chậm nhưng TCP còn sống -> giữ, thử lại sau");
+                return;
+            }
+
+            // Chết thật (hoặc đang là 127.0.0.1 chết) và không còn gateway nào -> gỡ proxy (:0).
+            Settings.Global.putString(context.getContentResolver(), "http_proxy", ":0");
+            Log.w(TAG, "proxy " + proxy + " CHẾT, mọi gateway cũng chết -> gỡ proxy (:0)");
+            if (isLoopback) wakeVpnApp(context);
         } catch (Throwable t) {
             Log.w(TAG, "tick lỗi: " + t.getClass().getSimpleName() + ": " + t.getMessage());
         }
+    }
+
+    /** Gateway sống (CONNECT 200) có thời gian CONNECT nhỏ nhất trong danh sách. */
+    private static String bestGateway(Context context, String skip) {
+        String best = null;
+        long bestMs = Long.MAX_VALUE;
+        for (String gw : gateways(context)) {
+            if (skip != null && gw.equals(skip)) continue;
+            long ms = probeMs(gw);
+            if (ms >= 0 && ms < bestMs) {
+                bestMs = ms;
+                best = gw;
+            }
+        }
+        return best;
     }
 
     /** Danh sách gateway, thử lần lượt (Windows trước, Mac sau). Prefs riêng, ngăn cách dấu phẩy. */
@@ -109,7 +134,46 @@ public class GuardReceiver extends BroadcastReceiver {
         return out;
     }
 
-    private static boolean gatewayAlive(String hostPort) {
+    /** Đo gateway: TCP 2 s + CONNECT thật tới gstatic (10 s). Trả ms hoàn tất, -1 nếu chết. */
+    private static long probeMs(String hostPort) {
+        int i = hostPort.lastIndexOf(':');
+        if (i <= 0) return -1;
+        int port;
+        try {
+            port = Integer.parseInt(hostPort.substring(i + 1).trim());
+        } catch (Throwable t) {
+            return -1;
+        }
+        String host = hostPort.substring(0, i).trim();
+        long t0 = android.os.SystemClock.elapsedRealtime();
+        Socket s = new Socket();
+        try {
+            s.connect(new InetSocketAddress(host, port), 2000);
+            s.setSoTimeout(10000);
+            // Phải kiểm bằng CONNECT thật: proxy mở cổng nhưng upstream chết vẫn trả 502
+            // (ca thật 23/10/2026: gateway .5 mở cổng nhưng CONNECT trả 502).
+            s.getOutputStream().write((
+                    "CONNECT connectivitycheck.gstatic.com:443 HTTP/1.1\r\n" +
+                            "Host: connectivitycheck.gstatic.com:443\r\n\r\n").getBytes());
+            s.getOutputStream().flush();
+            byte[] buf = new byte[96];
+            int n = s.getInputStream().read(buf);
+            if (n <= 0) return -1;
+            if (!new String(buf, 0, n).contains(" 200")) return -1;
+            return android.os.SystemClock.elapsedRealtime() - t0;
+        } catch (Throwable t) {
+            Log.w(TAG, "dò gateway " + hostPort + " hỏng: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            return -1;
+        } finally {
+            try {
+                s.close();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    /** TCP connect tới host:port (không CONNECT) — để phân biệt "cổng còn mở" với "proxy chết". */
+    private static boolean tcpAlive(String hostPort) {
         int i = hostPort.lastIndexOf(':');
         if (i <= 0) return false;
         int port;
