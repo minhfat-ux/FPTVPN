@@ -350,7 +350,10 @@ function cmdTag() {
   const commit = row.commit;
   if (tagExists(tag)) {
     const existing = gitOut(["rev-list", "-n1", tag]);
-    if (existing === commit) {
+    // `--commit` duoc phep ghi dang sha NGAN (7–12 ky tu) trong khi `rev-list` tra sha 40 ky tu:
+    // so sanh bang TIEN TO thay vi so sanh chuoi tuyet doi (loi that 24/10/2026 — so ghi `05e28d1d`,
+    // tag tro dung commit do nhung cong bao "KHONG khop" va tu choi di tiep).
+    if (existing && (existing === commit || existing.startsWith(commit))) {
       console.log(`tag ${tag} da ton tai va dang tro dung commit ${commit.slice(0, 12)}… — khong lam gi.`);
       return;
     }
@@ -375,7 +378,8 @@ function cmdTag() {
   // nhung tag tro 7ae07f0). Tag la moc "ban khach chay build tu ma nguon nao" ⇒ sai la mat tac dung.
   execFileSync("git", ["tag", "-a", tag, commit, "-m", message], { cwd: REPO, stdio: ["ignore", "inherit", "inherit"] });
   const anchored = gitOut(["rev-list", "-n1", tag]);
-  if (anchored !== commit) {
+  // Nhu tren: `--commit` co the la sha ngan ⇒ so sanh bang tien to.
+  if (!anchored || !(anchored === commit || anchored.startsWith(commit))) {
     die(`⛔ tag ${tag} vua tao nhung tro ${anchored} — KHONG khop commit build ${commit}.`, 1);
   }
   appendRow({
