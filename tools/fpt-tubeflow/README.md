@@ -46,3 +46,13 @@ Lưu ý:
   VPNFlow/guard đặt proxy trỏ gateway sống (xem kit cài đặt).
 - TV **không có `/dev/net/tun`** (kernel `CONFIG_TUN is not set`) ⇒ không thể VPN toàn máy;
   app nào bỏ qua system proxy sẽ đi thẳng và bị mạng chặn.
+
+## Cài lên TV
+
+Bộ cài đầy đủ (launcher + guard + app VPN + Tubeflow) nằm ở
+[`docs/TV_XIAOMI_INSTALL_KIT.md`](../../docs/TV_XIAOMI_INSTALL_KIT.md) và
+[`tools/tv-kit/install.sh`](../tv-kit/install.sh):
+
+```bash
+bash tools/tv-kit/install.sh 192.168.100.104 192.168.100.5:18081
+```
