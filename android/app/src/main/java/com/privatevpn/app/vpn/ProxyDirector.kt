@@ -42,7 +42,7 @@ object ProxyDirector {
             ?: Config.PROXY_GATEWAY_DEFAULT
         // Gateway TỰ DÒ được đứng trước: đó là địa chỉ THẬT của máy đang chạy proxy, còn danh sách
         // trong prefs chỉ là phương án dự phòng khi broadcast bị chặn (mạng chặn UDP/mỗi AP riêng).
-        val discovered = discoveredGateways()
+        val discovered = discoveredGateways() + scanSubnet(context)
         return (discovered + raw.split(',').map { it.trim() })
             .filter { it.contains(":") && it.isNotBlank() }
             .distinct()
@@ -93,6 +93,68 @@ object ProxyDirector {
         }
         return discList
     }
+
+    /**
+     * Quét subnet (…/24) tìm máy đang mở cổng proxy — dùng khi broadcast không thấy gì.
+     *
+     * Vì sao cần: gateway của Mac không trả lời `FLOWVPNGW?` (bridge của Mac là binary riêng), nên
+     * nếu chỉ dựa vào broadcast thì app chỉ biết gateway của Windows. Quét 1 lần mỗi
+     * [SCAN_TTL_MS], mỗi host một TCP connect 250 ms (chạy song song 32 luồng) — rẻ và chịu được
+     * việc DHCP đổi IP bất kỳ máy nào.
+     */
+    @Volatile private var scanAt = 0L
+    @Volatile private var scanList: List<String> = emptyList()
+
+    private fun scanSubnet(context: Context): List<String> {
+        if (android.os.SystemClock.elapsedRealtime() - scanAt < SCAN_TTL_MS) return scanList
+        scanAt = android.os.SystemClock.elapsedRealtime()
+        val prefix = localSubnetPrefix(context) ?: return scanList
+        val hits = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val tasks = 254 * SCAN_PORTS.size
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(SCAN_THREADS)
+        val latch = java.util.concurrent.CountDownLatch(tasks)
+        for (host in 1..254) {
+            val addr = "$prefix.$host"
+            // Quét cả 18081 (gateway smart-route) và 18083 (Flow3 trực tiếp của Mac).
+            for (port in SCAN_PORTS) {
+                runCatching {
+                    pool.execute {
+                        try {
+                            runCatching {
+                                java.net.Socket().use { s ->
+                                    s.connect(java.net.InetSocketAddress(addr, port), SCAN_TIMEOUT_MS)
+                                    hits.add("$addr:$port")
+                                }
+                            }
+                        } finally {
+                            latch.countDown()
+                        }
+                    }
+                }
+            }
+        }
+        runCatching { latch.await(8, java.util.concurrent.TimeUnit.SECONDS) }
+        pool.shutdownNow()
+        scanList = hits.toList()
+        if (scanList.isNotEmpty()) {
+            DiagnosticsLog.log("tuyến: quét subnet thấy gateway ${scanList.joinToString(", ")}")
+        }
+        return scanList
+    }
+
+    /** Tiền tố /24 của mạng Wi-Fi hiện tại, ví dụ `192.168.100`. */
+    private fun localSubnetPrefix(context: Context): String? = runCatching {
+        val wm = context.getSystemService(android.content.Context.WIFI_SERVICE)
+            as? android.net.wifi.WifiManager
+        @Suppress("DEPRECATION")
+        val ip = wm?.connectionInfo?.ipAddress ?: 0
+        if (ip == 0) return@runCatching null
+        // ipAddress trả về int little-endian.
+        val a = ip and 0xff
+        val b = (ip ushr 8) and 0xff
+        val c = (ip ushr 16) and 0xff
+        "$a.$b.$c"
+    }.getOrNull()
 
     /** Gateway đầu tiên trong danh sách (dùng cho nhãn UI). */
     fun gatewayAddress(context: Context): String = gateways(context).firstOrNull() ?: Config.PROXY_GATEWAY_DEFAULT
@@ -418,7 +480,14 @@ object ProxyDirector {
     /** Nhớ kết quả dò 60 s. */
     private const val DISCOVERY_TTL_MS = 60 * 1000L
     /** Chờ tối đa 700 ms cho các gateway trả lời. */
-    private const val DISCOVERY_WAIT_MS = 700L
+    private const val DISCOVERY_WAIT_MS = 700L    /** Cổng của gateway LAN (cả Windows lẫn Mac đều mở 18081). */
+    private const val GATEWAY_PORT = 18081
+    /** Quét những cổng này trên mọi host: 18081 = gateway smart-route, 18083 = Flow3 trực tiếp của Mac. */
+    private val SCAN_PORTS = intArrayOf(18081, 18083)
+    /** Quét subnet: nhớ 5 phút, 32 luồng, mỗi host chờ 250 ms. */
+    private const val SCAN_TTL_MS = 5 * 60 * 1000L
+    private const val SCAN_THREADS = 32
+    private const val SCAN_TIMEOUT_MS = 250
     /** Mỗi nhịp 60 s đo tối đa chừng này tuyến (2 × 128 KB ≈ 0,25 MB/phút, đủ nhanh mà không tốn). */
     private const val MAX_PROBES_PER_TICK = 2
     /**
