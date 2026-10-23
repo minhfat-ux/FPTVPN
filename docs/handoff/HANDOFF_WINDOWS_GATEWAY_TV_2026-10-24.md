@@ -133,7 +133,66 @@ Get-Content .tmp\gw-autostart.log -Tail 5; Get-Content .tmp\gw-monitor.log -Tail
 ## 8. Việc còn treo
 
 - **Netflix**: chờ hướng từ Mac (box/stick hoặc iPad HDMI). Không sửa được trên TV.
-- **Điện thoại Android**: APK đã build (`app-modern-debug.apk`, versionCode 99) — chưa cài; khi cần:
-  cắm USB + `adb install` + `settings put secure always_on_vpn_app com.privatevpn.app.dev`.
 - **Băng thông**: khi UDP bị chặn thì FPT Play/TV360 chỉ chạy được ở mức thấp; cần node/đường khác.
 - **Mac verify** 2 handoff (đã gửi `flowvpn-notify`, chưa có hồi âm).
+- **Publish cho user**: chờ chủ dự án chốt (xem §9.4).
+
+## 9. Cập nhật 24/10/2026 — điện thoại làm gateway + sửa IPv6
+
+### 9.1 Lỗi "VPN Connected nhưng Google/YouTube bị chặn" (đã sửa, `e133fd61`)
+
+Đo trên Galaxy Z Fold5 (Android 16):
+```
+curl -4 google  = 302 · youtube = 200     (IPv4 qua tunnel: TỐT)
+curl -6 google  = 000                      (IPv6: hỏng)
+```
+Nguyên nhân chuỗi:
+1. Tunnel cũ chỉ khai route IPv4 ⇒ gói IPv6 của Google/YouTube **đi thẳng** ra mạng toà nhà (bị chặn).
+2. Khi đưa IPv6 vào tunnel (`fd00:1::1`) thì lại hỏng hơn: **node1 có địa chỉ IPv6 nhưng không ra được
+   internet IPv6** (đo `curl -6` từ node = 000) ⇒ app chọn IPv6, bị reset.
+
+Cách sửa cuối (v101→v103): **bắt IPv6 vào TUN** (`addAddress fd00:1::1` + `addRoute "::"`) để không
+lọt ra ngoài, nhưng **không cấu hình IPv6 cho stack Go** (`HY_TUN_IPV6 = ""`) ⇒ gói IPv6 bị drop
+trong tunnel, app fail nhanh rồi happy-eyeballs chuyển IPv4. Khi node có IPv6 egress thật chỉ cần đặt
+`HY_TUN_IPV6 = "fd00:1::1/64"`.
+
+### 9.2 Điện thoại làm gateway cho TV (`fccad620`, versionCode 103)
+
+- `LocalProxy` mở thêm listener LAN `0.0.0.0:18081` (cùng handler) + trả lời **discovery UDP 18099**
+  (`FLOWVPNGW?` → `FLOWVPNGW1 18081`) ⇒ TV tự dò ra điện thoại như laptop/Mac, không nhập IP tay.
+- Chỉ phục vụ dải private; tự chối IP ngoài LAN.
+- `LanGatewayAuto`: tự bật/tắt theo mạng — nhận diện dải `192.168.100.*` từ `LinkProperties` của
+  **mọi** mạng (không cần SSID/quyền vị trí); vào mạng nhà ⇒ bật, ra mạng khác ⇒ tắt. Áp lại mỗi
+  nhịp keepalive 60 s.
+- `Settings → Chia sẻ điện thoại làm gateway LAN` (Switch) + 5 ngôn ngữ.
+- **Lỗi đã gặp và sửa**: `syncLanGateway()` ban đầu chặn theo `tunnelAvailable()` (cổng 1082) — trên
+  điện thoại app chạy chế độ TUN nên không có 1081/1082 ⇒ listener LAN không bao giờ mở. Đã bỏ điều
+  kiện này (ở chế độ TUN, socket của app tự đi qua tun0 nên vẫn vào VPN).
+
+**Bằng chứng chạy thật (v103):**
+```
+log (điện thoại): lan-gateway: mạng NHÀ -> BẬT vai trò gateway
+                  lan-gateway: nghe 0.0.0.0:18081
+                  lan-gateway: trả lời discovery UDP 18099
+từ laptop : curl -x http://192.168.100.101:18081 https://1.1.1.1/cdn-cgi/trace
+            -> ip=103.173.155.50 loc=VN ; 1MB = 440.902 B/s ; youtube=200
+trên TV   : quét subnet thấy gateway 192.168.100.5:18081, .6:18081, .6:18083, 192.168.100.101:18081
+            đo 192.168.100.101:18081 = 223 kbps (2 kết nối: 223 / 348)
+```
+TV chọn gateway theo điểm đo (lúc đo: Mac `.6`=363 kbps > điện thoại 223 > Windows `.5`=0).
+
+### 9.3 Trạng thái app Android hiện tại
+
+| Kênh | versionCode | Ghi chú |
+|---|---|---|
+| modern (điện thoại) | **103** (release, cùng keystore) | đã cài trên Galaxy Z Fold5, giữ nguyên đăng nhập khi nâng cấp |
+| tv | 100 | TV không cần IPv6/LAN gateway (không TUN) — chỉ cần auto gateway + keepalive |
+| legacy (Fire OS) | chưa build lại | cần build nếu phát hành cho Fire TV |
+
+### 9.4 Về việc publish cho user
+
+Bản 103 có **2 lỗi thật đã sửa** (Google/YouTube chết khi VPN bật trên máy có IPv6; điện thoại làm
+gateway được) ⇒ **nên phát hành**. Quy trình theo `docs/PUBLISHER_PROCESS.md` (harness Windows phát
+hành Windows + Android): tăng `versionName` (1.4.5 → 1.4.6), build `modern` + `legacy` release, kiểm
+chữ ký/hash, rồi upload theo kênh. Chờ chủ dự án xác nhận thời điểm.
+
