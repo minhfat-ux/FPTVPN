@@ -78,6 +78,11 @@ dò bằng CONNECT thật mỗi 60 s, chỉ gỡ `:0` khi **mọi** gateway TCP-
 | Giảm nhịp HomeGuard (2.4→2.6, vc 15-17) | 2000 ms → 120 ms, cửa sổ `queryEvents` 800 ms, chống dội 600 ms, `moveTaskToFront` trước `startActivity` | 4 lần bấm HOME: TVFlow Home khởi động lại sau **180-430 ms** (trước: **1,9 s**) |
 | Thêm `HomeWatcherService` (2.5, vc 16) | AccessibilityService bắt `TYPE_WINDOW_STATE_CHANGED` của `com.mitv.tvhome` ⇒ bật lại TVFlow Home ngay (dự phòng tầng 2 cho HomeGuard) | `dumpsys accessibility`: service bound, `Enabled services: com.tvflow.launcher/com.tvflow.launcher.HomeWatcherService`; log `TVFlowWatch: MiHome -> TVFlow Home (accessibility)` |
 
+### Nghiệm thu của chủ dự án (24/10/2026)
+
+- [x] **Sort thủ công**: "test cái 1 ok rồi" — giữ OK trên app, ◀ ▶ di chuyển, OK xong; hộp cuối đã di chuyển được.
+- [x] **Phím HOME**: "cái 2 cũng khá nhanh cũng chấp nhận được" — chấp nhận mức ~0,2-0,4 s (không cần overlay/root).
+
 ### Vì sao không đặt được TVFlow Home làm HOME mặc định (đã thử, bị Xiaomi chặn)
 
 | Cách | Kết quả thật |
