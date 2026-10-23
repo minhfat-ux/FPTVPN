@@ -23,6 +23,13 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+
+# --- chi mot instance duy nhat (Scheduled Task chay moi 5 phut se nhan ban neu khong khoa) ---
+$mutex = New-Object System.Threading.Mutex($false, "Local\VPNFlowGatewayAutostart")
+if (-not $mutex.WaitOne(0)) {
+    Log "da co instance autostart khac dang chay -> thoat"
+    exit 0
+}
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # ...\FPTVPN
 $tcpLog = Join-Path $root ".tmp\gw-autostart.log"
 $monitor = Join-Path $root "tools\lan-proxy\gateway-monitor.ps1"
