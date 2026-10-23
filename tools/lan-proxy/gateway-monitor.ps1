@@ -12,7 +12,9 @@
 # Log:  .tmp\gw-monitor.log
 
 $ErrorActionPreference = "Continue"
-$root = Split-Path -Parent $PSScriptRoot
+# Script co the nam o .tmp\ hoac tools\lan-proxy\ => tim goc repo bang su ton tai cua lan-proxy.exe
+$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+if (-not (Test-Path (Join-Path $root "tools\lan-proxy\lan-proxy.exe"))) { $root = Split-Path -Parent $PSScriptRoot }
 $relayExe = Join-Path $root ".tmp\gateway\flowvpnrelay-windows-amd64.exe"
 $lanExe = Join-Path $root "tools\lan-proxy\lan-proxy.exe"
 $cfgWs = Join-Path $root ".tmp\gateway\pc-gateway.json"
@@ -61,7 +63,7 @@ function Start-Relay($relay) {
     } else {
         $c = Get-Content $cfgWs -Raw | ConvertFrom-Json
         $c.transport.url = "wss://api.meetflowai.site/relay/$($relay.Name)"
-        $c.transport.links = 96
+        $c.transport.links = 24
         $c.socks5.listen = "127.0.0.1:$p"
         $f = Join-Path $env:TEMP "gwmon-$($relay.Name).json"
         ($c | ConvertTo-Json -Depth 6) | Set-Content -Path $f -Encoding UTF8
