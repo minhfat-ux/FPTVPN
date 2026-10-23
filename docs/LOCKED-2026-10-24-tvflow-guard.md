@@ -110,3 +110,21 @@ Muốn **tuyệt đối không thấy MiHome**: cần root (đổi home componen
 - Mac gateway chết: `launchctl kickstart -k gui/$(id -u)/site.flowvpn.relay` rồi thử
   `curl -x http://192.168.100.6:18081 https://connectivitycheck.gstatic.com/generate_204` phải `204`.
 - TV mất proxy: `adb -s 192.168.100.104:5555 shell settings put global http_proxy 192.168.100.5:18081`.
+
+## 7. Netflix trên TV này — ĐÃ CHỐT BỎ (24/10/2026)
+
+Quyết định của chủ dự án: **không dùng Netflix trên TV `MiTV-AFZP0`**, xem bằng điện thoại/iPad.
+Lý do (bằng chứng gộp từ 29/09 + 20/10 + 24/10/2026, không cần thử lại):
+
+| Kiểm | Kết quả |
+|---|---|
+| APK Netflix thật (đúng chữ ký `Netflix, Inc.`) | cài được, app chạy, nhưng Netflix tự báo **`-13` / "This device is not supported by the app."** |
+| Bản phone `com.netflix.mediaclient` trên cùng máy | **cũng bị chặn** ⇒ không phải lỗi APK/phiên bản |
+| Widevine | `securityLevel=L1`, vendor=Google, v18.0.0 ⇒ phần cứng DRM đủ, **không phải nguyên nhân** |
+| `com.netflix.partner.activation` (app Netflix dùng để nhận ESN) | cài vào **không qua** — thiếu phê duyệt phía server |
+| `cmd package set-home-activity`, đổi priority, `pm disable-user` MiHome | đã thử ở §4b — Xiaomi chặn, nhưng đây là chuyện HOME, không liên quan Netflix |
+| Chứng nhận | Netflix cấp **theo model qua dự án OEM** (ESN sinh lúc đăng ký, >900 test, 2–3 tháng, NTS); model nội địa TQ không có trong hệ chứng nhận |
+
+⇒ **Không có cách cứu bằng app/build.prop/root**: cái thiếu là ESN do Netflix cấp cho OEM, không
+phải tên model. Đừng thử lại các hướng "fake model", "mod APK bỏ check", "clone ESN" (giả mạo, trái ToS).
+Đường dùng được nếu sau này cần: box HDMI certified (Fire TV / Chromecast / Apple TV).
