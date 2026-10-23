@@ -351,7 +351,62 @@ func (s *dnsServer) handle(ctx context.Context, query []byte) []byte {
 
 // exchange gửi nguyên message tới addr qua UDP và trả câu trả lời. Dial THƯỜNG (không
 // binding interface): định tuyến của HĐO đã quyết gói đi thẳng hay vào TUN.
+// exchange hỏi một upstream: UDP trước, THẤT BẠI thì thử lại bằng TCP.
+//
+// Vì sao cần đường TCP (sự cố máy thật 22/10/2026): resolver "remote" đi XUYÊN tunnel, mà đường
+// UDP trong tunnel có mạng chập chờn trong khi TCP vẫn chạy (đo được: TCP tới 1.1.1.1:443 qua relay
+// ổn định). Thiếu đường TCP thì một truy vấn DNS hỏng làm CẢ HỆ THỐNG mất phân giải tên, dù tunnel
+// vẫn chở dữ liệu tốt.
 func (s *dnsServer) exchange(ctx context.Context, addr string, query []byte) ([]byte, error) {
+	if resp, err := s.exchangeUDP(ctx, addr, query); err == nil {
+		return resp, nil
+	}
+	return s.exchangeTCP(ctx, addr, query)
+}
+
+// exchangeTCP gửi DNS qua TCP (khung 2 byte độ dài) — dùng khi UDP không trả lời.
+func (s *dnsServer) exchangeTCP(ctx context.Context, addr string, query []byte) ([]byte, error) {
+	if len(query) < dnsMinHeader || len(query) > 0xffff {
+		return nil, errors.New("dns query sai do dai")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	d := net.Dialer{Timeout: dnsUpstreamTimeout}
+	conn, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	deadline := time.Now().Add(dnsUpstreamTimeout)
+	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
+		deadline = dl
+	}
+	_ = conn.SetDeadline(deadline)
+
+	framed := make([]byte, 2+len(query))
+	binary.BigEndian.PutUint16(framed[:2], uint16(len(query)))
+	copy(framed[2:], query)
+	if _, err := conn.Write(framed); err != nil {
+		return nil, err
+	}
+
+	var lenBuf [2]byte
+	if _, err := io.ReadFull(conn, lenBuf[:]); err != nil {
+		return nil, err
+	}
+	n := int(binary.BigEndian.Uint16(lenBuf[:]))
+	if n < dnsMinHeader || n > dnsMaxMsgSize {
+		return nil, errors.New("dns tcp: do dai phan hoi vo ly")
+	}
+	resp := make([]byte, n)
+	if _, err := io.ReadFull(conn, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+func (s *dnsServer) exchangeUDP(ctx context.Context, addr string, query []byte) ([]byte, error) {
 	if len(query) < dnsMinHeader {
 		return nil, errors.New("dns query quá ngắn")
 	}

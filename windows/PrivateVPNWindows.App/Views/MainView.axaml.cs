@@ -245,8 +245,9 @@ public partial class MainView : UserControl
         try
         {
             var accessToken = _services.Auth.AccessToken;
+            var claimSwatch = System.Diagnostics.Stopwatch.StartNew();
             await RegisterDeviceAsync(accessToken);
-            log.Info("connect: đã claim bản cài cho tài khoản");
+            log.Info($"connect: đã claim bản cài cho tài khoản ({claimSwatch.ElapsedMilliseconds} ms)");
 
             // Join token một lần để coordinator cấp IP overlay + provision peer.
             // PHẢI truyền token này vào RegisterAsync: mặc định hàm đó dùng token của
@@ -274,7 +275,9 @@ public partial class MainView : UserControl
         }
         catch (Exception ex)
         {
-            log.Error($"connect: thất bại: {ex.GetType().Name}: {ex.Message}");
+            // Log NGUYÊN chuỗi ngoại lệ: chỉ in ex.Message thì "Không thể kết nối tới máy chủ VPNFlow"
+            // không cho biết hỏng ở đâu (DNS? TCP? TLS?) — đúng thứ đã làm sự cố 21/10/2026 khó tìm.
+            log.Error($"connect: thất bại: {DescribeChain(ex)}");
             _services.Connection.Fail(ex.Message);
         }
 
@@ -297,6 +300,19 @@ public partial class MainView : UserControl
             accessToken: accessToken,
             deviceKey: _services.Device.PublicKeyBase64,
             name: _services.Device.RegistrationName());
+    }
+
+    /// <summary>Chuỗi ngoại lệ dạng "Outer: msg <- Inner: msg <- ..." để log đủ nguyên nhân gốc.</summary>
+    private static string DescribeChain(Exception ex)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (sb.Length > 0) sb.Append(" <- ");
+            sb.Append(e.GetType().Name).Append(": ").Append(e.Message);
+        }
+
+        return sb.ToString();
     }
 
     private static string DescribeDeviceLimit(DeviceLimitException ex)

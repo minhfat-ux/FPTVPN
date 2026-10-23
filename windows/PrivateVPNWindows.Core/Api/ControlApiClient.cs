@@ -95,6 +95,20 @@ public sealed class ControlApiClient : IDisposable
     /// IP giáº£ hoáº·c bá»‹ cháº·n â‡’ app KHÃ”NG gá»i Ä‘Æ°á»£c API (khÃ´ng Ä‘Äƒng nháº­p, khÃ´ng nháº­n OTP). Ta chá»§ Ä‘á»™ng
     /// phÃ¢n giáº£i tÃªn miá»n qua DoH rá»“i tá»± má»Ÿ socket tá»›i IP tháº­t; náº¿u DoH lá»—i thÃ¬ quay vá» DNS há»‡ thá»‘ng.
     /// </summary>
+    /// <summary>
+    /// HttpClient phân giải tên miền: **DNS hệ thống TRƯỚC**, chỉ hỏi DoH khi DNS hệ thống không
+    /// dùng được (hoặc trả về IP fake của chế độ TUN fake-IP).
+    ///
+    /// Vì sao đổi thứ tự (21/10/2026, sự cố máy thật): trước đây DoH (1.1.1.1:443) được hỏi TRƯỚC,
+    /// nên trên mạng **chặn 1.1.1.1:443** (đo thật: gói bị nuốt, TCP timeout, còn Cloudflare thì
+    /// 177–362 ms) mỗi lần thử host phải chờ hết hạn DoH rồi mới tới DNS thật ⇒ nối API chậm
+    /// 22–29 GIÂY (probe in ra "ApiServerException sau 22183 ms"), và với 2 host × 3 vòng thì khách
+    /// chỉ thấy "Không thể kết nối tới máy chủ VPNFlow". DNS hệ thống trả lời trong ~10 ms nên đảo
+    /// thứ tự là đúng cho mọi mạng bình thường.
+    ///
+    /// DoH vẫn giữ nguyên mục đích ban đầu: khi khách bật Clash Verge/v2rayN ở chế độ TUN + fake-IP,
+    /// DNS hệ thống trả IP giả (198.18.0.0/15 hoặc 198.19.0.0/16) — lúc đó mới hỏi DoH để lấy IP thật.
+    /// </summary>
     private static HttpClient CreateHttpClientWithDohFallback()
     {
         var handler = new SocketsHttpHandler
@@ -105,21 +119,8 @@ public sealed class ControlApiClient : IDisposable
                 var host = context.DnsEndPoint.Host;
                 var port = context.DnsEndPoint.Port;
 
-                var addresses = await ResolveWithDohAsync(host, cancellationToken).ConfigureAwait(false);
-                if (addresses.Count == 0)
-                {
-                    try
-                    {
-                        addresses = (await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
-                            .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
-                            .ToList();
-                    }
-                    catch (SocketException)
-                    {
-                        // rÆ¡i xuá»‘ng dÆ°á»›i: nÃ©m HttpRequestException vá»›i thÃ´ng bÃ¡o rÃµ rÃ ng
-                    }
-                }
-
+                // Thứ tự: DNS hệ thống (~10 ms) trước, chỉ khi không dùng được mới tới DoH.
+                var addresses = await ResolveSystemFirstAsync(host, cancellationToken).ConfigureAwait(false);
                 foreach (var ip in addresses)
                 {
                     var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
@@ -139,6 +140,54 @@ public sealed class ControlApiClient : IDisposable
         };
 
         return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+    }
+
+    /// <summary>
+    /// Phân giải tên miền: **DNS hệ thống trước**, DoH chỉ là đường dự phòng.
+    ///
+    /// DNS hệ thống bị coi là "không dùng được" khi: lỗi, rỗng, hoặc trả về IP fake của chế độ TUN
+    /// fake-IP (198.18.0.0/15, 198.19.0.0/16) — đúng ca mà DoH sinh ra để cứu.
+    /// </summary>
+    private static async Task<List<IPAddress>> ResolveSystemFirstAsync(
+        string host,
+        CancellationToken cancellationToken)
+    {
+        // Host đã là IP (vd "https://1.1.1.1"): không cần phân giải.
+        if (IPAddress.TryParse(host, out var literal))
+        {
+            return new List<IPAddress> { literal };
+        }
+
+        var system = new List<IPAddress>();
+        try
+        {
+            system = (await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
+                .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
+                .ToList();
+        }
+        catch (SocketException)
+        {
+            // Rơi xuống DoH.
+        }
+        catch (ArgumentException)
+        {
+            // Tên không hợp lệ — để DoH thử cho thống nhất.
+        }
+
+        if (system.Count > 0 && !system.Any(IsFakeIp))
+        {
+            return system;
+        }
+
+        var doh = await ResolveWithDohAsync(host, cancellationToken).ConfigureAwait(false);
+        return doh.Count > 0 ? doh : system;
+    }
+
+    /// <summary>IP giả của chế độ TUN fake-IP (Clash/mihomo dùng 198.18.0.0/15 và 198.19.0.0/16).</summary>
+    private static bool IsFakeIp(IPAddress ip)
+    {
+        var b = ip.GetAddressBytes();
+        return b.Length == 4 && b[0] == 198 && (b[1] == 18 || b[1] == 19);
     }
 
     private static readonly Lazy<HttpClient> DohClient = new(() =>
