@@ -35,6 +35,9 @@ public class HomeGuardService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         startForegroundCompat();
+        // Proxy nội bộ cho các app không dùng system proxy (SmartTube...): chúng trỏ
+        // localhost, còn gateway do lớp này tự chọn lại khi .5/.6 đổi.
+        LocalGatewayProxy.start();
         handler.post(tick);
     }
 
