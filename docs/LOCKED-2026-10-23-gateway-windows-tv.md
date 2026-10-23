@@ -10,7 +10,7 @@
 
 | Hạng mục | Giá trị |
 |---|---|
-| Commit khoá | `89a1a9f1` (handoff A+B), trước đó `60609eb2`/`3c90e400` |
+| Commit khoá | `87febe0d` (phương án B) + `9c277982`/`git log` autostart — xem §8 |
 | Commit trước đó cùng đợt | `789a75fb` (auto dò gateway + route domain fallback), `64ebdb47` (quét subnet 18081/18083) |
 | App TV | `com.privatevpn.app.tv.dev` **versionCode 99**, APK 97.432.509 B (sha256 đổi theo bản 99) |
 | Guard | `com.privatevpn.app.guard` (bản sửa: có INTERNET, dò cổng trên luồng riêng, danh sách gateway) |
@@ -92,3 +92,21 @@ khoá): phần media của FPT Play/TV360 không đi qua HTTP proxy ⇒ muốn p
   sau 20 s; thêm quyền `SCHEDULE_EXACT_ALARM`. Bằng chứng: sau `am kill` khi ở nền, +4 s service được
   yêu cầu, +9 s `local-proxy: nghe 127.0.0.1:1081`, +70 s `HTTP proxy (CONNECT) sẵn sàng`; `/proc/net/tcp`
   có dòng `:0439 … 0A` (LISTEN).
+## 8. Cập nhật cuối 24/10/2026 — CHỐT BẢN KHOÁ
+
+- **App TV: versionCode 100** (`87febe0d`). Chính sách auto = **phương án B**:
+  * mặc định dùng gateway LAN điểm cao nhất;
+  * đường App `127.0.0.1:1081` **được thi đấu** nhưng phải đạt `TV_WIN_MIN_KBPS = 2000 kbps` VÀ
+    `>= 1.5x` gateway tốt nhất;
+  * **Xác thực đường đo**: mỗi tuyến đo **2 lần trên 2 kết nối mới** (CONNECT + TLS thật), điểm = **min**
+    ⇒ burst ảo không kéo được điểm. Log: `đo <addr> = X kbps (2 kết nối: a / b)`.
+  * SCORE_TTL 5 phút (vì mỗi phép đo tốn 2×128 KB).
+- **Gateway Windows tự bật/tắt theo mạng** (`tools/lan-proxy/gateway-autostart.ps1`):
+  SSID `KT-617` hoặc IP `192.168.100.*` ⇒ bật monitor (tự dựng 4 relay + lan-proxy); mạng khác ⇒ dừng.
+  Chạy qua **Scheduled Task "VPNFlow Gateway Watch"** (5 phút/lần) + shortcut Startup; có mutex
+  single-instance và **wake-lock** (Windows không ngủ khi gateway chạy).
+- **Dọn TUN**: `disable-tun-for-gateway.ps1` (Administrator) xử lý adapter `sing-tun Tunnel` mà script cũ
+  không thấy. Sau reboot 23/10: `flowvpntun` sạch, route CF đi qua Wi-Fi.
+- **Bằng chứng failover** (đo thật): tắt gateway Windows → proxy sang Mac `.6` sau **20 s**; bật lại →
+  quay về `.5` sau **20 s**; log `đo .5 = 903 kbps` / `.6 = 0 kbps (SocketTimeout)`.
+- Từ mốc này: **không sửa code nữa** cho tới khi chủ dự án yêu cầu.
