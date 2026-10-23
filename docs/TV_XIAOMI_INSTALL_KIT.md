@@ -72,3 +72,38 @@ Mở FPT Tubeflow: sau ~5 s phải ra danh sách video. Trắng/lỗi ⇒ kiểm
   `android/guard`; nhớ cấp lại `WRITE_SECURE_SETTINGS` sau khi cài.
 - FPT Tubeflow: `bash tools/fpt-tubeflow/build.sh <SmartTube.apk> 9013 2.2-fpt-tubeflow`
   (xem `tools/fpt-tubeflow/README.md`).
+
+## Sự cố 24/10/2026 02:40 — "FPT Play không vào được gateway" (đã xử lý)
+
+**Triệu chứng:** TV không tải được FPT Play; `http_proxy` của TV trỏ gateway đã chết; phải tắt/bật
+app VPNFlow mới hết.
+
+**Chuỗi nguyên nhân (đo được):**
+
+1. Gateway Windows `.5` bị **"nửa chết"**: cổng TCP 18081 vẫn mở nhưng CONNECT trả `000` cho **mọi**
+   đích (gstatic, youtube, vodcdn.fptplay.net) — thời điểm này trùng cửa sổ harness Windows phát hành
+   `android 1.4.7/105` (commit `ccc83a3` 02:17) và test gateway trên máy Windows. ⇒ khả năng cao do
+   lần test/restart đó.
+2. Cùng lúc, app VPNFlow trên TV (vẫn **1.4.5/100**) ở chế độ `proxy_mode=auto` **tự phát hiện gateway
+   LAN của điện thoại** `192.168.100.101:18081` (bản 1.4.7/105 vừa cài trên Z Fold5 có "gateway LAN
+   trên điện thoại") rồi đặt proxy TV sang điện thoại. Gateway điện thoại **fail Google/CDN
+   `gstatic=000`** (lỗi IPv6 — chính là thứ 1.4.7 sửa, nhưng TV còn 1.4.5), chỉ FPT CDN còn `210`
+   ⇒ FPT Play chập chờn, Tubeflow chết.
+3. Guard cũ (≤1.5) nhịp 60 s + probe 8-10 s/đích nên chuyển gateway rất chậm ⇒ người dùng phải
+   tắt/bật VPNFlow để ép chọn lại.
+
+**Đã sửa:**
+
+| Việc | Kết quả |
+|---|---|
+| Guard **1.6** (vc 7): nhịp **15 s**, `probeQuick` 4 s, thêm đích `www.fptplay.net:443` | Tự failover **~20 s** (đo: 02:43:06 đặt `.5` chết → 02:43:31 proxy = `.6`) |
+| `proxy_gateway` của VPNFlow tạm ưu tiên `.6` | TV không bị chọn `.5` chết |
+| Đặt lại `http_proxy` = `.6` trên TV | FPT Play vào lại màn kênh; proxy giữ nguyên sau 20 s |
+
+**Bài học / luật rút ra:**
+
+- **Trước khi restart/dừng gateway trên máy Windows (`.5`) phải báo trước** — đó là đường ra đang
+  phục vụ TV; test 1 phút là TV mất mạng thật. (Giống luật §7e cho relay server, áp dụng cho gateway LAN.)
+- **Tắt "gateway LAN" trên điện thoại** (hoặc gỡ bản 1.4.7 khỏi điện thoại) nếu không muốn TV tự chọn
+  điện thoại làm proxy; TV app cũ (1.4.5) chưa có bản sửa IPv6 nên qua điện thoại sẽ chết Google.
+- Nếu cập nhật app VPNFlow trên TV lên **1.4.7/105**, cần kiểm lại `proxy_mode` có bị đổi về `auto` không.
