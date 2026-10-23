@@ -10,9 +10,9 @@
 
 | Hạng mục | Giá trị |
 |---|---|
-| Commit khoá | `3c90e400` (fix lan-proxy chia đều khi UDP chết) |
+| Commit khoá | `89a1a9f1` (handoff A+B), trước đó `60609eb2`/`3c90e400` |
 | Commit trước đó cùng đợt | `789a75fb` (auto dò gateway + route domain fallback), `64ebdb47` (quét subnet 18081/18083) |
-| App TV | `com.privatevpn.app.tv.dev` **versionCode 98**, APK 97.432.509 B, sha256 `B1C0406F8F0B41AC…` |
+| App TV | `com.privatevpn.app.tv.dev` **versionCode 99**, APK 97.432.509 B (sha256 đổi theo bản 99) |
 | Guard | `com.privatevpn.app.guard` (bản sửa: có INTERNET, dò cổng trên luồng riêng, danh sách gateway) |
 | Watchdog của Mac | `com.tvflow.watchdog` — **đang disable** (nó cũng ép proxy về 1081, xung đột với ProxyDirector) |
 
@@ -80,3 +80,15 @@ Trước đó (19:23–20:19) UDP bị chặn và chỉ còn WS 25–30 KB/s/nod
 Chủ dự án yêu cầu → cập nhật lại mục 1/2/3 và commit `docs(lock): ...` mới. Việc còn treo (chưa làm vì
 khoá): phần media của FPT Play/TV360 không đi qua HTTP proxy ⇒ muốn phủ 100% cần **TUN ở gateway**
 (hoặc root TV theo kế hoạch của Mac).
+
+## 7. Cập nhật 23/10/2026 22:00 — theo 2 handoff của Mac
+
+- **A. Discovery theo nhu cầu** (`ProxyDirector`): prefs ưu tiên trước, gateway tự dò xếp sau; chỉ dò khi
+  không còn tuyến nào sống / bấm Refresh / cache hết hạn; throttle ≤1 lượt/60 s, cache quét 10 phút;
+  `mode=tv` không dò. Bằng chứng: log `tự dò được gateway 192.168.100.5:18081`, `quét subnet thấy
+  192.168.100.6:18081, 192.168.100.5:18081, 192.168.100.6:18083`, chọn `.6` (71 kbps > 56 kbps).
+- **B. Tự hồi tunnel khi ở nền** (`VpnKeepAlive`): dùng `setExactAndAllowWhileIdle` (app được cấp
+  temporary power allowlist khi chuông nổ) thay `setAndAllowWhileIdle`; bắt lỗi bị từ chối ⇒ hẹn lại
+  sau 20 s; thêm quyền `SCHEDULE_EXACT_ALARM`. Bằng chứng: sau `am kill` khi ở nền, +4 s service được
+  yêu cầu, +9 s `local-proxy: nghe 127.0.0.1:1081`, +70 s `HTTP proxy (CONNECT) sẵn sàng`; `/proc/net/tcp`
+  có dòng `:0439 … 0A` (LISTEN).
