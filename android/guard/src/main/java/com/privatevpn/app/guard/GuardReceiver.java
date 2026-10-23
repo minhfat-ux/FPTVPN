@@ -31,7 +31,7 @@ public class GuardReceiver extends BroadcastReceiver {
     public static final String ACTION_TICK = "com.privatevpn.app.guard.TICK";
     private static final String PROXY_VALUE = "127.0.0.1:1081";
     private static final int REQ = 8101;
-    private static final long INTERVAL_MS = 60L * 1000L;
+    private static final long INTERVAL_MS = 15L * 1000L;
 
     /**
      * Gateway LAN dự phòng, **thử lần lượt theo thứ tự** (ngăn cách bằng dấu phẩy):
@@ -72,7 +72,10 @@ public class GuardReceiver extends BroadcastReceiver {
             // Lý do (sự cố thật 24/10/2026): mỗi nhịp lại chọn "nhanh nhất" => proxy nhảy
             // .5 <-> .6 giữa lúc đang xem, kết nối OkHttp đang mở đứt => "lúc có video lúc mất".
             if (isGateway && !isLoopback) {
-                long cur = probeMs(proxy);
+                // Kiểm tra NHANH: gateway hay bị "nửa chết" (cổng TCP vẫn mở nhưng CONNECT
+                // treo) — thuật toán cũ chờ tới 10 s/đích nên TV mất mạng cả phút.
+                // Ca thật 24/10/2026 02:40: gateway .5 treo, proxy kẹt .5 tới khi tắt/bật VPNFlow.
+                long cur = probeQuick(proxy);
                 if (cur >= 0) {
                     Log.i(TAG, "gateway " + proxy + " còn sống (" + cur + " ms) -> giữ");
                     return;
@@ -148,7 +151,7 @@ public class GuardReceiver extends BroadcastReceiver {
 
     /** Đích dò: ưu tiên YouTube (đúng ca video), fallback gstatic (đúng ca FPT Play/TV360). */
     private static final String[] PROBE_HOSTS = {
-            "www.youtube.com:443", "connectivitycheck.gstatic.com:443"};
+            "www.youtube.com:443", "connectivitycheck.gstatic.com:443", "www.fptplay.net:443"};
 
     /** Đo gateway bằng CONNECT thật tới đích dò. Trả ms của đích đầu tiên nối được, -1 nếu chết. */
     private static long probeMs(String hostPort) {
@@ -157,6 +160,37 @@ public class GuardReceiver extends BroadcastReceiver {
             if (ms >= 0) return ms;
         }
         return -1;
+    }
+
+    /** Kiểm nhanh (TCP 1,2 s + CONNECT 4 s) — dùng cho gateway đang dùng. */
+    private static long probeQuick(String hostPort) {
+        int i = hostPort.lastIndexOf(':');
+        if (i <= 0) return -1;
+        int port;
+        try {
+            port = Integer.parseInt(hostPort.substring(i + 1).trim());
+        } catch (Throwable t) {
+            return -1;
+        }
+        String host = hostPort.substring(0, i).trim();
+        long t0 = android.os.SystemClock.elapsedRealtime();
+        Socket s = new Socket();
+        try {
+            s.connect(new InetSocketAddress(host, port), 1200);
+            s.setSoTimeout(4000);
+            s.getOutputStream().write((
+                    "CONNECT www.youtube.com:443 HTTP/1.1\r\n" +
+                            "Host: www.youtube.com:443\r\n\r\n").getBytes());
+            s.getOutputStream().flush();
+            byte[] buf = new byte[96];
+            int n = s.getInputStream().read(buf);
+            if (n <= 0 || !new String(buf, 0, n).contains(" 200")) return -1;
+            return android.os.SystemClock.elapsedRealtime() - t0;
+        } catch (Throwable t) {
+            return -1;
+        } finally {
+            try { s.close(); } catch (Throwable ignored) { }
+        }
     }
 
     /** CONNECT thật tới `target` qua gateway `hostPort` (10 s). */

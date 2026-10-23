@@ -19,7 +19,7 @@ $A uninstall org.smarttube.stable 2>/dev/null || true
 
 echo "== cài 4 APK"
 $A install -r -d "${KIT_APK:-/Volumes/BIWIN/XiaoMiLauncher}/TVFlowHome-2.8.apk"
-$A install -r -d "${KIT_APK:-/Volumes/BIWIN/XiaoMiLauncher}/VPNFlowGuard-1.5.apk"
+$A install -r -d "${KIT_APK:-/Volumes/BIWIN/XiaoMiLauncher}/VPNFlowGuard-1.6.apk"
 $A install -r -d "${KIT_APK:-/Volumes/BIWIN/XiaoMiLauncher}/VPNFlow-TV-1.4.5.apk"
 $A install -r -d "${KIT_APK:-/Volumes/BIWIN/XiaoMiLauncher}/FPTTubeflow-2.2.apk"
 
