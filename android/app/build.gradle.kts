@@ -41,7 +41,7 @@ android {
         applicationId = "com.privatevpn.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 101
+        versionCode = 103
         versionName = "1.4.5"
     }
 

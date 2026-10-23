@@ -42,6 +42,9 @@ object VpnKeepAlive {
         // trong Settings: đường TV (1081) → gateway LAN → gỡ hẳn. Nhờ vậy nhịp này không còn "chỉ
         // xoá proxy" mà còn TỰ NHẢY sang đường dự phòng khi đường TV chết (yêu cầu chủ dự án 22/10/2026).
         ProxyDirector.enforce(context)
+        // Mỗi nhịp 60 s: áp lại vai trò gateway LAN theo mạng hiện tại (mạng nhà 192.168.100.* thì bật,
+        // mạng khác thì tắt) — yêu cầu chủ dự án 24/10/2026.
+        runCatching { LanGatewayAuto.sync(context) }
         // Chế độ "chỉ gateway LAN": tunnel của app là VÔ NGHĨA (proxy không bao giờ trỏ 1081) và còn
         // tốn CPU/băng thông ⇒ không dựng service, chỉ giữ chuông tự kiểm để còn nhảy lại khi đổi chế độ.
         if (ProxyDirector.mode(context) == Config.PROXY_MODE_GATEWAY) {

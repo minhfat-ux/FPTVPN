@@ -273,7 +273,14 @@ object Config {
      */
     const val PROXY_GATEWAY_DEFAULT = "192.168.100.11:18081,192.168.100.5:18081"
 
-    /**
+        /**
+     * Cho TV/máy khác trong LAN dùng ĐIỆN THOẠI làm gateway (yêu cầu chủ dự án 24/10/2026):
+     * mở HTTP proxy `0.0.0.0:18081` + trả lời discovery UDP 18099 (cùng giao thức với
+     * `tools/lan-proxy` trên desktop). Mặc định TẮT — bật trong Settings.
+     */
+    const val KEY_LAN_GATEWAY = "lan_gateway_enabled"
+
+/**
      * Cờ "đo lại băng thông ở phiên kế tiếp" — nút Refresh trên UI cắm cờ này rồi khởi động lại
      * tunnel (yêu cầu chủ dự án 22/10/2026). Service xoá mốc đã nhớ của mạng hiện tại khi dựng phiên.
      */

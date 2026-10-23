@@ -1303,6 +1303,8 @@ class HysteriaVpnService : VpnService() {
         // ⇒ CẢ TV MẤT MẠNG, không mở được app nào để tự chữa). Proxy hệ thống chỉ được đặt SAU
         // KHI tunnel lên thật (xem proxyAttempt), nên service chết sớm thì TV vẫn còn mạng.
         LocalProxy.ensureStarted(SOCKS_PORT)
+        // LAN gateway (nếu người dùng bật): mở listener 0.0.0.0:18081 + discovery cho TV.
+        runCatching { LocalProxy.syncLanGateway(this) }
     }
 
     /**
@@ -1472,6 +1474,8 @@ class HysteriaVpnService : VpnService() {
             if (!stopping) reportUp()
             DiagnosticsLog.log("proxy: TCP relay TRỰC TIẾP sẵn sàng (proxy hệ thống=${if (proxied) "đã đặt" else "CHƯA đặt được"})")
             LocalProxy.ensureStarted(SOCKS_PORT)
+        // LAN gateway (nếu người dùng bật): mở listener 0.0.0.0:18081 + discovery cho TV.
+        runCatching { LocalProxy.syncLanGateway(this) }
             Mobile.serveHTTPProxy("127.0.0.1:${LocalProxy.TUNNEL_PORT}")
             return serveOutcome("proxy-tcp serve() returned")
         } catch (e: Exception) {
@@ -2939,18 +2943,22 @@ class HysteriaVpnService : VpnService() {
         const val HY_TUN_IPV4_IP = "100.100.100.101"
         const val HY_TUN_IPV4 = "100.100.100.101/30"
         /**
-         * IPv6 trong tunnel — BẮT BUỘC từ 24/10/2026.
+         * IPv6 — BẮT BUỘC xử lý từ 24/10/2026 (sự cố: VPN Connected nhưng Google/YouTube chết).
          *
-         * Sự cố thật: điện thoại có IPv6, nhưng tunnel chỉ khai route IPv4 (`addRoute("0.0.0.0",0)`)
-         * nên gói IPv6 của YouTube/Google đi THẲNG ra mạng toà nhà (Google bị chặn ở đó) ⇒ VPN vẫn
-         * "Connected" mà riêng Google/YouTube không vào được. Go (`Serve`) đã hỗ trợ sẵn tham số
-         * `tunIpv6`; trước đây app chỉ để rỗng nên IPv6 lọt ra ngoài.
+         * Hai lần đo trên máy thật:
+         *  - Điện thoại có IPv6; tunnel cũ chỉ khai route IPv4 ⇒ gói IPv6 của Google/YouTube đi
+         *    THẲNG ra mạng (bị chặn) ⇒ VPN vẫn "Connected" mà Google chết.
+         *  - Nếu đưa IPv6 vào tunnel (fd00:1::1) thì còn tệ hơn: node1 có địa chỉ IPv6 nhưng KHÔNG ra
+         *    được internet IPv6 (đo `curl -6` từ node = 000) ⇒ app chọn IPv6, bị reset, YouTube chết.
          *
-         * Dùng ULA `fd00:1::1/64`: mọi gói IPv6 vào TUN rồi đi qua tunnel (server NAT66). Nếu node
-         * không có IPv6 ra internet thì kết nối IPv6 fail NHANH và app tự fallback IPv4 — vẫn tốt
-         * hơn để lọt ra mạng bị chặn.
+         * Vì vậy: **bắt IPv6 vào TUN** (addAddress + addRoute "::" ở Builder) để KHÔNG lọt ra ngoài,
+         * nhưng KHÔNG cấu hình IPv6 cho stack Go ([HY_TUN_IPV6] để rỗng) ⇒ gói IPv6 bị DROP trong
+         * tunnel, app nhận fail nhanh rồi happy-eyeballs chuyển sang IPv4.
+         * Bằng chứng IPv4 hoạt động hoàn hảo qua tunnel: google=302, youtube=200 (`curl -4`).
+         *
+         * Khi nào node có IPv6 egress thật thì chỉ cần đặt HY_TUN_IPV6 = "fd00:1::1/64".
          */
         const val HY_TUN_IPV6_IP = "fd00:1::1"
-        const val HY_TUN_IPV6 = "fd00:1::1/64"
+        const val HY_TUN_IPV6 = ""
     }
 }
