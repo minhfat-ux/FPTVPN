@@ -341,19 +341,23 @@ object ProxyDirector {
         val scored = aliveNow.mapNotNull { addr -> scoreOf(addr)?.let { addr to it } }
         if (scored.isEmpty()) return aliveNow.first()
 
-        // CHÍNH SÁCH AUTO (chốt với chủ dự án 22/10/2026):
-        //  - CÒN gateway LAN nào sống ⇒ LUÔN dùng gateway LAN, chọn cái điểm CAO NHẤT.
-        //  - KHÔNG còn gateway nào ⇒ mới dùng đường TV (127.0.0.1:1081) nếu nó sống.
-        //  - Không có gì ⇒ gỡ proxy (":0").
-        // Vì sao không cho đường TV "thi đấu" điểm với gateway: cầu WS của TV đo burst được vài nghìn
-        // kbps nhưng thực tế hay treo (app quay tít) — mẫu 128 KB không thấy được mất gói/jitter.
-        // Đã có ca thật: TV đo 2412 kbps > gateway 427 kbps nên app nhảy về 1081 và FPT Play đứng.
+        // CHÍNH SÁCH AUTO (chốt với chủ dự án 23/10/2026 — phương án B):
+        //  - Mặc định dùng gateway LAN điểm cao nhất.
+        //  - Đường TV (127.0.0.1:1081) ĐƯỢC THI ĐẤU, nhưng phải thắng rõ: điểm >= [TV_WIN_MIN_KBPS]
+        //    VÀ >= [TV_WIN_ADVANTAGE] lần gateway tốt nhất.
+        //  - Không còn gì ⇒ gỡ proxy (":0").
+        // Chống "burst ảo": điểm mỗi tuyến là MIN của HAI lần đo trên HAI kết nối khác nhau
+        // (xem probeQuality) — một cú burst không thể kéo điểm lên.
         val tvAlive = aliveNow.contains(tv)
+        val tvScore = scoreOf(tv) ?: 0
         val bestGw = aliveNow
             .filter { it != tv }
             .mapNotNull { addr -> scoreOf(addr)?.let { addr to it } }
             .maxByOrNull { it.second }
+        val tvWins = mode != Config.PROXY_MODE_GATEWAY && tvAlive && tvScore >= TV_WIN_MIN_KBPS &&
+            (bestGw == null || tvScore.toLong() * 100 >= bestGw.second.toLong() * (TV_WIN_ADVANTAGE * 100).toLong())
         val preferred = when {
+            tvWins -> tv
             bestGw != null -> bestGw.first
             tvAlive -> tv
             else -> aliveNow.first()
@@ -412,24 +416,41 @@ object ProxyDirector {
     }
 
     /**
-     * Đo chất lượng qua chính proxy [addr] bằng **CONNECT + TLS** rồi tải [PROBE_BYTES] byte.
+     * Đo chất lượng qua chính proxy [addr] — **HAI lần trên HAI kết nối mới**, điểm = MIN của hai lần.
      *
-     * Vì sao phải đi TLS chứ không GET http:// trực tiếp: gateway của Mac CHỈ xử lý CONNECT
-     * (HTTP thường trả `502 tunnel failed`), nên cách cũ chấm Mac = 0 điểm một cách oan uổng —
-     * đo thật 22/10/2026. Mọi proxy hệ thống của TV đều phải phục vụ HTTPS, nên đây mới là thước đo
-     * đúng thứ người dùng cần.
+     * Vì sao phải 2 lần: yêu cầu chủ dự án 23/10/2026 "đừng để nó đo vào burst ảo, phải xác thực cả
+     * đường đo". Một cú burst 128 KB có thể cho vài nghìn kbps trong khi đường thật đang treo; lấy
+     * MIN của hai kết nối độc lập thì burst không thể kéo điểm lên, còn đường thật yếu sẽ lộ ngay.
      *
-     * Điểm = kbps (bits/ms). Mẫu < [MIN_SAMPLE_BYTES] coi như không đo được (0) để tránh con số ảo.
+     * Mỗi lần đo: CONNECT + TLS thật tới speed.cloudflare.com (mọi proxy hệ thống của TV đều phải
+     * phục vụ HTTPS; gateway Mac chỉ xử lý CONNECT), tải [PROBE_BYTES] byte rồi tính kbps = bits/ms.
+     * Mẫu < [MIN_SAMPLE_BYTES] coi như 0.
      */
     private fun probeQuality(context: Context, addr: String) {
         val idx = addr.lastIndexOf(':')
         if (idx <= 0) return
         val host = addr.substring(0, idx).trim()
         val port = addr.substring(idx + 1).trim().toIntOrNull() ?: return
+        val first = measureOnce(host, port)
+        val second = if (first > 0) measureOnce(host, port) else 0
+        val kbps = if (first > 0 && second > 0) minOf(first, second) else 0
+        val now = android.os.SystemClock.elapsedRealtime()
+        scores = scores + (addr to now)
+        scoreKbps = scoreKbps + (addr to kbps)
+        if (kbps > 0) {
+            DiagnosticsLog.log("tuyến: đo $addr = ${kbps} kbps (2 kết nối: ${first} / ${second})")
+        } else {
+            DiagnosticsLog.log(
+                "tuyến: đo $addr = 0 kbps (2 kết nối: ${first} / ${second}) — không xác thực được đường đo",
+            )
+        }
+    }
+
+    /** Một lần đo trên một kết nối mới; trả kbps (0 = lỗi hoặc mẫu quá nhỏ). */
+    private fun measureOnce(host: String, port: Int): Int {
         val t0 = android.os.SystemClock.elapsedRealtime()
         var bytes = 0L
-        var failure: String? = null
-        runCatching {
+        val ok = runCatching {
             Socket().use { raw ->
                 raw.connect(InetSocketAddress(host, port), 2000)
                 raw.soTimeout = 2500
@@ -471,20 +492,12 @@ object ProxyDirector {
                 }
                 runCatching { tls.close() }
             }
-        }.onFailure { failure = "${it.javaClass.simpleName}: ${it.message}" }
+        }.isSuccess
+        if (!ok) return 0
         val ms = (android.os.SystemClock.elapsedRealtime() - t0).coerceAtLeast(1)
+        if (bytes < MIN_SAMPLE_BYTES) return 0
         // bits / ms = kbps (1 byte = 8 bit; 1 ms = 1/1000 s).
-        val rawKbps = if (bytes <= 0) 0 else ((bytes * 8L) / ms).toInt()
-        val kbps = if (bytes < MIN_SAMPLE_BYTES) 0 else rawKbps
-        val now = android.os.SystemClock.elapsedRealtime()
-        scores = scores + (addr to now)
-        scoreKbps = scoreKbps + (addr to kbps)
-        if (kbps > 0) {
-            DiagnosticsLog.log("tuyến: đo $addr = ${kbps} kbps (${bytes} B / ${ms} ms)")
-        } else {
-            val why = failure ?: "mẫu nhỏ (${bytes} B / ${ms} ms < $MIN_SAMPLE_BYTES B)"
-            DiagnosticsLog.log("tuyến: đo $addr = 0 kbps · $why")
-        }
+        return ((bytes * 8L) / ms).toInt()
     }
 
     /** Kích thước mẫu đo: đủ để phân biệt tuyến nhanh/chậm, nhỏ để không ăn băng thông. */
@@ -492,7 +505,12 @@ object ProxyDirector {
     /** Dưới mức này thì không tính điểm (tránh con số ảo từ vài trăm byte header). */
     private const val MIN_SAMPLE_BYTES = 16_384L
     /** Điểm chỉ có giá trị trong 3 phút — mạng đổi thì đo lại. */
-    private const val SCORE_TTL_MS = 3 * 60 * 1000L    /** Cổng UDP để tự dò gateway (khớp `tools/lan-proxy`). */
+    private const val SCORE_TTL_MS = 5 * 60 * 1000L
+    /** Đường TV phải đạt mức này (kbps) mới được xét thắng gateway. */
+    private const val TV_WIN_MIN_KBPS = 2000
+    /** Và phải cao hơn gateway tốt nhất chừng này lần. */
+    private const val TV_WIN_ADVANTAGE = 1.5
+    /** Cổng UDP để tự dò gateway (khớp 	ools/lan-proxy). */
     private const val DISCOVERY_PORT = 18099
     /** Nhớ kết quả dò 60 s. */
     private const val DISCOVERY_TTL_MS = 60 * 1000L
