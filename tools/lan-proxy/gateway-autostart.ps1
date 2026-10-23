@@ -56,7 +56,7 @@ function Get-Ssid {
 # Idle) van co the vao DRIPS khi tat man hinh/dong nap. SetThreadExecutionState(ES_CONTINUOUS |
 # ES_SYSTEM_REQUIRED) la cach buoc he thong coi nhu "co viec dang chay" => khong ngu; man hinh
 # van tat binh thuong (khong dat ES_DISPLAY_REQUIRED de khoi sang man hinh).
-function Enable-WakeLock {
+function Enable-WakeLock([bool]$Quiet = $false) {
     try {
         if (-not ("Win32.PowerUtil" -as [type])) {
             Add-Type -Namespace Win32 -Name PowerUtil -MemberDefinition @'
@@ -67,10 +67,11 @@ public static extern uint SetThreadExecutionState(uint esFlags);
         # 2147483649 = ES_CONTINUOUS(0x80000000) | ES_SYSTEM_REQUIRED(0x1) — tinh san de tranh tran Int32
         $flags = [uint32]2147483649
         [uint32]$prev = [Win32.PowerUtil]::SetThreadExecutionState($flags)
-        if ($prev -ne 0) { Log "wake-lock: da giu he thong KHONG NGU (Sleep van bi chan)" }
-        else { Log "wake-lock: SetThreadExecutionState that bai" }
+        if ($prev -ne 0) { if (-not $Quiet) { Log "wake-lock: da giu he thong KHONG NGU (Sleep van bi chan)" }; return $true }
+        else { Log "wake-lock: SetThreadExecutionState that bai"; return $false }
     } catch {
         Log "wake-lock loi: $($_.Exception.Message)"
+        return $false
     }
 }
 
@@ -105,13 +106,36 @@ function Stop-Gateway {
 Enable-WakeLock
 Log "autostart bat dau (ssid nha='$HomeSsid', dai IP='$HomeSubnet', moi $CheckSeconds s)"
 $wasHome = $null
+$lastTick = Get-Date
 
 while ($true) {
+    $now = Get-Date
+    # May vua THUC DAY sau khi ngu: do tre cua nhip 60 s la qua lau voi TV dang xem, va trong luc ngu
+    # relay/lan-proxy thuong da chet han. Don sach roi bat lai ngay (su co that 24/10/2026: ngu
+    # 00:20-02:37 => TV mat mang 2,5 gio vi khong co nhip nao chay).
+    if (($now - $lastTick).TotalSeconds -gt ($CheckSeconds * 2 + 15)) {
+        Log "may vua THUC DAY (nghi $([int](($now - $lastTick).TotalSeconds)) giay o nhip truoc) -> bat lai gateway ngay"
+        Stop-Gateway
+        Start-Sleep -Seconds 5
+    }
+    $lastTick = $now
+    [void](Enable-WakeLock $true)   # nhip lai moi vong: khong de he thong ngu trong luc gateway dang can song
+
     $net = Test-HomeNetwork
     if ($net.Home) {
         $mon = @(Get-MonitorProcess).Count
         if ($mon -eq 0) {
             Start-Monitor
+        } else {
+            # Monitor con process nhung TREO (khong ghi nhip tim) = chet kieu khong ai don.
+            $hb = Join-Path $root ".tmp\gw-monitor.heartbeat"
+            $age = if (Test-Path $hb) { ((Get-Date) - (Get-Item $hb).LastWriteTime).TotalSeconds } else { 9999 }
+            if ($age -gt 240) {
+                Log "monitor TREO (nhip tim cu $([int]$age) s) -> giet va bat lai"
+                foreach ($p in (Get-MonitorProcess)) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+                Start-Sleep -Seconds 2
+                Start-Monitor
+            }
         }
         if ($wasHome -ne $true) { Log "o MANG NHA ($($net.Why)) -> gateway BAT" }
         $wasHome = $true
