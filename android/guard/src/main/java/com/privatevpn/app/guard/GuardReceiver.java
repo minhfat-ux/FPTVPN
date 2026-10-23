@@ -68,13 +68,25 @@ public class GuardReceiver extends BroadcastReceiver {
             boolean isLoopback = proxy.startsWith("127.0.0.1");
             boolean isGateway = proxy.contains(":") && !proxy.startsWith(":");
 
+            // BÁM gateway đang dùng: còn CONNECT 200 thì GIỮ, không so tốc độ nữa.
+            // Lý do (sự cố thật 24/10/2026): mỗi nhịp lại chọn "nhanh nhất" => proxy nhảy
+            // .5 <-> .6 giữa lúc đang xem, kết nối OkHttp đang mở đứt => "lúc có video lúc mất".
+            if (isGateway && !isLoopback) {
+                long cur = probeMs(proxy);
+                if (cur >= 0) {
+                    Log.i(TAG, "gateway " + proxy + " còn sống (" + cur + " ms) -> giữ");
+                    return;
+                }
+                Log.w(TAG, "gateway " + proxy + " đã chết -> tìm gateway khác");
+            }
+
             if (isLoopback && portAlive("127.0.0.1", 1081)) {
                 Log.i(TAG, "proxy " + proxy + " còn sống -> không làm gì");
                 return;
             }
 
-            // Chọn gateway SỐNG và TỐT NHẤT (CONNECT trả 200 + thời gian ngắn nhất).
-            String best = bestGateway(context, null);
+            // Chỉ khi gateway hiện tại CHẾT mới chọn gateway khác.
+            String best = bestGateway(context, isGateway && !isLoopback ? proxy : null);
             if (best != null) {
                 if (best.equals(proxy)) {
                     Log.i(TAG, "gateway " + proxy + " còn sống & nhanh nhất -> giữ");
@@ -134,8 +146,21 @@ public class GuardReceiver extends BroadcastReceiver {
         return out;
     }
 
-    /** Đo gateway: TCP 2 s + CONNECT thật tới gstatic (10 s). Trả ms hoàn tất, -1 nếu chết. */
+    /** Đích dò: ưu tiên YouTube (đúng ca video), fallback gstatic (đúng ca FPT Play/TV360). */
+    private static final String[] PROBE_HOSTS = {
+            "www.youtube.com:443", "connectivitycheck.gstatic.com:443"};
+
+    /** Đo gateway bằng CONNECT thật tới đích dò. Trả ms của đích đầu tiên nối được, -1 nếu chết. */
     private static long probeMs(String hostPort) {
+        for (String target : PROBE_HOSTS) {
+            long ms = probeMs(hostPort, target);
+            if (ms >= 0) return ms;
+        }
+        return -1;
+    }
+
+    /** CONNECT thật tới `target` qua gateway `hostPort` (10 s). */
+    private static long probeMs(String hostPort, String target) {
         int i = hostPort.lastIndexOf(':');
         if (i <= 0) return -1;
         int port;
@@ -149,12 +174,12 @@ public class GuardReceiver extends BroadcastReceiver {
         Socket s = new Socket();
         try {
             s.connect(new InetSocketAddress(host, port), 2000);
-            s.setSoTimeout(10000);
+            s.setSoTimeout(8000);
             // Phải kiểm bằng CONNECT thật: proxy mở cổng nhưng upstream chết vẫn trả 502
             // (ca thật 23/10/2026: gateway .5 mở cổng nhưng CONNECT trả 502).
             s.getOutputStream().write((
-                    "CONNECT connectivitycheck.gstatic.com:443 HTTP/1.1\r\n" +
-                            "Host: connectivitycheck.gstatic.com:443\r\n\r\n").getBytes());
+                    "CONNECT " + target + " HTTP/1.1\r\n" +
+                            "Host: " + target + "\r\n\r\n").getBytes());
             s.getOutputStream().flush();
             byte[] buf = new byte[96];
             int n = s.getInputStream().read(buf);
@@ -162,7 +187,6 @@ public class GuardReceiver extends BroadcastReceiver {
             if (!new String(buf, 0, n).contains(" 200")) return -1;
             return android.os.SystemClock.elapsedRealtime() - t0;
         } catch (Throwable t) {
-            Log.w(TAG, "dò gateway " + hostPort + " hỏng: " + t.getClass().getSimpleName() + ": " + t.getMessage());
             return -1;
         } finally {
             try {
