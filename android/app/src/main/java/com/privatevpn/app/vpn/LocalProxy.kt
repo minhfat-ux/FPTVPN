@@ -72,6 +72,117 @@ object LocalProxy {
         started = false
         runCatching { server?.close() }
         server = null
+        stopLanGateway()
+    }
+
+    // ───────────────── LAN gateway: cho TV/máy khác dùng điện thoại làm proxy ─────────────────
+    //
+    // Yêu cầu chủ dự án 24/10/2026: "con điện thoại này anh cũng muốn nó làm gateway được cho TV".
+    // Cách làm: mở THÊM một listener trên `0.0.0.0:18081` (cùng handler với proxy nội bộ) + trả lời
+    // discovery UDP 18099 để app TV tự dò ra điện thoại (không cần nhập IP tay).
+    //
+    // An toàn: chỉ mở khi
+    //   - pref `lan_gateway_enabled` = true (người dùng bật trong Settings), VÀ
+    //   - tunnel đang sống (không thì kết nối LAN sẽ đi thẳng, mất ý nghĩa gateway).
+    // Chỉ phục vụ client trong dải private (10/8, 172.16/12, 192.168/16, 169.254/16).
+
+    /** Cổng proxy cho LAN (giống gateway laptop/Mac để TV quét đúng cổng). */
+    const val LAN_PORT = 18081
+    /** Cùng cổng discovery với `tools/lan-proxy` trên desktop. */
+    const val DISCOVERY_PORT = 18099
+
+    @Volatile private var lanServer: ServerSocket? = null
+    @Volatile private var discoverySocket: java.net.DatagramSocket? = null
+
+    /** Bật/tắt listener LAN theo pref. Gọi nhiều lần vô hại. */
+    fun syncLanGateway(context: android.content.Context) {
+        val enabled = runCatching {
+            context.getSharedPreferences(HysteriaVpnService.PREFS, android.content.Context.MODE_PRIVATE)
+                .getBoolean(com.privatevpn.app.Config.KEY_LAN_GATEWAY, false)
+        }.getOrDefault(false)
+        if (!enabled) {
+            stopLanGateway()
+            return
+        }
+        // KHÔNG chặn theo `tunnelAvailable()`: trên điện thoại app chạy chế độ TUN (không có proxy nội
+        // bộ 1081/1082), socket của app tự đi qua tun0 nên vẫn vào VPN. Đã gặp lỗi thật 24/10/2026:
+        // điều kiện cũ làm listener LAN không bao giờ mở trên điện thoại.
+        startLanGateway()
+    }
+
+    private fun startLanGateway() {
+        if (lanServer != null) return
+        synchronized(this) {
+            if (lanServer != null) return
+            val socket = runCatching {
+                ServerSocket(LAN_PORT, 64, java.net.InetAddress.getByName("0.0.0.0"))
+            }.getOrElse {
+                DiagnosticsLog.warn("lan-gateway: KHÔNG mở được 0.0.0.0:$LAN_PORT (${it.message})")
+                return
+            }
+            lanServer = socket
+            Thread {
+                DiagnosticsLog.log("lan-gateway: nghe 0.0.0.0:$LAN_PORT (cho TV/máy trong LAN dùng làm gateway)")
+                while (lanServer != null) {
+                    val client = runCatching { socket.accept() }.getOrNull() ?: break
+                    if (!isPrivateAddress(client.inetAddress)) {
+                        DiagnosticsLog.warn("lan-gateway: từ chối ${client.inetAddress?.hostAddress} (ngoài dải LAN)")
+                        runCatching { client.close() }
+                        continue
+                    }
+                    Thread { handle(client) }.apply { isDaemon = true; name = "lan-gateway-conn" }.start()
+                }
+            }.apply { isDaemon = true; name = "lan-gateway" }.start()
+            startDiscovery()
+        }
+    }
+
+    private fun stopLanGateway() {
+        runCatching { lanServer?.close() }
+        lanServer = null
+        runCatching { discoverySocket?.close() }
+        discoverySocket = null
+    }
+
+    /** Trả lời `FLOWVPNGW?` để app TV tự dò ra điện thoại (cùng giao thức với desktop). */
+    private fun startDiscovery() {
+        if (discoverySocket != null) return
+        runCatching {
+            val sock = java.net.DatagramSocket(DISCOVERY_PORT)
+            sock.broadcast = true
+            discoverySocket = sock
+            Thread {
+                DiagnosticsLog.log("lan-gateway: trả lời discovery UDP $DISCOVERY_PORT")
+                val buf = ByteArray(64)
+                while (discoverySocket != null) {
+                    val pkt = java.net.DatagramPacket(buf, buf.size)
+                    if (runCatching { sock.receive(pkt) }.isFailure) break
+                    val text = String(pkt.data, 0, pkt.length).trim()
+                    if (!text.startsWith("FLOWVPNGW?")) continue
+                    val reply = "FLOWVPNGW1 $LAN_PORT".toByteArray()
+                    runCatching { sock.send(java.net.DatagramPacket(reply, reply.size, pkt.address, pkt.port)) }
+                }
+            }.apply { isDaemon = true; name = "lan-gateway-discovery" }.start()
+        }.onFailure {
+            DiagnosticsLog.warn("lan-gateway: KHÔNG mở được UDP $DISCOVERY_PORT (${it.message})")
+        }
+    }
+
+    /** Client phải nằm trong dải private — không mở proxy ra internet. */
+    private fun isPrivateAddress(addr: java.net.InetAddress?): Boolean {
+        val a = addr ?: return false
+        if (a.isLoopbackAddress || a.isLinkLocalAddress) return true
+        val b = a.address
+        if (b.size != 4) return false
+        val b0 = b[0].toInt() and 0xff
+        val b1 = b[1].toInt() and 0xff
+        return when {
+            b0 == 10 -> true
+            b0 == 172 && b1 in 16..31 -> true
+            b0 == 192 && b1 == 168 -> true
+            b0 == 169 && b1 == 254 -> true
+            else -> false
+        }
     }
 
     // ───────────────────────── một kết nối ─────────────────────────

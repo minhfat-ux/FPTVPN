@@ -36,6 +36,10 @@ class VPNFlowApp : Application() {
         // chế độ người dùng đặt trong Settings: đường TV → gateway LAN → gỡ hẳn.
         runCatching { com.privatevpn.app.vpn.ProxyDirector.enforce(this) }
             .onFailure { DiagnosticsLog.warn("app: không chọn được tuyến ra: ${it.message}") }
+        // TỰ BẬT vai trò gateway LAN khi điện thoại vào MẠNG NHÀ (dải 192.168.100.*) — yêu cầu chủ
+        // dự án 24/10/2026: "con điện thoại này, khi vào mạng này cũng tự bật gateway lên cho TV".
+        runCatching { com.privatevpn.app.vpn.LanGatewayAuto.startWatching(this) }
+            .onFailure { DiagnosticsLog.warn("app: lỗi bật LAN gateway tự động: ${it.message}") }
         // TỰ KẾT NỐI LẠI khi app được đánh thức (app guard / ROM mở lại sau khi bị kill):
         // người dùng đã bật VPN thì dựng lại service luôn, KHÔNG cần bấm Connect.
         runCatching {

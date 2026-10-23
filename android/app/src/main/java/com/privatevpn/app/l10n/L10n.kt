@@ -71,6 +71,7 @@ enum class LKey {
     about, version, latestOnServer, latestDifferent, latestUnavailable,
     boost, boostNTunnel, boostCount, boostHint,
     proxyRoute, proxyAuto, proxyTvOnly, proxyGatewayOnly, proxyGatewayAddr, proxyHint,
+    lanGateway, lanGatewayHint,
 }
 
 object L10n {
@@ -107,6 +108,7 @@ object L10n {
             LKey.boostHint to "Applies on the next connection. Opens several parallel connections to draw more bandwidth on shared networks.",
             LKey.proxyRoute to "Exit path", LKey.proxyAuto to "Automatic (TV first, LAN gateway as fallback)", LKey.proxyTvOnly to "TV tunnel only (127.0.0.1:1081)", LKey.proxyGatewayOnly to "LAN gateway only",
             LKey.proxyGatewayAddr to "Gateway address", LKey.proxyHint to "Checks the real port before switching. Automatic jumps to the LAN gateway when the TV tunnel dies and back when it recovers.",
+            LKey.lanGateway to "Share this phone as a LAN gateway", LKey.lanGatewayHint to "Opens an HTTP proxy on port 18081 (and answers LAN discovery) so a TV or another device on the same Wi-Fi can use this phone as its gateway. Only private LAN addresses are accepted.",
             LKey.about to "About", LKey.version to "Version", LKey.latestOnServer to "Latest on server", LKey.latestDifferent to "DIFFERENT from installed build", LKey.latestUnavailable to "(unavailable)",
             LKey.upgrade to "Upgrade", LKey.preparingPermission to "Preparing VPN permission…", LKey.vpnStartFailure to "VPN could not start. Please try again.",
             LKey.diagnostics to "Diagnostics", LKey.state to "State", LKey.location to "Location", LKey.message to "Message", LKey.speedDown to "Download speed", LKey.speedUp to "Upload speed", LKey.rampMeasured to "Measured (ramp path)", LKey.rampDeclared to "Current declaration", LKey.rampHeadroom to "Declaration can rise", LKey.rampMaxed to "Maximized at this moment", LKey.pathUsed to "Path in use",
@@ -143,6 +145,7 @@ object L10n {
             LKey.boostHint to "Áp dụng ở lần kết nối sau. Mở nhiều kết nối song song để lấy thêm băng thông trên mạng dùng chung.",
             LKey.proxyRoute to "Đường ra", LKey.proxyAuto to "Tự động (ưu tiên TV, dự phòng gateway LAN)", LKey.proxyTvOnly to "Chỉ đường TV (127.0.0.1:1081)", LKey.proxyGatewayOnly to "Chỉ gateway LAN",
             LKey.proxyGatewayAddr to "Địa chỉ gateway", LKey.proxyHint to "Kiểm tra cổng thật trước khi chuyển. Tự động nhảy sang gateway LAN khi đường TV chết và tự quay lại khi đường TV sống lại.",
+            LKey.lanGateway to "Chia sẻ điện thoại làm gateway LAN", LKey.lanGatewayHint to "Mở HTTP proxy cổng 18081 (và trả lời discovery trong LAN) để TV/thiết bị khác cùng Wi-Fi dùng điện thoại này làm gateway. Chỉ chấp nhận địa chỉ trong LAN.",
             LKey.about to "Giới thiệu", LKey.version to "Phiên bản", LKey.latestOnServer to "Bản mới nhất trên server", LKey.latestDifferent to "KHÁC bản đang cài", LKey.latestUnavailable to "(không đọc được)",
             LKey.upgrade to "Nâng cấp", LKey.preparingPermission to "Đang chờ cấp quyền VPN…", LKey.vpnStartFailure to "Không thể khởi động VPN. Vui lòng thử lại.",
             LKey.diagnostics to "Chẩn đoán", LKey.state to "Trạng thái", LKey.location to "Vị trí", LKey.message to "Thông báo", LKey.speedDown to "Tốc độ tải xuống", LKey.speedUp to "Tốc độ tải lên", LKey.rampMeasured to "Đo được (đường ramp)", LKey.rampDeclared to "Khai báo hiện tại", LKey.rampHeadroom to "Khai báo còn lên được", LKey.rampMaxed to "Đã tối đa ở thời điểm này", LKey.pathUsed to "Đường đang dùng",

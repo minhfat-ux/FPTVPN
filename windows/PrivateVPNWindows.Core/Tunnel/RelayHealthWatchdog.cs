@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Net.Http;
 
 namespace VpnFlow.Core.Tunnel;
@@ -75,9 +77,46 @@ public sealed class RelayHealthWatchdog : IDisposable
 
     /// <summary>
     /// Bản dùng thật cho đường relay: thử qua tunnel bằng HTTP tới <paramref name="probeUrl"/>
-    /// (mặc định <see cref="DefaultProbeUrl"/>) và KHÔNG đọc số byte luỹ kế (không còn clash_api sau
-    /// khi bỏ sing-box — xem ghi chú đầu class).
+    /// <summary>
+    /// Phép thử chủ động KHÔNG phụ thuộc DNS: mở TCP tới một IP công cộng cố định xuyên tunnel.
+    ///
+    /// Vì sao không dùng HTTPS + tên miền (sự cố 22/10/2026): sau khi tunnel lên, DNS của máy trỏ vào
+    /// adapter TUN ⇒ chính phép thử cũng phải đi qua bộ chia DNS trong tunnel. DNS chập chờn một nhịp
+    /// là watchdog kết luận OAN "tunnel đứng" rồi gỡ một đường hầm vẫn chở dữ liệu tốt (đo thật: relay
+    /// vẫn ra được 103.173.155.50 trong khi watchdog báo hỏng). TCP tới IP cố định chỉ đo đúng thứ
+    /// cần đo: tunnel còn chở gói hay không.
     /// </summary>
+    private static readonly IPAddress[] ProbeIps =
+    {
+        IPAddress.Parse("1.1.1.1"),
+        IPAddress.Parse("8.8.8.8"),
+        IPAddress.Parse("104.21.83.112"),   // Cloudflare của API mình
+    };
+
+    private static async Task<bool> ProbeTcpAsync(CancellationToken token, int timeoutSeconds)
+    {
+        foreach (var ip in ProbeIps)
+        {
+            try
+            {
+                using var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+                {
+                    NoDelay = true,
+                };
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds)));
+                await socket.ConnectAsync(new IPEndPoint(ip, 443), cts.Token).ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception)
+            {
+                // Thử IP kế tiếp.
+            }
+        }
+
+        return false;
+    }
+
     public static RelayHealthWatchdog ForRelayTunnel(
         Action<string> log,
         Action<string> onStall,
@@ -87,32 +126,13 @@ public sealed class RelayHealthWatchdog : IDisposable
         int noTrafficSeconds = DefaultNoTrafficSeconds,
         int probeFailures = DefaultProbeFailures)
     {
-        var probeUri = new Uri(probeUrl);
-
-        // HttpClient riêng cho phép thử: timeout ngắn, KHÔNG dùng proxy hệ thống (proxy có thể là
-        // chính phần mềm đang tranh chấp và làm sai kết quả đo).
-        var probeClient = new HttpClient(new SocketsHttpHandler { UseProxy = false })
-        {
-            Timeout = TimeSpan.FromSeconds(Math.Max(1, probeTimeoutSeconds)),
-        };
+        // probeUrl giữ lại trong chữ ký để không phá caller/test; phép thử thật dùng TCP tới IP.
+        _ = probeUrl;
 
         return new RelayHealthWatchdog(
             // -1 = "không có số liệu lưu lượng": TickAsync khi đó chỉ dựa vào phép thử chủ động.
             _ => Task.FromResult(-1L),
-            async token =>
-            {
-                try
-                {
-                    using var response = await probeClient
-                        .GetAsync(probeUri, HttpCompletionOption.ResponseHeadersRead, token)
-                        .ConfigureAwait(false);
-                    return response.IsSuccessStatusCode;
-                }
-                catch (Exception)
-                {
-                    return false;
-                }
-            },
+            token => ProbeTcpAsync(token, probeTimeoutSeconds),
             log,
             onStall,
             intervalSeconds,

@@ -13,6 +13,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!--
+      Chuông tự kiểm dùng setExactAndAllowWhileIdle: khi chuông nổ, app được cấp "temporary power
+      allowlist" nên startForegroundService ĐƯỢC PHÉP dựng lại tunnel ở nền — đúng lỗi Xiaomi TV
+      từ chối service (AppsRelaunchController: Refused ... isCallerSystem=false).
+      SCHEDULE_EXACT_ALARM: Android 13+; USE_EXACT_ALARM chỉ dành cho app đồng hồ/báo thức nên không dùng.
+    -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!--
       Chỉ để ghi BÁO CÁO CHẨN ĐOÁN ra thư mục Downloads công khai trên máy Android ≤ 9 (từ API 29

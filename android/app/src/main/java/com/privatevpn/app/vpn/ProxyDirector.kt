@@ -36,12 +36,136 @@ object ProxyDirector {
      * "fallback thêm cả cơ chế cho Mac làm gateway". Ai sống thì dùng, cả hai chết mới gỡ proxy.
      * Đổi được bằng prefs (chuỗi ngăn cách bởi dấu phẩy), không cần build lại.
      */
-    fun gateways(context: Context): List<String> {
+    fun gateways(context: Context, forceDiscover: Boolean = false): List<String> {
         val raw = prefs(context).getString(Config.KEY_PROXY_GATEWAY, null)
             ?.takeIf { it.contains(":") && it.isNotBlank() }
             ?: Config.PROXY_GATEWAY_DEFAULT
-        return raw.split(',').map { it.trim() }.filter { it.contains(":") }.distinct()
+        // Prefs TRƯỚC (người dùng đã đặt thì ưu tiên — handoff Mac 23/10/2026), rồi tới gateway TỰ DÒ
+        // (địa chỉ thật khi DHCP đổi IP). Chế độ `tv` KHÔNG dò gì (yêu cầu A.4).
+        val configured = raw.split(',').map { it.trim() }.filter { it.contains(":") }
+        if (mode(context) == Config.PROXY_MODE_TV) return configured
+        val needDiscover = forceDiscover || (discList.isEmpty() && scanList.isEmpty())
+        val discovered = if (needDiscover) {
+            discoveredGateways(forceDiscover) + scanSubnet(context, forceDiscover)
+        } else {
+            discList + scanList
+        }
+        return (configured + discovered)
+            .filter { it.contains(":") && it.isNotBlank() }
+            .distinct()
     }
+
+    /**
+     * Tự dò gateway trong LAN bằng UDP broadcast — vì DHCP đổi IP máy liên tục (22→23/10/2026:
+     * laptop .11 → .5, Mac .5 → .3) nên mọi địa chỉ hard-code đều chết.
+     *
+     * Giao thức: app phát `FLOWVPNGW?` tới 255.255.255.255:[DISCOVERY_PORT]; `tools/lan-proxy` trả
+     * `FLOWVPNGW1 <cổng proxy>`. Kết quả nhớ 60 s để không phải broadcast mỗi nhịp.
+     */
+    @Volatile private var discAt = 0L
+    @Volatile private var discList: List<String> = emptyList()
+
+    private fun discoveredGateways(force: Boolean = false): List<String> {
+        // throttle: tối đa 1 lượt broadcast/60 s (yêu cầu A.3 — không scan storm)
+        if (!force && android.os.SystemClock.elapsedRealtime() - discAt < DISCOVERY_TTL_MS) return discList
+        val found = linkedSetOf<String>()
+        runCatching {
+            java.net.DatagramSocket().use { sock ->
+                sock.broadcast = true
+                sock.soTimeout = 500
+                val payload = "FLOWVPNGW?".toByteArray()
+                runCatching {
+                    sock.send(
+                        java.net.DatagramPacket(
+                            payload, payload.size,
+                            java.net.InetAddress.getByName("255.255.255.255"), DISCOVERY_PORT,
+                        ),
+                    )
+                }
+                val buf = ByteArray(128)
+                val deadline = android.os.SystemClock.elapsedRealtime() + DISCOVERY_WAIT_MS
+                while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                    val pkt = java.net.DatagramPacket(buf, buf.size)
+                    if (runCatching { sock.receive(pkt) }.isFailure) break
+                    val text = String(pkt.data, 0, pkt.length).trim()
+                    if (!text.startsWith("FLOWVPNGW1")) continue
+                    val port = text.substringAfter(' ', "18081").trim().toIntOrNull() ?: 18081
+                    found.add("${pkt.address.hostAddress}:$port")
+                }
+            }
+        }
+        discAt = android.os.SystemClock.elapsedRealtime()
+        discList = found.toList()
+        if (found.isNotEmpty()) {
+            DiagnosticsLog.log("tuyến: tự dò được gateway ${found.joinToString(", ")}")
+        }
+        return discList
+    }
+
+    /**
+     * Quét subnet (…/24) tìm máy đang mở cổng proxy — dùng khi broadcast không thấy gì.
+     *
+     * Vì sao cần: gateway của Mac không trả lời `FLOWVPNGW?` (bridge của Mac là binary riêng), nên
+     * nếu chỉ dựa vào broadcast thì app chỉ biết gateway của Windows. Quét 1 lần mỗi
+     * [SCAN_TTL_MS], mỗi host một TCP connect 250 ms (chạy song song 32 luồng) — rẻ và chịu được
+     * việc DHCP đổi IP bất kỳ máy nào.
+     */
+    @Volatile private var scanAt = 0L
+    @Volatile private var scanList: List<String> = emptyList()
+
+    private fun scanSubnet(context: Context, force: Boolean = false): List<String> {
+        // cache 10 phút; force thì bỏ qua cache nhưng vẫn giữ nhịp tối thiểu 60 s
+        val sinceScan = android.os.SystemClock.elapsedRealtime() - scanAt
+        if (!force && sinceScan < SCAN_TTL_MS) return scanList
+        if (force && sinceScan < DISCOVERY_TTL_MS) return scanList
+        scanAt = android.os.SystemClock.elapsedRealtime()
+        val prefix = localSubnetPrefix(context) ?: return scanList
+        val hits = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val tasks = 254 * SCAN_PORTS.size
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(SCAN_THREADS)
+        val latch = java.util.concurrent.CountDownLatch(tasks)
+        for (host in 1..254) {
+            val addr = "$prefix.$host"
+            // Quét cả 18081 (gateway smart-route) và 18083 (Flow3 trực tiếp của Mac).
+            for (port in SCAN_PORTS) {
+                runCatching {
+                    pool.execute {
+                        try {
+                            runCatching {
+                                java.net.Socket().use { s ->
+                                    s.connect(java.net.InetSocketAddress(addr, port), SCAN_TIMEOUT_MS)
+                                    hits.add("$addr:$port")
+                                }
+                            }
+                        } finally {
+                            latch.countDown()
+                        }
+                    }
+                }
+            }
+        }
+        runCatching { latch.await(8, java.util.concurrent.TimeUnit.SECONDS) }
+        pool.shutdownNow()
+        scanList = hits.toList()
+        if (scanList.isNotEmpty()) {
+            DiagnosticsLog.log("tuyến: quét subnet thấy gateway ${scanList.joinToString(", ")}")
+        }
+        return scanList
+    }
+
+    /** Tiền tố /24 của mạng Wi-Fi hiện tại, ví dụ `192.168.100`. */
+    private fun localSubnetPrefix(context: Context): String? = runCatching {
+        val wm = context.getSystemService(android.content.Context.WIFI_SERVICE)
+            as? android.net.wifi.WifiManager
+        @Suppress("DEPRECATION")
+        val ip = wm?.connectionInfo?.ipAddress ?: 0
+        if (ip == 0) return@runCatching null
+        // ipAddress trả về int little-endian.
+        val a = ip and 0xff
+        val b = (ip ushr 8) and 0xff
+        val c = (ip ushr 16) and 0xff
+        "$a.$b.$c"
+    }.getOrNull()
 
     /** Gateway đầu tiên trong danh sách (dùng cho nhãn UI). */
     fun gatewayAddress(context: Context): String = gateways(context).firstOrNull() ?: Config.PROXY_GATEWAY_DEFAULT
@@ -124,8 +248,19 @@ object ProxyDirector {
             )
             false
         }
-        if (ok) DiagnosticsLog.log("tuyến: proxy hệ thống $current -> $chosen (chế độ ${mode(context)})")
+        if (ok) {
+            if (chosen != ":0") lastGood = chosen
+            DiagnosticsLog.log("tuyến: proxy hệ thống $current -> $chosen (chế độ ${mode(context)})")
+        }
     }
+
+    /**
+     * Tuyến LAN cuối cùng đã dùng được. Vì sao cần: đã có ca thật (22/10/2026) — tắt máy Mac thì
+     * TV rơi về `:0` dù gateway Windows vẫn sống, vì lần dò đúng lúc Wi-Fi đang ngủ nên hết hạn 700 ms
+     * và app kết luận "chết hết". Có lastGood thì tệ nhất vẫn giữ được tuyến vừa dùng, và nhịp sau
+     * dò lại sẽ sửa tiếp.
+     */
+    @Volatile private var lastGood: String? = null
 
     private val WORKER = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "proxy-director").apply { isDaemon = true }
@@ -147,9 +282,9 @@ object ProxyDirector {
                     scores = emptyMap()
                     scoreKbps = emptyMap()
                     val candidates = if (mode(app) == Config.PROXY_MODE_GATEWAY) {
-                        gateways(app)
+                        gateways(app, forceDiscover = true)
                     } else {
-                        listOf(tvProxy()) + gateways(app)
+                        listOf(tvProxy()) + gateways(app, forceDiscover = true)
                     }
                     val aliveNow = candidates.filter { alive(it) }
                     DiagnosticsLog.log("tuyến: Refresh -> đo lại ${aliveNow.size}/${candidates.size} tuyến sống")
@@ -173,13 +308,28 @@ object ProxyDirector {
      */
     fun decide(context: Context): String {
         val tv = tvProxy()
-        val gws = gateways(context)
+        var gws = gateways(context)
         val mode = mode(context)
         if (mode == Config.PROXY_MODE_TV) return if (alive(tv)) tv else ":0"
 
-        val candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
-        val aliveNow = candidates.filter { alive(it) }
-        if (aliveNow.isEmpty()) return ":0"
+        var candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
+        var aliveNow = candidates.filter { alive(it) }
+        // Không còn tuyến nào sống ⇒ dò lại LAN (DHCP vừa đổi IP gateway) rồi tính lại.
+        if (aliveNow.isEmpty() && mode != Config.PROXY_MODE_TV) {
+            gws = gateways(context, forceDiscover = true)
+            candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
+            aliveNow = candidates.filter { alive(it) }
+        }
+        if (aliveNow.isEmpty()) {
+            // Không dò được cái nào: nếu tuyến LAN vừa dùng vẫn còn thì GIỮ NÓ thay vì gỡ proxy —
+            // "tắt Mac là mất hết" (sự cố thật 22/10/2026) xảy ra đúng ở nhánh này.
+            val keep = lastGood
+            if (keep != null && alive(keep, 2500)) {
+                DiagnosticsLog.log("tuyến: không dò được tuyến nào, giữ tuyến LAN vừa dùng $keep")
+                return keep
+            }
+            return ":0"
+        }
 
         // Đo: mọi tuyến CHƯA có điểm hoặc điểm đã cũ, tối đa [MAX_PROBES_PER_TICK] tuyến mỗi lượt.
         // (Bản trước chỉ đo 1 tuyến/lượt VÀ coi điểm quá hạn là "chưa có" ⇒ vài phút sau là rơi về
@@ -191,13 +341,40 @@ object ProxyDirector {
         val scored = aliveNow.mapNotNull { addr -> scoreOf(addr)?.let { addr to it } }
         if (scored.isEmpty()) return aliveNow.first()
 
-        val bestAddr = scored.maxByOrNull { it.second }!!.first
-        val bestScore = scored.maxOf { it.second }
+        // CHÍNH SÁCH AUTO (chốt với chủ dự án 23/10/2026 — phương án B):
+        //  - Mặc định dùng gateway LAN điểm cao nhất.
+        //  - Đường TV (127.0.0.1:1081) ĐƯỢC THI ĐẤU, nhưng phải thắng rõ: điểm >= [TV_WIN_MIN_KBPS]
+        //    VÀ >= [TV_WIN_ADVANTAGE] lần gateway tốt nhất.
+        //  - Không còn gì ⇒ gỡ proxy (":0").
+        // Chống "burst ảo": điểm mỗi tuyến là MIN của HAI lần đo trên HAI kết nối khác nhau
+        // (xem probeQuality) — một cú burst không thể kéo điểm lên.
+        val tvAlive = aliveNow.contains(tv)
+        val tvScore = scoreOf(tv) ?: 0
+        val bestGw = aliveNow
+            .filter { it != tv }
+            .mapNotNull { addr -> scoreOf(addr)?.let { addr to it } }
+            .maxByOrNull { it.second }
+        val tvWins = mode != Config.PROXY_MODE_GATEWAY && tvAlive && tvScore >= TV_WIN_MIN_KBPS &&
+            (bestGw == null || tvScore.toLong() * 100 >= bestGw.second.toLong() * (TV_WIN_ADVANTAGE * 100).toLong())
+        val preferred = when {
+            tvWins -> tv
+            bestGw != null -> bestGw.first
+            tvAlive -> tv
+            else -> aliveNow.first()
+        }
+        val bestAddr = preferred
+        val bestScore = scoreOf(bestAddr) ?: 0
 
         // Chống nhảy qua nhảy lại: giữ tuyến ĐANG dùng nếu nó còn sống và không kém tuyến tốt nhất
         // quá 15% (đổi tuyến = đổi đường của phiên đang xem, dễ làm player giật).
+        //
+        // NHƯNG chỉ áp dụng giữa các GATEWAY với nhau. Nếu tuyến đang dùng là đường TV mà đã có
+        // gateway sống thì ĐỔI NGAY — đây chính là lỗi 22/10/2026: đường TV đo burst 1355 kbps nên
+        // hysteresis "giữ 1081" và policy ưu tiên gateway LAN không bao giờ có hiệu lực.
         val current = currentProxy(context)
-        if (current != null && current != bestAddr && aliveNow.contains(current)) {
+        if (current != null && current != bestAddr && aliveNow.contains(current) &&
+            current != tv && bestAddr != tv
+        ) {
             val curScore = scoreOf(current) ?: 0
             if (curScore > 0 && curScore.toLong() * 100 >= bestScore.toLong() * 85) {
                 DiagnosticsLog.log("tuyến: giữ $current (${curScore}kbps) thay vì $bestAddr (${bestScore}kbps)")
@@ -206,7 +383,12 @@ object ProxyDirector {
         }
         if (bestAddr != current) {
             val detail = scored.joinToString(", ") { "${it.first}=${it.second}kbps" }
-            DiagnosticsLog.log("tuyến: chọn $bestAddr (điểm: $detail)")
+            val note = if (tvAlive && bestGw != null) {
+                "; ưu tiên gateway LAN khi còn gateway sống (đường TV ${scoreOf(tv) ?: 0}kbps)"
+            } else {
+                ""
+            }
+            DiagnosticsLog.log("tuyến: chọn $bestAddr (điểm: $detail$note)")
         }
         return bestAddr
     }
@@ -234,26 +416,43 @@ object ProxyDirector {
     }
 
     /**
-     * Đo chất lượng qua chính proxy [addr] bằng **CONNECT + TLS** rồi tải [PROBE_BYTES] byte.
+     * Đo chất lượng qua chính proxy [addr] — **HAI lần trên HAI kết nối mới**, điểm = MIN của hai lần.
      *
-     * Vì sao phải đi TLS chứ không GET http:// trực tiếp: gateway của Mac CHỈ xử lý CONNECT
-     * (HTTP thường trả `502 tunnel failed`), nên cách cũ chấm Mac = 0 điểm một cách oan uổng —
-     * đo thật 22/10/2026. Mọi proxy hệ thống của TV đều phải phục vụ HTTPS, nên đây mới là thước đo
-     * đúng thứ người dùng cần.
+     * Vì sao phải 2 lần: yêu cầu chủ dự án 23/10/2026 "đừng để nó đo vào burst ảo, phải xác thực cả
+     * đường đo". Một cú burst 128 KB có thể cho vài nghìn kbps trong khi đường thật đang treo; lấy
+     * MIN của hai kết nối độc lập thì burst không thể kéo điểm lên, còn đường thật yếu sẽ lộ ngay.
      *
-     * Điểm = kbps (bits/ms). Mẫu < [MIN_SAMPLE_BYTES] coi như không đo được (0) để tránh con số ảo.
+     * Mỗi lần đo: CONNECT + TLS thật tới speed.cloudflare.com (mọi proxy hệ thống của TV đều phải
+     * phục vụ HTTPS; gateway Mac chỉ xử lý CONNECT), tải [PROBE_BYTES] byte rồi tính kbps = bits/ms.
+     * Mẫu < [MIN_SAMPLE_BYTES] coi như 0.
      */
     private fun probeQuality(context: Context, addr: String) {
         val idx = addr.lastIndexOf(':')
         if (idx <= 0) return
         val host = addr.substring(0, idx).trim()
         val port = addr.substring(idx + 1).trim().toIntOrNull() ?: return
+        val first = measureOnce(host, port)
+        val second = if (first > 0) measureOnce(host, port) else 0
+        val kbps = if (first > 0 && second > 0) minOf(first, second) else 0
+        val now = android.os.SystemClock.elapsedRealtime()
+        scores = scores + (addr to now)
+        scoreKbps = scoreKbps + (addr to kbps)
+        if (kbps > 0) {
+            DiagnosticsLog.log("tuyến: đo $addr = ${kbps} kbps (2 kết nối: ${first} / ${second})")
+        } else {
+            DiagnosticsLog.log(
+                "tuyến: đo $addr = 0 kbps (2 kết nối: ${first} / ${second}) — không xác thực được đường đo",
+            )
+        }
+    }
+
+    /** Một lần đo trên một kết nối mới; trả kbps (0 = lỗi hoặc mẫu quá nhỏ). */
+    private fun measureOnce(host: String, port: Int): Int {
         val t0 = android.os.SystemClock.elapsedRealtime()
         var bytes = 0L
-        var failure: String? = null
-        runCatching {
+        val ok = runCatching {
             Socket().use { raw ->
-                raw.connect(InetSocketAddress(host, port), 1200)
+                raw.connect(InetSocketAddress(host, port), 2000)
                 raw.soTimeout = 2500
                 val out = raw.getOutputStream()
                 out.write(
@@ -293,20 +492,12 @@ object ProxyDirector {
                 }
                 runCatching { tls.close() }
             }
-        }.onFailure { failure = "${it.javaClass.simpleName}: ${it.message}" }
+        }.isSuccess
+        if (!ok) return 0
         val ms = (android.os.SystemClock.elapsedRealtime() - t0).coerceAtLeast(1)
+        if (bytes < MIN_SAMPLE_BYTES) return 0
         // bits / ms = kbps (1 byte = 8 bit; 1 ms = 1/1000 s).
-        val rawKbps = if (bytes <= 0) 0 else ((bytes * 8L) / ms).toInt()
-        val kbps = if (bytes < MIN_SAMPLE_BYTES) 0 else rawKbps
-        val now = android.os.SystemClock.elapsedRealtime()
-        scores = scores + (addr to now)
-        scoreKbps = scoreKbps + (addr to kbps)
-        if (kbps > 0) {
-            DiagnosticsLog.log("tuyến: đo $addr = ${kbps} kbps (${bytes} B / ${ms} ms)")
-        } else {
-            val why = failure ?: "mẫu nhỏ (${bytes} B / ${ms} ms < $MIN_SAMPLE_BYTES B)"
-            DiagnosticsLog.log("tuyến: đo $addr = 0 kbps · $why")
-        }
+        return ((bytes * 8L) / ms).toInt()
     }
 
     /** Kích thước mẫu đo: đủ để phân biệt tuyến nhanh/chậm, nhỏ để không ăn băng thông. */
@@ -314,12 +505,34 @@ object ProxyDirector {
     /** Dưới mức này thì không tính điểm (tránh con số ảo từ vài trăm byte header). */
     private const val MIN_SAMPLE_BYTES = 16_384L
     /** Điểm chỉ có giá trị trong 3 phút — mạng đổi thì đo lại. */
-    private const val SCORE_TTL_MS = 3 * 60 * 1000L
+    private const val SCORE_TTL_MS = 5 * 60 * 1000L
+    /** Đường TV phải đạt mức này (kbps) mới được xét thắng gateway. */
+    private const val TV_WIN_MIN_KBPS = 2000
+    /** Và phải cao hơn gateway tốt nhất chừng này lần. */
+    private const val TV_WIN_ADVANTAGE = 1.5
+    /** Cổng UDP để tự dò gateway (khớp 	ools/lan-proxy). */
+    private const val DISCOVERY_PORT = 18099
+    /** Nhớ kết quả dò 60 s. */
+    private const val DISCOVERY_TTL_MS = 60 * 1000L
+    /** Chờ tối đa 700 ms cho các gateway trả lời. */
+    private const val DISCOVERY_WAIT_MS = 700L    /** Cổng của gateway LAN (cả Windows lẫn Mac đều mở 18081). */
+    private const val GATEWAY_PORT = 18081
+    /** Quét những cổng này trên mọi host: 18081 = gateway smart-route, 18083 = Flow3 trực tiếp của Mac. */
+    private val SCAN_PORTS = intArrayOf(18081, 18083)
+    /** Quét subnet: nhớ 5 phút, 32 luồng, mỗi host chờ 250 ms. */
+    private const val SCAN_TTL_MS = 10 * 60 * 1000L
+    private const val SCAN_THREADS = 32
+    private const val SCAN_TIMEOUT_MS = 250
     /** Mỗi nhịp 60 s đo tối đa chừng này tuyến (2 × 128 KB ≈ 0,25 MB/phút, đủ nhanh mà không tốn). */
     private const val MAX_PROBES_PER_TICK = 2
+    /**
+     * Đường TV chỉ được chọn khi đo được ít nhất mức này (kbps). Dưới ngưỡng thì dù có số vẫn hay
+     * treo (app quay tít) vì jitter/mất gói của cầu WS — kinh nghiệm thật 22/10/2026.
+     */
+    /** Và phải cao hơn gateway tốt nhất chừng này lần thì mới đáng đổi đường. */
 
     /** TCP connect thật tới host:port (700 ms) — "cổng mở" chứ không phải "setting đang ghi gì". */
-    fun alive(hostPort: String, timeoutMs: Int = 700): Boolean {
+    fun alive(hostPort: String, timeoutMs: Int = 2000): Boolean {
         val idx = hostPort.lastIndexOf(':')
         if (idx <= 0) return false
         val host = hostPort.substring(0, idx).trim()

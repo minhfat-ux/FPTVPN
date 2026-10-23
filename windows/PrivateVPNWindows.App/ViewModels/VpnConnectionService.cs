@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using Avalonia.Media;
 using VpnFlow.Core.Api;
 using VpnFlow.Core.Auth;
@@ -458,30 +460,43 @@ public sealed class VpnConnectionService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Thử một request THẬT đi qua tunnel relay vừa dựng (endpoint health của chính mình, đúng URL
-    /// mà <see cref="RelayHealthWatchdog"/> dùng). Không dùng proxy hệ thống: proxy có thể là chính
-    /// phần mềm đang tranh chấp và làm sai kết quả. Mọi lỗi đều là "chưa chở được dữ liệu".
+    /// <summary>
+    /// Cổng sức khoẻ của đường relay: thử mở một kết nối TCP THẬT xuyên tunnel tới một IP cố định.
+    ///
+    /// Vì sao KHÔNG dùng HTTPS + tên miền như bản đầu (sự cố máy thật 22/10/2026): lúc này DNS của
+    /// máy đã bị trỏ vào adapter TUN ⇒ mọi truy vấn tên đi qua bộ chia DNS trong tunnel. Chỉ cần DNS
+    /// chập chờn một nhịp là cổng này loại OAN một đường hầm vẫn chở dữ liệu tốt — đo được: relay
+    /// vẫn chạy (exit IP 103.173.155.50, google 302, api 200) nhưng app rơi về WireGuard rồi chết.
+    /// TCP tới IP cố định không cần DNS nên chỉ đo đúng thứ cần đo: tunnel có chở gói hay không.
     /// </summary>
-    private static async Task<bool> RelayCarriesTrafficAsync(CancellationToken cancellationToken)
+    private async Task<bool> RelayCarriesTrafficAsync(CancellationToken cancellationToken)
     {
-        try
+        foreach (var ip in new[]
+                 {
+                     IPAddress.Parse("1.1.1.1"),
+                     IPAddress.Parse("8.8.8.8"),
+                     IPAddress.Parse("104.21.83.112"),   // Cloudflare của chính API mình
+                 })
         {
-            using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false })
+            try
             {
-                Timeout = TimeSpan.FromSeconds(8),
-            };
-            using var response = await client
-                .GetAsync(
-                    RelayHealthWatchdog.DefaultProbeUrl,
-                    HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            return response.IsSuccessStatusCode;
+                using var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+                {
+                    NoDelay = true,
+                };
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(6));
+                await socket.ConnectAsync(new IPEndPoint(ip, 443), timeout.Token).ConfigureAwait(false);
+                _log.Info($"relay: cổng sức khoẻ — TCP tới {ip}:443 qua tunnel THÀNH CÔNG");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _log.Info($"relay: cổng sức khoẻ — TCP tới {ip}:443 qua tunnel thất bại: {ex.Message}");
+            }
         }
-        catch (Exception)
-        {
-            return false;
-        }
+
+        return false;
     }
 
     /// <summary>

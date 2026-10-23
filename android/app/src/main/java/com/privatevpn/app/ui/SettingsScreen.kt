@@ -274,6 +274,42 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
 
+        // Gateway LAN: cho TV/thiết bị khác cùng Wi-Fi dùng điện thoại làm proxy.
+        // Tự bật khi vào mạng nhà (LanGatewayAuto), ở đây để người dùng xem/tắt tay.
+        SectionTitle(lang.t(LKey.lanGateway))
+        CardContainer {
+            val lanPrefs = context.getSharedPreferences(
+                HysteriaVpnService.PREFS,
+                android.content.Context.MODE_PRIVATE,
+            )
+            var lanGateway by remember {
+                mutableStateOf(lanPrefs.getBoolean(Config.KEY_LAN_GATEWAY, false))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(lang.t(LKey.lanGateway), color = VPNTheme.Label, fontSize = 15.sp)
+                Spacer(Modifier.weight(1f))
+                Switch(
+                    checked = lanGateway,
+                    onCheckedChange = { on ->
+                        lanGateway = on
+                        lanPrefs.edit().putBoolean(Config.KEY_LAN_GATEWAY, on).apply()
+                        com.privatevpn.app.vpn.LocalProxy.syncLanGateway(context)
+                    },
+                )
+            }
+            Text(
+                lang.t(LKey.lanGatewayHint),
+                color = VPNTheme.SecondaryLabel,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
         // Account
         SectionTitle(lang.t(LKey.account))
         CardContainer {

@@ -1207,6 +1207,15 @@ class HysteriaVpnService : VpnService() {
             builder.setMtu(HY_MTU)
             builder.addAddress(HY_TUN_IPV4_IP, 30)
             builder.addRoute("0.0.0.0", 0)
+            // IPv6 PHẢI vào tunnel, nếu không thì gói IPv6 của Google/YouTube đi thẳng ra mạng
+            // toà nhà (bị chặn) trong khi VPN vẫn hiện "Connected" — sự cố thật 24/10/2026.
+            // Go (`Serve`) đã nhận sẵn tham số tunIpv6; đây là phần còn thiếu phía VpnService.
+            runCatching {
+                builder.addAddress(HY_TUN_IPV6_IP, 64)
+                builder.addRoute("::", 0)
+            }.onFailure {
+                DiagnosticsLog.warn("vpn: KHÔNG thêm được IPv6 vào tunnel: ${it.javaClass.simpleName}: ${it.message}")
+            }
             if (!minimal) {
                 // ≥2 resolver: resolver đầu không trả lời thì hệ điều hành tự hỏi cái kế tiếp.
                 for (dns in com.privatevpn.app.Config.HY_DNS_SERVERS) {
@@ -1270,28 +1279,17 @@ class HysteriaVpnService : VpnService() {
     // ───────────── chế độ SOCKS5 cho thiết bị KHÔNG có TUN ─────────────
 
     /**
-     * Đặt/gỡ proxy hệ thống. Cần WRITE_SECURE_SETTINGS (cấp bằng `adb shell pm grant`).
+     * KHÔNG tự đặt proxy nữa — chuyển hết cho [ProxyDirector] (cần WRITE_SECURE_SETTINGS).
      *
-     * Tôn trọng chế độ tuyến trong Settings ([ProxyDirector]): chế độ `gateway` thì tunnel của app
-     * lên cũng KHÔNG đặt `127.0.0.1:1081` mà giữ gateway LAN — người dùng đã chốt "chỉ gateway".
+     * Lý do (sự cố thật 22/10/2026): hàm này từng ghi thẳng `127.0.0.1:1081` mỗi khi tunnel lên,
+     * nên dù chế độ auto đã chọn gateway LAN (đo được 644 kbps) thì vài chục giây sau service lại
+     * đè về 1081 (đường TV hay treo) ⇒ TV "vừa ngon lại hỏng". Nay mọi ngã rẽ đều qua một mối:
+     * auto/gateway thì gateway LAN còn sống là dùng, `tv` mới đặt 1081, không còn gì thì gỡ.
      */
     private fun setSystemProxy(on: Boolean): Boolean {
-        val value = when {
-            !on -> ":0"
-            ProxyDirector.mode(this) == Config.PROXY_MODE_GATEWAY -> ProxyDirector.gatewayAddress(this)
-            else -> "127.0.0.1:$SOCKS_PORT"
-        }
-        return runCatching {
-            android.provider.Settings.Global.putString(contentResolver, "http_proxy", value)
-            systemProxySet = on
-            true
-        }.getOrElse {
-            DiagnosticsLog.warn(
-                "proxy: KHÔNG đặt được proxy hệ thống (${it.javaClass.simpleName}: ${it.message}) " +
-                    "— cần 'pm grant $packageName android.permission.WRITE_SECURE_SETTINGS'",
-            )
-            false
-        }
+        ProxyDirector.enforceBlocking(this)
+        systemProxySet = on
+        return true
     }
 
     /**
@@ -1305,6 +1303,8 @@ class HysteriaVpnService : VpnService() {
         // ⇒ CẢ TV MẤT MẠNG, không mở được app nào để tự chữa). Proxy hệ thống chỉ được đặt SAU
         // KHI tunnel lên thật (xem proxyAttempt), nên service chết sớm thì TV vẫn còn mạng.
         LocalProxy.ensureStarted(SOCKS_PORT)
+        // LAN gateway (nếu người dùng bật): mở listener 0.0.0.0:18081 + discovery cho TV.
+        runCatching { LocalProxy.syncLanGateway(this) }
     }
 
     /**
@@ -1474,6 +1474,8 @@ class HysteriaVpnService : VpnService() {
             if (!stopping) reportUp()
             DiagnosticsLog.log("proxy: TCP relay TRỰC TIẾP sẵn sàng (proxy hệ thống=${if (proxied) "đã đặt" else "CHƯA đặt được"})")
             LocalProxy.ensureStarted(SOCKS_PORT)
+        // LAN gateway (nếu người dùng bật): mở listener 0.0.0.0:18081 + discovery cho TV.
+        runCatching { LocalProxy.syncLanGateway(this) }
             Mobile.serveHTTPProxy("127.0.0.1:${LocalProxy.TUNNEL_PORT}")
             return serveOutcome("proxy-tcp serve() returned")
         } catch (e: Exception) {
@@ -2940,6 +2942,23 @@ class HysteriaVpnService : VpnService() {
         // Single overlay address 100.100.100.101/30 (must match Go wrapper default).
         const val HY_TUN_IPV4_IP = "100.100.100.101"
         const val HY_TUN_IPV4 = "100.100.100.101/30"
+        /**
+         * IPv6 — BẮT BUỘC xử lý từ 24/10/2026 (sự cố: VPN Connected nhưng Google/YouTube chết).
+         *
+         * Hai lần đo trên máy thật:
+         *  - Điện thoại có IPv6; tunnel cũ chỉ khai route IPv4 ⇒ gói IPv6 của Google/YouTube đi
+         *    THẲNG ra mạng (bị chặn) ⇒ VPN vẫn "Connected" mà Google chết.
+         *  - Nếu đưa IPv6 vào tunnel (fd00:1::1) thì còn tệ hơn: node1 có địa chỉ IPv6 nhưng KHÔNG ra
+         *    được internet IPv6 (đo `curl -6` từ node = 000) ⇒ app chọn IPv6, bị reset, YouTube chết.
+         *
+         * Vì vậy: **bắt IPv6 vào TUN** (addAddress + addRoute "::" ở Builder) để KHÔNG lọt ra ngoài,
+         * nhưng KHÔNG cấu hình IPv6 cho stack Go ([HY_TUN_IPV6] để rỗng) ⇒ gói IPv6 bị DROP trong
+         * tunnel, app nhận fail nhanh rồi happy-eyeballs chuyển sang IPv4.
+         * Bằng chứng IPv4 hoạt động hoàn hảo qua tunnel: google=302, youtube=200 (`curl -4`).
+         *
+         * Khi nào node có IPv6 egress thật thì chỉ cần đặt HY_TUN_IPV6 = "fd00:1::1/64".
+         */
+        const val HY_TUN_IPV6_IP = "fd00:1::1"
         const val HY_TUN_IPV6 = ""
     }
 }
