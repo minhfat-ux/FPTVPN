@@ -29,9 +29,117 @@ import (
 
 var upstream string
 
+// ───────── chia luồng theo hậu tố tên miền (port từ `tools/http-socks-bridge` của Mac) ─────────
+//
+// Vì sao cần: FPT Play và TV360 cần HAI exit node khác nhau (FPT bị chặn ở node3, TV360 thì cần
+// node3). Trước đây mỗi proxy chỉ có một đường nên không thể chạy cả hai. Mac đã làm cơ chế này
+// trong http-socks-bridge (commit c4452d83, `-route .tv360.vn=...`); bản này port sang lan-proxy để
+// đường Windows cũng dùng được, TV không phải phụ thuộc máy Mac.
+//
+// Dùng:  -route ".tv360.vn=socks5://127.0.0.1:1103"  (lặp lại được nhiều lần)
+// Không khớp hậu tố nào ⇒ dùng danh sách -upstream như cũ.
+type routeRule struct {
+	suffix   string
+	upstream string
+}
+
+type routeList []routeRule
+
+func (l *routeList) String() string {
+	parts := make([]string, 0, len(*l))
+	for _, r := range *l {
+		parts = append(parts, r.suffix+"="+r.upstream)
+	}
+	return strings.Join(parts, ",")
+}
+
+func (l *routeList) Set(v string) error {
+	i := strings.Index(v, "=")
+	if i <= 0 {
+		return fmt.Errorf("route phải dạng .domain=socks5://host:port: %q", v)
+	}
+	suffix := strings.ToLower(strings.TrimSpace(v[:i]))
+	up := strings.TrimSpace(v[i+1:])
+	up = strings.TrimPrefix(strings.TrimPrefix(up, "socks5://"), "tcp://")
+	if suffix == "" || up == "" {
+		return fmt.Errorf("route thiếu hậu tố hoặc upstream: %q", v)
+	}
+	*l = append(*l, routeRule{suffix: suffix, upstream: up})
+	return nil
+}
+
+var routes routeList
+
+// ───────── danh sách đi THẲNG (không qua tunnel) ─────────
+//
+// Vì sao cần: TV Xiaomi tự kiểm tra mạng bằng `miwifi.com` (và vài domain Xiaomi khác). Qua exit
+// Việt Nam thì CONNECT tới các domain đó bị từ chối (code 4) ⇒ Android kết luận "không có internet"
+// ⇒ TV báo mất mạng dù mọi traffic khác vẫn đi được (sự cố thật 22/10/2026, log đầy
+// `CONNECT miwifi.com:443 FAIL socks5: CONNECT bị từ chối`).
+// Những domain này KHÔNG cần IP Việt Nam, cho đi thẳng bằng mạng của toà nhà.
+type directList []string
+
+func (d *directList) String() string { return strings.Join(*d, ",") }
+
+func (d *directList) Set(v string) error {
+	s := strings.ToLower(strings.TrimSpace(v))
+	if s == "" {
+		return fmt.Errorf("direct cần một hậu tố tên miền, ví dụ .miwifi.com")
+	}
+	*d = append(*d, s)
+	return nil
+}
+
+var directSuffixes directList
+
+// -verbose: ghi mỗi kết nối CONNECT (domain nào, đi đường nào) — dùng để biết TV gọi gì khi phát.
+var verbose bool
+
+func vlog(format string, args ...any) {
+	if verbose {
+		log.Printf(format, args...)
+	}
+}
+
+func isDirect(hostPort string) bool {
+	host := hostPort
+	if h, _, err := net.SplitHostPort(hostPort); err == nil {
+		host = h
+	}
+	host = strings.ToLower(host)
+	for _, s := range directSuffixes {
+		bare := strings.TrimPrefix(s, ".")
+		if strings.HasSuffix(host, s) || host == bare {
+			return true
+		}
+	}
+	return false
+}
+
+// routeUpstream trả về upstream riêng cho host (khớp hậu tố DÀI NHẤT), rỗng nếu không có quy tắc.
+func routeUpstream(hostPort string) string {
+	host := hostPort
+	if h, _, err := net.SplitHostPort(hostPort); err == nil {
+		host = h
+	}
+	host = strings.ToLower(host)
+	best := ""
+	bestLen := 0
+	for _, r := range routes {
+		bare := strings.TrimPrefix(r.suffix, ".")
+		if (strings.HasSuffix(host, r.suffix) || host == bare) && len(r.suffix) > bestLen {
+			best, bestLen = r.upstream, len(r.suffix)
+		}
+	}
+	return best
+}
+
 func main() {
 	listen := flag.String("listen", "0.0.0.0:18081", "địa chỉ lắng nghe, ví dụ 0.0.0.0:18081")
 	flag.StringVar(&upstream, "upstream", "", "socks5://host:port để chuyển tiếp qua SOCKS5 (rỗng = dial thẳng)")
+	flag.Var(&routes, "route", "chia luồng theo hậu tố tên miền: .tv360.vn=socks5://127.0.0.1:1103 (lặp lại được)")
+	flag.BoolVar(&verbose, "verbose", false, "log mọi CONNECT (domain + đường đi)")
+	flag.Var(&directSuffixes, "direct", "hậu tố đi THẲNG không qua tunnel (TV tự kiểm mạng): .miwifi.com (lặp lại được)")
 	flag.Parse()
 
 	ln, err := net.Listen("tcp", *listen)
@@ -42,6 +150,13 @@ func main() {
 		log.Printf("lan-proxy: nghe %s · chuyển tiếp qua %s", *listen, upstream)
 	} else {
 		log.Printf("lan-proxy: nghe %s · dial thẳng theo routing của máy", *listen)
+	}
+	for _, r := range routes {
+		log.Printf("lan-proxy: chia luồng %s -> %s", r.suffix, r.upstream)
+	}
+	startDiscovery(proxyPortOf(*listen))
+	for _, s := range directSuffixes {
+		log.Printf("lan-proxy: đi THẲNG (không qua tunnel) %s", s)
 	}
 	for {
 		conn, err := ln.Accept()
@@ -62,11 +177,36 @@ var connSeq int64
 // riêng ~1,4 Mbps (đo 22/10/2026: 1 luồng 1,43 Mbps, 3 luồng CÙNG một relay vẫn 1,4 Mbps
 // tổng), nhưng 3 relay khác nhau song song thì cộng dồn ~3 Mbps. Trước đây dùng lastGood
 // (chỉ failover) nên mọi kết nối dồn vào một relay và không bao giờ vượt được cái cap đó.
-var lastGood atomic.Value // string
-var rrNext uint64
+//
+// Từ 22/10/2026 đổi sang "ƯU TIÊN ĐẦU DANH SÁCH, tự thử lại": khi UDP trực tiếp mở lại (đo được
+// 8,9 Mbps so với 0,1–0,6 Mbps của cầu WS), chia đều round-robin sẽ làm 2/3 số kết nối rơi vào
+// đường chậm. Nay: dùng upstream đầu tiên còn sống; nó chết thì tụt xuống các cái sau; mỗi 30 s
+// thử lại cái đầu để quay về đường nhanh ngay khi nó sống lại.
+var current atomic.Value   // string: upstream đang dùng
+var rrNext uint64          // bộ đếm round-robin khi upstream đầu chết
+var primaryDeadUntil int64 // unix nano: trước mốc này thì chia đều các upstream còn lại
+var lastPrimaryTry int64   // unix nano, lần cuối thử upstream đầu
+
+const primaryRetryInterval = 30 * time.Second
 
 func dial(hostPort string) (net.Conn, error) {
+	// Domain "nội bộ thiết bị" (Xiaomi tự kiểm mạng) đi thẳng: qua tunnel VN là bị từ chối.
+	if isDirect(hostPort) {
+		return net.DialTimeout("tcp", hostPort, 8*time.Second)
+	}
+	// Quy tắc theo tên miền được ưu tiên: ví dụ `.tv360.vn` nên đi node3. Nhưng nếu node của route
+	// chết thì PHẢI fallback sang danh sách mặc định (case 21/22 của QA) — thà nhầm node còn hơn để
+	// TV mất mạng; trước đây `return nil, err` làm cả TV360 lẫn FPT chết cứng.
+	if routed := routeUpstream(hostPort); routed != "" {
+		c, err := socks5Dial(routed, hostPort)
+		if err == nil {
+			vlog("routed %s -> %s", hostPort, routed)
+			return c, nil
+		}
+		log.Printf("route %s -> %s lỗi (%v) -> fallback danh sách mặc định", hostPort, routed, err)
+	}
 	if upstream == "" {
+		vlog("direct %s", hostPort)
 		return net.DialTimeout("tcp", hostPort, 10*time.Second)
 	}
 	var list []string
@@ -79,13 +219,54 @@ func dial(hostPort string) (net.Conn, error) {
 	if len(list) == 0 {
 		return nil, fmt.Errorf("không có upstream nào dùng được")
 	}
-	start := int((atomic.AddUint64(&rrNext, 1) - 1) % uint64(len(list)))
+	// 1) Đến hạn thì thử lại upstream ĐẦU (đường nhanh nhất: UDP trực tiếp khi mở được).
+	if time.Since(time.Unix(0, atomic.LoadInt64(&lastPrimaryTry))) > primaryRetryInterval {
+		atomic.StoreInt64(&lastPrimaryTry, time.Now().UnixNano())
+		if c, err := socks5Dial(list[0], hostPort); err == nil {
+			current.Store(list[0])
+			atomic.StoreInt64(&primaryDeadUntil, 0)
+			return c, nil
+		}
+		// Đầu danh sách chết (ví dụ UDP bị chặn): đánh dấu 60 s để các kết nối sau CHIA ĐỀU phần còn
+		// lại — nhiều node WS cộng dồn ~1,7 Mbps, dính một node thì chỉ ~0,6 Mbps (đo 23/10/2026).
+		atomic.StoreInt64(&primaryDeadUntil, time.Now().Add(60*time.Second).UnixNano())
+	}
+	if time.Now().UnixNano() < atomic.LoadInt64(&primaryDeadUntil) {
+		// 2) Chia đều round-robin qua các upstream còn lại.
+		if v := current.Load(); v != nil {
+			if c, err := socks5Dial(v.(string), hostPort); err == nil {
+				return c, nil
+			}
+			current = atomic.Value{}
+		}
+		start := int((atomic.AddUint64(&rrNext, 1) - 1) % uint64(len(list)))
+		var firstErr error
+		for i := 0; i < len(list); i++ {
+			addr := list[(start+i)%len(list)]
+			c, err := socks5Dial(addr, hostPort)
+			if err == nil {
+				current.Store(addr)
+				return c, nil
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+		return nil, firstErr
+	}
+	// 3) Bình thường: dùng tiếp upstream đang chạy được (giữ kết nối ổn định, không nhảy loạn).
+	if v := current.Load(); v != nil {
+		if c, err := socks5Dial(v.(string), hostPort); err == nil {
+			return c, nil
+		}
+		current = atomic.Value{}
+	}
+	// 3) Tụt xuống các upstream còn lại theo thứ tự.
 	var firstErr error
-	for i := 0; i < len(list); i++ {
-		addr := list[(start+i)%len(list)]
+	for _, addr := range list {
 		c, err := socks5Dial(addr, hostPort)
 		if err == nil {
-			lastGood.Store(addr)
+			current.Store(addr)
 			return c, nil
 		}
 		if firstErr == nil {
@@ -252,4 +433,48 @@ func handle(conn net.Conn) {
 			return
 		}
 	}
+}
+
+// ───────── tự dò gateway (app không cần biết IP tĩnh) ─────────
+//
+// Vì sao: DHCP của toà nhà đổi IP máy (22→23/10/2026: laptop từ 192.168.100.11 thành .5, Mac thành .3),
+// nên mọi địa chỉ hard-code trong app/TV đều chết. App phát UDP broadcast "FLOWVPNGW?" tới cổng
+// [discoveryPort]; gateway trả "FLOWVPNGW1 <cổng proxy>" để app biết IP thật của gateway.
+const discoveryPort = 18099
+
+func startDiscovery(proxyPort int) {
+	go func() {
+		addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf(":%d", discoveryPort))
+		if err != nil {
+			log.Printf("discovery: %v", err)
+			return
+		}
+		conn, err := net.ListenUDP("udp4", addr)
+		if err != nil {
+			log.Printf("discovery: không mở được UDP %d: %v", discoveryPort, err)
+			return
+		}
+		log.Printf("discovery: nghe UDP %d (trả lời FLOWVPNGW? -> cổng %d)", discoveryPort, proxyPort)
+		buf := make([]byte, 128)
+		for {
+			n, from, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				continue
+			}
+			if strings.HasPrefix(strings.TrimSpace(string(buf[:n])), "FLOWVPNGW?") {
+				msg := fmt.Sprintf("FLOWVPNGW1 %d", proxyPort)
+				_, _ = conn.WriteToUDP([]byte(msg), from)
+			}
+		}
+	}()
+}
+
+// proxyPortOf lấy số cổng từ chuỗi "0.0.0.0:18081".
+func proxyPortOf(listen string) int {
+	if _, p, err := net.SplitHostPort(listen); err == nil {
+		if n, err := strconv.Atoi(p); err == nil {
+			return n
+		}
+	}
+	return 18081
 }

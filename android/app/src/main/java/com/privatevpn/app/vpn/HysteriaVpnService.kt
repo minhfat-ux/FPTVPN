@@ -1270,28 +1270,17 @@ class HysteriaVpnService : VpnService() {
     // ───────────── chế độ SOCKS5 cho thiết bị KHÔNG có TUN ─────────────
 
     /**
-     * Đặt/gỡ proxy hệ thống. Cần WRITE_SECURE_SETTINGS (cấp bằng `adb shell pm grant`).
+     * KHÔNG tự đặt proxy nữa — chuyển hết cho [ProxyDirector] (cần WRITE_SECURE_SETTINGS).
      *
-     * Tôn trọng chế độ tuyến trong Settings ([ProxyDirector]): chế độ `gateway` thì tunnel của app
-     * lên cũng KHÔNG đặt `127.0.0.1:1081` mà giữ gateway LAN — người dùng đã chốt "chỉ gateway".
+     * Lý do (sự cố thật 22/10/2026): hàm này từng ghi thẳng `127.0.0.1:1081` mỗi khi tunnel lên,
+     * nên dù chế độ auto đã chọn gateway LAN (đo được 644 kbps) thì vài chục giây sau service lại
+     * đè về 1081 (đường TV hay treo) ⇒ TV "vừa ngon lại hỏng". Nay mọi ngã rẽ đều qua một mối:
+     * auto/gateway thì gateway LAN còn sống là dùng, `tv` mới đặt 1081, không còn gì thì gỡ.
      */
     private fun setSystemProxy(on: Boolean): Boolean {
-        val value = when {
-            !on -> ":0"
-            ProxyDirector.mode(this) == Config.PROXY_MODE_GATEWAY -> ProxyDirector.gatewayAddress(this)
-            else -> "127.0.0.1:$SOCKS_PORT"
-        }
-        return runCatching {
-            android.provider.Settings.Global.putString(contentResolver, "http_proxy", value)
-            systemProxySet = on
-            true
-        }.getOrElse {
-            DiagnosticsLog.warn(
-                "proxy: KHÔNG đặt được proxy hệ thống (${it.javaClass.simpleName}: ${it.message}) " +
-                    "— cần 'pm grant $packageName android.permission.WRITE_SECURE_SETTINGS'",
-            )
-            false
-        }
+        ProxyDirector.enforceBlocking(this)
+        systemProxySet = on
+        return true
     }
 
     /**

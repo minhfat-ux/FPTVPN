@@ -40,7 +40,58 @@ object ProxyDirector {
         val raw = prefs(context).getString(Config.KEY_PROXY_GATEWAY, null)
             ?.takeIf { it.contains(":") && it.isNotBlank() }
             ?: Config.PROXY_GATEWAY_DEFAULT
-        return raw.split(',').map { it.trim() }.filter { it.contains(":") }.distinct()
+        // Gateway TỰ DÒ được đứng trước: đó là địa chỉ THẬT của máy đang chạy proxy, còn danh sách
+        // trong prefs chỉ là phương án dự phòng khi broadcast bị chặn (mạng chặn UDP/mỗi AP riêng).
+        val discovered = discoveredGateways()
+        return (discovered + raw.split(',').map { it.trim() })
+            .filter { it.contains(":") && it.isNotBlank() }
+            .distinct()
+    }
+
+    /**
+     * Tự dò gateway trong LAN bằng UDP broadcast — vì DHCP đổi IP máy liên tục (22→23/10/2026:
+     * laptop .11 → .5, Mac .5 → .3) nên mọi địa chỉ hard-code đều chết.
+     *
+     * Giao thức: app phát `FLOWVPNGW?` tới 255.255.255.255:[DISCOVERY_PORT]; `tools/lan-proxy` trả
+     * `FLOWVPNGW1 <cổng proxy>`. Kết quả nhớ 60 s để không phải broadcast mỗi nhịp.
+     */
+    @Volatile private var discAt = 0L
+    @Volatile private var discList: List<String> = emptyList()
+
+    private fun discoveredGateways(): List<String> {
+        if (android.os.SystemClock.elapsedRealtime() - discAt < DISCOVERY_TTL_MS) return discList
+        val found = linkedSetOf<String>()
+        runCatching {
+            java.net.DatagramSocket().use { sock ->
+                sock.broadcast = true
+                sock.soTimeout = 500
+                val payload = "FLOWVPNGW?".toByteArray()
+                runCatching {
+                    sock.send(
+                        java.net.DatagramPacket(
+                            payload, payload.size,
+                            java.net.InetAddress.getByName("255.255.255.255"), DISCOVERY_PORT,
+                        ),
+                    )
+                }
+                val buf = ByteArray(128)
+                val deadline = android.os.SystemClock.elapsedRealtime() + DISCOVERY_WAIT_MS
+                while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                    val pkt = java.net.DatagramPacket(buf, buf.size)
+                    if (runCatching { sock.receive(pkt) }.isFailure) break
+                    val text = String(pkt.data, 0, pkt.length).trim()
+                    if (!text.startsWith("FLOWVPNGW1")) continue
+                    val port = text.substringAfter(' ', "18081").trim().toIntOrNull() ?: 18081
+                    found.add("${pkt.address.hostAddress}:$port")
+                }
+            }
+        }
+        discAt = android.os.SystemClock.elapsedRealtime()
+        discList = found.toList()
+        if (found.isNotEmpty()) {
+            DiagnosticsLog.log("tuyến: tự dò được gateway ${found.joinToString(", ")}")
+        }
+        return discList
     }
 
     /** Gateway đầu tiên trong danh sách (dùng cho nhãn UI). */
@@ -124,8 +175,19 @@ object ProxyDirector {
             )
             false
         }
-        if (ok) DiagnosticsLog.log("tuyến: proxy hệ thống $current -> $chosen (chế độ ${mode(context)})")
+        if (ok) {
+            if (chosen != ":0") lastGood = chosen
+            DiagnosticsLog.log("tuyến: proxy hệ thống $current -> $chosen (chế độ ${mode(context)})")
+        }
     }
+
+    /**
+     * Tuyến LAN cuối cùng đã dùng được. Vì sao cần: đã có ca thật (22/10/2026) — tắt máy Mac thì
+     * TV rơi về `:0` dù gateway Windows vẫn sống, vì lần dò đúng lúc Wi-Fi đang ngủ nên hết hạn 700 ms
+     * và app kết luận "chết hết". Có lastGood thì tệ nhất vẫn giữ được tuyến vừa dùng, và nhịp sau
+     * dò lại sẽ sửa tiếp.
+     */
+    @Volatile private var lastGood: String? = null
 
     private val WORKER = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "proxy-director").apply { isDaemon = true }
@@ -179,7 +241,16 @@ object ProxyDirector {
 
         val candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
         val aliveNow = candidates.filter { alive(it) }
-        if (aliveNow.isEmpty()) return ":0"
+        if (aliveNow.isEmpty()) {
+            // Không dò được cái nào: nếu tuyến LAN vừa dùng vẫn còn thì GIỮ NÓ thay vì gỡ proxy —
+            // "tắt Mac là mất hết" (sự cố thật 22/10/2026) xảy ra đúng ở nhánh này.
+            val keep = lastGood
+            if (keep != null && alive(keep, 2500)) {
+                DiagnosticsLog.log("tuyến: không dò được tuyến nào, giữ tuyến LAN vừa dùng $keep")
+                return keep
+            }
+            return ":0"
+        }
 
         // Đo: mọi tuyến CHƯA có điểm hoặc điểm đã cũ, tối đa [MAX_PROBES_PER_TICK] tuyến mỗi lượt.
         // (Bản trước chỉ đo 1 tuyến/lượt VÀ coi điểm quá hạn là "chưa có" ⇒ vài phút sau là rơi về
@@ -191,13 +262,36 @@ object ProxyDirector {
         val scored = aliveNow.mapNotNull { addr -> scoreOf(addr)?.let { addr to it } }
         if (scored.isEmpty()) return aliveNow.first()
 
-        val bestAddr = scored.maxByOrNull { it.second }!!.first
-        val bestScore = scored.maxOf { it.second }
+        // CHÍNH SÁCH AUTO (chốt với chủ dự án 22/10/2026):
+        //  - CÒN gateway LAN nào sống ⇒ LUÔN dùng gateway LAN, chọn cái điểm CAO NHẤT.
+        //  - KHÔNG còn gateway nào ⇒ mới dùng đường TV (127.0.0.1:1081) nếu nó sống.
+        //  - Không có gì ⇒ gỡ proxy (":0").
+        // Vì sao không cho đường TV "thi đấu" điểm với gateway: cầu WS của TV đo burst được vài nghìn
+        // kbps nhưng thực tế hay treo (app quay tít) — mẫu 128 KB không thấy được mất gói/jitter.
+        // Đã có ca thật: TV đo 2412 kbps > gateway 427 kbps nên app nhảy về 1081 và FPT Play đứng.
+        val tvAlive = aliveNow.contains(tv)
+        val bestGw = aliveNow
+            .filter { it != tv }
+            .mapNotNull { addr -> scoreOf(addr)?.let { addr to it } }
+            .maxByOrNull { it.second }
+        val preferred = when {
+            bestGw != null -> bestGw.first
+            tvAlive -> tv
+            else -> aliveNow.first()
+        }
+        val bestAddr = preferred
+        val bestScore = scoreOf(bestAddr) ?: 0
 
         // Chống nhảy qua nhảy lại: giữ tuyến ĐANG dùng nếu nó còn sống và không kém tuyến tốt nhất
         // quá 15% (đổi tuyến = đổi đường của phiên đang xem, dễ làm player giật).
+        //
+        // NHƯNG chỉ áp dụng giữa các GATEWAY với nhau. Nếu tuyến đang dùng là đường TV mà đã có
+        // gateway sống thì ĐỔI NGAY — đây chính là lỗi 22/10/2026: đường TV đo burst 1355 kbps nên
+        // hysteresis "giữ 1081" và policy ưu tiên gateway LAN không bao giờ có hiệu lực.
         val current = currentProxy(context)
-        if (current != null && current != bestAddr && aliveNow.contains(current)) {
+        if (current != null && current != bestAddr && aliveNow.contains(current) &&
+            current != tv && bestAddr != tv
+        ) {
             val curScore = scoreOf(current) ?: 0
             if (curScore > 0 && curScore.toLong() * 100 >= bestScore.toLong() * 85) {
                 DiagnosticsLog.log("tuyến: giữ $current (${curScore}kbps) thay vì $bestAddr (${bestScore}kbps)")
@@ -206,7 +300,12 @@ object ProxyDirector {
         }
         if (bestAddr != current) {
             val detail = scored.joinToString(", ") { "${it.first}=${it.second}kbps" }
-            DiagnosticsLog.log("tuyến: chọn $bestAddr (điểm: $detail)")
+            val note = if (tvAlive && bestGw != null) {
+                "; ưu tiên gateway LAN khi còn gateway sống (đường TV ${scoreOf(tv) ?: 0}kbps)"
+            } else {
+                ""
+            }
+            DiagnosticsLog.log("tuyến: chọn $bestAddr (điểm: $detail$note)")
         }
         return bestAddr
     }
@@ -253,7 +352,7 @@ object ProxyDirector {
         var failure: String? = null
         runCatching {
             Socket().use { raw ->
-                raw.connect(InetSocketAddress(host, port), 1200)
+                raw.connect(InetSocketAddress(host, port), 2000)
                 raw.soTimeout = 2500
                 val out = raw.getOutputStream()
                 out.write(
@@ -314,12 +413,22 @@ object ProxyDirector {
     /** Dưới mức này thì không tính điểm (tránh con số ảo từ vài trăm byte header). */
     private const val MIN_SAMPLE_BYTES = 16_384L
     /** Điểm chỉ có giá trị trong 3 phút — mạng đổi thì đo lại. */
-    private const val SCORE_TTL_MS = 3 * 60 * 1000L
+    private const val SCORE_TTL_MS = 3 * 60 * 1000L    /** Cổng UDP để tự dò gateway (khớp `tools/lan-proxy`). */
+    private const val DISCOVERY_PORT = 18099
+    /** Nhớ kết quả dò 60 s. */
+    private const val DISCOVERY_TTL_MS = 60 * 1000L
+    /** Chờ tối đa 700 ms cho các gateway trả lời. */
+    private const val DISCOVERY_WAIT_MS = 700L
     /** Mỗi nhịp 60 s đo tối đa chừng này tuyến (2 × 128 KB ≈ 0,25 MB/phút, đủ nhanh mà không tốn). */
     private const val MAX_PROBES_PER_TICK = 2
+    /**
+     * Đường TV chỉ được chọn khi đo được ít nhất mức này (kbps). Dưới ngưỡng thì dù có số vẫn hay
+     * treo (app quay tít) vì jitter/mất gói của cầu WS — kinh nghiệm thật 22/10/2026.
+     */
+    /** Và phải cao hơn gateway tốt nhất chừng này lần thì mới đáng đổi đường. */
 
     /** TCP connect thật tới host:port (700 ms) — "cổng mở" chứ không phải "setting đang ghi gì". */
-    fun alive(hostPort: String, timeoutMs: Int = 700): Boolean {
+    fun alive(hostPort: String, timeoutMs: Int = 2000): Boolean {
         val idx = hostPort.lastIndexOf(':')
         if (idx <= 0) return false
         val host = hostPort.substring(0, idx).trim()
