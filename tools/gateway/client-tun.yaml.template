@@ -1,0 +1,55 @@
+# VPNFlow gateway — chế độ A (TUN): gateway tự dựng tun, mọi thiết bị trong LAN đi qua.
+#
+# Điền 3 giá trị <...> rồi chép thành /etc/hysteria/client.yaml và `chmod 600`.
+# TUYỆT ĐỐI không commit bản đã điền (chứa credential). Giá trị lấy từ
+# android/app/src/main/java/com/privatevpn/app/Config.kt (HY_SERVER / HY_PASSWORD / HY_OBFS).
+#
+# Đã đối chiếu với struct thật của hysteria v2.12.2 (app/client.go): tun.address.ipv4,
+# tun.route.ipv4/ipv4Exclude, bandwidth.up/down, tls.sni/insecure, obfs.salamander.password.
+
+server: <SERVER_IP>:8443
+auth: "<AUTH_PASSWORD>"
+
+tls:
+  # Server dùng self-signed cert ⇒ phải insecure + sni = IP server (giống app:
+  # mobile.go đặt ServerName=host, InsecureSkipVerify=true). Sai 2 dòng này = handshake fail.
+  sni: "<SERVER_IP>"
+  insecure: true
+
+obfs:
+  type: salamander
+  salamander:
+    password: "<OBFS_PASSWORD>"
+
+# Brutal CC: số khai là mức của CẢ PHIÊN (hysteria gộp mọi TCP stream vào 1 QUIC session).
+# Khai sát băng thông thật của đường khách. Khởi điểm thận trọng, đo rồi chỉnh:
+#   khai cao hơn thật  ⇒ nghẽn
+#   khai thấp hơn thật ⇒ tự bóp tốc độ
+bandwidth:
+  up: "20 mbps"
+  down: "50 mbps"
+
+fastOpen: true
+
+tun:
+  name: tun0
+  # 1300 = đúng MTU app Android đang dùng (đã sửa từ 1500 vì QUIC + obfs làm gói phình ra).
+  mtu: 1300
+  timeout: 5m
+  address:
+    ipv4: 100.100.100.101/30
+  route:
+    strict: false
+    ipv4:
+      - 0.0.0.0/0
+    # Nếu tunnel bị LOOP (client không ra được internet / mất kết nối tới server):
+    # bỏ comment dòng dưới để loại trừ IP server khỏi route đi vào tun.
+    # ipv4Exclude:
+    #   - <SERVER_IP>/32
+
+# Chế độ A không cần proxy; vẫn mở SOCKS5/HTTP ở localhost để CHẨN ĐOÁN
+# (không expose ra LAN — đừng đổi thành 0.0.0.0).
+socks5:
+  listen: 127.0.0.1:1080
+http:
+  listen: 127.0.0.1:8080

@@ -1,0 +1,31 @@
+# VPNFlow gateway — chế độ B (PROXY, KHÔNG cần TUN): dùng khi box không có /dev/net/tun.
+#
+# Client CHỈ mở SOCKS5 + HTTP ở localhost; gateway phải tự hút traffic vào bằng
+# nftables/iptrules (TPROXY cho UDP + redirect cho TCP). Xem README §5.3.
+#
+# Chép thành /etc/hysteria/client.yaml và `chmod 600`. Không commit bản đã điền.
+
+server: <SERVER_IP>:8443
+auth: "<AUTH_PASSWORD>"
+
+tls:
+  sni: "<SERVER_IP>"
+  insecure: true
+
+obfs:
+  type: salamander
+  salamander:
+    password: "<OBFS_PASSWORD>"
+
+bandwidth:
+  up: "20 mbps"
+  down: "50 mbps"
+
+fastOpen: true
+
+# KHÔNG có khối tun ⇒ client không tạo interface nào (chạy được trên kernel thiếu CONFIG_TUN).
+# Bật UDP trên SOCKS5 (mặc định bật) để app dùng QUIC/HTTP3 không bị treo phát:
+socks5:
+  listen: 127.0.0.1:1080
+http:
+  listen: 127.0.0.1:8080
