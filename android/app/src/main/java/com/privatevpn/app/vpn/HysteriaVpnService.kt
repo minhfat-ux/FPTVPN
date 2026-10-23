@@ -1207,6 +1207,15 @@ class HysteriaVpnService : VpnService() {
             builder.setMtu(HY_MTU)
             builder.addAddress(HY_TUN_IPV4_IP, 30)
             builder.addRoute("0.0.0.0", 0)
+            // IPv6 PHẢI vào tunnel, nếu không thì gói IPv6 của Google/YouTube đi thẳng ra mạng
+            // toà nhà (bị chặn) trong khi VPN vẫn hiện "Connected" — sự cố thật 24/10/2026.
+            // Go (`Serve`) đã nhận sẵn tham số tunIpv6; đây là phần còn thiếu phía VpnService.
+            runCatching {
+                builder.addAddress(HY_TUN_IPV6_IP, 64)
+                builder.addRoute("::", 0)
+            }.onFailure {
+                DiagnosticsLog.warn("vpn: KHÔNG thêm được IPv6 vào tunnel: ${it.javaClass.simpleName}: ${it.message}")
+            }
             if (!minimal) {
                 // ≥2 resolver: resolver đầu không trả lời thì hệ điều hành tự hỏi cái kế tiếp.
                 for (dns in com.privatevpn.app.Config.HY_DNS_SERVERS) {
@@ -2929,6 +2938,19 @@ class HysteriaVpnService : VpnService() {
         // Single overlay address 100.100.100.101/30 (must match Go wrapper default).
         const val HY_TUN_IPV4_IP = "100.100.100.101"
         const val HY_TUN_IPV4 = "100.100.100.101/30"
-        const val HY_TUN_IPV6 = ""
+        /**
+         * IPv6 trong tunnel — BẮT BUỘC từ 24/10/2026.
+         *
+         * Sự cố thật: điện thoại có IPv6, nhưng tunnel chỉ khai route IPv4 (`addRoute("0.0.0.0",0)`)
+         * nên gói IPv6 của YouTube/Google đi THẲNG ra mạng toà nhà (Google bị chặn ở đó) ⇒ VPN vẫn
+         * "Connected" mà riêng Google/YouTube không vào được. Go (`Serve`) đã hỗ trợ sẵn tham số
+         * `tunIpv6`; trước đây app chỉ để rỗng nên IPv6 lọt ra ngoài.
+         *
+         * Dùng ULA `fd00:1::1/64`: mọi gói IPv6 vào TUN rồi đi qua tunnel (server NAT66). Nếu node
+         * không có IPv6 ra internet thì kết nối IPv6 fail NHANH và app tự fallback IPv4 — vẫn tốt
+         * hơn để lọt ra mạng bị chặn.
+         */
+        const val HY_TUN_IPV6_IP = "fd00:1::1"
+        const val HY_TUN_IPV6 = "fd00:1::1/64"
     }
 }
