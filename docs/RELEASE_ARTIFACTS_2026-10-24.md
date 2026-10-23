@@ -73,10 +73,36 @@ keepalive tự hồi tunnel.
    cho cùng lý do artifact bất biến — cặp `(android-tv, 1.4.6)` đã có sha256 `191f8f95…`).
 2. **Chưa gửi email thông báo** (§5 `PUBLISHER_PROCESS.md`): script mới có template Windows; cần
    template Android trước khi gửi.
-3. **Chưa cài thử trên máy thật ở bản 1.4.7**: code **không đổi** so với bản 1.4.6/104 đã cài và
-   chạy trên Galaxy Z Fold5 (chỉ đổi `versionCode/versionName`), nhưng lần cài đè 1.4.5/103 → 1.4.7/105
-   vẫn phải làm để có bằng chứng "không mất đăng nhập" trên artifact phát hành thật.
+3. ~~Chưa cài thử trên máy thật~~ → **XONG (24/10 02:19 +07).** Galaxy Z Fold5 (`SM-F9460`,
+   Android 16, `adb 192.168.100.101:39717`): `adb install -r` artifact modern phát hành ⇒
+   `versionCode=105`, `versionName=1.4.7`, `firstInstallTime` **giữ nguyên 2026-10-19** (cài đè,
+   **không** gỡ bản cũ ⇒ giữ đăng nhập; app gọi control API ngay: log `tuyến: chọn … (điểm: …)`).
+   Tunnel lên đúng thiết kế: `tun0 100.100.100.101/30` + `tun0 fd00:1::1/64` (IPv6 thu vào tunnel
+   rồi bỏ), `probe: THROUGH TUNNEL http 1.1.1.1:80 ok=301`, `dns … in 196ms`. Gateway LAN của điện
+   thoại **chạy thật**: cổng **18081** LISTEN; từ laptop `curl -x http://192.168.100.101:18081
+   https://1.1.1.1/cdn-cgi/trace` → `ip=165.101.114.162 loc=VN`, tải 4 MB qua gateway điện thoại
+   **945.846 B/s** (~7,6 Mbps) — đúng đường dùng cho TV.
 4. **Cổng `check-publish-version.py` không đối chiếu `release/releases.jsonl`** ⇒ không bắt được
    "phát lại cùng số version với artifact khác hash". Cần bổ sung chặn cứng (việc tồn, xem §0).
-5. Chưa có tag `android-v1.4.7` / dòng sổ cho bản này tại thời điểm viết file — ghi sổ + tag ngay sau
-   commit version (xem `docs/VERSIONING.md` §4).
+5. ~~Chưa có tag / dòng sổ~~ → **XONG**: 2 dòng `published` trong `release/releases.jsonl` (sha256 đo
+   từ file thật) + tag annotated `android-v1.4.7`, `android-legacy-v1.4.7` (xem §6).
+6. **`scripts/release-record.mjs` đã sửa 1 lỗi thật**: cổng so `git rev-list` (sha 40 ký tự) với
+   `--commit` dạng sha ngắn ⇒ báo sai "KHONG khop" và từ chối tạo tag `android-legacy-v1.4.7`
+   (24/10). Nay so **bằng tiền tố**. Hệ quả đã tránh được: tag không bị tạo lại/sai commit.
+
+## 6. Mốc git của bản này (đọc kỹ: 2 mã commit)
+
+- **Commit build (tag neo vào đây):** `05e28d1d` — commit `release(android): PHAT 1.4.7/105 …`.
+  Tag `android-v1.4.7` + `android-legacy-v1.4.7` (annotated) trỏ đúng commit này và đã push.
+- Lúc push, `origin/main` đã có commit của máy khác ⇒ phải `git pull --rebase` ⇒ nội dung đó nằm
+  trên main với mã **`ccc83a3d`** (commit ghi sổ: `8c0ad992`). **Tag vẫn neo `05e28d1d`** theo luật
+  "không tạo lại/không sửa tag đã có" (`docs/VERSIONING.md` §2); commit này vẫn nằm trong repo qua
+  chính 2 tag đó.
+- Khác nhau giữa `05e28d1d` và `ccc83a3d` **chỉ** là các commit của máy khác được rebase vào giữa:
+  `android/guard/**` (app guard **riêng** `com.privatevpn.app.guard`, `settings.gradle.kts` khai
+  `include(":guard")` ⇒ **không** nằm trong APK VPN), `android/tvflow-launcher/**`, `docs/**`,
+  `tools/**`. **Không** file nào thuộc `android/app/src/**` bị đổi ⇒ APK phát hành khớp mã nguồn
+  `android/app` ở cả hai commit.
+- `node scripts/release-record.mjs verify` **không** báo lỗi cho 2 dòng android/android-legacy 1.4.7;
+  các dòng `KHONG DAT` còn lại trong sổ là của iOS/macOS/windows có từ trước (không thuộc kênh này).
+
