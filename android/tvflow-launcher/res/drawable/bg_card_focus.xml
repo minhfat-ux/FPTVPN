@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focus ring có glow: nhiều lớp stroke đồng tâm, alpha giảm dần ra ngoài -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- lớp glow ngoài cùng (mờ, lan rộng) -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="26dp" />
+            <stroke android:width="8dp" android:color="#1233C773" />
+        </shape>
+    </item>
+
+    <!-- lớp glow giữa -->
+    <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="23dp" />
+            <stroke android:width="5dp" android:color="#2E33C773" />
+        </shape>
+    </item>
+
+    <!-- lớp glow trong, ngả cyan -->
+    <item android:left="4dp" android:top="4dp" android:right="4dp" android:bottom="4dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <stroke android:width="3dp" android:color="#5522D3EE" />
+        </shape>
+    </item>
+
+    <!-- vành gradient signature: green -> cyan -> purple -->
+    <item android:left="6dp" android:top="6dp" android:right="6dp" android:bottom="6dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="135"
+                android:startColor="#5C33C773"
+                android:centerColor="#FF22D3EE"
+                android:endColor="#FF7C3AED" />
+            <corners android:radius="17dp" />
+        </shape>
+    </item>
+
+    <!-- ruột card -->
+    <item android:left="8dp" android:top="8dp" android:right="8dp" android:bottom="8dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card_inner" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+</layer-list>

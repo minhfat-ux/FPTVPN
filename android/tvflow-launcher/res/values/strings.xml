@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TVFlow Home</string>
+    <string name="row_apps">Ứng dụng</string>
+    <string name="row_shortcuts">Lối tắt</string>
+    <string name="hint_sort">Giữ OK trên app để sắp xếp</string>
+    <string name="accessibility_desc">Giữ TVFlow Home thay cho launcher Xiaomi</string>
+</resources>

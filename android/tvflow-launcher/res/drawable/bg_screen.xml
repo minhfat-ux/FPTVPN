@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- nền navy radial, quầng sáng góc trên trái như site -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="820dp"
+                android:centerX="0.04"
+                android:centerY="0.0"
+                android:startColor="@color/bg_hi"
+                android:centerColor="@color/bg_mid"
+                android:endColor="@color/bg_deep" />
+        </shape>
+    </item>
+    <!-- quầng cyan góc dưới phải -->
+    <item android:gravity="bottom|right" android:width="560dp" android:height="380dp">
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="280dp"
+                android:startColor="#2A22D3EE"
+                android:centerColor="#1222D3EE"
+                android:endColor="#0022D3EE" />
+        </shape>
+    </item>
+    <!-- quầng green góc dưới trái -->
+    <item android:gravity="bottom|left" android:width="420dp" android:height="320dp">
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="220dp"
+                android:startColor="#2433C773"
+                android:centerColor="#1033C773"
+                android:endColor="#0033C773" />
+        </shape>
+    </item>
+</layer-list>

@@ -19,6 +19,7 @@ File code chốt:
 | `android/guard/src/main/java/com/privatevpn/app/guard/GuardReceiver.java` | `DEFAULT_GATEWAY` = `.6 → .5 → .11`; `probeMs()` CONNECT thật; `bestGateway()` chọn nhanh nhất; nhánh "TCP còn sống thì giữ" |
 | `docs/handoff/HANDOFF_SERVER_RELAY_RECOVERY_2026-10-23.md` | bàn giao khôi phục relay node-2 |
 | `docs/handoff/HANDOFF_WINDOWS_PROXY_STABILITY_2026-10-23.md` | bàn giao ổn định proxy Windows |
+| `android/tvflow-launcher/**` | **Toàn bộ source TVFlow Home 2.6** (trước đây chỉ nằm ở `/Volumes/BIWIN/IoSApps/FacebookLack/tvlauncher`, không version hoá). Build: `cd android/tvflow-launcher && bash build.sh` (tự sinh `debug.keystore` nếu thiếu; `.gitignore` chặn `build/`, `*.keystore`) |
 
 ## 2. Gateway LAN
 
