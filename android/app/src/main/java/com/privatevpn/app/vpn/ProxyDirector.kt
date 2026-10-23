@@ -36,14 +36,21 @@ object ProxyDirector {
      * "fallback thêm cả cơ chế cho Mac làm gateway". Ai sống thì dùng, cả hai chết mới gỡ proxy.
      * Đổi được bằng prefs (chuỗi ngăn cách bởi dấu phẩy), không cần build lại.
      */
-    fun gateways(context: Context): List<String> {
+    fun gateways(context: Context, forceDiscover: Boolean = false): List<String> {
         val raw = prefs(context).getString(Config.KEY_PROXY_GATEWAY, null)
             ?.takeIf { it.contains(":") && it.isNotBlank() }
             ?: Config.PROXY_GATEWAY_DEFAULT
-        // Gateway TỰ DÒ được đứng trước: đó là địa chỉ THẬT của máy đang chạy proxy, còn danh sách
-        // trong prefs chỉ là phương án dự phòng khi broadcast bị chặn (mạng chặn UDP/mỗi AP riêng).
-        val discovered = discoveredGateways() + scanSubnet(context)
-        return (discovered + raw.split(',').map { it.trim() })
+        // Prefs TRƯỚC (người dùng đã đặt thì ưu tiên — handoff Mac 23/10/2026), rồi tới gateway TỰ DÒ
+        // (địa chỉ thật khi DHCP đổi IP). Chế độ `tv` KHÔNG dò gì (yêu cầu A.4).
+        val configured = raw.split(',').map { it.trim() }.filter { it.contains(":") }
+        if (mode(context) == Config.PROXY_MODE_TV) return configured
+        val needDiscover = forceDiscover || (discList.isEmpty() && scanList.isEmpty())
+        val discovered = if (needDiscover) {
+            discoveredGateways(forceDiscover) + scanSubnet(context, forceDiscover)
+        } else {
+            discList + scanList
+        }
+        return (configured + discovered)
             .filter { it.contains(":") && it.isNotBlank() }
             .distinct()
     }
@@ -58,8 +65,9 @@ object ProxyDirector {
     @Volatile private var discAt = 0L
     @Volatile private var discList: List<String> = emptyList()
 
-    private fun discoveredGateways(): List<String> {
-        if (android.os.SystemClock.elapsedRealtime() - discAt < DISCOVERY_TTL_MS) return discList
+    private fun discoveredGateways(force: Boolean = false): List<String> {
+        // throttle: tối đa 1 lượt broadcast/60 s (yêu cầu A.3 — không scan storm)
+        if (!force && android.os.SystemClock.elapsedRealtime() - discAt < DISCOVERY_TTL_MS) return discList
         val found = linkedSetOf<String>()
         runCatching {
             java.net.DatagramSocket().use { sock ->
@@ -105,8 +113,11 @@ object ProxyDirector {
     @Volatile private var scanAt = 0L
     @Volatile private var scanList: List<String> = emptyList()
 
-    private fun scanSubnet(context: Context): List<String> {
-        if (android.os.SystemClock.elapsedRealtime() - scanAt < SCAN_TTL_MS) return scanList
+    private fun scanSubnet(context: Context, force: Boolean = false): List<String> {
+        // cache 10 phút; force thì bỏ qua cache nhưng vẫn giữ nhịp tối thiểu 60 s
+        val sinceScan = android.os.SystemClock.elapsedRealtime() - scanAt
+        if (!force && sinceScan < SCAN_TTL_MS) return scanList
+        if (force && sinceScan < DISCOVERY_TTL_MS) return scanList
         scanAt = android.os.SystemClock.elapsedRealtime()
         val prefix = localSubnetPrefix(context) ?: return scanList
         val hits = java.util.Collections.synchronizedList(mutableListOf<String>())
@@ -271,9 +282,9 @@ object ProxyDirector {
                     scores = emptyMap()
                     scoreKbps = emptyMap()
                     val candidates = if (mode(app) == Config.PROXY_MODE_GATEWAY) {
-                        gateways(app)
+                        gateways(app, forceDiscover = true)
                     } else {
-                        listOf(tvProxy()) + gateways(app)
+                        listOf(tvProxy()) + gateways(app, forceDiscover = true)
                     }
                     val aliveNow = candidates.filter { alive(it) }
                     DiagnosticsLog.log("tuyến: Refresh -> đo lại ${aliveNow.size}/${candidates.size} tuyến sống")
@@ -297,12 +308,18 @@ object ProxyDirector {
      */
     fun decide(context: Context): String {
         val tv = tvProxy()
-        val gws = gateways(context)
+        var gws = gateways(context)
         val mode = mode(context)
         if (mode == Config.PROXY_MODE_TV) return if (alive(tv)) tv else ":0"
 
-        val candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
-        val aliveNow = candidates.filter { alive(it) }
+        var candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
+        var aliveNow = candidates.filter { alive(it) }
+        // Không còn tuyến nào sống ⇒ dò lại LAN (DHCP vừa đổi IP gateway) rồi tính lại.
+        if (aliveNow.isEmpty() && mode != Config.PROXY_MODE_TV) {
+            gws = gateways(context, forceDiscover = true)
+            candidates = if (mode == Config.PROXY_MODE_GATEWAY) gws else listOf(tv) + gws
+            aliveNow = candidates.filter { alive(it) }
+        }
         if (aliveNow.isEmpty()) {
             // Không dò được cái nào: nếu tuyến LAN vừa dùng vẫn còn thì GIỮ NÓ thay vì gỡ proxy —
             // "tắt Mac là mất hết" (sự cố thật 22/10/2026) xảy ra đúng ở nhánh này.
@@ -485,7 +502,7 @@ object ProxyDirector {
     /** Quét những cổng này trên mọi host: 18081 = gateway smart-route, 18083 = Flow3 trực tiếp của Mac. */
     private val SCAN_PORTS = intArrayOf(18081, 18083)
     /** Quét subnet: nhớ 5 phút, 32 luồng, mỗi host chờ 250 ms. */
-    private const val SCAN_TTL_MS = 5 * 60 * 1000L
+    private const val SCAN_TTL_MS = 10 * 60 * 1000L
     private const val SCAN_THREADS = 32
     private const val SCAN_TIMEOUT_MS = 250
     /** Mỗi nhịp 60 s đo tối đa chừng này tuyến (2 × 128 KB ≈ 0,25 MB/phút, đủ nhanh mà không tốn). */
