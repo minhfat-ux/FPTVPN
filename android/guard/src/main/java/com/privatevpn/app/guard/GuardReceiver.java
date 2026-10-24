@@ -51,6 +51,8 @@ public class GuardReceiver extends BroadcastReceiver {
     private static final String DEFAULT_GATEWAY =
             "192.168.100.5:18081,192.168.100.6:18081,192.168.100.101:18081,192.168.100.11:18081";
     private static final String PREFS = "vpnflow_guard";
+    /** Dải mạng lần trước — đổi giá trị = đã đổi mạng (để nhả gateway cũ). */
+    private static final String KEY_LAST_SUBNET = "last_subnet";
     private static final String KEY_GATEWAY = "gateway";
 
     @Override
@@ -70,6 +72,12 @@ public class GuardReceiver extends BroadcastReceiver {
 
     private static void tick(Context context) {
         try {
+            // ĐỔI MẠNG thì phải NHẢ gateway cũ + xoá cache quét: gateway của mạng trước có thể trùng
+            // IP nhưng KHÔNG còn phục vụ (hoặc IP vẫn "trả lời" nhưng là máy khác) — bám nó là mất mạng.
+            // Sự cố thật 24/10/2026: TV đổi từ LAN router (192.168.1.x) về mạng nhà (192.168.100.x)
+            // nhưng proxy còn trỏ gateway của mạng cũ nên không tự quét lại.
+            handleNetworkChange(context);
+
             String proxy = Settings.Global.getString(context.getContentResolver(), "http_proxy");
             if (proxy == null) proxy = "";
             boolean isLoopback = proxy.startsWith("127.0.0.1");
@@ -184,6 +192,55 @@ public class GuardReceiver extends BroadcastReceiver {
             }
         }
         return best;
+    }
+
+    /** Dải mạng hiện tại (vd "192.168.100.") — đổi giá trị này = đã đổi mạng. */
+    private static String currentSubnet() {
+        try {
+            for (NetworkInterface nif : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!nif.isUp() || nif.isLoopback()) continue;
+                for (InterfaceAddress ia : nif.getInterfaceAddresses()) {
+                    java.net.InetAddress ip = ia.getAddress();
+                    if (ip == null || ip.getAddress().length != 4 || ip.isLoopbackAddress()) continue;
+                    int prefix = ia.getNetworkPrefixLength();
+                    if (prefix < 8 || prefix > 30) continue;
+                    byte[] b = ip.getAddress();
+                    if (b[0] == 127) continue;
+                    return (b[0] & 0xff) + "." + (b[1] & 0xff) + "." + (b[2] & 0xff) + ".";
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
+    /**
+     * Đổi dải mạng ⇒ (1) xoá cache danh sách gateway để nhịp này quét LẠI ngay,
+     * (2) nếu proxy đang trỏ gateway KHÔNG thuộc dải mới thì nhả về ":0" để chọn lại từ đầu.
+     */
+    private static void handleNetworkChange(Context context) {
+        try {
+            String sub = currentSubnet();
+            if (sub.isEmpty()) return;
+            android.content.SharedPreferences sp =
+                    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String last = sp.getString(KEY_LAST_SUBNET, null);
+            if (sub.equals(last)) return;
+            sp.edit()
+                    .putString(KEY_LAST_SUBNET, sub)
+                    .putString(KEY_DISCOVERED, "")
+                    .putLong(KEY_DISCOVERED_AT, 0L)   // 0 = hết hạn ngay ⇒ nhịp này quét lại
+                    .apply();
+            Log.w(TAG, "DOI MANG " + last + " -> " + sub + ": xoa cache gateway, quet lai");
+            String proxy = Settings.Global.getString(context.getContentResolver(), "http_proxy");
+            if (proxy != null && proxy.contains(":") && !proxy.startsWith(":")
+                    && !proxy.startsWith(sub) && !proxy.startsWith("127.0.0.1")) {
+                Settings.Global.putString(context.getContentResolver(), "http_proxy", ":0");
+                Log.w(TAG, "gateway " + proxy + " khong thuoc dai moi " + sub + " -> nha proxy (:0)");
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "handleNetworkChange loi: " + t.getMessage());
+        }
     }
 
     /** Quét LAN tìm gateway (host có cổng 18081 mở) — vì IP các máy không cố định. */
