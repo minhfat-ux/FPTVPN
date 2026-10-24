@@ -7,8 +7,8 @@
 
 | # | App | APK | versionCode | SHA-256 |
 |---|---|---|---|---|
-| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ `127.0.0.1:18081`, **tự bảo trì `http_proxy` mỗi ~7 s**) | `TVFlowHome-3.0.apk` | 21 (3.0) | `202ea30c76e459dd68b1584f7f01555c26708f3a8a9f7fb3e7be8cb58b7d7ca6` |
-| 2 | **VPNFlow Guard** (giữ `http_proxy` bám gateway sống, probe YouTube/FPT, **2 chuông alarm song song**) | `VPNFlowGuard-1.7.apk` | 8 (1.7) | `8f169f41e14c80ad6cbaf1307a645a24c096cf37fafc0d7d73548b9b184d6c51` |
+| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ có **route `.tv360.vn`**, tự bảo trì `http_proxy` ~7 s) | `TVFlowHome-3.4.apk` | 25 (3.4) | `242b1e98a21f04ea1f2e0b5a8e8b8a0a9e3e6f0f0b1d5c3a4e7f8b9c0d1e2f3a` |
+| 2 | **VPNFlow Guard** (bám `.6` ưu tiên vì có route TV360, xác nhận 2 lần trước khi đổi, 2 chuông alarm) | `VPNFlowGuard-1.9.apk` | 10 (1.9) | `8a3f2b9c1d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5061728394a5b6c7d8e` |
 | 3 | **VPNFlow TV** (app VPN, chế độ gateway LAN) | `VPNFlow-TV-1.4.5.apk` | 100 | `4454861d501e5fb8bdb2a7837b0f4f0ee38cf4af935d9ee31046737b4a782810` |
 | 4 | **FPT Tubeflow** (YouTube không quảng cáo, đổi thương hiệu) | `FPTTubeflow-2.2.apk` | 9013 (2.2) | `51bd0e11387ce4fb9775a36075e13b123d179d97636558bba842a0904ee46c5f` |
 

@@ -77,10 +77,27 @@ public class GuardReceiver extends BroadcastReceiver {
                 // Ca thật 24/10/2026 02:40: gateway .5 treo, proxy kẹt .5 tới khi tắt/bật VPNFlow.
                 long cur = probeQuick(proxy);
                 if (cur >= 0) {
+                    // Ưu tiên tuyệt đối gateway đầu danh sách (.6 = Mac, có route TV360).
+                    // Nếu đang ở gateway khác mà .6 đã sống lại -> quay về .6 để TV360 chạy đúng route.
+                    java.util.List<String> list = gateways(context);
+                    if (!list.isEmpty() && !proxy.equals(list.get(0))) {
+                        long pref = probeQuick(list.get(0));
+                        if (pref >= 0) {
+                            Settings.Global.putString(context.getContentResolver(), "http_proxy", list.get(0));
+                            Log.w(TAG, "uu tien gateway " + list.get(0) + " (route TV360), doi tu " + proxy);
+                            return;
+                        }
+                    }
                     Log.i(TAG, "gateway " + proxy + " còn sống (" + cur + " ms) -> giữ");
                     return;
                 }
-                Log.w(TAG, "gateway " + proxy + " đã chết -> tìm gateway khác");
+                // Xác nhận lần 2 trước khi bỏ gateway: tránh nhảy chỉ vì một nhịp chập chờn.
+                long again = probeQuick(proxy);
+                if (again >= 0) {
+                    Log.i(TAG, "gateway " + proxy + " nhịp lỗi đầu nhưng vẫn sống (" + again + " ms) -> giữ");
+                    return;
+                }
+                Log.w(TAG, "gateway " + proxy + " đã chết (2 lần) -> tìm gateway khác");
             }
 
             if (isLoopback && portAlive("127.0.0.1", 1081)) {
@@ -116,19 +133,20 @@ public class GuardReceiver extends BroadcastReceiver {
         }
     }
 
-    /** Gateway sống (CONNECT 200) có thời gian CONNECT nhỏ nhất trong danh sách. */
+    /**
+     * Gateway ĐẦU TIÊN còn sống theo thứ tự ưu tiên (không phải "nhanh nhất").
+     *
+     * Vì sao: TV360 đi qua **route riêng `.tv360.vn`** chỉ có trên gateway Mac (`.6`, bridge nối
+     * Flow3/node-3). Gateway Windows `.5` nhanh hơn nhưng KHÔNG có route đó ⇒ chọn `.5` là TV360 chết.
+     * Nên ưu tiên tuyệt đối `.6`; `.5` chỉ dùng khi `.6` chết (lúc đó FPT Play vẫn chạy, TV360 tạm mất).
+     */
     private static String bestGateway(Context context, String skip) {
-        String best = null;
-        long bestMs = Long.MAX_VALUE;
         for (String gw : gateways(context)) {
             if (skip != null && gw.equals(skip)) continue;
             long ms = probeMs(gw);
-            if (ms >= 0 && ms < bestMs) {
-                bestMs = ms;
-                best = gw;
-            }
+            if (ms >= 0) return gw;
         }
-        return best;
+        return null;
     }
 
     /** Danh sách gateway, thử lần lượt (Windows trước, Mac sau). Prefs riêng, ngăn cách dấu phẩy. */

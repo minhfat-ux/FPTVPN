@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.tvflow.launcher"
-    android:versionCode="21"
-    android:versionName="3.0">
+    android:versionCode="25"
+    android:versionName="3.4">
 
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
@@ -46,6 +46,9 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.tvflow.launcher.BOOT_RETRY" />
             </intent-filter>
         </receiver>
 

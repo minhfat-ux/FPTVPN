@@ -21,6 +21,25 @@ public class HomeWatcherService extends AccessibilityService {
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
         android.util.Log.i(TAG, "accessibility đã nối");
+        // Cửa vào THỨ HAI lúc TV vừa bật: hệ thống tự khởi động lại accessibility service sau
+        // reboot, kể cả khi Xiaomi chặn BOOT_COMPLETED. Nếu máy vừa bật (< 6 phút), mở TVFlow Home.
+        long up = android.os.SystemClock.elapsedRealtime();
+        if (up < 6 * 60 * 1000L) {
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                    new Runnable() {
+                        @Override public void run() {
+                            try {
+                                Intent i = new Intent(HomeWatcherService.this, MainActivity.class);
+                                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                                startActivity(i);
+                                android.util.Log.i(TAG, "boot (accessibility) -> mo TVFlow Home");
+                            } catch (Exception e) {
+                                android.util.Log.w(TAG, "khong mo duoc: " + e);
+                            }
+                        }
+                    }, 6000L);
+        }
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {

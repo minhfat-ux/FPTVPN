@@ -24,6 +24,10 @@ public class LocalGatewayProxy {
     private static final int LISTEN_PORT = 18081;
     private static final String[] GATEWAYS = {
             "192.168.100.6:18081", "192.168.100.5:18081", "192.168.100.11:18081"};
+    /** Đuôi tên miền phải đi gateway CÓ ROUTE riêng (Mac .6 có `.tv360.vn -> Flow3/node-3`). */
+    private static final String[] ROUTED_SUFFIXES = {".tv360.vn"};
+    /** Gateway ưu tiên cho các đuôi trên (chỉ .6 có route TV360). */
+    private static final String ROUTED_GATEWAY = "192.168.100.6:18081";
     private static final long CACHE_MS = 4_000L;
     private static final long CONNECT_TIMEOUT_MS = 1_200L;
 
@@ -61,11 +65,16 @@ public class LocalGatewayProxy {
         t.start();
     }
 
-    /** Chuyển tiếp một kết nối client sang gateway đang tốt nhất. */
+    /** Chuyển tiếp một kết nối client sang gateway phù hợp (route theo tên miền nếu có). */
     private static void relay(Socket client) {
         Socket upstream = null;
         try {
-            String gw = pick();
+            // Đọc phần đầu yêu cầu (CONNECT host:443 / GET http://host/...) để biết đích,
+            // rồi mới chọn gateway: TV360 phải đi gateway có route riêng.
+            client.setSoTimeout(10000);
+            String head = readHead(client.getInputStream());
+            String host = hostOf(head);
+            String gw = pickFor(host);
             if (gw == null) {
                 Log.w(TAG, "khong gateway nao song -> dong ket noi");
                 return;
@@ -74,9 +83,14 @@ public class LocalGatewayProxy {
             upstream = new Socket();
             upstream.connect(new InetSocketAddress(gw.substring(0, i),
                     Integer.parseInt(gw.substring(i + 1))), (int) CONNECT_TIMEOUT_MS);
+            if (head != null && head.length() > 0) {
+                java.io.OutputStream uo = upstream.getOutputStream();
+                uo.write(head.getBytes("ISO-8859-1"));
+                uo.flush();
+            }
             client.setSoTimeout(0);
             upstream.setSoTimeout(0);
-            Log.i(TAG, "relay -> " + gw);
+            Log.i(TAG, "relay " + host + " -> " + gw);
             // Một chiều chạy riêng, chiều còn lại chạy ngay tại đây: relay() phải CHỜ tunnel
             // xong rồi mới đóng socket, nếu không finally sẽ đóng ngay lúc vừa mở
             // (lỗi thật 24/10/2026: nc nhận kết nối rồi bị cắt, SmartTube vẫn đứng hình).
@@ -110,22 +124,81 @@ public class LocalGatewayProxy {
         }
     }
 
+    /** Đọc phần đầu HTTP request (tới hết dòng trống), tối đa 8 KB. */
+    private static String readHead(InputStream in) {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        try {
+            int c;
+            int count = 0;
+            while ((c = in.read()) != -1) {
+                out.write(c);
+                if (++count > 8192) break;
+                // kết thúc header: 
+
+
+                if (count >= 4) {
+                    byte[] b = out.toByteArray();
+                    int n = b.length;
+                    if (b[n - 4] == '\r' && b[n - 3] == '\n' && b[n - 2] == '\r' && b[n - 1] == '\n') break;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return out.size() == 0 ? null : new String(out.toByteArray(), java.nio.charset.StandardCharsets.ISO_8859_1);
+    }
+
+    /** Tên host trong dòng đầu: "CONNECT host:443 HTTP/1.1" hoặc "GET http://host/path HTTP/1.1". */
+    private static String hostOf(String head) {
+        if (head == null) return null;
+        try {
+            String line = head.split("\r?\n", 2)[0].trim();
+            String[] parts = line.split(" ");
+            if (parts.length < 2) return null;
+            String target = parts[1];
+            int scheme = target.indexOf("://");
+            if (scheme >= 0) target = target.substring(scheme + 3);
+            int slash = target.indexOf('/');
+            if (slash >= 0) target = target.substring(0, slash);
+            int colon = target.lastIndexOf(':');
+            if (colon > 0) target = target.substring(0, colon);
+            return target.toLowerCase(java.util.Locale.US);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** Gateway cho host: đuôi có route riêng -> ROUTED_GATEWAY (nếu sống) -> còn lại: gateway tốt nhất. */
+    private static String pickFor(String host) {
+        if (host != null) {
+            for (String suffix : ROUTED_SUFFIXES) {
+                if (host.endsWith(suffix) || host.equals(suffix.substring(1))) {
+                    if (probe(ROUTED_GATEWAY) >= 0) {
+                        best = ROUTED_GATEWAY;
+                        bestAt = SystemClock.elapsedRealtime();
+                        return ROUTED_GATEWAY;
+                    }
+                    Log.w(TAG, "route " + suffix + ": gateway " + ROUTED_GATEWAY + " chết");
+                }
+            }
+        }
+        return pick();
+    }
+
     /** Gateway cụ thể còn sống không (dùng để bám gateway hiện tại, không nhảy liên tục). */
     public static boolean isAlive(String hostPort) {
         return probe(hostPort) >= 0;
     }
 
     /** Gateway sống (CONNECT thật trả 200) nhanh nhất; cache 10 giây để không dò liên tục. */
-    private static String pick() {
+    public static String pick() {
         String cur = best;
         if (cur != null && SystemClock.elapsedRealtime() - bestAt < CACHE_MS) return cur;
+        // Ưu tiên theo THỨ TỰ (không phải nhanh nhất): .6 (Mac) có route TV360, .5 chỉ để dự phòng.
         String found = null;
-        long bestMs = Long.MAX_VALUE;
         for (String gw : GATEWAYS) {
-            long ms = probe(gw);
-            if (ms >= 0 && ms < bestMs) {
-                bestMs = ms;
+            if (probe(gw) >= 0) {
                 found = gw;
+                break;
             }
         }
         best = found;
