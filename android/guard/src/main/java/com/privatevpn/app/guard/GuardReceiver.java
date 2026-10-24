@@ -127,6 +127,7 @@ public class GuardReceiver extends BroadcastReceiver {
                 }
                 // Xác nhận lần 2 trước khi bỏ gateway: tránh nhảy chỉ vì một nhịp chập chờn.
                 long again = probeQuick(proxy);
+                if (again < 0) again = probeQuick(proxy);  // BUG: 2 lan truot la loai oan; thu lan 3
                 if (again >= 0) {
                     Log.i(TAG, "gateway " + proxy + " nhịp lỗi đầu nhưng vẫn sống (" + again + " ms) -> giữ");
                     return;
@@ -365,33 +366,16 @@ public class GuardReceiver extends BroadcastReceiver {
 
     /** Kiểm nhanh (TCP 1,2 s + CONNECT 4 s) — dùng cho gateway đang dùng. */
     private static long probeQuick(String hostPort) {
-        int i = hostPort.lastIndexOf(':');
-        if (i <= 0) return -1;
-        int port;
-        try {
-            port = Integer.parseInt(hostPort.substring(i + 1).trim());
-        } catch (Throwable t) {
-            return -1;
+        // BUG (24/10/2026): ban cu chi do MOT host (www.youtube.com) voi timeout 1,2 s/4 s nen gateway
+        // di qua tunnel (dien thoai - do tre cao hon) bi loai oan la "da chet", du gstatic/youtube/
+        // fptplay qua no deu 200. Nay: thu 2 host nhe (gstatic truoc), moi host 2 lan, timeout rong hon.
+        for (String target : new String[]{"www.gstatic.com:443", "www.youtube.com:443"}) {
+            for (int attempt = 0; attempt < 2; attempt++) {
+                long ms = probeMs(hostPort, target);
+                if (ms >= 0) return ms;
+            }
         }
-        String host = hostPort.substring(0, i).trim();
-        long t0 = android.os.SystemClock.elapsedRealtime();
-        Socket s = new Socket();
-        try {
-            s.connect(new InetSocketAddress(host, port), 1200);
-            s.setSoTimeout(4000);
-            s.getOutputStream().write((
-                    "CONNECT www.youtube.com:443 HTTP/1.1\r\n" +
-                            "Host: www.youtube.com:443\r\n\r\n").getBytes());
-            s.getOutputStream().flush();
-            byte[] buf = new byte[96];
-            int n = s.getInputStream().read(buf);
-            if (n <= 0 || !new String(buf, 0, n).contains(" 200")) return -1;
-            return android.os.SystemClock.elapsedRealtime() - t0;
-        } catch (Throwable t) {
-            return -1;
-        } finally {
-            try { s.close(); } catch (Throwable ignored) { }
-        }
+        return -1;
     }
 
     /** CONNECT thật tới `target` qua gateway `hostPort` (10 s). */
