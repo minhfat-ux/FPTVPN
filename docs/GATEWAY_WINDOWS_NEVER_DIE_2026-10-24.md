@@ -79,3 +79,39 @@ khi bật process mới ⇒ process mới bind thất bại rồi kẹt luôn.
   app chưa tự dựng lại tunnel.
 - Đây là **lỗi riêng của app** (không phải hạ tầng laptop): cần cho keepalive kiểm tra *đường ra thật*
   qua proxy nội bộ và khởi động lại tunnel khi 502 — chưa sửa trong lần này.
+
+## 7. Hai chỉnh sửa sau khi quan sát 10 giờ chạy liên tục (24/10 chiều)
+
+### 7a. Nhấp nháy relay: 237 lần dựng lại chỉ vì đường UDP, trong khi WS vẫn tốt
+
+Log 04:00-13:20 cho thấy `da bat lai` **273 lần** (1081: 237, 1101/1102: ~63 mỗi cái, lan-proxy: 57).
+Đo lại thì đường **UDP/QUIC 1081 tới node-1 bị mạng tại chỗ chặn** —
+`connect error: http3: parsing frame failed: timeout: no recent network activity` — trong khi 1101/1102
+vẫn ra internet bình thường. Chính sách cũ (2 nhịp lỗi là dựng lại) làm cả gateway rung theo một đường
+hỏng, dù TV chỉ cần **một** đường sống.
+
+Sửa trong `gateway-monitor.ps1`:
+- Đo egress **một lượt cho cả 3 đường** trước khi quyết định; biết "còn đường nào sống không".
+- Còn đường khác sống ⇒ chỉ thử lại đường hỏng sau **10 nhịp** (~10 phút); **không còn đường nào** ⇒
+  dựng lại sau **3 nhịp**. Test-LocalNet vẫn chặn trường hợp mất mạng nội bộ.
+- Vòng lặp chỉ chạy nhịp 20 s khi **thật sự** có sự cố (thiếu cổng / proxy không ra được / không còn
+  đường nào), còn bình thường 60 s.
+- Đo sau sửa: **3,5 phút không có lần dựng lại nào**, `ket_noi_TV` vẫn nhận kết nối.
+- Đồng thời **vô hiệu hoá bản sao cũ `.tmp\gateway-monitor.ps1`** (đổi tên `*.old-20261024`): chính bản
+  này chạy nền suốt 9 giờ và sinh phần lớn số lần dựng lại ở trên.
+
+### 7b. Router mới trong nhà: `FPT_Minh` (Xiaomi AX3000T / model `xiaomi.router.rd03v2`)
+
+- Đăng nhập admin được bằng API: `POST /cgi-bin/luci/api/xqsystem/login` với body
+  **form-urlencoded** `username=admin&logtype=2&nonce=<nonce>&password=SHA256(nonce+SHA256(pw+key))`,
+  `key = a2ffa5c9be07488bbb04a3a47d3c5f6a`, `nonce = "0_<mac-client>_<unix-time>_<rand>"`;
+  trả `{"token": "..."}` (JSON body cùng tham số bị **401 Invalid token** — phải là form).
+- Trạng thái đo được: `inited=1` (đã cấu hình), `connect=0` (WAN chưa có internet — chưa cắm dây),
+  LAN `192.168.31.1/24`, DHCP cấp `192.168.31.11`.
+- Chủ dự án đã đổi: SSID **`FPT_Minh`** + mật khẩu **WPA2** (`abcde12345-` — đã kiểm: kết nối được,
+  nhận DHCP), LAN IP **`192.168.100.2`**, **tắt DHCP** ⇒ dùng như **access point**; phải cắm dây
+  LAN–LAN (từ SK-D749 vào cổng **LAN** của Xiaomi, **không** dùng cổng WAN).
+- Vì vậy `gateway-autostart.ps1` nay coi **`FPT_Minh` và dải `192.168.31.`** cũng là "mạng nhà"
+  (tham số `-HomeSsid`/`-HomeSubnet` nhận **danh sách phẩy**), để laptop đổi sang Wi-Fi đó thì gateway
+  **không bị tắt** như trước.
+
