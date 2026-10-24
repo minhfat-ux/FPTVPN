@@ -135,3 +135,10 @@ Ba lớp nay cùng bảo đảm:
 
 Nghiệm thu (24/10 11:33): `am force-stop` **cả guard và launcher**, đặt `http_proxy` vào gateway chết `.11`
 → **~18 s** sau proxy tự thành `.6` (chuông alarm đánh thức guard, guard scan và sửa).
+
+## Router AX3000T (đang bàn giao cho harness Windows)
+
+Router Xiaomi **AX3000T (RD03)** đã có, mục tiêu thay toàn bộ gateway Mac/Windows bằng sing-box trên
+router. Việc flash + cấu hình chuyển cho **harness Windows** (chỉ Windows với tới router):
+[`HANDOFF_ROUTER_AX3000T_GATEWAY_2026-10-24.md`](HANDOFF_ROUTER_AX3000T_GATEWAY_2026-10-24.md) ·
+bộ cài sẵn: `tools/router/` + binary `flowvpnrelay-linux-arm64`.
