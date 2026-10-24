@@ -7,8 +7,8 @@
 
 | # | App | APK | versionCode | SHA-256 |
 |---|---|---|---|---|
-| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ có **route `.tv360.vn`**, tự bảo trì `http_proxy` ~7 s) | `TVFlowHome-3.4.apk` | 25 (3.4) | `84e338e314bdb02a06ba4485183c418437aa3aa6378cb2e93d42cbe2b538a1b4` |
-| 2 | **VPNFlow Guard** (bám `.6` ưu tiên vì có route TV360, xác nhận 2 lần trước khi đổi, 2 chuông alarm) | `VPNFlowGuard-1.9.apk` | 10 (1.9) | `8fcfee2debaa5592b1652658f89230234a08272ba0c073b80df27cc96d78d052` |
+| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ **chọn gateway theo độ trễ + chống nhảy**, tự bảo trì `http_proxy` ~7 s) | `TVFlowHome-3.7.apk` | 28 (3.7) | `-` |
+| 2 | **VPNFlow Guard** (giữ proxy nội bộ khi còn sống, fallback `.101 → .5 → .6 → .11`, 2 chuông alarm) | `VPNFlowGuard-2.1.apk` | 12 (2.1) | `-` |
 | 3 | **VPNFlow TV** (app VPN, chế độ gateway LAN) | `VPNFlow-TV-1.4.5.apk` | 100 | `4454861d501e5fb8bdb2a7837b0f4f0ee38cf4af935d9ee31046737b4a782810` |
 | 4 | **FPT Tubeflow** (YouTube không quảng cáo, đổi thương hiệu) | `FPTTubeflow-2.2.apk` | 9013 (2.2) | `51bd0e11387ce4fb9775a36075e13b123d179d97636558bba842a0904ee46c5f` |
 
@@ -142,3 +142,15 @@ Router Xiaomi **AX3000T (RD03)** đã có, mục tiêu thay toàn bộ gateway M
 router. Việc flash + cấu hình chuyển cho **harness Windows** (chỉ Windows với tới router):
 [`HANDOFF_ROUTER_AX3000T_GATEWAY_2026-10-24.md`](HANDOFF_ROUTER_AX3000T_GATEWAY_2026-10-24.md) ·
 bộ cài sẵn: `tools/router/` + binary `flowvpnrelay-linux-arm64`.
+
+## Chọn đường trên TV theo chất lượng (24/10/2026)
+
+Proxy của TV = **`127.0.0.1:18081`** (proxy nội bộ của launcher). Launcher 3.7 tự:
+
+1. Dò **tất cả gateway còn sống**: `.101` (điện thoại VPNFlow), `.5` (Windows), `.6` (Mac), `.11`
+2. Chọn gateway có **độ trễ CONNECT thật thấp nhất**
+3. **Chống nhảy**: giữ gateway đang dùng nếu nó còn sống và không chậm hơn 2 lần gateway nhanh nhất
+4. Guard chỉ can thiệp khi proxy nội bộ **chết** (launcher bị hệ thống kill) → đặt lại gateway thật theo cùng thứ tự
+
+Nghiệm thu 24/10 14:47: log `TVFlowProxy: chon gateway 192.168.100.101:18081 (nhanh nhat ... 35ms)`,
+sau đó FPT Play và TV360 đều relay qua `.101`.

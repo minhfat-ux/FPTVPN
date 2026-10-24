@@ -42,7 +42,7 @@ public class GuardReceiver extends BroadcastReceiver {
      * Có thể đổi không cần build lại: app này đọc khoá `gateway` trong prefs riêng của nó.
      */
     private static final String DEFAULT_GATEWAY =
-            "192.168.100.6:18081,192.168.100.5:18081,192.168.100.11:18081";
+            "192.168.100.101:18081,192.168.100.5:18081,192.168.100.6:18081,192.168.100.11:18081";
     private static final String PREFS = "vpnflow_guard";
     private static final String KEY_GATEWAY = "gateway";
 
@@ -100,6 +100,12 @@ public class GuardReceiver extends BroadcastReceiver {
                 Log.w(TAG, "gateway " + proxy + " đã chết (2 lần) -> tìm gateway khác");
             }
 
+            // Proxy nội bộ của launcher (127.0.0.1:18081) — nó tự route theo tên miền
+            // (TV360 -> Mac .6, FPT/YouTube -> Windows .5). Còn nghe là giữ.
+            if (isLoopback && portAlive("127.0.0.1", 18081)) {
+                Log.i(TAG, "proxy nội bộ 127.0.0.1:18081 còn sống -> giữ");
+                return;
+            }
             if (isLoopback && portAlive("127.0.0.1", 1081)) {
                 Log.i(TAG, "proxy " + proxy + " còn sống -> không làm gì");
                 return;

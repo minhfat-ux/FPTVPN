@@ -22,10 +22,13 @@ import java.net.Socket;
 public class LocalGatewayProxy {
     private static final String TAG = "TVFlowProxy";
     private static final int LISTEN_PORT = 18081;
+    // Mặc định ưu tiên Windows (.5) vì ổn định khi xem video; TV360 đi riêng .6 (có route).
+    // .101 = điện thoại (VPNFlow gateway) — đang nhanh nhất; .5 Windows; .6 Mac (chậm do Wi-Fi 2.4G).
     private static final String[] GATEWAYS = {
-            "192.168.100.6:18081", "192.168.100.5:18081", "192.168.100.11:18081"};
+            "192.168.100.101:18081", "192.168.100.5:18081",
+            "192.168.100.6:18081", "192.168.100.11:18081"};
     /** Đuôi tên miền phải đi gateway CÓ ROUTE riêng (Mac .6 có `.tv360.vn -> Flow3/node-3`). */
-    private static final String[] ROUTED_SUFFIXES = {".tv360.vn"};
+    private static final String[] ROUTED_SUFFIXES = {};
     /** Gateway ưu tiên cho các đuôi trên (chỉ .6 có route TV360). */
     private static final String ROUTED_GATEWAY = "192.168.100.6:18081";
     private static final long CACHE_MS = 4_000L;
@@ -190,22 +193,42 @@ public class LocalGatewayProxy {
     }
 
     /** Gateway sống (CONNECT thật trả 200) nhanh nhất; cache 10 giây để không dò liên tục. */
+    /**
+     * Chọn gateway theo CHẤT LƯỢNG (độ trễ CONNECT thật) trong tất cả gateway còn sống,
+     * nhưng có "độ trễ chuyển" (hysteresis): giữ gateway đang dùng nếu nó còn sống và không
+     * chậm hơn 2 lần so với gateway nhanh nhất — tránh nhảy qua lại giữa các máy.
+     */
     public static String pick() {
+        long now = SystemClock.elapsedRealtime();
         String cur = best;
-        if (cur != null && SystemClock.elapsedRealtime() - bestAt < CACHE_MS) return cur;
-        // Ưu tiên theo THỨ TỰ (không phải nhanh nhất): .6 (Mac) có route TV360, .5 chỉ để dự phòng.
-        String found = null;
+        if (cur != null && now - bestAt < CACHE_MS) return cur;
+
+        String fast = null;
+        long fastMs = Long.MAX_VALUE;
+        long curMs = -1;
         for (String gw : GATEWAYS) {
-            if (probe(gw) >= 0) {
-                found = gw;
-                break;
+            long ms = probe(gw);
+            if (ms < 0) continue;
+            if (gw.equals(cur)) curMs = ms;
+            if (ms < fastMs) {
+                fastMs = ms;
+                fast = gw;
             }
         }
-        best = found;
-        bestAt = SystemClock.elapsedRealtime();
-        if (found == null) Log.w(TAG, "moi gateway deu chet");
-        return found;
+        String chosen = fast;
+        if (cur != null && curMs >= 0 && fast != null && curMs <= fastMs * 2) {
+            chosen = cur; // giữ gateway hiện tại (đủ tốt) để không nhảy
+        }
+        if (chosen != null && !chosen.equals(cur)) {
+            Log.i(TAG, "chon gateway " + chosen + " (nhanh nhat " + fast + " " + fastMs + "ms, cu " + cur + " " + curMs + "ms)");
+        }
+        best = chosen;
+        bestAt = now;
+        if (found(chosen)) return chosen;
+        return chosen;
     }
+
+    private static boolean found(String gw) { return gw != null; }
 
     /** CONNECT thật tới gstatic: proxy mở cổng nhưng upstream chết vẫn trả 502. */
     private static long probe(String hostPort) {
