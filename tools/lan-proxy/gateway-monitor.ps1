@@ -26,7 +26,10 @@ $upstreams = "socks5://127.0.0.1:1081,socks5://127.0.0.1:1101,socks5://127.0.0.1
 $relays = @(
     @{ Port = 1081; Name = "";      Cfg = $cfgUdp },
     @{ Port = 1101; Name = "vn1hy"; Cfg = $cfgWs },
-    @{ Port = 1102; Name = "vn2hy"; Cfg = $cfgWs }
+    @{ Port = 1102; Name = "vn2hy"; Cfg = $cfgWs },
+    # 1103 = vn3hy (node-3): lan-proxy da co `-route .tv360.vn=...1103`; thieu relay nay thi route
+    # tv360 chet va tv360 roi ve danh sach mac dinh (do that 25/10: tv360 can node-3).
+    @{ Port = 1103; Name = "vn3hy"; Cfg = $cfgWs }
 )
 
 function Log([string]$m) {
