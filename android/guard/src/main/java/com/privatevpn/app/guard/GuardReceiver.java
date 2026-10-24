@@ -13,6 +13,9 @@ import android.util.Log;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.NetworkInterface;
+import java.net.InterfaceAddress;
+import java.util.Collections;
 
 /**
  * Giữ proxy hệ thống KHÔNG BAO GIỜ trỏ vào cổng chết trên TV không có TUN.
@@ -41,8 +44,10 @@ public class GuardReceiver extends BroadcastReceiver {
      * thay vì rơi về mạng thẳng (IP Trung Quốc) — giống cách `ProxyDirector` bên app chính làm.
      * Có thể đổi không cần build lại: app này đọc khoá `gateway` trong prefs riêng của nó.
      */
+    // Ưu tiên theo ĐỘ ỔN ĐỊNH đo được (24/10): Windows .5 ổn định nhất; điện thoại .101
+    // flap 2/5 lần (Wi-Fi power save) nên để sau; Mac .6 chậm do Wi-Fi 2.4G.
     private static final String DEFAULT_GATEWAY =
-            "192.168.100.101:18081,192.168.100.5:18081,192.168.100.6:18081,192.168.100.11:18081";
+            "192.168.100.5:18081,192.168.100.6:18081,192.168.100.101:18081,192.168.100.11:18081";
     private static final String PREFS = "vpnflow_guard";
     private static final String KEY_GATEWAY = "gateway";
 
@@ -77,17 +82,6 @@ public class GuardReceiver extends BroadcastReceiver {
                 // Ca thật 24/10/2026 02:40: gateway .5 treo, proxy kẹt .5 tới khi tắt/bật VPNFlow.
                 long cur = probeQuick(proxy);
                 if (cur >= 0) {
-                    // Ưu tiên tuyệt đối gateway đầu danh sách (.6 = Mac, có route TV360).
-                    // Nếu đang ở gateway khác mà .6 đã sống lại -> quay về .6 để TV360 chạy đúng route.
-                    java.util.List<String> list = gateways(context);
-                    if (!list.isEmpty() && !proxy.equals(list.get(0))) {
-                        long pref = probeQuick(list.get(0));
-                        if (pref >= 0) {
-                            Settings.Global.putString(context.getContentResolver(), "http_proxy", list.get(0));
-                            Log.w(TAG, "uu tien gateway " + list.get(0) + " (route TV360), doi tu " + proxy);
-                            return;
-                        }
-                    }
                     Log.i(TAG, "gateway " + proxy + " còn sống (" + cur + " ms) -> giữ");
                     return;
                 }
@@ -147,12 +141,106 @@ public class GuardReceiver extends BroadcastReceiver {
      * Nên ưu tiên tuyệt đối `.6`; `.5` chỉ dùng khi `.6` chết (lúc đó FPT Play vẫn chạy, TV360 tạm mất).
      */
     private static String bestGateway(Context context, String skip) {
-        for (String gw : gateways(context)) {
+        String best = null;
+        long bestMs = Long.MAX_VALUE;
+        for (String gw : candidates(context, true)) {
             if (skip != null && gw.equals(skip)) continue;
-            long ms = probeMs(gw);
-            if (ms >= 0) return gw;
+            long ms = probeQuick(gw);
+            if (ms >= 0 && ms < bestMs) {
+                bestMs = ms;
+                best = gw;
+            }
         }
-        return null;
+        return best;
+    }
+
+    /** Quét LAN tìm gateway (host có cổng 18081 mở) — vì IP các máy không cố định. */
+    private static final String KEY_DISCOVERED = "discovered_gateways";
+    private static final String KEY_DISCOVERED_AT = "discovered_at";
+    private static final long DISCOVERY_TTL_MS = 10L * 60L * 1000L; // 10 phút
+
+    /** Trả danh sách gateway: IP quét được (nếu còn mới) + danh sách mặc định (dedup). */
+    private static java.util.List<String> candidates(Context context, boolean refreshIfStale) {
+        long last = 0L;
+        String raw = null;
+        try {
+            last = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getLong(KEY_DISCOVERED_AT, 0L);
+            raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString(KEY_DISCOVERED, null);
+        } catch (Throwable ignored) {
+        }
+        boolean stale = SystemClock.elapsedRealtime() - last > DISCOVERY_TTL_MS;
+        if (refreshIfStale && (stale || raw == null || raw.isEmpty())) {
+            raw = scanLan(context);
+            try {
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                        .putString(KEY_DISCOVERED, raw)
+                        .putLong(KEY_DISCOVERED_AT, SystemClock.elapsedRealtime())
+                        .apply();
+            } catch (Throwable ignored) {
+            }
+        }
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        if (raw != null) {
+            for (String part : raw.split(",")) {
+                String v = part.trim();
+                if (v.contains(":")) out.add(v);
+            }
+        }
+        for (String gw : gateways(context)) out.add(gw);
+        return new java.util.ArrayList<>(out);
+    }
+
+    /** Quét /24 hiện tại: host nào mở cổng 18081 thì coi là gateway. */
+    private static String scanLan(Context context) {
+        try {
+            java.util.List<String> subnets = new java.util.ArrayList<>();
+            for (NetworkInterface nif : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!nif.isUp() || nif.isLoopback()) continue;
+                for (InterfaceAddress ia : nif.getInterfaceAddresses()) {
+                    java.net.InetAddress ip = ia.getAddress();
+                    if (ip == null || ip.getAddress().length != 4) continue;
+                    if (ip.isLoopbackAddress()) continue;
+                    int prefix = ia.getNetworkPrefixLength();
+                    if (prefix < 24 || prefix > 30) continue; // chỉ quét mạng /24-/30
+                    byte[] b = ip.getAddress();
+                    String base = (b[0] & 0xff) + "." + (b[1] & 0xff) + "." + (b[2] & 0xff) + ".";
+                    if (!subnets.contains(base)) subnets.add(base);
+                }
+            }
+            java.util.Set<String> found = java.util.Collections.synchronizedSet(new java.util.LinkedHashSet<String>());
+            for (final String base : subnets) {
+                java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(24);
+                for (int i = 1; i <= 254; i++) {
+                    final String host = base + i;
+                    pool.execute(new Runnable() {
+                        @Override public void run() {
+                            Socket s = new Socket();
+                            try {
+                                s.connect(new java.net.InetSocketAddress(host, 18081), 350);
+                                found.add(host + ":18081");
+                            } catch (Throwable ignored) {
+                            } finally {
+                                try { s.close(); } catch (Throwable ignored) { }
+                            }
+                        }
+                    });
+                }
+                pool.shutdown();
+                try { pool.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS); } catch (Throwable ignored) { }
+            }
+            StringBuilder sb = new StringBuilder();
+            for (String gw : found) {
+                if (sb.length() > 0) sb.append(',');
+                sb.append(gw);
+            }
+            Log.i(TAG, "quet LAN thay gateway: " + sb);
+            return sb.toString();
+        } catch (Throwable t) {
+            Log.w(TAG, "quet LAN loi: " + t.getMessage());
+            return "";
+        }
     }
 
     /** Danh sách gateway, thử lần lượt (Windows trước, Mac sau). Prefs riêng, ngăn cách dấu phẩy. */

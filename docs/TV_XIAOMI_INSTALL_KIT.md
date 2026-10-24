@@ -8,7 +8,7 @@
 | # | App | APK | versionCode | SHA-256 |
 |---|---|---|---|---|
 | 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ **chọn gateway theo độ trễ + chống nhảy**, tự bảo trì `http_proxy` ~7 s) | `TVFlowHome-3.7.apk` | 28 (3.7) | `d97952312a9e2d34ffac824a8cad98881c2af4cbf3df2dfc9b84dd471424018e` |
-| 2 | **VPNFlow Guard** (giữ proxy nội bộ khi còn sống, fallback `.101 → .5 → .6 → .11`, 2 chuông alarm) | `VPNFlowGuard-2.1.apk` | 12 (2.1) | `ce206a138088122eeba0b2861d7e0f7abb24fddbdd98c2e7e291e730928d32a5` |
+| 2 | **VPNFlow Guard** (**quét LAN tìm gateway** port 18081, chọn theo độ trễ, giữ gateway đang sống, 2 chuông alarm) | `VPNFlowGuard-2.3.apk` | 14 (2.3) | `336e9b39ceff87e67e94e68c8c0d2eb93874bb5d571de234bd5f95caf10b9a52` |
 | 3 | **VPNFlow TV** (app VPN, chế độ gateway LAN) | `VPNFlow-TV-1.4.5.apk` | 100 | `4454861d501e5fb8bdb2a7837b0f4f0ee38cf4af935d9ee31046737b4a782810` |
 | 4 | **FPT Tubeflow** (YouTube không quảng cáo, đổi thương hiệu) | `FPTTubeflow-2.2.apk` | 9013 (2.2) | `51bd0e11387ce4fb9775a36075e13b123d179d97636558bba842a0904ee46c5f` |
 
@@ -154,3 +154,18 @@ Proxy của TV = **`127.0.0.1:18081`** (proxy nội bộ của launcher). Launch
 
 Nghiệm thu 24/10 14:47: log `TVFlowProxy: chon gateway 192.168.100.101:18081 (nhanh nhat ... 35ms)`,
 sau đó FPT Play và TV360 đều relay qua `.101`.
+
+## Quét LAN tìm gateway (guard 2.3 — 24/10/2026)
+
+Vì IP các máy gateway **không cố định** (điện thoại/Mac/Windows đổi IP theo DHCP), guard 2.3 không
+còn phụ thuộc danh sách cứng:
+
+1. Mỗi 10 phút (hoặc khi gateway hiện tại chết) quét **/24 hiện tại**, host nào mở cổng `18081`
+   thì coi là gateway (`WifiManager`→`NetworkInterface` lấy IP + prefix).
+2. Lưu danh sách quét được vào prefs; khi chọn thì **probe CONNECT thật** và lấy **gateway nhanh nhất**.
+3. Gateway đang dùng còn sống → **giữ** (xác nhận 2 lần trước khi bỏ).
+
+Nghiệm thu 24/10 16:13: đặt proxy vào IP chết `.11` →
+`quet LAN thay gateway: 192.168.100.6, .5, .101` → chọn `.5` (nhanh nhất) chỉ sau ~4 s.
+Lưu ý: đã **tắt app VPNFlow trên TV** (`pm disable-user com.privatevpn.app.tv.dev`) để nó không
+ghi đè `http_proxy` nữa — guard là nguồn duy nhất quản lý proxy.
