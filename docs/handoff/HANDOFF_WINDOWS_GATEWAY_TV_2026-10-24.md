@@ -29,8 +29,9 @@ Máy khác trong LAN cũng làm gateway được: Mac chạy `tools/http-socks-b
 | File | Vai trò | Cách chạy |
 |---|---|---|
 | `tools/lan-proxy/main.go` → `lan-proxy.exe` | HTTP proxy LAN cho TV + `-route` theo domain + `-direct` bỏ qua tunnel + discovery UDP 18099 | `lan-proxy.exe -listen 0.0.0.0:18081 -upstream socks5://127.0.0.1:1081,socks5://127.0.0.1:1101,socks5://127.0.0.1:1102 -route .tv360.vn=socks5://127.0.0.1:1103 -direct .miwifi.com -direct .xiaomi.com -direct .mi.com -direct .miui.com` |
-| `tools/lan-proxy/gateway-monitor.ps1` | con canh: mỗi 60 s kiểm **egress thật** từng cổng, hỏng 2 nhịp thì dựng lại relay/lan-proxy | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\lan-proxy\gateway-monitor.ps1` (log `.tmp\gw-monitor.log`) |
-| `tools/lan-proxy/gateway-autostart.ps1` | tự bật gateway khi ở mạng nhà (SSID `KT-617` hoặc IP `192.168.100.*`), tự tắt khi ra mạng khác; giữ **wake-lock** chống ngủ; mutex 1-instance | Scheduled Task `VPNFlow Gateway Watch` (5 phút) + shortcut Startup; log `.tmp\gw-autostart.log` |
+| `tools/lan-proxy/gateway-monitor.ps1` | con canh: mỗi 60 s (20 s khi có lỗi) kiểm **egress thật** từng cổng, hỏng **3** nhịp thì dựng lại relay/lan-proxy; dọn process "xác", đợi cổng trống thật, xác nhận đã LISTEN, ghi nhịp tim | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\lan-proxy\gateway-monitor.ps1` (log `.tmp\gw-monitor.log`) |
+| `tools/lan-proxy/gateway-autostart.ps1` | tự bật gateway khi ở mạng nhà (SSID `KT-617` hoặc IP `192.168.100.*`), tự tắt khi ra mạng khác; giữ **wake-lock** mỗi nhịp; phát hiện **máy vừa thức** ⇒ dựng lại ngay; thấy nhịp tim monitor cũ > 240 s ⇒ giết + bật lại; mutex 1-instance | Scheduled Task `VPNFlow Gateway Watch` + shortcut Startup; log `.tmp\gw-autostart.log` |
+| `tools/lan-proxy/install-gateway-task.ps1` | **đăng ký lại task cho chịu được pin/ngủ**: cho chạy khi dùng pin, không dừng khi rút sạc, `StartWhenAvailable`, 3 trigger (đăng nhập · 5 phút · **sự kiện thức dậy** Kernel-Power 507/1) | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\lan-proxy\install-gateway-task.ps1` (không cần admin) |
 | `tools/lan-proxy/disable-tun-for-gateway.ps1` | dọn adapter TUN còn sót (`sing-tun Tunnel`) + ~24.000 route — chạy Administrator | UAC → `powershell -File ...\disable-tun-for-gateway.ps1` |
 | `tools/lan-proxy/remove-tun-adapter.ps1` | bản cũ chỉ bắt "Wintun" (đã bị `disable-tun...` thay thế) | – |
 | App TV `com.privatevpn.app.tv.dev` | proxy + tunnel nội bộ `127.0.0.1:1081`, dò gateway, chọn tuyến, keepalive | cài bằng `adb install -r app-tv-debug.apk` + `pm grant ... WRITE_SECURE_SETTINGS` |
@@ -195,4 +196,21 @@ Bản 103 có **2 lỗi thật đã sửa** (Google/YouTube chết khi VPN bật
 gateway được) ⇒ **nên phát hành**. Quy trình theo `docs/PUBLISHER_PROCESS.md` (harness Windows phát
 hành Windows + Android): tăng `versionName` (1.4.5 → 1.4.6), build `modern` + `legacy` release, kiểm
 chữ ký/hash, rồi upload theo kênh. Chờ chủ dự án xác nhận thời điểm.
+
+> **ĐÃ PHÁT (24/10/2026):** bản phát hành là **1.4.7 / versionCode 105** (không phải 1.4.6 — cặp
+> `android 1.4.6` đã có artifact khác từ 19/10). Xem `docs/RELEASE_ARTIFACTS_2026-10-24.md`.
+
+## 10. Cập nhật 24/10/2026 (khuya) — "đừng bao giờ để gateway/relay của laptop chết"
+
+Sự cố: laptop vào Modern Standby **00:20 → 02:44**, gateway chết **2 h 17 m**, TV mất mạng, chủ dự án
+phải tự mở app. Ba lỗi gốc + cách sửa + số đo nghiệm thu nằm ở
+**`docs/GATEWAY_WINDOWS_NEVER_DIE_2026-10-24.md`**. Tóm tắt:
+
+1. Task Windows **không được chạy khi dùng pin** và **không chạy bù** nhịp bị lỡ khi ngủ ⇒ sửa bằng
+   `tools/lan-proxy/install-gateway-task.ps1` (3 trigger, gồm sự kiện thức dậy).
+2. Relay WS 1101/1102 **chưa bao giờ lên được** vì file cấu hình do monitor sinh có **BOM** (Go json
+   từ chối) ⇒ chỉ còn 1 đường UDP; sửa: ghi UTF-8 **không BOM**.
+3. Monitor không dọn process "xác" (sống nhưng không bind) và không xác nhận đã LISTEN ⇒ sửa: đợi
+   cổng trống, chờ LISTEN 30 s, giết đúng pid khi hỏng, dọn zombie, nhịp tim + tự bật lại khi treo.
+
 
