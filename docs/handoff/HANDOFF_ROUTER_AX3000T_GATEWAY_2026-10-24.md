@@ -72,3 +72,24 @@ Báo lại cho Mac qua `flowvpn-notify --from windows --to mac --topic "..."`, k
 
 - `node2.json` / `node3.json` chứa mật khẩu tunnel: **không** commit vào git, không gửi qua kênh công khai.
 - Nếu router không lên OpenWrt, giữ fallback hiện tại: TV dùng proxy `127.0.0.1:18081` (launcher 3.5 route TV360→`.6`, FPT→`.5`).
+
+## 7. CẬP NHẬT 24/10 — máy là **RD03v2 (IPQ5018)**, chủ dự án chốt **phương án B**
+
+Windows đọc firmware: `hardware=RD03v2, model=xiaomi.router.rd03v2, romversion=2.0.28`
+⇒ **không dùng** image mainline RD03 (sẽ brick). Chỉ có port community:
+`https://github.com/ADCDS/openwrt-xiaomi-ax3000t-rd03v2` (release v2.0.2), cài bằng xmir-patcher
+fork nhánh `connect8-connect9` theo `RD03v2-INSTALL.md`. Vật tư cứu hộ: `recovery.bin >= 2.0.28`.
+
+**Quyết định:** flash bản community, nhưng chạy **bản GON** vì RAM chỉ ~175 MB (~30 MB trống):
+- **1 relay** (node-2, socks `127.0.0.1:1081`) + **sing-box** TPROXY (socks outbound) — KHÔNG chạy relay node-3.
+- Hệ quả chấp nhận: **TV360 đi node-2** (chậm hơn ~10 s/phản hồi, đủ để dùng; không còn route node-3).
+- Nếu RAM không đủ: bỏ `mixed-in`, chỉ TPROXY; tắt Wi-Fi 2.4G nếu không dùng.
+
+**Bộ cài GON:** `http://192.168.100.6:8124/` (node2.json, flowvpnrelay-linux-arm64,
+sing-box-single.json, setup.sh). Sau flash: `sh setup.sh`.
+
+**Nghiệm thu:** `curl --socks5-hostname 127.0.0.1:1081 https://www.youtube.com/` = 200;
+`free -m` còn >10 MB trống; TV xem YouTube/FPT Play ≥5 phút; TV360 chấp nhận chậm hơn.
+
+**Rollback:** nếu flash lỗi → recovery.bin 2.0.28 qua TFTP; nếu không thiết lập được thì TV quay lại
+proxy launcher (`127.0.0.1:18081` — điện thoại `.101` đang là gateway nhanh nhất).
