@@ -1,0 +1,53 @@
+{
+  "_comment": "Mau sing-box cho router OpenWrt cua TV Xiaomi. Thay <SECRET_*> bang gia tri that (KHONG commit ban da dien).",
+  "log": { "level": "info", "timestamp": true },
+  "dns": {
+    "servers": [
+      { "tag": "remote", "address": "https://1.1.1.1/dns-query", "detour": "proxy-node2" },
+      { "tag": "local",  "address": "223.5.5.5" }
+    ],
+    "rules": [
+      { "domain_suffix": ["tv360.vn"], "server": "remote" },
+      { "domain_suffix": ["fptplay.net", "fptplay.vn", "fpt.vn"], "server": "remote" }
+    ],
+    "final": "remote"
+  },
+  "inbounds": [
+    {
+      "type": "tproxy", "tag": "tproxy-in", "listen": "::", "listen_port": 7893,
+      "sniff": true, "sniff_override_destination": false
+    },
+    {
+      "type": "mixed", "tag": "mixed-in", "listen": "0.0.0.0", "listen_port": 7890
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "hysteria2", "tag": "proxy-node2",
+      "server": "165.101.114.162", "server_port": 8443,
+      "password": "<SECRET_HY2_PASSWORD>",
+      "obfs": { "type": "salamander", "password": "<SECRET_HY2_OBFS>" },
+      "tls": { "enabled": true, "insecure": true },
+      "up_mbps": 30, "down_mbps": 100
+    },
+    {
+      "type": "hysteria2", "tag": "proxy-node3",
+      "server": "103.6.235.39", "server_port": 8443,
+      "password": "<SECRET_HY3_PASSWORD>",
+      "obfs": { "type": "salamander", "password": "<SECRET_HY3_OBFS>" },
+      "tls": { "enabled": true, "insecure": true },
+      "up_mbps": 20, "down_mbps": 50
+    },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": {
+    "rules": [
+      { "domain_suffix": ["tv360.vn"], "outbound": "proxy-node3" },
+      { "domain_suffix": ["fptplay.net", "fptplay.vn", "fpt.vn"], "outbound": "proxy-node2" },
+      { "domain_suffix": ["youtube.com", "googlevideo.com", "ytimg.com", "ggpht.com", "googleapis.com"], "outbound": "proxy-node2" },
+      { "ip_is_private": true, "outbound": "direct" }
+    ],
+    "final": "proxy-node2",
+    "auto_detect_interface": true
+  }
+}
