@@ -7,7 +7,7 @@
 
 | # | App | APK | versionCode | SHA-256 |
 |---|---|---|---|---|
-| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ **chọn gateway theo độ trễ + chống nhảy**, tự bảo trì `http_proxy` ~7 s) | `TVFlowHome-3.7.apk` | 28 (3.7) | `d97952312a9e2d34ffac824a8cad98881c2af4cbf3df2dfc9b84dd471424018e` |
+| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ **chọn gateway theo độ trễ + retry từng request sang gateway khác**) | `TVFlowHome-3.9.apk` | 30 (3.9) | `73021a735c96c58ad3e943924bf18b030dd0f5d1300654b855afc060e59178c9` |
 | 2 | **VPNFlow Guard** (**quét LAN** port 18081, **đánh giá lại mỗi 60 s → nhảy sang gateway nhanh nhất**, 2 chuông alarm) | `VPNFlowGuard-2.4.apk` | 15 (2.4) | `2b2111e5c6db8f548918891001afde840bc88540208d0c33d0a9aa82b829d6f5` |
 | 3 | **VPNFlow TV** (app VPN, chế độ gateway LAN) | `VPNFlow-TV-1.4.5.apk` | 100 | `4454861d501e5fb8bdb2a7837b0f4f0ee38cf4af935d9ee31046737b4a782810` |
 | 4 | **FPT Tubeflow** (YouTube không quảng cáo, đổi thương hiệu) | `FPTTubeflow-2.2.apk` | 9013 (2.2) | `51bd0e11387ce4fb9775a36075e13b123d179d97636558bba842a0904ee46c5f` |
@@ -170,3 +170,13 @@ Nghiệm thu 24/10 16:25: proxy `.6` → guard tự **chuyển sang `.101` khi �
 `quet LAN thay gateway: 192.168.100.6, .5, .101` → chọn `.5` (nhanh nhất) chỉ sau ~4 s.
 Lưu ý: đã **tắt app VPNFlow trên TV** (`pm disable-user com.privatevpn.app.tv.dev`) để nó không
 ghi đè `http_proxy` nữa — guard là nguồn duy nhất quản lý proxy.
+
+## Chống "đang xem thì chết" — failover từng request (launcher 3.9, 24/10/2026)
+
+Proxy nội bộ `127.0.0.1:18081` giờ **thử lần lượt các gateway cho mỗi request**:
+- Dựng thứ tự: gateway theo route (TV360) → gateway đang chọn → còn lại.
+- Kết nối gateway, **gửi request rồi ĐỌC phản hồi**: chỉ khi gateway trả `200 Connection Established`
+  mới chuyển tiếp cho app; nếu gateway trả `502`/timeout/đứt → **thử gateway kế tiếp**.
+- App không thấy lỗi, chỉ thấy chậm hơn một nhịp; kết nối mới luôn rơi vào gateway còn sống.
+
+Nghĩa là: một máy gateway chết giữa lúc xem thì request kế tiếp tự đi máy khác, không cần app khởi động lại.

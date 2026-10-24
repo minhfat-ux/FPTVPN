@@ -28,7 +28,7 @@ public class LocalGatewayProxy {
             "192.168.100.101:18081", "192.168.100.5:18081",
             "192.168.100.6:18081", "192.168.100.11:18081"};
     /** Đuôi tên miền phải đi gateway CÓ ROUTE riêng (Mac .6 có `.tv360.vn -> Flow3/node-3`). */
-    private static final String[] ROUTED_SUFFIXES = {};
+    private static final String[] ROUTED_SUFFIXES = {".tv360.vn"};
     /** Gateway ưu tiên cho các đuôi trên (chỉ .6 có route TV360). */
     private static final String ROUTED_GATEWAY = "192.168.100.6:18081";
     private static final long CACHE_MS = 4_000L;
@@ -82,14 +82,46 @@ public class LocalGatewayProxy {
                 Log.w(TAG, "khong gateway nao song -> dong ket noi");
                 return;
             }
-            int i = gw.lastIndexOf(':');
-            upstream = new Socket();
-            upstream.connect(new InetSocketAddress(gw.substring(0, i),
-                    Integer.parseInt(gw.substring(i + 1))), (int) CONNECT_TIMEOUT_MS);
-            if (head != null && head.length() > 0) {
-                java.io.OutputStream uo = upstream.getOutputStream();
-                uo.write(head.getBytes("ISO-8859-1"));
-                uo.flush();
+            // Thử LẦN LƯỢT các gateway cho tới khi một cái trả 200. Nhờ vậy khi gateway
+            // đang dùng chết giữa chừng, request MỚI vẫn trong suốt với app (không thấy lỗi).
+            String[] order = orderFor(host);
+            boolean ok = false;
+            for (String cand : order) {
+                Socket up = null;
+                try {
+                    int i = cand.lastIndexOf(':');
+                    up = new Socket();
+                    up.connect(new InetSocketAddress(cand.substring(0, i),
+                            Integer.parseInt(cand.substring(i + 1))), (int) CONNECT_TIMEOUT_MS);
+                    if (head != null && head.length() > 0) {
+                        java.io.OutputStream uo = up.getOutputStream();
+                        uo.write(head.getBytes("ISO-8859-1"));
+                        uo.flush();
+                    }
+                    up.setSoTimeout(4000);
+                    String resp = readHead(up.getInputStream());
+                    if (resp == null || !resp.contains(" 200")) {
+                        close(up);
+                        continue; // gateway này trả lỗi (502...) -> thử cái kế
+                    }
+                    upstream = up;
+                    gw = cand;
+                    ok = true;
+                    client.getOutputStream().write(resp.getBytes("ISO-8859-1"));
+                    client.getOutputStream().flush();
+                    break;
+                } catch (Throwable e) {
+                    close(up);
+                }
+            }
+            if (!ok) {
+                try {
+                    client.getOutputStream().write(
+                            "HTTP/1.1 502 Bad Gateway\r\n\r\n".getBytes("ISO-8859-1"));
+                    client.getOutputStream().flush();
+                } catch (Throwable ignored) {
+                }
+                return;
             }
             client.setSoTimeout(0);
             upstream.setSoTimeout(0);
@@ -168,6 +200,22 @@ public class LocalGatewayProxy {
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    /** Thứ tự thử gateway cho host: route riêng trước, rồi gateway đang chọn, rồi còn lại. */
+    private static String[] orderFor(String host) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        if (host != null) {
+            for (String suffix : ROUTED_SUFFIXES) {
+                if (host.endsWith(suffix) || host.equals(suffix.substring(1))) {
+                    out.add(ROUTED_GATEWAY);
+                }
+            }
+        }
+        String bestNow = pick();
+        if (bestNow != null) out.add(bestNow);
+        for (String gw : GATEWAYS) out.add(gw);
+        return out.toArray(new String[0]);
     }
 
     /** Gateway cho host: đuôi có route riêng -> ROUTED_GATEWAY (nếu sống) -> còn lại: gateway tốt nhất. */
