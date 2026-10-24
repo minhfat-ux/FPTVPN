@@ -107,3 +107,15 @@ app VPNFlow mới hết.
 - **Tắt "gateway LAN" trên điện thoại** (hoặc gỡ bản 1.4.7 khỏi điện thoại) nếu không muốn TV tự chọn
   điện thoại làm proxy; TV app cũ (1.4.5) chưa có bản sửa IPv6 nên qua điện thoại sẽ chết Google.
 - Nếu cập nhật app VPNFlow trên TV lên **1.4.7/105**, cần kiểm lại `proxy_mode` có bị đổi về `auto` không.
+
+## TV360 — đi qua **Flow3 riêng**, có watchdog (24/10/2026)
+
+TV360 (`com.viettel.tv360.tv`) không đi Flow2 như FPT Play: bridge Mac route `*.tv360.vn` sang
+**socks `127.0.0.1:1083`** (relay3 → node-3 `103.6.235.39`).
+
+Sự cố 24/10: mọi host `*.tv360.vn` qua gateway trả `000` trong ~3 ms. Nguyên nhân: **relay3 mất DNS**
+(`lookup api.meetflowai.site: no such host`), Flow3 chết, còn bridge vẫn trỏ vào 1083 chết ⇒ TV360 chết
+âm thầm. `health.sh` cũ chỉ kiểm Flow2 nên không phát hiện.
+
+Đã sửa: restart `site.flowvpn.relay3` (kết nối lại node-3 ~2 s, TV360 `200/2.2 s`) và **mở rộng
+watchdog** kiểm cả Flow3 mỗi 5 phút — chi tiết + script: [`tools/mac-gateway/`](../tools/mac-gateway/).
