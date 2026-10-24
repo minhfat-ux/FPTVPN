@@ -108,3 +108,15 @@ Vào quản trị: `http://192.168.100.9/` (từ mạng nhà) hoặc `http://192
 `node-2:/root/rd03v2/sysupgrade-fptminh.bin` = ảnh sysupgrade **đã nhồi sẵn** Wi-Fi `FPT_Minh` + LAN `192.168.50.1` qua `/etc/uci-defaults/99-fptminh` (hệ thống OpenWrt mặc định bật lên với Wi-Fi TẮT) — sha256 `cfb9eddac5735ab6fe616252ab4a6a180c8139a465c4babb4b0f70bbc61ee20d`.
 
 **5. Cảnh báo an toàn (từ lần chạy thử):** đường `cab_meshd sync config` của patcher **ghi đè mật khẩu admin web** (trường `web_passwd256`) ⇒ chủ dự án từng mất quyền vào router. Chỉ dùng `connect9` khi đã có phiên admin thật. Reset: giữ nút Reset ~8-10 s tới khi đèn nháy cam.
+
+## 9. Chốt 24/10/2026 (chủ dự án) — chuyển TV sang mạng router **sau khi** flash xong
+
+- Mac đang flash (báo cáo 19:07: router vẫn stock `2.0.28` tại `192.168.50.1`, chưa flash).
+- **Điều kiện chuyển TV**: chỉ chuyển khi router đã chạy OpenWrt **và** gateway đã nghiệm thu
+  (`curl --socks5 127.0.0.1:1081 https://www.youtube.com/` = 200 + `free -m` còn >10 MB).
+  Chuyển sớm là TV mất mạng (LAN `.50.x` không với tới gateway `.100.x`).
+- Khi chuyển: TV sang Wi-Fi của router (hoặc cắm dây LAN), rồi **xoá proxy cũ**
+  (`adb shell settings delete global http_proxy`) + mở app VPNFlow một lần để nó tự dò lại.
+- Guard TV (bản 1.1, commit `e8141d15`) giờ chọn gateway theo **thông lượng thật**
+  (2 lần đo/2 kết nối, điểm = min, nhảy khi nhanh hơn ≥1.5×) và quét LAN `/24` nên IP động không
+  còn là vấn đề.
