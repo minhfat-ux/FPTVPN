@@ -35,6 +35,8 @@ public class GuardReceiver extends BroadcastReceiver {
     private static final String PROXY_VALUE = "127.0.0.1:1081";
     private static final int REQ = 8101;
     private static final long INTERVAL_MS = 15L * 1000L;
+    private static final long QUALITY_INTERVAL_MS = 60L * 1000L;
+    private static long lastQualityCheck = 0L;
 
     /**
      * Gateway LAN dự phòng, **thử lần lượt theo thứ tự** (ngăn cách bằng dấu phẩy):
@@ -82,6 +84,31 @@ public class GuardReceiver extends BroadcastReceiver {
                 // Ca thật 24/10/2026 02:40: gateway .5 treo, proxy kẹt .5 tới khi tắt/bật VPNFlow.
                 long cur = probeQuick(proxy);
                 if (cur >= 0) {
+                    // Định kỳ (~60 s) đánh giá LẠI toàn bộ: gateway khác nhanh hơn rõ rệt thì nhảy,
+                    // không chờ gateway hiện tại chết. Chỉ nhảy khi nhanh hơn >=25% (chống rung).
+                    long nowEval = SystemClock.elapsedRealtime();
+                    if (nowEval - lastQualityCheck >= QUALITY_INTERVAL_MS) {
+                        lastQualityCheck = nowEval;
+                        String bestGw = null;
+                        long bestMs = Long.MAX_VALUE;
+                        long curMs = Long.MAX_VALUE;
+                        for (String gw : candidates(context, true)) {
+                            long ms = probeQuick(gw);
+                            if (ms < 0) continue;
+                            if (gw.equals(proxy)) curMs = ms;
+                            if (ms < bestMs) {
+                                bestMs = ms;
+                                bestGw = gw;
+                            }
+                        }
+                        if (bestGw != null && !bestGw.equals(proxy) && curMs != Long.MAX_VALUE
+                                && bestMs * 4 < curMs * 3) { // best < 0.75 * current
+                            Settings.Global.putString(context.getContentResolver(), "http_proxy", bestGw);
+                            Log.w(TAG, "chuyen sang " + bestGw + " (" + bestMs + " ms) vi nhanh hon "
+                                    + proxy + " (" + curMs + " ms)");
+                            return;
+                        }
+                    }
                     Log.i(TAG, "gateway " + proxy + " còn sống (" + cur + " ms) -> giữ");
                     return;
                 }
