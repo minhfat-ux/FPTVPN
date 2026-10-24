@@ -16,7 +16,7 @@ Write-Host "== go SmartTube goc neu co"
 adb @d uninstall org.smarttube.stable 2>$null | Out-Null
 
 Write-Host "== cai 4 APK"
-foreach ($apk in @("TVFlowHome-2.8.apk","VPNFlowGuard-1.6.apk","VPNFlow-TV-1.4.5.apk","FPTTubeflow-2.2.apk")) {
+foreach ($apk in @("TVFlowHome-2.9.apk","VPNFlowGuard-1.6.apk","VPNFlow-TV-1.4.5.apk","FPTTubeflow-2.2.apk")) {
   adb @d install -r -d (Join-Path $here "apk\$apk")
 }
 

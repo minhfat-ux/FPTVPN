@@ -24,8 +24,8 @@ public class LocalGatewayProxy {
     private static final int LISTEN_PORT = 18081;
     private static final String[] GATEWAYS = {
             "192.168.100.6:18081", "192.168.100.5:18081", "192.168.100.11:18081"};
-    private static final long CACHE_MS = 10_000L;
-    private static final long CONNECT_TIMEOUT_MS = 2_000L;
+    private static final long CACHE_MS = 4_000L;
+    private static final long CONNECT_TIMEOUT_MS = 1_200L;
 
     private static volatile String best;
     private static volatile long bestAt;
@@ -138,10 +138,10 @@ public class LocalGatewayProxy {
         try {
             s.connect(new InetSocketAddress(hostPort.substring(0, i),
                     Integer.parseInt(hostPort.substring(i + 1))), (int) CONNECT_TIMEOUT_MS);
-            s.setSoTimeout(5000);
+            s.setSoTimeout(4000);
             s.getOutputStream().write((
-                    "CONNECT connectivitycheck.gstatic.com:443 HTTP/1.1\r\n" +
-                            "Host: connectivitycheck.gstatic.com:443\r\n\r\n").getBytes());
+                    "CONNECT www.youtube.com:443 HTTP/1.1\r\n" +
+                            "Host: www.youtube.com:443\r\n\r\n").getBytes());
             s.getOutputStream().flush();
             byte[] buf = new byte[96];
             int n = s.getInputStream().read(buf);
