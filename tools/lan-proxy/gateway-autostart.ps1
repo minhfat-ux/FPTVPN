@@ -17,8 +17,8 @@
 
 param(
     [switch]$Once,
-    [string]$HomeSsid = "KT-617",
-    [string]$HomeSubnet = "192.168.100.",
+    [string]$HomeSsid = "KT-617,FPT_Minh",
+    [string]$HomeSubnet = "192.168.100.,192.168.31.",
     [int]$CheckSeconds = 60
 )
 
@@ -77,9 +77,9 @@ public static extern uint SetThreadExecutionState(uint esFlags);
 
 function Test-HomeNetwork {
     $ssid = Get-Ssid
-    if ($ssid -and $ssid -eq $HomeSsid) { return @{ Home = $true; Why = "ssid=$ssid" } }
+    if ($ssid -and (($HomeSsid -split ",") -contains $ssid)) { return @{ Home = $true; Why = "ssid=$ssid" } }
     $ips = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-            Where-Object { $_.IPAddress -like ($HomeSubnet + "*") } |
+            Where-Object { $ip = $_.IPAddress; @(($HomeSubnet -split ",") | Where-Object { $ip -like ($_ + "*") }).Count -gt 0 } |
             Select-Object -ExpandProperty IPAddress)
     if ($ips.Count -gt 0) { return @{ Home = $true; Why = "ip=$($ips -join ',')" } }
     return @{ Home = $false; Why = "ssid='$ssid' ip ngoai $HomeSubnet" }

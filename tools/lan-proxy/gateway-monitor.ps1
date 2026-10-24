@@ -168,6 +168,15 @@ while ($true) {
     $anyDown = $false
     $localNet = Test-LocalNet
 
+    # Do egress MOT LAN cho ca 3 duong truoc khi quyet dinh dung lai: TV chi can MOT duong song.
+    # Do lai tung duong 3 nhip/lan va dung lai moi duong hong lam gateway nhap nhay ca ngay
+    # (log 24/10/2026: 237 lan dung lai port 1081 trong 9 gio, trong khi WS 1101/1102 van tot).
+    $egressOk = @{}
+    foreach ($r in $relays) {
+        if (Test-Port([int]$r.Port)) { $egressOk[[int]$r.Port] = [bool](Test-Egress([int]$r.Port)) }
+    }
+    $anyEgress = @($egressOk.Values | Where-Object { $_ }).Count -gt 0
+
     foreach ($r in $relays) {
         $p = [int]$r.Port
         if (-not (Test-Port $p)) {
@@ -178,17 +187,19 @@ while ($true) {
             }
             continue
         }
-        $ip = Test-Egress $p
-        if ($ip) {
+        if ($egressOk[$p]) {
             $fail[$p] = 0
         } else {
             $fail[$p] = $fail[$p] + 1
-            if ($fail[$p] -ge 3 -and $localNet -and ((Get-Date) - $lastRestart[$p]).TotalSeconds -ge 120) {
-                Log "relay port $p khong ra duoc internet 3 nhip lien tiep -> dung lai"
+            # Con duong khac song: chi thu lai duong nay khi no hong BEN BIN (10 nhip) — dung dung lai
+            # moi 2 phut. Khong con duong nao: 3 nhip la dung lai ngay.
+            $need = if ($anyEgress) { 10 } else { 3 }
+            if ($fail[$p] -ge $need -and $localNet -and ((Get-Date) - $lastRestart[$p]).TotalSeconds -ge ($need * 20)) {
+                Log "relay port $p khong ra duoc internet $need nhip lien tiep (con duong khac: $anyEgress) -> dung lai"
                 Start-Relay $r
                 $lastRestart[$p] = Get-Date
                 $fail[$p] = 0
-            } elseif ($fail[$p] -ge 3 -and -not $localNet) {
+            } elseif ($fail[$p] -ge $need -and -not $localNet) {
                 Log "relay port $p khong ra duoc internet nhung laptop MAT MANG NOI BO -> khong dung lai"
                 $fail[$p] = 0
             }
@@ -227,7 +238,7 @@ while ($true) {
     # trong khi process van ton tai la kieu chet khong ai don.
     try { Set-Content -Path (Join-Path $root ".tmp\gw-monitor.heartbeat") -Value ((Get-Date).ToString("o")) -Encoding UTF8 } catch { }
 
-    # Dang co loi (thieu cong / relay-proxy khong ra duoc internet) thi kiem lai NHANH, dung doi 60 s.
-    $trouble = $anyDown -or ($proxyFail -gt 0) -or (@($fail.Values | Where-Object { $_ -gt 0 }).Count -gt 0)
+    # Chi kiem NHANH khi that su co su co (thieu cong / proxy khong ra duoc / khong con duong nao).
+    $trouble = $anyDown -or ($proxyFail -gt 0) -or (-not $anyEgress)
     if ($trouble) { Start-Sleep -Seconds 20 } else { Start-Sleep -Seconds 60 }
 }
