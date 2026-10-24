@@ -97,3 +97,8 @@ iOS/Hysteria.local.xcconfig
 
 # Framework hysteria2 cho Apple — build bằng tools/hysteria-apple/build.sh, KHÔNG commit binary.
 iOS/Frameworks/
+
+# router-gateway: binary + config relay co mat khau tunnel
+tools/router-gateway/dist/
+tools/router-gateway/relay-dist/
+
