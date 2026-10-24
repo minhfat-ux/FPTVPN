@@ -24,10 +24,16 @@ public class HomeGuardService extends Service {
     private static final String XIAOMI_HOME = "com.mitv.tvhome";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastBounce = 0L;
+    private int proxyTick = 0;
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             try { check(); } catch (Exception ignored) { }
+            // Mỗi ~7 s: bảo đảm http_proxy trỏ gateway còn sống (lớp dự phòng thứ 2 sau guard;
+            // quan trọng lúc TV vừa bật — gateway có thể chưa lên kịp).
+            if (++proxyTick % 60 == 0) {
+                try { ensureProxy(); } catch (Exception ignored) { }
+            }
             handler.postDelayed(this, 120L);
         }
     };
@@ -38,6 +44,7 @@ public class HomeGuardService extends Service {
         // Proxy nội bộ cho các app không dùng system proxy (SmartTube...): chúng trỏ
         // localhost, còn gateway do lớp này tự chọn lại khi .5/.6 đổi.
         LocalGatewayProxy.start();
+        try { ensureProxy(); } catch (Exception ignored) { }
         handler.post(tick);
     }
 
@@ -71,6 +78,27 @@ public class HomeGuardService extends Service {
             startForeground(1, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         } else {
             startForeground(1, n);
+        }
+    }
+
+    /**
+     * Giữ `http_proxy` trỏ gateway còn sống. Chỉ ĐỔI khi gateway hiện tại đã chết (bám gateway,
+     * tránh nhảy .5 <-> .6 giữa lúc xem). Chạy cả khi TV vừa bật (gateway chưa lên kịp).
+     */
+    private void ensureProxy() {
+        try {
+            String best = LocalGatewayProxy.pick();
+            if (best == null) return;
+            String cur = android.provider.Settings.Global.getString(
+                    getContentResolver(), "http_proxy");
+            if (best.equals(cur)) return;
+            if (cur != null && cur.contains(":") && !cur.startsWith(":")
+                    && LocalGatewayProxy.isAlive(cur)) {
+                return; // gateway hiện tại vẫn sống -> giữ
+            }
+            android.provider.Settings.Global.putString(getContentResolver(), "http_proxy", best);
+            android.util.Log.i("TVFlowGuard", "dat http_proxy=" + best + " (cu=" + cur + ")");
+        } catch (Exception ignored) {
         }
     }
 

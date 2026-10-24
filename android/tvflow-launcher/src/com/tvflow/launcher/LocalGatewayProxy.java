@@ -110,6 +110,11 @@ public class LocalGatewayProxy {
         }
     }
 
+    /** Gateway cụ thể còn sống không (dùng để bám gateway hiện tại, không nhảy liên tục). */
+    public static boolean isAlive(String hostPort) {
+        return probe(hostPort) >= 0;
+    }
+
     /** Gateway sống (CONNECT thật trả 200) nhanh nhất; cache 10 giây để không dò liên tục. */
     private static String pick() {
         String cur = best;

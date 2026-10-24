@@ -7,8 +7,8 @@
 
 | # | App | APK | versionCode | SHA-256 |
 |---|---|---|---|---|
-| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ `127.0.0.1:18081`, failover ~4 s) | `TVFlowHome-2.9.apk` | 20 (2.9) | `6b579ca38b72c86380022dcce8bd81c52ba37983b4837d9203cee33aa229d86d` |
-| 2 | **VPNFlow Guard** (giữ `http_proxy` bám gateway sống, probe YouTube/FPT, failover ~20 s) | `VPNFlowGuard-1.6.apk` | 7 (1.6) | `625342b13d8fdb1643ced328ffbd4bbcee6e95704139e218a17c8aec10aef178` |
+| 1 | **TVFlow Home** (launcher, HOME nhanh, proxy nội bộ `127.0.0.1:18081`, **tự bảo trì `http_proxy` mỗi ~7 s**) | `TVFlowHome-3.0.apk` | 21 (3.0) | `202ea30c76e459dd68b1584f7f01555c26708f3a8a9f7fb3e7be8cb58b7d7ca6` |
+| 2 | **VPNFlow Guard** (giữ `http_proxy` bám gateway sống, probe YouTube/FPT, **2 chuông alarm song song**) | `VPNFlowGuard-1.7.apk` | 8 (1.7) | `8f169f41e14c80ad6cbaf1307a645a24c096cf37fafc0d7d73548b9b184d6c51` |
 | 3 | **VPNFlow TV** (app VPN, chế độ gateway LAN) | `VPNFlow-TV-1.4.5.apk` | 100 | `4454861d501e5fb8bdb2a7837b0f4f0ee38cf4af935d9ee31046737b4a782810` |
 | 4 | **FPT Tubeflow** (YouTube không quảng cáo, đổi thương hiệu) | `FPTTubeflow-2.2.apk` | 9013 (2.2) | `51bd0e11387ce4fb9775a36075e13b123d179d97636558bba842a0904ee46c5f` |
 
@@ -120,3 +120,18 @@ Sự cố 24/10: mọi host `*.tv360.vn` qua gateway trả `000` trong ~3 ms. Ng
 
 Đã sửa: restart `site.flowvpn.relay3` (kết nối lại node-3 ~2 s, TV360 `200/2.2 s`) và **mở rộng
 watchdog** kiểm cả Flow3 mỗi 5 phút — chi tiết + script: [`tools/mac-gateway/`](../tools/mac-gateway/).
+
+## Tự scan gateway khi bật TV (24/10/2026)
+
+Sự cố: TV bật lên nhưng proxy trỏ gateway đã chết, không ai scan.
+
+Ba lớp nay cùng bảo đảm:
+
+| Lớp | Khi nào chạy | Việc làm |
+|---|---|---|
+| **Guard 1.7** | `BOOT_COMPLETED` + **2 chuông alarm song song** (15 s và 60 s) | Tick đầu tiên chạy ngay khi nhận `BOOT_COMPLETED`; mỗi 15 s dò gateway, bám gateway đang sống. Hai chuông độc lập để Xiaomi dọn app/bỏ broadcast không giết được chuỗi. |
+| **Launcher 3.0** | `AutoStartReceiver` mở TVFlow Home khi boot; service chạy | Mỗi ~7 s kiểm `http_proxy`: gateway hiện tại chết/rỗng thì đặt gateway sống tốt nhất; **đặt ngay khi service khởi động**. |
+| **VPNFlow app** | App chạy | `ProxyDirector` tự đặt proxy theo chế độ gateway. |
+
+Nghiệm thu (24/10 11:33): `am force-stop` **cả guard và launcher**, đặt `http_proxy` vào gateway chết `.11`
+→ **~18 s** sau proxy tự thành `.6` (chuông alarm đánh thức guard, guard scan và sửa).

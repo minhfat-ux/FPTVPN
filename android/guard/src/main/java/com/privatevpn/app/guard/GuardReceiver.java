@@ -276,18 +276,26 @@ public class GuardReceiver extends BroadcastReceiver {
         try {
             AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
             if (am == null) return;
-            Intent i = new Intent(context, GuardReceiver.class).setAction(ACTION_TICK);
-            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-            if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
-            PendingIntent pi = PendingIntent.getBroadcast(context, REQ, i, flags);
-            long at = SystemClock.elapsedRealtime() + INTERVAL_MS;
-            if (Build.VERSION.SDK_INT >= 23) {
-                am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
-            } else {
-                am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
-            }
+            // HAI chuông song song: nếu một chuỗi bị hệ thống bỏ/nuốt (Xiaomi dọn app, sai giờ,
+            // hoặc broadcast bị chặn) thì chuông còn lại vẫn đánh thức guard.
+            // Sự cố 24/10: TV bật lên mà không ai scan gateway -> proxy trỏ gateway chết cả tiếng.
+            arm(am, context, REQ, INTERVAL_MS);
+            arm(am, context, REQ + 1, INTERVAL_MS + 45_000L);
         } catch (Throwable t) {
             Log.w(TAG, "không hẹn được chuông: " + t.getMessage());
+        }
+    }
+
+    private static void arm(AlarmManager am, Context context, int req, long delayMs) {
+        Intent i = new Intent(context, GuardReceiver.class).setAction(ACTION_TICK);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent pi = PendingIntent.getBroadcast(context, req, i, flags);
+        long at = SystemClock.elapsedRealtime() + delayMs;
+        if (Build.VERSION.SDK_INT >= 23) {
+            am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
+        } else {
+            am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
         }
     }
 }
