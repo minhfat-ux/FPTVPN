@@ -184,3 +184,12 @@ Xử lý:
   1. `cron`: `0 4 * * * /sbin/reboot` (reboot đêm, xả RAM tích luỹ).
   2. Watchdog: nếu `MemAvailable < 6 MB` ⇒ `drop_caches` + restart relay1/relay3.
 - Cứu hộ không cần Wi-Fi: **SSH qua WAN `192.168.100.3`** (nếu Wi-Fi/hostapd chết vẫn vào được).
+
+### 14.1. Vì sao 175 MB RAM vẫn OOM dù chỉ vài client
+- RAM không tiêu vào client mà vào chính router: OpenWrt + driver Wi-Fi ath11k + hostapd ~90–100 MB;
+  sing-box ~26 MB; 2 relay flowvpnrelay ~27 MB; dnsmasq/netifd/logd/kernel slab/page cache phần còn lại
+  ⇒ chỉ còn ~18 MB trống, chạy vài giờ là kernel cache làm cạn ⇒ OOM.
+- Đã thêm **zram-swap 87 MB** (`apk add zram-swap`, `swapon` OK) ⇒ buffer chống OOM; kèm cron reboot
+  04:00 và watchdog RAM <6 MB.
+- Đo sau khi bật: free ~35 MB, swap 87 MB (chưa dùng), FPT Play proxy `301`/1,9 s, TV vẫn kết nối.
+- Nếu cần nhẹ hơn nữa: bỏ relay node-3 (mất TV360, −13 MB), hoặc đẩy tunnel sang Mac/mini-PC.
