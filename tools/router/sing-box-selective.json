@@ -8,7 +8,7 @@
   ],
   "outbounds": [
     { "type": "socks", "tag": "node", "server": "127.0.0.1", "server_port": 1085, "version": "5" },
-    { "type": "socks", "tag": "node3", "server": "127.0.0.1", "server_port": 1085, "version": "5" },
+    { "type": "socks", "tag": "node3", "server": "127.0.0.1", "server_port": 1083, "version": "5" },
     { "type": "direct", "tag": "direct" }
   ],
   "route": {
@@ -16,6 +16,7 @@
       { "inbound": "dns-in", "action": "hijack-dns" },
       { "inbound": "tproxy-in", "action": "sniff", "timeout": "3s" },
       { "ip_is_private": true, "outbound": "direct" },
+      { "ip_cidr": ["103.78.126.0/23","103.78.127.0/24","103.116.120.0/23","103.116.121.0/24"], "outbound": "direct" },
       { "domain_suffix": ["tv360.vn","viettel.vn","vietteltelecom.vn","vtvcab.vn","vtv.vn","ateme.com","ateme.tv"], "outbound": "node3" },
       { "domain_suffix": ["fptplay.net","fptplay.vn","fpt.vn"], "outbound": "node" },
       { "domain_suffix": ["youtube.com","googlevideo.com","ytimg.com","ggpht.com","googleapis.com","yt.be","googlesyndication.com","gstatic.com",

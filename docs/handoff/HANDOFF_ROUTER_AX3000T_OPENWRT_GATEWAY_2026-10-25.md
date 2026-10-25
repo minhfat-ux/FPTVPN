@@ -122,3 +122,20 @@
 - Theo dõi 4 phút sau khi đổi: FPT Play proxy `301` ổn định 1,5–3,7 s; node-1 `204` 8/8 lần; RAM trống ~26 MB.
 - Kết luận: ổn định ở mức "xem được", **không lên FullHD** và đôi lúc giật/RD_002 khi đường ISP→VN yếu
   (mạng toà nhà không ổn định) — không phải lỗi cấu hình router.
+
+## 12. RD_002 sau ~5 phút — nguyên nhân & xử lý
+Bằng chứng log:
+1. `open connection to 103.78.126.197:443 using outbound/socks[node3]: socks5: request rejected, code=4`
+   — FPT Play lấy **IP CDN** từ API rồi kết nối thẳng bằng IP; relay chỉ nhận đích dạng **domain**
+   ⇒ reject ⇒ hết buffer (~5 phút) là RD_002.
+2. Outbound `node3` từng bị **sai cổng 1085** (thay vì 1083) do lệnh sed trước đó, nên traffic
+   "node3" thực chất vào node-1; log `dial tcp 127.0.0.1:1085: connection refused`.
+3. Tunnel node-1 thỉnh thoảng rớt: `dial wss://api.meetflowai.site/relay/vn1hy: i/o timeout`
+   ⇒ license/API FPT Play fail đúng lúc (license TTL ngắn).
+
+Xử lý:
+- Sửa `node3` = `127.0.0.1:1083`.
+- Thêm rule `ip_cidr` cho dải CDN FPT (`103.78.126.0/23`, `103.78.127.0/24`,
+  `103.116.120.0/23`, `103.116.121.0/24`) → **direct** (relay không nhận IP; CDN VN vẫn phục vụ).
+- Giữ node-1 cho API/license; watchdog restart relay1 khi tunnel chết 3 lần.
+- Đo lại: FPT Play proxy `301` ~3,5 s; relay `1083`/`1085` đều LISTEN.
