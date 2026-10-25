@@ -159,3 +159,15 @@ Xử lý:
   3. Bỏ cron restart định kỳ 12 phút (gây blip vô ích); giữ procd respawn cho relay.
 - Kỳ vọng: sau khi mạng toà nhà rớt, relay tự nối lại trong vài giây; FPT Play bấm "Thử lại"
   là phát tiếp (tối đa ~1 phút gián đoạn).
+
+### 13.1. Theo dõi 30 phút sau khi cắm lại router (ngày 25/10)
+| Chỉ số | Kết quả |
+|---|---|
+| TV `RD_002` | **0 lần / 30 phút** |
+| `socks5 code=4` (reject IP CDN) | **0** |
+| `127.0.0.1:1085 connection refused` | **0** |
+| WAN down | **0** |
+| FPT Play proxy | `301` 28/30 mẫu, trễ 1,6–7,7 s |
+| Blip | 2 lần `000`/8 s (16:20, 16:23); watchdog restart relay1 1 lần lúc 16:24 rồi tự hồi |
+
+⇒ RD_002 đã được xử lý; còn lại chỉ là blip ngắn của đường mạng, không làm hỏng phiên xem.
