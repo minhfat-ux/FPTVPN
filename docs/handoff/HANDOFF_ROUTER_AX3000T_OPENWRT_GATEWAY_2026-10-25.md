@@ -111,3 +111,14 @@
 - Đo lại: FPT Play có nội dung; TV360 `C-310` = 0; transparent `google/generate_204` = 204,
   `facebook.com` = 200.
 - TV giữ proxy `192.168.1.1:18081` (router) để app đi qua mixed inbound (domain-based).
+
+## 11. Ổn định cho FPT Play (sau khi TV báo RD_002 / giật)
+- Thử `links: 2` cho node-1: **4/4 probe OK nhưng băng thông tụt còn 4–7 KB/s** ⇒ không dùng;
+  giữ `links: 1` (node-1 ~60–128 KB/s lúc tốt, dao động mạnh theo mạng toà nhà).
+- `daemon` cũ tự đổi node và **restart sing-box** mỗi lần switch ⇒ làm rớt kết nối đang xem.
+  Thay bằng **watchdog không đổi node**: chỉ probe node-1 (FPT Play) và node-3 (TV360), restart relay
+  khi fail 3 lần liên tiếp; không sửa config, không restart sing-box.
+- Tắt node-2 (chậm, tranh RAM); route: FPT Play → node-1 (1085); TV360 + quốc tế + catch-all 443 → node-3 (1083).
+- Theo dõi 4 phút sau khi đổi: FPT Play proxy `301` ổn định 1,5–3,7 s; node-1 `204` 8/8 lần; RAM trống ~26 MB.
+- Kết luận: ổn định ở mức "xem được", **không lên FullHD** và đôi lúc giật/RD_002 khi đường ISP→VN yếu
+  (mạng toà nhà không ổn định) — không phải lỗi cấu hình router.
