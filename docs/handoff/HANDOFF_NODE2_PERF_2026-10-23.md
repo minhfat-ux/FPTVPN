@@ -139,3 +139,30 @@ Khi session chết, client **hiển thị nguyên văn câu lỗi tiếng Anh c�
 - **Việc cần làm khi vào lại:** (1) kiểm `journalctl -u sshd | grep -i "penalty\|MaxStartups"`, (2) xem log
   `flowvpn-autoban` có ghi IP `183.61.117.64` (IP công cộng của LAN hiện tại) không, (3) nếu autoban bắt oan thì
   thêm allowlist cho IP văn phòng/khách sạn đang dùng.
+
+### 7e. ✅ ĐÃ LÀM — sửa iOS (chủ dự án mở đóng băng iOS, 25/10/2026) — commit `4ce0c55`
+
+**Hành vi mới khi phiên 30 ngày hết hạn (trước: hiện nguyên văn `Valid user session required`, token chết vẫn giữ):**
+
+| File | Thay đổi |
+|---|---|
+| `iOS/PrivateVPN/Services/SessionExpiryPolicy.swift` **(mới, thuần logic)** | `daysLeft()`, `bannerDaysLeft()` (≤3 ngày), `expiredMessage()`, `bannerMessage()` + `Notification.Name.flowvpnSessionExpired` |
+| `Services/ControlAPIClient.swift` | `ClientError.sessionExpired` + `failure(http,data:)`: **401 + "user session"** ⇒ lỗi riêng + **phát thông báo** (3 chỗ dựng lỗi đã chuyển sang helper, không còn nuốt thành `.server(msg)`) |
+| `Services/AuthSessionStore.swift` | cờ `sessionExpired`, `invalidate()` (xoá token trong Keychain), nghe thông báo ⇒ **tự xoá phiên**; `signOut()` xoá cờ |
+| `LoginView.swift` | hiện rõ **"Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."** (vi/en) |
+| `ContentView.swift` | **nhắc trước ≤3 ngày** (`SessionExpiryPolicy.bannerDaysLeft`) — không chặn dùng app |
+| `VPNManager.swift` | thêm nhánh `.sessionExpired` (cổng typecheck bắt `switch` không exhaustive) |
+| `project.yml` + `scripts/ios-typecheck.sh` | khai file mới cho **target macOS** (`ControlAPIClient` dùng chung; thiếu file ⇒ macOS không build). **Không đổi hành vi macOS.** |
+| `scripts/ios-pure-logic-tests/*` | **+10 test** cho policy (mốc hạn, làm tròn xuống, nil/hỏng, ngưỡng banner 3 ngày, câu vi/en) |
+
+**Cổng đã chạy (AGENTS §7b) — bằng chứng:**
+- `bash scripts/ios-pure-logic-tests/run.sh` → **682/682 PASS, 0 FAIL**
+- `python3 scripts/ios-lint-locks.py` → **ĐẠT**
+- `bash scripts/ios-typecheck.sh` → **extension 0 lỗi · app 0 lỗi · macOS 0 lỗi** (có `-swift-version 6`)
+
+**CHƯA làm (cần chủ dự án):**
+1. **Build IPA** theo §7a (`dev-hysteria-build-env.sh` → archive → export → `ios-verify-ipa.sh`) để cài lên máy khách.
+   — *Không bắt buộc để gỡ kẹt:* khách chỉ cần **đăng xuất + đăng nhập lại** là có phiên mới 30 ngày, cả trên bản đang cài.
+2. **Parity**: macOS (401 → Login), Android, Windows — chưa sửa (đóng băng chỉ mở cho iOS).
+3. **Sliding expiry** (tự gia hạn khi còn <7 ngày): phải sửa **server** `control-plane/src/index.js` =
+   **vùng bảo vệ của harness Windows** (`AGENTS §6b`) ⇒ cần phối hợp, không tự commit.
