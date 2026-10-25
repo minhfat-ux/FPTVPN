@@ -96,3 +96,46 @@ tốc độ tải + xem video + độ trễ vài phút. Tiêu chí: không tệ 
 
 **Việc khác đang mở (không liên quan node-2):** đổi IP Flow3 sang **ASN/dải khác** `103.6.234.0/23`
 (chờ chủ dự án cho biết **nhà cung cấp** để soạn đơn) · runbook đổi IP Flow3 đã có, chưa chạy.
+
+---
+
+## 7. SỰ CỐ 25/10/2026 — **SESSION 30 NGÀY HẾT HẠN**, app hiện lỗi thô *"Valid user session required"*
+
+**Triệu chứng:** iPad/iPhone VPNFlow báo lỗi; chữ thật là `{"error":"Unauthorized","message":"Valid user session required"}`
+(đây là câu của **API**, không phải lỗi mạng). Chủ dự án hỏi: *"sao session lại hết hạn, ảnh hưởng người dùng,
+thế cần phải có alert hoặc Force user login lại chứ."*
+
+### 7a. Vì sao hết hạn — và **ai chịu trách nhiệm**
+
+- `control-plane/src/auth-store.js:6` → **`SESSION_TTL_MS = 30 ngày`**, tính từ lúc đăng nhập. **Hết hạn là hành vi
+  thiết kế**, không phải sự cố.
+- **Không do vòng xoay khoá 01/10:** session được lưu bằng `hashToken()` = **sha256(token)** (`auth-store.js:761`),
+  KHÔNG ký bằng `VERIFY_LINK_SECRET` ⇒ đổi secret **không** làm chết session. Chỉ có 2 đường chết:
+  **quá 30 ngày** hoặc **user bị revoke** (`findSession`, `auth-store.js:155-163`).
+- Máy đăng nhập đợt ~25/09 ⇒ hết hạn ~25/10 ⇒ **nhiều máy chết cùng lúc** (đúng như đang thấy).
+
+### 7b. 🔴 ĐÂY MỚI LÀ LỖI THẬT: app không xử lý 401
+
+Khi session chết, client **hiển thị nguyên văn câu lỗi tiếng Anh của API** thay vì: **xoá token cũ → mở màn hình
+đăng nhập → báo "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"**. Thiếu nhánh xử lý **401-session-expired**
+ở client ⇒ khách tưởng app hỏng. **Cần sửa ở cả 4 nền tảng** (iOS · macOS · Android · Windows).
+
+### 7c. Alert + Force re-login — đề xuất (chờ chủ dự án chốt)
+
+| # | Việc | Loại | Ghi chú |
+|---|---|---|---|
+| A | **401 ⇒ clear session + mở Login** (kèm thông điệp rõ ràng) | client, **BẮT BUỘC** | sửa 4 app |
+| B | **Sliding expiry**: gia hạn khi còn < 7 ngày *và* user đang dùng | server + client | giảm ~90% ca này |
+| C | Banner "Phiên sẽ hết hạn sau 3 ngày" | client | phòng ngừa |
+| D | **Alert server**: script đọc `auth.json` + `devices.json` mỗi 10 phút → *(i)* số session hết hạn/24h vượt ngưỡng, *(ii)* thiết bị `active` mà `lastSeenAt` im > N giờ ⇒ gửi `flowvpn-notify` | server, **không cần sửa code app** | làm được ngay |
+| E | Log/counter 401 trong CP | server | `control-plane/src/index.js` = **vùng bảo vệ của Windows** (`AGENTS §6b`) ⇒ phải phối hợp |
+| F | Kiểm đường gửi email đăng nhập (Resend) còn sống | server | chưa kiểm được phiên này: **SSH bị cắt** |
+
+### 7d. Ghi chép vận hành — SSH bị cắt giữa phiên (không phải sự cố production)
+
+- Hiện tượng: TCP 22 **mở**, `SSH2_MSG_KEXINIT sent` xong **"Connection closed"** ngay; 443/API vẫn `health=200`.
+- Nguyên nhân khả dĩ: cơ chế chống dò của sshd (OpenSSH `PerSourcePenalties`) / `flowvpn-autoban` phản ứng vì phiên này
+  mở **quá nhiều kết nối SSH** liên tiếp. Tự hết sau cửa sổ phạt.
+- **Việc cần làm khi vào lại:** (1) kiểm `journalctl -u sshd | grep -i "penalty\|MaxStartups"`, (2) xem log
+  `flowvpn-autoban` có ghi IP `183.61.117.64` (IP công cộng của LAN hiện tại) không, (3) nếu autoban bắt oan thì
+  thêm allowlist cho IP văn phòng/khách sạn đang dùng.
