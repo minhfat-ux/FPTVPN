@@ -18,6 +18,7 @@ swiftc -O \
   "$SRC/RouteReporter.swift" \
   "$SRC/RampStatus.swift" \
   "$ROOT/iOS/PrivateVPN/Services/HysteriaDefaults.swift" \
+  "$ROOT/iOS/PrivateVPN/Services/SessionExpiryPolicy.swift" \
   "$ROOT/mac/PrivateVPNMac/NetworkConflictDetector.swift" \
   "$ROOT/scripts/ios-pure-logic-tests/main.swift" \
   -o "$OUT/pure-tests"

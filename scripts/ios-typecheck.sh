@@ -125,6 +125,9 @@ run_mac() { # target macOS: PrivateVPNMac + 6 file dùng chung (theo project.yml
   local out n files=()
   while IFS= read -r f; do files+=("$f"); done < <(find mac/PrivateVPNMac -name '*.swift' ! -name '._*' | sort)
   files+=("iOS/PrivateVPN/Services/ControlAPIClient.swift"
+          # ControlAPIClient dùng chung đăng ký Notification.Name.flowvpnSessionExpired
+          # ⇒ macOS phải biên dịch kèm file này (25/10/2026).
+          "iOS/PrivateVPN/Services/SessionExpiryPolicy.swift"
           "iOS/PrivateVPN/Services/WireGuardConfig.swift"
           "iOS/PrivateVPN/Services/AppVersionService.swift"
           "iOS/PrivateVPN/Services/KeychainStore.swift"

@@ -12,6 +12,10 @@ final class AuthSessionStore: ObservableObject {
     @Published private(set) var session: CoordinatorAuthSession?
     @Published var lastError: String?
 
+    /// `true` khi SERVER đã từ chối phiên (401) — UI dùng để mở màn hình đăng nhập kèm lý do.
+    /// Khác `signOut()` (khách tự bấm): đăng xuất chủ động thì cờ này là `false`.
+    @Published private(set) var sessionExpired = false
+
     var accessToken: String? {
         session?.access_token
     }
@@ -22,6 +26,19 @@ final class AuthSessionStore: ObservableObject {
 
     init() {
         session = Self.load()
+        // Token bị server từ chối ⇒ xoá ngay, không để app gọi lặp lại bằng token đã chết.
+        NotificationCenter.default.addObserver(
+            forName: .flowvpnSessionExpired, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.invalidate() }
+        }
+    }
+
+    /// Phiên bị SERVER từ chối (không phải khách bấm đăng xuất) ⇒ xoá token + bật cờ báo lý do.
+    func invalidate() {
+        Self.delete()
+        session = nil
+        sessionExpired = true
     }
 
     func save(_ session: CoordinatorAuthSession) {
@@ -38,6 +55,7 @@ final class AuthSessionStore: ObservableObject {
     func signOut() {
         Self.delete()
         session = nil
+        sessionExpired = false
     }
 
     private static func load() -> CoordinatorAuthSession? {

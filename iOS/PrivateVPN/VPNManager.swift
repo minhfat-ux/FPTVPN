@@ -1059,6 +1059,10 @@ final class VPNManager: ObservableObject {
                 return "Coordinator returned an invalid response. Please try again."
             case .missingSession:
                 return "Please sign in before connecting."
+            case .sessionExpired:
+                // Phiên 30 ngày đã hết hạn ở server: câu này phải nói ĐÚNG việc cần làm
+                // (đăng nhập lại), không phải "không kết nối được" chung chung.
+                return "Your session has expired. Please sign in again."
             case .deviceLimit(let message, _):
                 return message
             }

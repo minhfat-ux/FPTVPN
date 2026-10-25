@@ -300,6 +300,9 @@ targets:
         excludes:
           - "Resources/ChatGPT*.png"
       - path: iOS/PrivateVPN/Services/ControlAPIClient.swift
+      # Notification.Name.flowvpnSessionExpired + quyết định ngày còn lại của phiên:
+      # ControlAPIClient dùng chung cho macOS ⇒ thiếu file này, macOS không build được.
+      - path: iOS/PrivateVPN/Services/SessionExpiryPolicy.swift
       - path: iOS/PrivateVPN/Services/WireGuardConfig.swift
       - path: iOS/PrivateVPN/Services/AppVersionService.swift
       # KeychainStore dùng chung với extension: khoá WireGuard phải nằm trong CÙNG một

@@ -2571,6 +2571,34 @@ checkEqual(cloudflareFirstOrder.map(\.relayURL),
            ["wss://api.meetflowai.site/relay/vn2hy", ""],
            "directFirst=false ⇒ Cloudflare trước, đường thẳng làm cửa CUỐI")
 
+// ---------------------------------------------------------------------------
+// SessionExpiryPolicy — session control plane có hạn 30 ngày (auth-store.js).
+// Ca thật 25/10/2026: hết hạn nhưng app hiện nguyên văn "Valid user session required".
+// ---------------------------------------------------------------------------
+let expiryNow = ISO8601DateFormatter().date(from: "2026-10-25T00:00:00Z")!
+checkEqual(SessionExpiryPolicy.daysLeft(expiresAt: "2026-10-28T00:00:00Z", now: expiryNow), 3,
+           "còn đúng 3 ngày")
+checkEqual(SessionExpiryPolicy.daysLeft(expiresAt: "2026-10-25T23:59:00Z", now: expiryNow), 0,
+           "còn 23 giờ ⇒ 0 ngày (làm tròn XUỐNG, không làm tròn lên)")
+checkEqual(SessionExpiryPolicy.daysLeft(expiresAt: "2026-10-24T00:00:00Z", now: expiryNow), 0,
+           "đã hết hạn ⇒ 0, KHÔNG trả số âm")
+checkEqual(SessionExpiryPolicy.daysLeft(expiresAt: nil, now: expiryNow), nil,
+           "không có mốc hạn ⇒ nil")
+checkEqual(SessionExpiryPolicy.daysLeft(expiresAt: "không-phải-ngày", now: expiryNow), nil,
+           "chuỗi hỏng ⇒ nil (không crash)")
+checkEqual(SessionExpiryPolicy.bannerDaysLeft(expiresAt: "2026-10-27T00:00:00Z", now: expiryNow), 2,
+           "còn 2 ngày ⇒ CÓ banner nhắc trước")
+checkEqual(SessionExpiryPolicy.bannerDaysLeft(expiresAt: "2026-10-28T12:00:00Z", now: expiryNow), 3,
+           "đúng ngưỡng 3 ngày ⇒ vẫn nhắc")
+checkEqual(SessionExpiryPolicy.bannerDaysLeft(expiresAt: "2026-11-20T00:00:00Z", now: expiryNow), nil,
+           "còn 26 ngày ⇒ KHÔNG hiện banner (tránh làm phiền)")
+checkEqual(SessionExpiryPolicy.expiredMessage(isVietnamese: true),
+           "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+           "câu báo khi phiên bị từ chối (tiếng Việt)")
+checkEqual(SessionExpiryPolicy.expiredMessage(isVietnamese: false),
+           "Your session has expired. Please sign in again.",
+           "câu báo khi phiên bị từ chối (tiếng Anh)")
+
 print("")
 print("KẾT QUẢ: \(checks - failures)/\(checks) PASS, \(failures) FAIL")
 exit(failures == 0 ? 0 : 1)

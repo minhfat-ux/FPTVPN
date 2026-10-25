@@ -59,6 +59,14 @@ struct LoginView: View {
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
         }
+        // Phiên bị server từ chối ⇒ nói RÕ lý do ngay trên màn hình đăng nhập.
+        // Trước 25/10/2026 khách chỉ thấy form trống, không hiểu vì sao bị đăng xuất.
+        .onChange(of: authStore.sessionExpired, initial: true) { _, expired in
+            guard expired else { return }
+            message = .error(
+                SessionExpiryPolicy.expiredMessage(isVietnamese: languageStore.language == .vietnamese)
+            )
+        }
     }
 
     // MARK: - Header

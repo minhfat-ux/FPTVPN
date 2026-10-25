@@ -12,6 +12,9 @@ struct ContentView: View {
     @State private var showingSettings = false
     @State private var showingPaywall = false
     @State private var showingLogin = false
+    // Nhắc TRƯỚC khi phiên 30 ngày hết hạn (25/10/2026: khách bị đá ra mà không biết trước).
+    @State private var sessionExpiryDays = 0
+    @State private var showSessionExpiryReminder = false
     @State private var forcedUpdateInfo: AppVersionInfo?
 
     /// Bản mới CHƯA bắt buộc (latest_version > bản đang chạy nhưng minimum_version thì chưa vượt).
@@ -119,6 +122,18 @@ struct ContentView: View {
             } message: { _ in
                 Text(languageStore.t(.updateRequiredDetail))
             }
+            // Nhắc trước khi hết hạn (không chặn dùng app, chỉ để khách chủ động đăng nhập lại).
+            .alert(
+                languageStore.language == .vietnamese ? "Phiên đăng nhập" : "Session",
+                isPresented: $showSessionExpiryReminder
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(SessionExpiryPolicy.bannerMessage(
+                    daysLeft: sessionExpiryDays,
+                    isVietnamese: languageStore.language == .vietnamese
+                ))
+            }
         }
         // Device cap hit: mở NGAY màn hình "Thiết bị của tôi" bằng danh sách server trả kèm lỗi
         // 403 `device_limit_reached`, để khách tự đăng xuất máy khác thay vì chỉ thấy lỗi thô.
@@ -156,6 +171,12 @@ struct ContentView: View {
         }
         .task {
             vpnManager.refreshStatus()
+            // Phiên sắp hết hạn (≤3 ngày) ⇒ nhắc khách chủ động đăng nhập lại,
+            // thay vì để họ bị đá ra giữa chừng rồi mới thấy lỗi.
+            if let days = SessionExpiryPolicy.bannerDaysLeft(expiresAt: authStore.session?.expires_at) {
+                sessionExpiryDays = days
+                showSessionExpiryReminder = true
+            }
             // Quyền Premium có thể được cấp trên web SAU lần đăng nhập cuối, còn session chỉ
             // được cấp lúc đăng nhập — nên đọc lại ngay khi mở app (nút Connect bị khoá theo
             // `isSubscribed`). Chạy SONG SONG với fetchNodes để mạng chậm không làm chậm việc

@@ -599,6 +599,10 @@ struct ControlAPIClient {
         case server(String)
         case transport(endpoint: String, Error)
         case missingSession
+        /// Server đã từ chối phiên đăng nhập (HTTP 401 "Valid user session required").
+        /// Tách khỏi `.server` để app biết phải **xoá phiên + mở màn hình đăng nhập**, thay vì
+        /// hiện nguyên văn câu lỗi API (sự cố 25/10/2026 — xem handoff §7).
+        case sessionExpired
         /// The account already uses the maximum number of active devices. Carries
         /// the coordinator's message and the device list so the UI can offer
         /// "log out an old device" instead of a vague rejection.
@@ -614,10 +618,25 @@ struct ControlAPIClient {
                 return "Could not reach the coordinator while requesting \(endpoint): \(error.localizedDescription)"
             case .missingSession:
                 return "Please sign in before connecting."
+            case .sessionExpired:
+                return "Your session has expired. Please sign in again."
             case .deviceLimit(let message, _):
                 return message
             }
         }
+    }
+
+    /// Biến phản hồi lỗi thành `ClientError`, NHẬN DIỆN RIÊNG ca phiên hết hạn.
+    /// 401 + thông điệp "…user session…" ⇒ `.sessionExpired` và phát thông báo để
+    /// `AuthSessionStore` xoá token chết + buộc khách đăng nhập lại.
+    static func failure(_ http: HTTPURLResponse, data: Data) -> ClientError {
+        let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
+        let message = body?.message ?? body?.error ?? "HTTP \(http.statusCode)"
+        if http.statusCode == 401, message.lowercased().contains("user session") {
+            NotificationCenter.default.post(name: .flowvpnSessionExpired, object: nil)
+            return .sessionExpired
+        }
+        return .server(message)
     }
 
     /// Registers this device with the coordinator.
@@ -668,9 +687,7 @@ struct ControlAPIClient {
                     devices: limit.devices ?? []
                 )
             }
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.message
-                ?? "HTTP \(http.statusCode)"
-            throw ClientError.server(message)
+            throw Self.failure(http, data: data)
         }
         return try JSONDecoder().decode(CoordinatorRegisterResponse.self, from: data)
     }
@@ -812,10 +829,7 @@ struct ControlAPIClient {
             throw ClientError.badResponse
         }
         guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.message
-                ?? (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
-                ?? "HTTP \(http.statusCode)"
-            throw ClientError.server(message)
+            throw Self.failure(http, data: data)
         }
         let body = try JSONDecoder().decode(TokenResponse.self, from: data)
         return body.token
@@ -893,10 +907,7 @@ struct ControlAPIClient {
             throw ClientError.badResponse
         }
         guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.message
-                ?? (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
-                ?? "HTTP \(http.statusCode)"
-            throw ClientError.server(message)
+            throw Self.failure(http, data: data)
         }
         return data
     }
