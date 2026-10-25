@@ -1,7 +1,8 @@
 #!/bin/sh
 # Watchdog on dinh: khong doi node, khong restart sing-box.
-# - WAN down: chi log, khong restart relay (hotplug se lam khi WAN len lai).
-# - WAN up: probe node-1 (FPT Play) va node-3 (TV360); fail 2 lan lien tiep -> restart relay.
+# - MemAvailable < 6 MB: drop caches + restart relay (chong OOM lam mat Wi-Fi ca nha).
+# - WAN down: chi log; hotplug se restart relay khi WAN len lai.
+# - WAN up: probe node-1 (FPT Play) / node-3 (TV360); fail 2 lan -> restart relay.
 LOG=/var/log/flowvpn-health.log
 f1=0; f3=0
 probe() {
@@ -11,6 +12,13 @@ probe() {
   echo "$t"
 }
 while true; do
+  avail=$(awk "/MemAvailable/{print \$2}" /proc/meminfo)
+  if [ -n "$avail" ] && [ "$avail" -lt 6000 ]; then
+    echo "$(date +%H:%M:%S) MEM LOW avail=${avail}kB -> drop caches + restart relays" >> $LOG
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
+    /etc/init.d/flowvpnrelay1 restart >/dev/null 2>&1
+    /etc/init.d/flowvpnrelay3 restart >/dev/null 2>&1
+  fi
   if ! ping -c1 -W2 192.168.100.1 >/dev/null 2>&1; then
     echo "$(date +%H:%M:%S) WAN DOWN - cho hotplug" >> $LOG
     f1=0; f3=0; sleep 15; continue

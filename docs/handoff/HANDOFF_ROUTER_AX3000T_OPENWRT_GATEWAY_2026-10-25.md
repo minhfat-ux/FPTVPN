@@ -171,3 +171,16 @@ Xử lý:
 | Blip | 2 lần `000`/8 s (16:20, 16:23); watchdog restart relay1 1 lần lúc 16:24 rồi tự hồi |
 
 ⇒ RD_002 đã được xử lý; còn lại chỉ là blip ngắn của đường mạng, không làm hỏng phiên xem.
+
+## 14. "Mất hết mạng" đột ngột — router hết RAM (OOM), và cách cứu hộ
+- Triệu chứng: đang xem bình thường thì cả nhà mất mạng; Mac tự nhảy về Wi-Fi nhà; không join được
+  `FPT_Minh_Router` (dù iwinfo vẫn báo AP lên).
+- Chẩn đoán qua SSH WAN (`root@192.168.100.3` — WAN 22/80 **mở**):
+  - `dmesg | grep -c "out of memory"` = **11**; `MemAvailable` còn **488 kB**; load average **13–14**.
+  - hostapd/dnsmasq ở trạng thái D (đói bộ nhớ/IO) → Wi-Fi + DNS chết dây chuyền.
+- Xử lý: reboot router ⇒ load 1,2; RAM trống ~18 MB; internet `200`; TV tự nối lại; FPT Play proxy
+  `301`/1,6 s.
+- Phòng ngừa đã thêm:
+  1. `cron`: `0 4 * * * /sbin/reboot` (reboot đêm, xả RAM tích luỹ).
+  2. Watchdog: nếu `MemAvailable < 6 MB` ⇒ `drop_caches` + restart relay1/relay3.
+- Cứu hộ không cần Wi-Fi: **SSH qua WAN `192.168.100.3`** (nếu Wi-Fi/hostapd chết vẫn vào được).
