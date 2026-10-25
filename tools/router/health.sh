@@ -1,10 +1,10 @@
 #!/bin/sh
 CONF=/etc/sing-box/config.json
 STATE=/tmp/flowvpn-node
-NODES="1085 1081"
+NODES="1085"
 PROBE="https://www.youtube.com/generate_204"
 LOG=/var/log/flowvpn-health.log
-cur=1085; [ -f $STATE ] && cur=$(cat $STATE)
+cur=1085
 fails=0; fails3=0
 probe() {
   t=$(curl -s -o /dev/null -m 8 -w "%{time_total}" --socks5-hostname 127.0.0.1:$1 "$2" 2>/dev/null)
@@ -13,7 +13,6 @@ probe() {
 }
 restart_relays() {
   echo "$(date +%H:%M:%S) RESTART relays" >> $LOG
-  /etc/init.d/flowvpnrelay2 restart >/dev/null 2>&1
   /etc/init.d/flowvpnrelay1 restart >/dev/null 2>&1
   return 0
 }

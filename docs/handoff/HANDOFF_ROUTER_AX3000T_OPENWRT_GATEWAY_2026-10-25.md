@@ -85,3 +85,15 @@
   `facebook.com` = `200`, `tiktok.com` = `200`; TV FPT Play vẫn `LIVE`.
 - Lưu ý: rule `port 443 -> node` (catch-all HTTPS) khiến cả HTTPS nội địa (vd baidu)
   đi tunnel (chậm hơn ~5s); có thể bỏ catch-all khi mọi app đều đi proxy.
+
+## 9. Tối ưu tốc độ (sau khi TV bị giật video)
+- Đo băng thông từng node (1 MB qua socks): node-2 ~25 KB/s, node-1 ~47–128 KB/s, node-3 ~63–114 KB/s.
+  Nguyên nhân giật là **đường WS relay qua Cloudflare từ ISP hiện tại** (dao động 0,3–1 Mbps),
+  không phải CPU router.
+- Thử `links: 2` cho relay ⇒ băng thông **giảm** (35 KB/s) và RAM còn 1,4 MB (nguy hiểm) ⇒ giữ
+  `links: 1`.
+- Đã **tắt relay node-2** (chậm nhất) để giải phóng ~20 MB RAM (còn ~20 MB trống), daemon chỉ
+  probe node-1.
+- Chia route theo tốc độ: TV360 + FPT Play KHÔNG cùng node — TV360 → node-3; FPT Play → node-1;
+  YouTube/Google/Facebook/TikTok/… + catch-all 443 → **node-3** (nhanh nhất).
+- Giới hạn: video HD có thể vẫn giật khi đường relay yếu; muốn mượt cần node/kênh có uplink tốt hơn.
