@@ -71,3 +71,17 @@
   `/etc/init.d/flowvpnrelay3`; daemon chỉ đổi `server_port` của outbound `node`
   (không đụng `node3`).
 - Kết quả: TV360 phát được nội dung; FPT Play (LIVE/Kênh gợi ý) vẫn OK.
+
+## 8. DNS chọn lọc (Google/Firebase trong suốt)
+- Vấn đề: DNS nhà (ONT) bị đầu độc với Google/Facebook ⇒ client nhận IP rác, TPROXY đi
+  tunnel tới IP rác nên relay từ chối. Đặt proxy thủ công thì được nhưng nhiều app
+  (Firebase/FCM) không đi theo proxy.
+- Giải pháp: thêm listener DNS trong sing-box (`dns-in` `127.0.0.1:5353`, DoT
+  `tls://8.8.8.8` detour `node`) + rule `hijack-dns`; dnsmasq chỉ chuyển các domain
+  bị chặn sang listener này (`server=/google.com/127.0.0.1#5353`…), còn lại vẫn DNS nhà.
+  ⇒ Tunnel chết chỉ ảnh hưởng các domain bị chặn, không mất internet toàn mạng.
+- Đo sau khi làm: `www.google.com` → IP thật `142.251.x`; transparent (không proxy)
+  `google.com/generate_204` = `204`, `googleapis.com` = `404` (TLS OK),
+  `facebook.com` = `200`, `tiktok.com` = `200`; TV FPT Play vẫn `LIVE`.
+- Lưu ý: rule `port 443 -> node` (catch-all HTTPS) khiến cả HTTPS nội địa (vd baidu)
+  đi tunnel (chậm hơn ~5s); có thể bỏ catch-all khi mọi app đều đi proxy.
