@@ -1,56 +1,31 @@
-# Router OpenWrt cho TV Xiaomi — thay cho gateway Mac/Windows
+# Gateway OpenWrt tren Xiaomi AX3000T RD03v2
 
-## Kiến trúc
+Bo file cho router da flash OpenWrt (ADCDS `openwrt-xiaomi-ax3000t-rd03v2` v2.0.2).
 
-Một router chạy **sing-box** làm toàn bộ việc định tuyến theo tên miền:
+## Vai tro
+- `sing-box-selective.json`: TPROXY (7893) + HTTP/SOCKS (18081). Chi cac domain
+  bi chan (FPT Play, TV360, YouTube/Google, Facebook/Instagram, TikTok, X,
+  Telegram, WhatsApp, Signal) di qua node-1/node-2; **con lai di thang WAN**
+  => tunnel chet khong lam mat internet ca nha.
+- `health.sh`: moi 30 s do do tre 2 relay qua socks; chi doi node khi node hien
+  tai chet hoac node kia nhanh hon >=25%; ca 2 fail 3 lan -> restart relay.
 
-| Đích | Đi ra | Vì sao |
-|---|---|---|
-| `*.tv360.vn` | **node-3** (`103.6.235.39`) | TV360 cần exit riêng (node-3), node khác bị chậm/chặn |
-| `fptplay.net` / `fptplay.vn` / `fpt.vn` | **node-2** (`165.101.114.162`) | FPT Play |
-| `youtube.com`, `googlevideo.com`, `ytimg.com`, `ggpht.com`, `googleapis.com` | **node-2** | FPT Tubeflow / YouTube |
-| LAN nội bộ | direct | — |
-
-TV/điện thoại nối Wi-Fi router ⇒ **không cần proxy, không cần app scan gateway**. Chỉ cần TV bật là có mạng (dưới 2 s).
-
-## Chuẩn bị
-
-1. Router có OpenWrt / ImmortalWrt (Xiaomi AX3000T V1 = RD03; Redmi AX6000; GL-MT6000).
-2. Cài gói: `sing-box` (hoặc `mihomo`). Với OpenWrt 23.05+: `opkg update && opkg install sing-box` (có trong feed), hoặc tải binary chính thức.
-3. Điền `tools/router/sing-box-template.json` → `/etc/sing-box/config.json` trên router.
-   **KHÔNG commit bản đã điền mật khẩu** — file template chỉ có `<SECRET_*>`.
-4. Bật TPROXY + redirect traffic LAN vào sing-box (script `route-setup.sh`, xem dưới).
-
-## Bật định tuyến trong suốt (nftables)
-
-```sh
-# /etc/nftables.d/10-singbox.nft (hoặc đặt trong firewall include)
-table inet singbox {
-  chain prerouting {
-    type filter hook prerouting priority mangle; policy accept;
-    ip daddr { 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4 } return
-    meta l4proto { tcp, udp } tproxy ip to :7893 meta mark set 0x1 accept
-  }
-}
+## Cai tren router
+```
+mkdir -p /etc/flowvpn
+cp node1.json node2.json /etc/flowvpn/     # file credential, KHONG commit
+cp health.sh /etc/flowvpn/health.sh
+cp sing-box-selective.json /etc/sing-box/config.json
+# init.d: flowvpnrelay1 (node-1, socks 1085), flowvpnrelay2 (node-2, socks 1081),
+#          flowvpnhealth, tproxynft (nft tproxy, loai tru DHCP 67/68 va broadcast)
 ```
 
-```sh
-ip rule add fwmark 1 table 100
-ip route add local default dev lo table 100
-```
-
-## Kiểm tra sau khi cài
-
-```sh
-# Từ router
-curl -s -o /dev/null -w "%{http_code}\n" https://tv360.vn/          # 200
-curl -s -o /dev/null -w "%{http_code}\n" https://www.fptplay.net/   # 200/403/503 (bất kỳ, quan trọng là có phản hồi)
-# Từ TV: mở FPT Play + TV360 + FPT Tubeflow, KHÔNG đặt proxy
-adb shell settings delete global http_proxy
-```
-
-## Ghi chú bảo mật
-
-- Mật khẩu hysteria/obfs KHÔNG được nằm trong repo. Template chỉ có placeholder.
-- Sau khi dùng router, có thể tắt hẳn gateway Mac/Windows và xoá `http_proxy` trên TV; khi đó các app
-  TVFlow Home/Guard chỉ còn là dự phòng khi dùng mạng ngoài.
+## Luu y da gap
+1. **nft TPROXY phai loai tru DHCP** (`udp dport 67/68`, `255.255.255.255`) va
+   dai private, neu khong client moi (TV) khong nhan duoc IP.
+2. Toan bo traffic qua tunnel la thiet ke sai: tunnel chet => mat internet ca
+   nha. Dung dinh tuyen chon loc nhu `sing-box-selective.json`.
+3. TV co the bi Guard/Launcher tro proxy vao gateway da chet (vd Windows
+   `192.168.1.106:18081`) => app timeout 15 s. Kiem tra:
+   `adb shell settings get global http_proxy`; sua:
+   `adb shell settings put global http_proxy 192.168.1.1:18081`.

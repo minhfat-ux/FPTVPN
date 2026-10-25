@@ -1,0 +1,25 @@
+{
+  "_comment": "Mau sing-box cho gateway OpenWrt (RD03v2): chi domain bi chan di qua node-1/2, con lai di thang WAN. Port 1081 = relay node-2, 1085 = relay node-1; daemon tools/router/health.sh doi server_port khi can.",
+  "log": { "level": "warn" },
+  "inbounds": [
+    { "type": "tproxy", "tag": "tproxy-in", "listen": "::", "listen_port": 7893 },
+    { "type": "mixed", "tag": "mixed-in", "listen": "0.0.0.0", "listen_port": 18081 }
+  ],
+  "outbounds": [
+    { "type": "socks", "tag": "node", "server": "127.0.0.1", "server_port": 1081, "version": "5" },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": {
+    "rules": [
+      { "inbound": "tproxy-in", "action": "sniff", "timeout": "3s" },
+      { "ip_is_private": true, "outbound": "direct" },
+      { "domain_suffix": ["fptplay.net","fptplay.vn","fpt.vn","tv360.vn",
+        "youtube.com","googlevideo.com","ytimg.com","ggpht.com","googleapis.com","yt.be","googlesyndication.com","gstatic.com",
+        "facebook.com","facebook.net","fbcdn.net","fb.me","messenger.com","instagram.com","cdninstagram.com",
+        "tiktok.com","tiktokcdn.com","tiktokv.com","tiktokcdn-us.com","ibytedtos.com","byteoversea.com","muscdn.com",
+        "twitter.com","x.com","twimg.com","telegram.org","t.me","telegram.me","whatsapp.com","whatsapp.net","signal.org"], "outbound": "node" }
+    ],
+    "final": "direct",
+    "auto_detect_interface": true
+  }
+}
