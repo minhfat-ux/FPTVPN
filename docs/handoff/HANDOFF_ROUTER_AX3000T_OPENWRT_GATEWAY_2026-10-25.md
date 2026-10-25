@@ -139,3 +139,10 @@ Xử lý:
   `103.116.120.0/23`, `103.116.121.0/24`) → **direct** (relay không nhận IP; CDN VN vẫn phục vụ).
 - Giữ node-1 cho API/license; watchdog restart relay1 khi tunnel chết 3 lần.
 - Đo lại: FPT Play proxy `301` ~3,5 s; relay `1083`/`1085` đều LISTEN.
+
+### 12.1. Kết quả theo dõi sau khi sửa (10 phút xem liên tục)
+- FPT Play proxy: `301` 18/19 mẫu (1 mẫu `000`/8 s do mạng chập chờn), độ trễ 1,6–4,1 s.
+- `socks5 code=4` (reject IP CDN): **0 lần mới**.
+- `127.0.0.1:1085 connection refused` (sai cổng node3): **0**.
+- Tunnel drop (`i/o timeout`): **0** trong cửa sổ theo dõi.
+- **TV: `RD_002` = 0** trong ~10 phút xem ⇒ nguyên nhân đã xử lý đúng.
