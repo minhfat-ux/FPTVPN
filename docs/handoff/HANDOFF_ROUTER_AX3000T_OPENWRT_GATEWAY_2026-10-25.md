@@ -193,3 +193,16 @@ Xử lý:
   04:00 và watchdog RAM <6 MB.
 - Đo sau khi bật: free ~35 MB, swap 87 MB (chưa dùng), FPT Play proxy `301`/1,9 s, TV vẫn kết nối.
 - Nếu cần nhẹ hơn nữa: bỏ relay node-3 (mất TV360, −13 MB), hoặc đẩy tunnel sang Mac/mini-PC.
+
+## 15. Netflix trên iPad bị văng giữa chừng
+- Bằng chứng: iPad `192.168.1.157` có IPv6 ULA (fdba:…); DNS trả **AAAA toàn cầu** cho
+  `*.netflix.com` trong khi router **chỉ TPROXY IPv4** ⇒ iPad ưu tiên IPv6, kết nối đi thẳng
+  (không qua tunnel) ⇒ tắc ⇒ app thoát.
+- Cấu hình trước đó cũng **chưa có domain Netflix** trong rule ⇒ CDN Netflix không đi node.
+- Xử lý:
+  - Thêm `netflix.com, netflix.net, nflxext.com, nflximg.com, nflximg.net, nflxso.net,
+    nflxvideo.net` → outbound **node3**; DNS các domain này qua tunnel (`127.0.0.1#5353`).
+  - **Tắt IPv6 LAN** (`dhcp.lan.ra/dhcpv6/ndp = disabled`) và bật `filter_aaaa=1` để client chỉ
+    dùng IPv4 ⇒ mọi kết nối đều đi qua TPROXY/proxy.
+  - Đo lại: `www.netflix.com` qua proxy `302` (~3 s), FPT Play `301` (không ảnh hưởng).
+- Nếu sau này cần IPv6 nội bộ, phải làm TPROXY cho IPv6 hoặc bỏ filter AAAA.
