@@ -51,6 +51,8 @@ public class GuardReceiver extends BroadcastReceiver {
     private static final String DEFAULT_GATEWAY =
             "192.168.100.5:18081,192.168.100.6:18081,192.168.100.101:18081,192.168.100.11:18081";
     private static final String PREFS = "vpnflow_guard";
+    /** Dải mạng lần trước — đổi giá trị = đã đổi mạng (để nhả gateway cũ). */
+    private static final String KEY_LAST_SUBNET = "last_subnet";
     private static final String KEY_GATEWAY = "gateway";
 
     @Override
@@ -70,6 +72,12 @@ public class GuardReceiver extends BroadcastReceiver {
 
     private static void tick(Context context) {
         try {
+            // ĐỔI MẠNG thì phải NHẢ gateway cũ + xoá cache quét: gateway của mạng trước có thể trùng
+            // IP nhưng KHÔNG còn phục vụ (hoặc IP vẫn "trả lời" nhưng là máy khác) — bám nó là mất mạng.
+            // Sự cố thật 24/10/2026: TV đổi từ LAN router (192.168.1.x) về mạng nhà (192.168.100.x)
+            // nhưng proxy còn trỏ gateway của mạng cũ nên không tự quét lại.
+            handleNetworkChange(context);
+
             String proxy = Settings.Global.getString(context.getContentResolver(), "http_proxy");
             if (proxy == null) proxy = "";
             boolean isLoopback = proxy.startsWith("127.0.0.1");
@@ -84,36 +92,42 @@ public class GuardReceiver extends BroadcastReceiver {
                 // Ca thật 24/10/2026 02:40: gateway .5 treo, proxy kẹt .5 tới khi tắt/bật VPNFlow.
                 long cur = probeQuick(proxy);
                 if (cur >= 0) {
-                    // Định kỳ (~60 s) đánh giá LẠI toàn bộ: gateway khác nhanh hơn rõ rệt thì nhảy,
-                    // không chờ gateway hiện tại chết. Chỉ nhảy khi nhanh hơn >=25% (chống rung).
+                    // Định kỳ (~60 s) đánh giá LẠI toàn bộ bằng THÔNG LƯỢNG THẬT (không phải độ trễ):
+                    // ca thật 24/10/2026 — gateway .5 trả CONNECT trong 20 ms nhưng chỉ ~12 KB/s
+                    // (UDP bị chặn, còn WS relay bị bóp) nên video không chạy, trong khi điện thoại
+                    // (IP động, vd .103) nhanh hơn nhiều; đo độ trễ thì cả hai "bằng nhau" nên TV
+                    // không bao giờ nhảy. Nay: 2 lần đo / 2 kết nối mới, điểm = min (chống burst),
+                    // chỉ nhảy khi gateway khác nhanh hơn >= 1.5 lần.
                     long nowEval = SystemClock.elapsedRealtime();
                     if (nowEval - lastQualityCheck >= QUALITY_INTERVAL_MS) {
                         lastQualityCheck = nowEval;
+                        long curKbps = probeKbps(proxy);
                         String bestGw = null;
-                        long bestMs = Long.MAX_VALUE;
-                        long curMs = Long.MAX_VALUE;
+                        long bestKbps = -1;
                         for (String gw : candidates(context, true)) {
-                            long ms = probeQuick(gw);
-                            if (ms < 0) continue;
-                            if (gw.equals(proxy)) curMs = ms;
-                            if (ms < bestMs) {
-                                bestMs = ms;
+                            if (gw.equals(proxy)) continue;
+                            long kbps = probeKbps(gw);
+                            if (kbps > bestKbps) {
+                                bestKbps = kbps;
                                 bestGw = gw;
                             }
                         }
-                        if (bestGw != null && !bestGw.equals(proxy) && curMs != Long.MAX_VALUE
-                                && bestMs * 4 < curMs * 3) { // best < 0.75 * current
+                        if (bestGw != null && bestKbps > 0
+                                && (curKbps <= 0 || bestKbps * 2 >= curKbps * 3)) { // >= 1.5x
                             Settings.Global.putString(context.getContentResolver(), "http_proxy", bestGw);
-                            Log.w(TAG, "chuyen sang " + bestGw + " (" + bestMs + " ms) vi nhanh hon "
-                                    + proxy + " (" + curMs + " ms)");
+                            Log.w(TAG, "chuyen sang " + bestGw + " (" + bestKbps + " kbps) vi nhanh hon "
+                                    + proxy + " (" + curKbps + " kbps)");
                             return;
                         }
+                        Log.i(TAG, "giu gateway " + proxy + " (" + curKbps + " kbps; tot nhat khac "
+                                + bestGw + "=" + bestKbps + " kbps)");
                     }
                     Log.i(TAG, "gateway " + proxy + " còn sống (" + cur + " ms) -> giữ");
                     return;
                 }
                 // Xác nhận lần 2 trước khi bỏ gateway: tránh nhảy chỉ vì một nhịp chập chờn.
                 long again = probeQuick(proxy);
+                if (again < 0) again = probeQuick(proxy);  // BUG: 2 lan truot la loai oan; thu lan 3
                 if (again >= 0) {
                     Log.i(TAG, "gateway " + proxy + " nhịp lỗi đầu nhưng vẫn sống (" + again + " ms) -> giữ");
                     return;
@@ -179,6 +193,55 @@ public class GuardReceiver extends BroadcastReceiver {
             }
         }
         return best;
+    }
+
+    /** Dải mạng hiện tại (vd "192.168.100.") — đổi giá trị này = đã đổi mạng. */
+    private static String currentSubnet() {
+        try {
+            for (NetworkInterface nif : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!nif.isUp() || nif.isLoopback()) continue;
+                for (InterfaceAddress ia : nif.getInterfaceAddresses()) {
+                    java.net.InetAddress ip = ia.getAddress();
+                    if (ip == null || ip.getAddress().length != 4 || ip.isLoopbackAddress()) continue;
+                    int prefix = ia.getNetworkPrefixLength();
+                    if (prefix < 8 || prefix > 30) continue;
+                    byte[] b = ip.getAddress();
+                    if (b[0] == 127) continue;
+                    return (b[0] & 0xff) + "." + (b[1] & 0xff) + "." + (b[2] & 0xff) + ".";
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
+    /**
+     * Đổi dải mạng ⇒ (1) xoá cache danh sách gateway để nhịp này quét LẠI ngay,
+     * (2) nếu proxy đang trỏ gateway KHÔNG thuộc dải mới thì nhả về ":0" để chọn lại từ đầu.
+     */
+    private static void handleNetworkChange(Context context) {
+        try {
+            String sub = currentSubnet();
+            if (sub.isEmpty()) return;
+            android.content.SharedPreferences sp =
+                    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String last = sp.getString(KEY_LAST_SUBNET, null);
+            if (sub.equals(last)) return;
+            sp.edit()
+                    .putString(KEY_LAST_SUBNET, sub)
+                    .putString(KEY_DISCOVERED, "")
+                    .putLong(KEY_DISCOVERED_AT, 0L)   // 0 = hết hạn ngay ⇒ nhịp này quét lại
+                    .apply();
+            Log.w(TAG, "DOI MANG " + last + " -> " + sub + ": xoa cache gateway, quet lai");
+            String proxy = Settings.Global.getString(context.getContentResolver(), "http_proxy");
+            if (proxy != null && proxy.contains(":") && !proxy.startsWith(":")
+                    && !proxy.startsWith(sub) && !proxy.startsWith("127.0.0.1")) {
+                Settings.Global.putString(context.getContentResolver(), "http_proxy", ":0");
+                Log.w(TAG, "gateway " + proxy + " khong thuoc dai moi " + sub + " -> nha proxy (:0)");
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "handleNetworkChange loi: " + t.getMessage());
+        }
     }
 
     /** Quét LAN tìm gateway (host có cổng 18081 mở) — vì IP các máy không cố định. */
@@ -303,33 +366,16 @@ public class GuardReceiver extends BroadcastReceiver {
 
     /** Kiểm nhanh (TCP 1,2 s + CONNECT 4 s) — dùng cho gateway đang dùng. */
     private static long probeQuick(String hostPort) {
-        int i = hostPort.lastIndexOf(':');
-        if (i <= 0) return -1;
-        int port;
-        try {
-            port = Integer.parseInt(hostPort.substring(i + 1).trim());
-        } catch (Throwable t) {
-            return -1;
+        // BUG (24/10/2026): ban cu chi do MOT host (www.youtube.com) voi timeout 1,2 s/4 s nen gateway
+        // di qua tunnel (dien thoai - do tre cao hon) bi loai oan la "da chet", du gstatic/youtube/
+        // fptplay qua no deu 200. Nay: thu 2 host nhe (gstatic truoc), moi host 2 lan, timeout rong hon.
+        for (String target : new String[]{"www.gstatic.com:443", "www.youtube.com:443"}) {
+            for (int attempt = 0; attempt < 2; attempt++) {
+                long ms = probeMs(hostPort, target);
+                if (ms >= 0) return ms;
+            }
         }
-        String host = hostPort.substring(0, i).trim();
-        long t0 = android.os.SystemClock.elapsedRealtime();
-        Socket s = new Socket();
-        try {
-            s.connect(new InetSocketAddress(host, port), 1200);
-            s.setSoTimeout(4000);
-            s.getOutputStream().write((
-                    "CONNECT www.youtube.com:443 HTTP/1.1\r\n" +
-                            "Host: www.youtube.com:443\r\n\r\n").getBytes());
-            s.getOutputStream().flush();
-            byte[] buf = new byte[96];
-            int n = s.getInputStream().read(buf);
-            if (n <= 0 || !new String(buf, 0, n).contains(" 200")) return -1;
-            return android.os.SystemClock.elapsedRealtime() - t0;
-        } catch (Throwable t) {
-            return -1;
-        } finally {
-            try { s.close(); } catch (Throwable ignored) { }
-        }
+        return -1;
     }
 
     /** CONNECT thật tới `target` qua gateway `hostPort` (10 s). */
@@ -369,8 +415,81 @@ public class GuardReceiver extends BroadcastReceiver {
         }
     }
 
-    /** TCP connect tới host:port (không CONNECT) — để phân biệt "cổng còn mở" với "proxy chết". */
-    private static boolean tcpAlive(String hostPort) {
+    /** Số byte mỗi lần đo thông lượng (đủ để phân biệt 12 KB/s với 1 MB/s mà không tốn băng thông). */
+    private static final int PROBE_BYTES = 131_072;
+    /** Mẫu mỏng hơn mức này thì bỏ (mạng chập chờn, số đo vô nghĩa). */
+    private static final int MIN_SAMPLE_BYTES = 16_384;
+
+    /**
+     * Đo THÔNG LƯỢNG thật qua gateway: CONNECT → TLS → tải ≤128 KB, trả kbps.
+     * Đo 2 lần trên 2 kết nối MỚI và lấy **min** (chống số ảo do burst đầu phiên).
+     * Trả -1 nếu gateway chết / không tải được gì.
+     */
+    private static long probeKbps(String hostPort) {
+        long best = -1;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            long k = probeKbpsOnce(hostPort);
+            if (k < 0) continue;
+            if (best < 0 || k < best) best = k;
+        }
+        return best;
+    }
+
+    private static long probeKbpsOnce(String hostPort) {
+        int i = hostPort.lastIndexOf(':');
+        if (i <= 0) return -1;
+        int port;
+        try {
+            port = Integer.parseInt(hostPort.substring(i + 1).trim());
+        } catch (Throwable t) {
+            return -1;
+        }
+        String host = hostPort.substring(0, i).trim();
+        Socket raw = new Socket();
+        javax.net.ssl.SSLSocket tls = null;
+        try {
+            raw.connect(new InetSocketAddress(host, port), 1500);
+            raw.setSoTimeout(6000);
+            raw.getOutputStream().write((
+                    "CONNECT speed.cloudflare.com:443 HTTP/1.1\r\n" +
+                            "Host: speed.cloudflare.com:443\r\n\r\n").getBytes());
+            raw.getOutputStream().flush();
+            byte[] hdr = new byte[160];
+            int n = raw.getInputStream().read(hdr);
+            if (n <= 0 || !new String(hdr, 0, n).contains(" 200")) return -1;
+
+            javax.net.ssl.SSLSocketFactory f =
+                    (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
+            tls = (javax.net.ssl.SSLSocket) f.createSocket(raw, "speed.cloudflare.com", 443, true);
+            tls.setSoTimeout(6000);
+            tls.startHandshake();
+            tls.getOutputStream().write((
+                    "GET /__down?bytes=" + PROBE_BYTES + " HTTP/1.1\r\n" +
+                            "Host: speed.cloudflare.com\r\nConnection: close\r\n\r\n").getBytes());
+            tls.getOutputStream().flush();
+
+            long t0 = SystemClock.elapsedRealtime();
+            java.io.InputStream in = tls.getInputStream();
+            byte[] buf = new byte[16 * 1024];
+            int total = 0;
+            while (total < PROBE_BYTES) {
+                int r = in.read(buf);
+                if (r <= 0) break;
+                total += r;
+            }
+            long ms = SystemClock.elapsedRealtime() - t0;
+            if (total < MIN_SAMPLE_BYTES) return -1;
+            if (ms < 1) ms = 1;
+            return (long) total * 8L / ms;   // kbps
+        } catch (Throwable t) {
+            return -1;
+        } finally {
+            try { if (tls != null) tls.close(); } catch (Throwable ignored) { }
+            try { raw.close(); } catch (Throwable ignored) { }
+        }
+    }
+
+    /** TCP connect tới host:port (không CONNECT) — để phân biệt "cổng còn mở" với "proxy chết". */    private static boolean tcpAlive(String hostPort) {
         int i = hostPort.lastIndexOf(':');
         if (i <= 0) return false;
         int port;

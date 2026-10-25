@@ -1,0 +1,114 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "remote",
+        "address": "https://1.1.1.1/dns-query",
+        "detour": "node2"
+      },
+      {
+        "tag": "local",
+        "address": "223.5.5.5",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "domain_suffix": [
+          "lan",
+          "local",
+          "miwifi.com",
+          "xiaomi.com",
+          "mi.com",
+          "miui.com"
+        ],
+        "server": "local"
+      },
+      {
+        "query_type": [
+          "A",
+          "AAAA"
+        ],
+        "server": "remote"
+      }
+    ],
+    "final": "remote"
+  },
+  "inbounds": [
+    {
+      "type": "tproxy",
+      "tag": "tproxy-in",
+      "listen": "::",
+      "listen_port": 7893,
+      "sniff": true
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "0.0.0.0",
+      "listen_port": 7890
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "socks",
+      "tag": "node2",
+      "server": "127.0.0.1",
+      "server_port": 1081,
+      "version": "5"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "dns",
+      "tag": "dns-out"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "protocol": "dns",
+        "outbound": "dns-out"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "domain_suffix": [
+          "fptplay.net",
+          "fptplay.vn",
+          "fpt.vn"
+        ],
+        "outbound": "node2"
+      },
+      {
+        "domain_suffix": [
+          "youtube.com",
+          "googlevideo.com",
+          "ytimg.com",
+          "ggpht.com",
+          "googleapis.com"
+        ],
+        "outbound": "node2"
+      },
+      {
+        "domain_suffix": [
+          "miwifi.com",
+          "xiaomi.com",
+          "mi.com",
+          "miui.com"
+        ],
+        "outbound": "direct"
+      }
+    ],
+    "final": "node2",
+    "auto_detect_interface": true
+  }
+}
