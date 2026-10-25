@@ -60,3 +60,14 @@
 - Không đưa credential hysteria (`password`, `obfs`) hay mật khẩu admin vào
   repo/docs. File `node1.json`/`node2.json` chỉ nằm trên thiết bị
   (`/etc/flowvpn/`).
+
+## 7. Bổ sung sau khi test TV thực tế (TV360)
+- TV360 phát hiện VPN của node-1/node-2 ⇒ báo **C-310 "Nội dung chỉ cho phép lãnh thổ
+  Việt Nam"**. Theo tài liệu cũ và test lại: **TV360 chỉ phát được qua node-3**
+  (`socks 1083`), trong khi FPT Play phải đi node-1/node-2 (node-3 bị FPT Play chặn).
+- Cấu hình đã đổi: `*.tv360.vn`, `viettel*`, `vtvcab`, `vtv`, `ateme.*` → relay **node-3**;
+  FPT Play/YouTube/Facebook/TikTok → relay node-1/2 (`node`).
+- Thêm relay node-3 (`node3.json`, `socks 127.0.0.1:1083`) chạy bằng procd
+  `/etc/init.d/flowvpnrelay3`; daemon chỉ đổi `server_port` của outbound `node`
+  (không đụng `node3`).
+- Kết quả: TV360 phát được nội dung; FPT Play (LIVE/Kênh gợi ý) vẫn OK.

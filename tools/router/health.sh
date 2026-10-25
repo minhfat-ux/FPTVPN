@@ -36,7 +36,7 @@ while true; do
     curscore=$(probe $cur); [ "$curscore" = "fail" ] && curscore=999
     if [ "$best" != "$cur" ] && awk "BEGIN{exit !($bestscore*4 < $curscore*3)}"; then
       echo "$(date +%H:%M:%S) SWITCH $cur($curscore) -> $best($bestscore)" >> $LOG
-      sed -i "s/\"server_port\": [0-9]*/\"server_port\": $best/" $CONF
+      sed -i "/\"tag\": \"node\"/,/}/ s/\"server_port\": [0-9]*/\"server_port\": $best/" $CONF
       if sing-box check -c $CONF >/dev/null 2>&1; then
         echo $best > $STATE; cur=$best; /etc/init.d/sing-box restart >/dev/null 2>&1
       fi
