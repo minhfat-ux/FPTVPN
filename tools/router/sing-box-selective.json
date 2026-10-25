@@ -25,7 +25,6 @@
         "tiktok.com","tiktokcdn.com","tiktokv.com","tiktokcdn-us.com","ibytedtos.com","byteoversea.com","muscdn.com",
         "twitter.com","x.com","twimg.com","telegram.org","t.me","telegram.me","whatsapp.com","whatsapp.net","signal.org",
         "ipinfo.io","ipify.org","ipapi.co","ifconfig.me","myip.com","ip.sb","seeip.org","ipwho.is","ip-api.com","checkip.amazonaws.com"], "outbound": "node3" },
-      { "port": 443, "outbound": "node3" }
     ],
     "final": "direct",
     "auto_detect_interface": true

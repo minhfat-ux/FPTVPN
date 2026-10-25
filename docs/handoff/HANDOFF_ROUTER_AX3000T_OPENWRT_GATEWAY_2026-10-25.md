@@ -97,3 +97,17 @@
 - Chia route theo tốc độ: TV360 + FPT Play KHÔNG cùng node — TV360 → node-3; FPT Play → node-1;
   YouTube/Google/Facebook/TikTok/… + catch-all 443 → **node-3** (nhanh nhất).
 - Giới hạn: video HD có thể vẫn giật khi đường relay yếu; muốn mượt cần node/kênh có uplink tốt hơn.
+
+## 10. FPT Play lỗi "Hệ thống tạm thời chưa thể xử lý" — bỏ catch-all 443
+- Triệu chứng: FPT Play mở app nhưng báo "Thao tác không thực hiện được / Hệ thống tạm thời
+  chưa thể xử lý yêu cầu"; log sing-box: relay `socks5 request rejected, code=4` cho các
+  kết nối tới **IP CDN** `103.78.126.19x:443`.
+- Nguyên nhân: FPT Play lấy danh sách IP CDN từ API rồi **kết nối thẳng bằng IP**; rule
+  catch-all `port 443 -> node` đẩy các kết nối IP này vào relay, mà relay chỉ nhận đích dạng
+  domain ⇒ reject ⇒ app lỗi.
+- Xử lý: **bỏ catch-all `port 443`** khỏi route. Kết nối IP không khớp domain rơi về
+  `final: direct` ⇒ CDN FPT Play đi thẳng, app chạy lại; các domain quốc tế vẫn khớp rule
+  domain → node.
+- Đo lại: FPT Play có nội dung; TV360 `C-310` = 0; transparent `google/generate_204` = 204,
+  `facebook.com` = 200.
+- TV giữ proxy `192.168.1.1:18081` (router) để app đi qua mixed inbound (domain-based).
