@@ -1,0 +1,11 @@
+#!/bin/sh
+# Dat vao /etc/hotplug.d/iface/99-flowvpn tren router OpenWrt.
+# Khi WAN len lai sau khi mang toa nha rot: restart relay + watchdog de tuyen lai ngay.
+[ "$ACTION" = "ifup" ] || exit 0
+case "$INTERFACE" in wan|wan6)
+  sleep 2
+  /etc/init.d/flowvpnrelay1 restart >/dev/null 2>&1
+  /etc/init.d/flowvpnrelay3 restart >/dev/null 2>&1
+  /etc/init.d/flowvpnhealth restart >/dev/null 2>&1
+  logger -t flowvpn "WAN ifup -> restart relay1/3 + watchdog"
+;; esac

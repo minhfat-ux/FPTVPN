@@ -146,3 +146,16 @@ Xử lý:
 - `127.0.0.1:1085 connection refused` (sai cổng node3): **0**.
 - Tunnel drop (`i/o timeout`): **0** trong cửa sổ theo dõi.
 - **TV: `RD_002` = 0** trong ~10 phút xem ⇒ nguyên nhân đã xử lý đúng.
+
+## 13. Tự khôi phục sau khi mạng toà nhà rớt (nguyên nhân RD_002 tái diễn)
+- Quan sát: FPT Play xem ổn ~30 phút rồi RD_002. Health log có đúng một nhịp `node1 FAIL` —
+  khớp thời điểm license FPT Play (~30 phút) cần làm mới, nhưng tunnel node-1 vừa rớt ⇒ renewal fail.
+- Nguyên nhân gốc: **mạng toà nhà chập chờn** làm các WS relay chết im lặng (link chết nhưng process sống).
+- Đã thêm tự khôi phục:
+  1. `/etc/hotplug.d/iface/99-flowvpn`: khi `wan` **ifup** ⇒ restart relay1/relay3 + watchdog ngay
+     (không chờ probe).
+  2. Watchdog mới: kiểm tra WAN trước (`ping 192.168.100.1`); WAN down thì chỉ log, không restart
+     relay (tránh thrash); WAN up thì probe 20 s/lần, **2 lần fail liên tiếp** ⇒ restart relay.
+  3. Bỏ cron restart định kỳ 12 phút (gây blip vô ích); giữ procd respawn cho relay.
+- Kỳ vọng: sau khi mạng toà nhà rớt, relay tự nối lại trong vài giây; FPT Play bấm "Thử lại"
+  là phát tiếp (tối đa ~1 phút gián đoạn).
