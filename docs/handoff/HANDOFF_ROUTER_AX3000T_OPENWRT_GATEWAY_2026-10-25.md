@@ -216,3 +216,22 @@ Xử lý:
   applovin.com, unity3d.com`.
 - Đo từ router sau khi đổi: proxy 65–125 KB/s (dao động), FPT Play `301`, RAM trống ~11 MB.
 - Giới hạn: băng thông đường VN (Cloudflare WS) là trần; muốn hơn phải đổi exit/hạ tầng.
+
+## 17. TVFlow Home 3.10 — sửa rule chọn gateway (TV không nhảy sang máy mất mạng)
+- Triệu chứng: TV nhảy `http_proxy` sang gateway Windows `192.168.1.106:18081` dù máy đó không có internet;
+  FPT Play đứt.
+- Nguyên nhân trong code cũ (3.9):
+  1. `LocalGatewayProxy.probe()` chỉ CONNECT rồi đọc chữ " 200" — proxy **mở cổng nhưng upstream chết**
+     vẫn trả 200 nên bị coi là "sống" (và LAN nhanh ~1 ms nên luôn thắng router ~2 s).
+  2. `ensureProxy()` chạy **trên main thread** ⇒ mọi probe ném `NetworkOnMainThreadException`, bị catch
+     im lặng ⇒ lớp quản lý proxy của launcher thực tế **chưa từng hoạt động**.
+  3. Danh sách gateway hardcode dải `192.168.100.x` (mạng nhà), không có gateway router `192.168.1.1`.
+- Sửa trong 3.10 (versionCode 31):
+  - Probe **end-to-end**: `GET http://www.gstatic.com/generate_204` qua gateway, phải nhận `204` thật
+    (timeout 3,5 s) ⇒ gateway mất mạng bị loại.
+  - Chạy `ensureProxy()` trên **thread nền** (`kickProxy`, có cờ chống chồng).
+  - Gateway ứng viên lấy **gateway mặc định của mạng hiện tại** (`ConnectivityManager`/`LinkProperties`)
+    trước, rồi mới tới danh sách cũ; giữ nguyên sticky 2 lần fail.
+  - Cần `pm grant com.tvflow.launcher android.permission.WRITE_SECURE_SETTINGS` (grant không tự có sau khi cài).
+- Kiểm chứng: đặt `http_proxy=192.168.1.106:18081` (chết) ⇒ trong ~7 s tự về `192.168.1.1:18081`;
+  FPT Play load nội dung bình thường trên TV.

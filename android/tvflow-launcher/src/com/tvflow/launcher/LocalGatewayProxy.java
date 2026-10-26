@@ -1,5 +1,10 @@
 package com.tvflow.launcher;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.RouteInfo;
 import android.os.SystemClock;
 import android.util.Log;
 
@@ -22,15 +27,59 @@ import java.net.Socket;
 public class LocalGatewayProxy {
     private static final String TAG = "TVFlowProxy";
     private static final int LISTEN_PORT = 18081;
-    // Mặc định ưu tiên Windows (.5) vì ổn định khi xem video; TV360 đi riêng .6 (có route).
-    // .101 = điện thoại (VPNFlow gateway) — đang nhanh nhất; .5 Windows; .6 Mac (chậm do Wi-Fi 2.4G).
-    private static final String[] GATEWAYS = {
+    // Gateway CÙNG MẠNG được dò động từ default route (router nhà / Mac / Windows / phone...).
+    private static final String[] KNOWN_GATEWAYS = {
+            "192.168.1.1:18081",
             "192.168.100.101:18081", "192.168.100.5:18081",
             "192.168.100.6:18081", "192.168.100.11:18081"};
-    /** Đuôi tên miền phải đi gateway CÓ ROUTE riêng (Mac .6 có `.tv360.vn -> Flow3/node-3`). */
+    /** Đuôi tên miền phải đi gateway chính (router có route `.tv360.vn -> node-3`). */
     private static final String[] ROUTED_SUFFIXES = {".tv360.vn"};
-    /** Gateway ưu tiên cho các đuôi trên (chỉ .6 có route TV360). */
-    private static final String ROUTED_GATEWAY = "192.168.100.6:18081";
+    private static volatile Context appCtx;
+
+    /** Cần gọi trước start() để biết gateway cùng mạng. */
+    public static void init(Context c) {
+        if (c != null) appCtx = c.getApplicationContext();
+    }
+
+    /** IP gateway mặc định của mạng TV đang nối (VD 192.168.1.1), hoặc null. */
+    private static String localGatewayIp() {
+        try {
+            if (appCtx == null) return null;
+            ConnectivityManager cm = (ConnectivityManager)
+                    appCtx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return null;
+            Network[] nets = cm.getAllNetworks();
+            if (nets == null) return null;
+            for (Network n : nets) {
+                LinkProperties lp = cm.getLinkProperties(n);
+                if (lp == null) continue;
+                for (RouteInfo r : lp.getRoutes()) {
+                    if (r.isDefaultRoute() && r.getGateway() != null) {
+                        String ip = r.getGateway().getHostAddress();
+                        if (ip != null && !ip.contains(":")) return ip;
+                    }
+                }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+
+    /** Gateway chính cùng mạng (ip:18081) hoặc fallback. */
+    private static String routedGateway() {
+        String ip = localGatewayIp();
+        return ip != null ? ip + ":18081" : "192.168.1.1:18081";
+    }
+
+    /** Danh sách ứng viên: gateway cùng mạng trước, rồi các máy đã biết. */
+    private static java.util.LinkedHashSet<String> candidates() {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        String local = routedGateway();
+        if (local != null) out.add(local);
+        for (String gw : KNOWN_GATEWAYS) out.add(gw);
+        String cur = best;
+        if (cur != null) out.add(cur);
+        return out;
+    }
     private static final long CACHE_MS = 4_000L;
     private static final long CONNECT_TIMEOUT_MS = 1_200L;
 
@@ -208,13 +257,13 @@ public class LocalGatewayProxy {
         if (host != null) {
             for (String suffix : ROUTED_SUFFIXES) {
                 if (host.endsWith(suffix) || host.equals(suffix.substring(1))) {
-                    out.add(ROUTED_GATEWAY);
+                    out.add(routedGateway());
                 }
             }
         }
         String bestNow = pick();
         if (bestNow != null) out.add(bestNow);
-        for (String gw : GATEWAYS) out.add(gw);
+        for (String gw : candidates()) out.add(gw);
         return out.toArray(new String[0]);
     }
 
@@ -223,12 +272,13 @@ public class LocalGatewayProxy {
         if (host != null) {
             for (String suffix : ROUTED_SUFFIXES) {
                 if (host.endsWith(suffix) || host.equals(suffix.substring(1))) {
-                    if (probe(ROUTED_GATEWAY) >= 0) {
-                        best = ROUTED_GATEWAY;
+                    String rg = routedGateway();
+                    if (probe(rg) >= 0) {
+                        best = rg;
                         bestAt = SystemClock.elapsedRealtime();
-                        return ROUTED_GATEWAY;
+                        return rg;
                     }
-                    Log.w(TAG, "route " + suffix + ": gateway " + ROUTED_GATEWAY + " chết");
+                    Log.w(TAG, "route " + suffix + ": gateway " + rg + " chết");
                 }
             }
         }
@@ -254,7 +304,7 @@ public class LocalGatewayProxy {
         String fast = null;
         long fastMs = Long.MAX_VALUE;
         long curMs = -1;
-        for (String gw : GATEWAYS) {
+        for (String gw : candidates()) {
             long ms = probe(gw);
             if (ms < 0) continue;
             if (gw.equals(cur)) curMs = ms;
@@ -278,7 +328,11 @@ public class LocalGatewayProxy {
 
     private static boolean found(String gw) { return gw != null; }
 
-    /** CONNECT thật tới gstatic: proxy mở cổng nhưng upstream chết vẫn trả 502. */
+    /**
+     * Probe END-TO-END bằng HTTP proxy thật (absolute-URI GET):
+     * phải nhận " 204" thật từ generate_204. Proxy "mở cổng nhưng upstream chết"
+     * (Windows gateway mất mạng) sẽ treo/không trả 204 => bị loại.
+     */
     private static long probe(String hostPort) {
         int i = hostPort.lastIndexOf(':');
         if (i <= 0) return -1;
@@ -287,20 +341,36 @@ public class LocalGatewayProxy {
         try {
             s.connect(new InetSocketAddress(hostPort.substring(0, i),
                     Integer.parseInt(hostPort.substring(i + 1))), (int) CONNECT_TIMEOUT_MS);
-            s.setSoTimeout(4000);
-            s.getOutputStream().write((
-                    "CONNECT www.youtube.com:443 HTTP/1.1\r\n" +
-                            "Host: www.youtube.com:443\r\n\r\n").getBytes());
-            s.getOutputStream().flush();
-            byte[] buf = new byte[96];
-            int n = s.getInputStream().read(buf);
-            if (n <= 0 || !new String(buf, 0, n).contains(" 200")) return -1;
+            s.setSoTimeout(3500);
+            OutputStream out = s.getOutputStream();
+            out.write(("GET http://www.gstatic.com/generate_204 HTTP/1.1\r\n" +
+                    "Host: www.gstatic.com\r\nConnection: close\r\n\r\n").getBytes());
+            out.flush();
+            boolean ok = readContains(s.getInputStream(), " 204", 640);
+            if (!ok) return -1;
             return SystemClock.elapsedRealtime() - t0;
         } catch (Throwable t) {
             return -1;
         } finally {
             close(s);
         }
+    }
+
+    /** Đọc tới khi gặp chuỗi cần tìm (hoặc hết max byte). */
+    private static boolean readContains(InputStream in, String needle, int max) {
+        byte[] buf = new byte[128];
+        StringBuilder sb = new StringBuilder();
+        int total = 0;
+        try {
+            while (total < max) {
+                int n = in.read(buf, 0, buf.length);
+                if (n <= 0) break;
+                total += n;
+                sb.append(new String(buf, 0, n));
+                if (sb.indexOf(needle) >= 0) return true;
+            }
+        } catch (Throwable ignored) { }
+        return false;
     }
 
     private static void close(Socket s) {
