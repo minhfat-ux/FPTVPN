@@ -102,3 +102,6 @@ iOS/Frameworks/
 tools/router-gateway/dist/
 tools/router-gateway/relay-dist/
 
+android/tvflow-launcher/TVFlowHome.apk
+android/tvflow-launcher/TVFlowHome.apk.idsig
+android/tvflow-launcher/build/
