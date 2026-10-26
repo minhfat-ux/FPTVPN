@@ -206,3 +206,13 @@ Xử lý:
     dùng IPv4 ⇒ mọi kết nối đều đi qua TPROXY/proxy.
   - Đo lại: `www.netflix.com` qua proxy `302` (~3 s), FPT Play `301` (không ảnh hưởng).
 - Nếu sau này cần IPv6 nội bộ, phải làm TPROXY cho IPv6 hoặc bỏ filter AAAA.
+
+## 16. Tối ưu thêm cho HD (chọn node theo băng thông, giảm tải tunnel)
+- Daemon chọn node nay đo **băng thông thật** (600 KB qua socks mỗi ~5 phút) giữa node-1/node-2;
+  đổi node khi node kia nhanh hơn ≥25% và >20 KB/s. node-3 cố định cho TV360.
+- Quốc tế chung (YouTube/Google/Facebook/TikTok/FPT Play) đi **node nhanh nhất**, không ghim node-3.
+- Telemetry/quảng cáo đi thẳng để giảm tải tunnel: `miwifi.com, xiaomi.com, mi.com, adsplay.net,
+  doubleclick.net, googleadservices.com, googletagmanager.com, google-analytics.com, crashlytics.com,
+  applovin.com, unity3d.com`.
+- Đo từ router sau khi đổi: proxy 65–125 KB/s (dao động), FPT Play `301`, RAM trống ~11 MB.
+- Giới hạn: băng thông đường VN (Cloudflare WS) là trần; muốn hơn phải đổi exit/hạ tầng.

@@ -7,25 +7,26 @@
     { "type": "direct", "tag": "dns-in", "listen": "127.0.0.1", "listen_port": 5353 }
   ],
   "outbounds": [
-    { "type": "socks", "tag": "node", "server": "127.0.0.1", "server_port": 1085, "version": "5" },
-    { "type": "socks", "tag": "node3", "server": "127.0.0.1", "server_port": 1083, "version": "5" },
+    { "type": "socks", "tag": "node", "server": "127.0.0.1", "server_port": 1081, "version": "5" },
+    { "type": "socks", "tag": "node3", "server": "127.0.0.1", "server_port": 1081, "version": "5" },
     { "type": "direct", "tag": "direct" }
   ],
   "route": {
     "rules": [
       { "inbound": "dns-in", "action": "hijack-dns" },
       { "inbound": "tproxy-in", "action": "sniff", "timeout": "3s" },
+      { "domain_suffix": ["miwifi.com","xiaomi.com","mi.com","adsplay.net","doubleclick.net","googleadservices.com","crashlytics.com","applovin.com","unity3d.com"], "outbound": "direct" },
       { "ip_is_private": true, "outbound": "direct" },
       { "ip_cidr": ["103.78.126.0/23","103.78.127.0/24","103.116.120.0/23","103.116.121.0/24"], "outbound": "direct" },
       { "domain_suffix": ["tv360.vn","viettel.vn","vietteltelecom.vn","vtvcab.vn","vtv.vn","ateme.com","ateme.tv"], "outbound": "node3" },
       { "domain_suffix": ["fptplay.net","fptplay.vn","fpt.vn"], "outbound": "node" },
       { "domain_suffix": ["netflix.com","netflix.net","nflxext.com","nflximg.com","nflximg.net","nflxso.net","nflxvideo.net","youtube.com","googlevideo.com","ytimg.com","ggpht.com","googleapis.com","yt.be","googlesyndication.com","gstatic.com",
-        "google.com","google.com.vn","googleusercontent.com","googletagmanager.com","google-analytics.com","gmail.com","gvt1.com","gvt2.com","firebaseio.com","firebaseapp.com","firebase.com",
+        "google.com","google.com.vn","googleusercontent.com","gmail.com","gvt1.com","gvt2.com","firebaseio.com","firebaseapp.com","firebase.com",
         "chatgpt.com","openai.com","oaistatic.com","oaiusercontent.com",
         "facebook.com","facebook.net","fbcdn.net","fb.me","messenger.com","instagram.com","cdninstagram.com",
         "tiktok.com","tiktokcdn.com","tiktokv.com","tiktokcdn-us.com","ibytedtos.com","byteoversea.com","muscdn.com",
-        "twitter.com","x.com","twimg.com","telegram.org","t.me","telegram.me","whatsapp.com","whatsapp.net","signal.org"], "outbound": "node3" },
-      { "port": 443, "outbound": "node3" }
+        "twitter.com","x.com","twimg.com","telegram.org","t.me","telegram.me","whatsapp.com","whatsapp.net","signal.org"], "outbound": "node" },
+      { "port": 443, "outbound": "node" }
     ],
     "final": "direct",
     "auto_detect_interface": true

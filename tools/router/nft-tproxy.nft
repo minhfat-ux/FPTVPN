@@ -1,0 +1,10 @@
+table inet singbox {
+  chain prerouting {
+    type filter hook prerouting priority mangle; policy accept;
+    ip daddr { 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4 } return
+    ip daddr 255.255.255.255 return
+    udp dport 67 return
+    udp dport 68 return
+    meta l4proto { tcp, udp } tproxy ip to :7893 meta mark set 0x1 accept
+  }
+}
