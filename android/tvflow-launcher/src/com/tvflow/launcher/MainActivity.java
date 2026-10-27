@@ -115,6 +115,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        try { com.tvflow.launcher.HomeWatcherService.homeShown(); } catch (Throwable ignored) { }
         startHomeGuard();
         updateClock();
         handler.removeCallbacks(tick);
@@ -131,6 +132,7 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        try { com.tvflow.launcher.HomeWatcherService.homeHidden(); } catch (Throwable ignored) { }
         super.onPause();
         handler.removeCallbacks(tick);
     }

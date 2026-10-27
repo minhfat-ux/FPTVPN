@@ -1,6 +1,13 @@
 package com.tvflow.launcher;
 
 import android.accessibilityservice.AccessibilityService;
+import android.graphics.PixelFormat;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.ImageView;
 import android.content.Intent;
 import android.view.accessibility.AccessibilityEvent;
 
@@ -17,8 +24,24 @@ public class HomeWatcherService extends AccessibilityService {
     private static final String TAG = "TVFlowWatch";
     private static final String XIAOMI_HOME = "com.mitv.tvhome";
     private long lastBounce = 0L;
+    private static final String TUBEFLOW = "org.smarttube.stable";
+    private static volatile HomeWatcherService inst;
+    private static volatile boolean homeVisible;
+    private View logoView;
+    private final Handler logoHandler = new Handler(Looper.getMainLooper());
+
+    public static void homeShown() {
+        homeVisible = true;
+        HomeWatcherService s = inst;
+        if (s != null) s.hideLogo();
+    }
+
+    public static void homeHidden() {
+        homeVisible = false;
+    }
 
     @Override protected void onServiceConnected() {
+        inst = this;
         super.onServiceConnected();
         android.util.Log.i(TAG, "accessibility đã nối");
         // Cửa vào THỨ HAI lúc TV vừa bật: hệ thống tự khởi động lại accessibility service sau
@@ -44,6 +67,14 @@ public class HomeWatcherService extends AccessibilityService {
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
+        // Bao cho overlay biet app dang o tien canh (chi ve logo khi FPT Tubeflow).
+        String pkg = event.getPackageName().toString();
+        if (getPackageName().equals(pkg)) {
+            if (homeVisible) hideLogo();
+            return;
+        }
+        boolean tube = TUBEFLOW.equals(pkg);
+        if (tube) showLogo(); else hideLogo();
         if (!XIAOMI_HOME.contentEquals(event.getPackageName())) return;
         long now = android.os.SystemClock.elapsedRealtime();
         if (now - lastBounce < 400) return;   // chống dội
@@ -59,4 +90,45 @@ public class HomeWatcherService extends AccessibilityService {
     }
 
     @Override public void onInterrupt() { }
+
+    private int dp(float v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    /** Overlay logo FPT (TYPE_ACCESSIBILITY_OVERLAY: khong can quyen SYSTEM_ALERT_WINDOW). */
+
+    private void showLogo() {
+        if (logoView != null) return;
+        try {
+            WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+            ImageView iv = new ImageView(this);
+            iv.setImageResource(R.drawable.fpt_logo);
+            iv.setAlpha(0.85f);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                    dp(84), dp(30),
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.TOP | Gravity.END;
+            lp.x = dp(20); lp.y = dp(16);
+            wm.addView(iv, lp);
+            logoView = iv;
+        } catch (Throwable ignored) { }
+    }
+
+    private void hideLogo() {
+        if (logoView == null) return;
+        try {
+            WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+            wm.removeView(logoView);
+        } catch (Throwable ignored) { }
+        logoView = null;
+    }
+
+    @Override public void onDestroy() {
+        hideLogo();
+        super.onDestroy();
+    }
 }

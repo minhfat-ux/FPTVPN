@@ -235,3 +235,15 @@ Xử lý:
   - Cần `pm grant com.tvflow.launcher android.permission.WRITE_SECURE_SETTINGS` (grant không tự có sau khi cài).
 - Kiểm chứng: đặt `http_proxy=192.168.1.106:18081` (chết) ⇒ trong ~7 s tự về `192.168.1.1:18081`;
   FPT Play load nội dung bình thường trên TV.
+
+## 19. TVFlow Home 3.15 — overlay logo FPT khi xem FPT Tubeflow
+- Yêu cầu: khi chạy **FPT Tubeflow** (`org.smarttube.stable`) luôn có logo FPT nhỏ overlay trên video.
+- Cách làm: `HomeWatcherService` (AccessibilityService đã bật sẵn) nhận `TYPE_WINDOW_STATE_CHANGED`;
+  khi package == `org.smarttube.stable` thì `addView` một `ImageView` logo `res/drawable-nodpi/fpt_logo.png`
+  kiểu **`TYPE_ACCESSIBILITY_OVERLAY`** (không cần quyền SYSTEM_ALERT_WINDOW), góc phải trên, alpha 0,85,
+  không focus/không chạm. Khi app khác lên foreground thì gỡ overlay.
+- Chống vòng lặp tự ẩn: bỏ qua event do chính package launcher phát ra (cửa sổ overlay của mình),
+  chỉ ẩn overlay khi `MainActivity` của launcher resume (hook `homeShown/homeHidden`).
+- Đã cài 3.15 trên 2 TV công ty reachable (`.109`, `.113`); TV `.115` cần bật lại ADB (Android 9 mất
+  ADB-over-TCP sau reboot); TV nhà chưa cài (khác mạng).
+- Lưu ý: logo hiển thị khi Tubeflow ở foreground (kể cả menu); ẩn khi về TVFlow Home.
