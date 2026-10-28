@@ -421,3 +421,21 @@ ESTABLISHED; health log không còn restart/failover.
 - **v4.5**: chặn `setport ""` (khi không relay nào OK) — trước đó có thể ghi `server_port":` rỗng làm
   hỏng config.json; nay chỉ đổi khi `pick_node` trả về tên relay hợp lệ, còn lại mới restart relay
   (rate-limit 15 phút).
+
+## 26. Mất internet toàn nhà 16:00 28/10 — cả 3 relay cùng chết + catch-all 443 đi tunnel
+
+Triệu chứng: router còn ping được, DNS còn, nhưng mọi máy LAN không vào được internet.
+
+Nguyên nhân:
+- Cả 3 relay cùng lúc không chở dữ liệu (vn2hy không mở được WS, vn1hy/vn3hy vừa restart mới sống).
+- Rule `{ "port": 443, "outbound": "node3" }` (catch-all) đẩy **toàn bộ HTTPS của cả nhà** qua tunnel
+  ⇒ tunnel chết là mất internet, dù đường direct vẫn tốt (`gstatic` 204, `vnexpress` 404 ngay).
+
+Sửa:
+- Catch-all 443 → **direct**. Giờ chỉ các domain trong danh sách (FPT Play, Facebook, ChatGPT, Gemini,
+  YouTube/Netflix, TV360...) đi tunnel; web Việt Nam và phần còn lại đi trực tiếp ⇒ tunnel có hỏng thì
+  nhà vẫn có internet.
+- Khởi động lại 3 relay (1085/1083 sống lại; 1081 vẫn lỗi path vn2hy).
+- Kiểm chứng: google 200, facebook 200, fptplay 200, gemini 200; tv/phone vẫn ESTABLISHED.
+- Lưu ý: TV360 CDN theo IP trước đây nhờ catch-all đi node3; nay đi direct — cần test lại TV360,
+  nếu lỗi thì thêm ip_cidr CDN của TV360 → node3.
