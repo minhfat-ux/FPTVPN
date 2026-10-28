@@ -41,6 +41,12 @@
   `curl --socks5 127.0.0.1:1081 --resolve ios.prod.ftl.netflix.com:443:<IP> https://ios.prod.ftl.netflix.com/`.
 - Xray v26 Reality không tương thích sing-box 1.14 client; dùng **Xray v24.9.30**, dest `www.cloudflare.com`.
 
-## 6. Trạng thái đã kiểm chứng (29/10 rạng sáng)
+## 6. TRẠNG THÁI CHỐT — đã chạy được (29/10 sáng)
+Đã xác nhận với chủ nhà: **Netflix app trên iPad lên được** sau khi đổi catch-all 443 → `auto`.
+Snapshot cuối: `netflix/vn 200 · fptplay 200 · tv360 reachable · facebook 200 · google 200 · vnexpress 200`,
+TV 19 kết nối, iPad 51 kết nối, relay 3/3, `sing-box check` OK.
+Không đổi gì thêm cho tới khi có lỗi cụ thể — mỗi lần đổi phải `cp config.json config.json.good` + `sing-box check`.
+
+## 6b. Trạng thái cũ (để đối chiếu)
 fptplay 200 · netflix/vn 200 · tv360 ws 404 (reachable) · facebook/google/gemini 200 · chatgpt 200 (UA trình duyệt).
 TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nhập/DRM của app (đã từng sửa bằng `pm clear com.viettel.tv360.tv`).
