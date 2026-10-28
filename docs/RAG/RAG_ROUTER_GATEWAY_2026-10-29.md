@@ -92,3 +92,10 @@ TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nh�
 - Reality đo 680–941 KB/s; relay Cloudflare chỉ 7–215 KB/s → **ưu tiên Reality**.
 - TV **không còn proxy** (đã xoá `http_proxy`), đi tproxy trong suốt.
 - **KHÔNG đổi gì thêm** trừ khi chủ nhà báo lỗi mới. Mọi thay đổi: `cp config.json config.json.good` → `sing-box check` → restart.
+
+## 10. NGHIỆM THU 29/10 — chủ nhà xác nhận TỐT
+- FPT Play (TV): "chạy được, chất lượng tốt" — đi `auto` = Reality.
+- Netflix (iPad app): "chạy được" — đi `auto` = Reality.
+- TV360 (TV): "chất lượng tốt" — đi `node3` (1083); ADB xác nhận `media_session state=PLAYING`.
+- TV đã bỏ proxy (`http_proxy=:0`), đi tproxy trong suốt.
+- Kết quả nghiệm thu tạm thời: **TỐT**. Không thay đổi cấu hình thêm.
