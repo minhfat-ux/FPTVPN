@@ -408,3 +408,16 @@ Vấn đề: đường FPT→Cloudflare/VPS thay đổi liên tục trong ngày 
 
 Kiểm chứng sau deploy (15:08): load 0,26; `fpt=200 fb=200 chatgpt=200 gemini=200`; TV 14 kết nối
 ESTABLISHED; health log không còn restart/failover.
+
+## 25. Watchdog v4.3–v4.5: không đổi đường khi đang xem + ứng cứu mọi relay (2026-10-28 tối)
+
+- **v4.3**: e2e FPT Play kiểm mỗi ~20 s (trước 60 s); khi `MODE=udp` mà e2e hỏng 3 lần →
+  **quay về wsrelay ngay, không restart relay trước** (trước đây restart relay rồi mới revert =
+  gián đoạn 2 lần, đúng lúc khách thấy "mất"). Bỏ tự động thử udp (UDP bị FPT chặn sau ~7 phút,
+  tự chuyển sẽ tạo drop mỗi 7 phút); udp chỉ bật tay khi cần.
+- **v4.4**: node ladder mở rộng `1081 1085 1083` + `pick_node()` probe lần lượt relay còn lại →
+  tự ứng cứu sang relay nào còn sống. Ca thật tối 28/10: vn1hy/vn2hy không chở dữ liệu (bench "no bytes"),
+  chỉ vn3hy sống; watchdog chuyển `node` sang **1083** và mạng LAN có lại (e2e 200, TV/phone ESTABLISHED).
+- **v4.5**: chặn `setport ""` (khi không relay nào OK) — trước đó có thể ghi `server_port":` rỗng làm
+  hỏng config.json; nay chỉ đổi khi `pick_node` trả về tên relay hợp lệ, còn lại mới restart relay
+  (rate-limit 15 phút).

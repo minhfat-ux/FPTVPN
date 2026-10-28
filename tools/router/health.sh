@@ -16,7 +16,7 @@ STATE=/tmp/flowvpn-node
 MODE=/tmp/relay-transport
 LOG=/var/log/flowvpn-health.log
 CURL=/usr/bin/curl
-NODES="1081 1085"
+NODES="1081 1085 1083"
 CF_LIST="104.17.232.29 172.64.80.1 188.114.96.1 104.18.32.115 104.26.10.78 104.21.83.112 172.67.175.138 104.16.132.229"
 LOCKDIR=/tmp/health.lock
 PROXY=http://127.0.0.1:18081
@@ -45,6 +45,14 @@ probe() {
 port_open() { netstat -ltn 2>/dev/null | grep -q ":$1 "; }
 relay_for() { case $1 in 1081) echo 2 ;; 1085) echo 1 ;; 1083) echo 3 ;; esac; }
 other_node() { [ "$cur" = "1081" ] && echo 1085 || echo 1081; }
+pick_node() { # thu lan luot cac relay con lai, tra ve cai dau tien tra loi
+  for n in 1081 1085 1083; do
+    [ "$n" = "$cur" ] && continue
+    r=$(probe $n "https://www.youtube.com/generate_204")
+    case "$r" in fail|"") ;; *) echo $n; return ;; esac
+  done
+  echo ""
+}
 setport() {
   sed -i "/\"tag\": \"node\"/,/}/ s/\"server_port\": [0-9]*/\"server_port\": $1/" $CONF
   sing-box check -c $CONF >/dev/null 2>&1 && /etc/init.d/sing-box restart >/dev/null 2>&1 && echo $1 > $STATE
@@ -97,7 +105,7 @@ dns_bad() { # 0 = can chay lai dns-clean
 }
 
 f_node=0; f3=0; dead=0; last_fo=0; sb_f=0; last_sw=0; last_cf=0; cf_f=0; dfail=0; i=0
-e2e_f=0; last_e2e_sw=0; last_dns=0; last_tr=0
+e2e_f=0; last_e2e_sw=0; last_dns=0; last_tr=0; last_relay_restart=0; last_relay3=0
 while true; do
   i=$((i+1))
   lk=$(cat $LOCKDIR/pid 2>/dev/null)
@@ -158,44 +166,54 @@ while true; do
   r=$(probe $cur "https://www.youtube.com/generate_204")
   case "$r" in fail|"")
     f_node=$((f_node+1)); log "node $cur FAIL ($f_node)"
-    if [ "$f_node" -ge 3 ]; then
-      rl=$(relay_for $cur); log "restart relay$rl for node $cur"
-      /etc/init.d/flowvpnrelay$rl restart >/dev/null 2>&1
+    if [ "$f_node" -ge 4 ] && ! e2e; then
+      now2=$(date +%s)
+      if [ $((now2-last_relay_restart)) -ge 900 ]; then
+        rl=$(relay_for $cur); log "restart relay$rl for node $cur (e2e hong)"; last_relay_restart=$now2
+        /etc/init.d/flowvpnrelay$rl restart >/dev/null 2>&1
+      else
+        log "node $cur fail nhung vua restart relay, bo qua"
+      fi
       f_node=0; sleep 12
-      r2=$(probe $cur "https://www.youtube.com/generate_204")
-      case "$r2" in fail|"")
-        now2=$(date +%s)
-        if [ $((now2-last_sw)) -ge 900 ]; then nb=$(other_node); log "SWITCH node $cur -> $nb"; last_sw=$now2; setport $nb && cur=$nb; fi ;;
-      esac
     fi ;;
   *) f_node=0 ;;
   esac
 
   # --- node3 (TV360)
   r3=$(probe 1083 "https://ws.tv360.vn/")
-  case "$r3" in fail|"") f3=$((f3+1)); [ "$f3" -ge 3 ] && { log "restart relay3"; /etc/init.d/flowvpnrelay3 restart >/dev/null 2>&1; f3=0; } ;;
+  case "$r3" in fail|"")
+    f3=$((f3+1))
+    if [ "$f3" -ge 4 ]; then
+      now3=$(date +%s)
+      if [ $((now3-last_relay3)) -ge 900 ]; then log "restart relay3"; /etc/init.d/flowvpnrelay3 restart >/dev/null 2>&1; last_relay3=$now3; fi
+      f3=0
+    fi ;;
   *) f3=0 ;;
   esac
 
-  # --- END-TO-END (60s): FPT Play qua sing-box
-  if [ "$((i % 3))" -eq 0 ]; then
+  # --- END-TO-END (moi vong ~20s): FPT Play qua sing-box
+  if true; then
     if e2e; then
       e2e_f=0
     else
       e2e_f=$((e2e_f+1)); log "E2E FPT Play FAIL ($e2e_f)"
-      if [ "$e2e_f" -ge 2 ]; then
-        rl=$(relay_for $cur); log "E2E -> restart relay$rl"
-        /etc/init.d/flowvpnrelay$rl restart >/dev/null 2>&1; sleep 15
-        if ! e2e; then
-          now=$(date +%s)
-          if [ $((now-last_e2e_sw)) -ge 900 ]; then
-            last_e2e_sw=$now; nb=$(other_node)
-            log "E2E -> SWITCH node $cur -> $nb"; setport $nb && cur=$nb; sleep 12
+      if [ "$e2e_f" -ge 3 ]; then
+        now=$(date +%s)
+        mode=$(cat $MODE 2>/dev/null)
+        if [ "$mode" = "udp" ]; then
+          # FPT chan UDP -> ve wsrelay NGAY, khong restart relay truoc (tranh gian doan 2 lan)
+          if [ $((now-last_tr)) -ge 60 ]; then
+            last_tr=$now; log "E2E -> udp bi chan, quay ve wsrelay ngay"
+            set_transport wsrelay; sleep 10
           fi
-          if ! e2e && [ "$(cat $MODE 2>/dev/null)" != "udp" ] && [ $(( $(date +%s) - last_tr )) -ge 1800 ]; then
-            last_tr=$(date +%s); log "E2E -> thu transport udp"
-            set_transport udp; sleep 25
-            if ! e2e; then log "E2E -> udp khong duoc, quay lai wsrelay"; set_transport wsrelay; sleep 15; fi
+        else
+          nb=$(pick_node)
+          if [ -n "$nb" ] && [ $((now-last_e2e_sw)) -ge 900 ]; then
+            last_e2e_sw=$now; log "E2E -> SWITCH node $cur -> $nb (relay kia OK)"
+            setport $nb && cur=$nb; sleep 8
+          elif [ $((now-last_relay_restart)) -ge 900 ]; then
+            rl=$(relay_for $cur); log "E2E -> khong relay nao OK, restart relay$rl"; last_relay_restart=$now
+            /etc/init.d/flowvpnrelay$rl restart >/dev/null 2>&1; sleep 12
           fi
         fi
         e2e_f=0
