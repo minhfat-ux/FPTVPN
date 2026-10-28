@@ -347,3 +347,43 @@ Cách sửa: `tools/router/fb-hosts.sh` + `addn-hosts` của dnsmasq:
 Kết quả: `nslookup www.facebook.com 192.168.1.1` → `57.144.64.1`; IP này qua relay = 200 (4 s).
 Lưu ý: sau khi đổi DNS, app Facebook trên phone phải được khởi động lại (hoặc bật/tắt chế độ máy bay)
 để bỏ cache DNS cũ; các TV cũng cần mở lại app.
+
+## 23. Sự cố 28/10 tối: FPT bóp Cloudflare + đầu độc DNS (FB/ChatGPT/Gemini) — trạng thái và bài học
+
+### Đo được (bằng chứng)
+| Đường | Kết quả |
+|---|---|
+| Cloudflare wsrelay (qua CF) | 0,03–0,17 MB/s, lúc thì handshake 13 s rồi **0 byte** |
+| Direct hysteria2 UDP 8443 → VPS | **1,77 MB/s (14 Mbps)** — nhưng sau ~1 h dùng thì FPT chặn (handshake treo) |
+| Direct hysteria2 TCP 443 → VPS (caddy TLS thật) | WS 101 OK, nhưng bench chỉ **0,1–0,2 MB/s** (FPT bóp TCP tới VPS) |
+| FPT DNS (ONT/8.8.8.8/1.1.1.1) | trả IP rác cho Facebook/ChatGPT/Gemini |
+
+### Phát hiện quan trọng: Go TLS bị FPT DPI chặn
+Binary relay build bằng Go 1.26 **không bắt tay TLS được** tới VPS dù `curl` cùng máy chạy tốt
+(`context deadline exceeded`, curl `101`). Nguyên nhân: ClientHello của Go 1.26 có ML-KEM
+(X25519MLKEM768) → gói lớn bị DPI của FPT nuốt. **Sửa: chạy relay với `GODEBUG=tlsmlkem=0`** thì
+bắt tay được ngay. Nếu sau này dùng transport TCP trực tiếp, phải giữ biến này trong init script.
+
+### DNS sạch (thay cho fb-hosts.sh cũ)
+`tools/router/dns-clean.sh` (cron `*/20`): DoH trong tunnel → IP thật → thử qua relay với đúng SNI →
+ghi `/etc/flowvpn/dns-hosts` → HUP dnsmasq. Ba "family":
+- Facebook/Instagram/Messenger → `57.144.64.1` (FB edge VN, qua relay 200)
+- ChatGPT (`chatgpt.com`, `auth.openai.com`, `cdn.oaistatic.com`, `ab.chatgpt.com`) → `104.18.32.47`
+  (200; lưu ý nếu UA lạ sẽ 403 — app dùng UA riêng nên OK)
+- Gemini (`gemini.google.com`, `aistudio.google.com`) → `142.251.152.2` (200, TTFB ~7 s)
+
+Kết quả kiểm chứng: `nslookup` qua router trả đúng 3 IP trên; `chatgpt.com` (UA trình duyệt) = 200,
+`gemini.google.com` = 200, `facebook.com` = 200.
+
+### Trạng thái cuối
+- Transport: **wsrelay qua Cloudflare** (`MODE=wsrelay`), CF IP `104.17.232.29` (health.sh tự dò IP sống).
+- `node` (FPT Play, FB, ChatGPT, Gemini…) = **1081** (node2) vì node1 (1085) đang lỗi link.
+- Watchdog 1 instance, không restart relay trừ khi hỏng thật.
+- TV: FPT Play cần **khởi động lại app** sau khi mạng đứt lâu; app tự retry thì vẫn lên.
+
+### Bài học
+1. IP rác do DNS đầu độc là nguyên nhân chính của "app không vào được" — kiểm tra `nslookup` qua router
+   trước khi nghi tunnel.
+2. Không dùng Go build >1.24 cho TLS ra ngoài nếu DPI khó tính — phải `GODEBUG=tlsmlkem=0`.
+3. FPT bóp mọi đường tới VPS (UDP 8443 sau ~1 h, TCP 443 ~0,1 MB/s) ⇒ muốn nhanh ổn định phải có
+   exit qua nhà cung cấp khác/HK.
