@@ -81,3 +81,14 @@ TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nh�
 2. Đo đường: `curl -x http://127.0.0.1:18081 "https://speed.cloudflare.com/__down?bytes=2000000" -w "%{speed_download}"` (phải >300 KB/s).
 3. `pm list packages -d | grep tvmanager` (phải có) + `dumpsys deviceidle whitelist | grep fptplay`.
 4. Nếu vẫn lỗi DRM/cache: `pm clear net.fptplay.ottbox` (mất đăng nhập, phải đăng nhập lại).
+
+## 9. CHỐT CUỐI 29/10 — mọi thứ đã chạy (chủ nhà xác nhận)
+| Dịch vụ | Outbound | Xác nhận |
+|---|---|---|
+| FPT Play (TV) | `auto` = **Reality** | chủ nhà: "chạy được, chất lượng tốt" |
+| Netflix (iPad app) | `auto` = **Reality** | chủ nhà: "netflix chạy được" |
+| TV360 | `node3` (1083) | đường mạng OK |
+| Facebook / ChatGPT / Gemini / Google / web VN | `auto` / direct CDN | 200 |
+- Reality đo 680–941 KB/s; relay Cloudflare chỉ 7–215 KB/s → **ưu tiên Reality**.
+- TV **không còn proxy** (đã xoá `http_proxy`), đi tproxy trong suốt.
+- **KHÔNG đổi gì thêm** trừ khi chủ nhà báo lỗi mới. Mọi thay đổi: `cp config.json config.json.good` → `sing-box check` → restart.
