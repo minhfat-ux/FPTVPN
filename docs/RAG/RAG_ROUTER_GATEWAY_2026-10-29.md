@@ -99,3 +99,13 @@ TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nh�
 - TV360 (TV): "chất lượng tốt" — đi `node3` (1083); ADB xác nhận `media_session state=PLAYING`.
 - TV đã bỏ proxy (`http_proxy=:0`), đi tproxy trong suốt.
 - Kết quả nghiệm thu tạm thời: **TỐT**. Không thay đổi cấu hình thêm.
+
+## 11. NGHIỆM THU FB / ChatGPT / Gemini (29/10)
+- DNS qua router: `www.facebook.com → 57.144.64.1`, `chatgpt.com → 172.64.155.209`, `gemini.google.com → 142.251.154.2`.
+- Facebook: **PASS** — 200, ~2,0 s (qua `auto`/Reality).
+- Gemini: **PASS** — 200, ~1,8 s.
+- ChatGPT: đường mạng OK (TLS tới được, DNS đúng) nhưng `curl` nhận **403 = Cloudflare bot challenge**
+  (cả exit Reality lẫn relay đều 403; không có title/"just a moment" trong body).
+  ⇒ **Không kết luận bằng curl được**, phải mở app/browser thật trên điện thoại/iPad để nghiệm thu.
+  Nếu app báo lỗi thì kiểm tra: `nslookup chatgpt.com 192.168.1.1` phải ra 172.64.155.209 (hoặc IP CF thật),
+  và thử đổi UA/thiết bị trước khi đụng cấu hình.
