@@ -122,3 +122,14 @@ TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nh�
 | TV | PASS — không proxy, tproxy trong suốt | — |
 
 Ghi chú: `curl chatgpt.com` trả 403 là Cloudflare bot challenge — nghiệm thu bằng **app thật**, không bằng curl.
+
+## 13. TẮT WATCHDOG TRÊN TV + tách IP TV360 (29/10)
+- Đã disable trên TV: `com.tvflow.watchdog` (watchdog riêng), `com.privatevpn.app.guard` (VPN guard),
+  `com.xiaomi.mitv.tvmanager` (TV Manager đóng băng app).
+- Watchdog trong **TVFlow Home**: revoke `WRITE_SECURE_SETTINGS` của `com.tvflow.launcher` +
+  `am stop-service .HomeGuardService` + `settings put global http_proxy :0`.
+  ⇒ HomeGuard không thể đặt lại proxy cũ nữa; proxy giữ `:0`.
+  (HomeGuardService vẫn tồn tại nhưng vô hại vì không còn quyền ghi settings.)
+- **Không dính IP TV360**: kiểm tra conntrack khi FPT Play chạy — TV chỉ nói chuyện với FPT (`118.69.x`,
+  media KSYUN `103.78.126.x`) + Xiaomi/Google; TV360 dùng dải riêng (`125.235.x`, `156.59.x`, `149.104.x`).
+  Rule tách biệt: `fptplay*` khác rule `tv360/viettel/vtvcab/vtv/ateme`.
