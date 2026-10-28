@@ -50,3 +50,11 @@ Không đổi gì thêm cho tới khi có lỗi cụ thể — mỗi lần đổ
 ## 6b. Trạng thái cũ (để đối chiếu)
 fptplay 200 · netflix/vn 200 · tv360 ws 404 (reachable) · facebook/google/gemini 200 · chatgpt 200 (UA trình duyệt).
 TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nhập/DRM của app (đã từng sửa bằng `pm clear com.viettel.tv360.tv`).
+
+## 7. LUẬT KHÔNG THỬ LẠI (đọc trước khi định "tối ưu")
+- **links=2/8/24 KHÔNG nhanh hơn links=1** — đã đo nhiều lần (28–29/10): links=1 ~215 KB/s, links=2 rơi còn 13–22 KB/s.
+  Không thử lại nữa. Giữ `"links": 1`.
+- Đường relay (Cloudflare wsrelay) dao động 7–215 KB/s tuỳ phút ⇒ **không đủ cho video HD ổn định**.
+- Đường Reality đo 943 KB/s (7,5 Mbps) — ổn định hơn hẳn; đã cấu hình giống relay (cùng rule domain).
+- **Không tự ý đổi mapping/hạ tầng khi khách chưa báo lỗi mới.** Mỗi lần đổi phải dùng `config.good` + `sing-box check`.
+- Không chạy lại các thử nghiệm đã kết luận: links=N, UDP transport tự động, catch-all direct, Xray v26, DoT trực tiếp.
