@@ -11,7 +11,8 @@
 | **TV360** (`tv360.vn`, `viettel.vn`, `vietteltelecom.vn`, `vtvcab.vn`, `vtv.vn`, `ateme.com`, `ateme.tv`) | `node3` | **1083 = node-3** | đúng yêu cầu: TV360 ra node 3 |
 | Facebook/Instagram/Messenger, ChatGPT/OpenAI, Gemini/Google, YouTube, TikTok, Twitter, Telegram, WhatsApp | `auto` | urltest `[reality, node]` | reality = Xray VLESS+Reality (VPS TCP 4443) |
 | Quảng cáo/telemetry Xiaomi, FPT CDN `103.78.126.0/23`, `103.78.127.0/24`, `103.116.120.0/23`, `103.116.121.0/24` | `direct` | — | FPT CDN chỉ mở cho mạng FPT |
-| Còn lại (catch-all 443) | `direct` | — | tunnel chết KHÔNG kéo cả nhà mất mạng |
+| Netflix app (node1+node2) | `nf` | urltest `[node1(1085), node(1081)]` | app Netflix nối **theo IP** (appboot 34.217.x, ftl 45.57.x) |
+| Còn lại (catch-all 443) | **`auto`** | reality → relay | **KHÔNG dùng direct**: app Netflix/endpoint nối theo IP mà direct bị FPT chặn 403 |
 
 ## 2. DNS sạch (FPT đầu độc DNS)
 - `/etc/flowvpn/dns-hosts` + `addnhosts` của dnsmasq; cron `/etc/flowvpn/dns-clean.sh` mỗi 20 phút.
@@ -34,6 +35,10 @@
 - **RD-200/2001 FPT Play** = `ERROR_CODE_IO_NETWORK_CONNECTION_FAILED`: media FPT CDN không được đi qua VPS → phải để FPT Play ra node relay (node-2), KHÔNG ép direct toàn bộ.
 - Sửa config bằng sed phải **theo số dòng** hoặc kiểm tra `sing-box check` ngay; sed thay `"outbound": "node3"` toàn file sẽ làm hỏng rule TV360.
 - Cloudflare wsrelay 0,03–0,17 MB/s và hay đứt; direct UDP hysteria 14 Mbps nhưng bị FPT chặn sau ~7 phút.
+- **Catch-all 443 = `direct` là SAI**: các app (Netflix) nối theo IP literal, direct bị FPT trả 403 → app báo "no internet".
+  Catch-all phải = `auto` (reality trước, relay sau). Đổi lúc 17:3x 29/10: vnexpress/netflix/fptplay/tv360/facebook/google đều 200.
+- Netflix app có 2 endpoint riêng: `appboot.netflix.com` (AWS) và `ios.prod.ftl.netflix.com` (Akamai) — kiểm tra bằng
+  `curl --socks5 127.0.0.1:1081 --resolve ios.prod.ftl.netflix.com:443:<IP> https://ios.prod.ftl.netflix.com/`.
 - Xray v26 Reality không tương thích sing-box 1.14 client; dùng **Xray v24.9.30**, dest `www.cloudflare.com`.
 
 ## 6. Trạng thái đã kiểm chứng (29/10 rạng sáng)
