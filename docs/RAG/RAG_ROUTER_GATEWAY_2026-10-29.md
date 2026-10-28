@@ -109,3 +109,16 @@ TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nh�
   ⇒ **Không kết luận bằng curl được**, phải mở app/browser thật trên điện thoại/iPad để nghiệm thu.
   Nếu app báo lỗi thì kiểm tra: `nslookup chatgpt.com 192.168.1.1` phải ra 172.64.155.209 (hoặc IP CF thật),
   và thử đổi UA/thiết bị trước khi đụng cấu hình.
+
+## 12. NGHIỆM THU TỔNG 29/10 — TẤT CẢ PASS (chủ nhà xác nhận)
+| Case | Kết quả | Đường |
+|---|---|---|
+| FPT Play (TV) | PASS — chất lượng tốt | auto = Reality |
+| TV360 (TV) | PASS — chất lượng tốt | node3 (1083) |
+| Netflix (iPad) | PASS | auto = Reality |
+| Facebook | PASS — 200 / 2 s | auto = Reality |
+| ChatGPT | PASS (app trên điện thoại) | auto = Reality |
+| Gemini | PASS — 200 / 1,8 s | auto = Reality |
+| TV | PASS — không proxy, tproxy trong suốt | — |
+
+Ghi chú: `curl chatgpt.com` trả 403 là Cloudflare bot challenge — nghiệm thu bằng **app thật**, không bằng curl.
