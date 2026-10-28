@@ -299,3 +299,28 @@ Việc còn lại:
 - TV nhà `192.168.1.124`: bật ADB để xoá hẳn proxy cũ trong Settings (hiện chữa bằng NAT redirect).
 - TV360: đã về đúng `node3=1083`, cần test lại sau reboot.
 - Commit/push: xem commit kèm theo section này.
+
+## 21. Tốc độ: chuyển relay sang direct hysteria2 UDP tới VPS, bỏ Cloudflare (2026-10-28)
+
+Phát hiện: `tools/hysteria-relay/runner.go` đã hỗ trợ `transport.type = "udp"` (hysteria2 **direct** tới
+VPS), chỉ cần đổi `"wsrelay"` → `"udp"` trong `node{1,2,3}.json` (giữ `server`/`password`/`obfs`).
+
+Số đo thật (bench 4 luồng, file 8 MB qua `speed.cloudflare.com`):
+| Đường | node1 (VN) | node2 (VN) | node3 (VN) |
+|---|---|---|---|
+| Cloudflare wsrelay (cũ) | 0,03–0,17 MB/s | 0,03–0,17 MB/s | 0,03–0,17 MB/s |
+| Direct hysteria2 UDP | **1,77 MB/s (14,1 Mbps)** | **1,85 MB/s (14,8 Mbps)** | **0,58 MB/s (4,6 Mbps)** |
+
+Sau khi đổi qua sing-box (`socks5-hostname` mỗi node): 579–826 KB/s (trước 10–170 KB/s).
+Facebook: TTFB 0,9 s / tổng 1,6 s (trước 5–7 s / 8–13 s). FPT Play 200 trong 0,76 s.
+
+Vì sao nhanh hơn: chặng FPT→Cloudflare bị bóp (đo từ Mac không proxy chỉ 38–91 KB/s tới CF, nhiều IP CF
+timeout), còn FPT→VPS VN nội địa đạt 14 Mbps.
+
+Lưu ý:
+- IP-literal vẫn có thể bị hysteria server trả `code=4` (host unreachable) — lỗi phía VPS không tới được
+  đích (vd FPT CDN chỉ mở cho mạng FPT). FPT CDN vẫn đi `direct` theo `ip_cidr` như cũ.
+- Giữ bản cũ: `node{1,2,3}.json.wsrelay`.
+- Watchdog v3.1: thêm `MODE` (`/tmp/relay-transport`); relay down 3 lần × 2 vòng mà transport=udp →
+  tự khôi phục `*.json.wsrelay` + restart + log `TRANSPORT FALLBACK udp -> wsrelay` (chống VPS bị chặn UDP).
+  Đổi lại direct: đặt lại `"type": "udp"` và `echo udp > /tmp/relay-transport`.

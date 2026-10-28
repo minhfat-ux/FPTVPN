@@ -10,6 +10,7 @@
 CONF=/etc/sing-box/config.json
 GOOD=/etc/sing-box/config.json.good
 STATE=/tmp/flowvpn-node
+MODE=/tmp/relay-transport   # "udp" = hysteria2 direct tới VPS (mặc định), "wsrelay" = qua Cloudflare
 LOG=/var/log/flowvpn-health.log
 CURL=/usr/bin/curl
 NODES="1081 1085"
@@ -65,7 +66,7 @@ cf_sets() {
   echo "$1 api.meetflowai.site" >> /etc/hosts
 }
 
-f_node=0; f3=0; dead=0; last_fo=0; sb_f=0; last_sw=0; last_cf=0; cf_f=0; i=0
+f_node=0; f3=0; dead=0; last_fo=0; sb_f=0; last_sw=0; last_cf=0; cf_f=0; dfail=0; i=0
 while true; do
   i=$((i+1))
   # chỉ instance đang giữ lock mới được hành động (procd có thể chồng tiến trình khi WAN ifup restart)
@@ -120,10 +121,18 @@ while true; do
     dead=$((dead+1))
     if [ "$dead" -ge 3 ]; then
       now=$(date +%s)
+      mode=$(cat $MODE 2>/dev/null); [ -z "$mode" ] && mode=udp
       if [ $((now-last_fo)) -lt 600 ]; then
         log "RELAYS DOWN (rate-limited)"
+      elif [ "$mode" = "udp" ] && [ "$dfail" -ge 1 ]; then
+        # direct UDP không lên sau 2 vòng -> về transport Cloudflare (chậm hơn nhưng chắc sống)
+        last_fo=$now; dfail=0
+        for n in 1 2 3; do [ -f /etc/flowvpn/node$n.json.wsrelay ] && cp /etc/flowvpn/node$n.json.wsrelay /etc/flowvpn/node$n.json; done
+        echo wsrelay > $MODE
+        log "TRANSPORT FALLBACK udp -> wsrelay (relay khong len sau 2 vong)"
+        for s in 1 2 3; do /etc/init.d/flowvpnrelay$s restart >/dev/null 2>&1; done
       else
-        last_fo=$now
+        last_fo=$now; dfail=$((dfail+1))
         hip=$(hosts_ip)
         if ! cf_ok "$hip"; then
           new=$(cf_pick "$hip")
@@ -136,7 +145,7 @@ while true; do
       dead=0; sleep 30; continue
     fi
   else
-    dead=0
+    dead=0; dfail=0
   fi
 
   # --- node path health
