@@ -324,3 +324,26 @@ Lưu ý:
 - Watchdog v3.1: thêm `MODE` (`/tmp/relay-transport`); relay down 3 lần × 2 vòng mà transport=udp →
   tự khôi phục `*.json.wsrelay` + restart + log `TRANSPORT FALLBACK udp -> wsrelay` (chống VPS bị chặn UDP).
   Đổi lại direct: đặt lại `"type": "udp"` và `echo udp > /tmp/relay-transport`.
+
+## 22. Facebook trên Android không vào được — FPT đầu độc DNS (2026-10-28)
+
+Triệu chứng: phone Android (Z Fold5, `192.168.1.143`) + TV mở Facebook lỗi/không tải; trước đó tưởng do relay.
+
+Bằng chứng:
+- Cả ONT, 8.8.8.8 và 1.1.1.1 đều trả `www.facebook.com = 185.45.5.35` (IP rác) ⇒ **FPT chặn/đầu độc DNS Facebook ở tầng mạng**.
+- Relay nhận IP đích rác ⇒ VPS không tới được ⇒ hysteria server trả `code=4` (host unreachable) cho mọi kết nối theo IP.
+- Khi đích là **domain** (sing-box gửi domain), relay tự resolve ở VPS (57.144.x — FB edge VN) nên `www.facebook.com` qua relay = 200.
+- DoT/DoH trực tiếp từ nhà bị FPT reset (`Send failure: Connection reset by peer`); DoH **qua tunnel** (mixed 18081) trả 200.
+
+Cách sửa: `tools/router/fb-hosts.sh` + `addn-hosts` của dnsmasq:
+1. Lấy IP thật của `facebook.com/graph.facebook.com/instagram.com` qua DoH **trong tunnel**
+   (`https://cloudflare-dns.com/dns-query`, proxy mixed 18081).
+2. Thử từng IP qua relay với SNI đúng (`--socks5 127.0.0.1:1085 --resolve www.facebook.com:443:IP`),
+   lấy IP trả 2xx/3xx đầu tiên; fallback `57.144.8.1 / 57.144.24.1 / 57.144.100.141`.
+3. Ghi `IP domain` cho 12 domain FB/Instagram/Messenger vào `/etc/flowvpn/fb-hosts`,
+   `kill -HUP dnsmasq`. Cron `*/20` chạy lại ⇒ IP chết tự đổi (không ghim).
+4. `uci add_list dhcp.@dnsmasq[0].addnhosts=/etc/flowvpn/fb-hosts`.
+
+Kết quả: `nslookup www.facebook.com 192.168.1.1` → `57.144.64.1`; IP này qua relay = 200 (4 s).
+Lưu ý: sau khi đổi DNS, app Facebook trên phone phải được khởi động lại (hoặc bật/tắt chế độ máy bay)
+để bỏ cache DNS cũ; các TV cũng cần mở lại app.
