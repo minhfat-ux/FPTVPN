@@ -32,7 +32,11 @@ trap "rm -rf $LOCKDIR" EXIT
 sysctl -p /etc/sysctl.d/99-flowvpn.conf >/dev/null 2>&1
 
 cur=1081; [ -f $STATE ] && cur=$(cat $STATE)
-case " $NODES " in *" $cur "*) ;; *) cur=1081; echo 1081 > $STATE ;; esac
+# uu tien cong dang cau hinh that trong config (sau reboot /tmp co the lech)
+cfgport=$(sed -n 's/.*"tag": "node".*"server_port": \([0-9]*\).*/\1/p' $CONF | head -1)
+[ -n "$cfgport" ] && cur=$cfgport
+case " $NODES " in *" $cur "*) ;; *) cur=1081 ;; esac
+echo $cur > $STATE
 log() { echo "$(date +%H:%M:%S) $*" >> $LOG; }
 probe() {
   t=$($CURL -s -o /dev/null -m 8 -w "%{time_total}" --socks5-hostname 127.0.0.1:$1 "$2" 2>/dev/null)
