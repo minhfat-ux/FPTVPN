@@ -1,22 +1,25 @@
 #!/bin/sh
-# flowvpn watchdog v3 — 2026-10-28
-# Nguyên tắc: ổn định khi đang xem > tối ưu throughput.
-#  - 1 instance duy nhất (pid lock)
-#  - CF IP: KHÔNG ghim IP chết. Có danh sách ứng viên, tự probe và chọn IP trả lời nhanh nhất.
-#    Chỉ đổi khi IP hiện tại fail 2 lần liên tiếp, tối đa 1 lần / 10 phút; đổi xong mới restart relay.
-#  - Relay down (cả 1081+1085 đóng 3 lần liên tiếp) -> chọn lại CF IP rồi restart relay (rate-limited 10 phút).
-#  - Node switch tối đa 1 lần / 15 phút (tránh restart sing-box liên tục khi WAN chập chờn).
-#  - Guard sing-box: 3 lần mất 7893/18081 -> khôi phục config.good + restart.
+# flowvpn watchdog v4 (2026-10-28)
+# Mục tiêu: KHÔNG để "tối nào cũng phải fix tay".
+#  - 1 instance (pid lock + leader check)
+#  - Tự áp sysctl (tcp_mem...) ở đầu (phòng OOM "TCP: out of memory")
+#  - CF IP động: probe danh sách, chỉ đổi khi IP hiện tại fail 2 lần, tối đa 1 lần/10 phút
+#  - END-TO-END: mỗi ~60s test FPT Play qua sing-box. Hỏng 2 lần liên tiếp -> thang tự chữa:
+#      (1) restart relay đang dùng -> (2) đổi node (<=1 lần/15 phút) -> (3) thử transport udp
+#      (nếu có nodeN.json.udp) -> không được thì quay lại wsrelay.
+#  - DNS sạch: mỗi ~5 phút kiểm www.facebook.com/chatgpt.com/gemini.google.com;
+#      trả IP rác hoặc thiếu file -> chạy lại dns-clean.sh ở nền (rate-limit 20 phút).
+#  - Guard sing-box: mất 7893/18081 3 lần -> khôi phục config.good.
 CONF=/etc/sing-box/config.json
 GOOD=/etc/sing-box/config.json.good
 STATE=/tmp/flowvpn-node
-MODE=/tmp/relay-transport   # "udp" = hysteria2 direct tới VPS (mặc định), "wsrelay" = qua Cloudflare
+MODE=/tmp/relay-transport
 LOG=/var/log/flowvpn-health.log
 CURL=/usr/bin/curl
 NODES="1081 1085"
-# Ứng viên CF IP (đã kiểm tra trả 200 cho zone api.meetflowai.site). Không phụ thuộc thứ tự: cf_pick() đo thật.
 CF_LIST="104.17.232.29 172.64.80.1 188.114.96.1 104.18.32.115 104.26.10.78 104.21.83.112 172.67.175.138 104.16.132.229"
 LOCKDIR=/tmp/health.lock
+PROXY=http://127.0.0.1:18081
 
 if ! mkdir $LOCKDIR 2>/dev/null; then
   old=$(cat $LOCKDIR/pid 2>/dev/null)
@@ -25,6 +28,8 @@ if ! mkdir $LOCKDIR 2>/dev/null; then
 fi
 echo $$ > $LOCKDIR/pid
 trap "rm -rf $LOCKDIR" EXIT
+
+sysctl -p /etc/sysctl.d/99-flowvpn.conf >/dev/null 2>&1
 
 cur=1081; [ -f $STATE ] && cur=$(cat $STATE)
 case " $NODES " in *" $cur "*) ;; *) cur=1081; echo 1081 > $STATE ;; esac
@@ -47,7 +52,6 @@ cf_ok() {
   case "$c" in 2*|3*|4*) return 0 ;; esac
   return 1
 }
-# chọn IP sống có time_connect nhỏ nhất; $1 = IP cần tránh
 cf_pick() {
   avoid="$1"; best=""; bestt=99
   for ip in $CF_LIST; do
@@ -65,36 +69,53 @@ cf_sets() {
   grep -v meetflowai /etc/hosts > /tmp/h 2>/dev/null && cp /tmp/h /etc/hosts
   echo "$1 api.meetflowai.site" >> /etc/hosts
 }
+set_transport() { # wsrelay | udp
+  if [ "$1" = "udp" ]; then
+    for n in 1 2 3; do [ -f /etc/flowvpn/node$n.json.udp ] && cp /etc/flowvpn/node$n.json.udp /etc/flowvpn/node$n.json; done
+  else
+    for n in 1 2 3; do [ -f /etc/flowvpn/node$n.json.wsrelay ] && cp /etc/flowvpn/node$n.json.wsrelay /etc/flowvpn/node$n.json; done
+  fi
+  echo "$1" > $MODE
+  for s in 1 2 3; do /etc/init.d/flowvpnrelay$s restart >/dev/null 2>&1; done
+}
+e2e() { # 0 = ok
+  c=$($CURL -s -o /dev/null -m 15 -w "%{http_code}" -x $PROXY https://fptplay.vn/ 2>/dev/null)
+  case "$c" in 2*) return 0 ;; esac
+  return 1
+}
+dns_bad() { # 0 = can chay lai dns-clean
+  [ -f /etc/flowvpn/dns-hosts ] || return 0
+  [ "$(wc -l < /etc/flowvpn/dns-hosts)" -ge 15 ] || return 0
+  want=$(awk '/ www.facebook.com$/{print $1; exit}' /etc/flowvpn/dns-hosts)
+  got=$(nslookup www.facebook.com 127.0.0.1 2>/dev/null | awk '/^Address: /{print $2; exit}')
+  [ "$want" = "$got" ] && return 1
+  return 0
+}
 
 f_node=0; f3=0; dead=0; last_fo=0; sb_f=0; last_sw=0; last_cf=0; cf_f=0; dfail=0; i=0
+e2e_f=0; last_e2e_sw=0; last_dns=0; last_tr=0
 while true; do
   i=$((i+1))
-  # chỉ instance đang giữ lock mới được hành động (procd có thể chồng tiến trình khi WAN ifup restart)
   lk=$(cat $LOCKDIR/pid 2>/dev/null)
   if [ -n "$lk" ] && [ "$lk" != "$$" ] && [ -d /proc/$lk ]; then exit 0; fi
   avail=$(awk "/MemAvailable/{print \$2}" /proc/meminfo)
   if [ -n "$avail" ] && [ "$avail" -lt 4000 ]; then echo 3 > /proc/sys/vm/drop_caches 2>/dev/null; fi
-
-  # WAN: nếu gateway WAN không trả lời thì không quyết định gì cả
   if ! ping -c1 -W2 192.168.100.1 >/dev/null 2>&1; then dead=0; f_node=0; f3=0; cf_f=0; sleep 20; continue; fi
 
-  # --- CF IP health, kiểm tra mỗi ~60s
+  # --- CF IP health (60s)
   if [ "$((i % 3))" -eq 0 ]; then
-    hip=$(hosts_ip)
-    if ! cf_ok "$hip"; then
+    hipp=$(hosts_ip)
+    if ! cf_ok "$hipp"; then
       cf_f=$((cf_f+1))
       if [ "$cf_f" -ge 2 ]; then
         now=$(date +%s)
         if [ $((now-last_cf)) -ge 600 ]; then
-          new=$(cf_pick "$hip")
-          if [ -n "$new" ] && [ "$new" != "$hip" ]; then
-            last_cf=$now; cf_f=0
-            cf_sets "$new"
-            log "CF IP $hip -> $new (IP cu fail 2 lan)"
+          new=$(cf_pick "$hipp")
+          if [ -n "$new" ] && [ "$new" != "$hipp" ]; then
+            last_cf=$now; cf_f=0; cf_sets "$new"
+            log "CF IP $hipp -> $new"
             for s in 1 2 3; do /etc/init.d/flowvpnrelay$s restart >/dev/null 2>&1; done
             sleep 10
-          else
-            log "CF IP $hip fail, khong co IP nao tot hon"
           fi
         fi
       fi
@@ -106,40 +127,21 @@ while true; do
   # --- guard sing-box
   if ! port_open 7893 || ! port_open 18081; then
     sb_f=$((sb_f+1))
-    if [ "$sb_f" -ge 3 ]; then
-      log "SING-BOX DOWN (7893/18081 closed) -> restore config.good"
-      cp $GOOD $CONF 2>/dev/null
-      /etc/init.d/sing-box restart >/dev/null 2>&1
-      sb_f=0
-    fi
+    if [ "$sb_f" -ge 3 ]; then log "SING-BOX DOWN -> restore config.good"; cp $GOOD $CONF 2>/dev/null; /etc/init.d/sing-box restart >/dev/null 2>&1; sb_f=0; fi
   else
     sb_f=0
   fi
 
-  # --- relay down khẩn cấp
+  # --- relay down
   if ! port_open 1081 && ! port_open 1085; then
     dead=$((dead+1))
     if [ "$dead" -ge 3 ]; then
       now=$(date +%s)
-      mode=$(cat $MODE 2>/dev/null); [ -z "$mode" ] && mode=udp
-      if [ $((now-last_fo)) -lt 600 ]; then
-        log "RELAYS DOWN (rate-limited)"
-      elif [ "$mode" = "udp" ] && [ "$dfail" -ge 1 ]; then
-        # direct UDP không lên sau 2 vòng -> về transport Cloudflare (chậm hơn nhưng chắc sống)
-        last_fo=$now; dfail=0
-        for n in 1 2 3; do [ -f /etc/flowvpn/node$n.json.wsrelay ] && cp /etc/flowvpn/node$n.json.wsrelay /etc/flowvpn/node$n.json; done
-        echo wsrelay > $MODE
-        log "TRANSPORT FALLBACK udp -> wsrelay (relay khong len sau 2 vong)"
-        for s in 1 2 3; do /etc/init.d/flowvpnrelay$s restart >/dev/null 2>&1; done
+      if [ $((now-last_fo)) -lt 600 ]; then log "RELAYS DOWN (rate-limited)"
       else
         last_fo=$now; dfail=$((dfail+1))
-        hip=$(hosts_ip)
-        if ! cf_ok "$hip"; then
-          new=$(cf_pick "$hip")
-          if [ -n "$new" ]; then cf_sets "$new"; log "CF IP $hip -> $new (relays down)"; fi
-        else
-          log "relays down but CF IP $hip ok -> restart relays"
-        fi
+        hipp=$(hosts_ip)
+        if ! cf_ok "$hipp"; then new=$(cf_pick "$hipp"); [ -n "$new" ] && cf_sets "$new" && log "CF IP $hipp -> $new (relays down)"; fi
         for s in 1 2 3; do /etc/init.d/flowvpnrelay$s restart >/dev/null 2>&1; done
       fi
       dead=0; sleep 30; continue
@@ -159,24 +161,56 @@ while true; do
       r2=$(probe $cur "https://www.youtube.com/generate_204")
       case "$r2" in fail|"")
         now2=$(date +%s)
-        if [ $((now2-last_sw)) -lt 900 ]; then
-          log "node $cur van fail, switch rate-limited"
-        else
-          nb=$(other_node); log "SWITCH node $cur -> $nb"
-          last_sw=$now2; setport $nb && cur=$nb
-        fi ;;
+        if [ $((now2-last_sw)) -ge 900 ]; then nb=$(other_node); log "SWITCH node $cur -> $nb"; last_sw=$now2; setport $nb && cur=$nb; fi ;;
       esac
     fi ;;
   *) f_node=0 ;;
   esac
 
-  # --- node3 path health (TV360)
+  # --- node3 (TV360)
   r3=$(probe 1083 "https://ws.tv360.vn/")
-  case "$r3" in fail|"")
-    f3=$((f3+1))
-    if [ "$f3" -ge 3 ]; then log "restart relay3"; /etc/init.d/flowvpnrelay3 restart >/dev/null 2>&1; f3=0; fi ;;
+  case "$r3" in fail|"") f3=$((f3+1)); [ "$f3" -ge 3 ] && { log "restart relay3"; /etc/init.d/flowvpnrelay3 restart >/dev/null 2>&1; f3=0; } ;;
   *) f3=0 ;;
   esac
+
+  # --- END-TO-END (60s): FPT Play qua sing-box
+  if [ "$((i % 3))" -eq 0 ]; then
+    if e2e; then
+      e2e_f=0
+    else
+      e2e_f=$((e2e_f+1)); log "E2E FPT Play FAIL ($e2e_f)"
+      if [ "$e2e_f" -ge 2 ]; then
+        rl=$(relay_for $cur); log "E2E -> restart relay$rl"
+        /etc/init.d/flowvpnrelay$rl restart >/dev/null 2>&1; sleep 15
+        if ! e2e; then
+          now=$(date +%s)
+          if [ $((now-last_e2e_sw)) -ge 900 ]; then
+            last_e2e_sw=$now; nb=$(other_node)
+            log "E2E -> SWITCH node $cur -> $nb"; setport $nb && cur=$nb; sleep 12
+          fi
+          if ! e2e && [ "$(cat $MODE 2>/dev/null)" != "udp" ] && [ $(( $(date +%s) - last_tr )) -ge 1800 ]; then
+            last_tr=$(date +%s); log "E2E -> thu transport udp"
+            set_transport udp; sleep 25
+            if ! e2e; then log "E2E -> udp khong duoc, quay lai wsrelay"; set_transport wsrelay; sleep 15; fi
+          fi
+        fi
+        e2e_f=0
+      fi
+    fi
+  fi
+
+  # --- DNS sach (moi ~10 vong = 200s), chay lai toi da 20 phut/lan
+  if [ "$((i % 10))" -eq 5 ]; then
+    if dns_bad; then
+      now=$(date +%s)
+      if [ $((now-last_dns)) -ge 1200 ]; then
+        last_dns=$now; log "DNS sach sai/thieu -> chay dns-clean"
+        ( /etc/flowvpn/dns-clean.sh >/dev/null 2>&1 & )
+      else
+        log "DNS sach sai (rate-limited)"
+      fi
+    fi
+  fi
 
   sleep 20
 done

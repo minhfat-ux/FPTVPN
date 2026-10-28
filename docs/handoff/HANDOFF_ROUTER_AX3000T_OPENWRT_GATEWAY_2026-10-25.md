@@ -387,3 +387,24 @@ Kết quả kiểm chứng: `nslookup` qua router trả đúng 3 IP trên; `chat
 2. Không dùng Go build >1.24 cho TLS ra ngoài nếu DPI khó tính — phải `GODEBUG=tlsmlkem=0`.
 3. FPT bóp mọi đường tới VPS (UDP 8443 sau ~1 h, TCP 443 ~0,1 MB/s) ⇒ muốn nhanh ổn định phải có
    exit qua nhà cung cấp khác/HK.
+
+## 24. Watchdog v4 — tự chữa end-to-end để không phải fix tay mỗi tối (2026-10-28)
+
+Vấn đề: đường FPT→Cloudflare/VPS thay đổi liên tục trong ngày (bóp, chặn, IP rác) nên bản watchdog
+"chỉ canh cổng/node" không đủ: mỗi tối lại có case lệch.
+
+`tools/router/health.sh` **v4** thêm:
+- **Đầu mỗi lần chạy**: `sysctl -p /etc/sysctl.d/99-flowvpn.conf` (tcp_mem 4096/8192/16384, rmem/wmem
+  256K) — chống `TCP: out of memory`/OOM đã làm router đơ ngày 28/10.
+- **END-TO-END mỗi 60 s**: `curl -x 18081 https://fptplay.vn/` phải 2xx. Hỏng 2 lần liên tiếp → thang tự chữa:
+  1. restart relay đang dùng;
+  2. không được → đổi node (≤1 lần/15 phút);
+  3. không được → thử transport **udp** (`nodeN.json.udp`), nếu vẫn hỏng quay lại `wsrelay`
+     (≤1 lần/30 phút).
+- **DNS sạch mỗi ~5 phút**: kiểm `www.facebook.com` trả đúng IP trong `/etc/flowvpn/dns-hosts`
+  (≥15 dòng). Sai/thiếu → chạy lại `dns-clean.sh` ở nền (≤1 lần/20 phút).
+- Giữ nguyên: CF IP động, guard sing-box (`config.good`), relay-down khẩn cấp, node3 cho TV360,
+  leader-check 1 instance.
+
+Kiểm chứng sau deploy (15:08): load 0,26; `fpt=200 fb=200 chatgpt=200 gemini=200`; TV 14 kết nối
+ESTABLISHED; health log không còn restart/failover.
