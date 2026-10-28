@@ -133,3 +133,10 @@ Ghi chú: `curl chatgpt.com` trả 403 là Cloudflare bot challenge — nghiệm
 - **Không dính IP TV360**: kiểm tra conntrack khi FPT Play chạy — TV chỉ nói chuyện với FPT (`118.69.x`,
   media KSYUN `103.78.126.x`) + Xiaomi/Google; TV360 dùng dải riêng (`125.235.x`, `156.59.x`, `149.104.x`).
   Rule tách biệt: `fptplay*` khác rule `tv360/viettel/vtvcab/vtv/ateme`.
+
+## 14. TV hoàn toàn trong suốt — không proxy (29/10)
+- `settings get global http_proxy` = `:0`; `global_http_proxy_host` = null.
+- Bằng chứng không còn proxy: conntrack TV `dport=18081` **giảm dần** (68 → 47, entry cũ tự hết hạn),
+  trong khi flow trực tiếp (443/80) **tăng** (22 → 33). Toàn bộ kết nối mới của TV đi thẳng qua router (tproxy).
+- FPT Play lúc kiểm tra: `state=PLAYING(3)`, position 625 s, buffered 676 s (đệm trước ~50 s) — phát mượt.
+- Watchdog TV đã tắt hết; nft `tvproxy` redirect chỉ là lưới an toàn, không còn được dùng.
