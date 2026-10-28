@@ -22,7 +22,9 @@
 ## 3. TV Xiaomi (MiTV-AFZP0, 192.168.1.124)
 - Đã `pm disable-user com.xiaomi.mitv.tvmanager` (nó đóng băng app → video tự dừng).
 - Đã `cmd deviceidle whitelist +net.fptplay.ottbox`, `am set-inactive net.fptplay.ottbox false`.
-- TV có proxy cũ `192.168.100.5:18081` → nft `inet tvproxy` redirect `192.168.100.0/24:18081` về proxy router (chain này phải còn).
+- **Proxy trên TV đã được xoá (29/10)**: `settings put global http_proxy :0` — TV giờ đi qua tproxy trong suốt
+  (kiểm chứng: TV có flow trực tiếp tới `118.69.x` FPT Play, không còn flow mới tới :18081).
+  nft `inet tvproxy` redirect `192.168.100.0/24:18081` **vẫn giữ** làm lưới an toàn nếu app nào tự đặt proxy lại.
 - ADB vào TV từ Mac: nft DNAT `tcp dport 55555 dnat ip to 192.168.1.124:5555`; Mac: `adb connect 192.168.100.3:55555`.
 - Bằng chứng FPT Play chạy: logcat `audioDecoderInitialized`, `videoDecoderInitialized` HEVC 1.3 Mbps, media_session state BUFFERING→PLAYING.
 
