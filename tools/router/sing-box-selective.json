@@ -1,14 +1,27 @@
 {
   "log": { "level": "warn" },
-  "dns": { "servers": [ { "tag": "remote", "type": "tls", "server": "8.8.8.8", "detour": "node3" } ], "final": "remote" },
+  "dns": {
+    "servers": [
+      { "tag": "local", "type": "udp", "server": "192.168.100.1" },
+      { "tag": "remote", "type": "tls", "server": "8.8.8.8", "detour": "node3" }
+    ],
+    "rules": [
+      { "domain_suffix": ["netflix.com","netflix.net","nflxext.com","nflximg.com","nflximg.net","nflxso.net","nflxvideo.net",
+        "twitter.com","x.com","twimg.com","facebook.com","facebook.net","fbcdn.net","fb.me","instagram.com","cdninstagram.com",
+        "telegram.org","t.me","telegram.me","whatsapp.com","whatsapp.net","signal.org",
+        "chatgpt.com","openai.com","oaistatic.com","oaiusercontent.com",
+        "tiktok.com","tiktokcdn.com","tiktokv.com","tiktokcdn-us.com","ibytedtos.com","byteoversea.com","muscdn.com"], "server": "remote" }
+    ],
+    "final": "local"
+  },
   "inbounds": [
     { "type": "tproxy", "tag": "tproxy-in", "listen": "::", "listen_port": 7893 },
     { "type": "mixed", "tag": "mixed-in", "listen": "0.0.0.0", "listen_port": 18081 },
     { "type": "direct", "tag": "dns-in", "listen": "127.0.0.1", "listen_port": 5353 }
   ],
   "outbounds": [
-    { "type": "socks", "tag": "node", "server": "127.0.0.1", "server_port": 1081, "version": "5" },
-    { "type": "socks", "tag": "node3", "server": "127.0.0.1", "server_port": 1081, "version": "5" },
+    { "type": "socks", "tag": "node", "server": "127.0.0.1", "server_port": 1085, "version": "5" },
+    { "type": "socks", "tag": "node3", "server": "127.0.0.1", "server_port": 1085, "version": "5" },
     { "type": "direct", "tag": "direct" }
   ],
   "route": {
@@ -29,6 +42,7 @@
       { "port": 443, "outbound": "node3" }
     ],
     "final": "direct",
+    "default_domain_resolver": "local",
     "auto_detect_interface": true
   }
 }

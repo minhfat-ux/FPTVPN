@@ -247,3 +247,55 @@ Xử lý:
 - Đã cài 3.15 trên 2 TV công ty reachable (`.109`, `.113`); TV `.115` cần bật lại ADB (Android 9 mất
   ADB-over-TCP sau reboot); TV nhà chưa cài (khác mạng).
 - Lưu ý: logo hiển thị khi Tubeflow ở foreground (kể cả menu); ẩn khi về TVFlow Home.
+
+## 20. RD_002 "sau vài phút" — chuỗi nguyên nhân thật + watchdog v3 (2026-10-28)
+
+Triệu chứng: FPT Play xem vài phút thì RD_002; sau đó có đợt "TV mất mạng", "FPT Play không lên",
+"Facebook siêu chậm".
+
+Nguyên nhân (theo thứ tự phát hiện, đều có log):
+
+1. **Watchdog tự failover + restart cả 3 relay giữa lúc xem.** `/var/log/flowvpn-health.log` ghi
+   `CF FAILOVER 104.21.83.112 -> 172.67.175.138` (17:33:34) và ngược lại (17:41:03). Mỗi lần failover
+   restart cả 3 relay ⇒ mọi kết nối đang phát bị cắt ⇒ RD_002 đúng nhịp "vài phút".
+   Sâu xa: có **2 tiến trình `health.sh` chạy song song** (procd + hotplug ifup restart chồng lên) và điều
+   kiện "cả 1081+1085 cùng đóng" bị kích hoạt trong cửa sổ vài giây relay restart ⇒ vòng lặp restart,
+   load 4+, router **tự reboot** (uptime về 0).
+2. **`node3` trỏ nhầm cổng 1081** (đúng là 1083) ⇒ toàn bộ traffic 443 (catch-all) + TV360 dồn vào node2,
+   đúng relay FPT Play dùng.
+3. **DNS mặc định đi DoT qua tunnel** (1–4 s/lookup; đo `whippet.bsp.xiaomi.com` 3,59 s) ⇒ app timeout.
+4. **Config DNS có `detour: direct`** (sai với sing-box 1.14) ⇒ sing-box **crash loop** sau reboot
+   (`FATAL start service: start dns/udp[local]: detour to an empty direct outbound makes no sense`) ⇒ TV mất
+   mạng hoàn toàn vì traffic tproxy không có ai nhận.
+5. **TV cấu hình proxy trỏ địa chỉ cũ mạng ONT** (`192.168.100.101:18081`, `.100.5`, `.100.6`) ⇒ app đi
+   qua proxy chết (hàng chục `SYN_SENT`).
+
+Cách sửa đã deploy (đều nằm trong `tools/router/`):
+
+- `health.sh` v3: 1 instance (pid lock + kiểm tra "leader" mỗi vòng), failover relay tối đa 1 lần/10 phút
+  sau 3 lần check liên tiếp, **chỉ restart relay đang lỗi**, node switch tối đa 1 lần/15 phút,
+  guard sing-box (3 lần mất 7893/18081 → khôi phục `config.json.good` + restart).
+- **CF IP không ghim chết** (`CF_LIST` + `cf_pick()`): probe từng IP bằng
+  `curl --resolve api.meetflowai.site:443:$ip`, chọn IP trả lời nhanh nhất; chỉ đổi khi IP hiện tại fail
+  2 lần liên tiếp, tối đa 1 lần/10 phút. Bằng chứng: nhiều IP CF timeout trong khi IP khác trả 200 và
+  nhanh gấp 4 lần (104.17.232.29: 1,69 MB/10 s/4 luồng so với 104.21.83.112: 0,39 MB).
+- `sing-box-selective.json`: `node3 = 1083`, DNS mặc định = DNS ONT `192.168.100.1` (0,15 s), chỉ domain
+  cần chống nhiễm độc (Netflix/Twitter/FB/Telegram/ChatGPT/TikTok) đi DoT qua `node3`, log `warn`.
+- `nft-singbox.nft`: thêm bảng `tvproxy` — chuyển mọi kết nối tới `192.168.100.0/24:18081` về proxy router
+  (chữa proxy cũ trên TV; sống qua reboot vì nằm trong `/etc/nftables.d/`).
+
+Bằng chứng kiểm chứng:
+- 45 phút FPT Play fullHD qua proxy: **0** `code=4`, **0** relay flap/`1006`, **0** watchdog restart,
+  đỉnh 910 MB / 128.000 packets trên một kết nối.
+- `/var/log/flowvpn-health.log` sau khi deploy: không còn `CF FAILOVER`; chỉ còn các dòng `node FAIL (1)`
+  đơn lẻ khi mạng chập chờn.
+- `sing-box check -c` OK; 3 relay đều trả `204`; `fptplay.vn` qua mixed `200` (~2 s).
+
+Giới hạn đã xác định: băng thông tunnel = băng thông FPT→Cloudflare. Đo từ Mac (không proxy) tới
+`speed.cloudflare.com` chỉ **91 KB/s** và nhiều CF IP timeout; tunnel đạt 55–170 KB/s tuỳ luồng ⇒
+Facebook/Netflix nặng vẫn chậm, cần exit không qua CF (HK relay / VPS direct) nếu muốn mượt.
+
+Việc còn lại:
+- TV nhà `192.168.1.124`: bật ADB để xoá hẳn proxy cũ trong Settings (hiện chữa bằng NAT redirect).
+- TV360: đã về đúng `node3=1083`, cần test lại sau reboot.
+- Commit/push: xem commit kèm theo section này.
