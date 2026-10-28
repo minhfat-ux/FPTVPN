@@ -58,3 +58,24 @@ TV360 app: còn BUFFERING khi test tự động — cần kiểm tra đăng nh�
 - Đường Reality đo 943 KB/s (7,5 Mbps) — ổn định hơn hẳn; đã cấu hình giống relay (cùng rule domain).
 - **Không tự ý đổi mapping/hạ tầng khi khách chưa báo lỗi mới.** Mỗi lần đổi phải dùng `config.good` + `sing-box check`.
 - Không chạy lại các thử nghiệm đã kết luận: links=N, UDP transport tự động, catch-all direct, Xray v26, DoT trực tiếp.
+
+## 8. CHỐNG LẶP RD-002 / 2001 / 2002 (FPT Play trên TV)
+
+### Nguyên nhân đã xác định (đừng đoán lại)
+1. **Đường ra không ổn định**: relay Cloudflare dao động 7–215 KB/s → stream stall → app báo RD/2001/2002.
+   Đã chuyển FPT Play sang **Reality** (đo 640–871 KB/s ổn định). `fptplay → auto`.
+2. **Xiaomi TV Manager đóng băng app giữa lúc phát**: `ActivityManager: freezing net.fptplay.ottbox`.
+   Đã `pm disable-user --user 0 com.xiaomi.mitv.tvmanager` + `deviceidle whitelist +net.fptplay.ottbox`.
+3. **Cache/DRM hỏng**: logcat có `cache/...dm No such file` → đã `pm trim-caches` + restart app.
+4. **DNS bị FPT đầu độc** cho FB/ChatGPT/Gemini → dnsmasq `addnhosts=/etc/flowvpn/dns-hosts`, cron 20 phút.
+5. **Proxy cũ trong TV** (`192.168.100.5/.6:18081`) → nft redirect `192.168.100.0/24:18081` (đã bao cả dải).
+
+### Guard đang tự chạy (không cần can thiệp)
+- Watchdog `/etc/flowvpn/health.sh`: e2e FPT Play mỗi 20 s; fail 3 lần → tự chữa; DNS sai → tự chạy `dns-clean`; reality sống thì `auto` dùng reality.
+- `config.json.good` + `sing-box check` trước mỗi lần restart.
+
+### Khi lỗi quay lại — làm đúng 4 bước, KHÔNG đổi mapping
+1. `adb -s 192.168.100.3:55555 shell "logcat -d | grep -E 'playerFailed|ERROR_CODE_IO|EventLogger'"` → xem lỗi mạng hay DRM.
+2. Đo đường: `curl -x http://127.0.0.1:18081 "https://speed.cloudflare.com/__down?bytes=2000000" -w "%{speed_download}"` (phải >300 KB/s).
+3. `pm list packages -d | grep tvmanager` (phải có) + `dumpsys deviceidle whitelist | grep fptplay`.
+4. Nếu vẫn lỗi DRM/cache: `pm clear net.fptplay.ottbox` (mất đăng nhập, phải đăng nhập lại).
