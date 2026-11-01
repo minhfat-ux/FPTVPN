@@ -1,0 +1,7 @@
+{
+ "type": "verified",
+ "result": "pass",
+ "note": "Nghiệm thu độc lập trên node-2 (2026-11-01 19:31 +07): auth.json JSON hợp lệ 635031 byte, 22 users/125 sessions/56 reminders; flowvpn-cp active+enabled; health-watch v1.0.1 timer active; /health=200, /v1/nodes=200, /v1/auth/session=401, /v1/devices=401; journal từ 19:27 KHÔNG còn auth-store/SyntaxError. Khớp bằng chứng docs/evidence/T-20261101-01/README.md.",
+ "actor": "mac",
+ "at": "2026-11-01T12:32:03.219Z"
+}
