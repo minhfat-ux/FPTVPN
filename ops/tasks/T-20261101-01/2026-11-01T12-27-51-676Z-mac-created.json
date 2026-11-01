@@ -1,0 +1,15 @@
+{
+ "type": "created",
+ "task": {
+  "id": "T-20261101-01",
+  "title": "iOS báo HTTP 500 — sửa auth.json bị hỏng trên control plane",
+  "from": "mac",
+  "to": "mac",
+  "detail": "Chủ dự án báo iOS trong mạng hiện tại chạy lên báo HTTP 500. Nguyên nhân: /root/flowvpn-cp/data/auth.json có 253 byte rác sau JSON hợp lệ (fragment renewalReminders), AuthStore từ chối nạp => mọi route requireUserAuth trả 500. Đã backup, cắt về JSON hợp lệ 634734 byte, atomic replace, restart flowvpn-cp; dữ liệu giữ 22 users/125 sessions/56 reminders. Sau sửa: /health 200, /v1/nodes 200, /v1/auth/session + /v1/devices trả 401 (không còn 500).",
+  "verify": null,
+  "due": null,
+  "createdAt": "2026-11-01T12:27:51.676Z"
+ },
+ "actor": "mac",
+ "at": "2026-11-01T12:27:51.676Z"
+}

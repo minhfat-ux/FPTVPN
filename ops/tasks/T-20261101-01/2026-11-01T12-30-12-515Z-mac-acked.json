@@ -1,0 +1,6 @@
+{
+ "type": "acked",
+ "note": "Đã sửa auth.json + thêm probe auth-store vào health-watch v1.0.1.",
+ "actor": "mac",
+ "at": "2026-11-01T12:30:12.516Z"
+}

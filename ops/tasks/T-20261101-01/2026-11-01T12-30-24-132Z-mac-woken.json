@@ -1,0 +1,7 @@
+{
+ "type": "woken",
+ "actor": "mac",
+ "at": "2026-11-01T12:30:24.132Z",
+ "note": "connector VPS: done từ mac — T-20261101-01 · iOS báo HTTP 500 — sửa auth.json bị hỏng trên control plane",
+ "via": "dsh --profile headless \"{prompt}\""
+}

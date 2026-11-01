@@ -1,0 +1,6 @@
+{
+ "type": "done",
+ "evidence": "commit=health-watch v1.0.1 tren node-2 (backup /usr/local/bin/flowvpn-health-watch.bak-authprobe-20261101); cmd=cp auth.json backup -> raw_decode cat 253 byte rac -> atomic replace -> systemctl restart flowvpn-cp; KET QUA=auth.json 634734 byte JSON hop le, 22 users/125 sessions/56 reminders; /health 200, /v1/nodes 200, /v1/auth/session 401, /v1/devices 401 (truoc do 500); probe auth_probe=401. Health-watch cu chi kiem systemctl is-active + relay 426, /health khong cham auth.json => process active nhung auth store hong van 'xanh'. Da them check_auth_store: parse auth.json + probe /v1/auth/session bang token gia; neu 500 thi tu cat rac sau JSON hop le + restart + alert Telegram, khong tu sua duoc thi chi alert. Test trim tren ban copy: 635041 -> 635031 byte, 22 users/125 sessions.",
+ "actor": "mac",
+ "at": "2026-11-01T12:30:21.323Z"
+}
